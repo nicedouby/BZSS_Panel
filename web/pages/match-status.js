@@ -5,6 +5,11 @@
  *
  * 数据来源：module.matchState / playerState / squadState
  * 展示结构：Team -> Squad -> Members
+ *
+ * 玩家名字点击行为：
+ * - 打开居中悬浮窗口
+ * - 不再调用 openDrawer
+ * - 显示 Steam ID / EOS ID / Player ID / Team / Squad / Role / 状态
  */
 export async function renderPage({ root, api, openDrawer }) {
   if (root.__matchStatusTimer) {
@@ -54,10 +59,7 @@ export async function renderPage({ root, api, openDrawer }) {
       const player = players[Number(el.dataset.playerIndex)];
       if (!player) return;
 
-      openDrawer({
-        title: `${displayName(player.name)} 详情`,
-        body: renderPlayerDrawer(player),
-      });
+      openPlayerFloatingWindow(player);
     });
   });
 
@@ -306,39 +308,97 @@ function renderMember(member) {
   `;
 }
 
-function renderPlayerDrawer(player) {
+function openPlayerFloatingWindow(player) {
+  closePlayerFloatingWindow();
+
+  const root = document.createElement("div");
+  root.id = "bzss-player-floating-root";
+
   const stats = getMatchStats(player);
+  const steamID = player.steamID || player.steam64 || player.SteamID || "";
+  const eosID = player.eosID || player.eos || player.EOSID || "";
+  const teamValue = player._resolvedTeamID ?? player.teamID ?? "N/A";
+  const squadValue = player._resolvedUnassigned
+    ? "未编队"
+    : (player._resolvedSquadID ?? player.squadID ?? "N/A");
 
-  return `
-    <div class="detail-block">
-      <div class="detail-grid">
-        <div><strong>玩家名</strong><br>${esc(displayName(player.name))}</div>
-        <div><strong>状态</strong><br>${esc(formatState(player.state))}</div>
-        <div><strong>角色</strong><br>${esc(player.role || "未知角色")}</div>
-        <div><strong>是否队长</strong><br>${player.isLeader ? "是" : "否"}</div>
-        <div><strong>Team</strong><br>${esc(player._resolvedTeamID ?? player.teamID ?? "N/A")}</div>
-        <div><strong>Squad</strong><br>${esc(player._resolvedUnassigned ? "未编队" : (player._resolvedSquadID ?? player.squadID ?? "N/A"))}</div>
-        <div><strong>击杀</strong><br>${stats.kills}</div>
-        <div><strong>击倒</strong><br>${stats.downs}</div>
-        <div><strong>死亡</strong><br>${stats.deaths}</div>
+  root.innerHTML = `
+    <div class="bzss-player-float-backdrop" data-close-player-window="1"></div>
+
+    <div class="bzss-player-float-window" role="dialog" aria-modal="true">
+      <div class="bzss-player-float-header">
+        <div>
+          <div class="bzss-player-float-title">${esc(displayName(player.name))}</div>
+          <div class="bzss-player-float-subtitle">
+            ${esc(formatState(player.state))} · ${esc(player.role || "未知角色")}
+          </div>
+        </div>
+
+        <button class="bzss-player-float-close" type="button" data-close-player-window="1">×</button>
       </div>
-    </div>
 
-    <div class="detail-block">
-      <strong>身份信息</strong>
-      <div class="detail-grid">
-        <div><strong>Steam64</strong><br>${esc(player.steamID || "未记录")}</div>
-        <div><strong>EOS</strong><br>${esc(player.eosID || "未记录")}</div>
-        <div><strong>Player ID</strong><br>${esc(player.playerID ?? "N/A")}</div>
-        <div><strong>最后出现</strong><br>${esc(player.lastSeenTime || "未知")}</div>
+      <div class="bzss-player-float-body">
+        <div class="bzss-player-id-block">
+          <div>
+            <span>Steam ID</span>
+            <strong>${esc(steamID || "未记录")}</strong>
+          </div>
+          <div>
+            <span>EOS ID</span>
+            <strong>${esc(eosID || "未记录")}</strong>
+          </div>
+        </div>
+
+        <div class="bzss-player-detail-grid">
+          <div><span>Player ID</span><strong>${esc(player.playerID ?? "N/A")}</strong></div>
+          <div><span>Team</span><strong>${esc(teamValue)}</strong></div>
+          <div><span>Squad</span><strong>${esc(squadValue)}</strong></div>
+          <div><span>是否队长</span><strong>${player.isLeader ? "是" : "否"}</strong></div>
+          <div><span>击杀</span><strong>${stats.kills}</strong></div>
+          <div><span>击倒</span><strong>${stats.downs}</strong></div>
+          <div><span>死亡</span><strong>${stats.deaths}</strong></div>
+          <div><span>最后出现</span><strong>${esc(player.lastSeenTime || "未知")}</strong></div>
+        </div>
+
+        <div class="bzss-player-float-actions">
+          <button type="button" disabled>警告</button>
+          <button type="button" disabled>踢出小队</button>
+          <button type="button" disabled>跳边</button>
+          <button type="button" disabled>查看档案</button>
+        </div>
+
+        <div class="bzss-player-float-note">
+          功能按钮已预留。后续应分别接入 warning / squadManage / teamBalance / playerDatabase。
+        </div>
       </div>
-    </div>
-
-    <div class="detail-block">
-      <strong>原始数据</strong>
-      <pre class="detail-pre">${esc(JSON.stringify(player.raw ?? player, null, 2))}</pre>
     </div>
   `;
+
+  document.body.appendChild(root);
+
+  root.querySelectorAll("[data-close-player-window]").forEach((el) => {
+    el.addEventListener("click", closePlayerFloatingWindow);
+  });
+
+  const onKeyDown = (event) => {
+    if (event.key === "Escape") {
+      closePlayerFloatingWindow();
+    }
+  };
+
+  window.addEventListener("keydown", onKeyDown);
+  root.__onKeyDown = onKeyDown;
+}
+
+function closePlayerFloatingWindow() {
+  const root = document.querySelector("#bzss-player-floating-root");
+  if (!root) return;
+
+  if (root.__onKeyDown) {
+    window.removeEventListener("keydown", root.__onKeyDown);
+  }
+
+  root.remove();
 }
 
 function getMatchStats(player) {

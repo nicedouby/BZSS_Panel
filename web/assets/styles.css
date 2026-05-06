@@ -707,3 +707,148 @@ input:focus, select:focus {
   .console-line { grid-template-columns: 1fr; }
   .rcon-form { grid-template-columns: 1fr; }
 }
+/* 追加到 web/assets/styles.css 末尾 */
+
+/* Player floating window used by web/pages/match-status.js */
+
+#bzss-player-floating-root {
+  position: relative;
+  z-index: 5000;
+}
+
+.bzss-player-float-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  background:
+    radial-gradient(circle at 50% 35%, rgba(96, 165, 250, 0.12), transparent 32%),
+    rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.bzss-player-float-window {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: min(640px, calc(100vw - 38px));
+  max-height: min(760px, calc(100vh - 38px));
+  transform: translate(-50%, -50%);
+  z-index: 5001;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(94, 234, 212, 0.16), transparent 35%),
+    radial-gradient(circle at 86% 10%, rgba(124, 58, 237, 0.18), transparent 38%),
+    rgba(8, 13, 27, 0.96);
+  border: 1px solid rgba(94, 234, 212, 0.28);
+  border-radius: 18px;
+  box-shadow:
+    0 28px 90px rgba(0, 0, 0, 0.55),
+    0 0 34px rgba(96, 165, 250, 0.18);
+  backdrop-filter: blur(20px);
+}
+
+.bzss-player-float-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 15px 17px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.bzss-player-float-title {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+}
+
+.bzss-player-float-subtitle {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.bzss-player-float-close {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 11px;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.bzss-player-float-body {
+  padding: 15px 17px;
+  overflow: auto;
+}
+
+.bzss-player-id-block {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 9px;
+  margin-bottom: 13px;
+}
+
+.bzss-player-id-block > div {
+  min-width: 0;
+  padding: 10px 11px;
+  border-radius: 12px;
+  border: 1px solid rgba(94, 234, 212, 0.18);
+  background: rgba(3, 7, 18, 0.48);
+}
+
+.bzss-player-id-block span,
+.bzss-player-detail-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 5px;
+}
+
+.bzss-player-id-block strong,
+.bzss-player-detail-grid strong {
+  display: block;
+  color: var(--text);
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.bzss-player-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.bzss-player-detail-grid > div {
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 11px;
+  border: 1px solid rgba(148, 163, 184, 0.13);
+  background: rgba(15, 23, 42, 0.52);
+}
+
+.bzss-player-float-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.bzss-player-float-actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.bzss-player-float-note {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 680px) {
+  .bzss-player-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
