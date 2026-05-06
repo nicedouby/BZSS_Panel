@@ -1,0 +1,14 @@
+{
+  "name": "bzss-panel-js-starter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BZSS Panel JS event receiver starter",
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.js",
+    "test:event": "node src/tools/send-test-event.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "server": {
+    "name": "BZSS_JS_Receiver"
+  },
+  "udp": {
+    "host": "127.0.0.1",
+    "port": 6666,
+    "maxMessageBytes": 65535
+  },
+  "console": {
+    "useColor": true,
+    "printReceivedEvent": true,
+    "maxParamCount": 10,
+    "maxParamLength": 48
+  },
+  "plugins": {
+    "enabled": true,
+    "paths": [
+      "./src/plugins/debug-print-plugin.js",
+      "./src/plugins/combat-summary-plugin.js"
+    ]
+  }
+}
