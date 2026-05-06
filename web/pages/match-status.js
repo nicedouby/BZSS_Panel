@@ -167,8 +167,16 @@ function buildTeams({ players, squads }) {
 }
 
 function renderTeam(team, teamIndex) {
+  const teamClass = Number(team.teamID) === 1
+    ? "team-1"
+    : Number(team.teamID) === 2
+      ? "team-2"
+      : teamIndex % 2 === 0
+        ? "team-1"
+        : "team-2";
+
   return `
-    <section class="card match-team-card match-team-${teamIndex % 2 === 0 ? "alpha" : "bravo"}">
+    <section class="card match-team-card ${teamClass}">
       <div class="match-team-header">
         <div>
           <div class="match-team-eyebrow">Team ${esc(team.teamID)}</div>

@@ -236,6 +236,8 @@ body::before {
 .match-team-list {
   display: grid;
   gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
 }
 
 .match-team-card {
@@ -251,12 +253,22 @@ body::before {
   background: linear-gradient(90deg, rgba(94, 234, 212, 0.2), rgba(106, 166, 255, 0.9), rgba(124, 58, 237, 0.25));
 }
 
-.match-team-alpha::before {
-  background: linear-gradient(90deg, rgba(94, 234, 212, 0.2), rgba(106, 166, 255, 0.9), rgba(56, 189, 248, 0.25));
+.match-team-card.team-1 {
+  border-color: rgba(94, 234, 212, 0.28);
+  background: linear-gradient(180deg, rgba(12, 31, 34, 0.92), rgba(8, 15, 24, 0.82));
 }
 
-.match-team-bravo::before {
-  background: linear-gradient(90deg, rgba(253, 230, 138, 0.2), rgba(251, 113, 133, 0.9), rgba(248, 113, 113, 0.25));
+.match-team-card.team-1::before {
+  background: linear-gradient(90deg, rgba(94, 234, 212, 0.15), rgba(45, 212, 191, 0.92), rgba(16, 185, 129, 0.22));
+}
+
+.match-team-card.team-2 {
+  border-color: rgba(251, 113, 133, 0.28);
+  background: linear-gradient(180deg, rgba(35, 16, 26, 0.92), rgba(15, 10, 20, 0.82));
+}
+
+.match-team-card.team-2::before {
+  background: linear-gradient(90deg, rgba(253, 230, 138, 0.16), rgba(251, 113, 133, 0.92), rgba(244, 114, 182, 0.22));
 }
 
 .match-team-header {
@@ -279,6 +291,14 @@ body::before {
   font-size: 22px;
   font-weight: 800;
   line-height: 1.25;
+}
+
+.match-team-card.team-1 .match-team-title {
+  color: #8cf3e3;
+}
+
+.match-team-card.team-2 .match-team-title {
+  color: #ffb3c1;
 }
 
 .match-team-meta {
@@ -449,6 +469,10 @@ body::before {
 @media (max-width: 980px) {
   .grid.cols-2,
   .grid.cols-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .match-team-list {
     grid-template-columns: 1fr;
   }
 
