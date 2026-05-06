@@ -10,7 +10,7 @@
   "udp": {
     "enabled": true,
     "host": "127.0.0.1",
-    "port": 7788,
+    "port": 6666,
     "max_payload_bytes": 8192
   },
   "unknown": {
@@ -54,7 +54,7 @@
   },
   "logpost_web": {
     "host": "127.0.0.1",
-    "port": 7790,
+    "port": 12345,
     "output_dir": "./LogPost",
     "max_lines_per_request": 2000
   }
