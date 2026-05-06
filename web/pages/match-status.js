@@ -7,6 +7,12 @@
  * 展示结构：Team -> Squad -> Members
  */
 export async function renderPage({ root, api, openDrawer }) {
+  if (root.__matchStatusTimer) {
+    window.clearTimeout(root.__matchStatusTimer);
+    root.__matchStatusTimer = null;
+  }
+
+  const scrollTop = root.scrollTop;
   const data = await api("/api/match/overview");
   const status = data.status ?? {};
   const players = data.players ?? [];
@@ -54,18 +60,41 @@ export async function renderPage({ root, api, openDrawer }) {
       });
     });
   });
+
+  root.scrollTop = scrollTop;
+
+  root.__pageCleanup = () => {
+    if (root.__matchStatusTimer) {
+      window.clearTimeout(root.__matchStatusTimer);
+      root.__matchStatusTimer = null;
+    }
+  };
+
+  root.__matchStatusTimer = window.setTimeout(() => {
+    renderPage({ root, api, openDrawer }).catch(() => {});
+  }, 3000);
+
+  return root.__pageCleanup;
 }
 
 function buildTeams({ players, squads }) {
+  const teamMap = new Map([
+    ["1", createTeam(1)],
+    ["2", createTeam(2)],
+  ]);
   const squadMap = new Map();
-  const teamMap = new Map();
+  const squadsById = new Map();
 
-  squads.forEach((squad) => {
-    const team = ensureTeam(teamMap, squad.teamID, squad.teamName);
+  for (const squad of squads) {
+    const teamID = normalizeTeamID(squad.teamID);
+    const squadID = normalizeSquadID(squad.squadID);
+    if (teamID == null || squadID == null) continue;
+
+    const team = ensureTeam(teamMap, teamID, squad.teamName);
     const nextSquad = {
-      teamID: squad.teamID,
-      squadID: squad.squadID,
-      squadName: squad.squadName || squad.name || `Squad ${squad.squadID ?? ""}`.trim(),
+      teamID,
+      squadID,
+      squadName: squad.squadName || squad.name || `Squad ${squadID}`,
       locked: Boolean(squad.locked),
       creatorName: squad.creatorName || squad.leaderName || "",
       creatorSteamID: squad.creatorSteamID || squad.leaderSteamID || "",
@@ -76,46 +105,90 @@ function buildTeams({ players, squads }) {
     };
 
     team.squads.push(nextSquad);
-    squadMap.set(squadKey(squad.teamID, squad.squadID), nextSquad);
-  });
+    squadMap.set(squadKey(teamID, squadID), nextSquad);
+    if (!squadsById.has(squadID)) squadsById.set(squadID, []);
+    squadsById.get(squadID).push(nextSquad);
+  }
 
   players.forEach((player, index) => {
-    const team = ensureTeam(teamMap, player.teamID, "");
-    const targetSquad = player.squadID === null || player.squadID === undefined || player.squadID === "" || player.squadID === "N/A"
-      ? ensureUnassignedSquad(team)
-      : (squadMap.get(squadKey(player.teamID, player.squadID)) ?? ensureFallbackSquad(team, player.squadID));
-
-    targetSquad.members.push({
+    const placement = resolvePlacement(player);
+    placement.squad.members.push({
       ...player,
       _playerIndex: index,
+      _resolvedTeamID: placement.team.teamID,
+      _resolvedSquadID: placement.squad.squadID,
+      _resolvedUnassigned: Boolean(placement.squad.unassigned),
     });
   });
 
   for (const team of teamMap.values()) {
-    if (!team.teamName) {
-      const namedSquad = team.squads.find((squad) => squad.teamName);
-      team.teamName = namedSquad?.teamName || `Team ${team.teamID || "?"}`;
-    }
-
     team.squads.sort(compareSquads);
     team.playerCount = team.squads.reduce((sum, squad) => sum + squad.members.length, 0);
+    if (!team.teamName) {
+      team.teamName = `Team ${team.teamID}`;
+    }
   }
 
-  return [...teamMap.values()].sort((a, b) => Number(a.teamID || 0) - Number(b.teamID || 0));
+  return [teamMap.get("1"), teamMap.get("2")];
+
+  function createTeam(teamID) {
+    return {
+      teamID,
+      teamName: `Team ${teamID}`,
+      squads: [],
+      playerCount: 0,
+    };
+  }
 
   function ensureTeam(map, teamID, teamName) {
-    const key = String(teamID ?? "unknown");
+    const key = String(teamID);
     if (!map.has(key)) {
-      map.set(key, {
-        teamID,
-        teamName: teamName || `Team ${teamID || "?"}`,
-        squads: [],
-        playerCount: 0,
-      });
-    } else if (teamName && !map.get(key).teamName) {
-      map.get(key).teamName = teamName;
+      map.set(key, createTeam(teamID));
     }
-    return map.get(key);
+    const team = map.get(key);
+    if (teamName && !team.teamName) {
+      team.teamName = teamName;
+    }
+    return team;
+  }
+
+  function resolvePlacement(player) {
+    const teamID = normalizeTeamID(player.teamID);
+    const squadID = normalizeSquadID(player.squadID);
+    const normalizedName = normalizeName(player.name);
+
+    if (teamID != null && squadID != null) {
+      const exact = squadMap.get(squadKey(teamID, squadID));
+      if (exact) {
+        return { team: ensureTeam(teamMap, teamID, ""), squad: exact };
+      }
+    }
+
+    if (squadID != null) {
+      const candidates = squadsById.get(squadID) || [];
+      const byName = candidates.find((candidate) => {
+        const creator = normalizeName(candidate.creatorName);
+        const leader = normalizeName(candidate.creatorName);
+        return creator === normalizedName || leader === normalizedName;
+      });
+      if (byName) {
+        return { team: ensureTeam(teamMap, byName.teamID, ""), squad: byName };
+      }
+
+      if (candidates.length === 1) {
+        return { team: ensureTeam(teamMap, candidates[0].teamID, ""), squad: candidates[0] };
+      }
+
+      if (teamID != null) {
+        const fallback = squadMap.get(squadKey(teamID, squadID));
+        if (fallback) {
+          return { team: ensureTeam(teamMap, teamID, ""), squad: fallback };
+        }
+      }
+    }
+
+    const fallbackTeam = teamID != null ? ensureTeam(teamMap, teamID, "") : teamMap.get("1");
+    return { team: fallbackTeam, squad: ensureUnassignedSquad(fallbackTeam) };
   }
 
   function ensureUnassignedSquad(team) {
@@ -138,32 +211,11 @@ function buildTeams({ players, squads }) {
     return squad;
   }
 
-  function ensureFallbackSquad(team, squadID) {
-    let squad = team.squads.find((item) => String(item.squadID) === String(squadID));
-    if (!squad) {
-      squad = {
-        teamID: team.teamID,
-        squadID,
-        squadName: `Squad ${squadID}`,
-        locked: false,
-        creatorName: "",
-        creatorSteamID: "",
-        creatorEOSID: "",
-        size: 0,
-        members: [],
-        unassigned: false,
-      };
-      team.squads.push(squad);
-    }
-    return squad;
-  }
-
   function compareSquads(a, b) {
     if (a.unassigned && !b.unassigned) return 1;
     if (!a.unassigned && b.unassigned) return -1;
     return numericish(a.squadID) - numericish(b.squadID);
   }
-
 }
 
 function renderTeam(team, teamIndex) {
@@ -235,6 +287,8 @@ function renderMember(member) {
   const stats = getMatchStats(member);
   const stateLabel = formatState(member.state);
   const roleLabel = member.role || "未知角色";
+  const teamLabel = member._resolvedUnassigned ? "待确认队伍" : `Team ${member._resolvedTeamID ?? "?"}`;
+  const squadLabel = member._resolvedUnassigned ? "未编队" : `Squad ${member._resolvedSquadID ?? "?"}`;
 
   return `
     <button class="match-member-row" type="button" data-player-index="${member._playerIndex}">
@@ -245,6 +299,7 @@ function renderMember(member) {
       <div class="match-member-meta">
         <span class="match-member-stat">${esc(stateLabel)}</span>
         <span class="match-member-stat">${esc(roleLabel)}</span>
+        <span class="match-member-stat">${esc(teamLabel)} / ${esc(squadLabel)}</span>
         <span class="match-member-stat">K ${stats.kills} / D ${stats.downs} / 死 ${stats.deaths}</span>
       </div>
     </button>
@@ -261,8 +316,8 @@ function renderPlayerDrawer(player) {
         <div><strong>状态</strong><br>${esc(formatState(player.state))}</div>
         <div><strong>角色</strong><br>${esc(player.role || "未知角色")}</div>
         <div><strong>是否队长</strong><br>${player.isLeader ? "是" : "否"}</div>
-        <div><strong>Team</strong><br>${esc(player.teamID ?? "N/A")}</div>
-        <div><strong>Squad</strong><br>${esc(player.squadID ?? "N/A")}</div>
+        <div><strong>Team</strong><br>${esc(player._resolvedTeamID ?? player.teamID ?? "N/A")}</div>
+        <div><strong>Squad</strong><br>${esc(player._resolvedUnassigned ? "未编队" : (player._resolvedSquadID ?? player.squadID ?? "N/A"))}</div>
         <div><strong>击杀</strong><br>${stats.kills}</div>
         <div><strong>击倒</strong><br>${stats.downs}</div>
         <div><strong>死亡</strong><br>${stats.deaths}</div>
@@ -320,6 +375,20 @@ function formatState(state) {
 function displayName(value, fallback = "未知") {
   const text = String(value ?? "").trim();
   return text || fallback;
+}
+
+function normalizeTeamID(value) {
+  const num = Number(value);
+  return Number.isInteger(num) && (num === 1 || num === 2) ? num : null;
+}
+
+function normalizeSquadID(value) {
+  const num = Number(value);
+  return Number.isInteger(num) && num > 0 ? num : null;
+}
+
+function normalizeName(value) {
+  return String(value ?? "").trim().toLowerCase();
 }
 
 function squadKey(teamID, squadID) {
