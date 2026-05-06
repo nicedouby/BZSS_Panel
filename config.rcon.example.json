@@ -1,0 +1,29 @@
+{
+  "rcon": {
+    "enabled": true,
+    "host": "192.168.0.183",
+    "port": 30144,
+    "password": "9290dd2aa02b",
+
+    "autoReconnectDelay": 5000,
+    "commandTimeoutMs": 15000,
+
+    "rateLimit": {
+      "minIntervalMs": 500,
+      "maxQueueSize": 100
+    },
+
+    "polling": {
+      "enabled": true,
+      "playersIntervalMs": 5000,
+      "squadsIntervalMs": 10000
+    }
+  },
+
+  "modules": {
+    "console": {
+      "enabled": true,
+      "maxLines": 5000
+    }
+  }
+}

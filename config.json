@@ -21,7 +21,7 @@
   "pythonLogParser": {
     "enabled": true,
     "pythonExecutable": "python",
-    "workingDirectory": "./LogPost",
+    "workingDirectory": "./LogPost  ",
     "scriptPath": "./main.py",
     "configPath": "./config.json",
     "autoStart": true,
@@ -30,10 +30,10 @@
   },
 
   "rcon": {
-    "enabled": false,
-    "host": "127.0.0.1",
-    "port": 21114,
-    "password": "",
+    "enabled": true,
+    "host": "192.168.0.183",
+    "port": 30144,
+    "password": "9290dd2aa02b",
     "rateLimit": {
       "minIntervalMs": 500,
       "maxQueueSize": 100

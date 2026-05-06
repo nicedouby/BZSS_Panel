@@ -3,19 +3,13 @@
 import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 /**
  * Core: WebServer
  *
- * 负责：
- * - 静态文件服务 web/
- * - Web API
+ * 静态 Web + API。
  *
- * 不负责：
- * - 业务判断
- * - RCON 操作
- * - 插件逻辑
+ * 本文件只补 RCON 控制台所需 API，不额外改变 Web 架构。
  */
 export class WebServer {
   constructor({ config, logger, core, modules }) {
@@ -39,7 +33,7 @@ export class WebServer {
     this.server = http.createServer((req, res) => {
       this.handleRequest(req, res).catch((error) => {
         this.logger.error(`Web request failed: ${error.stack ?? error}`);
-        this.json(res, 500, { error: "InternalServerError" });
+        this.json(res, 500, { error: "InternalServerError", message: error.message });
       });
     });
 
@@ -69,9 +63,7 @@ export class WebServer {
 
   async handleApi(url, req, res) {
     if (url.pathname === "/api/web/pages") {
-      return this.json(res, 200, {
-        pages: this.core.webRegistry.getPages(),
-      });
+      return this.json(res, 200, { pages: this.core.webRegistry.getPages() });
     }
 
     if (url.pathname === "/api/web/status") {
@@ -82,39 +74,85 @@ export class WebServer {
       return this.json(res, 200, this.modules.matchState.getOverview());
     }
 
+    if (url.pathname === "/api/console/channels") {
+      return this.json(res, 200, { channels: this.modules.console.getChannels() });
+    }
+
     if (url.pathname === "/api/console/lines") {
       return this.json(res, 200, {
-        lines: this.modules.console.getLines(),
+        lines: this.modules.console.getLines({
+          channel: url.searchParams.get("channel") ?? "all",
+          afterSeq: url.searchParams.get("afterSeq") ?? "0",
+          limit: url.searchParams.get("limit") ?? "300",
+          q: url.searchParams.get("q") ?? "",
+        }),
       });
     }
 
-    if (url.pathname === "/api/player-database/list") {
-      return this.json(res, 200, {
-        players: this.modules.playerDatabase.listPlayers(),
+    if (url.pathname === "/api/console/rcon" && req.method === "POST") {
+      const body = await this.readJsonBody(req);
+      const result = await this.modules.console.executeRconCommand(body.command, {
+        requestedBy: "web.console",
       });
+      return this.json(res, 200, result);
+    }
+
+    if (url.pathname === "/api/rcon/status") {
+      return this.json(res, 200, this.core.rconManager.getStatus());
+    }
+
+    if (url.pathname === "/api/rcon/refresh") {
+      const type = url.searchParams.get("type") ?? "all";
+      const result = {};
+
+      if (type === "players" || type === "all") {
+        result.players = await this.core.rconManager.refreshPlayers();
+      }
+
+      if (type === "squads" || type === "all") {
+        result.squads = await this.core.rconManager.refreshSquads();
+      }
+
+      return this.json(res, 200, result);
+    }
+
+    if (url.pathname === "/api/player-database/list") {
+      return this.json(res, 200, { players: this.modules.playerDatabase.listPlayers() });
     }
 
     if (url.pathname === "/api/squads/list") {
       const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
-      return this.json(res, 200, {
-        squads: this.modules.squadState.getSquads(serverId),
-      });
+      return this.json(res, 200, { squads: this.modules.squadState.getSquads(serverId) });
     }
 
     if (url.pathname === "/api/kills/recent") {
       const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
-      return this.json(res, 200, {
-        records: this.modules.killManage.getRecentKills(serverId, 100),
-      });
+      return this.json(res, 200, { records: this.modules.killManage.getRecentKills(serverId, 100) });
     }
 
     return this.json(res, 404, { error: "ApiNotFound" });
   }
 
+  async readJsonBody(req) {
+    const chunks = [];
+
+    for await (const chunk of req) {
+      chunks.push(chunk);
+      const total = chunks.reduce((sum, item) => sum + item.length, 0);
+      if (total > 1024 * 1024) {
+        throw new Error("Request body too large.");
+      }
+    }
+
+    const text = Buffer.concat(chunks).toString("utf8").trim();
+    if (!text) return {};
+
+    return JSON.parse(text);
+  }
+
   async serveStatic(url, res) {
     let filePath = url.pathname === "/" ? "/index.html" : url.pathname;
 
-    // 避免路径穿越。
     filePath = path.normalize(filePath).replace(/^(\.\.[/\\])+/, "");
     const abs = path.join(this.staticDirectory, filePath);
 
