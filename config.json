@@ -1,23 +1,84 @@
 {
   "server": {
-    "name": "BZSS_JS_Receiver"
+    "id": "BZSS_Main",
+    "name": "BZSS Main Server"
   },
+
   "udp": {
     "host": "127.0.0.1",
     "port": 6666,
     "maxMessageBytes": 65535
   },
-  "console": {
-    "useColor": true,
-    "printReceivedEvent": true,
-    "maxParamCount": 10,
-    "maxParamLength": 48
+
+  "web": {
+    "enabled": true,
+    "host": "127.0.0.1",
+    "port": 7799,
+    "staticDirectory": "./web",
+    "title": "BZSS Panel"
   },
+
+  "pythonLogParser": {
+    "enabled": true,
+    "pythonExecutable": "python",
+    "workingDirectory": "./LogPost",
+    "scriptPath": "./main.py",
+    "configPath": "./config.json",
+    "autoStart": true,
+    "restartOnExit": false,
+    "pipeOutput": true
+  },
+
+  "rcon": {
+    "enabled": false,
+    "host": "127.0.0.1",
+    "port": 21114,
+    "password": "",
+    "rateLimit": {
+      "minIntervalMs": 500,
+      "maxQueueSize": 100
+    }
+  },
+
+  "core": {
+    "logger": {
+      "useColor": true
+    }
+  },
+
+  "modules": {
+    "audit": { "enabled": true },
+    "playerState": { "enabled": true },
+    "squadState": { "enabled": true },
+    "matchState": { "enabled": true },
+    "console": { "enabled": true, "maxLines": 500 },
+    "playerDatabase": { "enabled": true },
+    "killManage": { "enabled": true },
+    "teamBalance": { "enabled": true },
+    "squadManage": { "enabled": true },
+    "warning": { "enabled": true },
+    "playtime": { "enabled": true },
+    "seed": { "enabled": true },
+    "points": { "enabled": true }
+  },
+
+  "webModules": {
+    "required": [
+      "web.matchStatus",
+      "web.console",
+      "web.playerDatabase"
+    ],
+    "optional": {
+      "web.squadManage": true,
+      "web.killManage": true,
+      "web.teamBalance": false,
+      "web.seed": false,
+      "web.points": false
+    }
+  },
+
   "plugins": {
     "enabled": true,
-    "paths": [
-      "./src/plugins/debug-print-plugin.js",
-      "./src/plugins/combat-summary-plugin.js"
-    ]
+    "paths": []
   }
 }

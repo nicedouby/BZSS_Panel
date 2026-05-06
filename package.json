@@ -1,12 +1,11 @@
 {
-  "name": "bzss-panel-js-starter",
-  "version": "0.1.0",
+  "name": "bzss-panel-web-core",
+  "version": "0.2.0",
   "private": true,
-  "description": "BZSS Panel JS event receiver starter",
+  "description": "BZSS Panel minimal core/modules/plugins/web architecture",
   "type": "module",
   "scripts": {
-    "start": "node src/main.js",
-    "test:event": "node src/tools/send-test-event.js"
+    "start": "node main.js"
   },
   "engines": {
     "node": ">=18.0.0"

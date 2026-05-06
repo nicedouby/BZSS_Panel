@@ -1,4 +1,4 @@
 @echo off
 cd /d "%~dp0"
-node src/main.js
+node main.js
 pause
