@@ -1,6 +1,7 @@
 // -*- coding: utf-8 -*-
 
 import { createAuditModule } from "../modules/audit/index.js";
+import { createServerStatusModule } from "../modules/server-status/index.js";
 import { createPlayerStateModule } from "../modules/player-state/index.js";
 import { createSquadStateModule } from "../modules/squad-state/index.js";
 import { createMatchStateModule } from "../modules/match-state/index.js";
@@ -33,6 +34,7 @@ export class ModuleManager {
     const factories = [
       createAuditModule,
       createConsoleModule,
+      createServerStatusModule,
       createPlayerStateModule,
       createSquadStateModule,
       createMatchStateModule,

@@ -10,7 +10,7 @@ from bzss_parser.helpers import clean_value, regex_get
 
 def parse_online_ids(line: str) -> Tuple[str, str]:
     eos = regex_get(r"Online IDs:\s*EOS:\s*(\S+)\s+steam:\s*(\S+)", line, 1)
-    steam = regex_get(r"Online IDs:\s*EOS:\s*(\S+)\s+steam:\s*(\S+)", line, 2)
+    steam = sanitize_steam64(regex_get(r"Online IDs:\s*EOS:\s*(\S+)\s+steam:\s*(\S+)", line, 2))
 
     return eos, steam
 
@@ -23,7 +23,7 @@ def parse_controller_id(line: str) -> str:
 
 
 def parse_caused_by(line: str) -> str:
-    return regex_get(r"\scaused by\s*(.+)$", line)
+    return regex_get(r"\)\s*caused by\s*(.+)$", line)
 
 
 def parse_from_object(line: str) -> str:
@@ -100,4 +100,42 @@ def parse_status_from_params(params: List[Tuple[str, str]]) -> str:
     if empty_count <= 3:
         return "Partial"
 
-    return "Sparse"
+    return "Failed"
+
+
+def parse_confidence_from_status(parse_status: str) -> str:
+    status = clean_value(parse_status)
+
+    if status == "Full":
+        return "High"
+
+    if status == "Partial":
+        return "Medium"
+
+    return "Low"
+
+
+def effective_confidence(identity_confidence: str, parse_confidence: str) -> str:
+    rank = {
+        "Low": 0,
+        "MediumLow": 1,
+        "Medium": 2,
+        "High": 3,
+    }
+    reverse_rank = {
+        0: "Low",
+        1: "MediumLow",
+        2: "Medium",
+        3: "High",
+    }
+
+    identity_rank = rank.get(clean_value(identity_confidence), 0)
+    parse_rank = rank.get(clean_value(parse_confidence), 0)
+    return reverse_rank[min(identity_rank, parse_rank)]
+
+
+def sanitize_steam64(value: str) -> str:
+    digits = "".join(ch for ch in clean_value(value) if ch.isdigit())
+    if len(digits) == 17:
+        return digits
+    return ""

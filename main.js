@@ -36,6 +36,7 @@ import { PythonLogParserManager } from "./core/python-log-parser-manager.js";
 import { ModuleManager } from "./core/module-manager.js";
 import { PluginManager } from "./core/plugin-manager.js";
 import { AuthManager } from "./core/auth-manager.js";
+import { EventPipeline } from "./core/event-pipeline.js";
 
 async function main() {
   const configManager = new ConfigManager("./config.json");
@@ -45,6 +46,9 @@ async function main() {
   logger.info("BZSS Panel WebCore starting...");
 
   const eventBus = new EventBus({ logger });
+  const eventPipeline = new EventPipeline({
+    config: configManager.get("eventPipeline", {}),
+  });
   const webRegistry = new WebRegistry({ config: configManager, logger });
   const webStatus = new WebStatus({ config: configManager, logger });
   const authManager = new AuthManager({
@@ -57,6 +61,7 @@ async function main() {
     logger,
     eventBus,
     webStatus,
+    eventPipeline,
   });
 
   const udpReceiver = new UdpEventReceiver({
@@ -64,12 +69,14 @@ async function main() {
     logger,
     eventBus,
     webStatus,
+    eventPipeline,
   });
 
   const coreContext = {
     config: configManager,
     logger,
     eventBus,
+    eventPipeline,
     webRegistry,
     webStatus,
     rconManager,
@@ -106,6 +113,27 @@ async function main() {
   await rconManager.start();
   await udpReceiver.start();
   await moduleManager.loadBuiltInModules();
+  eventPipeline.setCombatIdentityResolver(({ serverId, keyType, keyValue }) => {
+    const playerState = moduleManager.registry.playerState;
+    if (!playerState || !keyValue) return null;
+
+    if (keyType === "steam64ID") {
+      const player = playerState.getPlayerBySteamID(serverId, keyValue);
+      return player?.name ? { name: player.name, source: "playerStateBySteam64" } : null;
+    }
+
+    if (keyType === "eosID") {
+      const player = playerState.getPlayerByEOSID(serverId, keyValue);
+      return player?.name ? { name: player.name, source: "playerStateByEOSID" } : null;
+    }
+
+    if (keyType === "controllerID") {
+      const player = playerState.getPlayerByControllerID(serverId, keyValue);
+      return player?.name ? { name: player.name, source: "playerStateByControllerID" } : null;
+    }
+
+    return null;
+  });
   await pluginManager.loadPlugins();
   await webServer.start();
 

@@ -1,7 +1,6 @@
 // -*- coding: utf-8 -*-
 
 import dgram from "node:dgram";
-import { normalizeRawGameEvent } from "./event-normalizer.js";
 
 /**
  * Core: UdpEventReceiver
@@ -9,7 +8,7 @@ import { normalizeRawGameEvent } from "./event-normalizer.js";
  * 接收 Python LogParser 发来的 UDP JSON 事件，并发布为 Core Event。
  */
 export class UdpEventReceiver {
-  constructor({ config, logger, eventBus, webStatus }) {
+  constructor({ config, logger, eventBus, webStatus, eventPipeline }) {
     this.host = config.host ?? "127.0.0.1";
     this.port = Number(config.port ?? 6666);
     this.maxMessageBytes = Number(config.maxMessageBytes ?? 65535);
@@ -17,6 +16,7 @@ export class UdpEventReceiver {
     this.logger = logger;
     this.eventBus = eventBus;
     this.webStatus = webStatus;
+    this.eventPipeline = eventPipeline;
     this.socket = dgram.createSocket("udp4");
 
     this.socket.on("message", (buffer, remoteInfo) => this.handleMessage(buffer, remoteInfo));
@@ -61,7 +61,7 @@ export class UdpEventReceiver {
       return;
     }
 
-    const event = normalizeRawGameEvent(rawEvent);
+    const event = this.eventPipeline.processRawGameEvent(rawEvent);
     event.udpRemoteAddress = remoteInfo.address;
     event.udpRemotePort = remoteInfo.port;
 

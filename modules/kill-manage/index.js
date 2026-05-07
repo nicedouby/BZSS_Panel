@@ -1,7 +1,5 @@
 // -*- coding: utf-8 -*-
 
-import { getParam } from "../../core/event-normalizer.js";
-
 /**
  * Module: KillManage
  *
@@ -12,18 +10,29 @@ export function createKillManageModule({ core }) {
   const unsubscribers = [];
 
   function handleCombat(event, type) {
+    const combat = event.normalized?.combat;
+    if (!combat) return;
+
     const record = {
       serverId: event.serverId,
       time: event.time,
+      logTime: event.logTime,
       sourceEventId: event.eventId,
-      type,
-      victimName: getParam(event, "VictimName"),
-      attackerName: getParam(event, "AttackerName"),
-      damage: getParam(event, "ActualDamage") || getParam(event, "KillingDamage"),
-      weapon: getParam(event, "CausedBy"),
-      confidence: getParam(event, "Confidence"),
+      type: combat.type || type,
+      victimName: combat.victimName,
+      attackerName: combat.attackerName,
+      damage: combat.damage,
+      weapon: combat.weapon,
+      rawCausedBy: combat.rawCausedBy,
+      causedBy: combat.causedBy,
+      causedByCategory: combat.causedByCategory,
+      confidence: combat.confidence,
+      identityConfidence: combat.identityConfidence,
+      parseConfidence: combat.parseConfidence,
+      parseStatus: combat.parseStatus,
       rawLog: event.rawLog || "",
       rawEvent: event.rawEvent || null,
+      normalized: event.normalized || null,
       params: event.params || null,
     };
 

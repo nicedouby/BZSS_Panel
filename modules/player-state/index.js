@@ -15,6 +15,7 @@ export function createPlayerStateModule({ core }) {
   const playersByName = new Map();
   const playersBySteamID = new Map();
   const playersByEOSID = new Map();
+  const playersByControllerID = new Map();
   const unsubscribers = [];
 
   function makeKey(serverId, value) {
@@ -31,12 +32,16 @@ export function createPlayerStateModule({ core }) {
     for (const [key, p] of [...playersByEOSID.entries()]) {
       if (p.serverId === serverId) playersByEOSID.delete(key);
     }
+    for (const [key, p] of [...playersByControllerID.entries()]) {
+      if (p.serverId === serverId) playersByControllerID.delete(key);
+    }
   }
 
   function indexPlayer(player) {
     if (player.name) playersByName.set(makeKey(player.serverId, player.name), player);
     if (player.steamID) playersBySteamID.set(makeKey(player.serverId, player.steamID), player);
     if (player.eosID) playersByEOSID.set(makeKey(player.serverId, player.eosID), player);
+    if (player.controllerID) playersByControllerID.set(makeKey(player.serverId, player.controllerID), player);
   }
 
   function upsertByName(serverId, name, patch = {}) {
@@ -109,6 +114,10 @@ export function createPlayerStateModule({ core }) {
       return playersByEOSID.get(makeKey(serverId, eosID)) ?? null;
     },
 
+    getPlayerByControllerID(serverId, controllerID) {
+      return playersByControllerID.get(makeKey(serverId, controllerID)) ?? null;
+    },
+
     getOnlinePlayers(serverId) {
       return [...playersByName.values()].filter((p) => p.serverId === serverId);
     },
@@ -145,11 +154,33 @@ export function createPlayerStateModule({ core }) {
       }));
 
       unsubscribers.push(core.eventBus.onCoreEvent("On_PlayerWounded", (event) => {
-        upsertByName(event.serverId, getParam(event, "VictimName"), { state: "wounded" });
+        upsertByName(event.serverId, getParam(event, "VictimName"), {
+          state: "wounded",
+          eosID: getParam(event, "VictimCachedEOSID"),
+          steamID: getParam(event, "VictimCachedSteam64ID"),
+        });
+
+        upsertByName(event.serverId, getParam(event, "AttackerName"), {
+          state: "playing",
+          eosID: getParam(event, "AttackerEOSID"),
+          steamID: getParam(event, "AttackerSteam64ID"),
+          controllerID: getParam(event, "AttackerControllerID"),
+        });
       }));
 
       unsubscribers.push(core.eventBus.onCoreEvent("On_PlayerDied", (event) => {
-        upsertByName(event.serverId, getParam(event, "VictimName"), { state: "dead" });
+        upsertByName(event.serverId, getParam(event, "VictimName"), {
+          state: "dead",
+          eosID: getParam(event, "VictimCachedEOSID"),
+          steamID: getParam(event, "VictimCachedSteam64ID"),
+        });
+
+        upsertByName(event.serverId, getParam(event, "AttackerName"), {
+          state: "playing",
+          eosID: getParam(event, "AttackerEOSID"),
+          steamID: getParam(event, "AttackerSteam64ID"),
+          controllerID: getParam(event, "AttackerControllerID"),
+        });
       }));
     },
 

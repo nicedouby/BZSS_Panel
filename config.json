@@ -45,6 +45,12 @@
       "useColor": true
     }
   },
+  "serverTickRate": {
+    "expected": 30,
+    "warningBelow": 28,
+    "criticalBelow": 20,
+    "staleAfterSeconds": 10
+  },
 
   "database": {
     "dir": "./data",

@@ -5,7 +5,10 @@
   "description": "BZSS Panel minimal core/modules/plugins/web architecture",
   "type": "module",
   "scripts": {
-    "start": "node main.js"
+    "start": "node main.js",
+    "test": "python -m unittest discover -s LogPost/tests && node tests/run-event-pipeline-tests.js",
+    "test:py": "python -m unittest discover -s LogPost/tests",
+    "test:js": "node tests/run-event-pipeline-tests.js"
   },
   "dependencies": {
     "sqlite": "^5.1.1",

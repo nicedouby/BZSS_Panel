@@ -17,6 +17,7 @@ from bzss_parser.tail_reader import TailReader
 from bzss_parser.udp_sender import UdpSender
 from bzss_parser.matchers.auxiliary_identity_matcher import AuxiliaryIdentityMatcher
 from bzss_parser.matchers.combat_matcher import CombatMatcher
+from bzss_parser.matchers.server_tick_rate_matcher import ServerTickRateMatcher
 from bzss_parser.matchers.spawn_matcher import SpawnMatcher
 from bzss_parser.matchers.squad_matcher import SquadMatcher
 
@@ -34,6 +35,7 @@ class BzssLogParserApp:
         self.auxiliary_identity_matcher = AuxiliaryIdentityMatcher(self.identity_cache)
         self.matchers = [
             CombatMatcher(self.identity_cache),
+            ServerTickRateMatcher(self.config.get("server_tick_rate", {})),
             SpawnMatcher(self.identity_cache),
             SquadMatcher(self.identity_cache),
         ]

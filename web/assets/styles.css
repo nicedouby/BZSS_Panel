@@ -140,6 +140,7 @@ body::before {
 .status-chip.good { color: var(--green); border-color: rgba(134, 239, 172, 0.28); }
 .status-chip.warn { color: var(--yellow); border-color: rgba(253, 230, 138, 0.28); }
 .status-chip.bad { color: var(--danger); border-color: rgba(251, 113, 133, 0.28); }
+.status-chip.muted { color: var(--muted); border-color: rgba(148, 163, 184, 0.24); }
 
 #shell {
   min-height: 0;

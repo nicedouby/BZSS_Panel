@@ -23,6 +23,7 @@ EVENT_COLORS = {
     "On_PlayerDamaged": ANSI_YELLOW,
     "On_PlayerWounded": ANSI_RED,
     "On_PlayerDied": ANSI_MAGENTA,
+    "On_ServerTickRateUpdated": ANSI_GREEN,
     "On_PlayerSpawnRequested": ANSI_CYAN,
     "On_SquadCreated": ANSI_GREEN,
 }

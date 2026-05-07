@@ -11,6 +11,12 @@ export class WebStatus {
   constructor({ config }) {
     this.serverId = config.get("server.id", "BZSS_Main");
     this.serverName = config.get("server.name", "BZSS Main Server");
+    this.serverTickRateConfig = {
+      expected: Number(config.get("serverTickRate.expected", 30)),
+      warningBelow: Number(config.get("serverTickRate.warningBelow", 28)),
+      criticalBelow: Number(config.get("serverTickRate.criticalBelow", 20)),
+      staleAfterSeconds: Number(config.get("serverTickRate.staleAfterSeconds", 10)),
+    };
 
     this.state = {
       serverId: this.serverId,
@@ -27,6 +33,9 @@ export class WebStatus {
       team1Count: 0,
       team2Count: 0,
       squadCount: 0,
+      tps: null,
+      tpsStatus: "unknown",
+      lastTpsUpdateTime: null,
 
       rconQueue: 0,
       recentErrors: 0,
@@ -45,7 +54,36 @@ export class WebStatus {
     this.state.updatedAt = new Date().toISOString();
   }
 
+  applyServerTickRateUpdate(update) {
+    this.patch({
+      tps: Number.isFinite(update?.tps) ? Number(update.tps) : null,
+      tpsStatus: String(update?.status ?? "unknown"),
+      lastTpsUpdateTime: update?.time ?? new Date().toISOString(),
+    });
+  }
+
   getSnapshot() {
-    return { ...this.state };
+    const snapshot = { ...this.state };
+    snapshot.tpsStatus = this.#resolveTpsStatus(snapshot);
+    snapshot.serverTickRate = { ...this.serverTickRateConfig };
+    return snapshot;
+  }
+
+  #resolveTpsStatus(snapshot) {
+    if (snapshot.tps == null || !snapshot.lastTpsUpdateTime) {
+      return "unknown";
+    }
+
+    const updatedAtMs = Date.parse(snapshot.lastTpsUpdateTime);
+    if (!Number.isFinite(updatedAtMs)) {
+      return snapshot.tpsStatus || "unknown";
+    }
+
+    const staleAfterMs = Math.max(1, this.serverTickRateConfig.staleAfterSeconds) * 1000;
+    if (Date.now() - updatedAtMs > staleAfterMs) {
+      return "stale";
+    }
+
+    return snapshot.tpsStatus || "unknown";
   }
 }

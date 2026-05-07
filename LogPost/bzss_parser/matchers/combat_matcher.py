@@ -8,8 +8,10 @@ from typing import List, Optional, Tuple
 from bzss_parser.identity_cache import IdentityCache
 from bzss_parser.matchers.helpers import (
     compute_combat_confidence,
+    effective_confidence,
     parse_attacker_name_from_damage,
     parse_caused_by,
+    parse_confidence_from_status,
     parse_controller_id,
     parse_damage_value,
     parse_from_object,
@@ -104,6 +106,7 @@ class CombatMatcher:
             attacker_controller=attacker_controller,
             victim_source=victim_source,
         )
+        identity_source = "RawLog+Victim" + victim_source
 
         params = [
             ("VictimName", victim_name),
@@ -115,11 +118,17 @@ class CombatMatcher:
             ("CausedBy", caused_by),
             ("VictimCachedEOSID", victim_identity.eos_id if victim_identity else ""),
             ("VictimCachedSteam64ID", victim_identity.steam64_id if victim_identity else ""),
-            ("Confidence", confidence),
-            ("IdentitySource", "RawLog+Victim" + victim_source),
+            ("IdentityConfidence", confidence),
+            ("IdentitySource", identity_source),
         ]
 
-        params.append(("ParseStatus", parse_status_from_params(params)))
+        parse_status = parse_status_from_params(params)
+        parse_confidence = parse_confidence_from_status(parse_status)
+        params.extend([
+            ("ParseStatus", parse_status),
+            ("ParseConfidence", parse_confidence),
+            ("Confidence", effective_confidence(confidence, parse_confidence)),
+        ])
 
         return "On_PlayerDamaged", params
 
@@ -150,6 +159,7 @@ class CombatMatcher:
             attacker_controller=attacker_controller,
             victim_source=victim_source,
         )
+        identity_source = attacker_source + "+Victim" + victim_source
 
         params = [
             ("VictimName", victim_name),
@@ -162,11 +172,17 @@ class CombatMatcher:
             ("CausedBy", caused_by),
             ("VictimCachedEOSID", victim_identity.eos_id if victim_identity else ""),
             ("VictimCachedSteam64ID", victim_identity.steam64_id if victim_identity else ""),
-            ("Confidence", confidence),
-            ("IdentitySource", attacker_source + "+Victim" + victim_source),
+            ("IdentityConfidence", confidence),
+            ("IdentitySource", identity_source),
         ]
 
-        params.append(("ParseStatus", parse_status_from_params(params)))
+        parse_status = parse_status_from_params(params)
+        parse_confidence = parse_confidence_from_status(parse_status)
+        params.extend([
+            ("ParseStatus", parse_status),
+            ("ParseConfidence", parse_confidence),
+            ("Confidence", effective_confidence(confidence, parse_confidence)),
+        ])
 
         return "On_PlayerWounded", params
 
@@ -197,6 +213,7 @@ class CombatMatcher:
             attacker_controller=attacker_controller,
             victim_source=victim_source,
         )
+        identity_source = attacker_source + "+Victim" + victim_source
 
         params = [
             ("VictimName", victim_name),
@@ -209,10 +226,16 @@ class CombatMatcher:
             ("CausedBy", caused_by),
             ("VictimCachedEOSID", victim_identity.eos_id if victim_identity else ""),
             ("VictimCachedSteam64ID", victim_identity.steam64_id if victim_identity else ""),
-            ("Confidence", confidence),
-            ("IdentitySource", attacker_source + "+Victim" + victim_source),
+            ("IdentityConfidence", confidence),
+            ("IdentitySource", identity_source),
         ]
 
-        params.append(("ParseStatus", parse_status_from_params(params)))
+        parse_status = parse_status_from_params(params)
+        parse_confidence = parse_confidence_from_status(parse_status)
+        params.extend([
+            ("ParseStatus", parse_status),
+            ("ParseConfidence", parse_confidence),
+            ("Confidence", effective_confidence(confidence, parse_confidence)),
+        ])
 
         return "On_PlayerDied", params

@@ -19,6 +19,12 @@
   "raw": {
     "max_raw_chars": 4096
   },
+  "server_tick_rate": {
+    "expected": 30,
+    "warning_below": 28,
+    "critical_below": 20,
+    "stale_after_seconds": 10
+  },
   "raw_input_log": {
     "enabled": true,
     "output_dir": "./ReceivedLogs",
