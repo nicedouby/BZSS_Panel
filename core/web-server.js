@@ -117,7 +117,23 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/player-database/list") {
-      return this.json(res, 200, { players: this.modules.playerDatabase.listPlayers() });
+      const result = await this.modules.playerDatabase.listPlayers({
+        query: url.searchParams.get("q") ?? "",
+        limit: url.searchParams.get("limit") ?? "100",
+        offset: url.searchParams.get("offset") ?? "0",
+        sort: url.searchParams.get("sort") ?? "updated_desc",
+      });
+      return this.json(res, 200, result);
+    }
+
+    if (url.pathname === "/api/player-database/detail") {
+      const detail = await this.modules.playerDatabase.getPlayerDetail(url.searchParams.get("id"));
+      if (!detail) return this.json(res, 404, { error: "PlayerNotFound" });
+      return this.json(res, 200, detail);
+    }
+
+    if (url.pathname === "/api/player-database/sync-online" && req.method === "POST") {
+      return this.json(res, 200, await this.modules.playerDatabase.syncOnline(url.searchParams.get("serverId") ?? this.core.webStatus.serverId));
     }
 
     if (url.pathname === "/api/squads/list") {

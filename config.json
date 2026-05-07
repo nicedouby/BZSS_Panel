@@ -31,7 +31,7 @@
 
   "rcon": {
     "enabled": true,
-    "host": "192.168.0.183",
+    "host": "SuperDB",
     "port": 30144,
     "password": "9290dd2aa02b",
     "rateLimit": {
@@ -44,6 +44,11 @@
     "logger": {
       "useColor": true
     }
+  },
+
+  "database": {
+    "dir": "./data",
+    "filename": "micepanel.db"
   },
 
   "modules": {
