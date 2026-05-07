@@ -194,9 +194,12 @@ export class PlayerRepository {
     const q = `%${String(query ?? "").trim()}%`;
     const cappedLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
     const safeOffset = Math.max(Number(offset) || 0, 0);
-    const orderBy = sort === "name_asc"
-      ? "COALESCE(players.current_name, '') COLLATE NOCASE ASC, players.updated_at DESC"
-      : "players.updated_at DESC";
+    let orderBy = "players.updated_at DESC";
+    if (sort === "name_asc") {
+      orderBy = "COALESCE(players.current_name, '') COLLATE NOCASE ASC, players.updated_at DESC";
+    } else if (sort === "last_login_desc") {
+      orderBy = "COALESCE(login.last_login_at, players.updated_at) DESC, players.updated_at DESC";
+    }
 
     return this.db.all(
       `SELECT players.id, players.current_name, players.steam_id, players.eos_id, players.current_ip,
@@ -251,11 +254,17 @@ export class PlayerRepository {
     const player = await this.getPlayerById(id);
     if (!player) return null;
 
-    const [aliases, ips, logins, squadCreated, recentEvents] = await Promise.all([
+    const [aliases, ips, cmdLogs, reported, reports, squadCreated, ratingHistory, logins, combatSessions, warmupStats, recentEvents] = await Promise.all([
       this.db.all("SELECT alias_name, seen_at FROM player_aliases WHERE player_id = ? ORDER BY seen_at DESC LIMIT 100", id),
       this.db.all("SELECT ip, seen_at FROM player_ips WHERE player_id = ? ORDER BY seen_at DESC LIMIT 100", id),
-      this.db.all("SELECT ip, controller_path, eos_id, steam_id, joined_at FROM player_logins WHERE player_id = ? ORDER BY joined_at DESC LIMIT 100", id),
+      this.db.all("SELECT command_text, command_result, created_at FROM command_logs WHERE player_id = ? ORDER BY created_at DESC LIMIT 100", id),
+      this.db.all("SELECT reason, status, created_at FROM report_records WHERE target_player_id = ? ORDER BY created_at DESC LIMIT 100", id),
+      this.db.all("SELECT reason, status, created_at FROM report_records WHERE reporter_player_id = ? ORDER BY created_at DESC LIMIT 100", id),
       this.db.all("SELECT squad_id, squad_name, team_name, created_at FROM squad_create_records WHERE player_id = ? ORDER BY created_at DESC LIMIT 100", id),
+      this.db.all("SELECT old_rating, new_rating, reason, changed_at FROM ladder_rating_history WHERE player_id = ? ORDER BY changed_at DESC LIMIT 100", id),
+      this.db.all("SELECT ip, controller_path, eos_id, steam_id, joined_at FROM player_logins WHERE player_id = ? ORDER BY joined_at DESC LIMIT 100", id),
+      this.db.all("SELECT id, date_key, file_path, first_event_at, last_event_at FROM combat_sessions WHERE player_id = ? ORDER BY date_key DESC, last_event_at DESC LIMIT 100", id),
+      this.db.get("SELECT * FROM player_warmup_stats WHERE player_id = ?", id),
       this.db.all(
         `SELECT source_event, event_name, raw_line, matched_player_name, created_at
          FROM log_events
@@ -267,26 +276,265 @@ export class PlayerRepository {
       ),
     ]);
 
-    return { player, aliases, ips, logins, squadCreated, recentEvents };
+    return { player, aliases, ips, cmdLogs, reported, reports, squadCreated, ratingHistory, logins, combatSessions, warmupStats, recentEvents };
   }
 
-  async getDatabaseStats() {
-    const overview = await this.db.get(
-      `SELECT COUNT(*) AS totalPlayers,
-              COALESCE(SUM(server_seconds), 0) AS totalServerSeconds,
-              COALESCE(SUM(game_seconds), 0) AS totalGameSeconds,
-              COALESCE(SUM(total_kills_light + total_kills_other), 0) AS totalKills,
-              COALESCE(SUM(total_deaths), 0) AS totalDeaths,
-              COALESCE(MAX(updated_at), 0) AS lastUpdatedAt
+  async setPermissionGroup(playerId, permissionGroup) {
+    await this.db.run(
+      "UPDATE players SET permission_group = ?, updated_at = ? WHERE id = ?",
+      cleanText(permissionGroup) ?? "default",
+      now(),
+      Number(playerId),
+    );
+  }
+
+  async resetKillStats() {
+    const ts = now();
+    const result = await this.db.run(
+      `UPDATE players
+       SET total_kills_light = 0,
+           total_kills_other = 0,
+           total_downed_light = 0,
+           total_downed_other = 0,
+           total_downed_light_fatal = 0,
+           total_tk_down = 0,
+           total_tk_kill = 0,
+           total_deaths = 0,
+           total_downed_received = 0,
+           total_suicides = 0,
+           updated_at = ?`,
+      ts,
+    );
+    await this.db.run("DELETE FROM player_warmup_stats");
+    return Number(result?.changes || 0);
+  }
+
+  async deletePlayer(playerId) {
+    const existing = await this.getPlayerById(playerId);
+    if (!existing) return false;
+    await this.db.run("DELETE FROM players WHERE id = ?", Number(playerId));
+    this.evict(existing);
+    return true;
+  }
+
+  async getDatabaseStats({ top = 10, days = 14 } = {}) {
+    const normalizedTop = Math.min(Math.max(Number(top) || 10, 1), 100);
+    const normalizedDays = Math.min(Math.max(Number(days) || 14, 1), 120);
+    const nowTs = now();
+    const windowStartTs = nowTs - normalizedDays * 24 * 60 * 60 * 1000;
+
+    const overviewRow = await this.db.get(
+      `SELECT COUNT(*) AS total_players,
+              COALESCE(SUM(game_seconds), 0) AS total_game_seconds,
+              COALESCE(SUM(server_seconds), 0) AS total_server_seconds,
+              COALESCE(SUM(commander_seconds), 0) AS total_commander_seconds,
+              COALESCE(SUM(squad_leader_seconds), 0) AS total_squad_leader_seconds,
+              COALESCE(SUM(in_squad_seconds), 0) AS total_in_squad_seconds,
+              COALESCE(SUM(total_matches), 0) AS total_matches,
+              COALESCE(SUM(total_match_wins), 0) AS total_match_wins,
+              COALESCE(SUM(total_kills_light + total_kills_other), 0) AS total_kills,
+              COALESCE(SUM(total_deaths), 0) AS total_deaths,
+              COALESCE(SUM(total_tk_down + total_tk_kill), 0) AS total_team_kills,
+              COALESCE(SUM(total_suicides), 0) AS total_suicides,
+              COALESCE(AVG(ladder_rating), 0) AS average_ladder_rating,
+              COALESCE(MAX(ladder_rating), 0) AS max_ladder_rating,
+              COALESCE(MIN(ladder_rating), 0) AS min_ladder_rating,
+              COALESCE(MAX(updated_at), 0) AS last_player_update_at
        FROM players`,
     );
+
+    const activeWindowRow = await this.db.get(
+      "SELECT COUNT(*) AS active_players FROM players WHERE updated_at >= ?",
+      windowStartTs,
+    );
+
+    const permissionGroups = await this.db.all(
+      `SELECT permission_group, COUNT(*) AS players
+       FROM players
+       GROUP BY permission_group
+       ORDER BY players DESC, permission_group ASC`,
+    );
+
+    const topByKills = await this.db.all(
+      `SELECT id, current_name, steam_id, eos_id, ladder_rating,
+              total_kills_light, total_kills_other, total_deaths, total_tk_down, total_tk_kill,
+              (total_kills_light + total_kills_other) AS total_kills,
+              CASE
+                WHEN total_deaths > 0 THEN ROUND(1.0 * (total_kills_light + total_kills_other) / total_deaths, 2)
+                ELSE NULL
+              END AS kd
+       FROM players
+       ORDER BY total_kills DESC, total_kills_light DESC, total_kills_other DESC, updated_at DESC
+       LIMIT ?`,
+      normalizedTop,
+    );
+
+    const topByPlaytime = await this.db.all(
+      `SELECT id, current_name, steam_id, eos_id, game_seconds, server_seconds,
+              commander_seconds, squad_leader_seconds, in_squad_seconds, warmup_seconds
+       FROM players
+       ORDER BY game_seconds DESC, server_seconds DESC, updated_at DESC
+       LIMIT ?`,
+      normalizedTop,
+    );
+
+    const tagStats = await this.db.all(
+      `SELECT tag_type, tag_value, COUNT(*) AS players
+       FROM player_tags
+       GROUP BY tag_type, tag_value
+       ORDER BY players DESC, tag_value ASC`,
+    );
+
+    const topViolations = await this.db.all(
+      `SELECT pvc.player_id,
+              COALESCE(p.current_name, p.steam_id, p.eos_id, 'Unknown') AS current_name,
+              p.steam_id,
+              p.eos_id,
+              SUM(pvc.count) AS total_violations,
+              MAX(pvc.last_at) AS last_violation_at
+       FROM player_violation_counts pvc
+       LEFT JOIN players p ON p.id = pvc.player_id
+       GROUP BY pvc.player_id
+       HAVING total_violations > 0
+       ORDER BY total_violations DESC, last_violation_at DESC
+       LIMIT ?`,
+      normalizedTop,
+    );
+
+    const violationTypeStats = await this.db.all(
+      `SELECT violation_key,
+              COALESCE(MAX(violation_label), violation_key) AS violation_label,
+              SUM(count) AS total_count,
+              COUNT(*) AS affected_players,
+              MAX(last_at) AS last_at
+       FROM player_violation_counts
+       GROUP BY violation_key
+       HAVING total_count > 0
+       ORDER BY total_count DESC, violation_key ASC
+       LIMIT ?`,
+      normalizedTop,
+    );
+
+    const loginTrend = await this.db.all(
+      `SELECT strftime('%Y-%m-%d', joined_at / 1000, 'unixepoch', 'localtime') AS day,
+              COUNT(*) AS login_count,
+              COUNT(DISTINCT player_id) AS unique_players
+       FROM player_logins
+       WHERE joined_at >= ?
+       GROUP BY day
+       ORDER BY day ASC`,
+      windowStartTs,
+    );
+
+    const matchTrend = await this.db.all(
+      `SELECT strftime('%Y-%m-%d', started_at / 1000, 'unixepoch', 'localtime') AS day,
+              COUNT(*) AS match_count,
+              SUM(CASE WHEN ended_at IS NOT NULL THEN 1 ELSE 0 END) AS completed_count
+       FROM match_records
+       WHERE started_at >= ?
+       GROUP BY day
+       ORDER BY day ASC`,
+      windowStartTs,
+    );
+
+    const roleTags = [];
+    const componentTags = [];
+    for (const row of tagStats || []) {
+      if (row.tag_type === "role") roleTags.push(row);
+      if (row.tag_type === "component") componentTags.push(row);
+    }
+
     return {
-      totalPlayers: Number(overview?.totalPlayers ?? 0),
-      totalServerSeconds: Number(overview?.totalServerSeconds ?? 0),
-      totalGameSeconds: Number(overview?.totalGameSeconds ?? 0),
-      totalKills: Number(overview?.totalKills ?? 0),
-      totalDeaths: Number(overview?.totalDeaths ?? 0),
-      lastUpdatedAt: Number(overview?.lastUpdatedAt ?? 0) || null,
+      generatedAt: nowTs,
+      windowDays: normalizedDays,
+      topLimit: normalizedTop,
+      overview: {
+        totalPlayers: Number(overviewRow?.total_players || 0),
+        activePlayersInWindow: Number(activeWindowRow?.active_players || 0),
+        totalGameSeconds: Number(overviewRow?.total_game_seconds || 0),
+        totalServerSeconds: Number(overviewRow?.total_server_seconds || 0),
+        totalCommanderSeconds: Number(overviewRow?.total_commander_seconds || 0),
+        totalSquadLeaderSeconds: Number(overviewRow?.total_squad_leader_seconds || 0),
+        totalInSquadSeconds: Number(overviewRow?.total_in_squad_seconds || 0),
+        totalMatches: Number(overviewRow?.total_matches || 0),
+        totalMatchWins: Number(overviewRow?.total_match_wins || 0),
+        totalKills: Number(overviewRow?.total_kills || 0),
+        totalDeaths: Number(overviewRow?.total_deaths || 0),
+        totalTeamKills: Number(overviewRow?.total_team_kills || 0),
+        totalSuicides: Number(overviewRow?.total_suicides || 0),
+        averageLadderRating: Number(Number(overviewRow?.average_ladder_rating || 0).toFixed(2)),
+        maxLadderRating: Number(overviewRow?.max_ladder_rating || 0),
+        minLadderRating: Number(overviewRow?.min_ladder_rating || 0),
+        lastPlayerUpdateAt: Number(overviewRow?.last_player_update_at || 0) || null,
+      },
+      breakdowns: {
+        permissionGroups: permissionGroups.map((row) => ({
+          permissionGroup: row.permission_group || "default",
+          players: Number(row.players || 0),
+        })),
+        roleTags: roleTags.slice(0, normalizedTop).map((row) => ({
+          tagValue: row.tag_value,
+          players: Number(row.players || 0),
+        })),
+        componentTags: componentTags.slice(0, normalizedTop).map((row) => ({
+          tagValue: row.tag_value,
+          players: Number(row.players || 0),
+        })),
+        violationTypes: violationTypeStats.map((row) => ({
+          violationKey: row.violation_key,
+          violationLabel: row.violation_label || row.violation_key,
+          totalCount: Number(row.total_count || 0),
+          affectedPlayers: Number(row.affected_players || 0),
+          lastAt: Number(row.last_at || 0) || null,
+        })),
+      },
+      leaderboards: {
+        byKills: topByKills.map((row) => ({
+          id: Number(row.id),
+          currentName: row.current_name || null,
+          steamID: row.steam_id || null,
+          eosID: row.eos_id || null,
+          ladderRating: Number(row.ladder_rating || 0),
+          totalKillsLight: Number(row.total_kills_light || 0),
+          totalKillsOther: Number(row.total_kills_other || 0),
+          totalKills: Number(row.total_kills || 0),
+          totalDeaths: Number(row.total_deaths || 0),
+          totalTeamKills: Number(row.total_tk_down || 0) + Number(row.total_tk_kill || 0),
+          kd: row.kd == null ? null : Number(row.kd),
+        })),
+        byPlaytime: topByPlaytime.map((row) => ({
+          id: Number(row.id),
+          currentName: row.current_name || null,
+          steamID: row.steam_id || null,
+          eosID: row.eos_id || null,
+          gameSeconds: Number(row.game_seconds || 0),
+          serverSeconds: Number(row.server_seconds || 0),
+          commanderSeconds: Number(row.commander_seconds || 0),
+          squadLeaderSeconds: Number(row.squad_leader_seconds || 0),
+          inSquadSeconds: Number(row.in_squad_seconds || 0),
+          warmupSeconds: Number(row.warmup_seconds || 0),
+        })),
+        byViolations: topViolations.map((row) => ({
+          playerId: Number(row.player_id),
+          currentName: row.current_name || null,
+          steamID: row.steam_id || null,
+          eosID: row.eos_id || null,
+          totalViolations: Number(row.total_violations || 0),
+          lastViolationAt: Number(row.last_violation_at || 0) || null,
+        })),
+      },
+      trends: {
+        loginsByDay: loginTrend.map((row) => ({
+          day: row.day,
+          loginCount: Number(row.login_count || 0),
+          uniquePlayers: Number(row.unique_players || 0),
+        })),
+        matchesByDay: matchTrend.map((row) => ({
+          day: row.day,
+          matchCount: Number(row.match_count || 0),
+          completedCount: Number(row.completed_count || 0),
+        })),
+      },
     };
   }
 

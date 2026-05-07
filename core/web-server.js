@@ -119,6 +119,7 @@ export class WebServer {
     if (url.pathname === "/api/player-database/list") {
       const result = await this.modules.playerDatabase.listPlayers({
         query: url.searchParams.get("q") ?? "",
+        q: url.searchParams.get("q") ?? "",
         limit: url.searchParams.get("limit") ?? "100",
         offset: url.searchParams.get("offset") ?? "0",
         sort: url.searchParams.get("sort") ?? "updated_desc",
@@ -134,6 +135,49 @@ export class WebServer {
 
     if (url.pathname === "/api/player-database/sync-online" && req.method === "POST") {
       return this.json(res, 200, await this.modules.playerDatabase.syncOnline(url.searchParams.get("serverId") ?? this.core.webStatus.serverId));
+    }
+
+    if (url.pathname === "/api/db/stats") {
+      return this.json(res, 200, await this.modules.playerDatabase.getStats({
+        top: url.searchParams.get("top") ?? "10",
+        days: url.searchParams.get("days") ?? "14",
+      }));
+    }
+
+    if (url.pathname === "/api/db/players") {
+      const result = await this.modules.playerDatabase.listPlayers({
+        query: url.searchParams.get("query") ?? "",
+        limit: url.searchParams.get("limit") ?? "200",
+        offset: url.searchParams.get("offset") ?? "0",
+        sort: url.searchParams.get("sort") ?? "updated_desc",
+        top: url.searchParams.get("top") ?? "10",
+        days: url.searchParams.get("days") ?? "14",
+      });
+      return this.json(res, 200, {
+        items: result.items ?? [],
+        total: result.total ?? 0,
+      });
+    }
+
+    const dbPlayerMatch = url.pathname.match(/^\/api\/db\/players\/(\d+)$/);
+    if (dbPlayerMatch && req.method === "GET") {
+      const detail = await this.modules.playerDatabase.getPlayerDetail(dbPlayerMatch[1]);
+      if (!detail) return this.json(res, 404, { error: "PlayerNotFound" });
+      return this.json(res, 200, detail);
+    }
+
+    const dbPermissionMatch = url.pathname.match(/^\/api\/db\/players\/(\d+)\/permission-group$/);
+    if (dbPermissionMatch && req.method === "PATCH") {
+      const body = await this.readJsonBody(req);
+      return this.json(res, 200, await this.modules.playerDatabase.setPermissionGroup(dbPermissionMatch[1], body.permissionGroup));
+    }
+
+    if (url.pathname === "/api/db/reset-kill-stats" && req.method === "POST") {
+      return this.json(res, 200, await this.modules.playerDatabase.resetKillStats());
+    }
+
+    if (dbPlayerMatch && req.method === "DELETE") {
+      return this.json(res, 200, await this.modules.playerDatabase.deletePlayer(dbPlayerMatch[1]));
     }
 
     if (url.pathname === "/api/squads/list") {

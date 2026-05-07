@@ -18,8 +18,8 @@ export async function createDatabase(config = {}) {
   await db.exec("PRAGMA journal_mode = WAL;");
   await db.exec("PRAGMA foreign_keys = ON;");
   await ensureMicePanelSchema(db);
-  await ensureCompatibleColumns(db);
   await runMigrations(db);
+  await ensureCompatibleColumns(db);
   await migrateLegacyColumns(db);
 
   return db;
@@ -259,13 +259,62 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 }
 
 async function runMigrations(db) {
-  await addColumnIfMissing(db, "players", "commander_seconds", "INTEGER NOT NULL DEFAULT 0");
-  await addColumnIfMissing(db, "players", "squad_leader_seconds", "INTEGER NOT NULL DEFAULT 0");
-  await addColumnIfMissing(db, "players", "in_squad_seconds", "INTEGER NOT NULL DEFAULT 0");
-  await addColumnIfMissing(db, "players", "warmup_seconds", "INTEGER NOT NULL DEFAULT 0");
-  await addColumnIfMissing(db, "players", "total_tk_kill", "INTEGER NOT NULL DEFAULT 0");
-  await addColumnIfMissing(db, "players", "total_deaths", "INTEGER NOT NULL DEFAULT 0");
-  await addColumnIfMissing(db, "players", "total_downed_received", "INTEGER NOT NULL DEFAULT 0");
+  const applied = await db.all("SELECT version FROM schema_migrations ORDER BY version");
+  const appliedSet = new Set(applied.map((row) => row.version));
+
+  if (!appliedSet.has(1)) {
+    const tableInfo = await db.all("PRAGMA table_info(players)");
+    const cols = new Set(tableInfo.map((column) => column.name));
+
+    if (cols.has("total_headshots") && !cols.has("total_downed_light_fatal")) {
+      await db.run("ALTER TABLE players RENAME COLUMN total_headshots TO total_downed_light_fatal");
+    }
+    if (cols.has("total_kills_other_fatal") && !cols.has("total_downed_other")) {
+      await db.run("ALTER TABLE players RENAME COLUMN total_kills_other_fatal TO total_downed_other");
+    }
+    if (cols.has("total_team_kills") && !cols.has("total_tk_down")) {
+      await db.run("ALTER TABLE players RENAME COLUMN total_team_kills TO total_tk_down");
+    }
+    if (!cols.has("total_tk_kill")) {
+      await db.run("ALTER TABLE players ADD COLUMN total_tk_kill INTEGER NOT NULL DEFAULT 0");
+    }
+    if (!cols.has("total_deaths")) {
+      await db.run("ALTER TABLE players ADD COLUMN total_deaths INTEGER NOT NULL DEFAULT 0");
+    }
+
+    await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 1, Date.now());
+  }
+
+  if (!appliedSet.has(2)) {
+    const tableInfo = await db.all("PRAGMA table_info(players)");
+    const cols = new Set(tableInfo.map((column) => column.name));
+
+    if (!cols.has("total_downed_received")) {
+      await db.run("ALTER TABLE players ADD COLUMN total_downed_received INTEGER NOT NULL DEFAULT 0");
+    }
+
+    await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 2, Date.now());
+  }
+
+  if (!appliedSet.has(3)) {
+    const tableInfo = await db.all("PRAGMA table_info(players)");
+    const cols = new Set(tableInfo.map((column) => column.name));
+
+    if (!cols.has("commander_seconds")) {
+      await db.run("ALTER TABLE players ADD COLUMN commander_seconds INTEGER NOT NULL DEFAULT 0");
+    }
+    if (!cols.has("squad_leader_seconds")) {
+      await db.run("ALTER TABLE players ADD COLUMN squad_leader_seconds INTEGER NOT NULL DEFAULT 0");
+    }
+    if (!cols.has("in_squad_seconds")) {
+      await db.run("ALTER TABLE players ADD COLUMN in_squad_seconds INTEGER NOT NULL DEFAULT 0");
+    }
+    if (!cols.has("warmup_seconds")) {
+      await db.run("ALTER TABLE players ADD COLUMN warmup_seconds INTEGER NOT NULL DEFAULT 0");
+    }
+
+    await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 3, Date.now());
+  }
 }
 
 async function ensureCompatibleColumns(db) {

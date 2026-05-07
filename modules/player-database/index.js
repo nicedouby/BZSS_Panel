@@ -78,10 +78,11 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       const [players, total, stats] = await Promise.all([
         repo.listPlayers(options),
         repo.countPlayers(options),
-        repo.getDatabaseStats(),
+        repo.getDatabaseStats(options),
       ]);
 
       return {
+        items: players,
         players: players.map((p) => ({
           id: p.id,
           name: p.current_name ?? "",
@@ -112,8 +113,25 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       };
     },
 
+    async getStats(options = {}) {
+      return repo.getDatabaseStats(options);
+    },
+
     async getPlayerDetail(playerId) {
       return repo.getPlayerDetail(playerId);
+    },
+
+    async setPermissionGroup(playerId, permissionGroup) {
+      await repo.setPermissionGroup(playerId, permissionGroup);
+      return { ok: true };
+    },
+
+    async resetKillStats() {
+      return { changed: await repo.resetKillStats() };
+    },
+
+    async deletePlayer(playerId) {
+      return { deleted: await repo.deletePlayer(playerId) };
     },
 
     async syncOnline(serverId = core.webStatus.serverId) {
