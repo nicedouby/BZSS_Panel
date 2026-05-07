@@ -4,12 +4,13 @@ let rows = [];
 let selectedId = null;
 let searchTimer = null;
 
-export async function renderPage({ root, api }) {
+export async function renderPage({ root, api, routeInfo }) {
   const state = {
     query: "",
     sort: "updated_desc",
     days: 14,
     top: 10,
+    initialPlayerQuery: String(routeInfo?.params?.get("player") || "").trim(),
   };
 
   root.innerHTML = `
@@ -104,6 +105,11 @@ export async function renderPage({ root, api }) {
     leaderboards: root.querySelector("#db-leaderboards"),
     trends: root.querySelector("#db-trends"),
   };
+
+  if (state.initialPlayerQuery) {
+    state.query = state.initialPlayerQuery;
+    els.search.value = state.initialPlayerQuery;
+  }
 
   function setStatus(text, tone = "idle") {
     els.status.dataset.tone = tone;
@@ -356,7 +362,6 @@ function renderDetail(els, data, actions) {
       if (!value || value === "--") return;
 
       const label = el.dataset.copyLabel || "内容";
-      const originalTitle = el.getAttribute("title") || "";
 
       try {
         if (navigator.clipboard?.writeText) {
@@ -369,15 +374,10 @@ function renderDetail(els, data, actions) {
           document.execCommand("copy");
           input.remove();
         }
-        el.setAttribute("title", `${label} 已复制`);
+        showToast(`${label} 已复制`);
       } catch {
-        el.setAttribute("title", `${label} 复制失败`);
+        showToast(`${label} 复制失败`);
       }
-
-      window.setTimeout(() => {
-        if (originalTitle) el.setAttribute("title", originalTitle);
-        else el.removeAttribute("title");
-      }, 1200);
     });
   });
 }
@@ -517,4 +517,22 @@ function esc(value) {
 
 function escAttr(value) {
   return esc(value).replace(/`/g, "&#96;");
+}
+
+function showToast(message) {
+  const id = "bzss-app-toast";
+  let toast = document.getElementById(id);
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = id;
+    toast.className = "app-toast";
+    document.body.appendChild(toast);
+  }
+
+  toast.textContent = message;
+  toast.classList.add("show");
+  window.clearTimeout(showToast._timer);
+  showToast._timer = window.setTimeout(() => {
+    toast.classList.remove("show");
+  }, 1400);
 }

@@ -40,7 +40,8 @@ async function loadBootData() {
 }
 
 async function navigateTo(route) {
-  const page = state.pages.find((p) => p.route === route) ?? state.pages[0];
+  const routeInfo = parseRouteTarget(route);
+  const page = state.pages.find((p) => p.route === routeInfo.path) ?? state.pages[0];
   if (!page) return;
 
   if (typeof state.currentPageCleanup === "function") {
@@ -51,7 +52,7 @@ async function navigateTo(route) {
   }
 
   state.currentPage = page;
-  history.replaceState(null, "", `#${page.route}`);
+  history.replaceState(null, "", `#${routeInfo.full}`);
 
   renderSidebar({
     pages: state.pages,
@@ -67,13 +68,27 @@ async function navigateTo(route) {
     api,
     openDrawer,
     openModal,
+    onNavigate: navigateTo,
     page,
+    routeInfo,
   });
   if (typeof cleanup === "function") {
     state.currentPageCleanup = cleanup;
   } else if (typeof pageScroll.__pageCleanup === "function") {
     state.currentPageCleanup = pageScroll.__pageCleanup;
   }
+}
+
+function parseRouteTarget(route) {
+  const raw = String(route || "").trim() || "/match-status";
+  const cleaned = raw.replace(/^#/, "");
+  const [pathPart, queryPart = ""] = cleaned.split("?");
+  const path = pathPart || "/match-status";
+  return {
+    full: queryPart ? `${path}?${queryPart}` : path,
+    path,
+    params: new URLSearchParams(queryPart),
+  };
 }
 
 async function refreshTopbar() {

@@ -30,6 +30,22 @@
  */
 
 /**
+ * @typedef {Object} PlayerRealtimeContract
+ * @property {"玩家实况"} name
+ * @property {"match-status"} sourcePage
+ * @property {"点击小队列表中的玩家名字"} openTrigger
+ * @property {boolean} supportsSteamIdCopy
+ * @property {boolean} supportsEosIdCopy
+ * @property {boolean} supportsNavigateToPlayerDatabase
+ *
+ * 约定：
+ * - “对局状态”页中，点击小队列表里的玩家名字，打开的窗口统一命名为“玩家实况”。
+ * - “玩家实况”至少展示 Steam ID、EOS ID、Player ID、Team、Squad、角色、状态与实时 K/击倒/死亡。
+ * - “玩家实况”中的 Steam ID 与 EOS ID 可直接点击复制，并给出复制提示。
+ * - “玩家实况”提供跳转到“玩家数据库”的入口，并尽量定位到该玩家的档案视图。
+ */
+
+/**
  * @typedef {Object} WebStatusSnapshot
  * @property {string} serverId
  * @property {string} serverName

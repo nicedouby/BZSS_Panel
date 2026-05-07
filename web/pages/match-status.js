@@ -11,7 +11,7 @@
  * - 不再调用 openDrawer
  * - 显示 Steam ID / EOS ID / Player ID / Team / Squad / Role / 状态
  */
-export async function renderPage({ root, api, openDrawer }) {
+export async function renderPage({ root, api, openDrawer, onNavigate }) {
   if (root.__matchStatusTimer) {
     window.clearTimeout(root.__matchStatusTimer);
     root.__matchStatusTimer = null;
@@ -52,14 +52,14 @@ export async function renderPage({ root, api, openDrawer }) {
     </section>
   `;
 
-  root.querySelector("#refresh").addEventListener("click", () => renderPage({ root, api, openDrawer }));
+  root.querySelector("#refresh").addEventListener("click", () => renderPage({ root, api, openDrawer, onNavigate }));
 
   root.querySelectorAll("[data-player-index]").forEach((el) => {
     el.addEventListener("click", () => {
       const player = players[Number(el.dataset.playerIndex)];
       if (!player) return;
 
-      openPlayerFloatingWindow(player);
+      openPlayerRealtimeWindow(player, onNavigate);
     });
   });
 
@@ -73,7 +73,7 @@ export async function renderPage({ root, api, openDrawer }) {
   };
 
   root.__matchStatusTimer = window.setTimeout(() => {
-    renderPage({ root, api, openDrawer }).catch(() => {});
+    renderPage({ root, api, openDrawer, onNavigate }).catch(() => {});
   }, 3000);
 
   return root.__pageCleanup;
@@ -308,7 +308,7 @@ function renderMember(member) {
   `;
 }
 
-function openPlayerFloatingWindow(player) {
+function openPlayerRealtimeWindow(player, onNavigate) {
   closePlayerFloatingWindow();
 
   const root = document.createElement("div");
@@ -330,7 +330,7 @@ function openPlayerFloatingWindow(player) {
         <div>
           <div class="bzss-player-float-title">${esc(displayName(player.name))}</div>
           <div class="bzss-player-float-subtitle">
-            ${esc(formatState(player.state))} · ${esc(player.role || "未知角色")}
+            玩家实况 · ${esc(formatState(player.state))} · ${esc(player.role || "未知角色")}
           </div>
         </div>
 
@@ -361,7 +361,7 @@ function openPlayerFloatingWindow(player) {
           <button type="button" disabled>警告</button>
           <button type="button" disabled>踢出小队</button>
           <button type="button" disabled>跳边</button>
-          <button type="button" disabled>查看档案</button>
+          <button type="button" id="open-player-database">玩家数据库</button>
         </div>
 
         <div class="bzss-player-float-note">
@@ -383,7 +383,6 @@ function openPlayerFloatingWindow(player) {
       if (!value) return;
 
       const label = el.dataset.copyLabel || "ID";
-      const originalTitle = el.getAttribute("title") || "";
 
       try {
         if (navigator.clipboard?.writeText) {
@@ -396,16 +395,21 @@ function openPlayerFloatingWindow(player) {
           document.execCommand("copy");
           input.remove();
         }
-        el.setAttribute("title", `${label} 已复制`);
+        showToast(`${label} 已复制`);
       } catch {
-        el.setAttribute("title", `${label} 复制失败`);
+        showToast(`${label} 复制失败`);
       }
-
-      window.setTimeout(() => {
-        if (originalTitle) el.setAttribute("title", originalTitle);
-        else el.removeAttribute("title");
-      }, 1200);
     });
+  });
+
+  root.querySelector("#open-player-database")?.addEventListener("click", () => {
+    const playerQuery = getPlayerDatabaseQuery(player);
+    closePlayerFloatingWindow();
+    if (typeof onNavigate === "function") {
+      onNavigate(`/player-database?player=${encodeURIComponent(playerQuery)}`);
+      return;
+    }
+    location.hash = `#/player-database?player=${encodeURIComponent(playerQuery)}`;
   });
 
   const onKeyDown = (event) => {
@@ -427,6 +431,13 @@ function closePlayerFloatingWindow() {
   }
 
   root.remove();
+}
+
+function getPlayerDatabaseQuery(player) {
+  const steamID = String(player.steamID || player.steam64 || player.SteamID || "").trim();
+  const eosID = String(player.eosID || player.eos || player.EOSID || "").trim();
+  const name = String(player.name || "").trim();
+  return steamID || eosID || name || "";
 }
 
 function getMatchStats(player) {
@@ -500,4 +511,22 @@ function esc(value) {
 
 function escAttr(value) {
   return esc(value).replace(/`/g, "&#96;");
+}
+
+function showToast(message) {
+  const id = "bzss-app-toast";
+  let toast = document.getElementById(id);
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = id;
+    toast.className = "app-toast";
+    document.body.appendChild(toast);
+  }
+
+  toast.textContent = message;
+  toast.classList.add("show");
+  window.clearTimeout(showToast._timer);
+  showToast._timer = window.setTimeout(() => {
+    toast.classList.remove("show");
+  }, 1400);
 }

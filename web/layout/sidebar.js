@@ -23,7 +23,7 @@ export function renderSidebar({ pages, activeRoute, onNavigate }) {
       item.innerHTML = `
         <span>${escapeHtml(page.icon ?? "•")}</span>
         <span>${escapeHtml(page.title)}</span>
-        ${page.required ? `<span class="sidebar-item-required">固定</span>` : ""}
+        ${page.required ? `<span class="sidebar-item-required" aria-label="固定" title="固定"></span>` : ""}
       `;
 
       item.addEventListener("click", () => onNavigate(page.route));
