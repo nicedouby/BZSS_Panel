@@ -897,6 +897,159 @@ body::before {
   white-space: nowrap;
 }
 
+.kill-page-shell {
+  min-height: calc(100vh - 96px);
+}
+
+.kill-table-card {
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.kill-table-wrap {
+  height: calc(100vh - 170px);
+  min-height: 420px;
+  overflow: auto;
+}
+
+.kill-search {
+  width: min(420px, 100%);
+}
+
+.kill-empty-cell {
+  color: var(--muted);
+  text-align: center;
+  padding: 20px 12px;
+}
+
+#bzss-kill-record-root {
+  position: relative;
+  z-index: 5200;
+}
+
+.kill-record-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 5200;
+  background: rgba(0, 0, 0, 0.56);
+  backdrop-filter: blur(5px);
+}
+
+.kill-record-window {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 5201;
+  width: min(1120px, calc(100vw - 32px));
+  height: min(88vh, 900px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid var(--line2);
+  background: rgba(8, 13, 27, 0.97);
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.45);
+}
+
+.kill-record-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.kill-record-title {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.kill-record-subtitle {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.kill-record-close {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 11px;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.kill-record-body {
+  min-height: 0;
+  flex: 1;
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.kill-record-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.kill-record-grid > div,
+.kill-record-raw-card {
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.kill-record-grid > div {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.kill-record-grid span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.kill-record-grid strong {
+  margin-top: 4px;
+  word-break: break-word;
+}
+
+.kill-record-raw-card {
+  min-height: 0;
+  flex: 1;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.kill-record-raw-card h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.kill-record-pre {
+  margin: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(3, 7, 18, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 @media (max-width: 980px) {
   .grid.cols-2,
   .grid.cols-3 {
@@ -1153,6 +1306,12 @@ input:focus, select:focus {
   }
   .db-grid {
     grid-template-columns: 1fr;
+  }
+  .kill-record-grid {
+    grid-template-columns: 1fr;
+  }
+  .kill-table-wrap {
+    height: calc(100vh - 210px);
   }
 }
 /* 追加到 web/assets/styles.css 末尾 */

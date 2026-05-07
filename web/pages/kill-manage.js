@@ -1,55 +1,234 @@
 // -*- coding: utf-8 -*-
 
+let searchTimer = null;
+
 /**
  * 页面：击杀管理
  *
- * 类型：可禁用 Web 模块。
+ * 类型：可选 Web 模块。
  * 数据来源：module.killManage
  */
-export async function renderPage({ root, api, openDrawer }) {
-  const data = await api("/api/kills/recent");
-  const records = data.records ?? [];
+export async function renderPage({ root, api }) {
+  if (root.__killManageTimer) {
+    window.clearTimeout(root.__killManageTimer);
+    root.__killManageTimer = null;
+  }
+
+  const state = {
+    allRecords: [],
+    filteredRecords: [],
+    query: "",
+    lastSignature: "",
+  };
 
   root.innerHTML = `
-    <section class="page">
+    <section class="page kill-page-shell">
       <div class="page-title-row">
         <div class="page-title">击杀管理</div>
-        <button id="refresh">刷新</button>
+        <div class="console-actions">
+          <input id="kill-search" class="console-search kill-search" placeholder="搜索：类型 / 受害者 / 攻击者 / 伤害 / 武器 / 时间">
+          <button id="refresh">刷新</button>
+        </div>
       </div>
 
-      <div class="card">
-        <div class="table-wrap">
+      <div class="card kill-table-card">
+        <div class="kill-table-wrap">
           <table>
-            <thead><tr><th>类型</th><th>受害者</th><th>攻击者</th><th>伤害</th><th>武器</th><th>可信度</th></tr></thead>
-            <tbody>
-              ${records.map((r, i) => `
-                <tr data-record="${i}">
-                  <td>${esc(r.type)}</td>
-                  <td>${esc(r.victimName)}</td>
-                  <td>${esc(r.attackerName)}</td>
-                  <td>${esc(r.damage)}</td>
-                  <td>${esc(r.weapon)}</td>
-                  <td>${esc(r.confidence)}</td>
-                </tr>
-              `).join("")}
-            </tbody>
+            <thead>
+              <tr>
+                <th>类型</th>
+                <th>受害者</th>
+                <th>攻击者</th>
+                <th>伤害</th>
+                <th>武器</th>
+                <th>时间</th>
+              </tr>
+            </thead>
+            <tbody id="kill-table-body"></tbody>
           </table>
         </div>
       </div>
     </section>
   `;
 
-  root.querySelector("#refresh").addEventListener("click", () => renderPage({ root, api, openDrawer }));
+  const els = {
+    body: root.querySelector("#kill-table-body"),
+    search: root.querySelector("#kill-search"),
+  };
 
-  root.querySelectorAll("[data-record]").forEach((el) => {
+  function applyFilter() {
+    const q = state.query.trim().toLowerCase();
+    state.filteredRecords = q
+      ? state.allRecords.filter((record) => matchesQuery(record, q))
+      : state.allRecords.slice();
+    renderTable(els.body, state.filteredRecords);
+  }
+
+  async function refreshRecords({ silent = false } = {}) {
+    if (document.visibilityState === "hidden" && silent) return;
+    const data = await api("/api/kills/recent");
+    const records = data.records ?? [];
+    const nextSignature = buildSignature(records);
+    if (nextSignature === state.lastSignature && silent) return;
+    state.allRecords = records;
+    state.lastSignature = nextSignature;
+    applyFilter();
+  }
+
+  function scheduleRefresh() {
+    root.__killManageTimer = window.setTimeout(async () => {
+      try {
+        await refreshRecords({ silent: true });
+      } catch {}
+      scheduleRefresh();
+    }, 5000);
+  }
+
+  els.search.addEventListener("input", () => {
+    window.clearTimeout(searchTimer);
+    searchTimer = window.setTimeout(() => {
+      state.query = els.search.value || "";
+      applyFilter();
+    }, 120);
+  });
+
+  root.querySelector("#refresh").addEventListener("click", async () => {
+    await refreshRecords();
+  });
+
+  await refreshRecords();
+  scheduleRefresh();
+
+  root.__pageCleanup = () => {
+    if (root.__killManageTimer) {
+      window.clearTimeout(root.__killManageTimer);
+      root.__killManageTimer = null;
+    }
+    window.clearTimeout(searchTimer);
+    closeKillRecordWindow();
+  };
+
+  return root.__pageCleanup;
+}
+
+function renderTable(tbody, records) {
+  if (!records.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="kill-empty-cell">没有匹配记录</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = records.map((r, i) => `
+    <tr data-record-index="${i}">
+      <td>${esc(r.type)}</td>
+      <td>${esc(r.victimName)}</td>
+      <td>${esc(r.attackerName)}</td>
+      <td>${esc(r.damage)}</td>
+      <td>${esc(r.weapon)}</td>
+      <td>${esc(formatTime(r.time))}</td>
+    </tr>
+  `).join("");
+
+  tbody.querySelectorAll("[data-record-index]").forEach((el) => {
     el.addEventListener("click", () => {
-      const record = records[Number(el.dataset.record)];
-      openDrawer({
-        title: "击杀记录详情",
-        body: `<pre>${esc(JSON.stringify(record, null, 2))}</pre>`,
-      });
+      const record = records[Number(el.dataset.recordIndex)];
+      if (!record) return;
+      openKillRecordWindow(record);
     });
   });
+}
+
+function openKillRecordWindow(record) {
+  closeKillRecordWindow();
+
+  const root = document.createElement("div");
+  root.id = "bzss-kill-record-root";
+  root.innerHTML = `
+    <div class="kill-record-backdrop" data-close-kill-window="1"></div>
+    <section class="kill-record-window" role="dialog" aria-modal="true" aria-label="击杀记录详情">
+      <header class="kill-record-header">
+        <div>
+          <div class="kill-record-title">击杀记录详情</div>
+          <div class="kill-record-subtitle">${esc(record.type || "--")} · ${esc(record.attackerName || "--")} -> ${esc(record.victimName || "--")}</div>
+        </div>
+        <button class="kill-record-close" type="button" data-close-kill-window="1">×</button>
+      </header>
+
+      <div class="kill-record-body">
+        <div class="kill-record-grid">
+          ${detailCell("类型", record.type)}
+          ${detailCell("受害者", record.victimName)}
+          ${detailCell("攻击者", record.attackerName)}
+          ${detailCell("伤害", record.damage)}
+          ${detailCell("武器", record.weapon)}
+          ${detailCell("时间", formatTime(record.time))}
+        </div>
+
+        <div class="kill-record-raw-card">
+          <h3>Raw Data</h3>
+          <pre class="kill-record-pre">${esc(JSON.stringify(record, null, 2))}</pre>
+        </div>
+      </div>
+    </section>
+  `;
+
+  document.body.appendChild(root);
+
+  root.querySelectorAll("[data-close-kill-window]").forEach((el) => {
+    el.addEventListener("click", closeKillRecordWindow);
+  });
+
+  const onKeyDown = (event) => {
+    if (event.key === "Escape") closeKillRecordWindow();
+  };
+  window.addEventListener("keydown", onKeyDown);
+  root.__onKeyDown = onKeyDown;
+}
+
+function closeKillRecordWindow() {
+  const root = document.querySelector("#bzss-kill-record-root");
+  if (!root) return;
+  if (root.__onKeyDown) {
+    window.removeEventListener("keydown", root.__onKeyDown);
+  }
+  root.remove();
+}
+
+function detailCell(label, value) {
+  return `<div><span>${esc(label)}</span><strong>${esc(value ?? "--")}</strong></div>`;
+}
+
+function matchesQuery(record, query) {
+  return [
+    record.type,
+    record.victimName,
+    record.attackerName,
+    record.damage,
+    record.weapon,
+    record.time,
+    record.sourceEventId,
+    record.rawLog,
+  ].some((value) => String(value ?? "").toLowerCase().includes(query));
+}
+
+function buildSignature(records) {
+  if (!records.length) return "0";
+  const head = records[0] || {};
+  return [
+    records.length,
+    head.sourceEventId || "",
+    head.time || "",
+    head.type || "",
+    head.attackerName || "",
+    head.victimName || "",
+  ].join("|");
+}
+
+function formatTime(value) {
+  if (!value) return "--";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? String(value)
+    : date.toLocaleString("zh-CN", { hour12: false });
 }
 
 function esc(value) {

@@ -22,6 +22,9 @@ export function createKillManageModule({ core }) {
       damage: getParam(event, "ActualDamage") || getParam(event, "KillingDamage"),
       weapon: getParam(event, "CausedBy"),
       confidence: getParam(event, "Confidence"),
+      rawLog: event.rawLog || "",
+      rawEvent: event.rawEvent || null,
+      params: event.params || null,
     };
 
     records.push(record);
