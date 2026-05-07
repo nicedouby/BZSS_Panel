@@ -2,12 +2,6 @@
 
 let searchTimer = null;
 
-/**
- * 页面：击杀管理
- *
- * 类型：可选 Web 模块。
- * 数据来源：module.killManage
- */
 export async function renderPage({ root, api }) {
   if (root.__killManageTimer) {
     window.clearTimeout(root.__killManageTimer);
@@ -19,15 +13,17 @@ export async function renderPage({ root, api }) {
     filteredRecords: [],
     query: "",
     lastSignature: "",
+    lastRefreshAt: "",
   };
 
   root.innerHTML = `
     <section class="page kill-page-shell">
       <div class="page-title-row">
-        <div class="page-title">击杀管理</div>
+        <div class="page-title">Kill Manage</div>
         <div class="console-actions">
-          <input id="kill-search" class="console-search kill-search" placeholder="搜索：类型 / 受害者 / 攻击者 / 伤害 / 武器 / 时间">
-          <button id="refresh">刷新</button>
+          <span id="kill-refresh-status" class="kill-refresh-status">Auto refresh enabled</span>
+          <input id="kill-search" class="console-search kill-search" placeholder="Search by type, victim, attacker, damage, weapon, time">
+          <button id="refresh" type="button">Refresh</button>
         </div>
       </div>
 
@@ -36,12 +32,12 @@ export async function renderPage({ root, api }) {
           <table>
             <thead>
               <tr>
-                <th>类型</th>
-                <th>受害者</th>
-                <th>攻击者</th>
-                <th>伤害</th>
-                <th>武器</th>
-                <th>时间</th>
+                <th>Type</th>
+                <th>Victim</th>
+                <th>Attacker</th>
+                <th>Damage</th>
+                <th>Weapon</th>
+                <th>Time</th>
               </tr>
             </thead>
             <tbody id="kill-table-body"></tbody>
@@ -54,6 +50,7 @@ export async function renderPage({ root, api }) {
   const els = {
     body: root.querySelector("#kill-table-body"),
     search: root.querySelector("#kill-search"),
+    refreshStatus: root.querySelector("#kill-refresh-status"),
   };
 
   function applyFilter() {
@@ -68,8 +65,12 @@ export async function renderPage({ root, api }) {
     if (document.visibilityState === "hidden" && silent) return;
     const data = await api("/api/kills/recent");
     const records = data.records ?? [];
+    state.lastRefreshAt = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+    els.refreshStatus.textContent = `Auto refresh | ${state.lastRefreshAt}`;
+
     const nextSignature = buildSignature(records);
     if (nextSignature === state.lastSignature && silent) return;
+
     state.allRecords = records;
     state.lastSignature = nextSignature;
     applyFilter();
@@ -113,7 +114,7 @@ export async function renderPage({ root, api }) {
 
 function renderTable(tbody, records) {
   if (!records.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="kill-empty-cell">没有匹配记录</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="kill-empty-cell">No matching records</td></tr>`;
     return;
   }
 
@@ -144,23 +145,23 @@ function openKillRecordWindow(record) {
   root.id = "bzss-kill-record-root";
   root.innerHTML = `
     <div class="kill-record-backdrop" data-close-kill-window="1"></div>
-    <section class="kill-record-window" role="dialog" aria-modal="true" aria-label="击杀记录详情">
+    <section class="kill-record-window" role="dialog" aria-modal="true" aria-label="Kill record detail">
       <header class="kill-record-header">
         <div>
-          <div class="kill-record-title">击杀记录详情</div>
-          <div class="kill-record-subtitle">${esc(record.type || "--")} · ${esc(record.attackerName || "--")} -> ${esc(record.victimName || "--")}</div>
+          <div class="kill-record-title">Kill Record Detail</div>
+          <div class="kill-record-subtitle">${esc(record.type || "--")} | ${esc(record.attackerName || "--")} -> ${esc(record.victimName || "--")}</div>
         </div>
-        <button class="kill-record-close" type="button" data-close-kill-window="1">×</button>
+        <button class="kill-record-close" type="button" data-close-kill-window="1">x</button>
       </header>
 
       <div class="kill-record-body">
         <div class="kill-record-grid">
-          ${detailCell("类型", record.type)}
-          ${detailCell("受害者", record.victimName)}
-          ${detailCell("攻击者", record.attackerName)}
-          ${detailCell("伤害", record.damage)}
-          ${detailCell("武器", record.weapon)}
-          ${detailCell("时间", formatTime(record.time))}
+          ${detailCell("Type", record.type)}
+          ${detailCell("Victim", record.victimName)}
+          ${detailCell("Attacker", record.attackerName)}
+          ${detailCell("Damage", record.damage)}
+          ${detailCell("Weapon", record.weapon)}
+          ${detailCell("Time", formatTime(record.time))}
         </div>
 
         <div class="kill-record-raw-card">

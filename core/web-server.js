@@ -4,13 +4,6 @@ import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-/**
- * Core: WebServer
- *
- * 静态 Web + API。
- *
- * 本文件只补 RCON 控制台所需 API，不额外改变 Web 架构。
- */
 export class WebServer {
   constructor({ config, logger, core, modules }) {
     this.enabled = config.enabled ?? true;
@@ -33,7 +26,10 @@ export class WebServer {
     this.server = http.createServer((req, res) => {
       this.handleRequest(req, res).catch((error) => {
         this.logger.error(`Web request failed: ${error.stack ?? error}`);
-        this.json(res, 500, { error: "InternalServerError", message: error.message });
+        this.json(res, error.statusCode ?? 500, {
+          error: error.code ?? "InternalServerError",
+          message: error.message,
+        });
       });
     });
 
@@ -62,6 +58,51 @@ export class WebServer {
   }
 
   async handleApi(url, req, res) {
+    if (url.pathname === "/api/auth/session") {
+      const user = this.core.authManager?.getUserFromRequest(req) ?? null;
+      return this.json(res, 200, {
+        authenticated: Boolean(user),
+        user,
+      });
+    }
+
+    if (url.pathname === "/api/auth/login" && req.method === "POST") {
+      const body = await this.readJsonBody(req);
+      const result = await this.core.authManager.login({
+        username: body.username,
+        password: body.password,
+        ip: this.getRequestIp(req),
+      });
+
+      if (!result.ok) {
+        return this.json(res, 401, {
+          ok: false,
+          error: result.error ?? "InvalidCredentials",
+          message: "Invalid username or password.",
+        });
+      }
+
+      return this.json(res, 200, {
+        ok: true,
+        authenticated: true,
+        user: result.user,
+      }, {
+        "Set-Cookie": result.cookie,
+      });
+    }
+
+    if (url.pathname === "/api/auth/logout" && req.method === "POST") {
+      const expiredCookie = this.core.authManager.logout(req);
+      return this.json(res, 200, {
+        ok: true,
+        authenticated: false,
+      }, {
+        "Set-Cookie": expiredCookie,
+      });
+    }
+
+    const user = this.core.authManager.requireLogin(req);
+
     if (url.pathname === "/api/web/pages") {
       return this.json(res, 200, { pages: this.core.webRegistry.getPages() });
     }
@@ -134,7 +175,11 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/player-database/sync-online" && req.method === "POST") {
-      return this.json(res, 200, await this.modules.playerDatabase.syncOnline(url.searchParams.get("serverId") ?? this.core.webStatus.serverId));
+      return this.json(
+        res,
+        200,
+        await this.modules.playerDatabase.syncOnline(url.searchParams.get("serverId") ?? this.core.webStatus.serverId),
+      );
     }
 
     if (url.pathname === "/api/db/stats") {
@@ -187,7 +232,14 @@ export class WebServer {
 
     if (url.pathname === "/api/kills/recent") {
       const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
-      return this.json(res, 200, { records: this.modules.killManage.getRecentKills(serverId, 100) });
+      return this.json(res, 200, {
+        records: this.modules.killManage.getRecentKills(serverId, 100),
+        viewer: {
+          username: user.username,
+          role: user.role,
+          isSuperAdmin: this.core.authManager.hasEverything(user),
+        },
+      });
     }
 
     return this.json(res, 404, { error: "ApiNotFound" });
@@ -237,13 +289,22 @@ export class WebServer {
     res.end(data);
   }
 
-  json(res, status, obj) {
+  json(res, status, obj, extraHeaders = {}) {
     const data = JSON.stringify(obj, null, 2);
     res.writeHead(status, {
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
+      ...extraHeaders,
     });
     res.end(data);
+  }
+
+  getRequestIp(req) {
+    const forwarded = req.headers["x-forwarded-for"];
+    if (typeof forwarded === "string" && forwarded.trim()) {
+      return forwarded.split(",")[0].trim();
+    }
+    return req.socket?.remoteAddress ?? "";
   }
 }
 

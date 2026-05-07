@@ -35,6 +35,7 @@ import { WebServer } from "./core/web-server.js";
 import { PythonLogParserManager } from "./core/python-log-parser-manager.js";
 import { ModuleManager } from "./core/module-manager.js";
 import { PluginManager } from "./core/plugin-manager.js";
+import { AuthManager } from "./core/auth-manager.js";
 
 async function main() {
   const configManager = new ConfigManager("./config.json");
@@ -46,6 +47,10 @@ async function main() {
   const eventBus = new EventBus({ logger });
   const webRegistry = new WebRegistry({ config: configManager, logger });
   const webStatus = new WebStatus({ config: configManager, logger });
+  const authManager = new AuthManager({
+    config: configManager.get("auth", {}),
+    logger,
+  });
 
   const rconManager = new RconManager({
     config: configManager.get("rcon", {}),
@@ -68,6 +73,7 @@ async function main() {
     webRegistry,
     webStatus,
     rconManager,
+    authManager,
   };
 
   const moduleManager = new ModuleManager({
@@ -96,6 +102,7 @@ async function main() {
     webStatus,
   });
 
+  await authManager.start();
   await rconManager.start();
   await udpReceiver.start();
   await moduleManager.loadBuiltInModules();
@@ -117,6 +124,7 @@ async function main() {
     await moduleManager.stopAll();
     await udpReceiver.stop();
     await rconManager.stop();
+    await authManager.stop();
 
     logger.info("BZSS Panel WebCore stopped.");
     process.exit(0);

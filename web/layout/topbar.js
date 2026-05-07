@@ -1,12 +1,9 @@
 // -*- coding: utf-8 -*-
 
-/**
- * Topbar
- *
- * 顶部全局状态栏。
- * 所有页面都显示。
- */
-export function renderTopbar({ root, status }) {
+export function renderTopbar({ root, status, auth, onLogout }) {
+  const user = auth?.user ?? null;
+  const roleText = user?.isSuperAdmin ? "SuperAdmin | has everything" : (user?.role ?? "Guest");
+
   root.innerHTML = `
     <div class="brand">${escapeHtml(status.serverName ?? "BZSS Panel")}</div>
     ${chip("JS", status.jsStarted ? "Running" : "Stopped", status.jsStarted ? "good" : "bad")}
@@ -17,7 +14,20 @@ export function renderTopbar({ root, status }) {
     ${chip("Layer", status.currentLayer ?? "Unknown", "")}
     ${chip("Match", status.matchState ?? "Unknown", "")}
     ${chip("Errors", String(status.recentErrors ?? 0), Number(status.recentErrors ?? 0) > 0 ? "bad" : "")}
+    <div class="topbar-spacer"></div>
+    <div class="auth-badge">
+      <strong>${escapeHtml(user?.username ?? "Guest")}</strong>
+      <span>${escapeHtml(roleText)}</span>
+    </div>
+    ${user ? `<button id="topbar-logout" class="topbar-logout" type="button">Sign out</button>` : ""}
   `;
+
+  const logoutButton = root.querySelector("#topbar-logout");
+  if (logoutButton && typeof onLogout === "function") {
+    logoutButton.addEventListener("click", () => {
+      onLogout().catch(() => {});
+    });
+  }
 }
 
 function chip(label, value, cls) {

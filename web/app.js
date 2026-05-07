@@ -1,14 +1,5 @@
 // -*- coding: utf-8 -*-
 
-/**
- * Web App Shell
- *
- * Web 端分层：
- * - app.js：加载 Shell
- * - layout/：顶栏、侧栏、弹窗、抽屉
- * - pages/：每个页面独立
- */
-
 import { renderTopbar } from "./layout/topbar.js";
 import { renderSidebar } from "./layout/sidebar.js";
 import { openDrawer } from "./layout/drawer.js";
@@ -19,14 +10,34 @@ const state = {
   currentPage: null,
   status: null,
   currentPageCleanup: null,
+  auth: {
+    authenticated: false,
+    user: null,
+  },
 };
 
 const pageScroll = document.querySelector("#page-scroll");
+let topbarTimer = null;
 
 async function api(path) {
   const res = await fetch(path, { cache: "no-store" });
+  if (res.status === 401) {
+    handleUnauthorized();
+    throw new Error("Unauthorized");
+  }
   if (!res.ok) throw new Error(await res.text());
   return await res.json();
+}
+
+async function apiPost(path, body = {}) {
+  return await fetch(path, {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
 }
 
 async function loadBootData() {
@@ -40,6 +51,8 @@ async function loadBootData() {
 }
 
 async function navigateTo(route) {
+  if (!state.auth.authenticated) return;
+
   const routeInfo = parseRouteTarget(route);
   const page = state.pages.find((p) => p.route === routeInfo.path) ?? state.pages[0];
   if (!page) return;
@@ -60,7 +73,7 @@ async function navigateTo(route) {
     onNavigate: navigateTo,
   });
 
-  pageScroll.innerHTML = `<div class="card">加载 ${page.title}...</div>`;
+  pageScroll.innerHTML = `<div class="card">Loading ${escapeHtml(page.title)}...</div>`;
 
   const mod = await import(page.pageModule);
   const cleanup = await mod.renderPage({
@@ -72,6 +85,7 @@ async function navigateTo(route) {
     page,
     routeInfo,
   });
+
   if (typeof cleanup === "function") {
     state.currentPageCleanup = cleanup;
   } else if (typeof pageScroll.__pageCleanup === "function") {
@@ -92,35 +106,158 @@ function parseRouteTarget(route) {
 }
 
 async function refreshTopbar() {
+  if (!state.auth.authenticated) return;
   state.status = await api("/api/web/status");
-  renderTopbar({
-    root: document.querySelector("#topbar"),
-    status: state.status,
-  });
+  renderFrame();
 }
 
-async function main() {
-  await loadBootData();
+function ensureTopbarTimer() {
+  if (topbarTimer) return;
+  topbarTimer = window.setInterval(() => {
+    refreshTopbar().catch(() => {});
+  }, 2000);
+}
 
+function renderFrame() {
   renderTopbar({
     root: document.querySelector("#topbar"),
-    status: state.status,
+    status: state.status ?? {},
+    auth: state.auth,
+    onLogout: logout,
   });
 
   renderSidebar({
-    pages: state.pages,
-    activeRoute: "",
+    pages: state.auth.authenticated ? state.pages : [],
+    activeRoute: state.currentPage?.route ?? "",
     onNavigate: navigateTo,
   });
+}
+
+function renderShellVisibility() {
+  const app = document.querySelector("#app");
+  app.classList.toggle("is-authenticated", Boolean(state.auth.authenticated));
+}
+
+async function restoreSession() {
+  const res = await fetch("/api/auth/session", { cache: "no-store" });
+  if (!res.ok) throw new Error(await res.text());
+  const data = await res.json();
+  state.auth = {
+    authenticated: Boolean(data.authenticated),
+    user: data.user ?? null,
+  };
+}
+
+function renderLoginScreen(message = "") {
+  pageScroll.innerHTML = `
+    <section class="login-shell">
+      <div class="login-card">
+        <div class="login-eyebrow">Secure Access</div>
+        <h1>BZSS Panel Login</h1>
+        <p class="login-copy">Only a user marked as SuperAdmin can enter the control panel.</p>
+        <form id="login-form" class="login-form">
+          <label>
+            <span>Username</span>
+            <input id="login-username" name="username" autocomplete="username" value="DoubyBear" required>
+          </label>
+          <label>
+            <span>Password</span>
+            <input id="login-password" name="password" type="password" autocomplete="current-password" value="DoubyBear" required>
+          </label>
+          <button id="login-submit" type="submit">Login as SuperAdmin</button>
+          <div id="login-message" class="login-message">${escapeHtml(message)}</div>
+        </form>
+      </div>
+    </section>
+  `;
+
+  const form = pageScroll.querySelector("#login-form");
+  const messageEl = pageScroll.querySelector("#login-message");
+  const submitButton = pageScroll.querySelector("#login-submit");
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    submitButton.disabled = true;
+    messageEl.textContent = "Verifying credentials...";
+
+    const username = pageScroll.querySelector("#login-username")?.value ?? "";
+    const password = pageScroll.querySelector("#login-password")?.value ?? "";
+
+    try {
+      const res = await apiPost("/api/auth/login", { username, password });
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        messageEl.textContent = data.message ?? "Login failed.";
+        submitButton.disabled = false;
+        return;
+      }
+
+      state.auth = {
+        authenticated: true,
+        user: data.user ?? null,
+      };
+      renderShellVisibility();
+      await loadBootData();
+      renderFrame();
+      ensureTopbarTimer();
+
+      const route = location.hash.replace(/^#/, "") || "/match-status";
+      await navigateTo(route);
+    } catch (error) {
+      messageEl.textContent = `Login failed: ${error.message}`;
+      submitButton.disabled = false;
+    }
+  });
+}
+
+function handleUnauthorized() {
+  if (typeof state.currentPageCleanup === "function") {
+    try {
+      state.currentPageCleanup();
+    } catch {}
+    state.currentPageCleanup = null;
+  }
+
+  state.auth = {
+    authenticated: false,
+    user: null,
+  };
+  state.pages = [];
+  state.currentPage = null;
+  state.status = null;
+
+  renderShellVisibility();
+  renderFrame();
+  renderLoginScreen("Session expired. Please log in again.");
+}
+
+async function logout() {
+  await apiPost("/api/auth/logout", {});
+  handleUnauthorized();
+  renderLoginScreen("Signed out.");
+}
+
+async function main() {
+  await restoreSession();
+  renderShellVisibility();
+
+  if (!state.auth.authenticated) {
+    renderFrame();
+    renderLoginScreen();
+    return;
+  }
+
+  await loadBootData();
+  renderFrame();
+  ensureTopbarTimer();
 
   const route = location.hash.replace(/^#/, "") || "/match-status";
   await navigateTo(route);
-
-  setInterval(refreshTopbar, 2000);
 }
 
 main().catch((error) => {
-  pageScroll.innerHTML = `<div class="card">Web 启动失败：${escapeHtml(error.message)}</div>`;
+  pageScroll.innerHTML = `<div class="card">Web startup failed: ${escapeHtml(error.message)}</div>`;
 });
 
 function escapeHtml(value) {

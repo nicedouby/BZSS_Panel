@@ -85,6 +85,37 @@ body::before {
   box-shadow: var(--glow);
 }
 
+.topbar-spacer {
+  flex: 1;
+}
+
+.auth-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 12px;
+  border: 1px solid rgba(94, 234, 212, 0.24);
+  border-radius: 12px;
+  background: rgba(8, 13, 27, 0.7);
+}
+
+.auth-badge strong {
+  font-size: 12px;
+  line-height: 1.1;
+}
+
+.auth-badge span {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.topbar-logout {
+  white-space: nowrap;
+}
+
 .brand {
   font-weight: 800;
   letter-spacing: 0.4px;
@@ -197,10 +228,83 @@ body::before {
   overflow: hidden;
 }
 
+#app:not(.is-authenticated) #sidebar {
+  display: none;
+}
+
+#app:not(.is-authenticated) #content {
+  grid-column: 1 / -1;
+}
+
 #page-scroll {
   height: 100%;
   overflow: auto;
   padding: 16px;
+}
+
+.login-shell {
+  min-height: calc(100vh - 84px);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.login-card {
+  width: min(100%, 460px);
+  padding: 28px;
+  border: 1px solid var(--line2);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(94, 234, 212, 0.12), transparent 35%),
+    radial-gradient(circle at 100% 10%, rgba(106, 166, 255, 0.16), transparent 28%),
+    rgba(8, 13, 27, 0.86);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(22px);
+}
+
+.login-eyebrow {
+  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.login-card h1 {
+  margin: 10px 0 8px;
+  font-size: 32px;
+}
+
+.login-copy {
+  margin: 0 0 20px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.login-form {
+  display: grid;
+  gap: 14px;
+}
+
+.login-form label {
+  display: grid;
+  gap: 8px;
+}
+
+.login-form span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.login-form input,
+.login-form button {
+  min-height: 44px;
+}
+
+.login-message {
+  min-height: 20px;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .page {
@@ -921,6 +1025,12 @@ body::before {
   width: min(420px, 100%);
 }
 
+.kill-refresh-status {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .kill-empty-cell {
   color: var(--muted);
   text-align: center;
@@ -1315,6 +1425,9 @@ input:focus, select:focus {
   }
   .kill-table-wrap {
     height: calc(100vh - 210px);
+  }
+  .auth-badge {
+    display: none;
   }
 }
 /* 追加到 web/assets/styles.css 末尾 */
