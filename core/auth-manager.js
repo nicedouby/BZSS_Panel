@@ -1,0 +1,239 @@
+// -*- coding: utf-8 -*-
+
+import crypto from "node:crypto";
+
+const DEFAULT_USERNAME = "DoubyBear";
+const DEFAULT_PASSWORD = "DoubyBear";
+const DEFAULT_ROLE = "SuperAdmin";
+
+/**
+ * Core: AuthManager
+ *
+ * 简单但安全的 Web 登录系统：
+ * - 密码只保存 scrypt 哈希，不保存明文。
+ * - Session token 只保存 SHA-256 哈希，不保存原始 token。
+ * - Cookie 使用 HttpOnly / SameSite=Strict。
+ *
+ * 注意：绝对安全不存在。生产环境仍应使用 HTTPS、强密码、反向代理限流和定期改密。
+ */
+export class AuthManager {
+  constructor({ config = {}, logger }) {
+    this.enabled = config.enabled ?? true;
+    this.logger = logger;
+    this.sessionCookieName = config.sessionCookieName ?? "bzss_session";
+    this.sessionTtlMs = Number(config.sessionTtlMs ?? 1000 * 60 * 60 * 12);
+    this.secureCookie = Boolean(config.secureCookie ?? false);
+
+    this.users = new Map();
+    this.sessions = new Map();
+  }
+
+  async start() {
+    if (!this.enabled) {
+      this.logger?.warn?.("AuthManager disabled. Web API will not require login.");
+      return;
+    }
+
+    await this.ensureDefaultSuperAdmin();
+    this.logger?.info?.("AuthManager started.");
+  }
+
+  async stop() {
+    this.sessions.clear();
+  }
+
+  async ensureDefaultSuperAdmin() {
+    if (this.users.has(DEFAULT_USERNAME)) return;
+
+    const passwordHash = await hashPassword(DEFAULT_PASSWORD);
+    this.users.set(DEFAULT_USERNAME, {
+      id: "user:superadmin",
+      username: DEFAULT_USERNAME,
+      passwordHash,
+      role: DEFAULT_ROLE,
+      enabled: true,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  }
+
+  async login({ username, password, ip = "" }) {
+    if (!this.enabled) {
+      return {
+        ok: true,
+        user: this.safeUser({ username: "disabled-auth", role: DEFAULT_ROLE }),
+        cookie: "",
+      };
+    }
+
+    const normalizedUsername = String(username ?? "").trim();
+    const rawPassword = String(password ?? "");
+    const user = this.users.get(normalizedUsername);
+
+    // 固定做一次 hash 校验，降低用户名枚举的 timing 差异。
+    const passwordHash = user?.passwordHash ?? await hashPassword("invalid-password-placeholder");
+    const passwordOk = await verifyPassword(rawPassword, passwordHash);
+
+    if (!user || !user.enabled || !passwordOk) {
+      this.logger?.warn?.(`Login failed username=${normalizedUsername || "<empty>"} ip=${ip}`);
+      return { ok: false, error: "InvalidCredentials" };
+    }
+
+    const token = crypto.randomBytes(32).toString("base64url");
+    const tokenHash = hashToken(token);
+    const now = Date.now();
+    const expiresAt = now + this.sessionTtlMs;
+
+    this.sessions.set(tokenHash, {
+      tokenHash,
+      userId: user.id,
+      username: user.username,
+      role: user.role,
+      createdAt: now,
+      expiresAt,
+      ip,
+    });
+
+    this.logger?.info?.(`Login success username=${user.username} role=${user.role} ip=${ip}`);
+
+    return {
+      ok: true,
+      user: this.safeUser(user),
+      cookie: this.makeSessionCookie(token, expiresAt),
+    };
+  }
+
+  logout(req) {
+    const token = this.getTokenFromRequest(req);
+    if (token) this.sessions.delete(hashToken(token));
+    return this.makeExpiredCookie();
+  }
+
+  getUserFromRequest(req) {
+    if (!this.enabled) {
+      return { id: "auth-disabled", username: "auth-disabled", role: DEFAULT_ROLE, isSuperAdmin: true };
+    }
+
+    const token = this.getTokenFromRequest(req);
+    if (!token) return null;
+
+    const tokenHash = hashToken(token);
+    const session = this.sessions.get(tokenHash);
+    if (!session) return null;
+
+    if (session.expiresAt <= Date.now()) {
+      this.sessions.delete(tokenHash);
+      return null;
+    }
+
+    return {
+      id: session.userId,
+      username: session.username,
+      role: session.role,
+      isSuperAdmin: this.isSuperAdminRole(session.role),
+    };
+  }
+
+  requireLogin(req) {
+    const user = this.getUserFromRequest(req);
+    if (!user) {
+      const error = new Error("Authentication required.");
+      error.statusCode = 401;
+      error.code = "Unauthorized";
+      throw error;
+    }
+    return user;
+  }
+
+  hasEverything(user) {
+    return Boolean(user && this.isSuperAdminRole(user.role));
+  }
+
+  isSuperAdminRole(role) {
+    return String(role ?? "").toLowerCase().includes("superadmin");
+  }
+
+  safeUser(user) {
+    return {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      isSuperAdmin: this.isSuperAdminRole(user.role),
+    };
+  }
+
+  getTokenFromRequest(req) {
+    const cookies = parseCookies(req.headers.cookie ?? "");
+    return cookies[this.sessionCookieName] ?? "";
+  }
+
+  makeSessionCookie(token, expiresAt) {
+    const parts = [
+      `${this.sessionCookieName}=${token}`,
+      "Path=/",
+      "HttpOnly",
+      "SameSite=Strict",
+      `Expires=${new Date(expiresAt).toUTCString()}`,
+      `Max-Age=${Math.floor(this.sessionTtlMs / 1000)}`,
+    ];
+
+    if (this.secureCookie) parts.push("Secure");
+    return parts.join("; ");
+  }
+
+  makeExpiredCookie() {
+    return `${this.sessionCookieName}=; Path=/; HttpOnly; SameSite=Strict; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0`;
+  }
+}
+
+async function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString("base64url");
+  const hash = await scrypt(password, salt);
+  return `scrypt$${salt}$${hash}`;
+}
+
+async function verifyPassword(password, encoded) {
+  const [kind, salt, expected] = String(encoded ?? "").split("$");
+  if (kind !== "scrypt" || !salt || !expected) return false;
+
+  const actual = await scrypt(password, salt);
+  return timingSafeEqual(actual, expected);
+}
+
+function scrypt(password, salt) {
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(String(password), String(salt), 64, {
+      N: 32768,
+      r: 8,
+      p: 1,
+      maxmem: 64 * 1024 * 1024,
+    }, (error, derivedKey) => {
+      if (error) reject(error);
+      else resolve(derivedKey.toString("base64url"));
+    });
+  });
+}
+
+function hashToken(token) {
+  return crypto.createHash("sha256").update(String(token)).digest("base64url");
+}
+
+function timingSafeEqual(a, b) {
+  const left = Buffer.from(String(a));
+  const right = Buffer.from(String(b));
+  if (left.length !== right.length) return false;
+  return crypto.timingSafeEqual(left, right);
+}
+
+function parseCookies(cookieHeader) {
+  const result = {};
+  for (const part of String(cookieHeader).split(";")) {
+    const index = part.indexOf("=");
+    if (index < 0) continue;
+    const key = part.slice(0, index).trim();
+    const value = part.slice(index + 1).trim();
+    if (!key) continue;
+    result[key] = decodeURIComponent(value);
+  }
+  return result;
+}
