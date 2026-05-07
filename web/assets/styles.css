@@ -534,8 +534,7 @@ body::before {
   display: flex;
   align-items: stretch;
   min-height: 620px;
-  max-height: calc(100vh - 260px);
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: rgba(8, 13, 27, 0.54);
@@ -544,7 +543,6 @@ body::before {
 .db-list-col {
   width: 340px;
   flex-shrink: 0;
-  overflow-y: auto;
   border-right: 1px solid var(--line);
   padding: 10px;
   display: flex;
@@ -591,7 +589,7 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  overflow-y: auto;
+  overflow: visible;
 }
 
 .db-card {
@@ -641,6 +639,30 @@ body::before {
   font-size: 13px;
   word-break: break-all;
   line-height: 1.35;
+}
+
+.db-copy-cell,
+.bzss-copy-field {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  cursor: copy;
+  box-shadow: none;
+}
+
+.db-copy-cell {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 12px;
+  padding: 8px;
+}
+
+.db-copy-cell:hover,
+.bzss-copy-field:hover {
+  border-color: rgba(94, 234, 212, 0.4);
+  box-shadow: none;
 }
 
 .db-vivid-id { color: #88e2ff; }
@@ -1194,6 +1216,15 @@ input:focus, select:focus {
   border-radius: 12px;
   border: 1px solid rgba(94, 234, 212, 0.18);
   background: rgba(3, 7, 18, 0.48);
+}
+
+.bzss-player-id-block > button {
+  min-width: 0;
+  padding: 10px 11px;
+  border-radius: 12px;
+  border: 1px solid rgba(94, 234, 212, 0.18);
+  background: rgba(3, 7, 18, 0.48);
+  box-shadow: none;
 }
 
 .bzss-player-id-block span,

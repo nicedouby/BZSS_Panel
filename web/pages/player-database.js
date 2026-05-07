@@ -258,14 +258,16 @@ function renderDetail(els, data, actions) {
   const kd = p.total_deaths > 0
     ? ((Number(p.total_kills_light || 0) + Number(p.total_kills_other || 0)) / Number(p.total_deaths || 0)).toFixed(2)
     : "--";
+  const totalKills = Number(p.total_kills_light || 0) + Number(p.total_kills_other || 0);
+  const totalDowns = Number(p.total_downed_light || 0) + Number(p.total_downed_other || 0);
 
   els.detail.innerHTML = `
     <div class="db-detail-top">
       <div class="db-card">
         <h2>${esc(p.current_name || "(未命名)")}</h2>
         <div class="db-grid">
-          ${cell("Steam64", p.steam_id || "--", "db-vivid-id")}
-          ${cell("EOS ID", p.eos_id || "--", "db-vivid-id")}
+          ${copyCell("Steam64", p.steam_id || "--", "db-vivid-id")}
+          ${copyCell("EOS ID", p.eos_id || "--", "db-vivid-id")}
           ${cell("当前 IP", currentIp, "db-vivid-ip")}
           ${cell("权限组", p.permission_group || "default", "db-vivid-perm")}
           ${cell("档案创建时间", rowTime(p.created_at))}
@@ -286,16 +288,14 @@ function renderDetail(els, data, actions) {
       <div class="db-card">
         <h3>击杀统计</h3>
         <div class="db-grid">
-          ${cell("轻武器击杀", fmtNumber(p.total_kills_light), "db-vivid-kill")}
-          ${cell("轻武器击倒", fmtNumber(p.total_downed_light), "db-vivid-kill")}
+          ${cell("总 K / 击倒 / 死亡", `${fmtNumber(totalKills)} / ${fmtNumber(totalDowns)} / ${fmtNumber(p.total_deaths)}`, "db-vivid-kill")}
+          ${cell("轻武器 K / 击倒", `${fmtNumber(p.total_kills_light)} / ${fmtNumber(p.total_downed_light)}`, "db-vivid-kill")}
           ${cell("致命击倒", fmtNumber(p.total_downed_light_fatal), "db-vivid-kill")}
           ${cell("致命击倒率", fatalDownRate)}
-          ${cell("其他击杀", fmtNumber(p.total_kills_other))}
-          ${cell("其他击倒", fmtNumber(p.total_downed_other))}
+          ${cell("其他 K / 击倒", `${fmtNumber(p.total_kills_other)} / ${fmtNumber(p.total_downed_other)}`)}
           ${cell("TK 击倒", fmtNumber(p.total_tk_down), "db-vivid-danger")}
           ${cell("TK 击杀", fmtNumber(p.total_tk_kill), "db-vivid-danger")}
           ${cell("被击倒", fmtNumber(p.total_downed_received))}
-          ${cell("死亡", fmtNumber(p.total_deaths))}
           ${cell("KD", kd)}
           ${cell("自杀", fmtNumber(p.total_suicides))}
         </div>
@@ -349,6 +349,37 @@ function renderDetail(els, data, actions) {
     status.dataset.tone = "success";
     status.textContent = "权限组已保存。";
   });
+
+  els.detail.querySelectorAll("[data-copy-value]").forEach((el) => {
+    el.addEventListener("click", async () => {
+      const value = String(el.dataset.copyValue || "").trim();
+      if (!value || value === "--") return;
+
+      const label = el.dataset.copyLabel || "内容";
+      const originalTitle = el.getAttribute("title") || "";
+
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(value);
+        } else {
+          const input = document.createElement("input");
+          input.value = value;
+          document.body.appendChild(input);
+          input.select();
+          document.execCommand("copy");
+          input.remove();
+        }
+        el.setAttribute("title", `${label} 已复制`);
+      } catch {
+        el.setAttribute("title", `${label} 复制失败`);
+      }
+
+      window.setTimeout(() => {
+        if (originalTitle) el.setAttribute("title", originalTitle);
+        else el.removeAttribute("title");
+      }, 1200);
+    });
+  });
 }
 
 function renderBreakdowns(root, stats) {
@@ -384,6 +415,10 @@ function renderTrends(root, stats) {
 
 function cell(label, value, className = "") {
   return `<div><span>${esc(label)}</span><strong class="${className}">${esc(value)}</strong></div>`;
+}
+
+function copyCell(label, value, className = "") {
+  return `<button type="button" class="db-copy-cell" data-copy-label="${esc(label)}" data-copy-value="${escAttr(value)}"><span>${esc(label)}</span><strong class="${className}">${esc(value)}</strong></button>`;
 }
 
 function miniList(title, items) {
@@ -478,4 +513,8 @@ function esc(value) {
     "\"": "&quot;",
     "'": "&#39;",
   }[c]));
+}
+
+function escAttr(value) {
+  return esc(value).replace(/`/g, "&#96;");
 }

@@ -339,24 +339,21 @@ function openPlayerFloatingWindow(player) {
 
       <div class="bzss-player-float-body">
         <div class="bzss-player-id-block">
-          <div>
+          <button type="button" class="bzss-copy-field" data-copy-value="${escAttr(steamID)}" data-copy-label="Steam ID">
             <span>Steam ID</span>
             <strong>${esc(steamID || "未记录")}</strong>
-          </div>
-          <div>
+          </button>
+          <button type="button" class="bzss-copy-field" data-copy-value="${escAttr(eosID)}" data-copy-label="EOS ID">
             <span>EOS ID</span>
             <strong>${esc(eosID || "未记录")}</strong>
-          </div>
+          </button>
         </div>
 
         <div class="bzss-player-detail-grid">
           <div><span>Player ID</span><strong>${esc(player.playerID ?? "N/A")}</strong></div>
           <div><span>Team</span><strong>${esc(teamValue)}</strong></div>
           <div><span>Squad</span><strong>${esc(squadValue)}</strong></div>
-          <div><span>是否队长</span><strong>${player.isLeader ? "是" : "否"}</strong></div>
-          <div><span>击杀</span><strong>${stats.kills}</strong></div>
-          <div><span>击倒</span><strong>${stats.downs}</strong></div>
-          <div><span>死亡</span><strong>${stats.deaths}</strong></div>
+          <div><span>K / 击倒 / 死亡</span><strong>${stats.kills} / ${stats.downs} / ${stats.deaths}</strong></div>
           <div><span>最后出现</span><strong>${esc(player.lastSeenTime || "未知")}</strong></div>
         </div>
 
@@ -378,6 +375,37 @@ function openPlayerFloatingWindow(player) {
 
   root.querySelectorAll("[data-close-player-window]").forEach((el) => {
     el.addEventListener("click", closePlayerFloatingWindow);
+  });
+
+  root.querySelectorAll("[data-copy-value]").forEach((el) => {
+    el.addEventListener("click", async () => {
+      const value = String(el.dataset.copyValue || "").trim();
+      if (!value) return;
+
+      const label = el.dataset.copyLabel || "ID";
+      const originalTitle = el.getAttribute("title") || "";
+
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(value);
+        } else {
+          const input = document.createElement("input");
+          input.value = value;
+          document.body.appendChild(input);
+          input.select();
+          document.execCommand("copy");
+          input.remove();
+        }
+        el.setAttribute("title", `${label} 已复制`);
+      } catch {
+        el.setAttribute("title", `${label} 复制失败`);
+      }
+
+      window.setTimeout(() => {
+        if (originalTitle) el.setAttribute("title", originalTitle);
+        else el.removeAttribute("title");
+      }, 1200);
+    });
   });
 
   const onKeyDown = (event) => {
@@ -468,4 +496,8 @@ function esc(value) {
     "\"": "&quot;",
     "'": "&#39;",
   }[c]));
+}
+
+function escAttr(value) {
+  return esc(value).replace(/`/g, "&#96;");
 }
