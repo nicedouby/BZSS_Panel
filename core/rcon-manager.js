@@ -41,6 +41,7 @@ export class RconManager {
 
     this.timers = [];
     this.rconEventTeardown = [];
+    this.nativeLogListeners = new Set();
 
     this.status = {
       enabled: this.enabled,
@@ -101,6 +102,10 @@ export class RconManager {
 
     this.setConnected(false);
     this.webStatus.set("rcon", "stopped");
+    this.emitNativeLog({
+      level: "status",
+      message: "RCON stopped.",
+    });
     this.logger.info("RconManager stopped.");
   }
 
@@ -129,16 +134,32 @@ export class RconManager {
         if (eventName === "RCON_CONNECTED") {
           this.setConnected(true);
           this.startPolling();
+          this.emitNativeLog({
+            level: "status",
+            message: `Connected to ${payload.host}:${payload.port}`,
+            host: payload.host,
+            port: payload.port,
+          });
         }
 
         if (eventName === "RCON_DISCONNECTED") {
           this.setConnected(false);
+          this.emitNativeLog({
+            level: "status",
+            message: `Disconnected: ${String(payload?.reason ?? "unknown reason")}`,
+            reason: String(payload?.reason ?? "unknown reason"),
+          });
         }
 
         if (eventName === "RCON_ERROR") {
           const message = payload instanceof Error ? payload.message : String(payload?.message ?? payload ?? "RCON error");
           this.status.lastError = message;
           this.webStatus.set("rcon", "error");
+          this.emitNativeLog({
+            level: "error",
+            message: `RCON error: ${message}`,
+            errorName: payload?.name || (payload instanceof Error ? payload.name : "Error"),
+          });
         }
 
         const normalizedPayload = normalizeRconPayload(eventName, payload);
@@ -152,6 +173,24 @@ export class RconManager {
           params: [],
           payload: normalizedPayload,
         });
+      };
+
+      this.squadRcon.on(eventName, handler);
+      this.rconEventTeardown.push(() => this.squadRcon.off(eventName, handler));
+    }
+
+    const nativeEvents = [
+      "RCON_NATIVE_WRITE",
+      "RCON_NATIVE_RESPONSE",
+      "RCON_NATIVE_ERROR",
+      "RCON_NATIVE_PUSH",
+    ];
+
+    for (const eventName of nativeEvents) {
+      const handler = (payload = {}) => {
+        const entry = mapNativeRconEventToConsoleEntry(eventName, payload);
+        if (!entry) return;
+        this.emitNativeLog(entry);
       };
 
       this.squadRcon.on(eventName, handler);
@@ -348,6 +387,32 @@ export class RconManager {
       queueSize: this.queue.length,
     };
   }
+
+  onNativeLog(handler) {
+    if (typeof handler !== "function") {
+      return () => {};
+    }
+
+    this.nativeLogListeners.add(handler);
+    return () => this.nativeLogListeners.delete(handler);
+  }
+
+  emitNativeLog(entry = {}) {
+    const line = {
+      time: entry.time || new Date().toISOString(),
+      level: entry.level || "info",
+      message: String(entry.message ?? ""),
+      ...entry,
+    };
+
+    for (const listener of this.nativeLogListeners) {
+      try {
+        listener(line);
+      } catch (error) {
+        this.logger.error(`Native RCON log listener failed: ${error.stack ?? error}`);
+      }
+    }
+  }
 }
 
 function normalizeRconPayload(eventName, payload) {
@@ -368,4 +433,43 @@ function normalizeRconPayload(eventName, payload) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function mapNativeRconEventToConsoleEntry(eventName, payload) {
+  if (eventName === "RCON_NATIVE_WRITE") {
+    return {
+      time: payload.time,
+      level: "input",
+      message: `> ${String(payload.command ?? payload.body ?? "").trim()}`,
+      command: String(payload.command ?? ""),
+    };
+  }
+
+  if (eventName === "RCON_NATIVE_RESPONSE") {
+    return {
+      time: payload.time,
+      level: "output",
+      message: String(payload.body ?? "") || "(empty response)",
+      command: String(payload.command ?? ""),
+    };
+  }
+
+  if (eventName === "RCON_NATIVE_ERROR") {
+    return {
+      time: payload.time,
+      level: "error",
+      message: String(payload.message ?? "Unknown RCON error"),
+      command: String(payload.command ?? ""),
+    };
+  }
+
+  if (eventName === "RCON_NATIVE_PUSH") {
+    return {
+      time: payload.time,
+      level: "push",
+      message: String(payload.body ?? ""),
+    };
+  }
+
+  return null;
 }

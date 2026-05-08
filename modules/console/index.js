@@ -6,19 +6,17 @@
  * Web 控制台的数据源。
  *
  * 设计目标：
- * - 支持频道 channel
- * - 支持服务端筛选，避免前端一次性拿太多日志
- * - 支持 afterSeq 增量获取，提高性能
- * - 支持执行手动 RCON，并把请求/响应写入 rcon 频道
+ * - 把事件分发器视图与 RCON 原生视图拆开
+ * - 支持按 channel 查询
+ * - 支持 afterSeq 增量拉取
+ * - 支持手动执行 RCON
  */
 
 const DEFAULT_CHANNELS = [
   { id: "all", title: "全部" },
+  { id: "dispatcher", title: "事件分发器" },
+  { id: "rcon-native", title: "RCON 原生" },
   { id: "system", title: "系统" },
-  { id: "events", title: "事件" },
-  { id: "rcon", title: "RCON" },
-  { id: "python", title: "Python" },
-  { id: "error", title: "错误" },
 ];
 
 export function createConsoleModule({ core, config }) {
@@ -62,16 +60,18 @@ export function createConsoleModule({ core, config }) {
       const commandText = String(command ?? "").trim();
 
       if (!commandText) {
-        return {
+        const result = {
           success: false,
-          message: "Command is empty.",
+          message: "RCON command is empty.",
           rconResponse: "",
         };
-      }
 
-      push("rcon", "input", `> ${commandText}`, {
-        owner: meta.requestedBy ?? "web.console",
-      });
+        push("rcon-native", "error", result.message, {
+          owner: meta.requestedBy ?? "web.console",
+        });
+
+        return result;
+      }
 
       const result = await core.rconManager.dispatchCommand({
         command: commandText,
@@ -79,12 +79,9 @@ export function createConsoleModule({ core, config }) {
         reason: meta.reason ?? "Manual RCON command from web console",
       });
 
-      if (result.success) {
-        push("rcon", "output", result.rconResponse || "(empty response)", {
-          command: commandText,
-        });
-      } else {
-        push("rcon", "error", result.message, {
+      if (!result.success) {
+        push("rcon-native", "error", result.message, {
+          owner: meta.requestedBy ?? "web.console",
           command: commandText,
         });
       }
@@ -94,36 +91,107 @@ export function createConsoleModule({ core, config }) {
   };
 
   return {
-    manifest: { id: "module.console", name: "Console Module", kind: "module", version: "0.2.0" },
+    manifest: { id: "module.console", name: "Console Module", kind: "module", version: "0.3.0" },
     apiName: "console",
     api,
 
     async start() {
       push("system", "info", "Console module started.");
 
-      unsubscribers.push(core.eventBus.onCoreEvent("*", (event) => {
-        const channel = getChannelForCoreEvent(event.eventName);
-        const level = channel === "error" ? "error" : "event";
+      if (core.rconManager?.onNativeLog) {
+        unsubscribers.push(core.rconManager.onNativeLog((line) => {
+          push("rcon-native", line.level || "info", line.message, {
+            command: line.command,
+            host: line.host,
+            port: line.port,
+            reason: line.reason,
+            source: "core.rconManager",
+            nativeKind: line.kind,
+            time: line.time || new Date().toISOString(),
+          });
+        }));
+      }
 
-        push(channel, level, event.eventName, {
+      unsubscribers.push(core.eventBus.onCoreEvent("*", (event) => {
+        push("dispatcher", getDispatcherLevel(event), formatDispatcherMessage(event), {
           eventId: event.eventId,
+          eventName: event.eventName,
           serverId: event.serverId,
           source: event.source,
+          time: event.time || new Date().toISOString(),
         });
       }));
     },
 
     async stop() {
-      for (const un of unsubscribers) un();
+      for (const un of unsubscribers.splice(0)) {
+        try {
+          un();
+        } catch {}
+      }
+
       push("system", "warn", "Console module stopped.");
     },
   };
 }
 
-function getChannelForCoreEvent(eventName) {
-  if (eventName === "RCON_ERROR" || eventName === "RCON_DISCONNECTED") return "error";
-  if (eventName.startsWith("RCON_") || eventName === "CHAT_MESSAGE") return "rcon";
-  return "events";
+function getDispatcherLevel(event) {
+  const name = String(event?.eventName ?? "");
+  if (name === "RCON_ERROR" || name === "RCON_DISCONNECTED") return "error";
+  return "event";
+}
+
+function formatDispatcherMessage(event) {
+  const eventName = String(event?.eventName ?? "UnknownEvent");
+  const details = summarizeDispatcherEvent(event);
+  return details ? `${eventName} | ${details}` : eventName;
+}
+
+function summarizeDispatcherEvent(event) {
+  if (Array.isArray(event?.players)) {
+    return `players=${event.players.length}`;
+  }
+
+  if (Array.isArray(event?.squads)) {
+    return `squads=${event.squads.length}`;
+  }
+
+  if (event?.payload && typeof event.payload === "object" && !Array.isArray(event.payload)) {
+    return safeJson(event.payload, 420);
+  }
+
+  if (Array.isArray(event?.params) && event.params.length > 0) {
+    const values = event.params
+      .slice(0, 6)
+      .map((param) => clipText(param?.value || "-", 48));
+
+    if (event.params.length > 6) {
+      values.push(`...+${event.params.length - 6}`);
+    }
+
+    return values.join(" | ");
+  }
+
+  if (event?.rawLog) {
+    return clipText(event.rawLog, 220);
+  }
+
+  return "";
+}
+
+function safeJson(value, maxLength) {
+  try {
+    return clipText(JSON.stringify(value), maxLength);
+  } catch {
+    return "[unserializable payload]";
+  }
+}
+
+function clipText(value, maxLength) {
+  const text = String(value ?? "").replace(/\r/g, " ").replace(/\n/g, " ").trim();
+  if (!text) return "";
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 3))}...`;
 }
 
 class RingLogStore {
@@ -163,7 +231,19 @@ class RingLogStore {
       if (channel !== "all" && item.channel !== channel) continue;
 
       if (queryText) {
-        const haystack = `${item.channel} ${item.level} ${item.message} ${item.eventId ?? ""} ${item.source ?? ""}`.toLowerCase();
+        const haystack = [
+          item.channel,
+          item.level,
+          item.message,
+          item.eventId,
+          item.eventName,
+          item.command,
+          item.source,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
         if (!haystack.includes(queryText)) continue;
       }
 

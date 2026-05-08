@@ -195,7 +195,36 @@ export default class Rcon extends EventEmitter {
    * @returns {Promise<string>}
    */
   execute(command) {
-    return this._write(SERVERDATA_EXECCOMMAND, command);
+    const commandText = String(command ?? "");
+
+    this.emit("RCON_NATIVE_WRITE", {
+      kind: "command",
+      command: commandText,
+      body: commandText,
+      time: new Date().toISOString(),
+    });
+
+    return this._write(SERVERDATA_EXECCOMMAND, commandText)
+      .then((response) => {
+        this.emit("RCON_NATIVE_RESPONSE", {
+          kind: "response",
+          command: commandText,
+          body: String(response ?? ""),
+          time: new Date().toISOString(),
+        });
+
+        return response;
+      })
+      .catch((error) => {
+        this.emit("RCON_NATIVE_ERROR", {
+          kind: "error",
+          command: commandText,
+          message: error.message,
+          time: new Date().toISOString(),
+        });
+
+        throw error;
+      });
   }
 
   _write(type, body) {

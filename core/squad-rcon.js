@@ -27,6 +27,12 @@ export default class SquadRcon extends Rcon {
     const time = nowString();
     const body = packet.body;
 
+    this.emit("RCON_NATIVE_PUSH", {
+      kind: "push",
+      body,
+      time,
+    });
+
     const lifecycleType = detectLifecycleType(body);
     if (lifecycleType) {
       const payload = {

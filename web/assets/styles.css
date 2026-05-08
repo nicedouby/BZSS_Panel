@@ -327,6 +327,12 @@ body::before {
   letter-spacing: 0.2px;
 }
 
+.page-subtitle {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
 .card {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -1282,6 +1288,25 @@ input:focus, select:focus {
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
+}
+
+.console-view-toggle {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.console-view-btn {
+  min-width: 110px;
+}
+
+.console-view-btn.active {
+  background: rgba(34, 197, 94, 0.18);
+  border-color: rgba(34, 197, 94, 0.38);
+  color: #dcfce7;
 }
 
 .console-search {
@@ -1290,6 +1315,36 @@ input:focus, select:focus {
 
 .console-command-card {
   padding: 10px;
+}
+
+.rcon-panel-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.rcon-panel-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.rcon-status-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rcon-status-chip {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.56);
+  color: #bfdbfe;
+  font-size: 12px;
 }
 
 .rcon-form {
@@ -1323,7 +1378,7 @@ input:focus, select:focus {
 
 .console-line {
   display: grid;
-  grid-template-columns: 70px 80px 92px 78px 1fr;
+  grid-template-columns: 70px 80px minmax(120px, 220px) 78px minmax(0, 1fr);
   gap: 8px;
   align-items: baseline;
   padding: 6px 8px;
@@ -1357,12 +1412,28 @@ input:focus, select:focus {
   color: #a78bfa;
 }
 
+.channel-rcon-native .log-channel {
+  color: #c4b5fd;
+}
+
+.channel-dispatcher .log-channel {
+  color: #67e8f9;
+}
+
 .level-output .log-message {
   color: #dbeafe;
 }
 
 .level-input .log-message {
   color: var(--green);
+}
+
+.level-push .log-message {
+  color: #f5d0fe;
+}
+
+.level-status .log-message {
+  color: #bfdbfe;
 }
 
 .drawer-backdrop,
@@ -1422,6 +1493,9 @@ input:focus, select:focus {
   .grid.cols-2, .grid.cols-3 { grid-template-columns: 1fr; }
   .console-line { grid-template-columns: 1fr; }
   .rcon-form { grid-template-columns: 1fr; }
+  .console-search { width: 100%; }
+  .console-view-toggle { width: 100%; }
+  .console-view-btn { flex: 1; }
   .db-panel {
     flex-direction: column;
     max-height: none;
