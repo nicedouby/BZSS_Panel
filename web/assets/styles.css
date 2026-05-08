@@ -383,6 +383,62 @@ body::before {
   gap: 8px;
 }
 
+.squad-order-flow-card {
+  display: grid;
+  gap: 10px;
+}
+
+.squad-order-team-flow {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.squad-order-team-label {
+  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.squad-order-flow-line {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.squad-order-flow-item {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  max-width: 220px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(94, 234, 212, 0.22);
+  background: rgba(15, 23, 42, 0.64);
+  color: #e0f2fe;
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squad-order-flow-item.is-muted {
+  color: var(--muted);
+  border-color: rgba(148, 163, 184, 0.2);
+  text-decoration: line-through;
+}
+
+.squad-order-flow-separator {
+  color: var(--muted);
+  font-weight: 900;
+}
+
 .squad-order-empty {
   color: var(--muted);
   text-align: center;
@@ -491,6 +547,11 @@ body::before {
 .match-badge.leader {
   color: #bfdbfe;
   border-color: rgba(96, 165, 250, 0.35);
+}
+
+.match-badge.bad {
+  color: var(--danger);
+  border-color: rgba(251, 113, 133, 0.3);
 }
 
 .match-squad-list {

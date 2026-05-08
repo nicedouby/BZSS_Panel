@@ -61,7 +61,11 @@
     "audit": { "enabled": true },
     "playerState": { "enabled": true },
     "squadState": { "enabled": true },
-    "squadCreationOrder": { "enabled": true },
+    "squadCreationOrder": {
+      "enabled": true,
+      "missingConfirmSnapshots": 2,
+      "missingConfirmMs": 15000
+    },
     "matchState": { "enabled": true },
     "console": { "enabled": true, "maxLines": 500 },
     "playerDatabase": { "enabled": true },

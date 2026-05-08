@@ -32,6 +32,12 @@
       }
     },
 
+    "squadCreationOrder": {
+      "enabled": true,
+      "missingConfirmSnapshots": 2,
+      "missingConfirmMs": 15000
+    },
+
     "console": {
       "enabled": true,
       "maxLines": 5000
