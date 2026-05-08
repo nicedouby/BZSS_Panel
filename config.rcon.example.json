@@ -14,13 +14,24 @@
     },
 
     "polling": {
-      "enabled": true,
+      "enabled": false,
       "playersIntervalMs": 5000,
       "squadsIntervalMs": 10000
     }
   },
 
   "modules": {
+    "matchState": {
+      "enabled": true,
+      "polling": {
+        "serverInfoIntervalMs": 5000,
+        "playersIntervalMs": 10000,
+        "squadsIntervalMs": 10000,
+        "currentMapIntervalMs": 15000,
+        "nextMapIntervalMs": 30000
+      }
+    },
+
     "console": {
       "enabled": true,
       "maxLines": 5000

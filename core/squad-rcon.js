@@ -120,30 +120,7 @@ export default class SquadRcon extends Rcon {
    */
   async getListPlayers() {
     const raw = await this.execute("ListPlayers");
-    const players = [];
-    if (!raw) return players;
-
-    for (const line of raw.split("\n")) {
-      const m = line.match(
-        /^ID: (?<playerID>\d+) \| Online IDs:([^|]+)\| Name: (?<name>.+) \| Team ID: (?<teamID>\d+|N\/A) \| Squad ID: (?<squadID>\d+|N\/A) \| Is Leader: (?<isLeader>True|False) \| Role: (?<role>.+)$/
-      );
-      if (!m) continue;
-
-      const p = { ...m.groups };
-      p.playerID = Number(p.playerID);
-      p.isLeader = p.isLeader === "True";
-      p.teamID = p.teamID !== "N/A" ? Number(p.teamID) : null;
-      p.squadID = p.squadID !== "N/A" ? Number(p.squadID) : null;
-
-      iterateIDs(m[2]).forEach((platform, id) => {
-        p[lowerID(platform)] = id;
-      });
-
-      p.raw = line;
-      players.push(p);
-    }
-
-    return players;
+    return parseListPlayers(raw);
   }
 
   /**
@@ -151,58 +128,17 @@ export default class SquadRcon extends Rcon {
    */
   async getSquads() {
     const raw = await this.execute("ListSquads");
-    const squads = [];
-    if (!raw) return squads;
-
-    let teamID = null;
-    let teamName = null;
-
-    for (const line of raw.split("\n")) {
-      const mTeam = line.match(/Team ID: (\d) \((.+)\)/);
-      if (mTeam) {
-        teamID = Number(mTeam[1]);
-        teamName = mTeam[2];
-        continue;
-      }
-
-      const m = line.match(
-        /ID: (?<squadID>\d+) \| Name: (?<squadName>.+) \| Size: (?<size>\d+) \| Locked: (?<locked>True|False) \| Creator Name: (?<creatorName>.+) \| Creator Online IDs:([^|]+)/
-      );
-      if (!m) continue;
-
-      const squad = {
-        ...m.groups,
-        squadID: Number(m.groups.squadID),
-        locked: m.groups.locked === "True",
-        size: Number(m.groups.size),
-        teamID,
-        teamName,
-        raw: line,
-      };
-
-      iterateIDs(m[6]).forEach((platform, id) => {
-        squad["creator" + capitalID(platform)] = id;
-      });
-
-      squads.push(squad);
-    }
-
-    return squads;
+    return parseListSquads(raw);
   }
 
   async getCurrentMap() {
     const raw = await this.execute("ShowCurrentMap");
-    const m = raw.match(/^Current level is ([^,]*), layer is ([^,]*)/);
-    return m ? { level: m[1].trim(), layer: m[2].trim() } : { level: null, layer: null };
+    return parseCurrentMap(raw);
   }
 
   async getNextMap() {
     const raw = await this.execute("ShowNextMap");
-    const m = raw.match(/^Next level is ([^,]*), layer is ([^,]*)/);
-    return {
-      level: m && m[1] !== "" ? m[1].trim() : null,
-      layer: m && m[2] !== "To be voted" ? m[2].trim() : null,
-    };
+    return parseNextMap(raw);
   }
 
   broadcast(message) {
@@ -228,6 +164,94 @@ export default class SquadRcon extends Rcon {
   disbandSquad(teamID, squadID) {
     return this.execute(`AdminDisbandSquad "${teamID}" ${squadID}`);
   }
+}
+
+export function parseListPlayers(raw) {
+  const players = [];
+  if (!raw) return players;
+
+  for (const line of String(raw).split("\n")) {
+    const m = line.trim().match(
+      /^ID: (?<playerID>\d+) \| Online IDs:([^|]+)\| Name: (?<name>.+) \| Team ID: (?<teamID>\d+|N\/A) \| Squad ID: (?<squadID>\d+|N\/A) \| Is Leader: (?<isLeader>True|False) \| Role: (?<role>.+)$/
+    );
+    if (!m) continue;
+
+    const p = { ...m.groups };
+    p.playerID = Number(p.playerID);
+    p.isLeader = p.isLeader === "True";
+    p.teamID = p.teamID !== "N/A" ? Number(p.teamID) : null;
+    p.squadID = p.squadID !== "N/A" ? Number(p.squadID) : null;
+
+    iterateIDs(m[2]).forEach((platform, id) => {
+      p[lowerID(platform)] = id;
+    });
+
+    p.raw = line.trim();
+    players.push(p);
+  }
+
+  return players;
+}
+
+export function parseListSquads(raw) {
+  const squads = [];
+  if (!raw) return squads;
+
+  let teamID = null;
+  let teamName = null;
+
+  for (const line of String(raw).split("\n")) {
+    const trimmed = line.trim();
+    const mTeam = trimmed.match(/Team ID: (\d+) \((.+)\)/);
+    if (mTeam) {
+      teamID = Number(mTeam[1]);
+      teamName = mTeam[2];
+      continue;
+    }
+
+    const m = trimmed.match(
+      /ID: (?<squadID>\d+) \| Name: (?<squadName>.+) \| Size: (?<size>\d+) \| Locked: (?<locked>True|False) \| Creator Name: (?<creatorName>.+) \| Creator Online IDs:([^|]+)/
+    );
+    if (!m) continue;
+
+    const squad = {
+      ...m.groups,
+      squadID: Number(m.groups.squadID),
+      locked: m.groups.locked === "True",
+      size: Number(m.groups.size),
+      teamID,
+      teamName,
+      raw: trimmed,
+    };
+
+    iterateIDs(m[6]).forEach((platform, id) => {
+      squad["creator" + capitalID(platform)] = id;
+    });
+
+    squads.push(squad);
+  }
+
+  return squads;
+}
+
+export function parseCurrentMap(raw) {
+  const text = String(raw ?? "").trim();
+  const m = text.match(/^Current level is ([^,]*), layer is ([^,]*)/i);
+  return m ? { level: cleanMapValue(m[1]), layer: cleanMapValue(m[2]) } : { level: null, layer: null };
+}
+
+export function parseNextMap(raw) {
+  const text = String(raw ?? "").trim();
+  const m = text.match(/^Next level is ([^,]*), layer is ([^,]*)/i);
+  return {
+    level: m && cleanMapValue(m[1]) ? cleanMapValue(m[1]) : null,
+    layer: m && cleanMapValue(m[2]) && cleanMapValue(m[2]) !== "To be voted" ? cleanMapValue(m[2]) : null,
+  };
+}
+
+function cleanMapValue(value) {
+  const text = String(value ?? "").trim();
+  return text || null;
 }
 
 function detectLifecycleType(rawBody) {

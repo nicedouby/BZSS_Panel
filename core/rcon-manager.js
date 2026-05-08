@@ -34,7 +34,7 @@ export class RconManager {
     this.lastCommandTime = 0;
 
     this.polling = {
-      enabled: Boolean(this.config.polling?.enabled ?? true),
+      enabled: Boolean(this.config.polling?.enabled ?? false),
       playersIntervalMs: Number(this.config.polling?.playersIntervalMs ?? 5000),
       squadsIntervalMs: Number(this.config.polling?.squadsIntervalMs ?? 10000),
     };
@@ -51,6 +51,11 @@ export class RconManager {
       lastError: "",
       lastPlayersRefresh: "",
       lastSquadsRefresh: "",
+    };
+
+    this.refreshInFlight = {
+      players: false,
+      squads: false,
     };
   }
 
@@ -321,52 +326,66 @@ export class RconManager {
 
   async refreshPlayers() {
     if (!this.enabled || !this.squadRcon) return [];
+    if (this.refreshInFlight.players) return [];
 
-    if (!this.squadRcon.connected || !this.squadRcon.loggedIn) {
-      await this.squadRcon.connect();
+    this.refreshInFlight.players = true;
+
+    try {
+      if (!this.squadRcon.connected || !this.squadRcon.loggedIn) {
+        await this.squadRcon.connect();
+      }
+
+      const players = await this.squadRcon.getListPlayers();
+      this.status.lastPlayersRefresh = new Date().toISOString();
+      this.webStatus.set("playerCount", players.length);
+
+      this.eventBus.emitCoreEvent("RCON_LIST_PLAYERS_UPDATED", {
+        eventId: `rcon:listPlayers:${Date.now()}`,
+        eventName: "RCON_LIST_PLAYERS_UPDATED",
+        layer: "core",
+        source: "core.rconManager",
+        serverId: this.webStatus.serverId,
+        time: new Date().toISOString(),
+        params: [],
+        players,
+      });
+
+      return players;
+    } finally {
+      this.refreshInFlight.players = false;
     }
-
-    const players = await this.squadRcon.getListPlayers();
-    this.status.lastPlayersRefresh = new Date().toISOString();
-    this.webStatus.set("playerCount", players.length);
-
-    this.eventBus.emitCoreEvent("RCON_LIST_PLAYERS_UPDATED", {
-      eventId: `rcon:listPlayers:${Date.now()}`,
-      eventName: "RCON_LIST_PLAYERS_UPDATED",
-      layer: "core",
-      source: "core.rconManager",
-      serverId: this.webStatus.serverId,
-      time: new Date().toISOString(),
-      params: [],
-      players,
-    });
-
-    return players;
   }
 
   async refreshSquads() {
     if (!this.enabled || !this.squadRcon) return [];
+    if (this.refreshInFlight.squads) return [];
 
-    if (!this.squadRcon.connected || !this.squadRcon.loggedIn) {
-      await this.squadRcon.connect();
+    this.refreshInFlight.squads = true;
+
+    try {
+      if (!this.squadRcon.connected || !this.squadRcon.loggedIn) {
+        await this.squadRcon.connect();
+      }
+
+      const squads = await this.squadRcon.getSquads();
+      this.status.lastSquadsRefresh = new Date().toISOString();
+      this.webStatus.set("squadCount", squads.length);
+
+      this.eventBus.emitCoreEvent("RCON_LIST_SQUADS_UPDATED", {
+        eventId: `rcon:listSquads:${Date.now()}`,
+        eventName: "RCON_LIST_SQUADS_UPDATED",
+        layer: "core",
+        source: "core.rconManager",
+        serverId: this.webStatus.serverId,
+        time: new Date().toISOString(),
+        params: [],
+        squads,
+      });
+
+      return squads;
+    } finally {
+      this.refreshInFlight.squads = false;
     }
-
-    const squads = await this.squadRcon.getSquads();
-    this.status.lastSquadsRefresh = new Date().toISOString();
-    this.webStatus.set("squadCount", squads.length);
-
-    this.eventBus.emitCoreEvent("RCON_LIST_SQUADS_UPDATED", {
-      eventId: `rcon:listSquads:${Date.now()}`,
-      eventName: "RCON_LIST_SQUADS_UPDATED",
-      layer: "core",
-      source: "core.rconManager",
-      serverId: this.webStatus.serverId,
-      time: new Date().toISOString(),
-      params: [],
-      squads,
-    });
-
-    return squads;
   }
 
   async getCurrentMap() {
