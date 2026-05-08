@@ -1,5 +1,7 @@
 // -*- coding: utf-8 -*-
 
+let authMenuOpen = false;
+
 export function renderTopbar({ root, status, auth, onLogout }) {
   const user = auth?.user ?? null;
   const roleText = user?.isSuperAdmin ? "SuperAdmin | has everything" : (user?.role ?? "Guest");
@@ -18,48 +20,70 @@ export function renderTopbar({ root, status, auth, onLogout }) {
     ${chip("Time", playtime, "")}
     <div class="topbar-spacer"></div>
     ${user ? `
-      <div class="auth-dropdown">
+      <div class="auth-dropdown ${authMenuOpen ? "is-open" : ""}">
         <button id="topbar-auth-btn" class="auth-badge-btn" type="button">
           <strong>${escapeHtml(user?.username ?? "Guest")}</strong>
           <span>${escapeHtml(roleText)}</span>
         </button>
-        <div id="topbar-auth-menu" class="auth-dropdown-menu" hidden>
-          <button id="topbar-logout" class="auth-dropdown-item" type="button">Sign out</button>
+        <div id="topbar-auth-menu" class="auth-dropdown-menu">
+          <button id="topbar-logout" class="auth-dropdown-item" type="button">退出登录</button>
         </div>
       </div>
     ` : ""}
   `;
 
-  if (user && typeof onLogout === "function") {
-    const authBtn = root.querySelector("#topbar-auth-btn");
-    const authMenu = root.querySelector("#topbar-auth-menu");
-    const logoutBtn = root.querySelector("#topbar-logout");
+  if (!user) {
+    authMenuOpen = false;
+    return;
+  }
 
-    if (authBtn && authMenu) {
-      authBtn.addEventListener("click", () => {
-        const isHidden = authMenu.hasAttribute("hidden");
-        if (isHidden) {
-          authMenu.removeAttribute("hidden");
-          document.addEventListener("click", closeMenuOnClickOutside);
-        } else {
-          authMenu.setAttribute("hidden", "");
-          document.removeEventListener("click", closeMenuOnClickOutside);
-        }
-      });
+  const authBtn = root.querySelector("#topbar-auth-btn");
+  const authMenu = root.querySelector("#topbar-auth-menu");
+  const logoutBtn = root.querySelector("#topbar-logout");
+  const authDropdown = root.querySelector(".auth-dropdown");
 
-      const closeMenuOnClickOutside = (e) => {
-        if (!authBtn.contains(e.target) && !authMenu.contains(e.target)) {
-          authMenu.setAttribute("hidden", "");
-          document.removeEventListener("click", closeMenuOnClickOutside);
-        }
-      };
+  if (authBtn && authMenu && authDropdown) {
+    const closeMenu = () => {
+      authMenuOpen = false;
+      authDropdown.classList.remove("is-open");
+      document.removeEventListener("click", closeMenuOnClickOutside);
+    };
+
+    const openMenu = () => {
+      authMenuOpen = true;
+      authDropdown.classList.add("is-open");
+      document.addEventListener("click", closeMenuOnClickOutside);
+    };
+
+    const closeMenuOnClickOutside = (e) => {
+      if (!authBtn.contains(e.target) && !authMenu.contains(e.target)) {
+        closeMenu();
+      }
+    };
+
+    authBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (authMenuOpen) {
+        closeMenu();
+        return;
+      }
+      openMenu();
+    });
+
+    authMenu.addEventListener("click", (e) => {
+      e.stopPropagation();
+    });
+
+    if (authMenuOpen) {
+      document.addEventListener("click", closeMenuOnClickOutside);
     }
+  }
 
-    if (logoutBtn) {
-      logoutBtn.addEventListener("click", () => {
-        onLogout().catch(() => {});
-      });
-    }
+  if (logoutBtn && typeof onLogout === "function") {
+    logoutBtn.addEventListener("click", () => {
+      authMenuOpen = false;
+      onLogout().catch(() => {});
+    });
   }
 }
 

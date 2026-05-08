@@ -81,8 +81,10 @@ body::before {
   align-items: center;
   gap: 10px;
   padding: 0 14px;
-  overflow: hidden;
+  overflow: visible;
   box-shadow: var(--glow);
+  position: relative;
+  z-index: 20;
 }
 
 .topbar-spacer {
@@ -140,10 +142,16 @@ body::before {
   backdrop-filter: blur(18px);
   z-index: 1000;
   overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-6px);
+  transition: opacity 120ms ease, transform 120ms ease;
 }
 
-.auth-dropdown-menu[hidden] {
-  display: none;
+.auth-dropdown.is-open .auth-dropdown-menu {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
 }
 
 .auth-dropdown-item {
