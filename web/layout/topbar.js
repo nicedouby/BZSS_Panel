@@ -2,6 +2,13 @@
 
 let authMenuOpen = false;
 
+/**
+ * 顶部状态栏
+ *
+ * 这里负责两件事：
+ * 1. 展示当前服务端核心状态，例如地图、人数、排队、时间等。
+ * 2. 提供右上角用户菜单，其中插件订阅入口只放在这里，不进入左侧主导航。
+ */
 export function renderTopbar({ root, status, auth, onLogout, onNavigate }) {
   const user = auth?.user ?? null;
   const roleText = user?.isSuperAdmin ? "SuperAdmin | has everything" : (user?.role ?? "Guest");
@@ -82,6 +89,7 @@ export function renderTopbar({ root, status, auth, onLogout, onNavigate }) {
     }
   }
 
+  // 插件订阅入口在右上角菜单中跳转，避免打断左侧主工作流。
   if (pluginSubscriptionsBtn && typeof onNavigate === "function") {
     pluginSubscriptionsBtn.addEventListener("click", () => {
       authMenuOpen = false;

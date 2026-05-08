@@ -36,7 +36,7 @@ export function createTeamBalanceModule({ core, modules }) {
   };
 
   return {
-    manifest: { id: "module.teamBalance", name: "Team Balance Module", kind: "module", version: "0.1.0" },
+    manifest: { id: "module.teamBalance", name: "Team Balance Module", kind: "module", version: "0.1.0", description: "队伍平衡执行模块。提供 canSwitchTeam() 权限检查和 requestSwitchTeam() 强制换队两个 API，所有插件和页面的换队操作必须经此模块执行，不能绕过直接调用 RCON。执行后自动调用 audit.record() 记录操作，保证换队行为留有审计追踪。" },
     apiName: "teamBalance",
     api,
   };

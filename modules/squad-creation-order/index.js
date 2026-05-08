@@ -411,6 +411,7 @@ export function createSquadCreationOrderModule({ core, config }) {
       name: "建队顺序",
       kind: "module",
       version: "0.2.0",
+      description: "建队顺序追踪插件。实时监听小队建立事件，记录每场对局中两支队伍的建队先后顺序，并通过前端页面以时间线方式可视化展示。用于还原赛前建队争抢序位的过程，辅助指挥员复盘和管理员分析对局节奏。数据在每轮对局结束后自动归档。",
       permissions: [
         "log.read",
         "event.subscribe.On_SquadCreated",

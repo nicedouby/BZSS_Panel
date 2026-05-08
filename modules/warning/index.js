@@ -28,7 +28,7 @@ export function createWarningModule({ core, modules }) {
   };
 
   return {
-    manifest: { id: "module.warning", name: "Warning Module", kind: "module", version: "0.1.0" },
+    manifest: { id: "module.warning", name: "Warning Module", kind: "module", version: "0.1.0", description: "玩家警告/提示执行模块。封装 AdminWarn RCON 命令，为所有需要向玩家发送警告消息的插件提供统一入口。执行后自动调用 audit.record() 记录操作者、目标玩家和警告内容，避免各插件各自调用 RCON 导致行为分散和审计断链。" },
     apiName: "warning",
     api,
   };

@@ -55,13 +55,15 @@ export function createKillManageModule({ core, modules }) {
     },
   };
 
+  // KillManage 依赖实时战斗事件归并结果。
+  // 这里同时检查 combatState 与 killManage，自身或上游任一被暂停时都停止写入新记录。
   function isSubscribed() {
     return modules?.pluginSubscriptions?.isSubscribed?.("module.combatState") !== false
       && modules?.pluginSubscriptions?.isSubscribed?.("module.killManage") !== false;
   }
 
   return {
-    manifest: { id: "module.killManage", name: "Kill Manage Module", kind: "module", version: "0.1.0" },
+    manifest: { id: "module.killManage", name: "Kill Manage Module", kind: "module", version: "0.1.0", description: "击杀/击倒/伤害事件归并模块。订阅 On_PlayerDamaged、On_PlayerWounded、On_PlayerDied 三类核心事件，将原始日志中的战斗参数（武器、伤害量、攻击者/受害者身份、置信度）归并为统一的 combatRecord 结构，并以 combatResolved 模块事件向后发布。武器收集插件、击杀管理页面等均以此事件为数据入口。" },
     apiName: "killManage",
     api,
 

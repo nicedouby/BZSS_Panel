@@ -122,13 +122,15 @@ export function createCombatStateModule({ core, modules, config }) {
     },
   };
 
+  // CombatState 是实时事件入口之一。
+  // 关闭订阅后保留模块实例与历史数据，但不再接收新的战斗事件。
   function isSubscribed() {
     return modules?.pluginSubscriptions?.isSubscribed?.("module.combatState") !== false
       && core.pluginSubscriptions?.isSubscribed?.("module.combatState") !== false;
   }
 
   return {
-    manifest: { id: "module.combatState", name: "Combat State Module", kind: "module", version: "0.1.0" },
+    manifest: { id: "module.combatState", name: "Combat State Module", kind: "module", version: "0.1.0", description: "战斗状态追踪模块。在 KillManage 之上进行更细粒度的战斗场景分析，包括连杀判定、阵亡速度、交战热度等派生指标。为将来的高级战报、英雄榜等功能提供基础数据结构，目前以骨架形态存在，供后续扩展。" },
     apiName: "combatState",
     api,
 

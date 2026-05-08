@@ -32,7 +32,7 @@ export function createAuditModule({ core }) {
   };
 
   return {
-    manifest: { id: "module.audit", name: "Audit Module", kind: "module", version: "0.1.0" },
+    manifest: { id: "module.audit", name: "Audit Module", kind: "module", version: "0.1.0", description: "行为追溯模块。记录面板内所有管理操作的'谁、通过什么模块、做了什么动作'，结果写入内存日志供查询。是跳边、解散小队、警告玩家等高危操作的审计链路终点，所有其他模块在执行敏感操作后必须调用 audit.record() 上报，保证操作可回溯。" },
     apiName: "audit",
     api,
   };

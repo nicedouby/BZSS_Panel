@@ -79,7 +79,7 @@ export function createSquadStateModule({ core }) {
   };
 
   return {
-    manifest: { id: "module.squadState", name: "Squad State Module", kind: "module", version: "0.2.0" },
+    manifest: { id: "module.squadState", name: "Squad State Module", kind: "module", version: "0.2.0", description: "小队实时状态维护模块。订阅建队、解队、加入/离开小队等核心事件，在内存中维护每支小队的成员列表、队长、队名和公开状态快照。建队顺序追踪、队伍平衡等模块依赖此模块的快照数据进行判断和操作。" },
     apiName: "squadState",
     api,
 

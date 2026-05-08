@@ -126,7 +126,7 @@ export function createPlayerStateModule({ core }) {
   };
 
   return {
-    manifest: { id: "module.playerState", name: "Player State Module", kind: "module", version: "0.2.0" },
+    manifest: { id: "module.playerState", name: "Player State Module", kind: "module", version: "0.2.0", description: "玩家实时状态维护模块。订阅玩家连接、断开、更换队伍、受伤、死亡等核心事件，在内存中维护每位在线玩家的当前状态快照，包括身份信息、所属队伍/小队、职业、存活状态等。是击杀管理、对局状态、玩家数据库等模块的基础数据源。" },
     apiName: "playerState",
     api,
 

@@ -141,7 +141,7 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
   };
 
   return {
-    manifest: { id: "module.playerDatabase", name: "Player Database Module", kind: "module", version: "0.2.0" },
+    manifest: { id: "module.playerDatabase", name: "Player Database Module", kind: "module", version: "0.2.0", description: "玩家持久化数据库模块。将玩家历史出现记录、SteamID/EOSID 映射关系、权限组设置等信息持久化至本地 SQLite 数据库。提供玩家搜索、详情查询、权限组修改等 API，是玩家管理页面的后端核心，也是黑名单、积分等功能的数据基础。" },
     apiName: "playerDatabase",
     api,
 

@@ -148,6 +148,8 @@ export function createPlugin({ core, modules }) {
     },
   };
 
+  // Weapon Collector 是典型的事件订阅型插件。
+  // 暂停订阅后继续保留内存中的历史统计，但不再消费新的 combatResolved 事件。
   function isSubscribed() {
     return modules?.pluginSubscriptions?.isSubscribed?.("plugin.weaponCollector") !== false
       && core.pluginSubscriptions?.isSubscribed?.("plugin.weaponCollector") !== false;
@@ -159,6 +161,7 @@ export function createPlugin({ core, modules }) {
       name: "Weapon Collector Plugin",
       kind: "plugin",
       version: "0.1.0",
+      description: "武器收集插件。订阅 module.killManage 发出的 combatResolved 事件，从击伤、击倒、击杀记录中提取武器名称，自动去除虚幻引擎类对象后缀（_Cxxx），按武器类别归类统计各类型事件的触发次数，供后续武器使用分析和战斗报告使用。",
     },
     apiName: "weaponCollector",
     api,

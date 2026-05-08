@@ -129,6 +129,8 @@ export function createMatchStateModule({ core, modules, config }) {
     },
   };
 
+  // MatchState 的实时能力来自轮询与状态广播。
+  // 订阅关闭时不销毁模块，只是停止新的轮询更新与对应事件发射。
   function isSubscribed() {
     return modules?.pluginSubscriptions?.isSubscribed?.("module.matchState") !== false
       && core.pluginSubscriptions?.isSubscribed?.("module.matchState") !== false;
@@ -413,7 +415,7 @@ export function createMatchStateModule({ core, modules, config }) {
   }
 
   return {
-    manifest: { id: "module.matchState", name: "Match State Module", kind: "module", version: "0.2.0" },
+    manifest: { id: "module.matchState", name: "Match State Module", kind: "module", version: "0.2.0", description: "对局全局状态聚合模块。订阅地图切换、回合开始/结束、票数变化、队伍得分等核心事件，维护当前对局的地图、图层、下一张图、队伍人数与得分等完整快照。对局状态前端页面直接读取本模块的 getOverview() 接口进行展示。" },
     apiName: "matchState",
     api,
 

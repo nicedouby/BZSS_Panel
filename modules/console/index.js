@@ -91,7 +91,7 @@ export function createConsoleModule({ core, config }) {
   };
 
   return {
-    manifest: { id: "module.console", name: "Console Module", kind: "module", version: "0.3.0" },
+    manifest: { id: "module.console", name: "Console Module", kind: "module", version: "0.3.0", description: "控制台日志聚合与 RCON 转发模块。订阅所有流经 EventBus 的日志条目，按来源分频道缓存最新若干条。前端控制台页面通过轮询拉取增量日志，并可在此页面直接输入 RCON 命令下发到服务器。是面板日志可视化和即时运维操作的核心入口。" },
     apiName: "console",
     api,
 

@@ -1263,6 +1263,94 @@ body::before {
   justify-content: flex-end;
 }
 
+.plugin-subscriptions-page {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+}
+
+.plugin-subscriptions-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.plugin-summary-card {
+  min-height: 82px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.plugin-summary-card span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.plugin-summary-card strong {
+  margin-top: 10px;
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+}
+
+.plugin-subscriptions-filter-card {
+  display: grid;
+  gap: 12px;
+}
+
+.plugin-subscriptions-filter-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.plugin-subscriptions-filter-title {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.plugin-subscriptions-filter-subtitle {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.plugin-subscriptions-kind-tabs {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.plugin-kind-tab {
+  min-height: 66px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.74);
+  box-shadow: none;
+}
+
+.plugin-kind-tab strong {
+  font-size: 13px;
+}
+
+.plugin-kind-tab span {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.plugin-kind-tab.is-active {
+  border-color: rgba(94, 234, 212, 0.4);
+  background: linear-gradient(135deg, rgba(8, 145, 178, 0.24), rgba(37, 99, 235, 0.22));
+}
+
 .plugin-subscriptions-error {
   padding: 10px 12px;
   border: 1px solid rgba(251, 113, 133, 0.34);
@@ -1277,20 +1365,74 @@ body::before {
   overflow: hidden;
 }
 
+.plugin-subscriptions-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.plugin-subscriptions-group-card {
+  padding: 0;
+  overflow: hidden;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.plugin-subscriptions-group-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 14px 0;
+}
+
+.plugin-subscriptions-group-title {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.plugin-subscriptions-group-subtitle {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.plugin-subscriptions-group-count {
+  color: var(--cyan);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .plugin-subscriptions-table-wrap {
-  height: calc(100vh - 170px);
-  min-height: 420px;
+  min-height: 0;
+  flex: 1;
   overflow: auto;
+  margin-top: 12px;
 }
 
 .plugin-subscriptions-table-wrap table {
-  min-width: 1120px;
+  min-width: 980px;
 }
 
 .plugin-subscriptions-table-wrap code {
   color: #bfdbfe;
   font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
   font-size: 12px;
+}
+
+.plugin-subscription-name-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.plugin-subscription-name-cell span {
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .plugin-status {
@@ -1824,7 +1966,7 @@ input:focus, select:focus {
 @media (max-width: 900px) {
   #shell { grid-template-columns: 1fr; }
   #sidebar { display: none; }
-  .grid.cols-2, .grid.cols-3 { grid-template-columns: 1fr; }
+  .grid.cols-2, .grid.cols-3, .plugin-subscriptions-summary { grid-template-columns: 1fr; }
   .console-line { grid-template-columns: 1fr; }
   .rcon-form { grid-template-columns: 1fr; }
   .console-search { width: 100%; }
@@ -1849,6 +1991,25 @@ input:focus, select:focus {
   }
   .kill-record-grid {
     grid-template-columns: 1fr;
+  }
+  .plugin-subscriptions-kind-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .plugin-subscriptions-page {
+    height: auto;
+    overflow: visible;
+    grid-template-rows: auto;
+  }
+  .plugin-subscriptions-groups {
+    grid-template-columns: 1fr;
+    grid-auto-rows: auto;
+    overflow: visible;
+  }
+  .plugin-subscriptions-group-card {
+    min-height: 320px;
+  }
+  .plugin-subscriptions-table-wrap {
+    min-height: 220px;
   }
   .kill-table-wrap {
     height: calc(100vh - 210px);
