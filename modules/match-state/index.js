@@ -42,8 +42,11 @@ export function createMatchStateModule({ core, modules, config }) {
       layer: "",
       mode: "",
       nextLayer: "",
-      playerCount: 0,
+      nextLayerSource: "",
+      playerCount: null,
+      playerCountSource: "",
       maxPlayers: null,
+      queueCount: null,
       playtime: null,
       tps: null,
       tpsStatus: "unknown",
@@ -136,12 +139,7 @@ export function createMatchStateModule({ core, modules, config }) {
       }
 
       const parsed = parseShowServerInfo(result.rconResponse);
-      const next = {
-        ...state.serverStatus,
-        ...parsed,
-        raw: result.rconResponse,
-        lastUpdatedAt: new Date().toISOString(),
-      };
+      const next = mergeServerStatus(state.serverStatus, parsed, result.rconResponse);
 
       if (!next.map || !next.layer) {
         const currentMap = await fetchCurrentMap();
@@ -169,7 +167,10 @@ export function createMatchStateModule({ core, modules, config }) {
 
       const players = parseListPlayers(result.rconResponse);
       state.players = makePlayersSnapshot(players);
-      state.serverStatus.playerCount = players.length;
+      if (!state.serverStatus.playerCountSource || state.serverStatus.playerCountSource !== "serverInfo") {
+        state.serverStatus.playerCount = players.length;
+        state.serverStatus.playerCountSource = "listPlayers";
+      }
       syncMatchFromServerStatus();
       updateWebStatus();
 
@@ -224,7 +225,7 @@ export function createMatchStateModule({ core, modules, config }) {
 
   async function refreshNextMap() {
     return guarded("nextMap", async () => {
-      if (state.serverStatus.nextLayer) return null;
+      if (state.serverStatus.nextLayerSource === "serverInfo") return null;
 
       const result = await executeRcon("ShowNextMap");
       if (!result.success) {
@@ -236,6 +237,7 @@ export function createMatchStateModule({ core, modules, config }) {
       const nextMap = parseNextMap(result.rconResponse);
       if (nextMap.layer) {
         state.serverStatus.nextLayer = nextMap.layer;
+        state.serverStatus.nextLayerSource = "showNextMap";
         state.serverStatus.lastUpdatedAt = new Date().toISOString();
         syncMatchFromServerStatus();
         updateWebStatus();
@@ -317,6 +319,7 @@ export function createMatchStateModule({ core, modules, config }) {
       nextLayer: state.serverStatus.nextLayer || "",
       playerCount: Number(state.serverStatus.playerCount ?? state.players.count ?? 0),
       maxPlayers: state.serverStatus.maxPlayers,
+      queueCount: state.serverStatus.queueCount ?? 0,
       tps: state.serverStatus.tps,
       tpsStatus: state.serverStatus.tpsStatus,
       playtime: state.serverStatus.playtime,
@@ -455,6 +458,7 @@ export function createMatchStateModule({ core, modules, config }) {
       refreshPlayers();
       refreshSquads();
       refreshCurrentMap();
+      refreshNextMap();
 
       startTimer(refreshServerInfo, polling.serverInfoIntervalMs);
       startTimer(refreshPlayers, polling.playersIntervalMs);
@@ -498,19 +502,56 @@ function makePlayersSnapshot(players) {
 function parseShowServerInfo(raw) {
   const fields = extractServerInfoFields(raw);
   const tps = pickNumber(fields, ["TPS", "ServerTPS", "TickRate", "ServerTickRate"]);
+  const derivedPlayers = derivePlayerCounts(raw);
 
   return {
     map: pickString(fields, ["MapName_s"]),
     layer: pickString(fields, ["Layer_s"]),
     mode: pickString(fields, ["GameMode_s"]),
     nextLayer: pickString(fields, ["NextLayer_s"]),
-    playerCount: pickNumber(fields, ["PlayerCount_I"]) ?? 0,
-    maxPlayers: pickNumber(fields, ["MaxPlayers"]),
-    playtime: pickNumber(fields, ["PLAYTIME_I"]),
+    playerCount: pickNumber(fields, ["PlayerCount_I", "PlayerCount", "Players"]) ?? derivedPlayers.playerCount,
+    maxPlayers: pickNumber(fields, ["MaxPlayers", "MaxPlayers_I", "MaxPlayerCount_I", "MaxPlayerCount"]) ?? derivedPlayers.maxPlayers,
+    queueCount: pickNumber(fields, ["Queue_I", "Queue", "PlayerQueue_I", "PlayerQueue", "PublicQueue_I", "PublicQueue", "NumPlayersQueued"]),
+    playtime: pickNumber(fields, ["PLAYTIME_I", "PlayTime_I", "Playtime_I", "PlayTime", "Playtime", "ElapsedTime_I", "RoundTime_I", "GameTime_I"]),
     tps,
     tpsStatus: resolveTpsStatus(tps),
     fields,
   };
+}
+
+function mergeServerStatus(current, parsed, raw) {
+  const next = {
+    ...current,
+    raw,
+    fields: parsed.fields ?? {},
+    lastUpdatedAt: new Date().toISOString(),
+  };
+
+  assignIfPresent(next, "map", parsed.map);
+  assignIfPresent(next, "layer", parsed.layer);
+  assignIfPresent(next, "mode", parsed.mode);
+  assignIfPresent(next, "maxPlayers", parsed.maxPlayers);
+  assignIfPresent(next, "queueCount", parsed.queueCount);
+  assignIfPresent(next, "playtime", parsed.playtime);
+  assignIfPresent(next, "tps", parsed.tps);
+
+  if (hasValue(parsed.tpsStatus) && parsed.tpsStatus !== "unknown") {
+    next.tpsStatus = parsed.tpsStatus;
+  }
+
+  if (hasValue(parsed.nextLayer)) {
+    next.nextLayer = parsed.nextLayer;
+    next.nextLayerSource = "serverInfo";
+  } else if (next.nextLayerSource === "serverInfo") {
+    next.nextLayerSource = "cached";
+  }
+
+  if (hasValue(parsed.playerCount)) {
+    next.playerCount = parsed.playerCount;
+    next.playerCountSource = "serverInfo";
+  }
+
+  return next;
 }
 
 function extractServerInfoFields(raw) {
@@ -521,8 +562,27 @@ function extractServerInfoFields(raw) {
     "GameMode_s",
     "NextLayer_s",
     "PlayerCount_I",
+    "PlayerCount",
+    "Players",
     "MaxPlayers",
+    "MaxPlayers_I",
+    "MaxPlayerCount_I",
+    "MaxPlayerCount",
+    "Queue_I",
+    "Queue",
+    "PlayerQueue_I",
+    "PlayerQueue",
+    "PublicQueue_I",
+    "PublicQueue",
+    "NumPlayersQueued",
     "PLAYTIME_I",
+    "PlayTime_I",
+    "Playtime_I",
+    "PlayTime",
+    "Playtime",
+    "ElapsedTime_I",
+    "RoundTime_I",
+    "GameTime_I",
     "TPS",
     "ServerTPS",
     "TickRate",
@@ -555,10 +615,46 @@ function pickString(fields, keys) {
 function pickNumber(fields, keys) {
   for (const key of keys) {
     if (!(key in fields) || fields[key] == null || String(fields[key]).trim() === "") continue;
-    const value = Number(String(fields[key] ?? "").replace(/[^\d.-]/g, ""));
+    const value = firstNumber(fields[key]);
     if (Number.isFinite(value)) return value;
   }
   return null;
+}
+
+function derivePlayerCounts(raw) {
+  const text = String(raw ?? "");
+  const slash = text.match(/\b(?:Players?|PlayerCount)\b[^0-9]*(\d+)\s*\/\s*(\d+)/i);
+  if (slash) {
+    return {
+      playerCount: Number(slash[1]),
+      maxPlayers: Number(slash[2]),
+    };
+  }
+
+  const of = text.match(/\b(?:Players?|PlayerCount)\b[^0-9]*(\d+)\s*(?:of|out\s+of)\s*(\d+)/i);
+  if (of) {
+    return {
+      playerCount: Number(of[1]),
+      maxPlayers: Number(of[2]),
+    };
+  }
+
+  return { playerCount: null, maxPlayers: null };
+}
+
+function assignIfPresent(target, key, value) {
+  if (hasValue(value)) target[key] = value;
+}
+
+function hasValue(value) {
+  if (value == null) return false;
+  if (typeof value === "number") return Number.isFinite(value);
+  return String(value).trim() !== "";
+}
+
+function firstNumber(value) {
+  const match = String(value ?? "").match(/-?\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : null;
 }
 
 function resolveTpsStatus(tps) {

@@ -115,7 +115,7 @@ function ensureTopbarTimer() {
   if (topbarTimer) return;
   topbarTimer = window.setInterval(() => {
     refreshTopbar().catch(() => {});
-  }, 2000);
+  }, 1000);
 }
 
 function renderFrame() {

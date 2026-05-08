@@ -19,7 +19,8 @@ function createHarness() {
       "GameMode_s=RAAS",
       "NextLayer_s=Fallujah_RAAS_v2",
       "PlayerCount_I=1",
-      "MaxPlayers=100",
+      "MaxPlayers_I=100",
+      "Queue_I=2",
       "PLAYTIME_I=123",
       "ServerTPS=29.7",
     ].join("\n"),
@@ -100,6 +101,7 @@ function createHarness() {
     module: createMatchStateModule({ core, modules: {}, config }),
     coreEvents,
     moduleEvents,
+    responses,
     webStatusState,
   };
 }
@@ -116,6 +118,7 @@ async function testAggregatesRconSnapshots() {
   assert.equal(state.serverStatus.nextLayer, "Fallujah_RAAS_v2");
   assert.equal(state.serverStatus.playerCount, 1);
   assert.equal(state.serverStatus.maxPlayers, 100);
+  assert.equal(state.serverStatus.queueCount, 2);
   assert.equal(state.serverStatus.playtime, 123);
   assert.equal(state.serverStatus.tps, 29.7);
   assert.equal(state.serverStatus.tpsStatus, "good");
@@ -133,6 +136,7 @@ async function testAggregatesRconSnapshots() {
   assert.equal(harness.webStatusState.nextLayer, "Fallujah_RAAS_v2");
   assert.equal(harness.webStatusState.playerCount, 1);
   assert.equal(harness.webStatusState.maxPlayers, 100);
+  assert.equal(harness.webStatusState.queueCount, 2);
   assert.equal(harness.webStatusState.tps, 29.7);
   assert.equal(harness.webStatusState.tpsStatus, "good");
   assert.equal(harness.webStatusState.playtime, 123);
@@ -149,6 +153,30 @@ async function testAggregatesRconSnapshots() {
   assert.ok(harness.coreEvents.some((item) => item.eventName === "RCON_LIST_SQUADS_UPDATED"));
 }
 
+async function testMissingServerInfoFieldsDoNotClobberLastGoodValues() {
+  const harness = createHarness();
+
+  await harness.module.api.refresh("serverInfo");
+  harness.responses.ShowServerInfo = [
+    "MapName_s=AlBasrah",
+    "Layer_s=AlBasrah_RAAS_v1",
+    "GameMode_s=RAAS",
+  ].join("\n");
+
+  await harness.module.api.refresh("serverInfo");
+  const state = harness.module.api.getState();
+
+  assert.equal(state.serverStatus.playerCount, 1);
+  assert.equal(state.serverStatus.maxPlayers, 100);
+  assert.equal(state.serverStatus.queueCount, 2);
+  assert.equal(state.serverStatus.playtime, 123);
+  assert.equal(state.serverStatus.nextLayer, "Fallujah_RAAS_v2");
+  assert.equal(harness.webStatusState.playerCount, 1);
+  assert.equal(harness.webStatusState.maxPlayers, 100);
+  assert.equal(harness.webStatusState.playtime, 123);
+}
+
 await testAggregatesRconSnapshots();
+await testMissingServerInfoFieldsDoNotClobberLastGoodValues();
 
 console.log("match state tests passed");

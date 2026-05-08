@@ -3,19 +3,19 @@
 export function renderTopbar({ root, status, auth, onLogout }) {
   const user = auth?.user ?? null;
   const roleText = user?.isSuperAdmin ? "SuperAdmin | has everything" : (user?.role ?? "Guest");
-  const tpsChip = buildTpsChip(status);
+  const currentMap = formatCurrentMap(status);
+  const nextMap = displayText(status.nextLayer, "Unknown");
+  const players = formatPlayers(status);
+  const queue = String(Number(status.queueCount ?? status.playerQueue ?? 0));
+  const playtime = formatPlaytime(status.playtime);
 
   root.innerHTML = `
     <div class="brand">${escapeHtml(status.serverName ?? "BZSS Panel")}</div>
-    ${chip("JS", status.jsStarted ? "Running" : "Stopped", status.jsStarted ? "good" : "bad")}
-    ${chip("Python", status.pythonLogParser ?? "unknown", status.pythonLogParser === "running" ? "good" : "warn")}
-    ${chip("UDP", status.udpReceiver ?? "unknown", status.udpReceiver === "listening" ? "good" : "warn")}
-    ${chip("RCON", status.rcon ?? "unknown", status.rcon === "connected" ? "good" : "warn")}
-    ${tpsChip}
-    ${chip("Players", String(status.playerCount ?? 0), "")}
-    ${chip("Layer", status.currentLayer ?? "Unknown", "")}
-    ${chip("Match", status.matchState ?? "Unknown", "")}
-    ${chip("Errors", String(status.recentErrors ?? 0), Number(status.recentErrors ?? 0) > 0 ? "bad" : "")}
+    ${chip("Current", currentMap, "")}
+    ${chip("Next", nextMap, "")}
+    ${chip("Players", players, "")}
+    ${chip("Queue", queue, Number(queue) > 0 ? "warn" : "")}
+    ${chip("Time", playtime, "")}
     <div class="topbar-spacer"></div>
     <div class="auth-badge">
       <strong>${escapeHtml(user?.username ?? "Guest")}</strong>
@@ -36,18 +36,38 @@ function chip(label, value, cls) {
   return `<div class="status-chip ${cls}">${escapeHtml(label)}: ${escapeHtml(value)}</div>`;
 }
 
-function buildTpsChip(status) {
-  const tps = Number(status?.tps);
-  const text = Number.isFinite(tps) ? tps.toFixed(2) : "--";
-  return chip("TPS", text, tpsChipClass(status?.tpsStatus));
+function formatCurrentMap(status) {
+  return displayText(status?.layer || status?.currentLayer || status?.map, "Unknown");
 }
 
-function tpsChipClass(tpsStatus) {
-  if (tpsStatus === "good") return "good";
-  if (tpsStatus === "warning") return "warn";
-  if (tpsStatus === "critical") return "bad";
-  if (tpsStatus === "stale" || tpsStatus === "unknown") return "muted";
-  return "";
+function formatPlayers(status) {
+  const current = Number(status?.playerCount ?? 0);
+  const max = Number(status?.maxPlayers);
+  const currentText = Number.isFinite(current) ? String(current) : "0";
+  return Number.isFinite(max) && max > 0 ? `${currentText}/${max}` : currentText;
+}
+
+function formatPlaytime(value) {
+  const totalSeconds = Number(value);
+  if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return "--";
+
+  const seconds = Math.floor(totalSeconds % 60);
+  const minutes = Math.floor(totalSeconds / 60) % 60;
+  const hours = Math.floor(totalSeconds / 3600);
+
+  if (hours > 0) {
+    return `${hours}:${pad2(minutes)}:${pad2(seconds)}`;
+  }
+  return `${minutes}:${pad2(seconds)}`;
+}
+
+function displayText(value, fallback) {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function pad2(value) {
+  return String(value).padStart(2, "0");
 }
 
 function escapeHtml(value) {
