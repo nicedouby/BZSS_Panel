@@ -61,6 +61,7 @@
     "audit": { "enabled": true },
     "playerState": { "enabled": true },
     "squadState": { "enabled": true },
+    "squadCreationOrder": { "enabled": true },
     "matchState": { "enabled": true },
     "console": { "enabled": true, "maxLines": 500 },
     "playerDatabase": { "enabled": true },
@@ -81,6 +82,7 @@
     ],
     "optional": {
       "web.squadManage": true,
+      "web.squadCreationOrder": true,
       "web.killManage": true,
       "web.teamBalance": false,
       "web.seed": false,

@@ -365,6 +365,24 @@ body::before {
   line-height: 1.2;
 }
 
+.squad-order-subtitle {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.squad-order-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.squad-order-empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 22px 12px;
+}
+
 .match-team-list {
   display: grid;
   gap: 14px;

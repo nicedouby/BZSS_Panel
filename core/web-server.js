@@ -230,6 +230,16 @@ export class WebServer {
       return this.json(res, 200, { squads: this.modules.squadState.getSquads(serverId) });
     }
 
+    if (url.pathname === "/api/squads/creation-order") {
+      const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
+      const sessionId = url.searchParams.get("sessionId");
+      const records = sessionId
+        ? this.modules.squadCreationOrder.getOrderBySession(serverId, sessionId)
+        : this.modules.squadCreationOrder.getCurrentOrder(serverId);
+
+      return this.json(res, 200, { serverId, sessionId: sessionId ?? null, records });
+    }
+
     if (url.pathname === "/api/kills/recent") {
       const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
       return this.json(res, 200, {

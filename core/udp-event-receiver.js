@@ -55,7 +55,7 @@ export class UdpEventReceiver {
       this.logger.warn(`Invalid UDP JSON from ${remoteInfo.address}:${remoteInfo.port}`);
       return;
     }
-
+    
     if (!rawEvent.Event) {
       this.logger.warn("UDP event missing Event field.");
       return;
