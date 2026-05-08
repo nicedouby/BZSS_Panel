@@ -87,8 +87,10 @@ export function createPlugin({ core, modules }) {
    */
   function cleanWeaponName(weaponName) {
     if (!weaponName) return null;
-    // 移除 _Cxxx 模式（x 是十六进制数字）
-    return weaponName.replace(/_C[0-9A-Fa-f]+$/, "");
+    // 移除实例后缀：_C_<数字> → _C，或旧格式 _C<hex> → 去掉
+    return weaponName
+      .replace(/_C_\d+$/, "_C")          // EF88_..._C_2147039011 → EF88_..._C
+      .replace(/_C[0-9A-Fa-f]+$/, "");   // 兜底：BP_..._C1a2b3c → BP_..._
   }
 
   /**
