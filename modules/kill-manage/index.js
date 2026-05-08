@@ -5,11 +5,13 @@
  *
  * 击杀/倒地/伤害归并模块。
  */
-export function createKillManageModule({ core }) {
+export function createKillManageModule({ core, modules }) {
   const records = [];
   const unsubscribers = [];
 
   function handleCombat(event, type) {
+    if (!isSubscribed()) return;
+
     const combat = event.normalized?.combat;
     if (!combat) return;
 
@@ -52,6 +54,11 @@ export function createKillManageModule({ core }) {
       return records.filter((r) => r.serverId === serverId).slice(-limit).reverse();
     },
   };
+
+  function isSubscribed() {
+    return modules?.pluginSubscriptions?.isSubscribed?.("module.combatState") !== false
+      && modules?.pluginSubscriptions?.isSubscribed?.("module.killManage") !== false;
+  }
 
   return {
     manifest: { id: "module.killManage", name: "Kill Manage Module", kind: "module", version: "0.1.0" },

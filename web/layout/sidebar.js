@@ -3,12 +3,13 @@
 /**
  * Sidebar
  *
- * 左侧 Web 模块栏。
- * 页面来自后端 WebRegistry，而不是前端写死。
+ * The page list comes from WebRegistry. Pages can opt out of the main
+ * navigation with hiddenFromSidebar while remaining routable.
  */
 export function renderSidebar({ pages, activeRoute, onNavigate }) {
   const root = document.querySelector("#sidebar");
-  const groups = groupBy(pages, (p) => p.group ?? "其他");
+  const visiblePages = pages.filter((page) => !page.hiddenFromSidebar);
+  const groups = groupBy(visiblePages, (p) => p.group ?? "其他");
 
   root.innerHTML = "";
 

@@ -3,10 +3,7 @@
 /**
  * Core: WebRegistry
  *
- * 只负责“Web 页面注册”。
- *
- * 它不提供页面数据，也不做业务判断。
- * Module / Plugin 可以向这里注册自己的 Web 页面入口。
+ * Registers Web pages contributed by built-in modules and plugins.
  */
 export class WebRegistry {
   constructor({ config, logger }) {
@@ -74,6 +71,8 @@ export class WebRegistry {
       enabled,
       order: Number(page.order ?? 1000),
       icon: page.icon ?? "•",
+      hiddenFromSidebar: Boolean(page.hiddenFromSidebar),
+      requiredPermission: page.requiredPermission ?? "",
     };
 
     this.pages.set(finalPage.id, finalPage);
@@ -83,6 +82,11 @@ export class WebRegistry {
   getPages() {
     return [...this.pages.values()]
       .filter((p) => p.enabled)
+      .sort((a, b) => a.order - b.order);
+  }
+
+  getAllPages() {
+    return [...this.pages.values()]
       .sort((a, b) => a.order - b.order);
   }
 }

@@ -58,6 +58,7 @@
   },
 
   "modules": {
+    "pluginSubscriptions": { "enabled": true },
     "audit": { "enabled": true },
     "playerState": { "enabled": true },
     "squadState": { "enabled": true },

@@ -2,7 +2,7 @@
 
 let authMenuOpen = false;
 
-export function renderTopbar({ root, status, auth, onLogout }) {
+export function renderTopbar({ root, status, auth, onLogout, onNavigate }) {
   const user = auth?.user ?? null;
   const roleText = user?.isSuperAdmin ? "SuperAdmin | has everything" : (user?.role ?? "Guest");
   const currentMap = formatCurrentMap(status);
@@ -10,6 +10,7 @@ export function renderTopbar({ root, status, auth, onLogout }) {
   const players = formatPlayers(status);
   const queue = String(Number(status.queueCount ?? status.playerQueue ?? 0));
   const playtime = formatPlaytime(status.playtime);
+  const canManagePlugins = Boolean(user?.isSuperAdmin);
 
   root.innerHTML = `
     <div class="brand">${escapeHtml(status.serverName ?? "BZSS Panel")}</div>
@@ -26,6 +27,7 @@ export function renderTopbar({ root, status, auth, onLogout }) {
           <span>${escapeHtml(roleText)}</span>
         </button>
         <div id="topbar-auth-menu" class="auth-dropdown-menu">
+          ${canManagePlugins ? `<button id="topbar-plugin-subscriptions" class="auth-dropdown-item" type="button">🔌 插件订阅</button>` : ""}
           <button id="topbar-logout" class="auth-dropdown-item" type="button">退出登录</button>
         </div>
       </div>
@@ -40,6 +42,7 @@ export function renderTopbar({ root, status, auth, onLogout }) {
   const authBtn = root.querySelector("#topbar-auth-btn");
   const authMenu = root.querySelector("#topbar-auth-menu");
   const logoutBtn = root.querySelector("#topbar-logout");
+  const pluginSubscriptionsBtn = root.querySelector("#topbar-plugin-subscriptions");
   const authDropdown = root.querySelector(".auth-dropdown");
 
   if (authBtn && authMenu && authDropdown) {
@@ -77,6 +80,13 @@ export function renderTopbar({ root, status, auth, onLogout }) {
     if (authMenuOpen) {
       document.addEventListener("click", closeMenuOnClickOutside);
     }
+  }
+
+  if (pluginSubscriptionsBtn && typeof onNavigate === "function") {
+    pluginSubscriptionsBtn.addEventListener("click", () => {
+      authMenuOpen = false;
+      onNavigate("/plugin-subscriptions").catch(() => {});
+    });
   }
 
   if (logoutBtn && typeof onLogout === "function") {

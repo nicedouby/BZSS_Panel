@@ -136,6 +136,7 @@ function renderFrame() {
     status: state.status ?? {},
     auth: state.auth,
     onLogout: logout,
+    onNavigate: navigateTo,
   });
 
   renderSidebar({

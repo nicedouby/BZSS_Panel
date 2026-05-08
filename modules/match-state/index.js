@@ -129,6 +129,11 @@ export function createMatchStateModule({ core, modules, config }) {
     },
   };
 
+  function isSubscribed() {
+    return modules?.pluginSubscriptions?.isSubscribed?.("module.matchState") !== false
+      && core.pluginSubscriptions?.isSubscribed?.("module.matchState") !== false;
+  }
+
   async function refreshServerInfo() {
     return guarded("serverInfo", async () => {
       const result = await executeRcon("ShowServerInfo");
@@ -263,6 +268,7 @@ export function createMatchStateModule({ core, modules, config }) {
   }
 
   async function guarded(key, fn) {
+    if (!isSubscribed()) return null;
     if (running[key]) return null;
     running[key] = true;
     try {
@@ -441,14 +447,17 @@ export function createMatchStateModule({ core, modules, config }) {
       if (!enabled) return;
 
       unsubscribers.push(core.eventBus.onCoreEvent("RCON_CONNECTED", () => {
+        if (!isSubscribed()) return;
         updateStatuses();
         emitRconStatusUpdated();
       }));
       unsubscribers.push(core.eventBus.onCoreEvent("RCON_DISCONNECTED", () => {
+        if (!isSubscribed()) return;
         updateStatuses();
         emitRconStatusUpdated();
       }));
       unsubscribers.push(core.eventBus.onCoreEvent("RCON_ERROR", () => {
+        if (!isSubscribed()) return;
         updateStatuses();
         emitRconStatusUpdated();
       }));

@@ -14,7 +14,7 @@ const VALID_FILTER_TYPES = new Set(["damage", "wound", "death"]);
  * Aggregates structured combat events emitted by the Python log parser.
  * It does not parse Squad.log lines; it only normalizes event params.
  */
-export function createCombatStateModule({ core, config }) {
+export function createCombatStateModule({ core, modules, config }) {
   const moduleConfig = config.get("modules.combatState", {});
   const enabled = Boolean(moduleConfig.enabled ?? true);
   const maxEvents = Math.max(1, Number(moduleConfig.maxEvents ?? 5000));
@@ -23,6 +23,8 @@ export function createCombatStateModule({ core, config }) {
   let lastUpdatedAt = "";
 
   function ingest(event) {
+    if (!isSubscribed()) return null;
+
     const type = COMBAT_TYPES[event?.eventName];
     if (!type) return null;
 
@@ -119,6 +121,11 @@ export function createCombatStateModule({ core, config }) {
       return { ok: true, cleared };
     },
   };
+
+  function isSubscribed() {
+    return modules?.pluginSubscriptions?.isSubscribed?.("module.combatState") !== false
+      && core.pluginSubscriptions?.isSubscribed?.("module.combatState") !== false;
+  }
 
   return {
     manifest: { id: "module.combatState", name: "Combat State Module", kind: "module", version: "0.1.0" },

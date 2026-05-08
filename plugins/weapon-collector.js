@@ -48,6 +48,8 @@ export function createPlugin({ core, modules }) {
    * 处理战斗事件
    */
   function handleCombatEvent(event) {
+    if (!isSubscribed()) return;
+
     const record = event.record;
     if (!record) return;
 
@@ -145,6 +147,11 @@ export function createPlugin({ core, modules }) {
       return summary;
     },
   };
+
+  function isSubscribed() {
+    return modules?.pluginSubscriptions?.isSubscribed?.("plugin.weaponCollector") !== false
+      && core.pluginSubscriptions?.isSubscribed?.("plugin.weaponCollector") !== false;
+  }
 
   return {
     manifest: {

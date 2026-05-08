@@ -1255,6 +1255,116 @@ body::before {
   white-space: nowrap;
 }
 
+.plugin-subscription-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.plugin-subscriptions-error {
+  padding: 10px 12px;
+  border: 1px solid rgba(251, 113, 133, 0.34);
+  border-radius: 10px;
+  background: rgba(127, 29, 29, 0.24);
+  color: #fecaca;
+  font-size: 12px;
+}
+
+.plugin-subscriptions-table-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.plugin-subscriptions-table-wrap {
+  height: calc(100vh - 170px);
+  min-height: 420px;
+  overflow: auto;
+}
+
+.plugin-subscriptions-table-wrap table {
+  min-width: 1120px;
+}
+
+.plugin-subscriptions-table-wrap code {
+  color: #bfdbfe;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
+.plugin-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(148, 163, 184, 0.12);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.plugin-status-running {
+  color: var(--green);
+  border-color: rgba(134, 239, 172, 0.28);
+}
+
+.plugin-status-stopped,
+.plugin-status-unloaded {
+  color: var(--muted);
+}
+
+.plugin-status-error {
+  color: var(--danger);
+  border-color: rgba(251, 113, 133, 0.3);
+}
+
+.plugin-subscription-switch {
+  position: relative;
+  width: 70px;
+  min-height: 32px;
+  padding: 0 10px 0 28px;
+  border-radius: 999px;
+  border-color: rgba(148, 163, 184, 0.26);
+  background: rgba(15, 23, 42, 0.88);
+  color: var(--muted);
+  box-shadow: none;
+  font-size: 12px;
+}
+
+.plugin-subscription-switch::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.88);
+  transform: translateY(-50%);
+  transition: left 120ms ease, background 120ms ease;
+}
+
+.plugin-subscription-switch.is-on {
+  padding-left: 10px;
+  padding-right: 28px;
+  border-color: rgba(34, 197, 94, 0.38);
+  background: rgba(22, 101, 52, 0.34);
+  color: #dcfce7;
+}
+
+.plugin-subscription-switch.is-on::before {
+  left: 44px;
+  background: var(--green);
+}
+
+.plugin-subscription-switch:disabled {
+  opacity: 0.58;
+  cursor: wait;
+}
+
 .combat-player-cell {
   display: flex;
   min-width: 130px;

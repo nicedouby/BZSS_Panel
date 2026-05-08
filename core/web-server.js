@@ -122,6 +122,37 @@ export class WebServer {
       return this.json(res, 200, this.core.webStatus.getSnapshot());
     }
 
+    if (url.pathname.startsWith("/api/plugin-subscriptions")) {
+      if (!this.canManagePlugins(user)) {
+        return this.json(res, 403, {
+          error: "Forbidden",
+          message: "plugins.manage permission is required.",
+        });
+      }
+
+      const pluginSubscriptions = this.modules.pluginSubscriptions;
+      if (!pluginSubscriptions) {
+        return this.json(res, 404, {
+          error: "PluginSubscriptionsUnavailable",
+          message: "Plugin subscriptions module is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugin-subscriptions/state" && req.method === "GET") {
+        return this.json(res, 200, pluginSubscriptions.getState());
+      }
+
+      if (url.pathname === "/api/plugin-subscriptions/set" && req.method === "POST") {
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, await pluginSubscriptions.setSubscribed(body.id, body.subscribed));
+      }
+
+      if (url.pathname === "/api/plugin-subscriptions/toggle" && req.method === "POST") {
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, await pluginSubscriptions.toggleSubscribed(body.id));
+      }
+    }
+
     if (url.pathname === "/api/match/overview") {
       return this.json(res, 200, this.modules.matchState.getOverview());
     }
@@ -352,6 +383,14 @@ export class WebServer {
       return forwarded.split(",")[0].trim();
     }
     return req.socket?.remoteAddress ?? "";
+  }
+
+  canManagePlugins(user) {
+    if (this.core.authManager?.hasEverything?.(user)) return true;
+    const permissions = user?.permissions ?? user?.permission ?? [];
+    if (Array.isArray(permissions)) return permissions.includes("plugins.manage");
+    if (permissions && typeof permissions === "object") return Boolean(permissions["plugins.manage"]);
+    return false;
   }
 }
 

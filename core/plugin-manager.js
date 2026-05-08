@@ -49,6 +49,7 @@ export class PluginManager {
         logger: this.core.logger,
         eventBus: this.core.eventBus,
         config: this.config,
+        pluginSubscriptions: this.core.pluginSubscriptions,
       },
       modules: this.modules,
     });
@@ -57,6 +58,10 @@ export class PluginManager {
     if (instance.start) await instance.start();
 
     this.instances.push(instance);
+    this.modules.pluginSubscriptions?.registerRuntimeItem?.({
+      ...(instance.manifest ?? {}),
+      status: "running",
+    });
     this.logger.info(`Plugin loaded: ${instance.manifest?.id ?? pluginPath}`);
   }
 

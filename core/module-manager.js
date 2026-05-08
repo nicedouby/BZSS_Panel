@@ -16,6 +16,7 @@ import { createWarningModule } from "../modules/warning/index.js";
 import { createPlaytimeModule } from "../modules/playtime/index.js";
 import { createSeedModule } from "../modules/seed/index.js";
 import { createPointsModule } from "../modules/points/index.js";
+import { createPluginSubscriptionsModule } from "../modules/plugin-subscriptions/index.js";
 
 /**
  * Core: ModuleManager
@@ -34,6 +35,7 @@ export class ModuleManager {
 
   async loadBuiltInModules() {
     const factories = [
+      createPluginSubscriptionsModule,
       createAuditModule,
       createConsoleModule,
       createServerStatusModule,
@@ -66,7 +68,15 @@ export class ModuleManager {
 
       if (instance.apiName && instance.api) {
         this.registry[instance.apiName] = instance.api;
+        if (instance.apiName === "pluginSubscriptions") {
+          this.core.pluginSubscriptions = instance.api;
+        }
       }
+
+      this.registry.pluginSubscriptions?.registerRuntimeItem?.({
+        ...(instance.manifest ?? {}),
+        status: this.getRuntimeStatus(instance.manifest),
+      });
 
       this.logger.module(`Loaded ${instance.manifest.id}`);
     }
@@ -76,5 +86,14 @@ export class ModuleManager {
     for (const instance of [...this.instances].reverse()) {
       if (instance.stop) await instance.stop();
     }
+  }
+
+  getRuntimeStatus(manifest = {}) {
+    const id = String(manifest.id ?? "");
+    if (!id.startsWith("module.")) return "running";
+
+    const configKey = id.slice("module.".length);
+    const moduleConfig = this.config.get(`modules.${configKey}`, {});
+    return moduleConfig.enabled === false ? "stopped" : "running";
   }
 }
