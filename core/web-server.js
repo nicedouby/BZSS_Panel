@@ -168,6 +168,25 @@ export class WebServer {
       return this.json(res, 200, result);
     }
 
+    if (url.pathname === "/api/combat/overview") {
+      return this.json(res, 200, this.modules.combatState.getOverview());
+    }
+
+    if (url.pathname === "/api/combat/events") {
+      return this.json(res, 200, {
+        events: this.modules.combatState.getEvents({
+          type: url.searchParams.get("type") ?? "all",
+          search: url.searchParams.get("search") ?? "",
+          limit: url.searchParams.get("limit") ?? "300",
+        }),
+        overview: this.modules.combatState.getOverview(),
+      });
+    }
+
+    if (url.pathname === "/api/combat/clear" && req.method === "POST") {
+      return this.json(res, 200, this.modules.combatState.clear());
+    }
+
     if (url.pathname === "/api/player-database/list") {
       const result = await this.modules.playerDatabase.listPlayers({
         query: url.searchParams.get("q") ?? "",
@@ -253,8 +272,15 @@ export class WebServer {
 
     if (url.pathname === "/api/kills/recent") {
       const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
+      const records = this.modules.combatState
+        ? this.modules.combatState.getEvents({
+            type: url.searchParams.get("type") ?? "all",
+            search: url.searchParams.get("search") ?? "",
+            limit: url.searchParams.get("limit") ?? "100",
+          })
+        : this.modules.killManage.getRecentKills(serverId, 100);
       return this.json(res, 200, {
-        records: this.modules.killManage.getRecentKills(serverId, 100),
+        records,
         viewer: {
           username: user.username,
           role: user.role,

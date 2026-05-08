@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import List, Tuple
 
 from bzss_parser.helpers import clean_value, regex_get
@@ -23,11 +24,20 @@ def parse_controller_id(line: str) -> str:
 
 
 def parse_caused_by(line: str) -> str:
-    return regex_get(r"\)\s*caused by\s*(.+)$", line)
+    match = re.search(r"caused by\s*(.+)$", line)
+    return match.group(1).strip() if match else ""
 
 
 def parse_from_object(line: str) -> str:
-    return regex_get(r"\sfrom\s+(\S+)\s+\(", line)
+    match = re.search(r"\sfrom\s+(.+?)\s+\(", line)
+    return match.group(1).strip() if match else ""
+
+
+def parse_controller_id_from_object(value: str) -> str:
+    text = str(value or "").strip()
+    if re.fullmatch(r"BP_PlayerController_C_\d+", text):
+        return text
+    return ""
 
 
 def parse_attacker_name_from_damage(line: str) -> str:
@@ -98,6 +108,22 @@ def parse_status_from_params(params: List[Tuple[str, str]]) -> str:
         return "Full"
 
     if empty_count <= 3:
+        return "Partial"
+
+    return "Failed"
+
+
+def parse_status_from_required_params(
+    params: List[Tuple[str, str]],
+    required_names: List[str],
+) -> str:
+    data = {name: clean_value(value) for name, value in params}
+    present = sum(1 for name in required_names if data.get(name, "") != "")
+
+    if present == len(required_names):
+        return "Full"
+
+    if present > 0:
         return "Partial"
 
     return "Failed"

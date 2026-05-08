@@ -43,7 +43,13 @@ class EventBuilder:
         }
 
         for index, (param_name, param_value) in enumerate(params, start=1):
-            event[f"Param{index}_{safe_param_name(param_name)}"] = clean_value(param_value)
+            event[f"Param{index}_{safe_param_name(param_name)}"] = clean_param_value(param_name, param_value)
 
         event["Raw"] = raw_value
         return event
+
+
+def clean_param_value(param_name: str, param_value: Any) -> str:
+    if str(param_name) in {"FromObject", "CausedBy"} and param_value is not None:
+        return str(param_value).strip()
+    return clean_value(param_value)

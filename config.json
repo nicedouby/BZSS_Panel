@@ -68,6 +68,7 @@
     },
     "matchState": { "enabled": true },
     "console": { "enabled": true, "maxLines": 500 },
+    "combatState": { "enabled": true, "maxEvents": 5000 },
     "playerDatabase": { "enabled": true },
     "killManage": { "enabled": true },
     "teamBalance": { "enabled": true },

@@ -427,11 +427,11 @@ export function createMatchStateModule({ core, modules, config }) {
 
       core.webRegistry.registerPage({
         id: "web.killManage",
-        title: "击杀管理",
+        title: "战斗事件管理",
         group: "管理",
         route: "/kill-manage",
         pageModule: "/pages/kill-manage.js",
-        source: "module.killManage",
+        source: "module.combatState",
         required: false,
         enabled: true,
         order: 110,

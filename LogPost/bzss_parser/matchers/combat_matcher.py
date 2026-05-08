@@ -12,12 +12,13 @@ from bzss_parser.matchers.helpers import (
     parse_attacker_name_from_damage,
     parse_caused_by,
     parse_confidence_from_status,
+    parse_controller_id_from_object,
     parse_controller_id,
     parse_damage_value,
     parse_from_object,
     parse_killing_damage_value,
     parse_online_ids,
-    parse_status_from_params,
+    parse_status_from_required_params,
     parse_victim_name_for_damage,
     parse_victim_name_for_killing_event,
 )
@@ -60,8 +61,7 @@ class CombatMatcher:
     @staticmethod
     def is_player_damaged(line: str) -> bool:
         return (
-            "LogSquad:" in line
-            and "Player:" in line
+            "Player:" in line
             and "ActualDamage=" in line
             and "caused by" in line
         )
@@ -122,7 +122,7 @@ class CombatMatcher:
             ("IdentitySource", identity_source),
         ]
 
-        parse_status = parse_status_from_params(params)
+        parse_status = parse_status_from_required_params(params, ["VictimName", "ActualDamage"])
         parse_confidence = parse_confidence_from_status(parse_status)
         params.extend([
             ("ParseStatus", parse_status),
@@ -137,11 +137,11 @@ class CombatMatcher:
         killing_damage = parse_killing_damage_value(line)
         from_object = parse_from_object(line)
         attacker_eos, attacker_steam = parse_online_ids(line)
-        attacker_controller = parse_controller_id(line)
+        attacker_controller = parse_controller_id(line) or parse_controller_id_from_object(from_object)
         caused_by = parse_caused_by(line)
 
         attacker_identity, attacker_source = self.identity_cache.resolve_by_controller(attacker_controller)
-        attacker_name = attacker_identity.name if attacker_identity else ""
+        attacker_name = attacker_identity.name if attacker_identity else parse_attacker_name_from_killing_event(from_object)
 
         if attacker_name or attacker_eos or attacker_steam or attacker_controller:
             self.identity_cache.upsert(
@@ -176,7 +176,7 @@ class CombatMatcher:
             ("IdentitySource", identity_source),
         ]
 
-        parse_status = parse_status_from_params(params)
+        parse_status = parse_status_from_required_params(params, ["VictimName", "KillingDamage"])
         parse_confidence = parse_confidence_from_status(parse_status)
         params.extend([
             ("ParseStatus", parse_status),
@@ -191,11 +191,11 @@ class CombatMatcher:
         killing_damage = parse_killing_damage_value(line)
         from_object = parse_from_object(line)
         attacker_eos, attacker_steam = parse_online_ids(line)
-        attacker_controller = parse_controller_id(line)
+        attacker_controller = parse_controller_id(line) or parse_controller_id_from_object(from_object)
         caused_by = parse_caused_by(line)
 
         attacker_identity, attacker_source = self.identity_cache.resolve_by_controller(attacker_controller)
-        attacker_name = attacker_identity.name if attacker_identity else ""
+        attacker_name = attacker_identity.name if attacker_identity else parse_attacker_name_from_killing_event(from_object)
 
         if attacker_name or attacker_eos or attacker_steam or attacker_controller:
             self.identity_cache.upsert(
@@ -230,7 +230,7 @@ class CombatMatcher:
             ("IdentitySource", identity_source),
         ]
 
-        parse_status = parse_status_from_params(params)
+        parse_status = parse_status_from_required_params(params, ["VictimName", "KillingDamage"])
         parse_confidence = parse_confidence_from_status(parse_status)
         params.extend([
             ("ParseStatus", parse_status),
@@ -239,3 +239,12 @@ class CombatMatcher:
         ])
 
         return "On_PlayerDied", params
+
+
+def parse_attacker_name_from_killing_event(from_object: str) -> str:
+    value = str(from_object or "").strip()
+    if not value or value.lower() == "nullptr":
+        return ""
+    if value.startswith("BP_"):
+        return ""
+    return value

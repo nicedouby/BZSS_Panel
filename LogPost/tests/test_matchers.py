@@ -7,6 +7,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from bzss_parser.identity_cache import IdentityCache
+from bzss_parser.event_builder import EventBuilder
 from bzss_parser.matchers.combat_matcher import CombatMatcher
 from bzss_parser.matchers.helpers import parse_online_ids
 from bzss_parser.matchers.server_tick_rate_matcher import ServerTickRateMatcher
@@ -30,7 +31,7 @@ class CombatMatcherTests(unittest.TestCase):
         self.assertEqual(event_name, "On_PlayerDamaged")
         self.assertEqual(data["CausedBy"], "BP_EF88_Specter_Foregrip_C_2146294694")
 
-    def test_partial_parse_does_not_stay_high_confidence(self) -> None:
+    def test_combat_status_uses_required_fields_only(self) -> None:
         line = (
             "[2026.05.07-12.39.26:173][276]LogSquad: Player: 试作型岛风 ActualDamage=62.000004 "
             "from  别说你爷 (Online IDs: EOS: 000262cdb3d74f43b95da83d6640873c steam: 76561199511806113 | Player Controller ID: "
@@ -40,9 +41,105 @@ class CombatMatcherTests(unittest.TestCase):
         _, params = self.matcher.parse_player_damaged(line)
         data = dict(params)
 
-        self.assertEqual(data["ParseStatus"], "Partial")
-        self.assertEqual(data["ParseConfidence"], "Medium")
-        self.assertNotEqual(data["Confidence"], "High")
+        self.assertEqual(data["ParseStatus"], "Full")
+        self.assertEqual(data["ParseConfidence"], "High")
+
+    def test_damaged_accepts_non_logsquad_prefix(self) -> None:
+        line = (
+            "LogSquadTrace: Player: Victim ActualDamage=62.000004 from Attacker "
+            "(Online IDs: EOS: xxx steam: 76561198000000000 | Player Controller ID: BP_PlayerController_C_123) "
+            "caused by BP_Rifle_C"
+        )
+
+        matched = self.matcher.match(line)
+        self.assertIsNotNone(matched)
+        event_name, params = matched
+        data = dict(params)
+
+        self.assertEqual(event_name, "On_PlayerDamaged")
+        self.assertEqual(data["VictimName"], "Victim")
+        self.assertEqual(data["AttackerName"], "Attacker")
+        self.assertEqual(data["ActualDamage"], "62.000004")
+        self.assertEqual(data["CausedBy"], "BP_Rifle_C")
+
+    def test_died_from_nullptr_with_invalid_ids_is_kept(self) -> None:
+        line = (
+            "LogSquadTrace: [DedicatedServer]Die(): Player: Braovo KillingDamage=-300.000000 "
+            "from nullptr (Online IDs: INVALID | Contoller ID: None) caused by "
+            "BP_Soldier_PLA_SquadLeader_Arid_C_2147373303"
+        )
+
+        matched = self.matcher.match(line)
+        self.assertIsNotNone(matched)
+        event_name, params = matched
+        data = dict(params)
+
+        self.assertEqual(event_name, "On_PlayerDied")
+        self.assertEqual(data["VictimName"], "Braovo")
+        self.assertEqual(data["KillingDamage"], "-300.000000")
+        self.assertEqual(data["FromObject"], "nullptr")
+        self.assertEqual(data["CausedBy"], "BP_Soldier_PLA_SquadLeader_Arid_C_2147373303")
+        self.assertEqual(data["AttackerName"], "")
+        self.assertEqual(data["ParseStatus"], "Full")
+
+    def test_wounded_event_is_generated(self) -> None:
+        line = (
+            "Wound(): Player: Victim KillingDamage=80.000000 from Attacker "
+            "(Online IDs: EOS: xxx steam: 76561198000000000 | Player Controller ID: BP_PlayerController_C_123) "
+            "caused by BP_Weapon_C"
+        )
+
+        matched = self.matcher.match(line)
+        self.assertIsNotNone(matched)
+        event_name, params = matched
+        data = dict(params)
+
+        self.assertEqual(event_name, "On_PlayerWounded")
+        self.assertEqual(data["VictimName"], "Victim")
+        self.assertEqual(data["KillingDamage"], "80.000000")
+        self.assertEqual(data["AttackerName"], "Attacker")
+
+    def test_died_preserves_controller_identity_and_caused_by_nullptr(self) -> None:
+        line = (
+            "Die(): Player: 四不两直 KillingDamage=100.000000 "
+            "from BP_PlayerController_C_2147413175 "
+            "(Online IDs: EOS: 000277a1cfc74496b194ef11aa83ed4d steam: 76561199164842747 "
+            "| Contoller ID: BP_PlayerController_C_2147413175) caused by nullptr"
+        )
+
+        matched = self.matcher.match(line)
+        self.assertIsNotNone(matched)
+        event_name, params = matched
+        data = dict(params)
+
+        self.assertEqual(event_name, "On_PlayerDied")
+        self.assertEqual(data["VictimName"], "四不两直")
+        self.assertEqual(data["KillingDamage"], "100.000000")
+        self.assertEqual(data["FromObject"], "BP_PlayerController_C_2147413175")
+        self.assertEqual(data["AttackerControllerID"], "BP_PlayerController_C_2147413175")
+        self.assertEqual(data["AttackerEOSID"], "000277a1cfc74496b194ef11aa83ed4d")
+        self.assertEqual(data["AttackerSteam64ID"], "76561199164842747")
+        self.assertEqual(data["CausedBy"], "nullptr")
+
+    def test_wounded_uses_from_object_controller_as_fallback(self) -> None:
+        line = (
+            "Wound(): Player: Victim KillingDamage=80.000000 "
+            "from BP_PlayerController_C_2147413175 "
+            "(Online IDs: EOS: 000277a1cfc74496b194ef11aa83ed4d steam: 76561199164842747 "
+            "| Contoller ID: None) caused by BP_Weapon_C"
+        )
+
+        matched = self.matcher.match(line)
+        self.assertIsNotNone(matched)
+        _, params = matched
+        data = dict(params)
+
+        self.assertEqual(data["FromObject"], "BP_PlayerController_C_2147413175")
+        self.assertEqual(data["AttackerControllerID"], "BP_PlayerController_C_2147413175")
+
+    def test_vehicle_damage_noise_is_ignored(self) -> None:
+        line = "LogSquad: SQVehicle::OnTakeDamage ActualDamage=100 caused by BP_Tank_C"
+        self.assertIsNone(self.matcher.match(line))
 
 
 class ServerTickRateMatcherTests(unittest.TestCase):
@@ -77,6 +174,20 @@ class IdSanitizationTests(unittest.TestCase):
         )
 
         self.assertEqual(steam, "76561199134649454")
+
+
+class EventBuilderTests(unittest.TestCase):
+    def test_from_object_nullptr_is_preserved(self) -> None:
+        builder = EventBuilder("BZSS_Main", "session", 1000)
+        event = builder.build(
+            "On_PlayerDied",
+            [("FromObject", "nullptr"), ("CausedBy", "nullptr"), ("AttackerEOSID", "INVALID")],
+            "raw",
+        )
+
+        self.assertEqual(event["Param1_FromObject"], "nullptr")
+        self.assertEqual(event["Param2_CausedBy"], "nullptr")
+        self.assertEqual(event["Param3_AttackerEOSID"], "")
 
 
 if __name__ == "__main__":
