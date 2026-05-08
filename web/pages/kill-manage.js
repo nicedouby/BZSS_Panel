@@ -80,7 +80,9 @@ export async function renderPage({ root, api }) {
     root.__killManageTimer = window.setTimeout(async () => {
       try {
         await refreshRecords({ silent: true });
-      } catch {}
+      } catch (error) {
+        if (error?.code === "Unauthorized") return;
+      }
       scheduleRefresh();
     }, 5000);
   }

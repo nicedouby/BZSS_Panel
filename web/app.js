@@ -19,25 +19,36 @@ const state = {
 const pageScroll = document.querySelector("#page-scroll");
 let topbarTimer = null;
 
-async function api(path) {
-  const res = await fetch(path, { cache: "no-store" });
-  if (res.status === 401) {
+async function apiFetch(path, options = {}, { handleAuth = true } = {}) {
+  const res = await fetch(path, {
+    cache: "no-store",
+    ...options,
+  });
+
+  if (handleAuth && res.status === 401) {
     handleUnauthorized();
-    throw new Error("Unauthorized");
+    const error = new Error("Unauthorized");
+    error.code = "Unauthorized";
+    throw error;
   }
+
+  return res;
+}
+
+async function api(path) {
+  const res = await apiFetch(path);
   if (!res.ok) throw new Error(await res.text());
   return await res.json();
 }
 
-async function apiPost(path, body = {}) {
-  return await fetch(path, {
+async function apiPost(path, body = {}, options = {}) {
+  return await apiFetch(path, {
     method: "POST",
-    cache: "no-store",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
-  });
+  }, options);
 }
 
 async function loadBootData() {
@@ -79,6 +90,7 @@ async function navigateTo(route) {
   const cleanup = await mod.renderPage({
     root: pageScroll,
     api,
+    apiFetch,
     openDrawer,
     openModal,
     onNavigate: navigateTo,
@@ -184,7 +196,7 @@ function renderLoginScreen(message = "") {
     const password = pageScroll.querySelector("#login-password")?.value ?? "";
 
     try {
-      const res = await apiPost("/api/auth/login", { username, password });
+      const res = await apiPost("/api/auth/login", { username, password }, { handleAuth: false });
       const data = await res.json();
 
       if (!res.ok || !data.ok) {
@@ -212,6 +224,11 @@ function renderLoginScreen(message = "") {
 }
 
 function handleUnauthorized() {
+  if (topbarTimer) {
+    window.clearInterval(topbarTimer);
+    topbarTimer = null;
+  }
+
   if (typeof state.currentPageCleanup === "function") {
     try {
       state.currentPageCleanup();

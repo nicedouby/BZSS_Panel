@@ -4,7 +4,7 @@ let rows = [];
 let selectedId = null;
 let searchTimer = null;
 
-export async function renderPage({ root, api, routeInfo }) {
+export async function renderPage({ root, api, apiFetch, routeInfo }) {
   const state = {
     query: "",
     sort: "updated_desc",
@@ -148,7 +148,7 @@ export async function renderPage({ root, api, routeInfo }) {
     const detail = await api(`/api/db/players/${encodeURIComponent(id)}`);
     renderDetail(els, detail, {
       async onSavePermission(permissionGroup) {
-        await fetch(`/api/db/players/${encodeURIComponent(id)}/permission-group`, {
+        await apiFetch(`/api/db/players/${encodeURIComponent(id)}/permission-group`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ permissionGroup }),
@@ -193,7 +193,7 @@ export async function renderPage({ root, api, routeInfo }) {
 
   root.querySelector("#db-sync-online-btn").addEventListener("click", async () => {
     setStatus("正在同步在线玩家...", "pending");
-    await fetch("/api/player-database/sync-online", { method: "POST" });
+    await apiFetch("/api/player-database/sync-online", { method: "POST" });
     await loadList();
     await loadStats({ silent: true });
     setStatus("在线玩家已同步", "success");
@@ -202,7 +202,7 @@ export async function renderPage({ root, api, routeInfo }) {
   root.querySelector("#db-reset-kill-stats-btn").addEventListener("click", async () => {
     if (!window.confirm("确认重置所有玩家击杀/击倒/TK/死亡/自杀统计吗？此操作不可撤销。")) return;
     setStatus("正在重置击杀统计...", "pending");
-    const res = await fetch("/api/db/reset-kill-stats", { method: "POST" });
+    const res = await apiFetch("/api/db/reset-kill-stats", { method: "POST" });
     const json = await res.json();
     if (!res.ok) throw new Error(json?.error || "重置失败");
     await loadList();

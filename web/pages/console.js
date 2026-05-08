@@ -20,7 +20,7 @@ const VIEW_OPTIONS = {
   },
 };
 
-export async function renderPage({ root, api }) {
+export async function renderPage({ root, api, apiFetch }) {
   clearPageTimers(root);
 
   const state = {
@@ -237,7 +237,7 @@ export async function renderPage({ root, api }) {
 
     rconInput.value = "";
 
-    await fetch("/api/console/rcon", {
+    await apiFetch("/api/console/rcon", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ command }),

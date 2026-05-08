@@ -3,8 +3,9 @@
 import crypto from "node:crypto";
 
 const DEFAULT_USERNAME = "DoubyBear";
-const DEFAULT_PASSWORD = "DoubyBear";
 const DEFAULT_ROLE = "SuperAdmin";
+const DEFAULT_PASSWORD_HASH = "scrypt$bzss-default-v1$1ZZCEAyPd4n5hgfHwMsYr9ftwYX2yS-VzBhU0tZRr1olmbHtTdDGO-dHJw43NGv0fg2meuR3LbLHOqdxNsQPvQ";
+const INVALID_PASSWORD_HASH = "scrypt$bzss-invalid-v1$UpgdHuTdcHnUYRfcBTFvC0by9qv9iboyj_VwZCfhJH5Xg1ZceJ637AMeDSSBZKSphN2Z_uIfGyl_AaOkBENdZw";
 
 /**
  * Core: AuthManager
@@ -45,11 +46,10 @@ export class AuthManager {
   async ensureDefaultSuperAdmin() {
     if (this.users.has(DEFAULT_USERNAME)) return;
 
-    const passwordHash = await hashPassword(DEFAULT_PASSWORD);
     this.users.set(DEFAULT_USERNAME, {
       id: "user:superadmin",
       username: DEFAULT_USERNAME,
-      passwordHash,
+      passwordHash: DEFAULT_PASSWORD_HASH,
       role: DEFAULT_ROLE,
       enabled: true,
       createdAt: Date.now(),
@@ -71,7 +71,7 @@ export class AuthManager {
     const user = this.users.get(normalizedUsername);
 
     // 固定做一次 hash 校验，降低用户名枚举的 timing 差异。
-    const passwordHash = user?.passwordHash ?? await hashPassword("invalid-password-placeholder");
+    const passwordHash = user?.passwordHash ?? INVALID_PASSWORD_HASH;
     const passwordOk = await verifyPassword(rawPassword, passwordHash);
 
     if (!user || !user.enabled || !passwordOk) {

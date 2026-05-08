@@ -25,8 +25,13 @@ export class WebServer {
 
     this.server = http.createServer((req, res) => {
       this.handleRequest(req, res).catch((error) => {
-        this.logger.error(`Web request failed: ${error.stack ?? error}`);
-        this.json(res, error.statusCode ?? 500, {
+        const statusCode = error.statusCode ?? 500;
+        if (statusCode >= 500) {
+          this.logger.error(`Web request failed: ${error.stack ?? error}`);
+        } else {
+          this.logger.warn(`Web request rejected: ${statusCode} ${error.code ?? error.message}`);
+        }
+        this.json(res, statusCode, {
           error: error.code ?? "InternalServerError",
           message: error.message,
         });
@@ -101,7 +106,13 @@ export class WebServer {
       });
     }
 
-    const user = this.core.authManager.requireLogin(req);
+    const user = this.core.authManager?.getUserFromRequest(req);
+    if (!user) {
+      return this.json(res, 401, {
+        error: "Unauthorized",
+        message: "Authentication required.",
+      });
+    }
 
     if (url.pathname === "/api/web/pages") {
       return this.json(res, 200, { pages: this.core.webRegistry.getPages() });
