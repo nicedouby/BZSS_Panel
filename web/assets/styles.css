@@ -89,7 +89,13 @@ body::before {
   flex: 1;
 }
 
-.auth-badge {
+.auth-dropdown {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.auth-badge-btn {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -99,21 +105,65 @@ body::before {
   border: 1px solid rgba(94, 234, 212, 0.24);
   border-radius: 12px;
   background: rgba(8, 13, 27, 0.7);
+  cursor: pointer;
+  transition: all 120ms ease;
 }
 
-.auth-badge strong {
+.auth-badge-btn:hover {
+  border-color: rgba(94, 234, 212, 0.48);
+  background: rgba(8, 13, 27, 0.9);
+  box-shadow: 0 0 16px rgba(94, 234, 212, 0.12);
+}
+
+.auth-badge-btn strong {
   font-size: 12px;
   line-height: 1.1;
+  color: var(--text);
 }
 
-.auth-badge span {
+.auth-badge-btn span {
   color: var(--muted);
   font-size: 11px;
   white-space: nowrap;
 }
 
-.topbar-logout {
-  white-space: nowrap;
+.auth-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  min-width: 140px;
+  background: rgba(8, 13, 27, 0.95);
+  border: 1px solid rgba(94, 234, 212, 0.28);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.48);
+  backdrop-filter: blur(18px);
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.auth-dropdown-menu[hidden] {
+  display: none;
+}
+
+.auth-dropdown-item {
+  display: block;
+  width: 100%;
+  text-align: right;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 100ms ease;
+}
+
+.auth-dropdown-item:hover {
+  background: rgba(251, 113, 133, 0.15);
+  color: var(--danger);
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .brand {

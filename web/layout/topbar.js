@@ -17,18 +17,49 @@ export function renderTopbar({ root, status, auth, onLogout }) {
     ${chip("Queue", queue, Number(queue) > 0 ? "warn" : "")}
     ${chip("Time", playtime, "")}
     <div class="topbar-spacer"></div>
-    <div class="auth-badge">
-      <strong>${escapeHtml(user?.username ?? "Guest")}</strong>
-      <span>${escapeHtml(roleText)}</span>
-    </div>
-    ${user ? `<button id="topbar-logout" class="topbar-logout" type="button">Sign out</button>` : ""}
+    ${user ? `
+      <div class="auth-dropdown">
+        <button id="topbar-auth-btn" class="auth-badge-btn" type="button">
+          <strong>${escapeHtml(user?.username ?? "Guest")}</strong>
+          <span>${escapeHtml(roleText)}</span>
+        </button>
+        <div id="topbar-auth-menu" class="auth-dropdown-menu" hidden>
+          <button id="topbar-logout" class="auth-dropdown-item" type="button">Sign out</button>
+        </div>
+      </div>
+    ` : ""}
   `;
 
-  const logoutButton = root.querySelector("#topbar-logout");
-  if (logoutButton && typeof onLogout === "function") {
-    logoutButton.addEventListener("click", () => {
-      onLogout().catch(() => {});
-    });
+  if (user && typeof onLogout === "function") {
+    const authBtn = root.querySelector("#topbar-auth-btn");
+    const authMenu = root.querySelector("#topbar-auth-menu");
+    const logoutBtn = root.querySelector("#topbar-logout");
+
+    if (authBtn && authMenu) {
+      authBtn.addEventListener("click", () => {
+        const isHidden = authMenu.hasAttribute("hidden");
+        if (isHidden) {
+          authMenu.removeAttribute("hidden");
+          document.addEventListener("click", closeMenuOnClickOutside);
+        } else {
+          authMenu.setAttribute("hidden", "");
+          document.removeEventListener("click", closeMenuOnClickOutside);
+        }
+      });
+
+      const closeMenuOnClickOutside = (e) => {
+        if (!authBtn.contains(e.target) && !authMenu.contains(e.target)) {
+          authMenu.setAttribute("hidden", "");
+          document.removeEventListener("click", closeMenuOnClickOutside);
+        }
+      };
+    }
+
+    if (logoutBtn) {
+      logoutBtn.addEventListener("click", () => {
+        onLogout().catch(() => {});
+      });
+    }
   }
 }
 
