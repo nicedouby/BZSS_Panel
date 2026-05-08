@@ -98,6 +98,6 @@
 
   "plugins": {
     "enabled": true,
-    "paths": []
+    "paths": ["./plugins/weapon-collector.js"]
   }
 }

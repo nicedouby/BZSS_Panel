@@ -2196,3 +2196,37 @@ input:focus, select:focus {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Weapon Collector Page ────────────────────────────────────────── */
+
+.weapon-page .combat-stat-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+th.sortable:hover {
+  color: var(--accent);
+}
+
+th.sortable.sort-active {
+  color: var(--accent);
+}
+
+th.sortable.sort-active::after {
+  content: " ▼";
+  font-size: .7em;
+}
+
+th.sortable[data-sort-dir="asc"].sort-active::after {
+  content: " ▲";
+}
+
+.weapon-name {
+  font-family: ui-monospace, "Cascadia Code", "Fira Code", monospace;
+  font-size: .9em;
+}

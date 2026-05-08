@@ -1,0 +1,137 @@
+{
+  "updatedAt": "2026-05-08T14:45:07.931Z",
+  "servers": {
+    "BZSS_Main": {
+      "HK417_Optic_C_2147085289": {
+        "category": "HK417_Optic_C_2147085289",
+        "cleanedName": "BP_HK417_Optic_C_2147085289",
+        "rawName": "BP_HK417_Optic_C_2147085289",
+        "damaged": 1,
+        "wounded": 0,
+        "died": 0,
+        "firstSeen": "2026-05-08T14:44:06.554Z",
+        "lastSeen": "2026-05-08T14:44:06.554Z"
+      },
+      "Soldier_CAF_HeavyAntiTank_02_C_2147040798": {
+        "category": "Soldier_CAF_HeavyAntiTank_02_C_2147040798",
+        "cleanedName": "BP_Soldier_CAF_HeavyAntiTank_02_C_2147040798",
+        "rawName": "BP_Soldier_CAF_HeavyAntiTank_02_C_2147040798",
+        "damaged": 0,
+        "wounded": 1,
+        "died": 1,
+        "firstSeen": "2026-05-08T14:44:11.033Z",
+        "lastSeen": "2026-05-08T14:44:24.026Z"
+      },
+      "EF88_Specter_Foregrip_C_2147036553": {
+        "category": "EF88_Specter_Foregrip_C_2147036553",
+        "cleanedName": "BP_EF88_Specter_Foregrip_C_2147036553",
+        "rawName": "BP_EF88_Specter_Foregrip_C_2147036553",
+        "damaged": 2,
+        "wounded": 1,
+        "died": 0,
+        "firstSeen": "2026-05-08T14:44:37.849Z",
+        "lastSeen": "2026-05-08T14:44:41.721Z"
+      },
+      "EF88_ET552_Foregrip_C_2147049220": {
+        "category": "EF88_ET552_Foregrip_C_2147049220",
+        "cleanedName": "BP_EF88_ET552_Foregrip_C_2147049220",
+        "rawName": "BP_EF88_ET552_Foregrip_C_2147049220",
+        "damaged": 3,
+        "wounded": 1,
+        "died": 0,
+        "firstSeen": "2026-05-08T14:44:40.703Z",
+        "lastSeen": "2026-05-08T14:44:46.207Z"
+      },
+      "EF88_ET552_Foregrip_C_2147048869": {
+        "category": "EF88_ET552_Foregrip_C_2147048869",
+        "cleanedName": "BP_EF88_ET552_Foregrip_C_2147048869",
+        "rawName": "BP_EF88_ET552_Foregrip_C_2147048869",
+        "damaged": 2,
+        "wounded": 1,
+        "died": 0,
+        "firstSeen": "2026-05-08T14:44:41.516Z",
+        "lastSeen": "2026-05-08T14:45:02.662Z"
+      },
+      "InfantryRazorwire_C_2147045389": {
+        "category": "InfantryRazorwire_C_2147045389",
+        "cleanedName": "BP_InfantryRazorwire_C_2147045389",
+        "rawName": "BP_InfantryRazorwire_C_2147045389",
+        "damaged": 1,
+        "wounded": 0,
+        "died": 0,
+        "firstSeen": "2026-05-08T14:44:42.333Z",
+        "lastSeen": "2026-05-08T14:44:42.333Z"
+      },
+      "LUVW_Burning_C_2147036101": {
+        "category": "LUVW_Burning_C_2147036101",
+        "cleanedName": "LUVW_Burning_C_2147036101",
+        "rawName": "LUVW_Burning_C_2147036101",
+        "damaged": 1,
+        "wounded": 0,
+        "died": 0,
+        "firstSeen": "2026-05-08T14:44:43.555Z",
+        "lastSeen": "2026-05-08T14:44:43.555Z"
+      },
+      "C16_C6_C_2147048547": {
+        "category": "C16_C6_C_2147048547",
+        "cleanedName": "BP_C16_C6_C_2147048547",
+        "rawName": "BP_C16_C6_C_2147048547",
+        "damaged": 2,
+        "wounded": 0,
+        "died": 0,
+        "firstSeen": "2026-05-08T14:44:48.042Z",
+        "lastSeen": "2026-05-08T14:44:48.247Z"
+      },
+      "Soldier_ADF_Grenadier1_C_2147049256": {
+        "category": "Soldier_ADF_Grenadier1_C_2147049256",
+        "cleanedName": "BP_Soldier_ADF_Grenadier1_C_2147049256",
+        "rawName": "BP_Soldier_ADF_Grenadier1_C_2147049256",
+        "damaged": 0,
+        "wounded": 0,
+        "died": 1,
+        "firstSeen": "2026-05-08T14:44:48.857Z",
+        "lastSeen": "2026-05-08T14:44:48.857Z"
+      },
+      "Soldier_CAF_Grenadier_C_2147041463": {
+        "category": "Soldier_CAF_Grenadier_C_2147041463",
+        "cleanedName": "BP_Soldier_CAF_Grenadier_C_2147041463",
+        "rawName": "BP_Soldier_CAF_Grenadier_C_2147041463",
+        "damaged": 1,
+        "wounded": 0,
+        "died": 0,
+        "firstSeen": "2026-05-08T14:44:49.264Z",
+        "lastSeen": "2026-05-08T14:44:49.264Z"
+      },
+      "C7A2_Ironsights_C_2147049768": {
+        "category": "C7A2_Ironsights_C_2147049768",
+        "cleanedName": "BP_C7A2_Ironsights_C_2147049768",
+        "rawName": "BP_C7A2_Ironsights_C_2147049768",
+        "damaged": 1,
+        "wounded": 0,
+        "died": 0,
+        "firstSeen": "2026-05-08T14:44:55.144Z",
+        "lastSeen": "2026-05-08T14:44:55.144Z"
+      },
+      "C8A3_ET552_Foregrip_C_2147055106": {
+        "category": "C8A3_ET552_Foregrip_C_2147055106",
+        "cleanedName": "BP_C8A3_ET552_Foregrip_C_2147055106",
+        "rawName": "BP_C8A3_ET552_Foregrip_C_2147055106",
+        "damaged": 1,
+        "wounded": 1,
+        "died": 0,
+        "firstSeen": "2026-05-08T14:45:04.487Z",
+        "lastSeen": "2026-05-08T14:45:04.489Z"
+      },
+      "Soldier_ADF_HAT_C_2147038063": {
+        "category": "Soldier_ADF_HAT_C_2147038063",
+        "cleanedName": "BP_Soldier_ADF_HAT_C_2147038063",
+        "rawName": "BP_Soldier_ADF_HAT_C_2147038063",
+        "damaged": 0,
+        "wounded": 0,
+        "died": 1,
+        "firstSeen": "2026-05-08T14:45:05.923Z",
+        "lastSeen": "2026-05-08T14:45:05.923Z"
+      }
+    }
+  }
+}

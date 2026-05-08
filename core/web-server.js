@@ -320,6 +320,37 @@ export class WebServer {
       });
     }
 
+    if (url.pathname === "/api/weapon-collector/stats") {
+      const pluginApi = this.core.pluginManager?.instances
+        ?.find((i) => i.manifest?.id === "plugin.weaponCollector")?.api;
+      if (!pluginApi) {
+        return this.json(res, 404, { error: "WeaponCollectorNotLoaded" });
+      }
+      const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
+      const weapons = pluginApi.getWeaponStats(serverId);
+      const totals = weapons.reduce(
+        (acc, w) => {
+          acc.damaged += w.damaged;
+          acc.wounded += w.wounded;
+          acc.died += w.died;
+          return acc;
+        },
+        { damaged: 0, wounded: 0, died: 0 },
+      );
+      return this.json(res, 200, { serverId, weapons, totals });
+    }
+
+    if (url.pathname === "/api/weapon-collector/clear" && req.method === "POST") {
+      const pluginApi = this.core.pluginManager?.instances
+        ?.find((i) => i.manifest?.id === "plugin.weaponCollector")?.api;
+      if (!pluginApi) {
+        return this.json(res, 404, { error: "WeaponCollectorNotLoaded" });
+      }
+      const serverId = url.searchParams.get("serverId") ?? null;
+      await pluginApi.clearWeaponStats(serverId);
+      return this.json(res, 200, { ok: true });
+    }
+
     return this.json(res, 404, { error: "ApiNotFound" });
   }
 

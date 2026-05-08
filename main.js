@@ -135,6 +135,7 @@ async function main() {
     return null;
   });
   await pluginManager.loadPlugins();
+  coreContext.pluginManager = pluginManager;
   await webServer.start();
 
   // 放在最后启动 Python，确保 UDP 和 Web 都已经准备好。

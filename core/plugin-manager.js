@@ -50,6 +50,7 @@ export class PluginManager {
         eventBus: this.core.eventBus,
         config: this.config,
         pluginSubscriptions: this.core.pluginSubscriptions,
+        webRegistry: this.core.webRegistry,
       },
       modules: this.modules,
     });
