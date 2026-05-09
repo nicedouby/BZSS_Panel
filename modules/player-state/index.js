@@ -11,7 +11,12 @@ import { getParam } from "../../core/event-normalizer.js";
  * - Python 日志事件：出生/倒地/死亡
  * - RCON_LIST_PLAYERS_UPDATED：ListPlayers 快照
  */
-export function createPlayerStateModule({ core }) {
+export function createPlayerStateModule({ core, logger }) {
+  const moduleLogger = logger ?? core.createLogger?.({
+    moduleId: "module.playerState",
+    source: "module.playerState",
+    channel: "module",
+  }) ?? core.logger;
   const playersByName = new Map();
   const playersBySteamID = new Map();
   const playersByEOSID = new Map();
@@ -88,6 +93,13 @@ export function createPlayerStateModule({ core }) {
     }
 
     core.webStatus.set("playerCount", players.length);
+    logWithFallback(moduleLogger, "debug", () => `Player snapshot refreshed (${players.length})`, {
+      operation: "replaceFromRcon",
+      data: {
+        players: players.length,
+        serverId,
+      },
+    });
 
     core.eventBus.emitModuleEvent("module.playerState", "playersSnapshotUpdated", {
       eventId: `module.playerState:${Date.now()}`,
@@ -143,6 +155,14 @@ export function createPlayerStateModule({ core }) {
         });
 
         if (player) {
+          logWithFallback(moduleLogger, "debug", () => `Spawn update for ${player.name}`, {
+            operation: "playerSpawnRequested",
+            data: {
+              serverId: event.serverId,
+              playerName: player.name,
+              role: player.role,
+            },
+          });
           core.eventBus.emitModuleEvent("module.playerState", "playerUpdated", {
             ...event,
             layer: "module",
@@ -182,10 +202,30 @@ export function createPlayerStateModule({ core }) {
           controllerID: getParam(event, "AttackerControllerID"),
         });
       }));
+
+      logWithFallback(moduleLogger, "info", "PlayerState subscriptions ready.", {
+        label: "MODULE",
+        operation: "start",
+      });
     },
 
     async stop() {
       for (const un of unsubscribers) un();
+      logWithFallback(moduleLogger, "info", "PlayerState subscriptions stopped.", {
+        label: "MODULE",
+        operation: "stop",
+      });
     },
   };
+}
+
+function logWithFallback(logger, method, message, context) {
+  const fn = logger?.[method];
+  if (typeof fn === "function") {
+    fn.call(logger, message, context);
+    return;
+  }
+
+  const rendered = typeof message === "function" ? message() : message;
+  logger?.module?.(rendered);
 }

@@ -25,9 +25,9 @@ export class PythonLogParserManager {
     }
 
     const pythonExecutable = this.config.pythonExecutable ?? "python";
-    const workingDirectory = path.resolve(process.cwd(), this.config.workingDirectory ?? ".");
-    const scriptPath = this.config.scriptPath ?? "./main.py";
-    const configPath = this.config.configPath ?? "./config.json";
+    const workingDirectory = path.resolve(process.cwd(), String(this.config.workingDirectory ?? ".").trim());
+    const scriptPath = String(this.config.scriptPath ?? "./main.py").trim();
+    const configPath = String(this.config.configPath ?? "./config.json").trim();
 
     this.webStatus.set("pythonLogParser", "starting");
     this.logger.info(`Starting Python LogParser: ${pythonExecutable} ${scriptPath} ${configPath}`);
@@ -93,5 +93,12 @@ export class PythonLogParserManager {
     });
 
     this.child = null;
+  }
+
+  async restart() {
+    this.logger.info("Restarting Python LogParser...");
+    await this.stop();
+    this.stopping = false;
+    await this.start();
   }
 }

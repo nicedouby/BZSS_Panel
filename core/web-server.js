@@ -37,7 +37,6 @@ export class WebServer {
         });
       });
     });
-
     await new Promise((resolve) => {
       this.server.listen(this.port, this.host, resolve);
     });
@@ -158,13 +157,17 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/console/channels") {
-      return this.json(res, 200, { channels: this.modules.console.getChannels() });
+      return this.json(res, 200, this.modules.console.getChannels({
+        stream: url.searchParams.get("stream") ?? "modules",
+      }));
     }
 
     if (url.pathname === "/api/console/lines") {
       return this.json(res, 200, {
         lines: this.modules.console.getLines({
-          channel: url.searchParams.get("channel") ?? "all",
+          stream: url.searchParams.get("stream") ?? "modules",
+          scope: url.searchParams.get("scope") ?? "all",
+          level: url.searchParams.get("level") ?? "all",
           afterSeq: url.searchParams.get("afterSeq") ?? "0",
           limit: url.searchParams.get("limit") ?? "300",
           q: url.searchParams.get("q") ?? "",
@@ -177,6 +180,16 @@ export class WebServer {
       const result = await this.modules.console.executeRconCommand(body.command, {
         requestedBy: "web.console",
       });
+      return this.json(res, 200, result);
+    }
+
+    if (url.pathname === "/api/logpost/raw-output" && req.method === "GET") {
+      return this.json(res, 200, await this.getLogPostRawOutputConfig());
+    }
+
+    if (url.pathname === "/api/logpost/raw-output" && req.method === "POST") {
+      const body = await this.readJsonBody(req);
+      const result = await this.setLogPostRawOutputConfig(Boolean(body.enabled));
       return this.json(res, 200, result);
     }
 
@@ -422,6 +435,53 @@ export class WebServer {
     if (Array.isArray(permissions)) return permissions.includes("plugins.manage");
     if (permissions && typeof permissions === "object") return Boolean(permissions["plugins.manage"]);
     return false;
+  }
+
+  getLogPostConfigPath() {
+    const parserConfig = this.core.config?.get?.("pythonLogParser", {}) ?? {};
+    const workingDirectory = path.resolve(process.cwd(), String(parserConfig.workingDirectory ?? "./LogPost").trim());
+    return path.resolve(workingDirectory, String(parserConfig.configPath ?? "./config.json").trim());
+  }
+
+  async readLogPostConfig() {
+    const configPath = this.getLogPostConfigPath();
+    const text = await fs.readFile(configPath, "utf8");
+    return {
+      configPath,
+      config: JSON.parse(text),
+    };
+  }
+
+  async getLogPostRawOutputConfig() {
+    const { configPath, config } = await this.readLogPostConfig();
+    return {
+      enabled: Boolean(config.raw_log_output?.enabled),
+      source: String(config.raw_log_output?.source ?? "Squad.log"),
+      configPath,
+    };
+  }
+
+  async setLogPostRawOutputConfig(enabled) {
+    const { configPath, config } = await this.readLogPostConfig();
+    config.raw_log_output = {
+      ...(config.raw_log_output ?? {}),
+      enabled: Boolean(enabled),
+      source: String(config.raw_log_output?.source ?? "Squad.log"),
+    };
+
+    await fs.writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+
+    if (this.core.pythonLogParserManager?.restart) {
+      await this.core.pythonLogParserManager.restart();
+    }
+
+    return {
+      ok: true,
+      enabled: Boolean(config.raw_log_output.enabled),
+      source: String(config.raw_log_output.source),
+      configPath,
+      restarted: Boolean(this.core.pythonLogParserManager?.restart),
+    };
   }
 }
 

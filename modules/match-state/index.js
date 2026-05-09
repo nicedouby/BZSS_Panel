@@ -13,7 +13,12 @@ import {
  * Active RCON polling aggregator for the current match state.
  * This module does not infer state from RCON push events.
  */
-export function createMatchStateModule({ core, modules, config }) {
+export function createMatchStateModule({ core, modules, config, logger }) {
+  const moduleLogger = logger ?? core.createLogger?.({
+    moduleId: "module.matchState",
+    source: "module.matchState",
+    channel: "module",
+  }) ?? core.logger;
   const moduleConfig = config.get("modules.matchState", {});
   const enabled = Boolean(moduleConfig.enabled ?? true);
   const polling = {
@@ -157,6 +162,15 @@ export function createMatchStateModule({ core, modules, config }) {
       state.serverStatus = next;
       syncMatchFromServerStatus();
       updateWebStatus();
+      logWithFallback(moduleLogger, "debug", () => "Server info refreshed.", {
+        operation: "refreshServerInfo",
+        data: {
+          map: next.map,
+          layer: next.layer,
+          playerCount: next.playerCount,
+          tps: next.tps,
+        },
+      });
       emitServerStatusUpdated();
       emitUpdated("serverStatus");
       return state.serverStatus;
@@ -182,6 +196,12 @@ export function createMatchStateModule({ core, modules, config }) {
       updateWebStatus();
 
       const event = makeEvent("RCON_LIST_PLAYERS_UPDATED", { players });
+      logWithFallback(moduleLogger, "debug", () => `Players refreshed (${players.length})`, {
+        operation: "refreshPlayers",
+        data: {
+          players: players.length,
+        },
+      });
       core.eventBus.emitCoreEvent("RCON_LIST_PLAYERS_UPDATED", event);
       emitPlayersUpdated();
       emitUpdated("players");
@@ -205,6 +225,12 @@ export function createMatchStateModule({ core, modules, config }) {
         lastUpdatedAt: new Date().toISOString(),
       };
       updateWebStatus();
+      logWithFallback(moduleLogger, "debug", () => `Squads refreshed (${squads.length})`, {
+        operation: "refreshSquads",
+        data: {
+          squads: squads.length,
+        },
+      });
 
       const event = makeEvent("RCON_LIST_SQUADS_UPDATED", { squads });
       core.eventBus.emitCoreEvent("RCON_LIST_SQUADS_UPDATED", event);
@@ -277,7 +303,9 @@ export function createMatchStateModule({ core, modules, config }) {
       updateStatuses();
       return await fn();
     } catch (error) {
-      core.logger.warn(`module.matchState ${key} polling failed: ${error.message}`);
+      logWithFallback(moduleLogger, "warn", `${key} polling failed: ${error.message}`, {
+        operation: "guarded",
+      });
       updateStatuses();
       emitRconStatusUpdated();
       return null;
@@ -410,7 +438,9 @@ export function createMatchStateModule({ core, modules, config }) {
   function startTimer(fn, intervalMs) {
     if (!Number.isFinite(intervalMs) || intervalMs <= 0) return;
     timers.push(setInterval(() => {
-      fn().catch((error) => core.logger.warn(`module.matchState timer failed: ${error.message}`));
+      fn().catch((error) => logWithFallback(moduleLogger, "warn", `timer failed: ${error.message}`, {
+        operation: "timer",
+      }));
     }, intervalMs));
   }
 
@@ -477,14 +507,31 @@ export function createMatchStateModule({ core, modules, config }) {
       startTimer(refreshCurrentMap, polling.currentMapIntervalMs);
       startTimer(refreshNextMap, polling.nextMapIntervalMs);
 
-      core.logger.module(
-        `module.matchState polling started. serverInfo=${polling.serverInfoIntervalMs}ms players=${polling.playersIntervalMs}ms squads=${polling.squadsIntervalMs}ms`
+      logWithFallback(
+        moduleLogger,
+        "info",
+        `MatchState polling started. serverInfo=${polling.serverInfoIntervalMs}ms players=${polling.playersIntervalMs}ms squads=${polling.squadsIntervalMs}ms`,
+        {
+          label: "MODULE",
+          operation: "start",
+          data: {
+            serverInfoIntervalMs: polling.serverInfoIntervalMs,
+            playersIntervalMs: polling.playersIntervalMs,
+            squadsIntervalMs: polling.squadsIntervalMs,
+            currentMapIntervalMs: polling.currentMapIntervalMs,
+            nextMapIntervalMs: polling.nextMapIntervalMs,
+          },
+        },
       );
     },
 
     async stop() {
       for (const timer of timers.splice(0)) clearInterval(timer);
       for (const unsubscribe of unsubscribers.splice(0)) unsubscribe();
+      logWithFallback(moduleLogger, "info", "MatchState stopped.", {
+        label: "MODULE",
+        operation: "stop",
+      });
     },
   };
 }
@@ -689,4 +736,20 @@ function escapeRegExp(value) {
 function formatMatchStateLabel(match) {
   const parts = [match.map, match.layer, match.mode].filter(Boolean);
   return parts.length > 0 ? parts.join(" / ") : "Unknown";
+}
+
+function logWithFallback(logger, method, message, context) {
+  const fn = logger?.[method];
+  if (typeof fn === "function") {
+    fn.call(logger, message, context);
+    return;
+  }
+
+  const rendered = typeof message === "function" ? message() : message;
+  if (method === "warn") {
+    logger?.warn?.(rendered);
+    return;
+  }
+
+  logger?.module?.(rendered);
 }

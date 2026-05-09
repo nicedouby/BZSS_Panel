@@ -5,8 +5,23 @@ import { createConsoleModule } from "../modules/console/index.js";
 function createHarness() {
   const coreListeners = new Set();
   const nativeListeners = new Set();
+  const loggerListeners = new Set();
+  const logger = {
+    subscribe(listener) {
+      loggerListeners.add(listener);
+      return () => loggerListeners.delete(listener);
+    },
+    debug() {},
+    info() {},
+    warn() {},
+    error() {},
+  };
 
   const core = {
+    logger,
+    createLogger() {
+      return logger;
+    },
     eventBus: {
       onCoreEvent(eventName, handler) {
         assert.equal(eventName, "*");
@@ -52,31 +67,65 @@ function createHarness() {
     emitNativeLog(line) {
       for (const handler of nativeListeners) handler(line);
     },
+    emitLoggerEntry(entry) {
+      for (const handler of loggerListeners) handler(entry);
+    },
   };
 }
 
-async function testDispatcherViewReceivesCoreEvents() {
+async function testModuleStreamReceivesLoggerEntries() {
+  const harness = createHarness();
+  await harness.module.start();
+
+  harness.emitLoggerEntry({
+    stream: "app",
+    channel: "module",
+    level: "info",
+    time: "2026-05-08T10:00:00.000Z",
+    message: "module ready",
+    scope: "module.test",
+    source: "module.test",
+    moduleId: "module.test",
+    eventName: "TEST_EVENT",
+    operation: "start",
+    label: "INFO",
+    tags: [],
+    data: { players: 2 },
+  });
+
+  const lines = harness.module.api.getLines({ stream: "modules" });
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].eventName, "TEST_EVENT");
+  assert.match(lines[0].message, /module ready/);
+}
+
+async function testRawLogStreamReceivesLogPostRawEvents() {
   const harness = createHarness();
   await harness.module.start();
 
   harness.emitCoreEvent({
-    eventId: "evt-1",
-    eventName: "CHAT_MESSAGE",
+    eventId: "raw-1",
+    eventName: "On_RawLogLine",
     serverId: "BZSS_Main",
-    source: "core.rconManager",
-    time: "2026-05-08T10:00:00.000Z",
-    payload: {
-      channel: "ChatAll",
-      name: "Alice",
-      message: "Hello",
+    source: "python-log-parser",
+    time: "2026-05-08T10:00:02.000Z",
+    logTime: "2026.05.08-10.00.02:000",
+    rawLog: "[2026.05.08-10.00.02:000][1]LogSquadTrace: raw hello",
+    rawEvent: {
+      Raw: "[2026.05.08-10.00.02:000][1]LogSquadTrace: raw hello",
+      RawTruncated: "false",
     },
+    paramMap: {
+      Source: "Squad.log",
+      Channel: "LogSquadTrace",
+    },
+    params: [],
   });
 
-  const lines = harness.module.api.getLines({ channel: "dispatcher" });
+  const lines = harness.module.api.getLines({ stream: "raw-log" });
   assert.equal(lines.length, 1);
-  assert.equal(lines[0].eventName, "CHAT_MESSAGE");
-  assert.match(lines[0].message, /CHAT_MESSAGE/);
-  assert.match(lines[0].message, /Alice/);
+  assert.equal(lines[0].rawChannel, "LogSquadTrace");
+  assert.match(lines[0].message, /raw hello/);
 }
 
 async function testNativeViewReceivesRconLogs() {
@@ -90,7 +139,7 @@ async function testNativeViewReceivesRconLogs() {
     kind: "push",
   });
 
-  const lines = harness.module.api.getLines({ channel: "rcon-native" });
+  const lines = harness.module.api.getLines({ stream: "rcon-native" });
   assert.equal(lines.length, 1);
   assert.equal(lines[0].level, "push");
   assert.match(lines[0].message, /Alice/);
@@ -106,14 +155,15 @@ async function testFailedManualCommandIsWrittenToNativeView() {
 
   assert.equal(result.success, false);
 
-  const lines = harness.module.api.getLines({ channel: "rcon-native" });
+  const lines = harness.module.api.getLines({ stream: "rcon-native" });
   assert.equal(lines.length, 1);
   assert.equal(lines[0].level, "error");
   assert.equal(lines[0].command, "FailCommand");
   assert.equal(lines[0].message, "RCON queue is full.");
 }
 
-await testDispatcherViewReceivesCoreEvents();
+await testModuleStreamReceivesLoggerEntries();
+await testRawLogStreamReceivesLogPostRawEvents();
 await testNativeViewReceivesRconLogs();
 await testFailedManualCommandIsWrittenToNativeView();
 

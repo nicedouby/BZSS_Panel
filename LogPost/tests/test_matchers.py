@@ -189,6 +189,18 @@ class EventBuilderTests(unittest.TestCase):
         self.assertEqual(event["Param2_CausedBy"], "nullptr")
         self.assertEqual(event["Param3_AttackerEOSID"], "")
 
+    def test_raw_log_line_event_is_generated(self) -> None:
+        builder = EventBuilder("BZSS_Main", "session", 1000)
+        event = builder.build_raw_log_line(
+            "[2026.05.08-10.00.02:000][1]LogSquadTrace: raw hello",
+            source="Squad.log",
+        )
+
+        self.assertEqual(event["Event"], "On_RawLogLine")
+        self.assertEqual(event["Param1_Source"], "Squad.log")
+        self.assertEqual(event["Param2_Channel"], "LogSquadTrace")
+        self.assertEqual(event["Raw"], "[2026.05.08-10.00.02:000][1]LogSquadTrace: raw hello")
+
 
 if __name__ == "__main__":
     unittest.main()

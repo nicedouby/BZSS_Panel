@@ -43,22 +43,37 @@ async function main() {
   await configManager.load();
 
   const logger = new Logger(configManager.get("core.logger", { useColor: true }));
-  logger.info("BZSS Panel WebCore starting...");
+  logger.info("BZSS Panel WebCore starting...", {
+    scope: "app",
+    source: "app.main",
+  });
 
-  const eventBus = new EventBus({ logger });
+  const eventBus = new EventBus({
+    logger: logger.child({
+      moduleId: "core.eventBus",
+      source: "core.eventBus",
+      channel: "event",
+    }),
+  });
   const eventPipeline = new EventPipeline({
     config: configManager.get("eventPipeline", {}),
   });
-  const webRegistry = new WebRegistry({ config: configManager, logger });
-  const webStatus = new WebStatus({ config: configManager, logger });
+  const webRegistry = new WebRegistry({
+    config: configManager,
+    logger: logger.child({ moduleId: "core.webRegistry", source: "core.webRegistry", channel: "web" }),
+  });
+  const webStatus = new WebStatus({
+    config: configManager,
+    logger: logger.child({ moduleId: "core.webStatus", source: "core.webStatus" }),
+  });
   const authManager = new AuthManager({
     config: configManager.get("auth", {}),
-    logger,
+    logger: logger.child({ moduleId: "core.authManager", source: "core.authManager" }),
   });
 
   const rconManager = new RconManager({
     config: configManager.get("rcon", {}),
-    logger,
+    logger: logger.child({ moduleId: "core.rconManager", source: "core.rconManager" }),
     eventBus,
     webStatus,
     eventPipeline,
@@ -66,7 +81,7 @@ async function main() {
 
   const udpReceiver = new UdpEventReceiver({
     config: configManager.get("udp", {}),
-    logger,
+    logger: logger.child({ moduleId: "core.udpEventReceiver", source: "core.udpEventReceiver" }),
     eventBus,
     webStatus,
     eventPipeline,
@@ -75,6 +90,9 @@ async function main() {
   const coreContext = {
     config: configManager,
     logger,
+    createLogger(bindings = {}) {
+      return logger.child(bindings);
+    },
     eventBus,
     eventPipeline,
     webRegistry,
@@ -85,29 +103,30 @@ async function main() {
 
   const moduleManager = new ModuleManager({
     core: coreContext,
-    logger,
+    logger: logger.child({ moduleId: "core.moduleManager", source: "core.moduleManager", channel: "module" }),
     config: configManager,
   });
 
   const pluginManager = new PluginManager({
     core: coreContext,
     modules: moduleManager.registry,
-    logger,
+    logger: logger.child({ moduleId: "core.pluginManager", source: "core.pluginManager" }),
     config: configManager,
   });
 
   const webServer = new WebServer({
     config: configManager.get("web", {}),
-    logger,
+    logger: logger.child({ moduleId: "core.webServer", source: "core.webServer", channel: "web" }),
     core: coreContext,
     modules: moduleManager.registry,
   });
 
   const pythonLogParserManager = new PythonLogParserManager({
     config: configManager.get("pythonLogParser", {}),
-    logger,
+    logger: logger.child({ moduleId: "core.pythonLogParserManager", source: "core.pythonLogParserManager" }),
     webStatus,
   });
+  coreContext.pythonLogParserManager = pythonLogParserManager;
 
   await authManager.start();
   await rconManager.start();
@@ -141,11 +160,20 @@ async function main() {
   // 放在最后启动 Python，确保 UDP 和 Web 都已经准备好。
   await pythonLogParserManager.start();
 
-  logger.info("BZSS Panel WebCore started.");
-  logger.info(`Web: http://${webServer.host}:${webServer.port}`);
+  logger.info("BZSS Panel WebCore started.", {
+    scope: "app",
+    source: "app.main",
+  });
+  logger.info(`Web: http://${webServer.host}:${webServer.port}`, {
+    scope: "app",
+    source: "app.main",
+  });
 
   async function shutdown() {
-    logger.warn("Shutdown requested.");
+    logger.warn("Shutdown requested.", {
+      scope: "app",
+      source: "app.main",
+    });
 
     await pythonLogParserManager.stop();
     await webServer.stop();
@@ -155,7 +183,10 @@ async function main() {
     await rconManager.stop();
     await authManager.stop();
 
-    logger.info("BZSS Panel WebCore stopped.");
+    logger.info("BZSS Panel WebCore stopped.", {
+      scope: "app",
+      source: "app.main",
+    });
     process.exit(0);
   }
 

@@ -62,7 +62,9 @@ export class RconManager {
   async start() {
     if (!this.enabled) {
       this.webStatus.set("rcon", "disabled");
-      this.logger.info("RconManager disabled.");
+      this.logger.info("RconManager disabled.", {
+        operation: "start",
+      });
       return;
     }
 
@@ -78,14 +80,21 @@ export class RconManager {
     this.attachSquadRconEvents();
 
     try {
+      this.logger.info(`Connecting to RCON ${this.config.host}:${this.config.port}`, {
+        operation: "start",
+      });
       await this.squadRcon.connect();
       this.setConnected(true);
       this.startPolling();
     } catch (error) {
       this.status.lastError = error.message;
       this.webStatus.set("rcon", "error");
-      this.logger.error(`Initial RCON connection failed: ${error.message}`);
-      this.logger.info("RCON will retry automatically if autoReconnect is enabled after a successful connection.");
+      this.logger.error(`Initial RCON connection failed: ${error.message}`, {
+        operation: "start",
+      });
+      this.logger.info("RCON will retry automatically if autoReconnect is enabled after a successful connection.", {
+        operation: "start",
+      });
     }
   }
 
@@ -110,8 +119,11 @@ export class RconManager {
     this.emitNativeLog({
       level: "status",
       message: "RCON stopped.",
+      source: "core.rconManager",
     });
-    this.logger.info("RconManager stopped.");
+    this.logger.info("RconManager stopped.", {
+      operation: "stop",
+    });
   }
 
   attachSquadRconEvents() {
@@ -168,6 +180,11 @@ export class RconManager {
         }
 
         const normalizedPayload = normalizeRconPayload(eventName, payload);
+        this.logger.debug(() => `Forwarding ${eventName}`, {
+          operation: "forwardEvent",
+          eventName,
+          data: summarizePayload(normalizedPayload),
+        });
         this.eventBus.emitCoreEvent(eventName, {
           eventId: `rcon:${eventName}:${Date.now()}`,
           eventName,
@@ -269,6 +286,14 @@ export class RconManager {
 
       this.status.queueSize = this.queue.length;
       this.webStatus.set("rconQueue", this.queue.length);
+      this.logger.debug(() => `Queued RCON command ${command}`, {
+        operation: "dispatchCommand",
+        data: {
+          command,
+          requestedBy: request?.requestedBy ?? "",
+          queueSize: this.queue.length,
+        },
+      });
 
       this.processQueue().catch((error) => {
         this.logger.error(`RCON queue processor failed: ${error.stack ?? error}`);
@@ -299,8 +324,23 @@ export class RconManager {
           }
 
           this.lastCommandTime = Date.now();
+          this.logger.debug(() => `Executing queued RCON command ${item.request.command}`, {
+            operation: "processQueue",
+            data: {
+              command: item.request.command,
+              requestedBy: item.request.requestedBy ?? "",
+              queueSize: this.queue.length,
+            },
+          });
           const response = await this.squadRcon.execute(item.request.command);
 
+          this.logger.debug(() => `RCON command completed ${item.request.command}`, {
+            operation: "processQueue",
+            data: {
+              command: item.request.command,
+              responseBytes: String(response ?? "").length,
+            },
+          });
           item.resolve({
             success: true,
             message: "RCON command executed.",
@@ -310,6 +350,13 @@ export class RconManager {
         } catch (error) {
           this.status.lastError = error.message;
           this.webStatus.set("rcon", "error");
+          this.logger.warn(`RCON command failed: ${item.request.command} -> ${error.message}`, {
+            operation: "processQueue",
+            data: {
+              command: item.request.command,
+              requestedBy: item.request.requestedBy ?? "",
+            },
+          });
 
           item.resolve({
             success: false,
@@ -338,6 +385,12 @@ export class RconManager {
       const players = await this.squadRcon.getListPlayers();
       this.status.lastPlayersRefresh = new Date().toISOString();
       this.webStatus.set("playerCount", players.length);
+      this.logger.debug(() => `ListPlayers refreshed (${players.length})`, {
+        operation: "refreshPlayers",
+        data: {
+          players: players.length,
+        },
+      });
 
       this.eventBus.emitCoreEvent("RCON_LIST_PLAYERS_UPDATED", {
         eventId: `rcon:listPlayers:${Date.now()}`,
@@ -370,6 +423,12 @@ export class RconManager {
       const squads = await this.squadRcon.getSquads();
       this.status.lastSquadsRefresh = new Date().toISOString();
       this.webStatus.set("squadCount", squads.length);
+      this.logger.debug(() => `ListSquads refreshed (${squads.length})`, {
+        operation: "refreshSquads",
+        data: {
+          squads: squads.length,
+        },
+      });
 
       this.eventBus.emitCoreEvent("RCON_LIST_SQUADS_UPDATED", {
         eventId: `rcon:listSquads:${Date.now()}`,
@@ -461,6 +520,7 @@ function mapNativeRconEventToConsoleEntry(eventName, payload) {
       level: "input",
       message: `> ${String(payload.command ?? payload.body ?? "").trim()}`,
       command: String(payload.command ?? ""),
+      source: "core.rconManager",
     };
   }
 
@@ -470,6 +530,7 @@ function mapNativeRconEventToConsoleEntry(eventName, payload) {
       level: "output",
       message: String(payload.body ?? "") || "(empty response)",
       command: String(payload.command ?? ""),
+      source: "core.rconManager",
     };
   }
 
@@ -479,6 +540,7 @@ function mapNativeRconEventToConsoleEntry(eventName, payload) {
       level: "error",
       message: String(payload.message ?? "Unknown RCON error"),
       command: String(payload.command ?? ""),
+      source: "core.rconManager",
     };
   }
 
@@ -487,8 +549,21 @@ function mapNativeRconEventToConsoleEntry(eventName, payload) {
       time: payload.time,
       level: "push",
       message: String(payload.body ?? ""),
+      source: "core.rconManager",
     };
   }
 
   return null;
+}
+
+function summarizePayload(payload) {
+  if (!payload || typeof payload !== "object") return null;
+
+  return {
+    players: Array.isArray(payload.players) ? payload.players.length : undefined,
+    squads: Array.isArray(payload.squads) ? payload.squads.length : undefined,
+    host: payload.host,
+    port: payload.port,
+    reason: payload.reason,
+  };
 }

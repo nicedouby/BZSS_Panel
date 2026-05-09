@@ -61,6 +61,9 @@ class BzssLogParserApp:
             file_name=str(raw_input_config.get("file_name", "Received.log")),
             fmt=str(raw_input_config.get("format", "raw")),
         )
+        raw_log_output_config = self.config.get("raw_log_output", {})
+        self.raw_log_output_enabled = bool(raw_log_output_config.get("enabled", False))
+        self.raw_log_output_source = str(raw_log_output_config.get("source", "Squad.log"))
 
         console_config = self.config.get("console", {})
         self.console = ConsolePrinter(
@@ -138,7 +141,11 @@ class BzssLogParserApp:
 
         # 0. 先保存 TailReader 实际收到的原始日志。
         #    这个动作独立于事件解析和黑名单过滤。
-        self.raw_input_writer.write(line)
+        try:
+            self.raw_input_writer.write(line)
+        except Exception as e:
+            self.console.warn(f"Raw input write failed: {e}")
+        self.forward_raw_log_line(line)
 
         try:
             # 1. 先更新身份缓存，不转发。
@@ -178,3 +185,16 @@ class BzssLogParserApp:
                 return matched
 
         return None
+
+    def forward_raw_log_line(self, line: str) -> None:
+        if not self.raw_log_output_enabled:
+            return
+
+        try:
+            event = self.builder.build_raw_log_line(
+                line,
+                source=self.raw_log_output_source,
+            )
+            self.udp_sender.send(event)
+        except Exception as e:
+            self.console.warn(f"Raw log output failed: {e}")

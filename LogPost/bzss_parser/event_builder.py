@@ -48,8 +48,49 @@ class EventBuilder:
         event["Raw"] = raw_value
         return event
 
+    def build_raw_log_line(
+        self,
+        raw: str,
+        source: str = "Squad.log",
+    ) -> Dict[str, str]:
+        self.seq += 1
+
+        raw_value, raw_truncated = truncate_raw(raw, self.max_raw_chars)
+
+        return {
+            "Version": "1",
+            "ServerID": self.server_id,
+            "SessionID": self.session_id,
+            "Seq": str(self.seq),
+            "Event": "On_RawLogLine",
+            "Time": now_time_string(),
+            "LogTime": extract_log_time(raw),
+            "RawTruncated": raw_truncated,
+            "Param1_Source": clean_value(source),
+            "Param2_Channel": clean_value(extract_channel(raw)),
+            "Raw": raw_value,
+        }
+
 
 def clean_param_value(param_name: str, param_value: Any) -> str:
     if str(param_name) in {"FromObject", "CausedBy"} and param_value is not None:
         return str(param_value).strip()
     return clean_value(param_value)
+
+
+def extract_channel(raw: str) -> str:
+    text = str(raw or "")
+    start = text.find("Log")
+
+    if start < 0:
+        return ""
+
+    end = text.find(":", start)
+    if end < 0:
+        return ""
+
+    candidate = text[start:end]
+    if not candidate.replace("_", "").isalnum():
+        return ""
+
+    return candidate

@@ -1,53 +1,69 @@
 // -*- coding: utf-8 -*-
 
-/**
- * Module: Console
- *
- * Web 控制台的数据源。
- *
- * 设计目标：
- * - 把事件分发器视图与 RCON 原生视图拆开
- * - 支持按 channel 查询
- * - 支持 afterSeq 增量拉取
- * - 支持手动执行 RCON
- */
-
-const DEFAULT_CHANNELS = [
-  { id: "all", title: "全部" },
-  { id: "dispatcher", title: "事件分发器" },
+const DEFAULT_STREAMS = [
+  { id: "raw-log", title: "Raw Log" },
+  { id: "modules", title: "模块日志" },
   { id: "rcon-native", title: "RCON 原生" },
-  { id: "system", title: "系统" },
+];
+
+const DEFAULT_LEVELS = [
+  { id: "all", title: "全部级别" },
+  { id: "debug", title: "Debug" },
+  { id: "info", title: "Info" },
+  { id: "warn", title: "Warn" },
+  { id: "error", title: "Error" },
+  { id: "input", title: "Input" },
+  { id: "output", title: "Output" },
+  { id: "push", title: "Push" },
+  { id: "status", title: "Status" },
 ];
 
 export function createConsoleModule({ core, config }) {
+  const logger = core.createLogger?.({
+    moduleId: "module.console",
+    source: "module.console",
+    channel: "module",
+  }) ?? core.logger;
   const maxLines = Number(config.get("modules.console.maxLines", 5000));
   const store = new RingLogStore(maxLines);
   const unsubscribers = [];
 
-  function push(channel, level, message, extra = {}) {
-    const line = store.push({
-      channel,
-      level,
-      time: new Date().toISOString(),
-      message: String(message ?? ""),
-      ...extra,
+  function push(line) {
+    return store.push({
+      time: line.time || new Date().toISOString(),
+      stream: line.stream || "modules",
+      channel: line.channel || line.stream || "modules",
+      level: line.level || "info",
+      message: String(line.message ?? ""),
+      scope: String(line.scope ?? line.moduleId ?? line.source ?? ""),
+      source: String(line.source ?? line.moduleId ?? ""),
+      moduleId: String(line.moduleId ?? ""),
+      eventName: String(line.eventName ?? ""),
+      operation: String(line.operation ?? ""),
+      label: String(line.label ?? ""),
+      tags: Array.isArray(line.tags) ? line.tags.map((item) => String(item)) : [],
+      dataSummary: String(line.dataSummary ?? ""),
+      ...line,
     });
-
-    return line;
   }
 
   const api = {
-    getChannels() {
-      const observed = store.getObservedChannels()
-        .filter((id) => !DEFAULT_CHANNELS.some((c) => c.id === id))
-        .map((id) => ({ id, title: id }));
+    getChannels(options = {}) {
+      const stream = String(options.stream ?? "modules");
+      const observedScopes = store.getObservedScopes(stream).map((id) => ({ id, title: id }));
 
-      return [...DEFAULT_CHANNELS, ...observed];
+      return {
+        streams: DEFAULT_STREAMS.map((item) => ({ ...item })),
+        scopes: [{ id: "all", title: stream === "rcon-native" ? "全部来源" : "全部模块" }, ...observedScopes],
+        levels: DEFAULT_LEVELS.map((item) => ({ ...item })),
+      };
     },
 
     getLines(options = {}) {
       return store.query({
-        channel: options.channel ?? "all",
+        stream: options.stream ?? "modules",
+        scope: options.scope ?? "all",
+        level: options.level ?? "all",
         afterSeq: Number(options.afterSeq ?? 0),
         limit: Number(options.limit ?? 300),
         q: String(options.q ?? ""),
@@ -66,12 +82,26 @@ export function createConsoleModule({ core, config }) {
           rconResponse: "",
         };
 
-        push("rcon-native", "error", result.message, {
-          owner: meta.requestedBy ?? "web.console",
+        push({
+          stream: "rcon-native",
+          channel: "rcon-native",
+          level: "error",
+          message: result.message,
+          scope: meta.requestedBy ?? "web.console",
+          source: meta.requestedBy ?? "web.console",
+          moduleId: "module.console",
         });
 
         return result;
       }
+
+      logger.debug(() => `Dispatching manual RCON command: ${commandText}`, {
+        operation: "executeRconCommand",
+        data: {
+          requestedBy: meta.requestedBy ?? "web.console",
+          command: commandText,
+        },
+      });
 
       const result = await core.rconManager.dispatchCommand({
         command: commandText,
@@ -80,8 +110,14 @@ export function createConsoleModule({ core, config }) {
       });
 
       if (!result.success) {
-        push("rcon-native", "error", result.message, {
-          owner: meta.requestedBy ?? "web.console",
+        push({
+          stream: "rcon-native",
+          channel: "rcon-native",
+          level: "error",
+          message: result.message,
+          scope: meta.requestedBy ?? "web.console",
+          source: meta.requestedBy ?? "web.console",
+          moduleId: "module.console",
           command: commandText,
         });
       }
@@ -91,104 +127,167 @@ export function createConsoleModule({ core, config }) {
   };
 
   return {
-    manifest: { id: "module.console", name: "Console Module", kind: "module", version: "0.3.0", description: "控制台日志聚合与 RCON 转发模块。订阅所有流经 EventBus 的日志条目，按来源分频道缓存最新若干条。前端控制台页面通过轮询拉取增量日志，并可在此页面直接输入 RCON 命令下发到服务器。是面板日志可视化和即时运维操作的核心入口。" },
+    manifest: {
+      id: "module.console",
+      name: "Console Module",
+      kind: "module",
+      version: "0.4.0",
+      description: "控制台日志聚合与 RCON 转发模块。",
+    },
     apiName: "console",
     api,
 
     async start() {
-      push("system", "info", "Console module started.");
+      unsubscribers.push(core.logger.subscribe((entry) => {
+        if (entry.stream !== "app") return;
+
+        push({
+          stream: "modules",
+          channel: entry.channel || "module",
+          level: entry.level,
+          time: entry.time,
+          message: entry.message,
+          scope: entry.scope || entry.moduleId || entry.source || "app",
+          source: entry.source,
+          moduleId: entry.moduleId,
+          eventName: entry.eventName,
+          operation: entry.operation,
+          label: entry.label,
+          tags: entry.tags,
+          dataSummary: summarizeData(entry.data),
+        });
+      }, { minLevel: "debug" }));
 
       if (core.rconManager?.onNativeLog) {
         unsubscribers.push(core.rconManager.onNativeLog((line) => {
-          push("rcon-native", line.level || "info", line.message, {
+          push({
+            stream: "rcon-native",
+            channel: "rcon-native",
+            level: line.level || "info",
+            message: line.message,
             command: line.command,
             host: line.host,
             port: line.port,
             reason: line.reason,
-            source: "core.rconManager",
+            source: line.source || "core.rconManager",
+            moduleId: "core.rconManager",
+            scope: line.source || "core.rconManager",
             nativeKind: line.kind,
             time: line.time || new Date().toISOString(),
+            dataSummary: summarizeNativeLine(line),
           });
         }));
       }
 
-      unsubscribers.push(core.eventBus.onCoreEvent("*", (event) => {
-        push("dispatcher", getDispatcherLevel(event), formatDispatcherMessage(event), {
-          eventId: event.eventId,
-          eventName: event.eventName,
-          serverId: event.serverId,
-          source: event.source,
-          time: event.time || new Date().toISOString(),
-        });
-      }));
+      if (core.eventBus?.onCoreEvent) {
+        unsubscribers.push(core.eventBus.onCoreEvent("*", (event) => {
+          if (event?.eventName !== "On_RawLogLine") return;
+
+          const rawSource = getEventParam(event, "Source") || "Squad.log";
+          const rawChannel = getEventParam(event, "Channel") || extractChannel(event.rawLog ?? event.rawEvent?.Raw ?? "");
+
+          push({
+            stream: "raw-log",
+            channel: rawChannel || "raw-log",
+            level: event.rawEvent?.RawTruncated === "true" ? "warn" : "info",
+            time: event.time || new Date().toISOString(),
+            message: event.rawLog ?? event.rawEvent?.Raw ?? "",
+            scope: rawChannel || rawSource,
+            source: rawSource,
+            moduleId: "logpost.raw",
+            eventName: event.eventName,
+            logTime: event.logTime,
+            rawChannel,
+            rawSource,
+            rawTruncated: event.rawEvent?.RawTruncated === "true",
+          });
+        }));
+      }
+
+      logger.info("Console module started.", {
+        operation: "start",
+        data: {
+          maxLines,
+        },
+      });
     },
 
     async stop() {
+      logger.info("Console module stopping.", {
+        operation: "stop",
+      });
+
       for (const un of unsubscribers.splice(0)) {
         try {
           un();
         } catch {}
       }
-
-      push("system", "warn", "Console module stopped.");
     },
   };
 }
 
-function getDispatcherLevel(event) {
-  const name = String(event?.eventName ?? "");
-  if (name === "RCON_ERROR" || name === "RCON_DISCONNECTED") return "error";
-  return "event";
+function summarizeData(data) {
+  if (!data || typeof data !== "object") {
+    return "";
+  }
+
+  if (typeof data.listenerCount === "number") {
+    return `listeners=${data.listenerCount}`;
+  }
+
+  if (typeof data.players === "number") {
+    return `players=${data.players}`;
+  }
+
+  if (typeof data.squads === "number") {
+    return `squads=${data.squads}`;
+  }
+
+  if (typeof data.command === "string" && data.command) {
+    return clipText(data.command, 96);
+  }
+
+  return clipText(safeJson(data), 180);
 }
 
-function formatDispatcherMessage(event) {
-  const eventName = String(event?.eventName ?? "UnknownEvent");
-  const details = summarizeDispatcherEvent(event);
-  return details ? `${eventName} | ${details}` : eventName;
-}
-
-function summarizeDispatcherEvent(event) {
-  if (Array.isArray(event?.players)) {
-    return `players=${event.players.length}`;
+function summarizeNativeLine(line) {
+  if (line.command) {
+    return clipText(String(line.command), 120);
   }
 
-  if (Array.isArray(event?.squads)) {
-    return `squads=${event.squads.length}`;
-  }
-
-  if (event?.payload && typeof event.payload === "object" && !Array.isArray(event.payload)) {
-    return safeJson(event.payload, 420);
-  }
-
-  if (Array.isArray(event?.params) && event.params.length > 0) {
-    const values = event.params
-      .slice(0, 6)
-      .map((param) => clipText(param?.value || "-", 48));
-
-    if (event.params.length > 6) {
-      values.push(`...+${event.params.length - 6}`);
-    }
-
-    return values.join(" | ");
-  }
-
-  if (event?.rawLog) {
-    return clipText(event.rawLog, 220);
+  if (line.reason) {
+    return clipText(String(line.reason), 120);
   }
 
   return "";
 }
 
-function safeJson(value, maxLength) {
+function getEventParam(event, name) {
+  if (event?.paramMap && event.paramMap[name] != null) return String(event.paramMap[name]);
+
+  if (Array.isArray(event?.params)) {
+    const param = event.params.find((item) => item?.name === name);
+    if (param) return String(param.value ?? "");
+  }
+
+  return "";
+}
+
+function extractChannel(line) {
+  const match = String(line ?? "").match(/\b(Log[A-Za-z0-9_]+)\s*:/);
+  return match ? match[1] : "";
+}
+
+function safeJson(value) {
   try {
-    return clipText(JSON.stringify(value), maxLength);
+    return JSON.stringify(value);
   } catch {
-    return "[unserializable payload]";
+    return "[unserializable]";
   }
 }
 
 function clipText(value, maxLength) {
-  const text = String(value ?? "").replace(/\r/g, " ").replace(/\n/g, " ").trim();
+  const text = String(value ?? "").replace(/\s+/g, " ").trim();
   if (!text) return "";
   if (text.length <= maxLength) return text;
   return `${text.slice(0, Math.max(0, maxLength - 3))}...`;
@@ -201,7 +300,7 @@ class RingLogStore {
     this.nextIndex = 0;
     this.size = 0;
     this.seq = 0;
-    this.observedChannels = new Set();
+    this.observedScopesByStream = new Map();
   }
 
   push(line) {
@@ -212,15 +311,23 @@ class RingLogStore {
       ...line,
     };
 
+    item.searchText = buildSearchText(item);
+
     this.buffer[this.nextIndex] = item;
     this.nextIndex = (this.nextIndex + 1) % this.maxLines;
     this.size = Math.min(this.size + 1, this.maxLines);
-    this.observedChannels.add(item.channel);
+
+    if (!this.observedScopesByStream.has(item.stream)) {
+      this.observedScopesByStream.set(item.stream, new Set());
+    }
+    if (item.scope) {
+      this.observedScopesByStream.get(item.stream).add(item.scope);
+    }
 
     return item;
   }
 
-  query({ channel = "all", afterSeq = 0, limit = 300, q = "" }) {
+  query({ stream = "modules", scope = "all", level = "all", afterSeq = 0, limit = 300, q = "" }) {
     const safeLimit = Math.max(1, Math.min(Number(limit) || 300, 1000));
     const queryText = String(q ?? "").trim().toLowerCase();
     const result = [];
@@ -228,27 +335,12 @@ class RingLogStore {
     for (const item of this.iterOldestToNewest()) {
       if (!item) continue;
       if (afterSeq > 0 && item.seq <= afterSeq) continue;
-      if (channel !== "all" && item.channel !== channel) continue;
+      if (stream !== "all" && item.stream !== stream) continue;
+      if (scope !== "all" && item.scope !== scope) continue;
+      if (level !== "all" && item.level !== level) continue;
+      if (queryText && !item.searchText.includes(queryText)) continue;
 
-      if (queryText) {
-        const haystack = [
-          item.channel,
-          item.level,
-          item.message,
-          item.eventId,
-          item.eventName,
-          item.command,
-          item.source,
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-
-        if (!haystack.includes(queryText)) continue;
-      }
-
-      result.push(item);
-
+      result.push(stripSearchText(item));
       if (result.length > safeLimit) {
         result.shift();
       }
@@ -257,8 +349,8 @@ class RingLogStore {
     return result;
   }
 
-  getObservedChannels() {
-    return [...this.observedChannels].sort();
+  getObservedScopes(stream = "modules") {
+    return [...(this.observedScopesByStream.get(stream) ?? new Set())].sort();
   }
 
   *iterOldestToNewest() {
@@ -267,4 +359,29 @@ class RingLogStore {
       yield this.buffer[idx];
     }
   }
+}
+
+function buildSearchText(item) {
+  return [
+    item.stream,
+    item.channel,
+    item.level,
+    item.message,
+    item.scope,
+    item.source,
+    item.moduleId,
+    item.eventName,
+    item.operation,
+    item.command,
+    item.dataSummary,
+    ...(Array.isArray(item.tags) ? item.tags : []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function stripSearchText(item) {
+  const { searchText, ...rest } = item;
+  return rest;
 }

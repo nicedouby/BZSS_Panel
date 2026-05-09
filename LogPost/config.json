@@ -31,6 +31,10 @@
     "file_name": "Received.log",
     "format": "raw"
   },
+  "raw_log_output": {
+    "enabled": false,
+    "source": "Squad.log"
+  },
   "blacklist_contains": [
     "GetDefaultPawnClassForController_Implementation()",
     "IsSpawnpointAllowed()",

@@ -41,6 +41,11 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "format": "raw",
     },
 
+    "raw_log_output": {
+        "enabled": False,
+        "source": "Squad.log",
+    },
+
     "blacklist_contains": [
         "GetDefaultPawnClassForController_Implementation()",
         "IsSpawnpointAllowed()",

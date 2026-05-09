@@ -20,7 +20,9 @@ export class UdpEventReceiver {
     this.socket = dgram.createSocket("udp4");
 
     this.socket.on("message", (buffer, remoteInfo) => this.handleMessage(buffer, remoteInfo));
-    this.socket.on("error", (error) => this.logger.error(`UDP socket error: ${error.stack ?? error}`));
+    this.socket.on("error", (error) => this.logger.error(`UDP socket error: ${error.stack ?? error}`, {
+      operation: "socketError",
+    }));
   }
 
   async start() {
@@ -31,7 +33,9 @@ export class UdpEventReceiver {
     });
 
     this.webStatus.set("udpReceiver", "listening");
-    this.logger.info(`UDP Receiver listening on ${this.host}:${this.port}`);
+    this.logger.info(`UDP Receiver listening on ${this.host}:${this.port}`, {
+      operation: "start",
+    });
   }
 
   async stop() {
@@ -44,7 +48,13 @@ export class UdpEventReceiver {
 
   handleMessage(buffer, remoteInfo) {
     if (buffer.length > this.maxMessageBytes) {
-      this.logger.warn(`UDP message too large. Bytes=${buffer.length}`);
+      this.logger.warn(`UDP message too large. Bytes=${buffer.length}`, {
+        operation: "handleMessage",
+        data: {
+          bytes: buffer.length,
+          remote: `${remoteInfo.address}:${remoteInfo.port}`,
+        },
+      });
       return;
     }
 
@@ -52,18 +62,36 @@ export class UdpEventReceiver {
     try {
       rawEvent = JSON.parse(buffer.toString("utf8"));
     } catch {
-      this.logger.warn(`Invalid UDP JSON from ${remoteInfo.address}:${remoteInfo.port}`);
+      this.logger.warn(`Invalid UDP JSON from ${remoteInfo.address}:${remoteInfo.port}`, {
+        operation: "handleMessage",
+        data: {
+          bytes: buffer.length,
+        },
+      });
       return;
     }
     
     if (!rawEvent.Event) {
-      this.logger.warn("UDP event missing Event field.");
+      this.logger.warn("UDP event missing Event field.", {
+        operation: "handleMessage",
+        data: {
+          remote: `${remoteInfo.address}:${remoteInfo.port}`,
+        },
+      });
       return;
     }
 
     const event = this.eventPipeline.processRawGameEvent(rawEvent);
     event.udpRemoteAddress = remoteInfo.address;
     event.udpRemotePort = remoteInfo.port;
+
+    this.logger.debug(() => `UDP event accepted ${event.eventName}`, {
+      operation: "handleMessage",
+      eventName: event.eventName,
+      data: {
+        remote: `${remoteInfo.address}:${remoteInfo.port}`,
+      },
+    });
 
     this.eventBus.emitCoreEvent(event.eventName, event);
   }

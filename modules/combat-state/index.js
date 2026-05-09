@@ -14,7 +14,12 @@ const VALID_FILTER_TYPES = new Set(["damage", "wound", "death"]);
  * Aggregates structured combat events emitted by the Python log parser.
  * It does not parse Squad.log lines; it only normalizes event params.
  */
-export function createCombatStateModule({ core, modules, config }) {
+export function createCombatStateModule({ core, modules, config, logger }) {
+  const moduleLogger = logger ?? core.createLogger?.({
+    moduleId: "module.combatState",
+    source: "module.combatState",
+    channel: "module",
+  }) ?? core.logger;
   const moduleConfig = config.get("modules.combatState", {});
   const enabled = Boolean(moduleConfig.enabled ?? true);
   const maxEvents = Math.max(1, Number(moduleConfig.maxEvents ?? 5000));
@@ -37,6 +42,15 @@ export function createCombatStateModule({ core, modules, config }) {
     }
 
     lastUpdatedAt = record.time || new Date().toISOString();
+    logWithFallback(moduleLogger, "debug", () => `Combat event captured ${record.type}`, {
+      operation: "ingest",
+      eventName: record.eventName,
+      data: {
+        attackerName: record.attackerName,
+        victimName: record.victimName,
+        weapon: record.weapon,
+      },
+    });
 
     core.eventBus.emitModuleEvent("module.combatState", "updated", {
       eventName: "module.combatState.updated",
@@ -110,6 +124,13 @@ export function createCombatStateModule({ core, modules, config }) {
       const cleared = events.length;
       events.splice(0);
       lastUpdatedAt = new Date().toISOString();
+      logWithFallback(moduleLogger, "info", `Cleared combat events (${cleared})`, {
+        label: "MODULE",
+        operation: "clear",
+        data: {
+          cleared,
+        },
+      });
       core.eventBus.emitModuleEvent("module.combatState", "cleared", {
         eventName: "module.combatState.cleared",
         layer: "module",
@@ -139,13 +160,23 @@ export function createCombatStateModule({ core, modules, config }) {
       for (const eventName of Object.keys(COMBAT_TYPES)) {
         unsubscribers.push(core.eventBus.onCoreEvent(eventName, ingest));
       }
-      core.logger.module(`module.combatState started. maxEvents=${maxEvents}`);
+      logWithFallback(moduleLogger, "info", `CombatState started. maxEvents=${maxEvents}`, {
+        label: "MODULE",
+        operation: "start",
+        data: {
+          maxEvents,
+        },
+      });
     },
 
     async stop() {
       for (const unsubscribe of unsubscribers.splice(0)) unsubscribe();
       events.splice(0);
       lastUpdatedAt = "";
+      logWithFallback(moduleLogger, "info", "CombatState stopped.", {
+        label: "MODULE",
+        operation: "stop",
+      });
     },
   };
 }
@@ -268,4 +299,15 @@ function matchesSearch(event, search) {
 
 function cloneEvent(event) {
   return { ...event };
+}
+
+function logWithFallback(logger, method, message, context) {
+  const fn = logger?.[method];
+  if (typeof fn === "function") {
+    fn.call(logger, message, context);
+    return;
+  }
+
+  const rendered = typeof message === "function" ? message() : message;
+  logger?.module?.(rendered);
 }
