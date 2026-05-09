@@ -198,8 +198,30 @@ async function testJsonShowServerInfoUpdatesPlaytime() {
   assert.equal(harness.webStatusState.playtime, 4152);
 }
 
+async function testJsonShowNextMapUpdatesNextLayerWhenServerInfoOmitsIt() {
+  const harness = createHarness();
+  harness.responses.ShowServerInfo = JSON.stringify({
+    MaxPlayers: 100,
+    GameMode_s: "RAAS",
+    MapName_s: "Narva_RAAS_v1",
+    PLAYTIME_I: "4152",
+    PlayerCount_I: "8",
+  });
+  harness.responses.ShowNextMap = JSON.stringify({
+    NextLevel_s: "Belaya",
+    NextLayer_s: "Belaya_RAAS_v3",
+  });
+
+  await harness.module.api.refresh("all");
+  const state = harness.module.api.getState();
+
+  assert.equal(state.serverStatus.nextLayer, "Belaya_RAAS_v3");
+  assert.equal(harness.webStatusState.nextLayer, "Belaya_RAAS_v3");
+}
+
 await testAggregatesRconSnapshots();
 await testMissingServerInfoFieldsDoNotClobberLastGoodValues();
 await testJsonShowServerInfoUpdatesPlaytime();
+await testJsonShowNextMapUpdatesNextLayerWhenServerInfoOmitsIt();
 
 console.log("match state tests passed");

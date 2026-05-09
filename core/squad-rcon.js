@@ -242,11 +242,50 @@ export function parseCurrentMap(raw) {
 
 export function parseNextMap(raw) {
   const text = String(raw ?? "").trim();
-  const m = text.match(/^Next level is ([^,]*), layer is ([^,]*)/i);
+  const json = parseMapJson(text);
+  if (json) {
+    return {
+      level: json.level,
+      layer: json.layer && json.layer !== "To be voted" ? json.layer : null,
+    };
+  }
+
+  const m = text.match(/^Next level is ([^,]*), layer is ([^,]*)/i)
+    || text.match(/^Next map is ([^,]*), layer is ([^,]*)/i)
+    || text.match(/^Next layer is ([^,]*), level is ([^,]*)/i);
   return {
     level: m && cleanMapValue(m[1]) ? cleanMapValue(m[1]) : null,
     layer: m && cleanMapValue(m[2]) && cleanMapValue(m[2]) !== "To be voted" ? cleanMapValue(m[2]) : null,
   };
+}
+
+function parseMapJson(text) {
+  if (!text.startsWith("{") || !text.endsWith("}")) return null;
+
+  try {
+    const parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+
+    return {
+      level: cleanMapValue(
+        parsed.NextLevel_s
+        ?? parsed.LevelName_s
+        ?? parsed.Level_s
+        ?? parsed.MapName_s
+        ?? parsed.Map
+        ?? parsed.level
+        ?? parsed.map
+      ),
+      layer: cleanMapValue(
+        parsed.NextLayer_s
+        ?? parsed.Layer_s
+        ?? parsed.LayerName_s
+        ?? parsed.layer
+      ),
+    };
+  } catch {
+    return null;
+  }
 }
 
 function cleanMapValue(value) {
