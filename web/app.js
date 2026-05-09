@@ -137,6 +137,7 @@ function renderFrame() {
     auth: state.auth,
     onLogout: logout,
     onNavigate: navigateTo,
+    onEditLogClock: openLogClockEditor,
   });
 
   renderSidebar({
@@ -149,6 +150,96 @@ function renderFrame() {
 function renderShellVisibility() {
   const app = document.querySelector("#app");
   app.classList.toggle("is-authenticated", Boolean(state.auth.authenticated));
+}
+
+async function openLogClockEditor({ seconds } = {}) {
+  if (!state.auth.authenticated) return;
+
+  const initialSeconds = Number.isFinite(Number(seconds))
+    ? Number(seconds)
+    : Number(state.status?.logClockSeconds ?? 0);
+  const initialValue = formatDurationInput(initialSeconds);
+
+  openModal({
+    title: "修改日志时间",
+    body: `
+      <form id="log-clock-form" class="rcon-form" style="grid-template-columns: 1fr auto; gap: 10px;">
+        <input id="log-clock-input" placeholder="例如 10 或 12:34 或 1:02:03" value="${escapeHtml(initialValue)}" />
+        <button type="submit">保存</button>
+      </form>
+      <div style="display:flex; gap:10px; margin-top:10px; align-items:center; flex-wrap: wrap;">
+        <button id="log-clock-reset" type="button">重置为 0</button>
+        <small style="color: var(--muted);">纯数字按「分钟」解析；包含冒号按 mm:ss / hh:mm:ss 解析。</small>
+      </div>
+    `,
+  });
+
+  const modalRoot = document.querySelector("#modal-root");
+  const form = modalRoot.querySelector("#log-clock-form");
+  const input = modalRoot.querySelector("#log-clock-input");
+  const resetBtn = modalRoot.querySelector("#log-clock-reset");
+
+  const close = () => {
+    modalRoot.innerHTML = "";
+  };
+
+  const submitSeconds = async (nextSeconds) => {
+    await apiPost("/api/log-clock/set", { seconds: nextSeconds });
+    close();
+    await refreshTopbar();
+  };
+
+  form?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const parsed = parseDurationSeconds(input?.value ?? "");
+    if (parsed == null) return;
+    submitSeconds(parsed).catch(() => {});
+  });
+
+  resetBtn?.addEventListener("click", () => {
+    apiPost("/api/log-clock/reset", {})
+      .then(async () => {
+        close();
+        await refreshTopbar();
+      })
+      .catch(() => {});
+  });
+}
+
+function parseDurationSeconds(raw) {
+  const text = String(raw ?? "").trim();
+  if (!text) return null;
+
+  if (/^\\d+(?:\\.\\d+)?$/.test(text)) {
+    const minutes = Number.parseFloat(text);
+    if (!Number.isFinite(minutes) || minutes < 0) return null;
+    return Math.floor(minutes * 60);
+  }
+
+  const parts = text.split(":").map((p) => p.trim());
+  if (parts.length === 2 || parts.length === 3) {
+    const nums = parts.map((p) => Number.parseInt(p, 10));
+    if (nums.some((n) => !Number.isFinite(n) || n < 0)) return null;
+
+    if (parts.length === 2) {
+      const [mm, ss] = nums;
+      return mm * 60 + ss;
+    }
+
+    const [hh, mm, ss] = nums;
+    return hh * 3600 + mm * 60 + ss;
+  }
+
+  return null;
+}
+
+function formatDurationInput(totalSeconds) {
+  const seconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const s = seconds % 60;
+  const m = Math.floor(seconds / 60) % 60;
+  const h = Math.floor(seconds / 3600);
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${m}:${String(s).padStart(2, "0")}`;
 }
 
 async function restoreSession() {

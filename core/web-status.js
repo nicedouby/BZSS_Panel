@@ -1,5 +1,7 @@
 // -*- coding: utf-8 -*-
 
+import { LogClock } from "./log-clock.js";
+
 /**
  * Core: WebStatus
  *
@@ -11,6 +13,11 @@ export class WebStatus {
   constructor({ config }) {
     this.serverId = config.get("server.id", "BZSS_Main");
     this.serverName = config.get("server.name", "BZSS Main Server");
+
+    const logClockFallbackSeconds = Number(config.get("logClock.fallbackSeconds", 600));
+    this.logClock = new LogClock({
+      fallbackSeconds: Number.isFinite(logClockFallbackSeconds) ? logClockFallbackSeconds : 600,
+    });
     this.serverTickRateConfig = {
       expected: Number(config.get("serverTickRate.expected", 30)),
       warningBelow: Number(config.get("serverTickRate.warningBelow", 28)),
@@ -66,7 +73,26 @@ export class WebStatus {
     const snapshot = { ...this.state };
     snapshot.tpsStatus = this.#resolveTpsStatus(snapshot);
     snapshot.serverTickRate = { ...this.serverTickRateConfig };
+
+    snapshot.logClockSeconds = this.logClock.getSeconds();
+    snapshot.logClockHasAnchor = Boolean(this.logClock.hasAnchor);
+    snapshot.logClockManual = Boolean(this.logClock.manual);
+    snapshot.logClockAnchorLogTime = String(this.logClock.anchorLogTime || "");
+    snapshot.logClockLastResetAt = String(this.logClock.lastResetAt || "");
+    snapshot.logClockLastResetReason = String(this.logClock.lastResetReason || "");
     return snapshot;
+  }
+
+  setLogClockSeconds(seconds, meta = {}) {
+    const next = this.logClock.setSeconds(seconds, meta);
+    this.state.updatedAt = new Date().toISOString();
+    return next;
+  }
+
+  resetLogClock(meta = {}) {
+    this.logClock.resetToZero(meta);
+    this.state.updatedAt = new Date().toISOString();
+    return 0;
   }
 
   #resolveTpsStatus(snapshot) {

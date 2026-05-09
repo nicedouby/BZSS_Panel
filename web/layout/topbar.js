@@ -9,17 +9,20 @@ let authMenuOpen = false;
  * 1. 展示当前服务端核心状态，例如地图、人数、排队、时间等。
  * 2. 提供右上角用户菜单，其中插件订阅入口只放在这里，不进入左侧主导航。
  */
-export function renderTopbar({ root, status, auth, onLogout, onNavigate }) {
+export function renderTopbar({ root, status, auth, onLogout, onNavigate, onEditLogClock }) {
   const user = auth?.user ?? null;
   const roleText = user?.isSuperAdmin ? "SuperAdmin | has everything" : (user?.role ?? "Guest");
   const currentMap = formatCurrentMap(status);
-  const nextMap = displayText(status.nextLayer, "Unknown");
+  const nextMap = displayText(status.nextLayer, "空");
   const mode = formatMode(status);
   const tps = formatTps(status);
   const tpsTone = formatTpsTone(status);
   const players = formatPlayers(status);
   const queue = String(Number(status.queueCount ?? status.playerQueue ?? 0));
   const playtime = formatPlaytime(status.playtime);
+  const logClockSeconds = Number(status?.logClockSeconds ?? 0);
+  const logClock = formatPlaytime(logClockSeconds);
+  const logClockTone = status?.logClockHasAnchor ? "good" : "warn";
   const canManagePlugins = Boolean(user?.isSuperAdmin);
 
   root.innerHTML = `
@@ -31,6 +34,7 @@ export function renderTopbar({ root, status, auth, onLogout, onNavigate }) {
     ${chip("Players", players, "")}
     ${chip("Queue", queue, Number(queue) > 0 ? "warn" : "")}
     ${chip("Time", playtime, "")}
+    ${chipButton("topbar-log-clock", "日志时间", logClock, logClockTone)}
     <div class="topbar-spacer"></div>
     ${user ? `
       <div class="auth-dropdown ${authMenuOpen ? "is-open" : ""}">
@@ -108,10 +112,32 @@ export function renderTopbar({ root, status, auth, onLogout, onNavigate }) {
       onLogout().catch(() => {});
     });
   }
+
+  const logClockBtn = root.querySelector("#topbar-log-clock");
+  if (logClockBtn && typeof onEditLogClock === "function") {
+    const trigger = () => {
+      try {
+        const result = onEditLogClock({ seconds: logClockSeconds });
+        result?.catch?.(() => {});
+      } catch {}
+    };
+
+    logClockBtn.addEventListener("click", trigger);
+    logClockBtn.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        trigger();
+      }
+    });
+  }
 }
 
 function chip(label, value, cls) {
   return `<div class="status-chip ${cls}">${escapeHtml(label)}: ${escapeHtml(value)}</div>`;
+}
+
+function chipButton(id, label, value, cls) {
+  return `<div id="${escapeAttr(id)}" class="status-chip status-chip-btn ${escapeAttr(cls)}" role="button" tabindex="0" title="点击修改">${escapeHtml(label)}: ${escapeHtml(value)}</div>`;
 }
 
 function formatCurrentMap(status) {
@@ -195,4 +221,8 @@ function escapeHtml(value) {
     "\"": "&quot;",
     "'": "&#39;",
   }[c]));
+}
+
+function escapeAttr(value) {
+  return String(value ?? "").replace(/["']/g, "");
 }

@@ -268,7 +268,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       }
 
       const nextMap = parseNextMap(result.rconResponse);
-      if (nextMap.layer) {
+      if (nextMap.layer && !isSameLayer(nextMap.layer, state.serverStatus.layer || state.match.layer || state.serverStatus.map)) {
         state.serverStatus.nextLayer = nextMap.layer;
         state.serverStatus.nextLayerSource = "showNextMap";
         state.serverStatus.lastUpdatedAt = new Date().toISOString();
@@ -604,10 +604,17 @@ function mergeServerStatus(current, parsed, raw) {
     next.tpsStatus = parsed.tpsStatus;
   }
 
-  if (hasValue(parsed.nextLayer)) {
+  const normalizedNextLayer = normalizeLayerLabel(parsed.nextLayer);
+  const normalizedCurrentLayer = normalizeLayerLabel(next.layer || parsed.layer || current.layer);
+  const isSameAsCurrentLayer = normalizedNextLayer
+    && normalizedCurrentLayer
+    && normalizedNextLayer === normalizedCurrentLayer;
+
+  if (hasValue(parsed.nextLayer) && !isSameAsCurrentLayer) {
     next.nextLayer = parsed.nextLayer;
     next.nextLayerSource = "serverInfo";
-  } else if (next.nextLayerSource === "serverInfo") {
+  } else if (hasValue(parsed.nextLayer) && isSameAsCurrentLayer) {
+    next.nextLayer = "";
     next.nextLayerSource = "cached";
   }
 
@@ -738,6 +745,16 @@ function hasValue(value) {
   if (value == null) return false;
   if (typeof value === "number") return Number.isFinite(value);
   return String(value).trim() !== "";
+}
+
+function normalizeLayerLabel(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function isSameLayer(left, right) {
+  const leftLabel = normalizeLayerLabel(left);
+  const rightLabel = normalizeLayerLabel(right);
+  return Boolean(leftLabel && rightLabel && leftLabel === rightLabel);
 }
 
 function firstNumber(value) {

@@ -121,6 +121,24 @@ export class WebServer {
       return this.json(res, 200, this.core.webStatus.getSnapshot());
     }
 
+    if (url.pathname === "/api/log-clock/set" && req.method === "POST") {
+      const body = await this.readJsonBody(req);
+      const seconds = Number(body.seconds ?? body.value ?? 0);
+      const next = this.core.webStatus.setLogClockSeconds(seconds, { reason: "manual" });
+      return this.json(res, 200, {
+        ok: true,
+        logClockSeconds: next,
+      });
+    }
+
+    if (url.pathname === "/api/log-clock/reset" && req.method === "POST") {
+      const next = this.core.webStatus.resetLogClock({ reason: "manualReset" });
+      return this.json(res, 200, {
+        ok: true,
+        logClockSeconds: next,
+      });
+    }
+
     if (url.pathname.startsWith("/api/plugin-subscriptions")) {
       if (!this.canManagePlugins(user)) {
         return this.json(res, 403, {
