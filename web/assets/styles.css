@@ -385,6 +385,14 @@ body::before {
   letter-spacing: 0.2px;
 }
 
+.match-toolbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .page-subtitle {
   margin-top: 4px;
   font-size: 13px;
@@ -713,6 +721,11 @@ body::before {
 
 .match-member-stat {
   padding: 2px 0;
+}
+
+.match-member-stat.playtime-stat {
+  color: #8cf3e3;
+  font-weight: 800;
 }
 
 .match-empty {

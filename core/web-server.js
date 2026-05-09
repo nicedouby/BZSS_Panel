@@ -153,7 +153,54 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/match/overview") {
-      return this.json(res, 200, this.modules.matchState.getOverview());
+      const overview = this.modules.matchState.getOverview();
+      if (this.modules.playtime?.enrichPlayers && Array.isArray(overview?.players)) {
+        overview.players = await this.modules.playtime.enrichPlayers(overview.players);
+      }
+      return this.json(res, 200, overview);
+    }
+
+    if (url.pathname === "/api/playtime/status") {
+      return this.json(res, 200, this.modules.playtime.getStatus());
+    }
+
+    if (url.pathname === "/api/playtime/logs") {
+      return this.json(res, 200, {
+        logs: await this.modules.playtime.listRecentLogs({
+          limit: url.searchParams.get("limit") ?? "100",
+        }),
+      });
+    }
+
+    if (url.pathname === "/api/playtime/online/refresh" && req.method === "POST") {
+      const body = await this.readJsonBody(req);
+      const job = await this.modules.playtime.refreshOnline(url.searchParams.get("serverId") ?? this.core.webStatus.serverId);
+      const waitMs = Number(body.waitMs ?? 0);
+      const payload = waitMs > 0
+        ? await this.modules.playtime.waitForJob(job.id, waitMs)
+        : this.modules.playtime.getJob(job.id);
+      return this.json(res, 202, payload);
+    }
+
+    if (url.pathname === "/api/playtime/players/refresh" && req.method === "POST") {
+      const body = await this.readJsonBody(req);
+      const job = await this.modules.playtime.refreshPlayer(body);
+      const waitMs = Number(body.waitMs ?? 0);
+      const payload = waitMs > 0
+        ? await this.modules.playtime.waitForJob(job.id, waitMs)
+        : this.modules.playtime.getJob(job.id);
+      return this.json(res, 202, payload);
+    }
+
+    const playtimeJobMatch = url.pathname.match(/^\/api\/playtime\/jobs\/([^/]+)$/);
+    if (playtimeJobMatch && req.method === "GET") {
+      const jobId = decodeURIComponent(playtimeJobMatch[1]);
+      const waitMs = Number(url.searchParams.get("waitMs") ?? 0);
+      const payload = waitMs > 0
+        ? await this.modules.playtime.waitForJob(jobId, waitMs)
+        : this.modules.playtime.getJob(jobId);
+      if (!payload) return this.json(res, 404, { error: "PlaytimeJobNotFound" });
+      return this.json(res, 200, payload);
     }
 
     if (url.pathname === "/api/console/channels") {

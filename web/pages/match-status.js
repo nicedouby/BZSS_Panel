@@ -1,17 +1,6 @@
 // -*- coding: utf-8 -*-
 
-/**
- * 页面：对局状态
- *
- * 数据来源：module.matchState / playerState / squadState
- * 展示结构：Team -> Squad -> Members
- *
- * 玩家名字点击行为：
- * - 打开居中悬浮窗口
- * - 不再调用 openDrawer
- * - 显示 Steam ID / EOS ID / Player ID / Team / Squad / Role / 状态
- */
-export async function renderPage({ root, api, openDrawer, onNavigate }) {
+export async function renderPage({ root, api, apiFetch, openDrawer, onNavigate }) {
   if (root.__matchStatusTimer) {
     window.clearTimeout(root.__matchStatusTimer);
     root.__matchStatusTimer = null;
@@ -27,8 +16,15 @@ export async function renderPage({ root, api, openDrawer, onNavigate }) {
   root.innerHTML = `
     <section class="page">
       <div class="page-title-row">
-        <div class="page-title">对局状态</div>
-        <button id="refresh">刷新</button>
+        <div>
+          <div class="page-title">对局状态</div>
+          <div class="page-subtitle">小队列表会显示已缓存的 Steam Squad 总时长，刷新后写入独立时长数据库。</div>
+        </div>
+        <div class="match-toolbar-actions">
+          <span id="playtime-status" class="status-text" data-tone="idle">Steam 时长待刷新</span>
+          <button id="refresh-playtime">检测在场玩家时长</button>
+          <button id="refresh">刷新</button>
+        </div>
       </div>
 
       <div class="grid cols-3">
@@ -52,14 +48,21 @@ export async function renderPage({ root, api, openDrawer, onNavigate }) {
     </section>
   `;
 
-  root.querySelector("#refresh").addEventListener("click", () => renderPage({ root, api, openDrawer, onNavigate }));
+  root.querySelector("#refresh").addEventListener("click", () => renderPage({ root, api, apiFetch, openDrawer, onNavigate }));
+  root.querySelector("#refresh-playtime").addEventListener("click", async () => {
+    await refreshAllPlaytime({ root, api, apiFetch, openDrawer, onNavigate });
+  });
 
   root.querySelectorAll("[data-player-index]").forEach((el) => {
     el.addEventListener("click", () => {
       const player = players[Number(el.dataset.playerIndex)];
       if (!player) return;
 
-      openPlayerRealtimeWindow(player, onNavigate);
+      openPlayerRealtimeWindow(player, {
+        apiFetch,
+        onNavigate,
+        onRefresh: () => renderPage({ root, api, apiFetch, openDrawer, onNavigate }),
+      });
     });
   });
 
@@ -73,7 +76,7 @@ export async function renderPage({ root, api, openDrawer, onNavigate }) {
   };
 
   root.__matchStatusTimer = window.setTimeout(() => {
-    renderPage({ root, api, openDrawer, onNavigate }).catch(() => {});
+    renderPage({ root, api, apiFetch, openDrawer, onNavigate }).catch(() => {});
   }, 3000);
 
   return root.__pageCleanup;
@@ -126,31 +129,20 @@ function buildTeams({ players, squads }) {
   for (const team of teamMap.values()) {
     team.squads.sort(compareSquads);
     team.playerCount = team.squads.reduce((sum, squad) => sum + squad.members.length, 0);
-    if (!team.teamName) {
-      team.teamName = `Team ${team.teamID}`;
-    }
+    if (!team.teamName) team.teamName = `Team ${team.teamID}`;
   }
 
   return [teamMap.get("1"), teamMap.get("2")];
 
   function createTeam(teamID) {
-    return {
-      teamID,
-      teamName: `Team ${teamID}`,
-      squads: [],
-      playerCount: 0,
-    };
+    return { teamID, teamName: `Team ${teamID}`, squads: [], playerCount: 0 };
   }
 
   function ensureTeam(map, teamID, teamName) {
     const key = String(teamID);
-    if (!map.has(key)) {
-      map.set(key, createTeam(teamID));
-    }
+    if (!map.has(key)) map.set(key, createTeam(teamID));
     const team = map.get(key);
-    if (teamName && !team.teamName) {
-      team.teamName = teamName;
-    }
+    if (teamName && !team.teamName) team.teamName = teamName;
     return team;
   }
 
@@ -161,31 +153,17 @@ function buildTeams({ players, squads }) {
 
     if (teamID != null && squadID != null) {
       const exact = squadMap.get(squadKey(teamID, squadID));
-      if (exact) {
-        return { team: ensureTeam(teamMap, teamID, ""), squad: exact };
-      }
+      if (exact) return { team: ensureTeam(teamMap, teamID, ""), squad: exact };
     }
 
     if (squadID != null) {
       const candidates = squadsById.get(squadID) || [];
-      const byName = candidates.find((candidate) => {
-        const creator = normalizeName(candidate.creatorName);
-        const leader = normalizeName(candidate.creatorName);
-        return creator === normalizedName || leader === normalizedName;
-      });
-      if (byName) {
-        return { team: ensureTeam(teamMap, byName.teamID, ""), squad: byName };
-      }
-
-      if (candidates.length === 1) {
-        return { team: ensureTeam(teamMap, candidates[0].teamID, ""), squad: candidates[0] };
-      }
-
+      const byName = candidates.find((candidate) => normalizeName(candidate.creatorName) === normalizedName);
+      if (byName) return { team: ensureTeam(teamMap, byName.teamID, ""), squad: byName };
+      if (candidates.length === 1) return { team: ensureTeam(teamMap, candidates[0].teamID, ""), squad: candidates[0] };
       if (teamID != null) {
         const fallback = squadMap.get(squadKey(teamID, squadID));
-        if (fallback) {
-          return { team: ensureTeam(teamMap, teamID, ""), squad: fallback };
-        }
+        if (fallback) return { team: ensureTeam(teamMap, teamID, ""), squad: fallback };
       }
     }
 
@@ -299,6 +277,7 @@ function renderMember(member) {
         ${member.isLeader ? '<span class="match-badge leader">队长</span>' : ""}
       </div>
       <div class="match-member-meta">
+        <span class="match-member-stat playtime-stat">${esc(formatPlaytime(member))}</span>
         <span class="match-member-stat">${esc(stateLabel)}</span>
         <span class="match-member-stat">${esc(roleLabel)}</span>
         <span class="match-member-stat">${esc(teamLabel)} / ${esc(squadLabel)}</span>
@@ -308,19 +287,17 @@ function renderMember(member) {
   `;
 }
 
-function openPlayerRealtimeWindow(player, onNavigate) {
+function openPlayerRealtimeWindow(player, { apiFetch, onNavigate, onRefresh } = {}) {
   closePlayerFloatingWindow();
 
   const root = document.createElement("div");
   root.id = "bzss-player-floating-root";
 
   const stats = getMatchStats(player);
-  const steamID = player.steamID || player.steam64 || player.SteamID || "";
+  const steamID = getPlayerSteamID(player);
   const eosID = player.eosID || player.eos || player.EOSID || "";
   const teamValue = player._resolvedTeamID ?? player.teamID ?? "N/A";
-  const squadValue = player._resolvedUnassigned
-    ? "未编队"
-    : (player._resolvedSquadID ?? player.squadID ?? "N/A");
+  const squadValue = player._resolvedUnassigned ? "未编队" : (player._resolvedSquadID ?? player.squadID ?? "N/A");
 
   root.innerHTML = `
     <div class="bzss-player-float-backdrop" data-close-player-window="1"></div>
@@ -334,7 +311,7 @@ function openPlayerRealtimeWindow(player, onNavigate) {
           </div>
         </div>
 
-        <button class="bzss-player-float-close" type="button" data-close-player-window="1">×</button>
+        <button class="bzss-player-float-close" type="button" data-close-player-window="1">x</button>
       </div>
 
       <div class="bzss-player-float-body">
@@ -354,18 +331,20 @@ function openPlayerRealtimeWindow(player, onNavigate) {
           <div><span>Team</span><strong>${esc(teamValue)}</strong></div>
           <div><span>Squad</span><strong>${esc(squadValue)}</strong></div>
           <div><span>K / 击倒 / 死亡</span><strong>${stats.kills} / ${stats.downs} / ${stats.deaths}</strong></div>
+          <div><span>Steam Squad 时长</span><strong id="player-playtime-value">${esc(formatPlaytime(player))}</strong></div>
           <div><span>最后出现</span><strong>${esc(player.lastSeenTime || "未知")}</strong></div>
         </div>
 
         <div class="bzss-player-float-actions">
+          <button type="button" id="refresh-player-playtime">刷新时长</button>
           <button type="button" disabled>警告</button>
           <button type="button" disabled>踢出小队</button>
           <button type="button" disabled>跳边</button>
           <button type="button" id="open-player-database">玩家数据库</button>
         </div>
 
-        <div class="bzss-player-float-note">
-          功能按钮已预留。后续应分别接入 warning / squadManage / teamBalance / playerDatabase。
+        <div class="bzss-player-float-note" id="player-playtime-status">
+          Steam 时长刷新会写入 data/steam_playtime.db，并同步玩家档案的游戏时长。
         </div>
       </div>
     </div>
@@ -377,13 +356,33 @@ function openPlayerRealtimeWindow(player, onNavigate) {
     el.addEventListener("click", closePlayerFloatingWindow);
   });
 
+  root.querySelector("#refresh-player-playtime")?.addEventListener("click", async () => {
+    const btn = root.querySelector("#refresh-player-playtime");
+    const status = root.querySelector("#player-playtime-status");
+    const value = root.querySelector("#player-playtime-value");
+    btn.disabled = true;
+    status.textContent = "正在刷新该玩家 Steam 时长...";
+    try {
+      const job = await refreshPlayerPlaytime({ apiFetch, player });
+      const lookup = job?.result?.lookup;
+      if (!lookup) throw new Error("Steam 返回结果为空");
+      value.textContent = formatSecondsAsHours(lookup.gameSeconds);
+      status.textContent = `刷新完成：${formatSecondsAsHours(lookup.gameSeconds)}`;
+      showToast(`Steam 时长已刷新：${formatSecondsAsHours(lookup.gameSeconds)}`);
+      await onRefresh?.();
+    } catch (error) {
+      status.textContent = error?.message || "刷新失败";
+      showToast(status.textContent);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
   root.querySelectorAll("[data-copy-value]").forEach((el) => {
     el.addEventListener("click", async () => {
       const value = String(el.dataset.copyValue || "").trim();
       if (!value) return;
-
       const label = el.dataset.copyLabel || "ID";
-
       try {
         if (navigator.clipboard?.writeText) {
           await navigator.clipboard.writeText(value);
@@ -413,9 +412,7 @@ function openPlayerRealtimeWindow(player, onNavigate) {
   });
 
   const onKeyDown = (event) => {
-    if (event.key === "Escape") {
-      closePlayerFloatingWindow();
-    }
+    if (event.key === "Escape") closePlayerFloatingWindow();
   };
 
   window.addEventListener("keydown", onKeyDown);
@@ -425,19 +422,93 @@ function openPlayerRealtimeWindow(player, onNavigate) {
 function closePlayerFloatingWindow() {
   const root = document.querySelector("#bzss-player-floating-root");
   if (!root) return;
-
-  if (root.__onKeyDown) {
-    window.removeEventListener("keydown", root.__onKeyDown);
-  }
-
+  if (root.__onKeyDown) window.removeEventListener("keydown", root.__onKeyDown);
   root.remove();
 }
 
+async function refreshAllPlaytime({ root, api, apiFetch, openDrawer, onNavigate }) {
+  const status = root.querySelector("#playtime-status");
+  const button = root.querySelector("#refresh-playtime");
+  button.disabled = true;
+  status.dataset.tone = "pending";
+  status.textContent = "正在检测在场玩家时长...";
+  try {
+    const response = await apiFetch("/api/playtime/online/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ waitMs: 0 }),
+    });
+    const job = await readJsonSafe(response);
+    if (!response.ok) throw new Error(job?.error || `请求失败 (${response.status})`);
+    const finalJob = job.status === "completed" || job.status === "failed"
+      ? job
+      : await waitForPlaytimeJob(apiFetch, job.id, 45_000);
+    if (finalJob.status !== "completed") throw new Error(finalJob?.error?.message || "Steam 时长批量刷新失败");
+
+    const result = finalJob.result || {};
+    status.dataset.tone = "success";
+    status.textContent = `已刷新 ${Number(result.updated || 0)}/${Number(result.total || 0)} 名玩家`;
+    showToast(status.textContent);
+    await renderPage({ root, api, apiFetch, openDrawer, onNavigate });
+  } catch (error) {
+    status.dataset.tone = "error";
+    status.textContent = error?.message || "Steam 时长刷新失败";
+    showToast(status.textContent);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function refreshPlayerPlaytime({ apiFetch, player }) {
+  const steamID = getPlayerSteamID(player);
+  if (!steamID) throw new Error("该玩家没有 Steam ID");
+  const response = await apiFetch("/api/playtime/players/refresh", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      steamID,
+      name: player.name || null,
+      eosID: player.eosID || player.eos || null,
+      waitMs: 0,
+    }),
+  });
+  const job = await readJsonSafe(response);
+  if (!response.ok) throw new Error(job?.error || `请求失败 (${response.status})`);
+  const finalJob = job.status === "completed" || job.status === "failed"
+    ? job
+    : await waitForPlaytimeJob(apiFetch, job.id, 30_000);
+  if (finalJob.status !== "completed") throw new Error(finalJob?.error?.message || "Steam 时长查询失败");
+  return finalJob;
+}
+
+async function waitForPlaytimeJob(apiFetch, jobId, waitMs = 30_000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < waitMs) {
+    const response = await apiFetch(`/api/playtime/jobs/${encodeURIComponent(jobId)}?waitMs=5000`);
+    const job = await readJsonSafe(response);
+    if (!response.ok) throw new Error(job?.error || `Steam 任务查询失败 (${response.status})`);
+    if (job?.status === "completed" || job?.status === "failed") return job;
+  }
+  throw new Error("等待 Steam 时长任务超时");
+}
+
+async function readJsonSafe(response) {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
 function getPlayerDatabaseQuery(player) {
-  const steamID = String(player.steamID || player.steam64 || player.SteamID || "").trim();
+  const steamID = getPlayerSteamID(player);
   const eosID = String(player.eosID || player.eos || player.EOSID || "").trim();
   const name = String(player.name || "").trim();
   return steamID || eosID || name || "";
+}
+
+function getPlayerSteamID(player) {
+  return String(player?.steamID || player?.steam64 || player?.SteamID || "").trim();
 }
 
 function getMatchStats(player) {
@@ -469,6 +540,16 @@ function formatState(state) {
   if (normalized === "dead") return "死亡";
   if (!normalized) return "未知";
   return state;
+}
+
+function formatPlaytime(player) {
+  const seconds = Number(player?.steamPlaytime?.gameSeconds ?? player?.gameSeconds ?? 0);
+  if (!Number.isFinite(seconds) || seconds <= 0) return "Steam 时长 --";
+  return `Steam ${formatSecondsAsHours(seconds)}`;
+}
+
+function formatSecondsAsHours(seconds) {
+  return `${(Number(seconds || 0) / 3600).toFixed(1)}h`;
 }
 
 function displayName(value, fallback = "未知") {

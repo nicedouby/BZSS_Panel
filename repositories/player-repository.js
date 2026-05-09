@@ -247,6 +247,30 @@ export class PlayerRepository {
     return this.db.get("SELECT * FROM players WHERE id = ?", Number(playerId));
   }
 
+  async listPlayersWithSteamID() {
+    return this.db.all(
+      `SELECT id, current_name, steam_id, eos_id, game_seconds, updated_at
+       FROM players
+       WHERE steam_id IS NOT NULL
+         AND TRIM(steam_id) <> ''
+       ORDER BY updated_at DESC`,
+    );
+  }
+
+  async updateGameDuration(playerId, gameSeconds) {
+    const normalizedSeconds = Math.max(0, Math.floor(Number(gameSeconds) || 0));
+    await this.db.run(
+      "UPDATE players SET game_seconds = ?, updated_at = ? WHERE id = ?",
+      normalizedSeconds,
+      now(),
+      Number(playerId),
+    );
+
+    const updated = await this.getPlayerById(playerId);
+    this.cache(updated);
+    return updated;
+  }
+
   async getPlayerDetail(playerId) {
     const id = Number(playerId);
     if (!Number.isFinite(id)) return null;

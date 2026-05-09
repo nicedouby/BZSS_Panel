@@ -138,6 +138,22 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       await upsertOnlinePlayers(serverId);
       return { ok: true };
     },
+
+    async upsertFromPresence(identity = {}) {
+      return repo.upsertFromPresence(identity);
+    },
+
+    async updateGameDuration(playerId, gameSeconds) {
+      return repo.updateGameDuration(playerId, gameSeconds);
+    },
+
+    async listPlayersWithSteamID() {
+      return repo.listPlayersWithSteamID();
+    },
+
+    async getCachedPlayer(identity = {}) {
+      return repo.findCachedPlayer(identity);
+    },
   };
 
   return {
