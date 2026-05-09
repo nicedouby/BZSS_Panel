@@ -176,7 +176,30 @@ async function testMissingServerInfoFieldsDoNotClobberLastGoodValues() {
   assert.equal(harness.webStatusState.playtime, 123);
 }
 
+async function testJsonShowServerInfoUpdatesPlaytime() {
+  const harness = createHarness();
+  harness.responses.ShowServerInfo = JSON.stringify({
+    MaxPlayers: 100,
+    GameMode_s: "RAAS",
+    MapName_s: "Narva_RAAS_v1",
+    ServerName_s: "BZSS Main Server",
+    PLAYTIME_I: "4152",
+    PlayerCount_I: "8",
+  });
+
+  await harness.module.api.refresh("serverInfo");
+  const state = harness.module.api.getState();
+
+  assert.equal(state.serverStatus.map, "Narva_RAAS_v1");
+  assert.equal(state.serverStatus.mode, "RAAS");
+  assert.equal(state.serverStatus.playerCount, 8);
+  assert.equal(state.serverStatus.maxPlayers, 100);
+  assert.equal(state.serverStatus.playtime, 4152);
+  assert.equal(harness.webStatusState.playtime, 4152);
+}
+
 await testAggregatesRconSnapshots();
 await testMissingServerInfoFieldsDoNotClobberLastGoodValues();
+await testJsonShowServerInfoUpdatesPlaytime();
 
 console.log("match state tests passed");

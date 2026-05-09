@@ -62,12 +62,12 @@ export class UdpEventReceiver {
     try {
       rawEvent = JSON.parse(buffer.toString("utf8"));
     } catch {
-      this.logger.warn(`Invalid UDP JSON from ${remoteInfo.address}:${remoteInfo.port}`, {
+      /*this.logger.warn(`Invalid UDP JSON from ${remoteInfo.address}:${remoteInfo.port}`, {
         operation: "handleMessage",
         data: {
           bytes: buffer.length,
         },
-      });
+      });*/
       return;
     }
     

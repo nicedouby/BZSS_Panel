@@ -648,6 +648,11 @@ function extractServerInfoFields(raw) {
   ];
 
   const text = String(raw ?? "");
+  const jsonFields = parseServerInfoJson(text);
+  if (jsonFields) {
+    Object.assign(fields, jsonFields);
+  }
+
   for (const key of knownKeys) {
     const match = text.match(new RegExp(`\\b${escapeRegExp(key)}\\b\\s*[:=]\\s*([^\\r\\n,]+)`, "i"));
     if (match) fields[key] = cleanFieldValue(match[1]);
@@ -660,6 +665,24 @@ function extractServerInfoFields(raw) {
   }
 
   return fields;
+}
+
+function parseServerInfoJson(text) {
+  const trimmed = String(text ?? "").trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return null;
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+
+    const fields = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      fields[key] = cleanFieldValue(value);
+    }
+    return fields;
+  } catch {
+    return null;
+  }
 }
 
 function pickString(fields, keys) {
