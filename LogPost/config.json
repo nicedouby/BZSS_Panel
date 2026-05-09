@@ -32,7 +32,7 @@
     "format": "raw"
   },
   "raw_log_output": {
-    "enabled": false,
+    "enabled": true,
     "source": "Squad.log"
   },
   "blacklist_contains": [

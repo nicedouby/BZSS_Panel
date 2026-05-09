@@ -198,6 +198,24 @@ async function testJsonShowServerInfoUpdatesPlaytime() {
   assert.equal(harness.webStatusState.playtime, 4152);
 }
 
+async function testLayerSuffixDerivesModeWhenGameModeMissing() {
+  const harness = createHarness();
+  harness.responses.ShowServerInfo = JSON.stringify({
+    MaxPlayers: 100,
+    MapName_s: "Narva_RAAS_v1",
+    PLAYTIME_I: "4152",
+    PlayerCount_I: "8",
+    Layer_s: "Narva_RAAS_v1",
+  });
+
+  await harness.module.api.refresh("serverInfo");
+  const state = harness.module.api.getState();
+
+  assert.equal(state.serverStatus.layer, "Narva_RAAS_v1");
+  assert.equal(state.serverStatus.mode, "RAAS");
+  assert.equal(harness.webStatusState.mode, "RAAS");
+}
+
 async function testJsonShowNextMapUpdatesNextLayerWhenServerInfoOmitsIt() {
   const harness = createHarness();
   harness.responses.ShowServerInfo = JSON.stringify({
@@ -222,6 +240,7 @@ async function testJsonShowNextMapUpdatesNextLayerWhenServerInfoOmitsIt() {
 await testAggregatesRconSnapshots();
 await testMissingServerInfoFieldsDoNotClobberLastGoodValues();
 await testJsonShowServerInfoUpdatesPlaytime();
+await testLayerSuffixDerivesModeWhenGameModeMissing();
 await testJsonShowNextMapUpdatesNextLayerWhenServerInfoOmitsIt();
 
 console.log("match state tests passed");

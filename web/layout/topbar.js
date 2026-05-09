@@ -14,6 +14,9 @@ export function renderTopbar({ root, status, auth, onLogout, onNavigate }) {
   const roleText = user?.isSuperAdmin ? "SuperAdmin | has everything" : (user?.role ?? "Guest");
   const currentMap = formatCurrentMap(status);
   const nextMap = displayText(status.nextLayer, "Unknown");
+  const mode = formatMode(status);
+  const tps = formatTps(status);
+  const tpsTone = formatTpsTone(status);
   const players = formatPlayers(status);
   const queue = String(Number(status.queueCount ?? status.playerQueue ?? 0));
   const playtime = formatPlaytime(status.playtime);
@@ -23,6 +26,8 @@ export function renderTopbar({ root, status, auth, onLogout, onNavigate }) {
     <div class="brand">${escapeHtml(status.serverName ?? "BZSS Panel")}</div>
     ${chip("Current", currentMap, "")}
     ${chip("Next", nextMap, "")}
+    ${chip("Mode", mode, mode !== "Unknown" ? "good" : "muted")}
+    ${chip("TPS", tps, tpsTone)}
     ${chip("Players", players, "")}
     ${chip("Queue", queue, Number(queue) > 0 ? "warn" : "")}
     ${chip("Time", playtime, "")}
@@ -113,6 +118,30 @@ function formatCurrentMap(status) {
   return displayText(status?.layer || status?.currentLayer || status?.map, "Unknown");
 }
 
+function formatMode(status) {
+  return displayText(status?.mode || deriveModeFromLayer(status?.layer || status?.currentLayer || status?.map), "Unknown");
+}
+
+function formatTps(status) {
+  const value = Number(status?.tps);
+  return Number.isFinite(value) ? value.toFixed(1) : "--";
+}
+
+function formatTpsTone(status) {
+  switch (String(status?.tpsStatus ?? "unknown")) {
+    case "good":
+      return "good";
+    case "warning":
+      return "warn";
+    case "critical":
+      return "bad";
+    case "stale":
+      return "muted";
+    default:
+      return "muted";
+  }
+}
+
 function formatPlayers(status) {
   const current = Number(status?.playerCount ?? 0);
   const max = Number(status?.maxPlayers);
@@ -137,6 +166,21 @@ function formatPlaytime(value) {
 function displayText(value, fallback) {
   const text = String(value ?? "").trim();
   return text || fallback;
+}
+
+function deriveModeFromLayer(layer) {
+  const text = String(layer ?? "").trim();
+  if (!text) return "";
+
+  const tokens = text.split(/[_\s-]+/).filter(Boolean);
+  if (tokens.length < 2) return "";
+
+  const lastToken = tokens[tokens.length - 1];
+  const modeToken = /^(?:v?\d+|pve|pvp|seed)$/i.test(lastToken) ? tokens[tokens.length - 2] : lastToken;
+  if (!modeToken) return "";
+
+  const mode = String(modeToken).trim();
+  return /^[A-Za-z]+$/.test(mode) ? mode.toUpperCase() : "";
 }
 
 function pad2(value) {

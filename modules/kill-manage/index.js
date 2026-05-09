@@ -1,13 +1,40 @@
 // -*- coding: utf-8 -*-
 
+import fs from "node:fs/promises";
+import path from "node:path";
+
+const DEFAULT_RAW_LOG_FILE = "./data/kill-manage-raw.log";
+
 /**
  * Module: KillManage
  *
  * 击杀/倒地/伤害归并模块。
  */
-export function createKillManageModule({ core, modules }) {
+export function createKillManageModule({ core, modules, config, logger }) {
   const records = [];
   const unsubscribers = [];
+  const moduleLogger = logger ?? core.createLogger?.({
+    moduleId: "module.killManage",
+    source: "module.killManage",
+    channel: "module",
+  }) ?? core.logger;
+  const moduleConfig = config?.get("modules.killManage", {}) ?? {};
+  const rawLogFile = path.resolve(process.cwd(), moduleConfig.rawLogFile ?? DEFAULT_RAW_LOG_FILE);
+  let rawLogWriteChain = Promise.resolve();
+
+  function appendRawLog(rawLog) {
+    const text = String(rawLog ?? "").trim();
+    if (!text) return;
+
+    rawLogWriteChain = rawLogWriteChain
+      .then(async () => {
+        await fs.mkdir(path.dirname(rawLogFile), { recursive: true });
+        await fs.appendFile(rawLogFile, `${text}\n`, "utf8");
+      })
+      .catch((error) => {
+        moduleLogger?.warn?.(`KillManage raw log write failed: ${error.message}`);
+      });
+  }
 
   function handleCombat(event, type) {
     if (!isSubscribed()) return;
@@ -39,6 +66,7 @@ export function createKillManageModule({ core, modules }) {
     };
 
     records.push(record);
+    appendRawLog(record.rawLog);
 
     core.eventBus.emitModuleEvent("module.killManage", "combatResolved", {
       ...event,
@@ -73,6 +101,9 @@ export function createKillManageModule({ core, modules }) {
       unsubscribers.push(core.eventBus.onCoreEvent("On_PlayerDied", (e) => handleCombat(e, "died")));
     },
 
-    async stop() { for (const un of unsubscribers) un(); },
+    async stop() {
+      for (const un of unsubscribers) un();
+      await rawLogWriteChain;
+    },
   };
 }

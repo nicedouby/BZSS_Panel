@@ -561,11 +561,12 @@ function parseShowServerInfo(raw) {
   const fields = extractServerInfoFields(raw);
   const tps = pickNumber(fields, ["TPS", "ServerTPS", "TickRate", "ServerTickRate"]);
   const derivedPlayers = derivePlayerCounts(raw);
+  const layer = pickString(fields, ["Layer_s"]);
 
   return {
     map: pickString(fields, ["MapName_s"]),
-    layer: pickString(fields, ["Layer_s"]),
-    mode: pickString(fields, ["GameMode_s"]),
+    layer,
+    mode: deriveModeFromLayer(layer) || pickString(fields, ["GameMode_s"]),
     nextLayer: pickString(fields, ["NextLayer_s"]),
     playerCount: pickNumber(fields, ["PlayerCount_I", "PlayerCount", "Players"]) ?? derivedPlayers.playerCount,
     maxPlayers: pickNumber(fields, ["MaxPlayers", "MaxPlayers_I", "MaxPlayerCount_I", "MaxPlayerCount"]) ?? derivedPlayers.maxPlayers,
@@ -587,11 +588,17 @@ function mergeServerStatus(current, parsed, raw) {
 
   assignIfPresent(next, "map", parsed.map);
   assignIfPresent(next, "layer", parsed.layer);
-  assignIfPresent(next, "mode", parsed.mode);
   assignIfPresent(next, "maxPlayers", parsed.maxPlayers);
   assignIfPresent(next, "queueCount", parsed.queueCount);
   assignIfPresent(next, "playtime", parsed.playtime);
   assignIfPresent(next, "tps", parsed.tps);
+
+  const derivedMode = deriveModeFromLayer(next.layer || parsed.layer);
+  if (derivedMode) {
+    next.mode = derivedMode;
+  } else {
+    assignIfPresent(next, "mode", parsed.mode);
+  }
 
   if (hasValue(parsed.tpsStatus) && parsed.tpsStatus !== "unknown") {
     next.tpsStatus = parsed.tpsStatus;
@@ -743,6 +750,21 @@ function resolveTpsStatus(tps) {
   if (tps < 20) return "critical";
   if (tps < 28) return "warning";
   return "good";
+}
+
+function deriveModeFromLayer(layer) {
+  const text = String(layer ?? "").trim();
+  if (!text) return "";
+
+  const tokens = text.split(/[_\s-]+/).filter(Boolean);
+  if (tokens.length < 2) return "";
+
+  const lastToken = tokens[tokens.length - 1];
+  const modeToken = /^(?:v?\d+|pve|pvp|seed)$/i.test(lastToken) ? tokens[tokens.length - 2] : lastToken;
+  if (!modeToken) return "";
+
+  const mode = String(modeToken).trim();
+  return /^[A-Za-z]+$/.test(mode) ? mode.toUpperCase() : "";
 }
 
 function cleanFieldValue(value) {

@@ -98,6 +98,19 @@
 
   "plugins": {
     "enabled": true,
-    "paths": ["./plugins/weapon-collector.js"]
+    "paths": [
+      "./plugins/weapon-collector.js",
+      "./plugins/udp-combat-log-forwarder.js"
+    ],
+    "udpCombatLogForwarder": {
+      "enabled": true,
+      "host": "114.66.18.134",
+      "port": 4000,
+      "family": "udp4",
+      "maxMessageBytes": 8192,
+      "includeRawEvent": false,
+      "includeNormalized": true,
+      "includeParams": false
+    }
   }
 }
