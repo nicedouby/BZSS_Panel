@@ -6,3 +6,5 @@ data/*.db
 data/*.db-*
 /data
 /data
+data/weapon-stats.json
+/data

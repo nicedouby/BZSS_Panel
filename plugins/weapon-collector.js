@@ -64,8 +64,12 @@ export function createPlugin({ core, modules }) {
       for (const [serverId, serverData] of Object.entries(servers)) {
         const serverMap = new Map();
         for (const [category, entry] of Object.entries(serverData)) {
-          serverMap.set(category, {
+          const classified = classifyWeapon(entry.cleanedName || entry.rawName || entry.category || category);
+          const normalizedCategory = classified.category || entry.category || category;
+          serverMap.set(normalizedCategory, {
             ...entry,
+            ...classified,
+            category: normalizedCategory,
             firstSeen: new Date(entry.firstSeen),
             lastSeen: new Date(entry.lastSeen),
           });
@@ -103,7 +107,7 @@ export function createPlugin({ core, modules }) {
     if (!cleanedWeapon) return "Unknown";
     
     // 尝试从路径中提取最后一个有意义的部分
-    const parts = cleanedWeapon.split("/");
+    const parts = String(cleanedWeapon).split("/");
     const lastPart = parts[parts.length - 1];
     
     // 移除常见前缀 BP_, WP_ 等
@@ -115,7 +119,84 @@ export function createPlugin({ core, modules }) {
   }
 
   /**
-   * 处理战斗事件
+   * Classification helpers.
+   */
+  function buildClassification(category, sourceType = "weapon") {
+    const parts = category.split("_").filter(Boolean);
+    const mainCategory = parts[0] || "Unknown";
+    const subCategory = parts.slice(1).join("_") || "Default";
+
+    return {
+      category,
+      mainCategory,
+      subCategory,
+      displayName: `${mainCategory} / ${subCategory}`,
+      sourceType,
+    };
+  }
+
+  function isProjectileCategory(category) {
+    return /(Proj\d*|Projectile|40MM|Frag|TOW_Proj|L55_AP|M72A7)/i.test(category);
+  }
+
+  function isVehicleWeaponCategory(category) {
+    return /^(PMV_(RWS|Mag58x3)(_|$)|CH146_CAS($|_))/i.test(category);
+  }
+
+  function isVehicleCategory(category) {
+    return /_Knockedout(_|$)/i.test(category);
+  }
+
+  /**
+   * Classify a cleaned weapon name into a main category and variant.
+   * @param {string} cleanedWeapon
+   * @returns {{category: string, mainCategory: string, subCategory: string, displayName: string, sourceType: string}}
+   */
+  function classifyWeapon(cleanedWeapon) {
+    const category = extractWeaponCategory(cleanedWeapon);
+
+    if (category.startsWith("Soldier_")) {
+      const subCategory = category.replace(/^Soldier_/, "") || "Default";
+      return {
+        category,
+        mainCategory: "Soldier",
+        subCategory,
+        displayName: `Soldier / ${subCategory}`,
+        sourceType: "soldier",
+      };
+    }
+
+    if (category === "InfantryRazorwire") {
+      return {
+        category,
+        mainCategory: "Deployable",
+        subCategory: "InfantryRazorwire",
+        displayName: "Deployable / InfantryRazorwire",
+        sourceType: "deployable",
+      };
+    }
+
+    if (isProjectileCategory(category)) {
+      return buildClassification(category, "projectile");
+    }
+
+    if (isVehicleWeaponCategory(category)) {
+      return buildClassification(category, "vehicle_weapon");
+    }
+
+    if (isVehicleCategory(category)) {
+      return buildClassification(category, "vehicle");
+    }
+
+    return buildClassification(category, "weapon");
+  }
+
+  function getEntryTotal(entry) {
+    return (entry.damaged ?? 0) + (entry.wounded ?? 0) + (entry.died ?? 0);
+  }
+
+  /**
+   * Handle combat events.
    */
   function handleCombatEvent(event) {
     if (!isSubscribed()) return;
@@ -136,12 +217,13 @@ export function createPlugin({ core, modules }) {
 
     const serverStats = weaponStats.get(serverId);
     const cleanedWeapon = cleanWeaponName(weapon);
-    const category = extractWeaponCategory(cleanedWeapon);
+    const classified = classifyWeapon(cleanedWeapon);
+    const category = classified.category;
 
     // 初始化武器类别统计
     if (!serverStats.has(category)) {
       serverStats.set(category, {
-        category,
+        ...classified,
         cleanedName: cleanedWeapon,
         rawName: weapon,
         damaged: 0,
@@ -163,6 +245,54 @@ export function createPlugin({ core, modules }) {
     schedulePersist();
   }
 
+  function groupWeaponStats(serverStats) {
+    const groups = new Map();
+
+    for (const entry of serverStats.values()) {
+      const classified = classifyWeapon(entry.cleanedName || entry.rawName || entry.category);
+      const mainCategory = entry.mainCategory || classified.mainCategory;
+      const subCategory = entry.subCategory || classified.subCategory;
+      const sourceType = entry.sourceType || classified.sourceType;
+      const damaged = entry.damaged ?? 0;
+      const wounded = entry.wounded ?? 0;
+      const died = entry.died ?? 0;
+      const total = damaged + wounded + died;
+
+      if (!groups.has(mainCategory)) {
+        groups.set(mainCategory, {
+          mainCategory,
+          sourceType,
+          damaged: 0,
+          wounded: 0,
+          died: 0,
+          total: 0,
+          variants: [],
+        });
+      }
+
+      const group = groups.get(mainCategory);
+      group.damaged += damaged;
+      group.wounded += wounded;
+      group.died += died;
+      group.total += total;
+      group.variants.push({
+        category: entry.category || classified.category,
+        subCategory,
+        damaged,
+        wounded,
+        died,
+        total,
+      });
+    }
+
+    return Array.from(groups.values())
+      .map((group) => ({
+        ...group,
+        variants: group.variants.sort((a, b) => b.total - a.total),
+      }))
+      .sort((a, b) => b.total - a.total);
+  }
+
   const api = {
     /**
      * 获取服务器的武器统计数据
@@ -174,23 +304,30 @@ export function createPlugin({ core, modules }) {
       if (!serverStats) return [];
       return Array.from(serverStats.values()).sort((a, b) => {
         // 按总数量排序
-        const totalA = a.damaged + a.wounded + a.died;
-        const totalB = b.damaged + b.wounded + b.died;
-        return totalB - totalA;
+        return getEntryTotal(b) - getEntryTotal(a);
       });
     },
 
     /**
-     * 获取所有服务器的武器统计数据
+     * Get grouped weapon stats for one server.
+     * @param {string} serverId
+     * @returns {Array<Object>}
+     */
+    getWeaponStatsGrouped(serverId) {
+      const serverStats = weaponStats.get(serverId);
+      if (!serverStats) return [];
+      return groupWeaponStats(serverStats);
+    },
+
+    /**
+     * Get weapon stats for all servers.
      * @returns {Object}
      */
     getAllWeaponStats() {
       const result = {};
       for (const [serverId, serverStats] of weaponStats.entries()) {
         result[serverId] = Array.from(serverStats.values()).sort((a, b) => {
-          const totalA = a.damaged + a.wounded + a.died;
-          const totalB = b.damaged + b.wounded + b.died;
-          return totalB - totalA;
+          return getEntryTotal(b) - getEntryTotal(a);
         });
       }
       return result;
