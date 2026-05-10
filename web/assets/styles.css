@@ -2092,6 +2092,12 @@ input:focus, select:focus {
   z-index: 5000;
 }
 
+#bzss-clean-combat-record-root,
+#bzss-player-clean-combat-record-root {
+  position: relative;
+  z-index: 5200;
+}
+
 .bzss-player-float-backdrop {
   position: fixed;
   inset: 0;
@@ -2254,6 +2260,66 @@ input:focus, select:focus {
   margin-top: 10px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.bzss-player-combat-panel {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.bzss-player-combat-title {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.bzss-player-combat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.bzss-player-combat-row {
+  width: 100%;
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(15, 23, 42, 0.52);
+  box-shadow: none;
+  text-align: left;
+}
+
+.bzss-player-combat-row.is-friendly {
+  border-color: rgba(251, 113, 133, 0.28);
+  background: rgba(127, 29, 29, 0.26);
+}
+
+.bzss-player-combat-row span {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.bzss-player-combat-row strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bzss-player-combat-row em,
+.bzss-player-combat-empty {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
 }
 
 @media (max-width: 680px) {

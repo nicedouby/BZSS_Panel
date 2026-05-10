@@ -393,11 +393,17 @@ function openPlayerRealtimeWindow(player, { apiFetch, onNavigate, onRefresh } = 
         <div class="bzss-player-float-note" id="player-playtime-status">
           Steam 时长刷新会写入 data/steam_playtime.db，并同步玩家档案的游戏时长。
         </div>
+
+        <section class="bzss-player-combat-panel">
+          <div class="bzss-player-combat-title">Recent clean combat</div>
+          <div id="player-clean-combat-list" class="bzss-player-combat-list">Loading...</div>
+        </section>
       </div>
     </div>
   `;
 
   document.body.appendChild(root);
+  loadPlayerCleanCombatEvents(root, { apiFetch, player }).catch(() => {});
 
   root.querySelectorAll("[data-close-player-window]").forEach((el) => {
     el.addEventListener("click", closePlayerFloatingWindow);
@@ -468,9 +474,163 @@ function openPlayerRealtimeWindow(player, { apiFetch, onNavigate, onRefresh } = 
 
 function closePlayerFloatingWindow() {
   const root = document.querySelector("#bzss-player-floating-root");
+  closePlayerCleanCombatDetailModal();
   if (!root) return;
   if (root.__onKeyDown) window.removeEventListener("keydown", root.__onKeyDown);
   root.remove();
+}
+
+async function loadPlayerCleanCombatEvents(root, { apiFetch, player }) {
+  const list = root.querySelector("#player-clean-combat-list");
+  if (!list) return;
+
+  const params = new URLSearchParams({
+    steam64ID: getPlayerSteamID(player),
+    eosID: String(player.eosID || player.eos || player.EOSID || "").trim(),
+    name: String(player.name || "").trim(),
+    limit: "20",
+  });
+
+  try {
+    const response = await apiFetch(`/api/combat-clean/player-events?${params.toString()}`);
+    const data = await readJsonSafe(response);
+    if (!response.ok) throw new Error(data?.error || `combat clean request failed (${response.status})`);
+    const events = data?.events ?? [];
+    if (!events.length) {
+      list.innerHTML = `<div class="bzss-player-combat-empty">No clean combat records</div>`;
+      return;
+    }
+
+    list.innerHTML = events.map((event, index) => `
+      <button type="button" class="bzss-player-combat-row ${event.relation?.isFriendlyFire ? "is-friendly" : ""}" data-player-clean-combat-index="${index}">
+        <span>${esc(cleanCombatTypeLabel(event.type))}</span>
+        <strong>${esc(event.displayText || "-")}</strong>
+        <em>${esc(formatCleanCombatTime(event.time))}</em>
+      </button>
+    `).join("");
+
+    list.querySelectorAll("[data-player-clean-combat-index]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const event = events[Number(button.dataset.playerCleanCombatIndex)];
+        if (event) openPlayerCleanCombatDetailModal(event);
+      });
+    });
+  } catch (error) {
+    list.innerHTML = `<div class="bzss-player-combat-empty">${esc(error?.message || "Failed to load clean combat")}</div>`;
+  }
+}
+
+function openPlayerCleanCombatDetailModal(event) {
+  closePlayerCleanCombatDetailModal();
+
+  const root = document.createElement("div");
+  root.id = "bzss-player-clean-combat-record-root";
+  root.innerHTML = `
+    <div class="kill-record-backdrop" data-close-player-clean-combat="1"></div>
+    <section class="kill-record-window combat-record-window" role="dialog" aria-modal="true" aria-label="clean combat detail">
+      <header class="kill-record-header">
+        <div>
+          <div class="kill-record-title">Clean Combat</div>
+          <div class="kill-record-subtitle">${esc(event.displayText || event.id || "")}</div>
+        </div>
+        <button class="kill-record-close" type="button" data-close-player-clean-combat="1">x</button>
+      </header>
+
+      <div class="kill-record-body">
+        <div class="kill-record-grid">
+          ${cleanCombatDetailCell("displayText", event.displayText)}
+          ${cleanCombatDetailCell("eventName", event.eventName)}
+          ${cleanCombatDetailCell("type", event.type)}
+          ${cleanCombatDetailCell("attacker", formatCleanCombatPlayerRef(event.attacker))}
+          ${cleanCombatDetailCell("victim", formatCleanCombatPlayerRef(event.victim))}
+          ${cleanCombatDetailCell("weapon", formatCleanCombatWeapon(event.weapon))}
+          ${cleanCombatDetailCell("relation", formatCleanCombatRelation(event.relation))}
+          ${cleanCombatDetailCell("warnings", formatCleanCombatWarnings(event.parse?.warnings))}
+          ${cleanCombatDetailCell("parse", `${event.parse?.status || "-"} / ${event.parse?.confidence || "-"}`)}
+        </div>
+
+        <div class="kill-record-raw-card">
+          <h3>Raw Log</h3>
+          <pre class="kill-record-pre">${esc(event.raw?.rawLog || "No rawLog")}</pre>
+        </div>
+      </div>
+    </section>
+  `;
+
+  document.body.appendChild(root);
+  root.querySelectorAll("[data-close-player-clean-combat]").forEach((el) => {
+    el.addEventListener("click", closePlayerCleanCombatDetailModal);
+  });
+  const onKeyDown = (keyboardEvent) => {
+    if (keyboardEvent.key === "Escape") closePlayerCleanCombatDetailModal();
+  };
+  window.addEventListener("keydown", onKeyDown);
+  root.__onKeyDown = onKeyDown;
+}
+
+function closePlayerCleanCombatDetailModal() {
+  const root = document.querySelector("#bzss-player-clean-combat-record-root");
+  if (!root) return;
+  if (root.__onKeyDown) window.removeEventListener("keydown", root.__onKeyDown);
+  root.remove();
+}
+
+function cleanCombatDetailCell(label, value) {
+  return `<div><span>${esc(label)}</span><strong>${esc(value ?? "-")}</strong></div>`;
+}
+
+function cleanCombatTypeLabel(type) {
+  if (type === "damage") return "伤害";
+  if (type === "wound") return "击倒";
+  if (type === "kill") return "击杀";
+  return type || "-";
+}
+
+function formatCleanCombatPlayerRef(player = {}) {
+  return [
+    player.name || "Unknown",
+    `team=${blankCleanCombatValue(player.teamID)}`,
+    `squad=${blankCleanCombatValue(player.squadID)}`,
+    player.steam64ID ? `steam=${player.steam64ID}` : "",
+    player.eosID ? `eos=${player.eosID}` : "",
+    player.resolved ? `resolved:${player.resolutionSource}` : "unresolved",
+    player.isFallback ? `fallback:${player.fallbackReason}` : "",
+  ].filter(Boolean).join(" / ");
+}
+
+function formatCleanCombatWeapon(weapon = {}) {
+  return [
+    weapon.displayName || weapon.cleaned || weapon.raw || "Unknown",
+    weapon.category ? `category=${weapon.category}` : "",
+    weapon.sourceType ? `source=${weapon.sourceType}` : "",
+    weapon.raw ? `raw=${weapon.raw}` : "",
+  ].filter(Boolean).join(" / ");
+}
+
+function formatCleanCombatRelation(relation = {}) {
+  return [
+    `attackerTeam=${blankCleanCombatValue(relation.attackerTeamID)}`,
+    `victimTeam=${blankCleanCombatValue(relation.victimTeamID)}`,
+    relation.sameTeam ? "sameTeam" : "notSameTeam",
+    relation.isFriendlyFire ? `friendlyFire:${relation.friendlyFireType || "yes"}` : "normal",
+    `confidence=${relation.teamConfidence || "low"}`,
+  ].join(" / ");
+}
+
+function formatCleanCombatWarnings(warnings) {
+  return Array.isArray(warnings) && warnings.length ? warnings.join(" / ") : "-";
+}
+
+function blankCleanCombatValue(value) {
+  return value === "" || value == null ? "?" : String(value);
+}
+
+function formatCleanCombatTime(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? String(value)
+    : date.toLocaleString("zh-CN", { hour12: false });
 }
 
 async function refreshAllPlaytime({ root, api, apiFetch, openDrawer, onNavigate }) {

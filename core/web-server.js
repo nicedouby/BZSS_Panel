@@ -298,6 +298,63 @@ export class WebServer {
       return this.json(res, 200, this.modules.combatState.clear());
     }
 
+    if (url.pathname.startsWith("/api/combat-clean")) {
+      const combatClean = this.modules.combatClean;
+      if (!combatClean) {
+        return this.json(res, 404, {
+          error: "CombatCleanUnavailable",
+          message: "Combat clean module is not loaded.",
+        });
+      }
+      const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
+
+      if (url.pathname === "/api/combat-clean/events" && req.method === "GET") {
+        return this.json(res, 200, {
+          events: combatClean.getEvents({
+            serverId,
+            type: url.searchParams.get("type") ?? "all",
+            search: url.searchParams.get("search") ?? "",
+            limit: url.searchParams.get("limit") ?? "300",
+            offset: url.searchParams.get("offset") ?? "0",
+            playerKey: url.searchParams.get("playerKey") ?? "",
+          }),
+          overview: combatClean.getOverview(serverId),
+        });
+      }
+
+      if (url.pathname === "/api/combat-clean/overview" && req.method === "GET") {
+        return this.json(res, 200, combatClean.getOverview(serverId));
+      }
+
+      const cleanEventMatch = url.pathname.match(/^\/api\/combat-clean\/events\/(.+)$/);
+      if (cleanEventMatch && req.method === "GET") {
+        const record = combatClean.getEventById(decodeURIComponent(cleanEventMatch[1]));
+        if (!record) return this.json(res, 404, { error: "CombatCleanEventNotFound" });
+        return this.json(res, 200, { event: record });
+      }
+
+      if (url.pathname === "/api/combat-clean/player-events" && req.method === "GET") {
+        return this.json(res, 200, {
+          events: combatClean.getPlayerEvents(serverId, {
+            steam64ID: url.searchParams.get("steam64ID") ?? url.searchParams.get("steamID") ?? "",
+            eosID: url.searchParams.get("eosID") ?? "",
+            controllerID: url.searchParams.get("controllerID") ?? "",
+            name: url.searchParams.get("name") ?? "",
+            playerKey: url.searchParams.get("playerKey") ?? "",
+          }, {
+            limit: url.searchParams.get("limit") ?? "20",
+            offset: url.searchParams.get("offset") ?? "0",
+          }),
+          overview: combatClean.getOverview(serverId),
+        });
+      }
+
+      if (url.pathname === "/api/combat-clean/clear" && req.method === "POST") {
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, combatClean.clear(body.serverId ?? serverId));
+      }
+    }
+
     if (url.pathname === "/api/player-database/list") {
       const result = await this.modules.playerDatabase.listPlayers({
         query: url.searchParams.get("q") ?? "",

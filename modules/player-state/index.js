@@ -5,11 +5,9 @@ import { getParam } from "../../core/event-normalizer.js";
 /**
  * Module: PlayerState
  *
- * 玩家实时状态模块。
- *
- * 数据来源：
- * - Python 日志事件：出生/倒地/死亡
- * - RCON_LIST_PLAYERS_UPDATED：ListPlayers 快照
+ * Canonical in-memory player list per server.
+ * Other modules should resolve players through this list instead of rebuilding
+ * ad hoc indexes on their own.
  */
 export function createPlayerStateModule({ core, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
@@ -17,89 +15,161 @@ export function createPlayerStateModule({ core, logger }) {
     source: "module.playerState",
     channel: "module",
   }) ?? core.logger;
-  const playersByName = new Map();
-  const playersByNormalizedName = new Map();
-  const playersBySteamID = new Map();
-  const playersByEOSID = new Map();
-  const playersByControllerID = new Map();
+  const servers = new Map();
   const unsubscribers = [];
 
-  function makeKey(serverId, value) {
-    return `${serverId}:${value}`;
+  function ensureServerState(serverId) {
+    const key = String(serverId ?? "");
+    if (!servers.has(key)) {
+      servers.set(key, {
+        playersByKey: new Map(),
+        byName: new Map(),
+        byNormalizedName: new Map(),
+        bySteamID: new Map(),
+        byEOSID: new Map(),
+        byControllerID: new Map(),
+        updatedAt: "",
+      });
+    }
+    return servers.get(key);
   }
 
   function clearServer(serverId) {
-    for (const [key, p] of [...playersByName.entries()]) {
-      if (p.serverId === serverId) playersByName.delete(key);
-    }
-    for (const [key, p] of [...playersByNormalizedName.entries()]) {
-      if (p.serverId === serverId) playersByNormalizedName.delete(key);
-    }
-    for (const [key, p] of [...playersBySteamID.entries()]) {
-      if (p.serverId === serverId) playersBySteamID.delete(key);
-    }
-    for (const [key, p] of [...playersByEOSID.entries()]) {
-      if (p.serverId === serverId) playersByEOSID.delete(key);
-    }
-    for (const [key, p] of [...playersByControllerID.entries()]) {
-      if (p.serverId === serverId) playersByControllerID.delete(key);
-    }
+    const state = ensureServerState(serverId);
+    state.playersByKey.clear();
+    state.byName.clear();
+    state.byNormalizedName.clear();
+    state.bySteamID.clear();
+    state.byEOSID.clear();
+    state.byControllerID.clear();
+    state.updatedAt = new Date().toISOString();
   }
 
-  function indexPlayer(player) {
+  function indexPlayer(serverState, player) {
+    const playerKey = getCanonicalPlayerKey(player);
     if (player.name) {
-      playersByName.set(makeKey(player.serverId, player.name), player);
+      serverState.byName.set(String(player.name), playerKey);
       const normalizedName = normalizeName(player.name);
-      if (normalizedName) playersByNormalizedName.set(makeKey(player.serverId, normalizedName), player);
+      if (normalizedName) serverState.byNormalizedName.set(normalizedName, playerKey);
     }
-    if (player.steamID) playersBySteamID.set(makeKey(player.serverId, player.steamID), player);
-    if (player.eosID) playersByEOSID.set(makeKey(player.serverId, player.eosID), player);
-    if (player.controllerID) playersByControllerID.set(makeKey(player.serverId, player.controllerID), player);
+    if (player.steamID) serverState.bySteamID.set(String(player.steamID), playerKey);
+    if (player.eosID) serverState.byEOSID.set(String(player.eosID), playerKey);
+    if (player.controllerID) serverState.byControllerID.set(String(player.controllerID), playerKey);
   }
 
-  function upsertByName(serverId, name, patch = {}) {
-    if (!name) return null;
+  function rebuildIndexes(serverState) {
+    serverState.byName.clear();
+    serverState.byNormalizedName.clear();
+    serverState.bySteamID.clear();
+    serverState.byEOSID.clear();
+    serverState.byControllerID.clear();
 
-    const key = makeKey(serverId, name);
-    const old = playersByName.get(key) ?? {
+    for (const player of serverState.playersByKey.values()) {
+      indexPlayer(serverState, player);
+    }
+    serverState.updatedAt = new Date().toISOString();
+  }
+
+  function resolveExistingPlayer(serverState, identity = {}) {
+    const steamID = cleanIdentityValue(identity.steamID ?? identity.steam64ID);
+    const eosID = cleanIdentityValue(identity.eosID);
+    const controllerID = cleanIdentityValue(identity.controllerID);
+    const name = cleanIdentityValue(identity.name);
+    const normalizedName = normalizeName(name);
+
+    const playerKey = (steamID ? serverState.bySteamID.get(steamID) : null)
+      ?? (eosID ? serverState.byEOSID.get(eosID) : null)
+      ?? (controllerID ? serverState.byControllerID.get(controllerID) : null)
+      ?? (name ? serverState.byName.get(name) : null)
+      ?? (normalizedName ? serverState.byNormalizedName.get(normalizedName) : null)
+      ?? null;
+
+    return playerKey ? serverState.playersByKey.get(playerKey) ?? null : null;
+  }
+
+  function upsertPlayer(serverId, identity = {}, patch = {}) {
+    const state = ensureServerState(serverId);
+    const existing = resolveExistingPlayer(state, identity);
+    const base = existing ?? {
       serverId,
-      name,
-      steamID: "",
-      eosID: "",
+      playerID: "",
+      name: cleanIdentityValue(identity.name),
+      steamID: cleanIdentityValue(identity.steamID ?? identity.steam64ID),
+      eosID: cleanIdentityValue(identity.eosID),
+      controllerID: cleanIdentityValue(identity.controllerID),
+      teamID: "",
+      squadID: "",
+      isLeader: false,
+      role: "",
       state: "unknown",
+      raw: "",
       lastSeenTime: "",
     };
 
     const next = {
-      ...old,
+      ...base,
       ...patch,
-      lastSeenTime: new Date().toISOString(),
+      serverId,
+      name: firstNonEmpty(patch.name, identity.name, base.name),
+      steamID: firstNonEmpty(patch.steamID, patch.steam64ID, identity.steamID, identity.steam64ID, base.steamID),
+      eosID: firstNonEmpty(patch.eosID, identity.eosID, base.eosID),
+      controllerID: firstNonEmpty(patch.controllerID, identity.controllerID, base.controllerID),
+      lastSeenTime: patch.lastSeenTime ?? new Date().toISOString(),
     };
 
-    indexPlayer(next);
+    if (existing) {
+      const oldKey = getCanonicalPlayerKey(existing);
+      existing.playerID = next.playerID;
+      existing.name = next.name;
+      existing.steamID = next.steamID;
+      existing.eosID = next.eosID;
+      existing.controllerID = next.controllerID;
+      existing.teamID = next.teamID;
+      existing.squadID = next.squadID;
+      existing.isLeader = Boolean(next.isLeader);
+      existing.role = next.role ?? "";
+      existing.state = next.state ?? existing.state;
+      existing.raw = next.raw ?? existing.raw;
+      existing.lastSeenTime = next.lastSeenTime;
+      existing.lastSpawnTime = next.lastSpawnTime ?? existing.lastSpawnTime;
+      const newKey = getCanonicalPlayerKey(existing);
+      if (oldKey !== newKey) {
+        state.playersByKey.delete(oldKey);
+        state.playersByKey.set(newKey, existing);
+      }
+      rebuildIndexes(state);
+      return existing;
+    }
+
+    state.playersByKey.set(getCanonicalPlayerKey(next), next);
+    rebuildIndexes(state);
     return next;
   }
 
   function replaceFromRcon(serverId, players) {
     clearServer(serverId);
+    const state = ensureServerState(serverId);
 
-    for (const p of players) {
-      indexPlayer({
+    for (const player of players) {
+      const next = {
         serverId,
-        playerID: p.playerID,
-        name: p.name,
-        steamID: p.steamID ?? "",
-        eosID: p.eosID ?? "",
-        teamID: p.teamID,
-        squadID: p.squadID,
-        isLeader: Boolean(p.isLeader),
-        role: p.role ?? "",
+        playerID: player.playerID,
+        name: cleanIdentityValue(player.name),
+        steamID: cleanIdentityValue(player.steamID),
+        eosID: cleanIdentityValue(player.eosID),
+        controllerID: cleanIdentityValue(player.controllerID),
+        teamID: player.teamID ?? "",
+        squadID: player.squadID ?? "",
+        isLeader: Boolean(player.isLeader),
+        role: player.role ?? "",
         state: "online",
         lastSeenTime: new Date().toISOString(),
-        raw: p.raw,
-      });
+        raw: player.raw,
+      };
+      state.playersByKey.set(getCanonicalPlayerKey(next), next);
     }
 
+    rebuildIndexes(state);
     core.webStatus.set("playerCount", players.length);
     logWithFallback(moduleLogger, "debug", () => `Player snapshot refreshed (${players.length})`, {
       operation: "replaceFromRcon",
@@ -117,43 +187,74 @@ export function createPlayerStateModule({ core, logger }) {
       serverId,
       time: new Date().toISOString(),
       params: [],
-      players: api.getOnlinePlayers(serverId),
+      players: api.getPlayerList(serverId),
     });
+  }
+
+  function getServerSnapshot(serverId) {
+    const state = ensureServerState(serverId);
+    const players = [...state.playersByKey.values()].map(clonePlayer);
+    return {
+      serverId: String(serverId ?? ""),
+      updatedAt: state.updatedAt,
+      count: players.length,
+      players,
+      indexes: {
+        byName: Object.fromEntries(state.byName),
+        byNormalizedName: Object.fromEntries(state.byNormalizedName),
+        bySteamID: Object.fromEntries(state.bySteamID),
+        byEOSID: Object.fromEntries(state.byEOSID),
+        byControllerID: Object.fromEntries(state.byControllerID),
+      },
+    };
   }
 
   const api = {
     getPlayerByName(serverId, name) {
-      const rawName = String(name ?? "");
-      const trimmedName = rawName.trim();
-      const normalizedName = normalizeName(name);
-
-      return playersByName.get(makeKey(serverId, rawName))
-        ?? (trimmedName ? playersByName.get(makeKey(serverId, trimmedName)) : null)
-        ?? (normalizedName ? playersByNormalizedName.get(makeKey(serverId, normalizedName)) : null)
-        ?? null;
+      return cloneOrNull(resolveExistingPlayer(ensureServerState(serverId), { name }));
     },
 
     getPlayerBySteamID(serverId, steamID) {
-      return playersBySteamID.get(makeKey(serverId, steamID)) ?? null;
+      return cloneOrNull(resolveExistingPlayer(ensureServerState(serverId), { steamID }));
     },
 
     getPlayerByEOSID(serverId, eosID) {
-      return playersByEOSID.get(makeKey(serverId, eosID)) ?? null;
+      return cloneOrNull(resolveExistingPlayer(ensureServerState(serverId), { eosID }));
     },
 
     getPlayerByControllerID(serverId, controllerID) {
-      return playersByControllerID.get(makeKey(serverId, controllerID)) ?? null;
+      return cloneOrNull(resolveExistingPlayer(ensureServerState(serverId), { controllerID }));
+    },
+
+    findPlayer(serverId, identity = {}) {
+      return cloneOrNull(resolveExistingPlayer(ensureServerState(serverId), identity));
+    },
+
+    getPlayerList(serverId) {
+      return getServerSnapshot(serverId).players;
     },
 
     getOnlinePlayers(serverId) {
-      return [...playersByName.values()].filter((p) => p.serverId === serverId);
+      return getServerSnapshot(serverId).players;
+    },
+
+    getState(serverId) {
+      if (serverId != null && String(serverId).trim() !== "") {
+        return getServerSnapshot(serverId);
+      }
+
+      const byServer = {};
+      for (const key of servers.keys()) {
+        byServer[key] = getServerSnapshot(key);
+      }
+      return { byServer };
     },
 
     replaceFromRcon,
   };
 
   return {
-    manifest: { id: "module.playerState", name: "Player State Module", kind: "module", version: "0.2.0", description: "玩家实时状态维护模块。订阅玩家连接、断开、更换队伍、受伤、死亡等核心事件，在内存中维护每位在线玩家的当前状态快照，包括身份信息、所属队伍/小队、职业、存活状态等。是击杀管理、对局状态、玩家数据库等模块的基础数据源。" },
+    manifest: { id: "module.playerState", name: "Player State Module", kind: "module", version: "0.3.0", description: "Canonical global player list module. Maintains one in-memory player list per server with merged identity indexes, team/squad state, role and presence data for reuse by combat, match and database modules." },
     apiName: "playerState",
     api,
 
@@ -164,7 +265,12 @@ export function createPlayerStateModule({ core, logger }) {
 
       unsubscribers.push(core.eventBus.onCoreEvent("On_PlayerSpawnRequested", (event) => {
         const spawnTeamID = inferTeamIDFromSpawn(getParam(event, "Spawn"));
-        const player = upsertByName(event.serverId, getParam(event, "PlayerName"), {
+        const player = upsertPlayer(event.serverId, {
+          name: getParam(event, "PlayerName"),
+          steam64ID: getParam(event, "Steam64ID"),
+          eosID: getParam(event, "EOSID"),
+          controllerID: getParam(event, "ControllerID"),
+        }, {
           role: getParam(event, "DeployRole"),
           ...(spawnTeamID ? { teamID: spawnTeamID } : {}),
           state: "playing",
@@ -185,38 +291,46 @@ export function createPlayerStateModule({ core, logger }) {
             layer: "module",
             source: "module.playerState",
             eventName: "module.playerState.playerUpdated",
-            player,
+            player: clonePlayer(player),
           });
         }
       }));
 
       unsubscribers.push(core.eventBus.onCoreEvent("On_PlayerWounded", (event) => {
-        upsertByName(event.serverId, getParam(event, "VictimName"), {
-          state: "wounded",
+        upsertPlayer(event.serverId, {
+          name: getParam(event, "VictimName"),
+          steam64ID: getParam(event, "VictimCachedSteam64ID"),
           eosID: getParam(event, "VictimCachedEOSID"),
-          steamID: getParam(event, "VictimCachedSteam64ID"),
+        }, {
+          state: "wounded",
         });
 
-        upsertByName(event.serverId, getParam(event, "AttackerName"), {
-          state: "playing",
+        upsertPlayer(event.serverId, {
+          name: getParam(event, "AttackerName"),
+          steam64ID: getParam(event, "AttackerSteam64ID"),
           eosID: getParam(event, "AttackerEOSID"),
-          steamID: getParam(event, "AttackerSteam64ID"),
           controllerID: getParam(event, "AttackerControllerID"),
+        }, {
+          state: "playing",
         });
       }));
 
       unsubscribers.push(core.eventBus.onCoreEvent("On_PlayerDied", (event) => {
-        upsertByName(event.serverId, getParam(event, "VictimName"), {
-          state: "dead",
+        upsertPlayer(event.serverId, {
+          name: getParam(event, "VictimName"),
+          steam64ID: getParam(event, "VictimCachedSteam64ID"),
           eosID: getParam(event, "VictimCachedEOSID"),
-          steamID: getParam(event, "VictimCachedSteam64ID"),
+        }, {
+          state: "dead",
         });
 
-        upsertByName(event.serverId, getParam(event, "AttackerName"), {
-          state: "playing",
+        upsertPlayer(event.serverId, {
+          name: getParam(event, "AttackerName"),
+          steam64ID: getParam(event, "AttackerSteam64ID"),
           eosID: getParam(event, "AttackerEOSID"),
-          steamID: getParam(event, "AttackerSteam64ID"),
           controllerID: getParam(event, "AttackerControllerID"),
+        }, {
+          state: "playing",
         });
       }));
 
@@ -227,13 +341,45 @@ export function createPlayerStateModule({ core, logger }) {
     },
 
     async stop() {
-      for (const un of unsubscribers) un();
+      for (const unsubscribe of unsubscribers.splice(0)) unsubscribe();
       logWithFallback(moduleLogger, "info", "PlayerState subscriptions stopped.", {
         label: "MODULE",
         operation: "stop",
       });
     },
   };
+}
+
+function clonePlayer(player) {
+  return player ? { ...player } : null;
+}
+
+function cloneOrNull(player) {
+  return player ? clonePlayer(player) : null;
+}
+
+function firstNonEmpty(...values) {
+  for (const value of values) {
+    const cleaned = cleanIdentityValue(value);
+    if (cleaned) return cleaned;
+  }
+  return "";
+}
+
+function getCanonicalPlayerKey(player) {
+  const steamID = cleanIdentityValue(player?.steamID ?? player?.steam64ID);
+  if (steamID) return `steam:${steamID}`;
+  const eosID = cleanIdentityValue(player?.eosID);
+  if (eosID) return `eos:${eosID}`;
+  const controllerID = cleanIdentityValue(player?.controllerID);
+  if (controllerID) return `controller:${controllerID}`;
+  const normalizedName = normalizeName(player?.name);
+  if (normalizedName) return `name:${normalizedName}`;
+  return `anon:${Math.random().toString(16).slice(2)}`;
+}
+
+function cleanIdentityValue(value) {
+  return String(value ?? "").trim();
 }
 
 function logWithFallback(logger, method, message, context) {

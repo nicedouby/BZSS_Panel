@@ -11,6 +11,7 @@ import { createLogClockModule } from "../modules/log-clock/index.js";
 import { createCombatStateModule } from "../modules/combat-state/index.js";
 import { createPlayerDatabaseModule } from "../modules/player-database/index.js";
 import { createKillManageModule } from "../modules/kill-manage/index.js";
+import { createCombatCleanModule } from "../modules/combat-clean/index.js";
 import { createTeamBalanceModule } from "../modules/team-balance/index.js";
 import { createSquadManageModule } from "../modules/squad-manage/index.js";
 import { createWarningModule } from "../modules/warning/index.js";
@@ -48,6 +49,7 @@ export class ModuleManager {
       createCombatStateModule,
       createPlayerDatabaseModule,
       createKillManageModule,
+      createCombatCleanModule,
       createTeamBalanceModule,
       createSquadManageModule,
       createWarningModule,
