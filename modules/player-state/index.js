@@ -18,6 +18,7 @@ export function createPlayerStateModule({ core, logger }) {
     channel: "module",
   }) ?? core.logger;
   const playersByName = new Map();
+  const playersByNormalizedName = new Map();
   const playersBySteamID = new Map();
   const playersByEOSID = new Map();
   const playersByControllerID = new Map();
@@ -31,6 +32,9 @@ export function createPlayerStateModule({ core, logger }) {
     for (const [key, p] of [...playersByName.entries()]) {
       if (p.serverId === serverId) playersByName.delete(key);
     }
+    for (const [key, p] of [...playersByNormalizedName.entries()]) {
+      if (p.serverId === serverId) playersByNormalizedName.delete(key);
+    }
     for (const [key, p] of [...playersBySteamID.entries()]) {
       if (p.serverId === serverId) playersBySteamID.delete(key);
     }
@@ -43,7 +47,11 @@ export function createPlayerStateModule({ core, logger }) {
   }
 
   function indexPlayer(player) {
-    if (player.name) playersByName.set(makeKey(player.serverId, player.name), player);
+    if (player.name) {
+      playersByName.set(makeKey(player.serverId, player.name), player);
+      const normalizedName = normalizeName(player.name);
+      if (normalizedName) playersByNormalizedName.set(makeKey(player.serverId, normalizedName), player);
+    }
     if (player.steamID) playersBySteamID.set(makeKey(player.serverId, player.steamID), player);
     if (player.eosID) playersByEOSID.set(makeKey(player.serverId, player.eosID), player);
     if (player.controllerID) playersByControllerID.set(makeKey(player.serverId, player.controllerID), player);
@@ -115,7 +123,14 @@ export function createPlayerStateModule({ core, logger }) {
 
   const api = {
     getPlayerByName(serverId, name) {
-      return playersByName.get(makeKey(serverId, name)) ?? null;
+      const rawName = String(name ?? "");
+      const trimmedName = rawName.trim();
+      const normalizedName = normalizeName(name);
+
+      return playersByName.get(makeKey(serverId, rawName))
+        ?? (trimmedName ? playersByName.get(makeKey(serverId, trimmedName)) : null)
+        ?? (normalizedName ? playersByNormalizedName.get(makeKey(serverId, normalizedName)) : null)
+        ?? null;
     },
 
     getPlayerBySteamID(serverId, steamID) {
@@ -235,4 +250,8 @@ function logWithFallback(logger, method, message, context) {
 function inferTeamIDFromSpawn(spawn) {
   const match = String(spawn ?? "").match(/\bTeam(\d+)/i);
   return match ? Number(match[1]) : "";
+}
+
+function normalizeName(value) {
+  return String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }

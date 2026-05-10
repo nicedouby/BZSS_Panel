@@ -223,13 +223,48 @@ export function createCombatStateModule({ core, modules, config, logger }) {
 
   function resolvePlayer(serverId, identity = {}) {
     const playerState = modules?.playerState;
-    if (!playerState) return null;
+    const matchState = modules?.matchState;
+    const steamID = String(identity.steamID ?? identity.steam64ID ?? "").trim();
+    const eosID = String(identity.eosID ?? "").trim();
+    const controllerID = String(identity.controllerID ?? "").trim();
+    const name = String(identity.name ?? "").trim();
 
-    return playerState.getPlayerBySteamID?.(serverId, identity.steamID || identity.steam64ID || "")
-      ?? playerState.getPlayerByEOSID?.(serverId, identity.eosID || "")
-      ?? playerState.getPlayerByControllerID?.(serverId, identity.controllerID || "")
-      ?? playerState.getPlayerByName?.(serverId, identity.name || "")
+    const player =
+      playerState?.getPlayerBySteamID?.(serverId, steamID)
+      ?? playerState?.getPlayerByEOSID?.(serverId, eosID)
+      ?? playerState?.getPlayerByControllerID?.(serverId, controllerID)
+      ?? playerState?.getPlayerByName?.(serverId, name)
       ?? null;
+
+    if (player) return player;
+
+    const matchPlayers = matchState?.getState?.()?.players;
+    if (!matchPlayers) return null;
+
+    return matchPlayers.bySteam64ID?.[steamID]
+      ?? matchPlayers.byEOSID?.[eosID]
+      ?? matchPlayers.byControllerID?.[controllerID]
+      ?? matchPlayers.byName?.[name]
+      ?? findPlayerByNormalizedName(matchPlayers.list, serverId, name)
+      ?? null;
+  }
+
+  function findPlayerByNormalizedName(players, serverId, name) {
+    const normalizedName = normalizeName(name);
+    if (!normalizedName) return null;
+
+    const list = Array.isArray(players) ? players : [];
+    for (const player of list) {
+      if (!player) continue;
+      if (player.serverId != null && String(player.serverId) !== String(serverId)) continue;
+      if (normalizeName(player.name) === normalizedName) return player;
+    }
+
+    return null;
+  }
+
+  function normalizeName(value) {
+    return String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
   }
 
   function addTeamKillMetadata(record) {
