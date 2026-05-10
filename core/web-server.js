@@ -4,6 +4,8 @@ import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
 
+const MAX_JSON_BODY_BYTES = 1024 * 1024;
+
 export class WebServer {
   constructor({ config, logger, core, modules }) {
     this.enabled = config.enabled ?? true;
@@ -399,8 +401,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/weapon-collector/stats") {
-      const pluginApi = this.core.pluginManager?.instances
-        ?.find((i) => i.manifest?.id === "plugin.weaponCollector")?.api;
+      const pluginApi = this.getPluginApi("plugin.weaponCollector");
       if (!pluginApi) {
         return this.json(res, 404, { error: "WeaponCollectorNotLoaded" });
       }
@@ -415,12 +416,26 @@ export class WebServer {
         },
         { damaged: 0, wounded: 0, died: 0 },
       );
-      return this.json(res, 200, { serverId, weapons, totals });
+      return this.json(res, 200, {
+        serverId,
+        weapons,
+        totals,
+        weaponTypeMap: pluginApi.getWeaponTypeMap?.() ?? {},
+      });
+    }
+
+    if (url.pathname === "/api/weapon-collector/type-map") {
+      const pluginApi = this.getPluginApi("plugin.weaponCollector");
+      if (!pluginApi) {
+        return this.json(res, 404, { error: "WeaponCollectorNotLoaded" });
+      }
+      return this.json(res, 200, {
+        weaponTypeMap: pluginApi.getWeaponTypeMap?.() ?? {},
+      });
     }
 
     if (url.pathname === "/api/weapon-collector/clear" && req.method === "POST") {
-      const pluginApi = this.core.pluginManager?.instances
-        ?.find((i) => i.manifest?.id === "plugin.weaponCollector")?.api;
+      const pluginApi = this.getPluginApi("plugin.weaponCollector");
       if (!pluginApi) {
         return this.json(res, 404, { error: "WeaponCollectorNotLoaded" });
       }
@@ -434,19 +449,25 @@ export class WebServer {
 
   async readJsonBody(req) {
     const chunks = [];
+    let totalLength = 0;
 
     for await (const chunk of req) {
-      chunks.push(chunk);
-      const total = chunks.reduce((sum, item) => sum + item.length, 0);
-      if (total > 1024 * 1024) {
-        throw new Error("Request body too large.");
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      totalLength += buffer.length;
+      if (totalLength > MAX_JSON_BODY_BYTES) {
+        throw createHttpError(413, "RequestBodyTooLarge", "Request body too large.");
       }
+      chunks.push(buffer);
     }
 
-    const text = Buffer.concat(chunks).toString("utf8").trim();
+    const text = Buffer.concat(chunks, totalLength).toString("utf8").trim();
     if (!text) return {};
 
-    return JSON.parse(text);
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw createHttpError(400, "InvalidJson", "Request body must be valid JSON.");
+    }
   }
 
   async serveStatic(url, res) {
@@ -548,6 +569,11 @@ export class WebServer {
       restarted: Boolean(this.core.pythonLogParserManager?.restart),
     };
   }
+
+  getPluginApi(pluginId) {
+    return this.core.pluginManager?.instances
+      ?.find((instance) => instance.manifest?.id === pluginId)?.api ?? null;
+  }
 }
 
 function contentType(filePath) {
@@ -557,4 +583,11 @@ function contentType(filePath) {
   if (filePath.endsWith(".json")) return "application/json; charset=utf-8";
   if (filePath.endsWith(".svg")) return "image/svg+xml";
   return "application/octet-stream";
+}
+
+function createHttpError(statusCode, code, message) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  error.code = code;
+  return error;
 }

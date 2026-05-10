@@ -3,23 +3,97 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+const DIRECT_WEAPON_TYPE_MAP = new Map([
+  ["Soldiers_WPMC_Crewman_01", "Soldiers_WPMC_Crewman"],
+  ["Soldiers_WPMC_HAT_02", "Soldiers_WPMC_HAT"],
+  ["Soldiers_WPMC_Medic_01", "Soldiers_WPMC_Medic"],
+  ["Soldiers_WPMC_Medic_02", "Soldiers_WPMC_Medic"],
+  ["Soldiers_WPMC_Sapper_01", "Soldiers_WPMC_Sapper"],
+  ["Soldiers_WPMC_SL_01", "Soldiers_WPMC_SL"],
+  ["Soldiers_WPMC_SL_04", "Soldiers_WPMC_SL"],
+  ["T90A_Desert", "T90A"],
+  ["BTR82A_RUS_Desert", "BTR82A_RUS"],
+]);
+
+const TRAILING_ATTACHMENT_TOKENS = new Set([
+  "1P78",
+  "ACOG",
+  "Bipod",
+  "C79A2",
+  "Drum",
+  "ET552",
+  "Foregrip",
+  "Grippod",
+  "Holo",
+  "Ironsights",
+  "M150",
+  "M68",
+  "OKP-7",
+  "Optic",
+  "Scope",
+  "Sight",
+  "Specter",
+  "Suppressor",
+  "SuppressorSD",
+  "VerticalGrip",
+]);
+
+const TRAILING_ENVIRONMENT_TOKENS = new Set([
+  "Arid",
+  "Black",
+  "Blue",
+  "Brown",
+  "Desert",
+  "Forest",
+  "Green",
+  "Red",
+  "Tan",
+  "White",
+  "Winter",
+  "Woodland",
+  "Yellow",
+]);
+
+const TRAILING_STATE_TOKENS = new Set([
+  "Ammocook",
+  "Burn",
+  "Burned",
+  "Burning",
+  "Crash",
+  "Destroy",
+  "Destroyed",
+  "Knockedout",
+  "destroyed",
+  "obliterate",
+]);
+
+const WEAPON_TRAILING_TOKENS = new Set([
+  ...TRAILING_ATTACHMENT_TOKENS,
+  ...TRAILING_ENVIRONMENT_TOKENS,
+]);
+
+const VEHICLE_OR_SOLDIER_TRAILING_TOKENS = new Set([
+  ...TRAILING_ENVIRONMENT_TOKENS,
+  ...TRAILING_STATE_TOKENS,
+]);
+
 /**
  * Plugin: Weapon Collector
  *
- * 收集击杀、击倒、伤害事件中的武器信息。
- * - 去除虚幻引擎类对象标识符 (_Cxxx)
- * - 只保留武器类别
+ * 收集击杀、击倒、伤害事件中的武器信息，并将原始对象名统一映射为可统计的武器类型。
+ * - 自动移除 UE 实例后缀（_Cxxx / _C_<number>）
+ * - 使用显式 Map + 规则归一化，把同类武器并到同一个类别
+ * - 记录 rawCategory -> canonicalCategory 的映射，供后续伤害显示/统计复用
  * - 持久化到单个 JSON 文件
  */
 export function createPlugin({ core, modules }) {
-  const weaponStats = new Map(); // Map<serverId, Map<category, weaponData>>
+  const weaponStats = new Map(); // Map<serverId, Map<canonicalCategory, weaponData>>
+  const weaponTypeMap = new Map(); // Map<rawCategory, canonicalCategory>
+  const classificationCache = new Map(); // Map<rawCategory, classification>
   const unsubscribers = [];
   const dataFile = path.resolve(process.cwd(), "data/weapon-stats.json");
   let persistTimer = null;
 
-  /**
-   * 防抖写入文件
-   */
   function schedulePersist() {
     if (persistTimer) clearTimeout(persistTimer);
     persistTimer = setTimeout(() => {
@@ -30,9 +104,6 @@ export function createPlugin({ core, modules }) {
     }, 2000);
   }
 
-  /**
-   * 将内存状态写入 JSON 文件（原子写入）
-   */
   async function persistState() {
     const data = {};
     for (const [serverId, serverStats] of weaponStats.entries()) {
@@ -40,94 +111,211 @@ export function createPlugin({ core, modules }) {
       for (const [category, entry] of serverStats.entries()) {
         data[serverId][category] = {
           ...entry,
+          aliases: normalizeAliases(entry.aliases, entry.rawCategory, entry.rawName),
           firstSeen: entry.firstSeen instanceof Date ? entry.firstSeen.toISOString() : entry.firstSeen,
           lastSeen: entry.lastSeen instanceof Date ? entry.lastSeen.toISOString() : entry.lastSeen,
         };
       }
     }
 
-    const payload = { updatedAt: new Date().toISOString(), servers: data };
+    const payload = {
+      updatedAt: new Date().toISOString(),
+      servers: data,
+      weaponTypeMap: Object.fromEntries([...weaponTypeMap.entries()].sort((a, b) => a[0].localeCompare(b[0]))),
+    };
+
     await fs.mkdir(path.dirname(dataFile), { recursive: true });
     const tmp = `${dataFile}.${process.pid}.${Date.now()}.tmp`;
     await fs.writeFile(tmp, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
     await fs.rename(tmp, dataFile);
   }
 
-  /**
-   * 从文件加载已有统计
-   */
   async function loadState() {
     try {
       const text = await fs.readFile(dataFile, "utf8");
       const parsed = JSON.parse(text);
       const servers = parsed?.servers ?? {};
+      let migrated = false;
+
+      for (const [rawCategory, canonicalCategory] of Object.entries(parsed?.weaponTypeMap ?? {})) {
+        weaponTypeMap.set(rawCategory, canonicalCategory);
+      }
+
       for (const [serverId, serverData] of Object.entries(servers)) {
         const serverMap = new Map();
         for (const [category, entry] of Object.entries(serverData)) {
-          const classified = classifyWeapon(entry.cleanedName || entry.rawName || entry.category || category);
+          const rawName = entry.rawName || entry.cleanedName || entry.category || category;
+          const cleanedName = cleanWeaponName(entry.cleanedName || rawName || category);
+          const rawCategory = extractWeaponCategory(cleanedName);
+          const classified = classifyWeapon(cleanedName);
           const normalizedCategory = classified.category || entry.category || category;
-          serverMap.set(normalizedCategory, {
+          const aliases = normalizeAliases(
+            entry.aliases,
+            entry.rawCategory,
+            rawCategory,
+            rawName,
+            category,
+            entry.category,
+          );
+
+          for (const alias of aliases) {
+            weaponTypeMap.set(alias, normalizedCategory);
+          }
+
+          const normalizedEntry = {
             ...entry,
             ...classified,
             category: normalizedCategory,
-            firstSeen: new Date(entry.firstSeen),
-            lastSeen: new Date(entry.lastSeen),
-          });
+            cleanedName,
+            rawName,
+            rawCategory,
+            aliases,
+            damaged: entry.damaged ?? 0,
+            wounded: entry.wounded ?? 0,
+            died: entry.died ?? 0,
+            firstSeen: parseStoredDate(entry.firstSeen),
+            lastSeen: parseStoredDate(entry.lastSeen),
+          };
+
+          if (
+            normalizedCategory !== category
+            || cleanedName !== entry.cleanedName
+            || aliases.length !== (entry.aliases?.length ?? 0)
+          ) {
+            migrated = true;
+          }
+
+          if (serverMap.has(normalizedCategory)) {
+            migrated = true;
+            const existing = serverMap.get(normalizedCategory);
+            mergeEntry(existing, normalizedEntry);
+            continue;
+          }
+
+          serverMap.set(normalizedCategory, normalizedEntry);
         }
         weaponStats.set(serverId, serverMap);
       }
+      return migrated;
     } catch (err) {
       if (err.code !== "ENOENT") {
         core.logger.warn(`[WeaponCollector] load state failed: ${err.message}`);
       }
+      return false;
     }
   }
 
-  /**
-   * 清理武器名称，去除 _Cxxx 内容
-   * 例如：BP_Rifle_AR15_C_Cxxx -> BP_Rifle_AR15_C
-   * @param {string} weaponName
-   * @returns {string}
-   */
-  function cleanWeaponName(weaponName) {
-    if (!weaponName) return null;
-    // 移除实例后缀：_C_<数字> → _C，或旧格式 _C<hex> → 去掉
-    return weaponName
-      .replace(/_C_\d+$/, "_C")          // EF88_..._C_2147039011 → EF88_..._C
-      .replace(/_C[0-9A-Fa-f]+$/, "");   // 兜底：BP_..._C1a2b3c → BP_..._
+  function parseStoredDate(value) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? new Date() : date;
   }
 
-  /**
-   * 从武器完整路径中提取武器类别
-   * 例如：/Game/Weapons/Rifle/BP_Rifle_AR15_C -> AR15
-   * @param {string} cleanedWeapon
-   * @returns {string}
-   */
+  function minDate(left, right) {
+    return left <= right ? left : right;
+  }
+
+  function maxDate(left, right) {
+    return left >= right ? left : right;
+  }
+
+  function mergeEntry(target, source) {
+    target.damaged += source.damaged ?? 0;
+    target.wounded += source.wounded ?? 0;
+    target.died += source.died ?? 0;
+    target.aliases = normalizeAliases(target.aliases, source.aliases, source.rawCategory, source.rawName);
+    target.firstSeen = minDate(target.firstSeen, source.firstSeen);
+    target.lastSeen = maxDate(target.lastSeen, source.lastSeen);
+  }
+
+  function cleanWeaponName(weaponName) {
+    if (!weaponName) return null;
+    return String(weaponName)
+      .replace(/_C_\d+$/, "_C")
+      .replace(/_C[0-9A-Fa-f]+$/, "");
+  }
+
+  function normalizeAliases(...values) {
+    return [...new Set(
+      values
+        .flat()
+        .map((value) => extractWeaponCategory(cleanWeaponName(value)))
+        .filter(Boolean),
+    )];
+  }
+
   function extractWeaponCategory(cleanedWeapon) {
     if (!cleanedWeapon) return "Unknown";
-    
-    // 尝试从路径中提取最后一个有意义的部分
+
     const parts = String(cleanedWeapon).split("/");
     const lastPart = parts[parts.length - 1];
-    
-    // 移除常见前缀 BP_, WP_ 等
+
     const category = lastPart
       .replace(/^(BP_|WP_|BPC_|PC_)/, "")
       .replace(/_C$/, "");
-    
+
     return category || "Unknown";
   }
 
-  /**
-   * Classification helpers.
-   */
-  function buildClassification(category, sourceType = "weapon") {
+  function popTrailingTokens(parts, allowedTokens) {
+    while (parts.length > 1) {
+      const last = parts[parts.length - 1];
+      if (/^\d+$/.test(last) || allowedTokens.has(last)) {
+        parts.pop();
+        continue;
+      }
+      break;
+    }
+    return parts;
+  }
+
+  function normalizeVehicleOrSoldierCategory(rawCategory) {
+    const parts = String(rawCategory).split("_").filter(Boolean);
+    return popTrailingTokens(parts, VEHICLE_OR_SOLDIER_TRAILING_TOKENS).join("_") || rawCategory;
+  }
+
+  function normalizeWeaponCategory(rawCategory) {
+    const parts = String(rawCategory).split("_").filter(Boolean);
+    return popTrailingTokens(parts, WEAPON_TRAILING_TOKENS).join("_") || rawCategory;
+  }
+
+  function toCanonicalWeaponCategory(rawCategory) {
+    if (!rawCategory) return "Unknown";
+
+    if (DIRECT_WEAPON_TYPE_MAP.has(rawCategory)) {
+      return DIRECT_WEAPON_TYPE_MAP.get(rawCategory);
+    }
+
+    if (/^(Soldier|Soldiers)_/i.test(rawCategory)) {
+      return normalizeVehicleOrSoldierCategory(rawCategory);
+    }
+
+    if (/^(Projectile|Proj\d*$|40MM$)/i.test(rawCategory) || /Frag$/i.test(rawCategory)) {
+      return normalizeWeaponCategory(rawCategory);
+    }
+
+    if (/_Knockedout(_|$)/i.test(rawCategory)) {
+      return rawCategory.replace(/_Knockedout(_.*)?$/i, "") || rawCategory;
+    }
+
+    if (/(Destroy|Destroyed|destroyed|Crash|Burn|Burned|Burning|Ammocook|obliterate)/.test(rawCategory)) {
+      return normalizeVehicleOrSoldierCategory(rawCategory);
+    }
+
+    if (/_(Desert|Woodland|Arid|Forest|Green|Tan|Winter|Black|Blue|Red|White|Yellow|Brown)(_|$)/.test(rawCategory)) {
+      return normalizeVehicleOrSoldierCategory(rawCategory);
+    }
+
+    return normalizeWeaponCategory(rawCategory);
+  }
+
+  function buildClassification(category, sourceType = "weapon", rawCategory = category) {
     const parts = category.split("_").filter(Boolean);
     const mainCategory = parts[0] || "Unknown";
     const subCategory = parts.slice(1).join("_") || "Default";
 
     return {
       category,
+      rawCategory,
       mainCategory,
       subCategory,
       displayName: `${mainCategory} / ${subCategory}`,
@@ -147,57 +335,86 @@ export function createPlugin({ core, modules }) {
     return /_Knockedout(_|$)/i.test(category);
   }
 
-  /**
-   * Classify a cleaned weapon name into a main category and variant.
-   * @param {string} cleanedWeapon
-   * @returns {{category: string, mainCategory: string, subCategory: string, displayName: string, sourceType: string}}
-   */
   function classifyWeapon(cleanedWeapon) {
-    const category = extractWeaponCategory(cleanedWeapon);
+    const rawCategory = extractWeaponCategory(cleanedWeapon);
+    const cached = classificationCache.get(rawCategory);
+    if (cached) {
+      weaponTypeMap.set(rawCategory, cached.category);
+      return cached;
+    }
 
+    const category = toCanonicalWeaponCategory(rawCategory);
+    weaponTypeMap.set(rawCategory, category);
+
+    let classification;
     if (category.startsWith("Soldier_")) {
       const subCategory = category.replace(/^Soldier_/, "") || "Default";
-      return {
+      classification = {
         category,
+        rawCategory,
         mainCategory: "Soldier",
         subCategory,
         displayName: `Soldier / ${subCategory}`,
         sourceType: "soldier",
       };
+      classificationCache.set(rawCategory, classification);
+      return classification;
+    }
+
+    if (category.startsWith("Soldiers_")) {
+      const subCategory = category.replace(/^Soldiers_/, "") || "Default";
+      classification = {
+        category,
+        rawCategory,
+        mainCategory: "Soldiers",
+        subCategory,
+        displayName: `Soldiers / ${subCategory}`,
+        sourceType: "soldier",
+      };
+      classificationCache.set(rawCategory, classification);
+      return classification;
     }
 
     if (category === "InfantryRazorwire") {
-      return {
+      classification = {
         category,
+        rawCategory,
         mainCategory: "Deployable",
         subCategory: "InfantryRazorwire",
         displayName: "Deployable / InfantryRazorwire",
         sourceType: "deployable",
       };
+      classificationCache.set(rawCategory, classification);
+      return classification;
     }
 
     if (isProjectileCategory(category)) {
-      return buildClassification(category, "projectile");
+      classification = buildClassification(category, "projectile", rawCategory);
+      classificationCache.set(rawCategory, classification);
+      return classification;
     }
 
     if (isVehicleWeaponCategory(category)) {
-      return buildClassification(category, "vehicle_weapon");
+      classification = buildClassification(category, "vehicle_weapon", rawCategory);
+      classificationCache.set(rawCategory, classification);
+      return classification;
     }
 
     if (isVehicleCategory(category)) {
-      return buildClassification(category, "vehicle");
+      classification = buildClassification(category, "vehicle", rawCategory);
+      classificationCache.set(rawCategory, classification);
+      return classification;
     }
 
-    return buildClassification(category, "weapon");
+    classification = buildClassification(category, "weapon", rawCategory);
+    classificationCache.set(rawCategory, classification);
+    return classification;
   }
 
   function getEntryTotal(entry) {
     return (entry.damaged ?? 0) + (entry.wounded ?? 0) + (entry.died ?? 0);
   }
 
-  /**
-   * Handle combat events.
-   */
   function handleCombatEvent(event) {
     if (!isSubscribed()) return;
 
@@ -206,11 +423,10 @@ export function createPlugin({ core, modules }) {
 
     const serverId = record.serverId;
     const weapon = record.weapon;
-    const type = record.type; // "damaged", "wounded", "died"
+    const type = record.type;
 
     if (!weapon) return;
 
-    // 初始化服务器的统计数据
     if (!weaponStats.has(serverId)) {
       weaponStats.set(serverId, new Map());
     }
@@ -219,13 +435,15 @@ export function createPlugin({ core, modules }) {
     const cleanedWeapon = cleanWeaponName(weapon);
     const classified = classifyWeapon(cleanedWeapon);
     const category = classified.category;
+    const rawCategory = classified.rawCategory || extractWeaponCategory(cleanedWeapon);
 
-    // 初始化武器类别统计
     if (!serverStats.has(category)) {
       serverStats.set(category, {
         ...classified,
         cleanedName: cleanedWeapon,
         rawName: weapon,
+        rawCategory,
+        aliases: normalizeAliases(rawCategory, weapon),
         damaged: 0,
         wounded: 0,
         died: 0,
@@ -235,8 +453,8 @@ export function createPlugin({ core, modules }) {
     }
 
     const weaponData = serverStats.get(category);
+    weaponData.aliases = normalizeAliases(weaponData.aliases, rawCategory, weapon);
 
-    // 更新统计数据
     if (type === "damaged") weaponData.damaged++;
     else if (type === "wounded") weaponData.wounded++;
     else if (type === "died") weaponData.died++;
@@ -277,6 +495,7 @@ export function createPlugin({ core, modules }) {
       group.total += total;
       group.variants.push({
         category: entry.category || classified.category,
+        aliases: entry.aliases || [],
         subCategory,
         damaged,
         wounded,
@@ -294,54 +513,36 @@ export function createPlugin({ core, modules }) {
   }
 
   const api = {
-    /**
-     * 获取服务器的武器统计数据
-     * @param {string} serverId
-     * @returns {Array<Object>}
-     */
     getWeaponStats(serverId) {
       const serverStats = weaponStats.get(serverId);
       if (!serverStats) return [];
-      return Array.from(serverStats.values()).sort((a, b) => {
-        // 按总数量排序
-        return getEntryTotal(b) - getEntryTotal(a);
-      });
+      return Array.from(serverStats.values()).sort((a, b) => getEntryTotal(b) - getEntryTotal(a));
     },
 
-    /**
-     * Get grouped weapon stats for one server.
-     * @param {string} serverId
-     * @returns {Array<Object>}
-     */
     getWeaponStatsGrouped(serverId) {
       const serverStats = weaponStats.get(serverId);
       if (!serverStats) return [];
       return groupWeaponStats(serverStats);
     },
 
-    /**
-     * Get weapon stats for all servers.
-     * @returns {Object}
-     */
     getAllWeaponStats() {
       const result = {};
       for (const [serverId, serverStats] of weaponStats.entries()) {
-        result[serverId] = Array.from(serverStats.values()).sort((a, b) => {
-          return getEntryTotal(b) - getEntryTotal(a);
-        });
+        result[serverId] = Array.from(serverStats.values()).sort((a, b) => getEntryTotal(b) - getEntryTotal(a));
       }
       return result;
     },
 
-    /**
-     * 清空特定服务器的统计数据并持久化
-     * @param {string} [serverId]
-     */
+    getWeaponTypeMap() {
+      return Object.fromEntries([...weaponTypeMap.entries()].sort((a, b) => a[0].localeCompare(b[0])));
+    },
+
     async clearWeaponStats(serverId) {
       if (serverId) {
         weaponStats.delete(serverId);
       } else {
         weaponStats.clear();
+        weaponTypeMap.clear();
       }
       await persistState();
     },
@@ -357,16 +558,19 @@ export function createPlugin({ core, modules }) {
       id: "plugin.weaponCollector",
       name: "Weapon Collector Plugin",
       kind: "plugin",
-      version: "0.2.0",
-      description: "武器收集插件。订阅 module.killManage 发出的 combatResolved 事件，从击伤、击倒、击杀记录中提取武器名称，自动去除虚幻引擎类对象后缀（_Cxxx），按武器类别归类统计各类型事件的触发次数，持久化到单个 JSON 文件，供后续武器使用分析和战斗报告使用。",
+      version: "0.3.0",
+      description: "武器收集插件。订阅 module.killManage 发出的 combatResolved 事件，把原始武器对象统一映射为可标记的武器类型，归并伤害/击倒/击杀次数，并持久化到本地 JSON 文件。",
     },
     apiName: "weaponCollector",
     api,
 
     async start() {
-      await loadState();
+      const migrated = await loadState();
+      if (migrated) {
+        await persistState();
+        core.logger.info("[WeaponCollector] Persisted normalized weapon stats state");
+      }
 
-      // 注册 Web 页面
       core.webRegistry?.registerPage({
         id: "web.weaponCollector",
         title: "武器统计",
@@ -374,18 +578,17 @@ export function createPlugin({ core, modules }) {
         route: "/weapon-collector",
         pageModule: "/pages/weapon-collector.js",
         source: "plugin.weaponCollector",
-        description: "武器使用统计页面。展示各武器的伤害、击倒、击杀次数，数据来自 plugin.weaponCollector，持久化到本地文件。",
+        description: "武器使用统计页面。展示统一归类后的武器伤害、击倒、击杀次数。",
         required: false,
         enabled: true,
         order: 500,
-        icon: "🔫",
+        icon: "🎯",
       });
 
-      // 订阅击杀管理模块的战斗事件
       unsubscribers.push(
         core.eventBus.onModuleEvent("module.killManage", "combatResolved", (event) => {
           handleCombatEvent(event);
-        })
+        }),
       );
 
       core.logger.info("[WeaponCollector] Plugin started and listening to combat events");
@@ -401,6 +604,7 @@ export function createPlugin({ core, modules }) {
         unsubscriber();
       }
       weaponStats.clear();
+      weaponTypeMap.clear();
       core.logger.info("[WeaponCollector] Plugin stopped");
     },
   };
