@@ -232,11 +232,9 @@ export function createKillManageModule({ core, modules, config, logger }) {
     },
   };
 
-  // KillManage 依赖实时战斗事件归并结果。
-  // 这里同时检查 combatState 与 killManage，自身或上游任一被暂停时都停止写入新记录。
+  // KillManage only depends on its own subscription state.
   function isSubscribed() {
-    return modules?.pluginSubscriptions?.isSubscribed?.("module.combatState") !== false
-      && modules?.pluginSubscriptions?.isSubscribed?.("module.killManage") !== false;
+    return modules?.pluginSubscriptions?.isSubscribed?.("module.killManage") !== false;
   }
 
   return {

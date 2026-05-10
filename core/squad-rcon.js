@@ -52,6 +52,22 @@ export default class SquadRcon extends Rcon {
       return;
     }
 
+    const matchTeamKill = body.match(/\[ChatAdmin]\s+ASQKillDeathRuleset\s+:\s+Player\s+(?<killerName>.*?)\s+Team Killed Player\s+(?<victimName>.*)/i);
+    if (matchTeamKill) {
+      const killerName = matchTeamKill.groups?.killerName?.trim() || "";
+      const victimName = matchTeamKill.groups?.victimName?.trim() || "";
+      this.emit("TEAM_KILL", {
+        raw: "TEAM_KILL",
+        sourceRaw: body,
+        killerName,
+        victimName,
+        tk1: killerName,
+        tk2: victimName,
+        time,
+      });
+      return;
+    }
+
     const matchChat = body.match(/\[(ChatAll|ChatTeam|ChatSquad|ChatAdmin)] \[Online IDs:([^\]]+)] (.+?) : (.*)/);
     if (matchChat) {
       const result = {
@@ -106,18 +122,6 @@ export default class SquadRcon extends Rcon {
       return;
     }
 
-    const matchTeamKill = body.match(/\[ChatAdmin] ASQKillDeathRuleset : Player (?<killerName>.*?) Team Killed Player (?<victimName>.*)/);
-    if (matchTeamKill) {
-      this.emit("TEAM_KILL", {
-        raw: "TEAM_KILL",
-        sourceRaw: body,
-        killerName: matchTeamKill.groups?.killerName?.trim() || "",
-        victimName: matchTeamKill.groups?.victimName?.trim() || "",
-        tk1: matchTeamKill.groups?.killerName?.trim() || "",
-        tk2: matchTeamKill.groups?.victimName?.trim() || "",
-        time,
-      });
-    }
   }
 
   /**

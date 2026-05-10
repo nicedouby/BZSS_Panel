@@ -69,6 +69,7 @@ export async function renderPage({ root, api, apiFetch }) {
             ${typeButton("damage")}
             ${typeButton("wound")}
             ${typeButton("death")}
+            ${typeButton("friendly")}
             ${typeButton("teamDamage")}
             ${typeButton("teamWound")}
             ${typeButton("teamKill")}

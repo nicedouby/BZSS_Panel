@@ -114,6 +114,15 @@ export function createCombatStateModule({ core, modules, config, logger }) {
       events.splice(0, events.length - maxEvents);
     }
     lastUpdatedAt = record.time || new Date().toISOString();
+    core.eventBus.emitModuleEvent("module.combatState", "updated", {
+      eventName: "module.combatState.updated",
+      layer: "module",
+      source: "module.combatState",
+      serverId: record.serverId,
+      time: record.time,
+      record,
+      stats: buildStats(),
+    });
     return record;
   }
 
