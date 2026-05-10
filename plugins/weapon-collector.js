@@ -112,8 +112,8 @@ export function createPlugin({ core, modules }) {
         data[serverId][category] = {
           ...entry,
           aliases: normalizeAliases(entry.aliases, entry.rawCategory, entry.rawName),
-          firstSeen: entry.firstSeen instanceof Date ? entry.firstSeen.toISOString() : entry.firstSeen,
-          lastSeen: entry.lastSeen instanceof Date ? entry.lastSeen.toISOString() : entry.lastSeen,
+          firstSeen: serializeDate(entry.firstSeen),
+          lastSeen: serializeDate(entry.lastSeen),
         };
       }
     }
@@ -206,8 +206,7 @@ export function createPlugin({ core, modules }) {
   }
 
   function parseStoredDate(value) {
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? new Date() : date;
+    return safeEventDate(value);
   }
 
   function minDate(left, right) {
@@ -230,8 +229,7 @@ export function createPlugin({ core, modules }) {
   function cleanWeaponName(weaponName) {
     if (!weaponName) return null;
     return String(weaponName)
-      .replace(/_C_\d+$/, "_C")
-      .replace(/_C[0-9A-Fa-f]+$/, "");
+      .replace(/_C_(?:\d+|[0-9A-Fa-f]+)$/, "_C");
   }
 
   function normalizeAliases(...values) {
@@ -239,7 +237,7 @@ export function createPlugin({ core, modules }) {
       values
         .flat()
         .map((value) => extractWeaponCategory(cleanWeaponName(value)))
-        .filter(Boolean),
+        .filter((value) => value && value !== "Unknown"),
     )];
   }
 
@@ -323,16 +321,52 @@ export function createPlugin({ core, modules }) {
     };
   }
 
-  function isProjectileCategory(category) {
-    return /(Proj\d*|Projectile|40MM|Frag|TOW_Proj|L55_AP|M72A7)/i.test(category);
+  function safeEventDate(value, fallback = new Date()) {
+    const parsed = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+
+    const fallbackDate = fallback instanceof Date ? new Date(fallback.getTime()) : new Date(fallback);
+    return Number.isNaN(fallbackDate.getTime()) ? new Date() : fallbackDate;
   }
 
-  function isVehicleWeaponCategory(category) {
-    return /^(PMV_(RWS|Mag58x3)(_|$)|CH146_CAS($|_))/i.test(category);
+  function serializeDate(value, fallback = new Date()) {
+    return safeEventDate(value, fallback).toISOString();
   }
 
-  function isVehicleCategory(category) {
-    return /_Knockedout(_|$)/i.test(category);
+  function inferSourceType(rawCategory) {
+    if (!rawCategory) return "weapon";
+
+    if (/^(Soldier|Soldiers)_/i.test(rawCategory)) {
+      return "soldier";
+    }
+
+    if (/^(Projectile|Proj\d*$|40MM$)/i.test(rawCategory) || /Frag$/i.test(rawCategory)) {
+      return "projectile";
+    }
+
+    if (/^(PMV_(RWS|Mag58x3)(_|$)|CH146_CAS($|_))/i.test(rawCategory)) {
+      return "vehicle_weapon";
+    }
+
+    if (DIRECT_WEAPON_TYPE_MAP.has(rawCategory)) {
+      return "vehicle";
+    }
+
+    if (/_Knockedout(_|$)/i.test(rawCategory)) {
+      return "vehicle";
+    }
+
+    if (/(Destroy|Destroyed|destroyed|Crash|Burn|Burned|Burning|Ammocook|obliterate)/.test(rawCategory)) {
+      return "vehicle";
+    }
+
+    if (/_(Desert|Woodland|Arid|Forest|Green|Tan|Winter|Black|Blue|Red|White|Yellow|Brown)(_|$)/.test(rawCategory)) {
+      return "vehicle";
+    }
+
+    return "weapon";
   }
 
   function classifyWeapon(cleanedWeapon) {
@@ -344,6 +378,7 @@ export function createPlugin({ core, modules }) {
     }
 
     const category = toCanonicalWeaponCategory(rawCategory);
+    const sourceType = inferSourceType(rawCategory);
     weaponTypeMap.set(rawCategory, category);
 
     let classification;
@@ -388,25 +423,7 @@ export function createPlugin({ core, modules }) {
       return classification;
     }
 
-    if (isProjectileCategory(category)) {
-      classification = buildClassification(category, "projectile", rawCategory);
-      classificationCache.set(rawCategory, classification);
-      return classification;
-    }
-
-    if (isVehicleWeaponCategory(category)) {
-      classification = buildClassification(category, "vehicle_weapon", rawCategory);
-      classificationCache.set(rawCategory, classification);
-      return classification;
-    }
-
-    if (isVehicleCategory(category)) {
-      classification = buildClassification(category, "vehicle", rawCategory);
-      classificationCache.set(rawCategory, classification);
-      return classification;
-    }
-
-    classification = buildClassification(category, "weapon", rawCategory);
+    classification = buildClassification(category, sourceType, rawCategory);
     classificationCache.set(rawCategory, classification);
     return classification;
   }
@@ -436,6 +453,7 @@ export function createPlugin({ core, modules }) {
     const classified = classifyWeapon(cleanedWeapon);
     const category = classified.category;
     const rawCategory = classified.rawCategory || extractWeaponCategory(cleanedWeapon);
+    const eventDate = safeEventDate(record.time);
 
     if (!serverStats.has(category)) {
       serverStats.set(category, {
@@ -447,8 +465,8 @@ export function createPlugin({ core, modules }) {
         damaged: 0,
         wounded: 0,
         died: 0,
-        firstSeen: new Date(record.time),
-        lastSeen: new Date(record.time),
+        firstSeen: eventDate,
+        lastSeen: eventDate,
       });
     }
 
@@ -459,7 +477,7 @@ export function createPlugin({ core, modules }) {
     else if (type === "wounded") weaponData.wounded++;
     else if (type === "died") weaponData.died++;
 
-    weaponData.lastSeen = new Date(record.time);
+    weaponData.lastSeen = eventDate;
     schedulePersist();
   }
 

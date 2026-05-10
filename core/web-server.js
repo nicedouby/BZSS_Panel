@@ -400,7 +400,7 @@ export class WebServer {
       });
     }
 
-    if (url.pathname === "/api/weapon-collector/stats") {
+    if (url.pathname === "/api/weapon-collector/stats" && req.method === "GET") {
       const pluginApi = this.getPluginApi("plugin.weaponCollector");
       if (!pluginApi) {
         return this.json(res, 404, { error: "WeaponCollectorNotLoaded" });
@@ -424,7 +424,7 @@ export class WebServer {
       });
     }
 
-    if (url.pathname === "/api/weapon-collector/type-map") {
+    if (url.pathname === "/api/weapon-collector/type-map" && req.method === "GET") {
       const pluginApi = this.getPluginApi("plugin.weaponCollector");
       if (!pluginApi) {
         return this.json(res, 404, { error: "WeaponCollectorNotLoaded" });

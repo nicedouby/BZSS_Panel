@@ -25,6 +25,27 @@ function createServer(overrides = {}) {
   });
 }
 
+function createRecorder() {
+  const state = {
+    status: null,
+    headers: null,
+    body: null,
+  };
+
+  return {
+    state,
+    res: {
+      writeHead(status, headers) {
+        state.status = status;
+        state.headers = headers;
+      },
+      end(body) {
+        state.body = Buffer.isBuffer(body) ? body.toString("utf8") : String(body ?? "");
+      },
+    },
+  };
+}
+
 async function testReadJsonBodyParsesValidPayload() {
   const server = createServer();
   const body = await server.readJsonBody(Readable.from(['{"name":"BZSS","count":2}']));
@@ -83,9 +104,87 @@ async function testGetPluginApiReturnsMatchingPluginApi() {
   assert.equal(server.getPluginApi("plugin.missing"), null);
 }
 
+async function testWeaponCollectorApiRequiresGet() {
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return {
+            username: "admin",
+            role: "admin",
+            permissions: ["plugins.manage"],
+          };
+        },
+        hasEverything() {
+          return true;
+        },
+      },
+      webStatus: {
+        serverId: "BZSS_Main",
+      },
+      pluginManager: {
+        instances: [
+          {
+            manifest: { id: "plugin.weaponCollector" },
+            api: {
+              getWeaponStats() {
+                return [{ damaged: 1, wounded: 2, died: 3 }];
+              },
+              getWeaponTypeMap() {
+                return { C7A2: "C7A2" };
+              },
+            },
+          },
+        ],
+      },
+    },
+  });
+
+  const statsGet = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/weapon-collector/stats?serverId=BZSS_Main",
+    headers: { host: "localhost" },
+    socket: {},
+  }, statsGet.res);
+  assert.equal(statsGet.state.status, 200);
+  assert.equal(JSON.parse(statsGet.state.body).totals.damaged, 1);
+
+  const statsPost = createRecorder();
+  await server.handleRequest({
+    method: "POST",
+    url: "/api/weapon-collector/stats?serverId=BZSS_Main",
+    headers: { host: "localhost" },
+    socket: {},
+  }, statsPost.res);
+  assert.equal(statsPost.state.status, 404);
+  assert.equal(JSON.parse(statsPost.state.body).error, "ApiNotFound");
+
+  const typeMapGet = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/weapon-collector/type-map",
+    headers: { host: "localhost" },
+    socket: {},
+  }, typeMapGet.res);
+  assert.equal(typeMapGet.state.status, 200);
+  assert.equal(JSON.parse(typeMapGet.state.body).weaponTypeMap.C7A2, "C7A2");
+
+  const typeMapPost = createRecorder();
+  await server.handleRequest({
+    method: "POST",
+    url: "/api/weapon-collector/type-map",
+    headers: { host: "localhost" },
+    socket: {},
+  }, typeMapPost.res);
+  assert.equal(typeMapPost.state.status, 404);
+  assert.equal(JSON.parse(typeMapPost.state.body).error, "ApiNotFound");
+}
+
 await testReadJsonBodyParsesValidPayload();
 await testReadJsonBodyRejectsInvalidJson();
 await testReadJsonBodyRejectsOversizedPayload();
 await testGetPluginApiReturnsMatchingPluginApi();
+await testWeaponCollectorApiRequiresGet();
 
 console.log("web server tests passed");
