@@ -18,17 +18,38 @@ export class UdpEventReceiver {
     this.webStatus = webStatus;
     this.eventPipeline = eventPipeline;
     this.socket = dgram.createSocket("udp4");
+    this.isStarting = false;
 
     this.socket.on("message", (buffer, remoteInfo) => this.handleMessage(buffer, remoteInfo));
-    this.socket.on("error", (error) => this.logger.error(`UDP socket error: ${error.stack ?? error}`, {
-      operation: "socketError",
-    }));
+    this.socket.on("error", (error) => {
+      if (this.isStarting) return;
+
+      this.webStatus.set("udpReceiver", "error");
+      this.logger.error(`UDP socket error: ${error.stack ?? error}`, {
+        operation: "socketError",
+      });
+    });
   }
 
   async start() {
+    this.isStarting = true;
+
     await new Promise((resolve, reject) => {
-      this.socket.once("listening", resolve);
-      this.socket.once("error", reject);
+      const onListening = () => {
+        this.socket.off("error", onError);
+        this.isStarting = false;
+        resolve();
+      };
+
+      const onError = (error) => {
+        this.socket.off("listening", onListening);
+        this.isStarting = false;
+        this.webStatus.set("udpReceiver", "error");
+        reject(wrapUdpStartupError(error, this.host, this.port));
+      };
+
+      this.socket.once("listening", onListening);
+      this.socket.once("error", onError);
       this.socket.bind(this.port, this.host);
     });
 
@@ -95,4 +116,21 @@ export class UdpEventReceiver {
 
     this.eventBus.emitCoreEvent(event.eventName, event);
   }
+}
+
+function wrapUdpStartupError(error, host, port) {
+  if (!error || typeof error !== "object") {
+    return new Error(`Failed to start UDP receiver on ${host}:${port}`);
+  }
+
+  if (error.code === "EADDRINUSE") {
+    const wrapped = new Error(
+      `UDP ${host}:${port} is already in use. Another BZSS Panel instance or log parser is likely already running. Stop the existing process or change udp.port in config.json before starting again.`,
+    );
+    wrapped.code = error.code;
+    wrapped.cause = error;
+    return wrapped;
+  }
+
+  return error;
 }

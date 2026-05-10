@@ -86,22 +86,46 @@ async function navigateTo(route) {
 
   pageScroll.innerHTML = `<div class="card">Loading ${escapeHtml(page.title)}...</div>`;
 
-  const mod = await import(page.pageModule);
-  const cleanup = await mod.renderPage({
-    root: pageScroll,
-    api,
-    apiFetch,
-    openDrawer,
-    openModal,
-    onNavigate: navigateTo,
-    page,
-    routeInfo,
-  });
+  try {
+    const mod = await import(page.pageModule);
+    const cleanup = await mod.renderPage({
+      root: pageScroll,
+      api,
+      apiFetch,
+      openDrawer,
+      openModal,
+      onNavigate: navigateTo,
+      page,
+      routeInfo,
+    });
 
-  if (typeof cleanup === "function") {
-    state.currentPageCleanup = cleanup;
-  } else if (typeof pageScroll.__pageCleanup === "function") {
-    state.currentPageCleanup = pageScroll.__pageCleanup;
+    if (typeof cleanup === "function") {
+      state.currentPageCleanup = cleanup;
+    } else if (typeof pageScroll.__pageCleanup === "function") {
+      state.currentPageCleanup = pageScroll.__pageCleanup;
+    }
+  } catch (error) {
+    console.error(`Failed to render page ${page.route}`, error);
+    pageScroll.innerHTML = `
+      <section class="page">
+        <div class="card">
+          <div class="page-title">页面加载失败</div>
+          <div class="page-subtitle">${escapeHtml(page.title)} 无法完成渲染。</div>
+          <p style="margin-top:12px; color: var(--muted);">${escapeHtml(error?.message || "Unknown error")}</p>
+          <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
+            <button id="page-retry" type="button">重试</button>
+            <button id="page-go-console" type="button">打开控制台</button>
+          </div>
+        </div>
+      </section>
+    `;
+
+    pageScroll.querySelector("#page-retry")?.addEventListener("click", () => {
+      navigateTo(routeInfo.full).catch(() => {});
+    });
+    pageScroll.querySelector("#page-go-console")?.addEventListener("click", () => {
+      navigateTo("/console").catch(() => {});
+    });
   }
 }
 

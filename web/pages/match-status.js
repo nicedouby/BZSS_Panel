@@ -7,7 +7,17 @@ export async function renderPage({ root, api, apiFetch, openDrawer, onNavigate }
   }
 
   const scrollTop = root.scrollTop;
-  const data = await api("/api/match/overview");
+  let data;
+  try {
+    data = await fetchMatchOverview(apiFetch);
+  } catch (error) {
+    root.innerHTML = renderMatchStatusError(error);
+    root.querySelector("#match-status-retry")?.addEventListener("click", () => {
+      renderPage({ root, api, apiFetch, openDrawer, onNavigate }).catch(() => {});
+    });
+    return root.__pageCleanup;
+  }
+
   const status = data.status ?? {};
   const players = data.players ?? [];
   const squads = data.squads ?? [];
@@ -80,6 +90,43 @@ export async function renderPage({ root, api, apiFetch, openDrawer, onNavigate }
   }, 3000);
 
   return root.__pageCleanup;
+}
+
+async function fetchMatchOverview(apiFetch, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await apiFetch("/api/match/overview", {
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`对局状态请求失败 (${response.status})`);
+    }
+    return await response.json();
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error(`对局状态加载超时（>${timeoutMs}ms）`);
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+function renderMatchStatusError(error) {
+  return `
+    <section class="page">
+      <div class="card">
+        <div class="page-title">对局状态暂时不可用</div>
+        <div class="page-subtitle">页面没有卡住，当前是该页数据加载失败。</div>
+        <p style="margin-top:12px; color: var(--muted);">${esc(error?.message || "未知错误")}</p>
+        <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
+          <button id="match-status-retry" type="button">重新加载</button>
+        </div>
+      </div>
+    </section>
+  `;
 }
 
 function buildTeams({ players, squads }) {
