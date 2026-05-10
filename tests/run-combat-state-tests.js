@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 
 import { createCombatStateModule, normalizeParams } from "../modules/combat-state/index.js";
 
-function createHarness({ maxEvents = 5000 } = {}) {
+function createHarness({ maxEvents = 5000, playerState = null } = {}) {
   const listeners = new Map();
+  const moduleListeners = new Map();
   const moduleEvents = [];
   const core = {
     webStatus: { serverId: "BZSS_Main" },
@@ -13,6 +14,12 @@ function createHarness({ maxEvents = 5000 } = {}) {
         if (!listeners.has(eventName)) listeners.set(eventName, new Set());
         listeners.get(eventName).add(handler);
         return () => listeners.get(eventName)?.delete(handler);
+      },
+      onModuleEvent(moduleId, eventName, handler) {
+        const key = `${moduleId}:${eventName}`;
+        if (!moduleListeners.has(key)) moduleListeners.set(key, new Set());
+        moduleListeners.get(key).add(handler);
+        return () => moduleListeners.get(key)?.delete(handler);
       },
       emitModuleEvent(moduleId, eventName, event) {
         moduleEvents.push({ moduleId, eventName, event });
@@ -25,13 +32,16 @@ function createHarness({ maxEvents = 5000 } = {}) {
       return defaultValue;
     },
   };
-  const module = createCombatStateModule({ core, config });
+  const module = createCombatStateModule({ core, modules: playerState ? { playerState } : {}, config });
 
   return {
     module,
     moduleEvents,
     emit(eventName, event) {
       for (const handler of listeners.get(eventName) ?? []) handler({ eventName, ...event });
+    },
+    emitModule(moduleId, eventName, event) {
+      for (const handler of moduleListeners.get(`${moduleId}:${eventName}`) ?? []) handler(event);
     },
   };
 }
@@ -122,6 +132,125 @@ async function testMaxEventsAndClear() {
   assert.equal(harness.module.api.getState().count, 0);
 }
 
+async function testSameTeamEventIsMarkedTeamKill() {
+  const playerState = {
+    getPlayerByName(serverId, name) {
+      if (serverId !== "BZSS_Main") return null;
+      if (name === "Attacker") return { name, teamID: 2 };
+      if (name === "Victim") return { name, teamID: 2 };
+      return null;
+    },
+  };
+  const harness = createHarness({ playerState });
+  await harness.module.start();
+
+  harness.emit("On_PlayerDied", makeEvent("On_PlayerDied", [
+    ["VictimName", "Victim"],
+    ["KillingDamage", "100"],
+    ["AttackerName", "Attacker"],
+    ["CausedBy", "BP_Rifle_C"],
+  ]));
+
+  const events = harness.module.api.getEvents({ type: "tk" });
+  const overview = harness.module.api.getOverview();
+  assert.equal(events.length, 1);
+  assert.equal(events[0].isTeamKill, true);
+  assert.equal(events[0].attackerTeamID, 2);
+  assert.equal(events[0].victimTeamID, 2);
+  assert.equal(overview.stats.teamKill, 1);
+}
+
+async function testSameTeamDamageIsFriendlyDamageNotTeamKill() {
+  const playerState = {
+    getPlayerByName(serverId, name) {
+      if (serverId !== "BZSS_Main") return null;
+      if (name === "Attacker") return { name, teamID: 2 };
+      if (name === "Victim") return { name, teamID: 2 };
+      return null;
+    },
+  };
+  const harness = createHarness({ playerState });
+  await harness.module.start();
+
+  harness.emit("On_PlayerDamaged", makeEvent("On_PlayerDamaged", [
+    ["VictimName", "Victim"],
+    ["ActualDamage", "25"],
+    ["AttackerName", "Attacker"],
+    ["CausedBy", "BP_Rifle_C"],
+  ]));
+
+  const events = harness.module.api.getEvents({ type: "teamDamage" });
+  const overview = harness.module.api.getOverview();
+  assert.equal(events.length, 1);
+  assert.equal(events[0].isFriendlyFire, true);
+  assert.equal(events[0].isTeamKill, false);
+  assert.equal(events[0].friendlyFireType, "team_damage");
+  assert.equal(events[0].friendlyFireLabel, "友军伤害");
+  assert.equal(overview.stats.teamDamage, 1);
+  assert.equal(overview.stats.teamKill, 0);
+}
+
+async function testSameTeamWoundIsTkDownNotTeamKill() {
+  const playerState = {
+    getPlayerByName(serverId, name) {
+      if (serverId !== "BZSS_Main") return null;
+      if (name === "Attacker") return { name, teamID: 2 };
+      if (name === "Victim") return { name, teamID: 2 };
+      return null;
+    },
+  };
+  const harness = createHarness({ playerState });
+  await harness.module.start();
+
+  harness.emit("On_PlayerWounded", makeEvent("On_PlayerWounded", [
+    ["VictimName", "Victim"],
+    ["KillingDamage", "80"],
+    ["AttackerName", "Attacker"],
+    ["CausedBy", "BP_Rifle_C"],
+  ]));
+
+  const events = harness.module.api.getEvents({ type: "teamWound" });
+  const overview = harness.module.api.getOverview();
+  assert.equal(events.length, 1);
+  assert.equal(events[0].isFriendlyFire, true);
+  assert.equal(events[0].isTeamKill, false);
+  assert.equal(events[0].isTeamKillDown, true);
+  assert.equal(events[0].friendlyFireType, "team_wound");
+  assert.equal(events[0].friendlyFireLabel, "TK击倒");
+  assert.ok(events[0].tags.includes("tk_down"));
+  assert.equal(overview.stats.teamWound, 1);
+  assert.equal(overview.stats.teamKill, 0);
+}
+
+async function testRconTkFromKillManageIsVisible() {
+  const harness = createHarness();
+  await harness.module.start();
+
+  harness.emitModule("module.killManage", "teamKillResolved", {
+    eventId: "module-tk-1",
+    eventName: "module.killManage.teamKillResolved",
+    serverId: "BZSS_Main",
+    time: "2026-05-08T11:01:00.000Z",
+    record: {
+      sourceEventId: "rcon:TEAM_KILL:1",
+      type: "tk",
+      serverId: "BZSS_Main",
+      time: "2026-05-08T11:01:00.000Z",
+      attackerName: "Donald·DoubyBear",
+      victimName: "Braovo",
+      causedBy: "RCON_TEAM_KILL",
+      rawLog: "[ChatAdmin] ASQKillDeathRuleset : Player Donald·DoubyBear Team Killed Player Braovo",
+      isTeamKill: true,
+    },
+  });
+
+  const events = harness.module.api.getEvents({ type: "tk" });
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, "tk");
+  assert.equal(events[0].isTeamKill, true);
+  assert.equal(events[0].attackerName, "Donald·DoubyBear");
+}
+
 function testNormalizeParamsCompatibility() {
   const params = normalizeParams({
     params: [["VictimName", "ArrayVictim"]],
@@ -140,6 +269,10 @@ function testNormalizeParamsCompatibility() {
 await testNormalizesDamageEventAndSearches();
 await testKeepsNullptrInvalidDeathEvent();
 await testMaxEventsAndClear();
+await testSameTeamEventIsMarkedTeamKill();
+await testSameTeamDamageIsFriendlyDamageNotTeamKill();
+await testSameTeamWoundIsTkDownNotTeamKill();
+await testRconTkFromKillManageIsVisible();
 testNormalizeParamsCompatibility();
 
 console.log("combat state tests passed");

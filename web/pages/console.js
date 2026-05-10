@@ -157,6 +157,9 @@ export async function renderPage({ root, api, apiFetch }) {
   function renderLine(line) {
     const div = document.createElement("div");
     div.className = `log-line console-line level-${safeClass(line.level)} channel-${safeClass(line.channel)} stream-${safeClass(line.stream)}`;
+    if (line.isTeamKill || line.tk || line.isFriendlyFire || (Array.isArray(line.tags) && (line.tags.includes("tk") || line.tags.includes("friendly_fire")))) {
+      div.classList.add("is-tk");
+    }
 
     div.innerHTML = `
       <span class="log-seq">#${esc(line.seq)}</span>

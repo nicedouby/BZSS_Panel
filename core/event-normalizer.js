@@ -118,6 +118,8 @@ function normalizeCombatPayload(event) {
     attackerSteam64ID: getParam(event, "AttackerSteam64ID"),
     victimCachedEOSID: getParam(event, "VictimCachedEOSID"),
     victimCachedSteam64ID: getParam(event, "VictimCachedSteam64ID"),
+    attackerTeamID: getParam(event, "AttackerTeamID") || getParam(event, "AttackerTeamId") || getParam(event, "AttackerTeam"),
+    victimTeamID: getParam(event, "VictimTeamID") || getParam(event, "VictimTeamId") || getParam(event, "VictimTeam"),
     fromObject: getParam(event, "FromObject"),
     damage: getParam(event, "ActualDamage") || getParam(event, "KillingDamage"),
     rawCausedBy: causedBy,

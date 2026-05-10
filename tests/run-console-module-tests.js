@@ -145,6 +145,25 @@ async function testNativeViewReceivesRconLogs() {
   assert.match(lines[0].message, /Alice/);
 }
 
+async function testNativeTeamKillLineIsMarked() {
+  const harness = createHarness();
+  await harness.module.start();
+
+  harness.emitNativeLog({
+    level: "push",
+    message: "[ChatAdmin] ASQKillDeathRuleset : Player Donald·DoubyBear Team Killed Player Braovo",
+    time: "2026-05-08T10:00:01.000Z",
+    kind: "push",
+    isTeamKill: true,
+    tags: ["tk"],
+  });
+
+  const lines = harness.module.api.getLines({ stream: "rcon-native" });
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].isTeamKill, true);
+  assert.deepEqual(lines[0].tags, ["tk"]);
+}
+
 async function testFailedManualCommandIsWrittenToNativeView() {
   const harness = createHarness();
   await harness.module.start();
@@ -165,6 +184,7 @@ async function testFailedManualCommandIsWrittenToNativeView() {
 await testModuleStreamReceivesLoggerEntries();
 await testRawLogStreamReceivesLogPostRawEvents();
 await testNativeViewReceivesRconLogs();
+await testNativeTeamKillLineIsMarked();
 await testFailedManualCommandIsWrittenToNativeView();
 
 console.log("console module tests passed");

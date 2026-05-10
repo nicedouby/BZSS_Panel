@@ -67,6 +67,269 @@ async function testWritesOnlyRawLogLines() {
   await fs.rm(tempDir, { recursive: true, force: true });
 }
 
+async function testRconTeamKillEmitsTkRecord() {
+  const listeners = new Map();
+  const moduleEvents = [];
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-kill-manage-"));
+  const rawLogFile = path.join(tempDir, "rcon-tk.log");
+  const core = {
+    logger: { warn() {}, module() {}, info() {}, debug() {} },
+    eventBus: {
+      onCoreEvent(eventName, handler) {
+        if (!listeners.has(eventName)) listeners.set(eventName, new Set());
+        listeners.get(eventName).add(handler);
+        return () => listeners.get(eventName)?.delete(handler);
+      },
+      emitModuleEvent(moduleId, eventName, event) {
+        moduleEvents.push({ moduleId, eventName, event });
+      },
+    },
+  };
+  const config = {
+    get(pathText, defaultValue) {
+      if (pathText === "modules.killManage") return { enabled: true, rawLogFile };
+      return defaultValue;
+    },
+  };
+  const module = createKillManageModule({ core, modules: {}, config });
+  await module.start();
+
+  for (const handler of listeners.get("TEAM_KILL") ?? []) {
+    handler({
+      eventId: "rcon:TEAM_KILL:1",
+      eventName: "TEAM_KILL",
+      serverId: "BZSS_Main",
+      time: "2026-05-09T10:01:00.000Z",
+      payload: {
+        sourceRaw: "[ChatAdmin] ASQKillDeathRuleset : Player Donald·DoubyBear Team Killed Player Braovo",
+        killerName: "Donald·DoubyBear",
+        victimName: "Braovo",
+      },
+    });
+  }
+
+  await module.stop();
+
+  const combatEvent = moduleEvents.find((item) => item.eventName === "combatResolved");
+  const tkEvent = moduleEvents.find((item) => item.eventName === "teamKillResolved");
+  assert.ok(combatEvent, "combatResolved should be emitted for RCON TK");
+  assert.ok(tkEvent, "teamKillResolved should be emitted for RCON TK");
+  assert.equal(combatEvent.event.record.type, "tk");
+  assert.equal(combatEvent.event.record.isTeamKill, true);
+  assert.equal(combatEvent.event.record.teamKillReason, "rcon_team_kill");
+  assert.equal(combatEvent.event.record.attackerName, "Donald·DoubyBear");
+  assert.equal(combatEvent.event.record.victimName, "Braovo");
+
+  await fs.rm(tempDir, { recursive: true, force: true });
+}
+
+async function testSameTeamCombatRecordIsMarkedTk() {
+  const listeners = new Map();
+  const moduleEvents = [];
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-kill-manage-"));
+  const rawLogFile = path.join(tempDir, "same-team.log");
+  const core = {
+    logger: { warn() {}, module() {}, info() {}, debug() {} },
+    eventBus: {
+      onCoreEvent(eventName, handler) {
+        if (!listeners.has(eventName)) listeners.set(eventName, new Set());
+        listeners.get(eventName).add(handler);
+        return () => listeners.get(eventName)?.delete(handler);
+      },
+      emitModuleEvent(moduleId, eventName, event) {
+        moduleEvents.push({ moduleId, eventName, event });
+      },
+    },
+  };
+  const playerState = {
+    getPlayerByName(serverId, name) {
+      if (serverId !== "BZSS_Main") return null;
+      if (name === "Attacker") return { name, teamID: 1 };
+      if (name === "Victim") return { name, teamID: 1 };
+      return null;
+    },
+  };
+  const config = {
+    get(pathText, defaultValue) {
+      if (pathText === "modules.killManage") return { enabled: true, rawLogFile };
+      return defaultValue;
+    },
+  };
+  const module = createKillManageModule({ core, modules: { playerState }, config });
+  await module.start();
+
+  for (const handler of listeners.get("On_PlayerDied") ?? []) {
+    handler({
+      eventId: "combat:tk",
+      eventName: "On_PlayerDied",
+      serverId: "BZSS_Main",
+      time: "2026-05-09T10:02:00.000Z",
+      rawLog: "raw tk death",
+      normalized: {
+        combat: {
+          type: "died",
+          victimName: "Victim",
+          attackerName: "Attacker",
+          damage: 100,
+          weapon: "BP_Rifle_C",
+        },
+      },
+    });
+  }
+
+  await module.stop();
+
+  const combatEvent = moduleEvents.find((item) => item.eventName === "combatResolved");
+  assert.equal(combatEvent.event.record.type, "died");
+  assert.equal(combatEvent.event.record.isTeamKill, true);
+  assert.equal(combatEvent.event.record.attackerTeamID, 1);
+  assert.equal(combatEvent.event.record.victimTeamID, 1);
+  assert.ok(combatEvent.event.record.tags.includes("tk"));
+  assert.ok(moduleEvents.some((item) => item.eventName === "teamKillResolved"));
+
+  await fs.rm(tempDir, { recursive: true, force: true });
+}
+
+async function testSameTeamDamageIsFriendlyDamageNotTk() {
+  const listeners = new Map();
+  const moduleEvents = [];
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-kill-manage-"));
+  const rawLogFile = path.join(tempDir, "same-team-damage.log");
+  const core = {
+    logger: { warn() {}, module() {}, info() {}, debug() {} },
+    eventBus: {
+      onCoreEvent(eventName, handler) {
+        if (!listeners.has(eventName)) listeners.set(eventName, new Set());
+        listeners.get(eventName).add(handler);
+        return () => listeners.get(eventName)?.delete(handler);
+      },
+      emitModuleEvent(moduleId, eventName, event) {
+        moduleEvents.push({ moduleId, eventName, event });
+      },
+    },
+  };
+  const playerState = {
+    getPlayerByName(serverId, name) {
+      if (serverId !== "BZSS_Main") return null;
+      if (name === "Attacker") return { name, teamID: 1 };
+      if (name === "Victim") return { name, teamID: 1 };
+      return null;
+    },
+  };
+  const config = {
+    get(pathText, defaultValue) {
+      if (pathText === "modules.killManage") return { enabled: true, rawLogFile };
+      return defaultValue;
+    },
+  };
+  const module = createKillManageModule({ core, modules: { playerState }, config });
+  await module.start();
+
+  for (const handler of listeners.get("On_PlayerDamaged") ?? []) {
+    handler({
+      eventId: "combat:friendly-damage",
+      eventName: "On_PlayerDamaged",
+      serverId: "BZSS_Main",
+      time: "2026-05-09T10:03:00.000Z",
+      rawLog: "raw friendly damage",
+      normalized: {
+        combat: {
+          type: "damaged",
+          victimName: "Victim",
+          attackerName: "Attacker",
+          damage: 25,
+          weapon: "BP_Rifle_C",
+        },
+      },
+    });
+  }
+
+  await module.stop();
+
+  const combatEvent = moduleEvents.find((item) => item.eventName === "combatResolved");
+  assert.equal(combatEvent.event.record.isFriendlyFire, true);
+  assert.equal(combatEvent.event.record.isTeamKill, false);
+  assert.equal(combatEvent.event.record.friendlyFireType, "team_damage");
+  assert.equal(combatEvent.event.record.friendlyFireLabel, "友军伤害");
+  assert.ok(moduleEvents.some((item) => item.eventName === "friendlyFireResolved"));
+  assert.ok(!moduleEvents.some((item) => item.eventName === "teamKillResolved"));
+
+  await fs.rm(tempDir, { recursive: true, force: true });
+}
+
+async function testSameTeamWoundIsTkDownNotTkKill() {
+  const listeners = new Map();
+  const moduleEvents = [];
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-kill-manage-"));
+  const rawLogFile = path.join(tempDir, "same-team-wound.log");
+  const core = {
+    logger: { warn() {}, module() {}, info() {}, debug() {} },
+    eventBus: {
+      onCoreEvent(eventName, handler) {
+        if (!listeners.has(eventName)) listeners.set(eventName, new Set());
+        listeners.get(eventName).add(handler);
+        return () => listeners.get(eventName)?.delete(handler);
+      },
+      emitModuleEvent(moduleId, eventName, event) {
+        moduleEvents.push({ moduleId, eventName, event });
+      },
+    },
+  };
+  const playerState = {
+    getPlayerByName(serverId, name) {
+      if (serverId !== "BZSS_Main") return null;
+      if (name === "Attacker") return { name, teamID: 1 };
+      if (name === "Victim") return { name, teamID: 1 };
+      return null;
+    },
+  };
+  const config = {
+    get(pathText, defaultValue) {
+      if (pathText === "modules.killManage") return { enabled: true, rawLogFile };
+      return defaultValue;
+    },
+  };
+  const module = createKillManageModule({ core, modules: { playerState }, config });
+  await module.start();
+
+  for (const handler of listeners.get("On_PlayerWounded") ?? []) {
+    handler({
+      eventId: "combat:tk-down",
+      eventName: "On_PlayerWounded",
+      serverId: "BZSS_Main",
+      time: "2026-05-09T10:04:00.000Z",
+      rawLog: "raw tk down",
+      normalized: {
+        combat: {
+          type: "wounded",
+          victimName: "Victim",
+          attackerName: "Attacker",
+          damage: 80,
+          weapon: "BP_Rifle_C",
+        },
+      },
+    });
+  }
+
+  await module.stop();
+
+  const combatEvent = moduleEvents.find((item) => item.eventName === "combatResolved");
+  assert.equal(combatEvent.event.record.isFriendlyFire, true);
+  assert.equal(combatEvent.event.record.isTeamKill, false);
+  assert.equal(combatEvent.event.record.isTeamKillDown, true);
+  assert.equal(combatEvent.event.record.friendlyFireType, "team_wound");
+  assert.equal(combatEvent.event.record.friendlyFireLabel, "TK击倒");
+  assert.ok(combatEvent.event.record.tags.includes("tk_down"));
+  assert.ok(moduleEvents.some((item) => item.eventName === "friendlyFireResolved"));
+  assert.ok(!moduleEvents.some((item) => item.eventName === "teamKillResolved"));
+
+  await fs.rm(tempDir, { recursive: true, force: true });
+}
+
 await testWritesOnlyRawLogLines();
+await testRconTeamKillEmitsTkRecord();
+await testSameTeamCombatRecordIsMarkedTk();
+await testSameTeamDamageIsFriendlyDamageNotTk();
+await testSameTeamWoundIsTkDownNotTkKill();
 
 console.log("kill manage tests passed");

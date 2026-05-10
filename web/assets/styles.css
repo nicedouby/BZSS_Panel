@@ -1200,7 +1200,7 @@ body::before {
 
 .combat-stat-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -1270,6 +1270,32 @@ body::before {
   border-color: rgba(248, 113, 113, 0.38);
   background: rgba(248, 113, 113, 0.14);
   color: #fecaca;
+}
+
+.combat-type-badge.tk {
+  border-color: rgba(251, 113, 133, 0.52);
+  background: rgba(127, 29, 29, 0.38);
+  color: #fecdd3;
+  box-shadow: 0 0 0 1px rgba(251, 113, 133, 0.12);
+}
+
+.combat-row-tk {
+  background: linear-gradient(90deg, rgba(127, 29, 29, 0.28), rgba(127, 29, 29, 0.08));
+}
+
+.combat-row-tk td {
+  border-color: rgba(251, 113, 133, 0.18);
+}
+
+.console-line.is-tk {
+  background: linear-gradient(90deg, rgba(127, 29, 29, 0.36), rgba(127, 29, 29, 0.08));
+  border: 1px solid rgba(251, 113, 133, 0.22);
+}
+
+.console-line.is-tk .log-channel,
+.console-line.is-tk .log-level,
+.console-line.is-tk .log-message {
+  color: #fecdd3;
 }
 
 .combat-time-cell,

@@ -5,12 +5,21 @@ const TYPE_LABELS = {
   damage: "伤害",
   wound: "击倒",
   death: "死亡/击杀",
+  friendly: "友军事件",
+  teamDamage: "友军伤害",
+  teamWound: "TK击倒",
+  teamKill: "友军击杀",
+  tk: "友军击杀",
 };
 
 const TYPE_CLASSES = {
   damage: "damage",
   wound: "wound",
   death: "death",
+  team_damage: "tk",
+  team_wound: "tk",
+  team_kill: "tk",
+  tk: "tk",
 };
 
 let searchTimer = null;
@@ -27,7 +36,7 @@ export async function renderPage({ root, api, apiFetch }) {
     limit: 500,
     events: [],
     overview: {
-      stats: { total: 0, damage: 0, wound: 0, death: 0 },
+      stats: { total: 0, damage: 0, wound: 0, death: 0, teamDamage: 0, teamWound: 0, teamKill: 0 },
       lastUpdatedAt: "",
     },
   };
@@ -47,6 +56,9 @@ export async function renderPage({ root, api, apiFetch }) {
         ${statCard("伤害", "combat-damage")}
         ${statCard("击倒", "combat-wound")}
         ${statCard("死亡/击杀", "combat-death")}
+        ${statCard("友军伤害", "combat-team-damage")}
+        ${statCard("TK击倒", "combat-team-wound")}
+        ${statCard("友军击杀", "combat-team-kill")}
         ${statCard("最近更新时间", "combat-updated")}
       </section>
 
@@ -57,6 +69,9 @@ export async function renderPage({ root, api, apiFetch }) {
             ${typeButton("damage")}
             ${typeButton("wound")}
             ${typeButton("death")}
+            ${typeButton("teamDamage")}
+            ${typeButton("teamWound")}
+            ${typeButton("teamKill")}
           </div>
           <input id="combat-search" class="console-search kill-search" placeholder="搜索玩家名、Steam64、EOS、武器/来源">
           <button id="combat-refresh" type="button">刷新</button>
@@ -96,6 +111,9 @@ export async function renderPage({ root, api, apiFetch }) {
     damage: root.querySelector("#combat-damage"),
     wound: root.querySelector("#combat-wound"),
     death: root.querySelector("#combat-death"),
+    teamDamage: root.querySelector("#combat-team-damage"),
+    teamWound: root.querySelector("#combat-team-wound"),
+    teamKill: root.querySelector("#combat-team-kill"),
     updated: root.querySelector("#combat-updated"),
   };
 
@@ -194,6 +212,9 @@ function renderStats(els, overview) {
   els.damage.textContent = fmtNumber(stats.damage ?? 0);
   els.wound.textContent = fmtNumber(stats.wound ?? 0);
   els.death.textContent = fmtNumber(stats.death ?? 0);
+  els.teamDamage.textContent = fmtNumber(stats.teamDamage ?? 0);
+  els.teamWound.textContent = fmtNumber(stats.teamWound ?? 0);
+  els.teamKill.textContent = fmtNumber(stats.teamKill ?? 0);
   els.updated.textContent = formatTime(overview?.lastUpdatedAt);
 }
 
@@ -204,11 +225,11 @@ function renderTable(tbody, events) {
   }
 
   tbody.innerHTML = events.map((event, index) => `
-    <tr class="combat-row combat-row-${TYPE_CLASSES[event.type] || "unknown"}">
+    <tr class="combat-row combat-row-${TYPE_CLASSES[event.type] || "unknown"} ${event.isFriendlyFire || event.isTeamKill || event.tk ? "combat-row-tk" : ""}">
       <td class="combat-time-cell">${esc(formatTime(event.time))}</td>
-      <td><span class="combat-type-badge ${TYPE_CLASSES[event.type] || ""}">${esc(TYPE_LABELS[event.type] || event.type || "-")}</span></td>
-      <td>${playerCell(event.attackerName, "未知攻击者", event.attackerSteam64ID, event.attackerEOSID, event.attackerControllerID)}</td>
-      <td>${playerCell(event.victimName, "未知受害者", event.victimSteam64ID, event.victimEOSID)}</td>
+      <td><span class="combat-type-badge ${event.isFriendlyFire || event.isTeamKill || event.tk ? "tk" : (TYPE_CLASSES[event.type] || "")}">${esc(getEventTypeLabel(event))}</span></td>
+      <td>${playerCell(event.attackerName, "未知攻击者", event.attackerSteam64ID, event.attackerEOSID, event.attackerControllerID, event.attackerTeamID)}</td>
+      <td>${playerCell(event.victimName, "未知受害者", event.victimSteam64ID, event.victimEOSID, "", event.victimTeamID)}</td>
       <td class="combat-damage-cell">${event.damage == null ? "-" : esc(trimNumber(event.damage))}</td>
       <td>${esc(event.weapon || event.causedBy || "未知来源")}</td>
       <td>${confidenceCell(event)}</td>
@@ -225,8 +246,10 @@ function renderTable(tbody, events) {
   });
 }
 
-function playerCell(name, fallback, steam64, eos, controllerID = "") {
+function playerCell(name, fallback, steam64, eos, controllerID = "", teamID = "") {
   const title = name || fallback;
+  const normalizedTeam = teamID === "" || teamID == null ? "?" : String(teamID);
+  const teamSuffix = `（team${normalizedTeam}）`;
   const ids = [
     steam64 ? `Steam ${steam64}` : "",
     eos ? `EOS ${eos}` : "",
@@ -234,7 +257,7 @@ function playerCell(name, fallback, steam64, eos, controllerID = "") {
   ].filter(Boolean).join(" / ");
   return `
     <div class="combat-player-cell">
-      <strong>${esc(title)}</strong>
+      <strong>${esc(`${title}${teamSuffix}`)}</strong>
       ${ids ? `<span>${esc(ids)}</span>` : ""}
     </div>
   `;
@@ -249,6 +272,22 @@ function confidenceCell(event) {
   return esc(parts.join(" / ") || "-");
 }
 
+function getEventTypeLabel(event) {
+  if (event.friendlyFireLabel) return event.friendlyFireLabel;
+  if (event.isTeamKill || event.tk) return "友军击杀";
+  if (event.isFriendlyFire) {
+    if (event.type === "damage" || event.type === "damaged") return "友军伤害";
+    if (event.type === "wound" || event.type === "wounded") return "TK击倒";
+    return "友军击杀";
+  }
+  return TYPE_LABELS[event.type] || event.type || "-";
+}
+
+function formatPlayerWithTeam(name, teamID) {
+  const normalizedTeam = teamID === "" || teamID == null ? "?" : String(teamID);
+  return `${String(name ?? "").trim() || "-"}（team${normalizedTeam}）`;
+}
+
 function openCombatEventWindow(event) {
   closeCombatEventWindow();
 
@@ -260,7 +299,7 @@ function openCombatEventWindow(event) {
       <header class="kill-record-header">
         <div>
           <div class="kill-record-title">战斗事件详情</div>
-          <div class="kill-record-subtitle">${esc(TYPE_LABELS[event.type] || event.type)} | ${esc(event.attackerName || "未知攻击者")} -> ${esc(event.victimName || "未知受害者")}</div>
+          <div class="kill-record-subtitle">${esc(TYPE_LABELS[event.type] || event.type)} | ${esc(formatPlayerWithTeam(event.attackerName || "未知攻击者", event.attackerTeamID))} -> ${esc(formatPlayerWithTeam(event.victimName || "未知受害者", event.victimTeamID))}</div>
         </div>
         <button class="kill-record-close" type="button" data-close-combat-window="1">x</button>
       </header>
@@ -269,9 +308,12 @@ function openCombatEventWindow(event) {
         <div class="kill-record-grid">
           ${detailCell("事件", event.eventName)}
           ${detailCell("时间", formatTime(event.time))}
-          ${detailCell("类型", TYPE_LABELS[event.type] || event.type)}
-          ${detailCell("攻击者", event.attackerName || "未知攻击者")}
-          ${detailCell("受害者", event.victimName || "未知受害者")}
+          ${detailCell("类型", getEventTypeLabel(event))}
+          ${detailCell("友军事件", event.isFriendlyFire || event.isTeamKill || event.tk ? "是" : "否")}
+          ${detailCell("攻击者队伍", event.attackerTeamID || "-")}
+          ${detailCell("受害者队伍", event.victimTeamID || "-")}
+          ${detailCell("攻击者", formatPlayerWithTeam(event.attackerName || "未知攻击者", event.attackerTeamID))}
+          ${detailCell("受害者", formatPlayerWithTeam(event.victimName || "未知受害者", event.victimTeamID))}
           ${detailCell("伤害值", event.damage == null ? "-" : trimNumber(event.damage))}
           ${detailCell("CausedBy", event.causedBy || "未知来源")}
           ${detailCell("FromObject", event.fromObject || "-")}

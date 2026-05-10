@@ -148,8 +148,10 @@ export function createPlayerStateModule({ core, logger }) {
       }));
 
       unsubscribers.push(core.eventBus.onCoreEvent("On_PlayerSpawnRequested", (event) => {
+        const spawnTeamID = inferTeamIDFromSpawn(getParam(event, "Spawn"));
         const player = upsertByName(event.serverId, getParam(event, "PlayerName"), {
           role: getParam(event, "DeployRole"),
+          ...(spawnTeamID ? { teamID: spawnTeamID } : {}),
           state: "playing",
           lastSpawnTime: new Date().toISOString(),
         });
@@ -228,4 +230,9 @@ function logWithFallback(logger, method, message, context) {
 
   const rendered = typeof message === "function" ? message() : message;
   logger?.module?.(rendered);
+}
+
+function inferTeamIDFromSpawn(spawn) {
+  const match = String(spawn ?? "").match(/\bTeam(\d+)/i);
+  return match ? Number(match[1]) : "";
 }

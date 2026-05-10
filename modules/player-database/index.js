@@ -22,6 +22,14 @@ function eventIdentity(event, prefix) {
   };
 }
 
+function recordIdentity(record, prefix) {
+  return {
+    name: record?.[`${prefix}Name`] || null,
+    steamID: record?.[`${prefix}Steam64ID`] || record?.[`${prefix}SteamID`] || null,
+    eosID: record?.[`${prefix}EOSID`] || null,
+  };
+}
+
 /**
  * Module: PlayerDatabase
  *
@@ -71,6 +79,23 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       matchedPlayerName: victimIdentity.name || attackerIdentity.name,
       payload: event,
     });
+  }
+
+  async function recordFriendlyFireStats(event) {
+    const record = event?.record;
+    if (!record?.isFriendlyFire) return;
+
+    const attackerIdentity = recordIdentity(record, "attacker");
+    const attacker = attackerIdentity.name || attackerIdentity.steamID || attackerIdentity.eosID
+      ? await repo.upsertFromPresence(attackerIdentity)
+      : null;
+    if (!attacker?.id) return;
+
+    if (record.friendlyFireType === "team_wound" || record.isTeamKillDown || record.tkDown) {
+      await repo.incrementFields(attacker.id, { total_tk_down: 1 });
+    } else if (record.friendlyFireType === "team_kill" || record.isTeamKill || record.tk) {
+      await repo.incrementFields(attacker.id, { total_tk_kill: 1 });
+    }
   }
 
   const api = {
@@ -190,6 +215,9 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
 
       unsubscribers.push(core.eventBus.onCoreEvent("On_PlayerWounded", (event) => recordCombat(event, "wounded")));
       unsubscribers.push(core.eventBus.onCoreEvent("On_PlayerDied", (event) => recordCombat(event, "died")));
+      if (core.eventBus.onModuleEvent) {
+        unsubscribers.push(core.eventBus.onModuleEvent("module.killManage", "combatResolved", recordFriendlyFireStats));
+      }
 
       unsubscribers.push(core.eventBus.onCoreEvent("*", async (event) => {
         if (!event?.eventName || event.eventName === "On_PlayerWounded" || event.eventName === "On_PlayerDied") return;

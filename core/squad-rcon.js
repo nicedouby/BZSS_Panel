@@ -27,10 +27,14 @@ export default class SquadRcon extends Rcon {
     const time = nowString();
     const body = packet.body;
 
+    const nativeIsTeamKill = isTeamKillMessage(body);
+
     this.emit("RCON_NATIVE_PUSH", {
       kind: "push",
       body,
       time,
+      isTeamKill: nativeIsTeamKill,
+      tags: nativeIsTeamKill ? ["tk"] : [],
     });
 
     const lifecycleType = detectLifecycleType(body);
@@ -106,6 +110,7 @@ export default class SquadRcon extends Rcon {
     if (matchTeamKill) {
       this.emit("TEAM_KILL", {
         raw: "TEAM_KILL",
+        sourceRaw: body,
         killerName: matchTeamKill.groups?.killerName?.trim() || "",
         victimName: matchTeamKill.groups?.victimName?.trim() || "",
         tk1: matchTeamKill.groups?.killerName?.trim() || "",
@@ -333,4 +338,8 @@ function containsAnyMarker(text, markers) {
     if (text.includes(marker)) return true;
   }
   return false;
+}
+
+function isTeamKillMessage(value) {
+  return /\[ChatAdmin]\s+ASQKillDeathRuleset\s+:\s+Player\s+.*?\s+Team Killed Player\s+/i.test(String(value ?? ""));
 }

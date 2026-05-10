@@ -6,7 +6,7 @@ const COMBAT_TYPES = {
   On_PlayerDied: "death",
 };
 
-const VALID_FILTER_TYPES = new Set(["damage", "wound", "death"]);
+const VALID_FILTER_TYPES = new Set(["damage", "wound", "death", "friendly", "teamDamage", "teamWound", "teamKill", "tk"]);
 
 /**
  * Module: CombatState
@@ -34,7 +34,7 @@ export function createCombatStateModule({ core, modules, config, logger }) {
     if (!type) return null;
 
     const params = normalizeParams(event);
-    const record = normalizeCombatEvent({ event, params, type });
+    const record = addTeamKillMetadata(normalizeCombatEvent({ event, params, type }));
 
     events.push(record);
     if (events.length > maxEvents) {
@@ -65,9 +65,61 @@ export function createCombatStateModule({ core, modules, config, logger }) {
     return record;
   }
 
+  function ingestKillManageTeamKill(event) {
+    if (!isSubscribed()) return null;
+    const sourceRecord = event?.record;
+    if (!sourceRecord?.isTeamKill) return null;
+    if (sourceRecord.type !== "tk" && event?.eventName !== "TEAM_KILL") return null;
+
+    const record = {
+      id: String(sourceRecord.sourceEventId || event?.eventId || `tk:${Date.now()}:${Math.random().toString(16).slice(2)}`),
+      type: "tk",
+      eventName: String(event?.eventName ?? "module.killManage.teamKillResolved"),
+      time: String(sourceRecord.time ?? event?.time ?? new Date().toISOString()),
+      serverId: String(sourceRecord.serverId ?? event?.serverId ?? ""),
+      victimName: String(sourceRecord.victimName ?? ""),
+      attackerName: String(sourceRecord.attackerName ?? ""),
+      damage: null,
+      weapon: String(sourceRecord.weapon ?? ""),
+      causedBy: String(sourceRecord.causedBy ?? "RCON_TEAM_KILL"),
+      fromObject: "",
+      attackerEOSID: String(sourceRecord.attackerEOSID ?? ""),
+      attackerSteam64ID: String(sourceRecord.attackerSteam64ID ?? ""),
+      attackerControllerID: String(sourceRecord.attackerControllerID ?? ""),
+      victimEOSID: String(sourceRecord.victimEOSID ?? ""),
+      victimSteam64ID: String(sourceRecord.victimSteam64ID ?? ""),
+      attackerTeamID: sourceRecord.attackerTeamID ?? "",
+      victimTeamID: sourceRecord.victimTeamID ?? "",
+      identityConfidence: String(sourceRecord.identityConfidence ?? ""),
+      parseConfidence: String(sourceRecord.parseConfidence ?? ""),
+      confidence: String(sourceRecord.confidence ?? ""),
+      parseStatus: String(sourceRecord.parseStatus ?? ""),
+      identitySource: "",
+      rawLog: String(sourceRecord.rawLog ?? ""),
+      isFriendlyFire: true,
+      isTeamKill: true,
+      isTeamKillDown: false,
+      tk: true,
+      tkDown: false,
+      friendlyFireType: "team_kill",
+      friendlyFireLabel: "友军击杀",
+      friendlyFireReason: sourceRecord.friendlyFireReason ?? sourceRecord.teamKillReason ?? "rcon_team_kill",
+      teamKillReason: sourceRecord.teamKillReason ?? "rcon_team_kill",
+      severity: "danger",
+      tags: ["friendly_fire", "friendly_kill", "tk"],
+    };
+
+    events.push(record);
+    if (events.length > maxEvents) {
+      events.splice(0, events.length - maxEvents);
+    }
+    lastUpdatedAt = record.time || new Date().toISOString();
+    return record;
+  }
+
   function getState() {
     return {
-      events: events.map(cloneEvent),
+      events: events.map(enrichEvent),
       count: events.length,
       stats: buildStats(),
       lastUpdatedAt,
@@ -80,10 +132,17 @@ export function createCombatStateModule({ core, modules, config, logger }) {
       damage: 0,
       wound: 0,
       death: 0,
+      teamDamage: 0,
+      teamWound: 0,
+      teamKill: 0,
     };
 
-    for (const event of events) {
+    for (const raw of events) {
+      const event = enrichEvent(raw);
       if (event.type in stats) stats[event.type] += 1;
+      if (event.friendlyFireType === "team_damage") stats.teamDamage += 1;
+      if (event.friendlyFireType === "team_wound" || event.isTeamKillDown) stats.teamWound += 1;
+      if (event.friendlyFireType === "team_kill" || event.isTeamKill) stats.teamKill += 1;
     }
 
     return stats;
@@ -110,14 +169,24 @@ export function createCombatStateModule({ core, modules, config, logger }) {
       let result = events;
 
       if (VALID_FILTER_TYPES.has(type)) {
-        result = result.filter((event) => event.type === type);
+        if (type === "friendly") {
+          result = result.filter((event) => event.isFriendlyFire);
+        } else if (type === "teamDamage") {
+          result = result.filter((event) => event.friendlyFireType === "team_damage");
+        } else if (type === "teamWound") {
+          result = result.filter((event) => event.friendlyFireType === "team_wound");
+        } else if (type === "teamKill" || type === "tk") {
+          result = result.filter((event) => event.friendlyFireType === "team_kill" || event.isTeamKill);
+        } else {
+          result = result.filter((event) => event.type === type);
+        }
       }
 
       if (search) {
         result = result.filter((event) => matchesSearch(event, search));
       }
 
-      return result.slice(-limit).reverse().map(cloneEvent);
+      return result.slice(-limit).reverse().map(enrichEvent);
     },
 
     clear() {
@@ -143,6 +212,98 @@ export function createCombatStateModule({ core, modules, config, logger }) {
     },
   };
 
+  function resolvePlayer(serverId, identity = {}) {
+    const playerState = modules?.playerState;
+    if (!playerState) return null;
+
+    return playerState.getPlayerBySteamID?.(serverId, identity.steamID || identity.steam64ID || "")
+      ?? playerState.getPlayerByEOSID?.(serverId, identity.eosID || "")
+      ?? playerState.getPlayerByControllerID?.(serverId, identity.controllerID || "")
+      ?? playerState.getPlayerByName?.(serverId, identity.name || "")
+      ?? null;
+  }
+
+  function addTeamKillMetadata(record) {
+    const attacker = resolvePlayer(record.serverId, {
+      name: record.attackerName,
+      steamID: record.attackerSteam64ID,
+      eosID: record.attackerEOSID,
+      controllerID: record.attackerControllerID,
+    });
+    const victim = resolvePlayer(record.serverId, {
+      name: record.victimName,
+      steamID: record.victimSteam64ID,
+      eosID: record.victimEOSID,
+      controllerID: record.victimControllerID,
+    });
+    const attackerTeamID = record.attackerTeamID || attacker?.teamID || "";
+    const victimTeamID = record.victimTeamID || victim?.teamID || "";
+    const isFriendlyFire = sameKnownTeam(attackerTeamID, victimTeamID);
+    const friendlyFireKind = getFriendlyFireKind(record.type);
+    const isTeamKill = Boolean(isFriendlyFire && friendlyFireKind.isTeamKill);
+    const isTeamKillDown = Boolean(isFriendlyFire && friendlyFireKind.isTeamKillDown);
+
+    return {
+      ...record,
+      attackerTeamID,
+      victimTeamID,
+      isFriendlyFire,
+      isTeamKill,
+      isTeamKillDown,
+      tk: isTeamKill,
+      tkDown: isTeamKillDown,
+      friendlyFireType: isFriendlyFire ? friendlyFireKind.type : "",
+      friendlyFireLabel: isFriendlyFire ? friendlyFireKind.label : "",
+      severity: isFriendlyFire ? "danger" : "",
+      tags: isFriendlyFire
+        ? ["friendly_fire", friendlyFireKind.tag, ...(isTeamKill ? ["tk"] : []), ...(isTeamKillDown ? ["tk_down"] : [])]
+        : [],
+    };
+  }
+
+  function enrichEvent(event) {
+    const base = cloneEvent(event);
+
+    // Late-bind team info and friendly-fire classification so older events can
+    // become fully annotated once PlayerState gets a team snapshot.
+    const attacker = resolvePlayer(base.serverId, {
+      name: base.attackerName,
+      steamID: base.attackerSteam64ID,
+      eosID: base.attackerEOSID,
+      controllerID: base.attackerControllerID,
+    });
+    const victim = resolvePlayer(base.serverId, {
+      name: base.victimName,
+      steamID: base.victimSteam64ID,
+      eosID: base.victimEOSID,
+      controllerID: base.victimControllerID,
+    });
+
+    const attackerTeamID = base.attackerTeamID || attacker?.teamID || "";
+    const victimTeamID = base.victimTeamID || victim?.teamID || "";
+    const isFriendlyFire = sameKnownTeam(attackerTeamID, victimTeamID) || Boolean(base.isFriendlyFire);
+    const friendlyFireKind = getFriendlyFireKind(base.type);
+    const isTeamKill = Boolean(isFriendlyFire && friendlyFireKind.isTeamKill) || Boolean(base.isTeamKill || base.tk);
+    const isTeamKillDown = Boolean(isFriendlyFire && friendlyFireKind.isTeamKillDown) || Boolean(base.isTeamKillDown || base.tkDown);
+
+    return {
+      ...base,
+      attackerTeamID,
+      victimTeamID,
+      isFriendlyFire,
+      isTeamKill,
+      isTeamKillDown,
+      tk: isTeamKill,
+      tkDown: isTeamKillDown,
+      friendlyFireType: isFriendlyFire ? (base.friendlyFireType || friendlyFireKind.type) : "",
+      friendlyFireLabel: isFriendlyFire ? (base.friendlyFireLabel || friendlyFireKind.label) : "",
+      severity: isFriendlyFire ? "danger" : (base.severity || ""),
+      tags: isFriendlyFire
+        ? [...new Set([...(Array.isArray(base.tags) ? base.tags : []), "friendly_fire", friendlyFireKind.tag, ...(isTeamKill ? ["tk"] : []), ...(isTeamKillDown ? ["tk_down"] : [])])]
+        : (Array.isArray(base.tags) ? base.tags : []),
+    };
+  }
+
   // CombatState 是实时事件入口之一。
   // 关闭订阅后保留模块实例与历史数据，但不再接收新的战斗事件。
   function isSubscribed() {
@@ -159,6 +320,9 @@ export function createCombatStateModule({ core, modules, config, logger }) {
       if (!enabled) return;
       for (const eventName of Object.keys(COMBAT_TYPES)) {
         unsubscribers.push(core.eventBus.onCoreEvent(eventName, ingest));
+      }
+      if (core.eventBus?.onModuleEvent) {
+        unsubscribers.push(core.eventBus.onModuleEvent("module.killManage", "teamKillResolved", ingestKillManageTeamKill));
       }
       logWithFallback(moduleLogger, "info", `CombatState started. maxEvents=${maxEvents}`, {
         label: "MODULE",
@@ -243,6 +407,8 @@ function normalizeCombatEvent({ event, params, type }) {
     attackerControllerID: getParam(params, "AttackerControllerID"),
     victimEOSID: getParam(params, "VictimCachedEOSID"),
     victimSteam64ID: getParam(params, "VictimCachedSteam64ID"),
+    attackerTeamID: getParam(params, "AttackerTeamID") || getParam(params, "AttackerTeamId") || getParam(params, "AttackerTeam"),
+    victimTeamID: getParam(params, "VictimTeamID") || getParam(params, "VictimTeamId") || getParam(params, "VictimTeam"),
     identityConfidence: getParam(params, "IdentityConfidence"),
     parseConfidence: getParam(params, "ParseConfidence"),
     confidence: getParam(params, "Confidence"),
@@ -294,7 +460,28 @@ function matchesSearch(event, search) {
     event.attackerEOSID,
     event.causedBy,
     event.weapon,
+    event.attackerTeamID,
+    event.victimTeamID,
+    ...(Array.isArray(event.tags) ? event.tags : []),
   ].some((value) => String(value ?? "").toLowerCase().includes(search));
+}
+
+function sameKnownTeam(left, right) {
+  if (left == null || right == null) return false;
+  const leftText = String(left).trim();
+  const rightText = String(right).trim();
+  return leftText !== "" && rightText !== "" && leftText === rightText;
+}
+
+function getFriendlyFireKind(type) {
+  const normalized = String(type ?? "").toLowerCase();
+  if (normalized === "damaged" || normalized === "damage") {
+    return { type: "team_damage", label: "友军伤害", tag: "friendly_damage", isTeamKill: false };
+  }
+  if (normalized === "wounded" || normalized === "wound") {
+    return { type: "team_wound", label: "TK击倒", tag: "tk_down", isTeamKill: false, isTeamKillDown: true };
+  }
+  return { type: "team_kill", label: "友军击杀", tag: "friendly_kill", isTeamKill: true, isTeamKillDown: false };
 }
 
 function cloneEvent(event) {

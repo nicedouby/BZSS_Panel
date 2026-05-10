@@ -6,9 +6,9 @@
   "type": "module",
   "scripts": {
     "start": "node main.js",
-    "test": "python -m unittest discover -s LogPost/tests && node tests/run-event-pipeline-tests.js && node tests/run-squad-creation-order-tests.js && node tests/run-console-module-tests.js && node tests/run-match-state-tests.js && node tests/run-combat-state-tests.js && node tests/run-weapon-collector-tests.js && node tests/run-web-server-tests.js",
+    "test": "python -m unittest discover -s LogPost/tests && node tests/run-event-pipeline-tests.js && node tests/run-squad-creation-order-tests.js && node tests/run-console-module-tests.js && node tests/run-match-state-tests.js && node tests/run-combat-state-tests.js && node tests/run-kill-manage-tests.js && node tests/run-weapon-collector-tests.js && node tests/run-web-server-tests.js",
     "test:py": "python -m unittest discover -s LogPost/tests",
-    "test:js": "node tests/run-event-pipeline-tests.js && node tests/run-squad-creation-order-tests.js && node tests/run-console-module-tests.js && node tests/run-match-state-tests.js && node tests/run-combat-state-tests.js && node tests/run-weapon-collector-tests.js && node tests/run-web-server-tests.js"
+    "test:js": "node tests/run-event-pipeline-tests.js && node tests/run-squad-creation-order-tests.js && node tests/run-console-module-tests.js && node tests/run-match-state-tests.js && node tests/run-combat-state-tests.js && node tests/run-kill-manage-tests.js && node tests/run-weapon-collector-tests.js && node tests/run-web-server-tests.js"
   },
   "dependencies": {
     "sqlite": "^5.1.1",

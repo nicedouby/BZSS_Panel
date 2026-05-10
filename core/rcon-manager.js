@@ -545,11 +545,14 @@ function mapNativeRconEventToConsoleEntry(eventName, payload) {
   }
 
   if (eventName === "RCON_NATIVE_PUSH") {
+    const isTeamKill = Boolean(payload.isTeamKill || isTeamKillRconPush(payload.body));
     return {
       time: payload.time,
       level: "push",
       message: String(payload.body ?? ""),
       source: "core.rconManager",
+      isTeamKill,
+      tags: isTeamKill ? ["tk"] : [],
     };
   }
 
@@ -566,4 +569,8 @@ function summarizePayload(payload) {
     port: payload.port,
     reason: payload.reason,
   };
+}
+
+function isTeamKillRconPush(value) {
+  return /\[ChatAdmin]\s+ASQKillDeathRuleset\s+:\s+Player\s+.*?\s+Team Killed Player\s+/i.test(String(value ?? ""));
 }

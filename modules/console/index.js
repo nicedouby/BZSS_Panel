@@ -175,6 +175,8 @@ export function createConsoleModule({ core, config }) {
             nativeKind: line.kind,
             time: line.time || new Date().toISOString(),
             dataSummary: summarizeNativeLine(line),
+            isTeamKill: Boolean(line.isTeamKill || line.tk),
+            tags: Array.isArray(line.tags) ? line.tags : [],
           });
         }));
       }
