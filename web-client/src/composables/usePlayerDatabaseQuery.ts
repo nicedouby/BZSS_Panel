@@ -36,7 +36,7 @@ export function usePlayerDatabaseQuery(filters: PlayerDatabaseFilters) {
     queryKey,
     queryFn: async () => {
       const params = new URLSearchParams({
-        q: debouncedQuery.value,
+        query: debouncedQuery.value,
         sort: filters.sort,
         limit: String(filters.limit),
         offset: String(filters.offset),
@@ -45,7 +45,7 @@ export function usePlayerDatabaseQuery(filters: PlayerDatabaseFilters) {
         items?: any[];
         players?: any[];
         total?: number;
-      }>(`/api/query/player-database?${params.toString()}`);
+      }>(`/api/db/players?${params.toString()}`);
     },
     placeholderData: (previousData) => previousData,
   });

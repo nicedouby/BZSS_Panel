@@ -119,3 +119,112 @@
 [96m[INFO][0m [90m2026-05-11T04:46:23.037Z[0m [96m[core.rconManager][0m [RCON] Authentication successful.
 [96m[INFO][0m [90m2026-05-11T04:46:23.936Z[0m [96m[core.authManager][0m Login success username=DoubyBear role=SuperAdmin ip=127.0.0.1
 [96m[INFO][0m [90m2026-05-11T04:51:25.359Z[0m [AUDIT] DoubyBear -> SwitchTeam
+[96m[INFO][0m [90m2026-05-11T04:53:31.489Z[0m [96m[core.pythonLogParserManager][0m [PY] 
+[92m[EVENT] On_ServerTickRateUpdated #508 @2026.05.11-04.46.25:577[0m [90m|[0m 30.11 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #519 @2026.05.11-04.46.35:854[0m [90m|[0m 30.07 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #521 @2026.05.11-04.46.46:089[0m [90m|[0m 30.09 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[93m[EVENT] On_PlayerDamaged #533 @2026.05.11-04.46.51:874[0m [90m|[0m Strelitzia016 | 60.000000 | [2m-[0m | [2m-[0m | [2m-[0m | [2m-[0m | BP_Projectile_C_2147410089 | 0002117b412a4169a4bfbf911f69d934 | ...+6
+[91m[EVENT] On_PlayerWounded #535 @2026.05.11-04.46.51:875[0m [90m|[0m Strelitzia016 | 60.000000 | [2m-[0m | [2m-[0m | [2m-[0m | [2m-[0m | nullptr | BP_Projectile_C_2147410089 | ...+7
+[95m[EVENT] On_PlayerDied #540 @2026.05.11-04.46.55:199[0m [90m|[0m Strelitzia016 | -300.000000 | [2m-[0m | [2m-[0m | [2m-[0m | [2m-[0m | nullptr | BP_Soldier_PLA_AR_Arid_C_2147415421 | ...+7
+[92m[EVENT] On_ServerTickRateUpdated #543 @2026.05.11-04.46.56:359[0m [90m|[0m 30.09 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #557 @2026.05.11-04.47.06:652[0m [90m|[0m 30.12 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #563 @2026.05.11-04.47.16:943[0m [90m|[0m 30.12 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[96m[EVENT] On_PlayerSpawnRequested #569 @2026.05.11-04.47.21:925[0m [90m|[0m Strelitzia016 | Team1TempSpawnGroupAncientQanat | PLA_Grenadier_02 | 0002117b412a4169a4bfbf911f69d934 | 76561199378372991 | CacheByName | Full
+[92m[EVENT] On_ServerTickRateUpdated #592 @2026.05.11-04.47.27:217[0m [90m|[0m 30.08 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #598 @2026.05.11-04.47.37:441[0m [90m|[0m 30.03 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #603 @2026.05.11-04.47.47:655[0m [90m|[0m 30.06 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #618 @2026.05.11-04.47.57:954[0m [90m|[0m 30.09 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #641 @2026.05.11-04.48.08:148[0m [90m|[0m 30.02 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #653 @2026.05.11-04.48.18:403[0m [90m|[0m 30.03 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #663 @2026.05.11-04.48.28:707[0m [90m|[0m 30.09 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #668 @2026.05.11-04.48.38:948[0m [90m|[0m 30.07 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #677 @2026.05.11-04.48.49:234[0m [90m|[0m 30.14 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #689 @2026.05.11-04.48.59:532[0m [90m|[0m 30.10 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #696 @2026.05.11-04.49.09:740[0m [90m|[0m 30.07 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[96m[EVENT] On_PlayerSpawnRequested #702 @2026.05.11-04.49.15:555[0m [90m|[0m Donald��DoubyBear | Team2TempSpawnGroupPoliceStation | AFU_SL_01 | 00026a0bbf67442f84777b964560fba4 | 76561198194428818 | CacheByName | Full
+[92m[EVENT] On_ServerTickRateUpdated #720 @2026.05.11-04.49.19:981[0m [90m|[0m 30.08 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #729 @2026.05.11-04.49.30:203[0m [90m|[0m 30.03 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #738 @2026.05.11-04.49.40:434[0m [90m|[0m 30.01 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #745 @2026.05.11-04.49.50:677[0m [90m|[0m 30.07 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #755 @2026.05.11-04.50.00:952[0m [90m|[0m 30.08 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #762 @2026.05.11-04.50.11:158[0m [90m|[0m 30.08 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[93m[EVENT] On_PlayerDamaged #770 @2026.05.11-04.50.20:470[0m [90m|[0m Donald��DoubyBear | 62.000004 | [2m-[0m | [2m-[0m | [2m-[0m | [2m-[0m | BP_Projectile_C_2147401734 | 00026a0bbf67442f84777b964560fba4 | ...+6
+[93m[EVENT] On_PlayerDamaged #772 @2026.05.11-04.50.20:868[0m [90m|[0m Donald��DoubyBear | 62.000004 | [2m-[0m | [2m-[0m | [2m-[0m | [2m-[0m | BP_Projectile_C_2147401686 | 00026a0bbf67442f84777b964560fba4 | ...+6
+[91m[EVENT] On_PlayerWounded #774 @2026.05.11-04.50.20:869[0m [90m|[0m Donald��DoubyBear | 62.000004 | [2m-[0m | [2m-[0m | [2m-[0m | [2m-[0m | nullptr | BP_Projectile_C_2147401686 | ...+7
+[92m[EVENT] On_ServerTickRateUpdated #776 @2026.05.11-04.50.21:467[0m [90m|[0m 30.08 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #791 @2026.05.11-04.50.31:736[0m [90m|[0m 30.08 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[95m[EVENT] On_PlayerDied #798 @2026.05.11-04.50.39:519[0m [90m|[0m Donald��DoubyBear | -300.000000 | [2m-[0m | [2m-[0m | [2m-[0m | [2m-[0m | nullptr | BP_Soldier_AFU_SquadLeader01_C_2147�� | ...+7
+[92m[EVENT] On_ServerTickRateUpdated #802 @2026.05.11-04.50.41:949[0m [90m|[0m 30.06 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #810 @2026.05.11-04.50.52:211[0m [90m|[0m 30.11 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[INFO] Log file truncated or recreated. Reopening.
+[INFO] Tailing: Z:\SquadGame.log from position 929428
+[92m[EVENT] On_ServerTickRateUpdated #830 @2026.05.11-04.51.02:450[0m [90m|[0m 30.08 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #841 @2026.05.11-04.51.12:749[0m [90m|[0m 30.10 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #854 @2026.05.11-04.51.22:992[0m [90m|[0m 30.07 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #865 @2026.05.11-04.51.33:261[0m [90m|[0m 30.09 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[93m[EVENT] On_PlayerDamaged #869 @2026.05.11-04.51.42:798[0m [90m|[0m Strelitzia016 | 30.000000 | [2m-[0m | [2m-[0m | [2m-[0m | [2m-[0m | BP_Projectile_C_2147396361 | 0002117b412a4169a4bfbf911f69d934 | ...+6
+[92m[EVENT] On_ServerTickRateUpdated #871 @2026.05.11-04.51.43:532[0m [90m|[0m 30.08 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #886 @2026.05.11-04.51.53:804[0m [90m|[0m 30.08 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #897 @2026.05.11-04.52.04:100[0m [90m|[0m 30.11 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #900 @2026.05.11-04.52.14:393[0m [90m|[0m 30.12 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #906 @2026.05.11-04.52.24:708[0m [90m|[0m 30.05 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #919 @2026.05.11-04.52.34:957[0m [90m|[0m 30.05 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #922 @2026.05.11-04.52.45:149[0m [90m|[0m 30.03 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #929 @2026.05.11-04.52.55:443[0m [90m|[0m 30.11 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1003 @2026.05.11-04.53.05:732[0m [90m|[0m 30.13 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1144 @2026.05.11-04.53.15:948[0m [90m|[0m 30.05 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[96m[EVENT] On_PlayerSpawnRequested #1183 @2026.05.11-04.53.24:314[0m [90m|[0m ս����ʻԱ | [2m-[0m | AFU_Rifleman_13 | [2m-[0m | [2m-[0m | Unknown | Partial
+[92m[EVENT] On_ServerTickRateUpdated #1189 @2026.05.11-04.53.26:112[0m [90m|[0m 30.01 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[96m[EVENT] On_PlayerSpawnRequested #1286 @2026.05.11-04.53.33:431[0m [90m|[0m ���������� | [2m-[0m | AFU_Rifleman_13 | [2m-[0m | [2m-[0m | Unknown | Partial
+[96m[INFO][0m [90m2026-05-11T04:59:21.734Z[0m [96m[core.pythonLogParserManager][0m [PY] 
+[92m[EVENT] On_ServerTickRateUpdated #1293 @2026.05.11-04.53.36:384[0m [90m|[0m 30.08 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1335 @2026.05.11-04.53.46:631[0m [90m|[0m 30.05 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[96m[EVENT] On_PlayerSpawnRequested #1365 @2026.05.11-04.53.54:485[0m [90m|[0m KT | [2m-[0m | AFU_Rifleman_13 | [2m-[0m | [2m-[0m | Unknown | Partial
+[92m[EVENT] On_ServerTickRateUpdated #1371 @2026.05.11-04.53.56:847[0m [90m|[0m 30.06 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[96m[EVENT] On_PlayerSpawnRequested #1378 @2026.05.11-04.54.00:041[0m [90m|[0m ս����ʻԱ | Team2TempSpawnGroupPoliceStation | AFU_MachineGunner_01 | [2m-[0m | [2m-[0m | Unknown | Partial
+[96m[EVENT] On_PlayerSpawnRequested #1394 @2026.05.11-04.54.00:046[0m [90m|[0m ���������� | BP_ForwardBaseSpawn_C_2147482073 | AFU_AR_04 | [2m-[0m | [2m-[0m | Unknown | Partial
+[92m[EVENT] On_ServerTickRateUpdated #1418 @2026.05.11-04.54.07:064[0m [90m|[0m 30.05 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1424 @2026.05.11-04.54.17:285[0m [90m|[0m 30.04 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1462 @2026.05.11-04.54.27:531[0m [90m|[0m 30.06 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[93m[EVENT] On_PlayerDamaged #1468 @2026.05.11-04.54.33:716[0m [90m|[0m ���������� | 24.631714 | ���������� | 0002442d90d34901800285259f93ec48 | 76561199468504550 | BP_PlayerController_C_2147391705 | BP_Soldier_AFU_AutomaticRifleman01_�� | 0002442d90d34901800285259f93ec48 | ...+6
+[92m[EVENT] On_ServerTickRateUpdated #1471 @2026.05.11-04.54.37:718[0m [90m|[0m 30.04 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[93m[EVENT] On_PlayerDamaged #1476 @2026.05.11-04.54.42:878[0m [90m|[0m ս����ʻԱ | 60.000000 | [2m-[0m | [2m-[0m | [2m-[0m | [2m-[0m | BP_Projectile_C_2147387919 | 00022b7f34dd4044a1d90a82775c64b5 | ...+6
+[93m[EVENT] On_PlayerDamaged #1480 @2026.05.11-04.54.43:543[0m [90m|[0m Strelitzia016 | 115.000000 | Strelitzia016 | 0002117b412a4169a4bfbf911f69d934 | 76561199378372991 | BP_PlayerController_C_2147471545 | BP_Type86p_Frag_C_2147403425 | 0002117b412a4169a4bfbf911f69d934 | ...+6
+[91m[EVENT] On_PlayerWounded #1482 @2026.05.11-04.54.43:543[0m [90m|[0m Strelitzia016 | 115.000000 | Strelitzia016 | 0002117b412a4169a4bfbf911f69d934 | 76561199378372991 | BP_PlayerController_C_2147471545 | BP_PlayerController_C_2147471545 | BP_Type86p_Frag_C_2147403425 | ...+7
+[95m[EVENT] On_PlayerDied #1487 @2026.05.11-04.54.46:005[0m [90m|[0m Strelitzia016 | -300.000000 | [2m-[0m | [2m-[0m | [2m-[0m | [2m-[0m | nullptr | BP_Soldier_PLA_Grenadier_Arid_C_214�� | ...+7
+[92m[EVENT] On_ServerTickRateUpdated #1489 @2026.05.11-04.54.47:938[0m [90m|[0m 30.04 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_SquadCreated #1491 @2026.05.11-04.54.48:401[0m [90m|[0m ���������� | 0002442d90d34901800285259f93ec48 | 76561199468504550 | 1 | Squad 1 | Armed Forces of Ukraine | Full
+[92m[EVENT] On_ServerTickRateUpdated #1510 @2026.05.11-04.54.58:158[0m [90m|[0m 30.04 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1513 @2026.05.11-04.55.08:383[0m [90m|[0m 30.02 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1523 @2026.05.11-04.55.18:696[0m [90m|[0m 30.06 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1532 @2026.05.11-04.55.28:882[0m [90m|[0m 30.04 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1540 @2026.05.11-04.55.38:962[0m [90m|[0m 29.96 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1543 @2026.05.11-04.55.49:153[0m [90m|[0m 30.03 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1559 @2026.05.11-04.55.59:427[0m [90m|[0m 30.08 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1572 @2026.05.11-04.56.09:702[0m [90m|[0m 30.07 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[93m[EVENT] On_PlayerDamaged #1576 @2026.05.11-04.56.13:091[0m [90m|[0m ս����ʻԱ | 186.000015 | [2m-[0m | [2m-[0m | [2m-[0m | [2m-[0m | BP_Projectile_C_2147384101 | 00022b7f34dd4044a1d90a82775c64b5 | ...+6
+[91m[EVENT] On_PlayerWounded #1578 @2026.05.11-04.56.13:092[0m [90m|[0m ս����ʻԱ | 186.000015 | [2m-[0m | [2m-[0m | [2m-[0m | [2m-[0m | nullptr | BP_Projectile_C_2147384101 | ...+7
+[96m[EVENT] On_PlayerSpawnRequested #1580 @2026.05.11-04.56.13:593[0m [90m|[0m Strelitzia016 | Team1SpawnGroupMain | PLA_SL_03 | 0002117b412a4169a4bfbf911f69d934 | 76561199378372991 | CacheByName | Full
+[95m[EVENT] On_PlayerDied #1598 @2026.05.11-04.56.19:319[0m [90m|[0m ս����ʻԱ | -300.000000 | [2m-[0m | [2m-[0m | [2m-[0m | [2m-[0m | nullptr | BP_Soldier_AFU_MachineGunner01_C_21�� | ...+7
+[92m[EVENT] On_ServerTickRateUpdated #1601 @2026.05.11-04.56.19:953[0m [90m|[0m 30.05 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1619 @2026.05.11-04.56.30:106[0m [90m|[0m 30.04 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[93m[EVENT] On_PlayerDamaged #1645 @2026.05.11-04.56.33:272[0m [90m|[0m ���������� | 31.000000 | [2m-[0m | [2m-[0m | [2m-[0m | [2m-[0m | BP_Projectile_C_2147382939 | 0002442d90d34901800285259f93ec48 | ...+6
+[92m[EVENT] On_ServerTickRateUpdated #1648 @2026.05.11-04.56.40:271[0m [90m|[0m 30.00 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1652 @2026.05.11-04.56.50:462[0m [90m|[0m 30.03 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1670 @2026.05.11-04.57.00:772[0m [90m|[0m 30.07 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1680 @2026.05.11-04.57.10:992[0m [90m|[0m 30.04 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1688 @2026.05.11-04.57.21:238[0m [90m|[0m 30.06 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1702 @2026.05.11-04.57.31:373[0m [90m|[0m 29.99 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1713 @2026.05.11-04.57.41:591[0m [90m|[0m 30.05 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1720 @2026.05.11-04.57.51:802[0m [90m|[0m 30.06 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1732 @2026.05.11-04.58.01:937[0m [90m|[0m 29.99 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1742 @2026.05.11-04.58.12:156[0m [90m|[0m 30.04 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1751 @2026.05.11-04.58.22:311[0m [90m|[0m 30.03 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1762 @2026.05.11-04.58.32:559[0m [90m|[0m 30.05 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1766 @2026.05.11-04.58.42:794[0m [90m|[0m 30.09 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1780 @2026.05.11-04.58.53:010[0m [90m|[0m 30.05 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1791 @2026.05.11-04.59.03:324[0m [90m|[0m 30.05 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1796 @2026.05.11-04.59.13:487[0m [90m|[0m 30.01 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #1804 @2026.05.11-04.59.23:707[0m [90m|[0m 30.04 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[93m[EVENT] On_PlayerDamaged #1806 @2026.05.11-04.59.23:840[0m [90m|[0m ���������� | 62.000004 | [2m-[0m | [2m-[0m | [2m-[0m | [2m-[0m | BP_Projectile_C_2147377054 | 0002442d90d34901800285259f93ec48 | ...+6
+[91m[EVENT] On_PlayerWounded #1808 @2026.05.11-04.59.23:841[0m [90m|[0m ���������� | 62.000004 | [2m-[0m | [2m-[0m | [2m-[0m | [2m-[0m | nullptr | BP_Projectile_C_2147377054 | ...+7

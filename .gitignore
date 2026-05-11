@@ -10,3 +10,4 @@ data/*.db-*
 data/weapon-stats.json
 /data
 /data
+server.out.log
