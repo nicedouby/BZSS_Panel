@@ -193,7 +193,6 @@ export class RuntimeState {
   }
 
   getAll() {
-    this.updateServer(this.webStatus?.getSnapshot?.() ?? {});
     return {
       server: this.getServer(),
       players: this.getPlayers(),
@@ -203,7 +202,14 @@ export class RuntimeState {
       rcon: cloneJsonSafe(this.state.rcon),
       events: this.getEvents(),
       jobs: this.getJobs(),
-      updatedAt: Date.now(),
+      updatedAt: Math.max(
+        Number(this.state.server?.updatedAt ?? 0),
+        Number(this.state.players?.updatedAt ?? 0),
+        Number(this.state.squads?.updatedAt ?? 0),
+        Number(this.state.events?.updatedAt ?? 0),
+        Number(this.state.jobs?.updatedAt ?? 0),
+        Number(this.state.rcon?.updatedAt ?? 0),
+      ),
     };
   }
 
@@ -263,6 +269,7 @@ function normalizeSquads(squads) {
 
 function deriveTeams(players, squads) {
   const teamMap = new Map();
+  const unknownTeamID = "unknown";
   for (const teamID of [1, 2]) {
     teamMap.set(String(teamID), {
       teamID,
@@ -272,6 +279,13 @@ function deriveTeams(players, squads) {
       playerCount: 0,
     });
   }
+  teamMap.set(unknownTeamID, {
+    teamID: unknownTeamID,
+    teamName: "Unknown / Unassigned",
+    squads: [],
+    unassignedPlayers: [],
+    playerCount: 0,
+  });
 
   const squadMap = new Map();
   for (const squad of squads) {
@@ -286,7 +300,7 @@ function deriveTeams(players, squads) {
   }
 
   for (const player of players) {
-    const teamID = player.teamID ?? 1;
+    const teamID = player.teamID == null ? unknownTeamID : player.teamID;
     const team = ensureTeam(teamMap, teamID);
     const key = player.squadID != null ? `${teamID}:${player.squadID}` : "";
     const squad = key ? squadMap.get(key) : null;
