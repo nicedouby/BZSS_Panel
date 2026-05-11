@@ -21,6 +21,7 @@ const state = {
 const pageScroll = document.querySelector("#page-scroll");
 const taskManager = getRuntimeTaskManager();
 const apiInFlight = new Map();
+let navigationSeq = 0;
 
 const MERGED_API_KEYS = [
   ["/api/web/status", "api:web-status"],
@@ -105,6 +106,7 @@ async function loadBootData() {
 }
 
 async function navigateTo(route) {
+  const seq = ++navigationSeq;
   if (!state.auth.authenticated) return;
 
   const routeInfo = parseRouteTarget(route);
@@ -147,6 +149,8 @@ async function navigateTo(route) {
 
   try {
     const mod = await import(page.pageModule);
+    if (seq !== navigationSeq) return;
+
     const cleanup = await mod.renderPage({
       root: pageScroll,
       api: pageApi,
@@ -161,12 +165,22 @@ async function navigateTo(route) {
       routeInfo,
     });
 
+    if (seq !== navigationSeq) {
+      if (typeof cleanup === "function") {
+        try {
+          cleanup();
+        } catch {}
+      }
+      return;
+    }
+
     if (typeof cleanup === "function") {
       state.currentPageCleanup = cleanup;
     } else if (typeof pageScroll.__pageCleanup === "function") {
       state.currentPageCleanup = pageScroll.__pageCleanup;
     }
   } catch (error) {
+    if (seq !== navigationSeq) return;
     console.error(`Failed to render page ${page.route}`, error);
     pageScroll.innerHTML = `
       <section class="page">
