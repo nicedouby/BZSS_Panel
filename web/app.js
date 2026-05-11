@@ -4,12 +4,14 @@ import { renderTopbar } from "./layout/topbar.js";
 import { renderSidebar } from "./layout/sidebar.js";
 import { openDrawer } from "./layout/drawer.js";
 import { openModal } from "./layout/modal.js";
+import { getRuntimeTaskManager } from "./runtime-task-manager.js";
 
 const state = {
   pages: [],
   currentPage: null,
   status: null,
   currentPageCleanup: null,
+  currentPageAbortController: null,
   auth: {
     authenticated: false,
     user: null,
@@ -17,28 +19,70 @@ const state = {
 };
 
 const pageScroll = document.querySelector("#page-scroll");
-let topbarTimer = null;
+const taskManager = getRuntimeTaskManager();
+const apiInFlight = new Map();
+
+const MERGED_API_KEYS = [
+  ["/api/console/lines", "api:console-lines"],
+  ["/api/web/status", "api:web-status"],
+  ["/api/snapshot/all", "api:snapshot-all"],
+];
 
 async function apiFetch(path, options = {}, { handleAuth = true } = {}) {
-  const res = await fetch(path, {
-    cache: "no-store",
-    ...options,
-  });
+  const controller = new AbortController();
+  const externalSignal = options.signal;
 
-  if (handleAuth && res.status === 401) {
-    handleUnauthorized();
-    const error = new Error("Unauthorized");
-    error.code = "Unauthorized";
-    throw error;
+  const abortFromExternal = () => controller.abort("abort");
+  if (externalSignal) {
+    if (externalSignal.aborted) controller.abort("abort");
+    else externalSignal.addEventListener("abort", abortFromExternal, { once: true });
   }
 
-  return res;
+  try {
+    const res = await fetch(path, {
+      cache: "no-store",
+      ...options,
+      signal: controller.signal,
+    });
+
+    if (handleAuth && res.status === 401) {
+      handleUnauthorized();
+      const error = new Error("Unauthorized");
+      error.code = "Unauthorized";
+      throw error;
+    }
+
+    return res;
+  } finally {
+    externalSignal?.removeEventListener?.("abort", abortFromExternal);
+  }
 }
 
-async function api(path) {
-  const res = await apiFetch(path);
-  if (!res.ok) throw new Error(await res.text());
-  return await res.json();
+async function api(path, fetchOptions = {}, requestOptions = {}) {
+  const dedupeKey = requestOptions?.dedupeKey ?? resolveApiDedupeKey(path);
+
+  const run = async () => {
+    const res = await apiFetch(path, fetchOptions, requestOptions);
+    if (!res.ok) throw new Error(await res.text());
+    return await res.json();
+  };
+
+  if (!dedupeKey) {
+    return await run();
+  }
+
+  if (apiInFlight.has(dedupeKey)) {
+    return await apiInFlight.get(dedupeKey);
+  }
+
+  const pending = run().finally(() => {
+    if (apiInFlight.get(dedupeKey) === pending) {
+      apiInFlight.delete(dedupeKey);
+    }
+  });
+
+  apiInFlight.set(dedupeKey, pending);
+  return await pending;
 }
 
 async function apiPost(path, body = {}, options = {}) {
@@ -68,12 +112,28 @@ async function navigateTo(route) {
   const page = state.pages.find((p) => p.route === routeInfo.path) ?? state.pages[0];
   if (!page) return;
 
-  if (typeof state.currentPageCleanup === "function") {
-    try {
-      state.currentPageCleanup();
-    } catch {}
-    state.currentPageCleanup = null;
-  }
+  cleanupCurrentPage({ abort: true });
+
+  const pageAbortController = new AbortController();
+  state.currentPageAbortController = pageAbortController;
+
+  const pageApiFetch = (path, options = {}, requestOptions = {}) => apiFetch(
+    path,
+    {
+      ...options,
+      signal: options.signal ?? pageAbortController.signal,
+    },
+    requestOptions,
+  );
+
+  const pageApi = (path, options = {}, requestOptions = {}) => api(
+    path,
+    {
+      ...options,
+      signal: options.signal ?? pageAbortController.signal,
+    },
+    requestOptions,
+  );
 
   state.currentPage = page;
   history.replaceState(null, "", `#${routeInfo.full}`);
@@ -90,8 +150,11 @@ async function navigateTo(route) {
     const mod = await import(page.pageModule);
     const cleanup = await mod.renderPage({
       root: pageScroll,
-      api,
-      apiFetch,
+      api: pageApi,
+      apiFetch: pageApiFetch,
+      globalApi: api,
+      globalApiFetch: apiFetch,
+      taskManager,
       openDrawer,
       openModal,
       onNavigate: navigateTo,
@@ -147,11 +210,20 @@ async function refreshTopbar() {
   renderFrame();
 }
 
-function ensureTopbarTimer() {
-  if (topbarTimer) return;
-  topbarTimer = window.setInterval(() => {
-    refreshTopbar().catch(() => {});
-  }, 1000);
+function ensureTopbarTask() {
+  taskManager.registerTask({
+    id: "topbar-status",
+    intervalMs: 1000,
+    backgroundIntervalMs: 5000,
+    visibleOnly: false,
+    dedupeKey: "api:web-status",
+    scope: "global",
+    run: async ({ signal }) => {
+      if (!state.auth.authenticated) return;
+      state.status = await api("/api/web/status", { signal }, { dedupeKey: "api:web-status" });
+      renderFrame();
+    },
+  });
 }
 
 function renderFrame() {
@@ -328,7 +400,7 @@ function renderLoginScreen(message = "") {
       renderShellVisibility();
       await loadBootData();
       renderFrame();
-      ensureTopbarTimer();
+      ensureTopbarTask();
 
       const route = location.hash.replace(/^#/, "") || "/match-status";
       await navigateTo(route);
@@ -340,17 +412,8 @@ function renderLoginScreen(message = "") {
 }
 
 function handleUnauthorized() {
-  if (topbarTimer) {
-    window.clearInterval(topbarTimer);
-    topbarTimer = null;
-  }
-
-  if (typeof state.currentPageCleanup === "function") {
-    try {
-      state.currentPageCleanup();
-    } catch {}
-    state.currentPageCleanup = null;
-  }
+  taskManager.removeTask("topbar-status", { abort: true });
+  cleanupCurrentPage({ abort: true });
 
   state.auth = {
     authenticated: false,
@@ -383,7 +446,7 @@ async function main() {
 
   await loadBootData();
   renderFrame();
-  ensureTopbarTimer();
+  ensureTopbarTask();
 
   const route = location.hash.replace(/^#/, "") || "/match-status";
   await navigateTo(route);
@@ -401,4 +464,28 @@ function escapeHtml(value) {
     "\"": "&quot;",
     "'": "&#39;",
   }[c]));
+}
+
+function cleanupCurrentPage({ abort = true } = {}) {
+  if (abort && state.currentPageAbortController) {
+    state.currentPageAbortController.abort();
+  }
+  state.currentPageAbortController = null;
+
+  if (typeof state.currentPageCleanup === "function") {
+    try {
+      state.currentPageCleanup();
+    } catch {}
+  }
+  state.currentPageCleanup = null;
+}
+
+function resolveApiDedupeKey(path) {
+  const normalized = String(path || "").split("?")[0];
+  for (const [prefix, key] of MERGED_API_KEYS) {
+    if (normalized === prefix || normalized.startsWith(`${prefix}/`)) {
+      return key;
+    }
+  }
+  return null;
 }

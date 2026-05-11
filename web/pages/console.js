@@ -18,19 +18,41 @@ const VIEW_OPTIONS = {
   },
 };
 
-export async function renderPage({ root, api, apiFetch }) {
-  clearPageTimers(root);
+const CONSOLE_LINES_TASK_ID = "console-lines";
+const CONSOLE_RUNTIME_KEY = "__bzssConsoleRuntime";
+
+function getConsoleRuntime() {
+  if (!window[CONSOLE_RUNTIME_KEY]) {
+    window[CONSOLE_RUNTIME_KEY] = {
+      view: "modules",
+      stream: "modules",
+      scope: "all",
+      level: "all",
+      q: "",
+      paused: false,
+      lastSeq: 0,
+      backgroundBufferedCount: 0,
+    };
+  }
+
+  return window[CONSOLE_RUNTIME_KEY];
+}
+
+export async function renderPage({ root, api, apiFetch, globalApi, taskManager }) {
+  const runtime = getConsoleRuntime();
+  const pageScope = `console-page:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
 
   const state = {
-    view: "modules",
-    stream: "modules",
-    scope: "all",
-    level: "all",
-    q: "",
-    lastSeq: 0,
-    paused: false,
+    view: runtime.view,
+    stream: runtime.stream,
+    scope: runtime.scope,
+    level: runtime.level,
+    q: runtime.q,
+    lastSeq: Number(runtime.lastSeq || 0),
+    paused: Boolean(runtime.paused),
     maxDomLines: 800,
     rawOutputEnabled: false,
+    mounted: true,
   };
 
   root.innerHTML = `
@@ -97,8 +119,22 @@ export async function renderPage({ root, api, apiFetch }) {
   const rconAuthState = root.querySelector("#rcon-auth-state");
   const rconQueueState = root.querySelector("#rcon-queue-state");
 
+  const apiForBackground = typeof globalApi === "function" ? globalApi : api;
+
+  function syncRuntimeState() {
+    runtime.view = state.view;
+    runtime.stream = state.stream;
+    runtime.scope = state.scope;
+    runtime.level = state.level;
+    runtime.q = state.q;
+    runtime.paused = state.paused;
+    runtime.lastSeq = Number(state.lastSeq || 0);
+  }
+
   async function fullReload() {
     state.lastSeq = 0;
+    runtime.lastSeq = 0;
+    runtime.backgroundBufferedCount = 0;
     logList.innerHTML = "";
     await refreshFilters();
     const lines = await fetchLines();
@@ -121,7 +157,7 @@ export async function renderPage({ root, api, apiFetch }) {
     }
   }
 
-  async function fetchLines() {
+  async function fetchLines({ signal = undefined, useBackgroundApi = false } = {}) {
     const params = new URLSearchParams({
       stream: state.stream,
       scope: state.scope,
@@ -131,7 +167,13 @@ export async function renderPage({ root, api, apiFetch }) {
       q: state.q,
     });
 
-    const data = await api(`/api/console/lines?${params}`);
+    const requestApi = useBackgroundApi ? apiForBackground : api;
+
+    const data = await requestApi(
+      `/api/console/lines?${params}`,
+      { signal },
+      { dedupeKey: "api:console-lines" },
+    );
     return data.lines ?? [];
   }
 
@@ -142,6 +184,7 @@ export async function renderPage({ root, api, apiFetch }) {
 
     for (const line of lines) {
       state.lastSeq = Math.max(state.lastSeq, Number(line.seq ?? 0));
+      runtime.lastSeq = state.lastSeq;
       frag.appendChild(renderLine(line));
     }
 
@@ -152,6 +195,16 @@ export async function renderPage({ root, api, apiFetch }) {
     }
 
     logList.scrollTop = logList.scrollHeight;
+    runtime.backgroundBufferedCount = 0;
+  }
+
+  function applyBackgroundUpdates(lines) {
+    if (!lines.length) return;
+    for (const line of lines) {
+      state.lastSeq = Math.max(state.lastSeq, Number(line.seq ?? 0));
+      runtime.lastSeq = state.lastSeq;
+    }
+    runtime.backgroundBufferedCount += lines.length;
   }
 
   function renderLine(line) {
@@ -213,6 +266,8 @@ export async function renderPage({ root, api, apiFetch }) {
     state.scope = "all";
     state.level = "all";
     state.q = "";
+    runtime.backgroundBufferedCount = 0;
+    syncRuntimeState();
     searchInput.value = "";
     searchInput.placeholder = VIEW_OPTIONS[view].searchPlaceholder;
     rconPanel.hidden = view !== "rcon-native";
@@ -269,11 +324,13 @@ export async function renderPage({ root, api, apiFetch }) {
 
   scopeFilter.addEventListener("change", async () => {
     state.scope = scopeFilter.value || "all";
+    syncRuntimeState();
     await fullReload();
   });
 
   levelFilter.addEventListener("change", async () => {
     state.level = levelFilter.value || "all";
+    syncRuntimeState();
     await fullReload();
   });
 
@@ -298,11 +355,13 @@ export async function renderPage({ root, api, apiFetch }) {
   searchInput.addEventListener("keydown", async (event) => {
     if (event.key !== "Enter") return;
     state.q = searchInput.value.trim();
+    syncRuntimeState();
     await fullReload();
   });
 
   pauseButton.addEventListener("click", () => {
     state.paused = !state.paused;
+    syncRuntimeState();
     pauseButton.textContent = state.paused ? "继续" : "暂停";
   });
 
@@ -329,23 +388,67 @@ export async function renderPage({ root, api, apiFetch }) {
   });
 
   await refreshRawOutputStatus();
-  await setView("modules");
+  await setView(state.view || "modules");
 
-  root.__consoleTimer = setInterval(async () => {
-    if (state.paused) return;
-    if (state.q) return;
+  if (taskManager) {
+    taskManager.registerTask({
+      id: CONSOLE_LINES_TASK_ID,
+      intervalMs: 1000,
+      backgroundIntervalMs: 5000,
+      visibleOnly: false,
+      dedupeKey: "api:console-lines",
+      scope: "global",
+      run: async ({ signal, hidden }) => {
+        if (state.paused || state.q) return;
+        const useBackgroundApi = !state.mounted;
+        const lines = await fetchLines({ signal, useBackgroundApi });
+        if (!lines.length) return;
 
-    const lines = await fetchLines();
-    appendLines(lines);
-  }, 1000);
+        if (state.mounted && !hidden) {
+          appendLines(lines);
+          return;
+        }
 
-  root.__consoleMetaTimer = setInterval(async () => {
-    await refreshFilters();
-  }, 5000);
+        applyBackgroundUpdates(lines);
+      },
+    });
 
-  root.__consoleStatusTimer = setInterval(async () => {
-    await refreshRconStatus();
-  }, 3000);
+    taskManager.registerTask({
+      id: `${pageScope}:filters`,
+      intervalMs: 5000,
+      backgroundIntervalMs: 15000,
+      visibleOnly: true,
+      dedupeKey: `${pageScope}:filters`,
+      scope: pageScope,
+      run: async () => {
+        if (!state.mounted) return;
+        await refreshFilters();
+      },
+    });
+
+    taskManager.registerTask({
+      id: `${pageScope}:rcon-status`,
+      intervalMs: 3000,
+      backgroundIntervalMs: 10000,
+      visibleOnly: true,
+      dedupeKey: `${pageScope}:rcon-status`,
+      scope: pageScope,
+      run: async () => {
+        if (!state.mounted) return;
+        await refreshRconStatus();
+      },
+    });
+  }
+
+  pauseButton.textContent = state.paused ? "继续" : "暂停";
+
+  return () => {
+    state.mounted = false;
+    syncRuntimeState();
+    if (taskManager) {
+      taskManager.removeTasksByScope(pageScope, { abort: true });
+    }
+  };
 }
 
 function applySelectOptions(select, items, currentValue) {
@@ -357,23 +460,6 @@ function applySelectOptions(select, items, currentValue) {
     option.textContent = item.title;
     if (item.id === currentValue) option.selected = true;
     select.appendChild(option);
-  }
-}
-
-function clearPageTimers(root) {
-  if (root.__consoleTimer) {
-    clearInterval(root.__consoleTimer);
-    root.__consoleTimer = null;
-  }
-
-  if (root.__consoleMetaTimer) {
-    clearInterval(root.__consoleMetaTimer);
-    root.__consoleMetaTimer = null;
-  }
-
-  if (root.__consoleStatusTimer) {
-    clearInterval(root.__consoleStatusTimer);
-    root.__consoleStatusTimer = null;
   }
 }
 
