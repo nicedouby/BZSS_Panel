@@ -13,7 +13,6 @@ import { createPlayerDatabaseModule } from "../modules/player-database/index.js"
 import { createKillManageModule } from "../modules/kill-manage/index.js";
 import { createCombatCleanModule } from "../modules/combat-clean/index.js";
 import { createTeamBalanceModule } from "../modules/team-balance/index.js";
-import { createSquadManageModule } from "../modules/squad-manage/index.js";
 import { createWarningModule } from "../modules/warning/index.js";
 import { createPlaytimeModule } from "../modules/playtime/index.js";
 import { createSeedModule } from "../modules/seed/index.js";
@@ -51,7 +50,6 @@ export class ModuleManager {
       createKillManageModule,
       createCombatCleanModule,
       createTeamBalanceModule,
-      createSquadManageModule,
       createWarningModule,
       createPlaytimeModule,
       createSeedModule,

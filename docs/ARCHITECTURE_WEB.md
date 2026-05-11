@@ -41,7 +41,6 @@ Module 是看不见的业务能力层：
 - squad-state
 - kill-manage
 - team-balance
-- squad-manage
 - warning
 - playtime
 - seed

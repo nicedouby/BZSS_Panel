@@ -451,19 +451,6 @@ export function createMatchStateModule({ core, modules, config, logger }) {
 
     async start() {
       core.webRegistry.registerPage({
-        id: "web.squadManage",
-        title: "建队管理",
-        group: "管理",
-        route: "/squad-manage",
-        pageModule: "/pages/squad-manage.js",
-        source: "module.squadManage",
-        required: false,
-        enabled: true,
-        order: 100,
-        icon: "🧩",
-      });
-
-      core.webRegistry.registerPage({
         id: "web.killManage",
         title: "战斗事件管理",
         group: "管理",

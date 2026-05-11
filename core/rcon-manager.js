@@ -15,7 +15,7 @@ import SquadRcon from "./squad-rcon.js";
  * 规则：
  * - 插件不能直接调用 RCON。
  * - Web 控制台可以通过 ConsoleModule 间接执行手动 RCON。
- * - 业务动作仍应走 warning/team-balance/squad-manage 等模块。
+ * - 业务动作仍应走 warning/team-balance 等模块。
  */
 export class RconManager {
   constructor({ config, logger, eventBus, webStatus }) {

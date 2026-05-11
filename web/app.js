@@ -23,7 +23,6 @@ const taskManager = getRuntimeTaskManager();
 const apiInFlight = new Map();
 
 const MERGED_API_KEYS = [
-  ["/api/console/lines", "api:console-lines"],
   ["/api/web/status", "api:web-status"],
   ["/api/snapshot/all", "api:snapshot-all"],
 ];

@@ -13,7 +13,7 @@
  * Plugin 不应该：
  * - 直接调用 RCON
  * - 直接维护全局玩家状态
- * - 绕过 TeamBalance / SquadManage / Warning
+ * - 绕过 TeamBalance / Warning
  */
 
 /**

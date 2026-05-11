@@ -75,7 +75,6 @@
     "killManage": { "enabled": true },
     "combatClean": { "enabled": true, "maxEvents": 5000 },
     "teamBalance": { "enabled": true },
-    "squadManage": { "enabled": true },
     "warning": { "enabled": true },
     "playtime": { "enabled": true },
     "seed": { "enabled": true },
@@ -89,7 +88,6 @@
       "web.playerDatabase"
     ],
     "optional": {
-      "web.squadManage": true,
       "web.squadCreationOrder": false,
       "web.killManage": true,
       "web.combatClean": true,

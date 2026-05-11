@@ -169,10 +169,11 @@ export async function renderPage({ root, api, apiFetch, globalApi, taskManager }
 
     const requestApi = useBackgroundApi ? apiForBackground : api;
 
+    const dedupeKey = `api:console-lines:${state.stream}:${state.scope}:${state.level}:${state.q}:${state.lastSeq}`;
     const data = await requestApi(
       `/api/console/lines?${params}`,
       { signal },
-      { dedupeKey: "api:console-lines" },
+      { dedupeKey },
     );
     return data.lines ?? [];
   }

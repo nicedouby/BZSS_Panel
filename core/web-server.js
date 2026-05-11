@@ -396,22 +396,7 @@ export class WebServer {
         targetSteam64: body.targetSteam64 ?? body.targetSteamID ?? "",
         targetEOS: body.targetEOS ?? body.targetEos ?? "",
         message: body.message ?? "Server warning",
-        reason: body.reason ?? "web.squad-manage.warn-player",
-      });
-      return this.json(res, result.success ? 200 : 400, result);
-    }
-
-    if (url.pathname === "/api/actions/disband-squad" && req.method === "POST") {
-      if (!this.modules.squadManage?.disbandSquad) {
-        return this.json(res, 404, { error: "SquadManageUnavailable" });
-      }
-      const body = await this.readJsonBody(req);
-      const result = await this.modules.squadManage.disbandSquad({
-        serverId: body.serverId ?? this.core.webStatus.serverId,
-        requestedBy: user.username,
-        teamId: Number(body.teamId ?? body.teamID ?? 0),
-        squadId: Number(body.squadId ?? body.squadID ?? 0),
-        reason: body.reason ?? "web.squad-manage.disband-squad",
+        reason: body.reason ?? "web.warn-player",
       });
       return this.json(res, result.success ? 200 : 400, result);
     }
@@ -426,33 +411,7 @@ export class WebServer {
         requestedBy: user.username,
         targetName: body.targetName ?? "",
         targetSteam64: body.targetSteam64 ?? body.targetSteamID ?? "",
-        reason: body.reason ?? "web.squad-manage.force-team-change",
-      });
-      return this.json(res, result.success ? 200 : 400, result);
-    }
-
-    if (url.pathname === "/api/actions/kick-from-squad" && req.method === "POST") {
-      const body = await this.readJsonBody(req);
-      const playerId = Number(body.playerId ?? body.playerID ?? 0);
-      const fallbackTarget = String(body.targetName ?? body.targetSteam64 ?? body.targetSteamID ?? "").trim();
-      const command = playerId > 0
-        ? `AdminRemovePlayerFromSquadById ${playerId}`
-        : `AdminRemovePlayerFromSquad "${fallbackTarget}"`;
-      const result = await this.core.rconManager.dispatchCommand({
-        command,
-        requestedBy: user.username,
-        reason: body.reason ?? "web.squad-manage.kick-from-squad",
-      });
-      await this.modules.audit?.record?.({
-        serverId: body.serverId ?? this.core.webStatus.serverId,
-        actorId: user.username,
-        actorKind: "web",
-        action: "RemovePlayerFromSquad",
-        targetType: "player",
-        targetId: playerId > 0 ? String(playerId) : fallbackTarget,
-        reason: body.reason ?? "web.squad-manage.kick-from-squad",
-        result: result.success ? "success" : "failed",
-        raw: { request: body, result, command },
+        reason: body.reason ?? "web.force-team-change",
       });
       return this.json(res, result.success ? 200 : 400, result);
     }

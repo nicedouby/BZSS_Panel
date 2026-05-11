@@ -169,10 +169,6 @@ export default class SquadRcon extends Rcon {
   switchTeam(anyID) {
     return this.execute(`AdminForceTeamChange "${anyID}"`);
   }
-
-  disbandSquad(teamID, squadID) {
-    return this.execute(`AdminDisbandSquad "${teamID}" ${squadID}`);
-  }
 }
 
 export function parseListPlayers(raw) {

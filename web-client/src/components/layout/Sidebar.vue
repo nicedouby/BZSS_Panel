@@ -24,7 +24,6 @@ const nav = [
   { path: "/player-database", label: "Player Database" },
   { path: "/combat-clean", label: "Combat Clean" },
   { path: "/kill-manage", label: "Kill Manage" },
-  { path: "/squad-manage", label: "Squad Manage" },
   { path: "/plugin-subscriptions", label: "Plugin Subscriptions" },
 ];
 </script>
