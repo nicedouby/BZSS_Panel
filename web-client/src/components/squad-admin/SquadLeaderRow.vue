@@ -38,7 +38,7 @@ defineEmits<{
 const isSelected = computed(() => props.selected ?? false);
 
 const playtimeText = computed(() => {
-  if (props.player.playtimeHours === null) return "";
+  if (props.player.playtimeHours == null) return "";
   return `Steam ${props.player.playtimeHours}h`;
 });
 </script>

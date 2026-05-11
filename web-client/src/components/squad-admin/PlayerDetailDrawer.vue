@@ -1,10 +1,7 @@
 <template>
   <Teleport to="body">
     <Transition name="drawer">
-      <div v-if="open" class="player-detail-drawer-backdrop" @click="close" />
-    </Transition>
-    <Transition name="drawer">
-      <div v-if="open && props.player" class="player-detail-drawer" @click.self="close">
+      <div v-if="open && props.player" class="player-detail-drawer">
         <header class="drawer-header">
           <div class="drawer-header-content">
             <h2 class="drawer-player-name">{{ props.player.name }}</h2>
@@ -205,18 +202,11 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.player-detail-drawer-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  z-index: 39;
-}
-
 .player-detail-drawer {
   position: fixed;
   top: 0;
   right: 0;
-  height: 100vh;
+  height: 100dvh;
   width: 420px;
   background: var(--color-bg-panel);
   border-left: 1px solid var(--color-border-default);
@@ -291,6 +281,7 @@ onUnmounted(() => {
 }
 
 .drawer-body {
+  min-height: 0;
   overflow-y: auto;
   padding: var(--spacing-lg);
   display: grid;

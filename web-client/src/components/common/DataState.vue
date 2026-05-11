@@ -12,10 +12,14 @@
     <p>{{ emptyText }}</p>
   </div>
   <div v-else class="state-shell">
-    <div v-if="stale" class="stale-banner">
-      <span>{{ staleText }}</span>
+    <div v-if="stale" class="state-banner-row">
+      <div class="stale-banner">
+        <span>{{ staleText }}</span>
+      </div>
     </div>
-    <slot />
+    <div class="state-content">
+      <slot />
+    </div>
   </div>
 </template>
 
@@ -48,7 +52,20 @@ withDefaults(defineProps<{
 <style scoped>
 .state-shell {
   display: grid;
-  gap: 12px;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.state-banner-row {
+  padding: 12px 12px 0;
+}
+
+.state-content {
+  display: grid;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .state-block,

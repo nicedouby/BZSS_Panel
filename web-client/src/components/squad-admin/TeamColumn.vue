@@ -40,9 +40,11 @@ const teamColorClass = computed(() => {
 <style scoped>
 .team-column {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: var(--spacing-md);
   min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .team-column.team1 .team-column-header {
@@ -78,7 +80,11 @@ const teamColorClass = computed(() => {
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--spacing-md);
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  align-content: start;
+  overscroll-behavior: contain;
 }
 
 /* 紧凑模式 */

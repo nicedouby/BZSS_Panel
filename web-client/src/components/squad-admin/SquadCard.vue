@@ -27,7 +27,7 @@
       <SquadLeaderRow
         v-if="squad.leader"
         :player="squad.leader"
-        :selected="selectedPlayerId === squad.leader.playerId"
+        :selected="String(selectedPlayerId) === String(squad.leader.playerId)"
         @select="$emit('select-player', squad.leader)"
       />
 
@@ -39,7 +39,7 @@
         v-for="member in squad.members"
         :key="`player-${member.playerId}`"
         :player="member"
-        :selected="selectedPlayerId === member.playerId"
+        :selected="String(selectedPlayerId) === String(member.playerId)"
         @select="$emit('select-player', member)"
       />
     </template>
@@ -70,8 +70,10 @@ const teamColorClass = computed(() => {
 
 const hasSelectedPlayer = computed(() => {
   if (!props.selectedPlayerId) return false;
-  if (props.squad.leader?.playerId === props.selectedPlayerId) return true;
-  return props.squad.members.some((m) => m.playerId === props.selectedPlayerId);
+  if (props.squad.leader && String(props.squad.leader.playerId) === String(props.selectedPlayerId)) {
+    return true;
+  }
+  return props.squad.members.some((member) => String(member.playerId) === String(props.selectedPlayerId));
 });
 </script>
 

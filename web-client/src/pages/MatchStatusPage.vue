@@ -194,19 +194,20 @@ function renderApiErrorText(runtimeError: string) {
 
 .squad-admin-layout {
   display: grid;
-  grid-template-rows: auto auto 1fr;
-  height: 100vh;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  height: 100dvh;
   gap: 0;
   overflow: hidden;
 }
 
 .squad-main-content {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--spacing-lg);
   padding: var(--spacing-lg);
-  overflow-y: auto;
-  position: relative;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 @media (max-width: 1366px) {
