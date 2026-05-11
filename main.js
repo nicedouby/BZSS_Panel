@@ -16,12 +16,14 @@
  * 3. EventBus
  * 4. WebRegistry
  * 5. WebStatus
- * 6. RconManager
- * 7. UdpEventReceiver
- * 8. ModuleManager
- * 9. PluginManager
- * 10. WebServer
- * 11. PythonLogParserManager
+ * 6. AuthManager
+ * 7. ModuleManager (loadBuiltInModules)
+ * 8. EventPipeline (setCombatIdentityResolver)
+ * 9. RconManager
+ * 10. UdpEventReceiver
+ * 11. PluginManager
+ * 12. WebServer
+ * 13. PythonLogParserManager
  */
 
 import { ConfigManager } from "./core/config-manager.js";
@@ -140,8 +142,6 @@ async function main() {
   coreContext.pythonLogParserManager = pythonLogParserManager;
 
   await authManager.start();
-  await rconManager.start();
-  await udpReceiver.start();
   await moduleManager.loadBuiltInModules();
   eventPipeline.setCombatIdentityResolver(({ serverId, keyType, keyValue }) => {
     const playerState = moduleManager.registry.playerState;
@@ -164,6 +164,8 @@ async function main() {
 
     return null;
   });
+  await rconManager.start();
+  await udpReceiver.start();
   await pluginManager.loadPlugins();
   coreContext.pluginManager = pluginManager;
   await webServer.start();
@@ -176,6 +178,14 @@ async function main() {
     source: "app.main",
   });
   logger.info(`Web: http://${webServer.host}:${webServer.port}`, {
+    scope: "app",
+    source: "app.main",
+  });
+  logger.info(`Web static mode: ${webServer.useVueClient ? "vue" : "legacy"}`, {
+    scope: "app",
+    source: "app.main",
+  });
+  logger.info(`Static directory: ${webServer.staticDirectory}`, {
     scope: "app",
     source: "app.main",
   });

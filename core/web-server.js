@@ -100,7 +100,9 @@ export class WebServer {
         web: {
           host: this.host,
           port: this.port,
+          useVueClient: this.useVueClient,
           staticDirectory: this.staticDirectory,
+          mode: this.useVueClient ? "vue" : "legacy",
         },
         auth: {
           enabled: true,
@@ -190,6 +192,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/log-clock/set" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
       const seconds = Number(body.seconds ?? body.value ?? 0);
       const next = this.core.webStatus.setLogClockSeconds(seconds, { reason: "manual" });
@@ -200,6 +203,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/log-clock/reset" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
       const next = this.core.webStatus.resetLogClock({ reason: "manualReset" });
       return this.json(res, 200, {
         ok: true,
@@ -208,13 +212,6 @@ export class WebServer {
     }
 
     if (url.pathname.startsWith("/api/plugin-subscriptions")) {
-      if (!this.canManagePlugins(user)) {
-        return this.json(res, 403, {
-          error: "Forbidden",
-          message: "plugins.manage permission is required.",
-        });
-      }
-
       const pluginSubscriptions = this.modules.pluginSubscriptions;
       if (!pluginSubscriptions) {
         return this.json(res, 404, {
@@ -228,11 +225,13 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/plugin-subscriptions/set" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
         return this.json(res, 200, await pluginSubscriptions.setSubscribed(body.id, body.subscribed));
       }
 
       if (url.pathname === "/api/plugin-subscriptions/toggle" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
         return this.json(res, 200, await pluginSubscriptions.toggleSubscribed(body.id));
       }
@@ -243,6 +242,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/jobs/playtime-refresh-online" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
       const job = await this.modules.playtime.refreshOnline(body.serverId ?? url.searchParams.get("serverId") ?? this.core.webStatus.serverId);
       this.core.runtimeState.updateJob(job);
@@ -250,6 +250,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/jobs/rcon-refresh" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
       const type = body.type ?? url.searchParams.get("type") ?? "all";
       const job = this.createLocalJob("rcon-refresh", { type });
@@ -327,6 +328,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/playtime/online/refresh" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
       const job = await this.modules.playtime.refreshOnline(url.searchParams.get("serverId") ?? this.core.webStatus.serverId);
       const waitMs = Number(body.waitMs ?? 0);
@@ -337,6 +339,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/playtime/players/refresh" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
       const job = await this.modules.playtime.refreshPlayer(body);
       const waitMs = Number(body.waitMs ?? 0);
@@ -377,6 +380,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/console/rcon" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
       const result = await this.modules.console.executeRconCommand(body.command, {
         requestedBy: "web.console",
@@ -389,6 +393,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/logpost/raw-output" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
       const result = await this.setLogPostRawOutputConfig(Boolean(body.enabled));
       return this.json(res, 200, result);
@@ -398,7 +403,8 @@ export class WebServer {
       return this.json(res, 200, this.core.rconManager.getStatus());
     }
 
-    if (url.pathname === "/api/rcon/refresh") {
+    if (url.pathname === "/api/rcon/refresh" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
       const type = url.searchParams.get("type") ?? "all";
       const result = {};
 
@@ -430,6 +436,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/combat/clear" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
       return this.json(res, 200, this.modules.combatState.clear());
     }
 
@@ -485,6 +492,7 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/combat-clean/clear" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
         return this.json(res, 200, combatClean.clear(body.serverId ?? serverId));
       }
@@ -511,6 +519,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/player-database/sync-online" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
       return this.json(
         res,
         200,
@@ -597,15 +606,18 @@ export class WebServer {
 
     const dbPermissionMatch = url.pathname.match(/^\/api\/db\/players\/(\d+)\/permission-group$/);
     if (dbPermissionMatch && req.method === "PATCH") {
+      if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
       return this.json(res, 200, await this.modules.playerDatabase.setPermissionGroup(dbPermissionMatch[1], body.permissionGroup));
     }
 
     if (url.pathname === "/api/db/reset-kill-stats" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
       return this.json(res, 200, await this.modules.playerDatabase.resetKillStats());
     }
 
     if (dbPlayerMatch && req.method === "DELETE") {
+      if (!this.requireSuperAdmin(user, res)) return;
       return this.json(res, 200, await this.modules.playerDatabase.deletePlayer(dbPlayerMatch[1]));
     }
 
@@ -668,6 +680,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/weapon-collector/clear" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
       const pluginApi = this.getPluginApi("plugin.weaponCollector");
       if (!pluginApi) {
         return this.json(res, 404, { error: "WeaponCollectorNotLoaded" });
@@ -856,6 +869,17 @@ export class WebServer {
     if (Array.isArray(permissions)) return permissions.includes("plugins.manage");
     if (permissions && typeof permissions === "object") return Boolean(permissions["plugins.manage"]);
     return false;
+  }
+
+  requireSuperAdmin(user, res) {
+    if (!this.core.authManager?.hasEverything?.(user)) {
+      this.json(res, 403, {
+        error: "Forbidden",
+        message: "SuperAdmin permission is required.",
+      });
+      return false;
+    }
+    return true;
   }
 
   getLogPostConfigPath() {
