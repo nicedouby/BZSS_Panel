@@ -1,8 +1,13 @@
 <template>
   <header class="topbar">
-    <div>
-      <strong>{{ serverName }}</strong>
-      <span>{{ layer }}</span>
+    <div class="topbar-start">
+      <button type="button" class="menu-button" @click="toggleSidebar">
+        {{ sidebarButtonLabel }}
+      </button>
+      <div>
+        <strong>{{ pageTitle }}</strong>
+        <span>{{ layer }}</span>
+      </div>
     </div>
     <div class="topbar-metrics">
       <StatusBadge :tone="runtimeTone">{{ runtimeLabel }}</StatusBadge>
@@ -15,20 +20,25 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import { useRoute } from "vue-router";
 import { useServerStore } from "../../stores/server.store";
 import { usePlayerStore } from "../../stores/player.store";
 import { getRuntimeSyncState } from "../../app/runtimeSync";
+import { useUiStore } from "../../stores/ui.store";
 import StatusBadge from "../common/StatusBadge.vue";
 
 const server = useServerStore();
 const players = usePlayerStore();
 const runtime = getRuntimeSyncState();
+const route = useRoute();
+const ui = useUiStore();
 
 const webStatus = computed(() => server.snapshot.webStatus ?? server.snapshot ?? {});
-const serverName = computed(() => webStatus.value.serverName ?? "BZSS Panel");
+const pageTitle = computed(() => String(route.meta.title ?? webStatus.value.serverName ?? "BZSS Panel"));
 const layer = computed(() => webStatus.value.currentLayer ?? webStatus.value.layer ?? "Unknown Layer");
 const playerCount = computed(() => players.active.length);
 const tps = computed(() => webStatus.value.tps ?? "--");
+const sidebarButtonLabel = computed(() => ui.sidebarCollapsed ? "Expand" : "Collapse");
 const runtimeLabel = computed(() => {
   if (runtime.inFlight) return "syncing";
   if (runtime.errorType === "unauthorized") return "unauthorized";
@@ -47,6 +57,14 @@ function briefRuntimeError(value: string) {
   if (value.length <= 52) return value;
   return `${value.slice(0, 49)}...`;
 }
+
+function toggleSidebar() {
+  if (window.matchMedia("(max-width: 780px)").matches) {
+    ui.toggleMobileSidebar();
+    return;
+  }
+  ui.toggleSidebarCollapsed();
+}
 </script>
 
 <style scoped>
@@ -61,6 +79,12 @@ function briefRuntimeError(value: string) {
   background: #14191f;
 }
 
+.topbar-start {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .topbar strong,
 .topbar span {
   display: block;
@@ -71,10 +95,25 @@ function briefRuntimeError(value: string) {
   font-size: 12px;
 }
 
+.menu-button {
+  min-width: 70px;
+}
+
 .topbar-metrics {
   display: flex;
   align-items: center;
   gap: 10px;
   white-space: nowrap;
+}
+
+@media (max-width: 780px) {
+  .topbar {
+    padding: 0 14px;
+  }
+
+  .topbar-metrics {
+    gap: 8px;
+    overflow: hidden;
+  }
 }
 </style>

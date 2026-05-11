@@ -174,6 +174,7 @@ export function createCombatStateModule({ core, modules, config, logger }) {
       const type = String(filter.type ?? "all").trim();
       const search = String(filter.search ?? "").trim().toLowerCase();
       const limit = clampLimit(filter.limit, 200);
+      const offset = Math.max(Number(filter.offset) || 0, 0);
 
       let result = events;
 
@@ -195,7 +196,7 @@ export function createCombatStateModule({ core, modules, config, logger }) {
         result = result.filter((event) => matchesSearch(event, search));
       }
 
-      return result.slice(-limit).reverse().map(enrichEvent);
+      return result.slice().reverse().slice(offset, offset + limit).map(enrichEvent);
     },
 
     clear() {

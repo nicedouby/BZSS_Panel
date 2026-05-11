@@ -8,12 +8,14 @@
 
 <script setup lang="ts">
 import { onMounted, watch } from "vue";
+import { useRoute } from "vue-router";
 import AppLayout from "./components/layout/AppLayout.vue";
 import LoginPage from "./pages/LoginPage.vue";
 import { useAuthStore } from "./stores/auth.store";
 import { startRuntimeSync, stopRuntimeSync } from "./app/runtimeSync";
 
 const auth = useAuthStore();
+const route = useRoute();
 
 onMounted(() => {
   void auth.restoreSession();
@@ -24,6 +26,14 @@ watch(
   (authenticated) => {
     if (authenticated) startRuntimeSync();
     else stopRuntimeSync();
+  },
+  { immediate: true },
+);
+
+watch(
+  () => route.meta.title,
+  (title) => {
+    document.title = title ? `BZSS Panel | ${title}` : "BZSS Panel";
   },
   { immediate: true },
 );

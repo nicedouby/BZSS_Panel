@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { Readable } from "node:stream";
 
 import { WebServer } from "../core/web-server.js";
@@ -214,11 +217,114 @@ async function testWeaponCollectorApiRequiresGet() {
   assert.equal(JSON.parse(typeMapPost.state.body).error, "ApiNotFound");
 }
 
+async function testSnapshotAllRequiresAuth() {
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return null;
+        },
+      },
+    },
+  });
+
+  const recorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/snapshot/all",
+    headers: { host: "localhost" },
+    socket: {},
+  }, recorder.res);
+
+  assert.equal(recorder.state.status, 401);
+  assert.equal(JSON.parse(recorder.state.body).error, "Unauthorized");
+}
+
+async function testSnapshotAllDoesNotTriggerSlowTasks() {
+  let getAllCalls = 0;
+  let slowTaskCalls = 0;
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin" };
+        },
+      },
+      runtimeState: {
+        getAll() {
+          getAllCalls += 1;
+          return { ok: true, players: { active: [] } };
+        },
+      },
+    },
+    modules: {
+      playtime: {
+        refreshOnline() {
+          slowTaskCalls += 1;
+        },
+      },
+    },
+  });
+
+  const recorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/snapshot/all",
+    headers: { host: "localhost" },
+    socket: {},
+  }, recorder.res);
+
+  assert.equal(recorder.state.status, 200);
+  assert.equal(getAllCalls, 1);
+  assert.equal(slowTaskCalls, 0);
+  assert.equal(JSON.parse(recorder.state.body).ok, true);
+}
+
+async function testVueRouteFallsBackToIndexHtml() {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-web-"));
+  await fs.writeFile(path.join(tempDir, "index.html"), "<html><body>vue-app</body></html>", "utf8");
+  await fs.writeFile(path.join(tempDir, "assets.txt"), "asset", "utf8");
+
+  const server = createServer({
+    config: {
+      useVueClient: true,
+    },
+  });
+  server.staticDirectory = tempDir;
+
+  const routeRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/match-status",
+    headers: { host: "localhost" },
+    socket: {},
+  }, routeRecorder.res);
+
+  assert.equal(routeRecorder.state.status, 200);
+  assert.match(routeRecorder.state.body, /vue-app/);
+
+  const assetRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/assets.txt",
+    headers: { host: "localhost" },
+    socket: {},
+  }, assetRecorder.res);
+
+  assert.equal(assetRecorder.state.status, 200);
+  assert.equal(assetRecorder.state.body, "asset");
+
+  await fs.rm(tempDir, { recursive: true, force: true });
+}
+
 await testReadJsonBodyParsesValidPayload();
 await testReadJsonBodyRejectsInvalidJson();
 await testReadJsonBodyRejectsOversizedPayload();
 await testGetPluginApiReturnsMatchingPluginApi();
 await testHealthEndpointDoesNotRequireAuth();
 await testWeaponCollectorApiRequiresGet();
+await testSnapshotAllRequiresAuth();
+await testSnapshotAllDoesNotTriggerSlowTasks();
+await testVueRouteFallsBackToIndexHtml();
 
 console.log("web server tests passed");

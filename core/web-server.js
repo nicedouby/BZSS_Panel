@@ -363,6 +363,79 @@ export class WebServer {
       return this.json(res, 200, result);
     }
 
+    if (url.pathname === "/api/actions/warn-player" && req.method === "POST") {
+      if (!this.modules.warning?.warnPlayer) {
+        return this.json(res, 404, { error: "WarningActionUnavailable" });
+      }
+      const body = await this.readJsonBody(req);
+      const result = await this.modules.warning.warnPlayer({
+        serverId: body.serverId ?? this.core.webStatus.serverId,
+        requestedBy: user.username,
+        targetName: body.targetName ?? "",
+        targetSteam64: body.targetSteam64 ?? body.targetSteamID ?? "",
+        targetEOS: body.targetEOS ?? body.targetEos ?? "",
+        message: body.message ?? "Server warning",
+        reason: body.reason ?? "web.squad-manage.warn-player",
+      });
+      return this.json(res, result.success ? 200 : 400, result);
+    }
+
+    if (url.pathname === "/api/actions/disband-squad" && req.method === "POST") {
+      if (!this.modules.squadManage?.disbandSquad) {
+        return this.json(res, 404, { error: "SquadManageUnavailable" });
+      }
+      const body = await this.readJsonBody(req);
+      const result = await this.modules.squadManage.disbandSquad({
+        serverId: body.serverId ?? this.core.webStatus.serverId,
+        requestedBy: user.username,
+        teamId: Number(body.teamId ?? body.teamID ?? 0),
+        squadId: Number(body.squadId ?? body.squadID ?? 0),
+        reason: body.reason ?? "web.squad-manage.disband-squad",
+      });
+      return this.json(res, result.success ? 200 : 400, result);
+    }
+
+    if (url.pathname === "/api/actions/force-team-change" && req.method === "POST") {
+      if (!this.modules.teamBalance?.requestSwitchTeam) {
+        return this.json(res, 404, { error: "TeamBalanceUnavailable" });
+      }
+      const body = await this.readJsonBody(req);
+      const result = await this.modules.teamBalance.requestSwitchTeam({
+        serverId: body.serverId ?? this.core.webStatus.serverId,
+        requestedBy: user.username,
+        targetName: body.targetName ?? "",
+        targetSteam64: body.targetSteam64 ?? body.targetSteamID ?? "",
+        reason: body.reason ?? "web.squad-manage.force-team-change",
+      });
+      return this.json(res, result.success ? 200 : 400, result);
+    }
+
+    if (url.pathname === "/api/actions/kick-from-squad" && req.method === "POST") {
+      const body = await this.readJsonBody(req);
+      const playerId = Number(body.playerId ?? body.playerID ?? 0);
+      const fallbackTarget = String(body.targetName ?? body.targetSteam64 ?? body.targetSteamID ?? "").trim();
+      const command = playerId > 0
+        ? `AdminRemovePlayerFromSquadById ${playerId}`
+        : `AdminRemovePlayerFromSquad "${fallbackTarget}"`;
+      const result = await this.core.rconManager.dispatchCommand({
+        command,
+        requestedBy: user.username,
+        reason: body.reason ?? "web.squad-manage.kick-from-squad",
+      });
+      await this.modules.audit?.record?.({
+        serverId: body.serverId ?? this.core.webStatus.serverId,
+        actorId: user.username,
+        actorKind: "web",
+        action: "RemovePlayerFromSquad",
+        targetType: "player",
+        targetId: playerId > 0 ? String(playerId) : fallbackTarget,
+        reason: body.reason ?? "web.squad-manage.kick-from-squad",
+        result: result.success ? "success" : "failed",
+        raw: { request: body, result, command },
+      });
+      return this.json(res, result.success ? 200 : 400, result);
+    }
+
     if (url.pathname === "/api/logpost/raw-output" && req.method === "GET") {
       return this.json(res, 200, await this.getLogPostRawOutputConfig());
     }
@@ -402,6 +475,7 @@ export class WebServer {
           type: url.searchParams.get("type") ?? "all",
           search: url.searchParams.get("search") ?? "",
           limit: url.searchParams.get("limit") ?? "300",
+          offset: url.searchParams.get("offset") ?? "0",
         }),
         overview: this.modules.combatState.getOverview(),
       });

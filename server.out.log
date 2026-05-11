@@ -1,0 +1,121 @@
+
+> bzss-panel-web-core@0.2.0 start
+> node main.js
+
+[96m[INFO][0m [90m2026-05-11T04:39:06.738Z[0m [96m[app][0m BZSS Panel WebCore starting...
+[96m[WEB][0m [90m2026-05-11T04:39:06.742Z[0m [94m[core.webRegistry][0m Registered page web.matchStatus
+[96m[WEB][0m [90m2026-05-11T04:39:06.744Z[0m [94m[core.webRegistry][0m Registered page web.console
+[96m[WEB][0m [90m2026-05-11T04:39:06.746Z[0m [94m[core.webRegistry][0m Registered page web.playerDatabase
+[96m[INFO][0m [90m2026-05-11T04:39:06.760Z[0m [96m[core.authManager][0m AuthManager started.
+[96m[INFO][0m [90m2026-05-11T04:39:06.763Z[0m [96m[core.rconManager][0m Connecting to RCON 192.168.0.184:30144 (op=start)
+[96m[INFO][0m [90m2026-05-11T04:39:06.766Z[0m [96m[core.rconManager][0m [RCON] Connecting to 192.168.0.184:30144 ...
+[96m[INFO][0m [90m2026-05-11T04:39:06.768Z[0m [96m[core.rconManager][0m [RCON] Connected to 192.168.0.184:30144
+[96m[INFO][0m [90m2026-05-11T04:39:06.861Z[0m [96m[core.rconManager][0m [RCON] Authentication successful.
+[96m[INFO][0m [90m2026-05-11T04:39:06.863Z[0m [96m[core.udpEventReceiver][0m UDP Receiver listening on 127.0.0.1:6666 (op=start)
+[96m[WEB][0m [90m2026-05-11T04:39:06.864Z[0m [94m[core.webRegistry][0m Registered page web.pluginSubscriptions
+[96m[MODULE][0m [90m2026-05-11T04:39:06.864Z[0m [96m[module][0m module.pluginSubscriptions started.
+[96m[MODULE][0m [90m2026-05-11T04:39:06.864Z[0m [95m[module.pluginSubscriptions][0m Loaded module.pluginSubscriptions (op=load)
+[96m[MODULE][0m [90m2026-05-11T04:39:06.865Z[0m [95m[module.audit][0m Loaded module.audit (op=load)
+[96m[INFO][0m [90m2026-05-11T04:39:06.865Z[0m [95m[module.console][0m Console module started. (op=start)
+[96m[MODULE][0m [90m2026-05-11T04:39:06.865Z[0m [95m[module.console][0m Loaded module.console (op=load)
+[96m[INFO][0m [90m2026-05-11T04:39:06.866Z[0m [95m[module.logClock][0m LogClock module started. (op=start)
+[96m[MODULE][0m [90m2026-05-11T04:39:06.866Z[0m [95m[module.logClock][0m Loaded module.logClock (op=load)
+[96m[MODULE][0m [90m2026-05-11T04:39:06.866Z[0m [95m[module.serverStatus][0m Loaded module.serverStatus (op=load)
+[96m[MODULE][0m [90m2026-05-11T04:39:06.867Z[0m [95m[module.playerState][0m PlayerState subscriptions ready. (op=start)
+[96m[MODULE][0m [90m2026-05-11T04:39:06.867Z[0m [95m[module.playerState][0m Loaded module.playerState (op=load)
+[96m[MODULE][0m [90m2026-05-11T04:39:06.868Z[0m [95m[module.squadState][0m Loaded module.squadState (op=load)
+[96m[MODULE][0m [90m2026-05-11T04:39:06.868Z[0m [95m[module.squadCreationOrder][0m Loaded module.squadCreationOrder (op=load)
+[96m[WEB][0m [90m2026-05-11T04:39:06.868Z[0m [94m[core.webRegistry][0m Registered page web.squadManage
+[96m[WEB][0m [90m2026-05-11T04:39:06.869Z[0m [94m[core.webRegistry][0m Registered page web.killManage
+[96m[MODULE][0m [90m2026-05-11T04:39:06.870Z[0m [95m[module.matchState][0m MatchState polling started. serverInfo=5000ms players=10000ms squads=10000ms (op=start)
+[96m[MODULE][0m [90m2026-05-11T04:39:06.870Z[0m [95m[module.matchState][0m Loaded module.matchState (op=load)
+[96m[MODULE][0m [90m2026-05-11T04:39:06.870Z[0m [95m[module.combatState][0m CombatState started. maxEvents=5000 (op=start)
+[96m[MODULE][0m [90m2026-05-11T04:39:06.871Z[0m [95m[module.combatState][0m Loaded module.combatState (op=load)
+[96m[MODULE][0m [90m2026-05-11T04:39:06.907Z[0m [95m[module.playerDatabase][0m Loaded module.playerDatabase (op=load)
+[96m[MODULE][0m [90m2026-05-11T04:39:06.908Z[0m [95m[module.killManage][0m Loaded module.killManage (op=load)
+[96m[WEB][0m [90m2026-05-11T04:39:06.908Z[0m [94m[core.webRegistry][0m Registered page web.combatClean
+[96m[MODULE][0m [90m2026-05-11T04:39:06.908Z[0m [95m[module.combatClean][0m CombatClean started. maxEvents=5000 (op=start)
+[96m[MODULE][0m [90m2026-05-11T04:39:06.908Z[0m [95m[module.combatClean][0m Loaded module.combatClean (op=load)
+[96m[MODULE][0m [90m2026-05-11T04:39:06.909Z[0m [95m[module.teamBalance][0m Loaded module.teamBalance (op=load)
+[96m[MODULE][0m [90m2026-05-11T04:39:06.909Z[0m [95m[module.squadManage][0m Loaded module.squadManage (op=load)
+[96m[MODULE][0m [90m2026-05-11T04:39:06.909Z[0m [95m[module.warning][0m Loaded module.warning (op=load)
+[96m[INFO][0m [90m2026-05-11T04:39:06.920Z[0m [95m[module.playtime][0m Steam playtime module initialized. (op=init)
+[96m[MODULE][0m [90m2026-05-11T04:39:06.921Z[0m [95m[module.playtime][0m Loaded module.playtime (op=load)
+[96m[MODULE][0m [90m2026-05-11T04:39:06.921Z[0m [95m[module.seed][0m Loaded module.seed (op=load)
+[96m[MODULE][0m [90m2026-05-11T04:39:06.921Z[0m [95m[module.points][0m Loaded module.points (op=load)
+[96m[WEB][0m [90m2026-05-11T04:39:06.934Z[0m [94m[core.webRegistry][0m Registered page web.weaponCollector
+[96m[INFO][0m [90m2026-05-11T04:39:06.934Z[0m [92m[plugin.weapon-collector][0m [WeaponCollector] Plugin started and listening to combat events
+[96m[MODULE][0m [90m2026-05-11T04:39:06.934Z[0m [92m[plugin.weapon-collector][0m Plugin loaded: plugin.weaponCollector (op=load)
+[96m[INFO][0m [90m2026-05-11T04:39:06.938Z[0m [92m[plugin.udp-combat-log-forwarder][0m [UdpCombatLogForwarder] forwarding combat logs to 114.66.18.134:4000/udp4
+[96m[MODULE][0m [90m2026-05-11T04:39:06.938Z[0m [92m[plugin.udp-combat-log-forwarder][0m Plugin loaded: plugin.udpCombatLogForwarder (op=load)
+[96m[INFO][0m [90m2026-05-11T04:39:06.940Z[0m [94m[core.webServer][0m WebServer listening on http://127.0.0.1:7799
+[96m[INFO][0m [90m2026-05-11T04:39:06.940Z[0m [96m[core.pythonLogParserManager][0m Starting Python LogParser: python ./main.py ./config.json
+[96m[INFO][0m [90m2026-05-11T04:39:06.940Z[0m [96m[core.pythonLogParserManager][0m Python cwd: D:\BZSS_Panel\LogPost
+[96m[INFO][0m [90m2026-05-11T04:39:07.159Z[0m [96m[app][0m BZSS Panel WebCore started.
+[96m[INFO][0m [90m2026-05-11T04:39:07.159Z[0m [96m[app][0m Web: http://127.0.0.1:7799
+[96m[INFO][0m [90m2026-05-11T04:46:13.270Z[0m [96m[core.pythonLogParserManager][0m [PY] [96m[INFO][0m BZSS Log Parser started.
+[96m[INFO][0m SessionID=20260511_123907_0dd4810e
+[96m[INFO][0m PollInterval=0.2s
+[INFO] Tailing: Z:\SquadGame.log from position 819919
+[92m[EVENT] On_ServerTickRateUpdated #2 @2026.05.11-04.39.15:268[0m [90m|[0m 30.10 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[96m[EVENT] On_PlayerSpawnRequested #5 @2026.05.11-04.39.21:514[0m [90m|[0m Strelitzia016 | Team1TempSpawnGroupAncientQanat | PLA_SL_03 | [2m-[0m | [2m-[0m | Unknown | Partial
+[92m[EVENT] On_ServerTickRateUpdated #22 @2026.05.11-04.39.25:480[0m [90m|[0m 30.07 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #33 @2026.05.11-04.39.35:746[0m [90m|[0m 30.09 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #52 @2026.05.11-04.39.45:937[0m [90m|[0m 30.03 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #62 @2026.05.11-04.39.56:151[0m [90m|[0m 30.06 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #72 @2026.05.11-04.40.06:430[0m [90m|[0m 30.06 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #78 @2026.05.11-04.40.16:705[0m [90m|[0m 30.07 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #92 @2026.05.11-04.40.27:011[0m [90m|[0m 30.09 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #118 @2026.05.11-04.40.37:282[0m [90m|[0m 30.08 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #121 @2026.05.11-04.40.47:495[0m [90m|[0m 30.05 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #132 @2026.05.11-04.40.57:705[0m [90m|[0m 30.07 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #145 @2026.05.11-04.41.07:950[0m [90m|[0m 30.06 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #149 @2026.05.11-04.41.18:254[0m [90m|[0m 30.09 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #164 @2026.05.11-04.41.28:551[0m [90m|[0m 30.11 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #178 @2026.05.11-04.41.38:771[0m [90m|[0m 30.03 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[93m[EVENT] On_PlayerDamaged #191 @2026.05.11-04.41.44:194[0m [90m|[0m Strelitzia016 | 0.065810 | [2m-[0m | [2m-[0m | [2m-[0m | [2m-[0m | Grenade_C_2147422842 | 0002117b412a4169a4bfbf911f69d934 | ...+6
+[92m[EVENT] On_ServerTickRateUpdated #197 @2026.05.11-04.41.48:985[0m [90m|[0m 30.06 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[93m[EVENT] On_PlayerDamaged #199 @2026.05.11-04.41.51:051[0m [90m|[0m Strelitzia016 | 40.739998 | [2m-[0m | [2m-[0m | [2m-[0m | [2m-[0m | BP_Projectile_7_62mm_C_2147422042 | 0002117b412a4169a4bfbf911f69d934 | ...+6
+[95m[EVENT] On_PlayerDied #203 @2026.05.11-04.41.54:699[0m [90m|[0m Donald��DoubyBear | -300.000000 | [2m-[0m | [2m-[0m | [2m-[0m | [2m-[0m | nullptr | BP_Soldier_AFU_SquadLeader01_C_2147�� | ...+7
+[93m[EVENT] On_PlayerDamaged #216 @2026.05.11-04.41.57:499[0m [90m|[0m Strelitzia016 | 8.758738 | [2m-[0m | [2m-[0m | [2m-[0m | [2m-[0m | BP_35MM_Proj_QLZ87_HEDP_C_2147421654 | 0002117b412a4169a4bfbf911f69d934 | ...+6
+[92m[EVENT] On_ServerTickRateUpdated #221 @2026.05.11-04.41.59:224[0m [90m|[0m 30.08 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #238 @2026.05.11-04.42.09:442[0m [90m|[0m 30.05 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[93m[EVENT] On_PlayerDamaged #255 @2026.05.11-04.42.16:456[0m [90m|[0m Strelitzia016 | 130.000000 | [2m-[0m | [2m-[0m | [2m-[0m | [2m-[0m | Grenade_C_2147420904 | 0002117b412a4169a4bfbf911f69d934 | ...+6
+[91m[EVENT] On_PlayerWounded #257 @2026.05.11-04.42.16:456[0m [90m|[0m Strelitzia016 | 130.000000 | [2m-[0m | [2m-[0m | [2m-[0m | [2m-[0m | nullptr | Grenade_C_2147420904 | ...+7
+[95m[EVENT] On_PlayerDied #259 @2026.05.11-04.42.19:011[0m [90m|[0m Strelitzia016 | -300.000000 | SquidBotAIController_C_2147435825 | [2m-[0m | [2m-[0m | SquidBotAIController_C_2147435825 | SquidBotAIController_C_2147435825 | BP_Soldier_PLA_SquadLeader_Arid_C_2�� | ...+7
+[92m[EVENT] On_ServerTickRateUpdated #261 @2026.05.11-04.42.19:711[0m [90m|[0m 30.09 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #272 @2026.05.11-04.42.29:943[0m [90m|[0m 30.10 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #279 @2026.05.11-04.42.40:244[0m [90m|[0m 30.10 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #284 @2026.05.11-04.42.50:524[0m [90m|[0m 30.15 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #293 @2026.05.11-04.43.00:816[0m [90m|[0m 30.12 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #309 @2026.05.11-04.43.11:023[0m [90m|[0m 30.08 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #313 @2026.05.11-04.43.21:280[0m [90m|[0m 30.03 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[INFO] Log file truncated or recreated. Reopening.
+[INFO] Tailing: Z:\SquadGame.log from position 860746
+[92m[EVENT] On_ServerTickRateUpdated #330 @2026.05.11-04.43.31:578[0m [90m|[0m 30.10 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #337 @2026.05.11-04.43.41:850[0m [90m|[0m 30.09 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #343 @2026.05.11-04.43.52:113[0m [90m|[0m 30.10 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #355 @2026.05.11-04.44.02:305[0m [90m|[0m 30.03 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #368 @2026.05.11-04.44.12:575[0m [90m|[0m 30.09 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #377 @2026.05.11-04.44.22:815[0m [90m|[0m 30.08 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #387 @2026.05.11-04.44.32:916[0m [90m|[0m 30.00 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[96m[EVENT] On_PlayerSpawnRequested #391 @2026.05.11-04.44.40:037[0m [90m|[0m Strelitzia016 | Team1TempSpawnGroupAncientQanat | PLA_AR_01 | 0002117b412a4169a4bfbf911f69d934 | 76561199378372991 | CacheByName | Full
+[92m[EVENT] On_ServerTickRateUpdated #409 @2026.05.11-04.44.43:108[0m [90m|[0m 30.02 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #414 @2026.05.11-04.44.53:390[0m [90m|[0m 30.05 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[INFO] Log file truncated or recreated. Reopening.
+[INFO] Tailing: Z:\SquadGame.log from position 876112
+[92m[EVENT] On_ServerTickRateUpdated #425 @2026.05.11-04.45.03:634[0m [90m|[0m 30.07 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #430 @2026.05.11-04.45.13:856[0m [90m|[0m 30.03 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[93m[EVENT] On_PlayerDamaged #434 @2026.05.11-04.45.15:892[0m [90m|[0m Strelitzia016 | 73.604095 | [2m-[0m | [2m-[0m | [2m-[0m | [2m-[0m | Grenade_C_2147414074 | 0002117b412a4169a4bfbf911f69d934 | ...+6
+[92m[EVENT] On_ServerTickRateUpdated #438 @2026.05.11-04.45.24:130[0m [90m|[0m 30.08 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #447 @2026.05.11-04.45.34:399[0m [90m|[0m 30.09 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #462 @2026.05.11-04.45.44:702[0m [90m|[0m 30.09 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #472 @2026.05.11-04.45.54:914[0m [90m|[0m 30.06 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #490 @2026.05.11-04.46.05:098[0m [90m|[0m 30.05 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[92m[EVENT] On_ServerTickRateUpdated #500 @2026.05.11-04.46.15:316[0m [90m|[0m 30.05 | TPS | good | 30.00 | 28.00 | 20.00 | Full
+[96m[INFO][0m [90m2026-05-11T04:46:22.516Z[0m [96m[core.rconManager][0m [RCON] Reconnecting in 5000ms ...
+[96m[INFO][0m [90m2026-05-11T04:46:22.612Z[0m [96m[core.rconManager][0m [RCON] Connecting to 192.168.0.184:30144 ...
+[96m[INFO][0m [90m2026-05-11T04:46:22.614Z[0m [96m[core.rconManager][0m [RCON] Connected to 192.168.0.184:30144
+[96m[INFO][0m [90m2026-05-11T04:46:23.037Z[0m [96m[core.rconManager][0m [RCON] Authentication successful.
+[96m[INFO][0m [90m2026-05-11T04:46:23.936Z[0m [96m[core.authManager][0m Login success username=DoubyBear role=SuperAdmin ip=127.0.0.1
+[96m[INFO][0m [90m2026-05-11T04:51:25.359Z[0m [AUDIT] DoubyBear -> SwitchTeam
