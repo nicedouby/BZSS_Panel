@@ -47,6 +47,11 @@
           <div class="db-row-meta">
             Last login {{ formatTime(player.last_login_at) }} · Updated {{ formatTime(player.updated_at) }}
           </div>
+          <div v-if="showIpInList && (player.current_ip || player.ip)" class="db-row-ip">
+            <button type="button" class="db-copy-link" @click.stop="copyRowIp(player)">Copy IP</button>
+            <span class="db-row-ip-value">{{ player.current_ip || player.ip }}</span>
+            <small>{{ listIpSummary(player) || "" }}</small>
+          </div>
         </button>
       </aside>
 
@@ -69,7 +74,14 @@
           <div class="db-card">
             <h3>Overview</h3>
             <div class="db-grid">
-              <div><span>Current IP</span><strong>{{ currentIp }}</strong></div>
+              <div v-if="showIpInDetail" class="db-ip-field">
+                <span>Current IP</span>
+                <div class="db-ip-line">
+                  <strong>{{ currentIp }}</strong>
+                  <button type="button" class="db-copy-link" :disabled="currentIp === '--'" @click="copyIp(currentIp)">Copy</button>
+                </div>
+                <small>{{ currentIpSummary }}</small>
+              </div>
               <div><span>Permission group</span><strong>{{ detail.player?.permission_group || "default" }}</strong></div>
               <div><span>Created at</span><strong>{{ formatTime(detail.player?.created_at) }}</strong></div>
               <div><span>Updated at</span><strong>{{ formatTime(detail.player?.updated_at) }}</strong></div>
@@ -109,11 +121,18 @@
             </div>
 
             <div class="db-card">
-              <h3>IPs (recent 12)</h3>
-              <ul class="db-list-mini">
+              <h3>IP History (recent 12)</h3>
+              <ul class="db-history-list">
                 <li v-for="item in (detail.ips || []).slice(0, 12)" :key="`${item.ip}-${item.seen_at}`">
-                  <span class="login-ip">{{ item.ip }}</span>
-                  <small>{{ formatTime(item.seen_at) }}</small>
+                  <div class="db-history-head">
+                    <div>
+                      <strong>{{ item.ip }}</strong>
+                      <small>{{ formatTime(item.seen_at) }}</small>
+                    </div>
+                    <button type="button" class="db-copy-link" @click="copyIp(item.ip)">Copy</button>
+                  </div>
+                  <small>{{ ipDetailSummary(item.ip) || "Unknown" }}</small>
+                  <small>{{ ipSourceLabel(item.ip) }}</small>
                 </li>
                 <li v-if="!(detail.ips || []).length">None</li>
               </ul>
@@ -121,10 +140,20 @@
 
             <div class="db-card">
               <h3>Logins (recent 12)</h3>
-              <ul class="db-list-mini">
+              <ul class="db-login-list">
                 <li v-for="item in (detail.logins || []).slice(0, 12)" :key="`${item.ip}-${item.joined_at}`">
-                  <span class="login-ip">{{ item.ip || "--" }}</span>
-                  <small>{{ formatTime(item.joined_at) }}</small>
+                  <div class="db-login-head">
+                    <div>
+                      <strong>{{ item.ip || "--" }}</strong>
+                      <small>{{ formatTime(item.joined_at) }}</small>
+                    </div>
+                    <button v-if="item.ip" type="button" class="db-copy-link" @click="copyIp(item.ip)">Copy IP</button>
+                  </div>
+                  <small v-if="item.controller_path">Controller {{ item.controller_path }}</small>
+                  <small v-if="item.steam_id">SteamID {{ item.steam_id }}</small>
+                  <small v-if="item.eos_id">EOSID {{ item.eos_id }}</small>
+                  <small>{{ ipDetailSummary(item.ip) || "Unknown" }}</small>
+                  <small>{{ ipSourceLabel(item.ip) }}</small>
                 </li>
                 <li v-if="!(detail.logins || []).length">None</li>
               </ul>
@@ -317,10 +346,16 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { useQuery } from "@tanstack/vue-query";
+import { useRoute } from "vue-router";
 import { ApiError, apiGet } from "../app/apiClient";
 import { queryClient } from "../app/queryClient";
 import { renderApiError } from "../app/errors";
+import { useServerStore } from "../stores/server.store";
+import { useUiStore } from "../stores/ui.store";
 import { usePlayerDatabaseQuery } from "../composables/usePlayerDatabaseQuery";
+import { useIpLookup } from "../composables/useIpLookup";
+import { copyTextWithToast } from "../utils/clipboard";
+import { collectIps, formatIpSummary, isPrivateIp, normalizeIp } from "../utils/ip";
 
 const filters = reactive({
   q: "",
@@ -335,6 +370,9 @@ const showStatsModal = ref(false);
 const statsLoading = ref(false);
 const statsError = ref("");
 const stats = ref<any | null>(null);
+const route = useRoute();
+const server = useServerStore();
+const ui = useUiStore();
 
 const statsSubtitle = computed(() => {
   const generatedAt = stats.value?.generatedAt ? formatTime(stats.value.generatedAt) : "not loaded yet";
@@ -350,6 +388,19 @@ const { query } = usePlayerDatabaseQuery(filters);
 const rows = computed(() => query.data.value?.items ?? query.data.value?.players ?? []);
 const listLoading = computed(() => query.isLoading.value && !rows.value.length);
 const listError = computed(() => (query.error.value && !rows.value.length ? renderApiError(query.error.value, "Failed to load the player database.") : ""));
+
+const identityDisplay = computed(() => {
+  const config = server.snapshot.webStatus?.playerIdentityDisplay ?? server.snapshot.playerIdentityDisplay ?? {};
+  return {
+    showIpInList: config.showIpInList !== false,
+    showIpInDetail: config.showIpInDetail !== false,
+    showIpGeo: config.showIpGeo !== false,
+  };
+});
+
+const showIpInList = computed(() => identityDisplay.value.showIpInList);
+const showIpInDetail = computed(() => identityDisplay.value.showIpInDetail);
+const showIpGeo = computed(() => identityDisplay.value.showIpGeo);
 
 const detailQuery = useQuery({
   queryKey: computed(() => ["player-database-detail", selectedId.value]),
@@ -373,6 +424,17 @@ const detailError = computed(() => {
 });
 
 const currentIp = computed(() => detail.value?.player?.current_ip || detail.value?.ips?.[0]?.ip || detail.value?.logins?.[0]?.ip || "--");
+const listLookupIps = computed(() => (showIpGeo.value ? collectIps(rows.value.map((player) => player.current_ip || player.ip)) : []));
+const detailLookupIps = computed(() => {
+  if (!showIpGeo.value || !detail.value) return [];
+  return collectIps([
+    detail.value?.player?.current_ip,
+    ...(detail.value?.ips ?? []).map((item: any) => item.ip),
+    ...(detail.value?.logins ?? []).map((item: any) => item.ip),
+  ]);
+});
+const listIpLookupQuery = useIpLookup(listLookupIps, { enabled: showIpGeo });
+const detailIpLookupQuery = useIpLookup(detailLookupIps, { enabled: showIpGeo });
 const overviewCards = computed(() => {
   const overview = stats.value?.overview ?? null;
   return [
@@ -384,6 +446,19 @@ const overviewCards = computed(() => {
     { label: "Rating Avg / Min / Max", value: overview ? ratingSummary(overview.averageLadderRating, overview.minLadderRating, overview.maxLadderRating) : "--" },
   ];
 });
+
+const currentIpSummary = computed(() => ipDetailSummary(currentIp.value));
+
+watch(
+  () => route.query.q,
+  (value) => {
+    const next = String(value ?? "").trim();
+    if (next !== filters.q) {
+      filters.q = next;
+    }
+  },
+  { immediate: true },
+);
 
 watch(
   () => [filters.q, filters.sort],
@@ -492,6 +567,46 @@ function winRate(wins: unknown, total: unknown) {
 
 function teamKills(player: any) {
   return Number(player?.total_tk_down ?? 0) + Number(player?.total_tk_kill ?? 0);
+}
+
+function lookupItem(ip: unknown, map: Record<string, any>) {
+  const key = normalizeIp(ip);
+  if (!key) return null;
+  return map[key] ?? null;
+}
+
+function listIpSummary(player: any) {
+  const ip = player?.current_ip || player?.ip;
+  const item = lookupItem(ip, listIpLookupQuery.items.value ?? {});
+  if (!item && !isPrivateIp(ip)) return showIpGeo.value ? "Unknown" : "";
+  return formatIpSummary(item ?? (isPrivateIp(ip) ? { ip: String(ip ?? ""), isPrivate: true, source: "private", provider: "none", country: "", region: "", city: "", isp: "", org: "", asn: "", timezone: "", latitude: null, longitude: null, isProxy: null, isHosting: null, updatedAt: 0, error: "" } : null), showIpGeo.value);
+}
+
+function ipDetailSummary(ip: unknown) {
+  const item = lookupItem(ip, detailIpLookupQuery.items.value ?? {});
+  if (!item && !isPrivateIp(ip)) return showIpGeo.value ? "Unknown" : "";
+  return formatIpSummary(item ?? (isPrivateIp(ip) ? { ip: String(ip ?? ""), isPrivate: true, source: "private", provider: "none", country: "", region: "", city: "", isp: "", org: "", asn: "", timezone: "", latitude: null, longitude: null, isProxy: null, isHosting: null, updatedAt: 0, error: "" } : null), showIpGeo.value);
+}
+
+function ipSourceLabel(ip: unknown) {
+  const item = lookupItem(ip, detailIpLookupQuery.items.value ?? {}) ?? lookupItem(ip, listIpLookupQuery.items.value ?? {});
+  if (!item) {
+    return isPrivateIp(ip) ? "Source private / none" : "Source unknown";
+  }
+  return `Source ${item.source} / ${item.provider}`;
+}
+
+async function copyIp(value: unknown) {
+  const text = String(value ?? "").trim();
+  if (!text || text === "--") return;
+  await copyTextWithToast(text, ui, {
+    label: "IP copied",
+    successMessage: text,
+  });
+}
+
+async function copyRowIp(player: any) {
+  await copyIp(player?.current_ip || player?.ip);
 }
 
 function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
@@ -607,6 +722,56 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
   font-weight: 700;
 }
 
+.db-row-ip {
+  display: grid;
+  gap: 4px;
+  padding-top: 2px;
+}
+
+.db-row-ip-value {
+  font-size: 12px;
+  color: #edf2f4;
+  word-break: break-word;
+}
+
+.db-copy-link {
+  width: fit-content;
+  border: 0;
+  background: transparent;
+  color: #8bb6ff;
+  padding: 0;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.db-copy-link:disabled {
+  color: #6f7a8f;
+  cursor: not-allowed;
+}
+
+.db-ip-field {
+  display: grid;
+  gap: 4px;
+}
+
+.db-ip-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.db-ip-line strong {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.db-ip-field small,
+.db-history-list small,
+.db-login-list small {
+  color: #8a93a8;
+}
+
 .db-detail-head {
   display: flex;
   align-items: flex-start;
@@ -655,6 +820,8 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
 }
 
 .db-list-mini,
+.db-history-list,
+.db-login-list,
 .db-rank-list,
 .db-trend-list {
   list-style: none;
@@ -665,16 +832,36 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
 }
 
 .db-list-mini li,
+.db-history-list li,
+.db-login-list li,
 .db-rank-list li,
 .db-trend-list li {
   border: 1px solid rgba(42, 49, 68, 0.82);
   border-radius: 10px;
   padding: 8px 10px;
+  display: grid;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.db-history-head,
+.db-login-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
-  background: rgba(255, 255, 255, 0.03);
+}
+
+.db-history-head div,
+.db-login-head div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.db-history-head strong,
+.db-login-head strong {
+  word-break: break-word;
 }
 
 .db-chip-wrap {

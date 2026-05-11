@@ -4,6 +4,7 @@
       <button type="button" class="name-button" @click="$emit('select', player)">
         {{ player.name || "Unknown" }}
       </button>
+      <button v-if="player.name || player.steamID || player.eosID" type="button" class="db-link-button" @click="searchPlayerDatabase">DB</button>
       <StatusBadge v-if="player.isLeader" tone="ok">SL</StatusBadge>
     </div>
     <div class="meta">
@@ -11,12 +12,20 @@
       <span>ID {{ player.playerID ?? "-" }}</span>
       <span>{{ playtimeText }}</span>
     </div>
+    <div v-if="currentIp" class="ip-row">
+      <span class="ip-text">{{ currentIp }}</span>
+      <button type="button" class="copy-button" @click="copyIp">Copy IP</button>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue";
+import { useRouter } from "vue-router";
 import type { RuntimePlayer } from "../../stores/player.store";
+import { useUiStore } from "../../stores/ui.store";
+import { copyTextWithToast } from "../../utils/clipboard";
+import { goToPlayerDatabaseSearch } from "../../utils/player-database";
 import StatusBadge from "../common/StatusBadge.vue";
 
 const props = defineProps<{
@@ -24,15 +33,31 @@ const props = defineProps<{
   playtime?: any;
 }>();
 
+const router = useRouter();
+const ui = useUiStore();
+
 defineEmits<{
   (event: "select", player: RuntimePlayer): void;
 }>();
 
+const currentIp = computed(() => String(props.player?.current_ip ?? props.player?.ip ?? "").trim());
 const playtimeText = computed(() => {
   const seconds = Number(props.playtime?.gameSeconds ?? 0);
   if (!Number.isFinite(seconds) || seconds <= 0) return "Steam --";
   return `Steam ${(seconds / 3600).toFixed(1)}h`;
 });
+
+async function copyIp() {
+  if (!currentIp.value) return;
+  await copyTextWithToast(currentIp.value, ui, {
+    label: "IP copied",
+    successMessage: currentIp.value,
+  });
+}
+
+function searchPlayerDatabase() {
+  goToPlayerDatabaseSearch(router, props.player.name || props.player.steamID || props.player.eosID || "");
+}
 </script>
 
 <style scoped>
@@ -51,6 +76,22 @@ const playtimeText = computed(() => {
   min-width: 0;
 }
 
+.ip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #8a93a8;
+  font-size: 12px;
+}
+
+.ip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .name-button {
   min-width: 0;
   overflow: hidden;
@@ -66,6 +107,20 @@ const playtimeText = computed(() => {
 
 .name-button:hover {
   color: #9fd6ff;
+}
+
+.db-link-button,
+.copy-button {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #8bb6ff;
+  font-size: 12px;
+}
+
+.db-link-button:hover,
+.copy-button:hover {
+  text-decoration: underline;
 }
 
 .meta {

@@ -199,6 +199,27 @@ CREATE TABLE IF NOT EXISTS player_logins (
 CREATE INDEX IF NOT EXISTS idx_player_logins_player ON player_logins(player_id);
 CREATE INDEX IF NOT EXISTS idx_player_logins_joined ON player_logins(joined_at);
 
+CREATE TABLE IF NOT EXISTS ip_lookup_cache (
+  ip TEXT PRIMARY KEY,
+  provider TEXT NOT NULL DEFAULT 'none',
+  source TEXT NOT NULL DEFAULT 'unknown',
+  country TEXT NOT NULL DEFAULT '',
+  region TEXT NOT NULL DEFAULT '',
+  city TEXT NOT NULL DEFAULT '',
+  isp TEXT NOT NULL DEFAULT '',
+  org TEXT NOT NULL DEFAULT '',
+  asn TEXT NOT NULL DEFAULT '',
+  timezone TEXT NOT NULL DEFAULT '',
+  latitude REAL,
+  longitude REAL,
+  is_private INTEGER NOT NULL DEFAULT 0,
+  is_proxy INTEGER,
+  is_hosting INTEGER,
+  updated_at INTEGER NOT NULL DEFAULT 0,
+  raw_json TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_ip_lookup_cache_updated ON ip_lookup_cache(updated_at);
+
 CREATE TABLE IF NOT EXISTS player_tags (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     player_id INTEGER NOT NULL,
@@ -314,6 +335,33 @@ async function runMigrations(db) {
     }
 
     await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 3, Date.now());
+  }
+
+  if (!appliedSet.has(4)) {
+    await db.exec(`
+CREATE TABLE IF NOT EXISTS ip_lookup_cache (
+    ip TEXT PRIMARY KEY,
+    provider TEXT NOT NULL DEFAULT 'none',
+    source TEXT NOT NULL DEFAULT 'unknown',
+    country TEXT NOT NULL DEFAULT '',
+    region TEXT NOT NULL DEFAULT '',
+    city TEXT NOT NULL DEFAULT '',
+    isp TEXT NOT NULL DEFAULT '',
+    org TEXT NOT NULL DEFAULT '',
+    asn TEXT NOT NULL DEFAULT '',
+    timezone TEXT NOT NULL DEFAULT '',
+    latitude REAL,
+    longitude REAL,
+    is_private INTEGER NOT NULL DEFAULT 0,
+    is_proxy INTEGER,
+    is_hosting INTEGER,
+    updated_at INTEGER NOT NULL DEFAULT 0,
+    raw_json TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_ip_lookup_cache_updated ON ip_lookup_cache(updated_at);
+    `);
+
+    await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 4, Date.now());
   }
 }
 

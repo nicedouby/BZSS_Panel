@@ -17,8 +17,16 @@
           <tr v-for="(event, index) in events" :key="event.id || `${event.time}-${index}`">
             <td>{{ formatTime(event.time) }}</td>
             <td>{{ eventType(event) }}</td>
-            <td>{{ attackerName(event) }}</td>
-            <td>{{ victimName(event) }}</td>
+            <td>
+              <button type="button" class="name-button" @click="$emit('search-player', attackerIdentity(event))">
+                {{ attackerName(event) }}
+              </button>
+            </td>
+            <td>
+              <button type="button" class="name-button" @click="$emit('search-player', victimIdentity(event))">
+                {{ victimName(event) }}
+              </button>
+            </td>
             <td>{{ event.damage ?? "-" }}</td>
             <td>{{ event.weapon?.displayName || event.weapon || event.causedBy || "-" }}</td>
             <td><button type="button" @click="$emit('select', event)">Detail</button></td>
@@ -38,6 +46,7 @@ defineProps<{
 
 defineEmits<{
   (event: "select", value: any): void;
+  (event: "search-player", value: string): void;
 }>();
 
 function eventType(event: any) {
@@ -48,8 +57,16 @@ function attackerName(event: any) {
   return event.attacker?.name || event.attackerName || "-";
 }
 
+function attackerIdentity(event: any) {
+  return event.attacker?.name || event.attackerName || event.attacker?.steamID || event.attackerSteamID || event.attacker?.eosID || event.attackerEOSID || "";
+}
+
 function victimName(event: any) {
   return event.victim?.name || event.victimName || "-";
+}
+
+function victimIdentity(event: any) {
+  return event.victim?.name || event.victimName || event.victim?.steamID || event.victimSteamID || event.victim?.eosID || event.victimEOSID || "";
 }
 
 function formatTime(value: unknown) {
@@ -81,5 +98,19 @@ th {
   color: #98a5af;
   font-size: 12px;
   font-weight: 600;
+}
+
+.name-button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #edf2f4;
+  font: inherit;
+  cursor: pointer;
+}
+
+.name-button:hover {
+  color: #8bb6ff;
+  text-decoration: underline;
 }
 </style>

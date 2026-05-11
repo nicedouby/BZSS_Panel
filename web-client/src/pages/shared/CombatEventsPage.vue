@@ -30,7 +30,11 @@
         </div>
       </PageCard>
 
-      <CombatEventTable :events="events" @select="selectedEvent = $event" />
+      <CombatEventTable
+        :events="events"
+        @select="selectedEvent = $event"
+        @search-player="searchPlayer"
+      />
     </DataState>
 
     <CombatEventDetailModal :event="selectedEvent" @close="selectedEvent = null" />
@@ -44,6 +48,7 @@ import { useMutation } from "@tanstack/vue-query";
 import { apiPost } from "../../app/apiClient";
 import { renderApiError } from "../../app/errors";
 import { useUiStore } from "../../stores/ui.store";
+import { goToPlayerDatabaseSearch } from "../../utils/player-database";
 import PageHeader from "../../components/common/PageHeader.vue";
 import PageCard from "../../components/common/PageCard.vue";
 import DataState from "../../components/common/DataState.vue";
@@ -122,6 +127,10 @@ const clearMutation = useMutation({
     });
   },
 });
+
+function searchPlayer(value: string) {
+  goToPlayerDatabaseSearch(router, value);
+}
 
 function previousPage() {
   filters.offset = Math.max(0, filters.offset - filters.limit);

@@ -24,6 +24,11 @@ export class WebStatus {
       criticalBelow: Number(config.get("serverTickRate.criticalBelow", 20)),
       staleAfterSeconds: Number(config.get("serverTickRate.staleAfterSeconds", 10)),
     };
+    this.playerIdentityDisplayConfig = {
+      showIpInList: config.get("playerIdentityDisplay.showIpInList", true) !== false,
+      showIpInDetail: config.get("playerIdentityDisplay.showIpInDetail", true) !== false,
+      showIpGeo: config.get("playerIdentityDisplay.showIpGeo", true) !== false,
+    };
 
     this.state = {
       serverId: this.serverId,
@@ -73,6 +78,7 @@ export class WebStatus {
     const snapshot = { ...this.state };
     snapshot.tpsStatus = this.#resolveTpsStatus(snapshot);
     snapshot.serverTickRate = { ...this.serverTickRateConfig };
+    snapshot.playerIdentityDisplay = { ...this.playerIdentityDisplayConfig };
 
     snapshot.logClockSeconds = this.logClock.getSeconds();
     snapshot.logClockHasAnchor = Boolean(this.logClock.hasAnchor);

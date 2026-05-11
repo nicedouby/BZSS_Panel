@@ -46,6 +46,17 @@
       "useColor": true
     }
   },
+  "ipLookup": {
+    "enabled": true,
+    "provider": "none",
+    "cacheTtlHours": 168,
+    "requestTimeoutMs": 3000
+  },
+  "playerIdentityDisplay": {
+    "showIpInList": true,
+    "showIpInDetail": true,
+    "showIpGeo": true
+  },
   "serverTickRate": {
     "expected": 30,
     "warningBelow": 28,

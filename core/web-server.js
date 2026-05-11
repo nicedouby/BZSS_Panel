@@ -288,6 +288,54 @@ export class WebServer {
       return this.json(res, 200, { items });
     }
 
+    if (url.pathname === "/api/ip/lookup" && req.method === "GET") {
+      const ip = String(url.searchParams.get("ip") ?? "").trim();
+      if (!ip) {
+        return this.json(res, 200, {
+          item: {
+            ip: "",
+            source: "invalid",
+            provider: "none",
+            country: "",
+            region: "",
+            city: "",
+            isp: "",
+            org: "",
+            asn: "",
+            timezone: "",
+            latitude: null,
+            longitude: null,
+            isPrivate: false,
+            isProxy: null,
+            isHosting: null,
+            updatedAt: 0,
+            error: "Empty IP value.",
+            stale: false,
+          },
+        });
+      }
+
+      return this.json(res, 200, {
+        item: await this.modules.ipLookup.lookupIp(ip),
+      });
+    }
+
+    if (url.pathname === "/api/ip/lookup-many" && req.method === "GET") {
+      const ips = String(url.searchParams.get("ips") ?? "")
+        .split(",")
+        .map((ip) => ip.trim())
+        .filter(Boolean)
+        .slice(0, 50);
+
+      if (!ips.length) {
+        return this.json(res, 200, { items: {} });
+      }
+
+      return this.json(res, 200, {
+        items: await this.modules.ipLookup.lookupMany(ips),
+      });
+    }
+
     if (url.pathname === "/api/query/player-database" && req.method === "GET") {
       return this.runTimedPlayerDatabaseQuery("/api/query/player-database", null, async () => {
         const result = await this.modules.playerDatabase.listPlayers({

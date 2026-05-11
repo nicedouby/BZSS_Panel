@@ -10,8 +10,32 @@
       </header>
 
       <div class="detail-grid">
-        <div><span>Attacker</span><strong>{{ event.attacker?.name || event.attackerName || "-" }}</strong></div>
-        <div><span>Victim</span><strong>{{ event.victim?.name || event.victimName || "-" }}</strong></div>
+        <div class="identity-card">
+          <span>Attacker</span>
+          <strong>{{ attackerName }}</strong>
+          <small v-if="attackerIp">IP {{ attackerIp }}</small>
+          <small v-if="attackerSteamID">SteamID {{ attackerSteamID }}</small>
+          <small v-if="attackerEOSID">EOSID {{ attackerEOSID }}</small>
+          <div class="action-row">
+            <button v-if="attackerSearchKey" type="button" class="mini-action" @click="searchPlayer(attackerSearchKey)">Search</button>
+            <button v-if="attackerSteamID" type="button" class="mini-action" @click="copyValue(attackerSteamID, 'SteamID')">Copy SteamID</button>
+            <button v-if="attackerEOSID" type="button" class="mini-action" @click="copyValue(attackerEOSID, 'EOSID')">Copy EOSID</button>
+            <button v-if="attackerIp" type="button" class="mini-action" @click="copyValue(attackerIp, 'IP')">Copy IP</button>
+          </div>
+        </div>
+        <div class="identity-card">
+          <span>Victim</span>
+          <strong>{{ victimName }}</strong>
+          <small v-if="victimIp">IP {{ victimIp }}</small>
+          <small v-if="victimSteamID">SteamID {{ victimSteamID }}</small>
+          <small v-if="victimEOSID">EOSID {{ victimEOSID }}</small>
+          <div class="action-row">
+            <button v-if="victimSearchKey" type="button" class="mini-action" @click="searchPlayer(victimSearchKey)">Search</button>
+            <button v-if="victimSteamID" type="button" class="mini-action" @click="copyValue(victimSteamID, 'SteamID')">Copy SteamID</button>
+            <button v-if="victimEOSID" type="button" class="mini-action" @click="copyValue(victimEOSID, 'EOSID')">Copy EOSID</button>
+            <button v-if="victimIp" type="button" class="mini-action" @click="copyValue(victimIp, 'IP')">Copy IP</button>
+          </div>
+        </div>
         <div><span>Damage</span><strong>{{ event.damage ?? "-" }}</strong></div>
         <div><span>Source</span><strong>{{ event.weapon?.displayName || event.weapon || event.causedBy || "-" }}</strong></div>
         <div><span>Friendly Fire</span><strong>{{ event.relation?.isFriendlyFire || event.isFriendlyFire ? "Yes" : "No" }}</strong></div>
@@ -25,6 +49,10 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import { useRouter } from "vue-router";
+import { useUiStore } from "../../stores/ui.store";
+import { copyTextWithToast } from "../../utils/clipboard";
+import { goToPlayerDatabaseSearch } from "../../utils/player-database";
 
 const props = defineProps<{
   event: any | null;
@@ -34,12 +62,37 @@ defineEmits<{
   (event: "close"): void;
 }>();
 
+const router = useRouter();
+const ui = useUiStore();
+
 const prettyEvent = computed(() => JSON.stringify(props.event, null, 2));
+const attackerName = computed(() => String(props.event?.attacker?.name ?? props.event?.attackerName ?? "-") );
+const victimName = computed(() => String(props.event?.victim?.name ?? props.event?.victimName ?? "-") );
+const attackerSteamID = computed(() => String(props.event?.attacker?.steamID ?? props.event?.attackerSteamID ?? props.event?.attacker?.steamId ?? "").trim());
+const attackerEOSID = computed(() => String(props.event?.attacker?.eosID ?? props.event?.attackerEOSID ?? "").trim());
+const attackerIp = computed(() => String(props.event?.attacker?.current_ip ?? props.event?.attacker?.ip ?? props.event?.attackerIp ?? "").trim());
+const attackerSearchKey = computed(() => attackerName.value !== "-" ? attackerName.value : (attackerSteamID.value || attackerEOSID.value || attackerIp.value));
+const victimSteamID = computed(() => String(props.event?.victim?.steamID ?? props.event?.victimSteamID ?? props.event?.victim?.steamId ?? "").trim());
+const victimEOSID = computed(() => String(props.event?.victim?.eosID ?? props.event?.victimEOSID ?? "").trim());
+const victimIp = computed(() => String(props.event?.victim?.current_ip ?? props.event?.victim?.ip ?? props.event?.victimIp ?? "").trim());
+const victimSearchKey = computed(() => victimName.value !== "-" ? victimName.value : (victimSteamID.value || victimEOSID.value || victimIp.value));
 
 function formatTime(value: unknown) {
   const text = String(value ?? "");
   const date = new Date(text);
   return Number.isNaN(date.getTime()) ? text : date.toLocaleString();
+}
+
+async function copyValue(value: string, label: string) {
+  if (!value) return;
+  await copyTextWithToast(value, ui, {
+    label: `${label} copied`,
+    successMessage: value,
+  });
+}
+
+function searchPlayer(value: string) {
+  goToPlayerDatabaseSearch(router, value);
 }
 </script>
 
@@ -94,6 +147,34 @@ function formatTime(value: unknown) {
   background: #11171d;
   border-radius: 8px;
   padding: 10px 12px;
+}
+
+.identity-card {
+  display: grid;
+  gap: 6px;
+}
+
+.identity-card small {
+  color: #98a5af;
+  font-size: 12px;
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mini-action {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #8bb6ff;
+  font-size: 12px;
+}
+
+.mini-action:hover {
+  text-decoration: underline;
 }
 
 .detail-grid span,
