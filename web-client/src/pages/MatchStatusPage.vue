@@ -6,40 +6,48 @@
         <p class="page-subtitle">Vue 版首阶段页面，只读取 RuntimeState 快照。</p>
       </div>
       <div class="actions">
-        <StatusBadge :tone="players.stale || squads.stale ? 'warn' : 'ok'">
-          {{ players.stale || squads.stale ? "stale" : "synced" }}
-        </StatusBadge>
-        <button type="button" :disabled="refreshingPlaytime" @click="refreshOnlinePlaytime">
+        <StatusBadge :tone="pageBadgeTone">{{ pageBadgeText }}</StatusBadge>
+        <button type="button" :disabled="refreshingPlaytime || !hasRuntimeData" @click="refreshOnlinePlaytime">
           {{ refreshingPlaytime ? "检测中..." : "检测在场玩家时长" }}
         </button>
       </div>
     </div>
 
-    <div class="stat-grid">
-      <div class="stat"><span>在线玩家</span><strong>{{ players.active.length }}</strong></div>
-      <div class="stat"><span>最近离线</span><strong>{{ players.recentlyDisconnected.length }}</strong></div>
-      <div class="stat"><span>小队</span><strong>{{ squads.list.length }}</strong></div>
-      <div class="stat"><span>队长</span><strong>{{ match.leaderList.length }}</strong></div>
-    </div>
+    <LoadingBlock v-if="!auth.checked" />
+    <ErrorBlock v-else-if="!auth.authenticated" message="未登录，请先登录。" />
+    <ErrorBlock v-else-if="blockingRuntimeError" :message="blockingRuntimeError" />
 
-    <ErrorBlock v-if="playtimeError" :message="playtimeError" />
-    <LoadingBlock v-if="!players.updatedAt && !squads.updatedAt" />
+    <template v-else>
+      <ErrorBlock v-if="playtimeError" :message="playtimeError" />
+      <ErrorBlock v-if="nonBlockingRuntimeError" :message="nonBlockingRuntimeError" />
 
-    <div class="teams">
-      <TeamPanel
-        v-for="team in match.teams"
-        :key="team.teamID"
-        :team="team"
-        :playtimes="playtimes"
-      />
-    </div>
+      <div class="stat-grid">
+        <div class="stat"><span>在线玩家</span><strong>{{ players.active.length }}</strong></div>
+        <div class="stat"><span>最近离线</span><strong>{{ players.recentlyDisconnected.length }}</strong></div>
+        <div class="stat"><span>小队</span><strong>{{ squads.list.length }}</strong></div>
+        <div class="stat"><span>队长</span><strong>{{ match.leaderList.length }}</strong></div>
+      </div>
+
+      <LoadingBlock v-if="!hasRuntimeData && runtime.inFlight" />
+
+      <div class="teams">
+        <TeamPanel
+          v-for="team in match.teams"
+          :key="team.teamID"
+          :team="team"
+          :playtimes="playtimes"
+        />
+      </div>
+    </template>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useQuery } from "@tanstack/vue-query";
-import { apiGet, apiPost } from "../app/apiClient";
+import { apiGet, apiPost, ApiError } from "../app/apiClient";
+import { getRuntimeSyncState } from "../app/runtimeSync";
+import { useAuthStore } from "../stores/auth.store";
 import { usePlayerStore } from "../stores/player.store";
 import { useSquadStore } from "../stores/squad.store";
 import { useMatchStore } from "../stores/match.store";
@@ -49,24 +57,47 @@ import ErrorBlock from "../components/common/ErrorBlock.vue";
 import LoadingBlock from "../components/common/LoadingBlock.vue";
 import TeamPanel from "../components/match/TeamPanel.vue";
 
+const auth = useAuthStore();
 const players = usePlayerStore();
 const squads = useSquadStore();
 const match = useMatchStore();
 const jobs = useJobStore();
+const runtime = getRuntimeSyncState();
 
 const refreshingPlaytime = ref(false);
 const playtimeError = ref("");
 
+const hasRuntimeData = computed(() => Boolean(players.updatedAt || squads.updatedAt));
 const steamIDs = computed(() => [...new Set(players.active.map((player) => player.steamID).filter(Boolean))] as string[]);
 const steamIDParam = computed(() => steamIDs.value.join(","));
 
 const playtimeQuery = useQuery({
   queryKey: computed(() => ["playtime-cache", steamIDParam.value]),
-  enabled: computed(() => steamIDs.value.length > 0),
+  enabled: computed(() => auth.authenticated && steamIDs.value.length > 0),
   queryFn: async () => apiGet<{ items: Record<string, any> }>(`/api/query/playtime-cache?steamIDs=${encodeURIComponent(steamIDParam.value)}`),
 });
 
 const playtimes = computed(() => playtimeQuery.data.value?.items ?? {});
+const blockingRuntimeError = computed(() => {
+  if (!auth.authenticated || hasRuntimeData.value || !runtime.lastError) return "";
+  if (runtime.errorType === "network" || runtime.errorType === "timeout") {
+    return `API 未连接：${runtime.lastError}`;
+  }
+  if (runtime.errorType === "unauthorized") return "登录状态已失效，请重新登录。";
+  return `请求失败：${runtime.lastError}`;
+});
+const nonBlockingRuntimeError = computed(() => {
+  if (!hasRuntimeData.value || !runtime.lastError) return "";
+  return `当前显示旧快照，最新同步失败：${runtime.lastError}`;
+});
+const pageBadgeText = computed(() => {
+  if (runtime.inFlight) return "syncing";
+  if (runtime.errorType === "unauthorized") return "unauthorized";
+  if (runtime.errorType === "network" || runtime.errorType === "timeout") return "api offline";
+  if (players.stale || squads.stale || runtime.lastError) return "stale";
+  return "synced";
+});
+const pageBadgeTone = computed(() => pageBadgeText.value === "synced" ? "ok" : pageBadgeText.value === "stale" ? "warn" : "error");
 
 async function refreshOnlinePlaytime() {
   refreshingPlaytime.value = true;
@@ -81,7 +112,7 @@ async function refreshOnlinePlaytime() {
     }
     await playtimeQuery.refetch();
   } catch (error: any) {
-    playtimeError.value = error?.message ?? "Steam 时长检测失败";
+    playtimeError.value = renderPageError(error, "Steam 时长检测失败");
   } finally {
     refreshingPlaytime.value = false;
   }
@@ -95,6 +126,16 @@ async function waitForJob(jobId: string, timeoutMs: number) {
     if (job.status === "completed" || job.status === "failed") return job;
   }
   throw new Error("等待 Steam 时长任务超时");
+}
+
+function renderPageError(error: unknown, fallback: string) {
+  if (error instanceof ApiError) {
+    if (error.status === 401) return "登录状态已失效，请重新登录。";
+    if (error.type === "network") return "API 未连接。";
+    if (error.type === "timeout") return "请求超时。";
+    return error.message;
+  }
+  return error instanceof Error ? error.message : fallback;
 }
 </script>
 

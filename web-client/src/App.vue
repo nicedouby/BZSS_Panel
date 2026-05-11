@@ -1,9 +1,32 @@
 <template>
-  <AppLayout />
+  <div v-if="!auth.checked" class="boot-screen">
+    <div class="boot-card">正在检查登录状态...</div>
+  </div>
+  <LoginPage v-else-if="!auth.authenticated" />
+  <AppLayout v-else />
 </template>
 
 <script setup lang="ts">
+import { onMounted, watch } from "vue";
 import AppLayout from "./components/layout/AppLayout.vue";
+import LoginPage from "./pages/LoginPage.vue";
+import { useAuthStore } from "./stores/auth.store";
+import { startRuntimeSync, stopRuntimeSync } from "./app/runtimeSync";
+
+const auth = useAuthStore();
+
+onMounted(() => {
+  void auth.restoreSession();
+});
+
+watch(
+  () => auth.authenticated,
+  (authenticated) => {
+    if (authenticated) startRuntimeSync();
+    else stopRuntimeSync();
+  },
+  { immediate: true },
+);
 </script>
 
 <style>
@@ -21,6 +44,21 @@ import AppLayout from "./components/layout/AppLayout.vue";
 body {
   margin: 0;
   min-width: 320px;
+}
+
+.boot-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: #101317;
+}
+
+.boot-card {
+  border: 1px solid #2c343d;
+  background: #171d23;
+  border-radius: 8px;
+  padding: 18px 22px;
+  color: #dce4e8;
 }
 
 button,

@@ -104,6 +104,39 @@ async function testGetPluginApiReturnsMatchingPluginApi() {
   assert.equal(server.getPluginApi("plugin.missing"), null);
 }
 
+async function testHealthEndpointDoesNotRequireAuth() {
+  const server = createServer({
+    config: {
+      host: "127.0.0.1",
+      port: 7799,
+      staticDirectory: "./web-client/dist",
+    },
+    core: {
+      rconManager: {
+        getStatus() {
+          return { enabled: true, connected: false };
+        },
+      },
+      runtimeState: {},
+    },
+  });
+
+  const health = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/health",
+    headers: { host: "localhost" },
+    socket: {},
+  }, health.res);
+
+  assert.equal(health.state.status, 200);
+  const body = JSON.parse(health.state.body);
+  assert.equal(body.ok, true);
+  assert.equal(body.service, "BZSS Panel WebServer");
+  assert.equal(body.runtimeState, true);
+  assert.equal(body.auth.enabled, true);
+}
+
 async function testWeaponCollectorApiRequiresGet() {
   const server = createServer({
     core: {
@@ -185,6 +218,7 @@ await testReadJsonBodyParsesValidPayload();
 await testReadJsonBodyRejectsInvalidJson();
 await testReadJsonBodyRejectsOversizedPayload();
 await testGetPluginApiReturnsMatchingPluginApi();
+await testHealthEndpointDoesNotRequireAuth();
 await testWeaponCollectorApiRequiresGet();
 
 console.log("web server tests passed");

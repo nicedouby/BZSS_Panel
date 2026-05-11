@@ -11,7 +11,11 @@ export class WebServer {
     this.enabled = config.enabled ?? true;
     this.host = config.host ?? "127.0.0.1";
     this.port = Number(config.port ?? 7799);
-    this.staticDirectory = path.resolve(process.cwd(), config.staticDirectory ?? "./web");
+    this.useVueClient = Boolean(config.useVueClient);
+    this.staticDirectory = path.resolve(
+      process.cwd(),
+      this.useVueClient ? "./web-client/dist" : (config.staticDirectory ?? "./web"),
+    );
 
     this.logger = logger;
     this.core = core;
@@ -26,6 +30,8 @@ export class WebServer {
       this.logger.info("WebServer disabled.");
       return;
     }
+
+    await this.warnIfStaticIndexMissing();
 
     this.server = http.createServer((req, res) => {
       this.handleRequest(req, res).catch((error) => {
@@ -66,6 +72,25 @@ export class WebServer {
   }
 
   async handleApi(url, req, res) {
+    if (url.pathname === "/api/health" && req.method === "GET") {
+      return this.json(res, 200, {
+        ok: true,
+        service: "BZSS Panel WebServer",
+        time: new Date().toISOString(),
+        uptimeMs: Math.floor(process.uptime() * 1000),
+        web: {
+          host: this.host,
+          port: this.port,
+          staticDirectory: this.staticDirectory,
+        },
+        auth: {
+          enabled: true,
+        },
+        rcon: this.core.rconManager?.getStatus?.() ?? null,
+        runtimeState: Boolean(this.core.runtimeState),
+      });
+    }
+
     if (url.pathname === "/api/auth/session") {
       const user = this.core.authManager?.getUserFromRequest(req) ?? null;
       return this.json(res, 200, {
@@ -719,9 +744,29 @@ export class WebServer {
 
   async serveIndex(res) {
     const indexPath = path.join(this.staticDirectory, "index.html");
-    const data = await fs.readFile(indexPath);
+    let data;
+    try {
+      data = await fs.readFile(indexPath);
+    } catch (error) {
+      throw createHttpError(
+        503,
+        "VueClientNotBuilt",
+        `Vue client index.html not found at ${indexPath}. Run npm run client:build before using production static hosting.`,
+      );
+    }
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(data);
+  }
+
+  async warnIfStaticIndexMissing() {
+    const indexPath = path.join(this.staticDirectory, "index.html");
+    try {
+      await fs.access(indexPath);
+    } catch {
+      this.logger.warn(
+        `Web static index missing: ${indexPath}. Run npm run client:build before opening Vue production routes.`,
+      );
+    }
   }
 
   json(res, status, obj, extraHeaders = {}) {
