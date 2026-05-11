@@ -63,11 +63,6 @@
     "audit": { "enabled": true },
     "playerState": { "enabled": true },
     "squadState": { "enabled": true },
-    "squadCreationOrder": {
-      "enabled": false,
-      "missingConfirmSnapshots": 2,
-      "missingConfirmMs": 15000
-    },
     "matchState": { "enabled": true },
     "console": { "enabled": true, "maxLines": 500 },
     "combatState": { "enabled": true, "maxEvents": 5000 },
@@ -75,10 +70,7 @@
     "killManage": { "enabled": true },
     "combatClean": { "enabled": true, "maxEvents": 5000 },
     "teamBalance": { "enabled": true },
-    "warning": { "enabled": true },
-    "playtime": { "enabled": true },
-    "seed": { "enabled": true },
-    "points": { "enabled": true }
+    "playtime": { "enabled": true }
   },
 
   "webModules": {
@@ -88,12 +80,9 @@
       "web.playerDatabase"
     ],
     "optional": {
-      "web.squadCreationOrder": false,
       "web.killManage": true,
       "web.combatClean": true,
-      "web.teamBalance": false,
-      "web.seed": false,
-      "web.points": false
+      "web.teamBalance": false
     }
   },
 

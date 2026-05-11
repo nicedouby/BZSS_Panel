@@ -384,23 +384,6 @@ export class WebServer {
       return this.json(res, 200, result);
     }
 
-    if (url.pathname === "/api/actions/warn-player" && req.method === "POST") {
-      if (!this.modules.warning?.warnPlayer) {
-        return this.json(res, 404, { error: "WarningActionUnavailable" });
-      }
-      const body = await this.readJsonBody(req);
-      const result = await this.modules.warning.warnPlayer({
-        serverId: body.serverId ?? this.core.webStatus.serverId,
-        requestedBy: user.username,
-        targetName: body.targetName ?? "",
-        targetSteam64: body.targetSteam64 ?? body.targetSteamID ?? "",
-        targetEOS: body.targetEOS ?? body.targetEos ?? "",
-        message: body.message ?? "Server warning",
-        reason: body.reason ?? "web.warn-player",
-      });
-      return this.json(res, result.success ? 200 : 400, result);
-    }
-
     if (url.pathname === "/api/actions/force-team-change" && req.method === "POST") {
       if (!this.modules.teamBalance?.requestSwitchTeam) {
         return this.json(res, 404, { error: "TeamBalanceUnavailable" });
@@ -644,23 +627,6 @@ export class WebServer {
     if (url.pathname === "/api/squads/list") {
       const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
       return this.json(res, 200, { squads: this.modules.squadState.getSquads(serverId) });
-    }
-
-    if (url.pathname === "/api/squads/creation-order") {
-      const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
-      const sessionId = url.searchParams.get("sessionId");
-      const enabled = this.core.config?.get?.("modules.squadCreationOrder.enabled", true) !== false;
-      if (!enabled || !this.modules.squadCreationOrder) {
-        return this.json(res, 404, {
-          error: "SquadCreationOrderUnavailable",
-          message: "Squad creation order module is not loaded.",
-        });
-      }
-      const records = sessionId
-        ? this.modules.squadCreationOrder.getOrderBySession(serverId, sessionId)
-        : this.modules.squadCreationOrder.getCurrentOrder(serverId);
-
-      return this.json(res, 200, { serverId, sessionId: sessionId ?? null, records });
     }
 
     if (url.pathname === "/api/kills/recent") {

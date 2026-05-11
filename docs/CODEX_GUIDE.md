@@ -61,12 +61,6 @@ Plugin 应通过 Module API 做事。
 modules.teamBalance.requestSwitchTeam(...)
 ```
 
-警告玩家必须通过：
-
-```js
-modules.warning.warnPlayer(...)
-```
-
 所有 RCON 最终必须经过：
 
 ```js

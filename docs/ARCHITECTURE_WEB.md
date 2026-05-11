@@ -41,10 +41,7 @@ Module 是看不见的业务能力层：
 - squad-state
 - kill-manage
 - team-balance
-- warning
 - playtime
-- seed
-- points
 - audit
 
 Module 订阅 Core Event，发布 Module Event，提供 API 给插件和 Web。
@@ -142,11 +139,11 @@ web/pages/
 
 可禁用：
 
-- 建队管理
+- 建队管理（已移除建队顺序页面）
 - 击杀管理
 - TeamBalance
-- 暖服功能
-- 积分系统
+- 暖服功能（保留运行态逻辑，不再提供独立模块）
+- 积分系统（已移除独立模块）
 
 ## 4. UI 原则
 

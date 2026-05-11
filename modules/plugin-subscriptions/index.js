@@ -12,7 +12,6 @@ const DEFAULT_STATE_FILE = "./data/plugin-subscriptions.json";
  * 这张表只影响订阅页中的展示分类，不改动原有 manifest.id，也不改动实际运行方式。
  */
 const KIND_OVERRIDES = {
-  "module.squadCreationOrder": "plugin",
 };
 
 /**

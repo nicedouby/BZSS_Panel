@@ -154,10 +154,6 @@ export default class SquadRcon extends Rcon {
     return this.execute(`AdminBroadcast ${message}`);
   }
 
-  warn(anyID, message) {
-    return this.execute(`AdminWarn "${anyID}" ${message}`);
-  }
-
   kick(anyID, message) {
     return this.execute(`AdminKick "${anyID}" ${message}`);
   }

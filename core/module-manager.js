@@ -4,7 +4,6 @@ import { createAuditModule } from "../modules/audit/index.js";
 import { createServerStatusModule } from "../modules/server-status/index.js";
 import { createPlayerStateModule } from "../modules/player-state/index.js";
 import { createSquadStateModule } from "../modules/squad-state/index.js";
-import { createSquadCreationOrderModule } from "../modules/squad-creation-order/index.js";
 import { createMatchStateModule } from "../modules/match-state/index.js";
 import { createConsoleModule } from "../modules/console/index.js";
 import { createLogClockModule } from "../modules/log-clock/index.js";
@@ -13,10 +12,7 @@ import { createPlayerDatabaseModule } from "../modules/player-database/index.js"
 import { createKillManageModule } from "../modules/kill-manage/index.js";
 import { createCombatCleanModule } from "../modules/combat-clean/index.js";
 import { createTeamBalanceModule } from "../modules/team-balance/index.js";
-import { createWarningModule } from "../modules/warning/index.js";
 import { createPlaytimeModule } from "../modules/playtime/index.js";
-import { createSeedModule } from "../modules/seed/index.js";
-import { createPointsModule } from "../modules/points/index.js";
 import { createPluginSubscriptionsModule } from "../modules/plugin-subscriptions/index.js";
 
 /**
@@ -43,17 +39,13 @@ export class ModuleManager {
       createServerStatusModule,
       createPlayerStateModule,
       createSquadStateModule,
-      createSquadCreationOrderModule,
       createMatchStateModule,
       createCombatStateModule,
       createPlayerDatabaseModule,
       createKillManageModule,
       createCombatCleanModule,
       createTeamBalanceModule,
-      createWarningModule,
       createPlaytimeModule,
-      createSeedModule,
-      createPointsModule,
     ];
 
     for (const factory of factories) {
