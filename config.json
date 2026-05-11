@@ -69,7 +69,6 @@
     "playerDatabase": { "enabled": true },
     "killManage": { "enabled": true },
     "combatClean": { "enabled": true, "maxEvents": 5000 },
-    "teamBalance": { "enabled": true },
     "playtime": { "enabled": true }
   },
 
