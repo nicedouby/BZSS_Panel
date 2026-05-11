@@ -386,7 +386,6 @@ function openPlayerRealtimeWindow(player, { apiFetch, onNavigate, onRefresh } = 
           <button type="button" id="refresh-player-playtime">刷新时长</button>
           <button type="button" disabled>警告</button>
           <button type="button" disabled>踢出小队</button>
-          <button type="button" disabled>跳边</button>
           <button type="button" id="open-player-database">玩家数据库</button>
         </div>
 

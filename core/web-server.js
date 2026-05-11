@@ -384,21 +384,6 @@ export class WebServer {
       return this.json(res, 200, result);
     }
 
-    if (url.pathname === "/api/actions/force-team-change" && req.method === "POST") {
-      if (!this.modules.teamBalance?.requestSwitchTeam) {
-        return this.json(res, 404, { error: "TeamBalanceUnavailable" });
-      }
-      const body = await this.readJsonBody(req);
-      const result = await this.modules.teamBalance.requestSwitchTeam({
-        serverId: body.serverId ?? this.core.webStatus.serverId,
-        requestedBy: user.username,
-        targetName: body.targetName ?? "",
-        targetSteam64: body.targetSteam64 ?? body.targetSteamID ?? "",
-        reason: body.reason ?? "web.force-team-change",
-      });
-      return this.json(res, result.success ? 200 : 400, result);
-    }
-
     if (url.pathname === "/api/logpost/raw-output" && req.method === "GET") {
       return this.json(res, 200, await this.getLogPostRawOutputConfig());
     }

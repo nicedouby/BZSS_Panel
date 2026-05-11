@@ -11,7 +11,6 @@ import { createCombatStateModule } from "../modules/combat-state/index.js";
 import { createPlayerDatabaseModule } from "../modules/player-database/index.js";
 import { createKillManageModule } from "../modules/kill-manage/index.js";
 import { createCombatCleanModule } from "../modules/combat-clean/index.js";
-import { createTeamBalanceModule } from "../modules/team-balance/index.js";
 import { createPlaytimeModule } from "../modules/playtime/index.js";
 import { createPluginSubscriptionsModule } from "../modules/plugin-subscriptions/index.js";
 
@@ -44,7 +43,6 @@ export class ModuleManager {
       createPlayerDatabaseModule,
       createKillManageModule,
       createCombatCleanModule,
-      createTeamBalanceModule,
       createPlaytimeModule,
     ];
 

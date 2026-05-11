@@ -22,7 +22,7 @@
   "pythonLogParser": {
     "enabled": true,
     "pythonExecutable": "python",
-    "workingDirectory": "./LogPost  ",
+    "workingDirectory": "./LogPost",
     "scriptPath": "./main.py",
     "configPath": "./config.json",
     "autoStart": true,
@@ -81,8 +81,7 @@
     ],
     "optional": {
       "web.killManage": true,
-      "web.combatClean": true,
-      "web.teamBalance": false
+      "web.combatClean": true
     }
   },
 
