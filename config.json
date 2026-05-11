@@ -64,7 +64,7 @@
     "playerState": { "enabled": true },
     "squadState": { "enabled": true },
     "squadCreationOrder": {
-      "enabled": true,
+      "enabled": false,
       "missingConfirmSnapshots": 2,
       "missingConfirmMs": 15000
     },
@@ -90,7 +90,7 @@
     ],
     "optional": {
       "web.squadManage": true,
-      "web.squadCreationOrder": true,
+      "web.squadCreationOrder": false,
       "web.killManage": true,
       "web.combatClean": true,
       "web.teamBalance": false,

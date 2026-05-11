@@ -7,6 +7,7 @@ const DEFAULT_MISSING_CONFIRM_MS = 15000;
 
 export function createSquadCreationOrderModule({ core, config }) {
   const moduleConfig = config?.get?.("modules.squadCreationOrder", {}) ?? {};
+  const enabled = Boolean(moduleConfig.enabled ?? true);
   const missingConfirmSnapshots = Number(moduleConfig.missingConfirmSnapshots ?? DEFAULT_MISSING_CONFIRM_SNAPSHOTS);
   const missingConfirmMs = Number(moduleConfig.missingConfirmMs ?? DEFAULT_MISSING_CONFIRM_MS);
 
@@ -425,6 +426,8 @@ export function createSquadCreationOrderModule({ core, config }) {
     api,
 
     async start() {
+      if (!enabled) return;
+
       if (!hasDeclaredPermission("log.read")) {
         const error = new Error("Squad Creation Order plugin requires log.read permission.");
         core.logger.error(error.message);

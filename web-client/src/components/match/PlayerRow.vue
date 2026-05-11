@@ -1,7 +1,9 @@
 <template>
   <div class="player-row">
     <div class="identity">
-      <strong>{{ player.name || "Unknown" }}</strong>
+      <button type="button" class="name-button" @click="$emit('select', player)">
+        {{ player.name || "Unknown" }}
+      </button>
       <StatusBadge v-if="player.isLeader" tone="ok">SL</StatusBadge>
     </div>
     <div class="meta">
@@ -20,6 +22,10 @@ import StatusBadge from "../common/StatusBadge.vue";
 const props = defineProps<{
   player: RuntimePlayer;
   playtime?: any;
+}>();
+
+defineEmits<{
+  (event: "select", player: RuntimePlayer): void;
 }>();
 
 const playtimeText = computed(() => {
@@ -45,11 +51,21 @@ const playtimeText = computed(() => {
   min-width: 0;
 }
 
-.identity strong {
+.name-button {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #edf2f4;
+  font-weight: 700;
+  text-align: left;
+}
+
+.name-button:hover {
+  color: #9fd6ff;
 }
 
 .meta {

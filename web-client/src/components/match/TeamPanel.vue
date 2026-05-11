@@ -6,18 +6,20 @@
         <span>Team {{ team.teamID }} / {{ team.playerCount }} players</span>
       </div>
     </header>
-    <div class="squad-grid">
+    <div class="squad-list">
       <SquadCard
         v-for="squad in team.squads"
         :key="squad.key"
         :squad="squad"
         :playtimes="playtimes"
+        @select-player="$emit('select-player', $event)"
       />
       <SquadCard
         v-if="team.unassignedPlayers.length"
         :squad="unassignedSquad"
         :members="team.unassignedPlayers"
         :playtimes="playtimes"
+        @select-player="$emit('select-player', $event)"
       />
     </div>
   </section>
@@ -25,6 +27,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import type { RuntimePlayer } from "../../stores/player.store";
 import type { RuntimeTeam } from "../../stores/match.store";
 import SquadCard from "./SquadCard.vue";
 
@@ -33,11 +36,15 @@ const props = defineProps<{
   playtimes: Record<string, any>;
 }>();
 
+defineEmits<{
+  (event: "select-player", player: RuntimePlayer): void;
+}>();
+
 const unassignedSquad = computed(() => ({
   key: `${props.team.teamID}:unassigned`,
   teamID: props.team.teamID,
   squadID: null,
-  squadName: "未编队",
+  squadName: "Unassigned",
   locked: false,
   creatorName: "",
 }));
@@ -65,9 +72,9 @@ h2 {
   font-size: 12px;
 }
 
-.squad-grid {
+.squad-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
 }
 </style>

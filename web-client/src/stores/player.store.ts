@@ -11,6 +11,7 @@ export interface RuntimePlayer {
   role: string;
   online: boolean;
   raw?: string;
+  [key: string]: unknown;
 }
 
 export const usePlayerStore = defineStore("players", {

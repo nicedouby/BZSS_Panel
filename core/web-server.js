@@ -544,6 +544,13 @@ export class WebServer {
     if (url.pathname === "/api/squads/creation-order") {
       const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
       const sessionId = url.searchParams.get("sessionId");
+      const enabled = this.core.config?.get?.("modules.squadCreationOrder.enabled", true) !== false;
+      if (!enabled || !this.modules.squadCreationOrder) {
+        return this.json(res, 404, {
+          error: "SquadCreationOrderUnavailable",
+          message: "Squad creation order module is not loaded.",
+        });
+      }
       const records = sessionId
         ? this.modules.squadCreationOrder.getOrderBySession(serverId, sessionId)
         : this.modules.squadCreationOrder.getCurrentOrder(serverId);

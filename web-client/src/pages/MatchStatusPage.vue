@@ -36,9 +36,17 @@
           :key="team.teamID"
           :team="team"
           :playtimes="playtimes"
+          @select-player="openPlayerDialog"
         />
       </div>
     </template>
+
+    <PlayerDetailDialog
+      v-if="selectedPlayer"
+      :player="selectedPlayer"
+      :playtime="selectedPlayer.steamID ? playtimes[selectedPlayer.steamID] : null"
+      @close="selectedPlayer = null"
+    />
   </section>
 </template>
 
@@ -48,7 +56,7 @@ import { useQuery } from "@tanstack/vue-query";
 import { apiGet, apiPost, ApiError } from "../app/apiClient";
 import { getRuntimeSyncState } from "../app/runtimeSync";
 import { useAuthStore } from "../stores/auth.store";
-import { usePlayerStore } from "../stores/player.store";
+import { usePlayerStore, type RuntimePlayer } from "../stores/player.store";
 import { useSquadStore } from "../stores/squad.store";
 import { useMatchStore } from "../stores/match.store";
 import { useJobStore } from "../stores/job.store";
@@ -56,6 +64,7 @@ import StatusBadge from "../components/common/StatusBadge.vue";
 import ErrorBlock from "../components/common/ErrorBlock.vue";
 import LoadingBlock from "../components/common/LoadingBlock.vue";
 import TeamPanel from "../components/match/TeamPanel.vue";
+import PlayerDetailDialog from "../components/match/PlayerDetailDialog.vue";
 
 const auth = useAuthStore();
 const players = usePlayerStore();
@@ -66,6 +75,7 @@ const runtime = getRuntimeSyncState();
 
 const refreshingPlaytime = ref(false);
 const playtimeError = ref("");
+const selectedPlayer = ref<RuntimePlayer | null>(null);
 
 const hasRuntimeData = computed(() => Boolean(players.updatedAt || squads.updatedAt));
 const steamIDs = computed(() => [...new Set(players.active.map((player) => player.steamID).filter(Boolean))] as string[]);
@@ -116,6 +126,10 @@ async function refreshOnlinePlaytime() {
   } finally {
     refreshingPlaytime.value = false;
   }
+}
+
+function openPlayerDialog(player: RuntimePlayer) {
+  selectedPlayer.value = player;
 }
 
 async function waitForJob(jobId: string, timeoutMs: number) {

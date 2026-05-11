@@ -12,8 +12,9 @@
       :key="player.steamID || player.eosID || player.playerID || player.name"
       :player="player"
       :playtime="player.steamID ? playtimes[player.steamID] : null"
+      @select="$emit('select-player', $event)"
     />
-    <div v-if="!members.length" class="empty">暂无成员</div>
+    <div v-if="!members.length" class="empty">No members</div>
   </article>
 </template>
 
@@ -30,10 +31,14 @@ const props = defineProps<{
   playtimes: Record<string, any>;
 }>();
 
+defineEmits<{
+  (event: "select-player", player: RuntimePlayer): void;
+}>();
+
 const members = computed(() => props.members ?? props.squad.members ?? []);
 const title = computed(() => props.squad.squadName || props.squad.name || `Squad ${props.squad.squadID ?? "-"}`);
 const subtitle = computed(() => {
-  const creator = props.squad.creatorName ? `创建者 ${props.squad.creatorName}` : "创建者未知";
+  const creator = props.squad.creatorName ? `Creator ${props.squad.creatorName}` : "Creator unknown";
   return `${props.squad.key || `${props.squad.teamID}:${props.squad.squadID}`} / ${creator}`;
 });
 </script>
