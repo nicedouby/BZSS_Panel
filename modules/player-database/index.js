@@ -100,10 +100,9 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
 
   const api = {
     async listPlayers(options = {}) {
-      const [players, total, stats] = await Promise.all([
+      const [players, total] = await Promise.all([
         repo.listPlayers(options),
         repo.countPlayers(options),
-        repo.getDatabaseStats(options),
       ]);
 
       return {
@@ -134,7 +133,6 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
           updatedAt: Number(p.updated_at ?? 0) || null,
         })),
         total,
-        stats,
       };
     },
 
@@ -144,6 +142,26 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
 
     async getPlayerDetail(playerId) {
       return repo.getPlayerDetail(playerId);
+    },
+
+    async listPlayerAliases(playerId, options = {}) {
+      return repo.listPlayerAliases(playerId, options);
+    },
+
+    async listPlayerIps(playerId, options = {}) {
+      return repo.listPlayerIps(playerId, options);
+    },
+
+    async listPlayerLogins(playerId, options = {}) {
+      return repo.listPlayerLogins(playerId, options);
+    },
+
+    async listPlayerSquadCreated(playerId, options = {}) {
+      return repo.listPlayerSquadCreated(playerId, options);
+    },
+
+    async getPlayerWarmupStats(playerId) {
+      return repo.getPlayerWarmupStats(playerId);
     },
 
     async setPermissionGroup(playerId, permissionGroup) {

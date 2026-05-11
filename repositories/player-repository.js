@@ -271,6 +271,83 @@ export class PlayerRepository {
     return updated;
   }
 
+  normalizePaging({ limit = 12, offset = 0 } = {}) {
+    return {
+      limit: Math.min(Math.max(Number(limit) || 12, 1), 100),
+      offset: Math.max(Number(offset) || 0, 0),
+    };
+  }
+
+  async listPlayerAliases(playerId, options = {}) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return [];
+    const { limit, offset } = this.normalizePaging(options);
+    return this.db.all(
+      `SELECT alias_name, seen_at
+       FROM player_aliases
+       WHERE player_id = ?
+       ORDER BY seen_at DESC, id DESC
+       LIMIT ? OFFSET ?`,
+      id,
+      limit,
+      offset,
+    );
+  }
+
+  async listPlayerIps(playerId, options = {}) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return [];
+    const { limit, offset } = this.normalizePaging(options);
+    return this.db.all(
+      `SELECT ip, seen_at
+       FROM player_ips
+       WHERE player_id = ?
+       ORDER BY seen_at DESC, id DESC
+       LIMIT ? OFFSET ?`,
+      id,
+      limit,
+      offset,
+    );
+  }
+
+  async listPlayerLogins(playerId, options = {}) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return [];
+    const { limit, offset } = this.normalizePaging(options);
+    return this.db.all(
+      `SELECT ip, controller_path, eos_id, steam_id, joined_at
+       FROM player_logins
+       WHERE player_id = ?
+       ORDER BY joined_at DESC, id DESC
+       LIMIT ? OFFSET ?`,
+      id,
+      limit,
+      offset,
+    );
+  }
+
+  async listPlayerSquadCreated(playerId, options = {}) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return [];
+    const { limit, offset } = this.normalizePaging(options);
+    return this.db.all(
+      `SELECT squad_id, squad_name, team_name, created_at
+       FROM squad_create_records
+       WHERE player_id = ?
+       ORDER BY created_at DESC, id DESC
+       LIMIT ? OFFSET ?`,
+      id,
+      limit,
+      offset,
+    );
+  }
+
+  async getPlayerWarmupStats(playerId) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return null;
+    return this.db.get("SELECT * FROM player_warmup_stats WHERE player_id = ?", id);
+  }
+
   async getPlayerDetail(playerId) {
     const id = Number(playerId);
     if (!Number.isFinite(id)) return null;
@@ -278,29 +355,30 @@ export class PlayerRepository {
     const player = await this.getPlayerById(id);
     if (!player) return null;
 
-    const [aliases, ips, cmdLogs, reported, reports, squadCreated, ratingHistory, logins, combatSessions, warmupStats, recentEvents] = await Promise.all([
-      this.db.all("SELECT alias_name, seen_at FROM player_aliases WHERE player_id = ? ORDER BY seen_at DESC LIMIT 100", id),
-      this.db.all("SELECT ip, seen_at FROM player_ips WHERE player_id = ? ORDER BY seen_at DESC LIMIT 100", id),
-      this.db.all("SELECT command_text, command_result, created_at FROM command_logs WHERE player_id = ? ORDER BY created_at DESC LIMIT 100", id),
-      this.db.all("SELECT reason, status, created_at FROM report_records WHERE target_player_id = ? ORDER BY created_at DESC LIMIT 100", id),
-      this.db.all("SELECT reason, status, created_at FROM report_records WHERE reporter_player_id = ? ORDER BY created_at DESC LIMIT 100", id),
-      this.db.all("SELECT squad_id, squad_name, team_name, created_at FROM squad_create_records WHERE player_id = ? ORDER BY created_at DESC LIMIT 100", id),
-      this.db.all("SELECT old_rating, new_rating, reason, changed_at FROM ladder_rating_history WHERE player_id = ? ORDER BY changed_at DESC LIMIT 100", id),
-      this.db.all("SELECT ip, controller_path, eos_id, steam_id, joined_at FROM player_logins WHERE player_id = ? ORDER BY joined_at DESC LIMIT 100", id),
-      this.db.all("SELECT id, date_key, file_path, first_event_at, last_event_at FROM combat_sessions WHERE player_id = ? ORDER BY date_key DESC, last_event_at DESC LIMIT 100", id),
-      this.db.get("SELECT * FROM player_warmup_stats WHERE player_id = ?", id),
-      this.db.all(
-        `SELECT source_event, event_name, raw_line, matched_player_name, created_at
-         FROM log_events
-         WHERE matched_player_name = ? OR payload_json LIKE ?
-         ORDER BY created_at DESC
-         LIMIT 100`,
-        player.current_name,
-        `%${player.current_name ?? ""}%`,
-      ),
+    const [aliases, ips, logins, squadCreatedRows, warmupStats] = await Promise.all([
+      this.listPlayerAliases(id, { limit: 12 }),
+      this.listPlayerIps(id, { limit: 12 }),
+      this.listPlayerLogins(id, { limit: 12 }),
+      this.listPlayerSquadCreated(id, { limit: 1 }),
+      this.getPlayerWarmupStats(id),
     ]);
 
-    return { player, aliases, ips, cmdLogs, reported, reports, squadCreated, ratingHistory, logins, combatSessions, warmupStats, recentEvents };
+    return {
+      player,
+      aliases,
+      ips,
+      logins,
+      squadCreated: squadCreatedRows[0] ?? null,
+      warmupStats,
+      summary: {
+        totalKills: Number(player.total_kills_light ?? 0) + Number(player.total_kills_other ?? 0),
+        totalDowns: Number(player.total_downed_light ?? 0) + Number(player.total_downed_other ?? 0),
+        totalDeaths: Number(player.total_deaths ?? 0),
+        totalTeamKills: Number(player.total_tk_down ?? 0) + Number(player.total_tk_kill ?? 0),
+        gameSeconds: Number(player.game_seconds ?? 0),
+        serverSeconds: Number(player.server_seconds ?? 0),
+      },
+    };
   }
 
   async setPermissionGroup(playerId, permissionGroup) {

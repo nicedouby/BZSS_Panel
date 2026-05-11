@@ -36,7 +36,7 @@ export function usePlayerDatabaseQuery(filters: PlayerDatabaseFilters) {
     queryKey,
     queryFn: async () => {
       const params = new URLSearchParams({
-        query: debouncedQuery.value,
+        q: debouncedQuery.value,
         sort: filters.sort,
         limit: String(filters.limit),
         offset: String(filters.offset),

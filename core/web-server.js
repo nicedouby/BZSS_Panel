@@ -71,6 +71,25 @@ export class WebServer {
     return this.serveStatic(url, res);
   }
 
+  async runTimedPlayerDatabaseQuery(endpoint, playerId, handler) {
+    const startedAt = Date.now();
+    try {
+      return await handler();
+    } finally {
+      const durationMs = Date.now() - startedAt;
+      if (durationMs > 300) {
+        const message = `[slow-query] endpoint=${endpoint} playerId=${playerId ?? "null"} durationMs=${durationMs}`;
+        if (durationMs > 1000 && typeof this.logger.error === "function") {
+          this.logger.error(message);
+        } else if (typeof this.logger.warn === "function") {
+          this.logger.warn(message);
+        } else {
+          this.logger.info(message);
+        }
+      }
+    }
+  }
+
   async handleApi(url, req, res) {
     if (url.pathname === "/api/health" && req.method === "GET") {
       return this.json(res, 200, {
@@ -269,14 +288,16 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/query/player-database" && req.method === "GET") {
-      const result = await this.modules.playerDatabase.listPlayers({
-        query: url.searchParams.get("q") ?? "",
-        q: url.searchParams.get("q") ?? "",
-        limit: url.searchParams.get("limit") ?? "100",
-        offset: url.searchParams.get("offset") ?? "0",
-        sort: url.searchParams.get("sort") ?? "updated_desc",
+      return this.runTimedPlayerDatabaseQuery("/api/query/player-database", null, async () => {
+        const result = await this.modules.playerDatabase.listPlayers({
+          query: url.searchParams.get("q") ?? "",
+          q: url.searchParams.get("q") ?? "",
+          limit: url.searchParams.get("limit") ?? "100",
+          offset: url.searchParams.get("offset") ?? "0",
+          sort: url.searchParams.get("sort") ?? "updated_desc",
+        });
+        return this.json(res, 200, result);
       });
-      return this.json(res, 200, result);
     }
 
     if (url.pathname === "/api/query/combat-clean" && req.method === "GET") {
@@ -554,9 +575,12 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/player-database/detail") {
-      const detail = await this.modules.playerDatabase.getPlayerDetail(url.searchParams.get("id"));
-      if (!detail) return this.json(res, 404, { error: "PlayerNotFound" });
-      return this.json(res, 200, detail);
+      const playerId = url.searchParams.get("id");
+      return this.runTimedPlayerDatabaseQuery("/api/player-database/detail", playerId, async () => {
+        const detail = await this.modules.playerDatabase.getPlayerDetail(playerId);
+        if (!detail) return this.json(res, 404, { error: "PlayerNotFound" });
+        return this.json(res, 200, detail);
+      });
     }
 
     if (url.pathname === "/api/player-database/sync-online" && req.method === "POST") {
@@ -568,10 +592,58 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/db/stats") {
-      return this.json(res, 200, await this.modules.playerDatabase.getStats({
+      return this.runTimedPlayerDatabaseQuery("/api/db/stats", null, async () => this.json(res, 200, await this.modules.playerDatabase.getStats({
         top: url.searchParams.get("top") ?? "10",
         days: url.searchParams.get("days") ?? "14",
-      }));
+      })));
+    }
+
+    if (url.pathname === "/api/player-database/detail/aliases") {
+      const playerId = url.searchParams.get("id");
+      return this.runTimedPlayerDatabaseQuery("/api/player-database/detail/aliases", playerId, async () => {
+        return this.json(res, 200, {
+          items: await this.modules.playerDatabase.listPlayerAliases(playerId, {
+            limit: url.searchParams.get("limit") ?? "12",
+            offset: url.searchParams.get("offset") ?? "0",
+          }),
+        });
+      });
+    }
+
+    if (url.pathname === "/api/player-database/detail/ips") {
+      const playerId = url.searchParams.get("id");
+      return this.runTimedPlayerDatabaseQuery("/api/player-database/detail/ips", playerId, async () => {
+        return this.json(res, 200, {
+          items: await this.modules.playerDatabase.listPlayerIps(playerId, {
+            limit: url.searchParams.get("limit") ?? "12",
+            offset: url.searchParams.get("offset") ?? "0",
+          }),
+        });
+      });
+    }
+
+    if (url.pathname === "/api/player-database/detail/logins") {
+      const playerId = url.searchParams.get("id");
+      return this.runTimedPlayerDatabaseQuery("/api/player-database/detail/logins", playerId, async () => {
+        return this.json(res, 200, {
+          items: await this.modules.playerDatabase.listPlayerLogins(playerId, {
+            limit: url.searchParams.get("limit") ?? "12",
+            offset: url.searchParams.get("offset") ?? "0",
+          }),
+        });
+      });
+    }
+
+    if (url.pathname === "/api/player-database/detail/squad-created") {
+      const playerId = url.searchParams.get("id");
+      return this.runTimedPlayerDatabaseQuery("/api/player-database/detail/squad-created", playerId, async () => {
+        return this.json(res, 200, {
+          items: await this.modules.playerDatabase.listPlayerSquadCreated(playerId, {
+            limit: url.searchParams.get("limit") ?? "12",
+            offset: url.searchParams.get("offset") ?? "0",
+          }),
+        });
+      });
     }
 
     if (url.pathname === "/api/db/players") {
