@@ -79,10 +79,11 @@ const hasSelectedPlayer = computed(() => {
 
 <style scoped>
 .squad-card {
+  flex: 0 0 auto;
   background: var(--color-bg-card);
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-md);
-  overflow: hidden;
+  overflow: visible;
   transition: all 0.2s ease;
 }
 

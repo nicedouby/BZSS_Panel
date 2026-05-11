@@ -39,8 +39,8 @@ const teamColorClass = computed(() => {
 
 <style scoped>
 .team-column {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: var(--spacing-md);
   min-height: 0;
   height: 100%;
@@ -56,6 +56,7 @@ const teamColorClass = computed(() => {
 }
 
 .team-column-header {
+  flex: 0 0 auto;
   padding: var(--spacing-md);
   background: var(--color-bg-card);
   border-radius: var(--radius-md);
@@ -77,13 +78,14 @@ const teamColorClass = computed(() => {
 }
 
 .squad-list {
-  display: grid;
-  grid-template-columns: 1fr;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   gap: var(--spacing-md);
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  align-content: start;
+  padding-right: 4px;
   overscroll-behavior: contain;
 }
 
