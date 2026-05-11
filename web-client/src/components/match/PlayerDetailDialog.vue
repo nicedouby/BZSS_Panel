@@ -4,7 +4,13 @@
       <header class="dialog-head">
         <div>
           <h3>{{ player.name || "Unknown" }}</h3>
-          <p>{{ player.online ? "Online" : "Offline" }} / {{ player.role || "Unknown role" }}</p>
+          <p>
+            {{ player.online ? "Online" : "Offline" }} / {{ player.role || "Unknown role" }}
+            <span class="header-meta">Steam {{ player.steamID || "--" }}</span>
+            <span class="header-meta">EOS {{ player.eosID || "--" }}</span>
+            <span class="header-meta">Team {{ player.teamID ?? "--" }}</span>
+            <span class="header-meta">Squad {{ player.squadID ?? "--" }}</span>
+          </p>
         </div>
         <div class="head-actions">
           <button type="button" class="search-button" @click="searchPlayerDatabase">Player Database</button>
@@ -13,7 +19,6 @@
       </header>
 
       <div class="detail-grid">
-        <div><span>Player ID</span><strong>{{ player.playerID ?? "-" }}</strong></div>
         <div>
           <span>Steam ID</span>
           <strong>{{ player.steamID || "-" }}</strong>
@@ -24,15 +29,44 @@
           <strong>{{ player.eosID || "-" }}</strong>
           <button v-if="player.eosID" type="button" class="copy-link" @click="copyValue(player.eosID, 'EOS ID')">Copy</button>
         </div>
-        <div v-if="currentIp">
+        <div class="detail-card detail-card-ip detail-span-2">
           <span>Current IP</span>
-          <strong>{{ currentIp }}</strong>
-          <button type="button" class="copy-link" @click="copyValue(currentIp, 'IP')">Copy</button>
+          <template v-if="currentIp">
+            <div class="detail-row">
+              <strong>{{ currentIp }}</strong>
+              <button type="button" class="copy-link" @click="copyValue(currentIp, 'IP')">Copy</button>
+            </div>
+            <small>{{ currentIpSummary || "Unknown" }}</small>
+            <small class="detail-meta">{{ currentIpSource }}</small>
+          </template>
+          <template v-else>
+            <strong>{{ ipEmptyText }}</strong>
+          </template>
         </div>
-        <div><span>Team</span><strong>{{ player.teamID ?? "-" }}</strong></div>
-        <div><span>Squad</span><strong>{{ player.squadID ?? "-" }}</strong></div>
-        <div><span>Leader</span><strong>{{ player.isLeader ? "Yes" : "No" }}</strong></div>
         <div><span>Steam Playtime</span><strong>{{ playtimeText }}</strong></div>
+      </div>
+
+      <div v-if="databaseLookupNotice" class="database-note">{{ databaseLookupNotice }}</div>
+
+      <div class="ip-panels">
+        <section class="ip-card">
+          <h4>Recent Logins</h4>
+          <ul v-if="recentLogins.length" class="ip-list">
+            <li v-for="item in recentLogins" :key="`${item.ip}-${item.joined_at}`" class="ip-item">
+              <div class="ip-item-head">
+                <div>
+                  <strong>{{ item.ip || "--" }}</strong>
+                  <small>{{ formatTime(item.joined_at) }}</small>
+                </div>
+                <button v-if="item.ip" type="button" class="copy-link" @click="copyValue(item.ip, 'IP')">Copy</button>
+              </div>
+              <small v-if="item.controller_path">Controller {{ item.controller_path }}</small>
+              <small>{{ ipSummary(item.ip) }}</small>
+              <small class="detail-meta">{{ ipSourceLabel(item.ip) }}</small>
+            </li>
+          </ul>
+          <div v-else class="ip-empty">{{ ipLoginEmptyText }}</div>
+        </section>
       </div>
 
       <pre v-if="player.raw" class="raw-block">{{ player.raw }}</pre>
@@ -41,11 +75,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import type { RuntimePlayer } from "../../stores/player.store";
 import { useUiStore } from "../../stores/ui.store";
+import { apiGet } from "../../app/apiClient";
+import { useIpLookup } from "../../composables/useIpLookup";
 import { copyTextWithToast } from "../../utils/clipboard";
+import { collectIps, formatIpSummary, isPrivateIp, isValidIp, normalizeIp } from "../../utils/ip";
 import { goToPlayerDatabaseSearch } from "../../utils/player-database";
 
 const props = defineProps<{
@@ -59,14 +96,126 @@ defineEmits<{
 
 const router = useRouter();
 const ui = useUiStore();
+const databaseDetail = ref<any | null>(null);
+const databaseLookupNotice = ref("");
+const loadToken = ref(0);
 
-const currentIp = computed(() => String(props.player?.current_ip ?? props.player?.ip ?? "").trim());
+const playerDatabaseSearchKey = computed(() => {
+  return String(props.player?.steamID ?? "").trim() || String(props.player?.eosID ?? "").trim() || String(props.player?.name ?? "").trim();
+});
+
+const detailPlayer = computed(() => databaseDetail.value?.player ?? null);
+const detailIps = computed(() => Array.isArray(databaseDetail.value?.ips) ? databaseDetail.value.ips : []);
+const detailLogins = computed(() => Array.isArray(databaseDetail.value?.logins) ? databaseDetail.value.logins : []);
+
+const currentIp = computed(() => {
+  return String(
+    props.player?.current_ip
+      ?? props.player?.ip
+      ?? detailPlayer.value?.current_ip
+      ?? detailIps.value?.[0]?.ip
+      ?? detailLogins.value?.[0]?.ip
+      ?? "",
+  ).trim();
+});
+
+const lookupIps = computed(() => collectIps([
+  props.player?.current_ip,
+  props.player?.ip,
+  detailPlayer.value?.current_ip,
+  ...detailIps.value.map((item: any) => item?.ip),
+  ...detailLogins.value.map((item: any) => item?.ip),
+]));
+
+const ipLookup = useIpLookup(lookupIps);
+const recentLogins = computed(() => detailLogins.value.slice(0, 5));
+const currentIpSummary = computed(() => ipSummary(currentIp.value));
+const currentIpSource = computed(() => ipSourceLabel(currentIp.value));
+const ipEmptyText = "No IP data found in player database.";
+const ipLoginEmptyText = "No IP data found in player database.";
+
+watch(
+  () => playerDatabaseSearchKey.value,
+  () => {
+    void loadDatabaseDetail();
+  },
+  { immediate: true },
+);
 
 const playtimeText = computed(() => {
   const seconds = Number(props.playtime?.gameSeconds ?? 0);
   if (!Number.isFinite(seconds) || seconds <= 0) return "Steam --";
   return `Steam ${(seconds / 3600).toFixed(1)}h`;
 });
+
+function resolveLookupItem(ip: unknown) {
+  const key = normalizeIp(ip);
+  if (!key) return null;
+  return ipLookup.items.value?.[key] ?? null;
+}
+
+function ipSummary(ip: unknown) {
+  const normalized = normalizeIp(ip);
+  if (!normalized) return "Unknown";
+  if (!isValidIp(normalized)) return "Invalid IP";
+  if (isPrivateIp(normalized)) return "LAN / Private";
+
+  const item = resolveLookupItem(normalized);
+  if (!item) return "Lookup disabled";
+  const provider = String((item as any).provider ?? "");
+  if (item.source === "invalid") return "Invalid IP";
+  if (item.isPrivate) return "LAN / Private";
+  if (provider === "none") return "Lookup disabled";
+  if (item.source === "unknown") return "Unknown";
+
+  const summary = formatIpSummary(item, true);
+  if (summary) return summary;
+  return provider === "none" ? "Lookup disabled" : "Unknown";
+}
+
+function ipSourceLabel(ip: unknown) {
+  const normalized = normalizeIp(ip);
+  if (!normalized) return "Source unknown";
+  if (!isValidIp(normalized)) return "Source invalid";
+  if (isPrivateIp(normalized)) return "Source private / none";
+
+  const item = resolveLookupItem(normalized);
+  if (!item) return "Source unknown";
+  return `Source ${item.source} / ${item.provider}`;
+}
+
+async function loadDatabaseDetail() {
+  const token = ++loadToken.value;
+  databaseDetail.value = null;
+  databaseLookupNotice.value = "";
+
+  const searchKey = playerDatabaseSearchKey.value;
+  if (!searchKey) {
+    databaseLookupNotice.value = "IP not found in database.";
+    return;
+  }
+
+  try {
+    const listResponse = await apiGet<any>(`/api/query/player-database?q=${encodeURIComponent(searchKey)}&limit=1`, {}, { timeoutMs: 5_000 });
+    const match = firstDatabasePlayer(listResponse);
+    if (!match?.id) {
+      if (token === loadToken.value) databaseLookupNotice.value = "IP not found in database.";
+      return;
+    }
+
+    const detail = await apiGet<any>(`/api/player-database/detail?id=${encodeURIComponent(String(match.id))}`, {}, { timeoutMs: 5_000 });
+    if (token !== loadToken.value) return;
+
+    databaseDetail.value = detail;
+  } catch {
+    if (token !== loadToken.value) return;
+    databaseLookupNotice.value = "IP not found in database.";
+  }
+}
+
+function firstDatabasePlayer(response: any) {
+  return response?.items?.[0] ?? response?.players?.[0] ?? response?.rows?.[0] ?? null;
+}
 
 async function copyValue(value: unknown, label: string) {
   const text = String(value ?? "").trim();
@@ -78,7 +227,13 @@ async function copyValue(value: unknown, label: string) {
 }
 
 function searchPlayerDatabase() {
-  goToPlayerDatabaseSearch(router, props.player.name || props.player.steamID || props.player.eosID || "");
+  goToPlayerDatabaseSearch(router, playerDatabaseSearchKey.value);
+}
+
+function formatTime(value: unknown) {
+  const time = Number(value ?? 0);
+  if (!time) return "--";
+  return new Date(time).toLocaleString("en-US");
 }
 </script>
 
@@ -94,7 +249,7 @@ function searchPlayerDatabase() {
 }
 
 .dialog-panel {
-  width: min(720px, 100%);
+  width: min(760px, 100%);
   display: grid;
   gap: 16px;
   border: 1px solid #2b3540;
@@ -125,6 +280,14 @@ function searchPlayerDatabase() {
   margin: 6px 0 0;
   color: #9aa7b2;
   font-size: 13px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.header-meta {
+  color: #cdd6dc;
+  font-size: 12px;
 }
 
 .close-button {
@@ -144,6 +307,10 @@ function searchPlayerDatabase() {
   padding: 10px 12px;
 }
 
+.detail-card-ip {
+  grid-column: span 2;
+}
+
 .detail-grid span,
 .detail-grid strong {
   display: block;
@@ -160,6 +327,82 @@ function searchPlayerDatabase() {
 
 .detail-grid button {
   margin-top: 4px;
+}
+
+.detail-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.detail-meta,
+.database-note,
+.ip-item small,
+.ip-empty {
+  color: #9aa7b2;
+  font-size: 12px;
+}
+
+.detail-card-ip small {
+  margin-top: 4px;
+}
+
+.database-note {
+  margin: -2px 0 0;
+  padding-left: 2px;
+}
+
+.ip-panels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.ip-card {
+  border: 1px solid #2b3540;
+  border-radius: 8px;
+  background: #11171d;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.ip-card h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.ip-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.ip-item {
+  border: 1px solid #2b3540;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.ip-item-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ip-item-head strong,
+.ip-item-head small {
+  display: block;
+}
+
+.ip-empty {
+  padding: 2px 0;
 }
 
 .copy-link,
@@ -186,10 +429,17 @@ function searchPlayerDatabase() {
   color: #cdd6dc;
   white-space: pre-wrap;
   word-break: break-word;
+  max-height: 220px;
 }
 
 @media (max-width: 700px) {
   .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-card-ip,
+  .ip-panels {
+    grid-column: auto;
     grid-template-columns: 1fr;
   }
 }
