@@ -2,6 +2,7 @@
 /LogPost/LogPost
 /MicePanel
 node_modules/
+web-client/dist/
 data/*.db
 data/*.db-*
 /data

@@ -176,30 +176,66 @@ export default class SquadRcon extends Rcon {
 }
 
 export function parseListPlayers(raw) {
-  const players = [];
-  if (!raw) return players;
+  const active = [];
+  const recentlyDisconnected = [];
+  if (!raw) return attachListPlayersSections(active, recentlyDisconnected);
+
+  let section = "active";
 
   for (const line of String(raw).split("\n")) {
-    const m = line.trim().match(
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    if (/^-+\s*Active Players\s*-+$/i.test(trimmed)) {
+      section = "active";
+      continue;
+    }
+    if (/^-+\s*Recently Disconnected Players/i.test(trimmed)) {
+      section = "recentlyDisconnected";
+      continue;
+    }
+
+    const m = trimmed.match(
       /^ID: (?<playerID>\d+) \| Online IDs:([^|]+)\| Name: (?<name>.+) \| Team ID: (?<teamID>\d+|N\/A) \| Squad ID: (?<squadID>\d+|N\/A) \| Is Leader: (?<isLeader>True|False) \| Role: (?<role>.+)$/
     );
     if (!m) continue;
 
     const p = { ...m.groups };
     p.playerID = Number(p.playerID);
+    p.name = String(p.name ?? "").trim();
+    p.role = String(p.role ?? "").trim();
     p.isLeader = p.isLeader === "True";
     p.teamID = p.teamID !== "N/A" ? Number(p.teamID) : null;
     p.squadID = p.squadID !== "N/A" ? Number(p.squadID) : null;
+    p.online = section !== "recentlyDisconnected";
 
     iterateIDs(m[2]).forEach((platform, id) => {
       p[lowerID(platform)] = id;
     });
 
-    p.raw = line.trim();
-    players.push(p);
+    p.raw = trimmed;
+    if (section === "recentlyDisconnected") {
+      recentlyDisconnected.push(p);
+    } else {
+      active.push(p);
+    }
   }
 
-  return players;
+  return attachListPlayersSections(active, recentlyDisconnected);
+}
+
+function attachListPlayersSections(active, recentlyDisconnected) {
+  Object.defineProperties(active, {
+    active: {
+      value: active,
+      enumerable: false,
+    },
+    recentlyDisconnected: {
+      value: recentlyDisconnected,
+      enumerable: false,
+    },
+  });
+  return active;
 }
 
 export function parseListSquads(raw) {

@@ -37,6 +37,7 @@ import { ModuleManager } from "./core/module-manager.js";
 import { PluginManager } from "./core/plugin-manager.js";
 import { AuthManager } from "./core/auth-manager.js";
 import { EventPipeline } from "./core/event-pipeline.js";
+import { RuntimeState } from "./core/runtime-state.js";
 
 async function main() {
   const configManager = new ConfigManager("./config.json");
@@ -70,6 +71,11 @@ async function main() {
     config: configManager.get("auth", {}),
     logger: logger.child({ moduleId: "core.authManager", source: "core.authManager" }),
   });
+  const runtimeState = new RuntimeState({
+    eventBus,
+    webStatus,
+    logger: logger.child({ moduleId: "core.runtimeState", source: "core.runtimeState" }),
+  });
 
   const rconManager = new RconManager({
     config: configManager.get("rcon", {}),
@@ -77,6 +83,10 @@ async function main() {
     eventBus,
     webStatus,
     eventPipeline,
+  });
+  rconManager.onNativeLog((entry) => {
+    runtimeState.recordEvent("console", entry);
+    runtimeState.recordEvent("rcon", entry);
   });
 
   const udpReceiver = new UdpEventReceiver({
@@ -97,6 +107,7 @@ async function main() {
     eventPipeline,
     webRegistry,
     webStatus,
+    runtimeState,
     rconManager,
     authManager,
   };
@@ -181,6 +192,7 @@ async function main() {
     await moduleManager.stopAll();
     await udpReceiver.stop();
     await rconManager.stop();
+    runtimeState.stop();
     await authManager.stop();
 
     logger.info("BZSS Panel WebCore stopped.", {

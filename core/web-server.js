@@ -17,6 +17,8 @@ export class WebServer {
     this.core = core;
     this.modules = modules;
     this.server = null;
+    this.jobs = new Map();
+    this.jobCounter = 0;
   }
 
   async start() {
@@ -123,6 +125,26 @@ export class WebServer {
       return this.json(res, 200, this.core.webStatus.getSnapshot());
     }
 
+    if (url.pathname === "/api/snapshot/all" && req.method === "GET") {
+      return this.json(res, 200, this.core.runtimeState.getAll());
+    }
+
+    if (url.pathname === "/api/snapshot/server" && req.method === "GET") {
+      return this.json(res, 200, this.core.runtimeState.getServer());
+    }
+
+    if (url.pathname === "/api/snapshot/players" && req.method === "GET") {
+      return this.json(res, 200, this.core.runtimeState.getPlayers());
+    }
+
+    if (url.pathname === "/api/snapshot/squads" && req.method === "GET") {
+      return this.json(res, 200, this.core.runtimeState.getSquads());
+    }
+
+    if (url.pathname === "/api/snapshot/match" && req.method === "GET") {
+      return this.json(res, 200, this.core.runtimeState.getMatch());
+    }
+
     if (url.pathname === "/api/log-clock/set" && req.method === "POST") {
       const body = await this.readJsonBody(req);
       const seconds = Number(body.seconds ?? body.value ?? 0);
@@ -173,11 +195,77 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/match/overview") {
-      const overview = this.modules.matchState.getOverview();
-      if (this.modules.playtime?.enrichPlayers && Array.isArray(overview?.players)) {
-        overview.players = await this.modules.playtime.enrichPlayers(overview.players);
-      }
-      return this.json(res, 200, overview);
+      return this.json(res, 200, this.getMatchOverviewFromRuntime());
+    }
+
+    if (url.pathname === "/api/jobs/playtime-refresh-online" && req.method === "POST") {
+      const body = await this.readJsonBody(req);
+      const job = await this.modules.playtime.refreshOnline(body.serverId ?? url.searchParams.get("serverId") ?? this.core.webStatus.serverId);
+      this.core.runtimeState.updateJob(job);
+      return this.json(res, 202, job);
+    }
+
+    if (url.pathname === "/api/jobs/rcon-refresh" && req.method === "POST") {
+      const body = await this.readJsonBody(req);
+      const type = body.type ?? url.searchParams.get("type") ?? "all";
+      const job = this.createLocalJob("rcon-refresh", { type });
+      this.runLocalJob(job, async () => {
+        const result = {};
+        if (type === "players" || type === "all") result.players = await this.core.rconManager.refreshPlayers();
+        if (type === "squads" || type === "all") result.squads = await this.core.rconManager.refreshSquads();
+        return result;
+      });
+      return this.json(res, 202, job);
+    }
+
+    const jobMatch = url.pathname.match(/^\/api\/jobs\/([^/]+)$/);
+    if (jobMatch && req.method === "GET") {
+      const job = await this.getJob(decodeURIComponent(jobMatch[1]), {
+        waitMs: Number(url.searchParams.get("waitMs") ?? 0),
+      });
+      if (!job) return this.json(res, 404, { error: "JobNotFound" });
+      this.core.runtimeState.updateJob(job);
+      return this.json(res, 200, job);
+    }
+
+    if (url.pathname === "/api/query/playtime-cache" && req.method === "GET") {
+      const steamIDs = String(url.searchParams.get("steamIDs") ?? "")
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean);
+      const items = {};
+      await Promise.all(steamIDs.map(async (steamID) => {
+        try {
+          const row = await this.modules.playtime.getBySteamID(steamID);
+          if (row) items[steamID] = normalizePlaytimeRow(row);
+        } catch {}
+      }));
+      return this.json(res, 200, { items });
+    }
+
+    if (url.pathname === "/api/query/player-database" && req.method === "GET") {
+      const result = await this.modules.playerDatabase.listPlayers({
+        query: url.searchParams.get("q") ?? "",
+        q: url.searchParams.get("q") ?? "",
+        limit: url.searchParams.get("limit") ?? "100",
+        offset: url.searchParams.get("offset") ?? "0",
+        sort: url.searchParams.get("sort") ?? "updated_desc",
+      });
+      return this.json(res, 200, result);
+    }
+
+    if (url.pathname === "/api/query/combat-clean" && req.method === "GET") {
+      const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
+      return this.json(res, 200, {
+        events: this.modules.combatClean?.getEvents?.({
+          serverId,
+          limit: url.searchParams.get("limit") ?? "100",
+          offset: url.searchParams.get("offset") ?? "0",
+          type: url.searchParams.get("type") ?? "all",
+          search: url.searchParams.get("q") ?? "",
+        }) ?? [],
+        overview: this.modules.combatClean?.getOverview?.(serverId) ?? null,
+      });
     }
 
     if (url.pathname === "/api/playtime/status") {
@@ -527,6 +615,88 @@ export class WebServer {
     }
   }
 
+  getMatchOverviewFromRuntime() {
+    if (!this.core.runtimeState) {
+      return this.modules.matchState?.getOverview?.() ?? {};
+    }
+
+    const match = this.core.runtimeState.getMatch();
+    const webStatus = this.core.webStatus?.getSnapshot?.() ?? {};
+    const rconStatus = this.core.rconManager?.getStatus?.() ?? {};
+    return {
+      status: webStatus,
+      matchState: match,
+      serverStatus: {
+        ...webStatus,
+        ...(match.server ?? {}),
+      },
+      match,
+      players: match.players?.active ?? [],
+      recentlyDisconnected: match.players?.recentlyDisconnected ?? [],
+      squads: match.squads?.list ?? [],
+      teams: match.teams ?? [],
+      rconStatus,
+      logAccess: {
+        granted: webStatus.pythonLogParser === "running" || webStatus.udpReceiver === "listening",
+        pythonLogParser: webStatus.pythonLogParser ?? "unknown",
+        udpReceiver: webStatus.udpReceiver ?? "unknown",
+      },
+    };
+  }
+
+  createLocalJob(type, input = {}) {
+    const now = Date.now();
+    const job = {
+      id: `local-${now}-${++this.jobCounter}`,
+      type,
+      status: "queued",
+      createdAt: now,
+      startedAt: null,
+      finishedAt: null,
+      input,
+      result: null,
+      error: null,
+    };
+    this.jobs.set(job.id, job);
+    this.core.runtimeState?.updateJob?.(job);
+    return { ...job };
+  }
+
+  runLocalJob(publicJob, runner) {
+    const job = this.jobs.get(publicJob.id);
+    if (!job) return;
+    job.status = "running";
+    job.startedAt = Date.now();
+    this.core.runtimeState?.updateJob?.(job);
+
+    Promise.resolve()
+      .then(runner)
+      .then((result) => {
+        job.status = "completed";
+        job.result = result;
+      })
+      .catch((error) => {
+        job.status = "failed";
+        job.error = {
+          message: error?.message || "Job failed.",
+        };
+      })
+      .finally(() => {
+        job.finishedAt = Date.now();
+        this.core.runtimeState?.updateJob?.(job);
+      });
+  }
+
+  async getJob(jobId, { waitMs = 0 } = {}) {
+    const localJob = this.jobs.get(String(jobId ?? ""));
+    if (localJob) return { ...localJob };
+
+    if (this.modules.playtime?.waitForJob && Number(waitMs) > 0) {
+      return this.modules.playtime.waitForJob(jobId, waitMs);
+    }
+    return this.modules.playtime?.getJob?.(jobId) ?? null;
+  }
+
   async serveStatic(url, res) {
     let filePath = url.pathname === "/" ? "/index.html" : url.pathname;
 
@@ -647,4 +817,18 @@ function createHttpError(statusCode, code, message) {
   error.statusCode = statusCode;
   error.code = code;
   return error;
+}
+
+function normalizePlaytimeRow(row) {
+  const gameSeconds = Number(row?.game_seconds ?? row?.gameSeconds ?? 0);
+  const safeSeconds = Number.isFinite(gameSeconds) ? gameSeconds : 0;
+  return {
+    steamID: String(row?.steam_id ?? row?.steamID ?? ""),
+    appId: Number(row?.app_id ?? row?.appId ?? 393380),
+    gameName: String(row?.game_name ?? row?.gameName ?? "Squad"),
+    gameSeconds: safeSeconds,
+    gameHours: Number((safeSeconds / 3600).toFixed(2)),
+    fetchedAt: Number(row?.fetched_at ?? row?.fetchedAt ?? 0) || null,
+    lastSeenName: row?.last_seen_name ?? row?.lastSeenName ?? null,
+  };
 }
