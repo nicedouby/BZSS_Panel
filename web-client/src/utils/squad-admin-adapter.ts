@@ -166,6 +166,7 @@ export function adaptPlayerDetail(
   player: RuntimePlayer,
   playtimeHours: number | null = null,
 ): PlayerDetailViewModel {
+  const currentIp = (player as any).current_ip || (player as any).ip || null;
   return {
     playerId: player.playerID ?? null,
     name: player.name || "Unknown",
@@ -176,7 +177,11 @@ export function adaptPlayerDetail(
     squadId: player.squadID ?? null,
     steamId: player.steamID ?? null,
     eosId: player.eosID ?? null,
-    ip: (player as any).current_ip || (player as any).ip || null,
+    ip: currentIp,
+    lastIp: null,
+    resolvedIp: currentIp,
+    ipSource: currentIp ? "current" : "none",
+    ipLookupLoading: false,
     playtimeHours,
     source: (player as any).source || "unknown",
     controller: (player as any).controllerID || (player as any).controller || "",

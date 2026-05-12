@@ -1,8 +1,8 @@
 <template>
   <div class="copyable-value">
     <span class="label">{{ label }}</span>
-    <span class="value" :title="value || 'Unknown'">
-      {{ displayValue }}
+    <span class="value" :title="value || emptyText">
+      {{ hasValue ? displayValue : emptyText }}
     </span>
     <button
       v-if="hasValue"
@@ -14,7 +14,6 @@
     >
       {{ copying ? 'Copied' : 'Copy' }}
     </button>
-    <span v-else class="no-value">--</span>
   </div>
 </template>
 
@@ -28,9 +27,11 @@ const props = withDefaults(
     label: string;
     value: string | null | undefined;
     truncate?: number;
+    emptyText?: string;
   }>(),
   {
     truncate: 0,
+    emptyText: "Unknown",
   },
 );
 

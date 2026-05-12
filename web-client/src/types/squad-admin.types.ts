@@ -56,6 +56,10 @@ export interface PlayerDetailViewModel {
   steamId: string | null;
   eosId: string | null;
   ip: string | null;
+  lastIp?: string | null;
+  resolvedIp?: string | null;
+  ipSource?: "current" | "last" | "none";
+  ipLookupLoading?: boolean;
   playtimeHours: number | null;
   source: string;
   controller: string;

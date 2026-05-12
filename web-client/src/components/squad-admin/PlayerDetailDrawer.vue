@@ -47,7 +47,10 @@
               <div class="detail-section-title">Identity</div>
               <CopyableValue label="Steam ID" :value="props.player.steamId" :truncate="32" />
               <CopyableValue label="EOS ID" :value="props.player.eosId" :truncate="32" />
-              <CopyableValue label="IP" :value="props.player.ip" />
+              <div class="identity-ip-block">
+                <CopyableValue label="IP" :value="displayIp" :empty-text="ipEmptyText" />
+                <small class="identity-ip-hint">{{ resolveIpError || ipSourceHint }}</small>
+              </div>
             </section>
 
             <section class="detail-section">
@@ -100,8 +103,8 @@
               <button
                 type="button"
                 class="action-button secondary"
-                @click="copyValue(props.player.ip, 'IP')"
-                :disabled="!props.player.ip"
+                @click="copyValue(displayIp, 'IP')"
+                :disabled="!displayIp"
               >
                 Copy IP
               </button>
@@ -133,12 +136,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { useRouter } from "vue-router";
 import type { PlayerDetailViewModel } from "../../types/squad-admin.types";
 import { useUiStore } from "../../stores/ui.store";
 import { copyTextWithToast } from "../../utils/clipboard";
 import { goToPlayerDatabaseSearch } from "../../utils/player-database";
+import { resolvePlayerIdentityIp } from "../../app/playerIdentityApi";
 import StatusBadge from "../common/StatusBadge.vue";
 import CopyableValue from "./CopyableValue.vue";
 
@@ -159,6 +163,20 @@ const emit = defineEmits<{
 const ui = useUiStore();
 const router = useRouter();
 const showAdvanced = ref(false);
+const resolvedLastIp = ref("");
+const resolvingIp = ref(false);
+const resolveIpError = ref("");
+const lookupToken = ref(0);
+
+const currentIp = computed(() => String(props.player?.ip ?? "").trim());
+const displayIp = computed(() => currentIp.value || resolvedLastIp.value.trim());
+const ipEmptyText = computed(() => (resolvingIp.value ? "resolving..." : "--"));
+const ipSourceHint = computed(() => {
+  if (currentIp.value) return "current";
+  if (resolvingIp.value) return "resolving...";
+  if (resolvedLastIp.value.trim()) return "last known";
+  return "none";
+});
 
 const teamColorClass = computed(() => {
   if (!props.player) return "neutral";
@@ -192,6 +210,66 @@ function openDatabase() {
     goToPlayerDatabaseSearch(router, searchKey);
   }
 }
+
+function buildLookupKey() {
+  return [
+    String(props.player?.steamId ?? "").trim(),
+    String(props.player?.eosId ?? "").trim(),
+    String(props.player?.name ?? "").trim(),
+  ].filter(Boolean).join("|");
+}
+
+watch(
+  () => [props.open, props.player?.steamId, props.player?.eosId, props.player?.name, props.player?.ip],
+  async () => {
+    lookupToken.value += 1;
+
+    if (!props.open || !props.player) {
+      resolvingIp.value = false;
+      resolveIpError.value = "";
+      resolvedLastIp.value = "";
+      return;
+    }
+
+    resolveIpError.value = "";
+
+    if (currentIp.value) {
+      resolvedLastIp.value = "";
+      resolvingIp.value = false;
+      return;
+    }
+
+    const lookupKey = buildLookupKey();
+    if (!lookupKey) {
+      resolvedLastIp.value = "";
+      resolvingIp.value = false;
+      return;
+    }
+
+    resolvedLastIp.value = "";
+    resolvingIp.value = true;
+
+    const token = lookupToken.value;
+    try {
+      const result = await resolvePlayerIdentityIp({
+        steamId: props.player.steamId,
+        eosId: props.player.eosId,
+        name: props.player.name,
+      });
+
+      if (token !== lookupToken.value) return;
+
+      resolvedLastIp.value = result.source === "last" ? result.ip : "";
+      resolvingIp.value = false;
+    } catch {
+      if (token !== lookupToken.value) return;
+      resolvedLastIp.value = "";
+      resolvingIp.value = false;
+      resolveIpError.value = "IP lookup failed";
+    }
+  },
+  { immediate: true },
+);
 
 onMounted(() => {
   document.addEventListener("keydown", handleEscape);
@@ -295,6 +373,16 @@ onUnmounted(() => {
 .detail-section {
   display: grid;
   gap: var(--spacing-sm);
+}
+
+.identity-ip-block {
+  display: grid;
+  gap: 4px;
+}
+
+.identity-ip-hint {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
 }
 
 .detail-section-title {

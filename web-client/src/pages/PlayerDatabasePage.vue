@@ -628,7 +628,7 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
 .db-page {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 14px;
+  gap: 10px;
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -647,16 +647,16 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
 .db-overview-card {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 10px;
-  padding: 12px;
+  gap: 8px;
+  padding: 8px;
 }
 
 .db-stat-item {
   border: 1px solid rgba(42, 49, 68, 0.82);
   border-radius: 12px;
-  padding: 10px;
+  padding: 7px 8px;
   display: grid;
-  gap: 6px;
+  gap: 3px;
 }
 
 .db-stat-item span,
@@ -666,29 +666,29 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
 .db-stats-modal-head p,
 .placeholder {
   color: #8a93a8;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .db-stat-item strong,
 .db-grid strong {
-  font-size: 18px;
+  font-size: 14px;
   color: #edf2f4;
 }
 
 .db-toolbar-card {
-  padding: 12px;
+  padding: 8px;
 }
 
 .db-toolbar-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .db-panel {
   display: grid;
   grid-template-columns: 360px minmax(0, 1fr);
-  gap: 14px;
+  gap: 10px;
   min-height: 0;
   height: 100%;
   overflow: hidden;
@@ -699,9 +699,9 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
 .db-list-col {
   border-right: 1px solid rgba(42, 49, 68, 0.84);
   background: rgba(10, 14, 20, 0.92);
-  padding: 10px;
+  padding: 6px;
   display: grid;
-  gap: 8px;
+  gap: 6px;
   align-content: start;
   min-height: 0;
   height: 100%;
@@ -710,9 +710,9 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
 }
 
 .db-detail-col {
-  padding: 14px;
+  padding: 10px;
   display: grid;
-  gap: 12px;
+  gap: 10px;
   align-content: start;
   min-height: 0;
   height: 100%;
@@ -725,19 +725,21 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
   overflow-y: auto;
   overflow-x: hidden;
   display: grid;
-  gap: 12px;
+  gap: 10px;
   align-content: start;
+  padding-right: 4px;
 }
 
 .db-row {
   text-align: left;
   border: 1px solid rgba(42, 49, 68, 0.84);
-  border-radius: 12px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.03);
-  padding: 10px;
+  padding: 7px 9px;
   display: grid;
-  gap: 6px;
+  gap: 3px;
   color: #edf2f4;
+  min-height: unset;
 }
 
 .db-row.active {
@@ -747,16 +749,20 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
 
 .db-row-name {
   font-weight: 700;
+  font-size: 13px;
+  line-height: 1.25;
 }
 
 .db-row-ip {
   display: grid;
-  gap: 4px;
+  gap: 5px;
   padding-top: 2px;
+  margin-top: 2px;
+  font-size: 11px;
 }
 
 .db-row-ip-value {
-  font-size: 12px;
+  font-size: 11px;
   color: #edf2f4;
   word-break: break-word;
 }
@@ -766,8 +772,8 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
   border: 0;
   background: transparent;
   color: #8bb6ff;
-  padding: 0;
-  font-size: 12px;
+  padding: 2px 5px;
+  font-size: 11px;
   cursor: pointer;
 }
 
@@ -778,13 +784,13 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
 
 .db-ip-field {
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
 
 .db-ip-line {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -797,6 +803,8 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
 .db-history-list small,
 .db-login-list small {
   color: #8a93a8;
+  font-size: 10.5px;
+  line-height: 1.25;
 }
 
 .db-detail-head {
@@ -804,6 +812,7 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  padding: 10px 12px;
 }
 
 .db-detail-head h2,
@@ -812,20 +821,30 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
   margin: 0;
 }
 
+.db-detail-head h2 {
+  font-size: 18px;
+}
+
 .db-detail-head p {
-  margin: 6px 0 0;
+  margin: 3px 0 0;
   color: #8a93a8;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .db-card {
-  padding: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.db-card h3 {
+  font-size: 13px;
+  margin-bottom: 8px;
 }
 
 .db-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .db-grid.compact {
@@ -834,16 +853,16 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
 
 .db-grid > div {
   border: 1px solid rgba(42, 49, 68, 0.78);
-  border-radius: 12px;
-  padding: 10px;
+  border-radius: 8px;
+  padding: 7px 8px;
   display: grid;
-  gap: 6px;
+  gap: 3px;
 }
 
 .db-detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .db-list-mini,
@@ -855,7 +874,7 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .db-list-mini li,
@@ -864,10 +883,10 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
 .db-rank-list li,
 .db-trend-list li {
   border: 1px solid rgba(42, 49, 68, 0.82);
-  border-radius: 10px;
-  padding: 8px 10px;
+  border-radius: 8px;
+  padding: 7px 8px;
   display: grid;
-  gap: 6px;
+  gap: 4px;
   background: rgba(255, 255, 255, 0.03);
 }
 
@@ -876,19 +895,20 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
 }
 
 .db-history-head div,
 .db-login-head div {
   display: grid;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
 }
 
 .db-history-head strong,
 .db-login-head strong {
   word-break: break-word;
+  font-size: 12px;
 }
 
 .db-chip-wrap {
@@ -908,13 +928,13 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
 }
 
 .db-analytics {
-  margin-top: 12px;
+  margin-top: 10px;
 }
 
 .db-analytics-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .db-analytics-card {
@@ -923,19 +943,19 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
 
 .db-analytics-body {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .db-analytics-block {
   border: 1px solid rgba(42, 49, 68, 0.82);
-  border-radius: 12px;
-  padding: 10px;
+  border-radius: 10px;
+  padding: 8px;
   background: rgba(255, 255, 255, 0.03);
 }
 
 .db-analytics-block h4 {
-  margin: 0 0 8px;
-  font-size: 12px;
+  margin: 0 0 6px;
+  font-size: 11px;
   color: #8a93a8;
 }
 
@@ -976,7 +996,7 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
   overflow: hidden;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  padding: 14px;
+  padding: 12px;
 }
 
 .db-stats-modal-head {
