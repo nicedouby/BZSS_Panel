@@ -9,6 +9,30 @@
         @input="$emit('search', searchQuery)"
       >
       <div class="toolbar-controls">
+        <div class="refresh-controls" title="Manual backend refresh">
+          <button
+            type="button"
+            :disabled="!canRefresh || isRefreshing"
+            @click="$emit('refresh', 'players')"
+          >
+            {{ refreshingType === 'players' ? 'Refreshing Players...' : 'Refresh Players' }}
+          </button>
+          <button
+            type="button"
+            :disabled="!canRefresh || isRefreshing"
+            @click="$emit('refresh', 'squads')"
+          >
+            {{ refreshingType === 'squads' ? 'Refreshing Squads...' : 'Refresh Squads' }}
+          </button>
+          <button
+            type="button"
+            :disabled="!canRefresh || isRefreshing"
+            @click="$emit('refresh', 'all')"
+          >
+            {{ refreshingType === 'all' ? 'Refreshing All...' : 'Refresh All' }}
+          </button>
+        </div>
+
         <div class="density-toggle">
           <button
             v-for="mode in ['comfortable', 'compact']"
@@ -20,50 +44,31 @@
             {{ mode === 'comfortable' ? 'Comfortable' : 'Compact' }}
           </button>
         </div>
-        <div class="refresh-actions">
-          <button type="button" :disabled="refreshingPlayers" @click="$emit('refresh-players')">
-            {{ refreshingPlayers ? "Refreshing Players..." : "Refresh Players" }}
-          </button>
-          <button type="button" :disabled="refreshingSquads" @click="$emit('refresh-squads')">
-            {{ refreshingSquads ? "Refreshing Squads..." : "Refresh Squads" }}
-          </button>
-          <button type="button" :disabled="refreshingAll" @click="$emit('refresh-all')">
-            {{ refreshingAll ? "Refreshing All..." : "Refresh All" }}
-          </button>
-        </div>
       </div>
-    </div>
-    <div class="toolbar-status-row">
-      <span>Server updated {{ formatTime(serverStatusUpdatedAt) }}</span>
-      <span>Players updated {{ formatTime(playersUpdatedAt) }}</span>
-      <span>Squads updated {{ formatTime(squadsUpdatedAt) }}</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
+
+type RefreshType = "players" | "squads" | "all";
 
 const props = defineProps<{
   searchQuery: string;
   densityMode: "comfortable" | "compact";
-  refreshingPlayers?: boolean;
-  refreshingSquads?: boolean;
-  refreshingAll?: boolean;
-  serverStatusUpdatedAt?: number;
-  playersUpdatedAt?: number;
-  squadsUpdatedAt?: number;
+  canRefresh: boolean;
+  refreshingType: RefreshType | "";
 }>();
 
 const emit = defineEmits<{
   (event: "search", query: string): void;
   (event: "density-change", mode: "comfortable" | "compact"): void;
-  (event: "refresh-players"): void;
-  (event: "refresh-squads"): void;
-  (event: "refresh-all"): void;
+  (event: "refresh", type: RefreshType): void;
 }>();
 
 const searchQuery = ref(props.searchQuery);
+const isRefreshing = computed(() => Boolean(props.refreshingType));
 
 watch(
   () => props.searchQuery,
@@ -71,15 +76,6 @@ watch(
     searchQuery.value = newVal;
   },
 );
-
-function formatTime(time?: number): string {
-  if (!time) return "--:--:--";
-  return new Date(time).toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
 </script>
 
 <style scoped>
@@ -125,6 +121,36 @@ function formatTime(time?: number): string {
   flex-wrap: wrap;
 }
 
+.refresh-controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.refresh-controls button {
+  padding: 6px 10px;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.refresh-controls button:hover:not(:disabled) {
+  color: var(--color-text-primary);
+  border-color: var(--color-status-info);
+}
+
+.refresh-controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .density-toggle {
   display: flex;
   gap: 2px;
@@ -156,42 +182,6 @@ function formatTime(time?: number): string {
   color: var(--color-text-primary);
 }
 
-.refresh-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.refresh-actions button {
-  padding: 6px 12px;
-  border: 1px solid var(--color-border-default);
-  background: var(--color-bg-elevated);
-  color: var(--color-text-primary);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  transition: all 0.15s ease;
-}
-
-.refresh-actions button:hover:not(:disabled) {
-  border-color: var(--color-status-info);
-  background: var(--color-bg-card);
-}
-
-.refresh-actions button:disabled {
-  opacity: 0.65;
-  cursor: not-allowed;
-}
-
-.toolbar-status-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 10px;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-}
-
 @media (max-width: 768px) {
   .toolbar-row {
     flex-direction: column;
@@ -199,6 +189,11 @@ function formatTime(time?: number): string {
 
   .squad-search-input {
     width: 100%;
+  }
+
+  .toolbar-controls {
+    width: 100%;
+    justify-content: space-between;
   }
 }
 </style>
