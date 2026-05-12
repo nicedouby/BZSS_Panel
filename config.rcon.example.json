@@ -25,8 +25,8 @@
       "enabled": true,
       "polling": {
         "serverInfoIntervalMs": 5000,
-        "playersIntervalMs": 10000,
-        "squadsIntervalMs": 10000,
+        "playersIntervalMs": 3000,
+        "squadsIntervalMs": 5000,
         "currentMapIntervalMs": 15000,
         "nextMapIntervalMs": 30000
       }

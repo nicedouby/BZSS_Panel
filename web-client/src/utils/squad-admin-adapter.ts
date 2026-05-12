@@ -205,6 +205,7 @@ export function adaptMatchHeader(
   const squadsUpdatedAt = toTimestamp(backendSquads.lastUpdatedAt);
   const runtimeUpdatedAt = Number(server.updatedAt ?? 0);
   const lastUpdateTime = Math.max(serverStatusUpdatedAt, playersUpdatedAt, squadsUpdatedAt, runtimeUpdatedAt);
+  const tps = backendServerStatus.tps ?? snapshot.tps ?? 0;
 
   return {
     serverName: backendServerStatus.name || snapshot.serverName || "Unknown Server",
@@ -215,7 +216,7 @@ export function adaptMatchHeader(
     team1Count: team1,
     team2Count: team2,
     matchTimeSeconds: Number(backendServerStatus.playtime ?? snapshot.matchTimeSeconds ?? backendMatch.playtime ?? 0),
-    tps: Number(backendServerStatus.tps ?? snapshot.tps ?? 0),
+    tps: Number(tps),
     rconStatus: (matchSnapshot?.rconStatus?.status ?? snapshot.webStatus?.rcon ?? snapshot.rconStatus ?? "unknown") as any,
     logsStatus: runtimeState?.lastError ? "stale" : "live",
     lastUpdateTime,

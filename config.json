@@ -140,6 +140,51 @@
         "min": 1,
         "max": 600,
         "restartRequired": true
+      },
+      {
+        "path": "modules.matchState.polling.serverInfoIntervalMs",
+        "label": "Server Info Refresh Interval",
+        "type": "number",
+        "min": 1000,
+        "max": 60000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.matchState.polling.playersIntervalMs",
+        "label": "Players Refresh Interval",
+        "type": "number",
+        "min": 1000,
+        "max": 60000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.matchState.polling.squadsIntervalMs",
+        "label": "Squads Refresh Interval",
+        "type": "number",
+        "min": 1000,
+        "max": 60000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.matchState.polling.currentMapIntervalMs",
+        "label": "Current Map Refresh Interval",
+        "type": "number",
+        "min": 3000,
+        "max": 120000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.matchState.polling.nextMapIntervalMs",
+        "label": "Next Map Refresh Interval",
+        "type": "number",
+        "min": 3000,
+        "max": 120000,
+        "advanced": true,
+        "restartRequired": true
       }
     ]
   },
@@ -200,7 +245,16 @@
     "audit": { "enabled": true },
     "playerState": { "enabled": true },
     "squadState": { "enabled": true },
-    "matchState": { "enabled": true },
+    "matchState": {
+      "enabled": true,
+      "polling": {
+        "serverInfoIntervalMs": 5000,
+        "playersIntervalMs": 3000,
+        "squadsIntervalMs": 5000,
+        "currentMapIntervalMs": 15000,
+        "nextMapIntervalMs": 30000
+      }
+    },
     "console": { "enabled": true, "maxLines": 500 },
     "combatState": { "enabled": true, "maxEvents": 5000 },
     "playerDatabase": { "enabled": true },

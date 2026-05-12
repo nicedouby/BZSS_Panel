@@ -23,8 +23,8 @@ export function createMatchStateModule({ core, modules, config, logger }) {
   const enabled = Boolean(moduleConfig.enabled ?? true);
   const polling = {
     serverInfoIntervalMs: Number(moduleConfig.polling?.serverInfoIntervalMs ?? 5000),
-    playersIntervalMs: Number(moduleConfig.polling?.playersIntervalMs ?? 10000),
-    squadsIntervalMs: Number(moduleConfig.polling?.squadsIntervalMs ?? 10000),
+    playersIntervalMs: Number(moduleConfig.polling?.playersIntervalMs ?? 3000),
+    squadsIntervalMs: Number(moduleConfig.polling?.squadsIntervalMs ?? 5000),
     currentMapIntervalMs: Number(moduleConfig.polling?.currentMapIntervalMs ?? 15000),
     nextMapIntervalMs: Number(moduleConfig.polling?.nextMapIntervalMs ?? 30000),
   };

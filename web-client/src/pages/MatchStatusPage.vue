@@ -44,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, reactive } from "vue";
+import { computed, ref, reactive, watch } from "vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { apiGet, apiPost } from "../app/apiClient";
 import { renderApiError } from "../app/errors";
@@ -152,6 +152,15 @@ const viewModels = computed(() => {
 const matchHeaderData = computed(() => {
   return adaptMatchHeader(server, runtime, match, matchSnapshot.value);
 });
+
+watch(
+  () => matchSnapshotQuery.data.value,
+  (data) => {
+    if (!data?.matchState) return;
+    applyMatchSnapshotResponse(data);
+  },
+  { immediate: true },
+);
 
 function selectPlayer(player: PlayerRowViewModel) {
   pageState.selectedPlayerId = player.playerId;
