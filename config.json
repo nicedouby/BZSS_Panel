@@ -159,7 +159,8 @@
     "enabled": true,
     "host": "192.168.0.184",
     "port": 30144,
-    "password": "9290dd2aa02b",
+    "password": "",
+    "passwordFromEnv": "BZSS_RCON_PASSWORD",
     "rateLimit": {
       "minIntervalMs": 500,
       "maxQueueSize": 100

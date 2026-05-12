@@ -110,8 +110,10 @@ async function testValidationAndGuards() {
   const config = new ConfigManager(configPath);
   await config.load();
 
-  assert.doesNotThrow(() => config.set("web.passwordHint", "visible"));
-  assert.equal(config.get("web.passwordHint"), "visible");
+  assert.throws(
+    () => config.set("web.passwordHint", "visible"),
+    (error) => error.statusCode === 403 && error.code === "SensitiveSettingBlocked",
+  );
   assert.doesNotThrow(() => config.set("database.name", "allowed"));
   assert.equal(config.get("database.name"), "allowed");
 

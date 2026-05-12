@@ -122,11 +122,18 @@ export class ConfigManager {
       };
     }
 
+    const previousConfig = cloneValue(this.config);
+
     for (const item of pending) {
       this.set(item.path, item.value);
     }
 
-    await this.performSave();
+    try {
+      await this.performSave();
+    } catch (error) {
+      this.config = previousConfig;
+      throw error;
+    }
 
     return {
       ...this.getExposedSettings(),
@@ -215,7 +222,7 @@ function isSensitivePath(pathText) {
   if (normalized === "database.dir" || normalized === "database.filename") return true;
 
   const segments = normalized.split(".");
-  return segments.some((segment) => /(password|secret|token)$/i.test(segment));
+  return segments.some((segment) => /password|secret|token|key/i.test(segment));
 }
 
 function normalizeExposedSettingDefinition(definition) {

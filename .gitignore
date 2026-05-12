@@ -11,3 +11,8 @@ data/weapon-stats.json
 /data
 /data
 server.out.log
+config.local.json
+config.local.*.json
+config.override.json
+config.override.*.json
+config.json.bak
