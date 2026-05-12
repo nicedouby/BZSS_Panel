@@ -27,7 +27,9 @@ const ui = useUiStore();
 
 <style scoped>
 .app-shell {
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
   background: #101317;
@@ -39,6 +41,9 @@ const ui = useUiStore();
 
 .main-shell {
   min-width: 0;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
 }
@@ -46,6 +51,9 @@ const ui = useUiStore();
 .content-shell {
   padding: 18px;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 @media (max-width: 780px) {

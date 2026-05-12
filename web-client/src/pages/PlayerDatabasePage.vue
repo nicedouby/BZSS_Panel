@@ -627,11 +627,11 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
 <style scoped>
 .db-page {
   display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 14px;
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  grid-template-rows: auto auto minmax(0, 1fr);
 }
 
 .db-overview-card,
@@ -687,12 +687,13 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
 
 .db-panel {
   display: grid;
-  grid-template-columns: 340px minmax(0, 1fr);
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 14px;
   min-height: 0;
   height: 100%;
+  overflow: hidden;
   border: 1px solid rgba(42, 49, 68, 0.84);
   border-radius: 14px;
-  overflow: hidden;
 }
 
 .db-list-col {
@@ -703,7 +704,9 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
   gap: 8px;
   align-content: start;
   min-height: 0;
+  height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .db-detail-col {
@@ -712,14 +715,18 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
   gap: 12px;
   align-content: start;
   min-height: 0;
+  height: 100%;
   overflow: hidden;
 }
 
 .db-detail-scroll {
   min-height: 0;
+  height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   display: grid;
   gap: 12px;
+  align-content: start;
 }
 
 .db-row {
@@ -965,7 +972,7 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
 .db-stats-modal-card {
   position: relative;
   width: min(1280px, calc(100vw - 28px));
-  max-height: calc(100vh - 40px);
+  max-height: calc(100vh - 48px);
   overflow: hidden;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);

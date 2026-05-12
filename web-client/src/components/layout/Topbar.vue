@@ -41,7 +41,10 @@ const webStatus = computed(() => server.snapshot.webStatus ?? server.snapshot ??
 const pageTitle = computed(() => String(route.meta.title ?? webStatus.value.serverName ?? "BZSS Panel"));
 const layer = computed(() => webStatus.value.currentLayer ?? webStatus.value.layer ?? "Unknown Layer");
 const playerCount = computed(() => players.active.length);
-const tps = computed(() => webStatus.value.tps ?? "--");
+const tps = computed(() => {
+  const value = Number(server.snapshot?.tps ?? server.snapshot?.webStatus?.tps);
+  return Number.isFinite(value) && value > 0 ? value.toFixed(1) : "--";
+});
 const sidebarButtonLabel = computed(() => ui.sidebarCollapsed ? "Expand" : "Collapse");
 const runtimeLabel = computed(() => {
   if (runtime.inFlight) return "syncing";
