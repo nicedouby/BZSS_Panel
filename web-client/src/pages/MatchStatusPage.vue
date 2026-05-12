@@ -28,9 +28,9 @@
     </DataState>
 
     <PlayerDetailDrawer
-      :open="!!selectedPlayerDetail"
+      :open="selectedPlayerDetail !== null"
       :player="selectedPlayerDetail"
-      @close="pageState.selectedPlayerId = null"
+      @close="closePlayerDetail"
     />
   </div>
 </template>
@@ -48,19 +48,21 @@ import { useServerStore } from "../stores/server.store";
 import { useMatchStore } from "../stores/match.store";
 import { useJobStore } from "../stores/job.store";
 import { useUiStore } from "../stores/ui.store";
-import { 
-  adaptTeam, 
-  adaptPlayerDetail, 
+import {
+  adaptTeam,
   adaptMatchHeader,
-  extractPlaytimeHours,
 } from "../utils/squad-admin-adapter";
-import type { PageState, PlayerDetailViewModel } from "../types/squad-admin.types";
 import DataState from "../components/common/DataState.vue";
 import ErrorBlock from "../components/common/ErrorBlock.vue";
 import MatchHeaderBar from "../components/squad-admin/MatchHeaderBar.vue";
 import SquadPageToolbar from "../components/squad-admin/SquadPageToolbar.vue";
 import TeamColumn from "../components/squad-admin/TeamColumn.vue";
 import PlayerDetailDrawer from "../components/squad-admin/PlayerDetailDrawer.vue";
+import type {
+  PageState,
+  PlayerDetailViewModel,
+  PlayerRowViewModel,
+} from "../types/squad-admin.types";
 
 const auth = useAuthStore();
 const server = useServerStore();
@@ -74,6 +76,7 @@ const runtime = getRuntimeSyncState();
 const refreshingPlaytime = ref(false);
 const playtimeError = ref("");
 const playtimeRequested = ref(false);
+const selectedPlayerDetail = ref<PlayerDetailViewModel | null>(null);
 
 const pageState = reactive<PageState>({
   searchQuery: "",
@@ -104,35 +107,45 @@ const playtimeQuery = useQuery({
 
 const playtimes = computed(() => playtimeQuery.data.value?.items ?? {});
 
-// ViewModel 层
 const viewModels = computed(() => {
   return {
     teams: match.teams.map((team) => adaptTeam(team, playtimes.value)),
   };
 });
 
-// MatchHeaderBar 数据
 const matchHeaderData = computed(() => {
   const snapshot = server.snapshot ?? {};
   return adaptMatchHeader(server, runtime, match);
 });
 
-// 找出当前选中的玩家
-const selectedPlayer = computed(() => {
-  if (pageState.selectedPlayerId == null) return null;
-  return players.active.find((p) => String(p.playerID) === String(pageState.selectedPlayerId));
-});
-
-// 将 RuntimePlayer 转换为 PlayerDetailViewModel
-const selectedPlayerDetail = computed(() => {
-  if (!selectedPlayer.value) return null;
-  const hours = extractPlaytimeHours(selectedPlayer.value.steamID, playtimes.value);
-  return adaptPlayerDetail(selectedPlayer.value, hours);
-});
-
-function selectPlayer(player: any) {
+function selectPlayer(player: PlayerRowViewModel) {
   pageState.selectedPlayerId = player.playerId;
-  if (player.steamId) playtimeRequested.value = true;
+
+  selectedPlayerDetail.value = {
+    playerId: player.playerId,
+    name: player.name,
+    role: player.role,
+    isLeader: player.isLeader,
+    isOnline: player.isOnline,
+    teamId: player.teamId,
+    squadId: player.squadId,
+    steamId: player.steamId,
+    eosId: player.eosId,
+    ip: player.ip,
+    playtimeHours: player.playtimeHours,
+    source: "row",
+    controller: "",
+    raw: player,
+  };
+
+  if (player.steamId) {
+    playtimeRequested.value = true;
+  }
+}
+
+function closePlayerDetail() {
+  pageState.selectedPlayerId = null;
+  selectedPlayerDetail.value = null;
 }
 
 async function refreshOnlinePlaytime() {
