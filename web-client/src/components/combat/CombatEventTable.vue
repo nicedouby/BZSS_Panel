@@ -4,12 +4,12 @@
       <table>
         <thead>
           <tr>
-            <th>Time</th>
-            <th>Type</th>
-            <th>Attacker</th>
-            <th>Victim</th>
-            <th>Damage</th>
-            <th>Source</th>
+            <th>{{ t("common.lastUpdated") }}</th>
+            <th>{{ t("combat.eventType") }}</th>
+            <th>{{ t("combat.attacker") }}</th>
+            <th>{{ t("combat.victim") }}</th>
+            <th>{{ t("combat.damage") }}</th>
+            <th>{{ t("combat.weapon") }}</th>
             <th></th>
           </tr>
         </thead>
@@ -29,7 +29,7 @@
             </td>
             <td>{{ event.damage ?? "-" }}</td>
             <td>{{ event.weapon?.displayName || event.weapon || event.causedBy || "-" }}</td>
-            <td><button type="button" @click="$emit('select', event)">Detail</button></td>
+            <td><button type="button" @click="$emit('select', event)">{{ t("common.open") }}</button></td>
           </tr>
         </tbody>
       </table>
@@ -39,6 +39,7 @@
 
 <script setup lang="ts">
 import PageCard from "../common/PageCard.vue";
+import { t } from "../../i18n";
 
 defineProps<{
   events: any[];

@@ -15,15 +15,15 @@
         </span>
         <span class="match-info-separator">·</span>
         <span class="match-info-item">
-          {{ data.totalPlayers }}/{{ data.maxPlayers }} players
+          {{ t("match.players", "", { current: data.totalPlayers, max: data.maxPlayers }) }}
         </span>
         <span class="match-info-separator">·</span>
         <span class="match-info-item team-1-badge">
-          T1: {{ data.team1Count }}
+          {{ t("match.team1", "", { count: data.team1Count }) }}
         </span>
         <span class="match-info-separator">·</span>
         <span class="match-info-item team-2-badge">
-          T2: {{ data.team2Count }}
+          {{ t("match.team2", "", { count: data.team2Count }) }}
         </span>
         <span class="match-info-separator">·</span>
         <span class="match-info-item">
@@ -31,25 +31,25 @@
         </span>
         <span class="match-info-separator">·</span>
         <span class="match-info-item">
-          TPS {{ formatTps(data.tps) }}
+          {{ t("topbar.tps", "", { value: formatTps(data.tps) }) }}
         </span>
       </div>
       <div class="match-status-row">
         <span class="status-item" :class="{ error: data.rconStatus !== 'connected' }">
           <span class="status-dot" :style="{ backgroundColor: getStatusColor(data.rconStatus) }" />
-          RCON {{ formatRconStatus(data.rconStatus) }}
+          {{ formatRconStatus(data.rconStatus) }}
         </span>
         <span class="status-separator">·</span>
         <span class="status-item" :class="{ error: data.logsStatus === 'error' }">
           <span class="status-dot" :style="{ backgroundColor: getLogsStatusColor(data.logsStatus) }" />
-          Logs {{ data.logsStatus }}
+          {{ formatLogsStatus(data.logsStatus) }}
         </span>
         <span class="status-separator">·</span>
         <span
           class="status-item"
-          :title="`Server ${formatUpdateTime(data.serverStatusUpdatedAt)} / Players ${formatUpdateTime(data.playersUpdatedAt)} / Squads ${formatUpdateTime(data.squadsUpdatedAt)}`"
+          :title="`${t('match.serverUpdated', '', { time: formatUpdateTime(data.serverStatusUpdatedAt) })} / ${t('match.playersUpdated', '', { time: formatUpdateTime(data.playersUpdatedAt) })} / ${t('match.squadsUpdated', '', { time: formatUpdateTime(data.squadsUpdatedAt) })}`"
         >
-          Updated {{ formatUpdateTime(data.lastUpdateTime) }}
+          {{ t("match.updated", "", { time: formatUpdateTime(data.lastUpdateTime) }) }}
         </span>
       </div>
     </div>
@@ -58,6 +58,7 @@
 
 <script setup lang="ts">
 import type { MatchHeaderData } from "../../types/squad-admin.types";
+import { t } from "../../i18n";
 
 const props = defineProps<{
   data: MatchHeaderData;
@@ -75,11 +76,18 @@ function formatTps(value: number | null | undefined): string {
 }
 
 function formatRconStatus(status: string): string {
-  if (status === "connected") return "Connected";
-  if (status === "disconnected") return "Disconnected";
-  if (status === "error") return "Error";
-  if (status === "disabled") return "Disabled";
-  return "Unknown";
+  if (status === "connected") return t("match.rconConnected");
+  if (status === "disconnected") return t("match.rconDisconnected");
+  if (status === "error") return t("match.rconError");
+  if (status === "disabled") return t("match.rconDisabled");
+  return t("common.unknown");
+}
+
+function formatLogsStatus(status: string): string {
+  if (status === "live") return t("match.logsLive");
+  if (status === "stale") return t("match.logsStale");
+  if (status === "error") return t("common.error");
+  return t("common.unknown");
 }
 
 function formatUpdateTime(time: number): string {

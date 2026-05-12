@@ -1,28 +1,40 @@
 <template>
   <section class="page">
-    <PageHeader :title="title" :subtitle="subtitle" />
+    <PageHeader :title="resolvedTitle" :subtitle="resolvedSubtitle" />
     <PageCard>
       <DataState
         :empty="true"
-        empty-title="Coming soon"
-        :empty-text="message"
+        :empty-title="t('comingSoon.title')"
+        :empty-text="resolvedMessage"
       />
     </PageCard>
   </section>
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
 import PageHeader from "../components/common/PageHeader.vue";
 import PageCard from "../components/common/PageCard.vue";
 import DataState from "../components/common/DataState.vue";
+import { t } from "../i18n";
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   title?: string;
   subtitle?: string;
   message?: string;
+  titleKey?: string;
+  subtitleKey?: string;
+  messageKey?: string;
 }>(), {
-  title: "Coming Soon",
-  subtitle: "This Vue page has not been migrated yet.",
-  message: "The page is reserved in the new client but not implemented yet.",
+  title: "",
+  subtitle: "",
+  message: "",
+  titleKey: "comingSoon.title",
+  subtitleKey: "comingSoon.subtitle",
+  messageKey: "comingSoon.message",
 });
+
+const resolvedTitle = computed(() => t(props.titleKey, props.title || t("comingSoon.title")));
+const resolvedSubtitle = computed(() => t(props.subtitleKey, props.subtitle || t("comingSoon.subtitle")));
+const resolvedMessage = computed(() => t(props.messageKey, props.message || t("comingSoon.message")));
 </script>

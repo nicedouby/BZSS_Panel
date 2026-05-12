@@ -11,11 +11,11 @@
         <select :value="level" @change="$emit('update:level', readValue($event))">
           <option v-for="item in levels" :key="item.id" :value="item.id">{{ item.title }}</option>
         </select>
-        <input :value="q" placeholder="Filter logs" @input="$emit('update:q', readValue($event))">
+        <input :value="q" :placeholder="t('console.filterLogs')" @input="$emit('update:q', readValue($event))">
       </div>
       <div class="toolbar-row end">
-        <button type="button" @click="$emit('clear')">Clear</button>
-        <button type="button" @click="$emit('toggle-paused')">{{ paused ? "Resume" : "Pause" }}</button>
+        <button type="button" @click="$emit('clear')">{{ t("common.clear") }}</button>
+        <button type="button" @click="$emit('toggle-paused')">{{ paused ? t("common.resume") : t("common.pause") }}</button>
       </div>
     </div>
   </PageCard>
@@ -23,6 +23,7 @@
 
 <script setup lang="ts">
 import PageCard from "../common/PageCard.vue";
+import { t } from "../../i18n";
 
 defineProps<{
   stream: string;

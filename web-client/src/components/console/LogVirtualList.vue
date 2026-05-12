@@ -11,8 +11,8 @@
         <div class="line-meta">
           <strong>#{{ item.seq }}</strong>
           <span>{{ shortTime(item.time) }}</span>
-          <span>{{ item.scope || item.channel || item.stream || "app" }}</span>
-          <span>{{ item.level || "info" }}</span>
+          <span>{{ item.scope || item.channel || item.stream || t("common.unknown", "app") }}</span>
+          <span>{{ item.level || t("console.info", "info") }}</span>
         </div>
         <div class="line-body">{{ lineMessage(item) }}</div>
       </article>
@@ -24,6 +24,7 @@
 import { RecycleScroller } from "vue-virtual-scroller";
 import type { ConsoleLine } from "../../composables/useConsoleLines";
 import PageCard from "../common/PageCard.vue";
+import { t } from "../../i18n";
 
 defineProps<{
   lines: ConsoleLine[];

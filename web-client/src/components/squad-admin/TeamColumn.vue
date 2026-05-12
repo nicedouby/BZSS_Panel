@@ -3,7 +3,7 @@
     <header class="team-column-header">
       <div>
         <h2>{{ team.teamName }}</h2>
-        <span class="team-player-count">{{ team.playerCount }} players</span>
+        <span class="team-player-count">{{ t("topbar.players", "", { count: team.playerCount }) }}</span>
       </div>
     </header>
     <div class="squad-list">
@@ -22,6 +22,7 @@
 import { computed } from "vue";
 import type { TeamViewModel, PlayerRowViewModel } from "../../types/squad-admin.types";
 import SquadCard from "./SquadCard.vue";
+import { t } from "../../i18n";
 
 const props = defineProps<{
   team: TeamViewModel;

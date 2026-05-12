@@ -17,10 +17,10 @@
         </div>
 
         <button type="button" class="menu-item" role="menuitem" @click="openSettings">
-          Settings
+          {{ t("user.settings") }}
         </button>
         <button type="button" class="menu-item danger" role="menuitem" @click="logout">
-          Logout
+          {{ t("user.logout") }}
         </button>
       </div>
     </transition>
@@ -31,6 +31,7 @@
 import { computed, onBeforeUnmount, ref } from "vue";
 import { useAuthStore } from "../../stores/auth.store";
 import { useSettingsStore } from "../../stores/settings.store";
+import { t } from "../../i18n";
 
 const auth = useAuthStore();
 const settings = useSettingsStore();
@@ -38,8 +39,8 @@ const settings = useSettingsStore();
 const menuOpen = ref(false);
 const rootEl = ref<HTMLElement | null>(null);
 
-const usernameLabel = computed(() => String(auth.user?.username ?? "User"));
-const roleLabel = computed(() => String(auth.user?.role ?? "Unknown"));
+const usernameLabel = computed(() => String(auth.user?.username ?? t("user.user")));
+const roleLabel = computed(() => String(auth.user?.role ?? t("common.unknown")));
 const avatarLabel = computed(() => {
   const name = usernameLabel.value.trim();
   if (!name) return "?";

@@ -10,9 +10,9 @@
       :disabled="copying"
       class="copy-button"
       @click="copy"
-      :title="copying ? 'Copied!' : 'Copy'"
+      :title="copying ? t('common.copied') : t('common.copy')"
     >
-      {{ copying ? 'Copied' : 'Copy' }}
+      {{ copying ? t("common.copied") : t("common.copy") }}
     </button>
   </div>
 </template>
@@ -21,6 +21,7 @@
 import { ref, computed } from "vue";
 import { useUiStore } from "../../stores/ui.store";
 import { copyTextWithToast } from "../../utils/clipboard";
+import { t } from "../../i18n";
 
 const props = withDefaults(
   defineProps<{
@@ -31,7 +32,7 @@ const props = withDefaults(
   }>(),
   {
     truncate: 0,
-    emptyText: "Unknown",
+    emptyText: t("common.unknown"),
   },
 );
 
@@ -41,7 +42,7 @@ const copying = ref(false);
 const hasValue = computed(() => Boolean(props.value?.trim()));
 
 const displayValue = computed(() => {
-  if (!props.value) return "Unknown";
+  if (!props.value) return t("common.unknown");
   if (!props.truncate || props.value.length <= props.truncate) {
     return props.value;
   }
@@ -54,7 +55,7 @@ async function copy() {
   try {
     copying.value = true;
     await copyTextWithToast(props.value, ui, {
-      label: `${props.label} copied`,
+      label: `${props.label} ${t("common.copied")}`,
       successMessage: props.value,
     });
   } finally {

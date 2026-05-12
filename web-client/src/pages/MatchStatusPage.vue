@@ -67,6 +67,7 @@ import MatchHeaderBar from "../components/squad-admin/MatchHeaderBar.vue";
 import SquadPageToolbar from "../components/squad-admin/SquadPageToolbar.vue";
 import TeamColumn from "../components/squad-admin/TeamColumn.vue";
 import PlayerDetailDrawer from "../components/squad-admin/PlayerDetailDrawer.vue";
+import { t } from "../i18n";
 import type {
   PageState,
   PlayerDetailViewModel,
@@ -127,9 +128,9 @@ const blockingRuntimeError = computed(() => {
 });
 const showStaleBanner = computed(() => hasSnapshotData.value && (Boolean(runtime.lastError) || server.stale || players.stale || squads.stale));
 const staleText = computed(() => {
-  if (runtime.lastError) return `Showing cached runtime data. Latest sync failed: ${runtime.lastError}`;
-  if (refreshError.value) return `Showing cached match data. Latest refresh failed: ${refreshError.value}`;
-  return "Showing cached data because the latest sync failed.";
+  if (runtime.lastError) return `${t("dataState.staleText")} ${runtime.lastError}`;
+  if (refreshError.value) return `${t("dataState.staleText")} ${refreshError.value}`;
+  return t("dataState.staleText");
 });
 
 const steamIDs = computed(() => [...new Set(players.active.map((player) => player.steamID).filter(Boolean))] as string[]);
@@ -204,19 +205,19 @@ async function refreshOnlinePlaytime() {
     jobs.upsert(finalJob);
 
     if (finalJob.status !== "completed") {
-      throw new Error(finalJob.error?.message ?? "Playtime refresh failed.");
+      throw new Error(finalJob.error?.message ?? t("common.error"));
     }
 
     await playtimeQuery.refetch();
     ui.pushToast({
-      title: "Playtime refreshed",
-      message: "Cached playtime for currently online players has been updated.",
+      title: t("common.updated"),
+      message: t("common.updated"),
       tone: "ok",
     });
   } catch (error) {
-    playtimeError.value = renderApiError(error, "Playtime refresh failed.");
+    playtimeError.value = renderApiError(error, t("common.error"));
     ui.pushToast({
-      title: "Playtime refresh failed",
+      title: t("common.error"),
       message: playtimeError.value,
       tone: "error",
     });
@@ -268,26 +269,26 @@ async function refreshMatchState(type: "players" | "squads" | "all") {
     const result = await apiPost<any>(endpoint, {});
     applyMatchRefreshResult(result);
     if (!result?.ok) {
-      refreshError.value = result?.errors?.[0]?.message ?? "Match refresh completed with errors.";
+      refreshError.value = result?.errors?.[0]?.message ?? t("common.error");
       server.markStale();
       players.markStale();
       squads.markStale();
       ui.pushToast({
-        title: "Match refresh had errors",
+        title: t("common.error"),
         message: refreshError.value,
         tone: "error",
       });
       return;
     }
     ui.pushToast({
-      title: "Match state refreshed",
-      message: type === "all" ? "Players, squads, and server info were refreshed." : `Match ${type} refreshed.`,
+      title: t("common.updated"),
+      message: type === "all" ? t("match.refreshAll") : type === "players" ? t("match.refreshPlayers") : t("match.refreshSquads"),
       tone: "ok",
     });
   } catch (error) {
-    refreshError.value = renderApiError(error, "Match refresh failed.");
+    refreshError.value = renderApiError(error, t("common.error"));
     ui.pushToast({
-      title: "Match refresh failed",
+      title: t("common.error"),
       message: refreshError.value,
       tone: "error",
     });
@@ -317,12 +318,12 @@ async function waitForJob(jobId: string, timeoutMs: number) {
 
 function renderApiErrorText(runtimeError: string) {
   if (runtime.errorType === "network" || runtime.errorType === "timeout") {
-    return `Runtime sync could not reach the API: ${runtimeError}`;
+    return `${t("common.apiOffline")}: ${runtimeError}`;
   }
   if (runtime.errorType === "unauthorized") {
-    return "Session expired. Please sign in again.";
+    return t("common.unauthorized");
   }
-  return `Runtime sync failed: ${runtimeError}`;
+  return `${t("common.error")}: ${runtimeError}`;
 }
 
 function toMillis(value: string | number | null | undefined): number {

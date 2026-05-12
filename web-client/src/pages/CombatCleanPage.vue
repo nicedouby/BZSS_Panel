@@ -1,22 +1,23 @@
 <template>
   <CombatEventsPage
-    page-title="Combat Clean"
-    page-subtitle="Clean combat layer with route-persisted filters and paged rendering."
+    :page-title="t('combat.combatClean')"
+    page-subtitle=""
     endpoint="/api/combat-clean/events"
     clear-endpoint="/api/combat-clean/clear"
     route-scope="combat-clean"
     :type-options="typeOptions"
-    empty-text="No clean combat events match the current filters."
+    :empty-text="t('combat.noEvents')"
   />
 </template>
 
 <script setup lang="ts">
 import CombatEventsPage from "./shared/CombatEventsPage.vue";
+import { t } from "../i18n";
 
 const typeOptions = [
-  { value: "all", label: "All" },
-  { value: "damage", label: "Damage" },
-  { value: "wound", label: "Wound" },
-  { value: "kill", label: "Kill" },
+  { value: "all", label: t("combat.all") },
+  { value: "damage", label: t("combat.damage") },
+  { value: "wound", label: t("combat.wound") },
+  { value: "kill", label: t("combat.kill") },
 ];
 </script>

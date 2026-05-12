@@ -3,7 +3,7 @@
   <aside class="sidebar" :class="{ collapsed: ui.sidebarCollapsed, mobileOpen: ui.mobileSidebarOpen }">
     <div class="brand">
       <strong>BZSS</strong>
-      <span>Vue Panel</span>
+      <span>Vue {{ t("common.panel") }}</span>
     </div>
     <nav>
       <RouterLink v-for="item in nav" :key="item.path" :to="item.path" @click="ui.closeMobileSidebar()">
@@ -15,16 +15,17 @@
 
 <script setup lang="ts">
 import { useUiStore } from "../../stores/ui.store";
+import { t } from "../../i18n";
 
 const ui = useUiStore();
 
 const nav = [
-  { path: "/match-status", label: "Match Status" },
-  { path: "/console", label: "Console" },
-  { path: "/player-database", label: "Player Database" },
-  { path: "/combat-clean", label: "Combat Clean" },
-  { path: "/kill-manage", label: "Kill Manage" },
-  { path: "/plugin-subscriptions", label: "Plugin Subscriptions" },
+  { path: "/match-status", label: t("nav.matchStatus") },
+  { path: "/console", label: t("nav.console") },
+  { path: "/player-database", label: t("nav.playerDatabase") },
+  { path: "/combat-clean", label: t("nav.combatClean") },
+  { path: "/kill-manage", label: t("nav.killManage") },
+  { path: "/plugin-subscriptions", label: t("nav.pluginSubscriptions") },
 ];
 </script>
 

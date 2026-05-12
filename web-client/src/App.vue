@@ -1,6 +1,6 @@
 <template>
   <div v-if="!auth.checked" class="boot-screen">
-    <div class="boot-card">正在检查登录状态...</div>
+    <div class="boot-card">{{ t("app.checkingAuth") }}</div>
   </div>
   <LoginPage v-else-if="!auth.authenticated" />
   <AppLayout v-else />
@@ -13,6 +13,7 @@ import AppLayout from "./components/layout/AppLayout.vue";
 import LoginPage from "./pages/LoginPage.vue";
 import { useAuthStore } from "./stores/auth.store";
 import { startRuntimeSync, stopRuntimeSync } from "./app/runtimeSync";
+import { t } from "./i18n";
 
 const auth = useAuthStore();
 const route = useRoute();
@@ -31,9 +32,10 @@ watch(
 );
 
 watch(
-  () => route.meta.title,
-  (title) => {
-    document.title = title ? `BZSS Panel | ${title}` : "BZSS Panel";
+  () => [route.meta.titleKey, route.meta.title],
+  ([titleKey, title]) => {
+    const localized = titleKey ? t(String(titleKey), String(title ?? "")) : String(title ?? "");
+    document.title = localized ? `BZSS Panel | ${localized}` : "BZSS Panel";
   },
   { immediate: true },
 );

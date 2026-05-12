@@ -15,12 +15,12 @@
         {{ squad.creatorName }}
       </div>
       <StatusBadge :tone="squad.isLocked ? 'warn' : 'idle'">
-        {{ squad.isLocked ? 'LOCKED' : 'OPEN' }}
+        {{ squad.isLocked ? t("common.locked") : t("common.open") }}
       </StatusBadge>
     </header>
 
     <div v-if="squad.state === 'empty'" class="squad-empty">
-      <div class="squad-empty-text">No members</div>
+      <div class="squad-empty-text">{{ t("match.noMembers") }}</div>
     </div>
 
     <template v-else>
@@ -32,7 +32,7 @@
       />
 
       <div v-if="squad.state === 'no_leader'" class="squad-warning">
-        ⚠ No squad leader
+        ⚠ {{ t("match.noSquadLeader") }}
       </div>
 
       <PlayerRow
@@ -52,6 +52,7 @@ import type { SquadViewModel, PlayerRowViewModel } from "../../types/squad-admin
 import StatusBadge from "../common/StatusBadge.vue";
 import PlayerRow from "./PlayerRow.vue";
 import SquadLeaderRow from "./SquadLeaderRow.vue";
+import { t } from "../../i18n";
 
 const props = defineProps<{
   squad: SquadViewModel;

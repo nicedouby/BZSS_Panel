@@ -1,6 +1,6 @@
 <template>
   <section class="page">
-    <PageHeader title="Console" subtitle="Module logs, raw logs, and native RCON traces." />
+    <PageHeader :title="t('console.title')" :subtitle="t('console.subtitle')" />
 
     <ConsoleToolbar
       :stream="filters.stream"
@@ -22,15 +22,15 @@
     <DataState
       :error="pageError"
       :empty="!pageError && !lines.length && !linesQuery.isFetching.value"
-      empty-title="No logs yet"
-      empty-text="No console lines match the current filters."
+      :empty-title="t('console.noLogsTitle')"
+      :empty-text="t('console.noLogsText')"
     >
       <PageCard compact>
         <div class="console-status">
-          <StatusBadge :tone="filters.paused ? 'warn' : 'ok'">{{ filters.paused ? "paused" : "live" }}</StatusBadge>
-          <StatusBadge :tone="hidden ? 'warn' : 'idle'">{{ hidden ? "hidden" : "visible" }}</StatusBadge>
-          <span>{{ lines.length }} lines buffered</span>
-          <span v-if="linesQuery.isFetching.value">Fetching updates...</span>
+          <StatusBadge :tone="filters.paused ? 'warn' : 'ok'">{{ filters.paused ? t("common.paused") : t("common.live") }}</StatusBadge>
+          <StatusBadge :tone="hidden ? 'warn' : 'idle'">{{ hidden ? t("common.hidden") : t("common.visible") }}</StatusBadge>
+          <span>{{ t("console.linesBuffered", "", { count: lines.length }) }}</span>
+          <span v-if="linesQuery.isFetching.value">{{ t("console.fetchingUpdates") }}</span>
         </div>
       </PageCard>
 
@@ -49,6 +49,7 @@ import ConsoleToolbar from "../components/console/ConsoleToolbar.vue";
 import LogVirtualList from "../components/console/LogVirtualList.vue";
 import { useConsoleLines } from "../composables/useConsoleLines";
 import { renderApiError } from "../app/errors";
+import { t } from "../i18n";
 
 const filters = reactive({
   stream: "modules",
@@ -59,17 +60,17 @@ const filters = reactive({
 });
 
 const defaultStreams = [
-  { id: "modules", title: "Modules" },
-  { id: "raw-log", title: "Raw Log" },
-  { id: "rcon-native", title: "RCON Native" },
+  { id: "modules", title: t("console.streamModules") },
+  { id: "raw-log", title: t("console.streamRawLog") },
+  { id: "rcon-native", title: t("console.streamRconNative") },
 ];
-const defaultScopes = [{ id: "all", title: "All scopes" }];
+const defaultScopes = [{ id: "all", title: t("console.allScopes") }];
 const defaultLevels = [
-  { id: "all", title: "All levels" },
-  { id: "debug", title: "Debug" },
-  { id: "info", title: "Info" },
-  { id: "warn", title: "Warn" },
-  { id: "error", title: "Error" },
+  { id: "all", title: t("console.allLevels") },
+  { id: "debug", title: t("console.debug") },
+  { id: "info", title: t("console.info") },
+  { id: "warn", title: t("console.warn") },
+  { id: "error", title: t("console.error") },
 ];
 
 const searchInput = ref("");
@@ -88,7 +89,7 @@ watch(searchInput, (value) => {
 watch(
   () => linesQuery.error.value,
   (error) => {
-    pageError.value = error ? renderApiError(error, "Failed to load console lines.") : "";
+    pageError.value = error ? renderApiError(error, t("console.noLogsText")) : "";
   },
   { immediate: true },
 );

@@ -13,8 +13,8 @@
       <div class="topbar-metrics">
         <StatusBadge :tone="runtimeTone">{{ runtimeLabel }}</StatusBadge>
         <span v-if="runtimeError">{{ runtimeError }}</span>
-        <span>{{ playerCount }} players</span>
-        <span>TPS {{ tps }}</span>
+        <span>{{ t("topbar.players", "", { count: playerCount }) }}</span>
+        <span>{{ t("topbar.tps", "", { value: tps }) }}</span>
       </div>
       <UserMenu />
     </div>
@@ -30,6 +30,7 @@ import { getRuntimeSyncState } from "../../app/runtimeSync";
 import { useUiStore } from "../../stores/ui.store";
 import StatusBadge from "../common/StatusBadge.vue";
 import UserMenu from "./UserMenu.vue";
+import { t } from "../../i18n";
 
 const server = useServerStore();
 const players = usePlayerStore();
@@ -38,7 +39,12 @@ const route = useRoute();
 const ui = useUiStore();
 
 const webStatus = computed(() => server.snapshot.webStatus ?? server.snapshot ?? {});
-const pageTitle = computed(() => String(route.meta.title ?? server.snapshot.serverName ?? webStatus.value.serverName ?? server.snapshot.name ?? webStatus.value.name ?? "BZSS Panel"));
+const pageTitle = computed(() => {
+  const titleKey = route.meta.titleKey ? String(route.meta.titleKey) : "";
+  const title = route.meta.title ? String(route.meta.title) : "";
+  if (titleKey) return t(titleKey, title);
+  return String(title || server.snapshot.serverName || webStatus.value.serverName || server.snapshot.name || webStatus.value.name || "BZSS Panel");
+});
 const layer = computed(() => stableDisplayValue(
   server.snapshot.currentLayer,
   webStatus.value.currentLayer,
@@ -46,24 +52,24 @@ const layer = computed(() => stableDisplayValue(
   webStatus.value.layer,
   server.snapshot.mapName,
   webStatus.value.mapName,
-  "Unknown Layer",
+  t("topbar.unknownLayer", "Unknown Layer"),
 ));
 const playerCount = computed(() => players.active.length);
 const tps = computed(() => {
   const value = Number(server.snapshot?.tps ?? server.snapshot?.webStatus?.tps);
   return Number.isFinite(value) && value > 0 ? value.toFixed(1) : "--";
 });
-const sidebarButtonLabel = computed(() => ui.sidebarCollapsed ? "Expand" : "Collapse");
+const sidebarButtonLabel = computed(() => ui.sidebarCollapsed ? t("topbar.expand") : t("topbar.collapse"));
 const runtimeLabel = computed(() => {
-  if (runtime.inFlight) return "syncing";
-  if (runtime.errorType === "unauthorized") return "unauthorized";
-  if (runtime.errorType === "network" || runtime.errorType === "timeout") return "api offline";
-  if (runtime.lastError || server.stale) return "stale";
-  return "live";
+  if (runtime.inFlight) return t("common.syncing");
+  if (runtime.errorType === "unauthorized") return t("common.unauthorized");
+  if (runtime.errorType === "network" || runtime.errorType === "timeout") return t("common.apiOffline");
+  if (runtime.lastError || server.stale) return t("common.stale");
+  return t("common.live");
 });
 const runtimeTone = computed(() => {
-  if (runtimeLabel.value === "live") return "ok";
-  if (runtimeLabel.value === "unauthorized" || runtimeLabel.value === "api offline") return "error";
+  if (runtimeLabel.value === t("common.live")) return "ok";
+  if (runtimeLabel.value === t("common.unauthorized") || runtimeLabel.value === t("common.apiOffline")) return "error";
   return "warn";
 });
 const runtimeError = computed(() => runtime.lastError ? briefRuntimeError(runtime.lastError) : "");
@@ -85,7 +91,7 @@ function stableDisplayValue(...values: unknown[]) {
       return String(value);
     }
   }
-  return "Unknown Layer";
+  return t("topbar.unknownLayer", "Unknown Layer");
 }
 
 function toggleSidebar() {

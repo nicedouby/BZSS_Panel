@@ -5,31 +5,31 @@
         v-model="searchQuery"
         type="text"
         class="squad-search-input"
-        placeholder="Search by name, role, ID, Steam, or IP..."
+        :placeholder="t('match.searchPlaceholder')"
         @input="$emit('search', searchQuery)"
       >
       <div class="toolbar-controls">
-        <div class="refresh-controls" title="Manual backend refresh">
+        <div class="refresh-controls" :title="t('common.refresh')">
           <button
             type="button"
             :disabled="!canRefresh || isRefreshing"
             @click="$emit('refresh', 'players')"
           >
-            {{ refreshingType === 'players' ? 'Refreshing Players...' : 'Refresh Players' }}
+            {{ refreshingType === 'players' ? t('common.refreshing') : t('match.refreshPlayers') }}
           </button>
           <button
             type="button"
             :disabled="!canRefresh || isRefreshing"
             @click="$emit('refresh', 'squads')"
           >
-            {{ refreshingType === 'squads' ? 'Refreshing Squads...' : 'Refresh Squads' }}
+            {{ refreshingType === 'squads' ? t('common.refreshing') : t('match.refreshSquads') }}
           </button>
           <button
             type="button"
             :disabled="!canRefresh || isRefreshing"
             @click="$emit('refresh', 'all')"
           >
-            {{ refreshingType === 'all' ? 'Refreshing All...' : 'Refresh All' }}
+            {{ refreshingType === 'all' ? t('common.refreshing') : t('match.refreshAll') }}
           </button>
         </div>
 
@@ -41,7 +41,7 @@
             :class="{ active: densityMode === mode }"
             @click="$emit('density-change', mode as any)"
           >
-            {{ mode === 'comfortable' ? 'Comfortable' : 'Compact' }}
+            {{ mode === 'comfortable' ? t('match.densityComfortable') : t('match.densityCompact') }}
           </button>
         </div>
       </div>
@@ -51,6 +51,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { t } from "../../i18n";
 
 type RefreshType = "players" | "squads" | "all";
 

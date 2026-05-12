@@ -1,6 +1,10 @@
 <template>
-  <div class="block">Loading...</div>
+  <div class="block">{{ t("common.loading") }}</div>
 </template>
+
+<script setup lang="ts">
+import { t } from "../../i18n";
+</script>
 
 <style scoped>
 .block {

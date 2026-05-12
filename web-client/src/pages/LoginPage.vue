@@ -3,19 +3,19 @@
     <section class="login-panel">
       <div>
         <h1>BZSS Panel</h1>
-        <p>登录后进入控制台。</p>
+        <p>{{ t("login.subtitle") }}</p>
       </div>
 
       <form @submit.prevent="submit">
         <label>
-          <span>Username</span>
+          <span>{{ t("login.username") }}</span>
           <input v-model="username" autocomplete="username" required />
         </label>
         <label>
-          <span>Password</span>
+          <span>{{ t("login.password") }}</span>
           <input v-model="password" type="password" autocomplete="current-password" required />
         </label>
-        <button type="submit" :disabled="loading">{{ loading ? "登录中..." : "登录" }}</button>
+        <button type="submit" :disabled="loading">{{ loading ? t("login.loggingIn") : t("login.login") }}</button>
       </form>
 
       <ErrorBlock v-if="errorText" :message="errorText" />
@@ -29,6 +29,7 @@ import { useRouter } from "vue-router";
 import { ApiError } from "../app/apiClient";
 import { useAuthStore } from "../stores/auth.store";
 import ErrorBlock from "../components/common/ErrorBlock.vue";
+import { t } from "../i18n";
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -47,9 +48,9 @@ async function submit() {
     await router.replace("/match-status");
   } catch (error: any) {
     if (error instanceof ApiError) {
-      localError.value = error.status === 401 ? "用户名或密码错误。" : error.message;
+      localError.value = error.status === 401 ? t("login.invalidCredentials") : error.message;
     } else {
-      localError.value = error?.message ?? "登录失败。";
+      localError.value = error?.message ?? t("login.loginFailed");
     }
   } finally {
     loading.value = false;

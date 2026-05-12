@@ -9,7 +9,7 @@
         <span
           class="role-icon"
           :class="`tone-${roleIcon.tone}`"
-          :title="`${roleIcon.label}: ${player.role || 'Unknown Role'}`"
+          :title="`${roleIcon.label}: ${displayRole(player.role)}`"
           aria-hidden="true"
         >
           <img
@@ -21,11 +21,11 @@
           <span v-else>{{ roleIcon.icon }}</span>
         </span>
         <span class="leader-name">{{ player.name }}</span>
-        <StatusBadge tone="ok">SL</StatusBadge>
+        <StatusBadge tone="ok">{{ t("match.squadLeader") }}</StatusBadge>
       </div>
       <div class="leader-meta">
-        <span class="leader-role">{{ player.role }}</span>
-        <span class="leader-id">ID {{ player.playerId ?? "-" }}</span>
+        <span class="leader-role">{{ displayRole(player.role) }}</span>
+        <span class="leader-id">{{ t("field.id") }} {{ player.playerId ?? "-" }}</span>
       </div>
     </div>
     <div v-if="playtimeText" class="leader-playtime">
@@ -39,6 +39,7 @@ import { computed } from "vue";
 import type { SquadLeaderRowViewModel } from "../../types/squad-admin.types";
 import StatusBadge from "../common/StatusBadge.vue";
 import { resolveRoleIcon } from "../../utils/role-icons";
+import { t } from "../../i18n";
 
 const props = defineProps<{
   player: SquadLeaderRowViewModel;
@@ -55,8 +56,32 @@ const isRoleIconImage = computed(() => roleIcon.value.icon.startsWith("/"));
 
 const playtimeText = computed(() => {
   if (props.player.playtimeHours == null) return "";
-  return `Steam ${props.player.playtimeHours}h`;
+  return `${t("player.steamTime")} ${props.player.playtimeHours}h`;
 });
+
+function displayRole(role: string | null | undefined) {
+  const raw = String(role ?? "").trim();
+  if (!raw) return t("role.unknownRole");
+  const normalized = raw.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const keyMap: Record<string, string> = {
+    squadleader: "role.squadLeader",
+    medic: "role.medic",
+    heavyantitank: "role.heavyAntiTank",
+    lightantitank: "role.lightAntiTank",
+    machinegunner: "role.machineGunner",
+    automaticrifleman: "role.automaticRifleman",
+    engineer: "role.engineer",
+    sapper: "role.sapper",
+    marksman: "role.marksman",
+    sniper: "role.sniper",
+    grenadier: "role.grenadier",
+    crewman: "role.crewman",
+    pilot: "role.pilot",
+    rifleman: "role.rifleman",
+  };
+  const key = keyMap[normalized];
+  return key ? t(key, raw) : raw;
+}
 </script>
 
 <style scoped>

@@ -24,6 +24,8 @@
 </template>
 
 <script setup lang="ts">
+import { t } from "../../i18n";
+
 withDefaults(defineProps<{
   loading?: boolean;
   error?: string;
@@ -40,12 +42,12 @@ withDefaults(defineProps<{
   error: "",
   empty: false,
   stale: false,
-  loadingTitle: "Loading",
-  loadingText: "Fetching the latest data.",
-  errorTitle: "Request failed",
-  emptyTitle: "No data",
-  emptyText: "Nothing to show here yet.",
-  staleText: "Showing cached data because the latest sync failed.",
+  loadingTitle: t("common.loading", "Loading"),
+  loadingText: t("dataState.loadingText", "Fetching the latest data."),
+  errorTitle: t("dataState.errorTitle", "Request failed"),
+  emptyTitle: t("common.noData", "No data"),
+  emptyText: t("dataState.emptyText", "Nothing to show here yet."),
+  staleText: t("dataState.staleText", "Showing cached data because the latest sync failed."),
 });
 </script>
 

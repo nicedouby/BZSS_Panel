@@ -8,120 +8,120 @@
               <h2 class="drawer-player-name">{{ props.player.name }}</h2>
               <div class="drawer-header-badges">
                 <StatusBadge :tone="props.player.isOnline ? 'ok' : 'idle'">
-                  {{ props.player.isOnline ? "Online" : "Offline" }}
+                  {{ props.player.isOnline ? t("common.online") : t("common.offline") }}
                 </StatusBadge>
-                <StatusBadge v-if="props.player.isLeader" tone="ok">SL</StatusBadge>
+                <StatusBadge v-if="props.player.isLeader" tone="ok">{{ t("match.squadLeader") }}</StatusBadge>
               </div>
             </div>
-            <button type="button" class="drawer-close-button" @click="close" title="Close (Esc)">
+            <button type="button" class="drawer-close-button" @click="close" :title="`${t('common.close')} (Esc)`">
               x
             </button>
           </header>
 
           <div class="drawer-body">
             <section class="detail-section">
-              <div class="detail-section-title">Player</div>
+              <div class="detail-section-title">{{ t("player.player") }}</div>
               <div class="player-summary">
                 <div class="summary-row">
-                  <span class="summary-label">Role</span>
-                  <span class="summary-value">{{ props.player.role }}</span>
+                  <span class="summary-label">{{ t("player.role") }}</span>
+                  <span class="summary-value">{{ displayRole(props.player.role) }}</span>
                 </div>
                 <div class="summary-row">
-                  <span class="summary-label">Team</span>
+                  <span class="summary-label">{{ t("player.team") }}</span>
                   <span class="summary-value team-badge" :class="teamColorClass">
-                    Team {{ props.player.teamId ?? "?" }}
+                    {{ t("player.team") }} {{ props.player.teamId ?? "?" }}
                   </span>
                 </div>
                 <div class="summary-row">
-                  <span class="summary-label">Squad</span>
-                  <span class="summary-value">Squad {{ props.player.squadId ?? "Unassigned" }}</span>
+                  <span class="summary-label">{{ t("player.squad") }}</span>
+                  <span class="summary-value">{{ t("player.squad") }} {{ props.player.squadId ?? t("match.unassigned") }}</span>
                 </div>
                 <div v-if="props.player.playtimeHours" class="summary-row">
-                  <span class="summary-label">Steam Time</span>
+                  <span class="summary-label">{{ t("player.steamTime") }}</span>
                   <span class="summary-value">{{ props.player.playtimeHours }}h</span>
                 </div>
               </div>
             </section>
 
             <section class="detail-section">
-              <div class="detail-section-title">Identity</div>
-              <CopyableValue label="Steam ID" :value="props.player.steamId" :truncate="32" />
-              <CopyableValue label="EOS ID" :value="props.player.eosId" :truncate="32" />
+              <div class="detail-section-title">{{ t("player.identity") }}</div>
+              <CopyableValue :label="t('player.steamId')" :value="props.player.steamId" :truncate="32" />
+              <CopyableValue :label="t('player.eosId')" :value="props.player.eosId" :truncate="32" />
               <div class="identity-ip-block">
-                <CopyableValue label="IP" :value="displayIp" :empty-text="ipEmptyText" />
+                <CopyableValue :label="t('player.ip')" :value="displayIp" :empty-text="ipEmptyText" />
                 <small class="identity-ip-hint">{{ resolveIpError || ipSourceHint }}</small>
               </div>
             </section>
 
             <section class="detail-section">
-              <div class="detail-section-title">Current Match</div>
+              <div class="detail-section-title">{{ t("player.currentMatch") }}</div>
               <div class="detail-rows">
                 <div class="detail-row">
-                  <span class="detail-label">Player ID</span>
+                  <span class="detail-label">{{ t("player.playerId") }}</span>
                   <span class="detail-value">{{ props.player.playerId ?? "-" }}</span>
                 </div>
                 <div class="detail-row">
-                  <span class="detail-label">Team ID</span>
+                  <span class="detail-label">{{ t("player.teamId") }}</span>
                   <span class="detail-value">{{ props.player.teamId ?? "-" }}</span>
                 </div>
                 <div class="detail-row">
-                  <span class="detail-label">Squad ID</span>
+                  <span class="detail-label">{{ t("player.squadId") }}</span>
                   <span class="detail-value">{{ props.player.squadId ?? "-" }}</span>
                 </div>
                 <div class="detail-row">
-                  <span class="detail-label">Leader</span>
-                  <span class="detail-value">{{ props.player.isLeader ? "Yes" : "No" }}</span>
+                  <span class="detail-label">{{ t("player.leader") }}</span>
+                  <span class="detail-value">{{ props.player.isLeader ? t("common.yes") : t("common.no") }}</span>
                 </div>
                 <div class="detail-row">
-                  <span class="detail-label">Status</span>
-                  <span class="detail-value">{{ props.player.isOnline ? "Online" : "Offline" }}</span>
+                  <span class="detail-label">{{ t("common.status") }}</span>
+                  <span class="detail-value">{{ props.player.isOnline ? t("common.online") : t("common.offline") }}</span>
                 </div>
               </div>
             </section>
 
             <section class="detail-section">
-              <div class="detail-section-title">Actions</div>
+              <div class="detail-section-title">{{ t("common.actions") }}</div>
               <button type="button" class="action-button primary" @click="openDatabase">
-                Open Database
+                {{ t("player.openDatabase") }}
               </button>
               <button
                 type="button"
                 class="action-button secondary"
-                @click="copyValue(props.player.steamId, 'Steam ID')"
+                @click="copyValue(props.player.steamId, t('player.steamId'))"
                 :disabled="!props.player.steamId"
               >
-                Copy Steam ID
+                {{ t("player.copySteamId") }}
               </button>
               <button
                 type="button"
                 class="action-button secondary"
-                @click="copyValue(props.player.eosId, 'EOS ID')"
+                @click="copyValue(props.player.eosId, t('player.eosId'))"
                 :disabled="!props.player.eosId"
               >
-                Copy EOS ID
+                {{ t("player.copyEosId") }}
               </button>
               <button
                 type="button"
                 class="action-button secondary"
-                @click="copyValue(displayIp, 'IP')"
+                @click="copyValue(displayIp, t('player.ip'))"
                 :disabled="!displayIp"
               >
-                Copy IP
+                {{ t("player.copyIp") }}
               </button>
             </section>
 
             <section class="detail-section advanced-section">
               <button type="button" class="detail-section-title advanced-toggle" @click="showAdvanced = !showAdvanced">
-                {{ showAdvanced ? "▼" : "▶" }} Advanced
+                {{ showAdvanced ? "▼" : "▶" }} {{ t("player.advanced") }}
               </button>
               <div v-if="showAdvanced" class="advanced-content">
                 <div class="detail-rows">
                   <div class="detail-row">
-                    <span class="detail-label">Source</span>
-                    <span class="detail-value">{{ props.player.source || "unknown" }}</span>
+                    <span class="detail-label">{{ t("common.source") }}</span>
+                    <span class="detail-value">{{ props.player.source || t("common.unknown") }}</span>
                   </div>
                   <div v-if="props.player.controller" class="detail-row">
-                    <span class="detail-label">Controller</span>
+                    <span class="detail-label">{{ t("player.controller") }}</span>
                     <span class="detail-value ellipsis">{{ props.player.controller }}</span>
                   </div>
                 </div>
@@ -145,6 +145,7 @@ import { goToPlayerDatabaseSearch } from "../../utils/player-database";
 import { resolvePlayerIdentityIp } from "../../app/playerIdentityApi";
 import StatusBadge from "../common/StatusBadge.vue";
 import CopyableValue from "./CopyableValue.vue";
+import { t } from "../../i18n";
 
 const props = withDefaults(
   defineProps<{
@@ -170,12 +171,12 @@ const lookupToken = ref(0);
 
 const currentIp = computed(() => String(props.player?.ip ?? "").trim());
 const displayIp = computed(() => currentIp.value || resolvedLastIp.value.trim());
-const ipEmptyText = computed(() => (resolvingIp.value ? "resolving..." : "--"));
+const ipEmptyText = computed(() => (resolvingIp.value ? t("common.resolving") : "--"));
 const ipSourceHint = computed(() => {
-  if (currentIp.value) return "current";
-  if (resolvingIp.value) return "resolving...";
-  if (resolvedLastIp.value.trim()) return "last known";
-  return "none";
+  if (currentIp.value) return t("common.current");
+  if (resolvingIp.value) return t("common.resolving");
+  if (resolvedLastIp.value.trim()) return t("common.lastKnown");
+  return t("common.none");
 });
 
 const teamColorClass = computed(() => {
@@ -198,7 +199,7 @@ function handleEscape(e: KeyboardEvent) {
 async function copyValue(value: string | null | undefined, label: string) {
   if (!value) return;
   await copyTextWithToast(value, ui, {
-    label: `${label} copied`,
+    label: `${label} ${t("common.copied")}`,
     successMessage: value,
   });
 }
@@ -265,11 +266,35 @@ watch(
       if (token !== lookupToken.value) return;
       resolvedLastIp.value = "";
       resolvingIp.value = false;
-      resolveIpError.value = "IP lookup failed";
+      resolveIpError.value = t("common.error");
     }
   },
   { immediate: true },
 );
+
+function displayRole(role: string | null | undefined) {
+  const raw = String(role ?? "").trim();
+  if (!raw) return t("role.unknownRole");
+  const normalized = raw.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const keyMap: Record<string, string> = {
+    squadleader: "role.squadLeader",
+    medic: "role.medic",
+    heavyantitank: "role.heavyAntiTank",
+    lightantitank: "role.lightAntiTank",
+    machinegunner: "role.machineGunner",
+    automaticrifleman: "role.automaticRifleman",
+    engineer: "role.engineer",
+    sapper: "role.sapper",
+    marksman: "role.marksman",
+    sniper: "role.sniper",
+    grenadier: "role.grenadier",
+    crewman: "role.crewman",
+    pilot: "role.pilot",
+    rifleman: "role.rifleman",
+  };
+  const key = keyMap[normalized];
+  return key ? t(key, raw) : raw;
+}
 
 onMounted(() => {
   document.addEventListener("keydown", handleEscape);

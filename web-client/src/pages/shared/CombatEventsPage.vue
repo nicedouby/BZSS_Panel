@@ -7,10 +7,10 @@
         <select v-model="filters.type">
           <option v-for="item in typeOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
         </select>
-        <input v-model="filters.q" placeholder="Search events">
-        <button type="button" :disabled="filters.offset === 0" @click="previousPage">Previous</button>
-        <button type="button" :disabled="!hasNextPage" @click="nextPage">Next</button>
-        <button type="button" @click="clearEvents">Clear Memory Events</button>
+        <input v-model="filters.q" :placeholder="t('combat.searchEvents')">
+        <button type="button" :disabled="filters.offset === 0" @click="previousPage">{{ t("combat.previous") }}</button>
+        <button type="button" :disabled="!hasNextPage" @click="nextPage">{{ t("combat.next") }}</button>
+        <button type="button" @click="clearEvents">{{ t("combat.clearMemoryEvents") }}</button>
       </div>
     </PageCard>
 
@@ -18,15 +18,15 @@
       :loading="query.isLoading.value && !events.length"
       :error="pageError"
       :empty="!pageError && !events.length && !query.isLoading.value"
-      empty-title="No events"
+      :empty-title="t('combat.noEvents')"
       :empty-text="emptyText"
     >
       <PageCard compact>
         <div class="summary">
-          <span>Total {{ total }}</span>
-          <span>Offset {{ filters.offset }}</span>
-          <span v-if="overview?.rejected != null">Rejected {{ overview.rejected }}</span>
-          <span v-if="overview?.lastUpdatedAt">Updated {{ formatTime(overview.lastUpdatedAt) }}</span>
+          <span>{{ t("combat.total", "", { count: total }) }}</span>
+          <span>{{ t("combat.offset", "", { offset: filters.offset }) }}</span>
+          <span v-if="overview?.rejected != null">{{ t("combat.rejected", "", { count: overview.rejected }) }}</span>
+          <span v-if="overview?.lastUpdatedAt">{{ t("common.updated") }} {{ formatTime(overview.lastUpdatedAt) }}</span>
         </div>
       </PageCard>
 
@@ -55,6 +55,7 @@ import DataState from "../../components/common/DataState.vue";
 import CombatEventTable from "../../components/combat/CombatEventTable.vue";
 import CombatEventDetailModal from "../../components/combat/CombatEventDetailModal.vue";
 import { useCombatEventsQuery } from "../../composables/useCombatEventsQuery";
+import { t } from "../../i18n";
 
 const props = defineProps<{
   pageTitle: string;
@@ -101,7 +102,7 @@ watch(
 
 const endpointRef = computed(() => props.endpoint);
 const { query } = useCombatEventsQuery(endpointRef, filters);
-const pageError = computed(() => query.error.value ? renderApiError(query.error.value, "Failed to load combat events.") : "");
+const pageError = computed(() => query.error.value ? renderApiError(query.error.value, t("combat.loadFailed")) : "");
 const events = computed(() => query.data.value?.events ?? []);
 const overview = computed(() => query.data.value?.overview ?? null);
 const total = computed(() => Number(overview.value?.count ?? events.value.length));
@@ -112,8 +113,8 @@ const clearMutation = useMutation({
   mutationFn: async () => apiPost(props.clearEndpoint, {}),
   onSuccess: async () => {
     ui.pushToast({
-      title: "Combat events cleared",
-      message: "The in-memory event buffer has been cleared.",
+      title: t("combat.clearCompleted"),
+      message: t("combat.clearCompletedMessage"),
       tone: "ok",
     });
     selectedEvent.value = null;
@@ -121,8 +122,8 @@ const clearMutation = useMutation({
   },
   onError: (error) => {
     ui.pushToast({
-      title: "Clear failed",
-      message: renderApiError(error, "Failed to clear combat events."),
+      title: t("combat.clearFailed"),
+      message: renderApiError(error, t("combat.clearFailed")),
       tone: "error",
     });
   },
@@ -143,9 +144,9 @@ function nextPage() {
 
 async function clearEvents() {
   const confirmed = await ui.openConfirm({
-    title: "Clear event buffer",
-    message: "This clears only the in-memory combat event buffer for this page.",
-    confirmText: "Clear",
+    title: t("combat.clearEventBuffer"),
+    message: t("combat.clearEventBufferMessage"),
+    confirmText: t("common.clear"),
     tone: "warn",
   });
   if (!confirmed) return;

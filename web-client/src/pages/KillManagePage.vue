@@ -1,26 +1,27 @@
 <template>
   <CombatEventsPage
-    page-title="Kill Manage"
-    page-subtitle="Structured combat events from the combat state module."
+    :page-title="t('combat.killManage')"
+    page-subtitle=""
     endpoint="/api/combat/events"
     clear-endpoint="/api/combat/clear"
     route-scope="kill-manage"
     :type-options="typeOptions"
-    empty-text="No combat events match the current filters."
+    :empty-text="t('combat.noEvents')"
   />
 </template>
 
 <script setup lang="ts">
 import CombatEventsPage from "./shared/CombatEventsPage.vue";
+import { t } from "../i18n";
 
 const typeOptions = [
-  { value: "all", label: "All" },
-  { value: "damage", label: "Damage" },
-  { value: "wound", label: "Wound" },
-  { value: "death", label: "Death" },
-  { value: "friendly", label: "Friendly" },
-  { value: "teamDamage", label: "Team Damage" },
-  { value: "teamWound", label: "Team Wound" },
-  { value: "teamKill", label: "Team Kill" },
+  { value: "all", label: t("combat.all") },
+  { value: "damage", label: t("combat.damage") },
+  { value: "wound", label: t("combat.wound") },
+  { value: "death", label: t("combat.death") },
+  { value: "friendly", label: t("combat.friendly") },
+  { value: "teamDamage", label: t("combat.teamDamage") },
+  { value: "teamWound", label: t("combat.teamWound") },
+  { value: "teamKill", label: t("combat.teamKill") },
 ];
 </script>

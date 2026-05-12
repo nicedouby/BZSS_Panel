@@ -3,43 +3,43 @@
     <section class="dialog-panel">
       <header class="dialog-head">
         <div>
-          <h3>{{ event.type || event.eventName || "Combat Event" }}</h3>
+          <h3>{{ event.type || event.eventName || t("combat.eventType") }}</h3>
           <p>{{ formatTime(event.time) }}</p>
         </div>
-        <button type="button" @click="$emit('close')">Close</button>
+        <button type="button" @click="$emit('close')">{{ t("common.close") }}</button>
       </header>
 
       <div class="detail-grid">
         <div class="identity-card">
-          <span>Attacker</span>
+          <span>{{ t("combat.attacker") }}</span>
           <strong>{{ attackerName }}</strong>
           <small v-if="attackerIp">IP {{ attackerIp }}</small>
           <small v-if="attackerSteamID">SteamID {{ attackerSteamID }}</small>
           <small v-if="attackerEOSID">EOSID {{ attackerEOSID }}</small>
           <div class="action-row">
-            <button v-if="attackerSearchKey" type="button" class="mini-action" @click="searchPlayer(attackerSearchKey)">Search</button>
-            <button v-if="attackerSteamID" type="button" class="mini-action" @click="copyValue(attackerSteamID, 'SteamID')">Copy SteamID</button>
-            <button v-if="attackerEOSID" type="button" class="mini-action" @click="copyValue(attackerEOSID, 'EOSID')">Copy EOSID</button>
-            <button v-if="attackerIp" type="button" class="mini-action" @click="copyValue(attackerIp, 'IP')">Copy IP</button>
+            <button v-if="attackerSearchKey" type="button" class="mini-action" @click="searchPlayer(attackerSearchKey)">{{ t("common.search") }}</button>
+            <button v-if="attackerSteamID" type="button" class="mini-action" @click="copyValue(attackerSteamID, 'SteamID')">{{ t("common.copy") }} SteamID</button>
+            <button v-if="attackerEOSID" type="button" class="mini-action" @click="copyValue(attackerEOSID, 'EOSID')">{{ t("common.copy") }} EOSID</button>
+            <button v-if="attackerIp" type="button" class="mini-action" @click="copyValue(attackerIp, 'IP')">{{ t("common.copy") }} IP</button>
           </div>
         </div>
         <div class="identity-card">
-          <span>Victim</span>
+          <span>{{ t("combat.victim") }}</span>
           <strong>{{ victimName }}</strong>
           <small v-if="victimIp">IP {{ victimIp }}</small>
           <small v-if="victimSteamID">SteamID {{ victimSteamID }}</small>
           <small v-if="victimEOSID">EOSID {{ victimEOSID }}</small>
           <div class="action-row">
-            <button v-if="victimSearchKey" type="button" class="mini-action" @click="searchPlayer(victimSearchKey)">Search</button>
-            <button v-if="victimSteamID" type="button" class="mini-action" @click="copyValue(victimSteamID, 'SteamID')">Copy SteamID</button>
-            <button v-if="victimEOSID" type="button" class="mini-action" @click="copyValue(victimEOSID, 'EOSID')">Copy EOSID</button>
-            <button v-if="victimIp" type="button" class="mini-action" @click="copyValue(victimIp, 'IP')">Copy IP</button>
+            <button v-if="victimSearchKey" type="button" class="mini-action" @click="searchPlayer(victimSearchKey)">{{ t("common.search") }}</button>
+            <button v-if="victimSteamID" type="button" class="mini-action" @click="copyValue(victimSteamID, 'SteamID')">{{ t("common.copy") }} SteamID</button>
+            <button v-if="victimEOSID" type="button" class="mini-action" @click="copyValue(victimEOSID, 'EOSID')">{{ t("common.copy") }} EOSID</button>
+            <button v-if="victimIp" type="button" class="mini-action" @click="copyValue(victimIp, 'IP')">{{ t("common.copy") }} IP</button>
           </div>
         </div>
-        <div><span>Damage</span><strong>{{ event.damage ?? "-" }}</strong></div>
-        <div><span>Source</span><strong>{{ event.weapon?.displayName || event.weapon || event.causedBy || "-" }}</strong></div>
-        <div><span>Friendly Fire</span><strong>{{ event.relation?.isFriendlyFire || event.isFriendlyFire ? "Yes" : "No" }}</strong></div>
-        <div><span>Parse Status</span><strong>{{ event.parse?.status || event.parseStatus || "-" }}</strong></div>
+        <div><span>{{ t("combat.damage") }}</span><strong>{{ event.damage ?? "-" }}</strong></div>
+        <div><span>{{ t("common.source") }}</span><strong>{{ event.weapon?.displayName || event.weapon || event.causedBy || "-" }}</strong></div>
+        <div><span>{{ t("combat.friendly") }}</span><strong>{{ event.relation?.isFriendlyFire || event.isFriendlyFire ? t("common.yes") : t("common.no") }}</strong></div>
+        <div><span>{{ t("common.status") }}</span><strong>{{ event.parse?.status || event.parseStatus || "-" }}</strong></div>
       </div>
 
       <pre class="raw-block">{{ prettyEvent }}</pre>
@@ -53,6 +53,7 @@ import { useRouter } from "vue-router";
 import { useUiStore } from "../../stores/ui.store";
 import { copyTextWithToast } from "../../utils/clipboard";
 import { goToPlayerDatabaseSearch } from "../../utils/player-database";
+import { t } from "../../i18n";
 
 const props = defineProps<{
   event: any | null;
@@ -86,7 +87,7 @@ function formatTime(value: unknown) {
 async function copyValue(value: string, label: string) {
   if (!value) return;
   await copyTextWithToast(value, ui, {
-    label: `${label} copied`,
+    label: `${label} ${t("common.copied")}`,
     successMessage: value,
   });
 }

@@ -3,50 +3,50 @@
     <aside class="settings-panel">
       <header class="settings-head">
         <div>
-          <h2>Settings</h2>
-          <p>Only exposed configuration fields can be edited here.</p>
+          <h2>{{ t("settings.title") }}</h2>
+          <p>{{ t("settings.subtitle") }}</p>
         </div>
-        <button type="button" @click="settings.closeDrawer()">Close</button>
+        <button type="button" @click="settings.closeDrawer()">{{ t("common.close") }}</button>
       </header>
 
       <section v-if="settings.loading" class="settings-state">
-        Loading exposed settings...
+        {{ t("settings.loading") }}
       </section>
 
       <section v-else-if="settings.error" class="settings-state error">
         {{ settings.error }}
-        <button type="button" @click="settings.load(true)">Retry</button>
+        <button type="button" @click="settings.load(true)">{{ t("common.retry") }}</button>
       </section>
 
       <section v-else class="settings-body">
         <div v-if="!settings.enabled" class="settings-note">
-          The settings editor is disabled in config.json.
+          {{ t("settings.disabled") }}
         </div>
 
         <div v-if="!canEdit" class="settings-note warn">
-          You can view settings, but only a super admin can save changes.
+          {{ t("settings.readonly") }}
         </div>
 
         <div v-if="settings.noticeRestartRequired" class="settings-note warn">
-          One or more changed settings require a restart before they take effect.
+          {{ t("settings.restartRequired") }}
         </div>
 
         <div v-if="!settings.fields.length" class="settings-empty">
-          No exposed settings are configured.
+          {{ t("settings.noExposedSettings") }}
         </div>
 
         <div v-for="field in settings.fields" :key="field.path" class="setting-field">
           <label class="setting-label">
             <span class="setting-label-row">
-              <span>{{ field.label }}</span>
-              <strong v-if="isDangerousField(field)" class="setting-pill">Advanced</strong>
+              <span>{{ settingLabel(field) }}</span>
+              <strong v-if="isDangerousField(field)" class="setting-pill">{{ t("common.advanced") }}</strong>
             </span>
             <small>{{ field.path }}</small>
           </label>
 
           <p v-if="field.description" class="setting-description">{{ field.description }}</p>
           <p v-if="isDangerousField(field)" class="setting-warning">
-            Advanced setting. Changes here may affect access or require a restart.
+            {{ t("settings.advancedWarning") }}
           </p>
 
           <template v-if="field.type === 'boolean'">
@@ -57,7 +57,7 @@
                 :disabled="!canSave || settings.loading || settings.saving"
                 @change="updateBoolean(field.path, $event)"
               >
-              <span>{{ Boolean(settings.getDraftValue(field.path)) ? "Enabled" : "Disabled" }}</span>
+              <span>{{ Boolean(settings.getDraftValue(field.path)) ? t("common.enabled") : t("common.disabled") }}</span>
             </label>
           </template>
 
@@ -100,14 +100,14 @@
       </section>
 
       <footer class="settings-footer">
-        <button type="button" @click="settings.closeDrawer()">Cancel</button>
+        <button type="button" @click="settings.closeDrawer()">{{ t("common.cancel") }}</button>
         <button
           type="button"
           class="save-button"
           :disabled="!canSave || settings.loading || settings.saving || !settings.hasChanges"
           @click="save"
         >
-          {{ settings.saving ? "Saving..." : "Save changes" }}
+          {{ settings.saving ? t("common.saving") : t("common.saveChanges") }}
         </button>
       </footer>
     </aside>
@@ -118,6 +118,7 @@
 import { computed, watch } from "vue";
 import { useAuthStore } from "../../stores/auth.store";
 import { useSettingsStore } from "../../stores/settings.store";
+import { t } from "../../i18n";
 
 const auth = useAuthStore();
 const settings = useSettingsStore();
@@ -184,6 +185,10 @@ function isDangerousField(field: { path: string; advanced?: boolean }) {
     "rcon.host",
     "rcon.port",
   ].includes(field.path);
+}
+
+function settingLabel(field: { path: string; label: string }) {
+  return t(`settingsField.${field.path}`, field.label);
 }
 
 async function save() {
