@@ -9,11 +9,14 @@
         <span>{{ layer }}</span>
       </div>
     </div>
-    <div class="topbar-metrics">
-      <StatusBadge :tone="runtimeTone">{{ runtimeLabel }}</StatusBadge>
-      <span v-if="runtimeError">{{ runtimeError }}</span>
-      <span>{{ playerCount }} players</span>
-      <span>TPS {{ tps }}</span>
+    <div class="topbar-end">
+      <div class="topbar-metrics">
+        <StatusBadge :tone="runtimeTone">{{ runtimeLabel }}</StatusBadge>
+        <span v-if="runtimeError">{{ runtimeError }}</span>
+        <span>{{ playerCount }} players</span>
+        <span>TPS {{ tps }}</span>
+      </div>
+      <UserMenu />
     </div>
   </header>
 </template>
@@ -26,6 +29,7 @@ import { usePlayerStore } from "../../stores/player.store";
 import { getRuntimeSyncState } from "../../app/runtimeSync";
 import { useUiStore } from "../../stores/ui.store";
 import StatusBadge from "../common/StatusBadge.vue";
+import UserMenu from "./UserMenu.vue";
 
 const server = useServerStore();
 const players = usePlayerStore();
@@ -106,9 +110,24 @@ function toggleSidebar() {
   white-space: nowrap;
 }
 
+.topbar-end {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
 @media (max-width: 780px) {
   .topbar {
     padding: 0 14px;
+    height: auto;
+    min-height: 58px;
+    flex-wrap: wrap;
+  }
+
+  .topbar-end {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .topbar-metrics {

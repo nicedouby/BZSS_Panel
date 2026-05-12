@@ -9,6 +9,7 @@
     </main>
     <ConfirmDialog />
     <ToastHost />
+    <SettingsDrawer />
   </div>
 </template>
 
@@ -19,6 +20,7 @@ import Topbar from "./Topbar.vue";
 import Sidebar from "./Sidebar.vue";
 import ConfirmDialog from "../common/ConfirmDialog.vue";
 import ToastHost from "../common/ToastHost.vue";
+import SettingsDrawer from "../settings/SettingsDrawer.vue";
 
 const ui = useUiStore();
 </script>

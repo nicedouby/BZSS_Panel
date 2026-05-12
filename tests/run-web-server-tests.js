@@ -280,6 +280,105 @@ async function testSnapshotAllDoesNotTriggerSlowTasks() {
   assert.equal(JSON.parse(recorder.state.body).ok, true);
 }
 
+async function testSettingsRoutesRequireAuthAndSuperAdmin() {
+  const settingsResponse = {
+    enabled: true,
+    settings: [
+      {
+        path: "web.port",
+        label: "Web Port",
+        type: "number",
+        min: 1,
+        max: 65535,
+        restartRequired: true,
+        value: 7799,
+      },
+    ],
+  };
+  let updateCalls = 0;
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest(req) {
+          if (req.headers.authorization === "super") {
+            return { username: "admin", role: "SuperAdmin" };
+          }
+          if (req.headers.authorization === "user") {
+            return { username: "viewer", role: "Operator" };
+          }
+          return null;
+        },
+        hasEverything(user) {
+          return String(user?.role ?? "").toLowerCase().includes("superadmin");
+        },
+      },
+      config: {
+        getExposedSettings() {
+          return settingsResponse;
+        },
+        async updateExposedSettings(changes) {
+          updateCalls += 1;
+          return {
+            ...settingsResponse,
+            settings: settingsResponse.settings.map((item) => (
+              item.path in changes ? { ...item, value: changes[item.path] } : item
+            )),
+            restartRequired: true,
+          };
+        },
+      },
+    },
+  });
+
+  const unauthGet = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/settings/exposed",
+    headers: { host: "localhost" },
+    socket: {},
+  }, unauthGet.res);
+  assert.equal(unauthGet.state.status, 401);
+
+  const authGet = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/settings/exposed",
+    headers: { host: "localhost", authorization: "user" },
+    socket: {},
+  }, authGet.res);
+  assert.equal(authGet.state.status, 200);
+  assert.equal(JSON.parse(authGet.state.body).settings[0].path, "web.port");
+
+  const forbiddenPatch = createRecorder();
+  await server.handleRequest({
+    method: "PATCH",
+    url: "/api/settings/exposed",
+    headers: { host: "localhost", authorization: "user" },
+    socket: {},
+  }, forbiddenPatch.res);
+  assert.equal(forbiddenPatch.state.status, 403);
+
+  const patchMissingBody = createRecorder();
+  const emptyPatchReq = Readable.from([]);
+  emptyPatchReq.method = "PATCH";
+  emptyPatchReq.url = "/api/settings/exposed";
+  emptyPatchReq.headers = { host: "localhost", authorization: "super" };
+  emptyPatchReq.socket = {};
+  await server.handleRequest(emptyPatchReq, patchMissingBody.res);
+  assert.equal(patchMissingBody.state.status, 400);
+
+  const successfulPatch = createRecorder();
+  const patchReq = Readable.from([JSON.stringify({ changes: { "web.port": 7800 } })]);
+  patchReq.method = "PATCH";
+  patchReq.url = "/api/settings/exposed";
+  patchReq.headers = { host: "localhost", authorization: "super" };
+  patchReq.socket = {};
+  await server.handleRequest(patchReq, successfulPatch.res);
+  assert.equal(successfulPatch.state.status, 200);
+  assert.equal(JSON.parse(successfulPatch.state.body).restartRequired, true);
+  assert.equal(updateCalls, 1);
+}
+
 async function testVueRouteFallsBackToIndexHtml() {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-web-"));
   await fs.writeFile(path.join(tempDir, "index.html"), "<html><body>vue-app</body></html>", "utf8");
@@ -325,6 +424,7 @@ await testHealthEndpointDoesNotRequireAuth();
 await testWeaponCollectorApiRequiresGet();
 await testSnapshotAllRequiresAuth();
 await testSnapshotAllDoesNotTriggerSlowTasks();
+await testSettingsRoutesRequireAuthAndSuperAdmin();
 await testVueRouteFallsBackToIndexHtml();
 
 console.log("web server tests passed");

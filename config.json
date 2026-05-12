@@ -19,6 +19,127 @@
     "title": "BZSS Panel"
   },
 
+  "settingsEditor": {
+    "enabled": true,
+    "exposed": [
+      {
+        "path": "server.name",
+        "label": "Server Name",
+        "type": "string",
+        "restartRequired": true
+      },
+      {
+        "path": "web.title",
+        "label": "Panel Title",
+        "type": "string",
+        "restartRequired": true
+      },
+      {
+        "path": "web.host",
+        "label": "Web Host",
+        "type": "string",
+        "restartRequired": true
+      },
+      {
+        "path": "web.port",
+        "label": "Web Port",
+        "type": "number",
+        "min": 1,
+        "max": 65535,
+        "restartRequired": true
+      },
+      {
+        "path": "web.useVueClient",
+        "label": "Use Vue Client",
+        "type": "boolean",
+        "restartRequired": true
+      },
+      {
+        "path": "rcon.enabled",
+        "label": "RCON Enabled",
+        "type": "boolean",
+        "restartRequired": true
+      },
+      {
+        "path": "rcon.host",
+        "label": "RCON Host",
+        "type": "string",
+        "restartRequired": true
+      },
+      {
+        "path": "rcon.port",
+        "label": "RCON Port",
+        "type": "number",
+        "min": 1,
+        "max": 65535,
+        "restartRequired": true
+      },
+      {
+        "path": "ipLookup.enabled",
+        "label": "IP Lookup Enabled",
+        "type": "boolean",
+        "restartRequired": true
+      },
+      {
+        "path": "ipLookup.provider",
+        "label": "IP Lookup Provider",
+        "type": "select",
+        "options": [
+          { "label": "None", "value": "none" },
+          { "label": "Manual", "value": "manual" },
+          { "label": "Local MMDB", "value": "local-mmdb" },
+          { "label": "IP-API", "value": "ip-api" },
+          { "label": "IPinfo", "value": "ipinfo" }
+        ],
+        "restartRequired": true
+      },
+      {
+        "path": "playerIdentityDisplay.showIpInList",
+        "label": "Show IP in List",
+        "type": "boolean",
+        "restartRequired": true
+      },
+      {
+        "path": "playerIdentityDisplay.showIpInDetail",
+        "label": "Show IP in Detail",
+        "type": "boolean",
+        "restartRequired": true
+      },
+      {
+        "path": "serverTickRate.expected",
+        "label": "Tick Rate Expected",
+        "type": "number",
+        "min": 1,
+        "max": 120,
+        "restartRequired": true
+      },
+      {
+        "path": "serverTickRate.warningBelow",
+        "label": "Tick Rate Warning",
+        "type": "number",
+        "min": 1,
+        "max": 120,
+        "restartRequired": true
+      },
+      {
+        "path": "serverTickRate.criticalBelow",
+        "label": "Tick Rate Critical",
+        "type": "number",
+        "min": 1,
+        "max": 120,
+        "restartRequired": true
+      },
+      {
+        "path": "serverTickRate.staleAfterSeconds",
+        "label": "Tick Rate Stale After",
+        "type": "number",
+        "min": 1,
+        "max": 600,
+        "restartRequired": true
+      }
+    ]
+  },
+
   "pythonLogParser": {
     "enabled": true,
     "pythonExecutable": "python",

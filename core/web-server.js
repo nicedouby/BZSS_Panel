@@ -163,6 +163,37 @@ export class WebServer {
       });
     }
 
+    if (url.pathname === "/api/settings/exposed") {
+      const configManager = this.core.config;
+      if (!configManager?.getExposedSettings) {
+        return this.json(res, 503, {
+          error: "SettingsUnavailable",
+          message: "Settings manager is unavailable.",
+        });
+      }
+
+      if (req.method === "GET") {
+        return this.json(res, 200, configManager.getExposedSettings());
+      }
+
+      if (req.method === "PATCH") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        if (!body || typeof body !== "object" || Array.isArray(body) || !body.changes || typeof body.changes !== "object" || Array.isArray(body.changes)) {
+          return this.json(res, 400, {
+            error: "InvalidRequestBody",
+            message: "Request body must include a changes object.",
+          });
+        }
+
+        const result = await configManager.updateExposedSettings(body.changes);
+        return this.json(res, 200, {
+          ok: true,
+          ...result,
+        });
+      }
+    }
+
     if (url.pathname === "/api/web/pages") {
       return this.json(res, 200, { pages: this.core.webRegistry.getPages() });
     }
