@@ -9,6 +9,30 @@
         @input="$emit('search', searchQuery)"
       >
       <div class="toolbar-controls">
+        <div class="refresh-controls" title="Manual backend refresh">
+          <button
+            type="button"
+            :disabled="!canRefresh || isRefreshing"
+            @click="$emit('refresh', 'players')"
+          >
+            {{ refreshingType === 'players' ? 'Refreshing Players...' : 'Refresh Players' }}
+          </button>
+          <button
+            type="button"
+            :disabled="!canRefresh || isRefreshing"
+            @click="$emit('refresh', 'squads')"
+          >
+            {{ refreshingType === 'squads' ? 'Refreshing Squads...' : 'Refresh Squads' }}
+          </button>
+          <button
+            type="button"
+            :disabled="!canRefresh || isRefreshing"
+            @click="$emit('refresh', 'all')"
+          >
+            {{ refreshingType === 'all' ? 'Refreshing All...' : 'Refresh All' }}
+          </button>
+        </div>
+
         <div class="density-toggle">
           <button
             v-for="mode in ['comfortable', 'compact']"
@@ -26,19 +50,25 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
+
+type RefreshType = "players" | "squads" | "all";
 
 const props = defineProps<{
   searchQuery: string;
   densityMode: "comfortable" | "compact";
+  canRefresh: boolean;
+  refreshingType: RefreshType | "";
 }>();
 
 const emit = defineEmits<{
   (event: "search", query: string): void;
   (event: "density-change", mode: "comfortable" | "compact"): void;
+  (event: "refresh", type: RefreshType): void;
 }>();
 
 const searchQuery = ref(props.searchQuery);
+const isRefreshing = computed(() => Boolean(props.refreshingType));
 
 watch(
   () => props.searchQuery,
@@ -88,6 +118,37 @@ watch(
   display: flex;
   gap: var(--spacing-md);
   align-items: center;
+  flex-wrap: wrap;
+}
+
+.refresh-controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.refresh-controls button {
+  padding: 6px 10px;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.refresh-controls button:hover:not(:disabled) {
+  color: var(--color-text-primary);
+  border-color: var(--color-status-info);
+}
+
+.refresh-controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .density-toggle {
@@ -128,6 +189,11 @@ watch(
 
   .squad-search-input {
     width: 100%;
+  }
+
+  .toolbar-controls {
+    width: 100%;
+    justify-content: space-between;
   }
 }
 </style>
