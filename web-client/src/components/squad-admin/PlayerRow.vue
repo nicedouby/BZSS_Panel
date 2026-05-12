@@ -24,7 +24,7 @@
       </div>
       <div class="player-meta">
         <span class="player-role">{{ displayRole(player.role) }}</span>
-        <span class="player-id">{{ t("field.id") }} {{ player.playerId ?? "-" }}</span>
+        <span class="player-id">#{{ player.playerId ?? "-" }}</span>
       </div>
     </div>
     <div v-if="playtimeText" class="player-playtime">
@@ -85,22 +85,25 @@ function displayRole(role: string | null | undefined) {
 
 <style scoped>
 .player-row {
-  padding: var(--spacing-md);
+  padding: 10px var(--spacing-md);
   border-top: 1px solid var(--color-border-soft);
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-md);
-  transition: all 0.15s ease;
+  background: rgba(255, 255, 255, 0.006);
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
   cursor: pointer;
 }
 
 .player-row:hover {
-  background-color: var(--color-bg-hover);
+  background: rgba(96, 165, 250, 0.08);
 }
 
 .player-row.selected {
-  background-color: var(--color-bg-selected);
+  background: var(--color-bg-selected);
 }
 
 .player-row-left {
@@ -118,9 +121,9 @@ function displayRole(role: string | null | undefined) {
 }
 
 .player-name {
-  font-weight: 600;
+  font-weight: 500;
   color: var(--color-text-primary);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -130,7 +133,7 @@ function displayRole(role: string | null | undefined) {
   display: flex;
   gap: var(--spacing-sm);
   align-items: center;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   flex-wrap: wrap;
 }
@@ -216,7 +219,7 @@ function displayRole(role: string | null | undefined) {
 }
 
 .player-playtime {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   white-space: nowrap;
   flex-shrink: 0;

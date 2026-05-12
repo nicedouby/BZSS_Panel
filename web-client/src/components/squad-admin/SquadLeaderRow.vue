@@ -94,13 +94,17 @@ function displayRole(role: string | null | undefined) {
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-md);
-  background-color: rgba(250, 204, 21, 0.03);
-  transition: all 0.15s ease;
+  background:
+    linear-gradient(90deg, rgba(250, 204, 21, 0.12), rgba(250, 204, 21, 0.025));
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
   cursor: pointer;
 }
 
 .squad-leader-row:hover {
-  background-color: rgba(250, 204, 21, 0.06);
+  background:
+    linear-gradient(90deg, rgba(250, 204, 21, 0.17), rgba(250, 204, 21, 0.04));
 }
 
 .squad-leader-row.selected {
@@ -194,9 +198,9 @@ function displayRole(role: string | null | undefined) {
 }
 
 .leader-name {
-  font-weight: 700;
+  font-weight: 800;
   color: var(--color-text-primary);
-  font-size: var(--font-size-base);
+  font-size: 15px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -206,7 +210,7 @@ function displayRole(role: string | null | undefined) {
   display: flex;
   gap: var(--spacing-sm);
   align-items: center;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   flex-wrap: wrap;
 }
@@ -222,10 +226,14 @@ function displayRole(role: string | null | undefined) {
 }
 
 .leader-playtime {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  color: var(--color-status-leader);
   white-space: nowrap;
   flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  background: rgba(250, 204, 21, 0.09);
+  border: 1px solid rgba(250, 204, 21, 0.18);
 }
 
 @media (max-width: 640px) {

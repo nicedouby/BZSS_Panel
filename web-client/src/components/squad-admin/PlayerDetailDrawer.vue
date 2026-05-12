@@ -330,7 +330,9 @@ onUnmounted(() => {
   right: 0;
   height: 100dvh;
   width: 420px;
-  background: var(--color-bg-panel);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.008)),
+    var(--color-bg-panel);
   border-left: 1px solid var(--color-border-default);
   display: grid;
   grid-template-rows: auto 1fr;
@@ -358,6 +360,9 @@ onUnmounted(() => {
   padding: var(--spacing-lg);
   border-bottom: 1px solid var(--color-border-default);
   flex-shrink: 0;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(96, 165, 250, 0.1), transparent 42%),
+    rgba(255, 255, 255, 0.018);
 }
 
 .drawer-header-content {
@@ -410,6 +415,10 @@ onUnmounted(() => {
 .detail-section {
   display: grid;
   gap: var(--spacing-sm);
+  padding: 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-soft);
+  background: rgba(255, 255, 255, 0.015);
 }
 
 .identity-ip-block {
@@ -479,7 +488,7 @@ onUnmounted(() => {
   margin: 0;
   padding: var(--spacing-md);
   border-radius: var(--radius-md);
-  background: var(--color-bg-muted);
+  background: rgba(0, 0, 0, 0.18);
   overflow: auto;
 }
 

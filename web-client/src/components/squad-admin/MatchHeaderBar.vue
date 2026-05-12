@@ -1,57 +1,45 @@
 <template>
   <header class="match-header-bar">
-    <div class="match-header-content">
-      <div class="match-info-row">
-        <span class="match-info-item">
-          <strong>{{ data.serverName }}</strong>
-        </span>
-        <span class="match-info-separator">·</span>
-        <span class="match-info-item">
-          {{ data.mapName }}
-        </span>
-        <span class="match-info-separator">·</span>
-        <span class="match-info-item">
-          {{ data.gameMode }}
-        </span>
-        <span class="match-info-separator">·</span>
-        <span class="match-info-item">
-          {{ t("match.players", "", { current: data.totalPlayers, max: data.maxPlayers }) }}
-        </span>
-        <span class="match-info-separator">·</span>
-        <span class="match-info-item team-1-badge">
-          {{ t("match.team1", "", { count: data.team1Count }) }}
-        </span>
-        <span class="match-info-separator">·</span>
-        <span class="match-info-item team-2-badge">
-          {{ t("match.team2", "", { count: data.team2Count }) }}
-        </span>
-        <span class="match-info-separator">·</span>
-        <span class="match-info-item">
-          {{ formatMatchTime(data.matchTimeSeconds) }}
-        </span>
-        <span class="match-info-separator">·</span>
-        <span class="match-info-item">
-          {{ t("topbar.tps", "", { value: formatTps(data.tps) }) }}
-        </span>
+    <div class="match-hero-left">
+      <div class="server-name">{{ props.data.serverName }}</div>
+      <div class="layer-line">
+        {{ props.data.mapName }} · {{ props.data.gameMode }}
       </div>
-      <div class="match-status-row">
-        <span class="status-item" :class="{ error: data.rconStatus !== 'connected' }">
-          <span class="status-dot" :style="{ backgroundColor: getStatusColor(data.rconStatus) }" />
-          {{ formatRconStatus(data.rconStatus) }}
-        </span>
-        <span class="status-separator">·</span>
-        <span class="status-item" :class="{ error: data.logsStatus === 'error' }">
-          <span class="status-dot" :style="{ backgroundColor: getLogsStatusColor(data.logsStatus) }" />
-          {{ formatLogsStatus(data.logsStatus) }}
-        </span>
-        <span class="status-separator">·</span>
-        <span
-          class="status-item"
-          :title="`${t('match.serverUpdated', '', { time: formatUpdateTime(data.serverStatusUpdatedAt) })} / ${t('match.playersUpdated', '', { time: formatUpdateTime(data.playersUpdatedAt) })} / ${t('match.squadsUpdated', '', { time: formatUpdateTime(data.squadsUpdatedAt) })}`"
-        >
-          {{ t("match.updated", "", { time: formatUpdateTime(data.lastUpdateTime) }) }}
-        </span>
+    </div>
+
+    <div class="match-hero-stats">
+      <div class="hero-stat">
+        <span>Players</span>
+        <strong>{{ props.data.totalPlayers }}/{{ props.data.maxPlayers }}</strong>
       </div>
+      <div class="hero-stat team1">
+        <span>Team 1</span>
+        <strong>{{ props.data.team1Count }}</strong>
+      </div>
+      <div class="hero-stat team2">
+        <span>Team 2</span>
+        <strong>{{ props.data.team2Count }}</strong>
+      </div>
+      <div class="hero-stat">
+        <span>Time</span>
+        <strong>{{ formatMatchTime(props.data.matchTimeSeconds) }}</strong>
+      </div>
+      <div class="hero-stat">
+        <span>TPS</span>
+        <strong>{{ formatTps(props.data.tps) }}</strong>
+      </div>
+    </div>
+
+    <div class="match-hero-status">
+      <span class="status-line" :class="statusTone(props.data.rconStatus)">
+        RCON {{ formatRconStatus(props.data.rconStatus) }}
+      </span>
+      <span class="status-line" :class="statusTone(props.data.logsStatus)">
+        Log {{ formatLogsStatus(props.data.logsStatus) }}
+      </span>
+      <span class="status-line">
+        Updated {{ formatUpdateTime(props.data.lastUpdateTime) }}
+      </span>
     </div>
   </header>
 </template>
@@ -100,99 +88,127 @@ function formatUpdateTime(time: number): string {
   });
 }
 
-function getStatusColor(status: string): string {
-  if (status === "connected") return "#22c55e";
-  if (status === "disconnected") return "#f59e0b";
-  if (status === "error") return "#ef4444";
-  return "#64748b";
-}
-
-function getLogsStatusColor(status: string): string {
-  if (status === "live") return "#22c55e";
-  if (status === "stale") return "#f59e0b";
-  return "#ef4444";
+function statusTone(status: string): string {
+  if (status === "connected" || status === "live") return "ok";
+  if (status === "error") return "error";
+  if (status === "disconnected" || status === "stale") return "warn";
+  return "idle";
 }
 </script>
 
 <style scoped>
 .match-header-bar {
-  background: var(--color-bg-panel);
+  display: grid;
+  grid-template-columns: minmax(260px, 1.2fr) minmax(360px, 2fr) auto;
+  gap: var(--spacing-lg);
+  align-items: center;
+  background:
+    radial-gradient(circle at 0% 0%, var(--color-team1-bg), transparent 34%),
+    radial-gradient(circle at 100% 0%, var(--color-team2-bg), transparent 34%),
+    var(--color-bg-panel);
   border-bottom: 1px solid var(--color-border-default);
-  padding: var(--spacing-md) var(--spacing-lg);
+  padding: 14px var(--spacing-lg);
   flex-shrink: 0;
 }
 
-.match-header-content {
-  display: grid;
-  gap: 8px;
-  font-size: var(--font-size-sm);
+.match-hero-left {
+  min-width: 0;
 }
 
-.match-info-row,
-.match-status-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  color: var(--color-text-secondary);
-}
-
-.match-info-row strong {
+.server-name {
   color: var(--color-text-primary);
-  font-weight: 700;
-}
-
-.match-info-item {
+  font-size: var(--font-size-lg);
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
 }
 
-.match-info-separator {
-  opacity: 0.4;
+.layer-line {
+  margin-top: 4px;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.team-1-badge {
+.match-hero-stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(72px, 1fr));
+  gap: 8px;
+}
+
+.hero-stat {
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-soft);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.hero-stat span {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.hero-stat strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-md);
+  font-weight: 800;
+}
+
+.hero-stat.team1 strong {
   color: var(--color-team1-primary);
 }
 
-.team-2-badge {
+.hero-stat.team2 strong {
   color: var(--color-team2-primary);
 }
 
-.status-item {
+.match-hero-status {
+  display: grid;
+  gap: 5px;
+  justify-items: end;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.status-line {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  transition: all 0.15s ease;
+  min-width: 0;
+  white-space: nowrap;
 }
 
-.status-separator {
-  opacity: 0.5;
+.status-line.ok {
+  color: var(--color-status-online);
 }
 
-.status-item.error {
+.status-line.warn {
   color: var(--color-status-warning);
 }
 
-.status-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
+.status-line.error {
+  color: var(--color-status-error);
 }
 
-@media (max-width: 1200px) {
-  .match-info-row {
-    font-size: 11px;
+@media (max-width: 1366px) {
+  .match-header-bar {
+    grid-template-columns: 1fr;
   }
 
-  .match-info-item,
-  .status-item {
-    min-width: 0;
+  .match-hero-status {
+    justify-items: start;
+  }
+}
+
+@media (max-width: 960px) {
+  .match-hero-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>

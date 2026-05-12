@@ -18,6 +18,11 @@
     "useVueClient": true,
     "title": "BZSS Panel"
   },
+  "auth": {
+    "enabled": true,
+    "defaultSteam64": "76561198194428818",
+    "viewerTeamAutoSwapEnabled": true
+  },
 
   "settingsEditor": {
     "enabled": true,

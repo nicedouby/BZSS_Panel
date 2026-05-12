@@ -19,6 +19,7 @@ const INVALID_PASSWORD_HASH = "scrypt$bzss-invalid-v1$UpgdHuTdcHnUYRfcBTFvC0by9q
  */
 export class AuthManager {
   constructor({ config = {}, logger }) {
+    this.config = config;
     this.enabled = config.enabled ?? true;
     this.logger = logger;
     this.sessionCookieName = config.sessionCookieName ?? "bzss_session";
@@ -35,6 +36,7 @@ export class AuthManager {
       return;
     }
 
+    this.seedConfiguredUsers();
     await this.ensureDefaultSuperAdmin();
     this.logger?.info?.("AuthManager started.");
   }
@@ -51,17 +53,45 @@ export class AuthManager {
       username: DEFAULT_USERNAME,
       passwordHash: DEFAULT_PASSWORD_HASH,
       role: DEFAULT_ROLE,
+      steam64: normalizeSteam64(this.config?.defaultSteam64),
+      viewerTeamAutoSwapEnabled: this.config?.viewerTeamAutoSwapEnabled !== false,
       enabled: true,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
   }
 
+  seedConfiguredUsers() {
+    const configuredUsers = Array.isArray(this.config?.users) ? this.config.users : [];
+    for (const user of configuredUsers) {
+      const username = String(user?.username ?? "").trim();
+      if (!username || this.users.has(username)) continue;
+
+      this.users.set(username, {
+        id: String(user?.id ?? `user:${username}`),
+        username,
+        passwordHash: String(user?.passwordHash ?? INVALID_PASSWORD_HASH),
+        role: String(user?.role ?? DEFAULT_ROLE),
+        steam64: normalizeSteam64(user?.steam64 ?? user?.steamID ?? user?.steamId ?? user?.steam64ID ?? user?.steam64Id),
+        viewerTeamAutoSwapEnabled: user?.viewerTeamAutoSwapEnabled !== false,
+        enabled: user?.enabled !== false,
+        createdAt: Number(user?.createdAt ?? Date.now()),
+        updatedAt: Number(user?.updatedAt ?? Date.now()),
+      });
+    }
+  }
+
   async login({ username, password, ip = "" }) {
     if (!this.enabled) {
       return {
         ok: true,
-        user: this.safeUser({ username: "disabled-auth", role: DEFAULT_ROLE }),
+        user: this.safeUser({
+          id: "auth-disabled",
+          username: "disabled-auth",
+          role: DEFAULT_ROLE,
+          steam64: "",
+          viewerTeamAutoSwapEnabled: false,
+        }),
         cookie: "",
       };
     }
@@ -89,6 +119,8 @@ export class AuthManager {
       userId: user.id,
       username: user.username,
       role: user.role,
+      steam64: normalizeSteam64(user.steam64 ?? user.steamID ?? user.steamId ?? user.steam64ID ?? user.steam64Id),
+      viewerTeamAutoSwapEnabled: user.viewerTeamAutoSwapEnabled !== false,
       createdAt: now,
       expiresAt,
       ip,
@@ -111,7 +143,14 @@ export class AuthManager {
 
   getUserFromRequest(req) {
     if (!this.enabled) {
-      return { id: "auth-disabled", username: "auth-disabled", role: DEFAULT_ROLE, isSuperAdmin: true };
+      return {
+        id: "auth-disabled",
+        username: "auth-disabled",
+        role: DEFAULT_ROLE,
+        isSuperAdmin: true,
+        steam64: "",
+        viewerTeamAutoSwapEnabled: false,
+      };
     }
 
     const token = this.getTokenFromRequest(req);
@@ -131,6 +170,8 @@ export class AuthManager {
       username: session.username,
       role: session.role,
       isSuperAdmin: this.isSuperAdminRole(session.role),
+      steam64: normalizeSteam64(session.steam64),
+      viewerTeamAutoSwapEnabled: session.viewerTeamAutoSwapEnabled !== false,
     };
   }
 
@@ -159,6 +200,8 @@ export class AuthManager {
       username: user.username,
       role: user.role,
       isSuperAdmin: this.isSuperAdminRole(user.role),
+      steam64: normalizeSteam64(user.steam64 ?? user.steamID ?? user.steamId ?? user.steam64ID ?? user.steam64Id),
+      viewerTeamAutoSwapEnabled: user.viewerTeamAutoSwapEnabled !== false,
     };
   }
 
@@ -236,4 +279,9 @@ function parseCookies(cookieHeader) {
     result[key] = decodeURIComponent(value);
   }
   return result;
+}
+
+function normalizeSteam64(value) {
+  const text = String(value ?? "").trim();
+  return /^\d{17}$/.test(text) ? text : "";
 }

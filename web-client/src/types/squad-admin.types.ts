@@ -12,6 +12,7 @@ export interface PlayerRowViewModel {
   teamId: number | null;
   squadId: number | null;
   steamId: string | null;
+  steam64?: string | null;
   eosId: string | null;
   ip: string | null;
   playtimeHours: number | null;
@@ -62,6 +63,7 @@ export interface PlayerDetailViewModel {
   teamId: number | null;
   squadId: number | null;
   steamId: string | null;
+  steam64?: string | null;
   eosId: string | null;
   ip: string | null;
   lastIp?: string | null;

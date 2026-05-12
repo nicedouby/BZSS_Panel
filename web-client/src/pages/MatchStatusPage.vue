@@ -16,6 +16,10 @@
       @refresh-playtime="refreshOnlinePlaytime"
     />
 
+    <div class="viewer-perspective-line">
+      {{ viewerPerspectiveText }}
+    </div>
+
     <DataState
       :loading="showInitialLoading"
       :error="blockingRuntimeError"
@@ -75,6 +79,7 @@ import type {
   PageState,
   PlayerDetailViewModel,
   PlayerRowViewModel,
+  TeamViewModel,
 } from "../types/squad-admin.types";
 
 const auth = useAuthStore();
@@ -147,12 +152,23 @@ const playtimeQuery = useQuery({
 
 const playtimes = computed(() => playtimeQuery.data.value?.items ?? {});
 
+const viewerSteam64 = computed(() => normalizeSteam64(auth.user?.steam64));
+const viewerAutoSwapEnabled = computed(() => auth.user?.viewerTeamAutoSwapEnabled !== false);
+
+const rawTeams = computed(() => match.teams.map((team) => adaptTeam(team, playtimes.value)));
+
 const viewModels = computed(() => {
-  const teams = match.teams.map((team) => adaptTeam(team, playtimes.value));
+  const filteredTeams = filterTeamsBySearch(rawTeams.value, pageState.searchQuery);
+  const viewerTeamId = viewerAutoSwapEnabled.value ? findAdminTeamId(rawTeams.value, viewerSteam64.value) : null;
   return {
-    teams: filterTeamsBySearch(teams, pageState.searchQuery),
+    teams: sortTeamsForAdminPerspective(filteredTeams, viewerTeamId),
+    viewerTeamId,
+    viewerSteam64: viewerSteam64.value,
+    viewerPerspectiveText: buildViewerPerspectiveText(viewerTeamId, viewerAutoSwapEnabled.value),
   };
 });
+
+const viewerPerspectiveText = computed(() => viewModels.value.viewerPerspectiveText);
 
 const matchHeaderData = computed(() => {
   return adaptMatchHeader(server, runtime, match, matchSnapshot.value);
@@ -336,6 +352,53 @@ function toMillis(value: string | number | null | undefined): number {
   const parsed = Date.parse(String(value));
   return Number.isFinite(parsed) ? parsed : 0;
 }
+
+function normalizeSteam64(value: unknown): string {
+  const text = String(value ?? "").trim();
+  return /^\d{17}$/.test(text) ? text : "";
+}
+
+function findAdminTeamId(teams: TeamViewModel[], steam64: string): number | null {
+  if (!steam64) return null;
+
+  for (const team of teams) {
+    for (const squad of team.squads) {
+      const players = [
+        ...(squad.leader ? [squad.leader] : []),
+        ...squad.members,
+      ];
+
+      for (const player of players) {
+        if (normalizeSteam64(player.steam64 ?? player.steamId) === steam64) {
+          return team.teamId;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+function sortTeamsForAdminPerspective(teams: TeamViewModel[], adminTeamId: number | null): TeamViewModel[] {
+  const copy = [...teams];
+
+  if (adminTeamId !== 1 && adminTeamId !== 2) {
+    return copy.sort((a, b) => Number(a.teamId) - Number(b.teamId));
+  }
+
+  return copy.sort((a, b) => {
+    if (a.teamId === adminTeamId) return -1;
+    if (b.teamId === adminTeamId) return 1;
+    return Number(a.teamId) - Number(b.teamId);
+  });
+}
+
+function buildViewerPerspectiveText(adminTeamId: number | null, enabled: boolean): string {
+  if (!enabled || adminTeamId !== 1 && adminTeamId !== 2) {
+    return "当前视角：默认 TEAM 1 → TEAM 2";
+  }
+  return `当前视角：TEAM ${adminTeamId}`;
+}
 </script>
 
 <style scoped>
@@ -344,9 +407,11 @@ function toMillis(value: string | number | null | undefined): number {
 .squad-admin-layout {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
-  height: 100dvh;
+  height: 100%;
+  min-height: 0;
   gap: 0;
   overflow: hidden;
+  background: var(--color-bg-page);
 }
 
 .squad-main-content {
@@ -357,6 +422,14 @@ function toMillis(value: string | number | null | undefined): number {
   min-height: 0;
   height: 100%;
   overflow: hidden;
+  background: var(--color-bg-page);
+}
+
+.viewer-perspective-line {
+  padding: 0 var(--spacing-lg) 8px;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.02em;
 }
 
 @media (max-width: 1366px) {

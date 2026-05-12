@@ -15,6 +15,7 @@ export function adaptPlayerRow(
   player: RuntimePlayer,
   playtimeHours: number | null = null,
 ): PlayerRowViewModel {
+  const steam64 = normalizeSteam64(player.steamID ?? (player as any).steamId ?? (player as any).steam64 ?? (player as any).steam64ID);
   return {
     playerId: player.playerID ?? null,
     name: player.name || "Unknown",
@@ -24,6 +25,7 @@ export function adaptPlayerRow(
     teamId: player.teamID ?? null,
     squadId: player.squadID ?? null,
     steamId: player.steamID ?? null,
+    steam64,
     eosId: player.eosID ?? null,
     ip: (player as any).current_ip || (player as any).ip || null,
     playtimeHours,
@@ -156,6 +158,7 @@ export function adaptPlayerDetail(
   playtimeHours: number | null = null,
 ): PlayerDetailViewModel {
   const currentIp = (player as any).current_ip || (player as any).ip || null;
+  const steam64 = normalizeSteam64(player.steamID ?? (player as any).steamId ?? (player as any).steam64 ?? (player as any).steam64ID);
   return {
     playerId: player.playerID ?? null,
     name: player.name || "Unknown",
@@ -165,6 +168,7 @@ export function adaptPlayerDetail(
     teamId: player.teamID ?? null,
     squadId: player.squadID ?? null,
     steamId: player.steamID ?? null,
+    steam64,
     eosId: player.eosID ?? null,
     ip: currentIp,
     lastIp: null,
@@ -473,4 +477,9 @@ function firstFiniteNumber(...values: unknown[]) {
     if (Number.isFinite(number)) return number;
   }
   return undefined;
+}
+
+function normalizeSteam64(value: unknown): string {
+  const text = String(value ?? "").trim();
+  return /^\d{17}$/.test(text) ? text : "";
 }

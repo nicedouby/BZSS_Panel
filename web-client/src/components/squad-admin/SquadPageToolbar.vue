@@ -1,14 +1,32 @@
 <template>
   <div class="squad-page-toolbar">
     <div class="toolbar-row">
-      <input
-        v-model="searchQuery"
-        type="text"
-        class="squad-search-input"
-        :placeholder="t('match.searchPlaceholder')"
-        @input="$emit('search', searchQuery)"
-      >
-      <div class="toolbar-controls">
+      <div class="toolbar-search">
+        <input
+          v-model="searchQuery"
+          type="text"
+          class="squad-search-input"
+          :placeholder="t('match.searchPlaceholder')"
+          @input="$emit('search', searchQuery)"
+        >
+      </div>
+
+      <div class="toolbar-filters" aria-label="Quick filters">
+        <button type="button" class="filter-chip active">
+          全部
+        </button>
+        <button type="button" class="filter-chip">
+          无队长
+        </button>
+        <button type="button" class="filter-chip">
+          锁队
+        </button>
+        <button type="button" class="filter-chip">
+          异常
+        </button>
+      </div>
+
+      <div class="toolbar-actions">
         <div class="refresh-controls" :title="t('common.refresh')">
           <button
             type="button"
@@ -91,20 +109,27 @@ watch(
 
 <style scoped>
 .squad-page-toolbar {
-  background: var(--color-bg-card);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.01)),
+    var(--color-bg-card);
   border-bottom: 1px solid var(--color-border-default);
-  padding: var(--spacing-md) var(--spacing-lg);
+  padding: 12px var(--spacing-lg);
   flex-shrink: 0;
 }
 
 .toolbar-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto auto;
   gap: var(--spacing-md);
   align-items: center;
 }
 
+.toolbar-search {
+  min-width: 0;
+}
+
 .squad-search-input {
-  flex: 1 1 auto;
+  width: 100%;
   min-width: 200px;
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border-default);
@@ -125,11 +150,34 @@ watch(
   color: var(--color-text-muted);
 }
 
-.toolbar-controls {
+.toolbar-filters {
   display: flex;
-  gap: var(--spacing-md);
+  gap: 6px;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.filter-chip {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border-soft);
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+.filter-chip.active {
+  color: var(--color-text-primary);
+  border-color: var(--color-status-info);
+  background: rgba(96, 165, 250, 0.12);
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
 .refresh-controls {
@@ -193,18 +241,14 @@ watch(
   color: var(--color-text-primary);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1200px) {
   .toolbar-row {
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
 
-  .squad-search-input {
-    width: 100%;
-  }
-
-  .toolbar-controls {
-    width: 100%;
+  .toolbar-actions {
     justify-content: space-between;
+    flex-wrap: wrap;
   }
 }
 </style>

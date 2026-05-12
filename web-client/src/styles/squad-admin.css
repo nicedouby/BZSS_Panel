@@ -5,22 +5,22 @@
 
 :root {
   /* 深色主题基础背景 */
-  --color-bg-page: #0b1117;
-  --color-bg-panel: #111923;
-  --color-bg-card: #16212c;
-  --color-bg-elevated: #1a2532;
-  --color-bg-hover: #1d2b38;
-  --color-bg-selected: rgba(96, 165, 250, 0.12);
+  --color-bg-page: #070b10;
+  --color-bg-panel: #0d141c;
+  --color-bg-card: #121c27;
+  --color-bg-elevated: #182536;
+  --color-bg-hover: #213246;
+  --color-bg-selected: rgba(96, 165, 250, 0.14);
 
   /* 边框 */
-  --color-border-default: #2a3a4b;
-  --color-border-soft: rgba(148, 163, 184, 0.18);
-  --color-border-highlight: rgba(96, 165, 250, 0.3);
+  --color-border-default: rgba(130, 154, 180, 0.22);
+  --color-border-soft: rgba(130, 154, 180, 0.12);
+  --color-border-highlight: rgba(96, 165, 250, 0.36);
 
   /* 文本颜色 */
-  --color-text-primary: #e8eef5;
-  --color-text-secondary: #a8b5c3;
-  --color-text-muted: #718295;
+  --color-text-primary: #eef5fb;
+  --color-text-secondary: #aebdca;
+  --color-text-muted: #74869a;
   --color-text-disabled: #526170;
 
   /* 状态色 */
@@ -32,16 +32,16 @@
   --color-status-leader: #facc15;
 
   /* Team 颜色 - Team 1 (蓝色) */
-  --color-team1-primary: #38bdf8;
-  --color-team1-soft: rgba(56, 189, 248, 0.08);
-  --color-team1-border: rgba(56, 189, 248, 0.28);
-  --color-team1-bg: rgba(56, 189, 248, 0.05);
+  --color-team1-primary: #37c8ff;
+  --color-team1-soft: rgba(55, 200, 255, 0.1);
+  --color-team1-border: rgba(55, 200, 255, 0.3);
+  --color-team1-bg: rgba(55, 200, 255, 0.045);
 
   /* Team 颜色 - Team 2 (橙色) */
-  --color-team2-primary: #fb923c;
-  --color-team2-soft: rgba(251, 146, 60, 0.08);
-  --color-team2-border: rgba(251, 146, 60, 0.28);
-  --color-team2-bg: rgba(251, 146, 60, 0.05);
+  --color-team2-primary: #ff9b45;
+  --color-team2-soft: rgba(255, 155, 69, 0.1);
+  --color-team2-border: rgba(255, 155, 69, 0.3);
+  --color-team2-bg: rgba(255, 155, 69, 0.045);
 
   /* 间距 */
   --spacing-xs: 4px;
@@ -72,9 +72,9 @@
   --line-height-relaxed: 1.8;
 
   /* 阴影 - 克制 */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.15);
-  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.25);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.16);
+  --shadow-md: 0 8px 22px rgba(0, 0, 0, 0.28);
+  --shadow-lg: 0 18px 42px rgba(0, 0, 0, 0.36);
 }
 
 /* 页面级通用样式 */

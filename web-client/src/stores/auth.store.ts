@@ -1,18 +1,27 @@
 import { defineStore } from "pinia";
 import { apiGet, apiPost, ApiError } from "../app/apiClient";
 
+export interface AuthUser {
+  id: string;
+  username: string;
+  role: string;
+  isSuperAdmin: boolean;
+  steam64?: string;
+  viewerTeamAutoSwapEnabled?: boolean;
+}
+
 export const useAuthStore = defineStore("auth", {
   state: () => ({
     checked: false,
     authenticated: false,
-    user: null as any,
+    user: null as AuthUser | null,
     error: null as string | null,
   }),
   actions: {
     async restoreSession() {
       this.error = null;
       try {
-        const data = await apiGet<{ authenticated: boolean; user: any }>("/api/auth/session", {}, { timeoutMs: 8_000 });
+        const data = await apiGet<{ authenticated: boolean; user: AuthUser | null }>("/api/auth/session", {}, { timeoutMs: 8_000 });
         this.authenticated = Boolean(data.authenticated);
         this.user = data.user ?? null;
       } catch (error: any) {
@@ -26,7 +35,7 @@ export const useAuthStore = defineStore("auth", {
 
     async login(username: string, password: string) {
       this.error = null;
-      const data = await apiPost<{ authenticated: boolean; user: any }>("/api/auth/login", { username, password });
+      const data = await apiPost<{ authenticated: boolean; user: AuthUser | null }>("/api/auth/login", { username, password });
       this.authenticated = Boolean(data.authenticated);
       this.user = data.user ?? null;
       this.checked = true;
