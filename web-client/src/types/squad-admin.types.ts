@@ -71,7 +71,7 @@ export interface MatchHeaderData {
   team1Count: number;
   team2Count: number;
   matchTimeSeconds: number;
-  tps: number;
+  tps: number | null;
   rconStatus: "connected" | "disconnected" | "error" | "disabled";
   logsStatus: "live" | "stale" | "error";
   lastUpdateTime: number;

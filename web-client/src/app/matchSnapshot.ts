@@ -8,7 +8,7 @@ export function applyMatchSnapshotResponse(response: any) {
   const matchState = response?.matchState ?? null;
   if (!matchState) return false;
 
-  useServerStore().applySnapshot(buildServerSnapshot(matchState, response?.overview ?? null));
+  useServerStore().applyStableSnapshot(buildServerSnapshot(matchState, response?.overview ?? null));
   usePlayerStore().applySnapshot(buildPlayersSnapshot(matchState.players));
   useSquadStore().applySnapshot(buildSquadsSnapshot(matchState.squads));
   return true;
@@ -24,11 +24,48 @@ export function applyRuntimeSnapshotResponse(snapshot: any) {
 export function buildServerSnapshot(matchState: any, overview: any) {
   const serverStatus = matchState?.serverStatus ?? {};
   const status = overview?.status ?? {};
+  const webStatus = {
+    rcon: firstDisplayValue(status.rcon, serverStatus.rcon),
+    serverName: firstDisplayValue(status.serverName, serverStatus.serverName, serverStatus.name),
+    name: firstDisplayValue(status.name, serverStatus.name, serverStatus.serverName),
+    map: firstDisplayValue(status.map, serverStatus.map),
+    mapName: firstDisplayValue(status.mapName, status.map, serverStatus.mapName, serverStatus.map),
+    layer: firstDisplayValue(status.layer, serverStatus.layer, status.currentLayer, serverStatus.currentLayer),
+    layerName: firstDisplayValue(status.layerName, status.layer, serverStatus.layerName, serverStatus.layer),
+    mode: firstDisplayValue(status.mode, serverStatus.mode),
+    gameMode: firstDisplayValue(status.gameMode, status.mode, serverStatus.gameMode, serverStatus.mode),
+    currentLayer: firstDisplayValue(status.currentLayer, serverStatus.currentLayer, status.layer, serverStatus.layer),
+    tps: firstPositiveNumber(status.tps, serverStatus.tps),
+    tpsStatus: firstDisplayValue(status.tpsStatus, serverStatus.tpsStatus),
+    playtime: firstFiniteNumber(status.playtime, serverStatus.playtime),
+    matchTimeSeconds: firstFiniteNumber(status.matchTimeSeconds, serverStatus.matchTimeSeconds, status.playtime, serverStatus.playtime),
+    playerCount: firstFiniteNumber(status.playerCount, serverStatus.playerCount),
+    maxPlayers: firstFiniteNumber(status.maxPlayers, serverStatus.maxPlayers),
+    queueCount: firstFiniteNumber(status.queueCount, serverStatus.queueCount),
+  };
 
   return {
     ...serverStatus,
+    rcon: firstDisplayValue(serverStatus.rcon, status.rcon),
+    serverName: firstDisplayValue(serverStatus.serverName, serverStatus.name, status.serverName, status.name),
+    name: firstDisplayValue(serverStatus.name, serverStatus.serverName, status.name, status.serverName),
+    map: firstDisplayValue(serverStatus.map, status.map),
+    mapName: firstDisplayValue(serverStatus.mapName, serverStatus.map, status.mapName, status.map),
+    layer: firstDisplayValue(serverStatus.layer, status.layer, serverStatus.currentLayer, status.currentLayer),
+    layerName: firstDisplayValue(serverStatus.layerName, serverStatus.layer, status.layerName, status.layer),
+    mode: firstDisplayValue(serverStatus.mode, status.mode),
+    gameMode: firstDisplayValue(serverStatus.gameMode, serverStatus.mode, status.gameMode, status.mode),
+    currentLayer: firstDisplayValue(serverStatus.currentLayer, serverStatus.layer, status.currentLayer, status.layer),
+    tps: firstPositiveNumber(serverStatus.tps, status.tps) ?? undefined,
+    tpsStatus: firstDisplayValue(serverStatus.tpsStatus, status.tpsStatus),
+    playtime: firstFiniteNumber(serverStatus.playtime, status.playtime) ?? undefined,
+    matchTimeSeconds: firstFiniteNumber(serverStatus.matchTimeSeconds, status.matchTimeSeconds, serverStatus.playtime, status.playtime) ?? undefined,
+    playerCount: firstFiniteNumber(serverStatus.playerCount, status.playerCount) ?? undefined,
+    maxPlayers: firstFiniteNumber(serverStatus.maxPlayers, status.maxPlayers) ?? undefined,
+    queueCount: firstFiniteNumber(serverStatus.queueCount, status.queueCount) ?? undefined,
     updatedAt: toMillis(serverStatus.lastUpdatedAt) || Date.now(),
-    webStatus: status,
+    matchState,
+    webStatus,
     stale: false,
   };
 }
@@ -98,4 +135,35 @@ function toMillis(value: string | number | null | undefined): number {
   if (!value) return 0;
   const parsed = Date.parse(String(value));
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function firstDisplayValue(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const text = value.trim();
+      if (!text) continue;
+      if (text === "Unknown" || text === "Unknown Server" || text === "Unknown Map" || text === "Unknown Layer") continue;
+      return text;
+    }
+    if (value !== undefined && value !== null) {
+      return String(value);
+    }
+  }
+  return undefined;
+}
+
+function firstPositiveNumber(...values: unknown[]) {
+  for (const value of values) {
+    const number = Number(value);
+    if (Number.isFinite(number) && number > 0) return number;
+  }
+  return null;
+}
+
+function firstFiniteNumber(...values: unknown[]) {
+  for (const value of values) {
+    const number = Number(value);
+    if (Number.isFinite(number)) return number;
+  }
+  return undefined;
 }

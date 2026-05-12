@@ -205,18 +205,59 @@ export function adaptMatchHeader(
   const squadsUpdatedAt = toTimestamp(backendSquads.lastUpdatedAt);
   const runtimeUpdatedAt = Number(server.updatedAt ?? 0);
   const lastUpdateTime = Math.max(serverStatusUpdatedAt, playersUpdatedAt, squadsUpdatedAt, runtimeUpdatedAt);
-  const tps = backendServerStatus.tps ?? snapshot.tps ?? 0;
+  const tps = firstPositiveNumber(
+    backendServerStatus.tps,
+    snapshot.tps,
+    snapshot.webStatus?.tps,
+  );
 
   return {
-    serverName: backendServerStatus.name || snapshot.serverName || "Unknown Server",
-    mapName: backendServerStatus.map || snapshot.layerName || snapshot.mapName || backendMatch.map || "Unknown Map",
-    gameMode: backendServerStatus.mode || snapshot.layerGameMode || snapshot.gameMode || backendMatch.mode || "Unknown",
+    serverName: firstDisplayValue(
+      backendServerStatus.serverName,
+      backendServerStatus.name,
+      snapshot.serverName,
+      snapshot.name,
+      snapshot.webStatus?.serverName,
+      "BZSS Panel",
+    ) ?? "BZSS Panel",
+    mapName: firstDisplayValue(
+      backendServerStatus.mapName,
+      backendServerStatus.map,
+      snapshot.mapName,
+      snapshot.map,
+      snapshot.layerName,
+      snapshot.layer,
+      snapshot.webStatus?.mapName,
+      snapshot.webStatus?.map,
+      backendMatch.map,
+      "Unknown Map",
+    ) ?? "Unknown Map",
+    gameMode: firstDisplayValue(
+      backendServerStatus.gameMode,
+      backendServerStatus.mode,
+      snapshot.gameMode,
+      snapshot.mode,
+      snapshot.webStatus?.gameMode,
+      snapshot.webStatus?.mode,
+      backendMatch.mode,
+      "Unknown",
+    ) ?? "Unknown",
     totalPlayers: team1 + team2,
-    maxPlayers: Number(backendServerStatus.maxPlayers ?? snapshot.maxPlayers ?? 100),
+    maxPlayers: firstFiniteNumber(
+      backendServerStatus.maxPlayers,
+      snapshot.maxPlayers,
+      snapshot.webStatus?.maxPlayers,
+    ) ?? 100,
     team1Count: team1,
     team2Count: team2,
-    matchTimeSeconds: Number(backendServerStatus.playtime ?? snapshot.matchTimeSeconds ?? backendMatch.playtime ?? 0),
-    tps: Number(tps),
+    matchTimeSeconds: firstFiniteNumber(
+      backendServerStatus.playtime,
+      backendServerStatus.matchTimeSeconds,
+      snapshot.playtime,
+      snapshot.matchTimeSeconds,
+      backendMatch.playtime,
+    ) ?? 0,
+    tps,
     rconStatus: (matchSnapshot?.rconStatus?.status ?? snapshot.webStatus?.rcon ?? snapshot.rconStatus ?? "unknown") as any,
     logsStatus: runtimeState?.lastError ? "stale" : "live",
     lastUpdateTime,
@@ -265,4 +306,35 @@ function toTimestamp(value: string | number | null | undefined): number {
   if (!value) return 0;
   const parsed = Date.parse(String(value));
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function firstPositiveNumber(...values: unknown[]) {
+  for (const value of values) {
+    const number = Number(value);
+    if (Number.isFinite(number) && number > 0) return number;
+  }
+  return null;
+}
+
+function firstDisplayValue(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const text = value.trim();
+      if (!text) continue;
+      if (text === "Unknown" || text === "Unknown Server" || text === "Unknown Map" || text === "Unknown Layer") continue;
+      return text;
+    }
+    if (value !== undefined && value !== null) {
+      return String(value);
+    }
+  }
+  return undefined;
+}
+
+function firstFiniteNumber(...values: unknown[]) {
+  for (const value of values) {
+    const number = Number(value);
+    if (Number.isFinite(number)) return number;
+  }
+  return undefined;
 }

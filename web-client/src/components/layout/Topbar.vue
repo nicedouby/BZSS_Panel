@@ -38,8 +38,16 @@ const route = useRoute();
 const ui = useUiStore();
 
 const webStatus = computed(() => server.snapshot.webStatus ?? server.snapshot ?? {});
-const pageTitle = computed(() => String(route.meta.title ?? webStatus.value.serverName ?? "BZSS Panel"));
-const layer = computed(() => webStatus.value.currentLayer ?? webStatus.value.layer ?? "Unknown Layer");
+const pageTitle = computed(() => String(route.meta.title ?? server.snapshot.serverName ?? webStatus.value.serverName ?? server.snapshot.name ?? webStatus.value.name ?? "BZSS Panel"));
+const layer = computed(() => stableDisplayValue(
+  server.snapshot.currentLayer,
+  webStatus.value.currentLayer,
+  server.snapshot.layer,
+  webStatus.value.layer,
+  server.snapshot.mapName,
+  webStatus.value.mapName,
+  "Unknown Layer",
+));
 const playerCount = computed(() => players.active.length);
 const tps = computed(() => {
   const value = Number(server.snapshot?.tps ?? server.snapshot?.webStatus?.tps);
@@ -63,6 +71,21 @@ const runtimeError = computed(() => runtime.lastError ? briefRuntimeError(runtim
 function briefRuntimeError(value: string) {
   if (value.length <= 52) return value;
   return `${value.slice(0, 49)}...`;
+}
+
+function stableDisplayValue(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const text = value.trim();
+      if (!text) continue;
+      if (text === "Unknown" || text === "Unknown Server" || text === "Unknown Map" || text === "Unknown Layer") continue;
+      return text;
+    }
+    if (value !== undefined && value !== null) {
+      return String(value);
+    }
+  }
+  return "Unknown Layer";
 }
 
 function toggleSidebar() {

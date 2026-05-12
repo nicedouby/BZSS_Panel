@@ -31,7 +31,7 @@
         </span>
         <span class="match-info-separator">·</span>
         <span class="match-info-item">
-          TPS {{ data.tps }}
+          TPS {{ formatTps(data.tps) }}
         </span>
       </div>
       <div class="match-status-row">
@@ -39,21 +39,17 @@
           <span class="status-dot" :style="{ backgroundColor: getStatusColor(data.rconStatus) }" />
           RCON {{ formatRconStatus(data.rconStatus) }}
         </span>
+        <span class="status-separator">·</span>
         <span class="status-item" :class="{ error: data.logsStatus === 'error' }">
           <span class="status-dot" :style="{ backgroundColor: getLogsStatusColor(data.logsStatus) }" />
           Logs {{ data.logsStatus }}
         </span>
-        <span class="status-item">
+        <span class="status-separator">·</span>
+        <span
+          class="status-item"
+          :title="`Server ${formatUpdateTime(data.serverStatusUpdatedAt)} / Players ${formatUpdateTime(data.playersUpdatedAt)} / Squads ${formatUpdateTime(data.squadsUpdatedAt)}`"
+        >
           Updated {{ formatUpdateTime(data.lastUpdateTime) }}
-        </span>
-        <span class="status-item">
-          Server {{ formatUpdateTime(data.serverStatusUpdatedAt) }}
-        </span>
-        <span class="status-item">
-          Players {{ formatUpdateTime(data.playersUpdatedAt) }}
-        </span>
-        <span class="status-item">
-          Squads {{ formatUpdateTime(data.squadsUpdatedAt) }}
         </span>
       </div>
     </div>
@@ -71,6 +67,11 @@ function formatMatchTime(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
   const secs = seconds % 60;
   return `${minutes}:${String(secs).padStart(2, "0")}`;
+}
+
+function formatTps(value: number | null | undefined): string {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number.toFixed(1) : "--";
 }
 
 function formatRconStatus(status: string): string {
@@ -158,6 +159,10 @@ function getLogsStatusColor(status: string): string {
   padding: 2px 8px;
   border-radius: 4px;
   transition: all 0.15s ease;
+}
+
+.status-separator {
+  opacity: 0.5;
 }
 
 .status-item.error {
