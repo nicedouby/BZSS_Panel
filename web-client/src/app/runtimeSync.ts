@@ -1,11 +1,15 @@
 import { reactive } from "vue";
-import { apiGet, ApiError, type ApiErrorType } from "./apiClient";
+import { apiGet, apiPost, ApiError, type ApiErrorType } from "./apiClient";
 import { useServerStore } from "../stores/server.store";
 import { usePlayerStore } from "../stores/player.store";
 import { useSquadStore } from "../stores/squad.store";
-import { useEventStore } from "../stores/event.store";
-import { useJobStore } from "../stores/job.store";
 import { useAuthStore } from "../stores/auth.store";
+import {
+  applyMatchSnapshotResponse,
+  applyRuntimeSnapshotResponse,
+  hasEmptyMatchLists,
+  isMatchSnapshotConnected,
+} from "./matchSnapshot";
 
 const runtimeSyncState = reactive({
   started: false,
@@ -14,6 +18,7 @@ const runtimeSyncState = reactive({
   lastError: null as string | null,
   errorType: null as ApiErrorType | "unauthorized" | null,
   consecutiveFailures: 0,
+  bootstrapRefreshAttempted: false,
 });
 
 let timer: number | null = null;
@@ -29,6 +34,7 @@ export function startRuntimeSync() {
 export function stopRuntimeSync() {
   runtimeSyncState.started = false;
   runtimeSyncState.inFlight = false;
+  runtimeSyncState.bootstrapRefreshAttempted = false;
   if (timer != null) {
     window.clearInterval(timer);
     timer = null;
@@ -46,13 +52,15 @@ export async function syncOnce() {
 
   runtimeSyncState.inFlight = true;
   try {
+    const matchSnapshot = await apiGet<any>("/api/match/snapshot");
+    if (!runtimeSyncState.started) return;
+    applyMatchSnapshotResponse(matchSnapshot);
+
     const snapshot = await apiGet<any>("/api/snapshot/all");
     if (!runtimeSyncState.started) return;
-    useServerStore().applySnapshot(snapshot.server);
-    usePlayerStore().applySnapshot(snapshot.players);
-    useSquadStore().applySnapshot(snapshot.squads);
-    useEventStore().applySnapshot(snapshot.events);
-    useJobStore().applySnapshot(snapshot.jobs);
+    applyRuntimeSnapshotResponse(snapshot);
+
+    await maybeBootstrapMatchRefresh(matchSnapshot);
 
     runtimeSyncState.lastSuccessAt = Date.now();
     runtimeSyncState.lastError = null;
@@ -108,4 +116,22 @@ function markRuntimeStoresStale() {
   useServerStore().markStale();
   usePlayerStore().markStale();
   useSquadStore().markStale();
+}
+
+async function maybeBootstrapMatchRefresh(matchSnapshot: any) {
+  const auth = useAuthStore();
+  if (!auth.user?.isSuperAdmin) return;
+  if (!isMatchSnapshotConnected(matchSnapshot)) return;
+  if (!hasEmptyMatchLists(matchSnapshot)) return;
+
+  if (runtimeSyncState.bootstrapRefreshAttempted) return;
+  runtimeSyncState.bootstrapRefreshAttempted = true;
+
+  try {
+    const refreshed = await apiPost<any>("/api/match/refresh/all", {});
+    if (!runtimeSyncState.started || !refreshed?.ok) return;
+    applyMatchSnapshotResponse(refreshed);
+  } catch {
+    return;
+  }
 }
