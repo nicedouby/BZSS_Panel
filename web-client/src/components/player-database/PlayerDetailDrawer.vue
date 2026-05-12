@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div v-if="open" class="drawer-root" @click.self="$emit('close')">
     <aside class="drawer-panel">
       <header class="drawer-head">
@@ -18,7 +18,19 @@
       >
         <div class="detail-grid">
           <div><span>Permission</span><strong>{{ detail?.player?.permission_group || "default" }}</strong></div>
-          <div><span>Current IP</span><strong>{{ detail?.player?.current_ip || "-" }}</strong></div>
+          <div>
+            <span>Current IP</span>
+            <strong v-if="currentIp">
+              <button
+                type="button"
+                class="detail-ip-link"
+                @click="openIpSearch(currentIp)"
+              >
+                {{ currentIp }}
+              </button>
+            </strong>
+            <strong v-else>-</strong>
+          </div>
           <div><span>Game Seconds</span><strong>{{ detail?.player?.game_seconds ?? 0 }}</strong></div>
           <div><span>Squad Created</span><strong>{{ detail?.player?.total_squad_created ?? 0 }}</strong></div>
           <div><span>Total Deaths</span><strong>{{ detail?.player?.total_deaths ?? 0 }}</strong></div>
@@ -50,6 +62,9 @@
 import { computed, ref, watch } from "vue";
 import DataState from "../common/DataState.vue";
 import PageCard from "../common/PageCard.vue";
+import { copyTextWithToast } from "../../utils/clipboard";
+import { normalizeIp } from "../../utils/ip";
+import { useUiStore } from "../../stores/ui.store";
 
 const props = defineProps<{
   open: boolean;
@@ -64,7 +79,9 @@ const emit = defineEmits<{
   (event: "save-permission", value: string): void;
 }>();
 
+const ui = useUiStore();
 const permissionGroup = ref("");
+const currentIp = computed(() => String(props.detail?.player?.current_ip ?? props.detail?.player?.ip ?? "").trim());
 
 watch(
   () => props.detail?.player?.permission_group,
@@ -83,6 +100,29 @@ function formatTime(value: unknown) {
   const time = Number(value ?? 0);
   if (!time) return "-";
   return new Date(time).toLocaleString();
+}
+
+function buildIpSearchUrl(value: unknown) {
+  const ip = normalizeIp(value);
+  if (!ip || ip === "--") return "";
+
+  return `https://www.baidu.com/s?wd=${encodeURIComponent(`IP查询 ${ip}`)}`;
+}
+
+function openIpSearch(value: unknown) {
+  const ip = normalizeIp(value);
+  if (!ip || ip === "--") return;
+
+  const url = buildIpSearchUrl(ip);
+  if (url && typeof window !== "undefined") {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  void copyTextWithToast(ip, ui, {
+    label: "IP",
+    successMessage: `已复制 IP：${ip}`,
+    errorMessage: "无法复制 IP。",
+  });
 }
 
 function save() {
@@ -155,6 +195,21 @@ function save() {
   margin-top: 4px;
 }
 
+.detail-ip-link {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  text-decoration: none;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.detail-ip-link:hover {
+  text-decoration: underline;
+}
+
 .permission-row {
   display: flex;
   gap: 10px;
@@ -181,3 +236,4 @@ function save() {
   }
 }
 </style>
+

@@ -48,7 +48,12 @@
               <CopyableValue :label="t('player.steamId')" :value="props.player.steamId" :truncate="32" />
               <CopyableValue :label="t('player.eosId')" :value="props.player.eosId" :truncate="32" />
               <div class="identity-ip-block">
-                <CopyableValue :label="t('player.ip')" :value="displayIp" :empty-text="ipEmptyText" />
+                <CopyableValue
+                  :label="t('player.ip')"
+                  :value="displayIp"
+                  :href="ipSearchUrl"
+                  :empty-text="ipEmptyText"
+                />
                 <small class="identity-ip-hint">{{ resolveIpError || ipSourceHint }}</small>
               </div>
             </section>
@@ -171,6 +176,7 @@ const lookupToken = ref(0);
 
 const currentIp = computed(() => String(props.player?.ip ?? "").trim());
 const displayIp = computed(() => currentIp.value || resolvedLastIp.value.trim());
+const ipSearchUrl = computed(() => buildIpSearchUrl(displayIp.value));
 const ipEmptyText = computed(() => (resolvingIp.value ? t("common.resolving") : "--"));
 const ipSourceHint = computed(() => {
   if (currentIp.value) return t("common.current");
@@ -202,6 +208,12 @@ async function copyValue(value: string | null | undefined, label: string) {
     label: `${label} ${t("common.copied")}`,
     successMessage: value,
   });
+}
+
+function buildIpSearchUrl(value: string | null | undefined) {
+  const ip = String(value ?? "").trim();
+  if (!ip) return "";
+  return `https://www.baidu.com/s?wd=${encodeURIComponent(`IP查询 ${ip}`)}`;
 }
 
 function openDatabase() {

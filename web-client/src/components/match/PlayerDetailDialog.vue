@@ -33,7 +33,13 @@
           <span>Current IP</span>
           <template v-if="currentIp">
             <div class="detail-row">
-              <strong>{{ currentIp }}</strong>
+              <button
+                type="button"
+                class="detail-ip-link"
+                @click="openIpSearch(currentIp)"
+              >
+                <strong>{{ currentIp }}</strong>
+              </button>
               <button type="button" class="copy-link" @click="copyValue(currentIp, 'IP')">Copy</button>
             </div>
             <small>{{ currentIpSummary || "Unknown" }}</small>
@@ -55,7 +61,15 @@
             <li v-for="item in recentLogins" :key="`${item.ip}-${item.joined_at}`" class="ip-item">
               <div class="ip-item-head">
                 <div>
-                  <strong>{{ item.ip || "--" }}</strong>
+                  <button
+                    type="button"
+                    v-if="item.ip"
+                    class="detail-ip-link"
+                    @click="openIpSearch(item.ip)"
+                  >
+                    <strong>{{ item.ip }}</strong>
+                  </button>
+                  <strong v-else>--</strong>
                   <small>{{ formatTime(item.joined_at) }}</small>
                 </div>
                 <button v-if="item.ip" type="button" class="copy-link" @click="copyValue(item.ip, 'IP')">Copy</button>
@@ -235,6 +249,25 @@ function formatTime(value: unknown) {
   if (!time) return "--";
   return new Date(time).toLocaleString("en-US");
 }
+
+function buildIpSearchUrl(value: unknown) {
+  const ip = normalizeIp(value);
+  if (!ip || ip === "--") return "";
+
+  return `https://www.baidu.com/s?wd=${encodeURIComponent(`IP查询 ${ip}`)}`;
+}
+
+function openIpSearch(value: unknown) {
+  const ip = normalizeIp(value);
+  if (!ip || ip === "--") return;
+
+  const url = buildIpSearchUrl(ip);
+  if (url && typeof window !== "undefined") {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  void copyValue(ip, "IP");
+}
 </script>
 
 <style scoped>
@@ -334,6 +367,21 @@ function formatTime(value: unknown) {
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
+}
+
+.detail-ip-link {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  text-decoration: none;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.detail-ip-link:hover {
+  text-decoration: underline;
 }
 
 .detail-meta,

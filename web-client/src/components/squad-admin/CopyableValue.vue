@@ -1,7 +1,18 @@
 <template>
   <div class="copyable-value">
     <span class="label">{{ label }}</span>
-    <span class="value" :title="value || emptyText">
+    <a
+      v-if="hasValue && href"
+      class="value value-link"
+      :href="href"
+      target="_blank"
+      rel="noopener noreferrer"
+      :title="value || emptyText"
+      @click="copy"
+    >
+      {{ displayValue }}
+    </a>
+    <span v-else class="value" :title="value || emptyText">
       {{ hasValue ? displayValue : emptyText }}
     </span>
     <button
@@ -29,10 +40,12 @@ const props = withDefaults(
     value: string | null | undefined;
     truncate?: number;
     emptyText?: string;
+    href?: string;
   }>(),
   {
     truncate: 0,
     emptyText: t("common.unknown"),
+    href: "",
   },
 );
 
@@ -88,6 +101,16 @@ async function copy() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.value-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.value-link:hover {
+  text-decoration: underline;
 }
 
 .no-value {

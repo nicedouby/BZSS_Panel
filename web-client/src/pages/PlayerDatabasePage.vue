@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <section class="page db-page">
     <section class="db-overview">
       <div class="db-overview-card">
@@ -32,13 +32,16 @@
         <div v-if="listLoading && !rows.length" class="placeholder">{{ t("database.loadingPlayerList") }}</div>
         <div v-else-if="listError" class="placeholder">{{ listError }}</div>
         <div v-else-if="!rows.length" class="placeholder">{{ t("database.noMatchingPlayers") }}</div>
-        <button
+        <div
           v-for="player in rows"
           :key="player.id"
-          type="button"
           class="db-row"
           :class="{ active: selectedId === player.id }"
           @click="openPlayer(player.id)"
+          role="button"
+          tabindex="0"
+          @keydown.enter.prevent="openPlayer(player.id)"
+          @keydown.space.prevent="openPlayer(player.id)"
         >
           <div class="db-row-name">{{ player.current_name || player.name || t("common.unknown") }}</div>
           <div class="db-row-meta">
@@ -48,16 +51,18 @@
             {{ t("database.lastLogin") }} {{ formatTime(player.last_login_at) }} · {{ t("database.updatedAt") }} {{ formatTime(player.updated_at) }}
           </div>
           <div v-if="showIpInList && (player.current_ip || player.ip)" class="db-row-ip">
-            <button
-              type="button"
+            <a
+              :href="buildIpSearchUrl(player.current_ip || player.ip)"
               class="db-ip-clickable"
+              target="_blank"
+              rel="noopener noreferrer"
               @click.stop="inspectIp(player.current_ip || player.ip)"
             >
               {{ player.current_ip || player.ip }}
-            </button>
+            </a>
             <small>{{ listIpSummary(player) || "" }}</small>
           </div>
-        </button>
+        </div>
       </aside>
 
       <section class="db-detail-col">
@@ -83,14 +88,17 @@
               <div v-if="showIpInDetail" class="db-ip-field">
                 <span>{{ t("player.currentIp") }}</span>
                 <div class="db-ip-line">
-                  <button
-                    type="button"
+                  <a
+                    v-if="currentIp !== '--'"
+                    :href="buildIpSearchUrl(currentIp)"
                     class="db-ip-clickable strong"
-                    :disabled="currentIp === '--'"
+                    target="_blank"
+                    rel="noopener noreferrer"
                     @click="inspectIp(currentIp)"
                   >
                     {{ currentIp }}
-                  </button>
+                  </a>
+                  <strong v-else>--</strong>
                 </div>
                 <small>{{ currentIpSummary }}</small>
               </div>
@@ -138,13 +146,15 @@
                 <li v-for="item in (detail.ips || []).slice(0, 12)" :key="`${item.ip}-${item.seen_at}`">
                   <div class="db-history-head">
                     <div>
-                      <button
-                        type="button"
+                      <a
+                        :href="buildIpSearchUrl(item.ip)"
                         class="db-ip-clickable strong"
+                        target="_blank"
+                        rel="noopener noreferrer"
                         @click="inspectIp(item.ip)"
                       >
                         {{ item.ip }}
-                      </button>
+                      </a>
                       <small>{{ formatTime(item.seen_at) }}</small>
                     </div>
                   </div>
@@ -161,14 +171,16 @@
                 <li v-for="item in (detail.logins || []).slice(0, 12)" :key="`${item.ip}-${item.joined_at}`">
                   <div class="db-login-head">
                     <div>
-                      <button
+                      <a
                         v-if="item.ip"
-                        type="button"
+                        :href="buildIpSearchUrl(item.ip)"
                         class="db-ip-clickable strong"
+                        target="_blank"
+                        rel="noopener noreferrer"
                         @click="inspectIp(item.ip)"
                       >
                         {{ item.ip }}
-                      </button>
+                      </a>
                       <strong v-else>--</strong>
                       <small>{{ formatTime(item.joined_at) }}</small>
                     </div>
@@ -198,53 +210,6 @@
         </div>
       </section>
     </div>
-
-    <div v-if="showIpInspectModal" class="db-stats-modal" aria-hidden="false">
-      <button
-        class="db-stats-modal-backdrop"
-        type="button"
-        :aria-label="t('common.close')"
-        @click="closeIpInspectModal"
-      />
-
-      <section class="db-stats-modal-card db-ip-inspect-modal" role="dialog" aria-modal="true">
-        <header class="db-stats-modal-head">
-          <div>
-            <h2>IP 地址检测</h2>
-            <p>点击 IP 后会自动复制，并填入这里。</p>
-          </div>
-
-          <button type="button" class="console-clear-btn" @click="closeIpInspectModal">
-            {{ t("common.close") }}
-          </button>
-        </header>
-
-        <div class="db-stats-modal-body">
-          <div class="console-toolbar db-toolbar-row">
-            <input
-              v-model="ipInspectInput"
-              class="console-input db-search"
-              placeholder="输入 IP 地址"
-            >
-
-            <button type="button" class="console-clear-btn" @click="inspectIp(ipInspectInput)">
-              检测
-            </button>
-
-            <button type="button" class="console-clear-btn" @click="copyIp(ipInspectInput)">
-              {{ t("common.copy") }}
-            </button>
-          </div>
-
-          <div class="db-card">
-            <h3>{{ ipInspectInput || "--" }}</h3>
-            <p>{{ ipDetailSummary(ipInspectInput) || t("common.unknown") }}</p>
-            <p>{{ ipSourceLabel(ipInspectInput) }}</p>
-          </div>
-        </div>
-      </section>
-    </div>
-
     <div v-if="showStatsModal" class="db-stats-modal" aria-hidden="false">
       <button class="db-stats-modal-backdrop" type="button" :aria-label="t('database.closeDetail')" @click="closeStatsModal" />
       <section class="db-stats-modal-card" role="dialog" aria-modal="true" :aria-label="t('database.databaseStats')">
@@ -441,8 +406,6 @@ const filters = reactive({
 const statsDays = ref("14");
 const statsTop = ref("10");
 const showStatsModal = ref(false);
-const showIpInspectModal = ref(false);
-const ipInspectInput = ref("");
 const statsLoading = ref(false);
 const statsError = ref("");
 const stats = ref<any | null>(null);
@@ -571,12 +534,16 @@ async function retryDetail() {
   await detailQuery.refetch();
 }
 
+function buildIpSearchUrl(value: unknown) {
+  const ip = normalizeIp(value);
+  if (!ip || ip === "--") return "";
+
+  return `https://www.baidu.com/s?wd=${encodeURIComponent(`IP查询 ${ip}`)}`;
+}
+
 async function inspectIp(value: unknown) {
   const ip = normalizeIp(value);
   if (!ip || ip === "--") return;
-
-  ipInspectInput.value = ip;
-  showIpInspectModal.value = true;
 
   await copyTextWithToast(ip, ui, {
     label: "IP",
@@ -592,10 +559,6 @@ async function openStatsModal() {
 
 function closeStatsModal() {
   showStatsModal.value = false;
-}
-
-function closeIpInspectModal() {
-  showIpInspectModal.value = false;
 }
 
 async function loadStats() {
@@ -855,12 +818,6 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
   font-size: 11px;
 }
 
-.db-row-ip-value {
-  font-size: 11px;
-  color: #edf2f4;
-  word-break: break-word;
-}
-
 .db-ip-clickable {
   display: inline-flex;
   align-items: center;
@@ -871,6 +828,7 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
   color: inherit;
   font: inherit;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
   user-select: text;
   word-break: break-word;
@@ -1124,10 +1082,6 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
   gap: 12px;
 }
 
-.db-ip-inspect-modal {
-  max-width: 720px;
-}
-
 .db-stats-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1191,3 +1145,4 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
   }
 }
 </style>
+
