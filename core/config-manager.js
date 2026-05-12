@@ -12,6 +12,7 @@ export class ConfigManager {
   constructor(configPath) {
     this.configPath = path.resolve(process.cwd(), configPath);
     this.config = {};
+    this.writeQueue = Promise.resolve();
   }
 
   async load() {
@@ -55,42 +56,7 @@ export class ConfigManager {
   }
 
   async save({ createBackup = true } = {}) {
-    const dir = path.dirname(this.configPath);
-    const tempPath = path.join(
-      dir,
-      `${path.basename(this.configPath)}.${process.pid}.${Date.now()}.tmp`,
-    );
-    const backupPath = `${this.configPath}.bak`;
-    const payload = `${JSON.stringify(this.config, null, 2)}\n`;
-
-    await fs.writeFile(tempPath, payload, "utf8");
-
-    try {
-      if (createBackup) {
-        try {
-          await fs.copyFile(this.configPath, backupPath);
-        } catch (error) {
-          if (error?.code !== "ENOENT") throw error;
-        }
-      }
-
-      await fs.rename(tempPath, this.configPath);
-    } catch (error) {
-      if (isRenameTargetConflict(error)) {
-        await fs.rm(this.configPath, { force: true });
-        await fs.rename(tempPath, this.configPath);
-      } else {
-        throw error;
-      }
-    } finally {
-      await fs.rm(tempPath, { force: true }).catch(() => {});
-    }
-
-    return {
-      ok: true,
-      configPath: this.configPath,
-      backupPath: createBackup ? backupPath : null,
-    };
+    return this.runWriteQueue(() => this.performSave({ createBackup }));
   }
 
   getExposedSettings() {
@@ -111,6 +77,10 @@ export class ConfigManager {
   }
 
   async updateExposedSettings(changes) {
+    return this.runWriteQueue(() => this.performUpdateExposedSettings(changes));
+  }
+
+  async performUpdateExposedSettings(changes) {
     const settingsEditor = this.get("settingsEditor", {}) ?? {};
     if (!settingsEditor.enabled) {
       throw createConfigError(403, "SettingsEditorDisabled", "Settings editor is disabled.");
@@ -156,12 +126,69 @@ export class ConfigManager {
       this.set(item.path, item.value);
     }
 
-    await this.save();
+    await this.performSave();
 
     return {
       ...this.getExposedSettings(),
       restartRequired,
     };
+  }
+
+  async performSave({ createBackup = true } = {}) {
+    const dir = path.dirname(this.configPath);
+    const tempPath = path.join(
+      dir,
+      `${path.basename(this.configPath)}.${process.pid}.${Date.now()}.tmp`,
+    );
+    const backupPath = `${this.configPath}.bak`;
+    const payload = `${JSON.stringify(this.config, null, 2)}\n`;
+    let backupCreated = false;
+
+    try {
+      await fs.writeFile(tempPath, payload, "utf8");
+
+      if (createBackup) {
+        try {
+          await fs.copyFile(this.configPath, backupPath);
+          backupCreated = true;
+        } catch (error) {
+          if (error?.code !== "ENOENT") throw error;
+        }
+      }
+
+      try {
+        await fs.rename(tempPath, this.configPath);
+      } catch (error) {
+        if (!backupCreated) {
+          throw error;
+        }
+
+        try {
+          await fs.rm(this.configPath, { force: true });
+          await fs.rename(tempPath, this.configPath);
+        } catch (replaceError) {
+          await restoreBackup(backupPath, this.configPath);
+          throw replaceError;
+        }
+      }
+
+      return {
+        ok: true,
+        configPath: this.configPath,
+        backupPath: createBackup && backupCreated ? backupPath : null,
+      };
+    } finally {
+      await fs.rm(tempPath, { force: true }).catch(() => {});
+    }
+  }
+
+  runWriteQueue(task) {
+    const run = this.writeQueue.then(() => task());
+    this.writeQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }
 }
 
@@ -175,14 +202,20 @@ function normalizePath(pathText) {
 
 function assertPathIsSafe(pathText) {
   if (isSensitivePath(pathText)) {
-      throw createConfigError(403, "SensitiveSettingBlocked", `Sensitive setting path is blocked: ${pathText}`);
-    }
+    throw createConfigError(403, "SensitiveSettingBlocked", `Sensitive setting path is blocked: ${pathText}`);
+  }
 }
 
 function isSensitivePath(pathText) {
-  const lowered = String(pathText ?? "").toLowerCase();
-  const blocked = ["password", "secret", "token", "auth.users", "rcon.password", "database"];
-  return blocked.some((fragment) => lowered.includes(fragment));
+  const normalized = String(pathText ?? "").trim().toLowerCase();
+  if (!normalized) return false;
+
+  if (normalized === "auth.users" || normalized.startsWith("auth.users.")) return true;
+  if (normalized === "rcon.password") return true;
+  if (normalized === "database.dir" || normalized === "database.filename") return true;
+
+  const segments = normalized.split(".");
+  return segments.some((segment) => /(password|secret|token)$/i.test(segment));
 }
 
 function normalizeExposedSettingDefinition(definition) {
@@ -200,6 +233,7 @@ function normalizeExposedSettingDefinition(definition) {
     type,
     description: String(definition.description ?? "").trim(),
     restartRequired: Boolean(definition.restartRequired),
+    advanced: Boolean(definition.advanced),
   };
 
   if (type === "number") {
@@ -327,6 +361,10 @@ function createConfigError(statusCode, code, message) {
   return error;
 }
 
-function isRenameTargetConflict(error) {
-  return ["EEXIST", "EPERM", "EBUSY"].includes(error?.code);
+async function restoreBackup(backupPath, targetPath) {
+  try {
+    await fs.copyFile(backupPath, targetPath);
+  } catch (error) {
+    throw createConfigError(500, "ConfigRestoreFailed", `Failed to restore config.json from backup: ${error.message}`);
+  }
 }

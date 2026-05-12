@@ -25,7 +25,6 @@ export const useSettingsStore = defineStore("settings", () => {
 
   function openDrawer() {
     open.value = true;
-    void load(true);
   }
 
   function closeDrawer() {
@@ -89,6 +88,15 @@ export const useSettingsStore = defineStore("settings", () => {
   }
 
   async function save() {
+    if (!enabled.value) {
+      return {
+        ok: true,
+        enabled: false,
+        settings: fields.value,
+        restartRequired: false,
+      };
+    }
+
     const changes = getChanges();
     if (!Object.keys(changes).length) {
       restartRequired.value = false;

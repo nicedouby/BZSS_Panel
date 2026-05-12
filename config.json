@@ -38,6 +38,7 @@
         "path": "web.host",
         "label": "Web Host",
         "type": "string",
+        "advanced": true,
         "restartRequired": true
       },
       {
@@ -46,6 +47,7 @@
         "type": "number",
         "min": 1,
         "max": 65535,
+        "advanced": true,
         "restartRequired": true
       },
       {
@@ -64,6 +66,7 @@
         "path": "rcon.host",
         "label": "RCON Host",
         "type": "string",
+        "advanced": true,
         "restartRequired": true
       },
       {
@@ -72,6 +75,7 @@
         "type": "number",
         "min": 1,
         "max": 65535,
+        "advanced": true,
         "restartRequired": true
       },
       {

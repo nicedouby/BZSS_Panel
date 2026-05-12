@@ -14,6 +14,7 @@ export interface ExposedSetting {
   type: SettingType;
   description?: string;
   restartRequired?: boolean;
+  advanced?: boolean;
   min?: number;
   max?: number;
   options?: SettingOption[];

@@ -37,18 +37,24 @@
 
         <div v-for="field in settings.fields" :key="field.path" class="setting-field">
           <label class="setting-label">
-            <span>{{ field.label }}</span>
+            <span class="setting-label-row">
+              <span>{{ field.label }}</span>
+              <strong v-if="isDangerousField(field)" class="setting-pill">Advanced</strong>
+            </span>
             <small>{{ field.path }}</small>
           </label>
 
           <p v-if="field.description" class="setting-description">{{ field.description }}</p>
+          <p v-if="isDangerousField(field)" class="setting-warning">
+            Advanced setting. Changes here may affect access or require a restart.
+          </p>
 
           <template v-if="field.type === 'boolean'">
             <label class="setting-control checkbox">
               <input
                 type="checkbox"
                 :checked="Boolean(settings.getDraftValue(field.path))"
-                :disabled="!canEdit || settings.loading || settings.saving"
+                :disabled="!canSave || settings.loading || settings.saving"
                 @change="updateBoolean(field.path, $event)"
               >
               <span>{{ Boolean(settings.getDraftValue(field.path)) ? "Enabled" : "Disabled" }}</span>
@@ -63,7 +69,7 @@
               :max="field.max"
               step="any"
               :value="numberInputValue(field.path)"
-              :disabled="!canEdit || settings.loading || settings.saving"
+              :disabled="!canSave || settings.loading || settings.saving"
               @input="updateNumber(field.path, $event)"
             >
           </template>
@@ -72,7 +78,7 @@
             <select
               class="setting-input"
               :value="selectInputValue(field.path)"
-              :disabled="!canEdit || settings.loading || settings.saving"
+              :disabled="!canSave || settings.loading || settings.saving"
               @change="updateSelect(field.path, $event)"
             >
               <option v-for="option in field.options ?? []" :key="String(option.value)" :value="option.value">
@@ -86,7 +92,7 @@
               class="setting-input"
               type="text"
               :value="stringInputValue(field.path)"
-              :disabled="!canEdit || settings.loading || settings.saving"
+              :disabled="!canSave || settings.loading || settings.saving"
               @input="updateString(field.path, $event)"
             >
           </template>
@@ -98,7 +104,7 @@
         <button
           type="button"
           class="save-button"
-          :disabled="!canEdit || settings.loading || settings.saving || !settings.hasChanges"
+          :disabled="!canSave || settings.loading || settings.saving || !settings.hasChanges"
           @click="save"
         >
           {{ settings.saving ? "Saving..." : "Save changes" }}
@@ -117,6 +123,7 @@ const auth = useAuthStore();
 const settings = useSettingsStore();
 
 const canEdit = computed(() => Boolean(auth.user?.isSuperAdmin));
+const canSave = computed(() => canEdit.value && settings.enabled);
 
 watch(
   () => settings.open,
@@ -169,6 +176,16 @@ function updateSelect(path: string, event: Event) {
   settings.setDraftValue(path, input.value);
 }
 
+function isDangerousField(field: { path: string; advanced?: boolean }) {
+  if (field.advanced) return true;
+  return [
+    "web.host",
+    "web.port",
+    "rcon.host",
+    "rcon.port",
+  ].includes(field.path);
+}
+
 async function save() {
   try {
     await settings.save();
@@ -180,7 +197,7 @@ async function save() {
 .settings-overlay {
   position: fixed;
   inset: 0;
-  z-index: 85;
+  z-index: 100;
   background: rgba(8, 12, 16, 0.68);
 }
 
@@ -194,6 +211,8 @@ async function save() {
   padding: 18px;
   display: grid;
   gap: 14px;
+  position: relative;
+  z-index: 101;
 }
 
 .settings-head,
@@ -263,6 +282,13 @@ async function save() {
   gap: 2px;
 }
 
+.setting-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .setting-label span {
   font-weight: 600;
 }
@@ -277,6 +303,32 @@ async function save() {
   color: #9aa7b2;
   font-size: 12px;
   line-height: 1.45;
+}
+
+.setting-warning {
+  margin: -2px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #786633;
+  background: #242116;
+  color: #f1d58b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.setting-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid #786633;
+  background: #242116;
+  color: #f1d58b;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .setting-input {

@@ -110,8 +110,23 @@ async function testValidationAndGuards() {
   const config = new ConfigManager(configPath);
   await config.load();
 
+  assert.doesNotThrow(() => config.set("web.passwordHint", "visible"));
+  assert.equal(config.get("web.passwordHint"), "visible");
+  assert.doesNotThrow(() => config.set("database.name", "allowed"));
+  assert.equal(config.get("database.name"), "allowed");
+
   await assert.rejects(
     () => config.updateExposedSettings({ "web.password": "nope" }),
+    (error) => error.statusCode === 403 && error.code === "SensitiveSettingBlocked",
+  );
+
+  assert.throws(
+    () => config.set("database.dir", "./data"),
+    (error) => error.statusCode === 403 && error.code === "SensitiveSettingBlocked",
+  );
+
+  assert.throws(
+    () => config.set("auth.users.list", []),
     (error) => error.statusCode === 403 && error.code === "SensitiveSettingBlocked",
   );
 
@@ -133,8 +148,48 @@ async function testValidationAndGuards() {
   await fs.rm(tempDir, { recursive: true, force: true });
 }
 
+async function testQueuedUpdatesRunSequentially() {
+  const { tempDir, configPath } = await createTempConfig({
+    web: { host: "127.0.0.1" },
+    settingsEditor: {
+      enabled: true,
+      exposed: [
+        { path: "web.host", label: "Web Host", type: "string", restartRequired: true },
+      ],
+    },
+  });
+
+  const config = new ConfigManager(configPath);
+  await config.load();
+
+  let activeSaves = 0;
+  let maxActiveSaves = 0;
+  const originalPerformSave = config.performSave.bind(config);
+  config.performSave = async function patchedPerformSave(options) {
+    activeSaves += 1;
+    maxActiveSaves = Math.max(maxActiveSaves, activeSaves);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return await originalPerformSave(options);
+    } finally {
+      activeSaves -= 1;
+    }
+  };
+
+  await Promise.all([
+    config.updateExposedSettings({ "web.host": "0.0.0.0" }),
+    config.updateExposedSettings({ "web.host": "127.0.0.2" }),
+  ]);
+
+  assert.equal(maxActiveSaves, 1);
+  assert.equal(config.get("web.host"), "127.0.0.2");
+
+  await fs.rm(tempDir, { recursive: true, force: true });
+}
+
 await testLoadAndGet();
 await testExposedSettingsAndSave();
 await testValidationAndGuards();
+await testQueuedUpdatesRunSequentially();
 
 console.log("config manager tests passed");
