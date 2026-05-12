@@ -119,7 +119,7 @@ const matchHeaderData = computed(() => {
 
 // 找出当前选中的玩家
 const selectedPlayer = computed(() => {
-  if (!pageState.selectedPlayerId) return null;
+  if (pageState.selectedPlayerId == null) return null;
   return players.active.find((p) => String(p.playerID) === String(pageState.selectedPlayerId));
 });
 

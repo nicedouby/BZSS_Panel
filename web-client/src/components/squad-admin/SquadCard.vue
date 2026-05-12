@@ -69,7 +69,7 @@ const teamColorClass = computed(() => {
 });
 
 const hasSelectedPlayer = computed(() => {
-  if (!props.selectedPlayerId) return false;
+  if (props.selectedPlayerId == null) return false;
   if (props.squad.leader && String(props.squad.leader.playerId) === String(props.selectedPlayerId)) {
     return true;
   }
