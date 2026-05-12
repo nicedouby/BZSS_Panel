@@ -48,8 +48,13 @@
             {{ t("database.lastLogin") }} {{ formatTime(player.last_login_at) }} · {{ t("database.updatedAt") }} {{ formatTime(player.updated_at) }}
           </div>
           <div v-if="showIpInList && (player.current_ip || player.ip)" class="db-row-ip">
-            <button type="button" class="db-copy-link" @click.stop="copyRowIp(player)">{{ t("database.copyIp") }}</button>
-            <span class="db-row-ip-value">{{ player.current_ip || player.ip }}</span>
+            <button
+              type="button"
+              class="db-ip-clickable"
+              @click.stop="inspectIp(player.current_ip || player.ip)"
+            >
+              {{ player.current_ip || player.ip }}
+            </button>
             <small>{{ listIpSummary(player) || "" }}</small>
           </div>
         </button>
@@ -78,8 +83,14 @@
               <div v-if="showIpInDetail" class="db-ip-field">
                 <span>{{ t("player.currentIp") }}</span>
                 <div class="db-ip-line">
-                  <strong>{{ currentIp }}</strong>
-                  <button type="button" class="db-copy-link" :disabled="currentIp === '--'" @click="copyIp(currentIp)">{{ t("common.copy") }}</button>
+                  <button
+                    type="button"
+                    class="db-ip-clickable strong"
+                    :disabled="currentIp === '--'"
+                    @click="inspectIp(currentIp)"
+                  >
+                    {{ currentIp }}
+                  </button>
                 </div>
                 <small>{{ currentIpSummary }}</small>
               </div>
@@ -127,10 +138,15 @@
                 <li v-for="item in (detail.ips || []).slice(0, 12)" :key="`${item.ip}-${item.seen_at}`">
                   <div class="db-history-head">
                     <div>
-                      <strong>{{ item.ip }}</strong>
+                      <button
+                        type="button"
+                        class="db-ip-clickable strong"
+                        @click="inspectIp(item.ip)"
+                      >
+                        {{ item.ip }}
+                      </button>
                       <small>{{ formatTime(item.seen_at) }}</small>
                     </div>
-                    <button type="button" class="db-copy-link" @click="copyIp(item.ip)">{{ t("common.copy") }}</button>
                   </div>
                   <small>{{ ipDetailSummary(item.ip) || t("common.unknown") }}</small>
                   <small>{{ ipSourceLabel(item.ip) }}</small>
@@ -145,10 +161,17 @@
                 <li v-for="item in (detail.logins || []).slice(0, 12)" :key="`${item.ip}-${item.joined_at}`">
                   <div class="db-login-head">
                     <div>
-                      <strong>{{ item.ip || "--" }}</strong>
+                      <button
+                        v-if="item.ip"
+                        type="button"
+                        class="db-ip-clickable strong"
+                        @click="inspectIp(item.ip)"
+                      >
+                        {{ item.ip }}
+                      </button>
+                      <strong v-else>--</strong>
                       <small>{{ formatTime(item.joined_at) }}</small>
                     </div>
-                    <button v-if="item.ip" type="button" class="db-copy-link" @click="copyIp(item.ip)">{{ t("database.copyIp") }}</button>
                   </div>
                   <small v-if="item.controller_path">{{ t("player.controller") }} {{ item.controller_path }}</small>
                   <small v-if="item.steam_id">{{ t("player.steamId") }} {{ item.steam_id }}</small>
@@ -172,6 +195,52 @@
             </div>
           </div>
         </template>
+        </div>
+      </section>
+    </div>
+
+    <div v-if="showIpInspectModal" class="db-stats-modal" aria-hidden="false">
+      <button
+        class="db-stats-modal-backdrop"
+        type="button"
+        :aria-label="t('common.close')"
+        @click="closeIpInspectModal"
+      />
+
+      <section class="db-stats-modal-card db-ip-inspect-modal" role="dialog" aria-modal="true">
+        <header class="db-stats-modal-head">
+          <div>
+            <h2>IP 地址检测</h2>
+            <p>点击 IP 后会自动复制，并填入这里。</p>
+          </div>
+
+          <button type="button" class="console-clear-btn" @click="closeIpInspectModal">
+            {{ t("common.close") }}
+          </button>
+        </header>
+
+        <div class="db-stats-modal-body">
+          <div class="console-toolbar db-toolbar-row">
+            <input
+              v-model="ipInspectInput"
+              class="console-input db-search"
+              placeholder="输入 IP 地址"
+            >
+
+            <button type="button" class="console-clear-btn" @click="inspectIp(ipInspectInput)">
+              检测
+            </button>
+
+            <button type="button" class="console-clear-btn" @click="copyIp(ipInspectInput)">
+              {{ t("common.copy") }}
+            </button>
+          </div>
+
+          <div class="db-card">
+            <h3>{{ ipInspectInput || "--" }}</h3>
+            <p>{{ ipDetailSummary(ipInspectInput) || t("common.unknown") }}</p>
+            <p>{{ ipSourceLabel(ipInspectInput) }}</p>
+          </div>
         </div>
       </section>
     </div>
@@ -372,6 +441,8 @@ const filters = reactive({
 const statsDays = ref("14");
 const statsTop = ref("10");
 const showStatsModal = ref(false);
+const showIpInspectModal = ref(false);
+const ipInspectInput = ref("");
 const statsLoading = ref(false);
 const statsError = ref("");
 const stats = ref<any | null>(null);
@@ -500,6 +571,20 @@ async function retryDetail() {
   await detailQuery.refetch();
 }
 
+async function inspectIp(value: unknown) {
+  const ip = normalizeIp(value);
+  if (!ip || ip === "--") return;
+
+  ipInspectInput.value = ip;
+  showIpInspectModal.value = true;
+
+  await copyTextWithToast(ip, ui, {
+    label: "IP",
+    successMessage: `已复制 IP：${ip}`,
+    errorMessage: "无法复制 IP。",
+  });
+}
+
 async function openStatsModal() {
   showStatsModal.value = true;
   await loadStats();
@@ -507,6 +592,10 @@ async function openStatsModal() {
 
 function closeStatsModal() {
   showStatsModal.value = false;
+}
+
+function closeIpInspectModal() {
+  showIpInspectModal.value = false;
 }
 
 async function loadStats() {
@@ -616,10 +705,6 @@ async function copyIp(value: unknown) {
 
 function fieldLabel(key: string, fallback?: string) {
   return t(`field.${key}`, fallback ?? key);
-}
-
-async function copyRowIp(player: any) {
-  await copyIp(player?.current_ip || player?.ip);
 }
 
 function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
@@ -776,6 +861,35 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
   word-break: break-word;
 }
 
+.db-ip-clickable {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  user-select: text;
+  word-break: break-word;
+}
+
+.db-ip-clickable:hover {
+  text-decoration: underline;
+}
+
+.db-ip-clickable.strong {
+  font-weight: 700;
+}
+
+.db-ip-clickable:disabled {
+  cursor: default;
+  opacity: 0.65;
+  text-decoration: none;
+}
+
 .db-copy-link {
   width: fit-content;
   border: 0;
@@ -801,11 +915,6 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
   align-items: center;
   gap: 6px;
   min-width: 0;
-}
-
-.db-ip-line strong {
-  min-width: 0;
-  word-break: break-word;
 }
 
 .db-ip-field small,
@@ -1013,6 +1122,10 @@ function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+}
+
+.db-ip-inspect-modal {
+  max-width: 720px;
 }
 
 .db-stats-actions {
