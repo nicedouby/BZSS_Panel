@@ -73,7 +73,9 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       count: 0,
       lastUpdatedAt: "",
     },
-    rconStatus: {},
+    rconStatus: {
+      lastError: "",
+    },
     logAccess: {
       granted: false,
       pythonLogParser: "unknown",
@@ -125,12 +127,23 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     },
 
     async refresh(type = "all") {
-      if (type === "serverInfo" || type === "all") await refreshServerInfo();
-      if (type === "players" || type === "all") await refreshPlayers();
-      if (type === "squads" || type === "all") await refreshSquads();
-      if (type === "currentMap" || type === "all") await refreshCurrentMap();
-      if (type === "nextMap" || type === "all") await refreshNextMap();
-      return getSnapshot();
+      const report = {
+        ok: true,
+        errors: [],
+      };
+
+      if (type === "serverInfo" || type === "all") await refreshServerInfo(report);
+      if (type === "players" || type === "all") await refreshPlayers(report);
+      if (type === "squads" || type === "all") await refreshSquads(report);
+      if (type === "currentMap" || type === "all") await refreshCurrentMap(report);
+      if (type === "nextMap" || type === "all") await refreshNextMap(report);
+      return {
+        ok: report.ok,
+        type,
+        matchState: getSnapshot(),
+        overview: api.getOverview(),
+        errors: report.errors,
+      };
     },
   };
 
@@ -141,13 +154,14 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       && core.pluginSubscriptions?.isSubscribed?.("module.matchState") !== false;
   }
 
-  async function refreshServerInfo() {
+  async function refreshServerInfo(report = null) {
     return guarded("serverInfo", async () => {
       const result = await executeRcon("ShowServerInfo");
       if (!result.success) {
+        noteRefreshFailure(report, "serverInfo", result.message || "ShowServerInfo failed.");
         updateStatuses();
         emitRconStatusUpdated();
-        return null;
+        return state.serverStatus;
       }
 
       const parsed = parseShowServerInfo(result.rconResponse);
@@ -174,16 +188,17 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       emitServerStatusUpdated();
       emitUpdated("serverStatus");
       return state.serverStatus;
-    });
+    }, () => state.serverStatus, report);
   }
 
-  async function refreshPlayers() {
+  async function refreshPlayers(report = null) {
     return guarded("players", async () => {
       const result = await executeRcon("ListPlayers");
       if (!result.success) {
+        noteRefreshFailure(report, "players", result.message || "ListPlayers failed.");
         updateStatuses();
         emitRconStatusUpdated();
-        return [];
+        return state.players.list;
       }
 
       const players = parseListPlayers(result.rconResponse);
@@ -206,16 +221,17 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       emitPlayersUpdated();
       emitUpdated("players");
       return players;
-    });
+    }, () => state.players.list, report);
   }
 
-  async function refreshSquads() {
+  async function refreshSquads(report = null) {
     return guarded("squads", async () => {
       const result = await executeRcon("ListSquads");
       if (!result.success) {
+        noteRefreshFailure(report, "squads", result.message || "ListSquads failed.");
         updateStatuses();
         emitRconStatusUpdated();
-        return [];
+        return state.squads.list;
       }
 
       const squads = parseListSquads(result.rconResponse);
@@ -237,10 +253,10 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       emitSquadsUpdated();
       emitUpdated("squads");
       return squads;
-    });
+    }, () => state.squads.list, report);
   }
 
-  async function refreshCurrentMap() {
+  async function refreshCurrentMap(report = null) {
     return guarded("currentMap", async () => {
       const currentMap = await fetchCurrentMap();
       if (currentMap.level || currentMap.layer) {
@@ -253,18 +269,25 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         emitUpdated("currentMap");
       }
       return currentMap;
-    });
+    }, () => ({
+      level: state.serverStatus.map || null,
+      layer: state.serverStatus.layer || null,
+    }), report);
   }
 
-  async function refreshNextMap() {
+  async function refreshNextMap(report = null) {
     return guarded("nextMap", async () => {
       if (state.serverStatus.nextLayerSource === "serverInfo") return null;
 
       const result = await executeRcon("ShowNextMap");
       if (!result.success) {
+        noteRefreshFailure(report, "nextMap", result.message || "ShowNextMap failed.");
         updateStatuses();
         emitRconStatusUpdated();
-        return null;
+        return {
+          level: null,
+          layer: state.serverStatus.nextLayer || null,
+        };
       }
 
       const nextMap = parseNextMap(result.rconResponse);
@@ -278,7 +301,10 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         emitUpdated("nextMap");
       }
       return nextMap;
-    });
+    }, () => ({
+      level: null,
+      layer: state.serverStatus.nextLayer || null,
+    }), report);
   }
 
   async function fetchCurrentMap() {
@@ -295,23 +321,36 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     });
   }
 
-  async function guarded(key, fn) {
-    if (!isSubscribed()) return null;
-    if (running[key]) return null;
+  async function guarded(key, fn, fallback = null, report = null) {
+    if (!isSubscribed()) {
+      noteRefreshFailure(report, key, "Match state module is not subscribed.");
+      return typeof fallback === "function" ? fallback() : fallback;
+    }
+    if (running[key]) return typeof fallback === "function" ? fallback() : fallback;
     running[key] = true;
     try {
       updateStatuses();
       return await fn();
     } catch (error) {
+      noteRefreshFailure(report, key, error?.message ?? String(error));
       logWithFallback(moduleLogger, "warn", `${key} polling failed: ${error.message}`, {
         operation: "guarded",
       });
       updateStatuses();
       emitRconStatusUpdated();
-      return null;
+      return typeof fallback === "function" ? fallback() : fallback;
     } finally {
       running[key] = false;
     }
+  }
+
+  function noteRefreshFailure(report, section, message) {
+    if (!report) return;
+    report.ok = false;
+    report.errors.push({
+      section,
+      message: String(message ?? "Refresh failed."),
+    });
   }
 
   function syncMatchFromServerStatus() {

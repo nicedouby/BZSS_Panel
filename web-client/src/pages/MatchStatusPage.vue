@@ -4,8 +4,17 @@
     <SquadPageToolbar
       :search-query="pageState.searchQuery"
       :density-mode="pageState.densityMode"
+      :refreshing-players="refreshingPlayers"
+      :refreshing-squads="refreshingSquads"
+      :refreshing-all="refreshingAll"
+      :server-status-updated-at="serverStatusUpdatedAt"
+      :players-updated-at="playersUpdatedAt"
+      :squads-updated-at="squadsUpdatedAt"
       @search="pageState.searchQuery = $event"
       @density-change="pageState.densityMode = $event"
+      @refresh-players="refreshPlayers"
+      @refresh-squads="refreshSquads"
+      @refresh-all="refreshAll"
     />
 
     <DataState
@@ -14,6 +23,8 @@
       :stale="showStaleBanner"
       :stale-text="staleText"
     >
+      <ErrorBlock v-if="refreshError" :message="refreshError" />
+
       <ErrorBlock v-if="playtimeError" :message="playtimeError" />
 
       <div class="squad-main-content" :class="pageState.densityMode">
@@ -37,7 +48,7 @@
 
 <script setup lang="ts">
 import { computed, ref, reactive } from "vue";
-import { useQuery } from "@tanstack/vue-query";
+import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { apiGet, apiPost } from "../app/apiClient";
 import { renderApiError } from "../app/errors";
 import { getRuntimeSyncState } from "../app/runtimeSync";
@@ -72,8 +83,13 @@ const match = useMatchStore();
 const jobs = useJobStore();
 const ui = useUiStore();
 const runtime = getRuntimeSyncState();
+const queryClient = useQueryClient();
 
 const refreshingPlaytime = ref(false);
+const refreshingPlayers = ref(false);
+const refreshingSquads = ref(false);
+const refreshingAll = ref(false);
+const refreshError = ref("");
 const playtimeError = ref("");
 const playtimeRequested = ref(false);
 const selectedPlayerDetail = ref<PlayerDetailViewModel | null>(null);
@@ -88,6 +104,16 @@ const snapshotUpdatedAt = computed(() => Math.max(server.updatedAt, players.upda
 const hasSnapshotData = computed(() => snapshotUpdatedAt.value > 0);
 const runtimeWebStatus = computed(() => server.snapshot?.webStatus ?? server.snapshot ?? {});
 const rconStatus = computed(() => String(runtimeWebStatus.value.rcon ?? "unknown"));
+const matchSnapshotQuery = useQuery({
+  queryKey: computed(() => ["match-snapshot", auth.authenticated]),
+  enabled: computed(() => auth.authenticated),
+  queryFn: async () => apiGet<any>("/api/match/snapshot"),
+  refetchOnWindowFocus: false,
+});
+const matchSnapshot = computed(() => matchSnapshotQuery.data.value?.matchState ?? null);
+const serverStatusUpdatedAt = computed(() => toMillis(matchSnapshot.value?.serverStatus?.lastUpdatedAt));
+const playersUpdatedAt = computed(() => toMillis(matchSnapshot.value?.players?.lastUpdatedAt));
+const squadsUpdatedAt = computed(() => toMillis(matchSnapshot.value?.squads?.lastUpdatedAt));
 const showInitialLoading = computed(() => auth.authenticated && !hasSnapshotData.value && runtime.inFlight && !runtime.lastError);
 const blockingRuntimeError = computed(() => {
   if (!auth.authenticated || hasSnapshotData.value || !runtime.lastError) return "";
@@ -114,8 +140,7 @@ const viewModels = computed(() => {
 });
 
 const matchHeaderData = computed(() => {
-  const snapshot = server.snapshot ?? {};
-  return adaptMatchHeader(server, runtime, match);
+  return adaptMatchHeader(server, runtime, match, matchSnapshot.value);
 });
 
 function selectPlayer(player: PlayerRowViewModel) {
@@ -181,6 +206,71 @@ async function refreshOnlinePlaytime() {
   }
 }
 
+async function refreshPlayers() {
+  await refreshMatchState("players");
+}
+
+async function refreshSquads() {
+  await refreshMatchState("squads");
+}
+
+async function refreshAll() {
+  await refreshMatchState("all");
+}
+
+async function refreshMatchState(type: "players" | "squads" | "all") {
+  const loadingState = type === "players"
+    ? refreshingPlayers
+    : type === "squads"
+      ? refreshingSquads
+      : refreshingAll;
+
+  loadingState.value = true;
+  refreshError.value = "";
+
+  try {
+    const result = await apiPost<any>("/api/match/refresh", { type });
+    applyMatchRefreshResult(result);
+    if (!result?.ok) {
+      refreshError.value = result?.errors?.[0]?.message ?? "Match refresh completed with errors.";
+      ui.pushToast({
+        title: "Match refresh had errors",
+        message: refreshError.value,
+        tone: "error",
+      });
+      return;
+    }
+    ui.pushToast({
+      title: "Match state refreshed",
+      message: type === "all" ? "Players, squads, and server info were refreshed." : `Match ${type} refreshed.`,
+      tone: "ok",
+    });
+  } catch (error) {
+    refreshError.value = renderApiError(error, "Match refresh failed.");
+    ui.pushToast({
+      title: "Match refresh failed",
+      message: refreshError.value,
+      tone: "error",
+    });
+  } finally {
+    loadingState.value = false;
+  }
+}
+
+function applyMatchRefreshResult(result: any) {
+  if (!result) return;
+
+  queryClient.setQueryData(["match-snapshot", auth.authenticated], result);
+
+  const matchState = result.matchState ?? null;
+  const overview = result.overview ?? null;
+  if (!matchState) return;
+
+  server.applySnapshot(buildServerSnapshot(matchState, overview));
+  players.applySnapshot(buildPlayersSnapshot(matchState.players));
+  squads.applySnapshot(buildSquadsSnapshot(matchState.squads));
+}
+
 async function waitForJob(jobId: string, timeoutMs: number) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
@@ -199,6 +289,69 @@ function renderApiErrorText(runtimeError: string) {
     return "Session expired. Please sign in again.";
   }
   return `Runtime sync failed: ${runtimeError}`;
+}
+
+function buildServerSnapshot(matchState: any, overview: any) {
+  const serverStatus = matchState?.serverStatus ?? {};
+  const status = overview?.status ?? {};
+
+  return {
+    ...serverStatus,
+    updatedAt: toMillis(serverStatus.lastUpdatedAt) || Date.now(),
+    webStatus: status,
+    stale: false,
+  };
+}
+
+function buildPlayersSnapshot(matchPlayers: any) {
+  const list = Array.isArray(matchPlayers?.list) ? matchPlayers.list : [];
+  const snapshot = {
+    active: [...list],
+    recentlyDisconnected: [],
+    bySteamID: {} as Record<string, any>,
+    byEOSID: {} as Record<string, any>,
+    byPlayerID: {} as Record<string, any>,
+    byName: {} as Record<string, any>,
+    updatedAt: toMillis(matchPlayers?.lastUpdatedAt) || Date.now(),
+    stale: false,
+  };
+
+  for (const player of list) {
+    if (player?.steamID && !snapshot.bySteamID[player.steamID]) snapshot.bySteamID[player.steamID] = player;
+    if (player?.eosID && !snapshot.byEOSID[player.eosID]) snapshot.byEOSID[player.eosID] = player;
+    if (player?.playerID != null && !snapshot.byPlayerID[player.playerID]) snapshot.byPlayerID[player.playerID] = player;
+    if (player?.name && !snapshot.byName[player.name]) snapshot.byName[player.name] = player;
+  }
+
+  return snapshot;
+}
+
+function buildSquadsSnapshot(matchSquads: any) {
+  const list = Array.isArray(matchSquads?.list) ? matchSquads.list : [];
+  const snapshot = {
+    list: [...list],
+    byKey: {} as Record<string, any>,
+    byTeamID: {} as Record<string, any[]>,
+    updatedAt: toMillis(matchSquads?.lastUpdatedAt) || Date.now(),
+    stale: false,
+  };
+
+  for (const squad of list) {
+    if (squad?.key) snapshot.byKey[squad.key] = squad;
+    const teamKey = squad?.teamID != null ? String(squad.teamID) : "";
+    if (!teamKey) continue;
+    if (!snapshot.byTeamID[teamKey]) snapshot.byTeamID[teamKey] = [];
+    snapshot.byTeamID[teamKey].push(squad);
+  }
+
+  return snapshot;
+}
+
+function toMillis(value: string | number | null | undefined): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (!value) return 0;
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 </script>
 

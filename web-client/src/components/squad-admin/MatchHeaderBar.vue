@@ -46,6 +46,15 @@
         <span class="status-item">
           Updated {{ formatUpdateTime(data.lastUpdateTime) }}
         </span>
+        <span class="status-item">
+          Server {{ formatUpdateTime(data.serverStatusUpdatedAt) }}
+        </span>
+        <span class="status-item">
+          Players {{ formatUpdateTime(data.playersUpdatedAt) }}
+        </span>
+        <span class="status-item">
+          Squads {{ formatUpdateTime(data.squadsUpdatedAt) }}
+        </span>
       </div>
     </div>
   </header>

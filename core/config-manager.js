@@ -37,6 +37,7 @@ export class ConfigManager {
   }
 
   set(pathText, value) {
+    // This is a low-level setter. Runtime writes should prefer queued update APIs.
     const normalizedPath = normalizePath(pathText);
     assertPathIsSafe(normalizedPath);
 

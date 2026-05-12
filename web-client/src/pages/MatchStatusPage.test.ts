@@ -44,15 +44,17 @@ describe("MatchStatusPage", () => {
     });
   });
 
-  it("shows a disconnected hint instead of infinite loading", () => {
+  it("renders the manual refresh controls without showing a loading state", () => {
     const wrapper = mount(MatchStatusPage, {
       global: {
         plugins: [[VueQueryPlugin, { queryClient: new QueryClient() }]],
       },
     });
 
-    expect(wrapper.text()).toContain("Not connected");
-    expect(wrapper.text()).toContain("No online players");
+    expect(wrapper.text()).toContain("Refresh Players");
+    expect(wrapper.text()).toContain("Refresh Squads");
+    expect(wrapper.text()).toContain("Refresh All");
+    expect(wrapper.text()).toContain("Disconnected");
     expect(wrapper.text()).not.toContain("Loading");
   });
 });

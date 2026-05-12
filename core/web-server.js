@@ -269,7 +269,33 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/match/overview") {
-      return this.json(res, 200, this.getMatchOverviewFromRuntime());
+      return this.json(res, 200, this.getMatchOverview());
+    }
+
+    if (url.pathname === "/api/match/snapshot" && req.method === "GET") {
+      return this.json(res, 200, this.getMatchStateSnapshotResponse());
+    }
+
+    if (url.pathname === "/api/match/refresh" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const body = await this.readJsonBody(req);
+      const type = this.normalizeMatchRefreshType(body.type ?? url.searchParams.get("type") ?? "all");
+      return this.json(res, 200, await this.refreshMatchState(type));
+    }
+
+    if (url.pathname === "/api/match/refresh/players" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      return this.json(res, 200, await this.refreshMatchState("players"));
+    }
+
+    if (url.pathname === "/api/match/refresh/squads" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      return this.json(res, 200, await this.refreshMatchState("squads"));
+    }
+
+    if (url.pathname === "/api/match/refresh/all" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      return this.json(res, 200, await this.refreshMatchState("all"));
     }
 
     if (url.pathname === "/api/jobs/playtime-refresh-online" && req.method === "POST") {
@@ -286,10 +312,7 @@ export class WebServer {
       const type = body.type ?? url.searchParams.get("type") ?? "all";
       const job = this.createLocalJob("rcon-refresh", { type });
       this.runLocalJob(job, async () => {
-        const result = {};
-        if (type === "players" || type === "all") result.players = await this.core.rconManager.refreshPlayers();
-        if (type === "squads" || type === "all") result.squads = await this.core.rconManager.refreshSquads();
-        return result;
+        return await this.refreshMatchState(this.normalizeMatchRefreshType(type));
       });
       return this.json(res, 202, job);
     }
@@ -484,18 +507,8 @@ export class WebServer {
 
     if (url.pathname === "/api/rcon/refresh" && req.method === "POST") {
       if (!this.requireSuperAdmin(user, res)) return;
-      const type = url.searchParams.get("type") ?? "all";
-      const result = {};
-
-      if (type === "players" || type === "all") {
-        result.players = await this.core.rconManager.refreshPlayers();
-      }
-
-      if (type === "squads" || type === "all") {
-        result.squads = await this.core.rconManager.refreshSquads();
-      }
-
-      return this.json(res, 200, result);
+      const type = this.normalizeMatchRefreshType(url.searchParams.get("type") ?? "all");
+      return this.json(res, 200, await this.refreshMatchState(type));
     }
 
     if (url.pathname === "/api/combat/overview") {
@@ -822,6 +835,54 @@ export class WebServer {
         udpReceiver: webStatus.udpReceiver ?? "unknown",
       },
     };
+  }
+
+  getMatchOverview() {
+    return this.modules.matchState?.getOverview?.() ?? this.getMatchOverviewFromRuntime();
+  }
+
+  getMatchStateSnapshotResponse() {
+    const matchStateModule = this.modules.matchState;
+    const matchState = matchStateModule?.getState?.() ?? matchStateModule?.getOverview?.()?.matchState ?? null;
+    return {
+      ok: true,
+      source: "module.matchState",
+      type: "snapshot",
+      matchState,
+      overview: matchStateModule?.getOverview?.() ?? this.getMatchOverview(),
+    };
+  }
+
+  async refreshMatchState(type = "all") {
+    const matchStateModule = this.modules.matchState;
+    if (!matchStateModule?.refresh) {
+      return {
+        ok: false,
+        source: "module.matchState",
+        type,
+        error: "MatchStateUnavailable",
+        message: "Match state module is not loaded.",
+      };
+    }
+
+    const matchState = await matchStateModule.refresh(type);
+    const snapshot = matchStateModule.getState?.() ?? matchState ?? null;
+    const overview = matchStateModule.getOverview?.() ?? null;
+    return {
+      ok: true,
+      source: "module.matchState",
+      type,
+      matchState: snapshot,
+      overview,
+    };
+  }
+
+  normalizeMatchRefreshType(type) {
+    const normalized = String(type ?? "all").trim();
+    if (["players", "squads", "serverInfo", "currentMap", "nextMap", "all"].includes(normalized)) {
+      return normalized;
+    }
+    return "all";
   }
 
   createLocalJob(type, input = {}) {

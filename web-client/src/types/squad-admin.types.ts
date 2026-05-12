@@ -75,6 +75,9 @@ export interface MatchHeaderData {
   rconStatus: "connected" | "disconnected" | "error" | "disabled";
   logsStatus: "live" | "stale" | "error";
   lastUpdateTime: number;
+  serverStatusUpdatedAt: number;
+  playersUpdatedAt: number;
+  squadsUpdatedAt: number;
 }
 
 export interface SquadWarning {

@@ -2,6 +2,20 @@
 
 import SquadRcon from "./squad-rcon.js";
 
+export function resolveRconPassword(config, logger) {
+  const passwordFromEnv = String(config?.passwordFromEnv ?? "").trim();
+  if (passwordFromEnv) {
+    const envPassword = process.env[passwordFromEnv];
+    if (typeof envPassword === "string" && envPassword.trim()) {
+      return envPassword;
+    }
+
+    logger?.warn?.(`RCON password env var ${passwordFromEnv} is missing or empty; falling back to config.password.`);
+  }
+
+  return config?.password ?? "";
+}
+
 /**
  * Core: RconManager
  *
@@ -71,7 +85,7 @@ export class RconManager {
     this.squadRcon = new SquadRcon({
       host: this.config.host,
       port: this.config.port,
-      password: this.config.password,
+      password: resolveRconPassword(this.config, this.logger),
       autoReconnectDelay: this.config.autoReconnectDelay ?? 5000,
       commandTimeoutMs: this.config.commandTimeoutMs ?? 15000,
       logger: this.logger,

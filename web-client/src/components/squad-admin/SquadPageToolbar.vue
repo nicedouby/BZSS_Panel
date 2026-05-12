@@ -20,7 +20,23 @@
             {{ mode === 'comfortable' ? 'Comfortable' : 'Compact' }}
           </button>
         </div>
+        <div class="refresh-actions">
+          <button type="button" :disabled="refreshingPlayers" @click="$emit('refresh-players')">
+            {{ refreshingPlayers ? "Refreshing Players..." : "Refresh Players" }}
+          </button>
+          <button type="button" :disabled="refreshingSquads" @click="$emit('refresh-squads')">
+            {{ refreshingSquads ? "Refreshing Squads..." : "Refresh Squads" }}
+          </button>
+          <button type="button" :disabled="refreshingAll" @click="$emit('refresh-all')">
+            {{ refreshingAll ? "Refreshing All..." : "Refresh All" }}
+          </button>
+        </div>
       </div>
+    </div>
+    <div class="toolbar-status-row">
+      <span>Server updated {{ formatTime(serverStatusUpdatedAt) }}</span>
+      <span>Players updated {{ formatTime(playersUpdatedAt) }}</span>
+      <span>Squads updated {{ formatTime(squadsUpdatedAt) }}</span>
     </div>
   </div>
 </template>
@@ -31,11 +47,20 @@ import { ref, watch } from "vue";
 const props = defineProps<{
   searchQuery: string;
   densityMode: "comfortable" | "compact";
+  refreshingPlayers?: boolean;
+  refreshingSquads?: boolean;
+  refreshingAll?: boolean;
+  serverStatusUpdatedAt?: number;
+  playersUpdatedAt?: number;
+  squadsUpdatedAt?: number;
 }>();
 
 const emit = defineEmits<{
   (event: "search", query: string): void;
   (event: "density-change", mode: "comfortable" | "compact"): void;
+  (event: "refresh-players"): void;
+  (event: "refresh-squads"): void;
+  (event: "refresh-all"): void;
 }>();
 
 const searchQuery = ref(props.searchQuery);
@@ -46,6 +71,15 @@ watch(
     searchQuery.value = newVal;
   },
 );
+
+function formatTime(time?: number): string {
+  if (!time) return "--:--:--";
+  return new Date(time).toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
 </script>
 
 <style scoped>
@@ -88,6 +122,7 @@ watch(
   display: flex;
   gap: var(--spacing-md);
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .density-toggle {
@@ -119,6 +154,42 @@ watch(
 
 .density-toggle button:hover:not(.active) {
   color: var(--color-text-primary);
+}
+
+.refresh-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.refresh-actions button {
+  padding: 6px 12px;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  transition: all 0.15s ease;
+}
+
+.refresh-actions button:hover:not(:disabled) {
+  border-color: var(--color-status-info);
+  background: var(--color-bg-card);
+}
+
+.refresh-actions button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.toolbar-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
 }
 
 @media (max-width: 768px) {

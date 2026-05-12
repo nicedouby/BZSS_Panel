@@ -11,8 +11,16 @@ function createHarness() {
     pythonLogParser: "running",
     udpReceiver: "listening",
   };
+  const rconStatusState = {
+    enabled: true,
+    connected: true,
+    authenticated: true,
+    queueSize: 0,
+    lastError: "",
+  };
 
   const responses = {
+    failCommands: new Set(),
     ShowServerInfo: [
       "MapName_s=AlBasrah",
       "Layer_s=AlBasrah_RAAS_v1",
@@ -51,18 +59,21 @@ function createHarness() {
     },
     rconManager: {
       async dispatchCommand({ command }) {
+        if (responses.failCommands.has(command)) {
+          rconStatusState.lastError = "simulated failure";
+          return {
+            success: false,
+            message: "simulated failure",
+            rconResponse: "",
+          };
+        }
         return {
           success: true,
           rconResponse: responses[command] ?? "",
         };
       },
       getStatus() {
-        return {
-          enabled: true,
-          connected: true,
-          authenticated: true,
-          queueSize: 0,
-        };
+        return { ...rconStatusState };
       },
     },
     webRegistry: {
@@ -255,11 +266,27 @@ async function testMatchingNextLayerIsCleared() {
   assert.equal(harness.webStatusState.nextLayer, "");
 }
 
+async function testRefreshFailurePreservesLastGoodSnapshot() {
+  const harness = createHarness();
+
+  await harness.module.api.refresh("all");
+  harness.responses.failCommands.add("ListPlayers");
+
+  await harness.module.api.refresh("players");
+  const state = harness.module.api.getState();
+
+  assert.equal(state.players.count, 1);
+  assert.equal(state.players.bySteam64ID["76561198000000001"].name, "Alice");
+  assert.equal(state.serverStatus.map, "AlBasrah");
+  assert.equal(state.rconStatus.lastError, "simulated failure");
+}
+
 await testAggregatesRconSnapshots();
 await testMissingServerInfoFieldsDoNotClobberLastGoodValues();
 await testJsonShowServerInfoUpdatesPlaytime();
 await testLayerSuffixDerivesModeWhenGameModeMissing();
 await testJsonShowNextMapUpdatesNextLayerWhenServerInfoOmitsIt();
 await testMatchingNextLayerIsCleared();
+await testRefreshFailurePreservesLastGoodSnapshot();
 
 console.log("match state tests passed");

@@ -280,6 +280,99 @@ async function testSnapshotAllDoesNotTriggerSlowTasks() {
   assert.equal(JSON.parse(recorder.state.body).ok, true);
 }
 
+async function testMatchRefreshRoutesDelegateToMatchState() {
+  const refreshCalls = [];
+  const matchState = {
+    getState() {
+      return {
+        serverStatus: {
+          map: "AlBasrah",
+          lastUpdatedAt: "2026-05-12T00:00:00.000Z",
+        },
+        players: {
+          list: [{ playerID: 1, name: "Alice" }],
+          lastUpdatedAt: "2026-05-12T00:00:00.000Z",
+        },
+        squads: {
+          list: [{ key: "1:2", teamID: 1, squadID: 2, squadName: "Alpha" }],
+          lastUpdatedAt: "2026-05-12T00:00:00.000Z",
+        },
+        rconStatus: {
+          status: "connected",
+          lastError: "",
+        },
+        logAccess: {
+          granted: true,
+        },
+      };
+    },
+    getOverview() {
+      return {
+        status: { rcon: "connected" },
+        matchState: this.getState(),
+      };
+    },
+    async refresh(type) {
+      refreshCalls.push(type);
+      return this.getState();
+    },
+  };
+
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin", role: "SuperAdmin" };
+        },
+        hasEverything() {
+          return true;
+        },
+      },
+      rconManager: {
+        refreshPlayers() {
+          throw new Error("legacy refresh should not be called");
+        },
+        refreshSquads() {
+          throw new Error("legacy refresh should not be called");
+        },
+      },
+    },
+    modules: {
+      matchState,
+    },
+  });
+
+  const response = createRecorder();
+  const refreshReq = Readable.from([JSON.stringify({ type: "all" })]);
+  refreshReq.method = "POST";
+  refreshReq.url = "/api/match/refresh";
+  refreshReq.headers = { host: "localhost" };
+  refreshReq.socket = {};
+  await server.handleRequest(refreshReq, response.res);
+
+  assert.equal(response.state.status, 200);
+  const body = JSON.parse(response.state.body);
+  assert.equal(body.ok, true);
+  assert.equal(body.source, "module.matchState");
+  assert.equal(body.type, "all");
+  assert.equal(body.matchState.serverStatus.map, "AlBasrah");
+  assert.equal(refreshCalls[0], "all");
+
+  const legacy = createRecorder();
+  const legacyReq = Readable.from([JSON.stringify({ type: "players" })]);
+  legacyReq.method = "POST";
+  legacyReq.url = "/api/rcon/refresh?type=players";
+  legacyReq.headers = { host: "localhost" };
+  legacyReq.socket = {};
+  await server.handleRequest(legacyReq, legacy.res);
+
+  assert.equal(legacy.state.status, 200);
+  const legacyBody = JSON.parse(legacy.state.body);
+  assert.equal(legacyBody.source, "module.matchState");
+  assert.equal(legacyBody.type, "players");
+  assert.equal(refreshCalls[1], "players");
+}
+
 async function testSettingsRoutesRequireAuthAndSuperAdmin() {
   const settingsResponse = {
     enabled: true,
@@ -424,6 +517,7 @@ await testHealthEndpointDoesNotRequireAuth();
 await testWeaponCollectorApiRequiresGet();
 await testSnapshotAllRequiresAuth();
 await testSnapshotAllDoesNotTriggerSlowTasks();
+await testMatchRefreshRoutesDelegateToMatchState();
 await testSettingsRoutesRequireAuthAndSuperAdmin();
 await testVueRouteFallsBackToIndexHtml();
 

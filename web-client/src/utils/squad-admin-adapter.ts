@@ -191,24 +191,37 @@ export function adaptMatchHeader(
   server: Record<string, any>,
   runtimeState: any,
   matchStore: any,
+  matchSnapshot: any = null,
 ): MatchHeaderData {
   const snapshot = server.snapshot ?? server ?? {};
+  const backendServerStatus = matchSnapshot?.serverStatus ?? {};
+  const backendMatch = matchSnapshot?.match ?? {};
+  const backendPlayers = matchSnapshot?.players ?? {};
+  const backendSquads = matchSnapshot?.squads ?? {};
   const team1 = matchStore.team1Players?.length ?? 0;
   const team2 = matchStore.team2Players?.length ?? 0;
+  const serverStatusUpdatedAt = toTimestamp(backendServerStatus.lastUpdatedAt);
+  const playersUpdatedAt = toTimestamp(backendPlayers.lastUpdatedAt);
+  const squadsUpdatedAt = toTimestamp(backendSquads.lastUpdatedAt);
+  const runtimeUpdatedAt = Number(server.updatedAt ?? 0);
+  const lastUpdateTime = Math.max(serverStatusUpdatedAt, playersUpdatedAt, squadsUpdatedAt, runtimeUpdatedAt);
 
   return {
-    serverName: snapshot.serverName || "Unknown Server",
-    mapName: snapshot.layerName || snapshot.mapName || "Unknown Map",
-    gameMode: snapshot.layerGameMode || snapshot.gameMode || "Unknown",
+    serverName: backendServerStatus.name || snapshot.serverName || "Unknown Server",
+    mapName: backendServerStatus.map || snapshot.layerName || snapshot.mapName || backendMatch.map || "Unknown Map",
+    gameMode: backendServerStatus.mode || snapshot.layerGameMode || snapshot.gameMode || backendMatch.mode || "Unknown",
     totalPlayers: team1 + team2,
-    maxPlayers: 100,
+    maxPlayers: Number(backendServerStatus.maxPlayers ?? snapshot.maxPlayers ?? 100),
     team1Count: team1,
     team2Count: team2,
-    matchTimeSeconds: (snapshot.matchTimeSeconds ?? 0) as number,
-    tps: (snapshot.tps ?? 0) as number,
-    rconStatus: (snapshot.rconStatus ?? "unknown") as any,
+    matchTimeSeconds: Number(backendServerStatus.playtime ?? snapshot.matchTimeSeconds ?? backendMatch.playtime ?? 0),
+    tps: Number(backendServerStatus.tps ?? snapshot.tps ?? 0),
+    rconStatus: (matchSnapshot?.rconStatus?.status ?? snapshot.webStatus?.rcon ?? snapshot.rconStatus ?? "unknown") as any,
     logsStatus: runtimeState?.lastError ? "stale" : "live",
-    lastUpdateTime: server.updatedAt ?? 0,
+    lastUpdateTime,
+    serverStatusUpdatedAt,
+    playersUpdatedAt,
+    squadsUpdatedAt,
   };
 }
 
@@ -244,4 +257,11 @@ function isPlayerMatch(player: PlayerRowViewModel, query: string): boolean {
     || (player.eosId?.toLowerCase().includes(query) ?? false)
     || (player.ip?.includes(query) ?? false)
   );
+}
+
+function toTimestamp(value: string | number | null | undefined): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (!value) return 0;
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : 0;
 }
