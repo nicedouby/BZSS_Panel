@@ -5,7 +5,23 @@
     @click="$emit('select')"
   >
     <div class="player-row-left">
-      <span class="player-name">{{ player.name }}</span>
+      <div class="player-identity">
+        <span
+          class="role-icon"
+          :class="`tone-${roleIcon.tone}`"
+          :title="`${roleIcon.label}: ${player.role || 'Unknown Role'}`"
+          aria-hidden="true"
+        >
+          <img
+            v-if="isRoleIconImage"
+            class="role-icon-image"
+            :src="roleIcon.icon"
+            :alt="roleIcon.label"
+          />
+          <span v-else>{{ roleIcon.icon }}</span>
+        </span>
+        <span class="player-name">{{ player.name }}</span>
+      </div>
       <div class="player-meta">
         <span class="player-role">{{ player.role }}</span>
         <span class="player-id">ID {{ player.playerId ?? "-" }}</span>
@@ -20,6 +36,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { PlayerRowViewModel } from "../../types/squad-admin.types";
+import { resolveRoleIcon } from "../../utils/role-icons";
 
 const props = defineProps<{
   player: PlayerRowViewModel;
@@ -31,6 +48,8 @@ defineEmits<{
 }>();
 
 const isSelected = computed(() => props.selected ?? false);
+const roleIcon = computed(() => resolveRoleIcon(props.player.role));
+const isRoleIconImage = computed(() => roleIcon.value.icon.startsWith("/"));
 
 const playtimeText = computed(() => {
   if (props.player.playtimeHours == null) return "";
@@ -65,6 +84,13 @@ const playtimeText = computed(() => {
   flex: 1;
 }
 
+.player-identity {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
 .player-name {
   font-weight: 600;
   color: var(--color-text-primary);
@@ -81,6 +107,76 @@ const playtimeText = computed(() => {
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
   flex-wrap: wrap;
+}
+
+.role-icon {
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.role-icon-image {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  display: block;
+}
+
+.tone-leader {
+  color: #facc15;
+  background: rgba(250, 204, 21, 0.1);
+}
+
+.tone-medic {
+  color: #fb7185;
+  background: rgba(251, 113, 133, 0.1);
+}
+
+.tone-at {
+  color: #f97316;
+  background: rgba(249, 115, 22, 0.1);
+}
+
+.tone-mg {
+  color: #a78bfa;
+  background: rgba(167, 139, 250, 0.1);
+}
+
+.tone-engineer {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+}
+
+.tone-marksman {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.tone-rifleman {
+  color: #cbd5e1;
+  background: rgba(203, 213, 225, 0.08);
+}
+
+.tone-crewman {
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.1);
+}
+
+.tone-pilot {
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.1);
+}
+
+.tone-default {
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.06);
 }
 
 .player-role {

@@ -6,7 +6,20 @@
   >
     <div class="leader-row-left">
       <div class="leader-identity">
-        <span class="leader-icon">👑</span>
+        <span
+          class="role-icon"
+          :class="`tone-${roleIcon.tone}`"
+          :title="`${roleIcon.label}: ${player.role || 'Unknown Role'}`"
+          aria-hidden="true"
+        >
+          <img
+            v-if="isRoleIconImage"
+            class="role-icon-image"
+            :src="roleIcon.icon"
+            :alt="roleIcon.label"
+          />
+          <span v-else>{{ roleIcon.icon }}</span>
+        </span>
         <span class="leader-name">{{ player.name }}</span>
         <StatusBadge tone="ok">SL</StatusBadge>
       </div>
@@ -25,6 +38,7 @@
 import { computed } from "vue";
 import type { SquadLeaderRowViewModel } from "../../types/squad-admin.types";
 import StatusBadge from "../common/StatusBadge.vue";
+import { resolveRoleIcon } from "../../utils/role-icons";
 
 const props = defineProps<{
   player: SquadLeaderRowViewModel;
@@ -36,6 +50,8 @@ defineEmits<{
 }>();
 
 const isSelected = computed(() => props.selected ?? false);
+const roleIcon = computed(() => resolveRoleIcon(props.player.role));
+const isRoleIconImage = computed(() => roleIcon.value.icon.startsWith("/"));
 
 const playtimeText = computed(() => {
   if (props.player.playtimeHours == null) return "";
@@ -78,12 +94,77 @@ const playtimeText = computed(() => {
   gap: 8px;
   align-items: center;
   min-width: 0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
-.leader-icon {
-  font-size: 14px;
-  flex-shrink: 0;
+.role-icon {
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.role-icon-image {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  display: block;
+}
+
+.tone-leader {
+  color: #facc15;
+  background: rgba(250, 204, 21, 0.1);
+}
+
+.tone-medic {
+  color: #fb7185;
+  background: rgba(251, 113, 133, 0.1);
+}
+
+.tone-at {
+  color: #f97316;
+  background: rgba(249, 115, 22, 0.1);
+}
+
+.tone-mg {
+  color: #a78bfa;
+  background: rgba(167, 139, 250, 0.1);
+}
+
+.tone-engineer {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+}
+
+.tone-marksman {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.tone-rifleman {
+  color: #cbd5e1;
+  background: rgba(203, 213, 225, 0.08);
+}
+
+.tone-crewman {
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.1);
+}
+
+.tone-pilot {
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.1);
+}
+
+.tone-default {
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.06);
 }
 
 .leader-name {
