@@ -6,12 +6,14 @@
       :density-mode="pageState.densityMode"
       :can-refresh="canRefresh"
       :refreshing-type="refreshingType"
+      :refreshing-playtime="refreshingPlaytime"
       :server-status-updated-at="serverStatusUpdatedAt"
       :players-updated-at="playersUpdatedAt"
       :squads-updated-at="squadsUpdatedAt"
       @search="pageState.searchQuery = $event"
       @density-change="pageState.densityMode = $event"
       @refresh="handleToolbarRefresh"
+      @refresh-playtime="refreshOnlinePlaytime"
     />
 
     <DataState
@@ -60,6 +62,7 @@ import { useUiStore } from "../stores/ui.store";
 import {
   adaptTeam,
   adaptMatchHeader,
+  filterTeamsBySearch,
 } from "../utils/squad-admin-adapter";
 import DataState from "../components/common/DataState.vue";
 import ErrorBlock from "../components/common/ErrorBlock.vue";
@@ -90,7 +93,7 @@ const refreshingSquads = ref(false);
 const refreshingAll = ref(false);
 const refreshError = ref("");
 const playtimeError = ref("");
-const playtimeRequested = ref(false);
+const playtimeRequested = ref(true);
 const selectedPlayerDetail = ref<PlayerDetailViewModel | null>(null);
 
 const pageState = reactive<PageState>({
@@ -145,8 +148,9 @@ const playtimeQuery = useQuery({
 const playtimes = computed(() => playtimeQuery.data.value?.items ?? {});
 
 const viewModels = computed(() => {
+  const teams = match.teams.map((team) => adaptTeam(team, playtimes.value));
   return {
-    teams: match.teams.map((team) => adaptTeam(team, playtimes.value)),
+    teams: filterTeamsBySearch(teams, pageState.searchQuery),
   };
 });
 

@@ -54,6 +54,7 @@ const isRoleIconImage = computed(() => roleIcon.value.icon.startsWith("/"));
 
 const playtimeText = computed(() => {
   if (props.player.playtimeHours == null) return "";
+  if (Number(props.player.playtimeHours) === 0) return `${t("player.steamTime")} 未公开`;
   return `${t("player.steamTime")} ${props.player.playtimeHours}h`;
 });
 

@@ -10,6 +10,7 @@
       <div class="squad-header-title">
         <strong>{{ squad.squadName }}</strong>
         <span class="squad-member-count">{{ squad.memberCount }}/{{ squad.maxMembers }}</span>
+        <span class="squad-average-playtime">{{ squadAveragePlaytimeText }}</span>
       </div>
       <div class="squad-header-creator">
         {{ squad.creatorName }}
@@ -76,6 +77,19 @@ const hasSelectedPlayer = computed(() => {
   }
   return props.squad.members.some((member) => String(member.playerId) === String(props.selectedPlayerId));
 });
+
+const squadAveragePlaytimeText = computed(() => {
+  if (props.squad.knownPlaytimePlayers <= 0) return "Steam 时长未加载";
+  const privateText = props.squad.privatePlaytimePlayers > 0
+    ? ` / 未公开 ${props.squad.privatePlaytimePlayers}`
+    : "";
+
+  if (props.squad.averagePlaytimeHours == null) {
+    return `平均时长 -- / 公开 0${privateText}`;
+  }
+
+  return `平均 ${props.squad.averagePlaytimeHours}h / 公开 ${props.squad.publicPlaytimePlayers}${privateText}`;
+});
 </script>
 
 <style scoped>
@@ -126,12 +140,19 @@ const hasSelectedPlayer = computed(() => {
   gap: var(--spacing-sm);
   align-items: center;
   min-width: 0;
+  flex-wrap: wrap;
 }
 
 .squad-member-count {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   font-weight: 500;
+}
+
+.squad-average-playtime {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
 }
 
 .squad-header-creator {

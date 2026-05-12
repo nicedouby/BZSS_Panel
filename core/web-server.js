@@ -675,8 +675,10 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/db/players") {
+      const searchQuery = url.searchParams.get("q") ?? url.searchParams.get("query") ?? "";
       const result = await this.modules.playerDatabase.listPlayers({
-        query: url.searchParams.get("query") ?? "",
+        query: searchQuery,
+        q: searchQuery,
         limit: url.searchParams.get("limit") ?? "200",
         offset: url.searchParams.get("offset") ?? "0",
         sort: url.searchParams.get("sort") ?? "updated_desc",

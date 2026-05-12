@@ -1,8 +1,3 @@
-/**
- * Squad Admin Console Adapter
- * 将原始数据转换为 ViewModel
- */
-
 import type { RuntimePlayer } from "../stores/player.store";
 import type { RuntimeSquad } from "../stores/squad.store";
 import type { RuntimeTeam } from "../stores/match.store";
@@ -16,9 +11,6 @@ import type {
   SquadWarning,
 } from "../types/squad-admin.types";
 
-/**
- * 将 RuntimePlayer 转换为 PlayerRowViewModel
- */
 export function adaptPlayerRow(
   player: RuntimePlayer,
   playtimeHours: number | null = null,
@@ -39,10 +31,6 @@ export function adaptPlayerRow(
   };
 }
 
-/**
- * 将小队的成员按 leader 分离
- * 返回 [leader, otherMembers]
- */
 export function separateSquadLeader(
   members: RuntimePlayer[],
   playtimes: Record<string, any> = {},
@@ -64,9 +52,6 @@ export function separateSquadLeader(
   return [leaderVm, memberVms];
 }
 
-/**
- * 从 playtimes 缓存中提取小时数
- */
 export function extractPlaytimeHours(
   steamId: string | null | undefined,
   playtimes: Record<string, any>,
@@ -75,19 +60,19 @@ export function extractPlaytimeHours(
   const playtime = playtimes[steamId];
   if (!playtime) return null;
   const seconds = Number(playtime.gameSeconds ?? 0);
-  if (!Number.isFinite(seconds) || seconds <= 0) return null;
-  return Math.round((seconds / 3600) * 10) / 10; // 一位小数
+  if (!Number.isFinite(seconds)) return null;
+  if (seconds === 0) return 0;
+  if (seconds < 0) return null;
+  return Math.round((seconds / 3600) * 10) / 10;
 }
 
-/**
- * 将 RuntimeSquad 和成员转换为 SquadViewModel
- */
 export function adaptSquad(
   squad: RuntimeSquad,
   members: RuntimePlayer[] = [],
   playtimes: Record<string, any> = {},
 ): SquadViewModel {
   const [leader, otherMembers] = separateSquadLeader(members, playtimes);
+  const playtimeSummary = buildPlaytimeSummary(collectSquadPlayers(leader, otherMembers));
 
   const warnings: SquadWarning[] = [];
   if (members.length > 0 && !leader) {
@@ -112,6 +97,10 @@ export function adaptSquad(
     isLocked: Boolean(squad.locked),
     memberCount: members.length,
     maxMembers: squad.size ?? 9,
+    averagePlaytimeHours: playtimeSummary.averagePlaytimeHours,
+    publicPlaytimePlayers: playtimeSummary.publicPlaytimePlayers,
+    privatePlaytimePlayers: playtimeSummary.privatePlaytimePlayers,
+    knownPlaytimePlayers: playtimeSummary.knownPlaytimePlayers,
     leader,
     members: otherMembers,
     warnings,
@@ -119,9 +108,6 @@ export function adaptSquad(
   };
 }
 
-/**
- * 将 RuntimeTeam 转换为 TeamViewModel
- */
 export function adaptTeam(
   runtimeTeam: RuntimeTeam,
   playtimes: Record<string, any> = {},
@@ -130,7 +116,6 @@ export function adaptTeam(
     adaptSquad(squad, squad.members ?? [], playtimes),
   );
 
-  // 处理未分配玩家 (Unassigned squad)
   if (runtimeTeam.unassignedPlayers.length > 0) {
     squads.push(
       adaptSquad(
@@ -149,19 +134,23 @@ export function adaptTeam(
     );
   }
 
+  const teamPlayers = squads.flatMap((squad) => collectSquadPlayers(squad.leader, squad.members));
+  const playtimeSummary = buildPlaytimeSummary(teamPlayers);
+
   return {
     teamId: runtimeTeam.teamID,
     teamName: runtimeTeam.teamName,
     teamColorType: runtimeTeam.teamID === 1 ? "team1" : "team2",
     playerCount: runtimeTeam.playerCount,
-    maxPlayers: 50, // 默认值，可从配置获取
+    maxPlayers: 50,
+    averagePlaytimeHours: playtimeSummary.averagePlaytimeHours,
+    publicPlaytimePlayers: playtimeSummary.publicPlaytimePlayers,
+    privatePlaytimePlayers: playtimeSummary.privatePlaytimePlayers,
+    knownPlaytimePlayers: playtimeSummary.knownPlaytimePlayers,
     squads,
   };
 }
 
-/**
- * 将 RuntimePlayer 转换为 PlayerDetailViewModel
- */
 export function adaptPlayerDetail(
   player: RuntimePlayer,
   playtimeHours: number | null = null,
@@ -189,9 +178,6 @@ export function adaptPlayerDetail(
   };
 }
 
-/**
- * 根据战局数据构建 MatchHeaderData
- */
 export function adaptMatchHeader(
   server: Record<string, any>,
   runtimeState: any,
@@ -272,38 +258,183 @@ export function adaptMatchHeader(
   };
 }
 
-/**
- * 搜索过滤
- */
 export function filterSquadsBySearch(
   squads: SquadViewModel[],
   query: string,
+  options: { forceKeepAllSquads?: boolean } = {},
 ): SquadViewModel[] {
-  if (!query.trim()) return squads;
+  const terms = normalizeSearchTerms(query);
+  if (!terms.length) return squads;
 
-  const lowerQuery = query.toLowerCase();
-  return squads.map((squad) => ({
-    ...squad,
-    members: squad.members.filter((member) =>
-      isPlayerMatch(member, lowerQuery),
-    ),
-    leader: squad.leader && isPlayerMatch(squad.leader, lowerQuery)
-      ? squad.leader
-      : squad.leader && !squad.leader.name.toLowerCase().includes(lowerQuery)
-        ? null
-        : squad.leader,
-  }));
+  return squads.flatMap((squad) => {
+    if (options.forceKeepAllSquads) {
+      return [squad];
+    }
+
+    const squadMatched = isSquadMetaMatch(squad, terms);
+    const leaderMatched = squad.leader ? isPlayerMatch(squad.leader, terms) : false;
+    const matchedMembers = squad.members.filter((member) => isPlayerMatch(member, terms));
+
+    if (!squadMatched && !leaderMatched && matchedMembers.length === 0) {
+      return [];
+    }
+
+    if (squadMatched) {
+      return [squad];
+    }
+
+    const filteredSquad = {
+      ...squad,
+      leader: leaderMatched ? squad.leader : null,
+      members: matchedMembers,
+      state: leaderMatched || matchedMembers.length > 0 ? "normal" : squad.state,
+    };
+    const summary = buildPlaytimeSummary(collectSquadPlayers(filteredSquad.leader, filteredSquad.members));
+
+    return [{
+      ...filteredSquad,
+      averagePlaytimeHours: summary.averagePlaytimeHours,
+      publicPlaytimePlayers: summary.publicPlaytimePlayers,
+      privatePlaytimePlayers: summary.privatePlaytimePlayers,
+      knownPlaytimePlayers: summary.knownPlaytimePlayers,
+    }];
+  });
 }
 
-function isPlayerMatch(player: PlayerRowViewModel, query: string): boolean {
-  return (
-    player.name.toLowerCase().includes(query)
-    || player.role.toLowerCase().includes(query)
-    || player.playerId?.toString().includes(query)
-    || (player.steamId?.includes(query) ?? false)
-    || (player.eosId?.toLowerCase().includes(query) ?? false)
-    || (player.ip?.includes(query) ?? false)
-  );
+export function filterTeamsBySearch(
+  teams: TeamViewModel[],
+  query: string,
+): TeamViewModel[] {
+  const terms = normalizeSearchTerms(query);
+  if (!terms.length) return teams;
+
+  return teams.flatMap((team) => {
+    const teamText = compactSearchText([
+      team.teamId,
+      team.teamName,
+      team.teamColorType,
+      team.playerCount,
+      team.maxPlayers,
+    ]);
+
+    const teamMetaMatched = includesAllTerms(teamText, terms);
+    const squads = filterSquadsBySearch(team.squads, query, {
+      forceKeepAllSquads: teamMetaMatched,
+    });
+
+    const teamPlayers = squads.flatMap((squad) => collectSquadPlayers(squad.leader, squad.members));
+    const playtimeSummary = buildPlaytimeSummary(teamPlayers);
+    const visiblePlayers = squads.reduce((sum, squad) => {
+      return sum + (squad.leader ? 1 : 0) + squad.members.length;
+    }, 0);
+
+    if (!teamMetaMatched && visiblePlayers === 0) {
+      return [];
+    }
+
+    return [{
+      ...team,
+      playerCount: teamMetaMatched ? team.playerCount : visiblePlayers,
+      averagePlaytimeHours: playtimeSummary.averagePlaytimeHours,
+      publicPlaytimePlayers: playtimeSummary.publicPlaytimePlayers,
+      privatePlaytimePlayers: playtimeSummary.privatePlaytimePlayers,
+      knownPlaytimePlayers: playtimeSummary.knownPlaytimePlayers,
+      squads,
+    }];
+  });
+}
+
+function normalizeSearchTerms(query: string): string[] {
+  return String(query ?? "")
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
+function includesAllTerms(haystack: string, terms: string[]): boolean {
+  const text = haystack.toLowerCase();
+  return terms.every((term) => text.includes(term));
+}
+
+function compactSearchText(parts: unknown[]): string {
+  return parts
+    .map((part) => String(part ?? "").trim())
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function isSquadMetaMatch(squad: SquadViewModel, terms: string[]): boolean {
+  const text = compactSearchText([
+    squad.squadId,
+    squad.squadName,
+    squad.teamId,
+    squad.creatorName,
+    squad.memberCount,
+    squad.maxMembers,
+    squad.averagePlaytimeHours,
+    squad.publicPlaytimePlayers,
+    squad.privatePlaytimePlayers,
+    squad.isLocked ? "locked 锁定 已锁" : "open unlocked 未锁 开放",
+    squad.state,
+    squad.state === "empty" ? "empty 空 无成员" : "",
+    squad.state === "no_leader" ? "no_leader no leader 无队长 没队长" : "",
+  ]);
+
+  return includesAllTerms(text, terms);
+}
+
+function isPlayerMatch(player: PlayerRowViewModel, terms: string[]): boolean {
+  const text = compactSearchText([
+    player.playerId,
+    player.name,
+    player.role,
+    player.isLeader ? "leader squadleader sl 队长 小队长" : "member 队员",
+    player.isOnline ? "online 在线" : "offline 离线",
+    player.teamId,
+    player.squadId,
+    player.steamId,
+    player.eosId,
+    player.ip,
+    player.playtimeHours,
+    player.playtimeHours === 0 ? "未公开 private hidden 0" : "",
+  ]);
+
+  return includesAllTerms(text, terms);
+}
+
+function collectSquadPlayers(
+  leader: SquadLeaderRowViewModel | null,
+  members: PlayerRowViewModel[],
+): PlayerRowViewModel[] {
+  return [
+    ...(leader ? [leader] : []),
+    ...members,
+  ];
+}
+
+function buildPlaytimeSummary(players: PlayerRowViewModel[]) {
+  const known = players.filter((player) => player.playtimeHours != null);
+  const publicPlayers = known.filter((player) => Number(player.playtimeHours) > 0);
+  const privatePlayers = known.filter((player) => Number(player.playtimeHours) === 0);
+
+  const totalHours = publicPlayers.reduce((sum, player) => {
+    return sum + Number(player.playtimeHours ?? 0);
+  }, 0);
+
+  const average = publicPlayers.length > 0
+    ? Math.round((totalHours / publicPlayers.length) * 10) / 10
+    : null;
+
+  return {
+    averagePlaytimeHours: average,
+    publicPlaytimePlayers: publicPlayers.length,
+    privatePlaytimePlayers: privatePlayers.length,
+    knownPlaytimePlayers: known.length,
+  };
 }
 
 function toTimestamp(value: string | number | null | undefined): number {

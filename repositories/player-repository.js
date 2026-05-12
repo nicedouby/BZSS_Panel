@@ -13,6 +13,96 @@ function cleanId(value) {
   return text;
 }
 
+function normalizeSearchTerms(query) {
+  return String(query ?? "")
+    .trim()
+    .split(/\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
+function buildPlayerSearchWhere(query) {
+  const terms = normalizeSearchTerms(query);
+  if (!terms.length) {
+    return {
+      where: "1 = 1",
+      params: [],
+    };
+  }
+
+  const clauses = [];
+  const params = [];
+
+  for (const term of terms) {
+    const like = `%${term}%`;
+    clauses.push(`(
+      CAST(players.id AS TEXT) LIKE ?
+      OR players.current_name LIKE ?
+      OR players.steam_id LIKE ?
+      OR players.eos_id LIKE ?
+      OR players.current_ip LIKE ?
+      OR players.permission_group LIKE ?
+      OR EXISTS (
+        SELECT 1
+        FROM player_aliases pa
+        WHERE pa.player_id = players.id
+          AND pa.alias_name LIKE ?
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM player_ips pi
+        WHERE pi.player_id = players.id
+          AND pi.ip LIKE ?
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM player_logins pl
+        WHERE pl.player_id = players.id
+          AND (
+            pl.ip LIKE ?
+            OR pl.steam_id LIKE ?
+            OR pl.eos_id LIKE ?
+            OR pl.controller_path LIKE ?
+          )
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM squad_create_records scr
+        WHERE scr.player_id = players.id
+          AND (
+            CAST(scr.squad_id AS TEXT) LIKE ?
+            OR scr.squad_name LIKE ?
+            OR scr.team_name LIKE ?
+          )
+      )
+    )`);
+
+    params.push(
+      like,
+      like,
+      like,
+      like,
+      like,
+      like,
+      like,
+      like,
+      like,
+      like,
+      like,
+      like,
+      like,
+      like,
+      like,
+    );
+  }
+
+  return {
+    where: clauses.join(" AND "),
+    params,
+  };
+}
+
 export class PlayerRepository {
   constructor(db) {
     this.db = db;
@@ -190,8 +280,9 @@ export class PlayerRepository {
     );
   }
 
-  async listPlayers({ query = "", limit = 100, offset = 0, sort = "updated_desc" } = {}) {
-    const q = `%${String(query ?? "").trim()}%`;
+  async listPlayers({ query = "", q: qAlias = "", limit = 100, offset = 0, sort = "updated_desc" } = {}) {
+    const searchQuery = query || qAlias || "";
+    const search = buildPlayerSearchWhere(searchQuery);
     const cappedLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
     const safeOffset = Math.max(Number(offset) || 0, 0);
     let orderBy = "players.updated_at DESC";
@@ -215,30 +306,23 @@ export class PlayerRepository {
           FROM player_logins
           GROUP BY player_id
        ) AS login ON login.player_id = players.id
-       WHERE (? = '%%' OR players.current_name LIKE ? OR players.steam_id LIKE ? OR players.eos_id LIKE ? OR players.current_ip LIKE ?)
+       WHERE ${search.where}
        ORDER BY ${orderBy}
        LIMIT ? OFFSET ?`,
-      q,
-      q,
-      q,
-      q,
-      q,
+      ...search.params,
       cappedLimit,
       safeOffset,
     );
   }
 
-  async countPlayers({ query = "" } = {}) {
-    const q = `%${String(query ?? "").trim()}%`;
+  async countPlayers({ query = "", q: qAlias = "" } = {}) {
+    const searchQuery = query || qAlias || "";
+    const search = buildPlayerSearchWhere(searchQuery);
     const row = await this.db.get(
       `SELECT COUNT(*) AS count
        FROM players
-       WHERE (? = '%%' OR current_name LIKE ? OR steam_id LIKE ? OR eos_id LIKE ? OR current_ip LIKE ?)`,
-      q,
-      q,
-      q,
-      q,
-      q,
+       WHERE ${search.where}`,
+      ...search.params,
     );
     return Number(row?.count ?? 0);
   }

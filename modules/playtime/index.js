@@ -13,6 +13,7 @@ const DEFAULT_WAIT_MS = 15_000;
 const DEFAULT_RETRY_COUNT = 2;
 const DEFAULT_RETRY_DELAY_MS = 1200;
 const DEFAULT_SCRIPT_TIMEOUT_MS = 12_000;
+const DEFAULT_ONLINE_REFRESH_FRESHNESS_WINDOW_MINUTES = 120;
 const MAX_JOB_HISTORY = 200;
 
 function now() {
@@ -75,6 +76,7 @@ class SteamGameDurationService {
     pythonConfigPath,
     scriptTimeoutMs,
     scriptFallbackToApi,
+    onlineRefreshFreshnessWindowMinutes,
     steamPlaytimeRepo,
     playerDatabase,
     logger,
@@ -92,6 +94,7 @@ class SteamGameDurationService {
     this.pythonConfigPath = path.resolve(process.cwd(), String(pythonConfigPath || "./MicePanel/config.json"));
     this.scriptTimeoutMs = Math.max(1000, Number(scriptTimeoutMs) || DEFAULT_SCRIPT_TIMEOUT_MS);
     this.scriptFallbackToApi = Boolean(scriptFallbackToApi);
+    this.onlineRefreshFreshnessWindowMinutes = Math.max(0, Number(onlineRefreshFreshnessWindowMinutes) || DEFAULT_ONLINE_REFRESH_FRESHNESS_WINDOW_MINUTES);
     this.steamPlaytimeRepo = steamPlaytimeRepo || null;
     this.playerDatabase = playerDatabase || null;
     this.logger = logger || null;
@@ -136,6 +139,7 @@ class SteamGameDurationService {
       pythonConfigPath: this.pythonConfigPath,
       scriptTimeoutMs: this.scriptTimeoutMs,
       scriptFallbackToApi: this.scriptFallbackToApi,
+      onlineRefreshFreshnessWindowMinutes: this.onlineRefreshFreshnessWindowMinutes,
       activeLookups: this.activeLookups,
       queuedLookups: this.lookupQueue.length,
       queuedJobs,
@@ -206,7 +210,8 @@ class SteamGameDurationService {
     });
 
     this._runJob(job, async () => {
-      const settled = await Promise.allSettled(targets.map(async (player) => {
+      const prioritizedTargets = await this._prioritizeOnlineRefreshTargets(targets);
+      const settled = await Promise.allSettled(prioritizedTargets.map(async (player) => {
         const lookup = await this.lookupSteamDuration(player.steamID, {
           lastSeenName: player.name || null,
         });
@@ -234,8 +239,8 @@ class SteamGameDurationService {
           await this._logRefresh(job, "success", item.value);
         } else {
           const failure = {
-            steamID: targets[index]?.steamID || null,
-            playerName: targets[index]?.name || null,
+            steamID: prioritizedTargets[index]?.steamID || null,
+            playerName: prioritizedTargets[index]?.name || null,
             error: item.reason?.message || "lookup failed",
           };
           failures.push(failure);
@@ -253,6 +258,42 @@ class SteamGameDurationService {
     });
 
     return this._publicJob(job);
+  }
+
+  async _prioritizeOnlineRefreshTargets(players) {
+    const rows = this.steamPlaytimeRepo?.getManyBySteamIDs
+      ? await this.steamPlaytimeRepo.getManyBySteamIDs(players.map((player) => player.steamID))
+      : new Map();
+    const freshnessWindowMs = this.onlineRefreshFreshnessWindowMinutes * 60_000;
+    const nowTs = now();
+
+    return players
+      .map((player, index) => {
+        const cached = rows.get(player.steamID);
+        const fetchedAt = Number(cached?.fetched_at || 0) || 0;
+        const ageMs = fetchedAt > 0 ? Math.max(0, nowTs - fetchedAt) : Number.POSITIVE_INFINITY;
+        const priorityScore = fetchedAt > 0
+          ? (ageMs < freshnessWindowMs ? ageMs - freshnessWindowMs : ageMs)
+          : Number.POSITIVE_INFINITY;
+
+        return {
+          player,
+          index,
+          fetchedAt,
+          ageMs,
+          priorityScore,
+        };
+      })
+      .sort((left, right) => {
+        if (left.priorityScore !== right.priorityScore) {
+          return right.priorityScore - left.priorityScore;
+        }
+        if (left.fetchedAt !== right.fetchedAt) {
+          return left.fetchedAt - right.fetchedAt;
+        }
+        return left.index - right.index;
+      })
+      .map(({ player }) => player);
   }
 
   async lookupSteamDuration(steamID, persistOptions = {}) {

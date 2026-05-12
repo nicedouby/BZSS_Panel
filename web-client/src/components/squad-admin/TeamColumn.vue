@@ -4,6 +4,7 @@
       <div>
         <h2>{{ team.teamName }}</h2>
         <span class="team-player-count">{{ t("topbar.players", "", { count: team.playerCount }) }}</span>
+        <span class="team-average-playtime">{{ teamAveragePlaytimeText }}</span>
       </div>
     </header>
     <div class="squad-list">
@@ -35,6 +36,20 @@ defineEmits<{
 
 const teamColorClass = computed(() => {
   return props.team.teamColorType === "team1" ? "team1" : "team2";
+});
+
+const teamAveragePlaytimeText = computed(() => {
+  if (props.team.knownPlaytimePlayers <= 0) return "Steam 时长未加载";
+
+  const privateText = props.team.privatePlaytimePlayers > 0
+    ? ` / 未公开 ${props.team.privatePlaytimePlayers}`
+    : "";
+
+  if (props.team.averagePlaytimeHours == null) {
+    return `平均时长 -- / 公开 0${privateText}`;
+  }
+
+  return `平均 ${props.team.averagePlaytimeHours}h / 公开 ${props.team.publicPlaytimePlayers}${privateText}`;
 });
 </script>
 
@@ -76,6 +91,13 @@ const teamColorClass = computed(() => {
   margin-top: 4px;
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
+}
+
+.team-average-playtime {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
 }
 
 .squad-list {

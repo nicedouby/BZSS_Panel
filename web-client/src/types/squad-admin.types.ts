@@ -30,6 +30,10 @@ export interface SquadViewModel {
   isLocked: boolean;
   memberCount: number;
   maxMembers: number;
+  averagePlaytimeHours: number | null;
+  publicPlaytimePlayers: number;
+  privatePlaytimePlayers: number;
+  knownPlaytimePlayers: number;
   leader: SquadLeaderRowViewModel | null;
   members: PlayerRowViewModel[];
   warnings: SquadWarning[];
@@ -42,6 +46,10 @@ export interface TeamViewModel {
   teamColorType: "team1" | "team2";
   playerCount: number;
   maxPlayers: number;
+  averagePlaytimeHours: number | null;
+  publicPlaytimePlayers: number;
+  privatePlaytimePlayers: number;
+  knownPlaytimePlayers: number;
   squads: SquadViewModel[];
 }
 

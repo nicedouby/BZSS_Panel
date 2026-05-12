@@ -31,6 +31,13 @@
           >
             {{ refreshingType === 'all' ? t('common.refreshing') : t('match.refreshAll') }}
           </button>
+          <button
+            type="button"
+            :disabled="!canRefresh || isRefreshing || refreshingPlaytime"
+            @click="$emit('refresh-playtime')"
+          >
+            {{ refreshingPlaytime ? "正在更新 Steam 时长" : "更新 Steam 时长" }}
+          </button>
         </div>
 
         <div class="density-toggle">
@@ -60,16 +67,19 @@ const props = defineProps<{
   densityMode: "comfortable" | "compact";
   canRefresh: boolean;
   refreshingType: RefreshType | "";
+  refreshingPlaytime?: boolean;
 }>();
 
 const emit = defineEmits<{
   (event: "search", query: string): void;
   (event: "density-change", mode: "comfortable" | "compact"): void;
   (event: "refresh", type: RefreshType): void;
+  (event: "refresh-playtime"): void;
 }>();
 
 const searchQuery = ref(props.searchQuery);
 const isRefreshing = computed(() => Boolean(props.refreshingType));
+const refreshingPlaytime = computed(() => Boolean(props.refreshingPlaytime));
 
 watch(
   () => props.searchQuery,

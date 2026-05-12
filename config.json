@@ -185,6 +185,92 @@
         "max": 120000,
         "advanced": true,
         "restartRequired": true
+      },
+      {
+        "path": "steam.appId",
+        "label": "Steam App ID",
+        "type": "number",
+        "min": 1,
+        "max": 2147483647,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "steam.maxConcurrent",
+        "label": "Steam Lookup Max Concurrent",
+        "type": "number",
+        "min": 1,
+        "max": 20,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "steam.requestTimeoutMs",
+        "label": "Steam Request Timeout",
+        "type": "number",
+        "min": 1000,
+        "max": 120000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "steam.defaultWaitMs",
+        "label": "Steam Job Wait Timeout",
+        "type": "number",
+        "min": 0,
+        "max": 30000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "steam.retryCount",
+        "label": "Steam Retry Count",
+        "type": "number",
+        "min": 0,
+        "max": 5,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "steam.retryDelayMs",
+        "label": "Steam Retry Delay",
+        "type": "number",
+        "min": 100,
+        "max": 10000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "steam.usePythonScript",
+        "label": "Steam Use Python Script",
+        "type": "boolean",
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "steam.scriptTimeoutMs",
+        "label": "Steam Script Timeout",
+        "type": "number",
+        "min": 1000,
+        "max": 120000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "steam.scriptFallbackToApi",
+        "label": "Steam Script Fallback To API",
+        "type": "boolean",
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "steam.onlineRefreshFreshnessWindowMinutes",
+        "label": "Steam Refresh Freshness Window",
+        "type": "number",
+        "min": 0,
+        "max": 10080,
+        "advanced": true,
+        "restartRequired": true
       }
     ]
   },
@@ -198,6 +284,19 @@
     "autoStart": true,
     "restartOnExit": false,
     "pipeOutput": true
+  },
+
+  "steam": {
+    "appId": 393380,
+    "maxConcurrent": 3,
+    "requestTimeoutMs": 20000,
+    "defaultWaitMs": 15000,
+    "retryCount": 2,
+    "retryDelayMs": 1200,
+    "usePythonScript": true,
+    "scriptTimeoutMs": 12000,
+    "scriptFallbackToApi": false,
+    "onlineRefreshFreshnessWindowMinutes": 120
   },
 
   "rcon": {
