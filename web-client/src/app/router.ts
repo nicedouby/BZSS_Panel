@@ -11,7 +11,14 @@ export const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: "/", redirect: "/match-status" },
-    { path: "/match-status", component: MatchStatusPage, meta: { titleKey: "routeTitle.matchStatus" } },
+    {
+      path: "/match-status",
+      component: MatchStatusPage,
+      meta: {
+        titleKey: "routeTitle.matchStatus",
+        fullBleed: true,
+      },
+    },
     { path: "/console", component: ConsolePage, meta: { titleKey: "routeTitle.console" } },
     { path: "/player-database", component: PlayerDatabasePage, meta: { titleKey: "routeTitle.playerDatabase" } },
     { path: "/combat-clean", component: CombatCleanPage, meta: { titleKey: "routeTitle.combatClean" } },

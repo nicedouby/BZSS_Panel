@@ -180,7 +180,7 @@ onBeforeUnmount(() => {
     #151a20;
   box-shadow: 0 18px 36px rgba(0, 0, 0, 0.35);
   padding: 10px;
-  z-index: 90;
+  z-index: var(--z-user-dropdown);
   display: grid;
   gap: 8px;
 }

@@ -4,20 +4,19 @@
       <button type="button" class="menu-button" @click="toggleSidebar">
         {{ sidebarButtonLabel }}
       </button>
-      <div>
+      <div class="topbar-copy">
         <strong>{{ pageTitle }}</strong>
-        <span>{{ currentLayer }}</span>
+        <span class="topbar-subtitle">{{ currentLayer }}</span>
       </div>
     </div>
     <div class="topbar-end">
       <div class="topbar-metrics">
         <StatusBadge :tone="runtimeTone">{{ runtimeLabel }}</StatusBadge>
-        <span v-if="runtimeError">{{ runtimeError }}</span>
-        <span>{{ t("topbar.players", "", { count: playerCount }) }}</span>
-        <span>Queue {{ queueCount }}</span>
-        <span>{{ currentLayer }}</span>
-        <span>{{ nextLayer }}</span>
-        <span>{{ t("topbar.tps", "", { value: tps }) }}</span>
+        <span class="metric primary">{{ t("topbar.players", "", { count: playerCount }) }}</span>
+        <span class="metric primary">{{ t("topbar.tps", "", { value: tps }) }}</span>
+        <span class="metric optional">Queue {{ queueCount }}</span>
+        <span class="metric optional">Next {{ nextLayer }}</span>
+        <span v-if="runtimeError" class="metric error optional">{{ runtimeError }}</span>
       </div>
       <UserMenu />
     </div>
@@ -135,16 +134,24 @@ function toggleSidebar() {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 
-.topbar strong,
-.topbar span {
+.topbar-copy {
+  min-width: 0;
+}
+
+.topbar-copy strong,
+.topbar-copy span {
   display: block;
 }
 
-.topbar span {
+.topbar-subtitle {
   color: #9aa7b2;
   font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .menu-button {
@@ -156,6 +163,30 @@ function toggleSidebar() {
   align-items: center;
   gap: 10px;
   white-space: nowrap;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.metric {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  color: #dce4e8;
+  font-size: 12px;
+}
+
+.metric.primary {
+  color: #edf2f4;
+  font-weight: 600;
+}
+
+.metric.error {
+  color: #ffb1b1;
+}
+
+.metric.optional {
+  display: inline-flex;
 }
 
 .topbar-end {
@@ -181,6 +212,12 @@ function toggleSidebar() {
   .topbar-metrics {
     gap: 8px;
     overflow: hidden;
+  }
+}
+
+@media (max-width: 1280px) {
+  .metric.optional {
+    display: none;
   }
 }
 </style>

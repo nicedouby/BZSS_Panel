@@ -5,18 +5,14 @@
         <h2 class="team-title-line">
           <span class="team-id-badge">TEAM {{ team.teamId }}</span>
           <span class="team-name">{{ team.teamName }}</span>
+          <span class="team-count">{{ team.playerCount }}/{{ team.maxPlayers }}</span>
         </h2>
         <p class="team-column-subtitle">
-          <span>{{ t("topbar.players", "", { count: team.playerCount }) }}</span>
-          <span class="team-subtitle-separator">·</span>
-          <span>{{ teamAveragePlaytimeText }}</span>
+          <span>{{ headerSummaryText }}</span>
         </p>
       </div>
-      <div class="team-column-metrics">
-        <div class="team-metric">
-          <span>Strength</span>
-          <strong>{{ team.playerCount }}/{{ team.maxPlayers }}</strong>
-        </div>
+
+      <div v-if="isComfortable" class="team-column-metrics">
         <div class="team-metric">
           <span>Avg</span>
           <strong>{{ teamAveragePlaytimeShortText }}</strong>
@@ -24,6 +20,14 @@
         <div class="team-metric">
           <span>Squads</span>
           <strong>{{ team.squads.length }}</strong>
+        </div>
+        <div class="team-metric">
+          <span>Locked</span>
+          <strong>{{ lockedSquadCount }}</strong>
+        </div>
+        <div class="team-metric">
+          <span>Alerts</span>
+          <strong>{{ alertSquadCount }}</strong>
         </div>
       </div>
     </header>
@@ -44,7 +48,6 @@
 import { computed } from "vue";
 import type { PlayerRowViewModel, TeamViewModel } from "../../types/squad-admin.types";
 import SquadCard from "./SquadCard.vue";
-import { t } from "../../i18n";
 
 const props = defineProps<{
   team: TeamViewModel;
@@ -56,28 +59,27 @@ defineEmits<{
   (event: "select-player", player: PlayerRowViewModel): void;
 }>();
 
-const teamColorClass = computed(() => {
-  return props.team.teamColorType === "team1" ? "team1" : "team2";
-});
-
-const teamAveragePlaytimeText = computed(() => {
-  if (props.team.knownPlaytimePlayers <= 0) return "Steam 时长未加载";
-
-  const privateText = props.team.privatePlaytimePlayers > 0
-    ? ` / 未公开 ${props.team.privatePlaytimePlayers}`
-    : "";
-
-  if (props.team.averagePlaytimeHours == null) {
-    return `平均时长 -- / 公开 0${privateText}`;
-  }
-
-  return `平均 ${props.team.averagePlaytimeHours}h / 公开 ${props.team.publicPlaytimePlayers}${privateText}`;
-});
+const teamColorClass = computed(() => (props.team.teamColorType === "team1" ? "team1" : "team2"));
+const isComfortable = computed(() => props.densityMode !== "compact");
 
 const teamAveragePlaytimeShortText = computed(() => {
   if (props.team.knownPlaytimePlayers <= 0) return "--";
   if (props.team.averagePlaytimeHours == null) return "--";
   return `${props.team.averagePlaytimeHours}h`;
+});
+
+const lockedSquadCount = computed(() => props.team.squads.filter((squad) => squad.isLocked).length);
+const alertSquadCount = computed(() => props.team.squads.filter((squad) => squad.warnings.length > 0 || squad.state !== "normal").length);
+
+const headerSummaryText = computed(() => {
+  const avg = teamAveragePlaytimeShortText.value === "--" ? "Avg --" : `Avg ${teamAveragePlaytimeShortText.value}`;
+  const squadText = `Squads ${props.team.squads.length}`;
+  const lockedText = `Locked ${lockedSquadCount.value}`;
+  const alertText = `Alerts ${alertSquadCount.value}`;
+  if (isComfortable.value) {
+    return `${avg} / ${squadText} / ${lockedText} / ${alertText}`;
+  }
+  return `${avg} / ${squadText}`;
 });
 </script>
 
@@ -163,18 +165,25 @@ const teamAveragePlaytimeShortText = computed(() => {
   white-space: nowrap;
 }
 
+.team-count {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
 .team-column-subtitle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   margin: 4px 0 0;
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
-  flex-wrap: wrap;
 }
 
-.team-subtitle-separator {
-  color: var(--color-text-muted);
+.team-column-subtitle span {
+  display: inline-block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .team-id-badge {
@@ -206,7 +215,7 @@ const teamAveragePlaytimeShortText = computed(() => {
 
 .team-column-metrics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -253,10 +262,11 @@ const teamAveragePlaytimeShortText = computed(() => {
 
 .team-column.compact .team-column-header {
   padding: 10px;
+  gap: 8px;
 }
 
-.team-column.compact .team-column-metrics {
-  gap: 6px;
+.team-column.compact .team-column-subtitle {
+  margin-top: 2px;
 }
 
 .team-column.compact .squad-list {
@@ -265,7 +275,7 @@ const teamAveragePlaytimeShortText = computed(() => {
 
 @media (max-width: 900px) {
   .team-column-metrics {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>

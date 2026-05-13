@@ -7,6 +7,8 @@
       :can-refresh="canRefresh"
       :refreshing-type="refreshingType"
       :refreshing-playtime="refreshingPlaytime"
+      :viewer-perspective-text="viewerPerspectiveText"
+      :show-viewer-perspective="ui.showTeamPerspectiveHint"
       :server-status-updated-at="serverStatusUpdatedAt"
       :players-updated-at="playersUpdatedAt"
       :squads-updated-at="squadsUpdatedAt"
@@ -16,29 +18,28 @@
       @refresh-playtime="refreshOnlinePlaytime"
     />
 
-    <div v-if="ui.showTeamPerspectiveHint" class="viewer-perspective-line">
-      {{ viewerPerspectiveText }}
-    </div>
-
     <DataState
       :loading="showInitialLoading"
       :error="blockingRuntimeError"
       :stale="showStaleBanner"
       :stale-text="staleText"
     >
-      <ErrorBlock v-if="refreshError" :message="refreshError" />
+      <div class="match-state-content">
+        <div v-if="refreshError || playtimeError" class="match-error-stack">
+          <ErrorBlock v-if="refreshError" :message="refreshError" />
+          <ErrorBlock v-if="playtimeError" :message="playtimeError" />
+        </div>
 
-      <ErrorBlock v-if="playtimeError" :message="playtimeError" />
-
-      <div class="squad-main-content" :class="pageState.densityMode">
-        <TeamColumn
-          v-for="team in viewModels.teams"
-          :key="team.teamId"
-          :team="team"
-          :density-mode="pageState.densityMode"
-          :selected-player-id="pageState.selectedPlayerId"
-          @select-player="selectPlayer"
-        />
+        <div class="squad-main-content" :class="pageState.densityMode">
+          <TeamColumn
+            v-for="team in viewModels.teams"
+            :key="team.teamId"
+            :team="team"
+            :density-mode="pageState.densityMode"
+            :selected-player-id="pageState.selectedPlayerId"
+            @select-player="selectPlayer"
+          />
+        </div>
       </div>
     </DataState>
 
@@ -175,7 +176,7 @@ const viewModels = computed(() => {
     teams: sortTeamsForAdminPerspective(filteredTeams, viewerTeamId),
     viewerTeamId,
     viewerSteam64: viewerSteam64.value,
-    viewerPerspectiveText: buildViewerPerspectiveText(viewerTeamId, viewerAutoSwapEnabled.value),
+    viewerPerspectiveText: buildViewerPerspectiveTextEnglish(viewerTeamId, viewerAutoSwapEnabled.value),
   };
 });
 
@@ -445,12 +446,13 @@ function sortTeamsForAdminPerspective(teams: TeamViewModel[], adminTeamId: numbe
   });
 }
 
-function buildViewerPerspectiveText(adminTeamId: number | null, enabled: boolean): string {
-  if (!enabled || adminTeamId !== 1 && adminTeamId !== 2) {
-    return "当前视角：默认 TEAM 1 → TEAM 2";
+function buildViewerPerspectiveTextEnglish(adminTeamId: number | null, enabled: boolean): string {
+  if (!enabled || (adminTeamId !== 1 && adminTeamId !== 2)) {
+    return "Current view: default TEAM 1 -> TEAM 2";
   }
-  return `当前视角：TEAM ${adminTeamId}`;
+  return `Current view: TEAM ${adminTeamId}`;
 }
+
 </script>
 
 <style scoped>
@@ -458,12 +460,26 @@ function buildViewerPerspectiveText(adminTeamId: number | null, enabled: boolean
 
 .squad-admin-layout {
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   height: 100%;
   min-height: 0;
   gap: 0;
   overflow: hidden;
   background: var(--app-background, var(--color-bg-page));
+}
+
+.match-state-content {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.match-error-stack {
+  display: grid;
+  gap: 8px;
+  padding: 8px var(--spacing-lg) 0;
 }
 
 .squad-main-content {
@@ -477,14 +493,7 @@ function buildViewerPerspectiveText(adminTeamId: number | null, enabled: boolean
   background: linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.004)), transparent 22%), var(--app-background, var(--color-bg-page));
 }
 
-.viewer-perspective-line {
-  padding: 0 var(--spacing-lg) 8px;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
-  letter-spacing: 0.02em;
-}
-
-@media (max-width: 1366px) {
+@media (max-width: 1180px) {
   .squad-main-content {
     grid-template-columns: 1fr;
   }

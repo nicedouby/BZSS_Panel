@@ -61,12 +61,13 @@ withDefaults(defineProps<{
 }
 
 .state-banner-row {
-  padding: 12px 12px 0;
+  padding: 8px 12px 0;
 }
 
 .state-content {
   display: grid;
   min-height: 0;
+  height: 100%;
   overflow: hidden;
 }
 
@@ -107,5 +108,6 @@ withDefaults(defineProps<{
   background: #221d12;
   color: #f1d58b;
   font-size: 12px;
+  padding: 10px 12px;
 }
 </style>

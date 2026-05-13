@@ -1,27 +1,21 @@
 <template>
   <header class="match-header-bar">
     <div class="match-hero-left">
-      <div class="server-name">{{ props.data.serverName }}</div>
-      <div class="layer-line">
-        {{ props.data.currentLayer }} · {{ props.data.currentMode }} · Next {{ props.data.nextLayer }}
-      </div>
+      <strong class="server-name">{{ props.data.serverName }}</strong>
+      <span class="layer-line">{{ props.data.mapName }} / {{ props.data.gameMode }}</span>
     </div>
 
     <div class="match-hero-stats">
-      <div class="hero-stat queue">
-        <span>Queue</span>
-        <strong>{{ props.data.queueCount }}</strong>
-      </div>
       <div class="hero-stat">
         <span>Players</span>
         <strong>{{ props.data.totalPlayers }}/{{ props.data.maxPlayers }}</strong>
       </div>
       <div class="hero-stat team1">
-        <span>Team 1</span>
+        <span>TEAM 1</span>
         <strong>{{ props.data.team1Count }}</strong>
       </div>
       <div class="hero-stat team2">
-        <span>Team 2</span>
+        <span>TEAM 2</span>
         <strong>{{ props.data.team2Count }}</strong>
       </div>
       <div class="hero-stat">
@@ -103,7 +97,7 @@ function statusTone(status: string): string {
 <style scoped>
 .match-header-bar {
   display: grid;
-  grid-template-columns: minmax(260px, 1.2fr) minmax(360px, 2fr) auto;
+  grid-template-columns: minmax(260px, 1.15fr) minmax(420px, 2fr) auto;
   gap: var(--spacing-lg);
   align-items: center;
   background:
@@ -113,10 +107,13 @@ function statusTone(status: string): string {
   border-bottom: 1px solid var(--color-border-default);
   padding: 14px var(--spacing-lg);
   flex-shrink: 0;
+  min-width: 0;
 }
 
 .match-hero-left {
   min-width: 0;
+  display: grid;
+  gap: 4px;
 }
 
 .server-name {
@@ -129,7 +126,6 @@ function statusTone(status: string): string {
 }
 
 .layer-line {
-  margin-top: 4px;
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
   overflow: hidden;
@@ -139,8 +135,9 @@ function statusTone(status: string): string {
 
 .match-hero-stats {
   display: grid;
-  grid-template-columns: repeat(6, minmax(72px, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
+  min-width: 0;
 }
 
 .hero-stat {
@@ -172,13 +169,9 @@ function statusTone(status: string): string {
   color: var(--color-team2-primary);
 }
 
-.hero-stat.queue strong {
-  color: var(--color-status-warning);
-}
-
 .match-hero-status {
   display: grid;
-  gap: 5px;
+  gap: 6px;
   justify-items: end;
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
@@ -204,7 +197,7 @@ function statusTone(status: string): string {
   color: var(--color-status-error);
 }
 
-@media (max-width: 1366px) {
+@media (max-width: 1180px) {
   .match-header-bar {
     grid-template-columns: 1fr;
   }

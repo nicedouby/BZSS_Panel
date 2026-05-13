@@ -4,6 +4,12 @@
  */
 
 :root {
+  --z-sidebar-backdrop: 40;
+  --z-player-drawer: 60;
+  --z-user-dropdown: 90;
+  --z-settings-drawer: 100;
+  --z-confirm-dialog: 120;
+  --z-toast: 140;
   /* 深色主题基础背景 */
   --color-bg-page: #070b10;
   --color-bg-panel: #0d141c;

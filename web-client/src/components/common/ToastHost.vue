@@ -23,7 +23,7 @@ const ui = useUiStore();
   position: fixed;
   right: 18px;
   bottom: 18px;
-  z-index: 90;
+  z-index: var(--z-toast);
   display: grid;
   gap: 10px;
   width: min(360px, calc(100vw - 24px));

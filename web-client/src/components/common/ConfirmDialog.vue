@@ -28,7 +28,7 @@ const ui = useUiStore();
 .dialog-root {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  z-index: var(--z-confirm-dialog);
   display: grid;
   place-items: center;
   padding: 24px;

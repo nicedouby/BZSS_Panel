@@ -3,7 +3,7 @@
     <Sidebar />
     <main class="main-shell">
       <Topbar />
-      <section class="content-shell">
+      <section class="content-shell" :class="contentShellClass">
         <RouterView />
       </section>
     </main>
@@ -14,7 +14,9 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
 import { RouterView } from "vue-router";
+import { useRoute } from "vue-router";
 import { useUiStore } from "../../stores/ui.store";
 import Topbar from "./Topbar.vue";
 import Sidebar from "./Sidebar.vue";
@@ -23,6 +25,11 @@ import ToastHost from "../common/ToastHost.vue";
 import SettingsDrawer from "../settings/SettingsDrawer.vue";
 
 const ui = useUiStore();
+const route = useRoute();
+
+const contentShellClass = computed(() => ({
+  "full-bleed": Boolean(route.meta.fullBleed),
+}));
 </script>
 
 <style scoped>
@@ -54,6 +61,10 @@ const ui = useUiStore();
   min-height: 0;
   height: 100%;
   overflow: hidden;
+}
+
+.content-shell.full-bleed {
+  padding: 0;
 }
 
 @media (max-width: 780px) {

@@ -423,7 +423,7 @@ async function save() {
 .settings-overlay {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: var(--z-settings-drawer);
   background: rgba(5, 8, 12, 0.18);
   backdrop-filter: blur(2px);
 }
@@ -444,7 +444,7 @@ async function save() {
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   gap: 14px;
   position: relative;
-  z-index: 101;
+  z-index: calc(var(--z-settings-drawer) + 1);
 }
 
 .settings-head,
