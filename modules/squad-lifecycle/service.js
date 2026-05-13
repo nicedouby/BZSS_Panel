@@ -25,7 +25,42 @@ export class SquadLifecycleService {
       squadId: logEvent.squadId,
     });
 
-    const activeState = await this.repository.getActiveByRuntimeKey(runtimeKey);
+    let activeState = await this.repository.getActiveByRuntimeKey(runtimeKey);
+
+    if (activeState?.status === "MISSING_CANDIDATE") {
+      const now = Number(logEvent.eventTime || Date.now());
+      const disbanded = {
+        ...activeState,
+        status: "DISBANDED",
+        disbandedAt: now,
+        closedAt: now,
+        closeReason: "DISBANDED",
+        disbandSource: "LOG_RECREATE",
+        updatedAt: now,
+      };
+
+      await this.repository.saveState(disbanded);
+
+      const disbandEvent = this.reducer.makeEvent({
+        state: disbanded,
+        eventType: "squad.disbanded",
+        eventTime: now,
+        source: "LOG",
+        confidence: "HIGH",
+        payload: {
+          reason: "log_create_after_missing_treated_as_new_generation",
+          previousLifecycleId: activeState.lifecycleId,
+          previousGeneration: activeState.generation,
+        },
+        rawLog: logEvent.rawLog,
+        rawSourceEventId: logEvent.sourceEventId ?? null,
+      });
+
+      await this.repository.saveEvent(disbandEvent);
+      await this.eventBus.emitSquadLifecycleEvent(disbandEvent);
+      activeState = null;
+    }
+
     const nextGeneration = await this.repository.getNextGeneration({
       serverId: logEvent.serverId,
       matchId: logEvent.matchId,

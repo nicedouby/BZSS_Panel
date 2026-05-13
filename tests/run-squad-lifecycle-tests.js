@@ -145,7 +145,7 @@ async function testMissingThenDisband() {
   assert.equal(second.events[0].eventType, "squad.disbanded");
 }
 
-async function testRecoverFromMissing() {
+async function testRecreateFromMissing() {
   const reducer = new SquadLifecycleReducer(makeConfig({ missingConfirmCount: 2 }));
 
   const missingState = {
@@ -203,9 +203,15 @@ async function testRecoverFromMissing() {
     getNextGeneration: async () => 2,
   });
 
-  assert.equal(result.statesToSave[0].status, "ACTIVE");
-  assert.equal(result.statesToSave[0].missingCount, 0);
-  assert.equal(result.events[0].eventType, "squad.recovered");
+  assert.equal(result.statesToSave.length, 2);
+  assert.equal(result.statesToSave[0].status, "DISBANDED");
+  assert.equal(result.statesToSave[1].status, "ACTIVE");
+  assert.equal(result.statesToSave[1].generation, 2);
+  assert.equal(result.statesToSave[1].createdAt, 3000);
+
+  assert.equal(result.events.length, 2);
+  assert.equal(result.events[0].eventType, "squad.disbanded");
+  assert.equal(result.events[1].eventType, "squad.created");
 }
 
 async function testSuspiciousEmptySnapshotGuard() {
@@ -233,7 +239,7 @@ async function run() {
   await testLogCreate();
   await testRconFallbackCreate();
   await testMissingThenDisband();
-  await testRecoverFromMissing();
+  await testRecreateFromMissing();
   await testSuspiciousEmptySnapshotGuard();
   console.log("run-squad-lifecycle-tests: all tests passed");
 }

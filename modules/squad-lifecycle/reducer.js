@@ -147,6 +147,98 @@ export class SquadLifecycleReducer {
       const existing = activeByRuntimeKey.get(runtimeKey);
       if (existing) {
         const wasMissing = existing.status === "MISSING_CANDIDATE";
+
+        if (wasMissing) {
+          const generation = await input.getNextGeneration(runtimeKey);
+
+          const lifecycleId = makeSquadLifecycleId({
+            serverId: item.serverId,
+            matchId: item.matchId,
+            teamId: item.teamId,
+            squadId: item.squadId,
+            generation,
+          });
+
+          const disbanded = {
+            ...existing,
+            status: "DISBANDED",
+            disbandedAt: now,
+            closedAt: now,
+            closeReason: "DISBANDED",
+            disbandSource: "RCON_DIFF",
+            updatedAt: now,
+          };
+
+          const recreated = {
+            lifecycleId,
+            runtimeKey,
+            serverId: item.serverId,
+            matchId: item.matchId,
+            teamId: item.teamId,
+            squadId: item.squadId,
+            generation,
+            squadName: item.squadName,
+            leaderName: item.leaderName ?? null,
+            leaderSteamId: item.leaderSteamId ?? null,
+            leaderEosId: item.leaderEosId ?? null,
+            creatorName: null,
+            creatorSteamId: null,
+            creatorEosId: null,
+            memberCount: item.memberCount ?? null,
+            locked: item.locked ?? null,
+            status: "ACTIVE",
+            createdAt: now,
+            firstSeenAt: now,
+            lastSeenAt: now,
+            missingSince: null,
+            missingCount: 0,
+            disbandedAt: null,
+            closedAt: null,
+            closeReason: null,
+            createSource: "RCON_SNAPSHOT",
+            creationSource: "RCON_SNAPSHOT",
+            disbandSource: null,
+            confidence: "MEDIUM",
+            creationConfidence: "MEDIUM",
+            updatedAt: now,
+          };
+
+          statesToSave.push(disbanded, recreated);
+
+          events.push(this.makeEvent({
+            state: disbanded,
+            eventType: "squad.disbanded",
+            eventTime: now,
+            source: "RCON",
+            confidence: "MEDIUM",
+            payload: {
+              reason: "squad_reappeared_treated_as_new_generation",
+              missingSince: existing.missingSince,
+              missingCount: existing.missingCount,
+              disbandedAt: now,
+            },
+          }));
+
+          events.push(this.makeEvent({
+            state: recreated,
+            eventType: "squad.created",
+            eventTime: now,
+            source: "RCON",
+            confidence: "MEDIUM",
+            payload: {
+              reason: "rcon_snapshot_recreated_after_missing",
+              previousLifecycleId: existing.lifecycleId,
+              previousGeneration: existing.generation,
+              squadName: item.squadName,
+              leaderName: item.leaderName ?? null,
+              memberCount: item.memberCount ?? null,
+              locked: item.locked ?? null,
+            },
+          }));
+
+          continue;
+        }
+
         const meaningfulChange = hasMeaningfulSquadChange(existing, item);
 
         const updated = {
@@ -166,17 +258,15 @@ export class SquadLifecycleReducer {
 
         statesToSave.push(updated);
 
-        if (wasMissing || meaningfulChange) {
+        if (meaningfulChange) {
           events.push(this.makeEvent({
             state: updated,
-            eventType: wasMissing ? "squad.recovered" : "squad.updated",
+            eventType: "squad.updated",
             eventTime: now,
             source: "RCON",
             confidence: existing.confidence,
             payload: {
-              reason: wasMissing
-                ? "squad_reappeared_before_disband_confirmed"
-                : "rcon_snapshot_update",
+              reason: "rcon_snapshot_update",
               squadName: item.squadName,
               leaderName: item.leaderName ?? null,
               memberCount: item.memberCount ?? null,
