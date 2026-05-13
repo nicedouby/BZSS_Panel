@@ -165,12 +165,63 @@ const playtimeQuery = useQuery({
   refetchOnWindowFocus: false,
 });
 
+const squadLifecycleQuery = useQuery({
+  queryKey: computed(() => ["squad-lifecycle-current", auth.authenticated]),
+  enabled: computed(() => auth.authenticated),
+  queryFn: async () => apiGet<any>("/api/squad-lifecycle/current"),
+  refetchInterval: 3000,
+  refetchOnWindowFocus: false,
+});
+
 const playtimes = computed(() => stablePlaytimes.value);
+
+const squadLifecycleByKey = computed(() => {
+  const map = new Map<string, any>();
+  const list = squadLifecycleQuery.data.value?.squads ?? [];
+
+  for (const item of list) {
+    const key = makeSquadLifecycleLookupKey(item.teamId, item.squadId);
+    map.set(key, item);
+  }
+
+  return map;
+});
+
+function makeSquadLifecycleLookupKey(teamId: unknown, squadId: unknown) {
+  return `${Number(teamId)}:${Number(squadId)}`;
+}
 
 const viewerSteam64 = computed(() => normalizeSteam64(auth.user?.steam64));
 const viewerAutoSwapEnabled = computed(() => auth.user?.viewerTeamAutoSwapEnabled !== false);
 
-const rawTeams = computed(() => match.teams.map((team) => adaptTeam(team, playtimes.value)));
+const rawTeams = computed(() => {
+  return match.teams.map((team) => {
+    const adapted = adaptTeam(team, playtimes.value);
+
+    return {
+      ...adapted,
+      squads: adapted.squads.map((squad) => {
+        const lifecycle = squadLifecycleByKey.value.get(
+          makeSquadLifecycleLookupKey(squad.teamId, squad.squadId),
+        );
+
+        if (!lifecycle) return squad;
+
+        return {
+          ...squad,
+          order: lifecycle.order ?? null,
+          lifecycleId: lifecycle.lifecycleId ?? null,
+          createdAt: lifecycle.createdAt ?? null,
+          createdAtLabel: lifecycle.createdAtLabel ?? null,
+          createdDisplayText: lifecycle.createdDisplayText ?? null,
+          creationSource: lifecycle.creationSource ?? null,
+          creationConfidence: lifecycle.creationConfidence ?? null,
+          sourceLabel: lifecycle.sourceLabel ?? null,
+        };
+      }),
+    };
+  });
+});
 
 const viewModels = computed(() => {
   const searchedTeams = filterTeamsBySearch(rawTeams.value, pageState.searchQuery);

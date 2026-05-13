@@ -298,6 +298,52 @@ export class WebServer {
       return this.json(res, 200, await this.refreshMatchState("all"));
     }
 
+    if (url.pathname === "/api/squad-lifecycle/current" && req.method === "GET") {
+      const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
+      const matchId = url.searchParams.get("matchId") ?? null;
+
+      if (!this.modules.squadLifecycle?.getCurrentSquads) {
+        return this.json(res, 404, {
+          error: "SquadLifecycleUnavailable",
+          message: "squadLifecycle module is not loaded.",
+        });
+      }
+
+      return this.json(res, 200, {
+        serverId,
+        squads: await this.modules.squadLifecycle.getCurrentSquads(serverId, matchId),
+      });
+    }
+
+    if (url.pathname === "/api/squad-lifecycle/order" && req.method === "GET") {
+      const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
+      const matchId = url.searchParams.get("matchId") ?? null;
+
+      if (!this.modules.squadLifecycle?.getSquadOrder) {
+        return this.json(res, 404, {
+          error: "SquadLifecycleUnavailable",
+          message: "squadLifecycle module is not loaded.",
+        });
+      }
+
+      return this.json(res, 200, await this.modules.squadLifecycle.getSquadOrder(serverId, matchId));
+    }
+
+    if (url.pathname === "/api/squad-lifecycle/timeline" && req.method === "GET") {
+      const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
+      const matchId = url.searchParams.get("matchId") ?? null;
+      const limit = Number(url.searchParams.get("limit") ?? 300);
+
+      if (!this.modules.squadLifecycle?.getTimeline) {
+        return this.json(res, 404, {
+          error: "SquadLifecycleUnavailable",
+          message: "squadLifecycle module is not loaded.",
+        });
+      }
+
+      return this.json(res, 200, await this.modules.squadLifecycle.getTimeline(serverId, matchId, limit));
+    }
+
     if (url.pathname === "/api/jobs/playtime-refresh-online" && req.method === "POST") {
       if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);

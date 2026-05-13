@@ -69,6 +69,7 @@ const zhCN = {
     playerDatabase: "玩家数据库",
     combatClean: "战斗清洗",
     killManage: "击杀管理",
+    squadOrder: "建队顺序",
     pluginSubscriptions: "插件订阅",
     comingSoon: "即将开放",
   },

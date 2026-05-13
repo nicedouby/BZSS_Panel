@@ -69,6 +69,7 @@ const enUS = {
     playerDatabase: "Player Database",
     combatClean: "Combat Clean",
     killManage: "Kill Manage",
+    squadOrder: "Squad Order",
     pluginSubscriptions: "Plugin Subscriptions",
     comingSoon: "Coming Soon",
   },
