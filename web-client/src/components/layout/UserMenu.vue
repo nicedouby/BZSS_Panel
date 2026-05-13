@@ -114,7 +114,9 @@ onBeforeUnmount(() => {
   padding: 8px 12px 8px 10px;
   border-radius: 999px;
   border: 1px solid #34404b;
-  background: linear-gradient(180deg, #1b2229, #151b21);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.01)), rgba(255, 255, 255, 0.005)),
+    linear-gradient(180deg, #1b2229, #151b21);
   color: #edf2f4;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.15);
 }
@@ -173,7 +175,9 @@ onBeforeUnmount(() => {
   width: 240px;
   border: 1px solid #2b3540;
   border-radius: 14px;
-  background: #151a20;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.012)), rgba(255, 255, 255, 0.005)),
+    #151a20;
   box-shadow: 0 18px 36px rgba(0, 0, 0, 0.35);
   padding: 10px;
   z-index: 90;

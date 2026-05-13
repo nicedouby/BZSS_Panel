@@ -99,7 +99,7 @@ function displayRole(role: string | null | undefined) {
 }
 
 .player-row:hover {
-  background: rgba(96, 165, 250, 0.08);
+  background: rgba(96, 165, 250, 0.1);
 }
 
 .player-row.selected {

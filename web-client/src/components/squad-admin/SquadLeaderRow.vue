@@ -95,7 +95,7 @@ function displayRole(role: string | null | undefined) {
   align-items: center;
   gap: var(--spacing-md);
   background:
-    linear-gradient(90deg, rgba(250, 204, 21, 0.12), rgba(250, 204, 21, 0.025));
+    linear-gradient(90deg, rgba(250, 204, 21, 0.14), rgba(250, 204, 21, 0.03));
   transition:
     background-color 0.15s ease,
     border-color 0.15s ease;
@@ -104,7 +104,7 @@ function displayRole(role: string | null | undefined) {
 
 .squad-leader-row:hover {
   background:
-    linear-gradient(90deg, rgba(250, 204, 21, 0.17), rgba(250, 204, 21, 0.04));
+    linear-gradient(90deg, rgba(250, 204, 21, 0.2), rgba(250, 204, 21, 0.05));
 }
 
 .squad-leader-row.selected {

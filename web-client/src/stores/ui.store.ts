@@ -1,7 +1,11 @@
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { defineStore } from "pinia";
 
 export type UiTone = "ok" | "warn" | "error" | "idle";
+export type UiVisualMode = "classic" | "tactical" | "glass";
+export type UiDensity = "comfortable" | "compact";
+export type UiAccent = "blueOrange" | "greenAmber" | "steelRed";
+export type UiMotion = "normal" | "reduced";
 
 export interface ToastInput {
   title?: string;
@@ -30,9 +34,26 @@ interface ConfirmState extends Required<Omit<ConfirmOptions, "tone">> {
   tone: UiTone;
 }
 
+interface StoredUiPrefs {
+  visualMode?: UiVisualMode;
+  globalDensity?: UiDensity;
+  accent?: UiAccent;
+  motion?: UiMotion;
+  richBackground?: boolean;
+  cardGlow?: boolean;
+  showTeamPerspectiveHint?: boolean;
+}
+
+const UI_PREFS_STORAGE_KEY = "bzss.ui.preferences";
+const visualModes: UiVisualMode[] = ["classic", "tactical", "glass"];
+const densities: UiDensity[] = ["comfortable", "compact"];
+const accents: UiAccent[] = ["blueOrange", "greenAmber", "steelRed"];
+const motions: UiMotion[] = ["normal", "reduced"];
+
 let toastId = 0;
 
 export const useUiStore = defineStore("ui", () => {
+  const savedPrefs = readStoredUiPrefs();
   const sidebarCollapsed = ref(false);
   const mobileSidebarOpen = ref(false);
   const toasts = ref<ToastItem[]>([]);
@@ -44,9 +65,48 @@ export const useUiStore = defineStore("ui", () => {
     cancelText: "Cancel",
     tone: "warn",
   });
+  const visualMode = ref<UiVisualMode>(savedPrefs.visualMode);
+  const globalDensity = ref<UiDensity>(savedPrefs.globalDensity);
+  const accent = ref<UiAccent>(savedPrefs.accent);
+  const motion = ref<UiMotion>(savedPrefs.motion);
+  const richBackground = ref(Boolean(savedPrefs.richBackground));
+  const cardGlow = ref(Boolean(savedPrefs.cardGlow));
+  const showTeamPerspectiveHint = ref(Boolean(savedPrefs.showTeamPerspectiveHint));
 
   const isSidebarExpanded = computed(() => !sidebarCollapsed.value);
+  const uiClassList = computed(() => [
+    `ui-mode-${visualMode.value}`,
+    `ui-density-${globalDensity.value}`,
+    `ui-accent-${accent.value}`,
+    `ui-motion-${motion.value}`,
+    richBackground.value ? "ui-rich-background" : "ui-flat-background",
+    cardGlow.value ? "ui-card-glow" : "ui-card-flat",
+  ]);
   let confirmResolver: ((value: boolean) => void) | null = null;
+
+  watch(
+    () => [
+      visualMode.value,
+      globalDensity.value,
+      accent.value,
+      motion.value,
+      richBackground.value,
+      cardGlow.value,
+      showTeamPerspectiveHint.value,
+    ],
+    () => {
+      persistUiPrefs({
+        visualMode: visualMode.value,
+        globalDensity: globalDensity.value,
+        accent: accent.value,
+        motion: motion.value,
+        richBackground: richBackground.value,
+        cardGlow: cardGlow.value,
+        showTeamPerspectiveHint: showTeamPerspectiveHint.value,
+      });
+    },
+    { immediate: true },
+  );
 
   function toggleSidebarCollapsed() {
     sidebarCollapsed.value = !sidebarCollapsed.value;
@@ -54,6 +114,34 @@ export const useUiStore = defineStore("ui", () => {
 
   function setSidebarCollapsed(next: boolean) {
     sidebarCollapsed.value = Boolean(next);
+  }
+
+  function setVisualMode(next: UiVisualMode) {
+    visualMode.value = resolveUiValue(next, visualModes, "tactical");
+  }
+
+  function setGlobalDensity(next: UiDensity) {
+    globalDensity.value = resolveUiValue(next, densities, "comfortable");
+  }
+
+  function setAccent(next: UiAccent) {
+    accent.value = resolveUiValue(next, accents, "blueOrange");
+  }
+
+  function setMotion(next: UiMotion) {
+    motion.value = resolveUiValue(next, motions, "normal");
+  }
+
+  function setRichBackground(next: boolean) {
+    richBackground.value = Boolean(next);
+  }
+
+  function setCardGlow(next: boolean) {
+    cardGlow.value = Boolean(next);
+  }
+
+  function setShowTeamPerspectiveHint(next: boolean) {
+    showTeamPerspectiveHint.value = Boolean(next);
   }
 
   function openMobileSidebar() {
@@ -138,5 +226,67 @@ export const useUiStore = defineStore("ui", () => {
     openConfirm,
     confirmAccept,
     confirmCancel,
+    visualMode,
+    globalDensity,
+    accent,
+    motion,
+    richBackground,
+    cardGlow,
+    showTeamPerspectiveHint,
+    uiClassList,
+    setVisualMode,
+    setGlobalDensity,
+    setAccent,
+    setMotion,
+    setRichBackground,
+    setCardGlow,
+    setShowTeamPerspectiveHint,
   };
 });
+
+function readStoredUiPrefs(): Required<StoredUiPrefs> {
+  const defaults = {
+    visualMode: "tactical" as UiVisualMode,
+    globalDensity: "comfortable" as UiDensity,
+    accent: "blueOrange" as UiAccent,
+    motion: "normal" as UiMotion,
+    richBackground: true,
+    cardGlow: true,
+    showTeamPerspectiveHint: true,
+  };
+
+  if (typeof window === "undefined") {
+    return defaults;
+  }
+
+  const raw = window.localStorage.getItem(UI_PREFS_STORAGE_KEY);
+  if (!raw) return defaults;
+
+  try {
+    const parsed = JSON.parse(raw) as StoredUiPrefs;
+    return {
+      visualMode: resolveUiValue(parsed.visualMode, visualModes, defaults.visualMode),
+      globalDensity: resolveUiValue(parsed.globalDensity, densities, defaults.globalDensity),
+      accent: resolveUiValue(parsed.accent, accents, defaults.accent),
+      motion: resolveUiValue(parsed.motion, motions, defaults.motion),
+      richBackground: typeof parsed.richBackground === "boolean" ? parsed.richBackground : defaults.richBackground,
+      cardGlow: typeof parsed.cardGlow === "boolean" ? parsed.cardGlow : defaults.cardGlow,
+      showTeamPerspectiveHint: typeof parsed.showTeamPerspectiveHint === "boolean"
+        ? parsed.showTeamPerspectiveHint
+        : defaults.showTeamPerspectiveHint,
+    };
+  } catch {
+    return defaults;
+  }
+}
+
+function persistUiPrefs(prefs: Required<StoredUiPrefs>) {
+  if (typeof window === "undefined") return;
+
+  window.localStorage.setItem(UI_PREFS_STORAGE_KEY, JSON.stringify(prefs));
+}
+
+function resolveUiValue<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  const text = String(value ?? "").trim();
+  return (allowed as readonly string[]).includes(text) ? (text as T) : fallback;
+}

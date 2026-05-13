@@ -142,7 +142,7 @@ function warningTone(label: string): "warn" | "idle" {
 .squad-card {
   flex: 0 0 auto;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012)),
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.015)), rgba(255, 255, 255, 0.012)),
     var(--color-bg-card);
   border: 1px solid var(--color-border-default);
   border-radius: 12px;
@@ -158,7 +158,7 @@ function warningTone(label: string): "warn" | "idle" {
 .squad-card:hover {
   border-color: var(--color-border-highlight);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018)),
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.025)), rgba(255, 255, 255, 0.018)),
     var(--color-bg-elevated);
 }
 
@@ -184,7 +184,7 @@ function warningTone(label: string): "warn" | "idle" {
   align-items: center;
   padding: var(--spacing-md);
   border-bottom: 1px solid var(--color-border-soft);
-  background: rgba(255, 255, 255, 0.025);
+  background: rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.008));
 }
 
 .squad-header-title {

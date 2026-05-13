@@ -11,12 +11,12 @@
       :players-updated-at="playersUpdatedAt"
       :squads-updated-at="squadsUpdatedAt"
       @search="pageState.searchQuery = $event"
-      @density-change="pageState.densityMode = $event"
+      @density-change="handleDensityChange"
       @refresh="handleToolbarRefresh"
       @refresh-playtime="refreshOnlinePlaytime"
     />
 
-    <div class="viewer-perspective-line">
+    <div v-if="ui.showTeamPerspectiveHint" class="viewer-perspective-line">
       {{ viewerPerspectiveText }}
     </div>
 
@@ -35,6 +35,7 @@
           v-for="team in viewModels.teams"
           :key="team.teamId"
           :team="team"
+          :density-mode="pageState.densityMode"
           :selected-player-id="pageState.selectedPlayerId"
           @select-player="selectPlayer"
         />
@@ -103,7 +104,7 @@ const selectedPlayerDetail = ref<PlayerDetailViewModel | null>(null);
 
 const pageState = reactive<PageState>({
   searchQuery: "",
-  densityMode: "comfortable",
+  densityMode: ui.globalDensity,
   selectedPlayerId: null,
 });
 
@@ -141,16 +142,26 @@ const staleText = computed(() => {
   return t("dataState.staleText");
 });
 
-const steamIDs = computed(() => [...new Set(players.active.map((player) => player.steamID).filter(Boolean))] as string[]);
+const steamIDs = computed(() => {
+  return [...new Set(players.active.map((player) => player.steamID).filter(Boolean))]
+    .map((id) => String(id).trim())
+    .filter(Boolean)
+    .sort();
+});
 const steamIDParam = computed(() => steamIDs.value.join(","));
+const stablePlaytimes = ref<Record<string, any>>({});
 
 const playtimeQuery = useQuery({
   queryKey: computed(() => ["playtime-cache", steamIDParam.value, playtimeRequested.value]),
   enabled: computed(() => auth.authenticated && playtimeRequested.value && steamIDs.value.length > 0),
   queryFn: async () => apiGet<{ items: Record<string, any> }>(`/api/query/playtime-cache?steamIDs=${encodeURIComponent(steamIDParam.value)}`),
+  placeholderData: (previousData) => previousData,
+  staleTime: 30_000,
+  gcTime: 5 * 60_000,
+  refetchOnWindowFocus: false,
 });
 
-const playtimes = computed(() => playtimeQuery.data.value?.items ?? {});
+const playtimes = computed(() => stablePlaytimes.value);
 
 const viewerSteam64 = computed(() => normalizeSteam64(auth.user?.steam64));
 const viewerAutoSwapEnabled = computed(() => auth.user?.viewerTeamAutoSwapEnabled !== false);
@@ -175,10 +186,40 @@ const matchHeaderData = computed(() => {
 });
 
 watch(
+  () => playtimeQuery.data.value?.items,
+  (items) => {
+    if (!items || typeof items !== "object") return;
+
+    stablePlaytimes.value = {
+      ...stablePlaytimes.value,
+      ...items,
+    };
+    playtimeError.value = "";
+  },
+  { immediate: true },
+);
+
+watch(
+  () => playtimeQuery.error.value,
+  (error) => {
+    if (!error) return;
+    playtimeError.value = renderApiError(error, t("common.error"));
+  },
+);
+
+watch(
   () => matchSnapshotQuery.data.value,
   (data) => {
     if (!data?.matchState) return;
     applyMatchSnapshotResponse(data);
+  },
+  { immediate: true },
+);
+
+watch(
+  () => ui.globalDensity,
+  (next) => {
+    pageState.densityMode = next;
   },
   { immediate: true },
 );
@@ -208,6 +249,11 @@ function selectPlayer(player: PlayerRowViewModel) {
   }
 }
 
+function handleDensityChange(mode: "comfortable" | "compact") {
+  pageState.densityMode = mode;
+  ui.setGlobalDensity(mode);
+}
+
 function closePlayerDetail() {
   pageState.selectedPlayerId = null;
   selectedPlayerDetail.value = null;
@@ -228,7 +274,13 @@ async function refreshOnlinePlaytime() {
       throw new Error(finalJob.error?.message ?? t("common.error"));
     }
 
-    await playtimeQuery.refetch();
+    const refreshed = await playtimeQuery.refetch();
+    if (refreshed.data?.items) {
+      stablePlaytimes.value = {
+        ...stablePlaytimes.value,
+        ...refreshed.data.items,
+      };
+    }
     ui.pushToast({
       title: t("common.updated"),
       message: t("common.updated"),
@@ -406,12 +458,12 @@ function buildViewerPerspectiveText(adminTeamId: number | null, enabled: boolean
 
 .squad-admin-layout {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   height: 100%;
   min-height: 0;
   gap: 0;
   overflow: hidden;
-  background: var(--color-bg-page);
+  background: var(--app-background, var(--color-bg-page));
 }
 
 .squad-main-content {
@@ -422,7 +474,7 @@ function buildViewerPerspectiveText(adminTeamId: number | null, enabled: boolean
   min-height: 0;
   height: 100%;
   overflow: hidden;
-  background: var(--color-bg-page);
+  background: linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.004)), transparent 22%), var(--app-background, var(--color-bg-page));
 }
 
 .viewer-perspective-line {

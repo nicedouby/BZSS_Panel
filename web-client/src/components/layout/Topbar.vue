@@ -112,7 +112,9 @@ function toggleSidebar() {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  background: #14191f;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.01)), rgba(255, 255, 255, 0.004)),
+    #14191f;
 }
 
 .topbar-start {

@@ -1,5 +1,5 @@
 <template>
-  <section class="team-column" :class="teamColorClass">
+  <section class="team-column" :class="[teamColorClass, densityMode]">
     <header class="team-column-header">
       <div class="team-column-title">
         <h2 class="team-title-line">
@@ -49,6 +49,7 @@ import { t } from "../../i18n";
 const props = defineProps<{
   team: TeamViewModel;
   selectedPlayerId?: string | number | null;
+  densityMode?: "comfortable" | "compact";
 }>();
 
 defineEmits<{
@@ -92,8 +93,9 @@ const teamAveragePlaytimeShortText = computed(() => {
   padding: 10px;
   border: 1px solid var(--color-border-soft);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.008)),
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.01)), rgba(255, 255, 255, 0.008)),
     var(--color-bg-panel);
+  box-shadow: var(--shadow-lg);
 }
 
 .team-column.team1 {
@@ -116,7 +118,7 @@ const teamAveragePlaytimeShortText = computed(() => {
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border-soft);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012)),
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.015)), rgba(255, 255, 255, 0.012)),
     var(--color-bg-card);
   box-shadow: var(--shadow-sm);
   display: grid;
@@ -125,10 +127,12 @@ const teamAveragePlaytimeShortText = computed(() => {
 
 .team-column.team1 .team-column-header {
   border-top: 3px solid var(--color-team1-primary);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), var(--shadow-sm);
 }
 
 .team-column.team2 .team-column-header {
   border-top: 3px solid var(--color-team2-primary);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), var(--shadow-sm);
 }
 
 .team-column-title {
