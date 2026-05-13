@@ -784,6 +784,36 @@ export class WebServer {
       return this.json(res, 200, { ok: true });
     }
 
+    if (url.pathname.startsWith("/api/squad-lifecycle")) {
+      const squadLifecycle = this.modules.squadLifecycle;
+      if (!squadLifecycle) {
+        return this.json(res, 503, {
+          error: "SquadLifecycleUnavailable",
+          message: "Squad lifecycle module is not loaded.",
+        });
+      }
+
+      const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
+      const matchId = url.searchParams.get("matchId") ?? null;
+
+      if (url.pathname === "/api/squad-lifecycle/current-squads" && req.method === "GET") {
+        return this.json(res, 200, {
+          squads: await squadLifecycle.getCurrentSquads(serverId, matchId),
+        });
+      }
+
+      if (url.pathname === "/api/squad-lifecycle/squad-order" && req.method === "GET") {
+        return this.json(res, 200, await squadLifecycle.getSquadOrder(serverId, matchId));
+      }
+
+      if (url.pathname === "/api/squad-lifecycle/timeline" && req.method === "GET") {
+        const limit = Number(url.searchParams.get("limit") ?? 200);
+        return this.json(res, 200, {
+          events: await squadLifecycle.getTimeline(serverId, matchId, limit),
+        });
+      }
+    }
+
     return this.json(res, 404, { error: "ApiNotFound" });
   }
 

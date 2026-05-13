@@ -9,6 +9,7 @@ export const defaultSquadLifecycleConfig = {
   suspiciousEmptySnapshotPlayerThreshold: 5,
   createFromRconSnapshot: true,
   preferLogCreateEvent: true,
+  preferLogCreatedAt: true,
   closeSquadsOnMatchEnd: true,
   matchChangingGraceMs: 10000,
   debug: true,
@@ -18,6 +19,8 @@ export function normalizeSquadLifecycleConfig(input = {}) {
   return {
     ...defaultSquadLifecycleConfig,
     ...(input ?? {}),
+    preferLogCreateEvent: Boolean(input?.preferLogCreateEvent ?? input?.preferLogCreatedAt ?? defaultSquadLifecycleConfig.preferLogCreateEvent),
+    preferLogCreatedAt: Boolean(input?.preferLogCreatedAt ?? input?.preferLogCreateEvent ?? defaultSquadLifecycleConfig.preferLogCreatedAt),
     rconPollIntervalMs: Math.max(200, Number(input?.rconPollIntervalMs ?? defaultSquadLifecycleConfig.rconPollIntervalMs)),
     rconTimeoutMs: Math.max(100, Number(input?.rconTimeoutMs ?? defaultSquadLifecycleConfig.rconTimeoutMs)),
     missingConfirmCount: Math.max(1, Number(input?.missingConfirmCount ?? defaultSquadLifecycleConfig.missingConfirmCount)),

@@ -27,7 +27,9 @@ export class SquadLifecycleReducer {
         creatorSteamId: logEvent.creatorSteamId ?? activeState.creatorSteamId ?? null,
         creatorEosId: logEvent.creatorEosId ?? activeState.creatorEosId ?? null,
         createSource: this.config.preferLogCreateEvent ? "LOG" : activeState.createSource,
+        creationSource: this.config.preferLogCreateEvent ? "LOG" : (activeState.creationSource ?? activeState.createSource),
         confidence: "HIGH",
+        creationConfidence: "HIGH",
         createdAt: this.config.preferLogCreateEvent && activeState.createSource === "RCON_SNAPSHOT"
           ? logEvent.eventTime
           : activeState.createdAt,
@@ -93,8 +95,10 @@ export class SquadLifecycleReducer {
       closedAt: null,
       closeReason: null,
       createSource: "LOG",
+      creationSource: "LOG",
       disbandSource: null,
       confidence: "HIGH",
+      creationConfidence: "HIGH",
       updatedAt: now,
     };
 
@@ -222,8 +226,10 @@ export class SquadLifecycleReducer {
           closedAt: null,
           closeReason: null,
           createSource: "RCON_SNAPSHOT",
+          creationSource: "RCON_SNAPSHOT",
           disbandSource: null,
           confidence: "MEDIUM",
+          creationConfidence: "MEDIUM",
           updatedAt: now,
         };
 

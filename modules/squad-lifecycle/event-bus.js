@@ -22,9 +22,10 @@ export class BzssSquadLifecycleEventBus {
       lifecycleEvent: event,
     });
 
-    this.core.eventBus.emitModuleEvent("module.squadLifecycle", "event", {
+    const moduleEventName = toModuleEventName(event.eventType);
+    const payload = {
       eventId: `module.squadLifecycle.event:${event.id}`,
-      eventName: "module.squadLifecycle.event",
+      eventName: `module.squadLifecycle.${moduleEventName}`,
       layer: "module",
       source: "module.squadLifecycle",
       serverId: event.serverId,
@@ -32,6 +33,21 @@ export class BzssSquadLifecycleEventBus {
       params: [],
       payload: event,
       lifecycleEvent: event,
-    });
+    };
+
+    this.core.eventBus.emitModuleEvent("module.squadLifecycle", "updated", payload);
+    this.core.eventBus.emitModuleEvent("module.squadLifecycle", moduleEventName, payload);
+  }
+}
+
+function toModuleEventName(eventType) {
+  switch (eventType) {
+    case "squad.created": return "squadCreated";
+    case "squad.updated": return "updated";
+    case "squad.missing_candidate": return "squadMissingCandidate";
+    case "squad.recovered": return "squadRecovered";
+    case "squad.disbanded": return "squadDisbanded";
+    case "squad.closed_by_match_end": return "squadClosedByMatchEnd";
+    default: return "updated";
   }
 }

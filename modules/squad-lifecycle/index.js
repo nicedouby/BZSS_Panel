@@ -1,15 +1,13 @@
-// -*- coding: utf-8 -*-
+﻿// -*- coding: utf-8 -*-
 
-import { parseListSquads } from "../../core/squad-rcon.js";
 import { BzssSquadLifecycleEventBus } from "./event-bus.js";
 import { SquadLogAdapter } from "./log-adapter.js";
 import { toRconSquadSnapshot } from "./parse-rcon-squads.js";
-import { SquadRconPoller } from "./rcon-poller.js";
 import { InMemorySquadLifecycleRepository } from "./repository.js";
 import { SquadLifecycleService } from "./service.js";
 import { defaultSquadLifecycleConfig, normalizeSquadLifecycleConfig } from "./config.js";
 
-const MATCH_END_EVENTS = ["GAME_END", "MATCH_END", "ROUND_END", "ROUND_ENDED"];
+const MATCH_END_EVENTS = ["GAME_END", "MATCH_END", "ROUND_END", "ROUND_ENDED", "NEW_GAME"];
 
 export function createSquadLifecycleModule({ core, modules, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
@@ -32,35 +30,6 @@ export function createSquadLifecycleModule({ core, modules, config, logger }) {
   };
 
   const service = new SquadLifecycleService(moduleConfig, repository, eventBus, moduleLogger);
-
-  const rconClient = {
-    async getSquadSnapshot() {
-      const serverId = resolveServerId(core);
-      const matchContext = resolveMatchContext(serverId, modules, core, matchRuntime);
-      const result = await core.rconManager.dispatchCommand({
-        command: "ListSquads",
-        requestedBy: "module.squadLifecycle",
-        reason: "squad-lifecycle-poller",
-      });
-
-      if (!result?.success) {
-        throw new Error(result?.message || "ListSquads failed");
-      }
-
-      const parsedSquads = parseListSquads(result.rconResponse);
-      return toRconSquadSnapshot({
-        serverId,
-        matchId: matchContext.matchId,
-        parsedSquads,
-        rawText: result.rconResponse,
-        capturedAt: Date.now(),
-        playerCount: matchContext.playerCount,
-        isMatchChanging: Date.now() < matchRuntime.matchChangingUntil,
-      });
-    },
-  };
-
-  const poller = new SquadRconPoller(moduleConfig, rconClient, service, moduleLogger);
 
   const logAdapter = new SquadLogAdapter(service, {
     resolveMatchContext: (serverId) => resolveMatchContext(serverId, modules, core, matchRuntime),
@@ -89,12 +58,37 @@ export function createSquadLifecycleModule({ core, modules, config, logger }) {
       return { ...moduleConfig };
     },
 
+    getState() {
+      const states = repository.dumpStates();
+      return {
+        currentMatchId: resolveMatchContext(resolveServerId(core), modules, core, matchRuntime).matchId,
+        squadsByLifecycleId: Object.fromEntries(states.map((state) => [state.lifecycleId, state])),
+        events: repository.dumpEvents(),
+      };
+    },
+
     async getCurrentSquads(serverId, matchId = null) {
       const sid = String(serverId || resolveServerId(core));
       const context = resolveMatchContext(sid, modules, core, matchRuntime);
       const targetMatchId = String(matchId || context.matchId);
       if (!targetMatchId) return [];
       return service.getCurrentSquads({ serverId: sid, matchId: targetMatchId });
+    },
+
+    async getSquadOrder(serverId, matchId = null) {
+      const sid = String(serverId || resolveServerId(core));
+      const context = resolveMatchContext(sid, modules, core, matchRuntime);
+      const targetMatchId = String(matchId || context.matchId);
+      if (!targetMatchId) return { matchId: "", orderedSquads: [] };
+      return service.getSquadOrder({ serverId: sid, matchId: targetMatchId });
+    },
+
+    async getTimeline(serverId, matchId = null, limit = 200) {
+      const sid = String(serverId || resolveServerId(core));
+      const context = resolveMatchContext(sid, modules, core, matchRuntime);
+      const targetMatchId = String(matchId || context.matchId);
+      if (!targetMatchId) return [];
+      return service.getTimeline({ serverId: sid, matchId: targetMatchId, limit });
     },
 
     async getEvents(serverId, matchId = null, limit = 1000) {
@@ -138,8 +132,8 @@ export function createSquadLifecycleModule({ core, modules, config, logger }) {
       id: "module.squadLifecycle",
       name: "Squad Lifecycle Module",
       kind: "module",
-      version: "0.1.0",
-      description: "小队生命周期状态机模块。日志负责建队输入，RCON 快照负责缺失与解散确认，支持切图关闭与 squadId 复用 generation。",
+      version: "0.2.0",
+      description: "小队生命周期状态机模块。订阅 match-state 的小队快照事件，日志负责建队输入，RCON 快照负责缺失与解散确认，支持切图关闭与 squadId 复用 generation。",
     },
     apiName: "squadLifecycle",
     api,
@@ -153,6 +147,21 @@ export function createSquadLifecycleModule({ core, modules, config, logger }) {
         return;
       }
 
+      // Register the squad-order page
+      core.webRegistry.registerPage({
+        id: "web.squadOrder",
+        title: "建队顺序",
+        group: "对局",
+        route: "/squad-order",
+        pageModule: "/pages/squad-order.js",
+        source: "module.squadLifecycle",
+        required: false,
+        enabled: true,
+        order: 15,
+        icon: "🏳️",
+      });
+
+      // Subscribe to squad log events
       unsubscribers.push(core.eventBus.onCoreEvent("On_SquadCreated", (event) => {
         void logAdapter.onCoreSquadCreatedEvent(event);
       }));
@@ -161,6 +170,26 @@ export function createSquadLifecycleModule({ core, modules, config, logger }) {
         void logAdapter.onCoreSquadCreatedEvent(event);
       }));
 
+      // Subscribe to match-state squad snapshots (preferred source, avoids duplicate RCON calls)
+      unsubscribers.push(core.eventBus.onModuleEvent("module.matchState", "squadsUpdated", (event) => {
+        const serverId = resolveServerId(core);
+        const context = resolveMatchContext(serverId, modules, core, matchRuntime);
+        if (!context.matchId) return;
+
+        const snapshot = toRconSquadSnapshot({
+          serverId,
+          matchId: context.matchId,
+          parsedSquads: event.squads ?? [],
+          rawText: "",
+          capturedAt: Date.now(),
+          playerCount: context.playerCount,
+          isMatchChanging: Date.now() < matchRuntime.matchChangingUntil,
+        });
+
+        void service.handleRconSnapshot(snapshot);
+      }));
+
+      // Subscribe to match end events
       for (const eventName of MATCH_END_EVENTS) {
         unsubscribers.push(core.eventBus.onCoreEvent(eventName, () => {
           const serverId = resolveServerId(core);
@@ -176,21 +205,17 @@ export function createSquadLifecycleModule({ core, modules, config, logger }) {
         }));
       }
 
-      poller.start();
-
       moduleLogger.info?.("SquadLifecycle started.", {
         label: "MODULE",
         operation: "start",
         data: {
-          rconPollIntervalMs: moduleConfig.rconPollIntervalMs,
-          rconTimeoutMs: moduleConfig.rconTimeoutMs,
+          snapshotSource: "module.matchState.squadsUpdated",
           missingConfirmCount: moduleConfig.missingConfirmCount,
         },
       });
     },
 
     async stop() {
-      poller.stop();
       for (const unsubscribe of unsubscribers.splice(0)) unsubscribe();
 
       if (moduleConfig.closeSquadsOnMatchEnd) {

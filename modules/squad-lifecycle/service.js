@@ -1,4 +1,4 @@
-// -*- coding: utf-8 -*-
+﻿// -*- coding: utf-8 -*-
 
 import { makeSquadRuntimeKey } from "./keys.js";
 import { SquadLifecycleReducer } from "./reducer.js";
@@ -150,6 +150,87 @@ export class SquadLifecycleService {
 
   async getCurrentSquads(input) {
     const states = await this.repository.getActiveByMatch(input.serverId, input.matchId);
-    return states.filter((x) => x.status === "ACTIVE");
+    const activeSquads = states
+      .filter((x) => x.status === "ACTIVE")
+      .sort((a, b) => {
+        const timeDiff = (a.createdAt || 0) - (b.createdAt || 0);
+        if (timeDiff !== 0) return timeDiff;
+        if ((a.teamId || 0) !== (b.teamId || 0)) return (a.teamId || 0) - (b.teamId || 0);
+        if ((a.squadId || 0) !== (b.squadId || 0)) return (a.squadId || 0) - (b.squadId || 0);
+        return (a.generation || 0) - (b.generation || 0);
+      });
+
+    return activeSquads.map((state, index) => ({
+      ...state,
+      order: index + 1,
+      createdAtLabel: formatTimeHHMMSS(state.createdAt),
+      creationSource: state.creationSource ?? state.createSource ?? "",
+      creationConfidence: state.creationConfidence ?? state.confidence ?? "",
+      sourceLabel: (state.creationSource ?? state.createSource) === "LOG" ? "日志确认" : "RCON首次发现",
+    }));
+  }
+
+  async getSquadOrder(input) {
+    const states = await this.repository.getActiveByMatch(input.serverId, input.matchId);
+    const activeSquads = states.filter((x) => x.status === "ACTIVE");
+
+    activeSquads.sort((a, b) => {
+      const timeDiff = (a.createdAt || 0) - (b.createdAt || 0);
+      if (timeDiff !== 0) return timeDiff;
+      if ((a.teamId || 0) !== (b.teamId || 0)) return (a.teamId || 0) - (b.teamId || 0);
+      if ((a.squadId || 0) !== (b.squadId || 0)) return (a.squadId || 0) - (b.squadId || 0);
+      return (a.generation || 0) - (b.generation || 0);
+    });
+
+    return {
+      matchId: input.matchId,
+      orderedSquads: activeSquads.map((state, index) => ({
+        order: index + 1,
+        teamId: state.teamId,
+        squadId: state.squadId,
+        generation: state.generation,
+        lifecycleId: state.lifecycleId,
+        squadName: state.squadName,
+        leaderName: state.leaderName,
+        memberCount: state.memberCount,
+        locked: state.locked,
+        createdAt: state.createdAt,
+        createdAtLabel: formatTimeHHMMSS(state.createdAt),
+        creationSource: state.creationSource ?? state.createSource,
+        creationConfidence: state.creationConfidence ?? state.confidence,
+        sourceLabel: (state.creationSource ?? state.createSource) === "LOG" ? "日志确认" : "RCON首次发现",
+        confidence: state.confidence,
+        status: state.status,
+      })),
+    };
+  }
+
+  async getTimeline(input) {
+    const limit = Number(input.limit ?? 200);
+    const events = await this.repository.getEventsByMatch(input.serverId, input.matchId, limit);
+    return events.map((evt) => ({
+      id: evt.id,
+      eventType: evt.eventType,
+      eventTime: evt.eventTime,
+      lifecycleId: evt.lifecycleId,
+      runtimeKey: evt.runtimeKey,
+      teamId: evt.payload?.teamId ?? null,
+      squadId: evt.payload?.squadId ?? null,
+      generation: evt.payload?.generation ?? null,
+      squadName: evt.payload?.squadName ?? null,
+      source: evt.source,
+      confidence: evt.confidence,
+      payload: evt.payload,
+    }));
   }
 }
+
+function formatTimeHHMMSS(ms) {
+  if (!ms || !Number.isFinite(Number(ms))) return "";
+  const d = new Date(Number(ms));
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  return `${hh}:${mm}:${ss}`;
+}
+
