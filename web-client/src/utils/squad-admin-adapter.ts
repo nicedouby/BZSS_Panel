@@ -76,7 +76,10 @@ export function adaptSquad(
 ): SquadViewModel {
   const [leader, otherMembers] = separateSquadLeader(members, playtimes);
   const playtimeSummary = buildPlaytimeSummary(collectSquadPlayers(leader, otherMembers));
-  const lifecycle = lifecycleByKey[buildSquadLifecycleLookupKey(squad.teamID, squad.squadID)] ?? {};
+  const lifecycle =
+    lifecycleByKey[buildSquadLifecycleLookupKey(squad.teamID, squad.squadID, squad.generation)]
+    ?? lifecycleByKey[buildSquadLifecycleLookupKey(squad.teamID, squad.squadID)]
+    ?? {};
 
   const warnings: SquadWarning[] = [];
   if (members.length > 0 && !leader) {
@@ -95,6 +98,7 @@ export function adaptSquad(
 
   return {
     squadId: squad.squadID ?? null,
+    generation: squad.generation ?? lifecycle.generation ?? null,
     squadName: squad.squadName || squad.name || `Squad ${squad.squadID ?? "?"}`,
     teamId: squad.teamID ?? null,
     creatorName: squad.creatorName || "Unknown Creator",
@@ -170,6 +174,7 @@ export interface SquadLifecycleViewModel {
   matchId: string | null;
   teamId: number | null;
   squadId: number | null;
+  generation?: number | null;
   squadName: string;
   createdAt?: string | null;
   createdAtMs?: number | null;
@@ -183,19 +188,23 @@ export interface SquadLifecycleViewModel {
 export function buildSquadLifecycleLookup(current: any): Record<string, SquadLifecycleViewModel> {
   const lookup: Record<string, SquadLifecycleViewModel> = {};
   const list = Array.isArray(current?.list) ? current.list : [];
+  const latestBySlot: Record<string, SquadLifecycleViewModel> = {};
 
   for (const item of list) {
     const teamId = item?.teamId ?? item?.teamID ?? null;
     const squadId = item?.squadId ?? item?.squadID ?? null;
     if (teamId == null || squadId == null) continue;
+    const generation = normalizeGeneration(item?.generation);
 
-    const key = buildSquadLifecycleLookupKey(teamId, squadId);
-    lookup[key] = {
-      key: String(item.key ?? key),
+    const slotKey = buildSquadLifecycleLookupKey(teamId, squadId);
+    const recordKey = String(item.key ?? buildSquadLifecycleLookupKey(teamId, squadId, generation) ?? slotKey);
+    const record: SquadLifecycleViewModel = {
+      key: recordKey,
       serverId: String(item.serverId ?? ""),
       matchId: item.matchId ?? null,
       teamId,
       squadId,
+      generation,
       squadName: String(item.squadName ?? "").trim(),
       createdAt: item.createdAt ?? null,
       createdAtMs: Number(item.createdAtMs ?? 0) || null,
@@ -205,13 +214,29 @@ export function buildSquadLifecycleLookup(current: any): Record<string, SquadLif
       creationConfidence: String(item.creationConfidence ?? ""),
       sourceLabel: String(item.sourceLabel ?? ""),
     };
+
+    if (generation != null) {
+      lookup[buildSquadLifecycleLookupKey(teamId, squadId, generation)] = record;
+    }
+
+    const currentLatest = latestBySlot[slotKey];
+    if (!currentLatest || compareLifecycleRecords(record, currentLatest) >= 0) {
+      latestBySlot[slotKey] = record;
+    }
   }
 
+  Object.assign(lookup, latestBySlot);
   return lookup;
 }
 
-export function buildSquadLifecycleLookupKey(teamId: number | string | null | undefined, squadId: number | string | null | undefined) {
-  return `${String(teamId ?? "")}:${String(squadId ?? "")}`;
+export function buildSquadLifecycleLookupKey(
+  teamId: number | string | null | undefined,
+  squadId: number | string | null | undefined,
+  generation: number | string | null | undefined = null,
+) {
+  const slotKey = `${String(teamId ?? "")}:${String(squadId ?? "")}`;
+  const normalizedGeneration = normalizeGeneration(generation);
+  return normalizedGeneration == null ? slotKey : `${slotKey}:G${normalizedGeneration}`;
 }
 
 export function adaptPlayerDetail(
@@ -574,6 +599,24 @@ function firstFiniteNumber(...values: unknown[]) {
     if (Number.isFinite(number)) return number;
   }
   return undefined;
+}
+
+function normalizeGeneration(value: unknown): number | null {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return null;
+  return Math.trunc(number);
+}
+
+function compareLifecycleRecords(left: SquadLifecycleViewModel, right: SquadLifecycleViewModel) {
+  const leftGeneration = Number(left.generation ?? 0);
+  const rightGeneration = Number(right.generation ?? 0);
+  if (leftGeneration !== rightGeneration) return leftGeneration - rightGeneration;
+
+  const leftCreatedAtMs = Number(left.createdAtMs ?? 0);
+  const rightCreatedAtMs = Number(right.createdAtMs ?? 0);
+  if (leftCreatedAtMs !== rightCreatedAtMs) return leftCreatedAtMs - rightCreatedAtMs;
+
+  return String(left.key ?? "").localeCompare(String(right.key ?? ""));
 }
 
 function normalizeSteam64(value: unknown): string {

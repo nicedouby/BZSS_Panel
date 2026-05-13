@@ -153,6 +153,46 @@ async function testPendingCreateFlushesFromSnapshot() {
   await harness.module.stop();
 }
 
+async function testReusedSquadIdCreatesNewGeneration() {
+  const harness = createHarness();
+  await harness.module.start();
+
+  harness.core.eventBus.emitCoreEvent("On_SquadCreated", squadEventBase({
+    time: "2026-05-13 20:31:42",
+    paramMap: {
+      SquadID: "5",
+      SquadName: "Echo",
+      FactionName: "USA",
+      TeamID: "1",
+      PlayerName: "Leader One",
+      Steam64ID: "76561198000000005",
+      EOSID: "eos-5",
+    },
+  }));
+
+  harness.core.eventBus.emitCoreEvent("On_SquadCreated", squadEventBase({
+    time: "2026-05-13 20:40:00",
+    rawLog: "raw squad create log - reused slot",
+    paramMap: {
+      SquadID: "5",
+      SquadName: "Echo",
+      FactionName: "USA",
+      TeamID: "1",
+      PlayerName: "Leader Two",
+      Steam64ID: "76561198000000015",
+      EOSID: "eos-15",
+    },
+  }));
+
+  const current = harness.module.api.getCurrent("BZSS_Main");
+  assert.equal(current.list.length, 1);
+  assert.equal(current.list[0].generation, 2);
+  assert.equal(current.list[0].key, "BZSS_Main:session-1:T1:S5:G2");
+  assert.equal(current.list[0].createdDisplayText, "\u521b\u5efa\u4e8e 20:40:00");
+  assert.equal(current.byKey[current.list[0].key].creatorName, "Leader Two");
+  await harness.module.stop();
+}
+
 async function testRconOnlySnapshotCreatesFallbackLifecycle() {
   const harness = createHarness();
   await harness.module.start();
@@ -209,6 +249,7 @@ async function testMatchEndClearsPendingAndCurrent() {
 
 await testLogCreateWithTeamId();
 await testPendingCreateFlushesFromSnapshot();
+await testReusedSquadIdCreatesNewGeneration();
 await testRconOnlySnapshotCreatesFallbackLifecycle();
 await testMatchEndClearsPendingAndCurrent();
 

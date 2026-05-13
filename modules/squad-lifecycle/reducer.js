@@ -1,10 +1,17 @@
 // -*- coding: utf-8 -*-
 
-import { buildSquadLifecycleKey, createCurrentSnapshot, formatLifecycleRecord } from "./service.js";
+import {
+  buildSquadLifecycleKey,
+  buildSquadLifecycleSlotKey,
+  createCurrentSnapshot,
+  formatLifecycleRecord,
+} from "./service.js";
 
 export function createSquadLifecycleReducer({ config, logger } = {}) {
   const state = {
     recordsByKey: new Map(),
+    latestKeyBySlot: new Map(),
+    generationBySlot: new Map(),
     currentMatchIdByServer: new Map(),
     orderByMatchKey: new Map(),
     updatedAt: "",
@@ -35,14 +42,22 @@ export function createSquadLifecycleReducer({ config, logger } = {}) {
   }
 
   function handleSquadCreateLogEvent(logEvent) {
-    const key = buildSquadLifecycleKey(logEvent.serverId, logEvent.matchId, logEvent.teamId, logEvent.squadId);
-    const current = state.recordsByKey.get(key) ?? null;
-    const next = current ? { ...current } : createBaseRecord(logEvent, getNextOrder(logEvent.serverId, logEvent.matchId));
-    const nextCreatedAtMs = parseTimestamp(logEvent.eventTime);
-    const shouldPromoteLogTimestamp = !current
+    const slotKey = buildSquadLifecycleSlotKey(logEvent.serverId, logEvent.matchId, logEvent.teamId, logEvent.squadId);
+    const current = getCurrentRecord(slotKey);
+    const eventCreatedAtMs = parseTimestamp(logEvent.eventTime);
+    const sameEvent = isSameCreationEvent(current, logEvent, eventCreatedAtMs);
+    const shouldReuseCurrentRecord = Boolean(current) && (sameEvent || current.creationSource === "RCON_SNAPSHOT");
+    const shouldPromoteLogTimestamp = sameEvent
+      || !current
+      || !shouldReuseCurrentRecord
       || (current.creationSource === "RCON_SNAPSHOT" && preferLogCreateEvent);
+    const next = shouldReuseCurrentRecord
+      ? { ...current }
+      : createBaseRecord(logEvent, getNextOrder(logEvent.serverId, logEvent.matchId), getNextGeneration(slotKey));
+    const key = buildSquadLifecycleKey(logEvent.serverId, logEvent.matchId, logEvent.teamId, logEvent.squadId, next.generation);
 
     next.key = key;
+    next.slotKey = slotKey;
     next.serverId = String(logEvent.serverId ?? "").trim();
     next.matchId = String(logEvent.matchId ?? "").trim();
     next.teamId = logEvent.teamId ?? null;
@@ -56,15 +71,15 @@ export function createSquadLifecycleReducer({ config, logger } = {}) {
     next.sourceEventId = String(logEvent.sourceEventId ?? "");
 
     if (shouldPromoteLogTimestamp) {
-      if (Number.isFinite(nextCreatedAtMs)) {
-        next.createdAtMs = nextCreatedAtMs;
-        next.createdAt = new Date(nextCreatedAtMs).toISOString();
+      if (Number.isFinite(eventCreatedAtMs)) {
+        next.createdAtMs = eventCreatedAtMs;
+        next.createdAt = new Date(eventCreatedAtMs).toISOString();
       }
       next.creationSource = "LOG";
       next.creationConfidence = "HIGH";
     }
 
-    state.recordsByKey.set(key, formatLifecycleRecord(next));
+    upsertRecord(next);
     touchUpdatedAt();
     return state.recordsByKey.get(key);
   }
@@ -81,13 +96,15 @@ export function createSquadLifecycleReducer({ config, logger } = {}) {
     const records = [];
 
     for (const squad of squads) {
-      const key = buildSquadLifecycleKey(serverId, matchId, squad.teamID ?? squad.teamId ?? null, squad.squadID ?? squad.squadId ?? null);
-      const current = state.recordsByKey.get(key) ?? null;
+      const teamId = squad.teamID ?? squad.teamId ?? null;
+      const squadId = squad.squadID ?? squad.squadId ?? null;
+      const slotKey = buildSquadLifecycleSlotKey(serverId, matchId, teamId, squadId);
+      const current = getCurrentRecord(slotKey);
       const next = current ? { ...current } : createBaseRecord({
         serverId,
         matchId,
-        teamId: squad.teamID ?? squad.teamId ?? null,
-        squadId: squad.squadID ?? squad.squadId ?? null,
+        teamId,
+        squadId,
         squadName: squad.squadName ?? squad.name ?? "",
         factionName: squad.teamName ?? "",
         creatorName: squad.creatorName ?? "",
@@ -95,13 +112,15 @@ export function createSquadLifecycleReducer({ config, logger } = {}) {
         creatorEosId: squad.creatorEOSID ?? squad.creatorEosId ?? "",
         rawLog: squad.raw ?? "",
         sourceEventId: squad.sourceEventId ?? "",
-      }, getNextOrder(serverId, matchId));
+      }, getNextOrder(serverId, matchId), getNextGeneration(slotKey));
 
+      const key = buildSquadLifecycleKey(serverId, matchId, teamId, squadId, next.generation);
       next.key = key;
+      next.slotKey = slotKey;
       next.serverId = serverId;
       next.matchId = matchId;
-      next.teamId = squad.teamID ?? squad.teamId ?? null;
-      next.squadId = squad.squadID ?? squad.squadId ?? null;
+      next.teamId = teamId;
+      next.squadId = squadId;
       next.squadName = String(squad.squadName ?? squad.name ?? "").trim();
       next.factionName = String(squad.teamName ?? next.factionName ?? "").trim();
       next.creatorName = String(squad.creatorName ?? next.creatorName ?? "").trim();
@@ -116,7 +135,7 @@ export function createSquadLifecycleReducer({ config, logger } = {}) {
         next.creationConfidence = "MEDIUM";
       }
 
-      state.recordsByKey.set(key, formatLifecycleRecord(next));
+      upsertRecord(next);
       records.push(state.recordsByKey.get(key));
     }
 
@@ -140,6 +159,16 @@ export function createSquadLifecycleReducer({ config, logger } = {}) {
     }
 
     state.orderByMatchKey.delete(`${serverKey}:${matchKey}`);
+    for (const [slotKey, latestKey] of [...state.latestKeyBySlot.entries()]) {
+      if (String(latestKey ?? "").startsWith(`${serverKey}:${matchKey}:`)) {
+        state.latestKeyBySlot.delete(slotKey);
+      }
+    }
+    for (const [slotKey, generation] of [...state.generationBySlot.entries()]) {
+      if (String(slotKey).startsWith(`${serverKey}:${matchKey}:`)) {
+        state.generationBySlot.delete(slotKey);
+      }
+    }
     touchUpdatedAt();
   }
 
@@ -165,17 +194,32 @@ export function createSquadLifecycleReducer({ config, logger } = {}) {
       }
     }
 
+    for (const slotKey of [...state.latestKeyBySlot.keys()]) {
+      if (slotKey.startsWith(`${serverKey}:`)) {
+        state.latestKeyBySlot.delete(slotKey);
+      }
+    }
+
+    for (const slotKey of [...state.generationBySlot.keys()]) {
+      if (slotKey.startsWith(`${serverKey}:`)) {
+        state.generationBySlot.delete(slotKey);
+      }
+    }
+
     touchUpdatedAt();
   }
 
   function getCurrentSnapshot(serverId) {
     const serverKey = String(serverId ?? "").trim();
     const currentMatchId = getCurrentMatchId(serverKey) || findLatestMatchId(serverKey);
-    const records = [...state.recordsByKey.values()].filter((record) => {
-      if (record.serverId !== serverKey) return false;
-      if (!currentMatchId) return true;
-      return record.matchId === currentMatchId;
-    });
+    const records = [...state.latestKeyBySlot.values()]
+      .map((key) => state.recordsByKey.get(key) ?? null)
+      .filter((record) => {
+        if (!record) return false;
+        if (record.serverId !== serverKey) return false;
+        if (!currentMatchId) return true;
+        return record.matchId === currentMatchId;
+      });
 
     return createCurrentSnapshot({
       serverId: serverKey,
@@ -211,6 +255,26 @@ export function createSquadLifecycleReducer({ config, logger } = {}) {
     return latestMatchId;
   }
 
+  function getCurrentRecord(slotKey) {
+    const key = state.latestKeyBySlot.get(slotKey);
+    if (!key) return null;
+    return state.recordsByKey.get(key) ?? null;
+  }
+
+  function getNextGeneration(slotKey) {
+    const next = Number(state.generationBySlot.get(slotKey) ?? 0) + 1;
+    state.generationBySlot.set(slotKey, next);
+    return next;
+  }
+
+  function upsertRecord(record) {
+    const formatted = formatLifecycleRecord(record);
+    state.recordsByKey.set(formatted.key, formatted);
+    state.latestKeyBySlot.set(formatted.slotKey, formatted.key);
+    state.generationBySlot.set(formatted.slotKey, Number(formatted.generation ?? 0) || 1);
+    return formatted;
+  }
+
   return {
     setCurrentMatchId,
     getCurrentMatchId,
@@ -223,7 +287,7 @@ export function createSquadLifecycleReducer({ config, logger } = {}) {
   };
 }
 
-function createBaseRecord(source, order) {
+function createBaseRecord(source, order, generation) {
   return {
     key: "",
     order: Number(order ?? 0),
@@ -238,6 +302,8 @@ function createBaseRecord(source, order) {
     creatorEosId: String(source.creatorEosId ?? "").trim(),
     rawLog: String(source.rawLog ?? ""),
     sourceEventId: String(source.sourceEventId ?? ""),
+    slotKey: "",
+    generation: Number(generation ?? source.generation ?? 0) || 1,
     createdAtMs: 0,
     createdAt: null,
     creationSource: "RCON_SNAPSHOT",
@@ -250,4 +316,25 @@ function parseTimestamp(value) {
   if (!value) return Date.now();
   const parsed = Date.parse(String(value));
   return Number.isFinite(parsed) ? parsed : Date.now();
+}
+
+function isSameCreationEvent(current, logEvent, nextCreatedAtMs) {
+  if (!current) return false;
+
+  const currentSourceEventId = String(current.sourceEventId ?? "").trim();
+  const nextSourceEventId = String(logEvent.sourceEventId ?? "").trim();
+  if (currentSourceEventId && nextSourceEventId && currentSourceEventId === nextSourceEventId) {
+    return true;
+  }
+
+  const currentRawLog = String(current.rawLog ?? "");
+  const nextRawLog = String(logEvent.rawLog ?? "");
+  if (currentRawLog && nextRawLog && currentRawLog === nextRawLog) {
+    const currentCreatedAtMs = Number(current.createdAtMs ?? 0);
+    if (currentCreatedAtMs > 0 && Number.isFinite(nextCreatedAtMs) && currentCreatedAtMs === nextCreatedAtMs) {
+      return true;
+    }
+  }
+
+  return false;
 }

@@ -27,13 +27,14 @@ export const useMatchStore = defineStore("match", () => {
       const team = ensureTeam(map, squad.teamID, squad.teamName);
       const entry = { ...squad, members: [] };
       team.squads.push(entry);
-      squadMap.set(`${squad.teamID}:${squad.squadID}`, entry);
+      squadMap.set(buildSquadKey(squad.teamID, squad.squadID, squad.generation), entry);
+      squadMap.set(buildSquadKey(squad.teamID, squad.squadID), entry);
     }
 
     for (const player of players.active) {
       const teamID = player.teamID ?? 1;
       const team = ensureTeam(map, teamID);
-      const squad = player.squadID != null ? squadMap.get(`${teamID}:${player.squadID}`) : null;
+      const squad = player.squadID != null ? squadMap.get(buildSquadKey(teamID, player.squadID)) : null;
       if (squad) squad.members.push(player);
       else team.unassignedPlayers.push(player);
       team.playerCount += 1;
@@ -51,7 +52,7 @@ export const useMatchStore = defineStore("match", () => {
     const members: Record<string, RuntimePlayer[]> = {};
     for (const player of players.active) {
       if (player.teamID == null || player.squadID == null) continue;
-      const key = `${player.teamID}:${player.squadID}`;
+      const key = buildSquadKey(player.teamID, player.squadID);
       if (!members[key]) members[key] = [];
       members[key].push(player);
     }
@@ -70,4 +71,10 @@ function ensureTeam(map: Map<number, RuntimeTeam>, teamID: number, teamName = ""
   const team = map.get(teamID)!;
   if (teamName) team.teamName = teamName;
   return team;
+}
+
+function buildSquadKey(teamID: number | null | undefined, squadID: number | null | undefined, generation: number | null | undefined = null) {
+  const base = `${String(teamID ?? "")}:${String(squadID ?? "")}`;
+  const generationText = Number.isFinite(Number(generation)) && Number(generation) > 0 ? Math.trunc(Number(generation)) : null;
+  return generationText == null ? base : `${base}:G${generationText}`;
 }

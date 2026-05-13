@@ -25,6 +25,7 @@ export interface SquadLeaderRowViewModel extends PlayerRowViewModel {
 
 export interface SquadViewModel {
   squadId: number | null;
+  generation?: number | null;
   squadName: string;
   teamId: number | null;
   creatorName: string;

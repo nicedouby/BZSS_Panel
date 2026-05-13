@@ -4,6 +4,7 @@ export interface RuntimeSquad {
   key: string;
   teamID: number | null;
   squadID: number | null;
+  generation?: number | null;
   teamName?: string;
   squadName?: string;
   name?: string;
