@@ -221,6 +221,19 @@
     "audit": { "enabled": true },
     "playerState": { "enabled": true },
     "squadState": { "enabled": true },
+    "squadLifecycle": {
+      "enabled": true,
+      "rconPollIntervalMs": 1000,
+      "rconTimeoutMs": 800,
+      "missingConfirmCount": 2,
+      "emptySnapshotGuard": true,
+      "suspiciousEmptySnapshotPlayerThreshold": 5,
+      "createFromRconSnapshot": true,
+      "preferLogCreateEvent": true,
+      "closeSquadsOnMatchEnd": true,
+      "matchChangingGraceMs": 10000,
+      "debug": true
+    },
     "matchState": {
       "enabled": true,
       "polling": {

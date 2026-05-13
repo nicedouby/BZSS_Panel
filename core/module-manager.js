@@ -4,6 +4,7 @@ import { createAuditModule } from "../modules/audit/index.js";
 import { createServerStatusModule } from "../modules/server-status/index.js";
 import { createPlayerStateModule } from "../modules/player-state/index.js";
 import { createSquadStateModule } from "../modules/squad-state/index.js";
+import { createSquadLifecycleModule } from "../modules/squad-lifecycle/index.js";
 import { createMatchStateModule } from "../modules/match-state/index.js";
 import { createConsoleModule } from "../modules/console/index.js";
 import { createLogClockModule } from "../modules/log-clock/index.js";
@@ -39,6 +40,7 @@ export class ModuleManager {
       createServerStatusModule,
       createPlayerStateModule,
       createSquadStateModule,
+      createSquadLifecycleModule,
       createMatchStateModule,
       createCombatStateModule,
       createPlayerDatabaseModule,
