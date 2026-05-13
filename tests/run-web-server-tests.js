@@ -373,6 +373,58 @@ async function testMatchRefreshRoutesDelegateToMatchState() {
   assert.equal(refreshCalls[1], "players");
 }
 
+async function testSquadLifecycleRouteReturnsCurrentSnapshot() {
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin", role: "Operator" };
+        },
+      },
+    },
+    modules: {
+      squadLifecycle: {
+        getCurrent(serverId) {
+          return {
+            serverId,
+            matchId: "session-1",
+            updatedAt: "2026-05-13T12:31:42.000Z",
+            list: [
+              {
+                key: "BZSS_Main:session-1:T1:S1",
+                teamId: 1,
+                squadId: 1,
+                squadName: "Alpha",
+                createdAt: "2026-05-13T12:31:42.000Z",
+                createdAtMs: 1778675502000,
+                createdAtLabel: "20:31:42",
+                createdDisplayText: "\u521b\u5efa\u4e8e 20:31:42",
+                creationSource: "LOG",
+                creationConfidence: "HIGH",
+                sourceLabel: "\u65e5\u5fd7\u786e\u8ba4",
+              },
+            ],
+            byKey: {},
+          };
+        },
+      },
+    },
+  });
+
+  const recorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/squad-lifecycle/current?serverId=BZSS_Main",
+    headers: { host: "localhost" },
+    socket: {},
+  }, recorder.res);
+
+  assert.equal(recorder.state.status, 200);
+  const body = JSON.parse(recorder.state.body);
+  assert.equal(body.current.serverId, "BZSS_Main");
+  assert.equal(body.current.list[0].creationSource, "LOG");
+}
+
 async function testSettingsRoutesRequireAuthAndSuperAdmin() {
   const settingsResponse = {
     enabled: true,
@@ -518,6 +570,7 @@ await testWeaponCollectorApiRequiresGet();
 await testSnapshotAllRequiresAuth();
 await testSnapshotAllDoesNotTriggerSlowTasks();
 await testMatchRefreshRoutesDelegateToMatchState();
+await testSquadLifecycleRouteReturnsCurrentSnapshot();
 await testSettingsRoutesRequireAuthAndSuperAdmin();
 await testVueRouteFallsBackToIndexHtml();
 

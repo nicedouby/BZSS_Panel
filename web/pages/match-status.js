@@ -20,8 +20,7 @@ export async function renderPage({ root, api, apiFetch, openDrawer, onNavigate }
 
   const status = data.status ?? {};
   const players = data.players ?? [];
-  const squads = data.squads ?? [];
-  const lifecycleMap = await fetchSquadLifecycleMap(apiFetch);
+  const squads = data.squads ?? [];
   const teams = buildTeams({ players, squads });
 
   root.innerHTML = `
@@ -54,7 +53,7 @@ export async function renderPage({ root, api, apiFetch, openDrawer, onNavigate }
       </div>
 
       <div class="match-team-list">
-        ${teams.map((team, teamIndex) => renderTeam(team, teamIndex, lifecycleMap)).join("")}
+        ${teams.map((team, teamIndex) => renderTeam(team, teamIndex)).join("")}
       </div>
     </section>
   `;
@@ -128,22 +127,6 @@ function renderMatchStatusError(error) {
       </div>
     </section>
   `;
-}
-
-async function fetchSquadLifecycleMap(apiFetch) {
-  try {
-    const response = await apiFetch("/api/squad-lifecycle/current-squads");
-    if (!response.ok) return new Map();
-    const payload = await response.json();
-    const map = new Map();
-    for (const item of payload.squads ?? []) {
-      if (item.teamId == null || item.squadId == null) continue;
-      map.set(squadKey(item.teamId, item.squadId), item);
-    }
-    return map;
-  } catch {
-    return new Map();
-  }
 }
 
 function buildTeams({ players, squads }) {
@@ -262,7 +245,7 @@ function buildTeams({ players, squads }) {
   }
 }
 
-function renderTeam(team, teamIndex, lifecycleMap) {
+function renderTeam(team, teamIndex) {
   const teamClass = Number(team.teamID) === 1
     ? "team-1"
     : Number(team.teamID) === 2
@@ -285,13 +268,13 @@ function renderTeam(team, teamIndex, lifecycleMap) {
       </div>
 
       <div class="match-squad-list">
-        ${team.squads.map((squad) => renderSquad(squad, lifecycleMap.get(squadKey(team.teamID, squad.squadID)))).join("")}
+        ${team.squads.map((squad) => renderSquad(squad)).join("")}
       </div>
     </section>
   `;
 }
 
-function renderSquad(squad, lifecycle) {
+function renderSquad(squad) {
   const totals = squad.members.reduce((summary, member) => {
     const stats = getMatchStats(member);
     summary.kills += stats.kills;
@@ -307,8 +290,7 @@ function renderSquad(squad, lifecycle) {
           <div class="match-squad-name">${esc(squad.squadName)}</div>
           <div class="match-squad-subtitle">
             <span class="match-badge ${squad.locked ? "locked" : "open"}">${squad.locked ? "锁队" : "公开"}</span>
-            <span class="match-squad-creator">创建人 ${esc(displayName(squad.creatorName, "未知"))}</span>
-            ${lifecycle ? `<span class="match-squad-creator">${esc(renderLifecycleLabel(lifecycle))}</span>` : ""}
+            <span class="match-squad-creator">创建人 ${esc(displayName(squad.creatorName, "未知"))}</span>
           </div>
         </div>
         <div class="match-squad-stats">
@@ -326,14 +308,6 @@ function renderSquad(squad, lifecycle) {
       </div>
     </article>
   `;
-}
-
-function renderLifecycleLabel(lifecycle) {
-  const timeLabel = lifecycle.creationSource === "LOG"
-    ? `创建于 ${formatTimeOnly(lifecycle.createdAt)}`
-    : `首次发现于 ${formatTimeOnly(lifecycle.createdAt)}`;
-  const orderLabel = lifecycle.order ? `#${lifecycle.order}` : "";
-  return [orderLabel, timeLabel, lifecycle.sourceLabel || ""].filter(Boolean).join(" · ");
 }
 
 function formatTimeOnly(value) {

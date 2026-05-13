@@ -28,6 +28,13 @@ export interface SquadViewModel {
   squadName: string;
   teamId: number | null;
   creatorName: string;
+  createdAt?: string | null;
+  createdAtMs?: number | null;
+  createdAtLabel?: string;
+  createdDisplayText?: string;
+  creationSource?: string;
+  creationConfidence?: string;
+  sourceLabel?: string;
   isLocked: boolean;
   memberCount: number;
   maxMembers: number;
@@ -39,14 +46,6 @@ export interface SquadViewModel {
   members: PlayerRowViewModel[];
   warnings: SquadWarning[];
   state: "normal" | "empty" | "no_leader";
-  order?: number | null;
-  lifecycleId?: string | null;
-  createdAt?: string | null;
-  createdAtLabel?: string | null;
-  createdDisplayText?: string | null;
-  creationSource?: "LOG" | "RCON_SNAPSHOT" | string | null;
-  creationConfidence?: "HIGH" | "MEDIUM" | "LOW" | string | null;
-  sourceLabel?: string | null;
 }
 
 export interface TeamViewModel {

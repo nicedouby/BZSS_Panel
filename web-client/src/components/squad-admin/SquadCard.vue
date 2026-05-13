@@ -9,8 +9,7 @@
     <header class="squad-header">
       <div class="squad-header-main">
         <div class="squad-title-row">
-          <strong class="squad-name">{{ squad.squadName }}</strong>
-          <span v-if="squad.order" class="squad-order-badge">#{{ squad.order }}</span>
+          <strong class="squad-name">{{ squad.squadName }}</strong>
           <span class="squad-member-count">{{ squad.memberCount }}/{{ squad.maxMembers }}</span>
           <StatusBadge class="squad-status-badge" :tone="squad.isLocked ? 'warn' : 'idle'">
             {{ squad.isLocked ? t("common.locked") : t("common.open") }}
@@ -19,12 +18,13 @@
 
         <div class="squad-meta-row">
           <span class="squad-meta-summary">{{ squadAveragePlaytimeText }}</span>
-          <span v-if="squad.createdAtLabel" class="squad-created-time">
-            {{ squad.createdDisplayText || squad.createdAtLabel }}
-            <em v-if="squad.sourceLabel">· {{ squad.sourceLabel }}</em>
-          </span>
           <span v-if="squad.creatorName" class="squad-meta-creator">by {{ squad.creatorName }}</span>
         </div>
+
+        <span v-if="squad.createdAtLabel" class="squad-created-time">
+          {{ squad.createdDisplayText || squad.createdAtLabel }}
+          <em v-if="squad.sourceLabel">· {{ squad.sourceLabel }}</em>
+        </span>
       </div>
 
       <div v-if="squadWarnings.length > 0" class="squad-warning-row">
@@ -261,6 +261,21 @@ function warningTone(label: string): "warn" | "idle" {
   white-space: nowrap;
 }
 
+.squad-created-time {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  color: var(--color-text-muted);
+  font-size: 10px;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.squad-created-time em {
+  font-style: normal;
+  color: var(--color-text-secondary);
+}
+
 .squad-warning-row {
   display: flex;
   flex-wrap: wrap;
@@ -304,31 +319,8 @@ function warningTone(label: string): "warn" | "idle" {
   font-size: 11px;
   border-left: 2px solid var(--color-status-warning);
 }
-
-.squad-order-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 18px;
-  padding: 1px 6px;
-  border-radius: var(--radius-full);
-  font-size: 11px;
-  font-weight: 800;
-  color: var(--color-status-info);
-  border: 1px solid rgba(96, 165, 250, 0.25);
-  background: rgba(96, 165, 250, 0.08);
-}
-
-.squad-created-time {
-  color: var(--color-text-muted);
-  flex: 0 0 auto;
-  font-size: 10px;
-  white-space: nowrap;
-}
-
-.squad-created-time em {
-  font-style: normal;
-  color: var(--color-text-secondary);
-}
+
+
 
 @media (max-width: 1100px) {
   .squad-header {

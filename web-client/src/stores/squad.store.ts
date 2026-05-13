@@ -10,6 +10,13 @@ export interface RuntimeSquad {
   size?: number;
   locked?: boolean;
   creatorName?: string;
+  createdAt?: string | null;
+  createdAtMs?: number | null;
+  createdAtLabel?: string;
+  createdDisplayText?: string;
+  creationSource?: string;
+  creationConfidence?: string;
+  sourceLabel?: string;
 }
 
 export const useSquadStore = defineStore("squads", {

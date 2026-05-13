@@ -298,52 +298,6 @@ export class WebServer {
       return this.json(res, 200, await this.refreshMatchState("all"));
     }
 
-    if (url.pathname === "/api/squad-lifecycle/current" && req.method === "GET") {
-      const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
-      const matchId = url.searchParams.get("matchId") ?? null;
-
-      if (!this.modules.squadLifecycle?.getCurrentSquads) {
-        return this.json(res, 404, {
-          error: "SquadLifecycleUnavailable",
-          message: "squadLifecycle module is not loaded.",
-        });
-      }
-
-      return this.json(res, 200, {
-        serverId,
-        squads: await this.modules.squadLifecycle.getCurrentSquads(serverId, matchId),
-      });
-    }
-
-    if (url.pathname === "/api/squad-lifecycle/order" && req.method === "GET") {
-      const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
-      const matchId = url.searchParams.get("matchId") ?? null;
-
-      if (!this.modules.squadLifecycle?.getSquadOrder) {
-        return this.json(res, 404, {
-          error: "SquadLifecycleUnavailable",
-          message: "squadLifecycle module is not loaded.",
-        });
-      }
-
-      return this.json(res, 200, await this.modules.squadLifecycle.getSquadOrder(serverId, matchId));
-    }
-
-    if (url.pathname === "/api/squad-lifecycle/timeline" && req.method === "GET") {
-      const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
-      const matchId = url.searchParams.get("matchId") ?? null;
-      const limit = Number(url.searchParams.get("limit") ?? 300);
-
-      if (!this.modules.squadLifecycle?.getTimeline) {
-        return this.json(res, 404, {
-          error: "SquadLifecycleUnavailable",
-          message: "squadLifecycle module is not loaded.",
-        });
-      }
-
-      return this.json(res, 200, await this.modules.squadLifecycle.getTimeline(serverId, matchId, limit));
-    }
-
     if (url.pathname === "/api/jobs/playtime-refresh-online" && req.method === "POST") {
       if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
@@ -766,6 +720,20 @@ export class WebServer {
       return this.json(res, 200, { squads: this.modules.squadState.getSquads(serverId) });
     }
 
+    if (url.pathname === "/api/squad-lifecycle/current" && req.method === "GET") {
+      const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
+      const lifecycle = this.modules.squadLifecycle?.getCurrent?.(serverId);
+      return this.json(res, 200, {
+        current: lifecycle ?? {
+          serverId,
+          matchId: null,
+          updatedAt: new Date().toISOString(),
+          list: [],
+          byKey: {},
+        },
+      });
+    }
+
     if (url.pathname === "/api/kills/recent") {
       const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
       const records = this.modules.combatState
@@ -828,36 +796,6 @@ export class WebServer {
       const serverId = url.searchParams.get("serverId") ?? null;
       await pluginApi.clearWeaponStats(serverId);
       return this.json(res, 200, { ok: true });
-    }
-
-    if (url.pathname.startsWith("/api/squad-lifecycle")) {
-      const squadLifecycle = this.modules.squadLifecycle;
-      if (!squadLifecycle) {
-        return this.json(res, 503, {
-          error: "SquadLifecycleUnavailable",
-          message: "Squad lifecycle module is not loaded.",
-        });
-      }
-
-      const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
-      const matchId = url.searchParams.get("matchId") ?? null;
-
-      if (url.pathname === "/api/squad-lifecycle/current-squads" && req.method === "GET") {
-        return this.json(res, 200, {
-          squads: await squadLifecycle.getCurrentSquads(serverId, matchId),
-        });
-      }
-
-      if (url.pathname === "/api/squad-lifecycle/squad-order" && req.method === "GET") {
-        return this.json(res, 200, await squadLifecycle.getSquadOrder(serverId, matchId));
-      }
-
-      if (url.pathname === "/api/squad-lifecycle/timeline" && req.method === "GET") {
-        const limit = Number(url.searchParams.get("limit") ?? 200);
-        return this.json(res, 200, {
-          events: await squadLifecycle.getTimeline(serverId, matchId, limit),
-        });
-      }
     }
 
     return this.json(res, 404, { error: "ApiNotFound" });

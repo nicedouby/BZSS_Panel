@@ -59,9 +59,7 @@ const zhCN = {
     console: "控制台",
     playerDatabase: "玩家数据库",
     combatClean: "战斗清洗",
-    killManage: "击杀管理",
-    squadOrder: "建队顺序",
-    pluginSubscriptions: "插件订阅",
+    killManage: "击杀管理",    pluginSubscriptions: "插件订阅",
     settings: "设置",
   },
   routeTitle: {
@@ -69,9 +67,7 @@ const zhCN = {
     console: "控制台",
     playerDatabase: "玩家数据库",
     combatClean: "战斗清洗",
-    killManage: "击杀管理",
-    squadOrder: "建队顺序",
-    pluginSubscriptions: "插件订阅",
+    killManage: "击杀管理",    pluginSubscriptions: "插件订阅",
     comingSoon: "即将开放",
   },
   login: {

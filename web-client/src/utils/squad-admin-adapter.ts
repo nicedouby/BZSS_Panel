@@ -72,9 +72,11 @@ export function adaptSquad(
   squad: RuntimeSquad,
   members: RuntimePlayer[] = [],
   playtimes: Record<string, any> = {},
+  lifecycleByKey: Record<string, SquadLifecycleViewModel> = {},
 ): SquadViewModel {
   const [leader, otherMembers] = separateSquadLeader(members, playtimes);
   const playtimeSummary = buildPlaytimeSummary(collectSquadPlayers(leader, otherMembers));
+  const lifecycle = lifecycleByKey[buildSquadLifecycleLookupKey(squad.teamID, squad.squadID)] ?? {};
 
   const warnings: SquadWarning[] = [];
   if (members.length > 0 && !leader) {
@@ -96,6 +98,13 @@ export function adaptSquad(
     squadName: squad.squadName || squad.name || `Squad ${squad.squadID ?? "?"}`,
     teamId: squad.teamID ?? null,
     creatorName: squad.creatorName || "Unknown Creator",
+    createdAt: lifecycle.createdAt ?? squad.createdAt ?? null,
+    createdAtMs: lifecycle.createdAtMs ?? squad.createdAtMs ?? null,
+    createdAtLabel: lifecycle.createdAtLabel ?? squad.createdAtLabel ?? "",
+    createdDisplayText: lifecycle.createdDisplayText ?? squad.createdDisplayText ?? "",
+    creationSource: lifecycle.creationSource ?? squad.creationSource ?? "",
+    creationConfidence: lifecycle.creationConfidence ?? squad.creationConfidence ?? "",
+    sourceLabel: lifecycle.sourceLabel ?? squad.sourceLabel ?? "",
     isLocked: Boolean(squad.locked),
     memberCount: members.length,
     maxMembers: squad.size ?? 9,
@@ -113,9 +122,10 @@ export function adaptSquad(
 export function adaptTeam(
   runtimeTeam: RuntimeTeam,
   playtimes: Record<string, any> = {},
+  lifecycleByKey: Record<string, SquadLifecycleViewModel> = {},
 ): TeamViewModel {
   const squads = runtimeTeam.squads.map((squad) =>
-    adaptSquad(squad, squad.members ?? [], playtimes),
+    adaptSquad(squad, squad.members ?? [], playtimes, lifecycleByKey),
   );
 
   if (runtimeTeam.unassignedPlayers.length > 0) {
@@ -132,6 +142,7 @@ export function adaptTeam(
         },
         runtimeTeam.unassignedPlayers,
         playtimes,
+        lifecycleByKey,
       ),
     );
   }
@@ -151,6 +162,56 @@ export function adaptTeam(
     knownPlaytimePlayers: playtimeSummary.knownPlaytimePlayers,
     squads,
   };
+}
+
+export interface SquadLifecycleViewModel {
+  key: string;
+  serverId: string;
+  matchId: string | null;
+  teamId: number | null;
+  squadId: number | null;
+  squadName: string;
+  createdAt?: string | null;
+  createdAtMs?: number | null;
+  createdAtLabel?: string;
+  createdDisplayText?: string;
+  creationSource?: string;
+  creationConfidence?: string;
+  sourceLabel?: string;
+}
+
+export function buildSquadLifecycleLookup(current: any): Record<string, SquadLifecycleViewModel> {
+  const lookup: Record<string, SquadLifecycleViewModel> = {};
+  const list = Array.isArray(current?.list) ? current.list : [];
+
+  for (const item of list) {
+    const teamId = item?.teamId ?? item?.teamID ?? null;
+    const squadId = item?.squadId ?? item?.squadID ?? null;
+    if (teamId == null || squadId == null) continue;
+
+    const key = buildSquadLifecycleLookupKey(teamId, squadId);
+    lookup[key] = {
+      key: String(item.key ?? key),
+      serverId: String(item.serverId ?? ""),
+      matchId: item.matchId ?? null,
+      teamId,
+      squadId,
+      squadName: String(item.squadName ?? "").trim(),
+      createdAt: item.createdAt ?? null,
+      createdAtMs: Number(item.createdAtMs ?? 0) || null,
+      createdAtLabel: String(item.createdAtLabel ?? ""),
+      createdDisplayText: String(item.createdDisplayText ?? ""),
+      creationSource: String(item.creationSource ?? ""),
+      creationConfidence: String(item.creationConfidence ?? ""),
+      sourceLabel: String(item.sourceLabel ?? ""),
+    };
+  }
+
+  return lookup;
+}
+
+export function buildSquadLifecycleLookupKey(teamId: number | string | null | undefined, squadId: number | string | null | undefined) {
+  return `${String(teamId ?? "")}:${String(squadId ?? "")}`;
 }
 
 export function adaptPlayerDetail(

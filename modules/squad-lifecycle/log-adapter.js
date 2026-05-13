@@ -2,127 +2,109 @@
 
 import { getParam } from "../../core/event-normalizer.js";
 
-export class SquadLogAdapter {
-  constructor(lifecycleService, options = {}) {
-    this.lifecycleService = lifecycleService;
-    this.resolveMatchContext = options.resolveMatchContext;
-    this.findTeamIdForSquad = options.findTeamIdForSquad;
-    this.logger = options.logger ?? console;
-    this.debug = Boolean(options.debug);
+export function parseSquadCreateEvent(event) {
+  if (!event || typeof event !== "object") return null;
+
+  const eventName = String(event.eventName ?? "").trim();
+  if (eventName !== "On_SquadCreated" && eventName !== "SQUAD_CREATED") {
+    return null;
   }
 
-  async onCoreSquadCreatedEvent(event) {
-    const parsed = this.parseSquadCreateEvent(event);
-    if (!parsed) return;
+  const serverId = String(event.serverId ?? getParam(event, "ServerID") ?? "").trim();
+  const matchId = String(
+    event.matchId
+      ?? event.sessionId
+      ?? getParam(event, "SessionID")
+      ?? getParam(event, "MatchID")
+      ?? "",
+  ).trim();
+  const squadId = toNumber(
+    event.squadId
+      ?? getParam(event, "SquadID")
+      ?? getParam(event, "SquadId"),
+  );
 
-    await this.lifecycleService.handleSquadCreateLogEvent(parsed);
+  if (!serverId || squadId == null) {
+    return null;
   }
 
-  parseSquadCreateEvent(event) {
-    const serverId = String(event?.serverId ?? "").trim();
-    if (!serverId) return null;
+  const eventTime = String(
+    event.eventTime
+      ?? event.time
+      ?? getParam(event, "Time")
+      ?? new Date().toISOString(),
+  ).trim();
 
-    const rawTeamId =
-      firstFiniteNumber([
-        getParam(event, "TeamID"),
-        getParam(event, "TeamId"),
-        getParam(event, "Team"),
-        event?.teamID,
-        event?.teamId,
-      ]);
+  const squadName = String(
+    event.squadName
+      ?? getParam(event, "SquadName")
+      ?? "",
+  ).trim();
 
-    const squadId = firstFiniteNumber([
-      getParam(event, "SquadID"),
-      getParam(event, "SquadId"),
-      event?.squadID,
-      event?.squadId,
-    ]);
+  const creatorName = String(
+    event.creatorName
+      ?? event.playerName
+      ?? getParam(event, "PlayerName")
+      ?? "",
+  ).trim();
 
-    if (!Number.isFinite(squadId)) return null;
+  const creatorSteamId = String(
+    event.creatorSteamId
+      ?? event.steamID
+      ?? getParam(event, "Steam64ID")
+      ?? getParam(event, "SteamID")
+      ?? "",
+  ).trim();
 
-    const squadName = String(
-      getParam(event, "SquadName")
-      || event?.squadName
-      || "",
-    ).trim();
+  const creatorEosId = String(
+    event.creatorEosId
+      ?? event.eosID
+      ?? getParam(event, "EOSID")
+      ?? "",
+  ).trim();
 
-    const creatorName = String(
-      getParam(event, "PlayerName")
-      || event?.playerName
-      || "",
-    ).trim() || null;
+  const factionName = String(
+    event.factionName
+      ?? getParam(event, "FactionName")
+      ?? getParam(event, "TeamName")
+      ?? "",
+  ).trim();
 
-    const creatorSteamId = String(
-      getParam(event, "Steam64ID")
-      || event?.steamID
-      || "",
-    ).trim() || null;
+  const teamId = toNumber(
+    event.teamId
+      ?? getParam(event, "TeamID")
+      ?? getParam(event, "TeamId")
+      ?? getParam(event, "teamID")
+      ?? getParam(event, "teamId"),
+  );
 
-    const creatorEosId = String(
-      getParam(event, "EOSID")
-      || event?.eosID
-      || "",
-    ).trim() || null;
-
-    const context = this.resolveMatchContext?.(serverId) ?? null;
-    const matchId = String(context?.matchId ?? "").trim();
-    if (!matchId) return null;
-
-    let teamId = rawTeamId;
-    if (!Number.isFinite(teamId)) {
-      teamId = this.findTeamIdForSquad?.({
-        serverId,
-        squadId,
-        squadName,
-      }) ?? null;
-    }
-
-    if (!Number.isFinite(teamId)) {
-      if (this.debug) {
-        this.logger.warn?.("[SquadLifecycle] skip squad create event because teamId is missing", {
-          serverId,
-          matchId,
-          squadId,
-          squadName,
-          eventName: event?.eventName,
-        });
-      }
-      return null;
-    }
-
-    const eventTime = toEpochMs(event?.time) || Date.now();
-
-    return {
-      serverId,
-      matchId,
-      eventTime,
-      teamId,
-      squadId,
-      squadName,
-      creatorName,
-      creatorSteamId,
-      creatorEosId,
-      rawLog: String(event?.rawLog ?? event?.rawEvent?.Raw ?? ""),
-      sourceEventId: String(event?.eventId ?? "").trim() || null,
-    };
-  }
+  return {
+    serverId,
+    matchId: matchId || null,
+    eventTime,
+    squadId,
+    squadName,
+    factionName,
+    creatorName,
+    creatorSteamId,
+    creatorEosId,
+    rawLog: String(event.rawLog ?? event.sourceRaw ?? event.raw ?? ""),
+    sourceEventId: String(event.sourceEventId ?? event.eventId ?? ""),
+    teamId,
+    needsTeamId: teamId == null,
+    needsMatchId: !matchId,
+  };
 }
 
-function firstFiniteNumber(values) {
-  for (const value of values) {
-    const n = Number(value);
-    if (Number.isFinite(n)) return n;
-  }
-  return null;
+export function normalizeSquadName(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
 }
 
-function toEpochMs(value) {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  const text = String(value ?? "").trim();
-  if (!text) return null;
-  const parsed = Date.parse(text);
-  return Number.isFinite(parsed) ? parsed : null;
+function toNumber(value) {
+  if (value == null || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }

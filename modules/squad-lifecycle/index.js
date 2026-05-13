@@ -1,166 +1,38 @@
-﻿// -*- coding: utf-8 -*-
+// -*- coding: utf-8 -*-
 
-import { BzssSquadLifecycleEventBus } from "./event-bus.js";
-import { SquadLogAdapter } from "./log-adapter.js";
-import { toRconSquadSnapshot } from "./parse-rcon-squads.js";
-import { InMemorySquadLifecycleRepository } from "./repository.js";
-import { SquadLifecycleService } from "./service.js";
-import { defaultSquadLifecycleConfig, normalizeSquadLifecycleConfig } from "./config.js";
+import { parseSquadCreateEvent, normalizeSquadName } from "./log-adapter.js";
+import { createSquadLifecycleReducer } from "./reducer.js";
 
 const MATCH_END_EVENTS = ["GAME_END", "MATCH_END", "ROUND_END", "ROUND_ENDED", "NEW_GAME"];
+const PENDING_CREATE_LOG_TTL_MS = 30_000;
 
-export function createSquadLifecycleModule({ core, modules, config, logger }) {
+export function createSquadLifecycleModule({ core, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
     moduleId: "module.squadLifecycle",
     source: "module.squadLifecycle",
     channel: "module",
   }) ?? core.logger;
 
-  const moduleConfig = normalizeSquadLifecycleConfig({
-    ...defaultSquadLifecycleConfig,
-    ...(config?.get("modules.squadLifecycle", {}) ?? {}),
-  });
+  const moduleConfig = config.get("modules.squadLifecycle", {});
+  const enabled = Boolean(moduleConfig.enabled ?? true);
+  const debugEnabled = Boolean(moduleConfig.debug ?? false);
+  const pendingCreateLogTtlMs = normalizePositiveNumber(moduleConfig.pendingCreateLogTtlMs, PENDING_CREATE_LOG_TTL_MS);
 
-  const repository = new InMemorySquadLifecycleRepository();
-  const eventBus = new BzssSquadLifecycleEventBus({ core });
-
-  const matchRuntime = {
-    byServer: new Map(),
-    matchChangingUntil: 0,
-  };
-
-  const service = new SquadLifecycleService(moduleConfig, repository, eventBus, moduleLogger);
-
-  const logAdapter = new SquadLogAdapter(service, {
-    resolveMatchContext: (serverId) => resolveMatchContext(serverId, modules, core, matchRuntime),
-    findTeamIdForSquad: ({ serverId, squadId, squadName }) => {
-      const squads = modules?.squadState?.getSquads?.(serverId) ?? [];
-      const matches = squads.filter((x) => {
-        if (Number(x.squadID) !== Number(squadId)) return false;
-        if (!squadName) return true;
-        return String(x.squadName ?? "").trim() === String(squadName).trim();
-      });
-
-      if (matches.length === 1 && Number.isFinite(Number(matches[0].teamID))) {
-        return Number(matches[0].teamID);
-      }
-
-      return null;
-    },
-    logger: moduleLogger,
-    debug: moduleConfig.debug,
-  });
-
+  const reducer = createSquadLifecycleReducer({ config, logger: moduleLogger });
+  const pendingCreateLogs = new Map();
   const unsubscribers = [];
 
   const api = {
-    getConfig() {
-      return { ...moduleConfig };
+    getCurrent(serverId = core.webStatus.serverId) {
+      return reducer.getCurrentSnapshot(serverId);
     },
 
-    getState() {
-      const states = repository.dumpStates();
-      return {
-        currentMatchId: resolveMatchContext(resolveServerId(core), modules, core, matchRuntime).matchId,
-        squadsByLifecycleId: Object.fromEntries(states.map((state) => [state.lifecycleId, state])),
-        events: repository.dumpEvents(),
-      };
+    getPendingCount() {
+      return pendingCreateLogs.size;
     },
 
-    async getCurrentSquads(serverId, matchId = null) {
-      const sid = String(serverId || resolveServerId(core));
-      const context = resolveMatchContext(sid, modules, core, matchRuntime);
-      const targetMatchId = String(matchId || context.matchId);
-      if (!targetMatchId) return [];
-      return service.getOrderedCurrentSquads({ serverId: sid, matchId: targetMatchId });
-    },
-
-    async getSquadOrder(serverId, matchId = null) {
-      const sid = String(serverId || resolveServerId(core));
-      const context = resolveMatchContext(sid, modules, core, matchRuntime);
-      const targetMatchId = String(matchId || context.matchId);
-      if (!targetMatchId) {
-        return {
-          serverId: sid,
-          matchId: "",
-          orderedSquads: [],
-          count: 0,
-          updatedAt: new Date().toISOString(),
-        };
-      }
-
-      const orderedSquads = await service.getOrderedCurrentSquads({
-        serverId: sid,
-        matchId: targetMatchId,
-      });
-
-      return {
-        serverId: sid,
-        matchId: targetMatchId,
-        orderedSquads,
-        count: orderedSquads.length,
-        updatedAt: new Date().toISOString(),
-      };
-    },
-
-    async getTimeline(serverId, matchId = null, limit = 300) {
-      const sid = String(serverId || resolveServerId(core));
-      const context = resolveMatchContext(sid, modules, core, matchRuntime);
-      const targetMatchId = String(matchId || context.matchId);
-      if (!targetMatchId) {
-        return {
-          serverId: sid,
-          matchId: "",
-          events: [],
-        };
-      }
-
-      const events = await service.getTimeline({
-        serverId: sid,
-        matchId: targetMatchId,
-        limit,
-      });
-
-      return {
-        serverId: sid,
-        matchId: targetMatchId,
-        events,
-      };
-    },
-
-    async getEvents(serverId, matchId = null, limit = 1000) {
-      const sid = String(serverId || resolveServerId(core));
-      const context = resolveMatchContext(sid, modules, core, matchRuntime);
-      const targetMatchId = String(matchId || context.matchId);
-      if (!targetMatchId) return [];
-      return repository.getEventsByMatch(sid, targetMatchId, limit);
-    },
-
-    dumpStates() {
-      return repository.dumpStates();
-    },
-
-    dumpEvents() {
-      return repository.dumpEvents();
-    },
-
-    async ingestSquadCreateLogEvent(event) {
-      return service.handleSquadCreateLogEvent(event);
-    },
-
-    async ingestRconSnapshot(snapshot) {
-      return service.handleRconSnapshot(snapshot);
-    },
-
-    async closeCurrentMatch(serverId, endedAt = Date.now()) {
-      const sid = String(serverId || resolveServerId(core));
-      const context = resolveMatchContext(sid, modules, core, matchRuntime);
-      if (!context.matchId) return;
-      await service.handleMatchEnded({
-        serverId: sid,
-        matchId: context.matchId,
-        endedAt,
-      });
+    getCurrentMatchId(serverId = core.webStatus.serverId) {
+      return reducer.getCurrentMatchId(serverId);
     },
   };
 
@@ -170,198 +42,239 @@ export function createSquadLifecycleModule({ core, modules, config, logger }) {
       name: "Squad Lifecycle Module",
       kind: "module",
       version: "0.2.0",
-      description: "小队生命周期状态机模块。订阅 match-state 的小队快照事件，日志负责建队输入，RCON 快照负责缺失与解散确认，支持切图关闭与 squadId 复用 generation。",
+      description: "Maintain squad lifecycle records, pending squad create logs, and creation timestamps from logs and RCON snapshots.",
     },
     apiName: "squadLifecycle",
     api,
 
     async start() {
-      if (!moduleConfig.enabled) {
-        moduleLogger.info?.("SquadLifecycle disabled.", {
-          label: "MODULE",
-          operation: "start",
-        });
-        return;
-      }
+      if (!enabled) return;
 
-      // Register the squad-order page
-      core.webRegistry.registerPage({
-        id: "web.squadOrder",
-        title: "建队顺序",
-        group: "对局",
-        route: "/squad-order",
-        pageModule: "/pages/squad-order.js",
-        source: "module.squadLifecycle",
-        required: false,
-        enabled: true,
-        order: 15,
-        icon: "🏳️",
-      });
-
-      // Subscribe to squad log events
       unsubscribers.push(core.eventBus.onCoreEvent("On_SquadCreated", (event) => {
-        void logAdapter.onCoreSquadCreatedEvent(event);
+        handleCreateEvent(event);
       }));
-
       unsubscribers.push(core.eventBus.onCoreEvent("SQUAD_CREATED", (event) => {
-        void logAdapter.onCoreSquadCreatedEvent(event);
+        handleCreateEvent(event);
       }));
 
-      // TODO:
-      // 后续将 squad-lifecycle 的 RCON 输入改为订阅 module.matchState.squadsUpdated，
-      // 避免本模块重复执行 ListSquads。
-
-      // Subscribe to match-state squad snapshots (preferred source, avoids duplicate RCON calls)
       unsubscribers.push(core.eventBus.onModuleEvent("module.matchState", "squadsUpdated", (event) => {
-        const serverId = resolveServerId(core);
-        const context = resolveMatchContext(serverId, modules, core, matchRuntime);
-        if (!context.matchId) return;
+        const serverId = String(event.serverId ?? core.webStatus.serverId ?? "").trim();
+        if (!serverId) return;
 
-        const snapshot = toRconSquadSnapshot({
+        cleanupExpiredPending();
+        const matchId = resolveCurrentMatchId(serverId, event) || buildSyntheticMatchId(serverId, event);
+        if (!matchId) return;
+
+        reducer.setCurrentMatchId(serverId, matchId);
+        flushPendingForSnapshot(serverId, matchId, Array.isArray(event.squads) ? event.squads : []);
+        reducer.handleRconSquadSnapshot({
           serverId,
-          matchId: context.matchId,
-          parsedSquads: event.squads ?? [],
-          rawText: "",
-          capturedAt: Date.now(),
-          playerCount: context.playerCount,
-          isMatchChanging: Date.now() < matchRuntime.matchChangingUntil,
+          matchId,
+          observedAt: event.time ?? new Date().toISOString(),
+          squads: Array.isArray(event.squads) ? event.squads : [],
         });
-
-        void service.handleRconSnapshot(snapshot);
       }));
 
-      await ingestCurrentMatchStateSquadsIfAvailable({
-        core,
-        modules,
-        matchRuntime,
-        service,
-      });
-
-      // Subscribe to match end events
       for (const eventName of MATCH_END_EVENTS) {
-        unsubscribers.push(core.eventBus.onCoreEvent(eventName, () => {
-          const serverId = resolveServerId(core);
-          const context = resolveMatchContext(serverId, modules, core, matchRuntime);
-          if (!context.matchId) return;
-
-          matchRuntime.matchChangingUntil = Date.now() + moduleConfig.matchChangingGraceMs;
-          void service.handleMatchEnded({
-            serverId,
-            matchId: context.matchId,
-            endedAt: Date.now(),
-          });
+        unsubscribers.push(core.eventBus.onCoreEvent(eventName, (event) => {
+          const serverId = String(event.serverId ?? core.webStatus.serverId ?? "").trim();
+          if (!serverId) return;
+          cleanupExpiredPending();
+          clearPendingForServer(serverId);
         }));
       }
-
-      moduleLogger.info?.("SquadLifecycle started.", {
-        label: "MODULE",
-        operation: "start",
-        data: {
-          snapshotSource: "module.matchState.squadsUpdated",
-          missingConfirmCount: moduleConfig.missingConfirmCount,
-        },
-      });
     },
 
     async stop() {
-      for (const unsubscribe of unsubscribers.splice(0)) unsubscribe();
-
-      if (moduleConfig.closeSquadsOnMatchEnd) {
-        const serverId = resolveServerId(core);
-        const context = resolveMatchContext(serverId, modules, core, matchRuntime);
-        if (context.matchId) {
-          await service.handleMatchEnded({
-            serverId,
-            matchId: context.matchId,
-            endedAt: Date.now(),
-          });
-        }
-      }
-
-      moduleLogger.info?.("SquadLifecycle stopped.", {
-        label: "MODULE",
-        operation: "stop",
-      });
+      for (const unsubscriber of unsubscribers.splice(0)) unsubscriber();
+      pendingCreateLogs.clear();
     },
   };
-}
 
-function resolveServerId(core) {
-  const id = String(core?.webStatus?.serverId ?? "").trim();
-  if (id) return id;
-  return String(core?.config?.get?.("server.id", "BZSS_Main") ?? "BZSS_Main");
-}
+  function handleCreateEvent(event) {
+    cleanupExpiredPending();
 
-function resolveMatchContext(serverId, modules, core, matchRuntime) {
-  const now = Date.now();
-  const snapshot = modules?.matchState?.getState?.() ?? {};
-  const status = snapshot.serverStatus ?? core?.webStatus?.getSnapshot?.() ?? {};
+    const parsed = parseSquadCreateEvent(event);
+    if (!parsed) return;
 
-  const map = String(status.map ?? "").trim();
-  const layer = String(status.layer ?? "").trim();
-  const layerKey = layer || map || "unknown";
+    const serverId = String(parsed.serverId ?? event.serverId ?? core.webStatus.serverId ?? "").trim();
+    if (!serverId || parsed.squadId == null) return;
 
-  const playtimeRaw = Number(status.playtime);
-  const playtime = Number.isFinite(playtimeRaw) && playtimeRaw >= 0 ? playtimeRaw : null;
+    const matchId = resolveCurrentMatchId(serverId, parsed) || buildSyntheticMatchId(serverId, parsed);
+    if (!matchId) return;
 
-  let runtime = matchRuntime.byServer.get(serverId);
+    reducer.setCurrentMatchId(serverId, matchId);
+    parsed.matchId = matchId;
 
-  if (!runtime) {
-    const anchor = playtime == null ? now : Math.max(0, now - (playtime * 1000));
-    runtime = {
-      map,
-      layer,
-      layerKey,
-      playtime,
-      startAnchorMs: anchor,
-    };
-    matchRuntime.byServer.set(serverId, runtime);
-  } else {
-    const layerChanged = layerKey && runtime.layerKey && layerKey !== runtime.layerKey;
-    const playtimeReset = playtime != null && runtime.playtime != null && playtime + 30 < runtime.playtime;
-
-    if (layerChanged || playtimeReset) {
-      runtime.startAnchorMs = playtime == null ? now : Math.max(0, now - (playtime * 1000));
+    if (parsed.teamId != null) {
+      reducer.handleSquadCreateLogEvent(parsed);
+      return;
     }
 
-    runtime.map = map;
-    runtime.layer = layer;
-    runtime.layerKey = layerKey;
-    runtime.playtime = playtime;
+    const pending = {
+      serverId,
+      matchId,
+      eventTime: parsed.eventTime,
+      squadId: parsed.squadId,
+      squadName: parsed.squadName,
+      factionName: parsed.factionName,
+      creatorName: parsed.creatorName,
+      creatorSteamId: parsed.creatorSteamId,
+      creatorEosId: parsed.creatorEosId,
+      rawLog: parsed.rawLog,
+      sourceEventId: parsed.sourceEventId,
+      teamId: null,
+      needsTeamId: true,
+      createdAt: Date.now(),
+    };
+
+    const key = buildPendingKey(pending);
+    pendingCreateLogs.set(key, pending);
+
+    if (debugEnabled) {
+      logWithFallback(moduleLogger, "info", `Queued pending squad create log for ${key}`, {
+        operation: "squadLifecycle.pendingCreate",
+        data: {
+          serverId,
+          matchId,
+          squadId: pending.squadId,
+          squadName: pending.squadName,
+        },
+      });
+    }
   }
 
-  const matchId = `${serverId}:${layerKey}:${Math.floor(runtime.startAnchorMs / 1000)}`;
-  const playerCount = Number(status.playerCount);
+  function flushPendingForSnapshot(serverId, matchId, squads) {
+    const pendingItems = [...pendingCreateLogs.values()].filter((item) => item.serverId === serverId && item.matchId === matchId);
+    if (pendingItems.length === 0) return;
 
-  return {
-    matchId,
-    map,
-    layer,
-    playtime,
-    playerCount: Number.isFinite(playerCount) ? playerCount : null,
-    isMatchChanging: Date.now() < matchRuntime.matchChangingUntil,
-  };
+    for (const pending of pendingItems) {
+      cleanupExpiredPending();
+      const matched = findMatchedSnapshotSquad(pending, squads);
+      if (!matched) continue;
+
+      reducer.handleSquadCreateLogEvent({
+        ...pending,
+        teamId: matched.teamID ?? matched.teamId ?? null,
+        squadName: matched.squadName ?? pending.squadName,
+      });
+      pendingCreateLogs.delete(buildPendingKey(pending));
+
+      if (debugEnabled) {
+        logWithFallback(moduleLogger, "info", `Flushed pending squad create log for ${pending.serverId}:${pending.matchId}:S${pending.squadId}`, {
+          operation: "squadLifecycle.flushPending",
+          data: {
+            serverId: pending.serverId,
+            matchId: pending.matchId,
+            squadId: pending.squadId,
+            squadName: pending.squadName,
+            teamId: matched.teamID ?? null,
+          },
+        });
+      }
+    }
+  }
+
+  function cleanupExpiredPending() {
+    const now = Date.now();
+    for (const [key, pending] of [...pendingCreateLogs.entries()]) {
+      const ageMs = now - Number(pending.createdAt ?? now);
+      if (ageMs <= pendingCreateLogTtlMs) continue;
+
+      pendingCreateLogs.delete(key);
+      if (debugEnabled) {
+        logWithFallback(moduleLogger, "info", `Expired pending squad create log ${key}`, {
+          operation: "squadLifecycle.expirePending",
+          data: {
+            serverId: pending.serverId,
+            matchId: pending.matchId,
+            squadId: pending.squadId,
+            squadName: pending.squadName,
+            ageMs,
+          },
+        });
+      }
+    }
+  }
+
+  function clearPendingForServer(serverId) {
+    const currentMatchId = reducer.getCurrentMatchId(serverId);
+    for (const [key, pending] of [...pendingCreateLogs.entries()]) {
+      if (pending.serverId !== serverId) continue;
+      if (currentMatchId && pending.matchId !== currentMatchId) continue;
+      pendingCreateLogs.delete(key);
+    }
+
+    if (!currentMatchId) {
+      for (const [key, pending] of [...pendingCreateLogs.entries()]) {
+        if (pending.serverId === serverId) pendingCreateLogs.delete(key);
+      }
+    }
+
+    if (currentMatchId) {
+      reducer.clearMatch(serverId, currentMatchId);
+    } else {
+      reducer.clearServer(serverId);
+    }
+  }
+
+  function resolveCurrentMatchId(serverId, event) {
+    const parsedMatchId = String(event?.matchId ?? event?.sessionId ?? event?.sessionID ?? "").trim();
+    if (parsedMatchId) return parsedMatchId;
+    return reducer.getCurrentMatchId(serverId);
+  }
+
+  function buildSyntheticMatchId(serverId, event) {
+    const eventId = String(event?.sourceEventId ?? event?.eventId ?? "").trim();
+    if (eventId) return eventId;
+    const eventTime = String(event?.eventTime ?? event?.time ?? "").trim();
+    if (eventTime) return `synthetic:${serverId}:${eventTime}`;
+    return `synthetic:${serverId}:${Date.now()}`;
+  }
 }
 
-async function ingestCurrentMatchStateSquadsIfAvailable({ core, modules, matchRuntime, service }) {
-  const serverId = resolveServerId(core);
-  const snapshot = modules?.matchState?.getState?.();
-  const squads = snapshot?.squads?.list ?? [];
+function buildPendingKey(pending) {
+  return `${pending.serverId}:${pending.matchId}:S${pending.squadId}:${normalizeSquadName(pending.squadName)}`;
+}
 
-  if (!Array.isArray(squads) || squads.length <= 0) return;
+function findMatchedSnapshotSquad(pending, squads) {
+  const normalizedPendingName = normalizeSquadName(pending.squadName);
+  const sameSquadId = squads.filter((squad) => Number(squad.squadID ?? squad.squadId ?? -1) === Number(pending.squadId));
+  if (sameSquadId.length === 0) return null;
 
-  const context = resolveMatchContext(serverId, modules, core, matchRuntime);
-  if (!context.matchId) return;
+  const exactNameMatches = normalizedPendingName
+    ? sameSquadId.filter((squad) => normalizeSquadName(squad.squadName ?? squad.name ?? "") === normalizedPendingName)
+    : [];
 
-  const rconSnapshot = toRconSquadSnapshot({
-    serverId,
-    matchId: context.matchId,
-    parsedSquads: squads,
-    rawText: "",
-    capturedAt: Date.now(),
-    playerCount: context.playerCount,
-    isMatchChanging: context.isMatchChanging,
-  });
+  if (exactNameMatches.length === 1) return exactNameMatches[0];
+  if (exactNameMatches.length > 1) return null;
 
-  await service.handleRconSnapshot(rconSnapshot);
+  const emptyNameMatches = sameSquadId.filter((squad) => !normalizeSquadName(squad.squadName ?? squad.name ?? ""));
+  if (pending.squadName && emptyNameMatches.length === 1) return emptyNameMatches[0];
+  if (!pending.squadName && emptyNameMatches.length === 1) return emptyNameMatches[0];
+
+  if (sameSquadId.length === 1) return sameSquadId[0];
+  return null;
+}
+
+function logWithFallback(logger, method, message, context) {
+  const fn = logger?.[method];
+  if (typeof fn === "function") {
+    fn.call(logger, message, context);
+    return;
+  }
+
+  const rendered = typeof message === "function" ? message() : message;
+  if (method === "warn") {
+    logger?.warn?.(rendered);
+    return;
+  }
+
+  logger?.info?.(rendered);
+}
+
+function normalizePositiveNumber(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return fallback;
+  return number;
 }

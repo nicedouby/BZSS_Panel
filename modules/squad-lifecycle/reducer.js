@@ -1,458 +1,253 @@
 // -*- coding: utf-8 -*-
 
-import { makeEventId } from "./event-id.js";
-import { makeSquadLifecycleId, makeSquadRuntimeKey } from "./keys.js";
+import { buildSquadLifecycleKey, createCurrentSnapshot, formatLifecycleRecord } from "./service.js";
 
-export class SquadLifecycleReducer {
-  constructor(config) {
-    this.config = config;
+export function createSquadLifecycleReducer({ config, logger } = {}) {
+  const state = {
+    recordsByKey: new Map(),
+    currentMatchIdByServer: new Map(),
+    orderByMatchKey: new Map(),
+    updatedAt: "",
+  };
+  const moduleConfig = config?.get?.("modules.squadLifecycle", {}) ?? {};
+  const preferLogCreateEvent = Boolean(moduleConfig.preferLogCreateEvent ?? moduleConfig.preferLogCreatedAt ?? true);
+
+  function setCurrentMatchId(serverId, matchId) {
+    const serverKey = String(serverId ?? "").trim();
+    if (!serverKey) return;
+    const matchKey = String(matchId ?? "").trim();
+    if (!matchKey) {
+      state.currentMatchIdByServer.delete(serverKey);
+      return;
+    }
+    state.currentMatchIdByServer.set(serverKey, matchKey);
   }
 
-  async createOrUpdateFromLog(input) {
-    const { logEvent, activeState } = input;
-    const now = Date.now();
+  function getCurrentMatchId(serverId) {
+    return state.currentMatchIdByServer.get(String(serverId ?? "").trim()) ?? "";
+  }
 
-    const runtimeKey = makeSquadRuntimeKey({
-      serverId: logEvent.serverId,
-      matchId: logEvent.matchId,
-      teamId: logEvent.teamId,
-      squadId: logEvent.squadId,
+  function getNextOrder(serverId, matchId) {
+    const key = `${String(serverId ?? "").trim()}:${String(matchId ?? "").trim()}`;
+    const next = Number(state.orderByMatchKey.get(key) ?? 0) + 1;
+    state.orderByMatchKey.set(key, next);
+    return next;
+  }
+
+  function handleSquadCreateLogEvent(logEvent) {
+    const key = buildSquadLifecycleKey(logEvent.serverId, logEvent.matchId, logEvent.teamId, logEvent.squadId);
+    const current = state.recordsByKey.get(key) ?? null;
+    const next = current ? { ...current } : createBaseRecord(logEvent, getNextOrder(logEvent.serverId, logEvent.matchId));
+    const nextCreatedAtMs = parseTimestamp(logEvent.eventTime);
+    const shouldPromoteLogTimestamp = !current
+      || (current.creationSource === "RCON_SNAPSHOT" && preferLogCreateEvent);
+
+    next.key = key;
+    next.serverId = String(logEvent.serverId ?? "").trim();
+    next.matchId = String(logEvent.matchId ?? "").trim();
+    next.teamId = logEvent.teamId ?? null;
+    next.squadId = logEvent.squadId ?? null;
+    next.squadName = String(logEvent.squadName ?? "").trim();
+    next.factionName = String(logEvent.factionName ?? "").trim();
+    next.creatorName = String(logEvent.creatorName ?? "").trim();
+    next.creatorSteamId = String(logEvent.creatorSteamId ?? "").trim();
+    next.creatorEosId = String(logEvent.creatorEosId ?? "").trim();
+    next.rawLog = String(logEvent.rawLog ?? "");
+    next.sourceEventId = String(logEvent.sourceEventId ?? "");
+
+    if (shouldPromoteLogTimestamp) {
+      if (Number.isFinite(nextCreatedAtMs)) {
+        next.createdAtMs = nextCreatedAtMs;
+        next.createdAt = new Date(nextCreatedAtMs).toISOString();
+      }
+      next.creationSource = "LOG";
+      next.creationConfidence = "HIGH";
+    }
+
+    state.recordsByKey.set(key, formatLifecycleRecord(next));
+    touchUpdatedAt();
+    return state.recordsByKey.get(key);
+  }
+
+  function handleRconSquadSnapshot(snapshot) {
+    const serverId = String(snapshot?.serverId ?? "").trim();
+    const matchId = String(snapshot?.matchId ?? getCurrentMatchId(serverId) ?? "").trim();
+    if (!serverId || !matchId) return [];
+
+    setCurrentMatchId(serverId, matchId);
+
+    const observedAtMs = parseTimestamp(snapshot?.observedAt ?? new Date().toISOString());
+    const squads = Array.isArray(snapshot?.squads) ? snapshot.squads : [];
+    const records = [];
+
+    for (const squad of squads) {
+      const key = buildSquadLifecycleKey(serverId, matchId, squad.teamID ?? squad.teamId ?? null, squad.squadID ?? squad.squadId ?? null);
+      const current = state.recordsByKey.get(key) ?? null;
+      const next = current ? { ...current } : createBaseRecord({
+        serverId,
+        matchId,
+        teamId: squad.teamID ?? squad.teamId ?? null,
+        squadId: squad.squadID ?? squad.squadId ?? null,
+        squadName: squad.squadName ?? squad.name ?? "",
+        factionName: squad.teamName ?? "",
+        creatorName: squad.creatorName ?? "",
+        creatorSteamId: squad.creatorSteamID ?? squad.creatorSteamId ?? "",
+        creatorEosId: squad.creatorEOSID ?? squad.creatorEosId ?? "",
+        rawLog: squad.raw ?? "",
+        sourceEventId: squad.sourceEventId ?? "",
+      }, getNextOrder(serverId, matchId));
+
+      next.key = key;
+      next.serverId = serverId;
+      next.matchId = matchId;
+      next.teamId = squad.teamID ?? squad.teamId ?? null;
+      next.squadId = squad.squadID ?? squad.squadId ?? null;
+      next.squadName = String(squad.squadName ?? squad.name ?? "").trim();
+      next.factionName = String(squad.teamName ?? next.factionName ?? "").trim();
+      next.creatorName = String(squad.creatorName ?? next.creatorName ?? "").trim();
+      next.creatorSteamId = String(squad.creatorSteamID ?? squad.creatorSteamId ?? next.creatorSteamId ?? "").trim();
+      next.creatorEosId = String(squad.creatorEOSID ?? squad.creatorEosId ?? next.creatorEosId ?? "").trim();
+      next.rawLog = String(squad.raw ?? next.rawLog ?? "");
+
+      if (!current) {
+        next.createdAtMs = observedAtMs;
+        next.createdAt = new Date(observedAtMs).toISOString();
+        next.creationSource = "RCON_SNAPSHOT";
+        next.creationConfidence = "MEDIUM";
+      }
+
+      state.recordsByKey.set(key, formatLifecycleRecord(next));
+      records.push(state.recordsByKey.get(key));
+    }
+
+    touchUpdatedAt();
+    return records;
+  }
+
+  function clearMatch(serverId, matchId) {
+    const serverKey = String(serverId ?? "").trim();
+    const matchKey = String(matchId ?? "").trim();
+    if (!serverKey || !matchKey) return;
+
+    for (const [key, record] of [...state.recordsByKey.entries()]) {
+      if (record.serverId === serverKey && record.matchId === matchKey) {
+        state.recordsByKey.delete(key);
+      }
+    }
+
+    if (state.currentMatchIdByServer.get(serverKey) === matchKey) {
+      state.currentMatchIdByServer.delete(serverKey);
+    }
+
+    state.orderByMatchKey.delete(`${serverKey}:${matchKey}`);
+    touchUpdatedAt();
+  }
+
+  function clearServer(serverId) {
+    const serverKey = String(serverId ?? "").trim();
+    if (!serverKey) return;
+
+    for (const [key, record] of [...state.recordsByKey.entries()]) {
+      if (record.serverId === serverKey) {
+        state.recordsByKey.delete(key);
+      }
+    }
+
+    for (const currentKey of [...state.currentMatchIdByServer.keys()]) {
+      if (currentKey === serverKey) {
+        state.currentMatchIdByServer.delete(currentKey);
+      }
+    }
+
+    for (const key of [...state.orderByMatchKey.keys()]) {
+      if (key.startsWith(`${serverKey}:`)) {
+        state.orderByMatchKey.delete(key);
+      }
+    }
+
+    touchUpdatedAt();
+  }
+
+  function getCurrentSnapshot(serverId) {
+    const serverKey = String(serverId ?? "").trim();
+    const currentMatchId = getCurrentMatchId(serverKey) || findLatestMatchId(serverKey);
+    const records = [...state.recordsByKey.values()].filter((record) => {
+      if (record.serverId !== serverKey) return false;
+      if (!currentMatchId) return true;
+      return record.matchId === currentMatchId;
     });
 
-    if (activeState) {
-      const updated = {
-        ...activeState,
-        squadName: logEvent.squadName || activeState.squadName,
-        creatorName: logEvent.creatorName ?? activeState.creatorName ?? null,
-        creatorSteamId: logEvent.creatorSteamId ?? activeState.creatorSteamId ?? null,
-        creatorEosId: logEvent.creatorEosId ?? activeState.creatorEosId ?? null,
-        createSource: this.config.preferLogCreateEvent ? "LOG" : activeState.createSource,
-        creationSource: this.config.preferLogCreateEvent ? "LOG" : (activeState.creationSource ?? activeState.createSource),
-        confidence: "HIGH",
-        creationConfidence: "HIGH",
-        createdAt: this.config.preferLogCreateEvent && activeState.createSource === "RCON_SNAPSHOT"
-          ? logEvent.eventTime
-          : activeState.createdAt,
-        updatedAt: now,
-      };
-
-      const event = this.makeEvent({
-        state: updated,
-        eventType: "squad.updated",
-        eventTime: logEvent.eventTime,
-        source: "LOG",
-        confidence: "HIGH",
-        payload: {
-          reason: "log_create_event_matched_existing_state",
-          squadName: logEvent.squadName,
-          creatorName: logEvent.creatorName ?? null,
-          creatorSteamId: logEvent.creatorSteamId ?? null,
-          creatorEosId: logEvent.creatorEosId ?? null,
-        },
-        rawLog: logEvent.rawLog,
-        rawSourceEventId: logEvent.sourceEventId ?? null,
-      });
-
-      return {
-        state: updated,
-        events: [event],
-      };
-    }
-
-    const generation = input.nextGeneration;
-    const lifecycleId = makeSquadLifecycleId({
-      serverId: logEvent.serverId,
-      matchId: logEvent.matchId,
-      teamId: logEvent.teamId,
-      squadId: logEvent.squadId,
-      generation,
+    return createCurrentSnapshot({
+      serverId: serverKey,
+      matchId: currentMatchId || null,
+      records,
+      updatedAt: state.updatedAt || new Date().toISOString(),
     });
-
-    const state = {
-      lifecycleId,
-      runtimeKey,
-      serverId: logEvent.serverId,
-      matchId: logEvent.matchId,
-      teamId: logEvent.teamId,
-      squadId: logEvent.squadId,
-      generation,
-      squadName: logEvent.squadName,
-      leaderName: logEvent.creatorName ?? null,
-      leaderSteamId: logEvent.creatorSteamId ?? null,
-      leaderEosId: logEvent.creatorEosId ?? null,
-      creatorName: logEvent.creatorName ?? null,
-      creatorSteamId: logEvent.creatorSteamId ?? null,
-      creatorEosId: logEvent.creatorEosId ?? null,
-      memberCount: null,
-      locked: null,
-      status: "ACTIVE",
-      createdAt: logEvent.eventTime,
-      firstSeenAt: now,
-      lastSeenAt: now,
-      missingSince: null,
-      missingCount: 0,
-      disbandedAt: null,
-      closedAt: null,
-      closeReason: null,
-      createSource: "LOG",
-      creationSource: "LOG",
-      disbandSource: null,
-      confidence: "HIGH",
-      creationConfidence: "HIGH",
-      updatedAt: now,
-    };
-
-    return {
-      state,
-      events: [this.makeEvent({
-        state,
-        eventType: "squad.created",
-        eventTime: logEvent.eventTime,
-        source: "LOG",
-        confidence: "HIGH",
-        payload: {
-          squadName: logEvent.squadName,
-          creatorName: logEvent.creatorName ?? null,
-          creatorSteamId: logEvent.creatorSteamId ?? null,
-          creatorEosId: logEvent.creatorEosId ?? null,
-        },
-        rawLog: logEvent.rawLog,
-        rawSourceEventId: logEvent.sourceEventId ?? null,
-      })],
-    };
   }
 
-  async applyRconSnapshot(input) {
-    const now = input.snapshot.capturedAt || Date.now();
-    const statesToSave = [];
-    const events = [];
+  function getAllRecords() {
+    return [...state.recordsByKey.values()];
+  }
 
-    const snapshotByRuntimeKey = new Map();
-    for (const item of input.snapshot.squads) {
-      const runtimeKey = makeSquadRuntimeKey({
-        serverId: item.serverId,
-        matchId: item.matchId,
-        teamId: item.teamId,
-        squadId: item.squadId,
-      });
-      snapshotByRuntimeKey.set(runtimeKey, item);
-    }
+  function touchUpdatedAt() {
+    state.updatedAt = new Date().toISOString();
+  }
 
-    const activeByRuntimeKey = new Map();
-    for (const state of input.activeStates) {
-      activeByRuntimeKey.set(state.runtimeKey, state);
-    }
+  function findLatestMatchId(serverId) {
+    const serverKey = String(serverId ?? "").trim();
+    const records = [...state.recordsByKey.values()].filter((record) => record.serverId === serverKey);
+    if (records.length === 0) return "";
+    let latestMatchId = "";
+    let latestOrder = -1;
 
-    for (const [runtimeKey, item] of snapshotByRuntimeKey.entries()) {
-      const existing = activeByRuntimeKey.get(runtimeKey);
-      if (existing) {
-        const wasMissing = existing.status === "MISSING_CANDIDATE";
-
-        if (wasMissing) {
-          const generation = await input.getNextGeneration(runtimeKey);
-
-          const lifecycleId = makeSquadLifecycleId({
-            serverId: item.serverId,
-            matchId: item.matchId,
-            teamId: item.teamId,
-            squadId: item.squadId,
-            generation,
-          });
-
-          const disbanded = {
-            ...existing,
-            status: "DISBANDED",
-            disbandedAt: now,
-            closedAt: now,
-            closeReason: "DISBANDED",
-            disbandSource: "RCON_DIFF",
-            updatedAt: now,
-          };
-
-          const recreated = {
-            lifecycleId,
-            runtimeKey,
-            serverId: item.serverId,
-            matchId: item.matchId,
-            teamId: item.teamId,
-            squadId: item.squadId,
-            generation,
-            squadName: item.squadName,
-            leaderName: item.leaderName ?? null,
-            leaderSteamId: item.leaderSteamId ?? null,
-            leaderEosId: item.leaderEosId ?? null,
-            creatorName: null,
-            creatorSteamId: null,
-            creatorEosId: null,
-            memberCount: item.memberCount ?? null,
-            locked: item.locked ?? null,
-            status: "ACTIVE",
-            createdAt: now,
-            firstSeenAt: now,
-            lastSeenAt: now,
-            missingSince: null,
-            missingCount: 0,
-            disbandedAt: null,
-            closedAt: null,
-            closeReason: null,
-            createSource: "RCON_SNAPSHOT",
-            creationSource: "RCON_SNAPSHOT",
-            disbandSource: null,
-            confidence: "MEDIUM",
-            creationConfidence: "MEDIUM",
-            updatedAt: now,
-          };
-
-          statesToSave.push(disbanded, recreated);
-
-          events.push(this.makeEvent({
-            state: disbanded,
-            eventType: "squad.disbanded",
-            eventTime: now,
-            source: "RCON",
-            confidence: "MEDIUM",
-            payload: {
-              reason: "squad_reappeared_treated_as_new_generation",
-              missingSince: existing.missingSince,
-              missingCount: existing.missingCount,
-              disbandedAt: now,
-            },
-          }));
-
-          events.push(this.makeEvent({
-            state: recreated,
-            eventType: "squad.created",
-            eventTime: now,
-            source: "RCON",
-            confidence: "MEDIUM",
-            payload: {
-              reason: "rcon_snapshot_recreated_after_missing",
-              previousLifecycleId: existing.lifecycleId,
-              previousGeneration: existing.generation,
-              squadName: item.squadName,
-              leaderName: item.leaderName ?? null,
-              memberCount: item.memberCount ?? null,
-              locked: item.locked ?? null,
-            },
-          }));
-
-          continue;
-        }
-
-        const meaningfulChange = hasMeaningfulSquadChange(existing, item);
-
-        const updated = {
-          ...existing,
-          squadName: item.squadName || existing.squadName,
-          leaderName: item.leaderName ?? existing.leaderName ?? null,
-          leaderSteamId: item.leaderSteamId ?? existing.leaderSteamId ?? null,
-          leaderEosId: item.leaderEosId ?? existing.leaderEosId ?? null,
-          memberCount: item.memberCount ?? existing.memberCount ?? null,
-          locked: item.locked ?? existing.locked ?? null,
-          status: "ACTIVE",
-          lastSeenAt: now,
-          missingSince: null,
-          missingCount: 0,
-          updatedAt: now,
-        };
-
-        statesToSave.push(updated);
-
-        if (meaningfulChange) {
-          events.push(this.makeEvent({
-            state: updated,
-            eventType: "squad.updated",
-            eventTime: now,
-            source: "RCON",
-            confidence: existing.confidence,
-            payload: {
-              reason: "rcon_snapshot_update",
-              squadName: item.squadName,
-              leaderName: item.leaderName ?? null,
-              memberCount: item.memberCount ?? null,
-              locked: item.locked ?? null,
-            },
-          }));
-        }
-
-        continue;
-      }
-
-      if (this.config.createFromRconSnapshot) {
-        const generation = await input.getNextGeneration(runtimeKey);
-
-        const lifecycleId = makeSquadLifecycleId({
-          serverId: item.serverId,
-          matchId: item.matchId,
-          teamId: item.teamId,
-          squadId: item.squadId,
-          generation,
-        });
-
-        const state = {
-          lifecycleId,
-          runtimeKey,
-          serverId: item.serverId,
-          matchId: item.matchId,
-          teamId: item.teamId,
-          squadId: item.squadId,
-          generation,
-          squadName: item.squadName,
-          leaderName: item.leaderName ?? null,
-          leaderSteamId: item.leaderSteamId ?? null,
-          leaderEosId: item.leaderEosId ?? null,
-          creatorName: null,
-          creatorSteamId: null,
-          creatorEosId: null,
-          memberCount: item.memberCount ?? null,
-          locked: item.locked ?? null,
-          status: "ACTIVE",
-          createdAt: now,
-          firstSeenAt: now,
-          lastSeenAt: now,
-          missingSince: null,
-          missingCount: 0,
-          disbandedAt: null,
-          closedAt: null,
-          closeReason: null,
-          createSource: "RCON_SNAPSHOT",
-          creationSource: "RCON_SNAPSHOT",
-          disbandSource: null,
-          confidence: "MEDIUM",
-          creationConfidence: "MEDIUM",
-          updatedAt: now,
-        };
-
-        statesToSave.push(state);
-        events.push(this.makeEvent({
-          state,
-          eventType: "squad.created",
-          eventTime: now,
-          source: "RCON",
-          confidence: "MEDIUM",
-          payload: {
-            reason: "rcon_snapshot_found_new_squad",
-            squadName: item.squadName,
-            leaderName: item.leaderName ?? null,
-            memberCount: item.memberCount ?? null,
-            locked: item.locked ?? null,
-          },
-        }));
+    for (const record of records) {
+      const order = Number(record.order ?? 0);
+      if (order >= latestOrder) {
+        latestOrder = order;
+        latestMatchId = String(record.matchId ?? "");
       }
     }
 
-    for (const existing of input.activeStates) {
-      const stillExists = snapshotByRuntimeKey.has(existing.runtimeKey);
-      if (stillExists) continue;
-
-      const nextMissingCount = existing.missingCount + 1;
-
-      if (nextMissingCount < this.config.missingConfirmCount) {
-        const missing = {
-          ...existing,
-          status: "MISSING_CANDIDATE",
-          missingSince: existing.missingSince ?? now,
-          missingCount: nextMissingCount,
-          updatedAt: now,
-        };
-
-        statesToSave.push(missing);
-        events.push(this.makeEvent({
-          state: missing,
-          eventType: "squad.missing_candidate",
-          eventTime: now,
-          source: "RCON",
-          confidence: "LOW",
-          payload: {
-            reason: "squad_missing_in_rcon_snapshot",
-            missingCount: nextMissingCount,
-            requiredMissingCount: this.config.missingConfirmCount,
-          },
-        }));
-
-        continue;
-      }
-
-      const disbanded = {
-        ...existing,
-        status: "DISBANDED",
-        missingCount: nextMissingCount,
-        missingSince: existing.missingSince ?? now,
-        disbandedAt: now,
-        closedAt: now,
-        closeReason: "DISBANDED",
-        disbandSource: "RCON_DIFF",
-        updatedAt: now,
-      };
-
-      statesToSave.push(disbanded);
-      events.push(this.makeEvent({
-        state: disbanded,
-        eventType: "squad.disbanded",
-        eventTime: now,
-        source: "RCON",
-        confidence: "MEDIUM",
-        payload: {
-          reason: "squad_absent_for_confirmed_snapshots",
-          missingCount: nextMissingCount,
-          requiredMissingCount: this.config.missingConfirmCount,
-          missingSince: disbanded.missingSince,
-          disbandedAt: disbanded.disbandedAt,
-        },
-      }));
-    }
-
-    return {
-      statesToSave,
-      events,
-    };
+    return latestMatchId;
   }
 
-  makeClosedByMatchEndEvents(input) {
-    return input.states.map((state) => this.makeEvent({
-      state,
-      eventType: "squad.closed_by_match_end",
-      eventTime: input.closedAt,
-      source: "SYSTEM",
-      confidence: "HIGH",
-      payload: {
-        reason: "match_ended",
-        closedAt: input.closedAt,
-      },
-    }));
-  }
-
-  makeEvent(input) {
-    return {
-      id: makeEventId("squad_evt"),
-      serverId: input.state.serverId,
-      matchId: input.state.matchId,
-      lifecycleId: input.state.lifecycleId,
-      runtimeKey: input.state.runtimeKey,
-      eventType: input.eventType,
-      eventTime: input.eventTime,
-      source: input.source,
-      confidence: input.confidence,
-      payload: {
-        ...input.payload,
-        teamId: input.state.teamId,
-        squadId: input.state.squadId,
-        generation: input.state.generation,
-        lifecycleId: input.state.lifecycleId,
-        runtimeKey: input.state.runtimeKey,
-      },
-      rawSourceEventId: input.rawSourceEventId ?? null,
-      rawLog: input.rawLog ?? null,
-      createdAt: Date.now(),
-    };
-  }
+  return {
+    setCurrentMatchId,
+    getCurrentMatchId,
+    handleSquadCreateLogEvent,
+    handleRconSquadSnapshot,
+    clearMatch,
+    clearServer,
+    getCurrentSnapshot,
+    getAllRecords,
+  };
 }
 
-function hasMeaningfulSquadChange(oldState, snapshotItem) {
-  return (
-    oldState.squadName !== (snapshotItem.squadName || oldState.squadName)
-    || oldState.leaderName !== (snapshotItem.leaderName ?? oldState.leaderName ?? null)
-    || oldState.memberCount !== (snapshotItem.memberCount ?? oldState.memberCount ?? null)
-    || oldState.locked !== (snapshotItem.locked ?? oldState.locked ?? null)
-  );
+function createBaseRecord(source, order) {
+  return {
+    key: "",
+    order: Number(order ?? 0),
+    serverId: String(source.serverId ?? "").trim(),
+    matchId: String(source.matchId ?? "").trim(),
+    teamId: source.teamId ?? null,
+    squadId: source.squadId ?? null,
+    squadName: String(source.squadName ?? "").trim(),
+    factionName: String(source.factionName ?? "").trim(),
+    creatorName: String(source.creatorName ?? "").trim(),
+    creatorSteamId: String(source.creatorSteamId ?? "").trim(),
+    creatorEosId: String(source.creatorEosId ?? "").trim(),
+    rawLog: String(source.rawLog ?? ""),
+    sourceEventId: String(source.sourceEventId ?? ""),
+    createdAtMs: 0,
+    createdAt: null,
+    creationSource: "RCON_SNAPSHOT",
+    creationConfidence: "MEDIUM",
+  };
+}
+
+function parseTimestamp(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (!value) return Date.now();
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : Date.now();
 }
