@@ -3,6 +3,11 @@
 import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
+import {
+  getAllPlugins,
+  setPluginEnabled as updatePluginEnabled,
+  updatePluginConfig as updatePluginManifestConfig,
+} from "./plugins/plugin.service.js";
 
 const MAX_JSON_BODY_BYTES = 1024 * 1024;
 
@@ -265,6 +270,48 @@ export class WebServer {
         if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
         return this.json(res, 200, await pluginSubscriptions.toggleSubscribed(body.id));
+      }
+    }
+
+    if (url.pathname === "/api/plugins" && req.method === "GET") {
+      return this.json(res, 200, getAllPlugins({
+        subscriptionsApi: this.core.pluginSubscriptions ?? this.modules.pluginSubscriptions ?? null,
+      }));
+    }
+
+    const pluginMatch = url.pathname.match(/^\/api\/plugins\/([^/]+)\/(enabled|config)$/);
+    if (pluginMatch && req.method === "PATCH") {
+      if (!this.requireSuperAdmin(user, res)) return;
+
+      const pluginId = decodeURIComponent(pluginMatch[1]);
+      const action = pluginMatch[2];
+      const body = await this.readJsonBody(req);
+      const subscriptionsApi = this.core.pluginSubscriptions ?? this.modules.pluginSubscriptions ?? null;
+
+      try {
+        if (action === "enabled") {
+          if (typeof body.enabled !== "boolean") {
+            return this.json(res, 400, {
+              error: "InvalidRequestBody",
+              message: "enabled must be boolean",
+            });
+          }
+          return this.json(res, 200, updatePluginEnabled(pluginId, body.enabled, { subscriptionsApi }));
+        }
+
+        if (!body.config || typeof body.config !== "object" || Array.isArray(body.config)) {
+          return this.json(res, 400, {
+            error: "InvalidRequestBody",
+            message: "config must be object",
+          });
+        }
+
+        return this.json(res, 200, updatePluginManifestConfig(pluginId, body.config, { subscriptionsApi }));
+      } catch (error) {
+        return this.json(res, 400, {
+          error: "PluginUpdateFailed",
+          message: error instanceof Error ? error.message : "Failed to update plugin",
+        });
       }
     }
 
