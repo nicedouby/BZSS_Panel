@@ -19,10 +19,12 @@ describe("server store stable snapshot", () => {
       playerCount: 5,
       maxPlayers: 100,
       queueCount: 3,
+      nextLayer: "Fallujah_RAAS_v2",
       webStatus: {
         serverName: "BZSS Main Server",
         currentLayer: "Mutaha_RAAS_v1",
         layer: "Mutaha_RAAS_v1",
+        nextLayer: "Fallujah_RAAS_v2",
         map: "Mutaha",
         mapName: "Mutaha",
         tps: 29.8,
@@ -40,10 +42,12 @@ describe("server store stable snapshot", () => {
       playerCount: 0,
       maxPlayers: 100,
       queueCount: 0,
+      nextLayer: "Unknown Layer",
       webStatus: {
         serverName: "Unknown Server",
         currentLayer: "Unknown Layer",
         layer: "Unknown Layer",
+        nextLayer: "Unknown Layer",
         map: "Unknown Map",
         mapName: "Unknown Map",
         tps: 0,
@@ -55,9 +59,11 @@ describe("server store stable snapshot", () => {
     expect(server.snapshot.serverName).toBe("BZSS Main Server");
     expect(server.snapshot.map).toBe("Mutaha");
     expect(server.snapshot.layer).toBe("Mutaha_RAAS_v1");
+    expect(server.snapshot.nextLayer).toBe("Fallujah_RAAS_v2");
     expect(server.snapshot.tps).toBe(29.8);
     expect(server.snapshot.webStatus.serverName).toBe("BZSS Main Server");
     expect(server.snapshot.webStatus.currentLayer).toBe("Mutaha_RAAS_v1");
+    expect(server.snapshot.webStatus.nextLayer).toBe("Fallujah_RAAS_v2");
     expect(server.snapshot.webStatus.tps).toBe(29.8);
   });
 });

@@ -86,6 +86,7 @@ const enUS = {
     collapse: "Collapse",
     players: "{count} players",
     tps: "TPS {value}",
+    queue: "Queue {count}",
     unknownLayer: "Unknown Layer",
   },
   user: {

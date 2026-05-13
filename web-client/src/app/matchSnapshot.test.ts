@@ -9,6 +9,7 @@ describe("buildServerSnapshot", () => {
           serverName: "BZSS Main Server",
           map: "Mutaha",
           layer: "Mutaha_RAAS_v1",
+          nextLayer: "Fallujah_RAAS_v2",
           playtime: 1234,
         },
       },
@@ -26,5 +27,6 @@ describe("buildServerSnapshot", () => {
     expect(snapshot.serverName).toBe("BZSS Main Server");
     expect(snapshot.map).toBe("Mutaha");
     expect(snapshot.layer).toBe("Mutaha_RAAS_v1");
+    expect(snapshot.webStatus.nextLayer).toBe("Fallujah_RAAS_v2");
   });
 });

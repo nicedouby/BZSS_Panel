@@ -6,7 +6,7 @@
       </button>
       <div>
         <strong>{{ pageTitle }}</strong>
-        <span>{{ layer }}</span>
+        <span>{{ currentLayer }}</span>
       </div>
     </div>
     <div class="topbar-end">
@@ -14,6 +14,9 @@
         <StatusBadge :tone="runtimeTone">{{ runtimeLabel }}</StatusBadge>
         <span v-if="runtimeError">{{ runtimeError }}</span>
         <span>{{ t("topbar.players", "", { count: playerCount }) }}</span>
+        <span>Queue {{ queueCount }}</span>
+        <span>{{ currentLayer }}</span>
+        <span>{{ nextLayer }}</span>
         <span>{{ t("topbar.tps", "", { value: tps }) }}</span>
       </div>
       <UserMenu />
@@ -45,16 +48,27 @@ const pageTitle = computed(() => {
   if (titleKey) return t(titleKey, title);
   return String(title || server.snapshot.serverName || webStatus.value.serverName || server.snapshot.name || webStatus.value.name || "BZSS Panel");
 });
-const layer = computed(() => stableDisplayValue(
+const currentLayer = computed(() => stableDisplayValue(
   server.snapshot.currentLayer,
   webStatus.value.currentLayer,
   server.snapshot.layer,
   webStatus.value.layer,
+  server.snapshot.map,
+  webStatus.value.map,
   server.snapshot.mapName,
   webStatus.value.mapName,
   t("topbar.unknownLayer", "Unknown Layer"),
 ));
+const nextLayer = computed(() => stableDisplayValue(
+  server.snapshot.nextLayer,
+  webStatus.value.nextLayer,
+  t("topbar.unknownLayer", "Unknown Layer"),
+));
 const playerCount = computed(() => players.active.length);
+const queueCount = computed(() => {
+  const value = Number(server.snapshot?.queueCount ?? server.snapshot?.webStatus?.queueCount);
+  return Number.isFinite(value) ? value : 0;
+});
 const tps = computed(() => {
   const value = Number(server.snapshot?.tps ?? server.snapshot?.webStatus?.tps);
   return Number.isFinite(value) && value > 0 ? value.toFixed(1) : "--";

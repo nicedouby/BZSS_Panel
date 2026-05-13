@@ -3,11 +3,15 @@
     <div class="match-hero-left">
       <div class="server-name">{{ props.data.serverName }}</div>
       <div class="layer-line">
-        {{ props.data.mapName }} · {{ props.data.gameMode }}
+        {{ props.data.currentLayer }} · {{ props.data.currentMode }} · Next {{ props.data.nextLayer }}
       </div>
     </div>
 
     <div class="match-hero-stats">
+      <div class="hero-stat queue">
+        <span>Queue</span>
+        <strong>{{ props.data.queueCount }}</strong>
+      </div>
       <div class="hero-stat">
         <span>Players</span>
         <strong>{{ props.data.totalPlayers }}/{{ props.data.maxPlayers }}</strong>
@@ -135,7 +139,7 @@ function statusTone(status: string): string {
 
 .match-hero-stats {
   display: grid;
-  grid-template-columns: repeat(5, minmax(72px, 1fr));
+  grid-template-columns: repeat(6, minmax(72px, 1fr));
   gap: 8px;
 }
 
@@ -166,6 +170,10 @@ function statusTone(status: string): string {
 
 .hero-stat.team2 strong {
   color: var(--color-team2-primary);
+}
+
+.hero-stat.queue strong {
+  color: var(--color-status-warning);
 }
 
 .match-hero-status {

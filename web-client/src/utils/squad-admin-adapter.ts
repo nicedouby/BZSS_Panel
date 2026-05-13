@@ -227,6 +227,42 @@ export function adaptMatchHeader(
       backendMatch.map,
       "Unknown Map",
     ) ?? "Unknown Map",
+    currentLayer: firstDisplayValue(
+      backendServerStatus.currentLayer,
+      backendServerStatus.layer,
+      snapshot.currentLayer,
+      snapshot.layer,
+      snapshot.webStatus?.currentLayer,
+      snapshot.webStatus?.layer,
+      backendMatch.layer,
+      "Unknown Layer",
+    ) ?? "Unknown Layer",
+    currentMode: deriveMatchMode(
+      backendServerStatus.gameMode,
+      backendServerStatus.mode,
+      snapshot.gameMode,
+      snapshot.mode,
+      snapshot.webStatus?.gameMode,
+      snapshot.webStatus?.mode,
+      backendMatch.mode,
+      backendServerStatus.currentLayer,
+      backendServerStatus.layer,
+      snapshot.currentLayer,
+      snapshot.layer,
+      backendMatch.layer,
+    ),
+    nextLayer: firstDisplayValue(
+      backendServerStatus.nextLayer,
+      snapshot.nextLayer,
+      snapshot.webStatus?.nextLayer,
+      backendMatch.nextLayer,
+      "Unknown Layer",
+    ) ?? "Unknown Layer",
+    queueCount: firstFiniteNumber(
+      backendServerStatus.queueCount,
+      snapshot.queueCount,
+      snapshot.webStatus?.queueCount,
+    ) ?? 0,
     gameMode: firstDisplayValue(
       backendServerStatus.gameMode,
       backendServerStatus.mode,
@@ -482,4 +518,37 @@ function firstFiniteNumber(...values: unknown[]) {
 function normalizeSteam64(value: unknown): string {
   const text = String(value ?? "").trim();
   return /^\d{17}$/.test(text) ? text : "";
+}
+
+function deriveMatchMode(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const text = value.trim();
+      if (!text) continue;
+      if (isKnownModeLabel(text)) return text.toUpperCase();
+
+      const derived = deriveModeFromLayer(text);
+      if (derived) return derived;
+    }
+  }
+  return "Unknown";
+}
+
+function isKnownModeLabel(value: string): boolean {
+  return /^(?:AAS|RAAS|INS|POV|TT|TC|INV|RAID|SKIRMISH|CONQUEST|SEED|PVP|PVE)$/i.test(value);
+}
+
+function deriveModeFromLayer(layer: string): string {
+  const text = String(layer ?? "").trim();
+  if (!text) return "";
+
+  const tokens = text.split(/[_\s-]+/).filter(Boolean);
+  if (tokens.length < 2) return "";
+
+  const lastToken = tokens[tokens.length - 1];
+  const modeToken = /^(?:v?\d+|pve|pvp|seed)$/i.test(lastToken) ? tokens[tokens.length - 2] : lastToken;
+  if (!modeToken) return "";
+
+  const mode = String(modeToken).trim();
+  return isKnownModeLabel(mode) ? mode.toUpperCase() : (/^[A-Za-z]+$/.test(mode) ? mode.toUpperCase() : "");
 }

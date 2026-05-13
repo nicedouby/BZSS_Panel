@@ -79,6 +79,10 @@ export interface PlayerDetailViewModel {
 export interface MatchHeaderData {
   serverName: string;
   mapName: string;
+  currentLayer: string;
+  nextLayer: string;
+  queueCount: number;
+  currentMode: string;
   gameMode: string;
   totalPlayers: number;
   maxPlayers: number;

@@ -3,22 +3,20 @@
 let authMenuOpen = false;
 
 /**
- * 顶部状态栏
+ * Top status bar.
  *
- * 这里负责两件事：
- * 1. 展示当前服务端核心状态，例如地图、人数、排队、时间等。
- * 2. 提供右上角用户菜单，其中插件订阅入口只放在这里，不进入左侧主导航。
+ * Shows the current server state and provides the right-side user menu.
  */
 export function renderTopbar({ root, status, auth, onLogout, onNavigate, onEditLogClock }) {
   const user = auth?.user ?? null;
   const roleText = user?.isSuperAdmin ? "SuperAdmin | has everything" : (user?.role ?? "Guest");
-  const currentMap = formatCurrentMap(status);
-  const nextMap = displayText(status.nextLayer, "空");
+  const currentLayer = formatCurrentLayer(status);
+  const nextLayer = displayText(status?.nextLayer ?? status?.webStatus?.nextLayer, "Unknown");
   const mode = formatMode(status);
   const tps = formatTps(status);
   const tpsTone = formatTpsTone(status);
   const players = formatPlayers(status);
-  const queue = String(Number(status.queueCount ?? status.playerQueue ?? 0));
+  const queue = formatQueue(status);
   const playtime = formatPlaytime(status.playtime);
   const logClockSeconds = Number(status?.logClockSeconds ?? 0);
   const logClock = formatPlaytime(logClockSeconds);
@@ -27,14 +25,14 @@ export function renderTopbar({ root, status, auth, onLogout, onNavigate, onEditL
 
   root.innerHTML = `
     <div class="brand">${escapeHtml(status.serverName ?? "BZSS Panel")}</div>
-    ${chip("Current", currentMap, "")}
-    ${chip("Next", nextMap, "")}
+    ${chip("Current Layer", currentLayer, "")}
+    ${chip("Next Layer", nextLayer, "")}
     ${chip("Mode", mode, mode !== "Unknown" ? "good" : "muted")}
     ${chip("TPS", tps, tpsTone)}
     ${chip("Players", players, "")}
     ${chip("Queue", queue, Number(queue) > 0 ? "warn" : "")}
     ${chip("Time", playtime, "")}
-    ${chipButton("topbar-log-clock", "日志时间", logClock, logClockTone)}
+    ${chipButton("topbar-log-clock", "Log Clock", logClock, logClockTone)}
     <div class="topbar-spacer"></div>
     ${user ? `
       <div class="auth-dropdown ${authMenuOpen ? "is-open" : ""}">
@@ -43,8 +41,8 @@ export function renderTopbar({ root, status, auth, onLogout, onNavigate, onEditL
           <span>${escapeHtml(roleText)}</span>
         </button>
         <div id="topbar-auth-menu" class="auth-dropdown-menu">
-          ${canManagePlugins ? `<button id="topbar-plugin-subscriptions" class="auth-dropdown-item" type="button">🔌 插件订阅</button>` : ""}
-          <button id="topbar-logout" class="auth-dropdown-item" type="button">退出登录</button>
+          ${canManagePlugins ? `<button id="topbar-plugin-subscriptions" class="auth-dropdown-item" type="button">Plugin Subscriptions</button>` : ""}
+          <button id="topbar-logout" class="auth-dropdown-item" type="button">Logout</button>
         </div>
       </div>
     ` : ""}
@@ -98,7 +96,7 @@ export function renderTopbar({ root, status, auth, onLogout, onNavigate, onEditL
     }
   }
 
-  // 插件订阅入口在右上角菜单中跳转，避免打断左侧主工作流。
+  // Keep plugin navigation in the top-right menu so it does not interrupt the main flow.
   if (pluginSubscriptionsBtn && typeof onNavigate === "function") {
     pluginSubscriptionsBtn.addEventListener("click", () => {
       authMenuOpen = false;
@@ -137,11 +135,19 @@ function chip(label, value, cls) {
 }
 
 function chipButton(id, label, value, cls) {
-  return `<div id="${escapeAttr(id)}" class="status-chip status-chip-btn ${escapeAttr(cls)}" role="button" tabindex="0" title="点击修改">${escapeHtml(label)}: ${escapeHtml(value)}</div>`;
+  return `<div id="${escapeAttr(id)}" class="status-chip status-chip-btn ${escapeAttr(cls)}" role="button" tabindex="0" title="Click to edit">${escapeHtml(label)}: ${escapeHtml(value)}</div>`;
 }
 
-function formatCurrentMap(status) {
-  return displayText(status?.layer || status?.currentLayer || status?.map, "Unknown");
+function formatCurrentLayer(status) {
+  return displayText(
+    status?.layer
+      || status?.currentLayer
+      || status?.map
+      || status?.webStatus?.layer
+      || status?.webStatus?.currentLayer
+      || status?.webStatus?.map,
+    "Unknown",
+  );
 }
 
 function formatMode(status) {
@@ -173,6 +179,11 @@ function formatPlayers(status) {
   const max = Number(status?.maxPlayers);
   const currentText = Number.isFinite(current) ? String(current) : "0";
   return Number.isFinite(max) && max > 0 ? `${currentText}/${max}` : currentText;
+}
+
+function formatQueue(status) {
+  const value = Number(status?.queueCount ?? status?.playerQueue ?? status?.webStatus?.queueCount ?? 0);
+  return Number.isFinite(value) ? String(value) : "0";
 }
 
 function formatPlaytime(value) {

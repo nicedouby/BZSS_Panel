@@ -40,11 +40,13 @@ export class WebStatus {
       rcon: "disabled",
 
       currentLayer: "Unknown",
+      nextLayer: "",
       matchState: "Unknown",
       playerCount: 0,
       team1Count: 0,
       team2Count: 0,
       squadCount: 0,
+      queueCount: 0,
       tps: null,
       tpsStatus: "unknown",
       lastTpsUpdateTime: null,
