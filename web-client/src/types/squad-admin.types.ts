@@ -107,4 +107,5 @@ export interface PageState {
   searchQuery: string;
   densityMode: "comfortable" | "compact";
   selectedPlayerId: string | number | null;
+  filterMode: "all" | "no_leader" | "locked" | "alerts";
 }

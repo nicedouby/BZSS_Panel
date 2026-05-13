@@ -10,10 +10,17 @@
       >
 
       <div class="filter-chips" aria-label="Quick filters">
-        <button type="button" class="filter-chip active" aria-pressed="true">All</button>
-        <button type="button" class="filter-chip" aria-pressed="false">No leader</button>
-        <button type="button" class="filter-chip" aria-pressed="false">Locked</button>
-        <button type="button" class="filter-chip" aria-pressed="false">Alerts</button>
+        <button
+          v-for="filter in filters"
+          :key="filter.value"
+          type="button"
+          class="filter-chip"
+          :class="{ active: filterMode === filter.value }"
+          :aria-pressed="filterMode === filter.value"
+          @click="$emit('filter-change', filter.value)"
+        >
+          {{ filter.label }}
+        </button>
       </div>
 
       <div v-if="showViewerPerspective" class="viewer-perspective-chip">
@@ -77,9 +84,11 @@ import { computed, ref, watch } from "vue";
 import { t } from "../../i18n";
 
 type RefreshType = "players" | "squads" | "all";
+type FilterMode = "all" | "no_leader" | "locked" | "alerts";
 
 const props = defineProps<{
   searchQuery: string;
+  filterMode: FilterMode;
   densityMode: "comfortable" | "compact";
   canRefresh: boolean;
   refreshingType: RefreshType | "";
@@ -90,16 +99,25 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: "search", query: string): void;
+  (event: "filter-change", mode: FilterMode): void;
   (event: "density-change", mode: "comfortable" | "compact"): void;
   (event: "refresh", type: RefreshType): void;
   (event: "refresh-playtime"): void;
 }>();
+
+const filters = [
+  { value: "all", label: "All" },
+  { value: "no_leader", label: "No leader" },
+  { value: "locked", label: "Locked" },
+  { value: "alerts", label: "Alerts" },
+] as const;
 
 const searchQuery = ref(props.searchQuery);
 const isRefreshing = computed(() => Boolean(props.refreshingType));
 const refreshingPlaytime = computed(() => Boolean(props.refreshingPlaytime));
 const showViewerPerspective = computed(() => Boolean(props.showViewerPerspective));
 const viewerPerspectiveText = computed(() => props.viewerPerspectiveText ?? "");
+const filterMode = computed(() => props.filterMode);
 
 watch(
   () => props.searchQuery,
@@ -136,10 +154,11 @@ function selectDensityMode(mode: string) {
   gap: 8px;
   min-width: 0;
   flex-wrap: wrap;
+  flex: 1 1 auto;
 }
 
 .squad-search-input {
-  width: min(420px, 100%);
+  width: min(400px, 100%);
   min-width: 220px;
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border-default);
@@ -194,10 +213,12 @@ function selectDensityMode(mode: string) {
 }
 
 .toolbar-actions {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
   gap: var(--spacing-sm);
   flex: 0 0 auto;
+  min-width: 0;
 }
 
 .refresh-controls {
@@ -205,6 +226,8 @@ function selectDensityMode(mode: string) {
   gap: 6px;
   align-items: center;
   flex-wrap: wrap;
+  min-width: 0;
+  justify-content: flex-end;
 }
 
 .refresh-button {
@@ -271,8 +294,17 @@ function selectDensityMode(mode: string) {
   }
 
   .toolbar-actions {
-    justify-content: space-between;
-    flex-wrap: wrap;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .refresh-controls {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .density-toggle {
+    justify-self: end;
   }
 }
 </style>

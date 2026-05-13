@@ -7,28 +7,9 @@
           <span class="team-name">{{ team.teamName }}</span>
           <span class="team-count">{{ team.playerCount }}/{{ team.maxPlayers }}</span>
         </h2>
-        <p class="team-column-subtitle">
+        <p class="team-column-subtitle" :class="{ compact: !isComfortable }">
           <span>{{ headerSummaryText }}</span>
         </p>
-      </div>
-
-      <div v-if="isComfortable" class="team-column-metrics">
-        <div class="team-metric">
-          <span>Avg</span>
-          <strong>{{ teamAveragePlaytimeShortText }}</strong>
-        </div>
-        <div class="team-metric">
-          <span>Squads</span>
-          <strong>{{ team.squads.length }}</strong>
-        </div>
-        <div class="team-metric">
-          <span>Locked</span>
-          <strong>{{ lockedSquadCount }}</strong>
-        </div>
-        <div class="team-metric">
-          <span>Alerts</span>
-          <strong>{{ alertSquadCount }}</strong>
-        </div>
       </div>
     </header>
 
@@ -68,18 +49,17 @@ const teamAveragePlaytimeShortText = computed(() => {
   return `${props.team.averagePlaytimeHours}h`;
 });
 
-const lockedSquadCount = computed(() => props.team.squads.filter((squad) => squad.isLocked).length);
-const alertSquadCount = computed(() => props.team.squads.filter((squad) => squad.warnings.length > 0 || squad.state !== "normal").length);
-
 const headerSummaryText = computed(() => {
-  const avg = teamAveragePlaytimeShortText.value === "--" ? "Avg --" : `Avg ${teamAveragePlaytimeShortText.value}`;
-  const squadText = `Squads ${props.team.squads.length}`;
-  const lockedText = `Locked ${lockedSquadCount.value}`;
-  const alertText = `Alerts ${alertSquadCount.value}`;
-  if (isComfortable.value) {
-    return `${avg} / ${squadText} / ${lockedText} / ${alertText}`;
+  const avg = `Avg ${teamAveragePlaytimeShortText.value}`;
+  const squadsText = `Squads ${props.team.squads.length}`;
+
+  if (!isComfortable.value) {
+    return `${avg} · ${squadsText}`;
   }
-  return `${avg} / ${squadText}`;
+
+  const publicText = `Public ${props.team.publicPlaytimePlayers}`;
+  const privateText = `Private ${props.team.privatePlaytimePlayers}`;
+  return `${avg} · ${publicText} · ${privateText} · ${squadsText}`;
 });
 </script>
 
@@ -124,7 +104,7 @@ const headerSummaryText = computed(() => {
     var(--color-bg-card);
   box-shadow: var(--shadow-sm);
   display: grid;
-  gap: var(--spacing-md);
+  gap: 8px;
 }
 
 .team-column.team1 .team-column-header {
@@ -178,6 +158,10 @@ const headerSummaryText = computed(() => {
   color: var(--color-text-secondary);
 }
 
+.team-column-subtitle.compact {
+  font-size: var(--font-size-xs);
+}
+
 .team-column-subtitle span {
   display: inline-block;
   min-width: 0;
@@ -213,37 +197,6 @@ const headerSummaryText = computed(() => {
   background: var(--color-team2-soft);
 }
 
-.team-column-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.team-metric {
-  padding: 8px 10px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border-soft);
-  background: rgba(255, 255, 255, 0.022);
-  min-width: 0;
-}
-
-.team-metric span {
-  display: block;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
-}
-
-.team-metric strong {
-  display: block;
-  margin-top: 2px;
-  color: var(--color-text-primary);
-  font-size: var(--font-size-sm);
-  font-weight: 800;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .squad-list {
   display: flex;
   flex: 1 1 auto;
@@ -265,17 +218,7 @@ const headerSummaryText = computed(() => {
   gap: 8px;
 }
 
-.team-column.compact .team-column-subtitle {
-  margin-top: 2px;
-}
-
 .team-column.compact .squad-list {
   gap: 8px;
-}
-
-@media (max-width: 900px) {
-  .team-column-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 </style>

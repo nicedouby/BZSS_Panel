@@ -3,6 +3,7 @@
     <MatchHeaderBar :data="matchHeaderData" />
     <SquadPageToolbar
       :search-query="pageState.searchQuery"
+      :filter-mode="pageState.filterMode"
       :density-mode="pageState.densityMode"
       :can-refresh="canRefresh"
       :refreshing-type="refreshingType"
@@ -13,6 +14,7 @@
       :players-updated-at="playersUpdatedAt"
       :squads-updated-at="squadsUpdatedAt"
       @search="pageState.searchQuery = $event"
+      @filter-change="pageState.filterMode = $event"
       @density-change="handleDensityChange"
       @refresh="handleToolbarRefresh"
       @refresh-playtime="refreshOnlinePlaytime"
@@ -107,6 +109,7 @@ const pageState = reactive<PageState>({
   searchQuery: "",
   densityMode: ui.globalDensity,
   selectedPlayerId: null,
+  filterMode: "all",
 });
 
 const canRefresh = computed(() => Boolean(auth.user?.isSuperAdmin));
@@ -170,7 +173,8 @@ const viewerAutoSwapEnabled = computed(() => auth.user?.viewerTeamAutoSwapEnable
 const rawTeams = computed(() => match.teams.map((team) => adaptTeam(team, playtimes.value)));
 
 const viewModels = computed(() => {
-  const filteredTeams = filterTeamsBySearch(rawTeams.value, pageState.searchQuery);
+  const searchedTeams = filterTeamsBySearch(rawTeams.value, pageState.searchQuery);
+  const filteredTeams = filterTeamsByMode(searchedTeams, pageState.filterMode);
   const viewerTeamId = viewerAutoSwapEnabled.value ? findAdminTeamId(rawTeams.value, viewerSteam64.value) : null;
   return {
     teams: sortTeamsForAdminPerspective(filteredTeams, viewerTeamId),
@@ -451,6 +455,22 @@ function buildViewerPerspectiveTextEnglish(adminTeamId: number | null, enabled: 
     return "Current view: default TEAM 1 -> TEAM 2";
   }
   return `Current view: TEAM ${adminTeamId}`;
+}
+
+function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "locked" | "alerts"): TeamViewModel[] {
+  if (mode === "all") return teams;
+
+  return teams
+    .map((team) => ({
+      ...team,
+      squads: team.squads.filter((squad) => {
+        if (mode === "no_leader") return squad.state === "no_leader";
+        if (mode === "locked") return squad.isLocked;
+        if (mode === "alerts") return squad.warnings.length > 0 || squad.state === "no_leader";
+        return true;
+      }),
+    }))
+    .filter((team) => team.squads.length > 0);
 }
 
 </script>
