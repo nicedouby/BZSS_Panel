@@ -11,16 +11,14 @@
         <div class="squad-title-row">
           <strong class="squad-name">{{ squad.squadName }}</strong>
           <span class="squad-member-count">{{ squad.memberCount }}/{{ squad.maxMembers }}</span>
-          <StatusBadge :tone="squad.isLocked ? 'warn' : 'idle'">
+          <StatusBadge class="squad-status-badge" :tone="squad.isLocked ? 'warn' : 'idle'">
             {{ squad.isLocked ? t("common.locked") : t("common.open") }}
           </StatusBadge>
         </div>
 
         <div class="squad-meta-row">
-          <span class="squad-meta-chip">{{ squadAveragePlaytimeText }}</span>
-          <span v-if="squad.creatorName" class="squad-meta-chip subtle">
-            Created by {{ squad.creatorName }}
-          </span>
+          <span class="squad-meta-summary">{{ squadAveragePlaytimeText }}</span>
+          <span v-if="squad.creatorName" class="squad-meta-creator">by {{ squad.creatorName }}</span>
         </div>
       </div>
 
@@ -74,6 +72,7 @@ import { t } from "../../i18n";
 const props = defineProps<{
   squad: SquadViewModel;
   selectedPlayerId?: string | number | null;
+  densityMode?: "comfortable" | "compact";
 }>();
 
 defineEmits<{
@@ -103,10 +102,10 @@ const squadAveragePlaytimeText = computed(() => {
     : "";
 
   if (props.squad.averagePlaytimeHours == null) {
-    return `Avg -- / ${publicText}${privateText ? ` / ${privateText}` : ""}`;
+    return `Avg -- · ${publicText}${privateText ? ` · ${privateText}` : ""}`;
   }
 
-  return `Avg ${props.squad.averagePlaytimeHours}h / ${publicText}${privateText ? ` / ${privateText}` : ""}`;
+  return `Avg ${props.squad.averagePlaytimeHours}h · ${publicText}${privateText ? ` · ${privateText}` : ""}`;
 });
 
 const squadWarnings = computed(() => {
@@ -146,7 +145,7 @@ function warningTone(label: string): "warn" | "idle" {
     linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.015)), rgba(255, 255, 255, 0.012)),
     var(--color-bg-card);
   border: 1px solid var(--color-border-default);
-  border-radius: 12px;
+  border-radius: 9px;
   overflow: hidden;
   box-shadow: var(--shadow-md);
   transition:
@@ -180,15 +179,15 @@ function warningTone(label: string): "warn" | "idle" {
 
 .squad-header {
   display: grid;
-  gap: 10px;
-  padding: var(--spacing-md);
+  gap: 4px;
+  padding: 7px 10px 8px;
   border-bottom: 1px solid var(--color-border-soft);
   background: rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.008));
 }
 
 .squad-header-main {
   display: grid;
-  gap: 8px;
+  gap: 3px;
   min-width: 0;
 }
 
@@ -198,10 +197,11 @@ function warningTone(label: string): "warn" | "idle" {
   gap: var(--spacing-sm);
   min-width: 0;
   flex-wrap: wrap;
+  line-height: 1;
 }
 
 .squad-name {
-  font-size: var(--font-size-md);
+  font-size: 13px;
   font-weight: 800;
   color: var(--color-text-primary);
   overflow: hidden;
@@ -210,10 +210,10 @@ function warningTone(label: string): "warn" | "idle" {
 }
 
 .squad-member-count {
-  font-size: var(--font-size-sm);
+  font-size: 11px;
   color: var(--color-text-secondary);
   font-weight: 700;
-  padding: 2px 7px;
+  padding: 2px 6px;
   border-radius: var(--radius-full);
   background: rgba(255, 255, 255, 0.045);
   border: 1px solid var(--color-border-soft);
@@ -221,42 +221,55 @@ function warningTone(label: string): "warn" | "idle" {
 
 .squad-meta-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  min-width: 0;
-}
-
-.squad-meta-chip {
-  display: inline-flex;
   align-items: center;
-  min-height: 22px;
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--color-border-soft);
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
-  white-space: nowrap;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  line-height: 1.1;
 }
 
-.squad-meta-chip.subtle {
+.squad-meta-summary {
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.squad-status-badge {
+  min-height: 20px;
+  padding-inline: 7px;
+  font-size: 11px;
+}
+
+.squad-status-badge :deep(.badge) {
+  min-height: 20px;
+  padding: 1px 7px;
+  font-size: 11px;
+}
+
+.squad-meta-creator {
   color: var(--color-text-muted);
+  flex: 0 0 auto;
+  font-size: 10px;
+  white-space: nowrap;
 }
 
 .squad-warning-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
   justify-content: flex-start;
 }
 
 .squad-warning-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 22px;
-  padding: 2px 8px;
+  min-height: 18px;
+  padding: 1px 6px;
   border-radius: var(--radius-full);
-  font-size: var(--font-size-xs);
+  font-size: 10px;
   border: 1px solid var(--color-border-soft);
   color: var(--color-text-secondary);
   background: rgba(255, 255, 255, 0.02);
@@ -269,27 +282,27 @@ function warningTone(label: string): "warn" | "idle" {
 }
 
 .squad-empty {
-  padding: var(--spacing-lg);
+  padding: 10px 12px 12px;
   text-align: center;
 }
 
 .squad-empty-text {
   color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
+  font-size: 11px;
 }
 
 .squad-warning {
-  padding: var(--spacing-md);
+  padding: 8px 10px;
   background-color: rgba(245, 158, 11, 0.08);
   border-top: 1px solid var(--color-border-soft);
   color: var(--color-status-warning);
-  font-size: var(--font-size-sm);
+  font-size: 11px;
   border-left: 2px solid var(--color-status-warning);
 }
 
 @media (max-width: 1100px) {
   .squad-header {
-    gap: 8px;
+    gap: 3px;
   }
 }
 </style>

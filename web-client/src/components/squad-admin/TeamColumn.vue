@@ -18,6 +18,7 @@
         v-for="squad in team.squads"
         :key="`${squad.squadId}`"
         :squad="squad"
+        :density-mode="densityMode"
         :selected-player-id="selectedPlayerId"
         @select-player="$emit('select-player', $event)"
       />
