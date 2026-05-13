@@ -7,24 +7,24 @@
     ]"
   >
     <header class="squad-header">
-      <div class="squad-header-title">
-        <div class="squad-header-title-main">
-          <strong>{{ squad.squadName }}</strong>
+      <div class="squad-header-main">
+        <div class="squad-title-row">
+          <strong class="squad-name">{{ squad.squadName }}</strong>
           <span class="squad-member-count">{{ squad.memberCount }}/{{ squad.maxMembers }}</span>
           <StatusBadge :tone="squad.isLocked ? 'warn' : 'idle'">
             {{ squad.isLocked ? t("common.locked") : t("common.open") }}
           </StatusBadge>
         </div>
 
-        <div class="squad-header-subtitle">
-          <span class="squad-average-playtime">{{ squadAveragePlaytimeText }}</span>
-          <span v-if="squad.creatorName" class="squad-header-creator">
+        <div class="squad-meta-row">
+          <span class="squad-meta-chip">{{ squadAveragePlaytimeText }}</span>
+          <span v-if="squad.creatorName" class="squad-meta-chip subtle">
             Created by {{ squad.creatorName }}
           </span>
         </div>
       </div>
 
-      <div class="squad-header-actions">
+      <div v-if="squadWarnings.length > 0" class="squad-warning-row">
         <span
           v-for="warning in squadWarnings"
           :key="warning"
@@ -95,43 +95,44 @@ const hasSelectedPlayer = computed(() => {
 });
 
 const squadAveragePlaytimeText = computed(() => {
-  if (props.squad.knownPlaytimePlayers <= 0) return "Steam 时长未加载";
+  if (props.squad.knownPlaytimePlayers <= 0) return "Steam time unavailable";
 
+  const publicText = `Public ${props.squad.publicPlaytimePlayers}`;
   const privateText = props.squad.privatePlaytimePlayers > 0
-    ? ` / 未公开 ${props.squad.privatePlaytimePlayers}`
+    ? `Private ${props.squad.privatePlaytimePlayers}`
     : "";
 
   if (props.squad.averagePlaytimeHours == null) {
-    return `平均时长 -- / 公开 0${privateText}`;
+    return `Avg -- / ${publicText}${privateText ? ` / ${privateText}` : ""}`;
   }
 
-  return `平均 ${props.squad.averagePlaytimeHours}h / 公开 ${props.squad.publicPlaytimePlayers}${privateText}`;
+  return `Avg ${props.squad.averagePlaytimeHours}h / ${publicText}${privateText ? ` / ${privateText}` : ""}`;
 });
 
 const squadWarnings = computed(() => {
   const items: string[] = [];
 
   if (props.squad.state === "empty") {
-    items.push("空队");
+    items.push("Empty");
   }
   if (props.squad.state === "no_leader") {
-    items.push("无队长");
+    items.push("No leader");
   }
   if (props.squad.isLocked) {
-    items.push("锁队");
+    items.push("Locked");
   }
   if (props.squad.knownPlaytimePlayers <= 0) {
-    items.push("时长缺失");
+    items.push("Steam time missing");
   }
   if (props.squad.averagePlaytimeHours != null && props.squad.averagePlaytimeHours < 10) {
-    items.push("低时长");
+    items.push("Low avg");
   }
 
   return items.slice(0, 3);
 });
 
 function warningTone(label: string): "warn" | "idle" {
-  if (label === "锁队" || label === "无队长" || label === "低时长" || label === "时长缺失") {
+  if (label === "Locked" || label === "No leader" || label === "Low avg" || label === "Steam time missing") {
     return "warn";
   }
   return "idle";
@@ -179,21 +180,19 @@ function warningTone(label: string): "warn" | "idle" {
 
 .squad-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--spacing-md);
-  align-items: center;
+  gap: 10px;
   padding: var(--spacing-md);
   border-bottom: 1px solid var(--color-border-soft);
   background: rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.008));
 }
 
-.squad-header-title {
+.squad-header-main {
   display: grid;
-  gap: 4px;
+  gap: 8px;
   min-width: 0;
 }
 
-.squad-header-title-main {
+.squad-title-row {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
@@ -201,7 +200,7 @@ function warningTone(label: string): "warn" | "idle" {
   flex-wrap: wrap;
 }
 
-.squad-header strong {
+.squad-name {
   font-size: var(--font-size-md);
   font-weight: 800;
   color: var(--color-text-primary);
@@ -220,32 +219,35 @@ function warningTone(label: string): "warn" | "idle" {
   border: 1px solid var(--color-border-soft);
 }
 
-.squad-header-subtitle {
+.squad-meta-row {
   display: flex;
-  gap: var(--spacing-sm);
-  align-items: center;
   flex-wrap: wrap;
+  gap: 6px;
   min-width: 0;
 }
 
-.squad-average-playtime {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  white-space: nowrap;
-}
-
-.squad-header-creator {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  white-space: nowrap;
-}
-
-.squad-header-actions {
-  display: flex;
+.squad-meta-chip {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border-soft);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+.squad-meta-chip.subtle {
+  color: var(--color-text-muted);
+}
+
+.squad-warning-row {
+  display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  gap: 6px;
+  justify-content: flex-start;
 }
 
 .squad-warning-chip {
@@ -287,12 +289,7 @@ function warningTone(label: string): "warn" | "idle" {
 
 @media (max-width: 1100px) {
   .squad-header {
-    grid-template-columns: 1fr;
-    align-items: start;
-  }
-
-  .squad-header-actions {
-    justify-content: flex-start;
+    gap: 8px;
   }
 }
 </style>

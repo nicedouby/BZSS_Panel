@@ -104,7 +104,7 @@ const headerSummaryText = computed(() => {
     var(--color-bg-card);
   box-shadow: var(--shadow-sm);
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .team-column.team1 .team-column-header {
@@ -156,6 +156,7 @@ const headerSummaryText = computed(() => {
   margin: 4px 0 0;
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
+  line-height: 1.35;
 }
 
 .team-column-subtitle.compact {

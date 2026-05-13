@@ -32,36 +32,57 @@
       <div class="refresh-controls">
         <button
           type="button"
-          class="refresh-button"
-          :disabled="!canRefresh || isRefreshing"
-          @click="$emit('refresh', 'players')"
-        >
-          {{ refreshingType === 'players' ? t('common.refreshing') : t('match.refreshPlayers') }}
-        </button>
-        <button
-          type="button"
-          class="refresh-button"
-          :disabled="!canRefresh || isRefreshing"
-          @click="$emit('refresh', 'squads')"
-        >
-          {{ refreshingType === 'squads' ? t('common.refreshing') : t('match.refreshSquads') }}
-        </button>
-        <button
-          type="button"
-          class="refresh-button"
+          class="refresh-button primary"
           :disabled="!canRefresh || isRefreshing"
           @click="$emit('refresh', 'all')"
         >
           {{ refreshingType === 'all' ? t('common.refreshing') : t('match.refreshAll') }}
         </button>
-        <button
-          type="button"
-          class="refresh-button secondary"
-          :disabled="!canRefresh || isRefreshing || refreshingPlaytime"
-          @click="$emit('refresh-playtime')"
-        >
-          {{ refreshingPlaytime ? "Refreshing Steam time" : "Refresh Steam time" }}
-        </button>
+        <div ref="refreshMenuRoot" class="refresh-dropdown">
+          <button
+            type="button"
+            class="refresh-button refresh-menu-trigger"
+            :disabled="!canRefresh || isRefreshing || refreshingPlaytime"
+            :aria-expanded="refreshMenuOpen"
+            aria-haspopup="menu"
+            @click.stop="toggleRefreshMenu"
+          >
+            <span>{{ t("common.more", "More") }}</span>
+            <span class="refresh-caret" aria-hidden="true">▾</span>
+          </button>
+
+          <transition name="menu-fade">
+            <div v-if="refreshMenuOpen" class="refresh-menu" role="menu">
+              <button
+                type="button"
+                class="menu-item"
+                role="menuitem"
+                :disabled="!canRefresh || isRefreshing"
+                @click="runRefresh('players')"
+              >
+                {{ refreshingType === 'players' ? t('common.refreshing') : t('match.refreshPlayers') }}
+              </button>
+              <button
+                type="button"
+                class="menu-item"
+                role="menuitem"
+                :disabled="!canRefresh || isRefreshing"
+                @click="runRefresh('squads')"
+              >
+                {{ refreshingType === 'squads' ? t('common.refreshing') : t('match.refreshSquads') }}
+              </button>
+              <button
+                type="button"
+                class="menu-item secondary"
+                role="menuitem"
+                :disabled="!canRefresh || isRefreshing || refreshingPlaytime"
+                @click="runRefreshPlaytime"
+              >
+                {{ refreshingPlaytime ? "Refreshing Steam time" : "Refresh Steam time" }}
+              </button>
+            </div>
+          </transition>
+        </div>
       </div>
 
       <div class="density-toggle">
@@ -80,7 +101,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { t } from "../../i18n";
 
 type RefreshType = "players" | "squads" | "all";
@@ -118,6 +139,8 @@ const refreshingPlaytime = computed(() => Boolean(props.refreshingPlaytime));
 const showViewerPerspective = computed(() => Boolean(props.showViewerPerspective));
 const viewerPerspectiveText = computed(() => props.viewerPerspectiveText ?? "");
 const filterMode = computed(() => props.filterMode);
+const refreshMenuOpen = ref(false);
+const refreshMenuRoot = ref<HTMLElement | null>(null);
 
 watch(
   () => props.searchQuery,
@@ -126,24 +149,80 @@ watch(
   },
 );
 
+watch(
+  () => [props.refreshingType, props.refreshingPlaytime],
+  () => {
+    if (isRefreshing.value || refreshingPlaytime.value) {
+      closeRefreshMenu();
+    }
+  },
+);
+
+function toggleRefreshMenu() {
+  refreshMenuOpen.value = !refreshMenuOpen.value;
+  if (refreshMenuOpen.value) {
+    window.addEventListener("pointerdown", onWindowPointerDown);
+    window.addEventListener("keydown", onWindowKeyDown);
+  } else {
+    removeWindowListeners();
+  }
+}
+
+function closeRefreshMenu() {
+  refreshMenuOpen.value = false;
+  removeWindowListeners();
+}
+
+function onWindowPointerDown(event: PointerEvent) {
+  if (!refreshMenuRoot.value) return;
+  if (!refreshMenuRoot.value.contains(event.target as Node)) {
+    closeRefreshMenu();
+  }
+}
+
+function onWindowKeyDown(event: KeyboardEvent) {
+  if (event.key === "Escape") {
+    closeRefreshMenu();
+  }
+}
+
+function removeWindowListeners() {
+  window.removeEventListener("pointerdown", onWindowPointerDown);
+  window.removeEventListener("keydown", onWindowKeyDown);
+}
+
+function runRefresh(type: RefreshType) {
+  closeRefreshMenu();
+  emit("refresh", type);
+}
+
+function runRefreshPlaytime() {
+  closeRefreshMenu();
+  emit("refresh-playtime");
+}
+
 function selectDensityMode(mode: string) {
   if (mode === "comfortable" || mode === "compact") {
     emit("density-change", mode);
   }
 }
+
+onBeforeUnmount(() => {
+  removeWindowListeners();
+});
 </script>
 
 <style scoped>
 .squad-page-toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--spacing-md);
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.01)),
     var(--color-bg-card);
   border-bottom: 1px solid var(--color-border-default);
-  padding: 12px var(--spacing-lg);
+  padding: 12px var(--spacing-lg) 14px;
   flex-shrink: 0;
   min-width: 0;
 }
@@ -154,7 +233,6 @@ function selectDensityMode(mode: string) {
   gap: 8px;
   min-width: 0;
   flex-wrap: wrap;
-  flex: 1 1 auto;
 }
 
 .squad-search-input {
@@ -215,19 +293,18 @@ function selectDensityMode(mode: string) {
 .toolbar-actions {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
+  align-items: center;
   gap: var(--spacing-sm);
-  flex: 0 0 auto;
   min-width: 0;
 }
 
 .refresh-controls {
-  display: flex;
-  gap: 6px;
+  display: inline-flex;
+  gap: 8px;
   align-items: center;
   flex-wrap: wrap;
   min-width: 0;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .refresh-button {
@@ -243,6 +320,10 @@ function selectDensityMode(mode: string) {
   white-space: nowrap;
 }
 
+.refresh-button.primary {
+  min-width: 112px;
+}
+
 .refresh-button.secondary {
   color: var(--color-text-muted);
 }
@@ -255,6 +336,58 @@ function selectDensityMode(mode: string) {
 .refresh-button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+.refresh-dropdown {
+  position: relative;
+}
+
+.refresh-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.refresh-caret {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.refresh-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 190px;
+  padding: 8px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-default);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.02)), rgba(255, 255, 255, 0.01)),
+    var(--color-bg-card);
+  box-shadow: var(--shadow-lg);
+  display: grid;
+  gap: 6px;
+  z-index: 10;
+}
+
+.refresh-menu .menu-item {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+}
+
+.refresh-menu .menu-item.secondary {
+  color: var(--color-text-muted);
+}
+
+.refresh-menu .menu-item:hover:not(:disabled) {
+  color: var(--color-text-primary);
+  border-color: var(--color-status-info);
 }
 
 .density-toggle {
@@ -289,10 +422,6 @@ function selectDensityMode(mode: string) {
 }
 
 @media (max-width: 1180px) {
-  .squad-page-toolbar {
-    grid-template-columns: 1fr;
-  }
-
   .toolbar-actions {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
@@ -300,11 +429,22 @@ function selectDensityMode(mode: string) {
 
   .refresh-controls {
     grid-column: 1 / -1;
-    justify-content: flex-start;
+    justify-content: space-between;
   }
 
   .density-toggle {
     justify-self: end;
   }
+}
+
+.menu-fade-enter-active,
+.menu-fade-leave-active {
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.menu-fade-enter-from,
+.menu-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 </style>

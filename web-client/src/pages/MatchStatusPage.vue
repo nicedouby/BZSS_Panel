@@ -505,11 +505,12 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 .squad-main-content {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--spacing-lg);
-  padding: var(--spacing-lg);
+  gap: clamp(12px, 1vw, 18px);
+  padding: clamp(12px, 1vw, 18px);
   min-height: 0;
   height: 100%;
   overflow: hidden;
+  align-items: stretch;
   background: linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.004)), transparent 22%), var(--app-background, var(--color-bg-page));
 }
 
