@@ -150,87 +150,108 @@ export class SquadLifecycleService {
 
   async getCurrentSquads(input) {
     const states = await this.repository.getActiveByMatch(input.serverId, input.matchId);
-    const activeSquads = states
-      .filter((x) => x.status === "ACTIVE")
-      .sort((a, b) => {
-        const timeDiff = (a.createdAt || 0) - (b.createdAt || 0);
-        if (timeDiff !== 0) return timeDiff;
-        if ((a.teamId || 0) !== (b.teamId || 0)) return (a.teamId || 0) - (b.teamId || 0);
-        if ((a.squadId || 0) !== (b.squadId || 0)) return (a.squadId || 0) - (b.squadId || 0);
-        return (a.generation || 0) - (b.generation || 0);
-      });
-
-    return activeSquads.map((state, index) => ({
-      ...state,
-      order: index + 1,
-      createdAtLabel: formatTimeHHMMSS(state.createdAt),
-      creationSource: state.creationSource ?? state.createSource ?? "",
-      creationConfidence: state.creationConfidence ?? state.confidence ?? "",
-      sourceLabel: (state.creationSource ?? state.createSource) === "LOG" ? "日志确认" : "RCON首次发现",
-    }));
+    return formatOrderedSquads(states);
   }
 
-  async getSquadOrder(input) {
+  async getOrderedCurrentSquads(input) {
     const states = await this.repository.getActiveByMatch(input.serverId, input.matchId);
-    const activeSquads = states.filter((x) => x.status === "ACTIVE");
-
-    activeSquads.sort((a, b) => {
-      const timeDiff = (a.createdAt || 0) - (b.createdAt || 0);
-      if (timeDiff !== 0) return timeDiff;
-      if ((a.teamId || 0) !== (b.teamId || 0)) return (a.teamId || 0) - (b.teamId || 0);
-      if ((a.squadId || 0) !== (b.squadId || 0)) return (a.squadId || 0) - (b.squadId || 0);
-      return (a.generation || 0) - (b.generation || 0);
-    });
-
-    return {
-      matchId: input.matchId,
-      orderedSquads: activeSquads.map((state, index) => ({
-        order: index + 1,
-        teamId: state.teamId,
-        squadId: state.squadId,
-        generation: state.generation,
-        lifecycleId: state.lifecycleId,
-        squadName: state.squadName,
-        leaderName: state.leaderName,
-        memberCount: state.memberCount,
-        locked: state.locked,
-        createdAt: state.createdAt,
-        createdAtLabel: formatTimeHHMMSS(state.createdAt),
-        creationSource: state.creationSource ?? state.createSource,
-        creationConfidence: state.creationConfidence ?? state.confidence,
-        sourceLabel: (state.creationSource ?? state.createSource) === "LOG" ? "日志确认" : "RCON首次发现",
-        confidence: state.confidence,
-        status: state.status,
-      })),
-    };
+    return formatOrderedSquads(states);
   }
 
   async getTimeline(input) {
-    const limit = Number(input.limit ?? 200);
+    const limit = Number(input.limit ?? 300);
     const events = await this.repository.getEventsByMatch(input.serverId, input.matchId, limit);
-    return events.map((evt) => ({
-      id: evt.id,
-      eventType: evt.eventType,
-      eventTime: evt.eventTime,
-      lifecycleId: evt.lifecycleId,
-      runtimeKey: evt.runtimeKey,
-      teamId: evt.payload?.teamId ?? null,
-      squadId: evt.payload?.squadId ?? null,
-      generation: evt.payload?.generation ?? null,
-      squadName: evt.payload?.squadName ?? null,
-      source: evt.source,
-      confidence: evt.confidence,
-      payload: evt.payload,
+    return events.map((event) => ({
+      id: event.id,
+      type: event.eventType,
+      time: new Date(event.eventTime || event.createdAt || Date.now()).toISOString(),
+      lifecycleId: event.lifecycleId,
+      runtimeKey: event.runtimeKey,
+      teamId: event.payload?.teamId ?? null,
+      squadId: event.payload?.squadId ?? null,
+      generation: event.payload?.generation ?? null,
+      squadName: event.payload?.squadName ?? "",
+      message: buildSquadTimelineMessage(event),
+      raw: event,
     }));
   }
 }
 
-function formatTimeHHMMSS(ms) {
-  if (!ms || !Number.isFinite(Number(ms))) return "";
-  const d = new Date(Number(ms));
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  const ss = String(d.getSeconds()).padStart(2, "0");
-  return `${hh}:${mm}:${ss}`;
+function formatOrderedSquads(states) {
+  return states
+    .slice()
+    .filter((x) => x.status === "ACTIVE")
+    .sort((a, b) => {
+      const at = Number(a.createdAt || a.firstSeenAt || 0);
+      const bt = Number(b.createdAt || b.firstSeenAt || 0);
+
+      if (at !== bt) return at - bt;
+
+      const teamDiff = Number(a.teamId) - Number(b.teamId);
+      if (teamDiff !== 0) return teamDiff;
+
+      const squadDiff = Number(a.squadId) - Number(b.squadId);
+      if (squadDiff !== 0) return squadDiff;
+
+      return Number(a.generation) - Number(b.generation);
+    })
+    .map((squad, index) => {
+      const createdAtMs = Number(squad.createdAt || squad.firstSeenAt || 0);
+      const createdAtIso = createdAtMs > 0 ? new Date(createdAtMs).toISOString() : "";
+      const createSource = squad.createSource || squad.creationSource || "RCON_SNAPSHOT";
+      const confidence = squad.confidence || squad.creationConfidence || "MEDIUM";
+
+      return {
+        ...squad,
+        order: index + 1,
+        createdAt: createdAtIso,
+        createdAtMs,
+        createdAtLabel: formatTimeLabel(createdAtMs),
+        creationSource: createSource,
+        creationConfidence: confidence,
+        sourceLabel: createSource === "LOG" ? "日志确认" : "RCON首次发现",
+        createdDisplayText: createSource === "LOG"
+          ? `创建于 ${formatTimeLabel(createdAtMs)}`
+          : `首次发现于 ${formatTimeLabel(createdAtMs)}`,
+      };
+    });
+}
+
+function formatTimeLabel(value) {
+  const ms = Number(value);
+  if (!Number.isFinite(ms) || ms <= 0) return "--:--:--";
+
+  const date = new Date(ms);
+  return date.toLocaleTimeString("zh-CN", {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function buildSquadTimelineMessage(event) {
+  const payload = event.payload ?? {};
+  const teamId = payload.teamId ?? "?";
+  const squadId = payload.squadId ?? "?";
+  const squadName = payload.squadName ? ` ${payload.squadName}` : "";
+
+  if (event.eventType === "squad.created") {
+    return `Team${teamId} Squad${squadId}${squadName} 创建`;
+  }
+
+  if (event.eventType === "squad.disbanded") {
+    return `Team${teamId} Squad${squadId}${squadName} 解散`;
+  }
+
+  if (event.eventType === "squad.closed_by_match_end") {
+    return `Team${teamId} Squad${squadId}${squadName} 因回合结束关闭`;
+  }
+
+  if (event.eventType === "squad.recovered") {
+    return `Team${teamId} Squad${squadId}${squadName} 恢复`;
+  }
+
+  return `Team${teamId} Squad${squadId}${squadName} 更新`;
 }
 

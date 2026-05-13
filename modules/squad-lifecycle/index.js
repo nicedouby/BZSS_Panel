@@ -72,23 +72,60 @@ export function createSquadLifecycleModule({ core, modules, config, logger }) {
       const context = resolveMatchContext(sid, modules, core, matchRuntime);
       const targetMatchId = String(matchId || context.matchId);
       if (!targetMatchId) return [];
-      return service.getCurrentSquads({ serverId: sid, matchId: targetMatchId });
+      return service.getOrderedCurrentSquads({ serverId: sid, matchId: targetMatchId });
     },
 
     async getSquadOrder(serverId, matchId = null) {
       const sid = String(serverId || resolveServerId(core));
       const context = resolveMatchContext(sid, modules, core, matchRuntime);
       const targetMatchId = String(matchId || context.matchId);
-      if (!targetMatchId) return { matchId: "", orderedSquads: [] };
-      return service.getSquadOrder({ serverId: sid, matchId: targetMatchId });
+      if (!targetMatchId) {
+        return {
+          serverId: sid,
+          matchId: "",
+          orderedSquads: [],
+          count: 0,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+
+      const orderedSquads = await service.getOrderedCurrentSquads({
+        serverId: sid,
+        matchId: targetMatchId,
+      });
+
+      return {
+        serverId: sid,
+        matchId: targetMatchId,
+        orderedSquads,
+        count: orderedSquads.length,
+        updatedAt: new Date().toISOString(),
+      };
     },
 
-    async getTimeline(serverId, matchId = null, limit = 200) {
+    async getTimeline(serverId, matchId = null, limit = 300) {
       const sid = String(serverId || resolveServerId(core));
       const context = resolveMatchContext(sid, modules, core, matchRuntime);
       const targetMatchId = String(matchId || context.matchId);
-      if (!targetMatchId) return [];
-      return service.getTimeline({ serverId: sid, matchId: targetMatchId, limit });
+      if (!targetMatchId) {
+        return {
+          serverId: sid,
+          matchId: "",
+          events: [],
+        };
+      }
+
+      const events = await service.getTimeline({
+        serverId: sid,
+        matchId: targetMatchId,
+        limit,
+      });
+
+      return {
+        serverId: sid,
+        matchId: targetMatchId,
+        events,
+      };
     },
 
     async getEvents(serverId, matchId = null, limit = 1000) {
@@ -170,6 +207,10 @@ export function createSquadLifecycleModule({ core, modules, config, logger }) {
         void logAdapter.onCoreSquadCreatedEvent(event);
       }));
 
+      // TODO:
+      // 后续将 squad-lifecycle 的 RCON 输入改为订阅 module.matchState.squadsUpdated，
+      // 避免本模块重复执行 ListSquads。
+
       // Subscribe to match-state squad snapshots (preferred source, avoids duplicate RCON calls)
       unsubscribers.push(core.eventBus.onModuleEvent("module.matchState", "squadsUpdated", (event) => {
         const serverId = resolveServerId(core);
@@ -188,6 +229,13 @@ export function createSquadLifecycleModule({ core, modules, config, logger }) {
 
         void service.handleRconSnapshot(snapshot);
       }));
+
+      await ingestCurrentMatchStateSquadsIfAvailable({
+        core,
+        modules,
+        matchRuntime,
+        service,
+      });
 
       // Subscribe to match end events
       for (const eventName of MATCH_END_EVENTS) {
@@ -293,4 +341,27 @@ function resolveMatchContext(serverId, modules, core, matchRuntime) {
     playerCount: Number.isFinite(playerCount) ? playerCount : null,
     isMatchChanging: Date.now() < matchRuntime.matchChangingUntil,
   };
+}
+
+async function ingestCurrentMatchStateSquadsIfAvailable({ core, modules, matchRuntime, service }) {
+  const serverId = resolveServerId(core);
+  const snapshot = modules?.matchState?.getState?.();
+  const squads = snapshot?.squads?.list ?? [];
+
+  if (!Array.isArray(squads) || squads.length <= 0) return;
+
+  const context = resolveMatchContext(serverId, modules, core, matchRuntime);
+  if (!context.matchId) return;
+
+  const rconSnapshot = toRconSquadSnapshot({
+    serverId,
+    matchId: context.matchId,
+    parsedSquads: squads,
+    rawText: "",
+    capturedAt: Date.now(),
+    playerCount: context.playerCount,
+    isMatchChanging: context.isMatchChanging,
+  });
+
+  await service.handleRconSnapshot(rconSnapshot);
 }
