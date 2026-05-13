@@ -24,16 +24,6 @@ export const router = createRouter({
     { path: "/combat-clean", component: CombatCleanPage, meta: { titleKey: "routeTitle.combatClean" } },
     { path: "/kill-manage", component: KillManagePage, meta: { titleKey: "routeTitle.killManage" } },
     {
-      path: "/plugin-subscriptions",
-      component: ComingSoonPage,
-      props: {
-        titleKey: "routeTitle.pluginSubscriptions",
-        subtitle: "",
-        message: "",
-      },
-      meta: { titleKey: "routeTitle.pluginSubscriptions" },
-    },
-    {
       path: "/:pathMatch(.*)*",
       component: ComingSoonPage,
       props: {

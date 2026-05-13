@@ -19,6 +19,9 @@
         <button type="button" class="menu-item" role="menuitem" @click="openSettings">
           {{ t("user.settings") }}
         </button>
+        <button type="button" class="menu-item" role="menuitem" @click="openPluginCenter">
+          插件中心
+        </button>
         <button type="button" class="menu-item danger" role="menuitem" @click="logout">
           {{ t("user.logout") }}
         </button>
@@ -32,6 +35,10 @@ import { computed, onBeforeUnmount, ref } from "vue";
 import { useAuthStore } from "../../stores/auth.store";
 import { useSettingsStore } from "../../stores/settings.store";
 import { t } from "../../i18n";
+
+const emit = defineEmits<{
+  (event: "open-plugin-center"): void;
+}>();
 
 const auth = useAuthStore();
 const settings = useSettingsStore();
@@ -88,6 +95,11 @@ function removeWindowListeners() {
 async function openSettings() {
   closeMenu();
   settings.openDrawer();
+}
+
+function openPluginCenter() {
+  closeMenu();
+  emit("open-plugin-center");
 }
 
 async function logout() {

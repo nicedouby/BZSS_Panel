@@ -18,7 +18,7 @@
         <span class="metric optional">Next {{ nextLayer }}</span>
         <span v-if="runtimeError" class="metric error optional">{{ runtimeError }}</span>
       </div>
-      <UserMenu />
+      <UserMenu @open-plugin-center="emit('open-plugin-center')" />
     </div>
   </header>
 </template>
@@ -33,6 +33,10 @@ import { useUiStore } from "../../stores/ui.store";
 import StatusBadge from "../common/StatusBadge.vue";
 import UserMenu from "./UserMenu.vue";
 import { t } from "../../i18n";
+
+const emit = defineEmits<{
+  (event: "open-plugin-center"): void;
+}>();
 
 const server = useServerStore();
 const players = usePlayerStore();

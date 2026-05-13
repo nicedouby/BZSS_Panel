@@ -83,7 +83,7 @@ const displayValue = computed(() => {
   if (props.modelValue === undefined || props.modelValue === null) {
     return "";
   }
-  return props.modelValue;
+  return String(props.modelValue);
 });
 
 function onStringInput(event: Event) {

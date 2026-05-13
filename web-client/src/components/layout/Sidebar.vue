@@ -26,7 +26,6 @@ const nav = [
   { path: "/player-database", icon: "DB", label: t("nav.playerDatabase") },
   { path: "/combat-clean", icon: "CC", label: t("nav.combatClean") },
   { path: "/kill-manage", icon: "KM", label: t("nav.killManage") },
-  { path: "/plugin-subscriptions", icon: "PL", label: t("nav.pluginSubscriptions") },
 ];
 </script>
 

@@ -2,7 +2,7 @@
   <div class="app-shell" :class="{ collapsed: ui.sidebarCollapsed }">
     <Sidebar />
     <main class="main-shell">
-      <Topbar />
+      <Topbar @open-plugin-center="pluginCenterOpen = true" />
       <section class="content-shell" :class="contentShellClass">
         <RouterView />
       </section>
@@ -10,11 +10,15 @@
     <ConfirmDialog />
     <ToastHost />
     <SettingsDrawer />
+    <PluginCenterDrawer
+      :open="pluginCenterOpen"
+      @close="pluginCenterOpen = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { RouterView } from "vue-router";
 import { useRoute } from "vue-router";
 import { useUiStore } from "../../stores/ui.store";
@@ -23,9 +27,11 @@ import Sidebar from "./Sidebar.vue";
 import ConfirmDialog from "../common/ConfirmDialog.vue";
 import ToastHost from "../common/ToastHost.vue";
 import SettingsDrawer from "../settings/SettingsDrawer.vue";
+import PluginCenterDrawer from "../../features/plugins/PluginCenterDrawer.vue";
 
 const ui = useUiStore();
 const route = useRoute();
+const pluginCenterOpen = ref(false);
 
 const contentShellClass = computed(() => ({
   "full-bleed": Boolean(route.meta.fullBleed),

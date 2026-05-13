@@ -1,5 +1,5 @@
 <template>
-  <aside class="plugin-settings-drawer">
+  <aside v-if="open && plugin" class="plugin-settings-drawer">
     <header class="plugin-settings-header">
       <div>
         <h3>{{ plugin.name }}</h3>
@@ -43,7 +43,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from "vue";
-import type { PluginManifest, PluginConfigField } from "./plugin.types";
+import type { PluginConfigField, PluginManifest } from "./plugin.types";
 import ConfigFieldRenderer from "./ConfigFieldRenderer.vue";
 
 const props = defineProps<{
