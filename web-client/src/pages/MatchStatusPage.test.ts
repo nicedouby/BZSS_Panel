@@ -51,10 +51,8 @@ describe("MatchStatusPage", () => {
       },
     });
 
-    expect(wrapper.text()).toContain("Refresh Players");
-    expect(wrapper.text()).toContain("Refresh Squads");
-    expect(wrapper.text()).toContain("Refresh All");
-    expect(wrapper.text()).toContain("Disconnected");
+    expect(wrapper.text()).toContain("智能刷新时长");
+    expect(wrapper.text()).toContain("强制刷新全部时长");
     expect(wrapper.text()).not.toContain("Loading");
   });
 });

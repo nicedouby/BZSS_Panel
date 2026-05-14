@@ -38,6 +38,22 @@
         >
           {{ refreshingType === 'all' ? t('common.refreshing') : t('match.refreshAll') }}
         </button>
+        <button
+          type="button"
+          class="refresh-button secondary"
+          :disabled="!canRefresh || isRefreshing || refreshingPlaytime"
+          @click="$emit('refresh-playtime')"
+        >
+          智能刷新时长
+        </button>
+        <button
+          type="button"
+          class="refresh-button danger"
+          :disabled="!canRefresh || isRefreshing || refreshingPlaytime"
+          @click="$emit('refresh-playtime-force')"
+        >
+          强制刷新全部时长
+        </button>
         <div ref="refreshMenuRoot" class="refresh-dropdown">
           <button
             type="button"
@@ -70,15 +86,6 @@
                 @click="runRefresh('squads')"
               >
                 {{ refreshingType === 'squads' ? t('common.refreshing') : t('match.refreshSquads') }}
-              </button>
-              <button
-                type="button"
-                class="menu-item secondary"
-                role="menuitem"
-                :disabled="!canRefresh || isRefreshing || refreshingPlaytime"
-                @click="runRefreshPlaytime"
-              >
-                {{ refreshingPlaytime ? "Refreshing Steam time" : "Refresh Steam time" }}
               </button>
             </div>
           </transition>
@@ -124,6 +131,7 @@ const emit = defineEmits<{
   (event: "density-change", mode: "comfortable" | "compact"): void;
   (event: "refresh", type: RefreshType): void;
   (event: "refresh-playtime"): void;
+  (event: "refresh-playtime-force"): void;
 }>();
 
 const filters = [
@@ -194,11 +202,6 @@ function removeWindowListeners() {
 function runRefresh(type: RefreshType) {
   closeRefreshMenu();
   emit("refresh", type);
-}
-
-function runRefreshPlaytime() {
-  closeRefreshMenu();
-  emit("refresh-playtime");
 }
 
 function selectDensityMode(mode: string) {
@@ -326,6 +329,26 @@ onBeforeUnmount(() => {
 
 .refresh-button.secondary {
   color: var(--color-text-muted);
+}
+
+.refresh-button.secondary {
+  background: rgba(55, 200, 255, 0.08);
+  color: var(--color-team1-primary);
+  border-color: rgba(55, 200, 255, 0.22);
+}
+
+.refresh-button.danger {
+  background: rgba(248, 113, 113, 0.08);
+  color: #fda4af;
+  border-color: rgba(248, 113, 113, 0.26);
+}
+
+.refresh-button.secondary:hover:not(:disabled) {
+  background: rgba(55, 200, 255, 0.14);
+}
+
+.refresh-button.danger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.14);
 }
 
 .refresh-button:hover:not(:disabled) {
