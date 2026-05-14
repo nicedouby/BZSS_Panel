@@ -14,7 +14,14 @@ const DEFAULT_RETRY_COUNT = 2;
 const DEFAULT_RETRY_DELAY_MS = 1200;
 const DEFAULT_SCRIPT_TIMEOUT_MS = 12_000;
 const DEFAULT_ONLINE_REFRESH_FRESHNESS_WINDOW_MINUTES = 120;
+const DEFAULT_MANUAL_REFRESH_COOLDOWN_MINUTES = 30;
+const DEFAULT_AUTO_REFRESH_ENABLED = true;
+const DEFAULT_AUTO_REFRESH_INTERVAL_MS = 30_000;
+const DEFAULT_AUTO_REFRESH_COOLDOWN_MINUTES = 30;
+const DEFAULT_AUTO_REFRESH_MISSING_ONLY = true;
+const DEFAULT_AUTO_REFRESH_BATCH_SIZE = 8;
 const MAX_JOB_HISTORY = 200;
+const MAX_JOB_EVENTS = 100;
 
 function now() {
   return Date.now();
@@ -77,6 +84,12 @@ class SteamGameDurationService {
     scriptTimeoutMs,
     scriptFallbackToApi,
     onlineRefreshFreshnessWindowMinutes,
+    manualRefreshCooldownMinutes,
+    autoRefreshEnabled,
+    autoRefreshIntervalMs,
+    autoRefreshCooldownMinutes,
+    autoRefreshMissingOnly,
+    autoRefreshBatchSize,
     steamPlaytimeRepo,
     playerDatabase,
     logger,
@@ -95,6 +108,12 @@ class SteamGameDurationService {
     this.scriptTimeoutMs = Math.max(1000, Number(scriptTimeoutMs) || DEFAULT_SCRIPT_TIMEOUT_MS);
     this.scriptFallbackToApi = Boolean(scriptFallbackToApi);
     this.onlineRefreshFreshnessWindowMinutes = Math.max(0, Number(onlineRefreshFreshnessWindowMinutes) || DEFAULT_ONLINE_REFRESH_FRESHNESS_WINDOW_MINUTES);
+    this.manualRefreshCooldownMinutes = Math.max(0, Number(manualRefreshCooldownMinutes) || DEFAULT_MANUAL_REFRESH_COOLDOWN_MINUTES);
+    this.autoRefreshEnabled = autoRefreshEnabled == null ? DEFAULT_AUTO_REFRESH_ENABLED : Boolean(autoRefreshEnabled);
+    this.autoRefreshIntervalMs = Math.max(1000, Number(autoRefreshIntervalMs) || DEFAULT_AUTO_REFRESH_INTERVAL_MS);
+    this.autoRefreshCooldownMinutes = Math.max(0, Number(autoRefreshCooldownMinutes) || DEFAULT_AUTO_REFRESH_COOLDOWN_MINUTES);
+    this.autoRefreshMissingOnly = autoRefreshMissingOnly == null ? DEFAULT_AUTO_REFRESH_MISSING_ONLY : Boolean(autoRefreshMissingOnly);
+    this.autoRefreshBatchSize = Math.max(1, Number(autoRefreshBatchSize) || DEFAULT_AUTO_REFRESH_BATCH_SIZE);
     this.steamPlaytimeRepo = steamPlaytimeRepo || null;
     this.playerDatabase = playerDatabase || null;
     this.logger = logger || null;
@@ -105,6 +124,10 @@ class SteamGameDurationService {
     this.activeLookups = 0;
     this.inflightLookups = new Map();
     this.jobCounter = 0;
+    this.backgroundAutoRefreshTimer = null;
+    this.backgroundAutoRefreshRunning = false;
+    this.backgroundAutoRefreshGetOnlinePlayers = null;
+    this.backgroundAutoRefreshPlayerDatabase = null;
   }
 
   isConfigured() {
@@ -140,6 +163,12 @@ class SteamGameDurationService {
       scriptTimeoutMs: this.scriptTimeoutMs,
       scriptFallbackToApi: this.scriptFallbackToApi,
       onlineRefreshFreshnessWindowMinutes: this.onlineRefreshFreshnessWindowMinutes,
+      manualRefreshCooldownMinutes: this.manualRefreshCooldownMinutes,
+      autoRefreshEnabled: this.autoRefreshEnabled,
+      autoRefreshIntervalMs: this.autoRefreshIntervalMs,
+      autoRefreshCooldownMinutes: this.autoRefreshCooldownMinutes,
+      autoRefreshMissingOnly: this.autoRefreshMissingOnly,
+      autoRefreshBatchSize: this.autoRefreshBatchSize,
       activeLookups: this.activeLookups,
       queuedLookups: this.lookupQueue.length,
       queuedJobs,
@@ -201,99 +230,247 @@ class SteamGameDurationService {
     return this._publicJob(job);
   }
 
-  createOnlineRefreshJob({ players = [], playerDatabase } = {}) {
+  createOnlineRefreshJob({
+    players = [],
+    playerDatabase = this.playerDatabase,
+    force = false,
+    cooldownMinutes = this.manualRefreshCooldownMinutes,
+    missingOnly = false,
+    source = "manual",
+  } = {}) {
     const targets = collectPlayersWithSteamID(players);
-    if (!targets.length) throw new Error("No online players with Steam ID found.");
 
     const job = this._createJob("online-refresh", {
       playerCount: targets.length,
+      force: Boolean(force),
+      cooldownMinutes: Math.max(0, Number(cooldownMinutes) || 0),
+      missingOnly: Boolean(missingOnly),
+      source,
+    });
+
+    this._initJobProgress(job, {
+      phase: "scan",
+      message: `扫描到 ${targets.length} 名在线玩家`,
+      total: targets.length,
+    });
+    this._pushJobEvent(job, {
+      phase: "scan",
+      status: "success",
+      message: `扫描到 ${targets.length} 名在线玩家`,
+      total: targets.length,
     });
 
     this._runJob(job, async () => {
-      const prioritizedTargets = await this._prioritizeOnlineRefreshTargets(targets);
-      const settled = await Promise.allSettled(prioritizedTargets.map(async (player) => {
+      const plan = await this._buildOnlineRefreshPlan(targets, {
+        force,
+        cooldownMinutes,
+        missingOnly,
+      });
+      return await this._executeOnlineRefreshJob(job, {
+        total: targets.length,
+        selectedTargets: plan.selectedTargets,
+        skippedItems: plan.skippedItems,
+        playerDatabase,
+      });
+    });
+
+    return this._publicJob(job);
+  }
+
+  async _buildOnlineRefreshPlan(players, {
+    force = false,
+    cooldownMinutes = this.manualRefreshCooldownMinutes,
+    missingOnly = false,
+  } = {}) {
+    const rows = this.steamPlaytimeRepo?.getManyBySteamIDs
+      ? await this.steamPlaytimeRepo.getManyBySteamIDs(players.map((player) => player.steamID))
+      : new Map();
+    const cooldownMs = Math.max(0, Number(cooldownMinutes) || 0) * 60_000;
+    const nowTs = now();
+    const selectedTargets = [];
+    const skippedItems = [];
+
+    for (const player of players) {
+      const cached = rows.get(player.steamID);
+      const fetchedAt = Number(cached?.fetched_at || 0) || 0;
+      const ageMs = fetchedAt > 0 ? Math.max(0, nowTs - fetchedAt) : Number.POSITIVE_INFINITY;
+      const hasCache = Boolean(cached);
+      const isFresh = fetchedAt > 0 && cooldownMs > 0 && ageMs < cooldownMs;
+      const shouldSkip = !force && (missingOnly ? hasCache : isFresh);
+
+      if (shouldSkip) {
+        const reason = missingOnly
+          ? "玩家已有 Steam 时长缓存"
+          : `最近 ${Math.max(0, Math.floor(Number(cooldownMinutes) || 0))} 分钟内已刷新`;
+        const ageMinutes = Number.isFinite(ageMs) ? Math.floor(ageMs / 60_000) : null;
+        skippedItems.push({
+          steamID: player.steamID,
+          playerName: player.name || null,
+          fetchedAt: fetchedAt || null,
+          ageMinutes,
+          reason,
+          event: {
+            phase: "filter",
+            status: "skipped",
+            steamID: player.steamID,
+            playerName: player.name || null,
+            message: `${player.name || player.steamID} ${reason}`,
+          },
+        });
+        continue;
+      }
+
+      selectedTargets.push({
+        ...player,
+        fetchedAt: fetchedAt || null,
+        ageMs: Number.isFinite(ageMs) ? ageMs : null,
+      });
+    }
+
+    return { selectedTargets, skippedItems };
+  }
+
+  async _executeOnlineRefreshJob(job, {
+    total = 0,
+    selectedTargets = [],
+    skippedItems = [],
+    playerDatabase = this.playerDatabase,
+  } = {}) {
+    const results = [];
+    const failures = [];
+    let processed = 0;
+    let running = 0;
+
+    this._setJobProgress(job, {
+      phase: selectedTargets.length ? "filter" : "completed",
+      message: selectedTargets.length
+        ? `准备刷新 ${selectedTargets.length} 名玩家`
+        : "没有需要刷新时长的在线玩家",
+      total,
+      selected: selectedTargets.length,
+      skipped: skippedItems.length,
+      queued: selectedTargets.length,
+      running: 0,
+      updated: 0,
+      failed: 0,
+      percent: this._calculateProgressPercent(total, skippedItems.length, 0),
+    });
+
+    for (const skipped of skippedItems) {
+      this._pushJobEvent(job, skipped.event);
+    }
+
+    const settleOne = async (player) => {
+      running += 1;
+      this._setJobProgress(job, {
+        phase: "lookup",
+        message: `正在查询 ${player.name || player.steamID}`,
+        queued: Math.max(0, selectedTargets.length - processed - running),
+        running,
+        percent: this._calculateProgressPercent(total, skippedItems.length, processed),
+      });
+      this._pushJobEvent(job, {
+        phase: "lookup",
+        status: "running",
+        steamID: player.steamID,
+        playerName: player.name || null,
+        message: `开始查询 ${player.name || player.steamID}`,
+      });
+
+      try {
         const lookup = await this.lookupSteamDuration(player.steamID, {
           lastSeenName: player.name || null,
         });
+        this._pushJobEvent(job, {
+          phase: "steam",
+          status: "success",
+          steamID: player.steamID,
+          playerName: player.name || null,
+          message: `Steam 查询成功 ${lookup.gameHours}h`,
+          gameSeconds: lookup.gameSeconds,
+        });
+
         const updatedPlayer = await this._syncPlayerDuration({
           player,
           steamID: player.steamID,
           lookup,
           playerDatabase,
         });
-        return {
+
+        const value = {
           playerId: updatedPlayer?.id || null,
           currentName: updatedPlayer?.current_name || player.name || null,
           steamID: player.steamID,
           gameSeconds: lookup.gameSeconds,
           found: lookup.found,
         };
-      }));
 
-      const results = [];
-      const failures = [];
-      for (let index = 0; index < settled.length; index += 1) {
-        const item = settled[index];
-        if (item.status === "fulfilled") {
-          results.push(item.value);
-          await this._logRefresh(job, "success", item.value);
-        } else {
-          const failure = {
-            steamID: prioritizedTargets[index]?.steamID || null,
-            playerName: prioritizedTargets[index]?.name || null,
-            error: item.reason?.message || "lookup failed",
-          };
-          failures.push(failure);
-          await this._logRefresh(job, "failed", failure, failure.error);
-        }
-      }
-
-      return {
-        total: targets.length,
-        updated: results.length,
-        failed: failures.length,
-        results,
-        failures,
-      };
-    });
-
-    return this._publicJob(job);
-  }
-
-  async _prioritizeOnlineRefreshTargets(players) {
-    const rows = this.steamPlaytimeRepo?.getManyBySteamIDs
-      ? await this.steamPlaytimeRepo.getManyBySteamIDs(players.map((player) => player.steamID))
-      : new Map();
-    const freshnessWindowMs = this.onlineRefreshFreshnessWindowMinutes * 60_000;
-    const nowTs = now();
-
-    return players
-      .map((player, index) => {
-        const cached = rows.get(player.steamID);
-        const fetchedAt = Number(cached?.fetched_at || 0) || 0;
-        const ageMs = fetchedAt > 0 ? Math.max(0, nowTs - fetchedAt) : Number.POSITIVE_INFINITY;
-        const priorityScore = fetchedAt > 0
-          ? (ageMs < freshnessWindowMs ? ageMs - freshnessWindowMs : ageMs)
-          : Number.POSITIVE_INFINITY;
-
-        return {
-          player,
-          index,
-          fetchedAt,
-          ageMs,
-          priorityScore,
+        this._pushJobEvent(job, {
+          phase: "database",
+          status: "success",
+          steamID: player.steamID,
+          playerName: value.currentName,
+          playerId: value.playerId,
+          message: "时长缓存和玩家档案已写入",
+          gameSeconds: lookup.gameSeconds,
+        });
+        await this._logRefresh(job, "success", value);
+        results.push(value);
+        return value;
+      } catch (error) {
+        const failure = {
+          steamID: player.steamID,
+          playerName: player.name || null,
+          error: error?.message || "lookup failed",
         };
-      })
-      .sort((left, right) => {
-        if (left.priorityScore !== right.priorityScore) {
-          return right.priorityScore - left.priorityScore;
-        }
-        if (left.fetchedAt !== right.fetchedAt) {
-          return left.fetchedAt - right.fetchedAt;
-        }
-        return left.index - right.index;
-      })
-      .map(({ player }) => player);
+        failures.push(failure);
+        this._pushJobEvent(job, {
+          phase: "failed",
+          status: "failed",
+          steamID: player.steamID,
+          playerName: player.name || null,
+          message: failure.error,
+        });
+        await this._logRefresh(job, "failed", failure, failure.error);
+        return null;
+      } finally {
+        processed += 1;
+        running = Math.max(0, running - 1);
+        this._setJobProgress(job, {
+          phase: processed >= selectedTargets.length ? "completed" : "lookup",
+          message: processed >= selectedTargets.length
+            ? "刷新完成"
+            : `已处理 ${processed}/${selectedTargets.length}`,
+          total,
+          selected: selectedTargets.length,
+          skipped: skippedItems.length,
+          queued: Math.max(0, selectedTargets.length - processed - running),
+          running,
+          updated: results.length,
+          failed: failures.length,
+          percent: this._calculateProgressPercent(total, skippedItems.length, processed),
+        });
+      }
+    };
+
+    await Promise.all(selectedTargets.map((player) => settleOne(player)));
+
+    return {
+      total,
+      selected: selectedTargets.length,
+      updated: results.length,
+      failed: failures.length,
+      skipped: skippedItems.length,
+      skippedItems: skippedItems.map((item) => ({
+        steamID: item.steamID,
+        playerName: item.playerName,
+        reason: item.reason,
+        fetchedAt: item.fetchedAt,
+        ageMinutes: item.ageMinutes,
+      })),
+      results,
+      failures,
+    };
   }
 
   async lookupSteamDuration(steamID, persistOptions = {}) {
@@ -340,6 +517,225 @@ class SteamGameDurationService {
       message,
       gameSeconds: payload.gameSeconds,
     });
+  }
+
+  _initJobProgress(job, initial = {}) {
+    job.progress = this._normalizeJobProgress({
+      phase: "queued",
+      message: "等待开始",
+      total: 0,
+      selected: 0,
+      skipped: 0,
+      queued: 0,
+      running: 0,
+      updated: 0,
+      failed: 0,
+      percent: 0,
+      events: [],
+      ...initial,
+    });
+    return job.progress;
+  }
+
+  _setJobProgress(job, patch = {}) {
+    if (!job.progress) this._initJobProgress(job);
+    job.progress = this._normalizeJobProgress({
+      ...job.progress,
+      ...patch,
+    });
+    return job.progress;
+  }
+
+  _pushJobEvent(job, event = {}) {
+    if (!job.progress) this._initJobProgress(job);
+    const entry = {
+      at: now(),
+      phase: "lookup",
+      status: "success",
+      message: "",
+      ...event,
+    };
+    const nextEvents = [...(job.progress.events || []), entry].slice(-MAX_JOB_EVENTS);
+    job.progress = this._normalizeJobProgress({
+      ...job.progress,
+      phase: entry.phase || job.progress.phase,
+      message: entry.message || job.progress.message,
+      events: nextEvents,
+    });
+    return entry;
+  }
+
+  _normalizeJobProgress(progress = {}) {
+    const total = Math.max(0, Math.floor(Number(progress.total) || 0));
+    const selected = Math.max(0, Math.floor(Number(progress.selected) || 0));
+    const skipped = Math.max(0, Math.floor(Number(progress.skipped) || 0));
+    const queued = Math.max(0, Math.floor(Number(progress.queued) || 0));
+    const running = Math.max(0, Math.floor(Number(progress.running) || 0));
+    const updated = Math.max(0, Math.floor(Number(progress.updated) || 0));
+    const failed = Math.max(0, Math.floor(Number(progress.failed) || 0));
+    const percent = Math.max(0, Math.min(100, Math.floor(Number(progress.percent) || 0)));
+    const events = Array.isArray(progress.events)
+      ? progress.events.map((event) => ({
+        at: Number(event?.at || 0) || now(),
+        phase: String(event?.phase || "lookup"),
+        status: String(event?.status || "success"),
+        steamID: event?.steamID || null,
+        playerName: event?.playerName || null,
+        playerId: event?.playerId == null ? null : event.playerId,
+        message: String(event?.message || ""),
+        gameSeconds: event?.gameSeconds == null ? null : Number(event.gameSeconds),
+        reason: event?.reason || null,
+        fetchedAt: event?.fetchedAt == null ? null : Number(event.fetchedAt),
+        ageMinutes: event?.ageMinutes == null ? null : Number(event.ageMinutes),
+      }))
+      : [];
+
+    return {
+      phase: String(progress.phase || "queued"),
+      message: String(progress.message || ""),
+      total,
+      selected,
+      skipped,
+      queued,
+      running,
+      updated,
+      failed,
+      percent,
+      events,
+    };
+  }
+
+  _calculateProgressPercent(total, skipped, processedSelected) {
+    const totalCount = Math.max(0, Math.floor(Number(total) || 0));
+    if (totalCount <= 0) return 100;
+    const done = Math.min(totalCount, Math.max(0, Math.floor(Number(skipped) || 0)) + Math.max(0, Math.floor(Number(processedSelected) || 0)));
+    return Math.max(0, Math.min(100, Math.floor((done / totalCount) * 100)));
+  }
+
+  async _buildBackgroundAutoRefreshPlan(players) {
+    const rows = this.steamPlaytimeRepo?.getManyBySteamIDs
+      ? await this.steamPlaytimeRepo.getManyBySteamIDs(players.map((player) => player.steamID))
+      : new Map();
+    const cooldownMs = Math.max(0, this.autoRefreshCooldownMinutes) * 60_000;
+    const nowTs = now();
+    const selectedTargets = [];
+    const skippedItems = [];
+
+    for (const player of players) {
+      const cached = rows.get(player.steamID);
+      const fetchedAt = Number(cached?.fetched_at || 0) || 0;
+      const ageMs = fetchedAt > 0 ? Math.max(0, nowTs - fetchedAt) : Number.POSITIVE_INFINITY;
+      const hasCache = Boolean(cached);
+      const isFresh = fetchedAt > 0 && cooldownMs > 0 && ageMs < cooldownMs;
+      const shouldRefresh = this.autoRefreshMissingOnly ? !hasCache : !isFresh;
+      if (!shouldRefresh) {
+        skippedItems.push({
+          steamID: player.steamID,
+          playerName: player.name || null,
+          fetchedAt: fetchedAt || null,
+          ageMinutes: Number.isFinite(ageMs) ? Math.floor(ageMs / 60_000) : null,
+          reason: this.autoRefreshMissingOnly ? "已有 Steam 时长缓存" : `最近 ${this.autoRefreshCooldownMinutes} 分钟内已刷新`,
+        });
+        continue;
+      }
+      selectedTargets.push({
+        ...player,
+        fetchedAt: fetchedAt || null,
+        ageMs: Number.isFinite(ageMs) ? ageMs : null,
+      });
+      if (selectedTargets.length >= this.autoRefreshBatchSize) break;
+    }
+
+    return { selectedTargets, skippedItems };
+  }
+
+  async startBackgroundAutoRefresh({
+    getOnlinePlayers,
+    playerDatabase = this.playerDatabase,
+  } = {}) {
+    this.backgroundAutoRefreshGetOnlinePlayers = getOnlinePlayers || this.backgroundAutoRefreshGetOnlinePlayers;
+    this.backgroundAutoRefreshPlayerDatabase = playerDatabase || this.backgroundAutoRefreshPlayerDatabase || this.playerDatabase;
+
+    if (this.backgroundAutoRefreshTimer) {
+      clearInterval(this.backgroundAutoRefreshTimer);
+      this.backgroundAutoRefreshTimer = null;
+    }
+
+    if (!this.autoRefreshEnabled || typeof this.backgroundAutoRefreshGetOnlinePlayers !== "function") {
+      return;
+    }
+
+    const tick = () => this._runBackgroundAutoRefreshTick().catch((error) => {
+      this.logger?.warn(`Background playtime refresh tick failed: ${error.message}`, {
+        operation: "playtimeBackgroundRefresh",
+      });
+    });
+
+    this.backgroundAutoRefreshTimer = setInterval(() => {
+      tick();
+    }, this.autoRefreshIntervalMs);
+
+    void tick();
+  }
+
+  async stopBackgroundAutoRefresh() {
+    if (this.backgroundAutoRefreshTimer) {
+      clearInterval(this.backgroundAutoRefreshTimer);
+      this.backgroundAutoRefreshTimer = null;
+    }
+    this.backgroundAutoRefreshRunning = false;
+  }
+
+  async _runBackgroundAutoRefreshTick() {
+    if (!this.autoRefreshEnabled) return;
+    if (this.backgroundAutoRefreshRunning) return;
+    if (typeof this.backgroundAutoRefreshGetOnlinePlayers !== "function") return;
+
+    this.backgroundAutoRefreshRunning = true;
+    try {
+      const players = collectPlayersWithSteamID(await this.backgroundAutoRefreshGetOnlinePlayers());
+      if (!players.length) return;
+
+      const { selectedTargets, skippedItems } = await this._buildBackgroundAutoRefreshPlan(players);
+      if (!selectedTargets.length) return;
+
+      const job = this._createJob("online-refresh-auto", {
+        playerCount: players.length,
+        force: false,
+        source: "background",
+        auto: true,
+      });
+
+      this._initJobProgress(job, {
+        phase: "scan",
+        message: `后台扫描到 ${players.length} 名在线玩家`,
+        total: players.length,
+      });
+      this._pushJobEvent(job, {
+        phase: "scan",
+        status: "success",
+        total: players.length,
+        message: `后台扫描到 ${players.length} 名在线玩家`,
+      });
+      for (const skipped of skippedItems) {
+        this._pushJobEvent(job, {
+          phase: "filter",
+          status: "skipped",
+          steamID: skipped.steamID,
+          playerName: skipped.playerName,
+          message: `${skipped.playerName || skipped.steamID} ${skipped.reason}`,
+        });
+      }
+
+      await this._runJob(job, async () => this._executeOnlineRefreshJob(job, {
+        total: selectedTargets.length + skippedItems.length,
+        selectedTargets,
+        skippedItems,
+        playerDatabase: this.backgroundAutoRefreshPlayerDatabase || this.playerDatabase,
+      }));
+    } finally {
+      this.backgroundAutoRefreshRunning = false;
+    }
   }
 
   async _fetchSteamDuration(steamID) {
@@ -531,6 +927,19 @@ class SteamGameDurationService {
       input: input || {},
       result: null,
       error: null,
+      progress: this._normalizeJobProgress({
+        phase: "queued",
+        message: "等待开始",
+        total: 0,
+        selected: 0,
+        skipped: 0,
+        queued: 0,
+        running: 0,
+        updated: 0,
+        failed: 0,
+        percent: 0,
+        events: [],
+      }),
       waiters: new Set(),
     };
 
@@ -587,6 +996,7 @@ class SteamGameDurationService {
       input: job.input,
       result: job.result,
       error: job.error,
+      progress: this._normalizeJobProgress(job.progress || {}),
     };
   }
 
@@ -697,11 +1107,15 @@ export function createPlaytimeModule({ core, modules, config, logger }) {
       return job;
     },
 
-    async refreshOnline(serverId = core.webStatus.serverId) {
+    async refreshOnline({ serverId = core.webStatus.serverId, force = false } = {}) {
       const players = await getOnlinePlayers(serverId);
       return service.createOnlineRefreshJob({
         players,
         playerDatabase: modules.playerDatabase,
+        force: Boolean(force),
+        cooldownMinutes: service.manualRefreshCooldownMinutes,
+        missingOnly: false,
+        source: "manual",
       });
     },
 
@@ -767,6 +1181,11 @@ export function createPlaytimeModule({ core, modules, config, logger }) {
         logger: moduleLogger,
       });
 
+      await service.startBackgroundAutoRefresh({
+        getOnlinePlayers,
+        playerDatabase: modules.playerDatabase,
+      });
+
       moduleLogger?.info("Steam playtime module initialized.", {
         operation: "init",
         data: {
@@ -779,6 +1198,7 @@ export function createPlaytimeModule({ core, modules, config, logger }) {
     },
 
     async stop() {
+      await service?.stopBackgroundAutoRefresh?.();
       await db?.close();
     },
   };
@@ -845,8 +1265,10 @@ function summarizeJobResult(result) {
   if (!result || typeof result !== "object") return result;
   return {
     total: result.total,
+    selected: result.selected,
     updated: result.updated,
     failed: result.failed,
+    skipped: result.skipped,
     lookup: result.lookup ? {
       steamID: result.lookup.steamID,
       gameHours: result.lookup.gameHours,

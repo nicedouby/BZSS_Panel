@@ -635,6 +635,123 @@ body::before {
   border-color: rgba(96, 239, 255, 0.34);
 }
 
+.match-playtime-card {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.match-playtime-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.match-playtime-title {
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.match-playtime-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.match-playtime-summary-row,
+.match-playtime-progress-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.match-playtime-summary-row strong,
+.match-playtime-progress-meta strong {
+  color: var(--text);
+}
+
+.match-playtime-progress {
+  display: grid;
+  gap: 8px;
+}
+
+.match-playtime-progress-track {
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+.match-playtime-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(45, 212, 191, 0.95), rgba(96, 165, 250, 0.96), rgba(168, 85, 247, 0.92));
+  transition: width 220ms ease;
+}
+
+.match-playtime-events {
+  display: grid;
+  gap: 8px;
+}
+
+.match-playtime-event {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.match-playtime-event .phase {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.match-playtime-event strong {
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.match-playtime-event em {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.match-playtime-event.success {
+  border-color: rgba(94, 234, 212, 0.22);
+}
+
+.match-playtime-event.skipped {
+  border-color: rgba(251, 191, 36, 0.24);
+}
+
+.match-playtime-event.failed {
+  border-color: rgba(248, 113, 113, 0.28);
+}
+
+.match-playtime-empty {
+  color: var(--muted);
+  font-size: 13px;
+  padding: 6px 2px;
+}
+
 .match-member-main {
   min-width: 0;
   display: flex;

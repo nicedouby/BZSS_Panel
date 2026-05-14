@@ -21,6 +21,7 @@ export async function renderPage({ root, api, apiFetch, openDrawer, onNavigate }
   const status = data.status ?? {};
   const players = data.players ?? [];
   const squads = data.squads ?? [];
+  const playtimeState = root.__playtimeRefreshState || createPlaytimeRefreshState();
   const teams = buildTeams({ players, squads });
 
   root.innerHTML = `
@@ -58,9 +59,29 @@ export async function renderPage({ root, api, apiFetch, openDrawer, onNavigate }
     </section>
   `;
 
+  root.querySelector("#playtime-status")?.setAttribute("data-tone", playtimeState.tone || "idle");
+  root.querySelector("#refresh-playtime")?.replaceChildren(document.createTextNode("智能刷新时长"));
+  if (!root.querySelector("#refresh-playtime-force")) {
+    const forceButton = document.createElement("button");
+    forceButton.id = "refresh-playtime-force";
+    forceButton.type = "button";
+    forceButton.textContent = "强制刷新全部时长";
+    root.querySelector(".match-toolbar-actions")?.insertBefore(forceButton, root.querySelector("#refresh"));
+  }
+  renderPlaytimePanel(root, playtimeState);
+
   root.querySelector("#refresh").addEventListener("click", () => renderPage({ root, api, apiFetch, openDrawer, onNavigate }));
   root.querySelector("#refresh-playtime").addEventListener("click", async () => {
-    await refreshAllPlaytime({ root, api, apiFetch, openDrawer, onNavigate });
+    await refreshAllPlaytime({ root, api, apiFetch, openDrawer, onNavigate, force: false });
+  });
+  root.querySelector("#refresh-playtime-force")?.addEventListener("click", async () => {
+    await refreshAllPlaytime({ root, api, apiFetch, openDrawer, onNavigate, force: true });
+  });
+  root.querySelector("#playtime-panel-refresh")?.addEventListener("click", async () => {
+    await refreshAllPlaytime({ root, api, apiFetch, openDrawer, onNavigate, force: false });
+  });
+  root.querySelector("#playtime-panel-force")?.addEventListener("click", async () => {
+    await refreshAllPlaytime({ root, api, apiFetch, openDrawer, onNavigate, force: true });
   });
 
   root.querySelectorAll("[data-player-index]").forEach((el) => {
@@ -85,9 +106,11 @@ export async function renderPage({ root, api, apiFetch, openDrawer, onNavigate }
     }
   };
 
-  root.__matchStatusTimer = window.setTimeout(() => {
-    renderPage({ root, api, apiFetch, openDrawer, onNavigate }).catch(() => {});
-  }, 3000);
+  if (!root.__playtimeRefreshState?.active) {
+    root.__matchStatusTimer = window.setTimeout(() => {
+      renderPage({ root, api, apiFetch, openDrawer, onNavigate }).catch(() => {});
+    }, 3000);
+  }
 
   return root.__pageCleanup;
 }
@@ -641,7 +664,7 @@ function formatCleanCombatTime(value) {
     : date.toLocaleString("zh-CN", { hour12: false });
 }
 
-async function refreshAllPlaytime({ root, api, apiFetch, openDrawer, onNavigate }) {
+async function legacyRefreshAllPlaytime({ root, api, apiFetch, openDrawer, onNavigate }) {
   const status = root.querySelector("#playtime-status");
   const button = root.querySelector("#refresh-playtime");
   button.disabled = true;
@@ -696,7 +719,7 @@ async function refreshPlayerPlaytime({ apiFetch, player }) {
   return finalJob;
 }
 
-async function waitForPlaytimeJob(apiFetch, jobId, waitMs = 30_000) {
+async function legacyWaitForPlaytimeJob(apiFetch, jobId, waitMs = 30_000) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < waitMs) {
     const response = await apiFetch(`/api/playtime/jobs/${encodeURIComponent(jobId)}?waitMs=5000`);
@@ -825,4 +848,226 @@ function showToast(message) {
   showToast._timer = window.setTimeout(() => {
     toast.classList.remove("show");
   }, 1400);
+}
+
+function createPlaytimeRefreshState() {
+  return {
+    active: false,
+    jobId: null,
+    tone: "idle",
+    statusText: "Steam 时长待刷新",
+    summaryText: "成功 0，跳过 0，失败 0",
+    progressLabel: "等待开始",
+    countText: "0 / 0",
+    percent: 0,
+    events: [],
+  };
+}
+
+function renderPlaytimeEvents(events = []) {
+  const items = [...events].slice(-8).reverse();
+  if (!items.length) return '<div class="match-playtime-empty">最近没有刷新事件</div>';
+
+  return items.map((event) => {
+    const tone = event.status === "failed"
+      ? "failed"
+      : event.status === "skipped"
+        ? "skipped"
+        : "success";
+    const time = event.at ? new Date(event.at).toLocaleTimeString("zh-CN", { hour12: false }) : "";
+    return `
+      <div class="match-playtime-event ${tone}">
+        <span class="phase">${esc(event.phase || event.status || "event")}</span>
+        <strong>${esc(event.message || "")}</strong>
+        <em>${esc(time)}</em>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderPlaytimePanel(root, state = createPlaytimeRefreshState()) {
+  const statsGrid = root.querySelector(".grid.cols-3");
+  if (!statsGrid) return;
+  root.querySelector("#playtime-panel")?.remove();
+
+  const panel = document.createElement("section");
+  panel.id = "playtime-panel";
+  panel.className = "card match-playtime-card";
+  panel.innerHTML = `
+    <div class="match-playtime-header">
+      <div>
+        <div class="match-playtime-title">Steam 时长刷新</div>
+        <div class="page-subtitle">智能刷新会跳过 30 分钟内已成功刷新的玩家；强制刷新会处理全部在线玩家。</div>
+      </div>
+      <div class="match-playtime-actions">
+        <button id="playtime-panel-refresh" type="button">智能刷新时长</button>
+        <button id="playtime-panel-force" type="button">强制刷新全部时长</button>
+      </div>
+    </div>
+    <div class="match-playtime-summary-row">
+      <span id="playtime-summary">${esc(state.summaryText || "成功 0，跳过 0，失败 0")}</span>
+      <span id="playtime-progress-label">${esc(state.progressLabel || "等待开始")}</span>
+    </div>
+    <div class="match-playtime-progress">
+      <div class="match-playtime-progress-track">
+        <div id="playtime-progress-fill" class="match-playtime-progress-fill" style="width:${Math.max(0, Math.min(100, Number(state.percent || 0)))}%"></div>
+      </div>
+      <div class="match-playtime-progress-meta">
+        <span id="playtime-progress-percent">${Math.max(0, Math.min(100, Number(state.percent || 0)))}%</span>
+        <span id="playtime-progress-count">${esc(state.countText || "0 / 0")}</span>
+      </div>
+    </div>
+    <div id="playtime-events" class="match-playtime-events">${renderPlaytimeEvents(state.events || [])}</div>
+  `;
+  statsGrid.insertAdjacentElement("afterend", panel);
+}
+
+function applyPlaytimeJobState(root, job, { active = false, tone = null, statusText = null } = {}) {
+  const progress = job?.progress ?? {};
+  const state = {
+    active,
+    jobId: job?.id || null,
+    tone: tone || (job?.status === "failed" ? "error" : job?.status === "completed" ? "success" : "pending"),
+    statusText: statusText || (job?.status === "completed"
+      ? "Steam 时长刷新完成"
+      : job?.status === "failed"
+        ? job?.error?.message || "Steam 时长刷新失败"
+        : "正在刷新 Steam 时长"),
+    summaryText: `成功 ${Number(progress.updated || 0)}，跳过 ${Number(progress.skipped || 0)}，失败 ${Number(progress.failed || 0)}`,
+    progressLabel: progress.message || "处理中",
+    countText: `${Number(progress.selected || 0)} / ${Number(progress.total || 0)}`,
+    percent: Math.max(0, Math.min(100, Number(progress.percent || 0))),
+    events: Array.isArray(progress.events) ? progress.events : [],
+  };
+  root.__playtimeRefreshState = state;
+
+  const status = root.querySelector("#playtime-status");
+  if (status) {
+    status.dataset.tone = state.tone;
+    status.textContent = state.statusText;
+  }
+  const summary = root.querySelector("#playtime-summary");
+  if (summary) summary.textContent = state.summaryText;
+  const label = root.querySelector("#playtime-progress-label");
+  if (label) label.textContent = state.progressLabel;
+  const percent = root.querySelector("#playtime-progress-percent");
+  if (percent) percent.textContent = `${state.percent}%`;
+  const count = root.querySelector("#playtime-progress-count");
+  if (count) count.textContent = state.countText;
+  const fill = root.querySelector("#playtime-progress-fill");
+  if (fill) fill.style.width = `${state.percent}%`;
+  const events = root.querySelector("#playtime-events");
+  if (events) events.innerHTML = renderPlaytimeEvents(state.events);
+
+  for (const selector of [
+    "#refresh-playtime",
+    "#refresh-playtime-force",
+    "#playtime-panel-refresh",
+    "#playtime-panel-force",
+  ]) {
+    const button = root.querySelector(selector);
+    if (button) button.disabled = Boolean(active);
+  }
+
+  return state;
+}
+
+async function refreshAllPlaytime({ root, api, apiFetch, openDrawer, onNavigate, force = false }) {
+  if (force && !window.confirm("确定强制刷新全部在线玩家时长？")) return;
+
+  applyPlaytimeJobState(root, {
+    id: "pending",
+    status: "queued",
+    type: "online-refresh",
+    progress: {
+      total: 0,
+      selected: 0,
+      skipped: 0,
+      queued: 0,
+      running: 0,
+      updated: 0,
+      failed: 0,
+      percent: 0,
+      message: force ? "正在强制刷新全部在线玩家时长..." : "正在智能刷新在线玩家时长...",
+      events: [],
+    },
+  }, { active: true, tone: "pending", statusText: force ? "正在强制刷新全部在线玩家时长..." : "正在智能刷新在线玩家时长..." });
+
+  try {
+    const response = await apiFetch("/api/playtime/online/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ force, waitMs: 0 }),
+    });
+    const job = await readJsonSafe(response);
+    if (!response.ok) throw new Error(job?.message || job?.error || `请求失败 (${response.status})`);
+
+    applyPlaytimeJobState(root, job, {
+      active: job.status !== "completed" && job.status !== "failed",
+      tone: job.status === "failed" ? "error" : "pending",
+      statusText: job.status === "completed"
+        ? "Steam 时长刷新完成"
+        : job.status === "failed"
+          ? job.error?.message || "Steam 时长刷新失败"
+          : force
+            ? "强制刷新进行中"
+            : "智能刷新进行中",
+    });
+
+    const finalJob = job.status === "completed" || job.status === "failed"
+      ? job
+      : await waitForPlaytimeJob(apiFetch, job.id, 45_000, (nextJob) => {
+        applyPlaytimeJobState(root, nextJob, {
+          active: nextJob.status !== "completed" && nextJob.status !== "failed",
+          tone: nextJob.status === "failed" ? "error" : "pending",
+        });
+      });
+
+    const state = applyPlaytimeJobState(root, finalJob, {
+      active: false,
+      tone: finalJob.status === "failed" ? "error" : "success",
+      statusText: finalJob.status === "failed"
+        ? finalJob.error?.message || "Steam 时长刷新失败"
+        : `成功 ${Number(finalJob.result?.updated || 0)}，跳过 ${Number(finalJob.result?.skipped || 0)}，失败 ${Number(finalJob.result?.failed || 0)}`,
+    });
+
+    if (finalJob.status !== "completed") {
+      throw new Error(finalJob?.error?.message || "Steam 时长批量刷新失败");
+    }
+
+    showToast(state.statusText);
+    await renderPage({ root, api, apiFetch, openDrawer, onNavigate });
+  } catch (error) {
+    applyPlaytimeJobState(root, {
+      id: "failed",
+      status: "failed",
+      type: "online-refresh",
+      error: { message: error?.message || "Steam 时长刷新失败" },
+      progress: {
+        total: 0,
+        selected: 0,
+        skipped: 0,
+        queued: 0,
+        running: 0,
+        updated: 0,
+        failed: 0,
+        percent: 0,
+        message: error?.message || "Steam 时长刷新失败",
+        events: [],
+      },
+    }, { active: false, tone: "error", statusText: error?.message || "Steam 时长刷新失败" });
+    showToast(error?.message || "Steam 时长刷新失败");
+  }
+}
+
+async function waitForPlaytimeJob(apiFetch, jobId, waitMs = 30_000, onUpdate = null) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < waitMs) {
+    const response = await apiFetch(`/api/playtime/jobs/${encodeURIComponent(jobId)}?waitMs=3000`);
+    const job = await readJsonSafe(response);
+    if (!response.ok) throw new Error(job?.error || `Steam 浠诲姟鏌ヨ澶辫触 (${response.status})`);
+    if (typeof onUpdate === "function") onUpdate(job);
+    if (job?.status === "completed" || job?.status === "failed") return job;
+  }
+  throw new Error("绛夊緟 Steam 鏃堕暱浠诲姟瓒呮椂");
 }

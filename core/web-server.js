@@ -348,7 +348,10 @@ export class WebServer {
     if (url.pathname === "/api/jobs/playtime-refresh-online" && req.method === "POST") {
       if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
-      const job = await this.modules.playtime.refreshOnline(body.serverId ?? url.searchParams.get("serverId") ?? this.core.webStatus.serverId);
+      const job = await this.modules.playtime.refreshOnline({
+        serverId: body.serverId ?? url.searchParams.get("serverId") ?? this.core.webStatus.serverId,
+        force: Boolean(body.force ?? url.searchParams.get("force") === "true"),
+      });
       this.core.runtimeState.updateJob(job);
       return this.json(res, 202, job);
     }
@@ -479,7 +482,10 @@ export class WebServer {
     if (url.pathname === "/api/playtime/online/refresh" && req.method === "POST") {
       if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
-      const job = await this.modules.playtime.refreshOnline(url.searchParams.get("serverId") ?? this.core.webStatus.serverId);
+      const job = await this.modules.playtime.refreshOnline({
+        serverId: body.serverId ?? url.searchParams.get("serverId") ?? this.core.webStatus.serverId,
+        force: Boolean(body.force ?? url.searchParams.get("force") === "true"),
+      });
       const waitMs = Number(body.waitMs ?? 0);
       const payload = waitMs > 0
         ? await this.modules.playtime.waitForJob(job.id, waitMs)
