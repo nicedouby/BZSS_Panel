@@ -9,10 +9,11 @@ function createHarness() {
   const webStatusState = {
     serverId: "BZSS_Main",
   };
+  const logs = [];
 
   const core = {
-    logger: makeLogger(),
-    createLogger: makeLogger,
+    logger: makeLogger(logs),
+    createLogger: () => makeLogger(logs),
     webStatus: {
       serverId: "BZSS_Main",
       getSnapshot() {
@@ -50,17 +51,32 @@ function createHarness() {
   return {
     core,
     module: createSquadLifecycleModule({ core, config, logger: core.logger }),
+    logs,
   };
 }
 
-function makeLogger() {
+function makeLogger(logs = []) {
   return {
-    debug() {},
-    info() {},
-    warn() {},
-    error() {},
-    module() {},
+    debug(message, context) {
+      logs.push({ level: "debug", message: renderLogMessage(message), context });
+    },
+    info(message, context) {
+      logs.push({ level: "info", message: renderLogMessage(message), context });
+    },
+    warn(message, context) {
+      logs.push({ level: "warn", message: renderLogMessage(message), context });
+    },
+    error(message, context) {
+      logs.push({ level: "error", message: renderLogMessage(message), context });
+    },
+    module(message, context) {
+      logs.push({ level: "module", message: renderLogMessage(message), context });
+    },
   };
+}
+
+function renderLogMessage(message) {
+  return typeof message === "function" ? message() : message;
 }
 
 function subscribe(map, key, handler) {
@@ -150,6 +166,73 @@ async function testPendingCreateFlushesFromSnapshot() {
   assert.equal(current.list[0].createdDisplayText, "\u521b\u5efa\u4e8e 20:31:42");
   assert.equal(current.list[0].sourceLabel, "\u65e5\u5fd7\u786e\u8ba4");
   assert.equal(harness.module.api.getPendingCount(), 0);
+  await harness.module.stop();
+}
+
+async function testRawLogLineCreatesPendingAndFlushesToLog() {
+  const harness = createHarness();
+  await harness.module.start();
+
+  const rawLogLine = "[2026.05.14-14.29.22:169][495]LogSquad: Donald·DoubyBear (Online IDs: EOS: 00026a0bbf67442f84777b964560fba4 steam: 76561198194428818) has created Squad 5 (Squad Name: Squad 5) on United States Army";
+
+  harness.core.eventBus.emitCoreEvent("On_RawLogLine", {
+    serverId: "BZSS_Main",
+    sessionId: "session-raw-1",
+    time: "2026-05-14 14:29:22.169",
+    rawLog: rawLogLine,
+    rawEvent: { Raw: rawLogLine },
+  });
+
+  assert.equal(harness.module.api.getPendingCount(), 1);
+  assert.equal(
+    harness.logs.some((entry) => entry.level === "info" && entry.message === "[SquadLifecycle] squad create accepted: S5 Squad 5"),
+    true,
+  );
+
+  harness.core.eventBus.emitModuleEvent("module.matchState", "squadsUpdated", {
+    serverId: "BZSS_Main",
+    sessionId: "session-raw-1",
+    time: "2026-05-14 14:29:30",
+    squads: [
+      {
+        teamID: 1,
+        squadID: 5,
+        squadName: "Squad 5",
+        teamName: "United States Army",
+        creatorName: "Donald·DoubyBear",
+      },
+    ],
+  });
+
+  const current = harness.module.api.getCurrent("BZSS_Main");
+  assert.equal(current.list.length, 1);
+  assert.equal(current.list[0].squadId, 5);
+  assert.equal(current.list[0].creationSource, "LOG");
+  assert.equal(current.list[0].createdDisplayText, "\u521b\u5efa\u4e8e 14:29:22");
+  assert.equal(current.list[0].sourceLabel, "\u65e5\u5fd7\u786e\u8ba4");
+  assert.equal(current.list[0].teamId, 1);
+  await harness.module.stop();
+}
+
+async function testRawLogLineParseFailureWarns() {
+  const harness = createHarness();
+  await harness.module.start();
+
+  harness.core.eventBus.emitCoreEvent("On_RawLogLine", {
+    serverId: "BZSS_Main",
+    sessionId: "session-raw-2",
+    time: "2026-05-14 14:29:22.169",
+    rawLog: "[2026.05.14-14.29.22:169][495]LogSquad: Something has created Squad 5",
+    rawEvent: {
+      Raw: "[2026.05.14-14.29.22:169][495]LogSquad: Something has created Squad 5",
+    },
+  });
+
+  assert.equal(harness.module.api.getPendingCount(), 0);
+  assert.equal(
+    harness.logs.some((entry) => entry.level === "warn" && String(entry.message ?? "").includes("raw squad create log could not be parsed")),
+    true,
+  );
   await harness.module.stop();
 }
 
@@ -390,6 +473,33 @@ function testParseSquadCreateEventRecognizesEventNameVariants() {
   assert.equal(parsedFromRawEvent?.matchId, "session-1");
 }
 
+function testParseSquadCreateEventRecognizesRawLogLine() {
+  const rawLogLine = "[2026.05.14-14.29.22:169][495]LogSquad: Donald·DoubyBear (Online IDs: EOS: 00026a0bbf67442f84777b964560fba4 steam: 76561198194428818) has created Squad 5 (Squad Name: Squad 5) on United States Army";
+  const parsed = parseSquadCreateEvent({
+    eventName: "On_RawLogLine",
+    serverId: "BZSS_Main",
+    sessionId: "session-raw-1",
+    time: "2026-05-14 14:29:22.169",
+    rawLog: rawLogLine,
+    rawEvent: {
+      Raw: rawLogLine,
+    },
+  });
+
+  assert.equal(parsed?.serverId, "BZSS_Main");
+  assert.equal(parsed?.matchId, "session-raw-1");
+  assert.equal(Number.isNaN(Date.parse(parsed?.eventTime ?? "")), false);
+  assert.equal(parsed?.squadId, 5);
+  assert.equal(parsed?.squadName, "Squad 5");
+  assert.equal(parsed?.factionName, "United States Army");
+  assert.equal(parsed?.creatorName, "Donald·DoubyBear");
+  assert.equal(parsed?.creatorSteamId, "76561198194428818");
+  assert.equal(parsed?.creatorEosId, "00026a0bbf67442f84777b964560fba4");
+  assert.equal(parsed?.teamId, null);
+  assert.equal(parsed?.needsTeamId, true);
+  assert.equal(parsed?.parsedFromRawLogLine, true);
+}
+
 async function testMatchEndClearsPendingAndCurrent() {
   const harness = createHarness();
   await harness.module.start();
@@ -419,12 +529,15 @@ async function testMatchEndClearsPendingAndCurrent() {
 
 await testLogCreateWithTeamId();
 await testPendingCreateFlushesFromSnapshot();
+await testRawLogLineCreatesPendingAndFlushesToLog();
+await testRawLogLineParseFailureWarns();
 await testRconFirstThenLogPromotesToLog();
 await testPendingLogWithoutTeamIdMatchesRconSnapshot();
 await testSyntheticCurrentMatchIdKeepsPendingAndSnapshotAligned();
 await testReusedSquadIdCreatesNewGeneration();
 await testRconOnlySnapshotCreatesFallbackLifecycle();
 testParseSquadCreateEventRecognizesEventNameVariants();
+testParseSquadCreateEventRecognizesRawLogLine();
 await testMatchEndClearsPendingAndCurrent();
 
 console.log("squad lifecycle tests passed");

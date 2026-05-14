@@ -12,7 +12,7 @@ export function parseSquadCreateEvent(event) {
       ?? event.rawEvent?.eventName
       ?? "",
   ).trim();
-  if (eventName !== "On_SquadCreated" && eventName !== "SQUAD_CREATED") {
+  if (eventName !== "On_SquadCreated" && eventName !== "SQUAD_CREATED" && eventName !== "On_RawLogLine") {
     return null;
   }
 
@@ -29,6 +29,35 @@ export function parseSquadCreateEvent(event) {
       ?? getParam(event, "SquadID")
       ?? getParam(event, "SquadId"),
   );
+
+  if (eventName === "On_RawLogLine") {
+    const rawLog = String(event.rawLog ?? event.rawEvent?.Raw ?? event.sourceRaw ?? event.raw ?? "").trim();
+    const parsed = parseRawSquadCreateLog(rawLog);
+    if (!serverId || !parsed) return null;
+
+    return {
+      serverId,
+      matchId: matchId || null,
+      eventTime: parseRawLogTimestamp(rawLog) ?? String(
+        event.eventTime
+          ?? event.time
+          ?? getParam(event, "Time")
+          ?? new Date().toISOString(),
+      ).trim(),
+      squadId: parsed.squadId,
+      squadName: parsed.squadName,
+      factionName: parsed.factionName,
+      creatorName: parsed.creatorName,
+      creatorSteamId: parsed.creatorSteamId,
+      creatorEosId: parsed.creatorEosId,
+      rawLog,
+      sourceEventId: String(event.sourceEventId ?? event.eventId ?? event.rawEvent?.EventId ?? event.rawEvent?.eventId ?? ""),
+      teamId: null,
+      needsTeamId: true,
+      needsMatchId: !matchId,
+      parsedFromRawLogLine: true,
+    };
+  }
 
   if (!serverId || squadId == null) {
     return null;
@@ -99,6 +128,7 @@ export function parseSquadCreateEvent(event) {
     teamId,
     needsTeamId: teamId == null,
     needsMatchId: !matchId,
+    parsedFromRawLogLine: false,
   };
 }
 
@@ -113,4 +143,38 @@ function toNumber(value) {
   if (value == null || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function parseRawSquadCreateLog(rawLog) {
+  const text = String(rawLog ?? "");
+  if (!text) return null;
+
+  const match = text.match(/LogSquad:\s*(.+?)\s*\(Online IDs:\s*EOS:\s*([^\s)]+)\s*steam:\s*([^\s)]+)\)\s*has created Squad\s*(\d+)\s*\(Squad Name:\s*(.+?)\)\s*on\s*(.+?)\s*$/i);
+  if (!match) return null;
+
+  return {
+    creatorName: match[1].trim(),
+    creatorEosId: match[2].trim(),
+    creatorSteamId: match[3].trim(),
+    squadId: toNumber(match[4]),
+    squadName: match[5].trim(),
+    factionName: match[6].trim(),
+  };
+}
+
+function parseRawLogTimestamp(rawLog) {
+  const text = String(rawLog ?? "");
+  const match = text.match(/\[(\d{4})\.(\d{2})\.(\d{2})-(\d{2})\.(\d{2})\.(\d{2}):(\d{3})\]/);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const millisecond = Number(match[7]);
+
+  const date = new Date(year, month, day, hour, minute, second, millisecond);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }

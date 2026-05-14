@@ -56,6 +56,9 @@ export function createSquadLifecycleModule({ core, config, logger }) {
       unsubscribers.push(core.eventBus.onCoreEvent("SQUAD_CREATED", (event) => {
         handleCreateEvent(event);
       }));
+      unsubscribers.push(core.eventBus.onCoreEvent("On_RawLogLine", (event) => {
+        handleCreateEvent(event);
+      }));
 
       unsubscribers.push(core.eventBus.onModuleEvent("module.matchState", "squadsUpdated", (event) => {
         const serverId = String(event.serverId ?? core.webStatus.serverId ?? "").trim();
@@ -95,7 +98,18 @@ export function createSquadLifecycleModule({ core, config, logger }) {
     cleanupExpiredPending();
 
     const parsed = parseSquadCreateEvent(event);
-    if (!parsed) return;
+    if (!parsed) {
+      if (looksLikeSquadCreateRawLog(event)) {
+        logWithFallback(moduleLogger, "warn", "[SquadLifecycle] raw squad create log could not be parsed", {
+          operation: "squadLifecycle.rawCreateParseFailed",
+          data: {
+            serverId: String(event?.serverId ?? core.webStatus.serverId ?? "").trim(),
+            matchId: String(event?.matchId ?? event?.sessionId ?? event?.sessionID ?? "").trim() || reducer.getCurrentMatchId(event?.serverId ?? core.webStatus.serverId ?? ""),
+          },
+        });
+      }
+      return;
+    }
 
     const serverId = String(parsed.serverId ?? event.serverId ?? core.webStatus.serverId ?? "").trim();
     if (!serverId || parsed.squadId == null) return;
@@ -105,6 +119,19 @@ export function createSquadLifecycleModule({ core, config, logger }) {
 
     reducer.setCurrentMatchId(serverId, matchId);
     parsed.matchId = matchId;
+
+    logWithFallback(moduleLogger, "info", `[SquadLifecycle] squad create accepted: S${parsed.squadId} ${parsed.squadName}`, {
+      operation: "squadLifecycle.createAccepted",
+      data: {
+        serverId,
+        matchId,
+        teamId: parsed.teamId,
+        squadId: parsed.squadId,
+        squadName: parsed.squadName,
+        creatorName: parsed.creatorName,
+        parsedFromRawLogLine: Boolean(parsed.parsedFromRawLogLine),
+      },
+    });
 
     if (parsed.teamId != null) {
       reducer.handleSquadCreateLogEvent(parsed);
@@ -275,4 +302,9 @@ function normalizePositiveNumber(value, fallback) {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0) return fallback;
   return number;
+}
+
+function looksLikeSquadCreateRawLog(event) {
+  const rawLog = String(event?.rawLog ?? event?.rawEvent?.Raw ?? event?.sourceRaw ?? event?.raw ?? "").trim();
+  return /LogSquad:/i.test(rawLog) && /has created Squad/i.test(rawLog);
 }
