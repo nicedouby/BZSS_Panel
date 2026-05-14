@@ -33,15 +33,18 @@ export function buildSquadLifecycleSlotKey(serverId, matchId, teamId, squadId) {
 export function formatOrderedSquads(records) {
   return [...records]
     .sort((left, right) => {
-      const leftOrder = Number(left.order ?? 0);
-      const rightOrder = Number(right.order ?? 0);
-      if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+      const leftSourceRank = getCreationSourceRank(left.creationSource);
+      const rightSourceRank = getCreationSourceRank(right.creationSource);
+      if (leftSourceRank !== rightSourceRank) return leftSourceRank - rightSourceRank;
+
       const leftTime = Number(left.createdAtMs ?? 0);
       const rightTime = Number(right.createdAtMs ?? 0);
       if (leftTime !== rightTime) return leftTime - rightTime;
+
       const leftGeneration = Number(left.generation ?? 0);
       const rightGeneration = Number(right.generation ?? 0);
       if (leftGeneration !== rightGeneration) return leftGeneration - rightGeneration;
+
       return Number(left.squadId ?? 0) - Number(right.squadId ?? 0);
     })
     .map((record) => formatLifecycleRecord(record));
@@ -100,4 +103,8 @@ function normalizeGeneration(value) {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0) return null;
   return Math.trunc(number);
+}
+
+function getCreationSourceRank(value) {
+  return value === "LOG" ? 0 : 1;
 }

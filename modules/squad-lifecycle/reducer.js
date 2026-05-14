@@ -16,8 +16,6 @@ export function createSquadLifecycleReducer({ config, logger } = {}) {
     orderByMatchKey: new Map(),
     updatedAt: "",
   };
-  const moduleConfig = config?.get?.("modules.squadLifecycle", {}) ?? {};
-  const preferLogCreateEvent = Boolean(moduleConfig.preferLogCreateEvent ?? moduleConfig.preferLogCreatedAt ?? true);
 
   function setCurrentMatchId(serverId, matchId) {
     const serverKey = String(serverId ?? "").trim();
@@ -45,12 +43,10 @@ export function createSquadLifecycleReducer({ config, logger } = {}) {
     const slotKey = buildSquadLifecycleSlotKey(logEvent.serverId, logEvent.matchId, logEvent.teamId, logEvent.squadId);
     const current = getCurrentRecord(slotKey);
     const eventCreatedAtMs = parseTimestamp(logEvent.eventTime);
+    const logConfirmedAt = new Date().toISOString();
+    const promoteRconRecord = Boolean(current && current.creationSource === "RCON_SNAPSHOT");
     const sameEvent = isSameCreationEvent(current, logEvent, eventCreatedAtMs);
-    const shouldReuseCurrentRecord = Boolean(current) && (sameEvent || current.creationSource === "RCON_SNAPSHOT");
-    const shouldPromoteLogTimestamp = sameEvent
-      || !current
-      || !shouldReuseCurrentRecord
-      || (current.creationSource === "RCON_SNAPSHOT" && preferLogCreateEvent);
+    const shouldReuseCurrentRecord = Boolean(current) && (sameEvent || promoteRconRecord);
     const next = shouldReuseCurrentRecord
       ? { ...current }
       : createBaseRecord(logEvent, getNextOrder(logEvent.serverId, logEvent.matchId), getNextGeneration(slotKey));
@@ -69,14 +65,19 @@ export function createSquadLifecycleReducer({ config, logger } = {}) {
     next.creatorEosId = String(logEvent.creatorEosId ?? "").trim();
     next.rawLog = String(logEvent.rawLog ?? "");
     next.sourceEventId = String(logEvent.sourceEventId ?? "");
+    next.logConfirmedAt = logConfirmedAt;
 
-    if (shouldPromoteLogTimestamp) {
-      if (Number.isFinite(eventCreatedAtMs)) {
-        next.createdAtMs = eventCreatedAtMs;
-        next.createdAt = new Date(eventCreatedAtMs).toISOString();
-      }
-      next.creationSource = "LOG";
-      next.creationConfidence = "HIGH";
+    if (Number.isFinite(eventCreatedAtMs)) {
+      next.createdAtMs = eventCreatedAtMs;
+      next.createdAt = new Date(eventCreatedAtMs).toISOString();
+    }
+
+    next.creationSource = "LOG";
+    next.creationConfidence = "HIGH";
+    if (promoteRconRecord) {
+      next.rconPromotedToLog = true;
+    } else if (next.rconPromotedToLog == null) {
+      next.rconPromotedToLog = false;
     }
 
     upsertRecord(next);
@@ -308,6 +309,8 @@ function createBaseRecord(source, order, generation) {
     createdAt: null,
     creationSource: "RCON_SNAPSHOT",
     creationConfidence: "MEDIUM",
+    logConfirmedAt: null,
+    rconPromotedToLog: false,
   };
 }
 

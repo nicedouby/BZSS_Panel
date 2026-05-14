@@ -5,7 +5,13 @@ import { getParam } from "../../core/event-normalizer.js";
 export function parseSquadCreateEvent(event) {
   if (!event || typeof event !== "object") return null;
 
-  const eventName = String(event.eventName ?? "").trim();
+  const eventName = String(
+    event.eventName
+      ?? event.Event
+      ?? event.rawEvent?.Event
+      ?? event.rawEvent?.eventName
+      ?? "",
+  ).trim();
   if (eventName !== "On_SquadCreated" && eventName !== "SQUAD_CREATED") {
     return null;
   }

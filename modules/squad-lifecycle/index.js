@@ -4,7 +4,7 @@ import { parseSquadCreateEvent, normalizeSquadName } from "./log-adapter.js";
 import { createSquadLifecycleReducer } from "./reducer.js";
 
 const MATCH_END_EVENTS = ["GAME_END", "MATCH_END", "ROUND_END", "ROUND_ENDED", "NEW_GAME"];
-const PENDING_CREATE_LOG_TTL_MS = 30_000;
+const PENDING_CREATE_LOG_TTL_MS = 5 * 60 * 1000;
 
 export function createSquadLifecycleModule({ core, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
@@ -225,11 +225,9 @@ export function createSquadLifecycleModule({ core, config, logger }) {
   }
 
   function buildSyntheticMatchId(serverId, event) {
-    const eventId = String(event?.sourceEventId ?? event?.eventId ?? "").trim();
-    if (eventId) return eventId;
-    const eventTime = String(event?.eventTime ?? event?.time ?? "").trim();
-    if (eventTime) return `synthetic:${serverId}:${eventTime}`;
-    return `synthetic:${serverId}:${Date.now()}`;
+    const matchId = String(event?.matchId ?? event?.sessionId ?? event?.sessionID ?? "").trim();
+    if (matchId) return matchId;
+    return `synthetic:${serverId}:current`;
   }
 }
 

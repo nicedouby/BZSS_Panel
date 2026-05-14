@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { createSquadLifecycleModule } from "../modules/squad-lifecycle/index.js";
+import { parseSquadCreateEvent } from "../modules/squad-lifecycle/log-adapter.js";
 
 function createHarness() {
   const coreListeners = new Map();
@@ -39,7 +40,6 @@ function createHarness() {
       if (path === "modules.squadLifecycle") {
         return {
           enabled: true,
-          preferLogCreateEvent: true,
           debug: false,
         };
       }
@@ -153,6 +153,142 @@ async function testPendingCreateFlushesFromSnapshot() {
   await harness.module.stop();
 }
 
+async function testRconFirstThenLogPromotesToLog() {
+  const harness = createHarness();
+  await harness.module.start();
+
+  harness.core.eventBus.emitModuleEvent("module.matchState", "squadsUpdated", {
+    serverId: "BZSS_Main",
+    sessionId: "session-1",
+    time: "2026-05-13 20:31:40",
+    squads: [
+      {
+        teamID: 1,
+        squadID: 6,
+        squadName: "Foxtrot",
+        teamName: "USA",
+        creatorName: "Leader",
+      },
+    ],
+  });
+
+  harness.core.eventBus.emitCoreEvent("On_SquadCreated", squadEventBase({
+    time: "2026-05-13 20:31:42",
+    paramMap: {
+      SquadID: "6",
+      SquadName: "Foxtrot",
+      FactionName: "USA",
+      TeamID: "1",
+      PlayerName: "Leader",
+      Steam64ID: "76561198000000006",
+      EOSID: "eos-6",
+    },
+  }));
+
+  const current = harness.module.api.getCurrent("BZSS_Main");
+  assert.equal(current.list.length, 1);
+  assert.equal(current.list[0].creationSource, "LOG");
+  assert.equal(current.list[0].creationConfidence, "HIGH");
+  assert.equal(current.list[0].createdAtMs, new Date("2026-05-13 20:31:42").getTime());
+  assert.equal(current.list[0].createdDisplayText, "\u521b\u5efa\u4e8e 20:31:42");
+  assert.equal(current.list[0].sourceLabel, "\u65e5\u5fd7\u786e\u8ba4");
+  assert.equal(current.list[0].rconPromotedToLog, true);
+  assert.equal(typeof current.list[0].logConfirmedAt, "string");
+  await harness.module.stop();
+}
+
+async function testPendingLogWithoutTeamIdMatchesRconSnapshot() {
+  const harness = createHarness();
+  await harness.module.start();
+
+  harness.core.eventBus.emitCoreEvent("On_SquadCreated", {
+    serverId: "BZSS_Main",
+    sessionId: "session-1",
+    time: "2026-05-13 20:31:42",
+    rawLog: "raw squad create log",
+    eventName: "On_SquadCreated",
+    paramMap: {
+      SquadID: "7",
+      SquadName: "Golf",
+      FactionName: "USA",
+      PlayerName: "Leader",
+      Steam64ID: "76561198000000007",
+      EOSID: "eos-7",
+    },
+  });
+
+  assert.equal(harness.module.api.getPendingCount(), 1);
+
+  harness.core.eventBus.emitModuleEvent("module.matchState", "squadsUpdated", {
+    serverId: "BZSS_Main",
+    sessionId: "session-1",
+    time: "2026-05-13 20:31:45",
+    squads: [
+      {
+        teamID: 2,
+        squadID: 7,
+        squadName: "Golf",
+        teamName: "USA",
+        creatorName: "Leader",
+      },
+    ],
+  });
+
+  const current = harness.module.api.getCurrent("BZSS_Main");
+  assert.equal(current.list.length, 1);
+  assert.equal(current.list[0].teamId, 2);
+  assert.equal(current.list[0].creationSource, "LOG");
+  assert.equal(current.list[0].creationConfidence, "HIGH");
+  assert.equal(current.list[0].createdDisplayText, "\u521b\u5efa\u4e8e 20:31:42");
+  assert.equal(harness.module.api.getPendingCount(), 0);
+  await harness.module.stop();
+}
+
+async function testSyntheticCurrentMatchIdKeepsPendingAndSnapshotAligned() {
+  const harness = createHarness();
+  await harness.module.start();
+
+  harness.core.eventBus.emitCoreEvent("On_SquadCreated", {
+    serverId: "BZSS_Main",
+    time: "2026-05-13 20:31:42",
+    rawLog: "raw squad create log",
+    eventName: "On_SquadCreated",
+    paramMap: {
+      SquadID: "8",
+      SquadName: "Hotel",
+      FactionName: "USA",
+      PlayerName: "Leader",
+      Steam64ID: "76561198000000008",
+      EOSID: "eos-8",
+    },
+  });
+
+  assert.equal(harness.module.api.getPendingCount(), 1);
+
+  harness.core.eventBus.emitModuleEvent("module.matchState", "squadsUpdated", {
+    serverId: "BZSS_Main",
+    time: "2026-05-13 20:31:45",
+    squads: [
+      {
+        teamID: 3,
+        squadID: 8,
+        squadName: "Hotel",
+        teamName: "USA",
+        creatorName: "Leader",
+      },
+    ],
+  });
+
+  const current = harness.module.api.getCurrent("BZSS_Main");
+  assert.equal(current.matchId, "synthetic:BZSS_Main:current");
+  assert.equal(current.list.length, 1);
+  assert.equal(current.list[0].matchId, "synthetic:BZSS_Main:current");
+  assert.equal(current.list[0].teamId, 3);
+  assert.equal(current.list[0].creationSource, "LOG");
+  assert.equal(harness.module.api.getPendingCount(), 0);
+  await harness.module.stop();
+}
+
 async function testReusedSquadIdCreatesNewGeneration() {
   const harness = createHarness();
   await harness.module.start();
@@ -220,6 +356,40 @@ async function testRconOnlySnapshotCreatesFallbackLifecycle() {
   await harness.module.stop();
 }
 
+function testParseSquadCreateEventRecognizesEventNameVariants() {
+  const parsedFromEvent = parseSquadCreateEvent({
+    Event: "On_SquadCreated",
+    serverId: "BZSS_Main",
+    sessionId: "session-1",
+    time: "2026-05-13 20:31:42",
+    rawLog: "raw squad create log",
+    paramMap: {
+      SquadID: "9",
+      SquadName: "India",
+    },
+  });
+
+  assert.equal(parsedFromEvent?.squadId, 9);
+  assert.equal(parsedFromEvent?.matchId, "session-1");
+
+  const parsedFromRawEvent = parseSquadCreateEvent({
+    rawEvent: {
+      Event: "On_SquadCreated",
+    },
+    serverId: "BZSS_Main",
+    sessionId: "session-1",
+    time: "2026-05-13 20:31:42",
+    rawLog: "raw squad create log",
+    paramMap: {
+      SquadID: "10",
+      SquadName: "Juliet",
+    },
+  });
+
+  assert.equal(parsedFromRawEvent?.squadId, 10);
+  assert.equal(parsedFromRawEvent?.matchId, "session-1");
+}
+
 async function testMatchEndClearsPendingAndCurrent() {
   const harness = createHarness();
   await harness.module.start();
@@ -249,8 +419,12 @@ async function testMatchEndClearsPendingAndCurrent() {
 
 await testLogCreateWithTeamId();
 await testPendingCreateFlushesFromSnapshot();
+await testRconFirstThenLogPromotesToLog();
+await testPendingLogWithoutTeamIdMatchesRconSnapshot();
+await testSyntheticCurrentMatchIdKeepsPendingAndSnapshotAligned();
 await testReusedSquadIdCreatesNewGeneration();
 await testRconOnlySnapshotCreatesFallbackLifecycle();
+testParseSquadCreateEventRecognizesEventNameVariants();
 await testMatchEndClearsPendingAndCurrent();
 
 console.log("squad lifecycle tests passed");
