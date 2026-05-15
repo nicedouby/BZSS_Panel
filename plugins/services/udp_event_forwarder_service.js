@@ -247,6 +247,42 @@ function extractIdentity(source, prefix) {
   };
 }
 
+function normalizeProcessedPlayerRef(player) {
+  if (!player || typeof player !== "object") {
+    return {
+      name: null,
+      teamID: null,
+      squadID: null,
+      steam64ID: null,
+      eosID: null,
+      controllerID: null,
+      role: "",
+      isLeader: false,
+      resolved: false,
+      resolutionSource: "",
+      isNullptr: false,
+      isFallback: false,
+      fallbackReason: "",
+    };
+  }
+
+  return compactObject({
+    name: sanitizeNullableName(player.name),
+    teamID: firstDefined(player.teamID, player.teamId),
+    squadID: firstDefined(player.squadID, player.squadId),
+    steam64ID: firstDefined(player.steam64ID, player.steamID, player.steamId),
+    eosID: firstDefined(player.eosID, player.eosId),
+    controllerID: firstDefined(player.controllerID, player.controllerId),
+    role: player.role ?? "",
+    isLeader: Boolean(player.isLeader),
+    resolved: Boolean(player.resolved),
+    resolutionSource: player.resolutionSource ?? "",
+    isNullptr: Boolean(player.isNullptr),
+    isFallback: Boolean(player.isFallback),
+    fallbackReason: player.fallbackReason ?? "",
+  });
+}
+
 function normalizeCombatPayload(event) {
   if (!event || typeof event !== "object") {
     return {};
@@ -313,6 +349,7 @@ function readConfig(sourceConfig = {}, pluginConfigOverride = {}) {
     includeRawLog: configBool(pluginConfig.includeRawLog, false),
     includeIds: configBool(pluginConfig.includeIds, true),
 
+    sendCombatEvents: configBool(pluginConfig.sendCombatEvents ?? pluginConfig.sendCombatDamage, true),
     sendCombatDamage: configBool(pluginConfig.sendCombatDamage, true),
     sendMapChanged: configBool(pluginConfig.sendMapChanged, true),
     sendStatus: configBool(pluginConfig.sendStatus, true),
@@ -425,10 +462,9 @@ export class UdpEventForwarderService {
     };
 
     this.unsubscribers.push(
-      subscribeEvent(this.eventBus, "core", "On_PlayerDamaged", (event) => this.forwardCombatDamage(event, "On_PlayerDamaged")),
-      subscribeEvent(this.eventBus, "core", "On_PlayerWounded", (event) => this.forwardCombatDamage(event, "On_PlayerWounded")),
-      subscribeEvent(this.eventBus, "core", "On_PlayerDied", (event) => this.forwardCombatDamage(event, "On_PlayerDied")),
-      subscribeEvent(this.eventBus, "core", "TEAM_KILL", (event) => this.forwardCombatDamage(event, "TEAM_KILL")),
+      subscribeEvent(this.eventBus, "module", { moduleId: "module.combatClean", name: "damageResolved" }, (event) => this.forwardProcessedCombatEvent(event, "module.combatClean.damageResolved")),
+      subscribeEvent(this.eventBus, "module", { moduleId: "module.combatClean", name: "woundResolved" }, (event) => this.forwardProcessedCombatEvent(event, "module.combatClean.woundResolved")),
+      subscribeEvent(this.eventBus, "module", { moduleId: "module.combatClean", name: "killResolved" }, (event) => this.forwardProcessedCombatEvent(event, "module.combatClean.killResolved")),
       subscribeEvent(this.eventBus, "core", "round.world_bring_up", (event) => this.forwardMapChanged(event, "round.world_bring_up")),
       subscribeEvent(this.eventBus, "core", "On_RawLogLine", (event) => this.forwardMapChanged(event, "On_RawLogLine")),
       subscribeEvent(this.eventBus, "core", "RCON_MATCH_STATE_UPDATED", (event) => this.onMatchStateUpdated(event, "RCON_MATCH_STATE_UPDATED")),
@@ -436,7 +472,6 @@ export class UdpEventForwarderService {
       subscribeEvent(this.eventBus, "core", "RCON_LIST_SQUADS_UPDATED", (event) => this.onMatchStateUpdated(event, "RCON_LIST_SQUADS_UPDATED")),
       subscribeEvent(this.eventBus, "module", { moduleId: "module.matchState", name: "updated" }, (event) => this.onMatchStateUpdated(event, "module.matchState.updated")),
       subscribeEvent(this.eventBus, "module", { moduleId: "module.roundState", name: "updated" }, (event) => this.forwardMapChanged(event, "module.roundState.updated")),
-      subscribeEvent(this.eventBus, "module", { moduleId: "module.combatState", name: "updated" }, (event) => this.forwardCombatDamage(event, "module.combatState.updated")),
     );
 
     if (this.config.sendStatus) {
@@ -466,7 +501,7 @@ export class UdpEventForwarderService {
       config: {
         statusIntervalMs: this.config.statusIntervalMs,
         heartbeatIntervalMs: this.config.heartbeatIntervalMs,
-        sendCombatDamage: this.config.sendCombatDamage,
+        sendCombatEvents: this.config.sendCombatEvents,
         sendMapChanged: this.config.sendMapChanged,
         sendStatus: this.config.sendStatus,
         sendHeartbeat: this.config.sendHeartbeat,
@@ -728,70 +763,88 @@ export class UdpEventForwarderService {
     }
   }
 
-  forwardCombatDamage(rawEvent, eventBusEvent) {
-    if (!this.config.sendCombatDamage) {
+  forwardProcessedCombatEvent(rawEvent, eventBusEvent) {
+    if (!this.config.sendCombatEvents) {
       return;
     }
 
-    const event = normalizeCombatPayload(rawEvent);
-    const sourceEventId = firstDefined(event.sourceEventId, rawEvent?.sourceEventId, rawEvent?.eventId, event.eventId);
+    const record = rawEvent?.record && typeof rawEvent.record === "object"
+      ? rawEvent.record
+      : null;
+
+    if (!record) {
+      return;
+    }
+
+    const combatType = String(record.type ?? "").trim().toLowerCase();
+    if (!["damage", "wound", "kill"].includes(combatType)) {
+      return;
+    }
+
+    const sourceEventId = firstDefined(
+      record.raw?.sourceEventId,
+      record.sourceEventId,
+      record.id,
+      rawEvent?.eventId,
+    );
     if (this.shouldSuppressDuplicate(sourceEventId, "combat")) {
       return;
     }
 
-    const eventType = String(firstDefined(
-      event.type,
-      rawEvent?.eventName,
-      rawEvent?.type,
-      "",
-    )).toLowerCase();
+    const udpType = combatType === "damage"
+      ? "combat.damage"
+      : combatType === "wound"
+        ? "combat.wound"
+        : "combat.kill";
 
-    if (!["damage", "damaged", "combat.damage", "on_playerdamaged"].includes(eventType)) {
-      return;
-    }
+    const payload = compactObject({
+      combatType,
+      eventName: record.eventName,
 
-    const victim = extractIdentity(event, "victim");
-    const attacker = extractIdentity(event, "attacker");
-    const damage = toNumberOrNull(firstDefined(
-      event.damage,
-      event.actualDamage,
-      event.ActualDamage,
-      event.killingDamage,
-      event.KillingDamage,
-      event.amount,
-      event.record?.damage,
-    ));
+      time: record.time,
+      logTime: record.logTime,
 
-    if (damage == null && eventBusEvent !== "module.combatState.updated") {
-      return;
-    }
+      attacker: normalizeProcessedPlayerRef(record.attacker),
+      victim: normalizeProcessedPlayerRef(record.victim),
 
-    const payload = {
-      victimName: victim.name,
-      attackerName: attacker.name,
-      damage,
-      damageType: firstDefined(event.damageType, event.type, "actual"),
-      weapon: firstDefined(
-        event.weapon?.displayName,
-        event.weapon?.raw,
-        event.weapon?.cleaned,
-        event.weapon,
-        event.causedBy,
-        event.rawCausedBy,
-        event.damageCauser,
-      ),
-      confidence: firstDefined(event.confidence, event.parseConfidence, event.identityConfidence, "unknown"),
-      rawType: firstDefined(event.rawType, rawEvent?.eventName, event.type),
-      victim: this.config.includeIds ? victim : { name: victim.name },
-      attacker: this.config.includeIds ? attacker : { name: attacker.name },
-    };
+      attackerName: record.attacker?.name ?? null,
+      victimName: record.victim?.name ?? null,
 
-    if (this.config.includeRawLog) {
-      payload.rawLog = firstDefined(event.rawLog, rawEvent?.rawLog, rawEvent?.message, rawEvent?.line);
-    }
+      damage: toNumberOrNull(record.damage),
+
+      weapon: {
+        raw: record.weapon?.raw ?? null,
+        cleaned: record.weapon?.cleaned ?? null,
+        displayName: record.weapon?.displayName ?? null,
+        category: record.weapon?.category ?? null,
+        sourceType: record.weapon?.sourceType ?? null,
+      },
+
+      relation: {
+        attackerTeamID: record.relation?.attackerTeamID ?? null,
+        victimTeamID: record.relation?.victimTeamID ?? null,
+        sameTeam: Boolean(record.relation?.sameTeam),
+        isFriendlyFire: Boolean(record.relation?.isFriendlyFire),
+        friendlyFireType: record.relation?.friendlyFireType ?? "",
+        teamSource: record.relation?.teamSource ?? "",
+      },
+
+      displayText: record.displayText ?? "",
+
+      raw: this.config.includeRawLog
+        ? {
+            sourceModule: record.raw?.sourceModule ?? "module.combatClean",
+            sourceEventId,
+            rawLog: record.raw?.rawLog ?? "",
+          }
+        : {
+            sourceModule: record.raw?.sourceModule ?? "module.combatClean",
+            sourceEventId,
+          },
+    });
 
     this.state.lastCombatEventAt = new Date().toISOString();
-    this.emitUdp("combat.damage", payload, {
+    this.emitUdp(udpType, payload, {
       eventBusEvent,
       sourceEventId,
     });

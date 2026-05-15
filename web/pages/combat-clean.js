@@ -1,10 +1,10 @@
-// -*- coding: utf-8 -*-
+﻿// -*- coding: utf-8 -*-
 
 const TYPE_LABELS = {
-  all: "全部",
-  damage: "伤害",
-  wound: "击倒",
-  kill: "击杀",
+  all: "\u5168\u90e8",
+  damage: "\u4f24\u5bb3",
+  wound: "\u51fb\u503c",
+  kill: "\u51fb\u6740",
 };
 
 const TYPE_CLASSES = {
@@ -37,34 +37,34 @@ export async function renderPage({ root, api, apiFetch }) {
     <section class="page kill-page-shell combat-page-shell">
       <div class="page-title-row">
         <div>
-          <div class="page-title">击杀管理（clean）</div>
-          <div class="page-subtitle">标准 clean combat event layer：BZSS_DAMAGE / BZSS_WOUND / BZSS_KILL</div>
+          <div class="page-title">\u6218\u6597\u7ba1\u7406\uff08\u5904\u7406\u540e\uff09</div>
+          <div class="page-subtitle">Clean combat event layer: BZSS_DAMAGE / BZSS_WOUND / BZSS_KILL</div>
         </div>
-        <span id="combat-clean-refresh-status" class="kill-refresh-status">等待刷新</span>
+        <span id="combat-clean-refresh-status" class="kill-refresh-status">Waiting for refresh</span>
       </div>
 
       <section class="combat-stat-grid">
-        ${statCard("总事件", "combat-clean-total")}
-        ${statCard("伤害", "combat-clean-damage")}
-        ${statCard("击倒", "combat-clean-wound")}
-        ${statCard("击杀", "combat-clean-kill")}
-        ${statCard("友军事件", "combat-clean-friendly")}
-        ${statCard("友军击杀", "combat-clean-team-kill")}
-        ${statCard("已拒绝", "combat-clean-rejected")}
-        ${statCard("最近更新", "combat-clean-updated")}
+        ${statCard("\u603b\u4e8b\u4ef6", "combat-clean-total")}
+        ${statCard("\u4f24\u5bb3", "combat-clean-damage")}
+        ${statCard("\u51fb\u503c", "combat-clean-wound")}
+        ${statCard("\u51fb\u6740", "combat-clean-kill")}
+        ${statCard("\u53cb\u519b\u4e8b\u4ef6", "combat-clean-friendly")}
+        ${statCard("\u53cb\u519b\u51fb\u6740", "combat-clean-team-kill")}
+        ${statCard("\u5df2\u62d2\u7edd", "combat-clean-rejected")}
+        ${statCard("\u6700\u8fd1\u66f4\u65b0", "combat-clean-updated")}
       </section>
 
       <section class="card combat-toolbar-card">
         <div class="console-actions combat-toolbar">
-          <div class="console-view-toggle combat-type-toggle" role="tablist" aria-label="clean combat 类型过滤">
+          <div class="console-view-toggle combat-type-toggle" role="tablist" aria-label="clean combat type filter">
             ${typeButton("all")}
             ${typeButton("damage")}
             ${typeButton("wound")}
             ${typeButton("kill")}
           </div>
-          <input id="combat-clean-search" class="console-search kill-search" placeholder="搜索玩家、Steam64、EOS、武器、raw log">
-          <button id="combat-clean-refresh" type="button">刷新</button>
-          <button id="combat-clean-clear" type="button" class="danger-lite">清空内存事件</button>
+          <input id="combat-clean-search" class="console-search kill-search" placeholder="Search player / Steam64 / EOS / weapon / raw log">
+          <button id="combat-clean-refresh" type="button">Refresh</button>
+          <button id="combat-clean-clear" type="button" class="danger-lite">Clear events</button>
         </div>
       </section>
 
@@ -73,15 +73,15 @@ export async function renderPage({ root, api, apiFetch }) {
           <table>
             <thead>
               <tr>
-                <th>时间</th>
-                <th>类型</th>
-                <th>攻击者</th>
-                <th>受害者</th>
-                <th>伤害</th>
-                <th>武器</th>
-                <th>关系</th>
-                <th>解析</th>
-                <th>详情</th>
+                <th>Time</th>
+                <th>Type</th>
+                <th>Attacker</th>
+                <th>Victim</th>
+                <th>Damage</th>
+                <th>Weapon</th>
+                <th>Relation</th>
+                <th>Parse</th>
+                <th>Details</th>
               </tr>
             </thead>
             <tbody id="combat-clean-table-body"></tbody>
@@ -118,7 +118,7 @@ export async function renderPage({ root, api, apiFetch }) {
     state.overview = data.overview ?? state.overview;
     renderStats(els, state.overview);
     renderTable(els.body, state.events);
-    els.status.textContent = `已刷新 ${new Date().toLocaleTimeString("zh-CN", { hour12: false })}`;
+    els.status.textContent = `宸插埛鏂?${new Date().toLocaleTimeString("zh-CN", { hour12: false })}`;
   }
 
   function scheduleRefresh() {
@@ -150,7 +150,7 @@ export async function renderPage({ root, api, apiFetch }) {
 
   root.querySelector("#combat-clean-refresh").addEventListener("click", () => loadEvents());
   root.querySelector("#combat-clean-clear").addEventListener("click", async () => {
-    if (!window.confirm("只清空当前内存中的 clean combat 事件，不会写入或删除数据库。继续？")) return;
+    if (!window.confirm("鍙竻绌哄綋鍓嶅唴瀛樹腑鐨?clean combat 浜嬩欢锛屼笉浼氬啓鍏ユ垨鍒犻櫎鏁版嵁搴撱€傜户缁紵")) return;
     await apiFetch("/api/combat-clean/clear", { method: "POST" });
     await loadEvents();
   });
@@ -206,7 +206,7 @@ function renderStats(els, overview) {
 
 function renderTable(tbody, events) {
   if (!events.length) {
-    tbody.innerHTML = `<tr><td colspan="9" class="kill-empty-cell">暂无 clean combat 事件</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="kill-empty-cell">No clean combat events yet</td></tr>`;
     return;
   }
 
@@ -220,7 +220,7 @@ function renderTable(tbody, events) {
       <td>${esc(event.weapon?.displayName || event.weapon?.cleaned || event.weapon?.raw || "Unknown")}</td>
       <td>${relationCell(event.relation)}</td>
       <td>${parseCell(event.parse)}</td>
-      <td><button type="button" class="combat-raw-btn" data-clean-event-index="${index}">查看</button></td>
+      <td><button type="button" class="combat-raw-btn" data-clean-event-index="${index}">鏌ョ湅</button></td>
     </tr>
   `).join("");
 
@@ -253,14 +253,14 @@ function playerCell(player = {}) {
 }
 
 function relationCell(relation = {}) {
-  const same = relation.sameTeam ? "同队" : "非同队";
-  const ff = relation.isFriendlyFire ? `友军 ${relation.friendlyFireType || ""}` : "正常";
-  return `<div class="combat-player-cell"><strong>${esc(ff)}</strong><span>${esc(`${same} / ${relation.teamConfidence || "low"}`)}</span></div>`;
+  const same = relation.sameTeam ? "\u540c\u961f" : "\u975e\u540c\u961f";
+  const ff = relation.isFriendlyFire ? `\u53cb\u519b ${relation.friendlyFireType || ""}` : "\u6b63\u5e38";
+  return `<div class="combat-player-cell"><strong>${esc(ff)}</strong><span>${esc(`${same} / ${relation.teamSource || "unknown"}`)}</span></div>`;
 }
 
 function parseCell(parse = {}) {
   const warnings = Array.isArray(parse.warnings) ? parse.warnings : [];
-  return `<div class="combat-player-cell"><strong>${esc(parse.status || "-")}</strong><span>${esc([parse.confidence, warnings.length ? `${warnings.length} warning` : ""].filter(Boolean).join(" / ") || "-")}</span></div>`;
+  return `<div class="combat-player-cell"><strong>${esc(parse.status || "-")}</strong><span>${esc(warnings.length ? `${warnings.length} warning` : "-")}</span></div>`;
 }
 
 function openCleanCombatDetailModal(event) {
@@ -270,10 +270,10 @@ function openCleanCombatDetailModal(event) {
   root.id = "bzss-clean-combat-record-root";
   root.innerHTML = `
     <div class="kill-record-backdrop" data-close-clean-combat="1"></div>
-    <section class="kill-record-window combat-record-window" role="dialog" aria-modal="true" aria-label="clean combat 详情">
+    <section class="kill-record-window combat-record-window" role="dialog" aria-modal="true" aria-label="clean combat details">
       <header class="kill-record-header">
         <div>
-          <div class="kill-record-title">Clean Combat 详情</div>
+          <div class="kill-record-title">Clean Combat details</div>
           <div class="kill-record-subtitle">${esc(event.displayText || event.id || "")}</div>
         </div>
         <button class="kill-record-close" type="button" data-close-clean-combat="1">x</button>
@@ -290,14 +290,14 @@ function openCleanCombatDetailModal(event) {
           ${detailCell("weapon", formatWeapon(event.weapon))}
           ${detailCell("relation", formatRelation(event.relation))}
           ${detailCell("warnings", formatWarnings(event.parse?.warnings))}
-          ${detailCell("parse", `${event.parse?.status || "-"} / ${event.parse?.confidence || "-"}`)}
+          ${detailCell("parse", `${event.parse?.status || "-"} / ${Array.isArray(event.parse?.warnings) ? event.parse.warnings.length : 0}`)}
           ${detailCell("source", `${event.raw?.sourceModule || "-"} / ${event.raw?.sourceEventId || "-"}`)}
           ${detailCell("server", event.serverId || "-")}
         </div>
 
         <div class="kill-record-raw-card">
           <h3>Raw Log</h3>
-          <pre class="kill-record-pre">${esc(event.raw?.rawLog || "无 rawLog")}</pre>
+          <pre class="kill-record-pre">${esc(event.raw?.rawLog || "No rawLog available")}</pre>
         </div>
       </div>
     </section>
@@ -356,8 +356,7 @@ function formatRelation(relation = {}) {
     `victimTeam=${blank(relation.victimTeamID)}`,
     relation.sameTeam ? "sameTeam" : "notSameTeam",
     relation.isFriendlyFire ? `friendlyFire:${relation.friendlyFireType || "yes"}` : "normal",
-    `confidence=${relation.teamConfidence || "low"}`,
-    `source=${relation.teamSource || "unknown"}`,
+        `source=${relation.teamSource || "unknown"}`,
   ].join(" / ");
 }
 
@@ -396,3 +395,4 @@ function esc(value) {
     "'": "&#39;",
   }[c]));
 }
+

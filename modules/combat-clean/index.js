@@ -1,4 +1,4 @@
-// -*- coding: utf-8 -*-
+﻿// -*- coding: utf-8 -*-
 
 const VALID_TYPES = new Set(["damage", "wound", "kill"]);
 const DEFAULT_MAX_EVENTS = 5000;
@@ -74,12 +74,11 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
         sourceModule: "module.killManage",
         sourceEventId,
         rawLog: String(rawRecord.rawLog ?? event?.rawLog ?? ""),
-        rawRecord: cloneJsonSafe(rawRecord),
+        rawRecord: sanitizeRawRecord(rawRecord),
       },
       parse: {
         status: String(rawRecord.parseStatus ?? "Cleaned"),
         warnings,
-        confidence: normalizeConfidence(rawRecord.confidence ?? rawRecord.parseConfidence ?? rawRecord.identityConfidence),
       },
     };
 
@@ -128,7 +127,7 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
         sourceModule: "module.killManage",
         sourceEventId: String(rawRecord?.sourceEventId ?? event?.eventId ?? ""),
         rawLog: String(rawRecord?.rawLog ?? event?.rawLog ?? ""),
-        rawRecord: cloneJsonSafe(rawRecord),
+        rawRecord: sanitizeRawRecord(rawRecord),
       },
     };
     rejected.push(item);
@@ -157,7 +156,6 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       isLeader: false,
       resolved: false,
       resolutionSource: "raw",
-      confidence: normalizeConfidence(rawRecord.identityConfidence ?? rawRecord.confidence),
       isNullptr: isNullishPlayerValue(identity.name),
       isFallback: false,
       fallbackReason: "",
@@ -168,7 +166,6 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       mergePlayer(rawRef, resolution.player);
       rawRef.resolved = true;
       rawRef.resolutionSource = resolution.source;
-      rawRef.confidence = resolution.confidence;
     } else if (rawRef.name || rawRef.steam64ID || rawRef.eosID || rawRef.controllerID) {
       rawRef.resolved = true;
       rawRef.resolutionSource = hasRawId(rawRef) ? "raw_id" : "raw_name";
@@ -203,11 +200,11 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       ?? playerState?.getPlayerByName?.(serverId, name)
       ?? null;
     if (playerStatePlayer) {
-      return { player: playerStatePlayer, source: "module.playerState", confidence: "high" };
+      return { player: playerStatePlayer, source: "module.playerState" };
     }
 
     const matchPlayers = modules?.matchState?.getState?.()?.players;
-    if (!matchPlayers) return { player: null, source: "", confidence: "low" };
+    if (!matchPlayers) return { player: null, source: "" };
 
     const matchPlayer = matchPlayers.bySteam64ID?.[steam64ID]
       ?? matchPlayers.byEOSID?.[eosID]
@@ -216,10 +213,10 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       ?? findPlayerByNormalizedName(matchPlayers.list, serverId, name)
       ?? null;
     if (matchPlayer) {
-      return { player: matchPlayer, source: "module.matchState", confidence: "medium" };
+      return { player: matchPlayer, source: "module.matchState" };
     }
 
-    return { player: null, source: "", confidence: "low" };
+    return { player: null, source: "" };
   }
 
   function buildRelation(type, attacker, victim, rawRecord) {
@@ -239,7 +236,6 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       sameTeam,
       isFriendlyFire,
       friendlyFireType,
-      teamConfidence: attackerTeamID !== "" && victimTeamID !== "" ? "high" : (rawFriendly ? "medium" : "low"),
       teamSource,
     };
   }
@@ -354,10 +350,10 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
   return {
     manifest: {
       id: "module.combatClean",
-      name: "Combat Clean Module",
+      name: "\u6218\u6597\u7ba1\u7406\uff08\u5904\u7406\u540e\uff09",
       kind: "module",
-      version: "0.1.0",
-      description: "Clean combat event layer built from raw module.killManage evidence records. Future stats and plugins should subscribe here instead of raw killManage.",
+      version: "0.2.0",
+      description: "Combat Manager (Processed) event layer built from raw module.killManage evidence records. External plugins and the UDP forwarder should subscribe here instead of raw combat logs or combatState.",
     },
     apiName: "combatClean",
     api,
@@ -365,8 +361,8 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
     async start() {
       core.webRegistry?.registerPage?.({
         id: "web.combatClean",
-        title: "击杀管理（clean）",
-        group: "管理",
+        title: "\u6218\u6597\u7ba1\u7406\uff08\u5904\u7406\u540e\uff09",
+        group: "\u7ba1\u7406",
         route: "/combat-clean",
         pageModule: "/pages/combat-clean.js",
         source: "module.combatClean",
@@ -566,15 +562,9 @@ function parseDamage(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-function normalizeConfidence(value) {
-  const text = String(value ?? "").trim();
-  if (!text) return "medium";
-  return text.toLowerCase();
-}
-
-function normalizeName(value) {
-  return String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
-}
+  function normalizeName(value) {
+    return String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  }
 
 function normalizeSearch(value) {
   return String(value ?? "").trim().toLowerCase();
@@ -617,6 +607,22 @@ function cloneJsonSafe(value) {
   }
 }
 
+function sanitizeRawRecord(rawRecord) {
+  const cloned = cloneJsonSafe(rawRecord);
+  if (!cloned || typeof cloned !== "object") return cloned;
+
+  delete cloned.confidence;
+  delete cloned.Confidence;
+  delete cloned.parseConfidence;
+  delete cloned.ParseConfidence;
+  delete cloned.identityConfidence;
+  delete cloned.IdentityConfidence;
+  delete cloned.teamConfidence;
+  delete cloned.TeamConfidence;
+
+  return cloned;
+}
+
 function logWithFallback(logger, method, message, context) {
   const fn = logger?.[method];
   if (typeof fn === "function") {
@@ -625,3 +631,4 @@ function logWithFallback(logger, method, message, context) {
   }
   logger?.info?.(typeof message === "function" ? message() : message);
 }
+

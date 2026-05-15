@@ -421,13 +421,14 @@
       "heartbeatIntervalMs": 30000,
       "includeRawLog": false,
       "includeIds": true,
+      "sendCombatEvents": true,
       "sendCombatDamage": true,
       "sendMapChanged": true,
       "sendStatus": true,
       "sendHeartbeat": true,
       "maxQueueSize": 1000,
       "dropPolicy": "drop_oldest",
-      "maxPacketBytes": 1200,
+      "maxPacketBytes": 4096,
       "logSuccess": false,
       "logFailure": true
     }

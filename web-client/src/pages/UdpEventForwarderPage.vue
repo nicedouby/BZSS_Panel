@@ -276,6 +276,8 @@ const filters = reactive({
 const typeOptions = [
   { value: "all", label: t("udpForwarder.types.all", "全部") },
   { value: "combat.damage", label: t("udpForwarder.types.combatDamage", "combat.damage") },
+  { value: "combat.wound", label: t("udpForwarder.types.combatWound", "combat.wound") },
+  { value: "combat.kill", label: t("udpForwarder.types.combatKill", "combat.kill") },
   { value: "match.map_changed", label: t("udpForwarder.types.mapChanged", "match.map_changed") },
   { value: "server.status", label: t("udpForwarder.types.serverStatus", "server.status") },
   { value: "forwarder.heartbeat", label: t("udpForwarder.types.heartbeat", "forwarder.heartbeat") },

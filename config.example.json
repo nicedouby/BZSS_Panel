@@ -277,6 +277,7 @@
       "heartbeatIntervalMs": 30000,
       "includeRawLog": false,
       "includeIds": true,
+      "sendCombatEvents": true,
       "sendCombatDamage": true,
       "sendMapChanged": true,
       "sendStatus": true,
