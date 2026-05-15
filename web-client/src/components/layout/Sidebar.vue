@@ -27,7 +27,7 @@ const nav = [
   { path: "/combat-clean", icon: "CC", label: t("nav.combatClean") },
   { path: "/kill-manage", icon: "KM", label: t("nav.killManage") },
   { path: "/plugins/group-report", icon: "GR", label: "抱团报备" },
-  { path: "/udp-event-forwarder", icon: "UDP", label: "UDP 杞彂鏃ュ織" },
+  { path: "/udp-event-forwarder", icon: "UDP", label: "UDP Forwarder" },
 ];
 </script>
 
@@ -118,26 +118,13 @@ a.router-link-active {
     position: fixed;
     inset: 0 auto 0 0;
     width: min(260px, calc(100vw - 48px));
-    z-index: calc(var(--z-sidebar-backdrop) + 1);
     transform: translateX(-100%);
+    z-index: var(--z-sidebar);
+    box-shadow: 12px 0 24px rgba(0, 0, 0, 0.35);
   }
 
   .sidebar.mobileOpen {
     transform: translateX(0);
-  }
-
-  .sidebar.collapsed {
-    width: min(260px, calc(100vw - 48px));
-  }
-
-  .sidebar.collapsed .brand span,
-  .sidebar.collapsed .nav-label {
-    display: block;
-  }
-
-  .sidebar.collapsed a {
-    justify-content: flex-start;
-    padding-inline: 10px;
   }
 }
 </style>

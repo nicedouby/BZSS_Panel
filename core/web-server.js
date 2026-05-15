@@ -168,6 +168,84 @@ export class WebServer {
       });
     }
 
+    if (url.pathname === "/api/team-balance/status" && req.method === "GET") {
+      const teamBalance = this.modules.teamBalance;
+
+      if (!teamBalance) {
+        return this.json(res, 404, {
+          error: "TeamBalanceUnavailable",
+          message: "TeamBalance module is not loaded.",
+        });
+      }
+
+      return this.json(res, 200, {
+        ok: true,
+        status: teamBalance.getStatus(),
+        viewer: {
+          username: user.username,
+          role: user.role,
+          isSuperAdmin: this.core.authManager.hasEverything(user),
+          canUseTb: this.core.authManager.hasPermission?.(user, "tb") ?? this.core.authManager.hasEverything(user),
+          permissions: user.permissions ?? [],
+        },
+      });
+    }
+
+    if (url.pathname === "/api/team-balance/events" && req.method === "GET") {
+      const teamBalance = this.modules.teamBalance;
+
+      if (!teamBalance) {
+        return this.json(res, 404, {
+          error: "TeamBalanceUnavailable",
+          message: "TeamBalance module is not loaded.",
+        });
+      }
+
+      return this.json(res, 200, {
+        ok: true,
+        events: teamBalance.getRecentEvents({
+          limit: url.searchParams.get("limit") ?? "100",
+        }),
+      });
+    }
+
+    if (url.pathname === "/api/team-balance/execute" && req.method === "POST") {
+      const teamBalance = this.modules.teamBalance;
+
+      if (!teamBalance) {
+        return this.json(res, 404, {
+          error: "TeamBalanceUnavailable",
+          message: "TeamBalance module is not loaded.",
+        });
+      }
+
+      const body = await this.readJsonBody(req);
+      const result = await teamBalance.execute({
+        tb: body.tb,
+        actor: user,
+        request: {
+          ip: this.getRequestIp(req),
+          userAgent: req.headers["user-agent"] ?? "",
+        },
+      });
+
+      if (!result.ok) {
+        const status = result.error === "Forbidden" ? 403 : 400;
+
+        return this.json(res, status, {
+          ok: false,
+          error: result.error,
+          message: result.message,
+          result,
+        });
+      }
+
+      return this.json(res, 200, {
+        ok: true,
+        result,
+      });
+    }
+
     if (url.pathname === "/api/settings/exposed") {
       const configManager = this.core.config;
       if (!configManager?.getExposedSettings) {
@@ -339,6 +417,14 @@ export class WebServer {
         });
       }
 
+      if (url.pathname === "/api/plugins/group-report/groups" && req.method === "DELETE") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.deleteAllGroups(),
+        });
+      }
+
       const groupMatch = url.pathname.match(/^\/api\/plugins\/group-report\/groups\/([^/]+)$/);
       if (groupMatch && req.method === "GET") {
         const group = pluginApi.getGroup(decodeURIComponent(groupMatch[1]));
@@ -376,6 +462,14 @@ export class WebServer {
       }
 
       const memberMatch = url.pathname.match(/^\/api\/plugins\/group-report\/groups\/([^/]+)\/members(?:\/([^/]+))?$/);
+      if (memberMatch && req.method === "DELETE" && !memberMatch[2]) {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.clearGroupMembers(decodeURIComponent(memberMatch[1])),
+        });
+      }
+
       if (memberMatch && req.method === "POST") {
         if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
@@ -384,6 +478,9 @@ export class WebServer {
           data: await pluginApi.addMember(decodeURIComponent(memberMatch[1]), {
             eosId: body.eosId,
             steamId: body.steamId,
+            teamId: body.teamId,
+            squadId: body.squadId,
+            playtimeHours: body.playtimeHours,
             name: body.name,
             note: body.note,
             addedBy: user?.username ?? user?.name ?? "",
@@ -399,6 +496,9 @@ export class WebServer {
           data: await pluginApi.updateMember(decodeURIComponent(memberMatch[1]), decodeURIComponent(memberMatch[2]), {
             eosId: body.eosId,
             steamId: body.steamId,
+            teamId: body.teamId,
+            squadId: body.squadId,
+            playtimeHours: body.playtimeHours,
             name: body.name,
             note: body.note,
           }),

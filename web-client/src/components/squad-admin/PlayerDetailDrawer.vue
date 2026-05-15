@@ -90,6 +90,15 @@
                 {{ t("player.openDatabase") }}
               </button>
               <button
+                v-if="props.canUseTb"
+                type="button"
+                class="action-button danger"
+                @click="requestSwitchTeam"
+                :disabled="props.tbBusy || !props.player?.isOnline"
+              >
+                {{ props.tbBusy ? "跳边中..." : "跳边" }}
+              </button>
+              <button
                 type="button"
                 class="action-button secondary"
                 @click="copyValue(props.player.steamId, t('player.steamId'))"
@@ -156,14 +165,19 @@ const props = withDefaults(
   defineProps<{
     player: PlayerDetailViewModel | null;
     open: boolean;
+    canUseTb?: boolean;
+    tbBusy?: boolean;
   }>(),
   {
     player: null,
+    canUseTb: false,
+    tbBusy: false,
   },
 );
 
 const emit = defineEmits<{
   (event: "close"): void;
+  (event: "switch-team", player: PlayerDetailViewModel): void;
 }>();
 
 const ui = useUiStore();
@@ -222,6 +236,15 @@ function openDatabase() {
   if (searchKey) {
     goToPlayerDatabaseSearch(router, searchKey);
   }
+}
+
+function requestSwitchTeam() {
+  if (!props.player) return;
+
+  const confirmed = window.confirm(`确定将玩家「${props.player.name}」跳边吗？`);
+  if (!confirmed) return;
+
+  emit("switch-team", props.player);
 }
 
 function buildLookupKey() {
@@ -474,6 +497,16 @@ onUnmounted(() => {
 
 .action-button {
   width: 100%;
+}
+
+.action-button.danger {
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.35);
+}
+
+.action-button.danger:hover:not(:disabled) {
+  background: rgba(153, 27, 27, 0.48);
 }
 
 .advanced-toggle {

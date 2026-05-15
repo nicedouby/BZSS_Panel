@@ -27,6 +27,13 @@ export function normalizeOptionalText(value) {
   return text ? text : undefined;
 }
 
+export function normalizeOptionalNumber(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return undefined;
+  const parsed = Number(text);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 export function buildPlayerKey(input = {}) {
   const eosId = String(input.eosId ?? "").trim();
   if (eosId) return `eos:${eosId}`;
@@ -164,6 +171,24 @@ export class GroupReportService {
     this.emitChanged("group-report.group-deleted", String(groupId));
   }
 
+  async deleteAllGroups() {
+    await this.load();
+
+    if (!this.store.groups.length) {
+      return { deleted: 0 };
+    }
+
+    const removedGroups = this.store.groups.splice(0);
+    this.touch();
+    await this.save();
+
+    for (const group of removedGroups) {
+      this.emitChanged("group-report.group-deleted", group.id);
+    }
+
+    return { deleted: removedGroups.length };
+  }
+
   async addMember(groupId, input = {}) {
     await this.load();
 
@@ -190,12 +215,18 @@ export class GroupReportService {
       existing.name = normalizeMemberName(input.name);
       existing.eosId = normalizeOptionalText(input.eosId);
       existing.steamId = normalizeOptionalText(input.steamId);
+      existing.teamId = normalizeOptionalNumber(input.teamId);
+      existing.squadId = normalizeOptionalNumber(input.squadId);
+      existing.playtimeHours = normalizeOptionalNumber(input.playtimeHours);
       existing.note = normalizeOptionalText(input.note);
     } else {
       group.members.push({
         playerKey,
         eosId: normalizeOptionalText(input.eosId),
         steamId: normalizeOptionalText(input.steamId),
+        teamId: normalizeOptionalNumber(input.teamId),
+        squadId: normalizeOptionalNumber(input.squadId),
+        playtimeHours: normalizeOptionalNumber(input.playtimeHours),
         name: normalizeMemberName(input.name),
         note: normalizeOptionalText(input.note),
         addedAt: at,
@@ -212,6 +243,26 @@ export class GroupReportService {
     }
 
     this.emitChanged(existing ? "group-report.member-updated" : "group-report.member-added", group.id, playerKey);
+    return cloneJson(group);
+  }
+
+  async clearGroupMembers(groupId) {
+    await this.load();
+
+    const group = this.requireGroup(groupId);
+    if (!group.members.length) {
+      return cloneJson(group);
+    }
+
+    const removedMembers = group.members.splice(0);
+    group.updatedAt = nowMs();
+    this.touch();
+    await this.save();
+
+    for (const member of removedMembers) {
+      this.emitChanged("group-report.member-removed", group.id, member.playerKey);
+    }
+
     return cloneJson(group);
   }
 
@@ -238,6 +289,18 @@ export class GroupReportService {
 
     if (input.steamId !== undefined) {
       member.steamId = normalizeOptionalText(input.steamId);
+    }
+
+    if (input.teamId !== undefined) {
+      member.teamId = normalizeOptionalNumber(input.teamId);
+    }
+
+    if (input.squadId !== undefined) {
+      member.squadId = normalizeOptionalNumber(input.squadId);
+    }
+
+    if (input.playtimeHours !== undefined) {
+      member.playtimeHours = normalizeOptionalNumber(input.playtimeHours);
     }
 
     group.updatedAt = nowMs();
@@ -348,6 +411,9 @@ export class GroupReportService {
         playerKey,
         eosId: normalizeOptionalText(member?.eosId),
         steamId: normalizeOptionalText(member?.steamId),
+        teamId: normalizeOptionalNumber(member?.teamId),
+        squadId: normalizeOptionalNumber(member?.squadId),
+        playtimeHours: normalizeOptionalNumber(member?.playtimeHours),
         name: normalizeMemberName(member?.name),
         note: normalizeOptionalText(member?.note),
         addedAt: Number(member?.addedAt ?? nowMs()) || nowMs(),

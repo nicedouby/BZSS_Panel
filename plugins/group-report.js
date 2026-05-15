@@ -17,7 +17,9 @@ export function createPlugin({ core } = {}) {
     createGroup: (input) => service.createGroup(input),
     updateGroup: (groupId, input) => service.updateGroup(groupId, input),
     deleteGroup: (groupId) => service.deleteGroup(groupId),
+    deleteAllGroups: () => service.deleteAllGroups(),
     addMember: (groupId, input) => service.addMember(groupId, input),
+    clearGroupMembers: (groupId) => service.clearGroupMembers(groupId),
     updateMember: (groupId, playerKey, input) => service.updateMember(groupId, playerKey, input),
     removeMember: (groupId, playerKey) => service.removeMember(groupId, playerKey),
   };

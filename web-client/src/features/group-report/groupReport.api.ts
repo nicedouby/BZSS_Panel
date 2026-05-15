@@ -4,6 +4,9 @@ export interface GroupReportMember {
   playerKey: string;
   eosId?: string;
   steamId?: string;
+  teamId?: number;
+  squadId?: number;
+  playtimeHours?: number | null;
   name: string;
   note?: string;
   addedAt: number;
@@ -77,11 +80,20 @@ export const groupReportApi = {
     });
   },
 
+  deleteAllGroups(): Promise<{ deleted: number }> {
+    return unwrap<{ deleted: number }>("/api/plugins/group-report/groups", {
+      method: "DELETE",
+    });
+  },
+
   addMember(
     groupId: string,
     input: {
       eosId?: string;
       steamId?: string;
+      teamId?: number;
+      squadId?: number;
+      playtimeHours?: number | null;
       name: string;
       note?: string;
     },
@@ -101,6 +113,9 @@ export const groupReportApi = {
     input: {
       eosId?: string;
       steamId?: string;
+      teamId?: number;
+      squadId?: number;
+      playtimeHours?: number | null;
       name?: string;
       note?: string;
     },
@@ -120,6 +135,15 @@ export const groupReportApi = {
   removeMember(groupId: string, playerKey: string): Promise<GroupReportGroup> {
     return unwrap<GroupReportGroup>(
       `/api/plugins/group-report/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(playerKey)}`,
+      {
+        method: "DELETE",
+      },
+    );
+  },
+
+  clearGroupMembers(groupId: string): Promise<GroupReportGroup> {
+    return unwrap<GroupReportGroup>(
+      `/api/plugins/group-report/groups/${encodeURIComponent(groupId)}/members`,
       {
         method: "DELETE",
       },

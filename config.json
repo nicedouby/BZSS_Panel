@@ -393,6 +393,12 @@
     },
     "playtime": {
       "enabled": true
+    },
+    "teamBalance": {
+      "enabled": true,
+      "permission": "tb",
+      "commandTemplate": "AdminForceTeamChangeById {playerId}",
+      "historyLimit": 200
     }
   },
   "webModules": {

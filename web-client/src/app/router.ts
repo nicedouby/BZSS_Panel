@@ -29,7 +29,7 @@ export const router = createRouter({
     {
       path: "/udp-event-forwarder",
       component: UdpEventForwarderPage,
-      meta: { title: "UDP 转发日志" },
+      meta: { title: "UDP Forwarder" },
     },
     {
       path: "/:pathMatch(.*)*",

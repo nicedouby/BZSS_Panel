@@ -8,6 +8,9 @@
       </div>
 
       <div class="header-actions">
+        <button type="button" class="danger" @click="clearAllGroups" :disabled="!groups.length">
+          一键全部删除
+        </button>
         <button type="button" @click="reloadAll" :disabled="loadingGroups || loadingPlayers">
           {{ loadingGroups || loadingPlayers ? "刷新中..." : "刷新" }}
         </button>
@@ -46,6 +49,7 @@
               <div class="inline-actions">
                 <button type="button" @click.stop="renameGroup(group)">改名</button>
                 <button type="button" @click.stop="editGroupNote(group)">备注</button>
+                <button type="button" @click.stop="clearMembers(group)">清空成员</button>
                 <button type="button" class="danger" @click.stop="deleteGroup(group)">删除</button>
               </div>
             </div>
@@ -57,8 +61,17 @@
 
               <div v-for="member in group.members" :key="member.playerKey" class="member-row">
                 <div class="member-copy">
-                  <strong>{{ member.name }}</strong>
-                  <span>{{ memberLabel(member) }}</span>
+                  <div class="member-line member-line-main">
+                    <strong>{{ member.name }}</strong>
+                    <span class="member-primary-id">{{ steamLabel(member) }}</span>
+                  </div>
+
+                  <div class="member-tags">
+                    <span class="tag">Team {{ displayNumber(memberTeamId(member)) }}</span>
+                    <span class="tag">Squad {{ displayNumber(memberSquadId(member)) }}</span>
+                    <span class="tag">{{ playtimeLabel(memberPlaytimeHours(member)) }}</span>
+                  </div>
+
                   <p v-if="member.note" class="note-box small">{{ member.note }}</p>
                 </div>
 
@@ -70,7 +83,7 @@
             </div>
           </article>
 
-          <div v-if="!groups.length" class="empty-hint">暂未创建抱团容器。</div>
+          <div v-if="!groups.length" class="empty-hint">暂无抱团容器。</div>
         </div>
       </section>
 
@@ -89,7 +102,7 @@
           v-model="playerKeyword"
           class="search-input"
           type="text"
-          placeholder="搜索玩家名称 / EOS / Steam"
+          placeholder="搜索玩家名称 / Steam / EOS"
         >
 
         <div class="player-list">
@@ -98,8 +111,16 @@
 
           <div v-for="player in players" :key="playerKeyOf(player)" class="player-row">
             <div class="player-copy">
-              <strong>{{ player.name }}</strong>
-              <span>{{ playerSubtitle(player) }}</span>
+              <div class="member-line member-line-main">
+                <strong>{{ player.name }}</strong>
+                <span class="member-primary-id">{{ steamPlayerLabel(player) }}</span>
+              </div>
+
+              <div class="member-tags">
+                <span class="tag">Team {{ displayNumber(playerTeamId(player)) }}</span>
+                <span class="tag">Squad {{ displayNumber(playerSquadId(player)) }}</span>
+                <span class="tag">{{ playtimeLabel(player.playtimeHours) }}</span>
+              </div>
             </div>
 
             <button
@@ -118,11 +139,13 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { apiGet } from "../app/apiClient";
 import { groupReportApi, type GroupReportGroup, type GroupReportMember, type GroupReportSnapshot } from "../features/group-report/groupReport.api";
 import { searchPlayers, type SearchablePlayer } from "../features/group-report/playerSearch";
 
 const groups = ref<GroupReportGroup[]>([]);
 const players = ref<SearchablePlayer[]>([]);
+const runtimePlayers = ref<any[]>([]);
 const selectedGroupId = ref<string | null>(null);
 const playerKeyword = ref("");
 const newGroupName = ref("");
@@ -159,7 +182,7 @@ watch(
 );
 
 async function reloadAll() {
-  await Promise.all([loadGroups(), loadPlayers()]);
+  await Promise.all([loadGroups(), loadRuntimePlayers(), loadPlayers()]);
 }
 
 async function loadGroups() {
@@ -194,6 +217,19 @@ async function loadPlayers() {
   }
 }
 
+async function loadRuntimePlayers() {
+  try {
+    const snapshot = await apiGet<any>("/api/snapshot/players");
+    runtimePlayers.value = Array.isArray(snapshot?.active)
+      ? snapshot.active
+      : Array.isArray(snapshot?.players)
+        ? snapshot.players
+        : [];
+  } catch {
+    runtimePlayers.value = [];
+  }
+}
+
 async function createGroup() {
   const name = newGroupName.value.trim() || "未命名抱团";
 
@@ -202,7 +238,7 @@ async function createGroup() {
     groups.value = [group, ...groups.value];
     selectedGroupId.value = group.id;
     newGroupName.value = "";
-    info.value = `已创建抱团「${group.name}」。`;
+    info.value = `已创建抱团：${group.name}`;
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   }
@@ -252,6 +288,30 @@ async function deleteGroup(group: GroupReportGroup) {
   }
 }
 
+async function clearMembers(group: GroupReportGroup) {
+  if (!window.confirm(`确定清空抱团「${group.name}」的全部成员吗？`)) return;
+
+  try {
+    const updated = await groupReportApi.clearGroupMembers(group.id);
+    replaceGroup(updated);
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err);
+  }
+}
+
+async function clearAllGroups() {
+  if (!window.confirm("确定一键删除全部抱团容器吗？此操作无法撤销。")) return;
+
+  try {
+    await groupReportApi.deleteAllGroups();
+    groups.value = [];
+    selectedGroupId.value = null;
+    info.value = "已删除全部抱团容器。";
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err);
+  }
+}
+
 async function addPlayer(player: SearchablePlayer) {
   if (!selectedGroup.value) return;
 
@@ -260,6 +320,9 @@ async function addPlayer(player: SearchablePlayer) {
       name: player.name,
       eosId: player.eosId,
       steamId: player.steamId,
+      teamId: player.teamId,
+      squadId: player.squadId,
+      playtimeHours: player.playtimeHours ?? undefined,
     });
     replaceGroup(updated);
   } catch (err) {
@@ -277,6 +340,9 @@ async function editMemberNote(group: GroupReportGroup, member: GroupReportMember
       note: nextNote,
       eosId: member.eosId,
       steamId: member.steamId,
+      teamId: member.teamId,
+      squadId: member.squadId,
+      playtimeHours: member.playtimeHours,
     });
     replaceGroup(updated);
   } catch (err) {
@@ -300,29 +366,75 @@ function replaceGroup(updated: GroupReportGroup) {
 function isAlreadyInSelectedGroup(player: SearchablePlayer) {
   if (!selectedGroup.value) return false;
   return selectedGroup.value.members.some((member) => {
-    if (player.eosId && member.eosId === player.eosId) return true;
     if (player.steamId && member.steamId === player.steamId) return true;
+    if (player.eosId && member.eosId === player.eosId) return true;
     return false;
   });
 }
 
 function playerKeyOf(player: SearchablePlayer) {
-  return `${player.eosId ?? ""}-${player.steamId ?? ""}-${player.name}`;
+  return `${player.steamId ?? ""}-${player.eosId ?? ""}-${player.name}`;
 }
 
-function memberLabel(member: GroupReportMember) {
-  if (member.eosId) return `EOS ${member.eosId}`;
-  if (member.steamId) return `Steam ${member.steamId}`;
+function steamLabel(member: GroupReportMember) {
+  const runtime = findRuntimePlayer(member);
+  if (member.steamId || runtime?.steamID) return `Steam ${member.steamId ?? runtime?.steamID}`;
+  if (member.eosId || runtime?.eosID) return `EOS ${member.eosId ?? runtime?.eosID}`;
   return member.playerKey;
 }
 
-function playerSubtitle(player: SearchablePlayer) {
-  const parts: string[] = [];
-  if (player.eosId) parts.push(`EOS ${player.eosId}`);
-  if (player.steamId) parts.push(`Steam ${player.steamId}`);
-  if (player.teamId !== undefined) parts.push(`Team ${player.teamId}`);
-  if (player.squadId !== undefined) parts.push(`Squad ${player.squadId}`);
-  return parts.join(" · ");
+function steamPlayerLabel(player: SearchablePlayer) {
+  if (player.steamId) return `Steam ${player.steamId}`;
+  if (player.eosId) return `EOS ${player.eosId}`;
+  return "--";
+}
+
+function displayNumber(value: number | null | undefined) {
+  return value == null ? "--" : String(value);
+}
+
+function playtimeLabel(value: number | null | undefined) {
+  if (value == null || Number.isNaN(Number(value))) return "时长 --";
+  return `时长 ${Number(value).toFixed(1)}h`;
+}
+
+function memberTeamId(member: GroupReportMember) {
+  return member.teamId ?? numberValue(findRuntimePlayer(member)?.teamID);
+}
+
+function memberSquadId(member: GroupReportMember) {
+  return member.squadId ?? numberValue(findRuntimePlayer(member)?.squadID);
+}
+
+function playerTeamId(player: SearchablePlayer) {
+  return player.teamId ?? undefined;
+}
+
+function playerSquadId(player: SearchablePlayer) {
+  return player.squadId ?? undefined;
+}
+
+function memberPlaytimeHours(member: GroupReportMember) {
+  return member.playtimeHours ?? undefined;
+}
+
+function findRuntimePlayer(member: GroupReportMember) {
+  const steam = String(member.steamId ?? "").trim();
+  const eos = String(member.eosId ?? "").trim();
+  return runtimePlayers.value.find((item) => {
+    if (steam && String(item?.steamID ?? item?.steamId ?? item?.steam_id ?? "").trim() === steam) {
+      return true;
+    }
+    if (eos && String(item?.eosID ?? item?.eosId ?? item?.eos_id ?? "").trim() === eos) {
+      return true;
+    }
+    return false;
+  }) ?? null;
+}
+
+function numberValue(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 function formatTime(value: number) {
@@ -398,34 +510,30 @@ function formatTime(value: number) {
 .workspace {
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
+  grid-template-columns: minmax(0, 1fr) 360px;
   gap: 12px;
 }
 
 .left-pane,
 .right-pane {
+  min-width: 0;
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
   border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 16px;
-  background: rgba(8, 15, 28, 0.72);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
-  overflow: hidden;
+  border-radius: 14px;
+  background: rgba(8, 15, 28, 0.8);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 
 .left-pane {
-  padding: 14px;
-}
-
-.right-pane {
-  padding: 14px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .create-row {
   display: flex;
   gap: 8px;
-  margin-bottom: 12px;
+  padding: 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
 }
 
 .create-row input,
@@ -433,55 +541,57 @@ function formatTime(value: number) {
   flex: 1;
   min-width: 0;
   height: 36px;
-  padding: 0 12px;
   border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  color: #ecf2f8;
-  background: rgba(2, 6, 23, 0.75);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(2, 6, 23, 0.72);
+  color: #e5eef7;
+  padding: 0 12px;
   outline: none;
 }
 
 .create-row input:focus,
 .search-input:focus {
-  border-color: rgba(96, 165, 250, 0.75);
+  border-color: rgba(96, 165, 250, 0.72);
 }
 
-.group-list,
-.player-list {
+.group-list {
   min-height: 0;
   overflow: auto;
+  padding: 12px;
   display: grid;
-  gap: 10px;
-}
-
-.group-card,
-.player-row {
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  border-radius: 14px;
-  background: rgba(15, 23, 42, 0.62);
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 12px;
+  align-content: start;
 }
 
 .group-card {
+  min-width: 0;
+  max-width: 100%;
+  max-height: 540px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(30, 41, 59, 0.65);
+  border-radius: 14px;
   padding: 12px;
   cursor: pointer;
+  overflow: hidden;
 }
 
 .group-card.selected {
-  border-color: rgba(96, 165, 250, 0.8);
-  background: rgba(30, 64, 175, 0.2);
-}
-
-.group-head,
-.member-row,
-.player-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  align-items: flex-start;
+  border-color: rgba(96, 165, 250, 0.7);
+  background: rgba(30, 64, 175, 0.24);
 }
 
 .group-head {
-  margin-bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.group-head-copy {
+  min-width: 0;
 }
 
 .group-head-copy h2 {
@@ -497,61 +607,103 @@ function formatTime(value: number) {
 
 .inline-actions {
   display: flex;
-  gap: 6px;
   flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.group-card .note-box,
+.member-row .note-box {
+  margin: 0;
 }
 
 .member-list {
+  min-height: 0;
+  overflow: auto;
   display: grid;
   gap: 8px;
+  padding-right: 2px;
 }
 
 .member-row,
 .player-row {
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
   padding: 10px;
   border-radius: 12px;
-  background: rgba(2, 6, 23, 0.36);
+  background: rgba(15, 23, 42, 0.56);
+  border: 1px solid rgba(148, 163, 184, 0.12);
 }
 
 .member-copy,
 .player-copy {
   min-width: 0;
+  flex: 1;
 }
 
-.member-copy strong,
-.player-copy strong {
-  display: block;
-  font-size: 14px;
+.member-line {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
 }
 
-.member-copy span,
-.player-copy span {
-  display: block;
-  margin-top: 4px;
-  color: #94a3b8;
-  font-size: 11px;
-  word-break: break-all;
+.member-line strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.member-primary-id {
+  flex: 0 0 auto;
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.member-tags {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(30, 41, 59, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  color: #dbeafe;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .note-box {
-  margin: 10px 0 0;
-  padding: 10px;
+  padding: 8px 10px;
   border-radius: 10px;
-  background: rgba(2, 6, 23, 0.48);
-  color: #dbe5f0;
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.52);
   font-size: 13px;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .note-box.small {
   margin-top: 8px;
-  padding: 8px;
+  font-size: 12px;
 }
 
-.search-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
+.right-pane {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  padding: 12px;
 }
 
 .search-head h2 {
@@ -560,24 +712,41 @@ function formatTime(value: number) {
 }
 
 .search-head p {
-  margin: 6px 0 0;
+  margin: 5px 0 0;
   color: #94a3b8;
   font-size: 13px;
 }
 
+.search-input {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.player-list {
+  min-height: 0;
+  overflow: auto;
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.player-row {
+  align-items: center;
+}
+
 .empty-hint {
   padding: 16px;
-  border-radius: 12px;
   color: #94a3b8;
   text-align: center;
-  background: rgba(2, 6, 23, 0.28);
+  font-size: 13px;
 }
 
 button {
-  height: 36px;
-  padding: 0 12px;
-  border-radius: 10px;
+  height: 32px;
+  padding: 0 10px;
   border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 10px;
   color: #e5eef7;
   background: rgba(51, 65, 85, 0.9);
   cursor: pointer;
@@ -585,46 +754,50 @@ button {
 }
 
 button:hover:not(:disabled) {
-  background: rgba(71, 85, 105, 0.96);
+  background: rgba(71, 85, 105, 0.95);
 }
 
 button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
 button.danger {
   border-color: rgba(248, 113, 113, 0.35);
   color: #fecaca;
-  background: rgba(127, 29, 29, 0.36);
+  background: rgba(127, 29, 29, 0.35);
 }
 
 button.danger:hover:not(:disabled) {
-  background: rgba(153, 27, 27, 0.5);
+  background: rgba(153, 27, 27, 0.48);
 }
 
-@media (max-width: 1120px) {
+@media (max-width: 1100px) {
   .workspace {
     grid-template-columns: 1fr;
   }
+
+  .right-pane {
+    min-height: 420px;
+  }
 }
 
-@media (max-width: 780px) {
+@media (max-width: 760px) {
   .page-header,
-  .create-row,
   .group-head,
   .member-row,
   .player-row {
     flex-direction: column;
   }
 
+  .header-actions,
   .inline-actions {
     width: 100%;
+    justify-content: flex-start;
   }
 
-  .inline-actions button,
-  .header-actions button {
-    width: 100%;
+  .group-list {
+    grid-template-columns: 1fr;
   }
 }
 </style>

@@ -55,6 +55,7 @@ export class AuthManager {
       role: DEFAULT_ROLE,
       steam64: normalizeSteam64(this.config?.defaultSteam64),
       viewerTeamAutoSwapEnabled: this.config?.viewerTeamAutoSwapEnabled !== false,
+      permissions: ["*"],
       enabled: true,
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -74,6 +75,7 @@ export class AuthManager {
         role: String(user?.role ?? DEFAULT_ROLE),
         steam64: normalizeSteam64(user?.steam64 ?? user?.steamID ?? user?.steamId ?? user?.steam64ID ?? user?.steam64Id),
         viewerTeamAutoSwapEnabled: user?.viewerTeamAutoSwapEnabled !== false,
+        permissions: normalizePermissions(user?.permissions),
         enabled: user?.enabled !== false,
         createdAt: Number(user?.createdAt ?? Date.now()),
         updatedAt: Number(user?.updatedAt ?? Date.now()),
@@ -121,6 +123,7 @@ export class AuthManager {
       role: user.role,
       steam64: normalizeSteam64(user.steam64 ?? user.steamID ?? user.steamId ?? user.steam64ID ?? user.steam64Id),
       viewerTeamAutoSwapEnabled: user.viewerTeamAutoSwapEnabled !== false,
+      permissions: normalizePermissions(user.permissions),
       createdAt: now,
       expiresAt,
       ip,
@@ -150,6 +153,7 @@ export class AuthManager {
         isSuperAdmin: true,
         steam64: "",
         viewerTeamAutoSwapEnabled: false,
+        permissions: ["*"],
       };
     }
 
@@ -172,6 +176,7 @@ export class AuthManager {
       isSuperAdmin: this.isSuperAdminRole(session.role),
       steam64: normalizeSteam64(session.steam64),
       viewerTeamAutoSwapEnabled: session.viewerTeamAutoSwapEnabled !== false,
+      permissions: normalizePermissions(session.permissions),
     };
   }
 
@@ -190,6 +195,24 @@ export class AuthManager {
     return Boolean(user && this.isSuperAdminRole(user.role));
   }
 
+  hasPermission(user, permission) {
+    if (!user) return false;
+    if (this.hasEverything(user)) return true;
+
+    const wanted = String(permission ?? "").trim();
+    if (!wanted) return false;
+
+    const permissions = normalizePermissions(user.permissions ?? user.permission);
+
+    if (permissions.includes("*")) return true;
+    if (permissions.includes(wanted)) return true;
+
+    const [namespace] = wanted.split(".");
+    if (namespace && permissions.includes(`${namespace}.*`)) return true;
+
+    return false;
+  }
+
   isSuperAdminRole(role) {
     return String(role ?? "").toLowerCase().includes("superadmin");
   }
@@ -202,6 +225,7 @@ export class AuthManager {
       isSuperAdmin: this.isSuperAdminRole(user.role),
       steam64: normalizeSteam64(user.steam64 ?? user.steamID ?? user.steamId ?? user.steam64ID ?? user.steam64Id),
       viewerTeamAutoSwapEnabled: user.viewerTeamAutoSwapEnabled !== false,
+      permissions: normalizePermissions(user.permissions),
     };
   }
 
@@ -284,4 +308,30 @@ function parseCookies(cookieHeader) {
 function normalizeSteam64(value) {
   const text = String(value ?? "").trim();
   return /^\d{17}$/.test(text) ? text : "";
+}
+
+function normalizePermissions(value) {
+  if (!value) return [];
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item ?? "").trim())
+      .filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  if (typeof value === "object") {
+    return Object.entries(value)
+      .filter(([, enabled]) => Boolean(enabled))
+      .map(([key]) => String(key).trim())
+      .filter(Boolean);
+  }
+
+  return [];
 }
