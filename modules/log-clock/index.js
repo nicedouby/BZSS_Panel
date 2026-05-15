@@ -8,6 +8,18 @@
  * Default anchor (inherited from MicePanel):
  * - LogWorld: SeamlessTravel to: ...
  */
+const WORLD_BRING_UP_GAME_MODES = new Set([
+  "AAS",
+  "RAAS",
+  "INVASION",
+  "SEED",
+  "SKIRMISH",
+  "TC",
+  "INSURGENCY",
+  "DESTRUCTION",
+  "TRAINING",
+]);
+
 export function createLogClockModule({ core, modules, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
     moduleId: "module.logClock",
@@ -51,6 +63,35 @@ export function createLogClockModule({ core, modules, config, logger }) {
     });
   }
 
+  function handleWorldBringUp(event) {
+    if (!enabled) return;
+    if (!isSubscribed()) return;
+    if (event?.eventName !== "round.world_bring_up") return;
+
+    const round = event?.normalized?.roundWorldBringUp
+      ?? resolveRoundWorldBringUpFromParamMap(event);
+
+    core.webStatus.resetLogClock({
+      reason: "worldBringUp",
+      anchorLogTime: round?.logLineTime || event?.logTime || "",
+      anchorRawLog: event?.rawLog || round?.rawLog || "",
+    });
+
+    moduleLogger.info(
+      `[ROUND] LogClock anchored by WorldBringUp. Reset to 0. layer=${round?.layerName || "unknown"} map=${round?.mapName || "unknown"} mode=${round?.gameMode || "unknown"}`,
+      {
+        operation: "anchor",
+        eventName: event?.eventName,
+        data: {
+          logLineTime: round?.logLineTime || "",
+          layerName: round?.layerName || "",
+          mapName: round?.mapName || "",
+          gameMode: round?.gameMode || "",
+        },
+      },
+    );
+  }
+
   return {
     manifest: {
       id: "module.logClock",
@@ -80,6 +121,7 @@ export function createLogClockModule({ core, modules, config, logger }) {
 
       if (!core.eventBus?.onCoreEvent) return;
       unsubscribers.push(core.eventBus.onCoreEvent("On_RawLogLine", handleRawLogLine));
+      unsubscribers.push(core.eventBus.onCoreEvent("round.world_bring_up", handleWorldBringUp));
       moduleLogger.info("LogClock module started.", {
         operation: "start",
         data: {
@@ -96,6 +138,81 @@ export function createLogClockModule({ core, modules, config, logger }) {
   };
 }
 
+function resolveRoundWorldBringUpFromParamMap(event) {
+  const paramMap = event?.paramMap && typeof event.paramMap === "object" ? event.paramMap : {};
+  const logLineTime = stringParam(paramMap, "logLineTime") || stringParam(paramMap, "LogLineTime");
+  const worldPath = stringParam(paramMap, "worldPath") || stringParam(paramMap, "WorldPath");
+  const layerName = stringParam(paramMap, "layerName") || extractLayerName(worldPath);
+  const mapName = stringParam(paramMap, "mapName") || inferMapName(layerName);
+  const gameMode = stringParam(paramMap, "gameMode") || inferGameMode(layerName);
+
+  return {
+    logLineTime,
+    rawLog: String(event?.rawLog ?? ""),
+    layerName,
+    mapName,
+    gameMode,
+  };
+}
+
+function stringParam(paramMap, key) {
+  const value = paramMap?.[key];
+  return value == null ? "" : String(value);
+}
+
+function extractLayerName(worldPath) {
+  const text = String(worldPath ?? "").trim();
+  if (!text) return "";
+  const lastSegment = text.split("/").filter(Boolean).pop() || "";
+  return lastSegment.split(".")[0].trim();
+}
+
+function inferMapName(layerName) {
+  const text = String(layerName ?? "").trim();
+  if (!text) return "";
+
+  const tokens = text.split("_").filter(Boolean);
+  if (tokens.length < 2) return "";
+
+  let end = tokens.length;
+  while (end > 0 && isVersionToken(tokens[end - 1])) {
+    end -= 1;
+  }
+
+  for (let index = end - 1; index > 0; index -= 1) {
+    if (WORLD_BRING_UP_GAME_MODES.has(tokens[index].toUpperCase())) {
+      return tokens.slice(0, index).join("_");
+    }
+  }
+
+  return "";
+}
+
+function inferGameMode(layerName) {
+  const text = String(layerName ?? "").trim();
+  if (!text) return "";
+
+  const tokens = text.split("_").filter(Boolean);
+  if (tokens.length < 2) return "";
+
+  let end = tokens.length;
+  while (end > 0 && isVersionToken(tokens[end - 1])) {
+    end -= 1;
+  }
+
+  for (let index = end - 1; index > 0; index -= 1) {
+    if (WORLD_BRING_UP_GAME_MODES.has(tokens[index].toUpperCase())) {
+      return tokens[index];
+    }
+  }
+
+  return "";
+}
+
+function isVersionToken(token) {
+  return /^\d+(?:\.\d+)*$/.test(String(token ?? "").trim());
+}
+
 function safeRegex(pattern, flags) {
   const text = String(pattern ?? "").trim();
   if (!text) return null;
@@ -106,4 +223,3 @@ function safeRegex(pattern, flags) {
     return null;
   }
 }
-
