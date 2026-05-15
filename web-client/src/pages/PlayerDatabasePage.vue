@@ -44,7 +44,7 @@
         >
           <div class="db-row-name">{{ player.current_name || player.name || t("common.unknown") }}</div>
           <div class="db-row-meta">
-            {{ player.permission_group || "default" }} · {{ t("database.ladderRating") }}={{ player.ladder_rating ?? 0 }} · {{ t("database.kills") }}={{ player.light_weapon_kills ?? player.total_kills_light ?? 0 }} · {{ t("database.teamKills") }}={{ teamKills(player) }}
+            {{ player.permission_group || "default" }}
           </div>
           <div class="db-row-meta">
             {{ t("database.updatedAt") }} {{ formatTime(player.updated_at) }}
@@ -106,21 +106,6 @@
               <div><span>{{ fieldLabel("updated_at", t("database.updatedAt")) }}</span><strong>{{ formatTime(detail.player?.updated_at) }}</strong></div>
               <div><span>{{ t("database.gameTime") }}</span><strong>{{ formatSeconds(detail.summary?.gameSeconds ?? detail.player?.game_seconds ?? 0) }}</strong></div>
               <div><span>{{ t("database.serverTime") }}</span><strong>{{ formatSeconds(detail.summary?.serverSeconds ?? detail.player?.server_seconds ?? 0) }}</strong></div>
-              <div><span>{{ t("database.totalKills") }}</span><strong>{{ formatNumber(detail.summary?.totalKills ?? 0) }}</strong></div>
-              <div><span>{{ t("database.totalDowns") }}</span><strong>{{ formatNumber(detail.summary?.totalDowns ?? 0) }}</strong></div>
-              <div><span>{{ t("database.totalDeaths") }}</span><strong>{{ formatNumber(detail.summary?.totalDeaths ?? 0) }}</strong></div>
-              <div><span>{{ t("database.totalTeamKills") }}</span><strong>{{ formatNumber(detail.summary?.totalTeamKills ?? 0) }}</strong></div>
-              <div><span>{{ t("database.ladderRating") }}</span><strong>{{ formatNumber(detail.player?.ladder_rating ?? 0) }}</strong></div>
-              <div><span>{{ t("database.winRate") }}</span><strong>{{ winRate(detail.player?.total_match_wins, detail.player?.total_matches) }}</strong></div>
-            </div>
-          </div>
-
-          <div class="db-card">
-            <h3>{{ t("database.killStats") }}</h3>
-            <div class="db-grid">
-              <div><span>{{ t("database.kills") }}</span><strong>{{ Number(detail.killStats?.lightWeaponKills ?? detail.combatStats?.lightWeaponKills ?? detail.warmupCombatStats?.kills ?? detail.warmupStats?.kills ?? 0) }}</strong></div>
-              <div><span>{{ t("database.downs") }}</span><strong>{{ Number(detail.killStats?.lightWeaponDowns ?? detail.combatStats?.lightWeaponDowns ?? detail.warmupCombatStats?.downs ?? detail.warmupStats?.downs ?? 0) }}</strong></div>
-              <div><span>{{ t("database.deaths") }}</span><strong>{{ Number(detail.killStats?.deaths ?? detail.combatStats?.deaths ?? detail.warmupCombatStats?.deaths ?? detail.warmupStats?.deaths ?? 0) }}</strong></div>
             </div>
           </div>
 
@@ -170,6 +155,22 @@
                 <div><span>{{ fieldLabel("created_at", t("database.createdAt")) }}</span><strong>{{ formatTime(detail.squadCreated.created_at) }}</strong></div>
               </div>
               <div v-else class="placeholder">{{ t("common.none") }}</div>
+            </div>
+
+            <div class="db-card">
+              <h3>{{ t("database.combatSessions") }}</h3>
+              <ul class="db-history-list">
+                <li v-for="log in (detail.combatSessions || []).slice(0, 30)" :key="`${log.filePath || log.dateKey}-${log.id}`">
+                  <div class="db-history-head">
+                    <div>
+                      <strong>{{ log.filePath || "--" }}</strong>
+                      <small>{{ log.dateKey || "--" }}</small>
+                    </div>
+                  </div>
+                  <small>{{ formatTime(log.firstEventAt) }} ~ {{ formatTime(log.lastEventAt) }}</small>
+                </li>
+                <li v-if="!(detail.combatSessions || []).length">{{ t("common.none") }}</li>
+              </ul>
             </div>
           </div>
         </template>
@@ -272,19 +273,6 @@
             <div class="db-card db-analytics-card">
               <h3>{{ t("database.leaderboards") }}</h3>
               <div class="db-analytics-body">
-                <section class="db-analytics-block">
-                  <h4>{{ t("database.kills") }}</h4>
-                  <ol v-if="stats?.leaderboards?.byKills?.length" class="db-rank-list">
-                    <li v-for="item in stats.leaderboards.byKills" :key="item.id">
-                      <button type="button" class="name db-rank-player" @click="jumpToPlayerFromStats(item.id)">
-                        {{ item.currentName || item.steamID || item.eosID || t("common.unknown") }}
-                      </button>
-                      <span class="value">{{ t("database.kills") }} {{ formatNumber(item.totalKills) }} / {{ t("database.deaths") }} {{ formatNumber(item.totalDeaths) }}</span>
-                    </li>
-                  </ol>
-                  <div v-else class="placeholder">{{ t("common.noData") }}</div>
-                </section>
-
                 <section class="db-analytics-block">
                   <h4>{{ t("database.playtime") }}</h4>
                   <ol v-if="stats?.leaderboards?.byPlaytime?.length" class="db-rank-list">
@@ -437,10 +425,9 @@ const overviewCards = computed(() => {
   return [
     { label: t("database.title"), value: overview ? formatNumber(overview.totalPlayers ?? 0) : "--" },
     { label: t("database.active"), value: overview ? formatNumber(overview.activePlayersInWindow ?? 0) : "--" },
-    { label: `${t("database.kills")} / ${t("database.deaths")}`, value: overview ? `${formatNumber(overview.totalKills ?? 0)} / ${formatNumber(overview.totalDeaths ?? 0)}` : "--" },
     { label: t("database.matches"), value: overview ? formatNumber(overview.totalMatches ?? 0) : "--" },
     { label: t("database.gameTime"), value: overview ? formatHoursFromSeconds(overview.totalGameSeconds ?? 0) : "--" },
-    { label: t("database.ratingAvgMinMax"), value: overview ? ratingSummary(overview.averageLadderRating, overview.minLadderRating, overview.maxLadderRating) : "--" },
+    { label: t("database.serverTime"), value: overview ? formatHoursFromSeconds(overview.totalServerSeconds ?? 0) : "--" },
   ];
 });
 
@@ -566,22 +553,6 @@ function formatHoursFromSeconds(value: unknown) {
 
 function formatNumber(value: unknown) {
   return new Intl.NumberFormat(currentLocale.value).format(Number(value ?? 0));
-}
-
-function ratingSummary(avg: unknown, min: unknown, max: unknown) {
-  const average = Number(avg ?? 0).toFixed(1);
-  return `${average} / ${formatNumber(min)}-${formatNumber(max)}`;
-}
-
-function winRate(wins: unknown, total: unknown) {
-  const winCount = Number(wins ?? 0);
-  const totalCount = Number(total ?? 0);
-  if (totalCount <= 0) return "--";
-  return `${((winCount / totalCount) * 100).toFixed(1)}%`;
-}
-
-function teamKills(player: any) {
-  return Number(player?.tk_downs ?? player?.total_tk_down ?? 0) + Number(player?.tk_kills ?? player?.total_tk_kill ?? 0);
 }
 
 function lookupItem(ip: unknown, map: Record<string, any>) {

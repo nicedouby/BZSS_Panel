@@ -45,16 +45,7 @@ CREATE TABLE IF NOT EXISTS players (
     ladder_rating INTEGER NOT NULL DEFAULT 1000,
     assets_json TEXT NOT NULL DEFAULT '{}',
     notes_json TEXT NOT NULL DEFAULT '{}',
-    total_kills_light INTEGER NOT NULL DEFAULT 0,
-    total_downed_light INTEGER NOT NULL DEFAULT 0,
-    total_downed_light_fatal INTEGER NOT NULL DEFAULT 0,
-    total_kills_other INTEGER NOT NULL DEFAULT 0,
-    total_downed_other INTEGER NOT NULL DEFAULT 0,
-    total_tk_down INTEGER NOT NULL DEFAULT 0,
-    total_tk_kill INTEGER NOT NULL DEFAULT 0,
     total_suicides INTEGER NOT NULL DEFAULT 0,
-    total_deaths INTEGER NOT NULL DEFAULT 0,
-    total_downed_received INTEGER NOT NULL DEFAULT 0,
     total_reports_received INTEGER NOT NULL DEFAULT 0,
     total_reports_submitted INTEGER NOT NULL DEFAULT 0,
     total_squad_created INTEGER NOT NULL DEFAULT 0,
@@ -271,19 +262,6 @@ ON combat_log_player_refs (player_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_combat_log_player_refs_event
 ON combat_log_player_refs (combat_log_event_id);
 
-CREATE TABLE IF NOT EXISTS player_logins (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    player_id INTEGER,
-    ip TEXT,
-    controller_path TEXT,
-    eos_id TEXT,
-    steam_id TEXT,
-    joined_at INTEGER NOT NULL,
-    FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE SET NULL
-);
-CREATE INDEX IF NOT EXISTS idx_player_logins_player ON player_logins(player_id);
-CREATE INDEX IF NOT EXISTS idx_player_logins_joined ON player_logins(joined_at);
-
 CREATE TABLE IF NOT EXISTS ip_lookup_cache (
   ip TEXT PRIMARY KEY,
   provider TEXT NOT NULL DEFAULT 'none',
@@ -381,24 +359,11 @@ async function runMigrations(db) {
     if (cols.has("total_team_kills") && !cols.has("total_tk_down")) {
       await db.run("ALTER TABLE players RENAME COLUMN total_team_kills TO total_tk_down");
     }
-    if (!cols.has("total_tk_kill")) {
-      await db.run("ALTER TABLE players ADD COLUMN total_tk_kill INTEGER NOT NULL DEFAULT 0");
-    }
-    if (!cols.has("total_deaths")) {
-      await db.run("ALTER TABLE players ADD COLUMN total_deaths INTEGER NOT NULL DEFAULT 0");
-    }
 
     await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 1, Date.now());
   }
 
   if (!appliedSet.has(2)) {
-    const tableInfo = await db.all("PRAGMA table_info(players)");
-    const cols = new Set(tableInfo.map((column) => column.name));
-
-    if (!cols.has("total_downed_received")) {
-      await db.run("ALTER TABLE players ADD COLUMN total_downed_received INTEGER NOT NULL DEFAULT 0");
-    }
-
     await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 2, Date.now());
   }
 
@@ -608,16 +573,7 @@ async function ensureCompatibleColumns(db) {
     ladder_rating: "INTEGER NOT NULL DEFAULT 1000",
     assets_json: "TEXT NOT NULL DEFAULT '{}'",
     notes_json: "TEXT NOT NULL DEFAULT '{}'",
-    total_kills_light: "INTEGER NOT NULL DEFAULT 0",
-    total_downed_light: "INTEGER NOT NULL DEFAULT 0",
-    total_downed_light_fatal: "INTEGER NOT NULL DEFAULT 0",
-    total_kills_other: "INTEGER NOT NULL DEFAULT 0",
-    total_downed_other: "INTEGER NOT NULL DEFAULT 0",
-    total_tk_down: "INTEGER NOT NULL DEFAULT 0",
-    total_tk_kill: "INTEGER NOT NULL DEFAULT 0",
     total_suicides: "INTEGER NOT NULL DEFAULT 0",
-    total_deaths: "INTEGER NOT NULL DEFAULT 0",
-    total_downed_received: "INTEGER NOT NULL DEFAULT 0",
     total_reports_received: "INTEGER NOT NULL DEFAULT 0",
     total_reports_submitted: "INTEGER NOT NULL DEFAULT 0",
     total_squad_created: "INTEGER NOT NULL DEFAULT 0",
@@ -662,18 +618,26 @@ async function migrateLegacyColumns(db) {
     const killColumns = new Set((await db.all("PRAGMA table_info(kill_stats)")).map((row) => row.name));
     if (killColumns.has("small_arm_kills")) {
       await db.run(`
-        UPDATE players
-        SET total_kills_light = COALESCE((SELECT small_arm_kills FROM kill_stats WHERE kill_stats.player_id = players.id), total_kills_light),
-            total_downed_light = COALESCE((SELECT small_arm_incaps FROM kill_stats WHERE kill_stats.player_id = players.id), total_downed_light),
-            total_downed_light_fatal = COALESCE((SELECT headshot_kills FROM kill_stats WHERE kill_stats.player_id = players.id), total_downed_light_fatal),
-            total_kills_other = COALESCE((SELECT other_kills FROM kill_stats WHERE kill_stats.player_id = players.id), total_kills_other),
-            total_downed_other = COALESCE((SELECT other_incaps FROM kill_stats WHERE kill_stats.player_id = players.id), total_downed_other),
-            total_tk_kill = COALESCE((SELECT teamkill_kills FROM kill_stats WHERE kill_stats.player_id = players.id), total_tk_kill),
-            total_tk_down = COALESCE((SELECT teamkill_incaps FROM kill_stats WHERE kill_stats.player_id = players.id), total_tk_down),
-            total_suicides = COALESCE((SELECT suicides FROM kill_stats WHERE kill_stats.player_id = players.id), total_suicides),
-            total_deaths = COALESCE((SELECT deaths FROM kill_stats WHERE kill_stats.player_id = players.id), total_deaths),
-            total_downed_received = COALESCE((SELECT incap_deaths FROM kill_stats WHERE kill_stats.player_id = players.id), total_downed_received)
-        WHERE EXISTS (SELECT 1 FROM kill_stats WHERE kill_stats.player_id = players.id)
+        INSERT OR REPLACE INTO player_combat_stats (
+            player_id,
+            light_weapon_downs,
+            light_weapon_kills,
+            light_weapon_fatal_downs,
+            deaths,
+            tk_downs,
+            tk_kills,
+            updated_at
+        )
+        SELECT
+            player_id,
+            COALESCE(small_arm_incaps, 0),
+            COALESCE(small_arm_kills, 0),
+            COALESCE(headshot_kills, 0),
+            COALESCE(deaths, 0),
+            COALESCE(teamkill_incaps, 0),
+            COALESCE(teamkill_kills, 0),
+            COALESCE(updated_at, strftime('%s','now') * 1000)
+        FROM kill_stats
       `);
     }
   }

@@ -467,18 +467,10 @@ export class PlayerRepository {
 
     return this.db.all(
       `SELECT players.id, players.current_name, players.steam_id, players.eos_id, players.current_ip,
-              players.permission_group, players.ladder_rating, players.game_seconds, players.server_seconds,
+              players.permission_group, players.game_seconds, players.server_seconds,
               players.commander_seconds, players.squad_leader_seconds, players.in_squad_seconds, players.warmup_seconds,
-              players.total_downed_received, players.total_squad_created, players.updated_at,
-              COALESCE(pcs.light_weapon_downs, 0) AS light_weapon_downs,
-              COALESCE(pcs.light_weapon_kills, 0) AS light_weapon_kills,
-              COALESCE(pcs.light_weapon_fatal_downs, 0) AS light_weapon_fatal_downs,
-              COALESCE(pcs.deaths, 0) AS combat_deaths,
-              COALESCE(pcs.tk_downs, 0) AS tk_downs,
-              COALESCE(pcs.tk_kills, 0) AS tk_kills,
-              players.updated_at AS last_login_at
+              players.total_squad_created, players.updated_at
        FROM players
-       LEFT JOIN player_combat_stats pcs ON pcs.player_id = players.id
        WHERE ${search.where}
        ORDER BY ${orderBy}
        LIMIT ? OFFSET ?`,
@@ -615,6 +607,8 @@ export class PlayerRepository {
     const { limit, offset } = this.normalizePaging(options);
     return this.db.all(
       `SELECT
+         r.combat_log_event_id,
+         r.player_id AS ref_player_id,
          e.id,
          e.event_type,
          r.role,
@@ -640,6 +634,28 @@ export class PlayerRepository {
     );
   }
 
+  async listCombatSessionsByPlayer(playerId, options = {}) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return [];
+    const { limit, offset } = this.normalizePaging(options);
+    return this.db.all(
+      `SELECT
+         id,
+         player_id,
+         date_key,
+         file_path,
+         first_event_at,
+         last_event_at
+       FROM combat_sessions
+       WHERE player_id = ?
+       ORDER BY last_event_at DESC, id DESC
+       LIMIT ? OFFSET ?`,
+      id,
+      limit,
+      offset,
+    );
+  }
+
   async getPlayerDetail(playerId) {
     const id = Number(playerId);
     if (!Number.isFinite(id)) return null;
@@ -647,81 +663,27 @@ export class PlayerRepository {
     const player = await this.getPlayerById(id);
     if (!player) return null;
 
-    const [aliases, ips, squadCreatedRows, combatStatsRow, warmupStatsRow, combatLogs] = await Promise.all([
+    const [aliases, ips, squadCreatedRows, combatSessions] = await Promise.all([
       this.listPlayerAliases(id, { limit: 12 }),
       this.listPlayerIps(id, { limit: 12 }),
       this.listPlayerSquadCreated(id, { limit: 1 }),
-      this.getPlayerWarmupStats(id),
-      this.db.get("SELECT * FROM player_combat_stats WHERE player_id = ?", id),
-      this.listCombatLogsByPlayer(id, { limit: 100 }),
+      this.listCombatSessionsByPlayer(id, { limit: 100 }),
     ]);
-
-    const killStats = combatStatsRow ? {
-      lightWeaponDowns: Number(combatStatsRow.light_weapon_downs ?? 0),
-      lightWeaponKills: Number(combatStatsRow.light_weapon_kills ?? 0),
-      lightWeaponFatalDowns: Number(combatStatsRow.light_weapon_fatal_downs ?? 0),
-      deaths: Number(combatStatsRow.deaths ?? 0),
-      tkDowns: Number(combatStatsRow.tk_downs ?? 0),
-      tkKills: Number(combatStatsRow.tk_kills ?? 0),
-      updatedAt: Number(combatStatsRow.updated_at ?? 0) || null,
-    } : {
-      lightWeaponDowns: 0,
-      lightWeaponKills: 0,
-      lightWeaponFatalDowns: 0,
-      deaths: 0,
-      tkDowns: 0,
-      tkKills: 0,
-      updatedAt: null,
-    };
-
-    const warmupCombatStats = warmupStatsRow ? {
-      downs: Number(warmupStatsRow.downs ?? 0),
-      kills: Number(warmupStatsRow.kills ?? 0),
-      deaths: Number(warmupStatsRow.deaths ?? 0),
-      updatedAt: Number(warmupStatsRow.updated_at ?? 0) || null,
-    } : {
-      downs: 0,
-      kills: 0,
-      deaths: 0,
-      updatedAt: null,
-    };
 
     return {
       player,
       aliases,
       ips,
       squadCreated: squadCreatedRows[0] ?? null,
-      killStats,
-      combatStats: killStats,
-      warmupCombatStats,
-      combatLogs: combatLogs.map((row) => ({
+      combatSessions: combatSessions.map((row) => ({
         id: Number(row.id),
-        eventType: row.event_type,
-        role: row.role,
-        attackerName: row.attacker_name || null,
-        victimName: row.victim_name || null,
-        weapon: row.weapon || null,
-        damage: row.damage == null ? null : Number(row.damage),
-        isLightWeapon: Number(row.is_light_weapon || 0) === 1,
-        isTeamkill: Number(row.is_teamkill || 0) === 1,
-        isFatalDown: Number(row.is_fatal_down || 0) === 1,
-        rawLine: row.raw_line || null,
-        payloadJson: row.payload_json || null,
-        createdAt: Number(row.created_at || 0) || null,
-        logTime: Number(row.log_time || 0) || null,
+        playerId: Number(row.player_id || 0) || null,
+        dateKey: row.date_key || null,
+        filePath: row.file_path || null,
+        firstEventAt: Number(row.first_event_at || 0) || null,
+        lastEventAt: Number(row.last_event_at || 0) || null,
       })),
-      combatLogRefs: combatLogs.map((row) => ({
-        id: Number(row.id),
-        eventType: row.event_type,
-        role: row.role,
-        createdAt: Number(row.created_at || 0) || null,
-      })),
-      warmupStats: warmupCombatStats,
       summary: {
-        totalKills: Number(killStats.lightWeaponKills ?? 0),
-        totalDowns: Number(killStats.lightWeaponDowns ?? 0),
-        totalDeaths: Number(killStats.deaths ?? 0),
-        totalTeamKills: Number(killStats.tkDowns ?? 0) + Number(killStats.tkKills ?? 0),
         gameSeconds: Number(player.game_seconds ?? 0),
         serverSeconds: Number(player.server_seconds ?? 0),
       },
@@ -738,12 +700,13 @@ export class PlayerRepository {
   }
 
   async resetCombatStats() {
-    const ts = now();
-    const result = await this.db.run("DELETE FROM player_combat_stats");
-    await this.db.run("DELETE FROM player_warmup_combat_stats");
-    await this.db.run("DELETE FROM combat_log_player_refs");
-    await this.db.run("DELETE FROM combat_log_events");
-    return Number(result?.changes || 0);
+    const deletes = [
+      await this.db.run("DELETE FROM player_combat_stats"),
+      await this.db.run("DELETE FROM player_warmup_combat_stats"),
+      await this.db.run("DELETE FROM combat_log_player_refs"),
+      await this.db.run("DELETE FROM combat_log_events"),
+    ];
+    return deletes.reduce((sum, result) => sum + Number(result?.changes || 0), 0);
   }
 
   async deletePlayer(playerId) {
@@ -769,13 +732,7 @@ export class PlayerRepository {
               COALESCE(SUM(in_squad_seconds), 0) AS total_in_squad_seconds,
               COALESCE(SUM(total_matches), 0) AS total_matches,
               COALESCE(SUM(total_match_wins), 0) AS total_match_wins,
-              COALESCE(SUM(COALESCE(pcs.light_weapon_kills, 0)), 0) AS total_kills,
-              COALESCE(SUM(COALESCE(pcs.deaths, 0)), 0) AS total_deaths,
-              COALESCE(SUM(COALESCE(pcs.tk_downs, 0) + COALESCE(pcs.tk_kills, 0)), 0) AS total_team_kills,
               COALESCE(SUM(total_suicides), 0) AS total_suicides,
-              COALESCE(AVG(ladder_rating), 0) AS average_ladder_rating,
-              COALESCE(MAX(ladder_rating), 0) AS max_ladder_rating,
-              COALESCE(MIN(ladder_rating), 0) AS min_ladder_rating,
               COALESCE(MAX(updated_at), 0) AS last_player_update_at
        FROM players
        LEFT JOIN player_combat_stats pcs ON pcs.player_id = players.id`,
@@ -791,26 +748,6 @@ export class PlayerRepository {
        FROM players
        GROUP BY permission_group
        ORDER BY players DESC, permission_group ASC`,
-    );
-
-    const topByKills = await this.db.all(
-      `SELECT id, current_name, steam_id, eos_id, ladder_rating,
-              COALESCE(pcs.light_weapon_downs, 0) AS light_weapon_downs,
-              COALESCE(pcs.light_weapon_kills, 0) AS light_weapon_kills,
-              COALESCE(pcs.light_weapon_fatal_downs, 0) AS light_weapon_fatal_downs,
-              COALESCE(pcs.deaths, 0) AS total_deaths,
-              COALESCE(pcs.tk_downs, 0) AS tk_downs,
-              COALESCE(pcs.tk_kills, 0) AS tk_kills,
-              COALESCE(pcs.light_weapon_kills, 0) AS total_kills,
-              CASE
-                WHEN COALESCE(pcs.deaths, 0) > 0 THEN ROUND(1.0 * COALESCE(pcs.light_weapon_kills, 0) / COALESCE(pcs.deaths, 0), 2)
-                ELSE NULL
-              END AS kd
-       FROM players
-       LEFT JOIN player_combat_stats pcs ON pcs.player_id = players.id
-       ORDER BY total_kills DESC, light_weapon_kills DESC, light_weapon_downs DESC, updated_at DESC
-       LIMIT ?`,
-      normalizedTop,
     );
 
     const topByPlaytime = await this.db.all(
@@ -891,13 +828,7 @@ export class PlayerRepository {
         totalInSquadSeconds: Number(overviewRow?.total_in_squad_seconds || 0),
         totalMatches: Number(overviewRow?.total_matches || 0),
         totalMatchWins: Number(overviewRow?.total_match_wins || 0),
-        totalKills: Number(overviewRow?.total_kills || 0),
-        totalDeaths: Number(overviewRow?.total_deaths || 0),
-        totalTeamKills: Number(overviewRow?.total_team_kills || 0),
         totalSuicides: Number(overviewRow?.total_suicides || 0),
-        averageLadderRating: Number(Number(overviewRow?.average_ladder_rating || 0).toFixed(2)),
-        maxLadderRating: Number(overviewRow?.max_ladder_rating || 0),
-        minLadderRating: Number(overviewRow?.min_ladder_rating || 0),
         lastPlayerUpdateAt: Number(overviewRow?.last_player_update_at || 0) || null,
       },
       breakdowns: {
@@ -922,19 +853,6 @@ export class PlayerRepository {
         })),
       },
       leaderboards: {
-        byKills: topByKills.map((row) => ({
-          id: Number(row.id),
-          currentName: row.current_name || null,
-          steamID: row.steam_id || null,
-          eosID: row.eos_id || null,
-          ladderRating: Number(row.ladder_rating || 0),
-          totalKillsLight: Number(row.light_weapon_kills || 0),
-          totalKillsOther: 0,
-          totalKills: Number(row.total_kills || 0),
-          totalDeaths: Number(row.total_deaths || 0),
-          totalTeamKills: Number(row.tk_downs || 0) + Number(row.tk_kills || 0),
-          kd: row.kd == null ? null : Number(row.kd),
-        })),
         byPlaytime: topByPlaytime.map((row) => ({
           id: Number(row.id),
           currentName: row.current_name || null,

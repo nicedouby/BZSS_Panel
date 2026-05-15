@@ -70,6 +70,40 @@ function eventTimeMs(event) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function isWarmupActive(core, modules, event) {
+  const snapshot = core.webStatus?.getSnapshot?.() ?? {};
+  const match = core.runtimeState?.getMatch?.() ?? {};
+  const roundState = modules.roundState?.getState?.() ?? null;
+  const matchState = modules.matchState?.getState?.() ?? null;
+
+  const candidates = [
+    event?.isWarmup,
+    event?.warmup,
+    event?.phase,
+    event?.roundState,
+    event?.matchState,
+    snapshot?.phase,
+    snapshot?.roundState,
+    snapshot?.matchState,
+    match?.phase,
+    match?.roundState,
+    match?.state,
+    roundState?.phase,
+    roundState?.state,
+    matchState?.phase,
+    matchState?.state,
+  ];
+
+  return candidates.some((value) => {
+    const text = String(value ?? "").trim().toLowerCase();
+    return text === "warmup"
+      || text === "preround"
+      || text === "staging"
+      || text === "waiting"
+      || text === "preparation";
+  });
+}
+
 /**
  * Module: PlayerDatabase
  *
@@ -98,87 +132,58 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       ? await repo.upsertFromPresence(attackerIdentity)
       : null;
 
-    const attackerTeamID = resolveTeamID(attackerIdentity, attacker, event, "Attacker");
-    const victimTeamID = resolveTeamID(victimIdentity, victim, event, "Victim");
-    const isTeamkill = Boolean(attacker?.id && victim?.id && attacker.id !== victim.id && sameTeam(attackerTeamID, victimTeamID));
-    const isLightWeapon = Boolean(attacker?.id || victim?.id) && !isTeamkill;
-    const isFatalDown = type === "died";
-    const eventType = type === "wounded" ? "WOUNDED" : "DIED";
-    const sourceEventId = buildCombatSourceEventId(event, type);
-    const sourceEvent = await repo.addCombatLogEvent({
-      sourceEventId,
-      serverId: event.serverId ?? null,
-      matchId: event.matchId ?? event?.record?.matchId ?? null,
-      mapName: event.mapName ?? event?.record?.mapName ?? null,
-      layerName: event.layerName ?? event?.record?.layerName ?? null,
-      eventType,
-      attackerPlayerId: attacker?.id ?? null,
-      victimPlayerId: victim?.id ?? null,
-      attackerName: attackerIdentity.name || null,
-      victimName: victimIdentity.name || null,
-      attackerSteamId: attackerIdentity.steamID || null,
-      attackerEosId: attackerIdentity.eosID || null,
-      victimSteamId: victimIdentity.steamID || null,
-      victimEosId: victimIdentity.eosID || null,
-      weapon: eventIdentityWeapon(event),
-      damage: eventDamageValue(event, type),
-      isLightWeapon,
-      isTeamkill,
-      isFatalDown,
-      rawLine: event.rawLog,
-      payload: event,
-      logTime: eventTimeMs(event),
+    if (isWarmupActive(core, modules, event)) {
+      await recordWarmupCombatOnly({ attacker, victim, type });
+      return;
+    }
+
+    await recordNormalCombatWithLog({
+      event,
+      type,
+      attacker,
+      victim,
+      attackerIdentity,
+      victimIdentity,
     });
+  }
 
-    await repo.addLogEvent({
-      sourceEvent: event.eventName,
-      eventName: `combat.${type}`,
-      rawLine: event.rawLog,
-      matchedPlayerName: victimIdentity.name || attackerIdentity.name,
-      payload: event,
-    });
-
-    if (!sourceEvent.inserted) return;
-
-    const refs = [];
-    if (attacker?.id) refs.push({ playerId: attacker.id, role: "attacker" });
-    if (victim?.id) refs.push({ playerId: victim.id, role: "victim" });
-    await repo.addCombatLogRefs(sourceEvent.id, refs);
-
+  async function recordWarmupCombatOnly({ attacker, victim, type }) {
     if (type === "wounded") {
-      if (attacker?.id && attacker.id !== victim?.id && !isTeamkill) {
-        await repo.incrementCombatStats(attacker.id, { light_weapon_downs: 1 });
+      if (attacker?.id && attacker.id !== victim?.id) {
+        await repo.incrementWarmupCombatStats(attacker.id, { downs: 1 });
       }
+      return;
     }
 
     if (type === "died") {
-      if (victim?.id) await repo.incrementCombatStats(victim.id, { deaths: 1 });
+      if (victim?.id) {
+        await repo.incrementWarmupCombatStats(victim.id, { deaths: 1 });
+      }
+
       if (attacker?.id && attacker.id !== victim?.id) {
-        if (!isTeamkill) {
-          await repo.incrementCombatStats(attacker.id, {
-            light_weapon_kills: 1,
-            light_weapon_fatal_downs: 1,
-          });
-        }
+        await repo.incrementWarmupCombatStats(attacker.id, { kills: 1 });
       }
     }
   }
 
+  async function recordNormalCombatWithLog({
+    event,
+    type,
+    attacker,
+    victim,
+    attackerIdentity,
+    victimIdentity,
+  }) {
+    void event;
+    void type;
+    void attacker;
+    void victim;
+    void attackerIdentity;
+    void victimIdentity;
+  }
+
   async function recordFriendlyFireStats(event) {
-    const record = event?.record;
-    if (!record?.isFriendlyFire) return;
-
-    const attackerIdentity = recordIdentity(record, "attacker");
-    const attacker = attackerIdentity.name || attackerIdentity.steamID || attackerIdentity.eosID
-      ? await repo.upsertFromPresence(attackerIdentity)
-      : null;
-    if (!attacker?.id) return;
-
-    if (record.friendlyFireType === "team_wound" || record.isTeamKillDown || record.tkDown) {
-      await repo.incrementCombatStats(attacker.id, { tk_downs: 1 });
-    } else if (record.friendlyFireType === "team_kill" || record.isTeamKill || record.tk) {
-      await repo.incrementCombatStats(attacker.id, { tk_kills: 1 });
-    }
+    void event;
   }
 
   const api = {
@@ -199,36 +204,14 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
           eosID: p.eos_id ?? "",
           ip: p.current_ip ?? "",
           permissionGroup: p.permission_group ?? "default",
-          ladderRating: Number(p.ladder_rating ?? 1000),
           gameSeconds: Number(p.game_seconds ?? 0),
           serverSeconds: Number(p.server_seconds ?? 0),
           commanderSeconds: Number(p.commander_seconds ?? 0),
           squadLeaderSeconds: Number(p.squad_leader_seconds ?? 0),
           inSquadSeconds: Number(p.in_squad_seconds ?? 0),
           warmupSeconds: Number(p.warmup_seconds ?? 0),
-          killStats: {
-            lightWeaponDowns: Number(p.light_weapon_downs ?? 0),
-            lightWeaponKills: Number(p.light_weapon_kills ?? 0),
-            lightWeaponFatalDowns: Number(p.light_weapon_fatal_downs ?? 0),
-            deaths: Number(p.combat_deaths ?? 0),
-            tkDowns: Number(p.tk_downs ?? 0),
-            tkKills: Number(p.tk_kills ?? 0),
-          },
-          combatStats: {
-            lightWeaponDowns: Number(p.light_weapon_downs ?? 0),
-            lightWeaponKills: Number(p.light_weapon_kills ?? 0),
-            lightWeaponFatalDowns: Number(p.light_weapon_fatal_downs ?? 0),
-            deaths: Number(p.combat_deaths ?? 0),
-            tkDowns: Number(p.tk_downs ?? 0),
-            tkKills: Number(p.tk_kills ?? 0),
-          },
-          kills: Number(p.light_weapon_kills ?? 0),
-          downs: Number(p.light_weapon_downs ?? 0),
-          deaths: Number(p.combat_deaths ?? 0),
-          teamKills: Number(p.tk_downs ?? 0) + Number(p.tk_kills ?? 0),
           suicides: Number(p.total_suicides ?? 0),
           squadCreated: Number(p.total_squad_created ?? 0),
-          lastLoginAt: Number(p.last_login_at ?? 0) || null,
           updatedAt: Number(p.updated_at ?? 0) || null,
         })),
         total,
@@ -332,12 +315,8 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
 
       unsubscribers.push(core.eventBus.onCoreEvent("On_PlayerWounded", (event) => recordCombat(event, "wounded")));
       unsubscribers.push(core.eventBus.onCoreEvent("On_PlayerDied", (event) => recordCombat(event, "died")));
-      if (core.eventBus.onModuleEvent) {
-        unsubscribers.push(core.eventBus.onModuleEvent("module.killManage", "combatResolved", recordFriendlyFireStats));
-      }
-
       unsubscribers.push(core.eventBus.onCoreEvent("*", async (event) => {
-      if (!event?.eventName || event.eventName === "On_PlayerWounded" || event.eventName === "On_PlayerDied") return;
+        if (!event?.eventName || event.eventName === "On_PlayerWounded" || event.eventName === "On_PlayerDied") return;
 
       await repo.addLogEvent({
         sourceEvent: event.eventName,

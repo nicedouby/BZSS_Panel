@@ -33,8 +33,6 @@
           </div>
           <div><span>Game Seconds</span><strong>{{ detail?.player?.game_seconds ?? 0 }}</strong></div>
           <div><span>Squad Created</span><strong>{{ detail?.player?.total_squad_created ?? 0 }}</strong></div>
-          <div><span>Total Deaths</span><strong>{{ detail?.killStats?.deaths ?? detail?.combatStats?.deaths ?? detail?.summary?.totalDeaths ?? 0 }}</strong></div>
-          <div><span>Total Team Kills</span><strong>{{ totalTeamKills }}</strong></div>
         </div>
 
         <PageCard compact title="Permission Group">
@@ -90,11 +88,6 @@ watch(
   },
   { immediate: true },
 );
-
-const totalTeamKills = computed(() => {
-  const player = props.detail?.player;
-  return Number(player?.tk_downs ?? player?.total_tk_down ?? 0) + Number(player?.tk_kills ?? player?.total_tk_kill ?? 0);
-});
 
 function formatTime(value: unknown) {
   const time = Number(value ?? 0);

@@ -1,4 +1,4 @@
-// -*- coding: utf-8 -*-
+﻿// -*- coding: utf-8 -*-
 
 let rows = [];
 let selectedId = null;
@@ -17,73 +17,73 @@ export async function renderPage({ root, api, apiFetch, routeInfo }) {
     <section class="page db-page-shell">
       <div class="page-title-row">
         <div>
-          <div class="page-title">玩家数据库</div>
-          <div class="match-empty">MicePanel 风格档案库：玩家、别名、IP、登录、战斗、暖服、标签与违规统计</div>
+          <div class="page-title">鐜╁鏁版嵁搴?/div>
+          <div class="match-empty">MicePanel 椋庢牸妗ｆ搴擄細鐜╁銆佸埆鍚嶃€両P銆佺櫥褰曘€佹垬鏂椼€佹殩鏈嶃€佹爣绛句笌杩濊缁熻</div>
         </div>
-        <span id="db-sync-status" class="status-text" data-tone="idle">等待操作</span>
+        <span id="db-sync-status" class="status-text" data-tone="idle">绛夊緟鎿嶄綔</span>
       </div>
 
       <section class="db-overview-card">
-        <div class="db-stat-item"><span>玩家总数</span><strong id="db-ov-total-players">--</strong></div>
-        <div class="db-stat-item"><span>窗口活跃</span><strong id="db-ov-active-players">--</strong></div>
-        <div class="db-stat-item"><span>总击杀 / 死亡</span><strong id="db-ov-kd">--</strong></div>
-        <div class="db-stat-item"><span>总比赛</span><strong id="db-ov-total-matches">--</strong></div>
-        <div class="db-stat-item"><span>总时长</span><strong id="db-ov-total-hours">--</strong></div>
-        <div class="db-stat-item"><span>天梯均值 / 极值</span><strong id="db-ov-rating">--</strong></div>
+        <div class="db-stat-item"><span>鐜╁鎬绘暟</span><strong id="db-ov-total-players">--</strong></div>
+        <div class="db-stat-item"><span>绐楀彛娲昏穬</span><strong id="db-ov-active-players">--</strong></div>
+        <div class="db-stat-item"><span>鎬绘湇鍔″櫒鏃堕暱</span><strong id="db-ov-kd">--</strong></div>
+        <div class="db-stat-item"><span>鎬绘瘮璧?/span><strong id="db-ov-total-matches">--</strong></div>
+        <div class="db-stat-item"><span>鎬绘椂闀?/span><strong id="db-ov-total-hours">--</strong></div>
+        <div class="db-stat-item"><span>鎬绘寚鎸ユ椂闀?/span><strong id="db-ov-rating">--</strong></div>
       </section>
 
       <section class="card db-toolbar-card">
         <div class="console-actions db-toolbar-row">
-          <input id="db-search" class="console-search db-search" placeholder="搜索：昵称 / Steam64 / EOS / IP">
+          <input id="db-search" class="console-search db-search" placeholder="鎼滅储锛氭樀绉?/ Steam64 / EOS / IP">
           <select id="db-sort">
-            <option value="updated_desc">排序：最近更新</option>
-            <option value="name_asc">排序：A-Z</option>
+            <option value="updated_desc">鎺掑簭锛氭渶杩戞洿鏂?/option>
+            <option value="name_asc">鎺掑簭锛欰-Z</option>
           </select>
           <select id="db-stats-days">
-            <option value="7">统计窗口：7天</option>
-            <option value="14" selected>统计窗口：14天</option>
-            <option value="30">统计窗口：30天</option>
-            <option value="60">统计窗口：60天</option>
-            <option value="90">统计窗口：90天</option>
+            <option value="7">缁熻绐楀彛锛?澶?/option>
+            <option value="14" selected>缁熻绐楀彛锛?4澶?/option>
+            <option value="30">缁熻绐楀彛锛?0澶?/option>
+            <option value="60">缁熻绐楀彛锛?0澶?/option>
+            <option value="90">缁熻绐楀彛锛?0澶?/option>
           </select>
           <select id="db-stats-top">
-            <option value="5">榜单数量：5</option>
-            <option value="10" selected>榜单数量：10</option>
-            <option value="20">榜单数量：20</option>
-            <option value="50">榜单数量：50</option>
+            <option value="5">姒滃崟鏁伴噺锛?</option>
+            <option value="10" selected>姒滃崟鏁伴噺锛?0</option>
+            <option value="20">姒滃崟鏁伴噺锛?0</option>
+            <option value="50">姒滃崟鏁伴噺锛?0</option>
           </select>
-          <button id="db-stats-toggle-btn">打开统计弹窗</button>
-          <button id="db-sync-online-btn">同步在线玩家</button>
-          <button id="db-reset-combat-stats-btn" class="danger-lite">重置击杀统计</button>
+          <button id="db-stats-toggle-btn">鎵撳紑缁熻寮圭獥</button>
+          <button id="db-sync-online-btn">鍚屾鍦ㄧ嚎鐜╁</button>
+          <button id="db-reset-combat-stats-btn" class="danger-lite">閲嶇疆鍑绘潃缁熻</button>
         </div>
       </section>
 
       <div class="db-panel">
         <aside class="db-list-col" id="db-list"></aside>
         <section class="db-detail-col" id="db-detail">
-          <div class="placeholder">请选择左侧玩家查看档案详情</div>
+          <div class="placeholder">璇烽€夋嫨宸︿晶鐜╁鏌ョ湅妗ｆ璇︽儏</div>
         </section>
       </div>
 
       <div class="db-stats-modal is-hidden" id="db-stats-modal" aria-hidden="true">
-        <button class="db-stats-modal-backdrop" id="db-stats-modal-backdrop" type="button" aria-label="关闭统计弹窗"></button>
-        <section class="db-stats-modal-card" role="dialog" aria-modal="true" aria-label="数据库统计弹窗">
+        <button class="db-stats-modal-backdrop" id="db-stats-modal-backdrop" type="button" aria-label="鍏抽棴缁熻寮圭獥"></button>
+        <section class="db-stats-modal-card" role="dialog" aria-modal="true" aria-label="鏁版嵁搴撶粺璁″脊绐?>
           <header class="db-stats-modal-head">
-            <h2>数据库统计</h2>
-            <button id="db-stats-modal-close" type="button">关闭</button>
+            <h2>鏁版嵁搴撶粺璁?/h2>
+            <button id="db-stats-modal-close" type="button">鍏抽棴</button>
           </header>
           <section class="db-analytics-grid">
             <div class="db-card db-analytics-card">
-              <h3>Breakdowns 分布统计</h3>
-              <div id="db-breakdowns" class="db-analytics-body">等待加载...</div>
+              <h3>Breakdowns 鍒嗗竷缁熻</h3>
+              <div id="db-breakdowns" class="db-analytics-body">绛夊緟鍔犺浇...</div>
             </div>
             <div class="db-card db-analytics-card">
-              <h3>Leaderboards 排行榜</h3>
-              <div id="db-leaderboards" class="db-analytics-body">等待加载...</div>
+              <h3>Leaderboards 鎺掕姒?/h3>
+              <div id="db-leaderboards" class="db-analytics-body">绛夊緟鍔犺浇...</div>
             </div>
             <div class="db-card db-analytics-card">
-              <h3>Trends 趋势</h3>
-              <div id="db-trends" class="db-analytics-body">等待加载...</div>
+              <h3>Trends 瓒嬪娍</h3>
+              <div id="db-trends" class="db-analytics-body">绛夊緟鍔犺浇...</div>
             </div>
           </section>
         </section>
@@ -126,7 +126,7 @@ export async function renderPage({ root, api, apiFetch, routeInfo }) {
       closeStatsModal(els.statsModal);
     });
     renderTrends(els.trends, stats);
-    if (!silent) setStatus(`统计已刷新：${state.days}天窗口，榜单${state.top}`, "success");
+    if (!silent) setStatus(`缁熻宸插埛鏂帮細${state.days}澶╃獥鍙ｏ紝姒滃崟${state.top}`, "success");
   }
 
   async function loadList() {
@@ -152,7 +152,7 @@ export async function renderPage({ root, api, apiFetch, routeInfo }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ permissionGroup }),
         });
-        setStatus("权限组已更新", "success");
+        setStatus("鏉冮檺缁勫凡鏇存柊", "success");
         await loadList();
       },
     });
@@ -191,22 +191,22 @@ export async function renderPage({ root, api, apiFetch, routeInfo }) {
   root.querySelector("#db-stats-modal-backdrop").addEventListener("click", () => closeStatsModal(els.statsModal));
 
   root.querySelector("#db-sync-online-btn").addEventListener("click", async () => {
-    setStatus("正在同步在线玩家...", "pending");
+    setStatus("姝ｅ湪鍚屾鍦ㄧ嚎鐜╁...", "pending");
     await apiFetch("/api/player-database/sync-online", { method: "POST" });
     await loadList();
     await loadStats({ silent: true });
-    setStatus("在线玩家已同步", "success");
+    setStatus("鍦ㄧ嚎鐜╁宸插悓姝?, "success");
   });
 
   root.querySelector("#db-reset-combat-stats-btn").addEventListener("click", async () => {
-    if (!window.confirm("确认重置所有玩家击杀统计和暖服统计吗？此操作不可撤销。")) return;
-    setStatus("正在重置击杀统计...", "pending");
+    if (!window.confirm("纭閲嶇疆鎵€鏈夌帺瀹跺嚮鏉€缁熻鍜屾殩鏈嶇粺璁″悧锛熸鎿嶄綔涓嶅彲鎾ら攢銆?)) return;
+    setStatus("姝ｅ湪閲嶇疆鍑绘潃缁熻...", "pending");
     const res = await apiFetch("/api/db/reset-combat-stats", { method: "POST" });
     const json = await res.json();
-    if (!res.ok) throw new Error(json?.error || "重置失败");
+    if (!res.ok) throw new Error(json?.error || "閲嶇疆澶辫触");
     await loadList();
     await loadStats({ silent: true });
-    setStatus(`击杀统计已重置，影响 ${Number(json.changed || 0)} 条记录`, "success");
+    setStatus(`鍑绘潃缁熻宸查噸缃紝褰卞搷 ${Number(json.changed || 0)} 鏉¤褰昤, "success");
   });
 
   await loadStats({ silent: true });
@@ -223,23 +223,23 @@ function renderOverview(root, stats) {
   const overview = stats?.overview || {};
   root.querySelector("#db-ov-total-players").textContent = fmtNumber(overview.totalPlayers || 0);
   root.querySelector("#db-ov-active-players").textContent = fmtNumber(overview.activePlayersInWindow || 0);
-  root.querySelector("#db-ov-kd").textContent = `${fmtNumber(overview.totalKills || 0)} / ${fmtNumber(overview.totalDeaths || 0)}`;
+  root.querySelector("#db-ov-kd").textContent = fmtHours(overview.totalServerSeconds || 0);
   root.querySelector("#db-ov-total-matches").textContent = fmtNumber(overview.totalMatches || 0);
   root.querySelector("#db-ov-total-hours").textContent = fmtHours(overview.totalGameSeconds || 0);
-  root.querySelector("#db-ov-rating").textContent = `${Number(overview.averageLadderRating || 0).toFixed(1)} / ${fmtNumber(overview.minLadderRating || 0)}-${fmtNumber(overview.maxLadderRating || 0)}`;
+  root.querySelector("#db-ov-rating").textContent = fmtHours(overview.totalCommanderSeconds || 0);
 }
 
 function renderList(els, loadDetail) {
   if (!rows.length) {
-    els.list.innerHTML = '<div class="placeholder">没有匹配的玩家</div>';
+    els.list.innerHTML = '<div class="placeholder">娌℃湁鍖归厤鐨勭帺瀹?/div>';
     return;
   }
 
   els.list.innerHTML = rows.map((p) => `
     <button class="db-row ${Number(p.id) === Number(selectedId) ? "active" : ""}" data-id="${p.id}">
-      <div class="db-row-name">${esc(p.current_name || "(未命名)")}</div>
-      <div class="db-row-meta">${esc(p.permission_group || "default")} · R=${fmtNumber(p.ladder_rating)} · K=${fmtNumber(p.light_weapon_kills)} · TK=${fmtNumber(Number(p.tk_downs || 0) + Number(p.tk_kills || 0))}</div>
-      <div class="db-row-meta">更新 ${rowTime(p.updated_at)}</div>
+      <div class="db-row-name">${esc(p.current_name || "(鏈懡鍚?")}</div>
+      <div class="db-row-meta">${esc(p.permission_group || "default")}</div>
+      <div class="db-row-meta">鏇存柊 ${rowTime(p.updated_at)}</div>
     </button>
   `).join("");
 
@@ -254,18 +254,7 @@ function renderList(els, loadDetail) {
 
 function renderDetail(els, data, actions) {
   const p = data.player;
-  const combat = data.killStats || data.combatStats || {};
-  const warmup = data.warmupCombatStats || data.warmupStats || {};
   const currentIp = p.current_ip || data.ips?.[0]?.ip || "--";
-  const winRate = p.total_matches > 0 ? `${((p.total_match_wins / p.total_matches) * 100).toFixed(1)}%` : "--";
-  const leadWinRate = p.total_lead_matches > 0 ? `${((p.total_lead_wins / p.total_lead_matches) * 100).toFixed(1)}%` : "--";
-  const cmdWinRate = p.total_cmd_matches > 0 ? `${((p.total_cmd_wins / p.total_cmd_matches) * 100).toFixed(1)}%` : "--";
-  const fatalDownRate = Number(combat.lightWeaponKills || 0) > 0 ? `${((Number(combat.lightWeaponFatalDowns || 0) / Number(combat.lightWeaponKills || 0)) * 100).toFixed(1)}%` : "--";
-  const kd = Number(combat.deaths || 0) > 0
-    ? (Number(combat.lightWeaponKills || 0) / Number(combat.deaths || 0)).toFixed(2)
-    : "--";
-  const totalKills = Number(combat.lightWeaponKills || 0);
-  const totalDowns = Number(combat.lightWeaponDowns || 0);
 
   els.detail.innerHTML = `
     <div class="db-detail-top">
@@ -277,50 +266,16 @@ function renderDetail(els, data, actions) {
           ${cell("当前 IP", currentIp, "db-vivid-ip")}
           ${cell("权限组", p.permission_group || "default", "db-vivid-perm")}
           ${cell("档案创建时间", rowTime(p.created_at))}
-          ${cell("最后更新时间", rowTime(p.updated_at))}
+          ${cell("最近更新时间", rowTime(p.updated_at))}
           ${cell("游戏时长", fmtSeconds(p.game_seconds), "db-vivid-duration")}
-          ${cell("服务器游玩时长", fmtSeconds(p.server_seconds))}
+          ${cell("服务器时长", fmtSeconds(p.server_seconds))}
           ${cell("暖服时长", fmtSeconds(p.warmup_seconds))}
-          ${cell("处于小队时长", fmtSeconds(p.in_squad_seconds))}
-          ${cell("作为队长时长", fmtSeconds(p.squad_leader_seconds))}
+          ${cell("在小队中时长", fmtSeconds(p.in_squad_seconds))}
+          ${cell("担任队长时长", fmtSeconds(p.squad_leader_seconds))}
           ${cell("担任指挥官时长", fmtSeconds(p.commander_seconds))}
-          ${cell("天梯分", fmtNumber(p.ladder_rating), "db-vivid-rating")}
-          ${cell("胜率", winRate)}
-          ${cell("带队胜率", leadWinRate)}
-          ${cell("指挥胜率", cmdWinRate)}
-        </div>
-      </div>
-
-      <div class="db-card">
-        <h3>击杀统计</h3>
-        <div class="db-grid">
-          ${cell("总 K / 击倒 / 死亡", `${fmtNumber(totalKills)} / ${fmtNumber(totalDowns)} / ${fmtNumber(combat.deaths)}`, "db-vivid-kill")}
-          ${cell("轻武器 K / 击倒", `${fmtNumber(combat.lightWeaponKills)} / ${fmtNumber(combat.lightWeaponDowns)}`, "db-vivid-kill")}
-          ${cell("致命击倒", fmtNumber(combat.lightWeaponFatalDowns), "db-vivid-kill")}
-          ${cell("致命击倒率", fatalDownRate)}
-          ${cell("TK 击倒", fmtNumber(combat.tkDowns), "db-vivid-danger")}
-          ${cell("TK 击杀", fmtNumber(combat.tkKills), "db-vivid-danger")}
-          ${cell("KD", kd)}
         </div>
       </div>
     </div>
-
-    <div class="db-card">
-      <h3>击杀统计</h3>
-      <div class="db-grid">
-        ${cell("暖服击杀", fmtNumber(warmup.kills || 0))}
-        ${cell("暖服击倒", fmtNumber(warmup.downs || 0))}
-        ${cell("暖服死亡", fmtNumber(warmup.deaths || 0))}
-      </div>
-    </div>
-
-    ${miniList("战斗日志（最近 100）", (data.combatLogs || []).slice(0, 100).map((item) => [
-      item.eventType || "--",
-      item.role || "--",
-      `${item.attackerName || "--"} -> ${item.victimName || "--"}`,
-      item.weapon ? `武器 ${item.weapon}` : "",
-      item.damage != null ? `伤害 ${item.damage}` : "",
-    ].filter(Boolean).join(" · ")))}
 
     <div class="db-card">
       <h3>行为记录</h3>
@@ -332,9 +287,11 @@ function renderDetail(els, data, actions) {
       </div>
     </div>
 
-    ${miniList("曾用名（最近 20）", (data.aliases || []).slice(0, 20).map((a) => `${a.alias_name} · ${rowTime(a.seen_at)}`))}
-    ${miniList("历史 IP（最近 20）", summarizeIpRows(data.ips, "seen_at").slice(0, 20).map((a) => `${a.ip} ×${a.count} · 最近 ${rowTime(a.latestAt)}`))}
-    ${miniList("战斗日志索引（最近 100）", (data.combatSessions || []).slice(0, 100).map((s) => `${s.date_key || "--"} · ${String(s.file_path || "").split(/[\\/]/).pop() || "--"} · ${rowTime(s.first_event_at)} ~ ${rowTime(s.last_event_at)}`))}
+    <div class="db-detail-grid">
+      ${miniList("曾用名称（最近 20）", (data.aliases || []).slice(0, 20).map((a) => `${a.alias_name} · ${rowTime(a.seen_at)}`))}
+      ${miniList("历史 IP（最近 20）", summarizeIpRows(data.ips, "seen_at").slice(0, 20).map((a) => `${a.ip} ×${a.count} · 最近 ${rowTime(a.latestAt)}`))}
+      ${miniList("战斗文件引用（最近 100）", (data.combatSessions || []).slice(0, 100).map((s) => `${s.date_key || "--"} · ${String(s.file_path || "").split(/[\\/]/).pop() || "--"} · ${rowTime(s.first_event_at)} ~ ${rowTime(s.last_event_at)}`))}
+    </div>
 
     <div class="db-card">
       <h3>权限组修改</h3>
@@ -382,23 +339,21 @@ function renderDetail(els, data, actions) {
     });
   });
 }
-
 function renderBreakdowns(root, stats) {
   const b = stats?.breakdowns || {};
   root.innerHTML = `
-    ${analyticsBlock("权限组分布", chipList(b.permissionGroups, "permissionGroup", "players"))}
-    ${analyticsBlock("角色标签分布", chipList(b.roleTags, "tagValue", "players"))}
-    ${analyticsBlock("成分标签分布", chipList(b.componentTags, "tagValue", "players"))}
-    ${analyticsBlock("违规类型分布", chipList((b.violationTypes || []).map((row) => ({ key: row.violationLabel || row.violationKey, value: row.totalCount })), "key", "value"))}
+    ${analyticsBlock("鏉冮檺缁勫垎甯?, chipList(b.permissionGroups, "permissionGroup", "players"))}
+    ${analyticsBlock("瑙掕壊鏍囩鍒嗗竷", chipList(b.roleTags, "tagValue", "players"))}
+    ${analyticsBlock("鎴愬垎鏍囩鍒嗗竷", chipList(b.componentTags, "tagValue", "players"))}
+    ${analyticsBlock("杩濊绫诲瀷鍒嗗竷", chipList((b.violationTypes || []).map((row) => ({ key: row.violationLabel || row.violationKey, value: row.totalCount })), "key", "value"))}
   `;
 }
 
 function renderLeaderboards(root, stats, jumpToPlayer) {
   const l = stats?.leaderboards || {};
   root.innerHTML = `
-    ${analyticsBlock("击杀榜", rankList(l.byKills, (row) => row.currentName || row.steamID || row.eosID || "未知玩家", (row) => `K ${fmtNumber(row.totalKills)} / D ${fmtNumber(row.totalDeaths)} / KD ${row.kd ?? "--"}`, "id"))}
-    ${analyticsBlock("时长榜", rankList(l.byPlaytime, (row) => row.currentName || row.steamID || row.eosID || "未知玩家", (row) => fmtHours(row.gameSeconds), "id"))}
-    ${analyticsBlock("违规榜", rankList(l.byViolations, (row) => row.currentName || row.steamID || row.eosID || "未知玩家", (row) => `违规 ${fmtNumber(row.totalViolations)}`, "playerId"))}
+    ${analyticsBlock("鏃堕暱姒?, rankList(l.byPlaytime, (row) => row.currentName || row.steamID || row.eosID || "鏈煡鐜╁", (row) => fmtHours(row.gameSeconds), "id"))}
+    ${analyticsBlock("杩濊姒?, rankList(l.byViolations, (row) => row.currentName || row.steamID || row.eosID || "鏈煡鐜╁", (row) => `杩濊 ${fmtNumber(row.totalViolations)}`, "playerId"))}
   `;
 
   root.querySelectorAll(".db-rank-player").forEach((btn) => {
@@ -409,7 +364,7 @@ function renderLeaderboards(root, stats, jumpToPlayer) {
 function renderTrends(root, stats) {
   const t = stats?.trends || {};
   root.innerHTML = `
-    ${analyticsBlock("近 N 天对局趋势", trendList(t.matchesByDay, (row) => `对局 ${fmtNumber(row.matchCount)} · 已结束 ${fmtNumber(row.completedCount)}`))}
+    ${analyticsBlock("杩?N 澶╁灞€瓒嬪娍", trendList(t.matchesByDay, (row) => `瀵瑰眬 ${fmtNumber(row.matchCount)} 路 宸茬粨鏉?${fmtNumber(row.completedCount)}`))}
   `;
 }
 
@@ -425,7 +380,7 @@ function miniList(title, items) {
   return `
     <div class="db-card">
       <h3>${esc(title)}</h3>
-      <ul class="db-list-mini">${items.length ? items.map((item) => `<li>${esc(item)}</li>`).join("") : "<li>无</li>"}</ul>
+      <ul class="db-list-mini">${items.length ? items.map((item) => `<li>${esc(item)}</li>`).join("") : "<li>鏃?/li>"}</ul>
     </div>
   `;
 }
@@ -435,14 +390,14 @@ function analyticsBlock(title, body) {
 }
 
 function chipList(items, keyField, valueField) {
-  if (!Array.isArray(items) || !items.length) return '<div class="placeholder">暂无数据</div>';
+  if (!Array.isArray(items) || !items.length) return '<div class="placeholder">鏆傛棤鏁版嵁</div>';
   return `<div class="db-chip-wrap">${items.map((item) => `
     <span class="db-chip"><span>${esc(item?.[keyField] ?? "--")}</span><small>${fmtNumber(item?.[valueField] ?? 0)}</small></span>
   `).join("")}</div>`;
 }
 
 function rankList(items, nameGetter, valueGetter, idField) {
-  if (!Array.isArray(items) || !items.length) return '<div class="placeholder">暂无数据</div>';
+  if (!Array.isArray(items) || !items.length) return '<div class="placeholder">鏆傛棤鏁版嵁</div>';
   return `<ol class="db-rank-list">${items.map((item) => `
     <li>
       <button class="name db-rank-player" type="button" data-player-id="${Number(item?.[idField] || 0)}">${esc(nameGetter(item))}</button>
@@ -452,7 +407,7 @@ function rankList(items, nameGetter, valueGetter, idField) {
 }
 
 function trendList(items, valueGetter) {
-  if (!Array.isArray(items) || !items.length) return '<div class="placeholder">暂无数据</div>';
+  if (!Array.isArray(items) || !items.length) return '<div class="placeholder">鏆傛棤鏁版嵁</div>';
   return `<ul class="db-trend-list">${items.map((item) => `
     <li><span class="name">${esc(item.day || "--")}</span><span class="value">${esc(valueGetter(item))}</span></li>
   `).join("")}</ul>`;
@@ -536,3 +491,4 @@ function showToast(message) {
     toast.classList.remove("show");
   }, 1400);
 }
+
