@@ -5,6 +5,7 @@ const PLUGIN_ID = "udp_event_forwarder";
 const SCHEMA = "bzss.udp.event.v1";
 const EVENT_TTL_MS = 10 * 60 * 1000;
 const MAX_SEEN_EVENTS = 5000;
+const DEFAULT_MAX_LOGS = 2000;
 
 function readPluginConfig(sourceConfig = {}) {
   if (sourceConfig && typeof sourceConfig.get === "function") {
@@ -319,6 +320,7 @@ function readConfig(sourceConfig = {}, pluginConfigOverride = {}) {
 
     maxQueueSize: configInt(pluginConfig.maxQueueSize, 1000),
     maxPacketBytes: configInt(pluginConfig.maxPacketBytes, 1200),
+    maxLogs: configInt(pluginConfig.maxLogs, DEFAULT_MAX_LOGS),
     dropPolicy: configString(pluginConfig.dropPolicy, "drop_oldest"),
 
     logSuccess: configBool(pluginConfig.logSuccess, false),
@@ -354,6 +356,7 @@ export class UdpEventForwarderService {
     this.modules = options.modules || {};
     this.logger = safeLogger(options.logger);
     this.config = readConfig(options.config, options.pluginConfig);
+    this.maxLogs = configInt(this.config.maxLogs, DEFAULT_MAX_LOGS);
 
     this.sender = new UdpEventSender({
       host: this.config.host,
@@ -372,6 +375,7 @@ export class UdpEventForwarderService {
     this.heartbeatTimer = null;
     this.sequence = 0;
     this.seenSourceEventIds = new Map();
+    this.eventLogs = [];
 
     this.state = {
       serverId: this.config.serverId,
@@ -398,6 +402,7 @@ export class UdpEventForwarderService {
       lastMatchStateUpdatedAt: null,
       lastRoundStateUpdatedAt: null,
       lastCombatEventAt: null,
+      lastForwardedAt: null,
     };
   }
 
@@ -510,6 +515,7 @@ export class UdpEventForwarderService {
       started: this.started,
       serverId: this.config.serverId,
       target: this.sender.getTarget(),
+      maxLogs: this.maxLogs,
       state: {
         ...this.state,
       },
@@ -551,7 +557,32 @@ export class UdpEventForwarderService {
 
   emitUdp(type, payload, source = {}) {
     const envelope = this.buildEnvelope(type, payload, source);
-    return this.sender.sendJson(envelope);
+    const accepted = this.sender.sendJson(envelope);
+    const record = {
+      id: envelope.eventId,
+      schema: envelope.schema,
+      serverId: envelope.serverId,
+      type: envelope.type,
+      timestamp: envelope.timestamp,
+      source: {
+        ...envelope.source,
+      },
+      match: {
+        ...envelope.match,
+      },
+      payload: envelope.payload,
+      accepted,
+      delivery: accepted ? "queued" : "rejected",
+      recordedAt: new Date().toISOString(),
+    };
+
+    this.eventLogs.push(record);
+    if (this.eventLogs.length > this.maxLogs) {
+      this.eventLogs.splice(0, this.eventLogs.length - this.maxLogs);
+    }
+
+    this.state.lastForwardedAt = record.recordedAt;
+    return accepted;
   }
 
   syncFromModules() {
@@ -980,8 +1011,78 @@ export class UdpEventForwarderService {
       this.seenSourceEventIds.delete(key);
     }
   }
+
+  getLogs(filter = {}) {
+    const typeFilter = String(filter.type ?? "all").trim();
+    const search = normalizeSearch(filter.search ?? filter.q ?? "");
+    const limit = clampLimit(filter.limit, 200);
+    const offset = clampOffset(filter.offset);
+
+    let logs = [...this.eventLogs];
+
+    if (typeFilter && typeFilter !== "all") {
+      logs = logs.filter((log) => log.type === typeFilter);
+    }
+
+    if (search) {
+      logs = logs.filter((log) => matchesLogSearch(log, search));
+    }
+
+    const total = logs.length;
+    const page = logs.slice().reverse().slice(offset, offset + limit);
+
+    return {
+      logs: page,
+      total,
+      limit,
+      offset,
+      type: typeFilter || "all",
+      search,
+      status: this.getStatus(),
+      updatedAt: this.state.lastForwardedAt,
+    };
+  }
+
+  clearLogs() {
+    const cleared = this.eventLogs.length;
+    this.eventLogs.splice(0);
+    return { ok: true, cleared };
+  }
 }
 
 export function createUdpEventForwarderService(options) {
   return new UdpEventForwarderService(options);
+}
+
+function normalizeSearch(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function clampLimit(value, defaultValue) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(parsed)) return defaultValue;
+  return Math.min(5000, Math.max(1, parsed));
+}
+
+function clampOffset(value) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, parsed);
+}
+
+function matchesLogSearch(log, search) {
+  if (!search) return true;
+  return [
+    log.id,
+    log.type,
+    log.timestamp,
+    log.source?.plugin,
+    log.source?.eventBusEvent,
+    log.source?.sourceEventId,
+    log.match?.matchId,
+    log.match?.map,
+    log.match?.layer,
+    log.match?.gameMode,
+    JSON.stringify(log.payload ?? {}),
+  ].some((value) => normalizeSearch(value).includes(search));
 }

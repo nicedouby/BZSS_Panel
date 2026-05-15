@@ -31,12 +31,42 @@ export function createPlugin({ core, modules } = {}) {
     version: "1.0.0",
     description: "Forward selected internal EventBus events to an external UDP receiver.",
     enabledByDefault: false,
+    apiName: "udpEventForwarder",
     manifest: {
       id: "plugin.udp_event_forwarder",
       name: PLUGIN_NAME,
       kind: "plugin",
       version: "1.0.0",
       description: "Forward selected internal EventBus events to an external UDP receiver.",
+    },
+    api: {
+      getStatus() {
+        return service?.getStatus?.() ?? {
+          enabled: isEnabled(pluginCore.config),
+          started: false,
+        };
+      },
+
+      getLogs(filter = {}) {
+        return service?.getLogs?.(filter) ?? {
+          logs: [],
+          total: 0,
+          limit: Number(filter.limit ?? 200) || 200,
+          offset: Number(filter.offset ?? 0) || 0,
+          type: String(filter.type ?? "all"),
+          search: String(filter.search ?? filter.q ?? ""),
+          status: {
+            enabled: isEnabled(pluginCore.config),
+            started: false,
+            target: "",
+          },
+          updatedAt: "",
+        };
+      },
+
+      clearLogs() {
+        return service?.clearLogs?.() ?? { ok: true, cleared: 0 };
+      },
     },
 
     async start() {

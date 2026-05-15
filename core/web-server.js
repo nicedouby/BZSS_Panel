@@ -279,6 +279,28 @@ export class WebServer {
       }));
     }
 
+    if (url.pathname === "/api/plugins/udp-event-forwarder/state" && req.method === "GET") {
+      const pluginApi = this.getPluginApi("plugin.udp_event_forwarder");
+      if (!pluginApi?.getStatus || !pluginApi?.getLogs) {
+        return this.json(res, 404, {
+          error: "PluginApiUnavailable",
+          message: "UDP event forwarder plugin is not loaded.",
+        });
+      }
+
+      const filter = {
+        type: url.searchParams.get("type") ?? "all",
+        search: url.searchParams.get("q") ?? "",
+        limit: url.searchParams.get("limit") ?? "200",
+        offset: url.searchParams.get("offset") ?? "0",
+      };
+
+      return this.json(res, 200, {
+        ...pluginApi.getLogs(filter),
+        status: pluginApi.getStatus(),
+      });
+    }
+
     const pluginMatch = url.pathname.match(/^\/api\/plugins\/([^/]+)\/(enabled|config)$/);
     if (pluginMatch && req.method === "PATCH") {
       if (!this.requireSuperAdmin(user, res)) return;
