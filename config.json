@@ -409,7 +409,8 @@
   "plugins": {
     "enabled": true,
     "paths": [
-      "./plugins/weapon-collector.js"
+      "./plugins/weapon-collector.js",
+      "./plugins/udp_event_forwarder.js"
     ]
   }
 }
