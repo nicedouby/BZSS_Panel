@@ -44,6 +44,13 @@ const TOP_LEVEL_STABLE_KEYS = new Set([
   "maxPlayers",
   "playerCount",
   "queueCount",
+  "logTime",
+  "logClockSeconds",
+  "logClockHasAnchor",
+  "logClockManual",
+  "logClockAnchorLogTime",
+  "logClockLastResetAt",
+  "logClockLastResetReason",
 ]);
 
 const WEB_STATUS_STABLE_KEYS = new Set([
@@ -58,6 +65,13 @@ const WEB_STATUS_STABLE_KEYS = new Set([
   "playerCount",
   "maxPlayers",
   "queueCount",
+  "logTime",
+  "logClockSeconds",
+  "logClockHasAnchor",
+  "logClockManual",
+  "logClockAnchorLogTime",
+  "logClockLastResetAt",
+  "logClockLastResetReason",
 ]);
 
 function mergeStableSnapshot(existing: Record<string, any>, incoming: Record<string, any>) {

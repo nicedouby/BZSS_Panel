@@ -14,6 +14,7 @@
         <StatusBadge :tone="runtimeTone">{{ runtimeLabel }}</StatusBadge>
         <span class="metric primary">{{ t("topbar.players", "", { count: playerCount }) }}</span>
         <span class="metric primary">{{ t("topbar.tps", "", { value: tps }) }}</span>
+        <span class="metric primary log-clock">日志时间 {{ logClockLabel }}</span>
         <span class="metric optional">Queue {{ queueCount }}</span>
         <span class="metric optional">Next {{ nextLayer }}</span>
         <span v-if="runtimeError" class="metric error optional">{{ runtimeError }}</span>
@@ -76,6 +77,19 @@ const tps = computed(() => {
   const value = Number(server.snapshot?.tps ?? server.snapshot?.webStatus?.tps);
   return Number.isFinite(value) && value > 0 ? value.toFixed(1) : "--";
 });
+const logClockSeconds = computed(() => {
+  const value = Number(
+    webStatus.value.logClockSeconds
+      ?? server.snapshot.logClockSeconds
+      ?? server.snapshot.webStatus?.logClockSeconds
+  );
+
+  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : null;
+});
+const logClockLabel = computed(() => {
+  if (logClockSeconds.value == null) return "--:--";
+  return formatDuration(logClockSeconds.value);
+});
 const sidebarButtonLabel = computed(() => ui.sidebarCollapsed ? t("topbar.expand") : t("topbar.collapse"));
 const runtimeLabel = computed(() => {
   if (runtime.inFlight) return t("common.syncing");
@@ -94,6 +108,19 @@ const runtimeError = computed(() => runtime.lastError ? briefRuntimeError(runtim
 function briefRuntimeError(value: string) {
   if (value.length <= 52) return value;
   return `${value.slice(0, 49)}...`;
+}
+
+function formatDuration(totalSeconds: number) {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const rest = seconds % 60;
+
+  if (hours > 0) {
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
+  }
+
+  return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
 }
 
 function stableDisplayValue(...values: unknown[]) {
@@ -183,6 +210,10 @@ function toggleSidebar() {
 .metric.primary {
   color: #edf2f4;
   font-weight: 600;
+}
+
+.metric.log-clock {
+  color: #d7f3ff;
 }
 
 .metric.error {

@@ -43,6 +43,13 @@ export function buildServerSnapshot(matchState: any, overview: any) {
     playerCount: firstFiniteNumber(status.playerCount, serverStatus.playerCount),
     maxPlayers: firstFiniteNumber(status.maxPlayers, serverStatus.maxPlayers),
     queueCount: firstFiniteNumber(status.queueCount, serverStatus.queueCount),
+    logTime: status.logTime ?? serverStatus.logTime,
+    logClockSeconds: firstFiniteNumber(status.logClockSeconds, serverStatus.logClockSeconds),
+    logClockHasAnchor: Boolean(status.logClockHasAnchor ?? serverStatus.logClockHasAnchor),
+    logClockManual: Boolean(status.logClockManual ?? serverStatus.logClockManual),
+    logClockAnchorLogTime: firstDisplayValue(status.logClockAnchorLogTime, serverStatus.logClockAnchorLogTime),
+    logClockLastResetAt: firstDisplayValue(status.logClockLastResetAt, serverStatus.logClockLastResetAt),
+    logClockLastResetReason: firstDisplayValue(status.logClockLastResetReason, serverStatus.logClockLastResetReason),
   };
 
   return {
@@ -65,6 +72,13 @@ export function buildServerSnapshot(matchState: any, overview: any) {
     playerCount: firstFiniteNumber(serverStatus.playerCount, status.playerCount) ?? undefined,
     maxPlayers: firstFiniteNumber(serverStatus.maxPlayers, status.maxPlayers) ?? undefined,
     queueCount: firstFiniteNumber(serverStatus.queueCount, status.queueCount) ?? undefined,
+    logTime: status.logTime ?? serverStatus.logTime,
+    logClockSeconds: firstFiniteNumber(status.logClockSeconds, serverStatus.logClockSeconds) ?? undefined,
+    logClockHasAnchor: Boolean(status.logClockHasAnchor ?? serverStatus.logClockHasAnchor),
+    logClockManual: Boolean(status.logClockManual ?? serverStatus.logClockManual),
+    logClockAnchorLogTime: firstDisplayValue(status.logClockAnchorLogTime, serverStatus.logClockAnchorLogTime),
+    logClockLastResetAt: firstDisplayValue(status.logClockLastResetAt, serverStatus.logClockLastResetAt),
+    logClockLastResetReason: firstDisplayValue(status.logClockLastResetReason, serverStatus.logClockLastResetReason),
     updatedAt: toMillis(serverStatus.lastUpdatedAt) || Date.now(),
     matchState,
     webStatus,
