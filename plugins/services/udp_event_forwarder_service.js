@@ -874,6 +874,12 @@ export class UdpEventForwarderService {
       this.state.matchId = `${this.config.serverId}:${new Date().toISOString().replace(/[-:.]/g, "").slice(0, 15)}:${layer || "unknown_layer"}`;
     }
 
+    // Only forward when the map or layer actually changed to avoid noisy duplicates.
+    const mapChanged = previousMap !== this.state.map || previousLayer !== this.state.layer;
+    if (!mapChanged) {
+      return;
+    }
+
     this.emitUdp("match.map_changed", {
       previousMap,
       previousLayer,
