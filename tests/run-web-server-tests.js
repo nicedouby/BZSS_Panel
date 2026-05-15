@@ -5,6 +5,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 
 import { WebServer } from "../core/web-server.js";
+import { GroupReportService } from "../plugins/group-report.service.js";
 
 function createServer(overrides = {}) {
   return new WebServer({
@@ -215,6 +216,85 @@ async function testWeaponCollectorApiRequiresGet() {
   }, typeMapPost.res);
   assert.equal(typeMapPost.state.status, 404);
   assert.equal(JSON.parse(typeMapPost.state.body).error, "ApiNotFound");
+}
+
+async function testGroupReportSnapshotRouteReturnsWrappedSnapshot() {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-group-report-web-"));
+  try {
+    const service = new GroupReportService({ dataDir: tempDir });
+    await service.init();
+    const group = await service.createGroup({ name: "Test Group" });
+    await service.addMember(group.id, {
+      name: "Alice",
+      eosId: "eos-123",
+      steamId: "steam-123",
+    });
+
+    const server = createServer({
+      core: {
+        authManager: {
+          getUserFromRequest() {
+            return { username: "admin", role: "SuperAdmin" };
+          },
+          hasEverything() {
+            return true;
+          },
+        },
+        pluginManager: {
+          instances: [
+            {
+              manifest: { id: "group-report" },
+              api: {
+                getSnapshot() {
+                  return service.getSnapshot();
+                },
+                getGroups() {
+                  return service.getGroups();
+                },
+                getGroup(groupId) {
+                  return service.getGroup(groupId);
+                },
+                createGroup(input) {
+                  return service.createGroup(input);
+                },
+                updateGroup(groupId, input) {
+                  return service.updateGroup(groupId, input);
+                },
+                deleteGroup(groupId) {
+                  return service.deleteGroup(groupId);
+                },
+                addMember(groupId, input) {
+                  return service.addMember(groupId, input);
+                },
+                updateMember(groupId, playerKey, input) {
+                  return service.updateMember(groupId, playerKey, input);
+                },
+                removeMember(groupId, playerKey) {
+                  return service.removeMember(groupId, playerKey);
+                },
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    const recorder = createRecorder();
+    await server.handleRequest({
+      method: "GET",
+      url: "/api/plugins/group-report/snapshot",
+      headers: { host: "localhost" },
+      socket: {},
+    }, recorder.res);
+
+    assert.equal(recorder.state.status, 200);
+    const body = JSON.parse(recorder.state.body);
+    assert.equal(body.ok, true);
+    assert.equal(body.data.plugin, "group-report");
+    assert.equal(body.data.groups[0].members[0].playerKey, "eos:eos-123");
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
 }
 
 async function testSnapshotAllRequiresAuth() {
@@ -567,6 +647,7 @@ await testReadJsonBodyRejectsOversizedPayload();
 await testGetPluginApiReturnsMatchingPluginApi();
 await testHealthEndpointDoesNotRequireAuth();
 await testWeaponCollectorApiRequiresGet();
+await testGroupReportSnapshotRouteReturnsWrappedSnapshot();
 await testSnapshotAllRequiresAuth();
 await testSnapshotAllDoesNotTriggerSlowTasks();
 await testMatchRefreshRoutesDelegateToMatchState();

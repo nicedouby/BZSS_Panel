@@ -71,6 +71,7 @@ export class PluginManager {
         config: this.config,
         pluginSubscriptions: this.core.pluginSubscriptions,
         webRegistry: this.core.webRegistry,
+        pluginManager: this,
       },
       modules: this.modules,
     });

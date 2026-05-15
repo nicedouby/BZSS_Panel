@@ -30,4 +30,16 @@ export const pluginCatalog = [
       blacklistRegex: "",
     },
   },
+  {
+    id: "group-report",
+    name: "抱团报备",
+    description: "人工维护玩家抱团关系的数据源插件。只负责持久化、查询和事件分发，不负责打乱、换队或 RCON。",
+    category: "Management",
+    icon: "",
+    enabled: true,
+    subscribed: true,
+    version: "1.0.0",
+    author: "BZSS",
+    status: "ok",
+  },
 ];

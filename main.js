@@ -126,6 +126,7 @@ async function main() {
     logger: logger.child({ moduleId: "core.pluginManager", source: "core.pluginManager" }),
     config: configManager,
   });
+  coreContext.pluginManager = pluginManager;
 
   const webServer = new WebServer({
     config: configManager.get("web", {}),
@@ -167,7 +168,6 @@ async function main() {
   await rconManager.start();
   await udpReceiver.start();
   await pluginManager.loadPlugins();
-  coreContext.pluginManager = pluginManager;
   await webServer.start();
 
   // 放在最后启动 Python，确保 UDP 和 Web 都已经准备好。

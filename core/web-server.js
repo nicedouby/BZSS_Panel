@@ -301,6 +301,119 @@ export class WebServer {
       });
     }
 
+    if (url.pathname.startsWith("/api/plugins/group-report")) {
+      const pluginApi = this.getPluginApi("group-report");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "GroupReportUnavailable",
+          message: "Group report plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/group-report/snapshot" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getSnapshot(),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/group-report/groups" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: {
+            groups: pluginApi.getGroups(),
+          },
+        });
+      }
+
+      if (url.pathname === "/api/plugins/group-report/groups" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.createGroup({
+            name: body.name,
+            note: body.note,
+            createdBy: user?.username ?? user?.name ?? "",
+          }),
+        });
+      }
+
+      const groupMatch = url.pathname.match(/^\/api\/plugins\/group-report\/groups\/([^/]+)$/);
+      if (groupMatch && req.method === "GET") {
+        const group = pluginApi.getGroup(decodeURIComponent(groupMatch[1]));
+        if (!group) {
+          return this.json(res, 404, {
+            ok: false,
+            error: "Group not found.",
+          });
+        }
+        return this.json(res, 200, {
+          ok: true,
+          data: group,
+        });
+      }
+
+      if (groupMatch && req.method === "PATCH") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.updateGroup(decodeURIComponent(groupMatch[1]), {
+            name: body.name,
+            note: body.note,
+          }),
+        });
+      }
+
+      if (groupMatch && req.method === "DELETE") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        await pluginApi.deleteGroup(decodeURIComponent(groupMatch[1]));
+        return this.json(res, 200, {
+          ok: true,
+          data: { deleted: true },
+        });
+      }
+
+      const memberMatch = url.pathname.match(/^\/api\/plugins\/group-report\/groups\/([^/]+)\/members(?:\/([^/]+))?$/);
+      if (memberMatch && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.addMember(decodeURIComponent(memberMatch[1]), {
+            eosId: body.eosId,
+            steamId: body.steamId,
+            name: body.name,
+            note: body.note,
+            addedBy: user?.username ?? user?.name ?? "",
+          }),
+        });
+      }
+
+      if (memberMatch && req.method === "PATCH" && memberMatch[2]) {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.updateMember(decodeURIComponent(memberMatch[1]), decodeURIComponent(memberMatch[2]), {
+            eosId: body.eosId,
+            steamId: body.steamId,
+            name: body.name,
+            note: body.note,
+          }),
+        });
+      }
+
+      if (memberMatch && req.method === "DELETE" && memberMatch[2]) {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.removeMember(decodeURIComponent(memberMatch[1]), decodeURIComponent(memberMatch[2])),
+        });
+      }
+    }
+
     const pluginMatch = url.pathname.match(/^\/api\/plugins\/([^/]+)\/(enabled|config)$/);
     if (pluginMatch && req.method === "PATCH") {
       if (!this.requireSuperAdmin(user, res)) return;

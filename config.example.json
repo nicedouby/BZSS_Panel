@@ -265,6 +265,7 @@
   "plugins": {
     "enabled": true,
     "paths": [
+      "./plugins/group-report.js",
       "./plugins/weapon-collector.js",
       "./plugins/udp_event_forwarder.js"
     ],

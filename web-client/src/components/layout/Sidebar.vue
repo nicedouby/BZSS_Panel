@@ -26,7 +26,8 @@ const nav = [
   { path: "/player-database", icon: "DB", label: t("nav.playerDatabase") },
   { path: "/combat-clean", icon: "CC", label: t("nav.combatClean") },
   { path: "/kill-manage", icon: "KM", label: t("nav.killManage") },
-  { path: "/udp-event-forwarder", icon: "UDP", label: "UDP 转发日志" },
+  { path: "/plugins/group-report", icon: "GR", label: "抱团报备" },
+  { path: "/udp-event-forwarder", icon: "UDP", label: "UDP 杞彂鏃ュ織" },
 ];
 </script>
 
