@@ -19,6 +19,18 @@ const CONFIDENCE_FROM_PARSE_STATUS = {
   Failed: "Low",
 };
 
+const WORLD_BRING_UP_GAME_MODES = new Set([
+  "AAS",
+  "RAAS",
+  "INVASION",
+  "SEED",
+  "SKIRMISH",
+  "TC",
+  "INSURGENCY",
+  "DESTRUCTION",
+  "TRAINING",
+]);
+
 /**
  * Core: EventNormalizer
  *
@@ -91,6 +103,13 @@ function buildNormalizedPayload(event) {
     };
   }
 
+  if (event.eventName === "round.world_bring_up") {
+    return {
+      category: "round_state",
+      roundWorldBringUp: normalizeRoundWorldBringUpPayload(event),
+    };
+  }
+
   return null;
 }
 
@@ -151,6 +170,34 @@ function normalizeServerTickRatePayload(event) {
   };
 }
 
+export function normalizeRoundWorldBringUpPayload(event) {
+  const logLineTime = getParam(event, "logLineTime") || getParam(event, "LogLineTime");
+  const frame = parseNullableInt(getParam(event, "frame") || getParam(event, "Frame"));
+  const worldPath = getParam(event, "worldPath") || getParam(event, "WorldPath");
+  const layerName = getParam(event, "layerName") || extractLayerName(worldPath);
+  const inferred = inferMapAndMode(layerName);
+  const mapName = getParam(event, "mapName") || inferred.mapName;
+  const gameMode = getParam(event, "gameMode") || inferred.gameMode;
+  const maxTickRate = parseNullableNumber(getParam(event, "maxTickRate") || getParam(event, "MaxTickRate"));
+  const serverPlayAt = getParam(event, "serverPlayAt") || getParam(event, "ServerPlayAt");
+
+  return {
+    type: "round.world_bring_up",
+    serverId: event.serverId,
+    logLineTime,
+    frame,
+    worldPath,
+    layerName,
+    mapName,
+    gameMode,
+    maxTickRate,
+    serverPlayAt,
+    logTimeStartedAtMs: Date.now(),
+    logTime: event.logTime,
+    rawLog: event.rawLog,
+  };
+}
+
 function confidenceFromParseStatus(parseStatus) {
   return CONFIDENCE_FROM_PARSE_STATUS[parseStatus] ?? "Low";
 }
@@ -172,6 +219,11 @@ function parseNullableNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function parseNullableInt(value) {
+  const parsed = Number.parseInt(String(value ?? "").trim(), 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export function classifyCausedBy(value) {
   const text = String(value ?? "").trim();
   if (!text) return "unknown";
@@ -184,4 +236,39 @@ export function classifyCausedBy(value) {
 export function getParam(event, name, defaultValue = "") {
   const value = event.paramMap?.[name];
   return value == null ? defaultValue : value;
+}
+
+function extractLayerName(worldPath) {
+  const text = String(worldPath ?? "").trim();
+  if (!text) return "";
+  const lastSegment = text.split("/").filter(Boolean).pop() || "";
+  return lastSegment.split(".")[0].trim();
+}
+
+function inferMapAndMode(layerName) {
+  const text = String(layerName ?? "").trim();
+  if (!text) return { mapName: "", gameMode: "" };
+
+  const tokens = text.split("_").filter(Boolean);
+  if (tokens.length < 2) return { mapName: "", gameMode: "" };
+
+  let end = tokens.length;
+  while (end > 0 && isVersionToken(tokens[end - 1])) {
+    end -= 1;
+  }
+
+  for (let index = end - 1; index > 0; index -= 1) {
+    if (WORLD_BRING_UP_GAME_MODES.has(tokens[index].toUpperCase())) {
+      return {
+        mapName: tokens.slice(0, index).join("_").trim(),
+        gameMode: tokens[index].toUpperCase(),
+      };
+    }
+  }
+
+  return { mapName: "", gameMode: "" };
+}
+
+function isVersionToken(token) {
+  return /^v?\d+$/i.test(String(token ?? "").trim());
 }

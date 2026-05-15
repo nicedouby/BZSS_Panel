@@ -20,6 +20,7 @@ from bzss_parser.matchers.combat_matcher import CombatMatcher
 from bzss_parser.matchers.server_tick_rate_matcher import ServerTickRateMatcher
 from bzss_parser.matchers.spawn_matcher import SpawnMatcher
 from bzss_parser.matchers.squad_matcher import SquadMatcher
+from bzss_parser.matchers.world_bring_up_matcher import WorldBringUpMatcher
 
 
 MatchedEvent = Tuple[str, List[Tuple[str, str]]]
@@ -36,6 +37,7 @@ class BzssLogParserApp:
         self.matchers = [
             CombatMatcher(self.identity_cache),
             ServerTickRateMatcher(self.config.get("server_tick_rate", {})),
+            WorldBringUpMatcher(),
             SpawnMatcher(self.identity_cache),
             SquadMatcher(self.identity_cache),
         ]

@@ -53,6 +53,7 @@ export class WebStatus {
 
       rconQueue: 0,
       recentErrors: 0,
+      logTime: null,
 
       updatedAt: new Date().toISOString(),
     };

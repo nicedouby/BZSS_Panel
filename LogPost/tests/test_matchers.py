@@ -11,6 +11,7 @@ from bzss_parser.event_builder import EventBuilder
 from bzss_parser.matchers.combat_matcher import CombatMatcher
 from bzss_parser.matchers.helpers import parse_online_ids
 from bzss_parser.matchers.server_tick_rate_matcher import ServerTickRateMatcher
+from bzss_parser.matchers.world_bring_up_matcher import WorldBringUpMatcher
 
 
 class CombatMatcherTests(unittest.TestCase):
@@ -162,6 +163,48 @@ class ServerTickRateMatcherTests(unittest.TestCase):
         self.assertEqual(data["TickRate"], "29.20")
         self.assertEqual(data["Unit"], "TPS")
         self.assertEqual(data["Status"], "good")
+
+
+class WorldBringUpMatcherTests(unittest.TestCase):
+    def test_world_bring_up_event_is_generated(self) -> None:
+        matcher = WorldBringUpMatcher()
+        line = (
+            "[2026.05.12-10.46.27:432][ 11]LogWorld: Bringing World "
+            "/Game/Maps/Mutaha/Gameplay_Layers/Mutaha_RAAS_v1.Mutaha_RAAS_v1 "
+            "up for play (max tick rate 50) at 2026.05.12-18.46.27"
+        )
+
+        matched = matcher.match(line)
+        self.assertIsNotNone(matched)
+        event_name, params = matched
+        data = dict(params)
+
+        self.assertEqual(event_name, "round.world_bring_up")
+        self.assertEqual(data["logLineTime"], "2026.05.12-10.46.27:432")
+        self.assertEqual(data["frame"], "11")
+        self.assertEqual(data["worldPath"], "/Game/Maps/Mutaha/Gameplay_Layers/Mutaha_RAAS_v1.Mutaha_RAAS_v1")
+        self.assertEqual(data["layerName"], "Mutaha_RAAS_v1")
+        self.assertEqual(data["mapName"], "Mutaha")
+        self.assertEqual(data["gameMode"], "RAAS")
+        self.assertEqual(data["maxTickRate"], "50")
+        self.assertEqual(data["serverPlayAt"], "2026.05.12-18.46.27")
+
+    def test_world_bring_up_parses_map_name_with_underscore(self) -> None:
+        matcher = WorldBringUpMatcher()
+        line = (
+            "[2026.05.12-10.46.27:432][ 11]LogWorld: Bringing World "
+            "/Game/Maps/Tallil_Outskirts/Gameplay_Layers/Tallil_Outskirts_AAS_v1.Tallil_Outskirts_AAS_v1 "
+            "up for play (max tick rate 60) at 2026.05.12-18.46.27"
+        )
+
+        matched = matcher.match(line)
+        self.assertIsNotNone(matched)
+        _, params = matched
+        data = dict(params)
+
+        self.assertEqual(data["layerName"], "Tallil_Outskirts_AAS_v1")
+        self.assertEqual(data["mapName"], "Tallil_Outskirts")
+        self.assertEqual(data["gameMode"], "AAS")
 
 
 class IdSanitizationTests(unittest.TestCase):

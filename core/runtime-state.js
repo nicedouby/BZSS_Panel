@@ -26,6 +26,7 @@ export class RuntimeState {
         console: [],
         raw: [],
         rcon: [],
+        round: [],
         combat: [],
         updatedAt: 0,
       },
@@ -51,6 +52,7 @@ export class RuntimeState {
     this.unsubscribers.push(eventBus.onCoreEvent("*", (event) => {
       this.recordEvent("raw", event);
       if (String(event?.eventName ?? "").startsWith("RCON_")) this.recordEvent("rcon", event);
+      if (String(event?.eventName ?? "") === "round.world_bring_up") this.recordEvent("round", event);
     }));
 
     this.unsubscribers.push(eventBus.onModuleEvent("module.combatClean", "*", (event) => {

@@ -8,6 +8,7 @@ import { createSquadLifecycleModule } from "../modules/squad-lifecycle/index.js"
 import { createMatchStateModule } from "../modules/match-state/index.js";
 import { createConsoleModule } from "../modules/console/index.js";
 import { createLogClockModule } from "../modules/log-clock/index.js";
+import { createRoundStateModule } from "../modules/round-state/index.js";
 import { createCombatStateModule } from "../modules/combat-state/index.js";
 import { createPlayerDatabaseModule } from "../modules/player-database/index.js";
 import { createIpLookupModule } from "../modules/ip-lookup/index.js";
@@ -37,6 +38,7 @@ export class ModuleManager {
       createAuditModule,
       createConsoleModule,
       createLogClockModule,
+      createRoundStateModule,
       createServerStatusModule,
       createPlayerStateModule,
       createSquadStateModule,

@@ -176,9 +176,43 @@ function testTpsNormalization() {
   assert.equal(event.normalized.serverTickRate.status, "good");
 }
 
+function testWorldBringUpNormalization() {
+  const pipeline = new EventPipeline();
+  const event = pipeline.processRawGameEvent({
+    Version: "1",
+    ServerID: "BZSS_Main",
+    SessionID: "TestSession",
+    Seq: "5",
+    Event: "round.world_bring_up",
+    Time: "2026-05-12 18:46:27.432",
+    LogTime: "2026.05.12-10.46.27:432",
+    Param1_logLineTime: "2026.05.12-10.46.27:432",
+    Param2_frame: "11",
+    Param3_worldPath: "/Game/Maps/Mutaha/Gameplay_Layers/Mutaha_RAAS_v1.Mutaha_RAAS_v1",
+    Param4_layerName: "Mutaha_RAAS_v1",
+    Param5_mapName: "Mutaha",
+    Param6_gameMode: "RAAS",
+    Param7_maxTickRate: "50",
+    Param8_serverPlayAt: "2026.05.12-18.46.27",
+    Raw: "[2026.05.12-10.46.27:432][ 11]LogWorld: Bringing World /Game/Maps/Mutaha/Gameplay_Layers/Mutaha_RAAS_v1.Mutaha_RAAS_v1 up for play (max tick rate 50) at 2026.05.12-18.46.27",
+  });
+
+  assert.equal(event.eventName, "round.world_bring_up");
+  assert.equal(event.normalized.roundWorldBringUp.type, "round.world_bring_up");
+  assert.equal(event.normalized.roundWorldBringUp.layerName, "Mutaha_RAAS_v1");
+  assert.equal(event.normalized.roundWorldBringUp.mapName, "Mutaha");
+  assert.equal(event.normalized.roundWorldBringUp.gameMode, "RAAS");
+  assert.equal(event.normalized.roundWorldBringUp.maxTickRate, 50);
+  assert.equal(event.normalized.roundWorldBringUp.frame, 11);
+  assert.equal(event.normalized.roundWorldBringUp.logLineTime, "2026.05.12-10.46.27:432");
+  assert.equal(event.normalized.roundWorldBringUp.serverPlayAt, "2026.05.12-18.46.27");
+  assert.equal(event.normalized.roundWorldBringUp.rawLog.includes("LogWorld: Bringing World"), true);
+}
+
 testDiedEventDoesNotInheritWeaponContext();
 testAttackerDisplayNameFallsBackToPlayerStateAndSteam64();
 testWebStatusStale();
 testTpsNormalization();
+testWorldBringUpNormalization();
 
 console.log("event pipeline tests passed");

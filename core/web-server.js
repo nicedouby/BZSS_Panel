@@ -319,6 +319,14 @@ export class WebServer {
       return this.json(res, 200, this.getMatchOverview());
     }
 
+    if (url.pathname === "/api/round/state") {
+      return this.json(res, 200, this.modules.roundState?.getState?.() ?? this.getRoundStateFromRuntime());
+    }
+
+    if (url.pathname === "/api/round/overview") {
+      return this.json(res, 200, this.modules.roundState?.getOverview?.() ?? this.getRoundOverviewFromRuntime());
+    }
+
     if (url.pathname === "/api/match/snapshot" && req.method === "GET") {
       return this.json(res, 200, this.getMatchStateSnapshotResponse());
     }
@@ -903,6 +911,29 @@ export class WebServer {
         pythonLogParser: webStatus.pythonLogParser ?? "unknown",
         udpReceiver: webStatus.udpReceiver ?? "unknown",
       },
+    };
+  }
+
+  getRoundStateFromRuntime() {
+    const snapshot = this.core.runtimeState?.getAll?.() ?? null;
+    const roundEvents = snapshot?.events?.round ?? [];
+    return {
+      serverId: this.core.webStatus?.serverId ?? "",
+      updatedAt: snapshot?.events?.updatedAt ?? "",
+      current: roundEvents.length ? roundEvents[roundEvents.length - 1] : null,
+      history: roundEvents,
+      lastAcceptedAt: roundEvents.length ? String(roundEvents[roundEvents.length - 1]?.receivedAt ?? roundEvents[roundEvents.length - 1]?.time ?? "") : "",
+      lastDedupedAt: "",
+    };
+  }
+
+  getRoundOverviewFromRuntime() {
+    const roundState = this.getRoundStateFromRuntime();
+    const status = this.core.webStatus?.getSnapshot?.() ?? {};
+    return {
+      status,
+      roundState,
+      latest: roundState.history.slice(-20).reverse(),
     };
   }
 
