@@ -33,7 +33,7 @@
           </div>
           <div><span>Game Seconds</span><strong>{{ detail?.player?.game_seconds ?? 0 }}</strong></div>
           <div><span>Squad Created</span><strong>{{ detail?.player?.total_squad_created ?? 0 }}</strong></div>
-          <div><span>Total Deaths</span><strong>{{ detail?.player?.total_deaths ?? 0 }}</strong></div>
+          <div><span>Total Deaths</span><strong>{{ detail?.combatStats?.deaths ?? detail?.summary?.totalDeaths ?? 0 }}</strong></div>
           <div><span>Total Team Kills</span><strong>{{ totalTeamKills }}</strong></div>
         </div>
 
@@ -93,7 +93,7 @@ watch(
 
 const totalTeamKills = computed(() => {
   const player = props.detail?.player;
-  return Number(player?.total_tk_down ?? 0) + Number(player?.total_tk_kill ?? 0);
+  return Number(player?.tk_downs ?? player?.total_tk_down ?? 0) + Number(player?.tk_kills ?? player?.total_tk_kill ?? 0);
 });
 
 function formatTime(value: unknown) {

@@ -186,6 +186,91 @@ CREATE TABLE IF NOT EXISTS player_warmup_stats (
     FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS player_combat_stats (
+    player_id INTEGER PRIMARY KEY,
+    light_weapon_downs INTEGER NOT NULL DEFAULT 0,
+    light_weapon_kills INTEGER NOT NULL DEFAULT 0,
+    light_weapon_fatal_downs INTEGER NOT NULL DEFAULT 0,
+    deaths INTEGER NOT NULL DEFAULT 0,
+    tk_downs INTEGER NOT NULL DEFAULT 0,
+    tk_kills INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_player_combat_stats_sort
+ON player_combat_stats (
+    light_weapon_kills DESC,
+    light_weapon_downs DESC,
+    light_weapon_fatal_downs DESC
+);
+
+CREATE TABLE IF NOT EXISTS player_warmup_combat_stats (
+    player_id INTEGER PRIMARY KEY,
+    downs INTEGER NOT NULL DEFAULT 0,
+    kills INTEGER NOT NULL DEFAULT 0,
+    deaths INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_player_warmup_combat_stats_sort
+ON player_warmup_combat_stats (
+    kills DESC,
+    downs DESC,
+    deaths DESC
+);
+
+CREATE TABLE IF NOT EXISTS combat_log_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_event_id TEXT UNIQUE,
+    server_id TEXT,
+    match_id TEXT,
+    map_name TEXT,
+    layer_name TEXT,
+    event_type TEXT NOT NULL,
+    attacker_player_id INTEGER,
+    victim_player_id INTEGER,
+    attacker_name TEXT,
+    victim_name TEXT,
+    attacker_steam_id TEXT,
+    attacker_eos_id TEXT,
+    victim_steam_id TEXT,
+    victim_eos_id TEXT,
+    weapon TEXT,
+    damage REAL,
+    is_light_weapon INTEGER NOT NULL DEFAULT 0,
+    is_teamkill INTEGER NOT NULL DEFAULT 0,
+    is_fatal_down INTEGER NOT NULL DEFAULT 0,
+    raw_line TEXT,
+    payload_json TEXT,
+    log_time INTEGER,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY(attacker_player_id) REFERENCES players(id) ON DELETE SET NULL,
+    FOREIGN KEY(victim_player_id) REFERENCES players(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_combat_log_events_created_at
+ON combat_log_events (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_combat_log_events_log_time
+ON combat_log_events (log_time DESC);
+CREATE INDEX IF NOT EXISTS idx_combat_log_events_attacker
+ON combat_log_events (attacker_player_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_combat_log_events_victim
+ON combat_log_events (victim_player_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS combat_log_player_refs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    combat_log_event_id INTEGER NOT NULL,
+    player_id INTEGER NOT NULL,
+    role TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY(combat_log_event_id) REFERENCES combat_log_events(id) ON DELETE CASCADE,
+    FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE,
+    UNIQUE(combat_log_event_id, player_id, role)
+);
+CREATE INDEX IF NOT EXISTS idx_combat_log_player_refs_player
+ON combat_log_player_refs (player_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_combat_log_player_refs_event
+ON combat_log_player_refs (combat_log_event_id);
+
 CREATE TABLE IF NOT EXISTS player_logins (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     player_id INTEGER,
@@ -337,7 +422,7 @@ async function runMigrations(db) {
     await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 3, Date.now());
   }
 
-  if (!appliedSet.has(4)) {
+    if (!appliedSet.has(4)) {
     await db.exec(`
 CREATE TABLE IF NOT EXISTS ip_lookup_cache (
     ip TEXT PRIMARY KEY,
@@ -362,6 +447,146 @@ CREATE INDEX IF NOT EXISTS idx_ip_lookup_cache_updated ON ip_lookup_cache(update
     `);
 
     await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 4, Date.now());
+  }
+
+  if (!appliedSet.has(5)) {
+    await db.exec(`
+CREATE TABLE IF NOT EXISTS player_combat_stats (
+    player_id INTEGER PRIMARY KEY,
+    light_weapon_downs INTEGER NOT NULL DEFAULT 0,
+    light_weapon_kills INTEGER NOT NULL DEFAULT 0,
+    light_weapon_fatal_downs INTEGER NOT NULL DEFAULT 0,
+    deaths INTEGER NOT NULL DEFAULT 0,
+    tk_downs INTEGER NOT NULL DEFAULT 0,
+    tk_kills INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_player_combat_stats_sort
+ON player_combat_stats (
+    light_weapon_kills DESC,
+    light_weapon_downs DESC,
+    light_weapon_fatal_downs DESC
+);
+
+CREATE TABLE IF NOT EXISTS player_warmup_combat_stats (
+    player_id INTEGER PRIMARY KEY,
+    downs INTEGER NOT NULL DEFAULT 0,
+    kills INTEGER NOT NULL DEFAULT 0,
+    deaths INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_player_warmup_combat_stats_sort
+ON player_warmup_combat_stats (
+    kills DESC,
+    downs DESC,
+    deaths DESC
+);
+
+CREATE TABLE IF NOT EXISTS combat_log_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_event_id TEXT UNIQUE,
+    server_id TEXT,
+    match_id TEXT,
+    map_name TEXT,
+    layer_name TEXT,
+    event_type TEXT NOT NULL,
+    attacker_player_id INTEGER,
+    victim_player_id INTEGER,
+    attacker_name TEXT,
+    victim_name TEXT,
+    attacker_steam_id TEXT,
+    attacker_eos_id TEXT,
+    victim_steam_id TEXT,
+    victim_eos_id TEXT,
+    weapon TEXT,
+    damage REAL,
+    is_light_weapon INTEGER NOT NULL DEFAULT 0,
+    is_teamkill INTEGER NOT NULL DEFAULT 0,
+    is_fatal_down INTEGER NOT NULL DEFAULT 0,
+    raw_line TEXT,
+    payload_json TEXT,
+    log_time INTEGER,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY(attacker_player_id) REFERENCES players(id) ON DELETE SET NULL,
+    FOREIGN KEY(victim_player_id) REFERENCES players(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_combat_log_events_created_at
+ON combat_log_events (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_combat_log_events_log_time
+ON combat_log_events (log_time DESC);
+CREATE INDEX IF NOT EXISTS idx_combat_log_events_attacker
+ON combat_log_events (attacker_player_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_combat_log_events_victim
+ON combat_log_events (victim_player_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS combat_log_player_refs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    combat_log_event_id INTEGER NOT NULL,
+    player_id INTEGER NOT NULL,
+    role TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY(combat_log_event_id) REFERENCES combat_log_events(id) ON DELETE CASCADE,
+    FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE,
+    UNIQUE(combat_log_event_id, player_id, role)
+);
+CREATE INDEX IF NOT EXISTS idx_combat_log_player_refs_player
+ON combat_log_player_refs (player_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_combat_log_player_refs_event
+ON combat_log_player_refs (combat_log_event_id);
+    `);
+
+    const tables = await db.all("SELECT name FROM sqlite_master WHERE type = 'table'");
+    const names = new Set(tables.map((row) => row.name));
+    if (names.has("players")) {
+      const playerColumns = new Set((await db.all("PRAGMA table_info(players)")).map((row) => row.name));
+      if (playerColumns.has("total_kills_light") || playerColumns.has("total_downed_light") || playerColumns.has("total_tk_down") || playerColumns.has("total_tk_kill") || playerColumns.has("total_deaths")) {
+        await db.run(`
+          INSERT OR REPLACE INTO player_combat_stats (
+              player_id,
+              light_weapon_downs,
+              light_weapon_kills,
+              light_weapon_fatal_downs,
+              deaths,
+              tk_downs,
+              tk_kills,
+              updated_at
+          )
+          SELECT
+              id,
+              COALESCE(total_downed_light, 0),
+              COALESCE(total_kills_light, 0),
+              COALESCE(total_downed_light_fatal, 0),
+              COALESCE(total_deaths, 0),
+              COALESCE(total_tk_down, 0),
+              COALESCE(total_tk_kill, 0),
+              COALESCE(updated_at, strftime('%s','now') * 1000)
+          FROM players
+        `);
+      }
+    }
+
+    if (names.has("player_warmup_stats")) {
+      await db.run(`
+        INSERT OR REPLACE INTO player_warmup_combat_stats (
+            player_id,
+            downs,
+            kills,
+            deaths,
+            updated_at
+        )
+        SELECT
+            player_id,
+            COALESCE(total_downed_light, 0) + COALESCE(total_downed_other, 0),
+            COALESCE(total_kills_light, 0) + COALESCE(total_kills_other, 0),
+            COALESCE(total_deaths, 0),
+            COALESCE(updated_at, strftime('%s','now') * 1000)
+        FROM player_warmup_stats
+      `);
+    }
+
+    await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 5, Date.now());
   }
 }
 

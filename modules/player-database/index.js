@@ -30,6 +30,48 @@ function recordIdentity(record, prefix) {
   };
 }
 
+function resolveTeamID(identity, player, event, prefix) {
+  return identity?.teamID
+    ?? player?.teamID
+    ?? event?.[`${prefix}TeamID`]
+    ?? event?.[`${prefix}TeamId`]
+    ?? "";
+}
+
+function sameTeam(left, right) {
+  const a = String(left ?? "").trim();
+  const b = String(right ?? "").trim();
+  return Boolean(a && b && a === b);
+}
+
+function buildCombatSourceEventId(event, type) {
+  return String(
+    event?.eventId
+      ?? event?.sourceEventId
+      ?? event?.eventName
+      ?? `${event?.serverId ?? ""}:${type}:${event?.time ?? ""}:${event?.rawLog ?? ""}`,
+  ).trim() || null;
+}
+
+function eventIdentityWeapon(event) {
+  return String(event?.weapon ?? event?.causedBy ?? event?.FromObject ?? event?.fromObject ?? "").trim() || null;
+}
+
+function eventDamageValue(event, type) {
+  const value = type === "wounded"
+    ? event?.KillingDamage
+    : event?.KillingDamage ?? event?.ActualDamage;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function eventTimeMs(event) {
+  const ts = Number(event?.time ?? event?.timestamp ?? 0);
+  if (Number.isFinite(ts) && ts > 0) return Math.trunc(ts);
+  const parsed = Date.parse(String(event?.time ?? ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 /**
  * Module: PlayerDatabase
  *
@@ -58,19 +100,37 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       ? await repo.upsertFromPresence(attackerIdentity)
       : null;
 
-    if (type === "wounded") {
-      if (attacker?.id && attacker.id !== victim?.id) await repo.incrementFields(attacker.id, { total_downed_light: 1 });
-      if (victim?.id) await repo.incrementFields(victim.id, { total_downed_received: 1 });
-    }
-
-    if (type === "died") {
-      if (victim?.id) await repo.incrementFields(victim.id, { total_deaths: 1 });
-      if (attacker?.id && attacker.id !== victim?.id) {
-        await repo.incrementFields(attacker.id, { total_kills_light: 1 });
-      } else if (victim?.id) {
-        await repo.incrementFields(victim.id, { total_suicides: 1 });
-      }
-    }
+    const attackerTeamID = resolveTeamID(attackerIdentity, attacker, event, "Attacker");
+    const victimTeamID = resolveTeamID(victimIdentity, victim, event, "Victim");
+    const isTeamkill = Boolean(attacker?.id && victim?.id && attacker.id !== victim.id && sameTeam(attackerTeamID, victimTeamID));
+    const isLightWeapon = Boolean(attacker?.id || victim?.id) && !isTeamkill;
+    const isFatalDown = type === "died";
+    const eventType = type === "wounded" ? "WOUNDED" : "DIED";
+    const sourceEventId = buildCombatSourceEventId(event, type);
+    const sourceEvent = await repo.addCombatLogEvent({
+      sourceEventId,
+      serverId: event.serverId ?? null,
+      matchId: event.matchId ?? event?.record?.matchId ?? null,
+      mapName: event.mapName ?? event?.record?.mapName ?? null,
+      layerName: event.layerName ?? event?.record?.layerName ?? null,
+      eventType,
+      attackerPlayerId: attacker?.id ?? null,
+      victimPlayerId: victim?.id ?? null,
+      attackerName: attackerIdentity.name || null,
+      victimName: victimIdentity.name || null,
+      attackerSteamId: attackerIdentity.steamID || null,
+      attackerEosId: attackerIdentity.eosID || null,
+      victimSteamId: victimIdentity.steamID || null,
+      victimEosId: victimIdentity.eosID || null,
+      weapon: eventIdentityWeapon(event),
+      damage: eventDamageValue(event, type),
+      isLightWeapon,
+      isTeamkill,
+      isFatalDown,
+      rawLine: event.rawLog,
+      payload: event,
+      logTime: eventTimeMs(event),
+    });
 
     await repo.addLogEvent({
       sourceEvent: event.eventName,
@@ -79,6 +139,31 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       matchedPlayerName: victimIdentity.name || attackerIdentity.name,
       payload: event,
     });
+
+    if (!sourceEvent.inserted) return;
+
+    const refs = [];
+    if (attacker?.id) refs.push({ playerId: attacker.id, role: "attacker" });
+    if (victim?.id) refs.push({ playerId: victim.id, role: "victim" });
+    await repo.addCombatLogRefs(sourceEvent.id, refs);
+
+    if (type === "wounded") {
+      if (attacker?.id && attacker.id !== victim?.id && !isTeamkill) {
+        await repo.incrementCombatStats(attacker.id, { light_weapon_downs: 1 });
+      }
+    }
+
+    if (type === "died") {
+      if (victim?.id) await repo.incrementCombatStats(victim.id, { deaths: 1 });
+      if (attacker?.id && attacker.id !== victim?.id) {
+        if (!isTeamkill) {
+          await repo.incrementCombatStats(attacker.id, {
+            light_weapon_kills: 1,
+            light_weapon_fatal_downs: 1,
+          });
+        }
+      }
+    }
   }
 
   async function recordFriendlyFireStats(event) {
@@ -92,9 +177,9 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
     if (!attacker?.id) return;
 
     if (record.friendlyFireType === "team_wound" || record.isTeamKillDown || record.tkDown) {
-      await repo.incrementFields(attacker.id, { total_tk_down: 1 });
+      await repo.incrementCombatStats(attacker.id, { tk_downs: 1 });
     } else if (record.friendlyFireType === "team_kill" || record.isTeamKill || record.tk) {
-      await repo.incrementFields(attacker.id, { total_tk_kill: 1 });
+      await repo.incrementCombatStats(attacker.id, { tk_kills: 1 });
     }
   }
 
@@ -123,10 +208,18 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
           squadLeaderSeconds: Number(p.squad_leader_seconds ?? 0),
           inSquadSeconds: Number(p.in_squad_seconds ?? 0),
           warmupSeconds: Number(p.warmup_seconds ?? 0),
-          kills: Number(p.total_kills_light ?? 0) + Number(p.total_kills_other ?? 0),
-          downs: Number(p.total_downed_light ?? 0) + Number(p.total_downed_other ?? 0),
-          deaths: Number(p.total_deaths ?? 0),
-          teamKills: Number(p.total_tk_down ?? 0) + Number(p.total_tk_kill ?? 0),
+          combatStats: {
+            lightWeaponDowns: Number(p.light_weapon_downs ?? 0),
+            lightWeaponKills: Number(p.light_weapon_kills ?? 0),
+            lightWeaponFatalDowns: Number(p.light_weapon_fatal_downs ?? 0),
+            deaths: Number(p.combat_deaths ?? 0),
+            tkDowns: Number(p.tk_downs ?? 0),
+            tkKills: Number(p.tk_kills ?? 0),
+          },
+          kills: Number(p.light_weapon_kills ?? 0),
+          downs: Number(p.light_weapon_downs ?? 0),
+          deaths: Number(p.combat_deaths ?? 0),
+          teamKills: Number(p.tk_downs ?? 0) + Number(p.tk_kills ?? 0),
           suicides: Number(p.total_suicides ?? 0),
           squadCreated: Number(p.total_squad_created ?? 0),
           lastLoginAt: Number(p.last_login_at ?? 0) || null,
@@ -164,13 +257,21 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       return repo.getPlayerWarmupStats(playerId);
     },
 
+    async listWarmupCombatStats(options = {}) {
+      return repo.listWarmupCombatStats(options);
+    },
+
     async setPermissionGroup(playerId, permissionGroup) {
       await repo.setPermissionGroup(playerId, permissionGroup);
       return { ok: true };
     },
 
+    async resetCombatStats() {
+      return { changed: await repo.resetCombatStats() };
+    },
+
     async resetKillStats() {
-      return { changed: await repo.resetKillStats() };
+      return { changed: await repo.resetCombatStats() };
     },
 
     async deletePlayer(playerId) {

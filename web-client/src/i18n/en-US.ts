@@ -219,6 +219,7 @@ const enUS = {
     closeDetail: "Close detail",
     overview: "Overview",
     warmupStats: "Warmup Stats",
+    combatLogs: "Combat Logs",
     aliases: "Aliases",
     ipHistory: "IP History",
     logins: "Logins",

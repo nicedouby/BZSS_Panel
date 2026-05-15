@@ -55,7 +55,7 @@ export async function renderPage({ root, api, apiFetch, routeInfo }) {
           </select>
           <button id="db-stats-toggle-btn">打开统计弹窗</button>
           <button id="db-sync-online-btn">同步在线玩家</button>
-          <button id="db-reset-kill-stats-btn" class="danger-lite">重置击杀统计</button>
+          <button id="db-reset-combat-stats-btn" class="danger-lite">重置战斗统计</button>
         </div>
       </section>
 
@@ -199,15 +199,15 @@ export async function renderPage({ root, api, apiFetch, routeInfo }) {
     setStatus("在线玩家已同步", "success");
   });
 
-  root.querySelector("#db-reset-kill-stats-btn").addEventListener("click", async () => {
-    if (!window.confirm("确认重置所有玩家击杀/击倒/TK/死亡/自杀统计吗？此操作不可撤销。")) return;
-    setStatus("正在重置击杀统计...", "pending");
-    const res = await apiFetch("/api/db/reset-kill-stats", { method: "POST" });
+  root.querySelector("#db-reset-combat-stats-btn").addEventListener("click", async () => {
+    if (!window.confirm("确认重置所有玩家战斗统计和暖服统计吗？此操作不可撤销。")) return;
+    setStatus("正在重置战斗统计...", "pending");
+    const res = await apiFetch("/api/db/reset-combat-stats", { method: "POST" });
     const json = await res.json();
     if (!res.ok) throw new Error(json?.error || "重置失败");
     await loadList();
     await loadStats({ silent: true });
-    setStatus(`击杀统计已重置，影响 ${Number(json.changed || 0)} 条玩家记录`, "success");
+    setStatus(`战斗统计已重置，影响 ${Number(json.changed || 0)} 条记录`, "success");
   });
 
   await loadStats({ silent: true });
@@ -239,7 +239,7 @@ function renderList(els, loadDetail) {
   els.list.innerHTML = rows.map((p) => `
     <button class="db-row ${Number(p.id) === Number(selectedId) ? "active" : ""}" data-id="${p.id}">
       <div class="db-row-name">${esc(p.current_name || "(未命名)")}</div>
-      <div class="db-row-meta">${esc(p.permission_group || "default")} · R=${fmtNumber(p.ladder_rating)} · K=${fmtNumber(p.total_kills_light)} · TK=${fmtNumber(Number(p.total_tk_down || 0) + Number(p.total_tk_kill || 0))}</div>
+      <div class="db-row-meta">${esc(p.permission_group || "default")} · R=${fmtNumber(p.ladder_rating)} · K=${fmtNumber(p.light_weapon_kills)} · TK=${fmtNumber(Number(p.tk_downs || 0) + Number(p.tk_kills || 0))}</div>
       <div class="db-row-meta">最近登录 ${rowTime(p.last_login_at)} · 更新 ${rowTime(p.updated_at)}</div>
     </button>
   `).join("");
@@ -255,17 +255,18 @@ function renderList(els, loadDetail) {
 
 function renderDetail(els, data, actions) {
   const p = data.player;
-  const warmup = data.warmupStats || {};
+  const combat = data.combatStats || {};
+  const warmup = data.warmupCombatStats || data.warmupStats || {};
   const currentIp = p.current_ip || data.logins?.[0]?.ip || data.ips?.[0]?.ip || "--";
   const winRate = p.total_matches > 0 ? `${((p.total_match_wins / p.total_matches) * 100).toFixed(1)}%` : "--";
   const leadWinRate = p.total_lead_matches > 0 ? `${((p.total_lead_wins / p.total_lead_matches) * 100).toFixed(1)}%` : "--";
   const cmdWinRate = p.total_cmd_matches > 0 ? `${((p.total_cmd_wins / p.total_cmd_matches) * 100).toFixed(1)}%` : "--";
-  const fatalDownRate = p.total_kills_light > 0 ? `${((p.total_downed_light_fatal / p.total_kills_light) * 100).toFixed(1)}%` : "--";
-  const kd = p.total_deaths > 0
-    ? ((Number(p.total_kills_light || 0) + Number(p.total_kills_other || 0)) / Number(p.total_deaths || 0)).toFixed(2)
+  const fatalDownRate = Number(combat.lightWeaponKills || 0) > 0 ? `${((Number(combat.lightWeaponFatalDowns || 0) / Number(combat.lightWeaponKills || 0)) * 100).toFixed(1)}%` : "--";
+  const kd = Number(combat.deaths || 0) > 0
+    ? (Number(combat.lightWeaponKills || 0) / Number(combat.deaths || 0)).toFixed(2)
     : "--";
-  const totalKills = Number(p.total_kills_light || 0) + Number(p.total_kills_other || 0);
-  const totalDowns = Number(p.total_downed_light || 0) + Number(p.total_downed_other || 0);
+  const totalKills = Number(combat.lightWeaponKills || 0);
+  const totalDowns = Number(combat.lightWeaponDowns || 0);
 
   els.detail.innerHTML = `
     <div class="db-detail-top">
@@ -294,16 +295,13 @@ function renderDetail(els, data, actions) {
       <div class="db-card">
         <h3>击杀统计</h3>
         <div class="db-grid">
-          ${cell("总 K / 击倒 / 死亡", `${fmtNumber(totalKills)} / ${fmtNumber(totalDowns)} / ${fmtNumber(p.total_deaths)}`, "db-vivid-kill")}
-          ${cell("轻武器 K / 击倒", `${fmtNumber(p.total_kills_light)} / ${fmtNumber(p.total_downed_light)}`, "db-vivid-kill")}
-          ${cell("致命击倒", fmtNumber(p.total_downed_light_fatal), "db-vivid-kill")}
+          ${cell("总 K / 击倒 / 死亡", `${fmtNumber(totalKills)} / ${fmtNumber(totalDowns)} / ${fmtNumber(combat.deaths)}`, "db-vivid-kill")}
+          ${cell("轻武器 K / 击倒", `${fmtNumber(combat.lightWeaponKills)} / ${fmtNumber(combat.lightWeaponDowns)}`, "db-vivid-kill")}
+          ${cell("致命击倒", fmtNumber(combat.lightWeaponFatalDowns), "db-vivid-kill")}
           ${cell("致命击倒率", fatalDownRate)}
-          ${cell("其他 K / 击倒", `${fmtNumber(p.total_kills_other)} / ${fmtNumber(p.total_downed_other)}`)}
-          ${cell("TK 击倒", fmtNumber(p.total_tk_down), "db-vivid-danger")}
-          ${cell("TK 击杀", fmtNumber(p.total_tk_kill), "db-vivid-danger")}
-          ${cell("被击倒", fmtNumber(p.total_downed_received))}
+          ${cell("TK 击倒", fmtNumber(combat.tkDowns), "db-vivid-danger")}
+          ${cell("TK 击杀", fmtNumber(combat.tkKills), "db-vivid-danger")}
           ${cell("KD", kd)}
-          ${cell("自杀", fmtNumber(p.total_suicides))}
         </div>
       </div>
     </div>
@@ -311,14 +309,19 @@ function renderDetail(els, data, actions) {
     <div class="db-card">
       <h3>暖服统计</h3>
       <div class="db-grid">
-        ${cell("暖服击杀", fmtNumber(Number(warmup.total_kills_light || 0) + Number(warmup.total_kills_other || 0)))}
-        ${cell("暖服击倒", fmtNumber(Number(warmup.total_downed_light || 0) + Number(warmup.total_downed_other || 0)))}
-        ${cell("暖服被击倒", fmtNumber(warmup.total_downed_received || 0))}
-        ${cell("暖服 TK", fmtNumber(Number(warmup.total_tk_down || 0) + Number(warmup.total_tk_kill || 0)))}
-        ${cell("暖服死亡", fmtNumber(warmup.total_deaths || 0))}
-        ${cell("暖服自杀", fmtNumber(warmup.total_suicides || 0))}
+        ${cell("暖服击杀", fmtNumber(warmup.kills || 0))}
+        ${cell("暖服击倒", fmtNumber(warmup.downs || 0))}
+        ${cell("暖服死亡", fmtNumber(warmup.deaths || 0))}
       </div>
     </div>
+
+    ${miniList("战斗日志（最近 100）", (data.combatLogs || []).slice(0, 100).map((item) => [
+      item.eventType || "--",
+      item.role || "--",
+      `${item.attackerName || "--"} -> ${item.victimName || "--"}`,
+      item.weapon ? `武器 ${item.weapon}` : "",
+      item.damage != null ? `伤害 ${item.damage}` : "",
+    ].filter(Boolean).join(" · ")))}
 
     <div class="db-card">
       <h3>行为记录</h3>

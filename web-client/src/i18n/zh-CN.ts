@@ -216,6 +216,7 @@ const zhCN = {
     closeDetail: "关闭详情",
     overview: "概览",
     warmupStats: "暖服统计",
+    combatLogs: "战斗日志",
     aliases: "历史名称",
     ipHistory: "IP 历史",
     logins: "登录记录",

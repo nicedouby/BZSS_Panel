@@ -103,6 +103,32 @@ function buildPlayerSearchWhere(query) {
   };
 }
 
+function normalizeCombatEventType(type) {
+  const value = String(type ?? "").trim().toUpperCase();
+  if (value === "WOUNDED") return "WOUNDED";
+  if (value === "DIED") return "DIED";
+  return "DAMAGE";
+}
+
+function toLogTime(value) {
+  const ts = Number(value);
+  if (Number.isFinite(ts) && ts > 0) return Math.trunc(ts);
+  return null;
+}
+
+function buildSourceEventId(event = {}) {
+  const raw = cleanText(event.sourceEventId ?? event.eventId ?? event.id);
+  if (raw) return raw;
+  const parts = [
+    cleanText(event.eventName),
+    cleanText(event.serverId),
+    cleanText(event.time),
+    cleanText(event.rawLog),
+    cleanText(event?.record?.time),
+  ].filter(Boolean);
+  return parts.length ? parts.join("|") : null;
+}
+
 export class PlayerRepository {
   constructor(db) {
     this.db = db;
@@ -262,6 +288,170 @@ export class PlayerRepository {
     );
   }
 
+  async addCombatLogEvent({
+    sourceEventId = null,
+    serverId = null,
+    matchId = null,
+    mapName = null,
+    layerName = null,
+    eventType = "DAMAGE",
+    attackerPlayerId = null,
+    victimPlayerId = null,
+    attackerName = null,
+    victimName = null,
+    attackerSteamId = null,
+    attackerEosId = null,
+    victimSteamId = null,
+    victimEosId = null,
+    weapon = null,
+    damage = null,
+    isLightWeapon = false,
+    isTeamkill = false,
+    isFatalDown = false,
+    rawLine = null,
+    payload = {},
+    logTime = null,
+  } = {}) {
+    const normalizedSourceEventId = cleanText(sourceEventId);
+    const payloadJson = JSON.stringify(payload ?? {});
+    const createdAt = now();
+    const params = [
+      normalizedSourceEventId,
+      cleanText(serverId),
+      cleanText(matchId),
+      cleanText(mapName),
+      cleanText(layerName),
+      normalizeCombatEventType(eventType),
+      Number.isFinite(Number(attackerPlayerId)) ? Number(attackerPlayerId) : null,
+      Number.isFinite(Number(victimPlayerId)) ? Number(victimPlayerId) : null,
+      cleanText(attackerName),
+      cleanText(victimName),
+      cleanText(attackerSteamId),
+      cleanText(attackerEosId),
+      cleanText(victimSteamId),
+      cleanText(victimEosId),
+      cleanText(weapon),
+      Number.isFinite(Number(damage)) ? Number(damage) : null,
+      isLightWeapon ? 1 : 0,
+      isTeamkill ? 1 : 0,
+      isFatalDown ? 1 : 0,
+      cleanText(rawLine),
+      payloadJson,
+      toLogTime(logTime),
+      createdAt,
+    ];
+
+    if (normalizedSourceEventId) {
+      const existing = await this.db.get(
+        "SELECT id FROM combat_log_events WHERE source_event_id = ?",
+        normalizedSourceEventId,
+      );
+      if (existing?.id) {
+        return { id: Number(existing.id), inserted: false };
+      }
+    }
+
+    const result = await this.db.run(
+      `INSERT INTO combat_log_events (
+         source_event_id, server_id, match_id, map_name, layer_name,
+         event_type, attacker_player_id, victim_player_id,
+         attacker_name, victim_name,
+         attacker_steam_id, attacker_eos_id, victim_steam_id, victim_eos_id,
+         weapon, damage, is_light_weapon, is_teamkill, is_fatal_down,
+         raw_line, payload_json, log_time, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ...params,
+    );
+    return { id: Number(result.lastID), inserted: true };
+  }
+
+  async addCombatLogRefs(combatLogEventId, refs = []) {
+    const id = Number(combatLogEventId);
+    if (!Number.isFinite(id) || id <= 0) return 0;
+    const ts = now();
+    let changes = 0;
+
+    for (const ref of refs) {
+      const playerId = Number(ref?.playerId);
+      const role = cleanText(ref?.role);
+      if (!Number.isFinite(playerId) || !role) continue;
+      const result = await this.db.run(
+        `INSERT INTO combat_log_player_refs (combat_log_event_id, player_id, role, created_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(combat_log_event_id, player_id, role) DO UPDATE SET
+           created_at = excluded.created_at`,
+        id,
+        playerId,
+        role,
+        ts,
+      );
+      changes += Number(result?.changes || 0);
+    }
+
+    return changes;
+  }
+
+  async incrementCombatStats(playerId, patch = {}) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id) || id <= 0) return;
+    const fields = {
+      light_weapon_downs: Math.trunc(Number(patch.light_weapon_downs ?? patch.lightWeaponDowns ?? 0)),
+      light_weapon_kills: Math.trunc(Number(patch.light_weapon_kills ?? patch.lightWeaponKills ?? 0)),
+      light_weapon_fatal_downs: Math.trunc(Number(patch.light_weapon_fatal_downs ?? patch.lightWeaponFatalDowns ?? 0)),
+      deaths: Math.trunc(Number(patch.deaths ?? 0)),
+      tk_downs: Math.trunc(Number(patch.tk_downs ?? patch.tkDowns ?? 0)),
+      tk_kills: Math.trunc(Number(patch.tk_kills ?? patch.tkKills ?? 0)),
+    };
+
+    const entries = Object.entries(fields).filter(([, value]) => Number.isFinite(value) && value !== 0);
+    if (!entries.length) return;
+
+    const assignments = entries.map(([key]) => `${key} = ${key} + excluded.${key}`).join(", ");
+    const columns = entries.map(([key]) => key).join(", ");
+    const placeholders = entries.map(() => "excluded." + entries[0][0]).length; // unused fallback to keep shape
+    const values = entries.map(([, value]) => value);
+    const ts = now();
+
+    const sql = `
+      INSERT INTO player_combat_stats (
+        player_id, ${columns}, updated_at
+      ) VALUES (
+        ?, ${entries.map(() => "?").join(", ")}, ?
+      )
+      ON CONFLICT(player_id) DO UPDATE SET
+        ${assignments},
+        updated_at = excluded.updated_at
+    `;
+    await this.db.run(sql, id, ...values, ts);
+  }
+
+  async incrementWarmupCombatStats(playerId, patch = {}) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id) || id <= 0) return;
+    const fields = {
+      downs: Math.trunc(Number(patch.downs ?? 0)),
+      kills: Math.trunc(Number(patch.kills ?? 0)),
+      deaths: Math.trunc(Number(patch.deaths ?? 0)),
+    };
+    const entries = Object.entries(fields).filter(([, value]) => Number.isFinite(value) && value !== 0);
+    if (!entries.length) return;
+    const columns = entries.map(([key]) => key).join(", ");
+    const update = entries.map(([key]) => `${key} = ${key} + excluded.${key}`).join(", ");
+    const values = entries.map(([, value]) => value);
+    const ts = now();
+    const sql = `
+      INSERT INTO player_warmup_combat_stats (
+        player_id, ${columns}, updated_at
+      ) VALUES (
+        ?, ${entries.map(() => "?").join(", ")}, ?
+      )
+      ON CONFLICT(player_id) DO UPDATE SET
+        ${update},
+        updated_at = excluded.updated_at
+    `;
+    await this.db.run(sql, id, ...values, ts);
+  }
+
   async incrementFields(playerId, patch) {
     const entries = Object.entries(patch ?? {}).filter(([, value]) => Number.isFinite(Number(value)) && Number(value) !== 0);
     if (!entries.length) return;
@@ -296,9 +486,13 @@ export class PlayerRepository {
       `SELECT players.id, players.current_name, players.steam_id, players.eos_id, players.current_ip,
               players.permission_group, players.ladder_rating, players.game_seconds, players.server_seconds,
               players.commander_seconds, players.squad_leader_seconds, players.in_squad_seconds, players.warmup_seconds,
-              players.total_kills_light, players.total_kills_other, players.total_downed_light, players.total_downed_other,
-              players.total_tk_down, players.total_tk_kill, players.total_suicides, players.total_deaths,
               players.total_downed_received, players.total_squad_created, players.updated_at,
+              COALESCE(pcs.light_weapon_downs, 0) AS light_weapon_downs,
+              COALESCE(pcs.light_weapon_kills, 0) AS light_weapon_kills,
+              COALESCE(pcs.light_weapon_fatal_downs, 0) AS light_weapon_fatal_downs,
+              COALESCE(pcs.deaths, 0) AS combat_deaths,
+              COALESCE(pcs.tk_downs, 0) AS tk_downs,
+              COALESCE(pcs.tk_kills, 0) AS tk_kills,
               login.last_login_at
        FROM players
        LEFT JOIN (
@@ -306,6 +500,7 @@ export class PlayerRepository {
           FROM player_logins
           GROUP BY player_id
        ) AS login ON login.player_id = players.id
+       LEFT JOIN player_combat_stats pcs ON pcs.player_id = players.id
        WHERE ${search.where}
        ORDER BY ${orderBy}
        LIMIT ? OFFSET ?`,
@@ -429,7 +624,56 @@ export class PlayerRepository {
   async getPlayerWarmupStats(playerId) {
     const id = Number(playerId);
     if (!Number.isFinite(id)) return null;
-    return this.db.get("SELECT * FROM player_warmup_stats WHERE player_id = ?", id);
+    return this.db.get("SELECT * FROM player_warmup_combat_stats WHERE player_id = ?", id);
+  }
+
+  async listWarmupCombatStats({ limit = 100, offset = 0 } = {}) {
+    const cappedLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
+    const safeOffset = Math.max(Number(offset) || 0, 0);
+    return this.db.all(
+      `SELECT p.id, p.current_name, p.steam_id, p.eos_id,
+              COALESCE(w.downs, 0) AS downs,
+              COALESCE(w.kills, 0) AS kills,
+              COALESCE(w.deaths, 0) AS deaths,
+              COALESCE(w.updated_at, 0) AS updated_at
+       FROM player_warmup_combat_stats w
+       JOIN players p ON p.id = w.player_id
+       ORDER BY w.kills DESC, w.downs DESC, w.deaths DESC, w.updated_at DESC
+       LIMIT ? OFFSET ?`,
+      cappedLimit,
+      safeOffset,
+    );
+  }
+
+  async listCombatLogsByPlayer(playerId, options = {}) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return [];
+    const { limit, offset } = this.normalizePaging(options);
+    return this.db.all(
+      `SELECT
+         e.id,
+         e.event_type,
+         r.role,
+         e.attacker_name,
+         e.victim_name,
+         e.weapon,
+         e.damage,
+         e.is_light_weapon,
+         e.is_teamkill,
+         e.is_fatal_down,
+         e.raw_line,
+         e.payload_json,
+         e.created_at,
+         e.log_time
+       FROM combat_log_player_refs r
+       JOIN combat_log_events e ON e.id = r.combat_log_event_id
+       WHERE r.player_id = ?
+       ORDER BY e.created_at DESC, e.id DESC
+       LIMIT ? OFFSET ?`,
+      id,
+      limit,
+      offset,
+    );
   }
 
   async getPlayerDetail(playerId) {
@@ -439,13 +683,45 @@ export class PlayerRepository {
     const player = await this.getPlayerById(id);
     if (!player) return null;
 
-    const [aliases, ips, logins, squadCreatedRows, warmupStats] = await Promise.all([
+    const [aliases, ips, logins, squadCreatedRows, combatStatsRow, warmupStatsRow, combatLogs] = await Promise.all([
       this.listPlayerAliases(id, { limit: 12 }),
       this.listPlayerIps(id, { limit: 12 }),
       this.listPlayerLogins(id, { limit: 12 }),
       this.listPlayerSquadCreated(id, { limit: 1 }),
       this.getPlayerWarmupStats(id),
+      this.db.get("SELECT * FROM player_combat_stats WHERE player_id = ?", id),
+      this.listCombatLogsByPlayer(id, { limit: 100 }),
     ]);
+
+    const combatStats = combatStatsRow ? {
+      lightWeaponDowns: Number(combatStatsRow.light_weapon_downs ?? 0),
+      lightWeaponKills: Number(combatStatsRow.light_weapon_kills ?? 0),
+      lightWeaponFatalDowns: Number(combatStatsRow.light_weapon_fatal_downs ?? 0),
+      deaths: Number(combatStatsRow.deaths ?? 0),
+      tkDowns: Number(combatStatsRow.tk_downs ?? 0),
+      tkKills: Number(combatStatsRow.tk_kills ?? 0),
+      updatedAt: Number(combatStatsRow.updated_at ?? 0) || null,
+    } : {
+      lightWeaponDowns: 0,
+      lightWeaponKills: 0,
+      lightWeaponFatalDowns: 0,
+      deaths: 0,
+      tkDowns: 0,
+      tkKills: 0,
+      updatedAt: null,
+    };
+
+    const warmupCombatStats = warmupStatsRow ? {
+      downs: Number(warmupStatsRow.downs ?? 0),
+      kills: Number(warmupStatsRow.kills ?? 0),
+      deaths: Number(warmupStatsRow.deaths ?? 0),
+      updatedAt: Number(warmupStatsRow.updated_at ?? 0) || null,
+    } : {
+      downs: 0,
+      kills: 0,
+      deaths: 0,
+      updatedAt: null,
+    };
 
     return {
       player,
@@ -453,12 +729,36 @@ export class PlayerRepository {
       ips,
       logins,
       squadCreated: squadCreatedRows[0] ?? null,
-      warmupStats,
+      combatStats,
+      warmupCombatStats,
+      combatLogs: combatLogs.map((row) => ({
+        id: Number(row.id),
+        eventType: row.event_type,
+        role: row.role,
+        attackerName: row.attacker_name || null,
+        victimName: row.victim_name || null,
+        weapon: row.weapon || null,
+        damage: row.damage == null ? null : Number(row.damage),
+        isLightWeapon: Number(row.is_light_weapon || 0) === 1,
+        isTeamkill: Number(row.is_teamkill || 0) === 1,
+        isFatalDown: Number(row.is_fatal_down || 0) === 1,
+        rawLine: row.raw_line || null,
+        payloadJson: row.payload_json || null,
+        createdAt: Number(row.created_at || 0) || null,
+        logTime: Number(row.log_time || 0) || null,
+      })),
+      combatLogRefs: combatLogs.map((row) => ({
+        id: Number(row.id),
+        eventType: row.event_type,
+        role: row.role,
+        createdAt: Number(row.created_at || 0) || null,
+      })),
+      warmupStats: warmupCombatStats,
       summary: {
-        totalKills: Number(player.total_kills_light ?? 0) + Number(player.total_kills_other ?? 0),
-        totalDowns: Number(player.total_downed_light ?? 0) + Number(player.total_downed_other ?? 0),
-        totalDeaths: Number(player.total_deaths ?? 0),
-        totalTeamKills: Number(player.total_tk_down ?? 0) + Number(player.total_tk_kill ?? 0),
+        totalKills: Number(combatStats.lightWeaponKills ?? 0),
+        totalDowns: Number(combatStats.lightWeaponDowns ?? 0),
+        totalDeaths: Number(combatStats.deaths ?? 0),
+        totalTeamKills: Number(combatStats.tkDowns ?? 0) + Number(combatStats.tkKills ?? 0),
         gameSeconds: Number(player.game_seconds ?? 0),
         serverSeconds: Number(player.server_seconds ?? 0),
       },
@@ -474,24 +774,12 @@ export class PlayerRepository {
     );
   }
 
-  async resetKillStats() {
+  async resetCombatStats() {
     const ts = now();
-    const result = await this.db.run(
-      `UPDATE players
-       SET total_kills_light = 0,
-           total_kills_other = 0,
-           total_downed_light = 0,
-           total_downed_other = 0,
-           total_downed_light_fatal = 0,
-           total_tk_down = 0,
-           total_tk_kill = 0,
-           total_deaths = 0,
-           total_downed_received = 0,
-           total_suicides = 0,
-           updated_at = ?`,
-      ts,
-    );
-    await this.db.run("DELETE FROM player_warmup_stats");
+    const result = await this.db.run("DELETE FROM player_combat_stats");
+    await this.db.run("DELETE FROM player_warmup_combat_stats");
+    await this.db.run("DELETE FROM combat_log_player_refs");
+    await this.db.run("DELETE FROM combat_log_events");
     return Number(result?.changes || 0);
   }
 
@@ -518,15 +806,16 @@ export class PlayerRepository {
               COALESCE(SUM(in_squad_seconds), 0) AS total_in_squad_seconds,
               COALESCE(SUM(total_matches), 0) AS total_matches,
               COALESCE(SUM(total_match_wins), 0) AS total_match_wins,
-              COALESCE(SUM(total_kills_light + total_kills_other), 0) AS total_kills,
-              COALESCE(SUM(total_deaths), 0) AS total_deaths,
-              COALESCE(SUM(total_tk_down + total_tk_kill), 0) AS total_team_kills,
+              COALESCE(SUM(COALESCE(pcs.light_weapon_kills, 0)), 0) AS total_kills,
+              COALESCE(SUM(COALESCE(pcs.deaths, 0)), 0) AS total_deaths,
+              COALESCE(SUM(COALESCE(pcs.tk_downs, 0) + COALESCE(pcs.tk_kills, 0)), 0) AS total_team_kills,
               COALESCE(SUM(total_suicides), 0) AS total_suicides,
               COALESCE(AVG(ladder_rating), 0) AS average_ladder_rating,
               COALESCE(MAX(ladder_rating), 0) AS max_ladder_rating,
               COALESCE(MIN(ladder_rating), 0) AS min_ladder_rating,
               COALESCE(MAX(updated_at), 0) AS last_player_update_at
-       FROM players`,
+       FROM players
+       LEFT JOIN player_combat_stats pcs ON pcs.player_id = players.id`,
     );
 
     const activeWindowRow = await this.db.get(
@@ -543,14 +832,20 @@ export class PlayerRepository {
 
     const topByKills = await this.db.all(
       `SELECT id, current_name, steam_id, eos_id, ladder_rating,
-              total_kills_light, total_kills_other, total_deaths, total_tk_down, total_tk_kill,
-              (total_kills_light + total_kills_other) AS total_kills,
+              COALESCE(pcs.light_weapon_downs, 0) AS light_weapon_downs,
+              COALESCE(pcs.light_weapon_kills, 0) AS light_weapon_kills,
+              COALESCE(pcs.light_weapon_fatal_downs, 0) AS light_weapon_fatal_downs,
+              COALESCE(pcs.deaths, 0) AS total_deaths,
+              COALESCE(pcs.tk_downs, 0) AS tk_downs,
+              COALESCE(pcs.tk_kills, 0) AS tk_kills,
+              COALESCE(pcs.light_weapon_kills, 0) AS total_kills,
               CASE
-                WHEN total_deaths > 0 THEN ROUND(1.0 * (total_kills_light + total_kills_other) / total_deaths, 2)
+                WHEN COALESCE(pcs.deaths, 0) > 0 THEN ROUND(1.0 * COALESCE(pcs.light_weapon_kills, 0) / COALESCE(pcs.deaths, 0), 2)
                 ELSE NULL
               END AS kd
        FROM players
-       ORDER BY total_kills DESC, total_kills_light DESC, total_kills_other DESC, updated_at DESC
+       LEFT JOIN player_combat_stats pcs ON pcs.player_id = players.id
+       ORDER BY total_kills DESC, light_weapon_kills DESC, light_weapon_downs DESC, updated_at DESC
        LIMIT ?`,
       normalizedTop,
     );
@@ -681,11 +976,11 @@ export class PlayerRepository {
           steamID: row.steam_id || null,
           eosID: row.eos_id || null,
           ladderRating: Number(row.ladder_rating || 0),
-          totalKillsLight: Number(row.total_kills_light || 0),
-          totalKillsOther: Number(row.total_kills_other || 0),
+          totalKillsLight: Number(row.light_weapon_kills || 0),
+          totalKillsOther: 0,
           totalKills: Number(row.total_kills || 0),
           totalDeaths: Number(row.total_deaths || 0),
-          totalTeamKills: Number(row.total_tk_down || 0) + Number(row.total_tk_kill || 0),
+          totalTeamKills: Number(row.tk_downs || 0) + Number(row.tk_kills || 0),
           kd: row.kd == null ? null : Number(row.kd),
         })),
         byPlaytime: topByPlaytime.map((row) => ({

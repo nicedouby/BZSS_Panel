@@ -45,7 +45,7 @@
         >
           <div class="db-row-name">{{ player.current_name || player.name || t("common.unknown") }}</div>
           <div class="db-row-meta">
-            {{ player.permission_group || "default" }} · {{ t("database.ladderRating") }}={{ player.ladder_rating ?? 0 }} · {{ t("database.kills") }}={{ player.total_kills_light ?? 0 }} · {{ t("database.teamKills") }}={{ teamKills(player) }}
+            {{ player.permission_group || "default" }} · {{ t("database.ladderRating") }}={{ player.ladder_rating ?? 0 }} · {{ t("database.kills") }}={{ player.light_weapon_kills ?? player.total_kills_light ?? 0 }} · {{ t("database.teamKills") }}={{ teamKills(player) }}
           </div>
           <div class="db-row-meta">
             {{ t("database.lastLogin") }} {{ formatTime(player.last_login_at) }} · {{ t("database.updatedAt") }} {{ formatTime(player.updated_at) }}
@@ -119,13 +119,21 @@
           <div class="db-card">
             <h3>{{ t("database.warmupStats") }}</h3>
             <div class="db-grid">
-              <div><span>{{ t("database.kills") }}</span><strong>{{ warmupTotal(detail.warmupStats, "kills") }}</strong></div>
-              <div><span>{{ t("database.downs") }}</span><strong>{{ warmupTotal(detail.warmupStats, "downs") }}</strong></div>
-              <div><span>{{ t("database.receivedDowns") }}</span><strong>{{ detail.warmupStats?.total_downed_received ?? 0 }}</strong></div>
-              <div><span>{{ t("database.teamKills") }}</span><strong>{{ warmupTotal(detail.warmupStats, "teamKills") }}</strong></div>
-              <div><span>{{ t("database.deaths") }}</span><strong>{{ detail.warmupStats?.total_deaths ?? 0 }}</strong></div>
-              <div><span>{{ t("database.suicides") }}</span><strong>{{ detail.warmupStats?.total_suicides ?? 0 }}</strong></div>
+              <div><span>{{ t("database.kills") }}</span><strong>{{ Number(detail.warmupCombatStats?.kills ?? detail.warmupStats?.kills ?? 0) }}</strong></div>
+              <div><span>{{ t("database.downs") }}</span><strong>{{ Number(detail.warmupCombatStats?.downs ?? detail.warmupStats?.downs ?? 0) }}</strong></div>
+              <div><span>{{ t("database.deaths") }}</span><strong>{{ Number(detail.warmupCombatStats?.deaths ?? detail.warmupStats?.deaths ?? 0) }}</strong></div>
             </div>
+          </div>
+
+          <div class="db-card">
+            <h3>{{ t("database.combatLogs") }}</h3>
+            <ul class="db-list-mini">
+              <li v-for="item in (detail.combatLogs || []).slice(0, 20)" :key="`${item.id}-${item.role}`">
+                <span>{{ item.eventType }} · {{ item.role }} · {{ item.attackerName || t("common.unknown") }} → {{ item.victimName || t("common.unknown") }}</span>
+                <small>{{ item.weapon || "--" }} · {{ item.damage ?? "--" }} · {{ formatTime(item.createdAt) }}</small>
+              </li>
+              <li v-if="!(detail.combatLogs || []).length">{{ t("common.none") }}</li>
+            </ul>
           </div>
 
           <div class="db-detail-grid">
@@ -627,7 +635,7 @@ function winRate(wins: unknown, total: unknown) {
 }
 
 function teamKills(player: any) {
-  return Number(player?.total_tk_down ?? 0) + Number(player?.total_tk_kill ?? 0);
+  return Number(player?.tk_downs ?? player?.total_tk_down ?? 0) + Number(player?.tk_kills ?? player?.total_tk_kill ?? 0);
 }
 
 function lookupItem(ip: unknown, map: Record<string, any>) {
@@ -670,15 +678,6 @@ function fieldLabel(key: string, fallback?: string) {
   return t(`field.${key}`, fallback ?? key);
 }
 
-function warmupTotal(statsBlock: any, type: "kills" | "downs" | "teamKills") {
-  if (type === "kills") {
-    return Number(statsBlock?.total_kills_light ?? 0) + Number(statsBlock?.total_kills_other ?? 0);
-  }
-  if (type === "downs") {
-    return Number(statsBlock?.total_downed_light ?? 0) + Number(statsBlock?.total_downed_other ?? 0);
-  }
-  return Number(statsBlock?.total_tk_down ?? 0) + Number(statsBlock?.total_tk_kill ?? 0);
-}
 </script>
 
 <style scoped>
