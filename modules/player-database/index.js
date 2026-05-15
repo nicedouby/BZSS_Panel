@@ -12,98 +12,6 @@ function identityFromPlayer(player) {
   };
 }
 
-function eventIdentity(event, prefix) {
-  return {
-    name: getParam(event, `${prefix}Name`) || null,
-    steamID: getParam(event, `${prefix}Steam64ID`) || getParam(event, `${prefix}SteamID`) || null,
-    eosID: getParam(event, `${prefix}EOSID`) || null,
-  };
-}
-
-function recordIdentity(record, prefix) {
-  return {
-    name: record?.[`${prefix}Name`] || null,
-    steamID: record?.[`${prefix}Steam64ID`] || record?.[`${prefix}SteamID`] || null,
-    eosID: record?.[`${prefix}EOSID`] || null,
-  };
-}
-
-function resolveTeamID(identity, player, event, prefix) {
-  return identity?.teamID
-    ?? player?.teamID
-    ?? event?.[`${prefix}TeamID`]
-    ?? event?.[`${prefix}TeamId`]
-    ?? "";
-}
-
-function sameTeam(left, right) {
-  const a = String(left ?? "").trim();
-  const b = String(right ?? "").trim();
-  return Boolean(a && b && a === b);
-}
-
-function buildCombatSourceEventId(event, type) {
-  return String(
-    event?.eventId
-      ?? event?.sourceEventId
-      ?? event?.eventName
-      ?? `${event?.serverId ?? ""}:${type}:${event?.time ?? ""}:${event?.rawLog ?? ""}`,
-  ).trim() || null;
-}
-
-function eventIdentityWeapon(event) {
-  return String(event?.weapon ?? event?.causedBy ?? event?.FromObject ?? event?.fromObject ?? "").trim() || null;
-}
-
-function eventDamageValue(event, type) {
-  const value = type === "wounded"
-    ? event?.KillingDamage
-    : event?.KillingDamage ?? event?.ActualDamage;
-  const number = Number(value);
-  return Number.isFinite(number) ? number : null;
-}
-
-function eventTimeMs(event) {
-  const ts = Number(event?.time ?? event?.timestamp ?? 0);
-  if (Number.isFinite(ts) && ts > 0) return Math.trunc(ts);
-  const parsed = Date.parse(String(event?.time ?? ""));
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function isWarmupActive(core, modules, event) {
-  const snapshot = core.webStatus?.getSnapshot?.() ?? {};
-  const match = core.runtimeState?.getMatch?.() ?? {};
-  const roundState = modules.roundState?.getState?.() ?? null;
-  const matchState = modules.matchState?.getState?.() ?? null;
-
-  const candidates = [
-    event?.isWarmup,
-    event?.warmup,
-    event?.phase,
-    event?.roundState,
-    event?.matchState,
-    snapshot?.phase,
-    snapshot?.roundState,
-    snapshot?.matchState,
-    match?.phase,
-    match?.roundState,
-    match?.state,
-    roundState?.phase,
-    roundState?.state,
-    matchState?.phase,
-    matchState?.state,
-  ];
-
-  return candidates.some((value) => {
-    const text = String(value ?? "").trim().toLowerCase();
-    return text === "warmup"
-      || text === "preround"
-      || text === "staging"
-      || text === "waiting"
-      || text === "preparation";
-  });
-}
-
 /**
  * Module: PlayerDatabase
  *
@@ -120,70 +28,6 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
     for (const player of online) {
       await repo.upsertFromPresence(identityFromPlayer(player));
     }
-  }
-
-  async function recordCombat(event, type) {
-    const victimIdentity = eventIdentity(event, "Victim");
-    const attackerIdentity = eventIdentity(event, "Attacker");
-    const victim = victimIdentity.name || victimIdentity.steamID || victimIdentity.eosID
-      ? await repo.upsertFromPresence(victimIdentity)
-      : null;
-    const attacker = attackerIdentity.name || attackerIdentity.steamID || attackerIdentity.eosID
-      ? await repo.upsertFromPresence(attackerIdentity)
-      : null;
-
-    if (isWarmupActive(core, modules, event)) {
-      await recordWarmupCombatOnly({ attacker, victim, type });
-      return;
-    }
-
-    await recordNormalCombatWithLog({
-      event,
-      type,
-      attacker,
-      victim,
-      attackerIdentity,
-      victimIdentity,
-    });
-  }
-
-  async function recordWarmupCombatOnly({ attacker, victim, type }) {
-    if (type === "wounded") {
-      if (attacker?.id && attacker.id !== victim?.id) {
-        await repo.incrementWarmupCombatStats(attacker.id, { downs: 1 });
-      }
-      return;
-    }
-
-    if (type === "died") {
-      if (victim?.id) {
-        await repo.incrementWarmupCombatStats(victim.id, { deaths: 1 });
-      }
-
-      if (attacker?.id && attacker.id !== victim?.id) {
-        await repo.incrementWarmupCombatStats(attacker.id, { kills: 1 });
-      }
-    }
-  }
-
-  async function recordNormalCombatWithLog({
-    event,
-    type,
-    attacker,
-    victim,
-    attackerIdentity,
-    victimIdentity,
-  }) {
-    void event;
-    void type;
-    void attacker;
-    void victim;
-    void attackerIdentity;
-    void victimIdentity;
-  }
-
-  async function recordFriendlyFireStats(event) {
-    void event;
   }
 
   const api = {
@@ -313,10 +157,8 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
         });
       }));
 
-      unsubscribers.push(core.eventBus.onCoreEvent("On_PlayerWounded", (event) => recordCombat(event, "wounded")));
-      unsubscribers.push(core.eventBus.onCoreEvent("On_PlayerDied", (event) => recordCombat(event, "died")));
       unsubscribers.push(core.eventBus.onCoreEvent("*", async (event) => {
-        if (!event?.eventName || event.eventName === "On_PlayerWounded" || event.eventName === "On_PlayerDied") return;
+        if (!event?.eventName) return;
 
       await repo.addLogEvent({
         sourceEvent: event.eventName,
