@@ -267,6 +267,25 @@
     "paths": [
       "./plugins/weapon-collector.js",
       "./plugins/udp_event_forwarder.js"
-    ]
+    ],
+    "udpEventForwarder": {
+      "enabled": false,
+      "host": "127.0.0.1",
+      "port": 39001,
+      "serverId": "BZSS_Main",
+      "statusIntervalMs": 5000,
+      "heartbeatIntervalMs": 30000,
+      "includeRawLog": false,
+      "includeIds": true,
+      "sendCombatDamage": true,
+      "sendMapChanged": true,
+      "sendStatus": true,
+      "sendHeartbeat": true,
+      "maxQueueSize": 1000,
+      "dropPolicy": "drop_oldest",
+      "maxPacketBytes": 1200,
+      "logSuccess": false,
+      "logFailure": true
+    }
   }
 }

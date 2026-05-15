@@ -6,23 +6,37 @@ const SCHEMA = "bzss.udp.event.v1";
 const EVENT_TTL_MS = 10 * 60 * 1000;
 const MAX_SEEN_EVENTS = 5000;
 
-function envBool(name, fallback = false) {
-  const value = process.env[name];
+function readPluginConfig(sourceConfig = {}) {
+  if (sourceConfig && typeof sourceConfig.get === "function") {
+    return sourceConfig.get("plugins.udpEventForwarder", {}) ?? {};
+  }
+
+  if (sourceConfig && typeof sourceConfig === "object") {
+    return sourceConfig.plugins?.udpEventForwarder ?? {};
+  }
+
+  return {};
+}
+
+function configBool(value, fallback = false) {
   if (value == null || value === "") {
     return fallback;
+  }
+
+  if (typeof value === "boolean") {
+    return value;
   }
 
   const normalized = String(value).trim().toLowerCase();
   return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
 }
 
-function envInt(name, fallback) {
-  const value = Number.parseInt(process.env[name], 10);
-  return Number.isFinite(value) && value > 0 ? value : fallback;
+function configInt(value, fallback) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function envString(name, fallback) {
-  const value = process.env[name];
+function configString(value, fallback) {
   return value == null || value === "" ? fallback : String(value);
 }
 
@@ -280,30 +294,35 @@ function normalizeMatchStatePayload(event) {
   return event;
 }
 
-function readConfig() {
+function readConfig(sourceConfig = {}, pluginConfigOverride = {}) {
+  const pluginConfig = {
+    ...readPluginConfig(sourceConfig),
+    ...pluginConfigOverride,
+  };
+
   return {
-    enabled: envBool("UDP_EVENT_FORWARDER_ENABLED", false),
-    host: envString("UDP_EVENT_FORWARDER_HOST", "127.0.0.1"),
-    port: envInt("UDP_EVENT_FORWARDER_PORT", 39001),
-    serverId: envString("UDP_EVENT_FORWARDER_SERVER_ID", "BZSS_Main"),
+    enabled: configBool(pluginConfig.enabled, false),
+    host: configString(pluginConfig.host, "127.0.0.1"),
+    port: configInt(pluginConfig.port, 39001),
+    serverId: configString(pluginConfig.serverId, "BZSS_Main"),
 
-    statusIntervalMs: envInt("UDP_EVENT_FORWARDER_STATUS_INTERVAL_MS", 5000),
-    heartbeatIntervalMs: envInt("UDP_EVENT_FORWARDER_HEARTBEAT_INTERVAL_MS", 30000),
+    statusIntervalMs: configInt(pluginConfig.statusIntervalMs, 5000),
+    heartbeatIntervalMs: configInt(pluginConfig.heartbeatIntervalMs, 30000),
 
-    includeRawLog: envBool("UDP_EVENT_FORWARDER_INCLUDE_RAW_LOG", false),
-    includeIds: envBool("UDP_EVENT_FORWARDER_INCLUDE_IDS", true),
+    includeRawLog: configBool(pluginConfig.includeRawLog, false),
+    includeIds: configBool(pluginConfig.includeIds, true),
 
-    sendCombatDamage: envBool("UDP_EVENT_FORWARDER_SEND_COMBAT_DAMAGE", true),
-    sendMapChanged: envBool("UDP_EVENT_FORWARDER_SEND_MAP_CHANGED", true),
-    sendStatus: envBool("UDP_EVENT_FORWARDER_SEND_STATUS", true),
-    sendHeartbeat: envBool("UDP_EVENT_FORWARDER_SEND_HEARTBEAT", true),
+    sendCombatDamage: configBool(pluginConfig.sendCombatDamage, true),
+    sendMapChanged: configBool(pluginConfig.sendMapChanged, true),
+    sendStatus: configBool(pluginConfig.sendStatus, true),
+    sendHeartbeat: configBool(pluginConfig.sendHeartbeat, true),
 
-    maxQueueSize: envInt("UDP_EVENT_FORWARDER_MAX_QUEUE_SIZE", 1000),
-    maxPacketBytes: envInt("UDP_EVENT_FORWARDER_MAX_PACKET_BYTES", 1200),
-    dropPolicy: envString("UDP_EVENT_FORWARDER_DROP_POLICY", "drop_oldest"),
+    maxQueueSize: configInt(pluginConfig.maxQueueSize, 1000),
+    maxPacketBytes: configInt(pluginConfig.maxPacketBytes, 1200),
+    dropPolicy: configString(pluginConfig.dropPolicy, "drop_oldest"),
 
-    logSuccess: envBool("UDP_EVENT_FORWARDER_LOG_SUCCESS", false),
-    logFailure: envBool("UDP_EVENT_FORWARDER_LOG_FAILURE", true),
+    logSuccess: configBool(pluginConfig.logSuccess, false),
+    logFailure: configBool(pluginConfig.logFailure, true),
   };
 }
 
@@ -334,7 +353,7 @@ export class UdpEventForwarderService {
     this.eventBus = options.eventBus;
     this.modules = options.modules || {};
     this.logger = safeLogger(options.logger);
-    this.config = readConfig();
+    this.config = readConfig(options.config, options.pluginConfig);
 
     this.sender = new UdpEventSender({
       host: this.config.host,

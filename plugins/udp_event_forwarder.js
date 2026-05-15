@@ -3,8 +3,21 @@ import { createUdpEventForwarderService } from "./services/udp_event_forwarder_s
 const PLUGIN_ID = "udp_event_forwarder";
 const PLUGIN_NAME = "UDP Event Forwarder";
 
-function isEnabled() {
-  return String(process.env.UDP_EVENT_FORWARDER_ENABLED || "false").toLowerCase() === "true";
+function readPluginConfig(config) {
+  if (config && typeof config.get === "function") {
+    return config.get("plugins.udpEventForwarder", {}) ?? {};
+  }
+
+  if (config && typeof config === "object") {
+    return config.plugins?.udpEventForwarder ?? {};
+  }
+
+  return {};
+}
+
+function isEnabled(config) {
+  const pluginConfig = readPluginConfig(config);
+  return Boolean(pluginConfig.enabled);
 }
 
 export function createPlugin({ core, modules } = {}) {
@@ -27,7 +40,9 @@ export function createPlugin({ core, modules } = {}) {
     },
 
     async start() {
-      if (!isEnabled()) {
+      const pluginConfig = readPluginConfig(pluginCore.config);
+
+      if (!isEnabled(pluginCore.config)) {
         pluginLogger?.info?.("UDP event forwarder is disabled by configuration.", {
           module: PLUGIN_NAME,
           ownerType: "plugin",
@@ -35,7 +50,7 @@ export function createPlugin({ core, modules } = {}) {
         });
         return {
           started: false,
-          reason: "UDP_EVENT_FORWARDER_ENABLED is not true",
+          reason: "plugins.udpEventForwarder.enabled is not true",
         };
       }
 
@@ -52,6 +67,7 @@ export function createPlugin({ core, modules } = {}) {
         logger: pluginLogger,
         config: pluginCore.config,
         modules,
+        pluginConfig,
       });
 
       await service.start();
@@ -83,7 +99,7 @@ export function createPlugin({ core, modules } = {}) {
     getStatus() {
       if (!service) {
         return {
-          enabled: isEnabled(),
+          enabled: isEnabled(pluginCore.config),
           started: false,
         };
       }
