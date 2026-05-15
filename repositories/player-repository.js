@@ -295,144 +295,45 @@ export class PlayerRepository {
     payload = {},
     logTime = null,
   } = {}) {
-    const normalizedSourceEventId = cleanText(sourceEventId);
-    const payloadJson = JSON.stringify(payload ?? {});
-    const createdAt = now();
-    const params = [
-      normalizedSourceEventId,
-      cleanText(serverId),
-      cleanText(matchId),
-      cleanText(mapName),
-      cleanText(layerName),
-      normalizeCombatEventType(eventType),
-      Number.isFinite(Number(attackerPlayerId)) ? Number(attackerPlayerId) : null,
-      Number.isFinite(Number(victimPlayerId)) ? Number(victimPlayerId) : null,
-      cleanText(attackerName),
-      cleanText(victimName),
-      cleanText(attackerSteamId),
-      cleanText(attackerEosId),
-      cleanText(victimSteamId),
-      cleanText(victimEosId),
-      cleanText(weapon),
-      Number.isFinite(Number(damage)) ? Number(damage) : null,
-      isLightWeapon ? 1 : 0,
-      isTeamkill ? 1 : 0,
-      isFatalDown ? 1 : 0,
-      cleanText(rawLine),
-      payloadJson,
-      toLogTime(logTime),
-      createdAt,
-    ];
-
-    if (normalizedSourceEventId) {
-      const existing = await this.db.get(
-        "SELECT id FROM combat_log_events WHERE source_event_id = ?",
-        normalizedSourceEventId,
-      );
-      if (existing?.id) {
-        return { id: Number(existing.id), inserted: false };
-      }
-    }
-
-    const result = await this.db.run(
-      `INSERT INTO combat_log_events (
-         source_event_id, server_id, match_id, map_name, layer_name,
-         event_type, attacker_player_id, victim_player_id,
-         attacker_name, victim_name,
-         attacker_steam_id, attacker_eos_id, victim_steam_id, victim_eos_id,
-         weapon, damage, is_light_weapon, is_teamkill, is_fatal_down,
-         raw_line, payload_json, log_time, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ...params,
-    );
-    return { id: Number(result.lastID), inserted: true };
+    void sourceEventId;
+    void serverId;
+    void matchId;
+    void mapName;
+    void layerName;
+    void eventType;
+    void attackerPlayerId;
+    void victimPlayerId;
+    void attackerName;
+    void victimName;
+    void attackerSteamId;
+    void attackerEosId;
+    void victimSteamId;
+    void victimEosId;
+    void weapon;
+    void damage;
+    void isLightWeapon;
+    void isTeamkill;
+    void isFatalDown;
+    void rawLine;
+    void payload;
+    void logTime;
+    return { id: null, inserted: false };
   }
 
   async addCombatLogRefs(combatLogEventId, refs = []) {
-    const id = Number(combatLogEventId);
-    if (!Number.isFinite(id) || id <= 0) return 0;
-    const ts = now();
-    let changes = 0;
-
-    for (const ref of refs) {
-      const playerId = Number(ref?.playerId);
-      const role = cleanText(ref?.role);
-      if (!Number.isFinite(playerId) || !role) continue;
-      const result = await this.db.run(
-        `INSERT INTO combat_log_player_refs (combat_log_event_id, player_id, role, created_at)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(combat_log_event_id, player_id, role) DO UPDATE SET
-           created_at = excluded.created_at`,
-        id,
-        playerId,
-        role,
-        ts,
-      );
-      changes += Number(result?.changes || 0);
-    }
-
-    return changes;
+    void combatLogEventId;
+    void refs;
+    return 0;
   }
 
   async incrementCombatStats(playerId, patch = {}) {
-    const id = Number(playerId);
-    if (!Number.isFinite(id) || id <= 0) return;
-    const fields = {
-      light_weapon_downs: Math.trunc(Number(patch.light_weapon_downs ?? patch.lightWeaponDowns ?? 0)),
-      light_weapon_kills: Math.trunc(Number(patch.light_weapon_kills ?? patch.lightWeaponKills ?? 0)),
-      light_weapon_fatal_downs: Math.trunc(Number(patch.light_weapon_fatal_downs ?? patch.lightWeaponFatalDowns ?? 0)),
-      deaths: Math.trunc(Number(patch.deaths ?? 0)),
-      tk_downs: Math.trunc(Number(patch.tk_downs ?? patch.tkDowns ?? 0)),
-      tk_kills: Math.trunc(Number(patch.tk_kills ?? patch.tkKills ?? 0)),
-    };
-
-    const entries = Object.entries(fields).filter(([, value]) => Number.isFinite(value) && value !== 0);
-    if (!entries.length) return;
-
-    const assignments = entries.map(([key]) => `${key} = ${key} + excluded.${key}`).join(", ");
-    const columns = entries.map(([key]) => key).join(", ");
-    const placeholders = entries.map(() => "excluded." + entries[0][0]).length; // unused fallback to keep shape
-    const values = entries.map(([, value]) => value);
-    const ts = now();
-
-    const sql = `
-      INSERT INTO player_combat_stats (
-        player_id, ${columns}, updated_at
-      ) VALUES (
-        ?, ${entries.map(() => "?").join(", ")}, ?
-      )
-      ON CONFLICT(player_id) DO UPDATE SET
-        ${assignments},
-        updated_at = excluded.updated_at
-    `;
-    await this.db.run(sql, id, ...values, ts);
+    void playerId;
+    void patch;
   }
 
   async incrementWarmupCombatStats(playerId, patch = {}) {
-    const id = Number(playerId);
-    if (!Number.isFinite(id) || id <= 0) return;
-    const fields = {
-      downs: Math.trunc(Number(patch.downs ?? 0)),
-      kills: Math.trunc(Number(patch.kills ?? 0)),
-      deaths: Math.trunc(Number(patch.deaths ?? 0)),
-    };
-    const entries = Object.entries(fields).filter(([, value]) => Number.isFinite(value) && value !== 0);
-    if (!entries.length) return;
-    const columns = entries.map(([key]) => key).join(", ");
-    const update = entries.map(([key]) => `${key} = ${key} + excluded.${key}`).join(", ");
-    const values = entries.map(([, value]) => value);
-    const ts = now();
-    const sql = `
-      INSERT INTO player_warmup_combat_stats (
-        player_id, ${columns}, updated_at
-      ) VALUES (
-        ?, ${entries.map(() => "?").join(", ")}, ?
-      )
-      ON CONFLICT(player_id) DO UPDATE SET
-        ${update},
-        updated_at = excluded.updated_at
-    `;
-    await this.db.run(sql, id, ...values, ts);
+    void playerId;
+    void patch;
   }
 
   async incrementFields(playerId, patch) {
@@ -578,82 +479,20 @@ export class PlayerRepository {
   }
 
   async getPlayerWarmupStats(playerId) {
-    const id = Number(playerId);
-    if (!Number.isFinite(id)) return null;
-    return this.db.get("SELECT * FROM player_warmup_combat_stats WHERE player_id = ?", id);
+    void playerId;
+    return null;
   }
 
   async listWarmupCombatStats({ limit = 100, offset = 0 } = {}) {
-    const cappedLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
-    const safeOffset = Math.max(Number(offset) || 0, 0);
-    return this.db.all(
-      `SELECT p.id, p.current_name, p.steam_id, p.eos_id,
-              COALESCE(w.downs, 0) AS downs,
-              COALESCE(w.kills, 0) AS kills,
-              COALESCE(w.deaths, 0) AS deaths,
-              COALESCE(w.updated_at, 0) AS updated_at
-       FROM player_warmup_combat_stats w
-       JOIN players p ON p.id = w.player_id
-       ORDER BY w.kills DESC, w.downs DESC, w.deaths DESC, w.updated_at DESC
-       LIMIT ? OFFSET ?`,
-      cappedLimit,
-      safeOffset,
-    );
+    void limit;
+    void offset;
+    return [];
   }
 
   async listCombatLogsByPlayer(playerId, options = {}) {
-    const id = Number(playerId);
-    if (!Number.isFinite(id)) return [];
-    const { limit, offset } = this.normalizePaging(options);
-    return this.db.all(
-      `SELECT
-         r.combat_log_event_id,
-         r.player_id AS ref_player_id,
-         e.id,
-         e.event_type,
-         r.role,
-         e.attacker_name,
-         e.victim_name,
-         e.weapon,
-         e.damage,
-         e.is_light_weapon,
-         e.is_teamkill,
-         e.is_fatal_down,
-         e.raw_line,
-         e.payload_json,
-         e.created_at,
-         e.log_time
-       FROM combat_log_player_refs r
-       JOIN combat_log_events e ON e.id = r.combat_log_event_id
-       WHERE r.player_id = ?
-       ORDER BY e.created_at DESC, e.id DESC
-       LIMIT ? OFFSET ?`,
-      id,
-      limit,
-      offset,
-    );
-  }
-
-  async listCombatSessionsByPlayer(playerId, options = {}) {
-    const id = Number(playerId);
-    if (!Number.isFinite(id)) return [];
-    const { limit, offset } = this.normalizePaging(options);
-    return this.db.all(
-      `SELECT
-         id,
-         player_id,
-         date_key,
-         file_path,
-         first_event_at,
-         last_event_at
-       FROM combat_sessions
-       WHERE player_id = ?
-       ORDER BY last_event_at DESC, id DESC
-       LIMIT ? OFFSET ?`,
-      id,
-      limit,
-      offset,
-    );
+    void playerId;
+    void options;
+    return [];
   }
 
   async getPlayerDetail(playerId) {
@@ -663,11 +502,10 @@ export class PlayerRepository {
     const player = await this.getPlayerById(id);
     if (!player) return null;
 
-    const [aliases, ips, squadCreatedRows, combatSessions] = await Promise.all([
+    const [aliases, ips, squadCreatedRows] = await Promise.all([
       this.listPlayerAliases(id, { limit: 12 }),
       this.listPlayerIps(id, { limit: 12 }),
       this.listPlayerSquadCreated(id, { limit: 1 }),
-      this.listCombatSessionsByPlayer(id, { limit: 100 }),
     ]);
 
     return {
@@ -675,14 +513,6 @@ export class PlayerRepository {
       aliases,
       ips,
       squadCreated: squadCreatedRows[0] ?? null,
-      combatSessions: combatSessions.map((row) => ({
-        id: Number(row.id),
-        playerId: Number(row.player_id || 0) || null,
-        dateKey: row.date_key || null,
-        filePath: row.file_path || null,
-        firstEventAt: Number(row.first_event_at || 0) || null,
-        lastEventAt: Number(row.last_event_at || 0) || null,
-      })),
       summary: {
         gameSeconds: Number(player.game_seconds ?? 0),
         serverSeconds: Number(player.server_seconds ?? 0),
@@ -700,13 +530,7 @@ export class PlayerRepository {
   }
 
   async resetCombatStats() {
-    const deletes = [
-      await this.db.run("DELETE FROM player_combat_stats"),
-      await this.db.run("DELETE FROM player_warmup_combat_stats"),
-      await this.db.run("DELETE FROM combat_log_player_refs"),
-      await this.db.run("DELETE FROM combat_log_events"),
-    ];
-    return deletes.reduce((sum, result) => sum + Number(result?.changes || 0), 0);
+    return 0;
   }
 
   async deletePlayer(playerId) {
@@ -732,10 +556,8 @@ export class PlayerRepository {
               COALESCE(SUM(in_squad_seconds), 0) AS total_in_squad_seconds,
               COALESCE(SUM(total_matches), 0) AS total_matches,
               COALESCE(SUM(total_match_wins), 0) AS total_match_wins,
-              COALESCE(SUM(total_suicides), 0) AS total_suicides,
               COALESCE(MAX(updated_at), 0) AS last_player_update_at
-       FROM players
-       LEFT JOIN player_combat_stats pcs ON pcs.player_id = players.id`,
+       FROM players`,
     );
 
     const activeWindowRow = await this.db.get(
@@ -828,7 +650,6 @@ export class PlayerRepository {
         totalInSquadSeconds: Number(overviewRow?.total_in_squad_seconds || 0),
         totalMatches: Number(overviewRow?.total_matches || 0),
         totalMatchWins: Number(overviewRow?.total_match_wins || 0),
-        totalSuicides: Number(overviewRow?.total_suicides || 0),
         lastPlayerUpdateAt: Number(overviewRow?.last_player_update_at || 0) || null,
       },
       breakdowns: {
