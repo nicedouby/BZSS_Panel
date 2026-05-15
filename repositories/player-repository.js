@@ -89,32 +89,6 @@ function buildPlayerSearchWhere(query) {
   };
 }
 
-function normalizeCombatEventType(type) {
-  const value = String(type ?? "").trim().toUpperCase();
-  if (value === "WOUNDED") return "WOUNDED";
-  if (value === "DIED") return "DIED";
-  return "DAMAGE";
-}
-
-function toLogTime(value) {
-  const ts = Number(value);
-  if (Number.isFinite(ts) && ts > 0) return Math.trunc(ts);
-  return null;
-}
-
-function buildSourceEventId(event = {}) {
-  const raw = cleanText(event.sourceEventId ?? event.eventId ?? event.id);
-  if (raw) return raw;
-  const parts = [
-    cleanText(event.eventName),
-    cleanText(event.serverId),
-    cleanText(event.time),
-    cleanText(event.rawLog),
-    cleanText(event?.record?.time),
-  ].filter(Boolean);
-  return parts.length ? parts.join("|") : null;
-}
-
 export class PlayerRepository {
   constructor(db) {
     this.db = db;
@@ -271,71 +245,6 @@ export class PlayerRepository {
     );
   }
 
-  async addCombatLogEvent({
-    sourceEventId = null,
-    serverId = null,
-    matchId = null,
-    mapName = null,
-    layerName = null,
-    eventType = "DAMAGE",
-    attackerPlayerId = null,
-    victimPlayerId = null,
-    attackerName = null,
-    victimName = null,
-    attackerSteamId = null,
-    attackerEosId = null,
-    victimSteamId = null,
-    victimEosId = null,
-    weapon = null,
-    damage = null,
-    isLightWeapon = false,
-    isTeamkill = false,
-    isFatalDown = false,
-    rawLine = null,
-    payload = {},
-    logTime = null,
-  } = {}) {
-    void sourceEventId;
-    void serverId;
-    void matchId;
-    void mapName;
-    void layerName;
-    void eventType;
-    void attackerPlayerId;
-    void victimPlayerId;
-    void attackerName;
-    void victimName;
-    void attackerSteamId;
-    void attackerEosId;
-    void victimSteamId;
-    void victimEosId;
-    void weapon;
-    void damage;
-    void isLightWeapon;
-    void isTeamkill;
-    void isFatalDown;
-    void rawLine;
-    void payload;
-    void logTime;
-    return { id: null, inserted: false };
-  }
-
-  async addCombatLogRefs(combatLogEventId, refs = []) {
-    void combatLogEventId;
-    void refs;
-    return 0;
-  }
-
-  async incrementCombatStats(playerId, patch = {}) {
-    void playerId;
-    void patch;
-  }
-
-  async incrementWarmupCombatStats(playerId, patch = {}) {
-    void playerId;
-    void patch;
-  }
-
   async incrementFields(playerId, patch) {
     const entries = Object.entries(patch ?? {}).filter(([, value]) => Number.isFinite(Number(value)) && Number(value) !== 0);
     if (!entries.length) return;
@@ -478,23 +387,6 @@ export class PlayerRepository {
     );
   }
 
-  async getPlayerWarmupStats(playerId) {
-    void playerId;
-    return null;
-  }
-
-  async listWarmupCombatStats({ limit = 100, offset = 0 } = {}) {
-    void limit;
-    void offset;
-    return [];
-  }
-
-  async listCombatLogsByPlayer(playerId, options = {}) {
-    void playerId;
-    void options;
-    return [];
-  }
-
   async getPlayerDetail(playerId) {
     const id = Number(playerId);
     if (!Number.isFinite(id)) return null;
@@ -527,10 +419,6 @@ export class PlayerRepository {
       now(),
       Number(playerId),
     );
-  }
-
-  async resetCombatStats() {
-    return 0;
   }
 
   async deletePlayer(playerId) {

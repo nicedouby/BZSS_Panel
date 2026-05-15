@@ -82,21 +82,9 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       return repo.listPlayerSquadCreated(playerId, options);
     },
 
-    async getPlayerWarmupStats(playerId) {
-      return repo.getPlayerWarmupStats(playerId);
-    },
-
-    async listWarmupCombatStats(options = {}) {
-      return repo.listWarmupCombatStats(options);
-    },
-
     async setPermissionGroup(playerId, permissionGroup) {
       await repo.setPermissionGroup(playerId, permissionGroup);
       return { ok: true };
-    },
-
-    async resetCombatStats() {
-      return { changed: await repo.resetCombatStats() };
     },
 
     async deletePlayer(playerId) {
