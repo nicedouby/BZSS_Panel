@@ -57,17 +57,6 @@ function buildPlayerSearchWhere(query) {
       )
       OR EXISTS (
         SELECT 1
-        FROM player_logins pl
-        WHERE pl.player_id = players.id
-          AND (
-            pl.ip LIKE ?
-            OR pl.steam_id LIKE ?
-            OR pl.eos_id LIKE ?
-            OR pl.controller_path LIKE ?
-          )
-      )
-      OR EXISTS (
-        SELECT 1
         FROM squad_create_records scr
         WHERE scr.player_id = players.id
           AND (
@@ -79,9 +68,6 @@ function buildPlayerSearchWhere(query) {
     )`);
 
     params.push(
-      like,
-      like,
-      like,
       like,
       like,
       like,
@@ -234,7 +220,7 @@ export class PlayerRepository {
     const alias = cleanText(aliasName);
     if (!alias) return;
     const row = await this.db.get(
-      "SELECT id FROM player_aliases WHERE player_id = ? AND alias_name = ? ORDER BY seen_at DESC LIMIT 1",
+      "SELECT id FROM player_aliases WHERE player_id = ? AND alias_name = ? LIMIT 1",
       playerId,
       alias,
     );
@@ -249,19 +235,16 @@ export class PlayerRepository {
     const value = cleanText(ip);
     if (!value) return;
     await this.db.run("UPDATE players SET current_ip = ?, updated_at = ? WHERE id = ?", value, ts, playerId);
-    await this.db.run("INSERT INTO player_ips (player_id, ip, seen_at) VALUES (?, ?, ?)", playerId, value, ts);
-  }
-
-  async recordLogin({ playerId = null, ip = null, controllerPath = null, eosID = null, steamID = null } = {}) {
-    await this.db.run(
-      "INSERT INTO player_logins (player_id, ip, controller_path, eos_id, steam_id, joined_at) VALUES (?, ?, ?, ?, ?, ?)",
+    const row = await this.db.get(
+      "SELECT id FROM player_ips WHERE player_id = ? AND ip = ? LIMIT 1",
       playerId,
-      cleanText(ip),
-      cleanText(controllerPath),
-      cleanId(eosID),
-      cleanId(steamID),
-      now(),
+      value,
     );
+    if (row) {
+      await this.db.run("UPDATE player_ips SET seen_at = ? WHERE id = ?", ts, row.id);
+    } else {
+      await this.db.run("INSERT INTO player_ips (player_id, ip, seen_at) VALUES (?, ?, ?)", playerId, value, ts);
+    }
   }
 
   async addSquadCreated({ playerId = null, squadID = null, squadName = null, teamName = null } = {}) {
@@ -479,7 +462,7 @@ export class PlayerRepository {
     if (sort === "name_asc") {
       orderBy = "COALESCE(players.current_name, '') COLLATE NOCASE ASC, players.updated_at DESC";
     } else if (sort === "last_login_desc") {
-      orderBy = "COALESCE(login.last_login_at, players.updated_at) DESC, players.updated_at DESC";
+      orderBy = "players.updated_at DESC";
     }
 
     return this.db.all(
@@ -493,13 +476,8 @@ export class PlayerRepository {
               COALESCE(pcs.deaths, 0) AS combat_deaths,
               COALESCE(pcs.tk_downs, 0) AS tk_downs,
               COALESCE(pcs.tk_kills, 0) AS tk_kills,
-              login.last_login_at
+              players.updated_at AS last_login_at
        FROM players
-       LEFT JOIN (
-          SELECT player_id, MAX(joined_at) AS last_login_at
-          FROM player_logins
-          GROUP BY player_id
-       ) AS login ON login.player_id = players.id
        LEFT JOIN player_combat_stats pcs ON pcs.player_id = players.id
        WHERE ${search.where}
        ORDER BY ${orderBy}
@@ -562,10 +540,11 @@ export class PlayerRepository {
     if (!Number.isFinite(id)) return [];
     const { limit, offset } = this.normalizePaging(options);
     return this.db.all(
-      `SELECT alias_name, seen_at
+      `SELECT alias_name, MAX(seen_at) AS seen_at
        FROM player_aliases
        WHERE player_id = ?
-       ORDER BY seen_at DESC, id DESC
+       GROUP BY alias_name
+       ORDER BY seen_at DESC, alias_name DESC
        LIMIT ? OFFSET ?`,
       id,
       limit,
@@ -578,26 +557,11 @@ export class PlayerRepository {
     if (!Number.isFinite(id)) return [];
     const { limit, offset } = this.normalizePaging(options);
     return this.db.all(
-      `SELECT ip, seen_at
+      `SELECT ip, MAX(seen_at) AS seen_at
        FROM player_ips
        WHERE player_id = ?
-       ORDER BY seen_at DESC, id DESC
-       LIMIT ? OFFSET ?`,
-      id,
-      limit,
-      offset,
-    );
-  }
-
-  async listPlayerLogins(playerId, options = {}) {
-    const id = Number(playerId);
-    if (!Number.isFinite(id)) return [];
-    const { limit, offset } = this.normalizePaging(options);
-    return this.db.all(
-      `SELECT ip, controller_path, eos_id, steam_id, joined_at
-       FROM player_logins
-       WHERE player_id = ?
-       ORDER BY joined_at DESC, id DESC
+       GROUP BY ip
+       ORDER BY seen_at DESC, ip DESC
        LIMIT ? OFFSET ?`,
       id,
       limit,
@@ -683,17 +647,16 @@ export class PlayerRepository {
     const player = await this.getPlayerById(id);
     if (!player) return null;
 
-    const [aliases, ips, logins, squadCreatedRows, combatStatsRow, warmupStatsRow, combatLogs] = await Promise.all([
+    const [aliases, ips, squadCreatedRows, combatStatsRow, warmupStatsRow, combatLogs] = await Promise.all([
       this.listPlayerAliases(id, { limit: 12 }),
       this.listPlayerIps(id, { limit: 12 }),
-      this.listPlayerLogins(id, { limit: 12 }),
       this.listPlayerSquadCreated(id, { limit: 1 }),
       this.getPlayerWarmupStats(id),
       this.db.get("SELECT * FROM player_combat_stats WHERE player_id = ?", id),
       this.listCombatLogsByPlayer(id, { limit: 100 }),
     ]);
 
-    const combatStats = combatStatsRow ? {
+    const killStats = combatStatsRow ? {
       lightWeaponDowns: Number(combatStatsRow.light_weapon_downs ?? 0),
       lightWeaponKills: Number(combatStatsRow.light_weapon_kills ?? 0),
       lightWeaponFatalDowns: Number(combatStatsRow.light_weapon_fatal_downs ?? 0),
@@ -727,9 +690,9 @@ export class PlayerRepository {
       player,
       aliases,
       ips,
-      logins,
       squadCreated: squadCreatedRows[0] ?? null,
-      combatStats,
+      killStats,
+      combatStats: killStats,
       warmupCombatStats,
       combatLogs: combatLogs.map((row) => ({
         id: Number(row.id),
@@ -755,10 +718,10 @@ export class PlayerRepository {
       })),
       warmupStats: warmupCombatStats,
       summary: {
-        totalKills: Number(combatStats.lightWeaponKills ?? 0),
-        totalDowns: Number(combatStats.lightWeaponDowns ?? 0),
-        totalDeaths: Number(combatStats.deaths ?? 0),
-        totalTeamKills: Number(combatStats.tkDowns ?? 0) + Number(combatStats.tkKills ?? 0),
+        totalKills: Number(killStats.lightWeaponKills ?? 0),
+        totalDowns: Number(killStats.lightWeaponDowns ?? 0),
+        totalDeaths: Number(killStats.deaths ?? 0),
+        totalTeamKills: Number(killStats.tkDowns ?? 0) + Number(killStats.tkKills ?? 0),
         gameSeconds: Number(player.game_seconds ?? 0),
         serverSeconds: Number(player.server_seconds ?? 0),
       },
@@ -896,17 +859,6 @@ export class PlayerRepository {
       normalizedTop,
     );
 
-    const loginTrend = await this.db.all(
-      `SELECT strftime('%Y-%m-%d', joined_at / 1000, 'unixepoch', 'localtime') AS day,
-              COUNT(*) AS login_count,
-              COUNT(DISTINCT player_id) AS unique_players
-       FROM player_logins
-       WHERE joined_at >= ?
-       GROUP BY day
-       ORDER BY day ASC`,
-      windowStartTs,
-    );
-
     const matchTrend = await this.db.all(
       `SELECT strftime('%Y-%m-%d', started_at / 1000, 'unixepoch', 'localtime') AS day,
               COUNT(*) AS match_count,
@@ -1005,11 +957,6 @@ export class PlayerRepository {
         })),
       },
       trends: {
-        loginsByDay: loginTrend.map((row) => ({
-          day: row.day,
-          loginCount: Number(row.login_count || 0),
-          uniquePlayers: Number(row.unique_players || 0),
-        })),
         matchesByDay: matchTrend.map((row) => ({
           day: row.day,
           matchCount: Number(row.match_count || 0),

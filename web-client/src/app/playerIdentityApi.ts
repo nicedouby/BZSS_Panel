@@ -116,7 +116,6 @@ function extractIpFromDatabaseItem(item: any) {
 function extractIpFromPlayerDetail(detail: any) {
   return sanitize(
     detail?.player?.current_ip
-      || detail?.ips?.[0]?.ip
-      || detail?.logins?.[0]?.ip,
+      || detail?.ips?.[0]?.ip,
   );
 }

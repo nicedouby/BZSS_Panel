@@ -20,7 +20,6 @@
           <select v-model="filters.sort" class="console-select">
             <option value="updated_desc">{{ t("database.sortRecentlyUpdated") }}</option>
             <option value="name_asc">{{ t("database.sortNameAsc") }}</option>
-            <option value="last_login_desc">{{ t("database.sortLastLogin") }}</option>
           </select>
           <button type="button" @click="openStatsModal">{{ t("database.openStatsModal") }}</button>
         </div>
@@ -48,7 +47,7 @@
             {{ player.permission_group || "default" }} · {{ t("database.ladderRating") }}={{ player.ladder_rating ?? 0 }} · {{ t("database.kills") }}={{ player.light_weapon_kills ?? player.total_kills_light ?? 0 }} · {{ t("database.teamKills") }}={{ teamKills(player) }}
           </div>
           <div class="db-row-meta">
-            {{ t("database.lastLogin") }} {{ formatTime(player.last_login_at) }} · {{ t("database.updatedAt") }} {{ formatTime(player.updated_at) }}
+            {{ t("database.updatedAt") }} {{ formatTime(player.updated_at) }}
           </div>
           <div v-if="showIpInList && (player.current_ip || player.ip)" class="db-row-ip">
             <a
@@ -117,23 +116,12 @@
           </div>
 
           <div class="db-card">
-            <h3>{{ t("database.warmupStats") }}</h3>
+            <h3>{{ t("database.killStats") }}</h3>
             <div class="db-grid">
-              <div><span>{{ t("database.kills") }}</span><strong>{{ Number(detail.warmupCombatStats?.kills ?? detail.warmupStats?.kills ?? 0) }}</strong></div>
-              <div><span>{{ t("database.downs") }}</span><strong>{{ Number(detail.warmupCombatStats?.downs ?? detail.warmupStats?.downs ?? 0) }}</strong></div>
-              <div><span>{{ t("database.deaths") }}</span><strong>{{ Number(detail.warmupCombatStats?.deaths ?? detail.warmupStats?.deaths ?? 0) }}</strong></div>
+              <div><span>{{ t("database.kills") }}</span><strong>{{ Number(detail.killStats?.lightWeaponKills ?? detail.combatStats?.lightWeaponKills ?? detail.warmupCombatStats?.kills ?? detail.warmupStats?.kills ?? 0) }}</strong></div>
+              <div><span>{{ t("database.downs") }}</span><strong>{{ Number(detail.killStats?.lightWeaponDowns ?? detail.combatStats?.lightWeaponDowns ?? detail.warmupCombatStats?.downs ?? detail.warmupStats?.downs ?? 0) }}</strong></div>
+              <div><span>{{ t("database.deaths") }}</span><strong>{{ Number(detail.killStats?.deaths ?? detail.combatStats?.deaths ?? detail.warmupCombatStats?.deaths ?? detail.warmupStats?.deaths ?? 0) }}</strong></div>
             </div>
-          </div>
-
-          <div class="db-card">
-            <h3>{{ t("database.combatLogs") }}</h3>
-            <ul class="db-list-mini">
-              <li v-for="item in (detail.combatLogs || []).slice(0, 20)" :key="`${item.id}-${item.role}`">
-                <span>{{ item.eventType }} · {{ item.role }} · {{ item.attackerName || t("common.unknown") }} → {{ item.victimName || t("common.unknown") }}</span>
-                <small>{{ item.weapon || "--" }} · {{ item.damage ?? "--" }} · {{ formatTime(item.createdAt) }}</small>
-              </li>
-              <li v-if="!(detail.combatLogs || []).length">{{ t("common.none") }}</li>
-            </ul>
           </div>
 
           <div class="db-detail-grid">
@@ -170,36 +158,6 @@
                   <small>{{ ipSourceLabel(item.ip) }}</small>
                 </li>
                 <li v-if="!(detail.ips || []).length">{{ t("common.none") }}</li>
-              </ul>
-            </div>
-
-            <div class="db-card">
-              <h3>{{ t("database.logins") }} ({{ t("database.recent12") }})</h3>
-              <ul class="db-login-list">
-                <li v-for="item in (detail.logins || []).slice(0, 12)" :key="`${item.ip}-${item.joined_at}`">
-                  <div class="db-login-head">
-                    <div>
-                      <a
-                        v-if="item.ip"
-                        :href="buildIpSearchUrl(item.ip)"
-                        class="db-ip-clickable strong"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        @click="inspectIp(item.ip)"
-                      >
-                        {{ item.ip }}
-                      </a>
-                      <strong v-else>--</strong>
-                      <small>{{ formatTime(item.joined_at) }}</small>
-                    </div>
-                  </div>
-                  <small v-if="item.controller_path">{{ t("player.controller") }} {{ item.controller_path }}</small>
-                  <small v-if="item.steam_id">{{ t("player.steamId") }} {{ item.steam_id }}</small>
-                  <small v-if="item.eos_id">{{ t("player.eosId") }} {{ item.eos_id }}</small>
-                  <small>{{ ipDetailSummary(item.ip) || t("common.unknown") }}</small>
-                  <small>{{ ipSourceLabel(item.ip) }}</small>
-                </li>
-                <li v-if="!(detail.logins || []).length">{{ t("common.none") }}</li>
               </ul>
             </div>
 
@@ -359,17 +317,6 @@
               <h3>{{ t("database.trends") }}</h3>
               <div class="db-analytics-body">
                 <section class="db-analytics-block">
-                  <h4>{{ t("database.loginsByDay") }}</h4>
-                  <ul v-if="stats?.trends?.loginsByDay?.length" class="db-trend-list">
-                    <li v-for="item in stats.trends.loginsByDay" :key="item.day">
-                      <span class="name">{{ item.day }}</span>
-                      <span class="value">{{ t("database.logins") }} {{ formatNumber(item.loginCount) }} · {{ t("database.active") }} {{ formatNumber(item.uniquePlayers) }}</span>
-                    </li>
-                  </ul>
-                  <div v-else class="placeholder">{{ t("common.noData") }}</div>
-                </section>
-
-                <section class="db-analytics-block">
                   <h4>{{ t("database.matchesByDay") }}</h4>
                   <ul v-if="stats?.trends?.matchesByDay?.length" class="db-trend-list">
                     <li v-for="item in stats.trends.matchesByDay" :key="item.day">
@@ -474,14 +421,13 @@ const detailError = computed(() => {
   return renderApiError(error, t("common.error"));
 });
 
-const currentIp = computed(() => detail.value?.player?.current_ip || detail.value?.ips?.[0]?.ip || detail.value?.logins?.[0]?.ip || "--");
+const currentIp = computed(() => detail.value?.player?.current_ip || detail.value?.ips?.[0]?.ip || "--");
 const listLookupIps = computed(() => (showIpGeo.value ? collectIps(rows.value.map((player) => player.current_ip || player.ip)) : []));
 const detailLookupIps = computed(() => {
   if (!showIpGeo.value || !detail.value) return [];
   return collectIps([
     detail.value?.player?.current_ip,
     ...(detail.value?.ips ?? []).map((item: any) => item.ip),
-    ...(detail.value?.logins ?? []).map((item: any) => item.ip),
   ]);
 });
 const listIpLookupQuery = useIpLookup(listLookupIps, { enabled: showIpGeo });

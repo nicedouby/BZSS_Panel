@@ -54,35 +54,6 @@
 
       <div v-if="databaseLookupNotice" class="database-note">{{ databaseLookupNotice }}</div>
 
-      <div class="ip-panels">
-        <section class="ip-card">
-          <h4>Recent Logins</h4>
-          <ul v-if="recentLogins.length" class="ip-list">
-            <li v-for="item in recentLogins" :key="`${item.ip}-${item.joined_at}`" class="ip-item">
-              <div class="ip-item-head">
-                <div>
-                  <button
-                    type="button"
-                    v-if="item.ip"
-                    class="detail-ip-link"
-                    @click="openIpSearch(item.ip)"
-                  >
-                    <strong>{{ item.ip }}</strong>
-                  </button>
-                  <strong v-else>--</strong>
-                  <small>{{ formatTime(item.joined_at) }}</small>
-                </div>
-                <button v-if="item.ip" type="button" class="copy-link" @click="copyValue(item.ip, 'IP')">Copy</button>
-              </div>
-              <small v-if="item.controller_path">Controller {{ item.controller_path }}</small>
-              <small>{{ ipSummary(item.ip) }}</small>
-              <small class="detail-meta">{{ ipSourceLabel(item.ip) }}</small>
-            </li>
-          </ul>
-          <div v-else class="ip-empty">{{ ipLoginEmptyText }}</div>
-        </section>
-      </div>
-
       <pre v-if="player.raw" class="raw-block">{{ player.raw }}</pre>
     </section>
   </div>
@@ -120,7 +91,6 @@ const playerDatabaseSearchKey = computed(() => {
 
 const detailPlayer = computed(() => databaseDetail.value?.player ?? null);
 const detailIps = computed(() => Array.isArray(databaseDetail.value?.ips) ? databaseDetail.value.ips : []);
-const detailLogins = computed(() => Array.isArray(databaseDetail.value?.logins) ? databaseDetail.value.logins : []);
 
 const currentIp = computed(() => {
   return String(
@@ -128,7 +98,6 @@ const currentIp = computed(() => {
       ?? props.player?.ip
       ?? detailPlayer.value?.current_ip
       ?? detailIps.value?.[0]?.ip
-      ?? detailLogins.value?.[0]?.ip
       ?? "",
   ).trim();
 });
@@ -138,15 +107,12 @@ const lookupIps = computed(() => collectIps([
   props.player?.ip,
   detailPlayer.value?.current_ip,
   ...detailIps.value.map((item: any) => item?.ip),
-  ...detailLogins.value.map((item: any) => item?.ip),
 ]));
 
 const ipLookup = useIpLookup(lookupIps);
-const recentLogins = computed(() => detailLogins.value.slice(0, 5));
 const currentIpSummary = computed(() => ipSummary(currentIp.value));
 const currentIpSource = computed(() => ipSourceLabel(currentIp.value));
 const ipEmptyText = "No IP data found in player database.";
-const ipLoginEmptyText = "No IP data found in player database.";
 
 watch(
   () => playerDatabaseSearchKey.value,
@@ -220,7 +186,7 @@ async function loadDatabaseDetail() {
     const detail = await apiGet<any>(`/api/player-database/detail?id=${encodeURIComponent(String(match.id))}`, {}, { timeoutMs: 5_000 });
     if (token !== loadToken.value) return;
 
-    databaseDetail.value = detail;
+      databaseDetail.value = detail;
   } catch {
     if (token !== loadToken.value) return;
     databaseLookupNotice.value = "IP not found in database.";

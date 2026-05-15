@@ -4,8 +4,6 @@ import { getParam } from "../../core/event-normalizer.js";
 import { createDatabase } from "../../core/database.js";
 import { PlayerRepository } from "../../repositories/player-repository.js";
 
-const POST_LOGIN_PATTERN = /PostLogin:\s+NewPlayer:\s+(?<controllerClass>\S+)\s+(?<controllerPath>\S+)\s+\(IP:\s+(?<ip>[\d.]+)\s+\|\s+Online IDs:\s+EOS:\s+(?<eos>[0-9a-fA-F]+|INVALID)\s+steam:\s+(?<steam>\d+|INVALID)\)/i;
-
 function identityFromPlayer(player) {
   return {
     name: player?.name ?? player?.current_name ?? null,
@@ -208,6 +206,14 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
           squadLeaderSeconds: Number(p.squad_leader_seconds ?? 0),
           inSquadSeconds: Number(p.in_squad_seconds ?? 0),
           warmupSeconds: Number(p.warmup_seconds ?? 0),
+          killStats: {
+            lightWeaponDowns: Number(p.light_weapon_downs ?? 0),
+            lightWeaponKills: Number(p.light_weapon_kills ?? 0),
+            lightWeaponFatalDowns: Number(p.light_weapon_fatal_downs ?? 0),
+            deaths: Number(p.combat_deaths ?? 0),
+            tkDowns: Number(p.tk_downs ?? 0),
+            tkKills: Number(p.tk_kills ?? 0),
+          },
           combatStats: {
             lightWeaponDowns: Number(p.light_weapon_downs ?? 0),
             lightWeaponKills: Number(p.light_weapon_kills ?? 0),
@@ -245,10 +251,6 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       return repo.listPlayerIps(playerId, options);
     },
 
-    async listPlayerLogins(playerId, options = {}) {
-      return repo.listPlayerLogins(playerId, options);
-    },
-
     async listPlayerSquadCreated(playerId, options = {}) {
       return repo.listPlayerSquadCreated(playerId, options);
     },
@@ -267,10 +269,6 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
     },
 
     async resetCombatStats() {
-      return { changed: await repo.resetCombatStats() };
-    },
-
-    async resetKillStats() {
       return { changed: await repo.resetCombatStats() };
     },
 
@@ -339,29 +337,15 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       }
 
       unsubscribers.push(core.eventBus.onCoreEvent("*", async (event) => {
-        if (!event?.eventName || event.eventName === "On_PlayerWounded" || event.eventName === "On_PlayerDied") return;
+      if (!event?.eventName || event.eventName === "On_PlayerWounded" || event.eventName === "On_PlayerDied") return;
 
-        const rawLine = event.rawLog ?? "";
-        const login = rawLine.match(POST_LOGIN_PATTERN);
-        if (login?.groups) {
-          const { controllerClass, controllerPath, ip, eos, steam } = login.groups;
-          const player = await repo.upsertFromPresence({ eosID: eos, steamID: steam, ip });
-          await repo.recordLogin({
-            playerId: player?.id ?? null,
-            ip,
-            eosID: eos,
-            steamID: steam,
-            controllerPath: `${controllerClass} ${controllerPath}`,
-          });
-        }
-
-        await repo.addLogEvent({
-          sourceEvent: event.eventName,
-          eventName: event.eventName,
-          rawLine,
-          payload: event,
-        });
-      }));
+      await repo.addLogEvent({
+        sourceEvent: event.eventName,
+        eventName: event.eventName,
+        rawLine: event.rawLog ?? "",
+        payload: event,
+      });
+    }));
     },
 
     async stop() {

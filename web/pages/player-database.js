@@ -38,7 +38,6 @@ export async function renderPage({ root, api, apiFetch, routeInfo }) {
           <select id="db-sort">
             <option value="updated_desc">排序：最近更新</option>
             <option value="name_asc">排序：A-Z</option>
-            <option value="last_login_desc">排序：登录时间</option>
           </select>
           <select id="db-stats-days">
             <option value="7">统计窗口：7天</option>
@@ -55,7 +54,7 @@ export async function renderPage({ root, api, apiFetch, routeInfo }) {
           </select>
           <button id="db-stats-toggle-btn">打开统计弹窗</button>
           <button id="db-sync-online-btn">同步在线玩家</button>
-          <button id="db-reset-combat-stats-btn" class="danger-lite">重置战斗统计</button>
+          <button id="db-reset-combat-stats-btn" class="danger-lite">重置击杀统计</button>
         </div>
       </section>
 
@@ -200,14 +199,14 @@ export async function renderPage({ root, api, apiFetch, routeInfo }) {
   });
 
   root.querySelector("#db-reset-combat-stats-btn").addEventListener("click", async () => {
-    if (!window.confirm("确认重置所有玩家战斗统计和暖服统计吗？此操作不可撤销。")) return;
-    setStatus("正在重置战斗统计...", "pending");
+    if (!window.confirm("确认重置所有玩家击杀统计和暖服统计吗？此操作不可撤销。")) return;
+    setStatus("正在重置击杀统计...", "pending");
     const res = await apiFetch("/api/db/reset-combat-stats", { method: "POST" });
     const json = await res.json();
     if (!res.ok) throw new Error(json?.error || "重置失败");
     await loadList();
     await loadStats({ silent: true });
-    setStatus(`战斗统计已重置，影响 ${Number(json.changed || 0)} 条记录`, "success");
+    setStatus(`击杀统计已重置，影响 ${Number(json.changed || 0)} 条记录`, "success");
   });
 
   await loadStats({ silent: true });
@@ -240,7 +239,7 @@ function renderList(els, loadDetail) {
     <button class="db-row ${Number(p.id) === Number(selectedId) ? "active" : ""}" data-id="${p.id}">
       <div class="db-row-name">${esc(p.current_name || "(未命名)")}</div>
       <div class="db-row-meta">${esc(p.permission_group || "default")} · R=${fmtNumber(p.ladder_rating)} · K=${fmtNumber(p.light_weapon_kills)} · TK=${fmtNumber(Number(p.tk_downs || 0) + Number(p.tk_kills || 0))}</div>
-      <div class="db-row-meta">最近登录 ${rowTime(p.last_login_at)} · 更新 ${rowTime(p.updated_at)}</div>
+      <div class="db-row-meta">更新 ${rowTime(p.updated_at)}</div>
     </button>
   `).join("");
 
@@ -255,9 +254,9 @@ function renderList(els, loadDetail) {
 
 function renderDetail(els, data, actions) {
   const p = data.player;
-  const combat = data.combatStats || {};
+  const combat = data.killStats || data.combatStats || {};
   const warmup = data.warmupCombatStats || data.warmupStats || {};
-  const currentIp = p.current_ip || data.logins?.[0]?.ip || data.ips?.[0]?.ip || "--";
+  const currentIp = p.current_ip || data.ips?.[0]?.ip || "--";
   const winRate = p.total_matches > 0 ? `${((p.total_match_wins / p.total_matches) * 100).toFixed(1)}%` : "--";
   const leadWinRate = p.total_lead_matches > 0 ? `${((p.total_lead_wins / p.total_lead_matches) * 100).toFixed(1)}%` : "--";
   const cmdWinRate = p.total_cmd_matches > 0 ? `${((p.total_cmd_wins / p.total_cmd_matches) * 100).toFixed(1)}%` : "--";
@@ -307,7 +306,7 @@ function renderDetail(els, data, actions) {
     </div>
 
     <div class="db-card">
-      <h3>暖服统计</h3>
+      <h3>击杀统计</h3>
       <div class="db-grid">
         ${cell("暖服击杀", fmtNumber(warmup.kills || 0))}
         ${cell("暖服击倒", fmtNumber(warmup.downs || 0))}
@@ -335,7 +334,6 @@ function renderDetail(els, data, actions) {
 
     ${miniList("曾用名（最近 20）", (data.aliases || []).slice(0, 20).map((a) => `${a.alias_name} · ${rowTime(a.seen_at)}`))}
     ${miniList("历史 IP（最近 20）", summarizeIpRows(data.ips, "seen_at").slice(0, 20).map((a) => `${a.ip} ×${a.count} · 最近 ${rowTime(a.latestAt)}`))}
-    ${miniList("登录记录（最近 50）", summarizeIpRows(data.logins, "joined_at").slice(0, 50).map((a) => `${a.ip} ×${a.count} · 最近 ${rowTime(a.latestAt)}`))}
     ${miniList("战斗日志索引（最近 100）", (data.combatSessions || []).slice(0, 100).map((s) => `${s.date_key || "--"} · ${String(s.file_path || "").split(/[\\/]/).pop() || "--"} · ${rowTime(s.first_event_at)} ~ ${rowTime(s.last_event_at)}`))}
 
     <div class="db-card">
@@ -411,7 +409,6 @@ function renderLeaderboards(root, stats, jumpToPlayer) {
 function renderTrends(root, stats) {
   const t = stats?.trends || {};
   root.innerHTML = `
-    ${analyticsBlock("近 N 天登录趋势", trendList(t.loginsByDay, (row) => `登录 ${fmtNumber(row.loginCount)} · 去重玩家 ${fmtNumber(row.uniquePlayers)}`))}
     ${analyticsBlock("近 N 天对局趋势", trendList(t.matchesByDay, (row) => `对局 ${fmtNumber(row.matchCount)} · 已结束 ${fmtNumber(row.completedCount)}`))}
   `;
 }

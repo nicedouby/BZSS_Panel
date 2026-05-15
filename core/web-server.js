@@ -1122,18 +1122,6 @@ export class WebServer {
       });
     }
 
-    if (url.pathname === "/api/player-database/detail/logins") {
-      const playerId = url.searchParams.get("id");
-      return this.runTimedPlayerDatabaseQuery("/api/player-database/detail/logins", playerId, async () => {
-        return this.json(res, 200, {
-          items: await this.modules.playerDatabase.listPlayerLogins(playerId, {
-            limit: url.searchParams.get("limit") ?? "12",
-            offset: url.searchParams.get("offset") ?? "0",
-          }),
-        });
-      });
-    }
-
     if (url.pathname === "/api/player-database/detail/squad-created") {
       const playerId = url.searchParams.get("id");
       return this.runTimedPlayerDatabaseQuery("/api/player-database/detail/squad-created", playerId, async () => {
