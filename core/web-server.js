@@ -246,6 +246,182 @@ export class WebServer {
       });
     }
 
+    if (url.pathname === "/api/team-balance/state" && req.method === "GET") {
+      const teamBalance = this.modules.teamBalance;
+
+      if (!teamBalance) {
+        return this.json(res, 404, {
+          error: "TeamBalanceUnavailable",
+          message: "TeamBalance module is not loaded.",
+        });
+      }
+
+      return this.json(res, 200, {
+        ok: true,
+        state: teamBalance.getState(),
+      });
+    }
+
+    if (url.pathname === "/api/team-balance/containers" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const teamBalance = this.modules.teamBalance;
+
+      if (!teamBalance) {
+        return this.json(res, 404, {
+          error: "TeamBalanceUnavailable",
+          message: "TeamBalance module is not loaded.",
+        });
+      }
+
+      const body = await this.readJsonBody(req);
+      const state = teamBalance.setContainers(body.containers ?? []);
+
+      return this.json(res, 200, {
+        ok: true,
+        state,
+      });
+    }
+
+    if (url.pathname === "/api/team-balance/balance-only" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const teamBalance = this.modules.teamBalance;
+
+      if (!teamBalance) {
+        return this.json(res, 404, {
+          error: "TeamBalanceUnavailable",
+          message: "TeamBalance module is not loaded.",
+        });
+      }
+
+      const plan = teamBalance.balanceOnly();
+      return this.json(res, 200, {
+        ok: true,
+        plan,
+        state: teamBalance.getState(),
+      });
+    }
+
+    if (url.pathname === "/api/team-balance/group-together" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const teamBalance = this.modules.teamBalance;
+
+      if (!teamBalance) {
+        return this.json(res, 404, {
+          error: "TeamBalanceUnavailable",
+          message: "TeamBalance module is not loaded.",
+        });
+      }
+
+      try {
+        const payload = await teamBalance.groupTogetherAndExecute({ actor: user });
+        return this.json(res, 200, {
+          ok: true,
+          ...payload,
+          state: teamBalance.getState(),
+        });
+      } catch (error) {
+        return this.json(res, error.statusCode ?? 400, {
+          ok: false,
+          error: error.code ?? "TeamBalanceExecutionFailed",
+          message: error.message,
+        });
+      }
+    }
+
+    if (url.pathname === "/api/team-balance/execute-plan" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const teamBalance = this.modules.teamBalance;
+
+      if (!teamBalance) {
+        return this.json(res, 404, {
+          error: "TeamBalanceUnavailable",
+          message: "TeamBalance module is not loaded.",
+        });
+      }
+
+      const body = await this.readJsonBody(req);
+
+      try {
+        const result = await teamBalance.executePlan(body.planId ?? teamBalance.getState()?.lastPlan?.id, { actor: user });
+        return this.json(res, 200, {
+          ok: true,
+          result,
+          state: teamBalance.getState(),
+        });
+      } catch (error) {
+        return this.json(res, error.statusCode ?? 400, {
+          ok: false,
+          error: error.code ?? "TeamBalanceExecutionFailed",
+          message: error.message,
+        });
+      }
+    }
+
+    {
+      const balanceMatch = url.pathname.match(/^\/api\/team-balance\/container\/([^/]+)\/balance$/);
+      if (balanceMatch && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const teamBalance = this.modules.teamBalance;
+
+        if (!teamBalance) {
+          return this.json(res, 404, {
+            error: "TeamBalanceUnavailable",
+            message: "TeamBalance module is not loaded.",
+          });
+        }
+
+        const body = await this.readJsonBody(req);
+
+        try {
+          const result = teamBalance.balanceSingleContainer(
+            decodeURIComponent(balanceMatch[1]),
+            body.targetTeam ?? null,
+          );
+          return this.json(res, 200, {
+            ok: true,
+            ...result,
+            state: teamBalance.getState(),
+          });
+        } catch (error) {
+          return this.json(res, error.statusCode ?? 400, {
+            ok: false,
+            error: error.code ?? "TeamBalanceBalanceFailed",
+            message: error.message,
+          });
+        }
+      }
+    }
+
+    {
+      const executeMatch = url.pathname.match(/^\/api\/team-balance\/container\/([^/]+)\/execute$/);
+      if (executeMatch && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const teamBalance = this.modules.teamBalance;
+
+        if (!teamBalance) {
+          return this.json(res, 404, {
+            error: "TeamBalanceUnavailable",
+            message: "TeamBalance module is not loaded.",
+          });
+        }
+
+        try {
+          const result = await teamBalance.executeContainer(decodeURIComponent(executeMatch[1]), { actor: user });
+          return this.json(res, 200, {
+            ok: true,
+            result,
+            state: teamBalance.getState(),
+          });
+        } catch (error) {
+          return this.json(res, error.statusCode ?? 400, {
+            ok: false,
+            error: error.code ?? "TeamBalanceExecutionFailed",
+            message: error.message,
+          });
+        }
+      }
+    }
+
     if (url.pathname === "/api/settings/exposed") {
       const configManager = this.core.config;
       if (!configManager?.getExposedSettings) {

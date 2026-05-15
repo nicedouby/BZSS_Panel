@@ -604,6 +604,106 @@ async function testSettingsRoutesRequireAuthAndSuperAdmin() {
   assert.equal(updateCalls, 1);
 }
 
+async function testTeamBalanceRoutesExposeStateAndRequireSuperAdminForMutations() {
+  const calls = [];
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest(req) {
+          if (req.headers.authorization === "super") {
+            return { username: "admin", role: "SuperAdmin", isSuperAdmin: true };
+          }
+          if (req.headers.authorization === "user") {
+            return { username: "viewer", role: "Operator", isSuperAdmin: false };
+          }
+          return null;
+        },
+        hasEverything(user) {
+          return String(user?.role ?? "").toLowerCase().includes("superadmin");
+        },
+      },
+    },
+    modules: {
+      teamBalance: {
+        getState() {
+          return {
+            containers: [{ id: "grp_1", name: "Alpha", targetTeam: 1, locked: false, players: [] }],
+            lastPlan: null,
+            lastExecution: null,
+            updatedAt: "2026-05-15T00:00:00.000Z",
+          };
+        },
+        setContainers(containers) {
+          calls.push({ type: "setContainers", containers });
+          return this.getState();
+        },
+        balanceOnly() {
+          calls.push({ type: "balanceOnly" });
+          return {
+            id: "plan_1",
+            mode: "balanceOnly",
+            execute: false,
+            containers: [],
+            totals: { team1: 1, team2: 0 },
+            createdAt: "2026-05-15T00:00:00.000Z",
+          };
+        },
+        async executePlan(planId) {
+          calls.push({ type: "executePlan", planId });
+          return {
+            planId: planId ?? "plan_1",
+            executedAt: "2026-05-15T00:00:00.000Z",
+            totalPlayers: 1,
+            switched: 1,
+            skipped: 0,
+            failed: 0,
+            results: [],
+          };
+        },
+      },
+    },
+  });
+
+  const stateRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/team-balance/state",
+    headers: { host: "localhost", authorization: "user" },
+    socket: {},
+  }, stateRecorder.res);
+  assert.equal(stateRecorder.state.status, 200);
+  assert.equal(JSON.parse(stateRecorder.state.body).state.containers[0].name, "Alpha");
+
+  const forbiddenRecorder = createRecorder();
+  const forbiddenReq = Readable.from([JSON.stringify({ containers: [] })]);
+  forbiddenReq.method = "POST";
+  forbiddenReq.url = "/api/team-balance/containers";
+  forbiddenReq.headers = { host: "localhost", authorization: "user" };
+  forbiddenReq.socket = {};
+  await server.handleRequest(forbiddenReq, forbiddenRecorder.res);
+  assert.equal(forbiddenRecorder.state.status, 403);
+
+  const allowedRecorder = createRecorder();
+  const allowedReq = Readable.from([JSON.stringify({ containers: [{ id: "grp_1", name: "Alpha", players: [] }] })]);
+  allowedReq.method = "POST";
+  allowedReq.url = "/api/team-balance/containers";
+  allowedReq.headers = { host: "localhost", authorization: "super" };
+  allowedReq.socket = {};
+  await server.handleRequest(allowedReq, allowedRecorder.res);
+  assert.equal(allowedRecorder.state.status, 200);
+  assert.equal(calls[0].type, "setContainers");
+
+  const executeRecorder = createRecorder();
+  const executeReq = Readable.from([JSON.stringify({})]);
+  executeReq.method = "POST";
+  executeReq.url = "/api/team-balance/execute-plan";
+  executeReq.headers = { host: "localhost", authorization: "super" };
+  executeReq.socket = {};
+  await server.handleRequest(executeReq, executeRecorder.res);
+  assert.equal(executeRecorder.state.status, 200);
+  assert.equal(calls.at(-1).type, "executePlan");
+}
+
 async function testVueRouteFallsBackToIndexHtml() {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-web-"));
   await fs.writeFile(path.join(tempDir, "index.html"), "<html><body>vue-app</body></html>", "utf8");
@@ -653,6 +753,7 @@ await testSnapshotAllDoesNotTriggerSlowTasks();
 await testMatchRefreshRoutesDelegateToMatchState();
 await testSquadLifecycleRouteReturnsCurrentSnapshot();
 await testSettingsRoutesRequireAuthAndSuperAdmin();
+await testTeamBalanceRoutesExposeStateAndRequireSuperAdminForMutations();
 await testVueRouteFallsBackToIndexHtml();
 
 console.log("web server tests passed");
