@@ -28,7 +28,7 @@
         "path": "modules.matchState.polling.serverInfoIntervalMs",
         "label": "Server Info Refresh Interval",
         "type": "number",
-        "min": 1000,
+        "min": 100,
         "max": 60000,
         "advanced": true,
         "restartRequired": true
@@ -37,7 +37,7 @@
         "path": "modules.matchState.polling.playersIntervalMs",
         "label": "Players Refresh Interval",
         "type": "number",
-        "min": 1000,
+        "min": 100,
         "max": 60000,
         "advanced": true,
         "restartRequired": true
@@ -46,7 +46,7 @@
         "path": "modules.matchState.polling.squadsIntervalMs",
         "label": "Squads Refresh Interval",
         "type": "number",
-        "min": 1000,
+        "min": 100,
         "max": 60000,
         "advanced": true,
         "restartRequired": true
@@ -91,7 +91,7 @@
         "path": "steam.requestTimeoutMs",
         "label": "Steam Request Timeout",
         "type": "number",
-        "min": 1000,
+        "min": 100,
         "max": 120000,
         "advanced": true,
         "restartRequired": true

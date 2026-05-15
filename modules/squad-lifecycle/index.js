@@ -5,6 +5,7 @@ import { createSquadLifecycleReducer } from "./reducer.js";
 
 const MATCH_END_EVENTS = ["GAME_END", "MATCH_END", "ROUND_END", "ROUND_ENDED", "NEW_GAME"];
 const PENDING_CREATE_LOG_TTL_MS = 5 * 60 * 1000;
+const CREATE_EVENT_DEDUPE_TTL_MS = 10_000;
 
 export function createSquadLifecycleModule({ core, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
@@ -20,6 +21,7 @@ export function createSquadLifecycleModule({ core, config, logger }) {
 
   const reducer = createSquadLifecycleReducer({ config, logger: moduleLogger });
   const pendingCreateLogs = new Map();
+  const recentCreateEventKeys = new Map();
   const unsubscribers = [];
 
   const api = {
@@ -88,9 +90,10 @@ export function createSquadLifecycleModule({ core, config, logger }) {
       }
     },
 
-    async stop() {
+  async stop() {
       for (const unsubscriber of unsubscribers.splice(0)) unsubscriber();
       pendingCreateLogs.clear();
+      recentCreateEventKeys.clear();
     },
   };
 
@@ -114,11 +117,29 @@ export function createSquadLifecycleModule({ core, config, logger }) {
     const serverId = String(parsed.serverId ?? event.serverId ?? core.webStatus.serverId ?? "").trim();
     if (!serverId || parsed.squadId == null) return;
 
+    if (isDuplicateCreateEvent(serverId, parsed)) {
+      if (debugEnabled) {
+        logWithFallback(moduleLogger, "info", "[SquadLifecycle] duplicate squad create event ignored", {
+          operation: "squadLifecycle.createDuplicateIgnored",
+          data: {
+            serverId,
+            matchId: String(parsed.matchId ?? event?.matchId ?? event?.sessionId ?? event?.sessionID ?? "").trim(),
+            squadId: parsed.squadId,
+            squadName: parsed.squadName,
+            creatorName: parsed.creatorName,
+            parsedFromRawLogLine: Boolean(parsed.parsedFromRawLogLine),
+          },
+        });
+      }
+      return;
+    }
+
     const matchId = resolveCurrentMatchId(serverId, parsed) || buildSyntheticMatchId(serverId, parsed);
     if (!matchId) return;
 
     reducer.setCurrentMatchId(serverId, matchId);
     parsed.matchId = matchId;
+    rememberCreateEvent(serverId, parsed);
 
     logWithFallback(moduleLogger, "info", `[SquadLifecycle] squad create accepted: S${parsed.squadId} ${parsed.squadName}`, {
       operation: "squadLifecycle.createAccepted",
@@ -178,7 +199,18 @@ export function createSquadLifecycleModule({ core, config, logger }) {
     for (const pending of pendingItems) {
       cleanupExpiredPending();
       const matched = findMatchedSnapshotSquad(pending, squads);
-      if (!matched) continue;
+      if (!matched) {
+        logWithFallback(moduleLogger, "warn", "[SquadLifecycle] pending create did not match current RCON squads", {
+          operation: "squadLifecycle.flushPendingUnmatched",
+          data: {
+            serverId,
+            matchId,
+            pending: describePendingCreate(pending),
+            squads: squads.map(describeRconSquad),
+          },
+        });
+        continue;
+      }
 
       reducer.handleSquadCreateLogEvent({
         ...pending,
@@ -187,18 +219,16 @@ export function createSquadLifecycleModule({ core, config, logger }) {
       });
       pendingCreateLogs.delete(buildPendingKey(pending));
 
-      if (debugEnabled) {
-        logWithFallback(moduleLogger, "info", `Flushed pending squad create log for ${pending.serverId}:${pending.matchId}:S${pending.squadId}`, {
-          operation: "squadLifecycle.flushPending",
-          data: {
-            serverId: pending.serverId,
-            matchId: pending.matchId,
-            squadId: pending.squadId,
-            squadName: pending.squadName,
-            teamId: matched.teamID ?? null,
-          },
-        });
-      }
+      logWithFallback(moduleLogger, "info", `[SquadLifecycle] pending create flushed to LOG: T${matched.teamID ?? matched.teamId ?? ""} S${pending.squadId} ${pending.squadName || matched.squadName || ""}`, {
+        operation: "squadLifecycle.flushPending",
+        data: {
+          serverId: pending.serverId,
+          matchId: pending.matchId,
+          squadId: pending.squadId,
+          squadName: pending.squadName,
+          teamId: matched.teamID ?? matched.teamId ?? null,
+        },
+      });
     }
   }
 
@@ -256,6 +286,57 @@ export function createSquadLifecycleModule({ core, config, logger }) {
     if (matchId) return matchId;
     return `synthetic:${serverId}:current`;
   }
+
+  function rememberCreateEvent(serverId, parsed) {
+    const key = buildCreateEventDedupeKey(serverId, parsed);
+    recentCreateEventKeys.set(key, Date.now());
+  }
+
+  function isDuplicateCreateEvent(serverId, parsed) {
+    cleanupExpiredCreateEventKeys();
+    const key = buildCreateEventDedupeKey(serverId, parsed);
+    return recentCreateEventKeys.has(key);
+  }
+
+  function buildCreateEventDedupeKey(serverId, parsed) {
+    return [
+      String(serverId ?? "").trim(),
+      String(parsed.matchId ?? "").trim(),
+      String(parsed.squadId ?? "").trim(),
+      normalizeSquadName(parsed.squadName),
+      normalizeSquadName(parsed.creatorName),
+      String(parsed.creatorSteamId ?? "").trim(),
+      normalizeEventTimeToSeconds(parsed.eventTime),
+    ].join(":");
+  }
+
+  function cleanupExpiredCreateEventKeys() {
+    const now = Date.now();
+    for (const [key, createdAt] of [...recentCreateEventKeys.entries()]) {
+      if (now - Number(createdAt ?? now) <= CREATE_EVENT_DEDUPE_TTL_MS) continue;
+      recentCreateEventKeys.delete(key);
+    }
+  }
+
+  function describePendingCreate(pending) {
+    return {
+      serverId: pending.serverId,
+      matchId: pending.matchId,
+      teamId: pending.teamId ?? null,
+      squadId: pending.squadId ?? null,
+      squadName: pending.squadName ?? "",
+      creatorName: pending.creatorName ?? "",
+    };
+  }
+
+  function describeRconSquad(squad) {
+    return {
+      teamID: squad?.teamID ?? squad?.teamId ?? null,
+      squadID: squad?.squadID ?? squad?.squadId ?? null,
+      squadName: squad?.squadName ?? squad?.name ?? "",
+      creatorName: squad?.creatorName ?? "",
+    };
+  }
 }
 
 function buildPendingKey(pending) {
@@ -263,23 +344,33 @@ function buildPendingKey(pending) {
 }
 
 function findMatchedSnapshotSquad(pending, squads) {
-  const normalizedPendingName = normalizeSquadName(pending.squadName);
   const sameSquadId = squads.filter((squad) => Number(squad.squadID ?? squad.squadId ?? -1) === Number(pending.squadId));
   if (sameSquadId.length === 0) return null;
 
-  const exactNameMatches = normalizedPendingName
-    ? sameSquadId.filter((squad) => normalizeSquadName(squad.squadName ?? squad.name ?? "") === normalizedPendingName)
-    : [];
-
-  if (exactNameMatches.length === 1) return exactNameMatches[0];
-  if (exactNameMatches.length > 1) return null;
-
-  const emptyNameMatches = sameSquadId.filter((squad) => !normalizeSquadName(squad.squadName ?? squad.name ?? ""));
-  if (pending.squadName && emptyNameMatches.length === 1) return emptyNameMatches[0];
-  if (!pending.squadName && emptyNameMatches.length === 1) return emptyNameMatches[0];
-
   if (sameSquadId.length === 1) return sameSquadId[0];
+
+  const creatorNameMatches = exactMatchFilter(sameSquadId, pending.creatorName, (squad) => squad.creatorName ?? "");
+  if (creatorNameMatches.length === 1) return creatorNameMatches[0];
+
+  const squadNameMatches = exactMatchFilter(sameSquadId, pending.squadName, (squad) => squad.squadName ?? squad.name ?? "");
+  if (squadNameMatches.length === 1) return squadNameMatches[0];
+
+  const factionNameMatches = exactMatchFilter(sameSquadId, pending.factionName, (squad) => squad.teamName ?? squad.factionName ?? "");
+  if (factionNameMatches.length === 1) return factionNameMatches[0];
+
   return null;
+}
+
+function exactMatchFilter(items, expected, getValue) {
+  const target = String(expected ?? "").trim();
+  if (!target) return [];
+  return items.filter((item) => String(getValue(item) ?? "").trim() === target);
+}
+
+function normalizeEventTimeToSeconds(value) {
+  const parsed = Date.parse(String(value ?? ""));
+  if (!Number.isFinite(parsed)) return "";
+  return String(Math.floor(parsed / 1000));
 }
 
 function logWithFallback(logger, method, message, context) {

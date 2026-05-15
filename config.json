@@ -3,13 +3,11 @@
     "id": "BZSS_Main",
     "name": "BZSS Main Server"
   },
-
   "udp": {
     "host": "127.0.0.1",
     "port": 6666,
     "maxMessageBytes": 65535
   },
-
   "web": {
     "enabled": true,
     "host": "127.0.0.1",
@@ -23,7 +21,6 @@
     "defaultSteam64": "76561198194428818",
     "viewerTeamAutoSwapEnabled": true
   },
-
   "settingsEditor": {
     "enabled": true,
     "exposed": [
@@ -94,11 +91,26 @@
         "label": "IP Lookup Provider",
         "type": "select",
         "options": [
-          { "label": "None", "value": "none" },
-          { "label": "Manual", "value": "manual" },
-          { "label": "Local MMDB", "value": "local-mmdb" },
-          { "label": "IP-API", "value": "ip-api" },
-          { "label": "IPinfo", "value": "ipinfo" }
+          {
+            "label": "None",
+            "value": "none"
+          },
+          {
+            "label": "Manual",
+            "value": "manual"
+          },
+          {
+            "label": "Local MMDB",
+            "value": "local-mmdb"
+          },
+          {
+            "label": "IP-API",
+            "value": "ip-api"
+          },
+          {
+            "label": "IPinfo",
+            "value": "ipinfo"
+          }
         ],
         "restartRequired": true
       },
@@ -159,7 +171,7 @@
         "path": "modules.matchState.polling.playersIntervalMs",
         "label": "Players Refresh Interval",
         "type": "number",
-        "min": 1000,
+        "min": 100,
         "max": 60000,
         "advanced": true,
         "restartRequired": true
@@ -279,7 +291,6 @@
       }
     ]
   },
-
   "pythonLogParser": {
     "enabled": true,
     "pythonExecutable": "python",
@@ -290,20 +301,18 @@
     "restartOnExit": false,
     "pipeOutput": true
   },
-
   "steam": {
     "appId": 393380,
-    "maxConcurrent": 3,
+    "maxConcurrent": 16,
     "requestTimeoutMs": 20000,
     "defaultWaitMs": 15000,
-    "retryCount": 2,
-    "retryDelayMs": 1200,
+    "retryCount": 4,
+    "retryDelayMs": 3000,
     "usePythonScript": true,
     "scriptTimeoutMs": 12000,
     "scriptFallbackToApi": false,
-    "onlineRefreshFreshnessWindowMinutes": 120
+    "onlineRefreshFreshnessWindowMinutes": 240
   },
-
   "rcon": {
     "enabled": true,
     "host": "192.168.0.184",
@@ -315,7 +324,6 @@
       "maxQueueSize": 100
     }
   },
-
   "core": {
     "logger": {
       "useColor": true
@@ -338,35 +346,55 @@
     "criticalBelow": 20,
     "staleAfterSeconds": 10
   },
-
   "database": {
     "dir": "./data",
     "filename": "micepanel.db"
   },
-
   "modules": {
-    "pluginSubscriptions": { "enabled": true },
-    "audit": { "enabled": true },
-    "playerState": { "enabled": true },
-    "squadState": { "enabled": true },
+    "pluginSubscriptions": {
+      "enabled": true
+    },
+    "audit": {
+      "enabled": true
+    },
+    "playerState": {
+      "enabled": true
+    },
+    "squadState": {
+      "enabled": true
+    },
     "matchState": {
       "enabled": true,
       "polling": {
-        "serverInfoIntervalMs": 5000,
-        "playersIntervalMs": 3000,
-        "squadsIntervalMs": 5000,
-        "currentMapIntervalMs": 15000,
+        "serverInfoIntervalMs": 15000,
+        "playersIntervalMs": 100,
+        "squadsIntervalMs": 100,
+        "currentMapIntervalMs": 30000,
         "nextMapIntervalMs": 30000
       }
     },
-    "console": { "enabled": true, "maxLines": 500 },
-    "combatState": { "enabled": true, "maxEvents": 5000 },
-    "playerDatabase": { "enabled": true },
-    "killManage": { "enabled": true },
-    "combatClean": { "enabled": true, "maxEvents": 5000 },
-    "playtime": { "enabled": true }
+    "console": {
+      "enabled": true,
+      "maxLines": 500
+    },
+    "combatState": {
+      "enabled": true,
+      "maxEvents": 5000
+    },
+    "playerDatabase": {
+      "enabled": true
+    },
+    "killManage": {
+      "enabled": true
+    },
+    "combatClean": {
+      "enabled": true,
+      "maxEvents": 5000
+    },
+    "playtime": {
+      "enabled": true
+    }
   },
-
   "webModules": {
     "required": [
       "web.matchStatus",
@@ -378,7 +406,6 @@
       "web.combatClean": true
     }
   },
-
   "plugins": {
     "enabled": true,
     "paths": [

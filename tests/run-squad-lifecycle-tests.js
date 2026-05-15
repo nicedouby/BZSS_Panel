@@ -189,6 +189,25 @@ async function testRawLogLineCreatesPendingAndFlushesToLog() {
     true,
   );
 
+  harness.core.eventBus.emitCoreEvent("On_SquadCreated", squadEventBase({
+    sessionId: "session-raw-1",
+    time: "2026-05-14 14:29:22.169",
+    rawLog: rawLogLine,
+    paramMap: {
+      SquadID: "5",
+      SquadName: "Squad 5",
+      FactionName: "United States Army",
+      PlayerName: "Donald\u00b7DoubyBear",
+      Steam64ID: "76561198194428818",
+      EOSID: "00026a0bbf67442f84777b964560fba4",
+    },
+  }));
+
+  assert.equal(
+    harness.logs.filter((entry) => entry.level === "info" && entry.message === "[SquadLifecycle] squad create accepted: S5 Squad 5").length,
+    1,
+  );
+
   harness.core.eventBus.emitModuleEvent("module.matchState", "squadsUpdated", {
     serverId: "BZSS_Main",
     sessionId: "session-raw-1",
@@ -211,6 +230,10 @@ async function testRawLogLineCreatesPendingAndFlushesToLog() {
   assert.equal(current.list[0].createdDisplayText, "\u521b\u5efa\u4e8e 14:29:22");
   assert.equal(current.list[0].sourceLabel, "\u65e5\u5fd7\u786e\u8ba4");
   assert.equal(current.list[0].teamId, 1);
+  assert.equal(
+    harness.logs.some((entry) => entry.level === "info" && entry.message === "[SquadLifecycle] pending create flushed to LOG: T1 S5 Squad 5"),
+    true,
+  );
   await harness.module.stop();
 }
 
@@ -231,6 +254,43 @@ async function testRawLogLineParseFailureWarns() {
   assert.equal(harness.module.api.getPendingCount(), 0);
   assert.equal(
     harness.logs.some((entry) => entry.level === "warn" && String(entry.message ?? "").includes("raw squad create log could not be parsed")),
+    true,
+  );
+  await harness.module.stop();
+}
+
+async function testPendingFlushWarnsWhenRconMissingMatch() {
+  const harness = createHarness();
+  await harness.module.start();
+
+  const rawLogLine = "[2026.05.14-14.29.22:169][495]LogSquad: Donald\u00b7DoubyBear (Online IDs: EOS: 00026a0bbf67442f84777b964560fba4 steam: 76561198194428818) has created Squad 11 (Squad Name: Squad 11) on United States Army";
+
+  harness.core.eventBus.emitCoreEvent("On_RawLogLine", {
+    serverId: "BZSS_Main",
+    sessionId: "session-raw-3",
+    time: "2026-05-14 14:29:22.169",
+    rawLog: rawLogLine,
+    rawEvent: { Raw: rawLogLine },
+  });
+
+  harness.core.eventBus.emitModuleEvent("module.matchState", "squadsUpdated", {
+    serverId: "BZSS_Main",
+    sessionId: "session-raw-3",
+    time: "2026-05-14 14:29:30",
+    squads: [
+      {
+        teamID: 1,
+        squadID: 12,
+        squadName: "Squad 12",
+        teamName: "United States Army",
+        creatorName: "Someone Else",
+      },
+    ],
+  });
+
+  assert.equal(harness.module.api.getPendingCount(), 1);
+  assert.equal(
+    harness.logs.some((entry) => entry.level === "warn" && String(entry.message ?? "").includes("pending create did not match current RCON squads")),
     true,
   );
   await harness.module.stop();
@@ -531,6 +591,7 @@ await testLogCreateWithTeamId();
 await testPendingCreateFlushesFromSnapshot();
 await testRawLogLineCreatesPendingAndFlushesToLog();
 await testRawLogLineParseFailureWarns();
+await testPendingFlushWarnsWhenRconMissingMatch();
 await testRconFirstThenLogPromotesToLog();
 await testPendingLogWithoutTeamIdMatchesRconSnapshot();
 await testSyntheticCurrentMatchIdKeepsPendingAndSnapshotAligned();
