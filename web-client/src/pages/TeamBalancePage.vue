@@ -6,6 +6,8 @@
       subtitle="容器数据来自抱团报备，RCON 执行统一走后端 team-balance 模块。"
     >
       <template #actions>
+        <RouterLink class="tab-link" to="/plugins/group-report">抱团报备</RouterLink>
+        <RouterLink class="tab-link active" to="/plugins/group-report/team-balance">队伍分配</RouterLink>
         <button type="button" @click="handleReload" :disabled="busy">
           {{ busy ? "刷新中..." : "刷新玩家" }}
         </button>
@@ -546,6 +548,24 @@ function findRuntimePlayer(steamId: string | undefined, eosId: string | undefine
   display: grid;
   gap: 16px;
   padding: 16px;
+}
+
+.tab-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #2b3540;
+  background: rgba(255, 255, 255, 0.02);
+  color: #dce4e8;
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.tab-link.active {
+  border-color: rgba(59, 130, 246, 0.35);
+  background: rgba(59, 130, 246, 0.18);
+  color: #dbeafe;
 }
 
 .banner {

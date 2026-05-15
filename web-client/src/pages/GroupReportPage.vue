@@ -8,6 +8,8 @@
       </div>
 
       <div class="header-actions">
+        <RouterLink class="tab-link active" to="/plugins/group-report">抱团报备</RouterLink>
+        <RouterLink class="tab-link" to="/plugins/group-report/team-balance">队伍分配</RouterLink>
         <button type="button" class="danger" @click="clearAllGroups" :disabled="!groups.length">
           一键全部删除
         </button>
@@ -107,9 +109,9 @@
 
         <div class="player-list">
           <div v-if="loadingPlayers" class="empty-hint">正在搜索玩家...</div>
-          <div v-else-if="!players.length" class="empty-hint">没有找到玩家。</div>
+          <div v-else-if="!filteredPlayers.length" class="empty-hint">没有可添加的玩家。</div>
 
-          <div v-for="player in players" :key="playerKeyOf(player)" class="player-row">
+          <div v-for="player in filteredPlayers" :key="playerKeyOf(player)" class="player-row">
             <div class="player-copy">
               <div class="member-line member-line-main">
                 <strong>{{ player.name }}</strong>
@@ -157,6 +159,22 @@ const info = ref("");
 let searchTimer: number | null = null;
 
 const selectedGroup = computed(() => groups.value.find((group) => group.id === selectedGroupId.value) ?? null);
+const groupedIdentifiers = computed(() => {
+  const steamIds = new Set<string>();
+  const eosIds = new Set<string>();
+
+  for (const group of groups.value) {
+    for (const member of group.members) {
+      const steamId = String(member.steamId ?? "").trim();
+      const eosId = String(member.eosId ?? "").trim();
+      if (steamId) steamIds.add(steamId);
+      if (eosId) eosIds.add(eosId);
+    }
+  }
+
+  return { steamIds, eosIds };
+});
+const filteredPlayers = computed(() => players.value.filter((player) => !isGroupedPlayer(player)));
 
 onMounted(() => {
   void reloadAll();
@@ -372,6 +390,12 @@ function isAlreadyInSelectedGroup(player: SearchablePlayer) {
   });
 }
 
+function isGroupedPlayer(player: SearchablePlayer) {
+  if (player.steamId && groupedIdentifiers.value.steamIds.has(player.steamId)) return true;
+  if (player.eosId && groupedIdentifiers.value.eosIds.has(player.eosId)) return true;
+  return false;
+}
+
 function playerKeyOf(player: SearchablePlayer) {
   return `${player.steamId ?? ""}-${player.eosId ?? ""}-${player.name}`;
 }
@@ -485,7 +509,27 @@ function formatTime(value: number) {
 
 .header-actions {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.tab-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #2b3540;
+  background: rgba(255, 255, 255, 0.02);
+  color: #dce4e8;
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.tab-link.active {
+  border-color: rgba(59, 130, 246, 0.35);
+  background: rgba(59, 130, 246, 0.18);
+  color: #dbeafe;
 }
 
 .banner {

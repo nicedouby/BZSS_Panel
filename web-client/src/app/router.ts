@@ -27,7 +27,8 @@ export const router = createRouter({
     { path: "/combat-clean", component: CombatCleanPage, meta: { titleKey: "routeTitle.combatClean" } },
     { path: "/kill-manage", component: KillManagePage, meta: { titleKey: "routeTitle.killManage" } },
     { path: "/plugins/group-report", component: GroupReportPage, meta: { title: "抱团报备", fullBleed: true } },
-    { path: "/team-balance", component: TeamBalancePage, meta: { title: "队伍分配", fullBleed: true } },
+    { path: "/plugins/group-report/team-balance", component: TeamBalancePage, meta: { title: "队伍分配", fullBleed: true } },
+    { path: "/team-balance", redirect: "/plugins/group-report/team-balance" },
     {
       path: "/udp-event-forwarder",
       component: UdpEventForwarderPage,
