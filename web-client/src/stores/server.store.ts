@@ -51,6 +51,9 @@ const TOP_LEVEL_STABLE_KEYS = new Set([
   "logClockAnchorLogTime",
   "logClockLastResetAt",
   "logClockLastResetReason",
+  "isWarmup",
+  "warmupUpdatedAt",
+  "warmupUpdatedBy",
 ]);
 
 const WEB_STATUS_STABLE_KEYS = new Set([
@@ -72,6 +75,9 @@ const WEB_STATUS_STABLE_KEYS = new Set([
   "logClockAnchorLogTime",
   "logClockLastResetAt",
   "logClockLastResetReason",
+  "isWarmup",
+  "warmupUpdatedAt",
+  "warmupUpdatedBy",
 ]);
 
 function mergeStableSnapshot(existing: Record<string, any>, incoming: Record<string, any>) {

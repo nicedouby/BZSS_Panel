@@ -604,6 +604,86 @@ async function testSettingsRoutesRequireAuthAndSuperAdmin() {
   assert.equal(updateCalls, 1);
 }
 
+async function testWarmupRoutesExposeStateAndValidateInput() {
+  let updateCalls = 0;
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest(req) {
+          if (req.headers.authorization === "user") {
+            return { username: "viewer", role: "Operator" };
+          }
+          if (req.headers.authorization === "super") {
+            return { username: "admin", role: "SuperAdmin" };
+          }
+          return null;
+        },
+        hasEverything(user) {
+          return String(user?.role ?? "").toLowerCase().includes("superadmin");
+        },
+      },
+      webStatus: {
+        getWarmupState() {
+          return {
+            isWarmup: false,
+            updatedAt: null,
+            updatedBy: null,
+          };
+        },
+        async setWarmup(isWarmup) {
+          updateCalls += 1;
+          return {
+            isWarmup,
+            updatedAt: "2026-05-16T06:20:00.000Z",
+            updatedBy: null,
+          };
+        },
+      },
+    },
+  });
+
+  const unauthorizedGet = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/server/warmup",
+    headers: { host: "localhost" },
+    socket: {},
+  }, unauthorizedGet.res);
+  assert.equal(unauthorizedGet.state.status, 401);
+
+  const authGet = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/server/warmup",
+    headers: { host: "localhost", authorization: "user" },
+    socket: {},
+  }, authGet.res);
+  assert.equal(authGet.state.status, 200);
+  assert.equal(JSON.parse(authGet.state.body).isWarmup, false);
+
+  const invalidPatch = createRecorder();
+  const invalidReq = Readable.from([JSON.stringify({ isWarmup: "true" })]);
+  invalidReq.method = "POST";
+  invalidReq.url = "/api/server/warmup";
+  invalidReq.headers = { host: "localhost", authorization: "super" };
+  invalidReq.socket = {};
+  await server.handleRequest(invalidReq, invalidPatch.res);
+  assert.equal(invalidPatch.state.status, 400);
+
+  const patchRecorder = createRecorder();
+  const patchReq = Readable.from([JSON.stringify({ isWarmup: true })]);
+  patchReq.method = "POST";
+  patchReq.url = "/api/server/warmup";
+  patchReq.headers = { host: "localhost", authorization: "super" };
+  patchReq.socket = {};
+  await server.handleRequest(patchReq, patchRecorder.res);
+  assert.equal(patchRecorder.state.status, 200);
+  const body = JSON.parse(patchRecorder.state.body);
+  assert.equal(body.isWarmup, true);
+  assert.equal(body.updatedAt, "2026-05-16T06:20:00.000Z");
+  assert.equal(updateCalls, 1);
+}
+
 async function testTeamBalanceRoutesExposeStateAndRequireSuperAdminForMutations() {
   const calls = [];
   const server = createServer({
@@ -753,6 +833,7 @@ await testSnapshotAllDoesNotTriggerSlowTasks();
 await testMatchRefreshRoutesDelegateToMatchState();
 await testSquadLifecycleRouteReturnsCurrentSnapshot();
 await testSettingsRoutesRequireAuthAndSuperAdmin();
+await testWarmupRoutesExposeStateAndValidateInput();
 await testTeamBalanceRoutesExposeStateAndRequireSuperAdminForMutations();
 await testVueRouteFallsBackToIndexHtml();
 

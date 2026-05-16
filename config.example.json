@@ -3,6 +3,9 @@
     "id": "BZSS_Main",
     "name": "BZSS Main Server"
   },
+  "warmup": {
+    "enabled": false
+  },
   "udp": {
     "host": "127.0.0.1",
     "port": 6666,

@@ -461,6 +461,41 @@ export class WebServer {
       return this.json(res, 200, this.core.webStatus.getSnapshot());
     }
 
+    if (url.pathname === "/api/server/warmup") {
+      const webStatus = this.core.webStatus;
+      if (!webStatus?.getWarmupState) {
+        return this.json(res, 503, {
+          error: "WarmupStateUnavailable",
+          message: "Warmup state manager is unavailable.",
+        });
+      }
+
+      if (req.method === "GET") {
+        return this.json(res, 200, webStatus.getWarmupState());
+      }
+
+      if (req.method === "POST") {
+        const body = await this.readJsonBody(req);
+        if (!body || typeof body !== "object" || Array.isArray(body) || typeof body.isWarmup !== "boolean") {
+          return this.json(res, 400, {
+            error: "InvalidRequestBody",
+            message: "Request body must include isWarmup as a boolean.",
+          });
+        }
+
+        try {
+          return this.json(res, 200, await webStatus.setWarmup(body.isWarmup, {
+            updatedBy: null,
+          }));
+        } catch (error) {
+          return this.json(res, error.statusCode ?? 500, {
+            error: error.code ?? "WarmupStateUpdateFailed",
+            message: error.message,
+          });
+        }
+      }
+    }
+
     if (url.pathname === "/api/snapshot/all" && req.method === "GET") {
       return this.json(res, 200, this.core.runtimeState.getAll());
     }

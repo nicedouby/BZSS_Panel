@@ -85,6 +85,11 @@ const zhCN = {
     players: "{count} 名玩家",
     tps: "TPS {value}",
     unknownLayer: "未知图层",
+    warmupLoading: "暖服，加载中",
+    warmupOn: "暖服：开启",
+    warmupOff: "暖服：关闭",
+    warmupEnable: "开启暖服",
+    warmupDisable: "关闭暖服",
   },
   user: {
     user: "用户",

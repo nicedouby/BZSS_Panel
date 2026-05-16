@@ -20,6 +20,9 @@ describe("server store stable snapshot", () => {
       maxPlayers: 100,
       queueCount: 3,
       nextLayer: "Fallujah_RAAS_v2",
+      isWarmup: true,
+      warmupUpdatedAt: "2026-05-15T00:00:00.000Z",
+      warmupUpdatedBy: "admin",
       webStatus: {
         serverName: "BZSS Main Server",
         currentLayer: "Mutaha_RAAS_v1",
@@ -30,6 +33,9 @@ describe("server store stable snapshot", () => {
         tps: 29.8,
         playerCount: 5,
         maxPlayers: 100,
+        isWarmup: true,
+        warmupUpdatedAt: "2026-05-15T00:00:00.000Z",
+        warmupUpdatedBy: "admin",
       },
     });
 
@@ -61,9 +67,12 @@ describe("server store stable snapshot", () => {
     expect(server.snapshot.layer).toBe("Mutaha_RAAS_v1");
     expect(server.snapshot.nextLayer).toBe("Fallujah_RAAS_v2");
     expect(server.snapshot.tps).toBe(29.8);
+    expect(server.snapshot.isWarmup).toBe(true);
+    expect(server.snapshot.warmupUpdatedBy).toBe("admin");
     expect(server.snapshot.webStatus.serverName).toBe("BZSS Main Server");
     expect(server.snapshot.webStatus.currentLayer).toBe("Mutaha_RAAS_v1");
     expect(server.snapshot.webStatus.nextLayer).toBe("Fallujah_RAAS_v2");
     expect(server.snapshot.webStatus.tps).toBe(29.8);
+    expect(server.snapshot.webStatus.isWarmup).toBe(true);
   });
 });

@@ -88,6 +88,11 @@ const enUS = {
     tps: "TPS {value}",
     queue: "Queue {count}",
     unknownLayer: "Unknown Layer",
+    warmupLoading: "Warmup loading",
+    warmupOn: "Warmup: On",
+    warmupOff: "Warmup: Off",
+    warmupEnable: "Enable warmup",
+    warmupDisable: "Disable warmup",
   },
   user: {
     user: "User",

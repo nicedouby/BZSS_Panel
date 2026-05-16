@@ -6,7 +6,18 @@
       </button>
       <div class="topbar-copy">
         <strong>{{ pageTitle }}</strong>
-        <span class="topbar-subtitle">{{ currentLayer }}</span>
+        <div class="topbar-meta">
+          <span class="topbar-subtitle">{{ currentLayer }}</span>
+          <button
+            type="button"
+            class="warmup-chip"
+            :data-warmup="warmupState ? 'on' : 'off'"
+            :disabled="warmupBusy"
+            @click="toggleWarmup"
+          >
+            {{ warmupLabel }}
+          </button>
+        </div>
       </div>
     </div>
     <div class="topbar-end">
@@ -25,12 +36,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useServerStore } from "../../stores/server.store";
 import { usePlayerStore } from "../../stores/player.store";
 import { getRuntimeSyncState } from "../../app/runtimeSync";
 import { useUiStore } from "../../stores/ui.store";
+import { fetchWarmupState, updateWarmupState } from "../../app/warmupApi";
 import StatusBadge from "../common/StatusBadge.vue";
 import UserMenu from "./UserMenu.vue";
 import { t } from "../../i18n";
@@ -44,6 +56,9 @@ const players = usePlayerStore();
 const runtime = getRuntimeSyncState();
 const route = useRoute();
 const ui = useUiStore();
+const warmupLoaded = ref(false);
+const warmupLoading = ref(false);
+const warmupSaving = ref(false);
 
 const webStatus = computed(() => server.snapshot.webStatus ?? server.snapshot ?? {});
 const pageTitle = computed(() => {
@@ -81,7 +96,7 @@ const logClockSeconds = computed(() => {
   const value = Number(
     webStatus.value.logClockSeconds
       ?? server.snapshot.logClockSeconds
-      ?? server.snapshot.webStatus?.logClockSeconds
+      ?? server.snapshot.webStatus?.logClockSeconds,
   );
 
   return Number.isFinite(value) && value >= 0 ? Math.floor(value) : null;
@@ -104,10 +119,79 @@ const runtimeTone = computed(() => {
   return "warn";
 });
 const runtimeError = computed(() => runtime.lastError ? briefRuntimeError(runtime.lastError) : "");
+const warmupState = computed(() => resolveWarmupState(webStatus.value, server.snapshot));
+const warmupLabel = computed(() => {
+  if (!warmupLoaded.value && warmupLoading.value) return t("topbar.warmupLoading");
+  return warmupState.value ? t("topbar.warmupOn") : t("topbar.warmupOff");
+});
+const warmupBusy = computed(() => warmupLoading.value || warmupSaving.value);
+
+onMounted(() => {
+  void loadWarmupState();
+});
 
 function briefRuntimeError(value: string) {
   if (value.length <= 52) return value;
   return `${value.slice(0, 49)}...`;
+}
+
+async function loadWarmupState() {
+  warmupLoading.value = true;
+  try {
+    const snapshot = await fetchWarmupState();
+    applyWarmupState(snapshot);
+  } catch {
+    // Keep the last known runtime snapshot if the dedicated call fails.
+  } finally {
+    warmupLoading.value = false;
+    warmupLoaded.value = true;
+  }
+}
+
+async function toggleWarmup() {
+  if (warmupBusy.value) return;
+
+  const targetWarmup = !warmupState.value;
+  const confirmed = await ui.openConfirm({
+    title: targetWarmup ? "开启暖服" : "关闭暖服",
+    message: targetWarmup
+      ? "确认后将把当前服务器切换为暖服状态。"
+      : "确认后将把当前服务器切换为正式局状态。",
+    confirmText: targetWarmup ? "确认开启" : "确认关闭",
+    cancelText: "取消",
+    tone: targetWarmup ? "warn" : "idle",
+  });
+  if (!confirmed) return;
+
+  warmupSaving.value = true;
+  try {
+    const next = await updateWarmupState(targetWarmup);
+    applyWarmupState(next);
+  } catch {
+    // Leave the current state untouched if the update fails.
+  } finally {
+    warmupSaving.value = false;
+    warmupLoaded.value = true;
+  }
+}
+
+function applyWarmupState(state: { isWarmup: boolean; updatedAt: string | null; updatedBy?: string | null; }) {
+  server.applyStableSnapshot({
+    isWarmup: state.isWarmup,
+    warmupUpdatedAt: state.updatedAt,
+    warmupUpdatedBy: state.updatedBy ?? null,
+    webStatus: {
+      isWarmup: state.isWarmup,
+      warmupUpdatedAt: state.updatedAt,
+      warmupUpdatedBy: state.updatedBy ?? null,
+    },
+  });
+}
+
+function resolveWarmupState(webStatusSnapshot: Record<string, any>, snapshot: Record<string, any>) {
+  if (typeof webStatusSnapshot?.isWarmup === "boolean") return webStatusSnapshot.isWarmup;
+  if (typeof snapshot?.isWarmup === "boolean") return snapshot.isWarmup;
+  return false;
 }
 
 function formatDuration(totalSeconds: number) {
@@ -177,12 +261,53 @@ function toggleSidebar() {
   display: block;
 }
 
+.topbar-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+  min-width: 0;
+}
+
 .topbar-subtitle {
   color: #9aa7b2;
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.warmup-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(122, 162, 184, 0.28);
+  background: rgba(122, 162, 184, 0.12);
+  color: #d7f3ff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.warmup-chip[data-warmup="on"] {
+  border-color: rgba(52, 211, 153, 0.45);
+  background: rgba(52, 211, 153, 0.16);
+  color: #bbf7d0;
+}
+
+.warmup-chip[data-warmup="off"] {
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.13);
+  color: #fecaca;
+}
+
+.warmup-chip:disabled {
+  cursor: wait;
+  opacity: 0.72;
 }
 
 .menu-button {

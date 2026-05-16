@@ -11,8 +11,10 @@ import { LogClock } from "./log-clock.js";
  */
 export class WebStatus {
   constructor({ config }) {
+    this.config = config;
     this.serverId = config.get("server.id", "BZSS_Main");
     this.serverName = config.get("server.name", "BZSS Main Server");
+    const warmupEnabled = config.get("warmup.enabled", false) === true;
 
     const logClockFallbackSeconds = Number(config.get("logClock.fallbackSeconds", 600));
     this.logClock = new LogClock({
@@ -54,6 +56,9 @@ export class WebStatus {
       rconQueue: 0,
       recentErrors: 0,
       logTime: null,
+      isWarmup: warmupEnabled,
+      warmupUpdatedAt: null,
+      warmupUpdatedBy: null,
 
       updatedAt: new Date().toISOString(),
     };
@@ -102,6 +107,49 @@ export class WebStatus {
     this.logClock.resetToZero(meta);
     this.state.updatedAt = new Date().toISOString();
     return 0;
+  }
+
+  getWarmupState() {
+    return {
+      isWarmup: Boolean(this.state.isWarmup),
+      updatedAt: this.state.warmupUpdatedAt,
+      updatedBy: this.state.warmupUpdatedBy ?? null,
+    };
+  }
+
+  async setWarmup(isWarmup, meta = {}) {
+    const nextValue = Boolean(isWarmup);
+    const previousValue = Boolean(this.state.isWarmup);
+    const previousWarmupUpdatedAt = this.state.warmupUpdatedAt;
+    const previousWarmupUpdatedBy = this.state.warmupUpdatedBy ?? null;
+    const nextWarmupUpdatedAt = new Date().toISOString();
+    const nextWarmupUpdatedBy = meta?.updatedBy ?? null;
+
+    if (this.config?.set) {
+      this.config.set("warmup.enabled", nextValue);
+    }
+
+    try {
+      if (this.config?.save) {
+        await this.config.save();
+      }
+    } catch (error) {
+      if (this.config?.set) {
+        this.config.set("warmup.enabled", previousValue);
+      }
+      this.state.isWarmup = previousValue;
+      this.state.warmupUpdatedAt = previousWarmupUpdatedAt;
+      this.state.warmupUpdatedBy = previousWarmupUpdatedBy;
+      throw error;
+    }
+
+    this.patch({
+      isWarmup: nextValue,
+      warmupUpdatedAt: nextWarmupUpdatedAt,
+      warmupUpdatedBy: nextWarmupUpdatedBy,
+    });
+
+    return this.getWarmupState();
   }
 
   #resolveTpsStatus(snapshot) {

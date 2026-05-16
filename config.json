@@ -439,5 +439,8 @@
       "logSuccess": false,
       "logFailure": true
     }
+  },
+  "warmup": {
+    "enabled": false
   }
 }

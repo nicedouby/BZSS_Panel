@@ -26,6 +26,9 @@ export function buildServerSnapshot(matchState: any, overview: any) {
   const status = overview?.status ?? {};
   const webStatus = {
     rcon: firstDisplayValue(status.rcon, serverStatus.rcon),
+    isWarmup: status.isWarmup ?? serverStatus.isWarmup,
+    warmupUpdatedAt: firstDisplayValue(status.warmupUpdatedAt, serverStatus.warmupUpdatedAt),
+    warmupUpdatedBy: firstDisplayValue(status.warmupUpdatedBy, serverStatus.warmupUpdatedBy),
     serverName: firstDisplayValue(status.serverName, serverStatus.serverName, serverStatus.name),
     name: firstDisplayValue(status.name, serverStatus.name, serverStatus.serverName),
     map: firstDisplayValue(status.map, serverStatus.map),
@@ -55,6 +58,9 @@ export function buildServerSnapshot(matchState: any, overview: any) {
   return {
     ...serverStatus,
     rcon: firstDisplayValue(serverStatus.rcon, status.rcon),
+    isWarmup: serverStatus.isWarmup ?? status.isWarmup,
+    warmupUpdatedAt: firstDisplayValue(serverStatus.warmupUpdatedAt, status.warmupUpdatedAt),
+    warmupUpdatedBy: firstDisplayValue(serverStatus.warmupUpdatedBy, status.warmupUpdatedBy),
     serverName: firstDisplayValue(serverStatus.serverName, serverStatus.name, status.serverName, status.name),
     name: firstDisplayValue(serverStatus.name, serverStatus.serverName, status.name, status.serverName),
     map: firstDisplayValue(serverStatus.map, status.map),
