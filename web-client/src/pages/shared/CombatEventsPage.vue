@@ -21,22 +21,24 @@
       :empty-title="t('combat.noEvents')"
       :empty-text="emptyText"
     >
-      <PageCard compact>
-        <div class="summary">
-          <span>{{ t("combat.total", "", { count: total }) }}</span>
-          <span>{{ t("combat.offset", "", { offset: filters.offset }) }}</span>
-          <span v-if="overview?.rejected != null">{{ t("combat.rejected", "", { count: overview.rejected }) }}</span>
-          <span v-if="overview?.lastUpdatedAt">{{ t("common.updated") }} {{ formatTime(overview.lastUpdatedAt) }}</span>
-        </div>
-      </PageCard>
+      <div class="combat-page-scroll">
+        <PageCard compact>
+          <div class="summary">
+            <span>{{ t("combat.total", "", { count: total }) }}</span>
+            <span>{{ t("combat.offset", "", { offset: filters.offset }) }}</span>
+            <span v-if="overview?.rejected != null">{{ t("combat.rejected", "", { count: overview.rejected }) }}</span>
+            <span v-if="overview?.lastUpdatedAt">{{ t("common.updated") }} {{ formatTime(overview.lastUpdatedAt) }}</span>
+          </div>
+        </PageCard>
 
-      <CombatEventTable
-        :events="events"
-        :highlight-key="hoverKey"
-        @select="selectedEvent = $event"
-        @search-player="searchPlayer"
-        @hover-player="hoverKey = $event"
-      />
+        <CombatEventTable
+          :events="events"
+          :highlight-key="hoverKey"
+          @select="selectedEvent = $event"
+          @search-player="searchPlayer"
+          @hover-player="hoverKey = $event"
+        />
+      </div>
     </DataState>
 
     <CombatEventDetailModal :event="selectedEvent" :highlight-key="hoverKey" @close="selectedEvent = null" />
@@ -164,6 +166,26 @@ function formatTime(value: unknown) {
 </script>
 
 <style scoped>
+.page {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.combat-page-scroll {
+  display: grid;
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+  overflow-y: scroll;
+  overflow-x: hidden;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+}
+
 .toolbar,
 .summary {
   display: flex;
@@ -179,7 +201,8 @@ function formatTime(value: unknown) {
   background: #11171d;
   color: #edf2f4;
   border-radius: 6px;
-  padding: 8px 10px;
+  padding: 7px 10px;
+  min-height: 34px;
 }
 
 .toolbar input {
@@ -189,5 +212,13 @@ function formatTime(value: unknown) {
 .summary {
   color: #a5b0b8;
   font-size: 12px;
+}
+
+.page :deep(.card-body.compact) {
+  padding: 8px 10px;
+}
+
+.page :deep(.card-header) {
+  padding: 8px 10px 0;
 }
 </style>

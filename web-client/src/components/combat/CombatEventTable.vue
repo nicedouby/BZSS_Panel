@@ -36,7 +36,20 @@
             </td>
             <td>
               <div class="identity-cell">
+                <div v-if="attackerMeta(event)" class="identity-meta">
+                  <button
+                    type="button"
+                    class="name-button"
+                    :class="{ 'is-highlighted': isClusterHighlighted(event, index) }"
+                    @click="emit('search-player', attackerIdentity(event))"
+                  >
+                    {{ attackerName(event) }}
+                  </button>
+                  <span v-if="attackerTeamText(event)">{{ attackerTeamText(event) }}</span>
+                  <span v-if="attackerSquadText(event)">{{ attackerSquadText(event) }}</span>
+                </div>
                 <button
+                  v-else
                   type="button"
                   class="name-button"
                   :class="{ 'is-highlighted': isClusterHighlighted(event, index) }"
@@ -44,15 +57,24 @@
                 >
                   {{ attackerName(event) }}
                 </button>
-                <div v-if="attackerMeta(event)" class="identity-meta">
-                  <span v-if="attackerTeamText(event)">{{ attackerTeamText(event) }}</span>
-                  <span v-if="attackerSquadText(event)">{{ attackerSquadText(event) }}</span>
-                </div>
               </div>
             </td>
             <td>
               <div class="identity-cell">
+                <div v-if="victimMeta(event)" class="identity-meta">
+                  <button
+                    type="button"
+                    class="name-button"
+                    :class="{ 'is-highlighted': isClusterHighlighted(event, index) }"
+                    @click="emit('search-player', victimIdentity(event))"
+                  >
+                    {{ victimName(event) }}
+                  </button>
+                  <span v-if="victimTeamText(event)">{{ victimTeamText(event) }}</span>
+                  <span v-if="victimSquadText(event)">{{ victimSquadText(event) }}</span>
+                </div>
                 <button
+                  v-else
                   type="button"
                   class="name-button"
                   :class="{ 'is-highlighted': isClusterHighlighted(event, index) }"
@@ -60,10 +82,6 @@
                 >
                   {{ victimName(event) }}
                 </button>
-                <div v-if="victimMeta(event)" class="identity-meta">
-                  <span v-if="victimTeamText(event)">{{ victimTeamText(event) }}</span>
-                  <span v-if="victimSquadText(event)">{{ victimSquadText(event) }}</span>
-                </div>
               </div>
             </td>
             <td>{{ event.damage ?? "-" }}</td>
@@ -244,15 +262,16 @@ table {
 
 th,
 td {
-  padding: 10px 12px;
+  padding: 7px 10px;
   text-align: left;
   border-bottom: 1px solid #26303a;
   white-space: nowrap;
+  line-height: 1.15;
 }
 
 th {
   color: #98a5af;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -303,13 +322,13 @@ th {
 .event-type-pill {
   display: inline-flex;
   align-items: center;
-  min-height: 22px;
-  padding: 0 10px;
+  min-height: 20px;
+  padding: 0 8px;
   border-radius: 999px;
   border: 1px solid #3a4651;
   background: rgba(255, 255, 255, 0.03);
   color: #edf2f4;
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
@@ -335,9 +354,11 @@ th {
 }
 
 .identity-cell {
-  display: grid;
-  gap: 5px;
-  padding: 2px 4px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  padding: 1px 2px;
   border-radius: 6px;
   transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -351,18 +372,19 @@ th {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  align-items: center;
 }
 
 .identity-meta span {
   display: inline-flex;
   align-items: center;
-  min-height: 20px;
-  padding: 0 7px;
+  min-height: 18px;
+  padding: 0 6px;
   border-radius: 999px;
   border: 1px solid #3c4a57;
   background: rgba(10, 14, 18, 0.36);
   color: #b8c3cb;
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .flag-row {
@@ -375,13 +397,13 @@ th {
 .flag-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 22px;
-  padding: 0 8px;
+  min-height: 20px;
+  padding: 0 7px;
   border-radius: 999px;
   border: 1px solid rgba(251, 191, 36, 0.34);
   background: rgba(120, 53, 15, 0.4);
   color: #fde68a;
-  font-size: 12px;
+  font-size: 11px;
   white-space: nowrap;
 }
 
