@@ -1,6 +1,6 @@
 ﻿// -*- coding: utf-8 -*-
 
-const VALID_TYPES = new Set(["damage", "wound", "kill"]);
+const VALID_TYPES = new Set(["damage", "wound", "kill", "revive"]);
 const DEFAULT_MAX_EVENTS = 5000;
 const FALLBACK_REASON = "attacker_nullptr_use_victim";
 
@@ -64,7 +64,7 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       time: String(rawRecord.time ?? event?.time ?? new Date().toISOString()),
       logTime: String(rawRecord.logTime ?? event?.logTime ?? ""),
       type: cleanType,
-      eventName: cleanType === "damage" ? "BZSS_DAMAGE" : cleanType === "wound" ? "BZSS_WOUND" : "BZSS_KILL",
+      eventName: cleanType === "damage" ? "BZSS_DAMAGE" : cleanType === "wound" ? "BZSS_WOUND" : cleanType === "revive" ? "BZSS_REVIVE" : "BZSS_KILL",
       attacker,
       victim,
       damage: parseDamage(rawRecord.damage),
@@ -227,6 +227,16 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
     const victimTeamID = firstPresent(rawRecord.victimTeamID, victim.teamID);
     const sameTeam = sameKnownTeam(attackerTeamID, victimTeamID);
     const rawFriendly = Boolean(rawRecord.isFriendlyFire || rawRecord.isTeamKill || rawRecord.tk || rawRecord.tkDown);
+    if (String(type ?? "").trim().toLowerCase() === "revive") {
+      return {
+        attackerTeamID,
+        victimTeamID,
+        sameTeam,
+        isFriendlyFire: false,
+        friendlyFireType: "",
+        teamSource: resolveTeamSource(rawRecord, attacker, victim),
+      };
+    }
     const isFriendlyFire = Boolean(sameTeam || rawFriendly);
     const friendlyFireType = isFriendlyFire
       ? String(rawRecord.friendlyFireType || friendlyFireKind(type))
@@ -483,6 +493,7 @@ function normalizeType(type, event) {
   const text = String(type ?? event?.record?.type ?? "").trim().toLowerCase();
   if (text === "damage" || text === "damaged") return "damage";
   if (text === "wound" || text === "wounded") return "wound";
+  if (text === "revive" || text === "revived") return "revive";
   if (text === "kill" || text === "killed" || text === "death" || text === "died" || text === "tk") return "kill";
   return "";
 }
@@ -499,6 +510,10 @@ function mergePlayer(target, player) {
 }
 
 function buildDisplayText(type, attacker, victim, weapon, damage, relation) {
+  if (String(type ?? "").trim().toLowerCase() === "revive") {
+    const ff = relation.isFriendlyFire ? " [friendly fire]" : "";
+    return `${attacker.name || "Unknown"} revived ${victim.name || "Unknown"}${ff}`;
+  }
   const verb = type === "damage" ? "damaged" : type === "wound" ? "wounded" : "killed";
   const amount = damage == null || damage === "" ? "" : ` (${trimNumber(damage)})`;
   const ff = relation.isFriendlyFire ? " [friendly fire]" : "";
@@ -511,6 +526,7 @@ function buildStats(list) {
     damage: 0,
     wound: 0,
     kill: 0,
+    revive: 0,
     friendlyFire: 0,
     teamDamage: 0,
     teamWound: 0,

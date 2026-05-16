@@ -19,6 +19,7 @@ const typeOptions = [
   { value: "damage", label: t("combat.damage") },
   { value: "wound", label: t("combat.wound") },
   { value: "death", label: t("combat.death") },
+  { value: "revive", label: t("combat.revive", "复苏") },
   { value: "friendly", label: t("combat.friendly") },
   { value: "teamDamage", label: t("combat.teamDamage") },
   { value: "teamWound", label: t("combat.teamWound") },

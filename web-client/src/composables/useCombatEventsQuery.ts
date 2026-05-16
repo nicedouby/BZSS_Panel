@@ -39,6 +39,8 @@ export function useCombatEventsQuery(endpoint: Ref<string>, filters: CombatQuery
       }>(`${endpoint.value}?${params.toString()}`);
     },
     placeholderData: (previousData) => previousData,
+    refetchInterval: 3000,
+    refetchIntervalInBackground: false,
   });
 
   return { query };

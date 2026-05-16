@@ -268,6 +268,43 @@ async function testSameTeamWoundIsTkDownNotTeamKill() {
   assert.equal(overview.stats.teamKill, 0);
 }
 
+async function testReviveEventIsTrackedWithoutFriendlyFire() {
+  const playerState = {
+    getPlayerByName(serverId, name) {
+      if (serverId !== "BZSS_Main") return null;
+      if (name === "Medic") return { name, teamID: 1 };
+      if (name === "Victim") return { name, teamID: 1 };
+      return null;
+    },
+  };
+  const harness = createHarness({ playerState });
+  await harness.module.start();
+
+  harness.emit("On_PlayerRevived", makeEvent("On_PlayerRevived", [
+    ["VictimName", "Victim"],
+    ["AttackerName", "Medic"],
+    ["AttackerEOSID", "eos-medic"],
+    ["AttackerSteam64ID", "76561198000000001"],
+    ["VictimCachedEOSID", "eos-victim"],
+    ["VictimCachedSteam64ID", "76561198000000002"],
+    ["ParseStatus", "Full"],
+    ["ParseConfidence", "High"],
+    ["IdentityConfidence", "High"],
+    ["Confidence", "High"],
+  ]));
+
+  const events = harness.module.api.getEvents({ type: "revive" });
+  const overview = harness.module.api.getOverview();
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, "revive");
+  assert.equal(events[0].isFriendlyFire, false);
+  assert.equal(events[0].eventFlagLabels.length, 0);
+  assert.equal(overview.stats.revive, 1);
+  assert.equal(overview.stats.teamKill, 0);
+
+  await harness.module.stop();
+}
+
 async function testRconTkFromKillManageIsVisible() {
   const harness = createHarness();
   await harness.module.start();
@@ -320,6 +357,7 @@ await testMaxEventsAndClear();
 await testSameTeamEventIsMarkedTeamKill();
 await testSameTeamDamageIsFriendlyDamageNotTeamKill();
 await testSameTeamWoundIsTkDownNotTeamKill();
+await testReviveEventIsTrackedWithoutFriendlyFire();
 await testRconTkFromKillManageIsVisible();
 testNormalizeParamsCompatibility();
 

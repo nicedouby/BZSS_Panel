@@ -100,6 +100,23 @@ class CombatMatcherTests(unittest.TestCase):
         self.assertEqual(data["KillingDamage"], "80.000000")
         self.assertEqual(data["AttackerName"], "Attacker")
 
+    def test_revived_event_is_generated(self) -> None:
+        line = (
+            "[2026.05.15-08.44.22:528][ 84]LogSquad: 976380162 (Online IDs: EOS: 0002ec27acdf423697faf9799bee268f steam: 76561199788781233) "
+            "has revived 金陵大老虎 (Online IDs: EOS: 0002520e619d48fb9c23a62c432072c6 steam: 76561198860843271)."
+        )
+
+        matched = self.matcher.match(line)
+        self.assertIsNotNone(matched)
+        event_name, params = matched
+        data = dict(params)
+
+        self.assertEqual(event_name, "On_PlayerRevived")
+        self.assertEqual(data["AttackerName"], "976380162")
+        self.assertEqual(data["VictimName"], "金陵大老虎")
+        self.assertEqual(data["AttackerSteam64ID"], "76561199788781233")
+        self.assertEqual(data["VictimCachedSteam64ID"], "76561198860843271")
+
     def test_died_preserves_controller_identity_and_caused_by_nullptr(self) -> None:
         line = (
             "Die(): Player: 四不两直 KillingDamage=100.000000 "

@@ -60,7 +60,9 @@ defineEmits<{
 }>();
 
 function eventType(event: any) {
-  return event.type || event.friendlyFireType || event.eventName || "-";
+  const type = String(event.type || event.friendlyFireType || event.eventName || "").trim();
+  if (type === "revive") return t("combat.revive", "复苏");
+  return type || "-";
 }
 
 function attackerName(event: any) {

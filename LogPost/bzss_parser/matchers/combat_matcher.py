@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import List, Optional, Tuple
 
 from bzss_parser.identity_cache import IdentityCache
@@ -43,6 +44,9 @@ class CombatMatcher:
         if self.is_player_damaged(line):
             return self.parse_player_damaged(line)
 
+        if self.is_player_revived(line):
+            return self.parse_player_revived(line)
+
         if self.is_player_wounded(line):
             return self.parse_player_wounded(line)
 
@@ -72,6 +76,13 @@ class CombatMatcher:
             "Wound(): Player:" in line
             and "KillingDamage=" in line
             and "caused by" in line
+        )
+
+    @staticmethod
+    def is_player_revived(line: str) -> bool:
+        return (
+            "has revived" in line
+            and "Online IDs:" in line
         )
 
     @staticmethod
@@ -185,6 +196,60 @@ class CombatMatcher:
         ])
 
         return "On_PlayerWounded", params
+
+    def parse_player_revived(self, line: str) -> Tuple[str, List[Tuple[str, str]]]:
+        match = re.search(
+            r"LogSquad:\s*(.*?)\s*\(Online IDs:\s*EOS:\s*([^\s)]+)\s*steam:\s*([^\s)]+)\)\s*has revived\s*(.*?)\s*\(Online IDs:\s*EOS:\s*([^\s)]+)\s*steam:\s*([^\s)]+)\)\.?\s*$",
+            line,
+            re.IGNORECASE,
+        )
+
+        if match:
+            attacker_name = match.group(1).strip()
+            attacker_eos = match.group(2).strip()
+            attacker_steam = match.group(3).strip()
+            victim_name = match.group(4).strip()
+            victim_eos = match.group(5).strip()
+            victim_steam = match.group(6).strip()
+        else:
+            attacker_name = ""
+            attacker_eos = ""
+            attacker_steam = ""
+            victim_name = ""
+            victim_eos = ""
+            victim_steam = ""
+
+        if attacker_name or attacker_eos or attacker_steam:
+            self.identity_cache.upsert(
+                name=attacker_name,
+                eos_id=attacker_eos,
+                steam64_id=attacker_steam,
+                controller_id="",
+            )
+
+        if victim_name or victim_eos or victim_steam:
+            self.identity_cache.upsert(
+                name=victim_name,
+                eos_id=victim_eos,
+                steam64_id=victim_steam,
+                controller_id="",
+            )
+
+        params = [
+            ("VictimName", victim_name),
+            ("AttackerName", attacker_name),
+            ("AttackerEOSID", attacker_eos),
+            ("AttackerSteam64ID", attacker_steam),
+            ("VictimCachedEOSID", victim_eos),
+            ("VictimCachedSteam64ID", victim_steam),
+            ("IdentityConfidence", "High" if attacker_name and victim_name else "Medium"),
+            ("IdentitySource", "RawLog+Revive"),
+            ("ParseStatus", "Full" if attacker_name and victim_name else "Partial"),
+            ("ParseConfidence", "High" if attacker_name and victim_name else "Medium"),
+            ("Confidence", "High" if attacker_name and victim_name else "Medium"),
+        ]
+
+        return "On_PlayerRevived", params
 
     def parse_player_died(self, line: str) -> Tuple[str, List[Tuple[str, str]]]:
         victim_name = parse_victim_name_for_killing_event(line)

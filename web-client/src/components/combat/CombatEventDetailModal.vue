@@ -3,7 +3,7 @@
     <section class="dialog-panel">
       <header class="dialog-head">
         <div>
-          <h3>{{ event.type || event.eventName || t("combat.eventType") }}</h3>
+          <h3>{{ displayType }}</h3>
           <p>{{ formatTime(event.time) }}</p>
         </div>
         <button type="button" @click="$emit('close')">{{ t("common.close") }}</button>
@@ -91,6 +91,11 @@ const eventFlagLabels = computed(() => {
   if (direct.length) return direct.map((label: unknown) => String(label)).filter(Boolean);
   const structured = Array.isArray(props.event?.eventFlags) ? props.event.eventFlags : [];
   return structured.map((flag: any) => String(flag?.label ?? "")).filter(Boolean);
+});
+const displayType = computed(() => {
+  const type = String(props.event?.type ?? props.event?.eventName ?? "").trim();
+  if (type === "revive") return t("combat.revive", "复苏");
+  return type || t("combat.eventType");
 });
 
 function formatTime(value: unknown) {

@@ -69,6 +69,10 @@ export function createKillManageModule({ core, modules, config, logger }) {
     const type = String(record?.type ?? "").trim().toLowerCase();
     const damage = toFiniteNumber(record?.damage);
 
+    if (type === "revive") {
+      return flags;
+    }
+
     if ((type === "died" || type === "death") && damage !== null && Math.abs(damage) === 300) {
       pushEventFlag(flags, {
         key: "give_up",
@@ -149,6 +153,22 @@ export function createKillManageModule({ core, modules, config, logger }) {
 
     const attackerTeamID = record.attackerTeamID ?? attacker?.teamID ?? "";
     const victimTeamID = record.victimTeamID ?? victim?.teamID ?? "";
+    if (String(record?.type ?? "").trim().toLowerCase() === "revive") {
+      record.attackerTeamID = attackerTeamID;
+      record.victimTeamID = victimTeamID;
+      record.isFriendlyFire = false;
+      record.isTeamKill = false;
+      record.isTeamKillDown = false;
+      record.tkDown = false;
+      record.tk = false;
+      record.friendlyFireType = "";
+      record.friendlyFireLabel = "";
+      record.teamKillReason = "";
+      record.friendlyFireReason = "";
+      record.severity = record.severity ?? "";
+      record.tags = [...new Set([...(record.tags ?? [])])];
+      return record;
+    }
     const isFriendlyFire = Boolean(forced || sameKnownTeam(attackerTeamID, victimTeamID));
     const friendlyFireKind = getFriendlyFireKind(record.type);
     const isTeamKill = Boolean(isFriendlyFire && friendlyFireKind.isTeamKill);
@@ -277,6 +297,47 @@ export function createKillManageModule({ core, modules, config, logger }) {
     publishRecord(event, applyCombatEventFlags(withTeamKillMetadata));
   }
 
+  function handleRevive(event) {
+    if (!isSubscribed()) return;
+
+    const combat = event.normalized?.combat;
+    if (!combat) return;
+
+    const record = {
+      serverId: event.serverId,
+      time: event.time,
+      logTime: event.logTime,
+      sourceEventId: event.eventId,
+      type: combat.type || "revive",
+      victimName: combat.victimName,
+      attackerName: combat.attackerName,
+      damage: null,
+      weapon: "",
+      rawCausedBy: "",
+      causedBy: "REVIVE",
+      causedByCategory: "revive",
+      attackerEOSID: combat.attackerEOSID,
+      attackerSteam64ID: combat.attackerSteam64ID,
+      attackerControllerID: combat.attackerControllerId ?? combat.attackerControllerID,
+      victimEOSID: combat.victimCachedEOSID ?? combat.victimEOSID,
+      victimSteam64ID: combat.victimCachedSteam64ID ?? combat.victimSteam64ID,
+      victimControllerID: combat.victimControllerId ?? combat.victimControllerID,
+      attackerTeamID: combat.attackerTeamID,
+      victimTeamID: combat.victimTeamID,
+      confidence: combat.confidence,
+      identityConfidence: combat.identityConfidence,
+      parseConfidence: combat.parseConfidence,
+      parseStatus: combat.parseStatus,
+      rawLog: event.rawLog || "",
+      rawEvent: event.rawEvent || null,
+      normalized: event.normalized || null,
+      params: event.params || null,
+    };
+
+    const withTeamKillMetadata = addTeamKillMetadata(record);
+    publishRecord(event, applyCombatEventFlags(withTeamKillMetadata));
+  }
+
   function handleTeamKill(event) {
     if (!isSubscribed()) return;
 
@@ -330,6 +391,7 @@ export function createKillManageModule({ core, modules, config, logger }) {
       unsubscribers.push(core.eventBus.onCoreEvent("On_PlayerDamaged", (e) => handleCombat(e, "damaged")));
       unsubscribers.push(core.eventBus.onCoreEvent("On_PlayerWounded", (e) => handleCombat(e, "wounded")));
       unsubscribers.push(core.eventBus.onCoreEvent("On_PlayerDied", (e) => handleCombat(e, "died")));
+      unsubscribers.push(core.eventBus.onCoreEvent("On_PlayerRevived", (e) => handleRevive(e)));
       unsubscribers.push(core.eventBus.onCoreEvent("TEAM_KILL", (e) => handleTeamKill(e)));
     },
 

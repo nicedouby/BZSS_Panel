@@ -4,6 +4,7 @@ const COMBAT_EVENT_TYPE_BY_NAME = {
   On_PlayerDamaged: "damaged",
   On_PlayerWounded: "wounded",
   On_PlayerDied: "died",
+  On_PlayerRevived: "revive",
 };
 
 const CONFIDENCE_RANK = {

@@ -4,9 +4,10 @@ const COMBAT_TYPES = {
   On_PlayerDamaged: "damage",
   On_PlayerWounded: "wound",
   On_PlayerDied: "death",
+  On_PlayerRevived: "revive",
 };
 
-const VALID_FILTER_TYPES = new Set(["damage", "wound", "death", "friendly", "teamDamage", "teamWound", "teamKill", "tk"]);
+const VALID_FILTER_TYPES = new Set(["damage", "wound", "death", "revive", "friendly", "teamDamage", "teamWound", "teamKill", "tk"]);
 
 /**
  * Module: CombatState
@@ -141,6 +142,7 @@ export function createCombatStateModule({ core, modules, config, logger }) {
       damage: 0,
       wound: 0,
       death: 0,
+      revive: 0,
       teamDamage: 0,
       teamWound: 0,
       teamKill: 0,
@@ -367,6 +369,22 @@ export function createCombatStateModule({ core, modules, config, logger }) {
     });
     const attackerTeamID = record.attackerTeamID || attacker?.teamID || "";
     const victimTeamID = record.victimTeamID || victim?.teamID || "";
+    if (String(record?.type ?? "").trim().toLowerCase() === "revive") {
+      return applyCombatEventFlags({
+        ...record,
+        attackerTeamID,
+        victimTeamID,
+        isFriendlyFire: false,
+        isTeamKill: false,
+        isTeamKillDown: false,
+        tk: false,
+        tkDown: false,
+        friendlyFireType: "",
+        friendlyFireLabel: "",
+        severity: "",
+        tags: Array.isArray(record.tags) ? [...record.tags] : [],
+      });
+    }
     const isFriendlyFire = sameKnownTeam(attackerTeamID, victimTeamID);
     const friendlyFireKind = getFriendlyFireKind(record.type);
     const isTeamKill = Boolean(isFriendlyFire && friendlyFireKind.isTeamKill);
@@ -410,6 +428,22 @@ export function createCombatStateModule({ core, modules, config, logger }) {
 
     const attackerTeamID = base.attackerTeamID || attacker?.teamID || "";
     const victimTeamID = base.victimTeamID || victim?.teamID || "";
+    if (String(base.type ?? "").trim().toLowerCase() === "revive") {
+      return applyCombatEventFlags({
+        ...base,
+        attackerTeamID,
+        victimTeamID,
+        isFriendlyFire: false,
+        isTeamKill: false,
+        isTeamKillDown: false,
+        tk: false,
+        tkDown: false,
+        friendlyFireType: "",
+        friendlyFireLabel: "",
+        severity: base.severity || "",
+        tags: Array.isArray(base.tags) ? [...base.tags] : [],
+      });
+    }
     const isFriendlyFire = sameKnownTeam(attackerTeamID, victimTeamID) || Boolean(base.isFriendlyFire);
     const friendlyFireKind = getFriendlyFireKind(base.type);
     const isTeamKill = Boolean(isFriendlyFire && friendlyFireKind.isTeamKill) || Boolean(base.isTeamKill || base.tk);

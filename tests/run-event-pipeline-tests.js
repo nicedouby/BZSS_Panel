@@ -63,6 +63,38 @@ function testDiedEventDoesNotInheritWeaponContext() {
   assert.equal("contextReceiveTime" in diedEvent.normalized.combat, false);
 }
 
+function testRevivedEventNormalizesCombatType() {
+  const pipeline = new EventPipeline();
+
+  const revivedEvent = pipeline.processRawGameEvent({
+    Version: "1",
+    ServerID: "BZSS_Main",
+    SessionID: "TestSession",
+    Seq: "6",
+    Event: "On_PlayerRevived",
+    Time: "2026-05-15 08:44:22.528",
+    LogTime: "2026.05.15-08.44.22:528",
+    Param1_AttackerName: "976380162",
+    Param2_AttackerEOSID: "0002ec27acdf423697faf9799bee268f",
+    Param3_AttackerSteam64ID: "76561199788781233",
+    Param4_VictimName: "金陵大老虎",
+    Param5_VictimCachedEOSID: "0002520e619d48fb9c23a62c432072c6",
+    Param6_VictimCachedSteam64ID: "76561198860843271",
+    Param7_ParseStatus: "Full",
+    Param8_ParseConfidence: "High",
+    Param9_IdentityConfidence: "High",
+    Param10_Confidence: "High",
+    Raw: "[2026.05.15-08.44.22:528][ 84]LogSquad: 976380162 (Online IDs: EOS: 0002ec27acdf423697faf9799bee268f steam: 76561199788781233) has revived 金陵大老虎 (Online IDs: EOS: 0002520e619d48fb9c23a62c432072c6 steam: 76561198860843271).",
+  });
+
+  assert.equal(revivedEvent.eventName, "On_PlayerRevived");
+  assert.equal(revivedEvent.normalized.combat.type, "revive");
+  assert.equal(revivedEvent.normalized.combat.attackerName, "976380162");
+  assert.equal(revivedEvent.normalized.combat.victimName, "金陵大老虎");
+  assert.equal(revivedEvent.normalized.combat.attackerSteam64ID, "76561199788781233");
+  assert.equal(revivedEvent.normalized.combat.victimCachedSteam64ID, "76561198860843271");
+}
+
 function testAttackerDisplayNameFallsBackToPlayerStateAndSteam64() {
   const pipeline = new EventPipeline();
   pipeline.setCombatIdentityResolver(({ keyType, keyValue }) => {
@@ -210,6 +242,7 @@ function testWorldBringUpNormalization() {
 }
 
 testDiedEventDoesNotInheritWeaponContext();
+testRevivedEventNormalizesCombatType();
 testAttackerDisplayNameFallsBackToPlayerStateAndSteam64();
 testWebStatusStale();
 testTpsNormalization();

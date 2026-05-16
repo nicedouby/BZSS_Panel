@@ -18,6 +18,7 @@ const typeOptions = [
   { value: "all", label: t("combat.all") },
   { value: "damage", label: t("combat.damage") },
   { value: "wound", label: t("combat.wound") },
+  { value: "revive", label: t("combat.revive", "复苏") },
   { value: "kill", label: t("combat.kill") },
 ];
 </script>

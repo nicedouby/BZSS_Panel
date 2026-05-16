@@ -246,6 +246,41 @@ async function testTeamWoundGetsTkDownLabelInProcessedData() {
   await module.stop();
 }
 
+async function testReviveEventIsKeptWithoutFriendlyFire() {
+  const playerState = {
+    getPlayerByName(serverId, name) {
+      if (serverId !== "BZSS_Main") return null;
+      if (name === "Medic") return { name, teamID: 1 };
+      if (name === "Victim") return { name, teamID: 1 };
+      return null;
+    },
+  };
+  const { module, listeners, moduleEvents } = createHarness({ playerState });
+  await module.start();
+
+  emitCombatResolved(listeners, {
+    sourceEventId: "raw:revive",
+    serverId: "BZSS_Main",
+    time: "2026-05-15T08:44:22.528Z",
+    type: "revive",
+    attackerName: "Medic",
+    victimName: "Victim",
+    attackerSteam64ID: "76561198000000001",
+    victimSteam64ID: "76561198000000002",
+    rawLog: "raw revive",
+  });
+
+  const clean = module.api.getEvents({ type: "revive" })[0];
+  assert.equal(clean.type, "revive");
+  assert.equal(clean.eventName, "BZSS_REVIVE");
+  assert.equal(clean.relation.isFriendlyFire, false);
+  assert.equal(clean.eventFlagLabels.length, 0);
+  assert.ok(clean.displayText.includes("revived"));
+  assert.ok(moduleEvents.some((item) => item.eventName === "reviveResolved"));
+
+  await module.stop();
+}
+
 async function testProcessedDataPreservesAllIncomingFlags() {
   const playerState = {
     getPlayerByName(serverId, name) {
@@ -344,6 +379,7 @@ await testGiveUpSameTeamKeepsFriendlyFireLabelInProcessedData();
 await testTeamWoundGetsTkDownLabelInProcessedData();
 await testProcessedDataPreservesAllIncomingFlags();
 await testProcessedDataBackfillsFriendlyFireFlags();
+await testReviveEventIsKeptWithoutFriendlyFire();
 await testPlayerEventsAndClear();
 
 console.log("combat clean tests passed");

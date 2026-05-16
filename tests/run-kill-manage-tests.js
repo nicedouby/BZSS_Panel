@@ -511,6 +511,65 @@ async function testSameTeamWoundAddsFriendlyFireFlag() {
   await fs.rm(tempDir, { recursive: true, force: true });
 }
 
+async function testReviveEventIsForwardedWithoutFriendlyFireFlags() {
+  const listeners = new Map();
+  const moduleEvents = [];
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-kill-manage-"));
+  const rawLogFile = path.join(tempDir, "revive.log");
+  const core = {
+    logger: { warn() {}, module() {}, info() {}, debug() {} },
+    eventBus: {
+      onCoreEvent(eventName, handler) {
+        if (!listeners.has(eventName)) listeners.set(eventName, new Set());
+        listeners.get(eventName).add(handler);
+        return () => listeners.get(eventName)?.delete(handler);
+      },
+      emitModuleEvent(moduleId, eventName, event) {
+        moduleEvents.push({ moduleId, eventName, event });
+      },
+    },
+  };
+  const config = {
+    get(pathText, defaultValue) {
+      if (pathText === "modules.killManage") return { enabled: true, rawLogFile };
+      return defaultValue;
+    },
+  };
+  const module = createKillManageModule({ core, modules: {}, config });
+  await module.start();
+
+  for (const handler of listeners.get("On_PlayerRevived") ?? []) {
+    handler({
+      eventId: "combat:revive",
+      eventName: "On_PlayerRevived",
+      serverId: "BZSS_Main",
+      time: "2026-05-15T08:44:22.528Z",
+      rawLog: "raw revive",
+      normalized: {
+        combat: {
+          type: "revive",
+          victimName: "Victim",
+          attackerName: "Medic",
+          attackerSteam64ID: "76561198000000001",
+          victimCachedSteam64ID: "76561198000000002",
+          weapon: "",
+        },
+      },
+    });
+  }
+
+  await module.stop();
+
+  const combatEvent = moduleEvents.find((item) => item.eventName === "combatResolved");
+  assert.equal(combatEvent.event.record.type, "revive");
+  assert.equal(combatEvent.event.record.isFriendlyFire, false);
+  assert.equal(combatEvent.event.record.eventFlagLabels.length, 0);
+  assert.ok(!moduleEvents.some((item) => item.eventName === "friendlyFireResolved"));
+  assert.ok(!moduleEvents.some((item) => item.eventName === "teamKillResolved"));
+
+  await fs.rm(tempDir, { recursive: true, force: true });
+}
+
 async function testSameIdentityAddsSelfDamageFlag() {
   const listeners = new Map();
   const moduleEvents = [];
@@ -577,6 +636,7 @@ await testSameTeamWoundIsTkDownNotTkKill();
 await testDiedDamage300AddsGiveUpFlag();
 await testDiedDamage300SameTeamKeepsFriendlyFireInfo();
 await testSameTeamWoundAddsFriendlyFireFlag();
+await testReviveEventIsForwardedWithoutFriendlyFireFlags();
 await testSameIdentityAddsSelfDamageFlag();
 
 console.log("kill manage tests passed");
