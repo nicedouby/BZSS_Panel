@@ -1165,12 +1165,6 @@ export class WebServer {
       return this.json(res, 200, await this.modules.playerDatabase.setPermissionGroup(dbPermissionMatch[1], body.permissionGroup));
     }
 
-    // Deprecated: keep /api/db/reset-kill-stats for old UI compatibility.
-    if ((url.pathname === "/api/db/reset-combat-stats" || url.pathname === "/api/db/reset-kill-stats") && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      return this.json(res, 200, await this.modules.playerDatabase.resetCombatStats());
-    }
-
     if (dbPlayerMatch && req.method === "DELETE") {
       if (!this.requireSuperAdmin(user, res)) return;
       return this.json(res, 200, await this.modules.playerDatabase.deletePlayer(dbPlayerMatch[1]));

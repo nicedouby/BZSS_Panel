@@ -321,7 +321,14 @@ DROP TABLE IF EXISTS kill_stats;
         "total_team_kills",
       ]) {
         if (cols.has(column)) {
-          await db.run(`ALTER TABLE players DROP COLUMN ${column}`);
+          try {
+            await db.run(`ALTER TABLE players DROP COLUMN ${column}`);
+          } catch (error) {
+            console.warn(
+              `[database] Failed to drop legacy combat column players.${column}: ${error.message}. ` +
+              "The column will be ignored by the application.",
+            );
+          }
         }
       }
     } finally {
