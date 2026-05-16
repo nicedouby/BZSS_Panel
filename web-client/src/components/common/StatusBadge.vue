@@ -12,12 +12,21 @@ withDefaults(defineProps<{ tone?: "ok" | "warn" | "error" | "idle" }>(), {
 .badge {
   display: inline-flex;
   align-items: center;
-  min-height: 22px;
+  justify-content: center;
+  min-height: 24px;
+  min-width: 60px;
   border-radius: 999px;
-  padding: 2px 8px;
+  padding: 0 10px;
   font-size: 12px;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   border: 1px solid #3a4651;
   color: #d7e0e5;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.02)), rgba(255, 255, 255, 0.004)),
+    rgba(122, 162, 184, 0.08);
+  white-space: nowrap;
 }
 
 .badge[data-tone="ok"] {

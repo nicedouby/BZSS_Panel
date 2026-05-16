@@ -23,11 +23,20 @@
       </div>
 
       <div class="topbar-center">
-        <div v-if="showMatchContext" class="match-summary">
+        <div class="match-summary">
           <span class="match-chip match-chip-strong">{{ matchPlayersLabel }}</span>
           <span class="match-chip match-chip-team1">{{ t("match.team1", "", { count: matchTeam1Count }) }}</span>
           <span class="match-chip match-chip-team2">{{ t("match.team2", "", { count: matchTeam2Count }) }}</span>
           <span class="match-chip">{{ matchTimeLabel }}</span>
+          <button
+            type="button"
+            class="match-chip match-chip-action"
+            :disabled="!canEditLogClock || logClockSaving"
+            :title="logClockTitle"
+            @click="editLogClock"
+          >
+            Log {{ logClockLabel }}
+          </button>
           <span class="match-chip">{{ matchTpsLabel }}</span>
           <span class="match-chip" :class="statusTone(matchRconStatus)">{{ matchRconLabel }}</span>
           <span class="match-chip" :class="statusTone(matchLogsStatus)">{{ matchLogsLabel }}</span>
@@ -37,12 +46,16 @@
 
       <div class="topbar-actions">
         <div class="topbar-metrics">
-          <StatusBadge :tone="runtimeTone">{{ runtimeLabel }}</StatusBadge>
-          <span v-if="!showMatchContext" class="metric primary">{{ t("topbar.players", "", { count: playerCount }) }}</span>
-          <span v-if="!showMatchContext" class="metric primary">{{ t("topbar.tps", "", { value: tps }) }}</span>
-          <span v-if="!showMatchContext" class="metric optional">Queue {{ queueCount }}</span>
-          <span v-if="!showMatchContext" class="metric optional">Next {{ nextLayer }}</span>
-          <span class="metric log-clock">Log {{ logClockLabel }}</span>
+          <StatusBadge class="runtime-badge" :tone="runtimeTone">{{ runtimeLabel }}</StatusBadge>
+          <button
+            type="button"
+            class="metric metric-button log-clock"
+            :disabled="!canEditLogClock || logClockSaving"
+            :title="logClockTitle"
+            @click="editLogClock"
+          >
+            Log {{ logClockLabel }}
+          </button>
           <span v-if="runtimeError" class="metric error optional">{{ runtimeError }}</span>
         </div>
         <UserMenu @open-plugin-center="emit('open-plugin-center')" />
@@ -54,6 +67,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
+import { apiPost, ApiError } from "../../app/apiClient";
+import { useAuthStore } from "../../stores/auth.store";
 import { useServerStore } from "../../stores/server.store";
 import { usePlayerStore } from "../../stores/player.store";
 import { useSquadStore } from "../../stores/squad.store";
@@ -73,12 +88,14 @@ const server = useServerStore();
 const players = usePlayerStore();
 const squads = useSquadStore();
 const match = useMatchStore();
+const auth = useAuthStore();
 const runtime = getRuntimeSyncState();
 const route = useRoute();
 const ui = useUiStore();
 const warmupLoaded = ref(false);
 const warmupLoading = ref(false);
 const warmupSaving = ref(false);
+const logClockSaving = ref(false);
 
 const webStatus = computed(() => server.snapshot.webStatus ?? server.snapshot ?? {});
 const showMatchContext = computed(() => route.path === "/match-status");
@@ -118,16 +135,6 @@ const pageTitle = computed(() => {
   if (titleKey) return t(titleKey, title);
   return String(title || server.snapshot.serverName || webStatus.value.serverName || server.snapshot.name || webStatus.value.name || "BZSS Panel");
 });
-const nextLayer = computed(() => stableDisplayValue(
-  server.snapshot.nextLayer,
-  webStatus.value.nextLayer,
-  t("topbar.unknownLayer", "Unknown Layer"),
-));
-const playerCount = computed(() => players.active.length);
-const queueCount = computed(() => {
-  const value = Number(server.snapshot?.queueCount ?? server.snapshot?.webStatus?.queueCount);
-  return Number.isFinite(value) ? value : 0;
-});
 const tps = computed(() => formatTps(server.snapshot?.tps ?? server.snapshot?.webStatus?.tps ?? null));
 const logClockSeconds = computed(() => {
   const value = Number(
@@ -141,6 +148,12 @@ const logClockSeconds = computed(() => {
 const logClockLabel = computed(() => {
   if (logClockSeconds.value == null) return "--:--";
   return formatDuration(logClockSeconds.value);
+});
+const canEditLogClock = computed(() => auth.user?.isSuperAdmin === true);
+const logClockTitle = computed(() => {
+  if (!canEditLogClock.value) return t("topbar.logClockReadonly", "Only super admins can edit the log clock.");
+  if (logClockSaving.value) return t("topbar.logClockSaving", "Saving log clock...");
+  return t("topbar.logClockEditable", "Click to edit the log clock.");
 });
 const sidebarButtonLabel = computed(() => ui.sidebarCollapsed ? t("topbar.expand") : t("topbar.collapse"));
 const runtimeLabel = computed(() => {
@@ -219,6 +232,59 @@ function briefRuntimeError(value: string) {
   return `${value.slice(0, 49)}...`;
 }
 
+async function editLogClock() {
+  if (!canEditLogClock.value || logClockSaving.value) return;
+
+  const currentValue = logClockSeconds.value == null ? "00:00" : formatDuration(logClockSeconds.value);
+  const input = window.prompt(
+    t("topbar.logClockPrompt", "Enter the log clock value (supports hh:mm:ss, mm:ss, or seconds)."),
+    currentValue,
+  );
+  if (input == null) return;
+
+  const seconds = parseClockInput(input);
+  if (seconds == null) {
+    ui.pushToast({
+      title: t("common.error"),
+      message: t("topbar.logClockInvalid", "Invalid log clock value."),
+      tone: "error",
+    });
+    return;
+  }
+
+  logClockSaving.value = true;
+  try {
+    const response = await apiPost<{ ok?: boolean; logClockSeconds?: number }>("/api/log-clock/set", { seconds });
+    const nextSeconds = Number(response.logClockSeconds ?? seconds);
+    server.applyStableSnapshot({
+      logClockSeconds: nextSeconds,
+      logClockManual: true,
+      logClockHasAnchor: false,
+      webStatus: {
+        logClockSeconds: nextSeconds,
+        logClockManual: true,
+        logClockHasAnchor: false,
+      },
+    });
+    ui.pushToast({
+      title: t("common.save"),
+      message: t("topbar.logClockSaved", "Log clock updated to {value}.", { value: formatDuration(nextSeconds) }),
+      tone: "ok",
+    });
+  } catch (error) {
+    const message = error instanceof ApiError
+      ? error.message
+      : t("topbar.logClockSaveFailed", "Failed to update the log clock.");
+    ui.pushToast({
+      title: t("common.error"),
+      message,
+      tone: "error",
+    });
+  } finally {
+    logClockSaving.value = false;
+  }
+}
+
 async function loadWarmupState() {
   warmupLoading.value = true;
   try {
@@ -289,6 +355,31 @@ function formatDuration(totalSeconds: number) {
   }
 
   return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
+}
+
+function parseClockInput(value: string): number | null {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+
+  if (/^\d+$/.test(text)) {
+    return clampSeconds(Number(text));
+  }
+
+  const parts = text.split(":").map((part) => part.trim());
+  if (parts.length < 2 || parts.length > 3 || parts.some((part) => !/^\d+$/.test(part))) {
+    return null;
+  }
+
+  let seconds = 0;
+  for (const part of parts) {
+    seconds = (seconds * 60) + Number(part);
+  }
+  return clampSeconds(seconds);
+}
+
+function clampSeconds(value: number) {
+  if (!Number.isFinite(value) || value < 0) return 0;
+  return Math.min(Math.floor(value), 7 * 24 * 3600);
 }
 
 function formatMatchTime(seconds: number): string {
@@ -417,17 +508,21 @@ function toggleSidebar() {
 .warmup-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 22px;
-  padding: 2px 10px;
+  min-height: 24px;
+  padding: 0 10px;
   border-radius: 999px;
   border: 1px solid rgba(122, 162, 184, 0.28);
-  background: rgba(122, 162, 184, 0.12);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.02)), rgba(255, 255, 255, 0.004)),
+    rgba(122, 162, 184, 0.12);
   color: #d7f3ff;
   font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.01em;
   white-space: nowrap;
   cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
 }
 
 .warmup-chip[data-warmup="on"] {
@@ -461,7 +556,7 @@ function toggleSidebar() {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
   min-width: 0;
 }
@@ -469,16 +564,20 @@ function toggleSidebar() {
 .match-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 20px;
-  padding: 0 8px;
+  min-height: 24px;
+  padding: 0 10px;
   border-radius: 999px;
   border: 1px solid rgba(122, 162, 184, 0.22);
-  background: rgba(122, 162, 184, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.018)), rgba(255, 255, 255, 0.004)),
+    rgba(122, 162, 184, 0.08);
   color: #dce4e8;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;
+  line-height: 1;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .match-chip-strong {
@@ -502,6 +601,23 @@ function toggleSidebar() {
   color: #aeb8bf;
 }
 
+.match-chip-action {
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.match-chip-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.match-chip-action:not(:disabled):hover {
+  border-color: rgba(122, 162, 184, 0.42);
+  background: rgba(122, 162, 184, 0.12);
+}
+
 .topbar-actions {
   display: flex;
   align-items: center;
@@ -513,7 +629,7 @@ function toggleSidebar() {
 .topbar-metrics {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   white-space: nowrap;
   min-width: 0;
   flex-wrap: wrap;
@@ -523,18 +639,48 @@ function toggleSidebar() {
 .metric {
   display: inline-flex;
   align-items: center;
-  min-height: 22px;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(122, 162, 184, 0.22);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.018)), rgba(255, 255, 255, 0.004)),
+    rgba(122, 162, 184, 0.08);
   color: #dce4e8;
   font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-button {
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.metric-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
 }
 
 .metric.primary {
   color: #edf2f4;
-  font-weight: 600;
+  border-color: rgba(122, 162, 184, 0.3);
 }
 
 .metric.log-clock {
   color: #d7f3ff;
+  border-color: rgba(122, 162, 184, 0.32);
+  cursor: pointer;
+}
+
+.runtime-badge {
+  min-width: 60px;
 }
 
 .metric.error {
