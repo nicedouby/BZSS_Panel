@@ -464,6 +464,7 @@ export class UdpEventForwarderService {
     this.unsubscribers.push(
       subscribeEvent(this.eventBus, "module", { moduleId: "module.combatClean", name: "damageResolved" }, (event) => this.forwardProcessedCombatEvent(event, "module.combatClean.damageResolved")),
       subscribeEvent(this.eventBus, "module", { moduleId: "module.combatClean", name: "woundResolved" }, (event) => this.forwardProcessedCombatEvent(event, "module.combatClean.woundResolved")),
+      subscribeEvent(this.eventBus, "module", { moduleId: "module.combatClean", name: "reviveResolved" }, (event) => this.forwardProcessedCombatEvent(event, "module.combatClean.reviveResolved")),
       subscribeEvent(this.eventBus, "module", { moduleId: "module.combatClean", name: "killResolved" }, (event) => this.forwardProcessedCombatEvent(event, "module.combatClean.killResolved")),
       subscribeEvent(this.eventBus, "core", "round.world_bring_up", (event) => this.forwardMapChanged(event, "round.world_bring_up")),
       subscribeEvent(this.eventBus, "core", "On_RawLogLine", (event) => this.forwardMapChanged(event, "On_RawLogLine")),
@@ -777,7 +778,7 @@ export class UdpEventForwarderService {
     }
 
     const combatType = String(record.type ?? "").trim().toLowerCase();
-    if (!["damage", "wound", "kill"].includes(combatType)) {
+    if (!["damage", "wound", "kill", "revive"].includes(combatType)) {
       return;
     }
 
@@ -795,7 +796,9 @@ export class UdpEventForwarderService {
       ? "combat.damage"
       : combatType === "wound"
         ? "combat.wound"
-        : "combat.kill";
+        : combatType === "revive"
+          ? "combat.revive"
+          : "combat.kill";
 
     const payload = compactObject({
       combatType,
