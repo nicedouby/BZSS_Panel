@@ -304,6 +304,7 @@ export function createCombatStateModule({ core, modules, config, logger }) {
         level: "neutral",
         reason: "died_damage_300",
       });
+      return flags;
     }
 
     if (record?.isFriendlyFire) {
@@ -311,6 +312,15 @@ export function createCombatStateModule({ core, modules, config, logger }) {
         key: "friendly_fire",
         label: "友伤",
         level: record?.isTeamKill || record?.isTeamKillDown ? "danger" : "warning",
+        reason: record?.friendlyFireReason || "same_team",
+      });
+    }
+
+    if (record?.isTeamKillDown) {
+      pushEventFlag(flags, {
+        key: "tk_down",
+        label: "TK击倒",
+        level: "warning",
         reason: record?.friendlyFireReason || "same_team",
       });
     }

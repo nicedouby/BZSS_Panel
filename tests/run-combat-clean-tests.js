@@ -160,6 +160,130 @@ async function testResolvesPlayersAndRelation() {
   await module.stop();
 }
 
+async function testGiveUpOnlyKeepsSingleLabelInProcessedData() {
+  const { module, listeners } = createHarness();
+  await module.start();
+
+  emitCombatResolved(listeners, {
+    sourceEventId: "raw:give-up",
+    serverId: "BZSS_Main",
+    time: "2026-05-10T01:04:00.000Z",
+    type: "died",
+    attackerName: "PlayerA",
+    victimName: "PlayerA",
+    damage: 300,
+    eventFlags: [{ key: "give_up", label: "放弃", level: "neutral", reason: "died_damage_300" }],
+    eventFlagLabels: ["放弃"],
+    rawLog: "raw give up",
+  });
+
+  const clean = module.api.getEvents({ serverId: "BZSS_Main" })[0];
+  assert.deepEqual(clean.eventFlagLabels, ["放弃"]);
+  assert.equal(clean.eventFlags.length, 1);
+  assert.equal(clean.eventFlags[0].key, "give_up");
+  await module.stop();
+}
+
+async function testTeamWoundGetsTkDownLabelInProcessedData() {
+  const playerState = {
+    getPlayerByName(serverId, name) {
+      if (serverId !== "BZSS_Main") return null;
+      if (name === "Attacker") return { name, teamID: 2 };
+      if (name === "Victim") return { name, teamID: 2 };
+      return null;
+    },
+  };
+  const { module, listeners } = createHarness({ playerState });
+  await module.start();
+
+  emitCombatResolved(listeners, {
+    sourceEventId: "raw:tk-down",
+    serverId: "BZSS_Main",
+    time: "2026-05-10T01:05:00.000Z",
+    type: "wounded",
+    attackerName: "Attacker",
+    victimName: "Victim",
+    damage: 80,
+    rawLog: "raw tk down",
+  });
+
+  const clean = module.api.getEvents({ type: "wound" })[0];
+  assert.ok(clean.eventFlagLabels.includes("TK击倒"));
+  assert.ok(clean.eventFlags.some((flag) => flag.key === "tk_down"));
+  assert.equal(clean.relation.friendlyFireType, "team_wound");
+
+  await module.stop();
+}
+
+async function testProcessedDataPreservesAllIncomingFlags() {
+  const playerState = {
+    getPlayerByName(serverId, name) {
+      if (serverId !== "BZSS_Main") return null;
+      if (name === "Attacker") return { name, teamID: 2 };
+      if (name === "Victim") return { name, teamID: 2 };
+      return null;
+    },
+  };
+  const { module, listeners } = createHarness({ playerState });
+  await module.start();
+
+  emitCombatResolved(listeners, {
+    sourceEventId: "raw:multi-flags",
+    serverId: "BZSS_Main",
+    time: "2026-05-10T01:06:00.000Z",
+    type: "wounded",
+    attackerName: "Attacker",
+    victimName: "Victim",
+    damage: 80,
+    eventFlags: [
+      { key: "friendly_fire", label: "友伤", level: "warning", reason: "same_team" },
+      { key: "self_damage", label: "自伤", level: "warning", reason: "same_attacker_victim" },
+    ],
+    eventFlagLabels: ["友伤", "自伤"],
+    rawLog: "raw multi flags",
+  });
+
+  const clean = module.api.getEvents({ type: "wound" })[0];
+  assert.ok(clean.eventFlagLabels.includes("友伤"));
+  assert.ok(clean.eventFlagLabels.includes("自伤"));
+  assert.ok(clean.eventFlagLabels.includes("TK击倒"));
+  assert.ok(clean.eventFlags.some((flag) => flag.key === "friendly_fire"));
+  assert.ok(clean.eventFlags.some((flag) => flag.key === "self_damage"));
+  assert.ok(clean.eventFlags.some((flag) => flag.key === "tk_down"));
+
+  await module.stop();
+}
+
+async function testProcessedDataBackfillsFriendlyFireFlags() {
+  const playerState = {
+    getPlayerByName(serverId, name) {
+      if (serverId !== "BZSS_Main") return null;
+      if (name === "Attacker") return { name, teamID: 2 };
+      if (name === "Victim") return { name, teamID: 2 };
+      return null;
+    },
+  };
+  const { module, listeners } = createHarness({ playerState });
+  await module.start();
+
+  emitCombatResolved(listeners, {
+    sourceEventId: "raw:backfill",
+    serverId: "BZSS_Main",
+    time: "2026-05-10T01:07:00.000Z",
+    type: "wounded",
+    attackerName: "Attacker",
+    victimName: "Victim",
+    damage: 80,
+    rawLog: "raw backfill",
+  });
+
+  const clean = module.api.getEvents({ type: "wound" })[0];
+  assert.ok(clean.eventFlagLabels.includes("友伤"));
+  assert.ok(clean.eventFlagLabels.includes("TK击倒"));
+
+  await module.stop();
+}
+
 async function testPlayerEventsAndClear() {
   const { module, listeners } = createHarness();
   await module.start();
@@ -184,6 +308,10 @@ async function testPlayerEventsAndClear() {
 await testAttackerNullptrFallsBackToVictimExactly();
 await testRejectsNullptrVictim();
 await testResolvesPlayersAndRelation();
+await testGiveUpOnlyKeepsSingleLabelInProcessedData();
+await testTeamWoundGetsTkDownLabelInProcessedData();
+await testProcessedDataPreservesAllIncomingFlags();
+await testProcessedDataBackfillsFriendlyFireFlags();
 await testPlayerEventsAndClear();
 
 console.log("combat clean tests passed");

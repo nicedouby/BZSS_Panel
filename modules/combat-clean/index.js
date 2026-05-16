@@ -57,6 +57,7 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
     });
     const relation = buildRelation(cleanType, attacker, victim, rawRecord);
     const weapon = buildWeapon(rawRecord);
+    const eventFlags = buildEventFlags(rawRecord, relation);
     const record = {
       id: makeCleanId(cleanType, sourceEventId, rawRecord),
       serverId,
@@ -70,6 +71,8 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       weapon,
       relation,
       displayText: buildDisplayText(cleanType, attacker, victim, weapon, rawRecord.damage, relation),
+      eventFlags,
+      eventFlagLabels: eventFlags.map((flag) => String(flag?.label ?? "")).filter(Boolean),
       raw: {
         sourceModule: "module.killManage",
         sourceEventId,
@@ -238,6 +241,69 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       friendlyFireType,
       teamSource,
     };
+  }
+
+  function buildEventFlags(rawRecord, relation) {
+    const flags = [];
+
+    const pushFlag = (flag) => {
+      if (!flag) return;
+      const key = String(flag.key ?? "").trim();
+      const label = String(flag.label ?? "").trim();
+      if (!key && !label) return;
+      if (key && flags.some((item) => String(item.key ?? "").trim() === key)) return;
+      if (!key && label && flags.some((item) => String(item.label ?? "").trim() === label)) return;
+      flags.push(cloneJsonSafe(flag));
+    };
+
+    const sameTextId = (left, right) => {
+      const a = String(left ?? "").trim();
+      const b = String(right ?? "").trim();
+      return Boolean(a && b && a === b);
+    };
+
+    const isSameCombatIdentity = () => sameTextId(rawRecord.attackerSteam64ID, rawRecord.victimSteam64ID)
+      || sameTextId(rawRecord.attackerEOSID, rawRecord.victimEOSID)
+      || sameTextId(rawRecord.attackerControllerID, rawRecord.victimControllerID)
+      || sameTextId(rawRecord.attackerName, rawRecord.victimName);
+
+    for (const flag of Array.isArray(rawRecord.eventFlags) ? rawRecord.eventFlags : []) {
+      pushFlag(flag);
+    }
+
+    for (const label of Array.isArray(rawRecord.eventFlagLabels) ? rawRecord.eventFlagLabels : []) {
+      const text = String(label).trim();
+      if (!text) continue;
+      pushFlag({ label: text });
+    }
+
+    if (flags.some((flag) => String(flag.key ?? "").trim() === "give_up" || String(flag.label ?? "").trim() === "放弃")) {
+      return flags;
+    }
+
+    if (relation?.isFriendlyFire && relation?.friendlyFireType === "team_wound") {
+      pushFlag({ key: "tk_down", label: "TK击倒", level: "warning", reason: "same_team" });
+    }
+
+    if (relation?.isFriendlyFire) {
+      pushFlag({
+        key: "friendly_fire",
+        label: "友伤",
+        level: relation?.friendlyFireType === "team_kill" ? "danger" : "warning",
+        reason: rawRecord.friendlyFireReason || rawRecord.teamKillReason || "same_team",
+      });
+    }
+
+    if (isSameCombatIdentity()) {
+      pushFlag({
+        key: "self_damage",
+        label: "自伤",
+        level: "warning",
+        reason: "same_attacker_victim",
+      });
+    }
+
+    return flags;
   }
 
   function buildWeapon(rawRecord) {

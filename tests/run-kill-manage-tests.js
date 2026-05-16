@@ -320,6 +320,7 @@ async function testSameTeamWoundIsTkDownNotTkKill() {
   assert.equal(combatEvent.event.record.friendlyFireType, "team_wound");
   assert.equal(combatEvent.event.record.friendlyFireLabel, "TK击倒");
   assert.ok(combatEvent.event.record.tags.includes("tk_down"));
+  assert.ok(combatEvent.event.record.eventFlagLabels.includes("TK击倒"));
   assert.ok(moduleEvents.some((item) => item.eventName === "friendlyFireResolved"));
   assert.ok(!moduleEvents.some((item) => item.eventName === "teamKillResolved"));
 

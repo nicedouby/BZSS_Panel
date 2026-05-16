@@ -206,7 +206,7 @@ async function main() {
     await authManager.stop();
 
     logger.info("BZSS Panel WebCore stopped.", {
-      scope: "app",
+      scope: "app", 
       source: "app.main",
     });
     process.exit(0);
