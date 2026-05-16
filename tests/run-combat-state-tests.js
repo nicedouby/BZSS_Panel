@@ -112,6 +112,24 @@ async function testKeepsNullptrInvalidDeathEvent() {
   assert.equal(events[0].causedBy, "BP_Soldier_PLA_SquadLeader_Arid_C_2147373303");
 }
 
+async function testDeathDamage300AddsGiveUpLabel() {
+  const harness = createHarness();
+  await harness.module.start();
+
+  harness.emit("On_PlayerDied", makeEvent("On_PlayerDied", [
+    ["VictimName", "PlayerA"],
+    ["KillingDamage", "300"],
+    ["AttackerName", ""],
+    ["CausedBy", "BP_Rifle_C"],
+  ]));
+
+  const events = harness.module.api.getEvents({ type: "death" });
+  assert.equal(events.length, 1);
+  assert.deepEqual(events[0].eventFlagLabels, ["放弃"]);
+  assert.ok(events[0].eventFlags.some((flag) => flag.key === "give_up"));
+  assert.ok(events[0].tags.includes("event:give_up"));
+}
+
 async function testMaxEventsAndClear() {
   const harness = createHarness({ maxEvents: 2 });
   await harness.module.start();
@@ -268,6 +286,7 @@ function testNormalizeParamsCompatibility() {
 
 await testNormalizesDamageEventAndSearches();
 await testKeepsNullptrInvalidDeathEvent();
+await testDeathDamage300AddsGiveUpLabel();
 await testMaxEventsAndClear();
 await testSameTeamEventIsMarkedTeamKill();
 await testSameTeamDamageIsFriendlyDamageNotTeamKill();

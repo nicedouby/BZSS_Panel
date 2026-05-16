@@ -36,7 +36,7 @@ export function createCombatStateModule({ core, modules, config, logger }) {
     const params = normalizeParams(event);
     const record = addTeamKillMetadata(normalizeCombatEvent({ event, params, type }));
 
-    events.push(record);
+    events.push(applyCombatEventFlags(record));
     if (events.length > maxEvents) {
       events.splice(0, events.length - maxEvents);
     }
@@ -268,6 +268,78 @@ export function createCombatStateModule({ core, modules, config, logger }) {
     return String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
   }
 
+  function toFiniteNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  }
+
+  function sameTextId(left, right) {
+    const a = String(left ?? "").trim();
+    const b = String(right ?? "").trim();
+    return Boolean(a && b && a === b);
+  }
+
+  function isSameCombatIdentity(record) {
+    return sameTextId(record.attackerSteam64ID, record.victimSteam64ID)
+      || sameTextId(record.attackerEOSID, record.victimEOSID)
+      || sameTextId(record.attackerControllerID, record.victimControllerID)
+      || sameTextId(record.attackerName, record.victimName);
+  }
+
+  function pushEventFlag(flags, flag) {
+    if (!flag?.key) return;
+    if (flags.some((item) => item.key === flag.key)) return;
+    flags.push(flag);
+  }
+
+  function buildCombatEventFlags(record) {
+    const flags = [];
+    const type = String(record?.type ?? "").trim().toLowerCase();
+    const damage = toFiniteNumber(record?.damage);
+
+    if ((type === "died" || type === "death") && damage !== null && Math.abs(damage) === 300) {
+      pushEventFlag(flags, {
+        key: "give_up",
+        label: "放弃",
+        level: "neutral",
+        reason: "died_damage_300",
+      });
+    }
+
+    if (record?.isFriendlyFire) {
+      pushEventFlag(flags, {
+        key: "friendly_fire",
+        label: "友伤",
+        level: record?.isTeamKill || record?.isTeamKillDown ? "danger" : "warning",
+        reason: record?.friendlyFireReason || "same_team",
+      });
+    }
+
+    if (isSameCombatIdentity(record)) {
+      pushEventFlag(flags, {
+        key: "self_damage",
+        label: "自伤",
+        level: "warning",
+        reason: "same_attacker_victim",
+      });
+    }
+
+    return flags;
+  }
+
+  function applyCombatEventFlags(record) {
+    const flags = buildCombatEventFlags(record);
+    return {
+      ...record,
+      eventFlags: flags,
+      eventFlagLabels: flags.map((flag) => flag.label),
+      tags: [...new Set([
+        ...(Array.isArray(record.tags) ? record.tags : []),
+        ...flags.map((flag) => `event:${flag.key}`),
+      ])],
+    };
+  }
+
   function addTeamKillMetadata(record) {
     const attacker = resolvePlayer(record.serverId, {
       name: record.attackerName,
@@ -288,7 +360,7 @@ export function createCombatStateModule({ core, modules, config, logger }) {
     const isTeamKill = Boolean(isFriendlyFire && friendlyFireKind.isTeamKill);
     const isTeamKillDown = Boolean(isFriendlyFire && friendlyFireKind.isTeamKillDown);
 
-    return {
+    return applyCombatEventFlags({
       ...record,
       attackerTeamID,
       victimTeamID,
@@ -303,7 +375,7 @@ export function createCombatStateModule({ core, modules, config, logger }) {
       tags: isFriendlyFire
         ? ["friendly_fire", friendlyFireKind.tag, ...(isTeamKill ? ["tk"] : []), ...(isTeamKillDown ? ["tk_down"] : [])]
         : [],
-    };
+    });
   }
 
   function enrichEvent(event) {
@@ -331,7 +403,7 @@ export function createCombatStateModule({ core, modules, config, logger }) {
     const isTeamKill = Boolean(isFriendlyFire && friendlyFireKind.isTeamKill) || Boolean(base.isTeamKill || base.tk);
     const isTeamKillDown = Boolean(isFriendlyFire && friendlyFireKind.isTeamKillDown) || Boolean(base.isTeamKillDown || base.tkDown);
 
-    return {
+    return applyCombatEventFlags({
       ...base,
       attackerTeamID,
       victimTeamID,
@@ -346,7 +418,7 @@ export function createCombatStateModule({ core, modules, config, logger }) {
       tags: isFriendlyFire
         ? [...new Set([...(Array.isArray(base.tags) ? base.tags : []), "friendly_fire", friendlyFireKind.tag, ...(isTeamKill ? ["tk"] : []), ...(isTeamKillDown ? ["tk_down"] : [])])]
         : (Array.isArray(base.tags) ? base.tags : []),
-    };
+    });
   }
 
   // CombatState 是实时事件入口之一。

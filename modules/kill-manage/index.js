@@ -40,6 +40,76 @@ export function createKillManageModule({ core, modules, config, logger }) {
     return leftText !== "" && rightText !== "" && leftText === rightText;
   }
 
+  function toFiniteNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  }
+
+  function sameTextId(left, right) {
+    const a = String(left ?? "").trim();
+    const b = String(right ?? "").trim();
+    return Boolean(a && b && a === b);
+  }
+
+  function isSameCombatIdentity(record) {
+    return sameTextId(record.attackerSteam64ID, record.victimSteam64ID)
+      || sameTextId(record.attackerEOSID, record.victimEOSID)
+      || sameTextId(record.attackerControllerID, record.victimControllerID)
+      || sameTextId(record.attackerName, record.victimName);
+  }
+
+  function pushEventFlag(flags, flag) {
+    if (!flag?.key) return;
+    if (flags.some((item) => item.key === flag.key)) return;
+    flags.push(flag);
+  }
+
+  function buildCombatEventFlags(record) {
+    const flags = [];
+    const type = String(record?.type ?? "").trim().toLowerCase();
+    const damage = toFiniteNumber(record?.damage);
+
+    if ((type === "died" || type === "death") && damage !== null && Math.abs(damage) === 300) {
+      pushEventFlag(flags, {
+        key: "give_up",
+        label: "放弃",
+        level: "neutral",
+        reason: "died_damage_300",
+      });
+    }
+
+    if (record?.isFriendlyFire) {
+      pushEventFlag(flags, {
+        key: "friendly_fire",
+        label: "友伤",
+        level: record?.isTeamKill || record?.isTeamKillDown ? "danger" : "warning",
+        reason: record?.friendlyFireReason || "same_team",
+      });
+    }
+
+    if (isSameCombatIdentity(record)) {
+      pushEventFlag(flags, {
+        key: "self_damage",
+        label: "自伤",
+        level: "warning",
+        reason: "same_attacker_victim",
+      });
+    }
+
+    return flags;
+  }
+
+  function applyCombatEventFlags(record) {
+    const flags = buildCombatEventFlags(record);
+    record.eventFlags = flags;
+    record.eventFlagLabels = flags.map((flag) => flag.label);
+    record.tags = [...new Set([
+      ...(record.tags ?? []),
+      ...flags.map((flag) => `event:${flag.key}`),
+    ])];
+    return record;
+  }
+
   function getFriendlyFireKind(type) {
     const normalized = String(type ?? "").toLowerCase();
     if (normalized === "damaged" || normalized === "damage") {
@@ -178,6 +248,7 @@ export function createKillManageModule({ core, modules, config, logger }) {
       attackerControllerID: combat.attackerControllerId ?? combat.attackerControllerID,
       victimEOSID: combat.victimCachedEOSID ?? combat.victimEOSID,
       victimSteam64ID: combat.victimCachedSteam64ID ?? combat.victimSteam64ID,
+      victimControllerID: combat.victimControllerId ?? combat.victimControllerID,
       attackerTeamID: combat.attackerTeamID,
       victimTeamID: combat.victimTeamID,
       confidence: combat.confidence,
@@ -190,7 +261,8 @@ export function createKillManageModule({ core, modules, config, logger }) {
       params: event.params || null,
     };
 
-    publishRecord(event, addTeamKillMetadata(record));
+    const withTeamKillMetadata = addTeamKillMetadata(record);
+    publishRecord(event, applyCombatEventFlags(withTeamKillMetadata));
   }
 
   function handleTeamKill(event) {
@@ -223,7 +295,7 @@ export function createKillManageModule({ core, modules, config, logger }) {
       params: event.params || null,
     }, { forced: true, reason: "rcon_team_kill" });
 
-    publishRecord(event, record);
+    publishRecord(event, applyCombatEventFlags(record));
   }
 
   const api = {

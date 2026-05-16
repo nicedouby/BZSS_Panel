@@ -6,6 +6,7 @@
           <tr>
             <th>{{ t("common.lastUpdated") }}</th>
             <th>{{ t("combat.eventType") }}</th>
+            <th>标记</th>
             <th>{{ t("combat.attacker") }}</th>
             <th>{{ t("combat.victim") }}</th>
             <th>{{ t("combat.damage") }}</th>
@@ -17,6 +18,14 @@
           <tr v-for="(event, index) in events" :key="event.id || `${event.time}-${index}`">
             <td>{{ formatTime(event.time) }}</td>
             <td>{{ eventType(event) }}</td>
+            <td>
+              <div class="flag-row">
+                <span v-for="label in eventFlagLabels(event)" :key="label" class="flag-chip">
+                  {{ label }}
+                </span>
+                <span v-if="!eventFlagLabels(event).length" class="flag-empty">-</span>
+              </div>
+            </td>
             <td>
               <button type="button" class="name-button" @click="$emit('search-player', attackerIdentity(event))">
                 {{ attackerName(event) }}
@@ -75,6 +84,16 @@ function formatTime(value: unknown) {
   const date = new Date(text);
   return Number.isNaN(date.getTime()) ? text : date.toLocaleString();
 }
+
+function eventFlagLabels(event: any) {
+  if (Array.isArray(event?.eventFlagLabels) && event.eventFlagLabels.length) {
+    return event.eventFlagLabels.map((label: unknown) => String(label)).filter(Boolean);
+  }
+  if (Array.isArray(event?.eventFlags) && event.eventFlags.length) {
+    return event.eventFlags.map((flag: any) => String(flag?.label ?? "")).filter(Boolean);
+  }
+  return [];
+}
 </script>
 
 <style scoped>
@@ -113,5 +132,30 @@ th {
 .name-button:hover {
   color: #8bb6ff;
   text-decoration: underline;
+}
+
+.flag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 72px;
+}
+
+.flag-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid #3a4651;
+  background: rgba(255, 255, 255, 0.03);
+  color: #d7e0e5;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.flag-empty {
+  color: #7f8c96;
+  font-size: 12px;
 }
 </style>

@@ -40,6 +40,15 @@
         <div><span>{{ t("common.source") }}</span><strong>{{ event.weapon?.displayName || event.weapon || event.causedBy || "-" }}</strong></div>
         <div><span>{{ t("combat.friendly") }}</span><strong>{{ event.relation?.isFriendlyFire || event.isFriendlyFire ? t("common.yes") : t("common.no") }}</strong></div>
         <div><span>{{ t("common.status") }}</span><strong>{{ event.parse?.status || event.parseStatus || "-" }}</strong></div>
+        <div class="flag-card">
+          <span>事件标记</span>
+          <div class="flag-row">
+            <span v-for="label in eventFlagLabels" :key="label" class="flag-chip">
+              {{ label }}
+            </span>
+            <span v-if="!eventFlagLabels.length" class="flag-empty">-</span>
+          </div>
+        </div>
       </div>
 
       <pre class="raw-block">{{ prettyEvent }}</pre>
@@ -77,6 +86,12 @@ const victimSteamID = computed(() => String(props.event?.victim?.steamID ?? prop
 const victimEOSID = computed(() => String(props.event?.victim?.eosID ?? props.event?.victimEOSID ?? "").trim());
 const victimIp = computed(() => String(props.event?.victim?.current_ip ?? props.event?.victim?.ip ?? props.event?.victimIp ?? "").trim());
 const victimSearchKey = computed(() => victimName.value !== "-" ? victimName.value : (victimSteamID.value || victimEOSID.value || victimIp.value));
+const eventFlagLabels = computed(() => {
+  const direct = Array.isArray(props.event?.eventFlagLabels) ? props.event.eventFlagLabels : [];
+  if (direct.length) return direct.map((label: unknown) => String(label)).filter(Boolean);
+  const structured = Array.isArray(props.event?.eventFlags) ? props.event.eventFlags : [];
+  return structured.map((flag: any) => String(flag?.label ?? "")).filter(Boolean);
+});
 
 function formatTime(value: unknown) {
   const text = String(value ?? "");
@@ -190,6 +205,35 @@ function searchPlayer(value: string) {
 
 .detail-grid strong {
   margin-top: 4px;
+}
+
+.flag-card {
+  grid-column: 1 / -1;
+}
+
+.flag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.flag-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid #3a4651;
+  background: rgba(255, 255, 255, 0.03);
+  color: #d7e0e5;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.flag-empty {
+  color: #7f8c96;
+  font-size: 12px;
 }
 
 .raw-block {

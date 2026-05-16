@@ -326,10 +326,191 @@ async function testSameTeamWoundIsTkDownNotTkKill() {
   await fs.rm(tempDir, { recursive: true, force: true });
 }
 
+async function testDiedDamage300AddsGiveUpFlag() {
+  const listeners = new Map();
+  const moduleEvents = [];
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-kill-manage-"));
+  const rawLogFile = path.join(tempDir, "give-up.log");
+  const core = {
+    logger: { warn() {}, module() {}, info() {}, debug() {} },
+    eventBus: {
+      onCoreEvent(eventName, handler) {
+        if (!listeners.has(eventName)) listeners.set(eventName, new Set());
+        listeners.get(eventName).add(handler);
+        return () => listeners.get(eventName)?.delete(handler);
+      },
+      emitModuleEvent(moduleId, eventName, event) {
+        moduleEvents.push({ moduleId, eventName, event });
+      },
+    },
+  };
+  const config = {
+    get(pathText, defaultValue) {
+      if (pathText === "modules.killManage") return { enabled: true, rawLogFile };
+      return defaultValue;
+    },
+  };
+  const module = createKillManageModule({ core, modules: {}, config });
+  await module.start();
+
+  for (const handler of listeners.get("On_PlayerDied") ?? []) {
+    handler({
+      eventId: "combat:give-up",
+      eventName: "On_PlayerDied",
+      serverId: "BZSS_Main",
+      time: "2026-05-09T10:05:00.000Z",
+      rawLog: "raw give up",
+      normalized: {
+        combat: {
+          type: "died",
+          victimName: "PlayerA",
+          attackerName: "",
+          damage: 300,
+          weapon: "",
+        },
+      },
+    });
+  }
+
+  await module.stop();
+
+  const combatEvent = moduleEvents.find((item) => item.eventName === "combatResolved");
+  assert.deepEqual(combatEvent.event.record.eventFlagLabels, ["放弃"]);
+  assert.ok(combatEvent.event.record.eventFlags.some((flag) => flag.key === "give_up"));
+  assert.ok(combatEvent.event.record.tags.includes("event:give_up"));
+
+  await fs.rm(tempDir, { recursive: true, force: true });
+}
+
+async function testSameTeamWoundAddsFriendlyFireFlag() {
+  const listeners = new Map();
+  const moduleEvents = [];
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-kill-manage-"));
+  const rawLogFile = path.join(tempDir, "friendly-fire.log");
+  const core = {
+    logger: { warn() {}, module() {}, info() {}, debug() {} },
+    eventBus: {
+      onCoreEvent(eventName, handler) {
+        if (!listeners.has(eventName)) listeners.set(eventName, new Set());
+        listeners.get(eventName).add(handler);
+        return () => listeners.get(eventName)?.delete(handler);
+      },
+      emitModuleEvent(moduleId, eventName, event) {
+        moduleEvents.push({ moduleId, eventName, event });
+      },
+    },
+  };
+  const playerState = {
+    getPlayerByName(serverId, name) {
+      if (serverId !== "BZSS_Main") return null;
+      if (name === "A") return { name, teamID: 1 };
+      if (name === "B") return { name, teamID: 1 };
+      return null;
+    },
+  };
+  const config = {
+    get(pathText, defaultValue) {
+      if (pathText === "modules.killManage") return { enabled: true, rawLogFile };
+      return defaultValue;
+    },
+  };
+  const module = createKillManageModule({ core, modules: { playerState }, config });
+  await module.start();
+
+  for (const handler of listeners.get("On_PlayerWounded") ?? []) {
+    handler({
+      eventId: "combat:friendly-fire",
+      eventName: "On_PlayerWounded",
+      serverId: "BZSS_Main",
+      time: "2026-05-09T10:06:00.000Z",
+      rawLog: "raw friendly fire",
+      normalized: {
+        combat: {
+          type: "wounded",
+          victimName: "B",
+          attackerName: "A",
+          damage: 35,
+          weapon: "BP_Rifle_C",
+        },
+      },
+    });
+  }
+
+  await module.stop();
+
+  const combatEvent = moduleEvents.find((item) => item.eventName === "combatResolved");
+  assert.ok(combatEvent.event.record.eventFlags.some((flag) => flag.key === "friendly_fire"));
+  assert.ok(combatEvent.event.record.eventFlagLabels.includes("友伤"));
+  assert.ok(combatEvent.event.record.tags.includes("event:friendly_fire"));
+
+  await fs.rm(tempDir, { recursive: true, force: true });
+}
+
+async function testSameIdentityAddsSelfDamageFlag() {
+  const listeners = new Map();
+  const moduleEvents = [];
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-kill-manage-"));
+  const rawLogFile = path.join(tempDir, "self-damage.log");
+  const core = {
+    logger: { warn() {}, module() {}, info() {}, debug() {} },
+    eventBus: {
+      onCoreEvent(eventName, handler) {
+        if (!listeners.has(eventName)) listeners.set(eventName, new Set());
+        listeners.get(eventName).add(handler);
+        return () => listeners.get(eventName)?.delete(handler);
+      },
+      emitModuleEvent(moduleId, eventName, event) {
+        moduleEvents.push({ moduleId, eventName, event });
+      },
+    },
+  };
+  const config = {
+    get(pathText, defaultValue) {
+      if (pathText === "modules.killManage") return { enabled: true, rawLogFile };
+      return defaultValue;
+    },
+  };
+  const module = createKillManageModule({ core, modules: {}, config });
+  await module.start();
+
+  for (const handler of listeners.get("On_PlayerDamaged") ?? []) {
+    handler({
+      eventId: "combat:self-damage",
+      eventName: "On_PlayerDamaged",
+      serverId: "BZSS_Main",
+      time: "2026-05-09T10:07:00.000Z",
+      rawLog: "raw self damage",
+      normalized: {
+        combat: {
+          type: "damaged",
+          victimName: "A",
+          attackerName: "A",
+          victimSteam64ID: "765xxx",
+          attackerSteam64ID: "765xxx",
+          damage: 15,
+          weapon: "BP_Rifle_C",
+        },
+      },
+    });
+  }
+
+  await module.stop();
+
+  const combatEvent = moduleEvents.find((item) => item.eventName === "combatResolved");
+  assert.ok(combatEvent.event.record.eventFlags.some((flag) => flag.key === "self_damage"));
+  assert.ok(combatEvent.event.record.eventFlagLabels.includes("自伤"));
+  assert.ok(combatEvent.event.record.tags.includes("event:self_damage"));
+
+  await fs.rm(tempDir, { recursive: true, force: true });
+}
+
 await testWritesOnlyRawLogLines();
 await testRconTeamKillEmitsTkRecord();
 await testSameTeamCombatRecordIsMarkedTk();
 await testSameTeamDamageIsFriendlyDamageNotTk();
 await testSameTeamWoundIsTkDownNotTkKill();
+await testDiedDamage300AddsGiveUpFlag();
+await testSameTeamWoundAddsFriendlyFireFlag();
+await testSameIdentityAddsSelfDamageFlag();
 
 console.log("kill manage tests passed");
