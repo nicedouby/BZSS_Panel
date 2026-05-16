@@ -184,6 +184,37 @@ async function testGiveUpOnlyKeepsSingleLabelInProcessedData() {
   await module.stop();
 }
 
+async function testGiveUpSameTeamKeepsFriendlyFireLabelInProcessedData() {
+  const playerState = {
+    getPlayerByName(serverId, name) {
+      if (serverId !== "BZSS_Main") return null;
+      if (name === "Attacker") return { name, teamID: 2 };
+      if (name === "Victim") return { name, teamID: 2 };
+      return null;
+    },
+  };
+  const { module, listeners } = createHarness({ playerState });
+  await module.start();
+
+  emitCombatResolved(listeners, {
+    sourceEventId: "raw:give-up-tk",
+    serverId: "BZSS_Main",
+    time: "2026-05-10T01:04:30.000Z",
+    type: "died",
+    attackerName: "Attacker",
+    victimName: "Victim",
+    damage: 300,
+    rawLog: "raw give up tk",
+  });
+
+  const clean = module.api.getEvents({ serverId: "BZSS_Main" })[0];
+  assert.ok(clean.eventFlagLabels.includes("放弃"));
+  assert.ok(clean.eventFlagLabels.includes("友伤"));
+  assert.equal(clean.relation.isFriendlyFire, true);
+
+  await module.stop();
+}
+
 async function testTeamWoundGetsTkDownLabelInProcessedData() {
   const playerState = {
     getPlayerByName(serverId, name) {
@@ -309,6 +340,7 @@ await testAttackerNullptrFallsBackToVictimExactly();
 await testRejectsNullptrVictim();
 await testResolvesPlayersAndRelation();
 await testGiveUpOnlyKeepsSingleLabelInProcessedData();
+await testGiveUpSameTeamKeepsFriendlyFireLabelInProcessedData();
 await testTeamWoundGetsTkDownLabelInProcessedData();
 await testProcessedDataPreservesAllIncomingFlags();
 await testProcessedDataBackfillsFriendlyFireFlags();

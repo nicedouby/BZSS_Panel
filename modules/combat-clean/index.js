@@ -267,6 +267,12 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       || sameTextId(rawRecord.attackerControllerID, rawRecord.victimControllerID)
       || sameTextId(rawRecord.attackerName, rawRecord.victimName);
 
+    const type = String(rawRecord.type ?? "").trim().toLowerCase();
+    const damage = Number(rawRecord.damage);
+    if ((type === "died" || type === "death") && Number.isFinite(damage) && Math.abs(damage) === 300) {
+      pushFlag({ key: "give_up", label: "放弃", level: "neutral", reason: "died_damage_300" });
+    }
+
     for (const flag of Array.isArray(rawRecord.eventFlags) ? rawRecord.eventFlags : []) {
       pushFlag(flag);
     }
@@ -278,7 +284,9 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
     }
 
     if (flags.some((flag) => String(flag.key ?? "").trim() === "give_up" || String(flag.label ?? "").trim() === "放弃")) {
-      return flags;
+      if (isSameCombatIdentity()) {
+        return flags;
+      }
     }
 
     if (relation?.isFriendlyFire && relation?.friendlyFireType === "team_wound") {

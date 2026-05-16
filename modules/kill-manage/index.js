@@ -76,7 +76,9 @@ export function createKillManageModule({ core, modules, config, logger }) {
         level: "neutral",
         reason: "died_damage_300",
       });
-      return flags;
+      if (isSameCombatIdentity(record)) {
+        return flags;
+      }
     }
 
     if (record?.isFriendlyFire) {

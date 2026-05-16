@@ -130,6 +130,33 @@ async function testDeathDamage300AddsGiveUpLabel() {
   assert.ok(events[0].tags.includes("event:give_up"));
 }
 
+async function testDeathDamage300SameTeamKeepsTkInfo() {
+  const playerState = {
+    getPlayerByName(serverId, name) {
+      if (serverId !== "BZSS_Main") return null;
+      if (name === "Attacker") return { name, teamID: 1 };
+      if (name === "Victim") return { name, teamID: 1 };
+      return null;
+    },
+  };
+  const harness = createHarness({ playerState });
+  await harness.module.start();
+
+  harness.emit("On_PlayerDied", makeEvent("On_PlayerDied", [
+    ["VictimName", "Victim"],
+    ["KillingDamage", "300"],
+    ["AttackerName", "Attacker"],
+    ["CausedBy", "BP_Rifle_C"],
+  ]));
+
+  const events = harness.module.api.getEvents({ type: "death" });
+  assert.ok(events[0].eventFlagLabels.includes("放弃"));
+  assert.ok(events[0].eventFlagLabels.includes("友伤"));
+  assert.equal(events[0].isTeamKill, true);
+
+  await harness.module.stop();
+}
+
 async function testMaxEventsAndClear() {
   const harness = createHarness({ maxEvents: 2 });
   await harness.module.start();
@@ -288,6 +315,7 @@ function testNormalizeParamsCompatibility() {
 await testNormalizesDamageEventAndSearches();
 await testKeepsNullptrInvalidDeathEvent();
 await testDeathDamage300AddsGiveUpLabel();
+await testDeathDamage300SameTeamKeepsTkInfo();
 await testMaxEventsAndClear();
 await testSameTeamEventIsMarkedTeamKill();
 await testSameTeamDamageIsFriendlyDamageNotTeamKill();

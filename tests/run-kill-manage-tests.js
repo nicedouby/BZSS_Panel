@@ -383,6 +383,70 @@ async function testDiedDamage300AddsGiveUpFlag() {
   await fs.rm(tempDir, { recursive: true, force: true });
 }
 
+async function testDiedDamage300SameTeamKeepsFriendlyFireInfo() {
+  const listeners = new Map();
+  const moduleEvents = [];
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-kill-manage-"));
+  const rawLogFile = path.join(tempDir, "give-up-tk.log");
+  const core = {
+    logger: { warn() {}, module() {}, info() {}, debug() {} },
+    eventBus: {
+      onCoreEvent(eventName, handler) {
+        if (!listeners.has(eventName)) listeners.set(eventName, new Set());
+        listeners.get(eventName).add(handler);
+        return () => listeners.get(eventName)?.delete(handler);
+      },
+      emitModuleEvent(moduleId, eventName, event) {
+        moduleEvents.push({ moduleId, eventName, event });
+      },
+    },
+  };
+  const playerState = {
+    getPlayerByName(serverId, name) {
+      if (serverId !== "BZSS_Main") return null;
+      if (name === "Attacker") return { name, teamID: 2 };
+      if (name === "Victim") return { name, teamID: 2 };
+      return null;
+    },
+  };
+  const config = {
+    get(pathText, defaultValue) {
+      if (pathText === "modules.killManage") return { enabled: true, rawLogFile };
+      return defaultValue;
+    },
+  };
+  const module = createKillManageModule({ core, modules: { playerState }, config });
+  await module.start();
+
+  for (const handler of listeners.get("On_PlayerDied") ?? []) {
+    handler({
+      eventId: "combat:give-up-tk",
+      eventName: "On_PlayerDied",
+      serverId: "BZSS_Main",
+      time: "2026-05-09T10:05:30.000Z",
+      rawLog: "raw give up tk",
+      normalized: {
+        combat: {
+          type: "died",
+          victimName: "Victim",
+          attackerName: "Attacker",
+          damage: 300,
+          weapon: "",
+        },
+      },
+    });
+  }
+
+  await module.stop();
+
+  const combatEvent = moduleEvents.find((item) => item.eventName === "combatResolved");
+  assert.ok(combatEvent.event.record.eventFlagLabels.includes("放弃"));
+  assert.ok(combatEvent.event.record.eventFlagLabels.includes("友伤"));
+  assert.equal(combatEvent.event.record.isTeamKill, true);
+
+  await fs.rm(tempDir, { recursive: true, force: true });
+}
+
 async function testSameTeamWoundAddsFriendlyFireFlag() {
   const listeners = new Map();
   const moduleEvents = [];
@@ -511,6 +575,7 @@ await testSameTeamCombatRecordIsMarkedTk();
 await testSameTeamDamageIsFriendlyDamageNotTk();
 await testSameTeamWoundIsTkDownNotTkKill();
 await testDiedDamage300AddsGiveUpFlag();
+await testDiedDamage300SameTeamKeepsFriendlyFireInfo();
 await testSameTeamWoundAddsFriendlyFireFlag();
 await testSameIdentityAddsSelfDamageFlag();
 
