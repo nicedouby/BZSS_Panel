@@ -157,6 +157,22 @@
         "max": 10080,
         "advanced": true,
         "restartRequired": true
+      },
+      {
+        "path": "modules.combatClean.weaponHistoryBackfill.enabled",
+        "label": "CombatClean Weapon History Backfill",
+        "type": "boolean",
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.combatClean.weaponHistoryBackfill.windowMs",
+        "label": "CombatClean Weapon History Backfill Window",
+        "type": "number",
+        "min": 1000,
+        "max": 600000,
+        "advanced": true,
+        "restartRequired": true
       }
     ]
   },
@@ -251,7 +267,14 @@
     "combatState": { "enabled": true, "maxEvents": 5000 },
     "playerDatabase": { "enabled": true },
     "killManage": { "enabled": true },
-    "combatClean": { "enabled": true, "maxEvents": 5000 },
+    "combatClean": {
+      "enabled": true,
+      "maxEvents": 5000,
+      "weaponHistoryBackfill": {
+        "enabled": true,
+        "windowMs": 300000
+      }
+    },
     "playtime": { "enabled": true }
   },
   "webModules": {

@@ -2,7 +2,21 @@
 
 const VALID_TYPES = new Set(["damage", "wound", "kill", "revive"]);
 const DEFAULT_MAX_EVENTS = 5000;
+const DEFAULT_WEAPON_HISTORY_WINDOW_MS = 300000;
 const FALLBACK_REASON = "attacker_nullptr_use_victim";
+const WEAPON_PLACEHOLDER_PATTERNS = [
+  /\bsoldier\b/i,
+  /\brifleman\d*\b/i,
+  /\bmarksman\b/i,
+  /\bmedic\b/i,
+  /\bgrenadier\b/i,
+  /\bcrewman\b/i,
+  /\bpilot\b/i,
+  /\bengineer\b/i,
+  /\brecon\b/i,
+  /\bcommander\b/i,
+  /\bautomatic rifleman\b/i,
+];
 
 export function createCombatCleanModule({ core, modules, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
@@ -13,9 +27,13 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
   const moduleConfig = config?.get?.("modules.combatClean", {}) ?? {};
   const enabled = Boolean(moduleConfig.enabled ?? true);
   const maxEvents = Math.max(1, Number(moduleConfig.maxEvents ?? DEFAULT_MAX_EVENTS));
+  const weaponHistoryBackfillConfig = moduleConfig.weaponHistoryBackfill ?? {};
+  const weaponHistoryBackfillEnabled = Boolean(weaponHistoryBackfillConfig.enabled ?? true);
+  const weaponHistoryWindowMs = Math.max(1000, Number(weaponHistoryBackfillConfig.windowMs ?? DEFAULT_WEAPON_HISTORY_WINDOW_MS));
   const events = [];
   const rejected = [];
   const sourceEventIds = new Set();
+  const recentWeaponHistory = new Map();
   const unsubscribers = [];
   let lastUpdatedAt = "";
 
@@ -56,21 +74,33 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       fallbackReason: attackerFallback ? FALLBACK_REASON : "",
     });
     const relation = buildRelation(cleanType, attacker, victim, rawRecord);
+    const time = String(rawRecord.time ?? event?.time ?? new Date().toISOString());
+    const timeMs = parseTimestampMs(time);
     const weapon = buildWeapon(rawRecord);
+    const resolvedWeapon = resolveWeaponHistory({
+      weapon,
+      serverId,
+      victim,
+      eventTimeMs: timeMs,
+      enabled: weaponHistoryBackfillEnabled,
+      windowMs: weaponHistoryWindowMs,
+    });
+    const finalWeapon = resolvedWeapon.weapon;
+    if (resolvedWeapon.applied) warnings.push("weapon_history_backfill");
     const eventFlags = buildEventFlags(rawRecord, relation);
     const record = {
       id: makeCleanId(cleanType, sourceEventId, rawRecord),
       serverId,
-      time: String(rawRecord.time ?? event?.time ?? new Date().toISOString()),
+      time,
       logTime: String(rawRecord.logTime ?? event?.logTime ?? ""),
       type: cleanType,
       eventName: cleanType === "damage" ? "BZSS_DAMAGE" : cleanType === "wound" ? "BZSS_WOUND" : cleanType === "revive" ? "BZSS_REVIVE" : "BZSS_KILL",
       attacker,
       victim,
       damage: parseDamage(rawRecord.damage),
-      weapon,
+      weapon: finalWeapon,
       relation,
-      displayText: buildDisplayText(cleanType, attacker, victim, weapon, rawRecord.damage, relation),
+      displayText: buildDisplayText(cleanType, attacker, victim, finalWeapon, rawRecord.damage, relation),
       eventFlags,
       eventFlagLabels: eventFlags.map((flag) => String(flag?.label ?? "")).filter(Boolean),
       raw: {
@@ -84,6 +114,19 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
         warnings,
       },
     };
+
+    if (cleanType === "wound" && weaponHistoryBackfillEnabled && !resolvedWeapon.applied) {
+      rememberWeaponHistory({
+        store: recentWeaponHistory,
+        serverId,
+        victim,
+        weapon: finalWeapon,
+        eventTimeMs: timeMs,
+        sourceEventId,
+        type: cleanType,
+        windowMs: weaponHistoryWindowMs,
+      });
+    }
 
     events.push(record);
     if (events.length > maxEvents) events.splice(0, events.length - maxEvents);
@@ -337,6 +380,40 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
     };
   }
 
+  function resolveWeaponHistory({ weapon, serverId, victim, eventTimeMs, enabled, windowMs }) {
+    const baseWeapon = cloneJsonSafe(weapon) ?? weapon;
+    if (!enabled) return { weapon: baseWeapon, applied: false };
+    if (!isPlaceholderWeapon(baseWeapon)) return { weapon: baseWeapon, applied: false };
+
+    const history = findWeaponHistory({
+      store: recentWeaponHistory,
+      serverId,
+      victim,
+      eventTimeMs,
+      windowMs,
+    });
+    if (!history) return { weapon: baseWeapon, applied: false };
+
+    const appliedWeapon = {
+      ...baseWeapon,
+      cleaned: history.weapon.cleaned || baseWeapon.cleaned,
+      displayName: history.weapon.displayName || history.weapon.cleaned || baseWeapon.displayName,
+      resolvedFromHistory: true,
+      resolutionSource: "weaponHistoryBackfill",
+      historyBackfill: {
+        enabled: true,
+        windowMs,
+        ageMs: Math.max(0, eventTimeMs - history.timeMs),
+        sourceEventId: history.sourceEventId,
+        sourceTime: history.time,
+        sourceType: history.type,
+        sourceWeapon: history.weapon.displayName || history.weapon.cleaned || history.weapon.raw || "",
+      },
+    };
+
+    return { weapon: appliedWeapon, applied: true };
+  }
+
   function getState(serverId = "") {
     const filtered = filterByServer(events, serverId);
     return {
@@ -411,6 +488,8 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
         events.splice(0);
       }
       sourceEventIds.clear();
+      if (target) recentWeaponHistory.delete(target);
+      else recentWeaponHistory.clear();
       lastUpdatedAt = new Date().toISOString();
       core.eventBus.emitModuleEvent("module.combatClean", "updated", {
         eventId: `module.combatClean.clear:${Date.now()}`,
@@ -436,8 +515,8 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       id: "module.combatClean",
       name: "\u6218\u6597\u7ba1\u7406\uff08\u5904\u7406\u540e\uff09",
       kind: "module",
-      version: "0.2.0",
-      description: "Combat Manager (Processed) event layer built from raw module.killManage evidence records. External plugins and the UDP forwarder should subscribe here instead of raw combat logs or combatState.",
+      version: "0.2.1",
+      description: "Combat Manager (Processed) event layer built from raw module.killManage evidence records. It optionally backfills placeholder weapon names from recent wound history before external plugins and the UDP forwarder consume the record.",
     },
     apiName: "combatClean",
     api,
@@ -556,6 +635,7 @@ function matchesSearch(event, search) {
     event.victim?.eosID,
     event.weapon?.raw,
     event.weapon?.cleaned,
+    event.weapon?.displayName,
     event.weapon?.category,
     event.raw?.rawLog,
   ].some((value) => normalizeSearch(value).includes(search));
@@ -652,6 +732,13 @@ function parseDamage(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function parseTimestampMs(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return Date.now();
+  const parsed = Date.parse(text);
+  return Number.isFinite(parsed) ? parsed : Date.now();
+}
+
   function normalizeName(value) {
     return String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
   }
@@ -720,5 +807,77 @@ function logWithFallback(logger, method, message, context) {
     return;
   }
   logger?.info?.(typeof message === "function" ? message() : message);
+}
+
+function isPlaceholderWeapon(weapon) {
+  const texts = [
+    weapon?.displayName,
+    weapon?.cleaned,
+    weapon?.raw,
+  ].map((value) => String(value ?? "").trim()).filter(Boolean);
+
+  if (!texts.length) return true;
+
+  const category = String(weapon?.category ?? "").trim().toLowerCase();
+  if (["pawn", "character", "person", "soldier"].includes(category)) return true;
+
+  return texts.some((text) => {
+    const normalized = text.toLowerCase();
+    if (!normalized || normalized === "unknown" || normalized === "none") return true;
+    return WEAPON_PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(text));
+  });
+}
+
+function buildWeaponHistoryKeys(victim) {
+  return [
+    victim?.steam64ID,
+    victim?.eosID,
+    victim?.controllerID,
+    victim?.name,
+  ].map((value) => normalizeSearch(value)).filter(Boolean);
+}
+
+function rememberWeaponHistory({ store, serverId, victim, weapon, eventTimeMs, sourceEventId, type, windowMs }) {
+  const victimKeys = buildWeaponHistoryKeys(victim);
+  if (!victimKeys.length) return;
+  if (!weapon || isPlaceholderWeapon(weapon)) return;
+
+  const entry = {
+    serverId: String(serverId ?? "").trim(),
+    victimKeys,
+    timeMs: Number.isFinite(eventTimeMs) ? eventTimeMs : Date.now(),
+    time: new Date(Number.isFinite(eventTimeMs) ? eventTimeMs : Date.now()).toISOString(),
+    sourceEventId: String(sourceEventId ?? "").trim(),
+    type: String(type ?? "").trim(),
+    weapon: cloneJsonSafe(weapon),
+  };
+
+  const history = store.get(entry.serverId) ?? [];
+  history.push(entry);
+  const cutoff = entry.timeMs - Math.max(1000, Number(windowMs ?? DEFAULT_WEAPON_HISTORY_WINDOW_MS));
+  while (history.length && Number(history[0].timeMs ?? 0) < cutoff) history.shift();
+  store.set(entry.serverId, history);
+}
+
+function findWeaponHistory({ store, serverId, victim, eventTimeMs, windowMs }) {
+  const history = store.get(String(serverId ?? "").trim()) ?? [];
+  if (!history.length) return null;
+
+  const victimKeys = buildWeaponHistoryKeys(victim);
+  if (!victimKeys.length) return null;
+
+  const cutoff = Number.isFinite(eventTimeMs)
+    ? eventTimeMs - Math.max(1000, Number(windowMs ?? DEFAULT_WEAPON_HISTORY_WINDOW_MS))
+    : -Infinity;
+
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const entry = history[i];
+    if (!entry) continue;
+    if (Number(entry.timeMs ?? 0) < cutoff) continue;
+    if (!entry.victimKeys?.some((key) => victimKeys.includes(key))) continue;
+    return entry;
+  }
+
+  return null;
 }
 

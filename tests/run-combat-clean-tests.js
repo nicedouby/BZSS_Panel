@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import { createCombatCleanModule } from "../modules/combat-clean/index.js";
 
-function createHarness({ playerState, matchState } = {}) {
+function createHarness({ playerState, matchState, combatCleanConfig } = {}) {
   const listeners = new Map();
   const moduleEvents = [];
   const core = {
@@ -21,9 +21,26 @@ function createHarness({ playerState, matchState } = {}) {
       },
     },
   };
+  const defaultCombatCleanConfig = {
+    enabled: true,
+    maxEvents: 100,
+    weaponHistoryBackfill: {
+      enabled: true,
+      windowMs: 300000,
+    },
+  };
   const config = {
     get(pathText, defaultValue) {
-      if (pathText === "modules.combatClean") return { enabled: true, maxEvents: 100 };
+      if (pathText === "modules.combatClean") {
+        return {
+          ...defaultCombatCleanConfig,
+          ...(combatCleanConfig ?? {}),
+          weaponHistoryBackfill: {
+            ...defaultCombatCleanConfig.weaponHistoryBackfill,
+            ...(combatCleanConfig?.weaponHistoryBackfill ?? {}),
+          },
+        };
+      }
       return defaultValue;
     },
   };
@@ -350,6 +367,88 @@ async function testProcessedDataBackfillsFriendlyFireFlags() {
   await module.stop();
 }
 
+async function testWeaponHistoryBackfillsPlaceholderWeapon() {
+  const { module, listeners } = createHarness();
+  await module.start();
+
+  emitCombatResolved(listeners, {
+    sourceEventId: "raw:history-1",
+    serverId: "BZSS_Main",
+    time: "2026-05-10T01:00:00.000Z",
+    type: "wounded",
+    attackerName: "Enemy",
+    victimName: "Victim",
+    victimSteam64ID: "76561198000000009",
+    weapon: "BP_PKP_C_214748",
+    rawLog: "raw history wound",
+  });
+
+  emitCombatResolved(listeners, {
+    sourceEventId: "raw:history-2",
+    serverId: "BZSS_Main",
+    time: "2026-05-10T01:04:59.000Z",
+    type: "died",
+    attackerName: "Enemy",
+    victimName: "Victim",
+    victimSteam64ID: "76561198000000009",
+    weapon: "Soldier BAF Rifleman1",
+    rawLog: "raw give up",
+  });
+
+  const clean = module.api.getEvents({ serverId: "BZSS_Main", limit: 10 });
+  const wound = clean.find((event) => event.type === "wound");
+  const kill = clean.find((event) => event.type === "kill");
+
+  assert.equal(wound.weapon.displayName, "PKP");
+  assert.equal(kill.weapon.raw, "Soldier BAF Rifleman1");
+  assert.equal(kill.weapon.displayName, "PKP");
+  assert.equal(kill.weapon.resolvedFromHistory, true);
+  assert.ok(kill.parse.warnings.includes("weapon_history_backfill"));
+  assert.ok(kill.displayText.includes("with PKP"));
+
+  await module.stop();
+}
+
+async function testWeaponHistoryBackfillCanBeDisabled() {
+  const { module, listeners } = createHarness({
+    combatCleanConfig: {
+      weaponHistoryBackfill: { enabled: false },
+    },
+  });
+  await module.start();
+
+  emitCombatResolved(listeners, {
+    sourceEventId: "raw:disable-1",
+    serverId: "BZSS_Main",
+    time: "2026-05-10T01:10:00.000Z",
+    type: "wounded",
+    attackerName: "Enemy",
+    victimName: "Victim",
+    victimSteam64ID: "76561198000000010",
+    weapon: "BP_PKP_C_214748",
+    rawLog: "raw history wound disabled",
+  });
+
+  emitCombatResolved(listeners, {
+    sourceEventId: "raw:disable-2",
+    serverId: "BZSS_Main",
+    time: "2026-05-10T01:10:10.000Z",
+    type: "died",
+    attackerName: "Enemy",
+    victimName: "Victim",
+    victimSteam64ID: "76561198000000010",
+    weapon: "Soldier BAF Rifleman1",
+    rawLog: "raw give up disabled",
+  });
+
+  const kill = module.api.getEvents({ serverId: "BZSS_Main", type: "kill" })[0];
+  assert.equal(kill.weapon.displayName, "Soldier BAF Rifleman1");
+  assert.equal(kill.weapon.resolvedFromHistory, undefined);
+  assert.ok(!kill.parse.warnings.includes("weapon_history_backfill"));
+
+  await module.stop();
+}
+
 async function testPlayerEventsAndClear() {
   const { module, listeners } = createHarness();
   await module.start();
@@ -379,6 +478,8 @@ await testGiveUpSameTeamKeepsFriendlyFireLabelInProcessedData();
 await testTeamWoundGetsTkDownLabelInProcessedData();
 await testProcessedDataPreservesAllIncomingFlags();
 await testProcessedDataBackfillsFriendlyFireFlags();
+await testWeaponHistoryBackfillsPlaceholderWeapon();
+await testWeaponHistoryBackfillCanBeDisabled();
 await testReviveEventIsKeptWithoutFriendlyFire();
 await testPlayerEventsAndClear();
 
