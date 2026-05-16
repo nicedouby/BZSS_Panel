@@ -25,6 +25,7 @@ export async function renderPage({ root, api, apiFetch }) {
     type: "all",
     search: "",
     limit: 500,
+    hoverKey: "",
     events: [],
     overview: {
       stats: { total: 0, damage: 0, wound: 0, kill: 0, friendlyFire: 0, teamDamage: 0, teamWound: 0, teamKill: 0 },
@@ -75,6 +76,7 @@ export async function renderPage({ root, api, apiFetch }) {
               <tr>
                 <th>Time</th>
                 <th>Type</th>
+                <th>Mark</th>
                 <th>Attacker</th>
                 <th>Victim</th>
                 <th>Damage</th>
@@ -117,7 +119,7 @@ export async function renderPage({ root, api, apiFetch }) {
     state.events = data.events ?? [];
     state.overview = data.overview ?? state.overview;
     renderStats(els, state.overview);
-    renderTable(els.body, state.events);
+    renderTable(els.body, state.events, state.hoverKey);
     els.status.textContent = `宸插埛鏂?${new Date().toLocaleTimeString("zh-CN", { hour12: false })}`;
   }
 
@@ -204,25 +206,29 @@ function renderStats(els, overview) {
   els.updated.textContent = formatTime(overview?.lastUpdatedAt);
 }
 
-function renderTable(tbody, events) {
+function renderTable(tbody, events, hoverKey = "") {
   if (!events.length) {
-    tbody.innerHTML = `<tr><td colspan="9" class="kill-empty-cell">No clean combat events yet</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="kill-empty-cell">No clean combat events yet</td></tr>`;
     return;
   }
 
-  tbody.innerHTML = events.map((event, index) => `
-    <tr class="combat-row combat-row-${TYPE_CLASSES[event.type] || "unknown"} ${event.relation?.isFriendlyFire ? "combat-row-tk" : ""}">
+  tbody.innerHTML = events.map((event, index) => {
+    const pairKey = eventPairKey(event);
+    return `
+    <tr class="combat-row combat-row-${TYPE_CLASSES[event.type] || "unknown"} ${event.relation?.isFriendlyFire ? "combat-row-tk" : ""} ${isRowHighlighted(event, hoverKey) ? "combat-row-hovered" : ""}" data-event-pair-key="${esc(pairKey)}">
       <td class="combat-time-cell">${esc(formatTime(event.time))}</td>
       <td><span class="combat-type-badge ${event.relation?.isFriendlyFire ? "tk" : (TYPE_CLASSES[event.type] || "")}">${esc(TYPE_LABELS[event.type] || event.type)}</span></td>
-      <td>${playerCell(event.attacker)}</td>
-      <td>${playerCell(event.victim)}</td>
+      <td>${flagCell(event)}</td>
+      <td>${playerCell(event.attacker, "attacker", hoverKey, pairKey)}</td>
+      <td>${playerCell(event.victim, "victim", hoverKey, pairKey)}</td>
       <td class="combat-damage-cell">${event.damage == null ? "-" : esc(trimNumber(event.damage))}</td>
       <td>${esc(event.weapon?.displayName || event.weapon?.cleaned || event.weapon?.raw || "Unknown")}</td>
       <td>${relationCell(event.relation)}</td>
       <td>${parseCell(event.parse)}</td>
       <td><button type="button" class="combat-raw-btn" data-clean-event-index="${index}">鏌ョ湅</button></td>
     </tr>
-  `).join("");
+  `;
+  }).join("");
 
   tbody.querySelectorAll("[data-clean-event-index]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -230,9 +236,24 @@ function renderTable(tbody, events) {
       if (event) openCleanCombatDetailModal(event);
     });
   });
+
+  tbody.querySelectorAll("[data-event-pair-key]").forEach((row) => {
+    const key = String(row.dataset.eventPairKey ?? "").trim().toLowerCase();
+    if (!key) return;
+    row.addEventListener("mouseenter", () => {
+      if (state.hoverKey === key) return;
+      setHoverKey(tbody, events, key);
+    });
+    row.addEventListener("mouseleave", () => {
+      if (!state.hoverKey) return;
+      setHoverKey(tbody, events, "");
+    });
+  });
+
+  applyHoverState(tbody, events, hoverKey);
 }
 
-function playerCell(player = {}) {
+function playerCell(player = {}, side = "", hoverKey = "", pairKey = "") {
   const team = player.teamID === "" || player.teamID == null ? "?" : String(player.teamID);
   const flags = [
     player.isFallback ? "fallback" : "",
@@ -243,11 +264,23 @@ function playerCell(player = {}) {
     player.eosID ? `EOS ${player.eosID}` : "",
     player.controllerID ? `Controller ${player.controllerID}` : "",
   ].filter(Boolean).join(" / ");
+  const isHighlighted = pairKey && hoverKey && pairKey === hoverKey;
   return `
-    <div class="combat-player-cell">
-      <strong>${esc(`${player.name || "Unknown"} (Team ${team})`)}</strong>
+    <div class="combat-player-cell ${isHighlighted ? "is-highlighted" : ""}" data-pair-key="${esc(pairKey)}" data-player-side="${esc(side)}">
+      <strong>${esc(`${player.name || "Unknown"}`)}</strong>
+      <div class="combat-player-meta">${esc(`Team ID ${team} / Squad ID ${blank(player.squadID)}`)}</div>
       ${ids ? `<span>${esc(ids)}</span>` : ""}
       ${flags ? `<span>${esc(flags)}</span>` : ""}
+    </div>
+  `;
+}
+
+function flagCell(event = {}) {
+  const labels = eventFlagLabels(event);
+  if (!labels.length) return `<span class="combat-flag-empty">-</span>`;
+  return `
+    <div class="combat-flag-cell">
+      ${labels.map((label) => `<span class="combat-flag-chip">${esc(label)}</span>`).join("")}
     </div>
   `;
 }
@@ -256,6 +289,52 @@ function relationCell(relation = {}) {
   const same = relation.sameTeam ? "\u540c\u961f" : "\u975e\u540c\u961f";
   const ff = relation.isFriendlyFire ? `\u53cb\u519b ${relation.friendlyFireType || ""}` : "\u6b63\u5e38";
   return `<div class="combat-player-cell"><strong>${esc(ff)}</strong><span>${esc(`${same} / ${relation.teamSource || "unknown"}`)}</span></div>`;
+}
+
+function eventFlagLabels(event = {}) {
+  const direct = Array.isArray(event?.eventFlagLabels) ? event.eventFlagLabels : [];
+  if (direct.length) return direct.map((label) => String(label)).filter(Boolean);
+  const structured = Array.isArray(event?.eventFlags) ? event.eventFlags : [];
+  return structured.map((flag) => String(flag?.label ?? "")).filter(Boolean);
+}
+
+function eventPairKey(event = {}) {
+  const attackerKey = displayedPlayerKey(event.attacker?.name);
+  const victimKey = displayedPlayerKey(event.victim?.name);
+  if (!attackerKey || !victimKey) return "";
+  return `${attackerKey}::${victimKey}`;
+}
+
+function displayedPlayerKey(value = "") {
+  const key = String(value ?? "")
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+  return key && key !== "unknown" ? key : "";
+}
+
+function isRowHighlighted(event = {}, hoverKey = "") {
+  const key = String(hoverKey ?? "").trim().toLowerCase();
+  if (!key) return false;
+  return eventPairKey(event) === key;
+}
+
+function setHoverKey(tbody, events, key) {
+  state.hoverKey = key;
+  applyHoverState(tbody, events, key);
+}
+
+function applyHoverState(tbody, events, hoverKey = "") {
+  const key = String(hoverKey ?? "").trim().toLowerCase();
+  tbody.querySelectorAll("tr.combat-row").forEach((row, index) => {
+    const event = events[index];
+    row.classList.toggle("combat-row-hovered", Boolean(key && event && isRowHighlighted(event, key)));
+    row.querySelectorAll("[data-pair-key]").forEach((cell) => {
+      const pairKey = String(cell.dataset.pairKey ?? "").trim().toLowerCase();
+      cell.classList.toggle("is-highlighted", Boolean(key && pairKey && pairKey === key));
+    });
+  });
 }
 
 function parseCell(parse = {}) {

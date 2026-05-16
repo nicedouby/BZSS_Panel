@@ -10,9 +10,12 @@
       </header>
 
       <div class="detail-grid">
-        <div class="identity-card">
+        <div class="identity-card" :class="{ 'is-highlighted': isHighlighted(attackerHighlightKey) }">
           <span>{{ t("combat.attacker") }}</span>
           <strong>{{ attackerName }}</strong>
+          <div v-if="attackerMetaTexts.length" class="identity-meta">
+            <span v-for="item in attackerMetaTexts" :key="item">{{ item }}</span>
+          </div>
           <small v-if="attackerIp">IP {{ attackerIp }}</small>
           <small v-if="attackerSteamID">SteamID {{ attackerSteamID }}</small>
           <small v-if="attackerEOSID">EOSID {{ attackerEOSID }}</small>
@@ -23,9 +26,12 @@
             <button v-if="attackerIp" type="button" class="mini-action" @click="copyValue(attackerIp, 'IP')">{{ t("common.copy") }} IP</button>
           </div>
         </div>
-        <div class="identity-card">
+        <div class="identity-card" :class="{ 'is-highlighted': isHighlighted(victimHighlightKey) }">
           <span>{{ t("combat.victim") }}</span>
           <strong>{{ victimName }}</strong>
+          <div v-if="victimMetaTexts.length" class="identity-meta">
+            <span v-for="item in victimMetaTexts" :key="item">{{ item }}</span>
+          </div>
           <small v-if="victimIp">IP {{ victimIp }}</small>
           <small v-if="victimSteamID">SteamID {{ victimSteamID }}</small>
           <small v-if="victimEOSID">EOSID {{ victimEOSID }}</small>
@@ -66,6 +72,7 @@ import { t } from "../../i18n";
 
 const props = defineProps<{
   event: any | null;
+  highlightKey?: string;
 }>();
 
 defineEmits<{
@@ -76,15 +83,25 @@ const router = useRouter();
 const ui = useUiStore();
 
 const prettyEvent = computed(() => JSON.stringify(props.event, null, 2));
-const attackerName = computed(() => String(props.event?.attacker?.name ?? props.event?.attackerName ?? "-") );
-const victimName = computed(() => String(props.event?.victim?.name ?? props.event?.victimName ?? "-") );
+const attackerName = computed(() => String(props.event?.attacker?.name ?? props.event?.attackerName ?? "-"));
+const victimName = computed(() => String(props.event?.victim?.name ?? props.event?.victimName ?? "-"));
 const attackerSteamID = computed(() => String(props.event?.attacker?.steamID ?? props.event?.attackerSteamID ?? props.event?.attacker?.steamId ?? "").trim());
 const attackerEOSID = computed(() => String(props.event?.attacker?.eosID ?? props.event?.attackerEOSID ?? "").trim());
 const attackerIp = computed(() => String(props.event?.attacker?.current_ip ?? props.event?.attacker?.ip ?? props.event?.attackerIp ?? "").trim());
+const attackerHighlightKey = computed(() => playerHighlightKey(props.event?.attacker, props.event?.attackerName, props.event?.attackerSteamID, props.event?.attackerEOSID, props.event?.attackerControllerID));
+const attackerMetaTexts = computed(() => [
+  formatTeamText(props.event?.attacker?.teamID ?? props.event?.attacker?.teamId ?? props.event?.attackerTeamID),
+  formatSquadText(props.event?.attacker?.squadID ?? props.event?.attacker?.squadId ?? props.event?.attackerSquadID),
+].filter(Boolean));
 const attackerSearchKey = computed(() => attackerName.value !== "-" ? attackerName.value : (attackerSteamID.value || attackerEOSID.value || attackerIp.value));
 const victimSteamID = computed(() => String(props.event?.victim?.steamID ?? props.event?.victimSteamID ?? props.event?.victim?.steamId ?? "").trim());
 const victimEOSID = computed(() => String(props.event?.victim?.eosID ?? props.event?.victimEOSID ?? "").trim());
 const victimIp = computed(() => String(props.event?.victim?.current_ip ?? props.event?.victim?.ip ?? props.event?.victimIp ?? "").trim());
+const victimHighlightKey = computed(() => playerHighlightKey(props.event?.victim, props.event?.victimName, props.event?.victimSteamID, props.event?.victimEOSID, props.event?.victimControllerID));
+const victimMetaTexts = computed(() => [
+  formatTeamText(props.event?.victim?.teamID ?? props.event?.victim?.teamId ?? props.event?.victimTeamID),
+  formatSquadText(props.event?.victim?.squadID ?? props.event?.victim?.squadId ?? props.event?.victimSquadID),
+].filter(Boolean));
 const victimSearchKey = computed(() => victimName.value !== "-" ? victimName.value : (victimSteamID.value || victimEOSID.value || victimIp.value));
 const eventFlagLabels = computed(() => {
   const direct = Array.isArray(props.event?.eventFlagLabels) ? props.event.eventFlagLabels : [];
@@ -94,7 +111,7 @@ const eventFlagLabels = computed(() => {
 });
 const displayType = computed(() => {
   const type = String(props.event?.type ?? props.event?.eventName ?? "").trim();
-  if (type === "revive") return t("combat.revive", "复苏");
+  if (type === "revive") return t("combat.revive", "revive");
   return type || t("combat.eventType");
 });
 
@@ -102,6 +119,35 @@ function formatTime(value: unknown) {
   const text = String(value ?? "");
   const date = new Date(text);
   return Number.isNaN(date.getTime()) ? text : date.toLocaleString();
+}
+
+function formatTeamText(teamId: unknown) {
+  const normalized = teamId == null || teamId === "" ? "" : String(teamId);
+  return normalized ? `Team ID ${normalized}` : "";
+}
+
+function formatSquadText(squadId: unknown) {
+  const normalized = squadId == null || squadId === "" ? "" : String(squadId);
+  return normalized ? `Squad ID ${normalized}` : "";
+}
+
+function playerHighlightKey(entity: any, fallbackName = "", fallbackSteam = "", fallbackEos = "", fallbackController = "") {
+  const identity = entity?.steamID
+    ?? entity?.steamId
+    ?? fallbackSteam
+    ?? entity?.eosID
+    ?? entity?.eosId
+    ?? fallbackEos
+    ?? entity?.controllerID
+    ?? entity?.controllerId
+    ?? fallbackController
+    ?? entity?.name
+    ?? fallbackName;
+  return String(identity ?? "").trim().toLowerCase();
+}
+
+function isHighlighted(key: string) {
+  return Boolean(key && String(props.highlightKey ?? "").trim().toLowerCase() === key);
 }
 
 async function copyValue(value: string, label: string) {
@@ -175,9 +221,32 @@ function searchPlayer(value: string) {
   gap: 6px;
 }
 
+.identity-card.is-highlighted {
+  outline: 2px solid rgba(139, 182, 255, 0.58);
+  box-shadow: 0 0 0 1px rgba(139, 182, 255, 0.2), 0 0 18px rgba(139, 182, 255, 0.12);
+}
+
 .identity-card small {
   color: #98a5af;
   font-size: 12px;
+}
+
+.identity-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.identity-meta span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid #3c4a57;
+  background: rgba(10, 14, 18, 0.36);
+  color: #b8c3cb;
+  font-size: 11px;
 }
 
 .action-row {

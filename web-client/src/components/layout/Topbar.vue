@@ -1,36 +1,52 @@
 <template>
-  <header class="topbar">
-    <div class="topbar-start">
-      <button type="button" class="menu-button" @click="toggleSidebar">
-        {{ sidebarButtonLabel }}
-      </button>
-      <div class="topbar-copy">
-        <strong>{{ pageTitle }}</strong>
-        <div class="topbar-meta">
-          <span class="topbar-subtitle">{{ currentLayer }}</span>
-          <button
-            type="button"
-            class="warmup-chip"
-            :data-warmup="warmupState ? 'on' : 'off'"
-            :disabled="warmupBusy"
-            @click="toggleWarmup"
-          >
-            {{ warmupLabel }}
-          </button>
+  <header class="topbar" :class="{ 'match-context': showMatchContext }">
+    <div class="topbar-grid">
+      <div class="topbar-brand">
+        <button type="button" class="menu-button" @click="toggleSidebar">
+          {{ sidebarButtonLabel }}
+        </button>
+        <div class="topbar-copy">
+          <strong>{{ pageTitle }}</strong>
+          <div class="topbar-meta">
+            <span class="topbar-subtitle">{{ subtitleLabel }}</span>
+            <button
+              type="button"
+              class="warmup-chip"
+              :data-warmup="warmupState ? 'on' : 'off'"
+              :disabled="warmupBusy"
+              @click="toggleWarmup"
+            >
+              {{ warmupLabel }}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-    <div class="topbar-end">
-      <div class="topbar-metrics">
-        <StatusBadge :tone="runtimeTone">{{ runtimeLabel }}</StatusBadge>
-        <span class="metric primary">{{ t("topbar.players", "", { count: playerCount }) }}</span>
-        <span class="metric primary">{{ t("topbar.tps", "", { value: tps }) }}</span>
-        <span class="metric primary log-clock">日志时间 {{ logClockLabel }}</span>
-        <span class="metric optional">Queue {{ queueCount }}</span>
-        <span class="metric optional">Next {{ nextLayer }}</span>
-        <span v-if="runtimeError" class="metric error optional">{{ runtimeError }}</span>
+
+      <div class="topbar-center">
+        <div v-if="showMatchContext" class="match-summary">
+          <span class="match-chip match-chip-strong">{{ matchPlayersLabel }}</span>
+          <span class="match-chip match-chip-team1">{{ t("match.team1", "", { count: matchTeam1Count }) }}</span>
+          <span class="match-chip match-chip-team2">{{ t("match.team2", "", { count: matchTeam2Count }) }}</span>
+          <span class="match-chip">{{ matchTimeLabel }}</span>
+          <span class="match-chip">{{ matchTpsLabel }}</span>
+          <span class="match-chip" :class="statusTone(matchRconStatus)">{{ matchRconLabel }}</span>
+          <span class="match-chip" :class="statusTone(matchLogsStatus)">{{ matchLogsLabel }}</span>
+          <span class="match-chip match-chip-muted">{{ matchUpdatedLabel }}</span>
+        </div>
       </div>
-      <UserMenu @open-plugin-center="emit('open-plugin-center')" />
+
+      <div class="topbar-actions">
+        <div class="topbar-metrics">
+          <StatusBadge :tone="runtimeTone">{{ runtimeLabel }}</StatusBadge>
+          <span v-if="!showMatchContext" class="metric primary">{{ t("topbar.players", "", { count: playerCount }) }}</span>
+          <span v-if="!showMatchContext" class="metric primary">{{ t("topbar.tps", "", { value: tps }) }}</span>
+          <span v-if="!showMatchContext" class="metric optional">Queue {{ queueCount }}</span>
+          <span v-if="!showMatchContext" class="metric optional">Next {{ nextLayer }}</span>
+          <span class="metric log-clock">Log {{ logClockLabel }}</span>
+          <span v-if="runtimeError" class="metric error optional">{{ runtimeError }}</span>
+        </div>
+        <UserMenu @open-plugin-center="emit('open-plugin-center')" />
+      </div>
     </div>
   </header>
 </template>
@@ -40,6 +56,8 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useServerStore } from "../../stores/server.store";
 import { usePlayerStore } from "../../stores/player.store";
+import { useSquadStore } from "../../stores/squad.store";
+import { useMatchStore } from "../../stores/match.store";
 import { getRuntimeSyncState } from "../../app/runtimeSync";
 import { useUiStore } from "../../stores/ui.store";
 import { fetchWarmupState, updateWarmupState } from "../../app/warmupApi";
@@ -53,6 +71,8 @@ const emit = defineEmits<{
 
 const server = useServerStore();
 const players = usePlayerStore();
+const squads = useSquadStore();
+const match = useMatchStore();
 const runtime = getRuntimeSyncState();
 const route = useRoute();
 const ui = useUiStore();
@@ -61,12 +81,7 @@ const warmupLoading = ref(false);
 const warmupSaving = ref(false);
 
 const webStatus = computed(() => server.snapshot.webStatus ?? server.snapshot ?? {});
-const pageTitle = computed(() => {
-  const titleKey = route.meta.titleKey ? String(route.meta.titleKey) : "";
-  const title = route.meta.title ? String(route.meta.title) : "";
-  if (titleKey) return t(titleKey, title);
-  return String(title || server.snapshot.serverName || webStatus.value.serverName || server.snapshot.name || webStatus.value.name || "BZSS Panel");
-});
+const showMatchContext = computed(() => route.path === "/match-status");
 const currentLayer = computed(() => stableDisplayValue(
   server.snapshot.currentLayer,
   webStatus.value.currentLayer,
@@ -78,6 +93,31 @@ const currentLayer = computed(() => stableDisplayValue(
   webStatus.value.mapName,
   t("topbar.unknownLayer", "Unknown Layer"),
 ));
+const currentMode = computed(() => stableDisplayValue(
+  server.snapshot.gameMode,
+  webStatus.value.gameMode,
+  server.snapshot.mode,
+  webStatus.value.mode,
+  t("match.unknownMode", "Unknown Mode"),
+));
+const subtitleLabel = computed(() => {
+  if (showMatchContext.value) return `${currentLayer.value} / ${currentMode.value}`;
+  return currentLayer.value;
+});
+const matchServerName = computed(() => stableDisplayValue(
+  server.snapshot.serverName,
+  webStatus.value.serverName,
+  server.snapshot.name,
+  webStatus.value.name,
+  t("match.unknownServer", "Unknown Server"),
+));
+const pageTitle = computed(() => {
+  if (showMatchContext.value) return matchServerName.value;
+  const titleKey = route.meta.titleKey ? String(route.meta.titleKey) : "";
+  const title = route.meta.title ? String(route.meta.title) : "";
+  if (titleKey) return t(titleKey, title);
+  return String(title || server.snapshot.serverName || webStatus.value.serverName || server.snapshot.name || webStatus.value.name || "BZSS Panel");
+});
 const nextLayer = computed(() => stableDisplayValue(
   server.snapshot.nextLayer,
   webStatus.value.nextLayer,
@@ -88,10 +128,7 @@ const queueCount = computed(() => {
   const value = Number(server.snapshot?.queueCount ?? server.snapshot?.webStatus?.queueCount);
   return Number.isFinite(value) ? value : 0;
 });
-const tps = computed(() => {
-  const value = Number(server.snapshot?.tps ?? server.snapshot?.webStatus?.tps);
-  return Number.isFinite(value) && value > 0 ? value.toFixed(1) : "--";
-});
+const tps = computed(() => formatTps(server.snapshot?.tps ?? server.snapshot?.webStatus?.tps ?? null));
 const logClockSeconds = computed(() => {
   const value = Number(
     webStatus.value.logClockSeconds
@@ -126,6 +163,53 @@ const warmupLabel = computed(() => {
 });
 const warmupBusy = computed(() => warmupLoading.value || warmupSaving.value);
 
+const matchTeam1Count = computed(() => match.team1Players.length);
+const matchTeam2Count = computed(() => match.team2Players.length);
+const matchTotalPlayers = computed(() => matchTeam1Count.value + matchTeam2Count.value);
+const matchMaxPlayers = computed(() => {
+  const value = Number(server.snapshot?.maxPlayers ?? server.snapshot?.webStatus?.maxPlayers);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 100;
+});
+const matchPlayersLabel = computed(() => t("match.players", "", {
+  current: matchTotalPlayers.value,
+  max: matchMaxPlayers.value,
+}));
+const matchMatchTimeSeconds = computed(() => {
+  const value = Number(
+    server.snapshot?.matchTimeSeconds
+      ?? server.snapshot?.playtime
+      ?? server.snapshot?.webStatus?.matchTimeSeconds
+      ?? server.snapshot?.webStatus?.playtime,
+  );
+
+  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
+});
+const matchTimeLabel = computed(() => `Time ${formatMatchTime(matchMatchTimeSeconds.value)}`);
+const matchTpsLabel = computed(() => `TPS ${formatTps(
+  server.snapshot?.tps
+    ?? server.snapshot?.webStatus?.tps
+    ?? null,
+)}`);
+const matchRconStatus = computed(() => String(
+  server.snapshot?.rconStatus
+    ?? webStatus.value.rcon
+    ?? "unknown",
+));
+const matchRconLabel = computed(() => `RCON ${formatRconStatus(matchRconStatus.value)}`);
+const matchLogsStatus = computed(() => (runtime.lastError ? "stale" : "live"));
+const matchLogsLabel = computed(() => `Log ${formatLogsStatus(matchLogsStatus.value)}`);
+const matchUpdatedAt = computed(() => Math.max(
+  server.updatedAt,
+  players.updatedAt,
+  squads.updatedAt,
+  toMillis(server.snapshot?.matchState?.serverStatus?.lastUpdatedAt),
+  toMillis(server.snapshot?.matchState?.players?.lastUpdatedAt),
+  toMillis(server.snapshot?.matchState?.squads?.lastUpdatedAt),
+));
+const matchUpdatedLabel = computed(() => t("match.updated", "", {
+  time: formatUpdateTime(matchUpdatedAt.value),
+}));
+
 onMounted(() => {
   void loadWarmupState();
 });
@@ -153,12 +237,12 @@ async function toggleWarmup() {
 
   const targetWarmup = !warmupState.value;
   const confirmed = await ui.openConfirm({
-    title: targetWarmup ? "开启暖服" : "关闭暖服",
+    title: targetWarmup ? "Enable warmup" : "Disable warmup",
     message: targetWarmup
-      ? "确认后将把当前服务器切换为暖服状态。"
-      : "确认后将把当前服务器切换为正式局状态。",
-    confirmText: targetWarmup ? "确认开启" : "确认关闭",
-    cancelText: "取消",
+      ? "Confirm enabling warmup for the current server."
+      : "Confirm disabling warmup for the current server.",
+    confirmText: targetWarmup ? "Confirm enable" : "Confirm disable",
+    cancelText: "Cancel",
     tone: targetWarmup ? "warn" : "idle",
   });
   if (!confirmed) return;
@@ -207,6 +291,49 @@ function formatDuration(totalSeconds: number) {
   return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
 }
 
+function formatMatchTime(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${minutes}:${String(secs).padStart(2, "0")}`;
+}
+
+function formatTps(value: number | null | undefined): string {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number.toFixed(1) : "--";
+}
+
+function formatRconStatus(status: string): string {
+  if (status === "connected") return t("match.rconConnected");
+  if (status === "disconnected") return t("match.rconDisconnected");
+  if (status === "error") return t("match.rconError");
+  if (status === "disabled") return t("match.rconDisabled");
+  return t("common.unknown");
+}
+
+function formatLogsStatus(status: string): string {
+  if (status === "live") return t("match.logsLive");
+  if (status === "stale") return t("match.logsStale");
+  if (status === "error") return t("common.error");
+  return t("common.unknown");
+}
+
+function formatUpdateTime(time: number): string {
+  if (!time) return "--:--:--";
+  const date = new Date(time);
+  return date.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function statusTone(status: string): string {
+  if (status === "connected" || status === "live") return "ok";
+  if (status === "error") return "error";
+  if (status === "disconnected" || status === "stale") return "warn";
+  return "idle";
+}
+
 function stableDisplayValue(...values: unknown[]) {
   for (const value of values) {
     if (typeof value === "string") {
@@ -222,6 +349,13 @@ function stableDisplayValue(...values: unknown[]) {
   return t("topbar.unknownLayer", "Unknown Layer");
 }
 
+function toMillis(value: string | number | null | undefined): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (!value) return 0;
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function toggleSidebar() {
   if (window.matchMedia("(max-width: 780px)").matches) {
     ui.toggleMobileSidebar();
@@ -233,19 +367,22 @@ function toggleSidebar() {
 
 <style scoped>
 .topbar {
-  height: 58px;
-  padding: 0 18px;
+  padding: 10px 18px 12px;
   border-bottom: 1px solid #273039;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.01)), rgba(255, 255, 255, 0.004)),
     #14191f;
 }
 
-.topbar-start {
+.topbar-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.1fr) minmax(0, 1.6fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.topbar-brand {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -314,6 +451,65 @@ function toggleSidebar() {
   min-width: 70px;
 }
 
+.topbar-center {
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.match-summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.match-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(122, 162, 184, 0.22);
+  background: rgba(122, 162, 184, 0.08);
+  color: #dce4e8;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.match-chip-strong {
+  color: #f4f7f8;
+  border-color: rgba(122, 162, 184, 0.32);
+}
+
+.match-chip-team1 {
+  color: var(--color-team1-primary);
+  border-color: rgba(55, 200, 255, 0.25);
+  background: rgba(55, 200, 255, 0.07);
+}
+
+.match-chip-team2 {
+  color: var(--color-team2-primary);
+  border-color: rgba(255, 155, 69, 0.25);
+  background: rgba(255, 155, 69, 0.07);
+}
+
+.match-chip-muted {
+  color: #aeb8bf;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
 .topbar-metrics {
   display: flex;
   align-items: center;
@@ -349,29 +545,58 @@ function toggleSidebar() {
   display: inline-flex;
 }
 
-.topbar-end {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-width: 0;
+@media (max-width: 1180px) {
+  .topbar-grid {
+    grid-template-columns: minmax(250px, 1fr) minmax(0, 1.1fr);
+    grid-template-areas:
+      "brand actions"
+      "center center";
+  }
+
+  .topbar-brand {
+    grid-area: brand;
+  }
+
+  .topbar-center {
+    grid-area: center;
+    justify-content: flex-start;
+  }
+
+  .topbar-actions {
+    grid-area: actions;
+  }
 }
 
 @media (max-width: 780px) {
   .topbar {
-    padding: 0 14px;
-    height: auto;
-    min-height: 58px;
+    padding: 10px 14px 12px;
+  }
+
+  .topbar-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "brand"
+      "actions"
+      "center";
+    gap: 10px;
+  }
+
+  .topbar-brand {
+    align-items: flex-start;
     flex-wrap: wrap;
   }
 
-  .topbar-end {
-    width: 100%;
+  .topbar-actions {
     justify-content: space-between;
   }
 
   .topbar-metrics {
     gap: 8px;
     overflow: hidden;
+  }
+
+  .topbar-center {
+    justify-content: flex-start;
   }
 }
 

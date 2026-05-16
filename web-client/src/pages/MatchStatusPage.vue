@@ -1,6 +1,5 @@
 <template>
   <div class="squad-admin-layout">
-    <MatchHeaderBar :data="matchHeaderData" />
     <SquadPageToolbar
       :search-query="pageState.searchQuery"
       :filter-mode="pageState.filterMode"
@@ -119,13 +118,11 @@ import { useJobStore } from "../stores/job.store";
 import { useUiStore } from "../stores/ui.store";
 import {
   adaptTeam,
-  adaptMatchHeader,
   buildSquadLifecycleLookup,
   filterTeamsBySearch,
 } from "../utils/squad-admin-adapter";
 import DataState from "../components/common/DataState.vue";
 import ErrorBlock from "../components/common/ErrorBlock.vue";
-import MatchHeaderBar from "../components/squad-admin/MatchHeaderBar.vue";
 import SquadPageToolbar from "../components/squad-admin/SquadPageToolbar.vue";
 import TeamColumn from "../components/squad-admin/TeamColumn.vue";
 import PlayerDetailDrawer from "../components/squad-admin/PlayerDetailDrawer.vue";
@@ -293,10 +290,6 @@ const viewModels = computed(() => {
 });
 
 const viewerPerspectiveText = computed(() => viewModels.value.viewerPerspectiveText);
-
-const matchHeaderData = computed(() => {
-  return adaptMatchHeader(server, runtime, match, matchSnapshot.value);
-});
 
 const playtimeProgress = computed(() => playtimeJob.value?.progress ?? null);
 const playtimeSelectedCount = computed(() => Number(playtimeProgress.value?.selected ?? 0));

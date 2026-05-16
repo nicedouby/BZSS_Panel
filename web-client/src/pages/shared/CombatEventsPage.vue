@@ -32,12 +32,14 @@
 
       <CombatEventTable
         :events="events"
+        :highlight-key="hoverKey"
         @select="selectedEvent = $event"
         @search-player="searchPlayer"
+        @hover-player="hoverKey = $event"
       />
     </DataState>
 
-    <CombatEventDetailModal :event="selectedEvent" @close="selectedEvent = null" />
+    <CombatEventDetailModal :event="selectedEvent" :highlight-key="hoverKey" @close="selectedEvent = null" />
   </section>
 </template>
 
@@ -108,6 +110,7 @@ const overview = computed(() => query.data.value?.overview ?? null);
 const total = computed(() => Number(overview.value?.count ?? events.value.length));
 const hasNextPage = computed(() => filters.offset + filters.limit < total.value);
 const selectedEvent = ref<any | null>(null);
+const hoverKey = ref("");
 
 const clearMutation = useMutation({
   mutationFn: async () => apiPost(props.clearEndpoint, {}),

@@ -15,9 +15,17 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(event, index) in events" :key="event.id || `${event.time}-${index}`">
+          <tr
+            v-for="(event, index) in events"
+            :key="event.id || `${event.time}-${index}`"
+            :class="rowClass(event, index)"
+            @mouseenter="setHoverPair(event)"
+            @mouseleave="clearHoverPair"
+          >
             <td>{{ formatTime(event.time) }}</td>
-            <td>{{ eventType(event) }}</td>
+            <td>
+              <span class="event-type-pill">{{ eventType(event) }}</span>
+            </td>
             <td>
               <div class="flag-row">
                 <span v-for="label in eventFlagLabels(event)" :key="label" class="flag-chip">
@@ -27,18 +35,40 @@
               </div>
             </td>
             <td>
-              <button type="button" class="name-button" @click="$emit('search-player', attackerIdentity(event))">
-                {{ attackerName(event) }}
-              </button>
+              <div class="identity-cell">
+                <button
+                  type="button"
+                  class="name-button"
+                  :class="{ 'is-highlighted': isClusterHighlighted(event, index) }"
+                  @click="emit('search-player', attackerIdentity(event))"
+                >
+                  {{ attackerName(event) }}
+                </button>
+                <div v-if="attackerMeta(event)" class="identity-meta">
+                  <span v-if="attackerTeamText(event)">{{ attackerTeamText(event) }}</span>
+                  <span v-if="attackerSquadText(event)">{{ attackerSquadText(event) }}</span>
+                </div>
+              </div>
             </td>
             <td>
-              <button type="button" class="name-button" @click="$emit('search-player', victimIdentity(event))">
-                {{ victimName(event) }}
-              </button>
+              <div class="identity-cell">
+                <button
+                  type="button"
+                  class="name-button"
+                  :class="{ 'is-highlighted': isClusterHighlighted(event, index) }"
+                  @click="emit('search-player', victimIdentity(event))"
+                >
+                  {{ victimName(event) }}
+                </button>
+                <div v-if="victimMeta(event)" class="identity-meta">
+                  <span v-if="victimTeamText(event)">{{ victimTeamText(event) }}</span>
+                  <span v-if="victimSquadText(event)">{{ victimSquadText(event) }}</span>
+                </div>
+              </div>
             </td>
             <td>{{ event.damage ?? "-" }}</td>
             <td>{{ event.weapon?.displayName || event.weapon || event.causedBy || "-" }}</td>
-            <td><button type="button" @click="$emit('select', event)">{{ t("common.open") }}</button></td>
+            <td><button type="button" @click="emit('select', event)">{{ t("common.open") }}</button></td>
           </tr>
         </tbody>
       </table>
@@ -47,22 +77,45 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from "vue";
 import PageCard from "../common/PageCard.vue";
 import { t } from "../../i18n";
 
-defineProps<{
+const props = defineProps<{
   events: any[];
+  highlightKey?: string;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   (event: "select", value: any): void;
   (event: "search-player", value: string): void;
+  (event: "hover-player", value: string): void;
 }>();
 
+const hoveredPairKey = ref("");
+
 function eventType(event: any) {
-  const type = String(event.type || event.friendlyFireType || event.eventName || "").trim();
-  if (type === "revive") return t("combat.revive", "复苏");
+  const type = String(event?.type ?? event?.friendlyFireType ?? event?.eventName ?? "").trim().toLowerCase();
+  if (type === "revive") return t("combat.revive", "revive");
   return type || "-";
+}
+
+function rowClass(event: any, index: number) {
+  return [
+    "combat-row",
+    `combat-row--${eventRowKind(event)}`,
+    isRowHighlighted(index) ? "combat-row--highlighted" : "",
+    event.isFriendlyFire || event.isTeamKill || event.tk ? "combat-row--friendly" : "",
+  ].filter(Boolean);
+}
+
+function eventRowKind(event: any) {
+  const type = String(event?.type ?? event?.friendlyFireType ?? "").trim().toLowerCase();
+  if (type === "revive") return "revive";
+  if (type === "kill" || type === "death") return "kill";
+  if (type === "wound") return "wound";
+  if (type === "damage") return "damage";
+  return "unknown";
 }
 
 function attackerName(event: any) {
@@ -73,12 +126,36 @@ function attackerIdentity(event: any) {
   return event.attacker?.name || event.attackerName || event.attacker?.steamID || event.attackerSteamID || event.attacker?.eosID || event.attackerEOSID || "";
 }
 
+function attackerMeta(event: any) {
+  return formatIdentityMeta(event.attacker, event.attackerTeamID, event.attackerSquadID);
+}
+
+function attackerTeamText(event: any) {
+  return formatTeamText(event.attacker?.teamID ?? event.attacker?.teamId ?? event.attackerTeamID);
+}
+
+function attackerSquadText(event: any) {
+  return formatSquadText(event.attacker?.squadID ?? event.attacker?.squadId ?? event.attackerSquadID);
+}
+
 function victimName(event: any) {
   return event.victim?.name || event.victimName || "-";
 }
 
 function victimIdentity(event: any) {
   return event.victim?.name || event.victimName || event.victim?.steamID || event.victimSteamID || event.victim?.eosID || event.victimEOSID || "";
+}
+
+function victimMeta(event: any) {
+  return formatIdentityMeta(event.victim, event.victimTeamID, event.victimSquadID);
+}
+
+function victimTeamText(event: any) {
+  return formatTeamText(event.victim?.teamID ?? event.victim?.teamId ?? event.victimTeamID);
+}
+
+function victimSquadText(event: any) {
+  return formatSquadText(event.victim?.squadID ?? event.victim?.squadId ?? event.victimSquadID);
 }
 
 function formatTime(value: unknown) {
@@ -95,6 +172,63 @@ function eventFlagLabels(event: any) {
     return event.eventFlags.map((flag: any) => String(flag?.label ?? "")).filter(Boolean);
   }
   return [];
+}
+
+function formatIdentityMeta(entity: any, fallbackTeamId: unknown, fallbackSquadId: unknown) {
+  const teamId = entity?.teamID ?? entity?.teamId ?? fallbackTeamId ?? null;
+  const squadId = entity?.squadID ?? entity?.squadId ?? fallbackSquadId ?? null;
+  const parts = [
+    teamId == null || teamId === "" ? "" : `Team ID ${teamId}`,
+    squadId == null || squadId === "" ? "" : `Squad ID ${squadId}`,
+  ].filter(Boolean);
+  return parts.join(" / ");
+}
+
+function formatTeamText(teamId: unknown) {
+  const normalized = teamId == null || teamId === "" ? "" : String(teamId);
+  return normalized ? `Team ID ${normalized}` : "";
+}
+
+function formatSquadText(squadId: unknown) {
+  const normalized = squadId == null || squadId === "" ? "" : String(squadId);
+  return normalized ? `Squad ID ${normalized}` : "";
+}
+
+function eventPairKey(event: any) {
+  const attackerKey = displayedPlayerKey(attackerName(event));
+  const victimKey = displayedPlayerKey(victimName(event));
+  if (!attackerKey || !victimKey) return "";
+  return `${attackerKey}::${victimKey}`;
+}
+
+function setHoverPair(event: any) {
+  hoveredPairKey.value = eventPairKey(event);
+  emit("hover-player", hoveredPairKey.value);
+}
+
+function clearHoverPair() {
+  hoveredPairKey.value = "";
+  emit("hover-player", "");
+}
+
+function displayedPlayerKey(value: unknown) {
+  const key = String(value ?? "")
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+  return key && key !== "-" ? key : "";
+}
+
+function isRowHighlighted(index: number) {
+  const hoverKey = hoveredPairKey.value || String(props.highlightKey ?? "");
+  if (!hoverKey) return false;
+  if (index < 0) return false;
+  return eventPairKey(props.events[index]) === hoverKey;
+}
+
+function isClusterHighlighted(event: any, index: number) {
+  return isRowHighlighted(index);
 }
 </script>
 
@@ -122,6 +256,64 @@ th {
   font-weight: 600;
 }
 
+.combat-row td {
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.combat-row--damage td {
+  background: rgba(69, 123, 157, 0.24);
+  box-shadow: inset 0 0 0 1px rgba(121, 162, 191, 0.16);
+}
+
+.combat-row--wound td {
+  background: rgba(245, 158, 11, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.18);
+}
+
+.combat-row--kill td {
+  background: rgba(230, 57, 70, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(255, 125, 137, 0.18);
+}
+
+.combat-row--revive td {
+  background: rgba(57, 176, 130, 0.24);
+  box-shadow: inset 0 0 0 1px rgba(113, 206, 164, 0.16);
+}
+
+.combat-row--friendly td {
+  box-shadow: inset 4px 0 0 rgba(244, 162, 97, 1);
+}
+
+.combat-row--highlighted td {
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.35), rgba(96, 165, 250, 0.22)) !important;
+  box-shadow: inset 0 0 0 1px rgba(191, 219, 254, 0.58), 0 0 0 1px rgba(96, 165, 250, 0.28);
+  color: #f8fbff;
+}
+
+.combat-row--unknown td {
+  background: rgba(148, 163, 184, 0.16);
+}
+
+.combat-row:hover td {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(139, 182, 255, 0.22);
+  filter: saturate(1.1);
+}
+
+.event-type-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid #3a4651;
+  background: rgba(255, 255, 255, 0.03);
+  color: #edf2f4;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
 .name-button {
   border: 0;
   padding: 0;
@@ -134,6 +326,43 @@ th {
 .name-button:hover {
   color: #8bb6ff;
   text-decoration: underline;
+}
+
+.name-button.is-highlighted {
+  color: #ffffff;
+  text-decoration: underline;
+  text-shadow: 0 0 10px rgba(139, 182, 255, 0.45);
+}
+
+.identity-cell {
+  display: grid;
+  gap: 5px;
+  padding: 2px 4px;
+  border-radius: 6px;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.identity-cell:hover {
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 0 0 1px rgba(139, 182, 255, 0.30);
+}
+
+.identity-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.identity-meta span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid #3c4a57;
+  background: rgba(10, 14, 18, 0.36);
+  color: #b8c3cb;
+  font-size: 11px;
 }
 
 .flag-row {
@@ -149,9 +378,9 @@ th {
   min-height: 22px;
   padding: 0 8px;
   border-radius: 999px;
-  border: 1px solid #3a4651;
-  background: rgba(255, 255, 255, 0.03);
-  color: #d7e0e5;
+  border: 1px solid rgba(251, 191, 36, 0.34);
+  background: rgba(120, 53, 15, 0.4);
+  color: #fde68a;
   font-size: 12px;
   white-space: nowrap;
 }
