@@ -1,5 +1,7 @@
 ﻿// -*- coding: utf-8 -*-
 
+import { classifyWeaponType } from "./weapon-type.js";
+
 const VALID_TYPES = new Set(["damage", "wound", "kill", "revive"]);
 const DEFAULT_MAX_EVENTS = 5000;
 const DEFAULT_WEAPON_HISTORY_WINDOW_MS = 300000;
@@ -374,12 +376,24 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
     const raw = String(rawRecord.rawCausedBy ?? rawRecord.weapon ?? rawRecord.causedBy ?? "").trim();
     const fallback = String(rawRecord.causedBy ?? rawRecord.weapon ?? rawRecord.rawCausedBy ?? "").trim();
     const cleaned = cleanWeaponName(raw || fallback);
+    const displayName = cleaned || raw || fallback || "Unknown";
+    const weaponType = classifyWeaponType({
+      raw: raw || fallback,
+      cleaned,
+      displayName,
+    });
     return {
       raw: raw || fallback,
       cleaned,
-      category: String(rawRecord.causedByCategory ?? rawRecord.weaponCategory ?? "").trim(),
-      displayName: cleaned || raw || fallback || "Unknown",
+      category: String(rawRecord.weaponCategory ?? "").trim(),
+      displayName,
       sourceType: String(rawRecord.causedByCategory ?? "").trim() || (raw ? "rawCausedBy" : (fallback ? "causedBy" : "")),
+      weaponType,
+      typeKey: weaponType.key,
+      typeLabel: weaponType.label,
+      typeMatchedBy: weaponType.matchedBy,
+      typeRuleId: weaponType.ruleId,
+      typeMatchText: weaponType.matchedText,
     };
   }
 
@@ -400,6 +414,12 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       ...baseWeapon,
       cleaned: history.weapon.cleaned || baseWeapon.cleaned,
       displayName: history.weapon.displayName || history.weapon.cleaned || baseWeapon.displayName,
+      weaponType: cloneJsonSafe(history.weapon.weaponType) ?? baseWeapon.weaponType,
+      typeKey: history.weapon.typeKey || baseWeapon.typeKey,
+      typeLabel: history.weapon.typeLabel || baseWeapon.typeLabel,
+      typeMatchedBy: history.weapon.typeMatchedBy || baseWeapon.typeMatchedBy,
+      typeRuleId: history.weapon.typeRuleId || baseWeapon.typeRuleId,
+      typeMatchText: history.weapon.typeMatchText || baseWeapon.typeMatchText,
       resolvedFromHistory: true,
       resolutionSource: "weaponHistoryBackfill",
       historyBackfill: {
@@ -598,7 +618,8 @@ function buildDisplayText(type, attacker, victim, weapon, damage, relation) {
   const verb = type === "damage" ? "damaged" : type === "wound" ? "wounded" : "killed";
   const amount = damage == null || damage === "" ? "" : ` (${trimNumber(damage)})`;
   const ff = relation.isFriendlyFire ? " [friendly fire]" : "";
-  return `${attacker.name || "Unknown"} ${verb} ${victim.name || "Unknown"} with ${weapon.displayName || "Unknown"}${amount}${ff}`;
+  const typeSuffix = weapon?.typeLabel ? ` ${weapon.typeLabel}` : "";
+  return `${attacker.name || "Unknown"} ${verb} ${victim.name || "Unknown"} with ${weapon.displayName || "Unknown"}${typeSuffix}${amount}${ff}`;
 }
 
 function buildStats(list) {
@@ -639,6 +660,9 @@ function matchesSearch(event, search) {
     event.weapon?.cleaned,
     event.weapon?.displayName,
     event.weapon?.category,
+    event.weapon?.typeKey,
+    event.weapon?.typeLabel,
+    event.weapon?.typeMatchText,
     event.raw?.rawLog,
   ].some((value) => normalizeSearch(value).includes(search));
 }

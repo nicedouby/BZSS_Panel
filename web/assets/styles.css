@@ -1323,6 +1323,57 @@ body::before {
   box-shadow: 0 0 0 1px rgba(251, 113, 133, 0.12);
 }
 
+.combat-weapon-type-badge,
+.weapon-type-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 0 7px;
+  margin-left: 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  background: rgba(148, 163, 184, 0.12);
+  color: #dbe4ea;
+  font-size: 11px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.combat-weapon-type-badge.light,
+.weapon-type-badge.light {
+  border-color: rgba(96, 165, 250, 0.42);
+  background: rgba(96, 165, 250, 0.16);
+  color: #dbeafe;
+}
+
+.combat-weapon-type-badge.anti-tank,
+.weapon-type-badge.anti-tank {
+  border-color: rgba(244, 114, 182, 0.38);
+  background: rgba(244, 114, 182, 0.14);
+  color: #fbcfe8;
+}
+
+.combat-weapon-type-badge.explosive,
+.weapon-type-badge.explosive {
+  border-color: rgba(245, 158, 11, 0.42);
+  background: rgba(245, 158, 11, 0.16);
+  color: #fde68a;
+}
+
+.combat-weapon-type-badge.melee,
+.weapon-type-badge.melee {
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.14);
+  color: #bbf7d0;
+}
+
+.combat-weapon-type-badge.other,
+.weapon-type-badge.other {
+  border-color: rgba(148, 163, 184, 0.24);
+  background: rgba(148, 163, 184, 0.1);
+  color: #cbd5e1;
+}
+
 .combat-row-tk {
   background: linear-gradient(90deg, rgba(127, 29, 29, 0.28), rgba(127, 29, 29, 0.08));
 }

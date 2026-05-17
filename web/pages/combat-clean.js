@@ -222,7 +222,7 @@ function renderTable(tbody, events, hoverKey = "") {
       <td>${playerCell(event.attacker, "attacker", hoverKey, pairKey)}</td>
       <td>${playerCell(event.victim, "victim", hoverKey, pairKey)}</td>
       <td class="combat-damage-cell">${event.damage == null ? "-" : esc(trimNumber(event.damage))}</td>
-      <td>${esc(event.weapon?.displayName || event.weapon?.cleaned || event.weapon?.raw || "Unknown")}</td>
+      <td>${formatWeaponCell(event.weapon)}</td>
       <td>${relationCell(event.relation)}</td>
       <td>${parseCell(event.parse)}</td>
       <td><button type="button" class="combat-raw-btn" data-clean-event-index="${index}">鏌ョ湅</button></td>
@@ -422,7 +422,7 @@ function formatPlayerRef(player = {}) {
 
 function formatWeapon(weapon = {}) {
   return [
-    weapon.displayName || weapon.cleaned || weapon.raw || "Unknown",
+    `${weapon.displayName || weapon.cleaned || weapon.raw || "Unknown"}${weaponTypeText(weapon)}`,
     weapon.category ? `category=${weapon.category}` : "",
     weapon.sourceType ? `source=${weapon.sourceType}` : "",
     weapon.raw ? `raw=${weapon.raw}` : "",
@@ -441,6 +441,28 @@ function formatRelation(relation = {}) {
 
 function formatWarnings(warnings) {
   return Array.isArray(warnings) && warnings.length ? warnings.join(" / ") : "-";
+}
+
+function formatWeaponCell(weapon = {}) {
+  const name = esc(weapon.displayName || weapon.cleaned || weapon.raw || "Unknown");
+  const label = weaponTypeLabel(weapon);
+  if (!label) return name;
+  return `${name} <span class="combat-weapon-type-badge ${weaponTypeClass(weapon)}">${esc(label)}</span>`;
+}
+
+function weaponTypeLabel(weapon = {}) {
+  return String(weapon?.typeLabel ?? "").trim();
+}
+
+function weaponTypeClass(weapon = {}) {
+  const key = String(weapon?.typeKey ?? "").trim().toLowerCase();
+  if (!key) return "other";
+  return key.replace(/[^a-z0-9]+/g, "-");
+}
+
+function weaponTypeText(weapon = {}) {
+  const label = weaponTypeLabel(weapon);
+  return label ? ` (${label})` : "";
 }
 
 function blank(value) {

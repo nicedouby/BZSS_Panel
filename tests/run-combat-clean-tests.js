@@ -97,6 +97,33 @@ async function testAttackerNullptrFallsBackToVictimExactly() {
   await module.stop();
 }
 
+async function testWeaponTypeClassificationIsPreserved() {
+  const { module, listeners } = createHarness();
+  await module.start();
+
+  emitCombatResolved(listeners, {
+    sourceEventId: "raw:weapon-type",
+    serverId: "BZSS_Main",
+    time: "2026-05-10T01:00:30.000Z",
+    type: "damaged",
+    attackerName: "Attacker",
+    victimName: "Victim",
+    weapon: "BP_PMT76_A940",
+    rawCausedBy: "BP_PMT76_A940",
+    causedBy: "BP_PMT76_A940",
+    rawLog: "raw damage",
+  });
+
+  const clean = module.api.getEvents({ serverId: "BZSS_Main" })[0];
+  assert.equal(clean.weapon.displayName, "PMT76 A940");
+  assert.equal(clean.weapon.typeKey, "light");
+  assert.ok(clean.weapon.typeLabel);
+  assert.ok(clean.displayText.includes("PMT76 A940"));
+  assert.ok(clean.displayText.includes(clean.weapon.typeLabel));
+
+  await module.stop();
+}
+
 async function testRejectsNullptrVictim() {
   const { module, listeners, moduleEvents } = createHarness();
   await module.start();
@@ -505,6 +532,7 @@ async function testPlayerEventsAndClear() {
 }
 
 await testAttackerNullptrFallsBackToVictimExactly();
+await testWeaponTypeClassificationIsPreserved();
 await testRejectsNullptrVictim();
 await testResolvesPlayersAndRelation();
 await testGiveUpOnlyKeepsSingleLabelInProcessedData();

@@ -43,7 +43,13 @@
           </div>
         </div>
         <div><span>{{ t("combat.damage") }}</span><strong>{{ event.damage ?? "-" }}</strong></div>
-        <div><span>{{ t("common.source") }}</span><strong>{{ event.weapon?.displayName || event.weapon || event.causedBy || "-" }}</strong></div>
+        <div class="weapon-source-row">
+          <span>{{ t("common.source") }}</span>
+          <strong>
+            <span>{{ weaponName }}</span>
+            <span v-if="weaponTypeLabel" class="weapon-type-badge" :class="weaponTypeClass">{{ weaponTypeLabel }}</span>
+          </strong>
+        </div>
         <div><span>{{ t("combat.friendly") }}</span><strong>{{ event.relation?.isFriendlyFire || event.isFriendlyFire ? t("common.yes") : t("common.no") }}</strong></div>
         <div><span>{{ t("common.status") }}</span><strong>{{ event.parse?.status || event.parseStatus || "-" }}</strong></div>
         <div class="flag-card">
@@ -103,6 +109,12 @@ const victimMetaTexts = computed(() => [
   formatSquadText(props.event?.victim?.squadID ?? props.event?.victim?.squadId ?? props.event?.victimSquadID),
 ].filter(Boolean));
 const victimSearchKey = computed(() => victimName.value !== "-" ? victimName.value : (victimSteamID.value || victimEOSID.value || victimIp.value));
+const weaponName = computed(() => String(props.event?.weapon?.displayName ?? props.event?.weapon?.cleaned ?? props.event?.weapon ?? props.event?.causedBy ?? "-"));
+const weaponTypeLabel = computed(() => String(props.event?.weapon?.typeLabel ?? "").trim());
+const weaponTypeClass = computed(() => {
+  const key = String(props.event?.weapon?.typeKey ?? "").trim().toLowerCase();
+  return key ? key.replace(/[^a-z0-9]+/g, "-") : "other";
+});
 const eventFlagLabels = computed(() => {
   const direct = Array.isArray(props.event?.eventFlagLabels) ? props.event.eventFlagLabels : [];
   if (direct.length) return direct.map((label: unknown) => String(label)).filter(Boolean);
@@ -281,6 +293,13 @@ function searchPlayer(value: string) {
   margin-top: 4px;
 }
 
+.weapon-source-row strong {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
 .flag-card {
   grid-column: 1 / -1;
 }
@@ -308,6 +327,49 @@ function searchPlayer(value: string) {
 .flag-empty {
   color: #7f8c96;
   font-size: 12px;
+}
+
+.weapon-type-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  background: rgba(148, 163, 184, 0.12);
+  color: #dbe4ea;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.weapon-type-badge.light {
+  border-color: rgba(96, 165, 250, 0.42);
+  background: rgba(96, 165, 250, 0.16);
+  color: #dbeafe;
+}
+
+.weapon-type-badge.anti-tank {
+  border-color: rgba(244, 114, 182, 0.38);
+  background: rgba(244, 114, 182, 0.14);
+  color: #fbcfe8;
+}
+
+.weapon-type-badge.explosive {
+  border-color: rgba(245, 158, 11, 0.42);
+  background: rgba(245, 158, 11, 0.16);
+  color: #fde68a;
+}
+
+.weapon-type-badge.melee {
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.14);
+  color: #bbf7d0;
+}
+
+.weapon-type-badge.other {
+  border-color: rgba(148, 163, 184, 0.24);
+  background: rgba(148, 163, 184, 0.1);
+  color: #cbd5e1;
 }
 
 .raw-block {
