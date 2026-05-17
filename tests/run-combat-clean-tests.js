@@ -367,7 +367,7 @@ async function testProcessedDataBackfillsFriendlyFireFlags() {
   await module.stop();
 }
 
-async function testWeaponHistoryBackfillsPlaceholderWeapon() {
+async function testWeaponHistoryBackfillsLatestWoundOnKillEvents() {
   const { module, listeners } = createHarness();
   await module.start();
 
@@ -384,6 +384,30 @@ async function testWeaponHistoryBackfillsPlaceholderWeapon() {
   });
 
   emitCombatResolved(listeners, {
+    sourceEventId: "raw:history-2a",
+    serverId: "BZSS_Main",
+    time: "2026-05-10T01:02:00.000Z",
+    type: "damaged",
+    attackerName: "Enemy",
+    victimName: "Victim",
+    victimSteam64ID: "76561198000000009",
+    weapon: "BP_Soldier_PLA_SquadLeader_Arid_C_2147383420",
+    rawLog: "raw history damage",
+  });
+
+  emitCombatResolved(listeners, {
+    sourceEventId: "raw:history-2b",
+    serverId: "BZSS_Main",
+    time: "2026-05-10T01:03:00.000Z",
+    type: "wounded",
+    attackerName: "Enemy",
+    victimName: "Victim",
+    victimSteam64ID: "76561198000000009",
+    weapon: "BP_Soldier_PLA_SquadLeader_Arid_C_2147383420",
+    rawLog: "raw history wound placeholder",
+  });
+
+  emitCombatResolved(listeners, {
     sourceEventId: "raw:history-2",
     serverId: "BZSS_Main",
     time: "2026-05-10T01:04:59.000Z",
@@ -391,20 +415,30 @@ async function testWeaponHistoryBackfillsPlaceholderWeapon() {
     attackerName: "Enemy",
     victimName: "Victim",
     victimSteam64ID: "76561198000000009",
-    weapon: "Soldier BAF Rifleman1",
+    weapon: "Type86p Frag",
     rawLog: "raw give up",
   });
 
   const clean = module.api.getEvents({ serverId: "BZSS_Main", limit: 10 });
-  const wound = clean.find((event) => event.type === "wound");
-  const kill = clean.find((event) => event.type === "kill");
+  const woundReal = clean.find((event) => event.raw?.sourceEventId === "raw:history-1");
+  const damage = clean.find((event) => event.raw?.sourceEventId === "raw:history-2a");
+  const woundPlaceholder = clean.find((event) => event.raw?.sourceEventId === "raw:history-2b");
+  const kill = clean.find((event) => event.raw?.sourceEventId === "raw:history-2");
 
-  assert.equal(wound.weapon.displayName, "PKP");
-  assert.equal(kill.weapon.raw, "Soldier BAF Rifleman1");
-  assert.equal(kill.weapon.displayName, "PKP");
+  assert.equal(woundReal.weapon.displayName, "PKP");
+  assert.equal(woundReal.weapon.resolvedFromHistory, undefined);
+  assert.equal(damage.weapon.raw, "BP_Soldier_PLA_SquadLeader_Arid_C_2147383420");
+  assert.equal(damage.weapon.resolvedFromHistory, undefined);
+  assert.equal(damage.weapon.displayName, "Soldier PLA SquadLeader Arid");
+  assert.equal(woundPlaceholder.weapon.raw, "BP_Soldier_PLA_SquadLeader_Arid_C_2147383420");
+  assert.equal(woundPlaceholder.weapon.resolvedFromHistory, undefined);
+  assert.equal(woundPlaceholder.weapon.displayName, "Soldier PLA SquadLeader Arid");
+  assert.equal(kill.weapon.raw, "Type86p Frag");
+  assert.equal(kill.weapon.displayName, "Soldier PLA SquadLeader Arid");
   assert.equal(kill.weapon.resolvedFromHistory, true);
+  assert.equal(kill.weapon.historyBackfill.sourceEventId, "raw:history-2b");
   assert.ok(kill.parse.warnings.includes("weapon_history_backfill"));
-  assert.ok(kill.displayText.includes("with PKP"));
+  assert.ok(kill.displayText.includes("with Soldier PLA SquadLeader Arid"));
 
   await module.stop();
 }
@@ -478,7 +512,7 @@ await testGiveUpSameTeamKeepsFriendlyFireLabelInProcessedData();
 await testTeamWoundGetsTkDownLabelInProcessedData();
 await testProcessedDataPreservesAllIncomingFlags();
 await testProcessedDataBackfillsFriendlyFireFlags();
-await testWeaponHistoryBackfillsPlaceholderWeapon();
+await testWeaponHistoryBackfillsLatestWoundOnKillEvents();
 await testWeaponHistoryBackfillCanBeDisabled();
 await testReviveEventIsKeptWithoutFriendlyFire();
 await testPlayerEventsAndClear();

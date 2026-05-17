@@ -77,14 +77,17 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
     const time = String(rawRecord.time ?? event?.time ?? new Date().toISOString());
     const timeMs = parseTimestampMs(time);
     const weapon = buildWeapon(rawRecord);
-    const resolvedWeapon = resolveWeaponHistory({
-      weapon,
-      serverId,
-      victim,
-      eventTimeMs: timeMs,
-      enabled: weaponHistoryBackfillEnabled,
-      windowMs: weaponHistoryWindowMs,
-    });
+    // Death records reuse the latest wound weapon within the history window.
+    const resolvedWeapon = cleanType === "kill"
+      ? resolveWeaponHistory({
+        weapon,
+        serverId,
+        victim,
+        eventTimeMs: timeMs,
+        enabled: weaponHistoryBackfillEnabled,
+        windowMs: weaponHistoryWindowMs,
+      })
+      : { weapon, applied: false };
     const finalWeapon = resolvedWeapon.weapon;
     if (resolvedWeapon.applied) warnings.push("weapon_history_backfill");
     const eventFlags = buildEventFlags(rawRecord, relation);
@@ -383,7 +386,6 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
   function resolveWeaponHistory({ weapon, serverId, victim, eventTimeMs, enabled, windowMs }) {
     const baseWeapon = cloneJsonSafe(weapon) ?? weapon;
     if (!enabled) return { weapon: baseWeapon, applied: false };
-    if (!isPlaceholderWeapon(baseWeapon)) return { weapon: baseWeapon, applied: false };
 
     const history = findWeaponHistory({
       store: recentWeaponHistory,
@@ -516,7 +518,7 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       name: "\u6218\u6597\u7ba1\u7406\uff08\u5904\u7406\u540e\uff09",
       kind: "module",
       version: "0.2.1",
-      description: "Combat Manager (Processed) event layer built from raw module.killManage evidence records. It optionally backfills placeholder weapon names from recent wound history before external plugins and the UDP forwarder consume the record.",
+      description: "Combat Manager (Processed) event layer built from raw module.killManage evidence records. It backfills kill event weapon names from recent wound history before external plugins and the UDP forwarder consume the record.",
     },
     apiName: "combatClean",
     api,
@@ -809,25 +811,6 @@ function logWithFallback(logger, method, message, context) {
   logger?.info?.(typeof message === "function" ? message() : message);
 }
 
-function isPlaceholderWeapon(weapon) {
-  const texts = [
-    weapon?.displayName,
-    weapon?.cleaned,
-    weapon?.raw,
-  ].map((value) => String(value ?? "").trim()).filter(Boolean);
-
-  if (!texts.length) return true;
-
-  const category = String(weapon?.category ?? "").trim().toLowerCase();
-  if (["pawn", "character", "person", "soldier"].includes(category)) return true;
-
-  return texts.some((text) => {
-    const normalized = text.toLowerCase();
-    if (!normalized || normalized === "unknown" || normalized === "none") return true;
-    return WEAPON_PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(text));
-  });
-}
-
 function buildWeaponHistoryKeys(victim) {
   return [
     victim?.steam64ID,
@@ -840,7 +823,7 @@ function buildWeaponHistoryKeys(victim) {
 function rememberWeaponHistory({ store, serverId, victim, weapon, eventTimeMs, sourceEventId, type, windowMs }) {
   const victimKeys = buildWeaponHistoryKeys(victim);
   if (!victimKeys.length) return;
-  if (!weapon || isPlaceholderWeapon(weapon)) return;
+  if (!weapon) return;
 
   const entry = {
     serverId: String(serverId ?? "").trim(),
