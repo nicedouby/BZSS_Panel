@@ -27,6 +27,7 @@ const nav = [
   { path: "/combat-clean", icon: "CC", label: t("nav.combatClean") },
   { path: "/kill-manage", icon: "KM", label: t("nav.killManage") },
   { path: "/plugins/group-report", icon: "GR", label: "抱团报备" },
+  { path: "/plugins/fair-squad", icon: "FS", label: "公平建队" },
   { path: "/udp-event-forwarder", icon: "UDP", label: "UDP Forwarder" },
 ];
 </script>

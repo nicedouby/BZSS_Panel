@@ -505,6 +505,166 @@ async function testSquadLifecycleRouteReturnsCurrentSnapshot() {
   assert.equal(body.current.list[0].creationSource, "LOG");
 }
 
+async function testSquadManagementRoutesExposeStateAndMutations() {
+  const state = {
+    disbandPermission: "squad.disband",
+    kickPermission: "squad.kick",
+    squads: [],
+    creators: [],
+    summary: {
+      currentSquads: 0,
+      violations: 0,
+      creators: 0,
+      trackedCreations: 0,
+    },
+  };
+  const calls = [];
+
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest(req) {
+          if (req.headers.authorization === "super") {
+            return {
+              username: "admin",
+              role: "SuperAdmin",
+              isSuperAdmin: true,
+              permissions: ["*"],
+            };
+          }
+          if (req.headers.authorization === "user") {
+            return {
+              username: "viewer",
+              role: "Operator",
+              permissions: [],
+            };
+          }
+          return null;
+        },
+        hasEverything(user) {
+          return Boolean(user?.isSuperAdmin);
+        },
+        hasPermission(user, permission) {
+          if (!user) return false;
+          if (user.isSuperAdmin) return true;
+          const permissions = Array.isArray(user.permissions) ? user.permissions : [];
+          return permissions.includes("*") || permissions.includes(permission);
+        },
+      },
+    },
+    modules: {
+      squadManagement: {
+        getState() {
+          return state;
+        },
+        async disband(input) {
+          calls.push({ type: "disband", input });
+          if (!input.actor?.isSuperAdmin && !Array.isArray(input.actor?.permissions)) {
+            return {
+              ok: false,
+              error: "Forbidden",
+              message: "Permission 'squad.disband' is required.",
+            };
+          }
+          if (!input.actor?.isSuperAdmin && !input.actor.permissions.includes("squad.disband") && !input.actor.permissions.includes("*")) {
+            return {
+              ok: false,
+              error: "Forbidden",
+              message: "Permission 'squad.disband' is required.",
+            };
+          }
+          return {
+            ok: true,
+            action: "manual-disband",
+            source: "manual",
+            system: false,
+            target: {
+              teamId: input.teamId,
+              squadId: input.squadId,
+            },
+            reason: input.reason ?? "",
+            time: "2026-05-13T20:00:00.000Z",
+          };
+        },
+        async kick(input) {
+          calls.push({ type: "kick", input });
+          if (!input.actor?.isSuperAdmin && !Array.isArray(input.actor?.permissions)) {
+            return {
+              ok: false,
+              error: "Forbidden",
+              message: "Permission 'squad.kick' is required.",
+            };
+          }
+          if (!input.actor?.isSuperAdmin && !input.actor.permissions.includes("squad.kick") && !input.actor.permissions.includes("*")) {
+            return {
+              ok: false,
+              error: "Forbidden",
+              message: "Permission 'squad.kick' is required.",
+            };
+          }
+          return {
+            ok: true,
+            action: "manual-kick",
+            source: "manual",
+            system: false,
+            target: {
+              anyId: input.anyId,
+              creatorKey: input.creatorKey,
+            },
+            reason: input.reason ?? "",
+            time: "2026-05-13T20:00:00.000Z",
+          };
+        },
+      },
+    },
+  });
+
+  const unauthorizedState = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/squad-management/state",
+    headers: { host: "localhost" },
+    socket: {},
+  }, unauthorizedState.res);
+  assert.equal(unauthorizedState.state.status, 401);
+
+  const stateRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/squad-management/state",
+    headers: { host: "localhost", authorization: "user" },
+    socket: {},
+  }, stateRecorder.res);
+  assert.equal(stateRecorder.state.status, 200);
+  const stateBody = JSON.parse(stateRecorder.state.body);
+  assert.equal(stateBody.ok, true);
+  assert.equal(stateBody.viewer.canDisband, false);
+  assert.equal(stateBody.viewer.canKick, false);
+
+  const disbandRecorder = createRecorder();
+  const disbandReq = Readable.from([JSON.stringify({ teamId: 1, squadId: 9, reason: "test" })]);
+  disbandReq.method = "POST";
+  disbandReq.url = "/api/squad-management/disband";
+  disbandReq.headers = { host: "localhost", authorization: "super" };
+  disbandReq.socket = {};
+  await server.handleRequest(disbandReq, disbandRecorder.res);
+  assert.equal(disbandRecorder.state.status, 200);
+  assert.equal(JSON.parse(disbandRecorder.state.body).result.ok, true);
+
+  const kickRecorder = createRecorder();
+  const kickReq = Readable.from([JSON.stringify({ anyId: "76561198000001234", reason: "test" })]);
+  kickReq.method = "POST";
+  kickReq.url = "/api/squad-management/kick";
+  kickReq.headers = { host: "localhost", authorization: "user" };
+  kickReq.socket = {};
+  await server.handleRequest(kickReq, kickRecorder.res);
+  assert.equal(kickRecorder.state.status, 403);
+  assert.equal(JSON.parse(kickRecorder.state.body).result.error, "Forbidden");
+
+  assert.equal(calls[0].type, "disband");
+  assert.equal(calls[1].type, "kick");
+}
+
 async function testSettingsRoutesRequireAuthAndSuperAdmin() {
   const settingsResponse = {
     enabled: true,
@@ -832,6 +992,7 @@ await testSnapshotAllRequiresAuth();
 await testSnapshotAllDoesNotTriggerSlowTasks();
 await testMatchRefreshRoutesDelegateToMatchState();
 await testSquadLifecycleRouteReturnsCurrentSnapshot();
+await testSquadManagementRoutesExposeStateAndMutations();
 await testSettingsRoutesRequireAuthAndSuperAdmin();
 await testWarmupRoutesExposeStateAndValidateInput();
 await testTeamBalanceRoutesExposeStateAndRequireSuperAdminForMutations();

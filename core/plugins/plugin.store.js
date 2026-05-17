@@ -1,8 +1,8 @@
 export const pluginCatalog = [
   {
     id: "raw-log-console",
-    name: "原生日志控制台",
-    description: "接收、缓存、过滤并显示 Squad 原生日志。",
+    name: "\u539f\u751f\u65e5\u5fd7\u63a7\u5236\u53f0",
+    description: "Receive, buffer, filter, and display raw Squad log lines.",
     category: "Logs",
     icon: "",
     enabled: true,
@@ -13,16 +13,16 @@ export const pluginCatalog = [
     configSchema: [
       {
         key: "maxBufferedLines",
-        label: "最大缓存行数",
+        label: "\u6700\u5927\u7f13\u5b58\u884c\u6570",
         type: "number",
         defaultValue: 3000,
       },
       {
         key: "blacklistRegex",
-        label: "过滤正则",
+        label: "\u8fc7\u6ee4\u6b63\u5219",
         type: "textarea",
         defaultValue: "",
-        description: "匹配到的日志会被隐藏或丢弃。",
+        description: "Matching log lines will be hidden or discarded.",
       },
     ],
     config: {
@@ -32,8 +32,8 @@ export const pluginCatalog = [
   },
   {
     id: "group-report",
-    name: "抱团报备",
-    description: "人工维护玩家抱团关系的数据源插件。只负责持久化、查询和事件分发，不负责打乱、换队或 RCON。",
+    name: "\u62b1\u56e2\u62a5\u5907",
+    description: "Manually maintained player group data source for persistence and event fan-out.",
     category: "Management",
     icon: "",
     enabled: true,
@@ -42,4 +42,17 @@ export const pluginCatalog = [
     author: "BZSS",
     status: "ok",
   },
+  {
+    id: "fair-squad",
+    name: "\u516c\u5e73\u5efa\u961f",
+    description: "Auto-enforced squad management rules for fair squad creation windows.",
+    category: "Management",
+    icon: "FS",
+    enabled: true,
+    subscribed: true,
+    version: "1.0.0",
+    author: "BZSS",
+    status: "ok",
+  },
 ];
+

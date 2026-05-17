@@ -8,6 +8,7 @@ export interface AuthUser {
   isSuperAdmin: boolean;
   steam64?: string;
   viewerTeamAutoSwapEnabled?: boolean;
+  permissions?: string[];
 }
 
 export const useAuthStore = defineStore("auth", {

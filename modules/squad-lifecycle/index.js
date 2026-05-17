@@ -155,7 +155,8 @@ export function createSquadLifecycleModule({ core, config, logger }) {
     });
 
     if (parsed.teamId != null) {
-      reducer.handleSquadCreateLogEvent(parsed);
+      const record = reducer.handleSquadCreateLogEvent(parsed);
+      emitSquadCreatedEvent(serverId, matchId, parsed, record);
       return;
     }
 
@@ -178,6 +179,7 @@ export function createSquadLifecycleModule({ core, config, logger }) {
 
     const key = buildPendingKey(pending);
     pendingCreateLogs.set(key, pending);
+    emitSquadCreatedEvent(serverId, matchId, parsed, null);
 
     if (debugEnabled) {
       logWithFallback(moduleLogger, "info", `Queued pending squad create log for ${key}`, {
@@ -337,6 +339,46 @@ export function createSquadLifecycleModule({ core, config, logger }) {
       creatorName: squad?.creatorName ?? "",
     };
   }
+
+  function emitSquadCreatedEvent(serverId, matchId, parsed, record) {
+    const createdAtMs = Number(record?.createdAtMs ?? parseTimestamp(parsed.eventTime));
+    const createdAt = Number.isFinite(createdAtMs) && createdAtMs > 0
+      ? new Date(createdAtMs).toISOString()
+      : String(parsed.eventTime ?? "");
+    const creationSignature = buildCreationSignature({
+      serverId,
+      matchId,
+      squadId: parsed.squadId,
+      squadName: parsed.squadName,
+      creatorName: parsed.creatorName,
+      creatorSteamId: parsed.creatorSteamId,
+      creatorEosId: parsed.creatorEosId,
+      createdAtMs,
+    });
+
+    core.eventBus.emitModuleEvent("module.squadLifecycle", "squadCreated", {
+      eventId: `module.squadLifecycle:${Date.now()}`,
+      eventName: "module.squadLifecycle.squadCreated",
+      layer: "module",
+      source: "module.squadLifecycle",
+      serverId,
+      matchId,
+      time: new Date().toISOString(),
+      squadId: parsed.squadId,
+      squadName: parsed.squadName,
+      factionName: parsed.factionName,
+      teamId: parsed.teamId ?? record?.teamId ?? null,
+      creatorName: parsed.creatorName,
+      creatorSteamId: parsed.creatorSteamId,
+      creatorEosId: parsed.creatorEosId,
+      sourceEventId: parsed.sourceEventId ?? "",
+      creationSource: record?.creationSource ?? "LOG",
+      createdAtMs,
+      createdAt,
+      creationSignature,
+      record: record ? { ...record } : null,
+    });
+  }
 }
 
 function buildPendingKey(pending) {
@@ -398,4 +440,36 @@ function normalizePositiveNumber(value, fallback) {
 function looksLikeSquadCreateRawLog(event) {
   const rawLog = String(event?.rawLog ?? event?.rawEvent?.Raw ?? event?.sourceRaw ?? event?.raw ?? "").trim();
   return /LogSquad:/i.test(rawLog) && /has created Squad/i.test(rawLog);
+}
+
+function parseTimestamp(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (!value) return Date.now();
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : Date.now();
+}
+
+function buildCreationSignature(source = {}) {
+  const creatorKey = buildCreatorKey(source);
+  const createdAtMs = Number.isFinite(Number(source.createdAtMs)) ? Number(source.createdAtMs) : Date.now();
+  const timeBucket = Math.floor(createdAtMs / 10000);
+
+  return [
+    String(source.serverId ?? "").trim(),
+    String(source.matchId ?? "").trim(),
+    String(source.squadId ?? "").trim(),
+    normalizeSquadName(source.squadName),
+    creatorKey,
+    String(timeBucket),
+  ].join(":");
+}
+
+function buildCreatorKey(source = {}) {
+  const steamId = String(source.creatorSteamId ?? source.creatorSteamID ?? "").trim();
+  const eosId = String(source.creatorEosId ?? source.creatorEOSID ?? "").trim();
+  const name = normalizeSquadName(source.creatorName);
+  if (steamId) return `steam:${steamId}`;
+  if (eosId) return `eos:${eosId}`;
+  if (name) return `name:${name}`;
+  return "";
 }

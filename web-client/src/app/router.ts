@@ -7,6 +7,7 @@ import CombatCleanPage from "../pages/CombatCleanPage.vue";
 import KillManagePage from "../pages/KillManagePage.vue";
 import GroupReportPage from "../pages/GroupReportPage.vue";
 import TeamBalancePage from "../pages/TeamBalancePage.vue";
+import FairSquadPage from "../pages/FairSquadPage.vue";
 import UdpEventForwarderPage from "../pages/UdpEventForwarderPage.vue";
 import ComingSoonPage from "../pages/ComingSoonPage.vue";
 
@@ -29,6 +30,8 @@ export const router = createRouter({
     { path: "/plugins/group-report", component: GroupReportPage, meta: { title: "抱团报备", fullBleed: true } },
     { path: "/plugins/group-report/team-balance", component: TeamBalancePage, meta: { title: "队伍分配", fullBleed: true } },
     { path: "/team-balance", redirect: "/plugins/group-report/team-balance" },
+    { path: "/plugins/fair-squad", component: FairSquadPage, meta: { title: "公平建队", fullBleed: true } },
+    { path: "/squad-management", redirect: "/plugins/fair-squad" },
     {
       path: "/udp-event-forwarder",
       component: UdpEventForwarderPage,

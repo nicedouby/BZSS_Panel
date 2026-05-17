@@ -414,6 +414,20 @@
     "playtime": {
       "enabled": true
     },
+    "squadManagement": {
+      "enabled": true,
+      "disbandPermission": "squad.disband",
+      "kickPermission": "squad.kick",
+      "kickThreshold": 10,
+      "noBuildUntilSeconds": 20,
+      "infantryOnlyUntilSeconds": 50,
+      "sweepIntervalMs": 15000,
+      "allowedInfantryNames": [
+        "萌新队",
+        "填线队"
+      ],
+      "defaultSquadNamePattern": "^Squad\\s*\\d+$"
+    },
     "teamBalance": {
       "enabled": true,
       "permission": "tb",
@@ -437,6 +451,7 @@
     "paths": [
       "./plugins/group-report.js",
       "./plugins/weapon-collector.js",
+      "./plugins/fair-squad.js",
       "./plugins/udp_event_forwarder.js"
     ],
     "udpEventForwarder": {
