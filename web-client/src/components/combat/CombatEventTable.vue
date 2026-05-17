@@ -38,6 +38,7 @@
               <div class="identity-cell">
                 <div v-if="attackerMeta(event)" class="identity-meta">
                   <button
+                    v-if="attackerIdentity(event)"
                     type="button"
                     class="name-button"
                     :class="{ 'is-highlighted': isClusterHighlighted(event, index) }"
@@ -45,18 +46,22 @@
                   >
                     {{ attackerName(event) }}
                   </button>
+                  <span v-else>{{ attackerName(event) }}</span>
                   <span v-if="attackerTeamText(event)">{{ attackerTeamText(event) }}</span>
                   <span v-if="attackerSquadText(event)">{{ attackerSquadText(event) }}</span>
                 </div>
-                <button
-                  v-else
-                  type="button"
-                  class="name-button"
-                  :class="{ 'is-highlighted': isClusterHighlighted(event, index) }"
-                  @click="emit('search-player', attackerIdentity(event))"
-                >
-                  {{ attackerName(event) }}
-                </button>
+                <template v-else>
+                  <button
+                    v-if="attackerIdentity(event)"
+                    type="button"
+                    class="name-button"
+                    :class="{ 'is-highlighted': isClusterHighlighted(event, index) }"
+                    @click="emit('search-player', attackerIdentity(event))"
+                  >
+                    {{ attackerName(event) }}
+                  </button>
+                  <span v-else>{{ attackerName(event) }}</span>
+                </template>
               </div>
             </td>
             <td>
@@ -142,10 +147,11 @@ function eventRowKind(event: any) {
 }
 
 function attackerName(event: any) {
-  return event.attacker?.name || event.attackerName || "-";
+  return event.attacker?.displayName || event.attacker?.name || event.attackerName || "-";
 }
 
 function attackerIdentity(event: any) {
+  if (event.attacker?.isBot) return "";
   return event.attacker?.name || event.attackerName || event.attacker?.steamID || event.attackerSteamID || event.attacker?.eosID || event.attackerEOSID || "";
 }
 
@@ -162,7 +168,7 @@ function attackerSquadText(event: any) {
 }
 
 function victimName(event: any) {
-  return event.victim?.name || event.victimName || "-";
+  return event.victim?.displayName || event.victim?.name || event.victimName || "-";
 }
 
 function victimIdentity(event: any) {
@@ -473,5 +479,11 @@ th {
   border-color: rgba(148, 163, 184, 0.24);
   background: rgba(148, 163, 184, 0.1);
   color: #cbd5e1;
+}
+
+.weapon-type-badge.bot-weapon {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.14);
+  color: #fecaca;
 }
 </style>

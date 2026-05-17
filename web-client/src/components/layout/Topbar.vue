@@ -118,7 +118,8 @@ const currentMode = computed(() => stableDisplayValue(
   t("match.unknownMode", "Unknown Mode"),
 ));
 const subtitleLabel = computed(() => {
-  if (showMatchContext.value) return `${currentLayer.value} / ${currentMode.value}`;
+  const unknownMode = t("match.unknownMode", "Unknown Mode");
+  if (currentMode.value && currentMode.value !== unknownMode) return `${currentLayer.value} / ${currentMode.value}`;
   return currentLayer.value;
 });
 const matchServerName = computed(() => stableDisplayValue(

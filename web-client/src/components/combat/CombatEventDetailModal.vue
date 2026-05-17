@@ -12,7 +12,7 @@
       <div class="detail-grid">
         <div class="identity-card" :class="{ 'is-highlighted': isHighlighted(attackerHighlightKey) }">
           <span>{{ t("combat.attacker") }}</span>
-          <strong>{{ attackerName }}</strong>
+          <strong>{{ attackerDisplayName }}</strong>
           <div v-if="attackerMetaTexts.length" class="identity-meta">
             <span v-for="item in attackerMetaTexts" :key="item">{{ item }}</span>
           </div>
@@ -28,7 +28,7 @@
         </div>
         <div class="identity-card" :class="{ 'is-highlighted': isHighlighted(victimHighlightKey) }">
           <span>{{ t("combat.victim") }}</span>
-          <strong>{{ victimName }}</strong>
+          <strong>{{ victimDisplayName }}</strong>
           <div v-if="victimMetaTexts.length" class="identity-meta">
             <span v-for="item in victimMetaTexts" :key="item">{{ item }}</span>
           </div>
@@ -89,17 +89,21 @@ const router = useRouter();
 const ui = useUiStore();
 
 const prettyEvent = computed(() => JSON.stringify(props.event, null, 2));
-const attackerName = computed(() => String(props.event?.attacker?.name ?? props.event?.attackerName ?? "-"));
-const victimName = computed(() => String(props.event?.victim?.name ?? props.event?.victimName ?? "-"));
-const attackerSteamID = computed(() => String(props.event?.attacker?.steamID ?? props.event?.attackerSteamID ?? props.event?.attacker?.steamId ?? "").trim());
-const attackerEOSID = computed(() => String(props.event?.attacker?.eosID ?? props.event?.attackerEOSID ?? "").trim());
-const attackerIp = computed(() => String(props.event?.attacker?.current_ip ?? props.event?.attacker?.ip ?? props.event?.attackerIp ?? "").trim());
-const attackerHighlightKey = computed(() => playerHighlightKey(props.event?.attacker, props.event?.attackerName, props.event?.attackerSteamID, props.event?.attackerEOSID, props.event?.attackerControllerID));
+const attackerDisplayName = computed(() => String(props.event?.attacker?.displayName ?? props.event?.attacker?.name ?? props.event?.attackerName ?? "-"));
+const victimDisplayName = computed(() => String(props.event?.victim?.displayName ?? props.event?.victim?.name ?? props.event?.victimName ?? "-"));
+const attackerSteamID = computed(() => props.event?.attacker?.isBot ? "" : String(props.event?.attacker?.steamID ?? props.event?.attackerSteamID ?? props.event?.attacker?.steamId ?? "").trim());
+const attackerEOSID = computed(() => props.event?.attacker?.isBot ? "" : String(props.event?.attacker?.eosID ?? props.event?.attackerEOSID ?? "").trim());
+const attackerIp = computed(() => props.event?.attacker?.isBot ? "" : String(props.event?.attacker?.current_ip ?? props.event?.attacker?.ip ?? props.event?.attackerIp ?? "").trim());
+const attackerHighlightKey = computed(() => props.event?.attacker?.isBot ? "" : playerHighlightKey(props.event?.attacker, props.event?.attackerName, props.event?.attackerSteamID, props.event?.attackerEOSID, props.event?.attackerControllerID));
 const attackerMetaTexts = computed(() => [
   formatTeamText(props.event?.attacker?.teamID ?? props.event?.attacker?.teamId ?? props.event?.attackerTeamID),
   formatSquadText(props.event?.attacker?.squadID ?? props.event?.attacker?.squadId ?? props.event?.attackerSquadID),
 ].filter(Boolean));
-const attackerSearchKey = computed(() => attackerName.value !== "-" ? attackerName.value : (attackerSteamID.value || attackerEOSID.value || attackerIp.value));
+const attackerSearchKey = computed(() => {
+  if (props.event?.attacker?.isBot) return "";
+  const identity = String(props.event?.attacker?.name ?? props.event?.attackerName ?? "").trim();
+  return identity || attackerSteamID.value || attackerEOSID.value || attackerIp.value;
+});
 const victimSteamID = computed(() => String(props.event?.victim?.steamID ?? props.event?.victimSteamID ?? props.event?.victim?.steamId ?? "").trim());
 const victimEOSID = computed(() => String(props.event?.victim?.eosID ?? props.event?.victimEOSID ?? "").trim());
 const victimIp = computed(() => String(props.event?.victim?.current_ip ?? props.event?.victim?.ip ?? props.event?.victimIp ?? "").trim());
@@ -108,7 +112,10 @@ const victimMetaTexts = computed(() => [
   formatTeamText(props.event?.victim?.teamID ?? props.event?.victim?.teamId ?? props.event?.victimTeamID),
   formatSquadText(props.event?.victim?.squadID ?? props.event?.victim?.squadId ?? props.event?.victimSquadID),
 ].filter(Boolean));
-const victimSearchKey = computed(() => victimName.value !== "-" ? victimName.value : (victimSteamID.value || victimEOSID.value || victimIp.value));
+const victimSearchKey = computed(() => {
+  const identity = String(props.event?.victim?.name ?? props.event?.victimName ?? "").trim();
+  return identity || victimSteamID.value || victimEOSID.value || victimIp.value;
+});
 const weaponName = computed(() => String(props.event?.weapon?.displayName ?? props.event?.weapon?.cleaned ?? props.event?.weapon ?? props.event?.causedBy ?? "-"));
 const weaponTypeLabel = computed(() => String(props.event?.weapon?.typeLabel ?? "").trim());
 const weaponTypeClass = computed(() => {
@@ -370,6 +377,12 @@ function searchPlayer(value: string) {
   border-color: rgba(148, 163, 184, 0.24);
   background: rgba(148, 163, 184, 0.1);
   color: #cbd5e1;
+}
+
+.weapon-type-badge.bot-weapon {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.14);
+  color: #fecaca;
 }
 
 .raw-block {

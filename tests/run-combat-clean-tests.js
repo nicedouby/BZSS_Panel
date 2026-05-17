@@ -2,12 +2,15 @@ import assert from "node:assert/strict";
 
 import { createCombatCleanModule } from "../modules/combat-clean/index.js";
 
-function createHarness({ playerState, matchState, combatCleanConfig } = {}) {
+function createHarness({ playerState, matchState, combatCleanConfig, webStatus } = {}) {
   const listeners = new Map();
   const moduleEvents = [];
   const core = {
     logger: { info() {}, debug() {}, warn() {}, error() {} },
-    webStatus: { serverId: "BZSS_Main" },
+    webStatus: {
+      serverId: "BZSS_Main",
+      ...(webStatus ?? {}),
+    },
     webRegistry: { registerPage() {} },
     eventBus: {
       onModuleEvent(moduleId, eventName, handler) {
@@ -120,6 +123,72 @@ async function testWeaponTypeClassificationIsPreserved() {
   assert.ok(clean.weapon.typeLabel);
   assert.ok(clean.displayText.includes("PMT76 A940"));
   assert.ok(clean.displayText.includes(clean.weapon.typeLabel));
+
+  await module.stop();
+}
+
+async function testExactProjectileAttackDisplaysBot() {
+  const { module, listeners } = createHarness();
+  await module.start();
+
+  emitCombatResolved(listeners, {
+    sourceEventId: "raw:exact-projectile-damage",
+    serverId: "BZSS_Main",
+    time: "2026-05-10T01:00:45.000Z",
+    type: "damaged",
+    attackerName: "Enemy Soldier",
+    victimName: "Victim",
+    damage: 12,
+    causedBy: "Projectile",
+    rawCausedBy: "Projectile",
+    rawLog: "raw projectile damage",
+  });
+
+  const clean = module.api.getEvents({ serverId: "BZSS_Main" })[0];
+  assert.equal(clean.attacker.name, "");
+  assert.equal(clean.attacker.displayName, "bot");
+  assert.equal(clean.attacker.isBot, true);
+  assert.equal(clean.attacker.botReason, "exact_projectile");
+  assert.equal(clean.attacker.teamID, "");
+  assert.equal(clean.attacker.squadID, "");
+  assert.equal(clean.attacker.isFallback, false);
+  assert.equal(clean.weapon.typeKey, "bot_weapon");
+  assert.equal(clean.weapon.typeLabel, "人机武器");
+  assert.equal(clean.weapon.isBotWeapon, true);
+  assert.equal(clean.isBotAttack, true);
+  assert.equal(clean.relation.isFriendlyFire, false);
+  assert.equal(clean.displayText.includes("bot"), true);
+
+  await module.stop();
+}
+
+async function testExactProjectileKillGetsBotFlag() {
+  const { module, listeners } = createHarness();
+  await module.start();
+
+  emitCombatResolved(listeners, {
+    sourceEventId: "raw:exact-projectile-kill",
+    serverId: "BZSS_Main",
+    time: "2026-05-10T01:00:50.000Z",
+    type: "died",
+    attackerName: "Enemy Soldier",
+    victimName: "Victim",
+    damage: 300,
+    causedBy: "Projectile",
+    rawCausedBy: "Projectile",
+    rawLog: "raw projectile kill",
+  });
+
+  const clean = module.api.getEvents({ serverId: "BZSS_Main" })[0];
+  assert.equal(clean.type, "kill");
+  assert.equal(clean.attacker.displayName, "bot");
+  assert.equal(clean.relation.isFriendlyFire, false);
+  assert.equal(clean.relation.teamSource, "bot");
+  assert.ok(clean.eventFlags.some((flag) => flag.key === "killed_by_bot"));
+  assert.ok(clean.eventFlagLabels.includes("被bot击杀"));
+  assert.ok(!clean.eventFlags.some((flag) => flag.key === "friendly_fire"));
+  assert.ok(!clean.eventFlagLabels.includes("友伤"));
+  assert.ok(!clean.eventFlagLabels.includes("放弃"));
 
   await module.stop();
 }
@@ -533,6 +602,8 @@ async function testPlayerEventsAndClear() {
 
 await testAttackerNullptrFallsBackToVictimExactly();
 await testWeaponTypeClassificationIsPreserved();
+await testExactProjectileAttackDisplaysBot();
+await testExactProjectileKillGetsBotFlag();
 await testRejectsNullptrVictim();
 await testResolvesPlayersAndRelation();
 await testGiveUpOnlyKeepsSingleLabelInProcessedData();

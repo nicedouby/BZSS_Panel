@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const WEAPON_TYPE_LABELS = Object.freeze({
+  bot_weapon: "人机武器",
   light: "轻武器",
   anti_tank: "单兵反坦克武器",
   explosive: "爆炸物",
@@ -285,6 +286,11 @@ export function classifyWeaponType(input = {}) {
     }, candidates);
   }
 
+  const exactProjectileMatch = matchExactProjectile(candidates);
+  if (exactProjectileMatch) {
+    return buildResult(WEAPON_TYPE_LABELS.bot_weapon, "bot_weapon", "weapon-type:bot_weapon:exact_projectile", exactProjectileMatch, candidates);
+  }
+
   for (const candidate of candidates) {
     if (isPlaceholderCandidate(candidate)) {
       return buildResult(WEAPON_TYPE_LABELS.other, "other", "other", {
@@ -329,6 +335,20 @@ export function normalizeWeaponTypeKey(key) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
+}
+
+function matchExactProjectile(candidates = []) {
+  for (const candidate of candidates) {
+    if (candidate?.lower !== "projectile") continue;
+    return {
+      matchedBy: "exact",
+      matchedText: candidate.text,
+      matchedTerm: "projectile",
+      candidateIndex: candidate.index,
+      candidateSource: candidate.source,
+    };
+  }
+  return null;
 }
 
 function makeRule(definition) {

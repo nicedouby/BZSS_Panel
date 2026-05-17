@@ -31,6 +31,30 @@ describe("buildServerSnapshot", () => {
     expect(snapshot.serverName).toBe("BZSS Main Server");
     expect(snapshot.map).toBe("Mutaha");
     expect(snapshot.layer).toBe("Mutaha_RAAS_v1");
+    expect(snapshot.mode).toBe("raas");
+    expect(snapshot.webStatus.mode).toBe("raas");
     expect(snapshot.webStatus.nextLayer).toBe("Fallujah_RAAS_v2");
+  });
+
+  it("derives seed mode from a seed layer suffix", () => {
+    const snapshot = buildServerSnapshot(
+      {
+        serverStatus: {
+          serverName: "BZSS Main Server",
+          layer: "AlBasrah_RAAS_v1_seed",
+          currentLayer: "AlBasrah_RAAS_v1_seed",
+        },
+      },
+      {
+        status: {
+          mode: "",
+          gameMode: "",
+        },
+      },
+    );
+
+    expect(snapshot.mode).toBe("seed");
+    expect(snapshot.webStatus.mode).toBe("seed");
+    expect(snapshot.webStatus.gameMode).toBe("seed");
   });
 });

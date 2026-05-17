@@ -210,14 +210,23 @@ function deriveModeFromLayer(layer) {
   if (!text) return "";
 
   const tokens = text.split(/[_\s-]+/).filter(Boolean);
-  if (tokens.length < 2) return "";
+  if (!tokens.length) return "";
 
   const lastToken = tokens[tokens.length - 1];
-  const modeToken = /^(?:v?\d+|pve|pvp|seed)$/i.test(lastToken) ? tokens[tokens.length - 2] : lastToken;
-  if (!modeToken) return "";
+  if (/^seed$/i.test(lastToken)) return "seed";
 
-  const mode = String(modeToken).trim();
-  return /^[A-Za-z]+$/.test(mode) ? mode.toUpperCase() : "";
+  if (/^(?:v?\d+|pve|pvp)$/i.test(lastToken) && tokens.length > 1) {
+    const previous = String(tokens[tokens.length - 2] ?? "").trim();
+    if (!previous) return "";
+    if (/^seed$/i.test(previous)) return "seed";
+    if (/^(?:pve|pvp)$/i.test(previous)) return previous;
+    return /^[a-z]+$/i.test(previous) ? previous : "";
+  }
+
+  const mode = String(lastToken).trim();
+  if (/^seed$/i.test(mode)) return "seed";
+  if (/^(?:pve|pvp)$/i.test(mode)) return mode;
+  return /^[a-z]+$/i.test(mode) ? mode : "";
 }
 
 function pad2(value) {

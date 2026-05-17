@@ -1374,6 +1374,13 @@ body::before {
   color: #cbd5e1;
 }
 
+.combat-weapon-type-badge.bot-weapon,
+.weapon-type-badge.bot-weapon {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.14);
+  color: #fecaca;
+}
+
 .combat-row-tk {
   background: linear-gradient(90deg, rgba(127, 29, 29, 0.28), rgba(127, 29, 29, 0.08));
 }

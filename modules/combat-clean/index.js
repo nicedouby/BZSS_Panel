@@ -61,24 +61,13 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
     }
 
     const warnings = [];
-    let attackerIdentity = extractIdentity(rawRecord, "attacker");
-    let attackerFallback = false;
-    if (isNullishPlayerValue(attackerIdentity.name)) {
-      attackerIdentity = { ...victimIdentity };
-      attackerFallback = true;
-      warnings.push(FALLBACK_REASON);
-    }
+    const attackerIdentity = extractIdentity(rawRecord, "attacker");
 
     const serverId = String(rawRecord.serverId ?? event?.serverId ?? core.webStatus?.serverId ?? "");
-    const victim = makePlayerRef(serverId, victimIdentity, rawRecord, "victim");
-    const attacker = makePlayerRef(serverId, attackerIdentity, rawRecord, "attacker", {
-      isFallback: attackerFallback,
-      fallbackReason: attackerFallback ? FALLBACK_REASON : "",
-    });
-    const relation = buildRelation(cleanType, attacker, victim, rawRecord);
     const time = String(rawRecord.time ?? event?.time ?? new Date().toISOString());
     const timeMs = parseTimestampMs(time);
     const weapon = buildWeapon(rawRecord);
+    const victim = makePlayerRef(serverId, victimIdentity, rawRecord, "victim");
     // Death records reuse the latest wound weapon within the history window.
     const resolvedWeapon = cleanType === "kill"
       ? resolveWeaponHistory({
@@ -91,8 +80,23 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       })
       : { weapon, applied: false };
     const finalWeapon = resolvedWeapon.weapon;
+    const botAttack = buildBotAttackContext(finalWeapon);
+    let resolvedAttackerIdentity = attackerIdentity;
+    let attackerFallback = false;
+    if (!botAttack.isBotAttack && isNullishPlayerValue(resolvedAttackerIdentity.name)) {
+      resolvedAttackerIdentity = { ...victimIdentity };
+      attackerFallback = true;
+      warnings.push(FALLBACK_REASON);
+    }
+    const attacker = botAttack.isBotAttack
+      ? makeBotPlayerRef()
+      : makePlayerRef(serverId, resolvedAttackerIdentity, rawRecord, "attacker", {
+        isFallback: attackerFallback,
+        fallbackReason: attackerFallback ? FALLBACK_REASON : "",
+      });
+    const relation = buildRelation(cleanType, attacker, victim, rawRecord, { botAttack });
     if (resolvedWeapon.applied) warnings.push("weapon_history_backfill");
-    const eventFlags = buildEventFlags(rawRecord, relation);
+    const eventFlags = buildEventFlags(rawRecord, relation, { cleanType, weapon: finalWeapon, botAttack });
     const record = {
       id: makeCleanId(cleanType, sourceEventId, rawRecord),
       serverId,
@@ -104,6 +108,8 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       victim,
       damage: parseDamage(rawRecord.damage),
       weapon: finalWeapon,
+      isBotAttack: botAttack.isBotAttack,
+      botAttackReason: botAttack.reason,
       relation,
       displayText: buildDisplayText(cleanType, attacker, victim, finalWeapon, rawRecord.damage, relation),
       eventFlags,
@@ -203,6 +209,7 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       steam64ID: cleanPlayerValue(identity.steam64ID),
       eosID: cleanPlayerValue(identity.eosID),
       controllerID: cleanPlayerValue(identity.controllerID),
+      displayName: cleanPlayerValue(identity.name),
       role: "",
       isLeader: false,
       resolved: false,
@@ -229,6 +236,27 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
     return {
       ...rawRef,
       ...patch,
+    };
+  }
+
+  function makeBotPlayerRef() {
+    return {
+      name: "",
+      teamID: "",
+      squadID: "",
+      steam64ID: "",
+      eosID: "",
+      controllerID: "",
+      displayName: "bot",
+      role: "",
+      isLeader: false,
+      resolved: false,
+      resolutionSource: "bot",
+      isNullptr: false,
+      isFallback: false,
+      fallbackReason: "",
+      isBot: true,
+      botReason: "exact_projectile",
     };
   }
 
@@ -270,11 +298,12 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
     return { player: null, source: "" };
   }
 
-  function buildRelation(type, attacker, victim, rawRecord) {
-    const attackerTeamID = firstPresent(rawRecord.attackerTeamID, attacker.teamID);
+  function buildRelation(type, attacker, victim, rawRecord, context = {}) {
+    const attackerTeamID = context?.botAttack?.isBotAttack ? "" : firstPresent(rawRecord.attackerTeamID, attacker.teamID);
     const victimTeamID = firstPresent(rawRecord.victimTeamID, victim.teamID);
     const sameTeam = sameKnownTeam(attackerTeamID, victimTeamID);
     const rawFriendly = Boolean(rawRecord.isFriendlyFire || rawRecord.isTeamKill || rawRecord.tk || rawRecord.tkDown);
+    const botAttack = Boolean(context?.botAttack?.isBotAttack);
     if (String(type ?? "").trim().toLowerCase() === "revive") {
       return {
         attackerTeamID,
@@ -283,6 +312,16 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
         isFriendlyFire: false,
         friendlyFireType: "",
         teamSource: resolveTeamSource(rawRecord, attacker, victim),
+      };
+    }
+    if (botAttack) {
+      return {
+        attackerTeamID,
+        victimTeamID,
+        sameTeam: false,
+        isFriendlyFire: false,
+        friendlyFireType: "",
+        teamSource: "bot",
       };
     }
     const isFriendlyFire = Boolean(sameTeam || rawFriendly);
@@ -301,8 +340,9 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
     };
   }
 
-  function buildEventFlags(rawRecord, relation) {
+  function buildEventFlags(rawRecord, relation, context = {}) {
     const flags = [];
+    const botAttack = Boolean(context?.botAttack?.isBotAttack);
 
     const pushFlag = (flag) => {
       if (!flag) return;
@@ -327,17 +367,21 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
 
     const type = String(rawRecord.type ?? "").trim().toLowerCase();
     const damage = Number(rawRecord.damage);
-    if ((type === "died" || type === "death") && Number.isFinite(damage) && Math.abs(damage) === 300) {
+    if (!botAttack && (type === "died" || type === "death") && Number.isFinite(damage) && Math.abs(damage) === 300) {
       pushFlag({ key: "give_up", label: "放弃", level: "neutral", reason: "died_damage_300" });
     }
 
     for (const flag of Array.isArray(rawRecord.eventFlags) ? rawRecord.eventFlags : []) {
+      const key = String(flag?.key ?? "").trim();
+      const label = String(flag?.label ?? "").trim();
+      if (botAttack && isSuppressedBotAttackFlag(key, label)) continue;
       pushFlag(flag);
     }
 
     for (const label of Array.isArray(rawRecord.eventFlagLabels) ? rawRecord.eventFlagLabels : []) {
       const text = String(label).trim();
       if (!text) continue;
+      if (botAttack && isSuppressedBotAttackFlag("", text)) continue;
       pushFlag({ label: text });
     }
 
@@ -360,12 +404,21 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       });
     }
 
-    if (isSameCombatIdentity()) {
+    if (!botAttack && isSameCombatIdentity()) {
       pushFlag({
         key: "self_damage",
         label: "自伤",
         level: "warning",
         reason: "same_attacker_victim",
+      });
+    }
+
+    if (context?.botAttack?.isBotAttack && context.cleanType === "kill") {
+      pushFlag({
+        key: "killed_by_bot",
+        label: "被bot击杀",
+        level: "danger",
+        reason: context.botAttack.reason || "exact_projectile",
       });
     }
 
@@ -394,6 +447,8 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       typeMatchedBy: weaponType.matchedBy,
       typeRuleId: weaponType.ruleId,
       typeMatchText: weaponType.matchedText,
+      isBotWeapon: weaponType.key === "bot_weapon",
+      botWeaponReason: weaponType.key === "bot_weapon" ? "exact_projectile" : "",
     };
   }
 
@@ -420,6 +475,8 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       typeMatchedBy: history.weapon.typeMatchedBy || baseWeapon.typeMatchedBy,
       typeRuleId: history.weapon.typeRuleId || baseWeapon.typeRuleId,
       typeMatchText: history.weapon.typeMatchText || baseWeapon.typeMatchText,
+      isBotWeapon: Boolean(history.weapon.isBotWeapon ?? baseWeapon.isBotWeapon),
+      botWeaponReason: history.weapon.botWeaponReason || baseWeapon.botWeaponReason || "",
       resolvedFromHistory: true,
       resolutionSource: "weaponHistoryBackfill",
       historyBackfill: {
@@ -613,13 +670,13 @@ function mergePlayer(target, player) {
 function buildDisplayText(type, attacker, victim, weapon, damage, relation) {
   if (String(type ?? "").trim().toLowerCase() === "revive") {
     const ff = relation.isFriendlyFire ? " [friendly fire]" : "";
-    return `${attacker.name || "Unknown"} revived ${victim.name || "Unknown"}${ff}`;
+    return `${displayPlayerName(attacker)} revived ${displayPlayerName(victim)}${ff}`;
   }
   const verb = type === "damage" ? "damaged" : type === "wound" ? "wounded" : "killed";
   const amount = damage == null || damage === "" ? "" : ` (${trimNumber(damage)})`;
   const ff = relation.isFriendlyFire ? " [friendly fire]" : "";
   const typeSuffix = weapon?.typeLabel ? ` ${weapon.typeLabel}` : "";
-  return `${attacker.name || "Unknown"} ${verb} ${victim.name || "Unknown"} with ${weapon.displayName || "Unknown"}${typeSuffix}${amount}${ff}`;
+  return `${displayPlayerName(attacker)} ${verb} ${displayPlayerName(victim)} with ${weapon.displayName || "Unknown"}${typeSuffix}${amount}${ff}`;
 }
 
 function buildStats(list) {
@@ -651,7 +708,9 @@ function matchesSearch(event, search) {
     event.eventName,
     event.displayText,
     event.attacker?.name,
+    event.attacker?.displayName,
     event.victim?.name,
+    event.victim?.displayName,
     event.attacker?.steam64ID,
     event.victim?.steam64ID,
     event.attacker?.eosID,
@@ -671,6 +730,7 @@ function matchesPlayerKey(event, playerKey) {
   const key = normalizeSearch(playerKey);
   if (!key) return true;
   return [event.attacker, event.victim].some((player) => [
+    player?.displayName,
     player?.name,
     normalizeName(player?.name),
     player?.steam64ID,
@@ -724,6 +784,31 @@ function cleanWeaponName(value) {
     .replace(/^BP_/, "")
     .replace(/_/g, " ")
     .trim();
+}
+
+function displayPlayerName(player = {}) {
+  return String(player?.displayName || player?.name || "Unknown").trim() || "Unknown";
+}
+
+function buildBotAttackContext(weapon = {}) {
+  const key = String(weapon?.typeKey ?? "").trim().toLowerCase();
+  if (key !== "bot_weapon") {
+    return { isBotAttack: false, reason: "" };
+  }
+  return { isBotAttack: true, reason: "exact_projectile" };
+}
+
+function isSuppressedBotAttackFlag(key, label) {
+  const normalizedKey = String(key ?? "").trim().toLowerCase();
+  const normalizedLabel = String(label ?? "").trim().toLowerCase();
+  return normalizedKey === "friendly_fire"
+    || normalizedKey === "tk_down"
+    || normalizedKey === "team_kill"
+    || normalizedKey === "give_up"
+    || normalizedLabel === "友伤"
+    || normalizedLabel === "tk击倒"
+    || normalizedLabel === "自伤"
+    || normalizedLabel === "放弃";
 }
 
 function cleanPlayerValue(value) {

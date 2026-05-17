@@ -24,6 +24,7 @@ export function applyRuntimeSnapshotResponse(snapshot: any) {
 export function buildServerSnapshot(matchState: any, overview: any) {
   const serverStatus = matchState?.serverStatus ?? {};
   const status = overview?.status ?? {};
+  const derivedMode = deriveModeFromLayer(status.layer, serverStatus.layer, status.currentLayer, serverStatus.currentLayer);
   const webStatus = {
     rcon: firstDisplayValue(status.rcon, serverStatus.rcon),
     isWarmup: status.isWarmup ?? serverStatus.isWarmup,
@@ -35,8 +36,8 @@ export function buildServerSnapshot(matchState: any, overview: any) {
     mapName: firstDisplayValue(status.mapName, status.map, serverStatus.mapName, serverStatus.map),
     layer: firstDisplayValue(status.layer, serverStatus.layer, status.currentLayer, serverStatus.currentLayer),
     layerName: firstDisplayValue(status.layerName, status.layer, serverStatus.layerName, serverStatus.layer),
-    mode: firstDisplayValue(status.mode, serverStatus.mode),
-    gameMode: firstDisplayValue(status.gameMode, status.mode, serverStatus.gameMode, serverStatus.mode),
+    mode: firstDisplayValue(derivedMode, status.mode, serverStatus.mode),
+    gameMode: firstDisplayValue(derivedMode, status.gameMode, status.mode, serverStatus.gameMode, serverStatus.mode),
     currentLayer: firstDisplayValue(status.currentLayer, serverStatus.currentLayer, status.layer, serverStatus.layer),
     nextLayer: firstDisplayValue(status.nextLayer, serverStatus.nextLayer, matchState?.serverStatus?.nextLayer),
     tps: firstPositiveNumber(status.tps, serverStatus.tps),
@@ -67,8 +68,8 @@ export function buildServerSnapshot(matchState: any, overview: any) {
     mapName: firstDisplayValue(serverStatus.mapName, serverStatus.map, status.mapName, status.map),
     layer: firstDisplayValue(serverStatus.layer, status.layer, serverStatus.currentLayer, status.currentLayer),
     layerName: firstDisplayValue(serverStatus.layerName, serverStatus.layer, status.layerName, status.layer),
-    mode: firstDisplayValue(serverStatus.mode, status.mode),
-    gameMode: firstDisplayValue(serverStatus.gameMode, serverStatus.mode, status.gameMode, status.mode),
+    mode: firstDisplayValue(derivedMode, serverStatus.mode, status.mode),
+    gameMode: firstDisplayValue(derivedMode, serverStatus.gameMode, serverStatus.mode, status.gameMode, status.mode),
     currentLayer: firstDisplayValue(serverStatus.currentLayer, serverStatus.layer, status.currentLayer, status.layer),
     nextLayer: firstDisplayValue(serverStatus.nextLayer, status.nextLayer, matchState?.serverStatus?.nextLayer),
     tps: firstPositiveNumber(serverStatus.tps, status.tps) ?? undefined,
@@ -187,5 +188,34 @@ function firstFiniteNumber(...values: unknown[]) {
     const number = Number(value);
     if (Number.isFinite(number)) return number;
   }
+  return undefined;
+}
+
+function deriveModeFromLayer(...layers: unknown[]) {
+  for (const layer of layers) {
+    const text = String(layer ?? "").trim();
+    if (!text) continue;
+
+    const tokens = text.split(/[_\s-]+/).filter(Boolean);
+    if (!tokens.length) continue;
+
+  const lastToken = tokens[tokens.length - 1];
+  if (/^seed$/i.test(lastToken)) return "seed";
+
+  if (/^(?:v?\d+|pve|pvp)$/i.test(lastToken) && tokens.length > 1) {
+      const previous = String(tokens[tokens.length - 2] ?? "").trim();
+      if (!previous) continue;
+      if (/^seed$/i.test(previous)) return "seed";
+      if (/^(?:pve|pvp)$/i.test(previous)) return previous;
+      if (/^[a-z]+$/i.test(previous)) return previous;
+      continue;
+    }
+
+    const mode = String(lastToken).trim();
+    if (/^seed$/i.test(mode)) return "seed";
+    if (/^(?:pve|pvp)$/i.test(mode)) return mode;
+    if (/^[a-z]+$/i.test(mode)) return mode;
+  }
+
   return undefined;
 }

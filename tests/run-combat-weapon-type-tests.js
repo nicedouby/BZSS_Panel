@@ -76,6 +76,17 @@ function testExplosiveWeaponClassification() {
   assert.ok(["contains", "regex"].includes(result.matchedBy));
 }
 
+function testExactProjectileBecomesBotWeapon() {
+  const result = classifyWeaponType({
+    displayName: "Projectile",
+    cleaned: "Projectile",
+  });
+
+  assert.equal(result.key, "bot_weapon");
+  assert.equal(result.label, "人机武器");
+  assert.equal(result.matchedBy, "exact");
+}
+
 function testMeleeWeaponClassification() {
   const result = classifyWeaponType({
     displayName: "Knife",
@@ -95,6 +106,7 @@ testCategoryDoesNotSuppressLightWeaponClassification();
 testAntiTankWeaponClassification();
 testPlaceholderFallsBackToOther();
 testExplosiveWeaponClassification();
+testExactProjectileBecomesBotWeapon();
 testMeleeWeaponClassification();
 
 console.log("combat weapon type tests passed");

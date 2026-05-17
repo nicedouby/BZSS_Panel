@@ -267,8 +267,8 @@ function playerCell(player = {}, side = "", hoverKey = "", pairKey = "") {
   const isHighlighted = pairKey && hoverKey && pairKey === hoverKey;
   return `
     <div class="combat-player-cell ${isHighlighted ? "is-highlighted" : ""}" data-pair-key="${esc(pairKey)}" data-player-side="${esc(side)}">
-      <strong>${esc(`${player.name || "Unknown"}`)}</strong>
-      <div class="combat-player-meta">${esc(`Team ID ${team} / Squad ID ${blank(player.squadID)}`)}</div>
+      <strong>${esc(`${player.displayName || player.name || "Unknown"}`)}</strong>
+      ${player.isBot ? "" : `<div class="combat-player-meta">${esc(`Team ID ${team} / Squad ID ${blank(player.squadID)}`)}</div>`}
       ${ids ? `<span>${esc(ids)}</span>` : ""}
       ${flags ? `<span>${esc(flags)}</span>` : ""}
     </div>
@@ -286,6 +286,9 @@ function flagCell(event = {}) {
 }
 
 function relationCell(relation = {}) {
+  if (relation.teamSource === "bot") {
+    return `<div class="combat-player-cell"><strong>正常</strong><span>bot</span></div>`;
+  }
   const same = relation.sameTeam ? "\u540c\u961f" : "\u975e\u540c\u961f";
   const ff = relation.isFriendlyFire ? `\u53cb\u519b ${relation.friendlyFireType || ""}` : "\u6b63\u5e38";
   return `<div class="combat-player-cell"><strong>${esc(ff)}</strong><span>${esc(`${same} / ${relation.teamSource || "unknown"}`)}</span></div>`;
@@ -299,6 +302,7 @@ function eventFlagLabels(event = {}) {
 }
 
 function eventPairKey(event = {}) {
+  if (event.attacker?.isBot) return "";
   const attackerKey = displayedPlayerKey(event.attacker?.name);
   const victimKey = displayedPlayerKey(event.victim?.name);
   if (!attackerKey || !victimKey) return "";
@@ -406,8 +410,9 @@ function detailCell(label, value) {
 }
 
 function formatPlayerRef(player = {}) {
+  if (player.isBot) return player.displayName || "bot";
   return [
-    player.name || "Unknown",
+    player.displayName || player.name || "Unknown",
     `team=${blank(player.teamID)}`,
     `squad=${blank(player.squadID)}`,
     player.steam64ID ? `steam=${player.steam64ID}` : "",

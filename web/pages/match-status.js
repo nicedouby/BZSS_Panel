@@ -618,8 +618,9 @@ function cleanCombatTypeLabel(type) {
 }
 
 function formatCleanCombatPlayerRef(player = {}) {
+  if (player.isBot) return player.displayName || "bot";
   return [
-    player.name || "Unknown",
+    player.displayName || player.name || "Unknown",
     `team=${blankCleanCombatValue(player.teamID)}`,
     `squad=${blankCleanCombatValue(player.squadID)}`,
     player.steam64ID ? `steam=${player.steam64ID}` : "",
@@ -639,6 +640,7 @@ function formatCleanCombatWeapon(weapon = {}) {
 }
 
 function formatCleanCombatRelation(relation = {}) {
+  if (relation.teamSource === "bot") return "bot / normal";
   return [
     `attackerTeam=${blankCleanCombatValue(relation.attackerTeamID)}`,
     `victimTeam=${blankCleanCombatValue(relation.victimTeamID)}`,
