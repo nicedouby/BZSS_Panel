@@ -120,33 +120,44 @@ CREATE TABLE IF NOT EXISTS squad_create_records (
 CREATE TABLE IF NOT EXISTS squad_management_records (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     record_key TEXT NOT NULL UNIQUE,
-    record_type TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT '',
+    time TEXT NOT NULL DEFAULT '',
+    time_ms INTEGER NOT NULL DEFAULT 0,
+    log_time TEXT NOT NULL DEFAULT '',
+    log_seconds INTEGER,
     server_id TEXT NOT NULL DEFAULT '',
     match_id TEXT NOT NULL DEFAULT '',
-    time TEXT NOT NULL,
-    log_time TEXT NOT NULL DEFAULT '',
     source TEXT NOT NULL DEFAULT '',
+    operator_name TEXT NOT NULL DEFAULT '',
     actor_name TEXT NOT NULL DEFAULT '',
     actor_id TEXT NOT NULL DEFAULT '',
+    system INTEGER NOT NULL DEFAULT 0,
+    team_id INTEGER,
+    squad_id INTEGER,
+    generation INTEGER,
+    squad_name TEXT NOT NULL DEFAULT '',
+    team_name TEXT NOT NULL DEFAULT '',
     creator_name TEXT NOT NULL DEFAULT '',
     creator_eos_id TEXT NOT NULL DEFAULT '',
     creator_steam_id TEXT NOT NULL DEFAULT '',
     player_name TEXT NOT NULL DEFAULT '',
     player_eos_id TEXT NOT NULL DEFAULT '',
     player_steam_id TEXT NOT NULL DEFAULT '',
-    team_id TEXT NOT NULL DEFAULT '',
-    squad_id TEXT NOT NULL DEFAULT '',
-    squad_name TEXT NOT NULL DEFAULT '',
+    steam_id TEXT NOT NULL DEFAULT '',
+    eos_id TEXT NOT NULL DEFAULT '',
+    player_key TEXT NOT NULL DEFAULT '',
     reason TEXT NOT NULL DEFAULT '',
     result TEXT NOT NULL DEFAULT '',
     error TEXT NOT NULL DEFAULT '',
     command TEXT NOT NULL DEFAULT '',
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    record_type TEXT NOT NULL DEFAULT '',
     creation_signature TEXT NOT NULL DEFAULT '',
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_squad_management_records_kind_time ON squad_management_records(record_type, created_at DESC, id DESC);
-CREATE INDEX IF NOT EXISTS idx_squad_management_records_server_time ON squad_management_records(server_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_squad_management_records_kind_time ON squad_management_records(kind, time_ms DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_squad_management_records_server_time ON squad_management_records(server_id, time_ms DESC, id DESC);
 
 CREATE TABLE IF NOT EXISTS ladder_rating_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

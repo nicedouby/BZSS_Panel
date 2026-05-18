@@ -3,6 +3,7 @@
 import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { handleSquadManagementRoutes } from "../modules/squad-management/routes.js";
 import {
   getAllPlugins,
   setPluginEnabled as updatePluginEnabled,
@@ -166,6 +167,19 @@ export class WebServer {
         error: "Unauthorized",
         message: "Authentication required.",
       });
+    }
+
+    const squadManagementHandled = await handleSquadManagementRoutes({
+      core: this.core,
+      modules: this.modules,
+      url,
+      req,
+      user,
+      readJsonBody: (request) => this.readJsonBody(request),
+      json: (status, obj, extraHeaders = {}) => this.json(res, status, obj, extraHeaders),
+    });
+    if (squadManagementHandled) {
+      return;
     }
 
     if (url.pathname === "/api/team-balance/status" && req.method === "GET") {
@@ -1207,118 +1221,9 @@ export class WebServer {
 
     if (url.pathname === "/api/squads/list") {
       const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
-      return this.json(res, 200, { squads: this.modules.squadState.getSquads(serverId) });
-    }
-
-    if (url.pathname === "/api/squad-management/state" && req.method === "GET") {
       const squadManagement = this.modules.squadManagement;
-      if (!squadManagement) {
-        return this.json(res, 404, {
-          error: "SquadManagementUnavailable",
-          message: "Squad management module is not loaded.",
-        });
-      }
-
-      const state = squadManagement.getState();
       return this.json(res, 200, {
-        ok: true,
-        state,
-        viewer: {
-          username: user.username,
-          role: user.role,
-          isSuperAdmin: this.core.authManager.hasEverything(user),
-          canDisband: this.core.authManager.hasPermission?.(user, state.disbandPermission ?? "squad.disband") ?? this.core.authManager.hasEverything(user),
-          canKick: this.core.authManager.hasPermission?.(user, state.kickPermission ?? "squad.kick") ?? this.core.authManager.hasEverything(user),
-          permissions: user.permissions ?? [],
-        },
-      });
-    }
-
-    if (url.pathname === "/api/squad-management/records" && req.method === "GET") {
-      const squadManagement = this.modules.squadManagement;
-      if (!squadManagement) {
-        return this.json(res, 404, {
-          error: "SquadManagementUnavailable",
-          message: "Squad management module is not loaded.",
-        });
-      }
-
-      const state = squadManagement.getState?.() ?? {};
-      const recordsResponse = await squadManagement.getRecords({
-        kind: url.searchParams.get("kind") ?? url.searchParams.get("type") ?? "all",
-        limit: url.searchParams.get("limit") ?? "500",
-        offset: url.searchParams.get("offset") ?? "0",
-      });
-
-      return this.json(res, 200, {
-        ok: true,
-        ...recordsResponse,
-        viewer: {
-          username: user.username,
-          role: user.role,
-          isSuperAdmin: this.core.authManager.hasEverything(user),
-          canDisband: this.core.authManager.hasPermission?.(user, state.disbandPermission ?? "squad.disband") ?? this.core.authManager.hasEverything(user),
-          canKick: this.core.authManager.hasPermission?.(user, state.kickPermission ?? "squad.kick") ?? this.core.authManager.hasEverything(user),
-          permissions: user.permissions ?? [],
-        },
-        policy: {
-          enforcementEnabled: Boolean(state.enforcementEnabled),
-          disbandPermission: state.disbandPermission ?? "squad.disband",
-          kickPermission: state.kickPermission ?? "squad.kick",
-          kickThreshold: Number(state.kickThreshold ?? 10),
-        },
-      });
-    }
-
-    if (url.pathname === "/api/squad-management/disband" && req.method === "POST") {
-      const squadManagement = this.modules.squadManagement;
-      if (!squadManagement) {
-        return this.json(res, 404, {
-          error: "SquadManagementUnavailable",
-          message: "Squad management module is not loaded.",
-        });
-      }
-
-      const body = await this.readJsonBody(req);
-      const result = await squadManagement.disband({
-        actor: user,
-        teamId: body.teamId ?? body.teamID ?? null,
-        squadId: body.squadId ?? body.squadID ?? null,
-        reason: body.reason ?? "",
-      });
-
-      return this.json(res, result.ok ? 200 : (result.error === "Forbidden" ? 403 : 400), {
-        ok: result.ok,
-        result,
-        state: squadManagement.getState(),
-      });
-    }
-
-    if (url.pathname === "/api/squad-management/kick" && req.method === "POST") {
-      const squadManagement = this.modules.squadManagement;
-      if (!squadManagement) {
-        return this.json(res, 404, {
-          error: "SquadManagementUnavailable",
-          message: "Squad management module is not loaded.",
-        });
-      }
-
-      const body = await this.readJsonBody(req);
-      const result = await squadManagement.kick({
-        actor: user,
-        anyId: body.anyId ?? body.anyID ?? body.steamId ?? body.steamID ?? body.eosId ?? body.eosID ?? body.creatorName ?? "",
-        creatorKey: body.creatorKey ?? "",
-        creatorName: body.creatorName ?? "",
-        steamId: body.steamId ?? body.steamID ?? "",
-        eosId: body.eosId ?? body.eosID ?? "",
-        count: body.count ?? 0,
-        reason: body.reason ?? "",
-      });
-
-      return this.json(res, result.ok ? 200 : (result.error === "Forbidden" ? 403 : 400), {
-        ok: result.ok,
-        result,
-        state: squadManagement.getState(),
+        squads: squadManagement?.getSquads?.(serverId) ?? this.modules.squadState.getSquads(serverId),
       });
     }
 
