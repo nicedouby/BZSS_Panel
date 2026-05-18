@@ -1,4 +1,4 @@
-const zhCN = {
+﻿const zhCN = {
   app: {
     checkingAuth: "正在检查登录状态...",
   },
@@ -55,19 +55,23 @@ const zhCN = {
     resume: "继续",
   },
   nav: {
-    matchStatus: "队伍管理",
+    matchStatus: "对局状态",
+    squadManagement: "小队管理",
     console: "控制台",
     playerDatabase: "玩家数据库",
     combatClean: "战斗管理（处理后）",
-    killManage: "击杀管理",    pluginSubscriptions: "插件订阅",
+    killManage: "击杀管理",
+    pluginSubscriptions: "插件订阅",
     settings: "设置",
   },
   routeTitle: {
-    matchStatus: "队伍管理",
+    matchStatus: "对局状态",
+    squadManagement: "小队管理",
     console: "控制台",
     playerDatabase: "玩家数据库",
     combatClean: "战斗管理（处理后）",
-    killManage: "击杀管理",    pluginSubscriptions: "插件订阅",
+    killManage: "击杀管理",
+    pluginSubscriptions: "插件订阅",
     comingSoon: "即将开放",
   },
   login: {
@@ -151,7 +155,7 @@ const zhCN = {
     filterLogs: "过滤日志",
   },
   match: {
-    title: "队伍管理",
+    title: "对局状态",
     unknownServer: "未知服务器",
     unknownMap: "未知地图",
     unknownMode: "未知模式",

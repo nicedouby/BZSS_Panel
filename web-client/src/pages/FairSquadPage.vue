@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <section class="squad-management-page page">
     <PageHeader
-      title="公平建队 / 小队管理"
+      title="公平建队"
       eyebrow="Squad Management"
       subtitle="围绕日志时钟窗口自动限制建队，超过阈值会对创建者执行踢出，所有解散动作都走同一个管理模块。"
     >
@@ -20,7 +20,7 @@
       :loading="loading && !state"
       :error="pageError"
       :empty="!pageError && !state && !loading"
-      empty-title="暂无小队管理状态"
+      empty-title="暂无公平建队状态"
       empty-text="等待日志时钟锚定后会显示当前窗口、当前小队以及建队追踪结果。"
     >
       <div class="page-stack">
@@ -29,6 +29,12 @@
           <span class="status-chip">日志 {{ clockLabel }}</span>
           <span class="status-chip" :data-tone="state?.isWarmup ? 'warn' : 'neutral'">
             {{ state?.isWarmup ? "暖服中" : "非暖服" }}
+          </span>
+          <span class="status-chip" :data-tone="state?.activationEnabled ? 'ok' : 'neutral'">
+            启用 {{ state?.activationPopulation ?? 0 }}/{{ state?.activationPlayerThreshold ?? 0 }}
+          </span>
+          <span class="status-chip" :data-tone="state?.activationEnabled ? 'ok' : 'warn'">
+            {{ state?.activationEnabled ? "已激活" : "未激活" }}
           </span>
           <span class="status-chip">阈值 {{ state?.kickThreshold ?? 10 }}</span>
           <span class="status-chip">解散 {{ state?.disbandPermission ?? "squad.disband" }}</span>
@@ -214,7 +220,7 @@ const query = useQuery({
 
 const state = computed(() => query.data.value?.state ?? null);
 const viewer = computed(() => query.data.value?.viewer ?? null);
-const pageError = computed(() => (query.error.value ? renderApiError(query.error.value, "无法加载小队管理状态") : ""));
+const pageError = computed(() => (query.error.value ? renderApiError(query.error.value, "无法加载公平建队状态") : ""));
 const loading = computed(() => Boolean(query.isLoading.value || query.isFetching.value));
 const canDisband = computed(() => Boolean(viewer.value?.canDisband || auth.user?.isSuperAdmin));
 const canKick = computed(() => Boolean(viewer.value?.canKick || auth.user?.isSuperAdmin));

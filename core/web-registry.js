@@ -35,6 +35,20 @@ export class WebRegistry {
     });
 
     this.registerPage({
+      id: "web.squadManagement",
+      title: "小队管理",
+      group: "基础",
+      route: "/squad-management",
+      pageModule: "/pages/squad-management.js",
+      source: "module.squadManagement",
+      description: "小队动作审计台。只负责记录、执行和查询建队、解散、踢出动作，不展示完整对局态势或成员列表。",
+      required: true,
+      enabled: true,
+      order: 15,
+      icon: "🛡️",
+    });
+
+    this.registerPage({
       id: "web.console",
       title: "控制台",
       group: "基础",

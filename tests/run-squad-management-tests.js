@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 import { createSquadManagementModule } from "../modules/squad-management/index.js";
+import { getPluginById, updatePluginConfig } from "../core/plugins/plugin.service.js";
 
 function createHarness(overrides = {}) {
   const coreListeners = new Map();
   const moduleListeners = new Map();
   const commands = [];
   const auditRecords = [];
+  const tempDbDir = fs.mkdtempSync(path.join(os.tmpdir(), "bzss-squad-"));
 
   const clock = {
     serverId: "BZSS_Main",
@@ -85,6 +90,17 @@ function createHarness(overrides = {}) {
   };
 
   const modules = {
+    playerState: {
+      getState() {
+        return {
+          count: Number(overrides.playerCount ?? 0),
+          players: Array.isArray(overrides.players) ? overrides.players : [],
+        };
+      },
+      getOnlinePlayers() {
+        return Array.isArray(overrides.players) ? overrides.players : [];
+      },
+    },
     matchState: {
       getState() {
         return {
@@ -128,6 +144,12 @@ function createHarness(overrides = {}) {
 
   const config = {
     get(path, defaultValue) {
+      if (path === "database") {
+        return {
+          dir: tempDbDir,
+          filename: "micepanel.db",
+        };
+      }
       if (path === "modules.squadManagement") {
         return {
           enabled: true,
@@ -153,6 +175,7 @@ function createHarness(overrides = {}) {
     modules,
     module,
     clock,
+    tempDbDir,
     squads,
     records,
     commands,
@@ -178,6 +201,24 @@ function subscribe(map, key, handler) {
 function emit(map, key, event) {
   for (const handler of map.get(key) ?? []) {
     handler(event);
+  }
+}
+
+function flushAsync() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function cleanupTempDbDir(dir) {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if (attempt === 5 || (error?.code !== "EBUSY" && error?.code !== "EPERM")) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
   }
 }
 
@@ -210,6 +251,7 @@ async function testBootstrapAutoKicksFrequentCreators() {
   }));
 
   const harness = createHarness({
+    playerCount: 1,
     clock: {
       logClockSeconds: 75,
       logClockLastResetAt: "2026-05-13T20:00:00.000Z",
@@ -229,17 +271,20 @@ async function testBootstrapAutoKicksFrequentCreators() {
 
   try {
     await harness.module.start();
+    await flushAsync();
 
     const state = harness.module.api.getState();
     assert.equal(state.creators[0].count, 11);
     assert.equal(harness.commands.some((command) => command.startsWith('AdminKick "76561198000009999"')), true);
   } finally {
     await harness.module.stop();
+    await cleanupTempDbDir(harness.tempDbDir);
   }
 }
 
 async function testNoBuildEventDisbandsSquadAndManualPermissionsAreChecked() {
   const harness = createHarness({
+    playerCount: 1,
     clock: {
       logClockSeconds: 10,
       logClockLastResetAt: "2026-05-13T20:00:00.000Z",
@@ -248,6 +293,7 @@ async function testNoBuildEventDisbandsSquadAndManualPermissionsAreChecked() {
 
   try {
     await harness.module.start();
+    await flushAsync();
 
     harness.core.eventBus.emitModuleEvent("module.squadLifecycle", "squadCreated", {
       serverId: "BZSS_Main",
@@ -262,8 +308,16 @@ async function testNoBuildEventDisbandsSquadAndManualPermissionsAreChecked() {
       creationSignature: "sig-rulebreaker",
       sourceEventId: "event-1",
     });
+    await flushAsync();
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     assert.equal(harness.commands.some((command) => command === "AdminDisbandSquad 1 9"), true);
+
+    const records = await harness.module.api.getRecords({ limit: 20 });
+    assert.equal(records.summary.created >= 1, true);
+    assert.equal(records.summary.disbanded >= 1, true);
+    assert.equal(records.records.some((record) => record.kind === "squad_created"), true);
+    assert.equal(records.records.some((record) => record.kind === "disband"), true);
 
     const disbandDenied = await harness.module.api.disband({
       actor: {
@@ -291,6 +345,55 @@ async function testNoBuildEventDisbandsSquadAndManualPermissionsAreChecked() {
     assert.equal(kickDenied.error, "Forbidden");
   } finally {
     await harness.module.stop();
+    await cleanupTempDbDir(harness.tempDbDir);
+  }
+}
+
+async function testActivationThresholdBlocksAutomationUntilPopulationIsHighEnough() {
+  const originalPluginConfig = getPluginById("fair-squad")?.config ?? {};
+  updatePluginConfig("fair-squad", {
+    ...originalPluginConfig,
+    activationPlayerThreshold: 5,
+  });
+
+  const harness = createHarness({
+    playerCount: 3,
+    clock: {
+      logClockSeconds: 10,
+      logClockLastResetAt: "2026-05-13T20:00:00.000Z",
+    },
+  });
+
+  try {
+    await harness.module.start();
+    await flushAsync();
+
+    const state = harness.module.api.getState();
+    assert.equal(state.activationPopulation, 3);
+    assert.equal(state.activationPlayerThreshold, 5);
+    assert.equal(state.activationEnabled, false);
+
+    harness.core.eventBus.emitModuleEvent("module.squadLifecycle", "squadCreated", {
+      serverId: "BZSS_Main",
+      matchId: "match-1",
+      teamId: 1,
+      squadId: 11,
+      squadName: "Squad 11",
+      creatorName: "QuietBuilder",
+      creatorSteamId: "76561198000005678",
+      creatorEosId: "eos-quiet-builder",
+      createdAtMs: Date.parse("2026-05-13T20:00:10.000Z"),
+      creationSignature: "sig-quiet-builder",
+      sourceEventId: "event-quiet",
+    });
+    await flushAsync();
+
+    assert.equal(harness.commands.some((command) => command === "AdminDisbandSquad 1 11"), false);
+    assert.equal(harness.commands.some((command) => command.startsWith("AdminKick ")), false);
+  } finally {
+    await harness.module.stop();
+    updatePluginConfig("fair-squad", originalPluginConfig);
+    await cleanupTempDbDir(harness.tempDbDir);
   }
 }
 
@@ -320,6 +423,7 @@ async function testInfantrySweepHonorsWhitelist() {
   ];
 
   const harness = createHarness({
+    playerCount: 1,
     clock: {
       logClockSeconds: 35,
       logClockLastResetAt: "2026-05-13T20:00:00.000Z",
@@ -339,6 +443,7 @@ async function testInfantrySweepHonorsWhitelist() {
 
   try {
     await harness.module.start();
+    await flushAsync();
     const state = harness.module.api.getState();
 
     assert.equal(state.squads.find((squad) => squad.squadName === "Bad Squad")?.shouldDisband, true);
@@ -349,12 +454,14 @@ async function testInfantrySweepHonorsWhitelist() {
     assert.equal(harness.commands.some((command) => command === "AdminDisbandSquad 1 3"), false);
   } finally {
     await harness.module.stop();
+    await cleanupTempDbDir(harness.tempDbDir);
   }
 }
 
 async function main() {
   await testBootstrapAutoKicksFrequentCreators();
   await testNoBuildEventDisbandsSquadAndManualPermissionsAreChecked();
+  await testActivationThresholdBlocksAutomationUntilPopulationIsHighEnough();
   await testInfantrySweepHonorsWhitelist();
   console.log("run-squad-management-tests.js: ok");
 }

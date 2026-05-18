@@ -22,6 +22,7 @@ const ui = useUiStore();
 
 const nav = [
   { path: "/match-status", icon: "MS", label: t("nav.matchStatus") },
+  { path: "/squad-management", icon: "SM", label: t("nav.squadManagement") },
   { path: "/console", icon: "CON", label: t("nav.console") },
   { path: "/player-database", icon: "DB", label: t("nav.playerDatabase") },
   { path: "/combat-clean", icon: "CC", label: t("nav.combatClean") },

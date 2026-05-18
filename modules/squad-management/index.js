@@ -2,6 +2,8 @@
 
 import { buildSquadLifecycleSlotKey } from "../squad-lifecycle/service.js";
 import { normalizeSquadName } from "../squad-lifecycle/log-adapter.js";
+import { createDatabase } from "../../core/database.js";
+import { getPluginById } from "../../core/plugins/plugin.service.js";
 
 const MODULE_ID = "module.squadManagement";
 const API_NAME = "squadManagement";
@@ -52,11 +54,13 @@ export function createSquadManagementModule({ core, modules, config, logger }) {
   const allowedInfantryNames = normalizeStringSet(moduleConfig.allowedInfantryNames, DEFAULT_ALLOWED_INFANTRY_NAMES);
   const defaultSquadNamePattern = safeRegex(moduleConfig.defaultSquadNamePattern ?? DEFAULT_DEFAULT_SQUAD_NAME_PATTERN, "i")
     ?? safeRegex(DEFAULT_DEFAULT_SQUAD_NAME_PATTERN, "i");
+  const databaseConfig = moduleConfig.database ?? config.get("database", config.get("modules.playerDatabase.database", {}));
 
   const creatorStats = new Map();
   const seenCreationKeys = new Set();
   const disbandedSquadKeys = new Set();
   const recentActions = [];
+  let db = null;
   const unsubscribers = [];
   const runtime = {
     roundKey: "",
@@ -116,6 +120,10 @@ export function createSquadManagementModule({ core, modules, config, logger }) {
         source: "manual",
       });
     },
+
+    async getRecords(query = {}) {
+      return listRecords(query);
+    },
   };
 
   return {
@@ -128,6 +136,10 @@ export function createSquadManagementModule({ core, modules, config, logger }) {
     },
     apiName: API_NAME,
     api,
+
+    async init() {
+      db = await createDatabase(databaseConfig);
+    },
 
     async start() {
       if (!enabled) {
@@ -197,6 +209,11 @@ export function createSquadManagementModule({ core, modules, config, logger }) {
         clearInterval(sweepTimer);
         sweepTimer = null;
       }
+
+      if (db?.close) {
+        await db.close();
+      }
+      db = null;
     },
   };
 
@@ -239,7 +256,7 @@ export function createSquadManagementModule({ core, modules, config, logger }) {
     runtime.lastSweepReason = reason;
     runtime.lastStateUpdatedAt = runtime.lastSweepAt;
 
-    if (enforce && !clock.isWarmup) {
+    if (enforce && !clock.isWarmup && getActivationStatus(clock).activationEnabled) {
       await enforceCurrentViolations(clock, reason);
     }
 
@@ -391,10 +408,15 @@ export function createSquadManagementModule({ core, modules, config, logger }) {
     runtime.lastStateUpdatedAt = stats.lastActionAt;
 
     if (enforce) {
-      void maybeDisbandViolation(record, clock, source);
-      void maybeKickCreator(record.creatorKey, clock, { source, creation: record });
+      const activation = getActivationStatus(clock);
+      if (activation.activationEnabled) {
+        void maybeDisbandViolation(record, clock, source);
+        void maybeKickCreator(record.creatorKey, clock, { source, creation: record });
+      }
     }
 
+    void persistCreationRecord(record, { clock, source });
+    void emitSquadCreatedEvent(record, { clock, source });
     return record;
   }
 
@@ -436,6 +458,7 @@ export function createSquadManagementModule({ core, modules, config, logger }) {
         source,
         system,
       });
+      await persistActionRecord("disband", result, { actor, clock, squad });
       return result;
     }
 
@@ -456,6 +479,7 @@ export function createSquadManagementModule({ core, modules, config, logger }) {
         source,
         system,
       });
+      await persistActionRecord("disband", result, { actor, clock, squad });
       return result;
     }
 
@@ -475,6 +499,7 @@ export function createSquadManagementModule({ core, modules, config, logger }) {
         source,
         system,
       });
+      await persistActionRecord("disband", result, { actor, clock, squad });
       return result;
     }
 
@@ -530,11 +555,17 @@ export function createSquadManagementModule({ core, modules, config, logger }) {
       source,
       system,
     });
+    await persistActionRecord("disband", result, {
+      actor,
+      clock,
+      squad: ok ? squad ?? null : squad,
+    });
 
     return result;
   }
 
   async function executeKick({ actor = SYSTEM_ACTOR, anyId = "", reason = DEFAULT_AUTO_KICK_REASON, source = "manual", system = false, creatorKey = "", creatorName = "", steamId = "", eosId = "", count = 0, creation = null } = {}) {
+    const clock = getClockContext();
     const targetId = String(anyId ?? steamId ?? eosId ?? creatorName ?? "").trim();
 
     const baseEvent = {
@@ -570,6 +601,7 @@ export function createSquadManagementModule({ core, modules, config, logger }) {
         source,
         system,
       });
+      await persistActionRecord("kick", result, { actor, clock, creation });
       return result;
     }
 
@@ -590,6 +622,7 @@ export function createSquadManagementModule({ core, modules, config, logger }) {
         source,
         system,
       });
+      await persistActionRecord("kick", result, { actor, clock, creation });
       return result;
     }
 
@@ -609,6 +642,7 @@ export function createSquadManagementModule({ core, modules, config, logger }) {
         source,
         system,
       });
+      await persistActionRecord("kick", result, { actor, clock, creation });
       return result;
     }
 
@@ -655,6 +689,7 @@ export function createSquadManagementModule({ core, modules, config, logger }) {
       system,
       creationSignature: String(creation?.creationSignature ?? ""),
     });
+    await persistActionRecord("kick", result, { actor, clock, creation });
 
     return result;
   }
@@ -796,6 +831,17 @@ export function createSquadManagementModule({ core, modules, config, logger }) {
   function buildStateSnapshot() {
     const clock = getClockContext();
     const squads = getCurrentSquads(clock);
+    const activationPopulation = Number(
+      modules.playerState?.getState?.()?.count
+      ?? modules.playerState?.getOnlinePlayers?.(clock.serverId)?.length
+      ?? 0,
+    ) || 0;
+    const activationPlayerThresholdValue = Number(
+      getPluginById("fair-squad")?.config?.activationPlayerThreshold ?? moduleConfig.activationPlayerThreshold ?? 0,
+    );
+    const activationPlayerThreshold = Number.isFinite(activationPlayerThresholdValue)
+      ? Math.max(0, Math.floor(activationPlayerThresholdValue))
+      : 0;
     const creators = [...creatorStats.entries()]
       .map(([creatorKey, stats]) => ({
         creatorKey,
@@ -833,6 +879,10 @@ export function createSquadManagementModule({ core, modules, config, logger }) {
       logClockLastResetAt: clock.logClockLastResetAt,
       logClockLastResetReason: clock.logClockLastResetReason,
       isWarmup: clock.isWarmup,
+      activationPlayerThreshold,
+      activationPopulation,
+      activationPopulationSource: "playerState.count",
+      activationEnabled: activationPlayerThreshold <= 0 ? true : activationPopulation >= activationPlayerThreshold,
       window: clock.window,
       enforcementEnabled: enabled,
       disbandPermission,
@@ -1159,6 +1209,314 @@ export function createSquadManagementModule({ core, modules, config, logger }) {
     }
   }
 
+  async function ensureDb() {
+    if (db) return db;
+    db = await createDatabase(databaseConfig);
+    return db;
+  }
+
+  async function persistCreationRecord(record, { clock = getClockContext(), source = "event" } = {}) {
+    if (!record) return null;
+    const eventTime = Number(record.createdAtMs ?? Date.now());
+    const timeText = iso(eventTime) || new Date().toISOString();
+
+    const row = {
+      record_key: buildCreationRecordKey(record),
+      record_type: "squad_created",
+      server_id: String(record.serverId ?? clock.serverId ?? "").trim(),
+      match_id: String(record.matchId ?? clock.currentMatchId ?? "").trim(),
+      time: timeText,
+      log_time: timeText,
+      source: String(source ?? record.creationSource ?? "event").trim() || "event",
+      actor_name: "",
+      actor_id: "",
+      team_id: String(record.teamId ?? "").trim(),
+      squad_id: String(record.squadId ?? "").trim(),
+      squad_name: String(record.squadName ?? "").trim(),
+      creator_name: String(record.creatorName ?? "").trim(),
+      creator_eos_id: String(record.creatorEosId ?? "").trim(),
+      creator_steam_id: String(record.creatorSteamId ?? "").trim(),
+      player_name: String(record.creatorName ?? "").trim(),
+      player_eos_id: String(record.creatorEosId ?? "").trim(),
+      player_steam_id: String(record.creatorSteamId ?? "").trim(),
+      reason: String(record.creationConfidence ?? record.creationSource ?? "").trim(),
+      result: "created",
+      error: "",
+      command: "",
+      creation_signature: String(record.creationSignature ?? record.recordKey ?? "").trim(),
+      created_at: eventTime,
+      updated_at: eventTime,
+    };
+
+    try {
+      await saveSquadManagementRecord(row);
+    } catch (error) {
+      moduleLogger.warn(`[SquadManagement] failed to persist creation record: ${error?.message ?? error}`);
+    }
+
+    return row;
+  }
+
+  async function persistActionRecord(kind, result, { actor = SYSTEM_ACTOR, clock = getClockContext(), squad = null, creation = null } = {}) {
+    if (!result) return null;
+
+    const target = cloneValue(result.target ?? {});
+    const resolvedSquad = normalizeCurrentSquad(
+      squad
+        ?? findSquadByIds(clock, target.teamId, target.squadId)
+        ?? {},
+      clock,
+    );
+    const eventTime = parseTimestamp(result.time ?? Date.now());
+    const timeText = iso(eventTime) || new Date().toISOString();
+
+    const row = {
+      record_key: buildActionRecordKey(kind, result, actor, resolvedSquad, creation),
+      record_type: kind,
+      server_id: String(resolvedSquad.serverId ?? clock.serverId ?? "").trim(),
+      match_id: String(resolvedSquad.matchId ?? clock.currentMatchId ?? "").trim(),
+      time: timeText,
+      log_time: timeText,
+      source: String(result.source ?? "").trim(),
+      actor_name: String(actor?.username ?? actor?.id ?? "").trim(),
+      actor_id: String(actor?.id ?? actor?.username ?? "").trim(),
+      team_id: String(target.teamId ?? resolvedSquad.teamId ?? "").trim(),
+      squad_id: String(target.squadId ?? resolvedSquad.squadId ?? "").trim(),
+      squad_name: String(target.squadName ?? resolvedSquad.squadName ?? "").trim(),
+      creator_name: String(target.creatorName ?? resolvedSquad.creatorName ?? "").trim(),
+      player_name: kind === "kick"
+        ? String(target.creatorName ?? target.anyId ?? resolvedSquad.creatorName ?? "").trim()
+        : "",
+      creator_eos_id: String(target.eosId ?? resolvedSquad.creatorEosId ?? creation?.creatorEosId ?? "").trim(),
+      creator_steam_id: String(target.steamId ?? resolvedSquad.creatorSteamId ?? creation?.creatorSteamId ?? "").trim(),
+      player_eos_id: String(target.eosId ?? resolvedSquad.creatorEosId ?? creation?.creatorEosId ?? "").trim(),
+      player_steam_id: String(target.steamId ?? resolvedSquad.creatorSteamId ?? creation?.creatorSteamId ?? "").trim(),
+      reason: String(result.reason ?? "").trim(),
+      result: result.ok ? "success" : String(result.error ?? "failed").trim() || "failed",
+      error: String(result.error ?? "").trim(),
+      command: String(result.command ?? "").trim(),
+      creation_signature: String(creation?.creationSignature ?? resolvedSquad.creationSignature ?? "").trim(),
+      created_at: eventTime,
+      updated_at: eventTime,
+    };
+
+    try {
+      await saveSquadManagementRecord(row);
+    } catch (error) {
+      moduleLogger.warn(`[SquadManagement] failed to persist action record: ${error?.message ?? error}`);
+    }
+
+    emitActionEvent(kind, result, {
+      record: row,
+      serverId: row.server_id,
+    });
+    return row;
+  }
+
+  async function saveSquadManagementRecord(row) {
+    const database = await ensureDb();
+    await database.run(
+      `INSERT INTO squad_management_records (
+         record_key, record_type, server_id, match_id, time, log_time, source,
+         actor_name, actor_id, creator_name, creator_eos_id, creator_steam_id,
+         player_name, player_eos_id, player_steam_id, team_id, squad_id, squad_name,
+         reason, result, error, command, creation_signature, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(record_key) DO NOTHING`,
+      row.record_key,
+      row.record_type,
+      String(row.server_id ?? ""),
+      String(row.match_id ?? ""),
+      String(row.time ?? ""),
+      String(row.log_time ?? row.time ?? ""),
+      String(row.source ?? ""),
+      String(row.actor_name ?? ""),
+      String(row.actor_id ?? ""),
+      String(row.creator_name ?? ""),
+      String(row.creator_eos_id ?? ""),
+      String(row.creator_steam_id ?? ""),
+      String(row.player_name ?? ""),
+      String(row.player_eos_id ?? ""),
+      String(row.player_steam_id ?? ""),
+      String(row.team_id ?? ""),
+      String(row.squad_id ?? ""),
+      String(row.squad_name ?? ""),
+      String(row.reason ?? ""),
+      String(row.result ?? ""),
+      String(row.error ?? ""),
+      String(row.command ?? ""),
+      String(row.creation_signature ?? ""),
+      Number(row.created_at ?? Date.now()),
+      Number(row.updated_at ?? Date.now()),
+    );
+  }
+
+  async function listRecords(query = {}) {
+    const database = await ensureDb();
+    const kind = normalizeRecordKindFilter(query.kind ?? query.type ?? "all");
+    const limit = Math.min(Math.max(1, Math.floor(Number(query.limit ?? 500) || 500)), 2000);
+    const offset = Math.max(0, Math.floor(Number(query.offset ?? 0) || 0));
+
+    const where = kind === "all" ? "" : "WHERE kind = ?";
+    const params = kind === "all" ? [limit, offset] : [kind, limit, offset];
+    const records = await database.all(
+      `SELECT *
+       FROM squad_management_records
+       ${where}
+       ORDER BY created_at DESC, id DESC
+       LIMIT ? OFFSET ?`,
+      ...params,
+    );
+
+    const summary = await buildRecordsSummary(database);
+    return {
+      ok: true,
+      kind,
+      limit,
+      offset,
+      total: summary.total,
+      summary,
+      records: records.map(mapRecordRow),
+    };
+  }
+
+  async function buildRecordsSummary(database) {
+    const totalRow = await database.get("SELECT COUNT(*) AS count, MAX(created_at) AS lastEventTime FROM squad_management_records");
+    const counts = await database.all(
+      "SELECT record_type AS kind, COUNT(*) AS count FROM squad_management_records GROUP BY record_type",
+    );
+    const results = await database.all(
+      "SELECT result, COUNT(*) AS count FROM squad_management_records GROUP BY result",
+    );
+
+    const byKind = counts.reduce((acc, row) => {
+      acc[String(row.kind ?? "")] = Number(row.count ?? 0);
+      return acc;
+    }, {});
+    const byResult = results.reduce((acc, row) => {
+      acc[String(row.result ?? "")] = Number(row.count ?? 0);
+      return acc;
+    }, {});
+    const actionTotal = Number(byKind.disband ?? 0) + Number(byKind.kick ?? 0);
+    const successActions = Number(byResult.success ?? 0);
+
+    return {
+      total: Number(totalRow?.count ?? 0),
+      created: Number(byKind.squad_created ?? 0),
+      disbanded: Number(byKind.disband ?? 0),
+      kicked: Number(byKind.kick ?? 0),
+      actions: actionTotal,
+      success: successActions,
+      failed: Math.max(0, actionTotal - successActions),
+      lastEventAt: iso(totalRow?.lastEventTime ?? 0),
+    };
+  }
+
+  function mapRecordRow(row) {
+    const kind = String(row?.record_type ?? row?.kind ?? "");
+    return {
+      id: Number(row?.id ?? 0),
+      recordKey: String(row?.record_key ?? ""),
+      kind,
+      time: String(row?.time ?? iso(row?.created_at ?? 0) ?? ""),
+      logTime: String(row?.log_time ?? row?.time ?? ""),
+      serverId: String(row?.server_id ?? ""),
+      matchId: String(row?.match_id ?? ""),
+      source: String(row?.source ?? ""),
+      operatorName: String(row?.actor_name ?? row?.operator_name ?? ""),
+      teamId: normalizeNullableNumber(row?.team_id),
+      squadId: normalizeNullableNumber(row?.squad_id),
+      squadName: String(row?.squad_name ?? ""),
+      creatorName: String(row?.creator_name ?? ""),
+      playerName: String(row?.player_name ?? ""),
+      steamId: String(row?.player_steam_id ?? row?.creator_steam_id ?? row?.steam_id ?? ""),
+      eosId: String(row?.player_eos_id ?? row?.creator_eos_id ?? row?.eos_id ?? ""),
+      reason: String(row?.reason ?? ""),
+      result: String(row?.result ?? ""),
+      error: String(row?.error ?? ""),
+      command: String(row?.command ?? ""),
+      payload: parseJsonPayload(row?.payload_json ?? "{}"),
+    };
+  }
+
+  function emitSquadCreatedEvent(record, { clock = getClockContext(), source = "event" } = {}) {
+    const payload = {
+      kind: "squad_created",
+      source,
+      serverId: String(record?.serverId ?? clock.serverId ?? ""),
+      matchId: String(record?.matchId ?? clock.currentMatchId ?? ""),
+      record: cloneValue(record),
+    };
+    core.eventBus?.emitModuleEvent?.(MODULE_ID, "SQUAD_CREATED", payload);
+    core.eventBus?.emitModuleEvent?.(MODULE_ID, "squadCreated", payload);
+  }
+
+  function emitActionEvent(kind, result, payload = {}) {
+    const eventName = result?.ok ? "SQUAD_MANAGEMENT_ACTION_COMPLETED" : "SQUAD_MANAGEMENT_ACTION_FAILED";
+    const eventPayload = {
+      kind,
+      source: String(result?.source ?? ""),
+      serverId: payload.serverId ?? result?.target?.serverId ?? "",
+      result: cloneValue(result),
+      record: cloneValue(payload.record ?? null),
+    };
+    core.eventBus?.emitModuleEvent?.(MODULE_ID, eventName, eventPayload);
+  }
+
+  function findSquadByIds(clock, teamId, squadId) {
+    const squads = getCurrentSquads(clock);
+    const targetTeamId = normalizeNullableNumber(teamId);
+    const targetSquadId = normalizeNullableNumber(squadId);
+    if (targetTeamId == null || targetSquadId == null) return null;
+    return squads.find((squad) => Number(squad.teamId ?? squad.teamID) === targetTeamId && Number(squad.squadId ?? squad.squadID) === targetSquadId) ?? null;
+  }
+
+  function buildCreationRecordKey(record) {
+    return [
+      "creation",
+      String(record?.creationSignature ?? "").trim(),
+      String(record?.recordKey ?? "").trim(),
+      String(record?.sourceEventId ?? "").trim(),
+      String(record?.serverId ?? "").trim(),
+      String(record?.matchId ?? "").trim(),
+      String(record?.squadId ?? "").trim(),
+    ].filter(Boolean).join(":");
+  }
+
+  function buildActionRecordKey(kind, result, actor, squad, creation) {
+    const target = result?.target ?? {};
+    return [
+      "action",
+      String(kind ?? ""),
+      String(result?.time ?? ""),
+      String(result?.source ?? ""),
+      String(actor?.id ?? actor?.username ?? ""),
+      String(squad?.serverId ?? result?.target?.serverId ?? ""),
+      String(squad?.matchId ?? result?.target?.matchId ?? ""),
+      String(target.teamId ?? ""),
+      String(target.squadId ?? ""),
+      String(target.anyId ?? target.creatorKey ?? ""),
+      String(result?.command ?? ""),
+      String(creation?.creationSignature ?? ""),
+    ].filter(Boolean).join(":");
+  }
+
+  function normalizeRecordKindFilter(value) {
+    const kind = String(value ?? "all").trim().toLowerCase();
+    if (kind === "created" || kind === "squad_created") return "squad_created";
+    if (kind === "disband" || kind === "kick" || kind === "all") return kind;
+    return "all";
+  }
+
+  function parseJsonPayload(value) {
+    if (typeof value !== "string" || !value.trim()) return {};
+    try {
+      return JSON.parse(value);
+    } catch {
+      return {};
+    }
+  }
+
   function hasPermission(actor, permission) {
     if (!actor) return false;
     if (core.authManager?.hasEverything?.(actor)) return true;
@@ -1229,5 +1587,26 @@ export function createSquadManagementModule({ core, modules, config, logger }) {
       ?? modules.squadLifecycle?.getCurrent?.(serverId)?.matchId
       ?? "",
     ).trim();
+  }
+
+  function getActivationStatus(clock = getClockContext()) {
+    const activationPopulation = Number(
+      modules.playerState?.getState?.()?.count
+      ?? modules.playerState?.getOnlinePlayers?.(clock.serverId)?.length
+      ?? 0,
+    ) || 0;
+    const activationPlayerThresholdValue = Number(
+      getPluginById("fair-squad")?.config?.activationPlayerThreshold ?? moduleConfig.activationPlayerThreshold ?? 0,
+    );
+    const activationPlayerThreshold = Number.isFinite(activationPlayerThresholdValue)
+      ? Math.max(0, Math.floor(activationPlayerThresholdValue))
+      : 0;
+
+    return {
+      activationPlayerThreshold,
+      activationPopulation,
+      activationPopulationSource: "playerState.count",
+      activationEnabled: activationPlayerThreshold <= 0 ? true : activationPopulation >= activationPlayerThreshold,
+    };
   }
 }

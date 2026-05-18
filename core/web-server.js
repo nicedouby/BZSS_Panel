@@ -1234,6 +1234,42 @@ export class WebServer {
       });
     }
 
+    if (url.pathname === "/api/squad-management/records" && req.method === "GET") {
+      const squadManagement = this.modules.squadManagement;
+      if (!squadManagement) {
+        return this.json(res, 404, {
+          error: "SquadManagementUnavailable",
+          message: "Squad management module is not loaded.",
+        });
+      }
+
+      const state = squadManagement.getState?.() ?? {};
+      const recordsResponse = await squadManagement.getRecords({
+        kind: url.searchParams.get("kind") ?? url.searchParams.get("type") ?? "all",
+        limit: url.searchParams.get("limit") ?? "500",
+        offset: url.searchParams.get("offset") ?? "0",
+      });
+
+      return this.json(res, 200, {
+        ok: true,
+        ...recordsResponse,
+        viewer: {
+          username: user.username,
+          role: user.role,
+          isSuperAdmin: this.core.authManager.hasEverything(user),
+          canDisband: this.core.authManager.hasPermission?.(user, state.disbandPermission ?? "squad.disband") ?? this.core.authManager.hasEverything(user),
+          canKick: this.core.authManager.hasPermission?.(user, state.kickPermission ?? "squad.kick") ?? this.core.authManager.hasEverything(user),
+          permissions: user.permissions ?? [],
+        },
+        policy: {
+          enforcementEnabled: Boolean(state.enforcementEnabled),
+          disbandPermission: state.disbandPermission ?? "squad.disband",
+          kickPermission: state.kickPermission ?? "squad.kick",
+          kickThreshold: Number(state.kickThreshold ?? 10),
+        },
+      });
+    }
+
     if (url.pathname === "/api/squad-management/disband" && req.method === "POST") {
       const squadManagement = this.modules.squadManagement;
       if (!squadManagement) {

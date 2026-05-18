@@ -92,6 +92,10 @@ export interface SquadManagementState {
   logClockLastResetAt: string;
   logClockLastResetReason: string;
   isWarmup: boolean;
+  activationPlayerThreshold: number;
+  activationPopulation: number;
+  activationPopulationSource: string;
+  activationEnabled: boolean;
   window: "waiting" | "warmup" | "no-build" | "infantry-only" | "open";
   enforcementEnabled: boolean;
   disbandPermission: string;
@@ -143,6 +147,58 @@ export interface SquadManagementActionResponse {
   state: SquadManagementState;
 }
 
+export interface SquadManagementRecord {
+  id: number;
+  recordKey: string;
+  kind: "squad_created" | "disband" | "kick" | string;
+  time: string;
+  logTime: string;
+  serverId: string;
+  matchId: string;
+  source: string;
+  operatorName: string;
+  teamId: number | null;
+  squadId: number | null;
+  squadName: string;
+  creatorName: string;
+  playerName: string;
+  steamId: string;
+  eosId: string;
+  reason: string;
+  result: string;
+  error: string;
+  command: string;
+  payload: Record<string, unknown>;
+}
+
+export interface SquadManagementRecordSummary {
+  total: number;
+  created: number;
+  disbanded: number;
+  kicked: number;
+  actions: number;
+  success: number;
+  failed: number;
+  lastEventAt: string;
+}
+
+export interface SquadManagementRecordsResponse {
+  ok: boolean;
+  kind: string;
+  limit: number;
+  offset: number;
+  total: number;
+  summary: SquadManagementRecordSummary;
+  records: SquadManagementRecord[];
+  viewer: SquadManagementViewer;
+  policy: {
+    enforcementEnabled: boolean;
+    disbandPermission: string;
+    kickPermission: string;
+    kickThreshold: number;
+  };
+}
+
 export function getSquadManagementState() {
   return apiGet<SquadManagementStateResponse>("/api/squad-management/state");
 }
@@ -167,3 +223,15 @@ export function kickSquadCreator(payload: {
   return apiPost<SquadManagementActionResponse>("/api/squad-management/kick", payload);
 }
 
+export function getSquadManagementRecords(params: {
+  kind?: string;
+  limit?: number | string;
+  offset?: number | string;
+} = {}) {
+  const search = new URLSearchParams();
+  if (params.kind && params.kind !== "all") search.set("kind", String(params.kind));
+  if (params.limit != null) search.set("limit", String(params.limit));
+  if (params.offset != null) search.set("offset", String(params.offset));
+  const query = search.toString();
+  return apiGet<SquadManagementRecordsResponse>(`/api/squad-management/records${query ? `?${query}` : ""}`);
+}

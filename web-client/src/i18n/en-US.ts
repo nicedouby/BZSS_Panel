@@ -1,4 +1,4 @@
-const enUS = {
+﻿const enUS = {
   app: {
     checkingAuth: "Checking authentication status...",
   },
@@ -56,6 +56,7 @@ const enUS = {
   },
   nav: {
     matchStatus: "Match Status",
+    squadManagement: "Squad Management",
     console: "Console",
     playerDatabase: "Player Database",
     combatClean: "Combat Manager (Processed)",
@@ -65,6 +66,7 @@ const enUS = {
   },
   routeTitle: {
     matchStatus: "Match Status",
+    squadManagement: "Squad Management",
     console: "Console",
     playerDatabase: "Player Database",
     combatClean: "Combat Manager (Processed)",
