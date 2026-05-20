@@ -922,7 +922,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/query/combat-clean" && req.method === "GET") {
-      const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
+      const serverId = url.searchParams.get("serverId") ?? "";
       return this.json(res, 200, {
         events: this.modules.combatClean?.getEvents?.({
           serverId,
@@ -1061,7 +1061,7 @@ export class WebServer {
           message: "Combat clean module is not loaded.",
         });
       }
-      const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
+      const serverId = url.searchParams.get("serverId") ?? "";
 
       if (url.pathname === "/api/combat-clean/events" && req.method === "GET") {
         return this.json(res, 200, {

@@ -141,6 +141,63 @@ async function testHealthEndpointDoesNotRequireAuth() {
   assert.equal(body.auth.enabled, true);
 }
 
+async function testCombatCleanRoutesDoNotForceCurrentServerFilter() {
+  const calls = [];
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "viewer", role: "Operator" };
+        },
+        hasEverything() {
+          return false;
+        },
+      },
+      webStatus: {
+        serverId: "CurrentServer",
+      },
+    },
+    modules: {
+      combatClean: {
+        getEvents(args) {
+          calls.push({ route: "events", args });
+          return [{ id: "evt-1" }];
+        },
+        getOverview(serverId) {
+          calls.push({ route: "overview", serverId });
+          return { count: 1, serverId };
+        },
+      },
+    },
+  });
+
+  const clean = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/combat-clean/events",
+    headers: { host: "localhost" },
+    socket: {},
+  }, clean.res);
+  assert.equal(clean.state.status, 200);
+  const cleanBody = JSON.parse(clean.state.body);
+  assert.equal(cleanBody.events[0].id, "evt-1");
+  assert.equal(calls[0].args.serverId, "");
+  assert.equal(calls[1].serverId, "");
+
+  const query = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/query/combat-clean",
+    headers: { host: "localhost" },
+    socket: {},
+  }, query.res);
+  assert.equal(query.state.status, 200);
+  const queryBody = JSON.parse(query.state.body);
+  assert.equal(queryBody.events[0].id, "evt-1");
+  assert.equal(calls[2].args.serverId, "");
+  assert.equal(calls[3].serverId, "");
+}
+
 async function testWeaponCollectorApiRequiresGet() {
   const server = createServer({
     core: {
@@ -986,6 +1043,7 @@ await testReadJsonBodyRejectsInvalidJson();
 await testReadJsonBodyRejectsOversizedPayload();
 await testGetPluginApiReturnsMatchingPluginApi();
 await testHealthEndpointDoesNotRequireAuth();
+await testCombatCleanRoutesDoNotForceCurrentServerFilter();
 await testWeaponCollectorApiRequiresGet();
 await testGroupReportSnapshotRouteReturnsWrappedSnapshot();
 await testSnapshotAllRequiresAuth();
