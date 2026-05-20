@@ -1001,6 +1001,55 @@ async function testTeamBalanceRoutesExposeStateAndRequireSuperAdminForMutations(
   assert.equal(calls.at(-1).type, "executePlan");
 }
 
+async function testAdminWarnRecentRouteReturnsMemoryRecords() {
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin", role: "SuperAdmin" };
+        },
+        hasEverything() {
+          return true;
+        },
+      },
+    },
+    modules: {
+      adminWarn: {
+        getRecent(filter) {
+          assert.equal(filter.sourceModule, "damage_display");
+          return [{
+            id: "warn-1",
+            createdAt: 1710000000000,
+            sourceModule: "damage_display",
+            reason: "victim_damage",
+            targetName: "PlayerB",
+            message: "hello",
+            success: true,
+            skipped: false,
+          }];
+        },
+        getConfig() {
+          return { maxRecords: 3000, ttlMs: 1800000 };
+        },
+      },
+    },
+  });
+
+  const recorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/admin-warns/recent?sourceModule=damage_display&limit=10",
+    headers: { host: "localhost" },
+    socket: {},
+  }, recorder.res);
+
+  assert.equal(recorder.state.status, 200);
+  const body = JSON.parse(recorder.state.body);
+  assert.equal(body.records.length, 1);
+  assert.equal(body.records[0].targetName, "PlayerB");
+  assert.equal(body.config.maxRecords, 3000);
+}
+
 async function testVueRouteFallsBackToIndexHtml() {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-web-"));
   await fs.writeFile(path.join(tempDir, "index.html"), "<html><body>vue-app</body></html>", "utf8");
@@ -1054,6 +1103,7 @@ await testSquadManagementRoutesExposeStateAndMutations();
 await testSettingsRoutesRequireAuthAndSuperAdmin();
 await testWarmupRoutesExposeStateAndValidateInput();
 await testTeamBalanceRoutesExposeStateAndRequireSuperAdminForMutations();
+await testAdminWarnRecentRouteReturnsMemoryRecords();
 await testVueRouteFallsBackToIndexHtml();
 
 console.log("web server tests passed");

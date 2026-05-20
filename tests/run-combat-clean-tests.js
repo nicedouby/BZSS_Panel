@@ -127,6 +127,39 @@ async function testWeaponTypeClassificationIsPreserved() {
   await module.stop();
 }
 
+async function testProcessedCombatRecordPublishesUnifiedEventAndTags() {
+  const { module, listeners, moduleEvents } = createHarness();
+  await module.start();
+
+  emitCombatResolved(listeners, {
+    sourceEventId: "raw:processed-tags",
+    serverId: "BZSS_Main",
+    time: "2026-05-10T01:00:31.000Z",
+    type: "damaged",
+    attackerName: "Attacker",
+    victimName: "Victim",
+    attackerSteam64ID: "111",
+    victimSteam64ID: "222",
+    weapon: "BP_AK74_C",
+    rawCausedBy: "BP_AK74_C",
+    causedBy: "BP_AK74_C",
+    damage: 27,
+    rawLog: "raw processed tags",
+  });
+
+  const clean = module.api.getEvents({ serverId: "BZSS_Main" })[0];
+  assert.equal(clean.type, "damage");
+  assert.ok(clean.tags.includes("combat.damage"));
+  assert.ok(clean.tags.includes("weapon.small_arm"));
+  assert.ok(clean.tags.includes("weapon.rifle"));
+  assert.ok(clean.tags.includes("damage.direct"));
+  assert.ok(clean.tags.includes("victim.valid"));
+  assert.equal(clean.warningState.attacker.warned, false);
+  assert.ok(moduleEvents.some((item) => item.eventName === "combat.record.processed"));
+
+  await module.stop();
+}
+
 async function testExactProjectileAttackDisplaysBot() {
   const { module, listeners } = createHarness();
   await module.start();
@@ -602,6 +635,7 @@ async function testPlayerEventsAndClear() {
 
 await testAttackerNullptrFallsBackToVictimExactly();
 await testWeaponTypeClassificationIsPreserved();
+await testProcessedCombatRecordPublishesUnifiedEventAndTags();
 await testExactProjectileAttackDisplaysBot();
 await testExactProjectileKillGetsBotFlag();
 await testRejectsNullptrVictim();

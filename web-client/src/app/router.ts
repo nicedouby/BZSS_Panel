@@ -5,6 +5,7 @@ import ConsolePage from "../pages/ConsolePage.vue";
 import PlayerDatabasePage from "../pages/PlayerDatabasePage.vue";
 import CombatCleanPage from "../pages/CombatCleanPage.vue";
 import KillManagePage from "../pages/KillManagePage.vue";
+import AdminWarnsPage from "../pages/AdminWarnsPage.vue";
 import GroupReportPage from "../pages/GroupReportPage.vue";
 import TeamBalancePage from "../pages/TeamBalancePage.vue";
 import FairSquadPage from "../pages/FairSquadPage.vue";
@@ -28,6 +29,7 @@ export const router = createRouter({
     { path: "/player-database", component: PlayerDatabasePage, meta: { titleKey: "routeTitle.playerDatabase" } },
     { path: "/combat-clean", component: CombatCleanPage, meta: { titleKey: "routeTitle.combatClean" } },
     { path: "/kill-manage", component: KillManagePage, meta: { titleKey: "routeTitle.killManage" } },
+    { path: "/admin-warns", component: AdminWarnsPage, meta: { titleKey: "routeTitle.adminWarns" } },
     { path: "/plugins/group-report", component: GroupReportPage, meta: { title: "抱团报备", fullBleed: true } },
     { path: "/plugins/group-report/team-balance", component: TeamBalancePage, meta: { title: "队伍分配", fullBleed: true } },
     { path: "/team-balance", redirect: "/plugins/group-report/team-balance" },

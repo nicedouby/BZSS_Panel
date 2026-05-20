@@ -411,6 +411,14 @@
         "windowMs": 300000
       }
     },
+    "adminWarn": {
+      "enabled": true,
+      "maxRecords": 3000,
+      "ttlMs": 1800000,
+      "rateLimit": {
+        "cooldownMs": 1500
+      }
+    },
     "playtime": {
       "enabled": true
     },
@@ -450,10 +458,50 @@
     "enabled": true,
     "paths": [
       "./plugins/group-report.js",
+      "./plugins/damage-display.js",
       "./plugins/weapon-collector.js",
       "./plugins/fair-squad.js",
       "./plugins/udp_event_forwarder.js"
     ],
+    "damageDisplay": {
+      "enabled": true,
+      "victimDisplayEnabled": true,
+      "attackerDisplayEnabled": true,
+      "attackerPolicy": {
+        "requireTags": [
+          "weapon.small_arm"
+        ],
+        "denyTags": [
+          "relation.self"
+        ],
+        "allowEventTypes": [
+          "damage",
+          "wound",
+          "kill"
+        ],
+        "allowFriendlyFire": true,
+        "allowSelfDamage": false,
+        "minDamage": 1
+      },
+      "victimPolicy": {
+        "allowEventTypes": [
+          "damage",
+          "wound",
+          "kill"
+        ],
+        "showUnknownAttacker": true,
+        "showWorldDamage": true
+      },
+      "templates": {
+        "attackerDamage": "命中 {victimName}，造成 {damage} 点伤害",
+        "attackerWound": "击倒 {victimName}",
+        "attackerKill": "击杀 {victimName}",
+        "victimDamage": "你受到 {attackerName} 的 {damage} 点伤害",
+        "victimWound": "你被 {attackerName} 击倒",
+        "victimKill": "你被 {attackerName} 击杀"
+      },
+      "roundDamage": true
+    },
     "udpEventForwarder": {
       "enabled": true,
       "host": "114.66.18.134",

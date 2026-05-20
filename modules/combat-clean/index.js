@@ -633,6 +633,16 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
 
       found.warningState = nextState;
       found.notify = nextState;
+      core.eventBus.emitModuleEvent("module.combatClean", "updated", {
+        eventId: `module.combatClean.warning:${found.id}:${Date.now()}`,
+        eventName: "module.combatClean.updated",
+        layer: "module",
+        source: "module.combatClean",
+        serverId: found.serverId,
+        time: new Date().toISOString(),
+        record: cloneJsonSafe(found),
+        overview: api.getOverview(found.serverId),
+      });
       return cloneJsonSafe(found);
     },
 
@@ -770,7 +780,7 @@ function buildProcessedCombatTags({ cleanType, rawRecord, attacker, victim, weap
   for (const tag of damageSourceTagsFor({ cleanType, rawRecord, weapon, botAttack })) {
     pushTag(tags, tag);
   }
-  for (const tag of identityTagsFor({ attacker, victim, botAttack, warnings })) {
+  for (const tag of identityTagsFor({ attacker, victim, rawRecord, botAttack, warnings })) {
     pushTag(tags, tag);
   }
   for (const tag of relationTagsFor({ relation, attacker, victim, botAttack })) {
@@ -838,12 +848,16 @@ function damageSourceTagsFor({ cleanType, rawRecord, weapon, botAttack }) {
   return tags;
 }
 
-function identityTagsFor({ attacker, victim, botAttack, warnings }) {
+function identityTagsFor({ attacker, victim, rawRecord, botAttack, warnings }) {
   const tags = [];
+  const attackerText = String(rawRecord?.attackerName ?? "").trim().toLowerCase();
+  const sourceText = `${rawRecord?.causedBy ?? ""} ${rawRecord?.weapon ?? ""}`.toLowerCase();
+  const worldLike = /^(world|environment)$/i.test(attackerText);
+  const environmentalLike = /\b(world|environment|fall|fell|falling|bleed|bleeding|burn|fire|crash|collision)\b/.test(sourceText);
   if (victim?.name || victim?.displayName) pushTag(tags, IdentityTags.VictimValid);
   else pushTag(tags, IdentityTags.VictimNull);
 
-  if (botAttack?.isBotAttack) {
+  if (botAttack?.isBotAttack || worldLike || ((!attacker?.name && !attacker?.displayName) && environmentalLike)) {
     pushTag(tags, IdentityTags.AttackerWorld);
     return tags;
   }

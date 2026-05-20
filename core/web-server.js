@@ -1026,6 +1026,30 @@ export class WebServer {
       return this.json(res, 200, this.core.rconManager.getStatus());
     }
 
+    if (url.pathname === "/api/admin-warns/recent" && req.method === "GET") {
+      const adminWarn = this.modules.adminWarn;
+      if (!adminWarn) {
+        return this.json(res, 404, {
+          error: "AdminWarnUnavailable",
+          message: "AdminWarn module is not loaded.",
+        });
+      }
+      const records = adminWarn.getRecent({
+        limit: url.searchParams.get("limit") ?? "200",
+        targetName: url.searchParams.get("targetName") ?? "",
+        targetEosId: url.searchParams.get("targetEosId") ?? "",
+        sourceModule: url.searchParams.get("sourceModule") ?? "",
+        reason: url.searchParams.get("reason") ?? "",
+        success: parseOptionalBoolean(url.searchParams.get("success")),
+        skipped: parseOptionalBoolean(url.searchParams.get("skipped")),
+      });
+      return this.json(res, 200, {
+        records,
+        total: records.length,
+        config: adminWarn.getConfig?.() ?? null,
+      });
+    }
+
     if (url.pathname === "/api/rcon/refresh" && req.method === "POST") {
       if (!this.requireSuperAdmin(user, res)) return;
       const type = this.normalizeMatchRefreshType(url.searchParams.get("type") ?? "all");
@@ -1635,6 +1659,14 @@ function createHttpError(statusCode, code, message) {
   error.statusCode = statusCode;
   error.code = code;
   return error;
+}
+
+function parseOptionalBoolean(value) {
+  if (value == null || String(value).trim() === "") return null;
+  const text = String(value).trim().toLowerCase();
+  if (text === "true" || text === "1") return true;
+  if (text === "false" || text === "0") return false;
+  return null;
 }
 
 function normalizePlaytimeRow(row) {

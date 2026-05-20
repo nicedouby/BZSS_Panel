@@ -15,6 +15,7 @@ import { createPlayerDatabaseModule } from "../modules/player-database/index.js"
 import { createIpLookupModule } from "../modules/ip-lookup/index.js";
 import { createKillManageModule } from "../modules/kill-manage/index.js";
 import { createCombatCleanModule } from "../modules/combat-clean/index.js";
+import { createAdminWarnModule } from "../modules/admin-warn/index.js";
 import { createPlaytimeModule } from "../modules/playtime/index.js";
 import { createPluginSubscriptionsModule } from "../modules/plugin-subscriptions/index.js";
 import { createTeamBalanceModule } from "../modules/team-balance/index.js";
@@ -53,6 +54,7 @@ export class ModuleManager {
       createIpLookupModule,
       createKillManageModule,
       createCombatCleanModule,
+      createAdminWarnModule,
       createPlaytimeModule,
     ];
 

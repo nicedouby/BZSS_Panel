@@ -280,6 +280,14 @@ export function createPluginSubscriptionsModule({ core, modules, config }) {
 
       // 第一阶段先把已知插件预登记进来，即使插件尚未实际加载，页面里也能看到它。
       registerRuntimeItem({
+        id: "plugin.damageDisplay",
+        name: "Damage Display Plugin",
+        kind: "plugin",
+        status: "unloaded",
+        description: "订阅 module.combatClean 的 combat.record.processed 事件，按 tags 决定是否向攻击者和受害者发送伤害提示，并通过 module.adminWarn 统一执行 AdminWarn。",
+      });
+
+      registerRuntimeItem({
         id: "plugin.weaponCollector",
         name: "Weapon Collector Plugin",
         kind: "plugin",
