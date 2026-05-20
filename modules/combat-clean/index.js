@@ -1,5 +1,15 @@
 ﻿// -*- coding: utf-8 -*-
 
+import {
+  CombatEventTags,
+  ConfidenceTags,
+  DamageSourceTags,
+  IdentityTags,
+  RelationTags,
+  SmallArmTags,
+  TeamKillTags,
+  WeaponCategoryTags,
+} from "./tags.js";
 import { classifyWeaponType } from "./weapon-type.js";
 
 const VALID_TYPES = new Set(["damage", "wound", "kill", "revive"]);
@@ -97,23 +107,63 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
     const relation = buildRelation(cleanType, attacker, victim, rawRecord, { botAttack });
     if (resolvedWeapon.applied) warnings.push("weapon_history_backfill");
     const eventFlags = buildEventFlags(rawRecord, relation, { cleanType, weapon: finalWeapon, botAttack });
+    const tags = buildProcessedCombatTags({
+      cleanType,
+      rawRecord,
+      attacker,
+      victim,
+      weapon: finalWeapon,
+      relation,
+      warnings,
+      botAttack,
+    });
+    const warningState = buildInitialWarningState();
     const record = {
       id: makeCleanId(cleanType, sourceEventId, rawRecord),
       serverId,
+      matchId: firstPresent(rawRecord.matchId, rawRecord.matchID, event?.matchId),
       time,
+      eventTime: timeMs,
+      logTimeMs: parseTimestampMs(rawRecord.logTimeMs ?? rawRecord.logTime ?? event?.logTime ?? time),
+      logTimeText: String(rawRecord.logTimeText ?? rawRecord.logTime ?? event?.logTime ?? ""),
       logTime: String(rawRecord.logTime ?? event?.logTime ?? ""),
       type: cleanType,
       eventName: cleanType === "damage" ? "BZSS_DAMAGE" : cleanType === "wound" ? "BZSS_WOUND" : cleanType === "revive" ? "BZSS_REVIVE" : "BZSS_KILL",
       attacker,
       victim,
+      attackerName: attacker.name || attacker.displayName || "",
+      attackerEosId: attacker.eosID || "",
+      attackerEOSID: attacker.eosID || "",
+      attackerSteamId: attacker.steam64ID || "",
+      attackerSteam64ID: attacker.steam64ID || "",
+      attackerControllerId: attacker.controllerID || "",
+      attackerControllerID: attacker.controllerID || "",
+      attackerTeamId: normalizeOptionalNumber(attacker.teamID),
+      attackerTeamID: normalizeOptionalNumber(attacker.teamID),
+      victimName: victim.name || victim.displayName || "",
+      victimEosId: victim.eosID || "",
+      victimEOSID: victim.eosID || "",
+      victimSteamId: victim.steam64ID || "",
+      victimSteam64ID: victim.steam64ID || "",
+      victimControllerId: victim.controllerID || "",
+      victimControllerID: victim.controllerID || "",
+      victimTeamId: normalizeOptionalNumber(victim.teamID),
+      victimTeamID: normalizeOptionalNumber(victim.teamID),
       damage: parseDamage(rawRecord.damage),
       weapon: finalWeapon,
+      weaponClass: String(finalWeapon?.typeKey ?? "").trim(),
+      weaponName: String(finalWeapon?.displayName ?? finalWeapon?.cleaned ?? finalWeapon?.raw ?? ""),
+      tags,
       isBotAttack: botAttack.isBotAttack,
       botAttackReason: botAttack.reason,
       relation,
       displayText: buildDisplayText(cleanType, attacker, victim, finalWeapon, rawRecord.damage, relation),
       eventFlags,
       eventFlagLabels: eventFlags.map((flag) => String(flag?.label ?? "")).filter(Boolean),
+      warningState,
+      notify: warningState,
+      rawLog: String(rawRecord.rawLog ?? event?.rawLog ?? ""),
+      rawEvent: sanitizeRawEvent(event),
       raw: {
         sourceModule: "module.killManage",
         sourceEventId,
@@ -153,6 +203,17 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       time: new Date().toISOString(),
       record,
     });
+    if (cleanType !== "revive") {
+      core.eventBus.emitModuleEvent("module.combatClean", "combat.record.processed", {
+        eventId: `module.combatClean.processed:${record.id}`,
+        eventName: "combat.record.processed",
+        layer: "module",
+        source: "module.combatClean",
+        serverId: record.serverId,
+        time: new Date().toISOString(),
+        record,
+      });
+    }
     core.eventBus.emitModuleEvent("module.combatClean", "updated", {
       eventId: `module.combatClean.updated:${Date.now()}`,
       eventName: "module.combatClean.updated",
@@ -553,6 +614,28 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       return found ? cloneJsonSafe(found) : null;
     },
 
+    updateWarningState(id, patch = {}) {
+      const text = String(id ?? "").trim();
+      if (!text) return null;
+      const found = events.find((event) => event.id === text);
+      if (!found) return null;
+
+      const nextState = {
+        attacker: {
+          ...(found.warningState?.attacker ?? buildInitialWarningState().attacker),
+          ...(patch.attacker ?? {}),
+        },
+        victim: {
+          ...(found.warningState?.victim ?? buildInitialWarningState().victim),
+          ...(patch.victim ?? {}),
+        },
+      };
+
+      found.warningState = nextState;
+      found.notify = nextState;
+      return cloneJsonSafe(found);
+    },
+
     clear(serverId = "") {
       const target = String(serverId ?? "").trim();
       let cleared;
@@ -679,6 +762,148 @@ function buildDisplayText(type, attacker, victim, weapon, damage, relation) {
   return `${displayPlayerName(attacker)} ${verb} ${displayPlayerName(victim)} with ${weapon.displayName || "Unknown"}${typeSuffix}${amount}${ff}`;
 }
 
+function buildProcessedCombatTags({ cleanType, rawRecord, attacker, victim, weapon, relation, warnings, botAttack }) {
+  const tags = [];
+  pushTag(tags, eventTypeTagFor(cleanType));
+  pushTag(tags, weaponCategoryTagFor(weapon));
+  pushTag(tags, smallArmSubTypeTagFor(weapon));
+  for (const tag of damageSourceTagsFor({ cleanType, rawRecord, weapon, botAttack })) {
+    pushTag(tags, tag);
+  }
+  for (const tag of identityTagsFor({ attacker, victim, botAttack, warnings })) {
+    pushTag(tags, tag);
+  }
+  for (const tag of relationTagsFor({ relation, attacker, victim, botAttack })) {
+    pushTag(tags, tag);
+  }
+  pushTag(tags, teamKillTagFor({ cleanType, relation }));
+  pushTag(tags, confidenceTagFor({ attacker, victim, weapon, warnings, botAttack }));
+  return tags;
+}
+
+function eventTypeTagFor(cleanType) {
+  if (cleanType === "damage") return CombatEventTags.Damage;
+  if (cleanType === "wound") return CombatEventTags.Wound;
+  if (cleanType === "kill") return CombatEventTags.Kill;
+  return "";
+}
+
+function weaponCategoryTagFor(weapon = {}) {
+  const typeKey = String(weapon?.typeKey ?? "").trim().toLowerCase();
+  if (typeKey === "light") return WeaponCategoryTags.SmallArm;
+  if (typeKey === "explosive" || typeKey === "anti_tank" || typeKey === "bot_weapon") return WeaponCategoryTags.Explosive;
+  if (typeKey === "melee") return WeaponCategoryTags.Melee;
+
+  const raw = `${weapon?.raw ?? ""} ${weapon?.cleaned ?? ""} ${weapon?.displayName ?? ""}`.toLowerCase();
+  if (/\b(tank|btr|bmp|lav|stryker|bradley|helicopter|heli|ifv|apc|vehicle|car|truck)\b/.test(raw)) {
+    return WeaponCategoryTags.Vehicle;
+  }
+  if (/\b(mortar|tow|hmg|emplacement|dshk|spg|zu23|crows)\b/.test(raw)) {
+    return WeaponCategoryTags.Emplacement;
+  }
+  return WeaponCategoryTags.UnknownWeapon;
+}
+
+function smallArmSubTypeTagFor(weapon = {}) {
+  const raw = `${weapon?.raw ?? ""} ${weapon?.cleaned ?? ""} ${weapon?.displayName ?? ""}`.toLowerCase();
+  const typeKey = String(weapon?.typeKey ?? "").trim().toLowerCase();
+  if (typeKey !== "light") return "";
+  if (/\b(pkp|pkm|rpk|m249|m240|m60|mg3|mg34|mg42|c6|c9|bren|dp28)\b/.test(raw)) return SmallArmTags.MachineGun;
+  if (/\b(m110|sr25|svd|m21|mk14|ebr|sks|qbu)\b/.test(raw)) return SmallArmTags.MarksmanRifle;
+  if (/\b(m24|mosin|m38|sv98|awm|m2010)\b/.test(raw)) return SmallArmTags.SniperRifle;
+  if (/\b(g17|glock|m9|p226|1911|makarov|cz75|p320|usp|deagle)\b/.test(raw)) return SmallArmTags.Pistol;
+  if (/\b(saiga|m870|shotgun)\b/.test(raw)) return SmallArmTags.Shotgun;
+  if (/\b(c8|carbine|m4|hk416|g36c)\b/.test(raw)) return SmallArmTags.Carbine;
+  return SmallArmTags.Rifle;
+}
+
+function damageSourceTagsFor({ cleanType, rawRecord, weapon, botAttack }) {
+  if (cleanType === "revive") return [];
+
+  const tags = [];
+  const raw = `${rawRecord?.causedBy ?? ""} ${rawRecord?.weapon ?? ""} ${weapon?.raw ?? ""} ${weapon?.displayName ?? ""}`.toLowerCase();
+  const attackerText = String(rawRecord?.attackerName ?? "").trim().toLowerCase();
+  const isWorld = botAttack?.isBotAttack !== true && /^(world|environment)$/i.test(attackerText);
+
+  if (/\bbleed|bleeding\b/.test(raw)) pushTag(tags, DamageSourceTags.Bleed);
+  if (/\bfall|fell|falling\b/.test(raw)) pushTag(tags, DamageSourceTags.Fall);
+  if (/\bburn|fire|flame|incendiary|molotov\b/.test(raw)) pushTag(tags, DamageSourceTags.Burn);
+  if (/\bcrash|collision|ram\b/.test(raw)) pushTag(tags, DamageSourceTags.VehicleCrash);
+  if (/\bgrenade|frag|shell|rocket|projectile|explosive|mortar|artillery|mine|claymore|c4|satchel|hedp|hesh|30mm|40mm|60mm|81mm|120mm|155mm\b/.test(raw)) {
+    pushTag(tags, DamageSourceTags.Splash);
+  }
+  if (isWorld) pushTag(tags, DamageSourceTags.UnknownSource);
+  if (!tags.length && cleanType === "damage") pushTag(tags, DamageSourceTags.Direct);
+  if (!tags.length) pushTag(tags, DamageSourceTags.UnknownSource);
+  return tags;
+}
+
+function identityTagsFor({ attacker, victim, botAttack, warnings }) {
+  const tags = [];
+  if (victim?.name || victim?.displayName) pushTag(tags, IdentityTags.VictimValid);
+  else pushTag(tags, IdentityTags.VictimNull);
+
+  if (botAttack?.isBotAttack) {
+    pushTag(tags, IdentityTags.AttackerWorld);
+    return tags;
+  }
+
+  if (attacker?.name || attacker?.displayName) {
+    if (Array.isArray(warnings) && warnings.includes(FALLBACK_REASON)) pushTag(tags, IdentityTags.AttackerNull);
+    pushTag(tags, IdentityTags.AttackerValid);
+    return tags;
+  }
+
+  pushTag(tags, IdentityTags.AttackerNull);
+  return tags;
+}
+
+function relationTagsFor({ relation, attacker, victim, botAttack }) {
+  const tags = [];
+  if (botAttack?.isBotAttack) {
+    pushTag(tags, RelationTags.UnknownRelation);
+    return tags;
+  }
+  if (sameKnownIdentity(attacker, victim)) {
+    pushTag(tags, RelationTags.Self);
+    return tags;
+  }
+  if (relation?.isFriendlyFire) {
+    pushTag(tags, RelationTags.Friendly);
+    return tags;
+  }
+  if (relation?.sameTeam === false) {
+    pushTag(tags, RelationTags.Enemy);
+    return tags;
+  }
+  pushTag(tags, RelationTags.UnknownRelation);
+  return tags;
+}
+
+function teamKillTagFor({ cleanType, relation }) {
+  if (!relation?.isFriendlyFire) return "";
+  if (cleanType === "damage") return TeamKillTags.TeamDamage;
+  if (cleanType === "wound") return TeamKillTags.TeamWound;
+  if (cleanType === "kill") return TeamKillTags.TeamKill;
+  return "";
+}
+
+function confidenceTagFor({ attacker, victim, weapon, warnings, botAttack }) {
+  if (!victim?.name && !victim?.displayName) return ConfidenceTags.Low;
+  if (botAttack?.isBotAttack) return ConfidenceTags.Medium;
+  if (String(weapon?.typeKey ?? "").trim() === "" || Array.isArray(warnings) && warnings.includes(FALLBACK_REASON)) {
+    return ConfidenceTags.Low;
+  }
+  if (attacker?.resolved && victim?.resolved) return ConfidenceTags.High;
+  return ConfidenceTags.Medium;
+}
+
+function pushTag(tags, tag) {
+  const text = String(tag ?? "").trim();
+  if (!text || tags.includes(text)) return;
+  tags.push(text);
+}
+
 function buildStats(list) {
   const stats = {
     total: list.length,
@@ -699,6 +924,27 @@ function buildStats(list) {
     if (event.relation?.friendlyFireType === "team_kill") stats.teamKill += 1;
   }
   return stats;
+}
+
+function buildInitialWarningState() {
+  return {
+    attacker: {
+      warned: false,
+      skipped: false,
+      success: false,
+      reason: "",
+      message: "",
+      updatedAt: 0,
+    },
+    victim: {
+      warned: false,
+      skipped: false,
+      success: false,
+      reason: "",
+      message: "",
+      updatedAt: 0,
+    },
+  };
 }
 
 function matchesSearch(event, search) {
@@ -722,6 +968,9 @@ function matchesSearch(event, search) {
     event.weapon?.typeKey,
     event.weapon?.typeLabel,
     event.weapon?.typeMatchText,
+    ...(Array.isArray(event.tags) ? event.tags : []),
+    event.warningState?.attacker?.reason,
+    event.warningState?.victim?.reason,
     event.raw?.rawLog,
   ].some((value) => normalizeSearch(value).includes(search));
 }
@@ -826,6 +1075,25 @@ function sameKnownTeam(left, right) {
   return leftText !== "" && rightText !== "" && leftText === rightText;
 }
 
+function sameKnownIdentity(left = {}, right = {}) {
+  return sameKnownValue(left.steam64ID, right.steam64ID)
+    || sameKnownValue(left.eosID, right.eosID)
+    || sameKnownValue(left.controllerID, right.controllerID)
+    || sameKnownValue(left.name, right.name);
+}
+
+function sameKnownValue(left, right) {
+  const leftText = String(left ?? "").trim();
+  const rightText = String(right ?? "").trim();
+  return Boolean(leftText && rightText && leftText === rightText);
+}
+
+function normalizeOptionalNumber(value) {
+  if (value == null || String(value).trim() === "") return undefined;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
+
 function hasRawId(ref) {
   return Boolean(ref.steam64ID || ref.eosID || ref.controllerID);
 }
@@ -908,6 +1176,14 @@ function sanitizeRawRecord(rawRecord) {
   delete cloned.teamConfidence;
   delete cloned.TeamConfidence;
 
+  return cloned;
+}
+
+function sanitizeRawEvent(rawEvent) {
+  const cloned = cloneJsonSafe(rawEvent);
+  if (!cloned || typeof cloned !== "object") return cloned;
+  if (cloned.record) delete cloned.record;
+  if (cloned.rawRecord) delete cloned.rawRecord;
   return cloned;
 }
 
