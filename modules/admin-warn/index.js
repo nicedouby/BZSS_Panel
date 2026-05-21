@@ -2,7 +2,6 @@
 
 const DEFAULT_MAX_RECORDS = 3000;
 const DEFAULT_TTL_MS = 30 * 60 * 1000;
-const DEFAULT_COOLDOWN_MS = 1500;
 
 export function createAdminWarnModule({ core, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
@@ -14,11 +13,8 @@ export function createAdminWarnModule({ core, config, logger }) {
   const enabled = Boolean(moduleConfig.enabled ?? true);
   const maxRecords = Math.max(1, Number(moduleConfig.maxRecords ?? DEFAULT_MAX_RECORDS));
   const ttlMs = Math.max(1000, Number(moduleConfig.ttlMs ?? DEFAULT_TTL_MS));
-  const rateLimitConfig = moduleConfig.rateLimit ?? {};
-  const cooldownMs = Math.max(0, Number(rateLimitConfig.cooldownMs ?? DEFAULT_COOLDOWN_MS));
 
   const memoryStore = new AdminWarnMemoryStore({ maxRecords, ttlMs });
-  const rateLimiter = new AdminWarnRateLimiter({ cooldownMs });
 
   const api = {
     async warnPlayer(req) {
@@ -49,8 +45,6 @@ export function createAdminWarnModule({ core, config, logger }) {
       const targetName = String(req?.targetName ?? "").trim();
       const targetEosId = optionalText(req?.targetEosId);
       const targetSteamId = optionalText(req?.targetSteamId);
-      const targetKey = targetEosId || targetSteamId || targetName;
-
       if (!targetName || !message) {
         const record = memoryStore.push({
           id: makeRecordId("invalid"),
@@ -70,28 +64,6 @@ export function createAdminWarnModule({ core, config, logger }) {
           success: false,
           skipped: true,
           skipReason: record.skipReason,
-        };
-      }
-
-      if (rateLimiter.isLimited(targetKey)) {
-        memoryStore.push({
-          id: makeRecordId("limited"),
-          createdAt: Date.now(),
-          sourceModule: String(req?.sourceModule ?? "unknown"),
-          reason: String(req?.reason ?? "rate_limited"),
-          targetName,
-          targetEosId,
-          targetSteamId,
-          message,
-          success: false,
-          skipped: true,
-          skipReason: "rate_limited",
-          relatedEventId: optionalText(req?.relatedEventId),
-        });
-        return {
-          success: false,
-          skipped: true,
-          skipReason: "rate_limited",
         };
       }
 
@@ -185,7 +157,6 @@ export function createAdminWarnModule({ core, config, logger }) {
         enabled,
         maxRecords,
         ttlMs,
-        cooldownMs,
       };
     },
 
@@ -200,7 +171,7 @@ export function createAdminWarnModule({ core, config, logger }) {
       name: "Admin Warn Module",
       kind: "module",
       version: "0.1.0",
-      description: "Unified AdminWarn execution module. Sanitizes messages, rate limits targets, executes RCON AdminWarn, and keeps short-lived in-memory records for the web UI.",
+      description: "Unified AdminWarn execution module. Sanitizes messages, executes RCON AdminWarn, and keeps short-lived in-memory records for the web UI.",
     },
     apiName: "adminWarn",
     api,
@@ -223,7 +194,6 @@ export function createAdminWarnModule({ core, config, logger }) {
 
     async stop() {
       memoryStore.clear();
-      rateLimiter.clear();
       moduleLogger?.info?.("AdminWarn stopped.");
     },
   };
@@ -293,29 +263,6 @@ class AdminWarnMemoryStore {
     if (this.records.length > this.maxRecords) {
       this.records.splice(0, this.records.length - this.maxRecords);
     }
-  }
-}
-
-class AdminWarnRateLimiter {
-  constructor({ cooldownMs }) {
-    this.cooldownMs = cooldownMs;
-    this.lastSeen = new Map();
-  }
-
-  isLimited(targetKey) {
-    const key = String(targetKey ?? "").trim();
-    if (!key) return true;
-    const now = Date.now();
-    const previous = Number(this.lastSeen.get(key) ?? 0);
-    if (previous > 0 && (now - previous) < this.cooldownMs) {
-      return true;
-    }
-    this.lastSeen.set(key, now);
-    return false;
-  }
-
-  clear() {
-    this.lastSeen.clear();
   }
 }
 

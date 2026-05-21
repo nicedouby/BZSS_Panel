@@ -23,7 +23,6 @@ function createHarness({ dispatchCommand, moduleConfig } = {}) {
             enabled: true,
             maxRecords: 10,
             ttlMs: 1800000,
-            rateLimit: { cooldownMs: 1500 },
             ...(moduleConfig ?? {}),
           };
         }
@@ -65,7 +64,7 @@ async function testWarnSuccessAndSanitize() {
   await module.stop();
 }
 
-async function testWarnRateLimitedWritesSkippedRecord() {
+async function testWarnBackToBackStillSends() {
   const { module } = createHarness();
   await module.start();
 
@@ -83,12 +82,12 @@ async function testWarnRateLimitedWritesSkippedRecord() {
   });
 
   assert.equal(first.success, true);
-  assert.equal(second.skipped, true);
-  assert.equal(second.skipReason, "rate_limited");
+  assert.equal(second.success, true);
 
-  const records = module.api.getRecent({ skipped: true });
-  assert.equal(records.length, 1);
-  assert.equal(records[0].skipReason, "rate_limited");
+  const records = module.api.getRecent({ targetName: "PlayerA" });
+  assert.equal(records.length, 2);
+  assert.equal(records[0].skipReason, undefined);
+  assert.equal(records[1].skipReason, undefined);
   await module.stop();
 }
 
@@ -117,7 +116,7 @@ async function testWarnFailureIsRecorded() {
 }
 
 await testWarnSuccessAndSanitize();
-await testWarnRateLimitedWritesSkippedRecord();
+await testWarnBackToBackStillSends();
 await testWarnFailureIsRecorded();
 
 console.log("admin warn tests passed");
