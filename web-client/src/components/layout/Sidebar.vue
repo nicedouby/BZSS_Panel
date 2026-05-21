@@ -30,6 +30,7 @@ const nav = [
   { path: "/admin-warns", icon: "AW", label: t("nav.adminWarns") },
   { path: "/plugins/group-report", icon: "GR", label: "抱团报备" },
   { path: "/plugins/fair-squad", icon: "FS", label: "公平建队" },
+  { path: "/plugins/server-info-statistics", icon: "SS", label: "服务器信息统计" },
   { path: "/udp-event-forwarder", icon: "UDP", label: "UDP Forwarder" },
 ];
 </script>

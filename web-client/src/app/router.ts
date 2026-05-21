@@ -11,6 +11,7 @@ import TeamBalancePage from "../pages/TeamBalancePage.vue";
 import FairSquadPage from "../pages/FairSquadPage.vue";
 import SquadManagementPage from "../pages/SquadManagementPage.vue";
 import UdpEventForwarderPage from "../pages/UdpEventForwarderPage.vue";
+import ServerInfoStatisticsPage from "../pages/ServerInfoStatisticsPage.vue";
 import ComingSoonPage from "../pages/ComingSoonPage.vue";
 
 export const router = createRouter({
@@ -39,6 +40,11 @@ export const router = createRouter({
       path: "/udp-event-forwarder",
       component: UdpEventForwarderPage,
       meta: { title: "UDP Forwarder" },
+    },
+    {
+      path: "/plugins/server-info-statistics",
+      component: ServerInfoStatisticsPage,
+      meta: { title: "服务器信息统计", fullBleed: true },
     },
     {
       path: "/:pathMatch(.*)*",

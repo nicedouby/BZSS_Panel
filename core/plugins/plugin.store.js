@@ -130,5 +130,17 @@ export const pluginCatalog = [
       allowedInfantryNames: "[\"\\u840c\\u65b0\\u961f\", \"\\u586b\\u7ebf\\u961f\"]",
     },
   },
+  {
+    id: "plugin.serverInfoStatistics",
+    name: "服务器信息统计",
+    description: "Collects player count, queue count, and TPS snapshots from ShowServerInfo-derived match state and stores them by day.",
+    category: "Analytics",
+    icon: "SS",
+    enabled: true,
+    subscribed: true,
+    version: "1.0.0",
+    author: "BZSS",
+    status: "ok",
+  },
 ];
 

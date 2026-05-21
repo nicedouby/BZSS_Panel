@@ -32,7 +32,7 @@ def main():
             f.flush()
 
             print(f"[Receiver] {len(data)} bytes from {addr}")
-
+            print(data)
 
 if __name__ == "__main__":
     main()

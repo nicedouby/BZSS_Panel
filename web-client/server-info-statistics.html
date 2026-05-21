@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>服务器信息统计</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #071018;
+      --panel: rgba(10, 18, 27, 0.86);
+      --panel-strong: rgba(15, 22, 32, 0.94);
+      --line: rgba(148, 163, 184, 0.18);
+      --text: #e5eef7;
+      --muted: #9aa7b2;
+      --player: #5eead4;
+      --queue: #fbbf24;
+      --tps: #34d399;
+      --shadow: 0 24px 70px rgba(0, 0, 0, 0.38);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 14px/1.6 "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(94, 234, 212, 0.13), transparent 36%),
+        radial-gradient(circle at top right, rgba(251, 191, 36, 0.1), transparent 30%),
+        linear-gradient(180deg, #071018 0%, #09131c 100%);
+    }
+
+    .page {
+      max-width: 1460px;
+      margin: 0 auto;
+      padding: 24px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .header, .panel, .chart-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+
+    .header {
+      border-radius: 22px;
+      padding: 20px 22px;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 26px;
+      line-height: 1.15;
+    }
+
+    .header p {
+      margin: 8px 0 0;
+      color: var(--muted);
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .toolbar input, .toolbar button, .toolbar select {
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      padding: 10px 12px;
+      font: inherit;
+    }
+
+    .toolbar button {
+      cursor: pointer;
+    }
+
+    .hero-grid, .summary, .chart-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .card {
+      border-radius: 18px;
+      padding: 16px;
+      background: var(--panel-strong);
+      border: 1px solid rgba(148, 163, 184, 0.14);
+    }
+
+    .card h2, .chart-card h3 {
+      margin: 0;
+      font-size: 14px;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+    }
+
+    .value {
+      display: block;
+      margin-top: 10px;
+      font-size: 28px;
+      line-height: 1.05;
+    }
+
+    .meta {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .panel {
+      border-radius: 22px;
+      padding: 18px;
+    }
+
+    .chart-list {
+      display: grid;
+      gap: 14px;
+    }
+
+    .chart-card {
+      border-radius: 20px;
+      padding: 16px;
+    }
+
+    .chart-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .chart-head strong {
+      font-size: 20px;
+      line-height: 1;
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(148, 163, 184, 0.14);
+    }
+
+    .chart {
+      width: 100%;
+      min-height: 220px;
+      display: block;
+    }
+
+    .grid line {
+      stroke: rgba(148, 163, 184, 0.16);
+      shape-rendering: crispEdges;
+    }
+
+    .line {
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      filter: drop-shadow(0 0 10px rgba(94, 234, 212, 0.16));
+    }
+
+    .point {
+      cursor: pointer;
+      stroke: rgba(7, 11, 16, 0.95);
+      stroke-width: 2;
+    }
+
+    .empty {
+      display: grid;
+      place-items: center;
+      min-height: 180px;
+      color: var(--muted);
+      border: 1px dashed rgba(148, 163, 184, 0.24);
+      border-radius: 16px;
+    }
+
+    .error {
+      border-left: 4px solid #ef4444;
+      padding-left: 12px;
+      color: #fca5a5;
+    }
+
+    @media (max-width: 1180px) {
+      .hero-grid, .summary, .chart-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .header {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="header">
+      <div>
+        <h1>服务器信息统计</h1>
+        <p>人数、排队人数、TPS 同时展示。点击曲线点可查看同一时刻的完整快照。</p>
+      </div>
+      <div class="toolbar">
+        <label>日期 <input id="dateInput" type="date"></label>
+        <select id="bucketSelect">
+          <option value="second">秒</option>
+          <option value="minute" selected>分</option>
+          <option value="hour">时</option>
+        </select>
+        <button id="refreshBtn" type="button">刷新</button>
+      </div>
+    </section>
+
+    <section class="hero-grid" id="heroGrid"></section>
+
+    <section class="panel">
+      <div class="chart-list" id="chartList"></div>
+    </section>
+
+    <section class="panel">
+      <h2 style="margin:0 0 10px;font-size:16px;">选中数据点</h2>
+      <div id="detailBox" class="card">还没有选中任何数据点。</div>
+    </section>
+
+    <section class="panel">
+      <h2 style="margin:0 0 10px;font-size:16px;">今日摘要</h2>
+      <div class="summary" id="summaryBox"></div>
+    </section>
+
+    <section class="panel">
+      <h2 style="margin:0 0 10px;font-size:16px;">历史日期</h2>
+      <div id="datesBox" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+    </section>
+
+    <div id="statusBox" class="card" style="display:none;"></div>
+  </main>
+
+  <script>
+    const metricDefs = [
+      { key: "playerCount", label: "人数", color: "#5eead4", soft: "#82f4e2", format: (v) => fmtInt(v), meta: (s) => "峰值 " + fmtInt(s.playerCountMax) + " · 均值 " + fmtNum(s.playerCountAvg) },
+      { key: "queueCount", label: "排队人数", color: "#fbbf24", soft: "#ffd36d", format: (v) => fmtInt(v), meta: (s) => "峰值 " + fmtInt(s.queueCountMax) + " · 均值 " + fmtNum(s.queueCountAvg) },
+      { key: "tps", label: "TPS", color: "#34d399", soft: "#7ee8b3", format: (v) => fmtTps(v), meta: (s) => "最高 " + fmtTps(s.tpsMax) + " · 平均 " + fmtTps(s.tpsAvg) },
+    ];
+
+    const els = {
+      dateInput: document.getElementById("dateInput"),
+      bucketSelect: document.getElementById("bucketSelect"),
+      refreshBtn: document.getElementById("refreshBtn"),
+      heroGrid: document.getElementById("heroGrid"),
+      chartList: document.getElementById("chartList"),
+      detailBox: document.getElementById("detailBox"),
+      summaryBox: document.getElementById("summaryBox"),
+      datesBox: document.getElementById("datesBox"),
+      statusBox: document.getElementById("statusBox"),
+    };
+
+    const state = { data: null, selectedAt: null, loading: false };
+    const currentDate = () => new Date().toISOString().slice(0, 10);
+
+    els.dateInput.value = currentDate();
+    els.dateInput.addEventListener("change", () => load());
+    els.bucketSelect.addEventListener("change", () => render());
+    els.refreshBtn.addEventListener("click", () => load());
+
+    load();
+
+    async function load() {
+      state.loading = true;
+      setStatus("");
+      try {
+        const url = new URL("/api/plugins/server-info-statistics/state", location.origin);
+        url.searchParams.set("date", els.dateInput.value || currentDate());
+        const response = await fetch(url, { credentials: "same-origin" });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data?.message || "加载失败");
+        state.data = data;
+        els.dateInput.value = data.date || els.dateInput.value;
+        state.selectedAt = data.latest?.at || data.day?.summary?.lastAt || null;
+        render();
+      } catch (error) {
+        setStatus(error?.message || String(error), true);
+      } finally {
+        state.loading = false;
+      }
+    }
+
+    function render() {
+      const data = state.data;
+      const bucket = els.bucketSelect.value;
+      if (!data) {
+        renderEmpty();
+        return;
+      }
+      renderHeroes(data);
+      renderCharts(data, bucket);
+      renderDetails(data);
+      renderSummary(data);
+      renderDates(data);
+    }
+
+    function renderHeroes(data) {
+      const latest = data.liveSnapshot || data.latest || data.day?.summary?.latest || null;
+      const cards = [
+        { label: "最新人数", value: fmtInt(latest?.playerCount), meta: "峰值 " + fmtInt(data.summary?.playerCountMax) + " · 均值 " + fmtNum(data.summary?.playerCountAvg) },
+        { label: "最新排队", value: fmtInt(latest?.queueCount), meta: "峰值 " + fmtInt(data.summary?.queueCountMax) + " · 均值 " + fmtNum(data.summary?.queueCountAvg) },
+        { label: "最新 TPS", value: fmtTps(latest?.tps), meta: "最高 " + fmtTps(data.summary?.tpsMax) + " · 平均 " + fmtTps(data.summary?.tpsAvg) },
+        { label: "采样点", value: fmtInt(data.summary?.sampleCount), meta: data.summary?.firstAt ? "从 " + fmtTime(data.summary.firstAt) : "尚未开始采样" },
+      ];
+
+      els.heroGrid.innerHTML = cards.map((card) => `
+        <div class="card">
+          <h2>${card.label}</h2>
+          <strong class="value">${card.value}</strong>
+          <div class="meta">${card.meta}</div>
+        </div>
+      `).join("");
+    }
+
+    function renderCharts(data, bucket) {
+      const samples = data.day?.samples ?? [];
+      els.chartList.innerHTML = metricDefs.map((metric) => {
+        const chart = buildChart(samples, metric.key, bucket);
+        return `
+          <article class="chart-card">
+            <div class="chart-head">
+              <div>
+                <h3>${metric.label}</h3>
+                <div class="meta">${metric.meta(data.summary || {})}</div>
+              </div>
+              <strong style="color:${metric.color};">${metric.format((data.liveSnapshot || data.latest || data.summary?.latest || {})[metric.key])}</strong>
+            </div>
+            ${chart.svg(metric)}
+          </article>
+        `;
+      }).join("");
+
+      for (const metric of metricDefs) {
+        buildChart(samples, metric.key, bucket).attach();
+      }
+    }
+
+    function renderDetails(data) {
+      const samples = data.day?.samples ?? [];
+      const selected = samples.find((sample) => sample.at === state.selectedAt) || samples[samples.length - 1] || null;
+      if (!selected) {
+        els.detailBox.textContent = "还没有选中任何数据点。";
+        return;
+      }
+
+      state.selectedAt = selected.at;
+      els.detailBox.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">
+          <div><div class="meta">时间</div><strong>${fmtTime(selected.at)}</strong></div>
+          <div><div class="meta">人数</div><strong>${fmtInt(selected.playerCount)}</strong></div>
+          <div><div class="meta">排队</div><strong>${fmtInt(selected.queueCount)}</strong></div>
+          <div><div class="meta">TPS</div><strong>${fmtTps(selected.tps)}</strong></div>
+          <div><div class="meta">地图</div><strong>${selected.map || "--"}</strong></div>
+          <div><div class="meta">图层</div><strong>${selected.layer || "--"}</strong></div>
+        </div>
+      `;
+    }
+
+    function renderSummary(data) {
+      const summary = data.summary || {};
+      const latest = data.liveSnapshot || data.latest || summary.latest || null;
+      const items = [
+        ["服务器", data.serverId || "--"],
+        ["最新记录", latest ? fmtTime(latest.at) : "--"],
+        ["当前地图", latest?.map || "--"],
+        ["当前图层", latest?.layer || "--"],
+        ["游戏模式", latest?.mode || latest?.matchState || "--"],
+        ["覆盖区间", summary.firstAt && summary.lastAt ? `${fmtTime(summary.firstAt)} - ${fmtTime(summary.lastAt)}` : "--"],
+      ];
+
+      els.summaryBox.innerHTML = items.map(([label, value]) => `
+        <div class="card"><div class="meta">${label}</div><strong style="display:block;margin-top:6px;">${value}</strong></div>
+      `).join("");
+    }
+
+    function renderDates(data) {
+      const dates = (data.availableDates || []).slice().reverse();
+      els.datesBox.innerHTML = dates.map((date) => `
+        <button type="button" class="toolbar" style="padding:8px 10px;" data-date="${date}">${date}</button>
+      `).join("");
+
+      els.datesBox.querySelectorAll("button[data-date]").forEach((button) => {
+        button.addEventListener("click", () => {
+          els.dateInput.value = button.dataset.date;
+          load();
+        });
+      });
+    }
+
+    function renderEmpty() {
+      els.heroGrid.innerHTML = "";
+      els.chartList.innerHTML = '<div class="empty">暂无统计数据</div>';
+      els.summaryBox.innerHTML = "";
+      els.datesBox.innerHTML = "";
+      els.detailBox.textContent = "还没有选中任何数据点。";
+    }
+
+    function setStatus(message, isError = false) {
+      if (!message) {
+        els.statusBox.style.display = "none";
+        els.statusBox.textContent = "";
+        els.statusBox.className = "card";
+        return;
+      }
+      els.statusBox.style.display = "block";
+      els.statusBox.className = "card" + (isError ? " error" : "");
+      els.statusBox.textContent = message;
+    }
+
+    function buildChart(samples, metric, bucket) {
+      const buckets = new Map();
+      for (const sample of samples) {
+        const ts = Date.parse(sample.at);
+        if (!Number.isFinite(ts)) continue;
+        buckets.set(truncate(ts, bucket), sample);
+      }
+
+      const ordered = [...buckets.entries()].sort((a, b) => a[0] - b[0]).map(([ts, sample]) => ({
+        ts,
+        sample,
+        value: valueOf(sample, metric),
+      }));
+
+      const width = 960;
+      const height = 260;
+      const left = 60;
+      const right = 22;
+      const top = 16;
+      const bottom = 30;
+      const plotWidth = Math.max(1, width - left - right);
+      const plotHeight = Math.max(1, height - top - bottom);
+      const values = ordered.map((item) => item.value).filter((v) => Number.isFinite(v));
+      const min = values.length ? Math.min(...values) : 0;
+      const max = values.length ? Math.max(...values) : 1;
+      const padding = max === min ? Math.max(1, Math.abs(max) * 0.15 || 1) : 0;
+      const scaleMin = min - padding;
+      const scaleMax = max + padding;
+
+      const points = ordered.map((item, index) => {
+        const ratio = ordered.length === 1 ? 0.5 : index / Math.max(1, ordered.length - 1);
+        const x = left + ratio * plotWidth;
+        const yRatio = normalize(item.value, scaleMin, scaleMax);
+        const y = top + (1 - yRatio) * plotHeight;
+        return {
+          ts: item.ts,
+          x,
+          y,
+          value: item.value,
+          sample: item.sample,
+          tooltip: tooltipOf(item.sample, item.value, metric),
+        };
+      });
+
+      const linePath = points.length ? `M ${points.map((p) => `${round(p.x)} ${round(p.y)}`).join(" L ")}` : "";
+      const areaPath = points.length ? `${linePath} L ${round(points.at(-1)?.x ?? left)} ${height - bottom} L ${round(points[0]?.x ?? left)} ${height - bottom} Z` : "";
+      const xLabels = buildTimeLabels(points, bucket);
+      const yLabels = buildValueLabels(scaleMin, scaleMax, height, top, bottom);
+
+      return {
+        svg(metricInfo) {
+          if (!points.length) {
+            return '<div class="empty">当前没有可绘制的数据点</div>';
+          }
+
+          return `
+            <svg class="chart" data-metric="${metric}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="${metricInfo.label}">
+              <defs>
+                <linearGradient id="area-${metric}" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stop-color="${metricInfo.color}" stop-opacity="0.34" />
+                  <stop offset="100%" stop-color="${metricInfo.color}" stop-opacity="0.02" />
+                </linearGradient>
+                <linearGradient id="line-${metric}" x1="0" x2="1" y1="0" y2="0">
+                  <stop offset="0%" stop-color="${metricInfo.color}" />
+                  <stop offset="100%" stop-color="${metricInfo.soft}" />
+                </linearGradient>
+              </defs>
+              <g class="grid">
+                ${yLabels.map((label) => `<line x1="${left}" y1="${label.y}" x2="${width - right}" y2="${label.y}"></line>`).join("")}
+                ${xLabels.map((label) => `<line x1="${label.x}" y1="${top}" x2="${label.x}" y2="${height - bottom}"></line>`).join("")}
+              </g>
+              <path d="${areaPath}" fill="url(#area-${metric})"></path>
+              <path class="line" d="${linePath}" fill="none" stroke="url(#line-${metric})"></path>
+              ${points.map((point) => `<circle class="point" cx="${point.x}" cy="${point.y}" r="5" fill="${metricInfo.color}" data-at="${point.sample.at}" title="${escapeHtml(point.tooltip)}"></circle>`).join("")}
+              ${renderLabels(xLabels, yLabels, width, height, left, bottom)}
+            </svg>
+          `;
+        },
+        attach() {
+          const svg = document.querySelector(`.chart[data-metric="${metric}"]`);
+          if (!svg) return;
+          svg.querySelectorAll(".point").forEach((circle) => {
+            circle.addEventListener("click", () => {
+              state.selectedAt = circle.getAttribute("data-at");
+              renderDetails(state.data);
+            });
+          });
+        },
+      };
+    }
+
+    function renderLabels(xLabels, yLabels, width, height, left, bottom) {
+      return `
+        <g>
+          ${yLabels.map((label) => `<text x="${left - 10}" y="${label.y}" text-anchor="end" fill="#94a3b8" font-size="11">${label.text}</text>`).join("")}
+          ${xLabels.map((label) => `<text x="${label.x}" y="${height - 12}" text-anchor="middle" fill="#94a3b8" font-size="11">${label.text}</text>`).join("")}
+        </g>
+      `;
+    }
+
+    function tooltipOf(sample, value, metric) {
+      const label = metricDefs.find((m) => m.key === metric)?.label || metric;
+      return [
+        fmtTime(sample.at),
+        `${label}: ${metric === "tps" ? fmtTps(value) : fmtInt(value)}`,
+        sample.map ? `地图: ${sample.map}` : "",
+        sample.layer ? `图层: ${sample.layer}` : "",
+      ].filter(Boolean).join("\\n");
+    }
+
+    function buildTimeLabels(points, bucket) {
+      if (!points.length) return [];
+      if (points.length === 1) {
+        return [{ x: points[0].x, text: bucketLabel(points[0].sample.at, bucket) }];
+      }
+      const anchors = [...new Set([0, Math.floor(points.length / 2), points.length - 1])];
+      return anchors.map((index) => ({ x: points[index].x, text: bucketLabel(points[index].sample.at, bucket) }));
+    }
+
+    function buildValueLabels(min, max, height, top, bottom) {
+      const labels = [];
+      for (let index = 0; index <= 4; index += 1) {
+        const ratio = index / 4;
+        const value = max - (max - min) * ratio;
+        const y = top + ratio * (height - top - bottom);
+        labels.push({ y, text: Number.isInteger(value) ? fmtInt(value) : value.toFixed(1) });
+      }
+      return labels;
+    }
+
+    function truncate(timestamp, bucket) {
+      const date = new Date(timestamp);
+      if (bucket === "hour") date.setMinutes(0, 0, 0);
+      else if (bucket === "minute") date.setSeconds(0, 0);
+      else date.setMilliseconds(0);
+      return date.getTime();
+    }
+
+    function valueOf(sample, metric) {
+      const raw = sample?.[metric];
+      const num = Number(raw);
+      return Number.isFinite(num) ? num : null;
+    }
+
+    function normalize(value, min, max) {
+      if (value == null || !Number.isFinite(value)) return 0;
+      if (max <= min) return 0.5;
+      return Math.max(0, Math.min(1, (value - min) / (max - min)));
+    }
+
+    function bucketLabel(value, bucket) {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return value;
+      if (bucket === "hour") return `${pad(date.getHours())}:00`;
+      if (bucket === "minute") return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+      return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+    }
+
+    function fmtTime(value) {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return value || "--";
+      return date.toLocaleString("zh-CN", {
+        hour12: false,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+    }
+
+    function fmtInt(value) {
+      const num = Number(value);
+      return Number.isFinite(num) ? new Intl.NumberFormat("zh-CN").format(num) : "--";
+    }
+
+    function fmtNum(value) {
+      const num = Number(value);
+      return Number.isFinite(num) ? num.toFixed(1) : "--";
+    }
+
+    function fmtTps(value) {
+      const num = Number(value);
+      return Number.isFinite(num) ? num.toFixed(1) : "--";
+    }
+
+    function round(value) {
+      return Math.round(value * 10) / 10;
+    }
+
+    function pad(value) {
+      return String(value).padStart(2, "0");
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+  </script>
+</body>
+</html>

@@ -317,6 +317,7 @@
       "./plugins/damage-display.js",
       "./plugins/weapon-collector.js",
       "./plugins/fair-squad.js",
+      "./plugins/server-info-statistics.js",
       "./plugins/udp_event_forwarder.js"
     ],
     "damageDisplay": {

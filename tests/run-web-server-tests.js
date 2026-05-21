@@ -275,6 +275,134 @@ async function testWeaponCollectorApiRequiresGet() {
   assert.equal(JSON.parse(typeMapPost.state.body).error, "ApiNotFound");
 }
 
+async function testServerInfoStatisticsRouteReturnsState() {
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return {
+            username: "admin",
+            role: "SuperAdmin",
+            permissions: ["plugins.manage"],
+          };
+        },
+        hasEverything() {
+          return true;
+        },
+      },
+      webStatus: {
+        serverId: "BZSS_Main",
+      },
+      pluginManager: {
+        instances: [
+          {
+            manifest: { id: "plugin.serverInfoStatistics" },
+            api: {
+              async getState({ serverId, date }) {
+                return {
+                  ok: true,
+                  plugin: "server-info-statistics",
+                  serverId,
+                  date: date || "2026-05-20",
+                  availableDates: ["2026-05-20"],
+                  day: {
+                    serverId,
+                    date: date || "2026-05-20",
+                    samples: [
+                      {
+                        at: "2026-05-20T10:00:00.000Z",
+                        playerCount: 12,
+                        queueCount: 3,
+                        tps: 29.7,
+                        map: "AlBasrah",
+                        layer: "AlBasrah_RAAS_v1",
+                        mode: "RAAS",
+                      },
+                    ],
+                    summary: {
+                      sampleCount: 1,
+                      firstAt: "2026-05-20T10:00:00.000Z",
+                      lastAt: "2026-05-20T10:00:00.000Z",
+                      latest: {
+                        at: "2026-05-20T10:00:00.000Z",
+                        playerCount: 12,
+                        queueCount: 3,
+                        tps: 29.7,
+                        map: "AlBasrah",
+                        layer: "AlBasrah_RAAS_v1",
+                        mode: "RAAS",
+                      },
+                    },
+                  },
+                  summary: {
+                    sampleCount: 1,
+                    firstAt: "2026-05-20T10:00:00.000Z",
+                    lastAt: "2026-05-20T10:00:00.000Z",
+                    latest: {
+                      at: "2026-05-20T10:00:00.000Z",
+                      playerCount: 12,
+                      queueCount: 3,
+                      tps: 29.7,
+                      map: "AlBasrah",
+                      layer: "AlBasrah_RAAS_v1",
+                      mode: "RAAS",
+                    },
+                  },
+                  latest: {
+                    at: "2026-05-20T10:00:00.000Z",
+                    playerCount: 12,
+                    queueCount: 3,
+                    tps: 29.7,
+                    map: "AlBasrah",
+                    layer: "AlBasrah_RAAS_v1",
+                    mode: "RAAS",
+                  },
+                  liveSnapshot: {
+                    at: "2026-05-20T10:00:00.000Z",
+                    playerCount: 12,
+                    queueCount: 3,
+                    tps: 29.7,
+                    map: "AlBasrah",
+                    layer: "AlBasrah_RAAS_v1",
+                    mode: "RAAS",
+                  },
+                  updatedAt: "2026-05-20T10:00:00.000Z",
+                };
+              },
+              async getAvailableDates() {
+                return ["2026-05-20"];
+              },
+              getLiveSnapshot() {
+                return {
+                  at: "2026-05-20T10:00:00.000Z",
+                  playerCount: 12,
+                  queueCount: 3,
+                  tps: 29.7,
+                };
+              },
+            },
+          },
+        ],
+      },
+    },
+  });
+
+  const recorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/plugins/server-info-statistics/state?serverId=BZSS_Main&date=2026-05-20",
+    headers: { host: "localhost" },
+    socket: {},
+  }, recorder.res);
+
+  assert.equal(recorder.state.status, 200);
+  const body = JSON.parse(recorder.state.body);
+  assert.equal(body.ok, true);
+  assert.equal(body.plugin, "server-info-statistics");
+  assert.equal(body.day.samples[0].playerCount, 12);
+  assert.equal(body.liveSnapshot.playerCount, 12);
+}
+
 async function testGroupReportSnapshotRouteReturnsWrappedSnapshot() {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-group-report-web-"));
   try {
@@ -1094,6 +1222,7 @@ await testGetPluginApiReturnsMatchingPluginApi();
 await testHealthEndpointDoesNotRequireAuth();
 await testCombatCleanRoutesDoNotForceCurrentServerFilter();
 await testWeaponCollectorApiRequiresGet();
+await testServerInfoStatisticsRouteReturnsState();
 await testGroupReportSnapshotRouteReturnsWrappedSnapshot();
 await testSnapshotAllRequiresAuth();
 await testSnapshotAllDoesNotTriggerSlowTasks();

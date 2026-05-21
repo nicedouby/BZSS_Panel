@@ -70,6 +70,10 @@ export class WebServer {
   async handleRequest(req, res) {
     const url = new URL(req.url, `http://${req.headers.host}`);
 
+    if (url.pathname === "/plugins/server-info-statistics" || url.pathname === "/plugins/server-info-statistics/") {
+      return this.serveServerInfoStatisticsPage(res);
+    }
+
     if (url.pathname.startsWith("/api/")) {
       return this.handleApi(url, req, res);
     }
@@ -1329,6 +1333,35 @@ export class WebServer {
       return this.json(res, 200, { ok: true });
     }
 
+    if (url.pathname.startsWith("/api/plugins/server-info-statistics")) {
+      const pluginApi = this.getPluginApi("plugin.serverInfoStatistics");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "ServerInfoStatisticsNotLoaded",
+          message: "Server info statistics plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/server-info-statistics/state" && req.method === "GET") {
+        const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
+        const date = url.searchParams.get("date") ?? "";
+        return this.json(res, 200, await pluginApi.getState({ serverId, date }));
+      }
+
+      if (url.pathname === "/api/plugins/server-info-statistics/live" && req.method === "GET") {
+        const availableDates = pluginApi.getAvailableDates
+          ? await pluginApi.getAvailableDates(this.core.webStatus.serverId)
+          : [];
+        return this.json(res, 200, {
+          ok: true,
+          plugin: "server-info-statistics",
+          serverId: this.core.webStatus.serverId,
+          liveSnapshot: pluginApi.getLiveSnapshot?.() ?? null,
+          availableDates,
+        });
+      }
+    }
+
     return this.json(res, 404, { error: "ApiNotFound" });
   }
 
@@ -1526,6 +1559,26 @@ export class WebServer {
     } catch {
       return this.serveIndex(res);
     }
+  }
+
+  async serveServerInfoStatisticsPage(res) {
+    const pagePath = path.resolve(process.cwd(), "web-client/server-info-statistics.html");
+    let html;
+    try {
+      html = await fs.readFile(pagePath, "utf8");
+    } catch (error) {
+      throw createHttpError(
+        503,
+        "ServerInfoStatisticsPageMissing",
+        `Server info statistics page not found at ${pagePath}.`,
+      );
+    }
+
+    res.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+    });
+    res.end(html);
   }
 
   async serveIndex(res) {
