@@ -12,8 +12,9 @@ export function createServerStatsModule({ core, modules, config, logger }) {
     channel: "module",
   }) ?? core.logger;
 
-  const databaseConfig = config.get("database", config.get("modules.serverStats.database", {}));
-  let db = null;
+  const moduleConfig = config.get("modules.serverStats", {});
+  const dataDir = moduleConfig.dataDir || "data/server-stats";
+  
   let store = null;
   let sampler = null;
   let api = null;
@@ -58,15 +59,14 @@ export function createServerStatsModule({ core, modules, config, logger }) {
       id: "module.serverStats",
       name: "Server Stats Module",
       kind: "module",
-      version: "1.0.0",
-      description: "Stores normalized server metric snapshots in SQLite, deduplicates unchanged samples, and exposes history/current APIs for charting.",
+      version: "1.1.0",
+      description: "Stores normalized server metric snapshots in daily JSONL files, deduplicates unchanged samples, and exposes history/current APIs for charting.",
     },
     apiName: "serverStats",
     api: null,
 
     async init() {
-      db = await createDatabase(databaseConfig);
-      store = new ServerMetricStore(db);
+      store = new ServerMetricStore({ dataDir, logger: moduleLogger });
       await store.init();
       sampler = new ServerInfoSampler({
         serverId: getServerId(),
@@ -85,12 +85,11 @@ export function createServerStatsModule({ core, modules, config, logger }) {
 
     async start() {
       await sampler?.start();
-      moduleLogger.info?.("[ServerStats] module started.");
+      moduleLogger.info?.(`[ServerStats] module started using file storage at ${dataDir}`);
     },
 
     async stop() {
       await sampler?.stop();
-      await db?.close();
       moduleLogger.info?.("[ServerStats] module stopped.");
     },
   };

@@ -1,100 +1,120 @@
 // -*- coding: utf-8 -*-
 
+import fs from "node:fs/promises";
+import path from "node:path";
 import crypto from "node:crypto";
 
 export class ServerMetricStore {
-  constructor(db) {
-    this.db = db;
+  constructor({ dataDir, logger }) {
+    this.dataDir = path.resolve(process.cwd(), dataDir || "data/server-stats");
+    this.logger = logger;
   }
 
   async init() {
-    await this.db.exec(`
-      CREATE TABLE IF NOT EXISTS server_metric_samples (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        server_id TEXT NOT NULL,
-        timestamp_ms INTEGER NOT NULL,
-        metrics_json TEXT NOT NULL,
-        metrics_hash TEXT NOT NULL,
-        created_at_ms INTEGER NOT NULL
-      )
-    `);
-
-    await this.db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_server_metric_samples_server_time
-      ON server_metric_samples(server_id, timestamp_ms)
-    `);
-
-    await this.db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_server_metric_samples_hash
-      ON server_metric_samples(server_id, metrics_hash)
-    `);
+    try {
+      await fs.mkdir(this.dataDir, { recursive: true });
+    } catch (error) {
+      this.logger?.error?.(`[ServerStats] Failed to create data directory: ${error.message}`);
+    }
   }
 
   async insertSample({ serverId, timestampMs, metrics, metricsHash }) {
-    await this.db.run(
-      `
-      INSERT INTO server_metric_samples
-      (server_id, timestamp_ms, metrics_json, metrics_hash, created_at_ms)
-      VALUES (?, ?, ?, ?, ?)
-      `,
-      [
-        serverId,
-        timestampMs,
-        JSON.stringify(metrics),
-        metricsHash,
-        Date.now(),
-      ],
-    );
+    const date = new Date(timestampMs).toISOString().split("T")[0];
+    const filePath = path.join(this.dataDir, `${serverId}-${date}.jsonl`);
+    
+    // Minimal data for file storage to save space
+    const entry = {
+      t: timestampMs,
+      m: metrics,
+      h: metricsHash.substring(0, 8), // Short hash for deduplication check if needed
+    };
+
+    try {
+      await fs.appendFile(filePath, JSON.stringify(entry) + "\n", "utf8");
+    } catch (error) {
+      this.logger?.warn?.(`[ServerStats] Failed to append sample to ${filePath}: ${error.message}`);
+    }
   }
 
-  async getHistory({ serverId, fromMs, toMs, includeCurrent = false }) {
-    // Get the sample just before the start time to ensure a continuous line
-    const previous = await this.db.get(
-      `
-      SELECT timestamp_ms, metrics_json
-      FROM server_metric_samples
-      WHERE server_id = ?
-        AND timestamp_ms < ?
-      ORDER BY timestamp_ms DESC
-      LIMIT 1
-      `,
-      [serverId, fromMs],
-    );
+  async getHistory({ serverId, fromMs, toMs }) {
+    const startMs = Number(fromMs);
+    const endMs = Number(toMs);
+    
+    // Get all relevant dates in the range
+    const dates = [];
+    let current = new Date(startMs);
+    const end = new Date(endMs);
+    
+    // Ensure we include the start date and end date
+    while (current <= end) {
+      dates.push(current.toISOString().split("T")[0]);
+      current.setDate(current.getDate() + 1);
+    }
+    // Add one more day to be safe if it spans midnight exactly
+    const lastDate = end.toISOString().split("T")[0];
+    if (!dates.includes(lastDate)) dates.push(lastDate);
 
-    const rows = await this.db.all(
-      `
-      SELECT timestamp_ms, metrics_json
-      FROM server_metric_samples
-      WHERE server_id = ?
-        AND timestamp_ms >= ?
-        AND timestamp_ms <= ?
-      ORDER BY timestamp_ms ASC
-      `,
-      [serverId, fromMs, toMs],
-    );
+    let allSamples = [];
+
+    // Read previous sample for virtual point if needed
+    // (Search in current and previous files)
+    let previousSample = null;
+    const sortedAvailableDates = await this.listAvailableDates({ serverId });
+    const firstDateInRange = dates[0];
+    const olderDates = sortedAvailableDates.filter(d => d < firstDateInRange);
+    
+    if (olderDates.length > 0) {
+      const latestOlderFile = path.join(this.dataDir, `${serverId}-${olderDates[0]}.jsonl`);
+      previousSample = await this.readLastSampleBefore(latestOlderFile, startMs);
+    }
+
+    for (const date of dates) {
+      const filePath = path.join(this.dataDir, `${serverId}-${date}.jsonl`);
+      try {
+        const content = await fs.readFile(filePath, "utf8");
+        const lines = content.split("\n");
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const entry = JSON.parse(line);
+          if (entry.t >= startMs && entry.t <= endMs) {
+            allSamples.push({
+              timestamp_ms: entry.t,
+              metrics: entry.m,
+              virtual: false,
+            });
+          } else if (entry.t < startMs) {
+            // Keep track of the latest sample before our range within the same day
+            if (!previousSample || entry.t > previousSample.timestamp_ms) {
+              previousSample = {
+                timestamp_ms: entry.t,
+                metrics: entry.m,
+                virtual: true,
+              };
+            }
+          }
+        }
+      } catch (err) {
+        // File might not exist for some days, skip
+      }
+    }
 
     const result = [];
-
-    if (previous) {
+    if (previousSample) {
       result.push({
-        timestamp_ms: Number(fromMs),
-        metrics: JSON.parse(previous.metrics_json),
+        timestamp_ms: startMs,
+        metrics: previousSample.metrics,
         virtual: true,
       });
     }
 
-    for (const row of rows) {
-      result.push({
-        timestamp_ms: Number(row.timestamp_ms),
-        metrics: JSON.parse(row.metrics_json),
-        virtual: false,
-      });
-    }
+    // Sort by time just in case
+    allSamples.sort((a, b) => a.timestamp_ms - b.timestamp_ms);
+    result.push(...allSamples);
 
     return {
       server_id: serverId,
-      from_ms: Number(fromMs),
-      to_ms: Number(toMs),
+      from_ms: startMs,
+      to_ms: endMs,
       samples: result,
       summary: {
         sampleCount: result.length,
@@ -108,18 +128,44 @@ export class ServerMetricStore {
     };
   }
 
+  async readLastSampleBefore(filePath, beforeMs) {
+    try {
+      const content = await fs.readFile(filePath, "utf8");
+      const lines = content.split("\n");
+      let last = null;
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const entry = JSON.parse(line);
+        if (entry.t < beforeMs) {
+          if (!last || entry.t > last.timestamp_ms) {
+            last = {
+              timestamp_ms: entry.t,
+              metrics: entry.m,
+            };
+          }
+        }
+      }
+      return last;
+    } catch {
+      return null;
+    }
+  }
+
   async listAvailableDates({ serverId }) {
-    const rows = await this.db.all(
-      `
-      SELECT DISTINCT date(timestamp_ms / 1000, 'unixepoch', 'localtime') as date
-      FROM server_metric_samples
-      WHERE server_id = ?
-      ORDER BY date DESC
-      LIMIT 30
-      `,
-      [serverId],
-    );
-    return rows.map((r) => r.date);
+    try {
+      const files = await fs.readdir(this.dataDir);
+      const prefix = `${serverId}-`;
+      const suffix = ".jsonl";
+      
+      const dates = files
+        .filter(f => f.startsWith(prefix) && f.endsWith(suffix))
+        .map(f => f.substring(prefix.length, f.length - suffix.length))
+        .sort((a, b) => b.localeCompare(a)); // Newest first
+        
+      return dates;
+    } catch (error) {
+      return [];
+    }
   }
 }
 
