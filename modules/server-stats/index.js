@@ -98,6 +98,7 @@ export function createServerStatsModule({ core, modules, config, logger }) {
 
 function firstFinite(values) {
   for (const value of values) {
+    if (value === null || value === undefined) continue;
     const number = Number(value);
     if (Number.isFinite(number)) return number;
   }

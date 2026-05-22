@@ -3,20 +3,47 @@
     <div class="page-head">
       <div>
         <h1 class="page-title">服务器信息统计</h1>
-        <p class="page-subtitle">跨天历史数据分析与实时监控。</p>
+        <p class="page-subtitle">智能日志分析与多轴动态监控。</p>
       </div>
       <div class="actions">
-        <div class="range-controls">
-          <div class="date-input-group">
-            <input type="date" v-model="startDate" @change="loadHistory" :max="endDate" />
-            <span class="date-sep">至</span>
-            <input type="date" v-model="endDate" @change="loadHistory" :min="startDate" />
-          </div>
+        <div class="log-calendar-trigger" @click="showCalendar = !showCalendar">
+          <span class="icon">📅</span>
+          <span v-if="selectedDates.length === 0">选择日志日期</span>
+          <span v-else>已选 {{ selectedDates.length }} 天</span>
         </div>
         <button class="refresh-btn" @click="refreshAll" :disabled="loading">
           <span v-if="loading">同步中...</span>
           <span v-else>刷新数据</span>
         </button>
+      </div>
+    </div>
+
+    <!-- Available Dates Window -->
+    <div v-if="showCalendar" class="log-calendar-overlay" @click.self="showCalendar = false">
+      <div class="log-calendar-modal">
+        <div class="modal-header">
+          <h3>可用日志日期</h3>
+          <button @click="showCalendar = false" class="close-btn">×</button>
+        </div>
+        <div class="modal-body">
+          <p class="hint">点击下方日期进行多选对比分析：</p>
+          <div class="date-chips">
+            <button
+              v-for="date in availableDates"
+              :key="date"
+              class="date-chip"
+              :class="{ selected: selectedDates.includes(date) }"
+              @click="toggleDate(date)"
+            >
+              {{ date }}
+            </button>
+            <div v-if="availableDates.length === 0" class="empty-dates">暂无历史日志</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="clear-btn" @click="selectedDates = []">清除选择</button>
+          <button class="apply-btn" @click="applyDates">开始分析</button>
+        </div>
       </div>
     </div>
 
@@ -109,8 +136,8 @@ const samples = ref<MetricSample[]>([]);
 const channels = ref<Channel[]>([]);
 const availableDates = ref<string[]>([]);
 const selectedRange = ref("24h");
-const startDate = ref("");
-const endDate = ref("");
+const showCalendar = ref(false);
+const selectedDates = ref<string[]>([]);
 const lastUpdated = ref<number | null>(null);
 
 const enabledChannels = reactive<Record<string, boolean>>({});
@@ -128,30 +155,40 @@ const lastUpdatedLabel = computed(() => {
 
 let pollTimer: number | null = null;
 
+async function fetchAvailableDates() {
+  try {
+    const res = await fetch("/api/server-stats/dates");
+    const data = await res.json();
+    availableDates.value = data.dates || [];
+  } catch (error) {
+    console.error("Failed to fetch available dates:", error);
+  }
+}
+
 async function loadHistory() {
   loading.value = true;
   try {
-    let fromMs: number;
-    let toMs: number;
+    let url = "/api/server-stats/history?include_current=1";
 
-    if (startDate.value && endDate.value) {
-      fromMs = Date.parse(`${startDate.value}T00:00:00`);
-      toMs = Date.parse(`${endDate.value}T23:59:59`);
-      selectedRange.value = ""; // Clear range buttons if manual dates selected
+    if (selectedDates.value.length > 0) {
+      const sorted = [...selectedDates.value].sort();
+      const fromMs = Date.parse(`${sorted[0]}T00:00:00Z`);
+      const toMs = Date.parse(`${sorted[sorted.length - 1]}T23:59:59Z`);
+      url += `&from_ms=${fromMs}&to_ms=${toMs}`;
+      selectedRange.value = "";
     } else {
       const range = ranges.find((r) => r.key === selectedRange.value) || ranges[3];
-      toMs = Date.now();
-      fromMs = toMs - range.hours * 60 * 60 * 1000;
+      const toMs = Date.now();
+      const fromMs = toMs - range.hours * 60 * 60 * 1000;
+      url += `&from_ms=${fromMs}&to_ms=${toMs}`;
     }
 
-    const res = await fetch(`/api/server-stats/history?from_ms=${fromMs}&to_ms=${toMs}&include_current=1`);
+    const res = await fetch(url);
     const data = await res.json();
 
     samples.value = data.samples || [];
     channels.value = data.channels || [];
-    availableDates.value = data.availableDates || [];
 
-    // Initialize channel toggles if not set
     channels.value.forEach((c) => {
       if (enabledChannels[c.key] === undefined) {
         enabledChannels[c.key] = c.enabledByDefault;
@@ -167,6 +204,20 @@ async function loadHistory() {
   }
 }
 
+function toggleDate(date: string) {
+  const index = selectedDates.value.indexOf(date);
+  if (index === -1) {
+    selectedDates.value.push(date);
+  } else {
+    selectedDates.value.splice(index, 1);
+  }
+}
+
+function applyDates() {
+  showCalendar.value = false;
+  void loadHistory();
+}
+
 async function refreshCurrent() {
   try {
     const res = await fetch("/api/server-stats/current");
@@ -178,12 +229,9 @@ async function refreshCurrent() {
         metrics: data.metrics,
       };
 
-      // Only append if it's actually newer and different
       const last = samples.value[samples.value.length - 1];
       if (!last || newSample.timestamp_ms > last.timestamp_ms) {
         samples.value.push(newSample);
-        // Trim old samples if they are outside the current view range
-        // (Simplified for now, just keep the last 5000)
         if (samples.value.length > 5000) {
           samples.value.shift();
         }
@@ -207,6 +255,7 @@ function updateChart() {
       showSymbol: false,
       smooth: true,
       connectNulls: true,
+      yAxisIndex: c.key === "tps" ? 1 : 0,
       data: samples.value.map((s) => [s.timestamp_ms, s.metrics[c.key]]),
       lineStyle: { width: 2, color: c.color },
       itemStyle: { color: c.color },
@@ -228,13 +277,13 @@ function toggleChannel(key: string) {
 
 function setRange(range: string) {
   selectedRange.value = range;
-  startDate.value = ""; // Clear manual dates if range is selected
-  endDate.value = "";
+  selectedDates.value = [];
   void loadHistory();
 }
 
 function refreshAll() {
   void loadHistory();
+  void fetchAvailableDates();
 }
 
 onMounted(() => {
@@ -244,10 +293,10 @@ onMounted(() => {
       backgroundColor: "transparent",
       animation: false,
       grid: {
-        left: 50,
-        right: 20,
+        left: 60,
+        right: 60, // Equal space for dual axes
         top: 20,
-        bottom: 40,
+        bottom: 50,
       },
       tooltip: {
         trigger: "axis",
@@ -257,7 +306,10 @@ onMounted(() => {
         axisPointer: { type: "cross" },
         formatter: (params: any[]) => {
           if (!params || params.length === 0) return "";
-          const time = new Date(params[0].axisValue).toLocaleTimeString();
+          const date = new Date(params[0].axisValue);
+          const time = date.toLocaleString([], {
+            month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit"
+          });
           const rows = params.map((p) => `
             <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
               <span style="width:10px;height:10px;border-radius:50%;background:${p.color};"></span>
@@ -266,7 +318,7 @@ onMounted(() => {
             </div>
           `).join("");
           return `
-            <div style="min-width:160px; padding: 4px;">
+            <div style="min-width:180px; padding: 4px;">
               <div style="font-weight:600;margin-bottom:8px;border-bottom:1px solid #444;padding-bottom:4px;">${time}</div>
               ${rows}
             </div>
@@ -279,15 +331,26 @@ onMounted(() => {
         axisLine: { lineStyle: { color: "#444" } },
         splitLine: { show: true, lineStyle: { color: "#222" } },
       },
-      yAxis: {
-        type: "value",
-        scale: true,
-        axisLine: { lineStyle: { color: "#444" } },
-        splitLine: { show: true, lineStyle: { color: "#222" } },
-      },
+      yAxis: [
+        {
+          name: "人数/排队",
+          type: "value",
+          scale: true,
+          axisLine: { lineStyle: { color: "#444" } },
+          splitLine: { show: true, lineStyle: { color: "#222" } },
+        },
+        {
+          name: "TPS",
+          type: "value",
+          min: 0,
+          max: 60, // Standard Squad TPS
+          splitLine: { show: false }, // Only show split lines for left axis
+          axisLine: { lineStyle: { color: "#444" } },
+        }
+      ],
       dataZoom: [
         { type: "inside", throttle: 50 },
-        { type: "slider", height: 20, bottom: 0 },
+        { type: "slider", height: 25, bottom: 5 },
       ],
       series: [],
     });
@@ -296,6 +359,7 @@ onMounted(() => {
   }
 
   void loadHistory();
+  void fetchAvailableDates();
   pollTimer = window.setInterval(() => refreshCurrent(), 3000);
 });
 
@@ -319,34 +383,141 @@ onUnmounted(() => {
   flex-wrap: wrap;
 }
 
-.range-controls {
+.log-calendar-trigger {
   display: flex;
   align-items: center;
-  gap: 12px;
-}
-
-.date-input-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  gap: 10px;
   background: #1d252d;
   border: 1px solid #38414c;
-  padding: 4px 12px;
+  padding: 8px 16px;
   border-radius: 6px;
-}
-
-.date-input-group input {
-  background: transparent;
-  border: none;
+  cursor: pointer;
   color: #fff;
   font-size: 14px;
-  outline: none;
+  transition: border-color 0.2s;
+}
+
+.log-calendar-trigger:hover {
+  border-color: #60a5fa;
+}
+
+.log-calendar-trigger .icon {
+  font-size: 16px;
+}
+
+/* Modal Styling */
+.log-calendar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+}
+
+.log-calendar-modal {
+  background: #151a20;
+  border: 1px solid #38414c;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #273039;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.close-btn {
+  background: transparent;
+  border: none;
+  color: #9aa7b2;
+  font-size: 24px;
   cursor: pointer;
 }
 
-.date-sep {
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.hint {
   color: #9aa7b2;
-  font-size: 12px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.date-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.date-chip {
+  background: #1d252d;
+  border: 1px solid #38414c;
+  color: #dce4e8;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.date-chip:hover {
+  background: #262f38;
+}
+
+.date-chip.selected {
+  background: #2563eb;
+  border-color: #3b82f6;
+  color: #fff;
+}
+
+.empty-dates {
+  padding: 20px;
+  text-align: center;
+  color: #9aa7b2;
+  width: 100%;
+}
+
+.modal-footer {
+  padding: 16px 20px;
+  border-top: 1px solid #273039;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.clear-btn {
+  background: transparent;
+  border: 1px solid #38414c;
+  color: #9aa7b2;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.apply-btn {
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  padding: 8px 24px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
 }
 
 .refresh-btn {

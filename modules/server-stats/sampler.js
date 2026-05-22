@@ -14,10 +14,11 @@ export class ServerInfoSampler {
   }
 
   normalizeMetrics(raw) {
+    const tps = raw.metrics?.tps;
     return {
       players: Math.max(0, Math.floor(Number(raw.metrics?.players ?? 0))),
       queue: Math.max(0, Math.floor(Number(raw.metrics?.queue ?? 0))),
-      tps: Number(Number(raw.metrics?.tps ?? 0).toFixed(2)),
+      tps: (tps === null || tps === undefined) ? null : Number(Number(tps).toFixed(2)),
     };
   }
 

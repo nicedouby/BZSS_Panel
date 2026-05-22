@@ -395,7 +395,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       playerCount: Number(state.serverStatus.playerCount ?? state.players.count ?? 0),
       maxPlayers: state.serverStatus.maxPlayers,
       queueCount: state.serverStatus.queueCount ?? 0,
-      tps: state.serverStatus.tps,
+      tps: state.serverStatus.tps ?? core.webStatus.getSnapshot?.()?.tps ?? core.webStatus.state?.tps,
       tpsStatus: state.serverStatus.tpsStatus,
       playtime: state.serverStatus.playtime,
       rconStatus: state.rconStatus.status,

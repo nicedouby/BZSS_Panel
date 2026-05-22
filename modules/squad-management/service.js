@@ -151,6 +151,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
         }
         await hydrateFromRepository();
         await hydrateFromLifecycleModule();
+        await hydrateFromPlayerState();
       } catch (error) {
         moduleLogger.warn(`[SquadManagement] init hydration failed: ${error?.message ?? error}`);
       }
@@ -165,10 +166,17 @@ export function createSquadManagementService({ core, modules, config, logger, re
           }
           await hydrateFromRepository();
           await hydrateFromLifecycleModule();
+          await hydrateFromPlayerState();
         } catch (error) {
           moduleLogger.warn(`[SquadManagement] start hydration failed: ${error?.message ?? error}`);
         }
         initialized = true;
+      }
+
+      for (const [serverId, creators] of creatorsByServer.entries()) {
+        for (const creator of creators.values()) {
+          await checkKickPolicy(serverId, creator);
+        }
       }
 
       if (!enabled) {
@@ -232,6 +240,19 @@ export function createSquadManagementService({ core, modules, config, logger, re
       }
     },
   };
+
+  async function hydrateFromPlayerState() {
+    const serverId = getDefaultServerId();
+    if (!serverId || !modules?.playerState) return;
+
+    const state = modules.playerState.getState?.(serverId) ?? modules.playerState.getState?.() ?? null;
+    const players = Array.isArray(state?.players) ? state.players : [];
+    if (players.length === 0) return;
+
+    const cache = ensureServerCache(serverId);
+    cache.playersRaw = players;
+    touchCache(cache);
+  }
 
   async function hydrateFromRepository() {
     if (!repositoryApi?.listRecords) return;
@@ -409,13 +430,14 @@ export function createSquadManagementService({ core, modules, config, logger, re
     if (!parsed.serverId || parsed.teamId == null || parsed.squadId == null) return;
 
     const cache = ensureServerCache(parsed.serverId);
-    cache.matchId = parsed.matchId || cache.matchId || getCurrentMatchId(parsed.serverId) || buildSyntheticMatchId(parsed.serverId, event);
+    const resolvedMatchId = parsed.matchId || cache.matchId || getCurrentMatchId(parsed.serverId) || buildSyntheticMatchId(parsed.serverId, event);
+    cache.matchId = resolvedMatchId;
     cache.lastEventAt = parsed.createdAt ?? new Date().toISOString();
 
-    lifecycle.setCurrentMatchId(parsed.serverId, cache.matchId);
+    lifecycle.setCurrentMatchId(parsed.serverId, resolvedMatchId);
     const lifecycleRecord = lifecycle.handleSquadCreateLogEvent({
       serverId: parsed.serverId,
-      matchId: cache.matchId,
+      matchId: resolvedMatchId,
       teamId: parsed.teamId,
       squadId: parsed.squadId,
       squadName: parsed.squadName,
@@ -431,10 +453,19 @@ export function createSquadManagementService({ core, modules, config, logger, re
 
     if (lifecycleRecord) {
       updateCreatorStats(parsed.serverId, lifecycleRecord);
+      await checkSquadPolicy(parsed.serverId, lifecycleRecord);
+
+      const creatorKey = buildCreatorKey(lifecycleRecord);
+      const creators = creatorsByServer.get(parsed.serverId);
+      const creator = creators?.get(creatorKey);
+      if (creator) {
+        await checkKickPolicy(parsed.serverId, creator);
+      }
+
       const record = await repositoryApi?.insertRecord?.({
         kind: "squad_created",
         serverId: parsed.serverId,
-        matchId: cache.matchId,
+        matchId: resolvedMatchId,
         source: parsed.source,
         system: false,
         teamId: parsed.teamId,
@@ -477,7 +508,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
 
     core.eventBus?.emitModuleEvent?.(MODULE_ID, "squadCreated", {
       serverId: parsed.serverId,
-      matchId: cache.matchId,
+      matchId: resolvedMatchId,
       teamId: parsed.teamId,
       squadId: parsed.squadId,
       squadName: parsed.squadName,
@@ -546,6 +577,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
     const state = buildStateSnapshot(serverId);
     const target = state.squads.find((squad) => sameSquadKey(squad, teamId, squadId)) ?? null;
     if (!target) {
+      moduleLogger.debug(`[SquadManagement] Disband failed: Target squad not found. Team ${teamId} Squad ${squadId}`);
       return recordFailedAction({
         kind: "disband",
         serverId,
@@ -805,16 +837,17 @@ export function createSquadManagementService({ core, modules, config, logger, re
     const kind = normalizeRecordKindFilter(query.kind ?? query.type ?? "all");
     const limit = normalizePositiveInteger(query.limit, 500);
     const offset = normalizePositiveInteger(query.offset, 0);
+    const matchId = normalizeMatchId(query.matchId ?? getCurrentMatchId(serverId));
     const records = await repositoryApi?.listRecords?.({
       serverId,
-      matchId: normalizeMatchId(query.matchId ?? getCurrentMatchId(serverId)),
+      matchId,
       kind,
       limit,
       offset,
     }) ?? [];
     const summary = await repositoryApi?.getSummary?.({
       serverId,
-      matchId: normalizeMatchId(query.matchId ?? getCurrentMatchId(serverId)),
+      matchId,
     }) ?? buildEmptySummary();
 
     return {
@@ -1309,6 +1342,68 @@ export function createSquadManagementService({ core, modules, config, logger, re
     cache.creators = [...creators.values()];
   }
 
+  async function checkSquadPolicy(serverId, lifecycleRecord) {
+    if (!enforcementEnabled) return;
+
+    const logSeconds = core.logClock?.getSeconds(lifecycleRecord.createdAtMs)
+      ?? lifecycleRecord.logSeconds
+      ?? extractSeconds(lifecycleRecord.eventTime)
+      ?? 0;
+
+    // Policy 1: No Build until X seconds
+    const noBuildUntilSeconds = normalizePositiveInteger(moduleConfig.noBuildUntilSeconds, 0);
+    if (noBuildUntilSeconds > 0 && logSeconds < noBuildUntilSeconds) {
+      moduleLogger.debug(`[SquadManagement] Policy Violation (No Build): Team ${lifecycleRecord.teamId} Squad ${lifecycleRecord.squadId} at ${logSeconds}s (threshold ${noBuildUntilSeconds}s)`);
+      return executeDisband({
+        serverId,
+        teamId: lifecycleRecord.teamId,
+        squadId: lifecycleRecord.squadId,
+        reason: `No building allowed until ${noBuildUntilSeconds}s (current: ${logSeconds}s)`,
+        source: "policy",
+        system: true,
+      });
+    }
+
+    // Policy 2: Infantry Only until Y seconds
+    const infantryOnlyUntilSeconds = normalizePositiveInteger(moduleConfig.infantryOnlyUntilSeconds, 0);
+    if (infantryOnlyUntilSeconds > 0 && logSeconds < infantryOnlyUntilSeconds) {
+      const squadName = normalizeText(lifecycleRecord.squadName);
+      const isAllowed = allowedInfantryNames.some((name) => squadName.toLowerCase().includes(normalizeText(name).toLowerCase()))
+        || /^Squad\s*\d+$/i.test(squadName);
+      if (!isAllowed) {
+        return executeDisband({
+          serverId,
+          teamId: lifecycleRecord.teamId,
+          squadId: lifecycleRecord.squadId,
+          reason: `Infantry/Allowed squads only until ${infantryOnlyUntilSeconds}s`,
+          source: "policy",
+          system: true,
+        });
+      }
+    }
+  }
+
+  async function checkKickPolicy(serverId, creator) {
+    if (!enforcementEnabled) return;
+    if (creator.count <= kickThreshold) return;
+    if (creator.lastKickAttemptedCount >= creator.count) return;
+
+    const reason = `Creating too many squads (${creator.count} > ${kickThreshold})`;
+    creator.lastKickAttemptedCount = creator.count;
+    creator.lastKickAt = new Date().toISOString();
+
+    return executeKick({
+      serverId,
+      reason,
+      source: "policy",
+      system: true,
+      steamId: creator.steamId,
+      eosId: creator.eosId,
+      name: creator.creatorName,
+      playerKey: creator.creatorKey,
+    });
+  }
+
   function buildCreatorRecordFromLifecycle(record) {
     return {
       creatorKey: buildCreatorKey(record),
@@ -1415,6 +1510,16 @@ export function createSquadManagementService({ core, modules, config, logger, re
       creatorName: squad?.creatorName ?? player?.name,
     });
     return creatorKey;
+  }
+
+  function resolveRequestedPlayer(request) {
+    return {
+      playerKey: normalizeText(request.playerKey ?? request.playerID ?? request.playerId),
+      playerId: normalizeText(request.playerId ?? request.playerID),
+      steamId: normalizeText(request.steamId ?? request.steamID ?? request.Steam64ID),
+      eosId: normalizeText(request.eosId ?? request.eosID ?? request.EOSID),
+      name: normalizeText(request.name ?? request.playerName),
+    };
   }
 
   function resolvePlayerTarget(state, request) {
