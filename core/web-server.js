@@ -1349,6 +1349,22 @@ export class WebServer {
       }));
     }
 
+    if (url.pathname === "/api/server-stats/dates" && req.method === "GET") {
+      const api = this.modules.serverStats;
+      if (!api?.listAvailableDates) {
+        return this.json(res, 404, {
+          error: "ServerStatsUnavailable",
+          message: "Server stats module is not loaded.",
+        });
+      }
+
+      return this.json(res, 200, {
+        dates: await api.listAvailableDates({
+          serverId: url.searchParams.get("server_id") ?? url.searchParams.get("serverId") ?? this.core.webStatus.serverId,
+        }),
+      });
+    }
+
     if (url.pathname === "/api/weapon-collector/clear" && req.method === "POST") {
       if (!this.requireSuperAdmin(user, res)) return;
       const pluginApi = this.getPluginApi("plugin.weaponCollector");

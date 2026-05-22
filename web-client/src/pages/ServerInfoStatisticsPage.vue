@@ -3,19 +3,19 @@
     <div class="page-head">
       <div>
         <h1 class="page-title">服务器信息统计</h1>
-        <p class="page-subtitle">实时监控在线人数、TPS 和排队情况。</p>
+        <p class="page-subtitle">跨天历史数据分析与实时监控。</p>
       </div>
       <div class="actions">
-        <div class="date-selector">
-          <select v-model="selectedDate" @change="loadHistory">
-            <option value="">最近 24 小时</option>
-            <option v-for="date in availableDates" :key="date" :value="date">
-              {{ date }}
-            </option>
-          </select>
+        <div class="range-controls">
+          <div class="date-input-group">
+            <input type="date" v-model="startDate" @change="loadHistory" :max="endDate" />
+            <span class="date-sep">至</span>
+            <input type="date" v-model="endDate" @change="loadHistory" :min="startDate" />
+          </div>
         </div>
         <button class="refresh-btn" @click="refreshAll" :disabled="loading">
-          {{ loading ? "同步中..." : "刷新" }}
+          <span v-if="loading">同步中...</span>
+          <span v-else>刷新数据</span>
         </button>
       </div>
     </div>
@@ -108,8 +108,9 @@ const loading = ref(false);
 const samples = ref<MetricSample[]>([]);
 const channels = ref<Channel[]>([]);
 const availableDates = ref<string[]>([]);
-const selectedDate = ref("");
 const selectedRange = ref("24h");
+const startDate = ref("");
+const endDate = ref("");
 const lastUpdated = ref<number | null>(null);
 
 const enabledChannels = reactive<Record<string, boolean>>({});
@@ -131,13 +132,15 @@ async function loadHistory() {
   loading.value = true;
   try {
     let fromMs: number;
-    let toMs = Date.now();
+    let toMs: number;
 
-    if (selectedDate.value) {
-      fromMs = Date.parse(`${selectedDate.value}T00:00:00Z`);
-      toMs = Date.parse(`${selectedDate.value}T23:59:59Z`);
+    if (startDate.value && endDate.value) {
+      fromMs = Date.parse(`${startDate.value}T00:00:00`);
+      toMs = Date.parse(`${endDate.value}T23:59:59`);
+      selectedRange.value = ""; // Clear range buttons if manual dates selected
     } else {
       const range = ranges.find((r) => r.key === selectedRange.value) || ranges[3];
+      toMs = Date.now();
       fromMs = toMs - range.hours * 60 * 60 * 1000;
     }
 
@@ -225,7 +228,8 @@ function toggleChannel(key: string) {
 
 function setRange(range: string) {
   selectedRange.value = range;
-  selectedDate.value = ""; // Clear date if range is selected
+  startDate.value = ""; // Clear manual dates if range is selected
+  endDate.value = "";
   void loadHistory();
 }
 
@@ -303,33 +307,60 @@ onUnmounted(() => {
 
 <style scoped>
 .server-stats-page {
-  max-width: 1200px;
+  max-width: 1600px;
   margin: 0 auto;
   padding: 20px;
 }
 
 .actions {
   display: flex;
-  gap: 12px;
+  gap: 16px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
-.date-selector select {
+.range-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.date-input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   background: #1d252d;
-  color: #fff;
   border: 1px solid #38414c;
+  padding: 4px 12px;
   border-radius: 6px;
-  padding: 8px 12px;
+}
+
+.date-input-group input {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 14px;
+  outline: none;
   cursor: pointer;
+}
+
+.date-sep {
+  color: #9aa7b2;
+  font-size: 12px;
 }
 
 .refresh-btn {
   background: #2563eb;
   color: #fff;
   border: none;
-  padding: 8px 16px;
+  padding: 10px 20px;
   border-radius: 6px;
   cursor: pointer;
+  font-weight: 600;
+}
+
+.refresh-btn:hover {
+  background: #3b82f6;
 }
 
 .refresh-btn:disabled {
@@ -339,7 +370,7 @@ onUnmounted(() => {
 
 .chart-panel {
   margin-top: 24px;
-  padding: 20px;
+  padding: 24px;
   background: #151a20;
 }
 
@@ -347,33 +378,35 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 20px;
 }
 
 .channel-toggles {
   display: flex;
-  gap: 8px;
+  gap: 10px;
 }
 
 .channel-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   background: #1d252d;
   border: 1px solid #38414c;
   color: #9aa7b2;
-  padding: 6px 12px;
+  padding: 8px 16px;
   border-radius: 20px;
-  font-size: 13px;
+  font-size: 14px;
   transition: all 0.2s;
+  cursor: pointer;
 }
 
 .channel-btn.enabled {
   background: #262f38;
   color: #fff;
-  border-color: #4b5563;
+  border-color: #60a5fa;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.2);
 }
 
 .color-dot {
@@ -394,8 +427,8 @@ onUnmounted(() => {
   background: transparent;
   border: none;
   color: #9aa7b2;
-  padding: 6px 12px;
-  font-size: 12px;
+  padding: 8px 16px;
+  font-size: 13px;
   cursor: pointer;
   border-right: 1px solid #38414c;
 }
@@ -410,11 +443,11 @@ onUnmounted(() => {
 }
 
 .stats-chart {
-  height: 450px;
+  height: 600px;
   width: 100%;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .chart-header {
     flex-direction: column;
     align-items: flex-start;
