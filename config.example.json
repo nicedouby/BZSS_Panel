@@ -313,7 +313,6 @@
       "./plugins/group-report.js",
       "./plugins/weapon-collector.js",
       "./plugins/fair-squad.js",
-      "./plugins/server-info-statistics.js",
       "./plugins/udp_event_forwarder.js"
     ],
     "udpEventForwarder": {

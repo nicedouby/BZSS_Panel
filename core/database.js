@@ -202,6 +202,19 @@ CREATE TABLE IF NOT EXISTS log_events (
     payload_json TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS server_metric_samples (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    server_id TEXT NOT NULL,
+    timestamp_ms INTEGER NOT NULL,
+    metrics_json TEXT NOT NULL,
+    metrics_hash TEXT NOT NULL,
+    created_at_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_server_metric_samples_server_time
+ON server_metric_samples(server_id, timestamp_ms);
+CREATE INDEX IF NOT EXISTS idx_server_metric_samples_hash
+ON server_metric_samples(server_id, metrics_hash);
+
 CREATE TABLE IF NOT EXISTS ip_lookup_cache (
   ip TEXT PRIMARY KEY,
   provider TEXT NOT NULL DEFAULT 'none',

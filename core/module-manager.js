@@ -19,6 +19,7 @@ import { createAdminWarnModule } from "../modules/admin-warn/index.js";
 import { createPlaytimeModule } from "../modules/playtime/index.js";
 import { createPluginSubscriptionsModule } from "../modules/plugin-subscriptions/index.js";
 import { createTeamBalanceModule } from "../modules/team-balance/index.js";
+import { createServerStatsModule } from "../modules/server-stats/index.js";
 
 /**
  * Core: ModuleManager
@@ -56,6 +57,7 @@ export class ModuleManager {
       createCombatCleanModule,
       createAdminWarnModule,
       createPlaytimeModule,
+      createServerStatsModule,
     ];
 
     for (const factory of factories) {
