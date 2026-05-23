@@ -451,7 +451,8 @@
     "paths": [
       "./plugins/group-report.js",
       "./plugins/weapon-collector.js",
-      "./plugins/udp_event_forwarder.js"
+      "./plugins/udp_event_forwarder.js",
+      "./plugins/fair-squad-building.js"
     ],
     "udpEventForwarder": {
       "enabled": true,

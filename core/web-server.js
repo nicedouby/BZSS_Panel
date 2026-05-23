@@ -485,6 +485,32 @@ export class WebServer {
       }
     }
 
+    if (url.pathname.startsWith("/api/plugins/fair-squad-building")) {
+      const pluginApi = this.getPluginApi("fair-squad-building");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "FairSquadBuildingUnavailable",
+          message: "Fair squad building plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/fair-squad-building/status" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getStatus(),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/fair-squad-building/config" && req.method === "PATCH") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.updateConfig(body),
+        });
+      }
+    }
+
     const pluginMatch = url.pathname.match(/^\/api\/plugins\/([^/]+)\/(enabled|config)$/);
     if (pluginMatch && req.method === "PATCH") {
       if (!this.requireSuperAdmin(user, res)) return;

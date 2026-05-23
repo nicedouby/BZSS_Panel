@@ -10,6 +10,7 @@ import GroupReportPage from "../pages/GroupReportPage.vue";
 import SquadManagementPage from "../pages/SquadManagementPage.vue";
 import UdpEventForwarderPage from "../pages/UdpEventForwarderPage.vue";
 import ServerInfoStatisticsPage from "../pages/ServerInfoStatisticsPage.vue";
+import FairSquadBuildingPage from "../pages/FairSquadBuildingPage.vue";
 import ComingSoonPage from "../pages/ComingSoonPage.vue";
 
 export const router = createRouter({
@@ -30,6 +31,7 @@ export const router = createRouter({
     { path: "/kill-manage", component: KillManagePage, meta: { titleKey: "routeTitle.killManage" } },
     { path: "/admin-warns", component: AdminWarnsPage, meta: { titleKey: "routeTitle.adminWarns" } },
     { path: "/plugins/group-report", component: GroupReportPage, meta: { title: "抱团报备", fullBleed: true } },
+    { path: "/plugins/fair-squad-building", component: FairSquadBuildingPage, meta: { title: "公平建队", fullBleed: true } },
     { path: "/squad-management", component: SquadManagementPage, meta: { titleKey: "routeTitle.squadManagement", fullBleed: true } },
     {
       path: "/udp-event-forwarder",

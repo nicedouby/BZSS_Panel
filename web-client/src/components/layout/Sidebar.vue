@@ -44,6 +44,7 @@ const groups = [
   {
     title: t("nav.pluginsCategory"),
     items: [
+      { path: "/plugins/fair-squad-building", icon: "FS", label: "公平建队" },
       { path: "/plugins/group-report", icon: "GR", label: "抱团报备" },
       { path: "/plugins/server-info-statistics", icon: "SS", label: "服务器信息统计" },
       { path: "/udp-event-forwarder", icon: "UDP", label: "UDP Forwarder" },
