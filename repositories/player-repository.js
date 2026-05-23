@@ -79,7 +79,6 @@ function buildPlayerSearchWhere(query) {
       like,
       like,
       like,
-      like,
     );
   }
 
