@@ -2,6 +2,8 @@
   <section class="page">
     <PageHeader :title="pageTitle" :subtitle="pageSubtitle" />
 
+    <CombatRateChart :refresh-key="query.dataUpdatedAt.value" />
+
     <PageCard compact>
       <div class="toolbar">
         <select v-model="filters.type">
@@ -56,6 +58,7 @@ import { goToPlayerDatabaseSearch } from "../../utils/player-database";
 import PageHeader from "../../components/common/PageHeader.vue";
 import PageCard from "../../components/common/PageCard.vue";
 import DataState from "../../components/common/DataState.vue";
+import CombatRateChart from "../../components/combat/CombatRateChart.vue";
 import CombatEventTable from "../../components/combat/CombatEventTable.vue";
 import CombatEventDetailModal from "../../components/combat/CombatEventDetailModal.vue";
 import { useCombatEventsQuery } from "../../composables/useCombatEventsQuery";

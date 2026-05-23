@@ -18,7 +18,6 @@ import { createCombatCleanModule } from "../modules/combat-clean/index.js";
 import { createAdminWarnModule } from "../modules/admin-warn/index.js";
 import { createPlaytimeModule } from "../modules/playtime/index.js";
 import { createPluginSubscriptionsModule } from "../modules/plugin-subscriptions/index.js";
-import { createTeamBalanceModule } from "../modules/team-balance/index.js";
 import { createServerStatsModule } from "../modules/server-stats/index.js";
 
 /**
@@ -49,7 +48,6 @@ export class ModuleManager {
       createSquadLifecycleModule,
       createMatchStateModule,
       createSquadManagementModule,
-      createTeamBalanceModule,
       createCombatStateModule,
       createPlayerDatabaseModule,
       createIpLookupModule,

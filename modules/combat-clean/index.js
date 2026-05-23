@@ -646,6 +646,37 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       return cloneJsonSafe(found);
     },
 
+    getRateHistory(serverId = "", windowMinutes = 30) {
+      const now = Date.now();
+      const windowMs = Number.isFinite(windowMinutes) ? windowMinutes * 60 * 1000 : 30 * 60 * 1000;
+      const cutoff = now - windowMs;
+      const filtered = filterByServer(events, String(serverId ?? "").trim())
+        .filter((e) => e.eventTime >= cutoff);
+
+      const buckets = new Map();
+      for (let i = 0; i <= (windowMs / 60000); i += 1) {
+        const time = Math.floor((now - i * 60000) / 60000) * 60000;
+        buckets.set(time, { damage: 0, wound: 0, kill: 0 });
+      }
+
+      for (const event of filtered) {
+        const minute = Math.floor(event.eventTime / 60000) * 60000;
+        const bucket = buckets.get(minute);
+        if (bucket) {
+          if (event.type === "damage") bucket.damage += 1;
+          else if (event.type === "wound") bucket.wound += 1;
+          else if (event.type === "kill") bucket.kill += 1;
+        }
+      }
+
+      return Array.from(buckets.entries())
+        .map(([time, counts]) => ({
+          timestamp: time,
+          ...counts,
+        }))
+        .sort((a, b) => a.timestamp - b.timestamp);
+    },
+
     clear(serverId = "") {
       const target = String(serverId ?? "").trim();
       let cleared;

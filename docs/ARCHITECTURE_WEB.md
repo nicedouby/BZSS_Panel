@@ -40,7 +40,6 @@ Module 是看不见的业务能力层：
 - player-state
 - squad-state
 - kill-manage
-- team-balance
 - playtime
 - audit
 
@@ -141,7 +140,6 @@ web/pages/
 
 - 建队管理（已移除建队顺序页面）
 - 击杀管理
-- TeamBalance
 - 暖服功能（保留运行态逻辑，不再提供独立模块）
 - 积分系统（已移除独立模块）
 

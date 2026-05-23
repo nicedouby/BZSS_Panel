@@ -93,10 +93,7 @@
     <PlayerDetailDrawer
       :open="selectedPlayerDetail !== null"
       :player="selectedPlayerDetail"
-      :can-use-tb="canUseTb"
-      :tb-busy="tbBusy"
       @close="closePlayerDetail"
-      @switch-team="handleSwitchTeam"
     />
   </div>
 </template>
@@ -106,7 +103,6 @@ import { computed, ref, reactive, watch } from "vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { apiGet, apiPost } from "../app/apiClient";
 import { renderApiError } from "../app/errors";
-import { executeTeamBalance, getTeamBalanceStatus, type TeamBalanceTbObject } from "../app/teamBalanceApi";
 import { getRuntimeSyncState } from "../app/runtimeSync";
 import { applyMatchSnapshotResponse } from "../app/matchSnapshot";
 import { useAuthStore } from "../stores/auth.store";
@@ -189,8 +185,6 @@ const playtimeError = ref("");
 const playtimeRequested = ref(true);
 const playtimeJob = ref<PlaytimeJobViewModel | null>(null);
 const selectedPlayerDetail = ref<PlayerDetailViewModel | null>(null);
-const tbBusy = ref(false);
-const canUseTb = ref(false);
 
 const pageState = reactive<PageState>({
   searchQuery: "",
@@ -354,18 +348,6 @@ watch(
   { immediate: true },
 );
 
-watch(
-  () => auth.authenticated,
-  (authenticated) => {
-    if (authenticated) {
-      void loadTeamBalanceStatus();
-    } else {
-      canUseTb.value = false;
-    }
-  },
-  { immediate: true },
-);
-
 function selectPlayer(player: PlayerRowViewModel) {
   pageState.selectedPlayerId = player.playerId;
 
@@ -399,64 +381,6 @@ function handleDensityChange(mode: "comfortable" | "compact") {
 function closePlayerDetail() {
   pageState.selectedPlayerId = null;
   selectedPlayerDetail.value = null;
-}
-
-async function loadTeamBalanceStatus() {
-  try {
-    const status = await getTeamBalanceStatus();
-    canUseTb.value = Boolean(status.viewer?.canUseTb);
-  } catch {
-    canUseTb.value = false;
-  }
-}
-
-async function handleSwitchTeam(player: PlayerDetailViewModel) {
-  if (!player) return;
-
-  tbBusy.value = true;
-  refreshError.value = "";
-
-  const tb: TeamBalanceTbObject = {
-    type: "switch-team",
-    source: "player-detail-drawer",
-    reason: "manual switch from player drawer",
-    target: {
-      playerId: player.playerId,
-      name: player.name,
-      steamId: player.steamId,
-      eosId: player.eosId,
-      teamId: player.teamId,
-      squadId: player.squadId,
-    },
-  };
-
-  try {
-    const result = await executeTeamBalance(tb);
-
-    if (!result.ok) {
-      throw new Error(result.message || result.error || "TB 执行失败");
-    }
-
-    ui.pushToast({
-      title: "TB 执行成功",
-      message: `已请求将 ${player.name} 跳边`,
-      tone: "ok",
-    });
-
-    window.setTimeout(() => {
-      void refreshMatchState("all");
-    }, 1200);
-  } catch (error) {
-    const message = renderApiError(error, "TB 执行失败");
-
-    ui.pushToast({
-      title: "TB 执行失败",
-      message,
-      tone: "error",
-    });
-  } finally {
-    tbBusy.value = false;
-  }
 }
 
 async function refreshOnlinePlaytime(force = false) {

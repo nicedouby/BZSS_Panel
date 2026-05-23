@@ -9,7 +9,6 @@
 
       <div class="header-actions">
         <RouterLink class="tab-link active" to="/plugins/group-report">抱团报备</RouterLink>
-        <RouterLink class="tab-link" to="/plugins/group-report/team-balance">队伍分配</RouterLink>
         <button type="button" class="danger" @click="clearAllGroups" :disabled="!groups.length">
           一键全部删除
         </button>

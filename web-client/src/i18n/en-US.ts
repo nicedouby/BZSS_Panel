@@ -55,6 +55,9 @@
     resume: "Resume",
   },
   nav: {
+    coreCategory: "Core",
+    toolsCategory: "Tools",
+    pluginsCategory: "Plugins",
     matchStatus: "Match Status",
     squadManagement: "Squad Management",
     console: "Console",

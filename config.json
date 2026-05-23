@@ -421,6 +421,7 @@
     },
     "squadManagement": {
       "enabled": true,
+      "enforcementEnabled": false,
       "disbandPermission": "squad.disband",
       "kickPermission": "squad.kick",
       "kickThreshold": 10,
@@ -432,12 +433,6 @@
         "填线队"
       ],
       "defaultSquadNamePattern": "^Squad\\s*\\d+$"
-    },
-    "teamBalance": {
-      "enabled": true,
-      "permission": "tb",
-      "commandTemplate": "AdminForceTeamChangeById {playerId}",
-      "historyLimit": 200
     }
   },
   "webModules": {
@@ -456,7 +451,6 @@
     "paths": [
       "./plugins/group-report.js",
       "./plugins/weapon-collector.js",
-      "./plugins/fair-squad.js",
       "./plugins/udp_event_forwarder.js"
     ],
     "udpEventForwarder": {

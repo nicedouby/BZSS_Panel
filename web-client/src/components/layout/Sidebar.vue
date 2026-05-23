@@ -6,10 +6,13 @@
       <span>Vue {{ t("common.panel") }}</span>
     </div>
     <nav>
-      <RouterLink v-for="item in nav" :key="item.path" :to="item.path" @click="ui.closeMobileSidebar()">
-        <span class="nav-icon">{{ item.icon }}</span>
-        <span class="nav-label">{{ item.label }}</span>
-      </RouterLink>
+      <div v-for="group in groups" :key="group.title" class="nav-group">
+        <h3 class="group-title">{{ group.title }}</h3>
+        <RouterLink v-for="item in group.items" :key="item.path" :to="item.path" @click="ui.closeMobileSidebar()">
+          <span class="nav-icon">{{ item.icon }}</span>
+          <span class="nav-label">{{ item.label }}</span>
+        </RouterLink>
+      </div>
     </nav>
   </aside>
 </template>
@@ -20,18 +23,32 @@ import { t } from "../../i18n";
 
 const ui = useUiStore();
 
-const nav = [
-  { path: "/match-status", icon: "MS", label: t("nav.matchStatus") },
-  { path: "/squad-management", icon: "SM", label: t("nav.squadManagement") },
-  { path: "/console", icon: "CON", label: t("nav.console") },
-  { path: "/player-database", icon: "DB", label: t("nav.playerDatabase") },
-  { path: "/combat-clean", icon: "CC", label: t("nav.combatClean") },
-  { path: "/kill-manage", icon: "KM", label: t("nav.killManage") },
-  { path: "/admin-warns", icon: "AW", label: t("nav.adminWarns") },
-  { path: "/plugins/group-report", icon: "GR", label: "抱团报备" },
-  { path: "/plugins/fair-squad", icon: "FS", label: "公平建队" },
-  { path: "/plugins/server-info-statistics", icon: "SS", label: "服务器信息统计" },
-  { path: "/udp-event-forwarder", icon: "UDP", label: "UDP Forwarder" },
+const groups = [
+  {
+    title: t("nav.coreCategory"),
+    items: [
+      { path: "/match-status", icon: "MS", label: t("nav.matchStatus") },
+      { path: "/console", icon: "CON", label: t("nav.console") },
+      { path: "/player-database", icon: "DB", label: t("nav.playerDatabase") },
+    ],
+  },
+  {
+    title: t("nav.toolsCategory"),
+    items: [
+      { path: "/squad-management", icon: "SM", label: t("nav.squadManagement") },
+      { path: "/combat-clean", icon: "CC", label: t("nav.combatClean") },
+      { path: "/kill-manage", icon: "KM", label: t("nav.killManage") },
+      { path: "/admin-warns", icon: "AW", label: t("nav.adminWarns") },
+    ],
+  },
+  {
+    title: t("nav.pluginsCategory"),
+    items: [
+      { path: "/plugins/group-report", icon: "GR", label: "抱团报备" },
+      { path: "/plugins/server-info-statistics", icon: "SS", label: "服务器信息统计" },
+      { path: "/udp-event-forwarder", icon: "UDP", label: "UDP Forwarder" },
+    ],
+  },
 ];
 </script>
 
@@ -57,8 +74,24 @@ const nav = [
 }
 
 .sidebar.collapsed .brand span,
-.sidebar.collapsed .nav-label {
+.sidebar.collapsed .nav-label,
+.sidebar.collapsed .group-title {
   display: none;
+}
+
+.nav-group {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+
+.group-title {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #5c6a77;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .brand {

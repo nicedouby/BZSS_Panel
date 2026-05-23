@@ -55,6 +55,9 @@
     resume: "继续",
   },
   nav: {
+    coreCategory: "核心功能",
+    toolsCategory: "管理工具",
+    pluginsCategory: "扩展功能",
     matchStatus: "对局状态",
     squadManagement: "小队管理",
     console: "控制台",
