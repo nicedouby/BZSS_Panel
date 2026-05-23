@@ -236,6 +236,17 @@ export function removePlayerFromSquad(payload: {
   return apiPost<SquadManagementActionResponse>("/api/squad-remove/execute", payload);
 }
 
+export function warnPlayer(payload: {
+  targetName: string;
+  message: string;
+  reason?: string;
+  sourceModule?: string;
+  targetSteamId?: string;
+  targetEosId?: string;
+}) {
+  return apiPost<any>("/api/admin-warns/warn", payload);
+}
+
 export function getSquadManagementRecords(params: {
   kind?: string;
   limit?: number | string;

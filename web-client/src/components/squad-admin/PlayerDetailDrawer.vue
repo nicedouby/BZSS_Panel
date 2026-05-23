@@ -19,34 +19,12 @@
           </header>
 
           <div class="drawer-body">
-            <section class="detail-section">
-              <div class="detail-section-title">{{ t("player.player") }}</div>
-              <div class="player-summary">
-                <div class="summary-row">
-                  <span class="summary-label">{{ t("player.role") }}</span>
-                  <span class="summary-value">{{ displayRole(props.player.role) }}</span>
-                </div>
-                <div class="summary-row">
-                  <span class="summary-label">{{ t("player.team") }}</span>
-                  <span class="summary-value team-badge" :class="teamColorClass">
-                    {{ t("player.team") }} {{ props.player.teamId ?? "?" }}
-                  </span>
-                </div>
-                <div class="summary-row">
-                  <span class="summary-label">{{ t("player.squad") }}</span>
-                  <span class="summary-value">{{ t("player.squad") }} {{ props.player.squadId ?? t("match.unassigned") }}</span>
-                </div>
-                <div v-if="props.player.playtimeHours" class="summary-row">
-                  <span class="summary-label">{{ t("player.steamTime") }}</span>
-                  <span class="summary-value">{{ props.player.playtimeHours }}h</span>
-                </div>
+            <!-- 1. IDENTITY BLOCK -->
+            <section class="detail-section identity-hero">
+              <div class="identity-grid">
+                <CopyableValue :label="t('player.steamId')" :value="props.player.steamId" :truncate="32" />
+                <CopyableValue :label="t('player.eosId')" :value="props.player.eosId" :truncate="32" />
               </div>
-            </section>
-
-            <section class="detail-section">
-              <div class="detail-section-title">{{ t("player.identity") }}</div>
-              <CopyableValue :label="t('player.steamId')" :value="props.player.steamId" :truncate="32" />
-              <CopyableValue :label="t('player.eosId')" :value="props.player.eosId" :truncate="32" />
               <div class="identity-ip-block">
                 <CopyableValue
                   :label="t('player.ip')"
@@ -58,61 +36,92 @@
               </div>
             </section>
 
-            <section class="detail-section">
+            <!-- 2. SESSION INFO GRID -->
+            <section class="detail-section info-card">
               <div class="detail-section-title">{{ t("player.currentMatch") }}</div>
-              <div class="detail-rows">
-                <div class="detail-row">
-                  <span class="detail-label">{{ t("player.playerId") }}</span>
-                  <span class="detail-value">{{ props.player.playerId ?? "-" }}</span>
+              <div class="stats-grid">
+                <div class="stat-item">
+                  <span class="stat-label">{{ t("player.role") }}</span>
+                  <strong class="stat-value">{{ displayRole(props.player.role) }}</strong>
                 </div>
-                <div class="detail-row">
-                  <span class="detail-label">{{ t("player.teamId") }}</span>
-                  <span class="detail-value">{{ props.player.teamId ?? "-" }}</span>
+                <div class="stat-item">
+                  <span class="stat-label">{{ t("player.team") }}</span>
+                  <strong class="stat-value" :class="teamColorClass">
+                    Team {{ props.player.teamId ?? "?" }}
+                  </strong>
                 </div>
-                <div class="detail-row">
-                  <span class="detail-label">{{ t("player.squadId") }}</span>
-                  <span class="detail-value">{{ props.player.squadId ?? "-" }}</span>
+                <div class="stat-item">
+                  <span class="stat-label">{{ t("player.squad") }}</span>
+                  <strong class="stat-value">
+                    {{ props.player.squadId ? `Squad ${props.player.squadId}` : t("match.unassigned") }}
+                  </strong>
                 </div>
-                <div class="detail-row">
-                  <span class="detail-label">{{ t("player.leader") }}</span>
-                  <span class="detail-value">{{ props.player.isLeader ? t("common.yes") : t("common.no") }}</span>
+                <div class="stat-item">
+                  <span class="stat-label">{{ t("player.playerId") }}</span>
+                  <strong class="stat-value">#{{ props.player.playerId ?? "-" }}</strong>
                 </div>
-                <div class="detail-row">
-                  <span class="detail-label">{{ t("common.status") }}</span>
-                  <span class="detail-value">{{ props.player.isOnline ? t("common.online") : t("common.offline") }}</span>
+                <div v-if="props.player.playtimeHours" class="stat-item">
+                  <span class="stat-label">{{ t("player.steamTime") }}</span>
+                  <strong class="stat-value">{{ props.player.playtimeHours }}h</strong>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">{{ t("player.leader") }}</span>
+                  <strong class="stat-value">{{ props.player.isLeader ? t("common.yes") : t("common.no") }}</strong>
                 </div>
               </div>
             </section>
 
-            <section class="detail-section">
+            <!-- 3. ACTION CONTROL CENTER -->
+            <section class="detail-section action-center">
               <div class="detail-section-title">{{ t("common.actions") }}</div>
-              <button type="button" class="action-button primary" @click="openDatabase">
-                {{ t("player.openDatabase") }}
-              </button>
-              <button
-                type="button"
-                class="action-button secondary"
-                @click="copyValue(props.player.steamId, t('player.steamId'))"
-                :disabled="!props.player.steamId"
-              >
-                {{ t("player.copySteamId") }}
-              </button>
-              <button
-                type="button"
-                class="action-button secondary"
-                @click="copyValue(props.player.eosId, t('player.eosId'))"
-                :disabled="!props.player.eosId"
-              >
-                {{ t("player.copyEosId") }}
-              </button>
-              <button
-                type="button"
-                class="action-button secondary"
-                @click="copyValue(displayIp, t('player.ip'))"
-                :disabled="!displayIp"
-              >
-                {{ t("player.copyIp") }}
-              </button>
+              
+              <div class="action-group">
+                <div class="group-label">管理指令 / COMMANDS</div>
+                <div class="player-actions-grid">
+                  <button type="button" class="action-button warn" @click="handleWarn" :disabled="actionBusy">
+                    {{ t("player.warn") }}
+                  </button>
+                  <button type="button" class="action-button danger" @click="handleKick" :disabled="actionBusy">
+                    {{ t("player.kick") }}
+                  </button>
+                  <button type="button" class="action-button danger" @click="handleRemove" :disabled="actionBusy">
+                    {{ t("player.removeFromSquad") }}
+                  </button>
+                </div>
+              </div>
+
+              <div class="action-group">
+                <div class="group-label">数据与工具 / TOOLS</div>
+                <button type="button" class="action-button primary" @click="openDatabase">
+                  {{ t("player.openDatabase") }}
+                </button>
+                <div class="secondary-actions-row">
+                  <button
+                    type="button"
+                    class="action-button secondary"
+                    @click="copyValue(props.player.steamId, t('player.steamId'))"
+                    :disabled="!props.player.steamId"
+                  >
+                    {{ t("player.copySteamId") }}
+                  </button>
+                  <button
+                    type="button"
+                    class="action-button secondary"
+                    @click="copyValue(props.player.eosId, t('player.eosId'))"
+                    :disabled="!props.player.eosId"
+                  >
+                    {{ t("player.copyEosId") }}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  class="action-button secondary"
+                  @click="copyValue(displayIp, t('player.ip'))"
+                  :disabled="!displayIp"
+                >
+                  {{ t("player.copyIp") }}
+                </button>
+              </div>
             </section>
 
             <section class="detail-section advanced-section">
@@ -148,6 +157,7 @@ import { useUiStore } from "../../stores/ui.store";
 import { copyTextWithToast } from "../../utils/clipboard";
 import { goToPlayerDatabaseSearch } from "../../utils/player-database";
 import { resolvePlayerIdentityIp } from "../../app/playerIdentityApi";
+import { warnPlayer, kickPlayer, removePlayerFromSquad } from "../../app/squadManagementApi";
 import StatusBadge from "../common/StatusBadge.vue";
 import CopyableValue from "./CopyableValue.vue";
 import { t } from "../../i18n";
@@ -173,6 +183,7 @@ const resolvedLastIp = ref("");
 const resolvingIp = ref(false);
 const resolveIpError = ref("");
 const lookupToken = ref(0);
+const actionBusy = ref(false);
 
 const currentIp = computed(() => String(props.player?.ip ?? "").trim());
 const displayIp = computed(() => currentIp.value || resolvedLastIp.value.trim());
@@ -221,6 +232,80 @@ function openDatabase() {
   const searchKey = props.player.name || props.player.steamId || props.player.eosId || "";
   if (searchKey) {
     goToPlayerDatabaseSearch(router, searchKey);
+  }
+}
+
+async function handleWarn() {
+  if (!props.player || actionBusy.value) return;
+  const message = window.prompt("输入警告消息 (Input warning message):", "请遵守服务器规则 (Please follow server rules)");
+  if (message === null) return;
+
+  actionBusy.value = true;
+  try {
+    const res = await warnPlayer({
+      targetName: props.player.name,
+      targetSteamId: props.player.steamId ?? undefined,
+      targetEosId: props.player.eosId ?? undefined,
+      message: message.trim() || "Admin Warning",
+      reason: "manual_warn",
+      sourceModule: "web.squadAdmin",
+    });
+    if (!res.success) throw new Error(res.errorMessage || "警告发送失败");
+    ui.pushToast({ title: "已发送警告", message: `玩家: ${props.player.name}`, tone: "ok" });
+  } catch (e) {
+    ui.pushToast({ title: "警告失败", message: String(e), tone: "error" });
+  } finally {
+    actionBusy.value = false;
+  }
+}
+
+async function handleKick() {
+  if (!props.player || actionBusy.value) return;
+  const confirmed = await ui.openConfirm({
+    title: "确认踢出玩家？",
+    message: `确定要将玩家 ${props.player.name} 踢出服务器吗？`,
+    tone: "error",
+  });
+  if (!confirmed) return;
+
+  actionBusy.value = true;
+  try {
+    const res = await kickPlayer({
+      anyId: props.player.steamId || props.player.eosId || props.player.name,
+      reason: "manual_kick",
+      source: "web.squadAdmin",
+    });
+    if (!res.ok) throw new Error(res.result?.message || "踢出执行失败");
+    ui.pushToast({ title: "指令已送达", message: "踢出玩家请求已处理", tone: "ok" });
+  } catch (e) {
+    ui.pushToast({ title: "踢出失败", message: String(e), tone: "error" });
+  } finally {
+    actionBusy.value = false;
+  }
+}
+
+async function handleRemove() {
+  if (!props.player || actionBusy.value) return;
+  const confirmed = await ui.openConfirm({
+    title: "确认移出小队？",
+    message: `确定要将玩家 ${props.player.name} 移出所在小队吗？`,
+    tone: "warn",
+  });
+  if (!confirmed) return;
+
+  actionBusy.value = true;
+  try {
+    const res = await removePlayerFromSquad({
+      anyId: props.player.steamId || props.player.eosId || props.player.name,
+      reason: "manual_remove",
+      source: "web.squadAdmin",
+    });
+    if (!res.ok) throw new Error(res.result?.message || "移出执行失败");
+    ui.pushToast({ title: "指令已送达", message: "玩家移出请求已处理", tone: "ok" });
+  } catch (e) {
+    ui.pushToast({ title: "移出失败", message: String(e), tone: "error" });
+  } finally {
+    actionBusy.value = false;
   }
 }
 
@@ -415,13 +500,25 @@ onUnmounted(() => {
 .detail-section {
   display: grid;
   gap: var(--spacing-sm);
-  padding: 14px;
+  padding: 16px;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border-soft);
   background: rgba(255, 255, 255, 0.015);
 }
 
+/* 1. IDENTITY HERO */
+.identity-hero {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.005));
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.identity-grid {
+  display: grid;
+  gap: var(--spacing-sm);
+}
+
 .identity-ip-block {
+  margin-top: 4px;
   display: grid;
   gap: 4px;
 }
@@ -429,61 +526,142 @@ onUnmounted(() => {
 .identity-ip-hint {
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
+  padding-left: 2px;
+}
+
+/* 2. INFO CARD */
+.info-card {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  letter-spacing: 0.05em;
+}
+
+.stat-value {
+  font-size: 14px;
+  color: var(--color-text-primary);
+}
+
+.stat-value.team1 { color: var(--color-team1-primary); }
+.stat-value.team2 { color: var(--color-team2-primary); }
+
+/* 3. ACTION CENTER */
+.action-center {
+  gap: 20px;
+}
+
+.action-group {
+  display: grid;
+  gap: 10px;
+}
+
+.group-label {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--color-text-muted);
+  opacity: 0.6;
+  margin-bottom: 2px;
 }
 
 .detail-section-title {
   font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   color: var(--color-text-muted);
+  margin-bottom: 4px;
 }
 
-.player-summary,
-.detail-rows,
-.advanced-content {
+.player-actions-grid {
   display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: var(--spacing-sm);
 }
 
-.summary-row,
-.detail-row {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--spacing-md);
-}
-
-.summary-label,
-.detail-label {
-  color: var(--color-text-secondary);
-}
-
-.summary-value,
-.detail-value {
-  color: var(--color-text-primary);
-  text-align: right;
-}
-
-.team-badge.team1 {
-  color: var(--color-team1-primary);
-}
-
-.team-badge.team2 {
-  color: var(--color-team2-primary);
+.secondary-actions-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-sm);
 }
 
 .action-button {
   width: 100%;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 6px;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.action-button.primary {
+  background: var(--color-status-info);
+  border: none;
+  color: #fff;
+}
+
+.action-button.primary:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.action-button.secondary {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-border-soft);
+  color: var(--color-text-secondary);
+}
+
+.action-button.secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--color-text-primary);
+}
+
+.action-button.warn {
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  color: #fef3c7;
+  background: rgba(120, 53, 15, 0.2);
+}
+
+.action-button.warn:hover:not(:disabled) {
+  background: rgba(146, 64, 14, 0.4);
+  border-color: rgba(251, 191, 36, 0.5);
 }
 
 .action-button.danger {
-  border-color: rgba(248, 113, 113, 0.35);
+  border: 1px solid rgba(248, 113, 113, 0.3);
   color: #fecaca;
-  background: rgba(127, 29, 29, 0.35);
+  background: rgba(127, 29, 29, 0.2);
 }
 
 .action-button.danger:hover:not(:disabled) {
-  background: rgba(153, 27, 27, 0.48);
+  background: rgba(153, 27, 27, 0.4);
+  border-color: rgba(248, 113, 113, 0.5);
+}
+
+.action-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .advanced-toggle {
@@ -494,12 +672,27 @@ onUnmounted(() => {
   cursor: pointer;
 }
 
+.detail-rows {
+  display: grid;
+  gap: var(--spacing-sm);
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.detail-label { color: var(--color-text-secondary); }
+.detail-value { color: var(--color-text-primary); text-align: right; }
+
 .raw-data {
-  margin: 0;
+  margin-top: 8px;
   padding: var(--spacing-md);
   border-radius: var(--radius-md);
-  background: rgba(0, 0, 0, 0.18);
+  background: rgba(0, 0, 0, 0.2);
   overflow: auto;
+  font-size: 11px;
 }
 
 @media (max-width: 640px) {

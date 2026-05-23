@@ -1133,6 +1133,18 @@ export class WebServer {
       }
     }
 
+    if (url.pathname === "/api/admin-warns/warn" && req.method === "POST") {
+      const api = this.modules.adminWarn;
+      if (!api) return this.json(res, 404, { error: "ModuleNotFound" });
+      const body = await this.readJsonBody(req);
+      try {
+        const result = await api.warnPlayer({ ...body, actor: user });
+        return this.json(res, result.success ? 200 : 400, result);
+      } catch (err) {
+        return this.json(res, 500, { error: "InternalError", message: err.message });
+      }
+    }
+
     if (url.pathname === "/api/server-stats/history" && req.method === "GET") {
       const api = this.modules.serverStats;
       if (!api?.getHistory) {

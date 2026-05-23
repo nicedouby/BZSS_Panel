@@ -20,7 +20,7 @@ export async function renderPage({ root, api, apiFetch, openDrawer, onNavigate }
 
   const status = data.status ?? {};
   const players = data.players ?? [];
-  const squads = data.squads ?? [];
+  const squads = data.squads ?? [];
   const playtimeState = root.__playtimeRefreshState || createPlaytimeRefreshState();
   const teams = buildTeams({ players, squads });
 
@@ -313,7 +313,7 @@ function renderSquad(squad) {
           <div class="match-squad-name">${esc(squad.squadName)}</div>
           <div class="match-squad-subtitle">
             <span class="match-badge ${squad.locked ? "locked" : "open"}">${squad.locked ? "锁队" : "公开"}</span>
-            <span class="match-squad-creator">创建人 ${esc(displayName(squad.creatorName, "未知"))}</span>
+            <span class="match-squad-creator">创建人 ${esc(displayName(squad.creatorName, "未知"))}</span>
           </div>
         </div>
         <div class="match-squad-stats">
@@ -416,8 +416,9 @@ function openPlayerRealtimeWindow(player, { apiFetch, onNavigate, onRefresh } = 
 
         <div class="bzss-player-float-actions">
           <button type="button" id="refresh-player-playtime">刷新时长</button>
-          <button type="button" disabled>警告</button>
-          <button type="button" disabled>踢出小队</button>
+          <button type="button" id="warn-player">警告</button>
+          <button type="button" id="kick-player">踢出</button>
+          <button type="button" id="remove-player-from-squad">移除队伍</button>
           <button type="button" id="open-player-database">玩家数据库</button>
         </div>
 
@@ -493,6 +494,72 @@ function openPlayerRealtimeWindow(player, { apiFetch, onNavigate, onRefresh } = 
       return;
     }
     location.hash = `#/player-database?player=${encodeURIComponent(playerQuery)}`;
+  });
+
+  root.querySelector("#warn-player")?.addEventListener("click", async () => {
+    const message = window.prompt("输入警告消息 (Input warning message):", "请遵守服务器规则 (Please follow server rules)");
+    if (message === null) return;
+    try {
+      const response = await apiFetch("/api/admin-warns/warn", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetName: player.name,
+          targetSteamId: steamID,
+          targetEosId: eosID,
+          message: message.trim() || "Admin Warning",
+          reason: "manual_warn",
+          sourceModule: "web.legacy.matchStatus",
+        }),
+      });
+      const data = await readJsonSafe(response);
+      if (!response.ok || !data.success) throw new Error(data?.errorMessage || "警告发送失败");
+      showToast("警告已发送");
+    } catch (e) {
+      showToast(String(e));
+    }
+  });
+
+  root.querySelector("#kick-player")?.addEventListener("click", async () => {
+    if (!window.confirm(`确定要将玩家 ${player.name} 踢出服务器吗？`)) return;
+    try {
+      const response = await apiFetch("/api/squad-kick/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          anyId: steamID || eosID || player.name,
+          reason: "manual_kick",
+          source: "web.legacy.matchStatus",
+        }),
+      });
+      const data = await readJsonSafe(response);
+      if (!response.ok || !data.ok) throw new Error(data?.result?.message || "踢出执行失败");
+      showToast("踢出请求已下达");
+      await onRefresh?.();
+    } catch (e) {
+      showToast(String(e));
+    }
+  });
+
+  root.querySelector("#remove-player-from-squad")?.addEventListener("click", async () => {
+    if (!window.confirm(`确定要将玩家 ${player.name} 移出小队吗？`)) return;
+    try {
+      const response = await apiFetch("/api/squad-remove/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          anyId: steamID || eosID || player.name,
+          reason: "manual_remove",
+          source: "web.legacy.matchStatus",
+        }),
+      });
+      const data = await readJsonSafe(response);
+      if (!response.ok || !data.ok) throw new Error(data?.result?.message || "移除执行失败");
+      showToast("移除请求已下达");
+      await onRefresh?.();
+    } catch (e) {
+      showToast(String(e));
+    }
   });
 
   const onKeyDown = (event) => {
