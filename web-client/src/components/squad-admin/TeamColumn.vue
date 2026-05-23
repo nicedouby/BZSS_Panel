@@ -21,6 +21,7 @@
         :density-mode="densityMode"
         :selected-player-id="selectedPlayerId"
         @select-player="$emit('select-player', $event)"
+        @select-squad="$emit('select-squad', $event)"
       />
     </div>
   </section>
@@ -28,7 +29,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import type { PlayerRowViewModel, TeamViewModel } from "../../types/squad-admin.types";
+import type { PlayerRowViewModel, TeamViewModel, SquadViewModel } from "../../types/squad-admin.types";
 import SquadCard from "./SquadCard.vue";
 
 const props = defineProps<{
@@ -39,6 +40,7 @@ const props = defineProps<{
 
 defineEmits<{
   (event: "select-player", player: PlayerRowViewModel): void;
+  (event: "select-squad", squad: SquadViewModel): void;
 }>();
 
 const teamColorClass = computed(() => (props.team.teamColorType === "team1" ? "team1" : "team2"));

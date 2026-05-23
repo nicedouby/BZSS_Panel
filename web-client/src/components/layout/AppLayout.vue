@@ -8,6 +8,7 @@
       </section>
     </main>
     <ConfirmDialog />
+    <WarnPrompt />
     <ToastHost />
     <SettingsDrawer />
     <PluginCenterDrawer
@@ -25,6 +26,7 @@ import { useUiStore } from "../../stores/ui.store";
 import Topbar from "./Topbar.vue";
 import Sidebar from "./Sidebar.vue";
 import ConfirmDialog from "../common/ConfirmDialog.vue";
+import WarnPrompt from "../common/WarnPrompt.vue";
 import ToastHost from "../common/ToastHost.vue";
 import SettingsDrawer from "../settings/SettingsDrawer.vue";
 import PluginCenterDrawer from "../../features/plugins/PluginCenterDrawer.vue";

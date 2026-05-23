@@ -6,10 +6,10 @@
       { selected: hasSelectedPlayer },
     ]"
   >
-    <header class="squad-header">
+    <header class="squad-header" @click.stop="$emit('select-squad', squad)">
       <div class="squad-header-main">
         <div class="squad-title-row">
-          <strong class="squad-name">{{ squad.squadName }}</strong>
+          <strong class="squad-name">{{ squad.squadName }}</strong>
           <span class="squad-member-count">{{ squad.memberCount }}/{{ squad.maxMembers }}</span>
           <StatusBadge class="squad-status-badge" :tone="squad.isLocked ? 'warn' : 'idle'">
             {{ squad.isLocked ? t("common.locked") : t("common.open") }}
@@ -82,6 +82,7 @@ const props = defineProps<{
 
 defineEmits<{
   (event: "select-player", player: PlayerRowViewModel): void;
+  (event: "select-squad", squad: SquadViewModel): void;
 }>();
 
 const teamColorClass = computed(() => {
@@ -188,6 +189,12 @@ function warningTone(label: string): "warn" | "idle" {
   padding: 7px 10px 8px;
   border-bottom: 1px solid var(--color-border-soft);
   background: rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.008));
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.squad-header:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .squad-header-main {
@@ -319,8 +326,8 @@ function warningTone(label: string): "warn" | "idle" {
   font-size: 11px;
   border-left: 2px solid var(--color-status-warning);
 }
-
-
+
+
 
 @media (max-width: 1100px) {
   .squad-header {

@@ -85,6 +85,7 @@
             :density-mode="pageState.densityMode"
             :selected-player-id="pageState.selectedPlayerId"
             @select-player="selectPlayer"
+            @select-squad="selectSquad"
           />
         </div>
       </div>
@@ -94,6 +95,12 @@
       :open="selectedPlayerDetail !== null"
       :player="selectedPlayerDetail"
       @close="closePlayerDetail"
+    />
+
+    <SquadDetailDrawer
+      :open="selectedSquadDetail !== null"
+      :squad="selectedSquadDetail"
+      @close="closeSquadDetail"
     />
   </div>
 </template>
@@ -122,12 +129,14 @@ import ErrorBlock from "../components/common/ErrorBlock.vue";
 import SquadPageToolbar from "../components/squad-admin/SquadPageToolbar.vue";
 import TeamColumn from "../components/squad-admin/TeamColumn.vue";
 import PlayerDetailDrawer from "../components/squad-admin/PlayerDetailDrawer.vue";
+import SquadDetailDrawer from "../components/squad-admin/SquadDetailDrawer.vue";
 import { t } from "../i18n";
 import type {
   PageState,
   PlayerDetailViewModel,
   PlayerRowViewModel,
   TeamViewModel,
+  SquadViewModel,
 } from "../types/squad-admin.types";
 
 interface PlaytimeJobProgressEvent {
@@ -185,6 +194,7 @@ const playtimeError = ref("");
 const playtimeRequested = ref(true);
 const playtimeJob = ref<PlaytimeJobViewModel | null>(null);
 const selectedPlayerDetail = ref<PlayerDetailViewModel | null>(null);
+const selectedSquadDetail = ref<SquadViewModel | null>(null);
 
 const pageState = reactive<PageState>({
   searchQuery: "",
@@ -371,6 +381,14 @@ function selectPlayer(player: PlayerRowViewModel) {
   if (player.steamId) {
     playtimeRequested.value = true;
   }
+}
+
+function selectSquad(squad: SquadViewModel) {
+  selectedSquadDetail.value = squad;
+}
+
+function closeSquadDetail() {
+  selectedSquadDetail.value = null;
 }
 
 function handleDensityChange(mode: "comfortable" | "compact") {

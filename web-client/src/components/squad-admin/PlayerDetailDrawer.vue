@@ -237,7 +237,11 @@ function openDatabase() {
 
 async function handleWarn() {
   if (!props.player || actionBusy.value) return;
-  const message = window.prompt("输入警告消息 (Input warning message):", "请遵守服务器规则 (Please follow server rules)");
+  const message = await ui.openWarnPrompt({
+    title: "发送玩家警告",
+    targetName: props.player.name,
+    defaultMessage: "请遵守服务器规则",
+  });
   if (message === null) return;
 
   actionBusy.value = true;

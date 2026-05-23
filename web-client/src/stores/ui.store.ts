@@ -29,6 +29,17 @@ interface ToastItem extends Required<Pick<ToastInput, "message">> {
   durationMs: number;
 }
 
+export interface WarnPromptOptions {
+  title: string;
+  targetName: string;
+  defaultMessage?: string;
+  confirmText?: string;
+}
+
+interface WarnPromptState extends Required<WarnPromptOptions> {
+  visible: boolean;
+}
+
 interface ConfirmState extends Required<Omit<ConfirmOptions, "tone">> {
   visible: boolean;
   tone: UiTone;
@@ -65,6 +76,13 @@ export const useUiStore = defineStore("ui", () => {
     cancelText: "Cancel",
     tone: "warn",
   });
+  const warnPrompt = ref<WarnPromptState>({
+    visible: false,
+    title: "",
+    targetName: "",
+    defaultMessage: "",
+    confirmText: "Send Warning",
+  });
   const visualMode = ref<UiVisualMode>(savedPrefs.visualMode);
   const globalDensity = ref<UiDensity>(savedPrefs.globalDensity);
   const accent = ref<UiAccent>(savedPrefs.accent);
@@ -83,6 +101,7 @@ export const useUiStore = defineStore("ui", () => {
     cardGlow.value ? "ui-card-glow" : "ui-card-flat",
   ]);
   let confirmResolver: ((value: boolean) => void) | null = null;
+  let warnPromptResolver: ((value: string | null) => void) | null = null;
 
   watch(
     () => [
@@ -209,12 +228,33 @@ export const useUiStore = defineStore("ui", () => {
     resolveConfirm(false);
   }
 
+  function openWarnPrompt(options: WarnPromptOptions) {
+    warnPrompt.value = {
+      visible: true,
+      title: options.title,
+      targetName: options.targetName,
+      defaultMessage: options.defaultMessage ?? "请遵守服务器规则",
+      confirmText: options.confirmText ?? "发送警告",
+    };
+
+    return new Promise<string | null>((resolve) => {
+      warnPromptResolver = resolve;
+    });
+  }
+
+  function resolveWarnPrompt(message: string | null) {
+    warnPrompt.value.visible = false;
+    warnPromptResolver?.(message);
+    warnPromptResolver = null;
+  }
+
   return {
     sidebarCollapsed,
     mobileSidebarOpen,
     isSidebarExpanded,
     toasts,
     confirm,
+    warnPrompt,
     toggleSidebarCollapsed,
     setSidebarCollapsed,
     openMobileSidebar,
@@ -226,6 +266,8 @@ export const useUiStore = defineStore("ui", () => {
     openConfirm,
     confirmAccept,
     confirmCancel,
+    openWarnPrompt,
+    resolveWarnPrompt,
     visualMode,
     globalDensity,
     accent,
