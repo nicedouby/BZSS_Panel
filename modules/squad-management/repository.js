@@ -167,7 +167,7 @@ export function createSquadManagementRepository({ config, logger } = {}) {
 
       const byKind = Object.fromEntries(byKindRows.map((row) => [String(row.kind ?? ""), Number(row.count ?? 0)]));
       const byResult = Object.fromEntries(byResultRows.map((row) => [String(row.result ?? ""), Number(row.count ?? 0)]));
-      const actionTotal = Number(byKind.disband ?? 0) + Number(byKind.kick ?? 0) + Number(byKind.action ?? 0);
+      const actionTotal = Number(byKind.disband ?? 0) + Number(byKind.kick ?? 0) + Number(byKind.remove ?? 0) + Number(byKind.action ?? 0);
       const success = Number(byResult.success ?? 0);
       const failed = Number(byResult.failed ?? 0) + Number(byResult.forbidden ?? 0) + Number(byResult.invalid ?? 0);
 
@@ -176,6 +176,7 @@ export function createSquadManagementRepository({ config, logger } = {}) {
         created: Number(byKind.squad_created ?? 0),
         disbanded: Number(byKind.disband ?? 0),
         kicked: Number(byKind.kick ?? 0),
+        removed: Number(byKind.remove ?? 0),
         actions: actionTotal,
         success,
         failed,

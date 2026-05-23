@@ -6,6 +6,7 @@ export interface SquadManagementViewer {
   isSuperAdmin: boolean;
   canDisband: boolean;
   canKick: boolean;
+  canRemove: boolean;
   permissions: string[];
 }
 
@@ -150,7 +151,7 @@ export interface SquadManagementActionResponse {
 export interface SquadManagementRecord {
   id: number;
   recordKey: string;
-  kind: "squad_created" | "disband" | "kick" | string;
+  kind: "squad_created" | "disband" | "kick" | "remove" | string;
   time: string;
   logTime: string;
   serverId: string;
@@ -176,6 +177,7 @@ export interface SquadManagementRecordSummary {
   created: number;
   disbanded: number;
   kicked: number;
+  removed: number;
   actions: number;
   success: number;
   failed: number;
@@ -207,20 +209,31 @@ export function disbandSquad(payload: {
   teamId?: number | null;
   squadId?: number | null;
   reason?: string;
+  source?: string;
 }) {
-  return apiPost<SquadManagementActionResponse>("/api/squad-management/disband", payload);
+  return apiPost<SquadManagementActionResponse>("/api/squad-disband/execute", payload);
 }
 
-export function kickSquadCreator(payload: {
+export function kickPlayer(payload: {
   anyId?: string;
   reason?: string;
-  creatorKey?: string;
-  creatorName?: string;
+  source?: string;
   steamId?: string;
   eosId?: string;
-  count?: number;
+  name?: string;
 }) {
-  return apiPost<SquadManagementActionResponse>("/api/squad-management/kick", payload);
+  return apiPost<SquadManagementActionResponse>("/api/squad-kick/execute", payload);
+}
+
+export function removePlayerFromSquad(payload: {
+  anyId?: string;
+  reason?: string;
+  source?: string;
+  steamId?: string;
+  eosId?: string;
+  name?: string;
+}) {
+  return apiPost<SquadManagementActionResponse>("/api/squad-remove/execute", payload);
 }
 
 export function getSquadManagementRecords(params: {

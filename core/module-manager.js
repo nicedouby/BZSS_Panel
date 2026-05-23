@@ -7,6 +7,9 @@ import { createSquadStateModule } from "../modules/squad-state/index.js";
 import { createSquadLifecycleModule } from "../modules/squad-lifecycle/index.js";
 import { createMatchStateModule } from "../modules/match-state/index.js";
 import { createSquadManagementModule } from "../modules/squad-management/index.js";
+import { createSquadDisbandModule } from "../modules/squad-disband/index.js";
+import { createSquadKickModule } from "../modules/squad-kick/index.js";
+import { createSquadRemoveModule } from "../modules/squad-remove/index.js";
 import { createConsoleModule } from "../modules/console/index.js";
 import { createLogClockModule } from "../modules/log-clock/index.js";
 import { createRoundStateModule } from "../modules/round-state/index.js";
@@ -48,6 +51,9 @@ export class ModuleManager {
       createSquadLifecycleModule,
       createMatchStateModule,
       createSquadManagementModule,
+      createSquadDisbandModule,
+      createSquadKickModule,
+      createSquadRemoveModule,
       createCombatStateModule,
       createPlayerDatabaseModule,
       createIpLookupModule,

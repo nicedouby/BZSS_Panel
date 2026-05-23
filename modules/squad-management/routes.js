@@ -118,6 +118,7 @@ function buildViewer(core, user, state) {
     isSuperAdmin,
     canDisband: core.authManager?.hasPermission?.(user, state.disbandPermission ?? "squad.disband") ?? isSuperAdmin,
     canKick: core.authManager?.hasPermission?.(user, state.kickPermission ?? "squad.kick") ?? isSuperAdmin,
+    canRemove: core.authManager?.hasPermission?.(user, state.removePermission ?? "squad.remove") ?? isSuperAdmin,
     permissions: user.permissions ?? [],
   };
 }

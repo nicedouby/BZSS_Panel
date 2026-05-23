@@ -3,7 +3,7 @@
     <PageHeader
       title="小队管理"
       eyebrow="Squad Management"
-      subtitle="所有解散和踢出命令都经过这里，并统一写入审计记录。"
+      subtitle="拆分为解散、踢出、移出小队三个模块，统一审计记录。"
     >
       <template #actions>
         <button type="button" @click="reload" :disabled="loading || actionBusy">
@@ -13,107 +13,117 @@
     </PageHeader>
 
     <div v-if="pageError" class="banner error">{{ pageError }}</div>
-    <div v-if="info" class="banner info">{{ info }}</div>
 
     <div class="page-stack">
-      <div class="policy-strip">
-        <span class="status-chip" :data-tone="viewerCanDisband ? 'ok' : 'neutral'">
-          解散 {{ viewerCanDisband ? "可用" : "受限" }}
-        </span>
-        <span class="status-chip" :data-tone="viewerCanKick ? 'ok' : 'neutral'">
-          踢出 {{ viewerCanKick ? "可用" : "受限" }}
-        </span>
-        <span class="status-chip">阈值 {{ policy?.kickThreshold ?? 0 }}</span>
-        <span class="status-chip">解散权限 {{ policy?.disbandPermission || "squad.disband" }}</span>
-        <span class="status-chip">踢出权限 {{ policy?.kickPermission || "squad.kick" }}</span>
-        <span class="status-chip" :data-tone="policy?.enforcementEnabled ? 'ok' : 'warn'">
-          {{ policy?.enforcementEnabled ? "模块已启用" : "模块未启用" }}
-        </span>
-      </div>
-
       <div class="overview-grid">
         <article class="overview-card accent">
           <span>记录总数</span>
           <strong>{{ summary?.total ?? 0 }}</strong>
-          <p>建队、解散、踢出三类记录的总和。</p>
         </article>
         <article class="overview-card">
-          <span>建队记录</span>
-          <strong>{{ summary?.created ?? 0 }}</strong>
-          <p>小队创建事件，包含 Team / Squad / 建队者。</p>
-        </article>
-        <article class="overview-card">
-          <span>解散记录</span>
+          <span>解散</span>
           <strong>{{ summary?.disbanded ?? 0 }}</strong>
-          <p>所有手动或自动解散的结果和错误。</p>
         </article>
         <article class="overview-card">
-          <span>踢出记录</span>
+          <span>踢出 (服务器)</span>
           <strong>{{ summary?.kicked ?? 0 }}</strong>
-          <p>所有手动或自动踢出的结果和错误。</p>
+        </article>
+        <article class="overview-card">
+          <span>移出 (小队)</span>
+          <strong>{{ summary?.removed ?? 0 }}</strong>
         </article>
       </div>
 
       <div class="action-grid">
-        <PageCard
-          title="手动解散"
-          description="输入 Team ID 和 Squad ID，命令会先走小队管理模块，再由后端执行并记录。"
-        >
+        <!-- Disband Card -->
+        <PageCard title="解散小队" class="action-card">
           <form class="action-form" @submit.prevent="handleDisband">
-            <label>
-              <span>Team ID</span>
-              <input v-model="disbandTeamId" type="number" min="0" inputmode="numeric" placeholder="例如 1" />
-            </label>
-            <label>
-              <span>Squad ID</span>
-              <input v-model="disbandSquadId" type="number" min="0" inputmode="numeric" placeholder="例如 3" />
-            </label>
-            <label class="full">
-              <span>原因</span>
-              <input v-model="disbandReason" type="text" placeholder="例如 manual review / no-build" />
-            </label>
-            <div class="form-actions full">
-              <button type="submit" class="secondary" :disabled="!viewerCanDisband || actionBusy || !canSubmitDisband">
-                解散小队
-              </button>
+            <div class="form-row">
+              <label>
+                <span>Team ID</span>
+                <input v-model="disbandTeamId" type="number" min="1" max="2" placeholder="1 或 2" />
+              </label>
+              <label>
+                <span>Squad ID</span>
+                <input v-model="disbandSquadId" type="number" min="1" placeholder="例如 5" />
+              </label>
             </div>
+            <label>
+              <span>来源</span>
+              <input v-model="disbandSource" type="text" placeholder="例如：manual / discord" />
+            </label>
+            <label>
+              <span>原因</span>
+              <input v-model="disbandReason" type="text" placeholder="可选理由" />
+            </label>
+            <button type="submit" class="secondary full" :disabled="!viewerCanDisband || actionBusy || !canSubmitDisband">
+              执行解散
+            </button>
           </form>
         </PageCard>
 
-        <PageCard
-          title="手动踢出"
-          description="输入玩家名，必要时补 Steam ID 或 EOS ID。命令同样会经过小队管理模块并写入记录。"
-        >
+        <!-- Kick Card -->
+        <PageCard title="踢出玩家 (服务器)" class="action-card">
           <form class="action-form" @submit.prevent="handleKick">
-            <label class="full">
-              <span>玩家名</span>
-              <input v-model="kickPlayerName" type="text" placeholder="例如 Builder123" />
+            <label>
+              <span>玩家名 / ID</span>
+              <input v-model="kickTarget" type="text" placeholder="名称, Steam64 或 EOS" />
             </label>
             <label>
-              <span>Steam ID</span>
-              <input v-model="kickSteamId" type="text" placeholder="可选" />
+              <span>来源</span>
+              <input v-model="kickSource" type="text" placeholder="例如：manual / anticheat" />
             </label>
             <label>
-              <span>EOS ID</span>
-              <input v-model="kickEosId" type="text" placeholder="可选" />
-            </label>
-            <label class="full">
               <span>原因</span>
-              <input v-model="kickReason" type="text" placeholder="例如 count=11 / manual review" />
+              <input v-model="kickReason" type="text" placeholder="可选理由" />
             </label>
-            <div class="form-actions full">
-              <button type="submit" class="secondary" :disabled="!viewerCanKick || actionBusy || !canSubmitKick">
-                踢出玩家
-              </button>
-            </div>
+            <button type="submit" class="secondary full" :disabled="!viewerCanKick || actionBusy || !canSubmitKick">
+              执行踢出
+            </button>
           </form>
+        </PageCard>
+
+        <!-- Remove Card -->
+        <PageCard title="移出玩家 (仅小队)" class="action-card">
+          <form class="action-form" @submit.prevent="handleRemove">
+            <label>
+              <span>玩家名 / ID</span>
+              <input v-model="removeTarget" type="text" placeholder="名称, Steam64 或 EOS" />
+            </label>
+            <label>
+              <span>来源</span>
+              <input v-model="removeSource" type="text" placeholder="例如：manual / sl_req" />
+            </label>
+            <label>
+              <span>原因</span>
+              <input v-model="removeReason" type="text" placeholder="可选理由" />
+            </label>
+            <button type="submit" class="secondary full" :disabled="!viewerCanRemove || actionBusy || !canSubmitRemove">
+              移出小队
+            </button>
+          </form>
+        </PageCard>
+
+        <!-- Creation Tracker Card -->
+        <PageCard title="建队事件追踪" class="action-card tracker-card">
+          <div class="tracker-console">
+            <div v-if="!recentCreations.length" class="console-placeholder">等待建队数据...</div>
+            <div v-for="log in recentCreations" :key="log.recordKey" class="console-row">
+              <div class="row-meta">
+                <span class="row-time">{{ formatTimeShort(log.time) }}</span>
+                <span class="row-badge">NEW</span>
+                <strong>T{{ log.teamId }} S{{ log.squadId }}</strong>
+              </div>
+              <div class="row-main">
+                <span class="row-squad">{{ log.squadName }}</span>
+                <span class="row-creator">{{ log.creatorName }}</span>
+              </div>
+            </div>
+          </div>
         </PageCard>
       </div>
 
-      <PageCard
-        title="记录"
-        description="按时间倒序展示全部记录。默认显示建队、解散、踢出三类动作，不展示完整成员态势。"
-      >
+      <PageCard title="操作审计记录">
         <div class="record-toolbar">
           <div class="filter-group">
             <button
@@ -125,27 +135,25 @@
               @click="selectedKind = item.value"
             >
               {{ item.label }}
-              <span>{{ item.count }}</span>
+              <span class="count-tag">{{ item.count }}</span>
             </button>
           </div>
           <div class="record-meta">
-            <span v-if="summary?.lastEventAt">最新 {{ formatTime(summary.lastEventAt) }}</span>
-            <span>刷新 {{ refreshLabel }}</span>
+            <span v-if="summary?.lastEventAt">最后更新 {{ formatTime(summary.lastEventAt) }}</span>
           </div>
         </div>
 
-        <div v-if="loading && !records.length" class="placeholder-block">记录加载中...</div>
-        <div v-else-if="!filteredRecords.length" class="placeholder-block">暂无匹配记录。</div>
+        <div v-if="loading && !records.length" class="placeholder-block">加载中...</div>
+        <div v-else-if="!filteredRecords.length" class="placeholder-block">无记录。</div>
         <div v-else class="table-wrap">
           <table class="record-table">
             <thead>
               <tr>
                 <th>时间</th>
-                <th>类型</th>
-                <th>来源 / 操作者</th>
-                <th>目标 / 细节</th>
+                <th>操作</th>
+                <th>细节 (来源 / 操作者 / 目标)</th>
                 <th>原因</th>
-                <th>结果</th>
+                <th>状态</th>
               </tr>
             </thead>
             <tbody>
@@ -153,7 +161,6 @@
                 <td>
                   <div class="time-cell">
                     <strong>{{ formatTime(record.time) }}</strong>
-                    <span v-if="record.logTime && record.logTime !== record.time">日志 {{ formatTime(record.logTime) }}</span>
                   </div>
                 </td>
                 <td>
@@ -163,30 +170,23 @@
                 </td>
                 <td>
                   <div class="detail-cell">
-                    <strong>{{ record.source || "--" }}</strong>
-                    <span v-if="record.operatorName">操作者 {{ record.operatorName }}</span>
+                    <div class="source-row">
+                      <span class="source-label">{{ record.source || "manual" }}</span>
+                      <span v-if="record.operatorName" class="operator-label">BY {{ record.operatorName }}</span>
+                    </div>
+                    <div class="target-row">
+                      <strong>{{ recordTargetTitle(record) }}</strong>
+                      <span class="target-sub">{{ recordTargetSubline(record) }}</span>
+                    </div>
                   </div>
                 </td>
+                <td>{{ record.reason || "--" }}</td>
                 <td>
-                  <div class="detail-cell">
-                    <strong>{{ recordTargetTitle(record) }}</strong>
-                    <span>{{ recordTargetSubline(record) }}</span>
-                  </div>
-                </td>
-                <td>
-                  <div class="detail-cell">
-                    <strong>{{ record.reason || "--" }}</strong>
-                    <span v-if="record.kind === 'squad_created'">{{ creationIdentity(record) }}</span>
-                    <span v-else-if="record.kind === 'kick'">{{ kickIdentity(record) }}</span>
-                    <span v-else>{{ record.command || "--" }}</span>
-                  </div>
-                </td>
-                <td>
-                  <div class="detail-cell">
+                  <div class="result-cell">
                     <span class="status-chip" :data-tone="resultTone(record.result, record.error)">
-                      {{ record.result || "--" }}
+                      {{ record.result || "failed" }}
                     </span>
-                    <span v-if="record.error">{{ record.error }}</span>
+                    <span v-if="record.error" class="error-text">{{ record.error }}</span>
                   </div>
                 </td>
               </tr>
@@ -200,14 +200,15 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useQuery } from "@tanstack/vue-query";
 import PageHeader from "../components/common/PageHeader.vue";
 import PageCard from "../components/common/PageCard.vue";
 import { renderApiError } from "../app/errors";
 import {
   disbandSquad,
+  kickPlayer,
+  removePlayerFromSquad,
   getSquadManagementRecords,
-  kickSquadCreator,
   type SquadManagementRecord,
   type SquadManagementRecordsResponse,
 } from "../app/squadManagementApi";
@@ -216,42 +217,46 @@ import { useUiStore } from "../stores/ui.store";
 
 const auth = useAuthStore();
 const ui = useUiStore();
-const queryClient = useQueryClient();
 
 const actionBusy = ref(false);
-const info = ref("");
-const selectedKind = ref<"all" | "squad_created" | "disband" | "kick">("all");
+const selectedKind = ref<string>("all");
+
 const disbandTeamId = ref("");
 const disbandSquadId = ref("");
-const disbandReason = ref("manual");
-const kickPlayerName = ref("");
-const kickSteamId = ref("");
-const kickEosId = ref("");
-const kickReason = ref("manual");
+const disbandSource = ref("manual");
+const disbandReason = ref("");
+
+const kickTarget = ref("");
+const kickSource = ref("manual");
+const kickReason = ref("");
+
+const removeTarget = ref("");
+const removeSource = ref("manual");
+const removeReason = ref("");
 
 const query = useQuery<SquadManagementRecordsResponse>({
   queryKey: ["squad-management-records"],
   queryFn: async () => getSquadManagementRecords({ limit: 1000, offset: 0 }),
   refetchInterval: 5000,
-  refetchIntervalInBackground: false,
-  staleTime: 0,
 });
 
 const records = computed(() => [...(query.data.value?.records ?? [])]);
 const summary = computed(() => query.data.value?.summary ?? null);
 const viewer = computed(() => query.data.value?.viewer ?? null);
 const policy = computed(() => query.data.value?.policy ?? null);
-const pageError = computed(() => query.error.value ? renderApiError(query.error.value, "无法加载小队管理记录") : "");
+const pageError = computed(() => query.error.value ? renderApiError(query.error.value, "加载失败") : "");
 const loading = computed(() => Boolean(query.isLoading.value || query.isFetching.value));
-const refreshLabel = computed(() => loading.value ? "刷新中" : "5 秒");
+
 const viewerCanDisband = computed(() => Boolean(viewer.value?.canDisband || auth.user?.isSuperAdmin));
 const viewerCanKick = computed(() => Boolean(viewer.value?.canKick || auth.user?.isSuperAdmin));
+const viewerCanRemove = computed(() => Boolean(viewer.value?.canRemove || auth.user?.isSuperAdmin));
 
 const kindOptions = computed(() => [
   { value: "all", label: "全部", count: summary.value?.total ?? 0 },
   { value: "squad_created", label: "建队", count: summary.value?.created ?? 0 },
   { value: "disband", label: "解散", count: summary.value?.disbanded ?? 0 },
   { value: "kick", label: "踢出", count: summary.value?.kicked ?? 0 },
+  { value: "remove", label: "移出", count: summary.value?.removed ?? 0 },
 ] as const);
 
 const filteredRecords = computed(() => {
@@ -259,12 +264,22 @@ const filteredRecords = computed(() => {
   return records.value.filter((record) => record.kind === selectedKind.value);
 });
 
+const recentCreations = computed(() => {
+  return records.value
+    .filter((r) => r.kind === "squad_created")
+    .slice(0, 15);
+});
+
 const canSubmitDisband = computed(() => {
-  return Boolean(normalizeNumericInput(disbandTeamId.value) != null && normalizeNumericInput(disbandSquadId.value) != null);
+  return Boolean(disbandTeamId.value && disbandSquadId.value);
 });
 
 const canSubmitKick = computed(() => {
-  return Boolean(kickPlayerName.value.trim() || kickSteamId.value.trim() || kickEosId.value.trim());
+  return Boolean(kickTarget.value.trim());
+});
+
+const canSubmitRemove = computed(() => {
+  return Boolean(removeTarget.value.trim());
 });
 
 async function reload() {
@@ -273,47 +288,27 @@ async function reload() {
 
 async function handleDisband() {
   if (!viewerCanDisband.value || actionBusy.value || !canSubmitDisband.value) return;
-
-  const teamId = normalizeNumericInput(disbandTeamId.value);
-  const squadId = normalizeNumericInput(disbandSquadId.value);
-  if (teamId == null || squadId == null) return;
-
   const confirmed = await ui.openConfirm({
-    title: "确认解散",
-    message: `将解散 Team ${teamId} / Squad ${squadId}，并写入记录。`,
-    confirmText: "确认解散",
-    cancelText: "取消",
+    title: "确认解散小队？",
+    message: `Team ${disbandTeamId.value} Squad ${disbandSquadId.value}`,
     tone: "warn",
   });
-
   if (!confirmed) return;
 
   actionBusy.value = true;
   try {
-    const response = await disbandSquad({
-      teamId,
-      squadId,
-      reason: disbandReason.value.trim() || "manual",
+    const res = await disbandSquad({
+      teamId: Number(disbandTeamId.value),
+      squadId: Number(disbandSquadId.value),
+      source: disbandSource.value,
+      reason: disbandReason.value.trim(),
     });
-
-    if (!response.ok || !response.result.ok) {
-      throw new Error(response.result.message || response.result.error || "解散失败");
-    }
-
-    info.value = `已提交解散 Team ${teamId} / Squad ${squadId}`;
-    ui.pushToast({
-      title: "解散成功",
-      message: `Team ${teamId} / Squad ${squadId} 已处理。`,
-      tone: "ok",
-    });
-    await query.refetch();
-    await queryClient.invalidateQueries({ queryKey: ["squad-management-records"] });
-  } catch (error) {
-    ui.pushToast({
-      title: "解散失败",
-      message: renderApiError(error, "解散失败"),
-      tone: "error",
-    });
+    if (!res.ok) throw new Error(res.result?.message || "解散失败");
+    ui.pushToast({ title: "解散成功", message: "已处理解散请求", tone: "ok" });
+    disbandTeamId.value = ""; disbandSquadId.value = ""; disbandReason.value = "";
+    void reload();
+  } catch (e) {
+    ui.pushToast({ title: "操作失败", message: String(e), tone: "error" });
   } finally {
     actionBusy.value = false;
   }
@@ -321,62 +316,71 @@ async function handleDisband() {
 
 async function handleKick() {
   if (!viewerCanKick.value || actionBusy.value || !canSubmitKick.value) return;
-
-  const targetName = kickPlayerName.value.trim() || kickSteamId.value.trim() || kickEosId.value.trim();
   const confirmed = await ui.openConfirm({
-    title: "确认踢出",
-    message: `将踢出 ${targetName}，并写入记录。`,
-    confirmText: "确认踢出",
-    cancelText: "取消",
+    title: "确认将玩家踢出服务器？",
+    message: kickTarget.value,
     tone: "warn",
   });
-
   if (!confirmed) return;
 
   actionBusy.value = true;
   try {
-    const response = await kickSquadCreator({
-      anyId: targetName,
-      creatorName: kickPlayerName.value.trim(),
-      steamId: kickSteamId.value.trim(),
-      eosId: kickEosId.value.trim(),
-      reason: kickReason.value.trim() || "manual",
+    const res = await kickPlayer({
+      anyId: kickTarget.value.trim(),
+      source: kickSource.value,
+      reason: kickReason.value.trim(),
     });
+    if (!res.ok) throw new Error(res.result?.message || "踢出失败");
+    ui.pushToast({ title: "踢出成功", message: "已处理踢出请求", tone: "ok" });
+    kickTarget.value = ""; kickReason.value = "";
+    void reload();
+  } catch (e) {
+    ui.pushToast({ title: "操作失败", message: String(e), tone: "error" });
+  } finally {
+    actionBusy.value = false;
+  }
+}
 
-    if (!response.ok || !response.result.ok) {
-      throw new Error(response.result.message || response.result.error || "踢出失败");
-    }
+async function handleRemove() {
+  if (!viewerCanRemove.value || actionBusy.value || !canSubmitRemove.value) return;
+  const confirmed = await ui.openConfirm({
+    title: "确认将玩家从所在小队移出？",
+    message: removeTarget.value,
+    tone: "warn",
+  });
+  if (!confirmed) return;
 
-    info.value = `已提交踢出 ${targetName}`;
-    ui.pushToast({
-      title: "踢出成功",
-      message: `${targetName} 已处理。`,
-      tone: "ok",
+  actionBusy.value = true;
+  try {
+    const res = await removePlayerFromSquad({
+      anyId: removeTarget.value.trim(),
+      source: removeSource.value,
+      reason: removeReason.value.trim(),
     });
-    await query.refetch();
-    await queryClient.invalidateQueries({ queryKey: ["squad-management-records"] });
-  } catch (error) {
-    ui.pushToast({
-      title: "踢出失败",
-      message: renderApiError(error, "踢出失败"),
-      tone: "error",
-    });
+    if (!res.ok) throw new Error(res.result?.message || "移出失败");
+    ui.pushToast({ title: "移出成功", message: "已处理移出请求", tone: "ok" });
+    removeTarget.value = ""; removeReason.value = "";
+    void reload();
+  } catch (e) {
+    ui.pushToast({ title: "操作失败", message: String(e), tone: "error" });
   } finally {
     actionBusy.value = false;
   }
 }
 
 function kindLabel(kind: string) {
-  if (kind === "squad_created") return "建队记录";
-  if (kind === "disband") return "解散记录";
-  if (kind === "kick") return "踢出记录";
-  return kind || "记录";
+  if (kind === "squad_created") return "小队创建";
+  if (kind === "disband") return "解散小队";
+  if (kind === "kick") return "踢出玩家";
+  if (kind === "remove") return "移出小队";
+  return kind;
 }
 
 function kindTone(kind: string) {
   if (kind === "squad_created") return "ok";
-  if (kind === "disband") return "warn";
-  if (kind === "kick") return "warn";
+  if (kind === "disband") return "danger";
+  if (kind === "kick") return "danger";
+  if (kind === "remove") return "warn";
   return "neutral";
 }
 
@@ -387,328 +391,106 @@ function resultTone(result: string, error: string) {
 }
 
 function recordTargetTitle(record: SquadManagementRecord) {
-  if (record.kind === "squad_created") {
-    return `${record.teamId == null ? "--" : `Team ${record.teamId}`} / ${record.squadId == null ? "--" : `Squad ${record.squadId}`}`;
-  }
-
-  if (record.kind === "kick") {
-    return record.playerName || record.creatorName || "--";
-  }
-
-  if (record.teamId == null && record.squadId == null) {
-    return record.squadName || "--";
-  }
-
-  return `${record.teamId == null ? "--" : `Team ${record.teamId}`} / ${record.squadId == null ? "--" : `Squad ${record.squadId}`}`;
+  if (record.kind === "kick" || record.kind === "remove") return record.playerName || "Unknown Player";
+  return `Team ${record.teamId ?? "?"} Squad ${record.squadId ?? "?"}`;
 }
 
 function recordTargetSubline(record: SquadManagementRecord) {
-  if (record.kind === "squad_created") {
-    return [record.squadName, creationIdentity(record)].filter(Boolean).join(" · ") || "--";
-  }
-
-  if (record.kind === "kick") {
-    return [kickIdentity(record), record.reason].filter(Boolean).join(" · ") || "--";
-  }
-
-  return [record.squadName, record.creatorName].filter(Boolean).join(" · ") || "--";
+  if (record.kind === "kick" || record.kind === "remove") return record.steamId || record.eosId || "";
+  return record.squadName || "";
 }
 
-function creationIdentity(record: SquadManagementRecord) {
-  const parts = [record.creatorName, record.steamId, record.eosId];
-  return parts.filter(Boolean).join(" / ") || "--";
+function formatTime(v: any) {
+  if (!v) return "--";
+  return new Date(v).toLocaleString("zh-CN", { hour12: false });
 }
 
-function kickIdentity(record: SquadManagementRecord) {
-  const parts = [record.playerName, record.steamId, record.eosId];
-  return parts.filter(Boolean).join(" / ") || "--";
-}
-
-function formatTime(value: string | number | null | undefined) {
-  if (value == null || value === "") return "--";
-  const date = new Date(String(value));
-  if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleString("zh-CN", { hour12: false });
-}
-
-function normalizeNumericInput(value: string) {
-  const text = String(value ?? "").trim();
-  if (!text) return null;
-  const number = Number(text);
-  return Number.isFinite(number) ? Math.floor(number) : null;
+function formatTimeShort(v: any) {
+  if (!v) return "--";
+  const date = new Date(v);
+  return date.toLocaleTimeString("zh-CN", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 </script>
 
 <style scoped>
-.squad-management-page {
+/* ... existing styles ... */
+.tracker-card {
+  grid-column: span 1;
+}
+
+.tracker-console {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 8px;
+  height: 260px;
+  overflow-y: auto;
+  padding: 8px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 4px;
+  font-family: monospace;
+}
+
+.console-placeholder {
   height: 100%;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.page-stack {
-  display: grid;
-  gap: 14px;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.policy-strip {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.overview-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.overview-card {
-  border: 1px solid rgba(105, 123, 141, 0.18);
-  border-radius: 14px;
-  padding: 14px;
-  background:
-    radial-gradient(circle at 100% 0%, rgba(96, 165, 250, 0.08), transparent 36%),
-    linear-gradient(180deg, rgba(24, 29, 35, 0.96), rgba(18, 22, 28, 0.96));
-}
-
-.overview-card.accent {
-  background:
-    radial-gradient(circle at 0% 100%, rgba(251, 146, 60, 0.1), transparent 32%),
-    linear-gradient(180deg, rgba(24, 29, 35, 0.98), rgba(18, 22, 28, 0.96));
-}
-
-.overview-card span {
-  display: block;
-  color: #8f98a8;
-  font-size: 12px;
-}
-
-.overview-card strong {
-  display: block;
-  margin-top: 8px;
-  font-size: 24px;
-}
-
-.overview-card p {
-  margin: 8px 0 0;
-  color: #aab2c0;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.action-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.action-form {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px 12px;
-}
-
-.action-form label {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-
-.action-form label span {
-  color: #8f98a8;
-  font-size: 12px;
-}
-
-.action-form input {
-  min-width: 0;
-}
-
-.action-form .full,
-.form-actions.full {
-  grid-column: 1 / -1;
-}
-
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.record-toolbar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-}
-
-.filter-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.filter-chip {
-  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 30px;
-  border: 1px solid rgba(105, 123, 141, 0.18);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #d8deea;
-  padding: 0 12px;
-}
-
-.filter-chip[data-active="true"] {
-  border-color: rgba(96, 165, 250, 0.42);
-  background: rgba(96, 165, 250, 0.14);
-}
-
-.filter-chip span {
-  color: #8f98a8;
-}
-
-.record-meta {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  color: #93a0ad;
-  font-size: 12px;
-}
-
-.placeholder-block {
-  padding: 12px 2px;
-  color: #93a0ad;
+  justify-content: center;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 
-.table-wrap {
-  overflow: auto;
-  max-height: 54vh;
-}
-
-.record-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.record-table th,
-.record-table td {
-  padding: 12px 10px;
-  border-bottom: 1px solid rgba(105, 123, 141, 0.12);
-  vertical-align: top;
-  text-align: left;
-}
-
-.record-table th {
-  color: #8f98a8;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.time-cell,
-.detail-cell {
+.console-row {
   display: grid;
   gap: 4px;
-  min-width: 0;
+  padding: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 12px;
 }
 
-.time-cell strong,
-.detail-cell strong {
-  color: #e8edf4;
+.row-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.row-time {
+  color: var(--color-text-muted);
+}
+
+.row-badge {
+  background: var(--color-status-online);
+  color: white;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.row-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.row-squad {
+  color: var(--color-text-primary);
   font-weight: 600;
 }
 
-.time-cell span,
-.detail-cell span {
-  color: #93a0ad;
-  line-height: 1.45;
+.row-creator {
+  color: var(--color-text-secondary);
+  opacity: 0.8;
 }
 
-.status-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 12px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #d8deea;
-  white-space: nowrap;
-}
-
-.status-chip[data-tone="ok"] {
-  background: rgba(34, 197, 94, 0.14);
-  color: #7ee7a6;
-}
-
-.status-chip[data-tone="warn"] {
-  background: rgba(245, 158, 11, 0.18);
-  color: #f5cf79;
-}
-
-.status-chip[data-tone="danger"] {
-  background: rgba(239, 68, 68, 0.16);
-  color: #ff9494;
-}
-
-.status-chip[data-tone="neutral"] {
-  background: rgba(255, 255, 255, 0.08);
-  color: #d8deea;
-}
-
-.banner {
-  border-radius: 12px;
-  padding: 10px 12px;
-  border: 1px solid rgba(105, 123, 141, 0.18);
-}
-
-.banner.error {
-  border-color: rgba(239, 68, 68, 0.28);
-  background: rgba(239, 68, 68, 0.08);
-  color: #ffb1b1;
-}
-
-.banner.info {
-  border-color: rgba(96, 165, 250, 0.28);
-  background: rgba(96, 165, 250, 0.08);
-  color: #a9d8ff;
-}
-
-button.secondary {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-:deep(.page-stack > .page-card) {
-  min-height: 0;
-}
-
-:deep(.page-stack > .page-card .card-body) {
-  min-height: 0;
-}
-
-@media (max-width: 1180px) {
-  .overview-grid,
+@media (max-width: 1400px) {
   .action-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
-@media (max-width: 760px) {
-  .action-form {
-    grid-template-columns: 1fr;
-  }
-
-  .record-table {
-    min-width: 880px;
-  }
+@media (max-width: 1200px) {
+  .overview-grid { grid-template-columns: 1fr 1fr; }
+  .action-grid { grid-template-columns: 1fr; }
 }
 </style>

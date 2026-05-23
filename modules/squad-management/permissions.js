@@ -14,3 +14,10 @@ export function canKick(viewer, config = {}) {
   );
 }
 
+export function canRemove(viewer, config = {}) {
+  return Boolean(
+    viewer?.isSuperAdmin
+    || viewer?.permissions?.includes?.(config.removePermission || "squad.remove")
+  );
+}
+

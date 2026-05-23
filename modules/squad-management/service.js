@@ -4,7 +4,7 @@ import { getParam } from "../../core/event-normalizer.js";
 import { createSquadLifecycleReducer } from "../squad-lifecycle/reducer.js";
 import { buildSquadLifecycleKey, buildSquadLifecycleSlotKey } from "../squad-lifecycle/service.js";
 import { normalizeSquadName } from "../squad-lifecycle/log-adapter.js";
-import { canDisband, canKick } from "./permissions.js";
+import { canDisband, canKick, canRemove } from "./permissions.js";
 
 const MODULE_ID = "module.squadManagement";
 const API_NAME = "squadManagement";
@@ -117,6 +117,17 @@ export function createSquadManagementService({ core, modules, config, logger, re
         ...request,
         source: String(request.source ?? "manual").trim() || "manual",
       });
+    },
+
+    async requestRemoveFromSquad(request = {}) {
+      return executeRemoveFromSquad({
+        ...request,
+        source: String(request.source ?? "manual").trim() || "manual",
+      });
+    },
+
+    async recordAction(entry = {}) {
+      return persistActionRecord(entry);
     },
 
     async disband(request = {}) {
@@ -774,6 +785,116 @@ export function createSquadManagementService({ core, modules, config, logger, re
     };
   }
 
+  async function executeRemoveFromSquad(request = {}) {
+    const serverId = normalizeServerId(request.serverId);
+    const reason = normalizeText(request.reason);
+    const source = normalizeText(request.source) || "manual";
+    const operatorName = normalizeText(request.operatorName ?? request.actor?.username ?? request.actor?.name);
+    const system = Boolean(request.system);
+    const actor = request.actor ?? request.viewer ?? null;
+    const requestedPlayer = resolveRequestedPlayer(request);
+
+    if (!serverId) {
+      return buildInvalidActionResult("remove", "InvalidServerId", "serverId is required.", { serverId, reason, source, system });
+    }
+    if (!requestedPlayer.playerKey && !requestedPlayer.playerId && !requestedPlayer.steamId && !requestedPlayer.eosId && !requestedPlayer.name) {
+      return recordFailedAction({
+        kind: "remove",
+        serverId,
+        matchId: getCurrentMatchId(serverId),
+        source,
+        operatorName,
+        system,
+        reason,
+        error: "InvalidTarget",
+        message: "A target player is required.",
+      });
+    }
+
+    const state = buildStateSnapshot(serverId);
+    const target = resolvePlayerTarget(state, requestedPlayer);
+    if (!target) {
+      return recordFailedAction({
+        kind: "remove",
+        serverId,
+        matchId: state.matchId,
+        source,
+        operatorName,
+        system,
+        reason,
+        error: "TargetNotFound",
+        message: "Target player is not present in the current snapshot.",
+      });
+    }
+
+    if (!system && !canRemove(actor, { removePermission: moduleConfig.removePermission || "squad.remove" })) {
+      return recordFailedAction({
+        kind: "remove",
+        serverId,
+        matchId: state.matchId,
+        source,
+        operatorName,
+        system,
+        reason,
+        error: "Forbidden",
+        message: `Permission 'squad.remove' is required.`,
+        target,
+      });
+    }
+
+    const targetId = target.steamId || target.eosId || target.name || target.playerId || requestedPlayer.playerKey;
+    const command = `AdminKickFromSquad "${escapeCommandString(targetId)}" ${escapeCommandString(reason)}`.trim();
+    const commandResult = await executeRemoveCommand({ command, serverId, target, reason, source, operatorName, system });
+
+    await persistActionRecord({
+      kind: "remove",
+      serverId,
+      matchId: state.matchId,
+      source,
+      operatorName,
+      system,
+      playerName: target.name,
+      playerKey: target.playerKey,
+      steamId: target.steamId,
+      eosId: target.eosId,
+      reason,
+      result: commandResult.ok ? "success" : "failed",
+      error: commandResult.ok ? "" : commandResult.error,
+      command,
+      payload: {
+        request,
+        target,
+        commandResult,
+      },
+      ok: commandResult.ok,
+      response: commandResult.response,
+      action: "remove",
+    });
+
+    core.eventBus?.emitModuleEvent?.(MODULE_ID, "playerRemovedFromSquad", {
+      serverId,
+      matchId: state.matchId,
+      playerId: target.playerId,
+      steamId: target.steamId,
+      eosId: target.eosId,
+      name: target.name,
+      reason,
+      source,
+      operatorName,
+      system,
+    });
+
+    return {
+      ok: commandResult.ok,
+      action: "remove",
+      command,
+      rconExecuted: commandResult.executed,
+      rconResponse: commandResult.response,
+      error: commandResult.error,
+      state: buildStateSnapshot(serverId),
+    };
+  }
+
   async function persistActionRecord(entry = {}) {
     const serverId = normalizeServerId(entry.serverId);
     const cache = ensureServerCache(serverId);
@@ -1070,6 +1191,31 @@ export function createSquadManagementService({ core, modules, config, logger, re
     }
   }
 
+  async function executeRemoveCommand({ command, serverId, target, reason, source, operatorName, system }) {
+    try {
+      const response = await runRconCommand({
+        command,
+        serverId,
+        reason,
+        source,
+        operatorName,
+        system,
+      }, "remove");
+      return {
+        ok: true,
+        executed: true,
+        response,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        executed: false,
+        response: "",
+        error: String(error?.message ?? error),
+      };
+    }
+  }
+
   async function runRconCommand(meta, action) {
     if (action === "disband") {
       if (typeof core.squadRcon?.adminDisbandSquad === "function") {
@@ -1077,10 +1223,16 @@ export function createSquadManagementService({ core, modules, config, logger, re
       }
     }
 
-    if (action === "kick") {
+    if (action === "kick" || action === "remove") {
       const target = meta.target ?? "";
-      if (typeof core.squadRcon?.kick === "function") {
-        return await core.squadRcon.kick(target, meta.reason ?? "");
+      if (action === "kick") {
+        if (typeof core.squadRcon?.kick === "function") {
+          return await core.squadRcon.kick(target, meta.reason ?? "");
+        }
+      } else {
+        if (typeof core.squadRcon?.kickFromSquad === "function") {
+          return await core.squadRcon.kickFromSquad(target, meta.reason ?? "");
+        }
       }
     }
 
@@ -1152,7 +1304,8 @@ export function createSquadManagementService({ core, modules, config, logger, re
     if (record.kind === "squad_created") cache.recordsSummary.created += 1;
     if (record.kind === "disband") cache.recordsSummary.disbanded += 1;
     if (record.kind === "kick") cache.recordsSummary.kicked += 1;
-    if (record.kind === "disband" || record.kind === "kick") cache.recordsSummary.actions += 1;
+    if (record.kind === "remove") cache.recordsSummary.removed += 1;
+    if (record.kind === "disband" || record.kind === "kick" || record.kind === "remove") cache.recordsSummary.actions += 1;
     if (record.result === "success") cache.recordsSummary.success += 1;
     if (record.result && record.result !== "success") cache.recordsSummary.failed += 1;
     cache.recordsSummary.lastEventAt = record.time || cache.recordsSummary.lastEventAt || "";

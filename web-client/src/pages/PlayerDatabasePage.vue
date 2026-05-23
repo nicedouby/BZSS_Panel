@@ -1,326 +1,44 @@
-﻿<template>
-  <section class="page db-page">
-    <section class="db-overview">
-      <div class="db-overview-card">
-        <div v-for="item in overviewCards" :key="item.label" class="db-stat-item">
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-        </div>
-      </div>
-    </section>
+<template>
+  <section class="db-page">
+    <PlayerDatabaseStats :stats="overviewCards" />
 
-    <section class="db-toolbar-shell">
-      <div class="db-toolbar-card">
-        <div class="console-toolbar db-toolbar-row">
-          <input
-            v-model="filters.q"
-            class="console-input db-search"
-            :placeholder="t('database.searchPlaceholder')"
-          >
-          <select v-model="filters.sort" class="console-select">
-            <option value="updated_desc">{{ t("database.sortRecentlyUpdated") }}</option>
-            <option value="name_asc">{{ t("database.sortNameAsc") }}</option>
-          </select>
-          <button type="button" @click="openStatsModal">{{ t("database.openStatsModal") }}</button>
-        </div>
-      </div>
-    </section>
+    <PlayerDatabaseToolbar v-model="filters" @open-stats="openStatsModal" />
 
-    <div class="db-panel">
-      <aside class="db-list-col">
-        <div v-if="listLoading && !rows.length" class="placeholder">{{ t("database.loadingPlayerList") }}</div>
-        <div v-else-if="listError" class="placeholder">{{ listError }}</div>
-        <div v-else-if="!rows.length" class="placeholder">{{ t("database.noMatchingPlayers") }}</div>
-        <div
-          v-for="player in rows"
-          :key="player.id"
-          class="db-row"
-          :class="{ active: selectedId === player.id }"
-          @click="openPlayer(player.id)"
-          role="button"
-          tabindex="0"
-          @keydown.enter.prevent="openPlayer(player.id)"
-          @keydown.space.prevent="openPlayer(player.id)"
-        >
-          <div class="db-row-name">{{ player.current_name || player.name || t("common.unknown") }}</div>
-          <div class="db-row-meta">
-            {{ player.permission_group || "default" }}
-          </div>
-          <div class="db-row-meta">
-            {{ t("database.updatedAt") }} {{ formatTime(player.updated_at) }}
-          </div>
-          <div v-if="showIpInList && (player.current_ip || player.ip)" class="db-row-ip">
-            <a
-              :href="buildIpSearchUrl(player.current_ip || player.ip)"
-              class="db-ip-clickable"
-              target="_blank"
-              rel="noopener noreferrer"
-              @click.stop="inspectIp(player.current_ip || player.ip)"
-            >
-              {{ player.current_ip || player.ip }}
-            </a>
-            <small>{{ listIpSummary(player) || "" }}</small>
-          </div>
-        </div>
+    <div class="db-main">
+      <aside class="db-sidebar">
+        <PlayerDatabaseList
+          :rows="rows"
+          :selected-id="selectedId"
+          :loading="listLoading"
+          :error="listError"
+          @select="openPlayer"
+        />
       </aside>
 
-      <section class="db-detail-col">
-        <div class="db-detail-scroll">
-        <div v-if="selectedId === null" class="placeholder">{{ t("database.selectPlayer") }}</div>
-        <div v-else-if="detailLoading && !detail" class="placeholder">{{ t("database.loadingDetail") }}</div>
-        <div v-else-if="detailError" class="placeholder db-error-block">
-          <div>{{ detailError }}</div>
-          <button type="button" class="console-clear-btn" @click="retryDetail">{{ t("database.retry") }}</button>
-        </div>
-        <template v-else-if="detail">
-          <div class="db-detail-head">
-            <div>
-              <h2>{{ detail.player?.current_name || detail.player?.name || t("player.player") }}</h2>
-              <p>Steam64 {{ detail.player?.steam_id || "--" }} · EOS {{ detail.player?.eos_id || "--" }}</p>
-            </div>
-            <button type="button" class="console-clear-btn" @click="closePlayerDetail">{{ t("database.closeDetail") }}</button>
-          </div>
-
-          <div class="db-card">
-            <h3>{{ t("database.overview") }}</h3>
-            <div class="db-grid">
-              <div v-if="showIpInDetail" class="db-ip-field">
-                <span>{{ t("player.currentIp") }}</span>
-                <div class="db-ip-line">
-                  <a
-                    v-if="currentIp !== '--'"
-                    :href="buildIpSearchUrl(currentIp)"
-                    class="db-ip-clickable strong"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    @click="inspectIp(currentIp)"
-                  >
-                    {{ currentIp }}
-                  </a>
-                  <strong v-else>--</strong>
-                </div>
-                <small>{{ currentIpSummary }}</small>
-              </div>
-              <div><span>{{ fieldLabel("permission_group", t("database.permissionGroup")) }}</span><strong>{{ detail.player?.permission_group || "default" }}</strong></div>
-              <div><span>{{ fieldLabel("created_at", t("database.createdAt")) }}</span><strong>{{ formatTime(detail.player?.created_at) }}</strong></div>
-              <div><span>{{ fieldLabel("updated_at", t("database.updatedAt")) }}</span><strong>{{ formatTime(detail.player?.updated_at) }}</strong></div>
-              <div><span>{{ t("database.gameTime") }}</span><strong>{{ formatSeconds(detail.summary?.gameSeconds ?? detail.player?.game_seconds ?? 0) }}</strong></div>
-              <div><span>{{ t("database.serverTime") }}</span><strong>{{ formatSeconds(detail.summary?.serverSeconds ?? detail.player?.server_seconds ?? 0) }}</strong></div>
-            </div>
-          </div>
-
-          <div class="db-detail-grid">
-            <div class="db-card">
-              <h3>{{ t("database.aliases") }} ({{ t("database.recent12") }})</h3>
-              <ul class="db-list-mini">
-                <li v-for="alias in (detail.aliases || []).slice(0, 12)" :key="`${alias.alias_name}-${alias.seen_at}`">
-                  <span>{{ alias.alias_name }}</span>
-                  <small>{{ formatTime(alias.seen_at) }}</small>
-                </li>
-                <li v-if="!(detail.aliases || []).length">{{ t("common.none") }}</li>
-              </ul>
-            </div>
-
-            <div class="db-card">
-              <h3>{{ t("database.ipHistory") }} ({{ t("database.recent12") }})</h3>
-              <ul class="db-history-list">
-                <li v-for="item in (detail.ips || []).slice(0, 12)" :key="`${item.ip}-${item.seen_at}`">
-                  <div class="db-history-head">
-                    <div>
-                      <a
-                        :href="buildIpSearchUrl(item.ip)"
-                        class="db-ip-clickable strong"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        @click="inspectIp(item.ip)"
-                      >
-                        {{ item.ip }}
-                      </a>
-                      <small>{{ formatTime(item.seen_at) }}</small>
-                    </div>
-                  </div>
-                  <small>{{ ipDetailSummary(item.ip) || t("common.unknown") }}</small>
-                  <small>{{ ipSourceLabel(item.ip) }}</small>
-                </li>
-                <li v-if="!(detail.ips || []).length">{{ t("common.none") }}</li>
-              </ul>
-            </div>
-
-            <div class="db-card">
-              <h3>{{ t("database.squadCreated") }}</h3>
-              <div v-if="detail.squadCreated" class="db-grid compact">
-                <div><span>{{ fieldLabel("squad_id") }}</span><strong>{{ detail.squadCreated.squad_id ?? "--" }}</strong></div>
-                <div><span>{{ fieldLabel("squad_name") }}</span><strong>{{ detail.squadCreated.squad_name || "--" }}</strong></div>
-                <div><span>{{ fieldLabel("team_name") }}</span><strong>{{ detail.squadCreated.team_name || "--" }}</strong></div>
-                <div><span>{{ fieldLabel("created_at", t("database.createdAt")) }}</span><strong>{{ formatTime(detail.squadCreated.created_at) }}</strong></div>
-              </div>
-              <div v-else class="placeholder">{{ t("common.none") }}</div>
-            </div>
-
-            <div class="db-card">
-              <h3>{{ t("database.combatSessions") }}</h3>
-              <ul class="db-history-list">
-                <li v-for="log in (detail.combatSessions || []).slice(0, 30)" :key="`${log.filePath || log.dateKey}-${log.id}`">
-                  <div class="db-history-head">
-                    <div>
-                      <strong>{{ log.filePath || "--" }}</strong>
-                      <small>{{ log.dateKey || "--" }}</small>
-                    </div>
-                  </div>
-                  <small>{{ formatTime(log.firstEventAt) }} ~ {{ formatTime(log.lastEventAt) }}</small>
-                </li>
-                <li v-if="!(detail.combatSessions || []).length">{{ t("common.none") }}</li>
-              </ul>
-            </div>
-          </div>
-        </template>
-        </div>
+      <section class="db-content">
+        <PlayerDatabaseDetail
+          :id="selectedId"
+          :detail="detail"
+          :loading="detailLoading"
+          :error="detailError"
+          @close="closePlayerDetail"
+          @retry="retryDetail"
+        />
       </section>
     </div>
-    <div v-if="showStatsModal" class="db-stats-modal" aria-hidden="false">
-      <button class="db-stats-modal-backdrop" type="button" :aria-label="t('database.closeDetail')" @click="closeStatsModal" />
-      <section class="db-stats-modal-card" role="dialog" aria-modal="true" :aria-label="t('database.databaseStats')">
-        <header class="db-stats-modal-head">
-          <div>
-            <h2>{{ t("database.databaseStats") }}</h2>
-            <p>{{ statsSubtitle }}</p>
-          </div>
-          <div class="db-stats-actions">
-            <select v-model="statsDays" class="console-select">
-              <option value="7">7 {{ t("database.days") }}</option>
-              <option value="14">14 {{ t("database.days") }}</option>
-              <option value="30">30 {{ t("database.days") }}</option>
-              <option value="60">60 {{ t("database.days") }}</option>
-              <option value="90">90 {{ t("database.days") }}</option>
-            </select>
-            <select v-model="statsTop" class="console-select">
-              <option value="5">{{ t("database.top") }} 5</option>
-              <option value="10">{{ t("database.top") }} 10</option>
-              <option value="20">{{ t("database.top") }} 20</option>
-              <option value="50">{{ t("database.top") }} 50</option>
-            </select>
-            <button type="button" class="console-clear-btn" :disabled="statsLoading" @click="refreshStats">
-              {{ statsLoading ? t("common.refreshing") : t("database.refreshStats") }}
-            </button>
-            <button type="button" class="console-clear-btn" @click="closeStatsModal">{{ t("common.close") }}</button>
-          </div>
-        </header>
 
-        <div class="db-stats-modal-body">
-          <div v-if="statsLoading" class="placeholder">{{ t("database.loadingStats") }}</div>
-          <div v-else-if="statsError" class="placeholder">{{ statsError }}</div>
-          <section v-else class="db-analytics">
-          <div class="db-analytics-grid">
-            <div class="db-card db-analytics-card">
-              <h3>{{ t("database.overview") }}</h3>
-              <div class="db-grid compact">
-                <div v-for="item in overviewCards" :key="item.label">
-                  <span>{{ item.label }}</span>
-                  <strong>{{ item.value }}</strong>
-                </div>
-              </div>
-            </div>
-
-            <div class="db-card db-analytics-card">
-              <h3>{{ t("database.breakdowns") }}</h3>
-              <div class="db-analytics-body">
-                <section class="db-analytics-block">
-                  <h4>{{ t("database.permissionGroups") }}</h4>
-                  <div v-if="stats?.breakdowns?.permissionGroups?.length" class="db-chip-wrap">
-                    <span v-for="item in stats.breakdowns.permissionGroups" :key="item.permissionGroup" class="db-chip">
-                      <span>{{ item.permissionGroup }}</span>
-                      <small>{{ formatNumber(item.players) }}</small>
-                    </span>
-                  </div>
-                  <div v-else class="placeholder">{{ t("common.noData") }}</div>
-                </section>
-
-                <section class="db-analytics-block">
-                  <h4>{{ t("database.roleTags") }}</h4>
-                  <div v-if="stats?.breakdowns?.roleTags?.length" class="db-chip-wrap">
-                    <span v-for="item in stats.breakdowns.roleTags" :key="item.tagValue" class="db-chip">
-                      <span>{{ item.tagValue }}</span>
-                      <small>{{ formatNumber(item.players) }}</small>
-                    </span>
-                  </div>
-                  <div v-else class="placeholder">{{ t("common.noData") }}</div>
-                </section>
-
-                <section class="db-analytics-block">
-                  <h4>{{ t("database.componentTags") }}</h4>
-                  <div v-if="stats?.breakdowns?.componentTags?.length" class="db-chip-wrap">
-                    <span v-for="item in stats.breakdowns.componentTags" :key="item.tagValue" class="db-chip">
-                      <span>{{ item.tagValue }}</span>
-                      <small>{{ formatNumber(item.players) }}</small>
-                    </span>
-                  </div>
-                  <div v-else class="placeholder">{{ t("common.noData") }}</div>
-                </section>
-
-                <section class="db-analytics-block">
-                  <h4>{{ t("database.violationTypes") }}</h4>
-                  <div v-if="stats?.breakdowns?.violationTypes?.length" class="db-chip-wrap">
-                    <span v-for="item in stats.breakdowns.violationTypes" :key="item.violationKey" class="db-chip">
-                      <span>{{ item.violationLabel || item.violationKey }}</span>
-                      <small>{{ formatNumber(item.totalCount) }}</small>
-                    </span>
-                  </div>
-                  <div v-else class="placeholder">{{ t("common.noData") }}</div>
-                </section>
-              </div>
-            </div>
-
-            <div class="db-card db-analytics-card">
-              <h3>{{ t("database.leaderboards") }}</h3>
-              <div class="db-analytics-body">
-                <section class="db-analytics-block">
-                  <h4>{{ t("database.playtime") }}</h4>
-                  <ol v-if="stats?.leaderboards?.byPlaytime?.length" class="db-rank-list">
-                    <li v-for="item in stats.leaderboards.byPlaytime" :key="item.id">
-                      <button type="button" class="name db-rank-player" @click="jumpToPlayerFromStats(item.id)">
-                        {{ item.currentName || item.steamID || item.eosID || t("common.unknown") }}
-                      </button>
-                      <span class="value">{{ formatHoursFromSeconds(item.gameSeconds) }}</span>
-                    </li>
-                  </ol>
-                  <div v-else class="placeholder">{{ t("common.noData") }}</div>
-                </section>
-
-                <section class="db-analytics-block">
-                  <h4>{{ t("database.violations") }}</h4>
-                  <ol v-if="stats?.leaderboards?.byViolations?.length" class="db-rank-list">
-                    <li v-for="item in stats.leaderboards.byViolations" :key="item.playerId">
-                      <button type="button" class="name db-rank-player" @click="jumpToPlayerFromStats(item.playerId)">
-                        {{ item.currentName || item.steamID || item.eosID || t("common.unknown") }}
-                      </button>
-                      <span class="value">{{ t("database.violations") }} {{ formatNumber(item.totalViolations) }}</span>
-                    </li>
-                  </ol>
-                  <div v-else class="placeholder">{{ t("common.noData") }}</div>
-                </section>
-              </div>
-            </div>
-
-            <div class="db-card db-analytics-card">
-              <h3>{{ t("database.trends") }}</h3>
-              <div class="db-analytics-body">
-                <section class="db-analytics-block">
-                  <h4>{{ t("database.matchesByDay") }}</h4>
-                  <ul v-if="stats?.trends?.matchesByDay?.length" class="db-trend-list">
-                    <li v-for="item in stats.trends.matchesByDay" :key="item.day">
-                      <span class="name">{{ item.day }}</span>
-                      <span class="value">{{ t("database.matches") }} {{ formatNumber(item.matchCount) }} · {{ t("common.updated") }} {{ formatNumber(item.completedCount) }}</span>
-                    </li>
-                  </ul>
-                  <div v-else class="placeholder">{{ t("common.noData") }}</div>
-                </section>
-              </div>
-            </div>
-          </div>
-          </section>
-        </div>
-      </section>
-    </div>
+    <PlayerDatabaseStatsModal
+      v-model:days="statsDays"
+      v-model:top="statsTop"
+      :open="showStatsModal"
+      :loading="statsLoading"
+      :error="statsError"
+      :stats="stats"
+      :subtitle="statsSubtitle"
+      @close="closeStatsModal"
+      @refresh="loadStats"
+      @jump="jumpToPlayerFromStats"
+    />
   </section>
 </template>
 
@@ -332,11 +50,12 @@ import { ApiError, apiGet } from "../app/apiClient";
 import { queryClient } from "../app/queryClient";
 import { renderApiError } from "../app/errors";
 import { useServerStore } from "../stores/server.store";
-import { useUiStore } from "../stores/ui.store";
 import { usePlayerDatabaseQuery } from "../composables/usePlayerDatabaseQuery";
-import { useIpLookup } from "../composables/useIpLookup";
-import { copyTextWithToast } from "../utils/clipboard";
-import { collectIps, formatIpSummary, isPrivateIp, normalizeIp } from "../utils/ip";
+import PlayerDatabaseStats from "../components/player-database/PlayerDatabaseStats.vue";
+import PlayerDatabaseToolbar from "../components/player-database/PlayerDatabaseToolbar.vue";
+import PlayerDatabaseList from "../components/player-database/PlayerDatabaseList.vue";
+import PlayerDatabaseDetail from "../components/player-database/PlayerDatabaseDetail.vue";
+import PlayerDatabaseStatsModal from "../components/player-database/PlayerDatabaseStatsModal.vue";
 import { currentLocale, t } from "../i18n";
 
 const filters = reactive({
@@ -354,7 +73,6 @@ const statsError = ref("");
 const stats = ref<any | null>(null);
 const route = useRoute();
 const server = useServerStore();
-const ui = useUiStore();
 
 const statsSubtitle = computed(() => {
   const generatedAt = stats.value?.generatedAt ? formatTime(stats.value.generatedAt) : t("common.notLoaded");
@@ -365,8 +83,6 @@ const statsSubtitle = computed(() => {
   });
 });
 
-const syncText = ref(t("common.loading"));
-const syncTone = ref<"idle" | "ok" | "warn" | "error">("idle");
 const selectedId = ref<number | null>(null);
 
 const { query } = usePlayerDatabaseQuery(filters);
@@ -374,19 +90,6 @@ const { query } = usePlayerDatabaseQuery(filters);
 const rows = computed(() => query.data.value?.items ?? query.data.value?.players ?? []);
 const listLoading = computed(() => query.isLoading.value && !rows.value.length);
 const listError = computed(() => (query.error.value && !rows.value.length ? renderApiError(query.error.value, t("common.error")) : ""));
-
-const identityDisplay = computed(() => {
-  const config = server.snapshot.webStatus?.playerIdentityDisplay ?? server.snapshot.playerIdentityDisplay ?? {};
-  return {
-    showIpInList: config.showIpInList !== false,
-    showIpInDetail: config.showIpInDetail !== false,
-    showIpGeo: config.showIpGeo !== false,
-  };
-});
-
-const showIpInList = computed(() => identityDisplay.value.showIpInList);
-const showIpInDetail = computed(() => identityDisplay.value.showIpInDetail);
-const showIpGeo = computed(() => identityDisplay.value.showIpGeo);
 
 const detailQuery = useQuery({
   queryKey: computed(() => ["player-database-detail", selectedId.value]),
@@ -409,17 +112,6 @@ const detailError = computed(() => {
   return renderApiError(error, t("common.error"));
 });
 
-const currentIp = computed(() => detail.value?.player?.current_ip || detail.value?.ips?.[0]?.ip || "--");
-const listLookupIps = computed(() => (showIpGeo.value ? collectIps(rows.value.map((player) => player.current_ip || player.ip)) : []));
-const detailLookupIps = computed(() => {
-  if (!showIpGeo.value || !detail.value) return [];
-  return collectIps([
-    detail.value?.player?.current_ip,
-    ...(detail.value?.ips ?? []).map((item: any) => item.ip),
-  ]);
-});
-const listIpLookupQuery = useIpLookup(listLookupIps, { enabled: showIpGeo });
-const detailIpLookupQuery = useIpLookup(detailLookupIps, { enabled: showIpGeo });
 const overviewCards = computed(() => {
   const overview = stats.value?.overview ?? null;
   return [
@@ -430,8 +122,6 @@ const overviewCards = computed(() => {
     { label: t("database.serverTime"), value: overview ? formatHoursFromSeconds(overview.totalServerSeconds ?? 0) : "--" },
   ];
 });
-
-const currentIpSummary = computed(() => ipDetailSummary(currentIp.value));
 
 watch(
   () => route.query.q,
@@ -475,24 +165,6 @@ async function retryDetail() {
   await detailQuery.refetch();
 }
 
-function buildIpSearchUrl(value: unknown) {
-  const ip = normalizeIp(value);
-  if (!ip || ip === "--") return "";
-
-  return `https://www.baidu.com/s?wd=${encodeURIComponent(`IP查询 ${ip}`)}`;
-}
-
-async function inspectIp(value: unknown) {
-  const ip = normalizeIp(value);
-  if (!ip || ip === "--") return;
-
-  await copyTextWithToast(ip, ui, {
-    label: "IP",
-    successMessage: `已复制 IP：${ip}`,
-    errorMessage: "无法复制 IP。",
-  });
-}
-
 async function openStatsModal() {
   showStatsModal.value = true;
   await loadStats();
@@ -511,17 +183,11 @@ async function loadStats() {
       top: String(statsTop.value),
     });
     stats.value = await apiGet<any>(`/api/db/stats?${params.toString()}`);
-    setSyncStatus(t("database.refreshStats"), "ok");
   } catch (error) {
     statsError.value = renderApiError(error, t("common.error"));
-    setSyncStatus(statsError.value, "error");
   } finally {
     statsLoading.value = false;
   }
-}
-
-async function refreshStats() {
-  await loadStats();
 }
 
 async function jumpToPlayerFromStats(playerId: number) {
@@ -529,22 +195,10 @@ async function jumpToPlayerFromStats(playerId: number) {
   await openPlayer(playerId);
 }
 
-function setSyncStatus(text: string, tone: "idle" | "ok" | "warn" | "error" = "idle") {
-  syncText.value = text;
-  syncTone.value = tone;
-}
-
 function formatTime(value: unknown) {
   const time = Number(value ?? 0);
   if (!time) return "--";
   return new Date(time).toLocaleString(currentLocale.value);
-}
-
-function formatSeconds(value: unknown) {
-  const totalSeconds = Math.max(0, Math.floor(Number(value ?? 0)));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  return `${totalSeconds}s (${hours}h ${minutes}m)`;
 }
 
 function formatHoursFromSeconds(value: unknown) {
@@ -554,511 +208,51 @@ function formatHoursFromSeconds(value: unknown) {
 function formatNumber(value: unknown) {
   return new Intl.NumberFormat(currentLocale.value).format(Number(value ?? 0));
 }
-
-function lookupItem(ip: unknown, map: Record<string, any>) {
-  const key = normalizeIp(ip);
-  if (!key) return null;
-  return map[key] ?? null;
-}
-
-function listIpSummary(player: any) {
-  const ip = player?.current_ip || player?.ip;
-  const item = lookupItem(ip, listIpLookupQuery.items.value ?? {});
-  if (!item && !isPrivateIp(ip)) return showIpGeo.value ? t("common.unknown") : "";
-  return formatIpSummary(item ?? (isPrivateIp(ip) ? { ip: String(ip ?? ""), isPrivate: true, source: "private", provider: "none", country: "", region: "", city: "", isp: "", org: "", asn: "", timezone: "", latitude: null, longitude: null, isProxy: null, isHosting: null, updatedAt: 0, error: "" } : null), showIpGeo.value);
-}
-
-function ipDetailSummary(ip: unknown) {
-  const item = lookupItem(ip, detailIpLookupQuery.items.value ?? {});
-  if (!item && !isPrivateIp(ip)) return showIpGeo.value ? t("common.unknown") : "";
-  return formatIpSummary(item ?? (isPrivateIp(ip) ? { ip: String(ip ?? ""), isPrivate: true, source: "private", provider: "none", country: "", region: "", city: "", isp: "", org: "", asn: "", timezone: "", latitude: null, longitude: null, isProxy: null, isHosting: null, updatedAt: 0, error: "" } : null), showIpGeo.value);
-}
-
-function ipSourceLabel(ip: unknown) {
-  const item = lookupItem(ip, detailIpLookupQuery.items.value ?? {}) ?? lookupItem(ip, listIpLookupQuery.items.value ?? {});
-  if (!item) {
-    return isPrivateIp(ip) ? `${t("common.source")} private / none` : t("database.sourceUnknown");
-  }
-  return `${t("common.source")} ${item.source} / ${item.provider}`;
-}
-
-async function copyIp(value: unknown) {
-  const text = String(value ?? "").trim();
-  if (!text || text === "--") return;
-  await copyTextWithToast(text, ui, {
-    label: `${t("player.ip")} ${t("common.copied")}`,
-    successMessage: text,
-  });
-}
-
-function fieldLabel(key: string, fallback?: string) {
-  return t(`field.${key}`, fallback ?? key);
-}
-
 </script>
 
 <style scoped>
 .db-page {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   height: 100%;
+  min-height: 0;
+  padding: 16px;
+  overflow: hidden;
+  background: var(--app-background);
+}
+
+.db-main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 380px minmax(0, 1fr);
+  gap: 16px;
   min-height: 0;
   overflow: hidden;
 }
 
-.db-overview-card,
-.db-toolbar-card,
-.db-card,
-.db-stats-modal-card {
-  border: 1px solid rgba(42, 49, 68, 0.84);
-  border-radius: 14px;
-  background: rgba(11, 15, 22, 0.88);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.18);
-}
-
-.db-overview-card {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 8px;
-  padding: 8px;
-}
-
-.db-stat-item {
-  border: 1px solid rgba(42, 49, 68, 0.82);
+.db-sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border-default);
   border-radius: 12px;
-  padding: 7px 8px;
-  display: grid;
-  gap: 3px;
 }
 
-.db-stat-item span,
-.db-grid span,
-.db-list-mini small,
-.db-row-meta,
-.db-stats-modal-head p,
-.placeholder {
-  color: #8a93a8;
-  font-size: 11px;
-}
-
-.db-stat-item strong,
-.db-grid strong {
-  font-size: 14px;
-  color: #edf2f4;
-}
-
-.db-toolbar-card {
-  padding: 8px;
-}
-
-.db-toolbar-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.db-panel {
-  display: grid;
-  grid-template-columns: 360px minmax(0, 1fr);
-  gap: 10px;
+.db-content {
   min-height: 0;
-  height: 100%;
-  overflow: hidden;
-  border: 1px solid rgba(42, 49, 68, 0.84);
-  border-radius: 14px;
-}
-
-.db-list-col {
-  border-right: 1px solid rgba(42, 49, 68, 0.84);
-  background: rgba(10, 14, 20, 0.92);
-  padding: 6px;
-  display: grid;
-  gap: 6px;
-  align-content: start;
-  min-height: 0;
-  height: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-.db-detail-col {
-  padding: 10px;
-  display: grid;
-  gap: 10px;
-  align-content: start;
-  min-height: 0;
-  height: 100%;
   overflow: hidden;
 }
 
-.db-detail-scroll {
-  min-height: 0;
-  height: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
-  display: grid;
-  gap: 10px;
-  align-content: start;
-  padding-right: 4px;
-}
-
-.db-row {
-  text-align: left;
-  border: 1px solid rgba(42, 49, 68, 0.84);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
-  padding: 7px 9px;
-  display: grid;
-  gap: 3px;
-  color: #edf2f4;
-  min-height: unset;
-}
-
-.db-row.active {
-  border-color: rgba(101, 140, 255, 0.72);
-  background: rgba(88, 126, 255, 0.14);
-}
-
-.db-row-name {
-  font-weight: 700;
-  font-size: 13px;
-  line-height: 1.25;
-}
-
-.db-row-ip {
-  display: grid;
-  gap: 5px;
-  padding-top: 2px;
-  margin-top: 2px;
-  font-size: 11px;
-}
-
-.db-ip-clickable {
-  display: inline-flex;
-  align-items: center;
-  max-width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  text-decoration: none;
-  cursor: pointer;
-  user-select: text;
-  word-break: break-word;
-}
-
-.db-ip-clickable:hover {
-  text-decoration: underline;
-}
-
-.db-ip-clickable.strong {
-  font-weight: 700;
-}
-
-.db-ip-clickable:disabled {
-  cursor: default;
-  opacity: 0.65;
-  text-decoration: none;
-}
-
-.db-copy-link {
-  width: fit-content;
-  border: 0;
-  background: transparent;
-  color: #8bb6ff;
-  padding: 2px 5px;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.db-copy-link:disabled {
-  color: #6f7a8f;
-  cursor: not-allowed;
-}
-
-.db-ip-field {
-  display: grid;
-  gap: 3px;
-}
-
-.db-ip-line {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.db-ip-field small,
-.db-history-list small,
-.db-login-list small {
-  color: #8a93a8;
-  font-size: 10.5px;
-  line-height: 1.25;
-}
-
-.db-detail-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-}
-
-.db-detail-head h2,
-.db-card h3,
-.db-stats-modal-head h2 {
-  margin: 0;
-}
-
-.db-detail-head h2 {
-  font-size: 18px;
-}
-
-.db-detail-head p {
-  margin: 3px 0 0;
-  color: #8a93a8;
-  font-size: 11px;
-}
-
-.db-card {
-  padding: 10px 12px;
-  border-radius: 10px;
-}
-
-.db-card h3 {
-  font-size: 13px;
-  margin-bottom: 8px;
-}
-
-.db-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.db-grid.compact {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.db-grid > div {
-  border: 1px solid rgba(42, 49, 68, 0.78);
-  border-radius: 8px;
-  padding: 7px 8px;
-  display: grid;
-  gap: 3px;
-}
-
-.db-detail-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.db-list-mini,
-.db-history-list,
-.db-login-list,
-.db-rank-list,
-.db-trend-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 6px;
-}
-
-.db-list-mini li,
-.db-history-list li,
-.db-login-list li,
-.db-rank-list li,
-.db-trend-list li {
-  border: 1px solid rgba(42, 49, 68, 0.82);
-  border-radius: 8px;
-  padding: 7px 8px;
-  display: grid;
-  gap: 4px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.db-history-head,
-.db-login-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.db-history-head div,
-.db-login-head div {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.db-history-head strong,
-.db-login-head strong {
-  word-break: break-word;
-  font-size: 12px;
-}
-
-.db-chip-wrap {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.db-chip {
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-  padding: 4px 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(108, 122, 160, 0.22);
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.db-analytics {
-  margin-top: 10px;
-}
-
-.db-analytics-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.db-analytics-card {
-  width: auto;
-}
-
-.db-analytics-body {
-  display: grid;
-  gap: 8px;
-}
-
-.db-analytics-block {
-  border: 1px solid rgba(42, 49, 68, 0.82);
-  border-radius: 10px;
-  padding: 8px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.db-analytics-block h4 {
-  margin: 0 0 6px;
-  font-size: 11px;
-  color: #8a93a8;
-}
-
-.db-rank-player {
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: #edf2f4;
-  cursor: pointer;
-}
-
-.db-rank-player:hover {
-  color: #8bb6ff;
-  text-decoration: underline;
-}
-
-.db-stats-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 120;
-  display: grid;
-  place-items: center;
-  padding: 14px;
-}
-
-.db-stats-modal-backdrop {
-  position: absolute;
-  inset: 0;
-  border: 0;
-  background: rgba(7, 10, 16, 0.68);
-  backdrop-filter: blur(2px);
-}
-
-.db-stats-modal-card {
-  position: relative;
-  width: min(1280px, calc(100vw - 28px));
-  max-height: calc(100vh - 48px);
-  overflow: hidden;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  padding: 12px;
-}
-
-.db-stats-modal-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.db-stats-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.db-stats-modal-body {
-  min-height: 0;
-  overflow-y: auto;
-  padding-top: 12px;
-}
-
-.db-error-block {
-  display: grid;
-  gap: 10px;
-}
-
-@media (max-width: 1280px) {
-  .db-overview-card {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .db-analytics-grid {
+@media (max-width: 1000px) {
+  .db-main {
     grid-template-columns: 1fr;
   }
-}
-
-@media (max-width: 920px) {
-  .db-panel {
-    grid-template-columns: 1fr;
-  }
-
-  .db-list-col {
-    border-right: 0;
-    border-bottom: 1px solid rgba(42, 49, 68, 0.84);
-  }
-
-  .db-grid,
-  .db-detail-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 760px) {
-  .db-overview-card,
-  .db-grid.compact {
-    grid-template-columns: 1fr;
-  }
-
-  .db-toolbar-row > * {
-    width: 100%;
-  }
-
-  .db-stats-modal {
-    padding: 10px;
-  }
-
-  .db-stats-modal-card {
-    width: min(100vw - 20px, 100%);
+  
+  .db-sidebar {
+    max-height: 400px;
   }
 }
 </style>
-
