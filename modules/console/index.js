@@ -125,6 +125,16 @@ export function createConsoleModule({ core, config }) {
             label: "Output",
           });
         }
+        
+        // Also push to modules stream for visibility
+        push({
+          stream: "modules",
+          channel: "rcon",
+          level: "info",
+          message: `Executed RCON: ${commandText}`,
+          scope: "WebConsole",
+          label: "RCON",
+        });
       } else {
         const lines = String(result.message || "Unknown error").split(/\r?\n/);
         for (const line of lines) {
@@ -204,26 +214,74 @@ export function createConsoleModule({ core, config }) {
 
       if (core.eventBus?.onCoreEvent) {
         unsubscribers.push(core.eventBus.onCoreEvent("*", (event) => {
-          if (event?.eventName !== "On_RawLogLine") return;
+          if (event?.eventName === "On_RawLogLine") {
+            const rawSource = getEventParam(event, "Source") || "Squad.log";
+            const rawChannel = getEventParam(event, "Channel") || extractChannel(event.rawLog ?? event.rawEvent?.Raw ?? "");
 
-          const rawSource = getEventParam(event, "Source") || "Squad.log";
-          const rawChannel = getEventParam(event, "Channel") || extractChannel(event.rawLog ?? event.rawEvent?.Raw ?? "");
+            push({
+              stream: "raw-log",
+              channel: rawChannel || "raw-log",
+              level: event.rawEvent?.RawTruncated === "true" ? "warn" : "info",
+              time: event.time || new Date().toISOString(),
+              message: event.rawLog ?? event.rawEvent?.Raw ?? "",
+              scope: rawChannel || rawSource,
+              source: rawSource,
+              moduleId: "logpost.raw",
+              eventName: event.eventName,
+              logTime: event.logTime,
+              rawChannel,
+              rawSource,
+              rawTruncated: event.rawEvent?.RawTruncated === "true",
+            });
+            return;
+          }
 
-          push({
-            stream: "raw-log",
-            channel: rawChannel || "raw-log",
-            level: event.rawEvent?.RawTruncated === "true" ? "warn" : "info",
-            time: event.time || new Date().toISOString(),
-            message: event.rawLog ?? event.rawEvent?.Raw ?? "",
-            scope: rawChannel || rawSource,
-            source: rawSource,
-            moduleId: "logpost.raw",
-            eventName: event.eventName,
-            logTime: event.logTime,
-            rawChannel,
-            rawSource,
-            rawTruncated: event.rawEvent?.RawTruncated === "true",
-          });
+          if (event?.eventName === "CHAT_MESSAGE") {
+            const p = event.payload || {};
+            push({
+              stream: "modules",
+              channel: "chat",
+              level: "info",
+              time: event.time,
+              message: `[${p.channel}] ${p.name}: ${p.message}`,
+              scope: p.channel || "Chat",
+              label: "Chat",
+              tags: ["chat", p.channel?.toLowerCase()].filter(Boolean),
+              playerName: p.name,
+              steamID: p.steamid,
+              eosID: p.eosid,
+            });
+            return;
+          }
+
+          if (event?.eventName === "TEAM_KILL") {
+            const p = event.payload || {};
+            push({
+              stream: "modules",
+              channel: "rcon",
+              level: "warn",
+              time: event.time,
+              message: `TEAM KILL: ${p.killerName} killed ${p.victimName}`,
+              scope: "TeamKill",
+              label: "TK",
+              tags: ["tk"],
+              killerName: p.killerName,
+              victimName: p.victimName,
+            });
+            return;
+          }
+
+          if (["SQUAD_CREATED", "POSSESSED_ADMIN_CAM", "UNPOSSESSED_ADMIN_CAM"].includes(event?.eventName)) {
+            push({
+              stream: "modules",
+              channel: "rcon",
+              level: "info",
+              time: event.time,
+              message: `${event.eventName}: ${JSON.stringify(event.payload)}`,
+              scope: "RCON",
+              label: "Event",
+            });
+          }
         }));
       }
 

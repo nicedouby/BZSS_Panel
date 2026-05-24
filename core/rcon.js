@@ -357,6 +357,11 @@ export default class Rcon extends EventEmitter {
         break;
 
       default:
+        // Also check ID for chat packets as some implementations vary
+        if (packet.id === SERVERDATA_CHAT_VALUE) {
+          this._processChatPacket(packet);
+          break;
+        }
         this._onClose("unknown packet type");
     }
   }
@@ -374,7 +379,12 @@ export default class Rcon extends EventEmitter {
       const decoded = this._decodePacket(raw);
       const matched = this._callbackIds.some((c) => c.id === decoded.count);
 
-      if (matched || [SERVERDATA_AUTH_RESPONSE, SERVERDATA_CHAT_VALUE].includes(decoded.type)) {
+      if (
+        matched || 
+        decoded.type === SERVERDATA_AUTH_RESPONSE || 
+        decoded.type === SERVERDATA_CHAT_VALUE || 
+        decoded.id === SERVERDATA_CHAT_VALUE
+      ) {
         this._onPacket(decoded);
         this._incomingData = this._incomingData.subarray(packetSize);
         continue;

@@ -25,7 +25,9 @@ function nowString() {
 export default class SquadRcon extends Rcon {
   _processChatPacket(packet) {
     const time = nowString();
-    const body = packet.body;
+    const body = String(packet.body || "").trim();
+
+    if (!body) return;
 
     const nativeIsTeamKill = isTeamKillMessage(body);
 
@@ -52,7 +54,7 @@ export default class SquadRcon extends Rcon {
       return;
     }
 
-    const matchTeamKill = body.match(/\[ChatAdmin]\s+ASQKillDeathRuleset\s+:\s+Player\s+(?<killerName>.*?)\s+Team Killed Player\s+(?<victimName>.*)/i);
+    const matchTeamKill = body.match(/\[ChatAdmin\]\s+ASQKillDeathRuleset\s+:\s+Player\s+(?<killerName>.*?)\s+Team Killed Player\s+(?<victimName>.*)/i);
     if (matchTeamKill) {
       const killerName = matchTeamKill.groups?.killerName?.trim() || "";
       const victimName = matchTeamKill.groups?.victimName?.trim() || "";
@@ -68,24 +70,29 @@ export default class SquadRcon extends Rcon {
       return;
     }
 
-    const matchChat = body.match(/\[(ChatAll|ChatTeam|ChatSquad|ChatAdmin)] \[Online IDs:([^\]]+)] (.+?) : (.*)/);
+    const matchChat = body.match(/\[(ChatAll|ChatTeam|ChatSquad|ChatAdmin)\]\s*\[Online Ids:([^\]]+)\]\s*(.+?)\s*:\s*(.*)/i)
+      || body.match(/\[(ChatAll|ChatTeam|ChatSquad|ChatAdmin)\]\s*(.+?)\s*:\s*(.*)/i);
+
     if (matchChat) {
+      const hasIds = matchChat.length === 5;
       const result = {
         channel: matchChat[1],
-        name: matchChat[3],
-        message: matchChat[4],
+        name: hasIds ? matchChat[3] : matchChat[2],
+        message: hasIds ? matchChat[4] : matchChat[3],
         time,
       };
 
-      iterateIDs(matchChat[2]).forEach((platform, id) => {
-        result[lowerID(platform)] = id;
-      });
+      if (hasIds) {
+        iterateIDs(matchChat[2]).forEach((platform, id) => {
+          result[lowerID(platform)] = id;
+        });
+      }
 
       this.emit("CHAT_MESSAGE", result);
       return;
     }
 
-    const matchCamOn = body.match(/\[Online Ids:([^\]]+)] (.+) has possessed admin camera\./);
+    const matchCamOn = body.match(/\[Online Ids:([^\]]+)\]\s*(.+) has possessed admin camera\./i);
     if (matchCamOn) {
       const result = { name: matchCamOn[2], time };
       iterateIDs(matchCamOn[1]).forEach((platform, id) => {
@@ -95,7 +102,7 @@ export default class SquadRcon extends Rcon {
       return;
     }
 
-    const matchCamOff = body.match(/\[Online IDs:([^\]]+)] (.+) has unpossessed admin camera\./);
+    const matchCamOff = body.match(/\[Online Ids:([^\]]+)\]\s*(.+) has unpossessed admin camera\./i);
     if (matchCamOff) {
       const result = { name: matchCamOff[2], time };
       iterateIDs(matchCamOff[1]).forEach((platform, id) => {

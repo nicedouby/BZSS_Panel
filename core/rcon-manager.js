@@ -193,6 +193,17 @@ export class RconManager {
         }
 
         const normalizedPayload = normalizeRconPayload(eventName, payload);
+        
+        // Also emit as native log for better debugging visibility in the console
+        if (eventName === "CHAT_MESSAGE") {
+          this.emitNativeLog({
+            level: "push",
+            message: `[CHAT] ${payload.channel} | ${payload.name}: ${payload.message}`,
+            source: "core.rconManager",
+            label: "Chat",
+          });
+        }
+
         this.logger.debug(() => `Forwarding ${eventName}`, {
           operation: "forwardEvent",
           eventName,
