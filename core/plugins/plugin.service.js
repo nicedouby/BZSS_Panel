@@ -1,9 +1,8 @@
-import { pluginCatalog } from "./plugin.store.js";
+import { pluginCatalog as staticCatalog } from "./plugin.store.js";
 
 const pluginState = new Map();
 
-function ensureState(pluginId) {
-  const catalogItem = pluginCatalog.find((plugin) => plugin.id === pluginId);
+function ensureState(pluginId, catalogItem) {
   const current = pluginState.get(pluginId) ?? {};
   const next = {
     enabled: current.enabled ?? Boolean(catalogItem?.enabled ?? true),
@@ -16,27 +15,51 @@ function ensureState(pluginId) {
   return next;
 }
 
-export function getAllPlugins({ subscriptionsApi } = {}) {
-  return pluginCatalog.map((plugin) => {
-    const state = ensureState(plugin.id);
-    const subscribed = resolveSubscribed(plugin.id, subscriptionsApi, state.subscribed);
+export function getAllPlugins({ subscriptionsApi, pluginManager } = {}) {
+  // 汇总所有可能的插件源
+  const dynamicCatalog = pluginManager?.catalog ?? [];
+  const allIds = new Set([
+    ...staticCatalog.map(p => p.id),
+    ...dynamicCatalog.map(p => p.id)
+  ]);
+
+  const list = Array.from(allIds).map(id => {
+    const staticItem = staticCatalog.find(p => p.id === id);
+    const dynamicItem = dynamicCatalog.find(p => p.id === id);
+    
+    // 合并元数据，动态扫描的优先
+    const merged = {
+      ...(staticItem ?? {}),
+      ...(dynamicItem ?? {}),
+    };
+
+    const state = ensureState(id, merged);
+    const subscribed = resolveSubscribed(id, subscriptionsApi, state.subscribed);
+    
     return clonePlugin({
-      ...plugin,
+      ...merged,
       enabled: state.enabled,
       subscribed,
       status: normalizeStatus(state.status, state.enabled, subscribed),
-      config: cloneValue(state.config ?? plugin.config ?? {}),
+      config: cloneValue(state.config ?? merged.config ?? {}),
     });
   });
+
+  return list;
 }
 
 export function getPluginById(pluginId, options = {}) {
   return getAllPlugins(options).find((plugin) => plugin.id === pluginId);
 }
 
-export function setPluginEnabled(pluginId, enabled, { subscriptionsApi } = {}) {
-  const plugin = ensurePluginExists(pluginId);
-  const state = ensureState(pluginId);
+export function setPluginEnabled(pluginId, enabled, { subscriptionsApi, pluginManager, config } = {}) {
+  const catalog = getAllPlugins({ subscriptionsApi, pluginManager });
+  const plugin = catalog.find((item) => item.id === pluginId);
+  if (!plugin) {
+    throw new Error(`Plugin not found: ${pluginId}`);
+  }
+
+  const state = ensureState(pluginId, plugin);
   const subscribed = resolveSubscribed(pluginId, subscriptionsApi, state.subscribed);
   if (!subscribed) {
     throw new Error(`Plugin is not subscribed: ${pluginId}`);
@@ -46,12 +69,24 @@ export function setPluginEnabled(pluginId, enabled, { subscriptionsApi } = {}) {
   state.status = state.enabled ? "ok" : "disabled";
   pluginState.set(pluginId, state);
 
+  // 如果有 config 对象，尝试持久化到 config.json
+  if (config) {
+    const current = config.get(`plugins.${pluginId}`, {});
+    config.set(`plugins.${pluginId}`, { ...current, enabled: state.enabled });
+    config.save?.().catch(err => console.error(`Failed to save config: ${err.message}`));
+  }
+
   return toManifest(plugin, state, subscribed);
 }
 
-export function updatePluginConfig(pluginId, nextConfig, { subscriptionsApi } = {}) {
-  const plugin = ensurePluginExists(pluginId);
-  const state = ensureState(pluginId);
+export function updatePluginConfig(pluginId, nextConfig, { subscriptionsApi, pluginManager, config } = {}) {
+  const catalog = getAllPlugins({ subscriptionsApi, pluginManager });
+  const plugin = catalog.find((item) => item.id === pluginId);
+  if (!plugin) {
+    throw new Error(`Plugin not found: ${pluginId}`);
+  }
+
+  const state = ensureState(pluginId, plugin);
   const subscribed = resolveSubscribed(pluginId, subscriptionsApi, state.subscribed);
   if (!subscribed) {
     throw new Error(`Plugin is not subscribed: ${pluginId}`);
@@ -65,15 +100,14 @@ export function updatePluginConfig(pluginId, nextConfig, { subscriptionsApi } = 
   };
   pluginState.set(pluginId, state);
 
-  return toManifest(plugin, state, subscribed);
-}
-
-function ensurePluginExists(pluginId) {
-  const plugin = pluginCatalog.find((item) => item.id === pluginId);
-  if (!plugin) {
-    throw new Error(`Plugin not found: ${pluginId}`);
+  // 如果有 config 对象，尝试持久化到 config.json
+  if (config) {
+    const current = config.get(`plugins.${pluginId}`, {});
+    config.set(`plugins.${pluginId}`, { ...current, ...state.config });
+    config.save?.().catch(err => console.error(`Failed to save config: ${err.message}`));
   }
-  return plugin;
+
+  return toManifest(plugin, state, subscribed);
 }
 
 function resolveSubscribed(pluginId, subscriptionsApi, fallback) {

@@ -58,7 +58,10 @@
           </button>
           <span v-if="runtimeError" class="metric error optional">{{ runtimeError }}</span>
         </div>
-        <UserMenu @open-plugin-center="emit('open-plugin-center')" />
+        <UserMenu
+          @open-plugin-center="emit('open-plugin-center')"
+          @open-rcon-modal="emit('open-rcon-modal')"
+        />
       </div>
     </div>
   </header>
@@ -82,6 +85,7 @@ import { t } from "../../i18n";
 
 const emit = defineEmits<{
   (event: "open-plugin-center"): void;
+  (event: "open-rcon-modal"): void;
 }>();
 
 const server = useServerStore();

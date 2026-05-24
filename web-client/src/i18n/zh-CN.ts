@@ -158,6 +158,11 @@
     warn: "警告",
     error: "错误",
     filterLogs: "过滤日志",
+    rconCommandPlaceholder: "输入 RCON 命令 (例如: AdminBroadcast Hello)",
+    rconExecute: "执行",
+    rconExecuting: "执行中...",
+    rconExecuted: "命令已发送",
+    rconFailed: "执行失败",
   },
   match: {
     title: "对局状态",

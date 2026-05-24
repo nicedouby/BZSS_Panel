@@ -19,6 +19,9 @@
         <button type="button" class="menu-item" role="menuitem" @click="openSettings">
           {{ t("user.settings") }}
         </button>
+        <button type="button" class="menu-item" role="menuitem" @click="openRconModal">
+          执行命令
+        </button>
         <button type="button" class="menu-item" role="menuitem" @click="openPluginCenter">
           插件中心
         </button>
@@ -38,6 +41,7 @@ import { t } from "../../i18n";
 
 const emit = defineEmits<{
   (event: "open-plugin-center"): void;
+  (event: "open-rcon-modal"): void;
 }>();
 
 const auth = useAuthStore();
@@ -95,6 +99,11 @@ function removeWindowListeners() {
 async function openSettings() {
   closeMenu();
   settings.openDrawer();
+}
+
+function openRconModal() {
+  closeMenu();
+  emit("open-rcon-modal");
 }
 
 function openPluginCenter() {

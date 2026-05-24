@@ -325,6 +325,7 @@ export class WebServer {
     if (url.pathname === "/api/plugins" && req.method === "GET") {
       return this.json(res, 200, getAllPlugins({
         subscriptionsApi: this.core.pluginSubscriptions ?? this.modules.pluginSubscriptions ?? null,
+        pluginManager: this.core.pluginManager,
       }));
     }
 
@@ -519,6 +520,8 @@ export class WebServer {
       const action = pluginMatch[2];
       const body = await this.readJsonBody(req);
       const subscriptionsApi = this.core.pluginSubscriptions ?? this.modules.pluginSubscriptions ?? null;
+      const pluginManager = this.core.pluginManager;
+      const config = this.core.config;
 
       try {
         if (action === "enabled") {
@@ -528,7 +531,11 @@ export class WebServer {
               message: "enabled must be boolean",
             });
           }
-          return this.json(res, 200, updatePluginEnabled(pluginId, body.enabled, { subscriptionsApi }));
+          return this.json(res, 200, updatePluginEnabled(pluginId, body.enabled, {
+            subscriptionsApi,
+            pluginManager,
+            config
+          }));
         }
 
         if (!body.config || typeof body.config !== "object" || Array.isArray(body.config)) {
@@ -538,7 +545,11 @@ export class WebServer {
           });
         }
 
-        return this.json(res, 200, updatePluginManifestConfig(pluginId, body.config, { subscriptionsApi }));
+        return this.json(res, 200, updatePluginManifestConfig(pluginId, body.config, {
+          subscriptionsApi,
+          pluginManager,
+          config
+        }));
       } catch (error) {
         return this.json(res, 400, {
           error: "PluginUpdateFailed",
@@ -546,6 +557,7 @@ export class WebServer {
         });
       }
     }
+
 
     if (url.pathname === "/api/match/overview") {
       return this.json(res, 200, this.getMatchOverview());

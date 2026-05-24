@@ -33,11 +33,56 @@ export function createPlugin({ core, modules } = {}) {
     enabledByDefault: false,
     apiName: "udpEventForwarder",
     manifest: {
-      id: "plugin.udp_event_forwarder",
+      id: "udpEventForwarder",
       name: PLUGIN_NAME,
       kind: "plugin",
       version: "1.0.0",
       description: "Forward selected internal EventBus events to an external UDP receiver.",
+      category: "Network",
+      configSchema: [
+        {
+          key: "enabled",
+          label: "是否启用",
+          type: "boolean",
+          defaultValue: false,
+        },
+        {
+          key: "host",
+          label: "目标主机 (UDP Host)",
+          type: "string",
+          defaultValue: "127.0.0.1",
+        },
+        {
+          key: "port",
+          label: "目标端口 (UDP Port)",
+          type: "number",
+          defaultValue: 4000,
+        },
+        {
+          key: "serverId",
+          label: "服务器 ID",
+          type: "string",
+          defaultValue: "BZSS_Main",
+        },
+        {
+          key: "sendCombatEvents",
+          label: "发送战斗事件",
+          type: "boolean",
+          defaultValue: true,
+        },
+        {
+          key: "sendMapChanged",
+          label: "发送地图更换事件",
+          type: "boolean",
+          defaultValue: true,
+        },
+        {
+          key: "sendStatus",
+          label: "发送服务器状态",
+          type: "boolean",
+          defaultValue: true,
+        },
+      ],
     },
     api: {
       getStatus() {

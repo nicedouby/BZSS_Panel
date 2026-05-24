@@ -1,12 +1,14 @@
 // -*- coding: utf-8 -*-
 
 import path from "node:path";
+import fs from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 /**
  * Core: PluginManager
  *
- * 当前 plugins.paths 为空，因此不会加载插件。
+ * 管理插件的发现、加载和生命周期。
+ * 默认扫描 plugins/ 目录下的所有 .js 文件。
  */
 export class PluginManager {
   constructor({ core, modules, logger, config }) {
@@ -15,9 +17,86 @@ export class PluginManager {
     this.logger = logger;
     this.config = config;
     this.instances = [];
+    this.catalog = [];
+  }
+
+  /**
+   * 扫描 plugins 目录，收集所有插件的 manifest。
+   */
+  async scanPlugins() {
+    const pluginsDir = path.resolve(process.cwd(), "plugins");
+    this.logger.debug(`Scanning plugins directory: ${pluginsDir}`, {
+      operation: "scanPlugins",
+    });
+
+    try {
+      const files = await fs.readdir(pluginsDir);
+      const jsFiles = files.filter((f) => f.endsWith(".js") && !f.endsWith(".service.js") && !f.endsWith(".store.js"));
+
+      const results = [];
+      for (const file of jsFiles) {
+        const filePath = path.join("plugins", file);
+        const metadata = await this.getPluginMetadata(filePath);
+        if (metadata) {
+          results.push({
+            ...metadata,
+            path: filePath,
+          });
+        }
+      }
+
+      this.catalog = results;
+      return results;
+    } catch (error) {
+      this.logger.error(`Failed to scan plugins: ${error.message}`, {
+        operation: "scanPlugins",
+      });
+      return [];
+    }
+  }
+
+  /**
+   * 尝试获取单个插件文件的元数据。
+   */
+  async getPluginMetadata(pluginPath) {
+    const abs = path.resolve(process.cwd(), pluginPath);
+    try {
+      const mod = await import(pathToFileURL(abs).href);
+
+      if (typeof mod.createPlugin !== "function") {
+        return null;
+      }
+
+      // 临时初始化一个实例来获取 manifest
+      // 注意：这可能会导致一些副作用，但目前插件的 createPlugin 通常只是定义 api/manifest
+      const tempInstance = mod.createPlugin({
+        core: { ...this.core, logger: this.logger.child({ moduleId: "temp" }) },
+        modules: this.modules,
+        config: this.config,
+        logger: this.logger,
+      });
+
+      const manifest = tempInstance.manifest ?? {};
+      const pluginId = manifest.id ?? inferPluginId(pluginPath);
+
+      return {
+        id: pluginId,
+        name: manifest.name ?? pluginId,
+        version: manifest.version ?? "0.0.0",
+        description: manifest.description ?? "",
+        category: manifest.category ?? "Plugin",
+        configSchema: manifest.configSchema ?? [],
+        manifest,
+      };
+    } catch (error) {
+      this.logger.warn(`Failed to read metadata for ${pluginPath}: ${error.message}`);
+      return null;
+    }
   }
 
   async loadPlugins() {
+    await this.scanPlugins();
+
     const pluginConfig = this.config.get("plugins", {});
     if (!pluginConfig.enabled) {
       this.logger.info("Plugin system disabled.", {
@@ -26,16 +105,21 @@ export class PluginManager {
       return;
     }
 
-    const paths = pluginConfig.paths ?? [];
-    if (paths.length === 0) {
-      this.logger.info("No plugins configured.", {
-        operation: "loadPlugins",
-      });
-      return;
-    }
-
-    for (const pluginPath of paths) {
-      await this.loadPlugin(pluginPath);
+    // 优先使用 config.json 中的 paths，如果没有则加载 catalog 中所有已启用的插件
+    const explicitPaths = pluginConfig.paths ?? [];
+    
+    if (explicitPaths.length > 0) {
+      for (const pluginPath of explicitPaths) {
+        await this.loadPlugin(pluginPath);
+      }
+    } else {
+      // 自动加载逻辑：如果 catalog 中的插件在 config 中没有被明确禁用，则加载
+      for (const entry of this.catalog) {
+        const state = this.config.get(`plugins.${entry.id}`, {});
+        if (state.enabled !== false) {
+          await this.loadPlugin(entry.path);
+        }
+      }
     }
   }
 
@@ -48,51 +132,60 @@ export class PluginManager {
         abs,
       },
     });
-    const mod = await import(pathToFileURL(abs).href);
 
-    if (typeof mod.createPlugin !== "function") {
-      this.logger.warn(`Plugin missing createPlugin(): ${pluginPath}`, {
-        operation: "loadPlugin",
-      });
-      return;
-    }
+    try {
+      const mod = await import(pathToFileURL(abs).href);
 
-    const pluginId = inferPluginId(pluginPath);
-    const pluginLogger = this.core.createLogger?.({
-      moduleId: pluginId,
-      source: pluginId,
-      channel: "module",
-    }) ?? this.logger;
+      if (typeof mod.createPlugin !== "function") {
+        this.logger.warn(`Plugin missing createPlugin(): ${pluginPath}`, {
+          operation: "loadPlugin",
+        });
+        return;
+      }
 
-    const instance = mod.createPlugin({
-      core: {
-        logger: pluginLogger,
-        eventBus: this.core.eventBus,
+      const pluginId = inferPluginId(pluginPath);
+      const pluginLogger = this.core.createLogger?.({
+        moduleId: pluginId,
+        source: pluginId,
+        channel: "module",
+      }) ?? this.logger;
+
+      const instance = mod.createPlugin({
+        core: {
+          logger: pluginLogger,
+          eventBus: this.core.eventBus,
+          config: this.config,
+          pluginSubscriptions: this.core.pluginSubscriptions,
+          webRegistry: this.core.webRegistry,
+          pluginManager: this,
+          webStatus: this.core.webStatus,
+        },
+        modules: this.modules,
         config: this.config,
-        pluginSubscriptions: this.core.pluginSubscriptions,
-        webRegistry: this.core.webRegistry,
-        pluginManager: this,
-      },
-      modules: this.modules,
-      config: this.config,
-      logger: pluginLogger,
-    });
+        logger: pluginLogger,
+      });
 
-    if (instance.init) await instance.init();
-    if (instance.start) await instance.start();
+      if (instance.init) await instance.init();
+      if (instance.start) await instance.start();
 
-    this.instances.push(instance);
-    this.modules.pluginSubscriptions?.registerRuntimeItem?.({
-      ...(instance.manifest ?? {}),
-      status: "running",
-    });
-    pluginLogger.info(`Plugin loaded: ${instance.manifest?.id ?? pluginPath}`, {
-      label: "MODULE",
-      operation: "load",
-      data: {
-        pluginPath,
-      },
-    });
+      this.instances.push(instance);
+      this.modules.pluginSubscriptions?.registerRuntimeItem?.({
+        ...(instance.manifest ?? {}),
+        status: "running",
+      });
+
+      pluginLogger.info(`Plugin loaded: ${instance.manifest?.id ?? pluginId}`, {
+        label: "MODULE",
+        operation: "load",
+        data: {
+          pluginPath,
+        },
+      });
+      
+      return instance;
+    } catch (error) {
+      this.logger.error(`Failed to load plugin ${pluginPath}: ${error.stack}`);
+    }
   }
 
   async stopAll() {
@@ -108,6 +201,11 @@ export class PluginManager {
       });
       if (instance.stop) await instance.stop();
     }
+    this.instances = [];
+  }
+  
+  getInstances() {
+    return this.instances;
   }
 }
 
@@ -116,3 +214,4 @@ function inferPluginId(pluginPath) {
   if (!name) return "plugin.unknown";
   return name.startsWith("plugin.") ? name : `plugin.${name}`;
 }
+

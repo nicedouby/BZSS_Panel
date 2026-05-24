@@ -449,13 +449,6 @@
   },
   "plugins": {
     "enabled": true,
-    "paths": [
-      "./plugins/group-report.js",
-      "./plugins/weapon-collector.js",
-      "./plugins/udp_event_forwarder.js",
-      "./plugins/fair-squad-building.js",
-      "./plugins/match-snapshot.js"
-    ],
     "udpEventForwarder": {
       "enabled": true,
       "host": "114.66.18.134",

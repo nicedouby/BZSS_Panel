@@ -2,7 +2,10 @@
   <div class="app-shell" :class="{ collapsed: ui.sidebarCollapsed }">
     <Sidebar />
     <main class="main-shell">
-      <Topbar @open-plugin-center="pluginCenterOpen = true" />
+      <Topbar
+        @open-plugin-center="pluginCenterOpen = true"
+        @open-rcon-modal="rconModalOpen = true"
+      />
       <section class="content-shell" :class="contentShellClass">
         <RouterView />
       </section>
@@ -14,6 +17,10 @@
     <PluginCenterDrawer
       :open="pluginCenterOpen"
       @close="pluginCenterOpen = false"
+    />
+    <RconCommandModal
+      :open="rconModalOpen"
+      @close="rconModalOpen = false"
     />
   </div>
 </template>
@@ -30,10 +37,12 @@ import WarnPrompt from "../common/WarnPrompt.vue";
 import ToastHost from "../common/ToastHost.vue";
 import SettingsDrawer from "../settings/SettingsDrawer.vue";
 import PluginCenterDrawer from "../../features/plugins/PluginCenterDrawer.vue";
+import RconCommandModal from "../console/RconCommandModal.vue";
 
 const ui = useUiStore();
 const route = useRoute();
 const pluginCenterOpen = ref(false);
+const rconModalOpen = ref(false);
 
 const contentShellClass = computed(() => ({
   "full-bleed": Boolean(route.meta.fullBleed),

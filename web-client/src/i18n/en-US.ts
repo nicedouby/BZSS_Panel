@@ -159,6 +159,11 @@
     warn: "Warn",
     error: "Error",
     filterLogs: "Filter logs",
+    rconCommandPlaceholder: "Enter RCON command (e.g., AdminBroadcast Hello)",
+    rconExecute: "Execute",
+    rconExecuting: "Executing...",
+    rconExecuted: "Command sent",
+    rconFailed: "Execution failed",
   },
   match: {
     title: "Match Status",
