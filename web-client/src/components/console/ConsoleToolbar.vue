@@ -1,28 +1,25 @@
 <template>
-  <PageCard compact>
-    <div class="toolbar">
-      <div class="toolbar-row">
-        <select :value="stream" @change="$emit('update:stream', readValue($event))">
-          <option v-for="item in streams" :key="item.id" :value="item.id">{{ item.title }}</option>
-        </select>
-        <select :value="scope" @change="$emit('update:scope', readValue($event))">
-          <option v-for="item in scopes" :key="item.id" :value="item.id">{{ item.title }}</option>
-        </select>
-        <select :value="level" @change="$emit('update:level', readValue($event))">
-          <option v-for="item in levels" :key="item.id" :value="item.id">{{ item.title }}</option>
-        </select>
-        <input :value="q" :placeholder="t('console.filterLogs')" @input="$emit('update:q', readValue($event))">
-      </div>
-      <div class="toolbar-row end">
-        <button type="button" @click="$emit('clear')">{{ t("common.clear") }}</button>
-        <button type="button" @click="$emit('toggle-paused')">{{ paused ? t("common.resume") : t("common.pause") }}</button>
-      </div>
+  <div class="toolbar">
+    <div class="toolbar-row">
+      <select :value="stream" @change="$emit('update:stream', readValue($event))">
+        <option v-for="item in streams" :key="item.id" :value="item.id">{{ item.title }}</option>
+      </select>
+      <select :value="scope" @change="$emit('update:scope', readValue($event))">
+        <option v-for="item in scopes" :key="item.id" :value="item.id">{{ item.title }}</option>
+      </select>
+      <select :value="level" @change="$emit('update:level', readValue($event))">
+        <option v-for="item in levels" :key="item.id" :value="item.id">{{ item.title }}</option>
+      </select>
+      <input :value="q" :placeholder="t('console.filterLogs')" @input="$emit('update:q', readValue($event))">
     </div>
-  </PageCard>
+    <div class="toolbar-row end">
+      <button type="button" @click="$emit('clear')">{{ t("common.clear") }}</button>
+      <button type="button" @click="$emit('toggle-paused')">{{ paused ? t("common.resume") : t("common.pause") }}</button>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
-import PageCard from "../common/PageCard.vue";
 import { t } from "../../i18n";
 
 defineProps<{
@@ -52,14 +49,17 @@ function readValue(event: Event) {
 
 <style scoped>
 .toolbar {
-  display: grid;
-  gap: 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .toolbar-row {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .toolbar-row.end {
@@ -69,14 +69,35 @@ function readValue(event: Event) {
 select,
 input {
   min-width: 0;
-  border: 1px solid #38414c;
-  background: #11171d;
-  color: #edf2f4;
+  border: 1px solid #30363d;
+  background: #0d1117;
+  color: #c9d1d9;
   border-radius: 6px;
-  padding: 8px 10px;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+select:focus,
+input:focus {
+  border-color: #58a6ff;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.3);
 }
 
 input {
-  flex: 1 1 240px;
+  width: 200px;
+}
+
+button {
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #c9d1d9;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+button:hover {
+  background: #30363d;
+  border-color: #8b949e;
 }
 </style>

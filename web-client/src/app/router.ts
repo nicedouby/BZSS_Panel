@@ -26,7 +26,7 @@ export const router = createRouter({
         fullBleed: true,
       },
     },
-    { path: "/console", component: ConsolePage, meta: { titleKey: "routeTitle.console" } },
+    { path: "/console", component: ConsolePage, meta: { titleKey: "routeTitle.console", fullBleed: true } },
     { path: "/player-database", component: PlayerDatabasePage, meta: { titleKey: "routeTitle.playerDatabase" } },
     { path: "/combat-clean", component: CombatCleanPage, meta: { titleKey: "routeTitle.combatClean" } },
     { path: "/kill-manage", component: KillManagePage, meta: { titleKey: "routeTitle.killManage" } },

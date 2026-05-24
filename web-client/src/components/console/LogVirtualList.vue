@@ -1,34 +1,54 @@
 <template>
-  <PageCard class="log-card" compact>
+  <div class="log-container">
     <RecycleScroller
+      ref="scrollerRef"
       class="scroller"
       :items="lines"
-      :item-size="60"
+      :item-size="32"
       key-field="seq"
       v-slot="{ item }"
     >
       <article class="log-line" :class="[`level-${safeClass(item.level)}`, `stream-${safeClass(item.stream)}`]">
         <div class="line-meta">
-          <strong>#{{ item.seq }}</strong>
-          <span>{{ shortTime(item.time) }}</span>
-          <span>{{ item.scope || item.channel || item.stream || t("common.unknown", "app") }}</span>
-          <span>{{ item.level || t("console.info", "info") }}</span>
+          <strong class="seq">#{{ item.seq }}</strong>
+          <span class="time">{{ shortTime(item.time) }}</span>
+          <span class="scope">{{ item.scope || item.channel || item.stream || t("common.unknown", "app") }}</span>
+          <span class="level" v-if="item.level !== 'info'">{{ item.level }}</span>
         </div>
-        <div class="line-body">{{ lineMessage(item) }}</div>
+        <div class="line-body">
+          <span v-if="item.label" class="line-label">[{{ item.label }}]</span>
+          {{ lineMessage(item) }}
+        </div>
       </article>
     </RecycleScroller>
-  </PageCard>
+  </div>
 </template>
 
 <script setup lang="ts">
+import { ref, watch, nextTick } from "vue";
 import { RecycleScroller } from "vue-virtual-scroller";
 import type { ConsoleLine } from "../../composables/useConsoleLines";
-import PageCard from "../common/PageCard.vue";
 import { t } from "../../i18n";
 
-defineProps<{
+const props = defineProps<{
   lines: ConsoleLine[];
 }>();
+
+const scrollerRef = ref<any>(null);
+const autoScroll = ref(true);
+
+watch(
+  () => props.lines.length,
+  () => {
+    if (autoScroll.value) {
+      nextTick(() => {
+        if (scrollerRef.value) {
+          scrollerRef.value.scrollToItem(props.lines.length - 1);
+        }
+      });
+    }
+  }
+);
 
 function shortTime(value: unknown) {
   const text = String(value ?? "");
@@ -54,42 +74,82 @@ function safeClass(value: unknown) {
 </script>
 
 <style scoped>
-.log-card {
-  min-height: 520px;
+.log-container {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #0d1117;
 }
 
 .scroller {
-  height: 520px;
+  flex: 1;
+  min-height: 0;
 }
 
 .log-line {
-  min-height: 60px;
-  padding: 10px 12px;
-  border-bottom: 1px solid #26303a;
-  display: grid;
-  gap: 6px;
+  height: 32px;
+  max-height: 32px;
+  padding: 0 12px;
+  border-bottom: 1px solid #1a2128;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  overflow: hidden;
 }
 
 .line-meta {
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  color: #98a5af;
-  font-size: 12px;
+  gap: 8px;
+  color: #6a7680;
+  font-size: 11px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.line-meta .seq {
+  color: #444c56;
+  width: 40px;
+}
+
+.line-meta .level {
+  text-transform: uppercase;
+  font-weight: bold;
 }
 
 .line-body {
-  color: #e4eaee;
+  color: #d1d5da;
   font-size: 13px;
-  line-height: 1.45;
-  word-break: break-word;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.line-label {
+  color: #58a6ff;
+  margin-right: 4px;
+  font-weight: bold;
 }
 
 .level-error .line-body {
-  color: #ffbcbc;
+  color: #f85149;
+}
+
+.level-error .line-meta .level {
+  color: #f85149;
 }
 
 .level-warn .line-body {
-  color: #f1d58b;
+  color: #d29922;
+}
+
+.level-warn .line-meta .level {
+  color: #d29922;
+}
+
+.level-debug .line-body {
+  color: #8b949e;
 }
 </style>

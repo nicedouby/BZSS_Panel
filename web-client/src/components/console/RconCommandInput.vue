@@ -1,12 +1,16 @@
 <template>
   <div class="rcon-input-group">
+    <div class="input-prefix">></div>
     <input
+      ref="inputRef"
       v-model="command"
       type="text"
       class="rcon-input"
       :placeholder="t('console.rconCommandPlaceholder')"
       :disabled="executing"
       @keydown.enter="execute"
+      @keydown.up.prevent="historyUp"
+      @keydown.down.prevent="historyDown"
     />
     <button
       type="button"
@@ -14,13 +18,14 @@
       :disabled="executing || !command.trim()"
       @click="execute"
     >
+      <span v-if="executing" class="spinner"></span>
       {{ executing ? t("console.rconExecuting") : t("console.rconExecute") }}
     </button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted } from "vue";
 import { apiPost } from "../../app/apiClient";
 import { useUiStore } from "../../stores/ui.store";
 import { t } from "../../i18n";
@@ -28,12 +33,29 @@ import { t } from "../../i18n";
 const ui = useUiStore();
 const command = ref("");
 const executing = ref(false);
+const inputRef = ref<HTMLInputElement | null>(null);
+
+const history = ref<string[]>(JSON.parse(localStorage.getItem("rcon_history") || "[]"));
+const historyIndex = ref(-1);
+
+onMounted(() => {
+  inputRef.value?.focus();
+});
 
 async function execute() {
   const cmd = command.value.trim();
   if (!cmd || executing.value) return;
 
   executing.value = true;
+  
+  // Add to history
+  if (history.value[0] !== cmd) {
+    history.value.unshift(cmd);
+    if (history.value.length > 50) history.value.pop();
+    localStorage.setItem("rcon_history", JSON.stringify(history.value));
+  }
+  historyIndex.value = -1;
+
   try {
     const result = await apiPost<{ ok: true; response: string }>("/api/console/rcon", {
       command: cmd,
@@ -52,6 +74,24 @@ async function execute() {
     });
   } finally {
     executing.value = false;
+    inputRef.value?.focus();
+  }
+}
+
+function historyUp() {
+  if (historyIndex.value < history.value.length - 1) {
+    historyIndex.value++;
+    command.value = history.value[historyIndex.value];
+  }
+}
+
+function historyDown() {
+  if (historyIndex.value > 0) {
+    historyIndex.value--;
+    command.value = history.value[historyIndex.value];
+  } else if (historyIndex.value === 0) {
+    historyIndex.value = -1;
+    command.value = "";
   }
 }
 </script>
@@ -59,27 +99,36 @@ async function execute() {
 <style scoped>
 .rcon-input-group {
   display: flex;
-  gap: 8px;
-  background: #151a20;
-  border: 1px solid #2c343d;
-  border-radius: 8px;
-  padding: 8px;
-  margin-bottom: 16px;
+  align-items: center;
+  gap: 12px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 4px 8px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.rcon-input-group:focus-within {
+  border-color: #58a6ff;
+  box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.3);
+}
+
+.input-prefix {
+  color: #58a6ff;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-weight: bold;
+  user-select: none;
 }
 
 .rcon-input {
   flex: 1;
   background: transparent;
-  border: 1px solid #38414c;
-  color: #edf2f4;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-family: inherit;
+  border: none;
+  color: #c9d1d9;
+  padding: 8px 0;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 14px;
   outline: none;
-}
-
-.rcon-input:focus {
-  border-color: #7aa2b8;
 }
 
 .rcon-input:disabled {
@@ -88,23 +137,40 @@ async function execute() {
 }
 
 .rcon-button {
-  background: #1d252d;
-  border: 1px solid #38414c;
-  color: #f4f7f8;
-  padding: 8px 20px;
+  background: #238636;
+  border: 1px solid rgba(240, 246, 252, 0.1);
+  color: #ffffff;
+  padding: 6px 16px;
   border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .rcon-button:hover:not(:disabled) {
-  border-color: #7aa2b8;
-  background: #252f38;
+  background: #2ea043;
 }
 
 .rcon-button:disabled {
-  opacity: 0.5;
+  background: #21262d;
+  color: #8b949e;
+  border-color: #30363d;
   cursor: not-allowed;
+}
+
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>

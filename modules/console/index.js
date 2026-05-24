@@ -109,17 +109,38 @@ export function createConsoleModule({ core, config }) {
         reason: meta.reason ?? "Manual RCON command from web console",
       });
 
-      if (!result.success) {
-        push({
-          stream: "rcon-native",
-          channel: "rcon-native",
-          level: "error",
-          message: result.message,
-          scope: meta.requestedBy ?? "web.console",
-          source: meta.requestedBy ?? "web.console",
-          moduleId: "module.console",
-          command: commandText,
-        });
+      if (result.success) {
+        const lines = String(result.message || "Command executed successfully.").split(/\r?\n/);
+        for (const line of lines) {
+          if (!line.trim() && lines.length > 1) continue;
+          push({
+            stream: "rcon-native",
+            channel: "rcon-native",
+            level: "info",
+            message: line,
+            scope: meta.requestedBy ?? "web.console",
+            source: meta.requestedBy ?? "web.console",
+            moduleId: "module.console",
+            command: commandText,
+            label: "Output",
+          });
+        }
+      } else {
+        const lines = String(result.message || "Unknown error").split(/\r?\n/);
+        for (const line of lines) {
+          if (!line.trim() && lines.length > 1) continue;
+          push({
+            stream: "rcon-native",
+            channel: "rcon-native",
+            level: "error",
+            message: line,
+            scope: meta.requestedBy ?? "web.console",
+            source: meta.requestedBy ?? "web.console",
+            moduleId: "module.console",
+            command: commandText,
+            label: "Error",
+          });
+        }
       }
 
       return result;

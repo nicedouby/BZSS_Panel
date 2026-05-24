@@ -82,6 +82,7 @@ const contentShellClass = computed(() => ({
 
 .content-shell.full-bleed {
   padding: 0;
+  overflow: hidden;
 }
 
 @media (max-width: 780px) {

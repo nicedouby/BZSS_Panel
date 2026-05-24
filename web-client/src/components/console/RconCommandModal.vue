@@ -15,6 +15,8 @@
             :placeholder="t('console.rconCommandPlaceholder')"
             :disabled="executing"
             @keydown.enter="execute"
+            @keydown.up.prevent="historyUp"
+            @keydown.down.prevent="historyDown"
           />
         </div>
         <div v-if="lastResponse" class="rcon-response">
@@ -58,12 +60,24 @@ const command = ref("");
 const executing = ref(false);
 const lastResponse = ref("");
 
+const history = ref<string[]>(JSON.parse(localStorage.getItem("rcon_history") || "[]"));
+const historyIndex = ref(-1);
+
 async function execute() {
   const cmd = command.value.trim();
   if (!cmd || executing.value) return;
 
   executing.value = true;
   lastResponse.value = "";
+
+  // Add to history
+  if (history.value[0] !== cmd) {
+    history.value.unshift(cmd);
+    if (history.value.length > 50) history.value.pop();
+    localStorage.setItem("rcon_history", JSON.stringify(history.value));
+  }
+  historyIndex.value = -1;
+
   try {
     const result = await apiPost<{ ok: true; response: string }>("/api/console/rcon", {
       command: cmd,
@@ -83,6 +97,23 @@ async function execute() {
     });
   } finally {
     executing.value = false;
+  }
+}
+
+function historyUp() {
+  if (historyIndex.value < history.value.length - 1) {
+    historyIndex.value++;
+    command.value = history.value[historyIndex.value];
+  }
+}
+
+function historyDown() {
+  if (historyIndex.value > 0) {
+    historyIndex.value--;
+    command.value = history.value[historyIndex.value];
+  } else if (historyIndex.value === 0) {
+    historyIndex.value = -1;
+    command.value = "";
   }
 }
 </script>
