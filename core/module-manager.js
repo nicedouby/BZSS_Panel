@@ -23,6 +23,8 @@ import { createPlaytimeModule } from "../modules/playtime/index.js";
 import { createPluginSubscriptionsModule } from "../modules/plugin-subscriptions/index.js";
 import { createServerStatsModule } from "../modules/server-stats/index.js";
 
+import { createChatManagerModule } from "../modules/chat-manager/index.js";
+
 /**
  * Core: ModuleManager
  *
@@ -40,6 +42,7 @@ export class ModuleManager {
 
   async loadBuiltInModules() {
     const factories = [
+      createChatManagerModule,
       createPluginSubscriptionsModule,
       createAuditModule,
       createConsoleModule,

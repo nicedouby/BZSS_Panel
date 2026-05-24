@@ -1236,6 +1236,11 @@ export class WebServer {
       });
     }
 
+    if (url.pathname === "/api/chat/history" && req.method === "GET") {
+      const history = this.modules.chatManager.getHistory();
+      return this.json(res, 200, { history });
+    }
+
     if (url.pathname === "/api/weapon-collector/clear" && req.method === "POST") {
       if (!this.requireSuperAdmin(user, res)) return;
       const pluginApi = this.getPluginApi("plugin.weaponCollector");

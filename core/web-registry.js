@@ -75,6 +75,19 @@ export class WebRegistry {
       order: 30,
       icon: "🗂️",
     });
+
+    this.registerPage({
+      id: "web.chatMonitor",
+      title: "聊天监控",
+      group: "调试",
+      route: "/chat-monitor",
+      source: "module.chatManager",
+      description: "实时聊天监控页面。展示所有玩家聊天内容，支持频率监控和自动触发器测试。",
+      required: false,
+      enabled: true,
+      order: 100,
+      icon: "💬",
+    });
   }
 
   /**

@@ -13,6 +13,7 @@ import ServerInfoStatisticsPage from "../pages/ServerInfoStatisticsPage.vue";
 import FairSquadBuildingPage from "../pages/FairSquadBuildingPage.vue";
 import MatchSnapshotDebugPage from "../pages/MatchSnapshotDebugPage.vue";
 import ComingSoonPage from "../pages/ComingSoonPage.vue";
+import ChatMonitorPage from "../pages/ChatMonitorPage.vue";
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -27,6 +28,7 @@ export const router = createRouter({
       },
     },
     { path: "/console", component: ConsolePage, meta: { titleKey: "routeTitle.console", fullBleed: true } },
+    { path: "/chat-monitor", component: ChatMonitorPage, meta: { title: "聊天监控", fullBleed: true } },
     { path: "/player-database", component: PlayerDatabasePage, meta: { titleKey: "routeTitle.playerDatabase" } },
     { path: "/combat-clean", component: CombatCleanPage, meta: { titleKey: "routeTitle.combatClean" } },
     { path: "/kill-manage", component: KillManagePage, meta: { titleKey: "routeTitle.killManage" } },
