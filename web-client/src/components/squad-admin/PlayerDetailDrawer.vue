@@ -53,6 +53,7 @@
                 <div class="stat-item">
                   <span class="stat-label">{{ t("player.squad") }}</span>
                   <strong class="stat-value">
+                    <span v-if="props.player.squadId != null" class="player-squad-badge">#{{ props.player.squadId }}</span>
                     {{ props.player.squadId ? `Squad ${props.player.squadId}` : t("match.unassigned") }}
                   </strong>
                 </div>
@@ -566,6 +567,22 @@ onUnmounted(() => {
 
 .stat-value.team1 { color: var(--color-team1-primary); }
 .stat-value.team2 { color: var(--color-team2-primary); }
+
+.player-squad-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 900;
+  color: #fff;
+  background-color: var(--color-status-info);
+  margin-right: 4px;
+  vertical-align: middle;
+}
 
 /* 3. ACTION CENTER */
 .action-center {

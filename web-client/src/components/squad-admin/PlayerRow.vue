@@ -23,6 +23,7 @@
         <span class="player-name">{{ player.name }}</span>
       </div>
       <div class="player-meta">
+        <span v-if="player.squadId != null" class="player-squad-badge">#{{ player.squadId }}</span>
         <span class="player-role">{{ displayRole(player.role) }}</span>
         <span class="player-id">#{{ player.playerId ?? "-" }}</span>
       </div>
@@ -216,6 +217,21 @@ function displayRole(role: string | null | undefined) {
 
 .player-id {
   white-space: nowrap;
+}
+
+.player-squad-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 800;
+  color: #fff;
+  background-color: var(--color-status-info);
+  opacity: 0.85;
 }
 
 .player-playtime {

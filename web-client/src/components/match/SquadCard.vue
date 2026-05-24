@@ -1,11 +1,14 @@
 <template>
   <article class="squad-card">
     <header>
-      <div>
-        <strong>{{ title }}</strong>
-        <span>{{ subtitle }}</span>
+      <div class="squad-title-row">
+        <span v-if="squad.squadID != null" class="squad-id-badge">#{{ squad.squadID }}</span>
+        <div class="squad-title-text">
+          <strong>{{ title }}</strong>
+          <span>{{ subtitle }}</span>
+        </div>
       </div>
-      <StatusBadge :tone="squad.locked ? 'warn' : 'idle'">{{ squad.locked ? "locked" : "open" }}</StatusBadge>
+      <StatusBadge :tone="squad.locked ? 'warn' : 'idle'">{{ squad.locked ? "Locked" : "Open" }}</StatusBadge>
     </header>
     <PlayerRow
       v-for="player in members"
@@ -58,6 +61,34 @@ header {
   justify-content: space-between;
   align-items: center;
   gap: 10px;
+}
+
+.squad-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.squad-id-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 19px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 900;
+  color: #fff;
+  background-color: #3b82f6;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  flex-shrink: 0;
+}
+
+.squad-title-text {
+  min-width: 0;
+  flex: 1;
 }
 
 header strong,

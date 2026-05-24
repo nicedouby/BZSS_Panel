@@ -9,6 +9,7 @@
     <header class="squad-header" @click.stop="$emit('select-squad', squad)">
       <div class="squad-header-main">
         <div class="squad-title-row">
+          <span v-if="squad.squadId != null" class="squad-id-badge">#{{ squad.squadId }}</span>
           <strong class="squad-name">{{ squad.squadName }}</strong>
           <span class="squad-member-count">{{ squad.memberCount }}/{{ squad.maxMembers }}</span>
           <StatusBadge class="squad-status-badge" :tone="squad.isLocked ? 'warn' : 'idle'">
@@ -219,6 +220,30 @@ function warningTone(label: string): "warn" | "idle" {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.squad-id-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 900;
+  color: #fff;
+  background-color: var(--color-status-info);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+
+.team1-context .squad-id-badge {
+  background-color: var(--color-team1-primary);
+}
+
+.team2-context .squad-id-badge {
+  background-color: var(--color-team2-primary);
 }
 
 .squad-member-count {

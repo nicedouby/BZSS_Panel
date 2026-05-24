@@ -589,6 +589,37 @@ body::before {
   font-weight: 800;
 }
 
+.match-squad-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.match-squad-id {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 19px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 900;
+  color: #fff;
+  background-color: var(--accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+
+.team-1 .match-squad-id {
+  background-color: #2dd4bf;
+}
+
+.team-2 .match-squad-id {
+  background-color: #fb7185;
+}
+
 .match-squad-subtitle {
   display: flex;
   flex-wrap: wrap;
@@ -780,6 +811,22 @@ body::before {
 .match-member-stat.playtime-stat {
   color: #8cf3e3;
   font-weight: 800;
+}
+
+.match-member-squad-id {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 900;
+  color: #fff;
+  background-color: var(--accent);
+  opacity: 0.8;
+  margin-right: 4px;
 }
 
 .match-empty {

@@ -8,6 +8,7 @@
       <StatusBadge v-if="player.isLeader" tone="ok">SL</StatusBadge>
     </div>
     <div class="meta">
+      <span v-if="player.squadID != null" class="player-squad-badge">#{{ player.squadID }}</span>
       <span>{{ player.role || "Unknown role" }}</span>
       <span>ID {{ player.playerID ?? "-" }}</span>
       <span>{{ playtimeText }}</span>
@@ -127,5 +128,20 @@ function searchPlayerDatabase() {
   color: #9aa7b2;
   font-size: 12px;
   flex-wrap: wrap;
+}
+
+.player-squad-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 800;
+  color: #fff;
+  background-color: #3b82f6;
+  opacity: 0.85;
 }
 </style>

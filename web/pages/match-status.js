@@ -310,7 +310,10 @@ function renderSquad(squad) {
     <article class="match-squad-card">
       <div class="match-squad-header">
         <div class="match-squad-heading">
-          <div class="match-squad-name">${esc(squad.squadName)}</div>
+          <div class="match-squad-title-row">
+            ${squad.unassigned ? "" : `<span class="match-squad-id">#${esc(squad.squadID)}</span>`}
+            <div class="match-squad-name">${esc(squad.squadName)}</div>
+          </div>
           <div class="match-squad-subtitle">
             <span class="match-badge ${squad.locked ? "locked" : "open"}">${squad.locked ? "锁队" : "公开"}</span>
             <span class="match-squad-creator">创建人 ${esc(displayName(squad.creatorName, "未知"))}</span>
@@ -357,6 +360,7 @@ function renderMember(member) {
       </div>
       <div class="match-member-meta">
         <span class="match-member-stat playtime-stat">${esc(formatPlaytime(member))}</span>
+        ${member._resolvedUnassigned ? "" : `<span class="match-member-squad-id">#${esc(member._resolvedSquadID)}</span>`}
         <span class="match-member-stat">${esc(stateLabel)}</span>
         <span class="match-member-stat">${esc(roleLabel)}</span>
         <span class="match-member-stat">${esc(teamLabel)} / ${esc(squadLabel)}</span>
