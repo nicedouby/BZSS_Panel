@@ -84,6 +84,19 @@ export function createServerStatsModule({ core, modules, config, logger }) {
     },
 
     async start() {
+      core.webRegistry.registerPage({
+        id: "web.serverStats",
+        title: "系统效能概览",
+        group: "扩展",
+        route: "/plugins/server-info-statistics",
+        pageModule: "/pages/server-info-statistics.js",
+        source: "module.serverStats",
+        required: false,
+        enabled: true,
+        order: 200,
+        icon: "📈",
+      });
+
       await sampler?.start();
       moduleLogger.info?.(`[ServerStats] module started using file storage at ${dataDir}`);
     },
