@@ -14,7 +14,7 @@
   "web": {
     "enabled": true,
     "host": "127.0.0.1",
-    "port": 7799,
+    "port": 8899,
     "staticDirectory": "./web-client/dist",
     "useVueClient": true,
     "title": "BZSS Panel"

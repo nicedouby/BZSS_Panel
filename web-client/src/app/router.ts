@@ -11,6 +11,7 @@ import SquadManagementPage from "../pages/SquadManagementPage.vue";
 import UdpEventForwarderPage from "../pages/UdpEventForwarderPage.vue";
 import ServerInfoStatisticsPage from "../pages/ServerInfoStatisticsPage.vue";
 import FairSquadBuildingPage from "../pages/FairSquadBuildingPage.vue";
+import MatchSnapshotDebugPage from "../pages/MatchSnapshotDebugPage.vue";
 import ComingSoonPage from "../pages/ComingSoonPage.vue";
 
 export const router = createRouter({
@@ -42,6 +43,11 @@ export const router = createRouter({
       path: "/plugins/server-info-statistics",
       component: ServerInfoStatisticsPage,
       meta: { title: "服务器信息统计", fullBleed: true },
+    },
+    {
+      path: "/debug/match-snapshots",
+      component: MatchSnapshotDebugPage,
+      meta: { title: "快照录制", fullBleed: true },
     },
     {
       path: "/:pathMatch(.*)*",

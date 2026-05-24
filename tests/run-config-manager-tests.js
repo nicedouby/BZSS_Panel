@@ -32,7 +32,7 @@ async function testLoadAndGet() {
 
 async function testExposedSettingsAndSave() {
   const { tempDir, configPath } = await createTempConfig({
-    web: { host: "127.0.0.1", port: 7799 },
+    web: { host: "127.0.0.1", port: 8899 },
     settingsEditor: {
       enabled: true,
       exposed: [
@@ -56,7 +56,7 @@ async function testExposedSettingsAndSave() {
   assert.equal(initial.enabled, true);
   assert.equal(initial.settings.length, 2);
   assert.equal(initial.settings[0].value, "127.0.0.1");
-  assert.equal(initial.settings[1].value, 7799);
+  assert.equal(initial.settings[1].value, 8899);
 
   const result = await config.updateExposedSettings({
     "web.host": "0.0.0.0",

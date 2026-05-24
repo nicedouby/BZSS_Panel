@@ -112,7 +112,7 @@ async function testHealthEndpointDoesNotRequireAuth() {
   const server = createServer({
     config: {
       host: "127.0.0.1",
-      port: 7799,
+      port: 8899,
       staticDirectory: "./web-client/dist",
     },
     core: {
@@ -733,7 +733,7 @@ async function testSettingsRoutesRequireAuthAndSuperAdmin() {
         min: 1,
         max: 65535,
         restartRequired: true,
-        value: 7799,
+        value: 8899,
       },
     ],
   };

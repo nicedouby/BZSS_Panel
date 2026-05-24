@@ -18,39 +18,80 @@
 </template>
 
 <script setup lang="ts">
+import { ref, computed, onMounted } from "vue";
 import { useUiStore } from "../../stores/ui.store";
+import { apiGet } from "../../app/apiClient";
 import { t } from "../../i18n";
 
 const ui = useUiStore();
+const apiPages = ref<any[]>([]);
 
-const groups = [
-  {
-    title: t("nav.coreCategory"),
-    items: [
-      { path: "/match-status", icon: "MS", label: t("nav.matchStatus") },
-      { path: "/console", icon: "CON", label: t("nav.console") },
-      { path: "/player-database", icon: "DB", label: t("nav.playerDatabase") },
-    ],
-  },
-  {
-    title: t("nav.toolsCategory"),
-    items: [
-      { path: "/squad-management", icon: "SM", label: t("nav.squadManagement") },
-      { path: "/combat-clean", icon: "CC", label: t("nav.combatClean") },
-      { path: "/kill-manage", icon: "KM", label: t("nav.killManage") },
-      { path: "/admin-warns", icon: "AW", label: t("nav.adminWarns") },
-    ],
-  },
-  {
+const groups = computed(() => {
+  const result: any[] = [
+    {
+      title: t("nav.coreCategory"),
+      items: [
+        { path: "/match-status", icon: "MS", label: t("nav.matchStatus") },
+        { path: "/console", icon: "CON", label: t("nav.console") },
+        { path: "/player-database", icon: "DB", label: t("nav.playerDatabase") },
+      ],
+    },
+    {
+      title: t("nav.toolsCategory"),
+      items: [
+        { path: "/squad-management", icon: "SM", label: t("nav.squadManagement") },
+        { path: "/combat-clean", icon: "CC", label: t("nav.combatClean") },
+        { path: "/kill-manage", icon: "KM", label: t("nav.killManage") },
+        { path: "/admin-warns", icon: "AW", label: t("nav.adminWarns") },
+      ],
+    },
+  ];
+
+  // Add Dynamic Pages from Registry
+  const dynamicGroup: any = {
     title: t("nav.pluginsCategory"),
-    items: [
-      { path: "/plugins/fair-squad-building", icon: "FS", label: "公平建队" },
-      { path: "/plugins/group-report", icon: "GR", label: "抱团报备" },
-      { path: "/plugins/server-info-statistics", icon: "SS", label: "服务器信息统计" },
-      { path: "/udp-event-forwarder", icon: "UDP", label: "UDP Forwarder" },
-    ],
-  },
-];
+    items: [],
+  };
+
+  const debugGroup: any = {
+    title: "调试 / DEBUG",
+    items: [],
+  };
+
+  for (const page of apiPages.value) {
+    if (!page.enabled || page.hiddenFromSidebar) continue;
+    
+    const item = {
+      path: page.route,
+      icon: page.icon || "P",
+      label: page.title,
+    };
+
+    if (page.group === "调试") {
+      debugGroup.items.push(item);
+    } else if (page.group === "核心") {
+      // Core pages already handled statically for now to keep icons
+    } else {
+      dynamicGroup.items.push(item);
+    }
+  }
+
+  if (dynamicGroup.items.length > 0) result.push(dynamicGroup);
+  if (debugGroup.items.length > 0) result.push(debugGroup);
+
+  return result;
+});
+
+async function fetchPages() {
+  try {
+    const res = await apiGet<any>("/api/web/pages");
+    apiPages.value = res.pages || [];
+  } catch (e) {
+    console.error("Failed to fetch sidebar pages:", e);
+  }
+}
+
+onMounted(fetchPages);
 </script>
 
 <style scoped>
@@ -63,15 +104,44 @@ const groups = [
 
 .sidebar {
   position: relative;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
   border-right: 1px solid #273039;
   background: #13181e;
-  padding: 16px 12px;
   min-width: 0;
   transition: width 0.16s ease, transform 0.16s ease;
+  overflow: hidden;
 }
 
 .sidebar.collapsed {
   width: 76px;
+}
+
+.brand {
+  padding: 24px 22px 20px;
+  flex: 0 0 auto;
+}
+
+.sidebar.collapsed .brand {
+  padding: 24px 0 20px;
+  text-align: center;
+}
+
+.brand strong {
+  display: block;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+}
+
+.sidebar.collapsed .brand strong {
+  font-size: 14px;
+  letter-spacing: 0.05em;
+}
+
+.brand span {
+  color: #98a5af;
+  font-size: 12px;
 }
 
 .sidebar.collapsed .brand span,
@@ -80,10 +150,36 @@ const groups = [
   display: none;
 }
 
+nav {
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 0 12px 24px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+nav::-webkit-scrollbar {
+  width: 4px;
+}
+
+nav::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+.sidebar.collapsed nav {
+  padding: 0 8px 24px;
+}
+
 .nav-group {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 2px;
-  margin-bottom: 12px;
+  margin-bottom: 20px;
 }
 
 .group-title {
@@ -92,62 +188,62 @@ const groups = [
   font-weight: 700;
   color: #5c6a77;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.brand {
-  padding: 10px 10px 18px;
-}
-
-.brand strong {
-  display: block;
-  font-size: 20px;
-}
-
-.brand span {
-  color: #98a5af;
-  font-size: 12px;
-}
-
-nav {
-  display: grid;
-  gap: 4px;
+  letter-spacing: 0.08em;
+  opacity: 0.8;
 }
 
 a {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   color: #dce4e8;
   text-decoration: none;
-  padding: 10px;
-  border-radius: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  transition: all 0.12s ease;
 }
 
 .nav-icon {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   display: inline-grid;
   place-items: center;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.035);
-  color: var(--color-text-secondary);
-  font-size: 11px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #9aa7b2;
+  font-size: 10px;
   font-weight: 800;
   flex: 0 0 auto;
 }
 
 .nav-label {
+  flex: 1 1 auto;
   min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .sidebar.collapsed a {
   justify-content: center;
-  padding-inline: 8px;
+  padding: 10px 0;
+}
+
+a:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
 }
 
 a.router-link-active {
   background: #20303a;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+a.router-link-active .nav-icon {
+  background: rgba(255, 255, 255, 0.1);
   color: #ffffff;
 }
 

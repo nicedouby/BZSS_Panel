@@ -74,6 +74,8 @@ export class PluginManager {
         pluginManager: this,
       },
       modules: this.modules,
+      config: this.config,
+      logger: pluginLogger,
     });
 
     if (instance.init) await instance.init();

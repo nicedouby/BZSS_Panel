@@ -111,7 +111,27 @@ function buildNormalizedPayload(event) {
     };
   }
 
+  if (event.eventName === "round.match_winner") {
+    return {
+      category: "round_state",
+      roundMatchWinner: normalizeRoundMatchWinnerPayload(event),
+    };
+  }
+
   return null;
+}
+
+export function normalizeRoundMatchWinnerPayload(event) {
+  return {
+    type: "round.match_winner",
+    serverId: event.serverId,
+    winner: getParam(event, "winner"),
+    mapName: getParam(event, "mapName"),
+    logLineTime: getParam(event, "logLineTime"),
+    time: event.time,
+    logTime: event.logTime,
+    rawLog: event.rawLog,
+  };
 }
 
 function normalizeCombatPayload(event) {

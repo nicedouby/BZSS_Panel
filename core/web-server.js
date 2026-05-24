@@ -16,7 +16,7 @@ export class WebServer {
   constructor({ config, logger, core, modules }) {
     this.enabled = config.enabled ?? true;
     this.host = config.host ?? "127.0.0.1";
-    this.port = Number(config.port ?? 7799);
+    this.port = Number(config.port ?? 8899);
     this.useVueClient = Boolean(config.useVueClient);
     this.staticDirectory = path.resolve(
       process.cwd(),
@@ -1142,6 +1142,38 @@ export class WebServer {
         return this.json(res, result.success ? 200 : 400, result);
       } catch (err) {
         return this.json(res, 500, { error: "InternalError", message: err.message });
+      }
+    }
+
+    if (url.pathname === "/api/match-snapshot/list" && req.method === "GET") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const pluginApi = this.getPluginApi("match-snapshot");
+      if (!pluginApi?.listSnapshots) return this.json(res, 404, { error: "PluginNotLoaded" });
+      return this.json(res, 200, await pluginApi.listSnapshots());
+    }
+
+    if (url.pathname === "/api/match-snapshot/capture" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const pluginApi = this.getPluginApi("match-snapshot");
+      if (!pluginApi?.takeManualSnapshot) return this.json(res, 404, { error: "PluginNotLoaded" });
+      await pluginApi.takeManualSnapshot();
+      return this.json(res, 200, { ok: true });
+    }
+
+    if (url.pathname === "/api/match-snapshot/view" && req.method === "GET") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const id = url.searchParams.get("id");
+      if (!id) return this.json(res, 400, { error: "MissingId" });
+
+      const safeId = path.basename(id);
+      const filePath = path.join(process.cwd(), "data", "match-snapshots", safeId);
+
+      try {
+        const content = await fs.readFile(filePath, "utf8");
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+        return res.end(content);
+      } catch (err) {
+        return this.json(res, 404, { error: "FileNotFound" });
       }
     }
 
