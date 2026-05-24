@@ -1241,6 +1241,14 @@ export class WebServer {
       return this.json(res, 200, { history });
     }
 
+    if (url.pathname === "/api/chat/stats" && req.method === "GET") {
+      return this.json(res, 200, {
+        timeline: this.modules.chatManager.getStats(),
+        spammers: this.modules.chatManager.getSpammers(),
+        playerFrequencies: this.modules.chatManager.getPlayerFrequencies(),
+      });
+    }
+
     if (url.pathname === "/api/weapon-collector/clear" && req.method === "POST") {
       if (!this.requireSuperAdmin(user, res)) return;
       const pluginApi = this.getPluginApi("plugin.weaponCollector");

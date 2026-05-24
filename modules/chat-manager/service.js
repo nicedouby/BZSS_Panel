@@ -8,9 +8,14 @@ export function createChatManagerService({ core, modules, config, logger }) {
   const MAX_HISTORY = 1000;
   
   // Frequency monitoring state
-  const playerStats = new Map(); // steamID -> { lastTime, count, rate }
+  const playerStats = new Map(); // steamID -> { lastTime, count, name, messageTimestamps: [] }
   const SPAM_WINDOW_MS = 10000;
   const SPAM_THRESHOLD = 5;
+  const FREQUENCY_WINDOW_MS = 60000;
+
+  // New: Per-minute statistics for visualization
+  const minuteStats = new Map(); // minuteTimestamp -> count
+  const MAX_STATS_MINUTES = 60;
 
   const unsubscribers = [];
 
@@ -18,6 +23,48 @@ export function createChatManagerService({ core, modules, config, logger }) {
   const api = {
     getHistory() {
       return [...chatHistory];
+    },
+
+    getStats() {
+      const now = Math.floor(Date.now() / 60000);
+      const result = [];
+      for (let i = MAX_STATS_MINUTES - 1; i >= 0; i--) {
+        const m = now - i;
+        result.push({
+          minute: m * 60000,
+          count: minuteStats.get(m) || 0
+        });
+      }
+      return result;
+    },
+
+    getPlayerFrequencies() {
+      const now = Date.now();
+      const result = [];
+      for (const [steamID, stats] of playerStats.entries()) {
+        // Clean up old timestamps
+        stats.messageTimestamps = (stats.messageTimestamps || [])
+          .filter(t => now - t < FREQUENCY_WINDOW_MS);
+        
+        if (stats.messageTimestamps.length > 0) {
+          result.push({
+            steamID,
+            name: stats.name,
+            count: stats.messageTimestamps.length
+          });
+        }
+      }
+      return result.sort((a, b) => b.count - a.count);
+    },
+
+    getSpammers() {
+      const spammers = [];
+      for (const [steamID, stats] of playerStats.entries()) {
+        if (stats.count > SPAM_THRESHOLD && Date.now() - stats.lastTime < SPAM_WINDOW_MS) {
+          spammers.push({ steamID, name: stats.name, count: stats.count });
+        }
+      }
+      return spammers;
     },
     
     /**
@@ -72,10 +119,23 @@ export function createChatManagerService({ core, modules, config, logger }) {
     chatHistory.push(entry);
     if (chatHistory.length > MAX_HISTORY) chatHistory.shift();
 
+    // New: Record per-minute stats
+    const currentMinute = Math.floor(Date.now() / 60000);
+    minuteStats.set(currentMinute, (minuteStats.get(currentMinute) || 0) + 1);
+    
+    // Cleanup old stats
+    if (minuteStats.size > MAX_STATS_MINUTES + 10) {
+      const oldestToKeep = currentMinute - MAX_STATS_MINUTES;
+      for (const m of minuteStats.keys()) {
+        if (m < oldestToKeep) minuteStats.delete(m);
+      }
+    }
+
     // 2. Frequency Monitoring (Spam Detection)
     if (steamID) {
       const now = Date.now();
-      const stats = playerStats.get(steamID) || { lastTime: 0, count: 0 };
+      const stats = playerStats.get(steamID) || { lastTime: 0, count: 0, name: "" };
+      stats.name = name; // Update name
       
       if (now - stats.lastTime < SPAM_WINDOW_MS) {
         stats.count++;
@@ -84,6 +144,10 @@ export function createChatManagerService({ core, modules, config, logger }) {
         stats.lastTime = now;
       }
       playerStats.set(steamID, stats);
+
+      // Record timestamp for rolling frequency
+      if (!stats.messageTimestamps) stats.messageTimestamps = [];
+      stats.messageTimestamps.push(now);
 
       if (stats.count > SPAM_THRESHOLD) {
         eventEmitter.emit("spam", { steamID, name, count: stats.count });
