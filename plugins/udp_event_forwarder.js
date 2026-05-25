@@ -33,7 +33,7 @@ export function createPlugin({ core, modules } = {}) {
     enabledByDefault: false,
     apiName: "udpEventForwarder",
     manifest: {
-      id: "udpEventForwarder",
+      id: "udp_event_forwarder",
       name: PLUGIN_NAME,
       kind: "plugin",
       version: "1.0.0",
@@ -73,6 +73,12 @@ export function createPlugin({ core, modules } = {}) {
         {
           key: "sendMapChanged",
           label: "发送地图更换事件",
+          type: "boolean",
+          defaultValue: true,
+        },
+        {
+          key: "sendChat",
+          label: "发送聊天事件",
           type: "boolean",
           defaultValue: true,
         },

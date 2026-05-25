@@ -37,9 +37,9 @@ export const router = createRouter({
     { path: "/plugins/fair-squad-building", component: FairSquadBuildingPage, meta: { title: "公平建队", fullBleed: true } },
     { path: "/squad-management", component: SquadManagementPage, meta: { titleKey: "routeTitle.squadManagement", fullBleed: true } },
     {
-      path: "/udp-event-forwarder",
+      path: "/debug/udp-forwarder",
       component: UdpEventForwarderPage,
-      meta: { title: "UDP Forwarder" },
+      meta: { title: "UDP 转发日志" },
     },
     {
       path: "/plugins/server-info-statistics",

@@ -330,7 +330,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/plugins/udp-event-forwarder/state" && req.method === "GET") {
-      const pluginApi = this.getPluginApi("plugin.udp_event_forwarder");
+      const pluginApi = this.getPluginApi("udp_event_forwarder");
       if (!pluginApi?.getStatus || !pluginApi?.getLogs) {
         return this.json(res, 404, {
           error: "PluginApiUnavailable",

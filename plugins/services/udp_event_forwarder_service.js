@@ -352,6 +352,7 @@ function readConfig(sourceConfig = {}, pluginConfigOverride = {}) {
     sendCombatEvents: configBool(pluginConfig.sendCombatEvents ?? pluginConfig.sendCombatDamage, true),
     sendCombatDamage: configBool(pluginConfig.sendCombatDamage, true),
     sendMapChanged: configBool(pluginConfig.sendMapChanged, true),
+    sendChat: configBool(pluginConfig.sendChat, true),
     sendStatus: configBool(pluginConfig.sendStatus, true),
     sendHeartbeat: configBool(pluginConfig.sendHeartbeat, true),
 
@@ -473,6 +474,7 @@ export class UdpEventForwarderService {
       subscribeEvent(this.eventBus, "core", "RCON_LIST_SQUADS_UPDATED", (event) => this.onMatchStateUpdated(event, "RCON_LIST_SQUADS_UPDATED")),
       subscribeEvent(this.eventBus, "module", { moduleId: "module.matchState", name: "updated" }, (event) => this.onMatchStateUpdated(event, "module.matchState.updated")),
       subscribeEvent(this.eventBus, "module", { moduleId: "module.roundState", name: "updated" }, (event) => this.forwardMapChanged(event, "module.roundState.updated")),
+      subscribeEvent(this.eventBus, "module", { moduleId: "module.chatManager", name: "CHAT_RECEIVED" }, (event) => this.forwardChat(event, "module.chatManager.CHAT_RECEIVED")),
     );
 
     if (this.config.sendStatus) {
@@ -762,6 +764,22 @@ export class UdpEventForwarderService {
     if (reason) {
       this.state.lastRoundStateUpdatedAt = new Date().toISOString();
     }
+  }
+
+  forwardChat(event, eventBusEvent) {
+    const payload = event || {};
+    
+    this.logger.debug(`Forwarding chat event from ${payload.name}`, {
+      channel: payload.channel,
+      message: payload.message
+    });
+
+    this.emitUdp("chat.message", {
+      ...payload,
+    }, {
+      eventBusEvent,
+      sourceEventId: payload.seq ? String(payload.seq) : null,
+    });
   }
 
   forwardProcessedCombatEvent(rawEvent, eventBusEvent) {

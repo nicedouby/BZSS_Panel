@@ -88,6 +88,32 @@ export class WebRegistry {
       order: 100,
       icon: "💬",
     });
+
+    this.registerPage({
+      id: "web.udpForwarder",
+      title: "UDP 转发日志",
+      group: "调试",
+      route: "/debug/udp-forwarder",
+      source: "plugin.udp_event_forwarder",
+      description: "UDP 事件转发状态与日志查看。监控系统向外部接收端推送事件的实时流与成功率。",
+      required: false,
+      enabled: true,
+      order: 110,
+      icon: "📡",
+    });
+
+    this.registerPage({
+      id: "web.matchSnapshotDebug",
+      title: "快照录制",
+      group: "调试",
+      route: "/debug/match-snapshots",
+      source: "plugin.match-snapshot",
+      description: "对局快照手动录制与历史查看。用于调试和复盘。",
+      required: false,
+      enabled: true,
+      order: 120,
+      icon: "📸",
+    });
   }
 
   /**

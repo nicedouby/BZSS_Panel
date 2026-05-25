@@ -112,6 +112,7 @@ export function createChatManagerService({ core, modules, config, logger }) {
       message,
       steamID,
       eosID,
+      raw: payload.raw || payload.sourceRaw || "",
       seq: Date.now()
     };
 
@@ -159,6 +160,7 @@ export function createChatManagerService({ core, modules, config, logger }) {
     eventEmitter.emit("message", entry);
 
     // 4. Emit module event for broader ecosystem
+    logger.debug(`Emitting CHAT_RECEIVED for ${name}: ${message}`);
     core.eventBus?.emitModuleEvent("module.chatManager", "CHAT_RECEIVED", {
       ...entry,
       serverId: core.webStatus?.serverId
