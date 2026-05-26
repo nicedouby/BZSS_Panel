@@ -2,7 +2,11 @@
   <section class="db-page">
     <PlayerDatabaseStats :stats="overviewCards" />
 
-    <PlayerDatabaseToolbar v-model="filters" @open-stats="openStatsModal" />
+    <PlayerDatabaseToolbar
+      :model-value="filters"
+      @update:model-value="onFiltersChange"
+      @open-stats="openStatsModal"
+    />
 
     <div class="db-main">
       <aside class="db-sidebar">
@@ -87,9 +91,10 @@ const selectedId = ref<number | null>(null);
 
 const { query } = usePlayerDatabaseQuery(filters);
 
-const rows = computed(() => query.data.value?.items ?? query.data.value?.players ?? []);
-const listLoading = computed(() => query.isLoading.value && !rows.value.length);
-const listError = computed(() => (query.error.value && !rows.value.length ? renderApiError(query.error.value, t("common.error")) : ""));
+const rowsRaw = computed(() => query.data.value?.items ?? query.data.value?.players ?? []);
+const rows = computed(() => sortRows(rowsRaw.value, filters.sort));
+const listLoading = computed(() => query.isLoading.value && !rowsRaw.value.length);
+const listError = computed(() => (query.error.value && !rowsRaw.value.length ? renderApiError(query.error.value, t("common.error")) : ""));
 
 const detailQuery = useQuery({
   queryKey: computed(() => ["player-database-detail", selectedId.value]),
@@ -141,6 +146,11 @@ watch(
     selectedId.value = null;
   },
 );
+
+function onFiltersChange(value: { q: string; sort: string }) {
+  filters.q = String(value?.q ?? "");
+  filters.sort = String(value?.sort ?? "updated_desc");
+}
 
 onBeforeUnmount(() => {
   void queryClient.cancelQueries({ queryKey: ["player-database-detail"] });
@@ -207,6 +217,31 @@ function formatHoursFromSeconds(value: unknown) {
 
 function formatNumber(value: unknown) {
   return new Intl.NumberFormat(currentLocale.value).format(Number(value ?? 0));
+}
+
+function sortRows(input: any[], sort: string) {
+  const rows = Array.isArray(input) ? [...input] : [];
+  if (!rows.length) return rows;
+
+  if (sort === "name_asc") {
+    return rows.sort((a, b) => {
+      const aName = String(a?.current_name ?? a?.name ?? "");
+      const bName = String(b?.current_name ?? b?.name ?? "");
+      return aName.localeCompare(bName, currentLocale.value, { sensitivity: "base" });
+    });
+  }
+
+  return rows.sort((a, b) => getSortTime(b) - getSortTime(a));
+}
+
+function getSortTime(row: any) {
+  const updated = Number(row?.updated_at ?? row?.updatedAt ?? 0);
+  if (Number.isFinite(updated) && updated > 0) return updated;
+
+  const lastLogin = Number(row?.last_login_at ?? row?.lastLoginAt ?? 0);
+  if (Number.isFinite(lastLogin) && lastLogin > 0) return lastLogin;
+
+  return 0;
 }
 </script>
 
