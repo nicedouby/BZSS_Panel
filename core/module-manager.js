@@ -15,6 +15,7 @@ import { createLogClockModule } from "../modules/log-clock/index.js";
 import { createRoundStateModule } from "../modules/round-state/index.js";
 import { createCombatStateModule } from "../modules/combat-state/index.js";
 import { createPlayerDatabaseModule } from "../modules/player-database/index.js";
+import { createPlayerDbSyncModule } from "../modules/player-db-sync/index.js";
 import { createIpLookupModule } from "../modules/ip-lookup/index.js";
 import { createKillManageModule } from "../modules/kill-manage/index.js";
 import { createCombatCleanModule } from "../modules/combat-clean/index.js";
@@ -59,6 +60,7 @@ export class ModuleManager {
       createSquadRemoveModule,
       createCombatStateModule,
       createPlayerDatabaseModule,
+      createPlayerDbSyncModule,
       createIpLookupModule,
       createKillManageModule,
       createCombatCleanModule,

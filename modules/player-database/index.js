@@ -111,10 +111,14 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
     async getCachedPlayer(identity = {}) {
       return repo.findCachedPlayer(identity);
     },
+
+    async addSquadCreated(record = {}) {
+      return repo.addSquadCreated(record);
+    },
   };
 
   return {
-    manifest: { id: "module.playerDatabase", name: "Player Database Module", kind: "module", version: "0.2.0", description: "玩家持久化数据库模块。将玩家历史出现记录、SteamID/EOSID 映射关系、权限组设置等信息持久化至本地 SQLite 数据库。提供玩家搜索、详情查询、权限组修改等 API，是玩家管理页面的后端核心，也是玩家档案功能的数据基础。" },
+    manifest: { id: "module.playerDatabase", name: "Player Database Module", kind: "module", version: "0.2.0", description: "玩家持久化数据库模块。只提供数据读写接口，不主动监听事件。" },
     apiName: "playerDatabase",
     api,
 
@@ -125,36 +129,7 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
     },
 
     async start() {
-      unsubscribers.push(core.eventBus.onCoreEvent("RCON_LIST_PLAYERS_UPDATED", async (event) => {
-        for (const player of event.players ?? []) {
-          await repo.upsertFromPresence(identityFromPlayer(player));
-        }
-      }));
-
-      unsubscribers.push(core.eventBus.onCoreEvent("On_SquadCreated", async (event) => {
-        const player = await repo.upsertFromPresence({
-          name: getParam(event, "PlayerName"),
-          steamID: getParam(event, "Steam64ID"),
-          eosID: getParam(event, "EOSID"),
-        });
-        await repo.addSquadCreated({
-          playerId: player?.id ?? null,
-          squadID: getParam(event, "SquadID") || null,
-          squadName: getParam(event, "SquadName") || null,
-          teamName: getParam(event, "FactionName") || null,
-        });
-      }));
-
-      unsubscribers.push(core.eventBus.onCoreEvent("*", async (event) => {
-        if (!event?.eventName) return;
-
-      await repo.addLogEvent({
-        sourceEvent: event.eventName,
-        eventName: event.eventName,
-        rawLine: event.rawLog ?? "",
-        payload: event,
-      });
-    }));
+      // Event listening has been moved to module.playerDbSync
     },
 
     async stop() {
