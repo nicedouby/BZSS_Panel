@@ -12,9 +12,8 @@ import { createSquadKickModule } from "../modules/squad-kick/index.js";
 import { createSquadRemoveModule } from "../modules/squad-remove/index.js";
 import { createConsoleModule } from "../modules/console/index.js";
 import { createLogClockModule } from "../modules/log-clock/index.js";
-import { createRoundStateModule } from "../modules/round-state/index.js";
 import { createCombatStateModule } from "../modules/combat-state/index.js";
-import { createPlayerDatabaseModule } from "../modules/player-database/index.js";
+
 import { createPlayerDbSyncModule } from "../modules/player-db-sync/index.js";
 import { createIpLookupModule } from "../modules/ip-lookup/index.js";
 import { createKillManageModule } from "../modules/kill-manage/index.js";
@@ -48,7 +47,6 @@ export class ModuleManager {
       createAuditModule,
       createConsoleModule,
       createLogClockModule,
-      createRoundStateModule,
       createServerStatusModule,
       createPlayerStateModule,
       createSquadStateModule,

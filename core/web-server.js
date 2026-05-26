@@ -564,11 +564,11 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/round/state") {
-      return this.json(res, 200, this.modules.roundState?.getState?.() ?? this.getRoundStateFromRuntime());
+      return this.json(res, 200, this.modules.matchState?.getRoundState?.() ?? this.getRoundStateFromRuntime());
     }
 
     if (url.pathname === "/api/round/overview") {
-      return this.json(res, 200, this.modules.roundState?.getOverview?.() ?? this.getRoundOverviewFromRuntime());
+      return this.json(res, 200, this.modules.matchState?.getRoundOverview?.() ?? this.getRoundOverviewFromRuntime());
     }
 
     if (url.pathname === "/api/match/snapshot" && req.method === "GET") {

@@ -6,12 +6,13 @@ import {
   parseListSquads,
   parseNextMap,
 } from "../../core/squad-rcon.js";
+import { normalizeRoundWorldBringUpPayload } from "../../core/event-normalizer.js";
 
 /**
  * Module: MatchState
  *
- * Active RCON polling aggregator for the current match state.
- * This module does not infer state from RCON push events.
+ * Active RCON polling aggregator and event listener for the current match state.
+ * This module consolidates round lifecycle events and RCON polling.
  */
 export function createMatchStateModule({ core, modules, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
@@ -28,6 +29,13 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     currentMapIntervalMs: Number(moduleConfig.polling?.currentMapIntervalMs ?? 15000),
     nextMapIntervalMs: Number(moduleConfig.polling?.nextMapIntervalMs ?? 30000),
   };
+
+  const MAX_ROUND_HISTORY = 200;
+  const DEFAULT_DEDUPE_TTL_MS = 10 * 60 * 1000;
+  const roundDedupeTtlMs = normalizePositiveNumber(moduleConfig.roundDedupeTtlMs, DEFAULT_DEDUPE_TTL_MS);
+  const roundMaxHistory = normalizePositiveNumber(moduleConfig.roundMaxHistory ?? moduleConfig.maxEvents, MAX_ROUND_HISTORY);
+  const roundRecentKeys = new Map();
+  const roundHistory = [];
 
   const timers = [];
   const unsubscribers = [];
@@ -65,7 +73,18 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       mode: "",
       nextLayer: "",
       playtime: null,
+      tickets: {
+        team1: null,
+        team2: null,
+      },
+      phase: "unknown", // 预热、进行中、结算中
       lastUpdatedAt: "",
+    },
+    round: {
+      current: null,
+      history: [],
+      lastAcceptedAt: "",
+      lastDedupedAt: "",
     },
     players: makePlayersSnapshot([]),
     squads: {
@@ -89,7 +108,13 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     return {
       ...state,
       serverStatus: { ...state.serverStatus, fields: { ...state.serverStatus.fields } },
-      match: { ...state.match },
+      match: { ...state.match, tickets: { ...state.match.tickets } },
+      round: {
+        current: state.round.current ? clone(state.round.current) : null,
+        history: state.round.history.map(clone),
+        lastAcceptedAt: state.round.lastAcceptedAt,
+        lastDedupedAt: state.round.lastDedupedAt,
+      },
       players: {
         list: [...state.players.list],
         bySteam64ID: { ...state.players.bySteam64ID },
@@ -121,8 +146,27 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         match: snapshot.match,
         players: snapshot.players.list,
         squads: snapshot.squads.list,
+        round: snapshot.round,
         rconStatus: snapshot.rconStatus,
         logAccess: snapshot.logAccess,
+      };
+    },
+
+    getRoundState() {
+      const snapshot = getSnapshot();
+      return {
+        serverId: state.serverId,
+        updatedAt: state.updatedAt,
+        ...snapshot.round,
+      };
+    },
+
+    getRoundOverview() {
+      const roundState = api.getRoundState();
+      return {
+        status: core.webStatus.getSnapshot(),
+        roundState,
+        latest: roundState.history.slice(-20).reverse(),
       };
     },
 
@@ -148,10 +192,99 @@ export function createMatchStateModule({ core, modules, config, logger }) {
   };
 
   // MatchState 的实时能力来自轮询与状态广播。
-  // 订阅关闭时不销毁模块，只是停止新的轮询更新与对应事件发射。
   function isSubscribed() {
     return modules?.pluginSubscriptions?.isSubscribed?.("module.matchState") !== false
       && core.pluginSubscriptions?.isSubscribed?.("module.matchState") !== false;
+  }
+
+  function ingestWorldBringUp(event) {
+    if (!enabled || !isSubscribed()) return null;
+
+    const parsed = event?.normalized?.roundWorldBringUp
+      ? { ...event.normalized.roundWorldBringUp }
+      : normalizeRoundWorldBringUpPayload(event);
+    if (!parsed?.worldPath || !parsed?.logLineTime || !parsed?.serverPlayAt) {
+      return null;
+    }
+
+    const serverId = String(parsed.serverId ?? event?.serverId ?? core.webStatus.serverId ?? "").trim();
+    if (!serverId) return null;
+
+    const dedupeKey = [
+      serverId,
+      String(parsed.logLineTime ?? "").trim(),
+      String(parsed.worldPath ?? "").trim(),
+      String(parsed.serverPlayAt ?? "").trim(),
+    ].join(":");
+
+    cleanupRoundRecentKeys();
+    if (roundRecentKeys.has(dedupeKey)) {
+      state.round.lastDedupedAt = new Date().toISOString();
+      return null;
+    }
+    roundRecentKeys.set(dedupeKey, Date.now());
+
+    const record = {
+      ...parsed,
+      serverId,
+      dedupeKey,
+      sourceEventId: String(event?.eventId ?? ""),
+      receivedAt: new Date().toISOString(),
+      rawLog: String(event?.rawLog ?? parsed.rawLog ?? ""),
+    };
+
+    state.serverId = serverId;
+    state.round.current = clone(record);
+    roundHistory.push(clone(record));
+    if (roundHistory.length > roundMaxHistory) {
+      roundHistory.splice(0, roundHistory.length - roundMaxHistory);
+    }
+    state.round.history = roundHistory.map(clone);
+    state.round.lastAcceptedAt = record.receivedAt;
+    state.updatedAt = record.receivedAt;
+
+    // Reset tickets and phase on world bring up (new round)
+    state.match.tickets = { team1: null, team2: null };
+    state.match.phase = "warmup"; // 通常刚开始是预热
+
+    updateWebStatus();
+
+    const payload = {
+      eventName: "module.matchState.roundUpdated",
+      layer: "module",
+      source: "module.matchState",
+      serverId,
+      time: record.receivedAt,
+      record: clone(record),
+      roundState: api.getRoundState(),
+    };
+
+    core.eventBus.emitModuleEvent("module.matchState", "roundUpdated", payload);
+    // Emit legacy event for compatibility if needed
+    core.eventBus.emitModuleEvent("module.roundState", "updated", {
+      ...payload,
+      eventName: "module.roundState.updated",
+      source: "module.roundState",
+      state: api.getRoundState(),
+    });
+
+    moduleLogger.info(
+      `[MATCH] Round World bring up detected: ${record.layerName} map=${record.mapName || "unknown"}`,
+      {
+        operation: "ingestWorldBringUp",
+        data: { serverId, layerName: record.layerName, mapName: record.mapName },
+      },
+    );
+
+    return record;
+  }
+
+  function cleanupRoundRecentKeys() {
+    const now = Date.now();
+    for (const [key, createdAt] of [...roundRecentKeys.entries()]) {
+      if (now - Number(createdAt ?? now) <= roundDedupeTtlMs) continue;
+      roundRecentKeys.delete(key);
+    }
   }
 
   async function refreshServerInfo(report = null) {
@@ -354,14 +487,21 @@ export function createMatchStateModule({ core, modules, config, logger }) {
   }
 
   function syncMatchFromServerStatus() {
-    state.match = {
-      map: state.serverStatus.map || "",
-      layer: state.serverStatus.layer || "",
-      mode: state.serverStatus.mode || "",
-      nextLayer: state.serverStatus.nextLayer || "",
-      playtime: state.serverStatus.playtime,
-      lastUpdatedAt: state.serverStatus.lastUpdatedAt,
-    };
+    state.match.map = state.serverStatus.map || "";
+    state.match.layer = state.serverStatus.layer || "";
+    state.match.mode = state.serverStatus.mode || "";
+    state.match.nextLayer = state.serverStatus.nextLayer || "";
+    state.match.playtime = state.serverStatus.playtime;
+    state.match.lastUpdatedAt = state.serverStatus.lastUpdatedAt;
+
+    // Phase inference based on playtime and events
+    if (state.match.playtime === 0) {
+      state.match.phase = "warmup";
+    } else if (state.match.playtime > 0) {
+      if (state.match.phase === "warmup" || state.match.phase === "unknown") {
+        state.match.phase = "in_progress";
+      }
+    }
   }
 
   function updateStatuses() {
@@ -403,6 +543,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       squadCount: state.squads.count,
       currentLayer: state.serverStatus.layer || "",
       matchState: formatMatchStateLabel(state.match),
+      matchPhase: state.match.phase,
     });
   }
 
@@ -484,22 +625,28 @@ export function createMatchStateModule({ core, modules, config, logger }) {
   }
 
   return {
-    manifest: { id: "module.matchState", name: "Match State Module", kind: "module", version: "0.2.0", description: "对局全局状态聚合模块。订阅地图切换、回合开始/结束、票数变化、队伍得分等核心事件，维护当前对局的地图、图层、下一张图、队伍人数与得分等完整快照。对局状态前端页面直接读取本模块的 getOverview() 接口进行展示。" },
+    manifest: {
+      id: "module.matchState",
+      name: "Match State Module",
+      kind: "module",
+      version: "0.3.0",
+      description: "对局全局状态聚合模块。合并了 roundState 功能，追踪地图切换、回合开始/结束、票数变化、队伍得分等核心事件。",
+    },
     apiName: "matchState",
     api,
 
     async start() {
       core.webRegistry.registerPage({
-        id: "web.killManage",
-        title: "战斗事件管理",
-        group: "管理",
-        route: "/kill-manage",
-        pageModule: "/pages/kill-manage.js",
-        source: "module.combatState",
+        id: "web.matchState",
+        title: "对局状态",
+        group: "监控",
+        route: "/match-state",
+        pageModule: "/pages/match-state.js",
+        source: "module.matchState",
         required: false,
         enabled: true,
-        order: 110,
-        icon: "🎯",
+        order: 10,
+        icon: "📊",
       });
 
       if (!enabled) return;
@@ -520,6 +667,27 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         emitRconStatusUpdated();
       }));
 
+      // Ingest round world bring up
+      unsubscribers.push(core.eventBus.onCoreEvent("round.world_bring_up", ingestWorldBringUp));
+
+      // Tickets parsing from chat or other events could be added here
+      unsubscribers.push(core.eventBus.onCoreEvent("round.tickets_changed", (event) => {
+        if (!event?.normalized?.tickets) return;
+        const { team1, team2 } = event.normalized.tickets;
+        state.match.tickets.team1 = team1;
+        state.match.tickets.team2 = team2;
+        state.match.lastUpdatedAt = new Date().toISOString();
+        updateWebStatus();
+        emitUpdated("tickets");
+      }));
+
+      // Round ended
+      unsubscribers.push(core.eventBus.onCoreEvent("round.winner_declared", (event) => {
+        state.match.phase = "ended";
+        updateWebStatus();
+        emitUpdated("phase");
+      }));
+
       updateWebStatus();
       refreshServerInfo();
       refreshPlayers();
@@ -536,17 +704,10 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       logWithFallback(
         moduleLogger,
         "info",
-        `MatchState polling started. serverInfo=${polling.serverInfoIntervalMs}ms players=${polling.playersIntervalMs}ms squads=${polling.squadsIntervalMs}ms`,
+        `MatchState (Consolidated) started.`,
         {
           label: "MODULE",
           operation: "start",
-          data: {
-            serverInfoIntervalMs: polling.serverInfoIntervalMs,
-            playersIntervalMs: polling.playersIntervalMs,
-            squadsIntervalMs: polling.squadsIntervalMs,
-            currentMapIntervalMs: polling.currentMapIntervalMs,
-            nextMapIntervalMs: polling.nextMapIntervalMs,
-          },
         },
       );
     },
@@ -554,6 +715,8 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     async stop() {
       for (const timer of timers.splice(0)) clearInterval(timer);
       for (const unsubscribe of unsubscribers.splice(0)) unsubscribe();
+      roundRecentKeys.clear();
+      roundHistory.length = 0;
       logWithFallback(moduleLogger, "info", "MatchState stopped.", {
         label: "MODULE",
         operation: "stop",
@@ -848,5 +1011,20 @@ function logWithFallback(logger, method, message, context) {
     return;
   }
 
-  logger?.module?.(rendered);
+  logger?.info?.(rendered);
+}
+
+function clone(value) {
+  if (value == null) return value;
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return value;
+  }
+}
+
+function normalizePositiveNumber(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return fallback;
+  return Math.floor(number);
 }

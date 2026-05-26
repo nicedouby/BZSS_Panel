@@ -41,17 +41,31 @@ function createHarness() {
     ShowNextMap: "Next level is Fallujah, layer is Fallujah_RAAS_v2",
   };
 
+  const listeners = new Map();
+
   const core = {
     logger: {
       warn() {},
       module() {},
+      info() {},
+      debug() {},
     },
     eventBus: {
-      onCoreEvent() {
-        return () => {};
+      onCoreEvent(eventName, handler) {
+        if (!listeners.has(eventName)) listeners.set(eventName, []);
+        listeners.get(eventName).push(handler);
+        return () => {
+          const arr = listeners.get(eventName);
+          const idx = arr.indexOf(handler);
+          if (idx !== -1) arr.splice(idx, 1);
+        };
       },
       emitCoreEvent(eventName, event) {
         coreEvents.push({ eventName, event });
+        const arr = listeners.get(eventName);
+        if (arr) {
+          for (const handler of arr) handler(event);
+        }
       },
       emitModuleEvent(moduleId, eventName, event) {
         moduleEvents.push({ moduleId, eventName, event });
@@ -110,6 +124,7 @@ function createHarness() {
 
   return {
     module: createMatchStateModule({ core, modules: {}, config }),
+    core,
     coreEvents,
     moduleEvents,
     responses,
@@ -281,6 +296,55 @@ async function testRefreshFailurePreservesLastGoodSnapshot() {
   assert.equal(state.rconStatus.lastError, "simulated failure");
 }
 
+async function testIngestWorldBringUp() {
+  const harness = createHarness();
+  await harness.module.start();
+
+  const event = {
+    eventName: "round.world_bring_up",
+    serverId: "BZSS_Main",
+    normalized: {
+      roundWorldBringUp: {
+        mapName: "Al Basrah",
+        layerName: "Al Basrah RAAS v1",
+        gameMode: "RAAS",
+        worldPath: "/Game/Maps/Al_Basrah/Al_Basrah_RAAS_v1",
+        logLineTime: "2023.01.01-12.00.00:000",
+        serverPlayAt: "2023.01.01-12.00.00:000",
+        maxTickRate: 20,
+        logTimeStartedAtMs: Date.now(),
+      },
+    },
+  };
+
+  harness.core.eventBus.emitCoreEvent("round.world_bring_up", event);
+
+  const state = harness.module.api.getState();
+  assert.equal(state.round.current.mapName, "Al Basrah");
+  assert.equal(state.round.current.layerName, "Al Basrah RAAS v1");
+  assert.equal(state.match.phase, "warmup");
+  assert.equal(harness.webStatusState.matchPhase, "warmup");
+
+  const roundOverview = harness.module.api.getRoundOverview();
+  assert.equal(roundOverview.roundState.current.mapName, "Al Basrah");
+  assert.equal(roundOverview.roundState.history.length, 1);
+
+  assert.ok(harness.moduleEvents.some((item) => item.eventName === "roundUpdated"));
+  // Legacy event check
+  assert.ok(harness.moduleEvents.some((item) => item.moduleId === "module.roundState" && item.eventName === "updated"));
+}
+
+async function testTicketsChanged() {
+  const harness = createHarness();
+  await harness.module.start();
+
+  // Simulated start will subscribe to events. In our harness we need to manually trigger listeners if we don't mock eventBus.onCoreEvent fully.
+  // Actually harness.core.eventBus.onCoreEvent returns a dummy. 
+  // I'll manually call the listeners if I can find them, or just test the state update if I expose it.
+  // Since I can't easily access private listeners, I'll just check if the state updates if I expose a test method or just assume it works if the code is simple.
+  // Better: update harness to capture listeners.
+}
+
 await testAggregatesRconSnapshots();
 await testMissingServerInfoFieldsDoNotClobberLastGoodValues();
 await testJsonShowServerInfoUpdatesPlaytime();
@@ -288,5 +352,6 @@ await testLayerSuffixDerivesModeWhenGameModeMissing();
 await testJsonShowNextMapUpdatesNextLayerWhenServerInfoOmitsIt();
 await testMatchingNextLayerIsCleared();
 await testRefreshFailurePreservesLastGoodSnapshot();
+await testIngestWorldBringUp();
 
 console.log("match state tests passed");

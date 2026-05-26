@@ -473,7 +473,7 @@ export class UdpEventForwarderService {
       subscribeEvent(this.eventBus, "core", "RCON_LIST_PLAYERS_UPDATED", (event) => this.onMatchStateUpdated(event, "RCON_LIST_PLAYERS_UPDATED")),
       subscribeEvent(this.eventBus, "core", "RCON_LIST_SQUADS_UPDATED", (event) => this.onMatchStateUpdated(event, "RCON_LIST_SQUADS_UPDATED")),
       subscribeEvent(this.eventBus, "module", { moduleId: "module.matchState", name: "updated" }, (event) => this.onMatchStateUpdated(event, "module.matchState.updated")),
-      subscribeEvent(this.eventBus, "module", { moduleId: "module.roundState", name: "updated" }, (event) => this.forwardMapChanged(event, "module.roundState.updated")),
+      subscribeEvent(this.eventBus, "module", { moduleId: "module.matchState", name: "roundUpdated" }, (event) => this.forwardMapChanged(event, "module.matchState.roundUpdated")),
       subscribeEvent(this.eventBus, "module", { moduleId: "module.chatManager", name: "CHAT_RECEIVED" }, (event) => this.forwardChat(event, "module.chatManager.CHAT_RECEIVED")),
     );
 
@@ -625,7 +625,7 @@ export class UdpEventForwarderService {
 
   syncFromModules() {
     this.syncFromMatchState(this.modules?.matchState?.getState?.() || this.modules?.matchState?.getOverview?.() || null, "initial");
-    this.syncFromRoundState(this.modules?.roundState?.getState?.() || null, "initial");
+    this.syncFromRoundState(this.modules?.matchState?.getRoundState?.() || null, "initial");
   }
 
   onMatchStateUpdated(rawEvent, eventBusEvent) {
@@ -682,7 +682,7 @@ export class UdpEventForwarderService {
       this.state.rconUpdatedAt = new Date().toISOString();
     }
 
-    this.syncFromRoundState(this.modules?.roundState?.getState?.() || null, eventBusEvent);
+    this.syncFromRoundState(this.modules?.matchState?.getRoundState?.() || null, eventBusEvent);
   }
 
   syncFromMatchState(snapshot, reason) {
