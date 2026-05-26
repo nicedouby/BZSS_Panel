@@ -516,12 +516,72 @@ export class PlayerRepository {
       windowStartTs,
     );
 
+    const sevenDayStartTs = nowTs - 7 * 24 * 60 * 60 * 1000;
+    const [newPlayers7dRow, repeatStats7dRow, repeatPlayers7d] = await Promise.all([
+      this.db.get(
+        `SELECT COUNT(*) AS new_players_7d
+         FROM players
+         WHERE created_at >= ?`,
+        sevenDayStartTs,
+      ),
+      this.db.get(
+        `WITH recent AS (
+           SELECT pmr.player_id,
+                  COUNT(*) AS match_count,
+                  COUNT(DISTINCT strftime('%Y-%m-%d', mr.started_at / 1000, 'unixepoch', 'localtime')) AS active_days
+           FROM player_match_records pmr
+           JOIN match_records mr ON mr.id = pmr.match_id
+           WHERE mr.started_at >= ?
+           GROUP BY pmr.player_id
+         )
+         SELECT COUNT(*) AS active_players_7d,
+                SUM(CASE WHEN match_count >= 2 THEN 1 ELSE 0 END) AS repeat_players_7d,
+                SUM(CASE WHEN active_days >= 2 THEN 1 ELSE 0 END) AS repeat_by_days_players_7d,
+                COALESCE(AVG(match_count), 0) AS avg_matches_per_active_7d,
+                COALESCE(MAX(match_count), 0) AS max_matches_per_player_7d
+         FROM recent`,
+        sevenDayStartTs,
+      ),
+      this.db.all(
+        `WITH recent AS (
+           SELECT pmr.player_id,
+                  COUNT(*) AS match_count,
+                  COUNT(DISTINCT strftime('%Y-%m-%d', mr.started_at / 1000, 'unixepoch', 'localtime')) AS active_days,
+                  MAX(mr.started_at) AS last_match_at
+           FROM player_match_records pmr
+           JOIN match_records mr ON mr.id = pmr.match_id
+           WHERE mr.started_at >= ?
+           GROUP BY pmr.player_id
+           HAVING match_count >= 2
+         )
+         SELECT p.id,
+                p.current_name,
+                p.steam_id,
+                p.eos_id,
+                recent.match_count,
+                recent.active_days,
+                recent.last_match_at
+         FROM recent
+         JOIN players p ON p.id = recent.player_id
+         ORDER BY recent.match_count DESC,
+                  recent.active_days DESC,
+                  recent.last_match_at DESC
+         LIMIT ?`,
+        sevenDayStartTs,
+        normalizedTop,
+      ),
+    ]);
+
     const roleTags = [];
     const componentTags = [];
     for (const row of tagStats || []) {
       if (row.tag_type === "role") roleTags.push(row);
       if (row.tag_type === "component") componentTags.push(row);
     }
+
+    const activePlayers7d = Number(repeatStats7dRow?.active_players_7d || 0);
+    const repeatPlayers7dCount = Number(repeatStats7dRow?.repeat_players_7d || 0);
+    const repeatByDaysPlayers7dCount = Number(repeatStats7dRow?.repeat_by_days_players_7d || 0);
 
     return {
       generatedAt: nowTs,
@@ -538,6 +598,17 @@ export class PlayerRepository {
         totalMatches: Number(overviewRow?.total_matches || 0),
         totalMatchWins: Number(overviewRow?.total_match_wins || 0),
         lastPlayerUpdateAt: Number(overviewRow?.last_player_update_at || 0) || null,
+      },
+      playerStats7d: {
+        windowDays: 7,
+        newPlayers: Number(newPlayers7dRow?.new_players_7d || 0),
+        activePlayers: activePlayers7d,
+        repeatPlayers: repeatPlayers7dCount,
+        repeatByDaysPlayers: repeatByDaysPlayers7dCount,
+        repeatRate: activePlayers7d > 0 ? repeatPlayers7dCount / activePlayers7d : 0,
+        repeatByDaysRate: activePlayers7d > 0 ? repeatByDaysPlayers7dCount / activePlayers7d : 0,
+        avgMatchesPerActive: Number(repeatStats7dRow?.avg_matches_per_active_7d || 0),
+        maxMatchesPerPlayer: Number(repeatStats7dRow?.max_matches_per_player_7d || 0),
       },
       breakdowns: {
         permissionGroups: permissionGroups.map((row) => ({
@@ -580,6 +651,15 @@ export class PlayerRepository {
           eosID: row.eos_id || null,
           totalViolations: Number(row.total_violations || 0),
           lastViolationAt: Number(row.last_violation_at || 0) || null,
+        })),
+        byRepeat7d: repeatPlayers7d.map((row) => ({
+          id: Number(row.id),
+          currentName: row.current_name || null,
+          steamID: row.steam_id || null,
+          eosID: row.eos_id || null,
+          matchCount: Number(row.match_count || 0),
+          activeDays: Number(row.active_days || 0),
+          lastMatchAt: Number(row.last_match_at || 0) || null,
         })),
       },
       trends: {

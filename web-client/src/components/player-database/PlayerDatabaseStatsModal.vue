@@ -90,6 +90,49 @@
             </div>
           </section>
 
+          <section class="analytics-section">
+            <h3>{{ t("database.playerInsights7d") }}</h3>
+            <div class="breakdown-grid">
+              <div class="breakdown-card">
+                <h4>{{ t("database.playerStats7d") }}</h4>
+                <ul class="metric-list">
+                  <li>
+                    <span>{{ t("database.newPlayers7d") }}</span>
+                    <strong>{{ stats.playerStats7d?.newPlayers ?? 0 }}</strong>
+                  </li>
+                  <li>
+                    <span>{{ t("database.activePlayers7d") }}</span>
+                    <strong>{{ stats.playerStats7d?.activePlayers ?? 0 }}</strong>
+                  </li>
+                  <li>
+                    <span>{{ t("database.repeatPlayers7d") }}</span>
+                    <strong>{{ stats.playerStats7d?.repeatPlayers ?? 0 }}</strong>
+                  </li>
+                  <li>
+                    <span>{{ t("database.repeatRate7d") }}</span>
+                    <strong>{{ formatPercent(stats.playerStats7d?.repeatRate ?? 0) }}</strong>
+                  </li>
+                  <li>
+                    <span>{{ t("database.avgMatchesPerActive7d") }}</span>
+                    <strong>{{ formatFloat(stats.playerStats7d?.avgMatchesPerActive ?? 0) }}</strong>
+                  </li>
+                </ul>
+              </div>
+
+              <div class="breakdown-card">
+                <h4>{{ t("database.repeatPlayers7dTop") }}</h4>
+                <ol class="rank-list">
+                  <li v-for="item in stats.leaderboards?.byRepeat7d || []" :key="item.id">
+                    <span class="player-name" @click="$emit('jump', item.id)">
+                      {{ item.currentName || item.steamID || item.eosID || t("common.unknown") }}
+                    </span>
+                    <span class="rank-value">{{ item.matchCount }} / {{ item.activeDays }}{{ t("database.days") }}</span>
+                  </li>
+                </ol>
+              </div>
+            </div>
+          </section>
+
           <!-- Trends -->
           <section class="analytics-section">
             <h3>{{ t("database.trends") }}</h3>
@@ -141,6 +184,16 @@ const maxMatches = computed(() => {
 
 function formatHours(seconds: number) {
   return (seconds / 3600).toFixed(1);
+}
+
+function formatPercent(ratio: number) {
+  const safe = Number.isFinite(ratio) ? Math.max(0, ratio) : 0;
+  return `${(safe * 100).toFixed(1)}%`;
+}
+
+function formatFloat(value: number) {
+  const safe = Number.isFinite(value) ? value : 0;
+  return safe.toFixed(2);
 }
 </script>
 
@@ -374,6 +427,32 @@ function formatHours(seconds: number) {
   font-size: 13px;
   font-weight: 700;
   text-align: right;
+  color: var(--color-text-primary);
+}
+
+.metric-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.metric-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  padding: 8px 0;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.metric-list li:last-child {
+  border-bottom: 0;
+}
+
+.metric-list strong {
   color: var(--color-text-primary);
 }
 </style>

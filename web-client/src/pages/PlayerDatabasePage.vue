@@ -47,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { useRoute } from "vue-router";
 import { ApiError, apiGet } from "../app/apiClient";
@@ -119,12 +119,16 @@ const detailError = computed(() => {
 
 const overviewCards = computed(() => {
   const overview = stats.value?.overview ?? null;
+  const playerStats7d = stats.value?.playerStats7d ?? null;
   return [
     { label: t("database.title"), value: overview ? formatNumber(overview.totalPlayers ?? 0) : "--" },
     { label: t("database.active"), value: overview ? formatNumber(overview.activePlayersInWindow ?? 0) : "--" },
     { label: t("database.matches"), value: overview ? formatNumber(overview.totalMatches ?? 0) : "--" },
     { label: t("database.gameTime"), value: overview ? formatHoursFromSeconds(overview.totalGameSeconds ?? 0) : "--" },
     { label: t("database.serverTime"), value: overview ? formatHoursFromSeconds(overview.totalServerSeconds ?? 0) : "--" },
+    { label: t("database.activePlayers7d"), value: playerStats7d ? formatNumber(playerStats7d.activePlayers ?? 0) : "--" },
+    { label: t("database.repeatPlayers7d"), value: playerStats7d ? formatNumber(playerStats7d.repeatPlayers ?? 0) : "--" },
+    { label: t("database.repeatRate7d"), value: playerStats7d ? formatPercent(playerStats7d.repeatRate ?? 0) : "--" },
   ];
 });
 
@@ -154,6 +158,10 @@ function onFiltersChange(value: { q: string; sort: string }) {
 
 onBeforeUnmount(() => {
   void queryClient.cancelQueries({ queryKey: ["player-database-detail"] });
+});
+
+onMounted(() => {
+  void loadStats();
 });
 
 async function cancelDetailQueries() {
@@ -217,6 +225,12 @@ function formatHoursFromSeconds(value: unknown) {
 
 function formatNumber(value: unknown) {
   return new Intl.NumberFormat(currentLocale.value).format(Number(value ?? 0));
+}
+
+function formatPercent(value: unknown) {
+  const ratio = Number(value ?? 0);
+  if (!Number.isFinite(ratio)) return "--";
+  return `${(Math.max(0, ratio) * 100).toFixed(1)}%`;
 }
 
 function sortRows(input: any[], sort: string) {
