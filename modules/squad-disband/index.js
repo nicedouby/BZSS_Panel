@@ -17,11 +17,10 @@ export function createSquadDisbandModule({ core, modules, config, logger }) {
         throw new Error("SquadManagement module is required.");
       }
 
-      const source = String(request.source ?? "manual").trim() || "manual";
-      
-      return await squadManagement.requestDisband({
+      return await squadManagement.executeAction({
         ...request,
-        source,
+        type: "disband_squad",
+        source: String(request.source ?? "module.squadDisband").trim() || "module.squadDisband",
       });
     },
   };
@@ -33,6 +32,8 @@ export function createSquadDisbandModule({ core, modules, config, logger }) {
       kind: "module",
       version: "1.0.0",
       description: "Dedicated module for disbanding squads.",
+      deprecated: true,
+      hidden: true,
     },
     apiName: API_NAME,
     api,

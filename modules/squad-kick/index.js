@@ -17,11 +17,10 @@ export function createSquadKickModule({ core, modules, config, logger }) {
         throw new Error("SquadManagement module is required.");
       }
 
-      const source = String(request.source ?? "manual").trim() || "manual";
-      
-      return await squadManagement.requestKick({
+      return await squadManagement.executeAction({
         ...request,
-        source,
+        type: "kick_player",
+        source: String(request.source ?? "module.squadKick").trim() || "module.squadKick",
       });
     },
   };
@@ -33,6 +32,8 @@ export function createSquadKickModule({ core, modules, config, logger }) {
       kind: "module",
       version: "1.0.0",
       description: "Dedicated module for kicking players from server.",
+      deprecated: true,
+      hidden: true,
     },
     apiName: API_NAME,
     api,

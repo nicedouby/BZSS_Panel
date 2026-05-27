@@ -17,11 +17,10 @@ export function createSquadRemoveModule({ core, modules, config, logger }) {
         throw new Error("SquadManagement module is required.");
       }
 
-      const source = String(request.source ?? "manual").trim() || "manual";
-      
-      return await squadManagement.requestRemoveFromSquad({
+      return await squadManagement.executeAction({
         ...request,
-        source,
+        type: "remove_from_squad",
+        source: String(request.source ?? "module.squadRemove").trim() || "module.squadRemove",
       });
     },
   };
@@ -33,6 +32,8 @@ export function createSquadRemoveModule({ core, modules, config, logger }) {
       kind: "module",
       version: "1.0.0",
       description: "Dedicated module for removing players from squads.",
+      deprecated: true,
+      hidden: true,
     },
     apiName: API_NAME,
     api,

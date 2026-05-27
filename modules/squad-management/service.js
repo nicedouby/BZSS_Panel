@@ -9,8 +9,27 @@ import { canDisband, canKick, canRemove } from "./permissions.js";
 const MODULE_ID = "module.squadManagement";
 const API_NAME = "squadManagement";
 
+const SQUAD_ACTION_TYPES = {
+  DISBAND_SQUAD: "disband_squad",
+  KICK_PLAYER: "kick_player",
+  REMOVE_FROM_SQUAD: "remove_from_squad",
+};
+
+const ACTION_TYPE_TO_KIND = {
+  [SQUAD_ACTION_TYPES.DISBAND_SQUAD]: "disband",
+  [SQUAD_ACTION_TYPES.KICK_PLAYER]: "kick",
+  [SQUAD_ACTION_TYPES.REMOVE_FROM_SQUAD]: "remove",
+};
+
+const ACTION_KIND_TO_TYPE = {
+  disband: SQUAD_ACTION_TYPES.DISBAND_SQUAD,
+  kick: SQUAD_ACTION_TYPES.KICK_PLAYER,
+  remove: SQUAD_ACTION_TYPES.REMOVE_FROM_SQUAD,
+};
+
 const DEFAULT_DISBAND_PERMISSION = "squad.disband";
 const DEFAULT_KICK_PERMISSION = "squad.kick";
+const DEFAULT_REMOVE_PERMISSION = "squad.remove";
 const DEFAULT_KICK_THRESHOLD = 10;
 const DEFAULT_MATCH_ID_PREFIX = "match";
 const MAX_RECENT_ACTIONS = 100;
@@ -27,13 +46,16 @@ export function createSquadManagementService({ core, modules, config, logger, re
   const enforcementEnabled = Boolean(moduleConfig.enforcementEnabled ?? false);
   const disbandPermission = String(moduleConfig.disbandPermission ?? DEFAULT_DISBAND_PERMISSION).trim() || DEFAULT_DISBAND_PERMISSION;
   const kickPermission = String(moduleConfig.kickPermission ?? DEFAULT_KICK_PERMISSION).trim() || DEFAULT_KICK_PERMISSION;
+  const removePermission = String(moduleConfig.removePermission ?? DEFAULT_REMOVE_PERMISSION).trim() || DEFAULT_REMOVE_PERMISSION;
   const kickThreshold = normalizePositiveInteger(moduleConfig.kickThreshold, DEFAULT_KICK_THRESHOLD);
   const allowedInfantryNames = Array.isArray(moduleConfig.allowedInfantryNames) ? moduleConfig.allowedInfantryNames : [];
+  const defaultSquadNamePattern = String(moduleConfig.defaultSquadNamePattern ?? "^Squad\\s*\\d+$").trim() || "^Squad\\s*\\d+$";
 
   const lifecycle = createSquadLifecycleReducer({ config, logger: moduleLogger });
   const serverCache = new Map();
   const recentActions = [];
   const creatorsByServer = new Map();
+  const pendingCreationsByServer = new Map();
   const unsubscribers = [];
   let initialized = false;
 
@@ -55,7 +77,12 @@ export function createSquadManagementService({ core, modules, config, logger, re
         enforcementEnabled: Boolean(state.enforcementEnabled),
         disbandPermission: state.disbandPermission,
         kickPermission: state.kickPermission,
+        removePermission: state.removePermission,
         kickThreshold: state.kickThreshold,
+        noBuildUntilSeconds: state.noBuildUntilSeconds,
+        infantryOnlyUntilSeconds: state.infantryOnlyUntilSeconds,
+        allowedInfantryNames: state.allowedInfantryNames,
+        defaultSquadNamePattern: state.defaultSquadNamePattern,
         window: state.window,
         currentSquads: state.squads.length,
         currentPlayers: state.players.length,
@@ -105,24 +132,107 @@ export function createSquadManagementService({ core, modules, config, logger, re
       return lifecycle.getCurrentSnapshot(serverId).list;
     },
 
-    async requestDisband(request = {}) {
-      return executeDisband({
+    async executeAction(request = {}) {
+      const type = normalizeActionType(request.type ?? request.action ?? request.kind);
+      if (!type) {
+        return buildInvalidActionResult(
+          "action",
+          "InvalidActionType",
+          "type is required.",
+          {
+            serverId: normalizeServerId(request.serverId),
+          },
+        );
+      }
+
+      const serverId = normalizeServerId(request.serverId);
+      const normalizedRequest = {
         ...request,
-        source: String(request.source ?? "manual").trim() || "manual",
+        type,
+        action: ACTION_TYPE_TO_KIND[type],
+        serverId,
+        reason: normalizeText(request.reason),
+        source: normalizeText(request.source) || "manual",
+        system: Boolean(request.system),
+        actor: request.actor ?? request.viewer ?? null,
+      };
+
+      let result;
+      switch (type) {
+        case SQUAD_ACTION_TYPES.DISBAND_SQUAD:
+          result = await executeDisband(normalizedRequest);
+          break;
+        case SQUAD_ACTION_TYPES.KICK_PLAYER:
+          result = await executeKick(normalizedRequest);
+          break;
+        case SQUAD_ACTION_TYPES.REMOVE_FROM_SQUAD:
+          result = await executeRemoveFromSquad(normalizedRequest);
+          break;
+        default:
+          result = buildInvalidActionResult("action", "UnsupportedActionType", `Unsupported action type: ${type}`, {
+            serverId,
+          });
+          break;
+      }
+
+      const finalResult = {
+        type,
+        action: ACTION_TYPE_TO_KIND[type] ?? result.action ?? "action",
+        serverId,
+        source: normalizedRequest.source,
+        system: Boolean(normalizedRequest.system),
+        reason: normalizedRequest.reason ?? "",
+        target: extractActionTarget(result.record) ?? null,
+        time: result.record?.time ?? "",
+        command: result.command ?? "",
+        rconExecuted: Boolean(result.rconExecuted),
+        rconResponse: result.rconResponse ?? "",
+        error: result.error ?? "",
+        message: result.message ?? "",
+        record: result.record ?? null,
+        state: result.state ?? buildStateSnapshot(serverId),
+        ok: Boolean(result.ok),
+      };
+
+      core.eventBus?.emitModuleEvent?.(MODULE_ID, "actionExecuted", {
+        type,
+        ok: finalResult.ok,
+        serverId,
+        target: extractActionTarget(finalResult.record) ?? null,
+        result: finalResult,
+      });
+
+      if (!finalResult.ok) {
+        core.eventBus?.emitModuleEvent?.(MODULE_ID, "actionFailed", {
+          type,
+          serverId,
+          error: finalResult.error ?? finalResult.message ?? "Action failed.",
+          reason: normalizedRequest.reason ?? "",
+          target: extractActionTarget(finalResult.record) ?? null,
+        });
+      }
+
+      return finalResult;
+    },
+
+    async requestDisband(request = {}) {
+      return api.executeAction({
+        ...request,
+        type: SQUAD_ACTION_TYPES.DISBAND_SQUAD,
       });
     },
 
     async requestKick(request = {}) {
-      return executeKick({
+      return api.executeAction({
         ...request,
-        source: String(request.source ?? "manual").trim() || "manual",
+        type: SQUAD_ACTION_TYPES.KICK_PLAYER,
       });
     },
 
     async requestRemoveFromSquad(request = {}) {
-      return executeRemoveFromSquad({
+      return api.executeAction({
         ...request,
-        source: String(request.source ?? "manual").trim() || "manual",
+        type: SQUAD_ACTION_TYPES.REMOVE_FROM_SQUAD,
       });
     },
 
@@ -136,6 +246,10 @@ export function createSquadManagementService({ core, modules, config, logger, re
 
     async kick(request = {}) {
       return api.requestKick(request);
+    },
+
+    async removeFromSquad(request = {}) {
+      return api.requestRemoveFromSquad(request);
     },
 
     async refresh(serverId = getDefaultServerId()) {
@@ -390,6 +504,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
     });
 
     touchCache(cache);
+    await flushPendingSquadCreations(serverId);
     core.eventBus?.emitModuleEvent?.(MODULE_ID, "squadsUpdated", {
       serverId,
       matchId: cache.matchId,
@@ -438,7 +553,14 @@ export function createSquadManagementService({ core, modules, config, logger, re
 
   async function handleSquadCreated(event = {}) {
     const parsed = normalizeSquadCreatedEvent(event);
-    if (!parsed.serverId || parsed.teamId == null || parsed.squadId == null) return;
+    if (!parsed.serverId || parsed.squadId == null) return;
+
+    const resolvedTeamId = resolveTeamIdForCreatedSquad(parsed.serverId, parsed);
+    if (resolvedTeamId == null) {
+      queuePendingSquadCreation(parsed.serverId, parsed);
+      return;
+    }
+    parsed.teamId = resolvedTeamId;
 
     const cache = ensureServerCache(parsed.serverId);
     const resolvedMatchId = parsed.matchId || cache.matchId || getCurrentMatchId(parsed.serverId) || buildSyntheticMatchId(parsed.serverId, event);
@@ -585,8 +707,13 @@ export function createSquadManagementService({ core, modules, config, logger, re
       });
     }
 
-    const state = buildStateSnapshot(serverId);
-    const target = state.squads.find((squad) => sameSquadKey(squad, teamId, squadId)) ?? null;
+    let state = buildStateSnapshot(serverId);
+    let target = state.squads.find((squad) => sameSquadKey(squad, teamId, squadId)) ?? null;
+    if (!target && request.allowRefresh !== false) {
+      await refreshSquadsSnapshot(serverId);
+      state = buildStateSnapshot(serverId);
+      target = state.squads.find((squad) => sameSquadKey(squad, teamId, squadId)) ?? null;
+    }
     if (!target) {
       return recordFailedAction({
         kind: "disband",
@@ -665,11 +792,15 @@ export function createSquadManagementService({ core, modules, config, logger, re
 
     return {
       ok: commandResult.ok,
+      type: SQUAD_ACTION_TYPES.DISBAND_SQUAD,
       action: "disband",
+      serverId,
       command,
       rconExecuted: commandResult.executed,
       rconResponse: commandResult.response,
       error: commandResult.error,
+      message: commandResult.ok ? "Squad disbanded." : commandResult.error,
+      record: result,
       state: buildStateSnapshot(serverId),
     };
   }
@@ -735,7 +866,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
     const command = `AdminKick "${escapeCommandString(targetId)}" ${escapeCommandString(reason)}`.trim();
     const commandResult = await executeKickCommand({ command, serverId, target, reason, source, operatorName, system });
 
-    await persistActionRecord({
+    const record = await persistActionRecord({
       kind: "kick",
       serverId,
       matchId: state.matchId,
@@ -775,11 +906,15 @@ export function createSquadManagementService({ core, modules, config, logger, re
 
     return {
       ok: commandResult.ok,
+      type: SQUAD_ACTION_TYPES.KICK_PLAYER,
       action: "kick",
+      serverId,
       command,
       rconExecuted: commandResult.executed,
       rconResponse: commandResult.response,
       error: commandResult.error,
+      message: commandResult.ok ? "Player kicked." : commandResult.error,
+      record,
       state: buildStateSnapshot(serverId),
     };
   }
@@ -826,7 +961,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
       });
     }
 
-    if (!system && !canRemove(actor, { removePermission: moduleConfig.removePermission || "squad.remove" })) {
+    if (!system && !canRemove(actor, { removePermission })) {
       return recordFailedAction({
         kind: "remove",
         serverId,
@@ -836,7 +971,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
         system,
         reason,
         error: "Forbidden",
-        message: `Permission 'squad.remove' is required.`,
+        message: `Permission '${removePermission}' is required.`,
         target,
       });
     }
@@ -845,7 +980,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
     const command = `AdminKickFromSquad "${escapeCommandString(targetId)}" ${escapeCommandString(reason)}`.trim();
     const commandResult = await executeRemoveCommand({ command, serverId, target, reason, source, operatorName, system });
 
-    await persistActionRecord({
+    const record = await persistActionRecord({
       kind: "remove",
       serverId,
       matchId: state.matchId,
@@ -885,11 +1020,15 @@ export function createSquadManagementService({ core, modules, config, logger, re
 
     return {
       ok: commandResult.ok,
+      type: SQUAD_ACTION_TYPES.REMOVE_FROM_SQUAD,
       action: "remove",
+      serverId,
       command,
       rconExecuted: commandResult.executed,
       rconResponse: commandResult.response,
       error: commandResult.error,
+      message: commandResult.ok ? "Player removed from squad." : commandResult.error,
+      record,
       state: buildStateSnapshot(serverId),
     };
   }
@@ -1104,9 +1243,12 @@ export function createSquadManagementService({ core, modules, config, logger, re
       enforcementEnabled,
       disbandPermission,
       kickPermission,
+      removePermission,
       kickThreshold,
+      noBuildUntilSeconds: normalizePositiveInteger(moduleConfig.noBuildUntilSeconds, 0),
+      infantryOnlyUntilSeconds: normalizePositiveInteger(moduleConfig.infantryOnlyUntilSeconds, 0),
       allowedInfantryNames,
-      defaultSquadNamePattern: "^Squad\\s*\\d+$",
+      defaultSquadNamePattern,
       currentMatchId: cache.matchId || lifecycleSnapshot.matchId || "",
       activationEnabled: false,
       activationPopulation: players.length,
@@ -1145,6 +1287,8 @@ export function createSquadManagementService({ core, modules, config, logger, re
       const response = await runRconCommand({
         command,
         serverId,
+        teamId,
+        squadId,
         reason,
         source,
         operatorName,
@@ -1170,6 +1314,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
       const response = await runRconCommand({
         command,
         serverId,
+        target,
         reason,
         source,
         operatorName,
@@ -1195,6 +1340,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
       const response = await runRconCommand({
         command,
         serverId,
+        target,
         reason,
         source,
         operatorName,
@@ -1223,7 +1369,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
     }
 
     if (action === "kick" || action === "remove") {
-      const target = meta.target ?? "";
+      const target = resolveRconPlayerTarget(meta.target);
       if (action === "kick") {
         if (typeof core.squadRcon?.kick === "function") {
           return await core.squadRcon.kick(target, meta.reason ?? "");
@@ -1253,6 +1399,11 @@ export function createSquadManagementService({ core, modules, config, logger, re
     }
 
     throw new Error("No RCON executor is available.");
+  }
+
+  function resolveRconPlayerTarget(target) {
+    if (!target || typeof target !== "object") return String(target ?? "");
+    return normalizeText(target.steamId ?? target.eosId ?? target.name ?? target.playerId ?? target.anyId ?? target.playerKey ?? "");
   }
 
   function getDefaultServerId() {
@@ -1505,12 +1656,13 @@ export function createSquadManagementService({ core, modules, config, logger, re
     // Policy 1: No Build until X seconds
     const noBuildUntilSeconds = normalizePositiveInteger(moduleConfig.noBuildUntilSeconds, 0);
     if (noBuildUntilSeconds > 0 && logSeconds < noBuildUntilSeconds) {
-      return executeDisband({
+      return api.executeAction({
+        type: SQUAD_ACTION_TYPES.DISBAND_SQUAD,
         serverId,
         teamId: lifecycleRecord.teamId,
         squadId: lifecycleRecord.squadId,
         reason: `No building allowed until ${noBuildUntilSeconds}s (current: ${logSeconds}s)`,
-        source: "policy",
+        source: "policy.fairSquadBuilding",
         system: true,
       });
     }
@@ -1520,14 +1672,15 @@ export function createSquadManagementService({ core, modules, config, logger, re
     if (infantryOnlyUntilSeconds > 0 && logSeconds < infantryOnlyUntilSeconds) {
       const squadName = normalizeText(lifecycleRecord.squadName);
       const isAllowed = allowedInfantryNames.some((name) => squadName.toLowerCase().includes(normalizeText(name).toLowerCase()))
-        || /^Squad\s*\d+$/i.test(squadName);
+        || isAllowedSquadName(squadName);
       if (!isAllowed) {
-        return executeDisband({
+        return api.executeAction({
+          type: SQUAD_ACTION_TYPES.DISBAND_SQUAD,
           serverId,
           teamId: lifecycleRecord.teamId,
           squadId: lifecycleRecord.squadId,
           reason: `Infantry/Allowed squads only until ${infantryOnlyUntilSeconds}s`,
-          source: "policy",
+          source: "policy.fairSquadBuilding",
           system: true,
         });
       }
@@ -1665,6 +1818,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
 
   function resolveRequestedPlayer(request) {
     return {
+      anyId: normalizeText(request.anyId ?? request.playerKey ?? request.playerID ?? request.playerId ?? request.steamId ?? request.steamID ?? request.eosId ?? request.eosID ?? request.name ?? request.playerName),
       playerKey: normalizeText(request.playerKey ?? request.playerID ?? request.playerId),
       playerId: normalizeText(request.playerId ?? request.playerID),
       steamId: normalizeText(request.steamId ?? request.steamID ?? request.Steam64ID),
@@ -1675,6 +1829,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
 
   function resolvePlayerTarget(state, request) {
     const lookup = {
+      anyId: normalizeText(request.anyId ?? request.playerKey ?? request.playerId ?? request.playerID ?? request.steamId ?? request.steamID ?? request.eosId ?? request.eosID ?? request.name ?? request.playerName),
       playerKey: normalizeText(request.playerKey ?? request.playerId ?? request.playerID),
       playerId: normalizeText(request.playerId ?? request.playerID),
       steamId: normalizeText(request.steamId ?? request.steamID),
@@ -1683,6 +1838,13 @@ export function createSquadManagementService({ core, modules, config, logger, re
     };
 
     const target = state.players.find((player) => {
+      if (lookup.anyId && (
+        normalizeText(player.playerId) === lookup.anyId
+        || normalizeText(player.steamId) === lookup.anyId
+        || normalizeText(player.eosId) === lookup.anyId
+        || normalizeText(player.name) === lookup.anyId
+        || samePlayerKey(player, lookup.anyId)
+      )) return true;
       if (lookup.playerKey && samePlayerKey(player, lookup.playerKey)) return true;
       if (lookup.playerId && normalizeText(player.playerId) === lookup.playerId) return true;
       if (lookup.steamId && normalizeText(player.steamId) === lookup.steamId) return true;
@@ -1763,6 +1925,123 @@ export function createSquadManagementService({ core, modules, config, logger, re
     return String(value ?? "").trim();
   }
 
+  function isAllowedSquadName(squadName) {
+    const pattern = defaultSquadNamePattern || "^Squad\\s*\\d+$";
+    try {
+      return new RegExp(pattern, "i").test(normalizeText(squadName));
+    } catch {
+      return /^Squad\s*\d+$/i.test(normalizeText(squadName));
+    }
+  }
+
+  function resolveTeamIdForCreatedSquad(serverId, parsed) {
+    if (parsed?.teamId != null) return parsed.teamId;
+
+    const cache = ensureServerCache(serverId);
+    const squads = Array.isArray(cache.rawSquads) ? cache.rawSquads : [];
+    const parsedSquadId = Number(parsed?.squadId);
+    const parsedSquadName = normalizeText(parsed?.squadName).toLowerCase();
+    const parsedCreatorName = normalizeText(parsed?.creatorName).toLowerCase();
+    const parsedCreatorSteamId = normalizeText(parsed?.creatorSteamId).toLowerCase();
+    const parsedCreatorEosId = normalizeText(parsed?.creatorEosId).toLowerCase();
+    const parsedTeamName = normalizeText(parsed?.teamName).toLowerCase();
+
+    const byStrict = squads.find((squad) =>
+      Number(squad.squadId) === parsedSquadId
+      && normalizeText(squad.squadName).toLowerCase() === parsedSquadName,
+    );
+    if (byStrict?.teamId != null) return byStrict.teamId;
+
+    const byCreator = squads.find((squad) =>
+      Number(squad.squadId) === parsedSquadId
+      && normalizeText(squad.creatorName).toLowerCase() === parsedCreatorName,
+    );
+    if (byCreator?.teamId != null) return byCreator.teamId;
+
+    const byIdentity = squads.find((squad) =>
+      normalizeText(squad.squadName).toLowerCase() === parsedSquadName
+      && (
+        normalizeText(squad.creatorSteamId).toLowerCase() === parsedCreatorSteamId
+        || normalizeText(squad.creatorEosId).toLowerCase() === parsedCreatorEosId
+      ),
+    );
+    if (byIdentity?.teamId != null) return byIdentity.teamId;
+
+    const byFaction = squads.find((squad) =>
+      Number(squad.squadId) === parsedSquadId
+      && (
+        normalizeText(squad.teamName).toLowerCase() === parsedTeamName
+        || normalizeText(squad.teamName).toLowerCase() === normalizeText(parsed?.teamName).toLowerCase()
+      ),
+    );
+    if (byFaction?.teamId != null) return byFaction.teamId;
+
+    return null;
+  }
+
+  function queuePendingSquadCreation(serverId, parsed) {
+    const key = normalizeServerId(serverId);
+    if (!key) return;
+    const queue = pendingCreationsByServer.get(key) ?? [];
+    const signature = buildPendingCreationSignature(parsed);
+    if (queue.some((item) => buildPendingCreationSignature(item) === signature)) return;
+    queue.push({ ...parsed });
+    pendingCreationsByServer.set(key, queue);
+  }
+
+  async function flushPendingSquadCreations(serverId) {
+    const key = normalizeServerId(serverId);
+    const queue = pendingCreationsByServer.get(key);
+    if (!Array.isArray(queue) || queue.length === 0) return;
+
+    pendingCreationsByServer.set(key, []);
+    for (const parsed of queue) {
+      await handleSquadCreated(parsed);
+    }
+
+    const remaining = pendingCreationsByServer.get(key) ?? [];
+    if (remaining.length === 0) {
+      pendingCreationsByServer.delete(key);
+    }
+  }
+
+  async function refreshSquadsSnapshot(serverId) {
+    const matchState = modules?.matchState;
+    if (typeof matchState?.refresh === "function") {
+      await matchState.refresh("squads");
+      return true;
+    }
+
+    if (typeof core.rconManager?.dispatchCommand === "function") {
+      await core.rconManager.dispatchCommand({
+        command: "ListSquads",
+        requestedBy: `${MODULE_ID}:refresh`,
+        reason: "squad-target-refresh",
+      });
+    }
+
+    return false;
+  }
+
+  function extractActionTarget(record = null) {
+    if (!record || typeof record !== "object") return null;
+    const payload = record.payload ?? {};
+    return payload.target ?? payload?.request?.target ?? null;
+  }
+
+  function buildPendingCreationSignature(parsed = {}) {
+    return [
+      normalizeServerId(parsed.serverId),
+      normalizeText(parsed.matchId),
+      normalizeText(parsed.squadId),
+      normalizeText(parsed.teamId),
+      normalizeText(parsed.squadName).toLowerCase(),
+      normalizeText(parsed.creatorName).toLowerCase(),
+      normalizeText(parsed.creatorSteamId).toLowerCase(),
+      normalizeText(parsed.creatorEosId).toLowerCase(),
+    ].join(":");
+  }
+
   function buildSyntheticMatchId(serverId, event = {}) {
     const rawMatchId = normalizeMatchId(event.matchId ?? event.sessionId ?? event.sessionID ?? "");
     if (rawMatchId) return rawMatchId;
@@ -1772,22 +2051,36 @@ export function createSquadManagementService({ core, modules, config, logger, re
   function normalizeRecordKindFilter(value) {
     const kind = normalizeText(value).toLowerCase();
     if (kind === "created" || kind === "squad_created") return "squad_created";
+    if (kind === "remove") return "remove";
     if (kind === "disband" || kind === "kick" || kind === "action" || kind === "all") return kind;
     return "all";
+  }
+
+  function normalizeActionType(value) {
+    const type = normalizeText(value).toLowerCase();
+    if (type in ACTION_TYPE_TO_KIND) return type;
+    if (type in ACTION_KIND_TO_TYPE) return ACTION_KIND_TO_TYPE[type];
+    return "";
   }
 
   function buildInvalidActionResult(action, error, message, details = {}) {
     return {
       ok: false,
+      type: ACTION_KIND_TO_TYPE[action] ?? action,
       action,
+      serverId: normalizeServerId(details.serverId),
+      command: "",
+      rconExecuted: false,
+      rconResponse: "",
       error,
       message,
+      record: null,
       state: buildStateSnapshot(normalizeServerId(details.serverId)),
     };
   }
 
   async function recordFailedAction(entry) {
-    await persistActionRecord({
+    const record = await persistActionRecord({
       kind: entry.kind,
       serverId: entry.serverId,
       matchId: entry.matchId,
@@ -1814,9 +2107,15 @@ export function createSquadManagementService({ core, modules, config, logger, re
 
     return {
       ok: false,
+      type: ACTION_KIND_TO_TYPE[entry.kind] ?? entry.kind,
       action: entry.kind,
+      serverId: normalizeServerId(entry.serverId),
+      command: entry.command ?? "",
+      rconExecuted: false,
+      rconResponse: "",
       error: entry.error,
       message: entry.message,
+      record,
       state: buildStateSnapshot(entry.serverId),
     };
   }

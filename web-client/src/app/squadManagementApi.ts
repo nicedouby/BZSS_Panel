@@ -69,17 +69,20 @@ export interface SquadManagementActionTarget {
 
 export interface SquadManagementActionResult {
   ok: boolean;
+  type: string;
   action: string;
+  serverId: string;
   source: string;
   system: boolean;
-  target: SquadManagementActionTarget;
+  target: SquadManagementActionTarget | null;
   reason: string;
-  time: string;
+  time?: string;
   error?: string;
   message?: string;
   command?: string;
   rconExecuted?: boolean;
   rconResponse?: string;
+  record?: Record<string, unknown> | null;
 }
 
 export interface SquadManagementState {
@@ -142,11 +145,14 @@ export interface SquadManagementStateResponse {
   viewer: SquadManagementViewer;
 }
 
-export interface SquadManagementActionResponse {
-  ok: boolean;
-  result: SquadManagementActionResult;
+export interface SquadManagementActionResponse extends SquadManagementActionResult {
   state: SquadManagementState;
 }
+
+export type SquadManagementActionType =
+  | "disband_squad"
+  | "kick_player"
+  | "remove_from_squad";
 
 export interface SquadManagementRecord {
   id: number;
@@ -205,13 +211,34 @@ export function getSquadManagementState() {
   return apiGet<SquadManagementStateResponse>("/api/squad-management/state");
 }
 
+export function executeSquadManagementAction(payload: {
+  type: SquadManagementActionType;
+  serverId?: string;
+  teamId?: number | null;
+  squadId?: number | null;
+  playerId?: string;
+  playerKey?: string;
+  steamId?: string;
+  eosId?: string;
+  name?: string;
+  anyId?: string;
+  reason?: string;
+  source?: string;
+  system?: boolean;
+}) {
+  return apiPost<SquadManagementActionResponse>("/api/squad-management/actions", payload);
+}
+
 export function disbandSquad(payload: {
   teamId?: number | null;
   squadId?: number | null;
   reason?: string;
   source?: string;
 }) {
-  return apiPost<SquadManagementActionResponse>("/api/squad-disband/execute", payload);
+  return executeSquadManagementAction({
+    type: "disband_squad",
+    ...payload,
+  });
 }
 
 export function kickPlayer(payload: {
@@ -222,7 +249,10 @@ export function kickPlayer(payload: {
   eosId?: string;
   name?: string;
 }) {
-  return apiPost<SquadManagementActionResponse>("/api/squad-kick/execute", payload);
+  return executeSquadManagementAction({
+    type: "kick_player",
+    ...payload,
+  });
 }
 
 export function removePlayerFromSquad(payload: {
@@ -233,7 +263,10 @@ export function removePlayerFromSquad(payload: {
   eosId?: string;
   name?: string;
 }) {
-  return apiPost<SquadManagementActionResponse>("/api/squad-remove/execute", payload);
+  return executeSquadManagementAction({
+    type: "remove_from_squad",
+    ...payload,
+  });
 }
 
 export function warnPlayer(payload: {

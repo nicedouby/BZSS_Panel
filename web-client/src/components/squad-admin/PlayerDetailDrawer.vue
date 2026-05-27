@@ -280,7 +280,7 @@ async function handleKick() {
       reason: "manual_kick",
       source: "web.squadAdmin",
     });
-    if (!res.ok) throw new Error(res.result?.message || "踢出执行失败");
+    if (!res.ok) throw new Error(res.message || "踢出执行失败");
     ui.pushToast({ title: "指令已送达", message: "踢出玩家请求已处理", tone: "ok" });
   } catch (e) {
     ui.pushToast({ title: "踢出失败", message: String(e), tone: "error" });
@@ -305,7 +305,7 @@ async function handleRemove() {
       reason: "manual_remove",
       source: "web.squadAdmin",
     });
-    if (!res.ok) throw new Error(res.result?.message || "移出执行失败");
+    if (!res.ok) throw new Error(res.message || "移出执行失败");
     ui.pushToast({ title: "指令已送达", message: "玩家移出请求已处理", tone: "ok" });
   } catch (e) {
     ui.pushToast({ title: "移出失败", message: String(e), tone: "error" });

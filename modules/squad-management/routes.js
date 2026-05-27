@@ -58,12 +58,43 @@ export async function handleSquadManagementRoutes({
     return true;
   }
 
+  if (url.pathname === "/api/squad-management/actions" && req.method === "POST") {
+    if (!core.authManager?.hasEverything?.(user)) {
+      json(403, {
+        error: "Forbidden",
+        message: "SuperAdmin permission is required.",
+      });
+      return true;
+    }
+
+    const body = await readJsonBody(req);
+    const api = squadManagement;
+    if (!api?.executeAction) {
+      json(404, { error: "SquadManagementUnavailable" });
+      return true;
+    }
+
+    const result = await api.executeAction({
+      ...body,
+      actor: user,
+      source: body.source ?? "web.squadManagement",
+      system: false,
+    });
+
+    json(result.ok ? 200 : 400, result);
+    return true;
+  }
+
   if (url.pathname === "/api/squad-management/disband" && req.method === "POST") {
     const body = await readJsonBody(req);
     const serverId = body.serverId ?? body.serverID ?? core.webStatus?.serverId ?? "";
-    const requestDisband = squadManagement.requestDisband ?? squadManagement.disband;
-    const result = await requestDisband({
+    if (!squadManagement?.executeAction) {
+      json(404, { error: "SquadManagementUnavailable" });
+      return true;
+    }
+    const result = await squadManagement.executeAction({
       actor: user,
+      type: "disband_squad",
       serverId,
       teamId: body.teamId ?? body.teamID ?? null,
       squadId: body.squadId ?? body.squadID ?? null,
@@ -84,11 +115,16 @@ export async function handleSquadManagementRoutes({
   if (url.pathname === "/api/squad-management/kick" && req.method === "POST") {
     const body = await readJsonBody(req);
     const serverId = body.serverId ?? body.serverID ?? core.webStatus?.serverId ?? "";
-    const requestKick = squadManagement.requestKick ?? squadManagement.kick;
-    const result = await requestKick({
+    if (!squadManagement?.executeAction) {
+      json(404, { error: "SquadManagementUnavailable" });
+      return true;
+    }
+    const result = await squadManagement.executeAction({
       actor: user,
+      type: "kick_player",
       serverId,
       playerId: body.playerId ?? body.playerID ?? "",
+      playerKey: body.playerKey ?? body.anyId ?? body.playerId ?? body.playerID ?? "",
       steamId: body.steamId ?? body.steamID ?? "",
       eosId: body.eosId ?? body.eosID ?? "",
       name: body.name ?? body.playerName ?? body.creatorName ?? "",
@@ -96,7 +132,36 @@ export async function handleSquadManagementRoutes({
       source: body.source ?? "manual",
       system: Boolean(body.system ?? false),
       operatorName: body.operatorName ?? user?.username ?? "",
-      creatorKey: body.creatorKey ?? "",
+    });
+
+    json(result.ok ? 200 : (result.error === "Forbidden" ? 403 : 400), {
+      ok: result.ok,
+      result,
+      state: result.state ?? squadManagement.getState(serverId),
+    });
+    return true;
+  }
+
+  if (url.pathname === "/api/squad-management/remove" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    const serverId = body.serverId ?? body.serverID ?? core.webStatus?.serverId ?? "";
+    if (!squadManagement?.executeAction) {
+      json(404, { error: "SquadManagementUnavailable" });
+      return true;
+    }
+    const result = await squadManagement.executeAction({
+      actor: user,
+      type: "remove_from_squad",
+      serverId,
+      playerId: body.playerId ?? body.playerID ?? "",
+      playerKey: body.playerKey ?? body.anyId ?? body.playerId ?? body.playerID ?? "",
+      steamId: body.steamId ?? body.steamID ?? "",
+      eosId: body.eosId ?? body.eosID ?? "",
+      name: body.name ?? body.playerName ?? body.creatorName ?? "",
+      reason: body.reason ?? "",
+      source: body.source ?? "manual",
+      system: Boolean(body.system ?? false),
+      operatorName: body.operatorName ?? user?.username ?? "",
     });
 
     json(result.ok ? 200 : (result.error === "Forbidden" ? 403 : 400), {

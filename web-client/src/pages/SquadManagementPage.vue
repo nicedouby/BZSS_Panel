@@ -298,7 +298,7 @@ async function handleDisband() {
       source: disbandSource.value,
       reason: disbandReason.value.trim(),
     });
-    if (!res.ok) throw new Error(res.result?.message || "指令执行失败");
+    if (!res.ok) throw new Error(res.message || "指令执行失败");
     ui.pushToast({ title: "指令已送达", message: "小队解散请求已处理", tone: "ok" });
     disbandTeamId.value = ""; disbandSquadId.value = ""; disbandReason.value = "";
     void reload();
@@ -325,7 +325,7 @@ async function handleKick() {
       source: kickSource.value,
       reason: kickReason.value.trim(),
     });
-    if (!res.ok) throw new Error(res.result?.message || "指令执行失败");
+    if (!res.ok) throw new Error(res.message || "指令执行失败");
     ui.pushToast({ title: "指令已送达", message: "踢出玩家请求已处理", tone: "ok" });
     kickTarget.value = ""; kickReason.value = "";
     void reload();
@@ -352,7 +352,7 @@ async function handleRemove() {
       source: removeSource.value,
       reason: removeReason.value.trim(),
     });
-    if (!res.ok) throw new Error(res.result?.message || "指令执行失败");
+    if (!res.ok) throw new Error(res.message || "指令执行失败");
     ui.pushToast({ title: "指令已送达", message: "玩家移出请求已处理", tone: "ok" });
     removeTarget.value = ""; removeReason.value = "";
     void reload();

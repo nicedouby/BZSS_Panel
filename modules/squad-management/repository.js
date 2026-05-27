@@ -451,6 +451,7 @@ function mapRecordRow(row = {}) {
 function normalizeKindFilter(kind) {
   const value = normalizeText(kind).toLowerCase();
   if (value === "created" || value === "squad_created") return "squad_created";
+  if (value === "remove") return "remove";
   if (value === "disband" || value === "kick" || value === "action" || value === "all") return value;
   return "all";
 }

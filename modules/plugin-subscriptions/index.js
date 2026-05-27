@@ -14,6 +14,12 @@ const DEFAULT_STATE_FILE = "./data/plugin-subscriptions.json";
 const KIND_OVERRIDES = {
 };
 
+const HIDDEN_RUNTIME_ITEM_IDS = new Set([
+  "module.squadDisband",
+  "module.squadKick",
+  "module.squadRemove",
+]);
+
 /**
  * 插件订阅模块
  *
@@ -64,6 +70,7 @@ export function createPluginSubscriptionsModule({ core, modules, config }) {
   function registerRuntimeItem(item = {}) {
     const id = normalizeId(item.id ?? item.manifest?.id);
     if (!id) return null;
+    if (HIDDEN_RUNTIME_ITEM_IDS.has(id)) return null;
 
     const now = new Date().toISOString();
     const previous = runtimeItems.get(id) ?? {};
@@ -96,14 +103,17 @@ export function createPluginSubscriptionsModule({ core, modules, config }) {
     const items = new Map();
 
     for (const item of runtimeItems.values()) {
+      if (HIDDEN_RUNTIME_ITEM_IDS.has(item.id)) continue;
       items.set(item.id, { ...item });
     }
 
     for (const page of getRegisteredPages()) {
+      if (HIDDEN_RUNTIME_ITEM_IDS.has(page.id)) continue;
       items.set(page.id, page);
     }
 
     for (const [id] of subscriptions.entries()) {
+      if (HIDDEN_RUNTIME_ITEM_IDS.has(id)) continue;
       if (!items.has(id)) {
         items.set(id, {
           id,
@@ -199,6 +209,7 @@ export function createPluginSubscriptionsModule({ core, modules, config }) {
 
       if (rawMap && typeof rawMap === "object" && !Array.isArray(rawMap)) {
         for (const [id, value] of Object.entries(rawMap)) {
+          if (HIDDEN_RUNTIME_ITEM_IDS.has(normalizeId(id))) continue;
           subscriptions.set(normalizeId(id), value !== false);
         }
       }

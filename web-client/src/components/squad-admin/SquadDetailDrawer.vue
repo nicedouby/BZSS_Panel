@@ -176,7 +176,7 @@ async function handleDisbandSquad() {
       reason: "manual_disband",
       source: "web.squadAdmin",
     });
-    if (!res.ok) throw new Error(res.result?.message || "解散执行失败");
+    if (!res.ok) throw new Error(res.message || "解散执行失败");
     ui.pushToast({ title: "指令已送达", message: "小队解散请求已处理", tone: "ok" });
     close();
   } catch (e) {

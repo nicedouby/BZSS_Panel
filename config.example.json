@@ -257,6 +257,7 @@
       "enabled": true,
       "disbandPermission": "squad.disband",
       "kickPermission": "squad.kick",
+      "removePermission": "squad.remove",
       "kickThreshold": 10,
       "noBuildUntilSeconds": 20,
       "infantryOnlyUntilSeconds": 50,

@@ -215,13 +215,15 @@ export class WebServer {
 
     if (url.pathname === "/api/system/status" && req.method === "GET") {
       if (!this.requireSuperAdmin(user, res)) return;
-      const modules = this.core.moduleManager?.instances?.map((inst) => ({
-        id: inst.manifest?.id,
-        name: inst.manifest?.name ?? inst.manifest?.id,
-        version: inst.manifest?.version ?? "1.0.0",
-        description: inst.manifest?.description ?? "",
-        status: "running",
-      })) ?? [];
+      const modules = this.core.moduleManager?.instances
+        ?.filter((inst) => !inst.manifest?.hidden && !inst.manifest?.deprecated)
+        .map((inst) => ({
+          id: inst.manifest?.id,
+          name: inst.manifest?.name ?? inst.manifest?.id,
+          version: inst.manifest?.version ?? "1.0.0",
+          description: inst.manifest?.description ?? "",
+          status: "running",
+        })) ?? [];
 
       const plugins = this.core.pluginManager?.instances?.map((inst) => ({
         id: inst.manifest?.id,
@@ -1115,12 +1117,36 @@ export class WebServer {
       });
     }
 
-    if (url.pathname === "/api/squad-disband/execute" && req.method === "POST") {
-      const api = this.modules.squadDisband;
-      if (!api) return this.json(res, 404, { error: "ModuleNotFound" });
+    if (url.pathname === "/api/squad-management/actions" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
+      const api = this.modules.squadManagement;
+      if (!api?.executeAction) {
+        return this.json(res, 404, { error: "SquadManagementUnavailable" });
+      }
+
+      const result = await api.executeAction({
+        ...body,
+        actor: user,
+        source: body.source ?? "web.squadManagement",
+        system: false,
+      });
+
+      return this.json(res, result.ok ? 200 : 400, result);
+    }
+
+    if (url.pathname === "/api/squad-disband/execute" && req.method === "POST") {
+      const body = await this.readJsonBody(req);
+      const api = this.modules.squadManagement;
+      if (!api?.executeAction) return this.json(res, 404, { error: "SquadManagementUnavailable" });
       try {
-        const result = await api.disbandSquad({ ...body, actor: user });
+        const result = await api.executeAction({
+          ...body,
+          actor: user,
+          type: "disband_squad",
+          source: body.source ?? "web.squadDisband",
+          system: Boolean(body.system ?? false),
+        });
         return this.json(res, result.ok ? 200 : 400, result);
       } catch (err) {
         return this.json(res, 500, { error: "InternalError", message: err.message });
@@ -1128,11 +1154,17 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/squad-kick/execute" && req.method === "POST") {
-      const api = this.modules.squadKick;
-      if (!api) return this.json(res, 404, { error: "ModuleNotFound" });
       const body = await this.readJsonBody(req);
+      const api = this.modules.squadManagement;
+      if (!api?.executeAction) return this.json(res, 404, { error: "SquadManagementUnavailable" });
       try {
-        const result = await api.kickPlayer({ ...body, actor: user });
+        const result = await api.executeAction({
+          ...body,
+          actor: user,
+          type: "kick_player",
+          source: body.source ?? "web.squadKick",
+          system: Boolean(body.system ?? false),
+        });
         return this.json(res, result.ok ? 200 : 400, result);
       } catch (err) {
         return this.json(res, 500, { error: "InternalError", message: err.message });
@@ -1140,11 +1172,17 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/squad-remove/execute" && req.method === "POST") {
-      const api = this.modules.squadRemove;
-      if (!api) return this.json(res, 404, { error: "ModuleNotFound" });
       const body = await this.readJsonBody(req);
+      const api = this.modules.squadManagement;
+      if (!api?.executeAction) return this.json(res, 404, { error: "SquadManagementUnavailable" });
       try {
-        const result = await api.removePlayerFromSquad({ ...body, actor: user });
+        const result = await api.executeAction({
+          ...body,
+          actor: user,
+          type: "remove_from_squad",
+          source: body.source ?? "web.squadRemove",
+          system: Boolean(body.system ?? false),
+        });
         return this.json(res, result.ok ? 200 : 400, result);
       } catch (err) {
         return this.json(res, 500, { error: "InternalError", message: err.message });

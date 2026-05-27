@@ -527,17 +527,18 @@ function openPlayerRealtimeWindow(player, { apiFetch, onNavigate, onRefresh } = 
   root.querySelector("#kick-player")?.addEventListener("click", async () => {
     if (!window.confirm(`确定要将玩家 ${player.name} 踢出服务器吗？`)) return;
     try {
-      const response = await apiFetch("/api/squad-kick/execute", {
+      const response = await apiFetch("/api/squad-management/actions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          type: "kick_player",
           anyId: steamID || eosID || player.name,
           reason: "manual_kick",
           source: "web.legacy.matchStatus",
         }),
       });
       const data = await readJsonSafe(response);
-      if (!response.ok || !data.ok) throw new Error(data?.result?.message || "踢出执行失败");
+      if (!response.ok || !data.ok) throw new Error(data?.message || "踢出执行失败");
       showToast("踢出请求已下达");
       await onRefresh?.();
     } catch (e) {
@@ -548,17 +549,18 @@ function openPlayerRealtimeWindow(player, { apiFetch, onNavigate, onRefresh } = 
   root.querySelector("#remove-player-from-squad")?.addEventListener("click", async () => {
     if (!window.confirm(`确定要将玩家 ${player.name} 移出小队吗？`)) return;
     try {
-      const response = await apiFetch("/api/squad-remove/execute", {
+      const response = await apiFetch("/api/squad-management/actions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          type: "remove_from_squad",
           anyId: steamID || eosID || player.name,
           reason: "manual_remove",
           source: "web.legacy.matchStatus",
         }),
       });
       const data = await readJsonSafe(response);
-      if (!response.ok || !data.ok) throw new Error(data?.result?.message || "移除执行失败");
+      if (!response.ok || !data.ok) throw new Error(data?.message || "移除执行失败");
       showToast("移除请求已下达");
       await onRefresh?.();
     } catch (e) {

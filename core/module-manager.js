@@ -107,10 +107,12 @@ export class ModuleManager {
         }
       }
 
-      this.registry.pluginSubscriptions?.registerRuntimeItem?.({
-        ...(instance.manifest ?? {}),
-        status: this.getRuntimeStatus(instance.manifest),
-      });
+      if (!instance.manifest?.hidden && !instance.manifest?.deprecated) {
+        this.registry.pluginSubscriptions?.registerRuntimeItem?.({
+          ...(instance.manifest ?? {}),
+          status: this.getRuntimeStatus(instance.manifest),
+        });
+      }
 
       moduleLogger.info(`Loaded ${instance.manifest.id}`, {
         label: "MODULE",

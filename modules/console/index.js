@@ -28,6 +28,27 @@ export function createConsoleModule({ core, config }) {
   const store = new RingLogStore(maxLines);
   const unsubscribers = [];
 
+  function getHiddenScopeIds() {
+    const ids = new Set([
+      "module.squadDisband",
+      "module.squadKick",
+      "module.squadRemove",
+    ]);
+
+    for (const instance of core.moduleManager?.instances ?? []) {
+      if (!instance?.manifest) continue;
+      if (!instance.manifest.hidden && !instance.manifest.deprecated) continue;
+      const id = String(instance.manifest.id ?? "").trim();
+      if (id) ids.add(id);
+    }
+
+    return ids;
+  }
+
+  function shouldHideScope(scope) {
+    return getHiddenScopeIds().has(String(scope ?? "").trim());
+  }
+
   function push(line) {
     return store.push({
       time: line.time || new Date().toISOString(),
@@ -50,7 +71,9 @@ export function createConsoleModule({ core, config }) {
   const api = {
     getChannels(options = {}) {
       const stream = String(options.stream ?? "modules");
-      const observedScopes = store.getObservedScopes(stream).map((id) => ({ id, title: id }));
+      const observedScopes = store.getObservedScopes(stream)
+        .filter((id) => !shouldHideScope(id))
+        .map((id) => ({ id, title: id }));
 
       return {
         streams: DEFAULT_STREAMS.map((item) => ({ ...item })),
