@@ -2,11 +2,13 @@
   <section class="console-page">
     <header class="console-toolbar-area">
       <ConsoleToolbar
+        ref="toolbarRef"
         :stream="filters.stream"
         :scope="filters.scope"
         :level="filters.level"
         :q="filters.q"
         :paused="filters.paused"
+        :has-active-filters="hasActiveFilters"
         :streams="channelsQuery.data.value?.streams ?? defaultStreams"
         :scopes="channelsQuery.data.value?.scopes ?? defaultScopes"
         :levels="channelsQuery.data.value?.levels ?? defaultLevels"
@@ -16,6 +18,7 @@
         @update:q="searchInput = $event"
         @toggle-paused="filters.paused = !filters.paused"
         @clear="clearVisibleLines"
+        @reset-filters="resetFilters"
       />
       <div class="console-status-bar">
         <StatusBadge :tone="filters.paused ? 'warn' : 'ok'">{{ filters.paused ? t("common.paused") : t("common.live") }}</StatusBadge>
@@ -43,7 +46,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import DataState from "../components/common/DataState.vue";
 import StatusBadge from "../components/common/StatusBadge.vue";
 import ConsoleToolbar from "../components/console/ConsoleToolbar.vue";
@@ -76,7 +79,11 @@ const defaultLevels = [
 ];
 
 const searchInput = ref("");
+const toolbarRef = ref<InstanceType<typeof ConsoleToolbar> | null>(null);
 let searchTimer: number | null = null;
+const hasActiveFilters = computed(() => {
+  return filters.stream !== "modules" || filters.scope !== "all" || filters.level !== "all" || Boolean(filters.q.trim());
+});
 
 const { lines, hidden, clearVisibleLines, channelsQuery, linesQuery } = useConsoleLines(filters);
 const pageError = ref("");
@@ -96,10 +103,41 @@ watch(
   { immediate: true },
 );
 
+function onGlobalKeydown(event: KeyboardEvent) {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+    event.preventDefault();
+    toolbarRef.value?.focusSearch?.();
+  }
+}
+
+onMounted(() => {
+  window.addEventListener("keydown", onGlobalKeydown);
+});
+
+onBeforeUnmount(() => {
+  if (searchTimer != null) {
+    window.clearTimeout(searchTimer);
+    searchTimer = null;
+  }
+  window.removeEventListener("keydown", onGlobalKeydown);
+});
+
 function setStream(value: string) {
   filters.stream = value;
   filters.scope = "all";
   filters.level = "all";
+}
+
+function resetFilters() {
+  if (searchTimer != null) {
+    window.clearTimeout(searchTimer);
+    searchTimer = null;
+  }
+  filters.stream = "modules";
+  filters.scope = "all";
+  filters.level = "all";
+  filters.q = "";
+  searchInput.value = "";
 }
 </script>
 

@@ -8,10 +8,15 @@
     <nav>
       <div v-for="group in groups" :key="group.title" class="nav-group">
         <h3 class="group-title">{{ group.title }}</h3>
-        <RouterLink v-for="item in group.items" :key="item.path" :to="item.path" @click="ui.closeMobileSidebar()">
-          <span class="nav-icon">{{ item.icon }}</span>
-          <span class="nav-label">{{ item.label }}</span>
-        </RouterLink>
+        <template v-for="item in group.items" :key="item.path">
+          <RouterLink
+            :to="item.path"
+            @click="ui.closeMobileSidebar()"
+          >
+            <span class="nav-icon">{{ item.icon }}</span>
+            <span class="nav-label">{{ item.label }}</span>
+          </RouterLink>
+        </template>
       </div>
     </nav>
   </aside>
@@ -68,7 +73,7 @@ const groups = computed(() => {
       label: page.title,
     };
 
-    if (page.group === "调试") {
+    if (page.group === "调试" || page.group === "DEBUG") {
       debugGroup.items.push(item);
     } else if (page.group === "核心") {
       // Core pages already handled statically for now to keep icons

@@ -2019,6 +2019,20 @@ input:focus, select:focus {
   flex-wrap: wrap;
 }
 
+.console-filter-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.46);
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
 .console-view-toggle {
   display: inline-flex;
   padding: 3px;
@@ -2050,6 +2064,14 @@ input:focus, select:focus {
 .console-filter {
   min-width: 150px;
   max-width: 220px;
+}
+
+@media (max-width: 1024px) {
+  .console-search,
+  .console-filter {
+    width: 100%;
+    max-width: none;
+  }
 }
 
 .console-command-card {

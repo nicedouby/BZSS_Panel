@@ -5,6 +5,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 
 import { WebServer } from "../core/web-server.js";
+import { classifySquadName } from "../core/squad-name-classifier.js";
 import { GroupReportService } from "../plugins/group-report.service.js";
 
 function createServer(overrides = {}) {
@@ -139,6 +140,42 @@ async function testHealthEndpointDoesNotRequireAuth() {
   assert.equal(body.service, "BZSS Panel WebServer");
   assert.equal(body.runtimeState, true);
   assert.equal(body.auth.enabled, true);
+}
+
+async function testSquadNameClassifierHelperCoversCoreRules() {
+  assert.equal(classifySquadName("Squad 7").category, "infantry");
+  assert.equal(classifySquadName("步兵队").category, "infantry");
+  assert.equal(classifySquadName("装甲队").category, "vehicle");
+  assert.equal(classifySquadName("后勤支援").category, "support");
+  assert.equal(classifySquadName("测试步兵队").category, "other");
+}
+
+async function testSquadNameClassifierApiReturnsClassification() {
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin", role: "Operator" };
+        },
+      },
+    },
+  });
+
+  const recorder = createRecorder();
+  const req = Readable.from([JSON.stringify({ name: "步兵队" })]);
+  req.method = "POST";
+  req.url = "/api/squad-name/classify";
+  req.headers = { host: "localhost" };
+  req.socket = {};
+
+  await server.handleRequest(req, recorder.res);
+
+  assert.equal(recorder.state.status, 200);
+  const body = JSON.parse(recorder.state.body);
+  assert.equal(body.ok, true);
+  assert.equal(body.category, "infantry");
+  assert.equal(body.label, "步兵队");
+  assert.equal(body.reason.includes("步兵队"), true);
 }
 
 async function testCombatCleanRoutesDoNotForceCurrentServerFilter() {
@@ -992,6 +1029,8 @@ await testReadJsonBodyRejectsInvalidJson();
 await testReadJsonBodyRejectsOversizedPayload();
 await testGetPluginApiReturnsMatchingPluginApi();
 await testHealthEndpointDoesNotRequireAuth();
+await testSquadNameClassifierHelperCoversCoreRules();
+await testSquadNameClassifierApiReturnsClassification();
 await testCombatCleanRoutesDoNotForceCurrentServerFilter();
 await testWeaponCollectorApiRequiresGet();
 await testGroupReportSnapshotRouteReturnsWrappedSnapshot();

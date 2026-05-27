@@ -77,6 +77,8 @@ export async function renderPage({ root, api, apiFetch, globalApi, taskManager }
         </div>
       </div>
 
+      <div id="filter-summary" class="console-filter-summary" hidden></div>
+
       <div id="rcon-panel" class="card console-command-card" hidden>
         <div class="rcon-panel-header">
           <div class="rcon-panel-title">RCON 控制</div>
@@ -111,6 +113,7 @@ export async function renderPage({ root, api, apiFetch, globalApi, taskManager }
   const rawOutputToggle = root.querySelector("#raw-output-toggle");
   const pauseButton = root.querySelector("#pause");
   const clearButton = root.querySelector("#clear");
+  const filterSummary = root.querySelector("#filter-summary");
   const rconPanel = root.querySelector("#rcon-panel");
   const rconForm = root.querySelector("#rcon-form");
   const rconInput = root.querySelector("#rcon-input");
@@ -129,6 +132,19 @@ export async function renderPage({ root, api, apiFetch, globalApi, taskManager }
     runtime.q = state.q;
     runtime.paused = state.paused;
     runtime.lastSeq = Number(state.lastSeq || 0);
+  }
+
+  function updateFilterSummary() {
+    if (!filterSummary) return;
+
+    const active = state.stream !== "modules" || state.scope !== "all" || state.level !== "all" || Boolean(state.q);
+    const parts = [getStreamTitle(state.stream)];
+    if (state.scope !== "all") parts.push(`scope:${state.scope}`);
+    if (state.level !== "all") parts.push(`level:${state.level}`);
+    if (state.q) parts.push(`q:${state.q}`);
+
+    filterSummary.hidden = !active;
+    filterSummary.textContent = active ? `当前筛选: ${parts.join(" · ")}` : "";
   }
 
   async function fullReload() {
@@ -272,6 +288,7 @@ export async function renderPage({ root, api, apiFetch, globalApi, taskManager }
     searchInput.value = "";
     searchInput.placeholder = VIEW_OPTIONS[view].searchPlaceholder;
     rconPanel.hidden = view !== "rcon-native";
+    updateFilterSummary();
 
     for (const button of viewButtons) {
       const active = button.dataset.view === view;
@@ -326,12 +343,14 @@ export async function renderPage({ root, api, apiFetch, globalApi, taskManager }
   scopeFilter.addEventListener("change", async () => {
     state.scope = scopeFilter.value || "all";
     syncRuntimeState();
+    updateFilterSummary();
     await fullReload();
   });
 
   levelFilter.addEventListener("change", async () => {
     state.level = levelFilter.value || "all";
     syncRuntimeState();
+    updateFilterSummary();
     await fullReload();
   });
 
@@ -354,9 +373,17 @@ export async function renderPage({ root, api, apiFetch, globalApi, taskManager }
   });
 
   searchInput.addEventListener("keydown", async (event) => {
+    if (event.key === "Escape" && searchInput.value) {
+      searchInput.value = "";
+      state.q = "";
+      syncRuntimeState();
+      updateFilterSummary();
+      return;
+    }
     if (event.key !== "Enter") return;
     state.q = searchInput.value.trim();
     syncRuntimeState();
+    updateFilterSummary();
     await fullReload();
   });
 
@@ -442,6 +469,7 @@ export async function renderPage({ root, api, apiFetch, globalApi, taskManager }
   }
 
   pauseButton.textContent = state.paused ? "继续" : "暂停";
+  updateFilterSummary();
 
   return () => {
     state.mounted = false;
@@ -487,4 +515,10 @@ function esc(value) {
     "\"": "&quot;",
     "'": "&#39;",
   }[c]));
+}
+
+function getStreamTitle(stream) {
+  if (stream === "raw-log") return "原生日志";
+  if (stream === "rcon-native") return "RCON 原始通信";
+  return "模块";
 }

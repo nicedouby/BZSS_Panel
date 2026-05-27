@@ -4,6 +4,7 @@ import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { handleSquadManagementRoutes } from "../modules/squad-management/routes.js";
+import { classifySquadName, getSquadNameClassifierRules } from "./squad-name-classifier.js";
 import {
   getAllPlugins,
   setPluginEnabled as updatePluginEnabled,
@@ -166,6 +167,35 @@ export class WebServer {
       return this.json(res, 401, {
         error: "Unauthorized",
         message: "Authentication required.",
+      });
+    }
+
+    if (url.pathname === "/api/squad-name/classify") {
+      if (req.method !== "GET" && req.method !== "POST") {
+        return this.json(res, 405, {
+          error: "MethodNotAllowed",
+          message: "Only GET and POST are supported.",
+        });
+      }
+
+      const body = req.method === "POST" ? await this.readJsonBody(req) : {};
+      const name = req.method === "POST"
+        ? body?.name ?? body?.squadName ?? body?.teamName ?? ""
+        : url.searchParams.get("name") ?? url.searchParams.get("squadName") ?? url.searchParams.get("teamName") ?? "";
+
+      if (!String(name ?? "").trim()) {
+        return this.json(res, 400, {
+          error: "MissingName",
+          message: "Squad name is required.",
+        });
+      }
+
+      const result = classifySquadName(name, {
+        rules: getSquadNameClassifierRules(),
+      });
+      return this.json(res, 200, {
+        ok: true,
+        ...result,
       });
     }
 

@@ -11,6 +11,7 @@ import SquadManagementPage from "../pages/SquadManagementPage.vue";
 import UdpEventForwarderPage from "../pages/UdpEventForwarderPage.vue";
 import ServerInfoStatisticsPage from "../pages/ServerInfoStatisticsPage.vue";
 import MatchSnapshotDebugPage from "../pages/MatchSnapshotDebugPage.vue";
+import SquadNameClassifierPage from "../pages/SquadNameClassifierPage.vue";
 import ComingSoonPage from "../pages/ComingSoonPage.vue";
 import ChatMonitorPage from "../pages/ChatMonitorPage.vue";
 import RuntimeStatusPage from "../pages/RuntimeStatusPage.vue";
@@ -35,6 +36,7 @@ export const router = createRouter({
     { path: "/admin-warns", component: AdminWarnsPage, meta: { titleKey: "routeTitle.adminWarns" } },
     { path: "/plugins/group-report", component: GroupReportPage, meta: { title: "抱团报备", fullBleed: true } },
     { path: "/squad-management", component: SquadManagementPage, meta: { titleKey: "routeTitle.squadManagement", fullBleed: true } },
+    { path: "/plugin-subscriptions", component: () => import("../pages/PluginSubscriptionsPage.vue"), meta: { titleKey: "routeTitle.pluginSubscriptions", fullBleed: true } },
     {
       path: "/debug/udp-forwarder",
       component: UdpEventForwarderPage,
@@ -49,6 +51,11 @@ export const router = createRouter({
       path: "/debug/match-snapshots",
       component: MatchSnapshotDebugPage,
       meta: { title: "快照录制", fullBleed: true },
+    },
+    {
+      path: "/debug/squad-name-classifier",
+      component: SquadNameClassifierPage,
+      meta: { title: "队名判定", fullBleed: true },
     },
     {
       path: "/system/status",

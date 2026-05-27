@@ -116,6 +116,20 @@ export class WebRegistry {
     });
 
     this.registerPage({
+      id: "web.squadNameClassifier",
+      title: "队名判定",
+      group: "调试",
+      route: "/debug/squad-name-classifier",
+      pageModule: "/pages/squad-name-classifier.js",
+      source: "core",
+      description: "输入队名并查看系统会把它判定为步兵队、载具队、支援队或其他，用于调试白名单和黑名单规则。",
+      required: false,
+      enabled: true,
+      order: 125,
+      icon: "SN",
+    });
+
+    this.registerPage({
       id: "web.runtimeStatus",
       title: "运行状态",
       group: "系统",
