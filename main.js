@@ -119,6 +119,7 @@ async function main() {
     logger: logger.child({ moduleId: "core.moduleManager", source: "core.moduleManager", channel: "module" }),
     config: configManager,
   });
+  coreContext.moduleManager = moduleManager;
 
   const pluginManager = new PluginManager({
     core: coreContext,

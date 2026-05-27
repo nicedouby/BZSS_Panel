@@ -114,6 +114,21 @@ export class WebRegistry {
       order: 120,
       icon: "📸",
     });
+
+    this.registerPage({
+      id: "web.runtimeStatus",
+      title: "运行状态",
+      group: "系统",
+      route: "/system/status",
+      pageModule: "/pages/runtime-status.js",
+      source: "core",
+      description: "系统模块与插件运行状态。展示当前加载的所有内置模块和外部插件的健康状况、版本信息及运行指标。",
+      required: true,
+      enabled: true,
+      order: 1000,
+      icon: "⚡",
+      hiddenFromSidebar: true,
+    });
   }
 
   /**

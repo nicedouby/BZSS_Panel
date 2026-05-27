@@ -41,6 +41,7 @@ export function renderTopbar({ root, status, auth, onLogout, onNavigate, onEditL
           <span>${escapeHtml(roleText)}</span>
         </button>
         <div id="topbar-auth-menu" class="auth-dropdown-menu">
+          <button id="topbar-runtime-status" class="auth-dropdown-item" type="button">Runtime Status</button>
           ${canManagePlugins ? `<button id="topbar-plugin-subscriptions" class="auth-dropdown-item" type="button">Plugin Subscriptions</button>` : ""}
           <button id="topbar-logout" class="auth-dropdown-item" type="button">Logout</button>
         </div>
@@ -56,6 +57,7 @@ export function renderTopbar({ root, status, auth, onLogout, onNavigate, onEditL
   const authBtn = root.querySelector("#topbar-auth-btn");
   const authMenu = root.querySelector("#topbar-auth-menu");
   const logoutBtn = root.querySelector("#topbar-logout");
+  const runtimeStatusBtn = root.querySelector("#topbar-runtime-status");
   const pluginSubscriptionsBtn = root.querySelector("#topbar-plugin-subscriptions");
   const authDropdown = root.querySelector(".auth-dropdown");
 
@@ -94,6 +96,13 @@ export function renderTopbar({ root, status, auth, onLogout, onNavigate, onEditL
     if (authMenuOpen) {
       document.addEventListener("click", closeMenuOnClickOutside);
     }
+  }
+
+  if (runtimeStatusBtn && typeof onNavigate === "function") {
+    runtimeStatusBtn.addEventListener("click", () => {
+      authMenuOpen = false;
+      onNavigate("/system/status").catch(() => {});
+    });
   }
 
   // Keep plugin navigation in the top-right menu so it does not interrupt the main flow.

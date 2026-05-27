@@ -213,6 +213,38 @@ export class WebServer {
       }
     }
 
+    if (url.pathname === "/api/system/status" && req.method === "GET") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const modules = this.core.moduleManager?.instances?.map((inst) => ({
+        id: inst.manifest?.id,
+        name: inst.manifest?.name ?? inst.manifest?.id,
+        version: inst.manifest?.version ?? "1.0.0",
+        description: inst.manifest?.description ?? "",
+        status: "running",
+      })) ?? [];
+
+      const plugins = this.core.pluginManager?.instances?.map((inst) => ({
+        id: inst.manifest?.id,
+        name: inst.manifest?.name ?? inst.manifest?.id,
+        version: inst.manifest?.version ?? "1.0.0",
+        description: inst.manifest?.description ?? "",
+        status: "running",
+      })) ?? [];
+
+      return this.json(res, 200, {
+        ok: true,
+        modules,
+        plugins,
+        system: {
+          uptime: Math.floor(process.uptime()),
+          memory: process.memoryUsage(),
+          nodeVersion: process.version,
+          platform: process.platform,
+          arch: process.arch,
+        },
+      });
+    }
+
     if (url.pathname === "/api/web/pages") {
       return this.json(res, 200, { pages: this.core.webRegistry.getPages() });
     }
