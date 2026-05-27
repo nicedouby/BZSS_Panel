@@ -588,7 +588,6 @@ export function createSquadManagementService({ core, modules, config, logger, re
     const state = buildStateSnapshot(serverId);
     const target = state.squads.find((squad) => sameSquadKey(squad, teamId, squadId)) ?? null;
     if (!target) {
-      moduleLogger.debug(`[SquadManagement] Disband failed: Target squad not found. Team ${teamId} Squad ${squadId}`);
       return recordFailedAction({
         kind: "disband",
         serverId,
@@ -1506,7 +1505,6 @@ export function createSquadManagementService({ core, modules, config, logger, re
     // Policy 1: No Build until X seconds
     const noBuildUntilSeconds = normalizePositiveInteger(moduleConfig.noBuildUntilSeconds, 0);
     if (noBuildUntilSeconds > 0 && logSeconds < noBuildUntilSeconds) {
-      moduleLogger.debug(`[SquadManagement] Policy Violation (No Build): Team ${lifecycleRecord.teamId} Squad ${lifecycleRecord.squadId} at ${logSeconds}s (threshold ${noBuildUntilSeconds}s)`);
       return executeDisband({
         serverId,
         teamId: lifecycleRecord.teamId,
@@ -1742,9 +1740,10 @@ export function createSquadManagementService({ core, modules, config, logger, re
 
   function normalizePositiveInteger(value, fallback) {
     const number = Number(value);
-    if (!Number.isFinite(number) || number <= 0) return Math.max(1, Math.floor(Number(fallback) || 1));
-    return Math.max(1, Math.floor(number));
+    if (!Number.isFinite(number) || number < 0) return Math.floor(Number(fallback) || 0);
+    return Math.floor(number);
   }
+
 
   function normalizeNullableNumber(value) {
     if (value == null || value === "") return null;
