@@ -33,6 +33,7 @@ const groups = computed(() => {
       items: [
         { path: "/match-status", icon: "MS", label: t("nav.matchStatus") },
         { path: "/console", icon: "CON", label: t("nav.console") },
+        { path: "/system/status", icon: "ST", label: t("nav.runtimeStatus") },
         { path: "/player-database", icon: "DB", label: t("nav.playerDatabase") },
       ],
     },

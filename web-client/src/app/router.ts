@@ -14,6 +14,7 @@ import FairSquadBuildingPage from "../pages/FairSquadBuildingPage.vue";
 import MatchSnapshotDebugPage from "../pages/MatchSnapshotDebugPage.vue";
 import ComingSoonPage from "../pages/ComingSoonPage.vue";
 import ChatMonitorPage from "../pages/ChatMonitorPage.vue";
+import RuntimeStatusPage from "../pages/RuntimeStatusPage.vue";
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -50,6 +51,11 @@ export const router = createRouter({
       path: "/debug/match-snapshots",
       component: MatchSnapshotDebugPage,
       meta: { title: "快照录制", fullBleed: true },
+    },
+    {
+      path: "/system/status",
+      component: RuntimeStatusPage,
+      meta: { titleKey: "routeTitle.runtimeStatus", fullBleed: true },
     },
     {
       path: "/:pathMatch(.*)*",

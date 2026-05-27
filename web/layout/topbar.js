@@ -41,7 +41,7 @@ export function renderTopbar({ root, status, auth, onLogout, onNavigate, onEditL
           <span>${escapeHtml(roleText)}</span>
         </button>
         <div id="topbar-auth-menu" class="auth-dropdown-menu">
-          <button id="topbar-runtime-status" class="auth-dropdown-item" type="button">Runtime Status</button>
+          <button id="topbar-runtime-status" class="auth-dropdown-item" type="button">运行状态</button>
           ${canManagePlugins ? `<button id="topbar-plugin-subscriptions" class="auth-dropdown-item" type="button">Plugin Subscriptions</button>` : ""}
           <button id="topbar-logout" class="auth-dropdown-item" type="button">Logout</button>
         </div>

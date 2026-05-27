@@ -127,7 +127,7 @@ export class WebRegistry {
       enabled: true,
       order: 1000,
       icon: "⚡",
-      hiddenFromSidebar: true,
+      hiddenFromSidebar: false,
     });
   }
 

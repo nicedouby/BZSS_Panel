@@ -25,6 +25,9 @@
         <button type="button" class="menu-item" role="menuitem" @click="openPluginCenter">
           插件中心
         </button>
+        <button type="button" class="menu-item" role="menuitem" @click="openRuntimeStatus">
+          运行状态
+        </button>
         <button type="button" class="menu-item danger" role="menuitem" @click="logout">
           {{ t("user.logout") }}
         </button>
@@ -35,6 +38,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
+import { useRouter } from "vue-router";
 import { useAuthStore } from "../../stores/auth.store";
 import { useSettingsStore } from "../../stores/settings.store";
 import { t } from "../../i18n";
@@ -46,6 +50,7 @@ const emit = defineEmits<{
 
 const auth = useAuthStore();
 const settings = useSettingsStore();
+const router = useRouter();
 
 const menuOpen = ref(false);
 const rootEl = ref<HTMLElement | null>(null);
@@ -109,6 +114,11 @@ function openRconModal() {
 function openPluginCenter() {
   closeMenu();
   emit("open-plugin-center");
+}
+
+function openRuntimeStatus() {
+  closeMenu();
+  router.push("/system/status");
 }
 
 async function logout() {
