@@ -3,10 +3,10 @@
     <div class="page-header">
       <div class="header-content">
         <h1>运行状态</h1>
-        <p>系统内核、模块与插件的实时运行状况。</p>
+        <p>系统内核、模块与插件的实时运行状态。</p>
       </div>
       <div class="header-actions">
-        <button class="refresh-btn" @click="fetchStatus" :disabled="loading">
+        <button class="refresh-btn" type="button" @click="fetchStatus" :disabled="loading">
           {{ loading ? "刷新中..." : "手动刷新" }}
         </button>
       </div>
@@ -17,7 +17,6 @@
     </div>
 
     <div v-if="status" class="status-content">
-      <!-- System Overview -->
       <section class="status-section">
         <h2 class="section-title">系统信息</h2>
         <div class="system-grid">
@@ -40,42 +39,61 @@
         </div>
       </section>
 
-      <!-- Modules -->
       <section class="status-section">
         <h2 class="section-title">内置模块 ({{ status.modules.length }})</h2>
         <div class="item-grid">
-          <div v-for="m in status.modules" :key="m.id" class="item-card">
+          <button
+            v-for="m in status.modules"
+            :key="m.id"
+            type="button"
+            class="item-card runtime-item-card"
+            :title="`查看 ${m.name} 日志`"
+            @click="openLogWindow({ ...m, kind: 'module' })"
+          >
             <div class="item-header">
               <span class="item-name">{{ m.name }}</span>
               <span class="status-badge running">Running</span>
             </div>
             <div class="item-meta">{{ m.id }} @ {{ m.version }}</div>
             <p class="item-desc">{{ m.description }}</p>
-          </div>
+          </button>
         </div>
       </section>
 
-      <!-- Plugins -->
       <section class="status-section">
         <h2 class="section-title">外部插件 ({{ status.plugins.length }})</h2>
         <div class="item-grid">
-          <div v-for="p in status.plugins" :key="p.id" class="item-card">
+          <button
+            v-for="p in status.plugins"
+            :key="p.id"
+            type="button"
+            class="item-card runtime-item-card"
+            :title="`查看 ${p.name} 日志`"
+            @click="openLogWindow({ ...p, kind: 'plugin' })"
+          >
             <div class="item-header">
               <span class="item-name">{{ p.name }}</span>
               <span class="status-badge running">Running</span>
             </div>
             <div class="item-meta">{{ p.id }} @ {{ p.version }}</div>
             <p class="item-desc">{{ p.description }}</p>
-          </div>
+          </button>
         </div>
       </section>
     </div>
+
+    <RuntimeLogModal
+      :open="Boolean(selectedTarget)"
+      :target="selectedTarget"
+      @close="closeLogWindow"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { apiGet } from "../app/apiClient";
+import RuntimeLogModal from "../components/runtime/RuntimeLogModal.vue";
 
 interface SystemStatus {
   ok: boolean;
@@ -102,10 +120,22 @@ interface SystemStatus {
   }>;
 }
 
+interface RuntimeTarget {
+  id: string;
+  name: string;
+  version?: string;
+  description?: string;
+  status?: string;
+  kind: "module" | "plugin";
+}
+
 const status = ref<SystemStatus | null>(null);
 const loading = ref(false);
 const error = ref<string | null>(null);
+const selectedTarget = ref<RuntimeTarget | null>(null);
 let timer: number | null = null;
+
+const hasSelection = computed(() => Boolean(selectedTarget.value));
 
 async function fetchStatus() {
   loading.value = true;
@@ -113,10 +143,18 @@ async function fetchStatus() {
   try {
     status.value = await apiGet<SystemStatus>("/api/system/status");
   } catch (err: any) {
-    error.value = err.message;
+    error.value = err?.message || "未知错误";
   } finally {
     loading.value = false;
   }
+}
+
+function openLogWindow(target: RuntimeTarget) {
+  selectedTarget.value = target;
+}
+
+function closeLogWindow() {
+  selectedTarget.value = null;
 }
 
 function formatUptime(seconds: number) {
@@ -124,7 +162,7 @@ function formatUptime(seconds: number) {
   const h = Math.floor((seconds % 86400) / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = Math.floor(seconds % 60);
-  const parts = [];
+  const parts: string[] = [];
   if (d > 0) parts.push(`${d}d`);
   if (h > 0) parts.push(`${h}h`);
   if (m > 0) parts.push(`${m}m`);
@@ -136,13 +174,21 @@ function formatMemory(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function onWindowKeyDown(event: KeyboardEvent) {
+  if (event.key === "Escape" && hasSelection.value) {
+    closeLogWindow();
+  }
+}
+
 onMounted(() => {
-  fetchStatus();
+  void fetchStatus();
   timer = window.setInterval(fetchStatus, 5000);
+  window.addEventListener("keydown", onWindowKeyDown);
 });
 
 onUnmounted(() => {
   if (timer) clearInterval(timer);
+  window.removeEventListener("keydown", onWindowKeyDown);
 });
 </script>
 
@@ -155,6 +201,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 16px;
   margin-bottom: 32px;
 }
 
@@ -241,11 +288,29 @@ onUnmounted(() => {
   border-radius: 12px;
 }
 
+.runtime-item-card {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease, background-color 0.15s ease;
+}
+
+.runtime-item-card:hover {
+  border-color: #4f6c86;
+  background: #212a33;
+}
+
+.runtime-item-card:focus-visible {
+  outline: 2px solid #6aa6ff;
+  outline-offset: 2px;
+}
+
 .item-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 4px;
+  gap: 12px;
 }
 
 .item-name {
@@ -259,6 +324,7 @@ onUnmounted(() => {
   border-radius: 999px;
   text-transform: uppercase;
   font-weight: 700;
+  flex: 0 0 auto;
 }
 
 .status-badge.running {
