@@ -2,6 +2,7 @@
 
 import { parseSquadCreateEvent, normalizeSquadName } from "./log-adapter.js";
 import { createSquadLifecycleReducer } from "./reducer.js";
+import { classifySquadName } from "../../domain/squad/squad_name_classifier.js";
 
 const MATCH_END_EVENTS = ["GAME_END", "MATCH_END", "ROUND_END", "ROUND_ENDED", "NEW_GAME"];
 const PENDING_CREATE_LOG_TTL_MS = 5 * 60 * 1000;
@@ -345,6 +346,7 @@ export function createSquadLifecycleModule({ core, config, logger }) {
     const createdAt = Number.isFinite(createdAtMs) && createdAtMs > 0
       ? new Date(createdAtMs).toISOString()
       : String(parsed.eventTime ?? "");
+    const classification = classifySquadName(parsed.squadName);
     const creationSignature = buildCreationSignature({
       serverId,
       matchId,
@@ -371,6 +373,12 @@ export function createSquadLifecycleModule({ core, config, logger }) {
       creatorName: parsed.creatorName,
       creatorSteamId: parsed.creatorSteamId,
       creatorEosId: parsed.creatorEosId,
+      squadNature: classification.nature,
+      squadNatureLabel: classification.label,
+      squadNatureReason: classification.reason,
+      squadNatureRule: classification.matchedRule,
+      squadNatureConfidence: classification.confidence,
+      squadNatureNormalizedName: classification.normalizedName,
       sourceEventId: parsed.sourceEventId ?? "",
       creationSource: record?.creationSource ?? "LOG",
       createdAtMs,

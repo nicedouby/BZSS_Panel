@@ -12,6 +12,7 @@
 
 import Rcon from "./rcon.js";
 import { iterateIDs, capitalID, lowerID } from "./id-parser.js";
+import { classifySquadName } from "../domain/squad/squad_name_classifier.js";
 
 const GAME_START_EVENTS = ["GAME_START", "MATCH_START", "ROUND_START", "NEW_GAME"];
 const GAME_END_EVENTS = ["GAME_END", "MATCH_END", "ROUND_END", "ROUND_ENDED"];
@@ -117,6 +118,7 @@ export default class SquadRcon extends Rcon {
     );
     if (matchSquadCreated) {
       const g = matchSquadCreated.groups;
+      const classification = classifySquadName(g.squadName);
       this.emit("SQUAD_CREATED", {
         playerName: g.playerName,
         eosID: g.eosID,
@@ -124,6 +126,12 @@ export default class SquadRcon extends Rcon {
         squadID: Number(g.squadID),
         squadName: g.squadName,
         teamName: g.teamName,
+        squadNature: classification.nature,
+        squadNatureLabel: classification.label,
+        squadNatureReason: classification.reason,
+        squadNatureRule: classification.matchedRule,
+        squadNatureConfidence: classification.confidence,
+        squadNatureNormalizedName: classification.normalizedName,
         time,
       });
       return;

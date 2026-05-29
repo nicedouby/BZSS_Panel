@@ -118,6 +118,19 @@ export class WebRegistry {
     });
 
     this.registerPage({
+      id: "web.squadNameClassifierDebug",
+      title: "小队名称分类器",
+      group: "调试",
+      route: "/debug/squad-name-classifier",
+      source: "domain.squadNameClassifier",
+      description: "小队名称性质分类器调试页。用于输入队名并查看标准化、命中规则、可信度和完整调试输出。",
+      required: false,
+      enabled: true,
+      order: 125,
+      icon: "🏷️",
+    });
+
+    this.registerPage({
       id: "web.runtimeStatus",
       title: "运行状态",
       group: "系统",

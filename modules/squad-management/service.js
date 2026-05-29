@@ -1,6 +1,7 @@
 // -*- coding: utf-8 -*-
 
 import { getParam } from "../../core/event-normalizer.js";
+import { classifySquadName } from "../../domain/squad/squad_name_classifier.js";
 import { createSquadLifecycleReducer } from "../squad-lifecycle/reducer.js";
 import { buildSquadLifecycleKey, buildSquadLifecycleSlotKey } from "../squad-lifecycle/service.js";
 import { normalizeSquadName } from "../squad-lifecycle/log-adapter.js";
@@ -1206,6 +1207,13 @@ export function createSquadManagementService({ core, modules, config, logger, re
         creatorCount: creatorStats?.count ?? 0,
         currentCreatorCount: creatorStats?.count ?? 0,
       };
+      const nature = classifySquadName(next.squadName ?? "");
+      next.squadNature = nature.nature;
+      next.squadNatureLabel = nature.label;
+      next.squadNatureReason = nature.reason;
+      next.squadNatureRule = nature.matchedRule;
+      next.squadNatureConfidence = nature.confidence;
+      next.squadNatureNormalizedName = nature.normalizedName;
       return next;
     });
 
@@ -1671,8 +1679,9 @@ export function createSquadManagementService({ core, modules, config, logger, re
     const infantryOnlyUntilSeconds = normalizePositiveInteger(moduleConfig.infantryOnlyUntilSeconds, 0);
     if (infantryOnlyUntilSeconds > 0 && logSeconds < infantryOnlyUntilSeconds) {
       const squadName = normalizeText(lifecycleRecord.squadName);
-      const isAllowed = allowedInfantryNames.some((name) => squadName.toLowerCase().includes(normalizeText(name).toLowerCase()))
-        || isAllowedSquadName(squadName);
+      const classification = classifySquadName(squadName);
+      const isAllowed = classification.nature === "infantry"
+        || allowedInfantryNames.some((name) => squadName.toLowerCase().includes(normalizeText(name).toLowerCase()));
       if (!isAllowed) {
         return api.executeAction({
           type: SQUAD_ACTION_TYPES.DISBAND_SQUAD,
@@ -1923,15 +1932,6 @@ export function createSquadManagementService({ core, modules, config, logger, re
 
   function normalizeText(value) {
     return String(value ?? "").trim();
-  }
-
-  function isAllowedSquadName(squadName) {
-    const pattern = defaultSquadNamePattern || "^Squad\\s*\\d+$";
-    try {
-      return new RegExp(pattern, "i").test(normalizeText(squadName));
-    } catch {
-      return /^Squad\s*\d+$/i.test(normalizeText(squadName));
-    }
   }
 
   function resolveTeamIdForCreatedSquad(serverId, parsed) {
