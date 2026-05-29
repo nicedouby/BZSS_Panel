@@ -191,7 +191,7 @@ export class WebServer {
       }
 
       const result = classifySquadName(name, {
-        rules: getSquadNameClassifierRules(),
+        rules: getSquadNameClassifierRules(this.core.config),
       });
       return this.json(res, 200, {
         ok: true,

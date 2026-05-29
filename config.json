@@ -17,6 +17,9 @@
     "title": "BZSS Panel",
     "enableDebugPage": true
   },
+  "squadNameClassifier": {
+    "rulesPath": "./config/squad_name_nature_rules.json"
+  },
   "auth": {
     "enabled": true,
     "defaultSteam64": "76561198194428818",

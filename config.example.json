@@ -19,6 +19,9 @@
     "useVueClient": true,
     "title": "BZSS Panel"
   },
+  "squadNameClassifier": {
+    "rulesPath": "./config/squad_name_nature_rules.json"
+  },
   "auth": {
     "enabled": true,
     "defaultSteam64": "",

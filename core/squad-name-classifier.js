@@ -1,5 +1,8 @@
 // -*- coding: utf-8 -*-
 
+import fs from "node:fs";
+import path from "node:path";
+
 const CATEGORY_LABELS = {
   infantry: "步兵队",
   vehicle: "载具队",
@@ -70,6 +73,13 @@ const DEFAULT_RULES = {
     /^Squad\s*\d+$/i,
     /^小队\s*\d+$/,
   ],
+};
+
+const DEFAULT_EXTERNAL_RULES_PATH = path.resolve(process.cwd(), "./config/squad_name_nature_rules.json");
+const externalRulesCache = {
+  path: "",
+  mtimeMs: 0,
+  rules: null,
 };
 
 export function classifySquadName(rawName, options = {}) {
@@ -162,8 +172,14 @@ export function classifySquadName(rawName, options = {}) {
   });
 }
 
-export function getSquadNameClassifierRules() {
-  return cloneRules(DEFAULT_RULES);
+export function getSquadNameClassifierRules(configManager = null) {
+  const rulesPath = resolveRulesPath(configManager);
+  if (!rulesPath) {
+    return cloneRules(DEFAULT_RULES);
+  }
+
+  const overrideRules = loadExternalRules(rulesPath);
+  return cloneRules(mergeRules(DEFAULT_RULES, overrideRules));
 }
 
 function normalizeSquadName(value) {
@@ -255,6 +271,88 @@ function matchesContains(value, rule) {
 
 function formatRuleValue(rule) {
   return rule instanceof RegExp ? rule.toString() : String(rule);
+}
+
+function resolveRulesPath(configManager) {
+  const configuredPath = String(configManager?.get?.("squadNameClassifier.rulesPath") ?? "").trim();
+  if (!configuredPath) return null;
+  return path.isAbsolute(configuredPath)
+    ? configuredPath
+    : path.resolve(process.cwd(), configuredPath);
+}
+
+function loadExternalRules(rulesPath) {
+  try {
+    const stat = fs.statSync(rulesPath);
+    if (
+      externalRulesCache.path === rulesPath
+      && externalRulesCache.mtimeMs === stat.mtimeMs
+      && externalRulesCache.rules
+    ) {
+      return externalRulesCache.rules;
+    }
+
+    const raw = fs.readFileSync(rulesPath, "utf8").trim();
+    const parsed = raw ? JSON.parse(raw) : {};
+    const rules = normalizeExternalRules(parsed.rules ?? parsed);
+    externalRulesCache.path = rulesPath;
+    externalRulesCache.mtimeMs = stat.mtimeMs;
+    externalRulesCache.rules = rules;
+    return rules;
+  } catch {
+    return {};
+  }
+}
+
+function normalizeExternalRules(rawRules = {}) {
+  const source = rawRules && typeof rawRules === "object" && !Array.isArray(rawRules) ? rawRules : {};
+  const nested = source.rules && typeof source.rules === "object" && !Array.isArray(source.rules) ? source.rules : source;
+  return {
+    blacklist: normalizeRuleList(source.blacklist ?? nested.blacklist),
+    infantry: {
+      exact: normalizeRuleList(nested.infantry?.exact),
+      contains: normalizeRuleList(nested.infantry?.contains),
+    },
+    vehicle: {
+      exact: normalizeRuleList(nested.vehicle?.exact),
+      contains: normalizeRuleList(nested.vehicle?.contains),
+    },
+    support: {
+      exact: normalizeRuleList(nested.support?.exact),
+      contains: normalizeRuleList(nested.support?.contains),
+    },
+    defaultInfantryPatterns: normalizeRuleList(nested.defaultInfantryPatterns).map((pattern) => {
+      if (pattern instanceof RegExp) return pattern;
+      const text = String(pattern ?? "").trim();
+      if (!text) return null;
+      if (text.startsWith("/") && text.lastIndexOf("/") > 0) {
+        const lastSlash = text.lastIndexOf("/");
+        const body = text.slice(1, lastSlash);
+        const flags = text.slice(lastSlash + 1);
+        try {
+          return new RegExp(body, flags);
+        } catch {
+          return text;
+        }
+      }
+      try {
+        return new RegExp(text, "i");
+      } catch {
+        return text;
+      }
+    }).filter(Boolean),
+  };
+}
+
+function normalizeRuleList(list = []) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((item) => {
+      if (item instanceof RegExp) return item;
+      const text = String(item ?? "").trim();
+      return text ? text : null;
+    })
+    .filter(Boolean);
 }
 
 function buildResult({ rawName, normalizedName, category, matchedRule, matchedValue, reason }) {
