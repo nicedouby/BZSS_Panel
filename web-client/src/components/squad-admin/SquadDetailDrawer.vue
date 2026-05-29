@@ -7,6 +7,9 @@
             <div class="drawer-header-content">
               <h2 class="drawer-squad-name">{{ props.squad.squadName }}</h2>
               <div class="drawer-header-badges">
+                <StatusBadge :tone="natureTone(props.squad.squadNature)">
+                  {{ props.squad.squadNatureLabel }}
+                </StatusBadge>
                 <StatusBadge :tone="props.squad.isLocked ? 'warn' : 'ok'">
                   {{ props.squad.isLocked ? t("common.locked") : t("common.open") }}
                 </StatusBadge>
@@ -112,6 +115,12 @@ const teamColorClass = computed(() => {
 
 function close() {
   emit("close");
+}
+
+function natureTone(nature: SquadViewModel["squadNature"]): "ok" | "warn" | "idle" {
+  if (nature === "vehicle") return "warn";
+  if (nature === "infantry" || nature === "support") return "ok";
+  return "idle";
 }
 
 function handleEscape(e: KeyboardEvent) {

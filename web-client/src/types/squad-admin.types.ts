@@ -43,6 +43,17 @@ export interface SquadViewModel {
   publicPlaytimePlayers: number;
   privatePlaytimePlayers: number;
   knownPlaytimePlayers: number;
+  squadNature: "infantry" | "vehicle" | "support" | "other";
+  squadNatureLabel: string;
+  squadNatureReason: string | null;
+  squadNatureRule: string | null;
+  squadNatureConfidence: "high" | "medium" | "low";
+  squadNatureNormalizedName: string;
+  squadVehicleClass: "ifv" | "light_vehicle" | "tank" | "spg" | "other";
+  squadVehicleClassLabel: string;
+  squadVehicleClassReason: string | null;
+  squadVehicleClassRule: string | null;
+  squadVehicleClassConfidence: "high" | "medium" | "low";
   leader: SquadLeaderRowViewModel | null;
   members: PlayerRowViewModel[];
   warnings: SquadWarning[];

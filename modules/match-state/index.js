@@ -7,6 +7,7 @@ import {
   parseNextMap,
 } from "../../core/squad-rcon.js";
 import { normalizeRoundWorldBringUpPayload } from "../../core/event-normalizer.js";
+import { classifySquadName } from "../../domain/squad/squad_name_classifier.js";
 
 /**
  * Module: MatchState
@@ -368,9 +369,26 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       }
 
       const squads = parseListSquads(result.rconResponse);
+      const classifiedSquads = squads.map((squad) => {
+        const classification = classifySquadName(squad.squadName ?? squad.name ?? "");
+        return {
+          ...squad,
+          squadNature: classification.nature,
+          squadNatureLabel: classification.label,
+          squadNatureReason: classification.reason,
+          squadNatureRule: classification.matchedRule,
+          squadNatureConfidence: classification.confidence,
+          squadNatureNormalizedName: classification.normalizedName,
+          squadVehicleClass: classification.vehicleClass,
+          squadVehicleClassLabel: classification.vehicleClassLabel,
+          squadVehicleClassReason: classification.vehicleClassReason,
+          squadVehicleClassRule: classification.vehicleClassRule,
+          squadVehicleClassConfidence: classification.vehicleClassConfidence,
+        };
+      });
       state.squads = {
-        list: squads,
-        count: squads.length,
+        list: classifiedSquads,
+        count: classifiedSquads.length,
         lastUpdatedAt: new Date().toISOString(),
       };
       updateWebStatus();
@@ -381,11 +399,11 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         },
       });
 
-      const event = makeEvent("RCON_LIST_SQUADS_UPDATED", { squads });
+      const event = makeEvent("RCON_LIST_SQUADS_UPDATED", { squads: classifiedSquads });
       core.eventBus.emitCoreEvent("RCON_LIST_SQUADS_UPDATED", event);
       emitSquadsUpdated();
       emitUpdated("squads");
-      return squads;
+      return classifiedSquads;
     }, () => state.squads.list, report);
   }
 
