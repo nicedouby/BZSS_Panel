@@ -132,6 +132,11 @@ export default class SquadRcon extends Rcon {
         squadNatureRule: classification.matchedRule,
         squadNatureConfidence: classification.confidence,
         squadNatureNormalizedName: classification.normalizedName,
+        squadVehicleClass: classification.vehicleClass,
+        squadVehicleClassLabel: classification.vehicleClassLabel,
+        squadVehicleClassReason: classification.vehicleClassReason,
+        squadVehicleClassRule: classification.vehicleClassRule,
+        squadVehicleClassConfidence: classification.vehicleClassConfidence,
         time,
       });
       return;

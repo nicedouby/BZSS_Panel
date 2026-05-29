@@ -60,7 +60,7 @@
           </div>
 
           <p class="hint">
-            返回字段包括：`nature`、`label`、`confidence`、`normalizedName`、`matchedRule`、`matchedValue`、`reason`、`debug`。
+            返回字段包括：`nature`、`label`、`confidence`、`normalizedName`、`vehicleClass`、`matchedRule`、`matchedValue`、`reason`、`debug`。
           </p>
         </div>
       </PageCard>
@@ -89,6 +89,18 @@
           <div class="summary-item">
             <span>标准化队名</span>
             <strong class="mono">{{ currentResult.normalizedName || "--" }}</strong>
+          </div>
+          <div class="summary-item">
+            <span>类型</span>
+            <StatusBadge :tone="toneForConfidence(currentResult.vehicleClassConfidence)">{{ currentResult.vehicleClassLabel || "--" }}</StatusBadge>
+          </div>
+          <div class="summary-item">
+            <span>类型英文</span>
+            <strong class="mono">{{ currentResult.vehicleClass || "--" }}</strong>
+          </div>
+          <div class="summary-item wide">
+            <span>类型原因</span>
+            <strong>{{ currentResult.vehicleClassReason || "--" }}</strong>
           </div>
           <div class="summary-item wide">
             <span>命中规则</span>
@@ -151,6 +163,7 @@
               <tr>
                 <th>输入</th>
                 <th>性质</th>
+                <th>类型</th>
                 <th>可信度</th>
                 <th>命中规则</th>
                 <th>命中值</th>
@@ -170,6 +183,7 @@
                   </div>
                 </td>
                 <td>{{ item.label }}</td>
+                <td><StatusBadge :tone="toneForConfidence(item.vehicleClassConfidence)">{{ item.vehicleClassLabel || "--" }}</StatusBadge></td>
                 <td><StatusBadge :tone="toneForConfidence(item.confidence)">{{ item.confidence }}</StatusBadge></td>
                 <td class="mono">{{ item.matchedRule || "--" }}</td>
                 <td class="mono">{{ item.matchedValue || "--" }}</td>
@@ -211,6 +225,12 @@ type SquadClassifierResponse = {
   matchedRule: string | null;
   matchedValue: string | null;
   reason: string;
+  vehicleClass: "ifv" | "light_vehicle" | "tank" | "other";
+  vehicleClassLabel: string;
+  vehicleClassRule: string | null;
+  vehicleClassValue: string | null;
+  vehicleClassReason: string | null;
+  vehicleClassConfidence: "high" | "medium" | "low";
   debug?: Record<string, unknown>;
 };
 
@@ -240,13 +260,23 @@ const sampleSets: Record<string, string[]> = {
     "Squad 1",
     "步兵一队",
     "步兵战车",
+    "机械化步兵（bmp2）",
+    "bmp2",
     "BTR",
+    "matv",
+    "99a",
+    "SPG 1",
     "后勤车",
     "迫击炮",
     "hello",
   ],
   conflict: [
     "步兵战车",
+    "机械化步兵（bmp2）",
+    "bmp2",
+    "matv",
+    "99a",
+    "SPG 1",
     "后勤车",
     "logi truck",
     "mortar vehicle",

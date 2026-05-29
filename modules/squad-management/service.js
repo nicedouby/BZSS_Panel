@@ -1214,6 +1214,11 @@ export function createSquadManagementService({ core, modules, config, logger, re
       next.squadNatureRule = nature.matchedRule;
       next.squadNatureConfidence = nature.confidence;
       next.squadNatureNormalizedName = nature.normalizedName;
+      next.squadVehicleClass = nature.vehicleClass;
+      next.squadVehicleClassLabel = nature.vehicleClassLabel;
+      next.squadVehicleClassReason = nature.vehicleClassReason;
+      next.squadVehicleClassRule = nature.vehicleClassRule;
+      next.squadVehicleClassConfidence = nature.vehicleClassConfidence;
       return next;
     });
 

@@ -8,26 +8,34 @@ const INFANTRY_CASES = [
   "小队1",
   "小队 1",
   "步兵一队",
+  "机械化步兵（bmp2）",
   "空突",
   "INF",
   "LOCKED INF",
+  "步兵战车",
 ];
 
 const VEHICLE_CASES = [
-  "步兵战车",
   "BTR",
   "BMP",
   "IFV CLAIM",
+  "zcc",
+  "zcc 1",
+  "BJC",
+  "zjc-2",
   "tank",
   "装甲队",
   "载具队",
   "轮战",
+  "SPG",
 ];
 
 const SUPPORT_CASES = [
   "迫击炮",
   "mortar",
   "logi",
+  "zsj",
+  "ZSJ 1",
   "后勤车",
   "补给队",
   "FOB",
@@ -65,8 +73,16 @@ assert.equal(classifySquadName("").nature, SQUAD_NATURE.OTHER);
 assert.equal(classifySquadName(null).nature, SQUAD_NATURE.OTHER);
 assert.equal(classifySquadName(undefined).nature, SQUAD_NATURE.OTHER);
 
-assert.equal(classifySquadName("步兵战车").nature, SQUAD_NATURE.VEHICLE);
+assert.equal(classifySquadName("步兵战车").nature, SQUAD_NATURE.INFANTRY);
+assert.equal(classifySquadName("bmp2").vehicleClass, "ifv");
+assert.equal(classifySquadName("bmp-2").vehicleClass, "ifv");
+assert.equal(classifySquadName("zcc").nature, SQUAD_NATURE.VEHICLE);
+assert.equal(classifySquadName("matv").vehicleClass, "light_vehicle");
 assert.equal(classifySquadName("后勤车").nature, SQUAD_NATURE.SUPPORT);
+assert.equal(classifySquadName("zsj").nature, SQUAD_NATURE.SUPPORT);
+assert.equal(classifySquadName("99a").vehicleClass, "tank");
+assert.equal(classifySquadName("SPG").nature, SQUAD_NATURE.VEHICLE);
+assert.equal(classifySquadName("SPG").vehicleClass, "spg");
 assert.equal(classifySquadName("logi truck").nature, SQUAD_NATURE.SUPPORT);
 assert.equal(classifySquadName("mortar vehicle").nature, SQUAD_NATURE.SUPPORT);
 

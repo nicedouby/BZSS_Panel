@@ -68,6 +68,9 @@ export const squadNameRules = Object.freeze({
       "bmp",
       "lav",
       "mrap",
+      "matv",
+      "spg",
+      "spg 1",
       "armor",
       "armour",
       "vic",
@@ -79,6 +82,15 @@ export const squadNameRules = Object.freeze({
       "步战",
       "轮战",
     ]),
+    aliases: Object.freeze({
+      exactWhitelist: Object.freeze([
+        "zcc",
+        "bjc",
+        "zjc",
+        "m-atv",
+        "m atv",
+      ]),
+    }),
     contains: Object.freeze([
       "坦克",
       "装甲",
@@ -101,6 +113,8 @@ export const squadNameRules = Object.freeze({
       "brdm",
       "zbd",
       "ztz",
+      "spg",
+      "spg 1",
       "步兵战车",
       "t72",
       "t-72",
@@ -120,6 +134,110 @@ export const squadNameRules = Object.freeze({
       "禁载具",
     ]),
     regex: Object.freeze([]),
+    classes: Object.freeze({
+      ifv: Object.freeze({
+        label: "步兵战车",
+        exactWhitelist: Object.freeze([
+          "ifv",
+          "bmp",
+          "bmp2",
+          "bmp-2",
+          "bmp 2",
+          "步兵战车",
+          "步战",
+          "步战车",
+          "bjc",
+        ]),
+        aliases: Object.freeze({
+          exactWhitelist: Object.freeze([
+            "zcc",
+            "bjc",
+          ]),
+        }),
+        contains: Object.freeze([
+          "ifv",
+          "bmp",
+          "bmp2",
+          "bmp-2",
+          "步兵战车",
+          "步战",
+          "步战车",
+        ]),
+        regex: Object.freeze([]),
+      }),
+      light_vehicle: Object.freeze({
+        label: "轻型载具",
+        exactWhitelist: Object.freeze([
+          "matv",
+          "m-atv",
+          "m atv",
+          "轻型载具",
+        ]),
+        aliases: Object.freeze({
+          exactWhitelist: Object.freeze([
+            "matv",
+            "m-atv",
+            "m atv",
+          ]),
+        }),
+        contains: Object.freeze([
+          "matv",
+          "m-atv",
+          "m atv",
+          "轻型载具",
+        ]),
+        regex: Object.freeze([]),
+      }),
+      tank: Object.freeze({
+        label: "坦克",
+        exactWhitelist: Object.freeze([
+          "99a",
+          "99a2",
+          "ztz99a",
+          "ztz 99a",
+          "坦克",
+          "mbt",
+        ]),
+        aliases: Object.freeze({
+          exactWhitelist: Object.freeze([
+            "99a",
+            "99a2",
+          ]),
+        }),
+        contains: Object.freeze([
+          "99a",
+          "99a2",
+          "ztz99a",
+          "ztz 99a",
+          "坦克",
+          "mbt",
+        ]),
+        regex: Object.freeze([]),
+      }),
+      spg: Object.freeze({
+        label: "SPG",
+        exactWhitelist: Object.freeze([
+          "spg",
+          "spg1",
+          "spg 1",
+          "炮车",
+          "火炮车",
+          "自行火炮",
+        ]),
+        aliases: Object.freeze({
+          exactWhitelist: Object.freeze([
+            "spg",
+          ]),
+        }),
+        contains: Object.freeze([
+          "spg",
+          "炮车",
+          "火炮车",
+          "自行火炮",
+        ]),
+        regex: Object.freeze([]),
+      }),
+    }),
   }),
   support: Object.freeze({
     exactWhitelist: Object.freeze([
@@ -132,6 +250,11 @@ export const squadNameRules = Object.freeze({
       "补给",
       "支援",
     ]),
+    aliases: Object.freeze({
+      exactWhitelist: Object.freeze([
+        "zsj",
+      ]),
+    }),
     contains: Object.freeze([
       "迫击炮",
       "mortar",
