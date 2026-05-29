@@ -7,6 +7,7 @@ import { createSquadStateModule } from "../modules/squad-state/index.js";
 import { createSquadLifecycleModule } from "../modules/squad-lifecycle/index.js";
 import { createMatchStateModule } from "../modules/match-state/index.js";
 import { createSquadManagementModule } from "../modules/squad-management/index.js";
+import { createTeamBalanceModule } from "../modules/team-balance/index.js";
 import { createSquadDisbandModule } from "../modules/squad-disband/index.js";
 import { createSquadKickModule } from "../modules/squad-kick/index.js";
 import { createSquadRemoveModule } from "../modules/squad-remove/index.js";
@@ -54,6 +55,7 @@ export class ModuleManager {
       createSquadLifecycleModule,
       createMatchStateModule,
       createSquadManagementModule,
+      createTeamBalanceModule,
       createSquadDisbandModule,
       createSquadKickModule,
       createSquadRemoveModule,

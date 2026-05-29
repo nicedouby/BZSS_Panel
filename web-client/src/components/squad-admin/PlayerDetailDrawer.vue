@@ -92,6 +92,13 @@
               </div>
 
               <div class="action-group">
+                <div class="group-label">队伍调度 / TEAM BALANCE</div>
+                <button type="button" class="action-button primary" @click="handleSwitchTeam" :disabled="actionBusy || !canSwitchTeam">
+                  跳边
+                </button>
+              </div>
+
+              <div class="action-group">
                 <div class="group-label">数据与工具 / TOOLS</div>
                 <button type="button" class="action-button primary" @click="openDatabase">
                   {{ t("player.openDatabase") }}
@@ -158,9 +165,11 @@ import { useUiStore } from "../../stores/ui.store";
 import { copyTextWithToast } from "../../utils/clipboard";
 import { goToPlayerDatabaseSearch } from "../../utils/player-database";
 import { resolvePlayerIdentityIp } from "../../app/playerIdentityApi";
+import { requestSwitchTeam } from "../../app/teamBalanceApi";
 import { warnPlayer, kickPlayer, removePlayerFromSquad } from "../../app/squadManagementApi";
 import StatusBadge from "../common/StatusBadge.vue";
 import CopyableValue from "./CopyableValue.vue";
+import { useAuthStore } from "../../stores/auth.store";
 import { t } from "../../i18n";
 
 const props = withDefaults(
@@ -178,6 +187,7 @@ const emit = defineEmits<{
 }>();
 
 const ui = useUiStore();
+const auth = useAuthStore();
 const router = useRouter();
 const showAdvanced = ref(false);
 const resolvedLastIp = ref("");
@@ -185,6 +195,7 @@ const resolvingIp = ref(false);
 const resolveIpError = ref("");
 const lookupToken = ref(0);
 const actionBusy = ref(false);
+const canSwitchTeam = computed(() => Boolean(auth.user?.isSuperAdmin || auth.user?.permissions?.includes?.("squad.switch")));
 
 const currentIp = computed(() => String(props.player?.ip ?? "").trim());
 const displayIp = computed(() => currentIp.value || resolvedLastIp.value.trim());
@@ -309,6 +320,36 @@ async function handleRemove() {
     ui.pushToast({ title: "指令已送达", message: "玩家移出请求已处理", tone: "ok" });
   } catch (e) {
     ui.pushToast({ title: "移出失败", message: String(e), tone: "error" });
+  } finally {
+    actionBusy.value = false;
+  }
+}
+
+async function handleSwitchTeam() {
+  if (!props.player || actionBusy.value || !canSwitchTeam.value) return;
+  const confirmed = await ui.openConfirm({
+    title: "确认跳边？",
+    message: `将玩家 ${props.player.name} 执行跳边操作。`,
+    tone: "warn",
+  });
+  if (!confirmed) return;
+
+  actionBusy.value = true;
+  try {
+    const res = await requestSwitchTeam({
+      anyId: props.player.steamId || props.player.eosId || props.player.name || "",
+      playerId: props.player.playerId ?? null,
+      steamId: props.player.steamId ?? undefined,
+      eosId: props.player.eosId ?? undefined,
+      name: props.player.name,
+      source: "对局状态手动操作",
+      operatorName: auth.user?.username || "",
+      reason: "manual_team_balance",
+    });
+    if (!res.ok) throw new Error(res.message || "跳边执行失败");
+    ui.pushToast({ title: "指令已送达", message: `跳边请求已提交：${props.player.name}`, tone: "ok" });
+  } catch (e) {
+    ui.pushToast({ title: "跳边失败", message: String(e), tone: "error" });
   } finally {
     actionBusy.value = false;
   }

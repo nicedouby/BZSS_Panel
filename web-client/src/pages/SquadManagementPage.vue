@@ -248,6 +248,7 @@ const kindOptions = computed(() => [
   { value: "disband", label: "解散指令", count: summary.value?.disbanded ?? 0 },
   { value: "kick", label: "踢出指令", count: summary.value?.kicked ?? 0 },
   { value: "remove", label: "移出指令", count: summary.value?.removed ?? 0 },
+  { value: "switch_team", label: "跳边指令", count: summary.value?.switched ?? 0 },
 ] as const);
 
 const filteredRecords = computed(() => {

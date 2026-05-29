@@ -101,7 +101,7 @@ export function createSquadManagementRepository({ config, logger } = {}) {
 
       if (kind !== "all") {
         if (kind === "action") {
-          clauses.push(`(${kindExpr(shape)} = 'disband' OR ${kindExpr(shape)} = 'kick' OR ${kindExpr(shape)} = 'action')`);
+          clauses.push(`(${kindExpr(shape)} = 'disband' OR ${kindExpr(shape)} = 'kick' OR ${kindExpr(shape)} = 'remove' OR ${kindExpr(shape)} = 'switch_team' OR ${kindExpr(shape)} = 'action')`);
         } else {
           clauses.push(`${kindExpr(shape)} = ?`);
           params.push(kind);
@@ -167,7 +167,7 @@ export function createSquadManagementRepository({ config, logger } = {}) {
 
       const byKind = Object.fromEntries(byKindRows.map((row) => [String(row.kind ?? ""), Number(row.count ?? 0)]));
       const byResult = Object.fromEntries(byResultRows.map((row) => [String(row.result ?? ""), Number(row.count ?? 0)]));
-      const actionTotal = Number(byKind.disband ?? 0) + Number(byKind.kick ?? 0) + Number(byKind.remove ?? 0) + Number(byKind.action ?? 0);
+      const actionTotal = Number(byKind.disband ?? 0) + Number(byKind.kick ?? 0) + Number(byKind.remove ?? 0) + Number(byKind.switch_team ?? 0) + Number(byKind.action ?? 0);
       const success = Number(byResult.success ?? 0);
       const failed = Number(byResult.failed ?? 0) + Number(byResult.forbidden ?? 0) + Number(byResult.invalid ?? 0);
 
@@ -177,6 +177,7 @@ export function createSquadManagementRepository({ config, logger } = {}) {
         disbanded: Number(byKind.disband ?? 0),
         kicked: Number(byKind.kick ?? 0),
         removed: Number(byKind.remove ?? 0),
+        switched: Number(byKind.switch_team ?? 0),
         actions: actionTotal,
         success,
         failed,
@@ -452,6 +453,7 @@ function normalizeKindFilter(kind) {
   const value = normalizeText(kind).toLowerCase();
   if (value === "created" || value === "squad_created") return "squad_created";
   if (value === "remove") return "remove";
+  if (value === "switch" || value === "switch_team" || value === "team_balance") return "switch_team";
   if (value === "disband" || value === "kick" || value === "action" || value === "all") return value;
   return "all";
 }

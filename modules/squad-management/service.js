@@ -48,6 +48,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
   const disbandPermission = String(moduleConfig.disbandPermission ?? DEFAULT_DISBAND_PERMISSION).trim() || DEFAULT_DISBAND_PERMISSION;
   const kickPermission = String(moduleConfig.kickPermission ?? DEFAULT_KICK_PERMISSION).trim() || DEFAULT_KICK_PERMISSION;
   const removePermission = String(moduleConfig.removePermission ?? DEFAULT_REMOVE_PERMISSION).trim() || DEFAULT_REMOVE_PERMISSION;
+  const switchPermission = String(moduleConfig.switchPermission ?? "squad.switch").trim() || "squad.switch";
   const kickThreshold = normalizePositiveInteger(moduleConfig.kickThreshold, DEFAULT_KICK_THRESHOLD);
   const allowedInfantryNames = Array.isArray(moduleConfig.allowedInfantryNames) ? moduleConfig.allowedInfantryNames : [];
   const defaultSquadNamePattern = String(moduleConfig.defaultSquadNamePattern ?? "^Squad\\s*\\d+$").trim() || "^Squad\\s*\\d+$";
@@ -79,6 +80,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
         disbandPermission: state.disbandPermission,
         kickPermission: state.kickPermission,
         removePermission: state.removePermission,
+        switchPermission,
         kickThreshold: state.kickThreshold,
         noBuildUntilSeconds: state.noBuildUntilSeconds,
         infantryOnlyUntilSeconds: state.infantryOnlyUntilSeconds,
@@ -1257,6 +1259,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
       disbandPermission,
       kickPermission,
       removePermission,
+      switchPermission,
       kickThreshold,
       noBuildUntilSeconds: normalizePositiveInteger(moduleConfig.noBuildUntilSeconds, 0),
       infantryOnlyUntilSeconds: normalizePositiveInteger(moduleConfig.infantryOnlyUntilSeconds, 0),
@@ -1468,7 +1471,8 @@ export function createSquadManagementService({ core, modules, config, logger, re
     if (record.kind === "disband") cache.recordsSummary.disbanded += 1;
     if (record.kind === "kick") cache.recordsSummary.kicked += 1;
     if (record.kind === "remove") cache.recordsSummary.removed += 1;
-    if (record.kind === "disband" || record.kind === "kick" || record.kind === "remove") cache.recordsSummary.actions += 1;
+    if (record.kind === "switch_team") cache.recordsSummary.switched += 1;
+    if (record.kind === "disband" || record.kind === "kick" || record.kind === "remove" || record.kind === "switch_team") cache.recordsSummary.actions += 1;
     if (record.result === "success") cache.recordsSummary.success += 1;
     if (record.result && record.result !== "success") cache.recordsSummary.failed += 1;
     cache.recordsSummary.lastEventAt = record.time || cache.recordsSummary.lastEventAt || "";
@@ -1514,6 +1518,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
       created: 0,
       disbanded: 0,
       kicked: 0,
+      switched: 0,
       actions: 0,
       success: 0,
       failed: 0,
@@ -2057,6 +2062,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
     const kind = normalizeText(value).toLowerCase();
     if (kind === "created" || kind === "squad_created") return "squad_created";
     if (kind === "remove") return "remove";
+    if (kind === "switch" || kind === "switch_team" || kind === "team_balance") return "switch_team";
     if (kind === "disband" || kind === "kick" || kind === "action" || kind === "all") return kind;
     return "all";
   }

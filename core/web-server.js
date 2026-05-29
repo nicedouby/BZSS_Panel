@@ -4,6 +4,7 @@ import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { handleSquadManagementRoutes } from "../modules/squad-management/routes.js";
+import { handleTeamBalanceRoutes } from "../modules/team-balance/routes.js";
 import { classifySquadName, getSquadNameClassifierRules } from "./squad-name-classifier.js";
 import {
   getAllPlugins,
@@ -209,6 +210,19 @@ export class WebServer {
       json: (status, obj, extraHeaders = {}) => this.json(res, status, obj, extraHeaders),
     });
     if (squadManagementHandled) {
+      return;
+    }
+
+    const teamBalanceHandled = await handleTeamBalanceRoutes({
+      core: this.core,
+      modules: this.modules,
+      url,
+      req,
+      user,
+      readJsonBody: (request) => this.readJsonBody(request),
+      json: (status, obj, extraHeaders = {}) => this.json(res, status, obj, extraHeaders),
+    });
+    if (teamBalanceHandled) {
       return;
     }
 

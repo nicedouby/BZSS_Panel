@@ -7,6 +7,7 @@ export interface SquadManagementViewer {
   canDisband: boolean;
   canKick: boolean;
   canRemove: boolean;
+  canSwitch: boolean;
   permissions: string[];
 }
 
@@ -104,6 +105,7 @@ export interface SquadManagementState {
   enforcementEnabled: boolean;
   disbandPermission: string;
   kickPermission: string;
+  switchPermission: string;
   kickThreshold: number;
   noBuildUntilSeconds: number;
   infantryOnlyUntilSeconds: number;
@@ -157,7 +159,7 @@ export type SquadManagementActionType =
 export interface SquadManagementRecord {
   id: number;
   recordKey: string;
-  kind: "squad_created" | "disband" | "kick" | "remove" | string;
+  kind: "squad_created" | "disband" | "kick" | "remove" | "switch_team" | string;
   time: string;
   logTime: string;
   serverId: string;
@@ -184,6 +186,7 @@ export interface SquadManagementRecordSummary {
   disbanded: number;
   kicked: number;
   removed: number;
+  switched: number;
   actions: number;
   success: number;
   failed: number;
