@@ -85,5 +85,10 @@ assert.equal(classifySquadName("SPG").nature, SQUAD_NATURE.VEHICLE);
 assert.equal(classifySquadName("SPG").vehicleClass, "spg");
 assert.equal(classifySquadName("logi truck").nature, SQUAD_NATURE.SUPPORT);
 assert.equal(classifySquadName("mortar vehicle").nature, SQUAD_NATURE.SUPPORT);
+assert.equal(classifySquadName("M1A2").vehicleClass, "tank");
+assert.equal(classifySquadName("BMP-2M").vehicleClass, "ifv");
+assert.equal(classifySquadName("MATV_USMC").vehicleClass, "light_vehicle");
+assert.equal(classifySquadName("UH60M").vehicleClass, "light_vehicle");
+assert.equal(classifySquadName("Ural375").vehicleClass, "light_vehicle");
 
 console.log("squad_name_classifier.test.js passed");

@@ -1,6 +1,7 @@
 // -*- coding: utf-8 -*-
 
 import { normalizeSquadName } from "./squad_name_normalizer.js";
+import { squadAssetRules } from "./squad_asset_rules.js";
 import { squadNameRules } from "./squad_name_rules.js";
 
 export { normalizeSquadName };
@@ -58,7 +59,10 @@ const VEHICLE_CLASS_PRIORITY = Object.freeze([
 
 export function classifySquadName(squadName, options = {}) {
   const includeDebug = options.includeDebug !== false;
-  const rules = mergeRules(squadNameRules, options.rulesOverride ?? options.rules ?? null);
+  const rules = mergeRules(
+    mergeRules(squadNameRules, squadAssetRules),
+    options.rulesOverride ?? options.rules ?? null,
+  );
   const normalizedName = normalizeSquadName(squadName);
 
   if (!normalizedName) {
@@ -147,6 +151,27 @@ export function classifySquadName(squadName, options = {}) {
   }
 
   if (!selected) {
+    if (vehicleClassMatch.vehicleClass !== SQUAD_VEHICLE_CLASS.OTHER) {
+      debug.conflictResolvedBy = "vehicleClass";
+      return makeResult({
+        nature: SQUAD_NATURE.VEHICLE,
+        matchedRule: vehicleClassMatch.vehicleClassRule ?? "vehicleClasses",
+        matchedValue: vehicleClassMatch.vehicleClassValue,
+        normalizedName,
+        reason: vehicleClassMatch.vehicleClassReason
+          ? `队名未命中性质规则，但命中车辆类型：${vehicleClassMatch.vehicleClassReason}`
+          : "队名未命中性质规则，但命中车辆类型，归类为载具队。",
+        confidence: vehicleClassMatch.vehicleClassConfidence,
+        debug,
+        vehicleClass: vehicleClassMatch.vehicleClass,
+        vehicleClassLabel: vehicleClassMatch.vehicleClassLabel,
+        vehicleClassRule: vehicleClassMatch.vehicleClassRule,
+        vehicleClassValue: vehicleClassMatch.vehicleClassValue,
+        vehicleClassReason: vehicleClassMatch.vehicleClassReason,
+        vehicleClassConfidence: vehicleClassMatch.vehicleClassConfidence,
+        category: SQUAD_NATURE.VEHICLE,
+      });
+    }
     return makeResult({
       nature: SQUAD_NATURE.OTHER,
       matchedRule: null,
