@@ -195,6 +195,10 @@ onUnmounted(() => {
 <style scoped>
 .runtime-status-page {
   padding: 24px;
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .page-header {
