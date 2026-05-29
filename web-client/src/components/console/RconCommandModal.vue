@@ -79,11 +79,12 @@ async function execute() {
   historyIndex.value = -1;
 
   try {
-    const result = await apiPost<{ ok: true; response: string }>("/api/console/rcon", {
+    const result = await apiPost<{ success?: boolean; ok?: boolean; response: string }>("/api/console/rcon", {
       command: cmd,
     });
-    
-    if (result.ok) {
+
+    const success = Boolean(result?.success ?? result?.ok);
+    if (success) {
       ui.pushToast({ message: t("console.rconExecuted"), tone: "ok" });
       lastResponse.value = result.response || "Command executed (no output).";
       // We don't clear the command immediately in case the user wants to tweak it
