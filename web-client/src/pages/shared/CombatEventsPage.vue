@@ -9,10 +9,10 @@
         <select v-model="filters.type">
           <option v-for="item in typeOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
         </select>
-        <input v-model="filters.q" :placeholder="t('combat.searchEvents')">
-        <button type="button" :disabled="filters.offset === 0" @click="previousPage">{{ t("combat.previous") }}</button>
-        <button type="button" :disabled="!hasNextPage" @click="nextPage">{{ t("combat.next") }}</button>
-        <button type="button" @click="clearEvents">{{ t("combat.clearMemoryEvents") }}</button>
+        <input v-model="filters.q" :placeholder="text.searchEvents">
+        <button type="button" :disabled="filters.offset === 0" @click="previousPage">{{ text.previous }}</button>
+        <button type="button" :disabled="!hasNextPage" @click="nextPage">{{ text.next }}</button>
+        <button type="button" @click="clearEvents">{{ text.clearMemoryEvents }}</button>
       </div>
     </PageCard>
 
@@ -20,15 +20,15 @@
       :loading="query.isLoading.value && !events.length"
       :error="pageError"
       :empty="!pageError && !events.length && !query.isLoading.value"
-      :empty-title="t('combat.noEvents')"
+      :empty-title="text.noEvents"
       :empty-text="emptyText"
     >
       <div class="combat-page-scroll">
         <PageCard compact>
           <div class="summary">
-            <span>{{ t("combat.total", "", { count: total }) }}</span>
-            <span>{{ t("combat.offset", "", { offset: filters.offset }) }}</span>
-            <span v-if="overview?.rejected != null">{{ t("combat.rejected", "", { count: overview.rejected }) }}</span>
+            <span>{{ t(text.total, "", { count: total }) }}</span>
+            <span>{{ t(text.offset, "", { offset: filters.offset }) }}</span>
+            <span v-if="overview?.rejected != null">{{ t(text.rejected, "", { count: overview.rejected }) }}</span>
             <span v-if="overview?.lastUpdatedAt">{{ t("common.updated") }} {{ formatTime(overview.lastUpdatedAt) }}</span>
           </div>
         </PageCard>
@@ -69,9 +69,25 @@ const props = defineProps<{
   pageSubtitle: string;
   endpoint: string;
   clearEndpoint: string;
-  routeScope: string;
-  typeOptions: Array<{ value: string; label: string }>;
-  emptyText: string;
+    routeScope: string;
+    typeOptions: Array<{ value: string; label: string }>;
+    emptyText: string;
+    uiText?: Partial<{
+      searchEvents: string;
+      previous: string;
+      next: string;
+      clearMemoryEvents: string;
+      noEvents: string;
+      total: string;
+      offset: string;
+      rejected: string;
+      loadFailed: string;
+      clearEventBuffer: string;
+      clearEventBufferMessage: string;
+      clearCompleted: string;
+      clearCompletedMessage: string;
+      clearFailed: string;
+    }>;
 }>();
 
 const route = useRoute();
@@ -109,20 +125,36 @@ watch(
 
 const endpointRef = computed(() => props.endpoint);
 const { query } = useCombatEventsQuery(endpointRef, filters);
-const pageError = computed(() => query.error.value ? renderApiError(query.error.value, t("combat.loadFailed")) : "");
+const pageError = computed(() => query.error.value ? renderApiError(query.error.value, text.value.loadFailed) : "");
 const events = computed(() => query.data.value?.events ?? []);
 const overview = computed(() => query.data.value?.overview ?? null);
 const total = computed(() => Number(overview.value?.count ?? events.value.length));
 const hasNextPage = computed(() => filters.offset + filters.limit < total.value);
 const selectedEvent = ref<any | null>(null);
 const hoverKey = ref("");
+const text = computed(() => ({
+  searchEvents: props.uiText?.searchEvents ?? t("combat.searchEvents"),
+  previous: props.uiText?.previous ?? t("combat.previous"),
+  next: props.uiText?.next ?? t("combat.next"),
+  clearMemoryEvents: props.uiText?.clearMemoryEvents ?? t("combat.clearMemoryEvents"),
+  noEvents: props.uiText?.noEvents ?? t("combat.noEvents"),
+  total: props.uiText?.total ?? t("combat.total"),
+  offset: props.uiText?.offset ?? t("combat.offset"),
+  rejected: props.uiText?.rejected ?? t("combat.rejected"),
+  loadFailed: props.uiText?.loadFailed ?? t("combat.loadFailed"),
+  clearEventBuffer: props.uiText?.clearEventBuffer ?? t("combat.clearEventBuffer"),
+  clearEventBufferMessage: props.uiText?.clearEventBufferMessage ?? t("combat.clearEventBufferMessage"),
+  clearCompleted: props.uiText?.clearCompleted ?? t("combat.clearCompleted"),
+  clearCompletedMessage: props.uiText?.clearCompletedMessage ?? t("combat.clearCompletedMessage"),
+  clearFailed: props.uiText?.clearFailed ?? t("combat.clearFailed"),
+}));
 
 const clearMutation = useMutation({
   mutationFn: async () => apiPost(props.clearEndpoint, {}),
   onSuccess: async () => {
     ui.pushToast({
-      title: t("combat.clearCompleted"),
-      message: t("combat.clearCompletedMessage"),
+      title: text.value.clearCompleted,
+      message: text.value.clearCompletedMessage,
       tone: "ok",
     });
     selectedEvent.value = null;
@@ -130,8 +162,8 @@ const clearMutation = useMutation({
   },
   onError: (error) => {
     ui.pushToast({
-      title: t("combat.clearFailed"),
-      message: renderApiError(error, t("combat.clearFailed")),
+      title: text.value.clearFailed,
+      message: renderApiError(error, text.value.clearFailed),
       tone: "error",
     });
   },
@@ -152,8 +184,8 @@ function nextPage() {
 
 async function clearEvents() {
   const confirmed = await ui.openConfirm({
-    title: t("combat.clearEventBuffer"),
-    message: t("combat.clearEventBufferMessage"),
+    title: text.value.clearEventBuffer,
+    message: text.value.clearEventBufferMessage,
     confirmText: t("common.clear"),
     tone: "warn",
   });
