@@ -3,11 +3,9 @@
 import {
   parseCurrentMap,
   parseListPlayers,
-  parseListSquads,
   parseNextMap,
 } from "../../core/squad-rcon.js";
 import { normalizeRoundWorldBringUpPayload } from "../../core/event-normalizer.js";
-import { classifySquadName } from "../../domain/squad/squad_name_classifier.js";
 
 /**
  * Module: MatchState
@@ -89,9 +87,22 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     },
     players: makePlayersSnapshot([]),
     squads: {
+      version: 1,
+      serverId: core.webStatus.serverId,
+      source: "runtimeState",
+      ok: false,
+      error: null,
+      teams: [],
+      flatSquads: [],
       list: [],
       count: 0,
       lastUpdatedAt: "",
+      updatedAt: 0,
+      lastSuccessAt: 0,
+      lastFailureAt: 0,
+      byKey: {},
+      byTeamID: {},
+      stale: false,
     },
     rconStatus: {
       lastError: "",
@@ -126,9 +137,22 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         lastUpdatedAt: state.players.lastUpdatedAt,
       },
       squads: {
+        version: state.squads.version,
+        serverId: state.squads.serverId,
+        source: state.squads.source,
+        ok: state.squads.ok,
+        error: state.squads.error,
+        teams: state.squads.teams.map(clone),
+        flatSquads: state.squads.flatSquads.map(clone),
         list: [...state.squads.list],
         count: state.squads.count,
         lastUpdatedAt: state.squads.lastUpdatedAt,
+        updatedAt: state.squads.updatedAt,
+        lastSuccessAt: state.squads.lastSuccessAt,
+        lastFailureAt: state.squads.lastFailureAt,
+        byKey: { ...state.squads.byKey },
+        byTeamID: cloneByTeamID(state.squads.byTeamID),
+        stale: state.squads.stale,
       },
       rconStatus: { ...state.rconStatus },
       logAccess: { ...state.logAccess },
@@ -360,50 +384,18 @@ export function createMatchStateModule({ core, modules, config, logger }) {
 
   async function refreshSquads(report = null) {
     return guarded("squads", async () => {
-      const result = await executeRcon("ListSquads");
-      if (!result.success) {
-        noteRefreshFailure(report, "squads", result.message || "ListSquads failed.");
-        updateStatuses();
-        emitRconStatusUpdated();
-        return state.squads.list;
-      }
-
-      const squads = parseListSquads(result.rconResponse);
-      const classifiedSquads = squads.map((squad) => {
-        const classification = classifySquadName(squad.squadName ?? squad.name ?? "");
-        return {
-          ...squad,
-          squadNature: classification.nature,
-          squadNatureLabel: classification.label,
-          squadNatureReason: classification.reason,
-          squadNatureRule: classification.matchedRule,
-          squadNatureConfidence: classification.confidence,
-          squadNatureNormalizedName: classification.normalizedName,
-          squadVehicleClass: classification.vehicleClass,
-          squadVehicleClassLabel: classification.vehicleClassLabel,
-          squadVehicleClassReason: classification.vehicleClassReason,
-          squadVehicleClassRule: classification.vehicleClassRule,
-          squadVehicleClassConfidence: classification.vehicleClassConfidence,
-        };
-      });
-      state.squads = {
-        list: classifiedSquads,
-        count: classifiedSquads.length,
-        lastUpdatedAt: new Date().toISOString(),
-      };
+      syncSquadsFromRuntimeState(null, true);
       updateWebStatus();
-      logWithFallback(moduleLogger, "debug", () => `Squads refreshed (${squads.length})`, {
+      logWithFallback(moduleLogger, "debug", () => `Squads refreshed (${state.squads.list.length})`, {
         operation: "refreshSquads",
         data: {
-          squads: squads.length,
+          squads: state.squads.list.length,
         },
       });
 
-      const event = makeEvent("RCON_LIST_SQUADS_UPDATED", { squads: classifiedSquads });
-      core.eventBus.emitCoreEvent("RCON_LIST_SQUADS_UPDATED", event);
       emitSquadsUpdated();
       emitUpdated("squads");
-      return classifiedSquads;
+      return state.squads.list;
     }, () => state.squads.list, report);
   }
 
@@ -611,6 +603,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
   function emitSquadsUpdated() {
     core.eventBus.emitModuleEvent("module.matchState", "squadsUpdated", makeEvent("module.matchState.squadsUpdated", {
       squads: state.squads.list,
+      squadsSnapshot: cloneSquadSnapshot(state.squads),
     }));
   }
 
@@ -618,6 +611,108 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     core.eventBus.emitModuleEvent("module.matchState", "rconStatusUpdated", makeEvent("module.matchState.rconStatusUpdated", {
       rconStatus: { ...state.rconStatus },
     }));
+  }
+
+  function syncSquadsFromRuntimeState(event = null, emit = false) {
+    const snapshot = core.runtimeState?.getSquads?.() ?? null;
+    state.squads = normalizeRuntimeSquadSnapshot(snapshot, event);
+    state.serverId = state.squads.serverId || state.serverId;
+    if (emit) {
+      emitSquadsUpdated();
+      emitUpdated("squads");
+    }
+  }
+
+  function normalizeRuntimeSquadSnapshot(snapshot, event = null) {
+    const source = String(snapshot?.source ?? event?.source ?? "runtimeState").trim() || "runtimeState";
+    const flatSquads = Array.isArray(snapshot?.flatSquads)
+      ? snapshot.flatSquads.map(clone)
+      : Array.isArray(snapshot?.list)
+        ? snapshot.list.map(clone)
+        : Array.isArray(event?.flatSquads)
+          ? event.flatSquads.map(clone)
+          : Array.isArray(event?.squads)
+            ? event.squads.map(clone)
+            : [];
+    const teams = Array.isArray(snapshot?.teams)
+      ? snapshot.teams.map(clone)
+      : [];
+    const list = flatSquads.length > 0
+      ? flatSquads
+      : teams.flatMap((team) => (Array.isArray(team?.squads) ? team.squads.map(clone) : []));
+    const updatedAt = Number(snapshot?.updatedAt ?? 0) || (event?.time ? Date.parse(String(event.time)) : 0) || Date.now();
+    const ok = snapshot?.ok !== false && event?.ok !== false;
+    const error = snapshot?.error ?? event?.error ?? null;
+    const byKey = snapshot?.byKey ? { ...snapshot.byKey } : buildSquadIndexByKey(list);
+    const byTeamID = snapshot?.byTeamID ? cloneByTeamID(snapshot.byTeamID) : buildSquadIndexByTeamID(list);
+    const lastUpdatedAt = String(snapshot?.lastUpdatedAt ?? event?.time ?? new Date(updatedAt).toISOString());
+
+    return {
+      version: Number(snapshot?.version ?? event?.version ?? 1) || 1,
+      serverId: String(snapshot?.serverId ?? event?.serverId ?? core.webStatus.serverId ?? "").trim(),
+      source,
+      ok,
+      error,
+      teams,
+      flatSquads: list,
+      list,
+      count: Number(snapshot?.count ?? list.length ?? 0) || 0,
+      lastUpdatedAt,
+      updatedAt,
+      lastSuccessAt: Number(snapshot?.lastSuccessAt ?? (ok ? updatedAt : 0)) || 0,
+      lastFailureAt: Number(snapshot?.lastFailureAt ?? (!ok ? updatedAt : 0)) || 0,
+      byKey,
+      byTeamID,
+      stale: Boolean(snapshot?.stale ?? !ok),
+    };
+  }
+
+  function cloneSquadSnapshot(snapshot) {
+    return {
+      version: snapshot.version,
+      serverId: snapshot.serverId,
+      source: snapshot.source,
+      ok: snapshot.ok,
+      error: snapshot.error,
+      teams: snapshot.teams.map(clone),
+      flatSquads: snapshot.flatSquads.map(clone),
+      list: snapshot.list.map(clone),
+      count: snapshot.count,
+      lastUpdatedAt: snapshot.lastUpdatedAt,
+      updatedAt: snapshot.updatedAt,
+      lastSuccessAt: snapshot.lastSuccessAt,
+      lastFailureAt: snapshot.lastFailureAt,
+      byKey: { ...snapshot.byKey },
+      byTeamID: cloneByTeamID(snapshot.byTeamID),
+      stale: snapshot.stale,
+    };
+  }
+
+  function buildSquadIndexByKey(list) {
+    const index = {};
+    for (const squad of Array.isArray(list) ? list : []) {
+      if (squad?.key) index[squad.key] = squad;
+    }
+    return index;
+  }
+
+  function buildSquadIndexByTeamID(list) {
+    const index = {};
+    for (const squad of Array.isArray(list) ? list : []) {
+      const teamKey = squad?.teamID == null ? "" : String(squad.teamID);
+      if (!teamKey) continue;
+      if (!index[teamKey]) index[teamKey] = [];
+      index[teamKey].push(squad);
+    }
+    return index;
+  }
+
+  function cloneByTeamID(byTeamID) {
+    const next = {};
+    for (const [key, value] of Object.entries(byTeamID ?? {})) {
+      next[key] = Array.isArray(value) ? value.map(clone) : [];
+    }
+    return next;
   }
 
   function makeEvent(eventName, patch = {}) {
@@ -654,19 +749,6 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     api,
 
     async start() {
-      core.webRegistry.registerPage({
-        id: "web.matchState",
-        title: "对局状态",
-        group: "监控",
-        route: "/match-state",
-        pageModule: "/pages/match-state.js",
-        source: "module.matchState",
-        required: false,
-        enabled: true,
-        order: 10,
-        icon: "📊",
-      });
-
       if (!enabled) return;
 
       unsubscribers.push(core.eventBus.onCoreEvent("RCON_CONNECTED", () => {
@@ -683,6 +765,14 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         if (!isSubscribed()) return;
         updateStatuses();
         emitRconStatusUpdated();
+      }));
+      unsubscribers.push(core.eventBus.onCoreEvent("RUNTIME_SQUADS_UPDATED", (event) => {
+        if (!isSubscribed()) return;
+        syncSquadsFromRuntimeState(event, true);
+      }));
+      unsubscribers.push(core.eventBus.onCoreEvent("RUNTIME_SQUADS_REFRESH_FAILED", (event) => {
+        if (!isSubscribed()) return;
+        syncSquadsFromRuntimeState(event, true);
       }));
 
       // Ingest round world bring up
@@ -715,7 +805,6 @@ export function createMatchStateModule({ core, modules, config, logger }) {
 
       startTimer(refreshServerInfo, polling.serverInfoIntervalMs);
       startTimer(refreshPlayers, polling.playersIntervalMs);
-      startTimer(refreshSquads, polling.squadsIntervalMs);
       startTimer(refreshCurrentMap, polling.currentMapIntervalMs);
       startTimer(refreshNextMap, polling.nextMapIntervalMs);
 

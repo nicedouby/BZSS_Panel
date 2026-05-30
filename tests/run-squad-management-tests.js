@@ -131,7 +131,7 @@ function createHarness(overrides = {}) {
           const squads = typeof overrides.refreshSquads === "function"
             ? overrides.refreshSquads()
             : overrides.refreshSquads ?? [];
-          core.eventBus.emitCoreEvent("RCON_LIST_SQUADS_UPDATED", {
+          core.eventBus.emitCoreEvent("RUNTIME_SQUADS_UPDATED", {
             serverId: SERVER_ID,
             matchId: MATCH_ID,
             squads,
@@ -207,7 +207,7 @@ function sleep(ms = 50) {
 }
 
 async function seedSquads(harness, squads) {
-  harness.core.eventBus.emitCoreEvent("RCON_LIST_SQUADS_UPDATED", {
+  harness.core.eventBus.emitCoreEvent("RUNTIME_SQUADS_UPDATED", {
     serverId: SERVER_ID,
     matchId: MATCH_ID,
     squads,

@@ -50,6 +50,86 @@ function createHarness() {
       info() {},
       debug() {},
     },
+    runtimeState: {
+      getSquads() {
+        const updatedAt = Date.parse("2026-05-12T00:00:00.000Z");
+        return {
+          version: 1,
+          serverId: "BZSS_Main",
+          updatedAt,
+          lastSuccessAt: updatedAt,
+          lastFailureAt: 0,
+          source: "rcon:listSquads",
+          ok: true,
+          error: null,
+          teams: [
+            {
+              teamID: 1,
+              teamName: "USA",
+              squads: [
+                {
+                  key: "1:2",
+                  teamID: 1,
+                  squadID: 2,
+                  squadName: "Alpha",
+                  size: 1,
+                  locked: false,
+                  creatorName: "Alice",
+                  creatorSteamId: "76561198000000001",
+                },
+              ],
+            },
+          ],
+          flatSquads: [
+            {
+              key: "1:2",
+              teamID: 1,
+              teamName: "USA",
+              squadID: 2,
+              squadName: "Alpha",
+              size: 1,
+              locked: false,
+              creatorName: "Alice",
+              creatorSteamId: "76561198000000001",
+            },
+          ],
+          list: [
+            {
+              key: "1:2",
+              teamID: 1,
+              teamName: "USA",
+              squadID: 2,
+              squadName: "Alpha",
+              size: 1,
+              locked: false,
+              creatorName: "Alice",
+              creatorSteamId: "76561198000000001",
+            },
+          ],
+          count: 1,
+          lastUpdatedAt: "2026-05-12T00:00:00.000Z",
+          byKey: {
+            "1:2": {
+              key: "1:2",
+              teamID: 1,
+              squadID: 2,
+              squadName: "Alpha",
+            },
+          },
+          byTeamID: {
+            1: [
+              {
+                key: "1:2",
+                teamID: 1,
+                squadID: 2,
+                squadName: "Alpha",
+              },
+            ],
+          },
+          stale: false,
+        };
+      },
+    },
     eventBus: {
       onCoreEvent(eventName, handler) {
         if (!listeners.has(eventName)) listeners.set(eventName, []);
@@ -155,6 +235,8 @@ async function testAggregatesRconSnapshots() {
   assert.equal(state.players.byName.Alice.isLeader, true);
   assert.equal(state.squads.count, 1);
   assert.equal(state.squads.list[0].squadName, "Alpha");
+  assert.equal(state.squads.source, "rcon:listSquads");
+  assert.equal(state.squads.ok, true);
 
   assert.equal(harness.webStatusState.map, "AlBasrah");
   assert.equal(harness.webStatusState.layer, "AlBasrah_RAAS_v1");
@@ -176,7 +258,6 @@ async function testAggregatesRconSnapshots() {
   assert.ok(harness.moduleEvents.some((item) => item.eventName === "squadsUpdated"));
   assert.ok(harness.coreEvents.some((item) => item.eventName === "RCON_MATCH_STATE_UPDATED"));
   assert.ok(harness.coreEvents.some((item) => item.eventName === "RCON_LIST_PLAYERS_UPDATED"));
-  assert.ok(harness.coreEvents.some((item) => item.eventName === "RCON_LIST_SQUADS_UPDATED"));
 }
 
 async function testMissingServerInfoFieldsDoNotClobberLastGoodValues() {

@@ -438,7 +438,8 @@ export class ConsoleService {
 function normalizeConsoleEntry(entry = {}, seq = 0) {
   const ts = normalizeTimestamp(entry.ts ?? entry.time);
   const id = String(entry.id ?? `console-${seq}-${ts}`);
-  const channel = normalizeChannel(entry.channel);
+  const sourceHint = String(entry.source ?? entry.moduleId ?? entry.scope ?? "").trim();
+  const channel = normalizeChannel(entry.channel, sourceHint);
   const level = normalizeLevel(entry.level);
   const source = String(entry.source ?? "").trim() || channelToDefaultSource(channel);
   const message = String(entry.message ?? "");
@@ -465,12 +466,22 @@ function normalizeTimestamp(value) {
   return Number.isFinite(parsed) ? parsed : Date.now();
 }
 
-function normalizeChannel(value) {
+function normalizeChannel(value, sourceHint = "") {
   const text = String(value ?? "system").trim().toLowerCase();
   if (CONSOLE_CHANNELS.includes(text)) return text;
+  if (text === "app" || text === "default") {
+    if (sourceHint.startsWith("module.")) return "module";
+    if (sourceHint.startsWith("core.web") || sourceHint.startsWith("web.")) return "web";
+    return "app";
+  }
   if (text === "raw-log" || text === "rawlog") return "raw_log";
   if (text === "rcon-native" || text === "rconnative") return "rcon";
-  if (text === "module" || text === "modules" || text === "eventbus") return "event";
+  if (text === "modules") return "module";
+  if (text === "eventbus") return "event";
+  if (!text || text === "system") {
+    if (sourceHint.startsWith("module.")) return "module";
+    if (sourceHint.startsWith("core.web") || sourceHint.startsWith("web.")) return "web";
+  }
   return "system";
 }
 
@@ -495,6 +506,12 @@ function channelToDefaultSource(channel) {
       return "RCON";
     case "plugin":
       return "plugin";
+    case "module":
+      return "module";
+    case "web":
+      return "core.webServer";
+    case "app":
+      return "app";
     default:
       return "BZSS Panel";
   }
@@ -672,7 +689,7 @@ function normalizeCoreEvent(event = {}) {
     return makeEventEntry(type, message, event, payload, "info");
   }
 
-  if (eventName === "RCON_LIST_PLAYERS_UPDATED" || eventName === "RCON_LIST_SQUADS_UPDATED" || eventName === "SERVER_INFO_UPDATED") {
+  if (eventName === "RCON_LIST_PLAYERS_UPDATED" || eventName === "RUNTIME_SQUADS_UPDATED" || eventName === "RUNTIME_SQUADS_REFRESH_FAILED" || eventName === "RCON_LIST_SQUADS_UPDATED" || eventName === "SERVER_INFO_UPDATED") {
     const payload = cloneJsonSafe(event.payload ?? {});
     const players = Array.isArray(payload?.players) ? payload.players.length : Number(payload?.playerCount ?? payload?.count ?? 0);
     const squads = Array.isArray(payload?.squads) ? payload.squads.length : Number(payload?.squadCount ?? 0);
@@ -795,6 +812,12 @@ function legacyLabelFor(entry) {
       return "RCON";
     case "plugin":
       return "Plugin";
+    case "module":
+      return "Module";
+    case "web":
+      return "Web";
+    case "app":
+      return "App";
     default:
       return "System";
   }

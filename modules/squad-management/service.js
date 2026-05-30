@@ -317,8 +317,8 @@ export function createSquadManagementService({ core, modules, config, logger, re
         return;
       }
 
-      unsubscribers.push(core.eventBus.onCoreEvent("RCON_LIST_SQUADS_UPDATED", (event) => {
-        void handleRconSquadsUpdated(event);
+      unsubscribers.push(core.eventBus.onCoreEvent("RUNTIME_SQUADS_UPDATED", (event) => {
+        void handleRuntimeSquadsUpdated(event);
       }));
       unsubscribers.push(core.eventBus.onCoreEvent("RCON_LIST_PLAYERS_UPDATED", (event) => {
         void handleRconPlayersUpdated(event);
@@ -334,9 +334,6 @@ export function createSquadManagementService({ core, modules, config, logger, re
       }));
 
       if (typeof core.eventBus.onModuleEvent === "function") {
-        unsubscribers.push(core.eventBus.onModuleEvent("module.matchState", "squadsUpdated", (event) => {
-          void handleModuleSquadsUpdated(event);
-        }));
         unsubscribers.push(core.eventBus.onModuleEvent("module.matchState", "playersUpdated", (event) => {
           void handleModulePlayersUpdated(event);
         }));
@@ -484,7 +481,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
     }
   }
 
-  async function handleRconSquadsUpdated(event = {}) {
+  async function handleRuntimeSquadsUpdated(event = {}) {
     const serverId = normalizeServerId(event.serverId);
     if (!serverId) return;
     const matchId = normalizeMatchId(event.matchId ?? event.sessionId ?? event.sessionID ?? getCurrentMatchId(serverId));
@@ -537,7 +534,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
 
   async function handleModuleSquadsUpdated(event = {}) {
     if (!event?.serverId) return;
-    await handleRconSquadsUpdated({
+    await handleRuntimeSquadsUpdated({
       serverId: event.serverId,
       matchId: event.matchId,
       squads: event.squads,
@@ -598,35 +595,8 @@ export function createSquadManagementService({ core, modules, config, logger, re
         await checkKickPolicy(parsed.serverId, creator);
       }
 
-      const record = await repositoryApi?.insertRecord?.({
-        kind: "squad_created",
-        serverId: parsed.serverId,
-        matchId: resolvedMatchId,
-        source: parsed.source,
-        system: false,
-        teamId: parsed.teamId,
-        squadId: parsed.squadId,
-        generation: lifecycleRecord.generation,
-        squadName: parsed.squadName,
-        teamName: parsed.teamName,
-        creatorName: parsed.creatorName,
-        steamId: parsed.creatorSteamId,
-        eosId: parsed.creatorEosId,
-        reason: parsed.creationConfidence || parsed.creationSource || "",
-        result: "created",
-        payload: {
-          event: parsed,
-          lifecycle: lifecycleRecord,
-        },
-        creationSignature: lifecycleRecord.creationSignature ?? lifecycleRecord.key ?? "",
-        time: lifecycleRecord.createdAt ?? parsed.createdAt ?? new Date().toISOString(),
-        timeMs: lifecycleRecord.createdAtMs ?? parsed.createdAtMs ?? Date.now(),
-        logTime: parsed.time ?? "",
-        logSeconds: extractSeconds(parsed.time),
-      });
-
       pushRecentAction(parsed.serverId, {
-        time: record?.time ?? parsed.createdAt ?? new Date().toISOString(),
+        time: lifecycleRecord.createdAt ?? parsed.createdAt ?? new Date().toISOString(),
         action: "squad_created",
         source: parsed.source,
         ok: true,
@@ -1070,6 +1040,19 @@ export function createSquadManagementService({ core, modules, config, logger, re
       createdAt: timeMs,
       updatedAt: timeMs,
     };
+
+    if (record.kind === "squad_created") {
+      moduleLogger.warn("[SquadManagement] squad_created persistence is disabled in this phase.", {
+        operation: "squadManagement.squadCreatedPersistSkipped",
+        data: {
+          serverId,
+          matchId: record.matchId,
+          squadId: record.squadId,
+          squadName: record.squadName,
+        },
+      });
+      return null;
+    }
 
     const saved = await repositoryApi?.insertRecord?.(record);
     updateActionSummary(cache, saved ?? record);

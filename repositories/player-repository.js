@@ -221,27 +221,14 @@ export class PlayerRepository {
   }
 
   async addSquadCreated({ playerId = null, squadID = null, squadName = null, teamName = null } = {}) {
-    await this.db.run(
-      "INSERT INTO squad_create_records (player_id, squad_id, squad_name, team_name, created_at) VALUES (?, ?, ?, ?, ?)",
-      playerId,
-      squadID,
-      cleanText(squadName),
-      cleanText(teamName),
-      now(),
-    );
-    if (playerId) await this.incrementFields(playerId, { total_squad_created: 1 });
+    // Disabled in the current phase: squad creation stays in runtime state only.
+    // Keep the method as a no-op so legacy callers do not reintroduce writes.
+    return null;
   }
 
   async addLogEvent({ sourceEvent, eventName = null, rawLine = null, payload = {}, matchedPlayerName = null } = {}) {
-    await this.db.run(
-      "INSERT INTO log_events (source_event, event_name, raw_line, matched_player_name, created_at, payload_json) VALUES (?, ?, ?, ?, ?, ?)",
-      cleanText(sourceEvent) ?? "UNKNOWN",
-      cleanText(eventName),
-      cleanText(rawLine),
-      cleanText(matchedPlayerName),
-      now(),
-      JSON.stringify(payload ?? {}),
-    );
+    // Disabled in the current phase: high-frequency log events must not grow the database.
+    return null;
   }
 
   async incrementFields(playerId, patch) {
