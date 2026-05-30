@@ -36,13 +36,16 @@
         </div>
 
         <main class="chat-log-area">
-          <div class="chat-log" ref="scrollerRef">
+          <div class="chat-log-shell">
+            <div class="chat-log" ref="scrollerRef">
+            <div v-if="filteredHistory.length === 0" class="chat-empty-state">暂无聊天记录</div>
             <article v-for="msg in filteredHistory" :key="msg.seq" class="chat-line" :class="[`channel-${msg.channel.toLowerCase()}`]">
               <span class="chat-time">{{ formatTime(msg.time) }}</span>
               <span class="chat-channel">[{{ msg.channel }}]</span>
               <span class="chat-name" :title="msg.steamID">{{ msg.name }}:</span>
               <span class="chat-message">{{ msg.message }}</span>
             </article>
+            </div>
           </div>
         </main>
       </div>
@@ -383,14 +386,31 @@ onBeforeUnmount(() => {
   border-radius: 4px;
 }
 
-.chat-log-area { flex: 1; min-height: 0; background: #0d1117; }
-.chat-log {
+.chat-log-area {
+  flex: 1 1 auto;
+  min-height: 0;
+  background: #0d1117;
+  overflow: hidden;
+}
+
+.chat-log-shell {
   height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-log {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
-  padding: 8px 16px;
+  padding: 8px 16px 16px;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 13px;
   line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
 }
 
 .chat-line {
@@ -398,6 +418,7 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid rgba(255, 255, 255, 0.02);
   display: flex;
   gap: 10px;
+  align-items: flex-start;
 }
 
 .chat-time { color: #484f58; flex-shrink: 0; }
@@ -408,7 +429,14 @@ onBeforeUnmount(() => {
 .channel-chatadmin { color: #d29922; }
 
 .chat-name { color: #c9d1d9; font-weight: bold; flex-shrink: 0; }
-.chat-message { color: #edf2f4; word-break: break-all; }
+.chat-message {
+  color: #edf2f4;
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 
 .chat-footer {
   padding: 6px 20px;
@@ -424,5 +452,20 @@ onBeforeUnmount(() => {
   text-align: center;
   color: #484f58;
   font-size: 12px;
+}
+
+.chat-empty-state {
+  padding: 24px 16px;
+  text-align: center;
+  color: #6e7681;
+  font-size: 13px;
+  border: 1px dashed rgba(139, 148, 158, 0.25);
+  border-radius: 8px;
+  margin: 8px 0;
+}
+
+.chat-log-shell,
+.chat-log {
+  max-height: 100%;
 }
 </style>

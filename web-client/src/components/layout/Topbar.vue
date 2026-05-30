@@ -454,6 +454,9 @@ function toggleSidebar() {
 
 <style scoped>
 .topbar {
+  position: relative;
+  z-index: var(--z-user-dropdown);
+  overflow: visible;
   padding: 12px 18px 14px;
   border-bottom: 1px solid var(--color-border-default);
   background:

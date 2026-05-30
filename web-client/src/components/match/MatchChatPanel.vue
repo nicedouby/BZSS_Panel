@@ -654,6 +654,8 @@ function buildWebSocketUrl(path: string) {
   padding: 8px 10px 10px;
   display: grid;
   gap: 8px;
+  align-content: start;
+  align-items: start;
 }
 
 .match-chat-empty {
@@ -672,6 +674,7 @@ function buildWebSocketUrl(path: string) {
   border-radius: 12px;
   border: 1px solid rgba(130, 154, 180, 0.14);
   background: rgba(255, 255, 255, 0.03);
+  align-self: start;
 }
 
 .match-chat-row-head {
