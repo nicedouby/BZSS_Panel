@@ -74,6 +74,7 @@ export function createAdminWarnModule({ core, config, logger }) {
           requestedBy: "module.adminWarn",
           reason: String(req?.reason ?? "admin_warn"),
           sourceEventId: optionalText(req?.relatedEventId),
+          priority: "high",
         });
 
         if (!result?.success) {

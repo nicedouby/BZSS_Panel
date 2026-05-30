@@ -39,10 +39,12 @@ export class RconManager {
 
     this.enabled = Boolean(this.config.enabled);
     this.minIntervalMs = Number(this.config.rateLimit?.minIntervalMs ?? 500);
+    this.priorityMinIntervalMs = Math.max(0, Number(this.config.rateLimit?.priorityMinIntervalMs ?? 50));
     this.maxQueueSize = Number(this.config.rateLimit?.maxQueueSize ?? 100);
 
     this.squadRcon = null;
     this.queue = [];
+    this.priorityQueue = [];
     this.processing = false;
     this.lastCommandTime = 0;
 
@@ -293,7 +295,8 @@ export class RconManager {
       };
     }
 
-    if (this.queue.length >= this.maxQueueSize) {
+    const priority = isPriorityRequest(request);
+    if (this.getQueueSize() >= this.maxQueueSize) {
       return {
         success: false,
         message: "RCON queue is full.",
@@ -303,19 +306,27 @@ export class RconManager {
     }
 
     return await new Promise((resolve) => {
-      this.queue.push({
+      const item = {
         request: { ...request, command },
+        priority,
         resolve,
-      });
+      };
 
-      this.status.queueSize = this.queue.length;
-      this.webStatus.set("rconQueue", this.queue.length);
+      if (priority) {
+        this.priorityQueue.push(item);
+      } else {
+        this.queue.push(item);
+      }
+
+      this.status.queueSize = this.getQueueSize();
+      this.webStatus.set("rconQueue", this.getQueueSize());
       this.logger.debug(() => `Queued RCON command ${command}`, {
         operation: "dispatchCommand",
         data: {
           command,
           requestedBy: request?.requestedBy ?? "",
-          queueSize: this.queue.length,
+          queueSize: this.getQueueSize(),
+          priority,
         },
       });
 
@@ -331,15 +342,16 @@ export class RconManager {
     this.processing = true;
 
     try {
-      while (this.queue.length > 0) {
-        const item = this.queue.shift();
+      while (this.getQueueSize() > 0) {
+        const item = this.priorityQueue.length > 0 ? this.priorityQueue.shift() : this.queue.shift();
 
-        this.status.queueSize = this.queue.length;
-        this.webStatus.set("rconQueue", this.queue.length);
+        this.status.queueSize = this.getQueueSize();
+        this.webStatus.set("rconQueue", this.getQueueSize());
 
         const diff = Date.now() - this.lastCommandTime;
-        if (diff < this.minIntervalMs) {
-          await sleep(this.minIntervalMs - diff);
+        const minIntervalMs = item?.priority ? this.priorityMinIntervalMs : this.minIntervalMs;
+        if (diff < minIntervalMs) {
+          await sleep(minIntervalMs - diff);
         }
 
         try {
@@ -353,7 +365,8 @@ export class RconManager {
             data: {
               command: item.request.command,
               requestedBy: item.request.requestedBy ?? "",
-              queueSize: this.queue.length,
+              queueSize: this.getQueueSize(),
+              priority: Boolean(item?.priority),
             },
           });
           const response = await this.squadRcon.execute(item.request.command);
@@ -486,8 +499,12 @@ export class RconManager {
       ...this.status,
       connected: Boolean(this.squadRcon?.connected),
       authenticated: Boolean(this.squadRcon?.loggedIn),
-      queueSize: this.queue.length,
+      queueSize: this.getQueueSize(),
     };
+  }
+
+  getQueueSize() {
+    return this.queue.length + this.priorityQueue.length;
   }
 
   onNativeLog(handler) {
@@ -535,6 +552,12 @@ function normalizeRconPayload(eventName, payload) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isPriorityRequest(request) {
+  return String(request?.priority ?? "").trim().toLowerCase() === "high"
+    || request?.priority === true
+    || request?.bypassRateLimit === true;
 }
 
 function mapNativeRconEventToConsoleEntry(eventName, payload) {

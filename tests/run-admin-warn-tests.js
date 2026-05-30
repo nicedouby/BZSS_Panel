@@ -55,6 +55,7 @@ async function testWarnSuccessAndSanitize() {
   assert.equal(result.success, true);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].command, `AdminWarn "PlayerA" "[BZSS] line1 'quoted'"`);
+  assert.equal(calls[0].priority, "high");
 
   const records = module.api.getRecent({ limit: 10 });
   assert.equal(records.length, 1);
