@@ -101,21 +101,24 @@ function historyDown() {
   display: flex;
   align-items: center;
   gap: 12px;
-  background: #0d1117;
-  border: 1px solid #30363d;
-  border-radius: 6px;
-  padding: 4px 8px;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.016)), rgba(255, 255, 255, 0.006)),
+    var(--color-bg-card);
+  border: 1px solid var(--color-border-default);
+  border-radius: 16px;
+  padding: 8px 10px;
+  box-shadow: var(--shadow-md);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .rcon-input-group:focus-within {
-  border-color: #58a6ff;
-  box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.3);
+  border-color: var(--color-border-highlight);
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.14), var(--shadow-md);
 }
 
 .input-prefix {
-  color: #58a6ff;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: var(--color-status-info);
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
   font-weight: bold;
   user-select: none;
 }
@@ -124,9 +127,9 @@ function historyDown() {
   flex: 1;
   background: transparent;
   border: none;
-  color: #c9d1d9;
+  color: var(--color-text-primary);
   padding: 8px 0;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
   font-size: 14px;
   outline: none;
 }
@@ -137,27 +140,28 @@ function historyDown() {
 }
 
 .rcon-button {
-  background: #238636;
-  border: 1px solid rgba(240, 246, 252, 0.1);
-  color: #ffffff;
-  padding: 6px 16px;
-  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(52, 211, 153, 0.96), rgba(34, 197, 94, 0.82));
+  border: 1px solid rgba(52, 211, 153, 0.24);
+  color: #04110a;
+  padding: 8px 16px;
+  border-radius: 12px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 8px;
+  box-shadow: var(--shadow-sm);
 }
 
 .rcon-button:hover:not(:disabled) {
-  background: #2ea043;
+  background: linear-gradient(180deg, rgba(74, 222, 128, 0.98), rgba(52, 211, 153, 0.88));
 }
 
 .rcon-button:disabled {
-  background: #21262d;
-  color: #8b949e;
-  border-color: #30363d;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-muted);
+  border-color: var(--color-border-default);
   cursor: not-allowed;
 }
 
@@ -165,7 +169,7 @@ function historyDown() {
   width: 12px;
   height: 12px;
   border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: #fff;
+  border-top-color: #04110a;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }

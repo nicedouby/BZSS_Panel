@@ -106,19 +106,17 @@ function setStream(value: string) {
 <style scoped>
 .console-page {
   height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: #0d1117;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  min-height: 0;
+  background: var(--app-background, var(--color-bg-page));
 }
 
 .console-toolbar-area {
-  flex-shrink: 0;
-  padding: 12px 16px;
-  background: #161b22;
-  border-bottom: 1px solid #30363d;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
 }
 
 .console-status-bar {
@@ -126,29 +124,28 @@ function setStream(value: string) {
   gap: 12px;
   align-items: center;
   font-size: 11px;
-  color: #8b949e;
+  color: var(--color-text-muted);
+  padding: 0 2px;
+  flex-wrap: wrap;
 }
 
 .buffered-count {
-  font-family: monospace;
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 .fetching-indicator {
-  color: #58a6ff;
+  color: var(--color-status-info);
 }
 
 .console-main {
-  flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
 
 .console-footer {
-  flex-shrink: 0;
-  padding: 12px 16px;
-  background: #161b22;
-  border-top: 1px solid #30363d;
+  padding: 0;
 }
 
 :deep(.rcon-input-group) {

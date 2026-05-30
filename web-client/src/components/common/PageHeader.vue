@@ -26,6 +26,7 @@ defineProps<{
   align-items: flex-start;
   gap: 16px;
   flex-wrap: wrap;
+  padding-bottom: 4px;
 }
 
 .text-block {
@@ -33,22 +34,27 @@ defineProps<{
 }
 
 .eyebrow {
-  margin: 0 0 8px;
-  font-size: 12px;
-  color: #8da0ad;
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-status-info);
   text-transform: uppercase;
+  letter-spacing: 0.12em;
 }
 
 .title {
   margin: 0;
-  font-size: 22px;
-  line-height: 1.2;
+  font-size: clamp(22px, 2.1vw, 30px);
+  line-height: 1.15;
+  letter-spacing: -0.03em;
 }
 
 .subtitle {
-  margin: 6px 0 0;
-  color: #9aa7b2;
+  margin: 8px 0 0;
+  color: var(--color-text-secondary);
   font-size: 13px;
+  line-height: 1.55;
+  max-width: 72ch;
 }
 
 .actions {

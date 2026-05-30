@@ -28,15 +28,6 @@
           <span class="match-chip match-chip-team1">{{ t("match.team1", "", { count: matchTeam1Count }) }}</span>
           <span class="match-chip match-chip-team2">{{ t("match.team2", "", { count: matchTeam2Count }) }}</span>
           <span class="match-chip">{{ matchTimeLabel }}</span>
-          <button
-            type="button"
-            class="match-chip match-chip-action"
-            :disabled="!canEditLogClock || logClockSaving"
-            :title="logClockTitle"
-            @click="editLogClock"
-          >
-            Log {{ logClockLabel }}
-          </button>
           <span class="match-chip">{{ matchTpsLabel }}</span>
           <span class="match-chip" :class="statusTone(matchRconStatus)">{{ matchRconLabel }}</span>
           <span class="match-chip" :class="statusTone(matchLogsStatus)">{{ matchLogsLabel }}</span>
@@ -463,16 +454,18 @@ function toggleSidebar() {
 
 <style scoped>
 .topbar {
-  padding: 10px 18px 12px;
-  border-bottom: 1px solid #273039;
+  padding: 12px 18px 14px;
+  border-bottom: 1px solid var(--color-border-default);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.01)), rgba(255, 255, 255, 0.004)),
-    #14191f;
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.016)), rgba(255, 255, 255, 0.006)),
+    var(--color-bg-panel);
+  backdrop-filter: blur(12px);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.02);
 }
 
 .topbar-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 1.1fr) minmax(0, 1.6fr) auto;
+  grid-template-columns: minmax(300px, 1.05fr) minmax(0, 1.5fr) auto;
   align-items: center;
   gap: 14px;
   min-width: 0;
@@ -481,7 +474,7 @@ function toggleSidebar() {
 .topbar-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   min-width: 0;
 }
 
@@ -494,16 +487,23 @@ function toggleSidebar() {
   display: block;
 }
 
+.topbar-copy strong {
+  font-size: 17px;
+  line-height: 1.18;
+  letter-spacing: -0.02em;
+}
+
 .topbar-meta {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 2px;
+  margin-top: 4px;
   min-width: 0;
+  flex-wrap: wrap;
 }
 
 .topbar-subtitle {
-  color: #9aa7b2;
+  color: var(--color-text-muted);
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -513,13 +513,13 @@ function toggleSidebar() {
 .warmup-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
-  padding: 0 10px;
+  min-height: 28px;
+  padding: 0 12px;
   border-radius: 999px;
-  border: 1px solid rgba(122, 162, 184, 0.28);
+  border: 1px solid rgba(122, 162, 184, 0.26);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.02)), rgba(255, 255, 255, 0.004)),
-    rgba(122, 162, 184, 0.12);
+    rgba(122, 162, 184, 0.14);
   color: #d7f3ff;
   font-size: 12px;
   font-weight: 600;
@@ -527,6 +527,7 @@ function toggleSidebar() {
   letter-spacing: 0.01em;
   white-space: nowrap;
   cursor: pointer;
+  box-shadow: var(--shadow-sm);
   transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
 }
 
@@ -548,7 +549,8 @@ function toggleSidebar() {
 }
 
 .menu-button {
-  min-width: 70px;
+  min-width: 82px;
+  box-shadow: var(--shadow-sm);
 }
 
 .topbar-center {
@@ -569,24 +571,25 @@ function toggleSidebar() {
 .match-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
-  padding: 0 10px;
+  min-height: 28px;
+  padding: 0 12px;
   border-radius: 999px;
   border: 1px solid rgba(122, 162, 184, 0.22);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.018)), rgba(255, 255, 255, 0.004)),
-    rgba(122, 162, 184, 0.08);
-  color: #dce4e8;
+    rgba(122, 162, 184, 0.09);
+  color: var(--color-text-secondary);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;
   line-height: 1;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+  box-shadow: var(--shadow-sm);
 }
 
 .match-chip-strong {
-  color: #f4f7f8;
+  color: var(--color-text-primary);
   border-color: rgba(122, 162, 184, 0.32);
 }
 
@@ -603,30 +606,13 @@ function toggleSidebar() {
 }
 
 .match-chip-muted {
-  color: #aeb8bf;
-}
-
-.match-chip-action {
-  appearance: none;
-  -webkit-appearance: none;
-  font: inherit;
-  cursor: pointer;
-}
-
-.match-chip-action:disabled {
-  cursor: not-allowed;
-  opacity: 0.72;
-}
-
-.match-chip-action:not(:disabled):hover {
-  border-color: rgba(122, 162, 184, 0.42);
-  background: rgba(122, 162, 184, 0.12);
+  color: var(--color-text-muted);
 }
 
 .topbar-actions {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   justify-content: flex-end;
   min-width: 0;
 }
@@ -644,20 +630,21 @@ function toggleSidebar() {
 .metric {
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
-  padding: 0 10px;
+  min-height: 28px;
+  padding: 0 12px;
   border-radius: 999px;
   border: 1px solid rgba(122, 162, 184, 0.22);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.018)), rgba(255, 255, 255, 0.004)),
-    rgba(122, 162, 184, 0.08);
-  color: #dce4e8;
+    rgba(122, 162, 184, 0.09);
+  color: var(--color-text-secondary);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;
   line-height: 1;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+  box-shadow: var(--shadow-sm);
 }
 
 .metric-button {
@@ -674,7 +661,7 @@ function toggleSidebar() {
 }
 
 .metric.primary {
-  color: #edf2f4;
+  color: var(--color-text-primary);
   border-color: rgba(122, 162, 184, 0.3);
 }
 
@@ -685,7 +672,7 @@ function toggleSidebar() {
 }
 
 .runtime-badge {
-  min-width: 60px;
+  min-width: 76px;
 }
 
 .metric.error {

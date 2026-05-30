@@ -263,19 +263,19 @@ function getSortTime(row: any) {
 .db-page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   height: 100%;
   min-height: 0;
-  padding: 16px;
+  padding: clamp(12px, 1.2vw, 20px);
   overflow: hidden;
-  background: var(--app-background);
+  background: var(--app-background, var(--color-bg-page));
 }
 
 .db-main {
   flex: 1;
   display: grid;
-  grid-template-columns: 380px minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 14px;
   min-height: 0;
   overflow: hidden;
 }
@@ -285,9 +285,13 @@ function getSortTime(row: any) {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  background: var(--color-bg-panel);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.016)), rgba(255, 255, 255, 0.006)),
+    var(--color-bg-card);
   border: 1px solid var(--color-border-default);
-  border-radius: 12px;
+  border-radius: 18px;
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(12px);
 }
 
 .db-content {
@@ -301,7 +305,7 @@ function getSortTime(row: any) {
   }
   
   .db-sidebar {
-    max-height: 400px;
+    max-height: 420px;
   }
 }
 </style>

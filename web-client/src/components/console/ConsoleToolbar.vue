@@ -53,6 +53,15 @@ function readValue(event: Event) {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-default);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.016)), rgba(255, 255, 255, 0.006)),
+    var(--color-bg-card);
+  border-radius: 16px;
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(12px);
 }
 
 .toolbar-row {
@@ -60,6 +69,7 @@ function readValue(event: Event) {
   gap: 8px;
   flex-wrap: wrap;
   align-items: center;
+  min-width: 0;
 }
 
 .toolbar-row.end {
@@ -69,35 +79,53 @@ function readValue(event: Event) {
 select,
 input {
   min-width: 0;
-  border: 1px solid #30363d;
-  background: #0d1117;
-  color: #c9d1d9;
-  border-radius: 6px;
-  padding: 6px 12px;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  border-radius: 12px;
+  padding: 8px 12px;
   font-size: 13px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 
 select:focus,
 input:focus {
-  border-color: #58a6ff;
   outline: none;
-  box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.3);
+  border-color: var(--color-border-highlight);
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.16);
 }
 
 input {
-  width: 200px;
+  width: min(260px, 100%);
 }
 
 button {
-  background: #21262d;
-  border: 1px solid #30363d;
-  color: #c9d1d9;
-  padding: 6px 12px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.018)), rgba(255, 255, 255, 0.004)),
+    var(--color-bg-elevated);
+  border: 1px solid var(--color-border-default);
+  color: var(--color-text-primary);
+  padding: 8px 12px;
   font-size: 13px;
+  box-shadow: var(--shadow-sm);
 }
 
 button:hover {
-  background: #30363d;
-  border-color: #8b949e;
+  border-color: var(--color-border-highlight);
+}
+
+@media (max-width: 900px) {
+  .toolbar {
+    padding: 12px;
+  }
+
+  .toolbar-row.end {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  input {
+    flex: 1 1 220px;
+  }
 }
 </style>

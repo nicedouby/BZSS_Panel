@@ -78,7 +78,7 @@ function cancel() {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(8, 12, 16, 0.85);
+  background: rgba(5, 8, 12, 0.82);
   backdrop-filter: blur(4px);
 }
 
@@ -86,27 +86,31 @@ function cancel() {
   width: min(520px, 100%);
   display: grid;
   gap: 20px;
-  border: 1px solid rgba(251, 191, 36, 0.3);
-  border-radius: 12px;
-  background: #1c1f26;
-  padding: 24px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 20px rgba(251, 191, 36, 0.05);
+  border: 1px solid rgba(251, 191, 36, 0.24);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.02)), rgba(255, 255, 255, 0.006)),
+    var(--color-bg-card);
+  padding: 22px;
+  box-shadow: var(--shadow-lg), 0 0 20px rgba(251, 191, 36, 0.05);
+  backdrop-filter: blur(12px);
 }
 
 .dialog-head h3 {
   margin: 0;
-  font-size: 20px;
+  font-size: 18px;
   color: #fbbf24;
 }
 
 .dialog-head p {
   margin: 8px 0 0;
-  color: #9aa7b2;
-  font-size: 14px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .dialog-head strong {
-  color: #fff;
+  color: var(--color-text-primary);
 }
 
 .dialog-body {
@@ -117,7 +121,7 @@ function cancel() {
 .input-label {
   font-size: 12px;
   font-weight: 700;
-  color: #64748b;
+  color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -125,19 +129,20 @@ function cancel() {
 .warn-textarea {
   width: 100%;
   height: 100px;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid #334155;
-  border-radius: 8px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-default);
+  border-radius: 12px;
   padding: 12px;
-  color: #f1f5f9;
+  color: var(--color-text-primary);
   font-size: 14px;
   resize: none;
-  transition: border-color 0.2s;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .warn-textarea:focus {
   outline: none;
-  border-color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.5);
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.12);
 }
 
 .quick-hints {
@@ -151,16 +156,16 @@ function cancel() {
   font-size: 12px;
   padding: 4px 10px;
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--color-border-soft);
   border-radius: var(--radius-full);
-  color: #94a3b8;
+  color: var(--color-text-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .hint-chip:hover {
   background: rgba(251, 191, 36, 0.1);
-  border-color: rgba(251, 191, 36, 0.3);
+  border-color: rgba(251, 191, 36, 0.28);
   color: #fbbf24;
 }
 
@@ -173,21 +178,22 @@ function cancel() {
 
 .cancel-btn {
   padding: 8px 16px;
-  background: transparent;
-  border: 1px solid #334155;
-  color: #94a3b8;
-  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border-default);
+  color: var(--color-text-secondary);
+  border-radius: 12px;
   cursor: pointer;
 }
 
 .submit-btn {
   padding: 8px 24px;
-  background: #fbbf24;
-  border: none;
+  background: linear-gradient(180deg, rgba(251, 191, 36, 0.96), rgba(251, 191, 36, 0.82));
+  border: 1px solid rgba(251, 191, 36, 0.28);
   color: #000;
   font-weight: 700;
-  border-radius: 6px;
+  border-radius: 12px;
   cursor: pointer;
+  box-shadow: var(--shadow-sm);
 }
 
 .submit-btn:disabled {
@@ -196,6 +202,6 @@ function cancel() {
 }
 
 .submit-btn:hover:not(:disabled) {
-  background: #fcd34d;
+  background: linear-gradient(180deg, rgba(252, 211, 77, 0.98), rgba(251, 191, 36, 0.88));
 }
 </style>

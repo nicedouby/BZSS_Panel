@@ -79,37 +79,44 @@ function safeClass(value: unknown) {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: #0d1117;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.012), transparent 14%),
+    var(--color-bg-panel);
+  border: 1px solid var(--color-border-default);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
 }
 
 .scroller {
   flex: 1;
   min-height: 0;
+  background: rgba(255, 255, 255, 0.01);
 }
 
 .log-line {
-  height: 32px;
-  max-height: 32px;
-  padding: 0 12px;
-  border-bottom: 1px solid #1a2128;
+  height: 34px;
+  max-height: 34px;
+  padding: 0 14px;
+  border-bottom: 1px solid rgba(140, 160, 185, 0.08);
   display: flex;
   gap: 8px;
   align-items: center;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
   overflow: hidden;
 }
 
 .line-meta {
   display: flex;
   gap: 8px;
-  color: #6a7680;
+  color: var(--color-text-muted);
   font-size: 11px;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
 .line-meta .seq {
-  color: #444c56;
+  color: rgba(148, 163, 184, 0.75);
   width: 40px;
 }
 
@@ -119,7 +126,7 @@ function safeClass(value: unknown) {
 }
 
 .line-body {
-  color: #d1d5da;
+  color: var(--color-text-secondary);
   font-size: 13px;
   white-space: nowrap;
   overflow: hidden;
@@ -128,28 +135,28 @@ function safeClass(value: unknown) {
 }
 
 .line-label {
-  color: #58a6ff;
+  color: var(--color-status-info);
   margin-right: 4px;
   font-weight: bold;
 }
 
 .level-error .line-body {
-  color: #f85149;
+  color: #ff9b9b;
 }
 
 .level-error .line-meta .level {
-  color: #f85149;
+  color: #ff9b9b;
 }
 
 .level-warn .line-body {
-  color: #d29922;
+  color: #f4c861;
 }
 
 .level-warn .line-meta .level {
-  color: #d29922;
+  color: #f4c861;
 }
 
 .level-debug .line-body {
-  color: #8b949e;
+  color: var(--color-text-muted);
 }
 </style>

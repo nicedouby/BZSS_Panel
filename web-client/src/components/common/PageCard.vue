@@ -31,13 +31,18 @@ withDefaults(defineProps<{
 
 <style scoped>
 .page-card {
-  border: 1px solid #2c343d;
-  background: #171d23;
-  border-radius: 8px;
+  border: 1px solid var(--color-border-default);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.016)), rgba(255, 255, 255, 0.006)),
+    var(--color-bg-card);
+  border-radius: 18px;
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  backdrop-filter: blur(12px);
 }
 
 .card-header {
-  padding: 14px 16px 0;
+  padding: 16px 18px 0;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -51,12 +56,14 @@ withDefaults(defineProps<{
 .card-title {
   margin: 0;
   font-size: 16px;
+  line-height: 1.3;
 }
 
 .card-description {
   margin: 6px 0 0;
   font-size: 12px;
-  color: #98a5af;
+  color: var(--color-text-muted);
+  line-height: 1.5;
 }
 
 .card-actions {
@@ -67,10 +74,10 @@ withDefaults(defineProps<{
 }
 
 .card-body {
-  padding: 16px;
+  padding: 18px;
 }
 
 .card-body.compact {
-  padding: 12px;
+  padding: 14px 16px;
 }
 </style>

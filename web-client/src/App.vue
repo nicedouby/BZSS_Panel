@@ -48,19 +48,95 @@ watch(
 <style>
 :root {
   color-scheme: dark;
-  font-family: Inter, "Microsoft YaHei", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #101317;
-  color: #edf2f4;
+  font-family: "Segoe UI Variable Text", "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--color-bg-page);
+  color: var(--color-text-primary);
+  --app-background: var(--color-bg-page);
 }
 
 * {
   box-sizing: border-box;
 }
 
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
 body {
   margin: 0;
   min-width: 320px;
-  background: #070b10;
+  background: var(--color-bg-page);
+  color: var(--color-text-primary);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+input,
+select,
+textarea {
+  border-radius: 12px;
+}
+
+button {
+  border: 1px solid var(--color-border-default);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.02)), rgba(255, 255, 255, 0.005)),
+    var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  padding: 8px 14px;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--color-border-highlight);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+}
+
+input,
+select,
+textarea {
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  padding: 10px 12px;
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-text-muted);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(96, 165, 250, 0.5);
+  outline-offset: 2px;
+}
+
+a {
+  color: inherit;
 }
 
 #app {
@@ -68,47 +144,65 @@ body {
 }
 
 .app-root {
+  position: relative;
   min-height: 100vh;
-  color: #edf2f4;
-  background: #070b10;
+  color: var(--color-text-primary);
+  background: var(--app-background, var(--color-bg-page));
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.app-root::before,
+.app-root::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.app-root::before {
+  z-index: 0;
+  background:
+    radial-gradient(circle at 14% 0%, rgba(56, 189, 248, 0.12), transparent 30%),
+    radial-gradient(circle at 86% 0%, rgba(251, 146, 60, 0.08), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 18%);
+  opacity: 0.95;
+}
+
+.app-root::after {
+  z-index: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.65), transparent 82%);
+  opacity: 0.18;
+}
+
+.app-root > * {
+  position: relative;
+  z-index: 1;
 }
 
 .boot-screen {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  background: #101317;
+  padding: 24px;
+  background: var(--app-background, var(--color-bg-page));
 }
 
 .boot-card {
-  border: 1px solid #2c343d;
-  background: #171d23;
-  border-radius: 8px;
-  padding: 18px 22px;
-  color: #dce4e8;
-}
-
-button,
-input {
-  font: inherit;
-}
-
-button {
-  border: 1px solid #38414c;
-  background: #1d252d;
-  color: #f4f7f8;
-  border-radius: 6px;
-  padding: 8px 12px;
-  cursor: pointer;
-}
-
-button:hover:not(:disabled) {
-  border-color: #7aa2b8;
-}
-
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
+  width: min(420px, 100%);
+  border: 1px solid var(--color-border-default);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.02)), rgba(255, 255, 255, 0.006)),
+    var(--color-bg-card);
+  border-radius: 20px;
+  padding: 20px 22px;
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(12px);
 }
 
 .page {
@@ -126,32 +220,43 @@ button:disabled {
 
 .page-title {
   margin: 0;
-  font-size: 22px;
-  line-height: 1.2;
+  font-size: clamp(20px, 1.9vw, 28px);
+  line-height: 1.18;
+  letter-spacing: -0.02em;
 }
 
 .page-subtitle {
   margin: 6px 0 0;
-  color: #9aa7b2;
+  color: var(--color-text-secondary);
   font-size: 13px;
+  line-height: 1.55;
+  max-width: 72ch;
 }
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.stat,
+.panel {
+  border: 1px solid var(--color-border-default);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.016)), rgba(255, 255, 255, 0.006)),
+    var(--color-bg-card);
+  border-radius: 16px;
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(12px);
 }
 
 .stat {
-  border: 1px solid #2c343d;
-  background: #171d23;
-  border-radius: 8px;
-  padding: 12px;
+  padding: 12px 14px;
 }
 
 .stat span {
   display: block;
-  color: #98a5af;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -159,95 +264,37 @@ button:disabled {
   display: block;
   margin-top: 4px;
   font-size: 20px;
+  line-height: 1.2;
 }
 
 .panel {
-  border: 1px solid #2c343d;
-  background: #151a20;
-  border-radius: 8px;
+  overflow: hidden;
 }
 
 .muted {
-  color: #9aa7b2;
+  color: var(--color-text-secondary);
 }
 
-.app-root.ui-mode-classic {
-  --panel-surface-alpha: 0.018;
-  --card-extra-glow: 0;
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
 }
 
-.app-root.ui-mode-tactical {
-  --panel-surface-alpha: 0.03;
-  --card-extra-glow: 1;
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.app-root.ui-mode-glass {
-  --panel-surface-alpha: 0.05;
-  --card-extra-glow: 1;
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.18);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
 }
 
-.app-root.ui-accent-blueOrange {
-  --color-team1-primary: #37c8ff;
-  --color-team1-soft: rgba(55, 200, 255, 0.1);
-  --color-team1-border: rgba(55, 200, 255, 0.3);
-  --color-team1-bg: rgba(55, 200, 255, 0.045);
-  --color-team2-primary: #ff9b45;
-  --color-team2-soft: rgba(255, 155, 69, 0.1);
-  --color-team2-border: rgba(255, 155, 69, 0.3);
-  --color-team2-bg: rgba(255, 155, 69, 0.045);
-}
-
-.app-root.ui-accent-greenAmber {
-  --color-team1-primary: #34d399;
-  --color-team1-soft: rgba(52, 211, 153, 0.1);
-  --color-team1-border: rgba(52, 211, 153, 0.3);
-  --color-team1-bg: rgba(52, 211, 153, 0.045);
-  --color-team2-primary: #fbbf24;
-  --color-team2-soft: rgba(251, 191, 36, 0.1);
-  --color-team2-border: rgba(251, 191, 36, 0.3);
-  --color-team2-bg: rgba(251, 191, 36, 0.045);
-}
-
-.app-root.ui-accent-steelRed {
-  --color-team1-primary: #93c5fd;
-  --color-team1-soft: rgba(147, 197, 253, 0.1);
-  --color-team1-border: rgba(147, 197, 253, 0.3);
-  --color-team1-bg: rgba(147, 197, 253, 0.045);
-  --color-team2-primary: #f87171;
-  --color-team2-soft: rgba(248, 113, 113, 0.1);
-  --color-team2-border: rgba(248, 113, 113, 0.3);
-  --color-team2-bg: rgba(248, 113, 113, 0.045);
-}
-
-.app-root.ui-rich-background .app-shell {
-  background:
-    radial-gradient(circle at 12% 0%, rgba(56, 189, 248, 0.08), transparent 28%),
-    radial-gradient(circle at 88% 0%, rgba(251, 146, 60, 0.07), transparent 30%),
-    #070b10;
-}
-
-.app-root.ui-flat-background .app-shell {
-  background: #070b10;
-}
-
-.app-root.ui-card-glow .panel,
-.app-root.ui-card-glow .stat,
-.app-root.ui-card-glow .boot-card {
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.24);
-}
-
-.app-root.ui-card-flat .panel,
-.app-root.ui-card-flat .stat,
-.app-root.ui-card-flat .boot-card {
-  box-shadow: none;
-}
-
-.app-root.ui-motion-reduced *,
-.app-root.ui-motion-reduced *::before,
-.app-root.ui-motion-reduced *::after {
-  transition-duration: 0.01ms !important;
-  animation-duration: 0.01ms !important;
-  animation-iteration-count: 1 !important;
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.3);
+  border: 3px solid transparent;
+  background-clip: padding-box;
 }
 
 @media (max-width: 900px) {

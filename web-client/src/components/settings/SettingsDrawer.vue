@@ -424,8 +424,8 @@ async function save() {
   position: fixed;
   inset: 0;
   z-index: var(--z-settings-drawer);
-  background: rgba(5, 8, 12, 0.18);
-  backdrop-filter: blur(2px);
+  background: rgba(5, 8, 12, 0.4);
+  backdrop-filter: blur(4px);
 }
 
 .settings-panel {
@@ -436,8 +436,9 @@ async function save() {
   background:
     radial-gradient(circle at 0% 0%, rgba(96, 165, 250, 0.1), transparent 32%),
     radial-gradient(circle at 100% 0%, rgba(251, 146, 60, 0.08), transparent 34%),
-    linear-gradient(180deg, #101822 0%, #0b1118 100%);
-  border-left: 1px solid rgba(130, 154, 180, 0.22);
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.02)), rgba(255, 255, 255, 0.006)),
+    var(--color-bg-card);
+  border-left: 1px solid var(--color-border-default);
   box-shadow: -24px 0 60px rgba(0, 0, 0, 0.38);
   padding: 18px;
   display: grid;
@@ -445,6 +446,7 @@ async function save() {
   gap: 14px;
   position: relative;
   z-index: calc(var(--z-settings-drawer) + 1);
+  backdrop-filter: blur(12px);
 }
 
 .settings-head,
@@ -457,9 +459,9 @@ async function save() {
 
 .settings-hero {
   padding: 16px;
-  border: 1px solid rgba(130, 154, 180, 0.16);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .settings-head-copy {
@@ -469,7 +471,7 @@ async function save() {
 
 .settings-kicker {
   margin: 0;
-  color: #88b8ff;
+  color: var(--color-status-info);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -483,14 +485,14 @@ async function save() {
 
 .settings-head p {
   margin: 0;
-  color: #9aa7b2;
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 
 .settings-section {
-  border: 1px solid rgba(130, 154, 180, 0.16);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.026);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.022);
   padding: 14px;
   display: grid;
   gap: 12px;
@@ -523,13 +525,13 @@ async function save() {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  color: #dce4e8;
+  color: var(--color-text-primary);
   font-size: 13px;
   font-weight: 600;
 }
 
 .appearance-label small {
-  color: #7f919f;
+  color: var(--color-text-muted);
   font-size: 11px;
   font-weight: 500;
 }
@@ -545,30 +547,31 @@ async function save() {
 }
 
 .segment-option {
-  border: 1px solid rgba(130, 154, 180, 0.16);
+  border: 1px solid var(--color-border-soft);
   background: rgba(255, 255, 255, 0.025);
-  color: #aebdca;
-  border-radius: 12px;
+  color: var(--color-text-secondary);
+  border-radius: 14px;
   padding: 10px;
   text-align: left;
   display: grid;
   gap: 4px;
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
 }
 
 .segment-option strong {
-  color: #edf2f4;
+  color: var(--color-text-primary);
   font-size: 13px;
 }
 
 .segment-option small {
-  color: #74869a;
+  color: var(--color-text-muted);
   font-size: 11px;
 }
 
 .segment-option.active {
-  border-color: rgba(96, 165, 250, 0.55);
+  border-color: rgba(96, 165, 250, 0.36);
   background: rgba(96, 165, 250, 0.12);
-  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.14);
 }
 
 .toggle-row {
@@ -576,22 +579,22 @@ async function save() {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border: 1px solid rgba(130, 154, 180, 0.12);
+  border: 1px solid var(--color-border-soft);
   background: rgba(255, 255, 255, 0.018);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 10px 12px;
 }
 
 .toggle-row strong {
   display: block;
-  color: #edf2f4;
+  color: var(--color-text-primary);
   font-size: 13px;
 }
 
 .toggle-row small {
   display: block;
   margin-top: 3px;
-  color: #7f919f;
+  color: var(--color-text-muted);
   font-size: 11px;
 }
 
@@ -601,38 +604,46 @@ async function save() {
 }
 
 .settings-state {
-  border: 1px solid #2b3540;
-  background: #171d23;
-  border-radius: 10px;
+  border: 1px solid var(--color-border-default);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.016)), rgba(255, 255, 255, 0.006)),
+    var(--color-bg-card);
+  border-radius: 14px;
   padding: 14px;
-  color: #dce4e8;
+  color: var(--color-text-primary);
 }
 
 .settings-state.error {
-  color: #ffb1b1;
+  color: #ffc4c4;
   display: grid;
   gap: 10px;
 }
 
 .settings-note,
 .settings-empty {
-  border: 1px solid #2b3540;
-  background: #171d23;
-  border-radius: 10px;
+  border: 1px solid var(--color-border-default);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.016)), rgba(255, 255, 255, 0.006)),
+    var(--color-bg-card);
+  border-radius: 14px;
   padding: 12px 14px;
-  color: #d8e1e7;
+  color: var(--color-text-secondary);
 }
 
 .settings-note.warn {
-  border-color: #786633;
-  background: #242116;
+  border-color: rgba(245, 158, 11, 0.28);
+  background:
+    linear-gradient(180deg, rgba(245, 158, 11, 0.12), rgba(255, 255, 255, 0.02)),
+    var(--color-bg-card);
   color: #f1d58b;
 }
 
 .setting-field {
-  border: 1px solid #2b3540;
-  background: #171d23;
-  border-radius: 12px;
+  border: 1px solid var(--color-border-default);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.016)), rgba(255, 255, 255, 0.006)),
+    var(--color-bg-card);
+  border-radius: 16px;
   padding: 12px;
   display: grid;
   gap: 10px;
@@ -655,13 +666,13 @@ async function save() {
 }
 
 .setting-label small {
-  color: #9aa7b2;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
 .setting-description {
   margin: 0;
-  color: #9aa7b2;
+  color: var(--color-text-secondary);
   font-size: 12px;
   line-height: 1.45;
 }
@@ -669,9 +680,11 @@ async function save() {
 .setting-warning {
   margin: -2px 0 0;
   padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid #786633;
-  background: #242116;
+  border-radius: 10px;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  background:
+    linear-gradient(180deg, rgba(245, 158, 11, 0.12), rgba(255, 255, 255, 0.02)),
+    var(--color-bg-card);
   color: #f1d58b;
   font-size: 12px;
   line-height: 1.45;
@@ -683,8 +696,10 @@ async function save() {
   min-height: 18px;
   padding: 0 6px;
   border-radius: 999px;
-  border: 1px solid #786633;
-  background: #242116;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  background:
+    linear-gradient(180deg, rgba(245, 158, 11, 0.12), rgba(255, 255, 255, 0.02)),
+    var(--color-bg-card);
   color: #f1d58b;
   font-size: 11px;
   font-weight: 700;
@@ -694,10 +709,10 @@ async function save() {
 
 .setting-input {
   width: 100%;
-  border: 1px solid #38414c;
-  background: #11171d;
-  color: #edf2f4;
-  border-radius: 8px;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  border-radius: 12px;
   padding: 9px 10px;
 }
 
@@ -705,16 +720,16 @@ async function save() {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  color: #edf2f4;
+  color: var(--color-text-primary);
 }
 
 .settings-footer {
   padding-top: 4px;
-  border-top: 1px solid rgba(38, 48, 58, 0.9);
+  border-top: 1px solid var(--color-border-soft);
 }
 
 .settings-footer-copy {
-  color: #8d9cab;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 

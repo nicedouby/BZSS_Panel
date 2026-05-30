@@ -61,7 +61,7 @@ withDefaults(defineProps<{
 }
 
 .state-banner-row {
-  padding: 8px 12px 0;
+  padding: 0 0 10px;
 }
 
 .state-content {
@@ -73,15 +73,21 @@ withDefaults(defineProps<{
 
 .state-block,
 .stale-banner {
-  border: 1px solid #2c343d;
-  background: #171d23;
-  border-radius: 8px;
-  padding: 16px;
+  border: 1px solid var(--color-border-default);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.016)), rgba(255, 255, 255, 0.006)),
+    var(--color-bg-card);
+  border-radius: 16px;
+  padding: 16px 18px;
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(12px);
 }
 
 .state-block.error {
-  border-color: #5d3131;
-  background: #211719;
+  border-color: rgba(248, 113, 113, 0.3);
+  background:
+    linear-gradient(180deg, rgba(248, 113, 113, 0.09), rgba(255, 255, 255, 0.02)),
+    var(--color-bg-card);
 }
 
 .state-block strong,
@@ -90,23 +96,26 @@ withDefaults(defineProps<{
 }
 
 .state-block strong {
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .state-block p {
   margin: 6px 0 0;
   font-size: 13px;
-  color: #9aa7b2;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
 }
 
 .state-block.error p {
-  color: #ffb5b5;
+  color: #ffc4c4;
 }
 
 .stale-banner {
-  border-color: #786633;
-  background: #221d12;
-  color: #f1d58b;
+  border-color: rgba(245, 158, 11, 0.28);
+  background:
+    linear-gradient(180deg, rgba(245, 158, 11, 0.12), rgba(255, 255, 255, 0.02)),
+    var(--color-bg-card);
+  color: #f5d37a;
   font-size: 12px;
   padding: 10px 12px;
 }

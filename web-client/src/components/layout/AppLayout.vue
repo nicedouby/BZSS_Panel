@@ -51,16 +51,17 @@ const contentShellClass = computed(() => ({
 
 <style scoped>
 .app-shell {
+  position: relative;
   height: 100vh;
   min-height: 0;
   overflow: hidden;
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
-  background: #101317;
+  grid-template-columns: 248px minmax(0, 1fr);
+  background: var(--app-background, var(--color-bg-page));
 }
 
 .app-shell.collapsed {
-  grid-template-columns: 76px minmax(0, 1fr);
+  grid-template-columns: 84px minmax(0, 1fr);
 }
 
 .main-shell {
@@ -70,14 +71,18 @@ const contentShellClass = computed(() => ({
   overflow: hidden;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 16%),
+    var(--app-background, var(--color-bg-page));
 }
 
 .content-shell {
-  padding: 18px;
+  padding: clamp(14px, 1.4vw, 22px);
   min-width: 0;
   min-height: 0;
   height: 100%;
-  overflow-y: auto;
+  overflow: auto;
+  scrollbar-gutter: stable both-edges;
 }
 
 .content-shell.full-bleed {
@@ -92,6 +97,10 @@ const contentShellClass = computed(() => ({
 
   .app-shell.collapsed {
     grid-template-columns: 1fr;
+  }
+
+  .content-shell {
+    padding: 12px;
   }
 }
 </style>
