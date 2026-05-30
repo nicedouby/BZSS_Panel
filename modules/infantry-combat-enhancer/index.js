@@ -155,9 +155,6 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
   }
 
   function buildVictimDecision(entry) {
-    if (entry.type === "kill" && !moduleConfig.showKillDisplay) {
-      return makeSkipDecision(entry, "victim", "kill_display_disabled");
-    }
     if (!entry.victim.name) {
       return makeSkipDecision(entry, "victim", "victim_missing_target");
     }
@@ -518,7 +515,7 @@ function normalizeModuleConfig(source = {}) {
     enabled: source.enabled !== false,
     forceAttackerDamageDisplay: Boolean(source.forceAttackerDamageDisplay ?? DEFAULT_CONFIG.forceAttackerDamageDisplay),
     minAttackerDamage: Math.max(0, Number(source.minAttackerDamage ?? DEFAULT_CONFIG.minAttackerDamage)),
-    showKillDisplay: source.showKillDisplay !== false,
+    showKillDisplay: source.showKillDisplay ?? DEFAULT_CONFIG.showKillDisplay,
     showVictimDamage: source.showVictimDamage !== false,
     showVictimWound: source.showVictimWound !== false,
     showVictimKill: source.showVictimKill !== false,

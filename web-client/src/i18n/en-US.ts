@@ -300,8 +300,8 @@
   },
   combat: {
     combatClean: "Combat Manager (Processed)",
-    infantryShowKillDisplay: "Show kill display",
-    infantryShowKillDisplayHint: "When disabled, kill events do not send xxx killed xxx warnings and only remain in the record.",
+    infantryShowKillDisplay: "Show killer prompt",
+    infantryShowKillDisplayHint: "When disabled, the killer does not receive the xxx killed xxx prompt, while the victim still receives the killed-by message.",
     killManage: "Kill Manage",
     kills: "Kills",
     downs: "Downs",
