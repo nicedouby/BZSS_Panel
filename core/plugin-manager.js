@@ -161,6 +161,8 @@ export class PluginManager {
           webStatus: this.core.webStatus,
         },
         modules: this.modules,
+        playerRepository: this.modules.playerDatabase ?? null,
+        steamGameDurationService: this.modules.playtime ?? null,
         config: this.config,
         logger: pluginLogger,
       });
@@ -214,4 +216,3 @@ function inferPluginId(pluginPath) {
   if (!name) return "plugin.unknown";
   return name.startsWith("plugin.") ? name : `plugin.${name}`;
 }
-
