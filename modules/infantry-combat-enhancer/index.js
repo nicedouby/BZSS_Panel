@@ -46,15 +46,15 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
       return store.query(filter);
     },
 
-    getOverview() {
-      return buildOverview();
+    getOverview(filter = {}) {
+      return buildOverview(filter);
     },
 
-    getState() {
+    getState(filter = {}) {
       return {
         config: api.getConfig(),
-        overview: api.getOverview(),
-        events: api.getEvents({ limit: moduleConfig.storeRecentEventLimit }),
+        overview: api.getOverview(filter),
+        events: api.getEvents({ ...filter, limit: moduleConfig.storeRecentEventLimit }),
         lastUpdatedAt,
       };
     },
@@ -170,14 +170,28 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
   }
 
   function buildAttackerDecision(entry) {
+    if (entry.samePlayer) {
+      return makeSkipDecision(entry, "attacker", "same_player");
+    }
+    if (!entry.attacker.name) {
+      return makeSkipDecision(entry, "attacker", "attacker_missing_target");
+    }
+    if (entry.type === "damage" && !moduleConfig.showAttackerDamage) {
+      return makeSkipDecision(entry, "attacker", "attacker_damage_disabled");
+    }
+    if (
+      entry.type === "damage"
+      && !moduleConfig.forceAttackerDamageDisplay
+      && Number.isFinite(entry.damage)
+      && entry.damage < moduleConfig.minAttackerDamage
+    ) {
+      return makeSkipDecision(entry, "attacker", "below_min_attacker_damage");
+    }
     if (moduleConfig.showOnlyLightWeaponDamage && !isLightWeaponEntry(entry)) {
       return makeSkipDecision(entry, "attacker", "non_light_weapon_hidden");
     }
     if (entry.type === "kill" && !moduleConfig.showKillDisplay) {
       return makeSkipDecision(entry, "attacker", "kill_display_disabled");
-    }
-    if (!entry.attacker.name) {
-      return makeSkipDecision(entry, "attacker", "attacker_missing_target");
     }
 
     return makeSendDecision({
@@ -407,7 +421,8 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
     );
   }
 
-  function buildOverview() {
+  function buildOverview(filter = {}) {
+    const records = store.list(filter);
     const stats = {
       total: 0,
       damage: 0,
@@ -415,28 +430,58 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
       kill: 0,
       victimWarned: 0,
       attackerWarned: 0,
-      samePlayerSuppressed: 0,
       skipped: 0,
       failed: 0,
+      victimSkipped: 0,
+      attackerSkipped: 0,
+      victimFailed: 0,
+      attackerFailed: 0,
+      friendlyFire: 0,
+      selfDamage: 0,
+      samePlayer: 0,
+      lightWeapon: 0,
+      nonLightWeapon: 0,
+      skipReasons: Object.create(null),
     };
 
-    for (const record of store.records) {
+    for (const record of records) {
       stats.total += 1;
-      if (record.type in stats) stats[record.type] += 1;
+      if (record.type && record.type in stats) stats[record.type] += 1;
       if (record.victimWarning?.success) stats.victimWarned += 1;
       if (record.attackerWarning?.success) stats.attackerWarned += 1;
-      if (record.attackerWarning?.skipReason === "same_player") stats.samePlayerSuppressed += 1;
+      if (record.victimWarning?.skipped) stats.victimSkipped += 1;
+      if (record.attackerWarning?.skipped) stats.attackerSkipped += 1;
+      if (record.victimWarning && record.victimWarning.success === false && !record.victimWarning.skipped) stats.victimFailed += 1;
+      if (record.attackerWarning && record.attackerWarning.success === false && !record.attackerWarning.skipped) stats.attackerFailed += 1;
       if (record.victimWarning?.skipped || record.attackerWarning?.skipped) stats.skipped += 1;
       if (record.victimWarning && record.victimWarning.success === false && !record.victimWarning.skipped) stats.failed += 1;
       if (record.attackerWarning && record.attackerWarning.success === false && !record.attackerWarning.skipped) stats.failed += 1;
+      if (isFriendlyFireEntry(record)) stats.friendlyFire += 1;
+      if (isSelfDamageEntry(record)) stats.selfDamage += 1;
+      if (record.samePlayer) stats.samePlayer += 1;
+      if (isLightWeaponEntry(record)) stats.lightWeapon += 1;
+      else stats.nonLightWeapon += 1;
+      collectSkipReason(stats.skipReasons, record.victimWarning);
+      collectSkipReason(stats.skipReasons, record.attackerWarning);
     }
 
     return {
-      count: store.records.length,
+      count: records.length,
       stats,
       lastUpdatedAt,
       config: api.getConfig(),
-      latest: store.records.slice(-20).reverse().map(cloneJsonSafe),
+      dependencies: {
+        combatClean: {
+          loaded: Boolean(modules?.combatClean),
+          subscribed: modules?.pluginSubscriptions?.isSubscribed?.(COMBAT_CLEAN_SUBSCRIPTION_ID) !== false
+            && core.pluginSubscriptions?.isSubscribed?.(COMBAT_CLEAN_SUBSCRIPTION_ID) !== false,
+        },
+        adminWarn: {
+          loaded: Boolean(modules?.adminWarn),
+          available: Boolean(modules?.adminWarn?.sendAdminWarn || modules?.adminWarn?.warnPlayer),
+        },
+      },
+      latest: records.slice(0, 20).map(cloneJsonSafe),
     };
   }
 
@@ -524,12 +569,13 @@ class InfantryEnhancerStore {
     return this.records[this.records.length - 1];
   }
 
-  query(filter = {}) {
-    const limit = clampLimit(filter.limit, this.maxRecords);
-    const offset = Math.max(Number(filter.offset ?? 0) || 0, 0);
-    const search = normalizeText(filter.search);
-    const type = normalizeType(filter.type);
+  list(filter = {}) {
     const serverId = normalizeText(filter.serverId);
+    const type = normalizeType(filter.type);
+    const warning = normalizeWarning(filter.warning);
+    const relation = normalizeRelation(filter.relation);
+    const weapon = normalizeWeapon(filter.weapon);
+    const search = normalizeText(filter.search);
 
     return this.records
       .slice()
@@ -537,11 +583,18 @@ class InfantryEnhancerStore {
       .filter((record) => {
         if (serverId && normalizeText(record.serverId) !== serverId) return false;
         if (type && type !== "all" && record.type !== type) return false;
+        if (warning && warning !== "all" && !matchesWarning(record, warning)) return false;
+        if (relation && relation !== "all" && !matchesRelation(record, relation)) return false;
+        if (weapon && weapon !== "all" && !matchesWeapon(record, weapon)) return false;
         if (search && !recordMatchesSearch(record, search)) return false;
         return true;
-      })
-      .slice(offset, offset + limit)
-      .map(cloneJsonSafe);
+      });
+  }
+
+  query(filter = {}) {
+    const limit = clampLimit(filter.limit, this.maxRecords);
+    const offset = Math.max(Number(filter.offset ?? 0) || 0, 0);
+    return this.list(filter).slice(offset, offset + limit).map(cloneJsonSafe);
   }
 
   clear() {
@@ -571,6 +624,24 @@ function normalizeType(value) {
   if (text === "damage" || text === "wound" || text === "kill") return text;
   if (text === "death") return "kill";
   return text;
+}
+
+function normalizeWarning(value) {
+  const text = normalizeText(value);
+  if (text === "victim_sent" || text === "attacker_sent" || text === "skipped" || text === "failed") return text;
+  return "all";
+}
+
+function normalizeRelation(value) {
+  const text = normalizeText(value);
+  if (text === "enemy" || text === "friendly" || text === "self" || text === "same_player") return text;
+  return "all";
+}
+
+function normalizeWeapon(value) {
+  const text = normalizeText(value);
+  if (text === "light" || text === "non_light" || text === "explosive" || text === "vehicle" || text === "emplacement" || text === "unknown") return text;
+  return "all";
 }
 
 function normalizeDamage(value) {
@@ -612,28 +683,92 @@ function trimTrailingZeros(value) {
   return text.replace(/\.0+$/, "").replace(/(\.\d*?[1-9])0+$/, "$1");
 }
 
-function clampLimit(value, maxLimit) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return Math.max(1, Math.min(200, maxLimit));
-  return Math.max(1, Math.min(Math.floor(number), maxLimit));
+function collectSkipReason(bucket, decision) {
+  const reason = String(decision?.skipReason ?? "").trim();
+  if (!reason) return;
+  bucket[reason] = (bucket[reason] ?? 0) + 1;
+}
+
+function matchesWarning(record, warning) {
+  const victim = record?.victimWarning;
+  const attacker = record?.attackerWarning;
+
+  if (warning === "victim_sent") return Boolean(victim?.success);
+  if (warning === "attacker_sent") return Boolean(attacker?.success);
+  if (warning === "skipped") return Boolean(victim?.skipped || attacker?.skipped);
+  if (warning === "failed") {
+    return Boolean(
+      (victim && victim.success === false && !victim.skipped)
+      || (attacker && attacker.success === false && !attacker.skipped),
+    );
+  }
+
+  return true;
+}
+
+function matchesRelation(record, relation) {
+  if (relation === "same_player") return Boolean(record?.samePlayer);
+  if (relation === "friendly") return isFriendlyFireEntry(record);
+  if (relation === "self") return isSelfDamageEntry(record);
+  if (relation === "enemy") return !isFriendlyFireEntry(record) && !record?.samePlayer && !isSelfDamageEntry(record);
+  return true;
+}
+
+function matchesWeapon(record, weapon) {
+  if (weapon === "light") return isLightWeaponEntry(record);
+  if (weapon === "non_light") return !isLightWeaponEntry(record);
+  if (weapon === "explosive") return hasAnyTag(record, ["weapon.explosive"]);
+  if (weapon === "vehicle") return hasAnyTag(record, ["weapon.vehicle"]);
+  if (weapon === "emplacement") return hasAnyTag(record, ["weapon.emplacement"]);
+  if (weapon === "unknown") return !record?.weapon || hasAnyTag(record, ["weapon.unknown"]);
+  return true;
+}
+
+function hasAnyTag(record, tags) {
+  const values = new Set([
+    ...(Array.isArray(record?.tags) ? record.tags : []),
+    ...(Array.isArray(record?.eventFlagLabels) ? record.eventFlagLabels : []),
+    ...(Array.isArray(record?.eventFlags) ? record.eventFlags.map((flag) => flag?.key || flag?.label).filter(Boolean) : []),
+  ].map((value) => normalizeText(value)));
+
+  return tags.some((tag) => values.has(normalizeText(tag)));
+}
+
+function isSelfDamageEntry(entry) {
+  if (entry?.samePlayer) return true;
+  if (entry?.relation?.isSelfDamage || entry?.relation?.selfDamage) return true;
+  return hasAnyTag(entry, ["relation.self", "event:self_damage", "self_damage", "combat.self_damage"]);
 }
 
 function recordMatchesSearch(record, search) {
-  const fields = [
-    record.attackerName,
-    record.victimName,
-    record.weapon,
-    record.reason,
-    record.type,
-    record.serverId,
-    record.sourceEventId,
-    record.combatEventId,
-    record.victimWarning?.message,
-    record.attackerWarning?.message,
-    record.victimWarning?.skipReason,
-    record.attackerWarning?.skipReason,
-  ];
-  return fields.some((field) => normalizeText(field).includes(search));
+  const haystacks = [
+    record?.attackerName,
+    record?.victimName,
+    record?.weapon,
+    record?.attackerSteam64ID,
+    record?.attackerEOSID,
+    record?.victimSteam64ID,
+    record?.victimEOSID,
+    record?.attackerControllerID,
+    record?.victimControllerID,
+    record?.sourceEventId,
+    record?.combatEventId,
+    record?.victimWarning?.skipReason,
+    record?.attackerWarning?.skipReason,
+    record?.victimWarning?.errorMessage,
+    record?.attackerWarning?.errorMessage,
+    record?.victimWarning?.commandText,
+    record?.attackerWarning?.commandText,
+  ].filter(Boolean).map((value) => normalizeText(value));
+
+  const needle = normalizeText(search);
+  return haystacks.some((value) => value.includes(needle));
+}
+
+function clampLimit(value, maxLimit) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return Math.max(1, Math.min(100, maxLimit));
+  return Math.max(1, Math.min(Math.floor(number), maxLimit));
 }
 
 function cloneJsonSafe(value) {
