@@ -250,8 +250,49 @@ async function testOnlyLightWeaponDamageSkipsNonLightWeapons() {
   await module.stop();
 }
 
+async function testOnlyLightWeaponDamageSkipsHeavyKillAttacker() {
+  const { module, eventBus, calls } = createHarness({
+    moduleConfig: {
+      showKillDisplay: true,
+      showOnlyLightWeaponDamage: true,
+    },
+  });
+  await module.start();
+
+  await eventBus.emitModuleEvent("module.combatClean", "combat.record.processed", {
+    record: {
+      id: "combat-heavy-kill",
+      serverId: "S1",
+      type: "kill",
+      time: "2026-05-30T12:12:00.000Z",
+      attackerName: "Attacker",
+      attackerSteam64ID: "111",
+      victimName: "Victim",
+      victimSteam64ID: "222",
+      damage: 300,
+      weaponName: "ZBD04A AP",
+      tags: ["combat.kill", "weapon.vehicle", "damage.direct"],
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].targetName, "Victim");
+
+  const events = module.api.getEvents({ limit: 10 });
+  assert.equal(events.length, 1);
+  assert.equal(events[0].victimWarning.success, true);
+  assert.equal(events[0].attackerWarning.skipped, true);
+  assert.equal(events[0].attackerWarning.skipReason, "non_light_weapon_hidden");
+
+  await module.stop();
+}
+
 async function testSamePlayerStillDisplays() {
-  const { module, eventBus, calls } = createHarness();
+  const { module, eventBus, calls } = createHarness({
+    moduleConfig: {
+      showOnlyLightWeaponDamage: false,
+    },
+  });
   await module.start();
 
   await eventBus.emitModuleEvent("module.combatClean", "combat.record.processed", {
@@ -302,6 +343,7 @@ async function testKillDisplayIsDisabledByDefault() {
       victimSteam64ID: "222",
       damage: 300,
       weaponName: "M4A1",
+      tags: ["combat.kill", "weapon.small_arm"],
     },
   });
 
@@ -335,6 +377,7 @@ async function testCombatCleanDependencyGate() {
 await testProcessingAndWarnings();
 await testTagDrivenMessages();
 await testOnlyLightWeaponDamageSkipsNonLightWeapons();
+await testOnlyLightWeaponDamageSkipsHeavyKillAttacker();
 await testSamePlayerStillDisplays();
 await testKillDisplayIsDisabledByDefault();
 await testCombatCleanDependencyGate();

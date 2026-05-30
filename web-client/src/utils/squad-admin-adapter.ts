@@ -164,6 +164,7 @@ export function adaptTeam(
 
   const teamPlayers = squads.flatMap((squad) => collectSquadPlayers(squad.leader, squad.members));
   const playtimeSummary = buildPlaytimeSummary(teamPlayers);
+  const leaderPlaytimeSummary = buildLeaderPlaytimeSummary(squads);
 
   return {
     teamId: runtimeTeam.teamID,
@@ -172,6 +173,10 @@ export function adaptTeam(
     playerCount: runtimeTeam.playerCount,
     maxPlayers: 50,
     averagePlaytimeHours: playtimeSummary.averagePlaytimeHours,
+    leaderAveragePlaytimeHours: leaderPlaytimeSummary.averagePlaytimeHours,
+    publicLeaderPlaytimePlayers: leaderPlaytimeSummary.publicPlaytimePlayers,
+    privateLeaderPlaytimePlayers: leaderPlaytimeSummary.privatePlaytimePlayers,
+    knownLeaderPlaytimePlayers: leaderPlaytimeSummary.knownPlaytimePlayers,
     publicPlaytimePlayers: playtimeSummary.publicPlaytimePlayers,
     privatePlaytimePlayers: playtimeSummary.privatePlaytimePlayers,
     knownPlaytimePlayers: playtimeSummary.knownPlaytimePlayers,
@@ -461,6 +466,7 @@ export function filterTeamsBySearch(
 
     const teamPlayers = squads.flatMap((squad) => collectSquadPlayers(squad.leader, squad.members));
     const playtimeSummary = buildPlaytimeSummary(teamPlayers);
+    const leaderPlaytimeSummary = buildLeaderPlaytimeSummary(squads);
     const visiblePlayers = squads.reduce((sum, squad) => {
       return sum + (squad.leader ? 1 : 0) + squad.members.length;
     }, 0);
@@ -473,6 +479,10 @@ export function filterTeamsBySearch(
       ...team,
       playerCount: teamMetaMatched ? team.playerCount : visiblePlayers,
       averagePlaytimeHours: playtimeSummary.averagePlaytimeHours,
+      leaderAveragePlaytimeHours: leaderPlaytimeSummary.averagePlaytimeHours,
+      publicLeaderPlaytimePlayers: leaderPlaytimeSummary.publicPlaytimePlayers,
+      privateLeaderPlaytimePlayers: leaderPlaytimeSummary.privatePlaytimePlayers,
+      knownLeaderPlaytimePlayers: leaderPlaytimeSummary.knownPlaytimePlayers,
       publicPlaytimePlayers: playtimeSummary.publicPlaytimePlayers,
       privatePlaytimePlayers: playtimeSummary.privatePlaytimePlayers,
       knownPlaytimePlayers: playtimeSummary.knownPlaytimePlayers,
@@ -572,6 +582,15 @@ function buildPlaytimeSummary(players: PlayerRowViewModel[]) {
     privatePlaytimePlayers: privatePlayers.length,
     knownPlaytimePlayers: known.length,
   };
+}
+
+function buildLeaderPlaytimeSummary(squads: SquadViewModel[]) {
+  const leaders = squads
+    .filter((squad) => squad.squadId != null)
+    .map((squad) => squad.leader)
+    .filter((leader): leader is SquadLeaderRowViewModel => Boolean(leader));
+
+  return buildPlaytimeSummary(leaders);
 }
 
 function toTimestamp(value: string | number | null | undefined): number {

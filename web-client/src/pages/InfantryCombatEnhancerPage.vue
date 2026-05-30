@@ -551,6 +551,7 @@ function shouldDisplayTag(tag: unknown) {
 .page-shell {
   position: relative;
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   grid-template-rows: auto auto auto minmax(0, 1fr);
   gap: 14px;
   min-height: 0;
@@ -595,6 +596,24 @@ function shouldDisplayTag(tag: unknown) {
   z-index: 1;
 }
 
+.page-shell > :nth-child(1),
+.page-shell > :nth-child(2),
+.page-shell > :nth-child(6) {
+  grid-column: 1 / -1;
+}
+
+.page-shell > :nth-child(3) {
+  grid-column: 1;
+}
+
+.page-shell > :nth-child(4) {
+  grid-column: 2;
+}
+
+.page-shell > :nth-child(5) {
+  grid-column: 3;
+}
+
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
@@ -611,7 +630,7 @@ function shouldDisplayTag(tag: unknown) {
 }
 
 .hero-copy {
-  padding: 24px;
+  padding: 18px 20px;
 }
 
 .hero-badge {
@@ -629,10 +648,10 @@ function shouldDisplayTag(tag: unknown) {
 }
 
 .hero-copy h2 {
-  margin: 14px 0 12px;
-  font-size: clamp(26px, 3vw, 38px);
-  line-height: 1.08;
-  letter-spacing: -0.03em;
+  margin: 10px 0 10px;
+  font-size: clamp(18px, 2vw, 26px);
+  line-height: 1.16;
+  letter-spacing: -0.02em;
   max-width: 12ch;
 }
 
@@ -640,15 +659,15 @@ function shouldDisplayTag(tag: unknown) {
   margin: 0;
   max-width: 68ch;
   color: #a8b3bd;
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .hero-actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
-  margin-top: 20px;
+  margin-top: 14px;
 }
 
 .primary-btn,
@@ -682,13 +701,13 @@ function shouldDisplayTag(tag: unknown) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  padding: 14px;
+  padding: 12px;
 }
 
 .stat-tile {
   display: block;
   border-radius: 16px;
-  padding: 16px 14px;
+  padding: 12px 12px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
@@ -722,8 +741,8 @@ function shouldDisplayTag(tag: unknown) {
 
 .stat-tile strong {
   display: block;
-  margin-top: 8px;
-  font-size: 30px;
+  margin-top: 6px;
+  font-size: 24px;
   line-height: 1;
   letter-spacing: -0.03em;
 }
@@ -807,6 +826,26 @@ function shouldDisplayTag(tag: unknown) {
   height: 100%;
   overflow: visible;
   grid-template-rows: auto minmax(0, 1fr);
+}
+
+.ice-page :deep(.control-card) {
+  min-width: 0;
+}
+
+.ice-page :deep(.control-card .card-body.compact) {
+  min-width: 0;
+}
+
+.ice-page :deep(.config-card .config-row) {
+  gap: 6px;
+}
+
+.ice-page :deep(.config-card .config-toggle) {
+  white-space: nowrap;
+}
+
+.ice-page :deep(.config-card p) {
+  min-height: 32px;
 }
 
 .summary {
@@ -951,8 +990,9 @@ tbody tr:hover {
 }
 
 .ice-page :deep(.page-header .title) {
-  font-size: clamp(24px, 2.8vw, 36px);
-  letter-spacing: -0.03em;
+  font-size: clamp(18px, 2vw, 26px);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
 }
 
 .ice-page :deep(.page-card) {

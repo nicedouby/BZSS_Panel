@@ -67,6 +67,10 @@ export interface TeamViewModel {
   playerCount: number;
   maxPlayers: number;
   averagePlaytimeHours: number | null;
+  leaderAveragePlaytimeHours: number | null;
+  publicLeaderPlaytimePlayers: number;
+  privateLeaderPlaytimePlayers: number;
+  knownLeaderPlaytimePlayers: number;
   publicPlaytimePlayers: number;
   privatePlaytimePlayers: number;
   knownPlaytimePlayers: number;

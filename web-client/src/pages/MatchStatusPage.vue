@@ -72,22 +72,26 @@
       :stale-text="staleText"
     >
       <div class="match-state-content">
-        <div v-if="refreshError || playtimeError" class="match-error-stack">
-          <ErrorBlock v-if="refreshError" :message="refreshError" />
-          <ErrorBlock v-if="playtimeError" :message="playtimeError" />
+        <div class="match-state-main">
+          <div v-if="refreshError || playtimeError" class="match-error-stack">
+            <ErrorBlock v-if="refreshError" :message="refreshError" />
+            <ErrorBlock v-if="playtimeError" :message="playtimeError" />
+          </div>
+
+          <div class="squad-main-content" :class="pageState.densityMode">
+            <TeamColumn
+              v-for="team in viewModels.teams"
+              :key="team.teamId"
+              :team="team"
+              :density-mode="pageState.densityMode"
+              :selected-player-id="pageState.selectedPlayerId"
+              @select-player="selectPlayer"
+              @select-squad="selectSquad"
+            />
+          </div>
         </div>
 
-        <div class="squad-main-content" :class="pageState.densityMode">
-          <TeamColumn
-            v-for="team in viewModels.teams"
-            :key="team.teamId"
-            :team="team"
-            :density-mode="pageState.densityMode"
-            :selected-player-id="pageState.selectedPlayerId"
-            @select-player="selectPlayer"
-            @select-squad="selectSquad"
-          />
-        </div>
+        <MatchChatPanel class="match-chat-column" />
       </div>
     </DataState>
 
@@ -128,6 +132,7 @@ import DataState from "../components/common/DataState.vue";
 import ErrorBlock from "../components/common/ErrorBlock.vue";
 import SquadPageToolbar from "../components/squad-admin/SquadPageToolbar.vue";
 import TeamColumn from "../components/squad-admin/TeamColumn.vue";
+import MatchChatPanel from "../components/match/MatchChatPanel.vue";
 import PlayerDetailDrawer from "../components/squad-admin/PlayerDetailDrawer.vue";
 import SquadDetailDrawer from "../components/squad-admin/SquadDetailDrawer.vue";
 import { t } from "../i18n";
@@ -743,10 +748,28 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 
 .match-state-content {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 12px;
   min-height: 0;
   height: 100%;
   overflow: hidden;
+  align-items: start;
+}
+
+.match-state-main {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.match-chat-column {
+  min-width: 0;
+  min-height: 0;
+  height: clamp(420px, 58vh, 640px);
+  align-self: start;
 }
 
 .match-error-stack {
@@ -938,8 +961,16 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 }
 
 @media (max-width: 1180px) {
+  .match-state-content {
+    grid-template-columns: 1fr;
+  }
+
   .squad-main-content {
     grid-template-columns: 1fr;
+  }
+
+  .match-chat-column {
+    height: 360px;
   }
 }
 </style>

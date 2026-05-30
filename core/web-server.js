@@ -33,7 +33,9 @@ export class WebServer {
     this.jobs = new Map();
     this.jobCounter = 0;
     this.consoleConnections = new Set();
+    this.chatConnections = new Set();
     this.consoleSubscription = null;
+    this.chatSubscription = null;
   }
 
   async start() {
@@ -74,6 +76,12 @@ export class WebServer {
       });
     }
 
+    if (typeof this.modules.chatManager?.on === "function") {
+      this.chatSubscription = this.modules.chatManager.on("message", (entry) => {
+        this.broadcastChatEntry(entry);
+      });
+    }
+
     await new Promise((resolve) => {
       this.server.listen(this.port, this.host, resolve);
     });
@@ -97,6 +105,20 @@ export class WebServer {
       } catch {}
     }
     this.consoleConnections.clear();
+
+    if (typeof this.chatSubscription === "function") {
+      try {
+        this.chatSubscription();
+      } catch {}
+      this.chatSubscription = null;
+    }
+
+    for (const client of this.chatConnections) {
+      try {
+        client.socket.end();
+      } catch {}
+    }
+    this.chatConnections.clear();
 
     await new Promise((resolve) => this.server.close(resolve));
     this.server = null;
@@ -1692,7 +1714,13 @@ export class WebServer {
 
   async handleUpgrade(req, socket, head) {
     const url = new URL(req.url, `http://${req.headers.host}`);
-    if (url.pathname !== "/ws/console") {
+    const connectionKind = url.pathname === "/ws/console"
+      ? "console"
+      : url.pathname === "/ws/chat"
+        ? "chat"
+        : null;
+
+    if (!connectionKind) {
       return this.rejectUpgrade(socket, 404, "Not Found");
     }
 
@@ -1726,21 +1754,30 @@ export class WebServer {
       socket,
       buffer: Buffer.alloc(0),
       user,
+      kind: connectionKind,
     };
 
-    this.consoleConnections.add(client);
+    if (connectionKind === "console") {
+      this.consoleConnections.add(client);
+    } else {
+      this.chatConnections.add(client);
+    }
 
     socket.on("data", (chunk) => {
       this.handleWebSocketData(client, chunk);
     });
 
     socket.on("close", () => {
-      this.consoleConnections.delete(client);
+      this.closeWebSocketClient(client);
     });
 
     socket.on("error", () => {
-      this.consoleConnections.delete(client);
+      this.closeWebSocketClient(client);
     });
+
+    if (connectionKind === "chat") {
+      this.sendChatRecentSnapshot(client);
+    }
 
     if (head && head.length) {
       this.handleWebSocketData(client, head);
@@ -1826,6 +1863,7 @@ export class WebServer {
 
   closeWebSocketClient(client) {
     this.consoleConnections.delete(client);
+    this.chatConnections.delete(client);
     try {
       this.sendWebSocketFrame(client.socket, Buffer.alloc(0), 0x8);
     } catch {}
@@ -1843,6 +1881,36 @@ export class WebServer {
         this.sendWebSocketFrame(client.socket, payload, 0x1);
       } catch {
         this.consoleConnections.delete(client);
+      }
+    }
+  }
+
+  sendChatRecentSnapshot(client) {
+    const history = this.modules.chatManager?.getHistory?.() ?? [];
+    const payload = Buffer.from(JSON.stringify({
+      event: "server:chat:recent",
+      items: history,
+    }), "utf8");
+
+    try {
+      this.sendWebSocketFrame(client.socket, payload, 0x1);
+    } catch {
+      this.closeWebSocketClient(client);
+    }
+  }
+
+  broadcastChatEntry(entry) {
+    if (!this.chatConnections.size) return;
+    const payload = Buffer.from(JSON.stringify({
+      event: "server:chat:message",
+      item: entry,
+    }), "utf8");
+
+    for (const client of [...this.chatConnections]) {
+      try {
+        this.sendWebSocketFrame(client.socket, payload, 0x1);
+      } catch {
+        this.chatConnections.delete(client);
       }
     }
   }

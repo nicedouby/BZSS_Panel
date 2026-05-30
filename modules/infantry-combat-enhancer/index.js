@@ -170,7 +170,7 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
   }
 
   function buildAttackerDecision(entry) {
-    if (entry.type === "damage" && moduleConfig.showOnlyLightWeaponDamage && !isLightWeaponEntry(entry)) {
+    if (moduleConfig.showOnlyLightWeaponDamage && !isLightWeaponEntry(entry)) {
       return makeSkipDecision(entry, "attacker", "non_light_weapon_hidden");
     }
     if (entry.type === "kill" && !moduleConfig.showKillDisplay) {

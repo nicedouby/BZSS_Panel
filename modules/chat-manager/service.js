@@ -1,175 +1,216 @@
 // -*- coding: utf-8 -*-
 
+import { randomUUID } from "node:crypto";
 import EventEmitter from "node:events";
 
-export function createChatManagerService({ core, modules, config, logger }) {
+const DEFAULT_MAX_HISTORY = 300;
+const DEFAULT_SPAM_WINDOW_MS = 10_000;
+const DEFAULT_SPAM_THRESHOLD = 5;
+const DEFAULT_FREQUENCY_WINDOW_MS = 60_000;
+const DEFAULT_STATS_MINUTES = 60;
+
+export function createChatManagerService({ core, config, logger }) {
   const eventEmitter = new EventEmitter();
   const chatHistory = [];
-  const MAX_HISTORY = 1000;
-  
-  // Frequency monitoring state
-  const playerStats = new Map(); // steamID -> { lastTime, count, name, messageTimestamps: [] }
-  const SPAM_WINDOW_MS = 10000;
-  const SPAM_THRESHOLD = 5;
-  const FREQUENCY_WINDOW_MS = 60000;
 
-  // New: Per-minute statistics for visualization
-  const minuteStats = new Map(); // minuteTimestamp -> count
-  const MAX_STATS_MINUTES = 60;
+  const maxHistory = normalizePositiveInteger(
+    config?.get?.("modules.chatManager.maxRecentMessages", DEFAULT_MAX_HISTORY),
+    DEFAULT_MAX_HISTORY,
+  );
+  const exposeRawLog = Boolean(config?.get?.("modules.chatManager.exposeRawLog", false));
+  const spamWindowMs = normalizePositiveInteger(
+    config?.get?.("modules.chatManager.spamWindowMs", DEFAULT_SPAM_WINDOW_MS),
+    DEFAULT_SPAM_WINDOW_MS,
+  );
+  const spamThreshold = normalizePositiveInteger(
+    config?.get?.("modules.chatManager.spamThreshold", DEFAULT_SPAM_THRESHOLD),
+    DEFAULT_SPAM_THRESHOLD,
+  );
+  const frequencyWindowMs = normalizePositiveInteger(
+    config?.get?.("modules.chatManager.frequencyWindowMs", DEFAULT_FREQUENCY_WINDOW_MS),
+    DEFAULT_FREQUENCY_WINDOW_MS,
+  );
+  const maxStatsMinutes = normalizePositiveInteger(
+    config?.get?.("modules.chatManager.maxStatsMinutes", DEFAULT_STATS_MINUTES),
+    DEFAULT_STATS_MINUTES,
+  );
 
+  // playerId -> monitoring state
+  const playerStats = new Map();
+  const minuteStats = new Map();
   const unsubscribers = [];
 
-  // API for other modules/plugins
   const api = {
-    getHistory() {
-      return [...chatHistory];
+    getHistory(limit = maxHistory) {
+      const recent = chatHistory.slice(-normalizePositiveInteger(limit, maxHistory));
+      return recent.map((entry) => cloneChatEntry(entry, { exposeRawLog }));
     },
 
     getStats() {
-      const now = Math.floor(Date.now() / 60000);
+      const nowMinute = Math.floor(Date.now() / 60_000);
       const result = [];
-      for (let i = MAX_STATS_MINUTES - 1; i >= 0; i--) {
-        const m = now - i;
+
+      for (let index = maxStatsMinutes - 1; index >= 0; index -= 1) {
+        const minute = nowMinute - index;
         result.push({
-          minute: m * 60000,
-          count: minuteStats.get(m) || 0
+          minute: minute * 60_000,
+          count: minuteStats.get(minute) || 0,
         });
       }
+
       return result;
     },
 
     getPlayerFrequencies() {
       const now = Date.now();
       const result = [];
-      for (const [steamID, stats] of playerStats.entries()) {
-        // Clean up old timestamps
-        stats.messageTimestamps = (stats.messageTimestamps || [])
-          .filter(t => now - t < FREQUENCY_WINDOW_MS);
-        
+
+      for (const [playerKey, stats] of playerStats.entries()) {
+        stats.messageTimestamps = (stats.messageTimestamps || []).filter((timestamp) => now - timestamp < frequencyWindowMs);
+
         if (stats.messageTimestamps.length > 0) {
           result.push({
-            steamID,
-            name: stats.name,
-            count: stats.messageTimestamps.length
+            steamID: stats.steamID || "",
+            eosID: stats.eosID || "",
+            name: stats.name || "Unknown",
+            count: stats.messageTimestamps.length,
+            playerKey,
           });
         }
       }
+
       return result.sort((a, b) => b.count - a.count);
     },
 
     getSpammers() {
-      const spammers = [];
-      for (const [steamID, stats] of playerStats.entries()) {
-        if (stats.count > SPAM_THRESHOLD && Date.now() - stats.lastTime < SPAM_WINDOW_MS) {
-          spammers.push({ steamID, name: stats.name, count: stats.count });
+      const now = Date.now();
+      const result = [];
+
+      for (const stats of playerStats.values()) {
+        if (stats.count > spamThreshold && now - stats.lastTime < spamWindowMs) {
+          result.push({
+            steamID: stats.steamID || "",
+            eosID: stats.eosID || "",
+            name: stats.name || "Unknown",
+            count: stats.count,
+          });
         }
       }
-      return spammers;
+
+      return result;
     },
-    
-    /**
-     * Subscribe to chat events.
-     * @param {string} type 'message' | 'spam' | 'trigger'
-     * @param {Function} handler 
-     */
+
     on(type, handler) {
       eventEmitter.on(type, handler);
       return () => eventEmitter.off(type, handler);
     },
 
-    /**
-     * Register a simple string or regex trigger
-     */
     registerTrigger(pattern, eventName) {
-      // Implementation for triggers can be added here
-      logger.debug(`Registered chat trigger: ${pattern} -> ${eventName}`);
-    }
+      logger?.debug?.(`Registered chat trigger: ${pattern} -> ${eventName}`);
+    },
   };
 
   async function start() {
     if (core.eventBus?.onCoreEvent) {
-      unsubscribers.push(core.eventBus.onCoreEvent("CHAT_MESSAGE", (event) => {
-        handleChatMessage(event.payload, event.time);
-      }));
+      unsubscribers.push(
+        core.eventBus.onCoreEvent("CHAT_MESSAGE", (event) => {
+          handleChatMessage(event?.payload ?? {}, event?.time ?? null);
+        }),
+      );
     }
-    
-    logger.info("ChatManager service started.");
+
+    logger?.info?.("ChatManager service started.");
   }
 
   async function stop() {
-    for (const un of unsubscribers.splice(0)) un();
+    for (const un of unsubscribers.splice(0)) {
+      try {
+        un();
+      } catch {}
+    }
+
     eventEmitter.removeAllListeners();
-    logger.info("ChatManager service stopped.");
+    logger?.info?.("ChatManager service stopped.");
   }
 
   function handleChatMessage(payload, time) {
-    const { channel, name, message, steamID, eosID } = payload;
-    
+    const timestamp = normalizeTimestamp(time ?? payload?.timestamp ?? payload?.time);
+    const playerName = normalizeText(payload?.playerName ?? payload?.name ?? payload?.player_name);
+    const steamId = normalizeText(payload?.steamId ?? payload?.steamID ?? payload?.steamid);
+    const eosId = normalizeText(payload?.eosId ?? payload?.eosID ?? payload?.eosid);
+    const channel = normalizeChannel(payload?.channel);
+    const message = String(payload?.message ?? "").trim();
+    const teamId = normalizeOptionalNumber(payload?.teamId ?? payload?.teamID);
+    const squadId = normalizeOptionalNumber(payload?.squadId ?? payload?.squadID);
+    const logTime = normalizeOptionalText(payload?.logTime ?? payload?.log_time);
+    const raw = normalizeOptionalText(payload?.raw ?? payload?.rawLog ?? payload?.sourceRaw);
+    const serverId = normalizeText(payload?.serverId ?? core.webStatus?.serverId ?? "");
+
+    if (!message) {
+      return;
+    }
+
     const entry = {
-      time,
+      id: randomUUID(),
+      serverId,
+      timestamp,
+      logTime,
+      chatChannel: channel,
       channel,
-      name,
+      playerName: playerName || null,
+      eosId: eosId || null,
+      steamId: steamId || null,
+      teamId,
+      squadId,
       message,
-      steamID,
-      eosID,
-      raw: payload.raw || payload.sourceRaw || "",
-      seq: Date.now()
+      raw: exposeRawLog && raw ? raw : undefined,
     };
 
-    // 1. Add to history
+    // Keep compatibility with older consumers while exposing the new fields.
+    entry.time = new Date(timestamp).toISOString();
+    entry.name = entry.playerName;
+    entry.eosID = entry.eosId;
+    entry.steamID = entry.steamId;
+    entry.seq = timestamp;
+    entry.channel = toLegacyChannel(channel);
+
     chatHistory.push(entry);
-    if (chatHistory.length > MAX_HISTORY) chatHistory.shift();
+    trimHistory(chatHistory, maxHistory);
 
-    // New: Record per-minute stats
-    const currentMinute = Math.floor(Date.now() / 60000);
+    const currentMinute = Math.floor(timestamp / 60_000);
     minuteStats.set(currentMinute, (minuteStats.get(currentMinute) || 0) + 1);
-    
-    // Cleanup old stats
-    if (minuteStats.size > MAX_STATS_MINUTES + 10) {
-      const oldestToKeep = currentMinute - MAX_STATS_MINUTES;
-      for (const m of minuteStats.keys()) {
-        if (m < oldestToKeep) minuteStats.delete(m);
-      }
-    }
+    trimMinuteStats(minuteStats, currentMinute, maxStatsMinutes);
 
-    // 2. Frequency Monitoring (Spam Detection)
-    if (steamID) {
-      const now = Date.now();
-      const stats = playerStats.get(steamID) || { lastTime: 0, count: 0, name: "" };
-      stats.name = name; // Update name
-      
-      if (now - stats.lastTime < SPAM_WINDOW_MS) {
-        stats.count++;
-      } else {
-        stats.count = 1;
-        stats.lastTime = now;
-      }
-      playerStats.set(steamID, stats);
-
-      // Record timestamp for rolling frequency
-      if (!stats.messageTimestamps) stats.messageTimestamps = [];
-      stats.messageTimestamps.push(now);
-
-      if (stats.count > SPAM_THRESHOLD) {
-        eventEmitter.emit("spam", { steamID, name, count: stats.count });
-        logger.warn(`Potential spam detected from ${name} (${steamID}): ${stats.count} msgs in ${SPAM_WINDOW_MS}ms`);
-      }
-    }
-
-    // 3. Emit basic event
-    eventEmitter.emit("message", entry);
-
-    // 4. Emit module event for broader ecosystem
-    logger.debug(`Emitting CHAT_RECEIVED for ${name}: ${message}`);
-    core.eventBus?.emitModuleEvent("module.chatManager", "CHAT_RECEIVED", {
-      ...entry,
-      serverId: core.webStatus?.serverId
+    updatePlayerStats(playerStats, {
+      now: timestamp,
+      steamId: steamId || eosId || playerName,
+      eosId,
+      playerName,
+      spamWindowMs,
+      frequencyWindowMs,
     });
 
-    // 5. Basic Trigger Check (Can be expanded)
-    // For now, we just emit a generic event that others can listen to
+    eventEmitter.emit("message", cloneChatEntry(entry, { exposeRawLog }));
+
+    logger?.debug?.(`[ChatMonitor] parsed chat: ${entry.chatChannel} ${entry.playerName || "Unknown"}`, {
+      operation: "chatMessageParsed",
+      data: {
+        channel: entry.channel,
+        playerName: entry.playerName || "",
+        serverId: entry.serverId,
+      },
+    });
+
+    core.eventBus?.emitModuleEvent?.("module.chatManager", "CHAT_RECEIVED", {
+      ...cloneChatEntry(entry, { exposeRawLog }),
+      serverId: entry.serverId,
+    });
+
     if (message.startsWith("!")) {
-      eventEmitter.emit("command", { ...entry, cmd: message.slice(1).split(" ")[0] });
+      eventEmitter.emit("command", {
+        ...cloneChatEntry(entry, { exposeRawLog }),
+        cmd: message.slice(1).split(/\s+/)[0] || "",
+      });
     }
   }
 
@@ -178,4 +219,148 @@ export function createChatManagerService({ core, modules, config, logger }) {
     start,
     stop,
   };
+}
+
+function updatePlayerStats(playerStats, { now, steamId, eosId, playerName, spamWindowMs, frequencyWindowMs }) {
+  const playerKey = String(steamId || eosId || playerName || "").trim();
+  if (!playerKey) {
+    return;
+  }
+
+  const stats = playerStats.get(playerKey) || {
+    lastTime: 0,
+    count: 0,
+    name: "",
+    steamID: String(steamId ?? ""),
+    eosID: String(eosId ?? ""),
+    messageTimestamps: [],
+  };
+
+  stats.name = String(playerName ?? stats.name ?? "Unknown").trim() || "Unknown";
+  stats.steamID = String(steamId ?? stats.steamID ?? "");
+  stats.eosID = String(eosId ?? stats.eosID ?? "");
+
+  if (now - stats.lastTime < spamWindowMs) {
+    stats.count += 1;
+  } else {
+    stats.count = 1;
+  }
+  stats.lastTime = now;
+
+  stats.messageTimestamps = (stats.messageTimestamps || []).filter((timestamp) => now - timestamp < frequencyWindowMs);
+  stats.messageTimestamps.push(now);
+  playerStats.set(playerKey, stats);
+}
+
+function cloneChatEntry(entry, { exposeRawLog }) {
+  const cloned = {
+    id: entry.id,
+    serverId: entry.serverId,
+    timestamp: entry.timestamp,
+    logTime: entry.logTime ?? null,
+    chatChannel: entry.chatChannel ?? normalizeChannel(entry.channel),
+    channel: entry.channel,
+    playerName: entry.playerName ?? null,
+    eosId: entry.eosId ?? null,
+    steamId: entry.steamId ?? null,
+    teamId: entry.teamId ?? null,
+    squadId: entry.squadId ?? null,
+    message: entry.message,
+    time: entry.time,
+    name: entry.name ?? null,
+    eosID: entry.eosID ?? null,
+    steamID: entry.steamID ?? null,
+    seq: entry.seq,
+  };
+
+  if (exposeRawLog && entry.raw) {
+    cloned.raw = entry.raw;
+  }
+
+  return cloned;
+}
+
+function normalizeChannel(value) {
+  const text = String(value ?? "").trim().toLowerCase();
+  if (!text) return "unknown";
+
+  if (text === "chatall" || text === "all") return "all";
+  if (text === "chatteam" || text === "team") return "team";
+  if (text === "chatsquad" || text === "squad") return "squad";
+  if (text === "chatadmin" || text === "admin") return "admin";
+  if (text === "system" || text === "chatsystem") return "system";
+  if (text === "unknown") return "unknown";
+  return text;
+}
+
+function toLegacyChannel(value) {
+  const normalized = normalizeChannel(value);
+  if (normalized === "all") return "ChatAll";
+  if (normalized === "team") return "ChatTeam";
+  if (normalized === "squad") return "ChatSquad";
+  if (normalized === "admin") return "ChatAdmin";
+  if (normalized === "system") return "ChatSystem";
+  return "Unknown";
+}
+
+function normalizeTimestamp(value) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  const text = String(value ?? "").trim();
+  if (!text) {
+    return Date.now();
+  }
+
+  const parsed = Date.parse(text);
+  if (Number.isFinite(parsed)) {
+    return parsed;
+  }
+
+  const numeric = Number(text);
+  if (Number.isFinite(numeric)) {
+    return numeric;
+  }
+
+  return Date.now();
+}
+
+function normalizeText(value) {
+  const text = String(value ?? "").trim();
+  return text;
+}
+
+function normalizeOptionalText(value) {
+  const text = String(value ?? "").trim();
+  return text || null;
+}
+
+function normalizeOptionalNumber(value) {
+  if (value == null || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function normalizePositiveInteger(value, fallback) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return Math.max(1, Math.trunc(Number(fallback) || 1));
+  }
+  return Math.max(1, Math.trunc(numeric));
+}
+
+function trimHistory(history, maxItems) {
+  if (history.length <= maxItems) return;
+  history.splice(0, history.length - maxItems);
+}
+
+function trimMinuteStats(minuteStats, currentMinute, maxStatsMinutes) {
+  if (minuteStats.size <= maxStatsMinutes + 10) return;
+  const oldestToKeep = currentMinute - maxStatsMinutes;
+  for (const minute of minuteStats.keys()) {
+    if (minute < oldestToKeep) {
+      minuteStats.delete(minute);
+    }
+  }
 }

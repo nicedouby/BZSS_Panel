@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
@@ -9,6 +9,46 @@ import { useAuthStore } from "../stores/auth.store";
 import { usePlayerStore } from "../stores/player.store";
 import { useServerStore } from "../stores/server.store";
 import { useSquadStore } from "../stores/squad.store";
+
+class FakeWebSocket {
+  static instances: FakeWebSocket[] = [];
+
+  url: string;
+  onopen: ((event: Event) => void) | null = null;
+  onmessage: ((event: MessageEvent<string>) => void) | null = null;
+  onclose: ((event: CloseEvent) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+
+  constructor(url: string) {
+    this.url = url;
+    FakeWebSocket.instances.push(this);
+    queueMicrotask(() => {
+      this.onopen?.(new Event("open"));
+    });
+  }
+
+  addEventListener(type: string, handler: EventListenerOrEventListenerObject) {
+    if (type === "open") this.onopen = handler as (event: Event) => void;
+    if (type === "message") this.onmessage = handler as (event: MessageEvent<string>) => void;
+    if (type === "close") this.onclose = handler as (event: CloseEvent) => void;
+    if (type === "error") this.onerror = handler as (event: Event) => void;
+  }
+
+  removeEventListener(type: string, handler: EventListenerOrEventListenerObject) {
+    if (type === "open" && this.onopen === handler) this.onopen = null;
+    if (type === "message" && this.onmessage === handler) this.onmessage = null;
+    if (type === "close" && this.onclose === handler) this.onclose = null;
+    if (type === "error" && this.onerror === handler) this.onerror = null;
+  }
+
+  close() {
+    this.onclose?.(new CloseEvent("close"));
+  }
+
+  emit(payload: unknown) {
+    this.onmessage?.(new MessageEvent("message", { data: JSON.stringify(payload) }));
+  }
+}
 
 describe("MatchStatusPage", () => {
   beforeEach(() => {
@@ -42,17 +82,24 @@ describe("MatchStatusPage", () => {
       list: [],
       updatedAt: Date.now(),
     });
+
+    FakeWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", FakeWebSocket as any);
   });
 
-  it("renders the manual refresh controls without showing a loading state", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("renders the match status page with the live chat panel", () => {
     const wrapper = mount(MatchStatusPage, {
       global: {
         plugins: [[VueQueryPlugin, { queryClient: new QueryClient() }]],
       },
     });
 
-    expect(wrapper.text()).toContain("智能刷新时长");
-    expect(wrapper.text()).toContain("强制刷新全部时长");
+    expect(wrapper.findComponent({ name: "MatchChatPanel" }).exists()).toBe(true);
     expect(wrapper.text()).not.toContain("Loading");
+    wrapper.unmount();
   });
 });

@@ -52,17 +52,24 @@ const teamAveragePlaytimeShortText = computed(() => {
   return `${props.team.averagePlaytimeHours}h`;
 });
 
+const teamLeaderAveragePlaytimeShortText = computed(() => {
+  if (props.team.knownLeaderPlaytimePlayers <= 0) return "--";
+  if (props.team.leaderAveragePlaytimeHours == null) return "--";
+  return `${props.team.leaderAveragePlaytimeHours}h`;
+});
+
 const headerSummaryText = computed(() => {
   const avg = `Avg ${teamAveragePlaytimeShortText.value}`;
+  const leaderAvg = `Leader Avg ${teamLeaderAveragePlaytimeShortText.value}`;
   const squadsText = `Squads ${props.team.squads.length}`;
 
   if (!isComfortable.value) {
-    return `${avg} · ${squadsText}`;
+    return `${avg} · ${leaderAvg} · ${squadsText}`;
   }
 
   const publicText = `Public ${props.team.publicPlaytimePlayers}`;
   const privateText = `Private ${props.team.privatePlaytimePlayers}`;
-  return `${avg} · ${publicText} · ${privateText} · ${squadsText}`;
+  return `${avg} · ${leaderAvg} · ${publicText} · ${privateText} · ${squadsText}`;
 });
 </script>
 
