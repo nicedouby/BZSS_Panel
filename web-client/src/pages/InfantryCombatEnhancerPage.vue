@@ -55,6 +55,24 @@
         </div>
       </section>
 
+      <PageCard compact class="control-card config-card">
+        <div class="config-row">
+          <label class="config-toggle">
+            <input
+              type="checkbox"
+              :checked="moduleConfig.showKillDisplay"
+              :disabled="configMutation.isPending.value || configQuery.isLoading.value"
+              @change="toggleKillDisplay(($event.target as HTMLInputElement).checked)"
+            >
+            <span>{{ t("combat.infantryShowKillDisplay") }}</span>
+          </label>
+          <p>{{ t("combat.infantryShowKillDisplayHint") }}</p>
+          <span class="toolbar-status config-status" :class="{ loading: configMutation.isPending.value || configQuery.isLoading.value }">
+            {{ configMutation.isPending.value ? t("common.saving") : (configQuery.isLoading.value ? t("common.loading") : t("common.updated")) }}
+          </span>
+        </div>
+      </PageCard>
+
       <PageCard compact class="control-card">
         <div class="toolbar">
           <select v-model="filters.type">
@@ -174,6 +192,48 @@ const route = useRoute();
 const router = useRouter();
 const ui = useUiStore();
 
+const moduleConfig = reactive({
+  showKillDisplay: false,
+});
+
+const configQuery = useQuery({
+  queryKey: ["infantry-combat-enhancer-config"],
+  queryFn: async () => apiGet<{
+    ok: boolean;
+    config: any;
+  }>("/api/plugins/infantry-combat-enhancer/config"),
+  refetchOnWindowFocus: false,
+});
+
+watch(
+  () => (configQuery.data.value as { config?: any } | undefined)?.config,
+  (config) => {
+    moduleConfig.showKillDisplay = Boolean(config?.showKillDisplay);
+  },
+  { immediate: true },
+);
+
+const configMutation = useMutation({
+  mutationFn: async (showKillDisplay: boolean) => apiPost("/api/plugins/infantry-combat-enhancer/config", {
+    showKillDisplay,
+  }),
+  onSuccess: (response: any) => {
+    moduleConfig.showKillDisplay = Boolean(response?.config?.showKillDisplay);
+    ui.pushToast({
+      title: "保存完成",
+      message: "击杀提示设置已更新",
+      tone: "ok",
+    });
+  },
+  onError: (error) => {
+    ui.pushToast({
+      title: "保存失败",
+      message: renderApiError(error, "更新击杀提示设置失败"),
+      tone: "error",
+    });
+  },
+});
+
 const TAG_LABELS: Record<string, string> = Object.freeze({
   "combat.damage": "伤害",
   "combat.wound": "击伤",
@@ -279,6 +339,11 @@ const events = computed(() => query.data.value?.events ?? []);
 const overview = computed(() => query.data.value?.overview ?? null);
 const total = computed(() => Number(overview.value?.count ?? events.value.length));
 const hasNextPage = computed(() => filters.offset + filters.limit < total.value);
+
+function toggleKillDisplay(nextValue: boolean) {
+  if (configMutation.isPending.value) return;
+  configMutation.mutate(Boolean(nextValue));
+}
 
 const clearMutation = useMutation({
   mutationFn: async () => apiPost("/api/plugins/infantry-combat-enhancer/clear", {}),
@@ -631,6 +696,37 @@ function shouldDisplayTag(tag: unknown) {
   gap: 10px;
   flex-wrap: wrap;
   align-items: center;
+}
+
+.config-row {
+  display: grid;
+  gap: 8px;
+  align-items: center;
+}
+
+.config-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #e6eef6;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.config-toggle input {
+  width: 18px;
+  height: 18px;
+}
+
+.config-row p {
+  margin: 0;
+  color: #93a1ad;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.config-status {
+  justify-self: start;
 }
 
 .toolbar input,

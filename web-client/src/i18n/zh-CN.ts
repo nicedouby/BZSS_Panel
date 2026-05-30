@@ -299,8 +299,8 @@
   },
   combat: {
     combatClean: "战斗管理（处理后）",
-    upstreamDependency: "依赖模块",
-    upstreamDependencyHint: "点击打开战斗管理（处理后）查看上游输入",
+    infantryShowKillDisplay: "显示击杀提示",
+    infantryShowKillDisplayHint: "关闭后，kill 事件不会发送 xxx killed xxx 提示，只保留记录。",
     killManage: "击杀管理",
     kills: "击杀",
     downs: "击倒",

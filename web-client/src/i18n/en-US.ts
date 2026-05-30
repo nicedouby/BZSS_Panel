@@ -300,8 +300,8 @@
   },
   combat: {
     combatClean: "Combat Manager (Processed)",
-    upstreamDependency: "Dependency Module",
-    upstreamDependencyHint: "Open Combat Manager (Processed) to inspect upstream input",
+    infantryShowKillDisplay: "Show kill display",
+    infantryShowKillDisplayHint: "When disabled, kill events do not send xxx killed xxx warnings and only remain in the record.",
     killManage: "Kill Manage",
     kills: "Kills",
     downs: "Downs",

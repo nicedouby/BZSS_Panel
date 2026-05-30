@@ -62,6 +62,7 @@ function createHarness({ moduleConfig = {}, adminWarn, subscriptionMap = {} } = 
             enabled: true,
             forceAttackerDamageDisplay: false,
             minAttackerDamage: 15,
+            showKillDisplay: false,
             showVictimDamage: true,
             showVictimWound: true,
             showVictimKill: true,
@@ -157,6 +158,36 @@ async function testSamePlayerStillDisplays() {
   await module.stop();
 }
 
+async function testKillDisplayIsDisabledByDefault() {
+  const { module, eventBus, calls } = createHarness();
+  await module.start();
+
+  await eventBus.emitModuleEvent("module.combatClean", "combat.record.processed", {
+    record: {
+      id: "combat-kill",
+      serverId: "S1",
+      type: "kill",
+      time: "2026-05-30T12:06:00.000Z",
+      attackerName: "Killer",
+      attackerSteam64ID: "111",
+      victimName: "Target",
+      victimSteam64ID: "222",
+      damage: 300,
+      weaponName: "M4A1",
+    },
+  });
+
+  assert.equal(calls.length, 0);
+  const events = module.api.getEvents({ limit: 10 });
+  assert.equal(events.length, 1);
+  assert.equal(events[0].victimWarning.skipped, true);
+  assert.equal(events[0].attackerWarning.skipped, true);
+  assert.equal(events[0].victimWarning.skipReason, "kill_display_disabled");
+  assert.equal(events[0].attackerWarning.skipReason, "kill_display_disabled");
+
+  await module.stop();
+}
+
 async function testCombatCleanDependencyGate() {
   const { module, eventBus, pages } = createHarness({
     subscriptionMap: {
@@ -174,6 +205,7 @@ async function testCombatCleanDependencyGate() {
 
 await testProcessingAndWarnings();
 await testSamePlayerStillDisplays();
+await testKillDisplayIsDisabledByDefault();
 await testCombatCleanDependencyGate();
 
 console.log("infantry combat enhancer tests passed");

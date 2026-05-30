@@ -4,6 +4,7 @@ const DEFAULT_CONFIG = Object.freeze({
   enabled: true,
   forceAttackerDamageDisplay: false,
   minAttackerDamage: 15,
+  showKillDisplay: false,
   showVictimDamage: true,
   showVictimWound: true,
   showVictimKill: true,
@@ -154,6 +155,9 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
   }
 
   function buildVictimDecision(entry) {
+    if (entry.type === "kill" && !moduleConfig.showKillDisplay) {
+      return makeSkipDecision(entry, "victim", "kill_display_disabled");
+    }
     if (!entry.victim.name) {
       return makeSkipDecision(entry, "victim", "victim_missing_target");
     }
@@ -168,6 +172,9 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
   }
 
   function buildAttackerDecision(entry) {
+    if (entry.type === "kill" && !moduleConfig.showKillDisplay) {
+      return makeSkipDecision(entry, "attacker", "kill_display_disabled");
+    }
     if (!entry.attacker.name) {
       return makeSkipDecision(entry, "attacker", "attacker_missing_target");
     }
@@ -511,6 +518,7 @@ function normalizeModuleConfig(source = {}) {
     enabled: source.enabled !== false,
     forceAttackerDamageDisplay: Boolean(source.forceAttackerDamageDisplay ?? DEFAULT_CONFIG.forceAttackerDamageDisplay),
     minAttackerDamage: Math.max(0, Number(source.minAttackerDamage ?? DEFAULT_CONFIG.minAttackerDamage)),
+    showKillDisplay: source.showKillDisplay !== false,
     showVictimDamage: source.showVictimDamage !== false,
     showVictimWound: source.showVictimWound !== false,
     showVictimKill: source.showVictimKill !== false,
