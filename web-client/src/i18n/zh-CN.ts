@@ -301,6 +301,8 @@
     combatClean: "战斗管理（处理后）",
     infantryShowKillDisplay: "显示击杀者提示",
     infantryShowKillDisplayHint: "关闭后，击杀者不会收到 xxx killed xxx 提示，受害者仍会收到被击杀提示。",
+    infantryOnlyLightWeaponDamage: "仅显示轻武器伤害",
+    infantryOnlyLightWeaponDamageHint: "开启后，攻击者只会收到轻武器造成的伤害提示；受害者仍会无条件收到伤害信息。",
     killManage: "击杀管理",
     kills: "击杀",
     downs: "击倒",

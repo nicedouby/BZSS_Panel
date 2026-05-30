@@ -73,6 +73,24 @@
         </div>
       </PageCard>
 
+      <PageCard compact class="control-card config-card">
+        <div class="config-row">
+          <label class="config-toggle">
+            <input
+              type="checkbox"
+              :checked="moduleConfig.showOnlyLightWeaponDamage"
+              :disabled="lightWeaponConfigMutation.isPending.value || configQuery.isLoading.value"
+              @change="toggleOnlyLightWeaponDamage(($event.target as HTMLInputElement).checked)"
+            >
+            <span>{{ t("combat.infantryOnlyLightWeaponDamage") }}</span>
+          </label>
+          <p>{{ t("combat.infantryOnlyLightWeaponDamageHint") }}</p>
+          <span class="toolbar-status config-status" :class="{ loading: lightWeaponConfigMutation.isPending.value || configQuery.isLoading.value }">
+            {{ lightWeaponConfigMutation.isPending.value ? t("common.saving") : (configQuery.isLoading.value ? t("common.loading") : t("common.updated")) }}
+          </span>
+        </div>
+      </PageCard>
+
       <PageCard compact class="control-card">
         <div class="toolbar">
           <select v-model="filters.type">
@@ -194,6 +212,7 @@ const ui = useUiStore();
 
 const moduleConfig = reactive({
   showKillDisplay: false,
+  showOnlyLightWeaponDamage: true,
 });
 
 const configQuery = useQuery({
@@ -209,6 +228,7 @@ watch(
   () => (configQuery.data.value as { config?: any } | undefined)?.config,
   (config) => {
     moduleConfig.showKillDisplay = Boolean(config?.showKillDisplay);
+    moduleConfig.showOnlyLightWeaponDamage = config?.showOnlyLightWeaponDamage !== false;
   },
   { immediate: true },
 );
@@ -229,6 +249,27 @@ const configMutation = useMutation({
     ui.pushToast({
       title: "保存失败",
       message: renderApiError(error, "更新击杀提示设置失败"),
+      tone: "error",
+    });
+  },
+});
+
+const lightWeaponConfigMutation = useMutation({
+  mutationFn: async (showOnlyLightWeaponDamage: boolean) => apiPost("/api/plugins/infantry-combat-enhancer/config", {
+    showOnlyLightWeaponDamage,
+  }),
+  onSuccess: (response: any) => {
+    moduleConfig.showOnlyLightWeaponDamage = response?.config?.showOnlyLightWeaponDamage !== false;
+    ui.pushToast({
+      title: "淇濆瓨瀹屾垚",
+      message: "杞绘鍣ㄤ激瀹虫樉绀鸿缃凡鏇存柊",
+      tone: "ok",
+    });
+  },
+  onError: (error) => {
+    ui.pushToast({
+      title: "淇濆瓨澶辫触",
+      message: renderApiError(error, "鏇存柊杞绘鍣ㄤ激瀹虫樉绀鸿缃け璐?"),
       tone: "error",
     });
   },
@@ -343,6 +384,11 @@ const hasNextPage = computed(() => filters.offset + filters.limit < total.value)
 function toggleKillDisplay(nextValue: boolean) {
   if (configMutation.isPending.value) return;
   configMutation.mutate(Boolean(nextValue));
+}
+
+function toggleOnlyLightWeaponDamage(nextValue: boolean) {
+  if (lightWeaponConfigMutation.isPending.value) return;
+  lightWeaponConfigMutation.mutate(Boolean(nextValue));
 }
 
 const clearMutation = useMutation({

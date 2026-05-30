@@ -66,6 +66,7 @@ function createHarness({ moduleConfig = {}, adminWarn, subscriptionMap = {} } = 
             showVictimWound: true,
             showVictimKill: true,
             showAttackerDamage: true,
+            showOnlyLightWeaponDamage: true,
             storeRecentEventLimit: 10,
             ...moduleConfig,
           };
@@ -216,6 +217,39 @@ async function testTagDrivenMessages() {
   await module.stop();
 }
 
+async function testOnlyLightWeaponDamageSkipsNonLightWeapons() {
+  const { module, eventBus, calls } = createHarness();
+  await module.start();
+
+  await eventBus.emitModuleEvent("module.combatClean", "combat.record.processed", {
+    record: {
+      id: "combat-heavy-damage",
+      serverId: "S1",
+      type: "damage",
+      time: "2026-05-30T12:11:00.000Z",
+      attackerName: "Attacker",
+      attackerSteam64ID: "111",
+      victimName: "Victim",
+      victimSteam64ID: "222",
+      damage: 60,
+      weaponName: "Grenade",
+      tags: ["combat.damage", "weapon.explosive", "damage.splash"],
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].targetName, "Victim");
+  assert.ok(String(calls[0].message).includes("Attacker"));
+
+  const events = module.api.getEvents({ limit: 10 });
+  assert.equal(events.length, 1);
+  assert.equal(events[0].victimWarning.success, true);
+  assert.equal(events[0].attackerWarning.skipped, true);
+  assert.equal(events[0].attackerWarning.skipReason, "non_light_weapon_hidden");
+
+  await module.stop();
+}
+
 async function testSamePlayerStillDisplays() {
   const { module, eventBus, calls } = createHarness();
   await module.start();
@@ -300,6 +334,7 @@ async function testCombatCleanDependencyGate() {
 
 await testProcessingAndWarnings();
 await testTagDrivenMessages();
+await testOnlyLightWeaponDamageSkipsNonLightWeapons();
 await testSamePlayerStillDisplays();
 await testKillDisplayIsDisabledByDefault();
 await testCombatCleanDependencyGate();

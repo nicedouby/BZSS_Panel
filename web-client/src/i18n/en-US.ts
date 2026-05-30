@@ -302,6 +302,8 @@
     combatClean: "Combat Manager (Processed)",
     infantryShowKillDisplay: "Show killer prompt",
     infantryShowKillDisplayHint: "When disabled, the killer does not receive the xxx killed xxx prompt, while the victim still receives the killed-by message.",
+    infantryOnlyLightWeaponDamage: "Only show light-weapon damage",
+    infantryOnlyLightWeaponDamageHint: "When enabled, attackers only receive damage prompts from light weapons, while victims still always receive damage info.",
     killManage: "Kill Manage",
     kills: "Kills",
     downs: "Downs",

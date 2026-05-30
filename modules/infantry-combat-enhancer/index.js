@@ -5,6 +5,7 @@ const DEFAULT_CONFIG = Object.freeze({
   forceAttackerDamageDisplay: false,
   minAttackerDamage: 15,
   showKillDisplay: false,
+  showOnlyLightWeaponDamage: true,
   showVictimDamage: true,
   showVictimWound: true,
   showVictimKill: true,
@@ -169,6 +170,9 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
   }
 
   function buildAttackerDecision(entry) {
+    if (entry.type === "damage" && moduleConfig.showOnlyLightWeaponDamage && !isLightWeaponEntry(entry)) {
+      return makeSkipDecision(entry, "attacker", "non_light_weapon_hidden");
+    }
     if (entry.type === "kill" && !moduleConfig.showKillDisplay) {
       return makeSkipDecision(entry, "attacker", "kill_display_disabled");
     }
@@ -329,6 +333,11 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
       const label = normalizeText(flag?.label);
       return key === "friendly_fire" || key === "tk_down" || label === "友伤" || label === "tk击倒" || label === "友军击杀";
     });
+  }
+
+  function isLightWeaponEntry(entry) {
+    const tags = Array.isArray(entry?.tags) ? entry.tags.map((tag) => normalizeText(tag)) : [];
+    return tags.some((tag) => LIGHT_WEAPON_TAGS.has(tag));
   }
 
   function extractIdentity(record, side) {
@@ -548,6 +557,7 @@ function normalizeModuleConfig(source = {}) {
     forceAttackerDamageDisplay: Boolean(source.forceAttackerDamageDisplay ?? DEFAULT_CONFIG.forceAttackerDamageDisplay),
     minAttackerDamage: Math.max(0, Number(source.minAttackerDamage ?? DEFAULT_CONFIG.minAttackerDamage)),
     showKillDisplay: source.showKillDisplay ?? DEFAULT_CONFIG.showKillDisplay,
+    showOnlyLightWeaponDamage: source.showOnlyLightWeaponDamage ?? DEFAULT_CONFIG.showOnlyLightWeaponDamage,
     showVictimDamage: source.showVictimDamage !== false,
     showVictimWound: source.showVictimWound !== false,
     showVictimKill: source.showVictimKill !== false,
@@ -579,6 +589,17 @@ function pickText(...values) {
   }
   return "";
 }
+
+const LIGHT_WEAPON_TAGS = new Set([
+  "weapon.small_arm",
+  "weapon.rifle",
+  "weapon.carbine",
+  "weapon.machine_gun",
+  "weapon.marksman_rifle",
+  "weapon.sniper_rifle",
+  "weapon.pistol",
+  "weapon.shotgun",
+]);
 
 function makeEntryId(time, seed) {
   const token = String(seed ?? "").replace(/[^A-Za-z0-9_.:-]/g, "_") || "event";
