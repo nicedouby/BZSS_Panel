@@ -23,7 +23,7 @@ function createEventBus() {
   };
 }
 
-function createHarness({ moduleConfig = {}, adminWarn } = {}) {
+function createHarness({ moduleConfig = {}, adminWarn, subscriptionMap = {} } = {}) {
   const pages = [];
   const calls = [];
   const eventBus = createEventBus();
@@ -39,7 +39,10 @@ function createHarness({ moduleConfig = {}, adminWarn } = {}) {
       eventBus,
       webStatus: { serverId: "S1" },
       pluginSubscriptions: {
-        isSubscribed() {
+        isSubscribed(id) {
+          if (Object.prototype.hasOwnProperty.call(subscriptionMap, id)) {
+            return Boolean(subscriptionMap[id]);
+          }
           return true;
         },
       },
@@ -94,6 +97,9 @@ async function testProcessingAndWarnings() {
       victimSteam64ID: "456",
       damage: 42,
       weaponName: "M4A1",
+      eventFlags: [{ key: "self_damage", label: "自伤" }],
+      eventFlagLabels: ["自伤"],
+      tags: ["weapon.small_arm", "damage.direct"],
     },
   });
 
@@ -106,13 +112,16 @@ async function testProcessingAndWarnings() {
   assert.equal(events.length, 1);
   assert.equal(events[0].victimWarning.success, true);
   assert.equal(events[0].attackerWarning.success, true);
+  assert.equal(events[0].eventFlags[0].key, "self_damage");
+  assert.equal(events[0].eventFlagLabels[0], "自伤");
+  assert.ok(events[0].tags.includes("weapon.small_arm"));
   assert.equal(module.api.getOverview().stats.victimWarned, 1);
   assert.equal(module.api.getOverview().stats.attackerWarned, 1);
 
   await module.stop();
 }
 
-async function testSamePlayerSuppression() {
+async function testSamePlayerStillDisplays() {
   const { module, eventBus, calls } = createHarness();
   await module.start();
 
@@ -131,13 +140,14 @@ async function testSamePlayerSuppression() {
     },
   });
 
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2);
   assert.equal(calls[0].targetName, "Echo");
+  assert.equal(calls[1].targetName, "Echo");
 
   const events = module.api.getEvents({ limit: 10 });
   assert.equal(events.length, 1);
-  assert.equal(events[0].attackerWarning.skipped, true);
-  assert.equal(events[0].attackerWarning.skipReason, "same_player");
+  assert.equal(events[0].victimWarning.success, true);
+  assert.equal(events[0].attackerWarning.success, true);
 
   const cleared = module.api.clear();
   assert.equal(cleared.ok, true);
@@ -147,7 +157,23 @@ async function testSamePlayerSuppression() {
   await module.stop();
 }
 
+async function testCombatCleanDependencyGate() {
+  const { module, eventBus, pages } = createHarness({
+    subscriptionMap: {
+      "module.combatClean": false,
+    },
+  });
+
+  await module.start();
+
+  assert.equal(pages.length, 1);
+  assert.equal(eventBus.listeners.length, 0);
+
+  await module.stop();
+}
+
 await testProcessingAndWarnings();
-await testSamePlayerSuppression();
+await testSamePlayerStillDisplays();
+await testCombatCleanDependencyGate();
 
 console.log("infantry combat enhancer tests passed");

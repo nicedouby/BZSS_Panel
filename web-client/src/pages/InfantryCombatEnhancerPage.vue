@@ -27,6 +27,11 @@
         </div>
 
         <div class="hero-stats">
+          <RouterLink class="stat-tile dependency-tile" to="/combat-clean">
+            <span>{{ t('combat.upstreamDependency') }}</span>
+            <strong>{{ t('combat.combatClean') }}</strong>
+            <small>{{ t('combat.upstreamDependencyHint') }}</small>
+          </RouterLink>
           <div class="stat-tile stat-tile-primary">
             <span>总事件</span>
             <strong>{{ total }}</strong>
@@ -124,7 +129,22 @@
                       </div>
                     </td>
                     <td class="mono">{{ formatDamage(event.damage) }}</td>
-                    <td class="weapon-cell">{{ event.weapon || "-" }}</td>
+                    <td>
+                      <div class="weapon-cell">
+                        <span>{{ event.weapon || "-" }}</span>
+                        <div class="tag-cloud">
+                          <span
+                            v-for="tag in formatCombatTags(event)"
+                            :key="tag.key"
+                            class="tag-chip"
+                            :data-tone="tag.tone"
+                          >
+                            {{ tag.label }}
+                          </span>
+                          <span v-if="!formatCombatTags(event).length" class="tag-empty">-</span>
+                        </div>
+                      </div>
+                    </td>
                     <td>{{ formatDecision(event.victimWarning) }}</td>
                     <td>{{ formatDecision(event.attackerWarning) }}</td>
                   </tr>
@@ -153,6 +173,57 @@ import { t } from "../i18n";
 const route = useRoute();
 const router = useRouter();
 const ui = useUiStore();
+
+const TAG_LABELS: Record<string, string> = Object.freeze({
+  "combat.damage": "伤害",
+  "combat.wound": "击伤",
+  "combat.kill": "击杀",
+  "combat.team_damage": "队伤",
+  "combat.team_wound": "TK击倒",
+  "combat.team_kill": "友军击杀",
+  "weapon.small_arm": "轻武器",
+  "weapon.rifle": "步枪",
+  "weapon.carbine": "卡宾枪",
+  "weapon.machine_gun": "机枪",
+  "weapon.marksman_rifle": "精确射手步枪",
+  "weapon.sniper_rifle": "狙击步枪",
+  "weapon.pistol": "手枪",
+  "weapon.shotgun": "霰弹枪",
+  "weapon.explosive": "爆炸物",
+  "weapon.vehicle": "载具",
+  "weapon.emplacement": "固定武器",
+  "weapon.melee": "近战",
+  "damage.direct": "直伤",
+  "damage.splash": "溅射",
+  "damage.bleed": "流血",
+  "damage.fall": "坠落",
+  "damage.burn": "燃烧",
+  "damage.vehicle_crash": "碰撞",
+  "relation.enemy": "敌对",
+  "relation.friendly": "友伤",
+  "relation.self": "自伤",
+  "event:give_up": "放弃",
+  "event:friendly_fire": "友伤",
+  "event:self_damage": "自伤",
+  "tk_down": "TK击倒",
+  "friendly_fire": "友伤",
+  "self_damage": "自伤",
+  "killed_by_bot": "被bot击杀",
+});
+
+const HIDDEN_TAGS = new Set([
+  "weapon.unknown",
+  "damage.unknown_source",
+  "attacker.valid",
+  "attacker.null",
+  "attacker.world",
+  "victim.valid",
+  "victim.null",
+  "relation.unknown",
+  "confidence.high",
+  "confidence.medium",
+  "confidence.low",
+]);
 
 const filters = reactive({
   type: String(route.query.type ?? "all"),
@@ -287,6 +358,74 @@ function formatTime(value: unknown) {
   const text = String(value ?? "");
   const date = new Date(text);
   return Number.isNaN(date.getTime()) ? text : date.toLocaleString();
+}
+
+function formatCombatTags(event: any) {
+  const items: Array<{ key: string; label: string; tone: string }> = [];
+  const seen = new Set<string>();
+
+  const push = (key: string, label: string, tone = "neutral") => {
+    const normalizedKey = String(key ?? "").trim();
+    const normalizedLabel = String(label ?? "").trim();
+    if (!normalizedKey && !normalizedLabel) return;
+    const fingerprint = `${normalizedKey}::${normalizedLabel}`;
+    const keyToken = normalizedKey ? `key:${normalizedKey}` : "";
+    const labelToken = normalizedLabel ? `label:${normalizedLabel}` : "";
+    if (seen.has(fingerprint) || (keyToken && seen.has(keyToken)) || (labelToken && seen.has(labelToken))) return;
+    seen.add(fingerprint);
+    if (keyToken) seen.add(keyToken);
+    if (labelToken) seen.add(labelToken);
+    items.push({
+      key: normalizedKey || normalizedLabel,
+      label: normalizedLabel || normalizedKey,
+      tone,
+    });
+  };
+
+  for (const flag of Array.isArray(event?.eventFlags) ? event.eventFlags : []) {
+    const key = String(flag?.key ?? "").trim();
+    const label = String(flag?.label ?? "").trim();
+    if (!key && !label) continue;
+    if (!shouldDisplayTag(key) && !shouldDisplayTag(label)) continue;
+    push(`flag:${key || label}`, label || labelForTag(key), toneForTag(key || label));
+  }
+
+  for (const label of Array.isArray(event?.eventFlagLabels) ? event.eventFlagLabels : []) {
+    const text = String(label ?? "").trim();
+    if (!text) continue;
+    if (!shouldDisplayTag(text)) continue;
+    push(`flag-label:${text}`, text, toneForTag(text));
+  }
+
+  for (const tag of Array.isArray(event?.tags) ? event.tags : []) {
+    const text = String(tag ?? "").trim();
+    if (!text) continue;
+    if (!shouldDisplayTag(text)) continue;
+    push(`tag:${text}`, labelForTag(text), toneForTag(text));
+  }
+
+  return items;
+}
+
+function labelForTag(tag: unknown) {
+  const text = String(tag ?? "").trim();
+  if (!text) return "";
+  return TAG_LABELS[text] || text;
+}
+
+function toneForTag(tag: unknown) {
+  const text = String(tag ?? "").trim();
+  if (!text) return "neutral";
+  if (text === "combat.team_kill" || text === "friendly_fire") return "danger";
+  if (text === "combat.team_damage" || text === "combat.team_wound" || text === "event:give_up" || text === "event:self_damage" || text === "tk_down") return "warn";
+  if (text === "combat.kill" || text === "confidence.high") return "ok";
+  return "neutral";
+}
+
+function shouldDisplayTag(tag: unknown) {
+  const text = String(tag ?? "").trim();
+  if (!text) return false;
+  return !HIDDEN_TAGS.has(text);
 }
 </script>
 
@@ -436,10 +575,26 @@ function formatTime(value: unknown) {
 }
 
 .stat-tile {
+  display: block;
   border-radius: 16px;
   padding: 16px 14px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.dependency-tile {
+  grid-column: 1 / -1;
+  color: inherit;
+  text-decoration: none;
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.14), rgba(34, 197, 94, 0.05));
+  border-color: rgba(34, 197, 94, 0.22);
+  transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+
+.dependency-tile:hover {
+  transform: translateY(-1px);
+  border-color: rgba(34, 197, 94, 0.38);
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.18), rgba(34, 197, 94, 0.07));
 }
 
 .stat-tile-primary {
@@ -509,6 +664,7 @@ function formatTime(value: unknown) {
   min-height: 0;
   height: 100%;
   overflow: visible;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .summary {
@@ -517,6 +673,8 @@ function formatTime(value: unknown) {
 }
 
 .table-wrap {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
   max-height: 100%;
 }
@@ -565,6 +723,57 @@ tbody tr:hover {
   font-size: 12px;
 }
 
+.weapon-cell {
+  display: grid;
+  gap: 8px;
+}
+
+.tag-cloud {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tag-chip,
+.tag-empty {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.tag-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: #d9e3ec;
+}
+
+.tag-chip[data-tone="warn"] {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.24);
+  color: #ffd59d;
+}
+
+.tag-chip[data-tone="danger"] {
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(239, 68, 68, 0.24);
+  color: #ffb1b1;
+}
+
+.tag-chip[data-tone="ok"] {
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(34, 197, 94, 0.24);
+  color: #b9f6cc;
+}
+
+.tag-empty {
+  color: #71808d;
+}
+
 .mono {
   font-variant-numeric: tabular-nums;
 }
@@ -609,6 +818,20 @@ tbody tr:hover {
   background: linear-gradient(180deg, rgba(19, 24, 30, 0.94), rgba(15, 20, 26, 0.96));
   border-color: rgba(52, 63, 74, 0.95);
   overflow: hidden;
+}
+
+.ice-page :deep(.table-card) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.ice-page :deep(.table-card .card-body.compact) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .ice-page :deep(.page-card .card-body.compact) {

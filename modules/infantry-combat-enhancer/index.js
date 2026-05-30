@@ -12,6 +12,7 @@ const DEFAULT_CONFIG = Object.freeze({
 });
 
 const VALID_TYPES = new Set(["damage", "wound", "kill"]);
+const COMBAT_CLEAN_SUBSCRIPTION_ID = "module.combatClean";
 
 export function createInfantryCombatEnhancerModule({ core, modules, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
@@ -82,8 +83,10 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
     const processedAt = new Date().toISOString();
     const attacker = extractIdentity(record, "attacker");
     const victim = extractIdentity(record, "victim");
-    const samePlayer = isSamePlayer(attacker, victim);
     const damage = normalizeDamage(record.damage);
+    if (!victim.name) return null;
+    if (Number.isFinite(damage) && Math.abs(damage) < 5) return null;
+    const samePlayer = isSamePlayer(attacker, victim);
     const weaponName = resolveWeaponName(record);
     const serverId = String(record.serverId ?? event?.serverId ?? core.webStatus?.serverId ?? "").trim();
     const sourceEventId = String(event?.eventId ?? record.sourceEventId ?? record.id ?? "").trim();
@@ -114,6 +117,9 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
       samePlayer,
       relation: cloneJsonSafe(record.relation ?? null),
       parse: cloneJsonSafe(record.parse ?? null),
+      eventFlags: Array.isArray(record.eventFlags) ? cloneJsonSafe(record.eventFlags) : [],
+      eventFlagLabels: Array.isArray(record.eventFlagLabels) ? cloneJsonSafe(record.eventFlagLabels) : [],
+      tags: Array.isArray(record.tags) ? cloneJsonSafe(record.tags) : [],
       warnings: [],
       victimWarning: null,
       attackerWarning: null,
@@ -148,16 +154,6 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
   }
 
   function buildVictimDecision(entry) {
-    if (!moduleConfig.showVictimDamage && entry.type === "damage") {
-      return makeSkipDecision(entry, "victim", "victim_damage_disabled");
-    }
-    if (!moduleConfig.showVictimWound && entry.type === "wound") {
-      return makeSkipDecision(entry, "victim", "victim_wound_disabled");
-    }
-    if (!moduleConfig.showVictimKill && entry.type === "kill") {
-      return makeSkipDecision(entry, "victim", "victim_kill_disabled");
-    }
-
     if (!entry.victim.name) {
       return makeSkipDecision(entry, "victim", "victim_missing_target");
     }
@@ -172,22 +168,8 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
   }
 
   function buildAttackerDecision(entry) {
-    if (!moduleConfig.showAttackerDamage) {
-      return makeSkipDecision(entry, "attacker", "attacker_warning_disabled");
-    }
-
-    if (entry.samePlayer) {
-      return makeSkipDecision(entry, "attacker", "same_player");
-    }
-
     if (!entry.attacker.name) {
       return makeSkipDecision(entry, "attacker", "attacker_missing_target");
-    }
-
-    const shouldForce = Boolean(moduleConfig.forceAttackerDamageDisplay);
-    const meetsThreshold = Number.isFinite(entry.damage) && entry.damage >= moduleConfig.minAttackerDamage;
-    if (entry.type !== "kill" && !shouldForce && !meetsThreshold) {
-      return makeSkipDecision(entry, "attacker", "below_damage_threshold");
     }
 
     return makeSendDecision({
@@ -419,7 +401,9 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
 
   function isSubscribed() {
     return modules?.pluginSubscriptions?.isSubscribed?.("module.infantryCombatEnhancer") !== false
-      && core.pluginSubscriptions?.isSubscribed?.("module.infantryCombatEnhancer") !== false;
+      && core.pluginSubscriptions?.isSubscribed?.("module.infantryCombatEnhancer") !== false
+      && modules?.pluginSubscriptions?.isSubscribed?.(COMBAT_CLEAN_SUBSCRIPTION_ID) !== false
+      && core.pluginSubscriptions?.isSubscribed?.(COMBAT_CLEAN_SUBSCRIPTION_ID) !== false;
   }
 
   return {
@@ -449,7 +433,7 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
         hiddenFromSidebar: true,
       });
 
-      if (!isEnabled()) {
+      if (!isEnabled() || !isSubscribed()) {
         moduleLogger?.info?.("InfantryCombatEnhancer started in disabled mode.");
         return;
       }

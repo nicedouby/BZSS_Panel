@@ -300,6 +300,8 @@
   },
   combat: {
     combatClean: "Combat Manager (Processed)",
+    upstreamDependency: "Dependency Module",
+    upstreamDependencyHint: "Open Combat Manager (Processed) to inspect upstream input",
     killManage: "Kill Manage",
     kills: "Kills",
     downs: "Downs",
