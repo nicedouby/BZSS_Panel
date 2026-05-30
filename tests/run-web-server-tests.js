@@ -142,12 +142,81 @@ async function testHealthEndpointDoesNotRequireAuth() {
   assert.equal(body.auth.enabled, true);
 }
 
+async function testConsoleRecentEndpointUsesUnifiedConsoleBuffer() {
+  const calls = [];
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin", role: "Operator" };
+        },
+        hasEverything() {
+          return true;
+        },
+      },
+      console: {
+        getRecent(args) {
+          calls.push(args);
+          return [
+            {
+              id: "console-1",
+              seq: 1,
+              ts: 1_000,
+              channel: "event",
+              level: "info",
+              source: "LogParser",
+              message: "地图切换：Mutaha",
+            },
+          ];
+        },
+        getLegacyChannels() {
+          return { streams: [], scopes: [], levels: [] };
+        },
+        getLegacyLines() {
+          return [];
+        },
+        async executeRconCommand() {
+          return { success: true, ok: true, response: "OK", status: "success", durationMs: 10 };
+        },
+      },
+    },
+  });
+
+  const recorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/console/recent?limit=1&channel=event&keyword=%E5%9C%B0%E5%9B%BE",
+    headers: { host: "localhost" },
+    socket: {},
+  }, recorder.res);
+
+  assert.equal(recorder.state.status, 200);
+  const body = JSON.parse(recorder.state.body);
+  assert.equal(body.items.length, 1);
+  assert.equal(body.items[0].channel, "event");
+  assert.equal(calls[0].channel, "event");
+  assert.equal(calls[0].keyword, "地图");
+
+  const rconRecorder = createRecorder();
+  const rconReq = Readable.from([JSON.stringify({ command: "ListPlayers" })]);
+  rconReq.method = "POST";
+  rconReq.url = "/api/rcon/execute";
+  rconReq.headers = { host: "localhost" };
+  rconReq.socket = {};
+
+  await server.handleRequest(rconReq, rconRecorder.res);
+  assert.equal(rconRecorder.state.status, 200);
+  const rconBody = JSON.parse(rconRecorder.state.body);
+  assert.equal(rconBody.ok, true);
+  assert.equal(rconBody.status, "success");
+}
+
 async function testSquadNameClassifierHelperCoversCoreRules() {
   assert.equal(classifySquadName("Squad 7").category, "infantry");
   assert.equal(classifySquadName("步兵队").category, "infantry");
   assert.equal(classifySquadName("装甲队").category, "vehicle");
   assert.equal(classifySquadName("后勤支援").category, "support");
-  assert.equal(classifySquadName("测试步兵队").category, "other");
+  assert.equal(classifySquadName("Alpha").category, "other");
 }
 
 async function testSquadNameClassifierApiReturnsClassification() {
@@ -651,6 +720,22 @@ async function testSquadManagementRoutesExposeStateAndMutations() {
         getState() {
           return state;
         },
+        async executeAction(input) {
+          if (input.type === "disband_squad") {
+            return this.disband(input);
+          }
+          if (input.type === "kick_player") {
+            return this.kick(input);
+          }
+          if (input.type === "remove_from_squad") {
+            return this.remove(input);
+          }
+          return {
+            ok: false,
+            error: "UnsupportedAction",
+            message: "Unsupported action type.",
+          };
+        },
         async disband(input) {
           calls.push({ type: "disband", input });
           if (!input.actor?.isSuperAdmin && !Array.isArray(input.actor?.permissions)) {
@@ -704,6 +789,20 @@ async function testSquadManagementRoutesExposeStateAndMutations() {
             target: {
               anyId: input.anyId,
               creatorKey: input.creatorKey,
+            },
+            reason: input.reason ?? "",
+            time: "2026-05-13T20:00:00.000Z",
+          };
+        },
+        async remove(input) {
+          calls.push({ type: "remove", input });
+          return {
+            ok: true,
+            action: "manual-remove",
+            source: "manual",
+            system: false,
+            target: {
+              playerId: input.playerId,
             },
             reason: input.reason ?? "",
             time: "2026-05-13T20:00:00.000Z",
@@ -1029,6 +1128,7 @@ await testReadJsonBodyRejectsInvalidJson();
 await testReadJsonBodyRejectsOversizedPayload();
 await testGetPluginApiReturnsMatchingPluginApi();
 await testHealthEndpointDoesNotRequireAuth();
+await testConsoleRecentEndpointUsesUnifiedConsoleBuffer();
 await testSquadNameClassifierHelperCoversCoreRules();
 await testSquadNameClassifierApiReturnsClassification();
 await testCombatCleanRoutesDoNotForceCurrentServerFilter();

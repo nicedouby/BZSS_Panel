@@ -1,34 +1,26 @@
 <template>
-  <div class="rcon-card">
-    <div class="rcon-header">
-      <div>
-        <div class="rcon-title">RCON</div>
-        <div class="rcon-subtitle">{{ t("console.rconCommandPlaceholder") }}</div>
-      </div>
-    </div>
-    <div class="rcon-input-group">
-      <div class="input-prefix">></div>
-      <input
-        ref="inputRef"
-        v-model="command"
-        type="text"
-        class="rcon-input"
-        :placeholder="t('console.rconCommandPlaceholder')"
-        :disabled="executing"
-        @keydown.enter="execute"
-        @keydown.up.prevent="historyUp"
-        @keydown.down.prevent="historyDown"
-      />
-      <button
-        type="button"
-        class="rcon-button"
-        :disabled="executing || !command.trim()"
-        @click="execute"
-      >
-        <span v-if="executing" class="spinner"></span>
-        {{ executing ? t("console.rconExecuting") : t("console.rconExecute") }}
-      </button>
-    </div>
+  <div class="rcon-input-group">
+    <div class="input-prefix">></div>
+    <input
+      ref="inputRef"
+      v-model="command"
+      type="text"
+      class="rcon-input"
+      :placeholder="t('console.rconCommandPlaceholder')"
+      :disabled="executing"
+      @keydown.enter="execute"
+      @keydown.up.prevent="historyUp"
+      @keydown.down.prevent="historyDown"
+    />
+    <button
+      type="button"
+      class="rcon-button"
+      :disabled="executing || !command.trim()"
+      @click="execute"
+    >
+      <span v-if="executing" class="spinner"></span>
+      {{ executing ? t("console.rconExecuting") : t("console.rconExecute") }}
+    </button>
   </div>
 </template>
 
@@ -65,12 +57,11 @@ async function execute() {
   historyIndex.value = -1;
 
   try {
-    const result = await apiPost<{ success?: boolean; ok?: boolean; response: string }>("/api/console/rcon", {
+    const result = await apiPost<{ ok: true; response: string }>("/api/console/rcon", {
       command: cmd,
     });
-
-    const success = Boolean(result?.success ?? result?.ok);
-    if (success) {
+    
+    if (result.ok) {
       ui.pushToast({ message: t("console.rconExecuted"), tone: "ok" });
       command.value = "";
     } else {
@@ -106,39 +97,14 @@ function historyDown() {
 </script>
 
 <style scoped>
-.rcon-card {
-  display: grid;
-  gap: 10px;
-}
-
-.rcon-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: end;
-  gap: 12px;
-}
-
-.rcon-title {
-  color: #e6edf3;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
-.rcon-subtitle {
-  color: #7d8894;
-  font-size: 11px;
-  margin-top: 2px;
-}
-
 .rcon-input-group {
   display: flex;
   align-items: center;
   gap: 12px;
-  background: rgba(13, 17, 23, 0.96);
-  border: 1px solid rgba(95, 111, 128, 0.28);
-  border-radius: 14px;
-  padding: 8px 10px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 4px 8px;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
@@ -158,7 +124,7 @@ function historyDown() {
   flex: 1;
   background: transparent;
   border: none;
-  color: #e6edf3;
+  color: #c9d1d9;
   padding: 8px 0;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 14px;

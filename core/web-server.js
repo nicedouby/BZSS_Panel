@@ -3,6 +3,7 @@
 import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
+import crypto from "node:crypto";
 import { handleSquadManagementRoutes } from "../modules/squad-management/routes.js";
 import { handleTeamBalanceRoutes } from "../modules/team-balance/routes.js";
 import { classifySquadName, getSquadNameClassifierRules } from "./squad-name-classifier.js";
@@ -31,6 +32,8 @@ export class WebServer {
     this.server = null;
     this.jobs = new Map();
     this.jobCounter = 0;
+    this.consoleConnections = new Set();
+    this.consoleSubscription = null;
   }
 
   async start() {
@@ -55,6 +58,22 @@ export class WebServer {
         });
       });
     });
+
+    this.server.on("upgrade", (req, socket, head) => {
+      this.handleUpgrade(req, socket, head).catch((error) => {
+        this.logger.warn(`WebSocket upgrade rejected: ${error?.message ?? error}`);
+        try {
+          socket.destroy();
+        } catch {}
+      });
+    });
+
+    if (this.core.console?.subscribe) {
+      this.consoleSubscription = this.core.console.subscribe((entry) => {
+        this.broadcastConsoleEntry(entry);
+      });
+    }
+
     await new Promise((resolve) => {
       this.server.listen(this.port, this.host, resolve);
     });
@@ -64,6 +83,20 @@ export class WebServer {
 
   async stop() {
     if (!this.server) return;
+
+    if (typeof this.consoleSubscription === "function") {
+      try {
+        this.consoleSubscription();
+      } catch {}
+      this.consoleSubscription = null;
+    }
+
+    for (const client of this.consoleConnections) {
+      try {
+        client.socket.end();
+      } catch {}
+    }
+    this.consoleConnections.clear();
 
     await new Promise((resolve) => this.server.close(resolve));
     this.server = null;
@@ -820,14 +853,14 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/console/channels") {
-      return this.json(res, 200, this.modules.console.getChannels({
+      return this.json(res, 200, this.getConsoleChannels({
         stream: url.searchParams.get("stream") ?? "modules",
       }));
     }
 
     if (url.pathname === "/api/console/lines") {
       return this.json(res, 200, {
-        lines: this.modules.console.getLines({
+        lines: this.getConsoleLines({
           stream: url.searchParams.get("stream") ?? "modules",
           scope: url.searchParams.get("scope") ?? "all",
           level: url.searchParams.get("level") ?? "all",
@@ -838,10 +871,31 @@ export class WebServer {
       });
     }
 
+    if (url.pathname === "/api/console/recent") {
+      return this.json(res, 200, {
+        items: this.core.console?.getRecent?.({
+          limit: url.searchParams.get("limit") ?? "500",
+          channel: url.searchParams.get("channel") ?? "",
+          level: url.searchParams.get("level") ?? "",
+          source: url.searchParams.get("source") ?? "",
+          keyword: url.searchParams.get("keyword") ?? "",
+        }) ?? [],
+      });
+    }
+
+    if (url.pathname === "/api/rcon/execute" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const body = await this.readJsonBody(req);
+      const result = await this.executeConsoleRconCommand(body.command, {
+        requestedBy: "web.console",
+      });
+      return this.json(res, 200, result);
+    }
+
     if (url.pathname === "/api/console/rcon" && req.method === "POST") {
       if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
-      const result = await this.modules.console.executeRconCommand(body.command, {
+      const result = await this.executeConsoleRconCommand(body.command, {
         requestedBy: "web.console",
       });
       return this.json(res, 200, result);
@@ -1592,6 +1646,232 @@ export class WebServer {
     return req.socket?.remoteAddress ?? "";
   }
 
+  async handleUpgrade(req, socket, head) {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    if (url.pathname !== "/ws/console") {
+      return this.rejectUpgrade(socket, 404, "Not Found");
+    }
+
+    const user = this.core.authManager?.getUserFromRequest(req);
+    if (!user) {
+      return this.rejectUpgrade(socket, 401, "Authentication required.");
+    }
+
+    const key = String(req.headers["sec-websocket-key"] ?? "").trim();
+    if (!key) {
+      return this.rejectUpgrade(socket, 400, "Missing WebSocket key.");
+    }
+
+    const acceptKey = crypto
+      .createHash("sha1")
+      .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
+      .digest("base64");
+
+    socket.write(
+      [
+        "HTTP/1.1 101 Switching Protocols",
+        "Upgrade: websocket",
+        "Connection: Upgrade",
+        `Sec-WebSocket-Accept: ${acceptKey}`,
+        "",
+        "",
+      ].join("\r\n"),
+    );
+
+    const client = {
+      socket,
+      buffer: Buffer.alloc(0),
+      user,
+    };
+
+    this.consoleConnections.add(client);
+
+    socket.on("data", (chunk) => {
+      this.handleWebSocketData(client, chunk);
+    });
+
+    socket.on("close", () => {
+      this.consoleConnections.delete(client);
+    });
+
+    socket.on("error", () => {
+      this.consoleConnections.delete(client);
+    });
+
+    if (head && head.length) {
+      this.handleWebSocketData(client, head);
+    }
+  }
+
+  rejectUpgrade(socket, statusCode, message) {
+    const body = Buffer.from(String(message ?? ""), "utf8");
+    socket.end(
+      Buffer.concat([
+        Buffer.from(
+          [
+            `HTTP/1.1 ${statusCode} ${statusText(statusCode)}`,
+            "Connection: close",
+            "Content-Type: text/plain; charset=utf-8",
+            `Content-Length: ${body.length}`,
+            "",
+            "",
+          ].join("\r\n"),
+          "utf8",
+        ),
+        body,
+      ]),
+    );
+  }
+
+  handleWebSocketData(client, chunk) {
+    client.buffer = Buffer.concat([client.buffer, chunk]);
+
+    while (client.buffer.length >= 2) {
+      const first = client.buffer[0];
+      const second = client.buffer[1];
+      const opcode = first & 0x0f;
+      const masked = (second & 0x80) !== 0;
+      let payloadLength = second & 0x7f;
+      let offset = 2;
+
+      if (payloadLength === 126) {
+        if (client.buffer.length < offset + 2) return;
+        payloadLength = client.buffer.readUInt16BE(offset);
+        offset += 2;
+      } else if (payloadLength === 127) {
+        if (client.buffer.length < offset + 8) return;
+        const lengthBig = client.buffer.readBigUInt64BE(offset);
+        if (lengthBig > BigInt(Number.MAX_SAFE_INTEGER)) {
+          this.closeWebSocketClient(client);
+          return;
+        }
+        payloadLength = Number(lengthBig);
+        offset += 8;
+      }
+
+      let mask;
+      if (masked) {
+        if (client.buffer.length < offset + 4) return;
+        mask = client.buffer.subarray(offset, offset + 4);
+        offset += 4;
+      }
+
+      if (client.buffer.length < offset + payloadLength) {
+        return;
+      }
+
+      const payload = client.buffer.subarray(offset, offset + payloadLength);
+      client.buffer = client.buffer.subarray(offset + payloadLength);
+
+      if (masked && mask) {
+        for (let i = 0; i < payload.length; i += 1) {
+          payload[i] ^= mask[i % 4];
+        }
+      }
+
+      if (opcode === 0x8) {
+        this.closeWebSocketClient(client);
+        return;
+      }
+
+      if (opcode === 0x9) {
+        this.sendWebSocketFrame(client.socket, Buffer.alloc(0), 0xA);
+      }
+    }
+  }
+
+  closeWebSocketClient(client) {
+    this.consoleConnections.delete(client);
+    try {
+      this.sendWebSocketFrame(client.socket, Buffer.alloc(0), 0x8);
+    } catch {}
+    try {
+      client.socket.end();
+    } catch {}
+  }
+
+  broadcastConsoleEntry(entry) {
+    if (!this.consoleConnections.size) return;
+    const payload = Buffer.from(JSON.stringify(entry), "utf8");
+
+    for (const client of [...this.consoleConnections]) {
+      try {
+        this.sendWebSocketFrame(client.socket, payload, 0x1);
+      } catch {
+        this.consoleConnections.delete(client);
+      }
+    }
+  }
+
+  sendWebSocketFrame(socket, payload, opcode = 0x1) {
+    const body = Buffer.isBuffer(payload) ? payload : Buffer.from(payload);
+    const length = body.length;
+
+    let header;
+    if (length < 126) {
+      header = Buffer.alloc(2);
+      header[1] = length;
+    } else if (length < 65536) {
+      header = Buffer.alloc(4);
+      header[1] = 126;
+      header.writeUInt16BE(length, 2);
+    } else {
+      header = Buffer.alloc(10);
+      header[1] = 127;
+      header.writeBigUInt64BE(BigInt(length), 2);
+    }
+
+    header[0] = 0x80 | (opcode & 0x0f);
+    socket.write(Buffer.concat([header, body]));
+  }
+
+  getConsoleChannels(options = {}) {
+    if (this.core.console?.getLegacyChannels) {
+      return this.core.console.getLegacyChannels(options);
+    }
+
+    if (this.modules.console?.getChannels) {
+      return this.modules.console.getChannels(options);
+    }
+
+    return {
+      streams: [],
+      scopes: [],
+      levels: [],
+    };
+  }
+
+  getConsoleLines(options = {}) {
+    if (this.core.console?.getLegacyLines) {
+      return this.core.console.getLegacyLines(options);
+    }
+
+    if (this.modules.console?.getLines) {
+      return this.modules.console.getLines(options);
+    }
+
+    return [];
+  }
+
+  executeConsoleRconCommand(command, meta = {}) {
+    if (this.core.console?.executeRconCommand) {
+      return this.core.console.executeRconCommand(command, meta);
+    }
+
+    if (this.modules.console?.executeRconCommand) {
+      return this.modules.console.executeRconCommand(command, meta);
+    }
+
+    return {
+      success: false,
+      ok: false,
+      message: "Console service unavailable.",
+      response: "",
+      status: "failed",
+      durationMs: 0,
+    };
+  }
+
   canManagePlugins(user) {
     if (this.core.authManager?.hasEverything?.(user)) return true;
     const permissions = user?.permissions ?? user?.permission ?? [];
@@ -1678,6 +1958,21 @@ function createHttpError(statusCode, code, message) {
   error.statusCode = statusCode;
   error.code = code;
   return error;
+}
+
+function statusText(code) {
+  switch (code) {
+    case 400:
+      return "Bad Request";
+    case 401:
+      return "Unauthorized";
+    case 403:
+      return "Forbidden";
+    case 404:
+      return "Not Found";
+    default:
+      return "Error";
+  }
 }
 
 function parseOptionalBoolean(value) {

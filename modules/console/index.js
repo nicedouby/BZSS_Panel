@@ -28,27 +28,6 @@ export function createConsoleModule({ core, config }) {
   const store = new RingLogStore(maxLines);
   const unsubscribers = [];
 
-  function getHiddenScopeIds() {
-    const ids = new Set([
-      "module.squadDisband",
-      "module.squadKick",
-      "module.squadRemove",
-    ]);
-
-    for (const instance of core.moduleManager?.instances ?? []) {
-      if (!instance?.manifest) continue;
-      if (!instance.manifest.hidden && !instance.manifest.deprecated) continue;
-      const id = String(instance.manifest.id ?? "").trim();
-      if (id) ids.add(id);
-    }
-
-    return ids;
-  }
-
-  function shouldHideScope(scope) {
-    return getHiddenScopeIds().has(String(scope ?? "").trim());
-  }
-
   function push(line) {
     return store.push({
       time: line.time || new Date().toISOString(),
@@ -71,9 +50,7 @@ export function createConsoleModule({ core, config }) {
   const api = {
     getChannels(options = {}) {
       const stream = String(options.stream ?? "modules");
-      const observedScopes = (stream === "raw-log" ? store.getObservedSubjects(stream) : store.getObservedScopes(stream))
-        .filter((id) => id && !shouldHideScope(id))
-        .map((id) => ({ id, title: id }));
+      const observedScopes = store.getObservedScopes(stream).map((id) => ({ id, title: id }));
 
       return {
         streams: DEFAULT_STREAMS.map((item) => ({ ...item })),
@@ -405,7 +382,6 @@ class RingLogStore {
     this.size = 0;
     this.seq = 0;
     this.observedScopesByStream = new Map();
-    this.observedSubjectsByStream = new Map();
   }
 
   push(line) {
@@ -429,14 +405,6 @@ class RingLogStore {
       this.observedScopesByStream.get(item.stream).add(item.scope);
     }
 
-    const subject = item.source || item.moduleId || item.scope;
-    if (subject) {
-      if (!this.observedSubjectsByStream.has(item.stream)) {
-        this.observedSubjectsByStream.set(item.stream, new Set());
-      }
-      this.observedSubjectsByStream.get(item.stream).add(subject);
-    }
-
     return item;
   }
 
@@ -449,7 +417,7 @@ class RingLogStore {
       if (!item) continue;
       if (afterSeq > 0 && item.seq <= afterSeq) continue;
       if (stream !== "all" && item.stream !== stream) continue;
-      if (scope !== "all" && !matchesScope(item, scope, stream)) continue;
+      if (scope !== "all" && item.scope !== scope) continue;
       if (level !== "all" && item.level !== level) continue;
       if (queryText && !item.searchText.includes(queryText)) continue;
 
@@ -464,10 +432,6 @@ class RingLogStore {
 
   getObservedScopes(stream = "modules") {
     return [...(this.observedScopesByStream.get(stream) ?? new Set())].sort();
-  }
-
-  getObservedSubjects(stream = "modules") {
-    return [...(this.observedSubjectsByStream.get(stream) ?? new Set())].sort();
   }
 
   *iterOldestToNewest() {
@@ -501,21 +465,4 @@ function buildSearchText(item) {
 function stripSearchText(item) {
   const { searchText, ...rest } = item;
   return rest;
-}
-
-function matchesScope(item, scope, stream) {
-  const value = String(scope ?? "").trim();
-  if (!value) return true;
-
-  if (String(item.scope ?? "") === value) return true;
-  if (String(item.source ?? "") === value) return true;
-  if (String(item.moduleId ?? "") === value) return true;
-
-  if (stream === "raw-log") {
-    if (String(item.rawSource ?? "") === value) return true;
-    if (String(item.rawChannel ?? "") === value) return true;
-    if (String(item.channel ?? "") === value) return true;
-  }
-
-  return false;
 }

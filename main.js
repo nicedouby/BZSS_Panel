@@ -29,6 +29,7 @@
 import { ConfigManager } from "./core/config-manager.js";
 import { Logger } from "./core/logger.js";
 import { EventBus } from "./core/event-bus.js";
+import { ConsoleService } from "./core/console-service.js";
 import { WebRegistry } from "./core/web-registry.js";
 import { WebStatus } from "./core/web-status.js";
 import { RconManager } from "./core/rcon-manager.js";
@@ -79,6 +80,10 @@ async function main() {
     logger: logger.child({ moduleId: "core.runtimeState", source: "core.runtimeState" }),
   });
 
+  const consoleService = new ConsoleService({
+    maxEntries: configManager.get("console.maxEntries", 5000),
+  });
+
   const rconManager = new RconManager({
     config: configManager.get("rcon", {}),
     logger: logger.child({ moduleId: "core.rconManager", source: "core.rconManager" }),
@@ -110,9 +115,12 @@ async function main() {
     webRegistry,
     webStatus,
     runtimeState,
+    console: consoleService,
     rconManager,
     authManager,
   };
+
+  consoleService.attachCore(coreContext);
 
   const moduleManager = new ModuleManager({
     core: coreContext,
