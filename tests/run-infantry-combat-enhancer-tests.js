@@ -121,6 +121,101 @@ async function testProcessingAndWarnings() {
   await module.stop();
 }
 
+async function testTagDrivenMessages() {
+  const { module, eventBus, calls } = createHarness({
+    moduleConfig: {
+      showKillDisplay: true,
+    },
+  });
+  await module.start();
+
+  const emit = async (record) => {
+    await eventBus.emitModuleEvent("module.combatClean", "combat.record.processed", { record });
+  };
+
+  await emit({
+    id: "combat-damage-enemy",
+    serverId: "S1",
+    type: "damage",
+    time: "2026-05-30T12:10:00.000Z",
+    attackerName: "Attacker",
+    attackerSteam64ID: "111",
+    victimName: "Victim",
+    victimSteam64ID: "222",
+    damage: 60,
+    weaponName: "XX",
+    tags: ["combat.damage", "weapon.small_arm", "damage.direct"],
+  });
+  assert.equal(calls.at(-2).message, "[BZSS]你被Attacker使用XX造成60伤害");
+  assert.equal(calls.at(-1).message, "[BZSS]你使用XX对Victim造成60伤害");
+
+  await emit({
+    id: "combat-damage-friendly",
+    serverId: "S1",
+    type: "damage",
+    time: "2026-05-30T12:10:01.000Z",
+    attackerName: "Attacker",
+    attackerSteam64ID: "111",
+    victimName: "Victim",
+    victimSteam64ID: "222",
+    damage: 60,
+    weaponName: "XX",
+    tags: ["combat.team_damage", "friendly_fire", "combat.damage", "weapon.small_arm", "damage.direct"],
+  });
+  assert.equal(calls.at(-2).message, "[BZSS]你被<友军>Attacker使用XX造成60伤害");
+  assert.equal(calls.at(-1).message, "[BZSS]你他妈的使用XX对<友军>Victim，造成60伤害");
+
+  await emit({
+    id: "combat-wound-friendly",
+    serverId: "S1",
+    type: "wound",
+    time: "2026-05-30T12:10:02.000Z",
+    attackerName: "Attacker",
+    attackerSteam64ID: "111",
+    victimName: "Victim",
+    victimSteam64ID: "222",
+    damage: 60,
+    weaponName: "XX",
+    tags: ["combat.team_wound", "friendly_fire", "combat.wound", "weapon.small_arm"],
+  });
+  assert.equal(calls.at(-2).message, "[BZSS]你被<友军>Attacker使用XX击倒，造成60伤害");
+  assert.equal(calls.at(-1).message, "[BZSS]你他妈的使用XX击倒<友军>Victim，造成60伤害");
+
+  await emit({
+    id: "combat-kill-enemy",
+    serverId: "S1",
+    type: "kill",
+    time: "2026-05-30T12:10:03.000Z",
+    attackerName: "Attacker",
+    attackerSteam64ID: "111",
+    victimName: "Victim",
+    victimSteam64ID: "222",
+    damage: 300,
+    weaponName: "XX",
+    tags: ["combat.kill", "weapon.small_arm"],
+  });
+  assert.equal(calls.at(-2).message, "[BZSS]你被Attacker击杀了");
+  assert.equal(calls.at(-1).message, "[BZSS]你击杀了Victim");
+
+  await emit({
+    id: "combat-kill-friendly",
+    serverId: "S1",
+    type: "kill",
+    time: "2026-05-30T12:10:04.000Z",
+    attackerName: "Attacker",
+    attackerSteam64ID: "111",
+    victimName: "Victim",
+    victimSteam64ID: "222",
+    damage: 300,
+    weaponName: "XX",
+    tags: ["combat.team_kill", "friendly_fire", "combat.kill", "weapon.small_arm"],
+  });
+  assert.equal(calls.at(-2).message, "[BZSS]你被<友军>Attacker击杀了");
+  assert.equal(calls.at(-1).message, "[BZSS]你他妈的杀了<友军>Victim");
+
+  await module.stop();
+}
+
 async function testSamePlayerStillDisplays() {
   const { module, eventBus, calls } = createHarness();
   await module.start();
@@ -178,6 +273,7 @@ async function testKillDisplayIsDisabledByDefault() {
 
   assert.equal(calls.length, 1);
   assert.equal(calls[0].targetName, "Target");
+  assert.equal(calls[0].message, "[BZSS]你被Killer击杀了");
   const events = module.api.getEvents({ limit: 10 });
   assert.equal(events.length, 1);
   assert.equal(events[0].victimWarning.success, true);
@@ -203,6 +299,7 @@ async function testCombatCleanDependencyGate() {
 }
 
 await testProcessingAndWarnings();
+await testTagDrivenMessages();
 await testSamePlayerStillDisplays();
 await testKillDisplayIsDisabledByDefault();
 await testCombatCleanDependencyGate();

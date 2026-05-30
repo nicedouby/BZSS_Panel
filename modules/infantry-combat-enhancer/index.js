@@ -272,14 +272,22 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
   function buildVictimMessage(entry) {
     const damageText = Number.isFinite(entry.damage) ? `${trimTrailingZeros(entry.damage)}` : "unknown";
     const weaponText = entry.weapon || "unknown weapon";
+    const friendlyFire = isFriendlyFireEntry(entry);
+    const attackerName = friendlyFire ? `<友军>${entry.attacker.name || "the attacker"}` : (entry.attacker.name || "the attacker");
     if (entry.type === "damage") {
-      return `You took ${damageText} damage from ${weaponText}.`;
+      return friendlyFire
+        ? `[BZSS]你被${attackerName}使用${weaponText}造成${damageText}伤害`
+        : `[BZSS]你被${attackerName}使用${weaponText}造成${damageText}伤害`;
     }
     if (entry.type === "wound") {
-      return `You were downed by ${weaponText}.`;
+      return friendlyFire
+        ? `[BZSS]你被${attackerName}使用${weaponText}击倒，造成${damageText}伤害`
+        : `[BZSS]你被${attackerName}使用${weaponText}击倒，造成${damageText}伤害`;
     }
     if (entry.type === "kill") {
-      return `You were killed by ${weaponText}.`;
+      return friendlyFire
+        ? `[BZSS]你被${attackerName}击杀了`
+        : `[BZSS]你被${attackerName}击杀了`;
     }
     return "Combat event processed.";
   }
@@ -287,16 +295,40 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
   function buildAttackerMessage(entry) {
     const damageText = Number.isFinite(entry.damage) ? `${trimTrailingZeros(entry.damage)}` : "unknown";
     const victimName = entry.victim.name || "the target";
+    const friendlyFire = isFriendlyFireEntry(entry);
+    const friendlyVictimName = friendlyFire ? `<友军>${victimName}` : victimName;
     if (entry.type === "damage") {
-      return `You dealt ${damageText} damage to ${victimName}.`;
+      return friendlyFire
+        ? `[BZSS]你他妈的使用${entry.weapon || "unknown weapon"}对${friendlyVictimName}，造成${damageText}伤害`
+        : `[BZSS]你使用${entry.weapon || "unknown weapon"}对${friendlyVictimName}造成${damageText}伤害`;
     }
     if (entry.type === "wound") {
-      return `You downed ${victimName}.`;
+      return friendlyFire
+        ? `[BZSS]你他妈的使用${entry.weapon || "unknown weapon"}击倒${friendlyVictimName}，造成${damageText}伤害`
+        : `[BZSS]你使用${entry.weapon || "unknown weapon"}击倒${friendlyVictimName}，造成${damageText}伤害`;
     }
     if (entry.type === "kill") {
-      return `You killed ${victimName}.`;
+      return friendlyFire
+        ? `[BZSS]你他妈的杀了${friendlyVictimName}`
+        : `[BZSS]你击杀了${friendlyVictimName}`;
     }
     return "Combat event processed.";
+  }
+
+  function isFriendlyFireEntry(entry) {
+    if (entry?.relation?.isFriendlyFire) return true;
+
+    const tags = Array.isArray(entry?.tags) ? entry.tags.map((tag) => normalizeText(tag)) : [];
+    if (tags.includes("combat.team_damage") || tags.includes("combat.team_wound") || tags.includes("combat.team_kill") || tags.includes("friendly_fire")) {
+      return true;
+    }
+
+    const flags = Array.isArray(entry?.eventFlags) ? entry.eventFlags : [];
+    return flags.some((flag) => {
+      const key = normalizeText(flag?.key);
+      const label = normalizeText(flag?.label);
+      return key === "friendly_fire" || key === "tk_down" || label === "友伤" || label === "tk击倒" || label === "友军击杀";
+    });
   }
 
   function extractIdentity(record, side) {
