@@ -74,6 +74,34 @@
         </div>
       </article>
     </div>
+
+    <section class="match-xm-log-panel">
+      <header class="match-xm-log-header">
+        <div class="match-xm-log-title">醒目标志日志</div>
+        <div class="match-xm-log-subtitle">仅显示消息开头包含 /xm 的内容</div>
+      </header>
+
+      <div class="match-xm-log-list">
+        <div v-if="xmMessages.length === 0" class="match-xm-log-empty">
+          暂无 /xm 日志
+        </div>
+
+        <article
+          v-for="entry in xmMessages"
+          :key="`xm-${entry.id}`"
+          class="match-xm-log-row"
+        >
+          <div class="match-xm-log-row-head">
+            <span class="match-chat-time">{{ formatTime(entry) }}</span>
+            <span class="match-chat-channel">[{{ channelLabels[entry.channel] }}]</span>
+            <span class="match-chat-player" :title="playerTooltip(entry)">
+              {{ displayPlayer(entry) }}
+            </span>
+          </div>
+          <div class="match-xm-log-message">{{ extractXmMessage(entry.message) }}</div>
+        </article>
+      </div>
+    </section>
   </aside>
 </template>
 
@@ -109,6 +137,7 @@ interface SocketEnvelope {
 }
 
 const MAX_MESSAGES = 300;
+const MAX_XM_MESSAGES = 120;
 
 const auth = useAuthStore();
 const listRef = ref<HTMLElement | null>(null);
@@ -164,6 +193,11 @@ const channelCounts = computed<Record<ChatChannel, number>>(() => {
 
 const visibleMessages = computed(() => {
   return messages.value.filter((message) => enabledChannels[message.channel] !== false);
+});
+
+const xmMessages = computed(() => {
+  const flagged = messages.value.filter((message) => extractXmMessage(message.message) !== null);
+  return flagged.slice(-MAX_XM_MESSAGES);
 });
 
 const statusText = computed(() => {
@@ -477,6 +511,16 @@ function formatTime(message: ChatMessageEvent): string {
   }).format(new Date(message.timestamp));
 }
 
+function extractXmMessage(text: string): string | null {
+  const trimmed = String(text ?? "").trimStart();
+  if (!trimmed.toLowerCase().startsWith("/xm")) {
+    return null;
+  }
+
+  const content = trimmed.slice(3).trimStart();
+  return content || "(空内容)";
+}
+
 function scrollToBottom() {
   const el = listRef.value;
   if (!el) return;
@@ -766,6 +810,82 @@ function buildWebSocketUrl(path: string) {
 
 .match-chat-row.channel-unknown .match-chat-channel {
   color: #cbd5e1;
+}
+
+.match-xm-log-panel {
+  flex: 0 0 170px;
+  height: 170px;
+  min-height: 170px;
+  max-height: 170px;
+  border-top: 1px solid rgba(130, 154, 180, 0.16);
+  background: rgba(7, 11, 16, 0.72);
+  display: flex;
+  flex-direction: column;
+}
+
+.match-xm-log-header {
+  flex: 0 0 auto;
+  padding: 8px 10px 6px;
+  border-bottom: 1px solid rgba(130, 154, 180, 0.12);
+  display: grid;
+  gap: 2px;
+}
+
+.match-xm-log-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #fef08a;
+  text-transform: uppercase;
+}
+
+.match-xm-log-subtitle {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.match-xm-log-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 10px 10px;
+  display: grid;
+  gap: 7px;
+  align-content: start;
+}
+
+.match-xm-log-empty {
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px dashed rgba(250, 204, 21, 0.28);
+  color: rgba(254, 240, 138, 0.9);
+  font-size: 12px;
+  text-align: center;
+}
+
+.match-xm-log-row {
+  display: grid;
+  gap: 5px;
+  padding: 7px 9px;
+  border-radius: 10px;
+  border: 1px solid rgba(250, 204, 21, 0.24);
+  background: rgba(250, 204, 21, 0.08);
+}
+
+.match-xm-log-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: baseline;
+}
+
+.match-xm-log-message {
+  min-width: 0;
+  color: #fef3c7;
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-word;
+  white-space: pre-wrap;
 }
 
 @media (max-width: 1180px) {
