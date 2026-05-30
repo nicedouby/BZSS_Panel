@@ -155,6 +155,8 @@
     streamRawLog: "Raw Log",
     streamRconNative: "RCON Native",
     streamFilter: "View",
+    moduleFilter: "Module filter",
+    advancedFilters: "Advanced filters",
     scopeFilter: "Scope",
     levelFilter: "Level",
     activeFilters: "Active filters",

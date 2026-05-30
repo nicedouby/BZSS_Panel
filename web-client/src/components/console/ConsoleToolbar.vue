@@ -28,6 +28,27 @@
         </div>
       </label>
 
+      <div class="stream-field">
+        <div class="field-row">
+          <span class="field-label">{{ t("console.moduleFilter") }}</span>
+          <button type="button" class="text-toggle" @click="$emit('toggle-advanced')">
+            {{ advancedOpen ? t("common.collapse") : t("console.advancedFilters") }}
+          </button>
+        </div>
+        <div class="stream-select-wrap">
+          <select
+            class="stream-select"
+            :value="stream"
+            :aria-label="t('console.moduleFilter')"
+            @change="$emit('update:stream', readValue($event))"
+          >
+            <option v-for="item in streams" :key="item.id" :value="item.id">
+              {{ item.title }}
+            </option>
+          </select>
+        </div>
+      </div>
+
       <div class="toolbar-actions">
         <button
           type="button"
@@ -46,65 +67,47 @@
       </div>
     </div>
 
-    <div v-if="hasSummary" class="toolbar-summary">
-      <span class="summary-label">{{ t("console.activeFilters") }}</span>
-      <span class="summary-pill">{{ streamTitle }}</span>
-      <span class="summary-pill">{{ scopeTitle }}</span>
-      <span class="summary-pill">{{ levelTitle }}</span>
-      <span v-if="q" class="summary-pill">{{ q }}</span>
-    </div>
+    <div v-if="advancedOpen || hasSummary" class="toolbar-advanced">
+      <div class="advanced-grid">
+        <div class="toolbar-chip-group">
+          <div class="chip-group-label">{{ t("console.scopeFilter") }}</div>
+          <div class="stream-select-wrap">
+            <select
+              class="stream-select"
+              :value="scope"
+              :aria-label="t('console.scopeFilter')"
+              @change="$emit('update:scope', readValue($event))"
+            >
+              <option v-for="item in scopes" :key="item.id" :value="item.id">
+                {{ item.title }}
+              </option>
+            </select>
+          </div>
+        </div>
 
-    <div class="toolbar-grid">
-      <div class="toolbar-chip-group">
-        <div class="chip-group-label">{{ t("console.streamFilter") }}</div>
-        <div class="chip-strip">
-          <button
-            v-for="item in streams"
-            :key="item.id"
-            type="button"
-            class="filter-chip"
-            :class="{ active: stream === item.id }"
-            :aria-pressed="stream === item.id"
-            @click="$emit('update:stream', item.id)"
-          >
-            {{ item.title }}
-          </button>
+        <div class="toolbar-chip-group">
+          <div class="chip-group-label">{{ t("console.levelFilter") }}</div>
+          <div class="stream-select-wrap">
+            <select
+              class="stream-select"
+              :value="level"
+              :aria-label="t('console.levelFilter')"
+              @change="$emit('update:level', readValue($event))"
+            >
+              <option v-for="item in levels" :key="item.id" :value="item.id">
+                {{ item.title }}
+              </option>
+            </select>
+          </div>
         </div>
       </div>
 
-      <div class="toolbar-chip-group">
-        <div class="chip-group-label">{{ t("console.scopeFilter") }}</div>
-        <div class="chip-strip">
-          <button
-            v-for="item in scopes"
-            :key="item.id"
-            type="button"
-            class="filter-chip"
-            :class="{ active: scope === item.id }"
-            :aria-pressed="scope === item.id"
-            :title="item.title"
-            @click="$emit('update:scope', item.id)"
-          >
-            {{ item.title }}
-          </button>
-        </div>
-      </div>
-
-      <div class="toolbar-chip-group">
-        <div class="chip-group-label">{{ t("console.levelFilter") }}</div>
-        <div class="chip-strip">
-          <button
-            v-for="item in levels"
-            :key="item.id"
-            type="button"
-            class="filter-chip"
-            :class="{ active: level === item.id }"
-            :aria-pressed="level === item.id"
-            @click="$emit('update:level', item.id)"
-          >
-            {{ item.title }}
-          </button>
-        </div>
+      <div v-if="hasSummary" class="toolbar-summary">
+        <span class="summary-label">{{ t("console.activeFilters") }}</span>
+        <span class="summary-pill">{{ streamTitle }}</span>
+        <span class="summary-pill">{{ scopeTitle }}</span>
+        <span class="summary-pill">{{ levelTitle }}</span>
+        <span v-if="q" class="summary-pill">{{ q }}</span>
       </div>
     </div>
   </div>
@@ -121,6 +124,7 @@ const props = defineProps<{
   q: string;
   paused: boolean;
   hasActiveFilters: boolean;
+  advancedOpen: boolean;
   streams: Array<{ id: string; title: string }>;
   scopes: Array<{ id: string; title: string }>;
   levels: Array<{ id: string; title: string }>;
@@ -132,6 +136,7 @@ const emit = defineEmits<{
   (event: "update:level", value: string): void;
   (event: "update:q", value: string): void;
   (event: "toggle-paused"): void;
+  (event: "toggle-advanced"): void;
   (event: "clear"): void;
   (event: "reset-filters"): void;
 }>();
@@ -172,18 +177,18 @@ defineExpose({
 }
 
 .toolbar-primary-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(220px, 0.8fr) auto;
   gap: 12px;
   align-items: end;
-  justify-content: space-between;
-  flex-wrap: wrap;
 }
 
-.search-field {
+.search-field,
+.stream-field,
+.toolbar-chip-group {
   display: grid;
-  gap: 6px;
-  flex: 1 1 360px;
-  min-width: 260px;
+  gap: 5px;
+  min-width: 0;
 }
 
 .field-row {
@@ -196,15 +201,32 @@ defineExpose({
 .field-label,
 .chip-group-label {
   font-size: 11px;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #8b949e;
 }
 
-.field-hint {
+.field-hint,
+.text-toggle {
   font-size: 11px;
   color: #6e7681;
   white-space: nowrap;
+}
+
+.text-toggle {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.search-box,
+.stream-select {
+  border: 1px solid rgba(95, 111, 128, 0.34);
+  background: rgba(10, 14, 20, 0.94);
+  border-radius: 12px;
+  min-height: 36px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 
 .search-box {
@@ -213,12 +235,10 @@ defineExpose({
   gap: 8px;
   min-width: 0;
   padding: 0 10px 0 12px;
-  border: 1px solid #30363d;
-  background: #0d1117;
-  border-radius: 10px;
 }
 
-.search-box:focus-within {
+.search-box:focus-within,
+.stream-select:focus {
   border-color: #58a6ff;
   box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.18);
 }
@@ -229,7 +249,7 @@ defineExpose({
   border: 0;
   outline: none;
   background: transparent;
-  color: #c9d1d9;
+  color: #e6edf3;
   padding: 10px 0;
   font-size: 13px;
 }
@@ -253,10 +273,6 @@ defineExpose({
   cursor: pointer;
 }
 
-.ghost-icon-button:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
 .toolbar-actions {
   display: inline-flex;
   align-items: center;
@@ -265,6 +281,7 @@ defineExpose({
 }
 
 .action-button {
+  min-height: 36px;
   border: 1px solid #30363d;
   background: #161b22;
   color: #c9d1d9;
@@ -285,19 +302,60 @@ defineExpose({
 }
 
 .action-button.subtle {
-  color: #8b949e;
+  color: #b2bcc6;
+  background: rgba(17, 22, 28, 0.92);
 }
 
-.toolbar-chip-group {
+.toolbar-advanced {
   display: grid;
-  gap: 6px;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(95, 111, 128, 0.22);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.stream-select-wrap {
+  position: relative;
   min-width: 0;
 }
 
-.toolbar-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 10px;
+.stream-select-wrap::after {
+  content: "";
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid #7d8894;
+  border-bottom: 1.5px solid #7d8894;
+  transform: translateY(calc(-50% - 2px)) rotate(45deg);
+  pointer-events: none;
+}
+
+.stream-select {
+  width: 100%;
+  min-width: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  color: #e6edf3;
+  padding: 7px 36px 7px 12px;
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: pointer;
+  outline: none;
+}
+
+.stream-select option {
+  background: #0d1117;
+  color: #e6edf3;
 }
 
 .toolbar-summary {
@@ -305,10 +363,6 @@ defineExpose({
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  padding: 10px 12px;
-  border: 1px solid #30363d;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.02);
 }
 
 .summary-label {
@@ -324,9 +378,9 @@ defineExpose({
   align-items: center;
   border: 1px solid rgba(88, 166, 255, 0.35);
   background: rgba(88, 166, 255, 0.08);
-  color: #c9d1d9;
+  color: #dfe8f0;
   border-radius: 999px;
-  padding: 6px 10px;
+  padding: 5px 10px;
   font-size: 12px;
   max-width: 100%;
   overflow: hidden;
@@ -334,37 +388,18 @@ defineExpose({
   white-space: nowrap;
 }
 
-.chip-strip {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-  min-width: 0;
-}
+@media (max-width: 920px) {
+  .toolbar-primary-row,
+  .advanced-grid {
+    grid-template-columns: 1fr;
+  }
 
-.filter-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #30363d;
-  background: rgba(255, 255, 255, 0.03);
-  color: #c9d1d9;
-  border-radius: 999px;
-  padding: 7px 12px;
-  font-size: 12px;
-  line-height: 1;
-  cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
+  .toolbar-actions {
+    width: 100%;
+  }
 
-.filter-chip:hover {
-  border-color: #58a6ff;
-  background: rgba(88, 166, 255, 0.1);
-}
-
-.filter-chip.active {
-  border-color: #58a6ff;
-  background: rgba(88, 166, 255, 0.16);
-  color: #f0f6fc;
+  .action-button {
+    flex: 1 1 auto;
+  }
 }
 </style>

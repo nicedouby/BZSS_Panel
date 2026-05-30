@@ -154,6 +154,8 @@
     streamRawLog: "原生日志",
     streamRconNative: "RCON 原始通信",
     streamFilter: "视图",
+    moduleFilter: "模块筛选",
+    advancedFilters: "高级筛选",
     scopeFilter: "范围",
     levelFilter: "等级",
     activeFilters: "当前筛选",

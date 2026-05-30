@@ -770,72 +770,111 @@ class SteamGameDurationService {
       "--timeout", String(timeoutSeconds),
     ];
 
-    return new Promise((resolve, reject) => {
-      const child = spawn(this.pythonBin, args, {
-        cwd: process.cwd(),
-        windowsHide: true,
-        stdio: ["ignore", "pipe", "pipe"],
-      });
+    const candidates = collectPythonBinCandidates(this.pythonBin);
+    const startFailures = [];
 
-      let stdout = "";
-      let stderr = "";
-      let settled = false;
+    for (const candidate of candidates) {
+      try {
+        // Try the configured interpreter first, then common Windows fallbacks.
+        return await new Promise((resolve, reject) => {
+          const child = spawn(candidate, args, {
+            cwd: process.cwd(),
+            windowsHide: true,
+            stdio: ["ignore", "pipe", "pipe"],
+          });
 
-      const timer = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        try {
-          child.kill("SIGTERM");
-        } catch {}
-        reject(new Error(`Python Steam lookup timed out after ${timeoutMs}ms.`));
-      }, timeoutMs);
+          let stdout = "";
+          let stderr = "";
+          let settled = false;
 
-      child.stdout.on("data", (chunk) => {
-        stdout += chunk?.toString?.() || "";
-      });
-      child.stderr.on("data", (chunk) => {
-        stderr += chunk?.toString?.() || "";
-      });
-      child.on("error", (error) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        reject(new Error(`Failed to start python process: ${error.message}`));
-      });
-      child.on("close", (code) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
+          const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            try {
+              child.kill("SIGTERM");
+            } catch {}
+            reject(new Error(`Python Steam lookup timed out after ${timeoutMs}ms.`));
+          }, timeoutMs);
 
-        const text = String(stdout || "").trim();
-        const lastLine = text.split(/\r?\n/u).filter(Boolean).pop() || "";
-        let payload = null;
-        try {
-          payload = JSON.parse(lastLine || "{}");
-        } catch {
-          payload = null;
-        }
+          child.stdout.on("data", (chunk) => {
+            stdout += chunk?.toString?.() || "";
+          });
+          child.stderr.on("data", (chunk) => {
+            stderr += chunk?.toString?.() || "";
+          });
+          child.on("error", (error) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            error.message = `Failed to start python process (${candidate}): ${error.message}`;
+            reject(error);
+          });
+          child.on("close", (code) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
 
-        if (!payload || typeof payload !== "object") {
-          const stderrText = String(stderr || "").trim();
-          reject(new Error(`Python lookup returned invalid output${stderrText ? `: ${stderrText}` : ""}`));
-          return;
-        }
+            const text = String(stdout || "").trim();
+            const lastLine = text.split(/\r?\n/u).filter(Boolean).pop() || "";
+            let payload = null;
+            try {
+              payload = JSON.parse(lastLine || "{}");
+            } catch {
+              payload = null;
+            }
+
+            if (!payload || typeof payload !== "object") {
+              const stderrText = String(stderr || "").trim();
+              reject(new Error(`Python lookup returned invalid output${stderrText ? `: ${stderrText}` : ""}`));
+              return;
+            }
 
         if (code !== 0 || payload.error) {
-          reject(new Error(String(payload.error || `Python lookup failed with exit code ${code}`)));
-          return;
-        }
+          const stderrText = String(stderr || "").trim();
+          if (code === 9009) {
+            reject(Object.assign(new Error(`Python candidate "${candidate}" is not executable in this environment.`), {
+              retryable: true,
+              candidate,
+              code,
+              stderr: stderrText,
+            }));
+            return;
+          }
+          reject(new Error([
+            String(payload.error || `Python lookup failed with exit code ${code}`),
+            stderrText ? `stderr: ${stderrText}` : "",
+          ].filter(Boolean).join(" | ")));
+              return;
+            }
 
-        resolve(buildLookupResult({
-          steamID: normalizeSteamID(payload.steamID || steamID),
-          appId: Number(payload.appId) || this.appId,
-          gameName: String(payload.gameName || "Squad"),
-          gameSeconds: Number(payload.gameSeconds || 0),
-          found: Boolean(payload.found),
-        }));
-      });
-    });
+            resolve(buildLookupResult({
+              steamID: normalizeSteamID(payload.steamID || steamID),
+              appId: Number(payload.appId) || this.appId,
+              gameName: String(payload.gameName || "Squad"),
+              gameSeconds: Number(payload.gameSeconds || 0),
+              found: Boolean(payload.found),
+            }));
+          });
+        });
+      } catch (error) {
+        const message = String(error?.message || "");
+        const retryable = Boolean(error?.retryable) || /Failed to start python process/i.test(message) || /ENOENT/i.test(message) || Number(error?.code) === 9009;
+        if (!retryable) {
+          throw error;
+        }
+        startFailures.push({
+          candidate,
+          message,
+          code: error?.code ?? null,
+        });
+      }
+    }
+
+    const tried = candidates.length ? candidates.join(", ") : this.pythonBin;
+    const details = startFailures.length
+      ? `; failures: ${startFailures.map((item) => `${item.candidate}${item.code != null ? `(${item.code})` : ""}: ${item.message}`).join(" | ")}`
+      : "";
+    throw new Error(`Failed to start python process after trying: ${tried}${details}`);
   }
 
   async _fetchSteamDurationFromApi(steamID) {
@@ -1279,4 +1318,19 @@ function summarizeJobResult(result) {
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function collectPythonBinCandidates(primary) {
+  const values = [primary, "python", "py", "python3"];
+  const seen = new Set();
+  const result = [];
+
+  for (const value of values) {
+    const candidate = String(value || "").trim();
+    if (!candidate || seen.has(candidate)) continue;
+    seen.add(candidate);
+    result.push(candidate);
+  }
+
+  return result;
 }

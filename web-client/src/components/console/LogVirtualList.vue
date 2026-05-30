@@ -1,10 +1,16 @@
 <template>
   <div class="log-container">
+    <div class="log-header">
+      <span class="log-header-cell seq">#</span>
+      <span class="log-header-cell time">{{ t("common.lastUpdated") }}</span>
+      <span class="log-header-cell scope">{{ t("common.source") }}</span>
+      <span class="log-header-cell body">Message</span>
+    </div>
     <RecycleScroller
       ref="scrollerRef"
       class="scroller"
       :items="lines"
-      :item-size="32"
+      :item-size="36"
       key-field="seq"
       v-slot="{ item }"
     >
@@ -79,7 +85,25 @@ function safeClass(value: unknown) {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: #0d1117;
+  background: rgba(11, 15, 20, 0.72);
+}
+
+.log-header {
+  display: grid;
+  grid-template-columns: 72px 110px minmax(180px, 240px) minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(95, 111, 128, 0.18);
+  background: rgba(16, 20, 26, 0.94);
+  color: #7d8894;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.log-header-cell {
+  min-width: 0;
 }
 
 .scroller {
@@ -88,34 +112,33 @@ function safeClass(value: unknown) {
 }
 
 .log-line {
-  height: 32px;
-  max-height: 32px;
-  padding: 0 12px;
-  border-bottom: 1px solid #1a2128;
-  display: flex;
-  gap: 8px;
+  height: 36px;
+  max-height: 36px;
+  padding: 0 16px;
+  border-bottom: 1px solid rgba(95, 111, 128, 0.12);
+  display: grid;
+  grid-template-columns: 72px 110px minmax(180px, 240px) minmax(0, 1fr);
+  gap: 10px;
   align-items: center;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   overflow: hidden;
 }
 
 .line-meta {
-  display: flex;
-  gap: 8px;
+  display: contents;
   color: #6a7680;
   font-size: 11px;
   white-space: nowrap;
-  flex-shrink: 0;
 }
 
 .line-meta .seq {
-  color: #444c56;
-  width: 40px;
+  color: #7f8b96;
 }
 
 .line-meta .level {
   text-transform: uppercase;
   font-weight: bold;
+  justify-self: end;
 }
 
 .line-body {
@@ -131,6 +154,10 @@ function safeClass(value: unknown) {
   color: #58a6ff;
   margin-right: 4px;
   font-weight: bold;
+}
+
+.log-line:hover {
+  background: rgba(88, 166, 255, 0.04);
 }
 
 .level-error .line-body {
@@ -151,5 +178,16 @@ function safeClass(value: unknown) {
 
 .level-debug .line-body {
   color: #8b949e;
+}
+
+@media (max-width: 820px) {
+  .log-header {
+    display: none;
+  }
+
+  .log-line {
+    grid-template-columns: 54px 88px minmax(100px, 180px) minmax(0, 1fr);
+    padding: 0 12px;
+  }
 }
 </style>
