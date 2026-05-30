@@ -148,6 +148,10 @@ export function createAdminWarnModule({ core, config, logger }) {
       }
     },
 
+    async sendAdminWarn(req) {
+      return api.warnPlayer(req);
+    },
+
     getRecent(filter = {}) {
       return memoryStore.query(filter);
     },

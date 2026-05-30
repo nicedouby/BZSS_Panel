@@ -49,6 +49,7 @@ const groups = computed(() => {
         { path: "/combat-clean", icon: "CC", label: t("nav.combatClean") },
         { path: "/kill-manage", icon: "KM", label: t("nav.killManage") },
         { path: "/admin-warns", icon: "AW", label: t("nav.adminWarns") },
+        { path: "/plugins/infantry-combat-enhancer", icon: "IE", label: t("nav.infantryCombatEnhancer") },
       ],
     },
   ];

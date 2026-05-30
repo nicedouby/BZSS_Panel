@@ -6,6 +6,7 @@ import PlayerDatabasePage from "../pages/PlayerDatabasePage.vue";
 import CombatCleanPage from "../pages/CombatCleanPage.vue";
 import KillManagePage from "../pages/KillManagePage.vue";
 import AdminWarnsPage from "../pages/AdminWarnsPage.vue";
+import InfantryCombatEnhancerPage from "../pages/InfantryCombatEnhancerPage.vue";
 import GroupReportPage from "../pages/GroupReportPage.vue";
 import SquadManagementPage from "../pages/SquadManagementPage.vue";
 import UdpEventForwarderPage from "../pages/UdpEventForwarderPage.vue";
@@ -34,6 +35,7 @@ export const router = createRouter({
     { path: "/combat-clean", component: CombatCleanPage, meta: { titleKey: "routeTitle.combatClean" } },
     { path: "/kill-manage", component: KillManagePage, meta: { titleKey: "routeTitle.killManage" } },
     { path: "/admin-warns", component: AdminWarnsPage, meta: { titleKey: "routeTitle.adminWarns" } },
+    { path: "/plugins/infantry-combat-enhancer", component: InfantryCombatEnhancerPage, meta: { titleKey: "routeTitle.infantryCombatEnhancer" } },
     { path: "/plugins/group-report", component: GroupReportPage, meta: { title: "抱团报备", fullBleed: true } },
     { path: "/squad-management", component: SquadManagementPage, meta: { titleKey: "routeTitle.squadManagement", fullBleed: true } },
     { path: "/plugin-subscriptions", component: () => import("../pages/PluginSubscriptionsPage.vue"), meta: { titleKey: "routeTitle.pluginSubscriptions", fullBleed: true } },

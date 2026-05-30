@@ -1025,10 +1025,54 @@ export class WebServer {
         });
       }
 
-      if (url.pathname === "/api/combat-clean/clear" && req.method === "POST") {
+    if (url.pathname === "/api/combat-clean/clear" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const body = await this.readJsonBody(req);
+      return this.json(res, 200, combatClean.clear(body.serverId ?? serverId));
+    }
+  }
+
+    if (url.pathname.startsWith("/api/plugins/infantry-combat-enhancer")) {
+      const infantryCombatEnhancer = this.modules.infantryCombatEnhancer;
+      if (!infantryCombatEnhancer) {
+        return this.json(res, 404, {
+          error: "InfantryCombatEnhancerUnavailable",
+          message: "Infantry combat enhancer module is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/infantry-combat-enhancer/config" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          config: infantryCombatEnhancer.getConfig?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/infantry-combat-enhancer/config" && req.method === "POST") {
         if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
-        return this.json(res, 200, combatClean.clear(body.serverId ?? serverId));
+        return this.json(res, 200, {
+          ok: true,
+          config: await infantryCombatEnhancer.updateConfig?.(body ?? {}),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/infantry-combat-enhancer/events" && req.method === "GET") {
+        return this.json(res, 200, {
+          events: infantryCombatEnhancer.getEvents?.({
+            serverId: url.searchParams.get("serverId") ?? "",
+            type: url.searchParams.get("type") ?? "all",
+            search: url.searchParams.get("search") ?? "",
+            limit: url.searchParams.get("limit") ?? "100",
+            offset: url.searchParams.get("offset") ?? "0",
+          }) ?? [],
+          overview: infantryCombatEnhancer.getOverview?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/infantry-combat-enhancer/clear" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, infantryCombatEnhancer.clear?.() ?? { ok: true, cleared: 0 });
       }
     }
 
