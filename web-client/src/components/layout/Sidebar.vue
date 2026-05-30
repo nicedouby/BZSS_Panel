@@ -66,7 +66,6 @@ const groups = computed(() => {
 
   for (const page of apiPages.value) {
     if (!page.enabled || page.hiddenFromSidebar) continue;
-    if (page.id === "web.matchStatus" || page.route === "/match-status") continue;
     
     const item = {
       path: page.route,

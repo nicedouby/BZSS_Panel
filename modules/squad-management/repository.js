@@ -31,19 +31,6 @@ export function createSquadManagementRepository({ config, logger } = {}) {
       const shape = await ensureTableShape(database);
       const row = normalizeRecord(record);
 
-      if (row.kind === "squad_created") {
-        logger?.warn?.("[SquadManagementRepository] squad_created inserts are disabled in this phase.", {
-          operation: "squadManagementRepository.squadCreatedInsertSkipped",
-          data: {
-            serverId: row.serverId,
-            matchId: row.matchId,
-            squadId: row.squadId,
-            squadName: row.squadName,
-          },
-        });
-        return row;
-      }
-
       const columns = [];
       const values = [];
       appendColumn(columns, values, "record_key", row.recordKey);

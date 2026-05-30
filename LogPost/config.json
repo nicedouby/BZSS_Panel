@@ -1,6 +1,6 @@
 {
   "server_id": "BZSS_Main",
-  "log_file": "Z:\\Users\\Administrator\\Desktop\\bzss_sq_server\\SquadGame\\Saved\\Logs\\SquadGame.log",
+  "log_file": "Z:\\Users\\12703\\Desktop\\squad_server\\SquadGame\\Saved\\Logs\\SquadGame.log",
   "output_dir": "./LogPost",
   "poll_interval_ms": 200,
   "tail": {

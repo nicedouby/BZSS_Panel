@@ -64,8 +64,6 @@ export class RconManager {
       lastError: "",
       lastPlayersRefresh: "",
       lastSquadsRefresh: "",
-      lastSquadsError: "",
-      lastSquadsErrorAt: "",
     };
 
     this.refreshInFlight = {
@@ -447,11 +445,7 @@ export class RconManager {
       }
 
       const squads = await this.squadRcon.getSquads();
-      const refreshedAt = new Date().toISOString();
-      this.status.lastError = "";
-      this.status.lastSquadsRefresh = refreshedAt;
-      this.status.lastSquadsError = "";
-      this.status.lastSquadsErrorAt = "";
+      this.status.lastSquadsRefresh = new Date().toISOString();
       this.webStatus.set("squadCount", squads.length);
       this.logger.debug(() => `ListSquads refreshed (${squads.length})`, {
         operation: "refreshSquads",
@@ -460,51 +454,18 @@ export class RconManager {
         },
       });
 
-      this.eventBus.emitCoreEvent("RUNTIME_SQUADS_UPDATED", {
-        eventId: `runtime:squads:${Date.now()}`,
-        eventName: "RUNTIME_SQUADS_UPDATED",
+      this.eventBus.emitCoreEvent("RCON_LIST_SQUADS_UPDATED", {
+        eventId: `rcon:listSquads:${Date.now()}`,
+        eventName: "RCON_LIST_SQUADS_UPDATED",
         layer: "core",
         source: "core.rconManager",
         serverId: this.webStatus.serverId,
-        time: refreshedAt,
+        time: new Date().toISOString(),
         params: [],
-        version: 1,
-        sourceKind: "rcon:listSquads",
-        ok: true,
-        error: null,
         squads,
-        flatSquads: squads,
       });
 
       return squads;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error?.message ?? error ?? "ListSquads failed.");
-      const failedAt = new Date().toISOString();
-      this.status.lastError = message;
-      this.status.lastSquadsError = message;
-      this.status.lastSquadsErrorAt = failedAt;
-      this.logger.warn(`ListSquads failed: ${message}`, {
-        operation: "refreshSquads",
-        data: {
-          error: message,
-        },
-      });
-
-      this.eventBus.emitCoreEvent("RUNTIME_SQUADS_REFRESH_FAILED", {
-        eventId: `runtime:squads:failed:${Date.now()}`,
-        eventName: "RUNTIME_SQUADS_REFRESH_FAILED",
-        layer: "core",
-        source: "core.rconManager",
-        serverId: this.webStatus.serverId,
-        time: failedAt,
-        params: [],
-        version: 1,
-        sourceKind: "rcon:listSquads",
-        ok: false,
-        error: message,
-      });
-
-      return [];
     } finally {
       this.refreshInFlight.squads = false;
     }

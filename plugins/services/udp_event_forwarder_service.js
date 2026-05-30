@@ -471,7 +471,7 @@ export class UdpEventForwarderService {
       subscribeEvent(this.eventBus, "core", "On_RawLogLine", (event) => this.forwardMapChanged(event, "On_RawLogLine")),
       subscribeEvent(this.eventBus, "core", "RCON_MATCH_STATE_UPDATED", (event) => this.onMatchStateUpdated(event, "RCON_MATCH_STATE_UPDATED")),
       subscribeEvent(this.eventBus, "core", "RCON_LIST_PLAYERS_UPDATED", (event) => this.onMatchStateUpdated(event, "RCON_LIST_PLAYERS_UPDATED")),
-      subscribeEvent(this.eventBus, "core", "RUNTIME_SQUADS_UPDATED", (event) => this.onMatchStateUpdated(event, "RUNTIME_SQUADS_UPDATED")),
+      subscribeEvent(this.eventBus, "core", "RCON_LIST_SQUADS_UPDATED", (event) => this.onMatchStateUpdated(event, "RCON_LIST_SQUADS_UPDATED")),
       subscribeEvent(this.eventBus, "module", { moduleId: "module.matchState", name: "updated" }, (event) => this.onMatchStateUpdated(event, "module.matchState.updated")),
       subscribeEvent(this.eventBus, "module", { moduleId: "module.matchState", name: "roundUpdated" }, (event) => this.forwardMapChanged(event, "module.matchState.roundUpdated")),
       subscribeEvent(this.eventBus, "module", { moduleId: "module.chatManager", name: "CHAT_RECEIVED" }, (event) => this.forwardChat(event, "module.chatManager.CHAT_RECEIVED")),

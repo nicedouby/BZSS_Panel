@@ -113,8 +113,7 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
     },
 
     async addSquadCreated(record = {}) {
-      // Legacy compatibility hook, intentionally disabled.
-      return null;
+      return repo.addSquadCreated(record);
     },
   };
 

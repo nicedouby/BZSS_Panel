@@ -1,6 +1,6 @@
 // -*- coding: utf-8 -*-
 
-export const CONSOLE_CHANNELS = ["raw_log", "event", "rcon", "plugin", "module", "web", "app", "system"];
+export const CONSOLE_CHANNELS = ["raw_log", "event", "rcon", "plugin", "system"];
 
 export const CONSOLE_LEVELS = ["debug", "info", "warn", "error"];
 

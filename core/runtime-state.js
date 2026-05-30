@@ -45,17 +45,8 @@ export class RuntimeState {
       this.updatePlayers(event?.players ?? []);
     }));
 
-    this.unsubscribers.push(eventBus.onCoreEvent("RUNTIME_SQUADS_UPDATED", (event) => {
-      this.updateSquadsSnapshot(event);
-    }));
-
-    this.unsubscribers.push(eventBus.onCoreEvent("RUNTIME_SQUADS_REFRESH_FAILED", (event) => {
-      this.updateSquadsSnapshot(event);
-    }));
-
-    // Backward compatibility for older emitters; the canonical event is RUNTIME_SQUADS_UPDATED.
     this.unsubscribers.push(eventBus.onCoreEvent("RCON_LIST_SQUADS_UPDATED", (event) => {
-      this.updateSquadsSnapshot(event);
+      this.updateSquads(event?.squads ?? []);
     }));
 
     this.unsubscribers.push(eventBus.onCoreEvent("*", (event) => {
@@ -64,11 +55,9 @@ export class RuntimeState {
       if (String(event?.eventName ?? "") === "round.world_bring_up") this.recordEvent("round", event);
     }));
 
-    if (typeof eventBus.onModuleEvent === "function") {
-      this.unsubscribers.push(eventBus.onModuleEvent("module.combatClean", "*", (event) => {
-        this.recordEvent("combat", event);
-      }));
-    }
+    this.unsubscribers.push(eventBus.onModuleEvent("module.combatClean", "*", (event) => {
+      this.recordEvent("combat", event);
+    }));
   }
 
   stop() {
@@ -117,10 +106,23 @@ export class RuntimeState {
     this.deriveTeams();
   }
 
-  updateSquadsSnapshot(input = []) {
-    const current = this.state.squads;
-    const normalized = normalizeSquadSnapshot(input, current);
-    this.state.squads = normalized;
+  updateSquads(squads = []) {
+    const list = normalizeSquads(squads);
+    const next = makeSquadsState();
+    next.list = list;
+    next.updatedAt = Date.now();
+    next.stale = false;
+
+    for (const squad of list) {
+      if (squad.key) next.byKey[squad.key] = squad;
+      if (squad.teamID != null) {
+        const teamKey = String(squad.teamID);
+        if (!next.byTeamID[teamKey]) next.byTeamID[teamKey] = [];
+        next.byTeamID[teamKey].push(squad);
+      }
+    }
+
+    this.state.squads = next;
     this.deriveTeams();
   }
 
@@ -214,7 +216,7 @@ export class RuntimeState {
   }
 
   deriveTeams() {
-    this.state.teams = deriveTeams(this.state.players.active, this.state.squads.flatSquads ?? this.state.squads.list);
+    this.state.teams = deriveTeams(this.state.players.active, this.state.squads.list);
   }
 }
 
@@ -233,21 +235,11 @@ function makePlayersState() {
 
 function makeSquadsState() {
   return {
-    version: 1,
-    serverId: "",
-    updatedAt: 0,
-    lastSuccessAt: 0,
-    lastFailureAt: 0,
-    source: "rcon:listSquads",
-    ok: false,
-    error: null,
-    teams: [],
-    flatSquads: [],
     list: [],
     byKey: {},
     byTeamID: {},
+    updatedAt: 0,
     stale: false,
-    count: 0,
   };
 }
 
@@ -268,115 +260,13 @@ function normalizeSquads(squads) {
   return (Array.isArray(squads) ? squads : []).map((squad) => {
     const teamID = numberOrNull(squad?.teamID);
     const squadID = numberOrNull(squad?.squadID);
-    const squadName = String(squad?.squadName ?? squad?.name ?? "").trim();
-    const creatorName = String(squad?.creatorName ?? "").trim();
-    const creatorSteamId = String(squad?.creatorSteamId ?? squad?.creatorSteamID ?? "").trim();
-    const creatorEosId = String(squad?.creatorEosId ?? squad?.creatorEOSID ?? "").trim();
     return {
       ...cloneJsonSafe(squad),
-      teamId: teamID,
       teamID,
-      squadId: squadID,
       squadID,
-      name: squadName,
-      squadName,
-      leaderName: String(squad?.leaderName ?? creatorName).trim(),
-      leaderSteamId: String(squad?.leaderSteamId ?? creatorSteamId).trim(),
-      leaderEosId: String(squad?.leaderEosId ?? creatorEosId).trim(),
-      creatorName,
-      creatorSteamId,
-      creatorEosId,
       key: teamID != null && squadID != null ? `${teamID}:${squadID}` : "",
     };
   });
-}
-
-function normalizeSquadSnapshot(input, current = makeSquadsState()) {
-  const now = Date.now();
-  const currentSnapshot = cloneJsonSafe(current) ?? makeSquadsState();
-  const event = Array.isArray(input) ? { squads: input } : (input ?? {});
-  const ok = event.ok !== false;
-  const source = String(event.sourceKind ?? event.source ?? currentSnapshot.source ?? "rcon:listSquads").trim() || "rcon:listSquads";
-  const serverId = String(event.serverId ?? currentSnapshot.serverId ?? "").trim();
-  const updatedAt = toMillis(event.time ?? event.updatedAt) || now;
-
-  if (!ok) {
-    return {
-      ...currentSnapshot,
-      version: Number(event.version ?? currentSnapshot.version ?? 1) || 1,
-      serverId: serverId || currentSnapshot.serverId || "",
-      source,
-      ok: false,
-      error: normalizeErrorMessage(event.error ?? event.message ?? "ListSquads refresh failed."),
-      lastFailureAt: updatedAt,
-      stale: true,
-      updatedAt: currentSnapshot.updatedAt || updatedAt,
-    };
-  }
-
-  const flatSquads = normalizeSquads(event.flatSquads ?? event.squads ?? event.list ?? []);
-  const teams = normalizeSquadTeams(event.teams ?? flatSquads);
-  const byKey = {};
-  const byTeamID = {};
-
-  for (const squad of flatSquads) {
-    if (squad.key) byKey[squad.key] = squad;
-    if (squad.teamID != null) {
-      const teamKey = String(squad.teamID);
-      if (!byTeamID[teamKey]) byTeamID[teamKey] = [];
-      byTeamID[teamKey].push(squad);
-    }
-  }
-
-  return {
-    version: Number(event.version ?? currentSnapshot.version ?? 1) || 1,
-    serverId: serverId || currentSnapshot.serverId || "",
-    updatedAt,
-    lastSuccessAt: updatedAt,
-    lastFailureAt: Number(currentSnapshot.lastFailureAt ?? 0) || 0,
-    source,
-    ok: true,
-    error: null,
-    teams,
-    flatSquads,
-    list: [...flatSquads],
-    byKey,
-    byTeamID,
-    stale: false,
-    count: flatSquads.length,
-  };
-}
-
-function normalizeSquadTeams(teamsOrSquads) {
-  if (!Array.isArray(teamsOrSquads)) return [];
-
-  if (teamsOrSquads.length > 0 && typeof teamsOrSquads[0] === "object" && Array.isArray(teamsOrSquads[0].squads)) {
-    return teamsOrSquads.map((team) => ({
-      ...cloneJsonSafe(team),
-      teamID: numberOrNull(team?.teamID ?? team?.teamId),
-      teamName: String(team?.teamName ?? team?.name ?? "").trim(),
-      squads: normalizeSquads(team?.squads ?? []),
-    }));
-  }
-
-  const teamMap = new Map();
-  for (const squad of normalizeSquads(teamsOrSquads)) {
-    const teamID = squad.teamID;
-    const teamKey = teamID == null ? "unknown" : String(teamID);
-    if (!teamMap.has(teamKey)) {
-      teamMap.set(teamKey, {
-        teamID,
-        teamName: squad.teamName || (teamID == null ? "Unknown / Unassigned" : `Team ${teamID}`),
-        squads: [],
-      });
-    }
-    teamMap.get(teamKey).squads.push({
-      ...cloneJsonSafe(squad),
-      members: Array.isArray(squad.members) ? cloneJsonSafe(squad.members) : [],
-    });
-  }
-
-  return [...teamMap.values()];
 }
 
 function deriveTeams(players, squads) {
@@ -450,21 +340,6 @@ function numberOrNull(value) {
   if (value == null || value === "" || value === "N/A") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
-}
-
-function toMillis(value) {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Date.parse(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return 0;
-}
-
-function normalizeErrorMessage(value) {
-  if (value == null) return null;
-  const text = String(value).trim();
-  return text || null;
 }
 
 function cloneJsonSafe(value) {

@@ -63,34 +63,17 @@ export async function renderPage({ root, api, apiFetch, globalApi, taskManager }
           <div class="page-subtitle">查看模块日志、LogPost 原始日志输出和 RCON 原生收发。</div>
         </div>
         <div class="console-actions">
-          <div class="console-control console-control-view">
-            <span class="console-control-label">视图</span>
-            <div class="console-view-toggle" role="tablist" aria-label="控制台视图">
-              <button type="button" class="console-view-btn active" data-view="modules">模块日志</button>
-              <button type="button" class="console-view-btn" data-view="raw-log">Raw Log</button>
-              <button type="button" class="console-view-btn" data-view="rcon-native">RCON 原生</button>
-            </div>
+          <div class="console-view-toggle" role="tablist" aria-label="控制台视图">
+            <button type="button" class="console-view-btn active" data-view="modules">模块日志</button>
+            <button type="button" class="console-view-btn" data-view="raw-log">Raw Log</button>
+            <button type="button" class="console-view-btn" data-view="rcon-native">RCON 原生</button>
           </div>
-          <label class="console-control" for="scope-filter">
-            <span class="console-control-label">来源</span>
-            <select id="scope-filter" class="console-filter" aria-label="来源筛选"></select>
-          </label>
-          <label class="console-control" for="level-filter">
-            <span class="console-control-label">级别</span>
-            <select id="level-filter" class="console-filter" aria-label="级别筛选"></select>
-          </label>
-          <label class="console-control console-control-search" for="search">
-            <span class="console-control-label">关键字</span>
-            <input id="search" class="console-search" placeholder="${esc(VIEW_OPTIONS.modules.searchPlaceholder)}">
-          </label>
-          <div class="console-control console-control-actions">
-            <span class="console-control-label">操作</span>
-            <div class="console-button-row">
-              <button id="raw-output-toggle" type="button">Raw 输出: ...</button>
-              <button id="pause">暂停</button>
-              <button id="clear">清空视图</button>
-            </div>
-          </div>
+          <select id="scope-filter" class="console-filter" aria-label="来源筛选"></select>
+          <select id="level-filter" class="console-filter" aria-label="级别筛选"></select>
+          <input id="search" class="console-search" placeholder="${esc(VIEW_OPTIONS.modules.searchPlaceholder)}">
+          <button id="raw-output-toggle" type="button">Raw 输出: ...</button>
+          <button id="pause">暂停</button>
+          <button id="clear">清空视图</button>
         </div>
       </div>
 

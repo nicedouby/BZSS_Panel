@@ -54,11 +54,20 @@ export function createPlayerDbSyncModule({ core, modules, logger }) {
 
       unsubscribers.push(core.eventBus.onCoreEvent("On_SquadCreated", async (event) => {
         try {
-          await dbApi.upsertFromPresence({
+          const player = await dbApi.upsertFromPresence({
             name: getParam(event, "PlayerName"),
             steamID: getParam(event, "Steam64ID"),
             eosID: getParam(event, "EOSID"),
           });
+          
+          if (player && player.id) {
+            await dbApi.addSquadCreated({
+              playerId: player.id,
+              squadID: getParam(event, "SquadID") || null,
+              squadName: getParam(event, "SquadName") || null,
+              teamName: getParam(event, "FactionName") || null,
+            });
+          }
         } catch (error) {
            moduleLogger.error(`Failed to sync On_SquadCreated to DB: ${error.message}`);
         }
