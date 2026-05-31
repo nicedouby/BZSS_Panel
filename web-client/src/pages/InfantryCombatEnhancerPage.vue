@@ -80,7 +80,7 @@ const {
   isConfigSaving,
 } = useInfantryCombatEnhancer();
 
-const hasEvents = computed(() => visibleEvents.length > 0);
+const hasEvents = computed(() => visibleEvents.value.length > 0);
 
 function updateFilters(next: InfantryCombatFilters) {
   Object.assign(filters, next);

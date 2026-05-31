@@ -4,7 +4,6 @@
       <div>
         <p class="kicker">输出记录</p>
         <h2>事件流</h2>
-        <p class="subtitle">传统日志输出。详情放到右侧面板，列表只保留扫读所需信息。</p>
       </div>
       <div class="records-head-actions">
         <span class="head-chip">{{ events.length }} 条</span>
@@ -245,17 +244,6 @@ function formatDamage(value: unknown) {
   line-height: 1;
 }
 
-.subtitle {
-  margin: 1px 0 0;
-  color: #8fa2b3;
-  font-size: 9px;
-  line-height: 1.15;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: min(100%, 280px);
-}
-
 .records-head-actions {
   display: flex;
   flex-wrap: wrap;
@@ -436,34 +424,6 @@ function formatDamage(value: unknown) {
   background: rgba(248, 113, 113, 0.08);
 }
 
-.record-line-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: 8px;
-  min-width: 0;
-  width: 100%;
-  overflow: hidden;
-}
-
-.log-chain,
-.log-tail {
-  display: flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  gap: 3px;
-  min-width: 0;
-}
-
-.log-chain {
-  overflow: hidden;
-}
-
-.log-tail {
-  justify-self: end;
-  overflow: hidden;
-}
-
 .log-label {
   color: #8fa2b3;
   font-size: 9px;
@@ -617,10 +577,6 @@ function formatDamage(value: unknown) {
 
   .records-head-actions {
     justify-content: flex-start;
-  }
-
-  .subtitle {
-    max-width: 100%;
   }
 }
 </style>

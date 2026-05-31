@@ -223,7 +223,9 @@ function buildQueryFromFilters(filters: InfantryCombatFilters) {
     q: filters.q || undefined,
     limit: filters.limit !== INFANTRY_COMBAT_DEFAULT_FILTERS.limit ? String(filters.limit) : undefined,
     offset: filters.offset > 0 ? String(filters.offset) : undefined,
-    autoRefresh: filters.autoRefresh ? "1" : undefined,
+    autoRefresh: filters.autoRefresh === INFANTRY_COMBAT_DEFAULT_FILTERS.autoRefresh
+      ? undefined
+      : "0",
   };
 }
 

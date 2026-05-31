@@ -35,12 +35,11 @@ function decisionTitle(decision?: InfantryCombatWarningDecision | null) {
 function shortWarningText(value: string) {
   const text = String(value ?? "").trim();
   if (!text) return "无";
-  const normalized = text
-    .replace(/^已发送$/, "已发")
-    .replace(/^已跳过[:：]?\s*/, "跳过 ")
-    .replace(/^失败[:：]?\s*/, "失败 ");
-  if (normalized.length <= 18) return normalized;
-  return `${normalized.slice(0, 16)}…`;
+  if (text === "已发送") return "已发";
+  if (text.includes("跳过")) return "跳过";
+  if (text.includes("失败")) return "失败";
+  if (text.length <= 6) return text;
+  return `${text.slice(0, 6)}…`;
 }
 </script>
 
@@ -48,14 +47,15 @@ function shortWarningText(value: string) {
 .decision-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
-  padding: 3px 7px;
+  padding: 1px 5px;
   border-radius: 999px;
   border: 1px solid #2f3944;
   background: #11171d;
   color: #dbe2e8;
   max-width: 100%;
+  line-height: 1;
 }
 
 .decision-badge[data-tone="ok"] {
@@ -73,17 +73,15 @@ function shortWarningText(value: string) {
   background: rgba(248, 113, 113, 0.1);
 }
 
-.decision-badge strong {
-  font-size: 10px;
+.decision-badge strong,
+.decision-badge small {
+  font-size: 9px;
+  line-height: 1;
   white-space: nowrap;
 }
 
 .decision-badge small {
-  font-size: 10px;
   color: inherit;
-  opacity: 0.85;
-  line-height: 1.1;
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
