@@ -55,22 +55,9 @@ function buildPlayerSearchWhere(query) {
         WHERE pi.player_id = players.id
           AND pi.ip LIKE ?
       )
-      OR EXISTS (
-        SELECT 1
-        FROM squad_create_records scr
-        WHERE scr.player_id = players.id
-          AND (
-            CAST(scr.squad_id AS TEXT) LIKE ?
-            OR scr.squad_name LIKE ?
-            OR scr.team_name LIKE ?
-          )
-      )
     )`);
 
     params.push(
-      like,
-      like,
-      like,
       like,
       like,
       like,
@@ -220,18 +207,6 @@ export class PlayerRepository {
     }
   }
 
-  async addSquadCreated({ playerId = null, squadID = null, squadName = null, teamName = null } = {}) {
-    await this.db.run(
-      "INSERT INTO squad_create_records (player_id, squad_id, squad_name, team_name, created_at) VALUES (?, ?, ?, ?, ?)",
-      playerId,
-      squadID,
-      cleanText(squadName),
-      cleanText(teamName),
-      now(),
-    );
-    if (playerId) await this.incrementFields(playerId, { total_squad_created: 1 });
-  }
-
   async addLogEvent({ sourceEvent, eventName = null, rawLine = null, payload = {}, matchedPlayerName = null } = {}) {
     await this.db.run(
       "INSERT INTO log_events (source_event, event_name, raw_line, matched_player_name, created_at, payload_json) VALUES (?, ?, ?, ?, ?, ?)",
@@ -278,7 +253,7 @@ export class PlayerRepository {
       `SELECT players.id, players.current_name, players.steam_id, players.eos_id, players.current_ip,
               players.permission_group, players.game_seconds, players.server_seconds,
               players.commander_seconds, players.squad_leader_seconds, players.in_squad_seconds, players.warmup_seconds,
-              players.total_squad_created, players.updated_at
+              players.updated_at
        FROM players
        WHERE ${search.where}
        ORDER BY ${orderBy}
@@ -370,22 +345,6 @@ export class PlayerRepository {
     );
   }
 
-  async listPlayerSquadCreated(playerId, options = {}) {
-    const id = Number(playerId);
-    if (!Number.isFinite(id)) return [];
-    const { limit, offset } = this.normalizePaging(options);
-    return this.db.all(
-      `SELECT squad_id, squad_name, team_name, created_at
-       FROM squad_create_records
-       WHERE player_id = ?
-       ORDER BY created_at DESC, id DESC
-       LIMIT ? OFFSET ?`,
-      id,
-      limit,
-      offset,
-    );
-  }
-
   async getPlayerDetail(playerId) {
     const id = Number(playerId);
     if (!Number.isFinite(id)) return null;
@@ -393,17 +352,15 @@ export class PlayerRepository {
     const player = await this.getPlayerById(id);
     if (!player) return null;
 
-    const [aliases, ips, squadCreatedRows] = await Promise.all([
+    const [aliases, ips] = await Promise.all([
       this.listPlayerAliases(id, { limit: 12 }),
       this.listPlayerIps(id, { limit: 12 }),
-      this.listPlayerSquadCreated(id, { limit: 1 }),
     ]);
 
     return {
       player,
       aliases,
       ips,
-      squadCreated: squadCreatedRows[0] ?? null,
       summary: {
         gameSeconds: Number(player.game_seconds ?? 0),
         serverSeconds: Number(player.server_seconds ?? 0),

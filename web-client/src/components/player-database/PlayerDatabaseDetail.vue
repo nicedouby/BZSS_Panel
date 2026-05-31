@@ -75,26 +75,6 @@
             </div>
           </div>
 
-          <!-- Squad Records Card -->
-          <div class="detail-card">
-            <h3>{{ t("database.squadCreated") }}</h3>
-            <div v-if="detail.squadCreated" class="info-grid">
-              <div class="info-item">
-                <span class="info-label">Squad Name</span>
-                <strong class="info-value">{{ detail.squadCreated.squad_name || "--" }}</strong>
-              </div>
-              <div class="info-item">
-                <span class="info-label">Team</span>
-                <strong class="info-value">{{ detail.squadCreated.team_name || "--" }}</strong>
-              </div>
-              <div class="info-item">
-                <span class="info-label">Date</span>
-                <strong class="info-value">{{ formatTime(detail.squadCreated.created_at) }}</strong>
-              </div>
-            </div>
-            <p v-else class="empty-hint">{{ t("common.none") }}</p>
-          </div>
-
           <!-- Combat Sessions Card -->
           <div class="detail-card">
             <h3>{{ t("database.combatSessions") }}</h3>

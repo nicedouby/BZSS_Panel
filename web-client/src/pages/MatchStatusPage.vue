@@ -748,7 +748,7 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 
 .match-state-content {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
+  grid-template-columns: minmax(0, 1fr) 320px;
   gap: 12px;
   min-height: 0;
   height: 100%;
@@ -768,7 +768,7 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 .match-chat-column {
   min-width: 0;
   min-height: 0;
-  height: clamp(420px, 58vh, 640px);
+  height: clamp(760px, 84vh, 1080px);
   align-self: start;
 }
 
@@ -970,7 +970,7 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
   }
 
   .match-chat-column {
-    height: 360px;
+    height: 820px;
   }
 }
 </style>

@@ -282,7 +282,6 @@ function renderDetail(els, data, actions) {
       <div class="db-grid">
         ${cell("被举报记录", fmtNumber(p.total_reports_received))}
         ${cell("举报记录", fmtNumber(p.total_reports_submitted))}
-        ${cell("小队创建记录", fmtNumber(p.total_squad_created))}
         ${cell("对局数", fmtNumber(p.total_matches))}
       </div>
     </div>

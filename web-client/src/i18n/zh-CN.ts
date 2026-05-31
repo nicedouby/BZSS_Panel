@@ -254,7 +254,6 @@
     aliases: "历史名称",
     ipHistory: "IP 历史",
     logins: "登录记录",
-    squadCreated: "创建小队",
     permissionGroup: "权限组",
     createdAt: "创建时间",
     updatedAt: "更新时间",

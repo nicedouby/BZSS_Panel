@@ -1,6 +1,5 @@
 // -*- coding: utf-8 -*-
 
-import { getParam } from "../../core/event-normalizer.js";
 import { createDatabase } from "../../core/database.js";
 import { PlayerRepository } from "../../repositories/player-repository.js";
 
@@ -55,7 +54,6 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
           inSquadSeconds: Number(p.in_squad_seconds ?? 0),
           warmupSeconds: Number(p.warmup_seconds ?? 0),
           suicides: Number(p.total_suicides ?? 0),
-          squadCreated: Number(p.total_squad_created ?? 0),
           updatedAt: Number(p.updated_at ?? 0) || null,
         })),
         total,
@@ -76,10 +74,6 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
 
     async listPlayerIps(playerId, options = {}) {
       return repo.listPlayerIps(playerId, options);
-    },
-
-    async listPlayerSquadCreated(playerId, options = {}) {
-      return repo.listPlayerSquadCreated(playerId, options);
     },
 
     async setPermissionGroup(playerId, permissionGroup) {
@@ -112,9 +106,6 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       return repo.findCachedPlayer(identity);
     },
 
-    async addSquadCreated(record = {}) {
-      return repo.addSquadCreated(record);
-    },
   };
 
   return {

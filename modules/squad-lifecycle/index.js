@@ -142,7 +142,7 @@ export function createSquadLifecycleModule({ core, config, logger }) {
     parsed.matchId = matchId;
     rememberCreateEvent(serverId, parsed);
 
-    logWithFallback(moduleLogger, "info", `[SquadLifecycle] squad create accepted: S${parsed.squadId} ${parsed.squadName}`, {
+    logWithFallback(moduleLogger, "info", `/xm [SquadLifecycle] squad create accepted: S${parsed.squadId} ${parsed.squadName}`, {
       operation: "squadLifecycle.createAccepted",
       data: {
         serverId,

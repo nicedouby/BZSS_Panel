@@ -1,104 +1,128 @@
-<template>
-  <aside class="match-chat-panel">
-    <header class="match-chat-header">
-      <div class="match-chat-title-block">
-        <div class="match-chat-eyebrow">Live feed</div>
-        <h2 class="match-chat-title">聊天记录</h2>
-        <p class="match-chat-subtitle">
-          实时接收聊天监控模块推送的标准化事件
-        </p>
-      </div>
+﻿<template>
+  <aside class="match-feed-panel">
+    <section class="match-feed-card match-feed-card-chat">
+      <header class="match-chat-header">
+        <div class="match-chat-title-block">
+          <div class="match-chat-eyebrow">Live feed</div>
+          <h2 class="match-chat-title">聊天记录</h2>
+          <p class="match-chat-subtitle">
+            只显示聊天流，不包含内部事件。
+          </p>
+        </div>
 
-      <div class="match-chat-status-group">
-        <StatusBadge :tone="statusTone">{{ statusText }}</StatusBadge>
+        <div class="match-chat-status-group">
+          <StatusBadge :tone="statusTone">{{ statusText }}</StatusBadge>
+          <button
+            type="button"
+            class="match-chat-action"
+            :class="{ active: autoScroll }"
+            @click="autoScroll = !autoScroll"
+          >
+            {{ autoScroll ? "自动滚动" : "暂停滚动" }}
+          </button>
+          <button
+            type="button"
+            class="match-chat-action"
+            @click="clearChatMessages"
+          >
+            清空
+          </button>
+        </div>
+      </header>
+
+      <div class="match-chat-toolbar">
         <button
+          v-for="channel in channels"
+          :key="channel.id"
           type="button"
-          class="match-chat-action"
-          :class="{ active: autoScroll }"
-          @click="autoScroll = !autoScroll"
+          class="match-chat-filter"
+          :class="{ active: enabledChannels[channel.id] }"
+          :data-channel="channel.id"
+          @click="toggleChannel(channel.id)"
         >
-          {{ autoScroll ? "自动滚动" : "暂停滚动" }}
-        </button>
-        <button
-          type="button"
-          class="match-chat-action"
-          @click="clearLocalMessages"
-        >
-          清空
+          <span class="match-chat-filter-label">{{ channel.label }}</span>
+          <span class="match-chat-filter-count">{{ channelCounts[channel.id] }}</span>
         </button>
       </div>
-    </header>
 
-    <div class="match-chat-toolbar">
-      <button
-        v-for="channel in channels"
-        :key="channel.id"
-        type="button"
-        class="match-chat-filter"
-        :class="{ active: enabledChannels[channel.id] }"
-        :data-channel="channel.id"
-        @click="toggleChannel(channel.id)"
-      >
-        <span class="match-chat-filter-label">{{ channel.label }}</span>
-        <span class="match-chat-filter-count">{{ channelCounts[channel.id] }}</span>
-      </button>
-    </div>
+      <div ref="chatListRef" class="match-chat-list">
+        <div v-if="visibleChatMessages.length === 0" class="match-chat-empty">
+          暂无聊天记录
+        </div>
 
-    <div ref="listRef" class="match-chat-list">
-      <div v-if="visibleMessages.length === 0" class="match-chat-empty">
-        暂无聊天记录
+        <article
+          v-for="message in visibleChatMessages"
+          :key="message.id"
+          class="match-chat-row"
+          :class="[`channel-${message.channel}`]"
+        >
+          <div class="match-chat-row-head">
+            <span class="match-chat-time">{{ formatChatTime(message) }}</span>
+            <span class="match-chat-channel">[{{ channelLabels[message.channel] }}]</span>
+            <span class="match-chat-player" :title="playerTooltip(message)">
+              {{ displayPlayer(message) }}
+            </span>
+            <span class="match-chat-message-inline">
+              {{ message.message }}
+            </span>
+          </div>
+
+          <div v-if="message.teamId != null || message.squadId != null" class="match-chat-meta">
+            <span v-if="message.teamId != null">Team {{ message.teamId }}</span>
+            <span v-if="message.squadId != null">Squad {{ message.squadId }}</span>
+            <span v-if="message.serverId">Server {{ message.serverId }}</span>
+          </div>
+        </article>
       </div>
+    </section>
 
-      <article
-        v-for="message in visibleMessages"
-        :key="message.id"
-        class="match-chat-row"
-        :class="[`channel-${message.channel}`]"
-      >
-        <div class="match-chat-row-head">
-          <span class="match-chat-time">{{ formatTime(message) }}</span>
-          <span class="match-chat-channel">[{{ channelLabels[message.channel] }}]</span>
-          <span class="match-chat-player" :title="playerTooltip(message)">
-            {{ displayPlayer(message) }}
-          </span>
-        </div>
-
-        <div class="match-chat-message">
-          {{ message.message }}
-        </div>
-
-        <div v-if="message.teamId != null || message.squadId != null" class="match-chat-meta">
-          <span v-if="message.teamId != null">Team {{ message.teamId }}</span>
-          <span v-if="message.squadId != null">Squad {{ message.squadId }}</span>
-          <span v-if="message.serverId">Server {{ message.serverId }}</span>
-        </div>
-      </article>
-    </div>
-
-    <section class="match-xm-log-panel">
+    <section class="match-feed-card match-feed-card-xm">
       <header class="match-xm-log-header">
         <div class="match-xm-log-title">醒目标志日志</div>
-        <div class="match-xm-log-subtitle">仅显示消息开头包含 /xm 的内容</div>
+        <div class="match-xm-log-subtitle">只显示内部事件里以 /xm 开头的内容</div>
+        <div class="match-xm-log-meta">
+          <StatusBadge :tone="xmStatusTone">{{ xmStatusText }}</StatusBadge>
+          <button
+            type="button"
+            class="match-chat-action"
+            @click="clearXmMessages"
+          >
+            清空
+          </button>
+        </div>
       </header>
 
       <div class="match-xm-log-list">
-        <div v-if="xmMessages.length === 0" class="match-xm-log-empty">
+        <div v-if="xmErrorText" class="match-xm-log-error">
+          {{ xmErrorText }}
+        </div>
+
+        <div v-if="visibleXmLines.length === 0 && !xmErrorText" class="match-xm-log-empty">
           暂无 /xm 日志
         </div>
 
         <article
-          v-for="entry in xmMessages"
-          :key="`xm-${entry.id}`"
+          v-for="entry in visibleXmLines"
+          :key="`xm-${entry.seq}`"
           class="match-xm-log-row"
+          :class="{ expanded: expandedXmSeq === entry.seq }"
+          @click="toggleXmExpanded(entry.seq)"
         >
           <div class="match-xm-log-row-head">
-            <span class="match-chat-time">{{ formatTime(entry) }}</span>
-            <span class="match-chat-channel">[{{ channelLabels[entry.channel] }}]</span>
-            <span class="match-chat-player" :title="playerTooltip(entry)">
-              {{ displayPlayer(entry) }}
+            <span class="match-chat-time">{{ formatConsoleTime(entry) }}</span>
+            <span class="match-chat-channel">[{{ entry.label || entry.stream || "MODULE" }}]</span>
+            <span class="match-chat-player" :title="consoleTooltip(entry)">
+              {{ consoleScope(entry) }}
             </span>
           </div>
-          <div class="match-xm-log-message">{{ extractXmMessage(entry.message) }}</div>
+          <div class="match-xm-log-message">{{ extractXmMessage(entry.message || "") }}</div>
+          <div class="match-xm-log-meta-row">
+            <span v-if="entry.eventName">{{ entry.eventName }}</span>
+            <span v-if="entry.operation">{{ entry.operation }}</span>
+          </div>
+          <div v-if="expandedXmSeq === entry.seq" class="match-xm-log-raw">
+            原文: {{ entry.message }}
+          </div>
         </article>
       </div>
     </section>
@@ -107,8 +131,17 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import { useQuery } from "@tanstack/vue-query";
+import { apiGet } from "../../app/apiClient";
 import { useAuthStore } from "../../stores/auth.store";
 import StatusBadge from "../common/StatusBadge.vue";
+import type { ConsoleLine } from "../../composables/useConsoleLines";
+
+type ConsoleFeedLine = ConsoleLine & {
+  label?: string;
+  source?: string;
+  moduleId?: string;
+};
 
 defineOptions({
   name: "MatchChatPanel",
@@ -136,14 +169,17 @@ interface SocketEnvelope {
   item?: unknown;
 }
 
-const MAX_MESSAGES = 300;
+const MAX_CHAT_MESSAGES = 300;
 const MAX_XM_MESSAGES = 120;
 
 const auth = useAuthStore();
-const listRef = ref<HTMLElement | null>(null);
+const chatListRef = ref<HTMLElement | null>(null);
 const socketRef = ref<WebSocket | null>(null);
 const autoScroll = ref(true);
-const messages = ref<ChatMessageEvent[]>([]);
+const chatMessages = ref<ChatMessageEvent[]>([]);
+const xmMessages = ref<ConsoleFeedLine[]>([]);
+const xmLastSeq = ref(0);
+const expandedXmSeq = ref<number | null>(null);
 const reconnectDelay = ref(1000);
 const transportState = ref<"idle" | "connecting" | "live" | "reconnecting" | "offline" | "unsupported">("idle");
 
@@ -184,20 +220,23 @@ const channelCounts = computed<Record<ChatChannel, number>>(() => {
     unknown: 0,
   };
 
-  for (const message of messages.value) {
+  for (const message of chatMessages.value) {
     counts[message.channel] += 1;
   }
 
   return counts;
 });
 
-const visibleMessages = computed(() => {
-  return messages.value.filter((message) => enabledChannels[message.channel] !== false);
+const visibleChatMessages = computed(() => {
+  return chatMessages.value.filter((message) => enabledChannels[message.channel] !== false);
 });
 
-const xmMessages = computed(() => {
-  const flagged = messages.value.filter((message) => extractXmMessage(message.message) !== null);
-  return flagged.slice(-MAX_XM_MESSAGES);
+const visibleXmLines = computed(() => xmMessages.value.slice(-MAX_XM_MESSAGES));
+
+const xmErrorText = computed(() => {
+  const error = xmQuery.error.value;
+  if (!error) return "";
+  return error instanceof Error ? error.message : String(error);
 });
 
 const statusText = computed(() => {
@@ -233,6 +272,44 @@ const statusTone = computed(() => {
   }
 });
 
+const xmStatusText = computed(() => {
+  if (!auth.checked) return "待认证";
+  if (!auth.authenticated) return "未登录";
+  if (xmQuery.error.value && xmMessages.value.length === 0) return "加载失败";
+  if (xmQuery.isFetching.value && xmMessages.value.length === 0) return "加载中";
+  return `在线 · ${visibleXmLines.value.length}`;
+});
+
+const xmStatusTone = computed(() => {
+  if (!auth.checked || !auth.authenticated) return "idle";
+  if (xmQuery.error.value && xmMessages.value.length === 0) return "error";
+  if (xmQuery.isFetching.value) return "warn";
+  return "ok";
+});
+
+const xmQuery = useQuery({
+  queryKey: computed(() => ["match-xm-lines", auth.checked, auth.authenticated]),
+  enabled: computed(() => auth.checked && auth.authenticated),
+  queryFn: async () => {
+    const params = new URLSearchParams({
+      stream: "modules",
+      scope: "all",
+      level: "all",
+      q: "/xm",
+      afterSeq: String(xmLastSeq.value),
+      limit: "200",
+    });
+
+    return apiGet<{ lines?: ConsoleLine[] }>(`/api/console/lines?${params.toString()}`);
+  },
+  refetchInterval: () => {
+    if (!auth.checked || !auth.authenticated) return false;
+    return 1200;
+  },
+  refetchOnWindowFocus: false,
+  placeholderData: (previousData) => previousData,
+});
+
 let reconnectTimer: number | null = null;
 let shouldReconnect = false;
 
@@ -242,7 +319,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   shouldReconnect = false;
-  disconnectSocket();
+  disconnectChatSocket();
   clearReconnectTimer();
 });
 
@@ -255,32 +332,57 @@ watch(
 );
 
 watch(
-  () => messages.value.length,
+  () => chatMessages.value.length,
   async () => {
     if (!autoScroll.value) return;
     await nextTick();
-    scrollToBottom();
+    scrollChatToBottom();
   },
+);
+
+watch(
+  () => xmQuery.data.value?.lines,
+  (incoming) => {
+    if (!Array.isArray(incoming) || incoming.length === 0) return;
+
+    const next = [...xmMessages.value];
+    for (const raw of incoming) {
+      const line = normalizeConsoleLine(raw);
+      if (!line || !isXmLine(String(line.message ?? ""))) continue;
+
+      const seq = Number(line.seq ?? 0);
+      if (seq > xmLastSeq.value) {
+        xmLastSeq.value = seq;
+      }
+      if (next.some((item) => Number(item.seq ?? 0) === seq)) continue;
+      next.push(line);
+    }
+
+    next.sort((a, b) => Number(a.seq ?? 0) - Number(b.seq ?? 0));
+    xmMessages.value = next.slice(-MAX_XM_MESSAGES);
+  },
+  { deep: true },
 );
 
 function watchAuthState() {
   if (!auth.checked || !auth.authenticated) {
     shouldReconnect = false;
-    disconnectSocket();
+    disconnectChatSocket();
+    chatMessages.value = [];
+    xmMessages.value = [];
+    xmLastSeq.value = 0;
     transportState.value = auth.checked ? "offline" : "idle";
     return;
   }
 
   shouldReconnect = true;
 
-  if (socketRef.value) {
-    return;
+  if (!socketRef.value) {
+    connectChatSocket();
   }
-
-  connectSocket();
 }
 
-function connectSocket() {
+function connectChatSocket() {
   if (typeof window.WebSocket === "undefined") {
     transportState.value = "unsupported";
     return;
@@ -313,23 +415,20 @@ function handleSocketMessage(event: MessageEvent<string>) {
   }
 
   if (Array.isArray(payload)) {
-    replaceMessages(payload);
+    replaceChatMessages(payload);
     return;
   }
 
-  if (!payload || typeof payload !== "object") {
-    return;
-  }
+  if (!payload || typeof payload !== "object") return;
 
   const envelope = payload as SocketEnvelope;
-
   if (envelope.event === "server:chat:recent") {
-    replaceMessages(Array.isArray(envelope.items) ? envelope.items : []);
+    replaceChatMessages(Array.isArray(envelope.items) ? envelope.items : []);
     return;
   }
 
   if (envelope.event === "server:chat:message") {
-    appendMessage(envelope.item);
+    appendChatMessage(envelope.item);
   }
 }
 
@@ -346,9 +445,7 @@ function handleSocketClose() {
 }
 
 function handleSocketError() {
-  if (!shouldReconnect) {
-    return;
-  }
+  if (!shouldReconnect) return;
   transportState.value = "reconnecting";
 }
 
@@ -363,7 +460,7 @@ function scheduleReconnect() {
     if (!shouldReconnect || !auth.checked || !auth.authenticated || socketRef.value) {
       return;
     }
-    connectSocket();
+    connectChatSocket();
   }, delay);
 }
 
@@ -374,15 +471,13 @@ function clearReconnectTimer() {
   }
 }
 
-function disconnectSocket() {
+function disconnectChatSocket() {
   clearReconnectTimer();
 
   const socket = socketRef.value;
   socketRef.value = null;
 
-  if (!socket) {
-    return;
-  }
+  if (!socket) return;
 
   socket.removeEventListener("open", handleSocketOpen);
   socket.removeEventListener("message", handleSocketMessage);
@@ -394,23 +489,23 @@ function disconnectSocket() {
   } catch {}
 }
 
-function replaceMessages(items: unknown[]) {
+function replaceChatMessages(items: unknown[]) {
   const next = items
-    .map((item) => normalizeIncomingMessage(item))
+    .map((item) => normalizeChatMessage(item))
     .filter((item): item is ChatMessageEvent => Boolean(item));
 
-  messages.value = dedupeAndLimit(next);
+  chatMessages.value = dedupeChatMessages(next);
 }
 
-function appendMessage(item: unknown) {
-  const normalized = normalizeIncomingMessage(item);
+function appendChatMessage(item: unknown) {
+  const normalized = normalizeChatMessage(item);
   if (!normalized) return;
 
-  const next = [...messages.value, normalized];
-  messages.value = dedupeAndLimit(next);
+  const next = [...chatMessages.value, normalized];
+  chatMessages.value = dedupeChatMessages(next);
 }
 
-function dedupeAndLimit(items: ChatMessageEvent[]) {
+function dedupeChatMessages(items: ChatMessageEvent[]) {
   const seen = new Set<string>();
   const result: ChatMessageEvent[] = [];
 
@@ -421,10 +516,10 @@ function dedupeAndLimit(items: ChatMessageEvent[]) {
     result.push(item);
   }
 
-  return result.slice(-MAX_MESSAGES);
+  return result.slice(-MAX_CHAT_MESSAGES);
 }
 
-function normalizeIncomingMessage(raw: unknown): ChatMessageEvent | null {
+function normalizeChatMessage(raw: unknown): ChatMessageEvent | null {
   if (!raw || typeof raw !== "object") return null;
 
   const source = raw as Record<string, any>;
@@ -444,6 +539,31 @@ function normalizeIncomingMessage(raw: unknown): ChatMessageEvent | null {
     teamId: normalizeNullableNumber(source.teamId ?? source.teamID),
     squadId: normalizeNullableNumber(source.squadId ?? source.squadID),
     message,
+  };
+}
+
+function normalizeConsoleLine(raw: unknown): ConsoleFeedLine | null {
+  if (!raw || typeof raw !== "object") return null;
+
+  const source = raw as Record<string, any>;
+  const message = String(source.message ?? "").trim();
+  if (!message) return null;
+
+  return {
+    seq: Number(source.seq ?? 0),
+    time: String(source.time ?? ""),
+    stream: String(source.stream ?? "modules"),
+    scope: String(source.scope ?? ""),
+    level: String(source.level ?? "info"),
+    message,
+    channel: String(source.channel ?? ""),
+    eventName: String(source.eventName ?? ""),
+    operation: String(source.operation ?? ""),
+    dataSummary: String(source.dataSummary ?? ""),
+    tags: Array.isArray(source.tags) ? source.tags.map((item: unknown) => String(item)) : [],
+    label: String(source.label ?? ""),
+    source: String(source.source ?? ""),
+    moduleId: String(source.moduleId ?? ""),
   };
 }
 
@@ -490,6 +610,10 @@ function normalizeId(value: unknown): string {
   return text || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function isXmLine(text: string): boolean {
+  return Boolean(extractXmMessage(text) !== null);
+}
+
 function displayPlayer(message: ChatMessageEvent): string {
   if (message.playerName) return message.playerName;
   if (message.channel === "system") return "System";
@@ -501,7 +625,7 @@ function playerTooltip(message: ChatMessageEvent): string {
   return [message.steamId, message.eosId].filter(Boolean).join(" / ");
 }
 
-function formatTime(message: ChatMessageEvent): string {
+function formatChatTime(message: ChatMessageEvent): string {
   if (message.logTime) return message.logTime;
   return new Intl.DateTimeFormat("zh-CN", {
     hour12: false,
@@ -509,6 +633,19 @@ function formatTime(message: ChatMessageEvent): string {
     minute: "2-digit",
     second: "2-digit",
   }).format(new Date(message.timestamp));
+}
+
+function formatConsoleTime(entry: ConsoleFeedLine): string {
+  if (entry.time) {
+    const text = String(entry.time);
+    const iso = text.match(/T(\d{2}:\d{2}:\d{2})/);
+    if (iso) return iso[1];
+    const plain = text.match(/(\d{2}:\d{2}:\d{2})/);
+    if (plain) return plain[1];
+    return text;
+  }
+
+  return "";
 }
 
 function extractXmMessage(text: string): string | null {
@@ -521,18 +658,38 @@ function extractXmMessage(text: string): string | null {
   return content || "(空内容)";
 }
 
-function scrollToBottom() {
-  const el = listRef.value;
+function consoleScope(entry: ConsoleFeedLine): string {
+  return String(entry.scope ?? entry.source ?? entry.moduleId ?? "module");
+}
+
+function consoleTooltip(entry: ConsoleFeedLine): string {
+  const parts = [entry.source, entry.eventName, entry.operation]
+    .map((item) => String(item ?? "").trim())
+    .filter(Boolean);
+  return parts.join(" · ");
+}
+
+function scrollChatToBottom() {
+  const el = chatListRef.value;
   if (!el) return;
   el.scrollTop = el.scrollHeight;
 }
 
-function clearLocalMessages() {
-  messages.value = [];
+function clearChatMessages() {
+  chatMessages.value = [];
+}
+
+function clearXmMessages() {
+  xmMessages.value = [];
+  expandedXmSeq.value = null;
 }
 
 function toggleChannel(channel: ChatChannel) {
   enabledChannels[channel] = !enabledChannels[channel];
+}
+
+function toggleXmExpanded(seq: number) {
+  expandedXmSeq.value = expandedXmSeq.value === seq ? null : seq;
 }
 
 function buildWebSocketUrl(path: string) {
@@ -542,21 +699,42 @@ function buildWebSocketUrl(path: string) {
 </script>
 
 <style scoped>
-.match-chat-panel {
+.match-feed-panel {
   min-width: 0;
   min-height: 0;
   height: 100%;
+  display: grid;
+  grid-template-rows: minmax(0, 1.35fr) minmax(0, 1.2fr);
+  gap: 14px;
+  overflow: hidden;
+}
+
+.match-feed-card {
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid rgba(130, 154, 180, 0.22);
   border-radius: 16px;
+  border: 1px solid rgba(130, 154, 180, 0.22);
+  box-shadow: var(--shadow-md);
+}
+
+.match-feed-card-chat {
   background:
     radial-gradient(circle at 0% 0%, rgba(96, 165, 250, 0.1), transparent 28%),
     radial-gradient(circle at 100% 0%, rgba(34, 197, 94, 0.06), transparent 24%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.014)),
     rgba(13, 20, 28, 0.96);
-  box-shadow: var(--shadow-md);
+}
+
+.match-feed-card-xm {
+  background:
+    radial-gradient(circle at 0% 0%, rgba(250, 204, 21, 0.12), transparent 26%),
+    radial-gradient(circle at 100% 0%, rgba(251, 191, 36, 0.08), transparent 24%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.012)),
+    rgba(10, 13, 18, 0.97);
+  border-color: rgba(250, 204, 21, 0.24);
 }
 
 .match-chat-header {
@@ -594,11 +772,13 @@ function buildWebSocketUrl(path: string) {
   color: var(--color-text-muted);
 }
 
-.match-chat-status-group {
+.match-chat-status-group,
+.match-xm-log-meta {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+  align-items: center;
 }
 
 .match-chat-action {
@@ -695,6 +875,7 @@ function buildWebSocketUrl(path: string) {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 8px 10px 10px;
   display: grid;
   gap: 8px;
@@ -719,41 +900,46 @@ function buildWebSocketUrl(path: string) {
   border: 1px solid rgba(130, 154, 180, 0.14);
   background: rgba(255, 255, 255, 0.03);
   align-self: start;
+  overflow: hidden;
 }
 
-.match-chat-row-head {
+.match-chat-row-head,
+.match-xm-log-row-head {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: baseline;
+  min-width: 0;
 }
 
 .match-chat-time {
   color: var(--color-text-muted);
-  font-size: 11px;
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
 
 .match-chat-channel {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
 }
 
 .match-chat-player {
   min-width: 0;
   color: var(--color-text-primary);
-  font-weight: 600;
-  font-size: 13px;
+  font-weight: 500;
+  font-size: 11px;
 }
 
-.match-chat-message {
+.match-chat-message-inline {
   min-width: 0;
   color: var(--color-text-secondary);
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.35;
   word-break: break-word;
   white-space: pre-wrap;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .match-chat-meta {
@@ -812,29 +998,18 @@ function buildWebSocketUrl(path: string) {
   color: #cbd5e1;
 }
 
-.match-xm-log-panel {
-  flex: 0 0 170px;
-  height: 170px;
-  min-height: 170px;
-  max-height: 170px;
-  border-top: 1px solid rgba(130, 154, 180, 0.16);
-  background: rgba(7, 11, 16, 0.72);
-  display: flex;
-  flex-direction: column;
-}
-
 .match-xm-log-header {
   flex: 0 0 auto;
-  padding: 8px 10px 6px;
-  border-bottom: 1px solid rgba(130, 154, 180, 0.12);
+  padding: 13px 14px 10px;
+  border-bottom: 1px solid rgba(250, 204, 21, 0.14);
   display: grid;
-  gap: 2px;
+  gap: 6px;
 }
 
 .match-xm-log-title {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   color: #fef08a;
   text-transform: uppercase;
 }
@@ -848,57 +1023,76 @@ function buildWebSocketUrl(path: string) {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px 10px 10px;
+  overflow-x: hidden;
+  padding: 12px 14px 14px;
   display: grid;
-  gap: 7px;
+  gap: 10px;
   align-content: start;
 }
 
-.match-xm-log-empty {
-  padding: 10px;
-  border-radius: 10px;
-  border: 1px dashed rgba(250, 204, 21, 0.28);
-  color: rgba(254, 240, 138, 0.9);
+.match-xm-log-empty,
+.match-xm-log-error {
+  padding: 16px 14px;
+  border-radius: 13px;
   font-size: 12px;
   text-align: center;
 }
 
-.match-xm-log-row {
-  display: grid;
-  gap: 5px;
-  padding: 7px 9px;
-  border-radius: 10px;
-  border: 1px solid rgba(250, 204, 21, 0.24);
-  background: rgba(250, 204, 21, 0.08);
+.match-xm-log-empty {
+  border: 1px dashed rgba(250, 204, 21, 0.28);
+  color: rgba(254, 240, 138, 0.9);
 }
 
-.match-xm-log-row-head {
-  display: flex;
-  flex-wrap: wrap;
+.match-xm-log-error {
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  color: #fecaca;
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.match-xm-log-row {
+  display: grid;
   gap: 7px;
-  align-items: baseline;
+  padding: 12px 13px;
+  border-radius: 13px;
+  border: 1px solid rgba(250, 204, 21, 0.24);
+  background: rgba(250, 204, 21, 0.08);
+  cursor: pointer;
+  overflow: hidden;
 }
 
 .match-xm-log-message {
   min-width: 0;
   color: #fef3c7;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.4;
   word-break: break-word;
   white-space: pre-wrap;
 }
 
+.match-xm-log-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: rgba(253, 224, 71, 0.88);
+  font-size: 10px;
+  font-weight: 400;
+  opacity: 0.9;
+}
+
+.match-xm-log-raw {
+  min-width: 0;
+  border-top: 1px solid rgba(250, 204, 21, 0.16);
+  padding-top: 6px;
+  color: rgba(254, 243, 199, 0.82);
+  font-size: 11px;
+  line-height: 1.45;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
 @media (max-width: 1180px) {
-  .match-chat-panel {
-    min-height: 320px;
-  }
-
-  .match-chat-header {
-    flex-direction: column;
-  }
-
-  .match-chat-status-group {
-    justify-content: flex-start;
+  .match-feed-panel {
+    min-height: 560px;
   }
 }
 </style>

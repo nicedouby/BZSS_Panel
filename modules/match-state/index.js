@@ -741,6 +741,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       });
     },
   };
+
 }
 
 function makePlayersSnapshot(players) {

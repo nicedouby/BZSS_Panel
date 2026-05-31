@@ -255,7 +255,6 @@
     aliases: "Aliases",
     ipHistory: "IP History",
     logins: "Logins",
-    squadCreated: "Squad Created",
     permissionGroup: "Permission group",
     createdAt: "Created at",
     updatedAt: "Updated at",

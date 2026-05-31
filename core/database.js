@@ -47,7 +47,6 @@ CREATE TABLE IF NOT EXISTS players (
     notes_json TEXT NOT NULL DEFAULT '{}',
     total_reports_received INTEGER NOT NULL DEFAULT 0,
     total_reports_submitted INTEGER NOT NULL DEFAULT 0,
-    total_squad_created INTEGER NOT NULL DEFAULT 0,
     total_matches INTEGER NOT NULL DEFAULT 0,
     total_match_wins INTEGER NOT NULL DEFAULT 0,
     total_lead_matches INTEGER NOT NULL DEFAULT 0,
@@ -105,16 +104,6 @@ CREATE TABLE IF NOT EXISTS report_records (
     created_at INTEGER NOT NULL,
     FOREIGN KEY(reporter_player_id) REFERENCES players(id) ON DELETE SET NULL,
     FOREIGN KEY(target_player_id) REFERENCES players(id) ON DELETE SET NULL
-);
-
-CREATE TABLE IF NOT EXISTS squad_create_records (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    player_id INTEGER,
-    squad_id INTEGER,
-    squad_name TEXT,
-    team_name TEXT,
-    created_at INTEGER NOT NULL,
-    FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS squad_management_records (
@@ -414,7 +403,6 @@ async function ensureCompatibleColumns(db) {
     notes_json: "TEXT NOT NULL DEFAULT '{}'",
     total_reports_received: "INTEGER NOT NULL DEFAULT 0",
     total_reports_submitted: "INTEGER NOT NULL DEFAULT 0",
-    total_squad_created: "INTEGER NOT NULL DEFAULT 0",
     total_matches: "INTEGER NOT NULL DEFAULT 0",
     total_match_wins: "INTEGER NOT NULL DEFAULT 0",
     total_lead_matches: "INTEGER NOT NULL DEFAULT 0",
