@@ -433,7 +433,6 @@ function formatDamage(value: unknown) {
 .entity-name {
   color: #edf2f4;
   font-size: 13px;
-  word-break: break-word;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

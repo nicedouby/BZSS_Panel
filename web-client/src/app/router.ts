@@ -12,6 +12,7 @@ import SquadManagementPage from "../pages/SquadManagementPage.vue";
 import UdpEventForwarderPage from "../pages/UdpEventForwarderPage.vue";
 import ServerInfoStatisticsPage from "../pages/ServerInfoStatisticsPage.vue";
 import MatchSnapshotDebugPage from "../pages/MatchSnapshotDebugPage.vue";
+import PjscAverageDurationPage from "../pages/PjscAverageDurationPage.vue";
 import SquadNameClassifierDebugPage from "../pages/SquadNameClassifierDebugPage.vue";
 import ComingSoonPage from "../pages/ComingSoonPage.vue";
 import ChatMonitorPage from "../pages/ChatMonitorPage.vue";
@@ -145,6 +146,15 @@ export const router = createRouter({
       meta: {
         ...debugManualMeta,
         title: "快照录制",
+        fullBleed: true,
+      },
+    },
+    {
+      path: "/debug/pjsc-average-duration",
+      component: PjscAverageDurationPage,
+      meta: {
+        ...debugManualMeta,
+        title: "PJSC 平均时长",
         fullBleed: true,
       },
     },

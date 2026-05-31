@@ -1055,6 +1055,58 @@ export class WebServer {
     }
   }
 
+    if (url.pathname.startsWith("/api/plugins/pjsc-average-duration")) {
+      const pluginApi = this.getPluginApi("plugin.pjscAverageDuration");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "PjscAverageDurationUnavailable",
+          message: "PJSC average duration plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/pjsc-average-duration/state" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getState?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/pjsc-average-duration/history" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: {
+            history: pluginApi.getHistory?.(Number(url.searchParams.get("limit") ?? "50") || 50) ?? [],
+          },
+        });
+      }
+
+      if (url.pathname === "/api/plugins/pjsc-average-duration/simulate" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.simulateChatMessage?.(body ?? {}),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/pjsc-average-duration/broadcast" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.broadcastNow?.(body?.reason ?? "manual_trigger"),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/pjsc-average-duration/clear" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.clearHistory?.() ?? null,
+        });
+      }
+    }
+
     if (url.pathname.startsWith("/api/plugins/infantry-combat-enhancer")) {
       const infantryCombatEnhancer = this.modules.infantryCombatEnhancer;
       if (!infantryCombatEnhancer) {

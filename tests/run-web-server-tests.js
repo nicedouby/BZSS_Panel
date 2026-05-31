@@ -1154,6 +1154,50 @@ async function testAdminWarnBroadcastRouteReturnsMemoryRecords() {
   assert.equal(recentBody.records[0].kind, "broadcast");
 }
 
+async function testPjscAverageDurationRouteReturnsPluginState() {
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin", role: "SuperAdmin" };
+        },
+        hasEverything() {
+          return true;
+        },
+      },
+      pluginManager: {
+        instances: [
+          {
+            manifest: { id: "plugin.pjscAverageDuration" },
+            api: {
+              getState() {
+                return {
+                  enabled: true,
+                  triggerCount: 1,
+                  history: [],
+                };
+              },
+            },
+          },
+        ],
+      },
+    },
+  });
+
+  const recorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/plugins/pjsc-average-duration/state",
+    headers: { host: "localhost" },
+    socket: {},
+  }, recorder.res);
+
+  assert.equal(recorder.state.status, 200);
+  const body = JSON.parse(recorder.state.body);
+  assert.equal(body.ok, true);
+  assert.equal(body.data.triggerCount, 1);
+}
+
 async function testVueRouteFallsBackToIndexHtml() {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-web-"));
   await fs.writeFile(path.join(tempDir, "index.html"), "<html><body>vue-app</body></html>", "utf8");
@@ -1211,6 +1255,7 @@ await testSettingsRoutesRequireAuthAndSuperAdmin();
 await testWarmupRoutesExposeStateAndValidateInput();
 await testAdminWarnRecentRouteReturnsMemoryRecords();
 await testAdminWarnBroadcastRouteReturnsMemoryRecords();
+await testPjscAverageDurationRouteReturnsPluginState();
 await testVueRouteFallsBackToIndexHtml();
 
 console.log("web server tests passed");
