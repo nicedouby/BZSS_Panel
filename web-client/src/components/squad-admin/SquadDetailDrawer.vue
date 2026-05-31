@@ -225,9 +225,7 @@ onUnmounted(() => {
   right: 0;
   height: 100dvh;
   width: 420px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.008)),
-    var(--color-bg-panel);
+  background: var(--color-bg-panel);
   border-left: 1px solid var(--color-border-default);
   display: grid;
   grid-template-rows: auto 1fr;
@@ -255,15 +253,17 @@ onUnmounted(() => {
   padding: var(--spacing-lg);
   border-bottom: 1px solid var(--color-border-default);
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.018);
+  background: var(--color-bg-elevated);
 }
 
 .drawer-header.team1-theme {
-  background: radial-gradient(circle at 0% 0%, rgba(55, 200, 255, 0.15), transparent 42%);
+  background: var(--color-bg-elevated);
+  box-shadow: inset 0 3px 0 rgba(55, 200, 255, 0.7);
 }
 
 .drawer-header.team2-theme {
-  background: radial-gradient(circle at 0% 0%, rgba(255, 155, 69, 0.15), transparent 42%);
+  background: var(--color-bg-elevated);
+  box-shadow: inset 0 3px 0 rgba(255, 155, 69, 0.7);
 }
 
 .drawer-header-content {
@@ -319,7 +319,7 @@ onUnmounted(() => {
   padding: 16px;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border-soft);
-  background: rgba(255, 255, 255, 0.015);
+  background: var(--color-bg-card);
 }
 
 .detail-section-title {
@@ -332,7 +332,7 @@ onUnmounted(() => {
 }
 
 .info-card {
-  background: rgba(0, 0, 0, 0.1);
+  background: var(--color-bg-card);
 }
 
 .stats-grid {
@@ -433,14 +433,14 @@ onUnmounted(() => {
   align-items: center;
   gap: 10px;
   padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--color-bg-elevated);
   border-radius: 6px;
   font-size: 13px;
 }
 
 .member-item.leader {
-  background: rgba(96, 165, 250, 0.1);
-  border: 1px solid rgba(96, 165, 250, 0.2);
+  background: var(--color-bg-elevated);
+  border: 1px solid rgba(96, 165, 250, 0.22);
 }
 
 .role-icon {

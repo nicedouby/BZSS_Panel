@@ -8,8 +8,8 @@
   --z-player-drawer: 60;
   --z-user-dropdown: 90;
   --z-settings-drawer: 100;
-  --z-confirm-dialog: 120;
-  --z-toast: 140;
+  --z-confirm-dialog: 1000;
+  --z-toast: 1100;
   --color-bg-page: #06090f;
   --color-bg-panel: rgba(11, 17, 25, 0.88);
   --color-bg-card: rgba(15, 23, 34, 0.94);

@@ -1,37 +1,39 @@
 <template>
-  <div v-if="ui.warnPrompt.visible" class="dialog-root" @click.self="cancel">
-    <section class="dialog-panel">
-      <header class="dialog-head">
-        <div>
-          <h3>{{ ui.warnPrompt.title }}</h3>
-          <p>目标：<strong>{{ ui.warnPrompt.targetName }}</strong></p>
-        </div>
-      </header>
+  <Teleport to="body">
+    <div v-if="ui.warnPrompt.visible" class="dialog-root" @click.self="cancel">
+      <section class="dialog-panel">
+        <header class="dialog-head">
+          <div>
+            <h3>{{ ui.warnPrompt.title }}</h3>
+            <p>目标：<strong>{{ ui.warnPrompt.targetName }}</strong></p>
+          </div>
+        </header>
 
-      <div class="dialog-body">
-        <label class="input-label">警告消息</label>
-        <textarea
-          ref="inputRef"
-          v-model="message"
-          class="warn-textarea"
-          placeholder="输入警告内容..."
-          @keydown.enter.ctrl="submit"
-        ></textarea>
-        <div class="quick-hints">
-          <span v-for="hint in hints" :key="hint" class="hint-chip" @click="message = hint">
-            {{ hint }}
-          </span>
+        <div class="dialog-body">
+          <label class="input-label">警告消息</label>
+          <textarea
+            ref="inputRef"
+            v-model="message"
+            class="warn-textarea"
+            placeholder="输入警告内容..."
+            @keydown.enter.ctrl="submit"
+          ></textarea>
+          <div class="quick-hints">
+            <span v-for="hint in hints" :key="hint" class="hint-chip" @click="message = hint">
+              {{ hint }}
+            </span>
+          </div>
         </div>
-      </div>
 
-      <footer class="dialog-actions">
-        <button type="button" class="cancel-btn" @click="cancel">取消</button>
-        <button type="button" class="submit-btn" :disabled="!message.trim()" @click="submit">
-          {{ ui.warnPrompt.confirmText }}
-        </button>
-      </footer>
-    </section>
-  </div>
+        <footer class="dialog-actions">
+          <button type="button" class="cancel-btn" @click="cancel">取消</button>
+          <button type="button" class="submit-btn" :disabled="!message.trim()" @click="submit">
+            {{ ui.warnPrompt.confirmText }}
+          </button>
+        </footer>
+      </section>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -47,7 +49,7 @@ const hints = [
   "请勿在非建队点建队",
   "请勿在公共频道大声喧哗",
   "请前往己方基地领取载具",
-  "请勿在单人开载具",
+  "请勿单人开载具",
 ];
 
 watch(() => ui.warnPrompt.visible, (visible) => {

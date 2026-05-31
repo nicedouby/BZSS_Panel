@@ -475,9 +475,7 @@ onUnmounted(() => {
   right: 0;
   height: 100dvh;
   width: 420px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.008)),
-    var(--color-bg-panel);
+  background: var(--color-bg-panel);
   border-left: 1px solid var(--color-border-default);
   display: grid;
   grid-template-rows: auto 1fr;
@@ -505,9 +503,7 @@ onUnmounted(() => {
   padding: var(--spacing-lg);
   border-bottom: 1px solid var(--color-border-default);
   flex-shrink: 0;
-  background:
-    radial-gradient(circle at 0% 0%, rgba(96, 165, 250, 0.1), transparent 42%),
-    rgba(255, 255, 255, 0.018);
+  background: var(--color-bg-elevated);
 }
 
 .drawer-header-content {
@@ -563,13 +559,13 @@ onUnmounted(() => {
   padding: 16px;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border-soft);
-  background: rgba(255, 255, 255, 0.015);
+  background: var(--color-bg-card);
 }
 
 /* 1. IDENTITY HERO */
 .identity-hero {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.005));
-  border-color: rgba(255, 255, 255, 0.08);
+  background: var(--color-bg-card);
+  border-color: var(--color-border-default);
 }
 
 .identity-grid {
@@ -591,7 +587,7 @@ onUnmounted(() => {
 
 /* 2. INFO CARD */
 .info-card {
-  background: rgba(0, 0, 0, 0.1);
+  background: var(--color-bg-card);
 }
 
 .stats-grid {

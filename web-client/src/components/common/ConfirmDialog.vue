@@ -1,21 +1,23 @@
 <template>
-  <div v-if="ui.confirm.visible" class="dialog-root" @click.self="ui.confirmCancel()">
-    <section class="dialog-panel">
-      <header class="dialog-head">
-        <div>
-          <h3>{{ ui.confirm.title }}</h3>
-          <p>{{ ui.confirm.message }}</p>
-        </div>
-      </header>
+  <Teleport to="body">
+    <div v-if="ui.confirm.visible" class="dialog-root" @click.self="ui.confirmCancel()">
+      <section class="dialog-panel">
+        <header class="dialog-head">
+          <div>
+            <h3>{{ ui.confirm.title }}</h3>
+            <p>{{ ui.confirm.message }}</p>
+          </div>
+        </header>
 
-      <footer class="dialog-actions">
-        <button type="button" @click="ui.confirmCancel()">{{ ui.confirm.cancelText }}</button>
-        <button type="button" class="danger-button" :data-tone="ui.confirm.tone" @click="ui.confirmAccept()">
-          {{ ui.confirm.confirmText }}
-        </button>
-      </footer>
-    </section>
-  </div>
+        <footer class="dialog-actions">
+          <button type="button" @click="ui.confirmCancel()">{{ ui.confirm.cancelText }}</button>
+          <button type="button" class="danger-button" :data-tone="ui.confirm.tone" @click="ui.confirmAccept()">
+            {{ ui.confirm.confirmText }}
+          </button>
+        </footer>
+      </section>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">

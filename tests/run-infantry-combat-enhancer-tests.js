@@ -164,7 +164,7 @@ async function testTagDrivenMessages() {
     tags: ["combat.team_damage", "friendly_fire", "combat.damage", "weapon.small_arm", "damage.direct"],
   });
   assert.equal(calls.at(-2).message, "[BZSS]你被<友军>Attacker使用XX造成60伤害");
-  assert.equal(calls.at(-1).message, "[BZSS]你他妈的使用XX对<友军>Victim，造成60伤害");
+  assert.equal(calls.at(-1).message, "[BZSS]你他奶奶的使用XX对<友军>Victim，造成60伤害");
 
   await emit({
     id: "combat-wound-friendly",
@@ -180,7 +180,7 @@ async function testTagDrivenMessages() {
     tags: ["combat.team_wound", "friendly_fire", "combat.wound", "weapon.small_arm"],
   });
   assert.equal(calls.at(-2).message, "[BZSS]你被<友军>Attacker使用XX击倒，造成60伤害");
-  assert.equal(calls.at(-1).message, "[BZSS]你他妈的使用XX击倒<友军>Victim，造成60伤害");
+  assert.equal(calls.at(-1).message, "[BZSS]你他奶奶的使用XX击倒<友军>Victim，造成60伤害");
 
   await emit({
     id: "combat-kill-enemy",
@@ -212,7 +212,7 @@ async function testTagDrivenMessages() {
     tags: ["combat.team_kill", "friendly_fire", "combat.kill", "weapon.small_arm"],
   });
   assert.equal(calls.at(-2).message, "[BZSS]你被<友军>Attacker击杀了");
-  assert.equal(calls.at(-1).message, "[BZSS]你他妈的杀了<友军>Victim");
+  assert.equal(calls.at(-1).message, "[BZSS]你他奶奶的杀了<友军>Victim");
 
   await module.stop();
 }

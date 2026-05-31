@@ -317,17 +317,17 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
     const friendlyVictimName = friendlyFire ? `<友军>${victimName}` : victimName;
     if (entry.type === "damage") {
       return friendlyFire
-        ? `[BZSS]你他妈的使用${entry.weapon || "unknown weapon"}对${friendlyVictimName}，造成${damageText}伤害`
+        ? `[BZSS]你他奶奶的使用${entry.weapon || "unknown weapon"}对${friendlyVictimName}，造成${damageText}伤害`
         : `[BZSS]你使用${entry.weapon || "unknown weapon"}对${friendlyVictimName}造成${damageText}伤害`;
     }
     if (entry.type === "wound") {
       return friendlyFire
-        ? `[BZSS]你他妈的使用${entry.weapon || "unknown weapon"}击倒${friendlyVictimName}，造成${damageText}伤害`
+        ? `[BZSS]你他奶奶的使用${entry.weapon || "unknown weapon"}击倒${friendlyVictimName}，造成${damageText}伤害`
         : `[BZSS]你使用${entry.weapon || "unknown weapon"}击倒${friendlyVictimName}，造成${damageText}伤害`;
     }
     if (entry.type === "kill") {
       return friendlyFire
-        ? `[BZSS]你他妈的杀了${friendlyVictimName}`
+        ? `[BZSS]你他奶奶的杀了${friendlyVictimName}`
         : `[BZSS]你击杀了${friendlyVictimName}`;
     }
     return "Combat event processed.";
