@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <Teleport to="body">
     <Transition name="drawer">
       <div v-if="open && props.player" class="drawer-root" @click.self="close">
@@ -248,26 +248,28 @@ function openDatabase() {
 }
 
 async function handleWarn() {
-  if (!props.player || actionBusy.value) return;
+  const player = props.player;
+  if (!player || actionBusy.value) return;
   const message = await ui.openWarnPrompt({
     title: "发送玩家警告",
-    targetName: props.player.name,
+    targetName: player.name,
     defaultMessage: "请遵守服务器规则",
   });
   if (message === null) return;
+  if (actionBusy.value || !props.player) return;
 
   actionBusy.value = true;
   try {
     const res = await warnPlayer({
-      targetName: props.player.name,
-      targetSteamId: props.player.steamId ?? undefined,
-      targetEosId: props.player.eosId ?? undefined,
+      targetName: player.name,
+      targetSteamId: player.steamId ?? undefined,
+      targetEosId: player.eosId ?? undefined,
       message: message.trim() || "Admin Warning",
       reason: "manual_warn",
       sourceModule: "web.squadAdmin",
     });
     if (!res.success) throw new Error(res.errorMessage || "警告发送失败");
-    ui.pushToast({ title: "已发送警告", message: `玩家: ${props.player.name}`, tone: "ok" });
+    ui.pushToast({ title: "已发送警告", message: `玩家: ${player.name}`, tone: "ok" });
   } catch (e) {
     ui.pushToast({ title: "警告失败", message: String(e), tone: "error" });
   } finally {
@@ -276,18 +278,24 @@ async function handleWarn() {
 }
 
 async function handleKick() {
-  if (!props.player || actionBusy.value) return;
+  const player = props.player;
+  if (!player || actionBusy.value) return;
   const confirmed = await ui.openConfirm({
     title: "确认踢出玩家？",
-    message: `确定要将玩家 ${props.player.name} 踢出服务器吗？`,
+    message: `确定要将玩家 ${player.name} 踢出服务器吗？`,
     tone: "error",
   });
   if (!confirmed) return;
+  if (actionBusy.value || !props.player) return;
 
   actionBusy.value = true;
   try {
     const res = await kickPlayer({
-      anyId: props.player.steamId || props.player.eosId || props.player.name,
+      playerId: player.playerId ?? undefined,
+      anyId: player.steamId || player.eosId || player.name || String(player.playerId ?? ""),
+      steamId: player.steamId ?? undefined,
+      eosId: player.eosId ?? undefined,
+      name: player.name,
       reason: "manual_kick",
       source: "web.squadAdmin",
     });
@@ -301,18 +309,24 @@ async function handleKick() {
 }
 
 async function handleRemove() {
-  if (!props.player || actionBusy.value) return;
+  const player = props.player;
+  if (!player || actionBusy.value) return;
   const confirmed = await ui.openConfirm({
     title: "确认移出小队？",
-    message: `确定要将玩家 ${props.player.name} 移出所在小队吗？`,
+    message: `确定要将玩家 ${player.name} 移出所在小队吗？`,
     tone: "warn",
   });
   if (!confirmed) return;
+  if (actionBusy.value || !props.player) return;
 
   actionBusy.value = true;
   try {
     const res = await removePlayerFromSquad({
-      anyId: props.player.steamId || props.player.eosId || props.player.name,
+      playerId: player.playerId ?? undefined,
+      anyId: player.steamId || player.eosId || player.name || String(player.playerId ?? ""),
+      steamId: player.steamId ?? undefined,
+      eosId: player.eosId ?? undefined,
+      name: player.name,
       reason: "manual_remove",
       source: "web.squadAdmin",
     });

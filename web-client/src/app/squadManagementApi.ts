@@ -219,7 +219,7 @@ export function executeSquadManagementAction(payload: {
   serverId?: string;
   teamId?: number | null;
   squadId?: number | null;
-  playerId?: string;
+  playerId?: string | number | null;
   playerKey?: string;
   steamId?: string;
   eosId?: string;
@@ -245,6 +245,7 @@ export function disbandSquad(payload: {
 }
 
 export function kickPlayer(payload: {
+  playerId?: string | number | null;
   anyId?: string;
   reason?: string;
   source?: string;
@@ -259,6 +260,7 @@ export function kickPlayer(payload: {
 }
 
 export function removePlayerFromSquad(payload: {
+  playerId?: string | number | null;
   anyId?: string;
   reason?: string;
   source?: string;

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <Teleport to="body">
     <Transition name="drawer">
       <div v-if="open && props.squad" class="drawer-root" @click.self="close">
@@ -130,19 +130,21 @@ function handleEscape(e: KeyboardEvent) {
 }
 
 async function handleWarnSquad() {
-  if (!props.squad || actionBusy.value) return;
+  const squad = props.squad;
+  if (!squad || actionBusy.value) return;
   const message = await ui.openWarnPrompt({
     title: "警告全队",
-    targetName: `${props.squad.squadName} (全体成员)`,
+    targetName: `${squad.squadName} (全体成员)`,
     defaultMessage: "请遵守服务器规则",
   });
   if (message === null) return;
+  if (actionBusy.value || !props.squad) return;
 
   actionBusy.value = true;
   try {
     const allPlayers = [];
-    if (props.squad.leader) allPlayers.push(props.squad.leader);
-    allPlayers.push(...props.squad.members);
+    if (squad.leader) allPlayers.push(squad.leader);
+    allPlayers.push(...squad.members);
 
     const promises = allPlayers.map(p => warnPlayer({
       targetName: p.name,
@@ -169,19 +171,25 @@ async function handleWarnSquad() {
 }
 
 async function handleDisbandSquad() {
-  if (!props.squad || actionBusy.value) return;
+  const squad = props.squad;
+  if (!squad || actionBusy.value) return;
+  if (squad.teamId == null || squad.squadId == null) {
+    ui.pushToast({ title: "操作失败", message: "缺少 teamId 或 squadId，无法解散小队。", tone: "error" });
+    return;
+  }
   const confirmed = await ui.openConfirm({
     title: "确认解散小队？",
-    message: `确定要强制解散 ${props.squad.squadName} 吗？`,
+    message: `确定要强制解散 ${squad.squadName} 吗？`,
     tone: "error",
   });
   if (!confirmed) return;
+  if (actionBusy.value) return;
 
   actionBusy.value = true;
   try {
     const res = await disbandSquad({
-      teamId: props.squad.teamId,
-      squadId: props.squad.squadId,
+      teamId: squad.teamId,
+      squadId: squad.squadId,
       reason: "manual_disband",
       source: "web.squadAdmin",
     });
