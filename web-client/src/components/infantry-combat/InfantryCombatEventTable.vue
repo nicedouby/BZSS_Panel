@@ -214,7 +214,7 @@ function formatDamage(value: unknown) {
   background:
     radial-gradient(circle at 0% 0%, rgba(96, 165, 250, 0.07), transparent 32%),
     linear-gradient(180deg, #12181f 0%, #10161c 100%);
-  min-height: clamp(520px, 62vh, 840px);
+  min-height: 0;
   height: 100%;
   overflow: hidden;
   padding: 7px;
@@ -316,6 +316,8 @@ function formatDamage(value: unknown) {
 .record-list {
   display: grid;
   gap: 4px;
+  grid-auto-rows: max-content;
+  align-content: start;
   min-height: 0;
   height: 100%;
   overflow: auto;
@@ -580,9 +582,11 @@ function formatDamage(value: unknown) {
   color: #9aa7b2;
   display: grid;
   gap: 4px;
-  min-height: 100%;
-  align-content: center;
+  min-height: 180px;
+  height: 100%;
+  place-content: center;
   justify-items: center;
+  text-align: center;
 }
 
 .empty-list strong {

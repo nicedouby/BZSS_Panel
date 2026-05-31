@@ -1086,6 +1086,74 @@ async function testAdminWarnRecentRouteReturnsMemoryRecords() {
   assert.equal(body.config.maxRecords, 3000);
 }
 
+async function testAdminWarnBroadcastRouteReturnsMemoryRecords() {
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin", role: "SuperAdmin" };
+        },
+        hasEverything() {
+          return true;
+        },
+      },
+    },
+    modules: {
+      adminWarn: {
+        async broadcastMessage(body) {
+          assert.equal(body.message, "server restart soon");
+          return { success: true, skipped: false, commandText: "AdminBroadcast server restart soon" };
+        },
+        getRecent(filter) {
+          assert.equal(filter.kind, "broadcast");
+          return [{
+            id: "broadcast-1",
+            kind: "broadcast",
+            createdAt: 1710000000000,
+            sourceModule: "web.broadcastModule",
+            reason: "manual_broadcast",
+            message: "server restart soon",
+            success: true,
+            skipped: false,
+          }];
+        },
+        getConfig() {
+          return { maxRecords: 3000, ttlMs: 1800000 };
+        },
+      },
+    },
+  });
+
+  const recorder = createRecorder();
+  const bodyStream = Readable.from([JSON.stringify({
+    message: "server restart soon",
+    sourceModule: "web.broadcastModule",
+    reason: "manual_broadcast",
+  })]);
+  bodyStream.method = "POST";
+  bodyStream.url = "/api/admin-warns/broadcast";
+  bodyStream.headers = { host: "localhost" };
+  bodyStream.socket = {};
+  await server.handleRequest(bodyStream, recorder.res);
+
+  assert.equal(recorder.state.status, 200);
+  const body = JSON.parse(recorder.state.body);
+  assert.equal(body.success, true);
+
+  const recentRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/admin-warns/recent?kind=broadcast&limit=10",
+    headers: { host: "localhost" },
+    socket: {},
+  }, recentRecorder.res);
+
+  assert.equal(recentRecorder.state.status, 200);
+  const recentBody = JSON.parse(recentRecorder.state.body);
+  assert.equal(recentBody.records.length, 1);
+  assert.equal(recentBody.records[0].kind, "broadcast");
+}
+
 async function testVueRouteFallsBackToIndexHtml() {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-web-"));
   await fs.writeFile(path.join(tempDir, "index.html"), "<html><body>vue-app</body></html>", "utf8");
@@ -1142,6 +1210,7 @@ await testSquadManagementRoutesExposeStateAndMutations();
 await testSettingsRoutesRequireAuthAndSuperAdmin();
 await testWarmupRoutesExposeStateAndValidateInput();
 await testAdminWarnRecentRouteReturnsMemoryRecords();
+await testAdminWarnBroadcastRouteReturnsMemoryRecords();
 await testVueRouteFallsBackToIndexHtml();
 
 console.log("web server tests passed");

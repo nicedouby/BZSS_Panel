@@ -48,9 +48,9 @@ function shortWarningText(value: string) {
 .decision-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
-  padding: 5px 8px;
+  padding: 3px 7px;
   border-radius: 999px;
   border: 1px solid #2f3944;
   background: #11171d;
@@ -74,15 +74,15 @@ function shortWarningText(value: string) {
 }
 
 .decision-badge strong {
-  font-size: 11px;
+  font-size: 10px;
   white-space: nowrap;
 }
 
 .decision-badge small {
-  font-size: 11px;
+  font-size: 10px;
   color: inherit;
   opacity: 0.85;
-  line-height: 1.2;
+  line-height: 1.1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

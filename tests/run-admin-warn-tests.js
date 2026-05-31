@@ -59,9 +59,40 @@ async function testWarnSuccessAndSanitize() {
 
   const records = module.api.getRecent({ limit: 10 });
   assert.equal(records.length, 1);
+  assert.equal(records[0].kind, "warning");
   assert.equal(records[0].message, "[BZSS] line1 'quoted'");
   assert.equal(records[0].sourceModule, "damage_display");
   assert.equal(records[0].relatedEventId, "combat-1");
+  await module.stop();
+}
+
+async function testBroadcastSuccessAndKindFilter() {
+  const calls = [];
+  const { module } = createHarness({
+    async dispatchCommand(request) {
+      calls.push(request);
+      return { success: true, message: "ok", rconExecuted: true, rconResponse: "" };
+    },
+  });
+
+  await module.start();
+  const result = await module.api.broadcastMessage({
+    message: 'line1\n"quoted"',
+    sourceModule: "web.broadcastModule",
+    reason: "manual_broadcast",
+    relatedEventId: "broadcast-1",
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].command, "AdminBroadcast line1 'quoted'");
+  assert.equal(calls[0].priority, "high");
+
+  const records = module.api.getRecent({ kind: "broadcast", limit: 10 });
+  assert.equal(records.length, 1);
+  assert.equal(records[0].kind, "broadcast");
+  assert.equal(records[0].message, "line1 'quoted'");
+  assert.equal(records[0].relatedEventId, "broadcast-1");
   await module.stop();
 }
 
@@ -117,7 +148,8 @@ async function testWarnFailureIsRecorded() {
 }
 
 await testWarnSuccessAndSanitize();
+await testBroadcastSuccessAndKindFilter();
 await testWarnBackToBackStillSends();
 await testWarnFailureIsRecorded();
 
-console.log("admin warn tests passed");
+console.log("broadcast module tests passed");

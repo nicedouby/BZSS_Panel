@@ -6,7 +6,7 @@ export const SKIP_REASON_LABELS: Record<string, string> = {
   attacker_missing_target: "缺少攻击者目标",
   victim_missing_target: "缺少受害者目标",
   same_player: "同一玩家，已抑制",
-  admin_warn_unavailable: "警告模块不可用",
+  admin_warn_unavailable: "广播模块不可用",
   below_min_attacker_damage: "低于攻击者伤害阈值",
   attacker_damage_disabled: "攻击者伤害提示已关闭",
 };

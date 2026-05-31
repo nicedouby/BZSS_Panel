@@ -2,13 +2,18 @@
 
 const DEFAULT_MAX_RECORDS = 3000;
 const DEFAULT_TTL_MS = 30 * 60 * 1000;
+const DEFAULT_PREFIX = "[BZSS]";
 
 export function createAdminWarnModule({ core, config, logger }) {
-  const moduleLogger = logger ?? core.createLogger?.({
-    moduleId: "module.adminWarn",
-    source: "module.adminWarn",
-    channel: "module",
-  }) ?? core.logger;
+  const moduleLogger =
+    logger ??
+    core.createLogger?.({
+      moduleId: "module.adminWarn",
+      source: "module.adminWarn",
+      channel: "module",
+    }) ??
+    core.logger;
+
   const moduleConfig = config?.get?.("modules.adminWarn", {}) ?? {};
   const enabled = Boolean(moduleConfig.enabled ?? true);
   const maxRecords = Math.max(1, Number(moduleConfig.maxRecords ?? DEFAULT_MAX_RECORDS));
@@ -18,139 +23,19 @@ export function createAdminWarnModule({ core, config, logger }) {
 
   const api = {
     async warnPlayer(req) {
-      if (!enabled) {
-        const message = prefixWarningMessage(sanitizeMessage(req?.message));
-        memoryStore.push({
-          id: makeRecordId("disabled"),
-          createdAt: Date.now(),
-          sourceModule: String(req?.sourceModule ?? "unknown"),
-          reason: String(req?.reason ?? "disabled"),
-          targetName: String(req?.targetName ?? ""),
-          targetEosId: optionalText(req?.targetEosId),
-          targetSteamId: optionalText(req?.targetSteamId),
-          message,
-          success: false,
-          skipped: true,
-          skipReason: "module_disabled",
-          relatedEventId: optionalText(req?.relatedEventId),
-        });
-        return {
-          success: false,
-          skipped: true,
-          skipReason: "module_disabled",
-        };
-      }
-
-      const message = prefixWarningMessage(sanitizeMessage(req?.message));
-      const targetName = String(req?.targetName ?? "").trim();
-      const targetEosId = optionalText(req?.targetEosId);
-      const targetSteamId = optionalText(req?.targetSteamId);
-      if (!targetName || !message) {
-        const record = memoryStore.push({
-          id: makeRecordId("invalid"),
-          createdAt: Date.now(),
-          sourceModule: String(req?.sourceModule ?? "unknown"),
-          reason: String(req?.reason ?? "invalid_request"),
-          targetName,
-          targetEosId,
-          targetSteamId,
-          message,
-          success: false,
-          skipped: true,
-          skipReason: "invalid_request",
-          relatedEventId: optionalText(req?.relatedEventId),
-        });
-        return {
-          success: false,
-          skipped: true,
-          skipReason: record.skipReason,
-        };
-      }
-
-      const commandText = buildCommand(targetName, message);
-      try {
-        const result = await core.rconManager.dispatchCommand({
-          command: commandText,
-          requestedBy: "module.adminWarn",
-          reason: String(req?.reason ?? "admin_warn"),
-          sourceEventId: optionalText(req?.relatedEventId),
-          priority: "high",
-        });
-
-        if (!result?.success) {
-          const errorMessage = String(result?.message ?? "RCON command failed.");
-          memoryStore.push({
-            id: makeRecordId("failed"),
-            createdAt: Date.now(),
-            sourceModule: String(req?.sourceModule ?? "unknown"),
-            reason: String(req?.reason ?? "admin_warn_failed"),
-            targetName,
-            targetEosId,
-            targetSteamId,
-            message,
-            commandText,
-            success: false,
-            skipped: false,
-            errorMessage,
-            relatedEventId: optionalText(req?.relatedEventId),
-          });
-          return {
-            success: false,
-            skipped: false,
-            commandText,
-            errorMessage,
-          };
-        }
-
-        memoryStore.push({
-          id: makeRecordId("ok"),
-          createdAt: Date.now(),
-          sourceModule: String(req?.sourceModule ?? "unknown"),
-          reason: String(req?.reason ?? "admin_warn"),
-          targetName,
-          targetEosId,
-          targetSteamId,
-          message,
-          commandText,
-          success: true,
-          skipped: false,
-          relatedEventId: optionalText(req?.relatedEventId),
-        });
-
-        return {
-          success: true,
-          skipped: false,
-          commandText,
-        };
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        memoryStore.push({
-          id: makeRecordId("error"),
-          createdAt: Date.now(),
-          sourceModule: String(req?.sourceModule ?? "unknown"),
-          reason: String(req?.reason ?? "admin_warn_exception"),
-          targetName,
-          targetEosId,
-          targetSteamId,
-          message,
-          commandText,
-          success: false,
-          skipped: false,
-          errorMessage,
-          relatedEventId: optionalText(req?.relatedEventId),
-        });
-        moduleLogger?.warn?.(`AdminWarn failed for ${targetName}: ${errorMessage}`);
-        return {
-          success: false,
-          skipped: false,
-          commandText,
-          errorMessage,
-        };
-      }
+      return sendNotification("warning", req);
     },
 
     async sendAdminWarn(req) {
       return api.warnPlayer(req);
+    },
+
+    async broadcastMessage(req) {
+      return sendNotification("broadcast", req);
+    },
+
+    async sendAdminBroadcast(req) {
+      return api.broadcastMessage(req);
     },
 
     getRecent(filter = {}) {
@@ -170,13 +55,162 @@ export function createAdminWarnModule({ core, config, logger }) {
     },
   };
 
+  async function sendNotification(kind, req) {
+    const normalizedKind = normalizeKind(kind);
+    const sourceModule = String(req?.sourceModule ?? "unknown");
+    const reason = String(req?.reason ?? defaultReasonForKind(normalizedKind));
+    const relatedEventId = optionalText(req?.relatedEventId);
+
+    const message = normalizedKind === "broadcast"
+      ? sanitizeBroadcastMessage(req?.message)
+      : prefixWarningMessage(sanitizeWarningMessage(req?.message));
+
+    const targetName = normalizedKind === "warning" ? String(req?.targetName ?? "").trim() : "";
+    const targetEosId = normalizedKind === "warning" ? optionalText(req?.targetEosId) : undefined;
+    const targetSteamId = normalizedKind === "warning" ? optionalText(req?.targetSteamId) : undefined;
+    const commandText = buildCommandText(normalizedKind, targetName, message);
+
+    if (!enabled) {
+      memoryStore.push({
+        id: makeRecordId("disabled"),
+        kind: normalizedKind,
+        createdAt: Date.now(),
+        sourceModule,
+        reason,
+        targetName,
+        targetEosId,
+        targetSteamId,
+        message,
+        commandText,
+        success: false,
+        skipped: true,
+        skipReason: "module_disabled",
+        relatedEventId,
+      });
+      return {
+        success: false,
+        skipped: true,
+        skipReason: "module_disabled",
+      };
+    }
+
+    if (!message || (normalizedKind === "warning" && !targetName)) {
+      const record = memoryStore.push({
+        id: makeRecordId("invalid"),
+        kind: normalizedKind,
+        createdAt: Date.now(),
+        sourceModule,
+        reason: "invalid_request",
+        targetName,
+        targetEosId,
+        targetSteamId,
+        message,
+        commandText,
+        success: false,
+        skipped: true,
+        skipReason: "invalid_request",
+        relatedEventId,
+      });
+      return {
+        success: false,
+        skipped: true,
+        skipReason: record.skipReason,
+      };
+    }
+
+    try {
+      const result = await core.rconManager.dispatchCommand({
+        command: commandText,
+        requestedBy: "module.broadcast",
+        reason,
+        sourceEventId: relatedEventId,
+        priority: "high",
+      });
+
+      if (!result?.success) {
+        const errorMessage = String(result?.message ?? "RCON command failed.");
+        memoryStore.push({
+          id: makeRecordId("failed"),
+          kind: normalizedKind,
+          createdAt: Date.now(),
+          sourceModule,
+          reason: `${reason}_failed`,
+          targetName,
+          targetEosId,
+          targetSteamId,
+          message,
+          commandText,
+          success: false,
+          skipped: false,
+          errorMessage,
+          relatedEventId,
+        });
+        return {
+          success: false,
+          skipped: false,
+          commandText,
+          errorMessage,
+        };
+      }
+
+      memoryStore.push({
+        id: makeRecordId("ok"),
+        kind: normalizedKind,
+        createdAt: Date.now(),
+        sourceModule,
+        reason,
+        targetName,
+        targetEosId,
+        targetSteamId,
+        message,
+        commandText,
+        success: true,
+        skipped: false,
+        relatedEventId,
+      });
+
+      return {
+        success: true,
+        skipped: false,
+        commandText,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      memoryStore.push({
+        id: makeRecordId("error"),
+        kind: normalizedKind,
+        createdAt: Date.now(),
+        sourceModule,
+        reason: `${reason}_exception`,
+        targetName,
+        targetEosId,
+        targetSteamId,
+        message,
+        commandText,
+        success: false,
+        skipped: false,
+        errorMessage,
+        relatedEventId,
+      });
+      moduleLogger?.warn?.(
+        `[BroadcastModule] ${normalizedKind} failed for ${targetName || "server"}: ${errorMessage}`,
+      );
+      return {
+        success: false,
+        skipped: false,
+        commandText,
+        errorMessage,
+      };
+    }
+  }
+
   return {
     manifest: {
       id: "module.adminWarn",
-      name: "Admin Warn Module",
+      name: "广播模块",
       kind: "module",
-      version: "0.1.0",
-      description: "Unified AdminWarn execution module. Sanitizes messages, executes RCON AdminWarn, and keeps short-lived in-memory records for the web UI.",
+      version: "0.2.0",
+      description: "统一的警告和广播执行模块。支持单人警告、全服广播，并在内存中保留短期记录供页面查看。",
     },
     apiName: "adminWarn",
     api,
@@ -184,7 +218,7 @@ export function createAdminWarnModule({ core, config, logger }) {
     async start() {
       core.webRegistry?.registerPage?.({
         id: "web.adminWarn",
-        title: "警告记录（当前进程内存）",
+        title: "广播模块",
         group: "管理",
         route: "/admin-warns",
         pageModule: "/pages/admin-warns.js",
@@ -194,12 +228,12 @@ export function createAdminWarnModule({ core, config, logger }) {
         order: 112,
         icon: "W",
       });
-      moduleLogger?.info?.(`AdminWarn started. maxRecords=${maxRecords} ttlMs=${ttlMs}`);
+      moduleLogger?.info?.(`Broadcast module started. maxRecords=${maxRecords} ttlMs=${ttlMs}`);
     },
 
     async stop() {
       memoryStore.clear();
-      moduleLogger?.info?.("AdminWarn stopped.");
+      moduleLogger?.info?.("Broadcast module stopped.");
     },
   };
 }
@@ -215,12 +249,16 @@ class AdminWarnMemoryStore {
     this.prune(Date.now());
     this.records.push({
       ...record,
+      kind: normalizeKind(record?.kind),
+      targetName: String(record?.targetName ?? "").trim(),
       targetEosId: optionalText(record?.targetEosId),
       targetSteamId: optionalText(record?.targetSteamId),
       commandText: optionalText(record?.commandText),
       skipReason: optionalText(record?.skipReason),
       errorMessage: optionalText(record?.errorMessage),
       relatedEventId: optionalText(record?.relatedEventId),
+      sourceModule: String(record?.sourceModule ?? "unknown"),
+      reason: String(record?.reason ?? "unknown"),
     });
     if (this.records.length > this.maxRecords) {
       this.records.splice(0, this.records.length - this.maxRecords);
@@ -231,6 +269,7 @@ class AdminWarnMemoryStore {
   query(filter = {}) {
     this.prune(Date.now());
     const limit = clampLimit(filter.limit, 200, this.maxRecords);
+    const kind = normalizeKind(filter.kind);
     const targetName = normalizeSearch(filter.targetName);
     const targetEosId = normalizeSearch(filter.targetEosId);
     const sourceModule = normalizeSearch(filter.sourceModule);
@@ -242,6 +281,7 @@ class AdminWarnMemoryStore {
       .slice()
       .reverse()
       .filter((item) => {
+        if (kind && normalizeKind(item.kind) !== kind) return false;
         if (targetName && !normalizeSearch(item.targetName).includes(targetName)) return false;
         if (targetEosId && normalizeSearch(item.targetEosId) !== targetEosId) return false;
         if (sourceModule && normalizeSearch(item.sourceModule) !== sourceModule) return false;
@@ -271,15 +311,22 @@ class AdminWarnMemoryStore {
   }
 }
 
-function buildCommand(targetName, message) {
+function buildCommandText(kind, targetName, message) {
+  if (kind === "broadcast") {
+    return `AdminBroadcast ${escapeCommandText(message)}`;
+  }
   return `AdminWarn "${escapeCommandText(targetName)}" "${escapeCommandText(message)}"`;
 }
 
-function escapeCommandText(value) {
-  return String(value ?? "").replace(/"/g, "'");
+function sanitizeWarningMessage(message) {
+  return String(message ?? "")
+    .replace(/[\r\n]+/g, " ")
+    .replace(/"/g, "'")
+    .trim()
+    .slice(0, 180);
 }
 
-function sanitizeMessage(message) {
+function sanitizeBroadcastMessage(message) {
   return String(message ?? "")
     .replace(/[\r\n]+/g, " ")
     .replace(/"/g, "'")
@@ -290,8 +337,20 @@ function sanitizeMessage(message) {
 function prefixWarningMessage(message) {
   const text = String(message ?? "").trim();
   if (!text) return "";
-  if (text.startsWith("[BZSS]")) return text;
-  return `[BZSS] ${text}`;
+  if (text.startsWith(DEFAULT_PREFIX)) return text;
+  return `${DEFAULT_PREFIX} ${text}`;
+}
+
+function defaultReasonForKind(kind) {
+  return kind === "broadcast" ? "manual_broadcast" : "manual_warn";
+}
+
+function normalizeKind(value) {
+  const text = String(value ?? "").trim().toLowerCase();
+  if (!text) return "";
+  if (text === "warn" || text === "warning") return "warning";
+  if (text === "broadcast" || text === "announce" || text === "announcement") return "broadcast";
+  return text;
 }
 
 function optionalText(value) {
@@ -325,6 +384,10 @@ function cloneJsonSafe(value) {
   } catch {
     return value;
   }
+}
+
+function escapeCommandText(value) {
+  return String(value ?? "").replace(/"/g, "'").trim();
 }
 
 function makeRecordId(prefix) {

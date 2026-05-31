@@ -943,11 +943,12 @@ export class WebServer {
       if (!adminWarn) {
         return this.json(res, 404, {
           error: "AdminWarnUnavailable",
-          message: "AdminWarn module is not loaded.",
+          message: "Broadcast module is not loaded.",
         });
       }
       const records = adminWarn.getRecent({
         limit: url.searchParams.get("limit") ?? "200",
+        kind: url.searchParams.get("kind") ?? "",
         targetName: url.searchParams.get("targetName") ?? "",
         targetEosId: url.searchParams.get("targetEosId") ?? "",
         sourceModule: url.searchParams.get("sourceModule") ?? "",
@@ -1351,6 +1352,18 @@ export class WebServer {
       const body = await this.readJsonBody(req);
       try {
         const result = await api.warnPlayer({ ...body, actor: user });
+        return this.json(res, result.success ? 200 : 400, result);
+      } catch (err) {
+        return this.json(res, 500, { error: "InternalError", message: err.message });
+      }
+    }
+
+    if (url.pathname === "/api/admin-warns/broadcast" && req.method === "POST") {
+      const api = this.modules.adminWarn;
+      if (!api) return this.json(res, 404, { error: "ModuleNotFound" });
+      const body = await this.readJsonBody(req);
+      try {
+        const result = await api.broadcastMessage({ ...body, actor: user });
         return this.json(res, result.success ? 200 : 400, result);
       } catch (err) {
         return this.json(res, 500, { error: "InternalError", message: err.message });

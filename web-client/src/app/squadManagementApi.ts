@@ -283,6 +283,14 @@ export function warnPlayer(payload: {
   return apiPost<any>("/api/admin-warns/warn", payload);
 }
 
+export function broadcastMessage(payload: {
+  message: string;
+  reason?: string;
+  sourceModule?: string;
+}) {
+  return apiPost<any>("/api/admin-warns/broadcast", payload);
+}
+
 export function getSquadManagementRecords(params: {
   kind?: string;
   limit?: number | string;

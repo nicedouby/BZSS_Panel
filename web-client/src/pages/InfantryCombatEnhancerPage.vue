@@ -2,7 +2,6 @@
   <section class="ice-page">
     <PageHeader
       :title="t('routeTitle.infantryCombatEnhancer')"
-      subtitle="查看步兵战斗增强事件、提醒决策和跳过原因"
     >
       <template #actions>
         <button type="button" class="ghost-button" @click="reload">刷新</button>
@@ -20,9 +19,10 @@
     />
 
     <DataState
+      :loading="isEventsLoading || isConfigLoading"
       :error="pageError"
     >
-      <div class="ice-main">
+      <div class="ice-main" :class="{ 'ice-main--empty': !hasEvents }">
         <InfantryCombatEventTable
           class="ice-table-pane"
           :events="visibleEvents"
@@ -31,6 +31,7 @@
         />
 
         <InfantryCombatEventDetail
+          v-if="hasEvents"
           class="ice-detail-pane"
           :event="selectedEvent"
           @close="setSelectedEvent(null)"
@@ -48,7 +49,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { t } from "../i18n";
 import PageHeader from "../components/common/PageHeader.vue";
 import DataState from "../components/common/DataState.vue";
@@ -78,6 +79,8 @@ const {
   isConfigLoading,
   isConfigSaving,
 } = useInfantryCombatEnhancer();
+
+const hasEvents = computed(() => visibleEvents.length > 0);
 
 function updateFilters(next: InfantryCombatFilters) {
   Object.assign(filters, next);
@@ -120,6 +123,10 @@ async function saveConfig(next: InfantryCombatConfig) {
   min-height: 0;
   height: 100%;
   overflow: hidden;
+}
+
+.ice-main.ice-main--empty {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .ice-table-pane,
