@@ -2,6 +2,9 @@
 
 import { hashMetrics } from "./store.js";
 
+const SAMPLE_INTERVAL_MS = 1000;
+const INITIAL_SAMPLE_DELAY_MS = 5000;
+
 export class ServerInfoSampler {
   constructor({ serverId, store, getSnapshot, logger }) {
     this.serverId = serverId;
@@ -10,6 +13,7 @@ export class ServerInfoSampler {
     this.logger = logger;
     this.lastSavedHash = null;
     this.interval = null;
+    this.startupTimer = null;
     this.currentSample = null;
   }
 
@@ -52,12 +56,21 @@ export class ServerInfoSampler {
   }
 
   async start() {
-    if (this.interval) return;
-    this.interval = setInterval(() => this.tick(), 1000);
-    await this.tick(); // Initial tick
+    if (this.interval || this.startupTimer) return;
+    this.startupTimer = setTimeout(() => {
+      this.startupTimer = null;
+      void this.tick();
+      this.interval = setInterval(() => {
+        void this.tick();
+      }, SAMPLE_INTERVAL_MS);
+    }, INITIAL_SAMPLE_DELAY_MS);
   }
 
   async stop() {
+    if (this.startupTimer) {
+      clearTimeout(this.startupTimer);
+      this.startupTimer = null;
+    }
     if (this.interval) {
       clearInterval(this.interval);
       this.interval = null;

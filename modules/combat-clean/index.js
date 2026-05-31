@@ -716,10 +716,12 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
   return {
     manifest: {
       id: "module.combatClean",
-      name: "\u6218\u6597\u7ba1\u7406\uff08\u5904\u7406\u540e\uff09",
+      name: "\u6218\u6597\u7ba1\u7406",
       kind: "module",
       version: "0.2.1",
-      description: "Combat Manager (Processed) event layer built from raw module.killManage evidence records. It backfills kill event weapon names from recent wound history before external plugins and the UDP forwarder consume the record.",
+      hidden: true,
+      deprecated: true,
+      description: "Legacy combat event compatibility layer built from raw module.killManage evidence records. It backfills kill event weapon names from recent wound history before external plugins and the UDP forwarder consume the record.",
     },
     apiName: "combatClean",
     api,
@@ -727,7 +729,7 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
     async start() {
       core.webRegistry?.registerPage?.({
         id: "web.combatClean",
-        title: "\u6218\u6597\u7ba1\u7406\uff08\u5904\u7406\u540e\uff09",
+        title: "\u6218\u6597\u7ba1\u7406",
         group: "\u7ba1\u7406",
         route: "/combat-clean",
         pageModule: "/pages/combat-clean.js",
@@ -736,6 +738,7 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
         enabled: true,
         order: 111,
         icon: "C",
+        hiddenFromSidebar: true,
       });
 
       if (!enabled) return;

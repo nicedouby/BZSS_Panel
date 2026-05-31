@@ -3,9 +3,9 @@ import { createRouter, createWebHistory } from "vue-router";
 import MatchStatusPage from "../pages/MatchStatusPage.vue";
 import ConsolePage from "../pages/ConsolePage.vue";
 import PlayerDatabasePage from "../pages/PlayerDatabasePage.vue";
-import CombatCleanPage from "../pages/CombatCleanPage.vue";
-import KillManagePage from "../pages/KillManagePage.vue";
+import CombatManagerPage from "../pages/CombatManagerPage.vue";
 import AdminWarnsPage from "../pages/AdminWarnsPage.vue";
+import ScheduledBroadcastPage from "../pages/ScheduledBroadcastPage.vue";
 import InfantryCombatEnhancerPage from "../pages/InfantryCombatEnhancerPage.vue";
 import GroupReportPage from "../pages/GroupReportPage.vue";
 import SquadManagementPage from "../pages/SquadManagementPage.vue";
@@ -13,10 +13,13 @@ import UdpEventForwarderPage from "../pages/UdpEventForwarderPage.vue";
 import ServerInfoStatisticsPage from "../pages/ServerInfoStatisticsPage.vue";
 import MatchSnapshotDebugPage from "../pages/MatchSnapshotDebugPage.vue";
 import PjscAverageDurationPage from "../pages/PjscAverageDurationPage.vue";
+import DrawVoteGuardDebugPage from "../pages/DrawVoteGuardDebugPage.vue";
 import SquadNameClassifierDebugPage from "../pages/SquadNameClassifierDebugPage.vue";
+import WelcomeJoinWarningDebugPage from "../pages/WelcomeJoinWarningDebugPage.vue";
 import ComingSoonPage from "../pages/ComingSoonPage.vue";
 import ChatMonitorPage from "../pages/ChatMonitorPage.vue";
 import RuntimeStatusPage from "../pages/RuntimeStatusPage.vue";
+import { useAuthStore } from "../stores/auth.store";
 
 const coreRealtimeMeta = { category: "core", refreshPolicy: "realtime" } as const;
 const coreManualMeta = { category: "core", refreshPolicy: "manual" } as const;
@@ -65,20 +68,22 @@ export const router = createRouter({
       },
     },
     {
-      path: "/combat-clean",
-      component: CombatCleanPage,
+      path: "/combat-manager",
+      component: CombatManagerPage,
       meta: {
         ...corePollingMeta,
-        titleKey: "routeTitle.combatClean",
+        titleKey: "routeTitle.combatManager",
+        requiredPermission: "combat_manager.view",
+        legacyRequiredPermissions: ["kill_manager.view"],
       },
     },
     {
       path: "/kill-manage",
-      component: KillManagePage,
-      meta: {
-        ...corePollingMeta,
-        titleKey: "routeTitle.killManage",
-      },
+      redirect: (to) => ({ path: "/combat-manager", query: to.query, hash: to.hash }),
+    },
+    {
+      path: "/combat-clean",
+      redirect: (to) => ({ path: "/combat-manager", query: to.query, hash: to.hash }),
     },
     {
       path: "/admin-warns",
@@ -86,6 +91,14 @@ export const router = createRouter({
       meta: {
         ...corePollingMeta,
         titleKey: "routeTitle.adminWarns",
+      },
+    },
+    {
+      path: "/scheduled-broadcasts",
+      component: ScheduledBroadcastPage,
+      meta: {
+        ...corePollingMeta,
+        title: "定时广播",
       },
     },
     {
@@ -159,6 +172,24 @@ export const router = createRouter({
       },
     },
     {
+      path: "/debug/draw-vote-guard",
+      component: DrawVoteGuardDebugPage,
+      meta: {
+        ...debugManualMeta,
+        title: "平局投票阶段提示",
+        fullBleed: true,
+      },
+    },
+    {
+      path: "/debug/welcome-join-warning",
+      component: WelcomeJoinWarningDebugPage,
+      meta: {
+        ...debugManualMeta,
+        title: "入服欢迎警告",
+        fullBleed: true,
+      },
+    },
+    {
       path: "/debug/squad-name-classifier",
       component: SquadNameClassifierDebugPage,
       meta: {
@@ -187,4 +218,26 @@ export const router = createRouter({
       meta: { titleKey: "routeTitle.comingSoon" },
     },
   ],
+});
+
+router.beforeEach((to) => {
+  const requiredPermission = String(to.meta?.requiredPermission ?? "").trim();
+  if (!requiredPermission) return true;
+
+  const auth = useAuthStore();
+  const permissions = Array.isArray(auth.user?.permissions) ? auth.user.permissions : [];
+  const legacyPermissions = Array.isArray(to.meta?.legacyRequiredPermissions) ? to.meta.legacyRequiredPermissions : [];
+  const allowed = auth.user?.isSuperAdmin
+    || permissions.includes("*")
+    || permissions.includes(requiredPermission)
+    || legacyPermissions.some((permission) => permissions.includes(permission));
+
+  if (allowed) {
+    if (!permissions.includes(requiredPermission) && legacyPermissions.some((permission) => permissions.includes(permission))) {
+      console.warn(`[router] Deprecated permission fallback used for ${String(to.fullPath ?? to.path)}: ${legacyPermissions.join(", ")}`);
+    }
+    return true;
+  }
+
+  return { path: "/match-status" };
 });

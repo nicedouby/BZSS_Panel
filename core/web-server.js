@@ -826,6 +826,27 @@ export class WebServer {
       });
     }
 
+    if (url.pathname === "/api/query/combat-manager" && req.method === "GET") {
+      const serverId = url.searchParams.get("serverId") ?? "";
+      const combatManager = this.modules.combatManager;
+      if (!combatManager) {
+        return this.json(res, 404, {
+          error: "CombatManagerUnavailable",
+          message: "Combat manager module is not loaded.",
+        });
+      }
+      return this.json(res, 200, {
+        events: combatManager.getEvents?.({
+          serverId,
+          limit: url.searchParams.get("limit") ?? "100",
+          offset: url.searchParams.get("offset") ?? "0",
+          type: url.searchParams.get("type") ?? "all",
+          search: url.searchParams.get("q") ?? "",
+        }) ?? [],
+        overview: combatManager.getOverview?.(serverId) ?? null,
+      });
+    }
+
     if (url.pathname === "/api/playtime/status") {
       return this.json(res, 200, this.modules.playtime.getStatus());
     }
@@ -963,6 +984,67 @@ export class WebServer {
       });
     }
 
+    if (url.pathname.startsWith("/api/scheduled-broadcasts")) {
+      const scheduledBroadcast = this.modules.scheduledBroadcast;
+      if (!scheduledBroadcast) {
+        return this.json(res, 404, {
+          error: "ScheduledBroadcastUnavailable",
+          message: "Scheduled broadcast module is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/scheduled-broadcasts/state" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          ...scheduledBroadcast.getState(),
+        });
+      }
+
+      if (url.pathname === "/api/scheduled-broadcasts/items" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          item: await scheduledBroadcast.addItem(body ?? {}),
+        });
+      }
+
+      if (url.pathname === "/api/scheduled-broadcasts/reorder" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        const ids = Array.isArray(body?.ids) ? body.ids : [];
+        return this.json(res, 200, await scheduledBroadcast.reorder(ids));
+      }
+
+      const itemPathMatch = url.pathname.match(/^\/api\/scheduled-broadcasts\/items\/([^/]+)$/);
+      if (itemPathMatch && req.method === "PATCH") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          item: await scheduledBroadcast.updateItem(decodeURIComponent(itemPathMatch[1]), body ?? {}),
+        });
+      }
+
+      if (itemPathMatch && req.method === "DELETE") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          item: await scheduledBroadcast.removeItem(decodeURIComponent(itemPathMatch[1])),
+        });
+      }
+
+      const runNowMatch = url.pathname.match(/^\/api\/scheduled-broadcasts\/items\/([^/]+)\/run$/);
+      if (runNowMatch && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          result: await scheduledBroadcast.runNow(decodeURIComponent(runNowMatch[1]), String(body?.reason ?? "manual_run")),
+        });
+      }
+    }
+
     if (url.pathname === "/api/rcon/refresh" && req.method === "POST") {
       if (!this.requireSuperAdmin(user, res)) return;
       const type = this.normalizeMatchRefreshType(url.searchParams.get("type") ?? "all");
@@ -971,6 +1053,88 @@ export class WebServer {
 
     if (url.pathname === "/api/combat/overview") {
       return this.json(res, 200, this.modules.combatState.getOverview());
+    }
+
+    if (url.pathname === "/api/combat-manager/overview") {
+      const combatManager = this.modules.combatManager;
+      if (!combatManager) {
+        return this.json(res, 404, {
+          error: "CombatManagerUnavailable",
+          message: "Combat manager module is not loaded.",
+        });
+      }
+      return this.json(res, 200, combatManager.getOverview(url.searchParams.get("serverId") ?? ""));
+    }
+
+    if (url.pathname === "/api/combat-manager/events") {
+      const combatManager = this.modules.combatManager;
+      if (!combatManager) {
+        return this.json(res, 404, {
+          error: "CombatManagerUnavailable",
+          message: "Combat manager module is not loaded.",
+        });
+      }
+      return this.json(res, 200, {
+        events: combatManager.getEvents({
+          type: url.searchParams.get("type") ?? "all",
+          search: url.searchParams.get("search") ?? url.searchParams.get("q") ?? "",
+          limit: url.searchParams.get("limit") ?? "300",
+          offset: url.searchParams.get("offset") ?? "0",
+          serverId: url.searchParams.get("serverId") ?? "",
+          mode: url.searchParams.get("mode") ?? "",
+          playerKey: url.searchParams.get("playerKey") ?? "",
+        }),
+        overview: combatManager.getOverview(url.searchParams.get("serverId") ?? ""),
+      });
+    }
+
+    if (url.pathname === "/api/combat-manager/rates") {
+      const combatManager = this.modules.combatManager;
+      if (!combatManager) {
+        return this.json(res, 404, {
+          error: "CombatManagerUnavailable",
+          message: "Combat manager module is not loaded.",
+        });
+      }
+      return this.json(res, 200, {
+        rates: combatManager.getRateHistory(url.searchParams.get("serverId") ?? "", Number(url.searchParams.get("window") ?? 30)),
+      });
+    }
+
+    if (url.pathname === "/api/combat-manager/player-events" && req.method === "GET") {
+      const combatManager = this.modules.combatManager;
+      if (!combatManager) {
+        return this.json(res, 404, {
+          error: "CombatManagerUnavailable",
+          message: "Combat manager module is not loaded.",
+        });
+      }
+      return this.json(res, 200, {
+        events: combatManager.getPlayerEvents?.(url.searchParams.get("serverId") ?? "", {
+          steam64ID: url.searchParams.get("steam64ID") ?? url.searchParams.get("steamID") ?? "",
+          eosID: url.searchParams.get("eosID") ?? "",
+          controllerID: url.searchParams.get("controllerID") ?? "",
+          name: url.searchParams.get("name") ?? "",
+          playerKey: url.searchParams.get("playerKey") ?? "",
+        }, {
+          limit: url.searchParams.get("limit") ?? "20",
+          offset: url.searchParams.get("offset") ?? "0",
+        }) ?? [],
+        overview: combatManager.getOverview?.(url.searchParams.get("serverId") ?? "") ?? null,
+      });
+    }
+
+    if (url.pathname === "/api/combat-manager/clear" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const combatManager = this.modules.combatManager;
+      if (!combatManager) {
+        return this.json(res, 404, {
+          error: "CombatManagerUnavailable",
+          message: "Combat manager module is not loaded.",
+        });
+      }
+      const body = await this.readJsonBody(req);
+      return this.json(res, 200, combatManager.clear(body.serverId ?? url.searchParams.get("serverId") ?? ""));
     }
 
     if (url.pathname === "/api/combat/events") {
@@ -1103,6 +1267,89 @@ export class WebServer {
         return this.json(res, 200, {
           ok: true,
           data: pluginApi.clearHistory?.() ?? null,
+        });
+      }
+    }
+
+    if (url.pathname.startsWith("/api/plugins/draw-vote-guard")) {
+      const pluginApi = this.getPluginApi("plugin.drawVoteGuard");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "DrawVoteGuardUnavailable",
+          message: "Draw vote guard plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/draw-vote-guard/state" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getState?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/draw-vote-guard/simulate" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.simulateTrigger?.(body ?? {}),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/draw-vote-guard/clear" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.clearHistory?.() ?? null,
+        });
+      }
+    }
+
+    if (url.pathname.startsWith("/api/plugins/welcome-join-warning")) {
+      const pluginApi = this.getPluginApi("welcome-join-warning");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "WelcomeJoinWarningUnavailable",
+          message: "Welcome join warning plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/welcome-join-warning/state" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getState?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/welcome-join-warning/recent-events" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getRecentEvents?.(Number(url.searchParams.get("limit") ?? "50") || 50) ?? [],
+        });
+      }
+
+      if (url.pathname === "/api/plugins/welcome-join-warning/simulate" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.simulateJoin?.(body ?? {}),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/welcome-join-warning/clear" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.clearHistory?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/welcome-join-warning/clear-events" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.clearRecentEvents?.() ?? null,
         });
       }
     }

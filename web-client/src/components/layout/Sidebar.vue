@@ -79,7 +79,7 @@ const groups = computed(() => {
       title: t("nav.toolsCategory"),
       items: [
         { path: "/squad-management", icon: "SM", label: t("nav.squadManagement") },
-        { path: "/kill-manage", icon: "KM", label: t("nav.killManage") },
+        { path: "/combat-manager", icon: "CM", label: t("nav.combatManager") },
         { path: "/admin-warns", icon: "BR", label: t("nav.adminWarns") },
         { path: "/plugins/infantry-combat-enhancer", icon: "IE", label: t("nav.infantryCombatEnhancer") },
       ],

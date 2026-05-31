@@ -14,6 +14,7 @@ import * as echarts from "echarts";
 const props = defineProps<{
   serverId?: string;
   refreshKey?: number;
+  endpoint?: string;
 }>();
 
 const chartRef = ref<HTMLElement | null>(null);
@@ -24,7 +25,8 @@ async function fetchRates() {
   loading.value = true;
   try {
     const serverIdParam = props.serverId ? `&serverId=${props.serverId}` : "";
-    const res = await fetch(`/api/combat-clean/rates?window=60${serverIdParam}`);
+    const endpoint = props.endpoint || "/api/combat-clean/rates";
+    const res = await fetch(`${endpoint}?window=60${serverIdParam}`);
     const data = await res.json();
     updateChart(data.rates || []);
   } catch (error) {

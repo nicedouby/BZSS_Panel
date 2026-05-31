@@ -20,11 +20,13 @@ import { createPlayerDbSyncModule } from "../modules/player-db-sync/index.js";
 import { createIpLookupModule } from "../modules/ip-lookup/index.js";
 import { createKillManageModule } from "../modules/kill-manage/index.js";
 import { createCombatCleanModule } from "../modules/combat-clean/index.js";
+import { createCombatManagerModule } from "../modules/combat-manager/index.js";
 import { createAdminWarnModule } from "../modules/admin-warn/index.js";
 import { createInfantryCombatEnhancerModule } from "../modules/infantry-combat-enhancer/index.js";
 import { createPlaytimeModule } from "../modules/playtime/index.js";
 import { createPluginSubscriptionsModule } from "../modules/plugin-subscriptions/index.js";
 import { createServerStatsModule } from "../modules/server-stats/index.js";
+import { createScheduledBroadcastModule } from "../modules/scheduled-broadcast/index.js";
 
 import { createChatManagerModule } from "../modules/chat-manager/index.js";
 
@@ -66,10 +68,12 @@ export class ModuleManager {
       createIpLookupModule,
       createKillManageModule,
       createCombatCleanModule,
+      createCombatManagerModule,
       createAdminWarnModule,
       createInfantryCombatEnhancerModule,
       createPlaytimeModule,
       createServerStatsModule,
+      createScheduledBroadcastModule,
     ];
 
     for (const factory of factories) {

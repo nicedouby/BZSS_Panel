@@ -298,6 +298,11 @@
       "maxRecords": 3000,
       "ttlMs": 1800000
     },
+    "scheduledBroadcast": {
+      "enabled": true,
+      "tickMs": 1000,
+      "dataFile": "./data/scheduled-broadcast/list.json"
+    },
     "playtime": { "enabled": true }
   },
   "webModules": {

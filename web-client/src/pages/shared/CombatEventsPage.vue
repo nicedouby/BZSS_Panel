@@ -2,7 +2,7 @@
   <section class="page">
     <PageHeader :title="pageTitle" :subtitle="pageSubtitle" />
 
-    <CombatRateChart :refresh-key="query.dataUpdatedAt.value" />
+    <CombatRateChart :refresh-key="query.dataUpdatedAt.value" :endpoint="rateEndpoint" />
 
     <PageCard compact>
       <div class="toolbar">
@@ -69,6 +69,7 @@ const props = defineProps<{
   pageSubtitle: string;
   endpoint: string;
   clearEndpoint: string;
+  rateEndpoint?: string;
     routeScope: string;
     typeOptions: Array<{ value: string; label: string }>;
     emptyText: string;
@@ -124,6 +125,7 @@ watch(
 );
 
 const endpointRef = computed(() => props.endpoint);
+const rateEndpoint = computed(() => props.rateEndpoint ?? "/api/combat-clean/rates");
 const { query } = useCombatEventsQuery(endpointRef, filters);
 const pageError = computed(() => query.error.value ? renderApiError(query.error.value, text.value.loadFailed) : "");
 const events = computed(() => query.data.value?.events ?? []);

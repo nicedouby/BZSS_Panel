@@ -131,6 +131,11 @@ const eventFlagLabels = computed(() => {
 const displayType = computed(() => {
   const type = String(props.event?.type ?? props.event?.eventName ?? "").trim();
   if (type === "revive") return t("combat.revive", "revive");
+  if (type === "tk") return t("combat.teamKill");
+  if (type === "friendly") return t("combat.friendly");
+  if (type === "teamdamage") return t("combat.teamDamage");
+  if (type === "teamwound") return t("combat.teamWound");
+  if (type === "teamkill") return t("combat.teamKill");
   return type || t("combat.eventType");
 });
 

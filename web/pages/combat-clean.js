@@ -5,12 +5,26 @@ const TYPE_LABELS = {
   damage: "\u4f24\u5bb3",
   wound: "\u51fb\u503c",
   kill: "\u51fb\u6740",
+  death: "\u6b7b\u4ea1",
+  revive: "\u590d\u82cf",
+  friendly: "\u53cb\u4f24",
+  teamDamage: "\u53cb\u519b\u4f24\u5bb3",
+  teamWound: "\u53cb\u519b\u51fb\u503c",
+  teamKill: "\u53cb\u519b\u51fb\u6740",
+  tk: "\u53cb\u519b\u51fb\u6740",
 };
 
 const TYPE_CLASSES = {
   damage: "damage",
   wound: "wound",
   kill: "death",
+  death: "death",
+  revive: "revive",
+  tk: "death",
+  friendly: "friendly",
+  teamDamage: "friendly",
+  teamWound: "friendly",
+  teamKill: "death",
 };
 
 let searchTimer = null;
@@ -29,6 +43,7 @@ export async function renderPage({ root, api, apiFetch }) {
     events: [],
     overview: {
       stats: { total: 0, damage: 0, wound: 0, kill: 0, friendlyFire: 0, teamDamage: 0, teamWound: 0, teamKill: 0 },
+      rawStats: { total: 0, damage: 0, wound: 0, kill: 0, death: 0, tk: 0 },
       rejected: 0,
       lastUpdatedAt: "",
     },
@@ -38,8 +53,8 @@ export async function renderPage({ root, api, apiFetch }) {
     <section class="page kill-page-shell combat-page-shell">
       <div class="page-title-row">
         <div>
-          <div class="page-title">\u6218\u6597\u7ba1\u7406\uff08\u5904\u7406\u540e\uff09</div>
-          <div class="page-subtitle">Clean combat event layer: BZSS_DAMAGE / BZSS_WOUND / BZSS_KILL</div>
+          <div class="page-title">\u6218\u6597\u7ba1\u7406</div>
+          <div class="page-subtitle">\u7edf\u4e00\u5c55\u793a\u4f24\u5bb3\u3001\u51fb\u5012\u3001\u51fb\u6740\u3001\u6b7b\u4ea1\u3001TK \u4e0e\u5904\u7406\u540e\u6218\u6597\u4e8b\u4ef6</div>
         </div>
         <span id="combat-clean-refresh-status" class="kill-refresh-status">Waiting for refresh</span>
       </div>
@@ -49,6 +64,8 @@ export async function renderPage({ root, api, apiFetch }) {
         ${statCard("\u4f24\u5bb3", "combat-clean-damage")}
         ${statCard("\u51fb\u503c", "combat-clean-wound")}
         ${statCard("\u51fb\u6740", "combat-clean-kill")}
+        ${statCard("\u6b7b\u4ea1", "combat-clean-death")}
+        ${statCard("TK", "combat-clean-tk")}
         ${statCard("\u53cb\u519b\u4e8b\u4ef6", "combat-clean-friendly")}
         ${statCard("\u53cb\u519b\u51fb\u6740", "combat-clean-team-kill")}
         ${statCard("\u5df2\u62d2\u7edd", "combat-clean-rejected")}
@@ -57,11 +74,18 @@ export async function renderPage({ root, api, apiFetch }) {
 
       <section class="card combat-toolbar-card">
         <div class="console-actions combat-toolbar">
-          <div class="console-view-toggle combat-type-toggle" role="tablist" aria-label="clean combat type filter">
+          <div class="console-view-toggle combat-type-toggle" role="tablist" aria-label="combat type filter">
             ${typeButton("all")}
             ${typeButton("damage")}
             ${typeButton("wound")}
             ${typeButton("kill")}
+            ${typeButton("death")}
+            ${typeButton("revive")}
+            ${typeButton("friendly")}
+            ${typeButton("teamDamage")}
+            ${typeButton("teamWound")}
+            ${typeButton("teamKill")}
+            ${typeButton("tk")}
           </div>
           <input id="combat-clean-search" class="console-search kill-search" placeholder="Search player / Steam64 / EOS / weapon / raw log">
           <button id="combat-clean-refresh" type="button">Refresh</button>
@@ -102,6 +126,8 @@ export async function renderPage({ root, api, apiFetch }) {
     damage: root.querySelector("#combat-clean-damage"),
     wound: root.querySelector("#combat-clean-wound"),
     kill: root.querySelector("#combat-clean-kill"),
+    death: root.querySelector("#combat-clean-death"),
+    tk: root.querySelector("#combat-clean-tk"),
     friendly: root.querySelector("#combat-clean-friendly"),
     teamKill: root.querySelector("#combat-clean-team-kill"),
     rejected: root.querySelector("#combat-clean-rejected"),
@@ -115,7 +141,7 @@ export async function renderPage({ root, api, apiFetch }) {
       search: state.search,
       limit: String(state.limit),
     });
-    const data = await api(`/api/combat-clean/events?${params.toString()}`);
+    const data = await api(`/api/combat-manager/events?${params.toString()}`);
     state.events = data.events ?? [];
     state.overview = data.overview ?? state.overview;
     renderStats(els, state.overview);
@@ -153,7 +179,7 @@ export async function renderPage({ root, api, apiFetch }) {
   root.querySelector("#combat-clean-refresh").addEventListener("click", () => loadEvents());
   root.querySelector("#combat-clean-clear").addEventListener("click", async () => {
     if (!window.confirm("鍙竻绌哄綋鍓嶅唴瀛樹腑鐨?clean combat 浜嬩欢锛屼笉浼氬啓鍏ユ垨鍒犻櫎鏁版嵁搴撱€傜户缁紵")) return;
-    await apiFetch("/api/combat-clean/clear", { method: "POST" });
+    await apiFetch("/api/combat-manager/clear", { method: "POST" });
     await loadEvents();
   });
 
@@ -200,6 +226,8 @@ function renderStats(els, overview) {
   els.damage.textContent = fmtNumber(stats.damage ?? 0);
   els.wound.textContent = fmtNumber(stats.wound ?? 0);
   els.kill.textContent = fmtNumber(stats.kill ?? 0);
+  if (els.death) els.death.textContent = fmtNumber(overview?.rawStats?.death ?? 0);
+  if (els.tk) els.tk.textContent = fmtNumber(overview?.rawStats?.tk ?? stats.teamKill ?? 0);
   els.friendly.textContent = fmtNumber(stats.friendlyFire ?? 0);
   els.teamKill.textContent = fmtNumber(stats.teamKill ?? 0);
   els.rejected.textContent = fmtNumber(overview?.rejected ?? 0);

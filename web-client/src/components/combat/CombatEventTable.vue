@@ -125,6 +125,11 @@ const hoveredPairKey = ref("");
 function eventType(event: any) {
   const type = String(event?.type ?? event?.friendlyFireType ?? event?.eventName ?? "").trim().toLowerCase();
   if (type === "revive") return t("combat.revive", "revive");
+  if (type === "tk") return t("combat.teamKill");
+  if (type === "friendly") return t("combat.friendly");
+  if (type === "teamdamage") return t("combat.teamDamage");
+  if (type === "teamwound") return t("combat.teamWound");
+  if (type === "teamkill") return t("combat.teamKill");
   return type || "-";
 }
 
@@ -140,7 +145,8 @@ function rowClass(event: any, index: number) {
 function eventRowKind(event: any) {
   const type = String(event?.type ?? event?.friendlyFireType ?? "").trim().toLowerCase();
   if (type === "revive") return "revive";
-  if (type === "kill" || type === "death") return "kill";
+  if (type === "kill" || type === "death" || type === "tk") return "kill";
+  if (type === "friendly" || type === "teamdamage" || type === "teamwound" || type === "teamkill") return "kill";
   if (type === "wound") return "wound";
   if (type === "damage") return "damage";
   return "unknown";

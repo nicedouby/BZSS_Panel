@@ -145,8 +145,9 @@ core/web-status.js
 | `/console` | `core` | `realtime` | 控制台 |
 | `/chat-monitor` | `core` | `realtime` | 聊天监控 |
 | `/player-database` | `core` | `manual` | 查询型页面 |
-| `/combat-clean` | `core` | `polling` | 战斗管理（处理后） |
-| `/kill-manage` | `core` | `polling` | 击杀管理 |
+| `/combat-manager` | `core` | `polling` | 战斗管理 |
+| `/combat-clean` | `core` | `polling` | 战斗管理 |
+| `/kill-manage` | `core` | `polling` | 战斗管理 |
 | `/admin-warns` | `core` | `polling` | 警告记录 |
 | `/squad-management` | `core` | `polling` | 小队管理 |
 | `/plugins/infantry-combat-enhancer` | `plugin` | `polling` | 插件页 |
