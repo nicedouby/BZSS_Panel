@@ -10,7 +10,7 @@
         <RouterView />
       </section>
     </main>
-    <ConfirmDialog />
+    <AppConfirmDialog />
     <WarnPrompt />
     <ToastHost />
     <SettingsDrawer />
@@ -32,7 +32,7 @@ import { useRoute } from "vue-router";
 import { useUiStore } from "../../stores/ui.store";
 import Topbar from "./Topbar.vue";
 import Sidebar from "./Sidebar.vue";
-import ConfirmDialog from "../common/ConfirmDialog.vue";
+import AppConfirmDialog from "../common/AppConfirmDialog.vue";
 import WarnPrompt from "../common/WarnPrompt.vue";
 import ToastHost from "../common/ToastHost.vue";
 import SettingsDrawer from "../settings/SettingsDrawer.vue";

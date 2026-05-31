@@ -17,6 +17,13 @@ import ComingSoonPage from "../pages/ComingSoonPage.vue";
 import ChatMonitorPage from "../pages/ChatMonitorPage.vue";
 import RuntimeStatusPage from "../pages/RuntimeStatusPage.vue";
 
+const coreRealtimeMeta = { category: "core", refreshPolicy: "realtime" } as const;
+const coreManualMeta = { category: "core", refreshPolicy: "manual" } as const;
+const corePollingMeta = { category: "core", refreshPolicy: "polling" } as const;
+const pluginPollingMeta = { category: "plugin", refreshPolicy: "polling" } as const;
+const systemPollingMeta = { category: "system", refreshPolicy: "polling" } as const;
+const debugManualMeta = { category: "debug", refreshPolicy: "manual" } as const;
+
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -25,44 +32,139 @@ export const router = createRouter({
       path: "/match-status",
       component: MatchStatusPage,
       meta: {
+        ...coreRealtimeMeta,
         titleKey: "routeTitle.matchStatus",
         fullBleed: true,
       },
     },
-    { path: "/console", component: ConsolePage, meta: { titleKey: "routeTitle.console", fullBleed: true } },
-    { path: "/chat-monitor", component: ChatMonitorPage, meta: { title: "聊天监控", fullBleed: true } },
-    { path: "/player-database", component: PlayerDatabasePage, meta: { titleKey: "routeTitle.playerDatabase" } },
-    { path: "/combat-clean", component: CombatCleanPage, meta: { titleKey: "routeTitle.combatClean" } },
-    { path: "/kill-manage", component: KillManagePage, meta: { titleKey: "routeTitle.killManage" } },
-    { path: "/admin-warns", component: AdminWarnsPage, meta: { titleKey: "routeTitle.adminWarns" } },
-    { path: "/plugins/infantry-combat-enhancer", component: InfantryCombatEnhancerPage, meta: { titleKey: "routeTitle.infantryCombatEnhancer" } },
-    { path: "/plugins/group-report", component: GroupReportPage, meta: { title: "抱团报备", fullBleed: true } },
-    { path: "/squad-management", component: SquadManagementPage, meta: { titleKey: "routeTitle.squadManagement", fullBleed: true } },
-    { path: "/plugin-subscriptions", component: () => import("../pages/PluginSubscriptionsPage.vue"), meta: { titleKey: "routeTitle.pluginSubscriptions", fullBleed: true } },
+    {
+      path: "/console",
+      component: ConsolePage,
+      meta: {
+        ...coreRealtimeMeta,
+        titleKey: "routeTitle.console",
+        fullBleed: true,
+      },
+    },
+    {
+      path: "/chat-monitor",
+      component: ChatMonitorPage,
+      meta: {
+        ...coreRealtimeMeta,
+        title: "聊天监控",
+        fullBleed: true,
+      },
+    },
+    {
+      path: "/player-database",
+      component: PlayerDatabasePage,
+      meta: {
+        ...coreManualMeta,
+        titleKey: "routeTitle.playerDatabase",
+      },
+    },
+    {
+      path: "/combat-clean",
+      component: CombatCleanPage,
+      meta: {
+        ...corePollingMeta,
+        titleKey: "routeTitle.combatClean",
+      },
+    },
+    {
+      path: "/kill-manage",
+      component: KillManagePage,
+      meta: {
+        ...corePollingMeta,
+        titleKey: "routeTitle.killManage",
+      },
+    },
+    {
+      path: "/admin-warns",
+      component: AdminWarnsPage,
+      meta: {
+        ...corePollingMeta,
+        titleKey: "routeTitle.adminWarns",
+      },
+    },
+    {
+      path: "/plugins/infantry-combat-enhancer",
+      component: InfantryCombatEnhancerPage,
+      meta: {
+        ...pluginPollingMeta,
+        titleKey: "routeTitle.infantryCombatEnhancer",
+      },
+    },
+    {
+      path: "/plugins/group-report",
+      component: GroupReportPage,
+      meta: {
+        ...pluginPollingMeta,
+        title: "抱团报备",
+        fullBleed: true,
+      },
+    },
+    {
+      path: "/squad-management",
+      component: SquadManagementPage,
+      meta: {
+        ...corePollingMeta,
+        titleKey: "routeTitle.squadManagement",
+        fullBleed: true,
+      },
+    },
+    {
+      path: "/plugin-subscriptions",
+      component: () => import("../pages/PluginSubscriptionsPage.vue"),
+      meta: {
+        ...systemPollingMeta,
+        titleKey: "routeTitle.pluginSubscriptions",
+        fullBleed: true,
+      },
+    },
     {
       path: "/debug/udp-forwarder",
       component: UdpEventForwarderPage,
-      meta: { title: "UDP 转发日志" },
+      meta: {
+        ...debugManualMeta,
+        title: "UDP 转发日志",
+      },
     },
     {
       path: "/plugins/server-info-statistics",
       component: ServerInfoStatisticsPage,
-      meta: { title: "服务器信息统计", fullBleed: true },
+      meta: {
+        ...pluginPollingMeta,
+        title: "服务器信息统计",
+        fullBleed: true,
+      },
     },
     {
       path: "/debug/match-snapshots",
       component: MatchSnapshotDebugPage,
-      meta: { title: "快照录制", fullBleed: true },
+      meta: {
+        ...debugManualMeta,
+        title: "快照录制",
+        fullBleed: true,
+      },
     },
     {
       path: "/debug/squad-name-classifier",
       component: SquadNameClassifierDebugPage,
-      meta: { title: "小队名称分类器", fullBleed: true },
+      meta: {
+        ...debugManualMeta,
+        title: "小队名称分类器",
+        fullBleed: true,
+      },
     },
     {
       path: "/system/status",
       component: RuntimeStatusPage,
-      meta: { titleKey: "routeTitle.runtimeStatus", fullBleed: true },
+      meta: {
+        ...systemPollingMeta,
+        titleKey: "routeTitle.runtimeStatus",
+        fullBleed: true,
+      },
     },
     {
       path: "/:pathMatch(.*)*",

@@ -50,13 +50,14 @@
 
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { ApiError } from "../app/apiClient";
 import { useAuthStore } from "../stores/auth.store";
 import ErrorBlock from "../components/common/ErrorBlock.vue";
 import { t } from "../i18n";
 
 const router = useRouter();
+const route = useRoute();
 const auth = useAuthStore();
 
 const username = ref("DoubyBear");
@@ -70,7 +71,8 @@ async function submit() {
   localError.value = "";
   try {
     await auth.login(username.value, password.value);
-    await router.replace("/match-status");
+    const target = getPostLoginTarget();
+    await router.replace(target);
   } catch (error: any) {
     if (error instanceof ApiError) {
       localError.value = error.status === 401 ? t("login.invalidCredentials") : error.message;
@@ -80,6 +82,15 @@ async function submit() {
   } finally {
     loading.value = false;
   }
+}
+
+function getPostLoginTarget() {
+  const target = String(route.fullPath || "/match-status").trim();
+  if (!target || target === "/" || target === "/login") {
+    return "/match-status";
+  }
+
+  return target;
 }
 </script>
 

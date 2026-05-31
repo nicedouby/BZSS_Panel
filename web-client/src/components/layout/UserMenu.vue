@@ -28,12 +28,87 @@
         <button type="button" class="menu-item" role="menuitem" @click="openRuntimeStatus">
           运行状态
         </button>
+        <button type="button" class="menu-item" role="menuitem" @click="openTankBattleDialog">
+          开启坦克大战
+        </button>
         <button type="button" class="menu-item danger" role="menuitem" @click="logout">
           {{ t("user.logout") }}
         </button>
       </div>
     </transition>
   </div>
+
+  <teleport to="body">
+    <transition name="menu-fade">
+      <div v-if="tankBattleDialogOpen" class="tank-battle-overlay" @click.self="closeTankBattleDialog">
+        <section class="tank-battle-dialog" role="dialog" aria-modal="true" aria-labelledby="tank-battle-title">
+          <header class="tank-battle-header">
+            <div>
+              <p class="tank-battle-kicker">用户菜单</p>
+              <h2 id="tank-battle-title">开启坦克大战</h2>
+              <p class="tank-battle-subtitle">一键执行坦克大战相关命令</p>
+            </div>
+            <button type="button" class="tank-battle-close" @click="closeTankBattleDialog">×</button>
+          </header>
+
+          <section class="tank-battle-panel">
+            <div class="tank-battle-actions">
+              <button type="button" class="success-action" :disabled="tankBattleBusy" @click="runTankBattlePreset(true)">
+                一键打开坦克大战
+              </button>
+              <button type="button" class="danger-action" :disabled="tankBattleBusy" @click="runTankBattlePreset(false)">
+                一键关闭坦克大战
+              </button>
+            </div>
+
+            <div class="tank-battle-toggle-row">
+              <button type="button" class="ghost-action" :disabled="tankBattleBusy" @click="setDeployableAvailability(true)">
+                开启无限工事
+              </button>
+              <button type="button" class="ghost-action" :disabled="tankBattleBusy" @click="setDeployableAvailability(false)">
+                关闭无限工事
+              </button>
+            </div>
+
+            <div class="tank-battle-custom">
+              <div class="tank-battle-custom-header">
+                <strong>自定义指令</strong>
+                <span>下面 6 个选项可单独打开或者关闭</span>
+              </div>
+
+              <div class="tank-battle-option-list">
+                <div v-for="option in tankBattleOptions" :key="option.label" class="tank-battle-option-row">
+                  <div class="tank-battle-option-copy">
+                    <strong>{{ option.label }}</strong>
+                    <span>{{ option.description }}</span>
+                  </div>
+
+                  <div class="tank-battle-option-actions">
+                    <button
+                      type="button"
+                      class="success-action"
+                      :disabled="tankBattleBusy"
+                      @click="runTankBattleCommand(`开启${option.label}`, option.openCommand, `已开启${option.label}。`)"
+                    >
+                      开启
+                    </button>
+                    <button
+                      type="button"
+                      class="danger-action"
+                      :disabled="tankBattleBusy"
+                      @click="runTankBattleCommand(`关闭${option.label}`, option.closeCommand, `已关闭${option.label}。`)"
+                    >
+                      关闭
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </section>
+      </div>
+    </transition>
+  </teleport>
 </template>
 
 <script setup lang="ts">
@@ -41,6 +116,8 @@ import { computed, onBeforeUnmount, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "../../stores/auth.store";
 import { useSettingsStore } from "../../stores/settings.store";
+import { apiGet, apiPost } from "../../app/apiClient";
+import { useUiStore } from "../../stores/ui.store";
 import { t } from "../../i18n";
 
 const emit = defineEmits<{
@@ -50,13 +127,57 @@ const emit = defineEmits<{
 
 const auth = useAuthStore();
 const settings = useSettingsStore();
+const ui = useUiStore();
 const router = useRouter();
 
 const menuOpen = ref(false);
 const rootEl = ref<HTMLElement | null>(null);
+const tankBattleDialogOpen = ref(false);
+const tankBattleBusy = ref(false);
+const deployableAvailability = ref<boolean | null>(null);
+
+const tankBattleOptions = [
+  {
+    label: "无重生计时",
+    description: "AdminNoRespawnTimer",
+    openCommand: "AdminNoRespawnTimer 1",
+    closeCommand: "AdminNoRespawnTimer 0",
+  },
+  {
+    label: "全部载具可用",
+    description: "AdminForceAllVehicleAvailability",
+    openCommand: "AdminForceAllVehicleAvailability 1",
+    closeCommand: "AdminForceAllVehicleAvailability 0",
+  },
+  {
+    label: "全部兵种可用",
+    description: "AdminForceAllRoleAvailability",
+    openCommand: "AdminForceAllRoleAvailability 1",
+    closeCommand: "AdminForceAllRoleAvailability 0",
+  },
+  {
+    label: "禁用载具套件要求",
+    description: "AdminDisableVehicleKitRequirement",
+    openCommand: "AdminDisableVehicleKitRequirement 1",
+    closeCommand: "AdminDisableVehicleKitRequirement 0",
+  },
+  {
+    label: "禁用载具占用",
+    description: "AdminDisableVehicleClaiming",
+    openCommand: "AdminDisableVehicleClaiming 1",
+    closeCommand: "AdminDisableVehicleClaiming 0",
+  },
+  {
+    label: "无限工事",
+    description: "AdminForceAllDeployableAvailability",
+    openCommand: "AdminForceAllDeployableAvailability 1",
+    closeCommand: "AdminForceAllDeployableAvailability 0",
+  },
+] as const;
 
 const usernameLabel = computed(() => String(auth.user?.username ?? t("user.user")));
 const roleLabel = computed(() => String(auth.user?.role ?? t("common.unknown")));
+const canManageTankBattle = computed(() => Boolean(auth.user?.isSuperAdmin));
 const avatarLabel = computed(() => {
   const name = usernameLabel.value.trim();
   if (!name) return "?";
@@ -119,6 +240,110 @@ function openPluginCenter() {
 function openRuntimeStatus() {
   closeMenu();
   router.push("/system/status");
+}
+
+function openTankBattleDialog() {
+  closeMenu();
+  if (!canManageTankBattle.value) {
+    ui.pushToast({ title: t("common.error"), message: "只有超级管理员可以使用坦克大战快捷操作。", tone: "error" });
+    return;
+  }
+
+  tankBattleDialogOpen.value = true;
+  void refreshDeployableAvailability();
+}
+
+function closeTankBattleDialog() {
+  tankBattleDialogOpen.value = false;
+}
+
+async function refreshDeployableAvailability() {
+  try {
+    const payload = await apiGet<{ enabled?: boolean; settings?: { mapSwitchCommands?: string[] } }>("/api/auto-tank-battle/status");
+    const commands = Array.isArray(payload?.settings?.mapSwitchCommands) ? payload.settings.mapSwitchCommands : [];
+    deployableAvailability.value = commands.some((command) => String(command || "").trim() === "AdminForceAllDeployableAvailability 1");
+  } catch {
+    deployableAvailability.value = null;
+  }
+}
+
+async function runTankBattlePreset(open: boolean) {
+  if (tankBattleBusy.value) return;
+
+  const commands = open
+    ? [
+        "AdminNoRespawnTimer 1",
+        "AdminForceAllVehicleAvailability 1",
+        "AdminForceAllRoleAvailability 1",
+        "AdminDisableVehicleKitRequirement 1",
+        "AdminDisableVehicleClaiming 1",
+      ]
+    : [
+        "AdminNoRespawnTimer 0",
+        "AdminForceAllVehicleAvailability 0",
+        "AdminForceAllRoleAvailability 0",
+        "AdminDisableVehicleKitRequirement 0",
+        "AdminDisableVehicleClaiming 0",
+      ];
+
+  const confirmed = window.confirm(
+    `确认${open ? "打开" : "关闭"}坦克大战吗？\n\n将按顺序执行以下 ${commands.length} 条命令：\n${commands.map((command, index) => `${index + 1}. ${command}`).join("\n")}`,
+  );
+  if (!confirmed) return;
+
+  tankBattleBusy.value = true;
+  try {
+    for (const command of commands) {
+      await apiPost("/api/rcon-command", { command });
+    }
+    ui.pushToast({ title: "已执行", message: `坦克大战已${open ? "打开" : "关闭"}。`, tone: "ok" });
+    closeTankBattleDialog();
+  } catch (error: any) {
+    ui.pushToast({ title: t("common.error"), message: error?.message || "坦克大战执行失败。", tone: "error" });
+  } finally {
+    tankBattleBusy.value = false;
+  }
+}
+
+async function setDeployableAvailability(next: boolean) {
+  if (tankBattleBusy.value) return;
+
+  const command = next ? "AdminForceAllDeployableAvailability 1" : "AdminForceAllDeployableAvailability 0";
+  const confirmed = window.confirm(`确认${next ? "开启" : "关闭"}无限工事吗？\n\n将执行命令：${command}`);
+  if (!confirmed) return;
+
+  tankBattleBusy.value = true;
+  try {
+    await apiPost("/api/rcon-command", { command });
+    deployableAvailability.value = next;
+    ui.pushToast({ title: "已执行", message: next ? "无限工事已开启。" : "无限工事已关闭。", tone: "ok" });
+  } catch (error: any) {
+    ui.pushToast({ title: t("common.error"), message: error?.message || "无限工事切换失败。", tone: "error" });
+  } finally {
+    tankBattleBusy.value = false;
+  }
+}
+
+async function runTankBattleCommand(actionLabel: string, command: string, successMessage: string) {
+  if (tankBattleBusy.value) return;
+
+  const confirmed = window.confirm(`确认${actionLabel}吗？\n\n将执行命令：${command}`);
+  if (!confirmed) return;
+
+  tankBattleBusy.value = true;
+  try {
+    await apiPost("/api/rcon-command", { command });
+    if (command === "AdminForceAllDeployableAvailability 1") {
+      deployableAvailability.value = true;
+    } else if (command === "AdminForceAllDeployableAvailability 0") {
+      deployableAvailability.value = false;
+    }
+    ui.pushToast({ title: "已执行", message: successMessage, tone: "ok" });
+  } catch (error: any) {
+    ui.pushToast({ title: t("common.error"), message: error?.message || "指令执行失败。", tone: "error" });
+  } finally {
+    tankBattleBusy.value = false;
+  }
 }
 
 async function logout() {
@@ -263,6 +488,230 @@ onBeforeUnmount(() => {
 .menu-item.danger:hover {
   border-color: rgba(248, 113, 113, 0.3);
   background: rgba(248, 113, 113, 0.1);
+}
+
+.tank-battle-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-user-dropdown) + 20);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background:
+    radial-gradient(circle at top, rgba(96, 165, 250, 0.18), transparent 34%),
+    rgba(6, 10, 14, 0.78);
+  backdrop-filter: blur(14px) saturate(1.08);
+}
+
+.tank-battle-dialog {
+  width: min(720px, calc(100vw - 32px));
+  border-radius: 28px;
+  border: 1px solid rgba(96, 165, 250, 0.24);
+  background:
+    radial-gradient(circle at top left, rgba(96, 165, 250, 0.18), transparent 30%),
+    radial-gradient(circle at top right, rgba(244, 114, 182, 0.08), transparent 28%),
+    linear-gradient(180deg, rgba(18, 24, 34, 0.98), rgba(9, 13, 19, 0.99));
+  box-shadow: 0 36px 110px rgba(0, 0, 0, 0.58);
+  overflow: hidden;
+}
+
+.tank-battle-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tank-battle-kicker {
+  margin: 0 0 6px;
+  color: #8fbaff;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.tank-battle-header h2 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.tank-battle-subtitle {
+  margin: 8px 0 0;
+  color: rgba(230, 240, 255, 0.74);
+  font-size: 13px;
+}
+
+.tank-battle-close {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: #f2f7ff;
+  font-size: 21px;
+  line-height: 1;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.tank-battle-panel {
+  display: grid;
+  gap: 14px;
+  padding: 20px 24px 24px;
+}
+
+.tank-battle-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.success-action,
+.danger-action,
+.secondary-action,
+.ghost-action {
+  min-height: 46px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0 14px;
+  font-weight: 700;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.success-action {
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.28), rgba(22, 163, 74, 0.18));
+  color: #effff3;
+  border-color: rgba(34, 197, 94, 0.42);
+  box-shadow: 0 12px 30px rgba(34, 197, 94, 0.12);
+}
+
+.ghost-action {
+  background: rgba(255, 255, 255, 0.035);
+  color: #edf4ff;
+}
+
+.danger-action {
+  background: linear-gradient(180deg, rgba(239, 68, 68, 0.28), rgba(185, 28, 28, 0.18));
+  color: #fff1f1;
+  border-color: rgba(239, 68, 68, 0.42);
+  box-shadow: 0 12px 30px rgba(239, 68, 68, 0.12);
+}
+
+.secondary-action {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.03));
+  color: #edf4ff;
+}
+
+.success-action:hover,
+.danger-action:hover,
+.secondary-action:hover,
+.ghost-action:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
+}
+
+.tank-battle-toggle-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  gap: 12px;
+  padding: 15px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+}
+
+.tank-battle-custom {
+  display: grid;
+  gap: 12px;
+  padding: 15px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+}
+
+.tank-battle-custom-header {
+  display: grid;
+  gap: 4px;
+}
+
+.tank-battle-custom-header strong {
+  font-size: 14px;
+  color: #f4f8ff;
+}
+
+.tank-battle-custom-header span {
+  color: rgba(230, 240, 255, 0.72);
+  font-size: 13px;
+}
+
+.tank-battle-option-list {
+  display: grid;
+  gap: 10px;
+}
+
+.tank-battle-option-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 13px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.025)),
+    rgba(255, 255, 255, 0.02);
+}
+
+.tank-battle-option-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tank-battle-option-copy strong {
+  font-size: 13px;
+  color: #f4f8ff;
+}
+
+.tank-battle-option-copy span {
+  color: rgba(230, 240, 255, 0.68);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tank-battle-option-actions {
+  display: inline-flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 720px) {
+  .tank-battle-dialog {
+    width: min(100vw - 24px, 720px);
+  }
+
+  .tank-battle-toggle-row {
+    grid-template-columns: 1fr;
+  }
+
+  .tank-battle-option-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tank-battle-option-actions {
+    width: 100%;
+  }
+
+  .tank-battle-option-actions .ghost-action {
+    flex: 1 1 0;
+  }
 }
 
 .menu-fade-enter-active,
