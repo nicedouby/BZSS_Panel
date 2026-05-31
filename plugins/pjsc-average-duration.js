@@ -4,17 +4,16 @@ const PLUGIN_ID = "plugin.pjscAverageDuration";
 const DEFAULT_TRIGGER_KEYWORD = "pjsc";
 const DEFAULT_HISTORY_LIMIT = 50;
 const PAGE_ROUTE = "/debug/pjsc-average-duration";
+const TRIGGERS = new Set(["pjsc", "avg", "平均时长"]);
 
-export function createPlugin({ core, modules, config, logger } = {}) {
+export function createPlugin({ core, modules, config, logger, playerRepository } = {}) {
   const pluginLogger =
     logger ??
     core?.createLogger?.({
       moduleId: PLUGIN_ID,
       source: PLUGIN_ID,
       channel: "module",
-    }) ??
-    core?.logger ??
-    console;
+    }) ?? core?.logger ?? console;
 
   const runtimeConfig = readConfig(config);
   const state = {
@@ -33,6 +32,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   };
 
   const unsubscribers = [];
+  const handledEventIds = new Set();
   let serial = Promise.resolve();
 
   function enqueue(task) {
@@ -53,151 +53,197 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     }
   }
 
-  function getCurrentMatch() {
+  function getOnlinePlayers() {
+    const overview = modules?.matchState?.getOverview?.() ?? null;
+
+    if (Array.isArray(overview?.players)) return overview.players;
+    if (Array.isArray(overview?.matchState?.players?.list)) return overview.matchState.players.list;
+    return [];
+  }
+
+  function getMatchSnapshot() {
     return core?.runtimeState?.getMatch?.()
       ?? modules?.matchState?.getOverview?.()?.matchState
       ?? modules?.matchState?.getState?.()
       ?? null;
   }
 
-  function getPlayersFromTeam(match, teamID) {
-    const players = Array.isArray(match?.players?.active)
-      ? match.players.active
-      : Array.isArray(match?.players)
-        ? match.players
+  function getTeamMeta() {
+    const match = getMatchSnapshot();
+    const teams = Array.isArray(match?.teams) ? match.teams : [];
+    const squads = Array.isArray(match?.squads?.list)
+      ? match.squads.list
+      : Array.isArray(match?.squads)
+        ? match.squads
         : [];
+    const teamByID = new Map();
 
-    return players
-      .filter((player) => Number(player?.teamID) === Number(teamID))
-      .map((player) => ({
-        ...player,
-        steamID: normalizeSteamID(player?.steamID ?? player?.steamId ?? player?.steam64 ?? player?.SteamID),
-      }))
-      .filter((player) => Boolean(player.steamID));
-  }
-
-  async function resolvePlaytimes(players) {
-    const unique = [];
-    const seen = new Set();
-
-    for (const player of players) {
-      const steamID = normalizeSteamID(player?.steamID);
-      if (!steamID || seen.has(steamID)) continue;
-      seen.add(steamID);
-      unique.push({ ...player, steamID });
-    }
-
-    const playtimeBySteamID = new Map();
-
-    if (typeof modules?.playtime?.enrichPlayers === "function") {
-      try {
-        const enriched = await modules.playtime.enrichPlayers(unique);
-        for (const player of Array.isArray(enriched) ? enriched : []) {
-          const steamID = normalizeSteamID(player?.steamID);
-          if (!steamID) continue;
-          playtimeBySteamID.set(steamID, extractPlaytimeHours(player));
-        }
-        return playtimeBySteamID;
-      } catch (error) {
-        pluginLogger?.warn?.(`[PJSC] enrichPlayers failed: ${error?.message || error}`);
-      }
-    }
-
-    if (typeof modules?.playtime?.getBySteamID === "function") {
-      for (const player of unique) {
-        try {
-          const row = await modules.playtime.getBySteamID(player.steamID);
-          playtimeBySteamID.set(player.steamID, extractPlaytimeHours(row));
-        } catch (error) {
-          pluginLogger?.warn?.(`[PJSC] getBySteamID failed for ${player.steamID}: ${error?.message || error}`);
-        }
-      }
-    }
-
-    return playtimeBySteamID;
-  }
-
-  async function buildSummary() {
-    const match = getCurrentMatch();
-    const teamSummaries = [];
-    const allPlayers = [];
-
-    for (const teamID of [1, 2]) {
-      const players = getPlayersFromTeam(match, teamID);
-      allPlayers.push(...players);
-    }
-
-    const playtimeBySteamID = await resolvePlaytimes(allPlayers);
-
-    for (const teamID of [1, 2]) {
-      const players = getPlayersFromTeam(match, teamID);
-      const enrichedPlayers = players.map((player) => ({
-        ...player,
-        playtimeHours: playtimeBySteamID.get(player.steamID) ?? null,
-      }));
-      const publicHours = enrichedPlayers
-        .map((player) => player.playtimeHours)
-        .filter((value) => isPublicPlaytimeHours(value));
-      const leaderHours = enrichedPlayers
-        .filter((player) => Boolean(player.isLeader))
-        .map((player) => player.playtimeHours)
-        .filter((value) => isPublicPlaytimeHours(value));
-
-      teamSummaries.push({
+    for (const squad of squads) {
+      const teamID = Number(squad?.teamID ?? 0);
+      const teamName = normalizeTeamName(squad?.teamName);
+      if (!teamID || !teamName) continue;
+      teamByID.set(teamID, {
         teamID,
-        playerCount: enrichedPlayers.length,
-        leaderCount: enrichedPlayers.filter((player) => Boolean(player.isLeader)).length,
-        averageHours: averageHours(publicHours),
-        leaderAverageHours: averageHours(leaderHours),
-        players: enrichedPlayers,
+        teamName,
       });
     }
 
+    for (const team of teams) {
+      const teamID = Number(team?.teamID ?? 0);
+      const teamName = normalizeTeamName(team?.teamName);
+      if (!teamID || !teamName) continue;
+      if (teamByID.has(teamID)) continue;
+      teamByID.set(teamID, {
+        teamID,
+        teamName,
+      });
+    }
+
+    for (const teamID of [1, 2]) {
+      if (!teamByID.has(teamID)) {
+        teamByID.set(teamID, { teamID, teamName: `Team ${teamID}` });
+      }
+    }
+
+    return teamByID;
+  }
+
+  async function loadPlayerRowsByIdentities(onlinePlayers = []) {
+    const steamIDs = [];
+    const eosIDs = [];
+
+    for (const player of Array.isArray(onlinePlayers) ? onlinePlayers : []) {
+      const steamID = normalizeSteamID(player?.steamID ?? player?.steamId ?? player?.steam64 ?? player?.steam_id);
+      const eosID = normalizeText(player?.eosID ?? player?.eosId ?? player?.eos_id);
+      if (steamID) steamIDs.push(steamID);
+      if (eosID) eosIDs.push(eosID);
+    }
+
+    const repo = playerRepository ?? modules?.playerDatabase ?? null;
+    if (typeof repo?.listPlayersByIdentities === "function") {
+      return repo.listPlayersByIdentities({ steamIDs, eosIDs });
+    }
+    if (typeof repo?.listPlayersBySteamIDs === "function") {
+      return repo.listPlayersBySteamIDs(steamIDs);
+    }
+    return [];
+  }
+
+  function buildAveragePlaytimeReport(onlinePlayers, dbRows) {
+    const rowBySteamId = new Map();
+    const rowByEosId = new Map();
+
+    for (const row of Array.isArray(dbRows) ? dbRows : []) {
+      const steam = normalizeSteamID(row?.steam_id ?? row?.steamID ?? row?.steamId);
+      const eos = normalizeText(row?.eos_id ?? row?.eosID ?? row?.eosId);
+      if (steam && !rowBySteamId.has(steam)) rowBySteamId.set(steam, row);
+      if (eos && !rowByEosId.has(eos)) rowByEosId.set(eos, row);
+    }
+
+    const items = [];
+    for (const player of Array.isArray(onlinePlayers) ? onlinePlayers : []) {
+      const steamId = normalizeSteamID(player?.steamID ?? player?.steamId ?? player?.steam64 ?? player?.steam_id);
+      const eosId = normalizeText(player?.eosID ?? player?.eosId ?? player?.eos_id);
+      const teamID = Number(player?.teamID ?? player?.teamId ?? player?.team_id ?? 0) || 0;
+      const isLeader = Boolean(player?.isLeader ?? player?.isSquadLeader ?? player?.leader);
+      const name = normalizeText(player?.name ?? player?.playerName ?? player?.current_name) || "Unknown";
+      const row = steamId ? rowBySteamId.get(steamId) : eosId ? rowByEosId.get(eosId) : null;
+      const seconds = Number(row?.game_seconds ?? row?.gameSeconds ?? 0);
+      const normalizedSeconds = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+
+      items.push({
+        name,
+        steamId,
+        eosId,
+        teamID,
+        isLeader,
+        gameSeconds: normalizedSeconds,
+        hasPublicPlaytime: normalizedSeconds > 0,
+      });
+    }
+
+    const overall = summarizePlaytime(items);
+    const teamMeta = getTeamMeta();
+    const teams = [1, 2].map((teamID) => {
+      const teamItems = items.filter((item) => Number(item.teamID) === Number(teamID));
+      const teamSummary = summarizePlaytime(teamItems);
+      const leaderItems = teamItems.filter((item) => item.isLeader);
+      const leaderSummary = summarizePlaytime(leaderItems);
+      const meta = teamMeta.get(teamID) ?? { teamID, teamName: `Team ${teamID}` };
+
+      return {
+        teamID,
+        teamName: meta.teamName,
+        playerCount: teamItems.length,
+        publicCount: teamSummary.publicCount,
+        privateCount: teamSummary.privateCount,
+        leaderCount: leaderItems.length,
+        averageSeconds: teamSummary.averageSeconds,
+        averageHours: teamSummary.averageHours,
+        leaderAverageSeconds: leaderSummary.averageSeconds,
+        leaderAverageHours: leaderSummary.averageHours,
+        items: teamItems,
+      };
+    });
+
+    return {
+      totalOnline: items.length,
+      publicCount: overall.publicCount,
+      privateCount: overall.privateCount,
+      averageSeconds: overall.averageSeconds,
+      averageHours: overall.averageHours,
+      teams,
+      items,
+    };
+  }
+
+  function buildAveragePlaytimeMessage(report) {
+    const totalOnline = Number(report?.totalOnline ?? 0);
+    const publicCount = Number(report?.publicCount ?? 0);
+    const privateCount = Number(report?.privateCount ?? 0);
+    const team1 = report?.teams?.find((team) => Number(team.teamID) === 1) ?? null;
+    const team2 = report?.teams?.find((team) => Number(team.teamID) === 2) ?? null;
+
+    const lines = [];
+    if (publicCount <= 0) {
+      lines.push(`当前在线 ${totalOnline} 人，公开时长 0 人，未公开 ${privateCount} 人，无法计算平均时长`);
+    } else {
+      lines.push(`当前在线 ${totalOnline} 人，公开时长 ${publicCount} 人，未公开 ${privateCount} 人，平均时长 ${formatHours(report?.averageHours)} 小时`);
+    }
+    lines.push(formatTeamSummaryLine(team1));
+    lines.push(formatTeamSummaryLine(team2));
+    return lines.join("\n");
+  }
+
+  async function buildSummary() {
+    const onlinePlayers = getOnlinePlayers();
+    const playerRows = await loadPlayerRowsByIdentities(onlinePlayers);
+    const report = buildAveragePlaytimeReport(onlinePlayers, playerRows);
+    const message = buildAveragePlaytimeMessage(report);
+
     return {
       generatedAt: new Date().toISOString(),
-      teams: teamSummaries,
-      lines: formatBroadcastLines(teamSummaries),
+      ...report,
+      message,
+      lines: message.split("\n"),
     };
   }
 
   async function broadcastCurrentMatch(reason = "pjsc_trigger") {
     if (!state.enabled) {
-      const result = {
-        success: false,
-        skipped: true,
-        skipReason: "plugin_disabled",
-      };
-      recordHistory({
-        kind: "broadcast",
-        success: false,
-        skipped: true,
-        reason,
-        result,
-      });
+      const result = { success: false, skipped: true, skipReason: "plugin_disabled" };
+      recordHistory({ kind: "broadcast", success: false, skipped: true, reason, result });
       return result;
     }
 
     const summary = await buildSummary();
-    const broadcaster = modules?.adminWarn?.sendAdminBroadcast
-      ?? modules?.adminWarn?.broadcastMessage;
-
+    const broadcaster = modules?.adminWarn?.sendAdminBroadcast ?? modules?.adminWarn?.broadcastMessage;
     if (typeof broadcaster !== "function") {
-      const result = {
-        success: false,
-        skipped: true,
-        skipReason: "broadcast_module_unavailable",
-      };
+      const result = { success: false, skipped: true, skipReason: "broadcast_module_unavailable" };
       state.lastSummary = summary;
       state.lastBroadcastResult = result;
       state.lastError = "adminWarn broadcast API unavailable";
-      recordHistory({
-        kind: "broadcast",
-        success: false,
-        skipped: true,
-        reason,
-        summary,
-        result,
-      });
+      recordHistory({ kind: "broadcast", success: false, skipped: true, reason, summary, result });
       return result;
     }
 
@@ -212,10 +258,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         sourceModule: PLUGIN_ID,
         relatedEventId: reason,
       });
-      lineResults.push({
-        line,
-        result: lineResult,
-      });
+      lineResults.push({ line, result: lineResult });
     }
 
     const result = {
@@ -224,10 +267,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       results: lineResults,
     };
 
-    state.lastSummary = {
-      ...summary,
-      message: lines.join("\n"),
-    };
+    state.lastSummary = { ...summary, message: lines.join("\n") };
     state.lastBroadcastResult = result;
     state.lastBroadcastAt = new Date().toISOString();
     state.broadcastCount += result.success ? 1 : 0;
@@ -236,25 +276,28 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       ? ""
       : String(failedLine?.errorMessage ?? failedLine?.skipReason ?? "broadcast_failed");
 
-    recordHistory({
-      kind: "broadcast",
-      success: Boolean(result.success),
-      skipped: Boolean(result.skipped),
-      reason,
-      summary,
-      result,
-    });
-
+    recordHistory({ kind: "broadcast", success: Boolean(result.success), skipped: Boolean(result.skipped), reason, summary, result });
     return result;
+  }
+
+  function shouldTriggerText(value) {
+    return TRIGGERS.has(normalizeCommand(value));
+  }
+
+  function isHandled(event) {
+    const key = String(event?.id ?? event?.seq ?? event?.timestamp ?? "").trim();
+    if (!key) return false;
+    if (handledEventIds.has(key)) return true;
+    handledEventIds.add(key);
+    if (handledEventIds.size > 200) handledEventIds.clear();
+    return false;
   }
 
   function handleChatMessage(event) {
     return enqueue(async () => {
+      if (isHandled(event)) return { matched: false, deduped: true };
       const message = String(event?.message ?? "").trim();
-      const keyword = state.triggerKeyword || DEFAULT_TRIGGER_KEYWORD;
-      if (!message || !containsTrigger(message, keyword)) {
-        return { matched: false };
-      }
+      if (!message || !shouldTriggerText(message)) return { matched: false };
 
       state.triggerCount += 1;
       state.lastTriggerAt = new Date().toISOString();
@@ -272,10 +315,33 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       });
 
       const result = await broadcastCurrentMatch("pjsc_chat_trigger");
-      return {
+      return { matched: true, result };
+    });
+  }
+
+  function handleChatCommand(event) {
+    return enqueue(async () => {
+      if (isHandled(event)) return { matched: false, deduped: true };
+      const cmd = normalizeCommand(event?.cmd ?? deriveCommandFromMessage(event?.message));
+      if (!shouldTriggerText(cmd)) return { matched: false };
+
+      state.triggerCount += 1;
+      state.lastTriggerAt = new Date().toISOString();
+      state.lastMessage = String(event?.message ?? event?.cmd ?? "").trim();
+      state.lastError = "";
+
+      recordHistory({
+        kind: "trigger",
         matched: true,
-        result,
-      };
+        message: state.lastMessage,
+        playerName: String(event?.playerName ?? event?.name ?? "").trim(),
+        steamID: normalizeSteamID(event?.steamID ?? event?.steamId ?? event?.steamid),
+        squadID: event?.squadID ?? event?.squadId ?? null,
+        teamID: event?.teamID ?? event?.teamId ?? null,
+      });
+
+      const result = await broadcastCurrentMatch("pjsc_chat_trigger");
+      return { matched: true, result };
     });
   }
 
@@ -304,9 +370,18 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     },
 
     async simulateChatMessage(payload = {}) {
+      const message = String(payload?.message ?? "pjsc");
+      if (message.trim().startsWith("!")) {
+        return handleChatCommand({
+          ...payload,
+          cmd: payload?.cmd ?? deriveCommandFromMessage(message),
+          message,
+        });
+      }
+
       return handleChatMessage({
         ...payload,
-        message: String(payload?.message ?? state.triggerKeyword ?? DEFAULT_TRIGGER_KEYWORD),
+        message,
       });
     },
 
@@ -327,7 +402,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       name: "PJSC 平均时长广播",
       kind: "plugin",
       version: "1.0.0",
-      description: "监听聊天中的 pjsc 触发词，按当前对局队伍与小队长统计平均时长，并通过广播输出结果。",
+      description: "监听聊天中的 pjsc / avg / 平均时长 触发词，按在线玩家的数据库游戏时长计算全服与各队平均时长并广播结果。",
     },
     apiName: "pjscAverageDuration",
     api,
@@ -344,7 +419,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         route: PAGE_ROUTE,
         pageModule: "/pages/pjsc-average-duration.js",
         source: PLUGIN_ID,
-        description: "监听 pjsc 聊天触发并广播 team1/team2 平均时长与小队长平均时长。",
+        description: "监听 pjsc 聊天触发并广播当前在线玩家的平均时长、team1/team2 平均时长与队长平均时长。",
         required: false,
         enabled: true,
         order: 128,
@@ -353,8 +428,10 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
       if (typeof modules?.chatManager?.on === "function") {
         unsubscribers.push(modules.chatManager.on("message", handleChatMessage));
+        unsubscribers.push(modules.chatManager.on("command", handleChatCommand));
       } else if (typeof core?.eventBus?.onModuleEvent === "function") {
         unsubscribers.push(core.eventBus.onModuleEvent("module.chatManager", "CHAT_RECEIVED", handleChatMessage));
+        unsubscribers.push(core.eventBus.onModuleEvent("module.chatManager", "CHAT_COMMAND", handleChatCommand));
       }
 
       pluginLogger?.info?.("[PJSC] plugin started");
@@ -385,52 +462,66 @@ function normalizeKeyword(value) {
   return text || DEFAULT_TRIGGER_KEYWORD;
 }
 
+function normalizeCommand(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/^!+/, "");
+}
+
+function deriveCommandFromMessage(value) {
+  const text = String(value ?? "").trim();
+  if (!text.startsWith("!")) return "";
+  return normalizeCommand(text);
+}
+
 function normalizeSteamID(value) {
   const text = String(value ?? "").trim();
   return text || "";
 }
 
-function containsTrigger(message, keyword) {
-  const text = String(message ?? "").toLowerCase();
-  const token = normalizeKeyword(keyword);
-  return token ? text.includes(token) : false;
+function normalizeText(value) {
+  return String(value ?? "").trim();
 }
 
-function extractPlaytimeHours(player) {
-  const rawHours =
-    player?.playtimeHours
-    ?? player?.gameHours
-    ?? player?.game_hours
-    ?? (Number.isFinite(Number(player?.game_seconds)) ? Number(player?.game_seconds) / 3600 : null)
-    ?? (Number.isFinite(Number(player?.gameSeconds)) ? Number(player?.gameSeconds) / 3600 : null)
-    ?? player?.steamPlaytime?.gameHours
-    ?? player?.steamPlaytime?.playtimeHours
-    ?? null;
-  const hours = Number(rawHours);
-  return Number.isFinite(hours) ? hours : null;
+function normalizeTeamName(value) {
+  const text = normalizeText(value);
+  if (!text) return "";
+  if (/^team\s*\d+$/i.test(text)) return "";
+  if (/^team\d+$/i.test(text)) return "";
+  if (/^t\d+$/i.test(text)) return "";
+  return text;
 }
 
-function isPublicPlaytimeHours(value) {
-  const hours = Number(value);
-  return Number.isFinite(hours) && hours > 0;
+function summarizePlaytime(items = []) {
+  const publicItems = items.filter((item) => item?.hasPublicPlaytime);
+  const totalSeconds = publicItems.reduce((sum, item) => sum + Number(item?.gameSeconds ?? 0), 0);
+  const averageSeconds = publicItems.length > 0 ? totalSeconds / publicItems.length : null;
+  return {
+    publicCount: publicItems.length,
+    privateCount: items.length - publicItems.length,
+    averageSeconds,
+    averageHours: averageSeconds == null ? null : averageSeconds / 3600,
+  };
 }
 
-function averageHours(values = []) {
-  const list = values.map((value) => Number(value)).filter(Number.isFinite);
-  if (!list.length) return null;
-  const sum = list.reduce((total, value) => total + value, 0);
-  return sum / list.length;
+function formatTeamSummaryLine(teamSummary) {
+  if (!teamSummary) {
+    return `Team? 未知 平均时长 0.0 小时，队长平均时长 0.0 小时`;
+  }
+
+  const teamLabel = `Team${Number(teamSummary.teamID) || "?"}`;
+  const teamName = normalizeText(teamSummary.teamName) || `Team ${teamSummary.teamID ?? "?"}`;
+  const teamAverage = teamSummary.publicCount > 0 ? formatHours(teamSummary.averageHours) : "0.0";
+  const leaderAverage = teamSummary.leaderCount > 0 && Number.isFinite(Number(teamSummary.leaderAverageHours))
+    ? formatHours(teamSummary.leaderAverageHours)
+    : "0.0";
+
+  return `${teamLabel} ${teamName} 平均时长 ${teamAverage} 小时，队长平均时长 ${leaderAverage} 小时`;
 }
 
 function formatHours(value) {
-  if (!Number.isFinite(Number(value))) return "暂无数据";
   const hours = Number(value);
-  return `${hours < 1 ? hours.toFixed(2) : hours.toFixed(1)}h`;
-}
-
-function formatBroadcastLines(teamSummaries = []) {
-  return [
-    `[PJSC] team1 平均时长 ${formatHours(teamSummaries[0]?.averageHours)} 小队长平均时长 ${formatHours(teamSummaries[0]?.leaderAverageHours)}`,
-    `[PJSC] team2 平均时长 ${formatHours(teamSummaries[1]?.averageHours)} 小队长平均时长 ${formatHours(teamSummaries[1]?.leaderAverageHours)}`,
-  ];
+  if (!Number.isFinite(hours) || hours <= 0) return "0.0";
+  return hours.toFixed(1);
 }

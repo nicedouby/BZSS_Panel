@@ -102,6 +102,14 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       return repo.listPlayersWithSteamID();
     },
 
+    async listPlayersBySteamIDs(steamIDs = []) {
+      return repo.listPlayersBySteamIDs(steamIDs);
+    },
+
+    async listPlayersByIdentities(identities = {}) {
+      return repo.listPlayersByIdentities(identities);
+    },
+
     async getCachedPlayer(identity = {}) {
       return repo.findCachedPlayer(identity);
     },

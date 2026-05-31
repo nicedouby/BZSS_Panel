@@ -290,6 +290,59 @@ export class PlayerRepository {
     );
   }
 
+  async listPlayersBySteamIDs(steamIDs = []) {
+    const ids = [...new Set(
+      (Array.isArray(steamIDs) ? steamIDs : [])
+        .map((id) => String(id ?? "").trim())
+        .filter(Boolean),
+    )];
+
+    if (!ids.length) return [];
+
+    const placeholders = ids.map(() => "?").join(", ");
+    return this.db.all(
+      `SELECT id, current_name, steam_id, eos_id, game_seconds, updated_at
+       FROM players
+       WHERE steam_id IN (${placeholders})`,
+      ...ids,
+    );
+  }
+
+  async listPlayersByIdentities({ steamIDs = [], eosIDs = [] } = {}) {
+    const steam = [...new Set(
+      (Array.isArray(steamIDs) ? steamIDs : [])
+        .map((id) => String(id ?? "").trim())
+        .filter(Boolean),
+    )];
+    const eos = [...new Set(
+      (Array.isArray(eosIDs) ? eosIDs : [])
+        .map((id) => String(id ?? "").trim())
+        .filter(Boolean),
+    )];
+
+    const clauses = [];
+    const params = [];
+
+    if (steam.length) {
+      clauses.push(`steam_id IN (${steam.map(() => "?").join(", ")})`);
+      params.push(...steam);
+    }
+
+    if (eos.length) {
+      clauses.push(`eos_id IN (${eos.map(() => "?").join(", ")})`);
+      params.push(...eos);
+    }
+
+    if (!clauses.length) return [];
+
+    return this.db.all(
+      `SELECT id, current_name, steam_id, eos_id, game_seconds, updated_at
+       FROM players
+       WHERE ${clauses.join(" OR ")}`,
+      ...params,
+    );
+  }
+
   async updateGameDuration(playerId, gameSeconds) {
     const normalizedSeconds = Math.max(0, Math.floor(Number(gameSeconds) || 0));
     await this.db.run(
