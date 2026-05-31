@@ -156,12 +156,13 @@ export class WebRegistry {
     const required = Boolean(page.required);
     const optionalConfig = this.config.get("webModules.optional", {});
     const enabled = required ? true : Boolean(optionalConfig[page.id] ?? page.enabled ?? true);
+    const normalizedRoute = normalizeRoute(page.route);
 
     const finalPage = {
       id: page.id,
       title: page.title,
       group: page.group ?? "其他",
-      route: page.route,
+      route: normalizedRoute,
       pageModule: page.pageModule,
       source: page.source,
       required,
@@ -172,6 +173,16 @@ export class WebRegistry {
       requiredPermission: page.requiredPermission ?? "",
     };
 
+    for (const existing of this.pages.values()) {
+      if (existing.id === finalPage.id) continue;
+      if (normalizeRoute(existing.route) !== normalizedRoute) continue;
+
+      this.logger.web(
+        `Skip duplicate page route ${normalizedRoute}: keep ${existing.id}, ignore ${finalPage.id}`,
+      );
+      return;
+    }
+
     this.pages.set(finalPage.id, finalPage);
     this.logger.web(`Registered page ${finalPage.id}`);
   }
@@ -180,7 +191,7 @@ export class WebRegistry {
    * 返回当前启用且面向前端展示的页面列表。
    */
   getPages() {
-    return [...this.pages.values()].filter((p) => p.enabled).sort((a, b) => a.order - b.order);
+    return dedupePagesByRoute([...this.pages.values()].filter((p) => p.enabled).sort((a, b) => a.order - b.order));
   }
 
   /**
@@ -188,6 +199,32 @@ export class WebRegistry {
    * 订阅页需要完整数据来展示系统结构，因此使用这个接口。
    */
   getAllPages() {
-    return [...this.pages.values()].sort((a, b) => a.order - b.order);
+    return dedupePagesByRoute([...this.pages.values()].sort((a, b) => a.order - b.order));
   }
+}
+
+function normalizeRoute(route) {
+  const raw = String(route ?? "").trim();
+  if (!raw) return "/";
+
+  const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`;
+  if (withLeadingSlash.length > 1 && withLeadingSlash.endsWith("/")) {
+    return withLeadingSlash.slice(0, -1);
+  }
+
+  return withLeadingSlash;
+}
+
+function dedupePagesByRoute(pages) {
+  const seenRoutes = new Set();
+  const unique = [];
+
+  for (const page of pages) {
+    const route = normalizeRoute(page?.route);
+    if (seenRoutes.has(route)) continue;
+    seenRoutes.add(route);
+    unique.push({ ...page, route });
+  }
+
+  return unique;
 }

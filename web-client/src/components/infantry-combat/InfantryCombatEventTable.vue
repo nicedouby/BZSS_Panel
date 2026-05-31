@@ -4,7 +4,7 @@
       <div>
         <p class="kicker">输出记录</p>
         <h2>事件流</h2>
-        <p class="subtitle">紧凑显示。详情放到右侧面板，列表只保留扫读所需信息。</p>
+        <p class="subtitle">传统日志输出。详情放到右侧面板，列表只保留扫读所需信息。</p>
       </div>
       <div class="records-head-actions">
         <span class="head-chip">{{ events.length }} 条</span>
@@ -12,7 +12,7 @@
       </div>
     </header>
 
-      <div class="record-stats">
+    <div class="record-stats">
       <span class="stat-chip primary">总计 {{ stats.total }}</span>
       <span class="stat-chip">伤 {{ stats.damage }}</span>
       <span class="stat-chip">倒 {{ stats.wound }}</span>
@@ -31,52 +31,25 @@
       >
         <div class="record-accent" :data-tone="eventTone(event)" />
 
-        <div class="record-top">
-          <div class="record-time">
-            <strong>{{ formatTime(event.time) }}</strong>
-            <span>{{ event.serverId || "未分配服务器" }}</span>
-          </div>
-
-          <div class="record-badges">
+        <div class="record-line">
+          <div class="record-line-body">
+            <span class="log-time">{{ formatTime(event.time) }}</span>
             <span class="type-pill" :data-tone="eventTone(event)">{{ typeLabel(event.type) }}</span>
             <span class="relation-pill" :data-tone="relationTone(event)">{{ relationLabel(event) }}</span>
             <span v-if="event.samePlayer" class="mini-pill danger">同人</span>
-          </div>
-        </div>
-
-        <div class="record-body">
-          <div class="entity entity-left">
-            <div class="entity-line">
-              <span class="entity-label">攻击者</span>
-              <strong>{{ event.attackerName || event.attacker?.name || "-" }}</strong>
-            </div>
-            <small>{{ entityMeta(event.attackerSteam64ID, event.attackerEOSID, event.attackerControllerID, event.attackerTeamID) }}</small>
-          </div>
-
-          <div class="event-core">
-            <div class="core-value">{{ formatDamage(event.damage) }}</div>
-            <div class="core-arrow">→</div>
-            <div class="core-subtitle">{{ weaponLabel(event.weapon) }}</div>
-          </div>
-
-          <div class="entity entity-right">
-            <div class="entity-line">
-              <span class="entity-label">受害者</span>
-              <strong>{{ event.victimName || event.victim?.name || "-" }}</strong>
-            </div>
-            <small>{{ entityMeta(event.victimSteam64ID, event.victimEOSID, event.victimControllerID, event.victimTeamID) }}</small>
-          </div>
-        </div>
-
-        <div class="record-footer">
-          <div class="tag-row">
+            <span class="log-label">攻击者</span>
+            <strong class="entity-name">{{ event.attackerName || event.attacker?.name || "-" }}</strong>
+            <span class="log-arrow">→</span>
+            <strong class="entity-name">{{ event.victimName || event.victim?.name || "-" }}</strong>
+            <span class="log-damage">{{ formatDamage(event.damage) }}</span>
+            <span class="log-weapon">{{ weaponLabel(event.weapon) }}</span>
+            <span class="log-divider">|</span>
+            <span class="log-label">标签</span>
             <span v-for="tag in compactTags(event)" :key="tag.key" class="tag-chip" :data-tone="tag.tone">{{ tag.label }}</span>
             <span v-if="!compactTags(event).length" class="tag-empty">无标签</span>
-          </div>
-
-          <div class="warning-row">
+            <span class="log-divider">|</span>
             <WarningDecisionBadge :decision="event.victimWarning" role-label="受害" />
-            <WarningDecisionBadge :decision="event.attackerWarning" role-label="攻" />
+            <WarningDecisionBadge :decision="event.attackerWarning" role-label="攻方" />
           </div>
         </div>
       </article>
@@ -133,7 +106,10 @@ function buildStats(events: InfantryCombatEventRecord[]) {
     if (event.victimWarning?.success) state.sent += 1;
     if (event.attackerWarning?.success) state.sent += 1;
     if (event.victimWarning?.skipped || event.attackerWarning?.skipped) state.skipped += 1;
-    if ((event.victimWarning && event.victimWarning.success === false && !event.victimWarning.skipped) || (event.attackerWarning && event.attackerWarning.success === false && !event.attackerWarning.skipped)) {
+    if (
+      (event.victimWarning && event.victimWarning.success === false && !event.victimWarning.skipped)
+      || (event.attackerWarning && event.attackerWarning.success === false && !event.attackerWarning.skipped)
+    ) {
       state.failed += 1;
     }
     if (event.samePlayer) state.samePlayer += 1;
@@ -187,24 +163,8 @@ function relationTone(event: InfantryCombatEventRecord) {
 function weaponLabel(value: unknown) {
   const text = String(value ?? "").trim();
   if (!text) return "未知武器";
-  if (text.length <= 14) return text;
-  return `${text.slice(0, 12)}…`;
-}
-
-function entityMeta(steam64ID?: string, eosID?: string, controllerID?: string, teamID?: string) {
-  return [
-    teamID ? `T${teamID}` : "",
-    controllerID ? `C${controllerID}` : "",
-    steam64ID ? `S${shortId(steam64ID)}` : "",
-    eosID ? `E${shortId(eosID)}` : "",
-  ].filter(Boolean).join(" · ") || "无标识";
-}
-
-function shortId(value: string) {
-  const text = String(value ?? "").trim();
-  if (!text) return "";
-  if (text.length <= 10) return text;
-  return `${text.slice(0, 4)}…${text.slice(-3)}`;
+  if (text.length <= 18) return text;
+  return `${text.slice(0, 16)}…`;
 }
 
 function isFriendly(event: InfantryCombatEventRecord) {
@@ -242,7 +202,7 @@ function formatTime(value: unknown) {
 
 function formatDamage(value: unknown) {
   const number = Number(value);
-  if (!Number.isFinite(number)) return "—";
+  if (!Number.isFinite(number)) return "-";
   return Number.isInteger(number) ? String(number) : number.toFixed(1).replace(/\.0$/, "");
 }
 </script>
@@ -250,69 +210,87 @@ function formatDamage(value: unknown) {
 <style scoped>
 .records-panel {
   border: 1px solid #29323b;
-  border-radius: 16px;
+  border-radius: 14px;
   background:
     radial-gradient(circle at 0% 0%, rgba(96, 165, 250, 0.07), transparent 32%),
     linear-gradient(180deg, #12181f 0%, #10161c 100%);
-  min-height: 0;
+  min-height: clamp(520px, 62vh, 840px);
+  height: 100%;
   overflow: hidden;
-  padding: 10px;
+  padding: 7px;
   display: grid;
-  gap: 8px;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 5px;
 }
 
 .records-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 6px;
 }
 
 .kicker {
-  margin: 0 0 2px;
+  margin: 0 0 1px;
   color: #88b8ff;
-  font-size: 10px;
+  font-size: 9px;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
 }
 
 .records-head h2 {
   margin: 0;
   color: #edf2f4;
-  font-size: 15px;
+  font-size: 13px;
+  line-height: 1;
 }
 
 .subtitle {
-  margin: 4px 0 0;
+  margin: 1px 0 0;
   color: #8fa2b3;
-  font-size: 11px;
-  line-height: 1.3;
+  font-size: 9px;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: min(100%, 280px);
 }
 
 .records-head-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 3px;
 }
 
 .head-chip,
 .stat-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 20px;
-  padding: 0 8px;
+  min-height: 16px;
+  padding: 0 6px;
   border-radius: 999px;
   border: 1px solid #31404d;
   background: #0f151b;
   color: #dbe2e8;
-  font-size: 10px;
+  font-size: 8px;
+  line-height: 1;
 }
 
 .record-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 1px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.record-stats::-webkit-scrollbar {
+  display: none;
 }
 
 .stat-chip.primary {
@@ -337,28 +315,33 @@ function formatDamage(value: unknown) {
 
 .record-list {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   min-height: 0;
+  height: 100%;
   overflow: auto;
-  max-height: calc(100vh - 260px);
   padding-right: 2px;
 }
 
 .record-card {
   position: relative;
   display: grid;
-  gap: 8px;
-  padding: 10px 10px 10px 14px;
-  border-radius: 13px;
+  gap: 3px;
+  padding: 6px 10px 6px 12px;
+  border-radius: 12px;
   border: 1px solid #2b3540;
   background: rgba(13, 19, 25, 0.94);
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+  transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+  min-height: 78px;
+  max-height: 78px;
+  height: 78px;
+  overflow: hidden;
 }
 
 .record-card:hover {
   border-color: #405061;
   background: rgba(15, 22, 29, 0.98);
+  transform: translateY(-1px);
 }
 
 .record-card--selected {
@@ -381,7 +364,7 @@ function formatDamage(value: unknown) {
 .record-accent {
   position: absolute;
   inset: 0 auto 0 0;
-  width: 3px;
+  width: 2px;
   border-radius: 12px 0 0 12px;
   background: #56708a;
 }
@@ -398,38 +381,18 @@ function formatDamage(value: unknown) {
   background: #f87171;
 }
 
-.record-top,
-.record-body,
-.record-footer {
+.record-line {
   display: grid;
-  gap: 5px;
+  gap: 0;
+  min-width: 0;
+  height: 100%;
 }
 
-.record-top {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-}
-
-.record-time {
-  display: grid;
-  gap: 2px;
-}
-
-.record-time strong {
+.log-time {
   color: #edf2f4;
-  font-size: 13px;
-}
-
-.record-time span {
-  color: #8fa2b3;
-  font-size: 11px;
-}
-
-.record-badges {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 4px;
+  font-size: 12px;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  letter-spacing: 0.02em;
 }
 
 .type-pill,
@@ -439,13 +402,13 @@ function formatDamage(value: unknown) {
 .tag-empty {
   display: inline-flex;
   align-items: center;
-  min-height: 20px;
-  padding: 0 8px;
+  min-height: 16px;
+  padding: 0 6px;
   border-radius: 999px;
   border: 1px solid #31404d;
   background: #0f151b;
   color: #dbe2e8;
-  font-size: 10px;
+  font-size: 8.5px;
 }
 
 .type-pill[data-tone="ok"],
@@ -471,86 +434,124 @@ function formatDamage(value: unknown) {
   background: rgba(248, 113, 113, 0.08);
 }
 
-.record-body {
-  grid-template-columns: minmax(0, 1fr) 132px minmax(0, 1fr);
+.record-line-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
+  column-gap: 8px;
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
 }
 
-.entity {
-  display: grid;
+.log-chain,
+.log-tail {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
   gap: 3px;
   min-width: 0;
 }
 
-.entity-line {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  flex-wrap: wrap;
+.log-chain {
+  overflow: hidden;
 }
 
-.entity-label {
+.log-tail {
+  justify-self: end;
+  overflow: hidden;
+}
+
+.log-label {
   color: #8fa2b3;
-  font-size: 11px;
+  font-size: 9px;
+  white-space: nowrap;
 }
 
-.entity strong {
+.entity-name {
   color: #edf2f4;
   font-size: 13px;
   word-break: break-word;
-}
-
-.entity small {
-  color: #7f919f;
-  font-size: 10px;
-  line-height: 1.25;
-  word-break: break-word;
-}
-
-.event-core {
-  display: grid;
-  justify-items: center;
-  gap: 1px;
-  text-align: center;
-}
-
-.core-value {
-  color: #edf2f4;
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.core-arrow {
-  color: #88b8ff;
-  font-size: 12px;
-  line-height: 1;
-}
-
-.core-subtitle {
-  color: #8fa2b3;
-  font-size: 10px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 120px;
+  min-width: 0;
+  max-width: 180px;
 }
 
-.record-footer {
-  padding-top: 7px;
-  border-top: 1px solid rgba(41, 50, 59, 0.8);
+.log-arrow {
+  color: #88b8ff;
+  font-size: 10px;
+  flex: 0 0 auto;
+}
+
+.log-damage {
+  display: inline-flex;
+  align-items: center;
+  min-height: 16px;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  background: rgba(96, 165, 250, 0.08);
+  color: #edf2f4;
+  font-size: 9px;
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
+.log-weapon {
+  color: #8fa2b3;
+  font-size: 9px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.log-divider {
+  color: #5f7180;
+  font-size: 9px;
+  padding: 0 2px;
+  flex: 0 0 auto;
+}
+
+.tag-chip,
+.tag-empty {
+  flex: 0 0 auto;
+}
+
+.record-line-body {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 4px;
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.record-line-body .type-pill,
+.record-line-body .relation-pill,
+.record-line-body .mini-pill,
+.record-line-body .tag-chip,
+.record-line-body .tag-empty,
+.record-line-body .log-damage,
+.record-line-body .log-weapon,
+.record-line-body .log-divider,
+.record-line-body .log-label {
+  flex: 0 0 auto;
+}
+
+.record-line-body .entity-name {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .tag-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-}
-
-.warning-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
+  gap: 3px;
 }
 
 .tag-empty {
@@ -579,6 +580,9 @@ function formatDamage(value: unknown) {
   color: #9aa7b2;
   display: grid;
   gap: 4px;
+  min-height: 100%;
+  align-content: center;
+  justify-items: center;
 }
 
 .empty-list strong {
@@ -587,38 +591,32 @@ function formatDamage(value: unknown) {
 
 @media (max-width: 1200px) {
   .record-list {
-    max-height: 60vh;
+    max-height: none;
   }
 
-  .record-body {
-    grid-template-columns: 1fr;
+  .record-line-body {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
 
-  .event-core {
-    justify-items: start;
-    text-align: left;
-  }
-
-  .warning-row {
-    grid-template-columns: 1fr;
+  .record-line-body::-webkit-scrollbar {
+    display: none;
   }
 }
 
 @media (max-width: 720px) {
   .records-head {
     flex-direction: column;
+    align-items: flex-start;
   }
 
   .records-head-actions {
     justify-content: flex-start;
   }
 
-  .record-top {
-    grid-template-columns: 1fr;
-  }
-
-  .record-badges {
-    justify-content: flex-start;
+  .subtitle {
+    max-width: 100%;
   }
 }
 </style>

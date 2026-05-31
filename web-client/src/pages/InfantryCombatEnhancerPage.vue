@@ -20,11 +20,7 @@
     />
 
     <DataState
-      :loading="isEventsLoading && !visibleEvents.length"
       :error="pageError"
-      :empty="!pageError && !visibleEvents.length && !isEventsLoading"
-      empty-title="暂无步兵战斗增强记录"
-      empty-text="等待 combat-clean 推送 processed 事件，并在这里展示提醒结果。"
     >
       <div class="ice-main">
         <InfantryCombatEventTable
@@ -122,11 +118,13 @@ async function saveConfig(next: InfantryCombatConfig) {
   grid-template-columns: minmax(0, 1fr) 380px;
   gap: 12px;
   min-height: 0;
+  height: 100%;
   overflow: hidden;
 }
 
 .ice-table-pane,
 .ice-detail-pane {
+  height: 100%;
   min-height: 0;
   overflow: auto;
 }

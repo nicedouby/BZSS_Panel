@@ -73,12 +73,6 @@
         </button>
       </div>
     </div>
-
-    <div class="toolbar-meta">
-      <span class="meta-chip">第 {{ Math.floor(filters.offset / Math.max(filters.limit, 1)) + 1 }} 页</span>
-      <span class="meta-chip">偏移 {{ filters.offset }}</span>
-      <span class="meta-chip" :data-tone="loading ? 'warn' : 'ok'">{{ loading ? "刷新中" : "实时刷新" }}</span>
-    </div>
   </section>
 </template>
 
@@ -148,26 +142,27 @@ function normalizeWeapon(value: string): InfantryCombatFilters["weapon"] {
   border: 1px solid #29323b;
   border-radius: 16px;
   background: #12181f;
-  padding: 14px;
+  padding: 8px;
   display: grid;
-  gap: 12px;
+  gap: 6px;
 }
 
 .toolbar-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 10px;
+  gap: 6px;
 }
 
 .field {
   display: grid;
-  gap: 6px;
+  gap: 3px;
   min-width: 0;
 }
 
 .field span {
   color: #8fa2b3;
-  font-size: 12px;
+  font-size: 10px;
+  line-height: 1.1;
 }
 
 .field select,
@@ -177,7 +172,8 @@ function normalizeWeapon(value: string): InfantryCombatFilters["weapon"] {
   background: #0f151b;
   color: #edf2f4;
   border-radius: 10px;
-  padding: 10px 12px;
+  padding: 6px 9px;
+  font-size: 11px;
 }
 
 .field.search {
@@ -193,42 +189,15 @@ function normalizeWeapon(value: string): InfantryCombatFilters["weapon"] {
   background: #0f151b;
   color: #edf2f4;
   border-radius: 10px;
-  min-height: 42px;
-  padding: 0 12px;
+  min-height: 32px;
+  padding: 0 10px;
   text-align: left;
+  font-size: 11px;
 }
 
 .toggle-button[data-on="true"] {
   border-color: rgba(74, 222, 128, 0.35);
   background: rgba(74, 222, 128, 0.08);
-}
-
-.toolbar-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.meta-chip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  padding: 0 8px;
-  border-radius: 999px;
-  border: 1px solid #31404d;
-  background: #0f151b;
-  color: #9aa7b2;
-  font-size: 11px;
-}
-
-.meta-chip[data-tone="ok"] {
-  border-color: rgba(74, 222, 128, 0.35);
-  color: #caedd4;
-}
-
-.meta-chip[data-tone="warn"] {
-  border-color: rgba(251, 191, 36, 0.35);
-  color: #f5db97;
 }
 
 @media (max-width: 1200px) {

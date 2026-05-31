@@ -8,7 +8,7 @@
     <nav>
       <div v-for="group in groups" :key="group.title" class="nav-group">
         <h3 class="group-title">{{ group.title }}</h3>
-        <template v-for="item in group.items" :key="item.path">
+        <template v-for="item in group.items" :key="`${group.title}-${item.path}`">
           <RouterLink
             :to="item.path"
             @click="ui.closeMobileSidebar()"
@@ -30,6 +30,39 @@ import { t } from "../../i18n";
 
 const ui = useUiStore();
 const apiPages = ref<any[]>([]);
+
+function normalizePath(path: unknown): string {
+  const raw = String(path ?? "").trim();
+  if (!raw) return "/";
+
+  const noLeadingHash = raw.replace(/^#+/, "");
+  let pathnameOnly = noLeadingHash;
+  if (/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(noLeadingHash)) {
+    try {
+      pathnameOnly = new URL(noLeadingHash).pathname || "/";
+    } catch {
+      pathnameOnly = noLeadingHash;
+    }
+  }
+
+  const withoutQueryOrHash = pathnameOnly.split(/[?#]/, 1)[0];
+  if (!withoutQueryOrHash) return "/";
+
+  const withLeadingSlash = withoutQueryOrHash.startsWith("/") ? withoutQueryOrHash : `/${withoutQueryOrHash}`;
+  const compacted = withLeadingSlash.replace(/\/{2,}/g, "/");
+  if (compacted.length > 1 && compacted.endsWith("/")) {
+    return compacted.slice(0, -1);
+  }
+
+  return compacted;
+}
+
+function normalizeLabel(label: unknown): string {
+  return String(label ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase();
+}
 
 const groups = computed(() => {
   const result: any[] = [
@@ -54,6 +87,21 @@ const groups = computed(() => {
     },
   ];
 
+  const seenPaths = new Set<string>();
+  const seenLabels = new Set<string>();
+  for (const group of result) {
+    for (const item of group.items) {
+      if (item?.path) {
+        item.path = normalizePath(item.path);
+        seenPaths.add(item.path);
+      }
+      if (item?.label) {
+        const labelKey = normalizeLabel(item.label);
+        if (labelKey) seenLabels.add(labelKey);
+      }
+    }
+  }
+
   // Add Dynamic Pages from Registry
   const dynamicGroup: any = {
     title: t("nav.pluginsCategory"),
@@ -67,12 +115,19 @@ const groups = computed(() => {
 
   for (const page of apiPages.value) {
     if (!page.enabled || page.hiddenFromSidebar) continue;
+    const normalizedRoute = normalizePath(page.route);
+    const normalizedLabel = normalizeLabel(page.title);
+    if (seenPaths.has(normalizedRoute)) continue;
+    if (normalizedLabel && seenLabels.has(normalizedLabel)) continue;
     
     const item = {
-      path: page.route,
+      path: normalizedRoute,
       icon: page.icon || "P",
       label: page.title,
     };
+
+    seenPaths.add(normalizedRoute);
+    if (normalizedLabel) seenLabels.add(normalizedLabel);
 
     if (page.group === "调试" || page.group === "DEBUG") {
       debugGroup.items.push(item);
@@ -271,18 +326,18 @@ a:hover {
   transform: translateX(1px);
 }
 
-a.router-link-active {
+a.router-link-exact-active {
   background: linear-gradient(90deg, rgba(96, 165, 250, 0.12), rgba(255, 255, 255, 0.03));
   color: var(--color-text-primary);
   box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.14), var(--shadow-sm);
 }
 
-a.router-link-active::before {
+a.router-link-exact-active::before {
   opacity: 1;
   background: var(--color-status-info);
 }
 
-a.router-link-active .nav-icon {
+a.router-link-exact-active .nav-icon {
   background: rgba(96, 165, 250, 0.14);
   color: var(--color-text-primary);
   border-color: rgba(96, 165, 250, 0.2);

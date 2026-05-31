@@ -181,6 +181,7 @@ function valueOf(value: unknown) {
   border: 1px solid #29323b;
   border-radius: 16px;
   background: #12181f;
+  height: 100%;
   min-height: 0;
   padding: 14px;
   display: grid;
@@ -329,6 +330,8 @@ function valueOf(value: unknown) {
   border: 1px dashed #34404c;
   border-radius: 14px;
   color: #9aa7b2;
+  min-height: 100%;
+  align-content: center;
 }
 
 .empty-state strong {
