@@ -5,7 +5,7 @@
         <div class="player-combat-timeline-eyebrow">COMBAT HISTORY</div>
         <div class="player-combat-timeline-title">个人战斗记录</div>
         <div class="player-combat-timeline-subtitle">
-          伤害、击倒、击杀的最近频率曲线。点击时间点后，可以查看该区间内的事件列表和单条原始记录。
+          伤害、击倒、击杀的最近频率曲线
         </div>
       </div>
       <div class="player-combat-timeline-range">{{ rangeLabel }}</div>
@@ -19,8 +19,8 @@
     </div>
     <template v-else-if="hasData">
       <div class="player-combat-summary-rail">
-        <div class="player-combat-summary-card">
-          <span>区间</span>
+        <div class="player-combat-summary-card player-combat-summary-card--range">
+          <span>当前选中区间</span>
           <strong>{{ selectedBucketRange }}</strong>
         </div>
         <div class="player-combat-summary-card">
@@ -117,7 +117,9 @@
           <div class="player-combat-detail-header">
             <div>
               <div class="player-combat-detail-title">区间 {{ selectedBucketIndex + 1 }} / {{ timeline.buckets.length }}</div>
-              <div class="player-combat-detail-range">{{ selectedBucketRange }}</div>
+              <div class="player-combat-detail-range">
+                {{ selectedBucketRange }} · {{ selectedBucket.events.length }} 条记录
+              </div>
             </div>
             <div class="player-combat-detail-stats">
               <span class="damage">伤害 {{ selectedBucket.damage }}</span>
@@ -126,64 +128,53 @@
             </div>
           </div>
 
-          <div class="player-combat-detail-summary">
-            该区间包含 {{ selectedBucket.events.length }} 条记录。点击左侧时间点切换区间，下面的事件列表和原始日志会同步更新。
-          </div>
+          <button
+            type="button"
+            class="player-combat-details-toggle"
+            @click="showEventDetails = !showEventDetails"
+          >
+            {{ showEventDetails ? "隐藏事件明细" : "展开事件明细" }}
+          </button>
 
-          <div class="player-combat-event-list">
-            <button
-              v-for="(event, index) in selectedBucketEvents"
-              :key="`${event.time}-${event.type}-${index}`"
-              type="button"
-              class="player-combat-event-row"
-              :class="{ friendly: isFriendly(event) }"
-              @click="selectedEventIndex = index"
-            >
-              <span>{{ labelForType(event.type) }}</span>
-              <strong>{{ event.displayText || "-" }}</strong>
-              <em>{{ formatEventTime(event.time) }}</em>
-            </button>
-          </div>
-
-          <div v-if="selectedEvent" class="player-combat-event-detail">
+          <div v-if="showEventDetails" class="player-combat-event-detail">
             <div class="player-combat-event-detail-head">
               <div>
                 <div class="player-combat-event-detail-title">单条记录</div>
-                <div class="player-combat-event-detail-subtitle">{{ selectedEvent.displayText || selectedEvent.id || "-" }}</div>
+                <div class="player-combat-event-detail-subtitle">{{ selectedEvent?.displayText || selectedEvent?.id || "-" }}</div>
               </div>
-              <div class="player-combat-event-detail-type">{{ labelForType(selectedEvent.type) }}</div>
+              <div class="player-combat-event-detail-type">{{ labelForType(selectedEvent?.type) }}</div>
             </div>
 
             <div class="player-combat-event-grid">
               <div>
                 <span>时间</span>
-                <strong>{{ formatEventTime(selectedEvent.time) }}</strong>
+                <strong>{{ formatEventTime(selectedEvent?.time) }}</strong>
               </div>
               <div>
                 <span>伤害</span>
-                <strong>{{ formatNumber(selectedEvent.damage) }}</strong>
+                <strong>{{ formatNumber(selectedEvent?.damage) }}</strong>
               </div>
               <div>
                 <span>武器</span>
-                <strong>{{ formatWeapon(selectedEvent.weapon) }}</strong>
+                <strong>{{ formatWeapon(selectedEvent?.weapon) }}</strong>
               </div>
               <div>
                 <span>关系</span>
-                <strong>{{ relationSummary(selectedEvent.relation) }}</strong>
+                <strong>{{ relationSummary(selectedEvent?.relation) }}</strong>
               </div>
               <div>
                 <span>攻击者</span>
-                <strong>{{ formatPlayerRef(selectedEvent.attacker) }}</strong>
+                <strong>{{ formatPlayerRef(selectedEvent?.attacker) }}</strong>
               </div>
               <div>
                 <span>受害者</span>
-                <strong>{{ formatPlayerRef(selectedEvent.victim) }}</strong>
+                <strong>{{ formatPlayerRef(selectedEvent?.victim) }}</strong>
               </div>
             </div>
 
             <div class="player-combat-raw-card">
               <div class="player-combat-raw-title">Raw Log</div>
-              <pre class="player-combat-raw-text">{{ selectedEvent.raw?.rawLog || selectedEvent.rawLog || "No rawLog" }}</pre>
+              <pre class="player-combat-raw-text">{{ selectedEvent?.raw?.rawLog || selectedEvent?.rawLog || "No rawLog" }}</pre>
             </div>
           </div>
         </div>
@@ -243,6 +234,7 @@ const props = defineProps<{
 
 const loading = ref(false);
 const error = ref("");
+const showEventDetails = ref(false);
 const timeline = ref<TimelineState>({
   buckets: [],
   rangeStart: 0,
@@ -385,6 +377,7 @@ function valueToY(value: number) {
 function selectBucket(index: number) {
   selectedBucketIndex.value = index;
   selectedEventIndex.value = 0;
+  showEventDetails.value = false;
 }
 
 function bucketHitboxX(index: number) {
@@ -571,6 +564,10 @@ function emptyBucket(): CombatBucket {
   font-weight: 800;
 }
 
+.player-combat-summary-card--range {
+  grid-column: span 2;
+}
+
 .player-combat-body {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
@@ -708,12 +705,6 @@ function emptyBucket(): CombatBucket {
   margin-top: 4px;
   color: var(--color-text-muted);
   font-size: 11px;
-}
-
-.player-combat-detail-summary {
-  color: var(--color-text-secondary);
-  font-size: 12px;
-  line-height: 1.45;
 }
 
 .player-combat-event-list {
@@ -877,6 +868,10 @@ function emptyBucket(): CombatBucket {
 
   .player-combat-summary-rail {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .player-combat-summary-card--range {
+    grid-column: span 2;
   }
 
   .player-combat-event-grid {
