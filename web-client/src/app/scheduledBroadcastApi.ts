@@ -40,6 +40,10 @@ export function getScheduledBroadcastState() {
 
 export function createScheduledBroadcastItem(payload: {
   message: string;
+  intervalSeconds?: number;
+  delaySeconds?: number;
+  enabled?: boolean;
+  order?: number;
 }) {
   return apiPost<{ ok: boolean; item: ScheduledBroadcastItem }>("/api/scheduled-broadcasts/items", payload);
 }
@@ -56,6 +60,12 @@ export function updateScheduledBroadcastItem(id: string, payload: Partial<{
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+  });
+}
+
+export function reorderScheduledBroadcastItems(ids: string[]) {
+  return apiPost<{ ok: boolean; items: ScheduledBroadcastItem[] }>("/api/scheduled-broadcasts/reorder", {
+    ids,
   });
 }
 

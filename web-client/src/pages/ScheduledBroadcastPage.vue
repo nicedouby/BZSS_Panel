@@ -2,7 +2,7 @@
   <section class="bz-page scheduled-broadcast-page">
     <PageHeader
       title="定时广播"
-      subtitle="建立广播列表，统一设置全局延迟，逐条配置广播间隔。"
+      subtitle="首条广播的间隔同时作为全局开始延迟，列表顺序决定执行顺序。"
     >
       <template #actions>
         <button type="button" class="bz-btn bz-btn-ghost" :disabled="isFetching" @click="query.refetch()">
@@ -12,102 +12,108 @@
     </PageHeader>
 
     <section class="bz-card">
-      <div class="bz-card-body compact">
-        <form class="create-grid" @submit.prevent="createItem">
-          <label class="field">
-            <span>全局开始延迟（秒）</span>
-            <input
-              type="number"
-              min="0"
-              max="86400"
-              :value="globalDelaySeconds"
-              @input="setGlobalDelay(($event.target as HTMLInputElement).value)"
-            />
-          </label>
-          <div class="actions">
-            <button type="submit" class="bz-btn bz-btn-primary" :disabled="createBusy">
-              {{ createBusy ? "添加中..." : "添加广播" }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </section>
-
-    <section class="bz-card">
-      <div class="bz-card-body compact">
+      <div class="bz-card-body compact create-bar">
         <div class="summary">
           <span class="bz-badge">总条目 {{ items.length }}</span>
           <span class="bz-badge">运行状态 {{ data?.status?.running ? "运行中" : "已停止" }}</span>
           <span class="bz-badge">轮询 {{ data?.config?.tickMs ?? "-" }} ms</span>
+          <span class="bz-badge bz-badge-info">全局开始延迟 {{ globalDelaySeconds }} 秒</span>
+        </div>
+        <div class="create-actions">
+          <p class="create-hint">首条间隔自动同步为全局开始延迟，可直接用上下按钮调整广播顺序。</p>
+          <button type="button" class="bz-btn bz-btn-primary" :disabled="createBusy" @click="createItem">
+            {{ createBusy ? "添加中..." : "添加广播" }}
+          </button>
         </div>
       </div>
     </section>
 
-    <DataState
-      :loading="isLoading && !items.length"
-      :error="pageError"
-    >
+    <DataState :loading="isLoading && !items.length" :error="pageError">
       <div v-if="items.length > 0" class="broadcast-list">
         <article v-for="(item, index) in items" :key="item.id" class="bz-card broadcast-card">
           <div class="broadcast-card-grid">
-            <label class="broadcast-enabled">
-              <input
-                type="checkbox"
-                :checked="drafts[item.id]?.enabled ?? item.enabled"
-                @change="onToggleEnabled(item.id, ($event.target as HTMLInputElement).checked)"
-              />
-            </label>
-
-            <label class="broadcast-field broadcast-title">
-              <span>标题</span>
-              <input
-                class="inline-input"
-                :value="drafts[item.id]?.title ?? item.title"
-                maxlength="60"
-                placeholder="例如：欢迎提示 / 规则提醒 / QQ群提示"
-                @input="setDraft(item.id, 'title', ($event.target as HTMLInputElement).value)"
-              />
-            </label>
-
-            <label class="broadcast-field broadcast-message">
-              <span>广播内容</span>
-              <textarea
-                class="inline-textarea"
-                rows="3"
-                maxlength="180"
-                :value="drafts[item.id]?.message ?? item.message"
-                placeholder="请输入广播内容"
-                @input="setDraft(item.id, 'message', ($event.target as HTMLTextAreaElement).value)"
-              />
-            </label>
-
-            <div class="broadcast-right">
-              <label class="broadcast-field">
-                <span>间隔（秒）</span>
+            <div class="broadcast-side">
+              <label class="broadcast-enabled">
                 <input
-                  class="inline-input"
-                  type="number"
-                  min="5"
-                  max="86400"
-                  :value="index === 0 ? globalDelaySeconds : (drafts[item.id]?.intervalSeconds ?? item.intervalSeconds)"
-                  :disabled="index === 0"
-                  @input="setDraft(item.id, 'intervalSeconds', Number(($event.target as HTMLInputElement).value))"
+                  type="checkbox"
+                  :checked="drafts[item.id]?.enabled ?? item.enabled"
+                  @change="onToggleEnabled(item.id, ($event.target as HTMLInputElement).checked)"
                 />
+                <span>{{ drafts[item.id]?.enabled ?? item.enabled ? "启用" : "停用" }}</span>
               </label>
 
-              <div class="broadcast-meta">
-                <span>下一次：{{ formatTime(item.nextRunAt) }}</span>
-                <span>最近一次：{{ formatTime(item.lastRunAt) }}</span>
-                <span v-if="item.lastError" class="broadcast-error">最近错误：{{ item.lastError }}</span>
-                <div class="broadcast-stats">
+              <div class="broadcast-order">
+                <button
+                  type="button"
+                  class="order-btn"
+                  :disabled="index === 0 || reorderBusy"
+                  @click="moveItem(index, -1)"
+                >
+                  ↑
+                </button>
+                <span class="order-index">{{ index + 1 }}</span>
+                <button
+                  type="button"
+                  class="order-btn"
+                  :disabled="index === items.length - 1 || reorderBusy"
+                  @click="moveItem(index, 1)"
+                >
+                  ↓
+                </button>
+              </div>
+            </div>
+
+            <div class="broadcast-main">
+              <div class="broadcast-head">
+                <div class="broadcast-labels">
+                  <span class="broadcast-rank">{{ index === 0 ? "首条广播" : `第 ${index + 1} 条广播` }}</span>
+                  <span v-if="index === 0" class="broadcast-sync-tip">首条间隔 = 全局开始延迟</span>
+                </div>
+                <div class="broadcast-status-row">
+                  <span class="bz-badge">下次 {{ formatTime(item.nextRunAt) }}</span>
+                  <span class="bz-badge">上次 {{ formatTime(item.lastRunAt) }}</span>
                   <span class="bz-badge">成功 {{ item.runCount ?? 0 }}</span>
                   <span class="bz-badge bz-badge-danger">失败 {{ item.errorCount ?? 0 }}</span>
                 </div>
               </div>
 
+              <label class="broadcast-field broadcast-message">
+                <span>广播内容</span>
+                <textarea
+                  class="inline-textarea"
+                  rows="3"
+                  maxlength="180"
+                  :value="drafts[item.id]?.message ?? item.message"
+                  placeholder="请输入广播内容"
+                  @input="setDraft(item.id, 'message', ($event.target as HTMLTextAreaElement).value)"
+                />
+              </label>
+
+              <p v-if="item.lastError" class="broadcast-error">最近错误：{{ item.lastError }}</p>
+            </div>
+
+            <div class="broadcast-right">
+              <label class="broadcast-field">
+                <span>{{ index === 0 ? "首条间隔 / 全局开始延迟（秒）" : "广播间隔（秒）" }}</span>
+                <input
+                  class="inline-input"
+                  type="number"
+                  min="5"
+                  max="86400"
+                  :value="drafts[item.id]?.intervalSeconds ?? item.intervalSeconds"
+                  @input="onIntervalInput(item.id, ($event.target as HTMLInputElement).value)"
+                />
+              </label>
+
+              <div class="broadcast-meta">
+                <span>开始延迟：{{ index === 0 ? (drafts[item.id]?.intervalSeconds ?? item.intervalSeconds) : globalDelaySeconds }} 秒</span>
+                <span>更新时间：{{ formatTime(item.updatedAt) }}</span>
+                <span>创建时间：{{ formatTime(item.createdAt) }}</span>
+              </div>
+
               <div class="broadcast-actions">
                 <button type="button" class="bz-btn bz-btn-primary" @click="saveItem(item, index)">保存</button>
-                <button type="button" class="bz-btn bz-btn-ghost" @click="runNow(item.id)">立刻执行</button>
+                <button type="button" class="bz-btn bz-btn-ghost" @click="runNow(item.id)">立即执行</button>
                 <button type="button" class="bz-btn bz-btn-danger" @click="removeItem(item.id)">删除</button>
               </div>
             </div>
@@ -117,10 +123,10 @@
 
       <div v-else class="bz-empty">
         <div class="bz-empty-inner">
-          <div class="bz-empty-icon">∅</div>
+          <div class="bz-empty-icon">-</div>
           <div class="bz-empty-title">暂无定时广播</div>
           <div class="bz-empty-desc">
-            先创建一条广播任务，然后它会按间隔自动发送。
+            先添加一条广播，再补充内容与间隔。首条广播的间隔会自动作为全局开始延迟。
           </div>
         </div>
       </div>
@@ -136,6 +142,7 @@ import {
   createScheduledBroadcastItem,
   deleteScheduledBroadcastItem,
   getScheduledBroadcastState,
+  reorderScheduledBroadcastItems,
   runScheduledBroadcastNow,
   updateScheduledBroadcastItem,
   type ScheduledBroadcastItem,
@@ -145,19 +152,16 @@ import PageHeader from "../components/common/PageHeader.vue";
 import DataState from "../components/common/DataState.vue";
 
 type DraftItem = {
-  title: string;
   message: string;
   intervalSeconds: number;
-  delaySeconds: number;
   enabled: boolean;
 };
 
 const ui = useUiStore();
 const createBusy = ref(false);
-const globalDelaySeconds = ref(10);
-const globalDelayTouched = ref(false);
-
+const reorderBusy = ref(false);
 const drafts = reactive<Record<string, DraftItem>>({});
+const dirtyDrafts = reactive<Record<string, boolean>>({});
 
 const query = useQuery({
   queryKey: ["scheduled-broadcast-state"],
@@ -169,6 +173,11 @@ const query = useQuery({
 
 const data = computed(() => query.data.value ?? null);
 const items = computed(() => (data.value?.items ?? []).slice().sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0)));
+const globalDelaySeconds = computed(() => {
+  const first = items.value[0];
+  if (!first) return 10;
+  return clampInt(drafts[first.id]?.intervalSeconds ?? first.intervalSeconds ?? first.delaySeconds, 5, 86400, 10);
+});
 const pageError = computed(() => (query.error.value ? renderApiError(query.error.value, "加载定时广播失败。") : ""));
 const isLoading = computed(() => query.isLoading.value);
 const isFetching = computed(() => query.isFetching.value);
@@ -177,17 +186,25 @@ watch(
   items,
   (nextItems) => {
     const knownIds = new Set(nextItems.map((item) => item.id));
-    if (!globalDelayTouched.value) {
-      const firstDelay = Number(nextItems[0]?.delaySeconds);
-      globalDelaySeconds.value = Number.isFinite(firstDelay) ? Math.max(0, Math.floor(firstDelay)) : 10;
-    }
 
     for (const item of nextItems) {
+      if (!drafts[item.id]) {
+        drafts[item.id] = {
+          message: item.message ?? "",
+          intervalSeconds: item.intervalSeconds ?? 300,
+          enabled: Boolean(item.enabled),
+        };
+        dirtyDrafts[item.id] = false;
+        continue;
+      }
+
+      if (dirtyDrafts[item.id]) {
+        continue;
+      }
+
       drafts[item.id] = {
-        title: item.title ?? "",
         message: item.message ?? "",
         intervalSeconds: item.intervalSeconds ?? 300,
-        delaySeconds: item.delaySeconds ?? 10,
         enabled: Boolean(item.enabled),
       };
     }
@@ -195,20 +212,17 @@ watch(
     for (const id of Object.keys(drafts)) {
       if (!knownIds.has(id)) {
         delete drafts[id];
+        delete dirtyDrafts[id];
       }
     }
   },
   { immediate: true },
 );
 
-function setGlobalDelay(value: string) {
-  globalDelayTouched.value = true;
-  globalDelaySeconds.value = clampInt(value, 0, 86400, globalDelaySeconds.value);
-}
-
 function setDraft(id: string, key: keyof DraftItem, value: string | number | boolean) {
   if (!drafts[id]) return;
-  if (key === "intervalSeconds" || key === "delaySeconds") {
+  dirtyDrafts[id] = true;
+  if (key === "intervalSeconds") {
     drafts[id][key] = Number.isFinite(Number(value)) ? Number(value) : drafts[id][key];
     return;
   }
@@ -219,18 +233,22 @@ function setDraft(id: string, key: keyof DraftItem, value: string | number | boo
   drafts[id][key] = String(value);
 }
 
+function onIntervalInput(id: string, value: string) {
+  if (!drafts[id]) return;
+  const fallback = drafts[id].intervalSeconds;
+  const nextValue = clampInt(value, 5, 86400, fallback);
+  drafts[id].intervalSeconds = nextValue;
+}
+
 async function createItem() {
   createBusy.value = true;
   try {
-    const initialDelay = clampInt(globalDelaySeconds.value, 0, 86400, 10);
-    const payload: { message: string; delaySeconds: number; intervalSeconds?: number } = {
+    const initialDelay = globalDelaySeconds.value;
+    await createScheduledBroadcastItem({
       message: "",
       delaySeconds: initialDelay,
-    };
-    if (!items.value.length) {
-      payload.intervalSeconds = Math.max(5, initialDelay);
-    }
-    await createScheduledBroadcastItem(payload);
+      intervalSeconds: items.value.length ? 300 : initialDelay,
+    });
 
     ui.pushToast({ title: "添加成功", message: "已生成空白广播模板，请补充内容后保存。", tone: "ok" });
     await query.refetch();
@@ -252,18 +270,22 @@ async function saveItem(item: ScheduledBroadcastItem, index: number) {
   }
 
   try {
-    const nextInterval = index === 0
-      ? Math.max(5, clampInt(globalDelaySeconds.value, 0, 86400, item.intervalSeconds))
-      : clampInt(draft.intervalSeconds, 5, 86400, item.intervalSeconds);
+    const nextInterval = clampInt(draft.intervalSeconds, 5, 86400, item.intervalSeconds);
+    const nextDelay = index === 0 ? nextInterval : globalDelaySeconds.value;
 
     await updateScheduledBroadcastItem(item.id, {
-      title: String(draft.title ?? "").trim(),
       message,
       intervalSeconds: nextInterval,
-      delaySeconds: clampInt(globalDelaySeconds.value, 0, 86400, item.delaySeconds),
+      delaySeconds: nextDelay,
       enabled: Boolean(draft.enabled),
       resetSchedule: true,
     });
+
+    if (index === 0) {
+      await syncFollowerDelays(nextInterval, item.id);
+    }
+
+    dirtyDrafts[item.id] = false;
     ui.pushToast({ title: "保存成功", message: "该条广播配置已更新。", tone: "ok" });
     await query.refetch();
   } catch (error) {
@@ -273,6 +295,7 @@ async function saveItem(item: ScheduledBroadcastItem, index: number) {
 
 async function onToggleEnabled(id: string, checked: boolean) {
   if (!drafts[id]) return;
+  dirtyDrafts[id] = true;
   drafts[id].enabled = checked;
   try {
     const index = items.value.findIndex((item) => item.id === id);
@@ -281,15 +304,17 @@ async function onToggleEnabled(id: string, checked: boolean) {
       resetSchedule: true,
     };
     if (checked) {
-      patch.delaySeconds = clampInt(globalDelaySeconds.value, 0, 86400, drafts[id].delaySeconds);
+      patch.delaySeconds = globalDelaySeconds.value;
       if (index === 0) {
-        patch.intervalSeconds = Math.max(5, patch.delaySeconds);
+        patch.intervalSeconds = globalDelaySeconds.value;
       }
     }
 
     await updateScheduledBroadcastItem(id, patch);
+    dirtyDrafts[id] = false;
     await query.refetch();
   } catch (error) {
+    dirtyDrafts[id] = false;
     ui.pushToast({ title: "更新失败", message: error instanceof Error ? error.message : String(error), tone: "error" });
   }
 }
@@ -318,6 +343,55 @@ async function removeItem(id: string) {
   }
 }
 
+async function moveItem(index: number, offset: number) {
+  const targetIndex = index + offset;
+  if (index < 0 || targetIndex < 0 || targetIndex >= items.value.length) return;
+
+  const reordered = items.value.slice();
+  const [moved] = reordered.splice(index, 1);
+  reordered.splice(targetIndex, 0, moved);
+
+  const newGlobalDelay = clampInt(
+    drafts[reordered[0].id]?.intervalSeconds ?? reordered[0].intervalSeconds,
+    5,
+    86400,
+    10,
+  );
+
+  reorderBusy.value = true;
+  try {
+    await reorderScheduledBroadcastItems(reordered.map((entry) => entry.id));
+    await syncGlobalDelayForOrder(reordered, newGlobalDelay);
+    ui.pushToast({ title: "顺序已更新", message: "广播顺序和全局开始延迟已同步。", tone: "ok" });
+    await query.refetch();
+  } catch (error) {
+    ui.pushToast({ title: "调序失败", message: error instanceof Error ? error.message : String(error), tone: "error" });
+  } finally {
+    reorderBusy.value = false;
+  }
+}
+
+async function syncFollowerDelays(delaySeconds: number, firstId: string) {
+  for (const item of items.value) {
+    if (item.id === firstId) continue;
+    await updateScheduledBroadcastItem(item.id, {
+      delaySeconds,
+      resetSchedule: true,
+    });
+  }
+}
+
+async function syncGlobalDelayForOrder(orderedItems: ScheduledBroadcastItem[], delaySeconds: number) {
+  for (let index = 0; index < orderedItems.length; index += 1) {
+    const item = orderedItems[index];
+    await updateScheduledBroadcastItem(item.id, {
+      delaySeconds,
+      intervalSeconds: index === 0 ? delaySeconds : item.intervalSeconds,
+      resetSchedule: true,
+    });
+  }
+}
+
 function clampInt(value: unknown, min: number, max: number, fallback: number) {
   const num = Number(value);
   if (!Number.isFinite(num)) return fallback;
@@ -336,15 +410,25 @@ function formatTime(value: unknown) {
   display: grid;
   gap: 12px;
   min-height: 0;
-  height: 100%;
-  overflow: hidden;
+  padding-bottom: 12px;
 }
 
-.create-grid {
+.create-bar {
   display: grid;
-  grid-template-columns: minmax(200px, 280px) auto;
   gap: 12px;
-  align-items: end;
+}
+
+.create-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.create-hint {
+  margin: 0;
+  color: #8fa2b3;
+  font-size: 12px;
 }
 
 .field {
@@ -372,14 +456,9 @@ function formatTime(value: unknown) {
 }
 
 .inline-textarea {
-  min-height: 84px;
+  min-height: 96px;
   resize: vertical;
-}
-
-.actions {
-  display: flex;
-  align-items: flex-end;
-  justify-content: flex-end;
+  line-height: 1.55;
 }
 
 .summary {
@@ -400,16 +479,88 @@ function formatTime(value: unknown) {
 
 .broadcast-card-grid {
   display: grid;
-  grid-template-columns: 44px minmax(220px, 1fr) minmax(320px, 1.4fr) minmax(260px, 0.95fr);
-  gap: 14px;
+  grid-template-columns: 96px minmax(420px, 1.6fr) minmax(260px, 0.9fr);
+  gap: 16px;
   align-items: start;
   padding: 16px 18px;
 }
 
+.broadcast-side {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
 .broadcast-enabled {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  color: #d6dee6;
+  font-size: 12px;
+}
+
+.broadcast-order {
+  display: inline-grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 8px;
+  align-items: center;
+}
+
+.order-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #38414c;
+  border-radius: 8px;
+  background: #10161c;
+  color: #dce5eb;
+  cursor: pointer;
+}
+
+.order-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.order-index {
+  min-width: 28px;
+  text-align: center;
+  color: #8fa2b3;
+  font-size: 12px;
+}
+
+.broadcast-main {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.broadcast-head {
   display: flex;
-  justify-content: center;
-  padding-top: 4px;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.broadcast-labels {
+  display: grid;
+  gap: 4px;
+}
+
+.broadcast-rank {
+  color: #edf2f4;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.broadcast-sync-tip {
+  color: #7dd3fc;
+  font-size: 12px;
+}
+
+.broadcast-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .broadcast-field {
@@ -422,10 +573,6 @@ function formatTime(value: unknown) {
   font-size: 12px;
 }
 
-.broadcast-title {
-  min-width: 0;
-}
-
 .broadcast-message {
   min-width: 0;
 }
@@ -434,6 +581,7 @@ function formatTime(value: unknown) {
   display: grid;
   gap: 10px;
   min-width: 0;
+  align-content: start;
 }
 
 .broadcast-meta {
@@ -445,54 +593,50 @@ function formatTime(value: unknown) {
 }
 
 .broadcast-error {
+  margin: 0;
   color: #fda4af;
-}
-
-.broadcast-stats {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .broadcast-actions {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 8px;
-}
-
-.broadcast-actions button {
-  width: 100%;
 }
 
 @media (max-width: 1300px) {
   .broadcast-card-grid {
-    grid-template-columns: 40px 1fr 1fr;
+    grid-template-columns: 88px 1fr;
   }
 
   .broadcast-right {
-    grid-column: 1 / -1;
-    grid-template-columns: minmax(180px, 220px) 1fr minmax(220px, 260px);
-    align-items: start;
+    grid-column: 2;
+  }
+
+  .broadcast-head {
+    flex-direction: column;
   }
 }
 
 @media (max-width: 900px) {
-  .create-grid {
-    grid-template-columns: 1fr;
+  .create-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .broadcast-card-grid {
     grid-template-columns: 1fr;
   }
 
-  .broadcast-enabled {
-    justify-content: flex-start;
+  .broadcast-side {
+    grid-template-columns: auto auto;
+    justify-content: space-between;
+    align-items: center;
   }
 
   .broadcast-right {
     grid-column: auto;
-    grid-template-columns: 1fr;
   }
 }
 </style>
