@@ -86,8 +86,19 @@ const contentShellClass = computed(() => ({
 }
 
 .content-shell.full-bleed {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
   padding: 0;
   overflow: hidden;
+}
+
+.content-shell.full-bleed > * {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
 }
 
 @media (max-width: 780px) {

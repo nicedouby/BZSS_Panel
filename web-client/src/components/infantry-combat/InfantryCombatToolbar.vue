@@ -142,20 +142,20 @@ function normalizeWeapon(value: string): InfantryCombatFilters["weapon"] {
 <style scoped>
 .toolbar-grid {
   display: grid;
-  grid-template-columns: 180px 180px 180px 180px minmax(260px, 1fr) 120px auto;
-  gap: 10px;
+  grid-template-columns: 168px 168px 168px 168px minmax(220px, 1fr) 96px auto;
+  gap: 8px;
   align-items: end;
 }
 
 .field {
   display: grid;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
 }
 
 .field span {
   color: #8fa2b3;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.1;
 }
 
@@ -166,10 +166,10 @@ function normalizeWeapon(value: string): InfantryCombatFilters["weapon"] {
   border: 1px solid #31404d;
   background: #0f151b;
   color: #edf2f4;
-  border-radius: 10px;
-  padding: 7px 10px;
+  border-radius: 9px;
+  padding: 6px 9px;
   font-size: 12px;
-  min-height: 34px;
+  min-height: 32px;
 }
 
 .field.search {
@@ -182,8 +182,8 @@ function normalizeWeapon(value: string): InfantryCombatFilters["weapon"] {
 
 .toggle-button {
   justify-content: flex-start;
-  min-height: 34px;
-  padding-inline: 12px;
+  min-height: 32px;
+  padding-inline: 10px;
 }
 
 .toggle-button[data-on="true"] {

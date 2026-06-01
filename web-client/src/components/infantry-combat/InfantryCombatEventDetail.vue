@@ -183,9 +183,9 @@ function valueOf(value: unknown) {
   background: #12181f;
   height: 100%;
   min-height: 0;
-  padding: 14px;
+  padding: 12px;
   display: grid;
-  gap: 12px;
+  gap: 10px;
   overflow: auto;
 }
 
@@ -219,20 +219,21 @@ function valueOf(value: unknown) {
 
 .detail-section {
   display: grid;
-  gap: 10px;
-  padding-top: 12px;
+  gap: 8px;
+  padding-top: 10px;
   border-top: 1px solid rgba(41, 50, 59, 0.8);
 }
 
 .kv-grid {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
 .kv-row {
   display: grid;
   gap: 3px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border-radius: 12px;
   background: #0f151b;
   border: 1px solid #29323b;
@@ -311,7 +312,7 @@ function valueOf(value: unknown) {
 
 .debug-block pre {
   margin: 0;
-  padding: 12px;
+  padding: 10px;
   background: #0b1116;
   border: 1px solid #29323b;
   border-radius: 12px;
@@ -326,7 +327,7 @@ function valueOf(value: unknown) {
 .empty-state {
   display: grid;
   gap: 6px;
-  padding: 16px;
+  padding: 14px;
   border: 1px dashed #34404c;
   border-radius: 14px;
   color: #9aa7b2;
@@ -336,5 +337,11 @@ function valueOf(value: unknown) {
 
 .empty-state strong {
   color: #edf2f4;
+}
+
+@media (max-width: 720px) {
+  .kv-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

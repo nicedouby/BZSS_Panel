@@ -214,11 +214,12 @@ function formatDamage(value: unknown) {
     radial-gradient(circle at 0% 0%, rgba(96, 165, 250, 0.07), transparent 32%),
     linear-gradient(180deg, #12181f 0%, #10161c 100%);
   min-height: 0;
-  height: auto;
+  height: 100%;
+  max-height: none;
   overflow: hidden;
   padding: 7px;
   display: grid;
-  grid-template-rows: auto auto auto;
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 5px;
 }
 
@@ -307,7 +308,7 @@ function formatDamage(value: unknown) {
   grid-auto-rows: max-content;
   align-content: start;
   min-height: 0;
-  max-height: calc(100vh - 360px);
+  height: 100%;
   overflow: auto;
   padding-right: 2px;
 }
@@ -537,12 +538,12 @@ function formatDamage(value: unknown) {
 .empty-list {
   border: 1px dashed #34404c;
   border-radius: 14px;
-  padding: 16px;
+  padding: 12px;
   color: #9aa7b2;
   display: grid;
   gap: 4px;
-  min-height: 120px;
-  height: auto;
+  min-height: 0;
+  height: 100%;
   place-content: center;
   justify-items: center;
   text-align: center;
@@ -553,10 +554,6 @@ function formatDamage(value: unknown) {
 }
 
 @media (max-width: 1200px) {
-  .record-list {
-    max-height: none;
-  }
-
   .record-line-body {
     overflow-x: auto;
     scrollbar-width: none;

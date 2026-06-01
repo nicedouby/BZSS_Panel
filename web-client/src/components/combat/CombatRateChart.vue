@@ -239,17 +239,17 @@ function toNumber(value: unknown) {
 
 <style scoped>
 .combat-rate-chart-shell {
-  min-height: 180px;
+  min-height: 108px;
 }
 
 .combat-rate-chart-container {
   position: relative;
   width: 100%;
-  height: 128px;
+  height: 108px;
   background: #161b22;
   border: 1px solid #30363d;
   border-radius: 8px;
-  padding: 12px;
+  padding: 10px;
 }
 
 .combat-rate-chart {
@@ -258,7 +258,7 @@ function toNumber(value: unknown) {
 }
 
 .combat-rate-chart-empty {
-  min-height: 128px;
+  min-height: 108px;
 }
 
 .chart-loader {

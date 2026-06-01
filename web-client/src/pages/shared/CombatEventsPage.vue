@@ -3,6 +3,7 @@
     <PageHeader :title="pageTitle" :subtitle="pageSubtitle" />
 
     <DataState
+      class="combat-state"
       :loading="query.isLoading.value"
       :error="pageError"
     >
@@ -221,7 +222,23 @@ function formatTime(value: unknown) {
   display: grid;
   gap: 12px;
   min-height: 0;
-  overflow: visible;
+  overflow: hidden;
+}
+
+.combat-page {
+  --combat-page-height: calc(100dvh - 72px);
+  --combat-header-height: 72px;
+  --combat-top-height: 108px;
+  --combat-event-table-height: calc(var(--combat-page-height) - var(--combat-header-height) - var(--combat-top-height) - 24px);
+  width: 100%;
+  max-width: none;
+  display: grid;
+  gap: 12px;
+  height: var(--combat-page-height);
+  max-height: var(--combat-page-height);
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
 }
 
 .combat-shell {
@@ -229,28 +246,41 @@ function formatTime(value: unknown) {
   grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.combat-state {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .combat-shell--with-detail {
-  grid-template-columns: minmax(0, 1fr) 380px;
+  grid-template-columns: minmax(0, 1fr) 320px;
 }
 
 .combat-main {
   display: grid;
   gap: 12px;
   min-height: 0;
+  height: 100%;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
 }
 
 .combat-top {
   display: grid;
-  grid-template-columns: minmax(280px, 0.92fr) minmax(0, 1.4fr);
-  gap: 12px;
+  grid-template-columns: minmax(240px, 0.78fr) minmax(0, 1.52fr);
+  gap: 10px;
   align-items: stretch;
 }
 
 .combat-table-card {
   min-height: 0;
-  height: auto;
+  height: var(--combat-event-table-height);
+  max-height: var(--combat-event-table-height);
+  overflow: hidden;
 }
 
 .combat-toolbar-card,
@@ -260,6 +290,8 @@ function formatTime(value: unknown) {
 
 .combat-detail-pane {
   min-height: 0;
+  height: var(--combat-event-table-height);
+  max-height: var(--combat-event-table-height);
   overflow: hidden;
 }
 
@@ -273,7 +305,7 @@ function formatTime(value: unknown) {
 
 .combat-controls {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   height: 100%;
   align-content: center;
 }
@@ -295,7 +327,7 @@ function formatTime(value: unknown) {
 
 .summary {
   color: #a5b0b8;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .combat-top :deep(.combat-rate-chart-shell) {
@@ -304,8 +336,8 @@ function formatTime(value: unknown) {
 
 .combat-top :deep(.combat-rate-chart-container),
 .combat-top :deep(.combat-rate-chart-empty) {
-  min-height: 88px;
-  max-height: 120px;
+  min-height: 76px;
+  max-height: 108px;
 }
 
 .combat-top :deep(.combat-rate-chart-empty) {
@@ -325,11 +357,15 @@ function formatTime(value: unknown) {
 
 @media (max-width: 1400px) {
   .combat-shell--with-detail {
-    grid-template-columns: minmax(0, 1fr) 360px;
+    grid-template-columns: minmax(0, 1fr) 300px;
   }
 }
 
 @media (max-width: 1200px) {
+  .combat-page {
+    --combat-top-height: 164px;
+  }
+
   .combat-shell {
     grid-template-columns: 1fr;
   }
@@ -339,7 +375,7 @@ function formatTime(value: unknown) {
   }
 
   .combat-detail-pane {
-    max-height: 420px;
+    max-height: min(420px, 40dvh);
   }
 }
 </style>

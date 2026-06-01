@@ -220,10 +220,10 @@ function searchPlayer(value: string) {
 .dialog-panel,
 .detail-panel {
   display: grid;
-  gap: 16px;
+  gap: 12px;
   border: 1px solid #2b3540;
   background: #171d23;
-  padding: 18px;
+  padding: 14px;
 }
 
 .dialog-panel {
@@ -260,19 +260,19 @@ function searchPlayer(value: string) {
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .detail-grid > div {
   border: 1px solid #2b3540;
   background: #11171d;
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 8px 10px;
 }
 
 .identity-card {
   display: grid;
-  gap: 6px;
+  gap: 5px;
 }
 
 .identity-card.is-highlighted {
@@ -422,11 +422,12 @@ function searchPlayer(value: string) {
 
 .raw-block {
   margin: 0;
+  min-height: 0;
   overflow: auto;
   border: 1px solid #2b3540;
   border-radius: 8px;
   background: #11171d;
-  padding: 12px;
+  padding: 10px;
   white-space: pre-wrap;
   word-break: break-word;
 }

@@ -1,5 +1,5 @@
 <template>
-  <PageCard compact>
+  <PageCard compact class="combat-event-table-panel">
     <div v-if="events.length" class="table-wrap">
       <table>
         <thead>
@@ -295,8 +295,24 @@ function isClusterHighlighted(event: any, index: number) {
 
 <style scoped>
 .table-wrap {
+  min-height: 0;
+  height: 100%;
   overflow: auto;
-  max-height: 100%;
+}
+
+.combat-event-table-panel {
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  overflow: hidden;
+  display: grid;
+}
+
+.combat-event-table-panel :deep(.card-body),
+.combat-event-table-panel :deep(.bz-card-body) {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 table {
@@ -508,6 +524,9 @@ th {
 }
 
 .combat-table-empty {
-  min-height: 160px;
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  place-items: center;
 }
 </style>

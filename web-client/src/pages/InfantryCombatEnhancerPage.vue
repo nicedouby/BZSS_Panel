@@ -11,6 +11,7 @@
     </PageHeader>
 
     <DataState
+      class="ice-state"
       :loading="isEventsLoading || isConfigLoading"
       :error="pageError"
     >
@@ -104,16 +105,35 @@ async function saveConfig(next: InfantryCombatConfig) {
 
 <style scoped>
 .infantry-combat-page {
+  --ice-page-height: calc(100dvh - 72px);
+  --ice-header-height: 72px;
+  --ice-top-height: 152px;
+  --ice-event-stream-height: calc(var(--ice-page-height) - var(--ice-header-height) - var(--ice-top-height) - 24px);
+
+  width: 100%;
+  max-width: none;
   display: grid;
   gap: 12px;
+  height: var(--ice-page-height);
+  max-height: var(--ice-page-height);
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .ice-shell {
   display: grid;
   gap: 12px;
   min-height: 0;
+  height: 100%;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.ice-state {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .ice-top {
@@ -126,15 +146,25 @@ async function saveConfig(next: InfantryCombatConfig) {
   grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   min-height: 0;
+  height: var(--ice-event-stream-height);
+  max-height: var(--ice-event-stream-height);
+  overflow: hidden;
 }
 
 .ice-main--with-detail {
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(0, 1fr) 300px;
 }
 
-.ice-table-pane,
+.ice-table-pane {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
 .ice-detail-pane {
   min-height: 0;
+  height: 100%;
+  overflow: auto;
 }
 
 .ice-top :deep(.ice-summary-card .bz-card-body.compact),
@@ -143,12 +173,16 @@ async function saveConfig(next: InfantryCombatConfig) {
 }
 
 @media (max-width: 1200px) {
+  .infantry-combat-page {
+    --ice-top-height: 216px;
+  }
+
   .ice-main--with-detail {
     grid-template-columns: 1fr;
   }
 
   .ice-detail-pane {
-    max-height: 420px;
+    max-height: min(420px, 40dvh);
   }
 }
 </style>
