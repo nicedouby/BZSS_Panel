@@ -310,16 +310,14 @@ export function createCombatManagerService({ core, modules, config, logger }) {
       record: normalized,
     });
 
-    if (normalized.type === "kill" || normalized.type === "death" || normalized.type === "tk") {
-      emitModuleEvent(LEGACY_EVENT_NAMES.killEvent, {
-        eventId: event?.eventId ?? normalized.id ?? `${COMBAT_MANAGER_MODULE_ID}:${Date.now()}`,
-        eventName: LEGACY_EVENT_NAMES.killEvent,
-        source: COMBAT_MANAGER_MODULE_ID,
-        serverId: normalized.serverId ?? event?.serverId ?? "",
-        time: normalized.time ?? event?.time ?? new Date().toISOString(),
-        record: normalized,
-      });
-    }
+    emitModuleEvent(LEGACY_EVENT_NAMES.killEvent, {
+      eventId: event?.eventId ?? normalized.id ?? `${COMBAT_MANAGER_MODULE_ID}:${Date.now()}`,
+      eventName: LEGACY_EVENT_NAMES.killEvent,
+      source: COMBAT_MANAGER_MODULE_ID,
+      serverId: normalized.serverId ?? event?.serverId ?? "",
+      time: normalized.time ?? event?.time ?? new Date().toISOString(),
+      record: normalized,
+    });
 
     return normalized;
   }
@@ -341,9 +339,6 @@ export function createCombatManagerService({ core, modules, config, logger }) {
       return;
     }
 
-    const combatStateUpdate = core.eventBus?.onModuleEvent?.("module.combatState", "updated", (event) => {
-      ingestSourceEvent(event, "");
-    });
     const combatStateCleared = core.eventBus?.onModuleEvent?.("module.combatState", "cleared", (event) => {
       emitCombatManagerUpdate({
         eventId: String(event?.eventId ?? `${COMBAT_MANAGER_MODULE_ID}:cleared:${Date.now()}`),
@@ -357,18 +352,6 @@ export function createCombatManagerService({ core, modules, config, logger }) {
     const combatCleanUpdated = core.eventBus?.onModuleEvent?.("module.combatClean", "updated", (event) => {
       ingestSourceEvent(event, "");
     });
-    const combatCleanDamage = core.eventBus?.onModuleEvent?.("module.combatClean", "damageResolved", (event) => {
-      ingestSourceEvent(event, "damage");
-    });
-    const combatCleanWound = core.eventBus?.onModuleEvent?.("module.combatClean", "woundResolved", (event) => {
-      ingestSourceEvent(event, "wound");
-    });
-    const combatCleanKill = core.eventBus?.onModuleEvent?.("module.combatClean", "killResolved", (event) => {
-      ingestSourceEvent(event, "kill");
-    });
-    const combatCleanRevive = core.eventBus?.onModuleEvent?.("module.combatClean", "reviveResolved", (event) => {
-      ingestSourceEvent(event, "revive");
-    });
     const combatCleanRejected = core.eventBus?.onModuleEvent?.("module.combatClean", "rejected", (event) => {
       emitCombatManagerUpdate({
         eventId: String(event?.eventId ?? `${COMBAT_MANAGER_MODULE_ID}:rejected:${Date.now()}`),
@@ -381,13 +364,8 @@ export function createCombatManagerService({ core, modules, config, logger }) {
     });
 
     unsubscribers.push(
-      combatStateUpdate,
       combatStateCleared,
       combatCleanUpdated,
-      combatCleanDamage,
-      combatCleanWound,
-      combatCleanKill,
-      combatCleanRevive,
       combatCleanRejected,
     );
 

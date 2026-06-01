@@ -63,7 +63,7 @@ async function withWeaponCollector({ initialState } = {}, run) {
 
 async function testWeaponCollectorMergesAliases() {
   await withWeaponCollector({}, async ({ plugin, listeners, stopPlugin }) => {
-    const handler = [...(listeners.get("module.killManage:combatResolved") ?? [])][0];
+    const handler = [...(listeners.get("module.combatManager:KILL_MANAGER_EVENT") ?? [])][0];
     assert.ok(handler, "combatResolved handler should be registered");
 
     const records = [
@@ -122,7 +122,7 @@ async function testWeaponCollectorMergesAliases() {
 
 async function testWeaponCollectorPreservesEmbeddedC7A2() {
   await withWeaponCollector({}, async ({ plugin, listeners }) => {
-    const handler = [...(listeners.get("module.killManage:combatResolved") ?? [])][0];
+    const handler = [...(listeners.get("module.combatManager:KILL_MANAGER_EVENT") ?? [])][0];
     assert.ok(handler, "combatResolved handler should be registered");
 
     handler({
@@ -174,7 +174,7 @@ async function testWeaponCollectorDropsUnknownAliases() {
 
 async function testWeaponCollectorHandlesInvalidEventTime() {
   await withWeaponCollector({}, async ({ plugin, listeners, tempDir, stopPlugin }) => {
-    const handler = [...(listeners.get("module.killManage:combatResolved") ?? [])][0];
+    const handler = [...(listeners.get("module.combatManager:KILL_MANAGER_EVENT") ?? [])][0];
     assert.ok(handler, "combatResolved handler should be registered");
 
     handler({
@@ -196,7 +196,7 @@ async function testWeaponCollectorHandlesInvalidEventTime() {
 
 async function testWeaponCollectorClassifiesT90AAsVehicle() {
   await withWeaponCollector({}, async ({ plugin, listeners }) => {
-    const handler = [...(listeners.get("module.killManage:combatResolved") ?? [])][0];
+    const handler = [...(listeners.get("module.combatManager:KILL_MANAGER_EVENT") ?? [])][0];
     assert.ok(handler, "combatResolved handler should be registered");
 
     handler({

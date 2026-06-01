@@ -604,7 +604,7 @@ export function createPlugin({ core, modules }) {
       });
 
       unsubscribers.push(
-        core.eventBus.onModuleEvent("module.killManage", "combatResolved", (event) => {
+        core.eventBus.onModuleEvent("module.combatManager", "KILL_MANAGER_EVENT", (event) => {
           handleCombatEvent(event);
         }),
       );

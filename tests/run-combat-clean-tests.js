@@ -56,15 +56,19 @@ function createHarness({ playerState, matchState, combatCleanConfig, webStatus }
 }
 
 function emitCombatResolved(listeners, record) {
-  for (const handler of listeners.get("module.killManage:combatResolved") ?? []) {
+  for (const handler of listeners.get("module.combatState:updated") ?? []) {
     handler({
-      eventId: record.sourceEventId,
-      eventName: "module.killManage.combatResolved",
+      eventId: `module.combatState:${record.sourceEventId}`,
+      eventName: "module.combatState.updated",
       layer: "module",
-      source: "module.killManage",
+      source: "module.combatState",
       serverId: record.serverId,
       time: record.time,
-      record,
+      record: {
+        ...record,
+        sourceEventId: record.sourceEventId,
+        sourceModule: "module.combatState",
+      },
     });
   }
 }

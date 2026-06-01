@@ -66,20 +66,20 @@ export function createCombatStateModule({ core, modules, config, logger }) {
     return record;
   }
 
-  function ingestKillManageTeamKill(event) {
+  function ingestTeamKillEvent(event) {
     if (!isSubscribed()) return null;
-    const sourceRecord = event?.record;
-    if (!sourceRecord?.isTeamKill) return null;
-    if (sourceRecord.type !== "tk" && event?.eventName !== "TEAM_KILL") return null;
+    const sourceRecord = event?.record ?? event?.payload ?? event?.data ?? event;
+    if (!sourceRecord) return null;
+    if (event?.eventName !== "TEAM_KILL" && !sourceRecord.isTeamKill) return null;
 
     const record = {
       id: String(sourceRecord.sourceEventId || event?.eventId || `tk:${Date.now()}:${Math.random().toString(16).slice(2)}`),
       type: "tk",
-      eventName: String(event?.eventName ?? "module.killManage.teamKillResolved"),
+      eventName: String(event?.eventName ?? "TEAM_KILL"),
       time: String(sourceRecord.time ?? event?.time ?? new Date().toISOString()),
       serverId: String(sourceRecord.serverId ?? event?.serverId ?? ""),
-      victimName: String(sourceRecord.victimName ?? ""),
-      attackerName: String(sourceRecord.attackerName ?? ""),
+      victimName: String(sourceRecord.victimName ?? sourceRecord.victim ?? sourceRecord.victimName ?? sourceRecord.tk2 ?? ""),
+      attackerName: String(sourceRecord.attackerName ?? sourceRecord.killerName ?? sourceRecord.attacker ?? sourceRecord.tk1 ?? ""),
       damage: null,
       weapon: String(sourceRecord.weapon ?? ""),
       causedBy: String(sourceRecord.causedBy ?? "RCON_TEAM_KILL"),
@@ -484,8 +484,8 @@ export function createCombatStateModule({ core, modules, config, logger }) {
       for (const eventName of Object.keys(COMBAT_TYPES)) {
         unsubscribers.push(core.eventBus.onCoreEvent(eventName, ingest));
       }
-      if (core.eventBus?.onModuleEvent) {
-        unsubscribers.push(core.eventBus.onModuleEvent("module.killManage", "teamKillResolved", ingestKillManageTeamKill));
+      if (core.eventBus?.onCoreEvent) {
+        unsubscribers.push(core.eventBus.onCoreEvent("TEAM_KILL", ingestTeamKillEvent));
       }
       logWithFallback(moduleLogger, "info", `CombatState started. maxEvents=${maxEvents}`, {
         label: "MODULE",

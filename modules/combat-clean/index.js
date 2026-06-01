@@ -54,7 +54,7 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
 
     const rawRecord = event?.record ?? event?.rawRecord ?? null;
     if (!rawRecord || typeof rawRecord !== "object") {
-      return reject(event, rawRecord, "missing_raw_record", ["module.killManage event does not include record"]);
+      return reject(event, rawRecord, "missing_raw_record", ["module.combatState event does not include record"]);
     }
 
     const sourceEventId = String(rawRecord.sourceEventId ?? event?.eventId ?? rawRecord.id ?? "").trim();
@@ -165,7 +165,7 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       rawLog: String(rawRecord.rawLog ?? event?.rawLog ?? ""),
       rawEvent: sanitizeRawEvent(event),
       raw: {
-        sourceModule: "module.killManage",
+        sourceModule: "module.combatState",
         sourceEventId,
         rawLog: String(rawRecord.rawLog ?? event?.rawLog ?? ""),
         rawRecord: sanitizeRawRecord(rawRecord),
@@ -242,7 +242,7 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       status,
       warnings,
       raw: {
-        sourceModule: "module.killManage",
+        sourceModule: "module.combatState",
         sourceEventId: String(rawRecord?.sourceEventId ?? event?.eventId ?? ""),
         rawLog: String(rawRecord?.rawLog ?? event?.rawLog ?? ""),
         rawRecord: sanitizeRawRecord(rawRecord),
@@ -721,7 +721,7 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       version: "0.2.1",
       hidden: true,
       deprecated: true,
-      description: "Legacy combat event compatibility layer built from raw module.killManage evidence records. It backfills kill event weapon names from recent wound history before external plugins and the UDP forwarder consume the record.",
+      description: "Combat clean layer built from raw module.combatState evidence records. It backfills kill event weapon names from recent wound history before external plugins and the UDP forwarder consume the record.",
     },
     apiName: "combatClean",
     api,
@@ -742,8 +742,7 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       });
 
       if (!enabled) return;
-      unsubscribers.push(core.eventBus.onModuleEvent("module.killManage", "combatResolved", ingest));
-      unsubscribers.push(core.eventBus.onModuleEvent("module.killManage", "teamKillResolved", (event) => ingest(event, { optionalTkFeed: true })));
+      unsubscribers.push(core.eventBus.onModuleEvent("module.combatState", "updated", ingest));
       logWithFallback(moduleLogger, "info", `CombatClean started. maxEvents=${maxEvents}`, {
         label: "MODULE",
         operation: "start",

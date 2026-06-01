@@ -311,12 +311,7 @@ export function createCombatLogModule({ core, modules, config, logger }) {
         requiredPermission: "combat_manager.view",
       });
 
-      unsubscribers.push(core.eventBus?.onModuleEvent?.("module.combatState", "updated", handleCombatEvent));
-      unsubscribers.push(core.eventBus?.onModuleEvent?.("module.combatClean", "damageResolved", handleCombatEvent));
-      unsubscribers.push(core.eventBus?.onModuleEvent?.("module.combatClean", "woundResolved", handleCombatEvent));
-      unsubscribers.push(core.eventBus?.onModuleEvent?.("module.combatClean", "killResolved", handleCombatEvent));
-      unsubscribers.push(core.eventBus?.onModuleEvent?.("module.combatClean", "reviveResolved", handleCombatEvent));
-      unsubscribers.push(core.eventBus?.onModuleEvent?.("module.killManage", "teamKillResolved", handleCombatEvent));
+      unsubscribers.push(core.eventBus?.onModuleEvent?.("module.combatManager", "KILL_MANAGER_EVENT", handleCombatEvent));
 
       moduleLogger.info("Combat log module started.", {
         operation: "start",

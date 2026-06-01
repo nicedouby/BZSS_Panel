@@ -349,6 +349,30 @@ function testNormalizeParamsCompatibility() {
   assert.equal(params.CausedBy, "BP_Test_C");
 }
 
+async function testTeamKillCoreEventIsVisible() {
+  const harness = createHarness();
+  await harness.module.start();
+
+  harness.emit("TEAM_KILL", {
+    eventId: "module-tk-1",
+    serverId: "BZSS_Main",
+    time: "2026-05-08T11:01:00.000Z",
+    payload: {
+      sourceRaw: "[ChatAdmin] ASQKillDeathRuleset : Player Donald路DoubyBear Team Killed Player Braovo",
+      killerName: "Donald路DoubyBear",
+      victimName: "Braovo",
+    },
+  });
+
+  const events = harness.module.api.getEvents({ type: "tk" });
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, "tk");
+  assert.equal(events[0].isTeamKill, true);
+  assert.equal(events[0].attackerName, "Donald路DoubyBear");
+
+  await harness.module.stop();
+}
+
 await testNormalizesDamageEventAndSearches();
 await testKeepsNullptrInvalidDeathEvent();
 await testDeathDamage300AddsGiveUpLabel();
@@ -358,7 +382,7 @@ await testSameTeamEventIsMarkedTeamKill();
 await testSameTeamDamageIsFriendlyDamageNotTeamKill();
 await testSameTeamWoundIsTkDownNotTeamKill();
 await testReviveEventIsTrackedWithoutFriendlyFire();
-await testRconTkFromKillManageIsVisible();
+await testTeamKillCoreEventIsVisible();
 testNormalizeParamsCompatibility();
 
 console.log("combat state tests passed");

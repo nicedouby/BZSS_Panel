@@ -1560,13 +1560,14 @@ export class WebServer {
 
     if (url.pathname === "/api/kills/recent") {
       const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
-      const records = this.modules.combatState
-        ? this.modules.combatState.getEvents({
+      const records = this.modules.combatManager?.getEvents
+        ? this.modules.combatManager.getEvents({
+            serverId,
             type: url.searchParams.get("type") ?? "all",
             search: url.searchParams.get("search") ?? "",
             limit: url.searchParams.get("limit") ?? "100",
           })
-        : this.modules.killManage.getRecentKills(serverId, 100);
+        : this.modules.killManage?.getRecentKills?.(serverId, 100) ?? [];
       return this.json(res, 200, {
         records,
         viewer: {
