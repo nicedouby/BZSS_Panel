@@ -16,6 +16,7 @@ import PjscAverageDurationPage from "../pages/PjscAverageDurationPage.vue";
 import DrawVoteGuardDebugPage from "../pages/DrawVoteGuardDebugPage.vue";
 import SquadNameClassifierDebugPage from "../pages/SquadNameClassifierDebugPage.vue";
 import WelcomeJoinWarningDebugPage from "../pages/WelcomeJoinWarningDebugPage.vue";
+import PlayerSessionRecordsPage from "../pages/PlayerSessionRecordsPage.vue";
 import ComingSoonPage from "../pages/ComingSoonPage.vue";
 import ChatMonitorPage from "../pages/ChatMonitorPage.vue";
 import RuntimeStatusPage from "../pages/RuntimeStatusPage.vue";
@@ -56,6 +57,15 @@ export const router = createRouter({
       meta: {
         ...coreRealtimeMeta,
         title: "聊天监控",
+        fullBleed: true,
+      },
+    },
+    {
+      path: "/player-session-records",
+      component: PlayerSessionRecordsPage,
+      meta: {
+        ...corePollingMeta,
+        title: "进退服记录",
         fullBleed: true,
       },
     },

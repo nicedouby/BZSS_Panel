@@ -513,7 +513,7 @@ function formatTime(value) {
 function trimNumber(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return String(value ?? "-");
-  return Number.isInteger(number) ? String(number) : String(Number(number.toFixed(6)));
+  return String(Math.trunc(number));
 }
 
 function fmtNumber(value) {

@@ -89,7 +89,7 @@
                 </button>
               </div>
             </td>
-            <td>{{ event.damage ?? "-" }}</td>
+            <td>{{ formatDamage(event.damage) }}</td>
             <td>
               <span>{{ weaponName(event) }}</span>
               <span v-if="weaponTypeLabel(event)" class="weapon-type-badge" :class="weaponTypeClass(event)">
@@ -210,6 +210,12 @@ function formatTime(value: unknown) {
   const text = String(value ?? "");
   const date = new Date(text);
   return Number.isNaN(date.getTime()) ? text : date.toLocaleString();
+}
+
+function formatDamage(value: unknown) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "-";
+  return String(Math.trunc(number));
 }
 
 function eventFlagLabels(event: any) {

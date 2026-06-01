@@ -1354,6 +1354,44 @@ export class WebServer {
       }
     }
 
+    if (url.pathname.startsWith("/api/modules/player-session-records")) {
+      const moduleApi = this.modules.playerSessionRecords;
+      if (!moduleApi) {
+        return this.json(res, 404, {
+          error: "PlayerSessionRecordsUnavailable",
+          message: "Player session records module is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/modules/player-session-records/state" && req.method === "GET") {
+        const limit = Number(url.searchParams.get("limit") ?? "200") || 200;
+        return this.json(res, 200, {
+          ok: true,
+          data: moduleApi.getState?.(limit) ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/modules/player-session-records/records" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: moduleApi.getRecords?.({
+            limit: Number(url.searchParams.get("limit") ?? "200") || 200,
+            kind: url.searchParams.get("kind") ?? "all",
+            serverId: url.searchParams.get("serverId") ?? "",
+            playerName: url.searchParams.get("playerName") ?? "",
+          }) ?? [],
+        });
+      }
+
+      if (url.pathname === "/api/modules/player-session-records/clear" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: moduleApi.clearRecords?.() ?? null,
+        });
+      }
+    }
+
     if (url.pathname.startsWith("/api/plugins/infantry-combat-enhancer")) {
       const infantryCombatEnhancer = this.modules.infantryCombatEnhancer;
       if (!infantryCombatEnhancer) {

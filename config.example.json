@@ -241,6 +241,10 @@
   "modules": {
     "pluginSubscriptions": { "enabled": true },
     "audit": { "enabled": true },
+    "playerSessionRecords": {
+      "enabled": true,
+      "maxRecords": 2000
+    },
     "playerState": { "enabled": true },
     "squadState": { "enabled": true },
     "squadLifecycle": {

@@ -27,6 +27,7 @@ import { createPlaytimeModule } from "../modules/playtime/index.js";
 import { createPluginSubscriptionsModule } from "../modules/plugin-subscriptions/index.js";
 import { createServerStatsModule } from "../modules/server-stats/index.js";
 import { createScheduledBroadcastModule } from "../modules/scheduled-broadcast/index.js";
+import { createPlayerSessionRecordsModule } from "../modules/player-session-records/index.js";
 
 import { createChatManagerModule } from "../modules/chat-manager/index.js";
 
@@ -74,6 +75,7 @@ export class ModuleManager {
       createPlaytimeModule,
       createServerStatsModule,
       createScheduledBroadcastModule,
+      createPlayerSessionRecordsModule,
     ];
 
     for (const factory of factories) {

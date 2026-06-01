@@ -42,7 +42,7 @@
             <button v-if="victimIp" type="button" class="mini-action" @click="copyValue(victimIp, 'IP')">{{ t("common.copy") }} IP</button>
           </div>
         </div>
-        <div><span>{{ t("combat.damage") }}</span><strong>{{ event.damage ?? "-" }}</strong></div>
+        <div><span>{{ t("combat.damage") }}</span><strong>{{ formatDamage(event.damage) }}</strong></div>
         <div class="weapon-source-row">
           <span>{{ t("common.source") }}</span>
           <strong>
@@ -143,6 +143,12 @@ function formatTime(value: unknown) {
   const text = String(value ?? "");
   const date = new Date(text);
   return Number.isNaN(date.getTime()) ? text : date.toLocaleString();
+}
+
+function formatDamage(value: unknown) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "-";
+  return String(Math.trunc(number));
 }
 
 function formatTeamText(teamId: unknown) {

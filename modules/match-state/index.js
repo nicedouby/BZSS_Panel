@@ -250,6 +250,21 @@ export function createMatchStateModule({ core, modules, config, logger }) {
 
     updateWebStatus();
 
+    const currentLayer = String(
+      record.layerName
+      || state.serverStatus.layer
+      || state.match.layer
+      || "unknown",
+    ).trim() || "unknown";
+    moduleLogger.info(`/xm 对局开始 图层=${currentLayer}`, {
+      operation: "matchStart",
+      data: {
+        serverId,
+        layer: currentLayer,
+        mapName: record.mapName || "",
+      },
+    });
+
     const payload = {
       eventName: "module.matchState.roundUpdated",
       layer: "module",
@@ -702,6 +717,14 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       // Round ended
       unsubscribers.push(core.eventBus.onCoreEvent("round.winner_declared", (event) => {
         state.match.phase = "ended";
+        logWithFallback(moduleLogger, "info", "/xm 对局结束", {
+          operation: "matchState.roundEnded",
+          data: {
+            serverId: String(event?.serverId ?? state.serverId ?? core.webStatus.serverId ?? "").trim(),
+            eventId: String(event?.eventId ?? "").trim(),
+            winner: String(event?.normalized?.winner ?? event?.winner ?? "").trim(),
+          },
+        });
         updateWebStatus();
         emitUpdated("phase");
       }));
