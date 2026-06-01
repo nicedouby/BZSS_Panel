@@ -306,10 +306,12 @@ export const router = createRouter({
 });
 
 router.beforeEach((to: any) => {
+  const auth = useAuthStore();
+  if (!auth.checked) return true;
+
   const requiredPermission = String(to.meta?.requiredPermission ?? "").trim();
   if (!requiredPermission) return true;
 
-  const auth = useAuthStore();
   const authUser = auth.user as { permissions?: unknown; permission?: unknown; isSuperAdmin?: boolean } | null | undefined;
   const permissions = normalizePermissionList(authUser?.permissions ?? authUser?.permission);
   const legacyPermissions = normalizePermissionList(to.meta?.legacyRequiredPermissions);

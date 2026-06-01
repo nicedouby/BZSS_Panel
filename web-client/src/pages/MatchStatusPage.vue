@@ -98,6 +98,7 @@
     <PlayerDetailDrawer
       :open="selectedPlayerDetail !== null"
       :player="selectedPlayerDetail"
+      :server-id="currentServerId"
       @close="closePlayerDetail"
     />
 
@@ -219,6 +220,7 @@ const refreshingType = computed(() => {
 const snapshotUpdatedAt = computed(() => Math.max(server.updatedAt, players.updatedAt, squads.updatedAt));
 const hasSnapshotData = computed(() => snapshotUpdatedAt.value > 0);
 const runtimeWebStatus = computed(() => server.snapshot?.webStatus ?? server.snapshot ?? {});
+const currentServerId = computed(() => String(runtimeWebStatus.value.serverId ?? server.snapshot?.serverId ?? "").trim());
 const rconStatus = computed(() => String(runtimeWebStatus.value.rcon ?? "unknown"));
 const matchSnapshotQuery = useQuery({
   queryKey: computed(() => ["match-snapshot", auth.authenticated]),

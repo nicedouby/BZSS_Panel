@@ -6,13 +6,10 @@
       <span>Vue {{ t("common.panel") }}</span>
     </div>
     <nav>
-      <div v-for="group in groups" :key="group.title" class="nav-group">
+      <div v-for="group in groups" :key="group.key" class="nav-group">
         <h3 class="group-title">{{ group.title }}</h3>
-        <template v-for="item in group.items" :key="`${group.title}-${item.path}`">
-          <RouterLink
-            :to="item.path"
-            @click="ui.closeMobileSidebar()"
-          >
+        <template v-for="item in group.items" :key="`${group.key}-${item.path}`">
+          <RouterLink :to="item.path" @click="ui.closeMobileSidebar()">
             <span class="nav-icon">{{ item.icon }}</span>
             <span class="nav-label">{{ item.label }}</span>
           </RouterLink>
@@ -23,7 +20,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useUiStore } from "../../stores/ui.store";
 import { useAuthStore } from "../../stores/auth.store";
 import { apiGet } from "../../app/apiClient";
@@ -34,9 +31,79 @@ import {
   resolveWebPagePermission,
 } from "../../shared/web-page-permissions.js";
 
+type SidebarSectionKey =
+  | "opsLive"
+  | "players"
+  | "combat"
+  | "broadcast"
+  | "plugins"
+  | "system"
+  | "debug"
+  | "other";
+
+interface SidebarItem {
+  path: string;
+  icon: string;
+  label: string;
+  section: SidebarSectionKey;
+  order: number;
+}
+
+interface SidebarGroup {
+  key: SidebarSectionKey;
+  title: string;
+  items: SidebarItem[];
+}
+
 const ui = useUiStore();
 const auth = useAuthStore();
 const apiPages = ref<any[]>([]);
+
+const sectionOrder: SidebarSectionKey[] = [
+  "opsLive",
+  "players",
+  "combat",
+  "broadcast",
+  "plugins",
+  "system",
+  "debug",
+  "other",
+];
+
+const sectionTitleKeys: Record<SidebarSectionKey, string> = {
+  opsLive: "nav.opsLiveCategory",
+  players: "nav.playersCategory",
+  combat: "nav.combatCategory",
+  broadcast: "nav.broadcastCategory",
+  plugins: "nav.pluginsCategory",
+  system: "nav.systemCategory",
+  debug: "nav.debugCategory",
+  other: "nav.otherCategory",
+};
+
+const staticItems: SidebarItem[] = [
+  { path: "/match-status", icon: "MS", label: t("nav.matchStatus"), section: "opsLive", order: 10 },
+  { path: "/match-state", icon: "MS", label: t("nav.matchStatus"), section: "opsLive", order: 11 },
+  { path: "/console", icon: "CON", label: t("nav.console"), section: "opsLive", order: 20 },
+  { path: "/chat-monitor", icon: "CHAT", label: t("nav.chatMonitor"), section: "opsLive", order: 30 },
+  { path: "/player-database", icon: "DB", label: t("nav.playerDatabase"), section: "players", order: 40 },
+  { path: "/player-session-records", icon: "REC", label: t("nav.playerSessionRecords"), section: "players", order: 50 },
+  { path: "/squad-management", icon: "SQ", label: t("nav.squadManagement"), section: "players", order: 60 },
+  { path: "/combat-manager", icon: "CB", label: t("nav.combatManager"), section: "combat", order: 70 },
+  { path: "/combat-log", icon: "LOG", label: t("nav.combatLog"), section: "combat", order: 80 },
+  { path: "/admin-warns", icon: "BR", label: t("nav.adminWarns"), section: "broadcast", order: 90 },
+  { path: "/scheduled-broadcasts", icon: "SCH", label: t("nav.scheduledBroadcasts"), section: "broadcast", order: 100 },
+  { path: "/plugins/infantry-combat-enhancer", icon: "ICE", label: t("nav.infantryCombatEnhancer"), section: "plugins", order: 110 },
+  { path: "/plugins/group-report", icon: "GR", label: t("nav.groupReport"), section: "plugins", order: 120 },
+  { path: "/plugins/server-info-statistics", icon: "STS", label: t("nav.serverInfoStatistics"), section: "plugins", order: 130 },
+  { path: "/system/status", icon: "SYS", label: t("nav.runtimeStatus"), section: "system", order: 140 },
+  { path: "/debug/udp-forwarder", icon: "UDP", label: t("nav.udpForwarder"), section: "debug", order: 150 },
+  { path: "/debug/match-snapshots", icon: "SNP", label: t("nav.matchSnapshots"), section: "debug", order: 160 },
+  { path: "/debug/pjsc-average-duration", icon: "PJ", label: t("nav.pjscAverageDuration"), section: "debug", order: 170 },
+  { path: "/debug/draw-vote-guard", icon: "DVG", label: t("nav.drawVoteGuard"), section: "debug", order: 180 },
+  { path: "/debug/welcome-join-warning", icon: "WJW", label: t("nav.welcomeJoinWarning"), section: "debug", order: 190 },
+  { path: "/debug/squad-name-classifier", icon: "SNC", label: t("nav.squadNameClassifier"), section: "debug", order: 200 },
+];
 
 function normalizePath(path: unknown): string {
   const raw = String(path ?? "").trim();
@@ -78,93 +145,97 @@ function canShowRoute(route: unknown, legacyRequiredPermissions: unknown[] = [])
   return canAccessPage(auth.user, requiredPermission, legacyPermissions);
 }
 
-const groups = computed(() => {
-  const result: any[] = [
-    {
-      title: t("nav.coreCategory"),
-      items: [
-        { path: "/match-status", icon: "MS", label: t("nav.matchStatus") },
-        { path: "/console", icon: "CON", label: t("nav.console") },
-        { path: "/system/status", icon: "ST", label: t("nav.runtimeStatus") },
-        { path: "/player-database", icon: "DB", label: t("nav.playerDatabase") },
-      ],
-    },
-    {
-      title: t("nav.toolsCategory"),
-      items: [
-        { path: "/squad-management", icon: "SM", label: t("nav.squadManagement") },
-        { path: "/combat-manager", icon: "CM", label: t("nav.combatManager") },
-        { path: "/admin-warns", icon: "BR", label: t("nav.adminWarns") },
-        { path: "/plugins/infantry-combat-enhancer", icon: "IE", label: t("nav.infantryCombatEnhancer") },
-      ],
-    },
-  ];
+function canShowPage(page: any) {
+  return canAccessPage(
+    auth.user,
+    String(page?.requiredPermission ?? "").trim(),
+    normalizePermissionList(page?.legacyRequiredPermissions ?? []),
+  );
+}
 
+function resolveSection(route: string, page: any): SidebarSectionKey {
+  const id = normalizeLabel(page?.id);
+  const source = normalizeLabel(page?.source);
+
+  if (route.startsWith("/debug/") || id.includes("debug")) return "debug";
+  if (route.startsWith("/system/") || id.includes("runtime") || id.includes("system")) return "system";
+  if (route === "/match-status" || route === "/match-state" || route === "/console" || route === "/chat-monitor") return "opsLive";
+  if (route === "/player-database" || route === "/player-session-records" || route === "/squad-management") return "players";
+  if (route === "/combat-manager" || route === "/combat-log" || route === "/kill-manage" || route === "/combat-clean") return "combat";
+  if (route === "/admin-warns" || route === "/scheduled-broadcasts") return "broadcast";
+  if (route.startsWith("/plugins/") || source.includes("plugin")) return "plugins";
+  if (id.includes("player") || id.includes("squad")) return "players";
+  if (id.includes("combat")) return "combat";
+  if (id.includes("warn") || id.includes("broadcast")) return "broadcast";
+  return "other";
+}
+
+function createGroupMap() {
+  const map = new Map<SidebarSectionKey, SidebarGroup>();
+  for (const key of sectionOrder) {
+    map.set(key, {
+      key,
+      title: t(sectionTitleKeys[key], key),
+      items: [],
+    });
+  }
+  return map;
+}
+
+const groups = computed(() => {
+  const map = createGroupMap();
   const seenPaths = new Set<string>();
   const seenLabels = new Set<string>();
-  for (const group of result) {
-    group.items = group.items.filter((item: any) => canShowRoute(item.path));
-    for (const item of group.items) {
-      if (item?.path) {
-        item.path = normalizePath(item.path);
-        seenPaths.add(item.path);
-      }
-      if (item?.label) {
-        const labelKey = normalizeLabel(item.label);
-        if (labelKey) seenLabels.add(labelKey);
-      }
-    }
+
+  for (const item of staticItems) {
+    if (!canShowRoute(item.path)) continue;
+    const normalizedPath = normalizePath(item.path);
+    const normalizedLabel = normalizeLabel(item.label);
+    if (seenPaths.has(normalizedPath)) continue;
+
+    map.get(item.section)?.items.push({ ...item, path: normalizedPath });
+    seenPaths.add(normalizedPath);
+    if (normalizedLabel) seenLabels.add(normalizedLabel);
   }
-
-  // Add Dynamic Pages from Registry
-  const dynamicGroup: any = {
-    title: t("nav.pluginsCategory"),
-    items: [],
-  };
-
-  const debugGroup: any = {
-    title: t("nav.debugCategory", "Debug"),
-    items: [],
-  };
 
   for (const page of apiPages.value) {
     if (!page.enabled || page.hiddenFromSidebar) continue;
-    const normalizedRoute = normalizePath(page.route);
-    const normalizedLabel = normalizeLabel(page.title);
-    if (seenPaths.has(normalizedRoute)) continue;
+    if (!canShowPage(page)) continue;
+
+    const route = normalizePath(page.route);
+    const label = String(page.title ?? "").trim();
+    const normalizedLabel = normalizeLabel(label);
+    if (seenPaths.has(route)) continue;
     if (normalizedLabel && seenLabels.has(normalizedLabel)) continue;
-    if (!canAccessPage(auth.user, page.requiredPermission, page.legacyRequiredPermissions)) continue;
-    
-    const item = {
-      path: normalizedRoute,
-      icon: page.icon || "P",
-      label: page.title,
-    };
 
-    seenPaths.add(normalizedRoute);
+    const section = resolveSection(route, page);
+    map.get(section)?.items.push({
+      path: route,
+      icon: String(page.icon ?? "P"),
+      label,
+      section,
+      order: Number(page.order ?? 9999),
+    });
+
+    seenPaths.add(route);
     if (normalizedLabel) seenLabels.add(normalizedLabel);
-
-    if (page.group === "调试" || page.group === "DEBUG") {
-      debugGroup.items.push(item);
-    } else if (page.group === "核心") {
-      // Core pages already handled statically for now to keep icons
-    } else {
-      dynamicGroup.items.push(item);
-    }
   }
 
-  if (dynamicGroup.items.length > 0) result.push(dynamicGroup);
-  if (debugGroup.items.length > 0) result.push(debugGroup);
-
-  return result;
+  return sectionOrder
+    .map((key) => map.get(key))
+    .filter((group): group is SidebarGroup => Boolean(group && group.items.length > 0))
+    .map((group) => ({
+      ...group,
+      items: group.items.slice().sort((a, b) => a.order - b.order || a.label.localeCompare(b.label)),
+    }));
 });
 
 async function fetchPages() {
   try {
     const res = await apiGet<any>("/api/web/pages");
     apiPages.value = res.pages || [];
-  } catch (e) {
-    console.error("Failed to fetch sidebar pages:", e);
+  } catch (error) {
+    console.error("Failed to fetch sidebar pages:", error);
   }
 }
 

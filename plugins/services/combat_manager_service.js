@@ -1,8 +1,12 @@
 // -*- coding: utf-8 -*-
 
+import fs from "node:fs/promises";
+import path from "node:path";
+
 const COMBAT_MANAGER_MODULE_ID = "module.combatManager";
 const COMBAT_MANAGER_VISIBLE_NAME = "战斗管理";
 const DEFAULT_ENABLED = true;
+const DEFAULT_CACHE_DIR = "data/combat-manager";
 const LEGACY_CONFIG_PREFIX = ["kill", "_manager"].join("");
 const LEGACY_EVENT_PREFIX = ["KILL", "_MANAGER"].join("");
 const LEGACY_EVENT_NAMES = Object.freeze({
@@ -39,9 +43,18 @@ export function createCombatManagerService({ core, modules, config, logger }) {
     config?.get?.([LEGACY_CONFIG_PREFIX, ".enabled"].join("")),
     DEFAULT_ENABLED,
   ));
+  const cacheDir = path.resolve(process.cwd(), String(firstPresent(
+    moduleConfig.cacheDir,
+    config?.get?.("modules.combatManager.cacheDir"),
+    config?.get?.("modules.combat_manager.cacheDir"),
+    config?.get?.("combat_manager.cacheDir"),
+    DEFAULT_CACHE_DIR,
+  )));
 
   const unsubscribers = [];
   const eventEmitter = new Map();
+  const cacheWriteTimers = new Map();
+  const cacheWritePromises = new Map();
   let lastSnapshotAt = "";
 
   const api = {
@@ -58,6 +71,18 @@ export function createCombatManagerService({ core, modules, config, logger }) {
 
     getOverview(serverId = "") {
       return getCombatManagerSnapshot(serverId);
+    },
+
+    getCacheFilePath(serverId = "") {
+      return getCombatCacheFilePath(serverId);
+    },
+
+    async readCacheSnapshot(serverId = "") {
+      return readCombatCacheSnapshot(serverId);
+    },
+
+    async ensureCacheSnapshot(serverId = "") {
+      return ensureCombatCacheSnapshot(serverId);
     },
 
     getEventById(id) {
@@ -125,6 +150,7 @@ export function createCombatManagerService({ core, modules, config, logger }) {
       const target = String(serverId ?? "").trim();
       const rawResult = modules?.combatState?.clear?.(target) ?? { ok: true, cleared: 0 };
       const processedResult = modules?.combatClean?.clear?.(target) ?? { ok: true, cleared: 0 };
+      scheduleCombatCacheWrite(target);
       emitCombatManagerUpdate({
         serverId: target,
         eventName: NEW_EVENT_NAMES.updated,
@@ -216,6 +242,7 @@ export function createCombatManagerService({ core, modules, config, logger }) {
 
   function emitCombatManagerUpdate(payload = {}) {
     const snapshot = getCombatManagerSnapshot(payload.serverId ?? "");
+    scheduleCombatCacheWrite(payload.serverId ?? "");
     const emitted = {
       ...payload,
       layer: payload.layer ?? "module",
@@ -271,6 +298,7 @@ export function createCombatManagerService({ core, modules, config, logger }) {
       processedStats,
       rejected,
       lastUpdatedAt: processedOverview?.lastUpdatedAt ?? rawState?.lastUpdatedAt ?? lastSnapshotAt,
+      events: cloneList(primaryEvents, (event) => normalizeCombatEvent(event, detectSource(event))),
       latest: cloneList(primaryEvents.slice(-20).reverse(), (event) => normalizeCombatEvent(event, detectSource(event))),
       rawLatest: cloneList(rawEvents.slice(-20).reverse(), (event) => normalizeCombatEvent(event, "raw")),
       processedLatest: cloneList(processedEvents.slice(-20).reverse(), (event) => normalizeCombatEvent(event, "processed")),
@@ -375,6 +403,11 @@ export function createCombatManagerService({ core, modules, config, logger }) {
       time: new Date().toISOString(),
       serverId: core.webStatus?.serverId ?? "",
     });
+    try {
+      await writeCombatCacheSnapshot(core.webStatus?.serverId ?? "");
+    } catch (error) {
+      moduleLogger?.warn?.(`CombatManager cache write failed on start: ${error?.message ?? error}`);
+    }
 
     moduleLogger?.info?.("CombatManager service started.", {
       operation: "start",
@@ -390,10 +423,60 @@ export function createCombatManagerService({ core, modules, config, logger }) {
         unsubscribe?.();
       } catch {}
     }
+    for (const timer of cacheWriteTimers.values()) {
+      clearTimeout(timer);
+    }
+    cacheWriteTimers.clear();
+    await Promise.allSettled(cacheWritePromises.values());
+    cacheWritePromises.clear();
     eventEmitter.clear?.();
     moduleLogger?.info?.("CombatManager service stopped.", {
       operation: "stop",
     });
+  }
+
+  function scheduleCombatCacheWrite(serverId = "") {
+    const target = normalizeServerKey(serverId);
+    const existing = cacheWriteTimers.get(target);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      cacheWriteTimers.delete(target);
+      const writePromise = writeCombatCacheSnapshot(target).finally(() => {
+        cacheWritePromises.delete(target);
+      });
+      cacheWritePromises.set(target, writePromise);
+    }, 250);
+    cacheWriteTimers.set(target, timer);
+  }
+
+  async function writeCombatCacheSnapshot(serverId = "") {
+    const snapshot = getCombatManagerSnapshot(serverId);
+    const filePath = getCombatCacheFilePath(serverId);
+    const tempPath = `${filePath}.tmp`;
+    await fs.mkdir(cacheDir, { recursive: true });
+    await fs.writeFile(tempPath, JSON.stringify(snapshot, null, 2), "utf8");
+    await fs.rename(tempPath, filePath);
+  }
+
+  async function readCombatCacheSnapshot(serverId = "") {
+    const filePath = getCombatCacheFilePath(serverId);
+    try {
+      const text = await fs.readFile(filePath, "utf8");
+      return JSON.parse(text);
+    } catch {
+      return null;
+    }
+  }
+
+  async function ensureCombatCacheSnapshot(serverId = "") {
+    const existing = await readCombatCacheSnapshot(serverId);
+    if (existing) return existing;
+    await writeCombatCacheSnapshot(serverId);
+    return readCombatCacheSnapshot(serverId);
+  }
+
+  function getCombatCacheFilePath(serverId = "") {
+    return path.join(cacheDir, `${normalizeServerKey(serverId)}.json`);
   }
 
   return {
@@ -453,6 +536,10 @@ function parseTimestampMs(value) {
   if (Number.isFinite(number)) return number > 10 ** 11 ? number : number * 1000;
   const parsed = Date.parse(text);
   return Number.isFinite(parsed) ? parsed : Date.now();
+}
+
+function normalizeServerKey(value = "") {
+  return String(value ?? "").trim().replace(/[^A-Za-z0-9_.-]/g, "_") || "default";
 }
 
 function selectPrimaryEvents(filter = {}) {

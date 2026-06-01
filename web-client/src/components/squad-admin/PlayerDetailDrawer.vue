@@ -132,6 +132,8 @@
               </div>
             </section>
 
+            <PlayerCombatTimeline :player="props.player" :server-id="props.serverId" />
+
             <section class="detail-section advanced-section">
               <button type="button" class="detail-section-title advanced-toggle" @click="showAdvanced = !showAdvanced">
                 {{ showAdvanced ? "▼" : "▶" }} {{ t("player.advanced") }}
@@ -169,6 +171,7 @@ import { requestSwitchTeam } from "../../app/teamBalanceApi";
 import { warnPlayer, kickPlayer, removePlayerFromSquad } from "../../app/squadManagementApi";
 import StatusBadge from "../common/StatusBadge.vue";
 import CopyableValue from "./CopyableValue.vue";
+import PlayerCombatTimeline from "./PlayerCombatTimeline.vue";
 import { useAuthStore } from "../../stores/auth.store";
 import { t } from "../../i18n";
 
@@ -176,6 +179,7 @@ const props = withDefaults(
   defineProps<{
     player: PlayerDetailViewModel | null;
     open: boolean;
+    serverId?: string | null;
   }>(),
   {
     player: null,

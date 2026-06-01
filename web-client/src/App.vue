@@ -11,20 +11,46 @@
 <script setup lang="ts">
 import { onMounted, watch } from "vue";
 import { useRoute } from "vue-router";
+import { useRouter } from "vue-router";
 import AppLayout from "./components/layout/AppLayout.vue";
 import LoginPage from "./pages/LoginPage.vue";
 import { useAuthStore } from "./stores/auth.store";
 import { useUiStore } from "./stores/ui.store";
 import { startRuntimeSync, stopRuntimeSync } from "./app/runtimeSync";
+import { canAccessPage, normalizePermissionList } from "./shared/web-page-permissions.js";
 import { t } from "./i18n";
 
 const auth = useAuthStore();
 const ui = useUiStore();
 const route = useRoute();
+const router = useRouter();
 
 onMounted(() => {
   void auth.restoreSession();
 });
+
+watch(
+  () => [auth.checked, auth.authenticated, route.fullPath, route.meta.requiredPermission, route.meta.legacyRequiredPermissions] as const,
+  ([checked, authenticated]) => {
+    if (!checked || !authenticated) return;
+
+    const requiredPermission = String(route.meta.requiredPermission ?? "").trim();
+    if (!requiredPermission) return;
+    if (route.path === "/access-denied") return;
+
+    const user = auth.user as {
+      permissions?: unknown;
+      permission?: unknown;
+      isSuperAdmin?: boolean;
+    } | null | undefined;
+    const legacyPermissions = normalizePermissionList(route.meta.legacyRequiredPermissions);
+    if (canAccessPage(user, requiredPermission, legacyPermissions)) return;
+
+    const current = String(route.fullPath ?? route.path ?? "/").trim() || "/";
+    void router.replace({ path: "/access-denied", query: { from: current } });
+  },
+  { immediate: true },
+);
 
 watch(
   () => auth.authenticated,

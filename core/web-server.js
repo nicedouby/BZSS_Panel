@@ -1152,6 +1152,26 @@ export class WebServer {
       });
     }
 
+    if (url.pathname === "/api/combat-manager/cache" && req.method === "GET") {
+      const combatManager = this.modules.combatManager;
+      if (!combatManager) {
+        return this.json(res, 404, {
+          error: "CombatManagerUnavailable",
+          message: "Combat manager module is not loaded.",
+        });
+      }
+      const serverId = url.searchParams.get("serverId") ?? "";
+      const snapshot = await combatManager.ensureCacheSnapshot?.(serverId)
+        ?? await combatManager.readCacheSnapshot?.(serverId);
+      if (!snapshot) {
+        return this.json(res, 404, {
+          error: "CombatManagerCacheNotFound",
+          message: "Combat manager cache file is not available yet.",
+        });
+      }
+      return this.json(res, 200, { snapshot });
+    }
+
     if (url.pathname === "/api/combat-manager/clear" && req.method === "POST") {
       if (!this.requireSuperAdmin(user, res)) return;
       const combatManager = this.modules.combatManager;
