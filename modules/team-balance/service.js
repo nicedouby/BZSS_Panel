@@ -1,5 +1,10 @@
 // -*- coding: utf-8 -*-
 
+import {
+  canSendRconCommand,
+  resolveRconPermission,
+} from "../../web-client/src/shared/rcon-permissions.js";
+
 const MODULE_ID = "module.teamBalance";
 const DEFAULT_SOURCE = "对局状态手动操作";
 const DEFAULT_SWITCH_PERMISSION = "squad.switch";
@@ -130,6 +135,7 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
         operatorName,
         reason,
         system,
+        actor,
       });
 
       const record = await modules?.squadManagement?.recordAction?.({
@@ -227,7 +233,17 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
     }
   }
 
-  async function executeSwitchCommand({ command, target, source, operatorName, reason, system }) {
+  async function executeSwitchCommand({ command, target, source, operatorName, reason, system, actor }) {
+    const requiredPermission = resolveRconPermission(command, { requiredPermission: "rcon.tb" });
+    if (!system && !canSendRconCommand(actor, command, { requiredPermission })) {
+      return {
+        ok: false,
+        executed: false,
+        response: "",
+        error: `Permission '${requiredPermission}' is required.`,
+      };
+    }
+
     if (typeof core.squadRcon?.switchTeam === "function") {
       const response = await core.squadRcon.switchTeam(target.anyId);
       return normalizeSwitchResponse(response);
@@ -239,6 +255,8 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
         requestedBy: `${MODULE_ID}:${operatorName || "system"}`,
         reason: reason || source || "switch_team",
         system,
+        actor,
+        requiredPermission,
       });
       if (response?.success || response?.rconExecuted) {
         return {

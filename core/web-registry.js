@@ -6,6 +6,12 @@
  * 这里只负责记录“有哪些 Web 页面存在，以及它们怎么展示”。
  * 它不承载页面业务数据，也不负责权限判定本身。
  */
+import {
+  canAccessPage,
+  normalizePermissionList,
+  resolveWebPagePermission,
+} from "../web-client/src/shared/web-page-permissions.js";
+
 export class WebRegistry {
   constructor({ config, logger }) {
     this.config = config;
@@ -157,6 +163,11 @@ export class WebRegistry {
     const optionalConfig = this.config.get("webModules.optional", {});
     const enabled = required ? true : Boolean(optionalConfig[page.id] ?? page.enabled ?? true);
     const normalizedRoute = normalizeRoute(page.route);
+    const resolvedPermission = resolveWebPagePermission(normalizedRoute);
+    const requiredPermission = String(page.requiredPermission ?? resolvedPermission?.requiredPermission ?? "").trim();
+    const legacyRequiredPermissions = normalizePermissionList(
+      page.legacyRequiredPermissions ?? resolvedPermission?.legacyRequiredPermissions ?? [],
+    );
 
     const finalPage = {
       id: page.id,
@@ -170,7 +181,8 @@ export class WebRegistry {
       order: Number(page.order ?? 1000),
       icon: page.icon ?? "🔹",
       hiddenFromSidebar: Boolean(page.hiddenFromSidebar),
-      requiredPermission: page.requiredPermission ?? "",
+      requiredPermission,
+      legacyRequiredPermissions,
     };
 
     for (const existing of this.pages.values()) {
@@ -190,8 +202,13 @@ export class WebRegistry {
   /**
    * 返回当前启用且面向前端展示的页面列表。
    */
-  getPages() {
-    return dedupePagesByRoute([...this.pages.values()].filter((p) => p.enabled).sort((a, b) => a.order - b.order));
+  getPages(user = null) {
+    return dedupePagesByRoute(
+      [...this.pages.values()]
+        .filter((page) => page.enabled)
+        .filter((page) => canAccessPage(user, page.requiredPermission, page.legacyRequiredPermissions))
+        .sort((a, b) => a.order - b.order),
+    );
   }
 
   /**

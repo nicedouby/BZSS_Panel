@@ -5,6 +5,10 @@ import { classifySquadName } from "../../domain/squad/squad_name_classifier.js";
 import { createSquadLifecycleReducer } from "../squad-lifecycle/reducer.js";
 import { buildSquadLifecycleKey, buildSquadLifecycleSlotKey } from "../squad-lifecycle/service.js";
 import { normalizeSquadName } from "../squad-lifecycle/log-adapter.js";
+import {
+  canSendRconCommand,
+  resolveRconPermission,
+} from "../../web-client/src/shared/rcon-permissions.js";
 import { canDisband, canKick, canRemove } from "./permissions.js";
 
 const MODULE_ID = "module.squadManagement";
@@ -751,7 +755,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
     }
 
     const command = `AdminDisbandSquad ${teamId} ${squadId}`;
-    const commandResult = await executeDisbandCommand({ command, serverId, teamId, squadId, reason, source, operatorName, system });
+    const commandResult = await executeDisbandCommand({ command, serverId, teamId, squadId, reason, source, operatorName, system, actor });
     const result = await persistActionRecord({
       kind: "disband",
       serverId,
@@ -867,7 +871,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
 
     const targetId = target.steamId || target.eosId || target.name || target.playerId || requestedPlayer.playerKey;
     const command = `AdminKick "${escapeCommandString(targetId)}" ${escapeCommandString(reason)}`.trim();
-    const commandResult = await executeKickCommand({ command, serverId, target, reason, source, operatorName, system });
+    const commandResult = await executeKickCommand({ command, serverId, target, reason, source, operatorName, system, actor });
 
     const record = await persistActionRecord({
       kind: "kick",
@@ -981,7 +985,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
 
     const targetId = target.steamId || target.eosId || target.name || target.playerId || requestedPlayer.playerKey;
     const command = `AdminKickFromSquad "${escapeCommandString(targetId)}" ${escapeCommandString(reason)}`.trim();
-    const commandResult = await executeRemoveCommand({ command, serverId, target, reason, source, operatorName, system });
+    const commandResult = await executeRemoveCommand({ command, serverId, target, reason, source, operatorName, system, actor });
 
     const record = await persistActionRecord({
       kind: "remove",
@@ -1298,7 +1302,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
     return state;
   }
 
-  async function executeDisbandCommand({ command, serverId, teamId, squadId, reason, source, operatorName, system }) {
+  async function executeDisbandCommand({ command, serverId, teamId, squadId, reason, source, operatorName, system, actor }) {
     try {
       const response = await runRconCommand({
         command,
@@ -1309,6 +1313,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
         source,
         operatorName,
         system,
+        actor,
       }, "disband");
       return {
         ok: true,
@@ -1325,7 +1330,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
     }
   }
 
-  async function executeKickCommand({ command, serverId, target, reason, source, operatorName, system }) {
+  async function executeKickCommand({ command, serverId, target, reason, source, operatorName, system, actor }) {
     try {
       const response = await runRconCommand({
         command,
@@ -1335,6 +1340,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
         source,
         operatorName,
         system,
+        actor,
       }, "kick");
       return {
         ok: true,
@@ -1351,7 +1357,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
     }
   }
 
-  async function executeRemoveCommand({ command, serverId, target, reason, source, operatorName, system }) {
+  async function executeRemoveCommand({ command, serverId, target, reason, source, operatorName, system, actor }) {
     try {
       const response = await runRconCommand({
         command,
@@ -1361,6 +1367,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
         source,
         operatorName,
         system,
+        actor,
       }, "remove");
       return {
         ok: true,
@@ -1378,6 +1385,11 @@ export function createSquadManagementService({ core, modules, config, logger, re
   }
 
   async function runRconCommand(meta, action) {
+    const requiredPermission = resolveRconPermission(meta.command, meta);
+    if (!meta.system && !canSendRconCommand(meta.actor, meta.command, { requiredPermission })) {
+      throw new Error(`Permission '${requiredPermission}' is required.`);
+    }
+
     if (action === "disband") {
       if (typeof core.squadRcon?.adminDisbandSquad === "function") {
         return await core.squadRcon.adminDisbandSquad(meta.teamId, meta.squadId);
@@ -1403,6 +1415,8 @@ export function createSquadManagementService({ core, modules, config, logger, re
         requestedBy: `${MODULE_ID}:${meta.operatorName || "system"}`,
         reason: meta.reason || meta.source || action,
         system: meta.system,
+        actor: meta.actor,
+        requiredPermission,
       });
       if (response?.success || response?.rconExecuted) {
         return response?.rconResponse ?? response;
@@ -2027,6 +2041,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
         command: "ListSquads",
         requestedBy: `${MODULE_ID}:refresh`,
         reason: "squad-target-refresh",
+        system: true,
       });
     }
 

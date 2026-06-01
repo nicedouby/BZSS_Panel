@@ -431,7 +431,15 @@ function openPlayerRealtimeWindow(player, { apiFetch, onNavigate, onRefresh } = 
         </div>
 
         <section class="bzss-player-combat-panel">
-          <div class="bzss-player-combat-title">Recent clean combat</div>
+          <div class="bzss-player-combat-panel-head">
+            <div>
+              <div class="bzss-player-combat-title">Recent clean combat</div>
+              <div class="bzss-player-combat-subtitle">按时间切片查看伤害 / 击倒 / 击杀频率，点击区间可以展开事件和原始记录。</div>
+            </div>
+            <div class="bzss-player-combat-range" id="player-combat-range-label">最近 60 分钟</div>
+          </div>
+          <div id="player-combat-chart" class="bzss-player-combat-chart">Loading...</div>
+          <div id="player-combat-detail" class="bzss-player-combat-detail">选择一个时间点查看详情。</div>
           <div id="player-clean-combat-list" class="bzss-player-combat-list">Loading...</div>
         </section>
       </div>
@@ -439,7 +447,7 @@ function openPlayerRealtimeWindow(player, { apiFetch, onNavigate, onRefresh } = 
   `;
 
   document.body.appendChild(root);
-  loadPlayerCleanCombatEvents(root, { apiFetch, player }).catch(() => {});
+  loadPlayerCombatTimeline(root, { apiFetch, player }).catch(() => {});
 
   root.querySelectorAll("[data-close-player-window]").forEach((el) => {
     el.addEventListener("click", closePlayerFloatingWindow);
@@ -584,44 +592,294 @@ function closePlayerFloatingWindow() {
   root.remove();
 }
 
-async function loadPlayerCleanCombatEvents(root, { apiFetch, player }) {
+async function loadPlayerCombatTimeline(root, { apiFetch, player }) {
+  const chart = root.querySelector("#player-combat-chart");
+  const detail = root.querySelector("#player-combat-detail");
   const list = root.querySelector("#player-clean-combat-list");
-  if (!list) return;
+  const rangeLabel = root.querySelector("#player-combat-range-label");
+  if (!chart || !detail || !list) return;
 
   const params = new URLSearchParams({
     steam64ID: getPlayerSteamID(player),
     eosID: String(player.eosID || player.eos || player.EOSID || "").trim(),
     name: String(player.name || "").trim(),
-    limit: "20",
+    limit: "180",
   });
 
   try {
     const response = await apiFetch(`/api/combat-clean/player-events?${params.toString()}`);
     const data = await readJsonSafe(response);
     if (!response.ok) throw new Error(data?.error || `combat clean request failed (${response.status})`);
-    const events = data?.events ?? [];
+    const events = Array.isArray(data?.events) ? data.events : [];
     if (!events.length) {
+      chart.innerHTML = `<div class="bzss-player-combat-empty">No clean combat records</div>`;
+      detail.innerHTML = `<div class="bzss-player-combat-empty">暂无可视化数据</div>`;
       list.innerHTML = `<div class="bzss-player-combat-empty">No clean combat records</div>`;
       return;
     }
 
-    list.innerHTML = events.map((event, index) => `
-      <button type="button" class="bzss-player-combat-row ${event.relation?.isFriendlyFire ? "is-friendly" : ""}" data-player-clean-combat-index="${index}">
-        <span>${esc(cleanCombatTypeLabel(event.type))}</span>
-        <strong>${esc(event.displayText || "-")}</strong>
-        <em>${esc(formatCleanCombatTime(event.time))}</em>
-      </button>
-    `).join("");
+    const timeline = buildPlayerCombatTimeline(events);
+    if (rangeLabel) {
+      rangeLabel.textContent = `${formatCombatWindowLabel(timeline.windowMinutes)} · ${formatCleanCombatTime(timeline.rangeStart)} ~ ${formatCleanCombatTime(timeline.rangeEnd)}`;
+    }
 
+    const state = {
+      selectedIndex: timeline.initialSelectedIndex,
+    };
+
+    const renderSelected = () => {
+      const bucket = timeline.buckets[state.selectedIndex] || timeline.buckets[timeline.buckets.length - 1];
+      if (!bucket) {
+        detail.innerHTML = `<div class="bzss-player-combat-empty">暂无可视化数据</div>`;
+        return;
+      }
+      detail.innerHTML = renderPlayerCombatBucketDetail(bucket, state.selectedIndex, timeline.buckets.length);
+      detail.querySelectorAll("[data-player-trace-event-index]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const event = bucket.events[Number(button.dataset.playerTraceEventIndex)];
+          if (event) openPlayerCleanCombatDetailModal(event);
+        });
+      });
+    };
+
+    const updateChartSelection = (index) => {
+      state.selectedIndex = Math.max(0, Math.min(timeline.buckets.length - 1, Number(index) || 0));
+      chart.querySelectorAll("[data-combat-bucket-index]").forEach((button) => {
+        button.classList.toggle("is-selected", Number(button.dataset.combatBucketIndex) === state.selectedIndex);
+      });
+      renderSelected();
+    };
+
+    chart.innerHTML = renderPlayerCombatChart(timeline);
+    chart.querySelectorAll("[data-combat-bucket-index]").forEach((button) => {
+      const index = Number(button.dataset.combatBucketIndex);
+      button.addEventListener("mouseenter", () => updateChartSelection(index));
+      button.addEventListener("focus", () => updateChartSelection(index));
+      button.addEventListener("click", () => updateChartSelection(index));
+    });
+
+    list.innerHTML = renderPlayerCombatEventList(events);
     list.querySelectorAll("[data-player-clean-combat-index]").forEach((button) => {
       button.addEventListener("click", () => {
         const event = events[Number(button.dataset.playerCleanCombatIndex)];
         if (event) openPlayerCleanCombatDetailModal(event);
       });
     });
+
+    updateChartSelection(timeline.initialSelectedIndex);
   } catch (error) {
-    list.innerHTML = `<div class="bzss-player-combat-empty">${esc(error?.message || "Failed to load clean combat")}</div>`;
+    const message = esc(error?.message || "Failed to load clean combat");
+    chart.innerHTML = `<div class="bzss-player-combat-empty">${message}</div>`;
+    detail.innerHTML = `<div class="bzss-player-combat-empty">${message}</div>`;
+    list.innerHTML = `<div class="bzss-player-combat-empty">${message}</div>`;
   }
+}
+
+function renderPlayerCombatEventList(events = []) {
+  const items = [...events].slice(0, 20);
+  if (!items.length) return `<div class="bzss-player-combat-empty">No clean combat records</div>`;
+
+  return items.map((event, index) => `
+    <button type="button" class="bzss-player-combat-row ${event.relation?.isFriendlyFire ? "is-friendly" : ""}" data-player-clean-combat-index="${index}">
+      <span>${esc(cleanCombatTypeLabel(event.type))}</span>
+      <strong>${esc(event.displayText || "-")}</strong>
+      <em>${esc(formatCleanCombatTime(event.time))}</em>
+    </button>
+  `).join("");
+}
+
+function renderPlayerCombatChart(timeline = {}) {
+  const buckets = Array.isArray(timeline.buckets) ? timeline.buckets : [];
+  if (!buckets.length) return `<div class="bzss-player-combat-empty">暂无曲线数据</div>`;
+
+  const width = 720;
+  const height = 180;
+  const padding = { top: 18, right: 18, bottom: 28, left: 28 };
+  const innerWidth = width - padding.left - padding.right;
+  const innerHeight = height - padding.top - padding.bottom;
+  const maxValue = Math.max(1, ...buckets.flatMap((bucket) => [bucket.damage, bucket.wound, bucket.kill]));
+  const points = {
+    damage: buildCombatSeriesPoints(buckets, innerWidth, innerHeight, padding, maxValue, "damage"),
+    wound: buildCombatSeriesPoints(buckets, innerWidth, innerHeight, padding, maxValue, "wound"),
+    kill: buildCombatSeriesPoints(buckets, innerWidth, innerHeight, padding, maxValue, "kill"),
+  };
+
+  return `
+    <div class="bzss-player-combat-chart-frame">
+      <svg class="bzss-player-combat-chart-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-label="player combat frequency chart" role="img">
+        <g class="bzss-player-combat-chart-grid">
+          ${Array.from({ length: 4 }, (_, index) => {
+            const y = padding.top + (innerHeight / 3) * index;
+            return `<line x1="${padding.left}" y1="${y.toFixed(2)}" x2="${width - padding.right}" y2="${y.toFixed(2)}" />`;
+          }).join("")}
+        </g>
+        ${renderCombatSeriesLine(points.damage, "damage")}
+        ${renderCombatSeriesLine(points.wound, "wound")}
+        ${renderCombatSeriesLine(points.kill, "kill")}
+        ${buckets.map((bucket, index) => renderCombatSeriesPoint(bucket, index, points, maxValue, padding, innerWidth, innerHeight)).join("")}
+      </svg>
+      <div class="bzss-player-combat-legend">
+        <span class="damage">伤害 ${formatCombatSeriesTotal(buckets, "damage")}</span>
+        <span class="wound">击倒 ${formatCombatSeriesTotal(buckets, "wound")}</span>
+        <span class="kill">击杀 ${formatCombatSeriesTotal(buckets, "kill")}</span>
+      </div>
+    </div>
+  `;
+}
+
+function buildPlayerCombatTimeline(events = []) {
+  const normalized = events
+    .map((event, index) => ({
+      ...event,
+      _timelineIndex: index,
+      _timeMs: toCombatTimeMs(event.time ?? event.eventTime ?? event.logTime ?? event.raw?.time),
+    }))
+    .filter((event) => Number.isFinite(event._timeMs) && event._timeMs > 0)
+    .sort((a, b) => a._timeMs - b._timeMs);
+
+  const now = Date.now();
+  const recentCutoff = now - 60 * 60 * 1000;
+  const recent = normalized.filter((event) => event._timeMs >= recentCutoff);
+  const source = recent.length ? recent : normalized.slice(-60);
+  const rangeEvents = source.length ? source : normalized;
+  const rangeStart = rangeEvents.length ? rangeEvents[0]._timeMs : now - 60 * 60 * 1000;
+  const rangeEnd = rangeEvents.length ? rangeEvents[rangeEvents.length - 1]._timeMs : now;
+  const spanMinutes = Math.max(60, Math.ceil(Math.max(1, rangeEnd - rangeStart) / 60000));
+  const windowMinutes = chooseCombatWindowMinutes(spanMinutes);
+  const bucketMinutes = windowMinutes / 12;
+  const bucketMs = bucketMinutes * 60000;
+  const chartEnd = Math.ceil(rangeEnd / bucketMs) * bucketMs || now;
+  const chartStart = chartEnd - (bucketMs * 12);
+  const buckets = Array.from({ length: 12 }, (_, index) => ({
+    index,
+    start: chartStart + index * bucketMs,
+    end: chartStart + (index + 1) * bucketMs,
+    damage: 0,
+    wound: 0,
+    kill: 0,
+    events: [],
+  }));
+
+  for (const event of source) {
+    const bucketIndex = Math.floor((event._timeMs - chartStart) / bucketMs);
+    if (bucketIndex < 0 || bucketIndex >= buckets.length) continue;
+    const bucket = buckets[bucketIndex];
+    bucket.events.push(event);
+    if (event.type === "damage") bucket.damage += 1;
+    else if (event.type === "wound") bucket.wound += 1;
+    else if (event.type === "kill") bucket.kill += 1;
+  }
+
+  const nonEmptyIndex = buckets.findIndex((bucket) => bucket.damage || bucket.wound || bucket.kill);
+  const initialSelectedIndex = nonEmptyIndex >= 0 ? nonEmptyIndex : buckets.length - 1;
+
+  return {
+    buckets,
+    rangeStart,
+    rangeEnd: Math.max(rangeEnd, chartEnd),
+    windowMinutes,
+    bucketMinutes,
+    initialSelectedIndex,
+  };
+}
+
+function renderPlayerCombatBucketDetail(bucket, index, totalBuckets) {
+  const recentEvents = [...bucket.events].slice().reverse().slice(0, 6);
+  return `
+    <div class="bzss-player-combat-detail-head">
+      <div>
+        <div class="bzss-player-combat-detail-title">区间 ${index + 1} / ${totalBuckets}</div>
+        <div class="bzss-player-combat-detail-range">${esc(formatCombatBucketRange(bucket))}</div>
+      </div>
+      <div class="bzss-player-combat-detail-stats">
+        <span class="damage">伤害 ${bucket.damage}</span>
+        <span class="wound">击倒 ${bucket.wound}</span>
+        <span class="kill">击杀 ${bucket.kill}</span>
+      </div>
+    </div>
+    <div class="bzss-player-combat-detail-summary">
+      该区间共 ${bucket.events.length} 条 clean combat 记录，可直接点开原始详情。后续追述功能可以从这里继续扩展。
+    </div>
+    <div class="bzss-player-combat-detail-events">
+      ${recentEvents.length
+        ? recentEvents.map((event, eventIndex) => `
+          <button type="button" class="bzss-player-combat-detail-event ${event.relation?.isFriendlyFire ? "is-friendly" : ""}" data-player-trace-event-index="${eventIndex}">
+            <span>${esc(cleanCombatTypeLabel(event.type))}</span>
+            <strong>${esc(event.displayText || "-")}</strong>
+            <em>${esc(formatCleanCombatTime(event.time))}</em>
+          </button>
+        `).join("")
+        : `<div class="bzss-player-combat-empty">该时间点没有事件</div>`}
+    </div>
+  `;
+}
+
+function renderCombatSeriesLine(points = [], type) {
+  if (!points.length) return "";
+  const path = points.map((point, index) => `${index === 0 ? "M" : "L"}${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" ");
+  return `<path class="bzss-combat-series-line ${type}" d="${path}" />`;
+}
+
+function renderCombatSeriesPoint(bucket, index, points, maxValue, padding, innerWidth, innerHeight) {
+  const centerX = padding.left + (innerWidth / Math.max(1, points.damage.length - 1 || 1)) * index;
+  const label = `${formatCombatBucketRange(bucket)} · 伤害 ${bucket.damage} / 击倒 ${bucket.wound} / 击杀 ${bucket.kill}`;
+  return `
+    <g class="bzss-combat-bucket" data-combat-bucket-index="${index}" tabindex="0" role="button" aria-label="${esc(label)}">
+      <circle class="bzss-combat-point damage ${bucket.damage ? "" : "is-empty"}" cx="${centerX.toFixed(2)}" cy="${scaleCombatValue(bucket.damage, maxValue, padding.top, innerHeight).toFixed(2)}" r="${bucket.damage ? 4.5 : 3.25}">
+        <title>${esc(label)}</title>
+      </circle>
+      <circle class="bzss-combat-point wound ${bucket.wound ? "" : "is-empty"}" cx="${centerX.toFixed(2)}" cy="${scaleCombatValue(bucket.wound, maxValue, padding.top, innerHeight).toFixed(2)}" r="${bucket.wound ? 4.5 : 3.25}">
+        <title>${esc(label)}</title>
+      </circle>
+      <circle class="bzss-combat-point kill ${bucket.kill ? "" : "is-empty"}" cx="${centerX.toFixed(2)}" cy="${scaleCombatValue(bucket.kill, maxValue, padding.top, innerHeight).toFixed(2)}" r="${bucket.kill ? 4.5 : 3.25}">
+        <title>${esc(label)}</title>
+      </circle>
+      <title>${esc(label)}</title>
+    </g>
+  `;
+}
+
+function buildCombatSeriesPoints(buckets, innerWidth, innerHeight, padding, maxValue, key) {
+  const step = buckets.length > 1 ? innerWidth / (buckets.length - 1) : 0;
+  return buckets.map((bucket, index) => ({
+    x: padding.left + (step * index),
+    y: scaleCombatValue(bucket[key], maxValue, padding.top, innerHeight),
+    value: bucket[key],
+  }));
+}
+
+function scaleCombatValue(value, maxValue, top, innerHeight) {
+  const ratio = Number(value) / Math.max(1, maxValue);
+  return top + innerHeight - (Math.max(0, ratio) * innerHeight);
+}
+
+function chooseCombatWindowMinutes(spanMinutes) {
+  if (spanMinutes <= 60) return 60;
+  if (spanMinutes <= 120) return 120;
+  if (spanMinutes <= 180) return 180;
+  return 240;
+}
+
+function formatCombatWindowLabel(windowMinutes) {
+  if (windowMinutes >= 60) return `最近 ${windowMinutes / 60} 小时`;
+  return `最近 ${windowMinutes} 分钟`;
+}
+
+function formatCombatBucketRange(bucket) {
+  return `${formatCleanCombatTime(bucket.start)} ~ ${formatCleanCombatTime(bucket.end)}`;
+}
+
+function formatCombatSeriesTotal(buckets, key) {
+  const total = buckets.reduce((sum, bucket) => sum + Number(bucket[key] || 0), 0);
+  return `${total}`;
+}
+
+function toCombatTimeMs(value) {
+  const date = new Date(value);
+  const time = date.getTime();
+  if (Number.isFinite(time)) return time;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : NaN;
 }
 
 function openPlayerCleanCombatDetailModal(event) {

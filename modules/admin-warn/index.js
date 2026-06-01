@@ -60,6 +60,8 @@ export function createAdminWarnModule({ core, config, logger }) {
     const sourceModule = String(req?.sourceModule ?? "unknown");
     const reason = String(req?.reason ?? defaultReasonForKind(normalizedKind));
     const relatedEventId = optionalText(req?.relatedEventId);
+    const actor = req?.actor ?? req?.viewer ?? null;
+    const system = Boolean(req?.system);
 
     const message = normalizedKind === "broadcast"
       ? sanitizeBroadcastMessage(req?.message)
@@ -125,6 +127,8 @@ export function createAdminWarnModule({ core, config, logger }) {
         reason,
         sourceEventId: relatedEventId,
         priority: "high",
+        actor,
+        system,
       });
 
       if (!result?.success) {

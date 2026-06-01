@@ -285,6 +285,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           relatedEventId: event?.eventId,
           targetName: playerName,
           message: state.message,
+          system: true,
         });
 
         state.lastWarnAt = new Date().toISOString();

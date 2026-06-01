@@ -100,7 +100,7 @@ export async function handleSquadManagementRoutes({
       squadId: body.squadId ?? body.squadID ?? null,
       reason: body.reason ?? "",
       source: body.source ?? "manual",
-      system: Boolean(body.system ?? false),
+      system: false,
       operatorName: body.operatorName ?? user?.username ?? "",
     });
 
@@ -130,7 +130,7 @@ export async function handleSquadManagementRoutes({
       name: body.name ?? body.playerName ?? body.creatorName ?? "",
       reason: body.reason ?? "",
       source: body.source ?? "manual",
-      system: Boolean(body.system ?? false),
+      system: false,
       operatorName: body.operatorName ?? user?.username ?? "",
     });
 
@@ -160,7 +160,7 @@ export async function handleSquadManagementRoutes({
       name: body.name ?? body.playerName ?? body.creatorName ?? "",
       reason: body.reason ?? "",
       source: body.source ?? "manual",
-      system: Boolean(body.system ?? false),
+      system: false,
       operatorName: body.operatorName ?? user?.username ?? "",
     });
 

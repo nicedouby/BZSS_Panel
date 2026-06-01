@@ -319,6 +319,9 @@ export class ConsoleService {
         command: commandText,
         requestedBy,
         reason: meta.reason ?? "Manual RCON command from web console",
+        actor: meta.actor ?? meta.user ?? null,
+        system: Boolean(meta.system),
+        requiredPermission: meta.requiredPermission,
       });
 
       const durationMs = Date.now() - startedAt;

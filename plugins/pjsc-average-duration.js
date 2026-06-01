@@ -257,6 +257,7 @@ export function createPlugin({ core, modules, config, logger, playerRepository }
         reason: `${reason}_line_${index + 1}`,
         sourceModule: PLUGIN_ID,
         relatedEventId: reason,
+        system: true,
       });
       lineResults.push({ line, result: lineResult });
     }

@@ -260,6 +260,7 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
       reason,
       sourceModule: "module.infantryCombatEnhancer",
       relatedEventId: entry.combatEventId || entry.sourceEventId,
+      system: true,
     });
   }
 

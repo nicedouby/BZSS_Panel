@@ -116,7 +116,7 @@ export function createScheduledBroadcastModule({ core, modules, config, logger }
       return { ok: true, items: listItems() };
     },
 
-    async runNow(id, reason = "manual_run") {
+    async runNow(id, reasonOrOptions = "manual_run") {
       const item = findItem(id);
       if (!item) {
         const error = new Error("Scheduled broadcast item not found.");
@@ -124,9 +124,15 @@ export function createScheduledBroadcastModule({ core, modules, config, logger }
         throw error;
       }
 
+      const options = typeof reasonOrOptions === "object" && reasonOrOptions !== null
+        ? reasonOrOptions
+        : { reason: reasonOrOptions };
+
       return await runItem(item, {
-        reason,
+        reason: String(options.reason ?? "manual_run"),
         manual: true,
+        actor: options.actor ?? null,
+        system: Boolean(options.system),
       });
     },
   };
@@ -226,6 +232,7 @@ export function createScheduledBroadcastModule({ core, modules, config, logger }
           reason: "scheduled_tick",
           manual: false,
           now,
+          system: true,
         });
       }
     } finally {
@@ -233,7 +240,7 @@ export function createScheduledBroadcastModule({ core, modules, config, logger }
     }
   }
 
-  async function runItem(item, { reason = "scheduled_tick", manual = false, now = Date.now() } = {}) {
+  async function runItem(item, { reason = "scheduled_tick", manual = false, now = Date.now(), actor = null, system = false } = {}) {
     const message = sanitizeMessage(item.message);
     if (!message) {
       item.lastError = "Message is empty.";
@@ -254,6 +261,8 @@ export function createScheduledBroadcastModule({ core, modules, config, logger }
         message,
         sourceModule: "module.scheduledBroadcast",
         reason,
+        actor,
+        system,
       });
 
       if (!result?.success) {
@@ -301,13 +310,15 @@ export function createScheduledBroadcastModule({ core, modules, config, logger }
     }
   }
 
-  async function dispatchBroadcast({ message, sourceModule, reason }) {
+  async function dispatchBroadcast({ message, sourceModule, reason, actor = null, system = false }) {
     const adminWarnApi = modules?.adminWarn;
     if (adminWarnApi?.broadcastMessage) {
       return await adminWarnApi.broadcastMessage({
         message,
         sourceModule,
         reason,
+        actor,
+        system,
       });
     }
 
@@ -316,6 +327,8 @@ export function createScheduledBroadcastModule({ core, modules, config, logger }
       requestedBy: sourceModule,
       reason,
       priority: "high",
+      actor,
+      system,
     });
   }
 

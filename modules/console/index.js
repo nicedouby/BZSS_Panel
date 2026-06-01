@@ -107,6 +107,9 @@ export function createConsoleModule({ core, config }) {
         command: commandText,
         requestedBy: meta.requestedBy ?? "web.console",
         reason: meta.reason ?? "Manual RCON command from web console",
+        actor: meta.actor ?? meta.user ?? null,
+        system: Boolean(meta.system),
+        requiredPermission: meta.requiredPermission,
       });
 
       if (result.success) {

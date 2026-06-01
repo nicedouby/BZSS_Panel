@@ -28,7 +28,7 @@
         <button type="button" class="menu-item" role="menuitem" @click="openRuntimeStatus">
           运行状态
         </button>
-        <button type="button" class="menu-item" role="menuitem" @click="openTankBattleDialog">
+        <button type="button" class="menu-item" role="menuitem" :disabled="!canManageTankBattle" @click="openTankBattleDialog">
           开启坦克大战
         </button>
         <button type="button" class="menu-item danger" role="menuitem" @click="logout">
@@ -53,19 +53,19 @@
 
           <section class="tank-battle-panel">
             <div class="tank-battle-actions">
-              <button type="button" class="success-action" :disabled="tankBattleBusy" @click="runTankBattlePreset(true)">
+              <button type="button" class="success-action" :disabled="tankBattleBusy || !canManageTankBattle" @click="runTankBattlePreset(true)">
                 一键打开坦克大战
               </button>
-              <button type="button" class="danger-action" :disabled="tankBattleBusy" @click="runTankBattlePreset(false)">
+              <button type="button" class="danger-action" :disabled="tankBattleBusy || !canManageTankBattle" @click="runTankBattlePreset(false)">
                 一键关闭坦克大战
               </button>
             </div>
 
             <div class="tank-battle-toggle-row">
-              <button type="button" class="ghost-action" :disabled="tankBattleBusy" @click="setDeployableAvailability(true)">
+              <button type="button" class="ghost-action" :disabled="tankBattleBusy || !canManageTankBattle" @click="setDeployableAvailability(true)">
                 开启无限工事
               </button>
-              <button type="button" class="ghost-action" :disabled="tankBattleBusy" @click="setDeployableAvailability(false)">
+              <button type="button" class="ghost-action" :disabled="tankBattleBusy || !canManageTankBattle" @click="setDeployableAvailability(false)">
                 关闭无限工事
               </button>
             </div>
@@ -87,7 +87,7 @@
                     <button
                       type="button"
                       class="success-action"
-                      :disabled="tankBattleBusy"
+                      :disabled="tankBattleBusy || !canManageTankBattle"
                       @click="runTankBattleCommand(`开启${option.label}`, option.openCommand, `已开启${option.label}。`)"
                     >
                       开启
@@ -95,7 +95,7 @@
                     <button
                       type="button"
                       class="danger-action"
-                      :disabled="tankBattleBusy"
+                      :disabled="tankBattleBusy || !canManageTankBattle"
                       @click="runTankBattleCommand(`关闭${option.label}`, option.closeCommand, `已关闭${option.label}。`)"
                     >
                       关闭
@@ -119,6 +119,7 @@ import { useSettingsStore } from "../../stores/settings.store";
 import { apiGet, apiPost } from "../../app/apiClient";
 import { useUiStore } from "../../stores/ui.store";
 import { t } from "../../i18n";
+import { canSendRconCommand } from "../../shared/rcon-permissions.js";
 
 const emit = defineEmits<{
   (event: "open-plugin-center"): void;
@@ -177,7 +178,7 @@ const tankBattleOptions = [
 
 const usernameLabel = computed(() => String(auth.user?.username ?? t("user.user")));
 const roleLabel = computed(() => String(auth.user?.role ?? t("common.unknown")));
-const canManageTankBattle = computed(() => Boolean(auth.user?.isSuperAdmin));
+const canManageTankBattle = computed(() => canSendRconCommand(auth.user, "AdminForceAllVehicleAvailability 1"));
 const avatarLabel = computed(() => {
   const name = usernameLabel.value.trim();
   if (!name) return "?";
@@ -245,7 +246,7 @@ function openRuntimeStatus() {
 function openTankBattleDialog() {
   closeMenu();
   if (!canManageTankBattle.value) {
-    ui.pushToast({ title: t("common.error"), message: "只有超级管理员可以使用坦克大战快捷操作。", tone: "error" });
+    ui.pushToast({ title: t("common.error"), message: "只有具备坦克大战 RCON 权限的管理员可以使用快捷操作。", tone: "error" });
     return;
   }
 

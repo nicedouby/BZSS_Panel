@@ -347,7 +347,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/web/pages") {
-      return this.json(res, 200, { pages: this.core.webRegistry.getPages() });
+      return this.json(res, 200, { pages: this.core.webRegistry.getPages(user) });
     }
 
     if (url.pathname === "/api/web/status") {
@@ -927,31 +927,34 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/rcon/execute" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
       const result = await this.executeConsoleRconCommand(body.command, {
         requestedBy: "web.console",
+        actor: user,
+        system: false,
       });
-      return this.json(res, 200, result);
+      return this.json(res, result?.code === "Forbidden" ? 403 : result?.success ? 200 : 400, result);
     }
 
     if (url.pathname === "/api/console/rcon" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
       const result = await this.executeConsoleRconCommand(body.command, {
         requestedBy: "web.console",
+        actor: user,
+        system: false,
       });
-      return this.json(res, 200, result);
+      return this.json(res, result?.code === "Forbidden" ? 403 : result?.success ? 200 : 400, result);
     }
 
     // Compatibility endpoint used by some Vue client builds.
     if (url.pathname === "/api/rcon-command" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
       const result = await this.executeConsoleRconCommand(body.command, {
         requestedBy: "web.console",
+        actor: user,
+        system: false,
       });
-      return this.json(res, 200, result);
+      return this.json(res, result?.code === "Forbidden" ? 403 : result?.success ? 200 : 400, result);
     }
 
     // Compatibility endpoint for tank-battle status panel.
@@ -1058,11 +1061,14 @@ export class WebServer {
 
       const runNowMatch = url.pathname.match(/^\/api\/scheduled-broadcasts\/items\/([^/]+)\/run$/);
       if (runNowMatch && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
         return this.json(res, 200, {
           ok: true,
-          result: await scheduledBroadcast.runNow(decodeURIComponent(runNowMatch[1]), String(body?.reason ?? "manual_run")),
+          result: await scheduledBroadcast.runNow(decodeURIComponent(runNowMatch[1]), {
+            reason: String(body?.reason ?? "manual_run"),
+            actor: user,
+            system: false,
+          }),
         });
       }
     }
@@ -1711,8 +1717,8 @@ export class WebServer {
       if (!api) return this.json(res, 404, { error: "ModuleNotFound" });
       const body = await this.readJsonBody(req);
       try {
-        const result = await api.warnPlayer({ ...body, actor: user });
-        return this.json(res, result.success ? 200 : 400, result);
+        const result = await api.warnPlayer({ ...body, actor: user, system: false });
+        return this.json(res, result?.code === "Forbidden" ? 403 : result.success ? 200 : 400, result);
       } catch (err) {
         return this.json(res, 500, { error: "InternalError", message: err.message });
       }
@@ -1723,8 +1729,8 @@ export class WebServer {
       if (!api) return this.json(res, 404, { error: "ModuleNotFound" });
       const body = await this.readJsonBody(req);
       try {
-        const result = await api.broadcastMessage({ ...body, actor: user });
-        return this.json(res, result.success ? 200 : 400, result);
+        const result = await api.broadcastMessage({ ...body, actor: user, system: false });
+        return this.json(res, result?.code === "Forbidden" ? 403 : result.success ? 200 : 400, result);
       } catch (err) {
         return this.json(res, 500, { error: "InternalError", message: err.message });
       }

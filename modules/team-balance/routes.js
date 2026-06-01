@@ -37,7 +37,7 @@ export async function handleTeamBalanceRoutes({
       actor: user,
       source: body.source ?? "对局状态手动操作",
       operatorName: body.operatorName ?? user?.username ?? "",
-      system: Boolean(body.system ?? false),
+      system: false,
       serverId: body.serverId ?? body.serverID ?? core.webStatus?.serverId ?? "",
     });
 

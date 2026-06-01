@@ -484,6 +484,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       command,
       requestedBy: "module.matchState",
       reason: "match-state-poll",
+      system: true,
     });
   }
 

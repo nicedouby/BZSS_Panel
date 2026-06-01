@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 
+import { WebRegistry } from "../core/web-registry.js";
 import { WebServer } from "../core/web-server.js";
 import { classifySquadName } from "../core/squad-name-classifier.js";
 import { GroupReportService } from "../plugins/group-report.service.js";
@@ -142,6 +143,69 @@ async function testHealthEndpointDoesNotRequireAuth() {
   assert.equal(body.auth.enabled, true);
 }
 
+async function testWebPagesEndpointFiltersByPermissions() {
+  const registry = new WebRegistry({
+    config: {
+      get() {
+        return {};
+      },
+    },
+    logger: {
+      web() {},
+    },
+  });
+
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest(req) {
+          if (req.headers.authorization === "viewer") {
+            return {
+              username: "viewer",
+              role: "Operator",
+              permissions: ["match_state.view", "console.view"],
+            };
+          }
+          if (req.headers.authorization === "super") {
+            return {
+              username: "admin",
+              role: "SuperAdmin",
+              isSuperAdmin: true,
+              permissions: [],
+            };
+          }
+          return null;
+        },
+      },
+      webRegistry: registry,
+    },
+  });
+
+  const viewer = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/web/pages",
+    headers: { host: "localhost", authorization: "viewer" },
+    socket: {},
+  }, viewer.res);
+
+  assert.equal(viewer.state.status, 200);
+  const viewerPages = JSON.parse(viewer.state.body).pages;
+  assert.deepEqual(viewerPages.map((page) => page.route), ["/match-status", "/console"]);
+
+  const superAdmin = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/web/pages",
+    headers: { host: "localhost", authorization: "super" },
+    socket: {},
+  }, superAdmin.res);
+
+  assert.equal(superAdmin.state.status, 200);
+  const adminPages = JSON.parse(superAdmin.state.body).pages;
+  assert.equal(adminPages.length, registry.getAllPages().length);
+}
+
 async function testConsoleRecentEndpointUsesUnifiedConsoleBuffer() {
   const calls = [];
   const server = createServer({
@@ -209,6 +273,112 @@ async function testConsoleRecentEndpointUsesUnifiedConsoleBuffer() {
   const rconBody = JSON.parse(rconRecorder.state.body);
   assert.equal(rconBody.ok, true);
   assert.equal(rconBody.status, "success");
+}
+
+async function testConsoleRconEndpointsUseLoggedInUser() {
+  const calls = [];
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return {
+            id: "user-1",
+            username: "admin",
+            role: "Operator",
+            permissions: ["rcon.broadcast"],
+          };
+        },
+        hasEverything() {
+          return false;
+        },
+      },
+      console: {
+        getRecent() {
+          return [];
+        },
+        getLegacyChannels() {
+          return { streams: [], scopes: [], levels: [] };
+        },
+        getLegacyLines() {
+          return [];
+        },
+        async executeRconCommand(command, meta) {
+          calls.push({ command, meta });
+          return { success: true, ok: true, response: "OK", status: "success", durationMs: 10 };
+        },
+      },
+    },
+  });
+
+  for (const pathName of ["/api/console/rcon", "/api/rcon-command"]) {
+    const recorder = createRecorder();
+    const req = Readable.from([JSON.stringify({ command: "AdminBroadcast Hello" })]);
+    req.method = "POST";
+    req.url = pathName;
+    req.headers = { host: "localhost" };
+    req.socket = {};
+
+    await server.handleRequest(req, recorder.res);
+    assert.equal(recorder.state.status, 200);
+  }
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].meta.actor.username, "admin");
+  assert.equal(calls[0].meta.system, false);
+  assert.equal(calls[1].meta.actor.username, "admin");
+  assert.equal(calls[1].meta.system, false);
+}
+
+async function testConsoleRconForbiddenMapsTo403() {
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return {
+            id: "user-2",
+            username: "viewer",
+            role: "Operator",
+            permissions: [],
+          };
+        },
+      },
+      console: {
+        getRecent() {
+          return [];
+        },
+        getLegacyChannels() {
+          return { streams: [], scopes: [], levels: [] };
+        },
+        getLegacyLines() {
+          return [];
+        },
+        async executeRconCommand() {
+          return {
+            success: false,
+            code: "Forbidden",
+            message: "Permission 'rcon.broadcast' is required.",
+            response: "",
+            status: "failed",
+            durationMs: 0,
+          };
+        },
+      },
+    },
+  });
+
+  for (const pathName of ["/api/console/rcon", "/api/rcon-command"]) {
+    const recorder = createRecorder();
+    const req = Readable.from([JSON.stringify({ command: "AdminBroadcast Hello" })]);
+    req.method = "POST";
+    req.url = pathName;
+    req.headers = { host: "localhost" };
+    req.socket = {};
+
+    await server.handleRequest(req, recorder.res);
+    assert.equal(recorder.state.status, 403);
+    const body = JSON.parse(recorder.state.body);
+    assert.equal(body.code, "Forbidden");
+  }
 }
 
 async function testSquadNameClassifierHelperCoversCoreRules() {
@@ -1240,6 +1410,7 @@ await testReadJsonBodyRejectsInvalidJson();
 await testReadJsonBodyRejectsOversizedPayload();
 await testGetPluginApiReturnsMatchingPluginApi();
 await testHealthEndpointDoesNotRequireAuth();
+await testWebPagesEndpointFiltersByPermissions();
 await testConsoleRecentEndpointUsesUnifiedConsoleBuffer();
 await testSquadNameClassifierHelperCoversCoreRules();
 await testSquadNameClassifierApiReturnsClassification();

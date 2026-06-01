@@ -25,10 +25,17 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
 import { useUiStore } from "../../stores/ui.store";
+import { useAuthStore } from "../../stores/auth.store";
 import { apiGet } from "../../app/apiClient";
 import { t } from "../../i18n";
+import {
+  canAccessPage,
+  normalizePermissionList,
+  resolveWebPagePermission,
+} from "../../shared/web-page-permissions.js";
 
 const ui = useUiStore();
+const auth = useAuthStore();
 const apiPages = ref<any[]>([]);
 
 function normalizePath(path: unknown): string {
@@ -64,6 +71,13 @@ function normalizeLabel(label: unknown): string {
     .toLocaleLowerCase();
 }
 
+function canShowRoute(route: unknown, legacyRequiredPermissions: unknown[] = []) {
+  const resolved = resolveWebPagePermission(route);
+  const requiredPermission = resolved?.requiredPermission ?? "";
+  const legacyPermissions = normalizePermissionList(legacyRequiredPermissions);
+  return canAccessPage(auth.user, requiredPermission, legacyPermissions);
+}
+
 const groups = computed(() => {
   const result: any[] = [
     {
@@ -89,6 +103,7 @@ const groups = computed(() => {
   const seenPaths = new Set<string>();
   const seenLabels = new Set<string>();
   for (const group of result) {
+    group.items = group.items.filter((item: any) => canShowRoute(item.path));
     for (const item of group.items) {
       if (item?.path) {
         item.path = normalizePath(item.path);
@@ -118,6 +133,7 @@ const groups = computed(() => {
     const normalizedLabel = normalizeLabel(page.title);
     if (seenPaths.has(normalizedRoute)) continue;
     if (normalizedLabel && seenLabels.has(normalizedLabel)) continue;
+    if (!canAccessPage(auth.user, page.requiredPermission, page.legacyRequiredPermissions)) continue;
     
     const item = {
       path: normalizedRoute,

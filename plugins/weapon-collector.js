@@ -601,6 +601,7 @@ export function createPlugin({ core, modules }) {
         enabled: true,
         order: 500,
         icon: "🎯",
+        hiddenFromSidebar: true,
       });
 
       unsubscribers.push(

@@ -1,6 +1,10 @@
 // -*- coding: utf-8 -*-
 
 import SquadRcon from "./squad-rcon.js";
+import {
+  canSendRconCommand,
+  resolveRconPermission,
+} from "../web-client/src/shared/rcon-permissions.js";
 
 export function resolveRconPassword(config, logger) {
   const passwordFromEnv = String(config?.passwordFromEnv ?? "").trim();
@@ -295,6 +299,20 @@ export class RconManager {
       };
     }
 
+    const actor = request?.actor ?? request?.user ?? null;
+    const system = Boolean(request?.system);
+    const requiredPermission = resolveRconPermission(command, request);
+    if (!system && !canSendRconCommand(actor, command, request)) {
+      return {
+        success: false,
+        code: "Forbidden",
+        message: `Permission '${requiredPermission}' is required.`,
+        requiredPermission,
+        rconExecuted: false,
+        rconResponse: "",
+      };
+    }
+
     const priority = isPriorityRequest(request);
     if (this.getQueueSize() >= this.maxQueueSize) {
       return {
@@ -325,6 +343,7 @@ export class RconManager {
         data: {
           command,
           requestedBy: request?.requestedBy ?? "",
+          requiredPermission,
           queueSize: this.getQueueSize(),
           priority,
         },

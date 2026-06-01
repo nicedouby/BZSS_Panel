@@ -225,6 +225,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         sourceModule: PLUGIN_ID,
         reason,
         relatedEventId: eventSummary?.eventId || eventKey,
+        system: true,
       });
 
       const success = Boolean(result?.success);

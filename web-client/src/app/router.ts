@@ -21,6 +21,11 @@ import ComingSoonPage from "../pages/ComingSoonPage.vue";
 import ChatMonitorPage from "../pages/ChatMonitorPage.vue";
 import RuntimeStatusPage from "../pages/RuntimeStatusPage.vue";
 import { useAuthStore } from "../stores/auth.store";
+import {
+  canAccessPage,
+  normalizePermissionList,
+  resolveWebPagePermission,
+} from "../shared/web-page-permissions.js";
 
 const coreRealtimeMeta = { category: "core", refreshPolicy: "realtime" } as const;
 const coreManualMeta = { category: "core", refreshPolicy: "manual" } as const;
@@ -29,12 +34,56 @@ const pluginPollingMeta = { category: "plugin", refreshPolicy: "polling" } as co
 const systemPollingMeta = { category: "system", refreshPolicy: "polling" } as const;
 const debugManualMeta = { category: "debug", refreshPolicy: "manual" } as const;
 
+function applyPagePermissions(routes: any[]) {
+  return routes.map((route) => {
+    if (!route || typeof route !== "object") return route;
+    const resolved = resolveWebPagePermission(route.path);
+    if (!resolved) return route;
+
+    const meta = route.meta ?? {};
+    const requiredPermission = String(meta.requiredPermission ?? resolved.requiredPermission ?? "").trim();
+    const legacyRequiredPermissions = mergePermissionLists(
+      meta.legacyRequiredPermissions,
+      resolved.legacyRequiredPermissions,
+    );
+
+    return {
+      ...route,
+      meta: {
+        ...meta,
+        requiredPermission,
+        legacyRequiredPermissions,
+      },
+    };
+  });
+}
+
+function mergePermissionLists(...values: any[]) {
+  const merged: string[] = [];
+  for (const value of values) {
+    for (const permission of normalizePermissionList(value)) {
+      if (merged.includes(permission)) continue;
+      merged.push(permission);
+    }
+  }
+  return merged;
+}
+
 export const router = createRouter({
   history: createWebHistory(),
-  routes: [
+  routes: applyPagePermissions([
     { path: "/", redirect: "/match-status" },
     {
       path: "/match-status",
+      component: MatchStatusPage,
+      meta: {
+        ...coreRealtimeMeta,
+        titleKey: "routeTitle.matchStatus",
+        fullBleed: true,
+      },
+    },
+    {
+      path: "/match-state",
       component: MatchStatusPage,
       meta: {
         ...coreRealtimeMeta,
@@ -90,11 +139,25 @@ export const router = createRouter({
     },
     {
       path: "/kill-manage",
-      redirect: (to) => ({ path: "/combat-manager", query: to.query, hash: to.hash }),
+      redirect: (to: any) => ({ path: "/combat-manager", query: to.query, hash: to.hash }),
     },
     {
       path: "/combat-clean",
-      redirect: (to) => ({ path: "/combat-manager", query: to.query, hash: to.hash }),
+      redirect: (to: any) => ({ path: "/combat-manager", query: to.query, hash: to.hash }),
+    },
+    {
+      path: "/combat-log",
+      component: ComingSoonPage,
+      props: {
+        titleKey: "routeTitle.combatLog",
+        subtitle: "",
+        message: "",
+      },
+      meta: {
+        ...corePollingMeta,
+        title: "鏀炬寱鎴樻枟鏃ュ織",
+        fullBleed: true,
+      },
     },
     {
       path: "/admin-warns",
@@ -220,6 +283,16 @@ export const router = createRouter({
       },
     },
     {
+      path: "/access-denied",
+      component: ComingSoonPage,
+      props: {
+        title: "Access denied",
+        subtitle: "权限不足",
+        message: "当前登录账号没有访问该页面所需的模块权限，请联系管理员分配对应权限后再试。",
+      },
+      meta: { title: "Access denied" },
+    },
+    {
       path: "/:pathMatch(.*)*",
       component: ComingSoonPage,
       props: {
@@ -229,20 +302,18 @@ export const router = createRouter({
       },
       meta: { titleKey: "routeTitle.comingSoon" },
     },
-  ],
+  ]),
 });
 
-router.beforeEach((to) => {
+router.beforeEach((to: any) => {
   const requiredPermission = String(to.meta?.requiredPermission ?? "").trim();
   if (!requiredPermission) return true;
 
   const auth = useAuthStore();
-  const permissions = Array.isArray(auth.user?.permissions) ? auth.user.permissions : [];
-  const legacyPermissions = Array.isArray(to.meta?.legacyRequiredPermissions) ? to.meta.legacyRequiredPermissions : [];
-  const allowed = auth.user?.isSuperAdmin
-    || permissions.includes("*")
-    || permissions.includes(requiredPermission)
-    || legacyPermissions.some((permission) => permissions.includes(permission));
+  const authUser = auth.user as { permissions?: unknown; permission?: unknown; isSuperAdmin?: boolean } | null | undefined;
+  const permissions = normalizePermissionList(authUser?.permissions ?? authUser?.permission);
+  const legacyPermissions = normalizePermissionList(to.meta?.legacyRequiredPermissions);
+  const allowed = canAccessPage(authUser, requiredPermission, legacyPermissions);
 
   if (allowed) {
     if (!permissions.includes(requiredPermission) && legacyPermissions.some((permission) => permissions.includes(permission))) {
@@ -251,5 +322,5 @@ router.beforeEach((to) => {
     return true;
   }
 
-  return { path: "/match-status" };
+  return { path: "/access-denied" };
 });
