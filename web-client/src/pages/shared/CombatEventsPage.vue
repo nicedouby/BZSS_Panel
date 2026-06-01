@@ -6,7 +6,13 @@
       :loading="query.isLoading.value"
       :error="pageError"
     >
-      <div class="combat-shell">
+      <div
+        class="combat-shell"
+        :class="{
+          'combat-shell--with-detail': Boolean(selectedEvent),
+          'combat-shell--empty': events.length === 0,
+        }"
+      >
         <div class="combat-main">
           <div class="combat-top">
             <CombatRateChart :refresh-key="query.dataUpdatedAt.value" :endpoint="rateEndpoint" />
@@ -43,6 +49,7 @@
         </div>
 
         <CombatEventDetailModal
+          v-if="selectedEvent"
           class="combat-detail-pane"
           inline
           :event="selectedEvent"
@@ -212,29 +219,26 @@ function formatTime(value: unknown) {
 <style scoped>
 .bz-page {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
   min-height: 0;
-  height: 100%;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .combat-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 420px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   min-height: 0;
-  height: 100%;
-  overflow: hidden;
+}
+
+.combat-shell--with-detail {
+  grid-template-columns: minmax(0, 1fr) 380px;
 }
 
 .combat-main {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
   min-height: 0;
-  height: 100%;
-  overflow: hidden;
 }
 
 .combat-top {
@@ -246,6 +250,7 @@ function formatTime(value: unknown) {
 
 .combat-table-card {
   min-height: 0;
+  height: auto;
 }
 
 .combat-toolbar-card,
@@ -299,8 +304,15 @@ function formatTime(value: unknown) {
 
 .combat-top :deep(.combat-rate-chart-container),
 .combat-top :deep(.combat-rate-chart-empty) {
-  height: 100%;
-  min-height: 112px;
+  min-height: 88px;
+  max-height: 120px;
+}
+
+.combat-top :deep(.combat-rate-chart-empty) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
 }
 
 .bz-page :deep(.card-body.compact) {
@@ -312,7 +324,7 @@ function formatTime(value: unknown) {
 }
 
 @media (max-width: 1400px) {
-  .combat-shell {
+  .combat-shell--with-detail {
     grid-template-columns: minmax(0, 1fr) 360px;
   }
 }

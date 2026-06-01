@@ -25,19 +25,26 @@
           />
         </div>
 
-        <div class="ice-main">
-        <InfantryCombatEventTable
-          class="ice-table-pane"
-          :events="visibleEvents"
-          :selected-id="selectedEvent?.id"
-          @select="setSelectedEvent"
-        />
+        <div
+          class="ice-main"
+          :class="{
+            'ice-main--with-detail': Boolean(selectedEvent),
+            'ice-main--empty': visibleEvents.length === 0,
+          }"
+        >
+          <InfantryCombatEventTable
+            class="ice-table-pane"
+            :events="visibleEvents"
+            :selected-id="selectedEvent?.id"
+            @select="setSelectedEvent"
+          />
 
-        <InfantryCombatEventDetail
-          class="ice-detail-pane"
-          :event="selectedEvent"
-          @close="setSelectedEvent(null)"
-        />
+          <InfantryCombatEventDetail
+            v-if="selectedEvent"
+            class="ice-detail-pane"
+            :event="selectedEvent"
+            @close="setSelectedEvent(null)"
+          />
         </div>
       </div>
     </DataState>
@@ -98,20 +105,15 @@ async function saveConfig(next: InfantryCombatConfig) {
 <style scoped>
 .infantry-combat-page {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
   min-height: 0;
-  height: 100%;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .ice-shell {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
   min-height: 0;
-  height: 100%;
-  overflow: hidden;
 }
 
 .ice-top {
@@ -121,18 +123,18 @@ async function saveConfig(next: InfantryCombatConfig) {
 
 .ice-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   min-height: 0;
-  height: 100%;
-  overflow: hidden;
+}
+
+.ice-main--with-detail {
+  grid-template-columns: minmax(0, 1fr) 360px;
 }
 
 .ice-table-pane,
 .ice-detail-pane {
-  height: 100%;
   min-height: 0;
-  overflow: auto;
 }
 
 .ice-top :deep(.ice-summary-card .bz-card-body.compact),
@@ -141,7 +143,7 @@ async function saveConfig(next: InfantryCombatConfig) {
 }
 
 @media (max-width: 1200px) {
-  .ice-main {
+  .ice-main--with-detail {
     grid-template-columns: 1fr;
   }
 

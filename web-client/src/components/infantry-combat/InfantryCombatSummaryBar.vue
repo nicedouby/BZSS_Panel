@@ -58,11 +58,11 @@ const stats = computed(() => props.overview?.stats ?? {});
 
 .tile {
   display: grid;
-  gap: 4px;
-  min-height: 96px;
-  padding: 12px 13px;
+  gap: 3px;
+  min-height: 64px;
+  padding: 9px 11px;
   border: 1px solid rgba(95, 130, 160, 0.22);
-  border-radius: 14px;
+  border-radius: 12px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015)),
     rgba(12, 20, 28, 0.9);
@@ -84,14 +84,12 @@ const stats = computed(() => props.overview?.stats ?? {});
 
 .tile strong {
   color: #edf2f4;
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1.05;
 }
 
 .tile small {
-  color: #70808e;
-  font-size: 10px;
-  line-height: 1.1;
+  display: none;
 }
 
 @media (max-width: 1400px) {

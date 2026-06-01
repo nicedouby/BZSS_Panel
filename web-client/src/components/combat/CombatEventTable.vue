@@ -508,6 +508,6 @@ th {
 }
 
 .combat-table-empty {
-  min-height: 320px;
+  min-height: 160px;
 }
 </style>

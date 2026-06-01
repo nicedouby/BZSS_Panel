@@ -94,13 +94,8 @@ export function useInfantryCombatEnhancer() {
         return;
       }
 
-      if (!selectedEvent.value) {
-        selectedEvent.value = next[0];
-        return;
-      }
-
       if (!next.some((event) => event.id === selectedEvent.value?.id)) {
-        selectedEvent.value = next[0];
+        selectedEvent.value = null;
       }
     },
     { immediate: true },
