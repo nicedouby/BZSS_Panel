@@ -1,6 +1,6 @@
 <template>
   <PageCard compact>
-    <div class="table-wrap">
+    <div v-if="events.length" class="table-wrap">
       <table>
         <thead>
           <tr>
@@ -100,6 +100,13 @@
           </tr>
         </tbody>
       </table>
+    </div>
+    <div v-else class="bz-empty bz-empty--compact combat-table-empty">
+      <div class="bz-empty-inner">
+        <div class="bz-empty-icon">∅</div>
+        <div class="bz-empty-title">暂无事件</div>
+        <div class="bz-empty-desc">当前筛选条件下没有可显示的战斗记录。可以尝试放宽类型、关系、武器或搜索条件。</div>
+      </div>
     </div>
   </PageCard>
 </template>
@@ -289,6 +296,7 @@ function isClusterHighlighted(event: any, index: number) {
 <style scoped>
 .table-wrap {
   overflow: auto;
+  max-height: 100%;
 }
 
 table {
@@ -497,5 +505,9 @@ th {
   border-color: rgba(239, 68, 68, 0.4);
   background: rgba(239, 68, 68, 0.14);
   color: #fecaca;
+}
+
+.combat-table-empty {
+  min-height: 320px;
 }
 </style>

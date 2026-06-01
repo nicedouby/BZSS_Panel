@@ -1,15 +1,15 @@
 <template>
-  <div v-if="event" class="dialog-root" @click.self="$emit('close')">
-    <section class="dialog-panel">
+  <div v-if="inline || event" :class="inline ? 'detail-card' : 'dialog-root'" @click.self="!inline && emit('close')">
+    <section :class="inline ? 'detail-panel' : 'dialog-panel'">
       <header class="dialog-head">
         <div>
-          <h3>{{ displayType }}</h3>
-          <p>{{ formatTime(event.time) }}</p>
+          <h3>{{ event ? displayType : '暂无详情' }}</h3>
+          <p>{{ event ? formatTime(event.time) : '请选择左侧一条战斗记录' }}</p>
         </div>
-        <button type="button" @click="$emit('close')">{{ t("common.close") }}</button>
+        <button v-if="event" type="button" @click="emit('close')">{{ t("common.close") }}</button>
       </header>
 
-      <div class="detail-grid">
+      <div v-if="event" class="detail-grid">
         <div class="identity-card" :class="{ 'is-highlighted': isHighlighted(attackerHighlightKey) }">
           <span>{{ t("combat.attacker") }}</span>
           <strong>{{ attackerDisplayName }}</strong>
@@ -63,7 +63,12 @@
         </div>
       </div>
 
-      <pre class="raw-block">{{ prettyEvent }}</pre>
+      <div v-else class="empty-state">
+        <strong>暂无可显示的事件详情</strong>
+        <p>左侧选择一条记录后，这里会固定显示完整详情、标记和原始 JSON。</p>
+      </div>
+
+      <pre v-if="event" class="raw-block">{{ prettyEvent }}</pre>
     </section>
   </div>
 </template>
@@ -79,9 +84,10 @@ import { t } from "../../i18n";
 const props = defineProps<{
   event: any | null;
   highlightKey?: string;
+  inline?: boolean;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   (event: "close"): void;
 }>();
 
@@ -204,16 +210,34 @@ function searchPlayer(value: string) {
   background: rgba(8, 12, 16, 0.72);
 }
 
+.detail-card {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.dialog-panel,
+.detail-panel {
+  display: grid;
+  gap: 16px;
+  border: 1px solid #2b3540;
+  background: #171d23;
+  padding: 18px;
+}
+
 .dialog-panel {
   width: min(900px, 100%);
   max-height: calc(100vh - 48px);
   overflow: auto;
-  display: grid;
-  gap: 16px;
-  border: 1px solid #2b3540;
   border-radius: 8px;
-  background: #171d23;
-  padding: 18px;
+}
+
+.detail-panel {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  border-radius: 16px;
 }
 
 .dialog-head {
@@ -405,6 +429,23 @@ function searchPlayer(value: string) {
   padding: 12px;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.empty-state {
+  display: grid;
+  gap: 6px;
+  align-content: center;
+  justify-items: center;
+  min-height: 100%;
+  border: 1px dashed #34404c;
+  border-radius: 12px;
+  padding: 18px;
+  color: #9aa7b2;
+  text-align: center;
+}
+
+.empty-state strong {
+  color: #edf2f4;
 }
 
 @media (max-width: 720px) {

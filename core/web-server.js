@@ -944,6 +944,28 @@ export class WebServer {
       return this.json(res, 200, result);
     }
 
+    // Compatibility endpoint used by some Vue client builds.
+    if (url.pathname === "/api/rcon-command" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const body = await this.readJsonBody(req);
+      const result = await this.executeConsoleRconCommand(body.command, {
+        requestedBy: "web.console",
+      });
+      return this.json(res, 200, result);
+    }
+
+    // Compatibility endpoint for tank-battle status panel.
+    if (url.pathname === "/api/auto-tank-battle/status" && req.method === "GET") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      return this.json(res, 200, {
+        enabled: false,
+        settings: {
+          mapSwitchCommands: [],
+        },
+        source: "compat",
+      });
+    }
+
     if (url.pathname === "/api/logpost/raw-output" && req.method === "GET") {
       return this.json(res, 200, await this.getLogPostRawOutputConfig());
     }

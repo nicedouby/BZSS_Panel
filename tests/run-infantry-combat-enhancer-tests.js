@@ -359,6 +359,40 @@ async function testKillDisplayIsDisabledByDefault() {
   await module.stop();
 }
 
+async function testFractionalDamageRoundsToInteger() {
+  const { module, eventBus, calls } = createHarness({
+    moduleConfig: {
+      showOnlyLightWeaponDamage: false,
+    },
+  });
+  await module.start();
+
+  await eventBus.emitModuleEvent("module.combatClean", "combat.record.processed", {
+    record: {
+      id: "combat-fractional-damage",
+      serverId: "S1",
+      type: "damage",
+      time: "2026-05-30T12:13:00.000Z",
+      attackerName: "Attacker",
+      attackerSteam64ID: "111",
+      victimName: "Victim",
+      victimSteam64ID: "222",
+      damage: 42.6,
+      weaponName: "M4A1",
+      tags: ["combat.damage", "weapon.small_arm", "damage.direct"],
+    },
+  });
+
+  const events = module.api.getEvents({ limit: 10 });
+  assert.equal(events.length, 1);
+  assert.equal(events[0].damage, 43);
+  assert.equal(calls.length, 2);
+  assert.ok(String(calls[0].message).includes("43伤害"));
+  assert.ok(String(calls[1].message).includes("43伤害"));
+
+  await module.stop();
+}
+
 async function testCombatCleanDependencyGate() {
   const { module, eventBus, pages } = createHarness({
     subscriptionMap: {
@@ -380,6 +414,7 @@ await testOnlyLightWeaponDamageSkipsNonLightWeapons();
 await testOnlyLightWeaponDamageSkipsHeavyKillAttacker();
 await testSamePlayerStillDisplays();
 await testKillDisplayIsDisabledByDefault();
+await testFractionalDamageRoundsToInteger();
 await testCombatCleanDependencyGate();
 
 console.log("infantry combat enhancer tests passed");

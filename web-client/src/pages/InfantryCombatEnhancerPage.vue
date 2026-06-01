@@ -1,28 +1,31 @@
 <template>
-  <section class="ice-page">
+  <section class="bz-page infantry-combat-page">
     <PageHeader
       :title="t('routeTitle.infantryCombatEnhancer')"
     >
       <template #actions>
-        <button type="button" class="ghost-button" @click="reload">刷新</button>
-        <button type="button" class="ghost-button" @click="settingsOpen = true">设置</button>
-        <button type="button" class="ghost-button danger" @click="clearEvents">清空记录</button>
+        <button type="button" class="bz-btn bz-btn-ghost" @click="reload">刷新</button>
+        <button type="button" class="bz-btn bz-btn-ghost" @click="settingsOpen = true">设置</button>
+        <button type="button" class="bz-btn bz-btn-danger" @click="clearEvents">清空记录</button>
       </template>
     </PageHeader>
-
-    <InfantryCombatSummaryBar :overview="overview" :loading="isEventsFetching" />
-
-    <InfantryCombatToolbar
-      :filters="filters"
-      :loading="isEventsFetching || isConfigLoading"
-      @update:filters="updateFilters"
-    />
 
     <DataState
       :loading="isEventsLoading || isConfigLoading"
       :error="pageError"
     >
-      <div class="ice-main" :class="{ 'ice-main--empty': !hasEvents }">
+      <div class="ice-shell">
+        <div class="ice-top">
+          <InfantryCombatSummaryBar :overview="overview" :loading="isEventsFetching" />
+
+          <InfantryCombatToolbar
+            :filters="filters"
+            :loading="isEventsFetching || isConfigLoading"
+            @update:filters="updateFilters"
+          />
+        </div>
+
+        <div class="ice-main">
         <InfantryCombatEventTable
           class="ice-table-pane"
           :events="visibleEvents"
@@ -31,11 +34,11 @@
         />
 
         <InfantryCombatEventDetail
-          v-if="hasEvents"
           class="ice-detail-pane"
           :event="selectedEvent"
           @close="setSelectedEvent(null)"
         />
+        </div>
       </div>
     </DataState>
 
@@ -49,7 +52,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { ref } from "vue";
 import { t } from "../i18n";
 import PageHeader from "../components/common/PageHeader.vue";
 import DataState from "../components/common/DataState.vue";
@@ -80,8 +83,6 @@ const {
   isConfigSaving,
 } = useInfantryCombatEnhancer();
 
-const hasEvents = computed(() => visibleEvents.value.length > 0);
-
 function updateFilters(next: InfantryCombatFilters) {
   Object.assign(filters, next);
 }
@@ -95,25 +96,27 @@ async function saveConfig(next: InfantryCombatConfig) {
 </script>
 
 <style scoped>
-.ice-page {
+.infantry-combat-page {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
-  height: 100%;
   min-height: 0;
+  height: 100%;
   overflow: hidden;
 }
 
-.ghost-button {
-  border: 1px solid #31404d;
-  background: #0f151b;
-  color: #edf2f4;
-  border-radius: 10px;
-  padding: 8px 12px;
+.ice-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
-.ghost-button.danger {
-  border-color: rgba(248, 113, 113, 0.35);
-  color: #ffcdcd;
+.ice-top {
+  display: grid;
+  gap: 12px;
 }
 
 .ice-main {
@@ -125,15 +128,16 @@ async function saveConfig(next: InfantryCombatConfig) {
   overflow: hidden;
 }
 
-.ice-main.ice-main--empty {
-  grid-template-columns: minmax(0, 1fr);
-}
-
 .ice-table-pane,
 .ice-detail-pane {
   height: 100%;
   min-height: 0;
   overflow: auto;
+}
+
+.ice-top :deep(.ice-summary-card .bz-card-body.compact),
+.ice-top :deep(.ice-toolbar-card .bz-card-body.compact) {
+  padding-block: 10px;
 }
 
 @media (max-width: 1200px) {

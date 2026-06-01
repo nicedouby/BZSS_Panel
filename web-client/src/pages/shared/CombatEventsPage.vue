@@ -1,49 +1,56 @@
 <template>
-  <section class="page">
+  <section class="bz-page combat-page">
     <PageHeader :title="pageTitle" :subtitle="pageSubtitle" />
 
-    <CombatRateChart :refresh-key="query.dataUpdatedAt.value" :endpoint="rateEndpoint" />
-
-    <PageCard compact>
-      <div class="toolbar">
-        <select v-model="filters.type">
-          <option v-for="item in typeOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
-        </select>
-        <input v-model="filters.q" :placeholder="text.searchEvents">
-        <button type="button" :disabled="filters.offset === 0" @click="previousPage">{{ text.previous }}</button>
-        <button type="button" :disabled="!hasNextPage" @click="nextPage">{{ text.next }}</button>
-        <button type="button" @click="clearEvents">{{ text.clearMemoryEvents }}</button>
-      </div>
-    </PageCard>
-
     <DataState
-      :loading="query.isLoading.value && !events.length"
+      :loading="query.isLoading.value"
       :error="pageError"
-      :empty="!pageError && !events.length && !query.isLoading.value"
-      :empty-title="text.noEvents"
-      :empty-text="emptyText"
     >
-      <div class="combat-page-scroll">
-        <PageCard compact>
-          <div class="summary">
-            <span>{{ t(text.total, "", { count: total }) }}</span>
-            <span>{{ t(text.offset, "", { offset: filters.offset }) }}</span>
-            <span v-if="overview?.rejected != null">{{ t(text.rejected, "", { count: overview.rejected }) }}</span>
-            <span v-if="overview?.lastUpdatedAt">{{ t("common.updated") }} {{ formatTime(overview.lastUpdatedAt) }}</span>
-          </div>
-        </PageCard>
+      <div class="combat-shell">
+        <div class="combat-main">
+          <div class="combat-top">
+            <CombatRateChart :refresh-key="query.dataUpdatedAt.value" :endpoint="rateEndpoint" />
 
-        <CombatEventTable
-          :events="events"
+            <PageCard compact class="combat-toolbar-card">
+              <div class="combat-controls">
+                <div class="toolbar">
+                  <select v-model="filters.type">
+                    <option v-for="item in typeOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+                  </select>
+                  <input v-model="filters.q" :placeholder="text.searchEvents">
+                  <button type="button" class="bz-btn bz-btn-ghost" :disabled="filters.offset === 0" @click="previousPage">{{ text.previous }}</button>
+                  <button type="button" class="bz-btn bz-btn-ghost" :disabled="!hasNextPage" @click="nextPage">{{ text.next }}</button>
+                  <button type="button" class="bz-btn bz-btn-danger" @click="clearEvents">{{ text.clearMemoryEvents }}</button>
+                </div>
+                <div class="summary">
+                  <span>{{ t(text.total, "", { count: total }) }}</span>
+                  <span>{{ t(text.offset, "", { offset: filters.offset }) }}</span>
+                  <span v-if="overview?.rejected != null">{{ t(text.rejected, "", { count: overview.rejected }) }}</span>
+                  <span v-if="overview?.lastUpdatedAt">{{ t("common.updated") }} {{ formatTime(overview.lastUpdatedAt) }}</span>
+                </div>
+              </div>
+            </PageCard>
+          </div>
+
+          <CombatEventTable
+            class="combat-table-card"
+            :events="events"
+            :highlight-key="hoverKey"
+            @select="selectedEvent = $event"
+            @search-player="searchPlayer"
+            @hover-player="hoverKey = $event"
+          />
+        </div>
+
+        <CombatEventDetailModal
+          class="combat-detail-pane"
+          inline
+          :event="selectedEvent"
           :highlight-key="hoverKey"
-          @select="selectedEvent = $event"
-          @search-player="searchPlayer"
-          @hover-player="hoverKey = $event"
+          @close="selectedEvent = null"
         />
       </div>
     </DataState>
-
-    <CombatEventDetailModal :event="selectedEvent" :highlight-key="hoverKey" @close="selectedEvent = null" />
   </section>
 </template>
 
@@ -70,25 +77,25 @@ const props = defineProps<{
   endpoint: string;
   clearEndpoint: string;
   rateEndpoint?: string;
-    routeScope: string;
-    typeOptions: Array<{ value: string; label: string }>;
-    emptyText: string;
-    uiText?: Partial<{
-      searchEvents: string;
-      previous: string;
-      next: string;
-      clearMemoryEvents: string;
-      noEvents: string;
-      total: string;
-      offset: string;
-      rejected: string;
-      loadFailed: string;
-      clearEventBuffer: string;
-      clearEventBufferMessage: string;
-      clearCompleted: string;
-      clearCompletedMessage: string;
-      clearFailed: string;
-    }>;
+  routeScope: string;
+  typeOptions: Array<{ value: string; label: string }>;
+  emptyText: string;
+  uiText?: Partial<{
+    searchEvents: string;
+    previous: string;
+    next: string;
+    clearMemoryEvents: string;
+    noEvents: string;
+    total: string;
+    offset: string;
+    rejected: string;
+    loadFailed: string;
+    clearEventBuffer: string;
+    clearEventBufferMessage: string;
+    clearCompleted: string;
+    clearCompletedMessage: string;
+    clearFailed: string;
+  }>;
 }>();
 
 const route = useRoute();
@@ -127,7 +134,7 @@ watch(
 const endpointRef = computed(() => props.endpoint);
 const rateEndpoint = computed(() => props.rateEndpoint ?? "/api/combat-clean/rates");
 const { query } = useCombatEventsQuery(endpointRef, filters);
-const pageError = computed(() => query.error.value ? renderApiError(query.error.value, text.value.loadFailed) : "");
+const pageError = computed(() => (query.error.value ? renderApiError(query.error.value, text.value.loadFailed) : ""));
 const events = computed(() => query.data.value?.events ?? []);
 const overview = computed(() => query.data.value?.overview ?? null);
 const total = computed(() => Number(overview.value?.count ?? events.value.length));
@@ -203,24 +210,52 @@ function formatTime(value: unknown) {
 </script>
 
 <style scoped>
-.page {
+.bz-page {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
   min-height: 0;
   height: 100%;
   overflow: hidden;
 }
 
-.combat-page-scroll {
+.combat-shell {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
   gap: 12px;
   min-height: 0;
   height: 100%;
-  overflow-y: scroll;
-  overflow-x: hidden;
-  padding-right: 4px;
-  scrollbar-gutter: stable;
+  overflow: hidden;
+}
+
+.combat-main {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.combat-top {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.92fr) minmax(0, 1.4fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.combat-table-card {
+  min-height: 0;
+}
+
+.combat-toolbar-card,
+.combat-summary-card {
+  min-height: 0;
+}
+
+.combat-detail-pane {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .toolbar,
@@ -229,6 +264,13 @@ function formatTime(value: unknown) {
   gap: 10px;
   flex-wrap: wrap;
   align-items: center;
+}
+
+.combat-controls {
+  display: grid;
+  gap: 8px;
+  height: 100%;
+  align-content: center;
 }
 
 .toolbar input,
@@ -251,11 +293,41 @@ function formatTime(value: unknown) {
   font-size: 12px;
 }
 
-.page :deep(.card-body.compact) {
+.combat-top :deep(.combat-rate-chart-shell) {
+  height: 100%;
+}
+
+.combat-top :deep(.combat-rate-chart-container),
+.combat-top :deep(.combat-rate-chart-empty) {
+  height: 100%;
+  min-height: 112px;
+}
+
+.bz-page :deep(.card-body.compact) {
   padding: 8px 10px;
 }
 
-.page :deep(.card-header) {
+.bz-page :deep(.card-header) {
   padding: 8px 10px 0;
+}
+
+@media (max-width: 1400px) {
+  .combat-shell {
+    grid-template-columns: minmax(0, 1fr) 360px;
+  }
+}
+
+@media (max-width: 1200px) {
+  .combat-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .combat-top {
+    grid-template-columns: 1fr;
+  }
+
+  .combat-detail-pane {
+    max-height: 420px;
+  }
 }
 </style>

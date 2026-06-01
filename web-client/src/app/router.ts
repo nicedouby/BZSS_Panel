@@ -85,6 +85,7 @@ export const router = createRouter({
         titleKey: "routeTitle.combatManager",
         requiredPermission: "combat_manager.view",
         legacyRequiredPermissions: ["kill_manager.view"],
+        fullBleed: true,
       },
     },
     {
@@ -117,6 +118,7 @@ export const router = createRouter({
       meta: {
         ...pluginPollingMeta,
         titleKey: "routeTitle.infantryCombatEnhancer",
+        fullBleed: true,
       },
     },
     {

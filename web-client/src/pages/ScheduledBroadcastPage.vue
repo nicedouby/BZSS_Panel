@@ -1,124 +1,129 @@
 <template>
-  <section class="page">
+  <section class="bz-page scheduled-broadcast-page">
     <PageHeader
       title="定时广播"
-      subtitle="建立广播列表，统一设置全局开始延迟，逐条配置广播间隔。"
+      subtitle="建立广播列表，统一设置全局延迟，逐条配置广播间隔。"
     >
       <template #actions>
-        <button type="button" class="refresh-button" :disabled="isFetching" @click="query.refetch()">
+        <button type="button" class="bz-btn bz-btn-ghost" :disabled="isFetching" @click="query.refetch()">
           {{ isFetching ? "同步中..." : "刷新" }}
         </button>
       </template>
     </PageHeader>
 
-    <PageCard compact>
-      <form class="create-grid" @submit.prevent="createItem">
-        <label>
-          <span>全局开始延迟(秒)</span>
-          <input
-            type="number"
-            min="0"
-            max="86400"
-            :value="globalDelaySeconds"
-            @input="setGlobalDelay(($event.target as HTMLInputElement).value)"
-          />
-        </label>
-        <div class="actions">
-          <button type="submit" class="primary-button" :disabled="createBusy">
-            {{ createBusy ? "添加中..." : "添加广播" }}
-          </button>
-        </div>
-      </form>
-    </PageCard>
-
-    <PageCard compact class="summary-card">
-      <div class="summary">
-        <span>总条目：{{ items.length }}</span>
-        <span>运行状态：{{ data?.status?.running ? "运行中" : "已停止" }}</span>
-        <span>轮询：{{ data?.config?.tickMs ?? "-" }} ms</span>
+    <section class="bz-card">
+      <div class="bz-card-body compact">
+        <form class="create-grid" @submit.prevent="createItem">
+          <label class="field">
+            <span>全局开始延迟（秒）</span>
+            <input
+              type="number"
+              min="0"
+              max="86400"
+              :value="globalDelaySeconds"
+              @input="setGlobalDelay(($event.target as HTMLInputElement).value)"
+            />
+          </label>
+          <div class="actions">
+            <button type="submit" class="bz-btn bz-btn-primary" :disabled="createBusy">
+              {{ createBusy ? "添加中..." : "添加广播" }}
+            </button>
+          </div>
+        </form>
       </div>
-    </PageCard>
+    </section>
+
+    <section class="bz-card">
+      <div class="bz-card-body compact">
+        <div class="summary">
+          <span class="bz-badge">总条目 {{ items.length }}</span>
+          <span class="bz-badge">运行状态 {{ data?.status?.running ? "运行中" : "已停止" }}</span>
+          <span class="bz-badge">轮询 {{ data?.config?.tickMs ?? "-" }} ms</span>
+        </div>
+      </div>
+    </section>
 
     <DataState
       :loading="isLoading && !items.length"
       :error="pageError"
-      :empty="!pageError && !items.length && !isLoading"
-      empty-title="暂无定时广播"
-      empty-text="先创建一条广播任务，然后它会按间隔自动发送。"
     >
-      <PageCard compact class="table-card">
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>启用</th>
-                <th>标题</th>
-                <th>广播内容</th>
-                <th>间隔(秒)</th>
-                <th>下次执行</th>
-                <th>最近执行</th>
-                <th>统计</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(item, index) in items" :key="item.id">
-                <td>
-                  <input
-                    type="checkbox"
-                    :checked="drafts[item.id]?.enabled ?? item.enabled"
-                    @change="onToggleEnabled(item.id, ($event.target as HTMLInputElement).checked)"
-                  />
-                </td>
-                <td>
-                  <input
-                    class="inline-input"
-                    :value="drafts[item.id]?.title ?? item.title"
-                    maxlength="60"
-                    @input="setDraft(item.id, 'title', ($event.target as HTMLInputElement).value)"
-                  />
-                </td>
-                <td>
-                  <textarea
-                    class="inline-textarea"
-                    rows="2"
-                    maxlength="180"
-                    :value="drafts[item.id]?.message ?? item.message"
-                    @input="setDraft(item.id, 'message', ($event.target as HTMLTextAreaElement).value)"
-                  />
-                </td>
-                <td>
-                  <input
-                    class="inline-input"
-                    type="number"
-                    min="5"
-                    max="86400"
-                    :value="index === 0 ? globalDelaySeconds : (drafts[item.id]?.intervalSeconds ?? item.intervalSeconds)"
-                    :disabled="index === 0"
-                    @input="setDraft(item.id, 'intervalSeconds', Number(($event.target as HTMLInputElement).value))"
-                  />
-                </td>
-                <td>{{ formatTime(item.nextRunAt) }}</td>
-                <td>
-                  <div>{{ formatTime(item.lastRunAt) }}</div>
-                  <div class="hint" v-if="item.lastError">{{ item.lastError }}</div>
-                </td>
-                <td>
-                  <div>成功 {{ item.runCount ?? 0 }}</div>
-                  <div>失败 {{ item.errorCount ?? 0 }}</div>
-                </td>
-                <td>
-                  <div class="row-actions">
-                    <button type="button" @click="saveItem(item, index)">保存</button>
-                    <button type="button" @click="runNow(item.id)">立即执行</button>
-                    <button type="button" class="danger" @click="removeItem(item.id)">删除</button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+      <div v-if="items.length > 0" class="broadcast-list">
+        <article v-for="(item, index) in items" :key="item.id" class="bz-card broadcast-card">
+          <div class="broadcast-card-grid">
+            <label class="broadcast-enabled">
+              <input
+                type="checkbox"
+                :checked="drafts[item.id]?.enabled ?? item.enabled"
+                @change="onToggleEnabled(item.id, ($event.target as HTMLInputElement).checked)"
+              />
+            </label>
+
+            <label class="broadcast-field broadcast-title">
+              <span>标题</span>
+              <input
+                class="inline-input"
+                :value="drafts[item.id]?.title ?? item.title"
+                maxlength="60"
+                placeholder="例如：欢迎提示 / 规则提醒 / QQ群提示"
+                @input="setDraft(item.id, 'title', ($event.target as HTMLInputElement).value)"
+              />
+            </label>
+
+            <label class="broadcast-field broadcast-message">
+              <span>广播内容</span>
+              <textarea
+                class="inline-textarea"
+                rows="3"
+                maxlength="180"
+                :value="drafts[item.id]?.message ?? item.message"
+                placeholder="请输入广播内容"
+                @input="setDraft(item.id, 'message', ($event.target as HTMLTextAreaElement).value)"
+              />
+            </label>
+
+            <div class="broadcast-right">
+              <label class="broadcast-field">
+                <span>间隔（秒）</span>
+                <input
+                  class="inline-input"
+                  type="number"
+                  min="5"
+                  max="86400"
+                  :value="index === 0 ? globalDelaySeconds : (drafts[item.id]?.intervalSeconds ?? item.intervalSeconds)"
+                  :disabled="index === 0"
+                  @input="setDraft(item.id, 'intervalSeconds', Number(($event.target as HTMLInputElement).value))"
+                />
+              </label>
+
+              <div class="broadcast-meta">
+                <span>下一次：{{ formatTime(item.nextRunAt) }}</span>
+                <span>最近一次：{{ formatTime(item.lastRunAt) }}</span>
+                <span v-if="item.lastError" class="broadcast-error">最近错误：{{ item.lastError }}</span>
+                <div class="broadcast-stats">
+                  <span class="bz-badge">成功 {{ item.runCount ?? 0 }}</span>
+                  <span class="bz-badge bz-badge-danger">失败 {{ item.errorCount ?? 0 }}</span>
+                </div>
+              </div>
+
+              <div class="broadcast-actions">
+                <button type="button" class="bz-btn bz-btn-primary" @click="saveItem(item, index)">保存</button>
+                <button type="button" class="bz-btn bz-btn-ghost" @click="runNow(item.id)">立刻执行</button>
+                <button type="button" class="bz-btn bz-btn-danger" @click="removeItem(item.id)">删除</button>
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div v-else class="bz-empty">
+        <div class="bz-empty-inner">
+          <div class="bz-empty-icon">∅</div>
+          <div class="bz-empty-title">暂无定时广播</div>
+          <div class="bz-empty-desc">
+            先创建一条广播任务，然后它会按间隔自动发送。
+          </div>
         </div>
-      </PageCard>
+      </div>
     </DataState>
   </section>
 </template>
@@ -137,7 +142,6 @@ import {
 } from "../app/scheduledBroadcastApi";
 import { useUiStore } from "../stores/ui.store";
 import PageHeader from "../components/common/PageHeader.vue";
-import PageCard from "../components/common/PageCard.vue";
 import DataState from "../components/common/DataState.vue";
 
 type DraftItem = {
@@ -283,9 +287,7 @@ async function onToggleEnabled(id: string, checked: boolean) {
       }
     }
 
-    await updateScheduledBroadcastItem(id, {
-      ...patch,
-    });
+    await updateScheduledBroadcastItem(id, patch);
     await query.refetch();
   } catch (error) {
     ui.pushToast({ title: "更新失败", message: error instanceof Error ? error.message : String(error), tone: "error" });
@@ -298,7 +300,7 @@ async function runNow(id: string) {
     if (!result?.result?.success) {
       throw new Error(result?.result?.errorMessage || "执行失败");
     }
-    ui.pushToast({ title: "执行成功", message: "广播已立即触发。", tone: "ok" });
+    ui.pushToast({ title: "执行成功", message: "广播已立刻触发。", tone: "ok" });
     await query.refetch();
   } catch (error) {
     ui.pushToast({ title: "执行失败", message: error instanceof Error ? error.message : String(error), tone: "error" });
@@ -330,9 +332,8 @@ function formatTime(value: unknown) {
 </script>
 
 <style scoped>
-.page {
+.scheduled-broadcast-page {
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
   gap: 12px;
   min-height: 0;
   height: 100%;
@@ -341,30 +342,23 @@ function formatTime(value: unknown) {
 
 .create-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(200px, 280px) auto;
   gap: 12px;
-  align-items: flex-end;
+  align-items: end;
 }
 
-.create-grid label {
+.field {
   display: grid;
   gap: 6px;
   color: #d6dee6;
   font-size: 12px;
 }
 
-.create-grid .wide {
-  grid-column: 1 / -1;
+.field span {
+  color: #8fa2b3;
 }
 
-.create-grid .actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.create-grid input,
-.create-grid textarea,
+.field input,
 .inline-input,
 .inline-textarea {
   width: 100%;
@@ -372,18 +366,14 @@ function formatTime(value: unknown) {
   border: 1px solid #38414c;
   background: #11171d;
   color: #edf2f4;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 8px 10px;
   min-height: 36px;
 }
 
 .inline-textarea {
-  min-height: 70px;
+  min-height: 84px;
   resize: vertical;
-}
-
-.toggle-label {
-  align-items: center;
 }
 
 .actions {
@@ -392,72 +382,117 @@ function formatTime(value: unknown) {
   justify-content: flex-end;
 }
 
-.primary-button,
-.refresh-button,
-.row-actions button {
-  min-height: 36px;
-  padding: 0 12px;
-  border: 1px solid #31404f;
-  border-radius: 8px;
-  background: #16202a;
-  color: #edf2f4;
-}
-
-.primary-button {
-  border-color: rgba(96, 165, 250, 0.45);
-  background: linear-gradient(180deg, rgba(96, 165, 250, 0.18), rgba(96, 165, 250, 0.08));
-}
-
 .summary {
   display: flex;
   flex-wrap: wrap;
-  gap: 14px;
-  color: #d5dee7;
-  font-size: 13px;
+  gap: 10px;
 }
 
-.table-card {
+.broadcast-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.broadcast-card {
   min-height: 0;
 }
 
-.table-wrap {
-  overflow: auto;
-  max-height: 100%;
+.broadcast-card-grid {
+  display: grid;
+  grid-template-columns: 44px minmax(220px, 1fr) minmax(320px, 1.4fr) minmax(260px, 0.95fr);
+  gap: 14px;
+  align-items: start;
+  padding: 16px 18px;
 }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 1080px;
+.broadcast-enabled {
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
 }
 
-th,
-td {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 10px;
-  text-align: left;
-  vertical-align: top;
+.broadcast-field {
+  display: grid;
+  gap: 6px;
+}
+
+.broadcast-field span {
+  color: #8fa2b3;
   font-size: 12px;
 }
 
-.hint {
-  margin-top: 4px;
+.broadcast-title {
+  min-width: 0;
+}
+
+.broadcast-message {
+  min-width: 0;
+}
+
+.broadcast-right {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.broadcast-meta {
+  display: grid;
+  gap: 4px;
+  color: #a5b0b8;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.broadcast-error {
   color: #fda4af;
 }
 
-.row-actions {
-  display: grid;
+.broadcast-stats {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.broadcast-actions {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 
-.row-actions .danger {
-  border-color: rgba(248, 113, 113, 0.45);
-  color: #fecaca;
+.broadcast-actions button {
+  width: 100%;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 1300px) {
+  .broadcast-card-grid {
+    grid-template-columns: 40px 1fr 1fr;
+  }
+
+  .broadcast-right {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(180px, 220px) 1fr minmax(220px, 260px);
+    align-items: start;
+  }
+}
+
+@media (max-width: 900px) {
   .create-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
+  }
+
+  .broadcast-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .broadcast-enabled {
+    justify-content: flex-start;
+  }
+
+  .broadcast-right {
+    grid-column: auto;
+    grid-template-columns: 1fr;
   }
 }
 </style>

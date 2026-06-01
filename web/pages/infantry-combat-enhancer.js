@@ -167,7 +167,7 @@ function formatTime(value) {
 function formatDamage(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "-";
-  return Number.isInteger(number) ? String(number) : number.toFixed(1).replace(/\.0$/, "");
+  return String(Math.round(number));
 }
 
 function escapeHtml(value) {

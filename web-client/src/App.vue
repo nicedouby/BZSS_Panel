@@ -210,6 +210,207 @@ a {
   gap: 16px;
 }
 
+.bz-page {
+  width: min(100%, 1760px);
+  margin: 0 auto;
+  padding: 18px 22px 28px;
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.bz-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.bz-page-title {
+  margin: 0;
+  font-size: clamp(22px, 2.1vw, 30px);
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+}
+
+.bz-page-subtitle {
+  margin: 6px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+  max-width: 74ch;
+}
+
+.bz-page-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.bz-card {
+  border: 1px solid var(--color-border-default);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.016)), rgba(255, 255, 255, 0.006)),
+    var(--color-bg-card);
+  border-radius: 18px;
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  backdrop-filter: blur(12px);
+}
+
+.bz-card-header {
+  padding: 16px 18px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.bz-card-title {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.3;
+  color: var(--color-text-primary);
+}
+
+.bz-card-desc {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.bz-card-body {
+  padding: 18px;
+}
+
+.bz-card-body.compact {
+  padding: 14px 16px;
+}
+
+.bz-empty {
+  min-height: 220px;
+  border: 1px dashed rgba(120, 160, 190, 0.28);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(60, 140, 220, 0.10), transparent 38%),
+    rgba(8, 16, 24, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 20px;
+  text-align: center;
+}
+
+.bz-empty--compact {
+  min-height: 156px;
+  padding: 22px 18px;
+}
+
+.bz-empty-inner {
+  max-width: 520px;
+}
+
+.bz-empty-icon {
+  width: 42px;
+  height: 42px;
+  margin: 0 auto 12px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(88, 166, 255, 0.12);
+  border: 1px solid rgba(88, 166, 255, 0.25);
+  color: #9ecbff;
+  font-size: 18px;
+}
+
+.bz-empty-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--color-text-primary);
+  margin-bottom: 6px;
+}
+
+.bz-empty-desc {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+
+.bz-empty-actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bz-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(110, 150, 180, 0.35);
+  background: rgba(20, 36, 50, 0.85);
+  color: var(--color-text-primary);
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.bz-btn:hover:not(:disabled) {
+  border-color: var(--color-border-highlight);
+  background: rgba(34, 58, 78, 0.95);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.bz-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+}
+
+.bz-btn-primary {
+  border-color: rgba(72, 170, 255, 0.55);
+  background: rgba(42, 105, 170, 0.42);
+}
+
+.bz-btn-danger {
+  border-color: rgba(255, 100, 100, 0.55);
+  background: rgba(120, 36, 36, 0.34);
+}
+
+.bz-btn-ghost {
+  background: transparent;
+}
+
+.bz-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  background: rgba(148, 163, 184, 0.12);
+  color: #dbe4ea;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.bz-badge-danger {
+  border-color: rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.1);
+  color: #fecaca;
+}
+
 .page-head {
   display: flex;
   justify-content: space-between;

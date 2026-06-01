@@ -646,7 +646,7 @@ function normalizeWeapon(value) {
 
 function normalizeDamage(value) {
   const number = Number(value);
-  return Number.isFinite(number) ? number : NaN;
+  return Number.isFinite(number) ? Math.round(number) : NaN;
 }
 
 function normalizeText(value) {
@@ -678,9 +678,9 @@ function makeEntryId(time, seed) {
 }
 
 function trimTrailingZeros(value) {
-  const text = String(value);
-  if (!text.includes(".")) return text;
-  return text.replace(/\.0+$/, "").replace(/(\.\d*?[1-9])0+$/, "$1");
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "";
+  return String(Math.round(number));
 }
 
 function collectSkipReason(bucket, decision) {
