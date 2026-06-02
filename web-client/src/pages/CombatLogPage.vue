@@ -6,43 +6,22 @@
     />
 
     <PageCard class="status-card" compact>
-      <div class="status-topline">
+      <div class="status-compact">
         <span class="live-pill" :class="{ live: isLiveSelected }">{{ liveBadgeLabel }}</span>
-        <div class="status-summary">
-          <span>{{ formatNumber(monthCount) }} 个月份</span>
-          <span>{{ formatNumber(files.length) }} 个文件</span>
-          <span>{{ formatNumber(selectedLineCount) }} 行</span>
-        </div>
-      </div>
 
-      <div class="status-grid">
-        <div class="status-item">
-          <span class="label">当前文件</span>
-          <strong class="value">{{ currentFileLabel }}</strong>
-        </div>
-        <div class="status-item">
-          <span class="label">当前目标</span>
-          <strong class="value">{{ currentTargetLabel }}</strong>
-        </div>
-        <div class="status-item">
-          <span class="label">最近写入</span>
-          <strong class="value">{{ formatDateTime(status?.lastWrittenAt) }}</strong>
-        </div>
-        <div class="status-item">
-          <span class="label">写入次数</span>
-          <strong class="value">{{ formatNumber(status?.writeCount ?? 0) }}</strong>
-        </div>
-      </div>
+        <span class="meta-chip">{{ formatNumber(monthCount) }} 个月份</span>
+        <span class="meta-chip">{{ formatNumber(files.length) }} 个文件</span>
+        <span class="meta-chip">{{ formatNumber(selectedLineCount) }} 行</span>
 
-      <div class="status-path">
-        <span class="label">当前读取路径</span>
-        <code>{{ selectedFileLabel || status?.currentTargetRelativePath || "--" }}</code>
-      </div>
+        <span class="meta-chip">当前文件：{{ currentFileLabel || "--" }}</span>
+        <span class="meta-chip">当前目标：{{ currentTargetLabel }}</span>
+        <span class="meta-chip">最近写入：{{ formatDateTime(status?.lastWrittenAt) }}</span>
+        <span class="meta-chip">写入次数：{{ formatNumber(status?.writeCount ?? 0) }}</span>
 
-      <div class="status-footnote">
-        <span v-if="selectedFile">文件大小 {{ formatBytes(selectedFileSize) }}</span>
-        <span v-if="selectedFile">修改时间 {{ formatDateTime(selectedFile.mtime) }}</span>
-        <span v-if="search">搜索词 {{ search }}</span>
+        <span class="meta-chip">当前读取路径：{{ selectedFileLabel || status?.currentTargetRelativePath || "--" }}</span>
+        <span v-if="selectedFile" class="meta-chip">文件大小：{{ formatBytes(selectedFileSize) }}</span>
+        <span v-if="selectedFile" class="meta-chip">修改时间：{{ formatDateTime(selectedFile.mtime) }}</span>
+        <span v-if="search" class="meta-chip">搜索词：{{ search }}</span>
       </div>
     </PageCard>
 
@@ -510,21 +489,11 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.status-topline {
+.status-compact {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: 8px;
   flex-wrap: wrap;
-}
-
-.status-summary {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  color: var(--muted);
-  font-size: 12px;
 }
 
 .live-pill,
@@ -547,58 +516,6 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
   border-color: rgba(34, 197, 94, 0.28);
   background: rgba(34, 197, 94, 0.16);
   color: #9af0b1;
-}
-
-.status-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.status-item {
-  display: grid;
-  gap: 6px;
-  padding: 14px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.label {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.value {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.status-path {
-  display: flex;
-  gap: 10px;
-  margin-top: 14px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.status-path code {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #cfe7ff;
-}
-
-.status-footnote {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 10px;
-  color: var(--muted);
-  font-size: 12px;
 }
 
 .refresh-banner {
@@ -766,16 +683,6 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
 
 @media (max-width: 1200px) {
   .layout {
-    grid-template-columns: 1fr;
-  }
-
-  .status-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 780px) {
-  .status-grid {
     grid-template-columns: 1fr;
   }
 }

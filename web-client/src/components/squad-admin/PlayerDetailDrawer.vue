@@ -766,9 +766,9 @@ onUnmounted(() => {
 }
 
 .combat-stat--deaths {
-  --combat-accent: #f87171;
-  border-color: rgba(248, 113, 113, 0.22);
-  background: linear-gradient(180deg, rgba(248, 113, 113, 0.11), rgba(15, 23, 42, 0.32));
+  --combat-accent: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.22);
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.11), rgba(15, 23, 42, 0.32));
 }
 
 .combat-stat--tk {

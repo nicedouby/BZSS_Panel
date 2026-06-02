@@ -436,11 +436,26 @@ function openPlayerRealtimeWindow(player, { apiFetch, onNavigate, onRefresh } = 
           <div><span>Team</span><strong>${esc(teamValue)}</strong></div>
           <div><span>Squad</span><strong>${esc(squadValue)}</strong></div>
           <div class="bzss-player-combat-detail-stats" style="grid-column: 1 / -1;">
-            <span class="wound">击倒 ${stats.downs}</span>
-            <span class="kill">击杀 ${stats.kills}</span>
-            <span class="death">死亡 ${stats.deaths}</span>
-            <span class="tk">TK ${stats.tk}</span>
-            <span class="revive">复苏 ${stats.revives}</span>
+            <div class="bzss-player-combat-stat-card wound">
+              <span>击倒</span>
+              <strong>${stats.downs}</strong>
+            </div>
+            <div class="bzss-player-combat-stat-card kill">
+              <span>击杀</span>
+              <strong>${stats.kills}</strong>
+            </div>
+            <div class="bzss-player-combat-stat-card death">
+              <span>死亡</span>
+              <strong>${stats.deaths}</strong>
+            </div>
+            <div class="bzss-player-combat-stat-card tk">
+              <span>TK</span>
+              <strong>${stats.tk}</strong>
+            </div>
+            <div class="bzss-player-combat-stat-card revive">
+              <span>复苏</span>
+              <strong>${stats.revives}</strong>
+            </div>
           </div>
           <div><span>Steam Squad 时长</span><strong id="player-playtime-value">${esc(formatPlaytime(player))}</strong></div>
           <div><span>最后出现</span><strong>${esc(player.lastSeenTime || "未知")}</strong></div>

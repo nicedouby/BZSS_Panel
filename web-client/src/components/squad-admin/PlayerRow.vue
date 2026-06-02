@@ -5,7 +5,7 @@
     @click="handleSelect"
   >
     <div class="player-row-left">
-      <div class="player-identity">
+      <div class="player-role-stack">
         <span
           class="role-icon"
           :class="`tone-${roleIcon.tone}`"
@@ -20,17 +20,25 @@
           />
           <span v-else>{{ roleIcon.icon }}</span>
         </span>
-        <span class="player-name">{{ player.name }}</span>
+        <div v-if="playtimeText" class="player-playtime stat-chip stat-playtime">
+          {{ playtimeText }}
+        </div>
       </div>
-      <div class="player-meta">
-        <span class="player-role">{{ displayRole(player.role) }}</span>
+      <div class="player-row-content">
+        <div class="player-identity">
+          <span class="player-name">{{ player.name }}</span>
+        </div>
+        <div class="player-meta">
+          <span class="player-role">{{ displayRole(player.role) }}</span>
+        </div>
+        <div class="player-combat-stats">
+          <span class="stat-chip stat-down">击倒 {{ player.combatStats.downs }}</span>
+          <span class="stat-chip stat-kill">击杀 {{ player.combatStats.kills }}</span>
+          <span class="stat-chip stat-death">死亡 {{ player.combatStats.deaths }}</span>
+          <span class="stat-chip stat-tk">TK {{ player.combatStats.tk }}</span>
+          <span class="stat-chip stat-revive">复苏 {{ player.combatStats.revives }}</span>
+        </div>
       </div>
-      <div class="player-combat-stats">
-        {{ player.statsLabel }}
-      </div>
-    </div>
-    <div v-if="playtimeText" class="player-playtime">
-      {{ playtimeText }}
     </div>
   </div>
 </template>
@@ -56,8 +64,8 @@ const isRoleIconImage = computed(() => roleIcon.value.icon.startsWith("/"));
 
 const playtimeText = computed(() => {
   if (props.player.playtimeHours == null) return "";
-  if (Number(props.player.playtimeHours) === 0) return `${t("player.steamTime")} 未公开`;
-  return `${t("player.steamTime")} ${props.player.playtimeHours}h`;
+  if (Number(props.player.playtimeHours) === 0) return "未公开";
+  return `${props.player.playtimeHours}h`;
 });
 
 function handleSelect(event: MouseEvent) {
@@ -114,9 +122,17 @@ function displayRole(role: string | null | undefined) {
 
 .player-row-left {
   display: grid;
-  gap: 4px;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 10px;
   min-width: 0;
   flex: 1;
+}
+
+.player-row-content {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
 }
 
 .player-identity {
@@ -124,6 +140,14 @@ function displayRole(role: string | null | undefined) {
   align-items: center;
   gap: 7px;
   min-width: 0;
+  min-height: 22px;
+}
+
+.player-role-stack {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: 52px;
 }
 
 .player-name {
@@ -140,16 +164,68 @@ function displayRole(role: string | null | undefined) {
   gap: var(--spacing-sm);
   align-items: center;
   font-size: var(--font-size-xs);
+  line-height: 1.15;
   color: var(--color-text-muted);
   flex-wrap: wrap;
-  padding-left: 29px;
 }
 
 .player-combat-stats {
-  color: var(--color-text-secondary);
   font-size: 11px;
   line-height: 1.3;
-  padding-left: 29px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 1px;
+}
+
+.stat-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.stat-down {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+
+.stat-kill {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+.stat-death {
+  border-color: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.1);
+  color: #000;
+}
+
+.stat-tk {
+  border-color: rgba(168, 85, 247, 0.35);
+  background: rgba(168, 85, 247, 0.12);
+  color: #a855f7;
+}
+
+.stat-revive {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.12);
+  color: #22c55e;
+}
+
+.stat-playtime {
+  border-color: rgba(96, 165, 250, 0.35);
+  background: rgba(96, 165, 250, 0.12);
+  color: #60a5fa;
+  justify-content: center;
+  max-width: 52px;
+  padding: 1px 5px;
 }
 
 .role-icon {
@@ -229,8 +305,7 @@ function displayRole(role: string | null | undefined) {
 }
 
 .player-playtime {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+  font-size: 10px;
   white-space: nowrap;
   flex-shrink: 0;
 }

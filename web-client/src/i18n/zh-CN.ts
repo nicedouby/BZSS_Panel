@@ -98,6 +98,7 @@
     playerDatabase: "玩家数据库",
     reserveSlots: "预留位管理",
     combatManager: "战斗管理",
+    combatLog: "战斗日志",
     combatClean: "战斗管理",
     killManage: "战斗管理",
     adminWarns: "广播模块",

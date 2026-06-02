@@ -195,18 +195,18 @@ export async function renderPage({ root, api, apiFetch, routeInfo }) {
     await apiFetch("/api/player-database/sync-online", { method: "POST" });
     await loadList();
     await loadStats({ silent: true });
-    setStatus("鍦ㄧ嚎鐜╁宸插悓姝?, "success");
+    setStatus("鍦ㄧ嚎鐜╁宸插悓姝�", "success");
   });
 
   root.querySelector("#db-reset-combat-stats-btn").addEventListener("click", async () => {
-    if (!window.confirm("纭閲嶇疆鎵€鏈夌帺瀹跺嚮鏉€缁熻鍜屾殩鏈嶇粺璁″悧锛熸鎿嶄綔涓嶅彲鎾ら攢銆?)) return;
+    if (!window.confirm("纭閲嶇疆鎵€鏈夌帺瀹跺嚮鏉€缁熻鍜屾殩鏈嶇粺璁″悧锛熸鎿嶄綔涓嶅彲鎾ら攢銆�?")) return;
     setStatus("姝ｅ湪閲嶇疆鍑绘潃缁熻...", "pending");
     const res = await apiFetch("/api/db/reset-combat-stats", { method: "POST" });
     const json = await res.json();
     if (!res.ok) throw new Error(json?.error || "閲嶇疆澶辫触");
     await loadList();
     await loadStats({ silent: true });
-    setStatus(`鍑绘潃缁熻宸查噸缃紝褰卞搷 ${Number(json.changed || 0)} 鏉¤褰昤, "success");
+    setStatus(`鍑绘潃缁熻宸查噸缃紝褰卞搷 ${Number(json.changed || 0)} 鏉¤褰�`, "success");
   });
 
   await loadStats({ silent: true });
@@ -341,7 +341,7 @@ function renderDetail(els, data, actions) {
 function renderBreakdowns(root, stats) {
   const b = stats?.breakdowns || {};
   root.innerHTML = `
-    ${analyticsBlock("鏉冮檺缁勫垎甯?, chipList(b.permissionGroups, "permissionGroup", "players"))}
+    ${analyticsBlock("鏉冮檺缁勫垎甯�", chipList(b.permissionGroups, "permissionGroup", "players"))}
     ${analyticsBlock("瑙掕壊鏍囩鍒嗗竷", chipList(b.roleTags, "tagValue", "players"))}
     ${analyticsBlock("鎴愬垎鏍囩鍒嗗竷", chipList(b.componentTags, "tagValue", "players"))}
     ${analyticsBlock("杩濊绫诲瀷鍒嗗竷", chipList((b.violationTypes || []).map((row) => ({ key: row.violationLabel || row.violationKey, value: row.totalCount })), "key", "value"))}
@@ -351,8 +351,8 @@ function renderBreakdowns(root, stats) {
 function renderLeaderboards(root, stats, jumpToPlayer) {
   const l = stats?.leaderboards || {};
   root.innerHTML = `
-    ${analyticsBlock("鏃堕暱姒?, rankList(l.byPlaytime, (row) => row.currentName || row.steamID || row.eosID || "鏈煡鐜╁", (row) => fmtHours(row.gameSeconds), "id"))}
-    ${analyticsBlock("杩濊姒?, rankList(l.byViolations, (row) => row.currentName || row.steamID || row.eosID || "鏈煡鐜╁", (row) => `杩濊 ${fmtNumber(row.totalViolations)}`, "playerId"))}
+    ${analyticsBlock("鏃堕暱姒�", rankList(l.byPlaytime, (row) => row.currentName || row.steamID || row.eosID || "鏈煡鐜╁", (row) => fmtHours(row.gameSeconds), "id"))}
+    ${analyticsBlock("杩濊姒�", rankList(l.byViolations, (row) => row.currentName || row.steamID || row.eosID || "鏈煡鐜╁", (row) => `杩濊 ${fmtNumber(row.totalViolations)}`, "playerId"))}
   `;
 
   root.querySelectorAll(".db-rank-player").forEach((btn) => {

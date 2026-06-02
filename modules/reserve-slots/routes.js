@@ -6,6 +6,7 @@ export async function handleReserveSlotsRoutes({
   url,
   req,
   user,
+  readTextBody,
   readJsonBody,
   json,
 }) {
@@ -41,6 +42,45 @@ export async function handleReserveSlotsRoutes({
       ok: true,
       success: true,
       message: result.message ?? "已从管理员文件同步预留位数据",
+      ...result,
+    });
+    return true;
+  }
+
+  if (url.pathname === "/api/reserve-slots/export-csv" && req.method === "GET") {
+    const csv = await reserveSlots.exportCsv();
+    json(200, {
+      ok: true,
+      csv,
+    }, {
+      "Content-Type": "application/json; charset=utf-8",
+    });
+    return true;
+  }
+
+  if (url.pathname === "/api/reserve-slots/import-csv" && req.method === "POST") {
+    if (!core.authManager?.hasEverything?.(user)) {
+      json(403, {
+        error: "Forbidden",
+        message: "SuperAdmin permission is required.",
+      });
+      return true;
+    }
+
+    const contentType = String(req.headers["content-type"] ?? "").toLowerCase();
+    let csvText = "";
+    if (contentType.includes("application/json")) {
+      const body = await readJsonBody(req);
+      csvText = String(body?.csv ?? body?.csvText ?? body?.text ?? "");
+    } else {
+      csvText = String(await readTextBody(req) ?? "");
+    }
+
+    const result = await reserveSlots.importFromCsv(csvText);
+    json(200, {
+      ok: true,
+      success: true,
+      message: result.message ?? "CSV 导入完成。",
       ...result,
     });
     return true;

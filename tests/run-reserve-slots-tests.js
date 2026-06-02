@@ -82,10 +82,13 @@ async function testParserHandlesAdminBlock() {
   assert.equal(parsed.groups[0].name, "BZSSVIP");
   assert.equal(parsed.members.length, 2);
   assert.equal(parsed.members[0].steamId, "76561198377609640");
+  assert.equal(parsed.members[0].name, "");
   assert.equal(parsed.members[0].expireAt, "2020-06-02 21:26:59");
   assert.equal(parsed.members[0].isExpired, true);
+  assert.deepEqual(parsed.members[0].reasons, ["预留位"]);
   assert.equal(parsed.members[1].expireAt, null);
   assert.equal(parsed.members[1].isExpired, false);
+  assert.deepEqual(parsed.members[1].reasons, ["预留位"]);
 }
 
 async function testEnsureReserveSlotStoreFileCreatesAndRepairs() {
@@ -136,17 +139,27 @@ async function testModuleAndRoutesWorkEndToEnd() {
     debug() {},
   };
 
-  const module = createReserveSlotsModule({
+  const reserveModule = createReserveSlotsModule({
     core: {
       createLogger() {
         return logger;
       },
       logger,
+      runtimeState: null,
+    },
+    modules: {
+      playerDatabase: {
+        async listPlayersBySteamIDs(steamIDs = []) {
+          return steamIDs.includes("76561198377609640")
+            ? [{ steam_id: "76561198377609640", current_name: "Alpha" }]
+            : [];
+        },
+      },
     },
     config,
     logger,
   });
-  await module.init();
+  await reserveModule.init();
 
   const server = new WebServer({
     config: {
@@ -174,7 +187,7 @@ async function testModuleAndRoutesWorkEndToEnd() {
       config,
     },
     modules: {
-      reserveSlots: module.api,
+      reserveSlots: reserveModule.api,
     },
   });
 
@@ -221,11 +234,54 @@ async function testModuleAndRoutesWorkEndToEnd() {
   assert.equal(importBody.success, true);
   assert.equal(importBody.members.length, 1);
   assert.equal(importBody.members[0].steamId, "76561198377609640");
+  assert.equal(importBody.members[0].name, "Alpha");
+  assert.deepEqual(importBody.members[0].reasons, ["预留位"]);
   assert.equal(importBody.lastImportedAt != null, true);
 
   const importedStore = JSON.parse(await fs.readFile(localReservePath, "utf8"));
   assert.equal(importedStore.source.adminFilePath, adminFilePath);
   assert.equal(importedStore.members[0].isExpired, true);
+  assert.equal(importedStore.members[0].name, "Alpha");
+  assert.deepEqual(importedStore.members[0].reasons, ["预留位"]);
+
+  const exportRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/reserve-slots/export-csv",
+    headers: { host: "localhost", authorization: "user" },
+    socket: {},
+  }, exportRecorder.res);
+  assert.equal(exportRecorder.state.status, 200);
+  const exportBody = JSON.parse(exportRecorder.state.body);
+  assert.match(exportBody.csv, /steamId,name,group,expireAt,reasons,remark,isExpired/);
+  assert.match(exportBody.csv, /Alpha/);
+
+  const routeCsvRecorder = createRecorder();
+  const routeCsvReq = Readable.from([
+    "steamId,name,group,expireAt,reasons,remark,isExpired\n",
+    '76561198377609641,Bravo,BZSSVIP,2026-06-02 21:26:59,"原因A | 原因B",手动导入,false\n',
+  ]);
+  routeCsvReq.method = "POST";
+  routeCsvReq.url = "/api/reserve-slots/import-csv";
+  routeCsvReq.headers = { host: "localhost", authorization: "super", "content-type": "text/csv; charset=utf-8" };
+  routeCsvReq.socket = {};
+  await server.handleRequest(routeCsvReq, routeCsvRecorder.res);
+  assert.equal(routeCsvRecorder.state.status, 200);
+  const routeCsvBody = JSON.parse(routeCsvRecorder.state.body);
+  assert.equal(routeCsvBody.success, true);
+  assert.equal(routeCsvBody.members[0].name, "Bravo");
+  assert.deepEqual(routeCsvBody.members[0].reasons, ["原因A", "原因B"]);
+
+  const exportedCsv = await reserveModule.api.exportCsv();
+  assert.match(exportedCsv, /steamId,name,group,expireAt,reasons,remark,isExpired/);
+  assert.match(exportedCsv, /Bravo/);
+
+  const csvImported = await reserveModule.api.importFromCsv([
+    "steamId,name,group,expireAt,reasons,remark,isExpired",
+    '76561198377609641,Bravo,BZSSVIP,2026-06-02 21:26:59,"原因A | 原因B",手动导入,false',
+  ].join("\n"));
+  assert.equal(csvImported.members[0].name, "Bravo");
+  assert.deepEqual(csvImported.members[0].reasons, ["原因A", "原因B"]);
 
   await fs.rm(tempDir, { recursive: true, force: true });
 }

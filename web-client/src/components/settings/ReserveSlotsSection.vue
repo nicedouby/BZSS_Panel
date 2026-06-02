@@ -1,169 +1,196 @@
 <template>
   <section class="settings-section reserve-slots-section">
-    <div class="settings-section-head">
-      <h3>预留位系统</h3>
-      <p>读取管理员配置文件中的预留位区块，并同步到本地 JSON，供页面展示。</p>
+    <div class="settings-section-head reserve-head">
+      <div>
+        <h3>预留位管理</h3>
+        <p>与玩家数据库关联，支持从管理员文件同步，以及 CSV 导入 / 导出。</p>
+      </div>
+      <div class="reserve-actions">
+        <button type="button" class="reserve-sync-btn" :disabled="!canEdit || importing" @click="syncFromAdmin">
+          {{ importing ? "同步中..." : "从管理员文件同步" }}
+        </button>
+        <button type="button" class="reserve-sync-btn secondary" :disabled="loading || importing || exporting" @click="exportCsv">
+          导出 CSV
+        </button>
+        <button type="button" class="reserve-sync-btn secondary" :disabled="!canEdit || loading || importing" @click="triggerImportFile">
+          导入 CSV
+        </button>
+        <input ref="importInput" class="hidden-input" type="file" accept=".csv,text/csv" @change="onImportFileChange">
+      </div>
     </div>
 
     <div v-if="loading" class="reserve-state-box">正在加载预留位数据...</div>
     <div v-else-if="error" class="reserve-state-box error">
       <span>{{ error }}</span>
-      <button type="button" @click="loadState(true)">重试</button>
+      <button type="button" class="reserve-mini-btn" @click="loadState(true)">重试</button>
     </div>
     <template v-else>
-      <div class="reserve-summary-grid">
-        <label class="reserve-toggle">
-          <span>
-            <strong>启用预留位系统</strong>
-            <small>关闭后仍保留本地数据，但不影响配置编辑。</small>
-          </span>
-          <input v-model="draft.enabled" type="checkbox" :disabled="!canEdit || saving">
-        </label>
-
-        <div class="reserve-field">
-          <label>管理员配置文件路径</label>
-          <input
-            v-model="draft.adminFilePath"
-            type="text"
-            class="reserve-input"
-            placeholder="C:/Servers/Squad/SquadGame/ServerConfig/Admins.cfg"
-            :disabled="!canEdit || saving"
-          >
-        </div>
-
-        <div class="reserve-field">
-          <label>本地预留位记录文件路径</label>
-          <input
-            v-model="draft.localReserveFilePath"
-            type="text"
-            class="reserve-input"
-            placeholder="data/reserve-slots.json"
-            :disabled="!canEdit || saving"
-          >
-        </div>
-      </div>
-
-      <div class="reserve-actions">
-        <button type="button" class="reserve-action secondary" :disabled="saving || importing" @click="loadState(true)">
-          重新加载
-        </button>
-        <button type="button" class="reserve-action secondary" :disabled="!canEdit || saving || importing" @click="saveSettings">
-          {{ saving ? "保存中..." : "保存设置" }}
-        </button>
-        <button type="button" class="reserve-action" :disabled="!canEdit || saving || importing" @click="syncFromAdmin">
-          {{ importing ? "同步中..." : "从管理员文件同步" }}
-        </button>
-      </div>
-
       <div v-if="notice" class="reserve-notice">{{ notice }}</div>
 
-      <div class="reserve-status-grid">
-        <div class="reserve-status-card">
-          <span class="reserve-status-label">本地文件</span>
-          <strong>{{ state?.localReserveFileExists ? "已存在" : "不存在" }}</strong>
-          <small>{{ state?.localReserveFilePath || "data/reserve-slots.json" }}</small>
-        </div>
-        <div class="reserve-status-card">
-          <span class="reserve-status-label">管理员文件</span>
-          <strong>{{ state?.adminFilePath ? (state?.adminFileExists ? "已存在" : "不存在") : "未配置" }}</strong>
-          <small>{{ state?.adminFilePath || "未配置管理员文件路径" }}</small>
-        </div>
-        <div class="reserve-status-card">
-          <span class="reserve-status-label">上次同步时间</span>
-          <strong>{{ formatDate(state?.lastImportedAt) }}</strong>
-          <small>{{ state?.source?.adminFilePath ? `来源: ${state.source.adminFilePath}` : "尚未同步" }}</small>
-        </div>
-        <div class="reserve-status-card">
-          <span class="reserve-status-label">当前统计</span>
-          <strong>{{ state?.summary?.memberCount ?? 0 }} 人</strong>
-          <small>过期 {{ state?.summary?.expiredCount ?? 0 }} · 无到期时间 {{ state?.summary?.noExpireCount ?? 0 }}</small>
-        </div>
+      <div class="reserve-meta-line">
+        <span>本地文件：{{ state?.localReserveFileExists ? "已存在" : "不存在" }}</span>
+        <span>管理员文件：{{ state?.adminFilePath || "未配置" }}</span>
+        <span>上次同步：{{ formatDate(state?.lastImportedAt) }}</span>
+        <span>当前统计：{{ state?.summary?.memberCount ?? 0 }} 人</span>
       </div>
 
-      <div class="reserve-block">
-        <div class="reserve-block-head">
-          <h4>权限组</h4>
-          <span>{{ state?.summary?.groupCount ?? 0 }} 个</span>
-        </div>
-        <div v-if="!groupRows.length" class="reserve-empty">暂无权限组。</div>
-        <div v-else class="reserve-tags">
-          <span v-for="group in groupRows" :key="group.rawLine" class="reserve-tag">
-            <strong>{{ group.name }}</strong>
-            <small>{{ group.permission }}</small>
-          </span>
-        </div>
-      </div>
+      <div class="reserve-workspace">
+        <div class="reserve-list-panel">
+          <div class="reserve-list-head">
+            <div>
+              <h4>预留位列表</h4>
+              <p>点击任意条目查看详情和原因。</p>
+            </div>
+            <span>{{ state?.summary?.memberCount ?? 0 }} 条</span>
+          </div>
 
-      <div class="reserve-block">
-        <div class="reserve-block-head">
-          <h4>预留位列表</h4>
-          <span>{{ state?.summary?.memberCount ?? 0 }} 条</span>
-        </div>
-
-        <div class="reserve-table-wrap">
-          <table class="reserve-table">
-            <thead>
-              <tr>
-                <th>SteamID</th>
-                <th>权限组</th>
-                <th>到期时间</th>
-                <th>状态</th>
-                <th>原始行</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="member in memberRows" :key="member.rawLine">
-                <td class="mono">{{ member.steamId }}</td>
-                <td>{{ member.group }}</td>
-                <td>{{ member.expireAt ?? "未设置到期时间" }}</td>
-                <td>
+          <div v-if="!memberRows.length" class="reserve-empty">暂无预留位数据。</div>
+          <div v-else class="reserve-list-scroll">
+            <button
+              v-for="member in memberRows"
+              :key="member.rawLine"
+              type="button"
+              class="reserve-row"
+              :class="{ active: selectedMember?.rawLine === member.rawLine, expired: member.isExpired }"
+              @click="selectedSteamId = member.steamId"
+            >
+              <div class="reserve-row-main">
+                <div class="reserve-row-title">
+                  <button
+                    type="button"
+                    class="reserve-name-link"
+                    @click.stop="openPlayerDatabase(member.name || member.steamId)"
+                  >
+                    {{ member.name || "未命名玩家" }}
+                  </button>
                   <span class="reserve-pill" :class="member.isExpired ? 'expired' : (member.expireAt ? 'active' : 'empty')">
-                    {{ member.isExpired ? "已过期" : (member.expireAt ? "正常" : "未设置到期时间") }}
+                    {{ member.isExpired ? "已过期" : (member.expireAt ? "有效" : "永久") }}
                   </span>
-                </td>
-                <td class="raw-line">{{ member.rawLine }}</td>
-              </tr>
-            </tbody>
-          </table>
+                </div>
+                <div class="reserve-row-sub">
+                  <span class="mono">{{ member.steamId }}</span>
+                  <span>组: {{ member.group }}</span>
+                  <span>剩余: {{ getRemainingText(member) }}</span>
+                </div>
+              </div>
+              <div class="reserve-row-meta">
+                <span>{{ member.expireAt ?? "永久" }}</span>
+              </div>
+            </button>
+          </div>
         </div>
+
+        <aside class="reserve-detail-panel">
+          <template v-if="selectedMember">
+            <div class="reserve-detail-head">
+              <div>
+                <h4>
+                  <button
+                    type="button"
+                    class="reserve-name-link detail"
+                    @click="openPlayerDatabase(selectedMember.name || selectedMember.steamId)"
+                  >
+                    {{ selectedMember.name || "未命名玩家" }}
+                  </button>
+                </h4>
+                <p>SteamID: {{ selectedMember.steamId }}</p>
+              </div>
+            </div>
+
+            <div class="reserve-detail-grid">
+              <div class="reserve-detail-card">
+                <span class="reserve-detail-label">预留组</span>
+                <strong>{{ selectedMember.group }}</strong>
+              </div>
+              <div class="reserve-detail-card">
+                <span class="reserve-detail-label">到期时间</span>
+                <strong>{{ selectedMember.expireAt ?? "永久" }}</strong>
+              </div>
+              <div class="reserve-detail-card">
+                <span class="reserve-detail-label">剩余时间</span>
+                <strong>{{ getRemainingText(selectedMember) }}</strong>
+              </div>
+            </div>
+
+            <div class="reserve-detail-block">
+              <div class="reserve-detail-block-head">
+                <h5>添加原因</h5>
+              </div>
+              <div v-if="selectedMember.reasons.length" class="reserve-reason-tags">
+                <span v-for="reason in selectedMember.reasons" :key="reason" class="reserve-reason-tag">{{ reason }}</span>
+              </div>
+              <div v-else class="reserve-empty compact">暂无原因记录。</div>
+            </div>
+
+            <div class="reserve-detail-block">
+              <div class="reserve-detail-block-head">
+                <h5>原始备注</h5>
+              </div>
+              <p class="reserve-detail-text">{{ selectedMember.remark || "无" }}</p>
+            </div>
+          </template>
+
+          <div v-else class="reserve-detail-empty">
+            <strong>未选择条目</strong>
+            <p>从左侧列表选择一个预留位，查看姓名、原因和剩余时间。</p>
+          </div>
+        </aside>
       </div>
     </template>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import { ApiError } from "../../app/apiClient";
 import {
+  exportReserveSlotsCsv,
   fetchReserveSlotsState,
+  importReserveSlotsCsv,
   importReserveSlotsFromAdmin,
-  updateReserveSlotsConfig,
+  type ReserveSlotMember,
   type ReserveSlotsState,
 } from "../../app/reserveSlotsApi";
+import { goToPlayerDatabaseSearch } from "../../utils/player-database";
 
 const props = defineProps<{
   canEdit: boolean;
 }>();
 
 const loading = ref(false);
-const saving = ref(false);
 const importing = ref(false);
+const exporting = ref(false);
 const error = ref<string | null>(null);
 const notice = ref<string | null>(null);
 const state = ref<ReserveSlotsState | null>(null);
+const nowTick = ref(Date.now());
+const selectedSteamId = ref<string>("");
+const importInput = ref<HTMLInputElement | null>(null);
+const router = useRouter();
 
-const draft = reactive({
-  enabled: true,
-  adminFilePath: "",
-  localReserveFilePath: "data/reserve-slots.json",
-});
-
-const groupRows = computed(() => Array.isArray(state.value?.groups) ? state.value.groups : []);
 const memberRows = computed(() => Array.isArray(state.value?.members) ? state.value.members : []);
+const selectedMember = computed(() => {
+  const list = memberRows.value;
+  if (!list.length) return null;
+  return list.find((member) => member.steamId === selectedSteamId.value) ?? list[0] ?? null;
+});
 const canEdit = computed(() => Boolean(props.canEdit));
+
+let timer: ReturnType<typeof setInterval> | null = null;
 
 onMounted(() => {
   void loadState();
+  timer = setInterval(() => {
+    nowTick.value = Date.now();
+  }, 30_000);
+});
+
+onUnmounted(() => {
+  if (timer) {
+    clearInterval(timer);
+    timer = null;
+  }
 });
 
 async function loadState(force = false) {
@@ -176,38 +203,13 @@ async function loadState(force = false) {
   try {
     const next = await fetchReserveSlotsState();
     state.value = next;
-    draft.enabled = Boolean(next.enabled);
-    draft.adminFilePath = String(next.adminFilePath ?? "");
-    draft.localReserveFilePath = String(next.localReserveFilePath ?? "data/reserve-slots.json");
+    if (!selectedSteamId.value && next.members?.length) {
+      selectedSteamId.value = next.members[0].steamId;
+    }
   } catch (err) {
     error.value = renderError(err);
   } finally {
     loading.value = false;
-  }
-}
-
-async function saveSettings() {
-  if (!canEdit.value) return;
-
-  saving.value = true;
-  error.value = null;
-  notice.value = null;
-
-  try {
-    const next = await updateReserveSlotsConfig({
-      enabled: draft.enabled,
-      adminFilePath: draft.adminFilePath,
-      localReserveFilePath: draft.localReserveFilePath,
-    });
-    state.value = next;
-    draft.enabled = Boolean(next.enabled);
-    draft.adminFilePath = String(next.adminFilePath ?? "");
-    draft.localReserveFilePath = String(next.localReserveFilePath ?? "data/reserve-slots.json");
-    notice.value = next.message ?? "预留位系统设置已保存。";
-  } catch (err) {
-    error.value = renderError(err);
-  } finally {
-    saving.value = false;
   }
 }
 
@@ -221,15 +223,90 @@ async function syncFromAdmin() {
   try {
     const next = await importReserveSlotsFromAdmin();
     state.value = next;
-    draft.enabled = Boolean(next.enabled);
-    draft.adminFilePath = String(next.adminFilePath ?? "");
-    draft.localReserveFilePath = String(next.localReserveFilePath ?? "data/reserve-slots.json");
+    if (!selectedSteamId.value && next.members?.length) {
+      selectedSteamId.value = next.members[0].steamId;
+    }
     notice.value = next.message ?? "已从管理员文件同步预留位数据。";
   } catch (err) {
     error.value = renderError(err);
   } finally {
     importing.value = false;
   }
+}
+
+async function exportCsv() {
+  exporting.value = true;
+  error.value = null;
+  notice.value = null;
+
+  try {
+    const result = await exportReserveSlotsCsv();
+    const blob = new Blob([result.csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "reserve-slots.csv";
+    anchor.click();
+    URL.revokeObjectURL(url);
+    notice.value = "CSV 已导出。";
+  } catch (err) {
+    error.value = renderError(err);
+  } finally {
+    exporting.value = false;
+  }
+}
+
+function triggerImportFile() {
+  importInput.value?.click();
+}
+
+async function onImportFileChange(event: Event) {
+  const input = event.target as HTMLInputElement | null;
+  const file = input?.files?.[0] ?? null;
+  if (!file) return;
+
+  importing.value = true;
+  error.value = null;
+  notice.value = null;
+
+  try {
+    const csvText = await file.text();
+    const result = await importReserveSlotsCsv(csvText);
+    state.value = result;
+    if (!selectedSteamId.value && result.members?.length) {
+      selectedSteamId.value = result.members[0].steamId;
+    }
+    notice.value = result.message ?? "CSV 导入完成。";
+    if (input) input.value = "";
+  } catch (err) {
+    error.value = renderError(err);
+  } finally {
+    importing.value = false;
+  }
+}
+
+function openPlayerDatabase(value: string) {
+  goToPlayerDatabaseSearch(router, value);
+}
+
+function getRemainingText(member: ReserveSlotMember) {
+  if (!member.expireAt) return "永久";
+  if (member.isExpired) return "已过期";
+
+  const expireAt = Date.parse(member.expireAt);
+  if (!Number.isFinite(expireAt)) return member.expireAt;
+
+  const remaining = Math.max(0, expireAt - nowTick.value);
+  const totalSeconds = Math.floor(remaining / 1000);
+  if (totalSeconds <= 0) return "即将过期";
+
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+  if (days > 0) return `${days} 天 ${hours} 小时`;
+  if (hours > 0) return `${hours} 小时 ${minutes} 分钟`;
+  return `${minutes} 分钟`;
 }
 
 function renderError(err: unknown) {
@@ -243,14 +320,11 @@ function renderError(err: unknown) {
 }
 
 function formatDate(value: string | null | undefined) {
-  if (!value) return "未同步";
+  if (!value) return "尚未同步";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString();
 }
-defineExpose({
-  loadState,
-});
 </script>
 
 <style scoped>
@@ -259,54 +333,19 @@ defineExpose({
   gap: 12px;
 }
 
-.reserve-summary-grid {
-  display: grid;
-  gap: 10px;
-}
-
-.reserve-field {
-  display: grid;
-  gap: 6px;
-}
-
-.reserve-field label,
-.reserve-toggle strong {
-  color: var(--color-text-primary);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.reserve-field small,
-.reserve-toggle small,
-.reserve-status-card small,
-.reserve-tag small {
-  color: var(--color-text-muted);
-  font-size: 11px;
-}
-
-.reserve-input {
-  width: 100%;
-  border: 1px solid var(--color-border-default);
-  background: var(--color-bg-elevated);
-  color: var(--color-text-primary);
-  border-radius: 12px;
-  padding: 9px 10px;
-}
-
-.reserve-toggle {
+.reserve-head {
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: flex-start;
   gap: 12px;
-  border: 1px solid var(--color-border-soft);
-  background: rgba(255, 255, 255, 0.02);
-  border-radius: 14px;
-  padding: 10px 12px;
 }
 
-.reserve-toggle span {
-  display: grid;
-  gap: 2px;
+.reserve-head h3 {
+  margin: 0;
+}
+
+.reserve-head p {
+  margin: 4px 0 0;
 }
 
 .reserve-actions {
@@ -315,29 +354,41 @@ defineExpose({
   gap: 8px;
 }
 
-.reserve-action {
+.reserve-sync-btn,
+.reserve-mini-btn {
   border: 1px solid rgba(96, 165, 250, 0.28);
-  background: rgba(96, 165, 250, 0.14);
+  background: #60a5fa24;
   color: var(--color-text-primary);
   border-radius: 12px;
   padding: 8px 12px;
 }
 
-.reserve-action.secondary {
+.reserve-sync-btn.secondary {
   border-color: var(--color-border-soft);
-  background: rgba(255, 255, 255, 0.03);
+  background: #ffffff08;
 }
 
-.reserve-action:disabled {
+.reserve-sync-btn:disabled {
   opacity: 0.55;
 }
 
-.reserve-notice,
-.reserve-state-box {
+.reserve-mini-btn {
+  padding: 6px 10px;
+  flex: 0 0 auto;
+}
+
+.hidden-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.reserve-state-box,
+.reserve-notice {
   border: 1px solid var(--color-border-default);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.016)), rgba(255, 255, 255, 0.006)),
-    var(--color-bg-card);
+  background: linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.016)), #ffffff02), var(--color-bg-card);
   border-radius: 14px;
   padding: 12px 14px;
   color: var(--color-text-secondary);
@@ -351,115 +402,146 @@ defineExpose({
   color: #ffc4c4;
 }
 
-.reserve-status-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.reserve-status-card {
+.reserve-meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #ffffff05;
   border: 1px solid var(--color-border-soft);
-  background: rgba(255, 255, 255, 0.02);
-  border-radius: 14px;
-  padding: 12px;
-  display: grid;
-  gap: 4px;
-}
-
-.reserve-status-label {
   color: var(--color-text-muted);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-size: 12px;
 }
 
-.reserve-status-card strong {
-  color: var(--color-text-primary);
-  font-size: 14px;
-}
-
-.reserve-block {
+.reserve-workspace {
   display: grid;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.9fr);
+  gap: 12px;
+  min-height: 0;
+}
+
+.reserve-list-panel,
+.reserve-detail-panel {
+  min-height: 0;
   border: 1px solid var(--color-border-soft);
-  background: rgba(255, 255, 255, 0.02);
+  background: #ffffff05;
   border-radius: 16px;
   padding: 12px;
 }
 
-.reserve-block-head {
+.reserve-list-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.reserve-list-head,
+.reserve-detail-head,
+.reserve-detail-block-head {
   display: flex;
   justify-content: space-between;
   gap: 10px;
   align-items: center;
 }
 
-.reserve-block-head h4 {
+.reserve-list-head h4,
+.reserve-detail-head h4,
+.reserve-detail-block h5 {
   margin: 0;
-  font-size: 14px;
 }
 
-.reserve-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.reserve-tag {
-  display: grid;
-  gap: 2px;
-  border: 1px solid var(--color-border-soft);
-  background: rgba(255, 255, 255, 0.025);
-  border-radius: 999px;
-  padding: 8px 10px;
-  min-width: 0;
-}
-
-.reserve-tag strong {
-  color: var(--color-text-primary);
-  font-size: 12px;
-}
-
-.reserve-empty {
+.reserve-list-head p,
+.reserve-detail-head p {
+  margin: 4px 0 0;
   color: var(--color-text-muted);
   font-size: 12px;
 }
 
-.reserve-table-wrap {
+.reserve-list-scroll {
+  max-height: 58vh;
   overflow: auto;
-  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+  padding-right: 2px;
 }
 
-.reserve-table {
+.reserve-row {
   width: 100%;
-  border-collapse: collapse;
-  min-width: 720px;
+  border: 1px solid var(--color-border-soft);
+  background: #ffffff08;
+  color: inherit;
+  border-radius: 14px;
+  padding: 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
 }
 
-.reserve-table th,
-.reserve-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+.reserve-row:hover {
+  border-color: #60a5fa66;
+  background: #60a5fa14;
+}
+
+.reserve-row.active {
+  border-color: #60a5fa9c;
+  background: #60a5fa22;
+}
+
+.reserve-row.expired {
+  opacity: 0.88;
+}
+
+.reserve-row-main {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.reserve-row-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.reserve-name-link {
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-weight: 700;
+  padding: 0;
+  cursor: pointer;
   text-align: left;
-  vertical-align: top;
-  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reserve-name-link:hover {
+  color: #8fc4ff;
+}
+
+.reserve-name-link.detail {
+  font-size: 15px;
+}
+
+.reserve-row-sub,
+.reserve-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
-.reserve-table th {
-  color: var(--color-text-primary);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.reserve-table .mono {
-  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
-  white-space: nowrap;
-}
-
-.reserve-table .raw-line {
-  word-break: break-all;
+.reserve-row-meta {
+  justify-content: flex-end;
+  align-content: flex-start;
+  flex: 0 0 auto;
+  min-width: 120px;
 }
 
 .reserve-pill {
@@ -470,48 +552,136 @@ defineExpose({
   border-radius: 999px;
   font-size: 11px;
   font-weight: 700;
+  flex: 0 0 auto;
 }
 
 .reserve-pill.active {
   border: 1px solid rgba(74, 222, 128, 0.28);
-  background: rgba(74, 222, 128, 0.12);
+  background: #4ade801f;
   color: #b8f7cc;
 }
 
 .reserve-pill.expired {
   border: 1px solid rgba(248, 113, 113, 0.28);
-  background: rgba(248, 113, 113, 0.12);
+  background: #f871711f;
   color: #ffcbc9;
 }
 
 .reserve-pill.empty {
   border: 1px solid rgba(148, 163, 184, 0.24);
-  background: rgba(148, 163, 184, 0.1);
+  background: #94a3b81a;
   color: #d4dde5;
 }
 
-@media (max-width: 1100px) {
-  .reserve-status-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+.reserve-detail-panel {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.reserve-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.reserve-detail-card,
+.reserve-detail-block {
+  border: 1px solid var(--color-border-soft);
+  background: #ffffff06;
+  border-radius: 14px;
+  padding: 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.reserve-detail-label {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.reserve-detail-card strong {
+  color: var(--color-text-primary);
+}
+
+.reserve-reason-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.reserve-reason-tag {
+  border: 1px solid var(--color-border-soft);
+  background: #ffffff08;
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: var(--color-text-primary);
+  font-size: 12px;
+}
+
+.reserve-detail-text {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.reserve-empty {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  padding: 8px 0 2px;
+}
+
+.reserve-empty.compact {
+  padding: 4px 0 0;
+}
+
+.reserve-detail-empty {
+  min-height: 100%;
+  border: 1px dashed var(--color-border-soft);
+  border-radius: 14px;
+  padding: 16px;
+  display: grid;
+  gap: 6px;
+  color: var(--color-text-muted);
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Consolas, Liberation Mono, monospace;
+}
+
+@media (max-width: 980px) {
+  .reserve-workspace {
+    grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 760px) {
-  .reserve-status-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .reserve-toggle {
+  .reserve-head,
+  .reserve-state-box.error {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .reserve-actions {
+  .reserve-actions,
+  .reserve-sync-btn,
+  .reserve-mini-btn {
+    width: 100%;
+  }
+
+  .reserve-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .reserve-row {
     flex-direction: column;
   }
 
-  .reserve-action {
-    width: 100%;
+  .reserve-row-meta {
+    justify-content: flex-start;
+    min-width: 0;
   }
 }
 </style>

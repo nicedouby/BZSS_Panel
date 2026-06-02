@@ -288,6 +288,7 @@ export class WebServer {
       url,
       req,
       user,
+      readTextBody: (request) => this.readTextBody(request),
       readJsonBody: (request) => this.readJsonBody(request),
       json: (status, obj, extraHeaders = {}) => this.json(res, status, obj, extraHeaders),
     });
@@ -1916,6 +1917,17 @@ export class WebServer {
   }
 
   async readJsonBody(req) {
+    const text = (await this.readTextBody(req)).trim();
+    if (!text) return {};
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw createHttpError(400, "InvalidJson", "Request body must be valid JSON.");
+    }
+  }
+
+  async readTextBody(req) {
     const chunks = [];
     let totalLength = 0;
 
@@ -1928,14 +1940,7 @@ export class WebServer {
       chunks.push(buffer);
     }
 
-    const text = Buffer.concat(chunks, totalLength).toString("utf8").trim();
-    if (!text) return {};
-
-    try {
-      return JSON.parse(text);
-    } catch {
-      throw createHttpError(400, "InvalidJson", "Request body must be valid JSON.");
-    }
+    return Buffer.concat(chunks, totalLength).toString("utf8");
   }
 
   getMatchOverviewFromRuntime() {

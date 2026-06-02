@@ -9,7 +9,9 @@ export interface ReserveSlotGroup {
 export interface ReserveSlotMember {
   steamId: string;
   group: string;
+  name: string;
   expireAt: string | null;
+  reasons: string[];
   remark: string;
   rawLine: string;
   isExpired: boolean;
@@ -76,4 +78,41 @@ export async function updateReserveSlotsConfig(payload: UpdateReserveSlotsPayloa
       body: JSON.stringify(payload),
     },
   );
+}
+
+export async function exportReserveSlotsCsv() {
+  const response = await fetch("/api/reserve-slots/export-csv", {
+    method: "GET",
+    cache: "no-store",
+    credentials: "include",
+  });
+
+  const body = await response.json().catch(() => null as any);
+  if (!response.ok) {
+    throw new Error(body?.message || body?.error || `Request failed (${response.status})`);
+  }
+
+  return {
+    csv: String(body?.csv ?? ""),
+    message: String(body?.message ?? ""),
+  };
+}
+
+export async function importReserveSlotsCsv(csvText: string) {
+  const response = await fetch("/api/reserve-slots/import-csv", {
+    method: "POST",
+    cache: "no-store",
+    credentials: "include",
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+    },
+    body: csvText,
+  });
+
+  const body = await response.json().catch(() => null as any);
+  if (!response.ok) {
+    throw new Error(body?.message || body?.error || `Request failed (${response.status})`);
+  }
+
+  return body as ReserveSlotsState & { success: boolean; message?: string };
 }

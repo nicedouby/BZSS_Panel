@@ -98,6 +98,7 @@
     playerDatabase: "Player Database",
     reserveSlots: "Reserve Slots",
     combatManager: "Combat Manager",
+    combatLog: "Combat Log",
     combatClean: "Combat Manager",
     killManage: "Combat Manager",
     adminWarns: "Broadcast Module",

@@ -8,7 +8,7 @@ const DEFAULT_LOCAL_RESERVE_FILE = "data/reserve-slots.json";
 const DEFAULT_STORE_VERSION = 1;
 const RESERVE_MARKER_RE = /\/\/\s*预留位/;
 
-export function createReserveSlotsModule({ core, config, logger }) {
+export function createReserveSlotsModule({ core, modules, config, logger }) {
   const moduleLogger =
     logger ??
     core.createLogger?.({
@@ -41,6 +41,14 @@ export function createReserveSlotsModule({ core, config, logger }) {
 
     async importFromAdminFile() {
       return await importReserveSlotsFromAdminFile();
+    },
+
+    async exportCsv() {
+      return await exportReserveSlotsCsv();
+    },
+
+    async importFromCsv(csvText = "") {
+      return await importReserveSlotsFromCsv(csvText);
     },
 
     async reload() {
@@ -152,10 +160,15 @@ export function createReserveSlotsModule({ core, config, logger }) {
         adminFilePath,
         importedAt,
         logger: moduleLogger,
+        runtimeState: core?.runtimeState,
       });
 
       parsed.source.adminFilePath = adminFilePath;
       parsed.source.lastImportedAt = importedAt;
+      parsed.members = await enrichMembersWithLinkedNames(parsed.members, {
+        playerDatabase: modules?.playerDatabase,
+        runtimeState: core?.runtimeState,
+      });
 
       await persistStore(runtime.resolvedLocalReserveFilePath, parsed);
       runtime.store = parsed;
@@ -182,7 +195,42 @@ export function createReserveSlotsModule({ core, config, logger }) {
     }
   }
 
-  async function buildState(extra = {}) {
+  async function exportReserveSlotsCsv() {
+    const state = await buildState();
+    const rows = Array.isArray(state.members) ? state.members : [];
+    return serializeReserveSlotsCsv(rows);
+  }
+
+  async function importReserveSlotsFromCsv(csvText = "") {
+    const currentLocalStore = await loadStoreFromDisk({ repair: true });
+    const parsed = parseReserveSlotsFromCsvContent(csvText, {
+      adminFilePath: runtime.config.adminFilePath,
+      logger: moduleLogger,
+    });
+    if (!parsed.members.length && !parsed.groups.length) {
+      return buildState({
+        message: "CSV 中没有可导入的预留位数据。",
+        localStore: currentLocalStore,
+      });
+    }
+
+    const importedAt = new Date().toISOString();
+    parsed.source.adminFilePath = runtime.config.adminFilePath;
+    parsed.source.lastImportedAt = importedAt;
+    parsed.members = await enrichMembersWithLinkedNames(parsed.members, {
+      playerDatabase: modules?.playerDatabase,
+      runtimeState: core?.runtimeState,
+    });
+
+    await persistStore(runtime.resolvedLocalReserveFilePath, parsed);
+    runtime.store = parsed;
+    runtime.loadedAt = importedAt;
+    return buildState({
+      message: "CSV 导入完成。",
+    });
+  }
+
+async function buildState(extra = {}) {
     refreshConfigFromRuntime();
     const [adminFileExists, localReserveFileExists] = await Promise.all([
       pathExists(runtime.config.adminFilePath ? resolveConfigPath(runtime.config.adminFilePath, "") : ""),
@@ -190,6 +238,10 @@ export function createReserveSlotsModule({ core, config, logger }) {
     ]);
 
     const store = runtime.store ?? createEmptyStore(runtime.config.adminFilePath);
+    const members = await enrichMembersWithLinkedNames(store.members ?? [], {
+      playerDatabase: modules?.playerDatabase,
+      runtimeState: core?.runtimeState,
+    });
 
     return {
       ok: true,
@@ -201,8 +253,8 @@ export function createReserveSlotsModule({ core, config, logger }) {
       lastImportedAt: store.source?.lastImportedAt ?? null,
       source: cloneValue(store.source ?? { adminFilePath: runtime.config.adminFilePath, lastImportedAt: null }),
       groups: cloneValue(store.groups ?? []),
-      members: cloneValue(store.members ?? []),
-      summary: buildSummary(store),
+      members: cloneValue(members),
+      summary: buildSummary({ ...store, members }),
       loadedAt: runtime.loadedAt,
       ...extra,
     };
@@ -292,6 +344,7 @@ export function parseReserveSlotsFromAdminFileContent(content, options = {}) {
     members,
   }, {
     adminFilePath,
+    runtimeState: options.runtimeState ?? null,
   });
 }
 
@@ -323,13 +376,15 @@ function parseReserveMemberLine(line) {
   const group = head.slice(separatorIndex + 1).trim();
   if (!steamId || !group) return null;
 
-  const { expireAt, remark } = parseReserveComment(commentTail);
+  const { expireAt, name, reasons, remark } = parseReserveComment(commentTail);
   const expireDate = parseReserveDate(expireAt);
 
   return {
     steamId,
     group,
+    name,
     expireAt: expireAt || null,
+    reasons,
     remark,
     rawLine: content,
     isExpired: Boolean(expireDate && expireDate.getTime() < Date.now()),
@@ -341,28 +396,41 @@ function parseReserveComment(commentText) {
   if (!text) {
     return {
       expireAt: null,
+      name: "",
+      reasons: [],
       remark: "",
     };
   }
 
   const localDateMatch = text.match(/^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})(?:\s+(.*))?$/);
   if (localDateMatch) {
+    const payload = String(localDateMatch[2] ?? "").trim();
     return {
       expireAt: localDateMatch[1],
-      remark: String(localDateMatch[2] ?? "").trim(),
+      name: "",
+      reasons: splitReserveReasons(payload),
+      remark: payload,
     };
   }
 
   const isoDateMatch = text.match(/^(\d{4}-\d{2}-\d{2}T[^\s]+)(?:\s+(.*))?$/);
   if (isoDateMatch) {
+    const payload = String(isoDateMatch[2] ?? "").trim();
     return {
       expireAt: isoDateMatch[1],
-      remark: String(isoDateMatch[2] ?? "").trim(),
+      name: "",
+      reasons: splitReserveReasons(payload),
+      remark: payload,
     };
   }
 
+  const named = parseReserveNamedComment(text);
+  if (named) return named;
+
   return {
     expireAt: null,
+    name: "",
+    reasons: splitReserveReasons(text),
     remark: text,
   };
 }
@@ -420,12 +488,16 @@ function normalizeMember(member) {
     ? null
     : String(member.expireAt).trim();
   const parsedExpireAt = parseReserveDate(expireAt);
+  const reasons = normalizeReasons(member.reasons ?? member.reason ?? member.remark ?? []);
+  const name = String(member.name ?? "").trim();
 
   return {
     steamId,
     group,
+    name,
     expireAt,
-    remark: String(member.remark ?? "").trim(),
+    reasons,
+    remark: String(member.remark ?? reasons.join("；")).trim(),
     rawLine,
     isExpired: Boolean(parsedExpireAt && parsedExpireAt.getTime() < Date.now()),
   };
@@ -455,6 +527,231 @@ function buildSummary(store) {
     expiredCount,
     noExpireCount,
     activeCount: Math.max(0, members.length - expiredCount),
+  };
+}
+
+async function enrichMembersWithLinkedNames(members = [], { playerDatabase = null, runtimeState = null } = {}) {
+  const list = Array.isArray(members) ? members : [];
+  const steamIDs = [...new Set(list.map((member) => String(member?.steamId ?? "").trim()).filter(Boolean))];
+  const bySteamID = new Map();
+
+  if (steamIDs.length && playerDatabase?.listPlayersBySteamIDs) {
+    try {
+      const rows = await playerDatabase.listPlayersBySteamIDs(steamIDs);
+      for (const row of Array.isArray(rows) ? rows : []) {
+        const steamID = String(row?.steam_id ?? row?.steamID ?? row?.steam64 ?? "").trim();
+        const name = String(row?.current_name ?? row?.name ?? "").trim();
+        if (steamID && name) bySteamID.set(steamID, name);
+      }
+    } catch {}
+  }
+
+  const runtimeBySteamID = runtimeState?.getPlayers?.()?.bySteamID ?? {};
+  return list.map((member) => {
+    const currentName = String(member?.name ?? "").trim();
+    if (currentName) return member;
+
+    const steamId = String(member?.steamId ?? "").trim();
+    const dbName = bySteamID.get(steamId) || "";
+    const runtimeName = String(runtimeBySteamID?.[steamId]?.name ?? "").trim();
+    const name = dbName || runtimeName;
+    if (!name) return member;
+
+    return {
+      ...member,
+      name,
+    };
+  });
+}
+
+function splitReserveReasons(text) {
+  const value = String(text ?? "").trim();
+  if (!value) return [];
+
+  return value
+    .split(/[|;,，、\/]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeReasons(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item ?? "").trim()).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return splitReserveReasons(value);
+  }
+  return [];
+}
+
+function serializeReserveSlotsCsv(members = []) {
+  const rows = Array.isArray(members) ? members : [];
+  const header = ["steamId", "name", "group", "expireAt", "reasons", "remark", "isExpired"];
+  const lines = [header.join(",")];
+
+  for (const member of rows) {
+    lines.push([
+      csvEscape(member?.steamId ?? ""),
+      csvEscape(member?.name ?? ""),
+      csvEscape(member?.group ?? ""),
+      csvEscape(member?.expireAt ?? ""),
+      csvEscape(Array.isArray(member?.reasons) ? member.reasons.join(" | ") : ""),
+      csvEscape(member?.remark ?? ""),
+      csvEscape(Boolean(member?.isExpired) ? "true" : "false"),
+    ].join(","));
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
+function parseReserveSlotsFromCsvContent(csvText, options = {}) {
+  const text = String(csvText ?? "").replace(/^\uFEFF/, "").trim();
+  if (!text) {
+    return createEmptyStore(String(options.adminFilePath ?? ""));
+  }
+
+  const rows = parseCsvRows(text);
+  if (!rows.length) {
+    return createEmptyStore(String(options.adminFilePath ?? ""));
+  }
+
+  const header = rows[0].map((item) => String(item ?? "").trim());
+  const indexOf = (name) => header.findIndex((item) => item === name);
+  const steamIdIndex = indexOf("steamId");
+  const nameIndex = indexOf("name");
+  const groupIndex = indexOf("group");
+  const expireAtIndex = indexOf("expireAt");
+  const reasonsIndex = indexOf("reasons");
+  const remarkIndex = indexOf("remark");
+
+  if (steamIdIndex < 0 || groupIndex < 0) {
+    options.logger?.warn?.("[ReserveSlots] CSV 缺少 steamId/group 列，返回空列表。");
+    return createEmptyStore(String(options.adminFilePath ?? ""));
+  }
+
+  const members = [];
+  for (const row of rows.slice(1)) {
+    const steamId = String(row[steamIdIndex] ?? "").trim();
+    const group = String(row[groupIndex] ?? "").trim();
+    if (!steamId || !group) continue;
+
+    const name = nameIndex >= 0 ? String(row[nameIndex] ?? "").trim() : "";
+    const expireAt = expireAtIndex >= 0 ? String(row[expireAtIndex] ?? "").trim() : "";
+    const reasonsRaw = reasonsIndex >= 0 ? String(row[reasonsIndex] ?? "").trim() : "";
+    const remark = remarkIndex >= 0 ? String(row[remarkIndex] ?? "").trim() : "";
+    const reasons = normalizeReasons(reasonsRaw);
+    const parsedExpireAt = parseReserveDate(expireAt);
+
+    members.push({
+      steamId,
+      name,
+      group,
+      expireAt: expireAt || null,
+      reasons,
+      remark: remark || reasons.join("；"),
+      rawLine: `CSV:${steamId}:${group}`,
+      isExpired: Boolean(parsedExpireAt && parsedExpireAt.getTime() < Date.now()),
+    });
+  }
+
+  return normalizeStore({
+    version: DEFAULT_STORE_VERSION,
+    source: {
+      adminFilePath: String(options.adminFilePath ?? "").trim(),
+      lastImportedAt: options.importedAt ?? null,
+    },
+    groups: [],
+    members,
+  }, {
+    adminFilePath: String(options.adminFilePath ?? "").trim(),
+  });
+}
+
+function parseCsvRows(text) {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let inQuotes = false;
+
+  const pushCell = () => {
+    row.push(cell);
+    cell = "";
+  };
+
+  const pushRow = () => {
+    if (row.length || cell.length) {
+      pushCell();
+      rows.push(row);
+      row = [];
+    }
+  };
+
+  const input = String(text ?? "");
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index];
+    const next = input[index + 1];
+
+    if (inQuotes) {
+      if (char === '"' && next === '"') {
+        cell += '"';
+        index += 1;
+        continue;
+      }
+      if (char === '"') {
+        inQuotes = false;
+        continue;
+      }
+      cell += char;
+      continue;
+    }
+
+    if (char === '"') {
+      inQuotes = true;
+      continue;
+    }
+
+    if (char === ",") {
+      pushCell();
+      continue;
+    }
+
+    if (char === "\r") {
+      continue;
+    }
+
+    if (char === "\n") {
+      pushRow();
+      continue;
+    }
+
+    cell += char;
+  }
+
+  if (cell.length || row.length) {
+    pushRow();
+  }
+
+  return rows.filter((entry) => Array.isArray(entry) && entry.some((item) => String(item ?? "").trim() !== ""));
+}
+
+function csvEscape(value) {
+  const text = String(value ?? "");
+  if (!/[,"\n\r]/.test(text)) return text;
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function parseReserveNamedComment(text) {
+  const parts = splitReserveReasons(text);
+  const namePart = parts.find((item) => /^(name|昵称|名称)\s*[:=]/i.test(item));
+  const reasonParts = parts.filter((item) => !/^(name|昵称|名称)\s*[:=]/i.test(item));
+  if (!namePart && !reasonParts.length) return null;
+
+  const name = namePart ? String(namePart.split(/[:=]/, 2)[1] ?? "").trim() : "";
+  return {
+    expireAt: null,
+    name,
+    reasons: reasonParts.length ? reasonParts : (name ? [] : parts),
+    remark: text,
   };
 }
 
