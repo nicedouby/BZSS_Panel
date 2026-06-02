@@ -2,7 +2,13 @@
   <Teleport to="body">
     <Transition :name="transitionName">
       <div v-if="open && props.player" :class="rootClass" @click.self="close">
-        <aside :class="panelClass" :style="panelStyle">
+        <aside
+          :class="panelClass"
+          :style="panelStyle"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="props.player.name || t('player.player')"
+        >
           <header class="drawer-header">
             <div class="drawer-header-content">
               <h2 class="drawer-player-name">{{ props.player.name }}</h2>
@@ -79,25 +85,25 @@
             <section class="detail-section combat-card">
               <div class="detail-section-title">{{ t("player.combatStats", "战绩") }}</div>
               <div class="combat-stats-grid">
-                <div class="stat-item">
-                  <span class="stat-label">{{ t("combat.kills", "击杀") }}</span>
-                  <strong class="stat-value">{{ props.player.combatStats.kills }}</strong>
-                </div>
-                <div class="stat-item">
+                <div class="stat-item combat-stat combat-stat--downs">
                   <span class="stat-label">{{ t("combat.downs", "击倒") }}</span>
-                  <strong class="stat-value">{{ props.player.combatStats.downs }}</strong>
+                  <strong class="stat-value combat-stat-value">{{ props.player.combatStats.downs }}</strong>
                 </div>
-                <div class="stat-item">
+                <div class="stat-item combat-stat combat-stat--kills">
+                  <span class="stat-label">{{ t("combat.kills", "击杀") }}</span>
+                  <strong class="stat-value combat-stat-value">{{ props.player.combatStats.kills }}</strong>
+                </div>
+                <div class="stat-item combat-stat combat-stat--deaths">
                   <span class="stat-label">{{ t("combat.death", "死亡") }}</span>
-                  <strong class="stat-value">{{ props.player.combatStats.deaths }}</strong>
+                  <strong class="stat-value combat-stat-value">{{ props.player.combatStats.deaths }}</strong>
                 </div>
-                <div class="stat-item">
+                <div class="stat-item combat-stat combat-stat--tk">
                   <span class="stat-label">{{ t("combat.teamKill", "TK") }}</span>
-                  <strong class="stat-value">{{ props.player.combatStats.tk }}</strong>
+                  <strong class="stat-value combat-stat-value">{{ props.player.combatStats.tk }}</strong>
                 </div>
-                <div class="stat-item">
+                <div class="stat-item combat-stat combat-stat--revives">
                   <span class="stat-label">{{ t("combat.revive", "复苏") }}</span>
-                  <strong class="stat-value">{{ props.player.combatStats.revives }}</strong>
+                  <strong class="stat-value combat-stat-value">{{ props.player.combatStats.revives }}</strong>
                 </div>
               </div>
               <div class="combat-stats-label">{{ props.player.statsLabel }}</div>
@@ -251,10 +257,43 @@ const panelClass = computed(() => ({
 }));
 const panelStyle = computed(() => {
   if (!isFloating.value) return undefined;
+
+  const margin = 12;
+  const compactViewport = viewport.value.width < 920 || viewport.value.height < 760;
+  if (compactViewport) {
+    return {
+      left: "12px",
+      top: "12px",
+      width: "calc(100vw - 24px)",
+      maxHeight: "calc(100vh - 24px)",
+      transform: "none",
+    };
+  }
+
+  const anchorX = Number.isFinite(Number(props.anchorX)) ? Number(props.anchorX) : viewport.value.width / 2;
+  const anchorY = Number.isFinite(Number(props.anchorY)) ? Number(props.anchorY) : viewport.value.height / 2;
+  const panelWidth = Math.min(480, Math.max(380, Math.round(viewport.value.width * 0.34)));
+  const estimatedHeight = Math.min(680, Math.max(360, viewport.value.height - 48));
+
+  let left = anchorX + 16;
+  let top = anchorY + 16;
+
+  if (left + panelWidth > viewport.value.width - margin) {
+    left = Math.max(margin, viewport.value.width - panelWidth - margin);
+  }
+  if (top + estimatedHeight > viewport.value.height - margin) {
+    top = Math.max(margin, viewport.value.height - estimatedHeight - margin);
+  }
+
+  left = Math.max(margin, left);
+  top = Math.max(margin, top);
+
   return {
-    left: "50%",
-    top: "50%",
-    transform: "translate(-50%, -50%)",
+    left: `${left}px`,
+    top: `${top}px`,
+    width: `${panelWidth}px`,
+    maxHeight: `${Math.max(320, viewport.value.height - 48)}px`,
+    transform: "none",
   };
 });
 const showAdvanced = ref(false);
@@ -491,7 +530,11 @@ onUnmounted(() => {
   position: fixed;
   inset: 0;
   z-index: calc(var(--z-player-drawer) + 1);
-  background: rgba(8, 12, 16, 0.18);
+  background:
+    radial-gradient(circle at 20% 18%, rgba(96, 165, 250, 0.14), transparent 28%),
+    radial-gradient(circle at 80% 10%, rgba(34, 197, 94, 0.08), transparent 26%),
+    rgba(8, 12, 16, 0.42);
+  backdrop-filter: blur(6px);
 }
 
 .player-detail-drawer {
@@ -509,19 +552,23 @@ onUnmounted(() => {
 
 .player-detail-floating {
   position: fixed;
-  width: min(460px, calc(100vw - 24px));
-  max-height: calc(100vh - 48px);
+  width: min(480px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
   overflow: hidden;
   border-radius: 18px;
   left: 12px;
   top: 12px;
   right: auto;
   bottom: auto;
-  background: var(--color-bg-panel);
-  border: 1px solid var(--color-border-default);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.01)), rgba(255, 255, 255, 0.006)),
+    var(--color-bg-panel);
+  border: 1px solid var(--color-border-highlight);
   display: grid;
   grid-template-rows: auto 1fr;
-  box-shadow: var(--shadow-lg);
+  box-shadow:
+    0 24px 72px rgba(0, 0, 0, 0.38),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset;
   backdrop-filter: blur(18px);
 }
 
@@ -605,6 +652,7 @@ onUnmounted(() => {
   overflow-y: auto;
   display: grid;
   gap: var(--spacing-lg);
+  overscroll-behavior: contain;
 }
 
 .detail-notice {
@@ -624,6 +672,22 @@ onUnmounted(() => {
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border-soft);
   background: var(--color-bg-card);
+}
+
+.drawer-body::-webkit-scrollbar {
+  width: 10px;
+}
+
+.drawer-body::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background: rgba(148, 163, 184, 0.28);
+  background-clip: content-box;
+}
+
+.drawer-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.42);
+  background-clip: content-box;
 }
 
 /* 1. IDENTITY HERO */
@@ -671,6 +735,54 @@ onUnmounted(() => {
   gap: 12px;
 }
 
+.combat-stat {
+  position: relative;
+  overflow: hidden;
+  padding: 12px 12px 11px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.45), rgba(15, 23, 42, 0.3));
+}
+
+.combat-stat::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  border-radius: 14px 0 0 14px;
+  background: var(--combat-accent, rgba(148, 163, 184, 0.5));
+}
+
+.combat-stat--downs {
+  --combat-accent: #60a5fa;
+  border-color: rgba(96, 165, 250, 0.22);
+  background: linear-gradient(180deg, rgba(96, 165, 250, 0.11), rgba(15, 23, 42, 0.32));
+}
+
+.combat-stat--kills {
+  --combat-accent: #f472b6;
+  border-color: rgba(244, 114, 182, 0.22);
+  background: linear-gradient(180deg, rgba(244, 114, 182, 0.11), rgba(15, 23, 42, 0.32));
+}
+
+.combat-stat--deaths {
+  --combat-accent: #f87171;
+  border-color: rgba(248, 113, 113, 0.22);
+  background: linear-gradient(180deg, rgba(248, 113, 113, 0.11), rgba(15, 23, 42, 0.32));
+}
+
+.combat-stat--tk {
+  --combat-accent: #fb7185;
+  border-color: rgba(251, 113, 133, 0.24);
+  background: linear-gradient(180deg, rgba(127, 29, 29, 0.36), rgba(15, 23, 42, 0.32));
+}
+
+.combat-stat--revives {
+  --combat-accent: #34d399;
+  border-color: rgba(52, 211, 153, 0.22);
+  background: linear-gradient(180deg, rgba(52, 211, 153, 0.11), rgba(15, 23, 42, 0.32));
+}
+
 .combat-stats-label {
   margin-top: 4px;
   color: var(--color-text-secondary);
@@ -688,13 +800,19 @@ onUnmounted(() => {
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  color: var(--color-text-muted);
+  color: var(--combat-accent, var(--color-text-muted));
+  opacity: 0.85;
   letter-spacing: 0.05em;
 }
 
 .stat-value {
   font-size: 14px;
-  color: var(--color-text-primary);
+  color: var(--combat-accent, var(--color-text-primary));
+}
+
+.combat-stat-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
 }
 
 .stat-value.team1 { color: var(--color-team1-primary); }
@@ -741,6 +859,14 @@ onUnmounted(() => {
   letter-spacing: 0.06em;
   color: var(--color-text-muted);
   margin-bottom: 4px;
+}
+
+.advanced-toggle {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
 }
 
 .player-actions-grid {
@@ -817,14 +943,6 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
-.advanced-toggle {
-  background: transparent;
-  border: 0;
-  padding: 0;
-  text-align: left;
-  cursor: pointer;
-}
-
 .detail-rows {
   display: grid;
   gap: var(--spacing-sm);
@@ -848,7 +966,7 @@ onUnmounted(() => {
   font-size: 11px;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 900px), (max-height: 760px) {
   .player-detail-drawer {
     width: 100vw;
   }

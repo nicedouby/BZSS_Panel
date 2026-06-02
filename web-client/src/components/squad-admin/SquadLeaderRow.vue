@@ -24,9 +24,7 @@
         <StatusBadge tone="ok">{{ t("match.squadLeader") }}</StatusBadge>
       </div>
       <div class="leader-meta">
-        <span v-if="player.squadId != null" class="player-squad-badge">#{{ player.squadId }}</span>
         <span class="leader-role">{{ displayRole(player.role) }}</span>
-        <span class="leader-id">{{ t("field.id") }} {{ player.playerId ?? "-" }}</span>
       </div>
       <div class="leader-combat-stats">
         {{ player.statsLabel }}
@@ -221,37 +219,20 @@ function displayRole(role: string | null | undefined) {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   flex-wrap: wrap;
+  padding-left: 30px;
 }
 
 .leader-combat-stats {
   color: var(--color-text-secondary);
   font-size: 11px;
   line-height: 1.3;
+  padding-left: 30px;
 }
 
 .leader-role {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.leader-id {
-  white-space: nowrap;
-}
-
-.player-squad-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 15px;
-  padding: 0 4px;
-  border-radius: 3px;
-  font-size: 10px;
-  font-weight: 800;
-  color: #fff;
-  background-color: var(--color-status-info);
-  opacity: 0.9;
 }
 
 .leader-playtime {

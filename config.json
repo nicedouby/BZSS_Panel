@@ -311,6 +311,11 @@
       }
     ]
   },
+  "reserveSystem": {
+    "enabled": true,
+    "adminFilePath": "Z:\\Users\\Administrator\\Desktop\\bzss_sq_server\\SquadGame\\ServerConfig\\Admins.cfg",
+    "localReserveFilePath": "data/reserve-slots.json"
+  },
   "pythonLogParser": {
     "enabled": true,
     "pythonExecutable": "python",

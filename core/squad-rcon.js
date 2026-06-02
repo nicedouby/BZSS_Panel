@@ -346,7 +346,9 @@ function parseMapJson(text) {
 }
 
 function cleanMapValue(value) {
-  const text = String(value ?? "").trim();
+  const text = String(value ?? "")
+    .trim()
+    .replace(/^#\d+\s+/, "");
   return text || null;
 }
 

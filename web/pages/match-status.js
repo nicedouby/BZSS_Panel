@@ -435,7 +435,13 @@ function openPlayerRealtimeWindow(player, { apiFetch, onNavigate, onRefresh } = 
           <div><span>Player ID</span><strong>${esc(player.playerID ?? "N/A")}</strong></div>
           <div><span>Team</span><strong>${esc(teamValue)}</strong></div>
           <div><span>Squad</span><strong>${esc(squadValue)}</strong></div>
-          <div><span>K / 击倒 / 死亡</span><strong>${stats.kills} / ${stats.downs} / ${stats.deaths}</strong></div>
+          <div class="bzss-player-combat-detail-stats" style="grid-column: 1 / -1;">
+            <span class="wound">击倒 ${stats.downs}</span>
+            <span class="kill">击杀 ${stats.kills}</span>
+            <span class="death">死亡 ${stats.deaths}</span>
+            <span class="tk">TK ${stats.tk}</span>
+            <span class="revive">复苏 ${stats.revives}</span>
+          </div>
           <div><span>Steam Squad 时长</span><strong id="player-playtime-value">${esc(formatPlaytime(player))}</strong></div>
           <div><span>最后出现</span><strong>${esc(player.lastSeenTime || "未知")}</strong></div>
         </div>
@@ -1198,7 +1204,8 @@ function createFloatingPlayerWindowState(player, { squad = null, team = null, an
     roleLabel: String(player?.role || player?.class || "未知角色"),
     playtimeLabel: formatPlaytime(player),
     lastSeenLabel: String(player?.lastSeenTime || player?.lastSeen || player?.updatedAt || "未知"),
-    statsLabel: `K ${stats.kills} / D ${stats.downs} / 死亡 ${stats.deaths}`,
+    combatStats: stats,
+    statsLabel: `击倒 ${stats.downs} / 击杀 ${stats.kills} / 死亡 ${stats.deaths} / TK ${stats.tk} / 复苏 ${stats.revives}`,
     historyEntryLabel: "打开玩家数据库",
     playtimeStatus: "Steam 时长刷新会写入本地时长缓存，并同步玩家档案。",
     squadSubtitle: "当前玩家所属小队",
@@ -1217,7 +1224,8 @@ function createFloatingPlayerWindowState(player, { squad = null, team = null, an
         squadLabel: member._resolvedUnassigned ? "未编队" : `#${member._resolvedSquadID}`,
         roleLabel: String(member.role || "未知角色"),
         stateLabel: formatState(member.state),
-        statsLabel: `K ${memberStats.kills} / D ${memberStats.downs} / 死亡 ${memberStats.deaths}`,
+        combatStats: memberStats,
+        statsLabel: `击倒 ${memberStats.downs} / 击杀 ${memberStats.kills} / 死亡 ${memberStats.deaths} / TK ${memberStats.tk} / 复苏 ${memberStats.revives}`,
       };
     }),
   };

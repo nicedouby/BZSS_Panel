@@ -2,6 +2,7 @@
 
 export function renderPlayerDetailContent(viewModel = {}) {
   const squads = Array.isArray(viewModel.squadMembers) ? viewModel.squadMembers : [];
+
   return `
     <div class="floating-player-window__body-inner">
       ${viewModel.missingNotice ? `
@@ -16,7 +17,7 @@ export function renderPlayerDetailContent(viewModel = {}) {
             <div class="floating-player-window__eyebrow">玩家详情</div>
             <div class="floating-player-window__title">${esc(viewModel.playerName || "未知玩家")}</div>
             <div class="floating-player-window__subtitle">
-              ${esc(viewModel.playerSubtitle || "对局状态玩家详情")}
+              ${esc(viewModel.playerSubtitle || "当前玩家状态与身份信息")}
             </div>
           </div>
           <div class="floating-player-window__badge-row">
@@ -36,7 +37,7 @@ export function renderPlayerDetailContent(viewModel = {}) {
           ${renderField("职位 / 兵种", viewModel.roleLabel)}
           ${renderField("游戏时长", viewModel.playtimeLabel, "", "player-playtime-value")}
           ${renderField("最近可见", viewModel.lastSeenLabel)}
-          ${renderField("K / D / Death", viewModel.statsLabel)}
+          ${renderCombatStats(viewModel.combatStats, viewModel.statsLabel)}
           ${renderField("玩家历史入口", viewModel.historyEntryLabel)}
         </div>
       </section>
@@ -45,7 +46,7 @@ export function renderPlayerDetailContent(viewModel = {}) {
         <div class="floating-player-window__section-head">
           <div>
             <div class="floating-player-window__eyebrow">管理操作</div>
-            <div class="floating-player-window__subtitle">复制、警告、踢出、移出小队、跳转历史记录</div>
+            <div class="floating-player-window__subtitle">复制、警告、踢出、移出小队、跳边、跳转数据库</div>
           </div>
         </div>
 
@@ -74,7 +75,7 @@ export function renderPlayerDetailContent(viewModel = {}) {
         <div class="floating-player-window__grid">
           ${renderField("小队名称", viewModel.squadName)}
           ${renderField("小队状态", viewModel.squadStateLabel)}
-          ${renderField("创建人", viewModel.squadCreatorLabel)}
+          ${renderField("创建者", viewModel.squadCreatorLabel)}
           ${renderField("成员数量", viewModel.squadSizeLabel)}
         </div>
 
@@ -125,6 +126,33 @@ function renderField(label, value, className = "", valueId = "") {
   `;
 }
 
+function renderCombatStats(stats, fallbackText = "") {
+  const safeStats = stats && typeof stats === "object" ? stats : null;
+  if (!safeStats) {
+    return renderField("战绩", fallbackText || "—");
+  }
+
+  return `
+    <div class="floating-player-window__combat-stats">
+      ${renderCombatStat("downs", "击倒", safeStats.downs)}
+      ${renderCombatStat("kills", "击杀", safeStats.kills)}
+      ${renderCombatStat("deaths", "死亡", safeStats.deaths)}
+      ${renderCombatStat("tk", "TK", safeStats.tk)}
+      ${renderCombatStat("revives", "复苏", safeStats.revives)}
+    </div>
+  `;
+}
+
+function renderCombatStat(kind, label, value) {
+  const numericValue = Number(value ?? 0);
+  return `
+    <span class="floating-player-window__combat-stat floating-player-window__combat-stat--${esc(kind)}">
+      <span>${esc(label)}</span>
+      <strong>${esc(numericValue)}</strong>
+    </span>
+  `;
+}
+
 function renderMember(member = {}, index = 0) {
   return `
     <button type="button" class="floating-player-window__member" data-floating-member-index="${index}">
@@ -137,7 +165,17 @@ function renderMember(member = {}, index = 0) {
         ${member.squadLabel ? `<span>${esc(member.squadLabel)}</span>` : ""}
         ${member.roleLabel ? `<span>${esc(member.roleLabel)}</span>` : ""}
         ${member.stateLabel ? `<span>${esc(member.stateLabel)}</span>` : ""}
-        ${member.statsLabel ? `<span>${esc(member.statsLabel)}</span>` : ""}
+        ${member.combatStats
+          ? `
+            <div class="floating-player-window__member-stats">
+              ${renderCombatStat("downs", "击倒", member.combatStats.downs)}
+              ${renderCombatStat("kills", "击杀", member.combatStats.kills)}
+              ${renderCombatStat("deaths", "死亡", member.combatStats.deaths)}
+              ${renderCombatStat("tk", "TK", member.combatStats.tk)}
+              ${renderCombatStat("revives", "复苏", member.combatStats.revives)}
+            </div>
+          `
+          : (member.statsLabel ? `<span>${esc(member.statsLabel)}</span>` : "")}
       </div>
     </button>
   `;

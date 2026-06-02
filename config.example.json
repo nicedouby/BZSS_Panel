@@ -179,6 +179,11 @@
       }
     ]
   },
+  "reserveSystem": {
+    "enabled": true,
+    "adminFilePath": "",
+    "localReserveFilePath": "data/reserve-slots.json"
+  },
   "pythonLogParser": {
     "enabled": true,
     "pythonExecutable": "python",

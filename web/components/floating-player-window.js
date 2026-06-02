@@ -19,6 +19,10 @@ export function setActivePlayerWindow(nextState = {}) {
   renderWindow(root, activeWindowState);
   installWindowListeners();
   positionWindow(root);
+  window.requestAnimationFrame?.(() => {
+    const currentRoot = document.querySelector(`#${ROOT_ID}`);
+    if (currentRoot) positionWindow(currentRoot);
+  });
   return root;
 }
 
@@ -107,7 +111,7 @@ function positionWindow(root) {
   const windowEl = root.querySelector(".floating-player-window");
   if (!state || !windowEl) return;
 
-  const isSmallScreen = window.innerWidth < 768;
+  const isSmallScreen = window.innerWidth < 768 || window.innerHeight < 760;
   const margin = 12;
 
   if (isSmallScreen) {
@@ -122,8 +126,8 @@ function positionWindow(root) {
   }
 
   const rect = windowEl.getBoundingClientRect();
-  const width = rect.width || 420;
-  const height = rect.height || 540;
+  const width = rect.width || 460;
+  const height = rect.height || 640;
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
 
@@ -145,6 +149,8 @@ function positionWindow(root) {
   windowEl.style.transform = "none";
   windowEl.style.right = "auto";
   windowEl.style.bottom = "auto";
+  windowEl.style.width = `${Math.min(width, Math.max(380, viewportWidth - 24))}px`;
+  windowEl.style.maxHeight = `${Math.max(320, viewportHeight - 48)}px`;
 }
 
 function escapeHtml(value) {

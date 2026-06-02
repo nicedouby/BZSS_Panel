@@ -133,13 +133,13 @@ export function adaptSquad(
     privatePlaytimePlayers: playtimeSummary.privatePlaytimePlayers,
     knownPlaytimePlayers: playtimeSummary.knownPlaytimePlayers,
     squadNature: squad.squadNature ?? "other",
-    squadNatureLabel: squad.squadNatureLabel ?? "其他",
+    squadNatureLabel: squad.squadNatureLabel ?? "鍏朵粬",
     squadNatureReason: squad.squadNatureReason ?? null,
     squadNatureRule: squad.squadNatureRule ?? null,
     squadNatureConfidence: squad.squadNatureConfidence ?? "low",
     squadNatureNormalizedName: squad.squadNatureNormalizedName ?? "",
     squadVehicleClass: squad.squadVehicleClass ?? "other",
-    squadVehicleClassLabel: squad.squadVehicleClassLabel ?? "其他",
+    squadVehicleClassLabel: squad.squadVehicleClassLabel ?? "鍏朵粬",
     squadVehicleClassReason: squad.squadVehicleClassReason ?? null,
     squadVehicleClassRule: squad.squadVehicleClassRule ?? null,
     squadVehicleClassConfidence: squad.squadVehicleClassConfidence ?? "low",
@@ -558,10 +558,10 @@ function isSquadMetaMatch(squad: SquadViewModel, terms: string[]): boolean {
     squad.averagePlaytimeHours,
     squad.publicPlaytimePlayers,
     squad.privatePlaytimePlayers,
-    squad.isLocked ? "locked 锁定 已锁" : "open unlocked 未锁 开放",
+    squad.isLocked ? "locked closed" : "open unlocked",
     squad.state,
-    squad.state === "empty" ? "empty 空 无成员" : "",
-    squad.state === "no_leader" ? "no_leader no leader 无队长 没队长" : "",
+    squad.state === "empty" ? "empty" : "",
+    squad.state === "no_leader" ? "no_leader no leader" : "",
   ]);
 
   return includesAllTerms(text, terms);
@@ -572,15 +572,15 @@ function isPlayerMatch(player: PlayerRowViewModel, terms: string[]): boolean {
     player.playerId,
     player.name,
     player.role,
-    player.isLeader ? "leader squadleader sl 队长 小队长" : "member 队员",
-    player.isOnline ? "online 在线" : "offline 离线",
+    player.isLeader ? "leader squadleader sl" : "member",
+    player.isOnline ? "online" : "offline",
     player.teamId,
     player.squadId,
     player.steamId,
     player.eosId,
     player.ip,
     player.playtimeHours,
-    player.playtimeHours === 0 ? "未公开 private hidden 0" : "",
+    player.playtimeHours === 0 ? "private hidden 0" : "",
   ]);
 
   return includesAllTerms(text, terms);
@@ -707,7 +707,7 @@ function cloneCombatStats(stats: CombatStats): CombatStats {
 }
 
 function formatCombatStatsLabel(stats: CombatStats): string {
-  return `K ${Number(stats?.kills ?? 0)} / D ${Number(stats?.downs ?? 0)} / 死 ${Number(stats?.deaths ?? 0)} / TK ${Number(stats?.tk ?? 0)} / 复苏 ${Number(stats?.revives ?? 0)}`;
+  return `击倒 ${Number(stats?.downs ?? 0)} / 击杀 ${Number(stats?.kills ?? 0)} / 死亡 ${Number(stats?.deaths ?? 0)} / TK ${Number(stats?.tk ?? 0)} / 复苏 ${Number(stats?.revives ?? 0)}`;
 }
 
 function applyCombatEventToLookup(lookup: Record<string, CombatStats>, event: Record<string, any>) {
