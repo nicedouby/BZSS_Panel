@@ -12,14 +12,14 @@
         :key="squad.key"
         :squad="squad"
         :playtimes="playtimes"
-        @select-player="$emit('select-player', $event)"
+        @select-player="($event) => $emit('select-player', $event)"
       />
       <SquadCard
         v-if="team.unassignedPlayers.length"
         :squad="unassignedSquad"
         :members="team.unassignedPlayers"
         :playtimes="playtimes"
-        @select-player="$emit('select-player', $event)"
+        @select-player="($event) => $emit('select-player', $event)"
       />
     </div>
   </section>

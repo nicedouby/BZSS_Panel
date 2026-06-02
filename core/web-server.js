@@ -1202,6 +1202,45 @@ export class WebServer {
       return this.json(res, 200, this.modules.combatState.clear());
     }
 
+    if (url.pathname.startsWith("/api/combat-logs")) {
+      const combatLog = this.modules.combatLog;
+      if (!combatLog) {
+        return this.json(res, 404, {
+          error: "CombatLogUnavailable",
+          message: "Combat log module is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/combat-logs/status" && req.method === "GET") {
+        return this.json(res, 200, combatLog.getStatus?.() ?? { ok: true });
+      }
+
+      if (url.pathname === "/api/combat-logs/months" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          months: await combatLog.listMonths?.() ?? [],
+        });
+      }
+
+      if (url.pathname === "/api/combat-logs/files" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          month: url.searchParams.get("month") ?? "",
+          files: await combatLog.listFiles?.(url.searchParams.get("month") ?? "") ?? [],
+        });
+      }
+
+      if (url.pathname === "/api/combat-logs/read" && req.method === "GET") {
+        return this.json(res, 200, await combatLog.readLog?.({
+          month: url.searchParams.get("month") ?? "",
+          date: url.searchParams.get("date") ?? "",
+          q: url.searchParams.get("q") ?? url.searchParams.get("search") ?? "",
+          limit: url.searchParams.get("limit") ?? "300",
+          offset: url.searchParams.get("offset") ?? "0",
+        }));
+      }
+    }
+
     if (url.pathname.startsWith("/api/combat-clean")) {
       const combatClean = this.modules.combatClean;
       if (!combatClean) {

@@ -10,12 +10,13 @@ import {
   TeamKillTags,
   WeaponCategoryTags,
 } from "./tags.js";
-import { classifyWeaponType } from "./weapon-type.js";
+import { classifyWeaponType, weaponTypeLabelForKey } from "./weapon-type.js";
 
 const VALID_TYPES = new Set(["damage", "wound", "kill", "revive"]);
 const DEFAULT_MAX_EVENTS = 5000;
 const DEFAULT_WEAPON_HISTORY_WINDOW_MS = 300000;
 const FALLBACK_REASON = "attacker_nullptr_use_victim";
+const BOT_PROJECTILE_NULLPTR_REASON = "nullptr_projectile_7_62mm";
 const WEAPON_PLACEHOLDER_PATTERNS = [
   /\bsoldier\b/i,
   /\brifleman\d*\b/i,
@@ -99,7 +100,7 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       warnings.push(FALLBACK_REASON);
     }
     const attacker = botAttack.isBotAttack
-      ? makeBotPlayerRef()
+      ? makeBotPlayerRef(botAttack.reason)
       : makePlayerRef(serverId, resolvedAttackerIdentity, rawRecord, "attacker", {
         isFallback: attackerFallback,
         fallbackReason: attackerFallback ? FALLBACK_REASON : "",
@@ -300,7 +301,7 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
     };
   }
 
-  function makeBotPlayerRef() {
+  function makeBotPlayerRef(reason = "exact_projectile") {
     return {
       name: "",
       teamID: "",
@@ -317,7 +318,7 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       isFallback: false,
       fallbackReason: "",
       isBot: true,
-      botReason: "exact_projectile",
+      botReason: reason,
     };
   }
 
@@ -496,20 +497,43 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       cleaned,
       displayName,
     });
+    const isNullptrProjectileWeapon = isNullishPlayerValue(rawRecord.attackerName)
+      && isNullptrProjectileWeaponName({
+        raw,
+        fallback,
+        cleaned,
+        displayName,
+      });
+    const resolvedWeaponType = isNullptrProjectileWeapon
+      ? {
+        ...weaponType,
+        key: "bot_weapon",
+        label: weaponTypeLabelForKey("bot_weapon"),
+        ruleId: "weapon-type:bot_weapon:nullptr_projectile_7_62mm",
+        matchedBy: "exact",
+        matchedText: displayName,
+        matchedTerm: "projectile 7 62mm",
+        candidateIndex: 0,
+        candidateSource: raw ? "rawCausedBy" : (fallback ? "causedBy" : ""),
+      }
+      : weaponType;
+    const isBotWeapon = resolvedWeaponType.key === "bot_weapon";
     return {
       raw: raw || fallback,
       cleaned,
       category: String(rawRecord.weaponCategory ?? "").trim(),
       displayName,
       sourceType: String(rawRecord.causedByCategory ?? "").trim() || (raw ? "rawCausedBy" : (fallback ? "causedBy" : "")),
-      weaponType,
-      typeKey: weaponType.key,
-      typeLabel: weaponType.label,
-      typeMatchedBy: weaponType.matchedBy,
-      typeRuleId: weaponType.ruleId,
-      typeMatchText: weaponType.matchedText,
-      isBotWeapon: weaponType.key === "bot_weapon",
-      botWeaponReason: weaponType.key === "bot_weapon" ? "exact_projectile" : "",
+      weaponType: resolvedWeaponType,
+      typeKey: resolvedWeaponType.key,
+      typeLabel: resolvedWeaponType.label,
+      typeMatchedBy: resolvedWeaponType.matchedBy,
+      typeRuleId: resolvedWeaponType.ruleId,
+      typeMatchText: resolvedWeaponType.matchedText,
+      isBotWeapon,
+      botWeaponReason: isBotWeapon
+        ? (isNullptrProjectileWeapon ? BOT_PROJECTILE_NULLPTR_REASON : "exact_projectile")
+        : "",
     };
   }
 
@@ -1086,13 +1110,39 @@ function displayPlayerName(player = {}) {
   return String(player?.displayName || player?.name || "Unknown").trim() || "Unknown";
 }
 
-function buildBotAttackContext(weapon = {}) {
-  const key = String(weapon?.typeKey ?? "").trim().toLowerCase();
-  if (key !== "bot_weapon") {
-    return { isBotAttack: false, reason: "" };
+  function buildBotAttackContext(weapon = {}) {
+    const key = String(weapon?.typeKey ?? "").trim().toLowerCase();
+    if (key !== "bot_weapon") {
+      return { isBotAttack: false, reason: "" };
+    }
+    return { isBotAttack: true, reason: String(weapon?.botWeaponReason ?? "").trim() || "exact_projectile" };
   }
-  return { isBotAttack: true, reason: "exact_projectile" };
-}
+
+  function isNullptrProjectileWeaponName({ raw = "", fallback = "", cleaned = "", displayName = "" } = {}) {
+    const candidates = [
+      raw,
+      fallback,
+      cleaned,
+      displayName,
+    ]
+      .map((value) => normalizeProjectileWeaponText(value))
+      .filter(Boolean);
+    return candidates.some((text) => {
+      const compact = text.replace(/[\s.-]+/g, "");
+      return text === "projectile"
+        || text === "projectile 7 62mm"
+        || text === "projectile 7.62mm"
+        || compact === "projectile762mm";
+    });
+  }
+
+  function normalizeProjectileWeaponText(value) {
+    return String(value ?? "")
+      .normalize("NFKC")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+  }
 
 function isSuppressedBotAttackFlag(key, label) {
   const normalizedKey = String(key ?? "").trim().toLowerCase();

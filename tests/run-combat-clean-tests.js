@@ -616,6 +616,36 @@ async function testWeaponHistoryBackfillCanBeDisabled() {
   await module.stop();
 }
 
+async function testProjectile762NullptrAttackDisplaysBotWeapon() {
+  const { module, listeners } = createHarness();
+  await module.start();
+
+  emitCombatResolved(listeners, {
+    sourceEventId: "raw:projectile-762-nullptr",
+    serverId: "BZSS_Main",
+    time: "2026-05-10T01:00:47.000Z",
+    type: "damaged",
+    attackerName: "nullptr",
+    victimName: "Victim",
+    damage: 18,
+    causedBy: "Projectile 7 62mm",
+    rawCausedBy: "Projectile 7 62mm",
+    rawLog: "raw projectile 7 62mm damage",
+  });
+
+  const clean = module.api.getEvents({ serverId: "BZSS_Main" })[0];
+  assert.equal(clean.attacker.displayName, "bot");
+  assert.equal(clean.attacker.botReason, "nullptr_projectile_7_62mm");
+  assert.equal(clean.weapon.typeKey, "bot_weapon");
+  assert.equal(clean.weapon.typeLabel, "人机武器");
+  assert.equal(clean.weapon.isBotWeapon, true);
+  assert.equal(clean.weapon.botWeaponReason, "nullptr_projectile_7_62mm");
+  assert.equal(clean.isBotAttack, true);
+  assert.equal(clean.relation.isFriendlyFire, false);
+
+  await module.stop();
+}
+
 async function testPlayerEventsAndClear() {
   const { module, listeners } = createHarness();
   await module.start();
@@ -641,6 +671,7 @@ await testAttackerNullptrFallsBackToVictimExactly();
 await testWeaponTypeClassificationIsPreserved();
 await testProcessedCombatRecordPublishesUnifiedEventAndTags();
 await testExactProjectileAttackDisplaysBot();
+await testProjectile762NullptrAttackDisplaysBotWeapon();
 await testExactProjectileKillGetsBotFlag();
 await testRejectsNullptrVictim();
 await testResolvesPlayersAndRelation();

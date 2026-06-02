@@ -20,7 +20,7 @@
         :squad="squad"
         :density-mode="densityMode"
         :selected-player-id="selectedPlayerId"
-        @select-player="$emit('select-player', $event)"
+        @select-player="($event) => $emit('select-player', $event)"
         @select-squad="$emit('select-squad', $event)"
       />
     </div>
@@ -39,7 +39,7 @@ const props = defineProps<{
 }>();
 
 defineEmits<{
-  (event: "select-player", player: PlayerRowViewModel): void;
+  (event: "select-player", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
   (event: "select-squad", squad: SquadViewModel): void;
 }>();
 

@@ -26,7 +26,9 @@ export interface ConsoleLine {
 }
 
 export function useConsoleLines(filters: ConsoleFilterState) {
+  const MAX_VISIBLE_LINES = 2000;
   const lines = ref<ConsoleLine[]>([]);
+  const lineSeqSet = new Set<number>();
   const hidden = ref(typeof document !== "undefined" ? document.hidden : false);
   const active = ref(true);
   const lastSeq = ref(0);
@@ -43,11 +45,13 @@ export function useConsoleLines(filters: ConsoleFilterState) {
 
   function reset() {
     lines.value = [];
+    lineSeqSet.clear();
     lastSeq.value = 0;
   }
 
   function clearVisibleLines() {
     lines.value = [];
+    lineSeqSet.clear();
   }
 
   const channelsQuery = useQuery({
@@ -95,13 +99,21 @@ export function useConsoleLines(filters: ConsoleFilterState) {
       for (const line of incoming) {
         const seq = Number(line.seq ?? 0);
         if (seq > lastSeq.value) lastSeq.value = seq;
-        if (!merged.some((item) => Number(item.seq ?? 0) === seq)) {
+        if (!lineSeqSet.has(seq)) {
           merged.push(line);
+          lineSeqSet.add(seq);
         }
       }
-      lines.value = merged.slice(-2000);
+      if (merged.length > MAX_VISIBLE_LINES) {
+        const overflow = merged.length - MAX_VISIBLE_LINES;
+        const removed = merged.splice(0, overflow);
+        for (const item of removed) {
+          const seq = Number(item.seq ?? 0);
+          lineSeqSet.delete(seq);
+        }
+      }
+      lines.value = merged;
     },
-    { deep: true },
   );
 
   watch(

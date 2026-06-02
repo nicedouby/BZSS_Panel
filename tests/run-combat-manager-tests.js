@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 import { createCombatManagerService, bindCombatManagerModules } from "../plugins/services/combat_manager_service.js";
 
-function createHarness({ combatStateEvents = [], combatCleanEvents = [], combatStateOverview = {}, combatCleanOverview = {}, combatStateClear = 0, combatCleanClear = 0 } = {}) {
+function createHarness({ combatStateEvents = [], combatCleanEvents = [], combatStateOverview = {}, combatCleanOverview = {}, combatStateClear = 0, combatCleanClear = 0, cacheDir = "data/combat-manager" } = {}) {
   const moduleEvents = [];
   const moduleListeners = new Map();
   const core = {
@@ -19,6 +22,10 @@ function createHarness({ combatStateEvents = [], combatCleanEvents = [], combatS
         moduleEvents.push({ moduleId, eventName, event });
       },
     },
+  };
+  const moduleConfig = {
+    enabled: true,
+    cacheDir,
   };
   const modules = {
     combatState: {
@@ -57,7 +64,20 @@ function createHarness({ combatStateEvents = [], combatCleanEvents = [], combatS
       },
     },
   };
-  const service = createCombatManagerService({ core, modules, config: { get() { return { enabled: true }; } } });
+  const service = createCombatManagerService({
+    core,
+    modules,
+    config: {
+      get(key) {
+        if (key === "modules.combatManager" || key === "modules.combat_manager" || key === "combat_manager" || key === "kill_manager") {
+          return moduleConfig;
+        }
+        if (String(key ?? "").endsWith(".enabled")) return true;
+        if (String(key ?? "").endsWith(".cacheDir")) return cacheDir;
+        return undefined;
+      },
+    },
+  });
   bindCombatManagerModules(modules);
   return { service, core, modules, moduleEvents, moduleListeners };
 }
@@ -144,8 +164,30 @@ async function testIgnoresCombatStateUpdatedDirectly() {
   await service.stop();
 }
 
+async function testSerializesCacheWrites() {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "combat-manager-cache-"));
+  const { service } = createHarness({ cacheDir: tempDir });
+
+  try {
+    await Promise.all([
+      service.start(),
+      service.api.ensureCacheSnapshot("BZSS_Main"),
+      service.api.ensureCacheSnapshot("BZSS_Main"),
+      service.api.ensureCacheSnapshot("BZSS_Main"),
+    ]);
+
+    const cacheFile = path.join(tempDir, "BZSS_Main.json");
+    const text = await fs.readFile(cacheFile, "utf8");
+    assert.match(text, /"serverId":\s*"BZSS_Main"/);
+  } finally {
+    await service.stop();
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
 await testGetRecentKillsAndOverview();
 await testUsesCombatCleanAsPrimaryIngress();
 await testIgnoresCombatStateUpdatedDirectly();
+await testSerializesCacheWrites();
 
 console.log("combat manager tests passed");

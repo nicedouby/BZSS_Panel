@@ -1,8 +1,8 @@
 ﻿<template>
   <Teleport to="body">
-    <Transition name="drawer">
-      <div v-if="open && props.player" class="drawer-root" @click.self="close">
-        <aside class="player-detail-drawer">
+    <Transition :name="transitionName">
+      <div v-if="open && props.player" :class="rootClass" @click.self="close">
+        <aside :class="panelClass" :style="panelStyle">
           <header class="drawer-header">
             <div class="drawer-header-content">
               <h2 class="drawer-player-name">{{ props.player.name }}</h2>
@@ -19,6 +19,10 @@
           </header>
 
           <div class="drawer-body">
+            <div v-if="props.notice" class="detail-notice">
+              {{ props.notice }}
+            </div>
+
             <!-- 1. IDENTITY BLOCK -->
             <section class="detail-section identity-hero">
               <div class="identity-grid">
@@ -149,7 +153,7 @@
                     <span class="detail-value ellipsis">{{ props.player.controller }}</span>
                   </div>
                 </div>
-                <pre v-if="props.player.raw" class="raw-data"><code>{{ JSON.stringify(props.player.raw, null, 2) }}</code></pre>
+                <pre v-if="rawDataText" class="raw-data"><code>{{ rawDataText }}</code></pre>
               </div>
             </section>
           </div>
@@ -180,6 +184,10 @@ const props = withDefaults(
     player: PlayerDetailViewModel | null;
     open: boolean;
     serverId?: string | null;
+    mode?: "drawer" | "floating";
+    anchorX?: number | null;
+    anchorY?: number | null;
+    notice?: string | null;
   }>(),
   {
     player: null,
@@ -193,6 +201,25 @@ const emit = defineEmits<{
 const ui = useUiStore();
 const auth = useAuthStore();
 const router = useRouter();
+const viewport = ref({
+  width: typeof window !== "undefined" ? window.innerWidth : 1280,
+  height: typeof window !== "undefined" ? window.innerHeight : 800,
+});
+const isFloating = computed(() => props.mode === "floating");
+const transitionName = computed(() => (isFloating.value ? "floating-player" : "drawer"));
+const rootClass = computed(() => (isFloating.value ? "floating-window-layer" : "drawer-root"));
+const panelClass = computed(() => ({
+  "player-detail-drawer": !isFloating.value,
+  "player-detail-floating": isFloating.value,
+}));
+const panelStyle = computed(() => {
+  if (!isFloating.value) return undefined;
+  return {
+    left: "50%",
+    top: "50%",
+    transform: "translate(-50%, -50%)",
+  };
+});
 const showAdvanced = ref(false);
 const resolvedLastIp = ref("");
 const resolvingIp = ref(false);
@@ -200,6 +227,12 @@ const resolveIpError = ref("");
 const lookupToken = ref(0);
 const actionBusy = ref(false);
 const canSwitchTeam = computed(() => Boolean(auth.user?.isSuperAdmin || auth.user?.permissions?.includes?.("squad.switch")));
+const updateViewport = () => {
+  viewport.value = {
+    width: window.innerWidth,
+    height: window.innerHeight,
+  };
+};
 
 const currentIp = computed(() => String(props.player?.ip ?? "").trim());
 const displayIp = computed(() => currentIp.value || resolvedLastIp.value.trim());
@@ -218,6 +251,7 @@ const teamColorClass = computed(() => {
   if (props.player.teamId === 2) return "team2";
   return "neutral";
 });
+const rawDataText = computed(() => safeStringify(props.player?.raw));
 
 function close() {
   emit("close");
@@ -241,6 +275,15 @@ function buildIpSearchUrl(value: string | null | undefined) {
   const ip = String(value ?? "").trim();
   if (!ip) return "";
   return `https://www.baidu.com/s?wd=${encodeURIComponent(`IP查询 ${ip}`)}`;
+}
+
+function safeStringify(value: unknown) {
+  if (value == null) return "";
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return "";
+  }
 }
 
 function openDatabase() {
@@ -458,10 +501,12 @@ function displayRole(role: string | null | undefined) {
 }
 
 onMounted(() => {
+  window.addEventListener("resize", updateViewport);
   document.addEventListener("keydown", handleEscape);
 });
 
 onUnmounted(() => {
+  window.removeEventListener("resize", updateViewport);
   document.removeEventListener("keydown", handleEscape);
 });
 </script>
@@ -471,6 +516,13 @@ onUnmounted(() => {
   position: fixed;
   inset: 0;
   z-index: var(--z-player-drawer);
+}
+
+.floating-window-layer {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-player-drawer) + 1);
+  background: rgba(8, 12, 16, 0.18);
 }
 
 .player-detail-drawer {
@@ -486,6 +538,24 @@ onUnmounted(() => {
   box-shadow: var(--shadow-lg);
 }
 
+.player-detail-floating {
+  position: fixed;
+  width: min(460px, calc(100vw - 24px));
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+  border-radius: 18px;
+  left: 12px;
+  top: 12px;
+  right: auto;
+  bottom: auto;
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border-default);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(18px);
+}
+
 .drawer-enter-active,
 .drawer-leave-active {
   transition: all 0.2s ease;
@@ -497,6 +567,17 @@ onUnmounted(() => {
 
 .drawer-leave-to {
   transform: translateX(100%);
+}
+
+.floating-player-enter-active,
+.floating-player-leave-active {
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.floating-player-enter-from,
+.floating-player-leave-to {
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
 }
 
 .drawer-header {
@@ -555,6 +636,16 @@ onUnmounted(() => {
   overflow-y: auto;
   display: grid;
   gap: var(--spacing-lg);
+}
+
+.detail-notice {
+  border: 1px solid rgba(251, 191, 36, 0.28);
+  background: rgba(251, 191, 36, 0.08);
+  color: #f5d37a;
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
 }
 
 .detail-section {
@@ -774,6 +865,11 @@ onUnmounted(() => {
 @media (max-width: 640px) {
   .player-detail-drawer {
     width: 100vw;
+  }
+
+  .player-detail-floating {
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
   }
 }
 </style>

@@ -6,7 +6,7 @@
       subtitle="显示玩家加入事件、15 秒延迟任务和警告发送结果，帮助确认插件是否生效。"
     >
       <template #actions>
-        <button type="button" class="btn ghost" :disabled="loading" @click="loadState">
+        <button type="button" class="btn ghost" :disabled="loading" @click="loadState(true)">
           {{ loading ? "刷新中..." : "刷新状态" }}
         </button>
         <button type="button" :class="['btn', autoRefresh ? 'primary' : 'ghost']" @click="toggleAutoRefresh">
@@ -220,14 +220,26 @@ const recentEvents = computed<RecentEvent[]>(() => (Array.isArray(state.value?.r
 
 onMounted(() => {
   void loadState();
+  document.addEventListener("visibilitychange", handleVisibilityChange);
   setupAutoRefresh();
 });
 
 onUnmounted(() => {
   if (autoRefreshTimer) {
     clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
   }
+  document.removeEventListener("visibilitychange", handleVisibilityChange);
 });
+
+function handleVisibilityChange() {
+  setupAutoRefresh();
+}
+
+function getRefreshIntervalMs() {
+  if (typeof document !== "undefined" && document.hidden) return 10_000;
+  return 2_000;
+}
 
 function setupAutoRefresh() {
   if (autoRefreshTimer) clearInterval(autoRefreshTimer);
@@ -235,7 +247,7 @@ function setupAutoRefresh() {
 
   autoRefreshTimer = window.setInterval(() => {
     void loadState();
-  }, 2000);
+  }, getRefreshIntervalMs());
 }
 
 function toggleAutoRefresh() {
@@ -243,7 +255,8 @@ function toggleAutoRefresh() {
   setupAutoRefresh();
 }
 
-async function loadState() {
+async function loadState(force = false) {
+  if (loading.value && !force) return;
   loading.value = true;
   error.value = "";
 
@@ -269,7 +282,7 @@ async function simulateJoin() {
     });
 
     info.value = "已模拟玩家加入，等待 15 秒后可看到发送记录。";
-    await loadState();
+    await loadState(true);
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
@@ -285,7 +298,7 @@ async function clearHistory() {
   try {
     await apiPost("/api/plugins/welcome-join-warning/clear", {});
     info.value = "记录已清空。";
-    await loadState();
+    await loadState(true);
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {

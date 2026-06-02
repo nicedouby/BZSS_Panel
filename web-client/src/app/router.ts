@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from "vue-router";
+﻿import { createRouter, createWebHistory } from "vue-router";
 
 import MatchStatusPage from "../pages/MatchStatusPage.vue";
 import ConsolePage from "../pages/ConsolePage.vue";
@@ -17,6 +17,7 @@ import DrawVoteGuardDebugPage from "../pages/DrawVoteGuardDebugPage.vue";
 import SquadNameClassifierDebugPage from "../pages/SquadNameClassifierDebugPage.vue";
 import WelcomeJoinWarningDebugPage from "../pages/WelcomeJoinWarningDebugPage.vue";
 import PlayerSessionRecordsPage from "../pages/PlayerSessionRecordsPage.vue";
+import CombatLogPage from "../pages/CombatLogPage.vue";
 import ComingSoonPage from "../pages/ComingSoonPage.vue";
 import ChatMonitorPage from "../pages/ChatMonitorPage.vue";
 import RuntimeStatusPage from "../pages/RuntimeStatusPage.vue";
@@ -105,7 +106,7 @@ export const router = createRouter({
       component: ChatMonitorPage,
       meta: {
         ...coreRealtimeMeta,
-        title: "聊天监控",
+        title: "鑱婂ぉ鐩戞帶",
         fullBleed: true,
       },
     },
@@ -114,7 +115,7 @@ export const router = createRouter({
       component: PlayerSessionRecordsPage,
       meta: {
         ...corePollingMeta,
-        title: "进退服记录",
+        title: "进出服记录",
         fullBleed: true,
       },
     },
@@ -147,15 +148,10 @@ export const router = createRouter({
     },
     {
       path: "/combat-log",
-      component: ComingSoonPage,
-      props: {
-        titleKey: "routeTitle.combatLog",
-        subtitle: "",
-        message: "",
-      },
+      component: CombatLogPage,
       meta: {
         ...corePollingMeta,
-        title: "鏀炬寱鎴樻枟鏃ュ織",
+        titleKey: "routeTitle.combatLog",
         fullBleed: true,
       },
     },
@@ -172,7 +168,7 @@ export const router = createRouter({
       component: ScheduledBroadcastPage,
       meta: {
         ...corePollingMeta,
-        title: "定时广播",
+        title: "瀹氭椂骞挎挱",
       },
     },
     {
@@ -189,7 +185,7 @@ export const router = createRouter({
       component: GroupReportPage,
       meta: {
         ...pluginPollingMeta,
-        title: "抱团报备",
+        title: "鎶卞洟鎶ュ",
         fullBleed: true,
       },
     },
@@ -216,7 +212,7 @@ export const router = createRouter({
       component: UdpEventForwarderPage,
       meta: {
         ...debugManualMeta,
-        title: "UDP 转发日志",
+        title: "UDP 杞彂鏃ュ織",
       },
     },
     {
@@ -224,7 +220,7 @@ export const router = createRouter({
       component: ServerInfoStatisticsPage,
       meta: {
         ...pluginPollingMeta,
-        title: "服务器信息统计",
+        title: "服务器统计",
         fullBleed: true,
       },
     },
@@ -233,7 +229,7 @@ export const router = createRouter({
       component: MatchSnapshotDebugPage,
       meta: {
         ...debugManualMeta,
-        title: "快照录制",
+        title: "蹇収褰曞埗",
         fullBleed: true,
       },
     },
@@ -242,7 +238,7 @@ export const router = createRouter({
       component: PjscAverageDurationPage,
       meta: {
         ...debugManualMeta,
-        title: "PJSC 平均时长",
+        title: "PJSC 骞冲潎鏃堕暱",
         fullBleed: true,
       },
     },
@@ -251,7 +247,7 @@ export const router = createRouter({
       component: DrawVoteGuardDebugPage,
       meta: {
         ...debugManualMeta,
-        title: "平局投票阶段提示",
+        title: "骞冲眬鎶曠エ闃舵鎻愮ず",
         fullBleed: true,
       },
     },
@@ -260,7 +256,7 @@ export const router = createRouter({
       component: WelcomeJoinWarningDebugPage,
       meta: {
         ...debugManualMeta,
-        title: "入服欢迎警告",
+        title: "鍏ユ湇娆㈣繋璀﹀憡",
         fullBleed: true,
       },
     },
@@ -287,7 +283,7 @@ export const router = createRouter({
       component: ComingSoonPage,
       props: {
         title: "Access denied",
-        subtitle: "权限不足",
+        subtitle: "鏉冮檺涓嶈冻",
         message: "当前登录账号没有访问该页面所需的模块权限，请联系管理员分配对应权限后再试。",
       },
       meta: { title: "Access denied" },
@@ -326,3 +322,4 @@ router.beforeEach((to: any) => {
 
   return { path: "/access-denied" };
 });
+

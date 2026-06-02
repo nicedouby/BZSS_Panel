@@ -52,7 +52,7 @@
         v-if="squad.leader"
         :player="squad.leader"
         :selected="String(selectedPlayerId) === String(squad.leader.playerId)"
-        @select="$emit('select-player', squad.leader)"
+        @select="handleLeaderSelect"
       />
 
       <div v-if="squad.state === 'no_leader'" class="squad-warning">
@@ -64,7 +64,7 @@
         :key="`player-${member.playerId}`"
         :player="member"
         :selected="String(selectedPlayerId) === String(member.playerId)"
-        @select="$emit('select-player', member)"
+        @select="handlePlayerSelect"
       />
     </template>
   </article>
@@ -84,8 +84,8 @@ const props = defineProps<{
   densityMode?: "comfortable" | "compact";
 }>();
 
-defineEmits<{
-  (event: "select-player", player: PlayerRowViewModel): void;
+const emit = defineEmits<{
+  (event: "select-player", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
   (event: "select-squad", squad: SquadViewModel): void;
 }>();
 
@@ -141,6 +141,14 @@ function vehicleTone(vehicleClass: SquadViewModel["squadVehicleClass"]): "ok" | 
   if (vehicleClass === "tank" || vehicleClass === "spg") return "warn";
   if (vehicleClass === "ifv" || vehicleClass === "light_vehicle") return "ok";
   return "idle";
+}
+
+function handleLeaderSelect(payload: { player: PlayerRowViewModel; event: MouseEvent }) {
+  emit("select-player", payload);
+}
+
+function handlePlayerSelect(payload: { player: PlayerRowViewModel; event: MouseEvent }) {
+  emit("select-player", payload);
 }
 </script>
 

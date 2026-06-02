@@ -2,7 +2,7 @@
   <div
     class="squad-leader-row"
     :class="{ selected: isSelected }"
-    @click="$emit('select')"
+    @click="handleSelect"
   >
     <div class="leader-row-left">
       <div class="leader-identity">
@@ -47,8 +47,8 @@ const props = defineProps<{
   selected?: boolean;
 }>();
 
-defineEmits<{
-  (event: "select"): void;
+const emit = defineEmits<{
+  (event: "select", payload: { player: SquadLeaderRowViewModel; event: MouseEvent }): void;
 }>();
 
 const isSelected = computed(() => props.selected ?? false);
@@ -60,6 +60,10 @@ const playtimeText = computed(() => {
   if (Number(props.player.playtimeHours) === 0) return `${t("player.steamTime")} 未公开`;
   return `${t("player.steamTime")} ${props.player.playtimeHours}h`;
 });
+
+function handleSelect(event: MouseEvent) {
+  emit("select", { player: props.player, event });
+}
 
 function displayRole(role: string | null | undefined) {
   const raw = String(role ?? "").trim();

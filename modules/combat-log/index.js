@@ -206,6 +206,7 @@ export function createCombatLogModule({ core, modules, config, logger }) {
 
     const eventKey = entry.sourceEventKey;
     const scheduledAt = Date.now();
+    seenEventKeys.set(eventKey, scheduledAt);
     writeChain = writeChain
       .then(async () => {
         await fs.mkdir(target.folderPath, { recursive: true });
@@ -222,7 +223,6 @@ export function createCombatLogModule({ core, modules, config, logger }) {
           });
         }
         await fs.appendFile(target.filePath, `${line}\n`, "utf8");
-        seenEventKeys.set(eventKey, scheduledAt);
         pruneSeenKeys();
         writeCount += 1;
         lastWriteAt = new Date().toISOString();
@@ -311,7 +311,11 @@ export function createCombatLogModule({ core, modules, config, logger }) {
         requiredPermission: "combat_manager.view",
       });
 
-      unsubscribers.push(core.eventBus?.onModuleEvent?.("module.combatManager", "KILL_MANAGER_EVENT", handleCombatEvent));
+      unsubscribers.push(core.eventBus?.onModuleEvent?.("module.combatState", "updated", handleCombatEvent));
+      for (const eventName of COMBAT_CLEAN_EVENTS) {
+        unsubscribers.push(core.eventBus?.onModuleEvent?.("module.combatClean", eventName, handleCombatEvent));
+      }
+      unsubscribers.push(core.eventBus?.onModuleEvent?.("module.killManage", "teamKillResolved", handleCombatEvent));
 
       moduleLogger.info("Combat log module started.", {
         operation: "start",

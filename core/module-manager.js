@@ -21,6 +21,7 @@ import { createIpLookupModule } from "../modules/ip-lookup/index.js";
 import { createKillManageModule } from "../modules/kill-manage/index.js";
 import { createCombatCleanModule } from "../modules/combat-clean/index.js";
 import { createCombatManagerModule } from "../modules/combat-manager/index.js";
+import { createCombatLogModule } from "../modules/combat-log/index.js";
 import { createAdminWarnModule } from "../modules/admin-warn/index.js";
 import { createInfantryCombatEnhancerModule } from "../modules/infantry-combat-enhancer/index.js";
 import { createPlaytimeModule } from "../modules/playtime/index.js";
@@ -70,6 +71,7 @@ export class ModuleManager {
       createKillManageModule,
       createCombatCleanModule,
       createCombatManagerModule,
+      createCombatLogModule,
       createAdminWarnModule,
       createInfantryCombatEnhancerModule,
       createPlaytimeModule,

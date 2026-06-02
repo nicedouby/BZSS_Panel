@@ -474,6 +474,128 @@ async function testCombatCleanRoutesDoNotForceCurrentServerFilter() {
   assert.equal(calls[3].serverId, "");
 }
 
+async function testCombatLogRoutesExposeLogsAndMetadata() {
+  const calls = [];
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return {
+            username: "viewer",
+            role: "Operator",
+            permissions: ["combat_manager.view"],
+          };
+        },
+      },
+    },
+    modules: {
+      combatLog: {
+        getStatus() {
+          return {
+            ok: true,
+            currentRelativePath: "data/combat-logs/2026-06/2026-06-02.log",
+            currentMonth: "2026-06",
+            currentDate: "2026-06-02",
+            lastWrittenAt: "2026-06-02T12:00:00.000Z",
+            writeCount: 2,
+          };
+        },
+        async listMonths() {
+          calls.push("months");
+          return [{ month: "2026-06", fileCount: 1, latestDate: "2026-06-02" }];
+        },
+        async listFiles(month) {
+          calls.push(month);
+          return [{
+            date: "2026-06-02",
+            fileName: "2026-06-02.log",
+            filePath: "/tmp/data/combat-logs/2026-06/2026-06-02.log",
+            relativePath: "data/combat-logs/2026-06/2026-06-02.log",
+            size: 42,
+            mtime: "2026-06-02T12:00:00.000Z",
+          }];
+        },
+        async readLog(filter) {
+          calls.push(filter);
+          return {
+            ok: true,
+            month: filter.month,
+            date: filter.date,
+            filePath: "/tmp/data/combat-logs/2026-06/2026-06-02.log",
+            relativePath: "data/combat-logs/2026-06/2026-06-02.log",
+            total: 1,
+            offset: Number(filter.offset ?? 0),
+            limit: Number(filter.limit ?? 300),
+            hasMoreOlder: false,
+            hasMoreNewer: false,
+            lines: [{
+              lineNumber: 1,
+              time: "12:00:00",
+              type: "damage",
+              mark: "友军伤害",
+              attacker: "Attacker",
+              victim: "Victim",
+              damage: "37.5",
+              weapon: "BP_Rifle_C",
+              raw: "12:00:00\tdamage\t友军伤害\tAttacker\tVictim\t37.5\tBP_Rifle_C",
+            }],
+          };
+        },
+      },
+    },
+  });
+
+  const statusRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/combat-logs/status",
+    headers: { host: "localhost" },
+    socket: {},
+  }, statusRecorder.res);
+
+  assert.equal(statusRecorder.state.status, 200);
+  assert.equal(JSON.parse(statusRecorder.state.body).currentMonth, "2026-06");
+
+  const monthsRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/combat-logs/months",
+    headers: { host: "localhost" },
+    socket: {},
+  }, monthsRecorder.res);
+
+  assert.equal(monthsRecorder.state.status, 200);
+  const monthsBody = JSON.parse(monthsRecorder.state.body);
+  assert.equal(monthsBody.months[0].month, "2026-06");
+
+  const filesRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/combat-logs/files?month=2026-06",
+    headers: { host: "localhost" },
+    socket: {},
+  }, filesRecorder.res);
+
+  assert.equal(filesRecorder.state.status, 200);
+  const filesBody = JSON.parse(filesRecorder.state.body);
+  assert.equal(filesBody.files[0].date, "2026-06-02");
+
+  const readRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/combat-logs/read?month=2026-06&date=2026-06-02&q=Attacker&limit=50&offset=0",
+    headers: { host: "localhost" },
+    socket: {},
+  }, readRecorder.res);
+
+  assert.equal(readRecorder.state.status, 200);
+  const readBody = JSON.parse(readRecorder.state.body);
+  assert.equal(readBody.lines[0].attacker, "Attacker");
+  assert.equal(calls[0], "months");
+  assert.equal(calls[1], "2026-06");
+  assert.equal(calls[2].date, "2026-06-02");
+}
+
 async function testWeaponCollectorApiRequiresGet() {
   const server = createServer({
     core: {
@@ -1426,6 +1548,7 @@ await testSettingsRoutesRequireAuthAndSuperAdmin();
 await testWarmupRoutesExposeStateAndValidateInput();
 await testAdminWarnRecentRouteReturnsMemoryRecords();
 await testAdminWarnBroadcastRouteReturnsMemoryRecords();
+await testCombatLogRoutesExposeLogsAndMetadata();
 await testPjscAverageDurationRouteReturnsPluginState();
 await testVueRouteFallsBackToIndexHtml();
 

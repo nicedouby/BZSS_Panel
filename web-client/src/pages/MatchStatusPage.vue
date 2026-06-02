@@ -95,10 +95,13 @@
       </div>
     </DataState>
 
-    <PlayerDetailDrawer
-      :open="selectedPlayerDetail !== null"
-      :player="selectedPlayerDetail"
+    <FloatingPlayerWindow
+      :open="activePlayerWindow !== null"
+      :player="activePlayerWindow?.detail ?? null"
       :server-id="currentServerId"
+      :anchor-x="activePlayerWindow?.anchorX ?? null"
+      :anchor-y="activePlayerWindow?.anchorY ?? null"
+      :notice="activePlayerWindow?.notice ?? ''"
       @close="closePlayerDetail"
     />
 
@@ -126,6 +129,7 @@ import { useJobStore } from "../stores/job.store";
 import { useUiStore } from "../stores/ui.store";
 import {
   adaptTeam,
+  adaptPlayerDetail,
   buildSquadLifecycleLookup,
   filterTeamsBySearch,
 } from "../utils/squad-admin-adapter";
@@ -134,7 +138,7 @@ import ErrorBlock from "../components/common/ErrorBlock.vue";
 import SquadPageToolbar from "../components/squad-admin/SquadPageToolbar.vue";
 import TeamColumn from "../components/squad-admin/TeamColumn.vue";
 import MatchChatPanel from "../components/match/MatchChatPanel.vue";
-import PlayerDetailDrawer from "../components/squad-admin/PlayerDetailDrawer.vue";
+import FloatingPlayerWindow from "../components/squad-admin/FloatingPlayerWindow.vue";
 import SquadDetailDrawer from "../components/squad-admin/SquadDetailDrawer.vue";
 import { t } from "../i18n";
 import type {
@@ -144,6 +148,7 @@ import type {
   TeamViewModel,
   SquadViewModel,
 } from "../types/squad-admin.types";
+import type { RuntimePlayer } from "../stores/player.store";
 
 interface PlaytimeJobProgressEvent {
   at?: number | string | null;
@@ -199,7 +204,12 @@ const refreshError = ref("");
 const playtimeError = ref("");
 const playtimeRequested = ref(true);
 const playtimeJob = ref<PlaytimeJobViewModel | null>(null);
-const selectedPlayerDetail = ref<PlayerDetailViewModel | null>(null);
+const activePlayerWindow = ref<{
+  detail: PlayerDetailViewModel;
+  anchorX: number;
+  anchorY: number;
+  notice: string;
+} | null>(null);
 const selectedSquadDetail = ref<SquadViewModel | null>(null);
 
 const pageState = reactive<PageState>({
@@ -365,24 +375,39 @@ watch(
   { immediate: true },
 );
 
-function selectPlayer(player: PlayerRowViewModel) {
+watch(
+  () => [viewModels.value.teams, activePlayerWindow.value?.detail.playerId],
+  () => {
+    if (!activePlayerWindow.value) return;
+
+    const currentId = activePlayerWindow.value.detail.playerId;
+    const player = findPlayerById(currentId);
+    if (!player) {
+      activePlayerWindow.value = {
+        ...activePlayerWindow.value,
+        notice: "该玩家可能已离线或数据已刷新，当前显示的是最近一次快照。",
+      };
+      return;
+    }
+
+    activePlayerWindow.value = {
+      ...activePlayerWindow.value,
+      detail: buildPlayerDetailViewModel(player),
+      notice: "",
+    };
+  },
+  { immediate: true },
+);
+
+function selectPlayer(payload: { player: PlayerRowViewModel; event: MouseEvent }) {
+  const player = payload.player;
   pageState.selectedPlayerId = player.playerId;
 
-  selectedPlayerDetail.value = {
-    playerId: player.playerId,
-    name: player.name,
-    role: player.role,
-    isLeader: player.isLeader,
-    isOnline: player.isOnline,
-    teamId: player.teamId,
-    squadId: player.squadId,
-    steamId: player.steamId,
-    eosId: player.eosId,
-    ip: player.ip,
-    playtimeHours: player.playtimeHours,
-    source: "row",
-    controller: "",
-    raw: player,
+  activePlayerWindow.value = {
+    detail: buildPlayerDetailViewModel(player),
+    anchorX: payload.event?.clientX ?? Math.floor(window.innerWidth / 2),
+    anchorY: payload.event?.clientY ?? Math.floor(window.innerHeight / 2),
+    notice: "",
   };
 
   if (player.steamId) {
@@ -405,7 +430,43 @@ function handleDensityChange(mode: "comfortable" | "compact") {
 
 function closePlayerDetail() {
   pageState.selectedPlayerId = null;
-  selectedPlayerDetail.value = null;
+  activePlayerWindow.value = null;
+}
+
+function buildPlayerDetailViewModel(player: PlayerRowViewModel): PlayerDetailViewModel {
+  const rawPlayer: RuntimePlayer = (player.raw as RuntimePlayer | undefined) ?? {
+    playerID: normalizePlayerId(player.playerId),
+    name: player.name,
+    teamID: player.teamId ?? null,
+    squadID: player.squadId ?? null,
+    steamID: player.steamId ?? undefined,
+    eosID: player.eosId ?? undefined,
+    isLeader: player.isLeader,
+    role: player.role,
+    online: player.isOnline,
+    current_ip: player.ip ?? undefined,
+  } as RuntimePlayer;
+  return adaptPlayerDetail(rawPlayer, player.playtimeHours ?? null);
+}
+
+function normalizePlayerId(value: string | number | null | undefined) {
+  if (value == null) return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function findPlayerById(playerId: PlayerDetailViewModel["playerId"]) {
+  if (playerId == null) return null;
+  for (const team of viewModels.value.teams) {
+    for (const squad of team.squads) {
+      if (squad.leader && String(squad.leader.playerId) === String(playerId)) {
+        return squad.leader;
+      }
+      const member = squad.members.find((item) => String(item.playerId) === String(playerId));
+      if (member) return member;
+    }
+  }
+  return null;
 }
 
 async function refreshOnlinePlaytime(force = false) {

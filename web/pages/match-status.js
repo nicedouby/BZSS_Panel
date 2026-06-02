@@ -1,5 +1,12 @@
 // -*- coding: utf-8 -*-
 
+import { renderPlayerDetailContent } from "../components/player-detail-content.js";
+import {
+  closeActivePlayerWindow,
+  getActivePlayerWindow,
+  setActivePlayerWindow,
+} from "../components/floating-player-window.js";
+
 export async function renderPage({ root, api, apiFetch, openDrawer, onNavigate }) {
   if (root.__matchStatusTimer) {
     window.clearTimeout(root.__matchStatusTimer);
@@ -85,16 +92,28 @@ export async function renderPage({ root, api, apiFetch, openDrawer, onNavigate }
   });
 
   root.querySelectorAll("[data-player-index]").forEach((el) => {
-    el.addEventListener("click", () => {
+    el.addEventListener("click", (event) => {
       const player = players[Number(el.dataset.playerIndex)];
       if (!player) return;
 
-      openPlayerRealtimeWindow(player, {
+      openFloatingPlayerWindow(player, {
         apiFetch,
         onNavigate,
         onRefresh: () => renderPage({ root, api, apiFetch, openDrawer, onNavigate }),
+        anchorX: event.clientX,
+        anchorY: event.clientY,
+        squad: player._resolvedSquadRef || null,
+        team: player._resolvedTeamRef || null,
       });
     });
+  });
+
+  syncFloatingPlayerWindow({
+    players,
+    teams,
+    apiFetch,
+    onNavigate,
+    onRefresh: () => renderPage({ root, api, apiFetch, openDrawer, onNavigate }),
   });
 
   root.scrollTop = scrollTop;
@@ -104,6 +123,7 @@ export async function renderPage({ root, api, apiFetch, openDrawer, onNavigate }
       window.clearTimeout(root.__matchStatusTimer);
       root.__matchStatusTimer = null;
     }
+    closeFloatingPlayerWindow();
   };
 
   if (!root.__playtimeRefreshState?.active) {
@@ -193,6 +213,8 @@ function buildTeams({ players, squads }) {
       _resolvedTeamID: placement.team.teamID,
       _resolvedSquadID: placement.squad.squadID,
       _resolvedUnassigned: Boolean(placement.squad.unassigned),
+      _resolvedTeamRef: placement.team,
+      _resolvedSquadRef: placement.squad,
     });
   });
 
@@ -598,6 +620,7 @@ async function loadPlayerCombatTimeline(root, { apiFetch, player }) {
   const list = root.querySelector("#player-clean-combat-list");
   const rangeLabel = root.querySelector("#player-combat-range-label");
   if (!chart || !detail || !list) return;
+  const requestSeq = (root.__playerCombatLoadSeq = (root.__playerCombatLoadSeq || 0) + 1);
 
   const params = new URLSearchParams({
     steam64ID: getPlayerSteamID(player),
@@ -609,6 +632,7 @@ async function loadPlayerCombatTimeline(root, { apiFetch, player }) {
   try {
     const response = await apiFetch(`/api/combat-clean/player-events?${params.toString()}`);
     const data = await readJsonSafe(response);
+    if (root.__playerCombatLoadSeq !== requestSeq) return;
     if (!response.ok) throw new Error(data?.error || `combat clean request failed (${response.status})`);
     const events = Array.isArray(data?.events) ? data.events : [];
     if (!events.length) {
@@ -651,6 +675,7 @@ async function loadPlayerCombatTimeline(root, { apiFetch, player }) {
     };
 
     chart.innerHTML = renderPlayerCombatChart(timeline);
+    if (root.__playerCombatLoadSeq !== requestSeq) return;
     chart.querySelectorAll("[data-combat-bucket-index]").forEach((button) => {
       const index = Number(button.dataset.combatBucketIndex);
       button.addEventListener("mouseenter", () => updateChartSelection(index));
@@ -659,6 +684,7 @@ async function loadPlayerCombatTimeline(root, { apiFetch, player }) {
     });
 
     list.innerHTML = renderPlayerCombatEventList(events);
+    if (root.__playerCombatLoadSeq !== requestSeq) return;
     list.querySelectorAll("[data-player-clean-combat-index]").forEach((button) => {
       button.addEventListener("click", () => {
         const event = events[Number(button.dataset.playerCleanCombatIndex)];
@@ -668,6 +694,7 @@ async function loadPlayerCombatTimeline(root, { apiFetch, player }) {
 
     updateChartSelection(timeline.initialSelectedIndex);
   } catch (error) {
+    if (root.__playerCombatLoadSeq !== requestSeq) return;
     const message = esc(error?.message || "Failed to load clean combat");
     chart.innerHTML = `<div class="bzss-player-combat-empty">${message}</div>`;
     detail.innerHTML = `<div class="bzss-player-combat-empty">${message}</div>`;
@@ -939,6 +966,310 @@ function closePlayerCleanCombatDetailModal() {
 
 function cleanCombatDetailCell(label, value) {
   return `<div><span>${esc(label)}</span><strong>${esc(value ?? "-")}</strong></div>`;
+}
+
+function openFloatingPlayerWindow(player, { apiFetch, onNavigate, onRefresh, anchorX, anchorY, squad, team } = {}) {
+  const state = createFloatingPlayerWindowState(player, {
+    squad: squad || player._resolvedSquadRef || null,
+    team: team || player._resolvedTeamRef || null,
+    anchorX,
+    anchorY,
+  });
+
+  setActivePlayerWindow({
+    ...state,
+    apiFetch,
+    onNavigate,
+    onRefresh,
+    contentHtml: renderPlayerDetailContent(state),
+    onRendered: (root, nextState) => {
+      bindFloatingPlayerWindowInteractions(root, nextState, { apiFetch, onNavigate, onRefresh });
+      loadPlayerCombatTimeline(root, { apiFetch, player: nextState.player }).catch(() => {});
+    },
+  });
+}
+
+function syncFloatingPlayerWindow({ teams = [], apiFetch, onNavigate, onRefresh } = {}) {
+  const current = getActivePlayerWindow();
+  if (!current) return;
+
+  const resolved = resolveFloatingPlayerWindowSnapshot(current, teams);
+  const base = resolved
+    ? createFloatingPlayerWindowState(resolved.player, {
+      squad: resolved.squad,
+      team: resolved.team,
+      anchorX: current.anchorX,
+      anchorY: current.anchorY,
+    })
+    : {
+      ...current,
+      missingNotice: "该玩家可能已离线或数据已刷新，当前显示的是最近一次快照。",
+    };
+
+  setActivePlayerWindow({
+    ...current,
+    ...base,
+    apiFetch,
+    onNavigate,
+    onRefresh,
+    contentHtml: renderPlayerDetailContent({
+      ...base,
+      missingNotice: base.missingNotice || "",
+    }),
+    onRendered: (root, nextState) => {
+      bindFloatingPlayerWindowInteractions(root, nextState, { apiFetch, onNavigate, onRefresh });
+      loadPlayerCombatTimeline(root, { apiFetch, player: nextState.player }).catch(() => {});
+    },
+  });
+}
+
+function bindFloatingPlayerWindowInteractions(root, state, { apiFetch, onNavigate, onRefresh } = {}) {
+  const player = state.player || {};
+  const steamID = getPlayerSteamID(player);
+  const eosID = String(player.eosID || player.eos || player.EOSID || "").trim();
+
+  root.querySelector("#refresh-player-playtime")?.addEventListener("click", async () => {
+    const btn = root.querySelector("#refresh-player-playtime");
+    const status = root.querySelector("#player-playtime-status");
+    const value = root.querySelector("#player-playtime-value");
+    if (!btn || !status || !value) return;
+
+    btn.disabled = true;
+    status.textContent = "正在刷新该玩家 Steam 时长...";
+    try {
+      const job = await refreshPlayerPlaytime({ apiFetch, player });
+      const lookup = job?.result?.lookup;
+      if (!lookup) throw new Error("Steam 返回结果为空");
+      value.textContent = formatSecondsAsHours(lookup.gameSeconds);
+      status.textContent = `刷新完成：${formatSecondsAsHours(lookup.gameSeconds)}`;
+      showToast(`Steam 时长已刷新：${formatSecondsAsHours(lookup.gameSeconds)}`);
+      await onRefresh?.();
+    } catch (error) {
+      status.textContent = error?.message || "刷新失败";
+      showToast(status.textContent);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  root.querySelectorAll("[data-copy-value]").forEach((el) => {
+    el.addEventListener("click", async () => {
+      const value = String(el.dataset.copyValue || "").trim();
+      if (!value || value === "—") return;
+      const label = el.dataset.copyLabel || "ID";
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(value);
+        } else {
+          const input = document.createElement("input");
+          input.value = value;
+          document.body.appendChild(input);
+          input.select();
+          document.execCommand("copy");
+          input.remove();
+        }
+        showToast(`${label} 已复制`);
+      } catch {
+        showToast(`${label} 复制失败`);
+      }
+    });
+  });
+
+  root.querySelector("#open-player-database")?.addEventListener("click", () => {
+    const playerQuery = getPlayerDatabaseQuery(player);
+    closeFloatingPlayerWindow();
+    if (typeof onNavigate === "function") {
+      onNavigate(`/player-database?player=${encodeURIComponent(playerQuery)}`);
+      return;
+    }
+    location.hash = `#/player-database?player=${encodeURIComponent(playerQuery)}`;
+  });
+
+  root.querySelector("#warn-player")?.addEventListener("click", async () => {
+    const message = window.prompt("输入警告消息:", "请遵守服务器规则");
+    if (message === null) return;
+    try {
+      const response = await apiFetch("/api/admin-warns/warn", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetName: player.name,
+          targetSteamId: steamID,
+          targetEosId: eosID,
+          message: message.trim() || "Admin Warning",
+          reason: "manual_warn",
+          sourceModule: "web.legacy.matchStatus",
+        }),
+      });
+      const data = await readJsonSafe(response);
+      if (!response.ok || !data.success) throw new Error(data?.errorMessage || "警告发送失败");
+      showToast("警告已发送");
+    } catch (e) {
+      showToast(String(e));
+    }
+  });
+
+  root.querySelector("#kick-player")?.addEventListener("click", async () => {
+    if (!window.confirm(`确定要将玩家 ${player.name} 踢出服务器吗？`)) return;
+    try {
+      const response = await apiFetch("/api/squad-management/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "kick_player",
+          anyId: steamID || eosID || player.name,
+          reason: "manual_kick",
+          source: "web.legacy.matchStatus",
+        }),
+      });
+      const data = await readJsonSafe(response);
+      if (!response.ok || !data.ok) throw new Error(data?.message || "踢出执行失败");
+      showToast("踢出请求已下发");
+      await onRefresh?.();
+    } catch (e) {
+      showToast(String(e));
+    }
+  });
+
+  root.querySelector("#remove-player-from-squad")?.addEventListener("click", async () => {
+    if (!window.confirm(`确定要将玩家 ${player.name} 移出小队吗？`)) return;
+    try {
+      const response = await apiFetch("/api/squad-management/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "remove_from_squad",
+          anyId: steamID || eosID || player.name,
+          reason: "manual_remove",
+          source: "web.legacy.matchStatus",
+        }),
+      });
+      const data = await readJsonSafe(response);
+      if (!response.ok || !data.ok) throw new Error(data?.message || "移除执行失败");
+      showToast("移除请求已下发");
+      await onRefresh?.();
+    } catch (e) {
+      showToast(String(e));
+    }
+  });
+
+  root.querySelectorAll("[data-floating-member-index]").forEach((el) => {
+    el.addEventListener("click", () => {
+      const index = Number(el.dataset.floatingMemberIndex);
+      const member = state.squad?.members?.[index];
+      if (!member) return;
+      openFloatingPlayerWindow(member, {
+        apiFetch,
+        onNavigate,
+        onRefresh,
+        anchorX: state.anchorX,
+        anchorY: state.anchorY,
+        squad: member._resolvedSquadRef || state.squad,
+        team: member._resolvedTeamRef || state.team,
+      });
+    });
+  });
+}
+
+function createFloatingPlayerWindowState(player, { squad = null, team = null, anchorX, anchorY, missingNotice = "" } = {}) {
+  const stats = getMatchStats(player);
+  const steamID = getPlayerSteamID(player);
+  const eosID = String(player?.eosID || player?.eos || player?.EOSID || "").trim();
+  const squadMembers = Array.isArray(squad?.members) ? squad.members : [];
+
+  const state = {
+    player,
+    squad,
+    team,
+    anchorX: Number.isFinite(Number(anchorX)) ? Number(anchorX) : (window.innerWidth / 2),
+    anchorY: Number.isFinite(Number(anchorY)) ? Number(anchorY) : (window.innerHeight / 2),
+    playerName: displayName(player?.name),
+    playerSubtitle: `玩家实况 · ${formatState(player?.state)} · ${player?.role || "未知角色"}`,
+    missingNotice,
+    isLeader: Boolean(player?.isLeader),
+    stateLabel: formatState(player?.state),
+    steamID: steamID || "—",
+    eosID: eosID || "—",
+    playerID: player?.playerID ?? "—",
+    currentIp: String(player?.ip || player?.currentIp || player?.current_ip || player?.network?.ip || "—"),
+    permissionGroup: String(player?.permission_group || player?.permissionGroup || player?.permission || "default"),
+    teamSquadLabel: buildTeamSquadLabel(player, squad, team),
+    factionLabel: String(player?.faction || player?.side || player?.teamName || `Team ${team?.teamID ?? player?.teamID ?? "?"}`),
+    roleLabel: String(player?.role || player?.class || "未知角色"),
+    playtimeLabel: formatPlaytime(player),
+    lastSeenLabel: String(player?.lastSeenTime || player?.lastSeen || player?.updatedAt || "未知"),
+    statsLabel: `K ${stats.kills} / D ${stats.downs} / 死亡 ${stats.deaths}`,
+    historyEntryLabel: "打开玩家数据库",
+    playtimeStatus: "Steam 时长刷新会写入本地时长缓存，并同步玩家档案。",
+    squadSubtitle: "当前玩家所属小队",
+    squadBadge: squad && !squad.unassigned ? `#${squad.squadID}` : "",
+    squadName: displayName(squad?.squadName || "未编队"),
+    squadStateLabel: squad?.unassigned ? "未编队" : (squad?.locked ? "锁队" : "公开"),
+    squadCreatorLabel: displayName(squad?.creatorName || squad?.leaderName || "未知"),
+    squadSizeLabel: String(squadMembers.length || squad?.size || 0),
+    combatSubtitle: "按时间切片查看伤害、击倒、击杀频率",
+    squadMembers: squadMembers.map((member) => {
+      const memberStats = getMatchStats(member);
+      return {
+        name: displayName(member.name),
+        isLeader: Boolean(member.isLeader),
+        playtime: formatPlaytime(member),
+        squadLabel: member._resolvedUnassigned ? "未编队" : `#${member._resolvedSquadID}`,
+        roleLabel: String(member.role || "未知角色"),
+        stateLabel: formatState(member.state),
+        statsLabel: `K ${memberStats.kills} / D ${memberStats.downs} / 死亡 ${memberStats.deaths}`,
+      };
+    }),
+  };
+
+  state.identity = buildPlayerIdentity(player);
+  state.contentHtml = renderPlayerDetailContent(state);
+  return state;
+}
+
+function resolveFloatingPlayerWindowSnapshot(current, teams = []) {
+  const identity = current?.identity;
+  if (!identity) return null;
+
+  for (const team of Array.isArray(teams) ? teams : []) {
+    for (const squad of team?.squads || []) {
+      for (const member of squad?.members || []) {
+        if (!matchesPlayerIdentity(member, identity)) continue;
+        return { player: member, squad, team };
+      }
+    }
+  }
+
+  return null;
+}
+
+function buildTeamSquadLabel(player, squad, team) {
+  const teamLabel = `Team ${team?.teamID ?? player?.teamID ?? "?"}`;
+  const squadLabel = squad?.unassigned ? "未编队" : `Squad ${squad?.squadID ?? player?.squadID ?? "?"}`;
+  return `${teamLabel} / ${squadLabel}`;
+}
+
+function buildPlayerIdentity(player = {}) {
+  return {
+    playerID: String(player?.playerID ?? "").trim(),
+    steamID: getPlayerSteamID(player),
+    eosID: String(player?.eosID || player?.eos || player?.EOSID || "").trim(),
+    name: normalizeName(player?.name),
+  };
+}
+
+function matchesPlayerIdentity(candidate = {}, identity = {}) {
+  const candidateIdentity = buildPlayerIdentity(candidate);
+  return Boolean(
+    (identity.playerID && candidateIdentity.playerID && candidateIdentity.playerID === identity.playerID)
+    || (identity.steamID && candidateIdentity.steamID && candidateIdentity.steamID === identity.steamID)
+    || (identity.eosID && candidateIdentity.eosID && candidateIdentity.eosID === identity.eosID)
+    || (identity.name && candidateIdentity.name && candidateIdentity.name === identity.name),
+  );
+}
+
+function closeFloatingPlayerWindow() {
+  closeActivePlayerWindow();
 }
 
 function cleanCombatTypeLabel(type) {

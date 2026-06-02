@@ -55,6 +55,7 @@ export function createCombatManagerService({ core, modules, config, logger }) {
   const eventEmitter = new Map();
   const cacheWriteTimers = new Map();
   const cacheWritePromises = new Map();
+  let cacheWriteNonce = 0;
   let lastSnapshotAt = "";
 
   const api = {
@@ -404,7 +405,7 @@ export function createCombatManagerService({ core, modules, config, logger }) {
       serverId: core.webStatus?.serverId ?? "",
     });
     try {
-      await writeCombatCacheSnapshot(core.webStatus?.serverId ?? "");
+      await queueCombatCacheWrite(core.webStatus?.serverId ?? "", () => writeCombatCacheSnapshot(core.webStatus?.serverId ?? ""));
     } catch (error) {
       moduleLogger?.warn?.(`CombatManager cache write failed on start: ${error?.message ?? error}`);
     }
@@ -441,21 +442,42 @@ export function createCombatManagerService({ core, modules, config, logger }) {
     if (existing) clearTimeout(existing);
     const timer = setTimeout(() => {
       cacheWriteTimers.delete(target);
-      const writePromise = writeCombatCacheSnapshot(target).finally(() => {
-        cacheWritePromises.delete(target);
-      });
-      cacheWritePromises.set(target, writePromise);
+      queueCombatCacheWrite(target, () => writeCombatCacheSnapshot(target));
     }, 250);
     cacheWriteTimers.set(target, timer);
+  }
+
+  function queueCombatCacheWrite(serverId = "", task) {
+    const target = normalizeServerKey(serverId);
+    const previous = cacheWritePromises.get(target) ?? Promise.resolve();
+    const writePromise = previous
+      .catch(() => {})
+      .then(() => task());
+
+    cacheWritePromises.set(target, writePromise);
+    writePromise.finally(() => {
+      if (cacheWritePromises.get(target) === writePromise) {
+        cacheWritePromises.delete(target);
+      }
+    });
+    return writePromise;
   }
 
   async function writeCombatCacheSnapshot(serverId = "") {
     const snapshot = getCombatManagerSnapshot(serverId);
     const filePath = getCombatCacheFilePath(serverId);
-    const tempPath = `${filePath}.tmp`;
+    const tempPath = `${filePath}.${process.pid}.${Date.now()}.${++cacheWriteNonce}.tmp`;
+    const payload = JSON.stringify(snapshot, null, 2);
     await fs.mkdir(cacheDir, { recursive: true });
-    await fs.writeFile(tempPath, JSON.stringify(snapshot, null, 2), "utf8");
-    await fs.rename(tempPath, filePath);
+    try {
+      await fs.writeFile(tempPath, payload, "utf8");
+      await fs.rename(tempPath, filePath);
+    } catch (error) {
+      if (error?.code !== "ENOENT" && error?.code !== "EPERM") throw error;
+      await fs.writeFile(filePath, payload, "utf8");
+    } finally {
+      await fs.rm(tempPath, { force: true }).catch(() => {});
+    }
   }
 
   async function readCombatCacheSnapshot(serverId = "") {
@@ -471,7 +493,7 @@ export function createCombatManagerService({ core, modules, config, logger }) {
   async function ensureCombatCacheSnapshot(serverId = "") {
     const existing = await readCombatCacheSnapshot(serverId);
     if (existing) return existing;
-    await writeCombatCacheSnapshot(serverId);
+    await queueCombatCacheWrite(serverId, () => writeCombatCacheSnapshot(serverId));
     return readCombatCacheSnapshot(serverId);
   }
 
