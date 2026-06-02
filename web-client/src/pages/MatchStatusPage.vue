@@ -130,6 +130,7 @@ import { useUiStore } from "../stores/ui.store";
 import {
   adaptTeam,
   adaptPlayerDetail,
+  buildCombatStatsLookup,
   buildSquadLifecycleLookup,
   filterTeamsBySearch,
 } from "../utils/squad-admin-adapter";
@@ -232,6 +233,20 @@ const hasSnapshotData = computed(() => snapshotUpdatedAt.value > 0);
 const runtimeWebStatus = computed(() => server.snapshot?.webStatus ?? server.snapshot ?? {});
 const currentServerId = computed(() => String(runtimeWebStatus.value.serverId ?? server.snapshot?.serverId ?? "").trim());
 const rconStatus = computed(() => String(runtimeWebStatus.value.rcon ?? "unknown"));
+const combatCacheQuery = useQuery({
+  queryKey: computed(() => ["combat-manager-cache", auth.authenticated, currentServerId.value]),
+  enabled: computed(() => auth.authenticated && Boolean(currentServerId.value)),
+  queryFn: async () => {
+    try {
+      return await apiGet<any>(`/api/combat-manager/cache?serverId=${encodeURIComponent(currentServerId.value)}`);
+    } catch {
+      return { snapshot: { events: [] } };
+    }
+  },
+  staleTime: 5_000,
+  refetchInterval: 5_000,
+  refetchOnWindowFocus: false,
+});
 const matchSnapshotQuery = useQuery({
   queryKey: computed(() => ["match-snapshot", auth.authenticated]),
   enabled: computed(() => auth.authenticated),
@@ -247,6 +262,10 @@ const squadLifecycleQuery = useQuery({
 });
 const matchSnapshot = computed(() => matchSnapshotQuery.data.value?.matchState ?? null);
 const squadLifecycleCurrent = computed(() => squadLifecycleQuery.data.value?.current ?? null);
+const combatCacheEvents = computed(() => Array.isArray(combatCacheQuery.data.value?.snapshot?.events)
+  ? combatCacheQuery.data.value.snapshot.events
+  : []);
+const combatStatsLookup = computed(() => buildCombatStatsLookup(combatCacheEvents.value));
 const serverStatusUpdatedAt = computed(() => toMillis(matchSnapshot.value?.serverStatus?.lastUpdatedAt));
 const playersUpdatedAt = computed(() => toMillis(matchSnapshot.value?.players?.lastUpdatedAt));
 const squadsUpdatedAt = computed(() => toMillis(matchSnapshot.value?.squads?.lastUpdatedAt));
@@ -289,7 +308,7 @@ const viewerAutoSwapEnabled = computed(() => auth.user?.viewerTeamAutoSwapEnable
 
 const rawTeams = computed(() => {
   return match.teams.map((team) => {
-    const adapted = adaptTeam(team, playtimes.value, squadLifecycleLookup.value);
+    const adapted = adaptTeam(team, playtimes.value, squadLifecycleLookup.value, combatStatsLookup.value);
 
     return {
       ...adapted,
@@ -375,6 +394,7 @@ watch(
   { immediate: true },
 );
 
+if (false) {
 watch(
   () => [viewModels.value.teams, activePlayerWindow.value?.detail.playerId],
   () => {
@@ -398,6 +418,7 @@ watch(
   },
   { immediate: true },
 );
+}
 
 function selectPlayer(payload: { player: PlayerRowViewModel; event: MouseEvent }) {
   const player = payload.player;
@@ -434,7 +455,7 @@ function closePlayerDetail() {
 }
 
 function buildPlayerDetailViewModel(player: PlayerRowViewModel): PlayerDetailViewModel {
-  const rawPlayer: RuntimePlayer = (player.raw as RuntimePlayer | undefined) ?? {
+  const rawPlayer: RuntimePlayer = {
     playerID: normalizePlayerId(player.playerId),
     name: player.name,
     teamID: player.teamId ?? null,
@@ -446,7 +467,7 @@ function buildPlayerDetailViewModel(player: PlayerRowViewModel): PlayerDetailVie
     online: player.isOnline,
     current_ip: player.ip ?? undefined,
   } as RuntimePlayer;
-  return adaptPlayerDetail(rawPlayer, player.playtimeHours ?? null);
+  return adaptPlayerDetail(rawPlayer, player.playtimeHours ?? null, combatStatsLookup.value);
 }
 
 function normalizePlayerId(value: string | number | null | undefined) {

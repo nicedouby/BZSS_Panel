@@ -232,6 +232,8 @@ const props = defineProps<{
   serverId?: string | null;
 }>();
 
+const MAX_EVENTS = 200;
+
 const loading = ref(false);
 const error = ref("");
 const showEventDetails = ref(false);
@@ -288,17 +290,45 @@ async function loadCombatTimeline() {
     return;
   }
 
+  const serverId = String(props.serverId ?? "").trim();
+  if (!serverId) {
+    timeline.value = { buckets: [], rangeStart: 0, rangeEnd: 0, windowMinutes: 60 };
+    error.value = "";
+    selectedBucketIndex.value = 0;
+    selectedEventIndex.value = 0;
+    return;
+  }
+
   const searchParams = new URLSearchParams({
-    serverId: String(props.serverId ?? "").trim(),
+    serverId,
+    limit: String(MAX_EVENTS),
+    offset: "0",
   });
+
+  const player = props.player;
+  const searchTerms = [
+    player?.steam64,
+    player?.steamId,
+    player?.eosId,
+    player?.name,
+    player?.playerId != null ? String(player.playerId) : "",
+  ].map((value) => String(value ?? "").trim()).filter(Boolean);
+  if (searchTerms.length > 0) {
+    searchParams.set("search", searchTerms[0]);
+  }
+  if (player?.steamId) searchParams.set("steamID", player.steamId);
+  if (player?.steam64) searchParams.set("steam64ID", player.steam64);
+  if (player?.eosId) searchParams.set("eosID", player.eosId);
+  if (player?.name) searchParams.set("name", player.name);
+  if (player?.playerId != null) searchParams.set("playerKey", String(player.playerId));
 
   loading.value = true;
   error.value = "";
 
   try {
-    const data = await apiGet<{ snapshot?: { events?: CombatEvent[] } }>(`/api/combat-manager/cache?${searchParams.toString()}`);
-    const list = Array.isArray(data.snapshot?.events) ? data.snapshot.events : [];
-    timeline.value = buildTimeline(list);
+    const data = await apiGet<{ events?: CombatEvent[] }>(`/api/combat-manager/player-events?${searchParams.toString()}`);
+    const sourceEvents = Array.isArray(data.events) ? data.events.slice(-MAX_EVENTS) : [];
+    timeline.value = buildTimeline(sourceEvents);
     const firstNonEmpty = timeline.value.buckets.findIndex((bucket) => bucket.events.length > 0);
     selectedBucketIndex.value = firstNonEmpty >= 0 ? firstNonEmpty : Math.max(0, timeline.value.buckets.length - 1);
     selectedEventIndex.value = 0;
@@ -468,6 +498,7 @@ function emptyBucket(): CombatBucket {
     events: [],
   };
 }
+
 </script>
 
 <style scoped>

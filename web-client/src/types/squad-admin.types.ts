@@ -16,6 +16,8 @@ export interface PlayerRowViewModel {
   eosId: string | null;
   ip: string | null;
   playtimeHours: number | null;
+  combatStats: CombatStats;
+  statsLabel: string;
   raw?: any;
 }
 
@@ -94,6 +96,8 @@ export interface PlayerDetailViewModel {
   ipSource?: "current" | "last" | "none";
   ipLookupLoading?: boolean;
   playtimeHours: number | null;
+  combatStats: CombatStats;
+  statsLabel: string;
   source: string;
   controller: string;
   raw?: any;
@@ -124,6 +128,14 @@ export interface MatchHeaderData {
 export interface SquadWarning {
   type: "no_leader" | "no_members" | "stale_data";
   message: string;
+}
+
+export interface CombatStats {
+  kills: number;
+  downs: number;
+  deaths: number;
+  tk: number;
+  revives: number;
 }
 
 export interface PageState {

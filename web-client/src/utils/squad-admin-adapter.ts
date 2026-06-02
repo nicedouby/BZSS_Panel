@@ -2,6 +2,7 @@ import type { RuntimePlayer } from "../stores/player.store";
 import type { RuntimeSquad } from "../stores/squad.store";
 import type { RuntimeTeam } from "../stores/match.store";
 import type {
+  CombatStats,
   PlayerRowViewModel,
   SquadLeaderRowViewModel,
   SquadViewModel,
@@ -11,11 +12,21 @@ import type {
   SquadWarning,
 } from "../types/squad-admin.types";
 
+const EMPTY_COMBAT_STATS: CombatStats = {
+  kills: 0,
+  downs: 0,
+  deaths: 0,
+  tk: 0,
+  revives: 0,
+};
+
 export function adaptPlayerRow(
   player: RuntimePlayer,
   playtimeHours: number | null = null,
+  combatStatsLookup: Record<string, CombatStats> = {},
 ): PlayerRowViewModel {
   const steam64 = normalizeSteam64(player.steamID ?? (player as any).steamId ?? (player as any).steam64 ?? (player as any).steam64ID);
+  const combatStats = cloneCombatStats(resolveCombatStats(player, combatStatsLookup));
   return {
     playerId: player.playerID ?? null,
     name: player.name || "Unknown",
@@ -29,6 +40,8 @@ export function adaptPlayerRow(
     eosId: player.eosID ?? null,
     ip: (player as any).current_ip || (player as any).ip || null,
     playtimeHours,
+    combatStats,
+    statsLabel: formatCombatStatsLabel(combatStats),
     raw: player,
   };
 }
@@ -36,6 +49,7 @@ export function adaptPlayerRow(
 export function separateSquadLeader(
   members: RuntimePlayer[],
   playtimes: Record<string, any> = {},
+  combatStatsLookup: Record<string, CombatStats> = {},
 ): [SquadLeaderRowViewModel | null, PlayerRowViewModel[]] {
   const leader = members.find((m) => m.isLeader);
   const others = members.filter((m) => !m.isLeader);
@@ -44,11 +58,12 @@ export function separateSquadLeader(
     ? (adaptPlayerRow(
         leader,
         extractPlaytimeHours(leader.steamID, playtimes),
+        combatStatsLookup,
       ) as SquadLeaderRowViewModel)
     : null;
 
   const memberVms = others.map((m) =>
-    adaptPlayerRow(m, extractPlaytimeHours(m.steamID, playtimes)),
+    adaptPlayerRow(m, extractPlaytimeHours(m.steamID, playtimes), combatStatsLookup),
   );
 
   return [leaderVm, memberVms];
@@ -73,8 +88,9 @@ export function adaptSquad(
   members: RuntimePlayer[] = [],
   playtimes: Record<string, any> = {},
   lifecycleByKey: Record<string, SquadLifecycleViewModel> = {},
+  combatStatsLookup: Record<string, CombatStats> = {},
 ): SquadViewModel {
-  const [leader, otherMembers] = separateSquadLeader(members, playtimes);
+  const [leader, otherMembers] = separateSquadLeader(members, playtimes, combatStatsLookup);
   const playtimeSummary = buildPlaytimeSummary(collectSquadPlayers(leader, otherMembers));
   const lifecycle =
     lifecycleByKey[buildSquadLifecycleLookupKey(squad.teamID, squad.squadID, squad.generation)]
@@ -138,9 +154,10 @@ export function adaptTeam(
   runtimeTeam: RuntimeTeam,
   playtimes: Record<string, any> = {},
   lifecycleByKey: Record<string, SquadLifecycleViewModel> = {},
+  combatStatsLookup: Record<string, CombatStats> = {},
 ): TeamViewModel {
   const squads = runtimeTeam.squads.map((squad) =>
-    adaptSquad(squad, squad.members ?? [], playtimes, lifecycleByKey),
+    adaptSquad(squad, squad.members ?? [], playtimes, lifecycleByKey, combatStatsLookup),
   );
 
   if (runtimeTeam.unassignedPlayers.length > 0) {
@@ -158,6 +175,7 @@ export function adaptTeam(
         runtimeTeam.unassignedPlayers,
         playtimes,
         lifecycleByKey,
+        combatStatsLookup,
       ),
     );
   }
@@ -258,9 +276,11 @@ export function buildSquadLifecycleLookupKey(
 export function adaptPlayerDetail(
   player: RuntimePlayer,
   playtimeHours: number | null = null,
+  combatStatsLookup: Record<string, CombatStats> = {},
 ): PlayerDetailViewModel {
   const currentIp = (player as any).current_ip || (player as any).ip || null;
   const steam64 = normalizeSteam64(player.steamID ?? (player as any).steamId ?? (player as any).steam64 ?? (player as any).steam64ID);
+  const combatStats = cloneCombatStats(resolveCombatStats(player, combatStatsLookup));
   return {
     playerId: player.playerID ?? null,
     name: player.name || "Unknown",
@@ -278,10 +298,23 @@ export function adaptPlayerDetail(
     ipSource: currentIp ? "current" : "none",
     ipLookupLoading: false,
     playtimeHours,
+    combatStats,
+    statsLabel: formatCombatStatsLabel(combatStats),
     source: (player as any).source || "unknown",
     controller: (player as any).controllerID || (player as any).controller || "",
     raw: player,
   };
+}
+
+export function buildCombatStatsLookup(events: any[] = []): Record<string, CombatStats> {
+  const lookup: Record<string, CombatStats> = {};
+  const list = Array.isArray(events) ? events : [];
+
+  for (const event of list) {
+    applyCombatEventToLookup(lookup, event);
+  }
+
+  return lookup;
 }
 
 export function adaptMatchHeader(
@@ -652,6 +685,120 @@ function compareLifecycleRecords(left: SquadLifecycleViewModel, right: SquadLife
 function normalizeSteam64(value: unknown): string {
   const text = String(value ?? "").trim();
   return /^\d{17}$/.test(text) ? text : "";
+}
+
+function resolveCombatStats(player: Record<string, any> = {}, lookup: Record<string, CombatStats> = {}): CombatStats {
+  const keys = collectCombatIdentityKeys(player);
+  for (const key of keys) {
+    const stats = lookup[key];
+    if (stats) return stats;
+  }
+  return EMPTY_COMBAT_STATS;
+}
+
+function cloneCombatStats(stats: CombatStats): CombatStats {
+  return {
+    kills: Number(stats?.kills ?? 0),
+    downs: Number(stats?.downs ?? 0),
+    deaths: Number(stats?.deaths ?? 0),
+    tk: Number(stats?.tk ?? 0),
+    revives: Number(stats?.revives ?? 0),
+  };
+}
+
+function formatCombatStatsLabel(stats: CombatStats): string {
+  return `K ${Number(stats?.kills ?? 0)} / D ${Number(stats?.downs ?? 0)} / 死 ${Number(stats?.deaths ?? 0)} / TK ${Number(stats?.tk ?? 0)} / 复苏 ${Number(stats?.revives ?? 0)}`;
+}
+
+function applyCombatEventToLookup(lookup: Record<string, CombatStats>, event: Record<string, any>) {
+  if (!event || typeof event !== "object") return;
+
+  const attacker = event.attacker && typeof event.attacker === "object" ? event.attacker : {};
+  const victim = event.victim && typeof event.victim === "object" ? event.victim : {};
+  const type = normalizeCombatType(event);
+  const isFriendlyFire = Boolean(event.isFriendlyFire ?? event.relation?.isFriendlyFire);
+  const friendlyFireType = String(event.friendlyFireType ?? event.relation?.friendlyFireType ?? "").trim();
+  const teamKillLike = isTeamKillEvent(event, type, isFriendlyFire, friendlyFireType);
+
+  if (attacker && Object.keys(attacker).length > 0) {
+    const attackerStats = ensureCombatStats(lookup, attacker);
+    if (type === "revive") {
+      attackerStats.revives += 1;
+    } else if (type === "wound") {
+      attackerStats.downs += 1;
+    } else if (type === "kill" || type === "death" || type === "tk") {
+      if (teamKillLike) attackerStats.tk += 1;
+      else attackerStats.kills += 1;
+    }
+  }
+
+  if (victim && Object.keys(victim).length > 0 && (type === "kill" || type === "death" || type === "tk")) {
+    const victimStats = ensureCombatStats(lookup, victim);
+    victimStats.deaths += 1;
+  }
+}
+
+function ensureCombatStats(lookup: Record<string, CombatStats>, identity: Record<string, any>) {
+  const keys = collectCombatIdentityKeys(identity);
+  const existing = keys.map((key) => lookup[key]).find(Boolean);
+  const stats = existing ?? createEmptyCombatStats();
+
+  for (const key of keys) {
+    if (!key) continue;
+    lookup[key] = stats;
+  }
+
+  return stats;
+}
+
+function createEmptyCombatStats(): CombatStats {
+  return {
+    kills: 0,
+    downs: 0,
+    deaths: 0,
+    tk: 0,
+    revives: 0,
+  };
+}
+
+function normalizeCombatType(event: Record<string, any>) {
+  const type = String(event?.type ?? event?.eventType ?? "").trim().toLowerCase();
+  if (type === "wound" || type === "wounded") return "wound";
+  if (type === "teamwound" || type === "team_wound") return "wound";
+  if (type === "revive" || type === "revived") return "revive";
+  if (type === "died" || type === "death") return "death";
+  if (type === "kill" || type === "killed") return "kill";
+  if (type === "tk" || type === "teamkill" || type === "team_kill") return "tk";
+  return type;
+}
+
+function isTeamKillEvent(event: Record<string, any>, type: string, isFriendlyFire: boolean, friendlyFireType: string) {
+  if (type === "tk") return true;
+  if (!isFriendlyFire) return false;
+  if (friendlyFireType === "team_kill") return true;
+  if (event?.isTeamKill || event?.tk) return true;
+  return false;
+}
+
+function collectCombatIdentityKeys(source: Record<string, any> = {}) {
+  const keys = new Set<string>();
+  const push = (prefix: string, value: unknown, normalizer: (text: string) => string = (text) => text.trim()) => {
+    const text = normalizer(String(value ?? ""));
+    if (!text) return;
+    keys.add(`${prefix}:${text}`);
+  };
+
+  push("steam", source.steamID ?? source.steamId ?? source.steam64ID ?? source.steam64Id ?? source.steam64 ?? source.steam64ID ?? source.steam64Id);
+  push("eos", source.eosID ?? source.eosId ?? source.EOSID ?? source.EosID);
+  push("controller", source.controllerID ?? source.controllerId);
+  push("player", source.playerID ?? source.playerId);
+  push("name", source.displayName ?? source.playerName ?? source.name, (text) => normalizeName(text));
+
+  return [...keys];
+}
+
+function normalizeName(value: string) {
+  return String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 function deriveMatchMode(...values: unknown[]): string {

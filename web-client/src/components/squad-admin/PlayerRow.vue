@@ -27,6 +27,9 @@
         <span class="player-role">{{ displayRole(player.role) }}</span>
         <span class="player-id">#{{ player.playerId ?? "-" }}</span>
       </div>
+      <div class="player-combat-stats">
+        {{ player.statsLabel }}
+      </div>
     </div>
     <div v-if="playtimeText" class="player-playtime">
       {{ playtimeText }}
@@ -141,6 +144,12 @@ function displayRole(role: string | null | undefined) {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   flex-wrap: wrap;
+}
+
+.player-combat-stats {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 1.3;
 }
 
 .role-icon {

@@ -28,6 +28,9 @@
         <span class="leader-role">{{ displayRole(player.role) }}</span>
         <span class="leader-id">{{ t("field.id") }} {{ player.playerId ?? "-" }}</span>
       </div>
+      <div class="leader-combat-stats">
+        {{ player.statsLabel }}
+      </div>
     </div>
     <div v-if="playtimeText" class="leader-playtime">
       {{ playtimeText }}
@@ -218,6 +221,12 @@ function displayRole(role: string | null | undefined) {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   flex-wrap: wrap;
+}
+
+.leader-combat-stats {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 1.3;
 }
 
 .leader-role {

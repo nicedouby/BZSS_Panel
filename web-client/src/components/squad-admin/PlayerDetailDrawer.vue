@@ -36,7 +36,7 @@
                   :href="ipSearchUrl"
                   :empty-text="ipEmptyText"
                 />
-                <small class="identity-ip-hint">{{ resolveIpError || ipSourceHint }}</small>
+                <small class="identity-ip-hint">{{ ipSourceHint }}</small>
               </div>
             </section>
 
@@ -73,6 +73,46 @@
                   <span class="stat-label">{{ t("player.leader") }}</span>
                   <strong class="stat-value">{{ props.player.isLeader ? t("common.yes") : t("common.no") }}</strong>
                 </div>
+              </div>
+            </section>
+
+            <section class="detail-section combat-card">
+              <div class="detail-section-title">{{ t("player.combatStats", "战绩") }}</div>
+              <div class="combat-stats-grid">
+                <div class="stat-item">
+                  <span class="stat-label">{{ t("combat.kills", "击杀") }}</span>
+                  <strong class="stat-value">{{ props.player.combatStats.kills }}</strong>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">{{ t("combat.downs", "击倒") }}</span>
+                  <strong class="stat-value">{{ props.player.combatStats.downs }}</strong>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">{{ t("combat.death", "死亡") }}</span>
+                  <strong class="stat-value">{{ props.player.combatStats.deaths }}</strong>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">{{ t("combat.teamKill", "TK") }}</span>
+                  <strong class="stat-value">{{ props.player.combatStats.tk }}</strong>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">{{ t("combat.revive", "复苏") }}</span>
+                  <strong class="stat-value">{{ props.player.combatStats.revives }}</strong>
+                </div>
+              </div>
+              <div class="combat-stats-label">{{ props.player.statsLabel }}</div>
+            </section>
+
+            <section class="detail-section combat-history-section">
+              <button
+                type="button"
+                class="detail-section-title advanced-toggle"
+                @click="showCombatTimeline = !showCombatTimeline"
+              >
+                {{ showCombatTimeline ? "▼" : "▶" }} 个人战斗记录
+              </button>
+              <div v-if="showCombatTimeline" class="combat-history-content">
+                <PlayerCombatTimeline :player="props.player" :server-id="props.serverId" />
               </div>
             </section>
 
@@ -136,8 +176,6 @@
               </div>
             </section>
 
-            <PlayerCombatTimeline :player="props.player" :server-id="props.serverId" />
-
             <section class="detail-section advanced-section">
               <button type="button" class="detail-section-title advanced-toggle" @click="showAdvanced = !showAdvanced">
                 {{ showAdvanced ? "▼" : "▶" }} {{ t("player.advanced") }}
@@ -170,7 +208,6 @@ import type { PlayerDetailViewModel } from "../../types/squad-admin.types";
 import { useUiStore } from "../../stores/ui.store";
 import { copyTextWithToast } from "../../utils/clipboard";
 import { goToPlayerDatabaseSearch } from "../../utils/player-database";
-import { resolvePlayerIdentityIp } from "../../app/playerIdentityApi";
 import { requestSwitchTeam } from "../../app/teamBalanceApi";
 import { warnPlayer, kickPlayer, removePlayerFromSquad } from "../../app/squadManagementApi";
 import StatusBadge from "../common/StatusBadge.vue";
@@ -221,10 +258,7 @@ const panelStyle = computed(() => {
   };
 });
 const showAdvanced = ref(false);
-const resolvedLastIp = ref("");
-const resolvingIp = ref(false);
-const resolveIpError = ref("");
-const lookupToken = ref(0);
+const showCombatTimeline = ref(false);
 const actionBusy = ref(false);
 const canSwitchTeam = computed(() => Boolean(auth.user?.isSuperAdmin || auth.user?.permissions?.includes?.("squad.switch")));
 const updateViewport = () => {
@@ -235,15 +269,10 @@ const updateViewport = () => {
 };
 
 const currentIp = computed(() => String(props.player?.ip ?? "").trim());
-const displayIp = computed(() => currentIp.value || resolvedLastIp.value.trim());
+const displayIp = computed(() => currentIp.value);
 const ipSearchUrl = computed(() => buildIpSearchUrl(displayIp.value));
-const ipEmptyText = computed(() => (resolvingIp.value ? t("common.resolving") : "--"));
-const ipSourceHint = computed(() => {
-  if (currentIp.value) return t("common.current");
-  if (resolvingIp.value) return t("common.resolving");
-  if (resolvedLastIp.value.trim()) return t("common.lastKnown");
-  return t("common.none");
-});
+const ipEmptyText = computed(() => "--");
+const ipSourceHint = computed(() => t("common.none"));
 
 const teamColorClass = computed(() => {
   if (!props.player) return "neutral";
@@ -251,7 +280,7 @@ const teamColorClass = computed(() => {
   if (props.player.teamId === 2) return "team2";
   return "neutral";
 });
-const rawDataText = computed(() => safeStringify(props.player?.raw));
+const rawDataText = computed(() => (showAdvanced.value ? safeStringify(props.player?.raw) : ""));
 
 function close() {
   emit("close");
@@ -415,66 +444,6 @@ async function handleSwitchTeam() {
     actionBusy.value = false;
   }
 }
-
-function buildLookupKey() {
-  return [
-    String(props.player?.steamId ?? "").trim(),
-    String(props.player?.eosId ?? "").trim(),
-    String(props.player?.name ?? "").trim(),
-  ].filter(Boolean).join("|");
-}
-
-watch(
-  () => [props.open, props.player?.steamId, props.player?.eosId, props.player?.name, props.player?.ip],
-  async () => {
-    lookupToken.value += 1;
-
-    if (!props.open || !props.player) {
-      resolvingIp.value = false;
-      resolveIpError.value = "";
-      resolvedLastIp.value = "";
-      return;
-    }
-
-    resolveIpError.value = "";
-
-    if (currentIp.value) {
-      resolvedLastIp.value = "";
-      resolvingIp.value = false;
-      return;
-    }
-
-    const lookupKey = buildLookupKey();
-    if (!lookupKey) {
-      resolvedLastIp.value = "";
-      resolvingIp.value = false;
-      return;
-    }
-
-    resolvedLastIp.value = "";
-    resolvingIp.value = true;
-
-    const token = lookupToken.value;
-    try {
-      const result = await resolvePlayerIdentityIp({
-        steamId: props.player.steamId,
-        eosId: props.player.eosId,
-        name: props.player.name,
-      });
-
-      if (token !== lookupToken.value) return;
-
-      resolvedLastIp.value = result.source === "last" ? result.ip : "";
-      resolvingIp.value = false;
-    } catch {
-      if (token !== lookupToken.value) return;
-      resolvedLastIp.value = "";
-      resolvingIp.value = false;
-      resolveIpError.value = t("common.error");
-    }
-  },
-  { immediate: true },
-);
 
 function displayRole(role: string | null | undefined) {
   const raw = String(role ?? "").trim();
@@ -690,6 +659,23 @@ onUnmounted(() => {
   grid-template-columns: 1fr 1fr;
   gap: 16px;
   margin-top: 4px;
+}
+
+.combat-card {
+  background: linear-gradient(180deg, rgba(96, 165, 250, 0.08), rgba(255, 255, 255, 0.03));
+}
+
+.combat-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 12px;
+}
+
+.combat-stats-label {
+  margin-top: 4px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
 }
 
 .stat-item {
