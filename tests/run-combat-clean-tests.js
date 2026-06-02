@@ -230,6 +230,121 @@ async function testExactProjectileKillGetsBotFlag() {
   await module.stop();
 }
 
+async function testProjectileXmmAttackDisplaysBot() {
+  const { module, listeners } = createHarness();
+  await module.start();
+
+  emitCombatResolved(listeners, {
+    sourceEventId: "raw:projectile-xmm-damage",
+    serverId: "BZSS_Main",
+    time: "2026-05-10T01:00:46.000Z",
+    type: "damaged",
+    attackerName: "Enemy Soldier",
+    victimName: "Victim",
+    damage: 14,
+    causedBy: "Projectile_xmm",
+    rawCausedBy: "Projectile_xmm",
+    rawLog: "raw projectile xmm damage",
+  });
+
+  const clean = module.api.getEvents({ serverId: "BZSS_Main" })[0];
+  assert.equal(clean.attacker.displayName, "bot");
+  assert.equal(clean.attacker.isBot, true);
+  assert.equal(clean.weapon.typeKey, "bot_weapon");
+  assert.equal(clean.weapon.isBotWeapon, true);
+  assert.equal(clean.isBotAttack, true);
+
+  await module.stop();
+}
+
+async function testSquidBotGrenadeKillGetsBotFlag() {
+  const { module, listeners } = createHarness();
+  await module.start();
+
+  emitCombatResolved(listeners, {
+    sourceEventId: "raw:squidbot-grenade-kill",
+    serverId: "BZSS_Main",
+    time: "2026-06-02T16:54:24.000Z",
+    type: "died",
+    attackerName: "SquidBotAIController_C_2147353751",
+    attackerControllerID: "SquidBotAIController_C_2147353751",
+    victimName: "JoStar",
+    damage: -300,
+    causedBy: "Grenade爆炸物",
+    rawCausedBy: "Grenade爆炸物",
+    rawLog: "raw squidbot grenade kill",
+  });
+
+  const clean = module.api.getEvents({ serverId: "BZSS_Main" })[0];
+  assert.equal(clean.type, "kill");
+  assert.equal(clean.attacker.displayName, "bot");
+  assert.equal(clean.isBotAttack, true);
+  assert.ok(clean.eventFlags.some((flag) => flag.key === "killed_by_bot"));
+  assert.ok(clean.eventFlagLabels.includes("被bot击杀"));
+  assert.ok(!clean.eventFlags.some((flag) => flag.key === "give_up"));
+  assert.ok(!clean.eventFlagLabels.includes("放弃"));
+
+  await module.stop();
+}
+
+async function testSquidBotWoundGetsBotDownFlag() {
+  const { module, listeners } = createHarness();
+  await module.start();
+
+  emitCombatResolved(listeners, {
+    sourceEventId: "raw:squidbot-grenade-wound",
+    serverId: "BZSS_Main",
+    time: "2026-06-02T16:54:25.000Z",
+    type: "wounded",
+    attackerName: "SquidBotAIController_C_2147353751",
+    attackerControllerID: "SquidBotAIController_C_2147353751",
+    victimName: "JoStar",
+    damage: 115,
+    causedBy: "Grenade爆炸物",
+    rawCausedBy: "Grenade爆炸物",
+    rawLog: "raw squidbot grenade wound",
+  });
+
+  const clean = module.api.getEvents({ serverId: "BZSS_Main", type: "wound" })[0];
+  assert.equal(clean.type, "wound");
+  assert.equal(clean.attacker.displayName, "bot");
+  assert.equal(clean.isBotAttack, true);
+  assert.ok(clean.eventFlags.some((flag) => flag.key === "downed_by_bot"));
+  assert.ok(clean.eventFlagLabels.includes("被bot击倒"));
+  assert.ok(!clean.eventFlagLabels.includes("放弃"));
+
+  await module.stop();
+}
+
+async function testSquidBotControllerForcesBotAttack() {
+  const { module, listeners } = createHarness();
+  await module.start();
+
+  emitCombatResolved(listeners, {
+    sourceEventId: "raw:squidbot-controller",
+    serverId: "BZSS_Main",
+    time: "2026-05-10T01:01:10.000Z",
+    type: "damaged",
+    attackerName: "Enemy Soldier",
+    attackerControllerID: "SquidBotAIController_C_2147353751",
+    victimName: "Victim",
+    damage: 9,
+    causedBy: "Grenade爆炸物",
+    rawCausedBy: "Grenade爆炸物",
+    rawLog: "raw squidbot controller damage",
+  });
+
+  const clean = module.api.getEvents({ serverId: "BZSS_Main" })[0];
+  assert.equal(clean.attacker.displayName, "bot");
+  assert.equal(clean.attacker.isBot, true);
+  assert.equal(clean.attacker.botReason, "squidbot_controller");
+  assert.equal(clean.isBotAttack, true);
+  assert.equal(clean.weapon.typeKey, "explosive");
+  assert.equal(clean.relation.teamSource, "bot");
+
+  await module.stop();
+}
+
 async function testRejectsNullptrVictim() {
   const { module, listeners, moduleEvents } = createHarness();
   await module.start();
@@ -671,8 +786,12 @@ await testAttackerNullptrFallsBackToVictimExactly();
 await testWeaponTypeClassificationIsPreserved();
 await testProcessedCombatRecordPublishesUnifiedEventAndTags();
 await testExactProjectileAttackDisplaysBot();
+await testProjectileXmmAttackDisplaysBot();
 await testProjectile762NullptrAttackDisplaysBotWeapon();
 await testExactProjectileKillGetsBotFlag();
+await testSquidBotGrenadeKillGetsBotFlag();
+await testSquidBotWoundGetsBotDownFlag();
+await testSquidBotControllerForcesBotAttack();
 await testRejectsNullptrVictim();
 await testResolvesPlayersAndRelation();
 await testGiveUpOnlyKeepsSingleLabelInProcessedData();

@@ -6,6 +6,7 @@ import path from "node:path";
 const DEFAULT_BASE_DIR = "./data/combat-logs";
 const SUBSCRIPTION_ID = "module.combatLog";
 const COMBAT_CLEAN_EVENTS = new Set(["damageResolved", "woundResolved", "killResolved", "reviveResolved"]);
+const SQUID_BOT_CONTROLLER_ID = "SquidBotAIController_C";
 
 export function createCombatLogModule({ core, modules, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
@@ -43,7 +44,7 @@ export function createCombatLogModule({ core, modules, config, logger }) {
     const time = String(record.time ?? event?.time ?? new Date().toISOString());
     const type = formatType(record);
     const mark = formatMark(record);
-    const attacker = formatPlayerName(record.attacker ?? record.attackerName ?? record.attackerDisplayName ?? record.attacker?.displayName ?? record.attacker?.name);
+    const attacker = formatAttackerName(record);
     const victim = formatPlayerName(record.victim ?? record.victimName ?? record.victimDisplayName ?? record.victim?.displayName ?? record.victim?.name);
     const damage = formatDamage(record.damage);
     const weapon = formatWeapon(record.weapon ?? record.weaponName ?? record.causedBy ?? record.rawCausedBy ?? record.weapon?.displayName);
@@ -101,6 +102,34 @@ export function createCombatLogModule({ core, modules, config, logger }) {
     return sanitizeLineValue(value);
   }
 
+  function formatAttackerName(record = {}) {
+    if (record?.attacker?.isBot || record?.isBotAttack) {
+      return "bot";
+    }
+
+    const attackerName = sanitizeLineValue(record.attackerName ?? record.attackerDisplayName ?? record.attacker?.displayName ?? record.attacker?.name ?? "");
+    const attackerControllerID = sanitizeLineValue(record.attackerControllerID ?? record.attackerControllerId ?? record.attacker?.controllerID ?? "");
+    const weapon = sanitizeLineValue(
+      record.weapon?.displayName
+      ?? record.weapon?.raw
+      ?? record.weaponName
+      ?? record.causedBy
+      ?? record.rawCausedBy
+      ?? record.weapon
+      ?? "",
+    );
+
+    if (isSquidBotControllerID(attackerControllerID) || isSquidBotControllerID(attackerName)) {
+      return "bot";
+    }
+
+    if (isBotWeaponName(weapon)) {
+      return "bot";
+    }
+
+    return attackerName || formatPlayerName(record.attacker);
+  }
+
   function formatDamage(value) {
     if (value == null || String(value).trim() === "") return "-";
     const number = Number(value);
@@ -130,6 +159,22 @@ export function createCombatLogModule({ core, modules, config, logger }) {
       .replace(/[\r\n\t]+/g, " ")
       .replace(/\s+/g, " ")
       .trim();
+  }
+
+  function isSquidBotControllerID(value) {
+    const text = sanitizeLineValue(value);
+    return text === SQUID_BOT_CONTROLLER_ID || text.startsWith(`${SQUID_BOT_CONTROLLER_ID}_`);
+  }
+
+  function isBotWeaponName(value) {
+    const text = sanitizeLineValue(value).toLowerCase();
+    if (!text) return false;
+    const compact = text.replace(/[\s._-]+/g, "");
+    return text === "projectile"
+      || text === "projectile_xmm"
+      || text === "projectile xmm"
+      || compact === "projectile"
+      || compact === "projectilexmm";
   }
 
   function formatDateParts(value = new Date()) {

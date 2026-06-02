@@ -87,6 +87,17 @@ function testExactProjectileBecomesBotWeapon() {
   assert.equal(result.matchedBy, "exact");
 }
 
+function testProjectileXmmBecomesBotWeapon() {
+  const result = classifyWeaponType({
+    displayName: "Projectile_xmm",
+    cleaned: "Projectile_xmm",
+  });
+
+  assert.equal(result.key, "bot_weapon");
+  assert.equal(result.label, "人机武器");
+  assert.equal(result.matchedBy, "exact");
+}
+
 function testMeleeWeaponClassification() {
   const result = classifyWeaponType({
     displayName: "Knife",
@@ -107,6 +118,7 @@ testAntiTankWeaponClassification();
 testPlaceholderFallsBackToOther();
 testExplosiveWeaponClassification();
 testExactProjectileBecomesBotWeapon();
+testProjectileXmmBecomesBotWeapon();
 testMeleeWeaponClassification();
 
 console.log("combat weapon type tests passed");

@@ -15,6 +15,7 @@ import { classifyWeaponType, weaponTypeLabelForKey } from "./weapon-type.js";
 const VALID_TYPES = new Set(["damage", "wound", "kill", "revive"]);
 const DEFAULT_MAX_EVENTS = 5000;
 const DEFAULT_WEAPON_HISTORY_WINDOW_MS = 300000;
+const SQUID_BOT_CONTROLLER_ID = "SquidBotAIController_C";
 const FALLBACK_REASON = "attacker_nullptr_use_victim";
 const BOT_PROJECTILE_NULLPTR_REASON = "nullptr_projectile_7_62mm";
 const WEAPON_PLACEHOLDER_PATTERNS = [
@@ -91,7 +92,7 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       })
       : { weapon, applied: false };
     const finalWeapon = resolvedWeapon.weapon;
-    const botAttack = buildBotAttackContext(finalWeapon);
+    const botAttack = buildBotAttackContext(finalWeapon, rawRecord);
     let resolvedAttackerIdentity = attackerIdentity;
     let attackerFallback = false;
     if (!botAttack.isBotAttack && isNullishPlayerValue(resolvedAttackerIdentity.name)) {
@@ -480,6 +481,15 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
         key: "killed_by_bot",
         label: "被bot击杀",
         level: "danger",
+        reason: context.botAttack.reason || "exact_projectile",
+      });
+    }
+
+    if (context?.botAttack?.isBotAttack && context.cleanType === "wound") {
+      pushFlag({
+        key: "downed_by_bot",
+        label: "被bot击倒",
+        level: "warning",
         reason: context.botAttack.reason || "exact_projectile",
       });
     }
@@ -1110,12 +1120,26 @@ function displayPlayerName(player = {}) {
   return String(player?.displayName || player?.name || "Unknown").trim() || "Unknown";
 }
 
-  function buildBotAttackContext(weapon = {}) {
+  function buildBotAttackContext(weapon = {}, rawRecord = {}) {
+    const attackerControllerID = String(
+      rawRecord?.attackerControllerID
+      ?? rawRecord?.attackerControllerId
+      ?? rawRecord?.attackerName
+      ?? ""
+    ).trim();
+    if (isSquidBotControllerID(attackerControllerID)) {
+      return { isBotAttack: true, reason: "squidbot_controller" };
+    }
     const key = String(weapon?.typeKey ?? "").trim().toLowerCase();
     if (key !== "bot_weapon") {
       return { isBotAttack: false, reason: "" };
     }
     return { isBotAttack: true, reason: String(weapon?.botWeaponReason ?? "").trim() || "exact_projectile" };
+  }
+
+  function isSquidBotControllerID(value) {
+    const text = String(value ?? "").trim();
+    return text === SQUID_BOT_CONTROLLER_ID || text.startsWith(`${SQUID_BOT_CONTROLLER_ID}_`);
   }
 
   function isNullptrProjectileWeaponName({ raw = "", fallback = "", cleaned = "", displayName = "" } = {}) {

@@ -159,7 +159,68 @@ async function testDuplicateEventKeyIsWrittenOnce() {
   });
 }
 
+async function testSquidBotAttackerWritesBotInCombatLog() {
+  await withTempCombatLog(async ({ module, emit, tempDir }) => {
+    await module.start();
+
+    const payload = {
+      record: {
+        sourceEventId: "combat-log-bot-controller",
+        serverId: "BZSS_Main",
+        time: "2026-06-02T16:54:24+08:00",
+        type: "died",
+        attackerName: "SquidBotAIController_C_2147353751",
+        attackerControllerID: "SquidBotAIController_C_2147353751",
+        victimName: "JoStar",
+        damage: -300,
+        weapon: "Grenade爆炸物",
+      },
+    };
+
+    await emit("module.combatState", "updated", payload);
+    await module.stop();
+
+    const filePath = path.join(tempDir, "data", "combat-logs", "2026-06", "2026-06-02.log");
+    const content = await fs.readFile(filePath, "utf8");
+    const lines = content.trim().split(/\r?\n/);
+
+    assert.equal(lines.length, 1);
+    assert.equal(lines[0], "16:54:24\tkill\t-\tbot\tJoStar\t-300\tGrenade爆炸物");
+  });
+}
+
+async function testProjectileWeaponWritesBotInCombatLog() {
+  await withTempCombatLog(async ({ module, emit, tempDir }) => {
+    await module.start();
+
+    const payload = {
+      record: {
+        sourceEventId: "combat-log-bot-projectile",
+        serverId: "BZSS_Main",
+        time: "2026-06-02T16:54:25+08:00",
+        type: "died",
+        attackerName: "JoStar",
+        victimName: "Victim",
+        damage: 300,
+        weapon: "Projectile",
+      },
+    };
+
+    await emit("module.combatState", "updated", payload);
+    await module.stop();
+
+    const filePath = path.join(tempDir, "data", "combat-logs", "2026-06", "2026-06-02.log");
+    const content = await fs.readFile(filePath, "utf8");
+    const lines = content.trim().split(/\r?\n/);
+
+    assert.equal(lines.length, 1);
+    assert.equal(lines[0], "16:54:25\tkill\t-\tbot\tVictim\t300\tProjectile");
+  });
+}
+
 await testWritesDailyFileAndExposesBrowseApis();
 await testDuplicateEventKeyIsWrittenOnce();
+await testSquidBotAttackerWritesBotInCombatLog();
+await testProjectileWeaponWritesBotInCombatLog();
 
 console.log("combat log tests passed");

@@ -46,6 +46,10 @@
       </div>
     </PageCard>
 
+    <div v-if="refreshError" class="refresh-banner">
+      {{ refreshError }}
+    </div>
+
     <DataState
       :loading="bootLoading"
       :error="bootError"
@@ -228,6 +232,8 @@ const offset = ref(Math.max(Number(route.query.offset ?? 0) || 0, 0));
 
 const bootLoading = ref(true);
 const bootError = ref("");
+const refreshError = ref("");
+const refreshing = ref(false);
 const entriesLoading = ref(false);
 const entriesError = ref("");
 
@@ -303,14 +309,10 @@ onBeforeUnmount(() => {
 async function bootstrap() {
   bootLoading.value = true;
   bootError.value = "";
+  refreshError.value = "";
 
   try {
-    await refreshStatus();
-    await refreshMonths();
-    await ensureSelection();
-    await loadFiles();
-    await ensureDateSelection();
-    await reloadEntries();
+    await refreshAllData();
   } catch (error) {
     bootError.value = renderApiError(error, "加载战斗日志失败");
   } finally {
@@ -319,7 +321,27 @@ async function bootstrap() {
 }
 
 async function refreshAll() {
-  await bootstrap();
+  if (refreshing.value) return;
+
+  refreshing.value = true;
+  refreshError.value = "";
+
+  try {
+    await refreshAllData();
+  } catch (error) {
+    refreshError.value = renderApiError(error, "刷新战斗日志失败");
+  } finally {
+    refreshing.value = false;
+  }
+}
+
+async function refreshAllData() {
+  await refreshStatus();
+  await refreshMonths();
+  await ensureSelection();
+  await loadFiles();
+  await ensureDateSelection();
+  await reloadEntries();
 }
 
 async function refreshStatus() {
@@ -577,6 +599,16 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
   margin-top: 10px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.refresh-banner {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  background: rgba(248, 113, 113, 0.08);
+  color: #fecaca;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .layout {

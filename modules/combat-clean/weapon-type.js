@@ -339,11 +339,11 @@ export function normalizeWeaponTypeKey(key) {
 
 function matchExactProjectile(candidates = []) {
   for (const candidate of candidates) {
-    if (candidate?.lower !== "projectile") continue;
+    if (candidate?.lower !== "projectile" && candidate?.lower !== "projectile xmm" && candidate?.compact !== "projectilexmm") continue;
     return {
       matchedBy: "exact",
       matchedText: candidate.text,
-      matchedTerm: "projectile",
+      matchedTerm: candidate?.lower === "projectile xmm" || candidate?.compact === "projectilexmm" ? "projectile_xmm" : "projectile",
       candidateIndex: candidate.index,
       candidateSource: candidate.source,
     };
