@@ -28,10 +28,7 @@
 
         <div
           class="ice-main"
-          :class="{
-            'ice-main--with-detail': Boolean(selectedEvent),
-            'ice-main--empty': visibleEvents.length === 0,
-          }"
+          :class="{ 'ice-main--with-detail': Boolean(selectedEvent) }"
         >
           <InfantryCombatEventTable
             class="ice-table-pane"
@@ -41,7 +38,6 @@
           />
 
           <InfantryCombatEventDetail
-            v-if="selectedEvent"
             class="ice-detail-pane"
             :event="selectedEvent"
             @close="setSelectedEvent(null)"
@@ -106,9 +102,7 @@ async function saveConfig(next: InfantryCombatConfig) {
 <style scoped>
 .infantry-combat-page {
   --ice-page-height: calc(100dvh - 72px);
-  --ice-header-height: 72px;
-  --ice-top-height: 152px;
-  --ice-event-stream-height: calc(var(--ice-page-height) - var(--ice-header-height) - var(--ice-top-height) - 24px);
+  --ice-detail-width: 284px;
 
   width: 100%;
   max-width: none;
@@ -139,20 +133,22 @@ async function saveConfig(next: InfantryCombatConfig) {
 .ice-top {
   display: grid;
   gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
 }
 
 .ice-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(260px, var(--ice-detail-width));
   gap: 12px;
   min-height: 0;
-  height: var(--ice-event-stream-height);
-  max-height: var(--ice-event-stream-height);
+  height: 100%;
+  max-height: 100%;
   overflow: hidden;
 }
 
 .ice-main--with-detail {
-  grid-template-columns: minmax(0, 1fr) 300px;
+  --ice-detail-width: 332px;
 }
 
 .ice-table-pane {
@@ -172,17 +168,25 @@ async function saveConfig(next: InfantryCombatConfig) {
   padding-block: 10px;
 }
 
-@media (max-width: 1200px) {
-  .infantry-combat-page {
-    --ice-top-height: 216px;
+@media (min-width: 1280px) {
+  .ice-top {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   }
+}
 
-  .ice-main--with-detail {
-    grid-template-columns: 1fr;
+@media (max-width: 1180px) {
+  .ice-main {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .ice-detail-pane {
-    max-height: min(420px, 40dvh);
+    max-height: min(420px, 42dvh);
+  }
+}
+
+@media (max-width: 860px) {
+  .ice-top {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

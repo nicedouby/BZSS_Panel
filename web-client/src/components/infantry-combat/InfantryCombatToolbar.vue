@@ -2,7 +2,7 @@
   <section class="bz-card ice-toolbar-card">
     <div class="bz-card-body compact">
       <div class="toolbar-grid">
-        <label class="field">
+        <label class="field field--type">
           <span>事件类型</span>
           <select :value="filters.type" :disabled="loading" @change="updateType(($event.target as HTMLSelectElement).value)">
             <option value="all">全部</option>
@@ -12,18 +12,18 @@
           </select>
         </label>
 
-        <label class="field">
+        <label class="field field--warning">
           <span>提醒结果</span>
           <select :value="filters.warning" :disabled="loading" @change="updateWarning(($event.target as HTMLSelectElement).value)">
             <option value="all">全部</option>
-            <option value="victim_sent">受害者已发送</option>
-            <option value="attacker_sent">攻击者已发送</option>
-            <option value="skipped">任意跳过</option>
-            <option value="failed">任意失败</option>
+            <option value="victim_sent">受害者已发</option>
+            <option value="attacker_sent">攻击者已发</option>
+            <option value="skipped">已跳过</option>
+            <option value="failed">已失败</option>
           </select>
         </label>
 
-        <label class="field">
+        <label class="field field--relation">
           <span>关系</span>
           <select :value="filters.relation" :disabled="loading" @change="updateRelation(($event.target as HTMLSelectElement).value)">
             <option value="all">全部</option>
@@ -34,7 +34,7 @@
           </select>
         </label>
 
-        <label class="field">
+        <label class="field field--weapon">
           <span>武器</span>
           <select :value="filters.weapon" :disabled="loading" @change="updateWeapon(($event.target as HTMLSelectElement).value)">
             <option value="all">全部</option>
@@ -47,7 +47,7 @@
           </select>
         </label>
 
-        <label class="field search">
+        <label class="field field--search">
           <span>搜索</span>
           <input
             :value="filters.q"
@@ -57,7 +57,7 @@
           >
         </label>
 
-        <label class="field">
+        <label class="field field--limit">
           <span>每页</span>
           <select :value="String(filters.limit)" :disabled="loading" @change="updateLimit(($event.target as HTMLSelectElement).value)">
             <option value="50">50</option>
@@ -67,9 +67,15 @@
           </select>
         </label>
 
-        <div class="field toggle">
+        <div class="field field--toggle">
           <span>自动刷新</span>
-          <button type="button" class="toggle-button bz-btn bz-btn-ghost" :data-on="filters.autoRefresh" :disabled="loading" @click="update('autoRefresh', !filters.autoRefresh)">
+          <button
+            type="button"
+            class="toggle-button bz-btn bz-btn-ghost"
+            :data-on="filters.autoRefresh"
+            :disabled="loading"
+            @click="update('autoRefresh', !filters.autoRefresh)"
+          >
             {{ filters.autoRefresh ? "开启" : "关闭" }}
           </button>
         </div>
@@ -142,8 +148,8 @@ function normalizeWeapon(value: string): InfantryCombatFilters["weapon"] {
 <style scoped>
 .toolbar-grid {
   display: grid;
-  grid-template-columns: 168px 168px 168px 168px minmax(220px, 1fr) 96px auto;
-  gap: 8px;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 6px;
   align-items: end;
 }
 
@@ -159,6 +165,22 @@ function normalizeWeapon(value: string): InfantryCombatFilters["weapon"] {
   line-height: 1.1;
 }
 
+.field--type,
+.field--warning,
+.field--relation,
+.field--weapon {
+  grid-column: span 1;
+}
+
+.field--search {
+  grid-column: span 2;
+}
+
+.field--limit,
+.field--toggle {
+  grid-column: span 1;
+}
+
 .field select,
 .field input {
   width: 100%;
@@ -167,23 +189,16 @@ function normalizeWeapon(value: string): InfantryCombatFilters["weapon"] {
   background: #0f151b;
   color: #edf2f4;
   border-radius: 9px;
-  padding: 6px 9px;
-  font-size: 12px;
-  min-height: 32px;
-}
-
-.field.search {
-  grid-column: span 1;
-}
-
-.field.toggle {
-  align-content: end;
+  padding: 5px 8px;
+  font-size: 11px;
+  min-height: 30px;
 }
 
 .toggle-button {
   justify-content: flex-start;
-  min-height: 32px;
+  min-height: 30px;
   padding-inline: 10px;
+  width: 100%;
 }
 
 .toggle-button[data-on="true"] {
@@ -191,9 +206,13 @@ function normalizeWeapon(value: string): InfantryCombatFilters["weapon"] {
   background: rgba(74, 222, 128, 0.08);
 }
 
-@media (max-width: 1400px) {
+@media (max-width: 1200px) {
   .toolbar-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .field--search {
+    grid-column: span 2;
   }
 }
 
@@ -201,11 +220,25 @@ function normalizeWeapon(value: string): InfantryCombatFilters["weapon"] {
   .toolbar-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .field--search {
+    grid-column: span 2;
+  }
 }
 
 @media (max-width: 720px) {
   .toolbar-grid {
     grid-template-columns: 1fr;
+  }
+
+  .field--type,
+  .field--warning,
+  .field--relation,
+  .field--weapon,
+  .field--search,
+  .field--limit,
+  .field--toggle {
+    grid-column: auto;
   }
 }
 </style>

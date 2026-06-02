@@ -2,13 +2,21 @@
   <aside class="detail-card">
     <template v-if="event">
       <header class="detail-head">
-        <div>
+        <div class="detail-head__text">
           <p class="kicker">事件详情</p>
           <h2>{{ eventTitle }}</h2>
           <p class="subtitle">{{ formatTime(event.time) }}</p>
         </div>
         <button type="button" class="close-button" @click="emit('close')">关闭</button>
       </header>
+
+      <section class="detail-section detail-section--hero">
+        <div class="hero-chips">
+          <span class="hero-chip">类型 {{ typeLabel(event.type) }}</span>
+          <span class="hero-chip">伤害 {{ formatNumber(event.damage) }}</span>
+          <span class="hero-chip">武器 {{ valueOf(event.weapon) }}</span>
+        </div>
+      </section>
 
       <section class="detail-section">
         <div class="section-head">
@@ -76,7 +84,7 @@
     <template v-else>
       <div class="empty-state">
         <strong>请选择一条事件查看详情</strong>
-        <p>左侧点击任意一行后，这里会展示完整记录、提醒决策和原始 JSON。</p>
+        <p>左侧点击任意一行后，这里会显示完整记录、提醒决策和原始 JSON。</p>
       </div>
     </template>
   </aside>
@@ -180,7 +188,9 @@ function valueOf(value: unknown) {
 .detail-card {
   border: 1px solid #29323b;
   border-radius: 16px;
-  background: #12181f;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(96, 165, 250, 0.08), transparent 28%),
+    #12181f;
   height: 100%;
   min-height: 0;
   padding: 12px;
@@ -195,6 +205,10 @@ function valueOf(value: unknown) {
   justify-content: space-between;
   align-items: flex-start;
   gap: 10px;
+}
+
+.detail-head__text {
+  min-width: 0;
 }
 
 .kicker {
@@ -222,6 +236,29 @@ function valueOf(value: unknown) {
   gap: 8px;
   padding-top: 10px;
   border-top: 1px solid rgba(41, 50, 59, 0.8);
+}
+
+.detail-section--hero {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.hero-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hero-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid #31404d;
+  background: #0f151b;
+  color: #dbe2e8;
+  font-size: 11px;
 }
 
 .kv-grid {
@@ -294,7 +331,7 @@ function valueOf(value: unknown) {
   background: #0f151b;
   color: #edf2f4;
   border-radius: 10px;
-  padding: 8px 10px;
+  padding: 7px 10px;
   font-size: 12px;
 }
 
@@ -333,6 +370,7 @@ function valueOf(value: unknown) {
   color: #9aa7b2;
   min-height: 100%;
   align-content: center;
+  justify-items: start;
 }
 
 .empty-state strong {

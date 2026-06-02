@@ -30,25 +30,38 @@
       >
         <div class="record-accent" :data-tone="eventTone(event)" />
 
-        <div class="record-line">
-          <div class="record-line-body">
+        <div class="record-body">
+          <div class="record-meta">
             <span class="log-time">{{ formatTime(event.time) }}</span>
             <span class="type-pill" :data-tone="eventTone(event)">{{ typeLabel(event.type) }}</span>
             <span class="relation-pill" :data-tone="relationTone(event)">{{ relationLabel(event) }}</span>
             <span v-if="event.samePlayer" class="mini-pill danger">同人</span>
-            <span class="log-label">攻击者</span>
-            <strong class="entity-name">{{ event.attackerName || event.attacker?.name || "-" }}</strong>
+          </div>
+
+          <div class="record-main">
+            <div class="record-entity">
+              <span class="record-entity__label">攻击者</span>
+              <strong class="entity-name">{{ event.attackerName || event.attacker?.name || "-" }}</strong>
+            </div>
             <span class="log-arrow">→</span>
-            <strong class="entity-name">{{ event.victimName || event.victim?.name || "-" }}</strong>
+            <div class="record-entity">
+              <span class="record-entity__label">受害者</span>
+              <strong class="entity-name">{{ event.victimName || event.victim?.name || "-" }}</strong>
+            </div>
             <span class="log-damage">{{ formatDamage(event.damage) }}</span>
             <span class="log-weapon">{{ weaponLabel(event.weapon) }}</span>
-            <span class="log-divider">|</span>
-            <span class="log-label">标签</span>
-            <span v-for="tag in compactTags(event)" :key="tag.key" class="tag-chip" :data-tone="tag.tone">{{ tag.label }}</span>
-            <span v-if="!compactTags(event).length" class="tag-empty">无标签</span>
-            <span class="log-divider">|</span>
-            <WarningDecisionBadge :decision="event.victimWarning" role-label="受害" />
-            <WarningDecisionBadge :decision="event.attackerWarning" role-label="攻方" />
+          </div>
+
+          <div class="record-foot">
+            <div class="record-tagline">
+              <span class="log-label">标签</span>
+              <span v-for="tag in compactTags(event)" :key="tag.key" class="tag-chip" :data-tone="tag.tone">{{ tag.label }}</span>
+              <span v-if="!compactTags(event).length" class="tag-empty">无标签</span>
+            </div>
+            <div class="record-warnings">
+              <WarningDecisionBadge :decision="event.victimWarning" role-label="受害者" />
+              <WarningDecisionBadge :decision="event.attackerWarning" role-label="攻击者" />
+            </div>
           </div>
         </div>
       </article>
@@ -217,10 +230,10 @@ function formatDamage(value: unknown) {
   height: 100%;
   max-height: none;
   overflow: hidden;
-  padding: 7px;
+  padding: 8px;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 5px;
+  gap: 6px;
 }
 
 .records-head {
@@ -270,7 +283,7 @@ function formatDamage(value: unknown) {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: max-content;
-  gap: 2px;
+  gap: 3px;
   overflow-x: auto;
   overflow-y: hidden;
   padding-bottom: 1px;
@@ -304,7 +317,7 @@ function formatDamage(value: unknown) {
 
 .record-list {
   display: grid;
-  gap: 4px;
+  gap: 5px;
   grid-auto-rows: max-content;
   align-content: start;
   min-height: 0;
@@ -316,16 +329,15 @@ function formatDamage(value: unknown) {
 .record-card {
   position: relative;
   display: grid;
-  gap: 3px;
-  padding: 6px 10px 6px 12px;
+  grid-template-columns: 2px minmax(0, 1fr);
+  gap: 10px;
+  padding: 8px 10px 8px 0;
   border-radius: 12px;
   border: 1px solid #2b3540;
   background: rgba(13, 19, 25, 0.94);
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
-  min-height: 78px;
-  max-height: 78px;
-  height: 78px;
+  min-height: 88px;
   overflow: hidden;
 }
 
@@ -353,10 +365,9 @@ function formatDamage(value: unknown) {
 }
 
 .record-accent {
-  position: absolute;
-  inset: 0 auto 0 0;
+  grid-row: 1 / span 1;
   width: 2px;
-  border-radius: 12px 0 0 12px;
+  border-radius: 999px;
   background: #56708a;
 }
 
@@ -372,11 +383,23 @@ function formatDamage(value: unknown) {
   background: #f87171;
 }
 
-.record-line {
+.record-body {
   display: grid;
-  gap: 0;
+  gap: 6px;
   min-width: 0;
-  height: 100%;
+}
+
+.record-meta,
+.record-main,
+.record-foot {
+  min-width: 0;
+}
+
+.record-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .log-time {
@@ -425,10 +448,24 @@ function formatDamage(value: unknown) {
   background: rgba(248, 113, 113, 0.08);
 }
 
-.log-label {
+.record-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.record-entity {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.record-entity__label {
   color: #8fa2b3;
   font-size: 9px;
-  white-space: nowrap;
+  line-height: 1.1;
 }
 
 .entity-name {
@@ -438,7 +475,6 @@ function formatDamage(value: unknown) {
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
-  max-width: 180px;
 }
 
 .log-arrow {
@@ -470,50 +506,41 @@ function formatDamage(value: unknown) {
   max-width: 180px;
 }
 
-.log-divider {
-  color: #5f7180;
-  font-size: 9px;
-  padding: 0 2px;
+.record-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.record-tagline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.record-warnings {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 4px;
   flex: 0 0 auto;
+}
+
+.log-label {
+  color: #8fa2b3;
+  font-size: 9px;
+  white-space: nowrap;
 }
 
 .tag-chip,
 .tag-empty {
   flex: 0 0 auto;
-}
-
-.record-line-body {
-  display: flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  gap: 4px;
-  min-width: 0;
-  width: 100%;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.record-line-body .type-pill,
-.record-line-body .relation-pill,
-.record-line-body .mini-pill,
-.record-line-body .tag-chip,
-.record-line-body .tag-empty,
-.record-line-body .log-damage,
-.record-line-body .log-weapon,
-.record-line-body .log-divider,
-.record-line-body .log-label {
-  flex: 0 0 auto;
-}
-
-.record-line-body .entity-name {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.tag-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3px;
 }
 
 .tag-empty {
@@ -554,25 +581,29 @@ function formatDamage(value: unknown) {
 }
 
 @media (max-width: 1200px) {
-  .record-line-body {
-    overflow-x: auto;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
+  .record-main {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
   }
 
-  .record-line-body::-webkit-scrollbar {
-    display: none;
+  .log-arrow,
+  .log-damage,
+  .log-weapon {
+    justify-self: start;
+  }
+
+  .record-foot {
+    align-items: flex-start;
   }
 }
 
 @media (max-width: 720px) {
-  .records-head {
-    flex-direction: column;
-    align-items: flex-start;
+  .record-card {
+    padding-right: 8px;
   }
 
-  .records-head-actions {
-    justify-content: flex-start;
+  .record-main {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>
