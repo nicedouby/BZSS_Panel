@@ -143,7 +143,7 @@
 
               <div class="action-group">
                 <div class="group-label">队伍调度 / TEAM BALANCE</div>
-                <button type="button" class="action-button primary" @click="handleSwitchTeam" :disabled="actionBusy || !canSwitchTeam">
+                <button type="button" class="action-button primary" @click="handleForceTeamChange" :disabled="actionBusy || !canSwitchTeam">
                   跳边
                 </button>
               </div>
@@ -214,7 +214,7 @@ import type { PlayerDetailViewModel } from "../../types/squad-admin.types";
 import { useUiStore } from "../../stores/ui.store";
 import { copyTextWithToast } from "../../utils/clipboard";
 import { goToPlayerDatabaseSearch } from "../../utils/player-database";
-import { requestSwitchTeam } from "../../app/teamBalanceApi";
+import { forceTeamChange } from "../../app/teamBalanceApi";
 import { warnPlayer, kickPlayer, removePlayerFromSquad } from "../../app/squadManagementApi";
 import StatusBadge from "../common/StatusBadge.vue";
 import CopyableValue from "./CopyableValue.vue";
@@ -454,7 +454,7 @@ async function handleRemove() {
   }
 }
 
-async function handleSwitchTeam() {
+async function handleForceTeamChange() {
   if (!props.player || actionBusy.value || !canSwitchTeam.value) return;
   const confirmed = await ui.openConfirm({
     title: "确认跳边？",
@@ -465,15 +465,19 @@ async function handleSwitchTeam() {
 
   actionBusy.value = true;
   try {
-    const res = await requestSwitchTeam({
-      anyId: props.player.steamId || props.player.eosId || props.player.name || "",
-      playerId: props.player.playerId ?? null,
+    const res = await forceTeamChange({
       steamId: props.player.steamId ?? undefined,
-      eosId: props.player.eosId ?? undefined,
-      name: props.player.name,
+      playerName: props.player.name,
       source: "对局状态手动操作",
-      operatorName: auth.user?.username || "",
       reason: "manual_team_balance",
+      operator: {
+        id: auth.user?.id ?? auth.user?.username ?? "",
+        name: auth.user?.username ?? "",
+        username: auth.user?.username ?? "",
+        role: auth.user?.role ?? "",
+        isSuperAdmin: Boolean(auth.user?.isSuperAdmin),
+        permissions: Array.isArray(auth.user?.permissions) ? auth.user.permissions : [],
+      },
     });
     if (!res.ok) throw new Error(res.message || "跳边执行失败");
     ui.pushToast({ title: "指令已送达", message: `跳边请求已提交：${props.player.name}`, tone: "ok" });

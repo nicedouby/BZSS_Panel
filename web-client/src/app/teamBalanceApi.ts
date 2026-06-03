@@ -1,43 +1,57 @@
 import { apiPost } from "./apiClient";
 
-export interface TeamBalanceSwitchResponse {
+export interface TeamBalanceForceTeamChangeResponse {
   ok: boolean;
   type: string;
   action: string;
-  serverId: string;
+  steamId: string;
+  playerName: string;
   source: string;
-  operatorName: string;
-  system: boolean;
-  target: {
-    playerId?: number | null;
-    playerKey?: string;
-    steamId?: string;
-    eosId?: string;
-    name?: string;
-    anyId?: string;
-  } | null;
   reason: string;
+  operator: {
+    id?: string;
+    name?: string;
+    username?: string;
+    role?: string;
+    isSuperAdmin?: boolean;
+    permissions?: string[];
+  } | null;
+  system: boolean;
   error: string;
   message: string;
   command: string;
   rconExecuted: boolean;
   rconResponse: string;
-  record?: Record<string, unknown> | null;
+}
+
+export type TeamBalanceSwitchResponse = TeamBalanceForceTeamChangeResponse;
+
+export function forceTeamChange(payload: {
+  steamId?: string;
+  playerName?: string;
+  source?: string;
+  reason?: string;
+  operator?: TeamBalanceForceTeamChangeResponse["operator"];
+  anyId?: string;
+  playerKey?: string;
+  playerId?: string | number | null;
+  eosId?: string;
+  name?: string;
+}) {
+  return apiPost<TeamBalanceForceTeamChangeResponse>("/api/tb/force-team-change", payload);
 }
 
 export function requestSwitchTeam(payload: {
-  serverId?: string;
-  playerId?: number | string | null;
-  playerKey?: string;
-  anyId?: string;
   steamId?: string;
+  playerName?: string;
+  source?: string;
+  reason?: string;
+  operator?: TeamBalanceForceTeamChangeResponse["operator"];
+  anyId?: string;
+  playerKey?: string;
+  playerId?: string | number | null;
   eosId?: string;
   name?: string;
-  source?: string;
-  operatorName?: string;
-  reason?: string;
-  system?: boolean;
-  matchId?: string;
 }) {
-  return apiPost<TeamBalanceSwitchResponse>("/api/team-balance/switch", payload);
+  return forceTeamChange(payload);
 }

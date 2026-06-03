@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { RconManager } from "../core/rcon-manager.js";
+import { createTeamBalanceService } from "../modules/team-balance/service.js";
 import { resolveRconPermission } from "../web-client/src/shared/rcon-permissions.js";
 
 function createHarness() {
@@ -51,10 +52,58 @@ function createHarness() {
 
 async function testResolveRconPermissionAliases() {
   assert.equal(resolveRconPermission("tb"), "rcon.tb");
-  assert.equal(resolveRconPermission("AdminForceTeamChange \"123\""), "rcon.tb");
   assert.equal(resolveRconPermission("AdminBroadcast Hello"), "rcon.broadcast");
   assert.equal(resolveRconPermission("AdminForceAllVehicleAvailability 1"), "rcon.tank_battle");
   assert.equal(resolveRconPermission("ListPlayers"), "rcon.read");
+}
+
+async function generateForceTeamChangeCommand() {
+  const executedCommands = [];
+  const service = createTeamBalanceService({
+    core: {
+      logger: {
+        info() {},
+        warn() {},
+        error() {},
+        debug() {},
+      },
+      rcon: {
+        async execute(command) {
+          executedCommands.push(command);
+          return "OK";
+        },
+      },
+    },
+    config: {
+      get() {
+        return {
+          enabled: true,
+          switchPermission: "squad.switch",
+        };
+      },
+    },
+    logger: {
+      info() {},
+      warn() {},
+      error() {},
+      debug() {},
+    },
+  });
+
+  const result = await service.api.forceTeamChange({
+    steamId: "76561198377609640",
+    playerName: "PlayerName",
+    source: "test",
+    reason: "test",
+    operator: {
+      isSuperAdmin: true,
+      permissions: ["*"],
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(executedCommands.length, 1);
+  return executedCommands[0];
 }
 
 async function testDispatchCommandRejectsMissingPermission() {
@@ -75,8 +124,9 @@ async function testDispatchCommandRejectsMissingPermission() {
 
 async function testDispatchCommandAllowsMatchingPermission() {
   const { manager, executedCommands } = createHarness();
+  const command = await generateForceTeamChangeCommand();
   const result = await manager.dispatchCommand({
-    command: "AdminForceTeamChange \"123\"",
+    command,
     actor: {
       username: "operator",
       permissions: ["rcon.tb"],
@@ -86,7 +136,7 @@ async function testDispatchCommandAllowsMatchingPermission() {
   assert.equal(result.success, true);
   assert.equal(result.rconExecuted, true);
   assert.equal(result.rconResponse, "OK");
-  assert.deepEqual(executedCommands, ["AdminForceTeamChange \"123\""]);
+  assert.deepEqual(executedCommands, [command]);
 }
 
 async function testDispatchCommandAllowsSystemBypass() {

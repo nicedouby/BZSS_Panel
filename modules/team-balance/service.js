@@ -6,27 +6,34 @@ import {
 } from "../../web-client/src/shared/rcon-permissions.js";
 
 const MODULE_ID = "module.teamBalance";
-const DEFAULT_SOURCE = "对局状态手动操作";
+const DEFAULT_SOURCE = "manual";
+const DEFAULT_REASON = "manual_team_balance";
 const DEFAULT_SWITCH_PERMISSION = "squad.switch";
 
-export function createTeamBalanceService({ core, modules, config, logger }) {
-  const moduleLogger = logger ?? core.createLogger?.({
-    moduleId: MODULE_ID,
-    source: MODULE_ID,
-    channel: "module",
-  }) ?? core.logger;
+export function createTeamBalanceService({ core, config, logger }) {
+  const moduleLogger = logger
+    ?? core.createLogger?.({
+      moduleId: MODULE_ID,
+      source: MODULE_ID,
+      channel: "module",
+    })
+    ?? core.logger;
 
   const moduleConfig = config?.get?.("modules.teamBalance", {}) ?? {};
   const enabled = Boolean(moduleConfig.enabled ?? true);
   const switchPermission = String(moduleConfig.switchPermission ?? DEFAULT_SWITCH_PERMISSION).trim() || DEFAULT_SWITCH_PERMISSION;
 
   const api = {
-    async requestSwitchTeam(request = {}) {
-      return switchPlayerTeam(request);
+    forceTeamChange(request = {}) {
+      return forceTeamChange(request);
     },
 
-    async switchTeam(request = {}) {
-      return switchPlayerTeam(request);
+    requestSwitchTeam(request = {}) {
+      return forceTeamChange(request);
+    },
+
+    switchTeam(request = {}) {
+      return forceTeamChange(request);
     },
 
     getConfig() {
@@ -42,14 +49,16 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
       id: MODULE_ID,
       name: "Team Balance Module",
       kind: "module",
-      version: "0.1.0",
-      description: "Central gateway for manual team switch actions.",
+      version: "0.2.0",
+      description: "Single gateway for force team change actions.",
     },
     apiName: "teamBalance",
     api,
 
+    async init() {},
+
     async start() {
-      moduleLogger.info("TeamBalance module started.", {
+      moduleLogger?.info?.("TeamBalance module started.", {
         operation: "start",
         data: {
           enabled,
@@ -57,185 +66,121 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
         },
       });
     },
+
+    async stop() {},
   };
 
-  async function switchPlayerTeam(request = {}) {
-    const serverId = normalizeServerId(request.serverId ?? core.webStatus?.serverId ?? "");
-    const actor = request.actor ?? request.viewer ?? null;
-    const operatorName = normalizeText(request.operatorName ?? actor?.username ?? actor?.name);
+  async function forceTeamChange(request = {}) {
+    const operator = normalizeOperator(
+      request.operator ?? request.actor ?? request.viewer ?? null,
+      request.operatorName ?? request.actorName ?? "",
+    );
     const source = normalizeText(request.source) || DEFAULT_SOURCE;
-    const reason = normalizeText(request.reason) || "manual_team_balance";
+    const reason = normalizeText(request.reason) || DEFAULT_REASON;
+    const steamId = normalizeText(request.steamId ?? request.steamID ?? request.anyId ?? request.playerKey ?? request.playerId ?? "");
+    const playerName = normalizeText(request.playerName ?? request.name ?? "");
     const system = Boolean(request.system);
-    const target = resolveSwitchTarget(request);
-    const matchId = normalizeText(request.matchId ?? modules?.squadManagement?.getState?.(serverId)?.matchId ?? "");
+    const command = buildForceTeamChangeCommand(steamId);
 
     if (!enabled) {
-      return buildResult({
+      const result = buildResult({
         ok: false,
-        serverId,
-        source,
-        operatorName,
-        reason,
-        target,
         error: "ModuleDisabled",
         message: "TeamBalance module is disabled.",
+        command,
+        steamId,
+        playerName,
+        source,
+        reason,
+        operator,
         system,
       });
+      writeActionLog(result);
+      return result;
     }
 
-    if (!serverId) {
-      return buildResult({
+    if (!steamId) {
+      const result = buildResult({
         ok: false,
-        serverId,
+        error: "MissingSteamId",
+        message: "steamId is required.",
+        command,
+        steamId,
+        playerName,
         source,
-        operatorName,
         reason,
-        target,
-        error: "InvalidServerId",
-        message: "serverId is required.",
+        operator,
         system,
       });
+      writeActionLog(result);
+      return result;
     }
 
-    if (!target.anyId) {
-      return buildResult({
+    if (!system && !canSwitch(operator, { switchPermission })) {
+      const result = buildResult({
         ok: false,
-        serverId,
-        source,
-        operatorName,
-        reason,
-        target,
-        error: "InvalidTarget",
-        message: "A player target is required.",
-        system,
-      });
-    }
-
-    if (!system && !canSwitch(actor, { switchPermission })) {
-      return buildResult({
-        ok: false,
-        serverId,
-        source,
-        operatorName,
-        reason,
-        target,
         error: "Forbidden",
         message: `Permission '${switchPermission}' is required.`,
+        command,
+        steamId,
+        playerName,
+        source,
+        reason,
+        operator,
         system,
       });
+      writeActionLog(result);
+      return result;
     }
 
-    const command = `AdminForceTeamChange "${escapeCommandString(target.anyId)}"`;
     try {
-      const response = await executeSwitchCommand({
-        serverId,
+      const response = await executeForceTeamChangeCommand({
         command,
-        target,
         source,
-        operatorName,
         reason,
+        operator,
         system,
-        actor,
       });
 
-      const record = await modules?.squadManagement?.recordAction?.({
-        kind: "switch_team",
-        serverId,
-        matchId,
-        source,
-        operatorName,
-        system,
-        playerName: target.name ?? "",
-        playerKey: target.playerKey ?? target.anyId,
-        playerId: target.playerId ?? null,
-        steamId: target.steamId ?? "",
-        eosId: target.eosId ?? "",
-        reason,
-        result: response.ok ? "success" : "failed",
-        error: response.ok ? "" : response.error,
-        command,
-        payload: {
-          request,
-          target,
-          response,
-          note: `${source}，操作者${operatorName || "unknown"}`,
-        },
-      });
-
-      await modules?.audit?.record?.({
-        actorId: actor?.id ?? actor?.username ?? operatorName ?? "unknown",
-        actorName: operatorName || actor?.username || "unknown",
-        sourceModule: MODULE_ID,
-        action: "switch_team",
-        serverId,
-        target: {
-          anyId: target.anyId,
-          playerId: target.playerId ?? null,
-          playerName: target.name ?? "",
-          steamId: target.steamId ?? "",
-          eosId: target.eosId ?? "",
-        },
-        source,
-        reason,
-        result: response.ok ? "success" : "failed",
-        operatorName,
-      });
-
-      return buildResult({
+      const result = buildResult({
         ok: response.ok,
-        serverId,
-        source,
-        operatorName,
-        reason,
-        target,
         error: response.ok ? "" : response.error,
-        message: response.ok ? "Team switch requested." : response.error,
+        message: response.ok ? "Team switch requested." : (response.error || "RCON command failed."),
         command,
         rconExecuted: response.executed,
         rconResponse: response.response,
-        record,
-        system,
-      });
-    } catch (error) {
-      const errorMessage = String(error?.message ?? error);
-      await modules?.audit?.record?.({
-        actorId: actor?.id ?? actor?.username ?? operatorName ?? "unknown",
-        actorName: operatorName || actor?.username || "unknown",
-        sourceModule: MODULE_ID,
-        action: "switch_team",
-        serverId,
-        target: {
-          anyId: target.anyId,
-          playerId: target.playerId ?? null,
-          playerName: target.name ?? "",
-          steamId: target.steamId ?? "",
-          eosId: target.eosId ?? "",
-        },
+        steamId,
+        playerName,
         source,
         reason,
-        result: "failed",
-        operatorName,
-        error: errorMessage,
+        operator,
+        system,
       });
 
-      return buildResult({
+      writeActionLog(result);
+      return result;
+    } catch (error) {
+      const errorMessage = String(error?.message ?? error);
+      const result = buildResult({
         ok: false,
-        serverId,
-        source,
-        operatorName,
-        reason,
-        target,
-        error: errorMessage,
+        error: "RCON_FAILED",
         message: errorMessage,
-        command: `AdminForceTeamChange "${escapeCommandString(target.anyId)}"`,
+        command,
+        steamId,
+        playerName,
+        source,
+        reason,
+        operator,
         system,
       });
+      writeActionLog(result);
+      return result;
     }
   }
 
-  async function executeSwitchCommand({ command, target, source, operatorName, reason, system, actor }) {
+  async function executeForceTeamChangeCommand({ command, source, reason, operator, system }) {
     const requiredPermission = resolveRconPermission(command, { requiredPermission: "rcon.tb" });
-    if (!system && !canSendRconCommand(actor, command, { requiredPermission })) {
+    if (!system && !canSendRconCommand(operator, command, { requiredPermission })) {
       return {
         ok: false,
         executed: false,
@@ -244,34 +189,16 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
       };
     }
 
-    if (typeof core.squadRcon?.switchTeam === "function") {
-      const response = await core.squadRcon.switchTeam(target.anyId);
-      return normalizeSwitchResponse(response);
-    }
-
     if (typeof core.rconManager?.dispatchCommand === "function") {
       const response = await core.rconManager.dispatchCommand({
         command,
-        requestedBy: `${MODULE_ID}:${operatorName || "system"}`,
-        reason: reason || source || "switch_team",
+        requestedBy: `${MODULE_ID}:${normalizeText(operator?.name ?? operator?.username ?? "system") || "system"}`,
+        reason: reason || source || DEFAULT_REASON,
         system,
-        actor,
+        actor: operator,
         requiredPermission,
       });
-      if (response?.success || response?.rconExecuted) {
-        return {
-          ok: true,
-          executed: Boolean(response?.rconExecuted ?? response?.success ?? true),
-          response: response?.rconResponse ?? response?.message ?? "",
-          error: "",
-        };
-      }
-      return {
-        ok: false,
-        executed: false,
-        response: response?.rconResponse ?? "",
-        error: String(response?.message ?? "RCON command failed."),
-      };
+      return normalizeDispatchResponse(response);
     }
 
     if (typeof core.rcon?.execute === "function") {
@@ -279,74 +206,83 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
       return {
         ok: true,
         executed: true,
-        response,
+        response: String(response ?? ""),
         error: "",
       };
     }
 
     throw new Error("No RCON executor is available.");
   }
+
+  function writeActionLog(result) {
+    const entry = {
+      type: "FORCE_TEAM_CHANGE",
+      ok: result.ok,
+      steamId: result.steamId,
+      playerName: result.playerName || null,
+      source: result.source,
+      reason: result.reason,
+      operator: result.operator,
+      command: result.command,
+      rconExecuted: result.rconExecuted,
+      rconResponse: result.rconResponse,
+      error: result.error,
+      message: result.message,
+    };
+
+    if (result.ok) {
+      moduleLogger?.info?.("[TB] FORCE_TEAM_CHANGE", entry);
+      return;
+    }
+
+    moduleLogger?.warn?.("[TB] FORCE_TEAM_CHANGE_FAILED", entry);
+  }
 }
 
 function buildResult({
   ok,
-  serverId,
-  source,
-  operatorName,
-  reason,
-  target,
   error = "",
   message = "",
   command = "",
   rconExecuted = false,
   rconResponse = "",
-  record = null,
+  steamId = "",
+  playerName = "",
+  source = DEFAULT_SOURCE,
+  reason = DEFAULT_REASON,
+  operator = null,
   system = false,
 }) {
   return {
     ok: Boolean(ok),
-    type: "switch_team",
-    action: "switch_team",
-    serverId,
+    type: "force_team_change",
+    action: "force_team_change",
+    steamId,
+    playerName,
     source,
-    operatorName,
-    system: Boolean(system),
-    target,
     reason,
+    operator,
+    system: Boolean(system),
     error,
     message,
     command,
     rconExecuted: Boolean(rconExecuted),
     rconResponse,
-    record,
   };
 }
 
-function resolveSwitchTarget(request = {}) {
-  const playerId = normalizeNullableNumber(request.playerId ?? request.playerID);
-  const playerKey = normalizeText(request.playerKey ?? request.anyId ?? request.playerId ?? request.playerID ?? "");
-  const steamId = normalizeText(request.steamId ?? request.steamID ?? "");
-  const eosId = normalizeText(request.eosId ?? request.eosID ?? "");
-  const name = normalizeText(request.name ?? request.playerName ?? "");
-  const anyId = normalizeText(request.anyId ?? steamId ?? eosId ?? name ?? playerKey);
-  return {
-    playerId,
-    playerKey,
-    steamId,
-    eosId,
-    name,
-    anyId,
-  };
+function buildForceTeamChangeCommand(steamId) {
+  return `AdminForceTeamChange "${escapeCommandString(steamId)}"`;
 }
 
 function canSwitch(viewer, config = {}) {
-  return Boolean(
-    viewer?.isSuperAdmin
-    || viewer?.permissions?.includes?.(config.switchPermission)
-  );
+  if (!viewer) return false;
+  if (viewer.isSuperAdmin) return true;
+  const permissions = normalizePermissionList(viewer.permissions ?? viewer.permission);
+  return permissions.includes(config.switchPermission);
 }
 
-function normalizeSwitchResponse(response) {
+function normalizeDispatchResponse(response) {
   if (response && typeof response === "object") {
     return {
       ok: Boolean(response.ok ?? response.success ?? true),
@@ -364,18 +300,49 @@ function normalizeSwitchResponse(response) {
   };
 }
 
-function normalizeServerId(value) {
-  return String(value ?? "").trim();
+function normalizeOperator(operator, fallbackName = "") {
+  if (operator && typeof operator === "object") {
+    return {
+      id: normalizeText(operator.id ?? operator.userId ?? operator.username ?? ""),
+      name: normalizeText(operator.name ?? operator.username ?? fallbackName),
+      username: normalizeText(operator.username ?? operator.name ?? fallbackName),
+      role: normalizeText(operator.role ?? ""),
+      isSuperAdmin: Boolean(operator.isSuperAdmin),
+      permissions: normalizePermissionList(operator.permissions ?? operator.permission),
+    };
+  }
+
+  const name = normalizeText(fallbackName);
+  if (!name) return null;
+  return {
+    id: "",
+    name,
+    username: name,
+    role: "",
+    isSuperAdmin: false,
+    permissions: [],
+  };
+}
+
+function normalizePermissionList(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizeText(entry)).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value.split(",").map((entry) => normalizeText(entry)).filter(Boolean);
+  }
+  if (typeof value === "object") {
+    return Object.entries(value)
+      .filter(([, enabled]) => Boolean(enabled))
+      .map(([entry]) => normalizeText(entry))
+      .filter(Boolean);
+  }
+  return [];
 }
 
 function normalizeText(value) {
   return String(value ?? "").trim();
-}
-
-function normalizeNullableNumber(value) {
-  if (value == null || value === "") return null;
-  const num = Number(value);
-  return Number.isFinite(num) ? num : null;
 }
 
 function escapeCommandString(value) {

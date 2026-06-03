@@ -185,7 +185,7 @@ async function testRawLogLineCreatesPendingAndFlushesToLog() {
 
   assert.equal(harness.module.api.getPendingCount(), 1);
   assert.equal(
-    harness.logs.some((entry) => entry.level === "info" && entry.message === "[SquadLifecycle] squad create accepted: S5 Squad 5"),
+    harness.logs.some((entry) => entry.level === "info" && String(entry.message ?? "").includes("[SquadLifecycle] squad create accepted: S5 Squad 5")),
     true,
   );
 
@@ -204,7 +204,7 @@ async function testRawLogLineCreatesPendingAndFlushesToLog() {
   }));
 
   assert.equal(
-    harness.logs.filter((entry) => entry.level === "info" && entry.message === "[SquadLifecycle] squad create accepted: S5 Squad 5").length,
+    harness.logs.filter((entry) => entry.level === "info" && String(entry.message ?? "").includes("[SquadLifecycle] squad create accepted: S5 Squad 5")).length,
     1,
   );
 

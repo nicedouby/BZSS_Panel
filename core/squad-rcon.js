@@ -181,10 +181,6 @@ export default class SquadRcon extends Rcon {
   ban(anyID, banLength, message) {
     return this.execute(`AdminBan "${anyID}" ${banLength} ${message}`);
   }
-
-  switchTeam(anyID) {
-    return this.execute(`AdminForceTeamChange "${anyID}"`);
-  }
 }
 
 export function parseListPlayers(raw) {

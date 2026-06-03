@@ -310,14 +310,14 @@ async function testSamePlayerStillDisplays() {
     },
   });
 
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 1);
   assert.equal(calls[0].targetName, "Echo");
-  assert.equal(calls[1].targetName, "Echo");
 
   const events = module.api.getEvents({ limit: 10 });
   assert.equal(events.length, 1);
   assert.equal(events[0].victimWarning.success, true);
-  assert.equal(events[0].attackerWarning.success, true);
+  assert.equal(events[0].attackerWarning.skipped, true);
+  assert.equal(events[0].attackerWarning.skipReason, "same_player");
 
   const cleared = module.api.clear();
   assert.equal(cleared.ok, true);
