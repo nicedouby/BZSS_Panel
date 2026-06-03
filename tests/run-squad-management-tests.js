@@ -390,41 +390,6 @@ async function testLegacyCompatibility() {
   fs.rmSync(harness.tempDbDir, { recursive: true, force: true });
 }
 
-async function testFairSquadBuildingPolicy() {
-  const harness = createHarness({
-    logClockSeconds: 5,
-    noBuildUntilSeconds: 20,
-    infantryOnlyUntilSeconds: 0,
-    refreshSquads: () => [
-      { teamId: 1, squadId: 1, squadName: "Tank", teamName: "Alpha", creatorName: "Builder", creatorSteamId: "76561198000000031" },
-    ],
-  });
-  await harness.module.init();
-  await harness.module.start();
-
-  harness.core.eventBus.emitCoreEvent("On_SquadCreated", {
-    serverId: SERVER_ID,
-    squadId: 1,
-    squadName: "Tank",
-    creatorName: "Builder",
-    creatorSteamId: "76561198000000031",
-    createdAtMs: Date.now(),
-  });
-
-  await sleep();
-  await harness.modules.matchState.refresh("squads");
-  await sleep(100);
-
-  assert.equal(harness.commandCalls.disband.length, 1);
-  const actionEvent = latestModuleEvent(harness, "actionExecuted");
-  assert.equal(actionEvent?.payload?.type, "disband_squad");
-  assert.equal(actionEvent?.payload?.result?.source, "policy.fairSquadBuilding");
-  assert.equal(actionEvent?.payload?.result?.system, true);
-
-  await harness.module.stop();
-  fs.rmSync(harness.tempDbDir, { recursive: true, force: true });
-}
-
 async function testDisbandRefreshRetry() {
   let refreshed = false;
   const harness = createHarness({
@@ -461,7 +426,6 @@ async function main() {
   await testExecuteActionKick();
   await testExecuteActionRemoveFromSquad();
   await testLegacyCompatibility();
-  await testFairSquadBuildingPolicy();
   await testDisbandRefreshRetry();
   console.log("Passed: squad management gateway tests");
 }
