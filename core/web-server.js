@@ -1373,6 +1373,48 @@ export class WebServer {
       }
     }
 
+    if (url.pathname.startsWith("/api/plugins/fair-squad-building")) {
+      const pluginApi = this.getPluginApi("plugin.fairSquadBuilding");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "FairSquadBuildingUnavailable",
+          message: "Fair squad building plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/fair-squad-building/state" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.getPageState?.(
+            url.searchParams.get("serverId")
+            ?? this.core?.webStatus?.serverId
+            ?? this.core?.webStatus?.getSnapshot?.()?.serverId
+            ?? "",
+            user,
+          ),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/fair-squad-building/records" && req.method === "GET") {
+        return this.json(res, 200, await pluginApi.listRecords?.({
+          serverId: url.searchParams.get("serverId")
+            ?? this.core?.webStatus?.serverId
+            ?? this.core?.webStatus?.getSnapshot?.()?.serverId
+            ?? "",
+          matchId: url.searchParams.get("matchId") ?? "",
+          kind: url.searchParams.get("kind") ?? "all",
+          limit: url.searchParams.get("limit") ?? "500",
+          offset: url.searchParams.get("offset") ?? "0",
+        }));
+      }
+
+      if (url.pathname === "/api/plugins/fair-squad-building/actions" && req.method === "POST") {
+        const body = await this.readJsonBody(req);
+        const result = await pluginApi.executeAction?.(body ?? {}, user);
+        return this.json(res, result?.ok ? 200 : (result?.error === "Forbidden" ? 403 : 400), result);
+      }
+    }
+
     if (url.pathname.startsWith("/api/plugins/pjsc-average-duration")) {
       const pluginApi = this.getPluginApi("plugin.pjscAverageDuration");
       if (!pluginApi) {

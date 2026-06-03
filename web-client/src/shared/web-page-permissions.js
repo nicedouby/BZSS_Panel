@@ -17,6 +17,7 @@ export const WEB_PAGE_PERMISSION_MATRIX = Object.freeze([
   { route: "/plugin-subscriptions", requiredPermission: "plugins.manage" },
   { route: "/plugins/infantry-combat-enhancer", requiredPermission: "infantry_combat_enhancer.view" },
   { route: "/plugins/group-report", requiredPermission: "group_report.view" },
+  { route: "/plugins/fair-squad-building", requiredPermission: "squad_management.view" },
   { route: "/plugins/server-info-statistics", requiredPermission: "server_stats.view" },
   { route: "/weapon-collector", requiredPermission: "combat_manager.view", legacyRequiredPermissions: ["kill_manager.view"] },
   { route: "/debug/udp-forwarder", requiredPermission: "debug.udp_forwarder.view" },

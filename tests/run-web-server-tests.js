@@ -1584,6 +1584,148 @@ async function testFairTeamBalanceRoutesReturnPluginStateAndRequests() {
   assert.equal(rejectCalls[0].reason, "manual_reject");
 }
 
+async function testFairSquadBuildingRoutesExposePluginApi() {
+  const actionCalls = [];
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return {
+            username: "admin",
+            role: "Operator",
+            permissions: ["squad.disband", "squad.kick", "squad.remove"],
+          };
+        },
+        hasEverything() {
+          return false;
+        },
+      },
+      pluginManager: {
+        instances: [
+          {
+            manifest: { id: "plugin.fairSquadBuilding" },
+            api: {
+              async getPageState(serverId, actor) {
+                return {
+                  plugin: { route: "/plugins/fair-squad-building", active: true },
+                  serverId,
+                  viewer: { username: actor.username },
+                  policy: { window: "no-build" },
+                  summary: { violations: 1 },
+                  currentMatchId: "match-1",
+                  squads: [],
+                  violations: [],
+                  creators: [],
+                  recentActions: [],
+                };
+              },
+              async listRecords(query) {
+                return {
+                  ok: true,
+                  kind: query.kind,
+                  limit: Number(query.limit),
+                  offset: Number(query.offset),
+                  total: 1,
+                  summary: {
+                    total: 1,
+                    created: 1,
+                    disbanded: 0,
+                    kicked: 0,
+                    removed: 0,
+                    switched: 0,
+                    actions: 0,
+                    success: 1,
+                    failed: 0,
+                    lastEventAt: "2026-06-03T00:00:00.000Z",
+                  },
+                  records: [
+                    { recordKey: "r1", kind: "squad_created", squadName: "Tank" },
+                  ],
+                };
+              },
+              async executeAction(payload, actor) {
+                actionCalls.push({ payload, actor });
+                return {
+                  ok: true,
+                  type: payload.type,
+                  action: "disband",
+                  source: "web.fairSquadBuilding",
+                };
+              },
+            },
+          },
+        ],
+      },
+    },
+  });
+
+  const stateRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/plugins/fair-squad-building/state?serverId=BZSS_Main",
+    headers: { host: "localhost", authorization: "admin" },
+    socket: {},
+  }, stateRecorder.res);
+  assert.equal(stateRecorder.state.status, 200);
+  const stateBody = JSON.parse(stateRecorder.state.body);
+  assert.equal(stateBody.data.serverId, "BZSS_Main");
+  assert.equal(stateBody.data.viewer.username, "admin");
+
+  const recordsRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/plugins/fair-squad-building/records?kind=squad_created&limit=50&offset=0",
+    headers: { host: "localhost", authorization: "admin" },
+    socket: {},
+  }, recordsRecorder.res);
+  assert.equal(recordsRecorder.state.status, 200);
+  const recordsBody = JSON.parse(recordsRecorder.state.body);
+  assert.equal(recordsBody.records[0].squadName, "Tank");
+
+  const actionRecorder = createRecorder();
+  const actionBody = Readable.from([JSON.stringify({ type: "disband_squad", teamId: 1, squadId: 2 })]);
+  actionBody.method = "POST";
+  actionBody.url = "/api/plugins/fair-squad-building/actions";
+  actionBody.headers = { host: "localhost", authorization: "admin" };
+  actionBody.socket = {};
+  await server.handleRequest(actionBody, actionRecorder.res);
+  assert.equal(actionRecorder.state.status, 200);
+  assert.equal(actionCalls.length, 1);
+  assert.equal(actionCalls[0].payload.type, "disband_squad");
+  assert.equal(actionCalls[0].actor.username, "admin");
+}
+
+async function testFairSquadBuildingRoutesReturn404WhenPluginMissing() {
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return {
+            username: "viewer",
+            role: "Operator",
+            permissions: ["squad_management.view"],
+          };
+        },
+      },
+      pluginManager: {
+        instances: [],
+      },
+    },
+  });
+
+  const recorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/plugins/fair-squad-building/state",
+    headers: { host: "localhost", authorization: "viewer" },
+    socket: {},
+  }, recorder.res);
+
+  assert.equal(recorder.state.status, 404);
+  const body = JSON.parse(recorder.state.body);
+  assert.equal(body.error, "FairSquadBuildingUnavailable");
+}
+
 async function testVueRouteFallsBackToIndexHtml() {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-web-"));
   await fs.writeFile(path.join(tempDir, "index.html"), "<html><body>vue-app</body></html>", "utf8");
@@ -1644,6 +1786,8 @@ await testAdminWarnRecentRouteReturnsMemoryRecords();
 await testAdminWarnBroadcastRouteReturnsMemoryRecords();
 await testCombatLogRoutesExposeLogsAndMetadata();
 await testFairTeamBalanceRoutesReturnPluginStateAndRequests();
+await testFairSquadBuildingRoutesExposePluginApi();
+await testFairSquadBuildingRoutesReturn404WhenPluginMissing();
 await testPjscAverageDurationRouteReturnsPluginState();
 await testVueRouteFallsBackToIndexHtml();
 

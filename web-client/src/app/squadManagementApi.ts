@@ -16,6 +16,7 @@ export interface SquadManagementSquad {
   matchId: string;
   teamId: number | null;
   squadId: number | null;
+  generation?: number | null;
   squadName: string;
   creatorName: string;
   creatorSteamId: string;
@@ -33,6 +34,9 @@ export interface SquadManagementSquad {
   shouldDisband: boolean;
   currentCreatorCount: number;
   disbanded: boolean;
+  memberCount?: number;
+  squadNature?: string;
+  squadNatureLabel?: string;
   recordKey?: string;
   creationSource?: string;
   creationConfidence?: string;
@@ -54,6 +58,8 @@ export interface SquadManagementCreator {
   lastKickResult: string;
   lastKickAttemptedCount: number;
   latestSquadName: string;
+  latestSquadId?: number | null;
+  latestTeamId?: number | null;
   lastActionAt: string;
 }
 
