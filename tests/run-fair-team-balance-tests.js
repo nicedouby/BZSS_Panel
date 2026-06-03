@@ -750,5 +750,39 @@ await testWarmupTbIgnoresNormalRestrictionsButChecksPostSwitchDelta();
 await testPlayerQuotasResetAndRecoveryRoundTrip();
 await testRecoveryRestoresPendingRequestAndRoundQuotaAfterRoundReset();
 await testSqtbExpiresByTtl();
+await testWindowBroadcasts();
 
 console.log("fair team balance tests passed");
+
+async function testWindowBroadcasts() {
+  console.log("testing window broadcasts...");
+  const harness = await createHarness({
+    webStatus: {
+      logClockSeconds: 10,
+    },
+  });
+
+  try {
+    // Initially closed at 10s
+    assert.equal(harness.broadcasts.length, 0);
+
+    // Move to 25s (Open)
+    harness.webStatus.logClockSeconds = 25;
+    await sleep(1200); // Wait for expiryTimer (1000ms + margin)
+    assert.equal(harness.broadcasts.length, 1);
+    assert.match(harness.broadcasts[0].message, /窗口已打开/);
+
+    // Stay at 30s (Still Open, no new broadcast)
+    harness.webStatus.logClockSeconds = 30;
+    await sleep(1200);
+    assert.equal(harness.broadcasts.length, 1);
+
+    // Move to 65s (Closed)
+    harness.webStatus.logClockSeconds = 65;
+    await sleep(1200);
+    assert.equal(harness.broadcasts.length, 2);
+    assert.match(harness.broadcasts[1].message, /窗口已关闭/);
+  } finally {
+    await harness.stop();
+  }
+}

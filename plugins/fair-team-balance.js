@@ -433,6 +433,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       state.round.usedPlayerKeys.clear();
       state.round.lastResetAt = nowIso();
       state.round.lastResetReason = reason;
+      state.windowState.wasOpen = false;
 
       await appendLog({
         type: "ROUND_RESET",
@@ -573,14 +574,14 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
   function validateCommonPlayerState(matchState, player) {
     if (!matchState) {
-      return { ok: false, error: "MatchStateUnavailable", message: "SquadManagement state unavailable." };
+      return { ok: false, error: "MatchStateUnavailable", message: "SquadManagement 状态不可用。" };
     }
     if (!player) {
-      return { ok: false, error: "PlayerNotFound", message: "Player is not present in the current snapshot." };
+      return { ok: false, error: "PlayerNotFound", message: "当前快照中未找到玩家。" };
     }
     const teamId = Number(player?.teamId ?? player?.teamID ?? 0);
     if (teamId !== 1 && teamId !== 2) {
-      return { ok: false, error: "InvalidTeam", message: "Player must be on team 1 or team 2." };
+      return { ok: false, error: "InvalidTeam", message: "玩家必须在队伍 1 或队伍 2。" };
     }
     return { ok: true };
   }
@@ -590,41 +591,41 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     if (!common.ok) return common;
 
     if (hasRoundUse(playerKey)) {
-      return { ok: false, error: "RoundPlayerQuotaExhausted", message: `${playerName || "Player"} has already used tb/sqtb/claim this round.` };
+      return { ok: false, error: "RoundPlayerQuotaExhausted", message: `${playerName || "玩家"} 本回合已使用过 tb/sqtb/认领。` };
     }
 
     if (Boolean(webStatus?.isWarmup)) {
       const warmupDelta = calculatePostSwitchDelta(matchState, player);
       if (warmupDelta == null) {
-        return { ok: false, error: "InvalidTeam", message: "Cannot calculate warmup team delta." };
+        return { ok: false, error: "InvalidTeam", message: "无法计算热身阶段队伍分差。" };
       }
       if (warmupDelta >= 6) {
-        return { ok: false, error: "WarmupDeltaExceeded", message: "Warmup switch would make team delta 6 or more." };
+        return { ok: false, error: "WarmupDeltaExceeded", message: "热身阶段跳边会导致队伍分差达到 6 人或更多。" };
       }
       return { ok: true, mode: "warmup" };
     }
 
     const logClockSeconds = Number(webStatus?.logClockSeconds ?? 0);
     if (logClockSeconds < 20 || logClockSeconds > 60) {
-      return { ok: false, error: "WindowClosed", message: "tb is only available between 20 and 60 seconds." };
+      return { ok: false, error: "WindowClosed", message: "tb 仅在开局 20 到 60 秒之间可用。" };
     }
 
     const squadId = Number(player?.squadId ?? player?.squadID ?? 0);
     if (squadId > 0) {
-      return { ok: false, error: "PlayerInSquad", message: "Player must not be in a squad." };
+      return { ok: false, error: "PlayerInSquad", message: "玩家必须不在小队中。" };
     }
 
     if (state.round.publicTbRemaining <= 0) {
-      return { ok: false, error: "RoundTbQuotaExhausted", message: "Round tb quota is exhausted." };
+      return { ok: false, error: "RoundTbQuotaExhausted", message: "本回合公共跳边额度已用尽。" };
     }
 
     if (Number(period?.tbUsed ?? 0) >= runtimeConfig.periodTbLimit) {
-      return { ok: false, error: "PlayerTbQuotaExhausted", message: "Player tb quota is exhausted for the current period." };
+      return { ok: false, error: "PlayerTbQuotaExhausted", message: "玩家在当前周期内的跳边额度已用尽。" };
     }
 
     const counts = getTeamCounts(matchState);
     if (Math.abs(counts.team1 - counts.team2) >= 3) {
-      return { ok: false, error: "TeamDeltaExceeded", message: "Current team delta is 3 or more." };
+      return { ok: false, error: "TeamDeltaExceeded", message: "当前队伍分差已达到 3 人或更多。" };
     }
 
     return { ok: true, mode: "normal" };
@@ -635,20 +636,20 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     if (!common.ok) return common;
 
     if (Boolean(webStatus?.isWarmup)) {
-      return { ok: false, error: "WarmupSqtbDisabled", message: "sqtb is disabled during warmup." };
+      return { ok: false, error: "WarmupSqtbDisabled", message: "暖服阶段禁用 sqtb 申请，请使用tb。" };
     }
 
     const squadId = Number(player?.squadId ?? player?.squadID ?? 0);
     if (squadId > 0) {
-      return { ok: false, error: "PlayerInSquad", message: "Player must not be in a squad." };
+      return { ok: false, error: "PlayerInSquad", message: "小队中禁止跳边" };
     }
 
     if (Number(period?.sqtbClaimUsed ?? 0) >= runtimeConfig.periodSqtbClaimLimit) {
-      return { ok: false, error: "PlayerSqtbQuotaExhausted", message: "Player sqtb/claim quota is exhausted for the current period." };
+      return { ok: false, error: "PlayerSqtbQuotaExhausted", message: "玩家在当前周期内的申请/认领额度已用尽。" };
     }
 
     if (hasRoundUse(playerKey)) {
-      return { ok: false, error: "RoundPlayerQuotaExhausted", message: `${playerName || "Player"} has already used tb/sqtb/claim this round.` };
+      return { ok: false, error: "RoundPlayerQuotaExhausted", message: `${playerName || "玩家"} 本回合已使用过 tb/sqtb/认领。` };
     }
 
     return { ok: true };
@@ -659,25 +660,25 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     if (!common.ok) return common;
 
     if (claimantKey === applicantPlayerKey) {
-      return { ok: false, error: "SelfClaimForbidden", message: "Applicant cannot claim their own sqtb request." };
+      return { ok: false, error: "SelfClaimForbidden", message: "申请人不能认领自己的 sqtb 申请。" };
     }
 
     if (Number(period?.sqtbClaimUsed ?? 0) >= runtimeConfig.periodSqtbClaimLimit) {
-      return { ok: false, error: "PlayerSqtbQuotaExhausted", message: "Player sqtb/claim quota is exhausted for the current period." };
+      return { ok: false, error: "PlayerSqtbQuotaExhausted", message: "当前周期内的申请/认领额度已用尽。" };
     }
 
     if (hasRoundUse(claimantKey)) {
-      return { ok: false, error: "RoundPlayerQuotaExhausted", message: `${claimantName || "Player"} has already used tb/sqtb/claim this round.` };
+      return { ok: false, error: "RoundPlayerQuotaExhausted", message: `${claimantName || "玩家"} 本回合已使用过 tb/sqtb/认领。` };
     }
 
     const squad = getSquadByPlayer(matchState, claimantPlayer);
     if (squad?.locked) {
-      return { ok: false, error: "LockedSquadForbidden", message: "Claimant cannot be in a locked squad." };
+      return { ok: false, error: "LockedSquadForbidden", message: "禁止锁队认领" };
     }
 
     const counts = getTeamCounts(matchState);
     if (Math.abs(counts.team1 - counts.team2) >= 3) {
-      return { ok: false, error: "TeamDeltaExceeded", message: "Current team delta is 3 or more." };
+      return { ok: false, error: "TeamDeltaExceeded", message: "当前队伍人数差已达到 3 人或更多。" };
     }
 
     return { ok: true };
@@ -950,7 +951,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       return {
         ok: false,
         error: "RequestNotFound",
-        message: "Matching sqtb request not found.",
+        message: "未找到对应的公平跳边申请。",
       };
     }
 
@@ -963,7 +964,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       return {
         ok: false,
         error: "RequestExpired",
-        message: "sqtb request has expired.",
+        message: "公平跳边申请已过期。",
       };
     }
 
@@ -1050,7 +1051,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         return {
           ok: false,
           error: "RequestNotFound",
-          message: "sqtb request not found.",
+          message: "未找到公平跳边申请。",
         };
       }
 
@@ -1058,7 +1059,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         return {
           ok: false,
           error: "ClaimRequired",
-          message: "Request must be claimed before normal approval.",
+          message: "申请必须先被认领才能批准。",
         };
       }
 
@@ -1071,7 +1072,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         return {
           ok: false,
           error: "ApplicantUnavailable",
-          message: "Applicant is not available for switching.",
+          message: "申请人目前无法执行跳边。",
         };
       }
 
@@ -1086,7 +1087,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         return {
           ok: false,
           error: "ApplicantQuotaExhausted",
-          message: "Applicant sqtb/claim quota is exhausted for the current period.",
+          message: "申请人的申请/认领额度已用尽。",
         };
       }
 
@@ -1097,7 +1098,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           return {
             ok: false,
             error: "ClaimantMissing",
-            message: "Request claimant is missing.",
+            message: "申请缺少认领人。",
           };
         }
         const claimantLive = findPlayerByActor(matchState, request.claimant) ?? request.claimant;
@@ -1112,7 +1113,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           return {
             ok: false,
             error: "ClaimantQuotaExhausted",
-            message: "Claimant sqtb/claim quota is exhausted for the current period.",
+            message: "认领人的申请/认领额度已用尽。",
           };
         }
       }
@@ -1137,7 +1138,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         return {
           ok: false,
           error: normalizeText(switchResult?.error) || "TeamBalanceRejected",
-          message: normalizeText(switchResult?.message) || "TeamBalance rejected the sqtb approval.",
+          message: normalizeText(switchResult?.message) || "TeamBalance 拒绝了 sqtb 批准。",
         };
       }
 
@@ -1171,6 +1172,13 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       state.requests.delete(request.id);
       state.requestIdsByCode.delete(request.code);
 
+      if (!direct && liveClaimantActor) {
+        await warnPlayer(liveApplicantActor, `你的公平跳边申请已被 ${liveClaimantActor.playerName} 认领并执行成功`, "fair_sqtb_claim_success_applicant");
+        await warnPlayer(liveClaimantActor, `你已成功认领并协助 ${liveApplicantActor.playerName} 完成跳边`, "fair_sqtb_claim_success_claimant");
+      } else if (direct) {
+        await warnPlayer(liveApplicantActor, `你的公平跳边申请已由管理员协助执行成功`, "fair_sqtb_direct_approve_success");
+      }
+
       await broadcastMessage(buildQuotaBroadcastMessage({
         playerName: liveApplicantActor.playerName,
         mode: direct ? "admin_sqtb" : "claim_sqtb",
@@ -1194,7 +1202,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         return {
           ok: false,
           error: "RequestNotFound",
-          message: "sqtb request not found.",
+          message: "未找到公平跳边申请。",
         };
       }
 
@@ -1215,6 +1223,10 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
       state.requests.delete(request.id);
       state.requestIdsByCode.delete(request.code);
+
+      if (request.applicant) {
+        await warnPlayer(request.applicant, `你的公平跳边申请已被拒绝: ${request.rejectedReason}`, "fair_sqtb_rejected_by_admin");
+      }
 
       return {
         ok: true,
@@ -1483,6 +1495,21 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
       expiryTimer = setInterval(() => {
         expireRequests();
+
+        if (isActive()) {
+          const webStatus = getCurrentWebStatus();
+          const logClockSeconds = Number(webStatus?.logClockSeconds ?? 0);
+          const isWarmup = Boolean(webStatus?.isWarmup);
+          const isOpen = !isWarmup && logClockSeconds >= 20 && logClockSeconds <= 60;
+
+          if (isOpen && !state.windowState.wasOpen) {
+            void broadcastMessage("公平跳边窗口已打开 (20-60秒)，输入 tb 即可跳边", "fair_tb_window_opened");
+            state.windowState.wasOpen = true;
+          } else if (!isOpen && state.windowState.wasOpen) {
+            void broadcastMessage("公平跳边窗口已关闭", "fair_tb_window_closed");
+            state.windowState.wasOpen = false;
+          }
+        }
       }, EXPIRY_SWEEP_MS);
       if (typeof expiryTimer.unref === "function") {
         expiryTimer.unref();
@@ -1523,6 +1550,9 @@ function createInitialState(runtimeConfig) {
     recovery: {
       lastRecoveredAt: "",
       recoveredLineCount: 0,
+    },
+    windowState: {
+      wasOpen: false,
     },
   };
 }

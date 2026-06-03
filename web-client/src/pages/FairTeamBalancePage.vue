@@ -1,218 +1,272 @@
 <template>
-  <main class="fair-page">
-    <section class="fair-hero">
-      <div>
-        <p class="fair-kicker">Plugin</p>
-        <h1>公平跳边</h1>
-        <p class="fair-summary">
-          处理聊天触发的 `tb`、`sqtb` 与认领执行。玩家认领后会直接跳边；无人认领时由管理员协助跳边。
-        </p>
-      </div>
-      <button
-        type="button"
-        class="fair-refresh"
-        :disabled="loadingState || loadingRequests"
-        @click="refreshPanel"
-      >
-        {{ loadingState || loadingRequests ? "刷新中..." : "刷新状态" }}
-      </button>
-    </section>
-
-    <p v-if="stateError" class="fair-error">{{ stateError }}</p>
-
-    <section v-else class="fair-panel">
-      <header class="fair-panel__header">
-        <div>
-          <h2>当前额度</h2>
-          <p>对局公共额度、18 小时周期额度和当前模式。</p>
-        </div>
-      </header>
-
-      <div class="fair-stats">
-        <article class="fair-stat">
-          <span>插件状态</span>
-          <strong>{{ fairState.active ? "运行中" : fairState.enabled ? "未订阅" : "已禁用" }}</strong>
-        </article>
-        <article class="fair-stat">
-          <span>当前模式</span>
-          <strong>{{ fairState.isWarmup ? "暖服模式" : "常规模式" }}</strong>
-        </article>
-        <article class="fair-stat">
-          <span>日志时间</span>
-          <strong>{{ fairState.logClockSeconds }}s</strong>
-        </article>
-        <article class="fair-stat">
-          <span>公共 TB 剩余</span>
-          <strong>{{ fairState.publicTbRemaining }} / {{ fairState.publicTbLimit }}</strong>
-        </article>
-        <article class="fair-stat">
-          <span>个人 TB 额度</span>
-          <strong>{{ fairState.periodTbLimit }} / 18h</strong>
-        </article>
-        <article class="fair-stat">
-          <span>个人 SQTB/认领额度</span>
-          <strong>{{ fairState.periodSqtbClaimLimit }} / 18h</strong>
-        </article>
-        <article class="fair-stat">
-          <span>本局已占用人数</span>
-          <strong>{{ fairState.roundUsedCount }}</strong>
-        </article>
-        <article class="fair-stat">
-          <span>待认领</span>
-          <strong>{{ fairState.pendingClaimCount }}</strong>
-        </article>
-        <article class="fair-stat">
-          <span>认领处理中</span>
-          <strong>{{ fairState.pendingApprovalCount }}</strong>
-        </article>
-      </div>
-
-      <div class="fair-meta">
-        <span>上次对局重置: {{ formatTime(fairState.lastRoundResetAt) }}</span>
-        <span>重置原因: {{ fairState.lastRoundResetReason || "-" }}</span>
-        <span>日志恢复: {{ formatTime(fairState.recovery.lastRecoveredAt) }}</span>
-        <span>恢复条数: {{ fairState.recovery.recoveredLineCount }}</span>
-      </div>
-    </section>
-
-    <section class="fair-panel fair-panel--quotas">
-      <header class="fair-panel__header">
-        <div>
-          <h2>玩家额度情况</h2>
-          <p>优先展示最近有活动或刚使用过额度的玩家。</p>
-        </div>
-        <div class="fair-panel__header-actions">
-          <button
-            type="button"
-            class="fair-action fair-action--danger"
-            :disabled="resettingAction !== ''"
-            @click="resetPeriodQuotas"
-          >
-            {{ resettingAction === "period" ? "重置中..." : "重置周期额度" }}
-          </button>
-          <button
-            type="button"
-            class="fair-action fair-action--danger"
-            :disabled="resettingAction !== ''"
-            @click="resetRoundQuota"
-          >
-            {{ resettingAction === "round" ? "重置中..." : "重置本局额度" }}
-          </button>
-        </div>
-      </header>
-
-      <p v-if="quotaError" class="fair-error">{{ quotaError }}</p>
-      <p v-else-if="!sortedPlayerQuotas.length" class="fair-empty">当前没有已记录玩家额度。</p>
-
-      <div v-else class="fair-quota-list">
-        <article v-for="quota in sortedPlayerQuotas" :key="quota.playerKey" class="fair-quota-card">
-          <div class="fair-quota-card__top">
-            <div>
-              <strong>{{ quota.playerName || quota.steamId || quota.eosId || "未知玩家" }}</strong>
-              <span class="fair-quota-card__meta">{{ quota.steamId || quota.eosId || quota.playerKey }}</span>
-            </div>
-            <span class="fair-quota-badge" :data-round-used="quota.hasRoundUse ? 'yes' : 'no'">
-              {{ quota.hasRoundUse ? "本局已占用" : "本局未占用" }}
-            </span>
-          </div>
-
-          <div class="fair-quota-card__meta">
-            <span>周期 TB：{{ quota.tbUsed }} / {{ fairState.periodTbLimit }}</span>
-            <span>周期 SQTB/认领：{{ quota.sqtbClaimUsed }} / {{ fairState.periodSqtbClaimLimit }}</span>
-          </div>
-
-          <div class="fair-quota-card__meta">
-            <span>周期开始：{{ formatTime(quota.periodStartedAt) }}</span>
-            <span>最近活动：{{ formatTime(quota.lastActivityAt) }}</span>
-          </div>
-        </article>
-      </div>
-    </section>
-
-    <section class="fair-panel">
-      <header class="fair-panel__header">
-        <div>
-          <h2>SQTB 待处理申请</h2>
-          <p>发起 `sqtb` 后会在服内广播认领码，玩家认领后直接执行；无人认领时可由管理员协助跳边。</p>
-        </div>
+  <section class="page fair-team-balance-page">
+    <PageHeader
+      eyebrow="Plugin"
+      title="公平跳边"
+      subtitle="玩家认领后直接执行；无人认领时，管理员只负责协助跳边，不再走审批式流程。"
+    >
+      <template #actions>
+        <span class="status-chip" :data-tone="systemTone">{{ systemStatusLabel }}</span>
         <button
           type="button"
-          class="fair-refresh fair-refresh--ghost"
-          :disabled="loadingRequests"
-          @click="loadRequests"
+          class="ghost-btn"
+          :disabled="loadingState || loadingRequests"
+          @click="refreshPanel"
         >
-          {{ loadingRequests ? "刷新中..." : "刷新申请" }}
+          {{ loadingState || loadingRequests ? "同步中..." : "刷新状态" }}
         </button>
-      </header>
+      </template>
+    </PageHeader>
 
-      <p v-if="requestsError" class="fair-error">{{ requestsError }}</p>
-      <p v-else-if="!requests.length" class="fair-empty">当前没有待处理申请。</p>
+    <div v-if="stateError" class="error-banner">
+      {{ stateError }}
+    </div>
 
-      <div v-else class="fair-request-list">
-        <article v-for="request in requests" :key="request.id" class="fair-request">
-          <div class="fair-request__top">
+    <PageCard class="hero-card" title="运行总览" description="当前插件状态、模式和最近恢复情况" compact>
+      <template #actions>
+        <span class="status-chip subtle">{{ modeLabel }}</span>
+      </template>
+
+      <div class="hero-grid">
+        <div class="hero-main">
+          <div class="hero-badges">
+            <span class="status-chip" :data-tone="systemTone">{{ systemStatusLabel }}</span>
+            <span class="status-chip subtle">日志钟 {{ fairState.logClockSeconds }}s</span>
+            <span class="status-chip subtle">恢复 {{ fairState.recovery.recoveredLineCount }} 条</span>
+          </div>
+
+          <dl class="hero-metrics">
             <div>
-              <strong>{{ request.applicant.playerName || request.applicant.steamId || "未知玩家" }}</strong>
-              <span class="fair-request__code">认领码 {{ request.code }}</span>
+              <dt>插件状态</dt>
+              <dd>{{ systemStatusLabel }}</dd>
             </div>
-            <span class="fair-request__status" :data-status="request.status">{{ request.statusLabel }}</span>
-          </div>
+            <div>
+              <dt>当前模式</dt>
+              <dd>{{ modeLabel }}</dd>
+            </div>
+            <div>
+              <dt>上次重置</dt>
+              <dd>{{ formatTime(fairState.lastRoundResetAt) }}</dd>
+            </div>
+            <div>
+              <dt>重置原因</dt>
+              <dd>{{ fairState.lastRoundResetReason || "-" }}</dd>
+            </div>
+          </dl>
 
-          <div class="fair-request__meta">
-            <span>申请时间: {{ formatTime(request.createdAt) }}</span>
-            <span>剩余时效: {{ formatDuration(requestRemainingMs(request)) }}</span>
-            <span>到期时间: {{ formatTime(request.expiresAt) }}</span>
+          <div class="hero-meta">
+            <span>日志恢复: {{ formatTime(fairState.recovery.lastRecoveredAt) }}</span>
+            <span>公共 TB: {{ fairState.publicTbRemaining }} / {{ fairState.publicTbLimit }}</span>
+            <span>待认领: {{ fairState.pendingClaimCount }}</span>
+            <span>协助处理中: {{ fairState.pendingApprovalCount }}</span>
           </div>
+        </div>
 
-          <div class="fair-request__meta">
-            <span>申请者: {{ formatActor(request.applicant) }}</span>
-            <span>认领者: {{ formatActor(request.claimant) }}</span>
-            <span>直批: {{ request.directApproval ? "是" : "否" }}</span>
-          </div>
-
-          <div v-if="request.claimedAt || request.approvedAt || request.rejectedReason" class="fair-request__meta">
-            <span v-if="request.claimedAt">认领时间: {{ formatTime(request.claimedAt) }}</span>
-            <span v-if="request.approvedAt">审批时间: {{ formatTime(request.approvedAt) }}</span>
-            <span v-if="request.rejectedReason">驳回原因: {{ request.rejectedReason }}</span>
-          </div>
-
-          <div class="fair-request__actions">
+        <div class="hero-side">
+          <p class="hero-side__label">管理动作</p>
+          <div class="action-stack">
             <button
-              v-if="request.canDirectApprove"
               type="button"
-              class="fair-action"
-              :disabled="actioningRequestId === request.id"
-              @click="approveRequest(request, true)"
+              class="danger-btn"
+              :disabled="resettingAction !== ''"
+              @click="resetPeriodQuotas"
             >
-              管理员协助跳边
-            </button>
-            <button
-              v-if="request.canApprove"
-              type="button"
-              class="fair-action"
-              :disabled="actioningRequestId === request.id"
-              @click="approveRequest(request, false)"
-            >
-              执行跳边
+              {{ resettingAction === "period" ? "重置中..." : "重置周期额度" }}
             </button>
             <button
               type="button"
-              class="fair-action fair-action--danger"
-              :disabled="actioningRequestId === request.id"
-              @click="rejectRequest(request)"
+              class="danger-btn"
+              :disabled="resettingAction !== ''"
+              @click="resetRoundQuota"
             >
-              驳回
+              {{ resettingAction === "round" ? "重置中..." : "重置本局额度" }}
             </button>
           </div>
-        </article>
+          <p class="hero-side__note">
+            重置周期额度作用于全部已记录玩家；重置本局额度仅清除本局占用状态。
+          </p>
+        </div>
       </div>
+    </PageCard>
+
+    <section class="summary-grid" aria-label="公平跳边关键指标">
+      <article class="summary-card" data-tone="info">
+        <span>公共 TB 剩余</span>
+        <strong>{{ fairState.publicTbRemaining }} / {{ fairState.publicTbLimit }}</strong>
+        <em>对局内共享额度</em>
+      </article>
+      <article class="summary-card" data-tone="info">
+        <span>周期 TB 额度</span>
+        <strong>{{ fairState.periodTbLimit }}</strong>
+        <em>18 小时滚动上限</em>
+      </article>
+      <article class="summary-card" data-tone="warning">
+        <span>周期 SQTB / 认领额度</span>
+        <strong>{{ fairState.periodSqtbClaimLimit }}</strong>
+        <em>用于 `sqtb` 认领与内部协助</em>
+      </article>
+      <article class="summary-card" data-tone="ok">
+        <span>本局已占用</span>
+        <strong>{{ fairState.roundUsedCount }}</strong>
+        <em>当前局内占用人数</em>
+      </article>
+      <article class="summary-card" data-tone="warning">
+        <span>待认领申请</span>
+        <strong>{{ fairState.pendingClaimCount }}</strong>
+        <em>等待玩家领取的申请</em>
+      </article>
+      <article class="summary-card" data-tone="danger">
+        <span>协助处理中</span>
+        <strong>{{ fairState.pendingApprovalCount }}</strong>
+        <em>管理员协助完成的申请</em>
+      </article>
     </section>
-  </main>
+
+    <section class="detail-grid">
+      <PageCard class="quota-card" title="玩家额度情况" description="优先展示最近有活动或刚使用过额度的玩家" compact>
+        <template #actions>
+          <span class="status-chip subtle">记录 {{ sortedPlayerQuotas.length }}</span>
+        </template>
+
+        <div v-if="quotaError" class="error-banner">
+          {{ quotaError }}
+        </div>
+        <p v-else-if="!sortedPlayerQuotas.length" class="empty-state">当前没有已记录玩家额度。</p>
+
+        <div v-else class="quota-list">
+          <article v-for="quota in sortedPlayerQuotas" :key="quota.playerKey" class="quota-item">
+            <div class="quota-item__head">
+              <div>
+                <strong>{{ quota.playerName || quota.steamId || quota.eosId || "未知玩家" }}</strong>
+                <span>{{ quota.steamId || quota.eosId || quota.playerKey }}</span>
+              </div>
+              <span class="quota-badge" :data-tone="quota.hasRoundUse ? 'ok' : 'muted'">
+                {{ quota.hasRoundUse ? "本局已占用" : "本局未占用" }}
+              </span>
+            </div>
+
+            <dl class="quota-grid">
+              <div>
+                <dt>周期 TB</dt>
+                <dd>{{ quota.tbUsed }} / {{ fairState.periodTbLimit }}</dd>
+              </div>
+              <div>
+                <dt>周期 SQTB / 认领</dt>
+                <dd>{{ quota.sqtbClaimUsed }} / {{ fairState.periodSqtbClaimLimit }}</dd>
+              </div>
+              <div>
+                <dt>周期开始</dt>
+                <dd>{{ formatTime(quota.periodStartedAt) }}</dd>
+              </div>
+              <div>
+                <dt>最近活动</dt>
+                <dd>{{ formatTime(quota.lastActivityAt) }}</dd>
+              </div>
+            </dl>
+          </article>
+        </div>
+      </PageCard>
+
+      <PageCard class="request-card" title="SQTB 认领队列" description="玩家认领后直接执行；无人认领时由管理员协助跳边" compact>
+        <template #actions>
+          <button
+            type="button"
+            class="ghost-btn"
+            :disabled="loadingRequests"
+            @click="loadRequests"
+          >
+            {{ loadingRequests ? "刷新中..." : "刷新申请" }}
+          </button>
+        </template>
+
+        <div v-if="requestsError" class="error-banner">
+          {{ requestsError }}
+        </div>
+        <p v-else-if="!requests.length" class="empty-state">当前没有待处理申请。</p>
+
+        <div v-else class="request-list">
+          <article v-for="request in requests" :key="request.id" class="request-item">
+            <div class="request-item__head">
+              <div>
+                <strong>{{ request.applicant.playerName || request.applicant.steamId || "未知玩家" }}</strong>
+                <span>认领码 {{ request.code }}</span>
+              </div>
+              <span class="request-status" :data-status="request.status">{{ request.statusLabel }}</span>
+            </div>
+
+            <dl class="request-grid">
+              <div>
+                <dt>申请时间</dt>
+                <dd>{{ formatTime(request.createdAt) }}</dd>
+              </div>
+              <div>
+                <dt>剩余时效</dt>
+                <dd>{{ formatDuration(requestRemainingMs(request)) }}</dd>
+              </div>
+              <div>
+                <dt>到期时间</dt>
+                <dd>{{ formatTime(request.expiresAt) }}</dd>
+              </div>
+              <div>
+                <dt>申请者</dt>
+                <dd>{{ formatActor(request.applicant) }}</dd>
+              </div>
+              <div>
+                <dt>认领者</dt>
+                <dd>{{ formatActor(request.claimant) }}</dd>
+              </div>
+              <div>
+                <dt>直批</dt>
+                <dd>{{ request.directApproval ? "是" : "否" }}</dd>
+              </div>
+            </dl>
+
+            <div v-if="request.claimedAt || request.approvedAt || request.rejectedReason" class="request-meta">
+              <span v-if="request.claimedAt">认领时间: {{ formatTime(request.claimedAt) }}</span>
+              <span v-if="request.approvedAt">处理时间: {{ formatTime(request.approvedAt) }}</span>
+              <span v-if="request.rejectedReason">驳回原因: {{ request.rejectedReason }}</span>
+            </div>
+
+            <div class="request-actions">
+              <button
+                v-if="request.canDirectApprove"
+                type="button"
+                class="action-btn"
+                :disabled="actioningRequestId === request.id"
+                @click="approveRequest(request, true)"
+              >
+                管理员协助跳边
+              </button>
+              <button
+                v-if="request.canApprove"
+                type="button"
+                class="action-btn"
+                :disabled="actioningRequestId === request.id"
+                @click="approveRequest(request, false)"
+              >
+                执行跳边
+              </button>
+              <button
+                type="button"
+                class="action-btn danger"
+                :disabled="actioningRequestId === request.id"
+                @click="rejectRequest(request)"
+              >
+                驳回
+              </button>
+            </div>
+          </article>
+        </div>
+      </PageCard>
+    </section>
+  </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { apiGet, apiPost } from "../app/apiClient";
+import PageHeader from "../components/common/PageHeader.vue";
+import PageCard from "../components/common/PageCard.vue";
 
 interface FairTeamBalanceActor {
   playerKey: string;
@@ -317,6 +371,22 @@ const resettingAction = ref<"" | "period" | "round">("");
 const nowMs = ref(Date.now());
 let timer: number | null = null;
 
+const systemStatusLabel = computed(() => {
+  if (!fairState.value.enabled) return "已禁用";
+  if (!fairState.value.subscribed) return "未订阅";
+  if (fairState.value.active) return "运行中";
+  return "已订阅";
+});
+
+const systemTone = computed(() => {
+  if (fairState.value.active) return "ok";
+  if (!fairState.value.enabled) return "danger";
+  if (!fairState.value.subscribed) return "warning";
+  return "info";
+});
+
+const modeLabel = computed(() => (fairState.value.isWarmup ? "暖服模式" : "常规模式"));
+
 const sortedPlayerQuotas = computed(() => {
   return [...fairState.value.playerQuotas].sort((left, right) => {
     const leftRecent = Math.max(Number(left.lastActivityAtMs ?? 0), Number(left.periodStartedAtMs ?? 0));
@@ -419,7 +489,7 @@ async function approveRequest(request: FairTeamBalanceRequest, direct: boolean) 
     });
     await refreshPanel();
   } catch (err: any) {
-    requestsError.value = String(err?.message || err || "公平跳边审批失败");
+    requestsError.value = String(err?.message || err || "公平跳边处理失败");
   } finally {
     actioningRequestId.value = "";
   }
@@ -553,7 +623,7 @@ function normalizeStatusLabel(status: string) {
     case "pending_claim":
       return "待认领";
     case "pending_approval":
-      return "认领处理中";
+      return "协助跳边中";
     case "approved":
       return "已批准";
     case "rejected":
@@ -567,284 +637,468 @@ function normalizeStatusLabel(status: string) {
 </script>
 
 <style scoped>
-.fair-page {
-  padding: 24px;
+.fair-team-balance-page {
+  position: relative;
   display: grid;
   gap: 18px;
+  padding: 18px;
+  overflow: hidden;
 }
 
-.fair-hero,
-.fair-panel {
-  border: 1px solid var(--color-border-default);
-  border-radius: 18px;
+.fair-team-balance-page::before {
+  content: "";
+  position: absolute;
+  inset: -80px auto auto -120px;
+  width: 280px;
+  height: 280px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.18), transparent 68%);
+  pointer-events: none;
+  filter: blur(8px);
+}
+
+.fair-team-balance-page::after {
+  content: "";
+  position: absolute;
+  inset: auto -100px -120px auto;
+  width: 320px;
+  height: 320px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(34, 197, 94, 0.12), transparent 68%);
+  pointer-events: none;
+  filter: blur(10px);
+}
+
+.fair-team-balance-page > * {
+  position: relative;
+  z-index: 1;
+}
+
+.fair-team-balance-page :deep(.page-card) {
+  border-color: rgba(148, 163, 184, 0.16);
   background:
-    radial-gradient(circle at top right, rgba(56, 189, 248, 0.14), transparent 32%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
-  padding: 22px;
+    radial-gradient(circle at top right, rgba(56, 189, 248, 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.024)), rgba(255, 255, 255, 0.01)),
+    var(--color-bg-card);
+  box-shadow: 0 18px 36px rgba(2, 6, 23, 0.28);
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
-.fair-hero {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+.fair-team-balance-page :deep(.page-card:hover) {
+  transform: translateY(-1px);
+  border-color: rgba(96, 165, 250, 0.28);
+  box-shadow: 0 22px 42px rgba(2, 6, 23, 0.32);
+}
+
+.fair-team-balance-page :deep(.card-header) {
+  padding: 16px 18px 0;
+}
+
+.fair-team-balance-page :deep(.card-body) {
+  padding: 18px;
+}
+
+.hero-card,
+.quota-card,
+.request-card {
+  min-width: 0;
+}
+
+.hero-grid,
+.detail-grid {
+  display: grid;
   gap: 16px;
 }
 
-.fair-kicker {
-  margin: 0 0 8px;
-  font-size: 12px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: #7dd3fc;
+.hero-grid {
+  grid-template-columns: minmax(0, 1.8fr) minmax(280px, 0.95fr);
+  align-items: stretch;
 }
 
-.fair-hero h1,
-.fair-panel h2 {
-  margin: 0;
+.hero-main,
+.hero-side {
+  min-width: 0;
 }
 
-.fair-summary,
-.fair-panel__header p,
-.fair-meta,
-.fair-request__meta,
-.fair-quota-card__meta {
-  color: var(--color-text-muted);
-}
-
-.fair-summary {
-  margin: 10px 0 0;
-  max-width: 680px;
-}
-
-.fair-panel__header {
+.hero-badges {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.fair-panel__header-actions {
-  display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
-  align-items: flex-start;
+  margin-bottom: 16px;
 }
 
-.fair-panel__header p {
-  margin: 8px 0 0;
-}
-
-.fair-refresh,
-.fair-action {
-  min-height: 38px;
-  padding: 0 16px;
-  border-radius: 10px;
-  border: 1px solid var(--color-border-default);
-  background: rgba(125, 211, 252, 0.08);
-  color: var(--color-text-main);
-  cursor: pointer;
-}
-
-.fair-refresh--ghost {
-  background: transparent;
-}
-
-.fair-stats {
-  margin-top: 18px;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.fair-stat {
-  display: grid;
-  gap: 6px;
-  padding: 14px;
-  border-radius: 14px;
-  border: 1px solid rgba(125, 211, 252, 0.18);
-  background: rgba(15, 23, 42, 0.22);
-}
-
-.fair-stat span {
-  font-size: 13px;
-  color: var(--color-text-muted);
-}
-
-.fair-stat strong {
-  font-size: 18px;
-}
-
-.fair-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 16px;
-  margin-top: 14px;
-}
-
-.fair-request-list {
-  margin-top: 18px;
-  display: grid;
-  gap: 12px;
-}
-
-.fair-quota-list {
-  margin-top: 18px;
-  display: grid;
-  gap: 12px;
-}
-
-.fair-quota-card {
-  display: grid;
-  gap: 10px;
-  padding: 16px;
-  border-radius: 14px;
-  border: 1px solid rgba(125, 211, 252, 0.16);
-  background: rgba(15, 23, 42, 0.18);
-}
-
-.fair-quota-card__top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.fair-quota-card__top > div {
-  display: grid;
-  gap: 4px;
-}
-
-.fair-quota-card__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 14px;
-}
-
-.fair-quota-card__meta span {
-  display: inline-flex;
-}
-
-.fair-quota-badge {
+.status-chip {
   display: inline-flex;
   align-items: center;
-  padding: 4px 10px;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 12px;
   border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text-primary);
   font-size: 12px;
+  font-weight: 700;
   white-space: nowrap;
-  background: rgba(255, 255, 255, 0.08);
 }
 
-.fair-quota-badge[data-round-used="yes"] {
-  background: rgba(59, 130, 246, 0.18);
-  color: #cfe2ff;
-}
-
-.fair-quota-badge[data-round-used="no"] {
-  background: rgba(255, 255, 255, 0.08);
+.status-chip.subtle {
   color: var(--color-text-muted);
 }
 
-.fair-request {
-  display: grid;
-  gap: 10px;
-  padding: 16px;
-  border-radius: 14px;
-  border: 1px solid rgba(125, 211, 252, 0.16);
-  background: rgba(15, 23, 42, 0.18);
-}
-
-.fair-request__top,
-.fair-request__actions {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.fair-request__top > div {
-  display: grid;
-  gap: 4px;
-}
-
-.fair-request__code {
-  color: var(--color-text-muted);
-  font-size: 13px;
-}
-
-.fair-request__status {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  white-space: nowrap;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.fair-request__status[data-status="pending_claim"],
-.fair-request__status[data-status="pending_approval"] {
-  background: rgba(59, 130, 246, 0.18);
-  color: #cfe2ff;
-}
-
-.fair-request__status[data-status="approved"] {
-  background: rgba(34, 197, 94, 0.18);
+.status-chip[data-tone="ok"] {
+  border-color: rgba(34, 197, 94, 0.36);
+  background: rgba(34, 197, 94, 0.12);
   color: #bbf7d0;
 }
 
-.fair-request__status[data-status="rejected"],
-.fair-request__status[data-status="expired"] {
-  background: rgba(239, 68, 68, 0.18);
+.status-chip[data-tone="info"] {
+  border-color: rgba(59, 130, 246, 0.32);
+  background: rgba(59, 130, 246, 0.12);
+  color: #cfe2ff;
+}
+
+.status-chip[data-tone="warning"] {
+  border-color: rgba(245, 158, 11, 0.32);
+  background: rgba(245, 158, 11, 0.12);
+  color: #fde68a;
+}
+
+.status-chip[data-tone="danger"] {
+  border-color: rgba(239, 68, 68, 0.32);
+  background: rgba(239, 68, 68, 0.12);
   color: #fecaca;
 }
 
-.fair-request__meta,
-.fair-request__actions {
+.hero-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.hero-metrics > div {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: rgba(15, 23, 42, 0.24);
+}
+
+.hero-metrics dt,
+.quota-grid dt,
+.request-grid dt {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.hero-metrics dd,
+.quota-grid dd,
+.request-grid dd {
+  margin: 6px 0 0;
+  color: var(--color-text-primary);
+  line-height: 1.45;
+}
+
+.hero-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 10px 14px;
+  margin-top: 14px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
 }
 
-.fair-action--danger {
-  border-color: rgba(239, 68, 68, 0.35);
-  background: rgba(239, 68, 68, 0.08);
+.hero-side {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  padding: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.22);
+}
+
+.hero-side__label {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.action-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.hero-side__note,
+.empty-state,
+.request-meta {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summary-card {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background:
+    radial-gradient(circle at top right, rgba(56, 189, 248, 0.08), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018));
+  box-shadow: 0 16px 28px rgba(2, 6, 23, 0.2);
+  min-height: 108px;
+}
+
+.summary-card[data-tone="ok"] {
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.summary-card[data-tone="warning"] {
+  border-color: rgba(245, 158, 11, 0.22);
+}
+
+.summary-card[data-tone="danger"] {
+  border-color: rgba(239, 68, 68, 0.22);
+}
+
+.summary-card span {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.summary-card strong {
+  font-size: 26px;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+.summary-card em {
+  font-style: normal;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.detail-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.quota-list,
+.request-list {
+  display: grid;
+  gap: 12px;
+}
+
+.quota-item,
+.request-item {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.18);
+}
+
+.quota-item__head,
+.request-item__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.quota-item__head > div,
+.request-item__head > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.quota-item__head strong,
+.request-item__head strong {
+  font-size: 15px;
+}
+
+.quota-item__head span,
+.request-item__head span {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.quota-badge,
+.request-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.quota-badge[data-tone="ok"],
+.request-status[data-status="approved"] {
+  border-color: rgba(34, 197, 94, 0.28);
+  background: rgba(34, 197, 94, 0.12);
+  color: #bbf7d0;
+}
+
+.quota-badge[data-tone="muted"] {
+  color: var(--color-text-muted);
+}
+
+.request-status[data-status="pending_claim"],
+.request-status[data-status="pending_approval"] {
+  border-color: rgba(59, 130, 246, 0.24);
+  background: rgba(59, 130, 246, 0.12);
+  color: #cfe2ff;
+}
+
+.request-status[data-status="rejected"],
+.request-status[data-status="expired"] {
+  border-color: rgba(239, 68, 68, 0.24);
+  background: rgba(239, 68, 68, 0.12);
   color: #fecaca;
 }
 
-.fair-empty,
-.fair-error {
-  margin-top: 16px;
+.quota-grid,
+.request-grid {
+  display: grid;
+  gap: 12px;
+  margin: 0;
 }
 
-.fair-error {
-  color: #fca5a5;
+.quota-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-@media (max-width: 860px) {
-  .fair-stats {
-    grid-template-columns: 1fr 1fr;
+.request-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.request-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin-top: 12px;
+}
+
+.request-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.ghost-btn,
+.danger-btn,
+.action-btn {
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  cursor: pointer;
+  font-weight: 700;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+}
+
+.ghost-btn {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-primary);
+}
+
+.danger-btn,
+.action-btn.danger {
+  border-color: rgba(239, 68, 68, 0.28);
+  background: rgba(239, 68, 68, 0.1);
+  color: #fecaca;
+}
+
+.action-btn {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text-primary);
+}
+
+.ghost-btn:hover:not(:disabled),
+.danger-btn:hover:not(:disabled),
+.action-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(96, 165, 250, 0.32);
+}
+
+.ghost-btn:disabled,
+.danger-btn:disabled,
+.action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.error-banner {
+  border-radius: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  background: rgba(239, 68, 68, 0.12);
+  color: #fecaca;
+}
+
+.empty-state {
+  margin: 0;
+  padding: 12px 0 4px;
+}
+
+@media (max-width: 1280px) {
+  .summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .hero-grid,
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 720px) {
-  .fair-page {
-    padding: 16px;
+  .fair-team-balance-page {
+    padding: 14px;
   }
 
-  .fair-hero,
-  .fair-panel,
-  .fair-panel__header,
-  .fair-request__top,
-  .fair-quota-card__top {
+  .summary-grid,
+  .hero-metrics,
+  .quota-grid,
+  .request-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .quota-item__head,
+  .request-item__head {
     display: grid;
   }
 
-  .fair-panel__header-actions {
-    width: 100%;
-  }
-
-  .fair-stats {
-    grid-template-columns: 1fr;
+  .request-actions,
+  .hero-meta {
+    gap: 8px 10px;
   }
 }
 </style>
