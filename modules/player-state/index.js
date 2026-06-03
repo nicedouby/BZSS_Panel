@@ -99,6 +99,12 @@ export function createPlayerStateModule({ core, logger }) {
       controllerID: cleanIdentityValue(identity.controllerID),
       teamID: "",
       squadID: "",
+      previousTeamID: "",
+      previousSquadID: "",
+      firstSeenAt: "",
+      lastSquadChangeAt: "",
+      squadJoinedAt: "",
+      squadLeftAt: "",
       isLeader: false,
       role: "",
       state: "unknown",
@@ -114,6 +120,8 @@ export function createPlayerStateModule({ core, logger }) {
       steamID: firstNonEmpty(patch.steamID, patch.steam64ID, identity.steamID, identity.steam64ID, base.steamID),
       eosID: firstNonEmpty(patch.eosID, identity.eosID, base.eosID),
       controllerID: firstNonEmpty(patch.controllerID, identity.controllerID, base.controllerID),
+      teamID: normalizeRconId(patch.teamID ?? base.teamID),
+      squadID: normalizeRconId(patch.squadID ?? base.squadID),
       lastSeenTime: patch.lastSeenTime ?? new Date().toISOString(),
     };
 
@@ -126,6 +134,12 @@ export function createPlayerStateModule({ core, logger }) {
       existing.controllerID = next.controllerID;
       existing.teamID = next.teamID;
       existing.squadID = next.squadID;
+      existing.previousTeamID = next.previousTeamID ?? existing.previousTeamID;
+      existing.previousSquadID = next.previousSquadID ?? existing.previousSquadID;
+      existing.firstSeenAt = next.firstSeenAt ?? existing.firstSeenAt;
+      existing.lastSquadChangeAt = next.lastSquadChangeAt ?? existing.lastSquadChangeAt;
+      existing.squadJoinedAt = next.squadJoinedAt ?? existing.squadJoinedAt;
+      existing.squadLeftAt = next.squadLeftAt ?? existing.squadLeftAt;
       existing.isLeader = Boolean(next.isLeader);
       existing.role = next.role ?? "";
       existing.state = next.state ?? existing.state;
@@ -146,36 +160,127 @@ export function createPlayerStateModule({ core, logger }) {
     return next;
   }
 
-  function replaceFromRcon(serverId, players) {
-    clearServer(serverId);
-    const state = ensureServerState(serverId);
+  function emitSquadMembershipChange(change) {
+    const payload = {
+      eventId: `module.playerState:squad:${change.serverId}:${change.playerKey}:${Date.now()}`,
+      eventName: change.eventName,
+      layer: "module",
+      source: "module.playerState",
+      serverId: change.serverId,
+      time: change.time,
 
-    for (const player of players) {
-      const next = {
-        serverId,
-        playerID: player.playerID,
-        name: cleanIdentityValue(player.name),
-        steamID: cleanIdentityValue(player.steamID),
-        eosID: cleanIdentityValue(player.eosID),
-        controllerID: cleanIdentityValue(player.controllerID),
-        teamID: player.teamID ?? "",
-        squadID: player.squadID ?? "",
-        isLeader: Boolean(player.isLeader),
-        role: player.role ?? "",
-        state: "online",
-        lastSeenTime: new Date().toISOString(),
-        raw: player.raw,
-      };
-      state.playersByKey.set(getCanonicalPlayerKey(next), next);
+      reason: "rconListPlayersDiff",
+      sourceEventName: "RCON_LIST_PLAYERS_UPDATED",
+
+      player: {
+        playerKey: change.playerKey,
+        playerID: change.current.playerID,
+        name: change.current.name,
+        steamID: change.current.steamID,
+        eosID: change.current.eosID,
+        controllerID: change.current.controllerID,
+        role: change.current.role,
+        isLeader: Boolean(change.current.isLeader),
+      },
+
+      previous: {
+        teamID: change.previousTeamID,
+        squadID: change.previousSquadID,
+      },
+
+      current: {
+        teamID: change.currentTeamID,
+        squadID: change.currentSquadID,
+      },
+    };
+
+    core.eventBus.emitModuleEvent("module.playerState", change.eventType, payload);
+
+    logWithFallback(moduleLogger, "info", () => {
+      if (change.type === "joined") {
+        return `[PLAYER_STATE] ${change.current.name} joined squad ${change.currentSquadID}`;
+      }
+      if (change.type === "left") {
+        return `[PLAYER_STATE] ${change.current.name} left squad ${change.previousSquadID}`;
+      }
+      return `[PLAYER_STATE] ${change.current.name} changed squad ${change.previousSquadID} -> ${change.currentSquadID}`;
+    }, {
+      operation: "squadMembershipChanged",
+      data: payload,
+    });
+  }
+
+  function replaceFromRcon(serverId, players) {
+    const now = new Date().toISOString();
+    const state = ensureServerState(serverId);
+    const hadPreviousSnapshot = state.playersByKey.size > 0;
+
+    const oldMap = new Map();
+    for (const player of state.playersByKey.values()) {
+      const normalized = normalizeRconPlayer(player);
+      const key = getStablePlayerKey(normalized);
+      if (key) oldMap.set(key, normalized);
     }
 
-    rebuildIndexes(state);
+    const newMap = makeComparablePlayerSnapshot(players);
+    const changes = hadPreviousSnapshot
+      ? detectSquadMembershipChanges(serverId, oldMap, newMap, now)
+      : [];
+
+    clearServer(serverId);
+    const nextState = ensureServerState(serverId);
+
+    for (const player of players) {
+      const normalized = normalizeRconPlayer(player);
+      const playerKey = getStablePlayerKey(normalized);
+      const previous = playerKey ? oldMap.get(playerKey) : null;
+      const previousSquadID = normalizeRconId(previous?.squadID);
+      const currentSquadID = normalizeRconId(normalized.squadID);
+      const previousTeamID = normalizeRconId(previous?.teamID);
+      const currentTeamID = normalizeRconId(normalized.teamID);
+      const squadChanged = Boolean(previous) && previousSquadID !== currentSquadID;
+
+      const next = {
+        serverId,
+        playerID: normalized.playerID,
+        name: normalized.name,
+        steamID: normalized.steamID,
+        eosID: normalized.eosID,
+        controllerID: normalized.controllerID,
+        teamID: currentTeamID,
+        squadID: currentSquadID,
+        previousTeamID,
+        previousSquadID,
+        firstSeenAt: previous?.firstSeenAt ?? now,
+        lastSquadChangeAt: squadChanged ? now : previous?.lastSquadChangeAt ?? "",
+        squadJoinedAt: currentSquadID && !previousSquadID
+          ? now
+          : previous?.squadJoinedAt ?? "",
+        squadLeftAt: previousSquadID && !currentSquadID
+          ? now
+          : previous?.squadLeftAt ?? "",
+        isLeader: Boolean(normalized.isLeader),
+        role: normalized.role,
+        state: "online",
+        lastSeenTime: now,
+        raw: normalized.raw,
+      };
+      nextState.playersByKey.set(getCanonicalPlayerKey(next), next);
+    }
+
+    rebuildIndexes(nextState);
     core.webStatus.set("playerCount", players.length);
+
+    for (const change of changes) {
+      emitSquadMembershipChange(change);
+    }
+
     logWithFallback(moduleLogger, "debug", () => `Player snapshot refreshed (${players.length})`, {
       operation: "replaceFromRcon",
       data: {
         players: players.length,
         serverId,
+        squadChanges: changes.length,
       },
     });
 
@@ -185,9 +290,19 @@ export function createPlayerStateModule({ core, logger }) {
       layer: "module",
       source: "module.playerState",
       serverId,
-      time: new Date().toISOString(),
+      time: now,
       params: [],
       players: api.getPlayerList(serverId),
+      squadChanges: changes.map((change) => ({
+        type: change.type,
+        playerKey: change.playerKey,
+        playerName: change.current.name,
+        previousSquadID: change.previousSquadID,
+        currentSquadID: change.currentSquadID,
+        previousTeamID: change.previousTeamID,
+        currentTeamID: change.currentTeamID,
+        time: change.time,
+      })),
     });
   }
 
@@ -395,9 +510,137 @@ function logWithFallback(logger, method, message, context) {
 
 function inferTeamIDFromSpawn(spawn) {
   const match = String(spawn ?? "").match(/\bTeam(\d+)/i);
-  return match ? Number(match[1]) : "";
+  return match ? String(match[1]) : "";
 }
 
 function normalizeName(value) {
   return String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizeRconId(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  const lower = text.toLowerCase();
+  if (text === "0" || lower === "none" || lower === "null" || lower === "undefined") {
+    return "";
+  }
+  return text;
+}
+
+function normalizeRconPlayer(player = {}) {
+  return {
+    playerID: cleanIdentityValue(player.playerID),
+    name: cleanIdentityValue(player.name),
+    steamID: cleanIdentityValue(player.steamID ?? player.steam64ID),
+    eosID: cleanIdentityValue(player.eosID),
+    controllerID: cleanIdentityValue(player.controllerID),
+    teamID: normalizeRconId(player.teamID),
+    squadID: normalizeRconId(player.squadID),
+    isLeader: Boolean(player.isLeader),
+    role: cleanIdentityValue(player.role),
+    raw: player.raw ?? "",
+  };
+}
+
+function getStablePlayerKey(player) {
+  const steamID = cleanIdentityValue(player?.steamID ?? player?.steam64ID);
+  if (steamID) return `steam:${steamID}`;
+
+  const eosID = cleanIdentityValue(player?.eosID);
+  if (eosID) return `eos:${eosID}`;
+
+  const controllerID = cleanIdentityValue(player?.controllerID);
+  if (controllerID) return `controller:${controllerID}`;
+
+  const name = normalizeName(player?.name);
+  if (name) return `name:${name}`;
+
+  return "";
+}
+
+function makeComparablePlayerSnapshot(players = []) {
+  const map = new Map();
+
+  for (const player of players) {
+    const normalized = normalizeRconPlayer(player);
+    const key = getStablePlayerKey(normalized);
+    if (!key) continue;
+    map.set(key, normalized);
+  }
+
+  return map;
+}
+
+function detectSquadMembershipChanges(serverId, oldMap, newMap, now) {
+  const changes = [];
+
+  for (const [playerKey, current] of newMap.entries()) {
+    const previous = oldMap.get(playerKey);
+    if (!previous) continue;
+
+    const previousSquadID = normalizeRconId(previous.squadID);
+    const currentSquadID = normalizeRconId(current.squadID);
+    const previousTeamID = normalizeRconId(previous.teamID);
+    const currentTeamID = normalizeRconId(current.teamID);
+
+    const wasInSquad = Boolean(previousSquadID);
+    const isInSquad = Boolean(currentSquadID);
+
+    if (!wasInSquad && isInSquad) {
+      // Squad leaders can appear as "joining" when they create a squad; callers don't want a joined event in that case.
+      if (Boolean(current.isLeader)) continue;
+      changes.push({
+        type: "joined",
+        eventType: "playerJoinedSquad",
+        eventName: "module.playerState.playerJoinedSquad",
+        serverId,
+        playerKey,
+        previous,
+        current,
+        previousTeamID,
+        currentTeamID,
+        previousSquadID,
+        currentSquadID,
+        time: now,
+      });
+      continue;
+    }
+
+    if (wasInSquad && !isInSquad) {
+      changes.push({
+        type: "left",
+        eventType: "playerLeftSquad",
+        eventName: "module.playerState.playerLeftSquad",
+        serverId,
+        playerKey,
+        previous,
+        current,
+        previousTeamID,
+        currentTeamID,
+        previousSquadID,
+        currentSquadID,
+        time: now,
+      });
+      continue;
+    }
+
+    if (wasInSquad && isInSquad && previousSquadID !== currentSquadID) {
+      changes.push({
+        type: "changed",
+        eventType: "playerChangedSquad",
+        eventName: "module.playerState.playerChangedSquad",
+        serverId,
+        playerKey,
+        previous,
+        current,
+        previousTeamID,
+        currentTeamID,
+        previousSquadID,
+        currentSquadID,
+        time: now,
+      });
+    }
+  }
+
+  return changes;
 }

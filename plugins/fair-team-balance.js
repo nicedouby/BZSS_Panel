@@ -483,6 +483,10 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     const common = validateCommonPlayerState(matchState, player);
     if (!common.ok) return common;
 
+    if (hasRoundUse(playerKey)) {
+      return { ok: false, error: "RoundPlayerQuotaExhausted", message: `${playerName || "Player"} has already used tb/sqtb/claim this round.` };
+    }
+
     if (Boolean(webStatus?.isWarmup)) {
       const warmupDelta = calculatePostSwitchDelta(matchState, player);
       if (warmupDelta == null) {
@@ -510,10 +514,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     if (Number(period?.tbUsed ?? 0) >= runtimeConfig.periodTbLimit) {
       return { ok: false, error: "PlayerTbQuotaExhausted", message: "Player tb quota is exhausted for the current period." };
-    }
-
-    if (hasRoundUse(playerKey)) {
-      return { ok: false, error: "RoundPlayerQuotaExhausted", message: `${playerName || "Player"} has already used tb/sqtb/claim this round.` };
     }
 
     const counts = getTeamCounts(matchState);

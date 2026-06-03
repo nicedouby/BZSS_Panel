@@ -376,6 +376,14 @@ async function testWarmupTbIgnoresNormalRestrictionsButChecksPostSwitchDelta() {
     assert.equal(harness.teamBalanceCalls.length, 1);
     assert.equal(harness.plugin.api.getState().publicTbRemaining, 5);
 
+    const repeatedPlayerRejected = await harness.plugin.api.simulateChatMessage({
+      message: "tb",
+      steamId: "steam-alpha",
+      playerName: "Alpha",
+    });
+    assert.equal(repeatedPlayerRejected.ok, false);
+    assert.equal(repeatedPlayerRejected.error, "RoundPlayerQuotaExhausted");
+
     harness.setMatchState({
       players: [
         { name: "Alpha", steamId: "steam-alpha", teamId: 1, squadId: 0 },
@@ -393,8 +401,8 @@ async function testWarmupTbIgnoresNormalRestrictionsButChecksPostSwitchDelta() {
 
     const rejected = await harness.plugin.api.simulateChatMessage({
       message: "tb",
-      steamId: "steam-alpha",
-      playerName: "Alpha",
+      steamId: "steam-bravo",
+      playerName: "Bravo",
     });
     assert.equal(rejected.ok, false);
     assert.equal(rejected.error, "WarmupDeltaExceeded");

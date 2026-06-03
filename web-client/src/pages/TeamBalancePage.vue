@@ -58,6 +58,127 @@
       <p v-if="error" class="tb-error">{{ error }}</p>
     </section>
 
+    <section class="tb-card tb-fair-card">
+      <header class="tb-header">
+        <div>
+          <h2>公平跳边状态</h2>
+          <p>显示 `tb` / `sqtb` 的公共额度、个人周期额度和当前待处理申请。</p>
+        </div>
+        <button type="button" class="tb-secondary-button" :disabled="loadingFairState || loadingFairRequests" @click="refreshFairPanel">
+          {{ loadingFairState || loadingFairRequests ? "刷新中..." : "刷新状态" }}
+        </button>
+      </header>
+
+      <p v-if="fairError" class="tb-error">{{ fairError }}</p>
+
+      <div v-else class="tb-fair-grid">
+        <article class="tb-fair-stat">
+          <span>当前模式</span>
+          <strong>{{ fairState.isWarmup ? "暖服" : "常规" }}</strong>
+        </article>
+        <article class="tb-fair-stat">
+          <span>日志时间</span>
+          <strong>{{ fairState.logClockSeconds }}s</strong>
+        </article>
+        <article class="tb-fair-stat">
+          <span>公共 TB 剩余</span>
+          <strong>{{ fairState.publicTbRemaining }} / {{ fairState.publicTbLimit }}</strong>
+        </article>
+        <article class="tb-fair-stat">
+          <span>个人 TB 额度</span>
+          <strong>{{ fairState.periodTbLimit }} 次 / 18h</strong>
+        </article>
+        <article class="tb-fair-stat">
+          <span>个人认领额度</span>
+          <strong>{{ fairState.periodSqtbClaimLimit }} 次 / 18h</strong>
+        </article>
+        <article class="tb-fair-stat">
+          <span>当前待处理</span>
+          <strong>{{ fairState.activeRequestCount }}</strong>
+        </article>
+      </div>
+
+      <div class="tb-fair-meta">
+        <span>重置时间: {{ fairState.lastRoundResetAt ? formatTime(fairState.lastRoundResetAt) : "-" }}</span>
+        <span>重置原因: {{ fairState.lastRoundResetReason || "-" }}</span>
+        <span>恢复时间: {{ fairState.recovery.lastRecoveredAt ? formatTime(fairState.recovery.lastRecoveredAt) : "-" }}</span>
+      </div>
+    </section>
+
+    <section class="tb-card tb-fair-card">
+      <header class="tb-header">
+        <div>
+          <h2>sqtb 待处理申请</h2>
+          <p>申请者先发起 `sqtb`，随后会出现认领码；管理员可直接批准或等待认领后再批准。</p>
+        </div>
+        <button type="button" class="tb-secondary-button" :disabled="loadingFairRequests" @click="loadFairRequests">
+          {{ loadingFairRequests ? "刷新中..." : "刷新申请" }}
+        </button>
+      </header>
+
+      <p v-if="fairRequestsError" class="tb-error">{{ fairRequestsError }}</p>
+      <p v-else-if="!fairRequests.length" class="tb-empty">暂无待处理申请。</p>
+
+      <div v-else class="tb-request-list">
+        <article v-for="request in fairRequests" :key="request.id" class="tb-request">
+          <div class="tb-request-main">
+            <div>
+              <strong>{{ request.applicant.playerName || request.applicant.steamId || "未知玩家" }}</strong>
+              <span class="tb-request-code">认领码: {{ request.code }}</span>
+            </div>
+            <span class="tb-request-status" :data-status="request.status">{{ request.statusLabel }}</span>
+          </div>
+
+          <div class="tb-request-meta">
+            <span>申请时间: {{ formatTime(request.createdAt) }}</span>
+            <span>到期: {{ formatTime(request.expiresAt) }}</span>
+            <span>剩余: {{ formatDuration(requestRemainingMs(request)) }}</span>
+          </div>
+
+          <div class="tb-request-meta">
+            <span>申请者: {{ formatActor(request.applicant) }}</span>
+            <span>认领者: {{ formatActor(request.claimant) }}</span>
+            <span>直批: {{ request.directApproval ? "是" : "否" }}</span>
+          </div>
+
+          <div v-if="request.rejectedReason || request.claimedAt || request.approvedAt" class="tb-request-detail">
+            <span v-if="request.claimedAt">认领时间: {{ formatTime(request.claimedAt) }}</span>
+            <span v-if="request.approvedAt">批准时间: {{ formatTime(request.approvedAt) }}</span>
+            <span v-if="request.rejectedReason">驳回原因: {{ request.rejectedReason }}</span>
+          </div>
+
+          <div class="tb-request-actions">
+            <button
+              v-if="request.canDirectApprove"
+              type="button"
+              class="tb-secondary-button"
+              :disabled="actioningRequestId === request.id"
+              @click="approveFairRequest(request, true)"
+            >
+              直接批准
+            </button>
+            <button
+              v-if="request.canApprove"
+              type="button"
+              class="tb-secondary-button"
+              :disabled="actioningRequestId === request.id"
+              @click="approveFairRequest(request, false)"
+            >
+              批准跳边
+            </button>
+            <button
+              type="button"
+              class="tb-secondary-button tb-secondary-button--danger"
+              :disabled="actioningRequestId === request.id"
+              @click="rejectFairRequest(request)"
+            >
+              驳回
+            </button>
+          </div>
+        </article>
+      </div>
+    </section>
+
     <section class="tb-card tb-records-card">
       <header class="tb-header">
         <div>
@@ -116,6 +237,58 @@ interface TeamBalanceRecord {
   error: string;
 }
 
+interface FairTeamBalanceActor {
+  playerKey: string;
+  playerName: string;
+  steamId: string;
+  eosId: string;
+  teamId: number | null;
+  squadId: number | null;
+}
+
+interface FairTeamBalanceRequest {
+  id: string;
+  code: string;
+  status: string;
+  statusLabel: string;
+  createdAt: string;
+  expiresAt: string;
+  applicant: FairTeamBalanceActor;
+  claimant: FairTeamBalanceActor | null;
+  claimedAt: string;
+  approvedAt: string;
+  rejectedAt: string;
+  rejectedReason: string;
+  directApproval: boolean;
+  serverId: string;
+  canDirectApprove: boolean;
+  canApprove: boolean;
+}
+
+interface FairTeamBalanceState {
+  enabled: boolean;
+  subscribed: boolean;
+  active: boolean;
+  isWarmup: boolean;
+  logClockSeconds: number;
+  publicTbLimit: number;
+  publicTbRemaining: number;
+  periodMs: number;
+  periodTbLimit: number;
+  periodSqtbClaimLimit: number;
+  requestTtlMs: number;
+  roundUsedCount: number;
+  activeRequestCount: number;
+  pendingClaimCount: number;
+  pendingApprovalCount: number;
+  lastRoundResetAt: string;
+  lastRoundResetReason: string;
+  recovery: {
+    lastRecoveredAt: string;
+    recoveredLineCount: number;
+  };
+}
+
 const steamId = ref("");
 const playerName = ref("");
 const submitting = ref(false);
@@ -124,6 +297,37 @@ const error = ref("");
 const records = ref<TeamBalanceRecord[]>([]);
 const loadingRecords = ref(false);
 const recordsError = ref("");
+const fairState = ref<FairTeamBalanceState>({
+  enabled: false,
+  subscribed: false,
+  active: false,
+  isWarmup: false,
+  logClockSeconds: 0,
+  publicTbLimit: 0,
+  publicTbRemaining: 0,
+  periodMs: 0,
+  periodTbLimit: 0,
+  periodSqtbClaimLimit: 0,
+  requestTtlMs: 0,
+  roundUsedCount: 0,
+  activeRequestCount: 0,
+  pendingClaimCount: 0,
+  pendingApprovalCount: 0,
+  lastRoundResetAt: "",
+  lastRoundResetReason: "",
+  recovery: {
+    lastRecoveredAt: "",
+    recoveredLineCount: 0,
+  },
+});
+const fairRequests = ref<FairTeamBalanceRequest[]>([]);
+const loadingFairState = ref(false);
+const loadingFairRequests = ref(false);
+const fairError = ref("");
+const fairRequestsError = ref("");
+const actioningRequestId = ref("");
+const nowMs = ref(Date.now());
+let nowTimer: number | null = null;
 
 const playerStore = usePlayerStore();
 const playerPickerRoot = ref<HTMLElement | null>(null);
@@ -146,9 +350,12 @@ const filteredPlayers = computed(() => {
 
 onMounted(() => {
   loadRecords();
+  void refreshFairPanel();
+  startClock();
 });
 
 onBeforeUnmount(() => {
+  stopClock();
   detachOutsideListener();
 });
 
@@ -265,11 +472,194 @@ async function loadRecords() {
   }
 }
 
+async function refreshFairPanel() {
+  await Promise.all([loadFairState(), loadFairRequests()]);
+}
+
+async function loadFairState() {
+  loadingFairState.value = true;
+  fairError.value = "";
+  try {
+    const res = await apiGet<{ ok?: boolean; data?: FairTeamBalanceState }>("/api/plugins/fair-team-balance/state");
+    if (res?.data) {
+      fairState.value = normalizeFairState(res.data);
+    }
+  } catch (err: any) {
+    fairError.value = String(err?.message || err || "公平跳边状态加载失败");
+  } finally {
+    loadingFairState.value = false;
+  }
+}
+
+async function loadFairRequests() {
+  loadingFairRequests.value = true;
+  fairRequestsError.value = "";
+  try {
+    const res = await apiGet<{ ok?: boolean; data?: { requests?: FairTeamBalanceRequest[] } }>("/api/plugins/fair-team-balance/requests");
+    const requests = Array.isArray(res?.data?.requests) ? res.data.requests : [];
+    fairRequests.value = requests.map(normalizeFairRequest);
+  } catch (err: any) {
+    fairRequestsError.value = String(err?.message || err || "公平跳边申请加载失败");
+    fairRequests.value = [];
+  } finally {
+    loadingFairRequests.value = false;
+  }
+}
+
+async function approveFairRequest(request: FairTeamBalanceRequest, direct: boolean) {
+  if (!request?.id) return;
+  actioningRequestId.value = request.id;
+  fairRequestsError.value = "";
+  try {
+    await apiPost("/api/plugins/fair-team-balance/approve", {
+      requestId: request.id,
+      direct,
+    });
+    await refreshFairPanel();
+    await loadRecords();
+  } catch (err: any) {
+    fairRequestsError.value = String(err?.message || err || "批准失败");
+  } finally {
+    actioningRequestId.value = "";
+  }
+}
+
+async function rejectFairRequest(request: FairTeamBalanceRequest) {
+  if (!request?.id) return;
+  const reason = window.prompt("输入驳回原因", "manual_reject")?.trim() || "manual_reject";
+  actioningRequestId.value = request.id;
+  fairRequestsError.value = "";
+  try {
+    await apiPost("/api/plugins/fair-team-balance/reject", {
+      requestId: request.id,
+      reason,
+    });
+    await refreshFairPanel();
+    await loadRecords();
+  } catch (err: any) {
+    fairRequestsError.value = String(err?.message || err || "驳回失败");
+  } finally {
+    actioningRequestId.value = "";
+  }
+}
+
+function startClock() {
+  stopClock();
+  nowTimer = window.setInterval(() => {
+    nowMs.value = Date.now();
+  }, 1000);
+}
+
+function stopClock() {
+  if (nowTimer != null) {
+    window.clearInterval(nowTimer);
+    nowTimer = null;
+  }
+}
+
 function formatTime(value: string) {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString();
+}
+
+function formatDuration(ms: number) {
+  if (!Number.isFinite(ms) || ms <= 0) return "0s";
+  const totalSeconds = Math.ceil(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes <= 0) return `${seconds}s`;
+  return `${minutes}m ${seconds}s`;
+}
+
+function requestRemainingMs(request: FairTeamBalanceRequest) {
+  const expiresAt = Date.parse(request?.expiresAt ?? "");
+  if (!Number.isFinite(expiresAt)) return 0;
+  return Math.max(0, expiresAt - nowMs.value);
+}
+
+function formatActor(actor: FairTeamBalanceActor | null) {
+  if (!actor) return "-";
+  const parts = [actor.playerName || actor.steamId || actor.eosId].filter(Boolean);
+  if (actor.steamId) parts.push(actor.steamId);
+  return parts.join(" / ");
+}
+
+function normalizeFairState(value: FairTeamBalanceState): FairTeamBalanceState {
+  return {
+    enabled: Boolean(value?.enabled),
+    subscribed: Boolean(value?.subscribed),
+    active: Boolean(value?.active),
+    isWarmup: Boolean(value?.isWarmup),
+    logClockSeconds: Number(value?.logClockSeconds ?? 0) || 0,
+    publicTbLimit: Number(value?.publicTbLimit ?? 0) || 0,
+    publicTbRemaining: Number(value?.publicTbRemaining ?? 0) || 0,
+    periodMs: Number(value?.periodMs ?? 0) || 0,
+    periodTbLimit: Number(value?.periodTbLimit ?? 0) || 0,
+    periodSqtbClaimLimit: Number(value?.periodSqtbClaimLimit ?? 0) || 0,
+    requestTtlMs: Number(value?.requestTtlMs ?? 0) || 0,
+    roundUsedCount: Number(value?.roundUsedCount ?? 0) || 0,
+    activeRequestCount: Number(value?.activeRequestCount ?? 0) || 0,
+    pendingClaimCount: Number(value?.pendingClaimCount ?? 0) || 0,
+    pendingApprovalCount: Number(value?.pendingApprovalCount ?? 0) || 0,
+    lastRoundResetAt: String(value?.lastRoundResetAt ?? ""),
+    lastRoundResetReason: String(value?.lastRoundResetReason ?? ""),
+    recovery: {
+      lastRecoveredAt: String(value?.recovery?.lastRecoveredAt ?? ""),
+      recoveredLineCount: Number(value?.recovery?.recoveredLineCount ?? 0) || 0,
+    },
+  };
+}
+
+function normalizeFairRequest(value: FairTeamBalanceRequest): FairTeamBalanceRequest {
+  const status = String(value?.status ?? "").trim() || "pending_claim";
+  return {
+    id: String(value?.id ?? ""),
+    code: String(value?.code ?? ""),
+    status,
+    statusLabel: normalizeRequestStatusLabel(status),
+    createdAt: String(value?.createdAt ?? ""),
+    expiresAt: String(value?.expiresAt ?? ""),
+    applicant: normalizeActor(value?.applicant),
+    claimant: value?.claimant ? normalizeActor(value.claimant) : null,
+    claimedAt: String(value?.claimedAt ?? ""),
+    approvedAt: String(value?.approvedAt ?? ""),
+    rejectedAt: String(value?.rejectedAt ?? ""),
+    rejectedReason: String(value?.rejectedReason ?? ""),
+    directApproval: Boolean(value?.directApproval),
+    serverId: String(value?.serverId ?? ""),
+    canDirectApprove: Boolean(value?.canDirectApprove),
+    canApprove: Boolean(value?.canApprove),
+  };
+}
+
+function normalizeActor(value: FairTeamBalanceActor | null): FairTeamBalanceActor {
+  return {
+    playerKey: String(value?.playerKey ?? ""),
+    playerName: String(value?.playerName ?? ""),
+    steamId: String(value?.steamId ?? ""),
+    eosId: String(value?.eosId ?? ""),
+    teamId: value?.teamId == null ? null : Number(value.teamId) || null,
+    squadId: value?.squadId == null ? null : Number(value.squadId) || null,
+  };
+}
+
+function normalizeRequestStatusLabel(status: string) {
+  switch (status) {
+    case "pending_claim":
+      return "待认领";
+    case "pending_approval":
+      return "待审批";
+    case "approved":
+      return "已批准";
+    case "rejected":
+      return "已驳回";
+    case "expired":
+      return "已过期";
+    default:
+      return status || "未知";
+  }
 }
 </script>
 
@@ -413,6 +803,126 @@ function formatTime(value: string) {
   color: var(--color-text-muted);
 }
 
+.tb-fair-card {
+  max-width: 1024px;
+}
+
+.tb-fair-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.tb-fair-stat {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border-default);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tb-fair-stat span {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.tb-fair-stat strong {
+  font-size: 18px;
+}
+
+.tb-fair-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  margin-top: 14px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.tb-request-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.tb-request {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--color-border-default);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tb-request-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tb-request-main > div {
+  display: grid;
+  gap: 4px;
+}
+
+.tb-request-code {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.tb-request-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-main);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.tb-request-status[data-status="pending_claim"],
+.tb-request-status[data-status="pending_approval"] {
+  background: rgba(59, 130, 246, 0.16);
+  color: #cfe2ff;
+}
+
+.tb-request-status[data-status="approved"] {
+  background: rgba(34, 197, 94, 0.16);
+  color: #bbf7d0;
+}
+
+.tb-request-status[data-status="rejected"],
+.tb-request-status[data-status="expired"] {
+  background: rgba(239, 68, 68, 0.16);
+  color: #fecaca;
+}
+
+.tb-request-meta,
+.tb-request-detail,
+.tb-request-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
+.tb-request-meta span,
+.tb-request-detail span {
+  color: var(--color-text-muted);
+}
+
+.tb-request-actions {
+  margin-top: 2px;
+}
+
+.tb-secondary-button--danger {
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #fecaca;
+}
+
 .tb-record-list {
   display: grid;
   gap: 12px;
@@ -460,6 +970,14 @@ function formatTime(value: string) {
   }
 
   .tb-header {
+    flex-direction: column;
+  }
+
+  .tb-fair-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tb-request-main {
     flex-direction: column;
   }
 }
