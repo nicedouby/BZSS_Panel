@@ -48,24 +48,26 @@
     </div>
 
     <template v-else>
-      <SquadLeaderRow
-        v-if="squad.leader"
-        :player="squad.leader"
-        :selected="String(selectedPlayerId) === String(squad.leader.playerId)"
-        @select="handleLeaderSelect"
-      />
+      <div class="squad-player-list">
+        <SquadPlayerRow
+          v-if="squad.leader"
+          :player="squad.leader"
+          :selected="String(selectedPlayerId) === String(squad.leader.playerId)"
+          @select="handlePlayerSelect"
+        />
 
-      <div v-if="squad.state === 'no_leader'" class="squad-warning">
-        {{ t("match.noSquadLeader") }}
+        <div v-if="squad.state === 'no_leader'" class="squad-warning">
+          {{ t("match.noSquadLeader") }}
+        </div>
+
+        <SquadPlayerRow
+          v-for="member in squad.members"
+          :key="`player-${member.playerId}`"
+          :player="member"
+          :selected="String(selectedPlayerId) === String(member.playerId)"
+          @select="handlePlayerSelect"
+        />
       </div>
-
-      <PlayerRow
-        v-for="member in squad.members"
-        :key="`player-${member.playerId}`"
-        :player="member"
-        :selected="String(selectedPlayerId) === String(member.playerId)"
-        @select="handlePlayerSelect"
-      />
     </template>
   </article>
 </template>
@@ -74,8 +76,7 @@
 import { computed } from "vue";
 import type { PlayerRowViewModel, SquadViewModel } from "../../types/squad-admin.types";
 import StatusBadge from "../common/StatusBadge.vue";
-import PlayerRow from "./PlayerRow.vue";
-import SquadLeaderRow from "./SquadLeaderRow.vue";
+import SquadPlayerRow from "./SquadPlayerRow.vue";
 import { t } from "../../i18n";
 
 const props = defineProps<{
@@ -141,10 +142,6 @@ function vehicleTone(vehicleClass: SquadViewModel["squadVehicleClass"]): "ok" | 
   if (vehicleClass === "tank" || vehicleClass === "spg") return "warn";
   if (vehicleClass === "ifv" || vehicleClass === "light_vehicle") return "ok";
   return "idle";
-}
-
-function handleLeaderSelect(payload: { player: PlayerRowViewModel; event: MouseEvent }) {
-  emit("select-player", payload);
 }
 
 function handlePlayerSelect(payload: { player: PlayerRowViewModel; event: MouseEvent }) {

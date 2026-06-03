@@ -301,7 +301,7 @@ function readStoredUiPrefs(): Required<StoredUiPrefs> {
     return defaults;
   }
 
-  const raw = window.localStorage.getItem(UI_PREFS_STORAGE_KEY);
+  const raw = resolveStorage()?.getItem(UI_PREFS_STORAGE_KEY);
   if (!raw) return defaults;
 
   try {
@@ -323,9 +323,16 @@ function readStoredUiPrefs(): Required<StoredUiPrefs> {
 }
 
 function persistUiPrefs(prefs: Required<StoredUiPrefs>) {
-  if (typeof window === "undefined") return;
+  resolveStorage()?.setItem(UI_PREFS_STORAGE_KEY, JSON.stringify(prefs));
+}
 
-  window.localStorage.setItem(UI_PREFS_STORAGE_KEY, JSON.stringify(prefs));
+function resolveStorage(): Storage | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function resolveUiValue<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {

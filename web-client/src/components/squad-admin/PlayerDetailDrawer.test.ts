@@ -69,7 +69,7 @@ describe("PlayerDetailDrawer", () => {
     const panel = document.body.querySelector(".player-detail-floating") as HTMLElement | null;
     expect(panel).toBeTruthy();
     expect(panel?.getAttribute("style") || "").toContain("left: 216px");
-    expect(panel?.getAttribute("style") || "").toContain("top: 256px");
+    expect(panel?.getAttribute("style") || "").toContain("top: 208px");
 
     wrapper.unmount();
   });

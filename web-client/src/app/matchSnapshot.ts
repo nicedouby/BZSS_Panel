@@ -206,15 +206,15 @@ function deriveModeFromLayer(...layers: unknown[]) {
       const previous = String(tokens[tokens.length - 2] ?? "").trim();
       if (!previous) continue;
       if (/^seed$/i.test(previous)) return "seed";
-      if (/^(?:pve|pvp)$/i.test(previous)) return previous;
-      if (/^[a-z]+$/i.test(previous)) return previous;
+      if (/^(?:pve|pvp)$/i.test(previous)) return previous.toLowerCase();
+      if (/^[a-z]+$/i.test(previous)) return previous.toLowerCase();
       continue;
     }
 
     const mode = String(lastToken).trim();
     if (/^seed$/i.test(mode)) return "seed";
-    if (/^(?:pve|pvp)$/i.test(mode)) return mode;
-    if (/^[a-z]+$/i.test(mode)) return mode;
+    if (/^(?:pve|pvp)$/i.test(mode)) return mode.toLowerCase();
+    if (/^[a-z]+$/i.test(mode)) return mode.toLowerCase();
   }
 
   return undefined;

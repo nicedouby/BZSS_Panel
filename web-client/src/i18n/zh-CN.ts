@@ -218,6 +218,7 @@
     noMembers: "无成员",
     noSquadLeader: "无小队长",
     squadLeader: "小队长",
+    squadMember: "成员",
     unassigned: "未分队",
   },
   player: {

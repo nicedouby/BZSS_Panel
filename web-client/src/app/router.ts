@@ -18,7 +18,6 @@ import SquadNameClassifierDebugPage from "../pages/SquadNameClassifierDebugPage.
 import WelcomeJoinWarningDebugPage from "../pages/WelcomeJoinWarningDebugPage.vue";
 import PlayerSessionRecordsPage from "../pages/PlayerSessionRecordsPage.vue";
 import CombatLogPage from "../pages/CombatLogPage.vue";
-import ReserveSlotsPage from "../pages/ReserveSlotsPage.vue";
 import ComingSoonPage from "../pages/ComingSoonPage.vue";
 import ChatMonitorPage from "../pages/ChatMonitorPage.vue";
 import RuntimeStatusPage from "../pages/RuntimeStatusPage.vue";
@@ -118,14 +117,6 @@ export const router = createRouter({
         ...corePollingMeta,
         title: "进出服记录",
         fullBleed: true,
-      },
-    },
-    {
-      path: "/reserve-slots",
-      component: ReserveSlotsPage,
-      meta: {
-        ...coreManualMeta,
-        titleKey: "routeTitle.reserveSlots",
       },
     },
     {
@@ -331,4 +322,3 @@ router.beforeEach((to: any) => {
 
   return { path: "/access-denied" };
 });
-

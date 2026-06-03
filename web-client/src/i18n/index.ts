@@ -12,9 +12,18 @@ const dictionaries: Record<Locale, Dictionary> = {
 
 const STORAGE_KEY = "bzss.locale";
 
+function resolveStorage(): Storage | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function resolveInitialLocale(): Locale {
   if (typeof window === "undefined") return "zh-CN";
-  const stored = window.localStorage.getItem(STORAGE_KEY);
+  const stored = resolveStorage()?.getItem(STORAGE_KEY);
   return stored === "en-US" || stored === "zh-CN" ? stored : "zh-CN";
 }
 
@@ -24,9 +33,7 @@ export const currentLocale: { value: Locale } = {
 
 export function setLocale(locale: Locale): void {
   currentLocale.value = locale;
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(STORAGE_KEY, locale);
-  }
+  resolveStorage()?.setItem(STORAGE_KEY, locale);
 }
 
 function getByPath(source: Dictionary, path: string): string | undefined {

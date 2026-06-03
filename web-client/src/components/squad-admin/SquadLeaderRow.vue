@@ -137,6 +137,8 @@ function displayRole(role: string | null | undefined) {
 
 .leader-row-content {
   display: grid;
+  grid-template-rows: 22px 16px minmax(18px, auto);
+  align-content: start;
   gap: 3px;
   min-width: 0;
 }
@@ -152,6 +154,8 @@ function displayRole(role: string | null | undefined) {
 
 .leader-role-stack {
   display: grid;
+  grid-template-rows: 22px 18px;
+  align-content: start;
   justify-items: center;
   gap: 4px;
   width: 52px;
@@ -242,6 +246,7 @@ function displayRole(role: string | null | undefined) {
   align-items: center;
   font-size: var(--font-size-xs);
   line-height: 1.15;
+  min-height: 16px;
   color: var(--color-text-muted);
   flex-wrap: wrap;
 }
@@ -253,6 +258,7 @@ function displayRole(role: string | null | undefined) {
   align-items: center;
   gap: 4px;
   flex-wrap: wrap;
+  min-height: 18px;
   margin-top: 1px;
 }
 
@@ -301,7 +307,9 @@ function displayRole(role: string | null | undefined) {
   background: rgba(96, 165, 250, 0.12);
   color: #60a5fa;
   justify-content: center;
+  width: 52px;
   max-width: 52px;
+  box-sizing: border-box;
   padding: 1px 5px;
 }
 

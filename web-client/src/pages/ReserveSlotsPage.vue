@@ -2,7 +2,6 @@
   <section class="bz-page reserve-slots-page">
     <PageHeader
       :title="t('routeTitle.reserveSlots')"
-      subtitle="管理管理员配置中的预留位区块，并同步到本地 JSON 供页面展示。"
     />
 
     <div class="reserve-shell">

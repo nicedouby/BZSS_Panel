@@ -88,7 +88,6 @@ const staticItems: SidebarItem[] = [
   { path: "/player-database", icon: "DB", label: t("nav.playerDatabase"), section: "players", order: 40 },
   { path: "/player-session-records", icon: "REC", label: t("nav.playerSessionRecords"), section: "players", order: 50 },
   { path: "/squad-management", icon: "SQ", label: t("nav.squadManagement"), section: "players", order: 60 },
-  { path: "/reserve-slots", icon: "RS", label: t("nav.reserveSlots"), section: "players", order: 65 },
   { path: "/combat-manager", icon: "CB", label: t("nav.combatManager"), section: "combat", order: 70 },
   { path: "/combat-log", icon: "LOG", label: t("nav.combatLog"), section: "combat", order: 80 },
   { path: "/admin-warns", icon: "BR", label: t("nav.adminWarns"), section: "broadcast", order: 90 },
@@ -160,7 +159,7 @@ function resolveSection(route: string, page: any): SidebarSectionKey {
   if (route.startsWith("/debug/") || id.includes("debug")) return "debug";
   if (route.startsWith("/system/") || id.includes("runtime") || id.includes("system")) return "system";
   if (route === "/match-status" || route === "/match-state" || route === "/console" || route === "/chat-monitor") return "opsLive";
-  if (route === "/player-database" || route === "/player-session-records" || route === "/squad-management" || route === "/reserve-slots") return "players";
+  if (route === "/player-database" || route === "/player-session-records" || route === "/squad-management") return "players";
   if (route === "/combat-manager" || route === "/combat-log" || route === "/kill-manage" || route === "/combat-clean") return "combat";
   if (route === "/admin-warns" || route === "/scheduled-broadcasts") return "broadcast";
   if (route.startsWith("/plugins/") || source.includes("plugin")) return "plugins";

@@ -219,6 +219,7 @@
     noMembers: "No members",
     noSquadLeader: "No squad leader",
     squadLeader: "Squad Leader",
+    squadMember: "Member",
     unassigned: "Unassigned",
   },
   player: {
