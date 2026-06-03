@@ -9,13 +9,14 @@ import { getParam } from "../../core/event-normalizer.js";
  * Other modules should resolve players through this list instead of rebuilding
  * ad hoc indexes on their own.
  */
-export function createPlayerStateModule({ core, logger }) {
+export function createPlayerStateModule({ core, modules, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
     moduleId: "module.playerState",
     source: "module.playerState",
     channel: "module",
   }) ?? core.logger;
   const servers = new Map();
+  const commanderByServer = new Map();
   const unsubscribers = [];
 
   function ensureServerState(serverId) {
@@ -261,6 +262,37 @@ export function createPlayerStateModule({ core, logger }) {
     });
   }
 
+  function updateCommanderAuthorizationFromSnapshot(serverId, oldMap, newMap, now) {
+    const prev = commanderByServer.get(String(serverId ?? "")) ?? { playerKey: "" };
+    const commandSquadKeys = resolveCommandSquadKeys(modules, serverId);
+    const candidate = detectCommanderCandidate(newMap, commandSquadKeys);
+    if (!candidate) return;
+    if (candidate.playerKey && candidate.playerKey === prev.playerKey) return;
+
+    commanderByServer.set(String(serverId ?? ""), {
+      playerKey: candidate.playerKey,
+      observedAt: now,
+    });
+
+    const previous = oldMap.get(candidate.playerKey) ?? null;
+    const previousSquadID = normalizeRconId(previous?.squadID);
+    const currentSquadID = normalizeRconId(candidate.current.squadID);
+    const previousTeamID = normalizeRconId(previous?.teamID);
+    const currentTeamID = normalizeRconId(candidate.current.teamID);
+
+    emitCommanderAuthorized({
+      serverId,
+      playerKey: candidate.playerKey,
+      previous,
+      current: candidate.current,
+      previousTeamID,
+      currentTeamID,
+      previousSquadID,
+      currentSquadID,
+      time: now,
+    });
+  }
+
   function replaceFromRcon(serverId, players) {
     const now = new Date().toISOString();
     const state = ensureServerState(serverId);
@@ -276,9 +308,6 @@ export function createPlayerStateModule({ core, logger }) {
     const newMap = makeComparablePlayerSnapshot(players);
     const changes = hadPreviousSnapshot
       ? detectSquadMembershipChanges(serverId, oldMap, newMap, now)
-      : [];
-    const commanderAuthorizations = hadPreviousSnapshot
-      ? detectCommanderAuthorizationChanges(serverId, oldMap, newMap, now)
       : [];
 
     clearServer(serverId);
@@ -329,9 +358,7 @@ export function createPlayerStateModule({ core, logger }) {
       emitSquadMembershipChange(change);
     }
 
-    for (const change of commanderAuthorizations) {
-      emitCommanderAuthorized(change);
-    }
+    updateCommanderAuthorizationFromSnapshot(serverId, oldMap, newMap, now);
 
     logWithFallback(moduleLogger, "debug", () => `Player snapshot refreshed (${players.length})`, {
       operation: "replaceFromRcon",
@@ -339,7 +366,6 @@ export function createPlayerStateModule({ core, logger }) {
         players: players.length,
         serverId,
         squadChanges: changes.length,
-        commanderAuthorizations: commanderAuthorizations.length,
       },
     });
 
@@ -516,6 +542,7 @@ export function createPlayerStateModule({ core, logger }) {
 
     async stop() {
       for (const unsubscribe of unsubscribers.splice(0)) unsubscribe();
+      commanderByServer.clear();
       logWithFallback(moduleLogger, "info", "PlayerState subscriptions stopped.", {
         label: "MODULE",
         operation: "stop",
@@ -591,6 +618,65 @@ function isCommandSquadId(value) {
   if (!id) return false;
   const lower = String(id).trim().toLowerCase();
   return lower === "10" || lower === "cmd" || lower === "command";
+}
+
+function isCommandSquadName(value) {
+  const name = String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  if (!name) return false;
+  if (name === "command squad") return true;
+  if (name === "cmd") return true;
+  if (name === "command") return true;
+  return /\bcommand\s*squad\b/i.test(name);
+}
+
+function resolveCommandSquadKeys(modules, serverId) {
+  const list = typeof modules?.squadManagement?.getSquads === "function"
+    ? modules.squadManagement.getSquads(serverId)
+    : [];
+
+  if (!Array.isArray(list) || list.length === 0) return [];
+
+  const keys = [];
+  for (const squad of list) {
+    const squadName = squad?.squadName ?? squad?.name ?? "";
+    if (!isCommandSquadName(squadName)) continue;
+
+    const teamID = normalizeRconId(squad?.teamID ?? squad?.teamId);
+    const squadID = normalizeRconId(squad?.squadID ?? squad?.squadId);
+    if (!teamID || !squadID) continue;
+
+    keys.push({ teamID, squadID, squadName: String(squadName ?? "") });
+  }
+  return keys;
+}
+
+function detectCommanderCandidate(newMap, commandSquadKeys = []) {
+  let leaderHit = null;
+  let roleHit = null;
+  let anyHit = null;
+
+  const hasKeys = Array.isArray(commandSquadKeys) && commandSquadKeys.length > 0;
+
+  for (const [playerKey, current] of newMap.entries()) {
+    const inCommandSquad = hasKeys
+      ? commandSquadKeys.some((key) => key.teamID === normalizeRconId(current?.teamID) && key.squadID === normalizeRconId(current?.squadID))
+      : isCommandSquadId(current?.squadID);
+    if (!inCommandSquad) continue;
+
+    anyHit = anyHit ?? { playerKey, current };
+
+    if (Boolean(current?.isLeader)) {
+      leaderHit = { playerKey, current };
+      break;
+    }
+
+    const role = String(current?.role ?? "").trim().toLowerCase();
+    if (role && (role.includes("commander") || role === "cmd" || role.includes(" cmd"))) {
+      roleHit = roleHit ?? { playerKey, current };
+    }
+  }
+
+  return leaderHit ?? roleHit ?? anyHit;
 }
 
 function normalizeRconPlayer(player = {}) {
@@ -711,36 +797,3 @@ function detectSquadMembershipChanges(serverId, oldMap, newMap, now) {
   return changes;
 }
 
-function detectCommanderAuthorizationChanges(serverId, oldMap, newMap, now) {
-  const changes = [];
-
-  for (const [playerKey, current] of newMap.entries()) {
-    const previous = oldMap.get(playerKey);
-    if (!previous) continue;
-
-    const previousSquadID = normalizeRconId(previous.squadID);
-    const currentSquadID = normalizeRconId(current.squadID);
-    const previousTeamID = normalizeRconId(previous.teamID);
-    const currentTeamID = normalizeRconId(current.teamID);
-
-    const wasCommandLeader = isCommandSquadId(previousSquadID) && Boolean(previous.isLeader);
-    const isCommandLeader = isCommandSquadId(currentSquadID) && Boolean(current.isLeader);
-    if (!isCommandLeader || wasCommandLeader) continue;
-
-    changes.push({
-      eventType: "commanderAuthorized",
-      eventName: "module.playerState.commanderAuthorized",
-      serverId,
-      playerKey,
-      previous,
-      current,
-      previousTeamID,
-      currentTeamID,
-      previousSquadID,
-      currentSquadID,
-      time: now,
-    });
-  }
-
-  return changes;
-}

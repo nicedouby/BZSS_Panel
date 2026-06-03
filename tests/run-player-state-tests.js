@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import { createPlayerStateModule } from "../modules/player-state/index.js";
 
-function createHarness() {
+function createHarness({ modulesOverride = null } = {}) {
   const listeners = new Map();
   const moduleEvents = [];
   const core = {
@@ -20,10 +20,12 @@ function createHarness() {
     },
   };
 
+  const modules = modulesOverride ?? {};
+
   return {
     listeners,
     moduleEvents,
-    module: createPlayerStateModule({ core }),
+    module: createPlayerStateModule({ core, modules }),
   };
 }
 
@@ -355,23 +357,9 @@ async function testOfflinePlayerDoesNotEmitLeftSquad() {
   await harness.module.stop();
 }
 
-async function testEmitsCommanderAuthorizedWhenLeaderEntersCommandSquad() {
+async function testEmitsCommanderAuthorizedWhenCommandSquadCommanderPresent() {
   const harness = createHarness();
   await harness.module.start();
-
-  emit(harness.listeners, "RCON_LIST_PLAYERS_UPDATED", {
-    serverId: "BZSS_Main",
-    players: [
-      {
-        playerID: 1,
-        name: "Leader",
-        steamID: "10",
-        teamID: "1",
-        squadID: "",
-        isLeader: false,
-      },
-    ],
-  });
 
   emit(harness.listeners, "RCON_LIST_PLAYERS_UPDATED", {
     serverId: "BZSS_Main",
@@ -391,7 +379,7 @@ async function testEmitsCommanderAuthorizedWhenLeaderEntersCommandSquad() {
   assert.equal(authEvents.length, 1);
   const auth = authEvents[0].event;
   assertCommanderAuthorizedShape(auth);
-  assert.equal(auth.previous.squadID, "");
+  assert.equal(auth.current.squadID, "10");
   assert.equal(auth.current.squadID, "10");
   assert.equal(auth.player.name, "Leader");
   assert.equal(auth.player.isLeader, true);
@@ -415,6 +403,46 @@ async function testEmitsCommanderAuthorizedWhenLeaderEntersCommandSquad() {
   await harness.module.stop();
 }
 
+async function testResolvesCommandSquadFromSquadManagementName() {
+  const harness = createHarness({
+    modulesOverride: {
+      squadManagement: {
+        getSquads() {
+          return [
+            { teamId: 1, squadId: 1, squadName: "Command Squad" },
+            { teamId: 1, squadId: 2, squadName: "Squad 2" },
+          ];
+        },
+      },
+    },
+  });
+  await harness.module.start();
+
+  emit(harness.listeners, "RCON_LIST_PLAYERS_UPDATED", {
+    serverId: "BZSS_Main",
+    players: [
+      {
+        playerID: 1,
+        name: "Donald",
+        steamID: "76561198194428818",
+        teamID: "1",
+        squadID: "1",
+        isLeader: true,
+      },
+    ],
+  });
+
+  const authEvents = getModuleEvents(harness.moduleEvents, "commanderAuthorized");
+  assert.equal(authEvents.length, 1);
+  const auth = authEvents[0].event;
+  assertCommanderAuthorizedShape(auth);
+  assert.equal(auth.current.teamID, "1");
+  assert.equal(auth.current.squadID, "1");
+  assert.equal(auth.player.name, "Donald");
+
+  await harness.module.stop();
+}
+
 await testBuildsCanonicalPlayerListFromRcon();
 await testMergesEventUpdatesIntoGlobalPlayerList();
 await testFirstSnapshotDoesNotEmitSquadMembershipEvents();
@@ -423,6 +451,7 @@ await testLeaderJoinDoesNotEmitPlayerJoinedSquad();
 await testEmitsPlayerLeftSquadFromSnapshotDiff();
 await testEmitsPlayerChangedSquadFromSnapshotDiff();
 await testOfflinePlayerDoesNotEmitLeftSquad();
-await testEmitsCommanderAuthorizedWhenLeaderEntersCommandSquad();
+await testEmitsCommanderAuthorizedWhenCommandSquadCommanderPresent();
+await testResolvesCommandSquadFromSquadManagementName();
 
 console.log("player state tests passed");
