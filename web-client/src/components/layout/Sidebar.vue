@@ -88,6 +88,7 @@ const staticItems: SidebarItem[] = [
   { path: "/player-database", icon: "DB", label: t("nav.playerDatabase"), section: "players", order: 40 },
   { path: "/player-session-records", icon: "REC", label: t("nav.playerSessionRecords"), section: "players", order: 50 },
   { path: "/squad-management", icon: "SQ", label: t("nav.squadManagement"), section: "players", order: 60 },
+  { path: "/tb", icon: "TB", label: t("nav.teamBalance"), section: "players", order: 65 },
   { path: "/combat-manager", icon: "CB", label: t("nav.combatManager"), section: "combat", order: 70 },
   { path: "/combat-log", icon: "LOG", label: t("nav.combatLog"), section: "combat", order: 80 },
   { path: "/admin-warns", icon: "BR", label: t("nav.adminWarns"), section: "broadcast", order: 90 },

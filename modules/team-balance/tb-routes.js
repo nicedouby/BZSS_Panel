@@ -2,6 +2,7 @@
 
 const LEGACY_PATH = "/api/team-balance/switch";
 const TB_PATH = "/api/tb/force-team-change";
+const RECORDS_PATH = "/api/tb/records";
 
 export async function handleTbRoutes({
   modules,
@@ -11,7 +12,7 @@ export async function handleTbRoutes({
   readJsonBody,
   json,
 }) {
-  if (url.pathname !== TB_PATH && url.pathname !== LEGACY_PATH) {
+  if (url.pathname !== TB_PATH && url.pathname !== LEGACY_PATH && url.pathname !== RECORDS_PATH) {
     return false;
   }
 
@@ -20,6 +21,35 @@ export async function handleTbRoutes({
     json(404, {
       error: "TeamBalanceUnavailable",
       message: "Team balance module is not loaded.",
+    });
+    return true;
+  }
+
+  if (url.pathname === RECORDS_PATH) {
+    if (req.method !== "GET") {
+      json(405, {
+        error: "MethodNotAllowed",
+        message: "Only GET is supported.",
+      });
+      return true;
+    }
+
+    if (!user) {
+      json(401, {
+        error: "Unauthorized",
+        message: "Authentication required.",
+      });
+      return true;
+    }
+
+    const limit = url.searchParams.get("limit") ?? url.searchParams.get("count") ?? "50";
+    const records = typeof teamBalance.listForceTeamChangeRecords === "function"
+      ? await teamBalance.listForceTeamChangeRecords({ limit })
+      : [];
+
+    json(200, {
+      ok: true,
+      records,
     });
     return true;
   }

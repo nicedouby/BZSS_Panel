@@ -9,6 +9,7 @@ import ScheduledBroadcastPage from "../pages/ScheduledBroadcastPage.vue";
 import InfantryCombatEnhancerPage from "../pages/InfantryCombatEnhancerPage.vue";
 import GroupReportPage from "../pages/GroupReportPage.vue";
 import SquadManagementPage from "../pages/SquadManagementPage.vue";
+import TeamBalancePage from "../pages/TeamBalancePage.vue";
 import UdpEventForwarderPage from "../pages/UdpEventForwarderPage.vue";
 import ServerInfoStatisticsPage from "../pages/ServerInfoStatisticsPage.vue";
 import MatchSnapshotDebugPage from "../pages/MatchSnapshotDebugPage.vue";
@@ -195,6 +196,15 @@ export const router = createRouter({
       meta: {
         ...corePollingMeta,
         titleKey: "routeTitle.squadManagement",
+        fullBleed: true,
+      },
+    },
+    {
+      path: "/tb",
+      component: TeamBalancePage,
+      meta: {
+        ...coreManualMeta,
+        titleKey: "routeTitle.teamBalance",
         fullBleed: true,
       },
     },

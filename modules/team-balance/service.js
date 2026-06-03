@@ -9,6 +9,7 @@ const MODULE_ID = "module.teamBalance";
 const DEFAULT_SOURCE = "manual";
 const DEFAULT_REASON = "manual_team_balance";
 const DEFAULT_SWITCH_PERMISSION = "squad.switch";
+const MAX_ACTION_HISTORY = 100;
 
 export function createTeamBalanceService({ core, config, logger }) {
   const moduleLogger = logger
@@ -22,6 +23,7 @@ export function createTeamBalanceService({ core, config, logger }) {
   const moduleConfig = config?.get?.("modules.teamBalance", {}) ?? {};
   const enabled = Boolean(moduleConfig.enabled ?? true);
   const switchPermission = String(moduleConfig.switchPermission ?? DEFAULT_SWITCH_PERMISSION).trim() || DEFAULT_SWITCH_PERMISSION;
+  const actionHistory = [];
 
   const api = {
     forceTeamChange(request = {}) {
@@ -34,6 +36,10 @@ export function createTeamBalanceService({ core, config, logger }) {
 
     switchTeam(request = {}) {
       return forceTeamChange(request);
+    },
+
+    listForceTeamChangeRecords(request = {}) {
+      return listForceTeamChangeRecords(request);
     },
 
     getConfig() {
@@ -95,7 +101,7 @@ export function createTeamBalanceService({ core, config, logger }) {
         operator,
         system,
       });
-      writeActionLog(result);
+      recordAction(result);
       return result;
     }
 
@@ -112,7 +118,7 @@ export function createTeamBalanceService({ core, config, logger }) {
         operator,
         system,
       });
-      writeActionLog(result);
+      recordAction(result);
       return result;
     }
 
@@ -129,7 +135,7 @@ export function createTeamBalanceService({ core, config, logger }) {
         operator,
         system,
       });
-      writeActionLog(result);
+      recordAction(result);
       return result;
     }
 
@@ -157,7 +163,7 @@ export function createTeamBalanceService({ core, config, logger }) {
         system,
       });
 
-      writeActionLog(result);
+      recordAction(result);
       return result;
     } catch (error) {
       const errorMessage = String(error?.message ?? error);
@@ -173,9 +179,14 @@ export function createTeamBalanceService({ core, config, logger }) {
         operator,
         system,
       });
-      writeActionLog(result);
+      recordAction(result);
       return result;
     }
+  }
+
+  function listForceTeamChangeRecords(request = {}) {
+    const limit = clampInteger(request.limit ?? request.count ?? 50, 1, MAX_ACTION_HISTORY);
+    return actionHistory.slice(0, limit);
   }
 
   async function executeForceTeamChangeCommand({ command, source, reason, operator, system }) {
@@ -214,14 +225,18 @@ export function createTeamBalanceService({ core, config, logger }) {
     throw new Error("No RCON executor is available.");
   }
 
-  function writeActionLog(result) {
+  function recordAction(result) {
     const entry = {
+      id: `${Date.now()}-${actionHistory.length + 1}`,
+      timestamp: new Date().toISOString(),
       type: "FORCE_TEAM_CHANGE",
       ok: result.ok,
       steamId: result.steamId,
       playerName: result.playerName || null,
       source: result.source,
       reason: result.reason,
+      executor: formatExecutor(result.operator),
+      executorId: result.operator?.id || "",
       operator: result.operator,
       command: result.command,
       rconExecuted: result.rconExecuted,
@@ -229,6 +244,11 @@ export function createTeamBalanceService({ core, config, logger }) {
       error: result.error,
       message: result.message,
     };
+
+    actionHistory.unshift(entry);
+    if (actionHistory.length > MAX_ACTION_HISTORY) {
+      actionHistory.length = MAX_ACTION_HISTORY;
+    }
 
     if (result.ok) {
       moduleLogger?.info?.("[TB] FORCE_TEAM_CHANGE", entry);
@@ -261,6 +281,7 @@ function buildResult({
     playerName,
     source,
     reason,
+    executor: formatExecutor(operator),
     operator,
     system: Boolean(system),
     error,
@@ -343,6 +364,17 @@ function normalizePermissionList(value) {
 
 function normalizeText(value) {
   return String(value ?? "").trim();
+}
+
+function formatExecutor(operator) {
+  if (!operator) return "system";
+  return normalizeText(operator.name || operator.username || operator.id || "system") || "system";
+}
+
+function clampInteger(value, min, max) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(parsed)) return min;
+  return Math.min(Math.max(parsed, min), max);
 }
 
 function escapeCommandString(value) {

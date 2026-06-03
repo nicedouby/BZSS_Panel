@@ -69,6 +69,12 @@ async function testForceTeamChangeSuccess() {
   assert.equal(result.command, commands[0].command);
   assert.equal(commands[0].requiredPermission, "rcon.tb");
   assert.match(result.command, /76561198377609640/);
+
+  const records = service.api.listForceTeamChangeRecords({ limit: 10 });
+  assert.equal(records.length, 1);
+  assert.equal(records[0].source, "match_state");
+  assert.equal(records[0].executor, "Admin");
+  assert.equal(records[0].steamId, "76561198377609640");
 }
 
 async function testForceTeamChangeRejectsMissingSteamId() {
@@ -140,6 +146,50 @@ async function testHandleTbRoutesSupportsNewAndLegacyPaths() {
   }
 }
 
+async function testHandleTbRoutesReturnsRecords() {
+  const modules = {
+    teamBalance: {
+      async listForceTeamChangeRecords() {
+        return [{
+          id: "record-1",
+          timestamp: "2026-06-03T00:00:00.000Z",
+          ok: true,
+          steamId: "76561198377609640",
+          playerName: "PlayerName",
+          source: "web.tb",
+          reason: "manual_tb_page",
+          executor: "Admin",
+          error: "",
+        }];
+      },
+    },
+  };
+
+  const recorder = createRecorder();
+  await handleTbRoutes({
+    modules,
+    url: new URL("http://localhost/api/tb/records?limit=5"),
+    req: { method: "GET" },
+    user: {
+      id: "admin-1",
+      username: "Admin",
+      role: "SuperAdmin",
+      isSuperAdmin: true,
+      permissions: ["*"],
+    },
+    readJsonBody: async () => ({}),
+    json(status, body) {
+      recorder.status = status;
+      recorder.body = body;
+    },
+  });
+
+  assert.equal(recorder.status, 200);
+  assert.equal(recorder.body.ok, true);
+  assert.equal(recorder.body.records[0].source, "web.tb");
+  assert.equal(recorder.body.records[0].executor, "Admin");
+}
+
 async function testHandleTbRoutesUnauthorizedAndForbidden() {
   const modules = {
     teamBalance: {
@@ -206,6 +256,7 @@ function createRecorder() {
 await testForceTeamChangeSuccess();
 await testForceTeamChangeRejectsMissingSteamId();
 await testHandleTbRoutesSupportsNewAndLegacyPaths();
+await testHandleTbRoutesReturnsRecords();
 await testHandleTbRoutesUnauthorizedAndForbidden();
 
 console.log("team balance tests passed");
