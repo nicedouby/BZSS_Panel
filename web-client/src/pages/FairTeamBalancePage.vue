@@ -5,7 +5,7 @@
         <p class="fair-kicker">Plugin</p>
         <h1>公平跳边</h1>
         <p class="fair-summary">
-          处理聊天触发的 `tb`、`sqtb` 与认领审批。页面仅负责状态查看和管理员审批。
+          处理聊天触发的 `tb`、`sqtb` 与认领执行。玩家认领后会直接跳边；无人认领时由管理员协助跳边。
         </p>
       </div>
       <button
@@ -62,7 +62,7 @@
           <strong>{{ fairState.pendingClaimCount }}</strong>
         </article>
         <article class="fair-stat">
-          <span>待审批</span>
+          <span>认领处理中</span>
           <strong>{{ fairState.pendingApprovalCount }}</strong>
         </article>
       </div>
@@ -75,11 +75,65 @@
       </div>
     </section>
 
+    <section class="fair-panel fair-panel--quotas">
+      <header class="fair-panel__header">
+        <div>
+          <h2>玩家额度情况</h2>
+          <p>优先展示最近有活动或刚使用过额度的玩家。</p>
+        </div>
+        <div class="fair-panel__header-actions">
+          <button
+            type="button"
+            class="fair-action fair-action--danger"
+            :disabled="resettingAction !== ''"
+            @click="resetPeriodQuotas"
+          >
+            {{ resettingAction === "period" ? "重置中..." : "重置周期额度" }}
+          </button>
+          <button
+            type="button"
+            class="fair-action fair-action--danger"
+            :disabled="resettingAction !== ''"
+            @click="resetRoundQuota"
+          >
+            {{ resettingAction === "round" ? "重置中..." : "重置本局额度" }}
+          </button>
+        </div>
+      </header>
+
+      <p v-if="quotaError" class="fair-error">{{ quotaError }}</p>
+      <p v-else-if="!sortedPlayerQuotas.length" class="fair-empty">当前没有已记录玩家额度。</p>
+
+      <div v-else class="fair-quota-list">
+        <article v-for="quota in sortedPlayerQuotas" :key="quota.playerKey" class="fair-quota-card">
+          <div class="fair-quota-card__top">
+            <div>
+              <strong>{{ quota.playerName || quota.steamId || quota.eosId || "未知玩家" }}</strong>
+              <span class="fair-quota-card__meta">{{ quota.steamId || quota.eosId || quota.playerKey }}</span>
+            </div>
+            <span class="fair-quota-badge" :data-round-used="quota.hasRoundUse ? 'yes' : 'no'">
+              {{ quota.hasRoundUse ? "本局已占用" : "本局未占用" }}
+            </span>
+          </div>
+
+          <div class="fair-quota-card__meta">
+            <span>周期 TB：{{ quota.tbUsed }} / {{ fairState.periodTbLimit }}</span>
+            <span>周期 SQTB/认领：{{ quota.sqtbClaimUsed }} / {{ fairState.periodSqtbClaimLimit }}</span>
+          </div>
+
+          <div class="fair-quota-card__meta">
+            <span>周期开始：{{ formatTime(quota.periodStartedAt) }}</span>
+            <span>最近活动：{{ formatTime(quota.lastActivityAt) }}</span>
+          </div>
+        </article>
+      </div>
+    </section>
+
     <section class="fair-panel">
       <header class="fair-panel__header">
         <div>
           <h2>SQTB 待处理申请</h2>
-          <p>发起 `sqtb` 后会在服内广播认领码，认领后进入待审批。</p>
+          <p>发起 `sqtb` 后会在服内广播认领码，玩家认领后直接执行；无人认领时可由管理员协助跳边。</p>
         </div>
         <button
           type="button"
@@ -130,7 +184,7 @@
               :disabled="actioningRequestId === request.id"
               @click="approveRequest(request, true)"
             >
-              直接批准
+              管理员协助跳边
             </button>
             <button
               v-if="request.canApprove"
@@ -139,7 +193,7 @@
               :disabled="actioningRequestId === request.id"
               @click="approveRequest(request, false)"
             >
-              批准跳边
+              执行跳边
             </button>
             <button
               type="button"
@@ -157,7 +211,7 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { apiGet, apiPost } from "../app/apiClient";
 
 interface FairTeamBalanceActor {
@@ -188,6 +242,20 @@ interface FairTeamBalanceRequest {
   canApprove: boolean;
 }
 
+interface FairTeamBalancePlayerQuota {
+  playerKey: string;
+  playerName: string;
+  steamId: string;
+  eosId: string;
+  periodStartedAt: string;
+  periodStartedAtMs: number;
+  lastActivityAt: string;
+  lastActivityAtMs: number;
+  tbUsed: number;
+  sqtbClaimUsed: number;
+  hasRoundUse: boolean;
+}
+
 interface FairTeamBalanceState {
   enabled: boolean;
   subscribed: boolean;
@@ -200,6 +268,7 @@ interface FairTeamBalanceState {
   periodTbLimit: number;
   periodSqtbClaimLimit: number;
   requestTtlMs: number;
+  playerQuotas: FairTeamBalancePlayerQuota[];
   roundUsedCount: number;
   activeRequestCount: number;
   pendingClaimCount: number;
@@ -224,6 +293,7 @@ const fairState = ref<FairTeamBalanceState>({
   periodTbLimit: 0,
   periodSqtbClaimLimit: 0,
   requestTtlMs: 0,
+  playerQuotas: [],
   roundUsedCount: 0,
   activeRequestCount: 0,
   pendingClaimCount: 0,
@@ -241,9 +311,27 @@ const loadingState = ref(false);
 const loadingRequests = ref(false);
 const stateError = ref("");
 const requestsError = ref("");
+const quotaError = ref("");
 const actioningRequestId = ref("");
+const resettingAction = ref<"" | "period" | "round">("");
 const nowMs = ref(Date.now());
 let timer: number | null = null;
+
+const sortedPlayerQuotas = computed(() => {
+  return [...fairState.value.playerQuotas].sort((left, right) => {
+    const leftRecent = Math.max(Number(left.lastActivityAtMs ?? 0), Number(left.periodStartedAtMs ?? 0));
+    const rightRecent = Math.max(Number(right.lastActivityAtMs ?? 0), Number(right.periodStartedAtMs ?? 0));
+    if (rightRecent !== leftRecent) return rightRecent - leftRecent;
+
+    const leftUsage = Number(left.tbUsed ?? 0) + Number(left.sqtbClaimUsed ?? 0);
+    const rightUsage = Number(right.tbUsed ?? 0) + Number(right.sqtbClaimUsed ?? 0);
+    if (rightUsage !== leftUsage) return rightUsage - leftUsage;
+
+    return String(left.playerName || left.steamId || left.eosId || left.playerKey).localeCompare(
+      String(right.playerName || right.steamId || right.eosId || right.playerKey),
+    );
+  });
+});
 
 onMounted(() => {
   void refreshPanel();
@@ -260,6 +348,7 @@ onBeforeUnmount(() => {
 });
 
 async function refreshPanel() {
+  quotaError.value = "";
   await Promise.all([loadState(), loadRequests()]);
 }
 
@@ -288,6 +377,34 @@ async function loadRequests() {
     requests.value = [];
   } finally {
     loadingRequests.value = false;
+  }
+}
+
+async function resetPeriodQuotas() {
+  if (!window.confirm("确认重置所有已记录玩家的周期额度？")) return;
+  resettingAction.value = "period";
+  quotaError.value = "";
+  try {
+    await apiPost("/api/plugins/fair-team-balance/reset-period-quotas", {});
+    await refreshPanel();
+  } catch (err: any) {
+    quotaError.value = String(err?.message || err || "周期额度重置失败");
+  } finally {
+    resettingAction.value = "";
+  }
+}
+
+async function resetRoundQuota() {
+  if (!window.confirm("确认重置本局额度？")) return;
+  resettingAction.value = "round";
+  quotaError.value = "";
+  try {
+    await apiPost("/api/plugins/fair-team-balance/reset-round", {});
+    await refreshPanel();
+  } catch (err: any) {
+    quotaError.value = String(err?.message || err || "本局额度重置失败");
+  } finally {
+    resettingAction.value = "";
   }
 }
 
@@ -368,6 +485,7 @@ function normalizeState(value?: Partial<FairTeamBalanceState> | null): FairTeamB
     periodTbLimit: Number(value?.periodTbLimit ?? 0) || 0,
     periodSqtbClaimLimit: Number(value?.periodSqtbClaimLimit ?? 0) || 0,
     requestTtlMs: Number(value?.requestTtlMs ?? 0) || 0,
+    playerQuotas: Array.isArray(value?.playerQuotas) ? value.playerQuotas.map(normalizePlayerQuota) : [],
     roundUsedCount: Number(value?.roundUsedCount ?? 0) || 0,
     activeRequestCount: Number(value?.activeRequestCount ?? 0) || 0,
     pendingClaimCount: Number(value?.pendingClaimCount ?? 0) || 0,
@@ -378,6 +496,22 @@ function normalizeState(value?: Partial<FairTeamBalanceState> | null): FairTeamB
       lastRecoveredAt: String(value?.recovery?.lastRecoveredAt ?? ""),
       recoveredLineCount: Number(value?.recovery?.recoveredLineCount ?? 0) || 0,
     },
+  };
+}
+
+function normalizePlayerQuota(value: Partial<FairTeamBalancePlayerQuota>): FairTeamBalancePlayerQuota {
+  return {
+    playerKey: String(value?.playerKey ?? ""),
+    playerName: String(value?.playerName ?? ""),
+    steamId: String(value?.steamId ?? ""),
+    eosId: String(value?.eosId ?? ""),
+    periodStartedAt: String(value?.periodStartedAt ?? ""),
+    periodStartedAtMs: Number(value?.periodStartedAtMs ?? 0) || 0,
+    lastActivityAt: String(value?.lastActivityAt ?? ""),
+    lastActivityAtMs: Number(value?.lastActivityAtMs ?? 0) || 0,
+    tbUsed: Number(value?.tbUsed ?? 0) || 0,
+    sqtbClaimUsed: Number(value?.sqtbClaimUsed ?? 0) || 0,
+    hasRoundUse: Boolean(value?.hasRoundUse),
   };
 }
 
@@ -419,7 +553,7 @@ function normalizeStatusLabel(status: string) {
     case "pending_claim":
       return "待认领";
     case "pending_approval":
-      return "待审批";
+      return "认领处理中";
     case "approved":
       return "已批准";
     case "rejected":
@@ -472,7 +606,8 @@ function normalizeStatusLabel(status: string) {
 .fair-summary,
 .fair-panel__header p,
 .fair-meta,
-.fair-request__meta {
+.fair-request__meta,
+.fair-quota-card__meta {
   color: var(--color-text-muted);
 }
 
@@ -486,6 +621,13 @@ function normalizeStatusLabel(status: string) {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+}
+
+.fair-panel__header-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: flex-start;
 }
 
 .fair-panel__header p {
@@ -543,6 +685,63 @@ function normalizeStatusLabel(status: string) {
   margin-top: 18px;
   display: grid;
   gap: 12px;
+}
+
+.fair-quota-list {
+  margin-top: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.fair-quota-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  background: rgba(15, 23, 42, 0.18);
+}
+
+.fair-quota-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fair-quota-card__top > div {
+  display: grid;
+  gap: 4px;
+}
+
+.fair-quota-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
+.fair-quota-card__meta span {
+  display: inline-flex;
+}
+
+.fair-quota-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.fair-quota-badge[data-round-used="yes"] {
+  background: rgba(59, 130, 246, 0.18);
+  color: #cfe2ff;
+}
+
+.fair-quota-badge[data-round-used="no"] {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-muted);
 }
 
 .fair-request {
@@ -635,8 +834,13 @@ function normalizeStatusLabel(status: string) {
   .fair-hero,
   .fair-panel,
   .fair-panel__header,
-  .fair-request__top {
+  .fair-request__top,
+  .fair-quota-card__top {
     display: grid;
+  }
+
+  .fair-panel__header-actions {
+    width: 100%;
   }
 
   .fair-stats {

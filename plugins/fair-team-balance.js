@@ -119,7 +119,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
   function buildQuotaBroadcastMessage({ playerName = "", mode = "tb" } = {}) {
     const safePlayerName = normalizeText(playerName) || "unknown";
-    const actionLabel = mode === "sqtb" ? "公平跳边审批通过" : "公平跳边执行成功";
+    const actionLabel = mode === "claim_sqtb"
+      ? "公平跳边认领完成"
+      : mode === "admin_sqtb"
+        ? "管理员协助跳边成功"
+        : "公平跳边执行成功";
     return `${actionLabel}: ${safePlayerName}，公共TB剩余 ${state.round.publicTbRemaining}/${runtimeConfig.publicTbLimit}`;
   }
 
@@ -424,16 +428,61 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   async function resetRound(reason = "round_world_bring_up", meta = {}) {
-    state.round.publicTbRemaining = runtimeConfig.publicTbLimit;
-    state.round.usedPlayerKeys.clear();
-    state.round.lastResetAt = nowIso();
-    state.round.lastResetReason = reason;
+    return enqueue(async () => {
+      state.round.publicTbRemaining = runtimeConfig.publicTbLimit;
+      state.round.usedPlayerKeys.clear();
+      state.round.lastResetAt = nowIso();
+      state.round.lastResetReason = reason;
 
-    await appendLog({
-      type: "ROUND_RESET",
-      reason,
-      serverId: getServerId(meta?.serverId),
-      by: normalizeText(meta?.by) || "system",
+      await appendLog({
+        type: "ROUND_RESET",
+        reason,
+        serverId: getServerId(meta?.serverId),
+        by: normalizeText(meta?.by) || "system",
+      });
+
+      return {
+        ok: true,
+        publicTbRemaining: state.round.publicTbRemaining,
+        lastResetAt: state.round.lastResetAt,
+        lastResetReason: state.round.lastResetReason,
+      };
+    });
+  }
+
+  async function resetPeriodQuotas(reason = "manual_period_reset", meta = {}) {
+    return enqueue(async () => {
+      const resetAtMs = Date.now();
+      const resetAt = new Date(resetAtMs).toISOString();
+      let affectedCount = 0;
+
+      for (const period of state.periods.values()) {
+        period.periodStartedAt = resetAt;
+        period.periodStartedAtMs = resetAtMs;
+        period.lastActivityAt = "";
+        period.lastActivityAtMs = 0;
+        period.tbUsed = 0;
+        period.sqtbClaimUsed = 0;
+        affectedCount += 1;
+
+        await appendLog({
+          type: "PERIOD_RESET",
+          reason,
+          serverId: getServerId(meta?.serverId),
+          by: normalizeText(meta?.by) || "system",
+          playerKey: period.playerKey,
+          playerName: period.playerName,
+          steamId: period.steamId,
+          eosId: period.eosId,
+        });
+      }
+
+      return {
+        ok: true,
+        affectedCount,
+        resetAt,
+        reason,
+      };
     });
   }
 
@@ -948,30 +997,48 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       };
     }
 
+    const previousRequestState = {
+      status: request.status,
+      claimant: request.claimant ? { ...request.claimant } : null,
+      claimedAt: request.claimedAt,
+      claimedAtMs: request.claimedAtMs,
+    };
+
     request.status = "pending_approval";
     request.claimedAt = new Date(nowMs).toISOString();
     request.claimedAtMs = nowMs;
     request.claimant = actor;
     consumeRoundUse(claimantKey);
 
-    await appendLog({
-      type: "SQTB_CLAIMED",
+    const approvalResult = await approveRequest({
       requestId: request.id,
-      code: request.code,
-      serverId,
-      applicant: request.applicant,
-      claimant: request.claimant,
+      direct: false,
+      actor: {
+        id: claimantKey || actor.steamId || actor.playerName || "claimant",
+        username: claimantName || actor.playerName || actor.steamId || "Claimant",
+        name: claimantName || actor.playerName || actor.steamId || "Claimant",
+        role: "player",
+        isSuperAdmin: false,
+        permissions: [],
+      },
     });
 
-    await broadcastMessage(
-      `${request.claimant?.playerName || request.claimant?.steamId || "unknown"} 已认领 ${request.applicant.playerName || request.applicant.steamId || "unknown"} 的公平跳边申请，等待管理员审批`,
-      "fair_sqtb_claimed",
-      { relatedEventId: normalizeText(event?.id ?? event?.seq) },
-    );
+    if (!approvalResult?.ok) {
+      request.status = previousRequestState.status;
+      request.claimant = previousRequestState.claimant;
+      request.claimedAt = previousRequestState.claimedAt;
+      request.claimedAtMs = previousRequestState.claimedAtMs;
+      if (claimantKey) state.round.usedPlayerKeys.delete(claimantKey);
+      await warnPlayer(actor, `认领失败: ${approvalResult?.message || "执行失败"}`, "fair_sqtb_claim_rejected", {
+        relatedEventId: normalizeText(event?.id ?? event?.seq),
+      });
+      return approvalResult;
+    }
 
     return {
       ok: true,
-      request: serializeRequest(request),
+      request: approvalResult.request ?? serializeRequest(request),
+      result: approvalResult.result ?? null,
     };
   }
 
@@ -1106,7 +1173,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
       await broadcastMessage(buildQuotaBroadcastMessage({
         playerName: liveApplicantActor.playerName,
-        mode: "sqtb",
+        mode: direct ? "admin_sqtb" : "claim_sqtb",
       }), direct ? "fair_sqtb_direct_approved_broadcast" : "fair_sqtb_approved_broadcast", {
         relatedEventId: request.id,
       });
@@ -1249,6 +1316,41 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       .map((request) => serializeRequest(request));
   }
 
+  function serializePeriod(period) {
+    const playerKey = normalizeText(period?.playerKey);
+    return {
+      playerKey,
+      playerName: normalizeText(period?.playerName),
+      steamId: normalizeText(period?.steamId),
+      eosId: normalizeText(period?.eosId),
+      periodStartedAt: normalizeText(period?.periodStartedAt),
+      periodStartedAtMs: Number(period?.periodStartedAtMs ?? 0) || 0,
+      lastActivityAt: normalizeText(period?.lastActivityAt),
+      lastActivityAtMs: Number(period?.lastActivityAtMs ?? 0) || 0,
+      tbUsed: Number(period?.tbUsed ?? 0) || 0,
+      sqtbClaimUsed: Number(period?.sqtbClaimUsed ?? 0) || 0,
+      hasRoundUse: state.round.usedPlayerKeys.has(playerKey),
+    };
+  }
+
+  function listPlayerQuotas() {
+    return [...state.periods.values()]
+      .map((period) => serializePeriod(period))
+      .sort((left, right) => {
+        const leftRecentAt = Math.max(Number(left.lastActivityAtMs ?? 0), Number(left.periodStartedAtMs ?? 0));
+        const rightRecentAt = Math.max(Number(right.lastActivityAtMs ?? 0), Number(right.periodStartedAtMs ?? 0));
+        if (rightRecentAt !== leftRecentAt) return rightRecentAt - leftRecentAt;
+
+        const leftUsage = Number(left.tbUsed ?? 0) + Number(left.sqtbClaimUsed ?? 0);
+        const rightUsage = Number(right.tbUsed ?? 0) + Number(right.sqtbClaimUsed ?? 0);
+        if (rightUsage !== leftUsage) return rightUsage - leftUsage;
+
+        return String(left.playerName || left.steamId || left.playerKey || "").localeCompare(
+          String(right.playerName || right.steamId || right.playerKey || ""),
+        );
+      });
+  }
+
   function getState() {
     expireRequests();
     const webStatus = getCurrentWebStatus();
@@ -1265,6 +1367,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       periodTbLimit: runtimeConfig.periodTbLimit,
       periodSqtbClaimLimit: runtimeConfig.periodSqtbClaimLimit,
       requestTtlMs: runtimeConfig.requestTtlMs,
+      playerQuotas: listPlayerQuotas(),
       roundUsedCount: state.round.usedPlayerKeys.size,
       activeRequestCount: requests.length,
       pendingClaimCount: requests.filter((request) => request.status === "pending_claim").length,
@@ -1322,6 +1425,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     listRequests,
     approveRequest,
     rejectRequest,
+    resetRound,
+    resetPeriodQuotas,
 
     async simulateChatMessage(payload = {}) {
       return handleChatMessage({
@@ -1357,7 +1462,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         route: PAGE_ROUTE,
         pageModule: "/pages/fair-team-balance.js",
         source: PLUGIN_ID,
-        description: "公平跳边插件状态、sqtb 待审批请求和额度查看页面。",
+        description: "公平跳边插件状态、sqtb 申请和额度查看页面。",
         required: false,
         enabled: true,
         order: 135,
@@ -1372,7 +1477,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
       if (typeof core?.eventBus?.onCoreEvent === "function") {
         unsubscribers.push(core.eventBus.onCoreEvent("round.world_bring_up", (event) => {
-          void enqueue(() => resetRound("round_world_bring_up", event));
+          void resetRound("round_world_bring_up", event);
         }));
       }
 

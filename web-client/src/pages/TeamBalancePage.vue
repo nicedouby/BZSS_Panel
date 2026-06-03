@@ -109,7 +109,7 @@
       <header class="tb-header">
         <div>
           <h2>sqtb 待处理申请</h2>
-          <p>申请者先发起 `sqtb`，随后会出现认领码；管理员可直接批准或等待认领后再批准。</p>
+          <p>申请者先发起 `sqtb`，随后会出现认领码；玩家认领后会直接执行，无需管理员再确认。无人认领时，管理员可协助跳边。</p>
         </div>
         <button type="button" class="tb-secondary-button" :disabled="loadingFairRequests" @click="loadFairRequests">
           {{ loadingFairRequests ? "刷新中..." : "刷新申请" }}
@@ -155,7 +155,7 @@
               :disabled="actioningRequestId === request.id"
               @click="approveFairRequest(request, true)"
             >
-              直接批准
+              管理员协助跳边
             </button>
             <button
               v-if="request.canApprove"
@@ -164,7 +164,7 @@
               :disabled="actioningRequestId === request.id"
               @click="approveFairRequest(request, false)"
             >
-              批准跳边
+              执行跳边
             </button>
             <button
               type="button"
@@ -650,7 +650,7 @@ function normalizeRequestStatusLabel(status: string) {
     case "pending_claim":
       return "待认领";
     case "pending_approval":
-      return "待审批";
+      return "认领处理中";
     case "approved":
       return "已批准";
     case "rejected":

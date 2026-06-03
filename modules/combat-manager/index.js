@@ -39,23 +39,8 @@ export function createCombatManagerModule({ core, modules, config, logger }) {
         required: false,
         enabled: true,
         order: 111,
-        icon: "⚔️",
+        icon: "✍",
         requiredPermission: NEW_PERMISSION,
-      });
-
-      core.webRegistry?.registerPage?.({
-        id: "web.combatManagerKillLegacy",
-        title: "战斗管理",
-        group: "管理",
-        route: "/kill-manage",
-        pageModule: "/pages/combat-clean.js",
-        source: MODULE_ID,
-        required: false,
-        enabled: true,
-        order: 112,
-        icon: "⚔️",
-        hiddenFromSidebar: true,
-        requiredPermission: LEGACY_PERMISSION,
       });
 
       core.webRegistry?.registerPage?.({
@@ -68,7 +53,7 @@ export function createCombatManagerModule({ core, modules, config, logger }) {
         required: false,
         enabled: true,
         order: 113,
-        icon: "⚔️",
+        icon: "✍",
         hiddenFromSidebar: true,
         requiredPermission: NEW_PERMISSION,
       });

@@ -2,56 +2,15 @@ import assert from "node:assert/strict";
 
 import { createKillManageModule } from "../modules/kill-manage/index.js";
 
-async function testProxiesRecentKillsToCombatManager() {
-  const coreListeners = new Map();
-  const moduleEvents = [];
+async function testKillsOnlyThroughRcon() {
+  const calls = [];
   const module = createKillManageModule({
     core: {
       logger: { info() {}, debug() {}, warn() {}, error() {} },
-      eventBus: {
-        onModuleEvent(moduleId, eventName, handler) {
-          const key = `${moduleId}:${eventName}`;
-          if (!coreListeners.has(key)) coreListeners.set(key, new Set());
-          coreListeners.get(key).add(handler);
-          return () => coreListeners.get(key)?.delete(handler);
-        },
-        emitModuleEvent(moduleId, eventName, event) {
-          moduleEvents.push({ moduleId, eventName, event });
-        },
-      },
-    },
-    modules: {
-      combatManager: {
-        getRecentKills(serverId, limit) {
-          return [{ serverId, limit, id: "recent-1" }];
-        },
-      },
-    },
-    config: { get() { return {}; } },
-  });
-
-  assert.deepEqual(module.api.getRecentKills("BZSS_Main", 12), [{ serverId: "BZSS_Main", limit: 12, id: "recent-1" }]);
-  await module.start();
-  await module.stop();
-  assert.equal(coreListeners.size, 1);
-  assert.equal(moduleEvents.length, 0);
-}
-
-async function testForwardsLegacyEventsFromCombatManager() {
-  const coreListeners = new Map();
-  const moduleEvents = [];
-  const module = createKillManageModule({
-    core: {
-      logger: { info() {}, debug() {}, warn() {}, error() {} },
-      eventBus: {
-        onModuleEvent(moduleId, eventName, handler) {
-          const key = `${moduleId}:${eventName}`;
-          if (!coreListeners.has(key)) coreListeners.set(key, new Set());
-          coreListeners.get(key).add(handler);
-          return () => coreListeners.get(key)?.delete(handler);
-        },
-        emitModuleEvent(moduleId, eventName, event) {
-          moduleEvents.push({ moduleId, eventName, event });
+      rconManager: {
+        async dispatchCommand(payload) {
+          calls.push(payload);
+          return { success: true, response: "ok" };
         },
       },
     },
@@ -59,35 +18,43 @@ async function testForwardsLegacyEventsFromCombatManager() {
     config: { get() { return {}; } },
   });
 
-  await module.start();
+  const result = await module.api.killPlayer({
+    targetName: "PlayerA",
+    reason: "manual test",
+    operatorId: "admin-1",
+    operatorName: "Admin",
+    source: "web.killManage",
+  });
 
-  for (const handler of coreListeners.get("module.combatManager:KILL_MANAGER_EVENT") ?? []) {
-    handler({
-      eventId: "combat-manager:1",
-      eventName: "KILL_MANAGER_EVENT",
-      serverId: "BZSS_Main",
-      time: "2026-05-09T10:01:00.000Z",
-      record: {
-        id: "combatClean:kill:1",
-        serverId: "BZSS_Main",
-        type: "kill",
-        attackerName: "Attacker",
-        victimName: "Victim",
-        isFriendlyFire: true,
-        isTeamKill: true,
-        friendlyFireLabel: "友伤",
-      },
-    });
-  }
-
-  await module.stop();
-
-  assert.equal(moduleEvents.filter((item) => item.eventName === "combatResolved").length, 1);
-  assert.equal(moduleEvents.filter((item) => item.eventName === "friendlyFireResolved").length, 1);
-  assert.equal(moduleEvents.filter((item) => item.eventName === "teamKillResolved").length, 1);
+  assert.equal(result.success, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].command, 'AdminKill "PlayerA"');
+  assert.equal(calls[0].requestedBy, "module.killManage");
+  assert.equal(calls[0].reason, "manual test");
 }
 
-async function testDoesNotSubscribeToCoreEventsOrWriteLogs() {
+async function testStoresExecutionRecords() {
+  const module = createKillManageModule({
+    core: {
+      logger: { info() {}, debug() {}, warn() {}, error() {} },
+      rconManager: {
+        async dispatchCommand() {
+          return { success: false, message: "Denied" };
+        },
+      },
+    },
+    modules: {},
+    config: { get() { return {}; } },
+  });
+
+  await module.api.killPlayer({ targetSteamId: "76561198000000000", operatorName: "Admin" });
+  const recent = module.api.getRecentKills("", 10);
+  assert.equal(recent.length, 1);
+  assert.equal(recent[0].command, 'AdminKill "76561198000000000"');
+  assert.equal(recent[0].success, false);
+}
+
+async function testDoesNotSubscribeToCombatEvents() {
   const coreListeners = new Map();
   const moduleEvents = [];
   const module = createKillManageModule({
@@ -109,6 +76,11 @@ async function testDoesNotSubscribeToCoreEventsOrWriteLogs() {
           moduleEvents.push({ moduleId, eventName, event });
         },
       },
+      rconManager: {
+        async dispatchCommand() {
+          return { success: true };
+        },
+      },
     },
     modules: {},
     config: { get() { return {}; } },
@@ -120,13 +92,12 @@ async function testDoesNotSubscribeToCoreEventsOrWriteLogs() {
   assert.equal(coreListeners.has("On_PlayerDamaged"), false);
   assert.equal(coreListeners.has("On_PlayerWounded"), false);
   assert.equal(coreListeners.has("On_PlayerDied"), false);
-  assert.equal(coreListeners.has("On_PlayerRevived"), false);
-  assert.equal(coreListeners.has("TEAM_KILL"), false);
+  assert.equal(coreListeners.has("module.combatManager:KILL_MANAGER_EVENT"), false);
   assert.equal(moduleEvents.length, 0);
 }
 
-await testProxiesRecentKillsToCombatManager();
-await testForwardsLegacyEventsFromCombatManager();
-await testDoesNotSubscribeToCoreEventsOrWriteLogs();
+await testKillsOnlyThroughRcon();
+await testStoresExecutionRecords();
+await testDoesNotSubscribeToCombatEvents();
 
-console.log("kill manage compatibility tests passed");
+console.log("kill manage admin-kill tests passed");

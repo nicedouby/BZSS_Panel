@@ -1371,6 +1371,28 @@ export class WebServer {
           }),
         });
       }
+
+      if (url.pathname === "/api/plugins/fair-team-balance/reset-period-quotas" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.resetPeriodQuotas?.("manual_period_reset", {
+            by: user?.username || user?.name || "admin",
+            serverId: this.core?.webStatus?.serverId ?? "",
+          }),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/fair-team-balance/reset-round" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.resetRound?.("manual_round_reset", {
+            by: user?.username || user?.name || "admin",
+            serverId: this.core?.webStatus?.serverId ?? "",
+          }),
+        });
+      }
     }
 
     if (url.pathname.startsWith("/api/plugins/pjsc-average-duration")) {
@@ -1860,6 +1882,25 @@ export class WebServer {
       } catch (err) {
         return this.json(res, 500, { error: "InternalError", message: err.message });
       }
+    }
+
+    if (url.pathname === "/api/kill-manage/kill" && req.method === "POST") {
+      const api = this.modules.killManage;
+      if (!api?.killPlayer) return this.json(res, 404, { error: "ModuleNotFound" });
+      const body = await this.readJsonBody(req);
+      try {
+        const result = await api.killPlayer({ ...body, actor: user, system: Boolean(body?.system ?? false) });
+        return this.json(res, result?.success ? 200 : result?.skipped ? 400 : 500, result);
+      } catch (err) {
+        return this.json(res, 500, { error: "InternalError", message: err.message });
+      }
+    }
+
+    if (url.pathname === "/api/kill-manage/recent" && req.method === "GET") {
+      const api = this.modules.killManage;
+      if (!api?.getRecentKills) return this.json(res, 404, { error: "ModuleNotFound" });
+      const limit = url.searchParams.get("limit") ?? 20;
+      return this.json(res, 200, { records: api.getRecentKills("", limit) });
     }
 
     if (url.pathname === "/api/match-snapshot/list" && req.method === "GET") {

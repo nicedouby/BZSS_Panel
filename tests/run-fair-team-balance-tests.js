@@ -55,6 +55,7 @@ function createMatchState({ players = [], squads = [] }) {
 
 async function createHarness(options = {}) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-fair-tb-"));
+  const keepTempDir = Boolean(options.keepTempDir);
   const coreEventHandlers = new Map();
   const teamBalanceCalls = [];
   const registeredPages = [];
@@ -180,7 +181,9 @@ async function createHarness(options = {}) {
     },
     async stop() {
       await plugin.stop();
-      await fs.rm(tempDir, { recursive: true, force: true });
+      if (!keepTempDir) {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      }
     },
   };
 }
@@ -296,7 +299,7 @@ async function testSqtbConsumesRoundUsageAndDirectApprovalOnlyConsumesApplicantP
   }
 }
 
-async function testClaimConsumesRoundUsageAndApprovalConsumesBothPeriodQuotas() {
+async function testClaimAutoExecutesAndConsumesBothPeriodQuotas() {
   const harness = await createHarness({
     matchState: {
       players: [
@@ -321,9 +324,11 @@ async function testClaimConsumesRoundUsageAndApprovalConsumesBothPeriodQuotas() 
     });
 
     assert.equal(claimed.ok, true);
-    assert.equal(claimed.request.status, "pending_approval");
+    assert.equal(claimed.request.status, "approved");
+    assert.equal(claimed.request.directApproval, false);
     assert.equal(harness.broadcasts.length, 2);
-    assert.match(harness.broadcasts[1].message, /等待管理员审批/);
+    assert.match(harness.broadcasts[1].message, /认领完成/);
+    assert.match(harness.broadcasts[1].message, /公共TB剩余 5\/5/);
 
     const claimantTb = await harness.plugin.api.simulateChatMessage({
       message: "tb",
@@ -332,24 +337,8 @@ async function testClaimConsumesRoundUsageAndApprovalConsumesBothPeriodQuotas() 
     });
     assert.equal(claimantTb.ok, false);
     assert.equal(claimantTb.error, "RoundPlayerQuotaExhausted");
-
-    const approved = await harness.plugin.api.approveRequest({
-      requestId: created.request.id,
-      direct: false,
-      actor: {
-        id: "admin-1",
-        username: "Admin",
-        name: "Admin",
-        role: "SuperAdmin",
-        isSuperAdmin: true,
-        permissions: ["*"],
-      },
-    });
-
-    assert.equal(approved.ok, true);
     assert.equal(harness.teamBalanceCalls.length, 1);
-    assert.equal(harness.broadcasts.length, 3);
-    assert.match(harness.broadcasts[2].message, /公共TB剩余 5\/5/);
+    assert.equal(harness.plugin.api.getState().activeRequestCount, 0);
   } finally {
     await harness.stop();
   }
@@ -454,6 +443,142 @@ async function testWarmupTbIgnoresNormalRestrictionsButChecksPostSwitchDelta() {
     assert.equal(rejected.error, "WarmupDeltaExceeded");
   } finally {
     await harness.stop();
+  }
+}
+
+async function testPlayerQuotasResetAndRecoveryRoundTrip() {
+  const harness = await createHarness({
+    keepTempDir: true,
+    matchState: {
+      players: [
+        { name: "Alpha", steamId: "steam-alpha", teamId: 1, squadId: 0 },
+        { name: "Bravo", steamId: "steam-bravo", teamId: 2, squadId: 0 },
+      ],
+    },
+  });
+
+  try {
+    const alphaTb = await harness.plugin.api.simulateChatMessage({
+      message: "tb",
+      steamId: "steam-alpha",
+      playerName: "Alpha",
+    });
+    assert.equal(alphaTb.ok, true);
+
+    const bravoTb = await harness.plugin.api.simulateChatMessage({
+      message: "tb",
+      steamId: "steam-bravo",
+      playerName: "Bravo",
+    });
+    assert.equal(bravoTb.ok, true);
+
+    const stateBeforeReset = harness.plugin.api.getState();
+    assert.equal(stateBeforeReset.playerQuotas.length, 2);
+    assert.equal(stateBeforeReset.roundUsedCount, 2);
+
+    const alphaQuota = stateBeforeReset.playerQuotas.find((quota) => quota.playerName === "Alpha");
+    const bravoQuota = stateBeforeReset.playerQuotas.find((quota) => quota.playerName === "Bravo");
+    assert.equal(alphaQuota?.tbUsed, 1);
+    assert.equal(alphaQuota?.hasRoundUse, true);
+    assert.equal(bravoQuota?.tbUsed, 1);
+    assert.equal(bravoQuota?.hasRoundUse, true);
+
+    const periodReset = await harness.plugin.api.resetPeriodQuotas();
+    assert.equal(periodReset.ok, true);
+    assert.equal(periodReset.affectedCount, 2);
+
+    const stateAfterPeriodReset = harness.plugin.api.getState();
+    assert.equal(stateAfterPeriodReset.playerQuotas.length, 2);
+    assert.equal(stateAfterPeriodReset.roundUsedCount, 2);
+    assert.ok(stateAfterPeriodReset.playerQuotas.every((quota) => quota.tbUsed === 0 && quota.sqtbClaimUsed === 0));
+
+    const roundReset = await harness.plugin.api.resetRound();
+    assert.equal(roundReset.ok, true);
+    assert.equal(harness.plugin.api.getState().publicTbRemaining, 5);
+    assert.equal(harness.plugin.api.getState().roundUsedCount, 0);
+  } finally {
+    await harness.stop();
+  }
+
+  const recoveredPlugin = createFairTeamBalancePlugin({
+    core: {
+      webStatus: {
+        serverId: "test-server",
+        getSnapshot() {
+          return {
+            isWarmup: false,
+            logClockSeconds: 30,
+            serverId: "test-server",
+          };
+        },
+      },
+      eventBus: {
+        onCoreEvent() {
+          return () => {};
+        },
+      },
+      logger: {
+        info() {},
+        warn() {},
+        error() {},
+        debug() {},
+      },
+    },
+    modules: {
+      teamBalance: {
+        async forceTeamChange() {
+          return {
+            ok: true,
+            error: "",
+            message: "Team switch requested.",
+            command: "",
+            rconExecuted: true,
+            rconResponse: "OK",
+          };
+        },
+      },
+      squadManagement: {
+        getState() {
+          return createMatchState({
+            players: [
+              { name: "Alpha", steamId: "steam-alpha", teamId: 1, squadId: 0 },
+              { name: "Bravo", steamId: "steam-bravo", teamId: 2, squadId: 0 },
+            ],
+          });
+        },
+      },
+      chatManager: {
+        on() {
+          return () => {};
+        },
+      },
+    },
+    config: {
+      get(pathText, defaultValue) {
+        if (pathText === "plugins.fairTeamBalance") {
+          return {
+            enabled: true,
+            directory: harness.tempDir,
+            requestTtlMs: 120000,
+          };
+        }
+        return defaultValue;
+      },
+    },
+  });
+
+  try {
+    await recoveredPlugin.init();
+    await recoveredPlugin.start();
+
+    const recoveredState = recoveredPlugin.api.getState();
+    assert.equal(recoveredState.publicTbRemaining, 5);
+    assert.equal(recoveredState.roundUsedCount, 0);
+    assert.equal(recoveredState.playerQuotas.length, 2);
+    assert.ok(recoveredState.playerQuotas.every((quota) => quota.tbUsed === 0 && quota.sqtbClaimUsed === 0));
+  } finally {
+    await recoveredPlugin.stop();
+    await fs.rm(harness.tempDir, { recursive: true, force: true });
   }
 }
 
@@ -619,9 +744,10 @@ async function testSqtbExpiresByTtl() {
 
 await testExactTriggersAndTbSuccess();
 await testSqtbConsumesRoundUsageAndDirectApprovalOnlyConsumesApplicantPeriodQuota();
-await testClaimConsumesRoundUsageAndApprovalConsumesBothPeriodQuotas();
+await testClaimAutoExecutesAndConsumesBothPeriodQuotas();
 await testLockedSquadClaimIsRejected();
 await testWarmupTbIgnoresNormalRestrictionsButChecksPostSwitchDelta();
+await testPlayerQuotasResetAndRecoveryRoundTrip();
 await testRecoveryRestoresPendingRequestAndRoundQuotaAfterRoundReset();
 await testSqtbExpiresByTtl();
 

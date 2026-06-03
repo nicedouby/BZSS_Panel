@@ -285,6 +285,18 @@ export function warnPlayer(payload: {
   return apiPost<any>("/api/admin-warns/warn", payload);
 }
 
+export function killPlayer(payload: {
+  targetName?: string;
+  targetSteamId?: string;
+  reason?: string;
+  operatorId?: string;
+  operatorName?: string;
+  source?: string;
+  system?: boolean;
+}) {
+  return apiPost<any>("/api/kill-manage/kill", payload);
+}
+
 export function broadcastMessage(payload: {
   message: string;
   reason?: string;

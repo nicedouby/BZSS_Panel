@@ -1493,6 +1493,8 @@ async function testPjscAverageDurationRouteReturnsPluginState() {
 async function testFairTeamBalanceRoutesReturnPluginStateAndRequests() {
   const approveCalls = [];
   const rejectCalls = [];
+  const periodResetCalls = [];
+  const roundResetCalls = [];
   const server = createServer({
     core: {
       authManager: {
@@ -1531,6 +1533,14 @@ async function testFairTeamBalanceRoutesReturnPluginStateAndRequests() {
               async rejectRequest(payload) {
                 rejectCalls.push(payload);
                 return { ok: true };
+              },
+              async resetPeriodQuotas(reason, meta) {
+                periodResetCalls.push({ reason, meta });
+                return { ok: true, affectedCount: 2 };
+              },
+              async resetRound(reason, meta) {
+                roundResetCalls.push({ reason, meta });
+                return { ok: true, publicTbRemaining: 5 };
               },
             },
           },
@@ -1582,6 +1592,30 @@ async function testFairTeamBalanceRoutesReturnPluginStateAndRequests() {
   assert.equal(rejectRecorder.state.status, 200);
   assert.equal(rejectCalls.length, 1);
   assert.equal(rejectCalls[0].reason, "manual_reject");
+
+  const resetPeriodRecorder = createRecorder();
+  const resetPeriodBody = Readable.from(["{}"]);
+  resetPeriodBody.method = "POST";
+  resetPeriodBody.url = "/api/plugins/fair-team-balance/reset-period-quotas";
+  resetPeriodBody.headers = { host: "localhost" };
+  resetPeriodBody.socket = {};
+  await server.handleRequest(resetPeriodBody, resetPeriodRecorder.res);
+  assert.equal(resetPeriodRecorder.state.status, 200);
+  assert.equal(periodResetCalls.length, 1);
+  assert.equal(periodResetCalls[0].reason, "manual_period_reset");
+  assert.equal(periodResetCalls[0].meta.by, "admin");
+
+  const resetRoundRecorder = createRecorder();
+  const resetRoundBody = Readable.from(["{}"]);
+  resetRoundBody.method = "POST";
+  resetRoundBody.url = "/api/plugins/fair-team-balance/reset-round";
+  resetRoundBody.headers = { host: "localhost" };
+  resetRoundBody.socket = {};
+  await server.handleRequest(resetRoundBody, resetRoundRecorder.res);
+  assert.equal(resetRoundRecorder.state.status, 200);
+  assert.equal(roundResetCalls.length, 1);
+  assert.equal(roundResetCalls[0].reason, "manual_round_reset");
+  assert.equal(roundResetCalls[0].meta.by, "admin");
 }
 
 async function testVueRouteFallsBackToIndexHtml() {
