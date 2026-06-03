@@ -57,6 +57,9 @@ async function createHarness(options = {}) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-fair-tb-"));
   const coreEventHandlers = new Map();
   const teamBalanceCalls = [];
+  const registeredPages = [];
+  const broadcasts = [];
+  const warnings = [];
   const webStatus = {
     isWarmup: false,
     logClockSeconds: 30,
@@ -81,6 +84,11 @@ async function createHarness(options = {}) {
         onCoreEvent(eventName, handler) {
           coreEventHandlers.set(eventName, handler);
           return () => coreEventHandlers.delete(eventName);
+        },
+      },
+      webRegistry: {
+        registerPage(page) {
+          registeredPages.push(page);
         },
       },
       logger: {
@@ -117,6 +125,24 @@ async function createHarness(options = {}) {
           return () => {};
         },
       },
+      adminWarn: {
+        async sendAdminBroadcast(request) {
+          broadcasts.push(request);
+          return {
+            success: true,
+            skipped: false,
+            commandText: `AdminBroadcast ${request.message}`,
+          };
+        },
+        async sendAdminWarn(request) {
+          warnings.push(request);
+          return {
+            success: true,
+            skipped: false,
+            commandText: `AdminWarn "${request.targetName}"`,
+          };
+        },
+      },
     },
     config: {
       get(pathText, defaultValue) {
@@ -139,6 +165,9 @@ async function createHarness(options = {}) {
     plugin,
     tempDir,
     teamBalanceCalls,
+    registeredPages,
+    broadcasts,
+    warnings,
     webStatus,
     matchState,
     setMatchState(nextState) {
@@ -168,6 +197,9 @@ async function testExactTriggersAndTbSuccess() {
   });
 
   try {
+    assert.equal(harness.registeredPages.length, 1);
+    assert.equal(harness.registeredPages[0].route, "/plugins/fair-team-balance");
+
     const spaced = await harness.plugin.api.simulateChatMessage({
       message: "tb ",
       steamId: "steam-alpha",
@@ -194,6 +226,9 @@ async function testExactTriggersAndTbSuccess() {
     assert.equal(harness.teamBalanceCalls[0].steamId, "steam-alpha");
     assert.equal(harness.plugin.api.getState().publicTbRemaining, 4);
     assert.equal(harness.plugin.api.getState().roundUsedCount, 1);
+    assert.equal(harness.broadcasts.length, 1);
+    assert.match(harness.broadcasts[0].message, /Alpha/);
+    assert.match(harness.broadcasts[0].message, /4\/5/);
   } finally {
     await harness.stop();
   }
@@ -218,6 +253,9 @@ async function testSqtbConsumesRoundUsageAndDirectApprovalOnlyConsumesApplicantP
 
     assert.equal(created.ok, true);
     assert.match(created.claimMessage, /^认领\d{5}$/);
+    assert.equal(harness.broadcasts.length, 1);
+    assert.match(harness.broadcasts[0].message, /认领/);
+    assert.match(harness.broadcasts[0].message, new RegExp(created.request.code));
 
     const tbAfterSqtb = await harness.plugin.api.simulateChatMessage({
       message: "tb",
@@ -242,6 +280,8 @@ async function testSqtbConsumesRoundUsageAndDirectApprovalOnlyConsumesApplicantP
 
     assert.equal(approved.ok, true);
     assert.equal(harness.teamBalanceCalls.length, 1);
+    assert.equal(harness.broadcasts.length, 2);
+    assert.match(harness.broadcasts[1].message, /公共TB剩余 5\/5/);
 
     const state = harness.plugin.api.getState();
     assert.equal(state.activeRequestCount, 0);
@@ -282,6 +322,8 @@ async function testClaimConsumesRoundUsageAndApprovalConsumesBothPeriodQuotas() 
 
     assert.equal(claimed.ok, true);
     assert.equal(claimed.request.status, "pending_approval");
+    assert.equal(harness.broadcasts.length, 2);
+    assert.match(harness.broadcasts[1].message, /等待管理员审批/);
 
     const claimantTb = await harness.plugin.api.simulateChatMessage({
       message: "tb",
@@ -306,6 +348,8 @@ async function testClaimConsumesRoundUsageAndApprovalConsumesBothPeriodQuotas() 
 
     assert.equal(approved.ok, true);
     assert.equal(harness.teamBalanceCalls.length, 1);
+    assert.equal(harness.broadcasts.length, 3);
+    assert.match(harness.broadcasts[2].message, /公共TB剩余 5\/5/);
   } finally {
     await harness.stop();
   }
@@ -338,6 +382,8 @@ async function testLockedSquadClaimIsRejected() {
 
     assert.equal(rejected.ok, false);
     assert.equal(rejected.error, "LockedSquadForbidden");
+    assert.equal(harness.warnings.length, 1);
+    assert.match(harness.warnings[0].message, /认领失败/);
   } finally {
     await harness.stop();
   }

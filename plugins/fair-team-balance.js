@@ -12,6 +12,7 @@ const DEFAULT_PERIOD_SQTB_CLAIM_LIMIT = 1;
 const DEFAULT_PERIOD_MS = 18 * 60 * 60 * 1000;
 const DEFAULT_REQUEST_TTL_MS = 120 * 1000;
 const EXPIRY_SWEEP_MS = 1000;
+const PAGE_ROUTE = "/plugins/fair-team-balance";
 const CLAIM_MESSAGE_PATTERN = /^认领(\d{5})$/;
 
 export function createPlugin({ core, modules, config, logger } = {}) {
@@ -64,6 +65,62 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
   function getCurrentMatchState(serverId = "") {
     return modules?.squadManagement?.getState?.(serverId || getServerId()) ?? null;
+  }
+
+  function getBroadcaster() {
+    return modules?.adminWarn?.sendAdminBroadcast ?? modules?.adminWarn?.broadcastMessage ?? null;
+  }
+
+  function getWarner() {
+    return modules?.adminWarn?.sendAdminWarn ?? modules?.adminWarn?.warnPlayer ?? null;
+  }
+
+  async function broadcastMessage(message, reason, meta = {}) {
+    const broadcaster = getBroadcaster();
+    const text = normalizeText(message);
+    if (!text || typeof broadcaster !== "function") return null;
+
+    try {
+      return await broadcaster({
+        message: text,
+        reason,
+        sourceModule: PLUGIN_ID,
+        relatedEventId: normalizeText(meta?.relatedEventId),
+        system: true,
+      });
+    } catch (error) {
+      pluginLogger?.warn?.(`[FairTB] broadcast failed: ${error?.message ?? error}`);
+      return null;
+    }
+  }
+
+  async function warnPlayer(player, message, reason, meta = {}) {
+    const warner = getWarner();
+    const text = normalizeText(message);
+    const targetName = normalizeText(player?.playerName ?? player?.name);
+    if (!text || !targetName || typeof warner !== "function") return null;
+
+    try {
+      return await warner({
+        targetName,
+        targetSteamId: normalizeText(player?.steamId ?? player?.steamID),
+        targetEosId: normalizeText(player?.eosId ?? player?.eosID),
+        message: text,
+        reason,
+        sourceModule: PLUGIN_ID,
+        relatedEventId: normalizeText(meta?.relatedEventId),
+        system: true,
+      });
+    } catch (error) {
+      pluginLogger?.warn?.(`[FairTB] warnPlayer failed: ${error?.message ?? error}`);
+      return null;
+    }
+  }
+
+  function buildQuotaBroadcastMessage({ playerName = "", mode = "tb" } = {}) {
+    const safePlayerName = normalizeText(playerName) || "unknown";
+    const actionLabel = mode === "sqtb" ? "公平跳边审批通过" : "公平跳边执行成功";
+    return `${actionLabel}: ${safePlayerName}，公共TB剩余 ${state.round.publicTbRemaining}/${runtimeConfig.publicTbLimit}`;
   }
 
   function getOnlinePlayerSnapshot(serverId = "", event = {}) {
@@ -646,6 +703,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         reason: validation.error,
         message: validation.message,
       });
+      await warnPlayer(actor, `公平跳边失败: ${validation.message}`, "fair_tb_rejected", {
+        relatedEventId: normalizeText(event?.id ?? event?.seq),
+      });
       return {
         ok: false,
         error: validation.error,
@@ -680,6 +740,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         reason: normalizeText(result?.error) || "TeamBalanceRejected",
         message: normalizeText(result?.message) || "TeamBalance rejected the switch.",
       });
+      await warnPlayer(actor, `公平跳边失败: ${normalizeText(result?.message) || "跳边执行被拒绝"}`, "fair_tb_switch_rejected", {
+        relatedEventId: normalizeText(event?.id ?? event?.seq),
+      });
       return {
         ok: false,
         error: normalizeText(result?.error) || "TeamBalanceRejected",
@@ -709,6 +772,13 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         message: normalizeText(result?.message),
         command: normalizeText(result?.command),
       },
+    });
+
+    await broadcastMessage(buildQuotaBroadcastMessage({
+      playerName,
+      mode: validation.mode === "warmup" ? "warmup" : "tb",
+    }), validation.mode === "warmup" ? "fair_tb_warmup_broadcast" : "fair_tb_broadcast", {
+      relatedEventId: normalizeText(event?.id ?? event?.seq),
     });
 
     return {
@@ -762,6 +832,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         reason: validation.error,
         message: validation.message,
       });
+      await warnPlayer(actor, `公平跳边申请失败: ${validation.message}`, "fair_sqtb_rejected", {
+        relatedEventId: normalizeText(event?.id ?? event?.seq),
+      });
       return {
         ok: false,
         error: validation.error,
@@ -804,6 +877,12 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       sourceMessageId: request.sourceMessageId,
     });
 
+    await broadcastMessage(
+      `${request.applicant.playerName || request.applicant.steamId || "unknown"} 发起公平跳边申请，请输入 认领${request.code} 完成认领`,
+      "fair_sqtb_created",
+      { relatedEventId: request.sourceMessageId },
+    );
+
     return {
       ok: true,
       request: serializeRequest(request),
@@ -812,9 +891,13 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   async function handleClaimMessage(event = {}, code = "") {
+    const eventActor = formatActor(null, event);
     const requestId = state.requestIdsByCode.get(code) ?? "";
     const request = requestId ? state.requests.get(requestId) : null;
     if (!request) {
+      await warnPlayer(eventActor, "认领失败: 未找到对应的公平跳边申请", "fair_sqtb_claim_missing", {
+        relatedEventId: normalizeText(event?.id ?? event?.seq),
+      });
       return {
         ok: false,
         error: "RequestNotFound",
@@ -825,6 +908,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     const nowMs = Date.now();
     if (request.expiresAtMs <= nowMs) {
       await expireSingleRequest(request, { persist: true, reason: "expired_before_claim" });
+      await warnPlayer(eventActor, "认领失败: 该公平跳边申请已过期", "fair_sqtb_claim_expired", {
+        relatedEventId: normalizeText(event?.id ?? event?.seq),
+      });
       return {
         ok: false,
         error: "RequestExpired",
@@ -852,6 +938,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     });
 
     if (!validation.ok) {
+      await warnPlayer(actor, `认领失败: ${validation.message}`, "fair_sqtb_claim_rejected", {
+        relatedEventId: normalizeText(event?.id ?? event?.seq),
+      });
       return {
         ok: false,
         error: validation.error,
@@ -873,6 +962,12 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       applicant: request.applicant,
       claimant: request.claimant,
     });
+
+    await broadcastMessage(
+      `${request.claimant?.playerName || request.claimant?.steamId || "unknown"} 已认领 ${request.applicant.playerName || request.applicant.steamId || "unknown"} 的公平跳边申请，等待管理员审批`,
+      "fair_sqtb_claimed",
+      { relatedEventId: normalizeText(event?.id ?? event?.seq) },
+    );
 
     return {
       ok: true,
@@ -1008,6 +1103,13 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
       state.requests.delete(request.id);
       state.requestIdsByCode.delete(request.code);
+
+      await broadcastMessage(buildQuotaBroadcastMessage({
+        playerName: liveApplicantActor.playerName,
+        mode: "sqtb",
+      }), direct ? "fair_sqtb_direct_approved_broadcast" : "fair_sqtb_approved_broadcast", {
+        relatedEventId: request.id,
+      });
 
       return {
         ok: true,
@@ -1247,6 +1349,20 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     async start() {
       state.enabled = runtimeConfig.enabled;
+
+      core?.webRegistry?.registerPage?.({
+        id: "web.fairTeamBalance",
+        title: "公平跳边",
+        group: "插件",
+        route: PAGE_ROUTE,
+        pageModule: "/pages/fair-team-balance.js",
+        source: PLUGIN_ID,
+        description: "公平跳边插件状态、sqtb 待审批请求和额度查看页面。",
+        required: false,
+        enabled: true,
+        order: 135,
+        icon: "FTB",
+      });
 
       if (typeof modules?.chatManager?.on === "function") {
         unsubscribers.push(modules.chatManager.on("message", handleChatMessage));
