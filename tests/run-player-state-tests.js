@@ -443,6 +443,67 @@ async function testResolvesCommandSquadFromSquadManagementName() {
   await harness.module.stop();
 }
 
+async function testTracksSquadlessTimingUntilJoin() {
+  const harness = createHarness();
+  await harness.module.start();
+
+  emit(harness.listeners, "RCON_LIST_PLAYERS_UPDATED", {
+    serverId: "BZSS_Main",
+    players: [
+      {
+        playerID: 1,
+        name: "Wanderer",
+        steamID: "999",
+        teamID: "1",
+        squadID: "",
+      },
+    ],
+  });
+
+  const first = harness.module.api.getPlayerBySteamID("BZSS_Main", "999");
+  assert.ok(first);
+  assert.equal(first?.squadID, "");
+  assert.ok(String(first?.squadlessSince ?? "").length > 0);
+
+  // Same (still squadless) snapshot should keep the original squadlessSince.
+  emit(harness.listeners, "RCON_LIST_PLAYERS_UPDATED", {
+    serverId: "BZSS_Main",
+    players: [
+      {
+        playerID: 1,
+        name: "Wanderer",
+        steamID: "999",
+        teamID: "1",
+        squadID: "",
+      },
+    ],
+  });
+
+  const second = harness.module.api.getPlayerBySteamID("BZSS_Main", "999");
+  assert.equal(second?.squadlessSince, first?.squadlessSince);
+
+  // Joining a squad should clear squadless timing.
+  emit(harness.listeners, "RCON_LIST_PLAYERS_UPDATED", {
+    serverId: "BZSS_Main",
+    players: [
+      {
+        playerID: 1,
+        name: "Wanderer",
+        steamID: "999",
+        teamID: "1",
+        squadID: "2",
+      },
+    ],
+  });
+
+  const joined = harness.module.api.getPlayerBySteamID("BZSS_Main", "999");
+  assert.equal(joined?.squadID, "2");
+  assert.equal(joined?.squadlessSince, "");
+  assert.equal(joined?.squadlessSeconds, 0);
+
+  await harness.module.stop();
+}
+
 await testBuildsCanonicalPlayerListFromRcon();
 await testMergesEventUpdatesIntoGlobalPlayerList();
 await testFirstSnapshotDoesNotEmitSquadMembershipEvents();
@@ -453,5 +514,6 @@ await testEmitsPlayerChangedSquadFromSnapshotDiff();
 await testOfflinePlayerDoesNotEmitLeftSquad();
 await testEmitsCommanderAuthorizedWhenCommandSquadCommanderPresent();
 await testResolvesCommandSquadFromSquadManagementName();
+await testTracksSquadlessTimingUntilJoin();
 
 console.log("player state tests passed");

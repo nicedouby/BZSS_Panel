@@ -691,6 +691,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
     const squadId = normalizeNullableNumber(request.squadId ?? request.squadID);
     const reason = normalizeText(request.reason);
     const source = normalizeText(request.source) || "manual";
+    const commandNameSuffix = normalizeText(request.commandNameSuffix);
     const operatorName = normalizeText(request.operatorName ?? request.actor?.username ?? request.actor?.name);
     const system = Boolean(request.system);
     const actor = request.actor ?? request.viewer ?? null;
@@ -754,7 +755,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
       });
     }
 
-    const command = `AdminDisbandSquad ${teamId} ${squadId}`;
+    const command = `AdminDisbandSquad${commandNameSuffix} ${teamId} ${squadId}`;
     const commandResult = await executeDisbandCommand({ command, serverId, teamId, squadId, reason, source, operatorName, system, actor });
     const result = await persistActionRecord({
       kind: "disband",

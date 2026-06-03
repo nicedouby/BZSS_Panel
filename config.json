@@ -348,6 +348,13 @@
         "restartRequired": true
       },
       {
+        "path": "plugins.fairSquadGuard.disbandCommandNameSuffix",
+        "label": "Fair Squad Guard Disband Command Suffix",
+        "type": "string",
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
         "path": "plugins.fairSquadGuard.allowedInfantryNamesText",
         "label": "Fair Squad Guard Infantry Names",
         "type": "string",
@@ -516,6 +523,7 @@
       "noSquadCreationSeconds": 20,
       "infantryOnlyUntilSeconds": 50,
       "maxViolationCountBeforeKick": 15,
+      "disbandCommandNameSuffix": "x",
       "allowedInfantryNamesText": "",
       "allowedInfantryPatternsText": ""
     },

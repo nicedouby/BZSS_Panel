@@ -20,6 +20,8 @@ export interface FairSquadGuardRecord {
   actions: Array<{ type: string; reason?: string; error?: string; count?: number }>;
   clockSeconds: number;
   population: number;
+  active?: boolean;
+  resolvedAt?: string;
   inferredLeader?: { name?: string; steamId?: string; eosId?: string };
   createdAt: string;
   updatedAt: string;
@@ -38,6 +40,7 @@ export interface FairSquadGuardStatus {
     allowedInfantryNames: string[];
     allowedInfantryPatterns: string[];
     defaultInfantryPatterns: string[];
+    disbandCommandNameSuffix: string;
   };
   population: { count: number; source: string };
   clock: {
@@ -68,6 +71,7 @@ export interface FairSquadGuardStatus {
     kicked: number;
   };
   recentRecords: FairSquadGuardRecord[];
+  currentViolatingSquads: FairSquadGuardRecord[];
   leaderboard: Array<{
     key: string;
     name: string;

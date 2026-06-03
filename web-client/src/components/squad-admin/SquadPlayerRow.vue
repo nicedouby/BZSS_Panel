@@ -56,6 +56,10 @@
           <span class="label">复苏</span>
           <span class="value">{{ revives }}</span>
         </span>
+        <span v-if="squadlessText" class="stat-chip">
+          <span class="label">游离</span>
+          <span class="value">{{ squadlessText }}</span>
+        </span>
       </div>
     </div>
   </div>
@@ -120,6 +124,14 @@ const deaths = computed(() => normalizeStat(props.player.combatStats?.deaths));
 const tk = computed(() => normalizeStat(props.player.combatStats?.tk));
 const revives = computed(() => normalizeStat(props.player.combatStats?.revives));
 
+const squadlessText = computed(() => {
+  if (props.player.squadId != null) return "";
+  const raw: any = props.player.raw ?? {};
+  const seconds = Number(raw.squadlessSeconds ?? 0);
+  if (!Number.isFinite(seconds) || seconds <= 0) return "";
+  return formatDurationShort(seconds);
+});
+
 function normalizeStat(value: unknown) {
   const numeric = Number(value ?? 0);
   if (!Number.isFinite(numeric)) return 0;
@@ -144,6 +156,16 @@ function formatPlaytime(hours?: number | null) {
 
 function handleSelect(event: MouseEvent) {
   emit("select", { player: props.player, event });
+}
+
+function formatDurationShort(secondsValue: number) {
+  const total = Math.max(0, Math.floor(Number(secondsValue ?? 0)));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h > 0) return `${h}h${String(m).padStart(2, "0")}m`;
+  if (m > 0) return `${m}m${String(s).padStart(2, "0")}s`;
+  return `${s}s`;
 }
 
 function displayRole(role: string | null | undefined) {

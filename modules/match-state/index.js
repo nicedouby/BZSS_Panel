@@ -351,7 +351,6 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       }
 
       const players = parseListPlayers(result.rconResponse);
-      state.players = makePlayersSnapshot(players);
       if (!state.serverStatus.playerCountSource || state.serverStatus.playerCountSource !== "serverInfo") {
         state.serverStatus.playerCount = players.length;
         state.serverStatus.playerCountSource = "listPlayers";
@@ -367,10 +366,48 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         },
       });
       core.eventBus.emitCoreEvent("RCON_LIST_PLAYERS_UPDATED", event);
+
+      const enrichedPlayers = enrichPlayersWithPlayerStateTiming(state.serverId, players);
+      state.players = makePlayersSnapshot(enrichedPlayers);
+
       emitPlayersUpdated();
       emitUpdated("players");
       return players;
     }, () => state.players.list, report);
+  }
+
+  function enrichPlayersWithPlayerStateTiming(serverId, players) {
+    const list = Array.isArray(players) ? players : [];
+    const getList = modules?.playerState?.getPlayerList;
+    if (typeof getList !== "function") return list;
+
+    const serverKey = String(serverId ?? core.webStatus.serverId ?? "").trim();
+    const playerStatePlayers = getList(serverKey) ?? [];
+    if (!Array.isArray(playerStatePlayers) || playerStatePlayers.length === 0) return list;
+
+    const lookup = new Map();
+    for (const p of playerStatePlayers) {
+      const key = getStableIdentityKey(p);
+      if (!key) continue;
+      lookup.set(key, p);
+    }
+
+    return list.map((player) => {
+      const key = getStableIdentityKey(player);
+      if (!key) return player;
+      const statePlayer = lookup.get(key);
+      if (!statePlayer) return player;
+
+      const squadlessSince = String(statePlayer?.squadlessSince ?? "");
+      const squadlessSeconds = Number(statePlayer?.squadlessSeconds ?? 0);
+      if (!squadlessSince && (!Number.isFinite(squadlessSeconds) || squadlessSeconds <= 0)) return player;
+
+      return {
+        ...player,
+        squadlessSince,
+        squadlessSeconds: Number.isFinite(squadlessSeconds) ? squadlessSeconds : 0,
+      };
+    });
   }
 
   async function refreshSquads(report = null) {
@@ -766,6 +803,25 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     },
   };
 
+}
+
+function getStableIdentityKey(player = {}) {
+  const steamID = String(player?.steamID ?? player?.steam64ID ?? "").trim();
+  if (steamID) return `steam:${steamID}`;
+
+  const eosID = String(player?.eosID ?? "").trim();
+  if (eosID) return `eos:${eosID}`;
+
+  const controllerID = String(player?.controllerID ?? "").trim();
+  if (controllerID) return `controller:${controllerID}`;
+
+  const name = String(player?.name ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+  if (name) return `name:${name}`;
+
+  return "";
 }
 
 function makePlayersSnapshot(players) {

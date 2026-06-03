@@ -1328,6 +1328,44 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       .map((request) => serializeRequest(request));
   }
 
+  async function listHistory({ limit = 100 } = {}) {
+    const files = getReplayFilePaths(Date.now());
+    const entries = [];
+    const types = [
+      "TB_EXECUTED",
+      "TB_REJECTED",
+      "SQTB_APPROVED",
+      "SQTB_REJECTED",
+      "SQTB_EXPIRED",
+    ];
+
+    for (const filePath of files) {
+      try {
+        const text = await fs.readFile(filePath, "utf8");
+        const lines = text.split(/\r?\n/);
+        // Process lines from bottom to top to get recent entries first
+        for (let i = lines.length - 1; i >= 0; i--) {
+          const trimmed = lines[i].trim();
+          if (!trimmed) continue;
+          try {
+            const entry = JSON.parse(trimmed);
+            if (types.includes(entry.type)) {
+              entries.push(entry);
+              if (entries.length >= limit) break;
+            }
+          } catch {}
+        }
+      } catch (error) {
+        if (error.code !== "ENOENT") {
+          pluginLogger?.warn?.(`[FairTB] Failed to read history log ${filePath}: ${error.message}`);
+        }
+      }
+      if (entries.length >= limit) break;
+    }
+
+    return entries.sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, limit);
+  }
+
   function serializePeriod(period) {
     const playerKey = normalizeText(period?.playerKey);
     return {
@@ -1435,6 +1473,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   const api = {
     getState,
     listRequests,
+    listHistory,
     approveRequest,
     rejectRequest,
     resetRound,

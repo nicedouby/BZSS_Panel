@@ -162,7 +162,7 @@ function resolveSection(route: string, page: any): SidebarSectionKey {
   if (route.startsWith("/system/") || id.includes("runtime") || id.includes("system")) return "system";
   if (route === "/match-status" || route === "/match-state" || route === "/console" || route === "/chat-monitor") return "opsLive";
   if (route === "/player-database" || route === "/player-session-records" || route === "/squad-management") return "players";
-  if (route === "/combat-manager" || route === "/combat-log" || route === "/kill-manage" || route === "/combat-clean") return "combat";
+  if (route === "/combat-manager" || route === "/combat-log" || route === "/combat-clean") return "combat";
   if (route === "/admin-warns" || route === "/scheduled-broadcasts") return "broadcast";
   if (route.startsWith("/plugins/") || source.includes("plugin")) return "plugins";
   if (id.includes("player") || id.includes("squad")) return "players";

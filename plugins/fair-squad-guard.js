@@ -11,6 +11,7 @@ const DEFAULT_PLAYER_THRESHOLD = 50;
 const DEFAULT_NO_CREATE_SECONDS = 20;
 const DEFAULT_INFANTRY_ONLY_UNTIL_SECONDS = 50;
 const DEFAULT_MAX_VIOLATIONS_BEFORE_KICK = 15;
+const DEFAULT_DISBAND_COMMAND_NAME_SUFFIX = "x";
 
 const DEFAULT_INFANTRY_PATTERNS = Object.freeze([
   "^squad\\s*\\d+$",
@@ -243,14 +244,17 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       const squads = Array.isArray(event.squads) ? event.squads : [];
       const population = getPopulation(serverId);
       const clock = ensureClockSafety();
+      const matchId = normalizeText(event.matchId);
+      const currentPresenceKeys = new Set();
 
       for (const squad of squads) {
         const normalized = normalizeRconSquad(squad, {
           serverId,
-          matchId: normalizeText(event.matchId),
+          matchId,
           observedAt: normalizeText(event.time) || nowIso(),
         });
         if (!normalized.serverId || normalized.teamId == null || normalized.squadId == null) continue;
+        currentPresenceKeys.add(buildPresenceKey(normalized));
 
         const slotKey = buildSlotKey(normalized);
         const pending = findPendingLog(normalized);
@@ -275,6 +279,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
         await processCreation(normalized);
       }
+
+      markCurrentSquadPresence({ serverId, matchId, currentPresenceKeys });
     });
   }
 
@@ -342,6 +348,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       clockTrusted: Boolean(clock.trusted || state.session.manualUnlockAt),
       population: population.count,
       populationSource: population.source,
+      active: existing?.active !== false,
+      resolvedAt: existing?.resolvedAt ?? "",
       actions: existing?.actions ? [...existing.actions] : [],
     };
 
@@ -464,6 +472,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       source: PLUGIN_ID,
       system: true,
       operatorName: PLUGIN_ID,
+      commandNameSuffix: runtimeConfig.disbandCommandNameSuffix,
     };
     if (typeof api?.requestDisband === "function") return await api.requestDisband(request);
     if (typeof api?.disband === "function") return await api.disband(request);
@@ -592,6 +601,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       session: { ...state.session },
       summary: { ...state.summary },
       recentRecords: state.records.map(cloneRecord),
+      currentViolatingSquads: getCurrentViolatingSquads(),
       leaderboard: getLeaderboard(),
       pendingLogCount: state.pendingLogs.size,
       seenSlotCount: state.seenSlots.size,
@@ -637,7 +647,43 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       allowedInfantryPatterns: [...runtimeConfig.allowedInfantryPatterns],
       defaultInfantryPatterns: [...DEFAULT_INFANTRY_PATTERNS],
       maxRecentRecords: runtimeConfig.maxRecentRecords,
+      disbandCommandNameSuffix: runtimeConfig.disbandCommandNameSuffix,
     };
+  }
+
+  function getCurrentViolatingSquads() {
+    return state.records
+      .filter((record) => record.violation && record.active !== false)
+      .map(cloneRecord);
+  }
+
+  function markCurrentSquadPresence({ serverId, matchId = "", currentPresenceKeys = new Set() } = {}) {
+    const normalizedServerId = normalizeText(serverId);
+    const normalizedMatchId = normalizeText(matchId);
+    const updatedAt = nowIso();
+
+    for (const record of state.records) {
+      if (!record?.serverId || record.teamId == null || record.squadId == null) continue;
+      if (normalizeText(record.serverId) !== normalizedServerId) continue;
+      if (normalizedMatchId && normalizeText(record.matchId) && normalizeText(record.matchId) !== normalizedMatchId) continue;
+
+      const isPresent = currentPresenceKeys.has(buildPresenceKey(record));
+      const nextActive = isPresent;
+      if (record.active === nextActive) continue;
+
+      record.active = nextActive;
+      record.updatedAt = updatedAt;
+      if (nextActive) {
+        record.resolvedAt = "";
+      } else {
+        record.resolvedAt = updatedAt;
+      }
+
+      const slotKey = buildSlotKey(record);
+      if (state.recordsBySlot.has(slotKey)) {
+        state.recordsBySlot.set(slotKey, cloneRecord(record));
+      }
+    }
   }
 
   function findPendingLog(event) {
@@ -762,6 +808,7 @@ function readConfig(config) {
     infantryOnlyUntilSeconds: positiveInt(raw.infantryOnlyUntilSeconds, DEFAULT_INFANTRY_ONLY_UNTIL_SECONDS),
     maxViolationCountBeforeKick: positiveInt(raw.maxViolationCountBeforeKick, DEFAULT_MAX_VIOLATIONS_BEFORE_KICK),
     maxRecentRecords: positiveInt(raw.maxRecentRecords, DEFAULT_RECENT_LIMIT),
+    disbandCommandNameSuffix: normalizeText(raw.disbandCommandNameSuffix ?? DEFAULT_DISBAND_COMMAND_NAME_SUFFIX),
     allowedInfantryNames: parseListText(raw.allowedInfantryNamesText ?? raw.allowedInfantryNames),
     allowedInfantryPatterns: parseListText(raw.allowedInfantryPatternsText ?? raw.allowedInfantryNamePatterns),
   };
@@ -905,6 +952,15 @@ function buildSlotKey(event) {
     event.teamId == null ? "" : String(event.teamId),
     event.squadId == null ? "" : String(event.squadId),
     normalizeSquadName(event.squadName),
+  ].join("|");
+}
+
+function buildPresenceKey(event) {
+  return [
+    normalizeText(event.serverId),
+    normalizeText(event.matchId),
+    event.teamId == null ? "" : String(event.teamId),
+    event.squadId == null ? "" : String(event.squadId),
   ].join("|");
 }
 

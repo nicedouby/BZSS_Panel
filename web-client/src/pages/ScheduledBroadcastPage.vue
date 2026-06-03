@@ -163,11 +163,15 @@ const reorderBusy = ref(false);
 const drafts = reactive<Record<string, DraftItem>>({});
 const dirtyDrafts = reactive<Record<string, boolean>>({});
 
+const REFRESH_INTERVAL_MS = 5000;
+const TIME_CACHE_MAX = 4000;
+const timeCache = new Map<number, string>();
+
 const query = useQuery({
   queryKey: ["scheduled-broadcast-state"],
   queryFn: getScheduledBroadcastState,
   placeholderData: (previousData) => previousData,
-  refetchInterval: 2000,
+  refetchInterval: REFRESH_INTERVAL_MS,
   refetchIntervalInBackground: false,
 });
 
@@ -202,11 +206,14 @@ watch(
         continue;
       }
 
-      drafts[item.id] = {
-        message: item.message ?? "",
-        intervalSeconds: item.intervalSeconds ?? 300,
-        enabled: Boolean(item.enabled),
-      };
+      const nextMessage = item.message ?? "";
+      const nextIntervalSeconds = item.intervalSeconds ?? 300;
+      const nextEnabled = Boolean(item.enabled);
+
+      const draft = drafts[item.id];
+      if (draft.message !== nextMessage) draft.message = nextMessage;
+      if (draft.intervalSeconds !== nextIntervalSeconds) draft.intervalSeconds = nextIntervalSeconds;
+      if (draft.enabled !== nextEnabled) draft.enabled = nextEnabled;
     }
 
     for (const id of Object.keys(drafts)) {
@@ -401,7 +408,12 @@ function clampInt(value: unknown, min: number, max: number, fallback: number) {
 function formatTime(value: unknown) {
   const num = Number(value);
   if (!Number.isFinite(num) || num <= 0) return "-";
-  return new Date(num).toLocaleString();
+  const cached = timeCache.get(num);
+  if (cached) return cached;
+  const formatted = new Date(num).toLocaleString();
+  timeCache.set(num, formatted);
+  if (timeCache.size > TIME_CACHE_MAX) timeCache.clear();
+  return formatted;
 }
 </script>
 

@@ -106,6 +106,8 @@ export function createPlayerStateModule({ core, modules, logger }) {
       lastSquadChangeAt: "",
       squadJoinedAt: "",
       squadLeftAt: "",
+      squadlessSince: "",
+      squadlessSeconds: 0,
       isLeader: false,
       role: "",
       state: "unknown",
@@ -141,6 +143,8 @@ export function createPlayerStateModule({ core, modules, logger }) {
       existing.lastSquadChangeAt = next.lastSquadChangeAt ?? existing.lastSquadChangeAt;
       existing.squadJoinedAt = next.squadJoinedAt ?? existing.squadJoinedAt;
       existing.squadLeftAt = next.squadLeftAt ?? existing.squadLeftAt;
+      existing.squadlessSince = next.squadlessSince ?? existing.squadlessSince;
+      existing.squadlessSeconds = next.squadlessSeconds ?? existing.squadlessSeconds;
       existing.isLeader = Boolean(next.isLeader);
       existing.role = next.role ?? "";
       existing.state = next.state ?? existing.state;
@@ -298,16 +302,19 @@ export function createPlayerStateModule({ core, modules, logger }) {
     const state = ensureServerState(serverId);
     const hadPreviousSnapshot = state.playersByKey.size > 0;
 
-    const oldMap = new Map();
+    const oldComparableMap = new Map();
+    const oldStateByStableKey = new Map();
     for (const player of state.playersByKey.values()) {
       const normalized = normalizeRconPlayer(player);
       const key = getStablePlayerKey(normalized);
-      if (key) oldMap.set(key, normalized);
+      if (!key) continue;
+      oldComparableMap.set(key, normalized);
+      oldStateByStableKey.set(key, player);
     }
 
-    const newMap = makeComparablePlayerSnapshot(players);
+    const newComparableMap = makeComparablePlayerSnapshot(players);
     const changes = hadPreviousSnapshot
-      ? detectSquadMembershipChanges(serverId, oldMap, newMap, now)
+      ? detectSquadMembershipChanges(serverId, oldComparableMap, newComparableMap, now)
       : [];
 
     clearServer(serverId);
@@ -316,12 +323,14 @@ export function createPlayerStateModule({ core, modules, logger }) {
     for (const player of players) {
       const normalized = normalizeRconPlayer(player);
       const playerKey = getStablePlayerKey(normalized);
-      const previous = playerKey ? oldMap.get(playerKey) : null;
+      const previous = playerKey ? oldStateByStableKey.get(playerKey) : null;
       const previousSquadID = normalizeRconId(previous?.squadID);
       const currentSquadID = normalizeRconId(normalized.squadID);
       const previousTeamID = normalizeRconId(previous?.teamID);
       const currentTeamID = normalizeRconId(normalized.teamID);
       const squadChanged = Boolean(previous) && previousSquadID !== currentSquadID;
+
+      const squadless = computeSquadlessTiming({ previous, currentSquadID, now });
 
       const next = {
         serverId,
@@ -342,6 +351,8 @@ export function createPlayerStateModule({ core, modules, logger }) {
         squadLeftAt: previousSquadID && !currentSquadID
           ? now
           : previous?.squadLeftAt ?? "",
+        squadlessSince: squadless.squadlessSince,
+        squadlessSeconds: squadless.squadlessSeconds,
         isLeader: Boolean(normalized.isLeader),
         role: normalized.role,
         state: "online",
@@ -358,7 +369,7 @@ export function createPlayerStateModule({ core, modules, logger }) {
       emitSquadMembershipChange(change);
     }
 
-    updateCommanderAuthorizationFromSnapshot(serverId, oldMap, newMap, now);
+    updateCommanderAuthorizationFromSnapshot(serverId, oldComparableMap, newComparableMap, now);
 
     logWithFallback(moduleLogger, "debug", () => `Player snapshot refreshed (${players.length})`, {
       operation: "replaceFromRcon",
@@ -549,6 +560,26 @@ export function createPlayerStateModule({ core, modules, logger }) {
       });
     },
   };
+}
+
+function computeSquadlessTiming({ previous, currentSquadID, now }) {
+  const isInSquad = Boolean(normalizeRconId(currentSquadID));
+  if (isInSquad) {
+    return { squadlessSince: "", squadlessSeconds: 0 };
+  }
+
+  const previousSquadID = normalizeRconId(previous?.squadID);
+  const wasInSquad = Boolean(previousSquadID);
+  const previousSince = String(previous?.squadlessSince ?? "").trim();
+  const squadlessSince = (!wasInSquad && previousSince) ? previousSince : String(now);
+
+  const sinceMs = Date.parse(squadlessSince);
+  const nowMs = Date.parse(String(now));
+  const deltaSeconds = Number.isFinite(sinceMs) && Number.isFinite(nowMs)
+    ? Math.max(0, Math.floor((nowMs - sinceMs) / 1000))
+    : 0;
+
+  return { squadlessSince, squadlessSeconds: deltaSeconds };
 }
 
 function clonePlayer(player) {

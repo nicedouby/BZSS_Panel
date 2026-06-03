@@ -69,7 +69,6 @@ export class ModuleManager {
       createPlayerDatabaseModule,
       createPlayerDbSyncModule,
       createIpLookupModule,
-      createKillManageModule,
       createCombatCleanModule,
       createCombatManagerModule,
       createCombatLogModule,

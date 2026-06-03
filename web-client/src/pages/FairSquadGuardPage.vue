@@ -83,6 +83,11 @@
         <em>触发警告/解散</em>
       </article>
       <article class="summary-card" data-tone="danger">
+        <span>当前违规队伍</span>
+        <strong>{{ status?.currentViolatingSquads.length ?? 0 }}</strong>
+        <em>仍在 RCON 快照中存在</em>
+      </article>
+      <article class="summary-card" data-tone="danger">
         <span>已解散</span>
         <strong>{{ status?.summary.disbanded ?? 0 }}</strong>
         <em>RCON 执行成功</em>
@@ -135,6 +140,27 @@
         </div>
       </PageCard>
     </section>
+
+    <PageCard title="当前违规队伍" description="只展示仍在当前 RCON 快照中存在的违规小队；队伍消失后会自动移出。" compact>
+      <div v-if="!status?.currentViolatingSquads.length" class="empty-state">当前没有追踪中的违规队伍。</div>
+      <div v-else class="current-grid">
+        <article
+          v-for="record in status.currentViolatingSquads"
+          :key="record.id"
+          class="current-card"
+        >
+          <div>
+            <strong>{{ record.squadName || `Squad ${record.squadId ?? "?"}` }}</strong>
+            <span>T{{ record.teamId ?? "?" }} / S{{ record.squadId ?? "?" }} · {{ record.creationSource }}</span>
+          </div>
+          <div>
+            <b>{{ record.clockSeconds }}s</b>
+            <small>{{ creatorLabel(record) }}</small>
+          </div>
+          <p v-if="record.reasons.length">{{ record.reasons.join(" / ") }}</p>
+        </article>
+      </div>
+    </PageCard>
 
     <PageCard title="判定时间轴" description="标明 LOG、RCON_SNAPSHOT 或 RCON_PROMOTED_TO_LOG 来源。" compact>
       <div v-if="!records.length" class="empty-state">暂无建队判定记录。</div>
@@ -347,6 +373,7 @@ onMounted(() => {
 .summary-card,
 .rule-list div,
 .leader-row,
+.current-card,
 .timeline-item {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 16px;
@@ -476,6 +503,41 @@ onMounted(() => {
   font-size: 24px;
 }
 
+.current-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.current-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-color: rgba(255, 92, 92, 0.28);
+}
+
+.current-card strong,
+.current-card span,
+.current-card small {
+  display: block;
+}
+
+.current-card span,
+.current-card small,
+.current-card p {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.current-card b {
+  color: #ffadad;
+  font-size: 22px;
+}
+
+.current-card p {
+  margin: 0;
+}
+
 .timeline {
   display: grid;
   gap: 12px;
@@ -516,6 +578,7 @@ onMounted(() => {
 @media (max-width: 980px) {
   .hero-grid,
   .detail-grid,
+  .current-grid,
   .metric-grid,
   .summary-grid {
     grid-template-columns: 1fr;

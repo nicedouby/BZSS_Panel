@@ -258,6 +258,41 @@
           </article>
         </div>
       </PageCard>
+
+      <PageCard class="history-card" title="请求历史记录" description="玩家发起的 TB 与 SQTB 记录" compact>
+        <template #actions>
+          <button
+            type="button"
+            class="ghost-btn"
+            :disabled="loadingHistory"
+            @click="loadHistory"
+          >
+            {{ loadingHistory ? "刷新中..." : "刷新历史" }}
+          </button>
+        </template>
+
+        <div v-if="historyError" class="error-banner">
+          {{ historyError }}
+        </div>
+        <p v-else-if="!history.length" class="empty-state">当前没有历史记录。</p>
+
+        <div v-else class="history-list">
+          <article v-for="(entry, index) in history" :key="index" class="history-item">
+            <div class="history-item__head">
+              <div>
+                <strong>{{ entry.actorName }}</strong>
+                <span>{{ formatTime(entry.at) }}</span>
+              </div>
+              <span class="history-status" :data-status="entry.statusClass">{{ entry.typeLabel }}</span>
+            </div>
+
+            <div v-if="entry.reason || entry.message" class="history-meta">
+              <span v-if="entry.reason" class="history-reason">原因: {{ entry.reason }}</span>
+              <span v-if="entry.message" class="history-message">详情: {{ entry.message }}</span>
+            </div>
+          </article>
+        </div>
+      </PageCard>
     </section>
   </section>
 </template>
@@ -294,6 +329,16 @@ interface FairTeamBalanceRequest {
   serverId: string;
   canDirectApprove: boolean;
   canApprove: boolean;
+}
+
+interface FairTeamBalanceHistoryEntry {
+  type: string;
+  typeLabel: string;
+  statusClass: string;
+  at: string;
+  actorName: string;
+  reason: string;
+  message: string;
 }
 
 interface FairTeamBalancePlayerQuota {
@@ -361,10 +406,13 @@ const fairState = ref<FairTeamBalanceState>({
 });
 
 const requests = ref<FairTeamBalanceRequest[]>([]);
+const history = ref<FairTeamBalanceHistoryEntry[]>([]);
 const loadingState = ref(false);
 const loadingRequests = ref(false);
+const loadingHistory = ref(false);
 const stateError = ref("");
 const requestsError = ref("");
+const historyError = ref("");
 const quotaError = ref("");
 const actioningRequestId = ref("");
 const resettingAction = ref<"" | "period" | "round">("");
@@ -419,7 +467,7 @@ onBeforeUnmount(() => {
 
 async function refreshPanel() {
   quotaError.value = "";
-  await Promise.all([loadState(), loadRequests()]);
+  await Promise.all([loadState(), loadRequests(), loadHistory()]);
 }
 
 async function loadState() {
@@ -447,6 +495,21 @@ async function loadRequests() {
     requests.value = [];
   } finally {
     loadingRequests.value = false;
+  }
+}
+
+async function loadHistory() {
+  loadingHistory.value = true;
+  historyError.value = "";
+  try {
+    const res = await apiGet<{ ok?: boolean; data?: { history?: any[] } }>("/api/plugins/fair-team-balance/history?limit=50");
+    const list = Array.isArray(res?.data?.history) ? res.data.history : [];
+    history.value = list.map(normalizeHistoryEntry);
+  } catch (err: any) {
+    historyError.value = String(err?.message || err || "请求历史记录加载失败");
+    history.value = [];
+  } finally {
+    loadingHistory.value = false;
   }
 }
 
@@ -615,6 +678,34 @@ function normalizeActor(value?: Partial<FairTeamBalanceActor> | null): FairTeamB
     eosId: String(value?.eosId ?? ""),
     teamId: value?.teamId == null ? null : Number(value.teamId) || null,
     squadId: value?.squadId == null ? null : Number(value.squadId) || null,
+  };
+}
+
+function normalizeHistoryEntry(value: any): FairTeamBalanceHistoryEntry {
+  const type = String(value?.type ?? "");
+  const actorName = value?.playerName || value?.applicant?.playerName || value?.steamId || value?.applicant?.steamId || "未知玩家";
+  
+  let typeLabel = type;
+  let statusClass = "info";
+  
+  switch(type) {
+    case "TB_REQUESTED": typeLabel = "申请 TB"; statusClass = "info"; break;
+    case "TB_EXECUTED": typeLabel = "TB 通过"; statusClass = "ok"; break;
+    case "TB_REJECTED": typeLabel = "TB 驳回"; statusClass = "danger"; break;
+    case "SQTB_CREATED": typeLabel = "申请 SQTB"; statusClass = "info"; break;
+    case "SQTB_APPROVED": typeLabel = "SQTB 通过"; statusClass = "ok"; break;
+    case "SQTB_REJECTED": typeLabel = "SQTB 驳回"; statusClass = "danger"; break;
+    case "SQTB_EXPIRED": typeLabel = "SQTB 过期"; statusClass = "warning"; break;
+  }
+  
+  return {
+    type,
+    typeLabel,
+    statusClass,
+    at: String(value?.at ?? value?.time ?? ""),
+    actorName: String(actorName),
+    reason: String(value?.reason ?? value?.rejectedReason ?? ""),
+    message: String(value?.message ?? ""),
   };
 }
 
@@ -891,18 +982,33 @@ function normalizeStatusLabel(status: string) {
 }
 
 .detail-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  height: 600px;
+}
+
+.detail-grid :deep(.page-card) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.detail-grid :deep(.card-body) {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .quota-list,
-.request-list {
+.request-list,
+.history-list {
   display: grid;
   gap: 12px;
 }
 
 .quota-item,
-.request-item {
+.request-item,
+.history-item {
   border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 16px;
   padding: 16px;
@@ -910,7 +1016,8 @@ function normalizeStatusLabel(status: string) {
 }
 
 .quota-item__head,
-.request-item__head {
+.request-item__head,
+.history-item__head {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -919,26 +1026,30 @@ function normalizeStatusLabel(status: string) {
 }
 
 .quota-item__head > div,
-.request-item__head > div {
+.request-item__head > div,
+.history-item__head > div {
   display: grid;
   gap: 4px;
   min-width: 0;
 }
 
 .quota-item__head strong,
-.request-item__head strong {
+.request-item__head strong,
+.history-item__head strong {
   font-size: 15px;
 }
 
 .quota-item__head span,
-.request-item__head span {
+.request-item__head span,
+.history-item__head span {
   color: var(--color-text-muted);
   font-size: 12px;
   word-break: break-all;
 }
 
 .quota-badge,
-.request-status {
+.request-status,
+.history-status {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -953,13 +1064,15 @@ function normalizeStatusLabel(status: string) {
 }
 
 .quota-badge[data-tone="ok"],
-.request-status[data-status="approved"] {
+.request-status[data-status="approved"],
+.history-status[data-status="ok"] {
   border-color: rgba(34, 197, 94, 0.28);
   background: rgba(34, 197, 94, 0.12);
   color: #bbf7d0;
 }
 
-.quota-badge[data-tone="muted"] {
+.quota-badge[data-tone="muted"],
+.history-status[data-status="info"] {
   color: var(--color-text-muted);
 }
 
@@ -971,10 +1084,17 @@ function normalizeStatusLabel(status: string) {
 }
 
 .request-status[data-status="rejected"],
-.request-status[data-status="expired"] {
+.request-status[data-status="expired"],
+.history-status[data-status="danger"] {
   border-color: rgba(239, 68, 68, 0.24);
   background: rgba(239, 68, 68, 0.12);
   color: #fecaca;
+}
+
+.history-status[data-status="warning"] {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: rgba(245, 158, 11, 0.12);
+  color: #fde68a;
 }
 
 .quota-grid,
@@ -992,11 +1112,17 @@ function normalizeStatusLabel(status: string) {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.request-meta {
+.request-meta,
+.history-meta {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px 14px;
+  flex-direction: column;
+  gap: 6px;
   margin-top: 12px;
+}
+
+.history-meta span {
+  font-size: 12px;
+  color: var(--color-text-secondary);
 }
 
 .request-actions {

@@ -373,6 +373,7 @@ function renderMember(member) {
   const roleLabel = member.role || "未知角色";
   const teamLabel = member._resolvedUnassigned ? "待确认队伍" : `Team ${member._resolvedTeamID ?? "?"}`;
   const squadLabel = member._resolvedUnassigned ? "未编队" : `Squad ${member._resolvedSquadID ?? "?"}`;
+  const squadlessText = member._resolvedUnassigned ? formatSquadlessSeconds(member?.squadlessSeconds) : "";
 
   return `
     <button class="match-member-row" type="button" data-player-index="${member._playerIndex}">
@@ -383,6 +384,7 @@ function renderMember(member) {
       <div class="match-member-meta">
         <span class="match-member-stat playtime-stat">${esc(formatPlaytime(member))}</span>
         ${member._resolvedUnassigned ? "" : `<span class="match-member-squad-id">#${esc(member._resolvedSquadID)}</span>`}
+        ${squadlessText ? `<span class="match-member-stat">${esc(squadlessText)}</span>` : ""}
         <span class="match-member-stat">${esc(stateLabel)}</span>
         <span class="match-member-stat">${esc(roleLabel)}</span>
         <span class="match-member-stat">${esc(teamLabel)} / ${esc(squadLabel)}</span>
@@ -1471,6 +1473,20 @@ function formatPlaytime(player) {
   const seconds = Number(player?.steamPlaytime?.gameSeconds ?? player?.gameSeconds ?? 0);
   if (!Number.isFinite(seconds) || seconds <= 0) return "Steam 时长 --";
   return `Steam ${formatSecondsAsHours(seconds)}`;
+}
+
+function formatSquadlessSeconds(value) {
+  const seconds = Number(value ?? 0);
+  if (!Number.isFinite(seconds) || seconds <= 0) return "";
+
+  const total = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+
+  if (h > 0) return `游离 ${h}h${String(m).padStart(2, "0")}m`;
+  if (m > 0) return `游离 ${m}m${String(s).padStart(2, "0")}s`;
+  return `游离 ${s}s`;
 }
 
 function formatSecondsAsHours(seconds) {

@@ -1395,6 +1395,17 @@ export class WebServer {
         });
       }
 
+      if (url.pathname === "/api/plugins/fair-team-balance/history" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: {
+            history: await pluginApi.listHistory?.({
+              limit: Number(url.searchParams.get("limit") ?? "100") || 100,
+            }) ?? [],
+          },
+        });
+      }
+
       if (url.pathname === "/api/plugins/fair-team-balance/approve" && req.method === "POST") {
         if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);

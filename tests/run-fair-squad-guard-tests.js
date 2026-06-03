@@ -63,7 +63,7 @@ async function createHarness(options = {}) {
         },
         async requestDisband(request) {
           disbands.push(request);
-          return { ok: true, command: `AdminDisbandSquad ${request.teamId} ${request.squadId}` };
+          return { ok: true, command: `AdminDisbandSquad${request.commandNameSuffix ?? ""} ${request.teamId} ${request.squadId}` };
         },
         async requestKick(request) {
           kicks.push(request);
@@ -87,6 +87,7 @@ async function createHarness(options = {}) {
             noSquadCreationSeconds: 20,
             infantryOnlyUntilSeconds: 50,
             maxViolationCountBeforeKick: 15,
+            disbandCommandNameSuffix: "x",
             allowedInfantryNamesText: "INF OK",
             allowedInfantryPatternsText: "",
           };
@@ -224,10 +225,36 @@ async function testRconOnlyDisbandsButDoesNotPunishPlayer() {
     const status = harness.plugin.api.getStatus();
     assert.equal(status.summary.violations, 1);
     assert.equal(harness.disbands.length, 1);
+    assert.equal(harness.disbands[0].commandNameSuffix, "x");
     assert.equal(harness.warnings.length, 0);
     assert.equal(harness.kicks.length, 0);
     assert.equal(status.leaderboard.length, 0);
+    assert.equal(status.currentViolatingSquads.length, 1);
     assert.equal(status.recentRecords[0].creationSource, "RCON_SNAPSHOT");
+  } finally {
+    await harness.stop();
+  }
+}
+
+async function testCurrentViolatingSquadsFollowRconSnapshot() {
+  const harness = await createHarness();
+  try {
+    await harness.plugin.api.simulateSquadsUpdated({
+      serverId: "test-server",
+      matchId: "match-1",
+      squads: [{ teamId: 1, squadId: 10, squadName: "Tank" }],
+    });
+    assert.equal(harness.plugin.api.getStatus().currentViolatingSquads.length, 1);
+
+    await harness.plugin.api.simulateSquadsUpdated({
+      serverId: "test-server",
+      matchId: "match-1",
+      squads: [],
+    });
+    const status = harness.plugin.api.getStatus();
+    assert.equal(status.currentViolatingSquads.length, 0);
+    assert.equal(status.recentRecords[0].active, false);
+    assert.ok(status.recentRecords[0].resolvedAt);
   } finally {
     await harness.stop();
   }
@@ -253,6 +280,7 @@ async function testLogPromotesRconWithoutSecondDisband() {
 
     assert.equal(promoted.creationSource, "RCON_PROMOTED_TO_LOG");
     assert.equal(harness.disbands.length, 1);
+    assert.equal(harness.disbands[0].commandNameSuffix, "x");
     assert.equal(harness.warnings.length, 1);
     assert.equal(harness.plugin.api.getStatus().leaderboard[0].violations, 1);
   } finally {
@@ -283,6 +311,7 @@ await testMissingAnchorLocksRound();
 await testManualClockLocksRoundAndUnlockAllowsExecution();
 await testWindowRules();
 await testRconOnlyDisbandsButDoesNotPunishPlayer();
+await testCurrentViolatingSquadsFollowRconSnapshot();
 await testLogPromotesRconWithoutSecondDisband();
 await testSixteenthViolationKicks();
 

@@ -275,6 +275,10 @@ const broadcastFilters = reactive({
   limit: 200,
 });
 
+const REFRESH_INTERVAL_MS = 8000;
+const TIME_CACHE_MAX = 4000;
+const timeCache = new Map<number, string>();
+
 const query = useQuery({
   queryKey: computed(() => [
     "broadcast-module",
@@ -312,7 +316,7 @@ const query = useQuery({
     return apiGet<ModuleRecentResponse>(`/api/admin-warns/recent?${params.toString()}`);
   },
   placeholderData: (previousData) => previousData,
-  refetchInterval: 3000,
+  refetchInterval: REFRESH_INTERVAL_MS,
   refetchIntervalInBackground: false,
 });
 
@@ -402,7 +406,12 @@ function resetFilters() {
 function formatTime(value: unknown) {
   const number = Number(value ?? 0);
   if (Number.isFinite(number) && number > 0) {
-    return new Date(number).toLocaleString();
+    const cached = timeCache.get(number);
+    if (cached) return cached;
+    const formatted = new Date(number).toLocaleString();
+    timeCache.set(number, formatted);
+    if (timeCache.size > TIME_CACHE_MAX) timeCache.clear();
+    return formatted;
   }
   return String(value ?? "-");
 }
