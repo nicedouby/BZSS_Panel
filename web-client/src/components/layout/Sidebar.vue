@@ -96,6 +96,7 @@ const staticItems: SidebarItem[] = [
   { path: "/plugins/infantry-combat-enhancer", icon: "ICE", label: t("nav.infantryCombatEnhancer"), section: "plugins", order: 110 },
   { path: "/plugins/group-report", icon: "GR", label: t("nav.groupReport"), section: "plugins", order: 120 },
   { path: "/plugins/server-info-statistics", icon: "STS", label: t("nav.serverInfoStatistics"), section: "plugins", order: 130 },
+  { path: "/plugins/fair-squad-guard", icon: "FSG", label: t("nav.fairSquadGuard"), section: "plugins", order: 132 },
   { path: "/system/status", icon: "SYS", label: t("nav.runtimeStatus"), section: "system", order: 140 },
   { path: "/debug/udp-forwarder", icon: "UDP", label: t("nav.udpForwarder"), section: "debug", order: 150 },
   { path: "/debug/match-snapshots", icon: "SNP", label: t("nav.matchSnapshots"), section: "debug", order: 160 },

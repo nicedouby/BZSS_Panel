@@ -47,6 +47,20 @@ function assertSquadEventShape(event, expectedEventName, expectedReason) {
   assert.ok(event.current);
 }
 
+function assertCommanderAuthorizedShape(event) {
+  assert.equal(event.eventName, "module.playerState.commanderAuthorized");
+  assert.equal(event.source, "module.playerState");
+  assert.equal(event.reason, "rconListPlayersDiff");
+  assert.equal(event.sourceEventName, "RCON_LIST_PLAYERS_UPDATED");
+  assert.ok(event.serverId);
+  assert.ok(event.time);
+  assert.ok(event.player);
+  assert.ok(event.previous);
+  assert.ok(event.current);
+  assert.equal(event.commander?.authorized, true);
+  assert.equal(event.commander?.source, "commandSquad");
+}
+
 async function testBuildsCanonicalPlayerListFromRcon() {
   const harness = createHarness();
   await harness.module.start();
@@ -341,6 +355,66 @@ async function testOfflinePlayerDoesNotEmitLeftSquad() {
   await harness.module.stop();
 }
 
+async function testEmitsCommanderAuthorizedWhenLeaderEntersCommandSquad() {
+  const harness = createHarness();
+  await harness.module.start();
+
+  emit(harness.listeners, "RCON_LIST_PLAYERS_UPDATED", {
+    serverId: "BZSS_Main",
+    players: [
+      {
+        playerID: 1,
+        name: "Leader",
+        steamID: "10",
+        teamID: "1",
+        squadID: "",
+        isLeader: false,
+      },
+    ],
+  });
+
+  emit(harness.listeners, "RCON_LIST_PLAYERS_UPDATED", {
+    serverId: "BZSS_Main",
+    players: [
+      {
+        playerID: 1,
+        name: "Leader",
+        steamID: "10",
+        teamID: "1",
+        squadID: "10",
+        isLeader: true,
+      },
+    ],
+  });
+
+  const authEvents = getModuleEvents(harness.moduleEvents, "commanderAuthorized");
+  assert.equal(authEvents.length, 1);
+  const auth = authEvents[0].event;
+  assertCommanderAuthorizedShape(auth);
+  assert.equal(auth.previous.squadID, "");
+  assert.equal(auth.current.squadID, "10");
+  assert.equal(auth.player.name, "Leader");
+  assert.equal(auth.player.isLeader, true);
+
+  // Same snapshot again should not re-emit.
+  emit(harness.listeners, "RCON_LIST_PLAYERS_UPDATED", {
+    serverId: "BZSS_Main",
+    players: [
+      {
+        playerID: 1,
+        name: "Leader",
+        steamID: "10",
+        teamID: "1",
+        squadID: "10",
+        isLeader: true,
+      },
+    ],
+  });
+
+  assert.equal(getModuleEvents(harness.moduleEvents, "commanderAuthorized").length, 1);
+  await harness.module.stop();
+}
+
 await testBuildsCanonicalPlayerListFromRcon();
 await testMergesEventUpdatesIntoGlobalPlayerList();
 await testFirstSnapshotDoesNotEmitSquadMembershipEvents();
@@ -349,5 +423,6 @@ await testLeaderJoinDoesNotEmitPlayerJoinedSquad();
 await testEmitsPlayerLeftSquadFromSnapshotDiff();
 await testEmitsPlayerChangedSquadFromSnapshotDiff();
 await testOfflinePlayerDoesNotEmitLeftSquad();
+await testEmitsCommanderAuthorizedWhenLeaderEntersCommandSquad();
 
 console.log("player state tests passed");

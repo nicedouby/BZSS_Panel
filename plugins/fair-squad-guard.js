@@ -1,0 +1,991 @@
+// -*- coding: utf-8 -*-
+
+import fs from "node:fs/promises";
+import path from "node:path";
+
+const PLUGIN_ID = "plugin.fairSquadGuard";
+const PAGE_ROUTE = "/plugins/fair-squad-guard";
+const DEFAULT_DATA_DIR = "./data/fair-squad-guard";
+const DEFAULT_RECENT_LIMIT = 300;
+const DEFAULT_PLAYER_THRESHOLD = 50;
+const DEFAULT_NO_CREATE_SECONDS = 20;
+const DEFAULT_INFANTRY_ONLY_UNTIL_SECONDS = 50;
+const DEFAULT_MAX_VIOLATIONS_BEFORE_KICK = 15;
+
+const DEFAULT_INFANTRY_PATTERNS = Object.freeze([
+  "^squad\\s*\\d+$",
+  "^\\d+$",
+  "^inf(?:antry)?(?:\\s*\\d+)?$",
+  "^步兵(?:\\s*\\d+)?$",
+]);
+
+export function createPlugin({ core, modules, config, logger } = {}) {
+  const pluginLogger =
+    logger
+    ?? core?.createLogger?.({ moduleId: PLUGIN_ID, source: PLUGIN_ID, channel: "plugin" })
+    ?? core?.logger
+    ?? console;
+
+  let runtimeConfig = readConfig(config);
+  const dataDir = path.resolve(process.cwd(), runtimeConfig.directory);
+  const state = createInitialState();
+  const unsubscribers = [];
+  let serial = Promise.resolve();
+
+  function enqueue(task) {
+    const next = serial.then(task, task);
+    serial = next.catch(() => {});
+    return next;
+  }
+
+  function isSubscribed() {
+    return modules?.pluginSubscriptions?.isSubscribed?.(PLUGIN_ID) !== false
+      && core?.pluginSubscriptions?.isSubscribed?.(PLUGIN_ID) !== false;
+  }
+
+  function isActive() {
+    return Boolean(runtimeConfig.enabled) && isSubscribed();
+  }
+
+  async function ensureDataDir() {
+    await fs.mkdir(dataDir, { recursive: true });
+  }
+
+  function recordsFilePath(value = new Date()) {
+    const date = value instanceof Date ? value : new Date(value);
+    const safe = Number.isNaN(date.getTime()) ? new Date() : date;
+    const yyyy = safe.getFullYear();
+    const mm = String(safe.getMonth() + 1).padStart(2, "0");
+    const dd = String(safe.getDate()).padStart(2, "0");
+    return path.join(dataDir, `${yyyy}-${mm}-${dd}.jsonl`);
+  }
+
+  async function appendJsonl(entry) {
+    await ensureDataDir();
+    const payload = {
+      ...entry,
+      persistedAt: nowIso(),
+    };
+    await fs.appendFile(recordsFilePath(payload.createdAt), `${JSON.stringify(payload)}\n`, "utf8");
+  }
+
+  function persistLater(entry) {
+    void appendJsonl(entry).catch((error) => {
+      pluginLogger?.warn?.(`[FairSquadGuard] persist failed: ${error?.message ?? error}`);
+    });
+  }
+
+  async function recoverFromLogs() {
+    state.recovery.lastRecoveredAt = nowIso();
+    state.recovery.recoveredLineCount = 0;
+
+    for (const filePath of recentLogFilePaths()) {
+      let text = "";
+      try {
+        text = await fs.readFile(filePath, "utf8");
+      } catch (error) {
+        if (error?.code !== "ENOENT") {
+          pluginLogger?.warn?.(`[FairSquadGuard] recovery read failed: ${error?.message ?? error}`);
+        }
+        continue;
+      }
+
+      for (const line of text.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const entry = JSON.parse(trimmed);
+          state.recovery.recoveredLineCount += 1;
+          if (entry?.type === "ROUND_RESET") {
+            resetSession(entry.reason ?? "recovery", { persist: false, keepLock: true });
+          } else if (entry?.type === "DECISION" && entry.record) {
+            rememberRecord(entry.record, { persist: false, replay: true });
+            replayRecordStats(entry.record);
+          } else if (entry?.type === "UNLOCK") {
+            state.session.midRoundLocked = false;
+            state.session.midRoundLockReason = "";
+            state.session.manualUnlockAt = entry.createdAt ?? entry.persistedAt ?? nowIso();
+          }
+        } catch (error) {
+          pluginLogger?.warn?.(`[FairSquadGuard] recovery parse failed: ${error?.message ?? error}`);
+        }
+      }
+    }
+  }
+
+  function recentLogFilePaths(baseMs = Date.now()) {
+    return [24 * 60 * 60 * 1000, 0]
+      .map((offset) => recordsFilePath(new Date(baseMs - offset)))
+      .filter((filePath, index, list) => list.indexOf(filePath) === index);
+  }
+
+  function getWebStatus() {
+    return core?.webStatus?.getSnapshot?.() ?? {
+      serverId: core?.webStatus?.serverId ?? "",
+      playerCount: 0,
+      logClockSeconds: 600,
+      logClockHasAnchor: false,
+      logClockManual: false,
+    };
+  }
+
+  function getServerId(value = "") {
+    return normalizeText(value || core?.webStatus?.serverId || getWebStatus().serverId || "");
+  }
+
+  function getSquadState(serverId = getServerId()) {
+    return modules?.squadManagement?.getState?.(serverId) ?? null;
+  }
+
+  function getPopulation(serverId = getServerId()) {
+    const squadState = getSquadState(serverId);
+    const players = Array.isArray(squadState?.players) ? squadState.players : [];
+    if (players.length > 0) return { count: players.length, source: "squadManagement.players" };
+    const webStatus = getWebStatus();
+    return {
+      count: Math.max(0, Number(webStatus.playerCount ?? 0) || 0),
+      source: "webStatus.playerCount",
+    };
+  }
+
+  function resolveClockState() {
+    const webStatus = getWebStatus();
+    const seconds = Math.max(0, Math.floor(Number(webStatus.logClockSeconds ?? 600) || 0));
+    const hasAnchor = Boolean(webStatus.logClockHasAnchor);
+    const manual = Boolean(webStatus.logClockManual);
+    const reason = normalizeText(webStatus.logClockLastResetReason);
+    const trusted = hasAnchor && !manual && !state.session.midRoundLocked;
+    return {
+      seconds,
+      hasAnchor,
+      manual,
+      trusted,
+      reason,
+      anchorLogTime: normalizeText(webStatus.logClockAnchorLogTime),
+      lastResetAt: normalizeText(webStatus.logClockLastResetAt),
+    };
+  }
+
+  function ensureClockSafety() {
+    const clock = resolveClockState();
+    if (state.session.manualUnlockAt) return clock;
+
+    if (clock.manual) {
+      lockCurrentRound("manual_log_clock");
+      return { ...clock, trusted: false };
+    }
+
+    if (!clock.hasAnchor) {
+      lockCurrentRound("mid_round_start_without_anchor");
+      return { ...clock, trusted: false };
+    }
+
+    return clock;
+  }
+
+  function lockCurrentRound(reason) {
+    if (state.session.midRoundLocked && state.session.midRoundLockReason === reason) return;
+    state.session.midRoundLocked = true;
+    state.session.midRoundLockReason = reason;
+    state.session.midRoundLockedAt = nowIso();
+    state.session.manualUnlockAt = "";
+  }
+
+  function resetSession(reason = "round_reset", options = {}) {
+    state.session = {
+      ...createInitialState().session,
+      lastResetAt: nowIso(),
+      lastResetReason: reason,
+    };
+    state.records = [];
+    state.recordsBySlot.clear();
+    state.pendingLogs.clear();
+    state.seenSlots.clear();
+    state.violationPlayers.clear();
+    state.summary = createEmptySummary();
+    if (options.keepLock) {
+      state.session.midRoundLocked = true;
+      state.session.midRoundLockReason = "recovery_startup";
+    }
+    if (options.persist !== false) {
+      persistLater({ type: "ROUND_RESET", createdAt: nowIso(), reason });
+    }
+  }
+
+  function handleRoundAnchor(event = {}, reason = "round_anchor") {
+    return enqueue(async () => {
+      resetSession(reason);
+      state.session.roundAnchor = {
+        eventName: normalizeText(event.eventName),
+        reason,
+        rawLog: normalizeText(event.rawLog),
+        logTime: normalizeText(event.logTime),
+        at: nowIso(),
+      };
+      pluginLogger?.info?.(`[FairSquadGuard] session reset by ${reason}`);
+    });
+  }
+
+  function handleLifecycleSquadCreated(event = {}) {
+    return enqueue(async () => {
+      runtimeConfig = readConfig(config);
+      const normalized = normalizeCreationEvent(event, "LOG");
+      if (!normalized.serverId || normalized.squadId == null) return;
+      await processCreation(normalized);
+    });
+  }
+
+  function handleSquadsUpdated(event = {}) {
+    return enqueue(async () => {
+      runtimeConfig = readConfig(config);
+      const serverId = getServerId(event.serverId);
+      if (!serverId) return;
+      const squads = Array.isArray(event.squads) ? event.squads : [];
+      const population = getPopulation(serverId);
+      const clock = ensureClockSafety();
+
+      for (const squad of squads) {
+        const normalized = normalizeRconSquad(squad, {
+          serverId,
+          matchId: normalizeText(event.matchId),
+          observedAt: normalizeText(event.time) || nowIso(),
+        });
+        if (!normalized.serverId || normalized.teamId == null || normalized.squadId == null) continue;
+
+        const slotKey = buildSlotKey(normalized);
+        const pending = findPendingLog(normalized);
+        if (pending) {
+          state.pendingLogs.delete(pending.pendingKey);
+          await processCreation({
+            ...pending,
+            teamId: normalized.teamId,
+            inferredLeader: normalized.inferredLeader,
+            rconObservedAt: normalized.createdAt,
+            creationSource: "LOG",
+            creationConfidence: "HIGH",
+          });
+          continue;
+        }
+
+        if (state.seenSlots.has(slotKey) || state.recordsBySlot.has(slotKey)) continue;
+        if (!shouldConsiderCurrentEvent({ population, clock })) {
+          state.seenSlots.add(slotKey);
+          continue;
+        }
+
+        await processCreation(normalized);
+      }
+    });
+  }
+
+  function shouldConsiderCurrentEvent({ population = null, clock = null } = {}) {
+    if (!isActive()) return false;
+    const resolvedPopulation = population ?? getPopulation();
+    if (resolvedPopulation.count < runtimeConfig.enforcementPlayerThreshold) return false;
+    const resolvedClock = clock ?? ensureClockSafety();
+    return Boolean(resolvedClock.trusted || state.session.manualUnlockAt);
+  }
+
+  async function processCreation(event) {
+    const serverId = getServerId(event.serverId);
+    const population = getPopulation(serverId);
+    const clock = ensureClockSafety();
+    let slotKey = buildSlotKey(event);
+
+    if (!isActive()) {
+      state.seenSlots.add(slotKey);
+      return null;
+    }
+
+    if (population.count < runtimeConfig.enforcementPlayerThreshold) {
+      state.seenSlots.add(slotKey);
+      return null;
+    }
+
+    if (!clock.trusted && !state.session.manualUnlockAt) {
+      state.seenSlots.add(slotKey);
+      return null;
+    }
+
+    if (event.teamId == null && event.creationSource === "LOG") {
+      const existingRecord = findRecordForLog(event);
+      if (existingRecord?.teamId != null) {
+        event.teamId = existingRecord.teamId;
+        slotKey = buildSlotKey(event);
+      }
+    }
+
+    if (event.teamId == null && event.creationSource === "LOG") {
+      const pendingKey = buildPendingKey(event);
+      state.pendingLogs.set(pendingKey, {
+        ...event,
+        pendingKey,
+        queuedAt: nowIso(),
+      });
+      return null;
+    }
+
+    const existing = state.recordsBySlot.get(slotKey);
+    const merged = mergeCreation(existing, event, clock, population);
+    const decision = decideCreation(merged, clock);
+    const record = {
+      ...merged,
+      id: existing?.id ?? makeRecordId(),
+      createdAt: existing?.createdAt ?? nowIso(),
+      updatedAt: nowIso(),
+      phase: decision.phase,
+      phaseLabel: decision.phaseLabel,
+      approved: decision.approved,
+      violation: !decision.approved,
+      reasons: decision.reasons,
+      clockSeconds: clock.seconds,
+      clockTrusted: Boolean(clock.trusted || state.session.manualUnlockAt),
+      population: population.count,
+      populationSource: population.source,
+      actions: existing?.actions ? [...existing.actions] : [],
+    };
+
+    if (!decision.approved) {
+      await applyViolationActions(record);
+    }
+
+    rememberRecord(record);
+    return record;
+  }
+
+  function decideCreation(record, clock) {
+    const seconds = Math.max(0, Math.floor(Number(clock.seconds ?? 0) || 0));
+    if (seconds < runtimeConfig.noSquadCreationSeconds) {
+      return {
+        approved: false,
+        phase: "locked",
+        phaseLabel: "0-20s no creation",
+        reasons: [`Opening ${runtimeConfig.noSquadCreationSeconds}s forbids squad creation.`],
+      };
+    }
+
+    if (seconds < runtimeConfig.infantryOnlyUntilSeconds) {
+        const allowed = isAllowedInfantryName(record.squadName, runtimeConfig);
+      return {
+        approved: allowed,
+        phase: "infantry_only",
+        phaseLabel: "20-50s infantry only",
+        reasons: allowed ? [] : ["Current window only allows default infantry squad names and allowlist entries."],
+      };
+    }
+
+    return {
+      approved: true,
+      phase: "open",
+      phaseLabel: "open",
+      reasons: [],
+    };
+  }
+
+  async function applyViolationActions(record) {
+    if (!record.actions.some((action) => action.type === "violation_recorded")) {
+      state.summary.violations += 1;
+      record.actions.push({ type: "violation_recorded" });
+    }
+
+    const alreadyWarned = record.actions.some((action) => action.type === "warned" || action.type === "warn_failed");
+    if (!alreadyWarned && record.isLogConfirmed && hasCreatorIdentity(record)) {
+      const warnResult = await warnCreator(record);
+      record.actions.push({
+        type: warnResult?.success === false ? "warn_failed" : "warned",
+        target: record.creatorName || record.creatorSteamId || record.creatorEosId,
+        result: summarizeActionResult(warnResult),
+      });
+      state.summary.warned += warnResult?.success === false ? 0 : 1;
+    } else if (!alreadyWarned && (record.inferredLeader?.name || record.inferredLeader?.steamId || record.inferredLeader?.eosId)) {
+      record.actions.push({
+        type: "warn_skipped",
+        reason: "rcon_only_inferred_leader_not_punishable",
+      });
+    }
+
+    const alreadyDisbanded = record.actions.some((action) => action.type === "disbanded" || action.type === "disband_failed");
+    if (!alreadyDisbanded && record.teamId != null && record.squadId != null) {
+      const disbandResult = await disbandSquad(record);
+      record.actions.push({
+        type: disbandResult?.ok === false ? "disband_failed" : "disbanded",
+        teamId: record.teamId,
+        squadId: record.squadId,
+        result: summarizeActionResult(disbandResult),
+      });
+      state.summary.disbanded += disbandResult?.ok === false ? 0 : 1;
+    } else if (!alreadyDisbanded) {
+      record.actions.push({ type: "disband_skipped", reason: "team_or_squad_missing" });
+    }
+
+    const alreadyCounted = record.actions.some((action) => action.type === "violation_counted");
+    if (!alreadyCounted && record.isLogConfirmed && hasCreatorIdentity(record)) {
+      const playerState = incrementViolationCount(record);
+      record.creatorViolationCount = playerState.violations;
+      record.actions.push({ type: "violation_counted", count: playerState.violations });
+      if (playerState.violations > runtimeConfig.maxViolationCountBeforeKick && !playerState.kicked) {
+        const kickResult = await kickCreator(record);
+        playerState.kicked = kickResult?.ok !== false;
+        playerState.kickedAt = playerState.kicked ? nowIso() : "";
+        record.actions.push({
+          type: playerState.kicked ? "kicked" : "kick_failed",
+          target: record.creatorName || record.creatorSteamId || record.creatorEosId,
+          result: summarizeActionResult(kickResult),
+        });
+        state.summary.kicked += playerState.kicked ? 1 : 0;
+      }
+    }
+  }
+
+  async function warnCreator(record) {
+    const sender = modules?.adminWarn?.sendAdminWarn ?? modules?.adminWarn?.warnPlayer;
+    if (typeof sender !== "function") return { success: false, skipped: true, skipReason: "admin_warn_unavailable" };
+    const targetName = record.creatorName || record.creatorSteamId || record.creatorEosId;
+    if (!targetName) return { success: false, skipped: true, skipReason: "target_missing" };
+    return await sender.call(modules.adminWarn, {
+      targetName,
+      targetSteamId: record.creatorSteamId,
+      targetEosId: record.creatorEosId,
+      message: `Squad creation rule violation: ${record.reasons.join(" ")}`,
+      reason: "fair_squad_guard_violation",
+      sourceModule: PLUGIN_ID,
+      relatedEventId: record.id,
+      system: true,
+    }).catch((error) => ({ success: false, error: error?.message ?? String(error) }));
+  }
+
+  async function disbandSquad(record) {
+    const api = modules?.squadManagement;
+    const request = {
+      serverId: record.serverId,
+      teamId: record.teamId,
+      squadId: record.squadId,
+      reason: `Fair squad guard: ${record.reasons.join(" ")}`,
+      source: PLUGIN_ID,
+      system: true,
+      operatorName: PLUGIN_ID,
+    };
+    if (typeof api?.requestDisband === "function") return await api.requestDisband(request);
+    if (typeof api?.disband === "function") return await api.disband(request);
+    if (typeof api?.executeAction === "function") {
+      return await api.executeAction({ ...request, type: "disband_squad" });
+    }
+    return { ok: false, error: "squad_management_unavailable" };
+  }
+
+  async function kickCreator(record) {
+    const api = modules?.squadManagement;
+    const request = {
+      serverId: record.serverId,
+      steamId: record.creatorSteamId,
+      eosId: record.creatorEosId,
+      name: record.creatorName,
+      reason: `Fair squad guard: more than ${runtimeConfig.maxViolationCountBeforeKick} violations this round.`,
+      source: PLUGIN_ID,
+      system: true,
+      operatorName: PLUGIN_ID,
+    };
+    if (typeof api?.requestKick === "function") return await api.requestKick(request);
+    if (typeof api?.kick === "function") return await api.kick(request);
+    if (typeof api?.executeAction === "function") {
+      return await api.executeAction({ ...request, type: "kick_player" });
+    }
+    return { ok: false, error: "squad_management_unavailable" };
+  }
+
+  function rememberRecord(record, options = {}) {
+    const slotKey = buildSlotKey(record);
+    const existingIndex = state.records.findIndex((item) => item.id === record.id || buildSlotKey(item) === slotKey);
+    const normalized = cloneRecord(record);
+    state.recordsBySlot.set(slotKey, normalized);
+    state.seenSlots.add(slotKey);
+    if (existingIndex >= 0) {
+      state.records.splice(existingIndex, 1, normalized);
+    } else {
+      state.records.push(normalized);
+      state.summary.total += 1;
+    }
+    state.records = state.records
+      .sort((left, right) => String(right.updatedAt || right.createdAt).localeCompare(String(left.updatedAt || left.createdAt)))
+      .slice(0, runtimeConfig.maxRecentRecords);
+
+    if (existingIndex < 0 && normalized.approved && !options.replay) state.summary.approved += 1;
+    state.lastRecordAt = normalized.updatedAt;
+
+    if (options.persist !== false) {
+      persistLater({ type: "DECISION", createdAt: normalized.createdAt, record: normalized });
+    }
+  }
+
+  function replayRecordStats(record) {
+    if (record?.approved) state.summary.approved += 1;
+    if (record?.violation) state.summary.violations += 1;
+    const actions = Array.isArray(record?.actions) ? record.actions : [];
+    if (actions.some((action) => action.type === "warned")) state.summary.warned += 1;
+    if (actions.some((action) => action.type === "disbanded")) state.summary.disbanded += 1;
+    if (actions.some((action) => action.type === "kicked")) state.summary.kicked += 1;
+
+    if (!record?.isLogConfirmed || !hasCreatorIdentity(record)) return;
+    const countAction = [...actions].reverse().find((action) => action.type === "violation_counted");
+    const count = Math.max(0, Number(countAction?.count ?? 0) || 0);
+    if (count <= 0) return;
+
+    const key = buildCreatorKey(record);
+    const current = state.violationPlayers.get(key) ?? {
+      key,
+      name: record.creatorName,
+      steamId: record.creatorSteamId,
+      eosId: record.creatorEosId,
+      violations: 0,
+      kicked: false,
+      kickedAt: "",
+      lastSquadName: "",
+      lastViolationAt: "",
+    };
+    current.violations = Math.max(current.violations, count);
+    current.kicked = current.kicked || actions.some((action) => action.type === "kicked");
+    current.kickedAt = current.kickedAt || (current.kicked ? record.updatedAt ?? record.createdAt ?? "" : "");
+    current.lastSquadName = record.squadName || current.lastSquadName;
+    current.lastViolationAt = record.updatedAt || record.createdAt || current.lastViolationAt;
+    state.violationPlayers.set(key, current);
+  }
+
+  function incrementViolationCount(record) {
+    const key = buildCreatorKey(record);
+    const current = state.violationPlayers.get(key) ?? {
+      key,
+      name: record.creatorName,
+      steamId: record.creatorSteamId,
+      eosId: record.creatorEosId,
+      violations: 0,
+      kicked: false,
+      kickedAt: "",
+      lastSquadName: "",
+      lastViolationAt: "",
+    };
+    current.name = record.creatorName || current.name;
+    current.steamId = record.creatorSteamId || current.steamId;
+    current.eosId = record.creatorEosId || current.eosId;
+    current.violations += 1;
+    current.lastSquadName = record.squadName;
+    current.lastViolationAt = nowIso();
+    state.violationPlayers.set(key, current);
+    return current;
+  }
+
+  function getStatus() {
+    runtimeConfig = readConfig(config);
+    const serverId = getServerId();
+    const population = getPopulation(serverId);
+    const clock = resolveClockState();
+    const phase = resolvePhase(clock.seconds, runtimeConfig);
+    return {
+      pluginId: PLUGIN_ID,
+      enabled: Boolean(runtimeConfig.enabled),
+      subscribed: isSubscribed(),
+      active: isActive(),
+      serverId,
+      settings: publicSettings(),
+      population,
+      clock,
+      phase,
+      session: { ...state.session },
+      summary: { ...state.summary },
+      recentRecords: state.records.map(cloneRecord),
+      leaderboard: getLeaderboard(),
+      pendingLogCount: state.pendingLogs.size,
+      seenSlotCount: state.seenSlots.size,
+      recovery: { ...state.recovery },
+      dataDir,
+      lastRecordAt: state.lastRecordAt,
+    };
+  }
+
+  function listRecords(query = {}) {
+    const limit = Math.max(1, Math.min(1000, Number(query.limit ?? 300) || 300));
+    const offset = Math.max(0, Number(query.offset ?? 0) || 0);
+    const records = state.records.map(cloneRecord);
+    return {
+      total: records.length,
+      limit,
+      offset,
+      records: records.slice(offset, offset + limit),
+    };
+  }
+
+  function unlockCurrentRound(meta = {}) {
+    state.session.midRoundLocked = false;
+    state.session.midRoundLockReason = "";
+    state.session.manualUnlockAt = nowIso();
+    state.session.manualUnlockBy = normalizeText(meta.by ?? meta.actor?.username ?? meta.actor?.name);
+    persistLater({
+      type: "UNLOCK",
+      createdAt: state.session.manualUnlockAt,
+      by: state.session.manualUnlockBy,
+      reason: normalizeText(meta.reason ?? "manual_unlock"),
+    });
+    return getStatus();
+  }
+
+  function publicSettings() {
+    return {
+      enforcementPlayerThreshold: runtimeConfig.enforcementPlayerThreshold,
+      noSquadCreationSeconds: runtimeConfig.noSquadCreationSeconds,
+      infantryOnlyUntilSeconds: runtimeConfig.infantryOnlyUntilSeconds,
+      maxViolationCountBeforeKick: runtimeConfig.maxViolationCountBeforeKick,
+      allowedInfantryNames: [...runtimeConfig.allowedInfantryNames],
+      allowedInfantryPatterns: [...runtimeConfig.allowedInfantryPatterns],
+      defaultInfantryPatterns: [...DEFAULT_INFANTRY_PATTERNS],
+      maxRecentRecords: runtimeConfig.maxRecentRecords,
+    };
+  }
+
+  function findPendingLog(event) {
+    const targetSquadId = Number(event.squadId);
+    const targetName = normalizeSquadName(event.squadName);
+    for (const pending of state.pendingLogs.values()) {
+      if (Number(pending.squadId) !== targetSquadId) continue;
+      if (targetName && normalizeSquadName(pending.squadName) !== targetName) continue;
+      return pending;
+    }
+    return null;
+  }
+
+  function findRecordForLog(event) {
+    const targetSquadId = Number(event.squadId);
+    const targetName = normalizeSquadName(event.squadName);
+    for (const record of state.recordsBySlot.values()) {
+      if (Number(record.squadId) !== targetSquadId) continue;
+      if (targetName && normalizeSquadName(record.squadName) !== targetName) continue;
+      return record;
+    }
+    return null;
+  }
+
+  function getLeaderboard() {
+    return [...state.violationPlayers.values()]
+      .map((item) => ({ ...item }))
+      .sort((left, right) => {
+        if (right.violations !== left.violations) return right.violations - left.violations;
+        return String(right.lastViolationAt).localeCompare(String(left.lastViolationAt));
+      });
+  }
+
+  const api = {
+    getStatus,
+    getState: getStatus,
+    listRecords,
+    unlockCurrentRound,
+    resetSession(reason = "manual_reset") {
+      resetSession(reason);
+      return getStatus();
+    },
+    async simulateCreation(event = {}) {
+      return await enqueue(() => processCreation(normalizeCreationEvent(event, event.creationSource ?? "LOG")));
+    },
+    async simulateSquadsUpdated(event = {}) {
+      await handleSquadsUpdated(event);
+      return getStatus();
+    },
+  };
+
+  return {
+    manifest: {
+      id: PLUGIN_ID,
+      name: "Fair Squad Guard",
+      kind: "plugin",
+      version: "1.0.0",
+      description: "Controls early-round squad creation using log-clock windows and RCON/log squad creation detection.",
+      category: "Moderation",
+    },
+    apiName: "fairSquadGuard",
+    api,
+
+    async init() {
+      await recoverFromLogs();
+    },
+
+    async start() {
+      runtimeConfig = readConfig(config);
+
+      core?.webRegistry?.registerPage?.({
+        id: "web.fairSquadGuard",
+        title: "公平建队",
+        group: "插件",
+        route: PAGE_ROUTE,
+        pageModule: "/pages/fair-squad-guard.js",
+        source: PLUGIN_ID,
+        description: "开局建队窗口、违规解散与建队违规排行榜。",
+        required: false,
+        enabled: true,
+        order: 132,
+        icon: "FSG",
+      });
+
+      ensureClockSafety();
+
+      if (typeof core?.eventBus?.onModuleEvent === "function") {
+        unsubscribers.push(core.eventBus.onModuleEvent("module.squadLifecycle", "squadCreated", handleLifecycleSquadCreated));
+        unsubscribers.push(core.eventBus.onModuleEvent("module.squadManagement", "squadsUpdated", handleSquadsUpdated));
+      }
+
+      if (typeof core?.eventBus?.onCoreEvent === "function") {
+        unsubscribers.push(core.eventBus.onCoreEvent("round.world_bring_up", (event) => {
+          void handleRoundAnchor(event, "world_bring_up");
+        }));
+        unsubscribers.push(core.eventBus.onCoreEvent("On_RawLogLine", (event) => {
+          const raw = normalizeText(event?.rawLog ?? event?.rawEvent?.Raw);
+          if (/LogWorld:\s+SeamlessTravel to:/i.test(raw)) {
+            void handleRoundAnchor(event, "seamless_travel");
+          }
+        }));
+      }
+
+      pluginLogger?.info?.("[FairSquadGuard] plugin started.");
+    },
+
+    async stop() {
+      for (const unsubscribe of unsubscribers.splice(0)) {
+        try { unsubscribe(); } catch {}
+      }
+    },
+  };
+}
+
+function readConfig(config) {
+  const raw = config?.get?.("plugins.fairSquadGuard", {}) ?? {};
+  return {
+    enabled: raw.enabled !== false,
+    directory: normalizeText(raw.directory) || DEFAULT_DATA_DIR,
+    enforcementPlayerThreshold: positiveInt(raw.enforcementPlayerThreshold, DEFAULT_PLAYER_THRESHOLD),
+    noSquadCreationSeconds: positiveInt(raw.noSquadCreationSeconds, DEFAULT_NO_CREATE_SECONDS),
+    infantryOnlyUntilSeconds: positiveInt(raw.infantryOnlyUntilSeconds, DEFAULT_INFANTRY_ONLY_UNTIL_SECONDS),
+    maxViolationCountBeforeKick: positiveInt(raw.maxViolationCountBeforeKick, DEFAULT_MAX_VIOLATIONS_BEFORE_KICK),
+    maxRecentRecords: positiveInt(raw.maxRecentRecords, DEFAULT_RECENT_LIMIT),
+    allowedInfantryNames: parseListText(raw.allowedInfantryNamesText ?? raw.allowedInfantryNames),
+    allowedInfantryPatterns: parseListText(raw.allowedInfantryPatternsText ?? raw.allowedInfantryNamePatterns),
+  };
+}
+
+function createInitialState() {
+  return {
+    session: {
+      midRoundLocked: false,
+      midRoundLockReason: "",
+      midRoundLockedAt: "",
+      manualUnlockAt: "",
+      manualUnlockBy: "",
+      lastResetAt: "",
+      lastResetReason: "",
+      roundAnchor: null,
+    },
+    summary: createEmptySummary(),
+    records: [],
+    recordsBySlot: new Map(),
+    pendingLogs: new Map(),
+    seenSlots: new Set(),
+    violationPlayers: new Map(),
+    recovery: {
+      lastRecoveredAt: "",
+      recoveredLineCount: 0,
+    },
+    lastRecordAt: "",
+  };
+}
+
+function createEmptySummary() {
+  return {
+    total: 0,
+    approved: 0,
+    violations: 0,
+    warned: 0,
+    disbanded: 0,
+    kicked: 0,
+  };
+}
+
+function normalizeCreationEvent(event = {}, fallbackSource = "LOG") {
+  const creationSource = normalizeText(event.creationSource ?? event.record?.creationSource ?? fallbackSource) || fallbackSource;
+  return {
+    serverId: normalizeText(event.serverId),
+    matchId: normalizeText(event.matchId),
+    teamId: nullableNumber(event.teamId ?? event.teamID),
+    squadId: nullableNumber(event.squadId ?? event.squadID),
+    squadName: normalizeText(event.squadName),
+    factionName: normalizeText(event.factionName ?? event.teamName),
+    creatorName: normalizeText(event.creatorName ?? event.playerName),
+    creatorSteamId: normalizeText(event.creatorSteamId ?? event.creatorSteamID ?? event.steamId ?? event.steamID),
+    creatorEosId: normalizeText(event.creatorEosId ?? event.creatorEOSID ?? event.eosId ?? event.eosID),
+    rawLog: normalizeText(event.rawLog ?? event.raw),
+    createdAt: normalizeText(event.createdAt ?? event.time) || nowIso(),
+    createdAtMs: Number(event.createdAtMs ?? event.timeMs ?? Date.parse(event.createdAt ?? event.time)) || Date.now(),
+    sourceEventId: normalizeText(event.sourceEventId ?? event.eventId),
+    creationSource,
+    creationConfidence: normalizeText(event.creationConfidence ?? event.record?.creationConfidence ?? (creationSource === "LOG" ? "HIGH" : "MEDIUM")),
+    isLogConfirmed: creationSource === "LOG",
+    inferredLeader: normalizeInferredLeader(event.inferredLeader),
+  };
+}
+
+function normalizeRconSquad(squad = {}, context = {}) {
+  const leader = normalizeInferredLeader({
+    name: squad.leaderName,
+    steamId: squad.leaderSteamId,
+    eosId: squad.leaderEosId,
+  });
+  return {
+    serverId: normalizeText(squad.serverId ?? context.serverId),
+    matchId: normalizeText(squad.matchId ?? context.matchId),
+    teamId: nullableNumber(squad.teamId ?? squad.teamID),
+    squadId: nullableNumber(squad.squadId ?? squad.squadID),
+    squadName: normalizeText(squad.squadName ?? squad.name),
+    factionName: normalizeText(squad.teamName ?? squad.factionName),
+    creatorName: "",
+    creatorSteamId: "",
+    creatorEosId: "",
+    rawLog: normalizeText(squad.raw),
+    createdAt: normalizeText(squad.createdAt ?? context.observedAt) || nowIso(),
+    createdAtMs: Number(squad.createdAtMs ?? Date.parse(squad.createdAt ?? context.observedAt)) || Date.now(),
+    sourceEventId: normalizeText(squad.recordKey ?? squad.lifecycleKey),
+    creationSource: "RCON_SNAPSHOT",
+    creationConfidence: "MEDIUM",
+    isLogConfirmed: false,
+    inferredLeader: leader,
+  };
+}
+
+function mergeCreation(existing, event, clock, population) {
+  const isLog = event.creationSource === "LOG";
+  const sourceWasRcon = existing?.creationSource === "RCON_SNAPSHOT" && isLog;
+  return {
+    ...(existing ?? {}),
+    ...event,
+    creatorName: isLog ? event.creatorName : (existing?.creatorName ?? event.creatorName),
+    creatorSteamId: isLog ? event.creatorSteamId : (existing?.creatorSteamId ?? event.creatorSteamId),
+    creatorEosId: isLog ? event.creatorEosId : (existing?.creatorEosId ?? event.creatorEosId),
+    creationSource: sourceWasRcon ? "RCON_PROMOTED_TO_LOG" : event.creationSource,
+    creationConfidence: isLog ? "HIGH" : event.creationConfidence,
+    isLogConfirmed: Boolean(isLog || existing?.isLogConfirmed),
+    sourceWasRcon,
+    clockSeconds: clock.seconds,
+    population: population.count,
+  };
+}
+
+function isAllowedInfantryName(squadName, runtimeConfig) {
+  const normalized = normalizeSquadName(squadName);
+  if (!normalized) return false;
+  const allowedNames = Array.isArray(runtimeConfig?.allowedInfantryNames) ? runtimeConfig.allowedInfantryNames : [];
+  const allowedPatterns = Array.isArray(runtimeConfig?.allowedInfantryPatterns) ? runtimeConfig.allowedInfantryPatterns : [];
+  return allowedNames.some((name) => normalizeSquadName(name) === normalized)
+    || [...DEFAULT_INFANTRY_PATTERNS, ...allowedPatterns].some((pattern) => safeTest(pattern, squadName));
+}
+
+function parseListText(value) {
+  if (Array.isArray(value)) return value.map(normalizeText).filter(Boolean);
+  return String(value ?? "")
+    .split(/\r?\n|,/)
+    .map(normalizeText)
+    .filter(Boolean);
+}
+
+function resolvePhase(seconds, runtimeConfig = {}) {
+  const safeSeconds = Math.max(0, Math.floor(Number(seconds ?? 0) || 0));
+  const noCreate = positiveInt(runtimeConfig.noSquadCreationSeconds, DEFAULT_NO_CREATE_SECONDS);
+  const infantryUntil = positiveInt(runtimeConfig.infantryOnlyUntilSeconds, DEFAULT_INFANTRY_ONLY_UNTIL_SECONDS);
+  if (safeSeconds < noCreate) return { phase: "locked", label: `${noCreate}s no creation` };
+  if (safeSeconds < infantryUntil) return { phase: "infantry_only", label: `${noCreate}-${infantryUntil}s infantry only` };
+  return { phase: "open", label: "open" };
+}
+
+function buildSlotKey(event) {
+  return [
+    normalizeText(event.serverId),
+    normalizeText(event.matchId),
+    event.teamId == null ? "" : String(event.teamId),
+    event.squadId == null ? "" : String(event.squadId),
+    normalizeSquadName(event.squadName),
+  ].join("|");
+}
+
+function buildPendingKey(event) {
+  return [
+    normalizeText(event.serverId),
+    normalizeText(event.matchId),
+    event.squadId == null ? "" : String(event.squadId),
+    normalizeSquadName(event.squadName),
+    normalizeText(event.creatorSteamId || event.creatorEosId || event.creatorName),
+  ].join("|");
+}
+
+function buildCreatorKey(record) {
+  if (record.creatorSteamId) return `steam:${record.creatorSteamId}`;
+  if (record.creatorEosId) return `eos:${record.creatorEosId}`;
+  if (record.creatorName) return `name:${normalizeSquadName(record.creatorName)}`;
+  return "unknown";
+}
+
+function hasCreatorIdentity(record) {
+  return Boolean(record.creatorName || record.creatorSteamId || record.creatorEosId);
+}
+
+function normalizeInferredLeader(value = {}) {
+  return {
+    name: normalizeText(value?.name),
+    steamId: normalizeText(value?.steamId ?? value?.steamID),
+    eosId: normalizeText(value?.eosId ?? value?.eosID),
+  };
+}
+
+function safeTest(pattern, value) {
+  try {
+    return new RegExp(pattern, "i").test(String(value ?? ""));
+  } catch {
+    return false;
+  }
+}
+
+function summarizeActionResult(result) {
+  if (!result || typeof result !== "object") return result ?? null;
+  return {
+    ok: result.ok ?? result.success ?? null,
+    skipped: result.skipped ?? false,
+    error: result.error ?? result.errorMessage ?? result.skipReason ?? "",
+    message: result.message ?? "",
+    command: result.command ?? result.commandText ?? "",
+  };
+}
+
+function cloneRecord(record) {
+  return JSON.parse(JSON.stringify(record));
+}
+
+function normalizeText(value) {
+  return String(value ?? "").trim();
+}
+
+function normalizeSquadName(value) {
+  return normalizeText(value).replace(/\s+/g, " ").toLowerCase();
+}
+
+function nullableNumber(value) {
+  if (value == null || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function positiveInt(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) return fallback;
+  return Math.floor(number);
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function makeRecordId() {
+  return `fair-squad-guard:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+}
+
+export default { createPlugin };

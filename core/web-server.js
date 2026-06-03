@@ -634,6 +634,55 @@ export class WebServer {
       }
     }
 
+    if (url.pathname.startsWith("/api/plugins/fair-squad-guard")) {
+      const pluginApi = this.getPluginApi("plugin.fairSquadGuard");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "FairSquadGuardUnavailable",
+          message: "Fair squad guard plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/fair-squad-guard/status" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getStatus?.() ?? pluginApi.getState?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/fair-squad-guard/records" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.listRecords?.({
+            limit: url.searchParams.get("limit") ?? "300",
+            offset: url.searchParams.get("offset") ?? "0",
+          }) ?? { total: 0, records: [] },
+        });
+      }
+
+      if (url.pathname === "/api/plugins/fair-squad-guard/unlock-current-round" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.unlockCurrentRound?.({
+            ...body,
+            actor: user,
+            by: user?.username ?? user?.name ?? "admin",
+          }) ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/fair-squad-guard/reset-session" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.resetSession?.(body?.reason ?? "manual_reset") ?? null,
+        });
+      }
+    }
+
     const pluginMatch = url.pathname.match(/^\/api\/plugins\/([^/]+)\/(enabled|config)$/);
     if (pluginMatch && req.method === "PATCH") {
       if (!this.requireSuperAdmin(user, res)) return;

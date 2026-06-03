@@ -1618,6 +1618,88 @@ async function testFairTeamBalanceRoutesReturnPluginStateAndRequests() {
   assert.equal(roundResetCalls[0].meta.by, "admin");
 }
 
+async function testFairSquadGuardRoutesReturnPluginStateAndActions() {
+  const unlockCalls = [];
+  const resetCalls = [];
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin", role: "superadmin" };
+        },
+        hasEverything() {
+          return true;
+        },
+      },
+      pluginManager: {
+        instances: [
+          {
+            manifest: { id: "plugin.fairSquadGuard" },
+            api: {
+              getStatus() {
+                return { active: true, summary: { total: 1 } };
+              },
+              listRecords(query) {
+                return { total: 1, limit: Number(query.limit), offset: Number(query.offset), records: [{ id: "rec-1" }] };
+              },
+              unlockCurrentRound(payload) {
+                unlockCalls.push(payload);
+                return { unlocked: true };
+              },
+              resetSession(reason) {
+                resetCalls.push(reason);
+                return { reset: true };
+              },
+            },
+          },
+        ],
+      },
+    },
+  });
+
+  const statusRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/plugins/fair-squad-guard/status",
+    headers: { host: "localhost" },
+    socket: {},
+  }, statusRecorder.res);
+  assert.equal(statusRecorder.state.status, 200);
+  assert.equal(JSON.parse(statusRecorder.state.body).data.summary.total, 1);
+
+  const recordsRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/plugins/fair-squad-guard/records?limit=20&offset=2",
+    headers: { host: "localhost" },
+    socket: {},
+  }, recordsRecorder.res);
+  assert.equal(recordsRecorder.state.status, 200);
+  assert.equal(JSON.parse(recordsRecorder.state.body).data.limit, 20);
+  assert.equal(JSON.parse(recordsRecorder.state.body).data.offset, 2);
+
+  const unlockRecorder = createRecorder();
+  const unlockBody = Readable.from(["{}"]);
+  unlockBody.method = "POST";
+  unlockBody.url = "/api/plugins/fair-squad-guard/unlock-current-round";
+  unlockBody.headers = { host: "localhost" };
+  unlockBody.socket = {};
+  await server.handleRequest(unlockBody, unlockRecorder.res);
+  assert.equal(unlockRecorder.state.status, 200);
+  assert.equal(unlockCalls.length, 1);
+  assert.equal(unlockCalls[0].by, "admin");
+
+  const resetRecorder = createRecorder();
+  const resetBody = Readable.from([JSON.stringify({ reason: "test_reset" })]);
+  resetBody.method = "POST";
+  resetBody.url = "/api/plugins/fair-squad-guard/reset-session";
+  resetBody.headers = { host: "localhost" };
+  resetBody.socket = {};
+  await server.handleRequest(resetBody, resetRecorder.res);
+  assert.equal(resetRecorder.state.status, 200);
+  assert.deepEqual(resetCalls, ["test_reset"]);
+}
+
 async function testVueRouteFallsBackToIndexHtml() {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-web-"));
   await fs.writeFile(path.join(tempDir, "index.html"), "<html><body>vue-app</body></html>", "utf8");
@@ -1678,6 +1760,7 @@ await testAdminWarnRecentRouteReturnsMemoryRecords();
 await testAdminWarnBroadcastRouteReturnsMemoryRecords();
 await testCombatLogRoutesExposeLogsAndMetadata();
 await testFairTeamBalanceRoutesReturnPluginStateAndRequests();
+await testFairSquadGuardRoutesReturnPluginStateAndActions();
 await testPjscAverageDurationRouteReturnsPluginState();
 await testVueRouteFallsBackToIndexHtml();
 

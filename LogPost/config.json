@@ -33,7 +33,7 @@
   },
   "raw_log_output": {
     "enabled": true,
-    "source": "Squad.log"
+    "source": "Squad.log" 
   },
   "blacklist_contains": [
     "GetDefaultPawnClassForController_Implementation()",

@@ -210,6 +210,57 @@ export function createPlayerStateModule({ core, logger }) {
     });
   }
 
+  function emitCommanderAuthorized(change) {
+    const payload = {
+      eventId: `module.playerState:commanderAuthorized:${change.serverId}:${change.playerKey}:${Date.now()}`,
+      eventName: "module.playerState.commanderAuthorized",
+      layer: "module",
+      source: "module.playerState",
+      serverId: change.serverId,
+      time: change.time,
+
+      reason: "rconListPlayersDiff",
+      sourceEventName: "RCON_LIST_PLAYERS_UPDATED",
+
+      player: {
+        playerKey: change.playerKey,
+        playerID: change.current.playerID,
+        name: change.current.name,
+        steamID: change.current.steamID,
+        eosID: change.current.eosID,
+        controllerID: change.current.controllerID,
+        role: change.current.role,
+        isLeader: Boolean(change.current.isLeader),
+      },
+
+      previous: {
+        teamID: change.previousTeamID,
+        squadID: change.previousSquadID,
+        isLeader: Boolean(change.previous?.isLeader),
+      },
+
+      current: {
+        teamID: change.currentTeamID,
+        squadID: change.currentSquadID,
+        isLeader: Boolean(change.current?.isLeader),
+      },
+
+      commander: {
+        authorized: true,
+        source: "commandSquad",
+      },
+    };
+
+    core.eventBus.emitModuleEvent("module.playerState", "commanderAuthorized", payload);
+
+    logWithFallback(moduleLogger, "info", () => {
+      return `[PLAYER_STATE] commander authorized: ${change.current.name} (squad ${change.currentSquadID})`;
+    }, {
+      operation: "commanderAuthorized",
+      data: payload,
+    });
+  }
+
   function replaceFromRcon(serverId, players) {
     const now = new Date().toISOString();
     const state = ensureServerState(serverId);
@@ -225,6 +276,9 @@ export function createPlayerStateModule({ core, logger }) {
     const newMap = makeComparablePlayerSnapshot(players);
     const changes = hadPreviousSnapshot
       ? detectSquadMembershipChanges(serverId, oldMap, newMap, now)
+      : [];
+    const commanderAuthorizations = hadPreviousSnapshot
+      ? detectCommanderAuthorizationChanges(serverId, oldMap, newMap, now)
       : [];
 
     clearServer(serverId);
@@ -275,12 +329,17 @@ export function createPlayerStateModule({ core, logger }) {
       emitSquadMembershipChange(change);
     }
 
+    for (const change of commanderAuthorizations) {
+      emitCommanderAuthorized(change);
+    }
+
     logWithFallback(moduleLogger, "debug", () => `Player snapshot refreshed (${players.length})`, {
       operation: "replaceFromRcon",
       data: {
         players: players.length,
         serverId,
         squadChanges: changes.length,
+        commanderAuthorizations: commanderAuthorizations.length,
       },
     });
 
@@ -369,7 +428,7 @@ export function createPlayerStateModule({ core, logger }) {
   };
 
   return {
-    manifest: { id: "module.playerState", name: "Player State Module", kind: "module", version: "0.3.0", description: "Canonical global player list module. Maintains one in-memory player list per server with merged identity indexes, team/squad state, role and presence data for reuse by combat, match and database modules." },
+    manifest: { id: "module.playerState", name: "Player State Module", kind: "module", version: "0.4.0", description: "Canonical global player list module. Maintains one in-memory player list per server with merged identity indexes, team/squad state, role and presence data for reuse by combat, match and database modules." },
     apiName: "playerState",
     api,
 
@@ -527,6 +586,13 @@ function normalizeRconId(value) {
   return text;
 }
 
+function isCommandSquadId(value) {
+  const id = normalizeRconId(value);
+  if (!id) return false;
+  const lower = String(id).trim().toLowerCase();
+  return lower === "10" || lower === "cmd" || lower === "command";
+}
+
 function normalizeRconPlayer(player = {}) {
   return {
     playerID: cleanIdentityValue(player.playerID),
@@ -640,6 +706,40 @@ function detectSquadMembershipChanges(serverId, oldMap, newMap, now) {
         time: now,
       });
     }
+  }
+
+  return changes;
+}
+
+function detectCommanderAuthorizationChanges(serverId, oldMap, newMap, now) {
+  const changes = [];
+
+  for (const [playerKey, current] of newMap.entries()) {
+    const previous = oldMap.get(playerKey);
+    if (!previous) continue;
+
+    const previousSquadID = normalizeRconId(previous.squadID);
+    const currentSquadID = normalizeRconId(current.squadID);
+    const previousTeamID = normalizeRconId(previous.teamID);
+    const currentTeamID = normalizeRconId(current.teamID);
+
+    const wasCommandLeader = isCommandSquadId(previousSquadID) && Boolean(previous.isLeader);
+    const isCommandLeader = isCommandSquadId(currentSquadID) && Boolean(current.isLeader);
+    if (!isCommandLeader || wasCommandLeader) continue;
+
+    changes.push({
+      eventType: "commanderAuthorized",
+      eventName: "module.playerState.commanderAuthorized",
+      serverId,
+      playerKey,
+      previous,
+      current,
+      previousTeamID,
+      currentTeamID,
+      previousSquadID,
+      currentSquadID,
+      time: now,
+    });
   }
 
   return changes;

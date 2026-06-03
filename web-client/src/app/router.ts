@@ -10,6 +10,7 @@ import ScheduledBroadcastPage from "../pages/ScheduledBroadcastPage.vue";
 import InfantryCombatEnhancerPage from "../pages/InfantryCombatEnhancerPage.vue";
 import GroupReportPage from "../pages/GroupReportPage.vue";
 import FairTeamBalancePage from "../pages/FairTeamBalancePage.vue";
+import FairSquadGuardPage from "../pages/FairSquadGuardPage.vue";
 import SquadManagementPage from "../pages/SquadManagementPage.vue";
 import TeamBalancePage from "../pages/TeamBalancePage.vue";
 import UdpEventForwarderPage from "../pages/UdpEventForwarderPage.vue";
@@ -205,6 +206,15 @@ export const router = createRouter({
       meta: {
         ...pluginPollingMeta,
         title: "公平跳边",
+        fullBleed: true,
+      },
+    },
+    {
+      path: "/plugins/fair-squad-guard",
+      component: FairSquadGuardPage,
+      meta: {
+        ...pluginPollingMeta,
+        titleKey: "routeTitle.fairSquadGuard",
         fullBleed: true,
       },
     },

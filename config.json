@@ -308,6 +308,57 @@
         "max": 600000,
         "advanced": true,
         "restartRequired": true
+      },
+      {
+        "path": "plugins.fairSquadGuard.enabled",
+        "label": "Fair Squad Guard Enabled",
+        "type": "boolean",
+        "restartRequired": true
+      },
+      {
+        "path": "plugins.fairSquadGuard.enforcementPlayerThreshold",
+        "label": "Fair Squad Guard Player Threshold",
+        "type": "number",
+        "min": 1,
+        "max": 100,
+        "restartRequired": true
+      },
+      {
+        "path": "plugins.fairSquadGuard.noSquadCreationSeconds",
+        "label": "Fair Squad Guard No Create Seconds",
+        "type": "number",
+        "min": 0,
+        "max": 300,
+        "restartRequired": true
+      },
+      {
+        "path": "plugins.fairSquadGuard.infantryOnlyUntilSeconds",
+        "label": "Fair Squad Guard Infantry Only Until",
+        "type": "number",
+        "min": 0,
+        "max": 600,
+        "restartRequired": true
+      },
+      {
+        "path": "plugins.fairSquadGuard.maxViolationCountBeforeKick",
+        "label": "Fair Squad Guard Kick Threshold",
+        "type": "number",
+        "min": 1,
+        "max": 100,
+        "restartRequired": true
+      },
+      {
+        "path": "plugins.fairSquadGuard.allowedInfantryNamesText",
+        "label": "Fair Squad Guard Infantry Names",
+        "type": "string",
+        "restartRequired": true
+      },
+      {
+        "path": "plugins.fairSquadGuard.allowedInfantryPatternsText",
+        "label": "Fair Squad Guard Infantry Patterns",
+        "type": "string",
+        "advanced": true,
+        "restartRequired": true
       }
     ]
   },
@@ -458,6 +509,19 @@
   },
   "plugins": {
     "enabled": true,
+    "fairSquadGuard": {
+      "enabled": true,
+      "directory": "./data/fair-squad-guard",
+      "enforcementPlayerThreshold": 50,
+      "noSquadCreationSeconds": 20,
+      "infantryOnlyUntilSeconds": 50,
+      "maxViolationCountBeforeKick": 15,
+      "allowedInfantryNamesText": "",
+      "allowedInfantryPatternsText": ""
+    },
+    "fair-team-balance": {
+      "enabled": false
+    },
     "udpEventForwarder": {
       "enabled": true,
       "host": "114.66.18.134",
@@ -477,9 +541,17 @@
       "maxPacketBytes": 4096,
       "logSuccess": false,
       "logFailure": true
+    },
+    "plugin": {
+      "fairSquadGuard": {
+        "enabled": false
+      },
+      "fairTeamBalance": {
+        "enabled": true
+      }
     }
   },
   "warmup": {
-    "enabled": false
+    "enabled": true
   }
 }
