@@ -1321,6 +1321,58 @@ export class WebServer {
     }
   }
 
+    if (url.pathname.startsWith("/api/plugins/fair-team-balance")) {
+      const pluginApi = this.getPluginApi("plugin.fairTeamBalance");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "FairTeamBalanceUnavailable",
+          message: "Fair team balance plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/fair-team-balance/state" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getState?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/fair-team-balance/requests" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: {
+            requests: pluginApi.listRequests?.() ?? [],
+          },
+        });
+      }
+
+      if (url.pathname === "/api/plugins/fair-team-balance/approve" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.approveRequest?.({
+            requestId: body?.requestId,
+            direct: body?.direct === true,
+            actor: user,
+          }),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/fair-team-balance/reject" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.rejectRequest?.({
+            requestId: body?.requestId,
+            reason: body?.reason,
+            actor: user,
+          }),
+        });
+      }
+    }
+
     if (url.pathname.startsWith("/api/plugins/pjsc-average-duration")) {
       const pluginApi = this.getPluginApi("plugin.pjscAverageDuration");
       if (!pluginApi) {

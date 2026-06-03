@@ -1490,6 +1490,100 @@ async function testPjscAverageDurationRouteReturnsPluginState() {
   assert.equal(body.data.triggerCount, 1);
 }
 
+async function testFairTeamBalanceRoutesReturnPluginStateAndRequests() {
+  const approveCalls = [];
+  const rejectCalls = [];
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return {
+            username: "admin",
+            name: "Admin",
+            role: "SuperAdmin",
+            isSuperAdmin: true,
+          };
+        },
+        hasEverything() {
+          return true;
+        },
+      },
+      pluginManager: {
+        instances: [
+          {
+            manifest: { id: "plugin.fairTeamBalance" },
+            api: {
+              getState() {
+                return {
+                  enabled: true,
+                  publicTbRemaining: 4,
+                };
+              },
+              listRequests() {
+                return [
+                  { id: "req-1", code: "12345", status: "pending_claim" },
+                ];
+              },
+              async approveRequest(payload) {
+                approveCalls.push(payload);
+                return { ok: true };
+              },
+              async rejectRequest(payload) {
+                rejectCalls.push(payload);
+                return { ok: true };
+              },
+            },
+          },
+        ],
+      },
+    },
+  });
+
+  const stateRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/plugins/fair-team-balance/state",
+    headers: { host: "localhost" },
+    socket: {},
+  }, stateRecorder.res);
+  assert.equal(stateRecorder.state.status, 200);
+  assert.equal(JSON.parse(stateRecorder.state.body).data.publicTbRemaining, 4);
+
+  const requestsRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/plugins/fair-team-balance/requests",
+    headers: { host: "localhost" },
+    socket: {},
+  }, requestsRecorder.res);
+  assert.equal(requestsRecorder.state.status, 200);
+  assert.equal(JSON.parse(requestsRecorder.state.body).data.requests[0].code, "12345");
+
+  const approveRecorder = createRecorder();
+  const approveBody = Readable.from([JSON.stringify({ requestId: "req-1", direct: true })]);
+  approveBody.method = "POST";
+  approveBody.url = "/api/plugins/fair-team-balance/approve";
+  approveBody.headers = { host: "localhost" };
+  approveBody.socket = {};
+  await server.handleRequest(approveBody, approveRecorder.res);
+  assert.equal(approveRecorder.state.status, 200);
+  assert.equal(approveCalls.length, 1);
+  assert.equal(approveCalls[0].requestId, "req-1");
+  assert.equal(approveCalls[0].direct, true);
+  assert.equal(approveCalls[0].actor.username, "admin");
+
+  const rejectRecorder = createRecorder();
+  const rejectBody = Readable.from([JSON.stringify({ requestId: "req-1", reason: "manual_reject" })]);
+  rejectBody.method = "POST";
+  rejectBody.url = "/api/plugins/fair-team-balance/reject";
+  rejectBody.headers = { host: "localhost" };
+  rejectBody.socket = {};
+  await server.handleRequest(rejectBody, rejectRecorder.res);
+  assert.equal(rejectRecorder.state.status, 200);
+  assert.equal(rejectCalls.length, 1);
+  assert.equal(rejectCalls[0].reason, "manual_reject");
+}
+
 async function testVueRouteFallsBackToIndexHtml() {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-web-"));
   await fs.writeFile(path.join(tempDir, "index.html"), "<html><body>vue-app</body></html>", "utf8");
@@ -1549,6 +1643,7 @@ await testWarmupRoutesExposeStateAndValidateInput();
 await testAdminWarnRecentRouteReturnsMemoryRecords();
 await testAdminWarnBroadcastRouteReturnsMemoryRecords();
 await testCombatLogRoutesExposeLogsAndMetadata();
+await testFairTeamBalanceRoutesReturnPluginStateAndRequests();
 await testPjscAverageDurationRouteReturnsPluginState();
 await testVueRouteFallsBackToIndexHtml();
 
