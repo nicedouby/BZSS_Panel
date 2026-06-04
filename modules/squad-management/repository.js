@@ -30,45 +30,52 @@ export function createSquadManagementRepository({ config, logger } = {}) {
       const database = await ensureDb();
       const shape = await ensureTableShape(database);
       const row = normalizeRecord(record);
+      const legacyRow = {
+        ...row,
+        // Older databases keep these columns NOT NULL, so preserve legacy compatibility
+        // while still letting the service layer work with null semantics.
+        teamId: row.teamId ?? 0,
+        squadId: row.squadId ?? 0,
+      };
 
       const columns = [];
       const values = [];
-      appendColumn(columns, values, "record_key", row.recordKey);
-      appendColumn(columns, values, "kind", row.kind, shape.hasKind);
-      appendColumn(columns, values, "record_type", row.kind, shape.hasRecordType);
-      appendColumn(columns, values, "time", row.time);
-      appendColumn(columns, values, "time_ms", row.timeMs, shape.hasTimeMs);
-      appendColumn(columns, values, "log_time", row.logTime);
-      appendColumn(columns, values, "log_seconds", row.logSeconds, shape.hasLogSeconds);
-      appendColumn(columns, values, "server_id", row.serverId);
-      appendColumn(columns, values, "match_id", row.matchId);
-      appendColumn(columns, values, "source", row.source);
-      appendColumn(columns, values, "operator_name", row.operatorName);
-      appendColumn(columns, values, "actor_name", row.actorName);
-      appendColumn(columns, values, "actor_id", row.actorId);
-      appendColumn(columns, values, "system", row.system, shape.hasSystem);
-      appendColumn(columns, values, "team_id", row.teamId);
-      appendColumn(columns, values, "squad_id", row.squadId);
-      appendColumn(columns, values, "generation", row.generation);
-      appendColumn(columns, values, "squad_name", row.squadName);
-      appendColumn(columns, values, "team_name", row.teamName);
-      appendColumn(columns, values, "creator_name", row.creatorName);
-      appendColumn(columns, values, "creator_eos_id", row.creatorEosId);
-      appendColumn(columns, values, "creator_steam_id", row.creatorSteamId);
-      appendColumn(columns, values, "player_name", row.playerName);
-      appendColumn(columns, values, "player_eos_id", row.playerEosId);
-      appendColumn(columns, values, "player_steam_id", row.playerSteamId);
-      appendColumn(columns, values, "steam_id", row.steamId);
-      appendColumn(columns, values, "eos_id", row.eosId);
-      appendColumn(columns, values, "player_key", row.playerKey);
-      appendColumn(columns, values, "reason", row.reason);
-      appendColumn(columns, values, "result", row.result);
-      appendColumn(columns, values, "error", row.error);
-      appendColumn(columns, values, "command", row.command);
-      appendColumn(columns, values, "payload_json", row.payloadJson);
-      appendColumn(columns, values, "creation_signature", row.creationSignature);
-      appendColumn(columns, values, "created_at", row.createdAt);
-      appendColumn(columns, values, "updated_at", row.updatedAt);
+      appendColumn(columns, values, "record_key", legacyRow.recordKey);
+      appendColumn(columns, values, "kind", legacyRow.kind, shape.hasKind);
+      appendColumn(columns, values, "record_type", legacyRow.kind, shape.hasRecordType);
+      appendColumn(columns, values, "time", legacyRow.time);
+      appendColumn(columns, values, "time_ms", legacyRow.timeMs, shape.hasTimeMs);
+      appendColumn(columns, values, "log_time", legacyRow.logTime);
+      appendColumn(columns, values, "log_seconds", legacyRow.logSeconds, shape.hasLogSeconds);
+      appendColumn(columns, values, "server_id", legacyRow.serverId);
+      appendColumn(columns, values, "match_id", legacyRow.matchId);
+      appendColumn(columns, values, "source", legacyRow.source);
+      appendColumn(columns, values, "operator_name", legacyRow.operatorName);
+      appendColumn(columns, values, "actor_name", legacyRow.actorName);
+      appendColumn(columns, values, "actor_id", legacyRow.actorId);
+      appendColumn(columns, values, "system", legacyRow.system, shape.hasSystem);
+      appendColumn(columns, values, "team_id", legacyRow.teamId);
+      appendColumn(columns, values, "squad_id", legacyRow.squadId);
+      appendColumn(columns, values, "generation", legacyRow.generation);
+      appendColumn(columns, values, "squad_name", legacyRow.squadName);
+      appendColumn(columns, values, "team_name", legacyRow.teamName);
+      appendColumn(columns, values, "creator_name", legacyRow.creatorName);
+      appendColumn(columns, values, "creator_eos_id", legacyRow.creatorEosId);
+      appendColumn(columns, values, "creator_steam_id", legacyRow.creatorSteamId);
+      appendColumn(columns, values, "player_name", legacyRow.playerName);
+      appendColumn(columns, values, "player_eos_id", legacyRow.playerEosId);
+      appendColumn(columns, values, "player_steam_id", legacyRow.playerSteamId);
+      appendColumn(columns, values, "steam_id", legacyRow.steamId);
+      appendColumn(columns, values, "eos_id", legacyRow.eosId);
+      appendColumn(columns, values, "player_key", legacyRow.playerKey);
+      appendColumn(columns, values, "reason", legacyRow.reason);
+      appendColumn(columns, values, "result", legacyRow.result);
+      appendColumn(columns, values, "error", legacyRow.error);
+      appendColumn(columns, values, "command", legacyRow.command);
+      appendColumn(columns, values, "payload_json", legacyRow.payloadJson);
+      appendColumn(columns, values, "creation_signature", legacyRow.creationSignature);
+      appendColumn(columns, values, "created_at", legacyRow.createdAt);
+      appendColumn(columns, values, "updated_at", legacyRow.updatedAt);
 
       await database.run(
         `INSERT INTO squad_management_records (${columns.join(", ")})
@@ -424,8 +431,8 @@ function mapRecordRow(row = {}) {
     actorName: normalizeText(row.actor_name),
     actorId: normalizeText(row.actor_id),
     system: Boolean(Number(row.system ?? 0)),
-    teamId: row.team_id == null ? null : Number(row.team_id),
-    squadId: row.squad_id == null ? null : Number(row.squad_id),
+    teamId: row.team_id == null || Number(row.team_id) === 0 ? null : Number(row.team_id),
+    squadId: row.squad_id == null || Number(row.squad_id) === 0 ? null : Number(row.squad_id),
     generation: row.generation == null ? null : Number(row.generation),
     squadName: normalizeText(row.squad_name),
     teamName: normalizeText(row.team_name),

@@ -29,6 +29,7 @@ async function createHarness(options = {}) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-stepwise-playtime-guard-"));
   const moduleHandlers = new Map();
   const disbands = [];
+  const kicks = [];
   const warnings = [];
   const broadcasts = [];
   const lookups = [];
@@ -65,6 +66,10 @@ async function createHarness(options = {}) {
         async requestDisband(request) {
           disbands.push(request);
           return { ok: true, command: `AdminDisbandSquad ${request.teamId} ${request.squadId}` };
+        },
+        async requestKick(request) {
+          kicks.push(request);
+          return { ok: true, command: `AdminKick ${request.name || request.steamId || request.eosId || ""}` };
         },
       },
       adminWarn: {
@@ -120,6 +125,7 @@ async function createHarness(options = {}) {
     plugin,
     webStatus,
     disbands,
+    kicks,
     warnings,
     broadcasts,
     lookups,
@@ -164,6 +170,7 @@ async function testInfantryLowHoursDisbands() {
     const result = await harness.plugin.api.simulateCreation(creation());
     assert.equal(result.violation, true);
     assert.equal(harness.disbands.length, 1);
+    assert.equal(harness.kicks.length, 0);
     assert.equal(harness.warnings.length, 1);
     assert.equal(harness.broadcasts.length, 0);
   } finally {
@@ -198,6 +205,7 @@ async function testVehicleWindowUsesConfiguredThreshold() {
     }));
     assert.equal(result.violation, true);
     assert.equal(harness.disbands.length, 1);
+    assert.equal(harness.kicks.length, 0);
   } finally {
     await harness.stop();
   }
@@ -339,6 +347,7 @@ async function testMissingPlaytimeDisbandsWarnsAndStartsLookup() {
     }));
     assert.equal(result.violation, true);
     assert.equal(harness.disbands.length, 1);
+    assert.equal(harness.kicks.length, 0);
     assert.equal(harness.warnings.length, 1);
     assert.equal(harness.warnings[0].message.includes("正在查询"), true);
     assert.deepEqual(harness.lookups, ["steam-missing"]);
