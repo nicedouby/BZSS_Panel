@@ -190,6 +190,67 @@
         "restartRequired": true
       },
       {
+        "path": "modules.matchState.polling.dynamic.enabled",
+        "label": "Dynamic Players/Squads Refresh Enabled",
+        "type": "boolean",
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.matchState.polling.dynamic.fastUntilSeconds",
+        "label": "Dynamic Fast Window Seconds",
+        "type": "number",
+        "min": 1,
+        "max": 600,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.matchState.polling.dynamic.mediumUntilSeconds",
+        "label": "Dynamic Medium Window Seconds",
+        "type": "number",
+        "min": 1,
+        "max": 1200,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.matchState.polling.dynamic.fastPlayersIntervalMs",
+        "label": "Fast Players Refresh Interval",
+        "type": "number",
+        "min": 100,
+        "max": 60000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.matchState.polling.dynamic.fastSquadsIntervalMs",
+        "label": "Fast Squads Refresh Interval",
+        "type": "number",
+        "min": 100,
+        "max": 60000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.matchState.polling.dynamic.mediumPlayersIntervalMs",
+        "label": "Medium Players Refresh Interval",
+        "type": "number",
+        "min": 100,
+        "max": 60000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.matchState.polling.dynamic.mediumSquadsIntervalMs",
+        "label": "Medium Squads Refresh Interval",
+        "type": "number",
+        "min": 100,
+        "max": 60000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
         "path": "modules.matchState.polling.currentMapIntervalMs",
         "label": "Current Map Refresh Interval",
         "type": "number",
@@ -452,6 +513,15 @@
         "serverInfoIntervalMs": 15000,
         "playersIntervalMs": 2000,
         "squadsIntervalMs": 2000,
+        "dynamic": {
+          "enabled": true,
+          "fastUntilSeconds": 90,
+          "mediumUntilSeconds": 180,
+          "fastPlayersIntervalMs": 500,
+          "fastSquadsIntervalMs": 500,
+          "mediumPlayersIntervalMs": 1500,
+          "mediumSquadsIntervalMs": 1500
+        },
         "currentMapIntervalMs": 30000,
         "nextMapIntervalMs": 30000
       }

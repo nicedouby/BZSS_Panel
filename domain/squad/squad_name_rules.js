@@ -17,6 +17,7 @@ export const squadNameRules = Object.freeze({
     exactWhitelist: Object.freeze([
       "inf",
       "infantry",
+      "ied",
       "步兵",
       "步兵队",
     ]),
@@ -75,6 +76,12 @@ export const squadNameRules = Object.freeze({
       "armour",
       "vic",
       "vehicle",
+      "82a",
+      "zlt05",
+      "fv107",
+      "08ifv",
+      "92ifv",
+      "pjp车",
       "步兵战车",
       "坦克",
       "装甲",
@@ -133,7 +140,11 @@ export const squadNameRules = Object.freeze({
       "no armour",
       "禁载具",
     ]),
-    regex: Object.freeze([]),
+    regex: Object.freeze([
+      "^\\d{2}\\s*-?\\s*\\d{2}$",
+      "^m1[0-9a-z-]*$",
+      "^fv[0-9a-z-]*$",
+    ]),
     classes: Object.freeze({
       ifv: Object.freeze({
         label: "步兵战车",

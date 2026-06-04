@@ -179,22 +179,42 @@ function updateChart() {
   try {
     const visibleSeries = props.channels
       .filter((channel) => props.enabledChannels[channel.key] !== false)
-      .map((channel) => ({
-        name: channel.label,
-        type: "line",
-        showSymbol: false,
-        smooth: true,
-        connectNulls: true,
-        yAxisIndex: channel.axis === "tps" ? 1 : 0,
-        data: props.samples.map((sample) => [sample.timestamp_ms, sample.metrics[channel.key] ?? null]),
-        lineStyle: {
-          width: 2,
-          color: channel.color,
-        },
-        itemStyle: {
-          color: channel.color,
-        },
-      }));
+      .map((channel) => {
+        const isPlayerCount = channel.key === "playerCount";
+        const seriesData = props.samples.map((sample) => [sample.timestamp_ms, sample.metrics[channel.key] ?? null]);
+        
+        const series: any = {
+          name: channel.label,
+          type: "line",
+          showSymbol: false,
+          smooth: true,
+          connectNulls: true,
+          yAxisIndex: channel.axis === "tps" ? 1 : 0,
+          data: seriesData,
+          lineStyle: {
+            width: 2,
+            color: channel.color,
+          },
+          itemStyle: {
+            color: channel.color,
+          },
+        };
+
+        if (isPlayerCount) {
+          series.markPoint = {
+            data: calculateSingularities(props.samples),
+            symbol: "pin",
+            symbolSize: 24,
+            label: {
+              fontSize: 9,
+              fontWeight: "900",
+              offset: [0, -2],
+            },
+          };
+        }
+
+        return series;
+      });
 
     const timestamps = props.samples.map((sample) => sample.timestamp_ms);
     chartInstance.value.setOption({
@@ -210,6 +230,44 @@ function updateChart() {
     chartError.value = "图表渲染失败";
     console.warn("[ServerStats] Failed to update chart:", error);
   }
+}
+
+function calculateSingularities(samples: ServerMetricSample[]) {
+  const thresholds = [10, 20, 30, 40, 50, 60, 80, 98];
+  const results: any[] = [];
+  const reachedByDay = new Map<string, Set<number>>();
+
+  for (const sample of samples) {
+    const val = sample.metrics.playerCount;
+    if (val == null) continue;
+
+    const date = new Date(sample.timestamp_ms);
+    const hour = date.getHours();
+    if (hour < 8) continue;
+
+    const dayKey = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+    if (!reachedByDay.has(dayKey)) {
+      reachedByDay.set(dayKey, new Set());
+    }
+
+    const reached = reachedByDay.get(dayKey)!;
+    for (const t of thresholds) {
+      if (val >= t && !reached.has(t)) {
+        reached.add(t);
+        results.push({
+          name: `P${t}`,
+          value: t,
+          xAxis: sample.timestamp_ms,
+          yAxis: val,
+          itemStyle: {
+            color: t >= 80 ? "#ef4444" : t >= 40 ? "#f59e0b" : "#3b82f6",
+          },
+        });
+      }
+    }
+  }
+
+  return results;
 }
 
 function formatTooltipTime(timestamp: number) {
@@ -280,13 +338,11 @@ onUnmounted(() => {
   position: relative;
   width: 100%;
   height: 100%;
-  min-height: 420px;
 }
 
 .server-metrics-chart-surface {
   width: 100%;
   height: 100%;
-  min-height: 420px;
 }
 
 .chart-fallback {

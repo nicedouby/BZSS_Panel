@@ -1,6 +1,7 @@
 // -*- coding: utf-8 -*-
 
 import SquadRcon from "./squad-rcon.js";
+import { resolveRconRefreshPolicy } from "./rcon-refresh-policy.js";
 import {
   canSendRconCommand,
   resolveRconPermission,
@@ -54,11 +55,35 @@ export class RconManager {
 
     this.polling = {
       enabled: Boolean(this.config.polling?.enabled ?? false),
-      playersIntervalMs: Number(this.config.polling?.playersIntervalMs ?? 5000),
-      squadsIntervalMs: Number(this.config.polling?.squadsIntervalMs ?? 10000),
+      playersIntervalMs: Number(
+        this.config.matchStatePolling?.playersIntervalMs
+        ?? this.config.polling?.playersIntervalMs
+        ?? 5000,
+      ),
+      squadsIntervalMs: Number(
+        this.config.matchStatePolling?.squadsIntervalMs
+        ?? this.config.polling?.squadsIntervalMs
+        ?? 10000,
+      ),
+      dynamic: {
+        enabled: Boolean(this.config.polling?.dynamic?.enabled ?? true),
+        fastUntilSeconds: Number(this.config.polling?.dynamic?.fastUntilSeconds ?? 90),
+        mediumUntilSeconds: Number(this.config.polling?.dynamic?.mediumUntilSeconds ?? 180),
+        fastPlayersIntervalMs: Number(this.config.polling?.dynamic?.fastPlayersIntervalMs ?? 1000),
+        fastSquadsIntervalMs: Number(this.config.polling?.dynamic?.fastSquadsIntervalMs ?? 1500),
+        mediumPlayersIntervalMs: Number(this.config.polling?.dynamic?.mediumPlayersIntervalMs ?? 2500),
+        mediumSquadsIntervalMs: Number(this.config.polling?.dynamic?.mediumSquadsIntervalMs ?? 3500),
+      },
     };
 
-    this.timers = [];
+    this.pollingTimers = {
+      players: null,
+      squads: null,
+    };
+    this.pollingKickPending = {
+      players: false,
+      squads: false,
+    };
     this.rconEventTeardown = [];
     this.nativeLogListeners = new Set();
 
@@ -102,6 +127,8 @@ export class RconManager {
       this.logger.info(`Connecting to RCON ${this.config.host}:${this.config.port}`, {
         operation: "start",
       });
+      this.pollingKickPending.players = true;
+      this.pollingKickPending.squads = true;
       await this.squadRcon.connect();
       this.setConnected(true);
       this.startPolling();
@@ -118,10 +145,10 @@ export class RconManager {
   }
 
   async stop() {
-    for (const timer of this.timers) {
-      clearInterval(timer);
-    }
-    this.timers = [];
+    this.clearPollingTimer("players");
+    this.clearPollingTimer("squads");
+    this.pollingKickPending.players = false;
+    this.pollingKickPending.squads = false;
 
     for (const dispose of this.rconEventTeardown.splice(0)) {
       try {
@@ -169,6 +196,8 @@ export class RconManager {
       const handler = (payload = {}) => {
         if (eventName === "RCON_CONNECTED") {
           this.setConnected(true);
+          this.pollingKickPending.players = true;
+          this.pollingKickPending.squads = true;
           this.startPolling();
           this.emitNativeLog({
             level: "status",
@@ -258,20 +287,25 @@ export class RconManager {
 
   startPolling() {
     if (!this.polling.enabled) return;
-    if (this.timers.length > 0) return;
+    const players = this.resolvePollingInterval("players");
+    const squads = this.resolvePollingInterval("squads");
+    this.logger.info(`RCON polling started. players=${players}ms squads=${squads}ms`);
 
-    this.logger.info(`RCON polling started. players=${this.polling.playersIntervalMs}ms squads=${this.polling.squadsIntervalMs}ms`);
+    if (this.pollingKickPending.players) {
+      this.pollingKickPending.players = false;
+      this.clearPollingTimer("players");
+      void this.runPollingTick("players").catch((err) => this.logger.warn(`Initial ListPlayers failed: ${err.message}`));
+    } else if (!this.pollingTimers.players) {
+      this.schedulePolling("players");
+    }
 
-    this.refreshPlayers().catch((err) => this.logger.warn(`Initial ListPlayers failed: ${err.message}`));
-    this.refreshSquads().catch((err) => this.logger.warn(`Initial ListSquads failed: ${err.message}`));
-
-    this.timers.push(setInterval(() => {
-      this.refreshPlayers().catch((err) => this.logger.warn(`ListPlayers failed: ${err.message}`));
-    }, this.polling.playersIntervalMs));
-
-    this.timers.push(setInterval(() => {
-      this.refreshSquads().catch((err) => this.logger.warn(`ListSquads failed: ${err.message}`));
-    }, this.polling.squadsIntervalMs));
+    if (this.pollingKickPending.squads) {
+      this.pollingKickPending.squads = false;
+      this.clearPollingTimer("squads");
+      void this.runPollingTick("squads").catch((err) => this.logger.warn(`Initial ListSquads failed: ${err.message}`));
+    } else if (!this.pollingTimers.squads) {
+      this.schedulePolling("squads");
+    }
   }
 
   /**
@@ -501,6 +535,62 @@ export class RconManager {
     } finally {
       this.refreshInFlight.squads = false;
     }
+  }
+
+  async runPollingTick(type) {
+    if (!this.polling.enabled) return [];
+
+    try {
+      if (type === "players") {
+        return await this.refreshPlayers();
+      }
+
+      if (type === "squads") {
+        return await this.refreshSquads();
+      }
+
+      return [];
+    } finally {
+      this.schedulePolling(type);
+    }
+  }
+
+  schedulePolling(type) {
+    if (!this.polling.enabled) return;
+    const delayMs = this.resolvePollingInterval(type);
+    this.clearPollingTimer(type);
+
+    this.pollingTimers[type] = setTimeout(() => {
+      this.pollingTimers[type] = null;
+      this.runPollingTick(type).catch((err) => this.logger.warn(`${type} polling failed: ${err.message}`));
+    }, delayMs);
+  }
+
+  clearPollingTimer(type) {
+    const timer = this.pollingTimers[type];
+    if (timer) {
+      clearTimeout(timer);
+      this.pollingTimers[type] = null;
+    }
+  }
+
+  resolvePollingInterval(type) {
+    const snapshot = this.webStatus?.getSnapshot?.() ?? {};
+    const policy = resolveRconRefreshPolicy({
+      logClockSeconds: snapshot.logClockSeconds,
+      logClockHasAnchor: snapshot.logClockHasAnchor,
+      logClockManual: snapshot.logClockManual,
+      config: {
+        enabled: this.polling.dynamic.enabled,
+        playersIntervalMs: this.polling.playersIntervalMs,
+        squadsIntervalMs: this.polling.squadsIntervalMs,
+        dynamic: this.polling.dynamic,
+      },
+    });
+
+    if (type === "players") return policy.playersIntervalMs;
+    if (type === "squads") return policy.squadsIntervalMs;
+    return policy.playersIntervalMs;
   }
 
   async getCurrentMap() {

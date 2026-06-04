@@ -87,8 +87,21 @@ async function main() {
 
   let rawLogDerivedEvents = null;
 
+  const rconConfig = configManager.get("rcon", {}) ?? {};
+  const matchStateConfig = configManager.get("modules.matchState", {}) ?? {};
+  const rconPollingConfig = rconConfig.polling ?? {};
+  const matchStatePollingConfig = matchStateConfig.polling ?? {};
+
   const rconManager = new RconManager({
-    config: configManager.get("rcon", {}),
+    config: {
+      ...rconConfig,
+      matchStatePolling: matchStatePollingConfig,
+      polling: {
+        ...rconPollingConfig,
+        enabled: rconPollingConfig.enabled ?? matchStateConfig.enabled !== false,
+        dynamic: matchStatePollingConfig.dynamic ?? rconPollingConfig.dynamic ?? {},
+      },
+    },
     logger: logger.child({ moduleId: "core.rconManager", source: "core.rconManager" }),
     eventBus,
     webStatus,

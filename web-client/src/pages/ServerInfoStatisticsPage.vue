@@ -287,25 +287,37 @@ onUnmounted(() => { stop(); });
 .panel-status-tag { margin-top: auto; font-size: 9px; color: #2d3748; font-weight: 800; letter-spacing: 0.5px; border-top: 1px solid rgba(255,255,255,0.03); padding-top: 16px; }
 
 /* Chart Area */
-.viewport-stage { flex: 1; display: flex; flex-direction: column; min-width: 0; background: #05070a; }
+.viewport-stage { 
+  flex: 1; 
+  display: flex; 
+  flex-direction: column; 
+  min-width: 0; 
+  background: #05070a; 
+  height: 100%;
+}
 
 .chart-canvas-container {
   flex: 1;
   position: relative;
-  min-height: 0;
+  height: 100%;
+  display: block;
 }
 
-.grid-overlay {
+:deep(.bz-data-state),
+:deep(.state-shell),
+:deep(.state-content) {
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.integrated-chart { 
+  width: 100%; 
+  height: 100% !important;
   position: absolute;
-  inset: 0;
-  background-image: 
-    linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
-  background-size: 100px 100px;
-  pointer-events: none;
+  top: 0;
+  left: 0;
 }
-
-.integrated-chart { width: 100%; height: 100%; }
 
 :deep(.integrated-chart .server-metrics-chart-surface) {
   height: 100% !important;

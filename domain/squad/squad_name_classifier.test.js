@@ -90,5 +90,18 @@ assert.equal(classifySquadName("BMP-2M").vehicleClass, "ifv");
 assert.equal(classifySquadName("MATV_USMC").vehicleClass, "light_vehicle");
 assert.equal(classifySquadName("UH60M").vehicleClass, "light_vehicle");
 assert.equal(classifySquadName("Ural375").vehicleClass, "light_vehicle");
+assert.equal(classifySquadName("IED").nature, SQUAD_NATURE.INFANTRY);
+assert.equal(classifySquadName("3030").nature, SQUAD_NATURE.VEHICLE);
+assert.equal(classifySquadName("8080").nature, SQUAD_NATURE.VEHICLE);
+assert.equal(classifySquadName("1212").nature, SQUAD_NATURE.VEHICLE);
+assert.equal(classifySquadName("12-12").nature, SQUAD_NATURE.VEHICLE);
+assert.equal(classifySquadName("82A").nature, SQUAD_NATURE.VEHICLE);
+assert.equal(classifySquadName("ZLT05").nature, SQUAD_NATURE.VEHICLE);
+assert.equal(classifySquadName("FV107").nature, SQUAD_NATURE.VEHICLE);
+assert.equal(classifySquadName("08IFV").nature, SQUAD_NATURE.VEHICLE);
+assert.equal(classifySquadName("92IFV").nature, SQUAD_NATURE.VEHICLE);
+assert.equal(classifySquadName("PJP车").nature, SQUAD_NATURE.VEHICLE);
+assert.equal(classifySquadName("M1").nature, SQUAD_NATURE.VEHICLE);
+assert.equal(classifySquadName("FV123").nature, SQUAD_NATURE.VEHICLE);
 
 console.log("squad_name_classifier.test.js passed");

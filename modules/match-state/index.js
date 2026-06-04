@@ -40,6 +40,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
 
   const timers = [];
   const unsubscribers = [];
+  let started = false;
   const running = {
     serverInfo: false,
     players: false,
@@ -351,13 +352,6 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       }
 
       const players = parseListPlayers(result.rconResponse);
-      if (!state.serverStatus.playerCountSource || state.serverStatus.playerCountSource !== "serverInfo") {
-        state.serverStatus.playerCount = players.length;
-        state.serverStatus.playerCountSource = "listPlayers";
-      }
-      syncMatchFromServerStatus();
-      updateWebStatus();
-
       const event = makeEvent("RCON_LIST_PLAYERS_UPDATED", { players });
       logWithFallback(moduleLogger, "debug", () => `Players refreshed (${players.length})`, {
         operation: "refreshPlayers",
@@ -366,14 +360,30 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         },
       });
       core.eventBus.emitCoreEvent("RCON_LIST_PLAYERS_UPDATED", event);
-
-      const enrichedPlayers = enrichPlayersWithPlayerStateTiming(state.serverId, players);
-      state.players = makePlayersSnapshot(enrichedPlayers);
-
-      emitPlayersUpdated();
-      emitUpdated("players");
+      if (!started) applyPlayersUpdatedEvent(event);
       return players;
     }, () => state.players.list, report);
+  }
+
+  function applyPlayersUpdatedEvent(event = {}) {
+    if (!enabled || !isSubscribed()) return;
+
+    const players = Array.isArray(event.players) ? event.players : [];
+    const serverId = String(event.serverId ?? state.serverId ?? core.webStatus.serverId ?? "").trim();
+    if (serverId) state.serverId = serverId;
+
+    if (!state.serverStatus.playerCountSource || state.serverStatus.playerCountSource !== "serverInfo") {
+      state.serverStatus.playerCount = players.length;
+      state.serverStatus.playerCountSource = "listPlayers";
+    }
+    syncMatchFromServerStatus();
+    updateWebStatus();
+
+    const enrichedPlayers = enrichPlayersWithPlayerStateTiming(state.serverId, players);
+    state.players = makePlayersSnapshot(enrichedPlayers);
+
+    emitPlayersUpdated();
+    emitUpdated("players");
   }
 
   function enrichPlayersWithPlayerStateTiming(serverId, players) {
@@ -421,29 +431,6 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       }
 
       const squads = parseListSquads(result.rconResponse);
-      const classifiedSquads = squads.map((squad) => {
-        const classification = classifySquadName(squad.squadName ?? squad.name ?? "");
-        return {
-          ...squad,
-          squadNature: classification.nature,
-          squadNatureLabel: classification.label,
-          squadNatureReason: classification.reason,
-          squadNatureRule: classification.matchedRule,
-          squadNatureConfidence: classification.confidence,
-          squadNatureNormalizedName: classification.normalizedName,
-          squadVehicleClass: classification.vehicleClass,
-          squadVehicleClassLabel: classification.vehicleClassLabel,
-          squadVehicleClassReason: classification.vehicleClassReason,
-          squadVehicleClassRule: classification.vehicleClassRule,
-          squadVehicleClassConfidence: classification.vehicleClassConfidence,
-        };
-      });
-      state.squads = {
-        list: classifiedSquads,
-        count: classifiedSquads.length,
-        lastUpdatedAt: new Date().toISOString(),
-      };
-      updateWebStatus();
       logWithFallback(moduleLogger, "debug", () => `Squads refreshed (${squads.length})`, {
         operation: "refreshSquads",
         data: {
@@ -451,12 +438,47 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         },
       });
 
-      const event = makeEvent("RCON_LIST_SQUADS_UPDATED", { squads: classifiedSquads });
+      const event = makeEvent("RCON_LIST_SQUADS_UPDATED", { squads });
       core.eventBus.emitCoreEvent("RCON_LIST_SQUADS_UPDATED", event);
-      emitSquadsUpdated();
-      emitUpdated("squads");
-      return classifiedSquads;
+      if (!started) applySquadsUpdatedEvent(event);
+      return squads;
     }, () => state.squads.list, report);
+  }
+
+  function applySquadsUpdatedEvent(event = {}) {
+    if (!enabled || !isSubscribed()) return;
+
+    const squads = Array.isArray(event.squads) ? event.squads : [];
+    const serverId = String(event.serverId ?? state.serverId ?? core.webStatus.serverId ?? "").trim();
+    if (serverId) state.serverId = serverId;
+
+    const classifiedSquads = squads.map(classifySquad);
+    state.squads = {
+      list: classifiedSquads,
+      count: classifiedSquads.length,
+      lastUpdatedAt: new Date().toISOString(),
+    };
+    updateWebStatus();
+    emitSquadsUpdated();
+    emitUpdated("squads");
+  }
+
+  function classifySquad(squad) {
+    const classification = classifySquadName(squad?.squadName ?? squad?.name ?? "");
+    return {
+      ...squad,
+      squadNature: classification.nature,
+      squadNatureLabel: classification.label,
+      squadNatureReason: classification.reason,
+      squadNatureRule: classification.matchedRule,
+      squadNatureConfidence: classification.confidence,
+      squadNatureNormalizedName: classification.normalizedName,
+      squadVehicleClass: classification.vehicleClass,
+      squadVehicleClassLabel: classification.vehicleClassLabel,
+      squadVehicleClassReason: classification.vehicleClassReason,
+      squadVehicleClassRule: classification.vehicleClassRule,
+      squadVehicleClassConfidence: classification.vehicleClassConfidence,
+    };
   }
 
   async function refreshCurrentMap(report = null) {
@@ -721,6 +743,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       });
 
       if (!enabled) return;
+      started = true;
 
       unsubscribers.push(core.eventBus.onCoreEvent("RCON_CONNECTED", () => {
         if (!isSubscribed()) return;
@@ -737,6 +760,8 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         updateStatuses();
         emitRconStatusUpdated();
       }));
+      unsubscribers.push(core.eventBus.onCoreEvent("RCON_LIST_PLAYERS_UPDATED", applyPlayersUpdatedEvent));
+      unsubscribers.push(core.eventBus.onCoreEvent("RCON_LIST_SQUADS_UPDATED", applySquadsUpdatedEvent));
 
       // Ingest round world bring up
       unsubscribers.push(core.eventBus.onCoreEvent("round.world_bring_up", ingestWorldBringUp));
@@ -769,14 +794,10 @@ export function createMatchStateModule({ core, modules, config, logger }) {
 
       updateWebStatus();
       refreshServerInfo();
-      refreshPlayers();
-      refreshSquads();
       refreshCurrentMap();
       refreshNextMap();
 
       startTimer(refreshServerInfo, polling.serverInfoIntervalMs);
-      startTimer(refreshPlayers, polling.playersIntervalMs);
-      startTimer(refreshSquads, polling.squadsIntervalMs);
       startTimer(refreshCurrentMap, polling.currentMapIntervalMs);
       startTimer(refreshNextMap, polling.nextMapIntervalMs);
 
@@ -792,6 +813,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     },
 
     async stop() {
+      started = false;
       for (const timer of timers.splice(0)) clearInterval(timer);
       for (const unsubscribe of unsubscribers.splice(0)) unsubscribe();
       roundRecentKeys.clear();

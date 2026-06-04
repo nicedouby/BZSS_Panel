@@ -5,6 +5,7 @@ import { createMatchStateModule } from "../modules/match-state/index.js";
 function createHarness() {
   const coreEvents = [];
   const moduleEvents = [];
+  const commandCalls = [];
   const webStatusState = {
     serverId: "BZSS_Main",
     serverName: "BZSS Main Server",
@@ -73,6 +74,7 @@ function createHarness() {
     },
     rconManager: {
       async dispatchCommand({ command }) {
+        commandCalls.push(command);
         if (responses.failCommands.has(command)) {
           rconStatusState.lastError = "simulated failure";
           return {
@@ -127,9 +129,14 @@ function createHarness() {
     core,
     coreEvents,
     moduleEvents,
+    commandCalls,
     responses,
     webStatusState,
   };
+}
+
+function sleep(ms = 0) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function testAggregatesRconSnapshots() {
@@ -334,6 +341,57 @@ async function testIngestWorldBringUp() {
   assert.ok(harness.moduleEvents.some((item) => item.moduleId === "module.roundState" && item.eventName === "updated"));
 }
 
+async function testStartedModuleSyncsPlayersAndSquadsFromRconEvents() {
+  const harness = createHarness();
+  await harness.module.start();
+  await sleep();
+
+  assert.equal(harness.commandCalls.includes("ListPlayers"), false);
+  assert.equal(harness.commandCalls.includes("ListSquads"), false);
+
+  harness.core.eventBus.emitCoreEvent("RCON_LIST_PLAYERS_UPDATED", {
+    eventName: "RCON_LIST_PLAYERS_UPDATED",
+    serverId: "BZSS_Main",
+    players: [
+      {
+        playerID: 7,
+        steamID: "76561198000000007",
+        eosID: "eos-7",
+        name: "Bob",
+        teamID: 2,
+        squadID: 3,
+        isLeader: false,
+        role: "Medic",
+      },
+    ],
+    time: new Date().toISOString(),
+  });
+
+  harness.core.eventBus.emitCoreEvent("RCON_LIST_SQUADS_UPDATED", {
+    eventName: "RCON_LIST_SQUADS_UPDATED",
+    serverId: "BZSS_Main",
+    squads: [
+      {
+        teamID: 2,
+        squadID: 3,
+        squadName: "Bravo",
+        size: 1,
+      },
+    ],
+    time: new Date().toISOString(),
+  });
+
+  const state = harness.module.api.getState();
+  assert.equal(state.players.count, 1);
+  assert.equal(state.players.bySteam64ID["76561198000000007"].name, "Bob");
+  assert.equal(state.squads.count, 1);
+  assert.equal(state.squads.list[0].squadName, "Bravo");
+  assert.equal(harness.webStatusState.playerCount, 1);
+  assert.equal(harness.webStatusState.squadCount, 1);
+
+  await harness.module.stop();
+}
+
 async function testTicketsChanged() {
   const harness = createHarness();
   await harness.module.start();
@@ -353,5 +411,6 @@ await testJsonShowNextMapUpdatesNextLayerWhenServerInfoOmitsIt();
 await testMatchingNextLayerIsCleared();
 await testRefreshFailurePreservesLastGoodSnapshot();
 await testIngestWorldBringUp();
+await testStartedModuleSyncsPlayersAndSquadsFromRconEvents();
 
 console.log("match state tests passed");

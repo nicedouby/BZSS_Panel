@@ -46,7 +46,7 @@ async function testWarnSuccessAndSanitize() {
   const result = await module.api.warnPlayer({
     targetName: "PlayerA",
     targetEosId: "eos-a",
-    message: "line1\n\"quoted\"",
+    message: "line1\r\nline2\n\"quoted\"",
     sourceModule: "damage_display",
     reason: "victim_damage",
     relatedEventId: "combat-1",
@@ -54,13 +54,13 @@ async function testWarnSuccessAndSanitize() {
 
   assert.equal(result.success, true);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].command, `AdminWarn "PlayerA" "[BZSS] line1 'quoted'"`);
+  assert.equal(calls[0].command, `AdminWarn "PlayerA" "line1\nline2\n'quoted'"`);
   assert.equal(calls[0].priority, "high");
 
   const records = module.api.getRecent({ limit: 10 });
   assert.equal(records.length, 1);
   assert.equal(records[0].kind, "warning");
-  assert.equal(records[0].message, "[BZSS] line1 'quoted'");
+  assert.equal(records[0].message, "line1\nline2\n'quoted'");
   assert.equal(records[0].sourceModule, "damage_display");
   assert.equal(records[0].relatedEventId, "combat-1");
   await module.stop();

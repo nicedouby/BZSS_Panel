@@ -32,6 +32,7 @@
         "squad",
         "inf",
         "infantry",
+        "ied",
         "rifle",
         "rifleman",
         "步兵",
@@ -114,7 +115,13 @@
         "lppv",
         "lppv rws",
         "cpv",
-        "ctm131"
+        "ctm131",
+        "82a",
+        "zlt05",
+        "fv107",
+        "08ifv",
+        "92ifv",
+        "pjp\u8f66"
       ],
       "contains": [
         "tank",
@@ -158,6 +165,11 @@
         "卡车",
         "直升机",
         "运输机"
+      ],
+      "regex": [
+        "^\\d{2}\\s*-?\\s*\\d{2}$",
+        "^m1[0-9a-z-]*$",
+        "^fv[0-9a-z-]*$"
       ]
     },
     "support": {

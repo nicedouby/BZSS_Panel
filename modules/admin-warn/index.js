@@ -2,7 +2,6 @@
 
 const DEFAULT_MAX_RECORDS = 3000;
 const DEFAULT_TTL_MS = 30 * 60 * 1000;
-const DEFAULT_PREFIX = "[BZSS]";
 
 export function createAdminWarnModule({ core, config, logger }) {
   const moduleLogger =
@@ -65,7 +64,7 @@ export function createAdminWarnModule({ core, config, logger }) {
 
     const message = normalizedKind === "broadcast"
       ? sanitizeBroadcastMessage(req?.message)
-      : prefixWarningMessage(sanitizeWarningMessage(req?.message));
+      : sanitizeWarningMessage(req?.message);
 
     const targetName = normalizedKind === "warning" ? String(req?.targetName ?? "").trim() : "";
     const targetEosId = normalizedKind === "warning" ? optionalText(req?.targetEosId) : undefined;
@@ -324,7 +323,7 @@ function buildCommandText(kind, targetName, message) {
 
 function sanitizeWarningMessage(message) {
   return String(message ?? "")
-    .replace(/[\r\n]+/g, " ")
+    .replace(/\r\n?/g, "\n")
     .replace(/"/g, "'")
     .trim()
     .slice(0, 180);
@@ -336,13 +335,6 @@ function sanitizeBroadcastMessage(message) {
     .replace(/"/g, "'")
     .trim()
     .slice(0, 180);
-}
-
-function prefixWarningMessage(message) {
-  const text = String(message ?? "").trim();
-  if (!text) return "";
-  if (text.startsWith(DEFAULT_PREFIX)) return text;
-  return `${DEFAULT_PREFIX} ${text}`;
 }
 
 function defaultReasonForKind(kind) {
