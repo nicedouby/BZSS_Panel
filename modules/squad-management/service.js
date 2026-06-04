@@ -1133,100 +1133,131 @@ export function createSquadManagementService({ core, modules, config, logger, re
     const cache = ensureServerCache(serverId);
     const lifecycleSnapshot = lifecycle.getCurrentSnapshot(serverId);
     const lifecycleRecords = Array.isArray(lifecycleSnapshot.list) ? lifecycleSnapshot.list : [];
+    const lifecycleRecordsBySlot = new Map();
     const rawSquads = Array.isArray(cache.rawSquads) ? cache.rawSquads : [];
     const rawPlayers = Array.isArray(cache.playersRaw) ? cache.playersRaw : [];
-    const rawSquadsBySlot = new Map(rawSquads.map((squad) => [buildSquadSlotKey(serverId, cache.matchId, squad.teamId, squad.squadId), squad]));
-    const playersBySquad = groupPlayersBySquad(serverId, cache.matchId, rawPlayers);
-    const squads = [];
+    const matchId = cache.matchId || lifecycleSnapshot.matchId || "";
+    const rawSquadsBySlot = new Map(
+      rawSquads.map((squad) => {
+        const { teamId, squadId } = getSquadIdentity(squad);
+        return [buildSquadSlotKey(serverId, matchId, teamId, squadId), squad];
+      }),
+    );
+    const playerSquadGroups = groupPlayersIntoSquads(serverId, matchId, rawPlayers);
+    const snapshotOnlySquads = rawSquads
+      .filter((rawSquad) => {
+        const { teamId, squadId } = getSquadIdentity(rawSquad);
+        const slotKey = buildSquadSlotKey(serverId, matchId, teamId, squadId);
+        return !playerSquadGroups.has(slotKey);
+      })
+      .map((rawSquad) => {
+        const { teamId, squadId } = getSquadIdentity(rawSquad);
+        return {
+          ...rawSquad,
+          teamId,
+          squadId,
+          slotKey: buildSquadSlotKey(serverId, matchId, teamId, squadId),
+        };
+      });
+    for (const record of lifecycleRecords) {
+      const slotKey = buildSquadSlotKey(serverId, record.matchId ?? matchId, record.teamId, record.squadId);
+      lifecycleRecordsBySlot.set(slotKey, record);
+    }
     const creatorsMap = new Map(
       [...(creatorsByServer.get(serverId)?.entries?.() ?? [])].map(([key, value]) => [key, { ...value }]),
     );
     const teamsMap = new Map();
 
-    for (const record of lifecycleRecords) {
-      const slotKey = buildSquadSlotKey(serverId, record.matchId ?? cache.matchId, record.teamId, record.squadId);
-      const rawSquad = rawSquadsBySlot.get(slotKey) ?? null;
-      const merged = mergeSquadRecord({
-        serverId,
-        cache,
-        record,
-        rawSquad,
-        players: playersBySquad.get(slotKey) ?? [],
+    const players = rawPlayers.map((player) => normalizePlayerSnapshot(serverId, matchId, player));
+
+    const filledSquads = [...playerSquadGroups.values()].map((group) => {
+      const rawSquad = rawSquadsBySlot.get(group.slotKey) ?? null;
+      const creationRecord = lifecycleRecordsBySlot.get(group.slotKey) ?? null;
+      const leader = group.members.find((player) => player.isLeader) ?? group.members[0] ?? null;
+      const creatorSteamId = normalizeText(creationRecord?.creatorSteamId ?? rawSquad?.creatorSteamId ?? rawSquad?.creatorSteamID ?? "");
+      const creatorEosId = normalizeText(creationRecord?.creatorEosId ?? rawSquad?.creatorEosId ?? rawSquad?.creatorEOSID ?? "");
+      const creatorName = normalizeText(creationRecord?.creatorName ?? rawSquad?.creatorName ?? "");
+      const squadName = normalizeText(
+        rawSquad?.squadName
+        ?? rawSquad?.name
+        ?? creationRecord?.squadName
+        ?? `Squad ${group.squadId}`,
+      );
+      const teamName = normalizeText(
+        rawSquad?.teamName
+        ?? creationRecord?.factionName
+        ?? creationRecord?.teamName
+        ?? "",
+      );
+      const creatorKey = buildCreatorKey({
+        creatorSteamId,
+        creatorEosId,
+        creatorName,
       });
-      squads.push(merged);
-      if (merged.creatorKey) {
-        creatorsMap.set(merged.creatorKey, createOrUpdateCreator(creatorsMap.get(merged.creatorKey), merged));
-      }
-      addTeamEntry(teamsMap, merged);
-    }
-
-    for (const rawSquad of rawSquads) {
-      const slotKey = buildSquadSlotKey(serverId, cache.matchId, rawSquad.teamId, rawSquad.squadId);
-      if (squads.some((squad) => squad.slotKey === slotKey)) continue;
-      const merged = mergeSquadRecord({
+      const squad = {
         serverId,
-        cache,
-        record: createFallbackLifecycleRecord(serverId, cache.matchId, rawSquad),
-        rawSquad,
-        players: playersBySquad.get(slotKey) ?? [],
-      });
-      squads.push(merged);
-      if (merged.creatorKey) {
-        creatorsMap.set(merged.creatorKey, createOrUpdateCreator(creatorsMap.get(merged.creatorKey), merged));
+        matchId,
+        slotKey: group.slotKey,
+        teamId: group.teamId,
+        squadId: group.squadId,
+        squadName,
+        teamName,
+        members: group.members,
+        memberCount: group.members.length,
+        leaderName: leader?.name ?? "",
+        leaderSteamId: leader?.steamId ?? leader?.steamID ?? "",
+        leaderEosId: leader?.eosId ?? leader?.eosID ?? "",
+        locked: Boolean(rawSquad?.locked ?? false),
+        size: Number(rawSquad?.size ?? group.members.length) || group.members.length,
+        active: true,
+        disbanded: false,
+        rconCreatorName: normalizeText(rawSquad?.creatorName ?? ""),
+        rconCreatorSteamId: normalizeText(rawSquad?.creatorSteamID ?? rawSquad?.creatorSteamId ?? ""),
+        rconCreatorEosId: normalizeText(rawSquad?.creatorEOSID ?? rawSquad?.creatorEosId ?? ""),
+        raw: rawSquad?.raw ?? "",
+        creatorName,
+        creatorSteamId,
+        creatorEosId,
+        createdAt: creationRecord?.createdAt ?? "",
+        createdAtMs: creationRecord?.createdAtMs ?? 0,
+        creationSource: creationRecord?.creationSource ?? "",
+        creationConfidence: creationRecord?.creationConfidence ?? "",
+        source: "LIST_PLAYERS",
+        attributeSource: rawSquad ? "LIST_SQUADS" : "MISSING_LIST_SQUADS",
+        creatorKey,
+        creatorCount: 0,
+        currentCreatorCount: 0,
+        warnings: [],
+        recordKey: creationRecord?.key ?? "",
+        lifecycleKey: creationRecord?.key ?? "",
+        violationType: "",
+        violationReason: "",
+        shouldDisband: false,
+      };
+      const nature = classifySquadName(squad.squadName ?? "");
+      squad.squadNature = nature.nature;
+      squad.squadNatureLabel = nature.label;
+      squad.squadNatureReason = nature.reason;
+      squad.squadNatureRule = nature.matchedRule;
+      squad.squadNatureConfidence = nature.confidence;
+      squad.squadNatureNormalizedName = nature.normalizedName;
+      squad.squadVehicleClass = nature.vehicleClass;
+      squad.squadVehicleClassLabel = nature.vehicleClassLabel;
+      squad.squadVehicleClassReason = nature.vehicleClassReason;
+      squad.squadVehicleClassRule = nature.vehicleClassRule;
+      squad.squadVehicleClassConfidence = nature.vehicleClassConfidence;
+      if (squad.creatorKey) {
+        creatorsMap.set(squad.creatorKey, createOrUpdateCreator(creatorsMap.get(squad.creatorKey), squad));
       }
-      addTeamEntry(teamsMap, merged);
-    }
-
-    const players = rawPlayers.map((player) => normalizePlayerSnapshot(serverId, cache.matchId, player));
-    for (const player of players) {
-      const key = buildPlayerKey(player);
-      if (!key) continue;
-      const squadKey = buildSquadSlotKey(serverId, cache.matchId, player.teamId, player.squadId);
-      const squad = squads.find((item) => item.slotKey === squadKey) ?? null;
-      if (squad) {
-        squad.memberCount = Number(squad.memberCount ?? 0);
-      }
-      const creatorKey = resolveCreatorKeyFromPlayer(player, squad);
-      if (creatorKey) {
-        creatorsMap.set(creatorKey, createOrUpdateCreator(creatorsMap.get(creatorKey), squad ?? player, player));
-      }
-    }
-
-    const filledSquads = squads.map((squad) => {
-      const members = rawPlayers
-        .filter((player) => matchesSquad(player, squad))
-        .map((player) => normalizePlayerSnapshot(serverId, cache.matchId, player));
-      const leader = members.find((player) => player.isLeader) ?? members[0] ?? null;
+      addTeamEntry(teamsMap, squad);
+      return squad;
+    }).map((squad) => {
       const creatorStats = squad.creatorKey ? creatorsMap.get(squad.creatorKey) : null;
-      const memberCount = members.length;
-      const active = Boolean(rawSquadsBySlot.get(squad.slotKey));
-
-      const next = {
+      return {
         ...squad,
-        leaderName: leader?.name ?? squad.leaderName ?? squad.creatorName ?? "",
-        leaderSteamId: leader?.steamId ?? squad.leaderSteamId ?? "",
-        leaderEosId: leader?.eosId ?? squad.leaderEosId ?? "",
-        memberCount,
-        members,
-        active,
-        disbanded: !active,
-        warnings: Array.isArray(squad.warnings) ? squad.warnings : [],
         creatorCount: creatorStats?.count ?? 0,
         currentCreatorCount: creatorStats?.count ?? 0,
       };
-      const nature = classifySquadName(next.squadName ?? "");
-      next.squadNature = nature.nature;
-      next.squadNatureLabel = nature.label;
-      next.squadNatureReason = nature.reason;
-      next.squadNatureRule = nature.matchedRule;
-      next.squadNatureConfidence = nature.confidence;
-      next.squadNatureNormalizedName = nature.normalizedName;
-      next.squadVehicleClass = nature.vehicleClass;
-      next.squadVehicleClassLabel = nature.vehicleClassLabel;
-      next.squadVehicleClassReason = nature.vehicleClassReason;
-      next.squadVehicleClassRule = nature.vehicleClassRule;
-      next.squadVehicleClassConfidence = nature.vehicleClassConfidence;
-      return next;
     });
 
     const populatedTeams = [...teamsMap.values()].map((team) => {
@@ -1241,7 +1272,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
 
     const state = {
       serverId,
-      matchId: cache.matchId || lifecycleSnapshot.matchId || "",
+      matchId,
       updatedAt: cache.updatedAt || new Date().toISOString(),
       rconUpdatedAt: cache.rconUpdatedAt || "",
       playersUpdatedAt: cache.playersUpdatedAt || "",
@@ -1255,6 +1286,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
       },
       teams: populatedTeams,
       squads: filledSquads.sort(sortSquads),
+      snapshotOnlySquads,
       players,
       creators: [...creatorsMap.values()].sort((left, right) => Number(right.count ?? 0) - Number(left.count ?? 0)),
       recentActions: [...cache.recentActions],
@@ -1270,12 +1302,12 @@ export function createSquadManagementService({ core, modules, config, logger, re
       infantryOnlyUntilSeconds: normalizePositiveInteger(moduleConfig.infantryOnlyUntilSeconds, 0),
       allowedInfantryNames,
       defaultSquadNamePattern,
-      currentMatchId: cache.matchId || lifecycleSnapshot.matchId || "",
+      currentMatchId: matchId,
       activationEnabled: false,
       activationPopulation: players.length,
       activationPlayerThreshold: 0,
       activationPopulationSource: "squadManagement.players",
-      roundKey: `${serverId}:${cache.matchId || lifecycleSnapshot.matchId || ""}`,
+      roundKey: `${serverId}:${matchId}`,
       roundStartedAtMs: 0,
       roundStartedAt: "",
       logClockSeconds: Number(cache.match?.logClockSeconds ?? 0) || 0,
@@ -2163,6 +2195,36 @@ export function createSquadManagementService({ core, modules, config, logger, re
 
   function buildSquadSlotKey(serverId, matchId, teamId, squadId) {
     return buildSquadLifecycleSlotKey(serverId, matchId, teamId, squadId);
+  }
+
+  function getSquadIdentity(source = {}) {
+    return {
+      teamId: normalizeNullableNumber(source.teamId ?? source.teamID),
+      squadId: normalizeNullableNumber(source.squadId ?? source.squadID),
+    };
+  }
+
+  function groupPlayersIntoSquads(serverId, matchId, players = []) {
+    const groups = new Map();
+
+    for (const player of players) {
+      const teamId = normalizeNullableNumber(player.teamId ?? player.teamID);
+      const squadId = normalizeNullableNumber(player.squadId ?? player.squadID);
+      if (teamId == null || squadId == null) continue;
+
+      const slotKey = buildSquadSlotKey(serverId, matchId, teamId, squadId);
+      const normalized = normalizePlayerSnapshot(serverId, matchId, player);
+      const group = groups.get(slotKey) ?? {
+        slotKey,
+        teamId,
+        squadId,
+        members: [],
+      };
+      group.members.push(normalized);
+      groups.set(slotKey, group);
+    }
+
+    return groups;
   }
 
   function groupPlayersBySquad(serverId, matchId, players = []) {

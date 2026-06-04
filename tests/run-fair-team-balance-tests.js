@@ -232,6 +232,8 @@ async function testExactTriggersAndTbSuccess() {
     assert.equal(harness.broadcasts.length, 1);
     assert.match(harness.broadcasts[0].message, /Alpha/);
     assert.match(harness.broadcasts[0].message, /4\/5/);
+    assert.equal(harness.warnings.length, 1);
+    assert.match(harness.warnings[0].message, /非暖服模式/);
   } finally {
     await harness.stop();
   }
@@ -378,7 +380,7 @@ async function testLockedSquadClaimIsRejected() {
   }
 }
 
-async function testWarmupTbIgnoresNormalRestrictionsButChecksPostSwitchDelta() {
+async function testWarmupTbIsRejectedAndWarned() {
   const harness = await createHarness({
     webStatus: {
       isWarmup: true,
@@ -407,40 +409,12 @@ async function testWarmupTbIgnoresNormalRestrictionsButChecksPostSwitchDelta() {
       steamId: "steam-alpha",
       playerName: "Alpha",
     });
-    assert.equal(result.ok, true);
-    assert.equal(harness.teamBalanceCalls.length, 1);
+    assert.equal(result.ok, false);
+    assert.equal(result.error, "WarmupModeDisabled");
+    assert.equal(harness.teamBalanceCalls.length, 0);
     assert.equal(harness.plugin.api.getState().publicTbRemaining, 5);
-
-    const repeatedPlayerRejected = await harness.plugin.api.simulateChatMessage({
-      message: "tb",
-      steamId: "steam-alpha",
-      playerName: "Alpha",
-    });
-    assert.equal(repeatedPlayerRejected.ok, false);
-    assert.equal(repeatedPlayerRejected.error, "RoundPlayerQuotaExhausted");
-
-    harness.setMatchState({
-      players: [
-        { name: "Alpha", steamId: "steam-alpha", teamId: 1, squadId: 0 },
-        { name: "Bravo", steamId: "steam-bravo", teamId: 1, squadId: 0 },
-        { name: "Charlie", steamId: "steam-charlie", teamId: 1, squadId: 0 },
-        { name: "Delta", steamId: "steam-delta", teamId: 1, squadId: 0 },
-        { name: "Foxtrot", steamId: "steam-foxtrot", teamId: 1, squadId: 0 },
-        { name: "Hotel", steamId: "steam-hotel", teamId: 1, squadId: 0 },
-        { name: "India", steamId: "steam-india", teamId: 1, squadId: 0 },
-        { name: "Juliet", steamId: "steam-juliet", teamId: 1, squadId: 0 },
-        { name: "Kilo", steamId: "steam-kilo", teamId: 1, squadId: 0 },
-        { name: "Golf", steamId: "steam-golf", teamId: 2, squadId: 0 },
-      ],
-    });
-
-    const rejected = await harness.plugin.api.simulateChatMessage({
-      message: "tb",
-      steamId: "steam-bravo",
-      playerName: "Bravo",
-    });
-    assert.equal(rejected.ok, false);
-    assert.equal(rejected.error, "WarmupDeltaExceeded");
+    assert.equal(harness.warnings.length, 1);
+    assert.match(harness.warnings[0].message, /暖服模式/);
   } finally {
     await harness.stop();
   }
@@ -746,7 +720,7 @@ await testExactTriggersAndTbSuccess();
 await testSqtbConsumesRoundUsageAndDirectApprovalOnlyConsumesApplicantPeriodQuota();
 await testClaimAutoExecutesAndConsumesBothPeriodQuotas();
 await testLockedSquadClaimIsRejected();
-await testWarmupTbIgnoresNormalRestrictionsButChecksPostSwitchDelta();
+await testWarmupTbIsRejectedAndWarned();
 await testPlayerQuotasResetAndRecoveryRoundTrip();
 await testRecoveryRestoresPendingRequestAndRoundQuotaAfterRoundReset();
 await testSqtbExpiresByTtl();

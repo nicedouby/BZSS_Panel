@@ -595,14 +595,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     }
 
     if (Boolean(webStatus?.isWarmup)) {
-      const warmupDelta = calculatePostSwitchDelta(matchState, player);
-      if (warmupDelta == null) {
-        return { ok: false, error: "InvalidTeam", message: "无法计算热身阶段队伍分差。" };
-      }
-      if (warmupDelta >= 6) {
-        return { ok: false, error: "WarmupDeltaExceeded", message: "热身阶段跳边会导致队伍分差达到 6 人或更多。" };
-      }
-      return { ok: true, mode: "warmup" };
+      return {
+        ok: false,
+        error: "WarmupModeDisabled",
+        message: "暖服模式下不触发公平跳边，请切换到非暖服模式。",
+      };
     }
 
     const logClockSeconds = Number(webStatus?.logClockSeconds ?? 0);
@@ -684,18 +681,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     return { ok: true };
   }
 
-  function calculatePostSwitchDelta(matchState, player) {
-    const teamId = Number(player?.teamId ?? player?.teamID ?? 0);
-    const counts = getTeamCounts(matchState);
-    if (teamId === 1) {
-      return Math.abs((counts.team1 - 1) - (counts.team2 + 1));
-    }
-    if (teamId === 2) {
-      return Math.abs((counts.team1 + 1) - (counts.team2 - 1));
-    }
-    return null;
-  }
-
   function formatActor(player, fallback = {}) {
     const steamId = normalizeText(player?.steamId ?? player?.steamID ?? fallback?.steamId);
     const eosId = normalizeText(player?.eosId ?? player?.eosID ?? fallback?.eosId);
@@ -739,7 +724,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       steamId: actor.steamId,
       eosId: actor.eosId,
       message: normalizeText(event?.message),
-      mode: validation.mode ?? (Boolean(webStatus?.isWarmup) ? "warmup" : "normal"),
+      mode: "normal",
     });
 
     if (!validation.ok) {
@@ -767,7 +752,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       steamId: actor.steamId,
       playerName,
       source: `${PLUGIN_ID}.tb`,
-      reason: validation.mode === "warmup" ? "fair_tb_warmup" : "fair_tb_chat",
+      reason: "fair_tb_chat",
       operator: {
         id: PLUGIN_ID,
         name: "FairTeamBalance",
@@ -800,12 +785,10 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       };
     }
 
-    if (validation.mode !== "warmup") {
-      period.tbUsed += 1;
-      period.lastActivityAt = nowIso();
-      period.lastActivityAtMs = Date.now();
-      state.round.publicTbRemaining = Math.max(0, state.round.publicTbRemaining - 1);
-    }
+    period.tbUsed += 1;
+    period.lastActivityAt = nowIso();
+    period.lastActivityAtMs = Date.now();
+    state.round.publicTbRemaining = Math.max(0, state.round.publicTbRemaining - 1);
     consumeRoundUse(playerKey);
 
     await appendLog({
@@ -826,14 +809,18 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     await broadcastMessage(buildQuotaBroadcastMessage({
       playerName,
-      mode: validation.mode === "warmup" ? "warmup" : "tb",
-    }), validation.mode === "warmup" ? "fair_tb_warmup_broadcast" : "fair_tb_broadcast", {
+      mode: "tb",
+    }), "fair_tb_broadcast", {
+      relatedEventId: normalizeText(event?.id ?? event?.seq),
+    });
+
+    await warnPlayer(actor, `公平跳边提醒: 已在非暖服模式执行完成，公共TB剩余 ${state.round.publicTbRemaining}/${runtimeConfig.publicTbLimit}`, "fair_tb_success_warning", {
       relatedEventId: normalizeText(event?.id ?? event?.seq),
     });
 
     return {
       ok: true,
-      mode: validation.mode,
+      mode: "normal",
       result,
       publicTbRemaining: state.round.publicTbRemaining,
     };

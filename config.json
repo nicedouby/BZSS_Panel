@@ -610,6 +610,45 @@
       "allowedInfantryNamesText": "",
       "allowedInfantryPatternsText": ""
     },
+    "stepwiseSquadPlaytimeGuard": {
+      "enabled": true,
+      "directory": "./data/stepwise-squad-playtime-guard",
+      "broadcastOnApproved": true,
+      "warnOnMissingPlaytime": true,
+      "liveLookupWhenMissing": true,
+      "maxRecentRecords": 300,
+      "rules": {
+        "infantry": [
+          {
+            "startSeconds": 0,
+            "endSeconds": 25,
+            "minHoursExclusive": 400
+          },
+          {
+            "startSeconds": 25,
+            "endSeconds": 40,
+            "minHoursExclusive": 200
+          }
+        ],
+        "vehicle": [
+          {
+            "startSeconds": 50,
+            "endSeconds": 60,
+            "minHoursExclusive": 800
+          },
+          {
+            "startSeconds": 60,
+            "endSeconds": 75,
+            "minHoursExclusive": 600
+          },
+          {
+            "startSeconds": 75,
+            "endSeconds": 90,
+            "minHoursExclusive": 400
+          }
+        ]
+      }
+    },
     "fair-team-balance": {
       "enabled": false
     },
