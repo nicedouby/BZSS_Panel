@@ -97,6 +97,18 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     rconStatus: {
       lastError: "",
     },
+    rconPolling: {
+      enabled: false,
+      dynamicEnabled: false,
+      mode: "disabled",
+      playersIntervalMs: polling.playersIntervalMs,
+      squadsIntervalMs: polling.squadsIntervalMs,
+      fastUntilSeconds: 90,
+      mediumUntilSeconds: 180,
+      logClockSeconds: 0,
+      logClockHasAnchor: false,
+      logClockManual: false,
+    },
     logAccess: {
       granted: false,
       pythonLogParser: "unknown",
@@ -132,6 +144,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         lastUpdatedAt: state.squads.lastUpdatedAt,
       },
       rconStatus: { ...state.rconStatus },
+      rconPolling: { ...state.rconPolling },
       logAccess: { ...state.logAccess },
     };
   }
@@ -150,6 +163,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         squads: snapshot.squads.list,
         round: snapshot.round,
         rconStatus: snapshot.rconStatus,
+        rconPolling: snapshot.rconPolling,
         logAccess: snapshot.logAccess,
       };
     },
@@ -607,6 +621,10 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       status: rconStatus.connected ? "connected" : (rconStatus.enabled ? "disconnected" : "disabled"),
       lastUpdatedAt: new Date().toISOString(),
     };
+    state.rconPolling = {
+      ...(rconStatus.polling ?? state.rconPolling),
+      lastUpdatedAt: new Date().toISOString(),
+    };
 
     state.logAccess = {
       granted: logAccessGranted,
@@ -632,6 +650,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       tpsStatus: state.serverStatus.tpsStatus,
       playtime: state.serverStatus.playtime,
       rconStatus: state.rconStatus.status,
+      rconPolling: { ...state.rconPolling },
       logAccessGranted: state.logAccess.granted,
       squadCount: state.squads.count,
       currentLayer: state.serverStatus.layer || "",

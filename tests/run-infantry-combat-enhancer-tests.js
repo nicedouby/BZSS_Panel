@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 
 import { createInfantryCombatEnhancerModule } from "../modules/infantry-combat-enhancer/index.js";
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function createEventBus() {
   const listeners = [];
   return {
@@ -104,6 +108,8 @@ async function testProcessingAndWarnings() {
     },
   });
 
+  await sleep(3000);
+
   assert.equal(calls.length, 2);
   assert.equal(calls[0].sourceModule, "module.infantryCombatEnhancer");
   assert.equal(calls[0].targetName, "Bravo");
@@ -188,6 +194,8 @@ async function testTagDrivenMessages() {
     weaponName: "XX",
     tags: ["combat.damage", "weapon.small_arm", "damage.direct"],
   });
+
+  await sleep(3000);
   assert.equal(calls.at(-2).message, "[BZSS]你被Attacker使用XX造成60伤害");
   assert.equal(calls.at(-1).message, "[BZSS]你使用XX对Victim造成60伤害");
 
@@ -204,6 +212,8 @@ async function testTagDrivenMessages() {
     weaponName: "XX",
     tags: ["combat.team_damage", "friendly_fire", "combat.damage", "weapon.small_arm", "damage.direct"],
   });
+
+  await sleep(3000);
   assert.equal(calls.at(-2).message, "[BZSS]你被<友军>Attacker使用XX造成60伤害");
   assert.equal(calls.at(-1).message, "[BZSS]你他奶奶的使用XX对<友军>Victim，造成60伤害");
 
@@ -277,6 +287,8 @@ async function testOnlyLightWeaponDamageSkipsNonLightWeapons() {
       tags: ["combat.damage", "weapon.explosive", "damage.splash"],
     },
   });
+
+  await sleep(3000);
 
   assert.equal(calls.length, 1);
   assert.equal(calls[0].targetName, "Victim");
@@ -424,6 +436,8 @@ async function testFractionalDamageRoundsToInteger() {
     },
   });
 
+  await sleep(3000);
+
   const events = module.api.getEvents({ limit: 10 });
   assert.equal(events.length, 1);
   assert.equal(events[0].damage, 43);
@@ -449,6 +463,122 @@ async function testCombatCleanDependencyGate() {
   await module.stop();
 }
 
+async function testDamageDebounceAggregatesTwoHits() {
+  const { module, eventBus, calls } = createHarness({
+    moduleConfig: {
+      showOnlyLightWeaponDamage: false,
+    },
+  });
+  await module.start();
+
+  const recordBase = {
+    serverId: "S1",
+    type: "damage",
+    attackerName: "Alpha",
+    attackerSteam64ID: "123",
+    victimName: "Bravo",
+    victimSteam64ID: "456",
+    weaponName: "M4A1",
+    tags: ["weapon.small_arm", "damage.direct"],
+  };
+
+  await eventBus.emitModuleEvent("module.combatClean", "combat.record.processed", {
+    record: {
+      ...recordBase,
+      id: "agg-dmg-1",
+      time: "2026-05-30T13:00:00.000Z",
+      damage: 30,
+    },
+  });
+
+  await eventBus.emitModuleEvent("module.combatClean", "combat.record.processed", {
+    record: {
+      ...recordBase,
+      id: "agg-dmg-2",
+      time: "2026-05-30T13:00:00.200Z",
+      damage: 40,
+    },
+  });
+
+  assert.equal(calls.length, 0);
+
+  await sleep(3000);
+
+  assert.equal(calls.length, 2);
+  assert.ok(String(calls[0].message).includes("70伤害"));
+  assert.ok(String(calls[1].message).includes("70伤害"));
+
+  const events = module.api.getEvents({ limit: 10 });
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, "damage");
+  assert.equal(events[0].damage, 70);
+
+  await module.stop();
+}
+
+async function testWoundMergesPendingDamageExcludingLastHit() {
+  const { module, eventBus, calls } = createHarness({
+    moduleConfig: {
+      showOnlyLightWeaponDamage: false,
+    },
+  });
+  await module.start();
+
+  const recordBase = {
+    serverId: "S1",
+    attackerName: "Alpha",
+    attackerSteam64ID: "123",
+    victimName: "Bravo",
+    victimSteam64ID: "456",
+    weaponName: "M4A1",
+    tags: ["weapon.small_arm"],
+  };
+
+  await eventBus.emitModuleEvent("module.combatClean", "combat.record.processed", {
+    record: {
+      ...recordBase,
+      id: "wound-merge-dmg-1",
+      type: "damage",
+      time: "2026-05-30T13:10:00.000Z",
+      damage: 30,
+    },
+  });
+
+  await eventBus.emitModuleEvent("module.combatClean", "combat.record.processed", {
+    record: {
+      ...recordBase,
+      id: "wound-merge-dmg-2",
+      type: "damage",
+      time: "2026-05-30T13:10:00.200Z",
+      damage: 40,
+    },
+  });
+
+  await eventBus.emitModuleEvent("module.combatClean", "combat.record.processed", {
+    record: {
+      ...recordBase,
+      id: "wound-merge-wound",
+      type: "wound",
+      time: "2026-05-30T13:10:00.400Z",
+      damage: 20,
+    },
+  });
+
+  assert.equal(calls.length, 2);
+  assert.ok(String(calls[0].message).includes("造成50伤害"));
+  assert.ok(String(calls[1].message).includes("造成50伤害"));
+
+  await sleep(3000);
+  assert.equal(calls.length, 2);
+
+  const events = module.api.getEvents({ limit: 10 });
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, "wound");
+  assert.equal(events[0].damage, 50);
+
+  await module.stop();
+}
+
 await testProcessingAndWarnings();
 await testReviveResolvedWarnings();
 await testTagDrivenMessages();
@@ -458,5 +588,7 @@ await testSamePlayerStillDisplays();
 await testKillDisplayIsDisabledByDefault();
 await testFractionalDamageRoundsToInteger();
 await testCombatCleanDependencyGate();
+await testDamageDebounceAggregatesTwoHits();
+await testWoundMergesPendingDamageExcludingLastHit();
 
 console.log("infantry combat enhancer tests passed");

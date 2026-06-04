@@ -58,6 +58,9 @@
           >
             Log {{ logClockLabel }}
           </button>
+          <span class="metric refresh-speed" :class="refreshSpeedTone" :title="refreshSpeedTitle">
+            {{ refreshSpeedLabel }}
+          </span>
           <span v-if="runtimeError" class="metric error optional">{{ runtimeError }}</span>
         </div>
         <UserMenu
@@ -156,6 +159,30 @@ const logClockLabel = computed(() => {
   if (logClockSeconds.value == null) return "--:--";
   return formatDuration(logClockSeconds.value);
 });
+const logClockHasAnchor = computed(() => Boolean(
+  webStatus.value.logClockHasAnchor
+    ?? server.snapshot.logClockHasAnchor
+    ?? server.snapshot.webStatus?.logClockHasAnchor,
+));
+const logClockManual = computed(() => Boolean(
+  webStatus.value.logClockManual
+    ?? server.snapshot.logClockManual
+    ?? server.snapshot.webStatus?.logClockManual,
+));
+const rconPollingSnapshot = computed(() => asRecord(
+  webStatus.value.rconPolling
+    ?? server.snapshot.rconPolling
+    ?? server.snapshot.webStatus?.rconPolling,
+));
+const refreshSpeedPolicy = computed(() => resolveRefreshSpeedPolicy(
+  rconPollingSnapshot.value,
+  logClockSeconds.value,
+  logClockHasAnchor.value,
+  logClockManual.value,
+));
+const refreshSpeedLabel = computed(() => formatRefreshSpeedLabel(refreshSpeedPolicy.value));
+const refreshSpeedTitle = computed(() => formatRefreshSpeedTitle(refreshSpeedPolicy.value, logClockSeconds.value, logClockHasAnchor.value, logClockManual.value));
+const refreshSpeedTone = computed(() => refreshSpeedToneClass(refreshSpeedPolicy.value.mode));
 const rconQueueCount = computed(() => {
   const value = Number(
     webStatus.value.rconQueue
@@ -387,6 +414,140 @@ function formatDuration(totalSeconds: number) {
   }
 
   return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
+}
+
+function resolveRefreshSpeedPolicy(
+  polling: Record<string, any> | null,
+  logClockValue: number | null,
+  hasAnchor: boolean,
+  manual: boolean,
+) {
+  const enabled = Boolean(polling?.enabled ?? true);
+  const dynamicEnabled = Boolean(polling?.dynamicEnabled ?? polling?.dynamic?.enabled ?? true);
+  const fastUntilSeconds = normalizePositiveInteger(polling?.fastUntilSeconds, 90);
+  const mediumUntilSeconds = Math.max(
+    fastUntilSeconds,
+    normalizePositiveInteger(polling?.mediumUntilSeconds, 180),
+  );
+  const seconds = Number.isFinite(Number(logClockValue)) ? Math.max(0, Math.floor(Number(logClockValue))) : 0;
+  const isAnchored = Boolean(hasAnchor) && !Boolean(manual);
+  let mode = String(polling?.mode ?? "disabled");
+
+  if (!enabled) {
+    mode = "disabled";
+  } else if (!dynamicEnabled || !isAnchored) {
+    mode = "fallback";
+  } else if (seconds < fastUntilSeconds) {
+    mode = "fast";
+  } else if (seconds < mediumUntilSeconds) {
+    mode = "medium";
+  } else {
+    mode = "fallback";
+  }
+
+  const playersIntervalMs = resolveIntervalMs(
+    mode === "fast"
+      ? polling?.fastPlayersIntervalMs
+      : mode === "medium"
+        ? polling?.mediumPlayersIntervalMs
+        : polling?.playersIntervalMs,
+    polling?.playersIntervalMs,
+  );
+  const squadsIntervalMs = resolveIntervalMs(
+    mode === "fast"
+      ? polling?.fastSquadsIntervalMs
+      : mode === "medium"
+        ? polling?.mediumSquadsIntervalMs
+        : polling?.squadsIntervalMs,
+    polling?.squadsIntervalMs,
+  );
+
+  return {
+    mode,
+    enabled,
+    dynamicEnabled,
+    fastUntilSeconds,
+    mediumUntilSeconds,
+    logClockSeconds: seconds,
+    playersIntervalMs: playersIntervalMs > 0 ? playersIntervalMs : Number(polling?.playersIntervalMs ?? 0) || 0,
+    squadsIntervalMs: squadsIntervalMs > 0 ? squadsIntervalMs : Number(polling?.squadsIntervalMs ?? 0) || 0,
+  };
+}
+
+function formatRefreshSpeedLabel(policy: Record<string, any>) {
+  if (policy.mode === "disabled") return t("topbar.refreshDisabled");
+  const modeLabel = resolveRefreshModeLabel(policy.mode);
+  return t("topbar.refreshSpeed", "", {
+    mode: modeLabel,
+    players: formatIntervalMs(policy.playersIntervalMs),
+    squads: formatIntervalMs(policy.squadsIntervalMs),
+  });
+}
+
+function formatRefreshSpeedTitle(
+  policy: Record<string, any>,
+  logClockValue: number | null,
+  hasAnchor: boolean,
+  manual: boolean,
+) {
+  if (policy.mode === "disabled") {
+    return t("topbar.refreshDisabledTitle", "Dynamic players/squads refresh is disabled.");
+  }
+
+  const clockLabel = logClockValue == null ? "--:--" : formatDuration(logClockValue);
+  const anchorLabel = manual
+    ? t("topbar.refreshManual", "manual")
+    : hasAnchor
+      ? t("topbar.refreshAnchored", "anchored")
+      : t("topbar.refreshUnanchored", "unanchored");
+
+  return t("topbar.refreshSpeedTitle", "", {
+    clock: clockLabel,
+    state: anchorLabel,
+    players: formatIntervalMs(policy.playersIntervalMs),
+    squads: formatIntervalMs(policy.squadsIntervalMs),
+  });
+}
+
+function resolveRefreshModeLabel(mode: string) {
+  if (mode === "fast") return t("topbar.refreshFast");
+  if (mode === "medium") return t("topbar.refreshMedium");
+  if (mode === "fallback") return t("topbar.refreshFallback");
+  return t("topbar.refreshUnknown");
+}
+
+function formatIntervalMs(value: number) {
+  const ms = Number(value);
+  if (!Number.isFinite(ms) || ms <= 0) return "--";
+  return `${(ms / 1000).toFixed(ms % 1000 === 0 ? 0 : 1)}s`;
+}
+
+function refreshSpeedToneClass(mode: string) {
+  if (mode === "fast") return "refresh-fast";
+  if (mode === "medium") return "refresh-medium";
+  if (mode === "disabled") return "refresh-disabled";
+  return "refresh-fallback";
+}
+
+function asRecord(value: unknown): Record<string, any> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, any>;
+}
+
+function normalizePositiveInteger(value: unknown, fallback: number) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) {
+    return Math.max(1, Math.floor(Number(fallback) || 1));
+  }
+  return Math.max(1, Math.floor(number));
+}
+
+function resolveIntervalMs(value: unknown, fallback: unknown) {
+  const primary = Number(value);
+  if (Number.isFinite(primary) && primary > 0) return Math.floor(primary);
+  const secondary = Number(fallback);
+  if (Number.isFinite(secondary) && secondary > 0) return Math.floor(secondary);
+  return 0;
 }
 
 function parseClockInput(value: string): number | null {
@@ -708,6 +869,33 @@ function toggleSidebar() {
   color: #d7f3ff;
   border-color: rgba(122, 162, 184, 0.32);
   cursor: pointer;
+}
+
+.metric.refresh-speed {
+  color: #d7f3ff;
+  border-color: rgba(122, 162, 184, 0.26);
+}
+
+.metric.refresh-speed.refresh-fast {
+  color: #bbf7d0;
+  border-color: rgba(52, 211, 153, 0.36);
+  background: rgba(52, 211, 153, 0.12);
+}
+
+.metric.refresh-speed.refresh-medium {
+  color: #fde68a;
+  border-color: rgba(245, 158, 11, 0.36);
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.metric.refresh-speed.refresh-fallback {
+  color: #d7f3ff;
+}
+
+.metric.refresh-speed.refresh-disabled {
+  color: #cbd5e1;
+  border-color: rgba(148, 163, 184, 0.28);
+  background: rgba(148, 163, 184, 0.08);
 }
 
 .runtime-badge {

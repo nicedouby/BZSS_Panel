@@ -576,17 +576,7 @@ export class RconManager {
 
   resolvePollingInterval(type) {
     const snapshot = this.webStatus?.getSnapshot?.() ?? {};
-    const policy = resolveRconRefreshPolicy({
-      logClockSeconds: snapshot.logClockSeconds,
-      logClockHasAnchor: snapshot.logClockHasAnchor,
-      logClockManual: snapshot.logClockManual,
-      config: {
-        enabled: this.polling.dynamic.enabled,
-        playersIntervalMs: this.polling.playersIntervalMs,
-        squadsIntervalMs: this.polling.squadsIntervalMs,
-        dynamic: this.polling.dynamic,
-      },
-    });
+    const policy = this.resolvePollingPolicy(snapshot);
 
     if (type === "players") return policy.playersIntervalMs;
     if (type === "squads") return policy.squadsIntervalMs;
@@ -604,11 +594,25 @@ export class RconManager {
   }
 
   getStatus() {
+    const snapshot = this.webStatus?.getSnapshot?.() ?? {};
+    const policy = this.resolvePollingPolicy(snapshot);
     return {
       ...this.status,
       connected: Boolean(this.squadRcon?.connected),
       authenticated: Boolean(this.squadRcon?.loggedIn),
       queueSize: this.getQueueSize(),
+      polling: {
+        enabled: this.polling.enabled,
+        dynamicEnabled: this.polling.dynamic.enabled,
+        mode: policy.mode,
+        playersIntervalMs: policy.playersIntervalMs,
+        squadsIntervalMs: policy.squadsIntervalMs,
+        fastUntilSeconds: policy.fastUntilSeconds,
+        mediumUntilSeconds: policy.mediumUntilSeconds,
+        logClockSeconds: Number(snapshot.logClockSeconds ?? 0) || 0,
+        logClockHasAnchor: Boolean(snapshot.logClockHasAnchor),
+        logClockManual: Boolean(snapshot.logClockManual),
+      },
     };
   }
 
@@ -640,6 +644,20 @@ export class RconManager {
         this.logger.error(`Native RCON log listener failed: ${error.stack ?? error}`);
       }
     }
+  }
+
+  resolvePollingPolicy(snapshot = {}) {
+    return resolveRconRefreshPolicy({
+      logClockSeconds: snapshot.logClockSeconds,
+      logClockHasAnchor: snapshot.logClockHasAnchor,
+      logClockManual: snapshot.logClockManual,
+      config: {
+        enabled: this.polling.dynamic.enabled,
+        playersIntervalMs: this.polling.playersIntervalMs,
+        squadsIntervalMs: this.polling.squadsIntervalMs,
+        dynamic: this.polling.dynamic,
+      },
+    });
   }
 }
 

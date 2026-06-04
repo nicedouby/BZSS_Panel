@@ -13,6 +13,8 @@ const DEFAULT_CONFIG = Object.freeze({
   storeRecentEventLimit: 300,
 });
 
+const DAMAGE_DEBOUNCE_MS = 500;
+
 const VALID_TYPES = new Set(["damage", "wound", "kill", "revive"]);
 const COMBAT_CLEAN_SUBSCRIPTION_ID = "module.combatClean";
 
@@ -24,6 +26,7 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
   }) ?? core.logger;
   const moduleConfig = normalizeModuleConfig(config?.get?.("modules.infantryCombatEnhancer", {}));
   const store = new InfantryEnhancerStore(moduleConfig.storeRecentEventLimit);
+  const damageAggregation = new Map();
   const unsubscribers = [];
   let lastUpdatedAt = "";
 
@@ -127,32 +130,168 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
       attackerWarning: null,
     };
 
-    const victimDecision = buildVictimDecision(baseEntry);
-    const attackerDecision = buildAttackerDecision(baseEntry);
+    if (baseEntry.type === "damage") {
+      bufferDamageEntry(baseEntry);
+      return null;
+    }
+
+    if (baseEntry.type === "wound") {
+      mergePendingDamageIntoWound(baseEntry);
+    }
+
+    return processEntryNow(baseEntry);
+  }
+
+  function makeAggregationKey(entry) {
+    const server = normalizeText(entry?.serverId);
+    const attackerKey = normalizeText(pickText(entry?.attackerSteam64ID, entry?.attackerEOSID, entry?.attackerControllerID, entry?.attackerName));
+    const victimKey = normalizeText(pickText(entry?.victimSteam64ID, entry?.victimEOSID, entry?.victimControllerID, entry?.victimName));
+    const weaponKey = normalizeText(entry?.weapon);
+    return `${server}|${attackerKey}|${victimKey}|${weaponKey}`;
+  }
+
+  function mergeTextArray(left, right) {
+    const result = [];
+    const seen = new Set();
+    for (const value of [...(Array.isArray(left) ? left : []), ...(Array.isArray(right) ? right : [])]) {
+      const text = String(value ?? "");
+      if (!text) continue;
+      if (seen.has(text)) continue;
+      seen.add(text);
+      result.push(text);
+    }
+    return result;
+  }
+
+  function mergeEventFlags(left, right) {
+    const result = [];
+    const seen = new Set();
+    const items = [...(Array.isArray(left) ? left : []), ...(Array.isArray(right) ? right : [])].filter((item) => item && typeof item === "object");
+    for (const item of items) {
+      const key = String(item.key ?? "").trim();
+      const label = String(item.label ?? "").trim();
+      const id = `${key}|${label}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      result.push(cloneJsonSafe(item));
+    }
+    return result;
+  }
+
+  function takeDamageBuffer(key) {
+    const buffer = damageAggregation.get(key);
+    if (!buffer) return null;
+    damageAggregation.delete(key);
+    if (buffer.timeoutId) {
+      try {
+        clearTimeout(buffer.timeoutId);
+      } catch {}
+    }
+    return buffer;
+  }
+
+  function bufferDamageEntry(entry) {
+    const key = makeAggregationKey(entry);
+    const nextDamage = Number.isFinite(entry.damage) ? entry.damage : 0;
+    const existing = damageAggregation.get(key);
+
+    const merged = existing ?? {
+      sumDamage: 0,
+      lastDamage: 0,
+      templateEntry: null,
+      tags: [],
+      eventFlags: [],
+      eventFlagLabels: [],
+      timeoutId: null,
+    };
+
+    if (merged.timeoutId) {
+      try {
+        clearTimeout(merged.timeoutId);
+      } catch {}
+    }
+
+    merged.sumDamage += nextDamage;
+    merged.lastDamage = nextDamage;
+    merged.templateEntry = cloneJsonSafe(entry);
+    merged.tags = mergeTextArray(merged.tags, entry.tags);
+    merged.eventFlags = mergeEventFlags(merged.eventFlags, entry.eventFlags);
+    merged.eventFlagLabels = mergeTextArray(merged.eventFlagLabels, entry.eventFlagLabels);
+
+    merged.timeoutId = setTimeout(() => {
+      flushDamageKey(key);
+    }, DAMAGE_DEBOUNCE_MS);
+
+    damageAggregation.set(key, merged);
+  }
+
+  function flushDamageKey(key) {
+    const buffer = takeDamageBuffer(key);
+    if (!buffer) return;
+    if (!isEnabled() || !isSubscribed()) return;
+
+    const template = buffer.templateEntry;
+    if (!template || typeof template !== "object") return;
+
+    const aggregatedEntry = cloneJsonSafe(template);
+    aggregatedEntry.damage = normalizeDamage(buffer.sumDamage);
+    aggregatedEntry.tags = mergeTextArray(aggregatedEntry.tags, buffer.tags);
+    aggregatedEntry.eventFlags = mergeEventFlags(aggregatedEntry.eventFlags, buffer.eventFlags);
+    aggregatedEntry.eventFlagLabels = mergeTextArray(aggregatedEntry.eventFlagLabels, buffer.eventFlagLabels);
+    aggregatedEntry.victimWarning = null;
+    aggregatedEntry.attackerWarning = null;
+    aggregatedEntry.warnings = [];
+
+    processEntryNow(aggregatedEntry).catch((error) => {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      moduleLogger?.warn?.(`Infantry combat damage flush failed: ${errorMessage}`);
+    });
+  }
+
+  function mergePendingDamageIntoWound(woundEntry) {
+    const key = makeAggregationKey(woundEntry);
+    const buffer = takeDamageBuffer(key);
+    if (!buffer) return;
+
+    const extra = Math.max(0, Number(buffer.sumDamage ?? 0) - Number(buffer.lastDamage ?? 0));
+    if (Number.isFinite(woundEntry.damage)) {
+      woundEntry.damage = normalizeDamage(woundEntry.damage + extra);
+    } else if (Number.isFinite(extra)) {
+      woundEntry.damage = normalizeDamage(extra);
+    }
+
+    woundEntry.tags = mergeTextArray(woundEntry.tags, buffer.tags);
+    woundEntry.eventFlags = mergeEventFlags(woundEntry.eventFlags, buffer.eventFlags);
+    woundEntry.eventFlagLabels = mergeTextArray(woundEntry.eventFlagLabels, buffer.eventFlagLabels);
+  }
+
+  async function processEntryNow(entry) {
+    const victimDecision = buildVictimDecision(entry);
+    const attackerDecision = buildAttackerDecision(entry);
 
     const [victimWarning, attackerWarning] = await Promise.all([
       executeDecision(victimDecision),
       executeDecision(attackerDecision),
     ]);
 
-    baseEntry.victimWarning = victimWarning;
-    baseEntry.attackerWarning = attackerWarning;
-    baseEntry.warnings = [victimWarning, attackerWarning].filter(Boolean);
+    entry.victimWarning = victimWarning;
+    entry.attackerWarning = attackerWarning;
+    entry.warnings = [victimWarning, attackerWarning].filter(Boolean);
 
-    store.push(baseEntry);
-    lastUpdatedAt = processedAt;
+    store.push(entry);
+    lastUpdatedAt = new Date().toISOString();
 
     core.eventBus?.emitModuleEvent?.("module.infantryCombatEnhancer", "updated", {
       eventName: "module.infantryCombatEnhancer.updated",
       layer: "module",
       source: "module.infantryCombatEnhancer",
-      serverId,
-      time: processedAt,
-      record: cloneJsonSafe(baseEntry),
+      serverId: entry.serverId,
+      time: lastUpdatedAt,
+      record: cloneJsonSafe(entry),
       overview: buildOverview(),
     });
 
-    return baseEntry;
+    return entry;
   }
 
   function buildVictimDecision(entry) {
@@ -562,6 +701,16 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
           unsubscribe();
         } catch {}
       }
+
+      for (const buffer of damageAggregation.values()) {
+        if (buffer?.timeoutId) {
+          try {
+            clearTimeout(buffer.timeoutId);
+          } catch {}
+        }
+      }
+      damageAggregation.clear();
+
       store.clear();
       moduleLogger?.info?.("InfantryCombatEnhancer stopped.");
     },
