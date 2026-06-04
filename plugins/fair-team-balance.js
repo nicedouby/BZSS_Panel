@@ -1050,6 +1050,15 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         };
       }
 
+      const webStatus = getCurrentWebStatus();
+      if (Boolean(webStatus?.isWarmup)) {
+        return {
+          ok: false,
+          error: "WarmupModeDisabled",
+          message: "鏆栨湇妯″紡涓嬪凡鍏抽棴鍏钩璺宠竟锛岃鍒囨崲鍒伴潪鏆栨湇妯″紡鍚庡啀澶勭悊璇锋眰銆?",
+        };
+      }
+
       const serverId = getServerId(request.serverId);
       const matchState = getCurrentMatchState(serverId);
       const applicantLive = findPlayerByActor(matchState, request.applicant) ?? request.applicant;

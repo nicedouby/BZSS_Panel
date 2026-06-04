@@ -12,6 +12,9 @@ const DEFAULT_NO_CREATE_SECONDS = 20;
 const DEFAULT_INFANTRY_ONLY_UNTIL_SECONDS = 50;
 const DEFAULT_MAX_VIOLATIONS_BEFORE_KICK = 15;
 const DEFAULT_DISBAND_COMMAND_NAME_SUFFIX = "x";
+const CREATION_COOLDOWN_MS = 3000;
+const KICK_RETRY_DELAY_MS = 1000;
+const KICK_RETRY_COUNT = 3;
 
 const DEFAULT_INFANTRY_PATTERNS = Object.freeze([
   "^squad\\s*\\d+$",
@@ -203,6 +206,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     state.pendingLogs.clear();
     state.seenSlots.clear();
     state.violationPlayers.clear();
+    state.creationCooldowns.clear();
     state.summary = createEmptySummary();
     if (options.keepLock) {
       state.session.midRoundLocked = true;
@@ -296,7 +300,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     const serverId = getServerId(event.serverId);
     const population = getPopulation(serverId);
     const clock = ensureClockSafety();
-    let slotKey = buildSlotKey(event);
+    const slotKey = buildSlotKey(event);
 
     if (!isActive()) {
       state.seenSlots.add(slotKey);
@@ -310,24 +314,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     if (!clock.trusted && !state.session.manualUnlockAt) {
       state.seenSlots.add(slotKey);
-      return null;
-    }
-
-    if (event.teamId == null && event.creationSource === "LOG") {
-      const existingRecord = findRecordForLog(event);
-      if (existingRecord?.teamId != null) {
-        event.teamId = existingRecord.teamId;
-        slotKey = buildSlotKey(event);
-      }
-    }
-
-    if (event.teamId == null && event.creationSource === "LOG") {
-      const pendingKey = buildPendingKey(event);
-      state.pendingLogs.set(pendingKey, {
-        ...event,
-        pendingKey,
-        queuedAt: nowIso(),
-      });
       return null;
     }
 
@@ -363,6 +349,16 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
   function decideCreation(record, clock) {
     const seconds = Math.max(0, Math.floor(Number(clock.seconds ?? 0) || 0));
+    const cooldown = getCreationCooldown(record, state);
+    if (cooldown.active) {
+      return {
+        approved: false,
+        phase: "kick_cooldown",
+        phaseLabel: "kick cooldown",
+        reasons: [`Kick cooldown active for ${cooldown.remainingSeconds}s.`],
+      };
+    }
+
     if (seconds < runtimeConfig.noSquadCreationSeconds) {
       return {
         approved: false,
@@ -398,11 +394,14 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     const alreadyWarned = record.actions.some((action) => action.type === "warned" || action.type === "warn_failed");
     if (!alreadyWarned && record.isLogConfirmed && hasCreatorIdentity(record)) {
+      const cooldown = armCreationCooldown(record, state);
+      record.cooldownUntil = cooldown.untilIso;
       const warnResult = await warnCreator(record);
       record.actions.push({
         type: warnResult?.success === false ? "warn_failed" : "warned",
         target: record.creatorName || record.creatorSteamId || record.creatorEosId,
         result: summarizeActionResult(warnResult),
+        cooldownUntil: cooldown.untilIso,
       });
       state.summary.warned += warnResult?.success === false ? 0 : 1;
     } else if (!alreadyWarned && (record.inferredLeader?.name || record.inferredLeader?.steamId || record.inferredLeader?.eosId)) {
@@ -421,6 +420,10 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         squadId: record.squadId,
         result: summarizeActionResult(disbandResult),
       });
+      if (disbandResult?.ok !== false) {
+        record.active = false;
+        record.resolvedAt = nowIso();
+      }
       state.summary.disbanded += disbandResult?.ok === false ? 0 : 1;
     } else if (!alreadyDisbanded) {
       record.actions.push({ type: "disband_skipped", reason: "team_or_squad_missing" });
@@ -440,6 +443,10 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           target: record.creatorName || record.creatorSteamId || record.creatorEosId,
           result: summarizeActionResult(kickResult),
         });
+        if (playerState.kicked) {
+          record.active = false;
+          record.resolvedAt = playerState.kickedAt;
+        }
         state.summary.kicked += playerState.kicked ? 1 : 0;
       }
     }
@@ -454,7 +461,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       targetName,
       targetSteamId: record.creatorSteamId,
       targetEosId: record.creatorEosId,
-      message: `Squad creation rule violation: ${record.reasons.join(" ")}`,
+      message: `Squad creation rule violation: ${record.reasons.join(" ")} 接下来三秒你将无法建队。`,
       reason: "fair_squad_guard_violation",
       sourceModule: PLUGIN_ID,
       relatedEventId: record.id,
@@ -494,12 +501,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       system: true,
       operatorName: PLUGIN_ID,
     };
-    if (typeof api?.requestKick === "function") return await api.requestKick(request);
-    if (typeof api?.kick === "function") return await api.kick(request);
-    if (typeof api?.executeAction === "function") {
-      return await api.executeAction({ ...request, type: "kick_player" });
-    }
-    return { ok: false, error: "squad_management_unavailable" };
+    return await executeKickBurst(record, request, api, modules);
   }
 
   function rememberRecord(record, options = {}) {
@@ -772,7 +774,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
       if (typeof core?.eventBus?.onModuleEvent === "function") {
         unsubscribers.push(core.eventBus.onModuleEvent("module.squadLifecycle", "squadCreated", handleLifecycleSquadCreated));
-        unsubscribers.push(core.eventBus.onModuleEvent("module.squadManagement", "squadsUpdated", handleSquadsUpdated));
       }
 
       if (typeof core?.eventBus?.onCoreEvent === "function") {
@@ -832,6 +833,7 @@ function createInitialState() {
     pendingLogs: new Map(),
     seenSlots: new Set(),
     violationPlayers: new Map(),
+    creationCooldowns: new Map(),
     recovery: {
       lastRecoveredAt: "",
       recoveredLineCount: 0,
@@ -1014,6 +1016,91 @@ function summarizeActionResult(result) {
 
 function cloneRecord(record) {
   return JSON.parse(JSON.stringify(record));
+}
+
+function nowMs() {
+  return Date.now();
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getCreationCooldown(record, stateRef) {
+  const key = buildCreatorKey(record);
+  const untilMs = Number(stateRef?.creationCooldowns?.get(key) ?? 0);
+  if (untilMs <= nowMs()) {
+    stateRef?.creationCooldowns?.delete(key);
+    return { active: false, untilMs: 0, untilIso: "", remainingSeconds: 0 };
+  }
+  return {
+    active: true,
+    untilMs,
+    untilIso: new Date(untilMs).toISOString(),
+    remainingSeconds: Math.max(1, Math.ceil((untilMs - nowMs()) / 1000)),
+  };
+}
+
+function armCreationCooldown(record, stateRef) {
+  const key = buildCreatorKey(record);
+  const untilMs = nowMs() + CREATION_COOLDOWN_MS;
+  stateRef?.creationCooldowns?.set(key, untilMs);
+  return {
+    key,
+    untilMs,
+    untilIso: new Date(untilMs).toISOString(),
+  };
+}
+
+async function executeKickBurst(record, request, api, modulesRef) {
+  if (!api) return { ok: false, error: "squad_management_unavailable", attempts: [] };
+  const attempts = [];
+  for (let index = 0; index < KICK_RETRY_COUNT; index += 1) {
+    await showKickNotice(record, index + 1, modulesRef);
+    const result = await executeSingleKick(api, request);
+    attempts.push({
+      attempt: index + 1,
+      ok: result?.ok !== false,
+      error: result?.error ?? "",
+      message: result?.message ?? "",
+    });
+    if (index < KICK_RETRY_COUNT - 1) {
+      await sleep(KICK_RETRY_DELAY_MS);
+    }
+  }
+  const success = attempts.some((item) => item.ok);
+  return {
+    ok: success,
+    error: success ? "" : (attempts[attempts.length - 1]?.error ?? "kick_failed"),
+    message: success ? "Kick burst executed." : (attempts[attempts.length - 1]?.message ?? ""),
+    attempts,
+  };
+}
+
+async function executeSingleKick(api, request) {
+  if (typeof api?.requestKick === "function") return await api.requestKick(request);
+  if (typeof api?.kick === "function") return await api.kick(request);
+  if (typeof api?.executeAction === "function") {
+    return await api.executeAction({ ...request, type: "kick_player" });
+  }
+  return { ok: false, error: "squad_management_unavailable" };
+}
+
+async function showKickNotice(record, attempt, modulesRef) {
+  const sender = modulesRef?.adminWarn?.sendAdminWarn ?? modulesRef?.adminWarn?.warnPlayer;
+  if (typeof sender !== "function") return { success: false, skipped: true, skipReason: "admin_warn_unavailable" };
+  const targetName = record.creatorName || record.creatorSteamId || record.creatorEosId;
+  if (!targetName) return { success: false, skipped: true, skipReason: "target_missing" };
+  return await sender.call(modulesRef.adminWarn, {
+    targetName,
+    targetSteamId: record.creatorSteamId,
+    targetEosId: record.creatorEosId,
+    message: "kick",
+    reason: `fair_squad_guard_kick_attempt_${attempt}`,
+    sourceModule: PLUGIN_ID,
+    relatedEventId: record.id,
+    system: true,
+  }).catch((error) => ({ success: false, error: error?.message ?? String(error) }));
 }
 
 function normalizeText(value) {

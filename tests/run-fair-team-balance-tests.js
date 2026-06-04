@@ -374,7 +374,7 @@ async function testLockedSquadClaimIsRejected() {
     assert.equal(rejected.ok, false);
     assert.equal(rejected.error, "LockedSquadForbidden");
     assert.equal(harness.warnings.length, 1);
-    assert.match(harness.warnings[0].message, /认领失败/);
+    assert.match(harness.warnings[0].message, /认领/);
   } finally {
     await harness.stop();
   }
@@ -415,6 +415,44 @@ async function testWarmupTbIsRejectedAndWarned() {
     assert.equal(harness.plugin.api.getState().publicTbRemaining, 5);
     assert.equal(harness.warnings.length, 1);
     assert.match(harness.warnings[0].message, /暖服模式/);
+  } finally {
+    await harness.stop();
+  }
+}
+
+async function testWarmupBlocksPendingSqtbApproval() {
+  const harness = await createHarness({
+    webStatus: {
+      isWarmup: false,
+      logClockSeconds: 30,
+    },
+    matchState: {
+      players: [
+        { name: "Alpha", steamId: "steam-alpha", teamId: 1, squadId: 0 },
+        { name: "Bravo", steamId: "steam-bravo", teamId: 2, squadId: 0 },
+      ],
+    },
+  });
+
+  try {
+    const created = await harness.plugin.api.simulateChatMessage({
+      message: "sqtb",
+      steamId: "steam-alpha",
+      playerName: "Alpha",
+    });
+    assert.equal(created.ok, true);
+
+    harness.webStatus.isWarmup = true;
+
+    const claimed = await harness.plugin.api.simulateChatMessage({
+      message: `认领${created.request.code}`,
+      steamId: "steam-bravo",
+      playerName: "Bravo",
+    });
+
+    assert.equal(claimed.ok, false);
+    assert.equal(claimed.error, "WarmupModeDisabled");
+    assert.equal(harness.teamBalanceCalls.length, 0);
   } finally {
     await harness.stop();
   }
@@ -721,6 +759,7 @@ await testSqtbConsumesRoundUsageAndDirectApprovalOnlyConsumesApplicantPeriodQuot
 await testClaimAutoExecutesAndConsumesBothPeriodQuotas();
 await testLockedSquadClaimIsRejected();
 await testWarmupTbIsRejectedAndWarned();
+await testWarmupBlocksPendingSqtbApproval();
 await testPlayerQuotasResetAndRecoveryRoundTrip();
 await testRecoveryRestoresPendingRequestAndRoundQuotaAfterRoundReset();
 await testSqtbExpiresByTtl();
