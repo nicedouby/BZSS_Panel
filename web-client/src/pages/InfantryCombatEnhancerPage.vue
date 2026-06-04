@@ -10,41 +10,37 @@
       </template>
     </PageHeader>
 
-    <DataState
-      class="ice-state"
-      :loading="isEventsLoading || isConfigLoading"
-      :error="pageError"
-    >
-      <div class="ice-shell">
-        <div class="ice-top">
-          <InfantryCombatSummaryBar :overview="overview" :loading="isEventsFetching" />
+    <div class="ice-shell">
+      <div class="ice-top">
+        <InfantryCombatSummaryBar :overview="overview" :loading="isEventsFetching" />
 
-          <InfantryCombatToolbar
-            :filters="filters"
-            :loading="isEventsFetching || isConfigLoading"
-            @update:filters="updateFilters"
-          />
-        </div>
-
-        <div
-          class="ice-main"
-          :class="{ 'ice-main--with-detail': Boolean(selectedEvent) }"
-        >
-          <InfantryCombatEventTable
-            class="ice-table-pane"
-            :events="visibleEvents"
-            :selected-id="selectedEvent?.id"
-            @select="setSelectedEvent"
-          />
-
-          <InfantryCombatEventDetail
-            class="ice-detail-pane"
-            :event="selectedEvent"
-            @close="setSelectedEvent(null)"
-          />
-        </div>
+        <InfantryCombatToolbar
+          :filters="filters"
+          :loading="isEventsFetching || isConfigLoading"
+          @update:filters="updateFilters"
+        />
       </div>
-    </DataState>
+
+      <div
+        class="ice-main"
+        :class="{ 'ice-main--with-detail': Boolean(selectedEvent) }"
+      >
+        <InfantryCombatEventTable
+          class="ice-table-pane"
+          :events="visibleEvents"
+          :selected-id="selectedEvent?.id"
+          :loading="isEventsLoading"
+          :error="pageError"
+          @select="setSelectedEvent"
+        />
+
+        <InfantryCombatEventDetail
+          class="ice-detail-pane"
+          :event="selectedEvent"
+          @close="setSelectedEvent(null)"
+        />
+      </div>
+    </div>
 
     <InfantryCombatSettingsDrawer
       v-model:open="settingsOpen"

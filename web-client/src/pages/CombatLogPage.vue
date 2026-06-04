@@ -87,7 +87,7 @@
               @keydown.enter.prevent="runSearch"
             >
             <button type="button" class="mini-button" @click="clearSearch" :disabled="!search">清空</button>
-            <select v-model.number="limit" class="limit-select" @change="reloadEntries">
+            <select v-model.number="limit" class="limit-select" @change="() => reloadEntries()">
               <option :value="100">100</option>
               <option :value="200">200</option>
               <option :value="500">500</option>
@@ -95,7 +95,7 @@
             </select>
             <button type="button" @click="pageNewer" :disabled="offset <= 0">更新的</button>
             <button type="button" @click="pageOlder" :disabled="!hasMoreOlder">更旧的</button>
-            <button type="button" @click="reloadEntries">刷新当前页</button>
+            <button type="button" @click="() => reloadEntries()">刷新当前页</button>
           </div>
 
           <div class="meta">

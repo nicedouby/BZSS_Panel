@@ -96,6 +96,7 @@
               <th>时间</th>
               <th>类型</th>
               <th>玩家</th>
+              <th>IP</th>
               <th>服务器</th>
               <th>事件名</th>
               <th>事件ID</th>
@@ -104,7 +105,7 @@
           </thead>
           <tbody>
             <tr v-if="!filteredRecords.length">
-              <td colspan="7" class="empty-cell">暂无记录</td>
+              <td colspan="8" class="empty-cell">暂无记录</td>
             </tr>
             <tr v-for="item in filteredRecords" :key="item.id">
               <td>{{ formatTime(item.at || item.time) }}</td>
@@ -114,6 +115,7 @@
                 </span>
               </td>
               <td class="truncate">{{ item.playerName || "-" }}</td>
+              <td>{{ item.ip || "-" }}</td>
               <td class="truncate">{{ item.serverId || "-" }}</td>
               <td class="truncate">{{ item.eventName || "-" }}</td>
               <td class="truncate">{{ item.eventId || "-" }}</td>
@@ -147,6 +149,7 @@ type SessionRecord = {
   eventId?: string;
   serverId?: string;
   playerName?: string;
+  ip?: string;
   hasPayload?: boolean;
   hasParams?: boolean;
   hasParamMap?: boolean;

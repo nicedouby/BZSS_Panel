@@ -2,18 +2,16 @@
   <section class="page fair-team-balance-page">
     <PageHeader
       eyebrow="Plugin"
-      title="公平跳边"
-      subtitle="玩家认领后直接执行；无人认领时，管理员只负责协助跳边，不再走审批式流程。"
+      title="均衡组队系统"
+      subtitle="管理公平组队插件的状态与请求。系统将自动平衡小队实力并记录所有 TB/SQTB 变更。"
     >
       <template #actions>
-        <span class="status-chip" :data-tone="systemTone">{{ systemStatusLabel }}</span>
         <button
           type="button"
           class="ghost-btn"
-          :disabled="loadingState || loadingRequests"
           @click="refreshPanel"
         >
-          {{ loadingState || loadingRequests ? "同步中..." : "刷新状态" }}
+          刷新面板
         </button>
       </template>
     </PageHeader>
@@ -22,7 +20,7 @@
       {{ stateError }}
     </div>
 
-    <PageCard class="hero-card" title="运行总览" description="当前插件状态、模式和最近恢复情况" compact>
+    <PageCard class="hero-card" title="系统概览" description="实时监控均衡组队系统的运行状态与核心指标。" compact>
       <template #actions>
         <span class="status-chip subtle">{{ modeLabel }}</span>
       </template>
@@ -31,13 +29,13 @@
         <div class="hero-main">
           <div class="hero-badges">
             <span class="status-chip" :data-tone="systemTone">{{ systemStatusLabel }}</span>
-            <span class="status-chip subtle">日志钟 {{ fairState.logClockSeconds }}s</span>
-            <span class="status-chip subtle">恢复 {{ fairState.recovery.recoveredLineCount }} 条</span>
+            <span class="status-chip subtle">同步延迟: {{ fairState.logClockSeconds }}s</span>
+            <span class="status-chip subtle">数据恢复: {{ fairState.recovery.recoveredLineCount }} 条</span>
           </div>
 
           <dl class="hero-metrics">
             <div>
-              <dt>插件状态</dt>
+              <dt>系统状态</dt>
               <dd>{{ systemStatusLabel }}</dd>
             </div>
             <div>
@@ -45,7 +43,7 @@
               <dd>{{ modeLabel }}</dd>
             </div>
             <div>
-              <dt>上次重置</dt>
+              <dt>上次重置时间</dt>
               <dd>{{ formatTime(fairState.lastRoundResetAt) }}</dd>
             </div>
             <div>
@@ -55,15 +53,15 @@
           </dl>
 
           <div class="hero-meta">
-            <span>日志恢复: {{ formatTime(fairState.recovery.lastRecoveredAt) }}</span>
+            <span>数据更新: {{ formatTime(fairState.recovery.lastRecoveredAt) }}</span>
             <span>公共 TB: {{ fairState.publicTbRemaining }} / {{ fairState.publicTbLimit }}</span>
             <span>待认领: {{ fairState.pendingClaimCount }}</span>
-            <span>协助处理中: {{ fairState.pendingApprovalCount }}</span>
+            <span>待审批: {{ fairState.pendingApprovalCount }}</span>
           </div>
         </div>
 
         <div class="hero-side">
-          <p class="hero-side__label">管理动作</p>
+          <p class="hero-side__label">紧急操作</p>
           <div class="action-stack">
             <button
               type="button"
@@ -71,7 +69,7 @@
               :disabled="resettingAction !== ''"
               @click="resetPeriodQuotas"
             >
-              {{ resettingAction === "period" ? "重置中..." : "重置周期额度" }}
+              {{ resettingAction === "period" ? "重置中..." : "重置周期配额" }}
             </button>
             <button
               type="button"
@@ -79,59 +77,88 @@
               :disabled="resettingAction !== ''"
               @click="resetRoundQuota"
             >
-              {{ resettingAction === "round" ? "重置中..." : "重置本局额度" }}
+              {{ resettingAction === "round" ? "重置中..." : "重置单局配额" }}
             </button>
           </div>
           <p class="hero-side__note">
-            重置周期额度作用于全部已记录玩家；重置本局额度仅清除本局占用状态。
+            重置操作将立即清空相关配额限制，并可能触发系统重新计算。请谨慎操作。
           </p>
+
+          <div class="broadcast-card">
+            <div class="broadcast-card__head">
+              <p class="hero-side__label">定时广播记录</p>
+              <span class="status-chip subtle">{{ loadingBroadcasts ? "..." : broadcastItems.length }}</span>
+            </div>
+
+            <div v-if="broadcastError" class="mini-banner">
+              {{ broadcastError }}
+            </div>
+            <p v-else-if="loadingBroadcasts" class="mini-empty">正在加载定时广播...</p>
+            <p v-else-if="!broadcastItems.length" class="mini-empty">暂无定时广播记录</p>
+            <div v-else class="broadcast-list">
+              <article v-for="item in broadcastItems" :key="item.id" class="broadcast-item">
+                <div class="broadcast-item__head">
+                  <strong>{{ item.title || "未命名广播" }}</strong>
+                  <span :data-tone="item.enabled ? 'ok' : 'muted'">
+                    {{ item.enabled ? "已启用" : "已停用" }}
+                  </span>
+                </div>
+                <div class="broadcast-item__meta">
+                  <span>上次: {{ formatBroadcastTime(item.lastRunAt) }}</span>
+                  <span>下次: {{ formatBroadcastTime(item.nextRunAt) }}</span>
+                  <span>成功: {{ item.runCount ?? 0 }}</span>
+                </div>
+                <p class="broadcast-item__message">{{ item.message || "未配置内容" }}</p>
+              </article>
+            </div>
+          </div>
         </div>
       </div>
     </PageCard>
 
-    <section class="summary-grid" aria-label="公平跳边关键指标">
+    <section class="summary-grid" aria-label="均衡组队核心数据概览">
       <article class="summary-card" data-tone="info">
         <span>公共 TB 剩余</span>
         <strong>{{ fairState.publicTbRemaining }} / {{ fairState.publicTbLimit }}</strong>
-        <em>对局内共享额度</em>
+        <em>当前本局剩余可用 TB 总额</em>
       </article>
       <article class="summary-card" data-tone="info">
-        <span>周期 TB 额度</span>
+        <span>周期 TB 限制</span>
         <strong>{{ fairState.periodTbLimit }}</strong>
-        <em>18 小时滚动上限</em>
+        <em>每个滚动周期内允许的 TB 数</em>
       </article>
       <article class="summary-card" data-tone="warning">
-        <span>周期 SQTB / 认领额度</span>
+        <span>周期 SQTB 限制</span>
         <strong>{{ fairState.periodSqtbClaimLimit }}</strong>
-        <em>用于 `sqtb` 认领与内部协助</em>
+        <em>周期内允许发起的 SQTB 认领数</em>
       </article>
       <article class="summary-card" data-tone="ok">
-        <span>本局已占用</span>
+        <span>本局已用名额</span>
         <strong>{{ fairState.roundUsedCount }}</strong>
-        <em>当前局内占用人数</em>
+        <em>本局已执行的 TB/SQTB 变更</em>
       </article>
       <article class="summary-card" data-tone="warning">
-        <span>待认领申请</span>
+        <span>待认领请求</span>
         <strong>{{ fairState.pendingClaimCount }}</strong>
-        <em>等待玩家领取的申请</em>
+        <em>玩家已发起但未被管理员认领的请求</em>
       </article>
       <article class="summary-card" data-tone="danger">
-        <span>协助处理中</span>
+        <span>待审批请求</span>
         <strong>{{ fairState.pendingApprovalCount }}</strong>
-        <em>管理员协助完成的申请</em>
+        <em>管理员已认领但未最终确认的请求</em>
       </article>
     </section>
 
     <section class="detail-grid">
-      <PageCard class="quota-card" title="玩家额度情况" description="优先展示最近有活动或刚使用过额度的玩家" compact>
+      <PageCard class="quota-card" title="玩家配额审计" description="监控所有在周期内活跃过的玩家配额使用情况。" compact>
         <template #actions>
-          <span class="status-chip subtle">记录 {{ sortedPlayerQuotas.length }}</span>
+          <span class="status-chip subtle">总计 {{ sortedPlayerQuotas.length }}</span>
         </template>
 
         <div v-if="quotaError" class="error-banner">
           {{ quotaError }}
         </div>
-        <p v-else-if="!sortedPlayerQuotas.length" class="empty-state">当前没有已记录玩家额度。</p>
+        <p v-else-if="!sortedPlayerQuotas.length" class="empty-state">暂无活跃玩家配额数据。</p>
 
         <div v-else class="quota-list">
           <article v-for="quota in sortedPlayerQuotas" :key="quota.playerKey" class="quota-item">
@@ -141,21 +168,21 @@
                 <span>{{ quota.steamId || quota.eosId || quota.playerKey }}</span>
               </div>
               <span class="quota-badge" :data-tone="quota.hasRoundUse ? 'ok' : 'muted'">
-                {{ quota.hasRoundUse ? "本局已占用" : "本局未占用" }}
+                {{ quota.hasRoundUse ? "本局已使用" : "本局未使用" }}
               </span>
             </div>
 
             <dl class="quota-grid">
               <div>
-                <dt>周期 TB</dt>
+                <dt>已用周期 TB</dt>
                 <dd>{{ quota.tbUsed }} / {{ fairState.periodTbLimit }}</dd>
               </div>
               <div>
-                <dt>周期 SQTB / 认领</dt>
+                <dt>已用周期 SQTB</dt>
                 <dd>{{ quota.sqtbClaimUsed }} / {{ fairState.periodSqtbClaimLimit }}</dd>
               </div>
               <div>
-                <dt>周期开始</dt>
+                <dt>周期起始</dt>
                 <dd>{{ formatTime(quota.periodStartedAt) }}</dd>
               </div>
               <div>
@@ -167,7 +194,7 @@
         </div>
       </PageCard>
 
-      <PageCard class="request-card" title="SQTB 认领队列" description="玩家认领后直接执行；无人认领时由管理员协助跳边" compact>
+      <PageCard class="request-card" title="SQTB 实时认领" description="管理所有待处理的 SQTB 认领请求。支持直接审批或认领后审批。" compact>
         <template #actions>
           <button
             type="button"
@@ -175,56 +202,56 @@
             :disabled="loadingRequests"
             @click="loadRequests"
           >
-            {{ loadingRequests ? "刷新中..." : "刷新申请" }}
+            {{ loadingRequests ? "同步中..." : "刷新列表" }}
           </button>
         </template>
 
         <div v-if="requestsError" class="error-banner">
           {{ requestsError }}
         </div>
-        <p v-else-if="!requests.length" class="empty-state">当前没有待处理申请。</p>
+        <p v-else-if="!requests.length" class="empty-state">暂无待处理的认领请求。</p>
 
         <div v-else class="request-list">
           <article v-for="request in requests" :key="request.id" class="request-item">
             <div class="request-item__head">
               <div>
                 <strong>{{ request.applicant.playerName || request.applicant.steamId || "未知玩家" }}</strong>
-                <span>认领码 {{ request.code }}</span>
+                <span>申请码: {{ request.code }}</span>
               </div>
               <span class="request-status" :data-status="request.status">{{ request.statusLabel }}</span>
             </div>
 
             <dl class="request-grid">
               <div>
-                <dt>申请时间</dt>
+                <dt>发起时间</dt>
                 <dd>{{ formatTime(request.createdAt) }}</dd>
               </div>
               <div>
-                <dt>剩余时效</dt>
+                <dt>剩余有效时间</dt>
                 <dd>{{ formatDuration(requestRemainingMs(request)) }}</dd>
               </div>
               <div>
-                <dt>到期时间</dt>
+                <dt>过期时间</dt>
                 <dd>{{ formatTime(request.expiresAt) }}</dd>
               </div>
               <div>
-                <dt>申请者</dt>
+                <dt>发起人</dt>
                 <dd>{{ formatActor(request.applicant) }}</dd>
               </div>
               <div>
-                <dt>认领者</dt>
+                <dt>认领人</dt>
                 <dd>{{ formatActor(request.claimant) }}</dd>
               </div>
               <div>
-                <dt>直批</dt>
+                <dt>直接审批</dt>
                 <dd>{{ request.directApproval ? "是" : "否" }}</dd>
               </div>
             </dl>
 
             <div v-if="request.claimedAt || request.approvedAt || request.rejectedReason" class="request-meta">
               <span v-if="request.claimedAt">认领时间: {{ formatTime(request.claimedAt) }}</span>
-              <span v-if="request.approvedAt">处理时间: {{ formatTime(request.approvedAt) }}</span>
-              <span v-if="request.rejectedReason">驳回原因: {{ request.rejectedReason }}</span>
+              <span v-if="request.approvedAt">完成时间: {{ formatTime(request.approvedAt) }}</span>
+              <span v-if="request.rejectedReason">拒绝原因: {{ request.rejectedReason }}</span>
             </div>
 
             <div class="request-actions">
@@ -235,7 +262,7 @@
                 :disabled="actioningRequestId === request.id"
                 @click="approveRequest(request, true)"
               >
-                管理员协助跳边
+                直接审批通过
               </button>
               <button
                 v-if="request.canApprove"
@@ -244,7 +271,7 @@
                 :disabled="actioningRequestId === request.id"
                 @click="approveRequest(request, false)"
               >
-                执行跳边
+                认领并审批
               </button>
               <button
                 type="button"
@@ -252,14 +279,14 @@
                 :disabled="actioningRequestId === request.id"
                 @click="rejectRequest(request)"
               >
-                驳回
+                拒绝申请
               </button>
             </div>
           </article>
         </div>
       </PageCard>
 
-      <PageCard class="history-card" title="请求历史记录" description="玩家发起的 TB 与 SQTB 记录" compact>
+      <PageCard class="history-card" title="近期变更日志" description="展示最近执行的周期重置与名额消耗记录。" compact>
         <template #actions>
           <button
             type="button"
@@ -267,14 +294,14 @@
             :disabled="loadingHistory"
             @click="loadHistory"
           >
-            {{ loadingHistory ? "刷新中..." : "刷新历史" }}
+            {{ loadingHistory ? "刷新中..." : "查看历史" }}
           </button>
         </template>
 
         <div v-if="historyError" class="error-banner">
           {{ historyError }}
         </div>
-        <p v-else-if="!history.length" class="empty-state">当前没有历史记录。</p>
+        <p v-else-if="!history.length" class="empty-state">暂无近期历史记录。</p>
 
         <div v-else class="history-list">
           <article v-for="(entry, index) in history" :key="index" class="history-item">
@@ -288,7 +315,7 @@
 
             <div v-if="entry.reason || entry.message" class="history-meta">
               <span v-if="entry.reason" class="history-reason">原因: {{ entry.reason }}</span>
-              <span v-if="entry.message" class="history-message">详情: {{ entry.message }}</span>
+              <span v-if="entry.message" class="history-message">消息: {{ entry.message }}</span>
             </div>
           </article>
         </div>
@@ -300,6 +327,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { apiGet, apiPost } from "../app/apiClient";
+import { getScheduledBroadcastState, type ScheduledBroadcastItem } from "../app/scheduledBroadcastApi";
 import PageHeader from "../components/common/PageHeader.vue";
 import PageCard from "../components/common/PageCard.vue";
 
@@ -407,12 +435,15 @@ const fairState = ref<FairTeamBalanceState>({
 
 const requests = ref<FairTeamBalanceRequest[]>([]);
 const history = ref<FairTeamBalanceHistoryEntry[]>([]);
+const broadcastItems = ref<ScheduledBroadcastItem[]>([]);
 const loadingState = ref(false);
 const loadingRequests = ref(false);
 const loadingHistory = ref(false);
+const loadingBroadcasts = ref(false);
 const stateError = ref("");
 const requestsError = ref("");
 const historyError = ref("");
+const broadcastError = ref("");
 const quotaError = ref("");
 const actioningRequestId = ref("");
 const resettingAction = ref<"" | "period" | "round">("");
@@ -420,10 +451,10 @@ const nowMs = ref(Date.now());
 let timer: number | null = null;
 
 const systemStatusLabel = computed(() => {
-  if (!fairState.value.enabled) return "已禁用";
-  if (!fairState.value.subscribed) return "未订阅";
+  if (!fairState.value.enabled) return "禁用中";
+  if (!fairState.value.subscribed) return "同步延迟";
   if (fairState.value.active) return "运行中";
-  return "已订阅";
+  return "准备就绪";
 });
 
 const systemTone = computed(() => {
@@ -433,7 +464,7 @@ const systemTone = computed(() => {
   return "info";
 });
 
-const modeLabel = computed(() => (fairState.value.isWarmup ? "暖服模式" : "常规模式"));
+const modeLabel = computed(() => (fairState.value.isWarmup ? "准备阶段" : "正式阶段"));
 
 const sortedPlayerQuotas = computed(() => {
   return [...fairState.value.playerQuotas].sort((left, right) => {
@@ -467,7 +498,7 @@ onBeforeUnmount(() => {
 
 async function refreshPanel() {
   quotaError.value = "";
-  await Promise.all([loadState(), loadRequests(), loadHistory()]);
+  await Promise.all([loadState(), loadRequests(), loadHistory(), loadBroadcastState()]);
 }
 
 async function loadState() {
@@ -477,7 +508,7 @@ async function loadState() {
     const res = await apiGet<{ ok?: boolean; data?: FairTeamBalanceState }>("/api/plugins/fair-team-balance/state");
     fairState.value = normalizeState(res?.data);
   } catch (err: any) {
-    stateError.value = String(err?.message || err || "公平跳边状态加载失败");
+    stateError.value = String(err?.message || err || "加载系统状态失败");
   } finally {
     loadingState.value = false;
   }
@@ -491,7 +522,7 @@ async function loadRequests() {
     const list = Array.isArray(res?.data?.requests) ? res.data.requests : [];
     requests.value = list.map(normalizeRequest);
   } catch (err: any) {
-    requestsError.value = String(err?.message || err || "公平跳边申请加载失败");
+    requestsError.value = String(err?.message || err || "加载认领请求失败");
     requests.value = [];
   } finally {
     loadingRequests.value = false;
@@ -506,36 +537,57 @@ async function loadHistory() {
     const list = Array.isArray(res?.data?.history) ? res.data.history : [];
     history.value = list.map(normalizeHistoryEntry);
   } catch (err: any) {
-    historyError.value = String(err?.message || err || "请求历史记录加载失败");
+    historyError.value = String(err?.message || err || "加载历史记录失败");
     history.value = [];
   } finally {
     loadingHistory.value = false;
   }
 }
 
+async function loadBroadcastState() {
+  loadingBroadcasts.value = true;
+  broadcastError.value = "";
+  try {
+    const res = await getScheduledBroadcastState();
+    const list = Array.isArray(res?.items) ? res.items : [];
+    broadcastItems.value = [...list]
+      .sort((left, right) => {
+        const leftTime = Math.max(Number(left.lastRunAt ?? 0), Number(left.updatedAt ?? 0), Number(left.createdAt ?? 0));
+        const rightTime = Math.max(Number(right.lastRunAt ?? 0), Number(right.updatedAt ?? 0), Number(right.createdAt ?? 0));
+        return rightTime - leftTime;
+      })
+      .slice(0, 4);
+  } catch (err: any) {
+    broadcastError.value = String(err?.message || err || "加载定时广播记录失败");
+    broadcastItems.value = [];
+  } finally {
+    loadingBroadcasts.value = false;
+  }
+}
+
 async function resetPeriodQuotas() {
-  if (!window.confirm("确认重置所有已记录玩家的周期额度？")) return;
+  if (!window.confirm("确定重置所有周期配额吗？这将影响本周期内所有玩家的使用限制。")) return;
   resettingAction.value = "period";
   quotaError.value = "";
   try {
     await apiPost("/api/plugins/fair-team-balance/reset-period-quotas", {});
     await refreshPanel();
   } catch (err: any) {
-    quotaError.value = String(err?.message || err || "周期额度重置失败");
+    quotaError.value = String(err?.message || err || "重置周期配额失败");
   } finally {
     resettingAction.value = "";
   }
 }
 
 async function resetRoundQuota() {
-  if (!window.confirm("确认重置本局额度？")) return;
+  if (!window.confirm("确定重置单局已用配额吗？")) return;
   resettingAction.value = "round";
   quotaError.value = "";
   try {
     await apiPost("/api/plugins/fair-team-balance/reset-round", {});
     await refreshPanel();
   } catch (err: any) {
-    quotaError.value = String(err?.message || err || "本局额度重置失败");
+    quotaError.value = String(err?.message || err || "重置单局配额失败");
   } finally {
     resettingAction.value = "";
   }
@@ -552,7 +604,7 @@ async function approveRequest(request: FairTeamBalanceRequest, direct: boolean) 
     });
     await refreshPanel();
   } catch (err: any) {
-    requestsError.value = String(err?.message || err || "公平跳边处理失败");
+    requestsError.value = String(err?.message || err || "审批请求失败");
   } finally {
     actioningRequestId.value = "";
   }
@@ -560,7 +612,7 @@ async function approveRequest(request: FairTeamBalanceRequest, direct: boolean) 
 
 async function rejectRequest(request: FairTeamBalanceRequest) {
   if (!request?.id) return;
-  const reason = window.prompt("输入驳回原因", "manual_reject")?.trim() || "manual_reject";
+  const reason = window.prompt("请输入拒绝原因", "manual_reject")?.trim() || "manual_reject";
   actioningRequestId.value = request.id;
   requestsError.value = "";
   try {
@@ -570,7 +622,7 @@ async function rejectRequest(request: FairTeamBalanceRequest) {
     });
     await refreshPanel();
   } catch (err: any) {
-    requestsError.value = String(err?.message || err || "公平跳边驳回失败");
+    requestsError.value = String(err?.message || err || "拒绝请求失败");
   } finally {
     actioningRequestId.value = "";
   }
@@ -596,6 +648,12 @@ function formatDuration(ms: number) {
   const seconds = totalSeconds % 60;
   if (minutes <= 0) return `${seconds}s`;
   return `${minutes}m ${seconds}s`;
+}
+
+function formatBroadcastTime(value: number | null | undefined) {
+  const time = Number(value ?? 0);
+  if (!Number.isFinite(time) || time <= 0) return "-";
+  return new Date(time).toLocaleString();
 }
 
 function formatActor(actor: FairTeamBalanceActor | null) {
@@ -689,13 +747,13 @@ function normalizeHistoryEntry(value: any): FairTeamBalanceHistoryEntry {
   let statusClass = "info";
   
   switch(type) {
-    case "TB_REQUESTED": typeLabel = "申请 TB"; statusClass = "info"; break;
-    case "TB_EXECUTED": typeLabel = "TB 通过"; statusClass = "ok"; break;
-    case "TB_REJECTED": typeLabel = "TB 驳回"; statusClass = "danger"; break;
-    case "SQTB_CREATED": typeLabel = "申请 SQTB"; statusClass = "info"; break;
-    case "SQTB_APPROVED": typeLabel = "SQTB 通过"; statusClass = "ok"; break;
-    case "SQTB_REJECTED": typeLabel = "SQTB 驳回"; statusClass = "danger"; break;
-    case "SQTB_EXPIRED": typeLabel = "SQTB 过期"; statusClass = "warning"; break;
+    case "TB_REQUESTED": typeLabel = "请求 TB"; statusClass = "info"; break;
+    case "TB_EXECUTED": typeLabel = "TB 执行完成"; statusClass = "ok"; break;
+    case "TB_REJECTED": typeLabel = "TB 被拒绝"; statusClass = "danger"; break;
+    case "SQTB_CREATED": typeLabel = "发起 SQTB"; statusClass = "info"; break;
+    case "SQTB_APPROVED": typeLabel = "SQTB 执行完成"; statusClass = "ok"; break;
+    case "SQTB_REJECTED": typeLabel = "SQTB 被拒绝"; statusClass = "danger"; break;
+    case "SQTB_EXPIRED": typeLabel = "SQTB 已过期"; statusClass = "warning"; break;
   }
   
   return {
@@ -714,11 +772,11 @@ function normalizeStatusLabel(status: string) {
     case "pending_claim":
       return "待认领";
     case "pending_approval":
-      return "协助跳边中";
+      return "审批中";
     case "approved":
-      return "已批准";
+      return "已审批";
     case "rejected":
-      return "已驳回";
+      return "已拒绝";
     case "expired":
       return "已过期";
     default:
@@ -732,8 +790,8 @@ function normalizeStatusLabel(status: string) {
   position: relative;
   display: grid;
   gap: 18px;
-  padding: 18px;
-  overflow: hidden;
+  padding: 16px;
+  overflow: visible;
 }
 
 .fair-team-balance-page::before {
@@ -802,8 +860,8 @@ function normalizeStatusLabel(status: string) {
 }
 
 .hero-grid {
-  grid-template-columns: minmax(0, 1.8fr) minmax(280px, 0.95fr);
-  align-items: stretch;
+  grid-template-columns: minmax(0, 1.55fr) minmax(260px, 0.85fr);
+  align-items: start;
 }
 
 .hero-main,
@@ -815,7 +873,7 @@ function normalizeStatusLabel(status: string) {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .status-chip {
@@ -864,14 +922,14 @@ function normalizeStatusLabel(status: string) {
 .hero-metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
   margin: 0;
 }
 
 .hero-metrics > div {
   border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 16px;
-  padding: 14px 16px;
+  padding: 12px 14px;
   background: rgba(15, 23, 42, 0.24);
 }
 
@@ -895,17 +953,17 @@ function normalizeStatusLabel(status: string) {
 .hero-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 14px;
-  margin-top: 14px;
+  gap: 8px 12px;
+  margin-top: 12px;
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .hero-side {
   display: grid;
   gap: 12px;
   align-content: start;
-  padding: 16px;
+  padding: 14px;
   border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 16px;
   background: rgba(15, 23, 42, 0.22);
@@ -922,6 +980,7 @@ function normalizeStatusLabel(status: string) {
 
 .action-stack {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -933,23 +992,88 @@ function normalizeStatusLabel(status: string) {
   line-height: 1.6;
 }
 
+.broadcast-card {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.broadcast-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.broadcast-list {
+  display: grid;
+  gap: 8px;
+}
+
+.broadcast-item {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(15, 23, 42, 0.18);
+  display: grid;
+  gap: 6px;
+}
+
+.broadcast-item__head,
+.broadcast-item__meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.broadcast-item__head strong {
+  font-size: 13px;
+}
+
+.broadcast-item__head span {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.broadcast-item__meta {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.broadcast-item__message {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.mini-banner,
+.mini-empty {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 12px;
 }
 
 .summary-card {
   display: grid;
   gap: 6px;
-  padding: 16px;
+  padding: 14px 15px;
   border-radius: 16px;
   border: 1px solid rgba(148, 163, 184, 0.16);
   background:
     radial-gradient(circle at top right, rgba(56, 189, 248, 0.08), transparent 36%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018));
   box-shadow: 0 16px 28px rgba(2, 6, 23, 0.2);
-  min-height: 108px;
+  min-height: 96px;
 }
 
 .summary-card[data-tone="ok"] {
@@ -984,20 +1108,22 @@ function normalizeStatusLabel(status: string) {
 .detail-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: stretch;
-  height: 100%;
-  min-height: 400px;
+  min-height: 0;
 }
 
 .detail-grid :deep(.page-card) {
-  display: flex;
-  flex-direction: column;
+  min-height: 0;
   height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .detail-grid :deep(.card-body) {
-  flex: 1;
-  overflow-y: auto;
   min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .quota-list,
@@ -1005,6 +1131,33 @@ function normalizeStatusLabel(status: string) {
 .history-list {
   display: grid;
   gap: 12px;
+  min-height: 0;
+}
+
+.detail-grid {
+  height: clamp(580px, calc(100vh - 360px), 940px);
+  max-height: calc(100vh - 360px);
+}
+
+.quota-card,
+.request-card,
+.history-card {
+  min-height: 0;
+}
+
+.quota-card :deep(.card-body),
+.request-card :deep(.card-body),
+.history-card :deep(.card-body) {
+  min-height: 0;
+}
+
+.quota-list,
+.request-list,
+.history-list {
+  overflow: auto;
+  scrollbar-gutter: stable;
+  padding-right: 4px;
+  overscroll-behavior: contain;
 }
 
 .quota-item,
@@ -1136,8 +1289,8 @@ function normalizeStatusLabel(status: string) {
 .ghost-btn,
 .danger-btn,
 .action-btn {
-  min-height: 38px;
-  padding: 0 14px;
+  min-height: 36px;
+  padding: 0 12px;
   border-radius: 12px;
   border: 1px solid rgba(148, 163, 184, 0.2);
   cursor: pointer;
@@ -1190,8 +1343,8 @@ function normalizeStatusLabel(status: string) {
 }
 
 @media (max-width: 1280px) {
-  .summary-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .hero-grid {
+    grid-template-columns: minmax(0, 1.3fr) minmax(240px, 0.9fr);
   }
 }
 
@@ -1201,14 +1354,14 @@ function normalizeStatusLabel(status: string) {
     grid-template-columns: 1fr;
   }
 
-  .summary-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .action-stack {
+    grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 720px) {
   .fair-team-balance-page {
-    padding: 14px;
+    padding: 12px;
   }
 
   .summary-grid,

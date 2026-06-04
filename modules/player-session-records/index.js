@@ -4,7 +4,7 @@ const MODULE_ID = "module.playerSessionRecords";
 const PAGE_ROUTE = "/player-session-records";
 const DEFAULT_MAX_RECORDS = 2000;
 
-const JOIN_EVENT_NAMES = ["On_PlayerJoined", "PLAYER_JOINED", "On_PlayerConnected", "PLAYER_CONNECTED"];
+const JOIN_EVENT_NAMES = ["On_PlayerJoined", "PLAYER_JOINED", "On_PlayerConnected", "PLAYER_CONNECTED", "PLAYER_POST_LOGIN"];
 const LEAVE_EVENT_NAMES = ["On_PlayerLeft", "PLAYER_LEFT", "On_PlayerDisconnected", "PLAYER_DISCONNECTED"];
 
 export function createPlayerSessionRecordsModule({ core, config, logger }) {
@@ -54,12 +54,31 @@ export function createPlayerSessionRecordsModule({ core, config, logger }) {
     return "";
   }
 
+  function resolvePlayerIp(event = {}) {
+    const payload = event?.payload ?? {};
+    const fromPayload = String(payload?.ip ?? payload?.remoteAddr ?? payload?.PlayerIP ?? "").trim();
+    if (fromPayload) return fromPayload;
+
+    const fromParamMap = String(event?.paramMap?.PlayerIP ?? event?.paramMap?.ip ?? event?.paramMap?.remoteAddr ?? "").trim();
+    if (fromParamMap) return fromParamMap;
+
+    const params = Array.isArray(event?.params) ? event.params : [];
+    for (const param of params) {
+      if (!["PlayerIP", "IP", "remoteAddr"].includes(String(param?.name ?? ""))) continue;
+      const value = String(param?.value ?? "").trim();
+      if (value) return value;
+    }
+
+    return "";
+  }
+
   function buildOnlineKey(serverId, playerName) {
     return `${String(serverId ?? "").trim()}::${String(playerName ?? "").trim().toLowerCase()}`;
   }
 
   function pushRecord(kind, event = {}) {
     const playerName = resolvePlayerName(event);
+    const ip = resolvePlayerIp(event);
     const serverId = String(event?.serverId ?? "").trim();
     const at = new Date().toISOString();
 
@@ -72,6 +91,7 @@ export function createPlayerSessionRecordsModule({ core, config, logger }) {
       time: String(event?.time ?? "").trim(),
       serverId,
       playerName,
+      ip,
       hasPayload: Boolean(event?.payload),
       hasParams: Array.isArray(event?.params) && event.params.length > 0,
       hasParamMap: Boolean(event?.paramMap),

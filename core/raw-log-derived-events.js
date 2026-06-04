@@ -64,6 +64,42 @@ export class RawLogDerivedEvents {
       return;
     }
 
+    const postLogin = parsePostLogin(raw);
+    if (postLogin) {
+      const resolvedName = this.resolvePlayerName({
+        serverId: String(event?.serverId ?? ""),
+        eosId: postLogin.eosId,
+        steam64Id: postLogin.steam64Id,
+        controllerId: postLogin.playerControllerId,
+      });
+
+      const payload = {
+        ...(resolvedName ? { name: resolvedName, playerName: resolvedName } : {}),
+        ip: postLogin.ip,
+        playerControllerId: postLogin.playerControllerId,
+        eosId: postLogin.eosId,
+        steam64Id: postLogin.steam64Id,
+      };
+
+      const paramMap = {
+        ...(resolvedName ? { PlayerName: resolvedName } : {}),
+        ...(postLogin.ip ? { PlayerIP: postLogin.ip } : {}),
+        ...(postLogin.eosId ? { PlayerEOSID: postLogin.eosId } : {}),
+        ...(postLogin.steam64Id ? { PlayerSteam64ID: postLogin.steam64Id } : {}),
+        ...(postLogin.playerControllerId ? { PlayerControllerID: postLogin.playerControllerId } : {}),
+      };
+
+      const derived = this.buildDerivedEvent({
+        sourceEvent: event,
+        eventName: "PLAYER_POST_LOGIN",
+        payload,
+        paramMap,
+      });
+
+      this.emitDerived(derived);
+      return;
+    }
+
     const disconnect = parseNetConnectionClose(raw);
     if (!disconnect) return;
 
@@ -76,6 +112,7 @@ export class RawLogDerivedEvents {
 
     const payload = {
       ...(resolvedName ? { name: resolvedName, playerName: resolvedName } : {}),
+      ip: cleanIp(disconnect.remoteAddr),
       remoteAddr: disconnect.remoteAddr,
       connectionName: disconnect.connectionName,
       driverName: disconnect.driverName,
@@ -91,6 +128,7 @@ export class RawLogDerivedEvents {
 
     const paramMap = {
       ...(resolvedName ? { PlayerName: resolvedName } : {}),
+      ...(payload.ip ? { PlayerIP: payload.ip } : {}),
       ...(disconnect.eosId ? { PlayerEOSID: disconnect.eosId } : {}),
       ...(disconnect.steam64Id ? { PlayerSteam64ID: disconnect.steam64Id } : {}),
       ...(disconnect.playerControllerId ? { PlayerControllerID: disconnect.playerControllerId } : {}),
@@ -218,6 +256,30 @@ function parseNetConnectionClose(raw) {
 function matchGroup(text, regex) {
   const match = String(text ?? "").match(regex);
   return match ? String(match[1] ?? "").trim() : "";
+}
+
+function parsePostLogin(raw) {
+  const text = String(raw ?? "");
+  if (!/\bLogNet:\s*PostLogin:\s*NewPlayer:/i.test(text)) return null;
+
+  const playerControllerId = matchGroup(text, /NewPlayer:\s*([^(\s]+)/i);
+  const ip = matchGroup(text, /\(IP:\s*([^|]+)\|/i);
+  const uniqueId = matchGroup(text, /Online IDs:\s*([^)]+)/i);
+
+  const parsedUnique = parseUniqueId(uniqueId);
+
+  return {
+    playerControllerId,
+    ip: cleanIp(ip),
+    eosId: parsedUnique.eosId,
+    steam64Id: parsedUnique.steam64Id,
+  };
+}
+
+function cleanIp(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  return text.replace(/^\[(.*)\]$/, "$1").split(":")[0];
 }
 
 function parseUniqueId(uniqueIdText) {

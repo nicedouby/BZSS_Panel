@@ -22,68 +22,74 @@
       <span class="stat-chip danger">失 {{ stats.failed }}</span>
     </div>
 
-    <div v-if="events.length" class="record-list">
-      <article
-        v-for="event in events"
-        :key="event.id"
-        :class="recordClass(event)"
-        @click="emit('select', event)"
-      >
-        <div class="record-accent" :data-tone="eventTone(event)" />
+    <DataState
+      :loading="loading"
+      :error="error"
+      :empty="!loading && !error && !events.length"
+      empty-title="没有可输出的记录"
+      empty-text="当前筛选条件下没有事件。可以调整类型、关系、武器或搜索词。"
+    >
+      <div class="record-list">
+        <article
+          v-for="event in events"
+          :key="event.id"
+          :class="recordClass(event)"
+          @click="emit('select', event)"
+        >
+          <div class="record-accent" :data-tone="eventTone(event)" />
 
-        <div class="record-body">
-          <div class="record-meta">
-            <span class="log-time">{{ formatTime(event.time) }}</span>
-            <span class="type-pill" :data-tone="eventTone(event)">{{ typeLabel(event.type) }}</span>
-            <span class="relation-pill" :data-tone="relationTone(event)">{{ relationLabel(event) }}</span>
-            <span v-if="event.samePlayer" class="mini-pill danger">同人</span>
+          <div class="record-body">
+            <div class="record-meta">
+              <span class="log-time">{{ formatTime(event.time) }}</span>
+              <span class="type-pill" :data-tone="eventTone(event)">{{ typeLabel(event.type) }}</span>
+              <span class="relation-pill" :data-tone="relationTone(event)">{{ relationLabel(event) }}</span>
+              <span v-if="event.samePlayer" class="mini-pill danger">同人</span>
+            </div>
+
+            <div class="record-main">
+              <div class="record-entity">
+                <span class="record-entity__label">攻击者</span>
+                <strong class="entity-name">{{ event.attackerName || event.attacker?.name || "-" }}</strong>
+              </div>
+              <span class="log-arrow">→</span>
+              <div class="record-entity">
+                <span class="record-entity__label">受害者</span>
+                <strong class="entity-name">{{ event.victimName || event.victim?.name || "-" }}</strong>
+              </div>
+              <span class="log-damage">{{ formatDamage(event.damage) }}</span>
+              <span class="log-weapon">{{ weaponLabel(event.weapon) }}</span>
+            </div>
+
+            <div class="record-foot">
+              <div class="record-tagline">
+                <span class="log-label">标签</span>
+                <span v-for="tag in compactTags(event)" :key="tag.key" class="tag-chip" :data-tone="tag.tone">{{ tag.label }}</span>
+                <span v-if="!compactTags(event).length" class="tag-empty">无标签</span>
+              </div>
+              <div class="record-warnings">
+                <WarningDecisionBadge :decision="event.victimWarning" role-label="受害者" />
+                <WarningDecisionBadge :decision="event.attackerWarning" role-label="攻击者" />
+              </div>
+            </div>
           </div>
-
-          <div class="record-main">
-            <div class="record-entity">
-              <span class="record-entity__label">攻击者</span>
-              <strong class="entity-name">{{ event.attackerName || event.attacker?.name || "-" }}</strong>
-            </div>
-            <span class="log-arrow">→</span>
-            <div class="record-entity">
-              <span class="record-entity__label">受害者</span>
-              <strong class="entity-name">{{ event.victimName || event.victim?.name || "-" }}</strong>
-            </div>
-            <span class="log-damage">{{ formatDamage(event.damage) }}</span>
-            <span class="log-weapon">{{ weaponLabel(event.weapon) }}</span>
-          </div>
-
-          <div class="record-foot">
-            <div class="record-tagline">
-              <span class="log-label">标签</span>
-              <span v-for="tag in compactTags(event)" :key="tag.key" class="tag-chip" :data-tone="tag.tone">{{ tag.label }}</span>
-              <span v-if="!compactTags(event).length" class="tag-empty">无标签</span>
-            </div>
-            <div class="record-warnings">
-              <WarningDecisionBadge :decision="event.victimWarning" role-label="受害者" />
-              <WarningDecisionBadge :decision="event.attackerWarning" role-label="攻击者" />
-            </div>
-          </div>
-        </div>
-      </article>
-    </div>
-
-    <div v-else class="empty-list">
-      <strong>没有可输出的记录</strong>
-      <p>当前筛选条件下没有事件。可以调整类型、关系、武器或搜索词。</p>
-    </div>
+        </article>
+      </div>
+    </DataState>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue";
 import WarningDecisionBadge from "./WarningDecisionBadge.vue";
+import DataState from "../common/DataState.vue";
 import type { InfantryCombatEventRecord } from "../../types/infantry-combat-enhancer";
 import { formatCombatTags } from "../../utils/combat-tags";
 
 const props = defineProps<{
   events: InfantryCombatEventRecord[];
   selectedId?: string | null;
+  loading?: boolean;
+  error?: string;
 }>();
 
 const emit = defineEmits<{

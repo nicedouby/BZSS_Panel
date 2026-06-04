@@ -2,135 +2,160 @@
   <section class="bz-page scheduled-broadcast-page">
     <PageHeader
       title="定时广播"
-      subtitle="首条广播的间隔同时作为全局开始延迟，列表顺序决定执行顺序。"
+      subtitle="管理自动轮播的消息。首条广播的间隔将同步为全局开始延迟，后续广播依序循环。"
     >
       <template #actions>
         <button type="button" class="bz-btn bz-btn-ghost" :disabled="isFetching" @click="query.refetch()">
-          {{ isFetching ? "同步中..." : "刷新" }}
+          {{ isFetching ? "同步中..." : "刷新数据" }}
         </button>
       </template>
     </PageHeader>
 
-    <section class="bz-card">
-      <div class="bz-card-body compact create-bar">
-        <div class="summary">
-          <span class="bz-badge">总条目 {{ items.length }}</span>
-          <span class="bz-badge">运行状态 {{ data?.status?.running ? "运行中" : "已停止" }}</span>
-          <span class="bz-badge">轮询 {{ data?.config?.tickMs ?? "-" }} ms</span>
-          <span class="bz-badge bz-badge-info">全局开始延迟 {{ globalDelaySeconds }} 秒</span>
+    <section class="bz-card summary-card">
+      <div class="bz-card-body compact summary-bar">
+        <div class="summary-stats">
+          <div class="stat-pill">
+            <span class="label">项目总数</span>
+            <span class="value">{{ items.length }}</span>
+          </div>
+          <div class="stat-pill" :data-active="data?.status?.running">
+            <span class="label">运行状态</span>
+            <span class="value">{{ data?.status?.running ? "运行中" : "已停止" }}</span>
+          </div>
+          <div class="stat-pill">
+            <span class="label">轮询频率</span>
+            <span class="value">{{ data?.config?.tickMs ?? "-" }} ms</span>
+          </div>
+          <div class="stat-pill highlight">
+            <span class="label">全局开始延迟</span>
+            <span class="value">{{ globalDelaySeconds }} 秒</span>
+          </div>
         </div>
-        <div class="create-actions">
-          <p class="create-hint">首条间隔自动同步为全局开始延迟，可直接用上下按钮调整广播顺序。</p>
+        <div class="summary-actions">
+          <p class="hint-text">支持通过按钮调整执行顺序。首条广播的间隔会自动同步为全局开始延迟。</p>
           <button type="button" class="bz-btn bz-btn-primary" :disabled="createBusy" @click="createItem">
-            {{ createBusy ? "添加中..." : "添加广播" }}
+            {{ createBusy ? "处理中..." : "添加新广播" }}
           </button>
         </div>
       </div>
     </section>
 
-    <DataState :loading="isLoading && !items.length" :error="pageError">
+    <section class="bz-card broadcast-panel">
+      <DataState class="broadcast-state" :loading="isLoading && !items.length" :error="pageError">
+        <div class="broadcast-scroll">
       <div v-if="items.length > 0" class="broadcast-list">
-        <article v-for="(item, index) in items" :key="item.id" class="bz-card broadcast-card">
-          <div class="broadcast-card-grid">
-            <div class="broadcast-side">
-              <label class="broadcast-enabled">
-                <input
-                  type="checkbox"
-                  :checked="drafts[item.id]?.enabled ?? item.enabled"
-                  @change="onToggleEnabled(item.id, ($event.target as HTMLInputElement).checked)"
-                />
-                <span>{{ drafts[item.id]?.enabled ?? item.enabled ? "启用" : "停用" }}</span>
-              </label>
-
-              <div class="broadcast-order">
+        <article v-for="(item, index) in items" :key="item.id" class="bz-card broadcast-card" :class="{ 'is-disabled': !(drafts[item.id]?.enabled ?? item.enabled) }">
+          <!-- 卡片头部：标识与状态 -->
+          <header class="item-header">
+            <div class="header-main">
+              <div class="item-index">#{{ index + 1 }}</div>
+              <div class="item-info">
+                <div class="item-title-row">
+                  <h3 class="item-name">{{ index === 0 ? "首条广播" : "常规广播" }}</h3>
+                  <span v-if="index === 0" class="sync-badge">同步全局延迟</span>
+                </div>
+                <div class="status-row">
+                  <span class="bz-badge">下次运行: {{ formatTime(item.nextRunAt) }}</span>
+                  <span class="bz-badge">上次运行: {{ formatTime(item.lastRunAt) }}</span>
+                  <span class="bz-badge">累计成功: {{ item.runCount ?? 0 }}</span>
+                  <span v-if="item.errorCount" class="bz-badge bz-badge-danger">累计失败: {{ item.errorCount }}</span>
+                </div>
+              </div>
+            </div>
+            
+            <div class="header-side">
+              <div class="order-group">
                 <button
                   type="button"
-                  class="order-btn"
+                  class="mini-btn"
+                  title="上移"
                   :disabled="index === 0 || reorderBusy"
                   @click="moveItem(index, -1)"
                 >
                   ↑
                 </button>
-                <span class="order-index">{{ index + 1 }}</span>
                 <button
                   type="button"
-                  class="order-btn"
+                  class="mini-btn"
+                  title="下移"
                   :disabled="index === items.length - 1 || reorderBusy"
                   @click="moveItem(index, 1)"
                 >
                   ↓
                 </button>
               </div>
-            </div>
-
-            <div class="broadcast-main">
-              <div class="broadcast-head">
-                <div class="broadcast-labels">
-                  <span class="broadcast-rank">{{ index === 0 ? "首条广播" : `第 ${index + 1} 条广播` }}</span>
-                  <span v-if="index === 0" class="broadcast-sync-tip">首条间隔 = 全局开始延迟</span>
-                </div>
-                <div class="broadcast-status-row">
-                  <span class="bz-badge">下次 {{ formatTime(item.nextRunAt) }}</span>
-                  <span class="bz-badge">上次 {{ formatTime(item.lastRunAt) }}</span>
-                  <span class="bz-badge">成功 {{ item.runCount ?? 0 }}</span>
-                  <span class="bz-badge bz-badge-danger">失败 {{ item.errorCount ?? 0 }}</span>
-                </div>
-              </div>
-
-              <label class="broadcast-field broadcast-message">
-                <span>广播内容</span>
-                <textarea
-                class="inline-textarea"
-                rows="2"
-                maxlength="180"
-                  :value="drafts[item.id]?.message ?? item.message"
-                  placeholder="请输入广播内容"
-                  @input="setDraft(item.id, 'message', ($event.target as HTMLTextAreaElement).value)"
-                />
-              </label>
-
-              <p v-if="item.lastError" class="broadcast-error">最近错误：{{ item.lastError }}</p>
-            </div>
-
-            <div class="broadcast-right">
-              <label class="broadcast-field">
-                <span>{{ index === 0 ? "首条间隔 / 全局开始延迟（秒）" : "广播间隔（秒）" }}</span>
+              <div class="divider"></div>
+              <label class="enable-toggle">
                 <input
-                  class="inline-input"
+                  type="checkbox"
+                  :checked="drafts[item.id]?.enabled ?? item.enabled"
+                  @change="onToggleEnabled(item.id, ($event.target as HTMLInputElement).checked)"
+                />
+                <span class="toggle-text">{{ drafts[item.id]?.enabled ?? item.enabled ? "已启用" : "已停用" }}</span>
+              </label>
+            </div>
+          </header>
+
+          <!-- 卡片主体：消息内容 -->
+          <div class="item-body">
+            <div class="field-label">广播内容</div>
+            <textarea
+              class="message-editor"
+              rows="2"
+              maxlength="180"
+              :value="drafts[item.id]?.message ?? item.message"
+              placeholder="请输入要在服务器中播报的消息内容..."
+              @input="setDraft(item.id, 'message', ($event.target as HTMLTextAreaElement).value)"
+            />
+            <div v-if="item.lastError" class="error-banner">
+              最近执行错误：{{ item.lastError }}
+            </div>
+          </div>
+
+          <!-- 卡片底部：配置与操作 -->
+          <footer class="item-footer">
+            <div class="settings-group">
+              <div class="input-field">
+                <span class="label">{{ index === 0 ? "首条间隔 / 全局延迟 (秒)" : "循环间隔 (秒)" }}</span>
+                <input
+                  class="interval-input"
                   type="number"
                   min="5"
                   max="86400"
                   :value="drafts[item.id]?.intervalSeconds ?? item.intervalSeconds"
                   @input="onIntervalInput(item.id, ($event.target as HTMLInputElement).value)"
                 />
-              </label>
-
-              <div class="broadcast-meta">
-                <span>开始延迟：{{ index === 0 ? (drafts[item.id]?.intervalSeconds ?? item.intervalSeconds) : globalDelaySeconds }} 秒</span>
-                <span>更新时间：{{ formatTime(item.updatedAt) }}</span>
-                <span>创建时间：{{ formatTime(item.createdAt) }}</span>
               </div>
-
-              <div class="broadcast-actions">
-                <button type="button" class="bz-btn bz-btn-primary" @click="saveItem(item, index)">保存</button>
-                <button type="button" class="bz-btn bz-btn-ghost" @click="runNow(item.id)">立即执行</button>
-                <button type="button" class="bz-btn bz-btn-danger" @click="removeItem(item.id)">删除</button>
+              <div class="meta-info">
+                <div class="meta-item">开始延迟: <span>{{ index === 0 ? (drafts[item.id]?.intervalSeconds ?? item.intervalSeconds) : globalDelaySeconds }}s</span></div>
+                <div class="meta-item">更新于: <span>{{ formatTime(item.updatedAt) }}</span></div>
               </div>
             </div>
-          </div>
+
+            <div class="action-group">
+              <button type="button" class="bz-btn bz-btn-ghost" @click="runNow(item.id)">立即试运行</button>
+              <button type="button" class="bz-btn bz-btn-danger" @click="removeItem(item.id)">删除</button>
+              <button type="button" class="bz-btn bz-btn-primary" @click="saveItem(item, index)">保存更改</button>
+            </div>
+          </footer>
         </article>
       </div>
 
       <div v-else class="bz-empty">
         <div class="bz-empty-inner">
-          <div class="bz-empty-icon">-</div>
-          <div class="bz-empty-title">暂无定时广播</div>
+          <div class="bz-empty-icon">+</div>
+          <div class="bz-empty-title">尚未配置定时广播</div>
           <div class="bz-empty-desc">
-            先添加一条广播，再补充内容与间隔。首条广播的间隔会自动作为全局开始延迟。
+            您可以添加多条广播消息。系统将按照列表顺序轮流发送，并根据设置的间隔进行等待。
+          </div>
+          <div class="bz-empty-actions">
+            <button type="button" class="bz-btn bz-btn-primary" @click="createItem">添加首条广播</button>
           </div>
         </div>
       </div>
-    </DataState>
+        </div>
+      </DataState>
+    </section>
   </section>
 </template>
 
@@ -419,237 +444,372 @@ function formatTime(value: unknown) {
 
 <style scoped>
 .scheduled-broadcast-page {
-  display: grid;
-  gap: 12px;
+  height: 100%;
   min-height: 0;
-  padding-bottom: 12px;
+  max-width: 1400px;
+  overflow: hidden;
+  grid-template-rows: auto auto minmax(0, 1fr);
 }
 
-.create-bar {
+.broadcast-panel {
+  min-height: 0;
+  height: clamp(560px, calc(100vh - 220px), 920px);
+  max-height: calc(100vh - 220px);
+  overflow: hidden;
   display: grid;
-  gap: 12px;
+  grid-template-rows: minmax(0, 1fr);
 }
 
-.create-actions {
+.broadcast-state {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+  height: 100%;
+}
+
+.broadcast-scroll {
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+
+/* Summary Bar */
+.summary-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.summary-stats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.stat-pill {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 12px;
+  min-width: 100px;
+}
+
+.stat-pill .label {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+
+.stat-pill .value {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.stat-pill[data-active="true"] .value {
+  color: var(--color-status-online);
+}
+
+.stat-pill.highlight {
+  border-color: var(--color-border-highlight);
+  background: rgba(96, 165, 250, 0.08);
+}
+
+.summary-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
 }
 
-.create-hint {
+.hint-text {
   margin: 0;
-  color: #8fa2b3;
   font-size: 12px;
+  color: var(--color-text-muted);
+  max-width: 320px;
+  line-height: 1.4;
 }
 
-.field {
-  display: grid;
-  gap: 6px;
-  color: #d6dee6;
-  font-size: 12px;
-}
-
-.field span {
-  color: #8fa2b3;
-}
-
-.field input,
-.inline-input,
-.inline-textarea {
-  width: 100%;
-  min-width: 0;
-  border: 1px solid #38414c;
-  background: #11171d;
-  color: #edf2f4;
-  border-radius: 10px;
-  padding: 8px 10px;
-  min-height: 36px;
-}
-
-.inline-textarea {
-  min-height: 96px;
-  resize: vertical;
-  line-height: 1.55;
-}
-
-.summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
+/* Broadcast List */
 .broadcast-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-
-.broadcast-card {
+  gap: 16px;
   min-height: 0;
 }
 
-.broadcast-card-grid {
-  display: grid;
-  grid-template-columns: 96px minmax(420px, 1.6fr) minmax(260px, 0.9fr);
-  gap: 16px;
-  align-items: start;
-  padding: 16px 18px;
+.broadcast-card {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  display: flex;
+  flex-direction: column;
 }
 
-.broadcast-side {
-  display: grid;
-  gap: 12px;
-  align-content: start;
+.broadcast-card.is-disabled {
+  opacity: 0.7;
 }
 
-.broadcast-enabled {
-  display: grid;
-  gap: 6px;
-  justify-items: start;
-  color: #d6dee6;
-  font-size: 12px;
-}
-
-.broadcast-order {
-  display: inline-grid;
-  grid-template-columns: repeat(3, auto);
-  gap: 8px;
-  align-items: center;
-}
-
-.order-btn {
-  width: 28px;
-  height: 28px;
-  border: 1px solid #38414c;
-  border-radius: 8px;
-  background: #10161c;
-  color: #dce5eb;
-  cursor: pointer;
-}
-
-.order-btn:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.order-index {
-  min-width: 28px;
-  text-align: center;
-  color: #8fa2b3;
-  font-size: 12px;
-}
-
-.broadcast-main {
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-}
-
-.broadcast-head {
+/* Item Header */
+.item-header {
+  padding: 16px 20px;
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--color-border-soft);
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.header-main {
+  display: flex;
+  gap: 16px;
   align-items: flex-start;
 }
 
-.broadcast-labels {
+.item-index {
+  width: 36px;
+  height: 36px;
   display: grid;
-  gap: 4px;
+  place-items: center;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-default);
+  border-radius: 10px;
+  font-weight: 800;
+  color: var(--color-text-secondary);
+  font-size: 14px;
 }
 
-.broadcast-rank {
-  color: #edf2f4;
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.broadcast-sync-tip {
-  color: #7dd3fc;
-  font-size: 12px;
-}
-
-.broadcast-status-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.broadcast-field {
+.item-info {
   display: grid;
   gap: 6px;
 }
 
-.broadcast-field span {
-  color: #8fa2b3;
+.item-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.item-name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.sync-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: rgba(96, 165, 250, 0.15);
+  color: #60a5fa;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.status-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.header-side {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.order-group {
+  display: flex;
+  gap: 4px;
+}
+
+.mini-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 6px;
   font-size: 12px;
+  display: grid;
+  place-items: center;
 }
 
-.broadcast-message {
-  min-width: 0;
+.divider {
+  width: 1px;
+  height: 24px;
+  background: var(--color-border-soft);
 }
 
-.broadcast-right {
+.enable-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.enable-toggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.toggle-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+/* Item Body */
+.item-body {
+  padding: 16px 20px;
   display: grid;
   gap: 10px;
-  min-width: 0;
-  align-content: start;
 }
 
-.broadcast-meta {
+.field-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.message-editor {
+  width: 100%;
+  min-height: 80px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-default);
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: var(--color-text-primary);
+  font-size: 15px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.message-editor:focus {
+  border-color: var(--color-border-highlight);
+  background: var(--color-bg-panel);
+}
+
+.error-banner {
+  padding: 8px 12px;
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.2);
+  border-radius: 8px;
+  color: #fca5a5;
+  font-size: 12px;
+}
+
+/* Item Footer */
+.item-footer {
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.01);
+  border-top: 1px solid var(--color-border-soft);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.settings-group {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.input-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.input-field .label {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.interval-input {
+  width: 120px;
+  height: 36px;
+  padding: 0 10px;
+  font-weight: 700;
+}
+
+.meta-info {
   display: grid;
   gap: 4px;
-  color: #a5b0b8;
-  font-size: 12px;
-  line-height: 1.5;
 }
 
-.broadcast-error {
-  margin: 0;
-  color: #fda4af;
-  font-size: 12px;
-  line-height: 1.5;
+.meta-item {
+  font-size: 11px;
+  color: var(--color-text-muted);
 }
 
-.broadcast-actions {
+.meta-item span {
+  color: var(--color-text-secondary);
+  margin-left: 4px;
+}
+
+.action-group {
   display: flex;
-  flex-wrap: wrap;
   gap: 8px;
-}
-
-@media (max-width: 1300px) {
-  .broadcast-card-grid {
-    grid-template-columns: 88px 1fr;
-  }
-
-  .broadcast-right {
-    grid-column: 2;
-  }
-
-  .broadcast-head {
-    flex-direction: column;
-  }
+  flex-wrap: wrap;
 }
 
 @media (max-width: 900px) {
-  .create-actions {
+  .summary-bar {
     flex-direction: column;
     align-items: stretch;
   }
-
-  .broadcast-card-grid {
-    grid-template-columns: 1fr;
+  
+  .summary-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
-
-  .broadcast-side {
-    grid-template-columns: auto auto;
+  
+  .hint-text {
+    max-width: none;
+    text-align: center;
+  }
+  
+  .item-header {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .header-side {
+    width: 100%;
     justify-content: space-between;
-    align-items: center;
   }
-
-  .broadcast-right {
-    grid-column: auto;
+  
+  .item-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .settings-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+  
+  .interval-input {
+    width: 100%;
+  }
+  
+  .action-group {
+    justify-content: flex-end;
   }
 }
 </style>
-yle>

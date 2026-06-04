@@ -1,30 +1,36 @@
 <template>
-  <div v-if="loading" class="state-block">
-    <strong>{{ loadingTitle }}</strong>
-    <p>{{ loadingText }}</p>
-  </div>
-  <div v-else-if="error" class="state-block error">
-    <strong>{{ errorTitle }}</strong>
-    <p>{{ error }}</p>
-  </div>
-  <div v-else-if="empty" class="state-block">
-    <strong>{{ emptyTitle }}</strong>
-    <p>{{ emptyText }}</p>
-  </div>
-  <div v-else class="state-shell">
-    <div v-if="stale" class="state-banner-row">
-      <div class="stale-banner">
-        <span>{{ staleText }}</span>
-      </div>
+  <div class="bz-data-state" v-bind="$attrs">
+    <div v-if="loading" class="state-block">
+      <strong>{{ loadingTitle }}</strong>
+      <p>{{ loadingText }}</p>
     </div>
-    <div class="state-content">
-      <slot />
+    <div v-else-if="error" class="state-block error">
+      <strong>{{ errorTitle }}</strong>
+      <p>{{ error }}</p>
+    </div>
+    <div v-else-if="empty" class="state-block">
+      <strong>{{ emptyTitle }}</strong>
+      <p>{{ emptyText }}</p>
+    </div>
+    <div v-else class="state-shell">
+      <div v-if="stale" class="state-banner-row">
+        <div class="stale-banner">
+          <span>{{ staleText }}</span>
+        </div>
+      </div>
+      <div class="state-content">
+        <slot />
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { t } from "../../i18n";
+
+defineOptions({
+  inheritAttrs: false,
+});
 
 withDefaults(defineProps<{
   loading?: boolean;
@@ -52,6 +58,13 @@ withDefaults(defineProps<{
 </script>
 
 <style scoped>
+.bz-data-state {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
 .state-shell {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -69,6 +82,15 @@ withDefaults(defineProps<{
   min-height: 0;
   height: 100%;
   overflow: hidden;
+}
+
+.state-block {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
 }
 
 .state-block,

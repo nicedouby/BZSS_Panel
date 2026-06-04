@@ -38,6 +38,16 @@
 
       <div class="topbar-actions">
         <div class="topbar-metrics">
+          <span class="metric optional" :title="t('topbar.queue', '', { count: matchQueueCount })">
+            Q {{ matchQueueCount }}
+          </span>
+          <span
+            v-if="rconQueueCount > 0"
+            class="metric optional error"
+            title="RCON Command Queue"
+          >
+            RQ {{ rconQueueCount }}
+          </span>
           <StatusBadge class="runtime-badge" :tone="runtimeTone">{{ runtimeLabel }}</StatusBadge>
           <button
             type="button"
@@ -146,6 +156,15 @@ const logClockLabel = computed(() => {
   if (logClockSeconds.value == null) return "--:--";
   return formatDuration(logClockSeconds.value);
 });
+const rconQueueCount = computed(() => {
+  const value = Number(
+    webStatus.value.rconQueue
+      ?? server.snapshot.rconQueue
+      ?? server.snapshot.webStatus?.rconQueue
+      ?? 0
+  );
+  return Number.isFinite(value) ? Math.floor(value) : 0;
+});
 const canEditLogClock = computed(() => auth.user?.isSuperAdmin === true);
 const logClockTitle = computed(() => {
   if (!canEditLogClock.value) return t("topbar.logClockReadonly", "Only super admins can edit the log clock.");
@@ -197,7 +216,7 @@ const matchQueueCount = computed(() => {
       ?? server.snapshot?.matchState?.serverStatus?.queueCount
       ?? 0
   );
-  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
 });
 const matchQueueLabel = computed(() => t("topbar.queue", "", { count: matchQueueCount.value }));
 const matchMatchTimeSeconds = computed(() => {

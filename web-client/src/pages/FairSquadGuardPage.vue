@@ -6,13 +6,26 @@
       subtitle="通过日志和 RCON 双来源检测建队，按开局窗口自动警告、解散违规小队，并统计真实创建者违规次数。"
     >
       <template #actions>
-        <span class="status-chip" :data-tone="statusTone">{{ statusLabel }}</span>
-        <button type="button" class="ghost-btn" :disabled="loading" @click="load">
-          {{ loading ? "刷新中..." : "刷新" }}
-        </button>
-        <button type="button" class="ghost-btn" @click="settings.openDrawer()">
-          打开设置
-        </button>
+        <div class="header-actions">
+          <div class="header-toolbar">
+            <span class="status-chip" :data-tone="statusTone">{{ statusLabel }}</span>
+            <button type="button" class="ghost-btn" :disabled="loading" @click="load">
+              {{ loading ? "刷新中..." : "刷新" }}
+            </button>
+            <button type="button" class="ghost-btn" @click="settings.openDrawer()">
+              打开设置
+            </button>
+          </div>
+          <aside class="header-rules">
+            <strong>规则窗口</strong>
+            <div class="header-rules-grid">
+              <span>0 - {{ status?.settings.noSquadCreationSeconds ?? 20 }}s<br>禁止建队</span>
+              <span>{{ status?.settings.noSquadCreationSeconds ?? 20 }} - {{ status?.settings.infantryOnlyUntilSeconds ?? 50 }}s<br>仅默认/白名单步兵队</span>
+              <span>{{ status?.settings.infantryOnlyUntilSeconds ?? 50 }}s+<br>开放建队</span>
+              <span>{{ status?.settings.maxViolationCountBeforeKick ?? 15 }} 次<br>踢出阈值</span>
+            </div>
+          </aside>
+        </div>
       </template>
     </PageHeader>
 
@@ -104,27 +117,8 @@
       </article>
     </section>
 
-    <section class="detail-grid">
-      <PageCard title="规则窗口" description="默认队名和设置白名单在 20-50 秒窗口放行。" compact>
-        <div class="rule-list">
-          <div><span>0 - {{ status?.settings.noSquadCreationSeconds ?? 20 }}s</span><strong>禁止建队</strong></div>
-          <div><span>{{ status?.settings.noSquadCreationSeconds ?? 20 }} - {{ status?.settings.infantryOnlyUntilSeconds ?? 50 }}s</span><strong>仅默认/白名单步兵队</strong></div>
-          <div><span>{{ status?.settings.infantryOnlyUntilSeconds ?? 50 }}s+</span><strong>开放建队</strong></div>
-          <div><span>违规踢出阈值</span><strong>{{ status?.settings.maxViolationCountBeforeKick ?? 15 }} 次后踢出</strong></div>
-        </div>
-        <div class="allowlist">
-          <h3>默认正则</h3>
-          <code v-for="item in status?.settings.defaultInfantryPatterns ?? []" :key="item">{{ item }}</code>
-          <h3>自定义名称</h3>
-          <code v-for="item in status?.settings.allowedInfantryNames ?? []" :key="item">{{ item }}</code>
-          <span v-if="!status?.settings.allowedInfantryNames.length" class="empty-inline">未配置</span>
-          <h3>自定义正则</h3>
-          <code v-for="item in status?.settings.allowedInfantryPatterns ?? []" :key="item">{{ item }}</code>
-          <span v-if="!status?.settings.allowedInfantryPatterns.length" class="empty-inline">未配置</span>
-        </div>
-      </PageCard>
-
-      <PageCard title="违规排行榜" description="只统计日志确认的真实创建者；RCON-only 不处罚玩家。" compact>
+    <section class="monitor-grid">
+      <PageCard class="leaderboard-card" title="违规排行榜" description="只统计日志确认的真实创建者；RCON-only 不处罚玩家。" compact>
         <div v-if="!status?.leaderboard.length" class="empty-state">暂无违规玩家。</div>
         <div v-else class="leaderboard">
           <article v-for="player in status.leaderboard" :key="player.key" class="leader-row">
@@ -139,60 +133,60 @@
           </article>
         </div>
       </PageCard>
-    </section>
 
-    <PageCard title="当前违规队伍" description="只展示仍在当前 RCON 快照中存在的违规小队；队伍消失后会自动移出。" compact>
-      <div v-if="!status?.currentViolatingSquads.length" class="empty-state">当前没有追踪中的违规队伍。</div>
-      <div v-else class="current-grid">
-        <article
-          v-for="record in status.currentViolatingSquads"
-          :key="record.id"
-          class="current-card"
-        >
-          <div>
-            <strong>{{ record.squadName || `Squad ${record.squadId ?? "?"}` }}</strong>
-            <span>T{{ record.teamId ?? "?" }} / S{{ record.squadId ?? "?" }} · {{ record.creationSource }}</span>
-          </div>
-          <div>
-            <b>{{ record.clockSeconds }}s</b>
-            <small>{{ creatorLabel(record) }}</small>
-          </div>
-          <p v-if="record.reasons.length">{{ record.reasons.join(" / ") }}</p>
-        </article>
-      </div>
-    </PageCard>
-
-    <PageCard title="判定时间轴" description="标明 LOG、RCON_SNAPSHOT 或 RCON_PROMOTED_TO_LOG 来源。" compact>
-      <div v-if="!records.length" class="empty-state">暂无建队判定记录。</div>
-      <div v-else class="timeline">
-        <article v-for="record in records" :key="record.id" class="timeline-item" :data-tone="record.approved ? 'ok' : 'danger'">
-          <div class="timeline-head">
+      <PageCard class="current-panel" title="当前违规队伍" description="只展示仍在当前 RCON 快照中存在的违规小队；队伍消失后会自动移出。" compact>
+        <div v-if="!status?.currentViolatingSquads.length" class="empty-state">当前没有追踪中的违规队伍。</div>
+        <div v-else class="current-grid">
+          <article
+            v-for="record in status.currentViolatingSquads"
+            :key="record.id"
+            class="current-card"
+          >
             <div>
               <strong>{{ record.squadName || `Squad ${record.squadId ?? "?"}` }}</strong>
-              <span>T{{ record.teamId ?? "?" }} / S{{ record.squadId ?? "?" }}</span>
+              <span>T{{ record.teamId ?? "?" }} / S{{ record.squadId ?? "?" }} · {{ record.creationSource }}</span>
             </div>
-            <div class="timeline-badges">
-              <span class="status-chip subtle">{{ record.creationSource }}</span>
-              <span class="status-chip" :data-tone="record.approved ? 'ok' : 'danger'">
-                {{ record.approved ? "通过" : "违规" }}
+            <div>
+              <b>{{ record.clockSeconds }}s</b>
+              <small>{{ creatorLabel(record) }}</small>
+            </div>
+            <p v-if="record.reasons.length">{{ record.reasons.join(" / ") }}</p>
+          </article>
+        </div>
+      </PageCard>
+
+      <PageCard class="timeline-panel" title="判定时间轴" description="标明 LOG、RCON_SNAPSHOT 或 RCON_PROMOTED_TO_LOG 来源。" compact>
+        <div v-if="!records.length" class="empty-state">暂无建队判定记录。</div>
+        <div v-else class="timeline">
+          <article v-for="record in records" :key="record.id" class="timeline-item" :data-tone="record.approved ? 'ok' : 'danger'">
+            <div class="timeline-head">
+              <div>
+                <strong>{{ record.squadName || `Squad ${record.squadId ?? "?"}` }}</strong>
+                <span>T{{ record.teamId ?? "?" }} / S{{ record.squadId ?? "?" }}</span>
+              </div>
+              <div class="timeline-badges">
+                <span class="status-chip subtle">{{ record.creationSource }}</span>
+                <span class="status-chip" :data-tone="record.approved ? 'ok' : 'danger'">
+                  {{ record.approved ? "通过" : "违规" }}
+                </span>
+              </div>
+            </div>
+            <div class="timeline-meta">
+              <span>创建者: {{ creatorLabel(record) }}</span>
+              <span>日志时间: {{ record.clockSeconds }}s</span>
+              <span>人数: {{ record.population }}</span>
+              <span>更新: {{ formatTime(record.updatedAt) }}</span>
+            </div>
+            <p v-if="record.reasons.length">{{ record.reasons.join(" / ") }}</p>
+            <div class="action-line">
+              <span v-for="action in record.actions" :key="`${record.id}-${action.type}-${action.count ?? ''}`">
+                {{ action.type }}{{ action.count != null ? `(${action.count})` : "" }}
               </span>
             </div>
-          </div>
-          <div class="timeline-meta">
-            <span>创建者: {{ creatorLabel(record) }}</span>
-            <span>日志时间: {{ record.clockSeconds }}s</span>
-            <span>人数: {{ record.population }}</span>
-            <span>更新: {{ formatTime(record.updatedAt) }}</span>
-          </div>
-          <p v-if="record.reasons.length">{{ record.reasons.join(" / ") }}</p>
-          <div class="action-line">
-            <span v-for="action in record.actions" :key="`${record.id}-${action.type}-${action.count ?? ''}`">
-              {{ action.type }}{{ action.count != null ? `(${action.count})` : "" }}
-            </span>
-          </div>
-        </article>
-      </div>
-    </PageCard>
+          </article>
+        </div>
+      </PageCard>
+    </section>
   </section>
 </template>
 
@@ -294,16 +288,71 @@ onMounted(() => {
 
 <style scoped>
 .fair-squad-guard-page {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
+  position: relative;
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  overflow: visible;
+}
+
+.fair-squad-guard-page::before {
+  content: "";
+  position: absolute;
+  inset: -80px auto auto -120px;
+  width: 280px;
+  height: 280px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.16), transparent 68%);
+  pointer-events: none;
+  filter: blur(8px);
+}
+
+.fair-squad-guard-page::after {
+  content: "";
+  position: absolute;
+  inset: auto -100px -120px auto;
+  width: 320px;
+  height: 320px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(34, 197, 94, 0.1), transparent 68%);
+  pointer-events: none;
+  filter: blur(10px);
+}
+
+.fair-squad-guard-page > * {
+  position: relative;
+  z-index: 1;
+}
+
+.fair-squad-guard-page :deep(.page-card) {
+  border-color: rgba(148, 163, 184, 0.16);
+  background:
+    radial-gradient(circle at top right, rgba(56, 189, 248, 0.1), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.02)), rgba(255, 255, 255, 0.01)),
+    var(--color-bg-card);
+  box-shadow: 0 18px 36px rgba(2, 6, 23, 0.26);
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.fair-squad-guard-page :deep(.page-card:hover) {
+  transform: translateY(-1px);
+  border-color: rgba(96, 165, 250, 0.28);
+  box-shadow: 0 22px 42px rgba(2, 6, 23, 0.3);
+}
+
+.fair-squad-guard-page :deep(.card-header) {
+  padding: 16px 18px 0;
+}
+
+.fair-squad-guard-page :deep(.card-body) {
+  padding: 18px;
 }
 
 .error-banner,
 .empty-state {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
-  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 14px;
+  padding: 12px 14px;
   background: rgba(255, 255, 255, 0.04);
   color: var(--color-text-muted);
 }
@@ -316,13 +365,71 @@ onMounted(() => {
 .hero-grid,
 .detail-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.8fr);
-  gap: 16px;
+  grid-template-columns: minmax(0, 1.7fr) minmax(240px, 0.78fr);
+  gap: 12px;
+}
+
+.detail-grid {
+  align-items: start;
 }
 
 .hero-main,
 .hero-actions {
   min-width: 0;
+}
+
+.monitor-grid {
+  display: grid;
+  grid-template-columns: minmax(250px, 0.82fr) minmax(320px, 1fr) minmax(360px, 1.2fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.header-actions {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  min-width: min(420px, 100%);
+}
+
+.header-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.header-rules {
+  width: min(420px, 100%);
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.24);
+}
+
+.header-rules strong {
+  display: block;
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--color-text-primary);
+}
+
+.header-rules-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.header-rules-grid span {
+  display: block;
+  padding: 8px 9px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .hero-badges,
@@ -334,12 +441,18 @@ onMounted(() => {
 }
 
 .status-chip {
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 12px;
   border-radius: 999px;
-  padding: 6px 10px;
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--color-text);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text-primary);
   font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .status-chip.subtle {
@@ -364,9 +477,9 @@ onMounted(() => {
 .metric-grid,
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .metric-grid div,
@@ -375,62 +488,77 @@ onMounted(() => {
 .leader-row,
 .current-card,
 .timeline-item {
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 16px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.025));
 }
 
 .metric-grid div,
 .summary-card,
 .rule-list div {
-  padding: 14px;
+  padding: 9px 10px;
 }
 
 .metric-grid dt,
 .summary-card span,
 .rule-list span {
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .metric-grid dd,
 .summary-card strong,
 .rule-list strong {
   display: block;
-  margin: 6px 0 0;
-  color: var(--color-text);
-  font-size: 20px;
+  margin: 2px 0 0;
+  color: var(--color-text-primary);
+  font-size: 15px;
 }
 
 .summary-card em {
   display: block;
-  margin-top: 6px;
+  margin-top: 2px;
   color: var(--color-text-muted);
   font-style: normal;
-  font-size: 12px;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.summary-card {
+  display: grid;
+  gap: 1px;
+  min-height: 0;
 }
 
 .hero-actions {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  align-items: stretch;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.22);
 }
 
 .hero-actions p {
   margin: 0;
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
 .ghost-btn,
 .danger-btn {
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  min-height: 36px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 12px;
-  padding: 10px 14px;
+  padding: 0 12px;
   background: rgba(255, 255, 255, 0.06);
-  color: var(--color-text);
+  color: var(--color-text-primary);
   cursor: pointer;
+  font-weight: 700;
 }
 
 .danger-btn {
@@ -444,45 +572,44 @@ onMounted(() => {
   cursor: not-allowed;
 }
 
-.rule-list {
-  display: grid;
-  gap: 10px;
+.leaderboard-card,
+.current-panel,
+.timeline-panel {
+  min-width: 0;
 }
 
-.allowlist {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 16px;
+.leaderboard-card :deep(.page-card) {
+  height: auto;
 }
 
-.allowlist h3 {
-  flex: 0 0 100%;
-  margin: 8px 0 0;
-  font-size: 13px;
-  color: var(--color-text-muted);
+.leaderboard-card :deep(.card-body) {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
 }
 
-.allowlist code,
-.empty-inline,
 .action-line span {
   border-radius: 999px;
-  padding: 5px 8px;
+  padding: 4px 8px;
   background: rgba(255, 255, 255, 0.07);
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .leaderboard {
   display: grid;
-  gap: 10px;
+  gap: 6px;
+  max-height: 288px;
+  overflow: auto;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
 }
 
 .leader-row {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px;
+  padding: 9px 10px;
 }
 
 .leader-row strong,
@@ -500,19 +627,43 @@ onMounted(() => {
 .leader-row b {
   display: block;
   text-align: right;
-  font-size: 24px;
+  font-size: 18px;
 }
 
 .current-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  max-height: 560px;
+  overflow: auto;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+}
+
+.current-panel :deep(.page-card),
+.timeline-panel :deep(.page-card) {
+  height: auto;
+}
+
+.current-panel :deep(.card-body),
+.timeline-panel :deep(.card-body) {
+  min-height: 0;
+  height: auto;
+  overflow: visible;
+}
+
+.current-panel :deep(.card-body) {
+  padding-right: 18px;
+}
+
+.timeline-panel :deep(.card-body) {
+  padding-right: 18px;
 }
 
 .current-card {
   display: grid;
-  gap: 10px;
-  padding: 14px;
+  gap: 6px;
+  padding: 9px 10px;
   border-color: rgba(255, 92, 92, 0.28);
 }
 
@@ -531,7 +682,7 @@ onMounted(() => {
 
 .current-card b {
   color: #ffadad;
-  font-size: 22px;
+  font-size: 18px;
 }
 
 .current-card p {
@@ -540,11 +691,15 @@ onMounted(() => {
 
 .timeline {
   display: grid;
-  gap: 12px;
+  gap: 6px;
+  max-height: 560px;
+  overflow: auto;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
 }
 
 .timeline-item {
-  padding: 14px;
+  padding: 9px 10px;
 }
 
 .timeline-item[data-tone="danger"] {
@@ -565,23 +720,70 @@ onMounted(() => {
 }
 
 .timeline-meta {
-  margin-top: 10px;
+  margin-top: 6px;
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .timeline-item p {
-  margin: 10px 0;
+  margin: 6px 0;
   color: var(--color-text);
 }
 
 @media (max-width: 980px) {
   .hero-grid,
   .detail-grid,
+  .monitor-grid,
   .current-grid,
   .metric-grid,
   .summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .current-card,
+  .leader-row,
+  .timeline-item {
+    padding: 12px;
+  }
+
+  .header-actions {
+    min-width: 0;
+    justify-items: stretch;
+  }
+
+  .header-toolbar {
+    justify-content: flex-start;
+  }
+
+  .header-rules {
+    width: 100%;
+  }
+
+  .header-rules-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .leaderboard,
+  .current-grid,
+  .timeline {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .fair-squad-guard-page {
+    padding: 12px;
+  }
+
+  .summary-card {
+    gap: 2px;
+  }
+
+  .leaderboard-card :deep(.card-body),
+  .current-panel :deep(.card-body),
+  .timeline-panel :deep(.card-body) {
+    height: auto;
+    overflow: visible;
   }
 }
 </style>
