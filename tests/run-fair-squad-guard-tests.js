@@ -87,7 +87,7 @@ async function createHarness(options = {}) {
             noSquadCreationSeconds: 20,
             infantryOnlyUntilSeconds: 50,
             maxViolationCountBeforeKick: 15,
-            disbandCommandNameSuffix: "x",
+            disbandCommandNameSuffix: "",
             allowedInfantryNamesText: "INF OK",
             allowedInfantryPatternsText: "",
           };
@@ -225,7 +225,7 @@ async function testRconOnlyDisbandsButDoesNotPunishPlayer() {
     const status = harness.plugin.api.getStatus();
     assert.equal(status.summary.violations, 1);
     assert.equal(harness.disbands.length, 1);
-    assert.equal(harness.disbands[0].commandNameSuffix, "x");
+    assert.equal(harness.disbands[0].commandNameSuffix, "");
     assert.equal(harness.warnings.length, 0);
     assert.equal(harness.kicks.length, 0);
     assert.equal(status.leaderboard.length, 0);
@@ -280,7 +280,7 @@ async function testLogPromotesRconWithoutSecondDisband() {
 
     assert.equal(promoted.creationSource, "RCON_PROMOTED_TO_LOG");
     assert.equal(harness.disbands.length, 1);
-    assert.equal(harness.disbands[0].commandNameSuffix, "x");
+    assert.equal(harness.disbands[0].commandNameSuffix, "");
     assert.equal(harness.warnings.length, 1);
     assert.equal(harness.plugin.api.getStatus().leaderboard[0].violations, 1);
   } finally {

@@ -258,8 +258,8 @@ describe("MatchStatusPage", () => {
     const panel = document.body.querySelector(".player-detail-floating");
     expect(panel).toBeTruthy();
     expect(panel?.textContent).toContain("Alice");
-    expect(panel?.getAttribute("style") || "").toContain("left: 136px");
-    expect(panel?.getAttribute("style") || "").toContain("top: 166px");
+    expect(panel?.getAttribute("style") || "").toContain("left: 12px");
+    expect(panel?.getAttribute("style") || "").toContain("top: 12px");
 
     wrapper.unmount();
   });

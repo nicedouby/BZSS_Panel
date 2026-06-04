@@ -600,7 +600,7 @@
   "plugins": {
     "enabled": true,
     "fairSquadGuard": {
-      "enabled": true,
+      "enabled": false,
       "directory": "./data/fair-squad-guard",
       "enforcementPlayerThreshold": 50,
       "noSquadCreationSeconds": 20,
@@ -674,7 +674,7 @@
     },
     "plugin": {
       "fairSquadGuard": {
-        "enabled": true
+        "enabled": false
       },
       "fairTeamBalance": {
         "enabled": true

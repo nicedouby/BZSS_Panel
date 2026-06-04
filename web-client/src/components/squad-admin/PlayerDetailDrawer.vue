@@ -258,7 +258,6 @@ const panelClass = computed(() => ({
 const panelStyle = computed(() => {
   if (!isFloating.value) return undefined;
 
-  const margin = 12;
   const compactViewport = viewport.value.width < 920 || viewport.value.height < 760;
   if (compactViewport) {
     return {
@@ -270,27 +269,11 @@ const panelStyle = computed(() => {
     };
   }
 
-  const anchorX = Number.isFinite(Number(props.anchorX)) ? Number(props.anchorX) : viewport.value.width / 2;
-  const anchorY = Number.isFinite(Number(props.anchorY)) ? Number(props.anchorY) : viewport.value.height / 2;
   const panelWidth = Math.min(480, Math.max(380, Math.round(viewport.value.width * 0.34)));
-  const estimatedHeight = Math.min(680, Math.max(360, viewport.value.height - 48));
-
-  let left = anchorX + 16;
-  let top = anchorY + 16;
-
-  if (left + panelWidth > viewport.value.width - margin) {
-    left = Math.max(margin, viewport.value.width - panelWidth - margin);
-  }
-  if (top + estimatedHeight > viewport.value.height - margin) {
-    top = Math.max(margin, viewport.value.height - estimatedHeight - margin);
-  }
-
-  left = Math.max(margin, left);
-  top = Math.max(margin, top);
 
   return {
-    left: `${left}px`,
-    top: `${top}px`,
+    left: "12px",
+    top: "12px",
     width: `${panelWidth}px`,
     maxHeight: `${Math.max(320, viewport.value.height - 48)}px`,
     transform: "none",
