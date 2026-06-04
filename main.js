@@ -41,6 +41,7 @@ import { PluginManager } from "./core/plugin-manager.js";
 import { AuthManager } from "./core/auth-manager.js";
 import { EventPipeline } from "./core/event-pipeline.js";
 import { RuntimeState } from "./core/runtime-state.js";
+import { RawLogDerivedEvents } from "./core/raw-log-derived-events.js";
 
 async function main() {
   const configManager = new ConfigManager("./config.json");
@@ -83,6 +84,8 @@ async function main() {
   const consoleService = new ConsoleService({
     maxEntries: configManager.get("console.maxEntries", 5000),
   });
+
+  let rawLogDerivedEvents = null;
 
   const rconManager = new RconManager({
     config: configManager.get("rcon", {}),
@@ -129,6 +132,34 @@ async function main() {
   });
   coreContext.moduleManager = moduleManager;
 
+  rawLogDerivedEvents = new RawLogDerivedEvents({
+    eventBus,
+    logger: logger.child({ moduleId: "core.rawLogDerivedEvents", source: "core.rawLogDerivedEvents" }),
+    playerIdentityResolver({ serverId, keyType, keyValue }) {
+      const playerState = moduleManager?.registry?.playerState;
+      if (!playerState || !keyValue) return null;
+
+      if (keyType === "steam64ID") {
+        const player = playerState.getPlayerBySteamID(serverId, keyValue);
+        return player?.name ? { name: player.name, source: "playerStateBySteam64" } : null;
+      }
+
+      if (keyType === "eosID") {
+        const player = playerState.getPlayerByEOSID(serverId, keyValue);
+        return player?.name ? { name: player.name, source: "playerStateByEOSID" } : null;
+      }
+
+      if (keyType === "controllerID") {
+        const player = playerState.getPlayerByControllerID(serverId, keyValue);
+        return player?.name ? { name: player.name, source: "playerStateByControllerID" } : null;
+      }
+
+      return null;
+    },
+  });
+
+  coreContext.rawLogDerivedEvents = rawLogDerivedEvents;
+
   const pluginManager = new PluginManager({
     core: coreContext,
     modules: moduleManager.registry,
@@ -153,6 +184,7 @@ async function main() {
 
   await authManager.start();
   await moduleManager.loadBuiltInModules();
+  rawLogDerivedEvents.start();
   eventPipeline.setCombatIdentityResolver(({ serverId, keyType, keyValue }) => {
     const playerState = moduleManager.registry.playerState;
     if (!playerState || !keyValue) return null;
@@ -209,6 +241,7 @@ async function main() {
     await webServer.stop();
     await pluginManager.stopAll();
     await moduleManager.stopAll();
+    rawLogDerivedEvents?.stop?.();
     await udpReceiver.stop();
     await rconManager.stop();
     runtimeState.stop();

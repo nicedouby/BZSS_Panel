@@ -1737,6 +1737,80 @@ async function testVueRouteFallsBackToIndexHtml() {
   await fs.rm(tempDir, { recursive: true, force: true });
 }
 
+async function testMatchSnapshotRoutesExposeArtifacts() {
+  const calls = [];
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin" };
+        },
+        hasEverything() {
+          return true;
+        },
+      },
+      pluginManager: {
+        instances: [
+          {
+            manifest: { id: "match-snapshot" },
+            api: {
+              async listSnapshots() {
+                return [{ id: "Match-Test", artifacts: [{ format: "image", fileName: "Match-Test.png" }] }];
+              },
+              async takeManualSnapshot(options) {
+                calls.push(`capture:${JSON.stringify(options ?? {})}`);
+                return { id: "Match-Test", files: { image: "Match-Test.png" } };
+              },
+              async readSnapshotArtifact(id, format) {
+                calls.push(`read:${id}:${format}`);
+                return {
+                  fileName: "Match-Test.png",
+                  format: "image",
+                  contentType: "image/png",
+                  content: Buffer.from("PNGDATA", "utf8"),
+                };
+              },
+            },
+          },
+        ],
+      },
+    },
+  });
+
+  const listRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/match-snapshot/list",
+    headers: { host: "localhost" },
+    socket: {},
+  }, listRecorder.res);
+  assert.equal(listRecorder.state.status, 200);
+  assert.equal(JSON.parse(listRecorder.state.body)[0].id, "Match-Test");
+
+  const captureRecorder = createRecorder();
+  const captureReq = Readable.from([JSON.stringify({ includeSteamID: false, includeEOSID: true })]);
+  captureReq.method = "POST";
+  captureReq.url = "/api/match-snapshot/capture";
+  captureReq.headers = { host: "localhost", "content-type": "application/json" };
+  captureReq.socket = {};
+  await server.handleRequest(captureReq, captureRecorder.res);
+  assert.equal(captureRecorder.state.status, 200);
+  assert.equal(JSON.parse(captureRecorder.state.body).snapshot.id, "Match-Test");
+  assert.ok(calls.includes('capture:{"includeSteamID":false,"includeEOSID":true}'));
+
+  const imageRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/match-snapshot/view?id=Match-Test&format=image",
+    headers: { host: "localhost" },
+    socket: {},
+  }, imageRecorder.res);
+  assert.equal(imageRecorder.state.status, 200);
+  assert.equal(imageRecorder.state.headers["Content-Type"], "image/png");
+  assert.equal(imageRecorder.state.body, "PNGDATA");
+  assert.ok(calls.includes("read:Match-Test:image"));
+}
+
 await testReadJsonBodyParsesValidPayload();
 await testReadJsonBodyRejectsInvalidJson();
 await testReadJsonBodyRejectsOversizedPayload();
@@ -1762,6 +1836,7 @@ await testCombatLogRoutesExposeLogsAndMetadata();
 await testFairTeamBalanceRoutesReturnPluginStateAndRequests();
 await testFairSquadGuardRoutesReturnPluginStateAndActions();
 await testPjscAverageDurationRouteReturnsPluginState();
+await testMatchSnapshotRoutesExposeArtifacts();
 await testVueRouteFallsBackToIndexHtml();
 
 console.log("web server tests passed");

@@ -255,7 +255,7 @@ export const router = createRouter({
       component: MatchSnapshotDebugPage,
       meta: {
         ...debugManualMeta,
-        title: "蹇収褰曞埗",
+        title: "快照录制",
         fullBleed: true,
       },
     },

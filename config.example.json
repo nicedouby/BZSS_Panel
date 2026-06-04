@@ -390,6 +390,7 @@
       "./plugins/weapon-collector.js",
       "./plugins/player_duration_slow_refresh.js",
       "./plugins/udp_event_forwarder.js",
+      "./plugins/match-snapshot.js",
       "./plugins/fair-squad-guard.js"
     ],
     "fairSquadGuard": {

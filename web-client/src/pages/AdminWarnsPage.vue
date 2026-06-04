@@ -70,7 +70,7 @@
       <div v-else class="form-grid">
         <label class="wide">
           <span>广播内容</span>
-          <textarea v-model="broadcastForm.message" rows="5" placeholder="请输入广播内容"></textarea>
+          <textarea v-model="broadcastForm.message" rows="2" placeholder="请输入广播内容"></textarea>
         </label>
         <label class="wide">
           <span>原因</span>

@@ -552,7 +552,7 @@
     },
     "plugin": {
       "fairSquadGuard": {
-        "enabled": false
+        "enabled": true
       },
       "fairTeamBalance": {
         "enabled": true
@@ -560,6 +560,6 @@
     }
   },
   "warmup": {
-    "enabled": false
+    "enabled": true
   }
 }

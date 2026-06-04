@@ -9,6 +9,7 @@
             <option value="damage">伤害</option>
             <option value="wound">击倒</option>
             <option value="kill">击杀</option>
+            <option value="revive">复苏</option>
           </select>
         </label>
 
@@ -125,7 +126,7 @@ function updateLimit(value: string) {
 }
 
 function normalizeType(value: string): InfantryCombatFilters["type"] {
-  if (value === "damage" || value === "wound" || value === "kill") return value;
+  if (value === "damage" || value === "wound" || value === "kill" || value === "revive") return value;
   return "all";
 }
 

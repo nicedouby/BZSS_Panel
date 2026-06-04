@@ -159,6 +159,7 @@ function prettyJson(value: unknown) {
 
 function typeLabel(value: unknown) {
   const type = String(value ?? "").trim().toLowerCase();
+  if (type === "revive") return "复苏";
   if (type === "damage") return "伤害";
   if (type === "wound") return "击倒";
   if (type === "kill") return "击杀";

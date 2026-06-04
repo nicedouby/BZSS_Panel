@@ -984,7 +984,8 @@ function normalizeStatusLabel(status: string) {
 .detail-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: stretch;
-  height: 600px;
+  height: 100%;
+  min-height: 400px;
 }
 
 .detail-grid :deep(.page-card) {
@@ -1010,8 +1011,8 @@ function normalizeStatusLabel(status: string) {
 .request-item,
 .history-item {
   border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 16px;
-  padding: 16px;
+  border-radius: 12px;
+  padding: 12px;
   background: rgba(15, 23, 42, 0.18);
 }
 

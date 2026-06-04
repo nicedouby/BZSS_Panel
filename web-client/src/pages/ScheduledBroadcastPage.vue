@@ -80,9 +80,9 @@
               <label class="broadcast-field broadcast-message">
                 <span>广播内容</span>
                 <textarea
-                  class="inline-textarea"
-                  rows="3"
-                  maxlength="180"
+                class="inline-textarea"
+                rows="2"
+                maxlength="180"
                   :value="drafts[item.id]?.message ?? item.message"
                   placeholder="请输入广播内容"
                   @input="setDraft(item.id, 'message', ($event.target as HTMLTextAreaElement).value)"
@@ -652,3 +652,4 @@ function formatTime(value: unknown) {
   }
 }
 </style>
+yle>

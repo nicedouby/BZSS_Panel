@@ -124,6 +124,7 @@
     collapse: "收起",
     players: "{count} 名玩家",
     tps: "TPS {value}",
+    queue: "排队 {count}",
     unknownLayer: "未知图层",
     warmupLoading: "暖服，加载中",
     warmupOn: "暖服：开启",

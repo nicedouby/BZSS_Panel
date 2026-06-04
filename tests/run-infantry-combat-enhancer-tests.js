@@ -122,6 +122,47 @@ async function testProcessingAndWarnings() {
   await module.stop();
 }
 
+async function testReviveResolvedWarnings() {
+  const { module, eventBus, calls } = createHarness();
+  await module.start();
+
+  await eventBus.emitModuleEvent("module.combatClean", "reviveResolved", {
+    eventId: "module.combatClean:revive-1",
+    serverId: "S1",
+    time: "2026-05-30T12:01:00.000Z",
+    record: {
+      id: "revive-1",
+      serverId: "S1",
+      type: "revive",
+      time: "2026-05-30T12:01:00.000Z",
+      attackerName: "Medic",
+      attackerSteam64ID: "111",
+      victimName: "Downed",
+      victimSteam64ID: "222",
+      tags: ["combat.revive"],
+    },
+  });
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].targetName, "Downed");
+  assert.equal(calls[0].message, "[BZSS]Medic复苏了你，立即归队作战");
+  assert.equal(calls[0].reason, "infantry_revive_victim");
+  assert.equal(calls[1].targetName, "Medic");
+  assert.equal(calls[1].message, "[BZSS]你复苏了Downed，继续并肩作战");
+  assert.equal(calls[1].reason, "infantry_revive_attacker");
+
+  const events = module.api.getEvents({ type: "revive", limit: 10 });
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, "revive");
+  assert.equal(events[0].victimWarning.success, true);
+  assert.equal(events[0].attackerWarning.success, true);
+  assert.equal(module.api.getOverview().stats.revive, 1);
+  assert.equal(module.api.getOverview().stats.victimWarned, 1);
+  assert.equal(module.api.getOverview().stats.attackerWarned, 1);
+
+  await module.stop();
+}
+
 async function testTagDrivenMessages() {
   const { module, eventBus, calls } = createHarness({
     moduleConfig: {
@@ -409,6 +450,7 @@ async function testCombatCleanDependencyGate() {
 }
 
 await testProcessingAndWarnings();
+await testReviveResolvedWarnings();
 await testTagDrivenMessages();
 await testOnlyLightWeaponDamageSkipsNonLightWeapons();
 await testOnlyLightWeaponDamageSkipsHeavyKillAttacker();

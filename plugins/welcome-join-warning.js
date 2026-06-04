@@ -434,11 +434,15 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         }));
       }
 
-      unsubscribers.push(core.eventBus.onCoreEvent(RAW_LOG_JOIN_EVENT_NAME, (event) => {
-        const joinEvent = buildJoinEventFromRawLog(event);
-        if (!joinEvent) return;
-        void enqueue(() => handleJoinEvent(joinEvent));
-      }));
+      // 兼容旧版本：如果核心层没有派生 PLAYER_CONNECTED，就从 RawLogLine 里兜底解析 Join succeeded。
+      // 新版本 core.rawLogDerivedEvents 会派生 PLAYER_CONNECTED，避免双重触发这里直接跳过。
+      if (!core?.rawLogDerivedEvents) {
+        unsubscribers.push(core.eventBus.onCoreEvent(RAW_LOG_JOIN_EVENT_NAME, (event) => {
+          const joinEvent = buildJoinEventFromRawLog(event);
+          if (!joinEvent) return;
+          void enqueue(() => handleJoinEvent(joinEvent));
+        }));
+      }
 
       pluginLogger?.info?.(
         `[WelcomeJoinWarning] started. delayMs=${state.delayMs} message=${JSON.stringify(state.message)}`,

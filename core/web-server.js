@@ -1972,10 +1972,14 @@ export class WebServer {
 
     if (url.pathname === "/api/match-snapshot/capture" && req.method === "POST") {
       if (!this.requireSuperAdmin(user, res)) return;
+      const body = await this.readJsonBody(req);
       const pluginApi = this.getPluginApi("match-snapshot");
       if (!pluginApi?.takeManualSnapshot) return this.json(res, 404, { error: "PluginNotLoaded" });
-      await pluginApi.takeManualSnapshot();
-      return this.json(res, 200, { ok: true });
+      const snapshot = await pluginApi.takeManualSnapshot({
+        includeSteamID: body?.includeSteamID ?? body?.options?.includeSteamID,
+        includeEOSID: body?.includeEOSID ?? body?.options?.includeEOSID,
+      });
+      return this.json(res, 200, { ok: true, snapshot });
     }
 
     if (url.pathname === "/api/match-snapshot/view" && req.method === "GET") {
@@ -1983,14 +1987,36 @@ export class WebServer {
       const id = url.searchParams.get("id");
       if (!id) return this.json(res, 400, { error: "MissingId" });
 
-      const safeId = path.basename(id);
-      const filePath = path.join(process.cwd(), "data", "match-snapshots", safeId);
-
       try {
-        const content = await fs.readFile(filePath, "utf8");
-        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+        const pluginApi = this.getPluginApi("match-snapshot");
+        if (pluginApi?.readSnapshotArtifact) {
+          const artifact = await pluginApi.readSnapshotArtifact(
+            id,
+            url.searchParams.get("format") ?? url.searchParams.get("type") ?? "json",
+          );
+          const headers = {
+            "Content-Type": artifact.contentType,
+            "Cache-Control": "no-store",
+          };
+          if (url.searchParams.get("download") === "1") {
+            headers["Content-Disposition"] = `attachment; filename="${safeHeaderFileName(artifact.fileName)}"`;
+          }
+          res.writeHead(200, headers);
+          return res.end(artifact.content);
+        }
+
+        const safeId = path.basename(id);
+        const filePath = path.join(process.cwd(), "data", "match-snapshots", safeId);
+        const content = await fs.readFile(filePath);
+        res.writeHead(200, {
+          "Content-Type": contentType(filePath),
+          "Cache-Control": "no-store",
+        });
         return res.end(content);
       } catch (err) {
+        if (err?.statusCode === 400) {
+          return this.json(res, 400, { error: err.code ?? "InvalidSnapshotArtifact", message: err.message });
+        }
         return this.json(res, 404, { error: "FileNotFound" });
       }
     }
@@ -2663,8 +2689,17 @@ function contentType(filePath) {
   if (filePath.endsWith(".css")) return "text/css; charset=utf-8";
   if (filePath.endsWith(".js")) return "text/javascript; charset=utf-8";
   if (filePath.endsWith(".json")) return "application/json; charset=utf-8";
+  if (filePath.endsWith(".png")) return "image/png";
   if (filePath.endsWith(".svg")) return "image/svg+xml";
+  if (filePath.endsWith(".csv")) return "text/csv; charset=utf-8";
+  if (filePath.endsWith(".md")) return "text/markdown; charset=utf-8";
   return "application/octet-stream";
+}
+
+function safeHeaderFileName(fileName) {
+  return path.basename(String(fileName ?? "download"))
+    .replace(/[^\x20-\x7E]/g, "_")
+    .replace(/["\\]/g, "_");
 }
 
 function createHttpError(statusCode, code, message) {

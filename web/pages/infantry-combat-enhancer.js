@@ -5,6 +5,7 @@ const TYPE_LABELS = {
   damage: "Damage",
   wound: "Wound",
   kill: "Kill",
+  revive: "Revive",
 };
 
 export async function renderPage({ root, api, apiFetch }) {

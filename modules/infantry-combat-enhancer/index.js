@@ -13,7 +13,7 @@ const DEFAULT_CONFIG = Object.freeze({
   storeRecentEventLimit: 300,
 });
 
-const VALID_TYPES = new Set(["damage", "wound", "kill"]);
+const VALID_TYPES = new Set(["damage", "wound", "kill", "revive"]);
 const COMBAT_CLEAN_SUBSCRIPTION_ID = "module.combatClean";
 
 export function createInfantryCombatEnhancerModule({ core, modules, config, logger }) {
@@ -87,7 +87,7 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
     const victim = extractIdentity(record, "victim");
     const damage = normalizeDamage(record.damage);
     if (!victim.name) return null;
-    if (Number.isFinite(damage) && Math.abs(damage) < 5) return null;
+    if (type !== "revive" && Number.isFinite(damage) && Math.abs(damage) < 5) return null;
     const samePlayer = isSamePlayer(attacker, victim);
     const weaponName = resolveWeaponName(record);
     const serverId = String(record.serverId ?? event?.serverId ?? core.webStatus?.serverId ?? "").trim();
@@ -175,6 +175,15 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
     }
     if (!entry.attacker.name) {
       return makeSkipDecision(entry, "attacker", "attacker_missing_target");
+    }
+    if (entry.type === "revive") {
+      return makeSendDecision({
+        entry,
+        role: "attacker",
+        target: entry.attacker,
+        message: buildAttackerMessage(entry),
+        reason: `infantry_${entry.type}_attacker`,
+      });
     }
     if (entry.type === "damage" && !moduleConfig.showAttackerDamage) {
       return makeSkipDecision(entry, "attacker", "attacker_damage_disabled");
@@ -289,6 +298,10 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
   }
 
   function buildVictimMessage(entry) {
+    if (entry.type === "revive") {
+      return `[BZSS]${entry.attacker.name || "队友"}复苏了你，立即归队作战`;
+    }
+
     const damageText = Number.isFinite(entry.damage) ? `${trimTrailingZeros(entry.damage)}` : "unknown";
     const weaponText = entry.weapon || "unknown weapon";
     const friendlyFire = isFriendlyFireEntry(entry);
@@ -312,6 +325,10 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
   }
 
   function buildAttackerMessage(entry) {
+    if (entry.type === "revive") {
+      return `[BZSS]你复苏了${entry.victim.name || "队友"}，继续并肩作战`;
+    }
+
     const damageText = Number.isFinite(entry.damage) ? `${trimTrailingZeros(entry.damage)}` : "unknown";
     const victimName = entry.victim.name || "the target";
     const friendlyFire = isFriendlyFireEntry(entry);
@@ -429,6 +446,7 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
       damage: 0,
       wound: 0,
       kill: 0,
+      revive: 0,
       victimWarned: 0,
       attackerWarned: 0,
       skipped: 0,
@@ -532,6 +550,7 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
       const eventBus = core.eventBus;
       if (eventBus?.onModuleEvent) {
         unsubscribers.push(eventBus.onModuleEvent("module.combatClean", "combat.record.processed", handleCombatProcessedEvent));
+        unsubscribers.push(eventBus.onModuleEvent("module.combatClean", "reviveResolved", handleCombatProcessedEvent));
       }
 
       moduleLogger?.info?.("InfantryCombatEnhancer started.");
@@ -622,7 +641,8 @@ function normalizeModuleConfig(source = {}) {
 
 function normalizeType(value) {
   const text = normalizeText(value);
-  if (text === "damage" || text === "wound" || text === "kill") return text;
+  if (text === "damage" || text === "wound" || text === "kill" || text === "revive") return text;
+  if (text === "revived") return "revive";
   if (text === "death") return "kill";
   return text;
 }

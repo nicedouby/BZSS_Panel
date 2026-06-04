@@ -257,7 +257,7 @@ function sameQuery(query: Record<string, unknown>, next: Record<string, unknown>
 
 function normalizeType(value: unknown) {
   const text = normalizeString(value);
-  if (text === "damage" || text === "wound" || text === "kill") return text;
+  if (text === "damage" || text === "wound" || text === "kill" || text === "revive") return text;
   return "all";
 }
 

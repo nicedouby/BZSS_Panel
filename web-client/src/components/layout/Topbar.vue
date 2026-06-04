@@ -27,6 +27,7 @@
           <span class="match-chip match-chip-strong">{{ matchPlayersLabel }}</span>
           <span class="match-chip match-chip-team1">{{ t("match.team1", "", { count: matchTeam1Count }) }}</span>
           <span class="match-chip match-chip-team2">{{ t("match.team2", "", { count: matchTeam2Count }) }}</span>
+          <span v-if="matchQueueCount > 0" class="match-chip match-chip-team2">{{ matchQueueLabel }}</span>
           <span class="match-chip">{{ matchTimeLabel }}</span>
           <span class="match-chip">{{ matchTpsLabel }}</span>
           <span class="match-chip" :class="statusTone(matchRconStatus)">{{ matchRconLabel }}</span>
@@ -179,10 +180,26 @@ const matchMaxPlayers = computed(() => {
   const value = Number(server.snapshot?.maxPlayers ?? server.snapshot?.webStatus?.maxPlayers);
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 100;
 });
-const matchPlayersLabel = computed(() => t("match.players", "", {
-  current: matchTotalPlayers.value,
-  max: matchMaxPlayers.value,
-}));
+const matchPlayersLabel = computed(() => {
+  const players = t("match.players", "", {
+    current: matchTotalPlayers.value,
+    max: matchMaxPlayers.value,
+  });
+  if (matchQueueCount.value > 0) {
+    return `${players} (+${matchQueueCount.value})`;
+  }
+  return players;
+});
+const matchQueueCount = computed(() => {
+  const value = Number(
+    server.snapshot?.queueCount
+      ?? server.snapshot?.webStatus?.queueCount
+      ?? server.snapshot?.matchState?.serverStatus?.queueCount
+      ?? 0
+  );
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+});
+const matchQueueLabel = computed(() => t("topbar.queue", "", { count: matchQueueCount.value }));
 const matchMatchTimeSeconds = computed(() => {
   const value = Number(
     server.snapshot?.matchTimeSeconds

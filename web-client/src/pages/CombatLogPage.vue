@@ -117,24 +117,24 @@
               <table class="log-table">
                 <thead>
                   <tr>
-                    <th>时间</th>
-                    <th>事件</th>
-                    <th>标记</th>
+                    <th style="width: 80px">时间</th>
+                    <th style="width: 100px">事件</th>
+                    <th style="width: 60px">标记</th>
                     <th>攻击者</th>
                     <th>受害者</th>
-                    <th>伤害</th>
-                    <th>武器</th>
+                    <th style="width: 60px">伤害</th>
+                    <th style="width: 180px">武器</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="line in entries" :key="`${line.lineNumber}-${line.raw}`">
                     <td class="time-cell">{{ line.time || "--" }}</td>
-                    <td><span class="type-pill">{{ line.type || "--" }}</span></td>
-                    <td>{{ line.mark || "-" }}</td>
-                    <td>{{ line.attacker || "-" }}</td>
-                    <td>{{ line.victim || "-" }}</td>
+                    <td class="type-cell"><span class="type-pill" :class="line.type?.toLowerCase()">{{ line.type || "--" }}</span></td>
+                    <td class="mark-cell">{{ line.mark || "-" }}</td>
+                    <td class="name-cell attacker">{{ line.attacker || "-" }}</td>
+                    <td class="name-cell victim">{{ line.victim || "-" }}</td>
                     <td class="damage-cell">{{ line.damage || "-" }}</td>
-                    <td>{{ line.weapon || "-" }}</td>
+                    <td class="weapon-cell">{{ line.weapon || "-" }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -330,7 +330,7 @@ async function refreshStatus() {
 async function refreshStatusAndMaybeEntries() {
   await refreshStatus();
   if (isLiveSelected.value && !entriesLoading.value) {
-    await reloadEntries();
+    await reloadEntries(true);
     return;
   }
   renderState();
@@ -353,7 +353,7 @@ async function loadFiles() {
   files.value = Array.isArray(data.files) ? data.files : [];
 }
 
-async function reloadEntries() {
+async function reloadEntries(silent = false) {
   if (!selectedMonth.value || !selectedDate.value) {
     entries.value = [];
     meta.value = null;
@@ -361,7 +361,9 @@ async function reloadEntries() {
   }
 
   const requestId = ++refreshSeq;
-  entriesLoading.value = true;
+  if (!silent) {
+    entriesLoading.value = true;
+  }
   entriesError.value = "";
 
   try {
@@ -632,6 +634,7 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
 .log-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 .log-table thead th {
@@ -640,6 +643,10 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
   background: rgba(9, 13, 19, 0.94);
   backdrop-filter: blur(8px);
   z-index: 1;
+  text-align: left;
+  color: var(--muted);
+  font-weight: 600;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
 }
 
 .log-table th,
@@ -647,6 +654,9 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
   padding: 11px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .log-table tbody tr:nth-child(2n) {
@@ -657,23 +667,93 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
   background: rgba(96, 165, 250, 0.08);
 }
 
-.time-cell,
+.time-cell {
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+.type-cell {
+  text-align: center;
+}
+
+.mark-cell {
+  text-align: center;
+  color: var(--muted);
+}
+
 .damage-cell {
-  white-space: nowrap;
+  text-align: center;
+  font-weight: 700;
+  color: #f87171;
+}
+
+.name-cell {
+  font-weight: 500;
+}
+
+.name-cell.attacker {
+  color: #93c5fd;
+}
+
+.name-cell.victim {
+  color: #fca5a5;
+}
+
+.weapon-cell {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .type-pill {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   padding: 0 8px;
-  min-height: 24px;
-  border-radius: 999px;
-  background: rgba(96, 165, 250, 0.14);
-  color: #9cc6ff;
+  min-height: 22px;
+  min-width: 70px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
   text-transform: uppercase;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 10px;
+  font-weight: 800;
   letter-spacing: 0.02em;
+}
+
+.type-pill.kill {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.type-pill.wound {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.type-pill.suicide {
+  background: rgba(107, 114, 128, 0.2);
+  color: #d1d5db;
+  border: 1px solid rgba(107, 114, 128, 0.2);
+}
+
+.type-pill.tk {
+  background: rgba(168, 85, 247, 0.2);
+  color: #d8b4fe;
+  border: 1px solid rgba(168, 85, 247, 0.2);
+}
+
+.type-pill.damage {
+  background: rgba(59, 130, 246, 0.15);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.15);
+}
+
+.type-pill.revive {
+  background: rgba(34, 197, 94, 0.15);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.15);
 }
 
 .mini-button {

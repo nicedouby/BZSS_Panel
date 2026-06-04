@@ -91,6 +91,18 @@ export function createPlayerSessionRecordsModule({ core, config, logger }) {
       stats.leaveCount += 1;
       stats.lastLeaveAt = at;
       if (playerName) onlinePlayerKeys.delete(onlineKey);
+
+      if (playerName) {
+        moduleLogger?.info?.(`/xm ${playerName}离开了游戏`, {
+          operation: "playerSessionRecords.leaveXm",
+          data: {
+            serverId,
+            playerName,
+            eventName: String(event?.eventName ?? "").trim(),
+            eventId: String(event?.eventId ?? "").trim(),
+          },
+        });
+      }
     }
   }
 

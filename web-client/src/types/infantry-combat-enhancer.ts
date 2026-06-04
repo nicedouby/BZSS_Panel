@@ -1,4 +1,4 @@
-export type InfantryCombatEventType = "all" | "damage" | "wound" | "kill";
+export type InfantryCombatEventType = "all" | "damage" | "wound" | "kill" | "revive";
 
 export type InfantryCombatWarningFilter = "all" | "victim_sent" | "attacker_sent" | "skipped" | "failed";
 
@@ -80,6 +80,7 @@ export interface InfantryCombatOverview {
     damage?: number;
     wound?: number;
     kill?: number;
+    revive?: number;
     victimWarned?: number;
     attackerWarned?: number;
     skipped?: number;

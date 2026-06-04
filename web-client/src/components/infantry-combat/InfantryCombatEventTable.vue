@@ -16,6 +16,7 @@
       <span class="stat-chip">伤 {{ stats.damage }}</span>
       <span class="stat-chip">倒 {{ stats.wound }}</span>
       <span class="stat-chip">杀 {{ stats.kill }}</span>
+      <span class="stat-chip">复 {{ stats.revive }}</span>
       <span class="stat-chip ok">发 {{ stats.sent }}</span>
       <span class="stat-chip warn">跳 {{ stats.skipped }}</span>
       <span class="stat-chip danger">失 {{ stats.failed }}</span>
@@ -102,6 +103,7 @@ function buildStats(events: InfantryCombatEventRecord[]) {
     damage: 0,
     wound: 0,
     kill: 0,
+    revive: 0,
     sent: 0,
     skipped: 0,
     failed: 0,
@@ -115,6 +117,7 @@ function buildStats(events: InfantryCombatEventRecord[]) {
     if (type === "damage") state.damage += 1;
     if (type === "wound") state.wound += 1;
     if (type === "kill") state.kill += 1;
+    if (type === "revive") state.revive += 1;
     if (event.victimWarning?.success) state.sent += 1;
     if (event.attackerWarning?.success) state.sent += 1;
     if (event.victimWarning?.skipped || event.attackerWarning?.skipped) state.skipped += 1;
@@ -145,6 +148,7 @@ function recordClass(event: InfantryCombatEventRecord) {
 
 function typeLabel(value: unknown) {
   const type = String(value ?? "").trim().toLowerCase();
+  if (type === "revive") return "复苏";
   if (type === "damage") return "伤";
   if (type === "wound") return "倒";
   if (type === "kill") return "杀";
@@ -153,6 +157,7 @@ function typeLabel(value: unknown) {
 
 function eventTone(event: InfantryCombatEventRecord) {
   const type = String(event.type ?? "").trim().toLowerCase();
+  if (type === "revive") return "ok";
   if (type === "kill") return "danger";
   if (type === "wound") return "warn";
   if (type === "damage") return "ok";

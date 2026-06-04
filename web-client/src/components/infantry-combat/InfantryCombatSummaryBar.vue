@@ -8,8 +8,8 @@
           <small class="metric__hint">{{ loading ? "正在刷新" : "当前筛选结果" }}</small>
         </div>
         <div class="metric">
-          <span class="metric__label">伤 / 击倒 / 击杀</span>
-          <strong class="metric__value">{{ stats.damage ?? 0 }} / {{ stats.wound ?? 0 }} / {{ stats.kill ?? 0 }}</strong>
+          <span class="metric__label">伤 / 击倒 / 击杀 / 复苏</span>
+          <strong class="metric__value">{{ stats.damage ?? 0 }} / {{ stats.wound ?? 0 }} / {{ stats.kill ?? 0 }} / {{ stats.revive ?? 0 }}</strong>
         </div>
         <div class="metric">
           <span class="metric__label">受害 / 攻击</span>

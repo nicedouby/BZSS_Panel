@@ -10,6 +10,10 @@
         <span>Players</span>
         <strong>{{ props.data.totalPlayers }}/{{ props.data.maxPlayers }}</strong>
       </div>
+      <div v-if="props.data.queueCount > 0" class="hero-stat team2">
+        <span>Queue</span>
+        <strong>{{ props.data.queueCount }}</strong>
+      </div>
       <div class="hero-stat team1">
         <span>TEAM 1</span>
         <strong>{{ props.data.team1Count }}</strong>
@@ -134,13 +138,14 @@ function statusTone(status: string): string {
 }
 
 .match-hero-stats {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
 }
 
 .hero-stat {
+  flex: 1 1 100px;
   padding: 8px 10px;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border-soft);
