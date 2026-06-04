@@ -348,6 +348,7 @@ export class RconManager {
     }
 
     const priority = isPriorityRequest(request);
+    const bypassRateLimit = Boolean(request?.bypassRateLimit === true);
     if (this.getQueueSize() >= this.maxQueueSize) {
       return {
         success: false,
@@ -361,6 +362,7 @@ export class RconManager {
       const item = {
         request: { ...request, command },
         priority,
+        bypassRateLimit,
         resolve,
       };
 
@@ -402,7 +404,9 @@ export class RconManager {
         this.webStatus.set("rconQueue", this.getQueueSize());
 
         const diff = Date.now() - this.lastCommandTime;
-        const minIntervalMs = item?.priority ? this.priorityMinIntervalMs : this.minIntervalMs;
+        const minIntervalMs = item?.bypassRateLimit
+          ? 0
+          : (item?.priority ? this.priorityMinIntervalMs : this.minIntervalMs);
         if (diff < minIntervalMs) {
           await sleep(minIntervalMs - diff);
         }
@@ -420,6 +424,7 @@ export class RconManager {
               requestedBy: item.request.requestedBy ?? "",
               queueSize: this.getQueueSize(),
               priority: Boolean(item?.priority),
+              bypassRateLimit: Boolean(item?.bypassRateLimit),
             },
           });
           const response = await this.squadRcon.execute(item.request.command);

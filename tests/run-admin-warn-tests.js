@@ -56,6 +56,7 @@ async function testWarnSuccessAndSanitize() {
   assert.equal(calls.length, 1);
   assert.equal(calls[0].command, `AdminWarn "PlayerA" "line1\nline2\n'quoted'"`);
   assert.equal(calls[0].priority, "high");
+  assert.equal(calls[0].bypassRateLimit, true);
 
   const records = module.api.getRecent({ limit: 10 });
   assert.equal(records.length, 1);
@@ -87,6 +88,7 @@ async function testBroadcastSuccessAndKindFilter() {
   assert.equal(calls.length, 1);
   assert.equal(calls[0].command, "AdminBroadcast line1 'quoted'");
   assert.equal(calls[0].priority, "high");
+  assert.equal(calls[0].bypassRateLimit, false);
 
   const records = module.api.getRecent({ kind: "broadcast", limit: 10 });
   assert.equal(records.length, 1);

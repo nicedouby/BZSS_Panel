@@ -41,6 +41,11 @@
             <span>最低攻击者伤害阈值</span>
             <input v-model.number="draft.minAttackerDamage" type="number" min="0" step="1">
           </label>
+
+          <label class="field">
+            <span>鎴樻枟鎻愰啋缂撳瓨(ms)</span>
+            <input v-model.number="draft.damageDebounceMs" type="number" min="0" step="1">
+          </label>
         </section>
 
         <section class="drawer-section">
@@ -122,6 +127,7 @@ function cloneConfig(config: InfantryCombatConfig | null | undefined): InfantryC
     enabled: config?.enabled ?? true,
     forceAttackerDamageDisplay: config?.forceAttackerDamageDisplay ?? false,
     minAttackerDamage: config?.minAttackerDamage ?? 15,
+    damageDebounceMs: config?.damageDebounceMs ?? 150,
     showKillDisplay: config?.showKillDisplay ?? false,
     showOnlyLightWeaponDamage: config?.showOnlyLightWeaponDamage ?? true,
     showVictimDamage: config?.showVictimDamage ?? true,

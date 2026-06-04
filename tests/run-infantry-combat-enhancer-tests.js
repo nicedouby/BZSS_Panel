@@ -66,6 +66,7 @@ function createHarness({ moduleConfig = {}, adminWarn, subscriptionMap = {} } = 
             enabled: true,
             forceAttackerDamageDisplay: false,
             minAttackerDamage: 15,
+            damageDebounceMs: 150,
             showVictimDamage: true,
             showVictimWound: true,
             showVictimKill: true,
@@ -81,6 +82,52 @@ function createHarness({ moduleConfig = {}, adminWarn, subscriptionMap = {} } = 
   });
 
   return { module, eventBus, pages, calls };
+}
+
+async function testDamageDebounceConfigAndDelay() {
+  const { module, eventBus, calls } = createHarness();
+  await module.start();
+
+  assert.equal(module.api.getConfig().damageDebounceMs, 150);
+
+  const updated = module.api.updateConfig({
+    damageDebounceMs: 25,
+  });
+  assert.equal(updated.damageDebounceMs, 25);
+  assert.equal(module.api.getState().config.damageDebounceMs, 25);
+
+  const originalSetTimeout = globalThis.setTimeout;
+  const delays = [];
+
+  globalThis.setTimeout = (handler, delayMs) => {
+    delays.push(delayMs);
+    return originalSetTimeout(handler, 0);
+  };
+
+  try {
+    await eventBus.emitModuleEvent("module.combatClean", "combat.record.processed", {
+      record: {
+        id: "combat-delay-check",
+        serverId: "S1",
+        type: "damage",
+        time: "2026-05-30T12:00:00.000Z",
+        attackerName: "Alpha",
+        attackerSteam64ID: "123",
+        victimName: "Bravo",
+        victimSteam64ID: "456",
+        damage: 42,
+        weaponName: "M4A1",
+        tags: ["weapon.small_arm", "damage.direct"],
+      },
+    });
+
+    assert.deepEqual(delays, [25]);
+    await new Promise((resolve) => originalSetTimeout(resolve, 50));
+    assert.equal(calls.length, 2);
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+    await module.stop();
+  }
 }
 
 async function testProcessingAndWarnings() {
@@ -108,7 +155,7 @@ async function testProcessingAndWarnings() {
     },
   });
 
-  await sleep(3000);
+  await sleep(500);
 
   assert.equal(calls.length, 2);
   assert.equal(calls[0].sourceModule, "module.infantryCombatEnhancer");
@@ -195,7 +242,7 @@ async function testTagDrivenMessages() {
     tags: ["combat.damage", "weapon.small_arm", "damage.direct"],
   });
 
-  await sleep(3000);
+  await sleep(500);
   assert.equal(calls.at(-2).message, "[BZSS]你被Attacker使用XX造成60伤害");
   assert.equal(calls.at(-1).message, "[BZSS]你使用XX对Victim造成60伤害");
 
@@ -213,7 +260,7 @@ async function testTagDrivenMessages() {
     tags: ["combat.team_damage", "friendly_fire", "combat.damage", "weapon.small_arm", "damage.direct"],
   });
 
-  await sleep(3000);
+  await sleep(500);
   assert.equal(calls.at(-2).message, "[BZSS]你被<友军>Attacker使用XX造成60伤害");
   assert.equal(calls.at(-1).message, "[BZSS]你他奶奶的使用XX对<友军>Victim，造成60伤害");
 
@@ -288,7 +335,7 @@ async function testOnlyLightWeaponDamageSkipsNonLightWeapons() {
     },
   });
 
-  await sleep(3000);
+  await sleep(500);
 
   assert.equal(calls.length, 1);
   assert.equal(calls[0].targetName, "Victim");
@@ -436,7 +483,7 @@ async function testFractionalDamageRoundsToInteger() {
     },
   });
 
-  await sleep(3000);
+  await sleep(500);
 
   const events = module.api.getEvents({ limit: 10 });
   assert.equal(events.length, 1);
@@ -502,7 +549,7 @@ async function testDamageDebounceAggregatesTwoHits() {
 
   assert.equal(calls.length, 0);
 
-  await sleep(3000);
+  await sleep(500);
 
   assert.equal(calls.length, 2);
   assert.ok(String(calls[0].message).includes("70伤害"));
@@ -568,7 +615,7 @@ async function testWoundMergesPendingDamageExcludingLastHit() {
   assert.ok(String(calls[0].message).includes("造成50伤害"));
   assert.ok(String(calls[1].message).includes("造成50伤害"));
 
-  await sleep(3000);
+  await sleep(500);
   assert.equal(calls.length, 2);
 
   const events = module.api.getEvents({ limit: 10 });
@@ -580,6 +627,7 @@ async function testWoundMergesPendingDamageExcludingLastHit() {
 }
 
 await testProcessingAndWarnings();
+await testDamageDebounceConfigAndDelay();
 await testReviveResolvedWarnings();
 await testTagDrivenMessages();
 await testOnlyLightWeaponDamageSkipsNonLightWeapons();

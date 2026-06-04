@@ -229,6 +229,7 @@ function normalizeConfig(source: Partial<InfantryCombatConfig> | null | undefine
     enabled: source?.enabled ?? INFANTRY_COMBAT_DEFAULT_CONFIG.enabled,
     forceAttackerDamageDisplay: source?.forceAttackerDamageDisplay ?? INFANTRY_COMBAT_DEFAULT_CONFIG.forceAttackerDamageDisplay,
     minAttackerDamage: normalizeNumber(source?.minAttackerDamage, INFANTRY_COMBAT_DEFAULT_CONFIG.minAttackerDamage),
+    damageDebounceMs: normalizeNumber(source?.damageDebounceMs, INFANTRY_COMBAT_DEFAULT_CONFIG.damageDebounceMs),
     showKillDisplay: source?.showKillDisplay ?? INFANTRY_COMBAT_DEFAULT_CONFIG.showKillDisplay,
     showOnlyLightWeaponDamage: source?.showOnlyLightWeaponDamage ?? INFANTRY_COMBAT_DEFAULT_CONFIG.showOnlyLightWeaponDamage,
     showVictimDamage: source?.showVictimDamage ?? INFANTRY_COMBAT_DEFAULT_CONFIG.showVictimDamage,

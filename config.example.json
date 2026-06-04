@@ -422,19 +422,32 @@
     "combatState": { "enabled": true, "maxEvents": 5000 },
     "playerDatabase": { "enabled": true },
     "killManage": { "enabled": true },
-    "combatClean": {
-      "enabled": true,
-      "maxEvents": 5000,
-      "weaponHistoryBackfill": {
+      "combatClean": {
         "enabled": true,
-        "windowMs": 300000
-      }
-    },
-    "adminWarn": {
-      "enabled": true,
-      "maxRecords": 3000,
-      "ttlMs": 1800000
-    },
+        "maxEvents": 5000,
+        "weaponHistoryBackfill": {
+          "enabled": true,
+          "windowMs": 300000
+        }
+      },
+      "infantryCombatEnhancer": {
+        "enabled": true,
+        "forceAttackerDamageDisplay": false,
+        "minAttackerDamage": 15,
+        "damageDebounceMs": 150,
+        "showKillDisplay": false,
+        "showOnlyLightWeaponDamage": true,
+        "showVictimDamage": true,
+        "showVictimWound": true,
+        "showVictimKill": true,
+        "showAttackerDamage": true,
+        "storeRecentEventLimit": 300
+      },
+      "adminWarn": {
+        "enabled": true,
+        "maxRecords": 3000,
+        "ttlMs": 1800000
+      },
     "scheduledBroadcast": {
       "enabled": true,
       "tickMs": 1000,

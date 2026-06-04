@@ -37,6 +37,7 @@ function createHarness(overrides = {}) {
         minIntervalMs: 0,
         priorityMinIntervalMs: 0,
         maxQueueSize: 10,
+        ...(overrides.rateLimit ?? {}),
       },
     },
     logger: {
@@ -184,6 +185,47 @@ async function testDispatchCommandAllowsSystemBypass() {
   assert.deepEqual(executedCommands, ["ListPlayers"]);
 }
 
+async function testBypassRateLimitSkipsInterval() {
+  const { manager, executedCommands } = createHarness({
+    rateLimit: {
+      minIntervalMs: 50,
+      priorityMinIntervalMs: 50,
+    },
+  });
+  const originalSetTimeout = globalThis.setTimeout;
+  const delays = [];
+
+  globalThis.setTimeout = (handler, delayMs) => {
+    delays.push(delayMs);
+    return originalSetTimeout(handler, 0);
+  };
+
+  try {
+    manager.lastCommandTime = Date.now();
+
+    const bypassResult = await manager.dispatchCommand({
+      command: "AdminWarn \"PlayerA\" \"Hello\"",
+      system: true,
+      bypassRateLimit: true,
+    });
+    assert.equal(bypassResult.success, true);
+
+    const normalResult = await manager.dispatchCommand({
+      command: "AdminBroadcast Hello",
+      system: true,
+    });
+    assert.equal(normalResult.success, true);
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+  }
+
+  assert.deepEqual(executedCommands, [
+    "AdminWarn \"PlayerA\" \"Hello\"",
+    "AdminBroadcast Hello",
+  ]);
+  assert.deepEqual(delays, [50]);
+}
+
 async function testDynamicPollingIntervalsFollowLogClock() {
   const { manager, webStatusSnapshot } = createHarness({
     pollingEnabled: true,
@@ -253,6 +295,7 @@ await testResolveRconPermissionAliases();
 await testDispatchCommandRejectsMissingPermission();
 await testDispatchCommandAllowsMatchingPermission();
 await testDispatchCommandAllowsSystemBypass();
+await testBypassRateLimitSkipsInterval();
 await testDynamicPollingIntervalsFollowLogClock();
 await testSchedulePollingRecomputesNextDelay();
 await testRefreshPlayersSkipsWhenAlreadyInFlight();

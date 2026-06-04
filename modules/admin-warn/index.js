@@ -120,12 +120,14 @@ export function createAdminWarnModule({ core, config, logger }) {
     }
 
     try {
+      const bypassRateLimit = normalizedKind === "warning";
       const result = await core.rconManager.dispatchCommand({
         command: commandText,
-        requestedBy: "module.broadcast",
+        requestedBy: "module.adminWarn",
         reason,
         sourceEventId: relatedEventId,
         priority: "high",
+        bypassRateLimit,
         actor,
         system,
       });

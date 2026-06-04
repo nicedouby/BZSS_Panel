@@ -4,6 +4,7 @@ const DEFAULT_CONFIG = Object.freeze({
   enabled: true,
   forceAttackerDamageDisplay: false,
   minAttackerDamage: 15,
+  damageDebounceMs: 150,
   showKillDisplay: false,
   showOnlyLightWeaponDamage: true,
   showVictimDamage: true,
@@ -12,8 +13,6 @@ const DEFAULT_CONFIG = Object.freeze({
   showAttackerDamage: true,
   storeRecentEventLimit: 300,
 });
-
-const DAMAGE_DEBOUNCE_MS = 500;
 
 const VALID_TYPES = new Set(["damage", "wound", "kill", "revive"]);
 const COMBAT_CLEAN_SUBSCRIPTION_ID = "module.combatClean";
@@ -193,6 +192,7 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
   function bufferDamageEntry(entry) {
     const key = makeAggregationKey(entry);
     const nextDamage = Number.isFinite(entry.damage) ? entry.damage : 0;
+    const debounceMs = Math.max(0, Number(moduleConfig.damageDebounceMs ?? DEFAULT_CONFIG.damageDebounceMs));
     const existing = damageAggregation.get(key);
 
     const merged = existing ?? {
@@ -220,7 +220,7 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
 
     merged.timeoutId = setTimeout(() => {
       flushDamageKey(key);
-    }, DAMAGE_DEBOUNCE_MS);
+    }, debounceMs);
 
     damageAggregation.set(key, merged);
   }
@@ -778,6 +778,7 @@ function normalizeModuleConfig(source = {}) {
     enabled: source.enabled !== false,
     forceAttackerDamageDisplay: Boolean(source.forceAttackerDamageDisplay ?? DEFAULT_CONFIG.forceAttackerDamageDisplay),
     minAttackerDamage: Math.max(0, Number(source.minAttackerDamage ?? DEFAULT_CONFIG.minAttackerDamage)),
+    damageDebounceMs: Math.max(0, Number(source.damageDebounceMs ?? DEFAULT_CONFIG.damageDebounceMs)),
     showKillDisplay: source.showKillDisplay ?? DEFAULT_CONFIG.showKillDisplay,
     showOnlyLightWeaponDamage: source.showOnlyLightWeaponDamage ?? DEFAULT_CONFIG.showOnlyLightWeaponDamage,
     showVictimDamage: source.showVictimDamage !== false,
