@@ -193,6 +193,21 @@ async function testInfantryPassBroadcasts() {
   }
 }
 
+async function testLogTime15BroadcastsRuleReminder() {
+  const harness = await createHarness({
+    webStatus: { logClockSeconds: 15 },
+    playtimeRows: [["steam-1", { game_seconds: 401 * 3600 }]],
+  });
+  try {
+    const result = await harness.plugin.api.simulateCreation(creation());
+    assert.equal(result.approved, true);
+    assert.equal(harness.broadcasts.length, 2);
+    assert.equal(harness.broadcasts.some((item) => String(item.message ?? "").includes("日志时间 15 秒")), true);
+  } finally {
+    await harness.stop();
+  }
+}
+
 async function testVehicleWindowUsesConfiguredThreshold() {
   const harness = await createHarness({
     webStatus: { logClockSeconds: 55 },
@@ -441,6 +456,7 @@ async function testLookupCompletionUpdatesRecordWithoutRollback() {
 
 await testInfantryLowHoursDisbands();
 await testInfantryPassBroadcasts();
+await testLogTime15BroadcastsRuleReminder();
 await testVehicleWindowUsesConfiguredThreshold();
 await testInfantrySecondWindowAndOpenWindow();
 await testVehicleSecondThirdAndOpenWindows();

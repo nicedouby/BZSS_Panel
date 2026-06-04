@@ -10,6 +10,7 @@ const CONFIG_KEY = "plugins.stepwiseSquadPlaytimeGuard";
 const DEFAULT_DATA_DIR = "./data/stepwise-squad-playtime-guard";
 const DEFAULT_RECENT_LIMIT = 300;
 const CREATION_COOLDOWN_MS = 3000;
+const RULE_REMINDER_SECONDS = 15;
 const DEFAULT_RULES = Object.freeze({
   infantry: Object.freeze([
     Object.freeze({ startSeconds: 0, endSeconds: 25, minHoursExclusive: 400 }),
@@ -186,6 +187,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     merged.active = true;
     merged.lastEvaluatedAt = merged.updatedAt;
 
+    await maybeBroadcastRuleReminder(merged, decision);
     await applyDecision(merged, decision);
     rememberRecord(merged);
     return cloneRecord(merged);
@@ -390,6 +392,33 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       type: result?.success === false ? "broadcast_failed" : "broadcasted",
       result: summarizeActionResult(result),
     });
+  }
+
+  async function maybeBroadcastRuleReminder(record) {
+    if (record.clockSeconds !== RULE_REMINDER_SECONDS) return;
+
+    const matchKey = buildRuleReminderKey(record);
+    if (state.ruleReminderBroadcastKeys.has(matchKey)) return;
+
+    const sender = modules?.adminWarn?.broadcastMessage ?? modules?.adminWarn?.sendAdminBroadcast;
+    if (typeof sender !== "function") return;
+
+    const result = await sender.call(modules.adminWarn, {
+      message: buildRuleReminderMessage(runtimeConfig?.rules),
+      reason: "stepwise_squad_playtime_rule_reminder",
+      sourceModule: PLUGIN_ID,
+      relatedEventId: record.id,
+      system: true,
+    }).catch((error) => ({ success: false, error: error?.message ?? String(error) }));
+
+    record.actions.push({
+      type: result?.success === false ? "rule_reminder_broadcast_failed" : "rule_reminder_broadcasted",
+      result: summarizeActionResult(result),
+    });
+
+    if (result?.success !== false) {
+      state.ruleReminderBroadcastKeys.add(matchKey);
+    }
   }
 
   async function disbandSquad(record, decision) {
@@ -807,6 +836,7 @@ function createInitialState() {
     recordsBySlot: new Map(),
     pendingLogs: new Map(),
     creationCooldowns: new Map(),
+    ruleReminderBroadcastKeys: new Set(),
   };
 }
 
@@ -906,4 +936,29 @@ function nullableNumber(value) {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function buildRuleReminderKey(record) {
+  return [
+    normalizeText(record.serverId),
+    normalizeText(record.matchId) || "no-match",
+    String(RULE_REMINDER_SECONDS),
+  ].join("|");
+}
+
+function buildRuleReminderMessage(rules = {}) {
+  const infantryRules = Array.isArray(rules?.infantry) ? rules.infantry : [];
+  const vehicleRules = Array.isArray(rules?.vehicle) ? rules.vehicle : [];
+  const lines = [];
+
+  if (infantryRules.length) {
+    lines.push(`步兵：${infantryRules.map((rule) => `${rule.startSeconds}-${rule.endSeconds}s > ${rule.minHoursExclusive}h`).join("；")}`);
+  }
+
+  if (vehicleRules.length) {
+    lines.push(`载具：${vehicleRules.map((rule) => `${rule.startSeconds}-${rule.endSeconds}s > ${rule.minHoursExclusive}h`).join("；")}`);
+  }
+
+  const rulesText = lines.length ? lines.join("；") : "暂无配置规则";
+  return `日志时间 ${RULE_REMINDER_SECONDS} 秒，阶梯式建队规定：${rulesText}。`;
 }
