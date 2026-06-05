@@ -1,8 +1,12 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import assert from "node:assert/strict";
 
 import { createMatchStateModule } from "../modules/match-state/index.js";
 
-function createHarness() {
+function createHarness({ sessionStateFile = "", logs = [], subscribed = true } = {}) {
+  const subscriptionState = { subscribed };
   const coreEvents = [];
   const moduleEvents = [];
   const commandCalls = [];
@@ -45,12 +49,7 @@ function createHarness() {
   const listeners = new Map();
 
   const core = {
-    logger: {
-      warn() {},
-      module() {},
-      info() {},
-      debug() {},
-    },
+    logger: makeLogger(logs),
     eventBus: {
       onCoreEvent(eventName, handler) {
         if (!listeners.has(eventName)) listeners.set(eventName, []);
@@ -109,7 +108,7 @@ function createHarness() {
   const config = {
     get(path, defaultValue) {
       if (path === "modules.matchState") {
-        return {
+        const value = {
           enabled: true,
           polling: {
             serverInfoIntervalMs: 0,
@@ -119,20 +118,58 @@ function createHarness() {
             nextMapIntervalMs: 0,
           },
         };
+        if (sessionStateFile) {
+          value.sessionStateFile = sessionStateFile;
+        }
+        return value;
       }
       return defaultValue;
     },
   };
 
+  const modules = {
+    pluginSubscriptions: {
+      isSubscribed() {
+        return subscriptionState.subscribed;
+      },
+    },
+  };
+
   return {
-    module: createMatchStateModule({ core, modules: {}, config }),
+    module: createMatchStateModule({ core, modules, config }),
     core,
     coreEvents,
     moduleEvents,
     commandCalls,
     responses,
     webStatusState,
+    logs,
+    subscriptionState,
   };
+}
+
+function makeLogger(logs = []) {
+  return {
+    debug(message, context) {
+      logs.push({ level: "debug", message: renderLogMessage(message), context });
+    },
+    info(message, context) {
+      logs.push({ level: "info", message: renderLogMessage(message), context });
+    },
+    warn(message, context) {
+      logs.push({ level: "warn", message: renderLogMessage(message), context });
+    },
+    error(message, context) {
+      logs.push({ level: "error", message: renderLogMessage(message), context });
+    },
+    module(message, context) {
+      logs.push({ level: "module", message: renderLogMessage(message), context });
+    },
+  };
+}
+
+function renderLogMessage(message) {
+  return typeof message === "function" ? message() : message;
 }
 
 function sleep(ms = 0) {
@@ -392,15 +429,131 @@ async function testStartedModuleSyncsPlayersAndSquadsFromRconEvents() {
   await harness.module.stop();
 }
 
-async function testTicketsChanged() {
-  const harness = createHarness();
-  await harness.module.start();
+async function testMatchStateSessionContinuityAcrossRestart() {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-match-state-"));
+  const sessionStateFile = path.join(tempDir, "match-state-session.json");
+  const sameMatchMessage = "/xm 当前对局与上一次关闭的对局为同一对局";
 
-  // Simulated start will subscribe to events. In our harness we need to manually trigger listeners if we don't mock eventBus.onCoreEvent fully.
-  // Actually harness.core.eventBus.onCoreEvent returns a dummy. 
-  // I'll manually call the listeners if I can find them, or just test the state update if I expose it.
-  // Since I can't easily access private listeners, I'll just check if the state updates if I expose a test method or just assume it works if the code is simple.
-  // Better: update harness to capture listeners.
+  try {
+    const firstHarness = createHarness({ sessionStateFile, logs: [] });
+    await firstHarness.module.start();
+    await firstHarness.module.api.refresh("all");
+    await firstHarness.module.stop();
+
+    const persisted = JSON.parse(await fs.readFile(sessionStateFile, "utf8"));
+    assert.equal(persisted.version, 1);
+    assert.ok(persisted.servers.BZSS_Main);
+    assert.equal(persisted.servers.BZSS_Main.baseKey, "albasrah|albasrah_raas_v1|raas");
+
+    const restartLogs = [];
+    const secondHarness = createHarness({ sessionStateFile, logs: restartLogs });
+    await secondHarness.module.start();
+    await secondHarness.module.api.refresh("all");
+    await secondHarness.module.api.refresh("all");
+
+    const sameMatchLogs = restartLogs.filter((entry) => entry.message === sameMatchMessage);
+    assert.equal(sameMatchLogs.length, 1);
+    assert.equal(sameMatchLogs[0].level, "info");
+    assert.equal(sameMatchLogs[0].context?.operation, "matchState.sameMatchRestored");
+    assert.equal(sameMatchLogs[0].context?.data?.serverId, "BZSS_Main");
+
+    await secondHarness.module.stop();
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+async function testMatchStateSessionContinuityAcrossSubscriptionToggle() {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-match-state-"));
+  const sessionStateFile = path.join(tempDir, "match-state-session.json");
+  const sameMatchMessage = "/xm 当前对局与上一次关闭的对局为同一对局";
+
+  try {
+    const harness = createHarness({ sessionStateFile, logs: [], subscribed: true });
+    await harness.module.start();
+    await harness.module.api.refresh("all");
+
+    harness.subscriptionState.subscribed = false;
+    await harness.module.api.refresh("serverInfo");
+
+    const persisted = JSON.parse(await fs.readFile(sessionStateFile, "utf8"));
+    assert.equal(persisted.servers.BZSS_Main.baseKey, "albasrah|albasrah_raas_v1|raas");
+    assert.ok(harness.logs.some((entry) => String(entry.message).includes("订阅已关闭，已保存上一局对局指纹")));
+
+    harness.subscriptionState.subscribed = true;
+    await harness.module.api.refresh("all");
+
+    const sameMatchLogs = harness.logs.filter((entry) => entry.message === sameMatchMessage);
+    assert.equal(sameMatchLogs.length, 1);
+    assert.ok(harness.logs.some((entry) => String(entry.message).includes("订阅已重新开启，正在比对当前对局")));
+
+    await harness.module.stop();
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+async function testMatchStateSessionStateMissingOrCorruptFileDoesNotCrash() {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-match-state-"));
+  const missingFile = path.join(tempDir, "missing-session.json");
+  const corruptFile = path.join(tempDir, "corrupt-session.json");
+  const corruptLogs = [];
+
+  try {
+    const missingHarness = createHarness({ sessionStateFile: missingFile, logs: [] });
+    await missingHarness.module.start();
+    await missingHarness.module.api.refresh("serverInfo");
+    await missingHarness.module.stop();
+
+    await fs.writeFile(corruptFile, "{not-json", "utf8");
+    const corruptHarness = createHarness({ sessionStateFile: corruptFile, logs: corruptLogs });
+    await corruptHarness.module.start();
+    await corruptHarness.module.api.refresh("serverInfo");
+    await corruptHarness.module.stop();
+
+    assert.ok(corruptLogs.some((entry) => entry.level === "warn" && String(entry.message).includes("session state read failed")));
+    assert.ok(!corruptLogs.some((entry) => entry.message === "/xm 当前对局与上一次关闭的对局为同一对局"));
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+async function testMatchStateSessionDifferentMapDoesNotMatchPreviousMatch() {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-match-state-"));
+  const sessionStateFile = path.join(tempDir, "match-state-session.json");
+  const sameMatchMessage = "/xm 当前对局与上一次关闭的对局为同一对局";
+  const differentMatchMessage = "/xm 当前对局与上一次关闭的对局不是同一对局";
+
+  try {
+    const firstHarness = createHarness({ sessionStateFile, logs: [] });
+    await firstHarness.module.start();
+    await firstHarness.module.api.refresh("all");
+    await firstHarness.module.stop();
+
+    const secondHarness = createHarness({ sessionStateFile, logs: [] });
+    secondHarness.responses.ShowServerInfo = [
+      "MapName_s=Yehorivka",
+      "Layer_s=Yehorivka_RAAS_v2",
+      "GameMode_s=RAAS",
+      "NextLayer_s=Fallujah_RAAS_v2",
+      "PlayerCount_I=1",
+      "MaxPlayers_I=100",
+      "Queue_I=2",
+      "PLAYTIME_I=123",
+      "ServerTPS=29.7",
+    ].join("\n");
+    secondHarness.responses.ShowCurrentMap = "Current level is Yehorivka, layer is Yehorivka_RAAS_v2";
+    secondHarness.responses.ShowNextMap = "Next level is Fallujah, layer is Fallujah_RAAS_v2";
+
+    await secondHarness.module.start();
+    await secondHarness.module.api.refresh("all");
+    await secondHarness.module.stop();
+
+    assert.equal(secondHarness.logs.filter((entry) => entry.message === sameMatchMessage).length, 0);
+    assert.equal(secondHarness.logs.filter((entry) => entry.message === differentMatchMessage).length, 1);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
 }
 
 await testAggregatesRconSnapshots();
@@ -412,5 +565,9 @@ await testMatchingNextLayerIsCleared();
 await testRefreshFailurePreservesLastGoodSnapshot();
 await testIngestWorldBringUp();
 await testStartedModuleSyncsPlayersAndSquadsFromRconEvents();
+await testMatchStateSessionContinuityAcrossRestart();
+await testMatchStateSessionContinuityAcrossSubscriptionToggle();
+await testMatchStateSessionStateMissingOrCorruptFileDoesNotCrash();
+await testMatchStateSessionDifferentMapDoesNotMatchPreviousMatch();
 
 console.log("match state tests passed");

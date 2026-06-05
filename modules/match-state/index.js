@@ -1,5 +1,8 @@
 // -*- coding: utf-8 -*-
 
+import fs from "node:fs/promises";
+import path from "node:path";
+
 import {
   parseCurrentMap,
   parseListPlayers,
@@ -33,10 +36,29 @@ export function createMatchStateModule({ core, modules, config, logger }) {
 
   const MAX_ROUND_HISTORY = 200;
   const DEFAULT_DEDUPE_TTL_MS = 10 * 60 * 1000;
+  const DEFAULT_SESSION_STATE_FILE = "./data/match-state-session.json";
+  const SESSION_STATE_VERSION = 1;
   const roundDedupeTtlMs = normalizePositiveNumber(moduleConfig.roundDedupeTtlMs, DEFAULT_DEDUPE_TTL_MS);
   const roundMaxHistory = normalizePositiveNumber(moduleConfig.roundMaxHistory ?? moduleConfig.maxEvents, MAX_ROUND_HISTORY);
+  const sessionStateFile = path.resolve(
+    process.cwd(),
+    String(moduleConfig.sessionStateFile ?? DEFAULT_SESSION_STATE_FILE).trim() || DEFAULT_SESSION_STATE_FILE,
+  );
   const roundRecentKeys = new Map();
   const roundHistory = [];
+  const sessionState = {
+    loaded: false,
+    filePath: sessionStateFile,
+    byServerId: new Map(),
+    persistedByServerId: new Map(),
+    lastPersistedFingerprintByServerId: new Map(),
+    announcedSameMatchByServerId: new Map(),
+    announcedComparisonByServerId: new Map(),
+    awaitingComparisonByServerId: new Map(),
+    waitingForServerInfoByServerId: new Map(),
+    subscriptionActive: null,
+    serverInfoReady: false,
+  };
 
   const timers = [];
   const unsubscribers = [];
@@ -337,6 +359,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         data: { serverId, layerName: record.layerName, mapName: record.mapName },
       },
     );
+    maybeAnnounceRestoredSameMatch("roundWorldBringUp");
 
     return record;
   }
@@ -354,6 +377,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       const result = await executeRcon("ShowServerInfo");
       if (!result.success) {
         noteRefreshFailure(report, "serverInfo", result.message || "ShowServerInfo failed.");
+        sessionState.serverInfoReady = false;
         updateStatuses();
         emitRconStatusUpdated();
         return state.serverStatus;
@@ -371,6 +395,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       state.serverStatus = next;
       syncMatchFromServerStatus();
       updateWebStatus();
+      sessionState.serverInfoReady = true;
       logWithFallback(moduleLogger, "debug", () => "Server info refreshed.", {
         operation: "refreshServerInfo",
         data: {
@@ -382,6 +407,8 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       });
       emitServerStatusUpdated();
       emitUpdated("serverStatus");
+      maybeAnnounceRestoredSameMatch("refreshServerInfo");
+      await persistMatchSessionState();
       return state.serverStatus;
     }, () => state.serverStatus, report);
   }
@@ -506,6 +533,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     updateWebStatus();
     emitSquadsUpdated();
     emitUpdated("squads");
+    maybeAnnounceRestoredSameMatch("squadsUpdated");
   }
 
   function classifySquad(squad) {
@@ -537,6 +565,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         updateWebStatus();
         emitServerStatusUpdated();
         emitUpdated("currentMap");
+        maybeAnnounceRestoredSameMatch("currentMap");
       }
       return currentMap;
     }, () => ({
@@ -593,7 +622,14 @@ export function createMatchStateModule({ core, modules, config, logger }) {
   }
 
   async function guarded(key, fn, fallback = null, report = null) {
-    if (!isSubscribed()) {
+    const subscribed = isSubscribed();
+    if (sessionState.subscriptionActive == null) {
+      sessionState.subscriptionActive = subscribed;
+    } else if (sessionState.subscriptionActive !== subscribed) {
+      await handleSubscriptionTransition(subscribed);
+    }
+
+    if (!subscribed) {
       noteRefreshFailure(report, key, "Match state module is not subscribed.");
       return typeof fallback === "function" ? fallback() : fallback;
     }
@@ -612,6 +648,38 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       return typeof fallback === "function" ? fallback() : fallback;
     } finally {
       running[key] = false;
+    }
+  }
+
+  async function handleSubscriptionTransition(subscribed) {
+    const previous = sessionState.subscriptionActive;
+    sessionState.subscriptionActive = subscribed;
+
+    if (previous === true && subscribed === false) {
+      await persistMatchSessionState({ promoteComparisonState: true });
+      sessionState.announcedSameMatchByServerId.clear();
+      sessionState.announcedComparisonByServerId.clear();
+      sessionState.awaitingComparisonByServerId.clear();
+      sessionState.waitingForServerInfoByServerId.clear();
+      logWithFallback(moduleLogger, "info", "[MatchState] 订阅已关闭，已保存上一局对局指纹", {
+        operation: "matchState.subscriptionDisabled",
+        data: {
+          filePath: sessionState.filePath,
+          serverId: normalizeText(state.serverId || core.webStatus.serverId || ""),
+        },
+      });
+      return;
+    }
+
+    if (previous === false && subscribed === true) {
+      logWithFallback(moduleLogger, "info", "[MatchState] 订阅已重新开启，正在比对当前对局", {
+        operation: "matchState.subscriptionEnabled",
+        data: {
+          filePath: sessionState.filePath,
+          serverId: normalizeText(state.serverId || core.webStatus.serverId || ""),
+        },
+      });
+      maybeAnnounceRestoredSameMatch("subscriptionEnabled");
     }
   }
 
@@ -789,6 +857,292 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     }, intervalMs));
   }
 
+  async function loadMatchSessionState() {
+    if (sessionState.loaded) return;
+    sessionState.loaded = true;
+    sessionState.byServerId.clear();
+
+    try {
+      const text = await fs.readFile(sessionState.filePath, "utf8");
+      const parsed = JSON.parse(text);
+      const rawServers = parsed?.servers && typeof parsed.servers === "object"
+        ? parsed.servers
+        : parsed;
+
+      if (rawServers && typeof rawServers === "object" && !Array.isArray(rawServers)) {
+        for (const [serverId, value] of Object.entries(rawServers)) {
+          const normalizedServerId = normalizeText(serverId);
+          const record = normalizeMatchSessionRecord(value);
+          if (!normalizedServerId || !record) continue;
+          sessionState.byServerId.set(normalizedServerId, record);
+          sessionState.persistedByServerId.set(normalizedServerId, { ...record });
+          sessionState.lastPersistedFingerprintByServerId.set(
+            normalizedServerId,
+            record.fingerprint || record.fullKey || record.baseKey || "",
+          );
+        }
+      }
+
+      if (sessionState.byServerId.size > 0) {
+        logWithFallback(moduleLogger, "info", "[MatchState] session state loaded", {
+          operation: "matchState.sessionStateLoaded",
+          data: {
+            filePath: sessionState.filePath,
+            servers: [...sessionState.byServerId.keys()],
+          },
+        });
+      }
+    } catch (error) {
+      if (error?.code !== "ENOENT") {
+        logWithFallback(moduleLogger, "warn", "[MatchState] session state read failed", {
+          operation: "matchState.sessionStateReadFailed",
+          data: {
+            filePath: sessionState.filePath,
+            message: String(error?.message ?? error),
+          },
+        });
+      }
+      sessionState.byServerId.clear();
+    }
+  }
+
+  async function persistMatchSessionState(options = {}) {
+    const promoteComparisonState = options?.promoteComparisonState === true;
+    const currentFingerprint = buildCurrentMatchFingerprint();
+    const serverId = normalizeText(state.serverId || core.webStatus.serverId || "");
+    if (serverId && currentFingerprint) {
+      const currentFingerprintKey = currentFingerprint.fingerprint || currentFingerprint.fullKey || currentFingerprint.baseKey || "";
+      const lastPersistedFingerprint = sessionState.lastPersistedFingerprintByServerId.get(serverId) ?? "";
+      if (lastPersistedFingerprint === currentFingerprintKey && sessionState.persistedByServerId.has(serverId)) {
+        if (promoteComparisonState) {
+          const persistedRecord = sessionState.persistedByServerId.get(serverId);
+          if (persistedRecord) {
+            sessionState.byServerId.set(serverId, { ...persistedRecord });
+          }
+        }
+        return;
+      }
+      const record = {
+        sessionId: buildMatchSessionId(serverId, currentFingerprint),
+        closedAt: new Date().toISOString(),
+        ...currentFingerprint,
+      };
+      sessionState.persistedByServerId.set(serverId, record);
+      sessionState.lastPersistedFingerprintByServerId.set(serverId, currentFingerprintKey);
+      if (promoteComparisonState) {
+        sessionState.byServerId.set(serverId, { ...record });
+      }
+    }
+
+    if (sessionState.persistedByServerId.size === 0) return;
+
+    const payload = {
+      version: SESSION_STATE_VERSION,
+      servers: Object.fromEntries(
+        [...sessionState.persistedByServerId.entries()]
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([key, value]) => [key, { ...value }]),
+      ),
+    };
+
+    try {
+      await fs.mkdir(path.dirname(sessionState.filePath), { recursive: true });
+      const tempFile = `${sessionState.filePath}.${process.pid}.${Date.now()}.tmp`;
+      await fs.writeFile(tempFile, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+      await fs.rename(tempFile, sessionState.filePath);
+    } catch (error) {
+      logWithFallback(moduleLogger, "warn", "[MatchState] session state write failed", {
+        operation: "matchState.sessionStateWriteFailed",
+        data: {
+          filePath: sessionState.filePath,
+          message: String(error?.message ?? error),
+        },
+      });
+    }
+  }
+
+  function maybeAnnounceRestoredSameMatch(trigger = "") {
+    const serverId = normalizeText(state.serverId || core.webStatus.serverId || "");
+    if (!serverId) return false;
+
+    const previous = sessionState.byServerId.get(serverId);
+    if (!previous) return false;
+
+    if (!sessionState.serverInfoReady) {
+      const waitingKey = `serverInfo:${previous.sessionId || serverId}`;
+      const announcedWaiting = sessionState.waitingForServerInfoByServerId.get(serverId) ?? "";
+      if (announcedWaiting !== waitingKey) {
+        sessionState.waitingForServerInfoByServerId.set(serverId, waitingKey);
+        logWithFallback(moduleLogger, "info", "[MatchState] 当前对局信息不足，等待 ShowServerInfo 返回后再比对", {
+          operation: "matchState.waitingForServerInfo",
+          data: {
+            trigger,
+            serverId,
+            sessionId: String(previous.sessionId ?? ""),
+            previousClosedAt: String(previous.closedAt ?? ""),
+          },
+        });
+      }
+      return false;
+    }
+
+    const current = buildCurrentMatchFingerprint();
+    if (!current) {
+      const waitingKey = `waiting:${String(previous.sessionId ?? previous.baseKey ?? serverId)}`;
+      const announcedWaiting = sessionState.awaitingComparisonByServerId.get(serverId) ?? "";
+      if (announcedWaiting !== waitingKey) {
+        sessionState.awaitingComparisonByServerId.set(serverId, waitingKey);
+        logWithFallback(moduleLogger, "info", "[MatchState] 当前对局信息不足，暂不比对", {
+          operation: "matchState.waitingForCurrentMatch",
+          data: {
+            trigger,
+            serverId,
+            sessionId: String(previous.sessionId ?? ""),
+            previousClosedAt: String(previous.closedAt ?? ""),
+            previousFingerprint: previous,
+          },
+        });
+      }
+      return false;
+    }
+
+    const currentComparisonKey = current.fullKey || current.baseKey;
+    const previousSessionId = String(previous.sessionId ?? "").trim();
+    const announcedComparison = sessionState.announcedComparisonByServerId.get(serverId) ?? "";
+    const sameKey = `same:${previousSessionId || currentComparisonKey}`;
+    const differentKey = `different:${previousSessionId || currentComparisonKey}`;
+    if (announcedComparison === sameKey) return true;
+    if (announcedComparison === differentKey) return false;
+    sessionState.awaitingComparisonByServerId.delete(serverId);
+
+    if (!isSameMatchFingerprint(current, previous)) {
+      sessionState.announcedComparisonByServerId.set(serverId, differentKey);
+      sessionState.announcedSameMatchByServerId.delete(serverId);
+      logWithFallback(moduleLogger, "info", "/xm 当前对局与上一次关闭的对局不是同一对局", {
+        operation: "matchState.differentMatchRestored",
+        data: {
+          trigger,
+          serverId,
+          sessionId: previousSessionId || "",
+          previousClosedAt: String(previous.closedAt ?? ""),
+          currentFingerprint: current,
+          previousFingerprint: previous,
+        },
+      });
+      return false;
+    }
+
+    sessionState.announcedComparisonByServerId.set(serverId, sameKey);
+    sessionState.announcedSameMatchByServerId.set(serverId, previousSessionId || currentComparisonKey);
+    logWithFallback(moduleLogger, "info", "/xm 当前对局与上一次关闭的对局为同一对局", {
+      operation: "matchState.sameMatchRestored",
+      data: {
+        trigger,
+        serverId,
+        sessionId: previousSessionId || "",
+        previousClosedAt: String(previous.closedAt ?? ""),
+        currentFingerprint: current,
+        previousFingerprint: previous,
+      },
+      });
+    return true;
+  }
+
+  function buildCurrentMatchFingerprint() {
+    const map = normalizeMatchFingerprintPart(state.serverStatus.map || state.match.map || "");
+    const layer = normalizeMatchFingerprintPart(state.serverStatus.layer || state.match.layer || "");
+    const mode = normalizeMatchFingerprintPart(state.serverStatus.mode || state.match.mode || "");
+    const baseParts = [map, layer, mode].filter(Boolean);
+    if (baseParts.length === 0) return null;
+
+    const { team1Name, team2Name } = extractSquadTeamNames(state.squads.list);
+    const normalizedTeam1Name = normalizeMatchFingerprintPart(team1Name);
+    const normalizedTeam2Name = normalizeMatchFingerprintPart(team2Name);
+    const fullParts = [baseParts.join("|"), normalizedTeam1Name, normalizedTeam2Name].filter(Boolean);
+    const fullKey = normalizedTeam1Name && normalizedTeam2Name ? fullParts.join("|") : "";
+    const baseKey = baseParts.join("|");
+
+    return {
+      baseKey,
+      fullKey,
+      fingerprint: fullKey || baseKey,
+      map,
+      layer,
+      mode,
+      team1Name: String(team1Name ?? "").trim(),
+      team2Name: String(team2Name ?? "").trim(),
+    };
+  }
+
+  function isSameMatchFingerprint(current, previous) {
+    if (!current?.baseKey || !previous) return false;
+    const previousBaseKey = String(previous.baseKey ?? "").trim();
+    if (!previousBaseKey) return false;
+
+    const currentFullKey = String(current.fullKey ?? "").trim();
+    const previousFullKey = String(previous.fullKey ?? "").trim();
+    if (currentFullKey && previousFullKey) {
+      return currentFullKey === previousFullKey;
+    }
+
+    return current.baseKey === previousBaseKey;
+  }
+
+  function normalizeMatchSessionRecord(value) {
+    if (!value || typeof value !== "object") return null;
+    const baseKey = normalizeText(value.baseKey ?? value.matchKey ?? value.fingerprint ?? "");
+    const fullKey = normalizeText(value.fullKey ?? value.matchFullKey ?? "");
+    const sessionId = normalizeText(value.sessionId ?? value.id ?? "");
+    const closedAt = String(value.closedAt ?? value.lastClosedAt ?? "").trim();
+
+    if (!baseKey && !fullKey && !sessionId) return null;
+
+    return {
+      sessionId: sessionId || buildMatchSessionId("unknown", { baseKey, fullKey, fingerprint: fullKey || baseKey }),
+      closedAt,
+      baseKey,
+      fullKey,
+      fingerprint: normalizeText(value.fingerprint ?? fullKey ?? baseKey),
+      map: String(value.map ?? "").trim(),
+      layer: String(value.layer ?? "").trim(),
+      mode: String(value.mode ?? "").trim(),
+      team1Name: String(value.team1Name ?? "").trim(),
+      team2Name: String(value.team2Name ?? "").trim(),
+    };
+  }
+
+  function extractSquadTeamNames(squads = []) {
+    let team1Name = "";
+    let team2Name = "";
+
+    for (const squad of Array.isArray(squads) ? squads : []) {
+      const teamId = Number(squad?.teamID ?? squad?.teamId ?? NaN);
+      const teamName = String(squad?.teamName ?? squad?.factionName ?? "").trim();
+      if (!teamName) continue;
+      if (teamId === 1 && !team1Name) team1Name = teamName;
+      if (teamId === 2 && !team2Name) team2Name = teamName;
+      if (team1Name && team2Name) break;
+    }
+
+    return { team1Name, team2Name };
+  }
+
+  function normalizeMatchFingerprintPart(value) {
+    return String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+  }
+
+  function buildMatchSessionId(serverId, fingerprint) {
+    return [
+      "match-state",
+      serverId,
+      fingerprint?.fingerprint || fingerprint?.fullKey || fingerprint?.baseKey || "unknown",
+      Date.now(),
+    ].join(":");
+  }
+
   return {
     manifest: {
       id: "module.matchState",
@@ -816,11 +1170,25 @@ export function createMatchStateModule({ core, modules, config, logger }) {
 
       if (!enabled) return;
       started = true;
+      await loadMatchSessionState();
+      sessionState.announcedSameMatchByServerId.clear();
+      sessionState.announcedComparisonByServerId.clear();
+      sessionState.awaitingComparisonByServerId.clear();
+      sessionState.waitingForServerInfoByServerId.clear();
+      sessionState.persistedByServerId.clear();
+      sessionState.lastPersistedFingerprintByServerId.clear();
+      sessionState.serverInfoReady = false;
+      sessionState.subscriptionActive = isSubscribed();
 
       unsubscribers.push(core.eventBus.onCoreEvent("RCON_CONNECTED", () => {
         if (!isSubscribed()) return;
         updateStatuses();
         emitRconStatusUpdated();
+        void (async () => {
+          await refreshServerInfo();
+          await refreshCurrentMap();
+          await refreshNextMap();
+        })();
       }));
       unsubscribers.push(core.eventBus.onCoreEvent("RCON_DISCONNECTED", () => {
         if (!isSubscribed()) return;
@@ -831,6 +1199,15 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         if (!isSubscribed()) return;
         updateStatuses();
         emitRconStatusUpdated();
+      }));
+      unsubscribers.push(core.eventBus.onCoreEvent("PLUGIN_SUBSCRIPTIONS_UPDATED", async (event) => {
+        const targetId = normalizeText(event?.id ?? event?.targetId ?? "");
+        if (targetId && targetId !== "module.matchState") return;
+
+        const subscribed = typeof event?.subscribed === "boolean"
+          ? event.subscribed
+          : isSubscribed();
+        await handleSubscriptionTransition(subscribed);
       }));
       unsubscribers.push(core.eventBus.onCoreEvent("RCON_LIST_PLAYERS_UPDATED", applyPlayersUpdatedEvent));
       unsubscribers.push(core.eventBus.onCoreEvent("RCON_LIST_SQUADS_UPDATED", applySquadsUpdatedEvent));
@@ -865,9 +1242,12 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       }));
 
       updateWebStatus();
-      refreshServerInfo();
-      refreshCurrentMap();
-      refreshNextMap();
+      const initialRconStatus = core.rconManager.getStatus();
+      if (initialRconStatus?.connected) {
+        await refreshServerInfo();
+        await refreshCurrentMap();
+        await refreshNextMap();
+      }
 
       startTimer(refreshServerInfo, polling.serverInfoIntervalMs);
       startTimer(refreshCurrentMap, polling.currentMapIntervalMs);
@@ -886,10 +1266,13 @@ export function createMatchStateModule({ core, modules, config, logger }) {
 
     async stop() {
       started = false;
+      await persistMatchSessionState({ promoteComparisonState: true });
       for (const timer of timers.splice(0)) clearInterval(timer);
       for (const unsubscribe of unsubscribers.splice(0)) unsubscribe();
       roundRecentKeys.clear();
       roundHistory.length = 0;
+      sessionState.persistedByServerId.clear();
+      sessionState.lastPersistedFingerprintByServerId.clear();
       logWithFallback(moduleLogger, "info", "MatchState stopped.", {
         label: "MODULE",
         operation: "stop",
@@ -1220,4 +1603,10 @@ function normalizePositiveNumber(value, fallback) {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0) return fallback;
   return Math.floor(number);
+}
+
+function normalizeText(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ");
 }

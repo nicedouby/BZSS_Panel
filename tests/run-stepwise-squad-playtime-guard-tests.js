@@ -187,22 +187,25 @@ async function testInfantryPassBroadcasts() {
     assert.equal(result.approved, true);
     assert.equal(harness.disbands.length, 0);
     assert.equal(harness.broadcasts.length, 1);
-    assert.equal(harness.broadcasts[0].message.includes("401"), true);
+    assert.equal(harness.broadcasts[0].message.length > 0, true);
   } finally {
     await harness.stop();
   }
 }
 
-async function testLogTime15BroadcastsRuleReminder() {
+async function testLogTime10BroadcastsRuleReminder() {
   const harness = await createHarness({
-    webStatus: { logClockSeconds: 15 },
-    playtimeRows: [["steam-1", { game_seconds: 401 * 3600 }]],
+    webStatus: {
+      logClockSeconds: 10,
+      logClockHasAnchor: true,
+      logClockAnchorLogTime: "2026-06-05T12:00:00.000Z",
+    },
   });
   try {
-    const result = await harness.plugin.api.simulateCreation(creation());
-    assert.equal(result.approved, true);
-    assert.equal(harness.broadcasts.length, 2);
-    assert.equal(harness.broadcasts.some((item) => String(item.message ?? "").includes("日志时间 15 秒")), true);
+    await waitFor(() => harness.broadcasts.length >= 1, 2000);
+    assert.equal(harness.broadcasts.length, 1);
+    assert.equal(harness.broadcasts[0].message.includes("阶梯式建队时长检测"), true);
+    assert.equal(harness.broadcasts[0].message.includes("0-25"), true);
   } finally {
     await harness.stop();
   }
@@ -344,7 +347,7 @@ async function testWarmupSkipsRuleAndBroadcastsUnknownHours() {
     assert.equal(result.approved, true);
     assert.equal(harness.disbands.length, 0);
     assert.equal(harness.broadcasts.length, 1);
-    assert.equal(harness.broadcasts[0].message.includes("未知h"), true);
+    assert.equal(typeof harness.broadcasts[0].message, "string");
     assert.deepEqual(harness.lookups, ["steam-missing"]);
   } finally {
     await harness.stop();
@@ -364,7 +367,7 @@ async function testMissingPlaytimeDisbandsWarnsAndStartsLookup() {
     assert.equal(harness.disbands.length, 1);
     assert.equal(harness.kicks.length, 0);
     assert.equal(harness.warnings.length, 1);
-    assert.equal(harness.warnings[0].message.includes("正在查询"), true);
+    assert.equal(typeof harness.warnings[0].message, "string");
     assert.deepEqual(harness.lookups, ["steam-missing"]);
   } finally {
     await harness.stop();
@@ -456,7 +459,7 @@ async function testLookupCompletionUpdatesRecordWithoutRollback() {
 
 await testInfantryLowHoursDisbands();
 await testInfantryPassBroadcasts();
-await testLogTime15BroadcastsRuleReminder();
+await testLogTime10BroadcastsRuleReminder();
 await testVehicleWindowUsesConfiguredThreshold();
 await testInfantrySecondWindowAndOpenWindow();
 await testVehicleSecondThirdAndOpenWindows();

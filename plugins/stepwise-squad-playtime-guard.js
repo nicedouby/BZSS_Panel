@@ -1,4 +1,4 @@
-// -*- coding: utf-8 -*-
+﻿// -*- coding: utf-8 -*-
 
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -10,7 +10,7 @@ const CONFIG_KEY = "plugins.stepwiseSquadPlaytimeGuard";
 const DEFAULT_DATA_DIR = "./data/stepwise-squad-playtime-guard";
 const DEFAULT_RECENT_LIMIT = 300;
 const CREATION_COOLDOWN_MS = 3000;
-const RULE_REMINDER_SECONDS = 15;
+const RULE_REMINDER_SECONDS = 10;
 const DEFAULT_RULES = Object.freeze({
   infantry: Object.freeze([
     Object.freeze({ startSeconds: 0, endSeconds: 25, minHoursExclusive: 400 }),
@@ -30,6 +30,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   const state = createInitialState();
   const unsubscribers = [];
   let serial = Promise.resolve();
+  let ruleReminderTimer = null;
 
   function enqueue(task) {
     const next = serial.then(task, task);
@@ -85,6 +86,15 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   function getClockSeconds() {
     const snapshot = core?.webStatus?.getSnapshot?.() ?? {};
     return Math.max(0, Math.floor(Number(snapshot.logClockSeconds ?? 0) || 0));
+  }
+
+  function getClockContext() {
+    const snapshot = core?.webStatus?.getSnapshot?.() ?? {};
+    return {
+      clockSeconds: Math.max(0, Math.floor(Number(snapshot.logClockSeconds ?? 0) || 0)),
+      anchorLogTime: normalizeText(snapshot.logClockAnchorLogTime ?? snapshot.logClockLastResetAt ?? ""),
+      hasAnchor: Boolean(snapshot.logClockHasAnchor),
+    };
   }
 
   function findPendingLog(event) {
@@ -168,9 +178,12 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     const slotKey = buildSlotKey(normalizedEvent);
     const existing = state.recordsBySlot.get(slotKey) ?? findRecordForLog(normalizedEvent) ?? null;
+    const clockContext = getClockContext();
     const merged = mergeCreation(existing, normalizedEvent, {
       warmup: getWarmupState(),
-      clockSeconds: getClockSeconds(),
+      clockSeconds: clockContext.clockSeconds,
+      clockAnchorLogTime: clockContext.anchorLogTime,
+      clockHasAnchor: clockContext.hasAnchor,
     });
 
     const playtime = await resolvePlaytime(merged);
@@ -187,7 +200,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     merged.active = true;
     merged.lastEvaluatedAt = merged.updatedAt;
 
-    await maybeBroadcastRuleReminder(merged, decision);
+    await maybeBroadcastRuleReminder(merged);
     await applyDecision(merged, decision);
     rememberRecord(merged);
     return cloneRecord(merged);
@@ -381,7 +394,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     }
 
     const result = await sender.call(modules.adminWarn, {
-      message: `${record.creatorName || record.identityName || "未知玩家"} 建立小队 ${record.squadName || "未知小队"} 队伍性质为 ${record.squadNatureLabel || "未知"} 游戏时长 ${record.playtime?.hoursText || "未知h"}`,
+      message: `${record.creatorName || record.identityName || "未知玩家"} 建立小队 ${record.squadName || "未知小队"}，队伍性质为 ${record.squadNatureLabel || "未知"}，游戏时长 ${record.playtime?.hoursText || "未知h"}`,
       reason: "stepwise_squad_playtime_broadcast",
       sourceModule: PLUGIN_ID,
       relatedEventId: record.id,
@@ -394,10 +407,21 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     });
   }
 
-  async function maybeBroadcastRuleReminder(record) {
-    if (record.clockSeconds !== RULE_REMINDER_SECONDS) return;
+  async function maybeBroadcastRuleReminder(record = null) {
+    const snapshot = core?.webStatus?.getSnapshot?.() ?? {};
+    const reminderClockSeconds = positiveInt(record?.clockSeconds ?? snapshot.logClockSeconds, 0);
+    if (reminderClockSeconds < RULE_REMINDER_SECONDS) return;
 
-    const matchKey = buildRuleReminderKey(record);
+    const hasAnchor = record?.clockHasAnchor != null
+      ? Boolean(record.clockHasAnchor)
+      : Boolean(snapshot.logClockHasAnchor);
+    if (!hasAnchor) return;
+
+    const matchKey = buildRuleReminderKey({
+      serverId: record?.serverId ?? snapshot.serverId ?? core?.webStatus?.serverId ?? "",
+      anchorLogTime: record?.clockAnchorLogTime ?? snapshot.logClockAnchorLogTime ?? snapshot.logClockLastResetAt ?? "",
+      matchId: record?.matchId ?? "",
+    });
     if (state.ruleReminderBroadcastKeys.has(matchKey)) return;
 
     const sender = modules?.adminWarn?.broadcastMessage ?? modules?.adminWarn?.sendAdminBroadcast;
@@ -407,14 +431,16 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       message: buildRuleReminderMessage(runtimeConfig?.rules),
       reason: "stepwise_squad_playtime_rule_reminder",
       sourceModule: PLUGIN_ID,
-      relatedEventId: record.id,
+      relatedEventId: record?.id ?? `rule-reminder:${matchKey}`,
       system: true,
     }).catch((error) => ({ success: false, error: error?.message ?? String(error) }));
 
-    record.actions.push({
-      type: result?.success === false ? "rule_reminder_broadcast_failed" : "rule_reminder_broadcasted",
-      result: summarizeActionResult(result),
-    });
+    if (record && Array.isArray(record.actions)) {
+      record.actions.push({
+        type: result?.success === false ? "rule_reminder_broadcast_failed" : "rule_reminder_broadcasted",
+        result: summarizeActionResult(result),
+      });
+    }
 
     if (result?.success !== false) {
       state.ruleReminderBroadcastKeys.add(matchKey);
@@ -610,10 +636,24 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           void handleLifecycleSquadCreated(event);
         }));
       }
+      if (!ruleReminderTimer) {
+        ruleReminderTimer = setInterval(() => {
+          void enqueue(() => maybeBroadcastRuleReminder()).catch((error) => {
+            pluginLogger?.warn?.(`[StepwiseSquadPlaytimeGuard] reminder check failed: ${error?.message ?? error}`);
+          });
+        }, 1000);
+      }
+      void enqueue(() => maybeBroadcastRuleReminder()).catch((error) => {
+        pluginLogger?.warn?.(`[StepwiseSquadPlaytimeGuard] initial reminder check failed: ${error?.message ?? error}`);
+      });
       pluginLogger?.info?.("[StepwiseSquadPlaytimeGuard] plugin started.");
     },
 
     async stop() {
+      if (ruleReminderTimer) {
+        clearInterval(ruleReminderTimer);
+        ruleReminderTimer = null;
+      }
       for (const unsubscribe of unsubscribers.splice(0)) {
         try { unsubscribe(); } catch {}
       }
@@ -735,6 +775,8 @@ function mergeCreation(existing, event, context) {
     isLogConfirmed: Boolean(event.creationSource === "LOG" || existing?.isLogConfirmed),
     isWarmup: Boolean(context.warmup),
     clockSeconds: Math.max(0, Math.floor(Number(context.clockSeconds ?? 0) || 0)),
+    clockAnchorLogTime: normalizeText(context.clockAnchorLogTime),
+    clockHasAnchor: Boolean(context.clockHasAnchor),
     actions: Array.isArray(existing?.actions) ? existing.actions.map((action) => ({ ...action })) : [],
     playtime: cloneValue(existing?.playtime) ?? null,
     lookupStartedAt: normalizeText(existing?.lookupStartedAt),
@@ -941,24 +983,13 @@ function nowIso() {
 function buildRuleReminderKey(record) {
   return [
     normalizeText(record.serverId),
-    normalizeText(record.matchId) || "no-match",
+    normalizeText(record.anchorLogTime) || normalizeText(record.matchId) || "no-match",
     String(RULE_REMINDER_SECONDS),
   ].join("|");
 }
 
 function buildRuleReminderMessage(rules = {}) {
-  const infantryRules = Array.isArray(rules?.infantry) ? rules.infantry : [];
-  const vehicleRules = Array.isArray(rules?.vehicle) ? rules.vehicle : [];
-  const lines = [];
-
-  if (infantryRules.length) {
-    lines.push(`步兵：${infantryRules.map((rule) => `${rule.startSeconds}-${rule.endSeconds}s > ${rule.minHoursExclusive}h`).join("；")}`);
-  }
-
-  if (vehicleRules.length) {
-    lines.push(`载具：${vehicleRules.map((rule) => `${rule.startSeconds}-${rule.endSeconds}s > ${rule.minHoursExclusive}h`).join("；")}`);
-  }
-
-  const rulesText = lines.length ? lines.join("；") : "暂无配置规则";
-  return `日志时间 ${RULE_REMINDER_SECONDS} 秒，阶梯式建队规定：${rulesText}。`;
+  const infantryRules = Array.isArray(rules?.infantry) && rules.infantry.length ? rules.infantry : DEFAULT_RULES.infantry;
+  const infantryText = infantryRules.map((rule) => `${rule.startSeconds}-${rule.endSeconds}秒 > ${rule.minHoursExclusive}h`).join("，");
+  return `本服设有阶梯式建队时长检测，步兵队 ${infantryText}，40秒后放开。`;
 }

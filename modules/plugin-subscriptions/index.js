@@ -162,9 +162,15 @@ export function createPluginSubscriptionsModule({ core, modules, config }) {
       throw error;
     }
 
+    const previousSubscribed = isSubscribed(normalizedId);
     subscriptions.set(normalizedId, Boolean(subscribed));
     lastUpdatedAt = new Date().toISOString();
     await persistState();
+    emitSubscriptionUpdated({
+      id: normalizedId,
+      subscribed: isSubscribed(normalizedId),
+      previousSubscribed,
+    });
 
     return {
       success: true,
@@ -186,9 +192,14 @@ export function createPluginSubscriptionsModule({ core, modules, config }) {
    * 当前前端未暴露这个操作，但 API 先保留。
    */
   async function reset() {
+    const previousState = getState();
     subscriptions.clear();
     lastUpdatedAt = new Date().toISOString();
     await persistState();
+    emitSubscriptionUpdated({
+      reset: true,
+      previousSubscriptions: previousState.subscriptions,
+    });
     return { success: true };
   }
 
@@ -222,6 +233,23 @@ export function createPluginSubscriptionsModule({ core, modules, config }) {
       subscriptions.clear();
       lastUpdatedAt = "";
     }
+  }
+
+  function emitSubscriptionUpdated(payload = {}) {
+    const event = {
+      eventName: "PLUGIN_SUBSCRIPTIONS_UPDATED",
+      layer: "core",
+      source: "module.pluginSubscriptions",
+      time: new Date().toISOString(),
+      ...payload,
+    };
+
+    core.eventBus?.emitCoreEvent?.("PLUGIN_SUBSCRIPTIONS_UPDATED", event);
+    core.eventBus?.emitModuleEvent?.("module.pluginSubscriptions", "updated", {
+      ...event,
+      eventName: "module.pluginSubscriptions.updated",
+      source: "module.pluginSubscriptions",
+    });
   }
 
   /**
