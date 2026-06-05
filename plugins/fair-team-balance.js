@@ -1,4 +1,4 @@
-// -*- coding: utf-8 -*-
+﻿// -*- coding: utf-8 -*-
 
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -32,11 +32,29 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   const unsubscribers = [];
   let expiryTimer = null;
   let serial = Promise.resolve();
+  const processingRequestIds = new Set();
 
   function enqueue(task) {
-    const next = Promise.resolve().then(task);
+    const next = serial.then(() => task(), () => task());
     serial = next.catch(() => {});
     return next;
+  }
+
+  function isRequestProcessing(requestId = "") {
+    return processingRequestIds.has(normalizeText(requestId));
+  }
+
+  function beginRequestProcessing(requestId = "") {
+    const key = normalizeText(requestId);
+    if (!key || processingRequestIds.has(key)) return false;
+    processingRequestIds.add(key);
+    return true;
+  }
+
+  function endRequestProcessing(requestId = "") {
+    const key = normalizeText(requestId);
+    if (!key) return;
+    processingRequestIds.delete(key);
   }
 
   function isSubscribed() {
@@ -1439,17 +1457,25 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   async function approveRequest({ requestId = "", direct = false, actor = null } = {}) {
-    return enqueue(async () => {
-      expireRequests();
-      const request = state.requests.get(normalizeText(requestId));
-      if (!request) {
-        return {
-          ok: false,
-          error: "RequestNotFound",
-          message: "未找到公平跳边申请。",
-        };
-      }
+    expireRequests();
+    const requestKey = normalizeText(requestId);
+    const request = state.requests.get(requestKey);
+    if (!request) {
+      return {
+        ok: false,
+        error: "RequestNotFound",
+        message: "未找到公平跳边申请。",
+      };
+    }
+    if (!beginRequestProcessing(requestKey)) {
+      return {
+        ok: false,
+        error: "RequestProcessing",
+        message: "该请求正在处理中，请稍后重试。",
+      };
+    }
 
+    try {
       if (request.status === "pending_claim" && !direct) {
         return {
           ok: false,
@@ -1595,21 +1621,31 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         request: serializeRequest(request),
         result: switchResult,
       };
-    });
+    } finally {
+      endRequestProcessing(requestKey);
+    }
   }
 
   async function rejectRequest({ requestId = "", reason = "", actor = null } = {}) {
-    return enqueue(async () => {
-      expireRequests();
-      const request = state.requests.get(normalizeText(requestId));
-      if (!request) {
-        return {
-          ok: false,
-          error: "RequestNotFound",
-          message: "未找到公平跳边申请。",
-        };
-      }
+    expireRequests();
+    const requestKey = normalizeText(requestId);
+    const request = state.requests.get(requestKey);
+    if (!request) {
+      return {
+        ok: false,
+        error: "RequestNotFound",
+        message: "未找到公平跳边申请。",
+      };
+    }
+    if (!beginRequestProcessing(requestKey)) {
+      return {
+        ok: false,
+        error: "RequestProcessing",
+        message: "该请求正在处理中，请稍后重试。",
+      };
+    }
 
+    try {
       request.status = "rejected";
       request.rejectedAt = nowIso();
       request.rejectedReason = normalizeText(reason) || "manual_reject";
@@ -1638,7 +1674,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         ok: true,
         request: serializeRequest(request),
       };
-    });
+    } finally {
+      endRequestProcessing(requestKey);
+    }
   }
 
   function normalizeActorForAudit(actor = null) {
@@ -1675,6 +1713,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     request.status = "expired";
     request.rejectedAt = nowIso();
     request.rejectedReason = reason;
+    endRequestProcessing(request.id);
     releaseRoundUse(request.applicant?.playerKey);
     releaseRoundUse(request.claimant?.playerKey);
     state.requests.delete(request.id);
@@ -1750,8 +1789,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       rejectedReason: request.rejectedReason,
       directApproval: Boolean(request.directApproval),
       serverId: request.serverId,
-      canDirectApprove: request.status === "pending_claim",
-      canApprove: request.status === "pending_approval",
+      processing: isRequestProcessing(request.id),
+      canDirectApprove: request.status === "pending_claim" && !isRequestProcessing(request.id),
+      canApprove: request.status === "pending_approval" && !isRequestProcessing(request.id),
     };
   }
 

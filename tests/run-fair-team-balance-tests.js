@@ -311,6 +311,89 @@ async function testSqtbDirectApproveStillWorks() {
   }
 }
 
+async function testApproveRequestRejectsConcurrentDuplicates() {
+  let releaseFirstApproval = null;
+  let firstApprovalStarted = false;
+  const harness = await createHarness({
+    matchState: {
+      players: [
+        { name: "Alpha", steamId: "steam-alpha", teamId: 1, squadId: 0 },
+        { name: "Bravo", steamId: "steam-bravo", teamId: 2, squadId: 0 },
+      ],
+    },
+    forceTeamChange: async () => {
+      if (!firstApprovalStarted) {
+        firstApprovalStarted = true;
+        await new Promise((resolve) => {
+          releaseFirstApproval = resolve;
+        });
+      }
+      return {
+        ok: true,
+        error: "",
+        message: "Team switch requested.",
+        command: "AdminForceTeamChange",
+        rconExecuted: true,
+        rconResponse: "OK",
+      };
+    },
+  });
+
+  try {
+    const created = await harness.plugin.api.simulateChatMessage({
+      message: "sqtb",
+      steamId: "steam-alpha",
+      playerName: "Alpha",
+    });
+
+    const firstApprovalPromise = harness.plugin.api.approveRequest({
+      requestId: created.request.id,
+      direct: true,
+      actor: {
+        id: "admin-1",
+        username: "Admin",
+        name: "Admin",
+        role: "SuperAdmin",
+        isSuperAdmin: true,
+        permissions: ["*"],
+      },
+    });
+
+    for (let index = 0; index < 50 && !firstApprovalStarted; index += 1) {
+      await sleep(10);
+    }
+
+    assert.equal(firstApprovalStarted, true);
+
+    const secondApproval = await harness.plugin.api.approveRequest({
+      requestId: created.request.id,
+      direct: true,
+      actor: {
+        id: "admin-2",
+        username: "Admin2",
+        name: "Admin2",
+        role: "SuperAdmin",
+        isSuperAdmin: true,
+        permissions: ["*"],
+      },
+    });
+
+    assert.equal(secondApproval.ok, false);
+    assert.equal(secondApproval.error, "RequestProcessing");
+    assert.equal(harness.teamBalanceCalls.length, 0);
+
+    releaseFirstApproval?.();
+    const firstApproval = await firstApprovalPromise;
+
+    assert.equal(firstApproval.ok, true);
+    assert.equal(harness.teamBalanceCalls.length, 1);
+    assert.equal(harness.plugin.api.listRequests().length, 0);
+  } finally {
+    releaseFirstApproval?.();
+    await harness.stop();
+  }
+}
+
 async function testClaimCodeIsStillHandled() {
   const harness = await createHarness({
     matchState: {
@@ -340,6 +423,7 @@ await testTbSucceedsOnlyWhenOwnTeamIsAheadByThree();
 await testTbRejectsWhenOwnTeamLeadIsBelowThree();
 await testSqtbCreatesRequestAndClaimExecutes();
 await testSqtbDirectApproveStillWorks();
+await testApproveRequestRejectsConcurrentDuplicates();
 await testClaimCodeIsStillHandled();
 
 console.log("fair team balance tests passed");

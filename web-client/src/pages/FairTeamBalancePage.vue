@@ -466,6 +466,8 @@ const historyClearing = ref(false);
 const resettingAction = ref<"" | "period" | "round">("");
 const nowMs = ref(Date.now());
 let timer: number | null = null;
+let requestsTimer: number | null = null;
+let visibilityRefreshHandler: (() => void) | null = null;
 
 const systemStatusLabel = computed(() => {
   if (!fairState.value.enabled) return "禁用中";
@@ -504,12 +506,33 @@ onMounted(() => {
   timer = window.setInterval(() => {
     nowMs.value = Date.now();
   }, 1000);
+  requestsTimer = window.setInterval(() => {
+    if (document.visibilityState === "visible" && !loadingRequests.value) {
+      void loadRequests();
+    }
+  }, 1200);
+  visibilityRefreshHandler = () => {
+    if (document.visibilityState === "visible" && !loadingRequests.value) {
+      void loadRequests();
+    }
+  };
+  document.addEventListener("visibilitychange", visibilityRefreshHandler);
+  window.addEventListener("focus", visibilityRefreshHandler);
 });
 
 onBeforeUnmount(() => {
   if (timer != null) {
     window.clearInterval(timer);
     timer = null;
+  }
+  if (requestsTimer != null) {
+    window.clearInterval(requestsTimer);
+    requestsTimer = null;
+  }
+  if (visibilityRefreshHandler) {
+    document.removeEventListener("visibilitychange", visibilityRefreshHandler);
+    window.removeEventListener("focus", visibilityRefreshHandler);
+    visibilityRefreshHandler = null;
   }
 });
 
@@ -532,6 +555,7 @@ async function loadState() {
 }
 
 async function loadRequests() {
+  if (loadingRequests.value) return;
   loadingRequests.value = true;
   requestsError.value = "";
   try {
