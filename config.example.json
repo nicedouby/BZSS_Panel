@@ -492,6 +492,7 @@
       "enabled": true,
       "directory": "./data/stepwise-squad-playtime-guard",
       "broadcastOnApproved": true,
+      "broadcastOnViolation": true,
       "warnOnMissingPlaytime": true,
       "liveLookupWhenMissing": true,
       "maxRecentRecords": 300,

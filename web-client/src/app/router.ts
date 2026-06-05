@@ -10,6 +10,7 @@ import InfantryCombatEnhancerPage from "../pages/InfantryCombatEnhancerPage.vue"
 import GroupReportPage from "../pages/GroupReportPage.vue";
 import FairTeamBalancePage from "../pages/FairTeamBalancePage.vue";
 import FairSquadGuardPage from "../pages/FairSquadGuardPage.vue";
+import StepwiseSquadPlaytimeGuardPage from "../pages/StepwiseSquadPlaytimeGuardPage.vue";
 import SquadManagementPage from "../pages/SquadManagementPage.vue";
 import TeamBalancePage from "../pages/TeamBalancePage.vue";
 import UdpEventForwarderPage from "../pages/UdpEventForwarderPage.vue";
@@ -203,6 +204,15 @@ export const router = createRouter({
       meta: {
         ...pluginPollingMeta,
         titleKey: "routeTitle.fairSquadGuard",
+        fullBleed: true,
+      },
+    },
+    {
+      path: "/plugins/stepwise-squad-playtime-guard",
+      component: StepwiseSquadPlaytimeGuardPage,
+      meta: {
+        ...pluginPollingMeta,
+        title: "阶梯式建队时长",
         fullBleed: true,
       },
     },

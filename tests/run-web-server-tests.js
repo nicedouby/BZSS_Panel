@@ -1709,6 +1709,94 @@ async function testFairTeamBalanceRoutesReturnPluginStateAndRequests() {
   assert.equal(roundResetCalls[0].meta.by, "admin");
 }
 
+async function testStepwiseSquadPlaytimeGuardRoutesReturnPluginStateAndSimulate() {
+  const simulateCalls = [];
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin", role: "SuperAdmin", isSuperAdmin: true };
+        },
+        hasEverything() {
+          return true;
+        },
+      },
+      pluginManager: {
+        instances: [
+          {
+            manifest: { id: "plugin.stepwiseSquadPlaytimeGuard" },
+            api: {
+              getState() {
+                return {
+                  enabled: true,
+                  subscribed: true,
+                  active: true,
+                  settings: {
+                    broadcastOnApproved: true,
+                    broadcastOnViolation: true,
+                    warnOnMissingPlaytime: true,
+                    liveLookupWhenMissing: true,
+                    maxRecentRecords: 10,
+                    rules: {
+                      infantry: [{ startSeconds: 0, endSeconds: 25, minHoursExclusive: 400 }],
+                      vehicle: [{ startSeconds: 50, endSeconds: 60, minHoursExclusive: 800 }],
+                    },
+                  },
+                  pendingLogCount: 0,
+                  summary: {
+                    total: 2,
+                    approved: 1,
+                    violations: 1,
+                    broadcasts: 2,
+                    disbands: 1,
+                    warns: 1,
+                    pendingLookups: 0,
+                  },
+                  recentRecords: [],
+                };
+              },
+              async simulateCreation(payload) {
+                simulateCalls.push(payload);
+                return { id: "rec-1", approved: true, actions: [{ type: "broadcasted" }] };
+              },
+            },
+          },
+        ],
+      },
+    },
+  });
+
+  const stateRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/plugins/stepwise-squad-playtime-guard/state",
+    headers: { host: "localhost" },
+    socket: {},
+  }, stateRecorder.res);
+  assert.equal(stateRecorder.state.status, 200);
+  const stateBody = JSON.parse(stateRecorder.state.body);
+  assert.equal(stateBody.ok, true);
+  assert.equal(stateBody.data.settings.broadcastOnViolation, true);
+  assert.equal(stateBody.data.summary.broadcasts, 2);
+
+  const simulateRecorder = createRecorder();
+  const simulateBody = Readable.from([JSON.stringify({
+    creatorName: "Leader",
+    squadName: "INF 1",
+    teamId: 1,
+    squadId: 1,
+    creationSource: "LOG",
+  })]);
+  simulateBody.method = "POST";
+  simulateBody.url = "/api/plugins/stepwise-squad-playtime-guard/simulate";
+  simulateBody.headers = { host: "localhost" };
+  simulateBody.socket = {};
+  await server.handleRequest(simulateBody, simulateRecorder.res);
+  assert.equal(simulateRecorder.state.status, 200);
+  assert.equal(simulateCalls.length, 1);
+  assert.equal(simulateCalls[0].squadName, "INF 1");
+}
+
 async function testFairSquadGuardRoutesReturnPluginStateAndActions() {
   const unlockCalls = [];
   const resetCalls = [];
@@ -1926,6 +2014,7 @@ await testAdminWarnRecentRouteReturnsMemoryRecords();
 await testAdminWarnBroadcastRouteReturnsMemoryRecords();
 await testCombatLogRoutesExposeLogsAndMetadata();
 await testFairTeamBalanceRoutesReturnPluginStateAndRequests();
+await testStepwiseSquadPlaytimeGuardRoutesReturnPluginStateAndSimulate();
 await testFairSquadGuardRoutesReturnPluginStateAndActions();
 await testPjscAverageDurationRouteReturnsPluginState();
 await testMatchSnapshotRoutesExposeArtifacts();

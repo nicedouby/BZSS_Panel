@@ -341,6 +341,10 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       await broadcastCreation(record, decision);
     }
 
+    if (!decision.approved && shouldBroadcastViolation(record, decision)) {
+      await broadcastViolation(record, decision);
+    }
+
     if (!decision.approved && !record.actions.some((action) => action.type === "disbanded" || action.type === "disband_failed")) {
       const disbandResult = await disbandSquad(record, decision);
       record.actions.push({
@@ -378,6 +382,13 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     return !record.actions.some((action) => action.type === "broadcasted" || action.type === "broadcast_failed");
   }
 
+  function shouldBroadcastViolation(record, decision) {
+    if (!runtimeConfig.broadcastOnViolation) return false;
+    if (decision.approved) return false;
+    if (decision.status === "kick_cooldown") return false;
+    return !record.actions.some((action) => action.type === "broadcasted_violation" || action.type === "broadcast_violation_failed");
+  }
+
   function shouldWarn(record, decision) {
     if (decision.status === "missing_playtime") return Boolean(runtimeConfig.warnOnMissingPlaytime);
     return true;
@@ -403,6 +414,30 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     record.actions.push({
       type: result?.success === false ? "broadcast_failed" : "broadcasted",
+      result: summarizeActionResult(result),
+    });
+  }
+
+  async function broadcastViolation(record, decision) {
+    const sender = modules?.adminWarn?.broadcastMessage ?? modules?.adminWarn?.sendAdminBroadcast;
+    if (typeof sender !== "function") {
+      record.actions.push({
+        type: "broadcast_violation_failed",
+        result: { error: "admin_warn_unavailable" },
+      });
+      return;
+    }
+
+    const result = await sender.call(modules.adminWarn, {
+      message: buildViolationBroadcastMessage(record, decision),
+      reason: "stepwise_squad_playtime_violation_broadcast",
+      sourceModule: PLUGIN_ID,
+      relatedEventId: record.id,
+      system: true,
+    }).catch((error) => ({ success: false, error: error?.message ?? String(error) }));
+
+    record.actions.push({
+      type: result?.success === false ? "broadcast_violation_failed" : "broadcasted_violation",
       result: summarizeActionResult(result),
     });
   }
@@ -594,6 +629,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     return {
       directory: runtimeConfig.directory,
       broadcastOnApproved: runtimeConfig.broadcastOnApproved,
+      broadcastOnViolation: runtimeConfig.broadcastOnViolation,
       warnOnMissingPlaytime: runtimeConfig.warnOnMissingPlaytime,
       liveLookupWhenMissing: runtimeConfig.liveLookupWhenMissing,
       maxRecentRecords: runtimeConfig.maxRecentRecords,
@@ -631,6 +667,18 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     async start() {
       runtimeConfig = readConfig(config);
+      core?.webRegistry?.registerPage?.({
+        id: "web.stepwiseSquadPlaytimeGuard",
+        title: "阶梯式建队时长",
+        group: "插件",
+        route: "/plugins/stepwise-squad-playtime-guard",
+        source: PLUGIN_ID,
+        description: "阶梯式建队时长检测页面。查看当前规则、广播开关、最近判定记录，并可手动模拟一次建队判定。",
+        required: false,
+        enabled: true,
+        order: 136,
+        icon: "SSP",
+      });
       if (typeof core?.eventBus?.onModuleEvent === "function") {
         unsubscribers.push(core.eventBus.onModuleEvent("module.squadLifecycle", "squadCreated", (event) => {
           void handleLifecycleSquadCreated(event);
@@ -667,6 +715,7 @@ function readConfig(config) {
     enabled: raw.enabled !== false,
     directory: normalizeText(raw.directory) || DEFAULT_DATA_DIR,
     broadcastOnApproved: raw.broadcastOnApproved !== false,
+    broadcastOnViolation: raw.broadcastOnViolation !== false,
     warnOnMissingPlaytime: raw.warnOnMissingPlaytime !== false,
     liveLookupWhenMissing: raw.liveLookupWhenMissing !== false,
     maxRecentRecords: positiveInt(raw.maxRecentRecords, DEFAULT_RECENT_LIMIT),
@@ -862,7 +911,7 @@ function buildSummary(records) {
   for (const record of records) {
     if (record.approved) summary.approved += 1;
     if (record.violation) summary.violations += 1;
-    if (record.actions?.some((action) => action.type === "broadcasted")) summary.broadcasts += 1;
+    if (record.actions?.some((action) => action.type === "broadcasted" || action.type === "broadcasted_violation")) summary.broadcasts += 1;
     if (record.actions?.some((action) => action.type === "disbanded")) summary.disbands += 1;
     if (record.actions?.some((action) => action.type === "warned")) summary.warns += 1;
     if (record.actions?.some((action) => action.type === "lookup_started") && !record.actions?.some((action) => action.type === "lookup_finished" || action.type === "lookup_failed")) {
@@ -992,4 +1041,16 @@ function buildRuleReminderMessage(rules = {}) {
   const infantryRules = Array.isArray(rules?.infantry) && rules.infantry.length ? rules.infantry : DEFAULT_RULES.infantry;
   const infantryText = infantryRules.map((rule) => `${rule.startSeconds}-${rule.endSeconds}秒 > ${rule.minHoursExclusive}h`).join("，");
   return `本服设有阶梯式建队时长检测，步兵队 ${infantryText}，40秒后放开。`;
+}
+
+function buildViolationBroadcastMessage(record, decision) {
+  const nature = record.squadNatureLabel || "当前";
+  const squadName = record.squadName || "未知小队";
+  const creator = record.creatorName || record.identityName || record.inferredLeader?.name || "未知玩家";
+  const ruleLabel = decision.rule?.label ?? "限制窗口";
+  const hoursText = record.playtime?.hoursText || "未知h";
+  if (decision.status === "missing_playtime") {
+    return `违规建队已拦截：${creator} 创建的 ${squadName} 在 ${nature} ${ruleLabel} 未查到游戏时长，已按规则解散。`;
+  }
+  return `违规建队已拦截：${creator} 创建的 ${squadName} 在 ${nature} ${ruleLabel} 仅有 ${hoursText}，已按规则解散。`;
 }

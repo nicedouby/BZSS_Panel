@@ -1614,6 +1614,32 @@ export class WebServer {
       }
     }
 
+    if (url.pathname.startsWith("/api/plugins/stepwise-squad-playtime-guard")) {
+      const pluginApi = this.getPluginApi("plugin.stepwiseSquadPlaytimeGuard");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "StepwiseSquadPlaytimeGuardUnavailable",
+          message: "Stepwise squad playtime guard plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/stepwise-squad-playtime-guard/state" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getState?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/stepwise-squad-playtime-guard/simulate" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.simulateCreation?.(body ?? {}),
+        });
+      }
+    }
+
     if (url.pathname.startsWith("/api/modules/player-session-records")) {
       const moduleApi = this.modules.playerSessionRecords;
       if (!moduleApi) {

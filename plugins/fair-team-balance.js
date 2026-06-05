@@ -307,53 +307,21 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       return;
     }
 
-    if (type === "SQTB_CREATED") {
-      const request = normalizeRecoveredRequest(entry, atMs);
-      if (!request) return;
-      state.requests.set(request.id, request);
-      state.requestIdsByCode.set(request.code, request.id);
-      state.round.usedPlayerKeys.add(request.applicant.playerKey);
+    if (type === "SQTB_CREATED" || type === "SQTB_CLAIMED" || type === "SQTB_REJECTED" || type === "SQTB_EXPIRED") {
       return;
     }
 
-    if (type === "SQTB_CLAIMED") {
-      const requestId = normalizeText(entry?.requestId);
-      const request = requestId ? state.requests.get(requestId) : null;
-      if (!request) return;
-      request.status = "pending_approval";
-      request.claimedAt = at;
-      request.claimedAtMs = atMs;
-      request.claimant = normalizeRecoveredActor(entry?.claimant ?? entry, "claimant");
-      if (request.claimant?.playerKey) {
-        state.round.usedPlayerKeys.add(request.claimant.playerKey);
+    if (type === "SQTB_APPROVED" || type === "SQTB_EXECUTED") {
+      applyRecoveredSqtbQuotaUsage(entry, at, atMs);
+      const applicant = normalizeRecoveredActor(entry?.applicant ?? entry, "applicant");
+      if (applicant?.playerKey) {
+        state.round.usedPlayerKeys.add(applicant.playerKey);
+      }
+      const claimant = normalizeRecoveredActor(entry?.claimant ?? null, "claimant");
+      if (claimant?.playerKey && !Boolean(entry?.directApproval)) {
+        state.round.usedPlayerKeys.add(claimant.playerKey);
       }
       return;
-    }
-
-    if (type === "SQTB_APPROVED") {
-      const requestId = normalizeText(entry?.requestId);
-      const request = requestId ? state.requests.get(requestId) : null;
-      if (!request) return;
-      request.status = "approved";
-      request.approvedAt = at;
-      request.directApproval = Boolean(entry?.directApproval);
-      applyRecoveredSqtbQuotaUsage(entry, at, atMs);
-      state.requests.delete(requestId);
-      state.requestIdsByCode.delete(request.code);
-      return;
-    }
-
-    if (type === "SQTB_REJECTED" || type === "SQTB_EXPIRED") {
-      const requestId = normalizeText(entry?.requestId);
-      const request = requestId ? state.requests.get(requestId) : null;
-      if (!request) return;
-      request.status = type === "SQTB_EXPIRED" ? "expired" : "rejected";
-      request.rejectedAt = at;
-      request.rejectedReason = normalizeText(entry?.reason);
-      releaseRoundUse(request.applicant?.playerKey);
-      releaseRoundUse(request.claimant?.playerKey);
-      state.requests.delete(requestId);
-      state.requestIdsByCode.delete(request.code);
     }
   }
 
@@ -648,6 +616,109 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     ) ?? null;
   }
 
+  function getPlayerTeamId(player) {
+    return Number(player?.teamId ?? player?.teamID ?? 0) || 0;
+  }
+
+  function getSwitchEligibility(matchState, player) {
+    const teamId = getPlayerTeamId(player);
+    if (teamId !== 1 && teamId !== 2) {
+      return {
+        ok: false,
+        error: "InvalidTeam",
+        message: "玩家必须在队伍 1 或队伍 2。",
+      };
+    }
+
+    const counts = getTeamCounts(matchState);
+    const ownCount = teamId === 1 ? counts.team1 : counts.team2;
+    const otherCount = teamId === 1 ? counts.team2 : counts.team1;
+
+    if (ownCount <= otherCount) {
+      return {
+        ok: false,
+        error: "TeamDeltaNotAllowed",
+        message: "只有当前队伍人数更多时，才允许跳到另一边。",
+      };
+    }
+
+    return {
+      ok: true,
+      teamId,
+      ownCount,
+      otherCount,
+    };
+  }
+
+  function validateDirectSwitch({ playerKey, playerName, player, matchState, webStatus, period, action }) {
+    const common = validateCommonPlayerState(matchState, player);
+    if (!common.ok) return common;
+
+    if (action === "tb" && Boolean(webStatus?.isWarmup)) {
+      return { ok: true, mode: "warmup" };
+    }
+
+    if (action === "sqtb" && Boolean(webStatus?.isWarmup)) {
+      return {
+        ok: false,
+        error: "WarmupSqtbDisabled",
+        message: "暖服阶段禁用 sqtb 申请，请使用tb。",
+      };
+    }
+
+    if (hasRoundUse(playerKey)) {
+      return {
+        ok: false,
+        error: "RoundPlayerQuotaExhausted",
+        message: `${playerName || "玩家"} 本回合已使用过 tb/sqtb/认领。`,
+      };
+    }
+
+    const squadId = Number(player?.squadId ?? player?.squadID ?? 0);
+    if (squadId > 0) {
+      return {
+        ok: false,
+        error: "PlayerInSquad",
+        message: "玩家必须不在小队中。",
+      };
+    }
+
+    if (action === "tb") {
+      if (state.round.publicTbRemaining <= 0) {
+        return {
+          ok: false,
+          error: "RoundTbQuotaExhausted",
+          message: "本回合公共跳边额度已用尽。",
+        };
+      }
+
+      if (Number(period?.tbUsed ?? 0) >= runtimeConfig.periodTbLimit) {
+        return {
+          ok: false,
+          error: "PlayerTbQuotaExhausted",
+          message: "玩家在当前周期内的跳边额度已用尽。",
+        };
+      }
+    }
+
+    if (action === "sqtb" && Number(period?.sqtbClaimUsed ?? 0) >= runtimeConfig.periodSqtbClaimLimit) {
+      return {
+        ok: false,
+        error: "PlayerSqtbQuotaExhausted",
+        message: "玩家在当前周期内的 sqtb 额度已用尽。",
+      };
+    }
+
+    const sideCheck = getSwitchEligibility(matchState, player);
+    if (!sideCheck.ok) return sideCheck;
+
+    return {
+      ok: true,
+      mode: action === "tb" && Boolean(webStatus?.isWarmup) ? "warmup" : "normal",
+      sideCheck,
+    };
+  }
+
   function validateCommonPlayerState(matchState, player) {
     if (!matchState) {
       return { ok: false, error: "MatchStateUnavailable", message: "SquadManagement 状态不可用。" };
@@ -902,6 +973,178 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       result,
       publicTbRemaining: state.round.publicTbRemaining,
     };
+  }
+
+  async function executeDirectSwitch(event = {}, action = "tb") {
+    const serverId = getServerId(event?.serverId);
+    const { matchState, player } = getOnlinePlayerSnapshot(serverId, event);
+    const actor = formatActor(player, event);
+    const playerKey = actor.playerKey;
+    const playerName = actor.playerName;
+    const nowMs = Date.now();
+    const period = ensurePeriod(playerKey, {
+      nowMs,
+      playerName,
+      steamId: actor.steamId,
+      eosId: actor.eosId,
+    });
+    const webStatus = getCurrentWebStatus();
+    const validation = validateDirectSwitch({
+      playerKey,
+      playerName,
+      player,
+      matchState,
+      webStatus,
+      period,
+      action,
+    });
+    const sourceMessageId = normalizeText(event?.id ?? event?.seq);
+    const requestedType = action === "sqtb" ? "SQTB_REQUESTED" : "TB_REQUESTED";
+    const rejectedType = action === "sqtb" ? "SQTB_REJECTED" : "TB_REJECTED";
+    const executedType = action === "sqtb" ? "SQTB_EXECUTED" : "TB_EXECUTED";
+    const successReason = action === "sqtb" ? "fair_sqtb_chat" : "fair_tb_chat";
+    const failureReason = action === "sqtb" ? "fair_sqtb_rejected" : "fair_tb_rejected";
+
+    await appendLog({
+      type: requestedType,
+      serverId,
+      playerKey,
+      playerName,
+      steamId: actor.steamId,
+      eosId: actor.eosId,
+      message: normalizeText(event?.message),
+      mode: action,
+      sourceMessageId,
+    });
+
+    if (!validation.ok) {
+      await appendLog({
+        type: rejectedType,
+        serverId,
+        playerKey,
+        playerName,
+        steamId: actor.steamId,
+        eosId: actor.eosId,
+        reason: validation.error,
+        message: validation.message,
+      });
+      await warnPlayer(actor, `公平跳边失败: ${validation.message}`, failureReason, {
+        relatedEventId: sourceMessageId,
+      });
+      return {
+        ok: false,
+        error: validation.error,
+        message: validation.message,
+      };
+    }
+
+    const switchResult = await modules?.teamBalance?.forceTeamChange?.({
+      steamId: actor.steamId,
+      playerName,
+      source: `${PLUGIN_ID}.${action}`,
+      reason: successReason,
+      operator: {
+        id: PLUGIN_ID,
+        name: "FairTeamBalance",
+        username: "FairTeamBalance",
+        role: "system",
+        isSuperAdmin: true,
+        permissions: ["*"],
+      },
+      system: true,
+    });
+
+    if (!switchResult?.ok) {
+      await appendLog({
+        type: rejectedType,
+        serverId,
+        playerKey,
+        playerName,
+        steamId: actor.steamId,
+        eosId: actor.eosId,
+        reason: normalizeText(switchResult?.error) || "TeamBalanceRejected",
+        message: normalizeText(switchResult?.message) || "TeamBalance rejected the switch.",
+      });
+      await warnPlayer(actor, `公平跳边失败: ${normalizeText(switchResult?.message) || "跳边执行被拒绝"}`, action === "sqtb" ? "fair_sqtb_switch_rejected" : "fair_tb_switch_rejected", {
+        relatedEventId: sourceMessageId,
+      });
+      return {
+        ok: false,
+        error: normalizeText(switchResult?.error) || "TeamBalanceRejected",
+        message: normalizeText(switchResult?.message) || "TeamBalance rejected the switch.",
+      };
+    }
+
+    if (action === "tb") {
+      if (!Boolean(validation.mode === "warmup")) {
+        period.tbUsed += 1;
+        state.round.publicTbRemaining = Math.max(0, state.round.publicTbRemaining - 1);
+        consumeRoundUse(playerKey);
+      }
+    } else {
+      period.sqtbClaimUsed += 1;
+      consumeRoundUse(playerKey);
+    }
+
+    period.lastActivityAt = nowIso();
+    period.lastActivityAtMs = nowMs;
+
+    await appendLog({
+      type: executedType,
+      serverId,
+      playerKey,
+      playerName,
+      steamId: actor.steamId,
+      eosId: actor.eosId,
+      mode: action === "tb" && Boolean(validation.mode === "warmup") ? "warmup_tb" : action,
+      roundPublicTbRemainingAfter: state.round.publicTbRemaining,
+      teamBalanceResult: {
+        ok: Boolean(switchResult?.ok),
+        message: normalizeText(switchResult?.message),
+        command: normalizeText(switchResult?.command),
+      },
+    });
+
+    if (action === "tb") {
+      await broadcastMessage(buildQuotaBroadcastMessage({
+        playerName,
+        mode: Boolean(validation.mode === "warmup") ? "warmup_tb" : "tb",
+      }), "fair_tb_broadcast", {
+        relatedEventId: sourceMessageId,
+      });
+      await warnPlayer(actor, Boolean(validation.mode === "warmup")
+        ? "公平跳边提醒: 已在暖服模式执行完成"
+        : `公平跳边提醒: 已在非暖服模式执行完成，公共TB剩余 ${state.round.publicTbRemaining}/${runtimeConfig.publicTbLimit}`, "fair_tb_success_warning", {
+        relatedEventId: sourceMessageId,
+      });
+      return {
+        ok: true,
+        mode: Boolean(validation.mode === "warmup") ? "warmup" : "normal",
+        result: switchResult,
+        publicTbRemaining: state.round.publicTbRemaining,
+      };
+    }
+
+    await broadcastMessage(`公平跳边 SQTB 执行成功: ${playerName || "unknown"}`, "fair_sqtb_broadcast", {
+      relatedEventId: sourceMessageId,
+    });
+    await warnPlayer(actor, "公平跳边提醒: SQTB 已在人数差允许时执行完成", "fair_sqtb_success_warning", {
+      relatedEventId: sourceMessageId,
+    });
+
+    return {
+      ok: true,
+      mode: "direct",
+      result: switchResult,
+    };
+  }
+
+  async function handleDirectTbMessage(event = {}) {
+    return executeDirectSwitch(event, "tb");
+  }
+
+  async function handleDirectSqtbMessage(event = {}) {
+    return executeDirectSwitch(event, "sqtb");
   }
 
   function buildRequestId() {
@@ -1436,8 +1679,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     const files = getReplayFilePaths(Date.now());
     const entries = [];
     const types = [
+      "TB_REQUESTED",
       "TB_EXECUTED",
       "TB_REJECTED",
+      "SQTB_REQUESTED",
+      "SQTB_EXECUTED",
       "SQTB_APPROVED",
       "SQTB_REJECTED",
       "SQTB_EXPIRED",
@@ -1540,12 +1786,12 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
       expireRequests();
       const message = String(event?.message ?? "");
-      if (message !== "tb" && message !== "sqtb" && !CLAIM_MESSAGE_PATTERN.test(message)) {
+      if (message !== "tb" && message !== "sqtb") {
         return { matched: false };
       }
 
       if (message === "tb") {
-        const result = await handleTbMessage(event);
+        const result = await handleDirectTbMessage(event);
         return {
           matched: true,
           trigger: "tb",
@@ -1554,23 +1800,13 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       }
 
       if (message === "sqtb") {
-        const result = await handleSqtbMessage(event);
+        const result = await handleDirectSqtbMessage(event);
         return {
           matched: true,
           trigger: "sqtb",
           ...result,
         };
       }
-
-      const match = message.match(CLAIM_MESSAGE_PATTERN);
-      const code = String(match?.[1] ?? "");
-      const result = await handleClaimMessage(event, code);
-      return {
-        matched: true,
-        trigger: "claim",
-        code,
-        ...result,
-      };
     });
   }
 
@@ -1640,21 +1876,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
       expiryTimer = setInterval(() => {
         expireRequests();
-
-        if (isActive()) {
-          const webStatus = getCurrentWebStatus();
-          const logClockSeconds = Number(webStatus?.logClockSeconds ?? 0);
-          const isWarmup = Boolean(webStatus?.isWarmup);
-          const isOpen = !isWarmup && logClockSeconds >= 20 && logClockSeconds <= 60;
-
-          if (isOpen && !state.windowState.wasOpen) {
-            void broadcastMessage("公平跳边窗口已打开 (20-60秒)，输入 tb 即可跳边", "fair_tb_window_opened");
-            state.windowState.wasOpen = true;
-          } else if (!isOpen && state.windowState.wasOpen) {
-            void broadcastMessage("公平跳边窗口已关闭", "fair_tb_window_closed");
-            state.windowState.wasOpen = false;
-          }
-        }
       }, EXPIRY_SWEEP_MS);
       if (typeof expiryTimer.unref === "function") {
         expiryTimer.unref();

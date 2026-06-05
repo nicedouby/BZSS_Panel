@@ -515,7 +515,7 @@ onBeforeUnmount(() => {
 
 async function refreshPanel() {
   quotaError.value = "";
-  await Promise.all([loadState(), loadRequests(), loadHistory(), loadBroadcastState()]);
+  await Promise.all([loadState(), loadHistory(), loadBroadcastState()]);
 }
 
 async function loadState() {
@@ -793,6 +793,15 @@ function normalizeHistoryEntry(value: any): FairTeamBalanceHistoryEntry {
   
   let typeLabel = type;
   let statusClass = "info";
+
+  if (type === "TB_REQUESTED") {
+    typeLabel = "TB 请求";
+  } else if (type === "SQTB_REQUESTED") {
+    typeLabel = "SQTB 请求";
+  } else if (type === "SQTB_EXECUTED") {
+    typeLabel = "SQTB 执行完成";
+    statusClass = "ok";
+  }
   
   switch(type) {
     case "TB_REQUESTED": typeLabel = "请求 TB"; statusClass = "info"; break;
@@ -899,6 +908,10 @@ function normalizeStatusLabel(status: string) {
 .quota-card,
 .request-card {
   min-width: 0;
+}
+
+.request-card {
+  display: none;
 }
 
 .hero-grid,

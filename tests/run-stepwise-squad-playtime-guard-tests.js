@@ -172,7 +172,8 @@ async function testInfantryLowHoursDisbands() {
     assert.equal(harness.disbands.length, 1);
     assert.equal(harness.kicks.length, 0);
     assert.equal(harness.warnings.length, 1);
-    assert.equal(harness.broadcasts.length, 0);
+    assert.equal(harness.broadcasts.length, 1);
+    assert.equal(harness.broadcasts[0].message.includes("违规建队已拦截"), true);
   } finally {
     await harness.stop();
   }
@@ -261,7 +262,7 @@ async function testInfantrySecondWindowAndOpenWindow() {
       creatorSteamId: "steam-open",
     }));
     assert.equal(open.approved, true);
-    assert.equal(harness.broadcasts.length, 2);
+    assert.equal(harness.broadcasts.length, 3);
   } finally {
     await harness.stop();
   }
@@ -305,7 +306,7 @@ async function testVehicleSecondThirdAndOpenWindows() {
       creatorSteamId: "steam-open-vehicle",
     }));
     assert.equal(open.approved, true);
-    assert.equal(harness.broadcasts.length, 3);
+    assert.equal(harness.broadcasts.length, 4);
     assert.equal(harness.disbands.length, 1);
   } finally {
     await harness.stop();
@@ -367,6 +368,7 @@ async function testMissingPlaytimeDisbandsWarnsAndStartsLookup() {
     assert.equal(harness.disbands.length, 1);
     assert.equal(harness.kicks.length, 0);
     assert.equal(harness.warnings.length, 1);
+    assert.equal(harness.broadcasts.length, 1);
     assert.equal(typeof harness.warnings[0].message, "string");
     assert.deepEqual(harness.lookups, ["steam-missing"]);
   } finally {
@@ -451,7 +453,7 @@ async function testLookupCompletionUpdatesRecordWithoutRollback() {
     const record = harness.plugin.api.getStatus().recentRecords[0];
     assert.equal(record.lookupResult.gameSeconds, 900 * 3600);
     assert.equal(harness.disbands.length, 1);
-    assert.equal(harness.broadcasts.length, 0);
+    assert.equal(harness.broadcasts.length, 1);
   } finally {
     await harness.stop();
   }
