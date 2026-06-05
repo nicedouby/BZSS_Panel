@@ -220,7 +220,7 @@ async function testSqtbSucceedsDirectlyAndConsumesItsOwnQuota() {
   }
 }
 
-async function testSqtbRejectsWhenTeamsAreBalanced() {
+async function testSqtbFallsBackToNormalRequestWhenDirectSwitchIsNotAllowed() {
   const harness = await createHarness({
     matchState: {
       players: [
@@ -238,11 +238,12 @@ async function testSqtbRejectsWhenTeamsAreBalanced() {
     });
 
     assert.equal(result.matched, true);
-    assert.equal(result.ok, false);
-    assert.equal(result.error, "TeamDeltaNotAllowed");
+    assert.equal(result.ok, true);
     assert.equal(harness.teamBalanceCalls.length, 0);
-    assert.equal(harness.plugin.api.getState().roundUsedCount, 0);
-    assert.equal(harness.plugin.api.listRequests().length, 0);
+    assert.equal(harness.plugin.api.getState().roundUsedCount, 1);
+    assert.equal(harness.plugin.api.listRequests().length, 1);
+    assert.equal(result.request?.status, "pending_claim");
+    assert.equal(typeof result.claimMessage, "string");
   } finally {
     await harness.stop();
   }
@@ -276,7 +277,7 @@ async function testClaimCodeNoLongerTriggersAnything() {
 await testTbSucceedsOnlyWhenOwnTeamIsLarger();
 await testTbRejectsWhenOwnTeamIsNotLarger();
 await testSqtbSucceedsDirectlyAndConsumesItsOwnQuota();
-await testSqtbRejectsWhenTeamsAreBalanced();
+await testSqtbFallsBackToNormalRequestWhenDirectSwitchIsNotAllowed();
 await testClaimCodeNoLongerTriggersAnything();
 
 console.log("fair team balance tests passed");

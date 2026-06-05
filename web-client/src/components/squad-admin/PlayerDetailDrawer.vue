@@ -378,9 +378,20 @@ async function handleWarn() {
 async function handleKick() {
   const player = props.player;
   if (!player || actionBusy.value) return;
+
+  const reason = window.prompt("请输入踢出原因", "")?.trim();
+  if (!reason) {
+    ui.pushToast({
+      title: "踢出已取消",
+      message: "请先填写踢出原因。",
+      tone: "warn",
+    });
+    return;
+  }
+
   const confirmed = await ui.openConfirm({
     title: "确认踢出玩家？",
-    message: `确定要将玩家 ${player.name} 踢出服务器吗？`,
+    message: `确定要将玩家 ${player.name} 踢出服务器吗？\n原因：${reason}`,
     tone: "error",
   });
   if (!confirmed) return;
@@ -394,7 +405,7 @@ async function handleKick() {
       steamId: player.steamId ?? undefined,
       eosId: player.eosId ?? undefined,
       name: player.name,
-      reason: "manual_kick",
+      reason,
       source: "web.squadAdmin",
     });
     if (!res.ok) throw new Error(res.message || "踢出执行失败");

@@ -825,6 +825,19 @@ export function createSquadManagementService({ core, modules, config, logger, re
     if (!serverId) {
       return buildInvalidActionResult("kick", "InvalidServerId", "serverId is required.", { serverId, reason, source, system });
     }
+    if (!system && !reason) {
+      return recordFailedAction({
+        kind: "kick",
+        serverId,
+        matchId: getCurrentMatchId(serverId),
+        source,
+        operatorName,
+        system,
+        reason,
+        error: "InvalidReason",
+        message: "A kick reason is required.",
+      });
+    }
     if (!requestedPlayer.playerKey && !requestedPlayer.playerId && !requestedPlayer.steamId && !requestedPlayer.eosId && !requestedPlayer.name) {
       return recordFailedAction({
         kind: "kick",

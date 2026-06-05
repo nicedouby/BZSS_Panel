@@ -313,7 +313,7 @@ const recentCreations = computed(() => {
 });
 
 const canSubmitDisband = computed(() => Boolean(disbandTeamId.value && disbandSquadId.value));
-const canSubmitKick = computed(() => Boolean(kickTarget.value.trim()));
+const canSubmitKick = computed(() => Boolean(kickTarget.value.trim() && kickReason.value.trim()));
 const canSubmitRemove = computed(() => Boolean(removeTarget.value.trim()));
 
 const headerStatusItems = computed<Array<{ label: string; tone?: "ok" | "warn" | "error" | "idle" }>>(() => [

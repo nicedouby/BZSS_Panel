@@ -293,6 +293,31 @@ async function testExecuteActionKick() {
   fs.rmSync(harness.tempDbDir, { recursive: true, force: true });
 }
 
+async function testExecuteActionKickRequiresReason() {
+  const harness = createHarness();
+  await harness.module.init();
+  await harness.module.start();
+  await seedPlayers(harness, [
+    { name: "KickTarget", steamId: "76561198000000012", eosId: "eos-12" },
+  ]);
+
+  const result = await harness.module.api.executeAction({
+    type: "kick_player",
+    serverId: SERVER_ID,
+    steamId: "76561198000000012",
+    reason: "",
+    system: false,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "InvalidReason");
+  assert.equal(result.message, "A kick reason is required.");
+  assert.equal(harness.commandCalls.kick.length, 0);
+
+  await harness.module.stop();
+  fs.rmSync(harness.tempDbDir, { recursive: true, force: true });
+}
+
 async function testExecuteActionRemoveFromSquad() {
   const harness = createHarness();
   await harness.module.init();
@@ -424,6 +449,7 @@ async function testDisbandRefreshRetry() {
 async function main() {
   await testExecuteActionDisband();
   await testExecuteActionKick();
+  await testExecuteActionKickRequiresReason();
   await testExecuteActionRemoveFromSquad();
   await testLegacyCompatibility();
   await testDisbandRefreshRetry();

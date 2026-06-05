@@ -1144,7 +1144,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   async function handleDirectSqtbMessage(event = {}) {
-    return executeDirectSwitch(event, "sqtb");
+    const result = await executeDirectSwitch(event, "sqtb");
+    if (result?.ok === false && result?.error === "TeamDeltaNotAllowed") {
+      return handleSqtbMessage(event);
+    }
+    return result;
   }
 
   function buildRequestId() {
@@ -1157,6 +1161,61 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       if (!state.requestIdsByCode.has(code)) return code;
     }
     return String(crypto.randomInt(0, 100000)).padStart(5, "0");
+  }
+
+  async function createSqtbRequest({ serverId, actor, sourceMessageId }) {
+    return createSqtbRequest({
+      serverId,
+      actor,
+      sourceMessageId: normalizeText(event?.id ?? event?.seq),
+    });
+
+    const createdAtMs = Date.now();
+    const request = {
+      id: buildRequestId(),
+      code: generateRequestCode(),
+      status: "pending_claim",
+      createdAt: new Date(createdAtMs).toISOString(),
+      createdAtMs,
+      expiresAt: new Date(createdAtMs + runtimeConfig.requestTtlMs).toISOString(),
+      expiresAtMs: createdAtMs + runtimeConfig.requestTtlMs,
+      applicant: actor,
+      claimant: null,
+      claimedAt: "",
+      claimedAtMs: 0,
+      approvedAt: "",
+      rejectedAt: "",
+      rejectedReason: "",
+      directApproval: false,
+      serverId,
+      sourceMessageId,
+    };
+
+    state.requests.set(request.id, request);
+    state.requestIdsByCode.set(request.code, request.id);
+    consumeRoundUse(actor.playerKey);
+
+    await appendLog({
+      type: "SQTB_CREATED",
+      requestId: request.id,
+      code: request.code,
+      serverId,
+      applicant: request.applicant,
+      expiresAt: request.expiresAt,
+      sourceMessageId: request.sourceMessageId,
+    });
+
+    await broadcastMessage(
+      `${request.applicant.playerName || request.applicant.steamId || "unknown"} 发起公平跳边申请，请输入 认领${request.code} 完成认领`,
+      "fair_sqtb_created",
+      { relatedEventId: request.sourceMessageId },
+    );
+
+    return {
+      ok: true,
+      request: serializeRequest(request),
+      claimMessage: `认领${request.code}`,
+    };
   }
 
   async function handleSqtbMessage(event = {}) {
