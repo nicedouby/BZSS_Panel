@@ -380,7 +380,55 @@ async function testLockedSquadClaimIsRejected() {
   }
 }
 
-async function testWarmupTbIsRejectedAndWarned() {
+async function testRejectedSqtbDoesNotConsumeRoundQuota() {
+  const harness = await createHarness({
+    matchState: {
+      players: [
+        { name: "Alpha", steamId: "steam-alpha", teamId: 1, squadId: 0 },
+        { name: "Bravo", steamId: "steam-bravo", teamId: 2, squadId: 0 },
+      ],
+    },
+  });
+
+  try {
+    const created = await harness.plugin.api.simulateChatMessage({
+      message: "sqtb",
+      steamId: "steam-alpha",
+      playerName: "Alpha",
+    });
+    assert.equal(created.ok, true);
+    assert.equal(harness.plugin.api.getState().roundUsedCount, 1);
+
+    const rejected = await harness.plugin.api.rejectRequest({
+      requestId: created.request.id,
+      reason: "cancelled",
+      actor: {
+        id: "admin-1",
+        username: "Admin",
+        name: "Admin",
+        role: "SuperAdmin",
+        isSuperAdmin: true,
+        permissions: ["*"],
+      },
+    });
+
+    assert.equal(rejected.ok, true);
+    assert.equal(harness.plugin.api.getState().roundUsedCount, 0);
+
+    const tbAfterCancel = await harness.plugin.api.simulateChatMessage({
+      message: "tb",
+      steamId: "steam-alpha",
+      playerName: "Alpha",
+    });
+    assert.equal(tbAfterCancel.ok, true);
+    assert.equal(harness.plugin.api.getState().roundUsedCount, 1);
+    assert.equal(harness.teamBalanceCalls.length, 1);
+  } finally {
+    await harness.stop();
+  }
+}
+
+async function testWarmupTbBypassesQuotaAndWindowChecks() {
   const harness = await createHarness({
     webStatus: {
       isWarmup: true,
@@ -404,16 +452,23 @@ async function testWarmupTbIsRejectedAndWarned() {
     const stateBefore = harness.plugin.api.getState();
     assert.equal(stateBefore.publicTbRemaining, 5);
 
-    const result = await harness.plugin.api.simulateChatMessage({
-      message: "tb",
-      steamId: "steam-alpha",
-      playerName: "Alpha",
-    });
-    assert.equal(result.ok, false);
-    assert.equal(result.error, "WarmupModeDisabled");
-    assert.equal(harness.teamBalanceCalls.length, 0);
-    assert.equal(harness.plugin.api.getState().publicTbRemaining, 5);
-    assert.equal(harness.warnings.length, 1);
+    for (let index = 0; index < 6; index += 1) {
+      const result = await harness.plugin.api.simulateChatMessage({
+        message: "tb",
+        steamId: "steam-alpha",
+        playerName: "Alpha",
+      });
+      assert.equal(result.ok, true);
+      assert.equal(result.mode, "warmup");
+    }
+
+    const stateAfter = harness.plugin.api.getState();
+    assert.equal(stateAfter.publicTbRemaining, 5);
+    assert.equal(stateAfter.roundUsedCount, 0);
+    assert.equal(harness.teamBalanceCalls.length, 6);
+    assert.equal(harness.broadcasts.length, 6);
+    assert.match(harness.broadcasts[0].message, /暖服模式/);
+    assert.equal(harness.warnings.length, 6);
     assert.match(harness.warnings[0].message, /暖服模式/);
   } finally {
     await harness.stop();
@@ -501,7 +556,8 @@ async function testPlayerQuotasResetAndRecoveryRoundTrip() {
 
     const stateAfterPeriodReset = harness.plugin.api.getState();
     assert.equal(stateAfterPeriodReset.playerQuotas.length, 2);
-    assert.equal(stateAfterPeriodReset.roundUsedCount, 2);
+    assert.equal(stateAfterPeriodReset.roundUsedCount, 0);
+    assert.equal(stateAfterPeriodReset.publicTbRemaining, 5);
     assert.ok(stateAfterPeriodReset.playerQuotas.every((quota) => quota.tbUsed === 0 && quota.sqtbClaimUsed === 0));
 
     const roundReset = await harness.plugin.api.resetRound();
@@ -591,6 +647,56 @@ async function testPlayerQuotasResetAndRecoveryRoundTrip() {
   } finally {
     await recoveredPlugin.stop();
     await fs.rm(harness.tempDir, { recursive: true, force: true });
+  }
+}
+
+async function testPlayerQuotaResetAndHistoryClear() {
+  const harness = await createHarness({
+    keepTempDir: true,
+    matchState: {
+      players: [
+        { name: "Alpha", steamId: "steam-alpha", teamId: 1, squadId: 0 },
+        { name: "Bravo", steamId: "steam-bravo", teamId: 2, squadId: 0 },
+      ],
+    },
+  });
+
+  try {
+    const alphaTb = await harness.plugin.api.simulateChatMessage({
+      message: "tb",
+      steamId: "steam-alpha",
+      playerName: "Alpha",
+    });
+    assert.equal(alphaTb.ok, true);
+    assert.equal(harness.plugin.api.getState().roundUsedCount, 1);
+
+    const alphaQuota = harness.plugin.api.getState().playerQuotas.find((quota) => quota.playerName === "Alpha");
+    assert.ok(alphaQuota?.playerKey);
+
+    const playerReset = await harness.plugin.api.resetPlayerQuota({
+      playerKey: alphaQuota.playerKey,
+      reason: "manual_player_reset",
+      meta: {
+        by: "admin",
+        serverId: "test-server",
+      },
+    });
+    assert.equal(playerReset.ok, true);
+    assert.equal(harness.plugin.api.getState().roundUsedCount, 0);
+    assert.equal(harness.plugin.api.getState().playerQuotas.find((quota) => quota.playerKey === alphaQuota.playerKey)?.tbUsed, 0);
+
+    const historyBeforeClear = await harness.plugin.api.listHistory({ limit: 20 });
+    assert.ok(historyBeforeClear.length > 0);
+
+    const clearResult = await harness.plugin.api.clearHistory();
+    assert.equal(clearResult.ok, true);
+    assert.ok(clearResult.clearedCount > 0);
+    assert.equal((await harness.plugin.api.listHistory({ limit: 20 })).length, 0);
+
+    const files = await fs.readdir(harness.tempDir);
+    assert.equal(files.filter((name) => name.endsWith(".jsonl")).length, 0);
+  } finally {
+    await harness.stop();
   }
 }
 
@@ -758,9 +864,11 @@ await testExactTriggersAndTbSuccess();
 await testSqtbConsumesRoundUsageAndDirectApprovalOnlyConsumesApplicantPeriodQuota();
 await testClaimAutoExecutesAndConsumesBothPeriodQuotas();
 await testLockedSquadClaimIsRejected();
-await testWarmupTbIsRejectedAndWarned();
+await testRejectedSqtbDoesNotConsumeRoundQuota();
+await testWarmupTbBypassesQuotaAndWindowChecks();
 await testWarmupBlocksPendingSqtbApproval();
 await testPlayerQuotasResetAndRecoveryRoundTrip();
+await testPlayerQuotaResetAndHistoryClear();
 await testRecoveryRestoresPendingRequestAndRoundQuotaAfterRoundReset();
 await testSqtbExpiresByTtl();
 await testWindowBroadcasts();

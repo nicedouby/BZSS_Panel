@@ -123,7 +123,12 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       ? "公平跳边认领完成"
       : mode === "admin_sqtb"
         ? "管理员协助跳边成功"
-        : "公平跳边执行成功";
+        : mode === "warmup_tb"
+          ? "暖服模式公平跳边执行成功"
+          : "公平跳边执行成功";
+    if (mode === "warmup_tb") {
+      return `${actionLabel}: ${safePlayerName}`;
+    }
     return `${actionLabel}: ${safePlayerName}，公共TB剩余 ${state.round.publicTbRemaining}/${runtimeConfig.publicTbLimit}`;
   }
 
@@ -345,6 +350,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       request.status = type === "SQTB_EXPIRED" ? "expired" : "rejected";
       request.rejectedAt = at;
       request.rejectedReason = normalizeText(entry?.reason);
+      releaseRoundUse(request.applicant?.playerKey);
+      releaseRoundUse(request.claimant?.playerKey);
       state.requests.delete(requestId);
       state.requestIdsByCode.delete(request.code);
     }
@@ -458,14 +465,83 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       let affectedCount = 0;
 
       for (const period of state.periods.values()) {
-        period.periodStartedAt = resetAt;
-        period.periodStartedAtMs = resetAtMs;
-        period.lastActivityAt = "";
-        period.lastActivityAtMs = 0;
-        period.tbUsed = 0;
-        period.sqtbClaimUsed = 0;
+        await resetPeriodEntry(period, {
+          resetAt,
+          resetAtMs,
+          persistLog: true,
+          reason,
+          meta,
+        });
         affectedCount += 1;
+      }
 
+      state.round.publicTbRemaining = runtimeConfig.publicTbLimit;
+      state.round.usedPlayerKeys.clear();
+      state.round.lastResetAt = resetAt;
+      state.round.lastResetReason = reason;
+      state.windowState.wasOpen = false;
+      await appendLog({
+        type: "ROUND_RESET",
+        reason,
+        serverId: getServerId(meta?.serverId),
+        by: normalizeText(meta?.by) || "system",
+      });
+
+      return {
+        ok: true,
+        affectedCount,
+        resetAt,
+        reason,
+        publicTbRemaining: state.round.publicTbRemaining,
+        roundUsedCount: state.round.usedPlayerKeys.size,
+      };
+    });
+  }
+
+  async function resetPlayerQuota({ playerKey = "", reason = "manual_player_reset", meta = {} } = {}) {
+    return enqueue(async () => {
+      const key = normalizeText(playerKey);
+      const period = key ? state.periods.get(key) : null;
+      if (!period) {
+        return {
+          ok: false,
+          error: "PlayerNotFound",
+          message: "未找到对应玩家配额。",
+        };
+      }
+
+      const resetAtMs = Date.now();
+      const resetAt = new Date(resetAtMs).toISOString();
+      await resetPeriodEntry(period, {
+        resetAt,
+        resetAtMs,
+        persistLog: true,
+        reason,
+        meta,
+      });
+      releaseRoundUse(key);
+
+      return {
+        ok: true,
+        playerKey: key,
+        resetAt,
+        reason,
+      };
+    });
+  }
+
+  async function resetPeriodEntry(period, { resetAt, resetAtMs, persistLog = true, reason = "manual_period_reset", meta = {} } = {}) {
+    if (!period) return;
+    period.periodStartedAt = resetAt;
+    period.periodStartedAtMs = resetAtMs;
+    period.lastActivityAt = "";
+    period.lastActivityAtMs = 0;
+    period.tbUsed = 0;
+    period.sqtbClaimUsed = 0;
+    releaseRoundUse(period.playerKey);
+
+    if (persistLog) {
+      try {
         await appendLog({
           type: "PERIOD_RESET",
           reason,
@@ -476,15 +552,10 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           steamId: period.steamId,
           eosId: period.eosId,
         });
+      } catch (error) {
+        pluginLogger?.warn?.(`[FairTB] Failed to write PERIOD_RESET: ${error?.message ?? error}`);
       }
-
-      return {
-        ok: true,
-        affectedCount,
-        resetAt,
-        reason,
-      };
-    });
+    }
   }
 
   function ensurePeriod(playerKey, { nowMs = Date.now(), playerName = "", steamId = "", eosId = "", persistReset = true } = {}) {
@@ -549,6 +620,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     return state.round.usedPlayerKeys.has(playerKey);
   }
 
+  function releaseRoundUse(playerKey) {
+    if (!playerKey) return;
+    state.round.usedPlayerKeys.delete(playerKey);
+  }
+
   function getTeamCounts(matchState) {
     const teams = Array.isArray(matchState?.teams) ? matchState.teams : [];
     const team1 = teams.find((team) => Number(team?.teamId ?? team?.teamID) === 1) ?? null;
@@ -590,16 +666,12 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     const common = validateCommonPlayerState(matchState, player);
     if (!common.ok) return common;
 
-    if (hasRoundUse(playerKey)) {
-      return { ok: false, error: "RoundPlayerQuotaExhausted", message: `${playerName || "玩家"} 本回合已使用过 tb/sqtb/认领。` };
+    if (Boolean(webStatus?.isWarmup)) {
+      return { ok: true, mode: "warmup" };
     }
 
-    if (Boolean(webStatus?.isWarmup)) {
-      return {
-        ok: false,
-        error: "WarmupModeDisabled",
-        message: "暖服模式下不触发公平跳边，请切换到非暖服模式。",
-      };
+    if (hasRoundUse(playerKey)) {
+      return { ok: false, error: "RoundPlayerQuotaExhausted", message: `${playerName || "玩家"} 本回合已使用过 tb/sqtb/认领。` };
     }
 
     const logClockSeconds = Number(webStatus?.logClockSeconds ?? 0);
@@ -715,6 +787,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       webStatus,
       period,
     });
+    const isWarmupTb = validation.mode === "warmup";
 
     await appendLog({
       type: "TB_REQUESTED",
@@ -724,7 +797,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       steamId: actor.steamId,
       eosId: actor.eosId,
       message: normalizeText(event?.message),
-      mode: "normal",
+      mode: isWarmupTb ? "warmup" : "normal",
     });
 
     if (!validation.ok) {
@@ -785,11 +858,14 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       };
     }
 
-    period.tbUsed += 1;
+    if (!isWarmupTb) {
+      period.tbUsed += 1;
+      state.round.publicTbRemaining = Math.max(0, state.round.publicTbRemaining - 1);
+      consumeRoundUse(playerKey);
+    }
+
     period.lastActivityAt = nowIso();
     period.lastActivityAtMs = Date.now();
-    state.round.publicTbRemaining = Math.max(0, state.round.publicTbRemaining - 1);
-    consumeRoundUse(playerKey);
 
     await appendLog({
       type: "TB_EXECUTED",
@@ -798,7 +874,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       playerName,
       steamId: actor.steamId,
       eosId: actor.eosId,
-      mode: validation.mode,
+      mode: isWarmupTb ? "warmup_tb" : validation.mode,
       roundPublicTbRemainingAfter: state.round.publicTbRemaining,
       teamBalanceResult: {
         ok: Boolean(result?.ok),
@@ -809,18 +885,20 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     await broadcastMessage(buildQuotaBroadcastMessage({
       playerName,
-      mode: "tb",
+      mode: isWarmupTb ? "warmup_tb" : "tb",
     }), "fair_tb_broadcast", {
       relatedEventId: normalizeText(event?.id ?? event?.seq),
     });
 
-    await warnPlayer(actor, `公平跳边提醒: 已在非暖服模式执行完成，公共TB剩余 ${state.round.publicTbRemaining}/${runtimeConfig.publicTbLimit}`, "fair_tb_success_warning", {
+    await warnPlayer(actor, isWarmupTb
+      ? "公平跳边提醒: 已在暖服模式执行完成"
+      : `公平跳边提醒: 已在非暖服模式执行完成，公共TB剩余 ${state.round.publicTbRemaining}/${runtimeConfig.publicTbLimit}`, "fair_tb_success_warning", {
       relatedEventId: normalizeText(event?.id ?? event?.seq),
     });
 
     return {
       ok: true,
-      mode: "normal",
+      mode: isWarmupTb ? "warmup" : "normal",
       result,
       publicTbRemaining: state.round.publicTbRemaining,
     };
@@ -1205,6 +1283,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       request.status = "rejected";
       request.rejectedAt = nowIso();
       request.rejectedReason = normalizeText(reason) || "manual_reject";
+      releaseRoundUse(request.applicant?.playerKey);
+      releaseRoundUse(request.claimant?.playerKey);
 
       await appendLog({
         type: "SQTB_REJECTED",
@@ -1265,6 +1345,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     request.status = "expired";
     request.rejectedAt = nowIso();
     request.rejectedReason = reason;
+    releaseRoundUse(request.applicant?.playerKey);
+    releaseRoundUse(request.claimant?.playerKey);
     state.requests.delete(request.id);
     state.requestIdsByCode.delete(request.code);
     if (persist) {
@@ -1278,6 +1360,32 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         reason,
       });
     }
+  }
+
+  async function clearHistory() {
+    return enqueue(async () => {
+      let clearedCount = 0;
+      try {
+        const files = await fs.readdir(dataDir, { withFileTypes: true });
+        for (const entry of files) {
+          if (!entry.isFile() || !entry.name.endsWith(".jsonl")) continue;
+          await fs.unlink(path.join(dataDir, entry.name));
+          clearedCount += 1;
+        }
+      } catch (error) {
+        if (error?.code !== "ENOENT") {
+          throw error;
+        }
+      }
+
+      state.recovery.lastRecoveredAt = nowIso();
+      state.recovery.recoveredLineCount = 0;
+
+      return {
+        ok: true,
+        clearedCount,
+      };
+    });
   }
 
   function expireRequests({ now = Date.now(), persist = true } = {}) {
@@ -1474,6 +1582,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     rejectRequest,
     resetRound,
     resetPeriodQuotas,
+    resetPlayerQuota,
+    clearHistory,
 
     async simulateChatMessage(payload = {}) {
       return handleChatMessage({

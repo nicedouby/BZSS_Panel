@@ -1453,6 +1453,30 @@ export class WebServer {
           }),
         });
       }
+
+      if (url.pathname === "/api/plugins/fair-team-balance/reset-player-quota" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.resetPlayerQuota?.({
+            playerKey: body?.playerKey,
+            reason: "manual_player_reset",
+            meta: {
+              by: user?.username || user?.name || "admin",
+              serverId: this.core?.webStatus?.serverId ?? "",
+            },
+          }),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/fair-team-balance/clear-history" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.clearHistory?.(),
+        });
+      }
     }
 
     if (url.pathname.startsWith("/api/plugins/pjsc-average-duration")) {

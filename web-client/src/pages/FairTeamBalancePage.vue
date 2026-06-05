@@ -61,29 +61,6 @@
         </div>
 
         <div class="hero-side">
-          <p class="hero-side__label">紧急操作</p>
-          <div class="action-stack">
-            <button
-              type="button"
-              class="danger-btn"
-              :disabled="resettingAction !== ''"
-              @click="resetPeriodQuotas"
-            >
-              {{ resettingAction === "period" ? "重置中..." : "重置周期配额" }}
-            </button>
-            <button
-              type="button"
-              class="danger-btn"
-              :disabled="resettingAction !== ''"
-              @click="resetRoundQuota"
-            >
-              {{ resettingAction === "round" ? "重置中..." : "重置单局配额" }}
-            </button>
-          </div>
-          <p class="hero-side__note">
-            重置操作将立即清空相关配额限制，并可能触发系统重新计算。请谨慎操作。
-          </p>
-
           <div class="broadcast-card">
             <div class="broadcast-card__head">
               <p class="hero-side__label">定时广播记录</p>
@@ -152,7 +129,25 @@
     <section class="detail-grid">
       <PageCard class="quota-card" title="玩家配额审计" description="监控所有在周期内活跃过的玩家配额使用情况。" compact>
         <template #actions>
-          <span class="status-chip subtle">总计 {{ sortedPlayerQuotas.length }}</span>
+          <div class="quota-actions">
+            <button
+              type="button"
+              class="ghost-btn"
+              :disabled="resettingAction !== ''"
+              @click="resetPeriodQuotas"
+            >
+              {{ resettingAction === "period" ? "重置中..." : "重置周期额度" }}
+            </button>
+            <button
+              type="button"
+              class="ghost-btn"
+              :disabled="resettingAction !== ''"
+              @click="resetRoundQuota"
+            >
+              {{ resettingAction === "round" ? "重置中..." : "重置当局额度" }}
+            </button>
+            <span class="status-chip subtle">总计 {{ sortedPlayerQuotas.length }}</span>
+          </div>
         </template>
 
         <div v-if="quotaError" class="error-banner">
@@ -167,9 +162,19 @@
                 <strong>{{ quota.playerName || quota.steamId || quota.eosId || "未知玩家" }}</strong>
                 <span>{{ quota.steamId || quota.eosId || quota.playerKey }}</span>
               </div>
-              <span class="quota-badge" :data-tone="quota.hasRoundUse ? 'ok' : 'muted'">
-                {{ quota.hasRoundUse ? "本局已使用" : "本局未使用" }}
-              </span>
+              <div class="quota-item__head-actions">
+                <span class="quota-badge" :data-tone="quota.hasRoundUse ? 'ok' : 'muted'">
+                  {{ quota.hasRoundUse ? "本局已使用" : "本局未使用" }}
+                </span>
+                <button
+                  type="button"
+                  class="ghost-btn ghost-btn--compact"
+                  :disabled="playerResettingKey === quota.playerKey"
+                  @click="resetPlayerQuota(quota)"
+                >
+                  {{ playerResettingKey === quota.playerKey ? "重置中..." : "重置个人额度" }}
+                </button>
+              </div>
             </div>
 
             <dl class="quota-grid">
@@ -288,14 +293,24 @@
 
       <PageCard class="history-card" title="近期变更日志" description="展示最近执行的周期重置与名额消耗记录。" compact>
         <template #actions>
-          <button
-            type="button"
-            class="ghost-btn"
-            :disabled="loadingHistory"
-            @click="loadHistory"
-          >
-            {{ loadingHistory ? "刷新中..." : "查看历史" }}
-          </button>
+          <div class="history-actions">
+            <button
+              type="button"
+              class="ghost-btn"
+              :disabled="loadingHistory"
+              @click="loadHistory"
+            >
+              {{ loadingHistory ? "刷新中..." : "查看历史" }}
+            </button>
+            <button
+              type="button"
+              class="danger-btn"
+              :disabled="historyClearing"
+              @click="clearHistory"
+            >
+              {{ historyClearing ? "清理中..." : "清理日志" }}
+            </button>
+          </div>
         </template>
 
         <div v-if="historyError" class="error-banner">
@@ -446,6 +461,8 @@ const historyError = ref("");
 const broadcastError = ref("");
 const quotaError = ref("");
 const actioningRequestId = ref("");
+const playerResettingKey = ref("");
+const historyClearing = ref(false);
 const resettingAction = ref<"" | "period" | "round">("");
 const nowMs = ref(Date.now());
 let timer: number | null = null;
@@ -566,7 +583,7 @@ async function loadBroadcastState() {
 }
 
 async function resetPeriodQuotas() {
-  if (!window.confirm("确定重置所有周期配额吗？这将影响本周期内所有玩家的使用限制。")) return;
+  if (!window.confirm("确定重置所有周期额度吗？这将同时清空个人额度和当局额度。")) return;
   resettingAction.value = "period";
   quotaError.value = "";
   try {
@@ -580,7 +597,7 @@ async function resetPeriodQuotas() {
 }
 
 async function resetRoundQuota() {
-  if (!window.confirm("确定重置单局已用配额吗？")) return;
+  if (!window.confirm("确定重置当局额度吗？")) return;
   resettingAction.value = "round";
   quotaError.value = "";
   try {
@@ -590,6 +607,37 @@ async function resetRoundQuota() {
     quotaError.value = String(err?.message || err || "重置单局配额失败");
   } finally {
     resettingAction.value = "";
+  }
+}
+
+async function resetPlayerQuota(quota: FairTeamBalancePlayerQuota) {
+  if (!quota?.playerKey) return;
+  if (!window.confirm(`确定重置 ${quota.playerName || quota.steamId || quota.playerKey} 的个人额度吗？`)) return;
+  playerResettingKey.value = quota.playerKey;
+  quotaError.value = "";
+  try {
+    await apiPost("/api/plugins/fair-team-balance/reset-player-quota", {
+      playerKey: quota.playerKey,
+    });
+    await refreshPanel();
+  } catch (err: any) {
+    quotaError.value = String(err?.message || err || "重置个人额度失败");
+  } finally {
+    playerResettingKey.value = "";
+  }
+}
+
+async function clearHistory() {
+  if (!window.confirm("确定清理近期变更日志吗？这会删除当前插件历史记录文件。")) return;
+  historyClearing.value = true;
+  historyError.value = "";
+  try {
+    await apiPost("/api/plugins/fair-team-balance/clear-history", {});
+    await loadHistory();
+  } catch (err: any) {
+    historyError.value = String(err?.message || err || "清理日志失败");
+  } finally {
+    historyClearing.value = false;
   }
 }
 
@@ -1286,6 +1334,22 @@ function normalizeStatusLabel(status: string) {
   margin-top: 14px;
 }
 
+.quota-actions,
+.history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.quota-item__head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
 .ghost-btn,
 .danger-btn,
 .action-btn {
@@ -1301,6 +1365,12 @@ function normalizeStatusLabel(status: string) {
 .ghost-btn {
   background: rgba(255, 255, 255, 0.04);
   color: var(--color-text-primary);
+}
+
+.ghost-btn--compact {
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 10px;
 }
 
 .danger-btn,
