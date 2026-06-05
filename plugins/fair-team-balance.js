@@ -307,21 +307,53 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       return;
     }
 
-    if (type === "SQTB_CREATED" || type === "SQTB_CLAIMED" || type === "SQTB_REJECTED" || type === "SQTB_EXPIRED") {
+    if (type === "SQTB_CREATED") {
+      const request = normalizeRecoveredRequest(entry, atMs);
+      if (!request) return;
+      state.requests.set(request.id, request);
+      state.requestIdsByCode.set(request.code, request.id);
+      state.round.usedPlayerKeys.add(request.applicant.playerKey);
       return;
     }
 
-    if (type === "SQTB_APPROVED" || type === "SQTB_EXECUTED") {
-      applyRecoveredSqtbQuotaUsage(entry, at, atMs);
-      const applicant = normalizeRecoveredActor(entry?.applicant ?? entry, "applicant");
-      if (applicant?.playerKey) {
-        state.round.usedPlayerKeys.add(applicant.playerKey);
-      }
-      const claimant = normalizeRecoveredActor(entry?.claimant ?? null, "claimant");
-      if (claimant?.playerKey && !Boolean(entry?.directApproval)) {
-        state.round.usedPlayerKeys.add(claimant.playerKey);
+    if (type === "SQTB_CLAIMED") {
+      const requestId = normalizeText(entry?.requestId);
+      const request = requestId ? state.requests.get(requestId) : null;
+      if (!request) return;
+      request.status = "pending_approval";
+      request.claimedAt = at;
+      request.claimedAtMs = atMs;
+      request.claimant = normalizeRecoveredActor(entry?.claimant ?? entry, "claimant");
+      if (request.claimant?.playerKey) {
+        state.round.usedPlayerKeys.add(request.claimant.playerKey);
       }
       return;
+    }
+
+    if (type === "SQTB_APPROVED") {
+      const requestId = normalizeText(entry?.requestId);
+      const request = requestId ? state.requests.get(requestId) : null;
+      if (!request) return;
+      request.status = "approved";
+      request.approvedAt = at;
+      request.directApproval = Boolean(entry?.directApproval);
+      applyRecoveredSqtbQuotaUsage(entry, at, atMs);
+      state.requests.delete(requestId);
+      state.requestIdsByCode.delete(request.code);
+      return;
+    }
+
+    if (type === "SQTB_REJECTED" || type === "SQTB_EXPIRED") {
+      const requestId = normalizeText(entry?.requestId);
+      const request = requestId ? state.requests.get(requestId) : null;
+      if (!request) return;
+      request.status = type === "SQTB_EXPIRED" ? "expired" : "rejected";
+      request.rejectedAt = at;
+      request.rejectedReason = normalizeText(entry?.reason);
+      releaseRoundUse(request.applicant?.playerKey);
+      releaseRoundUse(request.claimant?.playerKey);
+      state.requests.delete(requestId);
+      state.requestIdsByCode.delete(request.code);
     }
   }
 
@@ -634,11 +666,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     const ownCount = teamId === 1 ? counts.team1 : counts.team2;
     const otherCount = teamId === 1 ? counts.team2 : counts.team1;
 
-    if (ownCount <= otherCount) {
+    if (ownCount - otherCount < 3) {
       return {
         ok: false,
         error: "TeamDeltaNotAllowed",
-        message: "只有当前队伍人数更多时，才允许跳到另一边。",
+        message: "只有当前队伍人数比对方多 3 人及以上时，才允许直接 tb。",
       };
     }
 
@@ -1144,11 +1176,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   async function handleDirectSqtbMessage(event = {}) {
-    const result = await executeDirectSwitch(event, "sqtb");
-    if (result?.ok === false && result?.error === "TeamDeltaNotAllowed") {
-      return handleSqtbMessage(event);
-    }
-    return result;
+    return handleSqtbMessage(event);
   }
 
   function buildRequestId() {
@@ -1845,7 +1873,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
       expireRequests();
       const message = String(event?.message ?? "");
-      if (message !== "tb" && message !== "sqtb") {
+      if (message !== "tb" && message !== "sqtb" && !CLAIM_MESSAGE_PATTERN.test(message)) {
         return { matched: false };
       }
 
@@ -1866,6 +1894,16 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           ...result,
         };
       }
+
+      const match = message.match(CLAIM_MESSAGE_PATTERN);
+      const code = String(match?.[1] ?? "");
+      const result = await handleClaimMessage(event, code);
+      return {
+        matched: true,
+        trigger: "claim",
+        code,
+        ...result,
+      };
     });
   }
 

@@ -5,9 +5,22 @@ import path from "node:path";
 
 import { createPlugin as createFairTeamBalancePlugin } from "../plugins/fair-team-balance.js";
 
-function createMatchState({ players = [] } = {}) {
-  const team1 = players.filter((player) => Number(player?.teamId ?? player?.teamID ?? 0) === 1).length;
-  const team2 = players.filter((player) => Number(player?.teamId ?? player?.teamID ?? 0) === 2).length;
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function createMatchState({ players = [], squads = [] }) {
+  const teamCounts = new Map([
+    [1, 0],
+    [2, 0],
+  ]);
+
+  for (const player of players) {
+    const teamId = Number(player?.teamId ?? player?.teamID ?? 0);
+    if (teamId === 1 || teamId === 2) {
+      teamCounts.set(teamId, (teamCounts.get(teamId) || 0) + 1);
+    }
+  }
 
   return {
     serverId: "test-server",
@@ -18,34 +31,55 @@ function createMatchState({ players = [] } = {}) {
       teamId: Number(player?.teamId ?? player?.teamID ?? 0) || 0,
       squadId: Number(player?.squadId ?? player?.squadID ?? 0) || 0,
     })),
+    squads: squads.map((squad) => ({
+      teamId: Number(squad?.teamId ?? squad?.teamID ?? 0) || 0,
+      squadId: Number(squad?.squadId ?? squad?.squadID ?? 0) || 0,
+      locked: Boolean(squad?.locked),
+    })),
     teams: [
-      { teamId: 1, playerCount: team1 },
-      { teamId: 2, playerCount: team2 },
+      { teamId: 1, playerCount: teamCounts.get(1) || 0 },
+      { teamId: 2, playerCount: teamCounts.get(2) || 0 },
     ],
-    squads: [],
   };
 }
 
-async function createHarness({ matchState, webStatus } = {}) {
+async function createHarness(options = {}) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-fair-tb-"));
+  const coreEventHandlers = new Map();
+  const teamBalanceCalls = [];
+  const registeredPages = [];
   const broadcasts = [];
   const warnings = [];
-  const teamBalanceCalls = [];
+  const webStatus = {
+    isWarmup: false,
+    logClockSeconds: 30,
+    ...(options.webStatus ?? {}),
+  };
+  const matchState = {
+    current: createMatchState(options.matchState ?? {}),
+  };
+
   const plugin = createFairTeamBalancePlugin({
     core: {
       webStatus: {
         serverId: "test-server",
         getSnapshot() {
           return {
+            ...webStatus,
             serverId: "test-server",
-            isWarmup: false,
-            logClockSeconds: 30,
-            ...(webStatus ?? {}),
           };
         },
       },
+      eventBus: {
+        onCoreEvent(eventName, handler) {
+          coreEventHandlers.set(eventName, handler);
+          return () => coreEventHandlers.delete(eventName);
+        },
+      },
       webRegistry: {
-        registerPage() {},
+        registerPage(page) {
+          registeredPages.push(page);
+        },
       },
       logger: {
         info() {},
@@ -58,6 +92,9 @@ async function createHarness({ matchState, webStatus } = {}) {
       teamBalance: {
         async forceTeamChange(payload) {
           teamBalanceCalls.push(payload);
+          if (typeof options.forceTeamChange === "function") {
+            return options.forceTeamChange(payload);
+          }
           return {
             ok: true,
             error: "",
@@ -70,7 +107,7 @@ async function createHarness({ matchState, webStatus } = {}) {
       },
       squadManagement: {
         getState() {
-          return match.current;
+          return matchState.current;
         },
       },
       chatManager: {
@@ -79,23 +116,31 @@ async function createHarness({ matchState, webStatus } = {}) {
         },
       },
       adminWarn: {
-        async sendAdminBroadcast(payload) {
-          broadcasts.push(payload);
-          return { success: true };
+        async sendAdminBroadcast(request) {
+          broadcasts.push(request);
+          return {
+            success: true,
+            skipped: false,
+            commandText: `AdminBroadcast ${request.message}`,
+          };
         },
-        async sendAdminWarn(payload) {
-          warnings.push(payload);
-          return { success: true };
+        async sendAdminWarn(request) {
+          warnings.push(request);
+          return {
+            success: true,
+            skipped: false,
+            commandText: `AdminWarn "${request.targetName}"`,
+          };
         },
       },
     },
     config: {
-      get(key, defaultValue) {
-        if (key === "plugins.fairTeamBalance") {
+      get(pathText, defaultValue) {
+        if (pathText === "plugins.fairTeamBalance") {
           return {
             enabled: true,
             directory: tempDir,
-            requestTtlMs: 120000,
+            requestTtlMs: options.requestTtlMs ?? 120000,
           };
         }
         return defaultValue;
@@ -103,21 +148,25 @@ async function createHarness({ matchState, webStatus } = {}) {
     },
   });
 
-  const match = {
-    current: createMatchState(matchState),
-  };
-
   await plugin.init();
   await plugin.start();
 
   return {
     plugin,
     tempDir,
+    teamBalanceCalls,
+    registeredPages,
     broadcasts,
     warnings,
-    teamBalanceCalls,
+    webStatus,
+    matchState,
     setMatchState(nextState) {
-      match.current = createMatchState(nextState);
+      matchState.current = createMatchState(nextState);
+    },
+    async emitCoreEvent(eventName, payload = {}) {
+      const handler = coreEventHandlers.get(eventName);
+      if (handler) handler(payload);
+      await sleep(10);
     },
     async stop() {
       await plugin.stop();
@@ -126,13 +175,15 @@ async function createHarness({ matchState, webStatus } = {}) {
   };
 }
 
-async function testTbSucceedsOnlyWhenOwnTeamIsLarger() {
+async function testTbSucceedsOnlyWhenOwnTeamIsAheadByThree() {
   const harness = await createHarness({
     matchState: {
       players: [
-        { name: "Alpha", steamId: "steam-alpha", teamId: 1 },
-        { name: "Bravo", steamId: "steam-bravo", teamId: 1 },
-        { name: "Charlie", steamId: "steam-charlie", teamId: 2 },
+        { name: "Alpha", steamId: "steam-alpha", teamId: 1, squadId: 0 },
+        { name: "Bravo", steamId: "steam-bravo", teamId: 1, squadId: 0 },
+        { name: "Charlie", steamId: "steam-charlie", teamId: 1, squadId: 0 },
+        { name: "Echo", steamId: "steam-echo", teamId: 1, squadId: 0 },
+        { name: "Delta", steamId: "steam-delta", teamId: 2, squadId: 0 },
       ],
     },
   });
@@ -146,25 +197,22 @@ async function testTbSucceedsOnlyWhenOwnTeamIsLarger() {
 
     assert.equal(result.matched, true);
     assert.equal(result.ok, true);
-    assert.equal(result.mode, "normal");
     assert.equal(harness.teamBalanceCalls.length, 1);
     assert.equal(harness.plugin.api.getState().publicTbRemaining, 4);
     assert.equal(harness.plugin.api.getState().roundUsedCount, 1);
-    assert.equal(harness.plugin.api.getState().playerQuotas.find((quota) => quota.playerName === "Alpha")?.tbUsed, 1);
     assert.equal(harness.plugin.api.listRequests().length, 0);
-    assert.equal(harness.broadcasts.some((item) => /窗口已打开|窗口已关闭/.test(String(item?.message ?? ""))), false);
   } finally {
     await harness.stop();
   }
 }
 
-async function testTbRejectsWhenOwnTeamIsNotLarger() {
+async function testTbRejectsWhenOwnTeamLeadIsBelowThree() {
   const harness = await createHarness({
     matchState: {
       players: [
-        { name: "Alpha", steamId: "steam-alpha", teamId: 1 },
-        { name: "Bravo", steamId: "steam-bravo", teamId: 2 },
-        { name: "Charlie", steamId: "steam-charlie", teamId: 2 },
+        { name: "Alpha", steamId: "steam-alpha", teamId: 1, squadId: 0 },
+        { name: "Bravo", steamId: "steam-bravo", teamId: 1, squadId: 0 },
+        { name: "Charlie", steamId: "steam-charlie", teamId: 2, squadId: 0 },
       ],
     },
   });
@@ -182,102 +230,116 @@ async function testTbRejectsWhenOwnTeamIsNotLarger() {
     assert.equal(harness.teamBalanceCalls.length, 0);
     assert.equal(harness.plugin.api.getState().publicTbRemaining, 5);
     assert.equal(harness.plugin.api.getState().roundUsedCount, 0);
-    assert.equal(harness.plugin.api.listRequests().length, 0);
   } finally {
     await harness.stop();
   }
 }
 
-async function testSqtbSucceedsDirectlyAndConsumesItsOwnQuota() {
+async function testSqtbCreatesRequestAndClaimExecutes() {
   const harness = await createHarness({
     matchState: {
       players: [
-        { name: "Alpha", steamId: "steam-alpha", teamId: 2 },
-        { name: "Bravo", steamId: "steam-bravo", teamId: 2 },
-        { name: "Charlie", steamId: "steam-charlie", teamId: 1 },
+        { name: "Alpha", steamId: "steam-alpha", teamId: 1, squadId: 0 },
+        { name: "Bravo", steamId: "steam-bravo", teamId: 2, squadId: 0 },
       ],
     },
   });
 
   try {
-    const result = await harness.plugin.api.simulateChatMessage({
+    const created = await harness.plugin.api.simulateChatMessage({
       message: "sqtb",
       steamId: "steam-alpha",
       playerName: "Alpha",
     });
 
-    assert.equal(result.matched, true);
-    assert.equal(result.ok, true);
-    assert.equal(result.mode, "direct");
-    assert.equal(harness.teamBalanceCalls.length, 1);
-    assert.equal(harness.plugin.api.getState().publicTbRemaining, 5);
-    assert.equal(harness.plugin.api.getState().roundUsedCount, 1);
-    assert.equal(harness.plugin.api.getState().playerQuotas.find((quota) => quota.playerName === "Alpha")?.sqtbClaimUsed, 1);
-    assert.equal(harness.plugin.api.listRequests().length, 0);
-    assert.equal(harness.broadcasts.some((item) => /窗口已打开|窗口已关闭/.test(String(item?.message ?? ""))), false);
-  } finally {
-    await harness.stop();
-  }
-}
-
-async function testSqtbFallsBackToNormalRequestWhenDirectSwitchIsNotAllowed() {
-  const harness = await createHarness({
-    matchState: {
-      players: [
-        { name: "Alpha", steamId: "steam-alpha", teamId: 1 },
-        { name: "Bravo", steamId: "steam-bravo", teamId: 2 },
-      ],
-    },
-  });
-
-  try {
-    const result = await harness.plugin.api.simulateChatMessage({
-      message: "sqtb",
-      steamId: "steam-alpha",
-      playerName: "Alpha",
-    });
-
-    assert.equal(result.matched, true);
-    assert.equal(result.ok, true);
-    assert.equal(harness.teamBalanceCalls.length, 0);
-    assert.equal(harness.plugin.api.getState().roundUsedCount, 1);
+    assert.equal(created.ok, true);
+    assert.match(created.claimMessage, /^认领\d{5}$/);
     assert.equal(harness.plugin.api.listRequests().length, 1);
-    assert.equal(result.request?.status, "pending_claim");
-    assert.equal(typeof result.claimMessage, "string");
+    assert.equal(harness.teamBalanceCalls.length, 0);
+
+    const claimed = await harness.plugin.api.simulateChatMessage({
+      message: created.claimMessage,
+      steamId: "steam-bravo",
+      playerName: "Bravo",
+    });
+
+    assert.equal(claimed.ok, true);
+    assert.equal(claimed.request.status, "approved");
+    assert.equal(harness.teamBalanceCalls.length, 1);
+    assert.equal(harness.plugin.api.listRequests().length, 0);
+    assert.equal(harness.broadcasts.length >= 2, true);
   } finally {
     await harness.stop();
   }
 }
 
-async function testClaimCodeNoLongerTriggersAnything() {
+async function testSqtbDirectApproveStillWorks() {
   const harness = await createHarness({
     matchState: {
       players: [
-        { name: "Alpha", steamId: "steam-alpha", teamId: 1 },
-        { name: "Bravo", steamId: "steam-bravo", teamId: 2 },
+        { name: "Alpha", steamId: "steam-alpha", teamId: 1, squadId: 0 },
+        { name: "Bravo", steamId: "steam-bravo", teamId: 2, squadId: 0 },
       ],
     },
   });
 
   try {
-    const result = await harness.plugin.api.simulateChatMessage({
-      message: "璁ら12345",
+    const created = await harness.plugin.api.simulateChatMessage({
+      message: "sqtb",
       steamId: "steam-alpha",
       playerName: "Alpha",
     });
 
-    assert.equal(result.matched, false);
-    assert.equal(harness.teamBalanceCalls.length, 0);
+    const approved = await harness.plugin.api.approveRequest({
+      requestId: created.request.id,
+      direct: true,
+      actor: {
+        id: "admin-1",
+        username: "Admin",
+        name: "Admin",
+        role: "SuperAdmin",
+        isSuperAdmin: true,
+        permissions: ["*"],
+      },
+    });
+
+    assert.equal(approved.ok, true);
+    assert.equal(harness.teamBalanceCalls.length, 1);
     assert.equal(harness.plugin.api.listRequests().length, 0);
   } finally {
     await harness.stop();
   }
 }
 
-await testTbSucceedsOnlyWhenOwnTeamIsLarger();
-await testTbRejectsWhenOwnTeamIsNotLarger();
-await testSqtbSucceedsDirectlyAndConsumesItsOwnQuota();
-await testSqtbFallsBackToNormalRequestWhenDirectSwitchIsNotAllowed();
-await testClaimCodeNoLongerTriggersAnything();
+async function testClaimCodeIsStillHandled() {
+  const harness = await createHarness({
+    matchState: {
+      players: [
+        { name: "Alpha", steamId: "steam-alpha", teamId: 1, squadId: 0 },
+        { name: "Bravo", steamId: "steam-bravo", teamId: 2, squadId: 0 },
+      ],
+    },
+  });
+
+  try {
+    const result = await harness.plugin.api.simulateChatMessage({
+      message: "认领12345",
+      steamId: "steam-alpha",
+      playerName: "Alpha",
+    });
+
+    assert.equal(result.matched, true);
+    assert.equal(result.ok, false);
+    assert.equal(result.error, "RequestNotFound");
+  } finally {
+    await harness.stop();
+  }
+}
+
+await testTbSucceedsOnlyWhenOwnTeamIsAheadByThree();
+await testTbRejectsWhenOwnTeamLeadIsBelowThree();
+await testSqtbCreatesRequestAndClaimExecutes();
+await testSqtbDirectApproveStillWorks();
+await testClaimCodeIsStillHandled();
 
 console.log("fair team balance tests passed");

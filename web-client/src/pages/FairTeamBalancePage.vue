@@ -515,7 +515,7 @@ onBeforeUnmount(() => {
 
 async function refreshPanel() {
   quotaError.value = "";
-  await Promise.all([loadState(), loadHistory(), loadBroadcastState()]);
+  await Promise.all([loadState(), loadRequests(), loadHistory(), loadBroadcastState()]);
 }
 
 async function loadState() {
@@ -911,7 +911,6 @@ function normalizeStatusLabel(status: string) {
 }
 
 .request-card {
-  display: none;
 }
 
 .hero-grid,
