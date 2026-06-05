@@ -5,6 +5,20 @@ import path from "node:path";
 
 import { createPlugin } from "../plugins/fair-squad-guard.js";
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitFor(check, { timeoutMs = 2000, intervalMs = 20 } = {}) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const result = await check();
+    if (result) return result;
+    await sleep(intervalMs);
+  }
+  throw new Error("waitFor timeout");
+}
+
 function makePlayers(count) {
   return Array.from({ length: count }, (_, index) => ({
     name: `Player ${index + 1}`,
@@ -20,6 +34,7 @@ async function createHarness(options = {}) {
   const coreHandlers = new Map();
   const disbands = [];
   const warnings = [];
+  const broadcasts = [];
   const kicks = [];
   const webStatus = {
     serverId: "test-server",
@@ -75,6 +90,10 @@ async function createHarness(options = {}) {
           warnings.push(request);
           return { success: true, commandText: `AdminWarn ${request.targetName}` };
         },
+        async sendAdminBroadcast(request) {
+          broadcasts.push(request);
+          return { success: true, commandText: `AdminBroadcast ${request.message}` };
+        },
       },
     },
     config: {
@@ -108,7 +127,14 @@ async function createHarness(options = {}) {
     matchState,
     disbands,
     warnings,
+    broadcasts,
     kicks,
+    async emitCoreEvent(eventName, payload = {}) {
+      const handler = coreHandlers.get(eventName);
+      if (handler) {
+        await handler(payload);
+      }
+    },
     async stop() {
       await plugin.stop();
       await fs.rm(tempDir, { recursive: true, force: true });
@@ -191,18 +217,68 @@ async function testWindowRules() {
     assert.equal(locked.violation, true);
 
     harness.webStatus.logClockSeconds = 30;
-    const defaultName = await harness.plugin.api.simulateCreation(logCreation({ squadId: 4, squadName: "Squad 4" }));
+    const defaultName = await harness.plugin.api.simulateCreation(logCreation({
+      squadId: 4,
+      squadName: "Squad 4",
+      creatorName: "Another Leader",
+      creatorSteamId: "steam-another-leader",
+      creatorEosId: "eos-another-leader",
+    }));
     assert.equal(defaultName.approved, true);
 
-    const allowlisted = await harness.plugin.api.simulateCreation(logCreation({ squadId: 5, squadName: "INF OK" }));
+    const allowlisted = await harness.plugin.api.simulateCreation(logCreation({
+      squadId: 5,
+      squadName: "INF OK",
+      creatorName: "Third Leader",
+      creatorSteamId: "steam-third-leader",
+      creatorEosId: "eos-third-leader",
+    }));
     assert.equal(allowlisted.approved, true);
 
-    const vehicle = await harness.plugin.api.simulateCreation(logCreation({ squadId: 6, squadName: "Tank" }));
+    const vehicle = await harness.plugin.api.simulateCreation(logCreation({
+      squadId: 6,
+      squadName: "Tank",
+      creatorName: "Fourth Leader",
+      creatorSteamId: "steam-fourth-leader",
+      creatorEosId: "eos-fourth-leader",
+    }));
     assert.equal(vehicle.violation, true);
 
     harness.webStatus.logClockSeconds = 60;
-    const open = await harness.plugin.api.simulateCreation(logCreation({ squadId: 7, squadName: "Tank 2" }));
+    const open = await harness.plugin.api.simulateCreation(logCreation({
+      squadId: 7,
+      squadName: "Tank 2",
+      creatorName: "Fifth Leader",
+      creatorSteamId: "steam-fifth-leader",
+      creatorEosId: "eos-fifth-leader",
+    }));
     assert.equal(open.approved, true);
+  } finally {
+    await harness.stop();
+  }
+}
+
+async function testPhaseAnnouncementsBroadcastAtRoundStartAndWindowTransitions() {
+  const harness = await createHarness({
+    webStatus: { logClockSeconds: 10 },
+  });
+  try {
+    await harness.emitCoreEvent("round.world_bring_up", {
+      eventName: "round.world_bring_up",
+      serverId: "test-server",
+    });
+    await waitFor(() => harness.broadcasts.length >= 1);
+    assert.match(harness.broadcasts[0].message, /公平建队机制已开启/);
+    assert.match(harness.broadcasts[0].message, /20s/);
+
+    harness.webStatus.logClockSeconds = 30;
+    await waitFor(() => harness.broadcasts.length >= 2);
+    assert.match(harness.broadcasts[1].message, /步兵队建队区间已开启/);
+    assert.match(harness.broadcasts[1].message, /20-50s/);
+
+    harness.webStatus.logClockSeconds = 60;
+    await waitFor(() => harness.broadcasts.length >= 3);
+    assert.match(harness.broadcasts[2].message, /步兵队建队已放开/);
   } finally {
     await harness.stop();
   }
@@ -271,7 +347,7 @@ async function testLogPromotesRconWithoutSecondDisband() {
     assert.equal(harness.disbands.length, 1);
 
     const promoted = await harness.plugin.api.simulateCreation(logCreation({
-      teamId: null,
+      teamId: 1,
       squadId: 9,
       squadName: "Tank",
       creatorName: "Real Creator",
@@ -300,7 +376,7 @@ async function testSixteenthViolationKicks() {
       }));
     }
     assert.equal(harness.plugin.api.getStatus().leaderboard[0].violations, 16);
-    assert.equal(harness.kicks.length, 1);
+    assert.equal(harness.kicks.length, 3);
   } finally {
     await harness.stop();
   }
@@ -310,6 +386,7 @@ await testLowPopulationIgnored();
 await testMissingAnchorLocksRound();
 await testManualClockLocksRoundAndUnlockAllowsExecution();
 await testWindowRules();
+await testPhaseAnnouncementsBroadcastAtRoundStartAndWindowTransitions();
 await testRconOnlyDisbandsButDoesNotPunishPlayer();
 await testCurrentViolatingSquadsFollowRconSnapshot();
 await testLogPromotesRconWithoutSecondDisband();

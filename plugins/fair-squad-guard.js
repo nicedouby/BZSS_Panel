@@ -15,6 +15,7 @@ const DEFAULT_DISBAND_COMMAND_NAME_SUFFIX = "";
 const CREATION_COOLDOWN_MS = 3000;
 const KICK_RETRY_DELAY_MS = 1000;
 const KICK_RETRY_COUNT = 3;
+const PHASE_POLL_INTERVAL_MS = 1000;
 
 const DEFAULT_INFANTRY_PATTERNS = Object.freeze([
   "^squad\\s*\\d+$",
@@ -195,6 +196,59 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     state.session.manualUnlockAt = "";
   }
 
+  function getBroadcastSender() {
+    return modules?.adminWarn?.sendAdminBroadcast ?? modules?.adminWarn?.broadcastMessage ?? null;
+  }
+
+  async function broadcastMessage(message, reason, meta = {}) {
+    const sender = getBroadcastSender();
+    const text = normalizeText(message);
+    if (!text || typeof sender !== "function") return null;
+
+    try {
+      return await sender.call(modules.adminWarn, {
+        message: text,
+        reason,
+        sourceModule: PLUGIN_ID,
+        relatedEventId: normalizeText(meta?.relatedEventId),
+        system: true,
+      });
+    } catch (error) {
+      pluginLogger?.warn?.(`[FairSquadGuard] broadcast failed: ${error?.message ?? error}`);
+      return null;
+    }
+  }
+
+  function buildRoundMechanismMessage() {
+    return `公平建队机制已开启：开局 ${runtimeConfig.noSquadCreationSeconds}s 禁止建队，${runtimeConfig.noSquadCreationSeconds}-${runtimeConfig.infantryOnlyUntilSeconds}s 仅允许步兵队，之后全面放开。`;
+  }
+
+  function buildInfantryOnlyMessage() {
+    return `步兵队建队区间已开启：${runtimeConfig.noSquadCreationSeconds}-${runtimeConfig.infantryOnlyUntilSeconds}s 仅允许步兵队和白名单队名。`;
+  }
+
+  function buildOpenMessage() {
+    return "步兵队建队已放开：现在可以创建任意队名。";
+  }
+
+  async function maybeBroadcastPhaseChange(meta = {}) {
+    if (!isActive()) return;
+    if (!state.session.roundAnchor) return;
+
+    const webStatus = getWebStatus();
+    const phase = resolvePhase(Number(webStatus.logClockSeconds ?? 0), runtimeConfig).phase;
+    const currentPhase = state.session.lastBroadcastPhase || "";
+    if (phase === currentPhase) return;
+
+    state.session.lastBroadcastPhase = phase;
+
+    if (phase === "infantry_only") {
+      await broadcastMessage(buildInfantryOnlyMessage(), "fair_squad_guard_infantry_only_opened", meta);
+    } else if (phase === "open") {
+      await broadcastMessage(buildOpenMessage(), "fair_squad_guard_opened", meta);
+    }
+  }
+
   function resetSession(reason = "round_reset", options = {}) {
     state.session = {
       ...createInitialState().session,
@@ -208,6 +262,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     state.violationPlayers.clear();
     state.creationCooldowns.clear();
     state.summary = createEmptySummary();
+    state.session.lastBroadcastPhase = "";
+    state.session.mechanismAnnouncementAt = "";
     if (options.keepLock) {
       state.session.midRoundLocked = true;
       state.session.midRoundLockReason = "recovery_startup";
@@ -220,6 +276,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   function handleRoundAnchor(event = {}, reason = "round_anchor") {
     return enqueue(async () => {
       resetSession(reason);
+      state.session.lastBroadcastPhase = resolvePhase(Number(getWebStatus().logClockSeconds ?? 0), runtimeConfig).phase;
       state.session.roundAnchor = {
         eventName: normalizeText(event.eventName),
         reason,
@@ -227,6 +284,10 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         logTime: normalizeText(event.logTime),
         at: nowIso(),
       };
+      state.session.mechanismAnnouncementAt = nowIso();
+      await broadcastMessage(buildRoundMechanismMessage(), "fair_squad_guard_round_start", {
+        relatedEventId: normalizeText(event?.eventId ?? event?.id),
+      });
       pluginLogger?.info?.(`[FairSquadGuard] session reset by ${reason}`);
     });
   }
@@ -788,6 +849,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         }));
       }
 
+      const phaseTimer = setInterval(() => {
+        void maybeBroadcastPhaseChange();
+      }, PHASE_POLL_INTERVAL_MS);
+      unsubscribers.push(() => clearInterval(phaseTimer));
+
       pluginLogger?.info?.("[FairSquadGuard] plugin started.");
     },
 
@@ -826,6 +892,8 @@ function createInitialState() {
       lastResetAt: "",
       lastResetReason: "",
       roundAnchor: null,
+      lastBroadcastPhase: "",
+      mechanismAnnouncementAt: "",
     },
     summary: createEmptySummary(),
     records: [],
