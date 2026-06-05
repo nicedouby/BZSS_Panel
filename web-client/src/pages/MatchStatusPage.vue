@@ -114,8 +114,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, reactive, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useRoute } from "vue-router";
 import { apiGet, apiPost } from "../app/apiClient";
 import { renderApiError } from "../app/errors";
 import { getRuntimeSyncState } from "../app/runtimeSync";
@@ -142,6 +143,7 @@ import MatchChatPanel from "../components/match/MatchChatPanel.vue";
 import FloatingPlayerWindow from "../components/squad-admin/FloatingPlayerWindow.vue";
 import SquadDetailDrawer from "../components/squad-admin/SquadDetailDrawer.vue";
 import { t } from "../i18n";
+import { normalizeRefreshPolicy, resolveRefreshDelay } from "../app/refreshPolicy";
 import type {
   PageState,
   PlayerDetailViewModel,
@@ -196,6 +198,7 @@ const jobs = useJobStore();
 const ui = useUiStore();
 const runtime = getRuntimeSyncState();
 const queryClient = useQueryClient();
+const route = useRoute();
 
 const refreshingPlaytime = ref(false);
 const refreshingPlayers = ref(false);
@@ -212,6 +215,7 @@ const activePlayerWindow = ref<{
   notice: string;
 } | null>(null);
 const selectedSquadDetail = ref<SquadViewModel | null>(null);
+const pageHidden = ref(typeof document !== "undefined" ? document.hidden : false);
 
 const pageState = reactive<PageState>({
   searchQuery: "",
@@ -230,37 +234,59 @@ const refreshingType = computed(() => {
 
 const snapshotUpdatedAt = computed(() => Math.max(server.updatedAt, players.updatedAt, squads.updatedAt));
 const hasSnapshotData = computed(() => snapshotUpdatedAt.value > 0);
-const runtimeWebStatus = computed(() => server.snapshot?.webStatus ?? server.snapshot ?? {});
-const currentServerId = computed(() => String(runtimeWebStatus.value.serverId ?? server.snapshot?.serverId ?? "").trim());
-const rconStatus = computed(() => String(runtimeWebStatus.value.rcon ?? "unknown"));
-const combatCacheQuery = useQuery({
-  queryKey: computed(() => ["combat-manager-cache", auth.authenticated, currentServerId.value]),
-  enabled: computed(() => auth.authenticated && Boolean(currentServerId.value)),
-  queryFn: async () => {
-    try {
-      return await apiGet<any>(`/api/combat-manager/cache?serverId=${encodeURIComponent(currentServerId.value)}`);
-    } catch {
-      return { snapshot: { events: [] } };
-    }
-  },
-  staleTime: 5_000,
-  refetchInterval: 5_000,
-  refetchOnWindowFocus: false,
-});
+const routeRefreshPolicy = computed(() => normalizeRefreshPolicy(route.meta.refreshPolicy));
 const matchSnapshotQuery = useQuery({
   queryKey: computed(() => ["match-snapshot", auth.authenticated]),
   enabled: computed(() => auth.authenticated),
   queryFn: async () => apiGet<any>("/api/match/snapshot"),
   refetchOnWindowFocus: false,
 });
+const matchSnapshot = computed(() => matchSnapshotQuery.data.value?.matchState ?? null);
+const runtimeWebStatus = computed(() => server.snapshot?.webStatus ?? server.snapshot ?? {});
+const currentServerId = computed(() => String(runtimeWebStatus.value.serverId ?? server.snapshot?.serverId ?? "").trim());
+const rconStatus = computed(() => String(runtimeWebStatus.value.rcon ?? "unknown"));
+const currentPlayerCount = computed(() => Number(
+  server.snapshot?.webStatus?.playerCount
+  ?? matchSnapshot.value?.serverStatus?.playerCount
+  ?? matchSnapshot.value?.players?.list?.length
+  ?? players.active.length
+  ?? 0,
+));
+const combatCacheRefetchInterval = computed(() => resolveRefreshDelay({
+  policy: routeRefreshPolicy.value,
+  playerCount: currentPlayerCount.value,
+  hidden: pageHidden.value,
+  surface: "page",
+}));
+const squadLifecycleRefetchInterval = computed(() => resolveRefreshDelay({
+  policy: routeRefreshPolicy.value,
+  playerCount: currentPlayerCount.value,
+  hidden: pageHidden.value,
+  surface: "pageSlow",
+}));
+const combatCacheQuery = useQuery({
+  queryKey: computed(() => ["combat-manager-cache", auth.authenticated, currentServerId.value]),
+  enabled: computed(() => auth.authenticated && Boolean(currentServerId.value)),
+  queryFn: async () => {
+    try {
+      return await apiGet<any>(`/api/combat-manager/cache?serverId=${encodeURIComponent(currentServerId.value)}`);
+  } catch {
+      return { snapshot: { events: [] } };
+    }
+  },
+  staleTime: 5_000,
+  refetchInterval: combatCacheRefetchInterval,
+  refetchIntervalInBackground: true,
+  refetchOnWindowFocus: false,
+});
 const squadLifecycleQuery = useQuery({
   queryKey: computed(() => ["squad-lifecycle-current", auth.authenticated]),
   enabled: computed(() => auth.authenticated),
   queryFn: async () => apiGet<any>("/api/squad-lifecycle/current"),
-  refetchInterval: 3000,
+  refetchInterval: squadLifecycleRefetchInterval,
+  refetchIntervalInBackground: true,
   refetchOnWindowFocus: false,
 });
-const matchSnapshot = computed(() => matchSnapshotQuery.data.value?.matchState ?? null);
 const squadLifecycleCurrent = computed(() => squadLifecycleQuery.data.value?.current ?? null);
 const combatCacheEvents = computed(() => Array.isArray(combatCacheQuery.data.value?.snapshot?.events)
   ? combatCacheQuery.data.value.snapshot.events
@@ -354,6 +380,19 @@ const playtimeEvents = computed(() => {
   return [...events].slice(-10).reverse();
 });
 const showPlaytimePanel = computed(() => Boolean(refreshingPlaytime.value || playtimeJob.value || playtimeError.value));
+
+function handleVisibilityChange() {
+  pageHidden.value = typeof document !== "undefined" ? document.hidden : false;
+}
+
+onMounted(() => {
+  pageHidden.value = typeof document !== "undefined" ? document.hidden : false;
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener("visibilitychange", handleVisibilityChange);
+});
 
 watch(
   () => playtimeQuery.data.value?.items,

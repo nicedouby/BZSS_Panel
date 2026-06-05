@@ -4,6 +4,7 @@ import { useServerStore } from "../stores/server.store";
 import { usePlayerStore } from "../stores/player.store";
 import { useSquadStore } from "../stores/squad.store";
 import { useAuthStore } from "../stores/auth.store";
+import { normalizeRefreshPolicy, resolveRefreshDelay } from "./refreshPolicy";
 import {
   applyMatchSnapshotResponse,
   applyRuntimeSnapshotResponse,
@@ -19,27 +20,36 @@ const runtimeSyncState = reactive({
   errorType: null as ApiErrorType | "unauthorized" | null,
   consecutiveFailures: 0,
   bootstrapRefreshAttempted: false,
+  refreshPolicy: "polling" as "realtime" | "polling" | "manual",
+  lastRuntimeSnapshotAttemptAt: 0,
+  lastRuntimeSnapshotAt: 0,
 });
 
 let timer: number | null = null;
 
+export function setRuntimeSyncRefreshPolicy(policy: unknown) {
+  runtimeSyncState.refreshPolicy = normalizeRefreshPolicy(policy);
+  scheduleRuntimeSync();
+}
+
 export function startRuntimeSync() {
   if (runtimeSyncState.started) return;
   runtimeSyncState.started = true;
-  document.addEventListener("visibilitychange", rescheduleRuntimeSync);
-  void syncOnce();
-  rescheduleRuntimeSync();
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+  void performRuntimeSync({ scheduleNext: true });
 }
 
 export function stopRuntimeSync() {
   runtimeSyncState.started = false;
   runtimeSyncState.inFlight = false;
   runtimeSyncState.bootstrapRefreshAttempted = false;
+  runtimeSyncState.lastRuntimeSnapshotAttemptAt = 0;
+  runtimeSyncState.lastRuntimeSnapshotAt = 0;
   if (timer != null) {
-    window.clearInterval(timer);
+    window.clearTimeout(timer);
     timer = null;
   }
-  document.removeEventListener("visibilitychange", rescheduleRuntimeSync);
+  document.removeEventListener("visibilitychange", handleVisibilityChange);
 }
 
 export function restartRuntimeSync() {
@@ -48,6 +58,18 @@ export function restartRuntimeSync() {
 }
 
 export async function syncOnce() {
+  return performRuntimeSync({ scheduleNext: false });
+}
+
+export function getRuntimeSyncState() {
+  return runtimeSyncState;
+}
+
+function handleVisibilityChange() {
+  scheduleRuntimeSync();
+}
+
+async function performRuntimeSync({ scheduleNext }: { scheduleNext: boolean }) {
   if (!runtimeSyncState.started || runtimeSyncState.inFlight) return;
 
   runtimeSyncState.inFlight = true;
@@ -56,9 +78,14 @@ export async function syncOnce() {
     if (!runtimeSyncState.started) return;
     applyMatchSnapshotResponse(matchSnapshot);
 
-    const snapshot = await apiGet<any>("/api/snapshot/all");
-    if (!runtimeSyncState.started) return;
-    applyRuntimeSnapshotResponse(snapshot);
+    const playerCount = getPlayerCount(matchSnapshot);
+    if (shouldRefreshRuntimeSnapshot(playerCount)) {
+      runtimeSyncState.lastRuntimeSnapshotAttemptAt = Date.now();
+      const snapshot = await apiGet<any>("/api/snapshot/all");
+      if (!runtimeSyncState.started) return;
+      applyRuntimeSnapshotResponse(snapshot);
+      runtimeSyncState.lastRuntimeSnapshotAt = Date.now();
+    }
 
     await maybeBootstrapMatchRefresh(matchSnapshot);
 
@@ -70,19 +97,22 @@ export async function syncOnce() {
     handleSyncError(error);
   } finally {
     runtimeSyncState.inFlight = false;
+    if (scheduleNext) {
+      scheduleRuntimeSync();
+    }
   }
 }
 
-export function getRuntimeSyncState() {
-  return runtimeSyncState;
-}
-
-function rescheduleRuntimeSync() {
+function scheduleRuntimeSync() {
   if (!runtimeSyncState.started) return;
-  if (timer != null) window.clearInterval(timer);
-  timer = window.setInterval(() => {
-    void syncOnce();
-  }, document.hidden ? 7_000 : 2_000);
+  if (runtimeSyncState.inFlight) return;
+  if (timer != null) window.clearTimeout(timer);
+
+  const delay = resolveRuntimeSyncDelay("primary");
+  timer = window.setTimeout(() => {
+    timer = null;
+    void performRuntimeSync({ scheduleNext: true });
+  }, delay);
 }
 
 function handleSyncError(error: unknown) {
@@ -116,6 +146,44 @@ function markRuntimeStoresStale() {
   useServerStore().markStale();
   usePlayerStore().markStale();
   useSquadStore().markStale();
+}
+
+function getPlayerCount(matchSnapshot: any) {
+  const serverStore = useServerStore();
+  const storeCount = Number(serverStore.snapshot?.webStatus?.playerCount ?? serverStore.snapshot?.playerCount ?? Number.NaN);
+  if (Number.isFinite(storeCount) && storeCount >= 0) return storeCount;
+
+  const fromSnapshot = Number(matchSnapshot?.matchState?.serverStatus?.playerCount ?? matchSnapshot?.matchState?.players?.list?.length ?? 0);
+  if (Number.isFinite(fromSnapshot) && fromSnapshot >= 0) return fromSnapshot;
+
+  return 0;
+}
+
+function resolveRuntimeSyncDelay(surface: "primary" | "auxiliary") {
+  return resolveRefreshDelay({
+    policy: runtimeSyncState.refreshPolicy,
+    playerCount: getCurrentPlayerCount(),
+    hidden: typeof document !== "undefined" ? document.hidden : false,
+    surface,
+  });
+}
+
+function getCurrentPlayerCount() {
+  const serverStore = useServerStore();
+  const storeCount = Number(serverStore.snapshot?.webStatus?.playerCount ?? serverStore.snapshot?.playerCount ?? Number.NaN);
+  if (Number.isFinite(storeCount) && storeCount >= 0) return storeCount;
+  return 0;
+}
+
+function shouldRefreshRuntimeSnapshot(playerCount: number) {
+  if (!runtimeSyncState.lastRuntimeSnapshotAttemptAt) return true;
+  const interval = resolveRefreshDelay({
+    policy: runtimeSyncState.refreshPolicy,
+    playerCount,
+    hidden: typeof document !== "undefined" ? document.hidden : false,
+    surface: "auxiliary",
+  });
+  return Date.now() - runtimeSyncState.lastRuntimeSnapshotAttemptAt >= interval;
 }
 
 async function maybeBootstrapMatchRefresh(matchSnapshot: any) {

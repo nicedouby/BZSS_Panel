@@ -16,7 +16,7 @@ import AppLayout from "./components/layout/AppLayout.vue";
 import LoginPage from "./pages/LoginPage.vue";
 import { useAuthStore } from "./stores/auth.store";
 import { useUiStore } from "./stores/ui.store";
-import { startRuntimeSync, stopRuntimeSync } from "./app/runtimeSync";
+import { setRuntimeSyncRefreshPolicy, startRuntimeSync, stopRuntimeSync } from "./app/runtimeSync";
 import { canAccessPage, normalizePermissionList } from "./shared/web-page-permissions.js";
 import { t } from "./i18n";
 
@@ -53,8 +53,9 @@ watch(
 );
 
 watch(
-  () => auth.authenticated,
-  (authenticated) => {
+  () => [auth.authenticated, route.meta.refreshPolicy] as const,
+  ([authenticated, refreshPolicy]) => {
+    setRuntimeSyncRefreshPolicy(refreshPolicy);
     if (authenticated) startRuntimeSync();
     else stopRuntimeSync();
   },

@@ -815,6 +815,97 @@ async function testSnapshotAllDoesNotTriggerSlowTasks() {
   assert.equal(JSON.parse(recorder.state.body).ok, true);
 }
 
+async function testMatchSnapshotRouteReusesPrebuiltSnapshot() {
+  const snapshot = {
+    serverStatus: {
+      map: "AlBasrah",
+      layer: "AlBasrah_RAAS_v1",
+      lastUpdatedAt: "2026-06-01T00:00:00.000Z",
+    },
+    match: {
+      map: "AlBasrah",
+      layer: "AlBasrah_RAAS_v1",
+      phase: "in_progress",
+      lastUpdatedAt: "2026-06-01T00:00:00.000Z",
+    },
+    players: {
+      list: [{ playerID: 1, name: "Alice" }],
+      lastUpdatedAt: "2026-06-01T00:00:00.000Z",
+    },
+    squads: {
+      list: [{ key: "1:2", teamID: 1, squadID: 2, squadName: "Alpha" }],
+      lastUpdatedAt: "2026-06-01T00:00:00.000Z",
+    },
+    rconStatus: {
+      connected: true,
+      lastUpdatedAt: "2026-06-01T00:00:00.000Z",
+    },
+    rconPolling: {
+      enabled: true,
+      lastUpdatedAt: "2026-06-01T00:00:00.000Z",
+    },
+    logAccess: {
+      granted: true,
+      lastUpdatedAt: "2026-06-01T00:00:00.000Z",
+    },
+  };
+
+  let getStateCalls = 0;
+  let getOverviewCalls = 0;
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin", role: "SuperAdmin" };
+        },
+      },
+      webStatus: {
+        getSnapshot() {
+          return { updatedAt: "2026-06-01T00:00:00.000Z", rcon: "connected" };
+        },
+      },
+    },
+    modules: {
+      matchState: {
+        getState() {
+          getStateCalls += 1;
+          return snapshot;
+        },
+        getOverview(matchState) {
+          getOverviewCalls += 1;
+          assert.strictEqual(matchState, snapshot);
+          return {
+            status: { updatedAt: "2026-06-01T00:00:00.000Z", rcon: "connected" },
+            matchState,
+            serverStatus: matchState.serverStatus,
+            match: matchState.match,
+            players: matchState.players.list,
+            squads: matchState.squads.list,
+            round: { current: null, history: [] },
+            rconStatus: matchState.rconStatus,
+            rconPolling: matchState.rconPolling,
+            logAccess: matchState.logAccess,
+          };
+        },
+      },
+    },
+  });
+
+  const recorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/match/snapshot",
+    headers: { host: "localhost" },
+    socket: {},
+  }, recorder.res);
+
+  assert.equal(recorder.state.status, 200);
+  const body = JSON.parse(recorder.state.body);
+  assert.equal(body.matchState.serverStatus.map, "AlBasrah");
+  assert.equal(getStateCalls, 1);
+  assert.equal(getOverviewCalls, 1);
+}
+
 async function testMatchRefreshRoutesDelegateToMatchState() {
   const refreshCalls = [];
   const matchState = {
@@ -1825,6 +1916,7 @@ await testWeaponCollectorApiRequiresGet();
 await testGroupReportSnapshotRouteReturnsWrappedSnapshot();
 await testSnapshotAllRequiresAuth();
 await testSnapshotAllDoesNotTriggerSlowTasks();
+await testMatchSnapshotRouteReusesPrebuiltSnapshot();
 await testMatchRefreshRoutesDelegateToMatchState();
 await testSquadLifecycleRouteReturnsCurrentSnapshot();
 await testSquadManagementRoutesExposeStateAndMutations();

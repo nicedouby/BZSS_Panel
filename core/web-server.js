@@ -2180,13 +2180,15 @@ export class WebServer {
 
   getMatchStateSnapshotResponse() {
     const matchStateModule = this.modules.matchState;
-    const matchState = matchStateModule?.getState?.() ?? matchStateModule?.getOverview?.()?.matchState ?? null;
+    const matchState = matchStateModule?.getState?.() ?? null;
+    const overview = matchStateModule?.getOverview?.(matchState) ?? this.getMatchOverview();
+    const resolvedMatchState = matchState ?? overview?.matchState ?? null;
     return {
       ok: true,
       source: "module.matchState",
       type: "snapshot",
-      matchState,
-      overview: matchStateModule?.getOverview?.() ?? this.getMatchOverview(),
+      matchState: resolvedMatchState,
+      overview,
     };
   }
 

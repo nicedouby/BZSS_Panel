@@ -52,6 +52,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
   const state = {
     serverId: core.webStatus.serverId,
     updatedAt: "",
+    revision: 0,
     serverStatus: {
       map: "",
       layer: "",
@@ -118,8 +119,20 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     },
   };
 
+  const snapshotCache = {
+    key: "",
+    snapshot: null,
+    overviewSnapshot: null,
+    overview: null,
+  };
+
   function getSnapshot() {
-    return {
+    const cacheKey = getSnapshotCacheKey();
+    if (snapshotCache.key === cacheKey && snapshotCache.snapshot) {
+      return snapshotCache.snapshot;
+    }
+
+    const snapshot = {
       ...state,
       serverStatus: { ...state.serverStatus, fields: { ...state.serverStatus.fields } },
       match: { ...state.match, tickets: { ...state.match.tickets } },
@@ -147,14 +160,24 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       rconPolling: { ...state.rconPolling },
       logAccess: { ...state.logAccess },
     };
+
+    snapshotCache.key = cacheKey;
+    snapshotCache.snapshot = snapshot;
+    snapshotCache.overviewSnapshot = null;
+    snapshotCache.overview = null;
+    return snapshot;
   }
 
   const api = {
     getState: getSnapshot,
 
-    getOverview() {
-      const snapshot = getSnapshot();
-      return {
+    getOverview(matchState = null) {
+      const snapshot = matchState ?? getSnapshot();
+      if (snapshotCache.overviewSnapshot === snapshot && snapshotCache.overview) {
+        return snapshotCache.overview;
+      }
+
+      const overview = {
         status: core.webStatus.getSnapshot(),
         matchState: snapshot,
         serverStatus: snapshot.serverStatus,
@@ -166,6 +189,13 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         rconPolling: snapshot.rconPolling,
         logAccess: snapshot.logAccess,
       };
+
+      if (snapshotCache.snapshot === snapshot) {
+        snapshotCache.overviewSnapshot = snapshot;
+        snapshotCache.overview = overview;
+      }
+
+      return overview;
     },
 
     getRoundState() {
@@ -197,11 +227,12 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       if (type === "squads" || type === "all") await refreshSquads(report);
       if (type === "currentMap" || type === "all") await refreshCurrentMap(report);
       if (type === "nextMap" || type === "all") await refreshNextMap(report);
+      const snapshot = getSnapshot();
       return {
         ok: report.ok,
         type,
-        matchState: getSnapshot(),
-        overview: api.getOverview(),
+        matchState: snapshot,
+        overview: api.getOverview(snapshot),
         errors: report.errors,
       };
     },
@@ -611,6 +642,25 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     }
   }
 
+  function getSnapshotCacheKey() {
+    const webStatusUpdatedAt = String(core.webStatus?.state?.updatedAt ?? core.webStatus?.getSnapshot?.()?.updatedAt ?? "");
+    return [
+      state.revision,
+      state.serverId,
+      state.updatedAt,
+      state.serverStatus.lastUpdatedAt,
+      state.players.lastUpdatedAt,
+      state.squads.lastUpdatedAt,
+      state.match.lastUpdatedAt,
+      state.round.lastAcceptedAt,
+      state.round.lastDedupedAt,
+      state.rconStatus.lastUpdatedAt,
+      state.rconPolling.lastUpdatedAt,
+      state.logAccess.lastUpdatedAt,
+      webStatusUpdatedAt,
+    ].join("|");
+  }
+
   function updateStatuses() {
     const webSnapshot = core.webStatus.getSnapshot();
     const rconStatus = core.rconManager.getStatus();
@@ -633,6 +683,8 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       status: logAccessGranted ? "granted" : "missing",
       lastUpdatedAt: new Date().toISOString(),
     };
+
+    state.revision += 1;
   }
 
   function updateWebStatus() {
@@ -661,6 +713,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
 
   function emitUpdated(changed) {
     state.updatedAt = new Date().toISOString();
+    state.revision += 1;
     updateStatuses();
 
     const event = makeEvent("module.matchState.updated", {

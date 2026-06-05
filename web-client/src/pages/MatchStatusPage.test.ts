@@ -13,6 +13,11 @@ vi.mock("../app/apiClient", async () => {
 });
 
 vi.mock("vue-router", () => ({
+  useRoute: () => ({
+    meta: {
+      refreshPolicy: "realtime",
+    },
+  }),
   useRouter: () => ({
     push: vi.fn(),
     replace: vi.fn(),

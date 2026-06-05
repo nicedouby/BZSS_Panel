@@ -11,6 +11,7 @@ vi.mock("./apiClient", async () => {
 
 import { ApiError, apiGet } from "./apiClient";
 import { getRuntimeSyncState, stopRuntimeSync, syncOnce } from "./runtimeSync";
+import { resolveRefreshDelay } from "./refreshPolicy";
 import { useAuthStore } from "../stores/auth.store";
 import { useEventStore } from "../stores/event.store";
 import { useJobStore } from "../stores/job.store";
@@ -41,6 +42,9 @@ describe("runtimeSync", () => {
       errorType: null,
       consecutiveFailures: 0,
       bootstrapRefreshAttempted: false,
+      refreshPolicy: "polling",
+      lastRuntimeSnapshotAttemptAt: 0,
+      lastRuntimeSnapshotAt: 0,
     });
     vi.mocked(apiGet).mockReset();
   });
@@ -75,8 +79,10 @@ describe("runtimeSync", () => {
     const squads = useSquadStore();
     const events = useEventStore();
     const jobs = useJobStore();
+    const calls: string[] = [];
 
     vi.mocked(apiGet).mockImplementation(async (path: string) => {
+      calls.push(path);
       if (path === "/api/match/snapshot") {
         return {
           ok: true,
@@ -138,6 +144,32 @@ describe("runtimeSync", () => {
     });
 
     await syncOnce();
+    await syncOnce();
+
+    expect(resolveRefreshDelay({
+      policy: "realtime",
+      playerCount: 120,
+      hidden: false,
+      surface: "auxiliary",
+    })).toBeGreaterThan(resolveRefreshDelay({
+      policy: "realtime",
+      playerCount: 120,
+      hidden: false,
+      surface: "primary",
+    }));
+    expect(resolveRefreshDelay({
+      policy: "realtime",
+      playerCount: 120,
+      hidden: true,
+      surface: "primary",
+    })).toBeGreaterThan(resolveRefreshDelay({
+      policy: "realtime",
+      playerCount: 120,
+      hidden: false,
+      surface: "primary",
+    }));
+    expect(calls.filter((path) => path === "/api/match/snapshot")).toHaveLength(2);
+    expect(calls.filter((path) => path === "/api/snapshot/all")).toHaveLength(1);
 
     expect(server.snapshot.map).toBe("AlBasrah");
     expect(server.snapshot.webStatus.rcon).toBe("connected");
@@ -146,5 +178,36 @@ describe("runtimeSync", () => {
     expect(squads.list).toHaveLength(1);
     expect(events.updatedAt).toBe(1);
     expect(jobs.updatedAt).toBe(1);
+  });
+
+  it("resolves route-aware cadences and hidden tab backoff", () => {
+    const realtimePrimary = resolveRefreshDelay({
+      policy: "realtime",
+      playerCount: 120,
+      hidden: false,
+      surface: "primary",
+    });
+    const pollingPrimary = resolveRefreshDelay({
+      policy: "polling",
+      playerCount: 120,
+      hidden: false,
+      surface: "primary",
+    });
+    const hiddenRealtimePrimary = resolveRefreshDelay({
+      policy: "realtime",
+      playerCount: 120,
+      hidden: true,
+      surface: "primary",
+    });
+    const realtimeAuxiliary = resolveRefreshDelay({
+      policy: "realtime",
+      playerCount: 120,
+      hidden: false,
+      surface: "auxiliary",
+    });
+
+    expect(realtimePrimary).toBeLessThan(pollingPrimary);
+    expect(hiddenRealtimePrimary).toBeGreaterThan(realtimePrimary);
+    expect(realtimeAuxiliary).toBeGreaterThan(realtimePrimary);
   });
 });

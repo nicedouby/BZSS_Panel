@@ -13,6 +13,7 @@ export class RuntimeState {
     this.state = {
       server: {
         updatedAt: 0,
+        revision: 0,
         stale: false,
       },
       players: makePlayersState(),
@@ -20,6 +21,7 @@ export class RuntimeState {
       teams: [],
       rcon: {
         updatedAt: 0,
+        revision: 0,
         stale: false,
       },
       events: {
@@ -29,12 +31,24 @@ export class RuntimeState {
         round: [],
         combat: [],
         updatedAt: 0,
+        revision: 0,
       },
       jobs: {
         byId: {},
         activeJobs: [],
         updatedAt: 0,
+        revision: 0,
       },
+    };
+
+    this.cache = {
+      server: { key: "", value: null },
+      players: { key: "", value: null },
+      squads: { key: "", value: null },
+      match: { key: "", value: null },
+      events: { key: "", value: null },
+      jobs: { key: "", value: null },
+      all: { key: "", value: null },
     };
 
     if (this.eventBus) this.attachEventBus(this.eventBus);
@@ -75,6 +89,7 @@ export class RuntimeState {
       updatedAt: Date.now(),
       stale: false,
     };
+    this.state.server.revision += 1;
   }
 
   updateRcon(patch = {}) {
@@ -84,6 +99,7 @@ export class RuntimeState {
       updatedAt: Date.now(),
       stale: false,
     };
+    this.state.rcon.revision += 1;
   }
 
   updatePlayers(input = []) {
@@ -103,6 +119,7 @@ export class RuntimeState {
     }
 
     this.state.players = next;
+    this.state.players.revision += 1;
     this.deriveTeams();
   }
 
@@ -123,15 +140,18 @@ export class RuntimeState {
     }
 
     this.state.squads = next;
+    this.state.squads.revision += 1;
     this.deriveTeams();
   }
 
   markPlayersStale() {
     this.state.players.stale = true;
+    this.state.players.revision += 1;
   }
 
   markSquadsStale() {
     this.state.squads.stale = true;
+    this.state.squads.revision += 1;
   }
 
   recordEvent(bucket, event) {
@@ -142,6 +162,7 @@ export class RuntimeState {
       this.state.events[key].splice(0, this.state.events[key].length - MAX_EVENT_BUCKET_SIZE);
     }
     this.state.events.updatedAt = Date.now();
+    this.state.events.revision += 1;
   }
 
   updateJob(job) {
@@ -159,51 +180,109 @@ export class RuntimeState {
       .filter((item) => item.status === "queued" || item.status === "running")
       .map((item) => item.id);
     this.state.jobs.updatedAt = Date.now();
+    this.state.jobs.revision += 1;
   }
 
   getServer() {
-    return {
+    const webStatusUpdatedAt = String(this.webStatus?.state?.updatedAt ?? this.webStatus?.getSnapshot?.()?.updatedAt ?? "");
+    const key = this.getServerCacheKey(webStatusUpdatedAt);
+    const cached = this.cache.server;
+    if (cached.key === key && cached.value) return cached.value;
+
+    const webStatus = this.webStatus?.getSnapshot?.() ?? null;
+    const value = {
       ...cloneJsonSafe(this.state.server),
-      webStatus: this.webStatus?.getSnapshot?.() ?? null,
+      webStatus: webStatus ? cloneJsonSafe(webStatus) : null,
     };
+    cached.key = key;
+    cached.value = value;
+    return value;
   }
 
   getPlayers() {
-    return cloneJsonSafe(this.state.players);
+    const key = this.getPlayersCacheKey();
+    const cached = this.cache.players;
+    if (cached.key === key && cached.value) return cached.value;
+
+    const value = cloneJsonSafe(this.state.players);
+    cached.key = key;
+    cached.value = value;
+    return value;
   }
 
   getSquads() {
-    return cloneJsonSafe(this.state.squads);
+    const key = this.getSquadsCacheKey();
+    const cached = this.cache.squads;
+    if (cached.key === key && cached.value) return cached.value;
+
+    const value = cloneJsonSafe(this.state.squads);
+    cached.key = key;
+    cached.value = value;
+    return value;
   }
 
   getMatch() {
-    return {
-      server: this.getServer(),
-      players: this.getPlayers(),
-      squads: this.getSquads(),
+    const server = this.getServer();
+    const players = this.getPlayers();
+    const squads = this.getSquads();
+    const key = this.getMatchCacheKey(server, players, squads);
+    const cached = this.cache.match;
+    if (cached.key === key && cached.value) return cached.value;
+
+    const value = {
+      server,
+      players,
+      squads,
       teams: cloneJsonSafe(this.state.teams),
       updatedAt: Math.max(this.state.players.updatedAt, this.state.squads.updatedAt, this.state.server.updatedAt),
     };
+    cached.key = key;
+    cached.value = value;
+    return value;
   }
 
   getEvents() {
-    return cloneJsonSafe(this.state.events);
+    const key = this.getEventsCacheKey();
+    const cached = this.cache.events;
+    if (cached.key === key && cached.value) return cached.value;
+
+    const value = cloneJsonSafe(this.state.events);
+    cached.key = key;
+    cached.value = value;
+    return value;
   }
 
   getJobs() {
-    return cloneJsonSafe(this.state.jobs);
+    const key = this.getJobsCacheKey();
+    const cached = this.cache.jobs;
+    if (cached.key === key && cached.value) return cached.value;
+
+    const value = cloneJsonSafe(this.state.jobs);
+    cached.key = key;
+    cached.value = value;
+    return value;
   }
 
   getAll() {
-    return {
-      server: this.getServer(),
-      players: this.getPlayers(),
-      squads: this.getSquads(),
+    const server = this.getServer();
+    const players = this.getPlayers();
+    const squads = this.getSquads();
+    const match = this.getMatch();
+    const events = this.getEvents();
+    const jobs = this.getJobs();
+    const key = this.getAllCacheKey(server, players, squads, match, events, jobs);
+    const cached = this.cache.all;
+    if (cached.key === key && cached.value) return cached.value;
+
+    const value = {
+      server,
+      players,
+      squads,
       teams: cloneJsonSafe(this.state.teams),
-      match: this.getMatch(),
+      match,
       rcon: cloneJsonSafe(this.state.rcon),
-      events: this.getEvents(),
-      jobs: this.getJobs(),
+      events,
+      jobs,
       updatedAt: Math.max(
         Number(this.state.server?.updatedAt ?? 0),
         Number(this.state.players?.updatedAt ?? 0),
@@ -213,10 +292,87 @@ export class RuntimeState {
         Number(this.state.rcon?.updatedAt ?? 0),
       ),
     };
+    cached.key = key;
+    cached.value = value;
+    return value;
   }
 
   deriveTeams() {
     this.state.teams = deriveTeams(this.state.players.active, this.state.squads.list);
+  }
+
+  getServerCacheKey(webStatusUpdatedAt = "") {
+    return [
+      this.state.server.revision,
+      this.state.server.updatedAt,
+      this.state.server.stale ? "stale" : "fresh",
+      String(webStatusUpdatedAt ?? ""),
+    ].join("|");
+  }
+
+  getPlayersCacheKey() {
+    return [
+      this.state.players.revision,
+      this.state.players.updatedAt,
+      this.state.players.stale ? "stale" : "fresh",
+    ].join("|");
+  }
+
+  getSquadsCacheKey() {
+    return [
+      this.state.squads.revision,
+      this.state.squads.updatedAt,
+      this.state.squads.stale ? "stale" : "fresh",
+    ].join("|");
+  }
+
+  getMatchCacheKey(server, players, squads) {
+    return [
+      this.getServerCacheKey(server?.webStatus?.updatedAt ?? ""),
+      this.getPlayersCacheKey(),
+      this.getSquadsCacheKey(),
+      server?.updatedAt ?? "",
+      players?.updatedAt ?? "",
+      squads?.updatedAt ?? "",
+    ].join("|");
+  }
+
+  getEventsCacheKey() {
+    return [
+      this.state.events.revision,
+      this.state.events.updatedAt,
+      this.state.events.console.length,
+      this.state.events.raw.length,
+      this.state.events.rcon.length,
+      this.state.events.round.length,
+      this.state.events.combat.length,
+    ].join("|");
+  }
+
+  getJobsCacheKey() {
+    return [
+      this.state.jobs.revision,
+      this.state.jobs.updatedAt,
+      this.state.jobs.activeJobs.length,
+      Object.keys(this.state.jobs.byId).length,
+    ].join("|");
+  }
+
+  getAllCacheKey(server, players, squads, match, events, jobs) {
+    return [
+      this.getServerCacheKey(server?.webStatus?.updatedAt ?? ""),
+      this.getPlayersCacheKey(),
+      this.getSquadsCacheKey(),
+      this.getMatchCacheKey(server, players, squads),
+      this.getEventsCacheKey(),
+      this.getJobsCacheKey(),
+      this.state.rcon.revision,
+      this.state.rcon.updatedAt,
+      this.state.rcon.stale ? "stale" : "fresh",
+      match?.updatedAt ?? "",
+      events?.updatedAt ?? "",
+      jobs?.updatedAt ?? "",
+    ].join("|");
   }
 }
 
@@ -229,6 +385,7 @@ function makePlayersState() {
     byPlayerID: {},
     byName: {},
     updatedAt: 0,
+    revision: 0,
     stale: false,
   };
 }
@@ -239,6 +396,7 @@ function makeSquadsState() {
     byKey: {},
     byTeamID: {},
     updatedAt: 0,
+    revision: 0,
     stale: false,
   };
 }
