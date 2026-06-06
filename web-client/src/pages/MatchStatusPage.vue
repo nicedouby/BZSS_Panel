@@ -3,7 +3,6 @@
     <SquadPageToolbar
       :search-query="pageState.searchQuery"
       :filter-mode="pageState.filterMode"
-      :density-mode="pageState.densityMode"
       :can-refresh="canRefresh"
       :refreshing-type="refreshingType"
       :refreshing-playtime="refreshingPlaytime"
@@ -14,7 +13,6 @@
       :squads-updated-at="squadsUpdatedAt"
       @search="pageState.searchQuery = $event"
       @filter-change="pageState.filterMode = $event"
-      @density-change="handleDensityChange"
       @refresh="handleToolbarRefresh"
       @refresh-playtime="refreshOnlinePlaytime"
       @refresh-playtime-force="refreshOnlinePlaytime(true)"
@@ -219,7 +217,7 @@ const pageHidden = ref(typeof document !== "undefined" ? document.hidden : false
 
 const pageState = reactive<PageState>({
   searchQuery: "",
-  densityMode: ui.globalDensity,
+  densityMode: "compact",
   selectedPlayerId: null,
   filterMode: "all",
 });
@@ -421,14 +419,6 @@ watch(
   (data) => {
     if (!data?.matchState) return;
     applyMatchSnapshotResponse(data);
-  },
-  { immediate: true },
-);
-
-watch(
-  () => ui.globalDensity,
-  (next) => {
-    pageState.densityMode = next;
   },
   { immediate: true },
 );

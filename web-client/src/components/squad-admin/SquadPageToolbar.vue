@@ -91,18 +91,6 @@
           </transition>
         </div>
       </div>
-
-      <div class="density-toggle">
-        <button
-          v-for="mode in ['comfortable', 'compact']"
-          :key="mode"
-          type="button"
-          :class="{ active: densityMode === mode }"
-          @click="selectDensityMode(mode)"
-        >
-          {{ mode === 'comfortable' ? t('match.densityComfortable') : t('match.densityCompact') }}
-        </button>
-      </div>
     </div>
   </div>
 </template>
@@ -117,7 +105,6 @@ type FilterMode = "all" | "no_leader" | "locked" | "alerts";
 const props = defineProps<{
   searchQuery: string;
   filterMode: FilterMode;
-  densityMode: "comfortable" | "compact";
   canRefresh: boolean;
   refreshingType: RefreshType | "";
   refreshingPlaytime?: boolean;
@@ -128,7 +115,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: "search", query: string): void;
   (event: "filter-change", mode: FilterMode): void;
-  (event: "density-change", mode: "comfortable" | "compact"): void;
   (event: "refresh", type: RefreshType): void;
   (event: "refresh-playtime"): void;
   (event: "refresh-playtime-force"): void;
@@ -202,12 +188,6 @@ function removeWindowListeners() {
 function runRefresh(type: RefreshType) {
   closeRefreshMenu();
   emit("refresh", type);
-}
-
-function selectDensityMode(mode: string) {
-  if (mode === "comfortable" || mode === "compact") {
-    emit("density-change", mode);
-  }
 }
 
 onBeforeUnmount(() => {
@@ -413,37 +393,6 @@ onBeforeUnmount(() => {
   border-color: var(--color-status-info);
 }
 
-.density-toggle {
-  display: flex;
-  gap: 2px;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-md);
-  padding: 2px;
-}
-
-.density-toggle button {
-  padding: 6px 12px;
-  border: 0;
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  transition: all 0.15s ease;
-  font-weight: 500;
-}
-
-.density-toggle button.active {
-  background: var(--color-bg-card);
-  color: var(--color-text-primary);
-  border: 1px solid var(--color-border-soft);
-}
-
-.density-toggle button:hover:not(.active) {
-  color: var(--color-text-primary);
-}
-
 @media (max-width: 1180px) {
   .toolbar-actions {
     grid-template-columns: minmax(0, 1fr) auto;
@@ -453,10 +402,6 @@ onBeforeUnmount(() => {
   .refresh-controls {
     grid-column: 1 / -1;
     justify-content: space-between;
-  }
-
-  .density-toggle {
-    justify-self: end;
   }
 }
 

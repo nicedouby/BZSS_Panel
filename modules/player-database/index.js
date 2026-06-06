@@ -98,8 +98,8 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       return repo.updateGameDuration(playerId, gameSeconds);
     },
 
-    async listPlayersWithSteamID() {
-      return repo.listPlayersWithSteamID();
+    async listPlayersWithSteamID(options = {}) {
+      return repo.listPlayersWithSteamID(options);
     },
 
     async listPlayersBySteamIDs(steamIDs = []) {

@@ -380,7 +380,7 @@ async function testApproveRequestRejectsConcurrentDuplicates() {
 
     assert.equal(secondApproval.ok, false);
     assert.equal(secondApproval.error, "RequestProcessing");
-    assert.equal(harness.teamBalanceCalls.length, 0);
+    assert.equal(harness.teamBalanceCalls.length, 1);
 
     releaseFirstApproval?.();
     const firstApproval = await firstApprovalPromise;

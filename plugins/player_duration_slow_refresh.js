@@ -123,11 +123,21 @@ export function createPlugin(context = {}) {
   function isCoolingDown(steamID) {
     const taggedAt = Number(state.refreshTaggedAtBySteamID.get(steamID) || 0) || 0;
     if (!taggedAt) return false;
-    return Date.now() - taggedAt < REFRESH_COOLDOWN_MS;
+    const isCool = Date.now() - taggedAt < REFRESH_COOLDOWN_MS;
+    if (!isCool) {
+      state.refreshTaggedAtBySteamID.delete(steamID);
+    }
+    return isCool;
   }
 
   function markRefreshTag(steamID) {
-    state.refreshTaggedAtBySteamID.set(steamID, Date.now());
+    const nowTime = Date.now();
+    state.refreshTaggedAtBySteamID.set(steamID, nowTime);
+    for (const [id, taggedAt] of state.refreshTaggedAtBySteamID.entries()) {
+      if (nowTime - taggedAt >= REFRESH_COOLDOWN_MS) {
+        state.refreshTaggedAtBySteamID.delete(id);
+      }
+    }
   }
 
   async function resolvePlayerRecord(player) {
@@ -216,7 +226,7 @@ export function createPlugin(context = {}) {
       };
     }
 
-    const players = await playerRepository.listPlayersWithSteamID();
+    const players = await playerRepository.listPlayersWithSteamID({ limit: 100, order: "ASC" });
     const list = (Array.isArray(players) ? players : [])
       .map((player) => normalizePlayerCandidate(player, "database"))
       .filter(Boolean);

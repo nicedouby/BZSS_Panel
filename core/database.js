@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS players (
     UNIQUE(steam_id),
     UNIQUE(eos_id)
 );
+CREATE INDEX IF NOT EXISTS idx_players_updated_at ON players(updated_at);
 
 CREATE TABLE IF NOT EXISTS player_aliases (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

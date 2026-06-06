@@ -289,7 +289,7 @@ export const useUiStore = defineStore("ui", () => {
 function readStoredUiPrefs(): Required<StoredUiPrefs> {
   const defaults = {
     visualMode: "tactical" as UiVisualMode,
-    globalDensity: "comfortable" as UiDensity,
+    globalDensity: "compact" as UiDensity,
     accent: "blueOrange" as UiAccent,
     motion: "normal" as UiMotion,
     richBackground: true,

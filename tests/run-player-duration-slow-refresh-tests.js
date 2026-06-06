@@ -51,7 +51,8 @@ async function testCurrentMatchPriorityAndCooldown() {
   const second = deferred();
 
   const repo = {
-    async listPlayersWithSteamID() {
+    async listPlayersWithSteamID(options = {}) {
+      assert.deepEqual(options, { limit: 100, order: "ASC" });
       return [
         { id: 1, current_name: "Alpha", steam_id: "111" },
         { id: 2, current_name: "Bravo", steam_id: "222" },
@@ -155,7 +156,8 @@ async function testSkipNoSteamID() {
   let plugin = null;
 
   const repo = {
-    async listPlayersWithSteamID() {
+    async listPlayersWithSteamID(options = {}) {
+      assert.deepEqual(options, { limit: 100, order: "ASC" });
       return [
         { id: 11, current_name: "Ghost", steam_id: "" },
         { id: 12, current_name: "Delta", steam_id: "333" },

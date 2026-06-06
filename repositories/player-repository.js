@@ -280,14 +280,22 @@ export class PlayerRepository {
     return this.db.get("SELECT * FROM players WHERE id = ?", Number(playerId));
   }
 
-  async listPlayersWithSteamID() {
-    return this.db.all(
-      `SELECT id, current_name, steam_id, eos_id, game_seconds, updated_at
+  async listPlayersWithSteamID({ limit, offset, order = "DESC" } = {}) {
+    let query = `SELECT id, current_name, steam_id, eos_id, game_seconds, updated_at
        FROM players
        WHERE steam_id IS NOT NULL
          AND TRIM(steam_id) <> ''
-       ORDER BY updated_at DESC`,
-    );
+       ORDER BY updated_at ${order === "ASC" ? "ASC" : "DESC"}`;
+    const params = [];
+    if (limit !== undefined) {
+      query += " LIMIT ?";
+      params.push(Number(limit));
+    }
+    if (offset !== undefined) {
+      query += " OFFSET ?";
+      params.push(Number(offset));
+    }
+    return this.db.all(query, ...params);
   }
 
   async listPlayersBySteamIDs(steamIDs = []) {
