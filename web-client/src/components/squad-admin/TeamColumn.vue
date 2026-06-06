@@ -5,11 +5,35 @@
         <h2 class="team-title-line">
           <span class="team-id-badge">TEAM {{ team.teamId }}</span>
           <span class="team-name">{{ team.teamName }}</span>
-          <span class="team-count">{{ team.playerCount }}/{{ team.maxPlayers }}</span>
         </h2>
-        <p class="team-column-subtitle" :class="{ compact: !isComfortable }">
-          <span>{{ headerSummaryText }}</span>
-        </p>
+        <div class="team-stats-row">
+          <span class="team-stat-chip count">
+            <span class="tsc-label">玩家</span>
+            <span class="tsc-value">{{ team.playerCount }}/{{ team.maxPlayers }}</span>
+          </span>
+          <span class="team-stat-chip avg">
+            <span class="tsc-label">均时</span>
+            <span class="tsc-value">{{ teamAveragePlaytimeShortText }}</span>
+          </span>
+          <span class="team-stat-chip leader-avg">
+            <span class="tsc-label">队长</span>
+            <span class="tsc-value">{{ teamLeaderAveragePlaytimeShortText }}</span>
+          </span>
+          <span class="team-stat-chip squads">
+            <span class="tsc-label">小队</span>
+            <span class="tsc-value">{{ team.squads.length }}</span>
+          </span>
+          <template v-if="isComfortable">
+            <span class="team-stat-chip">
+              <span class="tsc-label">公开</span>
+              <span class="tsc-value">{{ team.publicPlaytimePlayers }}</span>
+            </span>
+            <span class="team-stat-chip">
+              <span class="tsc-label">私密</span>
+              <span class="tsc-value">{{ team.privatePlaytimePlayers }}</span>
+            </span>
+          </template>
+        </div>
       </div>
     </header>
 
@@ -57,56 +81,45 @@ const teamLeaderAveragePlaytimeShortText = computed(() => {
   if (props.team.leaderAveragePlaytimeHours == null) return "--";
   return `${props.team.leaderAveragePlaytimeHours}h`;
 });
-
-const headerSummaryText = computed(() => {
-  const avg = `Avg ${teamAveragePlaytimeShortText.value}`;
-  const leaderAvg = `Leader Avg ${teamLeaderAveragePlaytimeShortText.value}`;
-  const squadsText = `Squads ${props.team.squads.length}`;
-
-  if (!isComfortable.value) {
-    return `${avg} · ${leaderAvg} · ${squadsText}`;
-  }
-
-  const publicText = `Public ${props.team.publicPlaytimePlayers}`;
-  const privateText = `Private ${props.team.privatePlaytimePlayers}`;
-  return `${avg} · ${leaderAvg} · ${publicText} · ${privateText} · ${squadsText}`;
-});
 </script>
 
 <style scoped>
+/* ─── 队伍列主容器 ───────────────────────────────────────────────────────── */
 .team-column {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
   min-height: 0;
   height: 100%;
   overflow: hidden;
   border-radius: var(--radius-lg);
-  padding: 10px;
+  padding: 8px;
   border: 1px solid var(--color-border-soft);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.01)), rgba(255, 255, 255, 0.008)),
     var(--color-bg-panel);
   box-shadow: var(--shadow-lg);
+  transition: border-color 0.2s ease;
 }
 
 .team-column.team1 {
   background:
-    linear-gradient(180deg, var(--color-team1-bg), transparent 240px),
+    linear-gradient(160deg, rgba(55, 200, 255, 0.08) 0%, rgba(55, 200, 255, 0.02) 30%, transparent 55%),
     var(--color-bg-panel);
   border-color: var(--color-team1-border);
 }
 
 .team-column.team2 {
   background:
-    linear-gradient(180deg, var(--color-team2-bg), transparent 240px),
+    linear-gradient(160deg, rgba(255, 155, 69, 0.08) 0%, rgba(255, 155, 69, 0.02) 30%, transparent 55%),
     var(--color-bg-panel);
   border-color: var(--color-team2-border);
 }
 
+/* ─── 队伍头部 ───────────────────────────────────────────────────────────── */
 .team-column-header {
   flex: 0 0 auto;
-  padding: var(--spacing-md);
+  padding: 8px 10px 9px;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border-soft);
   background:
@@ -114,38 +127,42 @@ const headerSummaryText = computed(() => {
     var(--color-bg-card);
   box-shadow: var(--shadow-sm);
   display: grid;
-  gap: 6px;
+  gap: 5px;
+  transition: border-color 0.2s ease;
 }
 
 .team-column.team1 .team-column-header {
   border-top: 3px solid var(--color-team1-primary);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), var(--shadow-sm);
+  border-color: var(--color-team1-border);
+  box-shadow:
+    inset 0 1px 0 rgba(55, 200, 255, 0.05),
+    0 0 12px rgba(55, 200, 255, 0.04),
+    var(--shadow-sm);
 }
 
 .team-column.team2 .team-column-header {
   border-top: 3px solid var(--color-team2-primary);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), var(--shadow-sm);
+  border-color: var(--color-team2-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 155, 69, 0.05),
+    0 0 12px rgba(255, 155, 69, 0.04),
+    var(--shadow-sm);
 }
 
 .team-column-title {
   min-width: 0;
 }
 
-.team-column-header h2 {
-  margin: 0;
-  font-size: var(--font-size-xl);
-  font-weight: 800;
-  color: var(--color-text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
+/* ─── 队伍标题行 ─────────────────────────────────────────────────────────── */
 .team-title-line {
+  margin: 0;
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
+  font-size: var(--font-size-lg);
+  font-weight: 800;
+  color: var(--color-text-primary);
 }
 
 .team-name {
@@ -153,43 +170,18 @@ const headerSummaryText = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.team-count {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  font-weight: 700;
-  flex: 0 0 auto;
-}
-
-.team-column-subtitle {
-  margin: 4px 0 0;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  line-height: 1.35;
-}
-
-.team-column-subtitle.compact {
-  font-size: var(--font-size-xs);
-}
-
-.team-column-subtitle span {
-  display: inline-block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: var(--font-size-md);
 }
 
 .team-id-badge {
   display: inline-flex;
   align-items: center;
   height: 22px;
-  padding: 0 8px;
+  padding: 0 9px;
   border-radius: var(--radius-full);
-  font-size: var(--font-size-xs);
+  font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   border: 1px solid var(--color-border-soft);
   background: rgba(255, 255, 255, 0.045);
   color: var(--color-text-secondary);
@@ -200,36 +192,114 @@ const headerSummaryText = computed(() => {
   color: var(--color-team1-primary);
   border-color: var(--color-team1-border);
   background: var(--color-team1-soft);
+  text-shadow: 0 0 8px rgba(55, 200, 255, 0.35);
 }
 
 .team-column.team2 .team-id-badge {
   color: var(--color-team2-primary);
   border-color: var(--color-team2-border);
   background: var(--color-team2-soft);
+  text-shadow: 0 0 8px rgba(255, 155, 69, 0.35);
 }
 
+/* ─── 队伍统计芯片行 ─────────────────────────────────────────────────────── */
+.team-stats-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.team-stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border-soft);
+  background: rgba(255, 255, 255, 0.025);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.team-stat-chip.count {
+  border-color: rgba(140, 160, 185, 0.2);
+}
+
+.team-stat-chip.avg {
+  color: var(--color-status-online);
+  border-color: rgba(52, 211, 153, 0.22);
+  background: rgba(52, 211, 153, 0.06);
+}
+
+.team-stat-chip.leader-avg {
+  color: #fde68a;
+  border-color: rgba(250, 204, 21, 0.22);
+  background: rgba(250, 204, 21, 0.06);
+}
+
+.team-stat-chip.squads {
+  color: var(--color-text-secondary);
+}
+
+.tsc-label {
+  color: var(--color-text-muted);
+  font-size: 9px;
+}
+
+.tsc-value {
+  color: inherit;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.team-stat-chip.count .tsc-value {
+  color: var(--color-text-secondary);
+}
+
+/* ─── 小队列表 ───────────────────────────────────────────────────────────── */
 .squad-list {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 4px;
+  padding-right: 2px;
   overscroll-behavior: contain;
 }
 
+/* 滚动条样式 */
+.squad-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.squad-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.squad-list::-webkit-scrollbar-thumb {
+  border-radius: 2px;
+  background: rgba(140, 160, 185, 0.2);
+}
+
+.squad-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(140, 160, 185, 0.35);
+}
+
+/* ─── 紧凑密度调整 ───────────────────────────────────────────────────────── */
 .team-column.compact {
-  gap: 8px;
+  gap: 6px;
 }
 
 .team-column.compact .team-column-header {
-  padding: 10px;
-  gap: 8px;
+  padding: 7px 9px 8px;
 }
 
 .team-column.compact .squad-list {
-  gap: 8px;
+  gap: 6px;
 }
 </style>

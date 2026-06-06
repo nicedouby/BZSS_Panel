@@ -14,7 +14,7 @@
         />
         <span v-else class="player-avatar-text" aria-hidden="true">{{ roleIcon.icon }}</span>
       </div>
-      <div class="playtime-chip" :title="playtimeText">
+      <div class="playtime-chip" :title="playtimeTitle">
         {{ playtimeText }}
       </div>
     </div>
@@ -27,36 +27,36 @@
           :class="{ leader: player.isLeader }"
           :title="player.isLeader ? t('match.squadLeader') : t('match.squadMember')"
         >
-          {{ player.isLeader ? t("match.squadLeader") : t("match.squadMember") }}
+          {{ player.isLeader ? "队长" : "成员" }}
         </span>
       </div>
 
-      <div class="player-sub-line" :title="secondaryIdentityText">
+      <div v-if="secondaryIdentityText" class="player-sub-line" :title="secondaryIdentityText">
         {{ secondaryIdentityText }}
       </div>
 
       <div class="player-stat-line">
-        <span class="stat-chip wound">
-          <span class="label">击倒</span>
+        <span class="stat-chip wound" :title="`击倒: ${downs}`">
+          <span class="label">倒</span>
           <span class="value">{{ downs }}</span>
         </span>
-        <span class="stat-chip kill">
-          <span class="label">击杀</span>
+        <span class="stat-chip kill" :title="`击杀: ${kills}`">
+          <span class="label">杀</span>
           <span class="value">{{ kills }}</span>
         </span>
-        <span class="stat-chip death">
-          <span class="label">死亡</span>
+        <span class="stat-chip death" :title="`死亡: ${deaths}`">
+          <span class="label">亡</span>
           <span class="value">{{ deaths }}</span>
         </span>
-        <span class="stat-chip tk">
+        <span class="stat-chip tk" :title="`TK: ${tk}`">
           <span class="label">TK</span>
           <span class="value">{{ tk }}</span>
         </span>
-        <span class="stat-chip revive">
-          <span class="label">复苏</span>
+        <span class="stat-chip revive" :title="`复苏: ${revives}`">
+          <span class="label">苏</span>
           <span class="value">{{ revives }}</span>
         </span>
-        <span v-if="squadlessText" class="stat-chip">
+        <span v-if="squadlessText" class="stat-chip" :title="`游离时长: ${squadlessText}`">
           <span class="label">游离</span>
           <span class="value">{{ squadlessText }}</span>
         </span>
@@ -90,6 +90,11 @@ const displayName = computed(() => {
 });
 
 const playtimeText = computed(() => formatPlaytime(props.player.playtimeHours));
+const playtimeTitle = computed(() => {
+  const hours = props.player.playtimeHours;
+  if (typeof hours !== "number" || !Number.isFinite(hours) || hours === 0) return "Steam 时长未公开";
+  return `Steam 游戏时长: ${hours.toFixed(1)}h`;
+});
 
 const secondaryIdentityText = computed(() => {
   const raw: any = props.player.raw ?? {};
@@ -115,7 +120,7 @@ const secondaryIdentityText = computed(() => {
   const steamId = String(props.player.steamId ?? "").trim();
   if (steamId) return steamId;
 
-  return "未知 Steam 名";
+  return "";
 });
 
 const kills = computed(() => normalizeStat(props.player.combatStats?.kills));

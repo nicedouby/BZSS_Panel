@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <aside class="match-feed-panel">
     <section class="match-feed-card match-feed-card-chat">
       <header class="match-chat-header">
@@ -741,10 +741,10 @@ function buildWebSocketUrl(path: string) {
   flex: 0 0 auto;
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  align-items: flex-start;
-  padding: 10px 12px 8px;
-  border-bottom: 1px solid rgba(130, 154, 180, 0.16);
+  gap: 10px;
+  align-items: center;
+  padding: 7px 11px 6px;
+  border-bottom: 1px solid rgba(130, 154, 180, 0.14);
   background: rgba(8, 12, 18, 0.62);
 }
 
@@ -760,16 +760,15 @@ function buildWebSocketUrl(path: string) {
 }
 
 .match-chat-title {
-  margin: 2px 0 0;
-  font-size: 16px;
+  margin: 1px 0 0;
+  font-size: 14px;
+  font-weight: 700;
   line-height: 1.2;
   color: var(--color-text-primary);
 }
 
 .match-chat-subtitle {
-  margin: 4px 0 0;
-  font-size: 11px;
-  color: var(--color-text-muted);
+  display: none;
 }
 
 .match-chat-status-group,
@@ -802,23 +801,24 @@ function buildWebSocketUrl(path: string) {
   flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px 10px;
-  border-bottom: 1px solid rgba(130, 154, 180, 0.12);
+  gap: 4px;
+  padding: 5px 9px;
+  border-bottom: 1px solid rgba(130, 154, 180, 0.1);
 }
 
 .match-chat-filter {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 28px;
-  padding: 0 10px;
+  gap: 5px;
+  min-height: 22px;
+  padding: 0 8px;
   border-radius: 999px;
-  border: 1px solid rgba(130, 154, 180, 0.22);
-  background: rgba(19, 26, 37, 0.88);
-  color: var(--color-text-secondary);
+  border: 1px solid rgba(130, 154, 180, 0.18);
+  background: rgba(19, 26, 37, 0.7);
+  color: var(--color-text-muted);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
+  transition: all 0.12s ease;
 }
 
 .match-chat-filter.active {
@@ -862,13 +862,13 @@ function buildWebSocketUrl(path: string) {
 }
 
 .match-chat-filter-count {
-  min-width: 18px;
-  padding: 0 5px;
+  min-width: 16px;
+  padding: 0 4px;
   border-radius: 999px;
   text-align: center;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--color-text-muted);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .match-chat-list {
@@ -876,11 +876,28 @@ function buildWebSocketUrl(path: string) {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 8px 10px 10px;
+  padding: 6px 8px 8px;
   display: grid;
-  gap: 8px;
+  gap: 5px;
   align-content: start;
   align-items: start;
+}
+
+.match-chat-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.match-chat-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.match-chat-list::-webkit-scrollbar-thumb {
+  border-radius: 2px;
+  background: rgba(130, 154, 180, 0.2);
+}
+
+.match-chat-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(130, 154, 180, 0.35);
 }
 
 .match-chat-empty {
@@ -894,20 +911,25 @@ function buildWebSocketUrl(path: string) {
 
 .match-chat-row {
   display: grid;
-  gap: 5px;
-  padding: 8px 10px;
-  border-radius: 12px;
-  border: 1px solid rgba(130, 154, 180, 0.14);
-  background: rgba(255, 255, 255, 0.03);
+  gap: 3px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(130, 154, 180, 0.12);
+  background: rgba(255, 255, 255, 0.025);
   align-self: start;
   overflow: hidden;
+  transition: background-color 0.12s ease;
+}
+
+.match-chat-row:hover {
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .match-chat-row-head,
 .match-xm-log-row-head {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 5px;
   align-items: baseline;
   min-width: 0;
 }
@@ -927,14 +949,14 @@ function buildWebSocketUrl(path: string) {
 .match-chat-player {
   min-width: 0;
   color: var(--color-text-primary);
-  font-weight: 500;
+  font-weight: 600;
   font-size: 11px;
 }
 
 .match-chat-message-inline {
   min-width: 0;
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.35;
   word-break: break-word;
   white-space: pre-wrap;
@@ -945,9 +967,9 @@ function buildWebSocketUrl(path: string) {
 .match-chat-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   color: var(--color-text-muted);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .match-chat-row.channel-all {
@@ -1000,23 +1022,24 @@ function buildWebSocketUrl(path: string) {
 
 .match-xm-log-header {
   flex: 0 0 auto;
-  padding: 13px 14px 10px;
-  border-bottom: 1px solid rgba(250, 204, 21, 0.14);
-  display: grid;
-  gap: 6px;
+  padding: 7px 11px 6px;
+  border-bottom: 1px solid rgba(250, 204, 21, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .match-xm-log-title {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
   letter-spacing: 0.06em;
   color: #fef08a;
   text-transform: uppercase;
 }
 
 .match-xm-log-subtitle {
-  font-size: 11px;
-  color: var(--color-text-muted);
+  display: none;
 }
 
 .match-xm-log-list {
@@ -1024,10 +1047,23 @@ function buildWebSocketUrl(path: string) {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 12px 14px 14px;
+  padding: 8px 10px 10px;
   display: grid;
-  gap: 10px;
+  gap: 7px;
   align-content: start;
+}
+
+.match-xm-log-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.match-xm-log-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.match-xm-log-list::-webkit-scrollbar-thumb {
+  border-radius: 2px;
+  background: rgba(250, 204, 21, 0.2);
 }
 
 .match-xm-log-empty,
@@ -1051,13 +1087,18 @@ function buildWebSocketUrl(path: string) {
 
 .match-xm-log-row {
   display: grid;
-  gap: 7px;
-  padding: 12px 13px;
-  border-radius: 13px;
-  border: 1px solid rgba(250, 204, 21, 0.24);
-  background: rgba(250, 204, 21, 0.08);
+  gap: 5px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(250, 204, 21, 0.2);
+  background: rgba(250, 204, 21, 0.06);
   cursor: pointer;
   overflow: hidden;
+  transition: background-color 0.12s ease;
+}
+
+.match-xm-log-row:hover {
+  background: rgba(250, 204, 21, 0.1);
 }
 
 .match-xm-log-message {

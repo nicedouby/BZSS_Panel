@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <Teleport to="body">
     <Transition :name="transitionName">
       <div v-if="open && props.player" :class="rootClass" @click.self="close">
@@ -762,21 +762,23 @@ onUnmounted(() => {
   width: min(480px, calc(100vw - 24px));
   max-height: calc(100vh - 24px);
   overflow: hidden;
-  border-radius: 18px;
+  border-radius: 22px;
   left: 12px;
   top: 12px;
   right: auto;
   bottom: auto;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.01)), rgba(255, 255, 255, 0.006)),
+    linear-gradient(145deg, rgba(55, 200, 255, 0.06), rgba(168, 85, 247, 0.04)),
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.025)), rgba(255, 255, 255, 0.008)),
     var(--color-bg-panel);
-  border: 1px solid var(--color-border-highlight);
+  border: 1px solid rgba(140, 160, 200, 0.28);
   display: grid;
   grid-template-rows: auto 1fr;
   box-shadow:
-    0 24px 72px rgba(0, 0, 0, 0.38),
-    0 0 0 1px rgba(255, 255, 255, 0.02) inset;
-  backdrop-filter: blur(18px);
+    0 32px 80px rgba(0, 0, 0, 0.52),
+    0 8px 24px rgba(0, 0, 0, 0.32),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  backdrop-filter: blur(28px) saturate(1.4);
 }
 
 .drawer-enter-active,
@@ -806,59 +808,67 @@ onUnmounted(() => {
 .drawer-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--spacing-md);
-  padding: var(--spacing-lg);
-  border-bottom: 1px solid var(--color-border-default);
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 12px var(--spacing-md) 11px;
+  border-bottom: 1px solid var(--color-border-soft);
   flex-shrink: 0;
-  background: var(--color-bg-elevated);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)),
+    var(--color-bg-elevated);
 }
 
 .drawer-header-content {
   display: grid;
-  gap: 8px;
+  gap: 5px;
   min-width: 0;
   flex: 1;
 }
 
 .drawer-player-name {
   margin: 0;
-  font-size: var(--font-size-xl);
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 800;
   color: var(--color-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  letter-spacing: -0.01em;
 }
 
 .drawer-header-badges {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
   flex-wrap: wrap;
 }
 
 .drawer-close-button {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--color-border-soft);
   color: var(--color-text-muted);
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   flex-shrink: 0;
+  font-size: 13px;
+  display: grid;
+  place-items: center;
+  transition: all 0.14s ease;
 }
 
 .drawer-close-button:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-text-primary);
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
 }
 
 .drawer-body {
-  padding: var(--spacing-lg);
+  padding: 12px 14px;
   overflow-y: auto;
   display: grid;
-  gap: var(--spacing-lg);
+  gap: 10px;
   overscroll-behavior: contain;
 }
 
@@ -867,34 +877,31 @@ onUnmounted(() => {
   background: rgba(251, 191, 36, 0.08);
   color: #f5d37a;
   border-radius: var(--radius-md);
-  padding: 10px 12px;
-  font-size: var(--font-size-sm);
+  padding: 8px 10px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
 .detail-section {
   display: grid;
-  gap: var(--spacing-sm);
-  padding: 16px;
+  gap: 8px;
+  padding: 12px;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border-soft);
   background: var(--color-bg-card);
 }
 
 .drawer-body::-webkit-scrollbar {
-  width: 10px;
+  width: 5px;
 }
 
 .drawer-body::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  border: 2px solid transparent;
-  background: rgba(148, 163, 184, 0.28);
-  background-clip: content-box;
+  background: rgba(148, 163, 184, 0.22);
 }
 
 .drawer-body::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.42);
-  background-clip: content-box;
+  background: rgba(148, 163, 184, 0.38);
 }
 
 /* 1. IDENTITY HERO */
@@ -928,27 +935,31 @@ onUnmounted(() => {
 .stats-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-top: 4px;
+  gap: 10px;
+  margin-top: 2px;
 }
 
 .combat-card {
-  background: linear-gradient(180deg, rgba(96, 165, 250, 0.08), rgba(255, 255, 255, 0.03));
+  background: linear-gradient(170deg, rgba(96, 165, 250, 0.07), rgba(168, 85, 247, 0.04), rgba(255, 255, 255, 0.02));
+  border-color: rgba(96, 165, 250, 0.15);
 }
 
 .combat-stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 8px;
 }
 
 .combat-stat {
   position: relative;
   overflow: hidden;
-  padding: 12px 12px 11px;
-  border-radius: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.45), rgba(15, 23, 42, 0.3));
+  padding: 10px 10px 9px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.4), rgba(15, 23, 42, 0.25));
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .combat-stat::before {
@@ -956,70 +967,74 @@ onUnmounted(() => {
   position: absolute;
   inset: 0 auto 0 0;
   width: 3px;
-  border-radius: 14px 0 0 14px;
+  border-radius: 12px 0 0 12px;
   background: var(--combat-accent, rgba(148, 163, 184, 0.5));
 }
 
 .combat-stat--downs {
   --combat-accent: #60a5fa;
-  border-color: rgba(96, 165, 250, 0.22);
-  background: linear-gradient(180deg, rgba(96, 165, 250, 0.11), rgba(15, 23, 42, 0.32));
+  border-color: rgba(96, 165, 250, 0.2);
+  background: linear-gradient(160deg, rgba(96, 165, 250, 0.1), rgba(15, 23, 42, 0.28));
 }
 
 .combat-stat--kills {
   --combat-accent: #f472b6;
-  border-color: rgba(244, 114, 182, 0.22);
-  background: linear-gradient(180deg, rgba(244, 114, 182, 0.11), rgba(15, 23, 42, 0.32));
+  border-color: rgba(244, 114, 182, 0.2);
+  background: linear-gradient(160deg, rgba(244, 114, 182, 0.1), rgba(15, 23, 42, 0.28));
 }
 
 .combat-stat--deaths {
   --combat-accent: #f59e0b;
-  border-color: rgba(245, 158, 11, 0.22);
-  background: linear-gradient(180deg, rgba(245, 158, 11, 0.11), rgba(15, 23, 42, 0.32));
+  border-color: rgba(245, 158, 11, 0.2);
+  background: linear-gradient(160deg, rgba(245, 158, 11, 0.1), rgba(15, 23, 42, 0.28));
 }
 
 .combat-stat--tk {
   --combat-accent: #fb7185;
-  border-color: rgba(251, 113, 133, 0.24);
-  background: linear-gradient(180deg, rgba(127, 29, 29, 0.36), rgba(15, 23, 42, 0.32));
+  border-color: rgba(251, 113, 133, 0.22);
+  background: linear-gradient(160deg, rgba(127, 29, 29, 0.3), rgba(15, 23, 42, 0.28));
 }
 
 .combat-stat--revives {
   --combat-accent: #34d399;
-  border-color: rgba(52, 211, 153, 0.22);
-  background: linear-gradient(180deg, rgba(52, 211, 153, 0.11), rgba(15, 23, 42, 0.32));
+  border-color: rgba(52, 211, 153, 0.2);
+  background: linear-gradient(160deg, rgba(52, 211, 153, 0.1), rgba(15, 23, 42, 0.28));
 }
 
 .combat-stats-label {
-  margin-top: 4px;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
+  margin-top: 2px;
+  color: var(--color-text-muted);
+  font-size: 10px;
   line-height: 1.4;
 }
 
 .stat-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .stat-label {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
   text-transform: uppercase;
   color: var(--combat-accent, var(--color-text-muted));
-  opacity: 0.85;
-  letter-spacing: 0.05em;
+  opacity: 0.8;
+  letter-spacing: 0.06em;
 }
 
 .stat-value {
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 700;
   color: var(--combat-accent, var(--color-text-primary));
 }
 
 .combat-stat-value {
+  font-size: 22px;
+  font-weight: 900;
   font-variant-numeric: tabular-nums;
-  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
 }
 
 .stat-value.team1 { color: var(--color-team1-primary); }
@@ -1043,20 +1058,22 @@ onUnmounted(() => {
 
 /* 3. ACTION CENTER */
 .action-center {
-  gap: 20px;
+  gap: 14px;
 }
 
 .action-group {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .group-label {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   color: var(--color-text-muted);
-  opacity: 0.6;
-  margin-bottom: 2px;
+  opacity: 0.7;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 1px;
 }
 
 .playtime-summary {

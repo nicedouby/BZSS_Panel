@@ -892,8 +892,8 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 
 .match-state-content {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 10px;
   min-height: 0;
   height: 100%;
   overflow: hidden;
@@ -912,7 +912,7 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 .match-chat-column {
   min-width: 0;
   min-height: 0;
-  height: clamp(760px, 84vh, 1080px);
+  height: clamp(700px, 84vh, 1080px);
   align-self: start;
 }
 
@@ -924,9 +924,9 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 
 .playtime-refresh-card {
   display: grid;
-  gap: 14px;
-  margin: 10px var(--spacing-lg) 0;
-  padding: 14px 16px;
+  gap: 10px;
+  margin: 8px var(--spacing-lg) 0;
+  padding: 10px 14px;
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-xl);
   background:
@@ -946,7 +946,7 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 }
 
 .playtime-refresh-title {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--color-text-primary);
 }
@@ -1095,8 +1095,8 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 .squad-main-content {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: clamp(12px, 1vw, 18px);
-  padding: clamp(12px, 1vw, 18px);
+  gap: clamp(10px, 1vw, 16px);
+  padding: clamp(10px, 1vw, 16px);
   min-height: 0;
   height: 100%;
   overflow: hidden;
@@ -1114,7 +1114,7 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
   }
 
   .match-chat-column {
-    height: 820px;
+    height: 760px;
   }
 }
 </style>

@@ -5,32 +5,38 @@
   >
     <header class="squad-header" @click.stop="$emit('select-squad', squad)">
       <div class="squad-header-main">
+        <!-- 标题行：ID + 名称 + 徽章 + 人数 + 锁定状态 -->
         <div class="squad-title-row">
           <span v-if="squad.squadId != null" class="squad-id-badge">#{{ squad.squadId }}</span>
           <strong class="squad-name">{{ squad.squadName }}</strong>
-          <StatusBadge class="squad-nature-badge" :tone="natureTone(squad.squadNature)">
-            {{ squad.squadNatureLabel }}
-          </StatusBadge>
-          <StatusBadge class="squad-type-badge" :tone="vehicleTone(squad.squadVehicleClass)">
-            {{ squad.squadVehicleClassLabel || "其他" }}
-          </StatusBadge>
+          <span class="squad-badges-group">
+            <StatusBadge class="squad-nature-badge" :tone="natureTone(squad.squadNature)">
+              {{ squad.squadNatureLabel }}
+            </StatusBadge>
+            <StatusBadge class="squad-type-badge" :tone="vehicleTone(squad.squadVehicleClass)">
+              {{ squad.squadVehicleClassLabel || "其他" }}
+            </StatusBadge>
+          </span>
           <span class="squad-member-count">{{ squad.memberCount }}/{{ squad.maxMembers }}</span>
           <StatusBadge class="squad-status-badge" :tone="squad.isLocked ? 'warn' : 'idle'">
             {{ squad.isLocked ? t("common.locked") : t("common.open") }}
           </StatusBadge>
         </div>
 
+        <!-- 元信息行：均时 + 创建者 + 时间 -->
         <div class="squad-meta-row">
-          <span class="squad-meta-summary">{{ squadAveragePlaytimeText }}</span>
-          <span v-if="squad.creatorName" class="squad-meta-creator">by {{ squad.creatorName }}</span>
+          <span class="squad-meta-playtime">{{ squadAveragePlaytimeText }}</span>
+          <span v-if="squad.creatorName || squad.createdAtLabel" class="squad-meta-right">
+            <span v-if="squad.creatorName" class="squad-meta-creator">{{ squad.creatorName }}</span>
+            <span v-if="squad.createdAtLabel" class="squad-created-time">
+              {{ squad.createdDisplayText || squad.createdAtLabel }}
+              <em v-if="squad.sourceLabel">·{{ squad.sourceLabel }}</em>
+            </span>
+          </span>
         </div>
-
-        <span v-if="squad.createdAtLabel" class="squad-created-time">
-          {{ squad.createdDisplayText || squad.createdAtLabel }}
-          <em v-if="squad.sourceLabel">路 {{ squad.sourceLabel }}</em>
-        </span>
       </div>
 
+      <!-- 警告芯片行 -->
       <div v-if="squadWarnings.length > 0" class="squad-warning-row">
         <span
           v-for="warning in squadWarnings"
@@ -103,16 +109,16 @@ const hasSelectedPlayer = computed(() => {
 });
 
 const squadAveragePlaytimeText = computed(() => {
-  if (props.squad.knownPlaytimePlayers <= 0) return "Steam time unavailable";
+  if (props.squad.knownPlaytimePlayers <= 0) return "时长未知";
 
-  const publicText = `Public ${props.squad.publicPlaytimePlayers}`;
-  const privateText = props.squad.privatePlaytimePlayers > 0 ? `Private ${props.squad.privatePlaytimePlayers}` : "";
+  const publicText = `公开 ${props.squad.publicPlaytimePlayers}`;
+  const privateText = props.squad.privatePlaytimePlayers > 0 ? `私密 ${props.squad.privatePlaytimePlayers}` : "";
 
   if (props.squad.averagePlaytimeHours == null) {
-    return `Avg -- 路 ${publicText}${privateText ? ` 路 ${privateText}` : ""}`;
+    return `Avg -- · ${publicText}${privateText ? ` · ${privateText}` : ""}`;
   }
 
-  return `Avg ${props.squad.averagePlaytimeHours}h 路 ${publicText}${privateText ? ` 路 ${privateText}` : ""}`;
+  return `Avg ${props.squad.averagePlaytimeHours}h · ${publicText}${privateText ? ` · ${privateText}` : ""}`;
 });
 
 const squadWarnings = computed(() => {
@@ -120,13 +126,13 @@ const squadWarnings = computed(() => {
   if (props.squad.state === "empty") items.push("Empty");
   if (props.squad.state === "no_leader") items.push("No leader");
   if (props.squad.isLocked) items.push("Locked");
-  if (props.squad.knownPlaytimePlayers <= 0) items.push("Steam time missing");
+  if (props.squad.knownPlaytimePlayers <= 0) items.push("No time data");
   if (props.squad.averagePlaytimeHours != null && props.squad.averagePlaytimeHours < 10) items.push("Low avg");
   return items.slice(0, 3);
 });
 
 function warningTone(label: string): "warn" | "idle" {
-  if (label === "Locked" || label === "No leader" || label === "Low avg" || label === "Steam time missing") {
+  if (label === "Locked" || label === "No leader" || label === "Low avg" || label === "No time data") {
     return "warn";
   }
   return "idle";
@@ -150,50 +156,57 @@ function handlePlayerSelect(payload: { player: PlayerRowViewModel; event: MouseE
 </script>
 
 <style scoped>
+/* ─── 卡片主体 ───────────────────────────────────────────────────────────── */
 .squad-card {
   flex: 0 0 auto;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.015)), rgba(255, 255, 255, 0.012)),
     var(--color-bg-card);
   border: 1px solid var(--color-border-default);
-  border-radius: 9px;
+  border-radius: 10px;
   overflow: hidden;
   box-shadow: var(--shadow-md);
-  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease, transform 0.14s ease;
 }
 
 .squad-card:hover {
   border-color: var(--color-border-highlight);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.025)), rgba(255, 255, 255, 0.018)),
-    var(--color-bg-elevated);
+  transform: translateY(-1px);
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.38),
+    0 0 0 1px rgba(96, 165, 250, 0.1) inset;
 }
 
 .squad-card.selected {
   border-color: var(--color-status-info);
-  box-shadow: inset 0 0 0 1px var(--color-status-info), var(--shadow-md);
+  box-shadow:
+    inset 0 0 0 1px var(--color-status-info),
+    0 0 12px rgba(96, 165, 250, 0.12),
+    var(--shadow-md);
 }
 
+/* 左侧团队色彩条 */
 .squad-card.team1-context {
-  border-left: 4px solid var(--color-team1-primary);
+  border-left: 3px solid var(--color-team1-primary);
 }
 
 .squad-card.team2-context {
-  border-left: 4px solid var(--color-team2-primary);
+  border-left: 3px solid var(--color-team2-primary);
 }
 
+/* ─── 卡片头部 ───────────────────────────────────────────────────────────── */
 .squad-header {
   display: grid;
-  gap: 4px;
-  padding: 7px 10px 8px;
+  gap: 3px;
+  padding: 6px 9px 7px;
   border-bottom: 1px solid var(--color-border-soft);
   background: rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.008));
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color 0.14s ease;
 }
 
 .squad-header:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .squad-header-main {
@@ -202,109 +215,122 @@ function handlePlayerSelect(payload: { player: PlayerRowViewModel; event: MouseE
   min-width: 0;
 }
 
+/* ─── 标题行 ─────────────────────────────────────────────────────────────── */
 .squad-title-row {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: 4px;
   min-width: 0;
   flex-wrap: wrap;
   line-height: 1;
-}
-
-.squad-name {
-  font-size: 13px;
-  font-weight: 800;
-  color: var(--color-text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.squad-nature-badge,
-.squad-type-badge {
-  min-height: 20px;
-  padding-inline: 7px;
-  font-size: 11px;
 }
 
 .squad-id-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 24px;
-  height: 18px;
-  padding: 0 6px;
+  min-width: 22px;
+  height: 17px;
+  padding: 0 5px;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 900;
   color: #fff;
   background-color: var(--color-status-info);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.24);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
+  flex: 0 0 auto;
 }
 
 .team1-context .squad-id-badge {
   background-color: var(--color-team1-primary);
+  box-shadow: 0 1px 4px rgba(55, 200, 255, 0.35);
 }
 
 .team2-context .squad-id-badge {
   background-color: var(--color-team2-primary);
+  box-shadow: 0 1px 4px rgba(255, 155, 69, 0.35);
+}
+
+.squad-name {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.squad-badges-group {
+  display: inline-flex;
+  gap: 3px;
+  flex: 0 0 auto;
+}
+
+.squad-nature-badge,
+.squad-type-badge {
+  min-height: 18px;
+  padding-inline: 6px;
+  font-size: 10px;
 }
 
 .squad-member-count {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--color-text-secondary);
   font-weight: 700;
-  padding: 2px 6px;
+  padding: 1px 5px;
   border-radius: var(--radius-full);
-  background: rgba(255, 255, 255, 0.045);
+  background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--color-border-soft);
+  flex: 0 0 auto;
 }
 
+.squad-status-badge {
+  min-height: 18px;
+  padding-inline: 6px;
+  font-size: 10px;
+  flex: 0 0 auto;
+}
+
+/* ─── 元信息行 ───────────────────────────────────────────────────────────── */
 .squad-meta-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   line-height: 1.1;
 }
 
-.squad-meta-summary {
+.squad-meta-playtime {
   min-width: 0;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: 10px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.squad-status-badge {
-  min-height: 20px;
-  padding-inline: 7px;
-  font-size: 11px;
-}
-
-.squad-status-badge :deep(.badge) {
-  min-height: 20px;
-  padding: 1px 7px;
-  font-size: 11px;
+.squad-meta-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
 }
 
 .squad-meta-creator {
   color: var(--color-text-muted);
-  flex: 0 0 auto;
-  font-size: 10px;
+  font-size: 9px;
   white-space: nowrap;
 }
 
 .squad-created-time {
   display: inline-flex;
-  gap: 4px;
+  gap: 3px;
   align-items: center;
   color: var(--color-text-muted);
-  font-size: 10px;
-  line-height: 1.1;
+  font-size: 9px;
   white-space: nowrap;
 }
 
@@ -313,53 +339,51 @@ function handlePlayerSelect(payload: { player: PlayerRowViewModel; event: MouseE
   color: var(--color-text-secondary);
 }
 
+/* ─── 警告芯片 ───────────────────────────────────────────────────────────── */
 .squad-warning-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  justify-content: flex-start;
+  gap: 3px;
+  margin-top: 2px;
 }
 
 .squad-warning-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 18px;
-  padding: 1px 6px;
+  min-height: 17px;
+  padding: 0 6px;
   border-radius: var(--radius-full);
-  font-size: 10px;
+  font-size: 9px;
+  font-weight: 600;
   border: 1px solid var(--color-border-soft);
-  color: var(--color-text-secondary);
+  color: var(--color-text-muted);
   background: rgba(255, 255, 255, 0.02);
 }
 
 .squad-warning-chip.tone-warn {
-  color: var(--color-status-warning);
-  border-color: rgba(245, 158, 11, 0.22);
-  background: rgba(245, 158, 11, 0.08);
+  color: #fde68a;
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.09);
 }
 
+/* ─── 空小队 ─────────────────────────────────────────────────────────────── */
 .squad-empty {
-  padding: 10px 12px 12px;
+  padding: 8px 10px 10px;
   text-align: center;
 }
 
 .squad-empty-text {
   color: var(--color-text-muted);
-  font-size: 11px;
+  font-size: 10px;
 }
 
+/* ─── 无队长警告 ─────────────────────────────────────────────────────────── */
 .squad-warning {
-  padding: 8px 10px;
-  background-color: rgba(245, 158, 11, 0.08);
+  padding: 6px 9px;
+  background-color: rgba(245, 158, 11, 0.07);
   border-top: 1px solid var(--color-border-soft);
   color: var(--color-status-warning);
-  font-size: 11px;
-  border-left: 2px solid var(--color-status-warning);
-}
-
-@media (max-width: 1100px) {
-  .squad-header {
-    gap: 3px;
-  }
+  font-size: 10px;
+  border-left: 2px solid rgba(245, 158, 11, 0.6);
 }
 </style>

@@ -38,7 +38,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
   function enqueue(task) {
     const next = serial.then(task, task);
-    serial = next.catch(() => {});
+    serial = next.catch(() => { });
     return next;
   }
 
@@ -424,17 +424,17 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         approved: false,
         phase: "locked",
         phaseLabel: "0-20s no creation",
-        reasons: [`开局 ${runtimeConfig.noSquadCreationSeconds}秒内禁止创建小队。`],
+        reasons: [`开局 ${runtimeConfig.noSquadCreationSeconds}秒内禁止创建任何形式的小队。`],
       };
     }
 
     if (seconds < runtimeConfig.infantryOnlyUntilSeconds) {
-        const allowed = isAllowedInfantryName(record.squadName, runtimeConfig);
+      const allowed = isAllowedInfantryName(record.squadName, runtimeConfig);
       return {
         approved: allowed,
         phase: "infantry_only",
         phaseLabel: "20-50s infantry only",
-        reasons: allowed ? [] : ["当前区间仅允许默认步兵小队名和白名单队名。"],
+        reasons: allowed ? [] : ["当前区间仅允许步兵队创建。"],
       };
     }
 
@@ -940,7 +940,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     async stop() {
       for (const unsubscribe of unsubscribers.splice(0)) {
-        try { unsubscribe(); } catch {}
+        try { unsubscribe(); } catch { }
       }
     },
   };

@@ -1,14 +1,20 @@
 <template>
   <div class="squad-page-toolbar">
-    <div class="toolbar-observe">
-      <input
-        v-model="searchQuery"
-        type="text"
-        class="squad-search-input"
-        :placeholder="t('match.searchPlaceholder')"
-        @input="$emit('search', searchQuery)"
-      >
+    <!-- 单行工具栏：搜索 + 筛选 + 视角标签 + 操作按钮 全部在一行 -->
+    <div class="toolbar-row">
+      <!-- 搜索框 -->
+      <div class="search-wrapper">
+        <span class="search-icon" aria-hidden="true">⌕</span>
+        <input
+          v-model="searchQuery"
+          type="text"
+          class="squad-search-input"
+          :placeholder="t('match.searchPlaceholder')"
+          @input="$emit('search', searchQuery)"
+        >
+      </div>
 
+      <!-- 筛选芯片 -->
       <div class="filter-chips" aria-label="Quick filters">
         <button
           v-for="filter in filters"
@@ -23,12 +29,22 @@
         </button>
       </div>
 
+      <!-- 视角标签（有则显示） -->
       <div v-if="showViewerPerspective" class="viewer-perspective-chip">
         {{ viewerPerspectiveText }}
       </div>
-    </div>
 
-    <div class="toolbar-actions">
+      <!-- 弹性占位 -->
+      <div class="toolbar-spacer" />
+
+      <!-- 时间戳元信息 -->
+      <div v-if="serverStatusUpdatedAt || playersUpdatedAt" class="toolbar-timestamps">
+        <span v-if="playersUpdatedAt" class="ts-badge" :title="`玩家数据更新时间: ${formatTimestamp(playersUpdatedAt)}`">
+          {{ formatTimestampShort(playersUpdatedAt) }}
+        </span>
+      </div>
+
+      <!-- 操作按钮 -->
       <div class="refresh-controls">
         <button
           type="button"
@@ -42,6 +58,7 @@
           type="button"
           class="refresh-button secondary"
           :disabled="!canRefresh || isRefreshing || refreshingPlaytime"
+          :title="'智能刷新 Steam 时长（跳过 30 分钟内已刷新的玩家）'"
           @click="$emit('refresh-playtime')"
         >
           智能刷新时长
@@ -50,9 +67,10 @@
           type="button"
           class="refresh-button danger"
           :disabled="!canRefresh || isRefreshing || refreshingPlaytime"
+          :title="'强制刷新全部在线玩家的 Steam 时长'"
           @click="$emit('refresh-playtime-force')"
         >
-          强制刷新全部时长
+          强制刷新
         </button>
         <div ref="refreshMenuRoot" class="refresh-dropdown">
           <button
@@ -110,6 +128,9 @@ const props = defineProps<{
   refreshingPlaytime?: boolean;
   viewerPerspectiveText?: string;
   showViewerPerspective?: boolean;
+  serverStatusUpdatedAt?: number;
+  playersUpdatedAt?: number;
+  squadsUpdatedAt?: number;
 }>();
 
 const emit = defineEmits<{
@@ -190,27 +211,40 @@ function runRefresh(type: RefreshType) {
   emit("refresh", type);
 }
 
+function formatTimestamp(ms: number | undefined): string {
+  if (!ms) return "--";
+  return new Date(ms).toLocaleTimeString("zh-CN", { hour12: false });
+}
+
+function formatTimestampShort(ms: number | undefined): string {
+  if (!ms) return "--";
+  return new Date(ms).toLocaleTimeString("zh-CN", {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 onBeforeUnmount(() => {
   removeWindowListeners();
 });
 </script>
 
 <style scoped>
+/* ─── 单行工具栏容器 ─────────────────────────────────────────────────────── */
 .squad-page-toolbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
-  align-items: stretch;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.01)),
     var(--color-bg-card);
   border-bottom: 1px solid var(--color-border-default);
-  padding: 12px var(--spacing-lg) 14px;
+  padding: 8px var(--spacing-lg);
   flex-shrink: 0;
   min-width: 0;
+  backdrop-filter: blur(12px);
 }
 
-.toolbar-observe {
+.toolbar-row {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -218,127 +252,197 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 
+/* ─── 搜索框 ──────────────────────────────────────────────────────────────── */
+.search-wrapper {
+  position: relative;
+  flex: 0 0 auto;
+  width: min(300px, 30vw);
+  min-width: 180px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 15px;
+  color: var(--color-text-muted);
+  pointer-events: none;
+  line-height: 1;
+  opacity: 0.7;
+}
+
 .squad-search-input {
-  width: min(400px, 100%);
-  min-width: 220px;
+  width: 100%;
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border-default);
   color: var(--color-text-primary);
-  padding: var(--spacing-sm) var(--spacing-md);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-base);
-  transition: all 0.2s ease;
+  padding: 5px 10px 5px 28px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  transition: all 0.18s ease;
+  height: 30px;
 }
 
 .squad-search-input:focus {
   outline: none;
   border-color: var(--color-status-info);
   background: var(--color-bg-elevated);
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.12);
 }
 
 .squad-search-input::placeholder {
   color: var(--color-text-muted);
+  font-size: 11px;
 }
 
+/* ─── 筛选芯片 ───────────────────────────────────────────────────────────── */
 .filter-chips {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   align-items: center;
   flex-wrap: wrap;
 }
 
-.filter-chip,
-.viewer-perspective-chip {
-  height: 30px;
-  padding: 0 10px;
+.filter-chip {
+  height: 26px;
+  padding: 0 9px;
   border-radius: var(--radius-full);
   border: 1px solid var(--color-border-soft);
-  background: rgba(255, 255, 255, 0.025);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--color-text-muted);
+  font-size: 11px;
   white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.14s ease;
+  font-weight: 500;
+}
+
+.filter-chip:hover {
+  border-color: var(--color-border-default);
+  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .filter-chip.active {
-  color: var(--color-text-primary);
-  border-color: var(--color-status-info);
+  color: #bfdbfe;
+  border-color: rgba(96, 165, 250, 0.45);
   background: rgba(96, 165, 250, 0.12);
+  font-weight: 700;
 }
 
+/* ─── 视角标签 ───────────────────────────────────────────────────────────── */
 .viewer-perspective-chip {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-team1-border);
+  background: rgba(55, 200, 255, 0.07);
+  color: var(--color-team1-primary);
+  font-size: 10px;
   display: inline-flex;
   align-items: center;
-  color: var(--color-text-primary);
-  border-color: var(--color-team1-border);
-  background: rgba(55, 200, 255, 0.08);
+  white-space: nowrap;
+  font-weight: 600;
 }
 
-.toolbar-actions {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--spacing-sm);
+/* ─── 弹性占位 ───────────────────────────────────────────────────────────── */
+.toolbar-spacer {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
+/* ─── 时间戳元信息 ───────────────────────────────────────────────────────── */
+.toolbar-timestamps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.ts-badge {
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border-soft);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  cursor: default;
+}
+
+/* ─── 刷新操作区 ─────────────────────────────────────────────────────────── */
 .refresh-controls {
   display: inline-flex;
-  gap: 8px;
+  gap: 5px;
   align-items: center;
-  flex-wrap: wrap;
-  min-width: 0;
-  justify-content: flex-start;
+  flex: 0 0 auto;
 }
 
 .refresh-button {
-  padding: 6px 10px;
+  padding: 4px 10px;
+  height: 28px;
   border: 1px solid var(--color-border-default);
   background: var(--color-bg-elevated);
   color: var(--color-text-secondary);
   border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
+  font-size: 11px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.14s ease;
   font-weight: 500;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .refresh-button.primary {
-  min-width: 112px;
+  min-width: 96px;
+  background: rgba(96, 165, 250, 0.08);
+  color: #93c5fd;
+  border-color: rgba(96, 165, 250, 0.28);
+  font-weight: 600;
+}
+
+.refresh-button.primary:hover:not(:disabled) {
+  background: rgba(96, 165, 250, 0.16);
+  border-color: rgba(96, 165, 250, 0.5);
+  color: #bfdbfe;
 }
 
 .refresh-button.secondary {
-  color: var(--color-text-muted);
-}
-
-.refresh-button.secondary {
-  background: rgba(55, 200, 255, 0.08);
+  background: rgba(55, 200, 255, 0.06);
   color: var(--color-team1-primary);
-  border-color: rgba(55, 200, 255, 0.22);
-}
-
-.refresh-button.danger {
-  background: rgba(248, 113, 113, 0.08);
-  color: #fda4af;
-  border-color: rgba(248, 113, 113, 0.26);
+  border-color: rgba(55, 200, 255, 0.2);
 }
 
 .refresh-button.secondary:hover:not(:disabled) {
-  background: rgba(55, 200, 255, 0.14);
+  background: rgba(55, 200, 255, 0.12);
+  border-color: rgba(55, 200, 255, 0.38);
+}
+
+.refresh-button.danger {
+  background: rgba(248, 113, 113, 0.06);
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.22);
 }
 
 .refresh-button.danger:hover:not(:disabled) {
-  background: rgba(248, 113, 113, 0.14);
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.4);
 }
 
 .refresh-button:hover:not(:disabled) {
   color: var(--color-text-primary);
-  border-color: var(--color-status-info);
 }
 
 .refresh-button:disabled {
   cursor: not-allowed;
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
 .refresh-dropdown {
@@ -348,20 +452,20 @@ onBeforeUnmount(() => {
 .refresh-menu-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
 }
 
 .refresh-caret {
   color: var(--color-text-muted);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .refresh-menu {
   position: absolute;
-  top: calc(100% + 8px);
+  top: calc(100% + 6px);
   right: 0;
-  min-width: 190px;
-  padding: 8px;
+  min-width: 170px;
+  padding: 6px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border-default);
   background:
@@ -369,7 +473,7 @@ onBeforeUnmount(() => {
     var(--color-bg-card);
   box-shadow: var(--shadow-lg);
   display: grid;
-  gap: 6px;
+  gap: 5px;
   z-index: 10;
 }
 
@@ -377,37 +481,55 @@ onBeforeUnmount(() => {
   width: 100%;
   justify-content: flex-start;
   text-align: left;
-  border: 1px solid var(--color-border-default);
-  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-soft);
+  background: rgba(255, 255, 255, 0.02);
   color: var(--color-text-secondary);
-  border-radius: var(--radius-md);
-  padding: 8px 10px;
-}
-
-.refresh-menu .menu-item.secondary {
-  color: var(--color-text-muted);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.12s ease;
 }
 
 .refresh-menu .menu-item:hover:not(:disabled) {
   color: var(--color-text-primary);
   border-color: var(--color-status-info);
+  background: rgba(96, 165, 250, 0.08);
 }
 
+/* ─── 响应式 ─────────────────────────────────────────────────────────────── */
 @media (max-width: 1180px) {
-  .toolbar-actions {
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
+  .toolbar-timestamps {
+    display: none;
   }
 
-  .refresh-controls {
-    grid-column: 1 / -1;
-    justify-content: space-between;
+  .search-wrapper {
+    width: min(240px, 28vw);
+    min-width: 160px;
   }
 }
 
+@media (max-width: 900px) {
+  .toolbar-row {
+    gap: 6px;
+  }
+
+  .refresh-button.danger {
+    display: none;
+  }
+
+  .search-wrapper {
+    width: 100%;
+    min-width: 0;
+    order: -1;
+    flex: 1 1 auto;
+  }
+}
+
+/* ─── 动画 ───────────────────────────────────────────────────────────────── */
 .menu-fade-enter-active,
 .menu-fade-leave-active {
-  transition: opacity 0.12s ease, transform 0.12s ease;
+  transition: opacity 0.1s ease, transform 0.1s ease;
 }
 
 .menu-fade-enter-from,

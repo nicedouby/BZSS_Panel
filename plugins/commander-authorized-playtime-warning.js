@@ -12,6 +12,11 @@ function normalizeId(value) {
   return text || "";
 }
 
+function isSameTeamSquadLeader(player, teamID) {
+  if (!player || !player.isLeader) return false;
+  return normalizeId(player.teamID) === normalizeId(teamID);
+}
+
 function formatHoursShort(gameSeconds) {
   const seconds = Math.max(0, Math.floor(Number(gameSeconds) || 0));
   if (!seconds) return "未知h";
@@ -100,8 +105,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     const all = playerState.getPlayerList(serverId) ?? [];
     const team = normalizeId(teamID);
-    if (!team) return all.filter((p) => Boolean(p?.isLeader));
-    return all.filter((p) => Boolean(p?.isLeader) && normalizeId(p?.teamID) === team);
+    if (!team) return [];
+    return all.filter((player) => isSameTeamSquadLeader(player, team));
   }
 
   async function warnSquadLeader(warnApi, recipient, message, event) {
@@ -196,7 +201,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       name: "指挥官任命-游戏时长提醒",
       kind: "plugin",
       version: "1.0.0",
-      description: "当检测到指挥官被任命/授权时，向全体队长发送指挥官游戏时长提醒。",
+      description: "当检测到指挥官被任命/授权时，仅向己方小队长发送指挥官游戏时长提醒。",
       configSchema: [
         {
           key: `plugins.${PLUGIN_ID}.enabled`,
