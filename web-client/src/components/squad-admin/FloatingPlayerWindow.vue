@@ -8,6 +8,7 @@
     :anchor-y="anchorY"
     :notice="notice"
     @close="$emit('close')"
+    @playtime-updated="$emit('playtime-updated')"
   />
 </template>
 
@@ -26,5 +27,6 @@ defineProps<{
 
 defineEmits<{
   (event: "close"): void;
+  (event: "playtime-updated"): void;
 }>();
 </script>

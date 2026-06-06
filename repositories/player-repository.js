@@ -13,6 +13,41 @@ function cleanId(value) {
   return text;
 }
 
+function normalizeSeconds(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.floor(numeric));
+}
+
+function optionalSeconds(value) {
+  if (value == null || String(value).trim() === "") return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return Math.max(0, Math.floor(numeric));
+}
+
+function resolveEffectiveGameSeconds(row) {
+  const override = optionalSeconds(row?.game_seconds_override ?? row?.gameSecondsOverride);
+  if (override != null) return override;
+  return normalizeSeconds(row?.game_seconds ?? row?.gameSeconds ?? row?.steam_game_seconds ?? row?.steamGameSeconds);
+}
+
+function mapPlayerPlaytimeRow(row) {
+  if (!row) return null;
+  const steamGameSeconds = normalizeSeconds(row.steam_game_seconds ?? row.steamGameSeconds ?? row.game_seconds ?? row.gameSeconds);
+  const gameSecondsOverride = optionalSeconds(row.game_seconds_override ?? row.gameSecondsOverride);
+  const gameSeconds = resolveEffectiveGameSeconds(row);
+  return {
+    ...row,
+    steam_game_seconds: steamGameSeconds,
+    steamGameSeconds,
+    game_seconds_override: gameSecondsOverride,
+    gameSecondsOverride,
+    game_seconds: gameSeconds,
+    gameSeconds,
+  };
+}
+
 function normalizeSearchTerms(query) {
   return String(query ?? "")
     .trim()
@@ -251,7 +286,8 @@ export class PlayerRepository {
 
     return this.db.all(
       `SELECT players.id, players.current_name, players.steam_id, players.eos_id, players.current_ip,
-              players.permission_group, players.game_seconds, players.server_seconds,
+              players.permission_group, players.steam_game_seconds, players.game_seconds,
+              players.game_seconds_override, players.server_seconds,
               players.commander_seconds, players.squad_leader_seconds, players.in_squad_seconds, players.warmup_seconds,
               players.updated_at
        FROM players
@@ -308,12 +344,13 @@ export class PlayerRepository {
     if (!ids.length) return [];
 
     const placeholders = ids.map(() => "?").join(", ");
-    return this.db.all(
-      `SELECT id, current_name, steam_id, eos_id, game_seconds, updated_at
+    const rows = await this.db.all(
+      `SELECT id, current_name, steam_id, eos_id, steam_game_seconds, game_seconds, game_seconds_override, updated_at
        FROM players
        WHERE steam_id IN (${placeholders})`,
       ...ids,
     );
+    return rows.map((row) => mapPlayerPlaytimeRow(row));
   }
 
   async listPlayersByIdentities({ steamIDs = [], eosIDs = [] } = {}) {
@@ -343,25 +380,57 @@ export class PlayerRepository {
 
     if (!clauses.length) return [];
 
-    return this.db.all(
-      `SELECT id, current_name, steam_id, eos_id, game_seconds, updated_at
+    const rows = await this.db.all(
+      `SELECT id, current_name, steam_id, eos_id, steam_game_seconds, game_seconds, game_seconds_override, updated_at
        FROM players
        WHERE ${clauses.join(" OR ")}`,
       ...params,
     );
+    return rows.map((row) => mapPlayerPlaytimeRow(row));
   }
 
   async updateGameDuration(playerId, gameSeconds) {
-    const normalizedSeconds = Math.max(0, Math.floor(Number(gameSeconds) || 0));
+    const normalizedSeconds = normalizeSeconds(gameSeconds);
+    const id = Number(playerId);
+    const existing = await this.getPlayerById(id);
+    if (!existing) return null;
+    const effectiveSeconds = optionalSeconds(existing.game_seconds_override) ?? normalizedSeconds;
+
     await this.db.run(
-      "UPDATE players SET game_seconds = ?, updated_at = ? WHERE id = ?",
+      `UPDATE players
+       SET steam_game_seconds = ?, game_seconds = ?, updated_at = ?
+       WHERE id = ?`,
       normalizedSeconds,
+      effectiveSeconds,
       now(),
-      Number(playerId),
+      id,
     );
 
-    const updated = await this.getPlayerById(playerId);
-    this.cache(updated);
+    const updated = mapPlayerPlaytimeRow(await this.getPlayerById(id));
+    this.cache(updated, existing);
+    return updated;
+  }
+
+  async setGameDurationOverride(playerId, gameSeconds) {
+    const id = Number(playerId);
+    const existing = await this.getPlayerById(id);
+    if (!existing) return null;
+
+    const overrideSeconds = gameSeconds == null ? null : normalizeSeconds(gameSeconds);
+    const effectiveSeconds = overrideSeconds ?? normalizeSeconds(existing.steam_game_seconds ?? existing.game_seconds ?? 0);
+
+    await this.db.run(
+      `UPDATE players
+       SET game_seconds_override = ?, game_seconds = ?, updated_at = ?
+       WHERE id = ?`,
+      overrideSeconds,
+      effectiveSeconds,
+      now(),
+      id,
+    );
+
+    const updated = mapPlayerPlaytimeRow(await this.getPlayerById(id));
+    this.cache(updated, existing);
     return updated;
   }
 
@@ -419,11 +488,13 @@ export class PlayerRepository {
     ]);
 
     return {
-      player,
+      player: mapPlayerPlaytimeRow(player),
       aliases,
       ips,
       summary: {
-        gameSeconds: Number(player.game_seconds ?? 0),
+        gameSeconds: resolveEffectiveGameSeconds(player),
+        steamGameSeconds: normalizeSeconds(player.steam_game_seconds ?? player.game_seconds ?? 0),
+        gameSecondsOverride: optionalSeconds(player.game_seconds_override),
         serverSeconds: Number(player.server_seconds ?? 0),
       },
     };
@@ -479,6 +550,7 @@ export class PlayerRepository {
 
     const topByPlaytime = await this.db.all(
       `SELECT id, current_name, steam_id, eos_id, game_seconds, server_seconds,
+              steam_game_seconds, game_seconds_override,
               commander_seconds, squad_leader_seconds, in_squad_seconds, warmup_seconds
        FROM players
        ORDER BY game_seconds DESC, server_seconds DESC, updated_at DESC
@@ -656,6 +728,8 @@ export class PlayerRepository {
           steamID: row.steam_id || null,
           eosID: row.eos_id || null,
           gameSeconds: Number(row.game_seconds || 0),
+          steamGameSeconds: Number(row.steam_game_seconds || 0),
+          gameSecondsOverride: row.game_seconds_override == null ? null : Number(row.game_seconds_override || 0),
           serverSeconds: Number(row.server_seconds || 0),
           commanderSeconds: Number(row.commander_seconds || 0),
           squadLeaderSeconds: Number(row.squad_leader_seconds || 0),

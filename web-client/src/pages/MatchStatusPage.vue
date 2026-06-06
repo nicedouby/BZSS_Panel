@@ -101,6 +101,7 @@
       :anchor-y="activePlayerWindow?.anchorY ?? null"
       :notice="activePlayerWindow?.notice ?? ''"
       @close="closePlayerDetail"
+      @playtime-updated="handlePlayerPlaytimeUpdated"
     />
 
     <SquadDetailDrawer
@@ -481,6 +482,36 @@ function handleDensityChange(mode: "comfortable" | "compact") {
 function closePlayerDetail() {
   pageState.selectedPlayerId = null;
   activePlayerWindow.value = null;
+}
+
+async function handlePlayerPlaytimeUpdated() {
+  try {
+    const refreshed = await playtimeQuery.refetch();
+    if (refreshed.data?.items) {
+      stablePlaytimes.value = {
+        ...stablePlaytimes.value,
+        ...refreshed.data.items,
+      };
+    }
+
+    if (!activePlayerWindow.value) return;
+
+    const currentId = activePlayerWindow.value.detail.playerId;
+    const player = findPlayerById(currentId);
+    if (!player) return;
+
+    activePlayerWindow.value = {
+      ...activePlayerWindow.value,
+      detail: buildPlayerDetailViewModel(player),
+      notice: "",
+    };
+  } catch (error) {
+    ui.pushToast({
+      title: t("common.error"),
+      message: renderApiError(error, t("common.error")),
+      tone: "error",
+    });
+  }
 }
 
 function buildPlayerDetailViewModel(player: PlayerRowViewModel): PlayerDetailViewModel {

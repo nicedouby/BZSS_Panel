@@ -39,6 +39,16 @@
                 <strong class="info-value">{{ formatSeconds(detail.summary?.gameSeconds ?? detail.player?.game_seconds ?? 0) }}</strong>
               </div>
               <div class="info-item">
+                <span class="info-label">Steam 原始时长</span>
+                <strong class="info-value">{{ formatSeconds(detail.summary?.steamGameSeconds ?? detail.player?.steam_game_seconds ?? 0) }}</strong>
+              </div>
+              <div class="info-item">
+                <span class="info-label">覆盖时长</span>
+                <strong class="info-value">
+                  {{ detail.summary?.gameSecondsOverride == null ? "未覆盖" : formatSeconds(detail.summary.gameSecondsOverride) }}
+                </strong>
+              </div>
+              <div class="info-item">
                 <span class="info-label">{{ t("database.serverTime") }}</span>
                 <strong class="info-value">{{ formatSeconds(detail.summary?.serverSeconds ?? detail.player?.server_seconds ?? 0) }}</strong>
               </div>

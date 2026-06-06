@@ -47,7 +47,9 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
           eosID: p.eos_id ?? "",
           ip: p.current_ip ?? "",
           permissionGroup: p.permission_group ?? "default",
+          steamGameSeconds: Number(p.steam_game_seconds ?? 0),
           gameSeconds: Number(p.game_seconds ?? 0),
+          gameSecondsOverride: p.game_seconds_override == null ? null : Number(p.game_seconds_override ?? 0),
           serverSeconds: Number(p.server_seconds ?? 0),
           commanderSeconds: Number(p.commander_seconds ?? 0),
           squadLeaderSeconds: Number(p.squad_leader_seconds ?? 0),
@@ -96,6 +98,10 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
 
     async updateGameDuration(playerId, gameSeconds) {
       return repo.updateGameDuration(playerId, gameSeconds);
+    },
+
+    async setGameDurationOverride(playerId, gameSeconds) {
+      return repo.setGameDurationOverride(playerId, gameSeconds);
     },
 
     async listPlayersWithSteamID(options = {}) {

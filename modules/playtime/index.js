@@ -68,6 +68,55 @@ function buildLookupResult({ steamID, appId, gameName, gameSeconds, found }) {
   };
 }
 
+function normalizeEffectiveGameSeconds(row) {
+  const override = row?.game_seconds_override ?? row?.gameSecondsOverride;
+  if (override != null && String(override).trim() !== "") {
+    const value = Number(override);
+    if (Number.isFinite(value)) return Math.max(0, Math.floor(value));
+  }
+
+  const seconds = row?.game_seconds ?? row?.gameSeconds ?? row?.steam_game_seconds ?? row?.steamGameSeconds;
+  const numeric = Number(seconds);
+  return Number.isFinite(numeric) ? Math.max(0, Math.floor(numeric)) : 0;
+}
+
+function normalizeSteamGameSeconds(row) {
+  const seconds = row?.steam_game_seconds ?? row?.steamGameSeconds ?? row?.game_seconds ?? row?.gameSeconds;
+  const numeric = Number(seconds);
+  return Number.isFinite(numeric) ? Math.max(0, Math.floor(numeric)) : 0;
+}
+
+function normalizePlaytimeRow(row) {
+  if (!row) return null;
+  const steamID = cleanText(row?.steam_id ?? row?.steamID);
+  const gameSeconds = normalizeEffectiveGameSeconds(row);
+  const steamGameSeconds = normalizeSteamGameSeconds(row);
+  const gameSecondsOverride = row?.game_seconds_override ?? row?.gameSecondsOverride;
+  const normalizedOverride = gameSecondsOverride == null || String(gameSecondsOverride).trim() === ""
+    ? null
+    : Math.max(0, Math.floor(Number(gameSecondsOverride) || 0));
+
+  return {
+    ...row,
+    steam_id: steamID,
+    steamID,
+    app_id: Number(row?.app_id ?? row?.appId ?? DEFAULT_APP_ID),
+    appId: Number(row?.app_id ?? row?.appId ?? DEFAULT_APP_ID),
+    game_name: String(row?.game_name ?? row?.gameName ?? "Squad"),
+    gameName: String(row?.game_name ?? row?.gameName ?? "Squad"),
+    game_seconds: gameSeconds,
+    gameSeconds,
+    steam_game_seconds: steamGameSeconds,
+    steamGameSeconds,
+    game_seconds_override: normalizedOverride,
+    gameSecondsOverride: normalizedOverride,
+    fetched_at: Number(row?.fetched_at ?? row?.fetchedAt ?? row?.updated_at ?? row?.updatedAt ?? 0) || null,
+    fetchedAt: Number(row?.fetched_at ?? row?.fetchedAt ?? row?.updated_at ?? row?.updatedAt ?? 0) || null,
+    last_seen_name: row?.last_seen_name ?? row?.lastSeenName ?? row?.current_name ?? row?.currentName ?? null,
+    lastSeenName: row?.last_seen_name ?? row?.lastSeenName ?? row?.current_name ?? row?.currentName ?? null,
+  };
+}
+
 class SteamGameDurationService {
   constructor({
     apiKey,
@@ -1159,7 +1208,15 @@ export function createPlaytimeModule({ core, modules, config, logger }) {
     },
 
     async getBySteamID(steamID) {
-      return repo.getBySteamID(steamID);
+      const normalizedSteamID = optionalSteamID(steamID);
+      if (!normalizedSteamID) return null;
+
+      const cached = await modules.playerDatabase?.getCachedPlayer?.({ steamID: normalizedSteamID });
+      if (cached) {
+        return normalizePlaytimeRow(cached);
+      }
+
+      return repo.getBySteamID(normalizedSteamID);
     },
 
     async listRecentLogs(options = {}) {
@@ -1168,24 +1225,30 @@ export function createPlaytimeModule({ core, modules, config, logger }) {
 
     async enrichPlayers(players = []) {
       const ids = players.map((player) => optionalSteamID(player?.steamID || player?.steam64 || player?.SteamID)).filter(Boolean);
-      const playtimes = await repo.getManyBySteamIDs(ids);
+      const playtimeRows = modules.playerDatabase?.listPlayersBySteamIDs
+        ? await modules.playerDatabase.listPlayersBySteamIDs(ids)
+        : await repo.getManyBySteamIDs(ids);
+      const playtimes = playtimeRows instanceof Map
+        ? playtimeRows
+        : new Map((Array.isArray(playtimeRows) ? playtimeRows : []).map((row) => [normalizePlaytimeRow(row)?.steam_id, normalizePlaytimeRow(row)]).filter(([steamID]) => Boolean(steamID)));
       return players.map((player) => {
         const steamID = optionalSteamID(player?.steamID || player?.steam64 || player?.SteamID);
         const playtime = steamID ? playtimes.get(steamID) : null;
         if (!playtime) return player;
-        const gameSeconds = Number(playtime.game_seconds || 0);
+        const normalized = normalizePlaytimeRow(playtime);
+        const gameSeconds = Number(normalized.game_seconds || 0);
         return {
           ...player,
           gameSeconds,
           gameHours: Number((gameSeconds / 3600).toFixed(2)),
           steamPlaytime: {
-            steamID: playtime.steam_id,
-            appId: Number(playtime.app_id || DEFAULT_APP_ID),
-            gameName: playtime.game_name || "Squad",
+            steamID: normalized.steam_id,
+            appId: Number(normalized.app_id || DEFAULT_APP_ID),
+            gameName: normalized.game_name || "Squad",
             gameSeconds,
             gameHours: Number((gameSeconds / 3600).toFixed(2)),
-            fetchedAt: Number(playtime.fetched_at || 0) || null,
-            lastSeenName: playtime.last_seen_name || null,
+            fetchedAt: Number(normalized.fetched_at || 0) || null,
+            lastSeenName: normalized.last_seen_name || null,
           },
         };
       });

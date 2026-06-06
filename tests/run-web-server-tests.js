@@ -381,6 +381,134 @@ async function testConsoleRconForbiddenMapsTo403() {
   }
 }
 
+async function testPlaytimeCacheReturnsEffectiveDuration() {
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin", role: "SuperAdmin", isSuperAdmin: true };
+        },
+      },
+    },
+    modules: {
+      playtime: {
+        async getBySteamID(steamID) {
+          assert.equal(steamID, "76561198000000001");
+          return {
+            steam_id: steamID,
+            app_id: 393380,
+            game_name: "Squad",
+            steam_game_seconds: 7200,
+            game_seconds_override: 10800,
+            game_seconds: 10800,
+            fetched_at: 123456,
+            last_seen_name: "Alpha",
+          };
+        },
+      },
+    },
+  });
+
+  const recorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/query/playtime-cache?steamIDs=76561198000000001",
+    headers: { host: "localhost" },
+    socket: {},
+  }, recorder.res);
+
+  assert.equal(recorder.state.status, 200);
+  const body = JSON.parse(recorder.state.body);
+  assert.equal(body.items["76561198000000001"].gameSeconds, 10800);
+  assert.equal(body.items["76561198000000001"].steamGameSeconds, 7200);
+  assert.equal(body.items["76561198000000001"].gameSecondsOverride, 10800);
+}
+
+async function testPlayerPlaytimeOverrideRouteRequiresSuperAdmin() {
+  const setCalls = [];
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "viewer", role: "Operator", permissions: [] };
+        },
+        hasEverything() {
+          return false;
+        },
+      },
+    },
+    modules: {
+      playerDatabase: {
+        async setGameDurationOverride(playerId, gameSeconds) {
+          setCalls.push({ playerId, gameSeconds });
+          return { id: playerId };
+        },
+      },
+    },
+  });
+
+  const recorder = createRecorder();
+  const req = Readable.from([JSON.stringify({ gameHours: 12.5 })]);
+  req.method = "PATCH";
+  req.url = "/api/db/players/7/playtime";
+  req.headers = { host: "localhost" };
+  req.socket = {};
+
+  await server.handleRequest(req, recorder.res);
+  assert.equal(recorder.state.status, 403);
+  assert.equal(setCalls.length, 0);
+}
+
+async function testPlayerPlaytimeOverrideRouteSetsHours() {
+  const setCalls = [];
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin", role: "SuperAdmin", isSuperAdmin: true };
+        },
+        hasEverything() {
+          return true;
+        },
+      },
+    },
+    modules: {
+      playerDatabase: {
+        async setGameDurationOverride(playerId, gameSeconds) {
+          setCalls.push({ playerId, gameSeconds });
+          return {
+            player: {
+              id: Number(playerId),
+              game_seconds_override: gameSeconds,
+              game_seconds: gameSeconds,
+            },
+            summary: {
+              gameSeconds,
+              gameSecondsOverride: gameSeconds,
+              steamGameSeconds: 7200,
+            },
+          };
+        },
+      },
+    },
+  });
+
+  const recorder = createRecorder();
+  const req = Readable.from([JSON.stringify({ gameHours: 12.5 })]);
+  req.method = "PATCH";
+  req.url = "/api/db/players/7/playtime";
+  req.headers = { host: "localhost" };
+  req.socket = {};
+
+  await server.handleRequest(req, recorder.res);
+  assert.equal(recorder.state.status, 200);
+  const body = JSON.parse(recorder.state.body);
+  assert.equal(body.ok, true);
+  assert.equal(setCalls.length, 1);
+  assert.equal(setCalls[0].playerId, "7");
+  assert.equal(setCalls[0].gameSeconds, 45000);
+}
+
 async function testSquadNameClassifierHelperCoversCoreRules() {
   assert.equal(classifySquadName("Squad 7").category, "infantry");
   assert.equal(classifySquadName("步兵队").category, "infantry");
@@ -1997,6 +2125,9 @@ await testGetPluginApiReturnsMatchingPluginApi();
 await testHealthEndpointDoesNotRequireAuth();
 await testWebPagesEndpointFiltersByPermissions();
 await testConsoleRecentEndpointUsesUnifiedConsoleBuffer();
+await testPlaytimeCacheReturnsEffectiveDuration();
+await testPlayerPlaytimeOverrideRouteRequiresSuperAdmin();
+await testPlayerPlaytimeOverrideRouteSetsHours();
 await testSquadNameClassifierHelperCoversCoreRules();
 await testSquadNameClassifierApiReturnsClassification();
 await testCombatCleanRoutesDoNotForceCurrentServerFilter();

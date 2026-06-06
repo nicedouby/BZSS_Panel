@@ -61,6 +61,27 @@ export async function apiPost<T>(
   );
 }
 
+export async function apiPatch<T>(
+  path: string,
+  body: unknown = {},
+  init: RequestInit = {},
+  options: ApiRequestOptions = {},
+): Promise<T> {
+  return request<T>(
+    path,
+    {
+      ...init,
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        ...(init.headers ?? {}),
+      },
+      body: JSON.stringify(body),
+    },
+    options,
+  );
+}
+
 export async function request<T>(
   path: string,
   init: RequestInit = {},

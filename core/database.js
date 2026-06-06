@@ -35,7 +35,9 @@ CREATE TABLE IF NOT EXISTS players (
     current_ip TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
+    steam_game_seconds INTEGER NOT NULL DEFAULT 0,
     game_seconds INTEGER NOT NULL DEFAULT 0,
+    game_seconds_override INTEGER,
     server_seconds INTEGER NOT NULL DEFAULT 0,
     commander_seconds INTEGER NOT NULL DEFAULT 0,
     squad_leader_seconds INTEGER NOT NULL DEFAULT 0,
@@ -382,6 +384,32 @@ DROP TABLE IF EXISTS kill_stats;
 
     await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 6, Date.now());
   }
+
+  if (!appliedSet.has(7)) {
+    const tableInfo = await db.all("PRAGMA table_info(players)");
+    const cols = new Set(tableInfo.map((column) => column.name));
+
+    if (!cols.has("steam_game_seconds")) {
+      await db.run("ALTER TABLE players ADD COLUMN steam_game_seconds INTEGER NOT NULL DEFAULT 0");
+    }
+    if (!cols.has("game_seconds_override")) {
+      await db.run("ALTER TABLE players ADD COLUMN game_seconds_override INTEGER");
+    }
+
+    await db.run(`
+      UPDATE players
+      SET steam_game_seconds = CASE
+            WHEN steam_game_seconds = 0 AND game_seconds IS NOT NULL THEN game_seconds
+            ELSE steam_game_seconds
+          END,
+          game_seconds = CASE
+            WHEN game_seconds_override IS NOT NULL THEN game_seconds_override
+            ELSE COALESCE(game_seconds, steam_game_seconds, 0)
+          END
+    `);
+
+    await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 7, Date.now());
+  }
 }
 
 async function ensureCompatibleColumns(db) {
@@ -392,7 +420,9 @@ async function ensureCompatibleColumns(db) {
     current_ip: "TEXT",
     created_at: "INTEGER NOT NULL DEFAULT 0",
     updated_at: "INTEGER NOT NULL DEFAULT 0",
+    steam_game_seconds: "INTEGER NOT NULL DEFAULT 0",
     game_seconds: "INTEGER NOT NULL DEFAULT 0",
+    game_seconds_override: "INTEGER",
     server_seconds: "INTEGER NOT NULL DEFAULT 0",
     commander_seconds: "INTEGER NOT NULL DEFAULT 0",
     squad_leader_seconds: "INTEGER NOT NULL DEFAULT 0",

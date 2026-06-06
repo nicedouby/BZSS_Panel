@@ -1817,6 +1817,51 @@ export class WebServer {
       return this.json(res, 200, await this.modules.playerDatabase.setPermissionGroup(dbPermissionMatch[1], body.permissionGroup));
     }
 
+    const dbPlayerPlaytimeMatch = url.pathname.match(/^\/api\/db\/players\/(\d+)\/playtime$/);
+    if (dbPlayerPlaytimeMatch && req.method === "PATCH") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const body = await this.readJsonBody(req);
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
+        return this.json(res, 400, {
+          error: "InvalidRequestBody",
+          message: "Request body must be an object.",
+        });
+      }
+
+      const hasGameHours = Object.prototype.hasOwnProperty.call(body, "gameHours");
+      const hasGameSeconds = Object.prototype.hasOwnProperty.call(body, "gameSeconds");
+      const rawValue = hasGameHours ? body.gameHours : (hasGameSeconds ? body.gameSeconds : undefined);
+      let overrideSeconds = null;
+
+      if (rawValue != null && String(rawValue).trim() !== "") {
+        const numeric = Number(rawValue);
+        if (!Number.isFinite(numeric) || numeric < 0) {
+          return this.json(res, 400, {
+            error: "InvalidGameHours",
+            message: "gameHours must be a non-negative number or null.",
+          });
+        }
+        overrideSeconds = hasGameHours ? Math.round(numeric * 3600) : Math.floor(numeric);
+      } else if (rawValue === 0) {
+        overrideSeconds = 0;
+      } else {
+        overrideSeconds = null;
+      }
+
+      const updatedDetail = await this.modules.playerDatabase.setGameDurationOverride(dbPlayerPlaytimeMatch[1], overrideSeconds);
+      if (!updatedDetail) {
+        return this.json(res, 404, {
+          error: "PlayerNotFound",
+          message: "Player not found.",
+        });
+      }
+
+      return this.json(res, 200, {
+        ok: true,
+        data: updatedDetail,
+      });
+    }
+
     if (dbPlayerMatch && req.method === "DELETE") {
       if (!this.requireSuperAdmin(user, res)) return;
       return this.json(res, 200, await this.modules.playerDatabase.deletePlayer(dbPlayerMatch[1]));
@@ -2785,14 +2830,26 @@ function parseOptionalBoolean(value) {
 }
 
 function normalizePlaytimeRow(row) {
-  const gameSeconds = Number(row?.game_seconds ?? row?.gameSeconds ?? 0);
-  const safeSeconds = Number.isFinite(gameSeconds) ? gameSeconds : 0;
+  const steamSeconds = Number(row?.steam_game_seconds ?? row?.steamGameSeconds ?? row?.steam_seconds ?? row?.steamSeconds ?? row?.game_seconds ?? row?.gameSeconds ?? 0);
+  const overrideValue = row?.game_seconds_override ?? row?.gameSecondsOverride;
+  const normalizedOverride = overrideValue == null || String(overrideValue).trim() === ""
+    ? null
+    : Number(overrideValue);
+  const safeOverrideSeconds = normalizedOverride == null || !Number.isFinite(normalizedOverride)
+    ? null
+    : Math.max(0, Math.floor(normalizedOverride));
+  const effectiveSeconds = Number(safeOverrideSeconds ?? row?.game_seconds ?? row?.gameSeconds ?? steamSeconds ?? 0);
+  const safeSeconds = Number.isFinite(effectiveSeconds) ? effectiveSeconds : 0;
+  const safeSteamSeconds = Number.isFinite(steamSeconds) ? steamSeconds : 0;
   return {
     steamID: String(row?.steam_id ?? row?.steamID ?? ""),
     appId: Number(row?.app_id ?? row?.appId ?? 393380),
     gameName: String(row?.game_name ?? row?.gameName ?? "Squad"),
     gameSeconds: safeSeconds,
+    steamGameSeconds: safeSteamSeconds,
+    gameSecondsOverride: safeOverrideSeconds,
     gameHours: Number((safeSeconds / 3600).toFixed(2)),
+    steamGameHours: Number((safeSteamSeconds / 3600).toFixed(2)),
     fetchedAt: Number(row?.fetched_at ?? row?.fetchedAt ?? 0) || null,
     lastSeenName: row?.last_seen_name ?? row?.lastSeenName ?? null,
   };

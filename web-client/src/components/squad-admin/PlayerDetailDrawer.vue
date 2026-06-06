@@ -149,6 +149,46 @@
               </div>
 
               <div class="action-group">
+                <div class="group-label">时长覆盖 / PLAYTIME OVERRIDE</div>
+                <div class="playtime-summary">
+                  <div><span>当前有效时长</span><strong>{{ playtimeEffectiveText }}</strong></div>
+                  <div><span>Steam 原始时长</span><strong>{{ playtimeSteamText }}</strong></div>
+                  <div><span>覆盖状态</span><strong>{{ playtimeOverrideText }}</strong></div>
+                  <div><span>来源</span><strong>{{ playtimeSourceText }}</strong></div>
+                </div>
+                <div class="playtime-edit-row">
+                  <input
+                    v-model="playtimeOverrideHours"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    :disabled="!canEditPlaytime || playtimeSaving || databaseLoading || !playerDatabaseRecord"
+                    placeholder="输入小时数"
+                    class="playtime-input"
+                  >
+                  <button
+                    type="button"
+                    class="action-button primary"
+                    :disabled="!canEditPlaytime || playtimeSaving || databaseLoading || !playerDatabaseRecord"
+                    @click="savePlaytimeOverride(false)"
+                  >
+                    保存覆盖
+                  </button>
+                  <button
+                    type="button"
+                    class="action-button secondary"
+                    :disabled="!canEditPlaytime || playtimeSaving || databaseLoading || !playerDatabaseRecord"
+                    @click="savePlaytimeOverride(true)"
+                  >
+                    恢复默认
+                  </button>
+                </div>
+                <div v-if="databaseError" class="playtime-note error">{{ databaseError }}</div>
+                <div v-else-if="databaseLoading" class="playtime-note">正在加载玩家数据库详情…</div>
+                <div v-else class="playtime-note">留空恢复默认，0 代表显式覆盖为 0 小时。</div>
+              </div>
+
+              <div class="action-group">
                 <div class="group-label">数据与工具 / TOOLS</div>
                 <button type="button" class="action-button primary" @click="openDatabase">
                   {{ t("player.openDatabase") }}
@@ -216,6 +256,7 @@ import { copyTextWithToast } from "../../utils/clipboard";
 import { goToPlayerDatabaseSearch } from "../../utils/player-database";
 import { forceTeamChange } from "../../app/teamBalanceApi";
 import { warnPlayer, kickPlayer, removePlayerFromSquad } from "../../app/squadManagementApi";
+import { apiGet, apiPatch } from "../../app/apiClient";
 import StatusBadge from "../common/StatusBadge.vue";
 import CopyableValue from "./CopyableValue.vue";
 import PlayerCombatTimeline from "./PlayerCombatTimeline.vue";
@@ -239,6 +280,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (event: "close"): void;
+  (event: "playtime-updated"): void;
 }>();
 
 const ui = useUiStore();
@@ -282,7 +324,14 @@ const panelStyle = computed(() => {
 const showAdvanced = ref(false);
 const showCombatTimeline = ref(false);
 const actionBusy = ref(false);
+const databaseDetail = ref<any | null>(null);
+const databaseLoading = ref(false);
+const databaseError = ref("");
+const playtimeOverrideHours = ref("");
+const playtimeSaving = ref(false);
+const loadToken = ref(0);
 const canSwitchTeam = computed(() => Boolean(auth.user?.isSuperAdmin || auth.user?.permissions?.includes?.("squad.switch")));
+const canEditPlaytime = computed(() => Boolean(auth.user?.isSuperAdmin));
 const updateViewport = () => {
   viewport.value = {
     width: window.innerWidth,
@@ -303,6 +352,59 @@ const teamColorClass = computed(() => {
   return "neutral";
 });
 const rawDataText = computed(() => (showAdvanced.value ? safeStringify(props.player?.raw) : ""));
+const playerDatabaseSearchKey = computed(() => {
+  return String(props.player?.steamId ?? "").trim()
+    || String(props.player?.eosId ?? "").trim()
+    || String(props.player?.name ?? "").trim();
+});
+const playerDatabaseRecord = computed(() => databaseDetail.value?.player ?? null);
+const playerDatabaseSummary = computed(() => databaseDetail.value?.summary ?? null);
+const effectivePlaytimeSeconds = computed(() => {
+  if (!playerDatabaseRecord.value) return null;
+  return Number(playerDatabaseSummary.value?.gameSeconds ?? playerDatabaseRecord.value?.game_seconds ?? 0);
+});
+const steamPlaytimeSeconds = computed(() => {
+  if (!playerDatabaseRecord.value) return null;
+  return Number(playerDatabaseSummary.value?.steamGameSeconds ?? playerDatabaseRecord.value?.steam_game_seconds ?? 0);
+});
+const playtimeOverrideSeconds = computed(() => {
+  const raw = playerDatabaseSummary.value?.gameSecondsOverride ?? playerDatabaseRecord.value?.game_seconds_override;
+  if (raw == null || String(raw).trim() === "") return null;
+  const numeric = Number(raw);
+  return Number.isFinite(numeric) ? Math.max(0, Math.floor(numeric)) : null;
+});
+const playtimeSourceText = computed(() => {
+  if (playtimeOverrideSeconds.value == null) return "Steam 原始时长";
+  return "手动覆盖时长";
+});
+const playtimeEffectiveText = computed(() => formatHours(effectivePlaytimeSeconds.value));
+const playtimeSteamText = computed(() => formatHours(steamPlaytimeSeconds.value));
+const playtimeOverrideText = computed(() => {
+  if (playtimeOverrideSeconds.value == null) return "未覆盖";
+  return `${formatHours(playtimeOverrideSeconds.value)}（覆盖）`;
+});
+
+watch(
+  () => [props.open, playerDatabaseSearchKey.value],
+  () => {
+    if (!props.open) {
+      loadToken.value += 1;
+      databaseDetail.value = null;
+      databaseError.value = "";
+      playtimeOverrideHours.value = "";
+      return;
+    }
+    void loadDatabaseDetail();
+  },
+  { immediate: true },
+);
+
+watch(
+  () => playerDatabaseRecord.value?.id,
+  () => {
+    syncPlaytimeOverrideInput();
+  },
+);
 
 function close() {
   emit("close");
@@ -334,6 +436,113 @@ function safeStringify(value: unknown) {
     return JSON.stringify(value, null, 2);
   } catch {
     return "";
+  }
+}
+
+function formatHours(value: unknown) {
+  if (value == null || value === "") return "--";
+  const seconds = Number(value ?? 0);
+  if (!Number.isFinite(seconds) || seconds < 0) return "--";
+  return `${(seconds / 3600).toFixed(1)}h`;
+}
+
+function formatHoursInput(value: unknown) {
+  const seconds = Number(value ?? 0);
+  if (!Number.isFinite(seconds) || seconds < 0) return "";
+  return Number((seconds / 3600).toFixed(1)).toString();
+}
+
+function syncPlaytimeOverrideInput() {
+  playtimeOverrideHours.value = playtimeOverrideSeconds.value == null
+    ? ""
+    : formatHoursInput(playtimeOverrideSeconds.value);
+}
+
+async function loadDatabaseDetail() {
+  const searchKey = playerDatabaseSearchKey.value;
+  databaseError.value = "";
+  databaseDetail.value = null;
+  syncPlaytimeOverrideInput();
+
+  if (!searchKey) {
+    databaseLoading.value = false;
+    return;
+  }
+
+  const currentToken = ++loadToken.value;
+  databaseLoading.value = true;
+  try {
+    const listResponse = await apiGet<any>(`/api/query/player-database?q=${encodeURIComponent(searchKey)}&limit=1`, {}, { timeoutMs: 5_000 });
+    const match = firstDatabasePlayer(listResponse);
+    if (!match?.id) {
+      if (currentToken === loadToken.value) {
+        databaseError.value = "未在玩家数据库中找到该玩家。";
+      }
+      return;
+    }
+
+    const detail = await apiGet<any>(`/api/player-database/detail?id=${encodeURIComponent(String(match.id))}`, {}, { timeoutMs: 5_000 });
+    if (currentToken !== loadToken.value) return;
+    databaseDetail.value = detail;
+    syncPlaytimeOverrideInput();
+  } catch (error) {
+    if (currentToken !== loadToken.value) return;
+    databaseError.value = error instanceof Error ? error.message : "加载玩家数据库详情失败。";
+  } finally {
+    if (currentToken === loadToken.value) {
+      databaseLoading.value = false;
+    }
+  }
+}
+
+function firstDatabasePlayer(response: any) {
+  return response?.items?.[0] ?? response?.players?.[0] ?? response?.rows?.[0] ?? null;
+}
+
+async function savePlaytimeOverride(clear = false) {
+  if (!canEditPlaytime.value || !playerDatabaseRecord.value?.id || playtimeSaving.value) return;
+
+  let gameHours: number | null = null;
+  if (!clear) {
+    const raw = String(playtimeOverrideHours.value ?? "").trim();
+    if (!raw) {
+      gameHours = null;
+    } else {
+      const numeric = Number(raw);
+      if (!Number.isFinite(numeric) || numeric < 0) {
+        ui.pushToast({
+          title: "保存失败",
+          message: "请输入大于等于 0 的小时数，或留空恢复默认。",
+          tone: "error",
+        });
+        return;
+      }
+      gameHours = numeric;
+    }
+  }
+
+  playtimeSaving.value = true;
+  try {
+    const result = await apiPatch<any>(`/api/db/players/${encodeURIComponent(String(playerDatabaseRecord.value.id))}/playtime`, {
+      gameHours,
+    });
+    if (!result?.ok) throw new Error(result?.message || "保存失败");
+    databaseDetail.value = result.data ?? databaseDetail.value;
+    syncPlaytimeOverrideInput();
+    emit("playtime-updated");
+    ui.pushToast({
+      title: "已更新时长",
+      message: playtimeOverrideSeconds.value == null ? "已恢复为默认 Steam 时长" : `已覆盖为 ${formatHours(playtimeOverrideSeconds.value)}`,
+      tone: "ok",
+    });
+  } catch (error) {
+    ui.pushToast({
+      title: "保存失败",
+      message: error instanceof Error ? error.message : String(error),
+      tone: "error",
+    });
+  } finally {
+    playtimeSaving.value = false;
   }
 }
 
@@ -848,6 +1057,56 @@ onUnmounted(() => {
   color: var(--color-text-muted);
   opacity: 0.6;
   margin-bottom: 2px;
+}
+
+.playtime-summary {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.playtime-summary div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.playtime-summary strong {
+  color: var(--color-text-primary);
+  font-weight: 700;
+}
+
+.playtime-edit-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 160px) 1fr 1fr;
+  gap: var(--spacing-sm);
+}
+
+.playtime-input {
+  height: 38px;
+  width: 100%;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border-soft);
+  background: var(--color-bg-input);
+  color: var(--color-text-primary);
+  font-size: 13px;
+}
+
+.playtime-note {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.playtime-note.error {
+  color: var(--color-status-error);
 }
 
 .detail-section-title {

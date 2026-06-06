@@ -137,6 +137,46 @@ describe("MatchStatusPage", () => {
         return { items: {} };
       }
 
+      if (path.startsWith("/api/query/player-database")) {
+        return {
+          items: [
+            {
+              id: 1,
+              current_name: "Alice",
+              steam_id: "76561198000000001",
+              eos_id: "EOS-1",
+              game_seconds: 7200,
+              steam_game_seconds: 7200,
+              game_seconds_override: null,
+              updated_at: Date.now(),
+            },
+          ],
+        };
+      }
+
+      if (path.startsWith("/api/player-database/detail")) {
+        return {
+          player: {
+            id: 1,
+            current_name: "Alice",
+            steam_id: "76561198000000001",
+            eos_id: "EOS-1",
+            steam_game_seconds: 7200,
+            game_seconds: 7200,
+            game_seconds_override: null,
+            updated_at: Date.now(),
+          },
+          summary: {
+            gameSeconds: 7200,
+            steamGameSeconds: 7200,
+            gameSecondsOverride: null,
+            serverSeconds: 0,
+          },
+          aliases: [],
+          ips: [],
+        };
+      }
+
       if (path.startsWith("/api/combat-manager/cache")) {
         return { snapshot: { events: [] } };
       }
