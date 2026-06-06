@@ -12,7 +12,6 @@ const DEFAULT_NO_CREATE_SECONDS = 20;
 const DEFAULT_INFANTRY_ONLY_UNTIL_SECONDS = 50;
 const DEFAULT_MAX_VIOLATIONS_BEFORE_KICK = 15;
 const DEFAULT_DISBAND_COMMAND_NAME_SUFFIX = "";
-const CREATION_COOLDOWN_MS = 3000;
 const KICK_RETRY_DELAY_MS = 1000;
 const KICK_RETRY_COUNT = 3;
 const PHASE_POLL_INTERVAL_MS = 1000;
@@ -197,7 +196,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   function getBroadcastSender() {
-    return modules?.adminWarn?.sendAdminBroadcast ?? modules?.adminWarn?.broadcastMessage ?? null;
+    return modules?.adminWarn?.broadcastMessage ?? modules?.adminWarn?.sendAdminBroadcast ?? null;
   }
 
   async function broadcastMessage(message, reason, meta = {}) {
@@ -260,7 +259,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     state.pendingLogs.clear();
     state.seenSlots.clear();
     state.violationPlayers.clear();
-    state.creationCooldowns.clear();
     state.summary = createEmptySummary();
     state.session.lastBroadcastPhase = "";
     state.session.mechanismAnnouncementAt = "";
@@ -297,6 +295,15 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       runtimeConfig = readConfig(config);
       const normalized = normalizeCreationEvent(event, "LOG");
       if (!normalized.serverId || normalized.squadId == null) return;
+      if (normalized.teamId == null) {
+        const pendingKey = buildPendingKey(normalized);
+        state.pendingLogs.set(pendingKey, {
+          ...normalized,
+          pendingKey,
+          createdAt: normalized.createdAt || nowIso(),
+        });
+        return;
+      }
       await processCreation(normalized);
     });
   }
@@ -328,33 +335,22 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           await processCreation({
             ...pending,
             teamId: normalized.teamId,
-            inferredLeader: normalized.inferredLeader,
             rconObservedAt: normalized.createdAt,
-            creationSource: "LOG",
-            creationConfidence: "HIGH",
           });
           continue;
         }
 
-        if (state.seenSlots.has(slotKey) || state.recordsBySlot.has(slotKey)) continue;
-        if (!shouldConsiderCurrentEvent({ population, clock })) {
-          state.seenSlots.add(slotKey);
-          continue;
+        const existing = state.recordsBySlot.get(slotKey);
+        if (existing) {
+          const alreadyDisbanded = existing.actions.some((action) => action.type === "disbanded");
+          if (existing.violation && existing.active !== false && !alreadyDisbanded) {
+            await processCreation(normalized);
+          }
         }
-
-        await processCreation(normalized);
       }
 
       markCurrentSquadPresence({ serverId, matchId, currentPresenceKeys });
     });
-  }
-
-  function shouldConsiderCurrentEvent({ population = null, clock = null } = {}) {
-    if (!isActive()) return false;
-    const resolvedPopulation = population ?? getPopulation();
-    if (resolvedPopulation.count < runtimeConfig.enforcementPlayerThreshold) return false;
-    const resolvedClock = clock ?? ensureClockSafety();
-    return Boolean(resolvedClock.trusted || state.session.manualUnlockAt);
   }
 
   async function processCreation(event) {
@@ -378,7 +374,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       return null;
     }
 
-    const existing = state.recordsBySlot.get(slotKey);
+    const candidate = state.recordsBySlot.get(slotKey);
+    const existing = shouldStartNewRecordGeneration(candidate, event) ? null : candidate;
     const merged = mergeCreation(existing, event, clock, population);
     const decision = decideCreation(merged, clock);
     const record = {
@@ -391,10 +388,10 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       approved: decision.approved,
       violation: !decision.approved,
       reasons: decision.reasons,
-      clockSeconds: clock.seconds,
-      clockTrusted: Boolean(clock.trusted || state.session.manualUnlockAt),
-      population: population.count,
-      populationSource: population.source,
+      clockSeconds: existing ? existing.clockSeconds : clock.seconds,
+      clockTrusted: existing ? existing.clockTrusted : Boolean(clock.trusted || state.session.manualUnlockAt),
+      population: existing ? existing.population : population.count,
+      populationSource: existing ? existing.populationSource : population.source,
       active: existing?.active !== false,
       resolvedAt: existing?.resolvedAt ?? "",
       actions: existing?.actions ? [...existing.actions] : [],
@@ -402,6 +399,18 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     if (!decision.approved) {
       await applyViolationActions(record);
+    } else {
+      if (shouldBroadcastApproved(record)) {
+        const broadcastResult = await broadcastApproved(record);
+        const ok = broadcastResult?.success !== false;
+        record.actions.push({
+          type: ok ? "broadcasted" : "broadcast_failed",
+          result: summarizeActionResult(broadcastResult),
+        });
+        if (ok) {
+          state.summary.broadcasts = (state.summary.broadcasts || 0) + 1;
+        }
+      }
     }
 
     rememberRecord(record);
@@ -409,23 +418,13 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   function decideCreation(record, clock) {
-    const seconds = Math.max(0, Math.floor(Number(clock.seconds ?? 0) || 0));
-    const cooldown = getCreationCooldown(record, state);
-    if (cooldown.active) {
-      return {
-        approved: false,
-        phase: "kick_cooldown",
-        phaseLabel: "kick cooldown",
-        reasons: [`Kick cooldown active for ${cooldown.remainingSeconds}s.`],
-      };
-    }
-
+    const seconds = Math.max(0, Math.floor(Number(record.clockSeconds ?? clock.seconds ?? 0) || 0));
     if (seconds < runtimeConfig.noSquadCreationSeconds) {
       return {
         approved: false,
         phase: "locked",
         phaseLabel: "0-20s no creation",
-        reasons: [`Opening ${runtimeConfig.noSquadCreationSeconds}s forbids squad creation.`],
+        reasons: [`开局 ${runtimeConfig.noSquadCreationSeconds}秒内禁止创建小队。`],
       };
     }
 
@@ -435,7 +434,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         approved: allowed,
         phase: "infantry_only",
         phaseLabel: "20-50s infantry only",
-        reasons: allowed ? [] : ["Current window only allows default infantry squad names and allowlist entries."],
+        reasons: allowed ? [] : ["当前区间仅允许默认步兵小队名和白名单队名。"],
       };
     }
 
@@ -453,26 +452,30 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       record.actions.push({ type: "violation_recorded" });
     }
 
+    if (shouldBroadcastViolation(record)) {
+      const broadcastResult = await broadcastViolation(record);
+      const ok = broadcastResult?.success !== false;
+      record.actions.push({
+        type: ok ? "broadcasted_violation" : "broadcast_violation_failed",
+        result: summarizeActionResult(broadcastResult),
+      });
+      if (ok) {
+        state.summary.broadcasts = (state.summary.broadcasts || 0) + 1;
+      }
+    }
+
     const alreadyWarned = record.actions.some((action) => action.type === "warned" || action.type === "warn_failed");
     if (!alreadyWarned && record.isLogConfirmed && hasCreatorIdentity(record)) {
-      const cooldown = armCreationCooldown(record, state);
-      record.cooldownUntil = cooldown.untilIso;
-      const warnResult = await warnCreator(record);
+      const warnResult = await sendViolationWarning(record);
       record.actions.push({
         type: warnResult?.success === false ? "warn_failed" : "warned",
         target: record.creatorName || record.creatorSteamId || record.creatorEosId,
         result: summarizeActionResult(warnResult),
-        cooldownUntil: cooldown.untilIso,
       });
       state.summary.warned += warnResult?.success === false ? 0 : 1;
-    } else if (!alreadyWarned && (record.inferredLeader?.name || record.inferredLeader?.steamId || record.inferredLeader?.eosId)) {
-      record.actions.push({
-        type: "warn_skipped",
-        reason: "rcon_only_inferred_leader_not_punishable",
-      });
     }
 
-    const alreadyDisbanded = record.actions.some((action) => action.type === "disbanded" || action.type === "disband_failed");
+    const alreadyDisbanded = record.actions.some((action) => action.type === "disbanded");
     if (!alreadyDisbanded && record.teamId != null && record.squadId != null) {
       const disbandResult = await disbandSquad(record);
       record.actions.push({
@@ -522,8 +525,91 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       targetName,
       targetSteamId: record.creatorSteamId,
       targetEosId: record.creatorEosId,
-      message: `Squad creation rule violation: ${record.reasons.join(" ")} 接下来三秒你将无法建队。`,
+      message: `违规建队拦截：${record.reasons.join(" ")}`,
       reason: "fair_squad_guard_violation",
+      sourceModule: PLUGIN_ID,
+      relatedEventId: record.id,
+      system: true,
+    }).catch((error) => ({ success: false, error: error?.message ?? String(error) }));
+  }
+
+  async function sendViolationWarning(record) {
+    const sender = modules?.adminWarn?.sendAdminWarn ?? modules?.adminWarn?.warnPlayer;
+    if (typeof sender !== "function") return { success: false, skipped: true, skipReason: "admin_warn_unavailable" };
+    const targetName = record.creatorName || record.creatorSteamId || record.creatorEosId;
+    if (!targetName) return { success: false, skipped: true, skipReason: "target_missing" };
+    return await sender.call(modules.adminWarn, {
+      targetName,
+      targetSteamId: record.creatorSteamId,
+      targetEosId: record.creatorEosId,
+      message: `违规建队拦截：${record.reasons.join(" ")}`,
+      reason: "fair_squad_guard_violation",
+      sourceModule: PLUGIN_ID,
+      relatedEventId: record.id,
+      system: true,
+    }).catch((error) => ({ success: false, error: error?.message ?? String(error) }));
+  }
+
+  function shouldBroadcastApproved(record) {
+    if (!runtimeConfig.broadcastOnApproved) return false;
+    return !record.actions.some((action) => action.type === "broadcasted" || action.type === "broadcast_failed");
+  }
+
+  function shouldBroadcastViolation(record) {
+    if (!runtimeConfig.broadcastOnViolation) return false;
+    return !record.actions.some((action) => action.type === "broadcasted_violation" || action.type === "broadcast_violation_failed");
+  }
+
+  function buildApprovedBroadcastMessage(record) {
+    const creator = record.creatorName || "未知玩家";
+    const squadName = record.squadName || `Squad ${record.squadId ?? "?"}`;
+    const phase = record.phase;
+    if (phase === "infantry_only") {
+      return `${creator} 建立小队 ${squadName}，判定通过（在开局仅步兵队阶段）。`;
+    } else if (phase === "open") {
+      return `${creator} 建立小队 ${squadName}，判定通过（在开放建队阶段）。`;
+    }
+    return `${creator} 建立小队 ${squadName}，判定通过（在公平建队阶段）。`;
+  }
+
+  function buildViolationBroadcastMessage(record) {
+    const creator = record.creatorName || "未知玩家";
+    const squadName = record.squadName || `Squad ${record.squadId ?? "?"}`;
+    const phase = record.phase;
+    if (phase === "locked") {
+      return `违规建队已拦截：${creator} 创建的 ${squadName} 处于开局禁止建队阶段，已按规则解散。`;
+    } else if (phase === "infantry_only") {
+      return `违规建队已拦截：${creator} 创建的 ${squadName} 处于开局仅步兵队阶段，已按规则解散。`;
+    }
+    return `违规建队已拦截：${creator} 创建的 ${squadName} 违反公平建队规则，已按规则解散。`;
+  }
+
+  async function broadcastApproved(record) {
+    const sender = getBroadcastSender();
+    if (typeof sender !== "function") {
+      return { success: false, skipped: true, skipReason: "admin_warn_unavailable" };
+    }
+
+    const message = buildApprovedBroadcastMessage(record);
+    return await sender.call(modules.adminWarn, {
+      message,
+      reason: "fair_squad_guard_approved_broadcast",
+      sourceModule: PLUGIN_ID,
+      relatedEventId: record.id,
+      system: true,
+    }).catch((error) => ({ success: false, error: error?.message ?? String(error) }));
+  }
+
+  async function broadcastViolation(record) {
+    const sender = getBroadcastSender();
+    if (typeof sender !== "function") {
+      return { success: false, skipped: true, skipReason: "admin_warn_unavailable" };
+    }
+
+    const message = buildViolationBroadcastMessage(record);
+    return await sender.call(modules.adminWarn, {
+      message,
+      reason: "fair_squad_guard_violation_broadcast",
       sourceModule: PLUGIN_ID,
       relatedEventId: record.id,
       system: true,
@@ -536,7 +622,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       serverId: record.serverId,
       teamId: record.teamId,
       squadId: record.squadId,
-      reason: `Fair squad guard: ${record.reasons.join(" ")}`,
+      reason: `公平建队守护：${record.reasons.join(" ")}`,
       source: PLUGIN_ID,
       system: true,
       operatorName: PLUGIN_ID,
@@ -557,7 +643,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       steamId: record.creatorSteamId,
       eosId: record.creatorEosId,
       name: record.creatorName,
-      reason: `Fair squad guard: more than ${runtimeConfig.maxViolationCountBeforeKick} violations this round.`,
+      reason: `公平建队守护：本局累计违规建队超过 ${runtimeConfig.maxViolationCountBeforeKick} 次。`,
       source: PLUGIN_ID,
       system: true,
       operatorName: PLUGIN_ID,
@@ -567,7 +653,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
   function rememberRecord(record, options = {}) {
     const slotKey = buildSlotKey(record);
-    const existingIndex = state.records.findIndex((item) => item.id === record.id || buildSlotKey(item) === slotKey);
+    const existingIndex = state.records.findIndex((item) => item.id === record.id || (buildSlotKey(item) === slotKey && item.active !== false));
     const normalized = cloneRecord(record);
     state.recordsBySlot.set(slotKey, normalized);
     state.seenSlots.add(slotKey);
@@ -596,6 +682,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     if (actions.some((action) => action.type === "warned")) state.summary.warned += 1;
     if (actions.some((action) => action.type === "disbanded")) state.summary.disbanded += 1;
     if (actions.some((action) => action.type === "kicked")) state.summary.kicked += 1;
+    if (actions.some((action) => action.type === "broadcasted" || action.type === "broadcasted_violation")) {
+      state.summary.broadcasts = (state.summary.broadcasts || 0) + 1;
+    }
 
     if (!record?.isLogConfirmed || !hasCreatorIdentity(record)) return;
     const countAction = [...actions].reverse().find((action) => action.type === "violation_counted");
@@ -711,6 +800,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       defaultInfantryPatterns: [...DEFAULT_INFANTRY_PATTERNS],
       maxRecentRecords: runtimeConfig.maxRecentRecords,
       disbandCommandNameSuffix: runtimeConfig.disbandCommandNameSuffix,
+      broadcastOnApproved: runtimeConfig.broadcastOnApproved,
+      broadcastOnViolation: runtimeConfig.broadcastOnViolation,
     };
   }
 
@@ -760,17 +851,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     return null;
   }
 
-  function findRecordForLog(event) {
-    const targetSquadId = Number(event.squadId);
-    const targetName = normalizeSquadName(event.squadName);
-    for (const record of state.recordsBySlot.values()) {
-      if (Number(record.squadId) !== targetSquadId) continue;
-      if (targetName && normalizeSquadName(record.squadName) !== targetName) continue;
-      return record;
-    }
-    return null;
-  }
-
   function getLeaderboard() {
     return [...state.violationPlayers.values()]
       .map((item) => ({ ...item }))
@@ -790,7 +870,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       return getStatus();
     },
     async simulateCreation(event = {}) {
-      return await enqueue(() => processCreation(normalizeCreationEvent(event, event.creationSource ?? "LOG")));
+      return await enqueue(() => processCreation(normalizeCreationEvent(event)));
     },
     async simulateSquadsUpdated(event = {}) {
       await handleSquadsUpdated(event);
@@ -835,6 +915,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
       if (typeof core?.eventBus?.onModuleEvent === "function") {
         unsubscribers.push(core.eventBus.onModuleEvent("module.squadLifecycle", "squadCreated", handleLifecycleSquadCreated));
+        unsubscribers.push(core.eventBus.onModuleEvent("module.matchState", "squadsUpdated", handleSquadsUpdated));
       }
 
       if (typeof core?.eventBus?.onCoreEvent === "function") {
@@ -878,6 +959,8 @@ function readConfig(config) {
     disbandCommandNameSuffix: normalizeText(raw.disbandCommandNameSuffix ?? DEFAULT_DISBAND_COMMAND_NAME_SUFFIX),
     allowedInfantryNames: parseListText(raw.allowedInfantryNamesText ?? raw.allowedInfantryNames),
     allowedInfantryPatterns: parseListText(raw.allowedInfantryPatternsText ?? raw.allowedInfantryNamePatterns),
+    broadcastOnApproved: raw.broadcastOnApproved !== false,
+    broadcastOnViolation: raw.broadcastOnViolation !== false,
   };
 }
 
@@ -901,7 +984,6 @@ function createInitialState() {
     pendingLogs: new Map(),
     seenSlots: new Set(),
     violationPlayers: new Map(),
-    creationCooldowns: new Map(),
     recovery: {
       lastRecoveredAt: "",
       recoveredLineCount: 0,
@@ -918,11 +1000,11 @@ function createEmptySummary() {
     warned: 0,
     disbanded: 0,
     kicked: 0,
+    broadcasts: 0,
   };
 }
 
-function normalizeCreationEvent(event = {}, fallbackSource = "LOG") {
-  const creationSource = normalizeText(event.creationSource ?? event.record?.creationSource ?? fallbackSource) || fallbackSource;
+function normalizeCreationEvent(event = {}) {
   return {
     serverId: normalizeText(event.serverId),
     matchId: normalizeText(event.matchId),
@@ -937,19 +1019,13 @@ function normalizeCreationEvent(event = {}, fallbackSource = "LOG") {
     createdAt: normalizeText(event.createdAt ?? event.time) || nowIso(),
     createdAtMs: Number(event.createdAtMs ?? event.timeMs ?? Date.parse(event.createdAt ?? event.time)) || Date.now(),
     sourceEventId: normalizeText(event.sourceEventId ?? event.eventId),
-    creationSource,
-    creationConfidence: normalizeText(event.creationConfidence ?? event.record?.creationConfidence ?? (creationSource === "LOG" ? "HIGH" : "MEDIUM")),
-    isLogConfirmed: creationSource === "LOG",
-    inferredLeader: normalizeInferredLeader(event.inferredLeader),
+    creationSource: "LOG",
+    creationConfidence: "HIGH",
+    isLogConfirmed: true,
   };
 }
 
 function normalizeRconSquad(squad = {}, context = {}) {
-  const leader = normalizeInferredLeader({
-    name: squad.leaderName,
-    steamId: squad.leaderSteamId,
-    eosId: squad.leaderEosId,
-  });
   return {
     serverId: normalizeText(squad.serverId ?? context.serverId),
     matchId: normalizeText(squad.matchId ?? context.matchId),
@@ -964,29 +1040,32 @@ function normalizeRconSquad(squad = {}, context = {}) {
     createdAt: normalizeText(squad.createdAt ?? context.observedAt) || nowIso(),
     createdAtMs: Number(squad.createdAtMs ?? Date.parse(squad.createdAt ?? context.observedAt)) || Date.now(),
     sourceEventId: normalizeText(squad.recordKey ?? squad.lifecycleKey),
-    creationSource: "RCON_SNAPSHOT",
-    creationConfidence: "MEDIUM",
-    isLogConfirmed: false,
-    inferredLeader: leader,
   };
 }
 
 function mergeCreation(existing, event, clock, population) {
-  const isLog = event.creationSource === "LOG";
-  const sourceWasRcon = existing?.creationSource === "RCON_SNAPSHOT" && isLog;
   return {
     ...(existing ?? {}),
     ...event,
-    creatorName: isLog ? event.creatorName : (existing?.creatorName ?? event.creatorName),
-    creatorSteamId: isLog ? event.creatorSteamId : (existing?.creatorSteamId ?? event.creatorSteamId),
-    creatorEosId: isLog ? event.creatorEosId : (existing?.creatorEosId ?? event.creatorEosId),
-    creationSource: sourceWasRcon ? "RCON_PROMOTED_TO_LOG" : event.creationSource,
-    creationConfidence: isLog ? "HIGH" : event.creationConfidence,
-    isLogConfirmed: Boolean(isLog || existing?.isLogConfirmed),
-    sourceWasRcon,
-    clockSeconds: clock.seconds,
-    population: population.count,
+    id: existing?.id ?? event.id ?? makeRecordId(),
+    createdAt: existing?.createdAt ?? event.createdAt ?? nowIso(),
+    createdAtMs: existing?.createdAtMs ?? event.createdAtMs ?? Date.now(),
+    creatorName: event.creatorName || existing?.creatorName || "",
+    creatorSteamId: event.creatorSteamId || existing?.creatorSteamId || "",
+    creatorEosId: event.creatorEosId || existing?.creatorEosId || "",
+    creationSource: "LOG",
+    creationConfidence: "HIGH",
+    isLogConfirmed: true,
+    clockSeconds: existing ? existing.clockSeconds : clock.seconds,
+    population: existing ? existing.population : population.count,
   };
+}
+
+function shouldStartNewRecordGeneration(existing, event) {
+  if (!existing || existing.active !== false) return false;
+  const existingCreatedAtMs = Number(existing.createdAtMs ?? Date.parse(existing.createdAt ?? "")) || 0;
+  const nextCreatedAtMs = Number(event.createdAtMs ?? Date.parse(event.createdAt ?? "")) || 0;
+  return nextCreatedAtMs > existingCreatedAtMs;
 }
 
 function isAllowedInfantryName(squadName, runtimeConfig) {
@@ -1055,14 +1134,6 @@ function hasCreatorIdentity(record) {
   return Boolean(record.creatorName || record.creatorSteamId || record.creatorEosId);
 }
 
-function normalizeInferredLeader(value = {}) {
-  return {
-    name: normalizeText(value?.name),
-    steamId: normalizeText(value?.steamId ?? value?.steamID),
-    eosId: normalizeText(value?.eosId ?? value?.eosID),
-  };
-}
-
 function safeTest(pattern, value) {
   try {
     return new RegExp(pattern, "i").test(String(value ?? ""));
@@ -1086,38 +1157,8 @@ function cloneRecord(record) {
   return JSON.parse(JSON.stringify(record));
 }
 
-function nowMs() {
-  return Date.now();
-}
-
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function getCreationCooldown(record, stateRef) {
-  const key = buildCreatorKey(record);
-  const untilMs = Number(stateRef?.creationCooldowns?.get(key) ?? 0);
-  if (untilMs <= nowMs()) {
-    stateRef?.creationCooldowns?.delete(key);
-    return { active: false, untilMs: 0, untilIso: "", remainingSeconds: 0 };
-  }
-  return {
-    active: true,
-    untilMs,
-    untilIso: new Date(untilMs).toISOString(),
-    remainingSeconds: Math.max(1, Math.ceil((untilMs - nowMs()) / 1000)),
-  };
-}
-
-function armCreationCooldown(record, stateRef) {
-  const key = buildCreatorKey(record);
-  const untilMs = nowMs() + CREATION_COOLDOWN_MS;
-  stateRef?.creationCooldowns?.set(key, untilMs);
-  return {
-    key,
-    untilMs,
-    untilIso: new Date(untilMs).toISOString(),
-  };
 }
 
 async function executeKickBurst(record, request, api, modulesRef) {
@@ -1132,6 +1173,10 @@ async function executeKickBurst(record, request, api, modulesRef) {
       error: result?.error ?? "",
       message: result?.message ?? "",
     });
+    if (result?.ok !== false) {
+      // Successful kick; stop further attempts to avoid duplicate kicks
+      break;
+    }
     if (index < KICK_RETRY_COUNT - 1) {
       await sleep(KICK_RETRY_DELAY_MS);
     }

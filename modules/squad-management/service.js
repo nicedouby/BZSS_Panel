@@ -106,7 +106,10 @@ export function createSquadManagementService({ core, modules, config, logger, re
     },
 
     getSquad(serverId, teamId, squadId) {
-      return buildStateSnapshot(serverId).squads.find((squad) => sameSquadKey(squad, teamId, squadId)) ?? null;
+      const state = buildStateSnapshot(serverId);
+      return state.squads.find((squad) => sameSquadKey(squad, teamId, squadId))
+        ?? state.snapshotOnlySquads?.find((squad) => sameSquadKey(squad, teamId, squadId))
+        ?? null;
     },
 
     getTeams(serverId = getDefaultServerId()) {
@@ -716,11 +719,15 @@ export function createSquadManagementService({ core, modules, config, logger, re
     }
 
     let state = buildStateSnapshot(serverId);
-    let target = state.squads.find((squad) => sameSquadKey(squad, teamId, squadId)) ?? null;
+    let target = state.squads.find((squad) => sameSquadKey(squad, teamId, squadId))
+      ?? state.snapshotOnlySquads?.find((squad) => sameSquadKey(squad, teamId, squadId))
+      ?? null;
     if (!target && request.allowRefresh !== false) {
       await refreshSquadsSnapshot(serverId);
       state = buildStateSnapshot(serverId);
-      target = state.squads.find((squad) => sameSquadKey(squad, teamId, squadId)) ?? null;
+      target = state.squads.find((squad) => sameSquadKey(squad, teamId, squadId))
+        ?? state.snapshotOnlySquads?.find((squad) => sameSquadKey(squad, teamId, squadId))
+        ?? null;
     }
     if (!target) {
       return recordFailedAction({

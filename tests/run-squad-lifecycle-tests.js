@@ -343,6 +343,10 @@ async function testRconFirstThenLogPromotesToLog() {
 async function testPendingLogWithoutTeamIdMatchesRconSnapshot() {
   const harness = createHarness();
   await harness.module.start();
+  const emitted = [];
+  const unsubscribe = harness.core.eventBus.onModuleEvent("module.squadLifecycle", "squadCreated", (event) => {
+    emitted.push(event);
+  });
 
   harness.core.eventBus.emitCoreEvent("On_SquadCreated", {
     serverId: "BZSS_Main",
@@ -361,6 +365,8 @@ async function testPendingLogWithoutTeamIdMatchesRconSnapshot() {
   });
 
   assert.equal(harness.module.api.getPendingCount(), 1);
+  assert.equal(emitted.length, 1);
+  assert.equal(emitted[0].teamId, null);
 
   harness.core.eventBus.emitModuleEvent("module.matchState", "squadsUpdated", {
     serverId: "BZSS_Main",
@@ -384,6 +390,9 @@ async function testPendingLogWithoutTeamIdMatchesRconSnapshot() {
   assert.equal(current.list[0].creationConfidence, "HIGH");
   assert.equal(current.list[0].createdDisplayText, "\u521b\u5efa\u4e8e 20:31:42");
   assert.equal(harness.module.api.getPendingCount(), 0);
+  assert.equal(emitted.length, 2);
+  assert.equal(emitted[1].teamId, 2);
+  unsubscribe();
   await harness.module.stop();
 }
 

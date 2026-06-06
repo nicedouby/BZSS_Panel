@@ -1,4 +1,4 @@
-﻿const zhCN = {
+const zhCN = {
   app: {
     checkingAuth: "正在检查登录状态...",
   },
@@ -195,6 +195,8 @@
     "plugins.fairSquadGuard.maxViolationCountBeforeKick": "违规踢出阈值",
     "plugins.fairSquadGuard.allowedInfantryNamesText": "步兵队白名单名称",
     "plugins.fairSquadGuard.allowedInfantryPatternsText": "步兵队白名单正则",
+    "plugins.fairSquadGuard.broadcastOnApproved": "通过时广播",
+    "plugins.fairSquadGuard.broadcastOnViolation": "违规时广播",
     "modules.matchState.polling.currentMapIntervalMs": "当前地图刷新间隔",
     "modules.matchState.polling.nextMapIntervalMs": "下一张地图刷新间隔",
   },

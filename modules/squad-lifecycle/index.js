@@ -215,12 +215,14 @@ export function createSquadLifecycleModule({ core, config, logger }) {
         continue;
       }
 
-      reducer.handleSquadCreateLogEvent({
+      const flushedParsed = {
         ...pending,
         teamId: matched.teamID ?? matched.teamId ?? null,
         squadName: matched.squadName ?? pending.squadName,
-      });
+      };
+      const record = reducer.handleSquadCreateLogEvent(flushedParsed);
       pendingCreateLogs.delete(buildPendingKey(pending));
+      emitSquadCreatedEvent(serverId, matchId, flushedParsed, record);
 
       logWithFallback(moduleLogger, "info", `[SquadLifecycle] pending create flushed to LOG: T${matched.teamID ?? matched.teamId ?? ""} S${pending.squadId} ${pending.squadName || matched.squadName || ""}`, {
         operation: "squadLifecycle.flushPending",

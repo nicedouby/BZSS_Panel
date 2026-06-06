@@ -1,4 +1,4 @@
-﻿const enUS = {
+const enUS = {
   app: {
     checkingAuth: "Checking authentication status...",
   },
@@ -195,6 +195,8 @@
     "plugins.fairSquadGuard.maxViolationCountBeforeKick": "Violation kick threshold",
     "plugins.fairSquadGuard.allowedInfantryNamesText": "Infantry allowlist names",
     "plugins.fairSquadGuard.allowedInfantryPatternsText": "Infantry allowlist patterns",
+    "plugins.fairSquadGuard.broadcastOnApproved": "Broadcast when approved",
+    "plugins.fairSquadGuard.broadcastOnViolation": "Broadcast when violation",
     "modules.matchState.polling.currentMapIntervalMs": "Current map polling interval",
     "modules.matchState.polling.nextMapIntervalMs": "Next map polling interval",
   },

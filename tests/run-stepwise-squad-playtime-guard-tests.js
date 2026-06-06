@@ -65,6 +65,7 @@ async function createHarness(options = {}) {
       squadManagement: {
         async requestDisband(request) {
           disbands.push(request);
+          if (typeof options.requestDisband === "function") return await options.requestDisband(request);
           return { ok: true, command: `AdminDisbandSquad ${request.teamId} ${request.squadId}` };
         },
         async requestKick(request) {
@@ -471,5 +472,102 @@ await testMissingPlaytimeDisbandsWarnsAndStartsLookup();
 await testLogThenRconOnlyProcessesOnce();
 await testRconThenLogPromotionDoesNotRepeatDisband();
 await testLookupCompletionUpdatesRecordWithoutRollback();
+await testTransientDisbandFailureRetries();
+
+async function testTransientDisbandFailureRetries() {
+  let callCount = 0;
+  const harness = await createHarness({
+    playtimeRows: [["steam-1", { game_seconds: 350 * 3600 }]],
+    requestDisband: async (request) => {
+      callCount += 1;
+      if (callCount === 1) {
+        return { ok: false, error: "TargetNotFound" };
+      }
+      return { ok: true, command: "AdminDisbandSquad" };
+    },
+  });
+  try {
+    harness.webStatus.logClockSeconds = 10;
+    const result = await harness.plugin.api.simulateCreation(creation({
+      teamId: 1,
+      squadId: 40,
+      squadName: "INF 40",
+      creatorSteamId: "steam-1",
+    }));
+    assert.equal(result.violation, true);
+    assert.equal(harness.disbands.length, 1);
+
+    const statusBefore = harness.plugin.api.getStatus();
+    const recordBefore = statusBefore.recentRecords.find((r) => r.squadId === 40);
+    assert.equal(recordBefore.active, true);
+    assert.equal(recordBefore.actions.some((a) => a.type === "disband_failed"), true);
+    assert.equal(recordBefore.actions.some((a) => a.type === "disbanded"), false);
+
+    harness.webStatus.logClockSeconds = 95; // Progress clock to open phase
+
+    await harness.plugin.api.simulateSquadsUpdated({
+      serverId: "test-server",
+      matchId: "match-1",
+      time: new Date().toISOString(),
+      squads: [{
+        teamId: 1,
+        squadId: 40,
+        squadName: "INF 40",
+        leaderName: "Leader",
+        leaderSteamId: "steam-1",
+      }],
+    });
+
+    assert.equal(harness.disbands.length, 2);
+    const statusAfter = harness.plugin.api.getStatus();
+    const recordAfter = statusAfter.recentRecords.find((r) => r.squadId === 40);
+    assert.equal(recordAfter.actions.some((a) => a.type === "disbanded"), true);
+
+    await harness.plugin.api.simulateSquadsUpdated({
+      serverId: "test-server",
+      matchId: "match-1",
+      time: new Date().toISOString(),
+      squads: [{
+        teamId: 1,
+        squadId: 40,
+        squadName: "INF 40",
+        leaderName: "Leader",
+        leaderSteamId: "steam-1",
+      }],
+    });
+    assert.equal(harness.disbands.length, 2);
+  } finally {
+    await harness.stop();
+  }
+}
+
+async function testVehicleStartingFromZero() {
+  const harness = await createHarness({
+    rules: {
+      infantry: [
+        { startSeconds: 0, endSeconds: 25, minHoursExclusive: 400 }
+      ],
+      vehicle: [
+        { startSeconds: 0, endSeconds: 60, minHoursExclusive: 800 }
+      ]
+    },
+    webStatus: { logClockSeconds: 10 },
+    playtimeRows: [["steam-1", { game_seconds: 700 * 3600 }]],
+  });
+  try {
+    const result = await harness.plugin.api.simulateCreation(creation({
+      squadId: 2,
+      squadName: "Armor",
+      creatorSteamId: "steam-1",
+    }));
+    assert.equal(result.violation, true);
+    assert.equal(harness.disbands.length, 1);
+  } finally {
+    await harness.stop();
+  }
+}
+
+await testVehicleStartingFromZero();
 
 console.log("run-stepwise-squad-playtime-guard-tests.js passed");
+

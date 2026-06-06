@@ -427,6 +427,18 @@
         "type": "string",
         "advanced": true,
         "restartRequired": true
+      },
+      {
+        "path": "plugins.fairSquadGuard.broadcastOnApproved",
+        "label": "Fair Squad Guard Broadcast Approved",
+        "type": "boolean",
+        "restartRequired": true
+      },
+      {
+        "path": "plugins.fairSquadGuard.broadcastOnViolation",
+        "label": "Fair Squad Guard Broadcast Violation",
+        "type": "boolean",
+        "restartRequired": true
       }
     ]
   },
@@ -600,15 +612,17 @@
   "plugins": {
     "enabled": true,
     "fairSquadGuard": {
-      "enabled": false,
+      "enabled": true,
       "directory": "./data/fair-squad-guard",
-      "enforcementPlayerThreshold": 50,
+      "enforcementPlayerThreshold": 0,
       "noSquadCreationSeconds": 20,
       "infantryOnlyUntilSeconds": 50,
       "maxViolationCountBeforeKick": 15,
-      "disbandCommandNameSuffix": "x",
+      "disbandCommandNameSuffix": "",
       "allowedInfantryNamesText": "",
-      "allowedInfantryPatternsText": ""
+      "allowedInfantryPatternsText": "",
+      "broadcastOnApproved": false,
+      "broadcastOnViolation": true
     },
     "stepwiseSquadPlaytimeGuard": {
       "enabled": true,
@@ -632,7 +646,7 @@
         ],
         "vehicle": [
           {
-            "startSeconds": 50,
+            "startSeconds": 0,
             "endSeconds": 60,
             "minHoursExclusive": 800
           },
@@ -674,7 +688,7 @@
     },
     "plugin": {
       "fairSquadGuard": {
-        "enabled": false
+        "enabled": true
       },
       "fairTeamBalance": {
         "enabled": true

@@ -1,4 +1,4 @@
-﻿// -*- coding: utf-8 -*-
+// -*- coding: utf-8 -*-
 
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -9,7 +9,7 @@ const PLUGIN_ID = "plugin.stepwiseSquadPlaytimeGuard";
 const CONFIG_KEY = "plugins.stepwiseSquadPlaytimeGuard";
 const DEFAULT_DATA_DIR = "./data/stepwise-squad-playtime-guard";
 const DEFAULT_RECENT_LIMIT = 300;
-const CREATION_COOLDOWN_MS = 3000;
+const DEFAULT_RECENT_LOG_LIMIT = 200;
 const RULE_REMINDER_SECONDS = 10;
 const DEFAULT_RULES = Object.freeze({
   infantry: Object.freeze([
@@ -17,7 +17,7 @@ const DEFAULT_RULES = Object.freeze({
     Object.freeze({ startSeconds: 25, endSeconds: 40, minHoursExclusive: 200 }),
   ]),
   vehicle: Object.freeze([
-    Object.freeze({ startSeconds: 50, endSeconds: 60, minHoursExclusive: 800 }),
+    Object.freeze({ startSeconds: 0, endSeconds: 60, minHoursExclusive: 800 }),
     Object.freeze({ startSeconds: 60, endSeconds: 75, minHoursExclusive: 600 }),
     Object.freeze({ startSeconds: 75, endSeconds: 90, minHoursExclusive: 400 }),
   ]),
@@ -123,7 +123,27 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     return enqueue(async () => {
       runtimeConfig = readConfig(config);
       const normalized = normalizeCreationEvent(event, "LOG");
-      if (!normalized.serverId || normalized.squadId == null || normalized.teamId == null) return;
+      const clockContext = getClockContext();
+      const loggedEvent = {
+        ...normalized,
+        clockSeconds: clockContext.clockSeconds,
+        clockAnchorLogTime: clockContext.anchorLogTime,
+        clockHasAnchor: clockContext.hasAnchor,
+        isWarmup: getWarmupState(),
+      };
+      if (!normalized.serverId || normalized.squadId == null || normalized.teamId == null) {
+        loggedEvent.playtime = await resolvePlaytime(loggedEvent);
+        rememberCreationLog(state, buildCreationLogEntry(loggedEvent, {
+          stage: "dropped",
+          message: `Lifecycle squadCreated event ignored because required fields were incomplete: ${describeMissingLifecycleFields(normalized).join(", ") || "unknown"}.`,
+          dropReason: "missing_required_fields",
+        }));
+        return;
+      }
+      rememberCreationLog(state, buildCreationLogEntry(loggedEvent, {
+        stage: "received",
+        message: "Lifecycle squadCreated event received. Decision still uses the current log clock.",
+      }));
       await processCreation(normalized);
     });
   }
@@ -137,6 +157,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       const matchId = normalizeText(event.matchId);
       const squads = Array.isArray(event.squads) ? event.squads : [];
       const currentPresenceKeys = new Set();
+      const clockContext = getClockContext();
+      const isWarmup = getWarmupState();
 
       for (const squad of squads) {
         const normalized = normalizeRconSquad(squad, {
@@ -145,6 +167,16 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           observedAt: normalizeText(event.time) || nowIso(),
         });
         if (!normalized.serverId || normalized.teamId == null || normalized.squadId == null) continue;
+        rememberCreationLog(state, buildCreationLogEntry({
+          ...normalized,
+          clockSeconds: clockContext.clockSeconds,
+          clockAnchorLogTime: clockContext.anchorLogTime,
+          clockHasAnchor: clockContext.hasAnchor,
+          isWarmup,
+        }, {
+          stage: "observed",
+          message: "Squad seen in RCON squad snapshot. Decision still uses the current log clock.",
+        }));
         currentPresenceKeys.add(buildPresenceKey(normalized));
 
         const pending = findPendingLog(normalized);
@@ -177,7 +209,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     if (!isActive()) return null;
 
     const slotKey = buildSlotKey(normalizedEvent);
-    const existing = state.recordsBySlot.get(slotKey) ?? findRecordForLog(normalizedEvent) ?? null;
+    const candidate = state.recordsBySlot.get(slotKey) ?? findRecordForLog(normalizedEvent) ?? null;
+    const existing = shouldStartNewRecordGeneration(candidate, normalizedEvent) ? null : candidate;
     const clockContext = getClockContext();
     const merged = mergeCreation(existing, normalizedEvent, {
       warmup: getWarmupState(),
@@ -203,6 +236,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     await maybeBroadcastRuleReminder(merged);
     await applyDecision(merged, decision);
     rememberRecord(merged);
+    rememberCreationLog(state, buildCreationLogEntry(merged, {
+      stage: "evaluated",
+      message: decision.reason,
+      decision,
+    }));
     return cloneRecord(merged);
   }
 
@@ -263,18 +301,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   function decideCreation(record, currentConfig) {
-    const cooldown = getCreationCooldown(record, state);
-    if (cooldown.active) {
-      return {
-        status: "kick_cooldown",
-        phase: "kick_cooldown",
-        phaseLabel: "kick cooldown",
-        approved: false,
-        violation: true,
-        reason: `Kick cooldown active for ${cooldown.remainingSeconds}s.`,
-      };
-    }
-
     if (record.isWarmup) {
       return {
         status: "warmup_skipped",
@@ -282,7 +308,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         phaseLabel: "warmup skipped",
         approved: true,
         violation: false,
-        reason: "Warmup enabled.",
+        reason: "暖机阶段已跳过。",
       };
     }
 
@@ -293,7 +319,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         phaseLabel: "other nature skipped",
         approved: true,
         violation: false,
-        reason: "Current squad nature is outside the stepwise rules.",
+        reason: "当前小队类型不在阶梯规则限制内。",
       };
     }
 
@@ -305,7 +331,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         phaseLabel: "open",
         approved: true,
         violation: false,
-        reason: "Current time window has no playtime restriction.",
+        reason: "当前时间段无建队时长限制。",
       };
     }
 
@@ -316,7 +342,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         phaseLabel: rule.label,
         approved: false,
         violation: true,
-        reason: `Missing playtime for ${rule.label}.`,
+        reason: `缺少 ${rule.label} 区间的游戏时长。`,
         rule,
       };
     }
@@ -330,8 +356,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       approved,
       violation: !approved,
       reason: approved
-        ? `Playtime passed ${rule.label}.`
-        : `${record.squadNatureLabel} requires > ${rule.minHoursExclusive}h during ${rule.label}.`,
+        ? `时长满足 ${rule.label} 区间要求。`
+        : `${record.squadNatureLabel || "当前队伍"} 在 ${rule.label} 区间需要大于 ${rule.minHoursExclusive}h。`,
       rule,
     };
   }
@@ -345,7 +371,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       await broadcastViolation(record, decision);
     }
 
-    if (!decision.approved && !record.actions.some((action) => action.type === "disbanded" || action.type === "disband_failed")) {
+    if (!decision.approved && !record.actions.some((action) => action.type === "disbanded")) {
       const disbandResult = await disbandSquad(record, decision);
       record.actions.push({
         type: disbandResult?.ok === false ? "disband_failed" : "disbanded",
@@ -360,13 +386,10 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     if (!decision.approved && shouldWarn(record, decision)) {
       const warned = record.actions.some((action) => action.type === "warned" || action.type === "warn_failed");
       if (!warned) {
-        const cooldown = armCreationCooldown(record, state);
-        record.cooldownUntil = cooldown.untilIso;
         const warnResult = await warnCreator(record, decision);
         record.actions.push({
           type: warnResult?.success === false ? "warn_failed" : "warned",
           result: summarizeActionResult(warnResult),
-          cooldownUntil: cooldown.untilIso,
         });
       }
     }
@@ -620,6 +643,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       active: isActive(),
       settings: publicSettings(),
       recentRecords,
+      recentLogs: state.recentLogs.map(cloneValue),
       pendingLogCount: state.pendingLogs.size,
       summary: buildSummary(recentRecords),
     };
@@ -813,6 +837,8 @@ function mergeCreation(existing, event, context) {
     ...(existing ?? {}),
     ...event,
     id: existing?.id ?? event.id,
+    createdAt: existing?.createdAt ?? event.createdAt ?? nowIso(),
+    createdAtMs: existing?.createdAtMs ?? event.createdAtMs ?? Date.now(),
     creatorName: event.creatorName || existing?.creatorName || "",
     creatorSteamId: event.creatorSteamId || existing?.creatorSteamId || "",
     creatorEosId: event.creatorEosId || existing?.creatorEosId || "",
@@ -822,10 +848,10 @@ function mergeCreation(existing, event, context) {
     creationSource: sourceWasRcon ? "RCON_PROMOTED_TO_LOG" : event.creationSource,
     creationConfidence: event.creationSource === "LOG" ? "HIGH" : event.creationConfidence,
     isLogConfirmed: Boolean(event.creationSource === "LOG" || existing?.isLogConfirmed),
-    isWarmup: Boolean(context.warmup),
-    clockSeconds: Math.max(0, Math.floor(Number(context.clockSeconds ?? 0) || 0)),
-    clockAnchorLogTime: normalizeText(context.clockAnchorLogTime),
-    clockHasAnchor: Boolean(context.clockHasAnchor),
+    isWarmup: existing ? existing.isWarmup : Boolean(context.warmup),
+    clockSeconds: existing ? existing.clockSeconds : Math.max(0, Math.floor(Number(context.clockSeconds ?? 0) || 0)),
+    clockAnchorLogTime: existing ? existing.clockAnchorLogTime : context.clockAnchorLogTime,
+    clockHasAnchor: existing ? existing.clockHasAnchor : Boolean(context.clockHasAnchor),
     actions: Array.isArray(existing?.actions) ? existing.actions.map((action) => ({ ...action })) : [],
     playtime: cloneValue(existing?.playtime) ?? null,
     lookupStartedAt: normalizeText(existing?.lookupStartedAt),
@@ -833,6 +859,13 @@ function mergeCreation(existing, event, context) {
     lookupResult: cloneValue(existing?.lookupResult) ?? null,
     lookupError: normalizeText(existing?.lookupError),
   };
+}
+
+function shouldStartNewRecordGeneration(existing, event) {
+  if (!existing || existing.active) return false;
+  const existingCreatedAtMs = Number(existing.createdAtMs ?? Date.parse(existing.createdAt ?? "")) || 0;
+  const nextCreatedAtMs = Number(event.createdAtMs ?? Date.parse(event.createdAt ?? "")) || 0;
+  return nextCreatedAtMs > existingCreatedAtMs;
 }
 
 function resolveIdentity(record = {}) {
@@ -857,16 +890,16 @@ function normalizeIdentity(value = {}) {
 
 function buildDisbandReason(record, decision) {
   if (decision.status === "missing_playtime") {
-    return `Stepwise guard: playtime missing during ${decision.rule?.label ?? "restricted window"}`;
+    return `阶梯时长守护：在 ${decision.rule?.label ?? "限制窗口"} 缺少游戏时长数据。`;
   }
-  return `Stepwise guard: ${record.squadNatureLabel || "当前"} ${decision.rule?.label ?? "window"} requires > ${decision.rule?.minHoursExclusive ?? 0}h`;
+  return `阶梯时长守护：${record.squadNatureLabel || "当前队伍"} 在 ${decision.rule?.label ?? "限制窗口"} 需要游戏时长大于 ${decision.rule?.minHoursExclusive ?? 0}h。`;
 }
 
 function buildWarnMessage(record, decision) {
   if (decision.status === "missing_playtime") {
-    return "已处理你建立的小队，正在查询你的游戏时长。接下来三秒你将无法建队。";
+    return "已处理你建立的小队，正在查询你的游戏时长。";
   }
-  return `${record.squadNatureLabel || "当前队伍"} 在 ${decision.rule?.label ?? "限制窗口"} 需要大于 ${decision.rule?.minHoursExclusive ?? 0}h，你当前为 ${record.playtime?.hoursText || "未知h"}。接下来三秒你将无法建队。`;
+  return `${record.squadNatureLabel || "当前队伍"} 在 ${decision.rule?.label ?? "限制窗口"} 需要大于 ${decision.rule?.minHoursExclusive ?? 0}h，你当前为 ${record.playtime?.hoursText || "未知h"}。`;
 }
 
 function buildSlotKey(event) {
@@ -921,54 +954,80 @@ function buildSummary(records) {
   return summary;
 }
 
+function buildCreationLogEntry(record = {}, options = {}) {
+  const decision = options.decision ?? null;
+  const identity = resolveIdentity(record);
+  return {
+    id: `${normalizeText(record.id) || "sspg"}:${normalizeText(options.stage) || "event"}:${Date.now()}:${Math.random().toString(16).slice(2)}`,
+    at: normalizeText(options.at ?? record.updatedAt ?? record.createdAt) || nowIso(),
+    stage: normalizeText(options.stage) || "event",
+    source: normalizeText(record.creationSource) || "UNKNOWN",
+    message: normalizeText(options.message),
+    dropReason: normalizeText(options.dropReason),
+    serverId: normalizeText(record.serverId),
+    matchId: normalizeText(record.matchId),
+    teamId: nullableNumber(record.teamId),
+    squadId: nullableNumber(record.squadId),
+    squadName: normalizeText(record.squadName),
+    squadNature: normalizeText(record.squadNature),
+    squadNatureLabel: normalizeText(record.squadNatureLabel),
+    creatorName: normalizeText(record.creatorName) || identity.name,
+    creatorSteamId: normalizeText(record.creatorSteamId) || identity.steamID,
+    creatorEosId: normalizeText(record.creatorEosId) || identity.eosID,
+    leaderName: normalizeText(record.inferredLeader?.name),
+    clockSeconds: positiveInt(record.clockSeconds, 0),
+    isWarmup: Boolean(record.isWarmup),
+    creationConfidence: normalizeText(record.creationConfidence),
+    decision: normalizeText(decision?.status ?? record.decision),
+    approved: decision ? Boolean(decision.approved) : Boolean(record.approved),
+    violation: decision ? Boolean(decision.violation) : Boolean(record.violation),
+    decisionReason: normalizeText(decision?.reason ?? record.decisionReason),
+    ruleLabel: normalizeText(decision?.rule?.label),
+    ruleMinHoursExclusive: nullableNumber(decision?.rule?.minHoursExclusive),
+    playtimeKnown: Boolean(record.playtime?.known),
+    playtimeHoursText: normalizeText(record.playtime?.hoursText),
+    playtimeSource: normalizeText(record.playtime?.source),
+  };
+}
+
+function rememberCreationLog(stateRef, entry) {
+  const dedupeKey = [
+    normalizeText(entry.stage),
+    normalizeText(entry.source),
+    normalizeText(entry.serverId),
+    normalizeText(entry.matchId),
+    entry.teamId == null ? "" : String(entry.teamId),
+    entry.squadId == null ? "" : String(entry.squadId),
+    normalizeSquadName(entry.squadName),
+    normalizeText(entry.creatorName),
+    normalizeText(entry.message),
+    normalizeText(entry.at),
+  ].join("|");
+  if (stateRef?.recentLogs?.some((item) => item?.dedupeKey === dedupeKey)) {
+    return;
+  }
+  stateRef?.recentLogs?.unshift(cloneValue({ ...entry, dedupeKey }));
+  if ((stateRef?.recentLogs?.length ?? 0) > DEFAULT_RECENT_LOG_LIMIT) {
+    stateRef.recentLogs.length = DEFAULT_RECENT_LOG_LIMIT;
+  }
+}
+
+function describeMissingLifecycleFields(event = {}) {
+  const missing = [];
+  if (!normalizeText(event.serverId)) missing.push("serverId");
+  if (event.squadId == null) missing.push("squadId");
+  if (event.teamId == null) missing.push("teamId");
+  return missing;
+}
+
 function createInitialState() {
   return {
     records: [],
+    recentLogs: [],
     recordsBySlot: new Map(),
     pendingLogs: new Map(),
-    creationCooldowns: new Map(),
     ruleReminderBroadcastKeys: new Set(),
   };
-}
-
-function nowMs() {
-  return Date.now();
-}
-
-function getCreationCooldown(record, stateRef) {
-  const key = buildCreatorCooldownKey(record);
-  const untilMs = Number(stateRef?.creationCooldowns?.get(key) ?? 0);
-  if (untilMs <= nowMs()) {
-    stateRef?.creationCooldowns?.delete(key);
-    return { active: false, untilMs: 0, untilIso: "", remainingSeconds: 0 };
-  }
-  return {
-    active: true,
-    untilMs,
-    untilIso: new Date(untilMs).toISOString(),
-    remainingSeconds: Math.max(1, Math.ceil((untilMs - nowMs()) / 1000)),
-  };
-}
-
-function armCreationCooldown(record, stateRef) {
-  const key = buildCreatorCooldownKey(record);
-  const untilMs = nowMs() + CREATION_COOLDOWN_MS;
-  stateRef?.creationCooldowns?.set(key, untilMs);
-  return {
-    key,
-    untilMs,
-    untilIso: new Date(untilMs).toISOString(),
-  };
-}
-
-function buildCreatorCooldownKey(record) {
-  if (record.creatorSteamId) return `steam:${record.creatorSteamId}`;
-  if (record.creatorEosId) return `eos:${record.creatorEosId}`;
-  if (record.creatorName) return `name:${normalizeSquadName(record.creatorName)}`;
-  if (record.inferredLeader?.steamId) return `steam:${record.inferredLeader.steamId}`;
-  if (record.inferredLeader?.eosId) return `eos:${record.inferredLeader.eosId}`;
-  if (record.inferredLeader?.name) return `name:${normalizeSquadName(record.inferredLeader.name)}`;
-  return "unknown";
 }
 
 function summarizeActionResult(result) {
@@ -1040,7 +1099,15 @@ function buildRuleReminderKey(record) {
 function buildRuleReminderMessage(rules = {}) {
   const infantryRules = Array.isArray(rules?.infantry) && rules.infantry.length ? rules.infantry : DEFAULT_RULES.infantry;
   const infantryText = infantryRules.map((rule) => `${rule.startSeconds}-${rule.endSeconds}秒 > ${rule.minHoursExclusive}h`).join("，");
-  return `本服设有阶梯式建队时长检测，步兵队 ${infantryText}，40秒后放开。`;
+  const lastInfantry = infantryRules[infantryRules.length - 1];
+  const infantryEnd = lastInfantry ? lastInfantry.endSeconds : 40;
+
+  const vehicleRules = Array.isArray(rules?.vehicle) && rules.vehicle.length ? rules.vehicle : DEFAULT_RULES.vehicle;
+  const vehicleText = vehicleRules.map((rule) => `${rule.startSeconds}-${rule.endSeconds}秒 > ${rule.minHoursExclusive}h`).join("，");
+  const lastVehicle = vehicleRules[vehicleRules.length - 1];
+  const vehicleEnd = lastVehicle ? lastVehicle.endSeconds : 90;
+
+  return `本服设有阶梯式建队时长检测，步兵队 ${infantryText}，${infantryEnd}秒后放开；载具队 ${vehicleText}，${vehicleEnd}秒后放开。`;
 }
 
 function buildViolationBroadcastMessage(record, decision) {
