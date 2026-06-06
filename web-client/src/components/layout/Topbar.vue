@@ -22,7 +22,7 @@
         </div>
       </div>
 
-      <div class="topbar-center">
+      <div v-if="showMatchContext" class="topbar-center">
         <div class="match-summary">
           <span class="match-chip match-chip-strong">{{ matchPlayersLabel }}</span>
           <span class="match-chip match-chip-team1">{{ t("match.team1", "", { count: matchTeam1Count }) }}</span>

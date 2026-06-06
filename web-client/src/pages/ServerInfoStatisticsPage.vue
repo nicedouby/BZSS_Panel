@@ -1,124 +1,139 @@
 <template>
   <div class="server-stats-page">
-    <!-- 第一栏：极简战术顶栏 (人数、TPS、排队) -->
-    <header class="tactical-header">
-      <div class="h-branding">
-        <span class="pulse-dot"></span>
-        <h1 class="title">性能审计 <span>AUDIT</span></h1>
-      </div>
-      
-      <div class="kpi-center-hub">
-        <div class="kpi-widget" v-for="m in kpiMetrics" :key="m.label" :data-tone="m.tone">
-          <div class="k-info">
-            <span class="k-lbl">{{ m.label }}</span>
-            <span class="k-val">{{ m.value }}<small v-if="m.suffix">{{ m.suffix }}</small></span>
+    <!-- ─── 顶部 KPI 光带 ─────────────────────────────────────────── -->
+    <header class="stats-header">
+      <div class="kpi-hub">
+        <div
+          v-for="m in kpiMetrics"
+          :key="m.label"
+          class="kpi-tile"
+          :class="`tone-${m.tone}`"
+        >
+          <span class="kpi-label">{{ m.label }}</span>
+          <div class="kpi-number">
+            {{ m.value }}<small v-if="m.suffix">{{ m.suffix }}</small>
           </div>
-          <div class="k-spark" :style="{ background: m.color }"></div>
+          <div class="kpi-bar" :style="{ background: m.color, width: `${m.pct}%` }" />
+        </div>
+        <div class="kpi-tile tone-info kpi-meta-tile">
+          <span class="kpi-label">WINDOW</span>
+          <div class="kpi-number">{{ activeRangeLabel }}</div>
+          <span class="kpi-sub">{{ lastUpdatedLabel }}</span>
         </div>
       </div>
 
-      <div class="h-ctrl">
-        <div class="sync-pill">
-          <span class="l">SYNC</span>
-          <span class="v">{{ lastUpdatedLabel }}</span>
-        </div>
-        <button class="tactical-btn icon" title="选择日期" @click="openDateDialog">📅</button>
-        <button class="tactical-btn primary" :disabled="loading" @click="refreshAll">
-          {{ loading ? '...' : 'REFRESH' }}
+      <div class="header-actions">
+        <span class="refresh-mode-badge" :class="{ paused: hasCustomSelection }">
+          {{ hasCustomSelection ? 'PAUSED' : 'POLLING' }}
+        </span>
+        <button class="hdr-btn icon" title="选择历史日期" @click="openDateDialog">📅</button>
+        <button class="hdr-btn primary" :disabled="loading" @click="refreshAll">
+          <span v-if="loading" class="spin">◌</span>
+          <span v-else>↺</span>
+          {{ loading ? '刷新中' : '刷新' }}
         </button>
       </div>
     </header>
 
-    <div class="layout-main">
-      <!-- 左栏：控制与选项 -->
-      <aside class="side-command-panel">
-        <!-- 块 1：时间范围 -->
-        <div class="cmd-block">
-          <div class="block-head"><span class="i">🕒</span> TIME WINDOW</div>
+    <div class="stats-body">
+      <!-- ─── 左侧控制栏 ───────────────────────────────────────────── -->
+      <aside class="stats-sidebar">
+        <!-- 时间窗口 -->
+        <section class="sidebar-section">
+          <div class="section-head">
+            <span class="section-icon">🕒</span>
+            <span class="section-title">TIME WINDOW</span>
+          </div>
           <div class="range-grid">
             <button
               v-for="r in SERVER_METRIC_RANGES"
               :key="r.key"
-              class="range-cell"
-              :class="{ active: selectedRange === r.key }"
+              class="range-btn"
+              :class="{ active: selectedRange === r.key && !hasCustomSelection }"
               @click="setRange(r.key)"
             >
               {{ r.label }}
             </button>
           </div>
-        </div>
+        </section>
 
-        <!-- 块 2：高级统计 (Enrichment) -->
-        <div class="cmd-block technical-stats">
-          <div class="block-head"><span class="i">📊</span> ANALYTICS</div>
-          <div class="tech-grid">
-            <div class="tech-item">
-              <span class="tl">PEAK PLAYERS</span>
-              <span class="tv">{{ peakPlayers }}</span>
-            </div>
-            <div class="tech-item">
-              <span class="tl">AVG TPS (LOGIC)</span>
-              <span class="tv">{{ avgTps.toFixed(2) }}</span>
-            </div>
-            <div class="tech-item">
-              <span class="tl">DATA SAMPLES</span>
-              <span class="tv">{{ samples.length }}</span>
-            </div>
-            <div class="tech-item">
-              <span class="tl">UPTIME REF</span>
-              <span class="tv">ACTIVE</span>
-            </div>
+        <!-- 指标通道 -->
+        <section class="sidebar-section">
+          <div class="section-head">
+            <span class="section-icon">📡</span>
+            <span class="section-title">DATA CHANNELS</span>
           </div>
-        </div>
-
-        <!-- 块 3：通道控制 -->
-        <div class="cmd-block channels-manager">
-          <div class="block-head"><span class="i">📡</span> DATA CHANNELS</div>
           <div class="channel-list">
             <button
               v-for="c in channels"
               :key="c.key"
               class="channel-strip"
-              :class="{ disabled: !Array.isArray(enabledChannels) || !enabledChannels.includes(c.key) }"
+              :class="{ enabled: isChannelEnabled(c.key) }"
               @click="toggleChannel(c.key)"
             >
-              <div class="c-left">
-                <span class="c-dot" :style="{ background: c.color }"></span>
-                <span class="c-name">{{ c.label }}</span>
+              <div class="cs-left">
+                <span class="cs-dot" :style="{ background: c.color }" />
+                <span class="cs-name">{{ c.label }}</span>
               </div>
-              <div class="c-right">
-                <span class="c-val">{{ currentMetrics[c.key]?.toFixed(c.axis === 'tps' ? 1 : 0) ?? '-' }}</span>
-              </div>
+              <span class="cs-val">
+                {{ currentMetrics[c.key]?.toFixed(c.axis === 'tps' ? 1 : 0) ?? '—' }}
+              </span>
             </button>
           </div>
-        </div>
+        </section>
 
-        <div class="panel-status-tag">
-          COMMAND CENTER v2.4 | {{ refreshModeLabel }}
+        <!-- 衍生统计 -->
+        <section class="sidebar-section analytics-section">
+          <div class="section-head">
+            <span class="section-icon">📊</span>
+            <span class="section-title">ANALYTICS</span>
+          </div>
+          <div class="analytics-grid">
+            <div class="anlx-item">
+              <span class="anlx-label">峰值人数</span>
+              <span class="anlx-value">{{ peakPlayers }}</span>
+            </div>
+            <div class="anlx-item">
+              <span class="anlx-label">平均 TPS</span>
+              <span class="anlx-value">{{ avgTps.toFixed(2) }}</span>
+            </div>
+            <div class="anlx-item">
+              <span class="anlx-label">数据样本</span>
+              <span class="anlx-value">{{ samples.length }}</span>
+            </div>
+            <div class="anlx-item">
+              <span class="anlx-label">运行状态</span>
+              <span class="anlx-value status-active">ACTIVE</span>
+            </div>
+          </div>
+        </section>
+
+        <div class="sidebar-footer-tag">
+          BZSS PANEL · {{ refreshModeLabel }}
         </div>
       </aside>
 
-      <!-- 其余空间：全屏图表 -->
-      <main class="viewport-stage">
+      <!-- ─── 主图表区 ─────────────────────────────────────────────── -->
+      <main class="chart-stage">
         <DataState
           :loading="loading && !hasData"
           :error="blockingError"
           :empty="!loading && !hasData && !blockingError"
         >
-          <div class="chart-canvas-container">
-            <!-- 视觉点缀：网格底纹 -->
-            <div class="grid-overlay"></div>
+          <div class="chart-wrap">
+            <div class="chart-grid-overlay" />
             <ServerMetricsChart
               :samples="samples"
               :channels="channels"
               :enabled-channels="enabledChannels"
-              class="integrated-chart"
+              class="chart-component"
             />
           </div>
         </DataState>
       </main>
     </div>
 
+    <!-- 日期选择对话框 -->
     <ServerMetricsDateDialog
       :open="showDateDialog"
       :available-dates="availableDates"
@@ -171,136 +186,553 @@ const {
   refreshAll,
 } = metrics;
 
-// 计算衍生统计数据用于丰富排版
+// 辅助：通道是否已启用（兼容 boolean 和 Record）
+function isChannelEnabled(key: string): boolean {
+  const v = (enabledChannels.value as any)[key];
+  return v !== false;
+}
+
+// 衍生统计
 const peakPlayers = computed(() => {
   if (!samples.value.length) return 0;
-  return Math.max(...samples.value.map(s => s.metrics.playerCount ?? 0));
+  return Math.max(...samples.value.map((s) => s.metrics.playerCount ?? 0));
 });
 
 const avgTps = computed(() => {
   if (!samples.value.length) return 0;
-  const tpsSamples = samples.value.map(s => s.metrics.tps).filter(v => v != null) as number[];
+  const tpsSamples = samples.value.map((s) => s.metrics.tps).filter((v) => v != null) as number[];
   if (!tpsSamples.length) return 0;
   return tpsSamples.reduce((a, b) => a + b, 0) / tpsSamples.length;
 });
 
+const playerCount = computed(() => currentMetrics.value.playerCount ?? 0);
+const maxPlayers = 100;
+
 const kpiMetrics = computed(() => [
-  { label: 'ONLINE', value: currentMetrics.value.playerCount ?? 0, suffix: '/100', color: '#60a5fa', tone: 'info' },
-  { label: 'SERVER TPS', value: currentMetrics.value.tps?.toFixed(1) ?? '--', color: '#10b981', tone: tpsTone.value },
-  { label: 'QUEUE', value: (currentMetrics.value.publicQueue ?? 0) + (currentMetrics.value.reserveQueue ?? 0), color: '#f59e0b', tone: 'warn' },
+  {
+    label: "ONLINE",
+    value: playerCount.value,
+    suffix: "/100",
+    color: "#38bdf8",
+    tone: "info",
+    pct: Math.min(100, (playerCount.value / maxPlayers) * 100),
+  },
+  {
+    label: "SERVER TPS",
+    value: currentMetrics.value.tps?.toFixed(1) ?? "--",
+    suffix: "",
+    color: "#10b981",
+    tone: tpsTone.value,
+    pct: Math.min(100, ((currentMetrics.value.tps ?? 0) / 50) * 100),
+  },
+  {
+    label: "QUEUE",
+    value: (currentMetrics.value.publicQueue ?? 0) + (currentMetrics.value.reserveQueue ?? 0),
+    suffix: "",
+    color: "#f59e0b",
+    tone: "warn",
+    pct: Math.min(
+      100,
+      (((currentMetrics.value.publicQueue ?? 0) + (currentMetrics.value.reserveQueue ?? 0)) / 50) * 100,
+    ),
+  },
 ]);
 
 const refreshModeLabel = computed(() => (hasCustomSelection.value ? "PAUSED" : "POLLING"));
 const blockingError = computed(() => (historyError.value && !hasData.value ? historyError.value : ""));
 
-onMounted(() => { void start(); });
-onUnmounted(() => { stop(); });
+onMounted(() => {
+  void start();
+});
+onUnmounted(() => {
+  stop();
+});
 </script>
 
 <style scoped>
+/* ─── 页面根容器 ─────────────────────────────────────────────────── */
 .server-stats-page {
-  height: calc(100vh - 48px);
-  margin: -24px;
+  /* 占满内容区，不让 body 滚动 */
+  height: 100%;
   display: flex;
   flex-direction: column;
-  background: #05070a;
+  background:
+    radial-gradient(ellipse 60% 30% at 50% 0%, rgba(56, 189, 248, 0.06), transparent),
+    radial-gradient(ellipse 40% 40% at 80% 60%, rgba(168, 85, 247, 0.04), transparent),
+    #06090f;
   color: #f1f5f9;
   overflow: hidden;
   font-family: 'Inter', -apple-system, sans-serif;
 }
 
-/* Header */
-.tactical-header {
-  height: 52px;
-  background: rgba(10, 15, 26, 0.95);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+/* ─── 顶部 Header ────────────────────────────────────────────────── */
+.stats-header {
+  height: 58px;
+  padding: 0 20px;
+  flex-shrink: 0;
   display: flex;
-  padding: 0 24px;
   align-items: center;
-  justify-content: space-between;
+  gap: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.01)),
+    rgba(8, 12, 20, 0.92);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.1);
+  backdrop-filter: blur(12px);
+}
+
+/* 品牌区 */
+.header-branding {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.live-indicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #475569;
   flex-shrink: 0;
 }
 
-.h-branding { display: flex; align-items: center; gap: 12px; }
-.pulse-dot { width: 6px; height: 6px; background: #ef4444; border-radius: 50%; box-shadow: 0 0 8px #ef4444; animation: pulse 2s infinite; }
-@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
-.title { font-size: 14px; font-weight: 900; color: #fff; margin: 0; letter-spacing: 1px; }
-.title span { color: #475569; font-weight: 500; }
+.live-indicator.polling {
+  background: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+  animation: pulse-dot 2s infinite;
+}
 
-.kpi-center-hub { display: flex; gap: 32px; flex: 1; justify-content: center; }
-.kpi-widget { display: flex; flex-direction: column; min-width: 100px; position: relative; padding: 4px 0; }
-.k-lbl { font-size: 8px; font-weight: 900; color: #475569; text-transform: uppercase; letter-spacing: 1px; }
-.k-val { font-size: 22px; font-weight: 950; font-family: 'JetBrains Mono', monospace; line-height: 1; color: #fff; }
-.k-val small { font-size: 11px; color: #334155; margin-left: 2px; }
-.k-spark { position: absolute; bottom: 0; left: 0; width: 20px; height: 2px; border-radius: 1px; opacity: 0.6; }
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; box-shadow: 0 0 8px rgba(239, 68, 68, 0.6); }
+  50% { opacity: 0.5; box-shadow: 0 0 3px rgba(239, 68, 68, 0.3); }
+}
 
-.kpi-widget[data-tone="ok"] .k-val { color: #10b981; }
-.kpi-widget[data-tone="warn"] .k-val { color: #f59e0b; }
-.kpi-widget[data-tone="error"] .k-val { color: #ef4444; }
-.kpi-widget[data-tone="info"] .k-val { color: #38bdf8; }
+.header-titles {
+  display: grid;
+  gap: 1px;
+}
 
-.h-ctrl { display: flex; align-items: center; gap: 16px; }
-.sync-pill { display: flex; align-items: baseline; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 800; color: #334155; }
-.sync-pill .v { color: #38bdf8; }
-.tactical-btn { background: rgba(51, 65, 85, 0.4); border: 1px solid rgba(255, 255, 255, 0.1); color: #94a3b8; padding: 4px 12px; border-radius: 4px; font-size: 10px; font-weight: 900; cursor: pointer; }
-.tactical-btn.primary { background: #2563eb; color: #fff; border-color: transparent; }
+.header-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 900;
+  color: #f1f5f9;
+  letter-spacing: 0.5px;
+  line-height: 1.1;
+}
 
-/* Main Layout */
-.layout-main { flex: 1; display: flex; min-height: 0; }
+.header-sub {
+  font-size: 10px;
+  color: #475569;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  white-space: nowrap;
+}
 
-/* Sidebar */
-.side-command-panel {
-  width: 240px;
-  background: #080a0f;
-  border-right: 1px solid rgba(255, 255, 255, 0.05);
+/* KPI Hub */
+.kpi-hub {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+  justify-content: center;
+  align-items: stretch;
+}
+
+.kpi-tile {
+  position: relative;
   display: flex;
   flex-direction: column;
-  padding: 24px;
-  gap: 32px;
+  min-width: 110px;
+  padding: 5px 14px 7px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+  transition: border-color 0.2s ease;
+}
+
+.kpi-tile:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.kpi-label {
+  font-size: 8px;
+  font-weight: 900;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 2px;
+}
+
+.kpi-number {
+  font-size: 22px;
+  font-weight: 950;
+  font-family: 'JetBrains Mono', monospace;
+  line-height: 1;
+  color: #f1f5f9;
+}
+
+.kpi-number small {
+  font-size: 10px;
+  color: #334155;
+  margin-left: 2px;
+  font-weight: 500;
+}
+
+.kpi-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  border-radius: 1px;
+  opacity: 0.7;
+  transition: width 0.5s ease;
+}
+
+/* KPI 颜色语义 */
+.kpi-tile.tone-info .kpi-number { color: #38bdf8; }
+.kpi-tile.tone-ok .kpi-number { color: #10b981; }
+.kpi-tile.tone-warn .kpi-number { color: #f59e0b; }
+.kpi-tile.tone-critical .kpi-number { color: #ef4444; }
+
+.kpi-meta-tile {
+  min-width: 140px;
+}
+
+.kpi-meta-tile .kpi-number {
+  font-size: 14px;
+  margin-top: 2px;
+}
+
+.kpi-sub {
+  font-size: 9px;
+  color: #475569;
+  font-family: 'JetBrains Mono', monospace;
+  margin-top: 1px;
+}
+
+/* 右侧操作区 */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.refresh-mode-badge {
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  background: rgba(52, 211, 153, 0.08);
+  color: #34d399;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  display: inline-flex;
+  align-items: center;
+}
+
+.refresh-mode-badge.paused {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.08);
+  color: #f59e0b;
+}
+
+.hdr-btn {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.14s ease;
+}
+
+.hdr-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f1f5f9;
+}
+
+.hdr-btn.icon {
+  width: 30px;
+  padding: 0;
+  justify-content: center;
+}
+
+.hdr-btn.primary {
+  background: rgba(37, 99, 235, 0.2);
+  color: #93c5fd;
+  border-color: rgba(37, 99, 235, 0.35);
+  min-width: 72px;
+}
+
+.hdr-btn.primary:hover:not(:disabled) {
+  background: rgba(37, 99, 235, 0.32);
+  color: #bfdbfe;
+}
+
+.hdr-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.spin {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Body 区：左栏 + 图表 ───────────────────────────────────────── */
+.stats-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ─── 左侧栏 ─────────────────────────────────────────────────────── */
+.stats-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 14px 14px 10px;
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0.01)),
+    rgba(6, 9, 15, 0.7);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.stats-sidebar::-webkit-scrollbar { width: 4px; }
+.stats-sidebar::-webkit-scrollbar-thumb { border-radius: 2px; background: rgba(255,255,255,0.08); }
+
+.sidebar-section {
+  margin-bottom: 18px;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 9px;
+}
+
+.section-icon {
+  font-size: 11px;
+  opacity: 0.45;
+}
+
+.section-title {
+  font-size: 9px;
+  font-weight: 900;
+  color: #334155;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* 时间窗口格子 */
+.range-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+
+.range-btn {
+  height: 30px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.range-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #94a3b8;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.range-btn.active {
+  background: rgba(56, 189, 248, 0.14);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.35);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.1);
+}
+
+/* 指标通道列表 */
+.channel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.channel-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+
+.channel-strip:hover {
+  background: rgba(255, 255, 255, 0.03);
+  color: #94a3b8;
+}
+
+.channel-strip.enabled {
+  color: #cbd5e1;
+  border-color: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.cs-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cs-dot {
+  width: 4px;
+  height: 14px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.channel-strip:not(.enabled) .cs-dot {
+  opacity: 0.2;
+}
+
+.cs-name {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cs-val {
+  font-size: 12px;
+  font-weight: 800;
+  font-family: 'JetBrains Mono', monospace;
+  color: #334155;
   flex-shrink: 0;
 }
 
-.block-head { font-size: 10px; font-weight: 900; color: #475569; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-.block-head .i { opacity: 0.5; }
-
-.range-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.range-cell { background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(255, 255, 255, 0.05); color: #64748b; font-size: 11px; font-weight: 800; padding: 8px; border-radius: 4px; cursor: pointer; transition: all 0.2s; }
-.range-cell.active { background: #38bdf8; color: #000; border-color: transparent; }
-
-.tech-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.tech-item { display: flex; flex-direction: column; }
-.tl { font-size: 8px; font-weight: 800; color: #334155; }
-.tv { font-size: 13px; font-weight: 900; color: #cbd5e1; font-family: 'JetBrains Mono', monospace; }
-
-.channel-list { display: flex; flex-direction: column; gap: 2px; }
-.channel-strip { 
-  display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-radius: 6px;
-  background: transparent; border: 1px solid transparent; cursor: pointer; color: #cbd5e1; transition: all 0.2s;
-}
-.channel-strip:hover { background: rgba(255,255,255,0.02); }
-.c-left { display: flex; align-items: center; gap: 10px; }
-.c-dot { width: 4px; height: 12px; border-radius: 1px; }
-.c-name { font-size: 12px; font-weight: 700; }
-.c-val { font-size: 12px; font-weight: 800; font-family: 'JetBrains Mono', monospace; color: #475569; }
-.channel-strip.disabled { opacity: 0.15; filter: grayscale(1); }
-
-.panel-status-tag { margin-top: auto; font-size: 9px; color: #2d3748; font-weight: 800; letter-spacing: 0.5px; border-top: 1px solid rgba(255,255,255,0.03); padding-top: 16px; }
-
-/* Chart Area */
-.viewport-stage { 
-  flex: 1; 
-  display: flex; 
-  flex-direction: column; 
-  min-width: 0; 
-  background: #05070a; 
-  height: 100%;
+.channel-strip.enabled .cs-val {
+  color: #64748b;
 }
 
-.chart-canvas-container {
+/* 衍生分析区 */
+.analytics-section {
+  padding: 11px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.anlx-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.anlx-label {
+  font-size: 8px;
+  font-weight: 800;
+  color: #1e293b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.anlx-value {
+  font-size: 13px;
+  font-weight: 900;
+  color: #94a3b8;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.anlx-value.status-active {
+  color: #34d399;
+  font-size: 10px;
+}
+
+/* 底部版本标签 */
+.sidebar-footer-tag {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 8px;
+  color: #1e293b;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+/* ─── 图表区 ──────────────────────────────────────────────────────── */
+.chart-stage {
   flex: 1;
-  position: relative;
+  min-width: 0;
   height: 100%;
-  display: block;
+  background: #05070a;
+  position: relative;
+}
+
+.chart-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* 细网格底纹 */
+.chart-grid-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(56, 189, 248, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.025) 1px, transparent 1px);
+  background-size: 60px 60px;
+  mask-image: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.35) 15%, rgba(0,0,0,0.35) 85%, transparent 100%);
+}
+
+.chart-component {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 :deep(.bz-data-state),
@@ -311,21 +743,40 @@ onUnmounted(() => { stop(); });
   flex-direction: column !important;
 }
 
-.integrated-chart { 
-  width: 100%; 
-  height: 100% !important;
-  position: absolute;
-  top: 0;
-  left: 0;
-}
-
-:deep(.integrated-chart .server-metrics-chart-surface) {
-  height: 100% !important;
-}
-
+/* ─── 响应式 ─────────────────────────────────────────────────────── */
 @media (max-width: 1000px) {
-  .server-stats-page { margin: 0; height: 100vh; }
-  .layout-main { flex-direction: column; overflow-y: auto; }
-  .side-command-panel { width: 100%; height: auto; border-right: none; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+  .stats-body {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .stats-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 12px 16px;
+  }
+
+  .kpi-hub {
+    gap: 4px;
+  }
+
+  .kpi-tile {
+    min-width: 90px;
+  }
+}
+
+@media (max-width: 680px) {
+  .stats-header {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 10px 14px;
+    gap: 10px;
+  }
+
+  .kpi-hub {
+    order: 3;
+    width: 100%;
+  }
 }
 </style>

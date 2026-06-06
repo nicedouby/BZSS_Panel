@@ -98,6 +98,10 @@ export interface PlayerDetailViewModel {
   playtimeHours: number | null;
   combatStats: CombatStats;
   statsLabel: string;
+  battleStats?: CombatStats;
+  battleStatsLabel?: string;
+  battleStatsSource?: string;
+  battleStatsLastUpdatedAt?: string | null;
   source: string;
   controller: string;
   raw?: any;

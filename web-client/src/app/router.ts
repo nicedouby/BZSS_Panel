@@ -4,6 +4,7 @@ import MatchStatusPage from "../pages/MatchStatusPage.vue";
 import ConsolePage from "../pages/ConsolePage.vue";
 import PlayerDatabasePage from "../pages/PlayerDatabasePage.vue";
 import CombatManagerPage from "../pages/CombatManagerPage.vue";
+import BattleLogPage from "../pages/BattleLogPage.vue";
 import AdminWarnsPage from "../pages/AdminWarnsPage.vue";
 import ScheduledBroadcastPage from "../pages/ScheduledBroadcastPage.vue";
 import InfantryCombatEnhancerPage from "../pages/InfantryCombatEnhancerPage.vue";
@@ -152,6 +153,17 @@ export const router = createRouter({
       meta: {
         ...corePollingMeta,
         titleKey: "routeTitle.combatLog",
+        fullBleed: true,
+      },
+    },
+    {
+      path: "/battle-log",
+      component: BattleLogPage,
+      meta: {
+        ...corePollingMeta,
+        titleKey: "routeTitle.battleLog",
+        requiredPermission: "combat_manager.view",
+        legacyRequiredPermissions: ["kill_manager.view"],
         fullBleed: true,
       },
     },

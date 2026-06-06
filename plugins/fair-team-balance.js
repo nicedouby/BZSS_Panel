@@ -1,4 +1,4 @@
-﻿// -*- coding: utf-8 -*-
+// -*- coding: utf-8 -*-
 
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -1489,7 +1489,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         return {
           ok: false,
           error: "WarmupModeDisabled",
-          message: "鏆栨湇妯″紡涓嬪凡鍏抽棴鍏钩璺宠竟锛岃鍒囨崲鍒伴潪鏆栨湇妯″紡鍚庡啀澶勭悊璇锋眰銆?",
+          message: "鏆栨湇妯″紡涓嬪凡鍏抽棴公平跳边锛岃鍒囨崲鍒伴潪鏆栨湇妯″紡鍚庡啀澶勭悊璇锋眰銆?",
         };
       }
 
@@ -1912,12 +1912,16 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       }
 
       expireRequests();
-      const message = String(event?.message ?? "");
-      if (message !== "tb" && message !== "sqtb" && !CLAIM_MESSAGE_PATTERN.test(message)) {
+      const message = String(event?.message ?? "").trim();
+      const lowerMessage = message.toLowerCase();
+      const isTb = lowerMessage === "tb" || message === "公平跳边" || message === "跳边";
+      const isSqtb = lowerMessage === "sqtb" || message === "申请跳边";
+
+      if (!isTb && !isSqtb && !CLAIM_MESSAGE_PATTERN.test(message)) {
         return { matched: false };
       }
 
-      if (message === "tb") {
+      if (isTb) {
         const result = await handleDirectTbMessage(event);
         return {
           matched: true,
@@ -1926,7 +1930,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         };
       }
 
-      if (message === "sqtb") {
+      if (isSqtb) {
         const result = await handleDirectSqtbMessage(event);
         return {
           matched: true,

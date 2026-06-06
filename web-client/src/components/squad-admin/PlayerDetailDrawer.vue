@@ -109,6 +109,35 @@
               <div class="combat-stats-label">{{ props.player.statsLabel }}</div>
             </section>
 
+            <section v-if="props.player.battleStats" class="detail-section combat-card battle-log-card">
+              <div class="detail-section-title">{{ t("player.battleStats", "战绩（battleLog）") }}</div>
+              <div class="combat-stats-grid">
+                <div class="stat-item combat-stat combat-stat--downs">
+                  <span class="stat-label">{{ t("combat.downs", "击倒") }}</span>
+                  <strong class="stat-value combat-stat-value">{{ props.player.battleStats.downs }}</strong>
+                </div>
+                <div class="stat-item combat-stat combat-stat--kills">
+                  <span class="stat-label">{{ t("combat.kills", "击杀") }}</span>
+                  <strong class="stat-value combat-stat-value">{{ props.player.battleStats.kills }}</strong>
+                </div>
+                <div class="stat-item combat-stat combat-stat--deaths">
+                  <span class="stat-label">{{ t("combat.death", "死亡") }}</span>
+                  <strong class="stat-value combat-stat-value">{{ props.player.battleStats.deaths }}</strong>
+                </div>
+                <div class="stat-item combat-stat combat-stat--tk">
+                  <span class="stat-label">{{ t("combat.teamKill", "TK") }}</span>
+                  <strong class="stat-value combat-stat-value">{{ props.player.battleStats.tk }}</strong>
+                </div>
+                <div class="stat-item combat-stat combat-stat--revives">
+                  <span class="stat-label">{{ t("combat.revive", "复苏") }}</span>
+                  <strong class="stat-value combat-stat-value">{{ props.player.battleStats.revives }}</strong>
+                </div>
+              </div>
+              <div class="combat-stats-label">
+                {{ props.player.battleStatsLabel || props.player.battleStatsSource || t("common.source") }}
+              </div>
+            </section>
+
             <section class="detail-section combat-history-section">
               <button
                 type="button"

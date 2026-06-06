@@ -55,10 +55,10 @@ function buildBaseOption(): echarts.EChartsOption {
     backgroundColor: "transparent",
     animation: false,
     grid: {
-      left: 48,
-      right: 48,
-      top: 28,
-      bottom: 44,
+      left: 56,
+      right: 56,
+      top: 20,
+      bottom: 48,
       containLabel: true,
     },
     tooltip: {
@@ -67,15 +67,23 @@ function buildBaseOption(): echarts.EChartsOption {
       axisPointer: {
         type: "cross",
         lineStyle: {
-          color: "#60a5fa",
+          color: "rgba(96, 165, 250, 0.5)",
+          width: 1,
+          type: "dashed",
+        },
+        crossStyle: {
+          color: "rgba(96, 165, 250, 0.3)",
           width: 1,
         },
       },
-      backgroundColor: "#10151b",
-      borderColor: "#2d3748",
+      backgroundColor: "rgba(8, 14, 22, 0.96)",
+      borderColor: "rgba(56, 189, 248, 0.22)",
+      borderWidth: 1,
+      padding: 0,
       textStyle: {
         color: "#e5eef7",
       },
+      extraCssText: "box-shadow: 0 12px 36px rgba(0,0,0,0.48); border-radius: 12px; overflow: hidden;",
       formatter: buildTooltip as any,
     } as any,
     xAxis: {
@@ -83,17 +91,18 @@ function buildBaseOption(): echarts.EChartsOption {
       boundaryGap: false,
       axisLine: {
         lineStyle: {
-          color: "#2d3748",
+          color: "rgba(255,255,255,0.06)",
         },
       },
       axisLabel: {
-        color: "#7c8b99",
+        color: "#4a5568",
         fontSize: 11,
+        fontFamily: "JetBrains Mono, monospace",
       },
       splitLine: {
         show: true,
         lineStyle: {
-          color: "#18202a",
+          color: "rgba(255,255,255,0.04)",
         },
       },
     } as any,
@@ -102,27 +111,33 @@ function buildBaseOption(): echarts.EChartsOption {
         type: "value",
         scale: true,
         axisLabel: {
-          color: "#7c8b99",
+          color: "#4a5568",
           fontSize: 11,
+          fontFamily: "JetBrains Mono, monospace",
         },
         splitLine: {
           show: true,
           lineStyle: {
-            color: "#18202a",
+            color: "rgba(255,255,255,0.04)",
           },
         },
+        axisLine: { show: false },
+        axisTick: { show: false },
       },
       {
         type: "value",
         min: 0,
-        max: 60,
+        max: 50,
         axisLabel: {
-          color: "#7c8b99",
+          color: "#4a5568",
           fontSize: 11,
+          fontFamily: "JetBrains Mono, monospace",
         },
         splitLine: {
           show: false,
         },
+        axisLine: { show: false },
+        axisTick: { show: false },
       },
     ],
     dataZoom: [
@@ -132,16 +147,27 @@ function buildBaseOption(): echarts.EChartsOption {
       },
       {
         type: "slider",
-        height: 18,
-        bottom: 2,
+        height: 20,
+        bottom: 4,
         borderColor: "transparent",
-        fillerColor: "rgba(96, 165, 250, 0.14)",
+        fillerColor: "rgba(56, 189, 248, 0.1)",
         handleStyle: {
-          color: "#60a5fa",
+          color: "#38bdf8",
+          borderColor: "transparent",
+        },
+        dataBackground: {
+          lineStyle: { color: "rgba(56, 189, 248, 0.3)" },
+          areaStyle: { color: "rgba(56, 189, 248, 0.05)" },
+        },
+        selectedDataBackground: {
+          lineStyle: { color: "rgba(56, 189, 248, 0.5)" },
+          areaStyle: { color: "rgba(56, 189, 248, 0.1)" },
         },
         textStyle: {
-          color: "#7c8b99",
+          color: "#4a5568",
+          fontFamily: "JetBrains Mono, monospace",
         },
+        brushSelect: false,
       },
     ],
     series: [],
@@ -157,18 +183,18 @@ function buildTooltip(params: any[]) {
     const value = Array.isArray(item.data) ? item.data[1] : item.data;
     const unit = getUnit(item.seriesName);
     return `
-      <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
-        <span style="width:8px;height:8px;border-radius:2px;background:${item.color};flex:none;"></span>
-        <span style="flex:1;font-size:12px;color:#a8b4bf;">${escapeHtml(String(item.seriesName ?? ""))}</span>
-        <strong style="font-family:JetBrains Mono, monospace;font-size:13px;color:#f8fafc;">${escapeHtml(formatTooltipValue(value))}${unit ? `<span style="margin-left:4px;color:#7c8b99;font-size:11px;">${escapeHtml(unit)}</span>` : ""}</strong>
+      <div style="display:flex;align-items:center;gap:10px;padding:4px 0;">
+        <span style="width:3px;height:16px;border-radius:2px;background:${item.color};flex:none;border-radius:1px;"></span>
+        <span style="flex:1;font-size:11px;color:#64748b;font-weight:500;">${escapeHtml(String(item.seriesName ?? ""))}</span>
+        <strong style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:800;color:#f8fafc;">${escapeHtml(formatTooltipValue(value))}${unit ? `<span style="margin-left:3px;color:#475569;font-size:10px;font-weight:600;">${escapeHtml(unit)}</span>` : ""}</strong>
       </div>
     `;
   }).join("");
 
   return `
-    <div style="min-width:220px;padding:10px 12px;">
-      <div style="padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid #2d3748;font-size:12px;font-weight:700;color:#f8fafc;">${escapeHtml(time)}</div>
-      ${rows}
+    <div style="min-width:200px;">
+      <div style="padding:9px 13px 7px;background:rgba(56,189,248,0.06);border-bottom:1px solid rgba(56,189,248,0.12);font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:#38bdf8;letter-spacing:0.04em;">${escapeHtml(time)}</div>
+      <div style="padding:6px 13px 10px;">${rows}</div>
     </div>
   `;
 }
@@ -182,21 +208,48 @@ function updateChart() {
       .map((channel) => {
         const isPlayerCount = channel.key === "playerCount";
         const seriesData = props.samples.map((sample) => [sample.timestamp_ms, sample.metrics[channel.key] ?? null]);
-        
+
+        // 为每条线生成对应的面积渐变
+        const hexToRgb = (hex: string) => {
+          const r = parseInt(hex.slice(1, 3), 16);
+          const g = parseInt(hex.slice(3, 5), 16);
+          const b = parseInt(hex.slice(5, 7), 16);
+          return `${r},${g},${b}`;
+        };
+
+        let rgb = "148,163,184";
+        try { rgb = hexToRgb(channel.color); } catch { /* ignore */ }
+
         const series: any = {
           name: channel.label,
           type: "line",
           showSymbol: false,
-          smooth: true,
+          smooth: 0.35,
           connectNulls: true,
           yAxisIndex: channel.axis === "tps" ? 1 : 0,
           data: seriesData,
           lineStyle: {
-            width: 2,
+            width: 2.5,
             color: channel.color,
+            shadowColor: `rgba(${rgb}, 0.35)`,
+            shadowBlur: 6,
           },
           itemStyle: {
             color: channel.color,
+          },
+          areaStyle: {
+            color: {
+              type: "linear",
+              x: 0, y: 0, x2: 0, y2: 1,
+              colorStops: [
+                { offset: 0, color: `rgba(${rgb}, 0.18)` },
+                { offset: 0.6, color: `rgba(${rgb}, 0.05)` },
+                { offset: 1, color: `rgba(${rgb}, 0)` },
+              ],
+            },
+          },
+          emphasis: {
+            lineStyle: { width: 3 },
           },
         };
 
@@ -204,7 +257,7 @@ function updateChart() {
           series.markPoint = {
             data: calculateSingularities(props.samples),
             symbol: "pin",
-            symbolSize: 24,
+            symbolSize: 22,
             label: {
               fontSize: 9,
               fontWeight: "900",

@@ -63,6 +63,35 @@
       </div>
     </section>
 
+    <section v-if="showBattleLogPanel" class="battle-log-summary-card" :data-tone="battleLogSummaryTone">
+      <div class="battle-log-summary-header">
+        <div>
+          <div class="battle-log-summary-title">{{ t("player.battleStats", "战绩概览") }}</div>
+          <div class="battle-log-summary-subtitle">{{ battleLogSummarySubtitle }}</div>
+        </div>
+        <div class="battle-log-summary-meta">
+          <span class="battle-log-summary-badge" :data-tone="battleLogSummaryTone">{{ battleLogSummaryStatusText }}</span>
+          <span class="battle-log-summary-updated">{{ battleLogSummaryUpdatedText }}</span>
+        </div>
+      </div>
+
+      <div class="battle-log-summary-grid">
+        <article
+          v-for="card in battleLogSummaryCards"
+          :key="card.key"
+          class="battle-log-summary-stat"
+          :data-tone="card.tone"
+        >
+          <span class="battle-log-summary-stat-label">{{ battleLogSummaryCardLabel(card.key) }}</span>
+          <strong class="battle-log-summary-stat-value">{{ card.value }}</strong>
+        </article>
+      </div>
+
+      <div v-if="battleLogLatestText" class="battle-log-summary-latest">
+        {{ battleLogLatestText }}
+      </div>
+    </section>
+
     <DataState
       :loading="showInitialLoading"
       :error="blockingRuntimeError"
@@ -215,6 +244,7 @@ const activePlayerWindow = ref<{
 } | null>(null);
 const selectedSquadDetail = ref<SquadViewModel | null>(null);
 const pageHidden = ref(typeof document !== "undefined" ? document.hidden : false);
+let battlePlayerRefreshToken = 0;
 
 const pageState = reactive<PageState>({
   searchQuery: "",
@@ -242,7 +272,13 @@ const matchSnapshotQuery = useQuery({
 });
 const matchSnapshot = computed(() => matchSnapshotQuery.data.value?.matchState ?? null);
 const runtimeWebStatus = computed(() => server.snapshot?.webStatus ?? server.snapshot ?? {});
-const currentServerId = computed(() => String(runtimeWebStatus.value.serverId ?? server.snapshot?.serverId ?? "").trim());
+const currentServerId = computed(() => String(
+  runtimeWebStatus.value.serverId
+  ?? matchSnapshot.value?.serverStatus?.serverId
+  ?? matchSnapshot.value?.match?.serverId
+  ?? server.snapshot?.serverId
+  ?? "",
+).trim());
 const rconStatus = computed(() => String(runtimeWebStatus.value.rcon ?? "unknown"));
 const currentPlayerCount = computed(() => Number(
   server.snapshot?.webStatus?.playerCount
@@ -291,6 +327,55 @@ const combatCacheEvents = computed(() => Array.isArray(combatCacheQuery.data.val
   ? combatCacheQuery.data.value.snapshot.events
   : []);
 const combatStatsLookup = computed(() => buildCombatStatsLookup(combatCacheEvents.value));
+const battleLogOverviewQuery = useQuery({
+  queryKey: computed(() => ["battle-log-overview", auth.authenticated, currentServerId.value]),
+  enabled: computed(() => auth.authenticated && Boolean(currentServerId.value)),
+  queryFn: async () => {
+    try {
+      return await apiGet<any>(`/api/battle-log/overview?serverId=${encodeURIComponent(currentServerId.value)}`);
+    } catch {
+      return createEmptyBattleLogOverview(currentServerId.value);
+    }
+  },
+  staleTime: 5_000,
+  refetchInterval: combatCacheRefetchInterval,
+  refetchIntervalInBackground: true,
+  refetchOnWindowFocus: false,
+});
+const battleLogOverview = computed(() => normalizeBattleLogOverview(
+  battleLogOverviewQuery.data.value ?? createEmptyBattleLogOverview(currentServerId.value),
+));
+const battleLogSummaryStats = computed(() => normalizeBattleLogSummaryStats(battleLogOverview.value.stats));
+const battleLogSummaryTone = computed(() => {
+  if (!battleLogOverview.value.enabled) return "idle";
+  const logStatus = battleLogOverview.value.sourceStatus?.log;
+  if (logStatus?.enabled === false || logStatus?.subscribed === false) return "warning";
+  return "success";
+});
+const battleLogSummaryStatusText = computed(() => {
+  if (!battleLogOverview.value.enabled) return "战绩模块未启用";
+  const logStatus = battleLogOverview.value.sourceStatus?.log;
+  if (logStatus?.enabled === false) return "战绩模块已关闭";
+  if (logStatus?.subscribed === false) return "战绩订阅未连接";
+  return "战绩订阅正常";
+});
+const battleLogSummarySubtitle = computed(() => {
+  const total = Number(battleLogOverview.value.count ?? battleLogSummaryStats.value.total ?? 0);
+  return `总计 ${total} 条`;
+});
+const battleLogSummaryUpdatedText = computed(() => {
+  const updatedAt = battleLogOverview.value.lastUpdatedAt;
+  if (!updatedAt) return "暂无更新时间";
+  return `更新于 ${formatBattleLogTimestamp(updatedAt)}`;
+});
+const battleLogLatestText = computed(() => {
+  const latest = Array.isArray(battleLogOverview.value.latest) ? battleLogOverview.value.latest : [];
+  const first = latest[0];
+  if (!first) return "";
+  return first.displayText || first.note || first.sourceEventName || "";
+});
+const battleLogSummaryCards = computed(() => buildBattleLogSummaryCards(battleLogSummaryStats.value));
+const showBattleLogPanel = computed(() => Boolean(currentServerId.value));
 const serverStatusUpdatedAt = computed(() => toMillis(matchSnapshot.value?.serverStatus?.lastUpdatedAt));
 const playersUpdatedAt = computed(() => toMillis(matchSnapshot.value?.players?.lastUpdatedAt));
 const squadsUpdatedAt = computed(() => toMillis(matchSnapshot.value?.squads?.lastUpdatedAt));
@@ -424,6 +509,22 @@ watch(
   { immediate: true },
 );
 
+watch(
+  () => [
+    currentServerId.value,
+    activePlayerWindow.value?.detail.playerId,
+    activePlayerWindow.value?.detail.steamId,
+    activePlayerWindow.value?.detail.steam64,
+    activePlayerWindow.value?.detail.eosId,
+    activePlayerWindow.value?.detail.controller,
+    activePlayerWindow.value?.detail.name,
+  ],
+  () => {
+    void refreshActivePlayerBattleStats();
+  },
+  { immediate: true },
+);
+
 if (false) {
 watch(
   () => [viewModels.value.teams, activePlayerWindow.value?.detail.playerId],
@@ -482,6 +583,7 @@ function handleDensityChange(mode: "comfortable" | "compact") {
 function closePlayerDetail() {
   pageState.selectedPlayerId = null;
   activePlayerWindow.value = null;
+  battlePlayerRefreshToken += 1;
 }
 
 async function handlePlayerPlaytimeUpdated() {
@@ -500,9 +602,22 @@ async function handlePlayerPlaytimeUpdated() {
     const player = findPlayerById(currentId);
     if (!player) return;
 
+    const existingBattleStats = activePlayerWindow.value.detail.battleStats ?? null;
+    const existingBattleStatsLabel = activePlayerWindow.value.detail.battleStatsLabel ?? "";
+    const existingBattleStatsSource = activePlayerWindow.value.detail.battleStatsSource ?? "";
+    const existingBattleStatsLastUpdatedAt = activePlayerWindow.value.detail.battleStatsLastUpdatedAt ?? null;
+
     activePlayerWindow.value = {
       ...activePlayerWindow.value,
-      detail: buildPlayerDetailViewModel(player),
+      detail: {
+        ...buildPlayerDetailViewModel(player),
+        ...(existingBattleStats ? {
+          battleStats: existingBattleStats,
+          battleStatsLabel: existingBattleStatsLabel,
+          battleStatsSource: existingBattleStatsSource,
+          battleStatsLastUpdatedAt: existingBattleStatsLastUpdatedAt,
+        } : {}),
+      },
       notice: "",
     };
   } catch (error) {
@@ -530,10 +645,170 @@ function buildPlayerDetailViewModel(player: PlayerRowViewModel): PlayerDetailVie
   return adaptPlayerDetail(rawPlayer, player.playtimeHours ?? null, combatStatsLookup.value);
 }
 
+async function refreshActivePlayerBattleStats() {
+  const windowState = activePlayerWindow.value;
+  const detail = windowState?.detail;
+  const query = buildBattlePlayerQuery(detail);
+  if (!windowState || !detail || !query || !currentServerId.value) return;
+
+  const requestToken = ++battlePlayerRefreshToken;
+
+  try {
+    const response = await apiGet<any>(`/api/battle-log/player?serverId=${encodeURIComponent(currentServerId.value)}${query}`);
+    if (requestToken !== battlePlayerRefreshToken) return;
+    if (!activePlayerWindow.value) return;
+    if (buildBattlePlayerIdentityKey(activePlayerWindow.value.detail) !== buildBattlePlayerIdentityKey(detail)) return;
+
+    const battleStats = normalizeBattlePlayerStats(response?.stats ?? response?.overview?.stats ?? null);
+    activePlayerWindow.value = {
+      ...activePlayerWindow.value,
+      detail: {
+        ...activePlayerWindow.value.detail,
+        battleStats,
+        battleStatsLabel: `击倒 ${battleStats.downs} / 击杀 ${battleStats.kills} / 死亡 ${battleStats.deaths} / TK ${battleStats.tk} / 复苏 ${battleStats.revives}`,
+        battleStatsSource: String(response?.source ?? "battleLog"),
+        battleStatsLastUpdatedAt: response?.lastUpdatedAt ? String(response.lastUpdatedAt) : null,
+      },
+    };
+  } catch {
+    if (requestToken !== battlePlayerRefreshToken) return;
+  }
+}
+
 function normalizePlayerId(value: string | number | null | undefined) {
   if (value == null) return null;
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
+}
+
+function buildBattlePlayerQuery(detail: PlayerDetailViewModel | null | undefined) {
+  if (!detail) return "";
+
+  const params = new URLSearchParams();
+  const steam64ID = normalizeSteam64(detail.steam64 ?? detail.steamId);
+  const eosID = String(detail.eosId ?? "").trim();
+  const controllerID = String(detail.controller ?? "").trim();
+  const name = String(detail.name ?? "").trim();
+
+  if (steam64ID) params.set("steam64ID", steam64ID);
+  if (eosID) params.set("eosID", eosID);
+  if (controllerID) params.set("controllerID", controllerID);
+  if (name) params.set("name", name);
+  if (detail.playerId != null) params.set("playerKey", String(detail.playerId));
+
+  const query = params.toString();
+  return query ? `&${query}` : "";
+}
+
+function buildBattlePlayerIdentityKey(detail: PlayerDetailViewModel | null | undefined) {
+  if (!detail) return "";
+  return [
+    normalizeSteam64(detail.steam64 ?? detail.steamId),
+    String(detail.eosId ?? "").trim().toLowerCase(),
+    String(detail.controller ?? "").trim().toLowerCase(),
+    String(detail.name ?? "").trim().toLowerCase(),
+    String(detail.playerId ?? ""),
+  ].join("|");
+}
+
+function normalizeBattleLogOverview(value: any) {
+  const stats = normalizeBattleLogStats(value?.stats ?? null);
+  return {
+    ok: Boolean(value?.ok ?? true),
+    enabled: Boolean(value?.enabled ?? false),
+    source: String(value?.source ?? "battleLog"),
+    count: Number(value?.count ?? stats.total ?? 0) || 0,
+    stats,
+    lastUpdatedAt: value?.lastUpdatedAt ? String(value.lastUpdatedAt) : "",
+    latest: Array.isArray(value?.latest) ? value.latest : [],
+    sourceStatus: value?.sourceStatus ?? {},
+    serverId: String(value?.serverId ?? currentServerId.value ?? ""),
+  };
+}
+
+function normalizeBattleLogStats(value: any) {
+  return {
+    total: Number(value?.total ?? value?.count ?? 0) || 0,
+    down: Number(value?.down ?? value?.downs ?? 0) || 0,
+    kill: Number(value?.kill ?? value?.kills ?? 0) || 0,
+    death: Number(value?.death ?? value?.deaths ?? 0) || 0,
+    revive: Number(value?.revive ?? value?.revives ?? 0) || 0,
+    tk: Number(value?.tk ?? 0) || 0,
+  };
+}
+
+function normalizeBattlePlayerStats(value: any) {
+  return {
+    kills: Number(value?.kills ?? value?.kill ?? 0) || 0,
+    downs: Number(value?.downs ?? value?.down ?? 0) || 0,
+    deaths: Number(value?.deaths ?? value?.death ?? 0) || 0,
+    tk: Number(value?.tk ?? 0) || 0,
+    revives: Number(value?.revives ?? value?.revive ?? 0) || 0,
+  };
+}
+
+function normalizeBattleLogSummaryStats(value: any) {
+  return normalizeBattleLogStats(value);
+}
+
+function createEmptyBattleLogOverview(serverId = "") {
+  return {
+    ok: true,
+    enabled: false,
+    source: "battleLog",
+    count: 0,
+    stats: {
+      total: 0,
+      down: 0,
+      kill: 0,
+      death: 0,
+      revive: 0,
+      tk: 0,
+    },
+    lastUpdatedAt: "",
+    latest: [],
+    sourceStatus: {
+      log: {
+        enabled: false,
+        subscribed: false,
+      },
+      mod: {
+        enabled: false,
+        subscribed: false,
+        supported: false,
+      },
+    },
+    serverId: String(serverId ?? ""),
+  };
+}
+
+function buildBattleLogSummaryCards(stats: ReturnType<typeof normalizeBattleLogStats>) {
+  return [
+    { key: "down", label: "击倒", value: stats.down, tone: "down" },
+    { key: "kill", label: "击杀", value: stats.kill, tone: "kill" },
+    { key: "death", label: "死亡", value: stats.death, tone: "death" },
+    { key: "revive", label: "复苏", value: stats.revive, tone: "revive" },
+    { key: "tk", label: "TK", value: stats.tk, tone: "tk" },
+  ];
+}
+
+function battleLogSummaryCardLabel(key: string) {
+  if (key === "down") return "击倒";
+  if (key === "kill") return "击杀";
+  if (key === "death") return "死亡";
+  if (key === "revive") return "复苏";
+  if (key === "tk") return "TK";
+  return key;
+}
+
+function formatBattleStatsLabel(stats: ReturnType<typeof normalizeBattleLogStats>) {
+  return `击倒 ${stats.down} / 击杀 ${stats.kill} / 死亡 ${stats.death} / TK ${stats.tk} / 复苏 ${stats.revive}`;
+}
+
+function formatBattleLogTimestamp(value: string | number | null | undefined) {
+  const time = toMillis(value);
+  if (!time) return "";
+  return new Date(time).toLocaleString("zh-CN", { hour12: false });
 }
 
 function findPlayerById(playerId: PlayerDetailViewModel["playerId"]) {
@@ -937,6 +1212,139 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
   min-width: 0;
 }
 
+.battle-log-summary-card {
+  display: grid;
+  gap: 10px;
+  margin: 8px var(--spacing-lg) 0;
+  padding: 10px 14px;
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(34, 197, 94, 0.08), transparent 30%),
+    radial-gradient(circle at 0% 0%, rgba(96, 165, 250, 0.08), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015)),
+    var(--color-bg-card);
+  box-shadow: var(--shadow-md);
+  min-width: 0;
+}
+
+.battle-log-summary-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.battle-log-summary-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.battle-log-summary-subtitle {
+  margin-top: 4px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.battle-log-summary-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.battle-log-summary-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border-default);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.battle-log-summary-badge[data-tone="success"] {
+  color: var(--color-status-online);
+  border-color: rgba(34, 197, 94, 0.28);
+}
+
+.battle-log-summary-badge[data-tone="warning"] {
+  color: var(--color-status-warning);
+  border-color: rgba(245, 158, 11, 0.28);
+}
+
+.battle-log-summary-badge[data-tone="idle"] {
+  color: var(--color-text-secondary);
+}
+
+.battle-log-summary-updated {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.battle-log-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.battle-log-summary-stat {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-soft);
+  background: rgba(255, 255, 255, 0.025);
+  min-width: 0;
+}
+
+.battle-log-summary-stat[data-tone="down"] {
+  border-color: rgba(59, 130, 246, 0.24);
+}
+
+.battle-log-summary-stat[data-tone="kill"] {
+  border-color: rgba(248, 113, 113, 0.22);
+}
+
+.battle-log-summary-stat[data-tone="death"] {
+  border-color: rgba(148, 163, 184, 0.22);
+}
+
+.battle-log-summary-stat[data-tone="revive"] {
+  border-color: rgba(34, 197, 94, 0.24);
+}
+
+.battle-log-summary-stat[data-tone="tk"] {
+  border-color: rgba(245, 158, 11, 0.28);
+}
+
+.battle-log-summary-stat-label {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.battle-log-summary-stat-value {
+  color: var(--color-text-primary);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.battle-log-summary-latest {
+  padding: 8px 10px;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
 .playtime-refresh-header {
   display: flex;
   align-items: flex-start;
@@ -1109,12 +1517,22 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
     grid-template-columns: 1fr;
   }
 
+  .battle-log-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .squad-main-content {
     grid-template-columns: 1fr;
   }
 
   .match-chat-column {
     height: 760px;
+  }
+}
+
+@media (max-width: 720px) {
+  .battle-log-summary-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

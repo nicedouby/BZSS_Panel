@@ -1370,6 +1370,64 @@ export class WebServer {
     }
   }
 
+    if (url.pathname.startsWith("/api/battle-log")) {
+      const battleLog = this.modules.battleLog;
+      if (!battleLog) {
+        return this.json(res, 404, {
+          error: "BattleLogUnavailable",
+          message: "Battle log module is not loaded.",
+        });
+      }
+
+      const battleServerId = url.searchParams.get("serverId") ?? "";
+
+      if (url.pathname === "/api/battle-log/status" && req.method === "GET") {
+        return this.json(res, 200, battleLog.getStatus?.() ?? { ok: true });
+      }
+
+      if (url.pathname === "/api/battle-log/overview" && req.method === "GET") {
+        return this.json(res, 200, battleLog.getOverview?.(battleServerId));
+      }
+
+      if (url.pathname === "/api/battle-log/events" && req.method === "GET") {
+        return this.json(res, 200, {
+          events: battleLog.getEvents?.({
+            serverId: battleServerId,
+            type: url.searchParams.get("type") ?? "all",
+            search: url.searchParams.get("search") ?? url.searchParams.get("q") ?? "",
+            limit: url.searchParams.get("limit") ?? "300",
+            offset: url.searchParams.get("offset") ?? "0",
+            playerKey: url.searchParams.get("playerKey") ?? url.searchParams.get("player") ?? "",
+          }) ?? [],
+          overview: battleLog.getOverview?.(battleServerId) ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/battle-log/player" && req.method === "GET") {
+        return this.json(res, 200, battleLog.getPlayerStats?.(battleServerId, {
+          q: url.searchParams.get("q") ?? url.searchParams.get("search") ?? "",
+          playerKey: url.searchParams.get("playerKey") ?? "",
+          steam64ID: url.searchParams.get("steam64ID") ?? url.searchParams.get("steamID") ?? "",
+          eosID: url.searchParams.get("eosID") ?? "",
+          controllerID: url.searchParams.get("controllerID") ?? "",
+          name: url.searchParams.get("name") ?? "",
+        }));
+      }
+
+      if (url.pathname === "/api/battle-log/rates" && req.method === "GET") {
+        const windowMinutes = Number(url.searchParams.get("window") ?? 30);
+        return this.json(res, 200, {
+          rates: battleLog.getRateHistory?.(battleServerId, windowMinutes) ?? [],
+        });
+      }
+
+      if (url.pathname === "/api/battle-log/clear" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, battleLog.clear?.(body?.serverId ?? battleServerId));
+      }
+    }
+
     if (url.pathname.startsWith("/api/plugins/fair-team-balance")) {
       const pluginApi = this.getPluginApi("plugin.fairTeamBalance");
       if (!pluginApi) {

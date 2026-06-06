@@ -90,6 +90,7 @@ const staticItems: SidebarItem[] = [
   { path: "/squad-management", icon: "SQ", label: t("nav.squadManagement"), section: "players", order: 60 },
   { path: "/tb", icon: "TB", label: t("nav.teamBalance"), section: "players", order: 65 },
   { path: "/combat-manager", icon: "CB", label: t("nav.combatManager"), section: "combat", order: 70 },
+  { path: "/battle-log", icon: "BTL", label: t("nav.battleLog"), section: "combat", order: 82 },
   { path: "/combat-log", icon: "LOG", label: t("nav.combatLog"), section: "combat", order: 80 },
   { path: "/admin-warns", icon: "BR", label: t("nav.adminWarns"), section: "broadcast", order: 90 },
   { path: "/scheduled-broadcasts", icon: "SCH", label: t("nav.scheduledBroadcasts"), section: "broadcast", order: 100 },
@@ -162,7 +163,7 @@ function resolveSection(route: string, page: any): SidebarSectionKey {
   if (route.startsWith("/system/") || id.includes("runtime") || id.includes("system")) return "system";
   if (route === "/match-status" || route === "/match-state" || route === "/console" || route === "/chat-monitor") return "opsLive";
   if (route === "/player-database" || route === "/player-session-records" || route === "/squad-management") return "players";
-  if (route === "/combat-manager" || route === "/combat-log" || route === "/combat-clean") return "combat";
+  if (route === "/combat-manager" || route === "/battle-log" || route === "/combat-log" || route === "/combat-clean") return "combat";
   if (route === "/admin-warns" || route === "/scheduled-broadcasts") return "broadcast";
   if (route.startsWith("/plugins/") || source.includes("plugin")) return "plugins";
   if (id.includes("player") || id.includes("squad")) return "players";

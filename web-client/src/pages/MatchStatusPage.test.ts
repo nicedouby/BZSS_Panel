@@ -95,6 +95,7 @@ describe("MatchStatusPage", () => {
     useServerStore().applySnapshot({
       updatedAt: Date.now(),
       webStatus: {
+        serverId: "server-1",
         rcon: "disconnected",
       },
     });
@@ -131,6 +132,35 @@ describe("MatchStatusPage", () => {
 
       if (path === "/api/squad-lifecycle/current") {
         return { current: {} };
+      }
+
+      if (path.startsWith("/api/battle-log/overview")) {
+        return {
+          ok: true,
+          enabled: true,
+          source: "log",
+          count: 3,
+          stats: {
+            total: 3,
+            down: 1,
+            kill: 1,
+            death: 1,
+            revive: 0,
+            tk: 0,
+          },
+          lastUpdatedAt: "2026-05-12T00:00:00.000Z",
+          latest: [
+            {
+              displayText: "Alice downed by Bob",
+              sourceEventName: "module.combatClean.woundResolved",
+            },
+          ],
+          sourceStatus: {
+            log: { enabled: true, subscribed: true },
+            mod: { enabled: false, subscribed: false, supported: false },
+          },
+          serverId: "server-1",
+        };
       }
 
       if (path.startsWith("/api/query/playtime-cache")) {
@@ -181,6 +211,31 @@ describe("MatchStatusPage", () => {
         return { snapshot: { events: [] } };
       }
 
+      if (path.startsWith("/api/battle-log/player")) {
+        return {
+          ok: true,
+          enabled: true,
+          source: "log",
+          serverId: "server-1",
+          query: "Alice",
+          player: {
+            name: "Alice",
+            displayName: "Alice",
+            steam64ID: "76561198000000001",
+          },
+          stats: {
+            total: 7,
+            down: 2,
+            kill: 4,
+            death: 3,
+            revive: 1,
+            tk: 1,
+          },
+          lastUpdatedAt: "2026-05-12T00:00:00.000Z",
+          latest: [],
+        };
+      }
+
       throw new Error(`Unexpected path: ${path}`);
     });
 
@@ -206,6 +261,7 @@ describe("MatchStatusPage", () => {
     });
 
     expect(wrapper.findComponent({ name: "MatchChatPanel" }).exists()).toBe(true);
+    expect(wrapper.text()).toContain("战绩概览");
     expect(wrapper.text()).not.toContain("Loading");
     wrapper.unmount();
   });
@@ -227,7 +283,9 @@ describe("MatchStatusPage", () => {
           source: "module.matchState",
           type: "snapshot",
           matchState: {
-            serverStatus: {},
+            serverStatus: {
+              serverId: "server-1",
+            },
             players: {
               list: [
                 {
@@ -279,6 +337,55 @@ describe("MatchStatusPage", () => {
         };
       }
 
+      if (path.startsWith("/api/battle-log/overview")) {
+        return {
+          ok: true,
+          enabled: true,
+          source: "log",
+          count: 1,
+          stats: {
+            total: 1,
+            down: 0,
+            kill: 0,
+            death: 1,
+            revive: 0,
+            tk: 0,
+          },
+          lastUpdatedAt: "2026-05-12T00:00:00.000Z",
+          latest: [],
+          sourceStatus: {
+            log: { enabled: true, subscribed: true },
+            mod: { enabled: false, subscribed: false, supported: false },
+          },
+          serverId: "server-1",
+        };
+      }
+
+      if (path.startsWith("/api/battle-log/player")) {
+        return {
+          ok: true,
+          enabled: true,
+          source: "log",
+          serverId: "server-1",
+          query: "Alice",
+          player: {
+            name: "Alice",
+            displayName: "Alice",
+            steam64ID: "76561198000000001",
+          },
+          stats: {
+            total: 7,
+            down: 2,
+            kill: 4,
+            death: 3,
+            revive: 1,
+            tk: 1,
+          },
+          lastUpdatedAt: "2026-05-12T00:00:00.000Z",
+          latest: [],
+        };
+      }
+
       throw new Error(`Unexpected path: ${path}`);
     });
 
@@ -299,10 +406,13 @@ describe("MatchStatusPage", () => {
 
     await wrapper.find(".player-row").trigger("click", { clientX: 120, clientY: 150 });
     await flushPromises();
+    await flushPromises();
 
     const panel = document.body.querySelector(".player-detail-floating");
     expect(panel).toBeTruthy();
     expect(panel?.textContent).toContain("Alice");
+    expect(panel?.textContent).toContain("战绩（battleLog）");
+    expect(panel?.textContent).toContain("击倒 2 / 击杀 4 / 死亡 3 / TK 1 / 复苏 1");
     expect(panel?.getAttribute("style") || "").toContain("left: 12px");
     expect(panel?.getAttribute("style") || "").toContain("top: 12px");
 
