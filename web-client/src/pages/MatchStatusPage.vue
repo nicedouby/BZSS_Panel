@@ -118,7 +118,7 @@
               :selected-player-ids="selectedPlayerIds"
               @select-player="selectPlayer"
               @toggle-player-check="togglePlayerCheck"
-              @select-squad="selectSquad"
+              @select-squad="handleSquadClick"
             />
           </div>
         </div>
@@ -149,7 +149,9 @@
       <div v-if="multiSelectMode && selectedPlayers.length > 0" class="batch-action-bar">
         <div class="batch-bar-left">
           <span class="batch-count-badge">{{ selectedPlayers.length }}</span>
-          <span class="batch-count-text">名玩家已选择</span>
+          <span class="batch-count-text">
+            已选择 (T1: <strong class="t1-count">{{ selectedT1Count }}</strong> 人, T2: <strong class="t2-count">{{ selectedT2Count }}</strong> 人)
+          </span>
         </div>
         <div class="batch-bar-actions">
           <button type="button" class="batch-btn warn" @click="handleBatchWarn">
@@ -290,6 +292,14 @@ const selectedPlayers = computed(() => {
     }
   });
   return list;
+});
+
+const selectedT1Count = computed(() => {
+  return selectedPlayers.value.filter((p) => Number(p.teamId) === 1).length;
+});
+
+const selectedT2Count = computed(() => {
+  return selectedPlayers.value.filter((p) => Number(p.teamId) === 2).length;
 });
 
 const pageState = reactive<PageState>({
@@ -589,6 +599,40 @@ function selectPlayer(payload: { player: PlayerRowViewModel; event: MouseEvent }
 
 function selectSquad(squad: SquadViewModel) {
   selectedSquadDetail.value = squad;
+}
+
+function handleSquadClick(squad: SquadViewModel) {
+  if (multiSelectMode.value) {
+    toggleSquadPlayersCheck(squad);
+  } else {
+    selectSquad(squad);
+  }
+}
+
+function toggleSquadPlayersCheck(squad: SquadViewModel) {
+  const squadPlayers = [
+    ...(squad.leader ? [squad.leader] : []),
+    ...squad.members,
+  ];
+  if (squadPlayers.length === 0) return;
+
+  const newSet = new Set(selectedPlayerIds.value);
+  const allSelected = squadPlayers.every((player) => player.playerId != null && newSet.has(player.playerId as any));
+
+  if (allSelected) {
+    squadPlayers.forEach((player) => {
+      if (player.playerId != null) {
+        newSet.delete(player.playerId as any);
+      }
+    });
+  } else {
+    squadPlayers.forEach((player) => {
+      if (player.playerId != null) {
+        newSet.add(player.playerId as string | number);
+      }
+    });
+  }
+  selectedPlayerIds.value = newSet;
 }
 
 function toggleMultiSelectMode() {
@@ -1896,5 +1940,15 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 .bar-slide-leave-to {
   transform: translate(-50%, 40px);
   opacity: 0;
+}
+
+.t1-count {
+  color: var(--color-team1-primary, #37c8ff);
+  font-weight: 800;
+}
+
+.t2-count {
+  color: var(--color-team2-primary, #ff9b45);
+  font-weight: 800;
 }
 </style>

@@ -648,6 +648,20 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   function getTeamCounts(matchState) {
+    const players = Array.isArray(matchState?.players) ? matchState.players : [];
+    if (players.length) {
+      let team1 = 0;
+      let team2 = 0;
+
+      for (const player of players) {
+        const teamId = Number(player?.teamId ?? player?.teamID ?? 0);
+        if (teamId === 1) team1 += 1;
+        if (teamId === 2) team2 += 1;
+      }
+
+      return { team1, team2 };
+    }
+
     const teams = Array.isArray(matchState?.teams) ? matchState.teams : [];
     const team1 = teams.find((team) => Number(team?.teamId ?? team?.teamID) === 1) ?? null;
     const team2 = teams.find((team) => Number(team?.teamId ?? team?.teamID) === 2) ?? null;
@@ -689,10 +703,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     const otherCount = teamId === 1 ? counts.team2 : counts.team1;
 
     if (ownCount <= otherCount) {
+      const countsMessage = `当前人数: 1队 ${counts.team1}，2队 ${counts.team2}。`;
       return {
         ok: false,
         error: "TeamDeltaNotAllowed",
-        message: "只有从人数更多的一边跳到人数更少的一边时，才允许直接 tb。",
+        message: `只有从人数更多的一边跳到人数更少的一边时，才允许直接 tb。${countsMessage}`,
       };
     }
 

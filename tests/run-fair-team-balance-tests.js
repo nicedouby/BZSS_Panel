@@ -360,6 +360,38 @@ async function testTbRejectsWhenSwitchWouldNotImproveBalance() {
   }
 }
 
+async function testTbUsesLivePlayersForCountsAndIncludesCountsInError() {
+  const harness = await createHarness({
+    matchState: {
+      players: [
+        { name: "Alpha", steamId: "steam-alpha", teamId: 1, squadId: 0 },
+        { name: "Bravo", steamId: "steam-bravo", teamId: 2, squadId: 0 },
+      ],
+    },
+  });
+
+  harness.matchState.current.teams = [
+    { teamId: 1, playerCount: 50 },
+    { teamId: 2, playerCount: 48 },
+  ];
+
+  try {
+    const result = await harness.plugin.api.simulateChatMessage({
+      message: "tb",
+      steamId: "steam-alpha",
+      playerName: "Alpha",
+    });
+
+    assert.equal(result.matched, true);
+    assert.equal(result.ok, false);
+    assert.equal(result.error, "TeamDeltaNotAllowed");
+    assert.match(result.message, /当前人数: 1队 1，2队 1。/);
+    assert.equal(harness.teamBalanceCalls.length, 0);
+  } finally {
+    await harness.stop();
+  }
+}
+
 async function testSqtbCreatesRequestAndClaimExecutes() {
   const harness = await createHarness({
     matchState: {
@@ -549,6 +581,7 @@ await testTbAllowsSwitchFromLargerTeamAtFortyNineVsFortyEight();
 await testGreenBalanceTbBypassesBasicLayerButUsesRoundQuota();
 await testGreenBalanceTbStillRejectsRoundReuse();
 await testTbRejectsWhenSwitchWouldNotImproveBalance();
+await testTbUsesLivePlayersForCountsAndIncludesCountsInError();
 await testSqtbCreatesRequestAndClaimExecutes();
 await testSqtbDirectApproveStillWorks();
 await testApproveRequestRejectsConcurrentDuplicates();
