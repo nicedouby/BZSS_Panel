@@ -11,11 +11,13 @@
       :server-status-updated-at="serverStatusUpdatedAt"
       :players-updated-at="playersUpdatedAt"
       :squads-updated-at="squadsUpdatedAt"
+      :multi-select-mode="multiSelectMode"
       @search="pageState.searchQuery = $event"
       @filter-change="pageState.filterMode = $event"
       @refresh="handleToolbarRefresh"
       @refresh-playtime="refreshOnlinePlaytime"
       @refresh-playtime-force="refreshOnlinePlaytime(true)"
+      @toggle-multi-select="toggleMultiSelectMode"
     />
 
     <section v-if="showPlaytimePanel" class="playtime-refresh-card">
@@ -112,7 +114,10 @@
               :team="team"
               :density-mode="pageState.densityMode"
               :selected-player-id="pageState.selectedPlayerId"
+              :multi-select-mode="multiSelectMode"
+              :selected-player-ids="selectedPlayerIds"
               @select-player="selectPlayer"
+              @toggle-player-check="togglePlayerCheck"
               @select-squad="selectSquad"
             />
           </div>
@@ -138,6 +143,31 @@
       :squad="selectedSquadDetail"
       @close="closeSquadDetail"
     />
+
+    <!-- 批量操作悬浮条 -->
+    <transition name="bar-slide">
+      <div v-if="multiSelectMode && selectedPlayers.length > 0" class="batch-action-bar">
+        <div class="batch-bar-left">
+          <span class="batch-count-badge">{{ selectedPlayers.length }}</span>
+          <span class="batch-count-text">名玩家已选择</span>
+        </div>
+        <div class="batch-bar-actions">
+          <button type="button" class="batch-btn warn" @click="handleBatchWarn">
+            批量警告
+          </button>
+          <button type="button" class="batch-btn danger" @click="handleBatchKick">
+            批量 Kick
+          </button>
+          <button type="button" class="batch-btn primary" @click="handleBatchForceTeamChange">
+            批量跳边
+          </button>
+          <div class="batch-divider"></div>
+          <button type="button" class="batch-btn secondary" @click="clearBatchSelection">
+            取消选择
+          </button>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -156,6 +186,8 @@ import { useServerStore } from "../stores/server.store";
 import { useMatchStore } from "../stores/match.store";
 import { useJobStore } from "../stores/job.store";
 import { useUiStore } from "../stores/ui.store";
+import { forceTeamChange } from "../app/teamBalanceApi";
+import { warnPlayer, kickPlayer } from "../app/squadManagementApi";
 import {
   adaptTeam,
   adaptPlayerDetail,
@@ -245,6 +277,20 @@ const activePlayerWindow = ref<{
 const selectedSquadDetail = ref<SquadViewModel | null>(null);
 const pageHidden = ref(typeof document !== "undefined" ? document.hidden : false);
 let battlePlayerRefreshToken = 0;
+
+const multiSelectMode = ref(false);
+const selectedPlayerIds = ref<Set<string | number>>(new Set());
+
+const selectedPlayers = computed(() => {
+  const list: PlayerRowViewModel[] = [];
+  selectedPlayerIds.value.forEach((id) => {
+    const player = findPlayerById(id);
+    if (player) {
+      list.push(player);
+    }
+  });
+  return list;
+});
 
 const pageState = reactive<PageState>({
   searchQuery: "",
@@ -525,32 +571,6 @@ watch(
   { immediate: true },
 );
 
-if (false) {
-watch(
-  () => [viewModels.value.teams, activePlayerWindow.value?.detail.playerId],
-  () => {
-    if (!activePlayerWindow.value) return;
-
-    const currentId = activePlayerWindow.value.detail.playerId;
-    const player = findPlayerById(currentId);
-    if (!player) {
-      activePlayerWindow.value = {
-        ...activePlayerWindow.value,
-        notice: "该玩家可能已离线或数据已刷新，当前显示的是最近一次快照。",
-      };
-      return;
-    }
-
-    activePlayerWindow.value = {
-      ...activePlayerWindow.value,
-      detail: buildPlayerDetailViewModel(player),
-      notice: "",
-    };
-  },
-  { immediate: true },
-);
-}
-
 function selectPlayer(payload: { player: PlayerRowViewModel; event: MouseEvent }) {
   const player = payload.player;
   pageState.selectedPlayerId = player.playerId;
@@ -571,6 +591,27 @@ function selectSquad(squad: SquadViewModel) {
   selectedSquadDetail.value = squad;
 }
 
+function toggleMultiSelectMode() {
+  multiSelectMode.value = !multiSelectMode.value;
+  selectedPlayerIds.value = new Set();
+}
+
+function clearBatchSelection() {
+  selectedPlayerIds.value = new Set();
+}
+
+function togglePlayerCheck(payload: { player: PlayerRowViewModel; event: MouseEvent }) {
+  const id = payload.player.playerId;
+  if (id == null) return;
+  const newSet = new Set(selectedPlayerIds.value);
+  if (newSet.has(id)) {
+    newSet.delete(id);
+  } else {
+    newSet.add(id);
+  }
+  selectedPlayerIds.value = newSet;
+}
+
 function closeSquadDetail() {
   selectedSquadDetail.value = null;
 }
@@ -584,6 +625,175 @@ function closePlayerDetail() {
   pageState.selectedPlayerId = null;
   activePlayerWindow.value = null;
   battlePlayerRefreshToken += 1;
+}
+
+async function handleBatchWarn() {
+  if (selectedPlayers.value.length === 0) return;
+  const message = await ui.openWarnPrompt({
+    title: "批量发送玩家警告",
+    targetName: `${selectedPlayers.value.length} 名所选玩家`,
+    defaultMessage: "请遵守服务器规则",
+  });
+  if (message === null) return;
+
+  const targets = [...selectedPlayers.value];
+  let successCount = 0;
+  let failCount = 0;
+  
+  ui.pushToast({
+    title: "批量操作中",
+    message: `正在发送警告给 ${targets.length} 名玩家...`,
+    tone: "idle",
+  });
+
+  await Promise.all(
+    targets.map(async (player) => {
+      try {
+        const res = await warnPlayer({
+          targetName: player.name,
+          targetSteamId: player.steamId ?? undefined,
+          targetEosId: player.eosId ?? undefined,
+          message: message.trim() || "Admin Warning",
+          reason: "manual_warn",
+          sourceModule: "web.squadAdmin",
+        });
+        if (res.success) {
+          successCount++;
+        } else {
+          failCount++;
+        }
+      } catch (e) {
+        failCount++;
+      }
+    })
+  );
+
+  ui.pushToast({
+    title: "批量警告完成",
+    message: `成功: ${successCount}，失败: ${failCount}`,
+    tone: failCount > 0 ? "warn" : "ok",
+  });
+
+  clearBatchSelection();
+}
+
+async function handleBatchKick() {
+  if (selectedPlayers.value.length === 0) return;
+  
+  const reason = window.prompt(`请输入批量踢出原因 (将作用于 ${selectedPlayers.value.length} 名玩家):`, "")?.trim();
+  if (!reason) {
+    ui.pushToast({
+      title: "踢出已取消",
+      message: "请先填写踢出原因。",
+      tone: "warn",
+    });
+    return;
+  }
+
+  const confirmed = await ui.openConfirm({
+    title: "确认批量踢出玩家？",
+    message: `确定要将已选的 ${selectedPlayers.value.length} 名玩家踢出服务器吗？\n原因：${reason}`,
+    tone: "error",
+  });
+  if (!confirmed) return;
+
+  const targets = [...selectedPlayers.value];
+  let successCount = 0;
+  let failCount = 0;
+
+  ui.pushToast({
+    title: "批量操作中",
+    message: `正在踢出 ${targets.length} 名玩家...`,
+    tone: "idle",
+  });
+
+  await Promise.all(
+    targets.map(async (player) => {
+      try {
+        const res = await kickPlayer({
+          playerId: player.playerId ?? undefined,
+          anyId: player.steamId || player.eosId || player.name || String(player.playerId ?? ""),
+          steamId: player.steamId ?? undefined,
+          eosId: player.eosId ?? undefined,
+          name: player.name,
+          reason,
+          source: "web.squadAdmin",
+        });
+        if (res.ok) {
+          successCount++;
+        } else {
+          failCount++;
+        }
+      } catch (e) {
+        failCount++;
+      }
+    })
+  );
+
+  ui.pushToast({
+    title: "批量踢出完成",
+    message: `成功: ${successCount}，失败: ${failCount}`,
+    tone: failCount > 0 ? "warn" : "ok",
+  });
+
+  clearBatchSelection();
+}
+
+async function handleBatchForceTeamChange() {
+  if (selectedPlayers.value.length === 0) return;
+
+  const confirmed = await ui.openConfirm({
+    title: "确认批量跳边？",
+    message: `确定要将已选的 ${selectedPlayers.value.length} 名玩家执行跳边操作吗？`,
+    tone: "warn",
+  });
+  if (!confirmed) return;
+
+  const targets = [...selectedPlayers.value];
+  let successCount = 0;
+  let failCount = 0;
+
+  ui.pushToast({
+    title: "批量操作中",
+    message: `正在为 ${targets.length} 名玩家执行跳边...`,
+    tone: "idle",
+  });
+
+  await Promise.all(
+    targets.map(async (player) => {
+      try {
+        const res = await forceTeamChange({
+          steamId: player.steamId ?? undefined,
+          playerName: player.name,
+          source: "对局状态手动操作",
+          reason: "manual_team_balance",
+          operator: {
+            id: auth.user?.id ?? auth.user?.username ?? "",
+            name: auth.user?.username ?? "",
+            username: auth.user?.username ?? "",
+            role: auth.user?.role ?? "",
+            isSuperAdmin: Boolean(auth.user?.isSuperAdmin),
+            permissions: Array.isArray(auth.user?.permissions) ? auth.user.permissions : [],
+          },
+        });
+        if (res.ok) {
+          successCount++;
+        } else {
+          failCount++;
+        }
+      } catch (e) {
+        failCount++;
+      }
+    })
+  );
+
+  ui.pushToast({
+    title: "批量跳边完成",
+    message: `成功: ${successCount}，失败: ${failCount}`,
+    tone: failCount > 0 ? "warn" : "ok",
+  });
+
+  clearBatchSelection();
 }
 
 async function handlePlayerPlaytimeUpdated() {
@@ -1534,5 +1744,157 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
   .battle-log-summary-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ─── 批量操作悬浮条 ─────────────────────────────────────────────────────── */
+.batch-action-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 24px;
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(140, 160, 200, 0.28);
+  background:
+    linear-gradient(135deg, rgba(55, 200, 255, 0.08), rgba(168, 85, 247, 0.06)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)),
+    rgba(10, 15, 24, 0.88);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.64),
+    0 8px 20px rgba(0, 0, 0, 0.36),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  backdrop-filter: blur(20px) saturate(1.3);
+  min-width: 480px;
+  animation: bar-slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.batch-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.batch-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-status-info);
+  color: #fff;
+  font-weight: 800;
+  font-size: 13px;
+  box-shadow: 0 0 10px rgba(96, 165, 250, 0.4);
+}
+
+.batch-count-text {
+  font-size: var(--font-size-base);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.batch-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-grow: 1;
+  justify-content: flex-end;
+}
+
+.batch-btn {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.batch-btn.primary {
+  background: rgba(96, 165, 250, 0.12);
+  color: #93c5fd;
+  border-color: rgba(96, 165, 250, 0.35);
+}
+
+.batch-btn.primary:hover {
+  background: rgba(96, 165, 250, 0.22);
+  border-color: rgba(96, 165, 250, 0.6);
+  color: #bfdbfe;
+  box-shadow: 0 0 12px rgba(96, 165, 250, 0.2);
+}
+
+.batch-btn.warn {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fde68a;
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.batch-btn.warn:hover {
+  background: rgba(245, 158, 11, 0.22);
+  border-color: rgba(245, 158, 11, 0.6);
+  color: #fef08a;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.2);
+}
+
+.batch-btn.danger {
+  background: rgba(248, 113, 113, 0.12);
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
+.batch-btn.danger:hover {
+  background: rgba(248, 113, 113, 0.22);
+  border-color: rgba(248, 113, 113, 0.6);
+  color: #fecaca;
+  box-shadow: 0 0 12px rgba(248, 113, 113, 0.2);
+}
+
+.batch-btn.secondary {
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--color-text-muted);
+}
+
+.batch-btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-secondary);
+}
+
+.batch-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--color-border-soft);
+  margin: 0 4px;
+}
+
+/* ─── 动画 ───────────────────────────────────────────────────────────────── */
+@keyframes bar-slide-in {
+  from {
+    transform: translate(-50%, 40px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+.bar-slide-leave-active {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.bar-slide-leave-to {
+  transform: translate(-50%, 40px);
+  opacity: 0;
 }
 </style>

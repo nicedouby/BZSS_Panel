@@ -1,23 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-05-29T00:00:00.000Z",
-  "description": "Squad name nature rules generated from collected squad-name samples and public Squad faction/vehicle naming. The classifier reads this file through config.squadNameClassifier.rulesPath.",
-  "sources": [
-    {
-      "kind": "local",
-      "name": "team-name-collector"
-    },
-    {
-      "kind": "web",
-      "name": "Squad Wiki Factions",
-      "url": "https://squad.fandom.com/wiki/Factions"
-    },
-    {
-      "kind": "web",
-      "name": "Squad Wiki Vehicles",
-      "url": "https://squad.fandom.com/wiki/Vehicles"
-    }
-  ],
+  "updatedAt": "2026-06-07T12:03:23.622Z",
   "rules": {
     "blacklist": [
       "测试",
@@ -77,7 +60,7 @@
         "btr-4",
         "brdm",
         "brdm-2",
-        "bm21",
+        "BM21",
         "bm-21",
         "lav",
         "lav6",
@@ -101,11 +84,11 @@
         "zbl08",
         "qlz87",
         "zsl92 qlz89",
-        "04a",
+        "04A",
         "92a",
         "hj8",
         "hj-8",
-        "tow",
+        "TOW",
         "spg-9",
         "spg9",
         "zu-23-2",
@@ -121,7 +104,28 @@
         "fv107",
         "08ifv",
         "92ifv",
-        "pjp\u8f66"
+        "pjp车",
+        "ZCCRWS",
+        "9292",
+        "8282",
+        "3030",
+        "MATV",
+        "BRR",
+        "CROW",
+        "SCK",
+        "1126",
+        "1128",
+        "0808",
+        "0505",
+        "0404",
+        "MTLB",
+        "TAO",
+        "TAOCHE",
+        "TOWCHE",
+        "ATGM",
+        "SPG",
+        "BMPT",
+        "BMP-T"
       ],
       "contains": [
         "tank",
@@ -199,5 +203,22 @@
       "^(inf|infantry|rifle|green)(\\s*[-_#]?\\s*\\d+)?$",
       "^(步兵|步兵队|步枪队|突击|冲锋|轻步兵|纯步兵)\\s*\\d*$"
     ]
-  }
+  },
+  "description": "Squad name nature rules generated from collected squad-name samples and public Squad faction/vehicle naming. The classifier reads this file through config.squadNameClassifier.rulesPath.",
+  "sources": [
+    {
+      "kind": "local",
+      "name": "team-name-collector"
+    },
+    {
+      "kind": "web",
+      "name": "Squad Wiki Factions",
+      "url": "https://squad.fandom.com/wiki/Factions"
+    },
+    {
+      "kind": "web",
+      "name": "Squad Wiki Vehicles",
+      "url": "https://squad.fandom.com/wiki/Vehicles"
+    }
+  ]
 }

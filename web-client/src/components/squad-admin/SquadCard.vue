@@ -59,7 +59,10 @@
           v-if="squad.leader"
           :player="squad.leader"
           :selected="String(selectedPlayerId) === String(squad.leader.playerId)"
+          :multi-select-mode="multiSelectMode"
+          :checked="isPlayerChecked(squad.leader.playerId)"
           @select="handlePlayerSelect"
+          @toggle-check="handlePlayerToggleCheck"
         />
 
         <div v-if="squad.state === 'no_leader'" class="squad-warning">
@@ -71,7 +74,10 @@
           :key="`player-${member.playerId}`"
           :player="member"
           :selected="String(selectedPlayerId) === String(member.playerId)"
+          :multi-select-mode="multiSelectMode"
+          :checked="isPlayerChecked(member.playerId)"
           @select="handlePlayerSelect"
+          @toggle-check="handlePlayerToggleCheck"
         />
       </div>
     </template>
@@ -89,10 +95,13 @@ const props = defineProps<{
   squad: SquadViewModel;
   selectedPlayerId?: string | number | null;
   densityMode?: "comfortable" | "compact";
+  multiSelectMode?: boolean;
+  selectedPlayerIds?: Set<string | number>;
 }>();
 
 const emit = defineEmits<{
   (event: "select-player", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
+  (event: "toggle-player-check", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
   (event: "select-squad", squad: SquadViewModel): void;
 }>();
 
@@ -152,6 +161,15 @@ function vehicleTone(vehicleClass: SquadViewModel["squadVehicleClass"]): "ok" | 
 
 function handlePlayerSelect(payload: { player: PlayerRowViewModel; event: MouseEvent }) {
   emit("select-player", payload);
+}
+
+function isPlayerChecked(playerId: string | number | null) {
+  if (playerId == null || !props.selectedPlayerIds) return false;
+  return props.selectedPlayerIds.has(playerId);
+}
+
+function handlePlayerToggleCheck(payload: { player: PlayerRowViewModel; event: MouseEvent }) {
+  emit("toggle-player-check", payload);
 }
 </script>
 

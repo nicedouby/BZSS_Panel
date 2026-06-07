@@ -1,6 +1,7 @@
 // -*- coding: utf-8 -*-
 
 import fs from "node:fs";
+import fsp from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -25,13 +26,61 @@ export function classifySquadName(rawName, options = {}) {
 }
 
 export function getSquadNameClassifierRules(configManager = null) {
-  const rulesPath = resolveRulesPath(configManager);
+  const rulesPath = resolveSquadNameRulesPath(configManager);
   if (!rulesPath) {
     return cloneRules(squadNameRules);
   }
 
   const overrideRules = loadExternalRules(rulesPath);
   return cloneRules(mergeRules(squadNameRules, overrideRules));
+}
+
+export function resolveSquadNameRulesPath(configManager = null) {
+  return resolveRulesPath(configManager);
+}
+
+export async function getSquadNameExactRuleConfig(configManager = null) {
+  const rulesPath = resolveSquadNameRulesPath(configManager);
+  const document = await readRulesDocument(rulesPath);
+  const exactRules = buildExactRulesMap(document.rules ?? {});
+  return {
+    rulesPath,
+    updatedAt: document.updatedAt ?? null,
+    exactRules,
+    entries: flattenExactRuleEntries(exactRules),
+  };
+}
+
+export async function updateSquadNameExactRuleConfig(configManager = null, nextConfig = {}) {
+  const rulesPath = resolveSquadNameRulesPath(configManager);
+  const document = await readRulesDocument(rulesPath);
+  const exactRules = normalizeExactRulesInput(nextConfig);
+  const sanitizedExactRules = sanitizeExactRules(exactRules);
+
+  document.version = Number(document.version ?? 1);
+  document.updatedAt = new Date().toISOString();
+  document.rules = document.rules && typeof document.rules === "object" && !Array.isArray(document.rules)
+    ? document.rules
+    : {};
+
+  for (const nature of ["infantry", "vehicle", "support"]) {
+    const currentBucket = document.rules[nature];
+    const nextBucket = currentBucket && typeof currentBucket === "object" && !Array.isArray(currentBucket)
+      ? { ...currentBucket }
+      : {};
+    nextBucket.exact = [...sanitizedExactRules[nature]];
+    document.rules[nature] = nextBucket;
+  }
+
+  await fsp.mkdir(path.dirname(rulesPath), { recursive: true });
+  await fsp.writeFile(rulesPath, `${JSON.stringify(document, null, 2)}\n`, "utf8");
+
+  return {
+    rulesPath,
+    updatedAt: document.updatedAt,
+    exactRules: sanitizedExactRules,
+    entries: flattenExactRuleEntries(sanitizedExactRules),
+  };
 }
 
 export default {
@@ -63,6 +112,95 @@ function loadExternalRules(rulesPath) {
   } catch {
     return {};
   }
+}
+
+async function readRulesDocument(rulesPath) {
+  try {
+    const raw = await fsp.readFile(rulesPath, "utf8");
+    const trimmed = raw.trim();
+    if (!trimmed) return createDefaultRulesDocument();
+    const parsed = JSON.parse(trimmed);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return createDefaultRulesDocument();
+    }
+    return {
+      ...createDefaultRulesDocument(),
+      ...parsed,
+      rules: parsed.rules && typeof parsed.rules === "object" && !Array.isArray(parsed.rules)
+        ? parsed.rules
+        : {},
+    };
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return createDefaultRulesDocument();
+    }
+    throw error;
+  }
+}
+
+function createDefaultRulesDocument() {
+  return {
+    version: 1,
+    updatedAt: null,
+    rules: {},
+  };
+}
+
+function buildExactRulesMap(rawRules = {}) {
+  return sanitizeExactRules({
+    infantry: rawRules?.infantry?.exact ?? rawRules?.infantry?.exactWhitelist ?? [],
+    vehicle: rawRules?.vehicle?.exact ?? rawRules?.vehicle?.exactWhitelist ?? [],
+    support: rawRules?.support?.exact ?? rawRules?.support?.exactWhitelist ?? [],
+  });
+}
+
+function normalizeExactRulesInput(nextConfig = {}) {
+  const source = nextConfig && typeof nextConfig === "object" && !Array.isArray(nextConfig) ? nextConfig : {};
+  return {
+    infantry: asStringArray(source.infantry),
+    vehicle: asStringArray(source.vehicle),
+    support: asStringArray(source.support),
+  };
+}
+
+function sanitizeExactRules(exactRules = {}) {
+  const result = {
+    infantry: [],
+    vehicle: [],
+    support: [],
+  };
+  const ownerByName = new Map();
+
+  for (const nature of ["infantry", "vehicle", "support"]) {
+    for (const rawName of asStringArray(exactRules[nature])) {
+      const normalizedKey = normalizeSquadName(rawName);
+      if (!normalizedKey) continue;
+      ownerByName.set(normalizedKey, {
+        nature,
+        name: String(rawName).trim(),
+      });
+    }
+  }
+
+  for (const { nature, name } of ownerByName.values()) {
+    result[nature].push(name);
+  }
+
+  return {
+    infantry: dedupeStrings(result.infantry),
+    vehicle: dedupeStrings(result.vehicle),
+    support: dedupeStrings(result.support),
+  };
+}
+
+function flattenExactRuleEntries(exactRules) {
+  return ["infantry", "vehicle", "support"].flatMap((nature) =>
+    (exactRules?.[nature] ?? []).map((name) => ({
+      name,
+      nature,
+      label: SQUAD_NATURE_LABEL[nature] ?? nature,
+    })),
+  );
 }
 
 function normalizeExternalRuleObject(rawRules = {}) {

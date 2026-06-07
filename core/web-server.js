@@ -7,7 +7,12 @@ import crypto from "node:crypto";
 import { handleSquadManagementRoutes } from "../modules/squad-management/routes.js";
 import { handleTeamBalanceRoutes } from "../modules/team-balance/routes.js";
 import { handleReserveSlotsRoutes } from "../modules/reserve-slots/routes.js";
-import { classifySquadName, getSquadNameClassifierRules } from "./squad-name-classifier.js";
+import {
+  classifySquadName,
+  getSquadNameClassifierRules,
+  getSquadNameExactRuleConfig,
+  updateSquadNameExactRuleConfig,
+} from "./squad-name-classifier.js";
 import {
   getAllPlugins,
   setPluginEnabled as updatePluginEnabled,
@@ -224,6 +229,31 @@ export class WebServer {
       return this.json(res, 401, {
         error: "Unauthorized",
         message: "Authentication required.",
+      });
+    }
+
+    if (url.pathname === "/api/squad-name/rules") {
+      if (req.method === "GET") {
+        const result = await getSquadNameExactRuleConfig(this.core.config);
+        return this.json(res, 200, {
+          ok: true,
+          ...result,
+        });
+      }
+
+      if (req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        const result = await updateSquadNameExactRuleConfig(this.core.config, body?.exactRules ?? body ?? {});
+        return this.json(res, 200, {
+          ok: true,
+          ...result,
+        });
+      }
+
+      return this.json(res, 405, {
+        error: "MethodNotAllowed",
+        message: "Only GET and POST are supported.",
       });
     }
 

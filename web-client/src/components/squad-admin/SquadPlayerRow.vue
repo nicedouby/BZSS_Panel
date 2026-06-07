@@ -1,11 +1,14 @@
 <template>
   <div
     class="squad-player-row player-row"
-    :class="{ selected: isSelected, 'is-leader': player.isLeader }"
+    :class="{ selected: isSelected, 'is-leader': player.isLeader, 'is-checked': multiSelectMode && checked }"
     @click="handleSelect"
   >
     <div class="player-side">
-      <div class="player-avatar" :title="displayRole(player.role)">
+      <div v-if="multiSelectMode" class="player-checkbox-container">
+        <div class="player-checkbox-custom" :class="{ 'is-checked': checked }"></div>
+      </div>
+      <div v-else class="player-avatar" :title="displayRole(player.role)">
         <img
           v-if="isRoleIconImage"
           class="player-avatar-image"
@@ -74,10 +77,13 @@ import { t } from "../../i18n";
 const props = defineProps<{
   player: PlayerRowViewModel;
   selected?: boolean;
+  multiSelectMode?: boolean;
+  checked?: boolean;
 }>();
 
 const emit = defineEmits<{
   (event: "select", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
+  (event: "toggle-check", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
 }>();
 
 const isSelected = computed(() => props.selected ?? false);
@@ -160,7 +166,11 @@ function formatPlaytime(hours?: number | null) {
 }
 
 function handleSelect(event: MouseEvent) {
-  emit("select", { player: props.player, event });
+  if (props.multiSelectMode) {
+    emit("toggle-check", { player: props.player, event });
+  } else {
+    emit("select", { player: props.player, event });
+  }
 }
 
 function formatDurationShort(secondsValue: number) {

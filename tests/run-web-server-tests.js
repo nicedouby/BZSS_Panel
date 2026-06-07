@@ -388,6 +388,9 @@ async function testPlaytimeCacheReturnsEffectiveDuration() {
         getUserFromRequest() {
           return { username: "admin", role: "SuperAdmin", isSuperAdmin: true };
         },
+        hasEverything() {
+          return true;
+        },
       },
     },
     modules: {
@@ -543,6 +546,79 @@ async function testSquadNameClassifierApiReturnsClassification() {
   assert.equal(body.category, "infantry");
   assert.equal(body.label, "步兵队");
   assert.equal(body.reason.includes("步兵队"), true);
+}
+
+async function testSquadNameRulesApiReadsAndWritesExactMappings() {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-squad-name-api-"));
+  const rulesPath = path.join(tempDir, "rules.json");
+  await fs.writeFile(rulesPath, JSON.stringify({
+    version: 1,
+    updatedAt: "2026-06-07T00:00:00.000Z",
+    rules: {
+      infantry: { exact: ["alpha"] },
+      vehicle: { exact: ["bravo"] },
+      support: { exact: ["logi"] },
+    },
+  }), "utf8");
+
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin", role: "SuperAdmin", isSuperAdmin: true };
+        },
+        hasEverything() {
+          return true;
+        },
+      },
+      config: {
+        get(pathText) {
+          return pathText === "squadNameClassifier.rulesPath" ? rulesPath : undefined;
+        },
+      },
+    },
+  });
+
+  const getRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/squad-name/rules",
+    headers: { host: "localhost" },
+    socket: {},
+  }, getRecorder.res);
+  assert.equal(getRecorder.state.status, 200);
+  const getBody = JSON.parse(getRecorder.state.body);
+  assert.deepEqual(getBody.exactRules, {
+    infantry: ["alpha"],
+    vehicle: ["bravo"],
+    support: ["logi"],
+  });
+
+  const postRecorder = createRecorder();
+  const postReq = Readable.from([JSON.stringify({
+    exactRules: {
+      infantry: ["alpha", "green"],
+      vehicle: ["armor", "alpha"],
+      support: ["logi"],
+    },
+  })]);
+  postReq.method = "POST";
+  postReq.url = "/api/squad-name/rules";
+  postReq.headers = { host: "localhost", "content-type": "application/json" };
+  postReq.socket = {};
+  await server.handleRequest(postReq, postRecorder.res);
+  assert.equal(postRecorder.state.status, 200);
+  const postBody = JSON.parse(postRecorder.state.body);
+  assert.deepEqual(postBody.exactRules, {
+    infantry: ["green"],
+    vehicle: ["alpha", "armor"],
+    support: ["logi"],
+  });
+
+  const savedRaw = JSON.parse(await fs.readFile(rulesPath, "utf8"));
+  assert.deepEqual(savedRaw.rules.infantry.exact, ["green"]);
+  assert.deepEqual(savedRaw.rules.vehicle.exact, ["alpha", "armor"]);
+  assert.deepEqual(savedRaw.rules.support.exact, ["logi"]);
 }
 
 async function testCombatCleanRoutesDoNotForceCurrentServerFilter() {
@@ -2145,6 +2221,7 @@ await testPlayerPlaytimeOverrideRouteRequiresSuperAdmin();
 await testPlayerPlaytimeOverrideRouteSetsHours();
 await testSquadNameClassifierHelperCoversCoreRules();
 await testSquadNameClassifierApiReturnsClassification();
+await testSquadNameRulesApiReadsAndWritesExactMappings();
 await testCombatCleanRoutesDoNotForceCurrentServerFilter();
 await testWeaponCollectorApiRequiresGet();
 await testGroupReportSnapshotRouteReturnsWrappedSnapshot();

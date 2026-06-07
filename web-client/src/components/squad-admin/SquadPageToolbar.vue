@@ -48,6 +48,16 @@
       <div class="refresh-controls">
         <button
           type="button"
+          class="refresh-button"
+          :class="{ active: multiSelectMode, 'primary-select': multiSelectMode }"
+          @click="$emit('toggle-multi-select')"
+          :title="multiSelectMode ? '关闭批量操作' : '开启批量操作'"
+        >
+          <span class="select-icon">☑</span>
+          <span>{{ multiSelectMode ? '退出批量' : '批量操作' }}</span>
+        </button>
+        <button
+          type="button"
           class="refresh-button primary"
           :disabled="!canRefresh || isRefreshing"
           @click="$emit('refresh', 'all')"
@@ -131,6 +141,7 @@ const props = defineProps<{
   serverStatusUpdatedAt?: number;
   playersUpdatedAt?: number;
   squadsUpdatedAt?: number;
+  multiSelectMode?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -139,6 +150,7 @@ const emit = defineEmits<{
   (event: "refresh", type: RefreshType): void;
   (event: "refresh-playtime"): void;
   (event: "refresh-playtime-force"): void;
+  (event: "toggle-multi-select"): void;
 }>();
 
 const filters = [
@@ -524,6 +536,24 @@ onBeforeUnmount(() => {
     order: -1;
     flex: 1 1 auto;
   }
+}
+
+/* ─── 批量操作按钮样式 ───────────────────────────────────────────────────── */
+.refresh-button.primary-select {
+  background: rgba(96, 165, 250, 0.16) !important;
+  border-color: rgba(96, 165, 250, 0.45) !important;
+  color: #bfdbfe !important;
+  font-weight: 700;
+}
+
+.refresh-button.primary-select:hover {
+  background: rgba(96, 165, 250, 0.24) !important;
+  border-color: rgba(96, 165, 250, 0.6) !important;
+}
+
+.select-icon {
+  font-size: 13px;
+  line-height: 1;
 }
 
 /* ─── 动画 ───────────────────────────────────────────────────────────────── */

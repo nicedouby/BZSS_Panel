@@ -2,11 +2,11 @@
   <section class="page squad-classifier-page">
     <PageHeader
       title="小队名称性质分类器调试"
-      subtitle="直接调用后端分类接口，查看输入、标准化结果、命中规则、可信度和完整调试信息。"
+      subtitle="调试后端分类结果，并维护指定队名的精确性质映射。"
     >
       <template #actions>
         <button type="button" class="action-btn" @click="fillFromPreset('步兵一队')">步兵示例</button>
-        <button type="button" class="action-btn" @click="fillFromPreset('步兵战车')">载具示例</button>
+        <button type="button" class="action-btn" @click="fillFromPreset('BMP2')">载具示例</button>
         <button type="button" class="action-btn" @click="fillFromPreset('后勤车')">支援示例</button>
         <button type="button" class="action-btn primary" :disabled="busy" @click="runCurrent">
           {{ busy ? "分类中..." : "执行分类" }}
@@ -19,7 +19,7 @@
         <template #header>
           <div>
             <h2 class="card-headline">单条测试</h2>
-            <p class="card-subtitle">输入一个队名，提交给后端分类器。</p>
+            <p class="card-subtitle">输入一个队名，直接调用后端分类接口。</p>
           </div>
         </template>
 
@@ -29,7 +29,7 @@
             <input
               v-model="form.name"
               type="text"
-              placeholder="例如：步兵一队 / BTR / 后勤车"
+              placeholder="例如：步兵一队 / BMP2 / 后勤车"
               @keyup.enter="runCurrent"
             >
           </label>
@@ -60,7 +60,8 @@
           </div>
 
           <p class="hint">
-            返回字段包括：`nature`、`label`、`confidence`、`normalizedName`、`vehicleClass`、`matchedRule`、`matchedValue`、`reason`、`debug`。
+            返回字段包括：`nature`、`label`、`confidence`、`normalizedName`、`vehicleClass`、
+            `matchedRule`、`matchedValue`、`reason`、`debug`。
           </p>
         </div>
       </PageCard>
@@ -91,16 +92,12 @@
             <strong class="mono">{{ currentResult.normalizedName || "--" }}</strong>
           </div>
           <div class="summary-item">
-            <span>类型</span>
+            <span>载具子类</span>
             <StatusBadge :tone="toneForConfidence(currentResult.vehicleClassConfidence)">{{ currentResult.vehicleClassLabel || "--" }}</StatusBadge>
           </div>
           <div class="summary-item">
-            <span>类型英文</span>
+            <span>载具英文</span>
             <strong class="mono">{{ currentResult.vehicleClass || "--" }}</strong>
-          </div>
-          <div class="summary-item wide">
-            <span>类型原因</span>
-            <strong>{{ currentResult.vehicleClassReason || "--" }}</strong>
           </div>
           <div class="summary-item wide">
             <span>命中规则</span>
@@ -114,12 +111,85 @@
             <span>命中原因</span>
             <strong>{{ currentResult.reason || "--" }}</strong>
           </div>
+          <div class="summary-item wide">
+            <span>载具原因</span>
+            <strong>{{ currentResult.vehicleClassReason || "--" }}</strong>
+          </div>
         </div>
         <div v-else class="empty-note">
           还没有执行分类。先输入一个队名并点击“执行分类”。
         </div>
       </PageCard>
     </section>
+
+    <PageCard compact class="rules-editor-card">
+      <template #header>
+        <div>
+          <h2 class="card-headline">指定队名性质</h2>
+          <p class="card-subtitle">维护精确匹配白名单，用于把指定队名直接归到固定性质。</p>
+        </div>
+      </template>
+
+      <div class="stack">
+        <div class="button-row">
+          <button type="button" class="action-btn" :disabled="exactRulesLoading" @click="loadExactRules">
+            {{ exactRulesLoading ? "加载中..." : "重新加载" }}
+          </button>
+          <button type="button" class="action-btn primary" :disabled="exactRulesSaving || !canEditExactRules" @click="saveExactRules">
+            {{ exactRulesSaving ? "保存中..." : "保存指定队名" }}
+          </button>
+        </div>
+
+        <p class="hint">
+          每行一个队名。保存时会自动去重；如果同一个队名同时出现在多个性质里，只保留最后一个性质。
+          <span v-if="!canEditExactRules">当前账号只能查看，保存需要超级管理员。</span>
+        </p>
+
+        <div class="rules-grid">
+          <label class="field">
+            <span>步兵队</span>
+            <textarea
+              v-model="exactRuleForm.infantryText"
+              rows="8"
+              :disabled="exactRulesLoading || exactRulesSaving || !canEditExactRules"
+            />
+          </label>
+          <label class="field">
+            <span>载具队</span>
+            <textarea
+              v-model="exactRuleForm.vehicleText"
+              rows="8"
+              :disabled="exactRulesLoading || exactRulesSaving || !canEditExactRules"
+            />
+          </label>
+          <label class="field">
+            <span>支援队</span>
+            <textarea
+              v-model="exactRuleForm.supportText"
+              rows="8"
+              :disabled="exactRulesLoading || exactRulesSaving || !canEditExactRules"
+            />
+          </label>
+        </div>
+
+        <div class="rules-meta">
+          <span>当前指定数：{{ exactRuleEntries.length }}</span>
+          <span>最近更新：{{ exactRulesUpdatedAtText }}</span>
+        </div>
+
+        <div v-if="exactRuleEntries.length" class="rules-chip-list">
+          <button
+            v-for="entry in exactRuleEntries"
+            :key="`${entry.nature}:${entry.name}`"
+            type="button"
+            class="sample-pill"
+            @click="fillFromPreset(entry.name)"
+          >
+            {{ entry.label }} · {{ entry.name }}
+          </button>
+        </div>
+      </div>
+    </PageCard>
 
     <PageCard compact class="batch-card">
       <template #header>
@@ -163,7 +233,7 @@
               <tr>
                 <th>输入</th>
                 <th>性质</th>
-                <th>类型</th>
+                <th>载具子类</th>
                 <th>可信度</th>
                 <th>命中规则</th>
                 <th>命中值</th>
@@ -208,30 +278,47 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import PageHeader from "../components/common/PageHeader.vue";
 import PageCard from "../components/common/PageCard.vue";
 import DataState from "../components/common/DataState.vue";
 import StatusBadge from "../components/common/StatusBadge.vue";
 import { apiGet, apiPost, ApiError } from "../app/apiClient";
+import { useAuthStore } from "../stores/auth.store";
 import { useUiStore } from "../stores/ui.store";
+
+type SquadNature = "infantry" | "vehicle" | "support" | "other";
+type SquadRuleNature = Exclude<SquadNature, "other">;
 
 type SquadClassifierResponse = {
   ok?: boolean;
-  nature: "infantry" | "vehicle" | "support" | "other";
+  nature: SquadNature;
   label: string;
   confidence: "high" | "medium" | "low";
   normalizedName: string;
   matchedRule: string | null;
   matchedValue: string | null;
   reason: string;
-  vehicleClass: "ifv" | "light_vehicle" | "tank" | "other";
+  vehicleClass: "ifv" | "light_vehicle" | "tank" | "spg" | "other";
   vehicleClassLabel: string;
   vehicleClassRule: string | null;
   vehicleClassValue: string | null;
   vehicleClassReason: string | null;
   vehicleClassConfidence: "high" | "medium" | "low";
   debug?: Record<string, unknown>;
+};
+
+type SquadNameRuleEntry = {
+  name: string;
+  nature: SquadRuleNature;
+  label: string;
+};
+
+type SquadNameRulesResponse = {
+  ok?: boolean;
+  updatedAt: string | null;
+  exactRules: Record<SquadRuleNature, string[]>;
+  entries: SquadNameRuleEntry[];
 };
 
 type ResultRow = SquadClassifierResponse & {
@@ -241,13 +328,27 @@ type ResultRow = SquadClassifierResponse & {
   payload: Record<string, unknown>;
 };
 
+const auth = useAuthStore();
 const ui = useUiStore();
+
 const loading = ref(false);
 const busy = ref(false);
 const error = ref("");
 const currentResult = ref<SquadClassifierResponse | null>(null);
 const results = ref<ResultRow[]>([]);
 const selectedResult = ref<ResultRow | null>(null);
+
+const exactRulesLoading = ref(false);
+const exactRulesSaving = ref(false);
+const exactRuleEntries = ref<SquadNameRuleEntry[]>([]);
+const exactRulesUpdatedAt = ref<string | null>(null);
+const exactRuleForm = reactive({
+  infantryText: "",
+  vehicleText: "",
+  supportText: "",
+});
+
+const canEditExactRules = computed(() => Boolean(auth.user?.isSuperAdmin));
 
 const form = ref({
   name: "步兵一队",
@@ -260,11 +361,11 @@ const sampleSets: Record<string, string[]> = {
     "Squad 1",
     "步兵一队",
     "步兵战车",
-    "机械化步兵（bmp2）",
-    "bmp2",
+    "机械化步兵(BMP2)",
+    "BMP2",
     "BTR",
-    "matv",
-    "99a",
+    "MATV",
+    "99A",
     "SPG 1",
     "后勤车",
     "迫击炮",
@@ -272,10 +373,10 @@ const sampleSets: Record<string, string[]> = {
   ],
   conflict: [
     "步兵战车",
-    "机械化步兵（bmp2）",
-    "bmp2",
-    "matv",
-    "99a",
+    "机械化步兵(BMP2)",
+    "BMP2",
+    "MATV",
+    "99A",
     "SPG 1",
     "后勤车",
     "logi truck",
@@ -288,6 +389,17 @@ const activeSamples = computed(() => {
     return [form.value.name].filter(Boolean);
   }
   return sampleSets[form.value.sampleSet] ?? sampleSets.basic;
+});
+
+const exactRulesUpdatedAtText = computed(() => {
+  if (!exactRulesUpdatedAt.value) return "--";
+  const time = new Date(exactRulesUpdatedAt.value);
+  if (Number.isNaN(time.getTime())) return exactRulesUpdatedAt.value;
+  return time.toLocaleString();
+});
+
+onMounted(() => {
+  void loadExactRules();
 });
 
 function prettyJson(value: unknown) {
@@ -364,6 +476,77 @@ async function classifyName(name: string, method: "GET" | "POST") {
   return apiPost<SquadClassifierResponse>("/api/squad-name/classify", { name });
 }
 
+async function loadExactRules() {
+  exactRulesLoading.value = true;
+  try {
+    const payload = await apiGet<SquadNameRulesResponse>("/api/squad-name/rules");
+    applyExactRules(payload);
+  } catch (err) {
+    ui.pushToast({
+      title: "加载指定队名失败",
+      message: formatError(err),
+      tone: "error",
+    });
+  } finally {
+    exactRulesLoading.value = false;
+  }
+}
+
+async function saveExactRules() {
+  if (!canEditExactRules.value) {
+    ui.pushToast({
+      title: "没有权限",
+      message: "保存指定队名需要超级管理员权限。",
+      tone: "warn",
+    });
+    return;
+  }
+
+  exactRulesSaving.value = true;
+  try {
+    const payload = await apiPost<SquadNameRulesResponse>("/api/squad-name/rules", {
+      exactRules: {
+        infantry: parseRuleTextarea(exactRuleForm.infantryText),
+        vehicle: parseRuleTextarea(exactRuleForm.vehicleText),
+        support: parseRuleTextarea(exactRuleForm.supportText),
+      },
+    });
+    applyExactRules(payload);
+    ui.pushToast({
+      title: "保存完成",
+      message: "指定队名规则已更新。",
+      tone: "ok",
+    });
+  } catch (err) {
+    ui.pushToast({
+      title: "保存失败",
+      message: formatError(err),
+      tone: "error",
+    });
+  } finally {
+    exactRulesSaving.value = false;
+  }
+}
+
+function applyExactRules(payload: SquadNameRulesResponse) {
+  exactRuleEntries.value = Array.isArray(payload.entries) ? payload.entries : [];
+  exactRulesUpdatedAt.value = payload.updatedAt ?? null;
+  exactRuleForm.infantryText = (payload.exactRules?.infantry ?? []).join("\n");
+  exactRuleForm.vehicleText = (payload.exactRules?.vehicle ?? []).join("\n");
+  exactRuleForm.supportText = (payload.exactRules?.support ?? []).join("\n");
+}
+
+function parseRuleTextarea(text: string) {
+  return Array.from(
+    new Set(
+      String(text ?? "")
+        .split(/[\r\n,，]+/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
 function normalizeRow(input: string, payload: SquadClassifierResponse): ResultRow {
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -408,6 +591,12 @@ function formatError(err: unknown) {
   gap: 12px;
 }
 
+.rules-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .field {
   display: grid;
   gap: 8px;
@@ -419,7 +608,8 @@ function formatError(err: unknown) {
 }
 
 .field input,
-.field select {
+.field select,
+.field textarea {
   width: 100%;
   border-radius: 8px;
   border: 1px solid #2c343d;
@@ -429,13 +619,20 @@ function formatError(err: unknown) {
   outline: none;
 }
 
+.field textarea {
+  resize: vertical;
+  min-height: 140px;
+}
+
 .field input:focus,
-.field select:focus {
+.field select:focus,
+.field textarea:focus {
   border-color: #4f6979;
 }
 
 .button-row,
-.sample-list {
+.sample-list,
+.rules-chip-list {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -451,6 +648,12 @@ function formatError(err: unknown) {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+}
+
+.action-btn:disabled,
+.sample-pill:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .action-btn.primary {
@@ -478,6 +681,14 @@ function formatError(err: unknown) {
   color: #98a5af;
   font-size: 12px;
   line-height: 1.6;
+}
+
+.rules-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: #98a5af;
+  font-size: 12px;
 }
 
 .summary-grid {
@@ -576,6 +787,7 @@ function formatError(err: unknown) {
 
 .input-card,
 .summary-card,
+.rules-editor-card,
 .batch-card,
 .result-card,
 .json-card {
@@ -587,7 +799,8 @@ function formatError(err: unknown) {
 }
 
 @media (max-width: 1100px) {
-  .hero-grid {
+  .hero-grid,
+  .rules-grid {
     grid-template-columns: 1fr;
   }
 }

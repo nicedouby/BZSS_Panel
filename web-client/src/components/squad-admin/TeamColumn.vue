@@ -44,7 +44,10 @@
         :squad="squad"
         :density-mode="densityMode"
         :selected-player-id="selectedPlayerId"
+        :multi-select-mode="multiSelectMode"
+        :selected-player-ids="selectedPlayerIds"
         @select-player="($event) => $emit('select-player', $event)"
+        @toggle-player-check="($event) => $emit('toggle-player-check', $event)"
         @select-squad="$emit('select-squad', $event)"
       />
     </div>
@@ -60,10 +63,13 @@ const props = defineProps<{
   team: TeamViewModel;
   selectedPlayerId?: string | number | null;
   densityMode?: "comfortable" | "compact";
+  multiSelectMode?: boolean;
+  selectedPlayerIds?: Set<string | number>;
 }>();
 
 defineEmits<{
   (event: "select-player", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
+  (event: "toggle-player-check", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
   (event: "select-squad", squad: SquadViewModel): void;
 }>();
 

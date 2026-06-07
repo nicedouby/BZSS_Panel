@@ -3,7 +3,12 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { classifySquadName, getSquadNameClassifierRules } from "../core/squad-name-classifier.js";
+import {
+  classifySquadName,
+  getSquadNameClassifierRules,
+  getSquadNameExactRuleConfig,
+  updateSquadNameExactRuleConfig,
+} from "../core/squad-name-classifier.js";
 
 async function main() {
   assert.equal(classifySquadName("Squad 7").category, "infantry");
@@ -33,6 +38,25 @@ async function main() {
   const rules = getSquadNameClassifierRules(configManager);
   assert.equal(classifySquadName("alpha squad", { rules }).category, "infantry");
   assert.equal(classifySquadName("bravo armor", { rules }).category, "vehicle");
+
+  const updated = await updateSquadNameExactRuleConfig(configManager, {
+    infantry: ["alpha squad", "green squad"],
+    vehicle: ["bravo armor", "alpha squad"],
+    support: ["logi 1"],
+  });
+  assert.deepEqual(updated.exactRules, {
+    infantry: ["green squad"],
+    vehicle: ["alpha squad", "bravo armor"],
+    support: ["logi 1"],
+  });
+
+  const savedConfig = await getSquadNameExactRuleConfig(configManager);
+  assert.deepEqual(savedConfig.exactRules, updated.exactRules);
+
+  const savedRules = getSquadNameClassifierRules(configManager);
+  assert.equal(classifySquadName("green squad", { rules: savedRules }).category, "infantry");
+  assert.equal(classifySquadName("alpha squad", { rules: savedRules }).category, "vehicle");
+  assert.equal(classifySquadName("logi 1", { rules: savedRules }).category, "support");
 
   console.log("run-squad-name-rules-tests: ok");
 }

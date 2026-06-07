@@ -147,4 +147,6 @@ export interface PageState {
   densityMode: "comfortable" | "compact";
   selectedPlayerId: string | number | null;
   filterMode: "all" | "no_leader" | "locked" | "alerts";
+  multiSelectMode?: boolean;
+  selectedPlayerIds?: (string | number)[];
 }
