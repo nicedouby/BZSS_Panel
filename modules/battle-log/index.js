@@ -361,6 +361,107 @@ export function createBattleLogModule({ core, modules, config, logger }) {
     };
   }
 
+  function normalizeCombatCleanType(record) {
+    return String(record?.type ?? record?.statType ?? "").trim().toLowerCase();
+  }
+
+  function replayCombatCleanRecord(record) {
+    if (!record || typeof record !== "object") return null;
+
+    const type = normalizeCombatCleanType(record);
+    if (!type) return null;
+
+    const event = {
+      eventId: `module.combatClean:${record.id ?? resolveSourceEventId(record, null)}`,
+      eventName: `module.combatClean.${type}Resolved`,
+      layer: "module",
+      source: "module.combatClean",
+      serverId: record.serverId,
+      time: record.time,
+      record,
+    };
+
+    if (type === "wound") return handleCombatCleanWound(event);
+    if (type === "kill") return handleCombatCleanKill(event);
+    if (type === "revive") return handleCombatCleanRevive(event);
+    return null;
+  }
+
+  function backfillFromCombatClean() {
+    if (!enabled || !logEnabled || !isSubscribed()) {
+      return { attempted: false, fetched: 0, imported: 0, reason: "disabled" };
+    }
+
+    const combatCleanApi = modules?.combatClean;
+    if (!combatCleanApi?.getOverview || !combatCleanApi?.getEvents) {
+      return { attempted: false, fetched: 0, imported: 0, reason: "combat_clean_unavailable" };
+    }
+
+    const overview = combatCleanApi.getOverview("");
+    const total = Math.max(0, Number(overview?.count ?? 0));
+    if (!total) {
+      return { attempted: true, fetched: 0, imported: 0, reason: "empty" };
+    }
+
+    const fetchedRecords = combatCleanApi.getEvents({
+      limit: Math.min(total, maxEvents),
+      offset: 0,
+    });
+    const orderedRecords = Array.isArray(fetchedRecords) ? fetchedRecords.slice().reverse() : [];
+
+    let imported = 0;
+    for (const record of orderedRecords) {
+      const before = events.length;
+      replayCombatCleanRecord(record);
+      imported += Math.max(0, events.length - before);
+    }
+
+    return {
+      attempted: true,
+      fetched: orderedRecords.length,
+      imported,
+      reason: imported > 0 ? "ok" : "deduped",
+    };
+  }
+
+  async function backfillFromCombatManagerCache() {
+    if (!enabled || !logEnabled || !isSubscribed()) {
+      return { attempted: false, fetched: 0, imported: 0, reason: "disabled" };
+    }
+
+    const combatManagerApi = modules?.combatManager;
+    if (!combatManagerApi?.readCacheSnapshot) {
+      return { attempted: false, fetched: 0, imported: 0, reason: "combat_manager_unavailable" };
+    }
+
+    const targetServerId = String(core?.webStatus?.serverId ?? "").trim();
+    const snapshot = await combatManagerApi.readCacheSnapshot(targetServerId);
+    const cachedEvents = Array.isArray(snapshot?.events) ? snapshot.events : [];
+    if (!cachedEvents.length) {
+      return { attempted: true, fetched: 0, imported: 0, reason: "empty" };
+    }
+
+    const orderedRecords = cachedEvents
+      .filter((record) => String(record?.sourceLayer ?? "processed").trim().toLowerCase() === "processed")
+      .slice()
+      .reverse();
+
+    let imported = 0;
+    for (const record of orderedRecords) {
+      const before = events.length;
+      replayCombatCleanRecord(record);
+      imported += Math.max(0, events.length - before);
+    }
+
+    return {
+      attempted: true,
+      serverId: targetServerId,
+      fetched: orderedRecords.length,
+      imported,
+      reason: imported > 0 ? "ok" : "deduped",
+    };
+  }
+
   const api = {
     getStatus,
     getOverview,
@@ -404,6 +505,9 @@ export function createBattleLogModule({ core, modules, config, logger }) {
       }
       unsubscribers.push(core.eventBus.onCoreEvent("TEAM_KILL", handleTeamKill));
 
+      const combatCleanBackfill = backfillFromCombatClean();
+      const cacheBackfill = await backfillFromCombatManagerCache();
+
       moduleLogger.info("Battle log module started.", {
         operation: "start",
         data: {
@@ -411,6 +515,10 @@ export function createBattleLogModule({ core, modules, config, logger }) {
           logEnabled,
           modEnabled,
           maxEvents,
+          backfill: {
+            combatClean: combatCleanBackfill,
+            combatManagerCache: cacheBackfill,
+          },
         },
       });
     },

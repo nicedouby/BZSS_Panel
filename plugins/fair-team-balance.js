@@ -684,11 +684,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     const ownCount = teamId === 1 ? counts.team1 : counts.team2;
     const otherCount = teamId === 1 ? counts.team2 : counts.team1;
 
-    if (ownCount - otherCount < 3) {
+    if (ownCount <= otherCount) {
       return {
         ok: false,
         error: "TeamDeltaNotAllowed",
-        message: "只有当前队伍人数比对方多 3 人及以上时，才允许直接 tb。",
+        message: "只有从人数更多的一边跳到人数更少的一边时，才允许直接 tb。",
       };
     }
 

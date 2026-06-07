@@ -17,6 +17,7 @@ export async function createSteamPlaytimeDatabase(config = {}) {
 
   await db.exec("PRAGMA journal_mode = WAL;");
   await db.exec("PRAGMA foreign_keys = ON;");
+  await db.exec("PRAGMA busy_timeout = 5000;");
   await ensureSchema(db);
   await migrateLegacySteamPlaytime(db, config.legacyPath ?? "./MicePanel/data/steam_playtime.db", dbFile);
 

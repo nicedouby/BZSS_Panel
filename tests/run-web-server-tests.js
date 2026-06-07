@@ -2077,6 +2077,10 @@ async function testMatchSnapshotRoutesExposeArtifacts() {
                   content: Buffer.from("PNGDATA", "utf8"),
                 };
               },
+              async deleteSnapshot(id) {
+                calls.push(`delete:${id}`);
+                return { id, removed: true, removedFiles: [`${id}.json`, `${id}.png`, `${id}.csv`, `${id}.md`] };
+              },
             },
           },
         ],
@@ -2116,6 +2120,17 @@ async function testMatchSnapshotRoutesExposeArtifacts() {
   assert.equal(imageRecorder.state.headers["Content-Type"], "image/png");
   assert.equal(imageRecorder.state.body, "PNGDATA");
   assert.ok(calls.includes("read:Match-Test:image"));
+
+  const deleteRecorder = createRecorder();
+  await server.handleRequest({
+    method: "DELETE",
+    url: "/api/match-snapshot/delete?id=Match-Test",
+    headers: { host: "localhost" },
+    socket: {} ,
+  }, deleteRecorder.res);
+  assert.equal(deleteRecorder.state.status, 200);
+  assert.equal(JSON.parse(deleteRecorder.state.body).snapshot.id, "Match-Test");
+  assert.ok(calls.includes("delete:Match-Test"));
 }
 
 await testReadJsonBodyParsesValidPayload();

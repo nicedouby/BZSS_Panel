@@ -175,7 +175,7 @@ async function createHarness(options = {}) {
   };
 }
 
-async function testTbSucceedsOnlyWhenOwnTeamIsAheadByThree() {
+async function testTbAllowsSwitchFromLargerTeam() {
   const harness = await createHarness({
     matchState: {
       players: [
@@ -206,13 +206,49 @@ async function testTbSucceedsOnlyWhenOwnTeamIsAheadByThree() {
   }
 }
 
-async function testTbRejectsWhenOwnTeamLeadIsBelowThree() {
+async function testTbAllowsSwitchFromLargerTeamAtFortyNineVsFortyEight() {
+  const harness = await createHarness({
+    matchState: {
+      players: [
+        ...Array.from({ length: 49 }, (_, index) => ({
+          name: `Team1-${index + 1}`,
+          steamId: `steam-team1-${index + 1}`,
+          teamId: 1,
+          squadId: 0,
+        })),
+        ...Array.from({ length: 48 }, (_, index) => ({
+          name: `Team2-${index + 1}`,
+          steamId: `steam-team2-${index + 1}`,
+          teamId: 2,
+          squadId: 0,
+        })),
+      ],
+    },
+  });
+
+  try {
+    const result = await harness.plugin.api.simulateChatMessage({
+      message: "tb",
+      steamId: "steam-team1-1",
+      playerName: "Team1-1",
+    });
+
+    assert.equal(result.matched, true);
+    assert.equal(result.ok, true);
+    assert.equal(harness.teamBalanceCalls.length, 1);
+    assert.equal(harness.plugin.api.getState().publicTbRemaining, 4);
+    assert.equal(harness.plugin.api.getState().roundUsedCount, 1);
+  } finally {
+    await harness.stop();
+  }
+}
+
+async function testTbRejectsWhenSwitchWouldNotImproveBalance() {
   const harness = await createHarness({
     matchState: {
       players: [
         { name: "Alpha", steamId: "steam-alpha", teamId: 1, squadId: 0 },
-        { name: "Bravo", steamId: "steam-bravo", teamId: 1, squadId: 0 },
-        { name: "Charlie", steamId: "steam-charlie", teamId: 2, squadId: 0 },
+        { name: "Bravo", steamId: "steam-bravo", teamId: 2, squadId: 0 },
       ],
     },
   });
@@ -419,8 +455,9 @@ async function testClaimCodeIsStillHandled() {
   }
 }
 
-await testTbSucceedsOnlyWhenOwnTeamIsAheadByThree();
-await testTbRejectsWhenOwnTeamLeadIsBelowThree();
+await testTbAllowsSwitchFromLargerTeam();
+await testTbAllowsSwitchFromLargerTeamAtFortyNineVsFortyEight();
+await testTbRejectsWhenSwitchWouldNotImproveBalance();
 await testSqtbCreatesRequestAndClaimExecutes();
 await testSqtbDirectApproveStillWorks();
 await testApproveRequestRejectsConcurrentDuplicates();

@@ -163,6 +163,13 @@ async function testCaptureWritesImageAndFiles() {
     assert.equal(list.length, 1);
     assert.equal(list[0].id, item.id);
     assert.equal(list[0].artifacts.length, 4);
+
+    const deleted = await plugin.api.deleteSnapshot(item.id);
+    assert.equal(deleted.id, item.id);
+    assert.equal(deleted.removed, true);
+
+    const missing = await plugin.api.listSnapshots();
+    assert.equal(missing.length, 0);
   } finally {
     process.chdir(oldCwd);
     await fs.rm(tempDir, { recursive: true, force: true });

@@ -2135,6 +2135,17 @@ export class WebServer {
       return this.json(res, 200, { ok: true, snapshot });
     }
 
+    if (url.pathname === "/api/match-snapshot/delete" && req.method === "DELETE") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const id = url.searchParams.get("id");
+      if (!id) return this.json(res, 400, { error: "MissingId" });
+      const pluginApi = this.getPluginApi("match-snapshot");
+      if (!pluginApi?.deleteSnapshot) return this.json(res, 404, { error: "PluginNotLoaded" });
+      const result = await pluginApi.deleteSnapshot(id);
+      if (!result?.removed) return this.json(res, 404, { error: "SnapshotNotFound" });
+      return this.json(res, 200, { ok: true, snapshot: result });
+    }
+
     if (url.pathname === "/api/match-snapshot/view" && req.method === "GET") {
       if (!this.requireSuperAdmin(user, res)) return;
       const id = url.searchParams.get("id");

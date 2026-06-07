@@ -311,7 +311,7 @@ async function testRconOnlySnapshotDoesNotCreateDecisionRecord() {
     assert.equal(status.summary.violations, 0);
     assert.equal(harness.disbands.length, 0);
     assert.equal(harness.warnings.length, 0);
-    assert.equal(harness.kicks.length, 1);
+    assert.equal(harness.kicks.length, 0);
     assert.equal(status.leaderboard.length, 0);
     assert.equal(status.currentViolatingSquads.length, 0);
     assert.equal(status.recentRecords.length, 0);
@@ -416,6 +416,15 @@ async function testSixteenthViolationKicks() {
   const harness = await createHarness();
   try {
     for (let index = 0; index < 16; index += 1) {
+      await harness.plugin.api.simulateCreation(logCreation({
+        squadId: 100 + index,
+        squadName: `Tank ${index}`,
+        creatorName: "Repeat Offender",
+        creatorSteamId: "steam-repeat",
+      }));
+    }
+    assert.equal(harness.plugin.api.getStatus().leaderboard[0].violations, 16);
+    assert.equal(harness.kicks.length, 1);
   } finally {
     await harness.stop();
   }

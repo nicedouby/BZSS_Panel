@@ -193,12 +193,16 @@ async function testBypassRateLimitSkipsInterval() {
     },
   });
   const originalSetTimeout = globalThis.setTimeout;
+  const originalDateNow = Date.now;
   const delays = [];
 
   globalThis.setTimeout = (handler, delayMs) => {
     delays.push(delayMs);
     return originalSetTimeout(handler, 0);
   };
+
+  const fixedNow = 1700000000000;
+  Date.now = () => fixedNow;
 
   try {
     manager.lastCommandTime = Date.now();
@@ -217,6 +221,7 @@ async function testBypassRateLimitSkipsInterval() {
     assert.equal(normalResult.success, true);
   } finally {
     globalThis.setTimeout = originalSetTimeout;
+    Date.now = originalDateNow;
   }
 
   assert.deepEqual(executedCommands, [

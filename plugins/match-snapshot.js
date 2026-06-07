@@ -130,6 +130,34 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     };
   }
 
+  async function deleteSnapshot(id) {
+    await ensureSnapshotDir();
+    const baseName = sanitizeBaseName(path.basename(String(id ?? "").trim()).replace(/\.(json|png|svg|csv|md)$/i, ""));
+    if (!baseName) {
+      const error = new Error("Snapshot id is required.");
+      error.code = "MissingId";
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const removedFiles = [];
+    for (const artifact of ARTIFACTS) {
+      const fileName = `${baseName}${artifact.extension}`;
+      try {
+        await fs.unlink(path.join(resolveSnapshotDir(), fileName));
+        removedFiles.push(fileName);
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+      }
+    }
+
+    return {
+      id: baseName,
+      removed: removedFiles.length > 0,
+      removedFiles,
+    };
+  }
+
   function getCurrentOverview() {
     const api = modules?.matchState?.api ?? modules?.matchState;
     const overview = api?.getOverview?.();
@@ -148,6 +176,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   const api = {
+    deleteSnapshot,
     listSnapshots,
     readSnapshotArtifact,
     takeSnapshot,
@@ -574,7 +603,7 @@ function generateMarkdownReport(snapshot, options = {}) {
   const includeSteamID = Boolean(options.includeSteamID);
   const lines = [];
   lines.push("# 对局状态玩家列表快照", "");
-  lines.push(`- 录制时间: ${snapshot.capturedAt}`);
+  lines.push(`- 录制时间: ${formatDateTimeLocal(snapshot.capturedAt)}`);
   lines.push(`- 地图: ${snapshot.match.map || "-"}`);
   lines.push(`- 图层: ${snapshot.match.layer || "-"}`);
   lines.push(`- 模式: ${snapshot.match.mode || "-"}`);
@@ -601,7 +630,9 @@ function appendMarkdownPlayers(lines, players, options = {}) {
   const headers = ["名称", "角色", "KWD", "TK", "时长"];
   if (options.includeSteamID) headers.push("SteamID");
   lines.push(`| ${headers.join(" | ")} |`);
-  lines.push(`| ${headers.map(() => ":---").join(" | ")} |`);
+  const alignments = [":---", ":---:", ":---:", ":---:", ":---:"];
+  if (options.includeSteamID) alignments.push(":---:");
+  lines.push(`| ${alignments.join(" | ")} |`);
   for (const player of players) {
     const role = resolveRoleMeta(player.role);
     const cells = [
@@ -643,7 +674,7 @@ async function buildPlayerListPngLayout(snapshot, options = {}) {
     height,
     title: snapshot.match.map || "Unknown Map",
     subtitle: `${snapshot.match.layer || "-"} / ${snapshot.match.mode || "-"}`,
-    infoLine: `${snapshot.capturedAt} | ${snapshot.server.serverName || snapshot.server.serverId || "server"}`,
+    infoLine: `${formatDateTimeLocal(snapshot.capturedAt)} | ${snapshot.server.serverName || snapshot.server.serverId || "server"}`,
     summary: {
       playerCount: snapshot.summary.playerCount,
       squadCount: snapshot.summary.squadCount,
@@ -690,7 +721,7 @@ function buildPlayerPanelLayout(team, options, x, y, width, iconCache) {
     for (const player of team.unassignedPlayers) rows.push(buildPlayerRow(player, options, iconCache));
   }
 
-  const headerHeight = 116;
+  const headerHeight = 124;
   const rowsHeight = rows.reduce((sum, row) => sum + row.height, 0);
   return {
     teamID: team.teamID,
@@ -757,21 +788,21 @@ function renderPlayerListSvg(layout) {
   svg.push(`<text x="48" y="64" class="title">${xmlEscape(layout.title)}</text>`);
   svg.push(`<text x="48" y="92" class="subtitle">${xmlEscape(layout.subtitle)}</text>`);
   svg.push(`<text x="48" y="118" class="meta">${xmlEscape(layout.infoLine)}</text>`);
-  svg.push(renderSummaryMetric(1220, 34, "玩家", layout.summary.playerCount, "#38bdf8"));
-  svg.push(renderSummaryMetric(1388, 34, "小队", layout.summary.squadCount, "#a78bfa"));
-  svg.push(renderSummaryMetric(1556, 34, "SL", layout.summary.leaderCount, "#f59e0b"));
-  svg.push(renderSummaryMetric(1724, 34, "未分队", layout.summary.unassignedCount, "#ef4444"));
-  svg.push(renderSummaryMetric(1892, 34, "对局时长", layout.summary.matchDuration || "-", "#22c55e"));
+  svg.push(renderSummaryMetric(1304, 34, "玩家", layout.summary.playerCount, "#38bdf8"));
+  svg.push(renderSummaryMetric(1472, 34, "小队", layout.summary.squadCount, "#a78bfa"));
+  svg.push(renderSummaryMetric(1640, 34, "SL", layout.summary.leaderCount, "#f59e0b"));
+  svg.push(renderSummaryMetric(1808, 34, "未分队", layout.summary.unassignedCount, "#ef4444"));
+  svg.push(renderSummaryMetric(1976, 34, "对局时长", layout.summary.matchDuration || "-", "#22c55e"));
 
   for (const panel of layout.panels) {
     const tone = Number(panel.teamID) === 1 ? "#0f766e" : "#1d4ed8";
     svg.push(`<rect x="${panel.x}" y="${panel.y}" width="${panel.width}" height="${panel.height}" rx="18" fill="url(#panelGradient)" stroke="#334155"/>`);
-    svg.push(`<rect x="${panel.x}" y="${panel.y}" width="${panel.width}" height="52" rx="18" fill="${tone}"/>`);
-    svg.push(`<text x="${panel.x + 18}" y="${panel.y + 30}" class="team-title">${xmlEscape(panel.teamName)}</text>`);
-    svg.push(`<text x="${panel.x + 18}" y="${panel.y + 48}" class="team-stat">${xmlEscape(panel.statsLine)}</text>`);
-    svg.push(`<rect x="${panel.x + 12}" y="${panel.y + 66}" width="${panel.width - 24}" height="28" rx="8" fill="#1f2937" stroke="#334155"/>`);
+    svg.push(`<rect x="${panel.x}" y="${panel.y}" width="${panel.width}" height="60" rx="18" fill="${tone}"/>`);
+    svg.push(`<text x="${panel.x + 18}" y="${panel.y + 34}" class="team-title">${xmlEscape(panel.teamName)}</text>`);
+    svg.push(`<text x="${panel.x + 18}" y="${panel.y + 52}" class="team-stat">${xmlEscape(panel.statsLine)}</text>`);
+    svg.push(`<rect x="${panel.x + 12}" y="${panel.y + 74}" width="${panel.width - 24}" height="28" rx="8" fill="#1f2937" stroke="#334155"/>`);
     for (const column of panel.columns) {
-      svg.push(`<text x="${panel.x + column.x}" y="${panel.y + 84}" class="header">${xmlEscape(column.label)}</text>`);
+      svg.push(`<text x="${panel.x + column.x}" y="${panel.y + 92}" class="header">${xmlEscape(column.label)}</text>`);
     }
 
     let rowY = panel.y + panel.headerHeight;
@@ -1030,10 +1061,38 @@ function xmlEscape(value) {
     .replace(/'/g, "&apos;");
 }
 
-function clipTextByWidth(text, approxChars) {
+function formatDateTimeLocal(isoString) {
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return isoString || "-";
+
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const hh = String(date.getHours()).padStart(2, "0");
+  const min = String(date.getMinutes()).padStart(2, "0");
+  const ss = String(date.getSeconds()).padStart(2, "0");
+
+  return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
+}
+
+function clipTextByWidth(text, maxVisualWidth) {
   const value = String(text ?? "");
-  if (value.length <= approxChars) return value;
-  return `${value.slice(0, Math.max(1, approxChars - 1))}…`;
+  let visualWidth = 0;
+  let result = "";
+
+  for (let i = 0; i < value.length; i++) {
+    const char = value[i];
+    const code = char.charCodeAt(0);
+    // Double-width character detection (CJK Unified Ideographs, full-width forms, etc.)
+    const charWidth = (code >= 0x3000 && code <= 0x9FFF) || (code >= 0xFF00 && code <= 0xFFEF) ? 2 : 1;
+
+    if (visualWidth + charWidth > maxVisualWidth) {
+      return `${result}…`;
+    }
+    result += char;
+    visualWidth += charWidth;
+  }
+  return result;
 }
 
 function cloneJsonSafe(value) {

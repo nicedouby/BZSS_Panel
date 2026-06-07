@@ -82,6 +82,14 @@ export async function apiPatch<T>(
   );
 }
 
+export async function apiDelete<T>(
+  path: string,
+  init: RequestInit = {},
+  options: ApiRequestOptions = {},
+): Promise<T> {
+  return request<T>(path, { ...init, method: "DELETE" }, options);
+}
+
 export async function request<T>(
   path: string,
   init: RequestInit = {},
