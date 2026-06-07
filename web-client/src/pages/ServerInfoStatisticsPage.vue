@@ -188,7 +188,7 @@ const {
 
 // 辅助：通道是否已启用（兼容 boolean 和 Record）
 function isChannelEnabled(key: string): boolean {
-  const v = (enabledChannels.value as any)[key];
+  const v = (enabledChannels as any)[key];
   return v !== false;
 }
 

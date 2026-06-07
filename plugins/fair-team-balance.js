@@ -143,7 +143,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         ? "管理员协助跳边成功"
         : mode === "warmup_tb"
           ? "暖服模式公平跳边执行成功"
-          : "公平跳边执行成功";
+          : mode === "green_balance_tb"
+            ? "绿色平衡跳边通道执行成功"
+            : "公平跳边执行成功";
     if (mode === "warmup_tb") {
       return `${actionLabel}: ${safePlayerName}`;
     }
@@ -313,7 +315,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         eosId: entry?.eosId,
         persistReset: false,
       });
-      period.tbUsed += 1;
+      if (normalizeText(entry?.mode) !== "green_balance_tb") {
+        period.tbUsed += 1;
+      }
       period.lastActivityAt = at;
       period.lastActivityAtMs = atMs;
       state.round.publicTbRemaining = clampInteger(
@@ -700,6 +704,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     };
   }
 
+  function isGreenBalanceSwitch(sideCheck) {
+    if (!sideCheck?.ok) return false;
+    return (Number(sideCheck.ownCount ?? 0) - 1) > (Number(sideCheck.otherCount ?? 0) + 1);
+  }
+
   function validateDirectSwitch({ playerKey, playerName, player, matchState, webStatus, period, action }) {
     const common = validateCommonPlayerState(matchState, player);
     if (!common.ok) return common;
@@ -724,21 +733,36 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       };
     }
 
-    const squadId = Number(player?.squadId ?? player?.squadID ?? 0);
-    if (squadId > 0) {
-      return {
-        ok: false,
-        error: "PlayerInSquad",
-        message: "玩家必须不在小队中。",
-      };
-    }
-
     if (action === "tb") {
       if (state.round.publicTbRemaining <= 0) {
         return {
           ok: false,
           error: "RoundTbQuotaExhausted",
           message: "本回合公共跳边额度已用尽。",
+        };
+      }
+
+      const sideCheck = getSwitchEligibility(matchState, player);
+      if (sideCheck.ok && isGreenBalanceSwitch(sideCheck)) {
+        return {
+          ok: true,
+          mode: "green_balance",
+          sideCheck,
+        };
+      }
+      if (!sideCheck.ok) return sideCheck;
+
+      const logClockSeconds = Number(webStatus?.logClockSeconds ?? 0);
+      if (logClockSeconds < 20 || logClockSeconds > 60) {
+        return { ok: false, error: "WindowClosed", message: "tb 仅在开局 20 到 60 秒之间可用。" };
+      }
+
+      const squadId = Number(player?.squadId ?? player?.squadID ?? 0);
+      if (squadId > 0) {
+        return {
+          ok: false,
+          error: "PlayerInSquad",
+          message: "玩家必须不在小队中。",
         };
       }
 
@@ -756,6 +780,15 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         ok: false,
         error: "PlayerSqtbQuotaExhausted",
         message: "玩家在当前周期内的 sqtb 额度已用尽。",
+      };
+    }
+
+    const squadId = Number(player?.squadId ?? player?.squadID ?? 0);
+    if (squadId > 0) {
+      return {
+        ok: false,
+        error: "PlayerInSquad",
+        message: "玩家必须不在小队中。",
       };
     }
 
@@ -1127,7 +1160,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     if (action === "tb") {
       if (!Boolean(validation.mode === "warmup")) {
-        period.tbUsed += 1;
+        if (validation.mode !== "green_balance") {
+          period.tbUsed += 1;
+        }
         state.round.publicTbRemaining = Math.max(0, state.round.publicTbRemaining - 1);
         consumeRoundUse(playerKey);
       }
@@ -1146,7 +1181,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       playerName,
       steamId: actor.steamId,
       eosId: actor.eosId,
-      mode: action === "tb" && Boolean(validation.mode === "warmup") ? "warmup_tb" : action,
+      mode: action === "tb" && Boolean(validation.mode === "warmup")
+        ? "warmup_tb"
+        : (action === "tb" && validation.mode === "green_balance" ? "green_balance_tb" : action),
       roundPublicTbRemainingAfter: state.round.publicTbRemaining,
       teamBalanceResult: {
         ok: Boolean(switchResult?.ok),
@@ -1158,18 +1195,22 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     if (action === "tb") {
       await broadcastMessage(buildQuotaBroadcastMessage({
         playerName,
-        mode: Boolean(validation.mode === "warmup") ? "warmup_tb" : "tb",
+        mode: Boolean(validation.mode === "warmup")
+          ? "warmup_tb"
+          : (validation.mode === "green_balance" ? "green_balance_tb" : "tb"),
       }), "fair_tb_broadcast", {
         relatedEventId: sourceMessageId,
       });
       await warnPlayer(actor, Boolean(validation.mode === "warmup")
         ? "公平跳边提醒: 已在暖服模式执行完成"
-        : `公平跳边提醒: 已在非暖服模式执行完成，公共TB剩余 ${state.round.publicTbRemaining}/${runtimeConfig.publicTbLimit}`, "fair_tb_success_warning", {
+        : (validation.mode === "green_balance"
+          ? `绿色平衡跳边通道执行完成，公共TB剩余 ${state.round.publicTbRemaining}/${runtimeConfig.publicTbLimit}`
+          : `公平跳边提醒: 已在非暖服模式执行完成，公共TB剩余 ${state.round.publicTbRemaining}/${runtimeConfig.publicTbLimit}`), "fair_tb_success_warning", {
         relatedEventId: sourceMessageId,
       });
       return {
         ok: true,
-        mode: Boolean(validation.mode === "warmup") ? "warmup" : "normal",
+        mode: Boolean(validation.mode === "warmup") ? "warmup" : validation.mode,
         result: switchResult,
         publicTbRemaining: state.round.publicTbRemaining,
       };

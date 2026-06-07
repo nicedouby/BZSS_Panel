@@ -656,7 +656,7 @@ async function generatePlayerListPng(snapshot, options = {}) {
 }
 
 async function buildPlayerListPngLayout(snapshot, options = {}) {
-  const width = 2200;
+  const width = 1400;
   const panelTop = 176;
   const panelGap = 24;
   const panelWidth = Math.floor((width - 48 - panelGap) / 2);
@@ -681,6 +681,9 @@ async function buildPlayerListPngLayout(snapshot, options = {}) {
       leaderCount: snapshot.summary.leaderCount,
       unassignedCount: snapshot.summary.unassignedCount,
       matchDuration: formatDurationLong(snapshot.match.playtime),
+    },
+    renderOptions: {
+      includeSteamID: Boolean(options.includeSteamID ?? snapshot.renderOptions?.includeSteamID ?? true),
     },
     panels: [leftPanel, rightPanel],
   };
@@ -721,7 +724,7 @@ function buildPlayerPanelLayout(team, options, x, y, width, iconCache) {
     for (const player of team.unassignedPlayers) rows.push(buildPlayerRow(player, options, iconCache));
   }
 
-  const headerHeight = 124;
+  const headerHeight = 114;
   const rowsHeight = rows.reduce((sum, row) => sum + row.height, 0);
   return {
     teamID: team.teamID,
@@ -742,7 +745,7 @@ function buildPlayerRow(player, options, iconCache) {
   return {
     type: "player",
     height: 42,
-    name: buildPlayerDisplayName(player),
+    name: String(player?.name ?? "Unknown").trim() || "Unknown",
     steamID: Boolean(options.includeSteamID) ? player.steamID : "",
     kwd: buildKwdText(player),
     tk: String(player?.combatStats?.tk ?? 0),
@@ -756,19 +759,25 @@ function buildPlayerRow(player, options, iconCache) {
 
 function buildPngColumns(options, width) {
   const columns = [
-    { key: "name", label: "名称", x: 22, width: 260 },
-    { key: "role", label: "角色", x: 300, width: 72 },
+    { key: "name", label: "名称", x: 18, width: 160 },
   ];
-  let cursorX = 392;
   if (Boolean(options.includeSteamID)) {
-    columns.push({ key: "steamID", label: "SteamID", x: cursorX, width: 232 });
-    cursorX += 252;
+    columns.push(
+      { key: "role", label: "角色", x: 192, width: 76 },
+      { key: "steamID", label: "SteamID", x: 282, width: 146 },
+      { key: "kwd", label: "KWD", x: 442, width: 94 },
+      { key: "tk", label: "TK", x: 550, width: 38 },
+      { key: "duration", label: "时长", x: 602, width: 46 }
+    );
+  } else {
+    columns[0].width = 232;
+    columns.push(
+      { key: "role", label: "角色", x: 264, width: 76 },
+      { key: "kwd", label: "KWD", x: 354, width: 110 },
+      { key: "tk", label: "TK", x: 478, width: 50 },
+      { key: "duration", label: "时长", x: 542, width: 106 }
+    );
   }
-  columns.push({ key: "kwd", label: "KWD", x: cursorX, width: 120 });
-  cursorX += 136;
-  columns.push({ key: "tk", label: "TK", x: cursorX, width: 52 });
-  cursorX += 68;
-  columns.push({ key: "duration", label: "时长", x: cursorX, width: Math.max(84, width - cursorX - 40) });
   return columns;
 }
 
@@ -776,70 +785,95 @@ function renderPlayerListSvg(layout) {
   const svg = [];
   svg.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${layout.width}" height="${layout.height}" viewBox="0 0 ${layout.width} ${layout.height}">`);
   svg.push("<defs>");
-  svg.push('<linearGradient id="bgGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#08111f"/><stop offset="100%" stop-color="#111827"/></linearGradient>');
-  svg.push('<linearGradient id="panelGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0f172a"/><stop offset="100%" stop-color="#111827"/></linearGradient>');
+  svg.push('<linearGradient id="bgGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0b0f19"/><stop offset="100%" stop-color="#111827"/></linearGradient>');
+  svg.push('<linearGradient id="panelGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0f1626"/><stop offset="100%" stop-color="#090d16"/></linearGradient>');
+  svg.push('<linearGradient id="teamGradient1" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#0f766e"/><stop offset="100%" stop-color="#14b8a6"/></linearGradient>');
+  svg.push('<linearGradient id="teamGradient2" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#1d4ed8"/><stop offset="100%" stop-color="#4f46e5"/></linearGradient>');
   svg.push("<style><![CDATA[");
-  svg.push("text{font-family:'Microsoft YaHei UI','Segoe UI',sans-serif}.mono{font-family:'Consolas','Cascadia Mono',monospace}.title{font-size:34px;font-weight:800;fill:#f8fafc}.subtitle{font-size:16px;fill:#cbd5e1}.meta{font-size:13px;fill:#94a3b8}.metric-label{font-size:12px;fill:#94a3b8}.metric-value{font-size:20px;font-weight:800;fill:#f8fafc}.team-title{font-size:18px;font-weight:800;fill:#f8fafc}.team-stat{font-size:13px;fill:#dbe4f0}.header{font-size:12px;font-weight:800;fill:#9fb0c5}.squad{font-size:13px;font-weight:700;fill:#dbe4f0}.row{font-size:14px;fill:#f8fafc}.small{font-size:12px;fill:#cbd5e1}.badge{font-size:11px;font-weight:800;fill:#0b1220}");
+  svg.push("text{font-family:'system-ui',-apple-system,'Segoe UI',Roboto,'Microsoft YaHei',sans-serif;fill:#f8fafc}.mono{font-family:'Consolas','Cascadia Mono',monospace}.title{font-size:30px;font-weight:800;fill:#f8fafc}.subtitle{font-size:15px;fill:#cbd5e1}.meta{font-size:12px;fill:#94a3b8}.metric-label{font-size:12px;font-weight:600;fill:#64748b;letter-spacing:1px}.metric-value{font-size:24px;font-weight:800;fill:#f8fafc}.team-title{font-size:20px;font-weight:800;fill:#f8fafc}.team-stat{font-size:13px;fill:#cbd5e1}.header{font-size:12px;font-weight:800;fill:#94a3b8;letter-spacing:0.5px}.squad{font-size:13px;font-weight:800;fill:#f1f5f9}.row{font-size:14px;fill:#f8fafc}.row-bold{font-size:14px;font-weight:700;fill:#f8fafc}.small{font-size:12px;fill:#94a3b8}.badge{font-size:11px;font-weight:800;fill:#0f172a}");
   svg.push("]]></style>");
   svg.push("</defs>");
   svg.push('<rect x="0" y="0" width="100%" height="100%" fill="url(#bgGradient)"/>');
 
-  svg.push('<rect x="24" y="20" width="2152" height="136" rx="18" fill="#0b1220" stroke="#1f2937"/>');
-  svg.push(`<text x="48" y="64" class="title">${xmlEscape(layout.title)}</text>`);
-  svg.push(`<text x="48" y="92" class="subtitle">${xmlEscape(layout.subtitle)}</text>`);
-  svg.push(`<text x="48" y="118" class="meta">${xmlEscape(layout.infoLine)}</text>`);
-  svg.push(renderSummaryMetric(1304, 34, "玩家", layout.summary.playerCount, "#38bdf8"));
-  svg.push(renderSummaryMetric(1472, 34, "小队", layout.summary.squadCount, "#a78bfa"));
-  svg.push(renderSummaryMetric(1640, 34, "SL", layout.summary.leaderCount, "#f59e0b"));
-  svg.push(renderSummaryMetric(1808, 34, "未分队", layout.summary.unassignedCount, "#ef4444"));
-  svg.push(renderSummaryMetric(1976, 34, "对局时长", layout.summary.matchDuration || "-", "#22c55e"));
+  // Header Card
+  svg.push('<rect x="24" y="20" width="1352" height="136" rx="16" fill="#0c1222" stroke="#1e293b" stroke-width="1.5"/>');
+  svg.push(`<text x="48" y="62" class="title">${xmlEscape(layout.title)}</text>`);
+  svg.push(`<text x="48" y="90" class="subtitle">${xmlEscape(layout.subtitle)}</text>`);
+  svg.push(`<text x="48" y="116" class="meta">${xmlEscape(layout.infoLine)}</text>`);
+  svg.push(renderSummaryMetric(648, 34, "玩家", layout.summary.playerCount, "#38bdf8"));
+  svg.push(renderSummaryMetric(792, 34, "小队", layout.summary.squadCount, "#a78bfa"));
+  svg.push(renderSummaryMetric(936, 34, "SL", layout.summary.leaderCount, "#f59e0b"));
+  svg.push(renderSummaryMetric(1080, 34, "未分队", layout.summary.unassignedCount, "#ef4444"));
+  svg.push(renderSummaryMetric(1224, 34, "对局时长", layout.summary.matchDuration || "-", "#22c55e"));
 
   for (const panel of layout.panels) {
-    const tone = Number(panel.teamID) === 1 ? "#0f766e" : "#1d4ed8";
-    svg.push(`<rect x="${panel.x}" y="${panel.y}" width="${panel.width}" height="${panel.height}" rx="18" fill="url(#panelGradient)" stroke="#334155"/>`);
-    svg.push(`<rect x="${panel.x}" y="${panel.y}" width="${panel.width}" height="60" rx="18" fill="${tone}"/>`);
-    svg.push(`<text x="${panel.x + 18}" y="${panel.y + 34}" class="team-title">${xmlEscape(panel.teamName)}</text>`);
-    svg.push(`<text x="${panel.x + 18}" y="${panel.y + 52}" class="team-stat">${xmlEscape(panel.statsLine)}</text>`);
-    svg.push(`<rect x="${panel.x + 12}" y="${panel.y + 74}" width="${panel.width - 24}" height="28" rx="8" fill="#1f2937" stroke="#334155"/>`);
+    const gradientId = Number(panel.teamID) === 1 ? "teamGradient1" : (Number(panel.teamID) === 2 ? "teamGradient2" : "panelGradient");
+    
+    // Panel background
+    svg.push(`<rect x="${panel.x}" y="${panel.y}" width="${panel.width}" height="${panel.height}" rx="18" fill="url(#panelGradient)" stroke="#1e293b" stroke-width="1.5"/>`);
+    
+    // Panel Header with only top corners rounded
+    const r = 18;
+    const headerH = 60;
+    const pathData = `M ${panel.x + r} ${panel.y} ` +
+      `L ${panel.x + panel.width - r} ${panel.y} ` +
+      `Q ${panel.x + panel.width} ${panel.y} ${panel.x + panel.width} ${panel.y + r} ` +
+      `L ${panel.x + panel.width} ${panel.y + headerH} ` +
+      `L ${panel.x} ${panel.y + headerH} ` +
+      `L ${panel.x} ${panel.y + r} ` +
+      `Q ${panel.x} ${panel.y} ${panel.x + r} ${panel.y} Z`;
+    svg.push(`<path d="${pathData}" fill="url(#${gradientId})"/>`);
+    
+    svg.push(`<text x="${panel.x + 20}" y="${panel.y + 36}" class="team-title">${xmlEscape(panel.teamName)}</text>`);
+    svg.push(`<text x="${panel.x + panel.width - 20}" y="${panel.y + 36}" text-anchor="end" class="team-stat">${xmlEscape(panel.statsLine)}</text>`);
+    
+    // Column Header Row
+    svg.push(`<rect x="${panel.x + 12}" y="${panel.y + 70}" width="${panel.width - 24}" height="32" rx="6" fill="#131e35" stroke="#223154" stroke-opacity="0.6"/>`);
     for (const column of panel.columns) {
-      svg.push(`<text x="${panel.x + column.x}" y="${panel.y + 92}" class="header">${xmlEscape(column.label)}</text>`);
+      svg.push(`<text x="${panel.x + column.x}" y="${panel.y + 90}" class="header">${xmlEscape(column.label)}</text>`);
     }
 
     let rowY = panel.y + panel.headerHeight;
     let rowIndex = 0;
     for (const row of panel.rows) {
       if (row.type === "squad") {
-        svg.push(`<rect x="${panel.x + 12}" y="${rowY}" width="${panel.width - 24}" height="${row.height - 4}" rx="8" fill="#162133" stroke="#334155"/>`);
-        svg.push(`<text x="${panel.x + 22}" y="${rowY + 20}" class="squad">${xmlEscape(row.label)}</text>`);
-        svg.push(`<text x="${panel.x + panel.width - 64}" y="${rowY + 20}" text-anchor="end" class="small">${xmlEscape(String(row.count))}</text>`);
+        const leftBorderColor = Number(panel.teamID) === 1 ? "#0d9488" : "#3b82f6";
+        svg.push(`<rect x="${panel.x + 12}" y="${rowY}" width="${panel.width - 24}" height="${row.height - 4}" rx="6" fill="#17223b" stroke="#223154"/>`);
+        // Accent vertical bar
+        svg.push(`<rect x="${panel.x + 12}" y="${rowY}" width="4" height="${row.height - 4}" rx="2" fill="${leftBorderColor}"/>`);
+        svg.push(`<text x="${panel.x + 26}" y="${rowY + 20}" class="squad">${xmlEscape(row.label)}</text>`);
+        svg.push(`<text x="${panel.x + panel.width - 26}" y="${rowY + 20}" text-anchor="end" class="squad-count small">${xmlEscape(String(row.count) + " 玩家")}</text>`);
       } else {
-        const fill = rowIndex % 2 === 0 ? "#0b1220" : "#0f172a";
-        svg.push(`<rect x="${panel.x + 12}" y="${rowY}" width="${panel.width - 24}" height="${row.height - 4}" rx="8" fill="${fill}" stroke="rgba(148,163,184,0.10)"/>`);
+        const fill = rowIndex % 2 === 0 ? "#0d1324" : "#111a30";
+        svg.push(`<rect x="${panel.x + 12}" y="${rowY}" width="${panel.width - 24}" height="${row.height - 4}" rx="6" fill="${fill}" stroke="#1e293b" stroke-opacity="0.3"/>`);
+        
         for (const column of panel.columns) {
           const columnX = panel.x + column.x;
           if (column.key === "name") {
+            const maxLen = Boolean(layout.renderOptions?.includeSteamID) ? (row.isLeader ? 15 : 19) : (row.isLeader ? 24 : 28);
             if (row.isLeader) {
-              svg.push(`<rect x="${columnX}" y="${rowY + 9}" width="24" height="16" rx="8" fill="#f59e0b"/>`);
-              svg.push(`<text x="${columnX + 12}" y="${rowY + 21}" text-anchor="middle" class="badge">SL</text>`);
-              svg.push(`<text x="${columnX + 34}" y="${rowY + 24}" class="row">${xmlEscape(clipTextByWidth(row.name, 24))}</text>`);
+              svg.push(`<rect x="${columnX}" y="${rowY + 11}" width="26" height="16" rx="4" fill="#eab308"/>`);
+              svg.push(`<text x="${columnX + 13}" y="${rowY + 23}" text-anchor="middle" class="badge">SL</text>`);
+              svg.push(`<text x="${columnX + 34}" y="${rowY + 24}" class="row-bold">${xmlEscape(clipTextByWidth(row.name, maxLen))}</text>`);
             } else {
-              svg.push(`<text x="${columnX}" y="${rowY + 24}" class="row">${xmlEscape(clipTextByWidth(row.name, 28))}</text>`);
+              svg.push(`<text x="${columnX}" y="${rowY + 24}" class="row">${xmlEscape(clipTextByWidth(row.name, maxLen))}</text>`);
             }
           } else if (column.key === "role") {
             if (row.roleIconData) {
-              svg.push(`<image href="${row.roleIconData}" x="${columnX}" y="${rowY + 5}" width="24" height="24"/>`);
+              svg.push(`<image href="${row.roleIconData}" x="${columnX}" y="${rowY + 7}" width="24" height="24"/>`);
             } else {
-              svg.push(`<rect x="${columnX}" y="${rowY + 7}" width="24" height="20" rx="5" fill="${row.roleTone}"/>`);
+              svg.push(`<rect x="${columnX}" y="${rowY + 9}" width="24" height="20" rx="4" fill="${row.roleTone}"/>`);
             }
             svg.push(`<text x="${columnX + 30}" y="${rowY + 24}" class="small">${xmlEscape(row.roleLabel)}</text>`);
           } else if (column.key === "steamID") {
-            svg.push(`<text x="${columnX}" y="${rowY + 24}" class="row mono">${xmlEscape(clipTextByWidth(row.steamID || "-", 18))}</text>`);
+            svg.push(`<text x="${columnX}" y="${rowY + 24}" class="row mono small">${xmlEscape(clipTextByWidth(row.steamID || "-", 18))}</text>`);
           } else if (column.key === "kwd") {
-            svg.push(`<text x="${columnX}" y="${rowY + 24}" class="row">${xmlEscape(row.kwd)}</text>`);
+            svg.push(`<text x="${columnX}" y="${rowY + 24}" class="row mono">${xmlEscape(row.kwd)}</text>`);
           } else if (column.key === "tk") {
-            svg.push(`<text x="${columnX}" y="${rowY + 24}" class="row">${xmlEscape(row.tk)}</text>`);
+            const tkColor = Number(row.tk) > 0 ? "#ef4444" : "#f8fafc";
+            svg.push(`<text x="${columnX}" y="${rowY + 24}" class="row mono" ${Number(row.tk) > 0 ? 'style="fill:#ef4444"' : ""}>${xmlEscape(row.tk)}</text>`);
           } else if (column.key === "duration") {
-            svg.push(`<text x="${columnX}" y="${rowY + 24}" class="row">${xmlEscape(row.duration)}</text>`);
+            svg.push(`<text x="${columnX}" y="${rowY + 24}" class="row mono small">${xmlEscape(row.duration)}</text>`);
           }
         }
         rowIndex += 1;
@@ -854,10 +888,10 @@ function renderPlayerListSvg(layout) {
 
 function renderSummaryMetric(x, y, label, value, color) {
   return [
-    `<rect x="${x}" y="${y}" width="152" height="84" rx="12" fill="#111827" stroke="#334155"/>`,
-    `<rect x="${x + 14}" y="${y + 16}" width="12" height="12" rx="4" fill="${color}"/>`,
-    `<text x="${x + 34}" y="${y + 27}" class="metric-label">${xmlEscape(label)}</text>`,
-    `<text x="${x + 14}" y="${y + 58}" class="metric-value">${xmlEscape(String(value))}</text>`,
+    `<rect x="${x}" y="${y}" width="132" height="84" rx="12" fill="#131e35" stroke="#223154" stroke-width="1"/>`,
+    `<path d="M ${x + 12} ${y} L ${x + 120} ${y}" stroke="${color}" stroke-width="3" stroke-linecap="round"/>`,
+    `<text x="${x + 14}" y="${y + 28}" class="metric-label">${xmlEscape(label)}</text>`,
+    `<text x="${x + 14}" y="${y + 62}" class="metric-value mono">${xmlEscape(String(value))}</text>`,
   ].join("");
 }
 

@@ -141,6 +141,7 @@ async function createHarness(options = {}) {
             enabled: true,
             directory: tempDir,
             requestTtlMs: options.requestTtlMs ?? 120000,
+            periodTbLimit: options.periodTbLimit,
           };
         }
         return defaultValue;
@@ -235,6 +236,94 @@ async function testTbAllowsSwitchFromLargerTeamAtFortyNineVsFortyEight() {
 
     assert.equal(result.matched, true);
     assert.equal(result.ok, true);
+    assert.equal(harness.teamBalanceCalls.length, 1);
+    assert.equal(harness.plugin.api.getState().publicTbRemaining, 4);
+    assert.equal(harness.plugin.api.getState().roundUsedCount, 1);
+  } finally {
+    await harness.stop();
+  }
+}
+
+async function testGreenBalanceTbBypassesBasicLayerButUsesRoundQuota() {
+  const harness = await createHarness({
+    webStatus: {
+      logClockSeconds: 90,
+    },
+    periodTbLimit: 0,
+    matchState: {
+      players: [
+        ...Array.from({ length: 51 }, (_, index) => ({
+          name: `Team1-${index + 1}`,
+          steamId: `steam-team1-${index + 1}`,
+          teamId: 1,
+          squadId: index === 0 ? 1 : 0,
+        })),
+        ...Array.from({ length: 48 }, (_, index) => ({
+          name: `Team2-${index + 1}`,
+          steamId: `steam-team2-${index + 1}`,
+          teamId: 2,
+          squadId: 0,
+        })),
+      ],
+    },
+  });
+
+  try {
+    const result = await harness.plugin.api.simulateChatMessage({
+      message: "tb",
+      steamId: "steam-team1-1",
+      playerName: "Team1-1",
+    });
+
+    assert.equal(result.matched, true);
+    assert.equal(result.ok, true);
+    assert.equal(result.mode, "green_balance");
+    assert.equal(harness.teamBalanceCalls.length, 1);
+    const state = harness.plugin.api.getState();
+    assert.equal(state.publicTbRemaining, 4);
+    assert.equal(state.roundUsedCount, 1);
+    assert.equal(state.playerQuotas.find((entry) => entry.steamId === "steam-team1-1")?.tbUsed, 0);
+  } finally {
+    await harness.stop();
+  }
+}
+
+async function testGreenBalanceTbStillRejectsRoundReuse() {
+  const harness = await createHarness({
+    matchState: {
+      players: [
+        ...Array.from({ length: 51 }, (_, index) => ({
+          name: `Team1-${index + 1}`,
+          steamId: `steam-team1-${index + 1}`,
+          teamId: 1,
+          squadId: 0,
+        })),
+        ...Array.from({ length: 48 }, (_, index) => ({
+          name: `Team2-${index + 1}`,
+          steamId: `steam-team2-${index + 1}`,
+          teamId: 2,
+          squadId: 0,
+        })),
+      ],
+    },
+  });
+
+  try {
+    const first = await harness.plugin.api.simulateChatMessage({
+      message: "tb",
+      steamId: "steam-team1-1",
+      playerName: "Team1-1",
+    });
+    const second = await harness.plugin.api.simulateChatMessage({
+      message: "tb",
+      steamId: "steam-team1-1",
+      playerName: "Team1-1",
+    });
+
+    assert.equal(first.ok, true);
+    assert.equal(first.mode, "green_balance");
+    assert.equal(second.ok, false);
+    assert.equal(second.error, "RoundPlayerQuotaExhausted");
     assert.equal(harness.teamBalanceCalls.length, 1);
     assert.equal(harness.plugin.api.getState().publicTbRemaining, 4);
     assert.equal(harness.plugin.api.getState().roundUsedCount, 1);
@@ -457,6 +546,8 @@ async function testClaimCodeIsStillHandled() {
 
 await testTbAllowsSwitchFromLargerTeam();
 await testTbAllowsSwitchFromLargerTeamAtFortyNineVsFortyEight();
+await testGreenBalanceTbBypassesBasicLayerButUsesRoundQuota();
+await testGreenBalanceTbStillRejectsRoundReuse();
 await testTbRejectsWhenSwitchWouldNotImproveBalance();
 await testSqtbCreatesRequestAndClaimExecutes();
 await testSqtbDirectApproveStillWorks();

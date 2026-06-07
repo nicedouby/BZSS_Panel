@@ -301,10 +301,11 @@ export function useServerMetrics() {
 
       const lastSample = samples.value[samples.value.length - 1];
       if (!lastSample || nextSample.timestamp_ms > lastSample.timestamp_ms) {
-        samples.value.push(nextSample);
-        if (samples.value.length > MAX_SAMPLES) {
-          samples.value.shift();
+        const nextSamples = [...samples.value, nextSample];
+        if (nextSamples.length > MAX_SAMPLES) {
+          nextSamples.shift();
         }
+        samples.value = nextSamples;
         lastUpdatedAt.value = Date.now();
       }
     } catch (error) {

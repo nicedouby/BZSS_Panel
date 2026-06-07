@@ -29,56 +29,60 @@
         <AppCard compact title="历史快照记录" description="查看自动或手动生成的对局状态快照，提供图片预览和文件下载。">
           <div v-if="loading" class="empty-state">正在加载快照列表...</div>
           <div v-else-if="snapshots.length === 0" class="empty-state">暂无录制记录</div>
-          <AppTable v-else compact>
-            <thead>
-              <tr>
-                <th>名称</th>
-                <th>录制时间</th>
-                <th>文件</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="snapshot in snapshotsView"
-                :key="snapshot.id"
-                :class="{ selected: selectedId === snapshot.id }"
-                @click="selectSnapshot(snapshot.id)"
-              >
-                <td class="col-name">
-                  <strong class="snapshot-name">{{ snapshot.name }}</strong>
-                  <div class="snapshot-file">{{ snapshot.id }}</div>
-                </td>
-                <td class="col-time">{{ formatDate(snapshot.createdAt) }}</td>
-                <td class="col-artifacts">
-                  <div class="artifact-list">
-                    <span
-                      v-for="artifact in snapshot.artifacts"
-                      :key="artifact.format"
-                      class="artifact-chip"
-                      :data-format="artifact.format"
-                    >
-                      {{ artifact.label }} <span class="artifact-size">{{ formatSize(artifact.size) }}</span>
-                    </span>
-                  </div>
-                </td>
-                <td class="col-actions">
-                  <div class="action-group" @click.stop>
-                    <button type="button" class="action-btn sm" @click="openArtifact(snapshot.id, 'image')">图片</button>
-                    <button type="button" class="action-btn sm" @click="openArtifact(snapshot.id, 'json')">JSON</button>
-                    <button type="button" class="action-btn sm" @click="downloadArtifact(snapshot.id, 'csv')">CSV</button>
-                    <button type="button" class="action-btn sm" @click="downloadArtifact(snapshot.id, 'markdown')">MD</button>
-                    <button type="button" class="action-btn sm danger" :disabled="busy" @click="handleDeleteSnapshot(snapshot)">删除</button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </AppTable>
+          <div class="snapshot-list" v-else>
+            <AppTable compact>
+              <thead>
+                <tr>
+                  <th><input type="checkbox" :checked="selectedIds.length === snapshotsView.length && snapshotsView.length > 0" @change="toggleSelectAll($event)" /></th>
+                  <th>名称</th>
+                  <th>录制时间</th>
+                  <th>文件</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="snapshot in snapshotsView"
+                  :key="snapshot.id"
+                  :class="{ selected: selectedId === snapshot.id }"
+                  @click="selectSnapshot(snapshot.id)"
+                >
+                  <td><input type="checkbox" :value="snapshot.id" v-model="selectedIds" @click.stop /></td>
+                  <td class="col-name">
+                    <strong class="snapshot-name">{{ snapshot.name }}</strong>
+                    <div class="snapshot-file">{{ snapshot.id }}</div>
+                  </td>
+                  <td class="col-time">{{ formatDate(snapshot.createdAt) }}</td>
+                  <td class="col-artifacts">
+                    <div class="artifact-list">
+                      <span
+                        v-for="artifact in snapshot.artifacts"
+                        :key="artifact.format"
+                        class="artifact-chip"
+                        :data-format="artifact.format"
+                      >
+                        {{ artifact.label }} <span class="artifact-size">{{ formatSize(artifact.size) }}</span>
+                      </span>
+                    </div>
+                  </td>
+                  <td class="col-actions">
+                    <div class="action-group" @click.stop>
+                      <button type="button" class="action-btn sm" @click="openArtifact(snapshot.id, 'image')">图片</button>
+                      <button type="button" class="action-btn sm" @click="openArtifact(snapshot.id, 'json')">JSON</button>
+                      <button type="button" class="action-btn sm" @click="downloadArtifact(snapshot.id, 'csv')">CSV</button>
+                      <button type="button" class="action-btn sm" @click="downloadArtifact(snapshot.id, 'markdown')">MD</button>
+                      <button type="button" class="action-btn sm danger" :disabled="busy" @click="handleDeleteSnapshot(snapshot)">删除</button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </AppTable>
+          </div>
         </AppCard>
       </template>
 
       <template #right>
-        <AppCard compact title="图片预览" :description="selectedSnapshot?.name || '未选择'">
+        <AppCard compact title="图片预览" :description="selectedSnapshot?.name || '未选择'" class="preview-card">
           <div class="preview-toolbar">
             <button
               v-if="selectedImageUrl"
@@ -96,12 +100,19 @@
             >
               在新标签页打开
             </button>
+            <button
+              type="button"
+              class="action-btn sm danger"
+              :disabled="!selectedIds.length || busy"
+              @click="batchDelete"
+            >
+              批量删除
+            </button>
           </div>
 
-          <div v-if="selectedImageUrl" class="preview-shell">
+          <div v-if="selectedImageUrl" class="preview-shell" :class="zoomMode">
             <img
               :src="selectedImageUrl"
-              :class="zoomMode === 'fit' ? 'zoom-fit' : 'zoom-raw'"
               alt="对局状态玩家列表快照图片"
             >
           </div>
@@ -151,6 +162,8 @@ const lastLoadedAt = ref("");
 const selectedId = ref("");
 const includeSteamID = ref(true);
 const zoomMode = ref<"fit" | "raw">("fit");
+// Batch selection IDs
+const selectedIds = ref<string[]>([]);
 
 const sortedSnapshots = computed(() => [...snapshots.value].sort((a, b) => Number(new Date(b.createdAt)) - Number(new Date(a.createdAt))));
 const snapshotsView = computed(() => sortedSnapshots.value.map(normalizeSnapshotItem));
@@ -245,6 +258,8 @@ async function handleDeleteSnapshot(snapshot: MatchSnapshotItem) {
   try {
     await apiDelete<{ ok: boolean; snapshot?: { id?: string } }>(`/api/match-snapshot/delete?id=${encodeURIComponent(normalized.id)}`);
     ui.pushToast({ title: "已删除", message: `快照 ${normalized.id} 已删除。`, tone: "ok" });
+    // also remove from batch selection if present
+    selectedIds.value = selectedIds.value.filter(id => id !== normalized.id);
     if (selectedId.value === normalized.id) selectedId.value = "";
     await loadList();
   } catch (error) {
@@ -252,6 +267,45 @@ async function handleDeleteSnapshot(snapshot: MatchSnapshotItem) {
     ui.pushToast({ title: "删除失败", message: errorMessage.value, tone: "error" });
   } finally {
     busy.value = false;
+  }
+}
+
+async function batchDelete() {
+  if (!selectedIds.value.length) return;
+  const confirmed = await ui.openConfirm({
+    title: "批量删除快照",
+    message: `确认删除 ${selectedIds.value.length} 条快照吗？此操作不可恢复。`,
+    confirmText: "确认删除",
+    cancelText: "取消",
+    tone: "warn",
+  });
+  if (!confirmed) return;
+
+  busy.value = true;
+  errorMessage.value = "";
+  try {
+    // Delete sequentially to simplify error handling
+    for (const id of selectedIds.value) {
+      await apiDelete<{ ok: boolean }>(`/api/match-snapshot/delete?id=${encodeURIComponent(id)}`);
+    }
+    ui.pushToast({ title: "已删除", message: `共删除 ${selectedIds.value.length} 条快照。`, tone: "ok" });
+    selectedIds.value = [];
+    selectedId.value = "";
+    await loadList();
+  } catch (error) {
+    errorMessage.value = String(error instanceof Error ? error.message : error);
+    ui.pushToast({ title: "删除失败", message: errorMessage.value, tone: "error" });
+  } finally {
+    busy.value = false;
+  }
+}
+
+function toggleSelectAll(event: Event) {
+  const checked = (event.target as HTMLInputElement).checked;
+  if (checked) {
+    selectedIds.value = snapshotsView.value.map(s => s.id);
+  } else {
+    selectedIds.value = [];
   }
 }
 
@@ -317,6 +371,13 @@ onMounted(loadList);
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+/* make left list scrollable */
+.snapshot-list {
+  height: 420px;
+  overflow-y: auto;
+  flex-shrink: 0;
 }
 
 .option-toggle {
@@ -446,24 +507,29 @@ onMounted(loadList);
   scrollbar-gutter: stable;
   position: relative;
   min-height: 350px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .preview-shell img {
   display: block;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
 }
 
 .preview-shell img.zoom-fit {
-  width: 100%;
-  max-width: 100%;
+  width: auto;
   height: auto;
 }
 
 .preview-shell img.zoom-raw {
   width: auto;
-  min-width: 2200px;
-  max-width: none;
   height: auto;
+  min-width: inherit;
+  max-width: none;
 }
 
 .action-btn {

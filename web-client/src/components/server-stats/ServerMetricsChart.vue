@@ -224,15 +224,16 @@ function updateChart() {
           name: channel.label,
           type: "line",
           showSymbol: false,
-          smooth: 0.35,
+          smooth: props.samples.length <= 1000 ? 0.35 : false,
+          sampling: "lttb",
           connectNulls: true,
           yAxisIndex: channel.axis === "tps" ? 1 : 0,
           data: seriesData,
           lineStyle: {
             width: 2.5,
             color: channel.color,
-            shadowColor: `rgba(${rgb}, 0.35)`,
-            shadowBlur: 6,
+            shadowColor: props.samples.length <= 1000 ? `rgba(${rgb}, 0.35)` : undefined,
+            shadowBlur: props.samples.length <= 1000 ? 6 : undefined,
           },
           itemStyle: {
             color: channel.color,
@@ -367,11 +368,14 @@ onMounted(() => {
 });
 
 watch(
-  () => [props.samples, props.channels, props.enabledChannels],
+  [
+    () => props.samples,
+    () => props.channels,
+    () => ({ ...props.enabledChannels }),
+  ],
   () => {
     updateChart();
-  },
-  { deep: true },
+  }
 );
 
 onUnmounted(() => {
