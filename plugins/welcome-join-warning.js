@@ -113,6 +113,32 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     return "";
   }
 
+  function resolvePlayerSteamID(event = {}) {
+    const payload = event?.payload ?? {};
+    const fromPayload = String(payload?.steamID ?? payload?.steam64 ?? payload?.steamId ?? payload?.steam64ID ?? "").trim();
+    if (fromPayload) return fromPayload;
+
+    const fromParamMap = String(event?.paramMap?.SteamID ?? event?.paramMap?.SteamId ?? event?.paramMap?.steamID ?? "").trim();
+    if (fromParamMap) return fromParamMap;
+
+    const params = Array.isArray(event?.params) ? event.params : [];
+    for (const param of params) {
+      if (param?.name === "SteamID" || param?.name === "steamID" || param?.name === "SteamId") {
+        const value = String(param?.value ?? "").trim();
+        if (value) return value;
+      }
+    }
+
+    const playerName = resolvePlayerName(event);
+    if (playerName && modules?.playerState?.getPlayerByName) {
+      const serverId = event?.serverId ?? core?.webStatus?.serverId ?? "";
+      const hit = modules.playerState.getPlayerByName(serverId, playerName);
+      if (hit?.steamID) return hit.steamID;
+    }
+
+    return "";
+  }
+
   function parseJoinSucceededNameFromRawLog(event = {}) {
     const raw = String(event?.rawLog ?? event?.rawEvent?.Raw ?? "").trim();
     if (!raw) return "";
@@ -321,6 +347,67 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           message: state.message,
           result,
         });
+
+        // Newbie Playtime Check & Additional Warning
+        const steamID = resolvePlayerSteamID(event);
+        if (steamID && modules?.playtime) {
+          try {
+            let gameSeconds = null;
+            const cached = await modules.playtime.getBySteamID?.(steamID);
+            const isUnknown = !cached || (cached.fetchedAt == null && cached.gameSecondsOverride == null);
+
+            if (isUnknown) {
+              const lookup = await modules.playtime.lookupSteamID?.(steamID, { lastSeenName: playerName });
+              if (lookup && lookup.gameSeconds != null) {
+                gameSeconds = Number(lookup.gameSeconds);
+              }
+            } else {
+              gameSeconds = Number(cached.gameSeconds ?? cached.game_seconds);
+            }
+
+            if (gameSeconds !== null) {
+              const gameHours = gameSeconds / 3600;
+              if (gameHours <= 200) {
+                const newbieMessage = "BZSS是一个注重萌新体验的游戏社区\n欢迎加入社区群，萌新可以在群内问各种各样的问题，也可以找人入门，群号就在服务器名称中。";
+                
+                const newbieResult = await warnApi({
+                  sourceModule: PLUGIN_ID,
+                  reason: "player_join_newbie_welcome",
+                  relatedEventId: event?.eventId,
+                  targetName: playerName,
+                  message: newbieMessage,
+                  system: true,
+                });
+
+                if (newbieResult?.success) {
+                  recordHistory({
+                    kind: "warn",
+                    success: true,
+                    skipped: false,
+                    reason: "newbie_warn_sent",
+                    event: eventSummary,
+                    delayMs: state.delayMs,
+                    message: newbieMessage,
+                    result: newbieResult,
+                  });
+                } else {
+                  recordHistory({
+                    kind: "warn",
+                    success: false,
+                    skipped: Boolean(newbieResult?.skipped),
+                    reason: "newbie_warn_failed",
+                    event: eventSummary,
+                    delayMs: state.delayMs,
+                    message: newbieMessage,
+                    result: newbieResult,
+                  });
+                }
+              }
+            }
+          } catch (ptError) {
+            pluginLogger?.warn?.(`[WelcomeJoinWarning] Playtime lookup / newbie warning failed for ${playerName}: ${ptError.message}`);
+          }
+        }
       } catch (error) {
         state.warnFailedCount += 1;
         state.lastWarnAt = new Date().toISOString();
@@ -372,6 +459,49 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           PlayerName: playerName,
         },
       }));
+    },
+
+    async updateConfig(nextConfig = {}) {
+      const currentRaw = config?.get?.("plugins.welcome-join-warning", null)
+        ?? config?.get?.("plugins.welcomeJoinWarning", null)
+        ?? {};
+
+      const previousConfig = { ...currentRaw };
+
+      const enabled = nextConfig.enabled !== false;
+      const delayMs = Math.max(0, Number(nextConfig.delayMs) ?? DEFAULT_DELAY_MS);
+      const message = String(nextConfig.message ?? DEFAULT_MESSAGE).trim() || DEFAULT_MESSAGE;
+      const historyLimit = Math.max(20, Number(nextConfig.historyLimit) ?? DEFAULT_HISTORY_LIMIT);
+
+      const normalized = {
+        enabled,
+        delayMs,
+        message,
+        historyLimit,
+      };
+
+      const configKey = "plugins.welcome-join-warning";
+
+      config?.set?.(configKey, normalized);
+
+      try {
+        await config?.save?.();
+        state.enabled = enabled;
+        state.delayMs = delayMs;
+        state.message = message;
+        state.historyLimit = historyLimit;
+
+        if (state.history.length > state.historyLimit) {
+          state.history.splice(0, state.history.length - state.historyLimit);
+        }
+      } catch (error) {
+        if (config?.set) {
+          config.set(configKey, previousConfig);
+        }
+        throw error;
+      }
+
+      return getState();
     },
 
     clearHistory() {

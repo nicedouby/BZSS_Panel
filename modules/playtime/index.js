@@ -1211,12 +1211,39 @@ export function createPlaytimeModule({ core, modules, config, logger }) {
       const normalizedSteamID = optionalSteamID(steamID);
       if (!normalizedSteamID) return null;
 
+      const playtimeRecord = await repo.getBySteamID(normalizedSteamID);
       const cached = await modules.playerDatabase?.getCachedPlayer?.({ steamID: normalizedSteamID });
-      if (cached) {
-        return normalizePlaytimeRow(cached);
+
+      if (playtimeRecord || cached) {
+        const normPlaytime = normalizePlaytimeRow(playtimeRecord);
+        const normCached = normalizePlaytimeRow(cached);
+
+        const merged = {
+          ...normPlaytime,
+          ...normCached,
+        };
+
+        if (normPlaytime) {
+          merged.fetchedAt = normPlaytime.fetchedAt;
+          merged.fetched_at = normPlaytime.fetched_at;
+          
+          const override = normCached?.gameSecondsOverride;
+          if (override != null) {
+            merged.gameSeconds = override;
+            merged.game_seconds = override;
+          } else {
+            merged.gameSeconds = normPlaytime.gameSeconds;
+            merged.game_seconds = normPlaytime.game_seconds;
+          }
+        } else {
+          merged.fetchedAt = null;
+          merged.fetched_at = null;
+        }
+
+        return merged;
       }
 
-      return repo.getBySteamID(normalizedSteamID);
+      return null;
     },
 
     async listRecentLogs(options = {}) {

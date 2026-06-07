@@ -1670,6 +1670,15 @@ export class WebServer {
           data: pluginApi.clearRecentEvents?.() ?? null,
         });
       }
+
+      if (url.pathname === "/api/plugins/welcome-join-warning/config" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.updateConfig?.(body ?? {}),
+        });
+      }
     }
 
     if (url.pathname.startsWith("/api/plugins/stepwise-squad-playtime-guard")) {
