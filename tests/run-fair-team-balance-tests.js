@@ -468,6 +468,104 @@ async function testSqtbDirectApproveStillWorks() {
   }
 }
 
+async function testHistoryIncludesClaimAndApprovalEvents() {
+  const harness = await createHarness({
+    matchState: {
+      players: [
+        { name: "Alpha", steamId: "steam-alpha", teamId: 1, squadId: 0 },
+        { name: "Bravo", steamId: "steam-bravo", teamId: 2, squadId: 0 },
+      ],
+    },
+  });
+
+  try {
+    const created = await harness.plugin.api.simulateChatMessage({
+      message: "sqtb",
+      steamId: "steam-alpha",
+      playerName: "Alpha",
+    });
+    const claimed = await harness.plugin.api.simulateChatMessage({
+      message: created.claimMessage,
+      steamId: "steam-bravo",
+      playerName: "Bravo",
+    });
+
+    assert.equal(claimed.ok, true);
+
+    const history = await harness.plugin.api.listHistory({ limit: 10 });
+    const types = history.map((entry) => entry.type);
+
+    assert.equal(types.includes("SQTB_CREATED"), true);
+    assert.equal(types.includes("SQTB_CLAIMED"), true);
+    assert.equal(types.includes("SQTB_APPROVED"), true);
+  } finally {
+    await harness.stop();
+  }
+}
+
+async function testHistoryIncludesClaimAndApprovalRejections() {
+  const harness = await createHarness({
+    matchState: {
+      players: [
+        { name: "Alpha", steamId: "steam-alpha", teamId: 1, squadId: 0 },
+        { name: "Bravo", steamId: "steam-bravo", teamId: 2, squadId: 0 },
+      ],
+    },
+    forceTeamChange: async () => ({
+      ok: false,
+      error: "TeamBalanceRejected",
+      message: "switch denied",
+    }),
+  });
+
+  try {
+    const missing = await harness.plugin.api.simulateChatMessage({
+      message: "认领12345",
+      steamId: "steam-alpha",
+      playerName: "Alpha",
+    });
+    assert.equal(missing.ok, false);
+
+    const created = await harness.plugin.api.simulateChatMessage({
+      message: "sqtb",
+      steamId: "steam-alpha",
+      playerName: "Alpha",
+    });
+    const failedClaim = await harness.plugin.api.simulateChatMessage({
+      message: created.claimMessage,
+      steamId: "steam-alpha",
+      playerName: "Alpha",
+    });
+
+    assert.equal(failedClaim.ok, false);
+    assert.equal(failedClaim.error, "SelfClaimForbidden");
+
+    const adminReject = await harness.plugin.api.approveRequest({
+      requestId: created.request.id,
+      direct: true,
+      actor: {
+        id: "admin-1",
+        username: "Admin",
+        name: "Admin",
+        role: "SuperAdmin",
+        isSuperAdmin: true,
+        permissions: ["*"],
+      },
+    });
+
+    assert.equal(adminReject.ok, false);
+    assert.equal(adminReject.error, "TeamBalanceRejected");
+
+    const history = await harness.plugin.api.listHistory({ limit: 20 });
+    const types = history.map((entry) => entry.type);
+
+    assert.equal(types.includes("SQTB_CLAIM_REJECTED"), true);
+    assert.equal(types.includes("SQTB_APPROVAL_REJECTED"), true);
+  } finally {
+    await harness.stop();
+  }
+}
+
 async function testApproveRequestRejectsConcurrentDuplicates() {
   let releaseFirstApproval = null;
   let firstApprovalStarted = false;
@@ -584,6 +682,8 @@ await testTbRejectsWhenSwitchWouldNotImproveBalance();
 await testTbUsesLivePlayersForCountsAndIncludesCountsInError();
 await testSqtbCreatesRequestAndClaimExecutes();
 await testSqtbDirectApproveStillWorks();
+await testHistoryIncludesClaimAndApprovalEvents();
+await testHistoryIncludesClaimAndApprovalRejections();
 await testApproveRequestRejectsConcurrentDuplicates();
 await testClaimCodeIsStillHandled();
 

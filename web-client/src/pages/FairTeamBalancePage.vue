@@ -813,30 +813,32 @@ function normalizeActor(value?: Partial<FairTeamBalanceActor> | null): FairTeamB
 
 function normalizeHistoryEntry(value: any): FairTeamBalanceHistoryEntry {
   const type = String(value?.type ?? "");
-  const actorName = value?.playerName || value?.applicant?.playerName || value?.steamId || value?.applicant?.steamId || "未知玩家";
-  
+  const applicantName = value?.applicant?.playerName || value?.applicant?.steamId || "";
+  const claimantName = value?.claimant?.playerName || value?.claimant?.steamId || "";
+  const approverName = value?.approvedBy?.name || value?.approvedBy?.username || value?.approvedBy?.id || "";
+  const rejectorName = value?.rejectedBy?.name || value?.rejectedBy?.username || value?.rejectedBy?.id || "";
+  let actorName = value?.playerName || applicantName || value?.steamId || value?.applicant?.steamId || "未知玩家";
+
   let typeLabel = type;
   let statusClass = "info";
 
-  if (type === "TB_REQUESTED") {
-    typeLabel = "TB 请求";
-  } else if (type === "SQTB_REQUESTED") {
-    typeLabel = "SQTB 请求";
-  } else if (type === "SQTB_EXECUTED") {
-    typeLabel = "SQTB 执行完成";
-    statusClass = "ok";
-  }
-  
   switch(type) {
     case "TB_REQUESTED": typeLabel = "请求 TB"; statusClass = "info"; break;
     case "TB_EXECUTED": typeLabel = "TB 执行完成"; statusClass = "ok"; break;
     case "TB_REJECTED": typeLabel = "TB 被拒绝"; statusClass = "danger"; break;
     case "SQTB_CREATED": typeLabel = "发起 SQTB"; statusClass = "info"; break;
-    case "SQTB_APPROVED": typeLabel = "SQTB 执行完成"; statusClass = "ok"; break;
+    case "SQTB_CLAIMED": typeLabel = "认领 SQTB"; statusClass = "info"; actorName = claimantName || actorName; break;
+    case "SQTB_CLAIM_REJECTED": typeLabel = "认领被拒绝"; statusClass = "danger"; actorName = claimantName || actorName; break;
+    case "SQTB_APPROVAL_REJECTED": typeLabel = "准许被拒绝"; statusClass = "danger"; actorName = approverName || actorName; break;
+    case "SQTB_APPROVED": typeLabel = "准许 SQTB"; statusClass = "ok"; actorName = approverName || claimantName || actorName; break;
     case "SQTB_REJECTED": typeLabel = "SQTB 被拒绝"; statusClass = "danger"; break;
     case "SQTB_EXPIRED": typeLabel = "SQTB 已过期"; statusClass = "warning"; break;
   }
-  
+
+  if (type === "SQTB_REJECTED") {
+    actorName = rejectorName || approverName || claimantName || actorName;
+  }
+
   return {
     type,
     typeLabel,

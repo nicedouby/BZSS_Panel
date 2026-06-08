@@ -352,6 +352,10 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       return;
     }
 
+    if (type === "SQTB_CLAIM_REJECTED" || type === "SQTB_APPROVAL_REJECTED") {
+      return;
+    }
+
     if (type === "SQTB_APPROVED") {
       const requestId = normalizeText(entry?.requestId);
       const request = requestId ? state.requests.get(requestId) : null;
@@ -1457,6 +1461,16 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     });
 
     if (!validation.ok) {
+      await appendLog({
+        type: "SQTB_CLAIM_REJECTED",
+        requestId: request.id,
+        code: request.code,
+        serverId,
+        applicant: request.applicant,
+        claimant: actor,
+        reason: validation.error,
+        message: validation.message,
+      });
       await warnPlayer(actor, `认领失败: ${validation.message}`, "fair_sqtb_claim_rejected", {
         relatedEventId: normalizeText(event?.id ?? event?.seq),
       });
@@ -1480,6 +1494,15 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     request.claimant = actor;
     consumeRoundUse(claimantKey);
 
+    await appendLog({
+      type: "SQTB_CLAIMED",
+      requestId: request.id,
+      code: request.code,
+      serverId,
+      applicant: request.applicant,
+      claimant: request.claimant,
+    });
+
     const approvalResult = await approveRequest({
       requestId: request.id,
       direct: false,
@@ -1494,6 +1517,16 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     });
 
     if (!approvalResult?.ok) {
+      await appendLog({
+        type: "SQTB_CLAIM_REJECTED",
+        requestId: request.id,
+        code: request.code,
+        serverId,
+        applicant: request.applicant,
+        claimant: actor,
+        reason: normalizeText(approvalResult?.error) || "ClaimApprovalRejected",
+        message: normalizeText(approvalResult?.message) || "claim approval rejected",
+      });
       request.status = previousRequestState.status;
       request.claimant = previousRequestState.claimant;
       request.claimedAt = previousRequestState.claimedAt;
@@ -1510,6 +1543,29 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       request: approvalResult.request ?? serializeRequest(request),
       result: approvalResult.result ?? null,
     };
+  }
+
+  async function appendApprovalRejectedLog(request, {
+    actor = null,
+    applicant = null,
+    claimant = null,
+    direct = false,
+    serverId = "",
+    reason = "",
+    message = "",
+  } = {}) {
+    await appendLog({
+      type: "SQTB_APPROVAL_REJECTED",
+      requestId: request?.id,
+      code: request?.code,
+      serverId: getServerId(serverId || request?.serverId),
+      directApproval: Boolean(direct),
+      applicant: applicant ?? request?.applicant ?? null,
+      claimant: claimant ?? request?.claimant ?? null,
+      approvedBy: normalizeActorForAudit(actor),
+      reason: normalizeText(reason),
+      message: normalizeText(message),
+    });
   }
 
   async function approveRequest({ requestId = "", direct = false, actor = null } = {}) {
@@ -1533,6 +1589,12 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     try {
       if (request.status === "pending_claim" && !direct) {
+        await appendApprovalRejectedLog(request, {
+          actor,
+          direct,
+          reason: "ClaimRequired",
+          message: "claim required before approval",
+        });
         return {
           ok: false,
           error: "ClaimRequired",
@@ -1542,6 +1604,12 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
       const webStatus = getCurrentWebStatus();
       if (Boolean(webStatus?.isWarmup)) {
+        await appendApprovalRejectedLog(request, {
+          actor,
+          direct,
+          reason: "WarmupModeDisabled",
+          message: "approval rejected during warmup",
+        });
         return {
           ok: false,
           error: "WarmupModeDisabled",
@@ -1555,6 +1623,14 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       const liveApplicantActor = formatActor(applicantLive, request.applicant);
 
       if (!liveApplicantActor.steamId) {
+        await appendApprovalRejectedLog(request, {
+          actor,
+          applicant: liveApplicantActor,
+          direct,
+          serverId,
+          reason: "ApplicantUnavailable",
+          message: "applicant unavailable",
+        });
         return {
           ok: false,
           error: "ApplicantUnavailable",
@@ -1570,6 +1646,14 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         eosId: liveApplicantActor.eosId,
       });
       if (Number(applicantPeriod.sqtbClaimUsed ?? 0) >= runtimeConfig.periodSqtbClaimLimit) {
+        await appendApprovalRejectedLog(request, {
+          actor,
+          applicant: liveApplicantActor,
+          direct,
+          serverId,
+          reason: "ApplicantQuotaExhausted",
+          message: "applicant quota exhausted",
+        });
         return {
           ok: false,
           error: "ApplicantQuotaExhausted",
@@ -1581,6 +1665,15 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       let claimantPeriod = null;
       if (!direct) {
         if (!request.claimant?.playerKey) {
+          await appendApprovalRejectedLog(request, {
+            actor,
+            applicant: liveApplicantActor,
+            claimant: request.claimant,
+            direct,
+            serverId,
+            reason: "ClaimantMissing",
+            message: "claimant missing",
+          });
           return {
             ok: false,
             error: "ClaimantMissing",
@@ -1596,6 +1689,15 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           eosId: liveClaimantActor.eosId,
         });
         if (Number(claimantPeriod.sqtbClaimUsed ?? 0) >= runtimeConfig.periodSqtbClaimLimit) {
+          await appendApprovalRejectedLog(request, {
+            actor,
+            applicant: liveApplicantActor,
+            claimant: liveClaimantActor,
+            direct,
+            serverId,
+            reason: "ClaimantQuotaExhausted",
+            message: "claimant quota exhausted",
+          });
           return {
             ok: false,
             error: "ClaimantQuotaExhausted",
@@ -1621,6 +1723,15 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       });
 
       if (!switchResult?.ok) {
+        await appendApprovalRejectedLog(request, {
+          actor,
+          applicant: liveApplicantActor,
+          claimant: liveClaimantActor ?? request.claimant,
+          direct,
+          serverId,
+          reason: normalizeText(switchResult?.error) || "TeamBalanceRejected",
+          message: normalizeText(switchResult?.message) || "TeamBalance rejected sqtb approval",
+        });
         return {
           ok: false,
           error: normalizeText(switchResult?.error) || "TeamBalanceRejected",
@@ -1865,8 +1976,10 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       "TB_REQUESTED",
       "TB_EXECUTED",
       "TB_REJECTED",
-      "SQTB_REQUESTED",
-      "SQTB_EXECUTED",
+      "SQTB_CREATED",
+      "SQTB_CLAIMED",
+      "SQTB_CLAIM_REJECTED",
+      "SQTB_APPROVAL_REJECTED",
       "SQTB_APPROVED",
       "SQTB_REJECTED",
       "SQTB_EXPIRED",
