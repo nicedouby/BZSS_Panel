@@ -59,12 +59,13 @@
           <div class="match-chat-row-head">
             <span class="match-chat-time">{{ formatChatTime(message) }}</span>
             <span class="match-chat-channel">[{{ channelLabels[message.channel] }}]</span>
-            <span class="match-chat-player" :title="playerTooltip(message)">
-              {{ displayPlayer(message) }}
+            <span class="match-chat-player" :title="`${displayPlayer(message)}${message.steamId ? ' (' + message.steamId + ')' : ''}`">
+              {{ displayPlayer(message) }}:
             </span>
-            <span class="match-chat-message-inline">
-              {{ message.message }}
-            </span>
+          </div>
+
+          <div class="match-chat-message-block">
+            {{ message.message }}
           </div>
 
           <div v-if="message.teamId != null || message.squadId != null" class="match-chat-meta">
@@ -193,21 +194,21 @@ const enabledChannels = reactive<Record<ChatChannel, boolean>>({
 });
 
 const channels = [
-  { id: "all", label: "All" },
-  { id: "team", label: "Team" },
-  { id: "squad", label: "Squad" },
-  { id: "admin", label: "Admin" },
-  { id: "system", label: "System" },
-  { id: "unknown", label: "Unknown" },
+  { id: "all", label: "公开" },
+  { id: "team", label: "阵营" },
+  { id: "squad", label: "小队" },
+  { id: "admin", label: "管理" },
+  { id: "system", label: "系统" },
+  { id: "unknown", label: "未知" },
 ] as const;
 
 const channelLabels: Record<ChatChannel, string> = {
-  all: "ALL",
-  team: "TEAM",
-  squad: "SQUAD",
-  admin: "ADMIN",
-  system: "SYSTEM",
-  unknown: "UNKNOWN",
+  all: "公开",
+  team: "阵营",
+  squad: "小队",
+  admin: "管理",
+  system: "系统",
+  unknown: "未知",
 };
 
 const channelCounts = computed<Record<ChatChannel, number>>(() => {
@@ -800,25 +801,33 @@ function buildWebSocketUrl(path: string) {
 .match-chat-toolbar {
   flex: 0 0 auto;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
   gap: 4px;
-  padding: 5px 9px;
+  padding: 4px 6px;
   border-bottom: 1px solid rgba(130, 154, 180, 0.1);
+}
+
+.match-chat-toolbar::-webkit-scrollbar {
+  display: none;
 }
 
 .match-chat-filter {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  min-height: 22px;
-  padding: 0 8px;
-  border-radius: 999px;
+  justify-content: center;
+  gap: 3px;
+  min-height: 20px;
+  padding: 0 4px;
+  border-radius: 4px;
   border: 1px solid rgba(130, 154, 180, 0.18);
   background: rgba(19, 26, 37, 0.7);
   color: var(--color-text-muted);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 10px;
   transition: all 0.12s ease;
+  flex: 1 1 auto;
 }
 
 .match-chat-filter.active {
@@ -862,11 +871,11 @@ function buildWebSocketUrl(path: string) {
 }
 
 .match-chat-filter-count {
-  min-width: 16px;
-  padding: 0 4px;
+  min-width: 12px;
+  padding: 0 3px;
   border-radius: 999px;
   text-align: center;
-  font-size: 10px;
+  font-size: 9px;
   color: var(--color-text-muted);
   background: rgba(255, 255, 255, 0.06);
 }
@@ -928,9 +937,9 @@ function buildWebSocketUrl(path: string) {
 .match-chat-row-head,
 .match-xm-log-row-head {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 5px;
-  align-items: baseline;
+  align-items: center;
   min-width: 0;
 }
 
@@ -938,30 +947,37 @@ function buildWebSocketUrl(path: string) {
   color: var(--color-text-muted);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
 }
 
 .match-chat-channel {
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.06em;
+  flex-shrink: 0;
 }
 
 .match-chat-player {
   min-width: 0;
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--color-text-primary);
   font-weight: 600;
   font-size: 11px;
+  flex-shrink: 0;
 }
 
-.match-chat-message-inline {
+.match-chat-message-block {
   min-width: 0;
   color: var(--color-text-secondary);
   font-size: 11px;
   line-height: 1.35;
   word-break: break-word;
   white-space: pre-wrap;
-  flex: 1 1 auto;
-  min-width: 0;
+  margin-top: 2px;
+  padding-left: 2px;
 }
 
 .match-chat-meta {

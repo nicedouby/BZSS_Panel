@@ -165,7 +165,9 @@ function handlePlayerSelect(payload: { player: PlayerRowViewModel; event: MouseE
 
 function isPlayerChecked(playerId: string | number | null) {
   if (playerId == null || !props.selectedPlayerIds) return false;
-  return props.selectedPlayerIds.has(playerId);
+  return props.selectedPlayerIds.has(playerId)
+    || props.selectedPlayerIds.has(String(playerId))
+    || props.selectedPlayerIds.has(Number(playerId));
 }
 
 function handlePlayerToggleCheck(payload: { player: PlayerRowViewModel; event: MouseEvent }) {

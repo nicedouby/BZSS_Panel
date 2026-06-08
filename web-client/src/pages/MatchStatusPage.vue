@@ -617,18 +617,30 @@ function toggleSquadPlayersCheck(squad: SquadViewModel) {
   if (squadPlayers.length === 0) return;
 
   const newSet = new Set(selectedPlayerIds.value);
-  const allSelected = squadPlayers.every((player) => player.playerId != null && newSet.has(player.playerId as any));
+  const allSelected = squadPlayers.every((player) => {
+    if (player.playerId == null) return false;
+    const id = player.playerId;
+    return newSet.has(id) || newSet.has(String(id)) || newSet.has(Number(id));
+  });
 
   if (allSelected) {
     squadPlayers.forEach((player) => {
       if (player.playerId != null) {
-        newSet.delete(player.playerId as any);
+        const id = player.playerId;
+        const match = [id, String(id), Number(id)].find(x => newSet.has(x));
+        if (match !== undefined) {
+          newSet.delete(match);
+        }
       }
     });
   } else {
     squadPlayers.forEach((player) => {
       if (player.playerId != null) {
-        newSet.add(player.playerId as string | number);
+        const id = player.playerId;
+        const exists = [id, String(id), Number(id)].some(x => newSet.has(x));
+        if (!exists) {
+          newSet.add(id);
+        }
       }
     });
   }
@@ -648,8 +660,9 @@ function togglePlayerCheck(payload: { player: PlayerRowViewModel; event: MouseEv
   const id = payload.player.playerId;
   if (id == null) return;
   const newSet = new Set(selectedPlayerIds.value);
-  if (newSet.has(id)) {
-    newSet.delete(id);
+  const match = [id, String(id), Number(id)].find(x => newSet.has(x));
+  if (match !== undefined) {
+    newSet.delete(match);
   } else {
     newSet.add(id);
   }
@@ -1067,7 +1080,7 @@ function formatBattleLogTimestamp(value: string | number | null | undefined) {
 
 function findPlayerById(playerId: PlayerDetailViewModel["playerId"]) {
   if (playerId == null) return null;
-  for (const team of viewModels.value.teams) {
+  for (const team of rawTeams.value) {
     for (const squad of team.squads) {
       if (squad.leader && String(squad.leader.playerId) === String(playerId)) {
         return squad.leader;

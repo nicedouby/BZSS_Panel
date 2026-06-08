@@ -41,14 +41,39 @@
             <div v-if="filteredHistory.length === 0" class="chat-empty-state">暂无聊天记录</div>
             <article v-for="msg in filteredHistory" :key="msg.seq" class="chat-line" :class="[`channel-${msg.channel.toLowerCase()}`]">
               <span class="chat-time">{{ formatTime(msg.time) }}</span>
-              <span class="chat-channel">[{{ msg.channel }}]</span>
-              <span class="chat-name" :title="msg.steamID">{{ msg.name }}:</span>
+              <span class="chat-channel">[{{ channelLabels[msg.channel] || msg.channel }}]</span>
+              <span class="chat-name" :title="`${msg.name}${msg.steamID ? ' (' + msg.steamID + ')' : ''}`">{{ msg.name }}:</span>
               <span class="chat-message">{{ msg.message }}</span>
             </article>
             </div>
           </div>
         </main>
       </div>
+
+      <aside class="chat-column-right">
+        <div class="sidebar-card">
+          <div class="card-header">玩家发言频率 (1min)</div>
+          <div class="frequency-list">
+            <div v-if="playerFrequencies.length === 0" class="empty-hint">暂无活跃发言</div>
+            <div v-for="p in playerFrequencies" :key="p.steamID" class="frequency-item" :class="{ high: p.count >= 5 }">
+              <div class="freq-info">
+                <span class="p-name" :title="p.steamID">{{ p.name }}</span>
+                <span class="p-count">{{ p.count }} msg/min</span>
+              </div>
+              <div class="freq-bar-bg">
+                <div class="freq-bar-fill" :style="{ width: Math.min(100, p.count * 10) + '%' }"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-card spammers-box" v-if="activeSpammers.length > 0">
+          <div class="card-header alert">⚠️ 高频警告 (10s)</div>
+          <div class="spammer-list">
+            <div v-for="s in activeSpammers" :key="s.steamID" class="spammer-item">
+              <strong>{{ s.name }}</strong>
+              <span>{{ s.count }} msg</span>
+            </div>
 
       <aside class="chat-column-right">
         <div class="sidebar-card">
@@ -128,6 +153,13 @@ const autoScroll = ref(true);
 const scrollerRef = ref<HTMLElement | null>(null);
 const chartRef = ref<HTMLElement | null>(null);
 let myChart: echarts.ECharts | null = null;
+
+const channelLabels: Record<string, string> = {
+  ChatAll: "公开",
+  ChatTeam: "阵营",
+  ChatSquad: "小队",
+  ChatAdmin: "管理",
+};
 
 const filters = reactive({
   query: "",
@@ -422,13 +454,25 @@ onBeforeUnmount(() => {
 }
 
 .chat-time { color: #484f58; flex-shrink: 0; }
-.chat-channel { font-weight: bold; width: 80px; flex-shrink: 0; }
+.chat-channel {
+  font-weight: bold;
+  width: 52px;
+  flex-shrink: 0;
+}
 .channel-chatall { color: #f85149; }
 .channel-chatteam { color: #58a6ff; }
 .channel-chatsquad { color: #3fb950; }
 .channel-chatadmin { color: #d29922; }
 
-.chat-name { color: #c9d1d9; font-weight: bold; flex-shrink: 0; }
+.chat-name {
+  color: #c9d1d9;
+  font-weight: bold;
+  flex-shrink: 0;
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .chat-message {
   color: #edf2f4;
   flex: 1 1 auto;
