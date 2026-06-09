@@ -830,6 +830,10 @@ class SteamGameDurationService {
             cwd: process.cwd(),
             windowsHide: true,
             stdio: ["ignore", "pipe", "pipe"],
+            env: {
+              ...process.env,
+              PYTHONIOENCODING: "utf-8",
+            },
           });
 
           let stdout = "";

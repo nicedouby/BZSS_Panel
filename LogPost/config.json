@@ -16,6 +16,16 @@
   "unknown": {
     "write_unknown": false
   },
+  "preserve": {
+    "enabled": true,
+    "write_file": true,
+    "file_name": "Preserved.jsonl",
+    "contains": [
+      "LogNet: Join succeeded:",
+      "LogNet: PostLogin: NewPlayer:",
+      "LogNet: UNetConnection::Close:"
+    ]
+  },
   "raw": {
     "max_raw_chars": 4096
   },
@@ -46,13 +56,7 @@
     "ServerFireProjectileWithId_Implementation()",
     "SQVehicle::OnTakeDamage",
     "SQVehicle::TakeDamage",
-    "VehicleMovementComponent",
-    "LogEOS:",
-    "LogHttp:",
-    "LogOnline:",
-    "LogNet:",
-    "LogPakFile:",
-    "LogStreaming:"
+    "VehicleMovementComponent"
   ],
   "console": {
     "enabled": true,

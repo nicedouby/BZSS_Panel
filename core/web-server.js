@@ -1774,6 +1774,23 @@ export class WebServer {
       }
     }
 
+    if (url.pathname.startsWith("/api/plugins/lianban-kick")) {
+      const pluginApi = this.getPluginApi("plugin.lianbanKick");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "LianbanKickUnavailable",
+          message: "Lianban kick plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/lianban-kick/state" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getState?.() ?? null,
+        });
+      }
+    }
+
     if (url.pathname.startsWith("/api/modules/player-session-records")) {
       const moduleApi = this.modules.playerSessionRecords;
       if (!moduleApi) {

@@ -30,6 +30,17 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "write_unknown": False,
     },
 
+    "preserve": {
+        "enabled": True,
+        "write_file": True,
+        "file_name": "Preserved.jsonl",
+        "contains": [
+            "LogNet: Join succeeded:",
+            "LogNet: PostLogin: NewPlayer:",
+            "LogNet: UNetConnection::Close:",
+        ],
+    },
+
     "raw": {
         "max_raw_chars": 4096,
     },

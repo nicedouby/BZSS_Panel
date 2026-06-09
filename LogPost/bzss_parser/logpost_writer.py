@@ -12,6 +12,7 @@ from bzss_parser.helpers import extract_log_time, now_time_string, today_string,
 class LogPostWriter:
     def __init__(self, output_dir: str) -> None:
         self.output_dir = Path(output_dir)
+        self.preserved_file_name = "Preserved.jsonl"
 
     def write_event(self, event: Dict[str, str]) -> None:
         date_dir = self.output_dir / today_string()
@@ -36,6 +37,21 @@ class LogPostWriter:
         }
 
         self._append(date_dir / "Unknown.jsonl", to_json_line(obj) + "\n")
+
+    def write_preserved(self, raw: str, matched_rule: str = "") -> None:
+        date_dir = self.output_dir / today_string()
+        date_dir.mkdir(parents=True, exist_ok=True)
+
+        obj = {
+            "Version": "1",
+            "Event": "PreservedRawLog",
+            "Time": now_time_string(),
+            "LogTime": extract_log_time(raw),
+            "MatchedRule": matched_rule,
+            "Raw": raw,
+        }
+
+        self._append(date_dir / self.preserved_file_name, to_json_line(obj) + "\n")
 
     def write_parse_error(self, raw: str, error: str) -> None:
         date_dir = self.output_dir / today_string()

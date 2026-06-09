@@ -38,6 +38,10 @@ export class PythonLogParserManager {
       shell: false,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: false,
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: "utf-8",
+      },
     });
 
     this.webStatus.set("pythonLogParser", "running");

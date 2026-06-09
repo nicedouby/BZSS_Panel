@@ -7,21 +7,22 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from bzss_parser.blacklist import BlacklistFilter
-from bzss_parser.event_builder import EventBuilder
 from bzss_parser.console_printer import ConsolePrinter
+from bzss_parser.event_builder import EventBuilder
 from bzss_parser.helpers import make_session_id
 from bzss_parser.identity_cache import IdentityCache
 from bzss_parser.logpost_writer import LogPostWriter
-from bzss_parser.raw_input_writer import RawInputWriter
-from bzss_parser.tail_reader import TailReader
-from bzss_parser.udp_sender import UdpSender
 from bzss_parser.matchers.auxiliary_identity_matcher import AuxiliaryIdentityMatcher
 from bzss_parser.matchers.combat_matcher import CombatMatcher
+from bzss_parser.matchers.round_end_matcher import RoundEndMatcher
 from bzss_parser.matchers.server_tick_rate_matcher import ServerTickRateMatcher
 from bzss_parser.matchers.spawn_matcher import SpawnMatcher
 from bzss_parser.matchers.squad_matcher import SquadMatcher
 from bzss_parser.matchers.world_bring_up_matcher import WorldBringUpMatcher
-from bzss_parser.matchers.round_end_matcher import RoundEndMatcher
+from bzss_parser.preserve_filter import PreserveFilter
+from bzss_parser.raw_input_writer import RawInputWriter
+from bzss_parser.tail_reader import TailReader
+from bzss_parser.udp_sender import UdpSender
 
 
 MatchedEvent = Tuple[str, List[Tuple[str, str]]]
@@ -44,9 +45,11 @@ class BzssLogParserApp:
             SquadMatcher(self.identity_cache),
         ]
 
-        self.blacklist = BlacklistFilter(
-            self.config.get("blacklist_contains", [])
-        )
+        self.blacklist = BlacklistFilter(self.config.get("blacklist_contains", []))
+        preserve_config = self.config.get("preserve", {})
+        self.preserve_enabled = bool(preserve_config.get("enabled", True))
+        self.preserve_write_file = bool(preserve_config.get("write_file", True))
+        self.preserve_filter = PreserveFilter(preserve_config.get("contains", []))
 
         self.builder = EventBuilder(
             server_id=str(self.config.get("server_id", "BZSS_Main")),
@@ -56,6 +59,9 @@ class BzssLogParserApp:
 
         self.writer = LogPostWriter(
             output_dir=str(self.config.get("output_dir", "./LogPost"))
+        )
+        self.writer.preserved_file_name = str(
+            preserve_config.get("file_name", "Preserved.jsonl")
         )
 
         raw_input_config = self.config.get("raw_input_log", {})
@@ -104,11 +110,22 @@ class BzssLogParserApp:
         )
 
         self._last_cleanup = time.time()
+        self._last_stats_report = time.time()
+        self.stats = {
+            "lines_read": 0,
+            "events_matched": 0,
+            "lines_preserved": 0,
+            "lines_blacklisted": 0,
+            "lines_unknown": 0,
+            "parse_errors": 0,
+        }
 
     def run(self) -> None:
         self.console.info("BZSS Log Parser started.")
         self.console.info(f"SessionID={self.session_id}")
         self.console.info(f"PollInterval={self.poll_interval}s")
+        for rule in self.blacklist.rejected_rules:
+            self.console.warn(f"Broad log-channel blacklist rule rejected: {rule}")
 
         while True:
             try:
@@ -137,14 +154,18 @@ class BzssLogParserApp:
             self.identity_cache.cleanup()
             self._last_cleanup = now
 
+        if now - self._last_stats_report >= 60:
+            self.report_stats()
+            self._last_stats_report = now
+
     def process_line(self, line: str) -> None:
         line = line.rstrip("\r\n")
 
         if not line:
             return
 
-        # 0. 先保存 TailReader 实际收到的原始日志。
-        #    这个动作独立于事件解析和黑名单过滤。
+        self.stats["lines_read"] += 1
+
         try:
             self.raw_input_writer.write(line)
         except Exception as e:
@@ -152,35 +173,39 @@ class BzssLogParserApp:
         self.forward_raw_log_line(line)
 
         try:
-            # 1. 先更新身份缓存，不转发。
             self.auxiliary_identity_matcher.update(line)
 
-            # 2. 先匹配白名单事件。
             matched = self.match_event(line)
-
             if matched:
                 event_name, params = matched
                 event = self.builder.build(event_name, params, line)
-
-                # 先落盘，再 UDP。
                 self.writer.write_event(event)
                 self.udp_sender.send(event)
-
+                self.stats["events_matched"] += 1
                 self.console.event(event)
-
                 return
 
-            # 3. 没命中白名单事件，再检查黑名单。
+            preserved_rule = ""
+            if self.preserve_enabled:
+                preserved_rule = self.preserve_filter.match(line)
+            if preserved_rule:
+                if self.preserve_write_file:
+                    self.writer.write_preserved(line, preserved_rule)
+                self.stats["lines_preserved"] += 1
+                return
+
             if self.blacklist.is_blacklisted(line):
+                self.stats["lines_blacklisted"] += 1
                 return
 
-            # 4. 未匹配、未黑名单，按配置写 Unknown。
             if self.write_unknown:
                 self.writer.write_unknown(line)
+                self.stats["lines_unknown"] += 1
 
         except Exception as e:
             self.writer.write_parse_error(line, str(e))
             self.console.warn(f"Parse error: {e}")
+            self.stats["parse_errors"] += 1
 
     def match_event(self, line: str) -> Optional[MatchedEvent]:
         for matcher in self.matchers:
@@ -202,3 +227,17 @@ class BzssLogParserApp:
             self.udp_sender.send(event)
         except Exception as e:
             self.console.warn(f"Raw log output failed: {e}")
+
+    def report_stats(self) -> None:
+        try:
+            self.console.info(
+                "LogPost stats: "
+                f"read={self.stats['lines_read']} "
+                f"matched={self.stats['events_matched']} "
+                f"preserved={self.stats['lines_preserved']} "
+                f"blacklisted={self.stats['lines_blacklisted']} "
+                f"unknown={self.stats['lines_unknown']} "
+                f"errors={self.stats['parse_errors']}"
+            )
+        except Exception:
+            pass
