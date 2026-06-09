@@ -472,9 +472,9 @@ await testMissingPlaytimeDisbandsWarnsAndStartsLookup();
 await testLogThenRconOnlyProcessesOnce();
 await testRconThenLogPromotionDoesNotRepeatDisband();
 await testLookupCompletionUpdatesRecordWithoutRollback();
-await testTransientDisbandFailureRetries();
+await testTransientDisbandFailureStopsAfterOpenWindow();
 
-async function testTransientDisbandFailureRetries() {
+async function testTransientDisbandFailureStopsAfterOpenWindow() {
   let callCount = 0;
   const harness = await createHarness({
     playtimeRows: [["steam-1", { game_seconds: 350 * 3600 }]],
@@ -518,10 +518,11 @@ async function testTransientDisbandFailureRetries() {
       }],
     });
 
-    assert.equal(harness.disbands.length, 2);
+    assert.equal(harness.disbands.length, 1);
     const statusAfter = harness.plugin.api.getStatus();
     const recordAfter = statusAfter.recentRecords.find((r) => r.squadId === 40);
-    assert.equal(recordAfter.actions.some((a) => a.type === "disbanded"), true);
+    assert.equal(recordAfter.decision, "open");
+    assert.equal(recordAfter.actions.some((a) => a.type === "disbanded"), false);
 
     await harness.plugin.api.simulateSquadsUpdated({
       serverId: "test-server",
@@ -535,7 +536,7 @@ async function testTransientDisbandFailureRetries() {
         leaderSteamId: "steam-1",
       }],
     });
-    assert.equal(harness.disbands.length, 2);
+    assert.equal(harness.disbands.length, 1);
   } finally {
     await harness.stop();
   }

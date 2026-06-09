@@ -36,6 +36,7 @@ async function createHarness(options = {}) {
   const warnings = [];
   const broadcasts = [];
   const kicks = [];
+  const actionLog = [];
   const webStatus = {
     serverId: "test-server",
     playerCount: options.playerCount ?? 60,
@@ -77,21 +78,25 @@ async function createHarness(options = {}) {
           return matchState;
         },
         async requestDisband(request) {
+          actionLog.push("disband");
           disbands.push(request);
           if (typeof options.requestDisband === "function") return await options.requestDisband(request);
           return { ok: true, command: `AdminDisbandSquad${request.commandNameSuffix ?? ""} ${request.teamId} ${request.squadId}` };
         },
         async requestKick(request) {
+          actionLog.push("kick");
           kicks.push(request);
           return { ok: true, command: `AdminKick ${request.steamId || request.name}` };
         },
       },
       adminWarn: {
         async sendAdminWarn(request) {
+          actionLog.push("warn");
           warnings.push(request);
           return { success: true, commandText: `AdminWarn ${request.targetName}` };
         },
         async sendAdminBroadcast(request) {
+          actionLog.push("broadcast");
           broadcasts.push(request);
           return { success: true, commandText: `AdminBroadcast ${request.message}` };
         },
@@ -132,6 +137,7 @@ async function createHarness(options = {}) {
     warnings,
     broadcasts,
     kicks,
+    actionLog,
     async emitCoreEvent(eventName, payload = {}) {
       const handler = coreHandlers.get(eventName);
       if (handler) {
@@ -380,6 +386,24 @@ async function testPendingLogWaitsForRconTeamIdAndStaysLogBacked() {
   }
 }
 
+async function testViolationDisbandsBeforeWarn() {
+  const harness = await createHarness();
+  try {
+    harness.webStatus.logClockSeconds = 10;
+    await harness.plugin.api.simulateCreation(logCreation({
+      squadId: 11,
+      squadName: "Tank",
+      creatorName: "Order Leader",
+      creatorSteamId: "steam-order",
+      creatorEosId: "eos-order",
+    }));
+
+    assert.deepEqual(harness.actionLog.slice(0, 3), ["broadcast", "disband", "warn"]);
+  } finally {
+    await harness.stop();
+  }
+}
+
 async function testRepeatedViolationsAreNotBlockedByCooldown() {
   const harness = await createHarness();
   try {
@@ -475,6 +499,7 @@ await testPhaseAnnouncementsBroadcastAtRoundStartAndWindowTransitions();
 await testRconOnlySnapshotDoesNotCreateDecisionRecord();
 await testCurrentViolatingSquadsFollowRconSnapshotAfterLogDecision();
 await testPendingLogWaitsForRconTeamIdAndStaysLogBacked();
+await testViolationDisbandsBeforeWarn();
 await testRepeatedViolationsAreNotBlockedByCooldown();
 await testSixteenthViolationKicks();
 await testBroadcastOnApprovedAndViolation();

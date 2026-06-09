@@ -1,54 +1,57 @@
 <template>
   <Teleport to="body">
-    <div v-if="open" class="dialog-root" @click.self="emit('close')">
-      <section class="dialog-panel" role="dialog" aria-modal="true" :aria-label="title">
-        <header class="dialog-head">
-          <div class="title-block">
-            <span class="eyebrow">{{ targetLabel }}</span>
-            <h3>{{ title }}</h3>
-            <p>
-              <span>{{ target?.id || "--" }}</span>
-              <span v-if="target?.version">· v{{ target.version }}</span>
-              <span v-if="target?.status">· {{ target.status }}</span>
-            </p>
+    <Transition name="floating-log" :appear="true">
+      <div v-if="open" class="dialog-root">
+        <div class="dialog-backdrop" @click="emit('close')" />
+        <section class="dialog-panel" role="dialog" aria-modal="true" :aria-label="title">
+          <header class="dialog-head">
+            <div class="title-block">
+              <span class="eyebrow">{{ targetLabel }}</span>
+              <h3>{{ title }}</h3>
+              <p>
+                <span>{{ target?.id || "--" }}</span>
+                <span v-if="target?.version">· v{{ target.version }}</span>
+                <span v-if="target?.status">· {{ target.status }}</span>
+              </p>
+            </div>
+
+            <div class="dialog-actions">
+              <button
+                type="button"
+                class="icon-button"
+                :disabled="loading"
+                :title="loading ? '正在刷新' : '刷新日志'"
+                @click="refreshLogs"
+              >
+                ↻
+              </button>
+              <button type="button" class="icon-button close" title="关闭" @click="emit('close')">
+                ×
+              </button>
+            </div>
+          </header>
+
+          <div v-if="target?.description" class="dialog-summary">
+            {{ target.description }}
           </div>
 
-          <div class="dialog-actions">
-            <button
-              type="button"
-              class="icon-button"
-              :disabled="loading"
-              :title="loading ? '正在刷新' : '刷新日志'"
-              @click="refreshLogs"
-            >
-              ↻
-            </button>
-            <button type="button" class="icon-button close" title="关闭" @click="emit('close')">
-              ×
-            </button>
+          <div class="dialog-meta">
+            <span class="meta-chip" :class="target?.kind || 'module'">{{ targetLabel }}</span>
+            <span class="meta-chip scope">scope: {{ target?.id || "--" }}</span>
           </div>
-        </header>
 
-        <div v-if="target?.description" class="dialog-summary">
-          {{ target.description }}
-        </div>
+          <div v-if="error" class="error-banner">
+            {{ error }}
+          </div>
 
-        <div class="dialog-meta">
-          <span class="meta-chip" :class="target?.kind || 'module'">{{ targetLabel }}</span>
-          <span class="meta-chip scope">scope: {{ target?.id || "--" }}</span>
-        </div>
-
-        <div v-if="error" class="error-banner">
-          {{ error }}
-        </div>
-
-        <div class="log-shell">
-          <div v-if="loading && !lines.length" class="empty-state">正在加载日志...</div>
-          <div v-else-if="!lines.length" class="empty-state">暂无日志</div>
-          <LogVirtualList v-else :lines="lines" />
-        </div>
-      </section>
-    </div>
+          <div class="log-shell">
+            <div v-if="loading && !lines.length" class="empty-state">正在加载日志...</div>
+            <div v-else-if="!lines.length" class="empty-state">暂无日志</div>
+            <LogVirtualList v-else :lines="lines" />
+          </div>
+        </section>
+      </div>
+    </Transition>
   </Teleport>
 </template>
 
@@ -175,23 +178,68 @@ function onWindowKeyDown(event: KeyboardEvent) {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(6, 10, 16, 0.72);
-  backdrop-filter: blur(4px);
+}
+
+.dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    radial-gradient(circle at 20% 18%, rgba(96, 165, 250, 0.12), transparent 28%),
+    radial-gradient(circle at 80% 10%, rgba(34, 197, 94, 0.06), transparent 26%),
+    rgba(8, 12, 16, 0.65);
 }
 
 .dialog-panel {
+  position: relative;
+  z-index: 2;
   width: min(1100px, calc(100vw - 48px));
   height: min(78vh, calc(100vh - 48px));
   display: flex;
   flex-direction: column;
   gap: 12px;
-  border: 1px solid #2b3540;
-  border-radius: 10px;
-  background: #10161d;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.48);
-  padding: 18px;
+  background:
+    linear-gradient(145deg, rgba(55, 200, 255, 0.05), rgba(168, 85, 247, 0.03)),
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha, 0.02) + 0.02)), rgba(255, 255, 255, 0.005)),
+    var(--color-bg-panel, #10161d);
+  border: 1px solid rgba(140, 160, 200, 0.28);
+  border-radius: 22px;
+  box-shadow:
+    0 32px 80px rgba(0, 0, 0, 0.52),
+    0 8px 24px rgba(0, 0, 0, 0.32),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  backdrop-filter: blur(28px) saturate(1.4);
+  padding: 22px;
   min-width: 0;
   min-height: 0;
+}
+
+/* Transition Animations */
+
+/* Backdrop Fade */
+.floating-log-enter-active .dialog-backdrop,
+.floating-log-leave-active .dialog-backdrop {
+  transition: opacity 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.floating-log-enter-from .dialog-backdrop,
+.floating-log-leave-to .dialog-backdrop {
+  opacity: 0;
+}
+
+/* Panel Scale and Slide Up */
+.floating-log-enter-active .dialog-panel,
+.floating-log-leave-active .dialog-panel {
+  transition: opacity 0.32s cubic-bezier(0.16, 1, 0.3, 1), transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  transform-style: preserve-3d;
+}
+
+.floating-log-enter-from .dialog-panel,
+.floating-log-leave-to .dialog-panel {
+  opacity: 0;
+  transform: translateY(16px) scale(0.97);
 }
 
 .dialog-head {
@@ -240,25 +288,31 @@ function onWindowKeyDown(event: KeyboardEvent) {
   width: 34px;
   height: 34px;
   border-radius: 8px;
-  border: 1px solid #334155;
-  background: rgba(255, 255, 255, 0.05);
-  color: #edf2f4;
+  border: 1px solid var(--color-border-soft, #27313a);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-muted, #9aa7b2);
   cursor: pointer;
-  font-size: 18px;
-  line-height: 1;
+  font-size: 16px;
+  display: grid;
+  place-items: center;
+  transition: all 0.14s ease;
 }
 
 .icon-button:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.1);
+  color: var(--color-text-primary, #fff);
+  border-color: var(--color-border-default, #3b4b5a);
+}
+
+.icon-button.close:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
 }
 
 .icon-button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
-}
-
-.icon-button.close {
-  font-size: 24px;
 }
 
 .dialog-summary {
