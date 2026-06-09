@@ -524,9 +524,9 @@
       "polling": {
         "serverInfoIntervalMs": 15000,
         "playersIntervalMs": 2000,
-        "squadsIntervalMs": 2000,
+        "squadsIntervalMs": 4999,
         "dynamic": {
-          "enabled": true,
+          "enabled": false,
           "fastUntilSeconds": 90,
           "mediumUntilSeconds": 180,
           "fastPlayersIntervalMs": 500,
@@ -696,6 +696,6 @@
     }
   },
   "warmup": {
-    "enabled": false
+    "enabled": true
   }
 }

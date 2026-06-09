@@ -1,14 +1,23 @@
 // -*- coding: utf-8 -*-
 
-const MAX_EVENT_BUCKET_SIZE = 500;
 const MAX_JOB_HISTORY = 200;
 
 export class RuntimeState {
-  constructor({ eventBus, webStatus, logger } = {}) {
+  constructor({ eventBus, webStatus, logger, config } = {}) {
     this.eventBus = eventBus;
     this.webStatus = webStatus;
     this.logger = logger;
+    this.config = config;
     this.unsubscribers = [];
+
+    this.limits = {
+      raw: this.config?.get?.("runtimeState.eventHistory.raw", 100) ?? 100,
+      rcon: this.config?.get?.("runtimeState.eventHistory.rcon", 100) ?? 100,
+      round: this.config?.get?.("runtimeState.eventHistory.round", 50) ?? 50,
+      combat: this.config?.get?.("runtimeState.eventHistory.combat", 200) ?? 200,
+      console: 500,
+    };
+    this.includeEventsInAllSnapshot = this.config?.get?.("runtimeState.includeEventsInAllSnapshot", false) ?? false;
 
     this.state = {
       server: {
@@ -157,14 +166,28 @@ export class RuntimeState {
   recordEvent(bucket, event) {
     const key = String(bucket || "").trim();
     if (!this.state.events[key]) return;
-    this.state.events[key].push(cloneJsonSafe(event));
-    if (this.state.events[key].length > MAX_EVENT_BUCKET_SIZE) {
-      this.state.events[key].splice(0, this.state.events[key].length - MAX_EVENT_BUCKET_SIZE);
+
+    // Avoid retaining full player/squad lists in event logs
+    const cleanedEvent = cloneJsonSafe(event);
+    if (cleanedEvent && typeof cleanedEvent === "object") {
+      if (cleanedEvent.players) {
+        cleanedEvent.playerCount = Array.isArray(cleanedEvent.players) ? cleanedEvent.players.length : 0;
+        delete cleanedEvent.players;
+      }
+      if (cleanedEvent.squads) {
+        cleanedEvent.squadCount = Array.isArray(cleanedEvent.squads) ? cleanedEvent.squads.length : 0;
+        delete cleanedEvent.squads;
+      }
+    }
+
+    this.state.events[key].push(cleanedEvent);
+    const limit = this.limits[key] ?? 500;
+    if (this.state.events[key].length > limit) {
+      this.state.events[key].splice(0, this.state.events[key].length - limit);
     }
     this.state.events.updatedAt = Date.now();
     this.state.events.revision += 1;
   }
-
   updateJob(job) {
     if (!job?.id) return;
     const publicJob = cloneJsonSafe(job);
@@ -268,7 +291,9 @@ export class RuntimeState {
     const players = this.getPlayers();
     const squads = this.getSquads();
     const match = this.getMatch();
-    const events = this.getEvents();
+    const events = this.includeEventsInAllSnapshot
+      ? this.getEvents()
+      : { console: [], raw: [], rcon: [], round: [], combat: [] };
     const jobs = this.getJobs();
     const key = this.getAllCacheKey(server, players, squads, match, events, jobs);
     const cached = this.cache.all;
@@ -287,7 +312,7 @@ export class RuntimeState {
         Number(this.state.server?.updatedAt ?? 0),
         Number(this.state.players?.updatedAt ?? 0),
         Number(this.state.squads?.updatedAt ?? 0),
-        Number(this.state.events?.updatedAt ?? 0),
+        this.includeEventsInAllSnapshot ? Number(this.state.events?.updatedAt ?? 0) : 0,
         Number(this.state.jobs?.updatedAt ?? 0),
         Number(this.state.rcon?.updatedAt ?? 0),
       ),
@@ -359,18 +384,20 @@ export class RuntimeState {
   }
 
   getAllCacheKey(server, players, squads, match, events, jobs) {
+    const eventsKey = this.includeEventsInAllSnapshot ? this.getEventsCacheKey() : "no-events";
+    const eventsUpdatedAt = this.includeEventsInAllSnapshot ? (events?.updatedAt ?? "") : "";
     return [
       this.getServerCacheKey(server?.webStatus?.updatedAt ?? ""),
       this.getPlayersCacheKey(),
       this.getSquadsCacheKey(),
       this.getMatchCacheKey(server, players, squads),
-      this.getEventsCacheKey(),
-      this.getJobsCacheKey(),
+      eventsKey,
+      this.getJobsKey ? this.getJobsKey() : this.getJobsCacheKey(), // handle compatibility safely
       this.state.rcon.revision,
       this.state.rcon.updatedAt,
       this.state.rcon.stale ? "stale" : "fresh",
       match?.updatedAt ?? "",
-      events?.updatedAt ?? "",
+      eventsUpdatedAt,
       jobs?.updatedAt ?? "",
     ].join("|");
   }

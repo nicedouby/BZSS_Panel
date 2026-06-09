@@ -42,6 +42,7 @@ import { AuthManager } from "./core/auth-manager.js";
 import { EventPipeline } from "./core/event-pipeline.js";
 import { RuntimeState } from "./core/runtime-state.js";
 import { RawLogDerivedEvents } from "./core/raw-log-derived-events.js";
+import { PerformanceMonitor } from "./core/performance-monitor.js";
 
 async function main() {
   const configManager = new ConfigManager("./config.json");
@@ -79,6 +80,12 @@ async function main() {
     eventBus,
     webStatus,
     logger: logger.child({ moduleId: "core.runtimeState", source: "core.runtimeState" }),
+    config: configManager,
+  });
+
+  const performanceMonitor = new PerformanceMonitor({
+    config: configManager,
+    logger: logger.child({ moduleId: "core.performanceMonitor", source: "core.performanceMonitor" }),
   });
 
   const consoleService = new ConsoleService({
@@ -134,6 +141,7 @@ async function main() {
     console: consoleService,
     rconManager,
     authManager,
+    performanceMonitor,
   };
 
   consoleService.attachCore(coreContext);
@@ -195,6 +203,7 @@ async function main() {
   });
   coreContext.pythonLogParserManager = pythonLogParserManager;
 
+  performanceMonitor.start();
   await authManager.start();
   await moduleManager.loadBuiltInModules();
   rawLogDerivedEvents.start();
@@ -258,10 +267,11 @@ async function main() {
     await udpReceiver.stop();
     await rconManager.stop();
     runtimeState.stop();
+    performanceMonitor.stop();
     await authManager.stop();
 
     logger.info("BZSS Panel WebCore stopped.", {
-      scope: "app", 
+      scope: "app",
       source: "app.main",
     });
     process.exit(0);

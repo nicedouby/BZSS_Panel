@@ -1,9 +1,11 @@
 // -*- coding: utf-8 -*-
 
 const LOG_SCOPE = "PlayerDurationSlowRefresh";
-const MATCH_REFRESH_INTERVAL_MS = 10_000;
-const DATA_REFRESH_INTERVAL_MS = 60_000;
-const REFRESH_COOLDOWN_MS = 30 * 60_000;
+const CURRENT_REFRESH_INTERVALS_MS = [10_000, 15_000, 20_000, 30_000, 45_000, 60_000];
+const DATABASE_REFRESH_INTERVALS_MS = [60_000, 75_000, 90_000, 120_000, 180_000];
+const IDLE_REFRESH_INTERVALS_MS = [60_000, 90_000, 120_000, 180_000, 300_000];
+const FAILURE_REFRESH_INTERVALS_MS = [60_000, 120_000, 180_000, 300_000];
+const DATABASE_REFRESH_COOLDOWN_MS = 30 * 60_000;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -21,6 +23,11 @@ function normalizeSteamID(value) {
 
 function formatHours(seconds) {
   return (Math.max(0, Number(seconds) || 0) / 3600).toFixed(1);
+}
+
+function pickInterval(intervals, streak = 0) {
+  const index = Math.max(0, Math.min(intervals.length - 1, Math.floor(Number(streak) || 0)));
+  return intervals[index];
 }
 
 function resolveGameSeconds(result) {
@@ -78,17 +85,33 @@ function normalizePlayerCandidate(player, source = "database") {
   };
 }
 
-function collectCurrentMatchPlayers(matchState) {
+function collectCurrentMatchContext(matchState) {
   const overview = matchState?.getOverview?.() ?? matchState?.api?.getOverview?.() ?? null;
-  const players = Array.isArray(overview?.players)
+  const matchSnapshot = overview?.matchState ?? overview ?? null;
+  const rawPlayers = Array.isArray(overview?.players)
     ? overview.players
-    : Array.isArray(overview?.matchState?.players?.list)
-      ? overview.matchState.players.list
-      : Array.isArray(overview?.matchState?.players?.active)
-        ? overview.matchState.players.active
+    : Array.isArray(matchSnapshot?.players?.list)
+      ? matchSnapshot.players.list
+      : Array.isArray(matchSnapshot?.players?.active)
+        ? matchSnapshot.players.active
         : [];
 
-  return players.map((player) => normalizePlayerCandidate(player, "current-match")).filter(Boolean);
+  const players = rawPlayers
+    .map((player) => normalizePlayerCandidate(player, "current-match"))
+    .filter(Boolean);
+
+  const revision = Number(matchSnapshot?.revision ?? overview?.revision ?? 0) || 0;
+  const updatedAt = String(matchSnapshot?.updatedAt ?? overview?.updatedAt ?? "");
+  const fingerprint = `${revision}::${updatedAt}::${players.map((player) => player.steamID).join("|")}`;
+
+  return {
+    overview,
+    matchSnapshot,
+    players,
+    revision,
+    updatedAt,
+    fingerprint,
+  };
 }
 
 export function createPlugin(context = {}) {
@@ -111,33 +134,112 @@ export function createPlugin(context = {}) {
     currentSource: null,
     round: 0,
     refreshedThisRound: new Set(),
-    refreshTaggedAtBySteamID: new Map(),
+    currentMatchRefreshedSteamIDs: new Set(),
+    databaseRefreshTaggedAtBySteamID: new Map(),
+    matchRevision: null,
+    matchUpdatedAt: "",
+    matchFingerprint: "",
+    matchStableLoops: 0,
+    currentMatchCursor: 0,
+    databaseCursor: 0,
+    databaseStableLoops: 0,
+    idleStreak: 0,
     lastSuccessAt: null,
     lastErrorAt: null,
     lastDelayMs: null,
     lastSelectedSource: null,
+    lastTargetSteamID: null,
+    currentMatchEligibleCount: 0,
+    databaseEligibleCount: 0,
     totalSuccess: 0,
     totalFailed: 0,
   };
 
-  function isCoolingDown(steamID) {
-    const taggedAt = Number(state.refreshTaggedAtBySteamID.get(steamID) || 0) || 0;
+  function isDatabaseCoolingDown(steamID) {
+    const taggedAt = Number(state.databaseRefreshTaggedAtBySteamID.get(steamID) || 0) || 0;
     if (!taggedAt) return false;
-    const isCool = Date.now() - taggedAt < REFRESH_COOLDOWN_MS;
-    if (!isCool) {
-      state.refreshTaggedAtBySteamID.delete(steamID);
+
+    const isCooling = Date.now() - taggedAt < DATABASE_REFRESH_COOLDOWN_MS;
+    if (!isCooling) {
+      state.databaseRefreshTaggedAtBySteamID.delete(steamID);
     }
-    return isCool;
+    return isCooling;
   }
 
-  function markRefreshTag(steamID) {
-    const nowTime = Date.now();
-    state.refreshTaggedAtBySteamID.set(steamID, nowTime);
-    for (const [id, taggedAt] of state.refreshTaggedAtBySteamID.entries()) {
-      if (nowTime - taggedAt >= REFRESH_COOLDOWN_MS) {
-        state.refreshTaggedAtBySteamID.delete(id);
+  function markDatabaseRefreshTag(steamID) {
+    const now = Date.now();
+    state.databaseRefreshTaggedAtBySteamID.set(steamID, now);
+
+    for (const [id, taggedAt] of state.databaseRefreshTaggedAtBySteamID.entries()) {
+      if (now - taggedAt >= DATABASE_REFRESH_COOLDOWN_MS) {
+        state.databaseRefreshTaggedAtBySteamID.delete(id);
       }
     }
+  }
+
+  function setCurrentMatchContext(matchContext) {
+    const changed = state.matchFingerprint !== matchContext.fingerprint;
+    state.matchRevision = matchContext.revision;
+    state.matchUpdatedAt = matchContext.updatedAt;
+    state.matchFingerprint = matchContext.fingerprint;
+
+    if (changed) {
+      state.currentMatchRefreshedSteamIDs.clear();
+      state.refreshedThisRound.clear();
+      state.currentMatchCursor = 0;
+      state.matchStableLoops = 0;
+      state.databaseStableLoops = 0;
+      state.idleStreak = 0;
+    } else {
+      state.matchStableLoops += 1;
+    }
+
+    return changed;
+  }
+
+  function pickFromList(players, cursorKey) {
+    if (!Array.isArray(players) || players.length === 0) {
+      return null;
+    }
+
+    const start = Number(state[cursorKey] || 0) % players.length;
+    for (let offset = 0; offset < players.length; offset += 1) {
+      const index = (start + offset) % players.length;
+      const player = players[index];
+      if (player) {
+        state[cursorKey] = (index + 1) % players.length;
+        return player;
+      }
+    }
+
+    return null;
+  }
+
+  function computeInterval(source, eligibleCount, matchChanged, explicitStreak = null) {
+    if (source === "current-match") {
+      if (matchChanged) {
+        return CURRENT_REFRESH_INTERVALS_MS[0];
+      }
+
+      const pressure = eligibleCount <= 1 ? 1 : 0;
+      return pickInterval(
+        CURRENT_REFRESH_INTERVALS_MS,
+        Math.min(CURRENT_REFRESH_INTERVALS_MS.length - 1, state.matchStableLoops + pressure),
+      );
+    }
+
+    if (source === "database") {
+      return pickInterval(
+        DATABASE_REFRESH_INTERVALS_MS,
+        Math.min(DATABASE_REFRESH_INTERVALS_MS.length - 1, state.databaseStableLoops),
+      );
+    }
+
+    const streak = explicitStreak == null ? state.idleStreak : explicitStreak;
+    return pickInterval(
+      IDLE_REFRESH_INTERVALS_MS,
+      Math.min(IDLE_REFRESH_INTERVALS_MS.length - 1, streak),
+    );
   }
 
   async function resolvePlayerRecord(player) {
@@ -181,18 +283,26 @@ export function createPlugin(context = {}) {
     state.currentPlayerId = playerId;
     state.currentSteamID = player.steamID;
     state.currentSource = source;
-    markRefreshTag(player.steamID);
+    state.lastTargetSteamID = player.steamID;
 
     try {
-      const sourceLabel = source === "current-match" ? "当前对局" : "数据";
+      const sourceLabel = source === "current-match" ? "当前对局" : "数据库";
       log.info(`开始刷新${sourceLabel}玩家时长：${player.name} steam=${player.steamID}`);
 
       const seconds = await fetchGameDurationSeconds(steamGameDurationService, player.steamID, player.name);
       await playerRepository.updateGameDuration(playerId, seconds);
 
       state.refreshedThisRound.add(playerId);
+      if (source === "current-match") {
+        state.currentMatchRefreshedSteamIDs.add(player.steamID);
+      } else {
+        markDatabaseRefreshTag(player.steamID);
+      }
+
       state.lastSuccessAt = Date.now();
       state.totalSuccess += 1;
+      state.databaseStableLoops = source === "database" ? state.databaseStableLoops + 1 : 0;
+      state.idleStreak = 0;
 
       log.info(
         `玩家时长刷新成功：${player.name} steam=${player.steamID} seconds=${seconds} hours=${formatHours(seconds)} source=${source}`,
@@ -201,6 +311,9 @@ export function createPlugin(context = {}) {
     } catch (error) {
       state.lastErrorAt = Date.now();
       state.totalFailed += 1;
+      if (source === "database") {
+        state.databaseStableLoops = 0;
+      }
       log.warn(
         `玩家时长刷新失败：${player.name} steam=${player.steamID} error=${error?.message || error} source=${source}`,
       );
@@ -213,16 +326,24 @@ export function createPlugin(context = {}) {
   }
 
   async function pickNextTarget() {
-    const currentMatchPlayers = collectCurrentMatchPlayers(modules?.matchState);
-    const eligibleCurrentPlayers = currentMatchPlayers.filter((player) => !isCoolingDown(player.steamID));
+    const matchContext = collectCurrentMatchContext(modules?.matchState);
+    const matchChanged = setCurrentMatchContext(matchContext);
+
+    const eligibleCurrentPlayers = matchContext.players.filter(
+      (player) => !state.currentMatchRefreshedSteamIDs.has(player.steamID),
+    );
+    state.currentMatchEligibleCount = eligibleCurrentPlayers.length;
 
     if (eligibleCurrentPlayers.length > 0) {
+      const player = pickFromList(eligibleCurrentPlayers, "currentMatchCursor");
       return {
-        player: eligibleCurrentPlayers[0],
+        player,
         source: "current-match",
-        intervalMs: MATCH_REFRESH_INTERVAL_MS,
-        totalCount: currentMatchPlayers.length,
+        matchChanged,
+        intervalMs: computeInterval("current-match", eligibleCurrentPlayers.length, matchChanged),
+        totalCount: matchContext.players.length,
         eligibleCount: eligibleCurrentPlayers.length,
+        matchContext,
       };
     }
 
@@ -230,24 +351,34 @@ export function createPlugin(context = {}) {
     const list = (Array.isArray(players) ? players : [])
       .map((player) => normalizePlayerCandidate(player, "database"))
       .filter(Boolean);
-    const eligibleDatabasePlayers = list.filter((player) => !isCoolingDown(player.steamID));
+    const eligibleDatabasePlayers = list.filter(
+      (player) => !isDatabaseCoolingDown(player.steamID) && !state.currentMatchRefreshedSteamIDs.has(player.steamID),
+    );
+    state.databaseEligibleCount = eligibleDatabasePlayers.length;
 
     if (eligibleDatabasePlayers.length > 0) {
+      const player = pickFromList(eligibleDatabasePlayers, "databaseCursor");
       return {
-        player: eligibleDatabasePlayers[0],
+        player,
         source: "database",
-        intervalMs: DATA_REFRESH_INTERVAL_MS,
+        matchChanged,
+        intervalMs: computeInterval("database", eligibleDatabasePlayers.length, matchChanged),
         totalCount: list.length,
         eligibleCount: eligibleDatabasePlayers.length,
+        matchContext,
       };
     }
 
+    const idleStreak = state.idleStreak;
+    state.idleStreak = Math.min(state.idleStreak + 1, IDLE_REFRESH_INTERVALS_MS.length - 1);
     return {
       player: null,
       source: "idle",
-      intervalMs: DATA_REFRESH_INTERVAL_MS,
+      matchChanged,
+      intervalMs: computeInterval("idle", 0, matchChanged, idleStreak),
       totalCount: list.length,
       eligibleCount: 0,
+      matchContext,
     };
   }
 
@@ -277,6 +408,9 @@ export function createPlugin(context = {}) {
           const target = await pickNextTarget();
           state.lastSelectedSource = target.source;
           state.lastDelayMs = target.intervalMs;
+          state.matchRevision = target.matchContext?.revision ?? state.matchRevision;
+          state.matchUpdatedAt = target.matchContext?.updatedAt ?? state.matchUpdatedAt;
+          state.matchFingerprint = target.matchContext?.fingerprint ?? state.matchFingerprint;
 
           if (!target.player) {
             log.info(`第 ${state.round} 轮没有可刷新的玩家，${Math.round(target.intervalMs / 1000)} 秒后重试。`);
@@ -287,10 +421,13 @@ export function createPlugin(context = {}) {
           }
 
           log.info(
-            `第 ${state.round} 轮刷新 ${target.source === "current-match" ? "当前对局" : "数据"} 玩家：${target.player.name} steam=${target.player.steamID}，间隔=${Math.round(target.intervalMs / 1000)} 秒`,
+            `第 ${state.round} 轮刷新 ${target.source === "current-match" ? "当前对局" : "数据库"} 玩家：${target.player.name} steam=${target.player.steamID}，间隔=${Math.round(target.intervalMs / 1000)} 秒`,
           );
 
-          await processPlayer(target.player, target.source);
+          const success = await processPlayer(target.player, target.source);
+          if (success && target.source === "database") {
+            state.databaseStableLoops = Math.min(state.databaseStableLoops, DATABASE_REFRESH_INTERVALS_MS.length - 1);
+          }
 
           if (!state.stopRequested) {
             await sleepImpl(target.intervalMs);
@@ -298,9 +435,15 @@ export function createPlugin(context = {}) {
         } catch (error) {
           state.lastErrorAt = Date.now();
           state.totalFailed += 1;
+          state.databaseStableLoops = 0;
           log.error(`玩家时长慢速刷新循环失败：${error?.stack || error}`);
           if (!state.stopRequested) {
-            await sleepImpl(DATA_REFRESH_INTERVAL_MS);
+            const failureDelayMs = pickInterval(
+              FAILURE_REFRESH_INTERVALS_MS,
+              Math.min(FAILURE_REFRESH_INTERVALS_MS.length - 1, state.totalFailed),
+            );
+            state.lastDelayMs = failureDelayMs;
+            await sleepImpl(failureDelayMs);
           }
         }
       }
@@ -315,10 +458,13 @@ export function createPlugin(context = {}) {
 
   const api = {
     getState() {
+      const databaseRefreshTaggedAtBySteamID = Object.fromEntries(state.databaseRefreshTaggedAtBySteamID);
       return {
         ...state,
         refreshedThisRound: Array.from(state.refreshedThisRound),
-        refreshTaggedAtBySteamID: Object.fromEntries(state.refreshTaggedAtBySteamID),
+        currentMatchRefreshedSteamIDs: Array.from(state.currentMatchRefreshedSteamIDs),
+        databaseRefreshTaggedAtBySteamID,
+        refreshTaggedAtBySteamID: databaseRefreshTaggedAtBySteamID,
       };
     },
   };

@@ -562,5 +562,22 @@
       "logSuccess": false,
       "logFailure": true
     }
+  },
+  "performance": {
+    "enabled": true,
+    "sampleIntervalMs": 10000,
+    "logIntervalMs": 60000,
+    "maxHistoryPoints": 120,
+    "largeJsonBytes": 262144,
+    "slowJsonMs": 50
+  },
+  "runtimeState": {
+    "eventHistory": {
+      "raw": 100,
+      "rcon": 100,
+      "round": 50,
+      "combat": 200
+    },
+    "includeEventsInAllSnapshot": false
   }
 }

@@ -39,7 +39,7 @@ function createLogger(logs) {
   };
 }
 
-async function testCurrentMatchPriorityAndCooldown() {
+async function testCurrentMatchResetAndDatabaseFallback() {
   const logs = [];
   const updates = [];
   const lookups = [];
@@ -49,6 +49,13 @@ async function testCurrentMatchPriorityAndCooldown() {
 
   const first = deferred();
   const second = deferred();
+  const third = deferred();
+
+  let matchSnapshot = {
+    revision: 1,
+    updatedAt: "2026-06-09T00:00:00Z",
+    players: [{ name: "Alpha", steamID: "111", eosID: "eos-111" }],
+  };
 
   const repo = {
     async listPlayersWithSteamID(options = {}) {
@@ -75,7 +82,8 @@ async function testCurrentMatchPriorityAndCooldown() {
   const matchState = {
     getOverview() {
       return {
-        players: [{ name: "Alpha", steamID: "111", eosID: "eos-111" }],
+        matchState: matchSnapshot,
+        players: matchSnapshot.players,
       };
     },
   };
@@ -86,8 +94,9 @@ async function testCurrentMatchPriorityAndCooldown() {
       activeLookups += 1;
       assert.equal(activeLookups, 1);
       try {
-        if (steamID === "111") return await first.promise;
+        if (steamID === "111" && lookups.length === 1) return await first.promise;
         if (steamID === "222") return await second.promise;
+        if (steamID === "111" && lookups.length === 3) return await third.promise;
         throw new Error(`Unexpected steamID: ${steamID}`);
       } finally {
         activeLookups -= 1;
@@ -98,6 +107,16 @@ async function testCurrentMatchPriorityAndCooldown() {
   const sleep = async (ms) => {
     sleepIntervals.push(ms);
     if (sleepIntervals.length === 2) {
+      matchSnapshot = {
+        revision: 2,
+        updatedAt: "2026-06-09T00:05:00Z",
+        players: [
+          { name: "Alpha", steamID: "111", eosID: "eos-111" },
+          { name: "Charlie", steamID: "333", eosID: "eos-333" },
+        ],
+      };
+    }
+    if (sleepIntervals.length === 3) {
       await plugin.stop();
     }
   };
@@ -113,7 +132,6 @@ async function testCurrentMatchPriorityAndCooldown() {
   await plugin.start();
 
   await waitFor(() => lookups.length === 1);
-  assert.equal(activeLookups, 1);
   assert.equal(lookups[0], "111");
 
   first.resolve({ gameSeconds: 3661 });
@@ -123,32 +141,34 @@ async function testCurrentMatchPriorityAndCooldown() {
 
   await waitFor(() => lookups.length === 2);
   assert.equal(lookups[1], "222");
-  assert.equal(activeLookups, 1);
 
   second.resolve({ gameSeconds: 7200 });
+  await waitFor(() => lookups.length === 3);
+  assert.equal(lookups[2], "111");
+
+  third.resolve({ gameSeconds: 4000 });
   await waitFor(() => !plugin.getState().running);
 
   const state = plugin.getState();
-  assert.equal(state.round, 2);
-  assert.deepEqual(state.refreshedThisRound, [1, 2]);
-  assert.equal(state.totalSuccess, 2);
+  assert.equal(state.round, 3);
+  assert.equal(state.totalSuccess, 3);
   assert.equal(state.totalFailed, 0);
   assert.equal(state.currentPlayerId, null);
   assert.equal(state.currentSteamID, null);
   assert.equal(state.currentSource, null);
-  assert.equal(state.lastSelectedSource, "database");
-  assert.equal(state.lastDelayMs, 60_000);
-  assert.deepEqual(sleepIntervals, [10_000, 60_000]);
-  assert.equal(state.refreshTaggedAtBySteamID["111"] > 0, true);
+  assert.equal(state.lastSelectedSource, "current-match");
+  assert.equal(state.lastDelayMs, 10_000);
+  assert.deepEqual(sleepIntervals, [10_000, 60_000, 10_000]);
+  assert.deepEqual(state.currentMatchRefreshedSteamIDs, ["111"]);
+  assert.equal(state.refreshTaggedAtBySteamID["111"], undefined);
   assert.equal(state.refreshTaggedAtBySteamID["222"] > 0, true);
   assert.equal(logs.some((entry) => entry.message.includes("玩家时长慢速刷新插件已启动")), true);
-  assert.equal(logs.some((entry) => entry.message.includes("当前对局玩家时长")), true);
-  assert.equal(logs.some((entry) => entry.message.includes("source=current-match")), true);
-  assert.equal(logs.some((entry) => entry.message.includes("source=database")), true);
+  assert.equal(logs.some((entry) => entry.message.includes("当前对局玩家")), true);
+  assert.equal(logs.some((entry) => entry.message.includes("数据库玩家")), true);
   assert.equal(logs.some((entry) => entry.message.includes("玩家时长慢速刷新插件已停止")), true);
 }
 
-async function testSkipNoSteamID() {
+async function testDatabaseBackoffAndIdleRetry() {
   const logs = [];
   const updates = [];
   const lookups = [];
@@ -178,12 +198,26 @@ async function testSkipNoSteamID() {
 
   const sleep = async (ms) => {
     sleepIntervals.push(ms);
-    if (sleepIntervals.length === 2) {
+    if (sleepIntervals.length === 3) {
       await plugin.stop();
     }
   };
 
+  const matchState = {
+    getOverview() {
+      return {
+        matchState: {
+          revision: 1,
+          updatedAt: "2026-06-09T00:00:00Z",
+          players: [],
+        },
+        players: [],
+      };
+    },
+  };
+
   plugin = createPlugin({
+    modules: { matchState },
     playerRepository: repo,
     steamGameDurationService: service,
     logger: createLogger(logs),
@@ -197,11 +231,11 @@ async function testSkipNoSteamID() {
   assert.equal(updates[0].playerId, 12);
   assert.equal(updates[0].seconds, 1234);
   assert.deepEqual(lookups, ["333"]);
-  assert.deepEqual(sleepIntervals, [60_000, 60_000]);
-  assert.equal(logs.some((entry) => entry.message.includes("第 2 轮没有可刷新的玩家")), true);
+  assert.deepEqual(sleepIntervals, [60_000, 60_000, 90_000]);
+  assert.equal(logs.some((entry) => entry.message.includes("没有可刷新的玩家")), true);
 }
 
-await testCurrentMatchPriorityAndCooldown();
-await testSkipNoSteamID();
+await testCurrentMatchResetAndDatabaseFallback();
+await testDatabaseBackoffAndIdleRetry();
 
 console.log("player duration slow refresh tests passed");

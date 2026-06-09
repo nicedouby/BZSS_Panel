@@ -4,6 +4,9 @@ import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
+
+const requestStorage = new AsyncLocalStorage();
 import { handleSquadManagementRoutes } from "../modules/squad-management/routes.js";
 import { handleTeamBalanceRoutes } from "../modules/team-balance/routes.js";
 import { handleReserveSlotsRoutes } from "../modules/reserve-slots/routes.js";
@@ -57,16 +60,18 @@ export class WebServer {
     await this.warnIfStaticIndexMissing();
 
     this.server = http.createServer((req, res) => {
-      this.handleRequest(req, res).catch((error) => {
-        const statusCode = error.statusCode ?? 500;
-        if (statusCode >= 500) {
-          this.logger.error(`Web request failed: ${error.stack ?? error}`);
-        } else {
-          this.logger.warn(`Web request rejected: ${statusCode} ${error.code ?? error.message}`);
-        }
-        this.json(res, statusCode, {
-          error: error.code ?? "InternalServerError",
-          message: error.message,
+      requestStorage.run({ req }, () => {
+        this.handleRequest(req, res).catch((error) => {
+          const statusCode = error.statusCode ?? 500;
+          if (statusCode >= 500) {
+            this.logger.error(`Web request failed: ${error.stack ?? error}`);
+          } else {
+            this.logger.warn(`Web request rejected: ${statusCode} ${error.code ?? error.message}`);
+          }
+          this.json(res, statusCode, {
+            error: error.code ?? "InternalServerError",
+            message: error.message,
+          });
         });
       });
     });
@@ -418,6 +423,7 @@ export class WebServer {
           nodeVersion: process.version,
           platform: process.platform,
           arch: process.arch,
+          performance: this.core.performanceMonitor?.getSnapshot() ?? null,
         },
       });
     }
@@ -2559,7 +2565,21 @@ export class WebServer {
   }
 
   json(res, status, obj, extraHeaders = {}) {
+    const start = performance.now();
     const data = JSON.stringify(obj, null, 2);
+    const durationMs = performance.now() - start;
+    const sizeBytes = Buffer.byteLength(data);
+
+    const performanceConfig = this.core?.config?.get?.("performance") ?? {};
+    const largeJsonBytes = performanceConfig.largeJsonBytes ?? 262144;
+    const slowJsonMs = performanceConfig.slowJsonMs ?? 50;
+
+    if (sizeBytes > largeJsonBytes || durationMs > slowJsonMs) {
+      const store = requestStorage.getStore();
+      const urlStr = store?.req?.url ?? "unknown";
+      this.logger?.warn(`[large-slow-json] url=${urlStr} sizeBytes=${sizeBytes} durationMs=${durationMs.toFixed(2)}ms`);
+    }
+
     res.writeHead(status, {
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
