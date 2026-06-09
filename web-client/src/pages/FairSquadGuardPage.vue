@@ -3,7 +3,7 @@
     <PageHeader
       eyebrow="Plugin"
       title="公平建队"
-      subtitle="通过日志和 RCON 双来源检测建队，按开局窗口自动警告、解散违规小队，并只对日志确认的真实创建者累计违规。"
+      subtitle="通过日志和 RCON 来源检测并按窗口自动管理违规小队。"
     >
       <template #actions>
         <div class="header-actions">
@@ -16,25 +16,34 @@
               打开设置
             </button>
           </div>
-          <aside class="header-rules">
-            <strong>规则窗口</strong>
-            <div class="header-rules-grid">
-              <span>0 - {{ status?.settings.noSquadCreationSeconds ?? 20 }}s<br>禁止建队</span>
-              <span>{{ status?.settings.noSquadCreationSeconds ?? 20 }} - {{ status?.settings.infantryOnlyUntilSeconds ?? 50 }}s<br>仅允许步兵默认名/白名单</span>
-              <span>{{ status?.settings.infantryOnlyUntilSeconds ?? 50 }}s+<br>开放建队</span>
-              <span>{{ status?.settings.maxViolationCountBeforeKick ?? 15 }} 次<br>踢出阈值</span>
-            </div>
-          </aside>
         </div>
       </template>
     </PageHeader>
 
     <div v-if="error" class="error-banner">{{ error }}</div>
 
+    <div class="rules-bar">
+      <div class="rules-item">
+        <strong>0 - {{ status?.settings.noSquadCreationSeconds ?? 20 }}s</strong>
+        <span>禁止建队</span>
+      </div>
+      <div class="rules-item">
+        <strong>{{ status?.settings.noSquadCreationSeconds ?? 20 }} - {{ status?.settings.infantryOnlyUntilSeconds ?? 50 }}s</strong>
+        <span>仅允许步兵/白名单</span>
+      </div>
+      <div class="rules-item">
+        <strong>{{ status?.settings.infantryOnlyUntilSeconds ?? 50 }}s+</strong>
+        <span>开放建队</span>
+      </div>
+      <div class="rules-item">
+        <strong>{{ status?.settings.maxViolationCountBeforeKick ?? 15 }} 次</strong>
+        <span>踢出阈值</span>
+      </div>
+    </div>
+
     <PageCard
       class="guard-hero"
       title="运行总览"
-      description="显示当前窗口、时钟可信度、执行状态，以及是否已切换到强制打开。"
       compact
     >
       <template #actions>
@@ -77,14 +86,15 @@
         </div>
 
         <aside class="hero-actions">
-          <button type="button" class="danger-btn" :disabled="actionBusy" @click="unlockRound">
-            {{ status?.session.manualUnlockAt ? "已强制打开" : "强制打开" }}
-          </button>
-          <button type="button" class="danger-btn" :disabled="actionBusy" @click="resetSession">
-            重置会话
-          </button>
-          <p>强制打开只影响当前局。它会跳过锚点或手动时钟带来的安全锁，但仍然按当前 `logClockSeconds` 所在窗口执行禁建、步兵限定或开放判定。</p>
-          <p v-if="status?.session.manualUnlockAt">当前已经强制打开，后续创建会继续按照当前时间窗口规则处理。</p>
+          <div class="hero-btns">
+            <button type="button" class="danger-btn" :disabled="actionBusy" @click="unlockRound">
+              {{ status?.session.manualUnlockAt ? "已强制打开" : "强制打开" }}
+            </button>
+            <button type="button" class="danger-btn" :disabled="actionBusy" @click="resetSession">
+              重置会话
+            </button>
+          </div>
+          <p>强制打开跳过安全锁，按当前 `logClockSeconds` 窗口执行判定。</p>
         </aside>
       </div>
     </PageCard>
@@ -220,12 +230,37 @@
           </article>
         </div>
       </PageCard>
+
+      <PageCard
+        class="xm-log-panel"
+        title="建队事件日志"
+        description="实时追踪来自日志解析器的建队原始确认事件 (/xm 信号)。"
+        compact
+      >
+        <template #actions>
+          <button type="button" class="ghost-btn" @click="clearXmLines">清空</button>
+        </template>
+        <div v-if="!xmLines.length" class="empty-state">暂无实时建队事件。</div>
+        <div v-else class="xm-log-list">
+          <article
+            v-for="entry in xmLines.slice().reverse()"
+            :key="`xm-${entry.seq}`"
+            class="xm-log-row"
+          >
+            <div class="xm-log-row-head">
+              <span class="xm-log-time">{{ formatConsoleTime(entry) }}</span>
+              <span class="xm-log-scope">[{{ entry.scope || "MODULE" }}]</span>
+            </div>
+            <div class="xm-log-message">{{ extractXmMessage(entry.message || "") }}</div>
+          </article>
+        </div>
+      </PageCard>
     </section>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import PageHeader from "../components/common/PageHeader.vue";
 import PageCard from "../components/common/PageCard.vue";
 import {
@@ -237,6 +272,7 @@ import {
   type FairSquadGuardStatus,
 } from "../app/fairSquadGuardApi";
 import { useSettingsStore } from "../stores/settings.store";
+import { useConsoleLines, type ConsoleLine } from "../composables/useConsoleLines";
 
 const settings = useSettingsStore();
 const status = ref<FairSquadGuardStatus | null>(null);
@@ -244,6 +280,16 @@ const records = ref<FairSquadGuardRecord[]>([]);
 const loading = ref(false);
 const actionBusy = ref(false);
 const error = ref("");
+
+const xmFilters = reactive({
+  stream: "modules",
+  scope: "all",
+  level: "all",
+  q: "/xm [SquadLifecycle]",
+  paused: false,
+});
+
+const { lines: xmLines, clearVisibleLines: clearXmLines } = useConsoleLines(xmFilters);
 
 const statusTone = computed(() => {
   if (!status.value?.active) return "danger";
@@ -311,6 +357,27 @@ function formatTime(value: unknown) {
   return date.toLocaleString("zh-CN", { hour12: false });
 }
 
+function formatConsoleTime(entry: ConsoleLine): string {
+  if (entry.time) {
+    const text = String(entry.time);
+    const iso = text.match(/T(\d{2}:\d{2}:\d{2})/);
+    if (iso) return iso[1];
+    const plain = text.match(/(\d{2}:\d{2}:\d{2})/);
+    if (plain) return plain[1];
+    return text;
+  }
+  return "";
+}
+
+function extractXmMessage(text: string): string | null {
+  const trimmed = String(text ?? "").trimStart();
+  if (!trimmed.toLowerCase().startsWith("/xm")) {
+    return null;
+  }
+  const content = trimmed.slice(3).trimStart();
+  return content || "(空内容)";
+}
+
 function creatorLabel(record: FairSquadGuardRecord) {
   if (record.creatorName || record.creatorSteamId || record.creatorEosId) {
     return record.creatorName || record.creatorSteamId || record.creatorEosId;
@@ -327,9 +394,35 @@ onMounted(() => {
 .fair-squad-guard-page {
   position: relative;
   display: grid;
-  gap: 16px;
-  padding: 16px;
+  gap: 12px;
+  padding: 12px 16px;
   overflow: visible;
+}
+
+.rules-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.rules-item {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.24);
+}
+
+.rules-item strong {
+  font-size: 13px;
+  color: var(--color-text-primary);
+}
+
+.rules-item span {
+  font-size: 11px;
+  color: var(--color-text-muted);
 }
 
 .fair-squad-guard-page::before {
@@ -417,56 +510,83 @@ onMounted(() => {
 
 .monitor-grid {
   display: grid;
-  grid-template-columns: minmax(250px, 0.82fr) minmax(320px, 1fr) minmax(360px, 1.2fr);
+  grid-template-columns: minmax(200px, 0.6fr) minmax(240px, 0.8fr) minmax(280px, 1fr) minmax(280px, 1fr);
   gap: 12px;
   align-items: start;
 }
 
-.header-actions {
+.xm-log-panel :deep(.page-card) {
+  height: auto;
+  border-color: rgba(250, 204, 21, 0.22);
+  background:
+    radial-gradient(circle at top right, rgba(250, 204, 21, 0.08), transparent 34%),
+    var(--color-bg-card);
+}
+
+.xm-log-panel :deep(.card-body) {
+  padding-right: 18px;
+}
+
+.xm-log-list {
   display: grid;
-  justify-items: end;
+  gap: 6px;
+  max-height: 560px;
+  overflow: auto;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+}
+
+.xm-log-row {
+  padding: 8px 10px;
+  border: 1px solid rgba(250, 204, 21, 0.18);
+  border-radius: 12px;
+  background: rgba(250, 204, 21, 0.05);
+}
+
+.xm-log-row-head {
+  display: flex;
   gap: 8px;
-  min-width: min(420px, 100%);
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.xm-log-time {
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-family: var(--font-mono);
+}
+
+.xm-log-scope {
+  color: #fde047;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.xm-log-message {
+  color: #fef3c7;
+  font-size: 11px;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.header-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
 }
 
 .header-toolbar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 8px;
-  flex-wrap: wrap;
 }
 
-.header-rules {
-  width: min(420px, 100%);
-  padding: 10px 12px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 16px;
-  background: rgba(15, 23, 42, 0.24);
-}
-
-.header-rules strong {
-  display: block;
-  margin: 0 0 8px;
-  font-size: 12px;
-  color: var(--color-text-primary);
-}
-
-.header-rules-grid {
+.hero-btns {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.header-rules-grid span {
-  display: block;
-  padding: 8px 9px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--color-text-muted);
-  font-size: 11px;
-  line-height: 1.35;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 
 .hero-badges,
@@ -571,9 +691,8 @@ onMounted(() => {
 .hero-actions {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  align-items: stretch;
-  padding: 14px;
+  gap: 12px;
+  padding: 12px;
   border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 16px;
   background: rgba(15, 23, 42, 0.22);
@@ -767,6 +886,12 @@ onMounted(() => {
   color: var(--color-text);
 }
 
+@media (max-width: 1440px) {
+  .monitor-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 @media (max-width: 980px) {
   .hero-grid,
   .detail-grid,
@@ -790,14 +915,6 @@ onMounted(() => {
 
   .header-toolbar {
     justify-content: flex-start;
-  }
-
-  .header-rules {
-    width: 100%;
-  }
-
-  .header-rules-grid {
-    grid-template-columns: 1fr;
   }
 
   .leaderboard,

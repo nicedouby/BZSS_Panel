@@ -115,7 +115,6 @@
               :playtimes="playtimes"
               :combat-stats-lookup="combatStatsLookup"
               :density-mode="pageState.densityMode"
-              :selected-player-id="pageState.selectedPlayerId"
               :multi-select-mode="multiSelectMode"
               :selected-player-ids="selectedPlayerIds"
               @select-player="selectPlayer"
@@ -176,7 +175,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch, provide } from "vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useRoute } from "vue-router";
 import { apiGet, apiPost } from "../app/apiClient";
@@ -452,6 +451,8 @@ const staleText = computed(() => {
 const stablePlaytimes = ref<Record<string, any>>({});
 const squadLifecycleLookup = computed(() => buildSquadLifecycleLookup(squadLifecycleCurrent.value));
 const playtimes = computed(() => stablePlaytimes.value);
+
+provide("selectedPlayerId", computed(() => pageState.selectedPlayerId));
 
 const viewerSteam64 = computed(() => normalizeSteam64(auth.user?.steam64));
 const viewerAutoSwapEnabled = computed(() => auth.user?.viewerTeamAutoSwapEnabled !== false);

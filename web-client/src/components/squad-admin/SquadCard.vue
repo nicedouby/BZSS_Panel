@@ -60,7 +60,6 @@
           :player="squad.leader"
           :playtime-hours="getPlayerPlaytime(squad.leader.steamId)"
           :combat-stats="getPlayerCombatStats(squad.leader)"
-          :selected="String(selectedPlayerId) === String(squad.leader.playerId)"
           :multi-select-mode="multiSelectMode"
           :checked="isPlayerChecked(squad.leader.playerId)"
           @select="handlePlayerSelect"
@@ -77,7 +76,6 @@
           :player="member"
           :playtime-hours="getPlayerPlaytime(member.steamId)"
           :combat-stats="getPlayerCombatStats(member)"
-          :selected="String(selectedPlayerId) === String(member.playerId)"
           :multi-select-mode="multiSelectMode"
           :checked="isPlayerChecked(member.playerId)"
           @select="handlePlayerSelect"
@@ -89,7 +87,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, inject, ref } from "vue";
 import type { PlayerRowViewModel, SquadViewModel, CombatStats } from "../../types/squad-admin.types";
 import StatusBadge from "../common/StatusBadge.vue";
 import SquadPlayerRow from "./SquadPlayerRow.vue";
@@ -100,7 +98,6 @@ const props = defineProps<{
   squad: SquadViewModel;
   playtimes: Record<string, any>;
   combatStatsLookup: Record<string, CombatStats>;
-  selectedPlayerId?: string | number | null;
   densityMode?: "comfortable" | "compact";
   multiSelectMode?: boolean;
   selectedPlayerIds?: Set<string | number>;
@@ -112,6 +109,8 @@ const emit = defineEmits<{
   (event: "select-squad", squad: SquadViewModel): void;
 }>();
 
+const selectedPlayerId = inject<any>("selectedPlayerId", ref(null));
+
 const teamColorClass = computed(() => {
   if (props.squad.teamId === 1) return "team1-context";
   if (props.squad.teamId === 2) return "team2-context";
@@ -119,9 +118,9 @@ const teamColorClass = computed(() => {
 });
 
 const hasSelectedPlayer = computed(() => {
-  if (props.selectedPlayerId == null) return false;
-  if (props.squad.leader && String(props.squad.leader.playerId) === String(props.selectedPlayerId)) return true;
-  return props.squad.members.some((member) => String(member.playerId) === String(props.selectedPlayerId));
+  if (selectedPlayerId.value == null) return false;
+  if (props.squad.leader && String(props.squad.leader.playerId) === String(selectedPlayerId.value)) return true;
+  return props.squad.members.some((member) => String(member.playerId) === String(selectedPlayerId.value));
 });
 
 const squadPlayers = computed(() => {

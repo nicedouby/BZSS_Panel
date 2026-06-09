@@ -142,7 +142,7 @@ export function createSquadLifecycleModule({ core, config, logger }) {
     parsed.matchId = matchId;
     rememberCreateEvent(serverId, parsed);
 
-    logWithFallback(moduleLogger, "info", `/xm [SquadLifecycle] squad create accepted: S${parsed.squadId} ${parsed.squadName}`, {
+    logWithFallback(moduleLogger, "info", `/xm [SquadLifecycle] squad create accepted: S${parsed.squadId} ${parsed.squadName} by ${parsed.creatorName || "unknown"}`, {
       operation: "squadLifecycle.createAccepted",
       data: {
         serverId,
@@ -224,7 +224,7 @@ export function createSquadLifecycleModule({ core, config, logger }) {
       pendingCreateLogs.delete(buildPendingKey(pending));
       emitSquadCreatedEvent(serverId, matchId, flushedParsed, record);
 
-      logWithFallback(moduleLogger, "info", `[SquadLifecycle] pending create flushed to LOG: T${matched.teamID ?? matched.teamId ?? ""} S${pending.squadId} ${pending.squadName || matched.squadName || ""}`, {
+      logWithFallback(moduleLogger, "info", `/xm [SquadLifecycle] pending create flushed: T${matched.teamID ?? matched.teamId ?? ""} S${pending.squadId} ${pending.squadName || matched.squadName || ""} by ${pending.creatorName || "unknown"}`, {
         operation: "squadLifecycle.flushPending",
         data: {
           serverId: pending.serverId,

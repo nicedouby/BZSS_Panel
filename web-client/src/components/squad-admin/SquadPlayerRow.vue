@@ -69,7 +69,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, inject, ref } from "vue";
 import type { PlayerRowViewModel, CombatStats } from "../../types/squad-admin.types";
 import { resolveRoleIcon } from "../../utils/role-icons";
 import { t } from "../../i18n";
@@ -78,7 +78,6 @@ const props = defineProps<{
   player: PlayerRowViewModel;
   playtimeHours: number | null;
   combatStats: CombatStats;
-  selected?: boolean;
   multiSelectMode?: boolean;
   checked?: boolean;
 }>();
@@ -88,7 +87,11 @@ const emit = defineEmits<{
   (event: "toggle-check", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
 }>();
 
-const isSelected = computed(() => props.selected ?? false);
+const selectedPlayerId = inject<any>("selectedPlayerId", ref(null));
+const isSelected = computed(() => {
+  if (selectedPlayerId.value == null || props.player.playerId == null) return false;
+  return String(selectedPlayerId.value) === String(props.player.playerId);
+});
 const roleIcon = computed(() => resolveRoleIcon(props.player.role));
 const isRoleIconImage = computed(() => roleIcon.value.icon.startsWith("/"));
 

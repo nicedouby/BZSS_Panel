@@ -45,7 +45,6 @@
         :playtimes="playtimes"
         :combat-stats-lookup="combatStatsLookup"
         :density-mode="densityMode"
-        :selected-player-id="selectedPlayerId"
         :multi-select-mode="multiSelectMode"
         :selected-player-ids="selectedPlayerIds"
         @select-player="($event) => $emit('select-player', $event)"
@@ -66,7 +65,6 @@ const props = defineProps<{
   team: TeamViewModel;
   playtimes: Record<string, any>;
   combatStatsLookup: Record<string, CombatStats>;
-  selectedPlayerId?: string | number | null;
   densityMode?: "comfortable" | "compact";
   multiSelectMode?: boolean;
   selectedPlayerIds?: Set<string | number>;

@@ -1,7 +1,8 @@
 <template>
   <Teleport to="body">
-    <Transition :name="transitionName">
-      <div v-if="open && props.player" :class="rootClass" @click.self="close">
+    <Transition :name="transitionName" :appear="true">
+      <div v-if="open && props.player" :class="rootClass">
+        <div class="drawer-backdrop" @click="close" />
         <aside
           :class="panelClass"
           :style="panelStyle"
@@ -332,22 +333,22 @@ const panelStyle = computed(() => {
   const compactViewport = viewport.value.width < 920 || viewport.value.height < 760;
   if (compactViewport) {
     return {
-      left: "12px",
-      top: "12px",
+      left: "50%",
+      top: "50%",
       width: "calc(100vw - 24px)",
       maxHeight: "calc(100vh - 24px)",
-      transform: "none",
+      transform: "translate(-50%, -50%)",
     };
   }
 
   const panelWidth = Math.min(480, Math.max(380, Math.round(viewport.value.width * 0.34)));
 
   return {
-    left: "12px",
-    top: "12px",
+    left: "50%",
+    top: "50%",
     width: `${panelWidth}px`,
     maxHeight: `${Math.max(320, viewport.value.height - 48)}px`,
-    transform: "none",
+    transform: "translate(-50%, -50%)",
   };
 });
 const showAdvanced = ref(false);
@@ -381,11 +382,13 @@ const teamColorClass = computed(() => {
   return "neutral";
 });
 const rawDataText = computed(() => (showAdvanced.value ? safeStringify(props.player?.raw) : ""));
+
 const playerDatabaseSearchKey = computed(() => {
   return String(props.player?.steamId ?? "").trim()
     || String(props.player?.eosId ?? "").trim()
     || String(props.player?.name ?? "").trim();
 });
+
 const playerDatabaseRecord = computed(() => databaseDetail.value?.player ?? null);
 const playerDatabaseSummary = computed(() => databaseDetail.value?.summary ?? null);
 const effectivePlaytimeSeconds = computed(() => {
