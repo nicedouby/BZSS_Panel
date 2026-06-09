@@ -42,6 +42,8 @@
         v-for="squad in team.squads"
         :key="`${squad.squadId}`"
         :squad="squad"
+        :playtimes="playtimes"
+        :combat-stats-lookup="combatStatsLookup"
         :density-mode="densityMode"
         :selected-player-id="selectedPlayerId"
         :multi-select-mode="multiSelectMode"
@@ -56,11 +58,14 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import type { PlayerRowViewModel, TeamViewModel, SquadViewModel } from "../../types/squad-admin.types";
+import type { PlayerRowViewModel, TeamViewModel, SquadViewModel, CombatStats, SquadLeaderRowViewModel } from "../../types/squad-admin.types";
 import SquadCard from "./SquadCard.vue";
+import { extractPlaytimeHours } from "../../utils/squad-admin-adapter";
 
 const props = defineProps<{
   team: TeamViewModel;
+  playtimes: Record<string, any>;
+  combatStatsLookup: Record<string, CombatStats>;
   selectedPlayerId?: string | number | null;
   densityMode?: "comfortable" | "compact";
   multiSelectMode?: boolean;
@@ -76,16 +81,70 @@ defineEmits<{
 const teamColorClass = computed(() => (props.team.teamColorType === "team1" ? "team1" : "team2"));
 const isComfortable = computed(() => props.densityMode !== "compact");
 
+const teamPlayers = computed(() => {
+  return props.team.squads.flatMap((squad) => {
+    return [
+      ...(squad.leader ? [squad.leader] : []),
+      ...squad.members,
+    ];
+  });
+});
+
+const teamPlaytimeSummary = computed(() => {
+  const playersList = teamPlayers.value;
+  const hoursList = playersList.map(p => extractPlaytimeHours(p.steamId, props.playtimes));
+
+  const known = hoursList.filter((h) => h != null) as number[];
+  const publicPlayers = known.filter((h) => h > 0);
+  const privatePlayers = known.filter((h) => h === 0);
+
+  const totalHours = publicPlayers.reduce((sum, h) => sum + h, 0);
+  const average = publicPlayers.length > 0
+    ? Math.round((totalHours / publicPlayers.length) * 10) / 10
+    : null;
+
+  return {
+    averagePlaytimeHours: average,
+    knownPlaytimePlayers: known.length,
+    publicPlaytimePlayers: publicPlayers.length,
+    privatePlaytimePlayers: privatePlayers.length,
+  };
+});
+
+const teamLeaderPlaytimeSummary = computed(() => {
+  const leaders = props.team.squads
+    .filter((squad) => squad.squadId != null)
+    .map((squad) => squad.leader)
+    .filter((leader): leader is SquadLeaderRowViewModel => Boolean(leader));
+
+  const hoursList = leaders.map(p => extractPlaytimeHours(p.steamId, props.playtimes));
+
+  const known = hoursList.filter((h) => h != null) as number[];
+  const publicPlayers = known.filter((h) => h > 0);
+
+  const totalHours = publicPlayers.reduce((sum, h) => sum + h, 0);
+  const average = publicPlayers.length > 0
+    ? Math.round((totalHours / publicPlayers.length) * 10) / 10
+    : null;
+
+  return {
+    averagePlaytimeHours: average,
+    knownPlaytimePlayers: known.length,
+  };
+});
+
 const teamAveragePlaytimeShortText = computed(() => {
-  if (props.team.knownPlaytimePlayers <= 0) return "--";
-  if (props.team.averagePlaytimeHours == null) return "--";
-  return `${props.team.averagePlaytimeHours}h`;
+  const summary = teamPlaytimeSummary.value;
+  if (summary.knownPlaytimePlayers <= 0) return "--";
+  if (summary.averagePlaytimeHours == null) return "--";
+  return `${summary.averagePlaytimeHours}h`;
 });
 
 const teamLeaderAveragePlaytimeShortText = computed(() => {
-  if (props.team.knownLeaderPlaytimePlayers <= 0) return "--";
-  if (props.team.leaderAveragePlaytimeHours == null) return "--";
-  return `${props.team.leaderAveragePlaytimeHours}h`;
+  const summary = teamLeaderPlaytimeSummary.value;
+  if (summary.knownPlaytimePlayers <= 0) return "--";
+  if (summary.averagePlaytimeHours == null) return "--";
+  return `${summary.averagePlaytimeHours}h`;
 });
 </script>
 

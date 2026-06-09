@@ -691,7 +691,9 @@
         "enabled": true
       },
       "fairTeamBalance": {
-        "enabled": true
+        "enabled": true,
+        "broadcastOnApproved": true,
+        "broadcastOnViolation": true
       }
     }
   },

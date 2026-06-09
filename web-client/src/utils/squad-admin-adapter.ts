@@ -687,7 +687,7 @@ function normalizeSteam64(value: unknown): string {
   return /^\d{17}$/.test(text) ? text : "";
 }
 
-function resolveCombatStats(player: Record<string, any> = {}, lookup: Record<string, CombatStats> = {}): CombatStats {
+export function resolveCombatStats(player: Record<string, any> = {}, lookup: Record<string, CombatStats> = {}): CombatStats {
   const keys = collectCombatIdentityKeys(player);
   for (const key of keys) {
     const stats = lookup[key];

@@ -1,4 +1,5 @@
 import { defineStore } from "pinia";
+import { ref, shallowRef } from "vue";
 
 export interface RuntimePlayer {
   playerID: number | null;
@@ -14,30 +15,41 @@ export interface RuntimePlayer {
   [key: string]: unknown;
 }
 
-export const usePlayerStore = defineStore("players", {
-  state: () => ({
-    active: [] as RuntimePlayer[],
-    recentlyDisconnected: [] as RuntimePlayer[],
-    bySteamID: {} as Record<string, RuntimePlayer>,
-    byEOSID: {} as Record<string, RuntimePlayer>,
-    byPlayerID: {} as Record<string, RuntimePlayer>,
-    byName: {} as Record<string, RuntimePlayer>,
-    updatedAt: 0,
-    stale: false,
-  }),
-  actions: {
-    applySnapshot(snapshot: any) {
-      this.active = snapshot?.active ?? [];
-      this.recentlyDisconnected = snapshot?.recentlyDisconnected ?? [];
-      this.bySteamID = snapshot?.bySteamID ?? {};
-      this.byEOSID = snapshot?.byEOSID ?? {};
-      this.byPlayerID = snapshot?.byPlayerID ?? {};
-      this.byName = snapshot?.byName ?? {};
-      this.updatedAt = Number(snapshot?.updatedAt ?? Date.now());
-      this.stale = Boolean(snapshot?.stale);
-    },
-    markStale() {
-      this.stale = true;
-    },
-  },
+export const usePlayerStore = defineStore("players", () => {
+  const active = shallowRef<RuntimePlayer[]>([]);
+  const recentlyDisconnected = shallowRef<RuntimePlayer[]>([]);
+  const bySteamID = shallowRef<Record<string, RuntimePlayer>>({});
+  const byEOSID = shallowRef<Record<string, RuntimePlayer>>({});
+  const byPlayerID = shallowRef<Record<string, RuntimePlayer>>({});
+  const byName = shallowRef<Record<string, RuntimePlayer>>({});
+  const updatedAt = ref(0);
+  const stale = ref(false);
+
+  function applySnapshot(snapshot: any) {
+    active.value = snapshot?.active ?? [];
+    recentlyDisconnected.value = snapshot?.recentlyDisconnected ?? [];
+    bySteamID.value = snapshot?.bySteamID ?? {};
+    byEOSID.value = snapshot?.byEOSID ?? {};
+    byPlayerID.value = snapshot?.byPlayerID ?? {};
+    byName.value = snapshot?.byName ?? {};
+    updatedAt.value = Number(snapshot?.updatedAt ?? Date.now());
+    stale.value = Boolean(snapshot?.stale);
+  }
+
+  function markStale() {
+    stale.value = true;
+  }
+
+  return {
+    active,
+    recentlyDisconnected,
+    bySteamID,
+    byEOSID,
+    byPlayerID,
+    byName,
+    updatedAt,
+    stale,
+    applySnapshot,
+    markStale,
+  };
 });

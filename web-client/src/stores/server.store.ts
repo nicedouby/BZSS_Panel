@@ -1,29 +1,38 @@
 import { defineStore } from "pinia";
+import { ref, shallowRef } from "vue";
 
-export const useServerStore = defineStore("server", {
-  state: () => ({
-    snapshot: {} as Record<string, any>,
-    stale: false,
-    updatedAt: 0,
-  }),
-  actions: {
-    applySnapshot(snapshot: any) {
-      this.snapshot = snapshot ?? {};
-      this.stale = Boolean(snapshot?.stale);
-      this.updatedAt = Number(snapshot?.updatedAt ?? Date.now());
-    },
-    applyStableSnapshot(snapshot: any) {
-      const existing = isRecord(this.snapshot) ? this.snapshot : {};
-      const incoming = isRecord(snapshot) ? snapshot : {};
+export const useServerStore = defineStore("server", () => {
+  const snapshot = shallowRef<Record<string, any>>({});
+  const stale = ref(false);
+  const updatedAt = ref(0);
 
-      this.snapshot = mergeStableSnapshot(existing, incoming);
-      this.stale = Boolean(incoming?.stale);
-      this.updatedAt = Number(incoming?.updatedAt ?? Date.now());
-    },
-    markStale() {
-      this.stale = true;
-    },
-  },
+  function applySnapshot(newSnapshot: any) {
+    snapshot.value = newSnapshot ?? {};
+    stale.value = Boolean(newSnapshot?.stale);
+    updatedAt.value = Number(newSnapshot?.updatedAt ?? Date.now());
+  }
+
+  function applyStableSnapshot(newSnapshot: any) {
+    const existing = isRecord(snapshot.value) ? snapshot.value : {};
+    const incoming = isRecord(newSnapshot) ? newSnapshot : {};
+
+    snapshot.value = mergeStableSnapshot(existing, incoming);
+    stale.value = Boolean(incoming?.stale);
+    updatedAt.value = Number(incoming?.updatedAt ?? Date.now());
+  }
+
+  function markStale() {
+    stale.value = true;
+  }
+
+  return {
+    snapshot,
+    stale,
+    updatedAt,
+    applySnapshot,
+    applyStableSnapshot,
+    markStale,
+  };
 });
 
 const TOP_LEVEL_STABLE_KEYS = new Set([

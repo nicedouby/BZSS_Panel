@@ -70,12 +70,14 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import type { PlayerRowViewModel } from "../../types/squad-admin.types";
+import type { PlayerRowViewModel, CombatStats } from "../../types/squad-admin.types";
 import { resolveRoleIcon } from "../../utils/role-icons";
 import { t } from "../../i18n";
 
 const props = defineProps<{
   player: PlayerRowViewModel;
+  playtimeHours: number | null;
+  combatStats: CombatStats;
   selected?: boolean;
   multiSelectMode?: boolean;
   checked?: boolean;
@@ -95,9 +97,9 @@ const displayName = computed(() => {
   return raw || "未知玩家";
 });
 
-const playtimeText = computed(() => formatPlaytime(props.player.playtimeHours));
+const playtimeText = computed(() => formatPlaytime(props.playtimeHours));
 const playtimeTitle = computed(() => {
-  const hours = props.player.playtimeHours;
+  const hours = props.playtimeHours;
   if (typeof hours !== "number" || !Number.isFinite(hours) || hours === 0) return "Steam 时长未公开";
   return `Steam 游戏时长: ${hours.toFixed(1)}h`;
 });
@@ -129,11 +131,11 @@ const secondaryIdentityText = computed(() => {
   return "";
 });
 
-const kills = computed(() => normalizeStat(props.player.combatStats?.kills));
-const downs = computed(() => normalizeStat(props.player.combatStats?.downs));
-const deaths = computed(() => normalizeStat(props.player.combatStats?.deaths));
-const tk = computed(() => normalizeStat(props.player.combatStats?.tk));
-const revives = computed(() => normalizeStat(props.player.combatStats?.revives));
+const kills = computed(() => normalizeStat(props.combatStats?.kills));
+const downs = computed(() => normalizeStat(props.combatStats?.downs));
+const deaths = computed(() => normalizeStat(props.combatStats?.deaths));
+const tk = computed(() => normalizeStat(props.combatStats?.tk));
+const revives = computed(() => normalizeStat(props.combatStats?.revives));
 
 const squadlessText = computed(() => {
   if (props.player.squadId != null) return "";

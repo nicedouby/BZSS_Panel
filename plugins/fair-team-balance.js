@@ -112,6 +112,24 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     }
   }
 
+  function shouldBroadcastApproved() {
+    return runtimeConfig.broadcastOnApproved !== false;
+  }
+
+  function shouldBroadcastViolation() {
+    return runtimeConfig.broadcastOnViolation !== false;
+  }
+
+  async function broadcastApprovedMessage(message, reason, meta = {}) {
+    if (!shouldBroadcastApproved()) return null;
+    return broadcastMessage(message, reason, meta);
+  }
+
+  async function broadcastViolationMessage(message, reason, meta = {}) {
+    if (!shouldBroadcastViolation()) return null;
+    return broadcastMessage(message, reason, meta);
+  }
+
   async function warnPlayer(player, message, reason, meta = {}) {
     const warner = getWarner();
     const text = normalizeText(message);
@@ -150,6 +168,12 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       return `${actionLabel}: ${safePlayerName}`;
     }
     return `${actionLabel}: ${safePlayerName}，公共TB剩余 ${state.round.publicTbRemaining}/${runtimeConfig.publicTbLimit}`;
+  }
+
+  function buildViolationBroadcastMessage({ playerName = "", actionLabel = "公平跳边", reason = "" } = {}) {
+    const safePlayerName = normalizeText(playerName) || "unknown";
+    const safeReason = normalizeText(reason) || "已被规则拦截";
+    return `${actionLabel}已被拦截: ${safePlayerName}，原因: ${safeReason}`;
   }
 
   function getOnlinePlayerSnapshot(serverId = "", event = {}) {
@@ -987,6 +1011,13 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       await warnPlayer(actor, `公平跳边失败: ${validation.message}`, "fair_tb_rejected", {
         relatedEventId: normalizeText(event?.id ?? event?.seq),
       });
+      await broadcastViolationMessage(buildViolationBroadcastMessage({
+        playerName,
+        actionLabel: "公平跳边",
+        reason: validation.message,
+      }), "fair_tb_rejected_broadcast", {
+        relatedEventId: normalizeText(event?.id ?? event?.seq),
+      });
       return {
         ok: false,
         error: validation.error,
@@ -1133,6 +1164,13 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       await warnPlayer(actor, `公平跳边失败: ${validation.message}`, failureReason, {
         relatedEventId: sourceMessageId,
       });
+      await broadcastViolationMessage(buildViolationBroadcastMessage({
+        playerName,
+        actionLabel: action === "sqtb" ? "公平跳边申请" : "公平跳边",
+        reason: validation.message,
+      }), action === "sqtb" ? "fair_sqtb_rejected_broadcast" : "fair_tb_rejected_broadcast", {
+        relatedEventId: sourceMessageId,
+      });
       return {
         ok: false,
         error: validation.error,
@@ -1168,6 +1206,13 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         message: normalizeText(switchResult?.message) || "TeamBalance rejected the switch.",
       });
       await warnPlayer(actor, `公平跳边失败: ${normalizeText(switchResult?.message) || "跳边执行被拒绝"}`, action === "sqtb" ? "fair_sqtb_switch_rejected" : "fair_tb_switch_rejected", {
+        relatedEventId: sourceMessageId,
+      });
+      await broadcastViolationMessage(buildViolationBroadcastMessage({
+        playerName,
+        actionLabel: "公平跳边",
+        reason: normalizeText(switchResult?.message) || "跳边执行被拒绝",
+      }), action === "sqtb" ? "fair_sqtb_switch_rejected_broadcast" : "fair_tb_switch_rejected_broadcast", {
         relatedEventId: sourceMessageId,
       });
       return {
@@ -1212,7 +1257,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     });
 
     if (action === "tb") {
-      await broadcastMessage(buildQuotaBroadcastMessage({
+      await broadcastApprovedMessage(buildQuotaBroadcastMessage({
         playerName,
         mode: Boolean(validation.mode === "warmup")
           ? "warmup_tb"
@@ -1235,7 +1280,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       };
     }
 
-    await broadcastMessage(`公平跳边 SQTB 执行成功: ${playerName || "unknown"}`, "fair_sqtb_broadcast", {
+    await broadcastApprovedMessage(`公平跳边 SQTB 执行成功: ${playerName || "unknown"}`, "fair_sqtb_broadcast", {
       relatedEventId: sourceMessageId,
     });
     await warnPlayer(actor, "公平跳边提醒: SQTB 已在人数差允许时执行完成", "fair_sqtb_success_warning", {
@@ -1358,6 +1403,13 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       await warnPlayer(actor, `公平跳边申请失败: ${validation.message}`, "fair_sqtb_rejected", {
         relatedEventId: normalizeText(event?.id ?? event?.seq),
       });
+      await broadcastViolationMessage(buildViolationBroadcastMessage({
+        playerName,
+        actionLabel: "公平跳边申请",
+        reason: validation.message,
+      }), "fair_sqtb_rejected_broadcast", {
+        relatedEventId: normalizeText(event?.id ?? event?.seq),
+      });
       return {
         ok: false,
         error: validation.error,
@@ -1421,6 +1473,13 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       await warnPlayer(eventActor, "认领失败: 未找到对应的公平跳边申请", "fair_sqtb_claim_missing", {
         relatedEventId: normalizeText(event?.id ?? event?.seq),
       });
+      await broadcastViolationMessage(buildViolationBroadcastMessage({
+        playerName: eventActor.playerName,
+        actionLabel: "公平跳边认领",
+        reason: "未找到对应的公平跳边申请",
+      }), "fair_sqtb_claim_missing_broadcast", {
+        relatedEventId: normalizeText(event?.id ?? event?.seq),
+      });
       return {
         ok: false,
         error: "RequestNotFound",
@@ -1432,6 +1491,13 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     if (request.expiresAtMs <= nowMs) {
       await expireSingleRequest(request, { persist: true, reason: "expired_before_claim" });
       await warnPlayer(eventActor, "认领失败: 该公平跳边申请已过期", "fair_sqtb_claim_expired", {
+        relatedEventId: normalizeText(event?.id ?? event?.seq),
+      });
+      await broadcastViolationMessage(buildViolationBroadcastMessage({
+        playerName: eventActor.playerName,
+        actionLabel: "公平跳边认领",
+        reason: "该公平跳边申请已过期",
+      }), "fair_sqtb_claim_expired_broadcast", {
         relatedEventId: normalizeText(event?.id ?? event?.seq),
       });
       return {
@@ -1472,6 +1538,13 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         message: validation.message,
       });
       await warnPlayer(actor, `认领失败: ${validation.message}`, "fair_sqtb_claim_rejected", {
+        relatedEventId: normalizeText(event?.id ?? event?.seq),
+      });
+      await broadcastViolationMessage(buildViolationBroadcastMessage({
+        playerName: claimantName,
+        actionLabel: "公平跳边认领",
+        reason: validation.message,
+      }), "fair_sqtb_claim_rejected_broadcast", {
         relatedEventId: normalizeText(event?.id ?? event?.seq),
       });
       return {
@@ -1533,6 +1606,13 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       request.claimedAtMs = previousRequestState.claimedAtMs;
       if (claimantKey) state.round.usedPlayerKeys.delete(claimantKey);
       await warnPlayer(actor, `认领失败: ${approvalResult?.message || "执行失败"}`, "fair_sqtb_claim_rejected", {
+        relatedEventId: normalizeText(event?.id ?? event?.seq),
+      });
+      await broadcastViolationMessage(buildViolationBroadcastMessage({
+        playerName: claimantName,
+        actionLabel: "公平跳边认领",
+        reason: approvalResult?.message || "执行失败",
+      }), "fair_sqtb_claim_approval_rejected_broadcast", {
         relatedEventId: normalizeText(event?.id ?? event?.seq),
       });
       return approvalResult;
@@ -1776,7 +1856,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         await warnPlayer(liveApplicantActor, `你的公平跳边申请已由管理员协助执行成功`, "fair_sqtb_direct_approve_success");
       }
 
-      await broadcastMessage(buildQuotaBroadcastMessage({
+      await broadcastApprovedMessage(buildQuotaBroadcastMessage({
         playerName: liveApplicantActor.playerName,
         mode: direct ? "admin_sqtb" : "claim_sqtb",
       }), direct ? "fair_sqtb_direct_approved_broadcast" : "fair_sqtb_approved_broadcast", {
@@ -2063,6 +2143,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       periodTbLimit: runtimeConfig.periodTbLimit,
       periodSqtbClaimLimit: runtimeConfig.periodSqtbClaimLimit,
       requestTtlMs: runtimeConfig.requestTtlMs,
+      broadcastOnApproved: runtimeConfig.broadcastOnApproved,
+      broadcastOnViolation: runtimeConfig.broadcastOnViolation,
       playerQuotas: listPlayerQuotas(),
       roundUsedCount: state.round.usedPlayerKeys.size,
       activeRequestCount: requests.length,
@@ -2243,6 +2325,8 @@ function readConfig(config) {
     periodSqtbClaimLimit: clampInteger(pluginConfig.periodSqtbClaimLimit, 0, 999, DEFAULT_PERIOD_SQTB_CLAIM_LIMIT),
     periodMs: clampInteger(pluginConfig.periodMs, 60 * 1000, 7 * 24 * 60 * 60 * 1000, DEFAULT_PERIOD_MS),
     requestTtlMs: clampInteger(pluginConfig.requestTtlMs, 100, 60 * 60 * 1000, DEFAULT_REQUEST_TTL_MS),
+    broadcastOnApproved: pluginConfig.broadcastOnApproved !== false,
+    broadcastOnViolation: pluginConfig.broadcastOnViolation !== false,
   };
 }
 

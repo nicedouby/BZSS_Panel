@@ -58,6 +58,8 @@
         <SquadPlayerRow
           v-if="squad.leader"
           :player="squad.leader"
+          :playtime-hours="getPlayerPlaytime(squad.leader.steamId)"
+          :combat-stats="getPlayerCombatStats(squad.leader)"
           :selected="String(selectedPlayerId) === String(squad.leader.playerId)"
           :multi-select-mode="multiSelectMode"
           :checked="isPlayerChecked(squad.leader.playerId)"
@@ -73,6 +75,8 @@
           v-for="member in squad.members"
           :key="`player-${member.playerId}`"
           :player="member"
+          :playtime-hours="getPlayerPlaytime(member.steamId)"
+          :combat-stats="getPlayerCombatStats(member)"
           :selected="String(selectedPlayerId) === String(member.playerId)"
           :multi-select-mode="multiSelectMode"
           :checked="isPlayerChecked(member.playerId)"
@@ -86,13 +90,16 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import type { PlayerRowViewModel, SquadViewModel } from "../../types/squad-admin.types";
+import type { PlayerRowViewModel, SquadViewModel, CombatStats } from "../../types/squad-admin.types";
 import StatusBadge from "../common/StatusBadge.vue";
 import SquadPlayerRow from "./SquadPlayerRow.vue";
 import { t } from "../../i18n";
+import { extractPlaytimeHours, resolveCombatStats } from "../../utils/squad-admin-adapter";
 
 const props = defineProps<{
   squad: SquadViewModel;
+  playtimes: Record<string, any>;
+  combatStatsLookup: Record<string, CombatStats>;
   selectedPlayerId?: string | number | null;
   densityMode?: "comfortable" | "compact";
   multiSelectMode?: boolean;
@@ -117,17 +124,46 @@ const hasSelectedPlayer = computed(() => {
   return props.squad.members.some((member) => String(member.playerId) === String(props.selectedPlayerId));
 });
 
+const squadPlayers = computed(() => {
+  return [
+    ...(props.squad.leader ? [props.squad.leader] : []),
+    ...props.squad.members,
+  ];
+});
+
+const squadPlaytimeSummary = computed(() => {
+  const playersList = squadPlayers.value;
+  const hoursList = playersList.map(p => extractPlaytimeHours(p.steamId, props.playtimes));
+
+  const known = hoursList.filter((h) => h != null) as number[];
+  const publicPlayers = known.filter((h) => h > 0);
+  const privatePlayers = known.filter((h) => h === 0);
+
+  const totalHours = publicPlayers.reduce((sum, h) => sum + h, 0);
+  const average = publicPlayers.length > 0
+    ? Math.round((totalHours / publicPlayers.length) * 10) / 10
+    : null;
+
+  return {
+    averagePlaytimeHours: average,
+    publicPlaytimePlayers: publicPlayers.length,
+    privatePlaytimePlayers: privatePlayers.length,
+    knownPlaytimePlayers: known.length,
+  };
+});
+
 const squadAveragePlaytimeText = computed(() => {
-  if (props.squad.knownPlaytimePlayers <= 0) return "时长未知";
+  const summary = squadPlaytimeSummary.value;
+  if (summary.knownPlaytimePlayers <= 0) return "时长未知";
 
-  const publicText = `公开 ${props.squad.publicPlaytimePlayers}`;
-  const privateText = props.squad.privatePlaytimePlayers > 0 ? `私密 ${props.squad.privatePlaytimePlayers}` : "";
+  const publicText = `公开 ${summary.publicPlaytimePlayers}`;
+  const privateText = summary.privatePlaytimePlayers > 0 ? `私密 ${summary.privatePlaytimePlayers}` : "";
 
-  if (props.squad.averagePlaytimeHours == null) {
+  if (summary.averagePlaytimeHours == null) {
     return `Avg -- · ${publicText}${privateText ? ` · ${privateText}` : ""}`;
   }
 
-  return `Avg ${props.squad.averagePlaytimeHours}h · ${publicText}${privateText ? ` · ${privateText}` : ""}`;
+  return `Avg ${summary.averagePlaytimeHours}h · ${publicText}${privateText ? ` · ${privateText}` : ""}`;
 });
 
 const squadWarnings = computed(() => {
@@ -135,10 +171,20 @@ const squadWarnings = computed(() => {
   if (props.squad.state === "empty") items.push("Empty");
   if (props.squad.state === "no_leader") items.push("No leader");
   if (props.squad.isLocked) items.push("Locked");
-  if (props.squad.knownPlaytimePlayers <= 0) items.push("No time data");
-  if (props.squad.averagePlaytimeHours != null && props.squad.averagePlaytimeHours < 10) items.push("Low avg");
+
+  const summary = squadPlaytimeSummary.value;
+  if (summary.knownPlaytimePlayers <= 0) items.push("No time data");
+  if (summary.averagePlaytimeHours != null && summary.averagePlaytimeHours < 10) items.push("Low avg");
   return items.slice(0, 3);
 });
+
+function getPlayerPlaytime(steamId: string | null | undefined): number | null {
+  return extractPlaytimeHours(steamId, props.playtimes);
+}
+
+function getPlayerCombatStats(player: PlayerRowViewModel): CombatStats {
+  return resolveCombatStats(player.raw || player, props.combatStatsLookup);
+}
 
 function warningTone(label: string): "warn" | "idle" {
   if (label === "Locked" || label === "No leader" || label === "Low avg" || label === "No time data") {

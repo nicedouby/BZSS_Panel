@@ -418,4 +418,55 @@ describe("MatchStatusPage", () => {
 
     wrapper.unmount();
   });
+
+  it("does not refetch playtime for already cached steamIDs", async () => {
+    const playersStore = usePlayerStore();
+
+    const wrapper = mount(MatchStatusPage, {
+      global: {
+        plugins: [[VueQueryPlugin, { queryClient: new QueryClient() }]],
+        stubs: {
+          PlayerCombatTimeline: true,
+          StatusBadge: true,
+          CopyableValue: true,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    // Clear call history on apiGet mock
+    vi.mocked(apiGet).mockClear();
+
+    // Add another player with the same steamID (which is already cached in stablePlaytimes)
+    playersStore.applySnapshot({
+      active: [
+        {
+          playerID: 1,
+          name: "Alice",
+          teamID: 1,
+          squadID: 2,
+          steamID: "76561198000000001",
+          online: true,
+        },
+        {
+          playerID: 2,
+          name: "Bob",
+          teamID: 1,
+          squadID: 2,
+          steamID: "76561198000000001",
+          online: true,
+        }
+      ],
+      updatedAt: Date.now(),
+    });
+
+    await flushPromises();
+
+    // Verify that no new network call is made for playtime-cache
+    const playtimeCacheCalls = vi.mocked(apiGet).mock.calls.filter(call => call[0].includes("playtime-cache"));
+    expect(playtimeCacheCalls.length).toBe(0);
+
+    wrapper.unmount();
+  });
 });

@@ -355,6 +355,37 @@ async function testTbRejectsWhenSwitchWouldNotImproveBalance() {
     assert.equal(harness.teamBalanceCalls.length, 0);
     assert.equal(harness.plugin.api.getState().publicTbRemaining, 5);
     assert.equal(harness.plugin.api.getState().roundUsedCount, 0);
+    assert.equal(harness.broadcasts.length, 1);
+    assert.equal(harness.broadcasts[0].reason, "fair_tb_rejected_broadcast");
+  } finally {
+    await harness.stop();
+  }
+}
+
+async function testSqtbRejectBroadcastsOnIntercept() {
+  const harness = await createHarness({
+    webStatus: {
+      isWarmup: true,
+    },
+    matchState: {
+      players: [
+        { name: "Alpha", steamId: "steam-alpha", teamId: 1, squadId: 0 },
+      ],
+    },
+  });
+
+  try {
+    const result = await harness.plugin.api.simulateChatMessage({
+      message: "sqtb",
+      steamId: "steam-alpha",
+      playerName: "Alpha",
+    });
+
+    assert.equal(result.matched, true);
+    assert.equal(result.ok, false);
+    assert.equal(result.error, "WarmupSqtbDisabled");
+    assert.equal(harness.broadcasts.length, 1);
+    assert.equal(harness.broadcasts[0].reason, "fair_sqtb_rejected_broadcast");
   } finally {
     await harness.stop();
   }
@@ -679,6 +710,7 @@ await testTbAllowsSwitchFromLargerTeamAtFortyNineVsFortyEight();
 await testGreenBalanceTbBypassesBasicLayerButUsesRoundQuota();
 await testGreenBalanceTbStillRejectsRoundReuse();
 await testTbRejectsWhenSwitchWouldNotImproveBalance();
+await testSqtbRejectBroadcastsOnIntercept();
 await testTbUsesLivePlayersForCountsAndIncludesCountsInError();
 await testSqtbCreatesRequestAndClaimExecutes();
 await testSqtbDirectApproveStillWorks();

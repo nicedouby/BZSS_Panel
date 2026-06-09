@@ -2,14 +2,14 @@
   <section class="page full-height">
     <header class="chat-header">
       <div class="header-left">
-        <PageHeader title="聊天监控 / Chat Monitor" subtitle="实时聊天过滤与各个玩家频率监控" />
+        <PageHeader title="鉴于聊天监控 / Chat Monitor" subtitle="实时聊天过滤与各个玩家频率监控" />
       </div>
       <div class="header-right">
         <div class="filter-group">
-          <input 
-            v-model="filters.query" 
-            type="text" 
-            placeholder="搜索玩家名/内容..." 
+          <input
+            v-model="filters.query"
+            type="text"
+            placeholder="搜索玩家名/内容..."
             class="filter-input"
           />
           <select v-model="filters.channel" class="filter-select">
@@ -31,20 +31,25 @@
         <div class="chat-dashboard-inline">
           <div class="stats-card-mini">
             <div class="card-header">60分钟活跃趋势</div>
-            <div class="chart-container" ref="chartRef"></div>
+            <div ref="chartRef" class="chart-container"></div>
           </div>
         </div>
 
         <main class="chat-log-area">
           <div class="chat-log-shell">
-            <div class="chat-log" ref="scrollerRef">
-            <div v-if="filteredHistory.length === 0" class="chat-empty-state">暂无聊天记录</div>
-            <article v-for="msg in filteredHistory" :key="msg.seq" class="chat-line" :class="[`channel-${msg.channel.toLowerCase()}`]">
-              <span class="chat-time">{{ formatTime(msg.time) }}</span>
-              <span class="chat-channel">[{{ channelLabels[msg.channel] || msg.channel }}]</span>
-              <span class="chat-name" :title="`${msg.name}${msg.steamID ? ' (' + msg.steamID + ')' : ''}`">{{ msg.name }}:</span>
-              <span class="chat-message">{{ msg.message }}</span>
-            </article>
+            <div ref="scrollerRef" class="chat-log">
+              <div v-if="filteredHistory.length === 0" class="chat-empty-state">暂无聊天记录</div>
+              <article
+                v-for="msg in filteredHistory"
+                :key="msg.seq"
+                class="chat-line"
+                :class="[`channel-${msg.channel.toLowerCase()}`]"
+              >
+                <span class="chat-time">{{ formatTime(msg.time) }}</span>
+                <span class="chat-channel">[{{ channelLabels[msg.channel] || msg.channel }}]</span>
+                <span class="chat-name" :title="`${msg.name}${msg.steamID ? ' (' + msg.steamID + ')' : ''}`">{{ msg.name }}:</span>
+                <span class="chat-message">{{ msg.message }}</span>
+              </article>
             </div>
           </div>
         </main>
@@ -55,7 +60,12 @@
           <div class="card-header">玩家发言频率 (1min)</div>
           <div class="frequency-list">
             <div v-if="playerFrequencies.length === 0" class="empty-hint">暂无活跃发言</div>
-            <div v-for="p in playerFrequencies" :key="p.steamID" class="frequency-item" :class="{ high: p.count >= 5 }">
+            <div
+              v-for="p in playerFrequencies"
+              :key="p.steamID"
+              class="frequency-item"
+              :class="{ high: p.count >= 5 }"
+            >
               <div class="freq-info">
                 <span class="p-name" :title="p.steamID">{{ p.name }}</span>
                 <span class="p-count">{{ p.count }} msg/min</span>
@@ -67,32 +77,7 @@
           </div>
         </div>
 
-        <div class="sidebar-card spammers-box" v-if="activeSpammers.length > 0">
-          <div class="card-header alert">⚠️ 高频警告 (10s)</div>
-          <div class="spammer-list">
-            <div v-for="s in activeSpammers" :key="s.steamID" class="spammer-item">
-              <strong>{{ s.name }}</strong>
-              <span>{{ s.count }} msg</span>
-            </div>
-
-      <aside class="chat-column-right">
-        <div class="sidebar-card">
-          <div class="card-header">玩家发言频率 (1min)</div>
-          <div class="frequency-list">
-            <div v-if="playerFrequencies.length === 0" class="empty-hint">暂无活跃发言</div>
-            <div v-for="p in playerFrequencies" :key="p.steamID" class="frequency-item" :class="{ high: p.count >= 5 }">
-              <div class="freq-info">
-                <span class="p-name" :title="p.steamID">{{ p.name }}</span>
-                <span class="p-count">{{ p.count }} msg/min</span>
-              </div>
-              <div class="freq-bar-bg">
-                <div class="freq-bar-fill" :style="{ width: Math.min(100, p.count * 10) + '%' }"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="sidebar-card spammers-box" v-if="activeSpammers.length > 0">
+        <div v-if="activeSpammers.length > 0" class="sidebar-card spammers-box">
           <div class="card-header alert">⚠️ 高频警告 (10s)</div>
           <div class="spammer-list">
             <div v-for="s in activeSpammers" :key="s.steamID" class="spammer-item">
@@ -163,13 +148,14 @@ const channelLabels: Record<string, string> = {
 
 const filters = reactive({
   query: "",
-  channel: "all"
+  channel: "all",
 });
 
 const filteredHistory = computed(() => {
-  return history.value.filter(msg => {
-    const matchesQuery = !filters.query || 
-      msg.name.toLowerCase().includes(filters.query.toLowerCase()) || 
+  return history.value.filter((msg) => {
+    const matchesQuery =
+      !filters.query ||
+      msg.name.toLowerCase().includes(filters.query.toLowerCase()) ||
       msg.message.toLowerCase().includes(filters.query.toLowerCase());
     const matchesChannel = filters.channel === "all" || msg.channel === filters.channel;
     return matchesQuery && matchesChannel;
@@ -180,9 +166,9 @@ async function fetchData() {
   try {
     const [hRes, sRes] = await Promise.all([
       apiGet<{ history: ChatMessage[] }>("/api/chat/history"),
-      apiGet<{ timeline: StatPoint[], spammers: Spammer[], playerFrequencies: PlayerFreq[] }>("/api/chat/stats")
+      apiGet<{ timeline: StatPoint[]; spammers: Spammer[]; playerFrequencies: PlayerFreq[] }>("/api/chat/stats"),
     ]);
-    
+
     if (hRes.history) history.value = hRes.history;
     if (sRes.timeline) {
       stats.value = sRes.timeline;
@@ -205,27 +191,34 @@ function initChart() {
     xAxis: {
       type: "category",
       show: false,
-      data: []
+      data: [],
     },
     yAxis: { type: "value", show: false },
-    series: [{
-      data: [],
-      type: "line",
-      smooth: true,
-      symbol: "none",
-      areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: "#58a6ff" }, { offset: 1, color: "transparent" }]) },
-      lineStyle: { color: "#58a6ff", width: 1 }
-    }]
+    series: [
+      {
+        data: [],
+        type: "line",
+        smooth: true,
+        symbol: "none",
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: "#58a6ff" },
+            { offset: 1, color: "transparent" },
+          ]),
+        },
+        lineStyle: { color: "#58a6ff", width: 1 },
+      },
+    ],
   };
   myChart.setOption(option);
 }
 
 function updateChart() {
   if (!myChart) return;
-  const seriesData = stats.value.map(p => p.count);
+  const seriesData = stats.value.map((p) => p.count);
   myChart.setOption({
-    xAxis: { data: stats.value.map(p => p.minute) },
-    series: [{ data: seriesData }]
+    xAxis: { data: stats.value.map((p) => p.minute) },
+    series: [{ data: seriesData }],
   });
 }
 
@@ -240,9 +233,12 @@ function scrollToEnd() {
   }
 }
 
-watch(() => filteredHistory.value.length, () => {
-  nextTick(scrollToEnd);
-});
+watch(
+  () => filteredHistory.value.length,
+  () => {
+    nextTick(scrollToEnd);
+  },
+);
 
 let timer: number | null = null;
 onMounted(() => {
@@ -359,7 +355,9 @@ onBeforeUnmount(() => {
   text-transform: uppercase;
 }
 
-.card-header.alert { color: #f85149; }
+.card-header.alert {
+  color: #f85149;
+}
 
 .frequency-list {
   padding: 8px;
@@ -389,7 +387,9 @@ onBeforeUnmount(() => {
   max-width: 150px;
 }
 
-.p-count { color: #8b949e; }
+.p-count {
+  color: #8b949e;
+}
 
 .freq-bar-bg {
   height: 4px;
@@ -404,10 +404,21 @@ onBeforeUnmount(() => {
   transition: width 0.3s ease;
 }
 
-.frequency-item.high .p-count { color: #f85149; }
-.frequency-item.high .freq-bar-fill { background: #f85149; }
+.frequency-item.high .p-count {
+  color: #f85149;
+}
 
-.spammer-list { padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+.frequency-item.high .freq-bar-fill {
+  background: #f85149;
+}
+
+.spammer-list {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .spammer-item {
   display: flex;
   justify-content: space-between;
@@ -437,7 +448,7 @@ onBeforeUnmount(() => {
   min-height: 0;
   overflow-y: auto;
   padding: 8px 16px 16px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
   font-size: 13px;
   line-height: 1.6;
   display: flex;
@@ -453,16 +464,32 @@ onBeforeUnmount(() => {
   align-items: flex-start;
 }
 
-.chat-time { color: #484f58; flex-shrink: 0; }
+.chat-time {
+  color: #484f58;
+  flex-shrink: 0;
+}
+
 .chat-channel {
   font-weight: bold;
   width: 52px;
   flex-shrink: 0;
 }
-.channel-chatall { color: #f85149; }
-.channel-chatteam { color: #58a6ff; }
-.channel-chatsquad { color: #3fb950; }
-.channel-chatadmin { color: #d29922; }
+
+.channel-chatall {
+  color: #f85149;
+}
+
+.channel-chatteam {
+  color: #58a6ff;
+}
+
+.channel-chatsquad {
+  color: #3fb950;
+}
+
+.channel-chatadmin {
+  color: #d29922;
+}
 
 .chat-name {
   color: #c9d1d9;
@@ -473,6 +500,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
 .chat-message {
   color: #edf2f4;
   flex: 1 1 auto;

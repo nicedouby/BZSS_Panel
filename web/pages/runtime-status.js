@@ -31,6 +31,13 @@ export async function renderPage({ root, api, taskManager }) {
         </div>
 
         <div class="card" style="margin-bottom: 20px;">
+          <div class="card-title">内存变化趋势</div>
+          <div class="memory-chart-card">
+            ${renderMemoryChart(system.memoryHistory)}
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 20px;">
           <div class="card-title">系统信息</div>
           <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">
             <div class="status-item">
@@ -128,6 +135,65 @@ export async function renderPage({ root, api, taskManager }) {
 
         .status-item .status-label { font-size: 12px; color: var(--muted); }
         .status-item .status-value { font-weight: 600; font-size: 16px; }
+
+        .memory-chart-card {
+          margin-top: 15px;
+          padding: 16px;
+          border-radius: 12px;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: linear-gradient(180deg, rgba(17, 24, 39, 0.92), rgba(8, 13, 27, 0.96));
+          overflow: hidden;
+        }
+        .memory-chart-shell {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .memory-chart-svg {
+          width: 100%;
+          height: auto;
+          display: block;
+        }
+        .memory-chart-empty {
+          min-height: 220px;
+          display: grid;
+          place-items: center;
+          color: var(--muted);
+          font-size: 13px;
+          border-radius: 10px;
+          background: rgba(255, 255, 255, 0.02);
+          border: 1px dashed rgba(255, 255, 255, 0.08);
+        }
+        .memory-chart-legend {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px 14px;
+          font-size: 12px;
+          color: var(--muted);
+        }
+        .memory-chart-legend-item {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .memory-chart-legend-swatch {
+          width: 10px;
+          height: 10px;
+          border-radius: 999px;
+          display: inline-block;
+        }
+        .memory-chart-caption {
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          flex-wrap: wrap;
+          color: var(--muted);
+          font-size: 12px;
+        }
+        .memory-chart-caption strong {
+          color: var(--text-primary);
+          font-weight: 600;
+        }
 
         .runtime-log-backdrop {
           position: fixed;
@@ -481,6 +547,122 @@ export async function renderPage({ root, api, taskManager }) {
   function formatMemory(bytes) {
     const mb = bytes / 1024 / 1024;
     return `${mb.toFixed(1)} MB`;
+  }
+
+  function renderMemoryChart(history) {
+    const points = Array.isArray(history)
+      ? history
+          .filter((item) => Number.isFinite(Number(item?.timestamp)))
+          .map((item) => ({
+            timestamp: Number(item.timestamp),
+            rss: Number(item.rss ?? 0),
+            heapUsed: Number(item.heapUsed ?? 0),
+            heapTotal: Number(item.heapTotal ?? 0),
+          }))
+          .filter((item) => item.timestamp > 0)
+      : [];
+
+    if (points.length < 2) {
+      return '<div class="memory-chart-empty">暂无足够的内存历史数据，等待下一次采样后显示。</div>';
+    }
+
+    const width = 1000;
+    const height = 260;
+    const padding = { top: 18, right: 20, bottom: 36, left: 58 };
+    const plotWidth = width - padding.left - padding.right;
+    const plotHeight = height - padding.top - padding.bottom;
+    const values = points
+      .flatMap((point) => [point.rss, point.heapUsed, point.heapTotal])
+      .filter((value) => Number.isFinite(value) && value > 0);
+    const minValue = Math.min(...values);
+    const maxValue = Math.max(...values);
+    const range = Math.max(maxValue - minValue, 1);
+    const yMin = Math.max(0, minValue - range * 0.1);
+    const yMax = maxValue + range * 0.15;
+    const yRange = Math.max(yMax - yMin, 1);
+    const startTime = points[0].timestamp;
+    const endTime = points[points.length - 1].timestamp;
+    const timeRange = Math.max(endTime - startTime, 1);
+    const x = (timestamp) => padding.left + ((timestamp - startTime) / timeRange) * plotWidth;
+    const y = (value) => padding.top + (1 - ((value - yMin) / yRange)) * plotHeight;
+    const yBaseline = () => (padding.top + plotHeight).toFixed(2);
+
+    const buildPath = (series) => series
+      .map((point, index) => `${index === 0 ? "M" : "L"} ${x(point.timestamp).toFixed(2)} ${y(point.value).toFixed(2)}`)
+      .join(" ");
+
+    const buildArea = (series) => {
+      const first = series[0];
+      const last = series[series.length - 1];
+      return `${buildPath(series)} L ${x(last.timestamp).toFixed(2)} ${yBaseline()} L ${x(first.timestamp).toFixed(2)} ${yBaseline()} Z`;
+    };
+
+    const formatTick = (timestamp) => new Date(timestamp).toLocaleTimeString("zh-CN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+
+    const latest = points[points.length - 1];
+    const rssSeries = points.map((point) => ({ timestamp: point.timestamp, value: point.rss }));
+    const heapUsedSeries = points.map((point) => ({ timestamp: point.timestamp, value: point.heapUsed }));
+    const heapTotalSeries = points.map((point) => ({ timestamp: point.timestamp, value: point.heapTotal }));
+    const ticks = [
+      { label: formatTick(startTime), x: padding.left, anchor: "start" },
+      { label: formatTick(endTime), x: width - padding.right, anchor: "end" },
+    ];
+
+    const renderLine = (series, stroke, widthValue, dashArray = "") => `
+      <path d="${buildPath(series)}" fill="none" stroke="${stroke}" stroke-width="${widthValue}"${dashArray ? ` stroke-dasharray="${dashArray}"` : ""} stroke-linecap="round" stroke-linejoin="round"></path>
+    `;
+
+    const renderArea = (series, fill) => `
+      <path d="${buildArea(series)}" fill="${fill}" stroke="none"></path>
+    `;
+
+    return `
+      <div class="memory-chart-shell">
+        <div class="memory-chart-caption">
+          <span><strong>当前 RSS</strong> ${formatMemory(latest.rss)}</span>
+          <span>Heap Used ${formatMemory(latest.heapUsed)} · Heap Total ${formatMemory(latest.heapTotal)}</span>
+        </div>
+        <svg class="memory-chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="内存变化趋势图">
+          <defs>
+            <linearGradient id="memory-rss-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="rgba(56, 189, 248, 0.22)"></stop>
+              <stop offset="100%" stop-color="rgba(56, 189, 248, 0)"></stop>
+            </linearGradient>
+            <linearGradient id="memory-heap-used-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="rgba(52, 211, 153, 0.18)"></stop>
+              <stop offset="100%" stop-color="rgba(52, 211, 153, 0)"></stop>
+            </linearGradient>
+          </defs>
+          <rect x="0" y="0" width="${width}" height="${height}" rx="16" fill="rgba(255,255,255,0.02)"></rect>
+          <g opacity="0.4" stroke="rgba(154, 167, 178, 0.18)" stroke-width="1">
+            <line x1="${padding.left}" y1="${padding.top}" x2="${padding.left}" y2="${padding.top + plotHeight}"></line>
+            <line x1="${padding.left}" y1="${padding.top + plotHeight}" x2="${width - padding.right}" y2="${padding.top + plotHeight}"></line>
+            <line x1="${padding.left}" y1="${padding.top + plotHeight * 0.5}" x2="${width - padding.right}" y2="${padding.top + plotHeight * 0.5}"></line>
+          </g>
+          ${renderArea(rssSeries, "url(#memory-rss-fill)")}
+          ${renderArea(heapUsedSeries, "url(#memory-heap-used-fill)")}
+          ${renderLine(heapTotalSeries, "#818cf8", 1.6, "8 6")}
+          ${renderLine(heapUsedSeries, "#34d399", 2.2)}
+          ${renderLine(rssSeries, "#38bdf8", 2.6)}
+          <g fill="#9aa7b2" font-size="12" font-family="Consolas, 'JetBrains Mono', monospace">
+            <text x="${padding.left}" y="16">MB</text>
+            <text x="${padding.left}" y="${height - 12}">${formatMemory(yMin)}</text>
+            <text x="${padding.left}" y="${padding.top + 12}">${formatMemory(yMax)}</text>
+            ${ticks.map((tick) => `<text x="${tick.x}" y="${height - 12}" text-anchor="${tick.anchor}">${escapeHtml(tick.label)}</text>`).join("")}
+          </g>
+        </svg>
+        <div class="memory-chart-legend">
+          <span class="memory-chart-legend-item"><i class="memory-chart-legend-swatch" style="background:#38bdf8"></i>RSS</span>
+          <span class="memory-chart-legend-item"><i class="memory-chart-legend-swatch" style="background:#34d399"></i>Heap Used</span>
+          <span class="memory-chart-legend-item"><i class="memory-chart-legend-swatch" style="background:#818cf8"></i>Heap Total</span>
+        </div>
+      </div>
+    `;
   }
 
   function escapeHtml(value) {

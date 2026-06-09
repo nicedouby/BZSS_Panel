@@ -1,4 +1,5 @@
 import { defineStore } from "pinia";
+import { ref, shallowRef } from "vue";
 
 export interface RuntimeSquad {
   key: string;
@@ -31,24 +32,32 @@ export interface RuntimeSquad {
   squadVehicleClassConfidence?: "high" | "medium" | "low";
 }
 
-export const useSquadStore = defineStore("squads", {
-  state: () => ({
-    list: [] as RuntimeSquad[],
-    byKey: {} as Record<string, RuntimeSquad>,
-    byTeamID: {} as Record<string, RuntimeSquad[]>,
-    updatedAt: 0,
-    stale: false,
-  }),
-  actions: {
-    applySnapshot(snapshot: any) {
-      this.list = snapshot?.list ?? [];
-      this.byKey = snapshot?.byKey ?? {};
-      this.byTeamID = snapshot?.byTeamID ?? {};
-      this.updatedAt = Number(snapshot?.updatedAt ?? Date.now());
-      this.stale = Boolean(snapshot?.stale);
-    },
-    markStale() {
-      this.stale = true;
-    },
-  },
+export const useSquadStore = defineStore("squads", () => {
+  const list = shallowRef<RuntimeSquad[]>([]);
+  const byKey = shallowRef<Record<string, RuntimeSquad>>({});
+  const byTeamID = shallowRef<Record<string, RuntimeSquad[]>>({});
+  const updatedAt = ref(0);
+  const stale = ref(false);
+
+  function applySnapshot(snapshot: any) {
+    list.value = snapshot?.list ?? [];
+    byKey.value = snapshot?.byKey ?? {};
+    byTeamID.value = snapshot?.byTeamID ?? {};
+    updatedAt.value = Number(snapshot?.updatedAt ?? Date.now());
+    stale.value = Boolean(snapshot?.stale);
+  }
+
+  function markStale() {
+    stale.value = true;
+  }
+
+  return {
+    list,
+    byKey,
+    byTeamID,
+    updatedAt,
+    stale,
+    applySnapshot,
+    markStale,
+  };
 });

@@ -112,6 +112,8 @@
               v-for="team in viewModels.teams"
               :key="team.teamId"
               :team="team"
+              :playtimes="playtimes"
+              :combat-stats-lookup="combatStatsLookup"
               :density-mode="pageState.densityMode"
               :selected-player-id="pageState.selectedPlayerId"
               :multi-select-mode="multiSelectMode"
@@ -361,7 +363,7 @@ const combatCacheQuery = useQuery({
   queryFn: async () => {
     try {
       return await apiGet<any>(`/api/combat-manager/cache?serverId=${encodeURIComponent(currentServerId.value)}`);
-  } catch {
+    } catch {
       return { snapshot: { events: [] } };
     }
   },
@@ -447,26 +449,8 @@ const staleText = computed(() => {
   return t("dataState.staleText");
 });
 
-const steamIDs = computed(() => {
-  return [...new Set(players.active.map((player) => player.steamID).filter(Boolean))]
-    .map((id) => String(id).trim())
-    .filter(Boolean)
-    .sort();
-});
-const steamIDParam = computed(() => steamIDs.value.join(","));
 const stablePlaytimes = ref<Record<string, any>>({});
 const squadLifecycleLookup = computed(() => buildSquadLifecycleLookup(squadLifecycleCurrent.value));
-
-const playtimeQuery = useQuery({
-  queryKey: computed(() => ["playtime-cache", steamIDParam.value, playtimeRequested.value]),
-  enabled: computed(() => auth.authenticated && playtimeRequested.value && steamIDs.value.length > 0),
-  queryFn: async () => apiGet<{ items: Record<string, any> }>(`/api/query/playtime-cache?steamIDs=${encodeURIComponent(steamIDParam.value)}`),
-  placeholderData: (previousData) => previousData,
-  staleTime: 30_000,
-  gcTime: 5 * 60_000,
-  refetchOnWindowFocus: false,
-});
-
 const playtimes = computed(() => stablePlaytimes.value);
 
 const viewerSteam64 = computed(() => normalizeSteam64(auth.user?.steam64));
@@ -474,12 +458,7 @@ const viewerAutoSwapEnabled = computed(() => auth.user?.viewerTeamAutoSwapEnable
 
 const rawTeams = computed(() => {
   return match.teams.map((team) => {
-    const adapted = adaptTeam(team, playtimes.value, squadLifecycleLookup.value, combatStatsLookup.value);
-
-    return {
-      ...adapted,
-      squads: adapted.squads,
-    };
+    return adaptTeam(team, {}, squadLifecycleLookup.value, {});
   });
 });
 
@@ -534,26 +513,38 @@ onBeforeUnmount(() => {
   document.removeEventListener("visibilitychange", handleVisibilityChange);
 });
 
-watch(
-  () => playtimeQuery.data.value?.items,
-  (items) => {
-    if (!items || typeof items !== "object") return;
-
-    stablePlaytimes.value = {
-      ...stablePlaytimes.value,
-      ...items,
-    };
-    playtimeError.value = "";
-  },
-  { immediate: true },
-);
+async function fetchPlaytimes(steamIDsList: string[]) {
+  if (steamIDsList.length === 0) return {};
+  const res = await apiGet<{ items: Record<string, any> }>(
+    `/api/query/playtime-cache?steamIDs=${encodeURIComponent(steamIDsList.join(","))}`
+  );
+  return res?.items ?? {};
+}
 
 watch(
-  () => playtimeQuery.error.value,
-  (error) => {
-    if (!error) return;
-    playtimeError.value = renderApiError(error, t("common.error"));
+  () => players.active,
+  async (newPlayers) => {
+    if (!newPlayers || newPlayers.length === 0) return;
+    const missingIDs = [...new Set(
+      newPlayers
+        .map((p) => String(p.steamID ?? "").trim())
+        .filter((id) => id && stablePlaytimes.value[id] === undefined)
+    )];
+
+    if (missingIDs.length > 0 && auth.authenticated && playtimeRequested.value) {
+      try {
+        const items = await fetchPlaytimes(missingIDs);
+        stablePlaytimes.value = {
+          ...stablePlaytimes.value,
+          ...items,
+        };
+        playtimeError.value = "";
+      } catch (err) {
+        playtimeError.value = renderApiError(err, t("common.error"));
+      }
+    }
   },
+  { immediate: true }
 );
 
 watch(
@@ -855,11 +846,16 @@ async function handleBatchForceTeamChange() {
 
 async function handlePlayerPlaytimeUpdated() {
   try {
-    const refreshed = await playtimeQuery.refetch();
-    if (refreshed.data?.items) {
+    const activeIDs = [...new Set(
+      players.active
+        .map((p) => String(p.steamID ?? "").trim())
+        .filter(Boolean)
+    )];
+    if (activeIDs.length > 0) {
+      const items = await fetchPlaytimes(activeIDs);
       stablePlaytimes.value = {
         ...stablePlaytimes.value,
-        ...refreshed.data.items,
+        ...items,
       };
     }
 
@@ -1134,11 +1130,16 @@ async function refreshOnlinePlaytime(force = false) {
       throw new Error(finalJob.error?.message ?? t("common.error"));
     }
 
-    const refreshed = await playtimeQuery.refetch();
-    if (refreshed.data?.items) {
+    const activeIDs = [...new Set(
+      players.active
+        .map((p) => String(p.steamID ?? "").trim())
+        .filter(Boolean)
+    )];
+    if (activeIDs.length > 0) {
+      const items = await fetchPlaytimes(activeIDs);
       stablePlaytimes.value = {
         ...stablePlaytimes.value,
-        ...refreshed.data.items,
+        ...items,
       };
     }
     ui.pushToast({
@@ -1255,6 +1256,8 @@ function applyMatchRefreshResult(result: any) {
   applyMatchSnapshotResponse(result);
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function waitForPlaytimeJob(
   jobId: string,
   timeoutMs: number,
@@ -1267,6 +1270,7 @@ async function waitForPlaytimeJob(
     applyPlaytimeJob(job);
     onUpdate?.(job);
     if (job.status === "completed" || job.status === "failed") return job;
+    await sleep(2000);
   }
   throw new Error("Timed out while waiting for the playtime refresh job.");
 }
@@ -1416,7 +1420,6 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
     }))
     .filter((team) => team.squads.length > 0);
 }
-
 </script>
 
 <style scoped>
