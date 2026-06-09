@@ -40,6 +40,13 @@
       </section>
 
       <section class="status-section">
+        <h2 class="section-title">内存占用变化趋势</h2>
+        <div class="chart-container">
+          <div ref="chartRef" class="memory-chart" />
+        </div>
+      </section>
+
+      <section class="status-section">
         <h2 class="section-title">内置模块 ({{ status.modules.length }})</h2>
         <div class="item-grid">
           <button
@@ -91,15 +98,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
 import { apiGet } from "../app/apiClient";
 import RuntimeLogModal from "../components/runtime/RuntimeLogModal.vue";
+import * as echarts from "echarts";
 
 interface SystemStatus {
   ok: boolean;
   system: {
     uptime: number;
     memory: { rss: number };
+    memoryHistory?: Array<{
+      timestamp: number;
+      rss: number;
+      heapUsed: number;
+      heapTotal: number;
+    }>;
     nodeVersion: string;
     platform: string;
     arch: string;
@@ -134,6 +148,191 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 const selectedTarget = ref<RuntimeTarget | null>(null);
 let timer: number | null = null;
+
+const chartRef = ref<HTMLElement | null>(null);
+const chartInstance = shallowRef<echarts.ECharts | null>(null);
+let resizeObserver: ResizeObserver | null = null;
+
+function initChartIfNeeded() {
+  if (chartInstance.value || !chartRef.value) return;
+
+  try {
+    chartInstance.value = echarts.init(chartRef.value, "dark");
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(() => {
+        chartInstance.value?.resize();
+      });
+      resizeObserver.observe(chartRef.value);
+    }
+  } catch (err) {
+    console.error("Failed to initialize memory chart:", err);
+  }
+}
+
+function updateChart(history: NonNullable<SystemStatus["system"]["memoryHistory"]>) {
+  if (!chartInstance.value) return;
+
+  const rssData = history.map(h => [h.timestamp, h.rss / 1024 / 1024]);
+  const heapTotalData = history.map(h => [h.timestamp, h.heapTotal / 1024 / 1024]);
+  const heapUsedData = history.map(h => [h.timestamp, h.heapUsed / 1024 / 1024]);
+
+  const option: echarts.EChartsOption = {
+    backgroundColor: "transparent",
+    animation: false,
+    tooltip: {
+      trigger: "axis",
+      confine: true,
+      backgroundColor: "rgba(27, 34, 41, 0.96)",
+      borderColor: "rgba(56, 189, 248, 0.22)",
+      borderWidth: 1,
+      padding: [8, 12],
+      textStyle: {
+        color: "#edf2f4"
+      },
+      extraCssText: "box-shadow: 0 8px 24px rgba(0,0,0,0.3); border-radius: 8px;",
+      valueFormatter: (value: any) => `${Number(value).toFixed(1)} MB`
+    },
+    legend: {
+      data: ["RSS", "Heap Total", "Heap Used"],
+      textStyle: {
+        color: "#9aa7b2"
+      },
+      bottom: 0
+    },
+    grid: {
+      top: 35,
+      left: "3%",
+      right: "4%",
+      bottom: 45,
+      containLabel: true
+    },
+    xAxis: {
+      type: "time",
+      axisLabel: {
+        color: "#9aa7b2",
+        fontSize: 10,
+        formatter: (value: any) => {
+          const date = new Date(value);
+          const min = String(date.getMinutes()).padStart(2, "0");
+          const sec = String(date.getSeconds()).padStart(2, "0");
+          return `${date.getHours()}:${min}:${sec}`;
+        }
+      },
+      axisLine: {
+        lineStyle: {
+          color: "#2e3944"
+        }
+      },
+      splitLine: {
+        show: true,
+        lineStyle: {
+          color: "rgba(46, 57, 68, 0.3)"
+        }
+      }
+    },
+    yAxis: {
+      type: "value",
+      name: "MB",
+      nameTextStyle: {
+        color: "#9aa7b2",
+        align: "right"
+      },
+      axisLabel: {
+        color: "#9aa7b2",
+        fontSize: 10
+      },
+      axisLine: {
+        lineStyle: {
+          color: "#2e3944"
+        }
+      },
+      splitLine: {
+        show: true,
+        lineStyle: {
+          color: "rgba(46, 57, 68, 0.3)"
+        }
+      }
+    },
+    series: [
+      {
+        name: "RSS",
+        type: "line",
+        data: rssData,
+        showSymbol: false,
+        smooth: 0.35,
+        lineStyle: {
+          color: "#38bdf8",
+          width: 2.5
+        },
+        itemStyle: {
+          color: "#38bdf8"
+        },
+        areaStyle: {
+          color: {
+            type: "linear",
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: "rgba(56, 189, 248, 0.18)" },
+              { offset: 0.6, color: "rgba(56, 189, 248, 0.05)" },
+              { offset: 1, color: "rgba(56, 189, 248, 0)" }
+            ]
+          }
+        }
+      },
+      {
+        name: "Heap Total",
+        type: "line",
+        data: heapTotalData,
+        showSymbol: false,
+        smooth: 0.35,
+        lineStyle: {
+          color: "#818cf8",
+          width: 1.5,
+          type: "dashed"
+        },
+        itemStyle: {
+          color: "#818cf8"
+        }
+      },
+      {
+        name: "Heap Used",
+        type: "line",
+        data: heapUsedData,
+        showSymbol: false,
+        smooth: 0.35,
+        lineStyle: {
+          color: "#34d399",
+          width: 2.5
+        },
+        itemStyle: {
+          color: "#34d399"
+        },
+        areaStyle: {
+          color: {
+            type: "linear",
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: "rgba(52, 211, 153, 0.15)" },
+              { offset: 0.6, color: "rgba(52, 211, 153, 0.04)" },
+              { offset: 1, color: "rgba(52, 211, 153, 0)" }
+            ]
+          }
+        }
+      }
+    ]
+  };
+
+  chartInstance.value.setOption(option);
+}
+
+watch(() => status.value?.system?.memoryHistory, (newHistory) => {
+  if (newHistory && newHistory.length > 0) {
+    nextTick(() => {
+      initChartIfNeeded();
+      updateChart(newHistory);
+    });
+  }
+}, { immediate: true });
 
 const hasSelection = computed(() => Boolean(selectedTarget.value));
 
@@ -189,6 +388,14 @@ onMounted(() => {
 onUnmounted(() => {
   if (timer) clearInterval(timer);
   window.removeEventListener("keydown", onWindowKeyDown);
+  if (resizeObserver) {
+    resizeObserver.disconnect();
+    resizeObserver = null;
+  }
+  if (chartInstance.value) {
+    chartInstance.value.dispose();
+    chartInstance.value = null;
+  }
 });
 </script>
 
@@ -348,5 +555,19 @@ onUnmounted(() => {
   color: #9aa7b2;
   margin: 0;
   line-height: 1.4;
+}
+
+.chart-container {
+  background: #1b2229;
+  border: 1px solid #2e3944;
+  border-radius: 12px;
+  padding: 20px;
+  height: 320px;
+  position: relative;
+}
+
+.memory-chart {
+  width: 100%;
+  height: 100%;
 }
 </style>

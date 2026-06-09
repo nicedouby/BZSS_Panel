@@ -42,6 +42,10 @@ export class WebServer {
     this.chatConnections = new Set();
     this.consoleSubscription = null;
     this.chatSubscription = null;
+
+    this.memoryHistory = [];
+    this.maxMemoryHistoryPoints = 120;
+    this.memoryInterval = null;
   }
 
   async start() {
@@ -92,10 +96,36 @@ export class WebServer {
       this.server.listen(this.port, this.host, resolve);
     });
 
+    // Start tracking memory history
+    this.memoryHistory = [];
+    const recordMemory = () => {
+      try {
+        const mem = process.memoryUsage();
+        this.memoryHistory.push({
+          timestamp: Date.now(),
+          rss: mem.rss,
+          heapUsed: mem.heapUsed,
+          heapTotal: mem.heapTotal,
+        });
+        if (this.memoryHistory.length > this.maxMemoryHistoryPoints) {
+          this.memoryHistory.shift();
+        }
+      } catch (err) {
+        this.logger.error(`Failed to collect process memory: ${err.message}`);
+      }
+    };
+    recordMemory(); // Record first data point immediately
+    this.memoryInterval = setInterval(recordMemory, 10000);
+
     this.logger.info(`WebServer listening on http://${this.host}:${this.port}`);
   }
 
   async stop() {
+    if (this.memoryInterval) {
+      clearInterval(this.memoryInterval);
+      this.memoryInterval = null;
+    }
+
     if (!this.server) return;
 
     if (typeof this.consoleSubscription === "function") {
@@ -384,6 +414,7 @@ export class WebServer {
         system: {
           uptime: Math.floor(process.uptime()),
           memory: process.memoryUsage(),
+          memoryHistory: this.memoryHistory,
           nodeVersion: process.version,
           platform: process.platform,
           arch: process.arch,
