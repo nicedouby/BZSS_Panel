@@ -48,6 +48,7 @@ export class RconManager {
     this.maxQueueSize = Number(this.config.rateLimit?.maxQueueSize ?? 100);
 
     this.squadRcon = null;
+    this.rconWorkers = [];
     this.queue = [];
     this.priorityQueue = [];
     this.processing = false;
@@ -106,6 +107,26 @@ export class RconManager {
   async start() {
     if (!this.enabled) {
       this.webStatus.set("rcon", "disabled");
+
+    this.status = {
+      enabled: this.enabled,
+      connected: false,
+      authenticated: false,
+      queueSize: 0,
+      lastError: "",
+      lastPlayersRefresh: "",
+      lastSquadsRefresh: "",
+    };
+
+    this.refreshInFlight = {
+      players: false,
+      squads: false,
+    };
+  }
+
+  async start() {
+    if (!this.enabled) {
+      this.webStatus.set("rcon", "disabled");
       this.logger.info("RconManager disabled.", {
         operation: "start",
       });
@@ -123,6 +144,25 @@ export class RconManager {
 
     this.attachSquadRconEvents();
 
+    const workerCount = 2;
+    this.rconWorkers = [];
+    for (let i = 0; i < workerCount; i++) {
+      const workerClient = new SquadRcon({
+        host: this.config.host,
+        port: this.config.port,
+        password: resolveRconPassword(this.config, this.logger),
+        autoReconnectDelay: this.config.autoReconnectDelay ?? 5000,
+        commandTimeoutMs: this.config.commandTimeoutMs ?? 15000,
+        logger: this.logger,
+      });
+      this.rconWorkers.push({
+        id: `worker-${i + 1}`,
+        client: workerClient,
+        busy: false,
+        lastCommandTime: 0,
+      });
+    }
+
     try {
       this.logger.info(`Connecting to RCON ${this.config.host}:${this.config.port}`, {
         operation: "start",
@@ -131,6 +171,17 @@ export class RconManager {
       this.pollingKickPending.squads = true;
       await this.squadRcon.connect();
       this.setConnected(true);
+
+      for (const worker of this.rconWorkers) {
+        worker.client.connect()
+          .then(() => {
+            this.logger.info(`RCON Worker ${worker.id} connected.`, { operation: "start" });
+          })
+          .catch((err) => {
+            this.logger.error(`RCON Worker ${worker.id} connection failed: ${err.message}`, { operation: "start" });
+          });
+      }
+
       this.startPolling();
     } catch (error) {
       this.status.lastError = error.message;
@@ -159,6 +210,13 @@ export class RconManager {
     if (this.squadRcon) {
       await this.squadRcon.disconnect().catch(() => {});
     }
+
+    for (const worker of this.rconWorkers) {
+      if (worker.client) {
+        await worker.client.disconnect().catch(() => {});
+      }
+    }
+    this.rconWorkers = [];
 
     this.setConnected(false);
     this.webStatus.set("rcon", "stopped");
@@ -392,13 +450,25 @@ export class RconManager {
   }
 
   async processQueue() {
-    if (this.processing) return;
+    if (this.getQueueSize() === 0) return;
 
+    if (Array.isArray(this.rconWorkers) && this.rconWorkers.length > 0) {
+      for (const worker of this.rconWorkers) {
+        if (this.getQueueSize() === 0) break;
+        if (!worker.busy) {
+          void this.runWorker(worker);
+        }
+      }
+      return;
+    }
+
+    if (this.processing) return;
     this.processing = true;
 
     try {
       while (this.getQueueSize() > 0) {
         const item = this.priorityQueue.length > 0 ? this.priorityQueue.shift() : this.queue.shift();
+        if (!item) continue;
 
         this.status.queueSize = this.getQueueSize();
         this.webStatus.set("rconQueue", this.getQueueSize());
@@ -427,40 +497,6 @@ export class RconManager {
               bypassRateLimit: Boolean(item?.bypassRateLimit),
             },
           });
-          const response = await this.squadRcon.execute(item.request.command);
-
-          this.logger.debug(() => `RCON command completed ${item.request.command}`, {
-            operation: "processQueue",
-            data: {
-              command: item.request.command,
-              responseBytes: String(response ?? "").length,
-            },
-          });
-          item.resolve({
-            success: true,
-            message: "RCON command executed.",
-            rconExecuted: true,
-            rconResponse: response,
-          });
-        } catch (error) {
-          this.status.lastError = error.message;
-          this.webStatus.set("rcon", "error");
-          this.logger.warn(`RCON command failed: ${item.request.command} -> ${error.message}`, {
-            operation: "processQueue",
-            data: {
-              command: item.request.command,
-              requestedBy: item.request.requestedBy ?? "",
-            },
-          });
-
-          item.resolve({
-            success: false,
-            message: error.message,
-            rconExecuted: false,
-            rconResponse: "",
-          });
-        }
-      }
     } finally {
       this.processing = false;
     }
@@ -606,6 +642,12 @@ export class RconManager {
       connected: Boolean(this.squadRcon?.connected),
       authenticated: Boolean(this.squadRcon?.loggedIn),
       queueSize: this.getQueueSize(),
+      workers: this.rconWorkers.map((w) => ({
+        id: w.id,
+        connected: Boolean(w.client?.connected),
+        authenticated: Boolean(w.client?.loggedIn),
+        busy: w.busy,
+      })),
       polling: {
         enabled: this.polling.enabled,
         dynamicEnabled: this.polling.dynamic.enabled,
