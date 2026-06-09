@@ -126,7 +126,7 @@
           stale-text="最新轮询失败，正在显示缓存数据。"
         >
           <div class="right-stack">
-            <AppCard class="creation-card" title="实时建队动态" description="最近 15 条建队记录。">
+            <AppCard title="实时建队动态" description="最近 15 条建队记录。">
               <div class="creation-feed">
                 <article v-if="!recentCreations.length" class="empty-feed">
                   等待数据扫描...
@@ -146,7 +146,7 @@
               </div>
             </AppCard>
 
-            <AppCard class="audit-card" title="系统操作审计" description="按指令类型查看执行结果。">
+            <AppCard title="系统操作审计" description="按指令类型查看执行结果。">
               <div class="audit-filter-bar">
                 <AppStatusBadge
                   v-for="item in kindOptions"
@@ -566,13 +566,6 @@ function timeValue(value: string) {
 .creation-feed {
   display: grid;
   gap: 10px;
-  max-height: 320px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.audit-card :deep(.app-table-scroll) {
-  max-height: 480px;
 }
 
 .right-stack {

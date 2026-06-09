@@ -542,12 +542,6 @@
         ]
       }
     },
-    "lianbanKick": {
-      "enabled": true,
-      "directory": "./联办",
-      "cacheMs": 5000,
-      "retryCooldownMs": 30000
-    },
     "udpEventForwarder": {
       "enabled": false,
       "host": "127.0.0.1",

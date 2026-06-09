@@ -769,20 +769,11 @@ onUnmounted(() => {
   position: fixed;
   inset: 0;
   z-index: calc(var(--z-player-drawer) + 1);
-}
-
-.drawer-backdrop {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  background: transparent;
-}
-
-.floating-window-layer .drawer-backdrop {
   background:
     radial-gradient(circle at 20% 18%, rgba(96, 165, 250, 0.14), transparent 28%),
     radial-gradient(circle at 80% 10%, rgba(34, 197, 94, 0.08), transparent 26%),
-    rgba(8, 12, 16, 0.65);
+    rgba(8, 12, 16, 0.42);
+  backdrop-filter: blur(6px);
 }
 
 .player-detail-drawer {
@@ -791,7 +782,6 @@ onUnmounted(() => {
   right: 0;
   height: 100dvh;
   width: 420px;
-  z-index: 2;
   background: var(--color-bg-panel);
   border-left: 1px solid var(--color-border-default);
   display: grid;
@@ -801,14 +791,14 @@ onUnmounted(() => {
 
 .player-detail-floating {
   position: fixed;
-  z-index: 2;
   width: min(480px, calc(100vw - 24px));
   max-height: calc(100vh - 24px);
   overflow: hidden;
   border-radius: 22px;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  left: 12px;
+  top: 12px;
+  right: auto;
+  bottom: auto;
   background:
     linear-gradient(145deg, rgba(55, 200, 255, 0.06), rgba(168, 85, 247, 0.04)),
     linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.025)), rgba(255, 255, 255, 0.008)),
@@ -823,43 +813,28 @@ onUnmounted(() => {
   backdrop-filter: blur(28px) saturate(1.4);
 }
 
-/* Transition Animations */
-
-/* Drawer Slide In */
-.drawer-enter-active .player-detail-drawer,
-.drawer-leave-active .player-detail-drawer {
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: transform;
+.drawer-enter-active,
+.drawer-leave-active {
+  transition: all 0.2s ease;
 }
 
-.drawer-enter-from .player-detail-drawer,
-.drawer-leave-to .player-detail-drawer {
+.drawer-enter-from {
   transform: translateX(100%);
 }
 
-/* Floating Window Fade/Scale/Slide */
-.floating-player-enter-active .drawer-backdrop,
-.floating-player-leave-active .drawer-backdrop {
-  transition: opacity 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+.drawer-leave-to {
+  transform: translateX(100%);
 }
 
-.floating-player-enter-from .drawer-backdrop,
-.floating-player-leave-to .drawer-backdrop {
+.floating-player-enter-active,
+.floating-player-leave-active {
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.floating-player-enter-from,
+.floating-player-leave-to {
   opacity: 0;
-}
-
-.floating-player-enter-active .player-detail-floating,
-.floating-player-leave-active .player-detail-floating {
-  transition: opacity 0.32s cubic-bezier(0.16, 1, 0.3, 1), transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: transform, opacity;
-  backface-visibility: hidden;
-  transform-style: preserve-3d;
-}
-
-.floating-player-enter-from .player-detail-floating,
-.floating-player-leave-to .player-detail-floating {
-  opacity: 0 !important;
-  transform: translate(-50%, -46%) scale(0.96) !important;
+  transform: translateY(8px) scale(0.98);
 }
 
 .drawer-header {

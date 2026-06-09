@@ -848,12 +848,10 @@ function mergeCreation(existing, event, context) {
     creationSource: sourceWasRcon ? "RCON_PROMOTED_TO_LOG" : event.creationSource,
     creationConfidence: event.creationSource === "LOG" ? "HIGH" : event.creationConfidence,
     isLogConfirmed: Boolean(event.creationSource === "LOG" || existing?.isLogConfirmed),
-    isWarmup: Boolean(context.warmup),
-    // Re-evaluate against the current log clock so late snapshots/retries do not
-    // keep enforcing an old creation window after the round has already advanced.
-    clockSeconds: Math.max(0, Math.floor(Number(context.clockSeconds ?? 0) || 0)),
-    clockAnchorLogTime: context.clockAnchorLogTime,
-    clockHasAnchor: Boolean(context.clockHasAnchor),
+    isWarmup: existing ? existing.isWarmup : Boolean(context.warmup),
+    clockSeconds: existing ? existing.clockSeconds : Math.max(0, Math.floor(Number(context.clockSeconds ?? 0) || 0)),
+    clockAnchorLogTime: existing ? existing.clockAnchorLogTime : context.clockAnchorLogTime,
+    clockHasAnchor: existing ? existing.clockHasAnchor : Boolean(context.clockHasAnchor),
     actions: Array.isArray(existing?.actions) ? existing.actions.map((action) => ({ ...action })) : [],
     playtime: cloneValue(existing?.playtime) ?? null,
     lookupStartedAt: normalizeText(existing?.lookupStartedAt),

@@ -464,6 +464,17 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       }
     }
 
+    const alreadyWarned = record.actions.some((action) => action.type === "warned" || action.type === "warn_failed");
+    if (!alreadyWarned && record.isLogConfirmed && hasCreatorIdentity(record)) {
+      const warnResult = await sendViolationWarning(record);
+      record.actions.push({
+        type: warnResult?.success === false ? "warn_failed" : "warned",
+        target: record.creatorName || record.creatorSteamId || record.creatorEosId,
+        result: summarizeActionResult(warnResult),
+      });
+      state.summary.warned += warnResult?.success === false ? 0 : 1;
+    }
+
     const alreadyDisbanded = record.actions.some((action) => action.type === "disbanded");
     if (!alreadyDisbanded && record.teamId != null && record.squadId != null) {
       const disbandResult = await disbandSquad(record);
@@ -480,17 +491,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       state.summary.disbanded += disbandResult?.ok === false ? 0 : 1;
     } else if (!alreadyDisbanded) {
       record.actions.push({ type: "disband_skipped", reason: "team_or_squad_missing" });
-    }
-
-    const alreadyWarned = record.actions.some((action) => action.type === "warned" || action.type === "warn_failed");
-    if (!alreadyWarned && record.isLogConfirmed && hasCreatorIdentity(record)) {
-      const warnResult = await sendViolationWarning(record);
-      record.actions.push({
-        type: warnResult?.success === false ? "warn_failed" : "warned",
-        target: record.creatorName || record.creatorSteamId || record.creatorEosId,
-        result: summarizeActionResult(warnResult),
-      });
-      state.summary.warned += warnResult?.success === false ? 0 : 1;
     }
 
     const alreadyCounted = record.actions.some((action) => action.type === "violation_counted");
