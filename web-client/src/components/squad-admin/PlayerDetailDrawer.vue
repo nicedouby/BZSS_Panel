@@ -32,9 +32,9 @@
               >
                 <div class="hud-avatar-inner">
                   <img
-                    v-if="props.player.steamAvatar"
+                    v-if="props.player.steamAvatar || playerDatabaseRecord?.steam_avatar"
                     class="hud-avatar-image-steam"
-                    :src="props.player.steamAvatar"
+                    :src="props.player.steamAvatar || playerDatabaseRecord?.steam_avatar"
                     alt="Steam Avatar"
                   />
                   <span v-else class="hud-avatar-letter">{{ playerInitials }}</span>
@@ -75,7 +75,7 @@
                       <path fill="currentColor" d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
                     </svg>
                     <span v-else class="refresh-spinner"></span>
-                    刷新资料
+                    刷新个人资料
                   </button>
                 </div>
                 <div class="hud-header-identities">
@@ -437,7 +437,7 @@ import { copyTextWithToast } from "../../utils/clipboard";
 import { goToPlayerDatabaseSearch } from "../../utils/player-database";
 import { forceTeamChange } from "../../app/teamBalanceApi";
 import { warnPlayer, kickPlayer, removePlayerFromSquad } from "../../app/squadManagementApi";
-import { apiGet, apiPatch } from "../../app/apiClient";
+import { apiGet, apiPatch, apiPost } from "../../app/apiClient";
 import StatusBadge from "../common/StatusBadge.vue";
 import CopyableValue from "./CopyableValue.vue";
 import PlayerCombatTimeline from "./PlayerCombatTimeline.vue";
@@ -1137,14 +1137,14 @@ onUnmounted(() => {
 .player-detail-drawer,
 .player-detail-floating {
   background:
-    linear-gradient(135deg, rgba(32, 45, 68, 0.88), rgba(20, 28, 42, 0.92));
+    linear-gradient(135deg, rgba(32, 45, 68, 0.6), rgba(20, 28, 42, 0.7));
   border: 1px solid rgba(255, 255, 255, 0.22);
   display: grid;
   grid-template-rows: auto 1fr;
   box-shadow:
     0 32px 80px rgba(0, 0, 0, 0.45),
     0 8px 24px rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(8px) saturate(1.4);
   position: relative;
   overflow: hidden;
 }
