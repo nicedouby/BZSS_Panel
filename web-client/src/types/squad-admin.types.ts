@@ -67,6 +67,7 @@ export interface TeamViewModel {
   teamId: number;
   teamName: string;
   teamColorType: "team1" | "team2";
+  factionCode: string | null;
   playerCount: number;
   maxPlayers: number;
   averagePlaytimeHours: number | null;

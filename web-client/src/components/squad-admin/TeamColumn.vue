@@ -1,8 +1,17 @@
 <template>
   <section class="team-column" :class="[teamColorClass, densityMode]">
-    <header class="team-column-header">
+    <header
+      class="team-column-header"
+      :class="{ 'has-flag': !!factionFlagUrl }"
+      :style="factionFlagUrl ? { '--faction-flag-url': `url(${factionFlagUrl})` } : {}"
+    >
+      <!-- DEBUG -->
+      <div style="position: absolute; top: 0; left: 0; font-size: 10px; color: yellow; background: rgba(0,0,0,0.8); padding: 2px; z-index: 999;">
+        Flag: {{ factionFlagUrl ? 'YES' : 'NO' }} | Badge: {{ formationBadgeUrl ? 'YES' : 'NO' }}
+      </div>
       <div class="team-column-title">
         <h2 class="team-title-line">
+          <img v-if="formationBadgeUrl" class="formation-badge" :src="formationBadgeUrl" alt="" />
           <span class="team-id-badge">TEAM {{ team.teamId }}</span>
           <span class="team-name">{{ team.teamName }}</span>
         </h2>
@@ -60,6 +69,7 @@ import { computed } from "vue";
 import type { PlayerRowViewModel, TeamViewModel, SquadViewModel, CombatStats, SquadLeaderRowViewModel } from "../../types/squad-admin.types";
 import SquadCard from "./SquadCard.vue";
 import { extractPlaytimeHours } from "../../utils/squad-admin-adapter";
+import { getFlagUrlByTeamName, getBadgeUrl } from "../../shared/faction-assets/faction-data";
 
 const props = defineProps<{
   team: TeamViewModel;
@@ -78,6 +88,17 @@ defineEmits<{
 
 const teamColorClass = computed(() => (props.team.teamColorType === "team1" ? "team1" : "team2"));
 const isComfortable = computed(() => props.densityMode !== "compact");
+
+const factionFlagUrl = computed(() => {
+  const url = getFlagUrlByTeamName(props.team.teamName);
+  console.log('[TeamColumn] factionFlagUrl:', { teamName: props.team.teamName, url });
+  return url;
+});
+const formationBadgeUrl = computed(() => {
+  const url = getBadgeUrl(props.team.teamName);
+  console.log('[TeamColumn] formationBadgeUrl:', { teamName: props.team.teamName, url });
+  return url;
+});
 
 const teamPlayers = computed(() => {
   return props.team.squads.flatMap((squad) => {
@@ -192,6 +213,35 @@ const teamLeaderAveragePlaytimeShortText = computed(() => {
   display: grid;
   gap: 5px;
   transition: border-color 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.team-column-header.has-flag::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--faction-flag-url);
+  background-size: cover;
+  background-position: center right;
+  opacity: 0.25;
+  pointer-events: none;
+  z-index: 0;
+  border: 2px solid red; /* DEBUG */
+}
+
+.team-column-header > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ─── 编制徽章 ───────────────────────────────────────────────────────────── */
+.formation-badge {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  flex: 0 0 auto;
+  image-rendering: auto;
 }
 
 .team-column.team1 .team-column-header {

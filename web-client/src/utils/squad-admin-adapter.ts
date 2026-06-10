@@ -1,6 +1,7 @@
 import type { RuntimePlayer } from "../stores/player.store";
 import type { RuntimeSquad } from "../stores/squad.store";
 import type { RuntimeTeam } from "../stores/match.store";
+import { getFactionFromTeamName } from "../shared/faction-assets/faction-data";
 import type {
   CombatStats,
   PlayerRowViewModel,
@@ -206,6 +207,7 @@ export function adaptTeam(
     teamId: runtimeTeam.teamID,
     teamName: runtimeTeam.teamName,
     teamColorType: runtimeTeam.teamID === 1 ? "team1" : "team2",
+    factionCode: getFactionFromTeamName(runtimeTeam.teamName),
     playerCount: runtimeTeam.playerCount,
     maxPlayers: 50,
     averagePlaytimeHours: playtimeSummary.averagePlaytimeHours,

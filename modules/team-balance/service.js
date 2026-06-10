@@ -8,6 +8,8 @@ import {
 const MODULE_ID = "module.teamBalance";
 const DEFAULT_SOURCE = "manual";
 const DEFAULT_REASON = "manual_team_balance";
+const DEFAULT_SHUFFLE_SOURCE = "web.matchStatus.shufflePlan";
+const DEFAULT_SHUFFLE_REASON = "match_status_playtime_shuffle_plan";
 const DEFAULT_SWITCH_PERMISSION = "squad.switch";
 const MAX_ACTION_HISTORY = 100;
 
@@ -36,6 +38,10 @@ export function createTeamBalanceService({ core, config, logger }) {
 
     switchTeam(request = {}) {
       return forceTeamChange(request);
+    },
+
+    createPlaytimeShufflePlan(request = {}) {
+      return createPlaytimeShufflePlan(request);
     },
 
     listForceTeamChangeRecords(request = {}) {
@@ -184,6 +190,89 @@ export function createTeamBalanceService({ core, config, logger }) {
     }
   }
 
+  async function createPlaytimeShufflePlan(request = {}) {
+    const operator = normalizeOperator(
+      request.operator ?? request.actor ?? request.viewer ?? null,
+      request.operatorName ?? request.actorName ?? "",
+    );
+    const source = normalizeText(request.source) || DEFAULT_SHUFFLE_SOURCE;
+    const reason = normalizeText(request.reason) || DEFAULT_SHUFFLE_REASON;
+    const system = Boolean(request.system);
+    const roster = normalizeShuffleRoster(request.players ?? request.roster);
+
+    if (!enabled) {
+      const result = buildShufflePlanResult({
+        ok: false,
+        error: "ModuleDisabled",
+        message: "TeamBalance module is disabled.",
+        source,
+        reason,
+        operator,
+        system,
+      });
+      recordAction(result);
+      return result;
+    }
+
+    if (!system && !canSwitch(operator, { switchPermission })) {
+      const result = buildShufflePlanResult({
+        ok: false,
+        error: "Forbidden",
+        message: `Permission '${switchPermission}' is required.`,
+        source,
+        reason,
+        operator,
+        system,
+      });
+      recordAction(result);
+      return result;
+    }
+
+    if (roster.length === 0) {
+      const result = buildShufflePlanResult({
+        ok: false,
+        error: "EmptyRoster",
+        message: "No eligible players were provided for shuffle planning.",
+        source,
+        reason,
+        operator,
+        system,
+      });
+      recordAction(result);
+      return result;
+    }
+
+    const teamIds = [...new Set(roster.map((player) => player.teamId))];
+    if (!teamIds.includes(1) || !teamIds.includes(2)) {
+      const result = buildShufflePlanResult({
+        ok: false,
+        error: "MissingTeamRoster",
+        message: "Both team 1 and team 2 players are required.",
+        source,
+        reason,
+        operator,
+        system,
+      });
+      recordAction(result);
+      return result;
+    }
+
+    const plan = buildPlaytimeShufflePlan(roster);
+    const result = buildShufflePlanResult({
+      ok: true,
+      error: "",
+      message: "Playtime-balanced shuffle plan recorded. No team switch executed.",
+      source,
+      reason,
+      operator,
+      system,
+      summary: plan.summary,
+      plan: plan.plan,
+    });
+    recordAction(result);
+    return result;
+  }
+
   function listForceTeamChangeRecords(request = {}) {
     const limit = clampInteger(request.limit ?? request.count ?? 50, 1, MAX_ACTION_HISTORY);
     return actionHistory.slice(0, limit);
@@ -229,9 +318,10 @@ export function createTeamBalanceService({ core, config, logger }) {
     const entry = {
       id: `${Date.now()}-${actionHistory.length + 1}`,
       timestamp: new Date().toISOString(),
-      type: "FORCE_TEAM_CHANGE",
+      type: normalizeText(result.type).toUpperCase() || "UNKNOWN_ACTION",
+      action: normalizeText(result.action) || "unknown_action",
       ok: result.ok,
-      steamId: result.steamId,
+      steamId: result.steamId || "",
       playerName: result.playerName || null,
       source: result.source,
       reason: result.reason,
@@ -243,6 +333,8 @@ export function createTeamBalanceService({ core, config, logger }) {
       rconResponse: result.rconResponse,
       error: result.error,
       message: result.message,
+      summary: result.summary ?? null,
+      plan: result.plan ?? null,
     };
 
     actionHistory.unshift(entry);
@@ -251,11 +343,11 @@ export function createTeamBalanceService({ core, config, logger }) {
     }
 
     if (result.ok) {
-      moduleLogger?.info?.("[TB] FORCE_TEAM_CHANGE", entry);
+      moduleLogger?.info?.(`[TB] ${entry.type}`, entry);
       return;
     }
 
-    moduleLogger?.warn?.("[TB] FORCE_TEAM_CHANGE_FAILED", entry);
+    moduleLogger?.warn?.(`[TB] ${entry.type}_FAILED`, entry);
   }
 }
 
@@ -289,6 +381,38 @@ function buildResult({
     command,
     rconExecuted: Boolean(rconExecuted),
     rconResponse,
+  };
+}
+
+function buildShufflePlanResult({
+  ok,
+  error = "",
+  message = "",
+  source = DEFAULT_SHUFFLE_SOURCE,
+  reason = DEFAULT_SHUFFLE_REASON,
+  operator = null,
+  system = false,
+  summary = null,
+  plan = null,
+}) {
+  return {
+    ok: Boolean(ok),
+    type: "playtime_shuffle_plan",
+    action: "playtime_shuffle_plan",
+    steamId: "",
+    playerName: "",
+    source,
+    reason,
+    executor: formatExecutor(operator),
+    operator,
+    system: Boolean(system),
+    error,
+    message,
+    command: "",
+    rconExecuted: false,
+    rconResponse: "",
+    summary,
+    plan,
   };
 }
 
@@ -379,4 +503,212 @@ function clampInteger(value, min, max) {
 
 function escapeCommandString(value) {
   return String(value ?? "").replaceAll("\\", "\\\\").replaceAll("\"", "\\\"");
+}
+
+function normalizeShuffleRoster(players) {
+  if (!Array.isArray(players)) return [];
+  return players
+    .map((player, index) => normalizeShufflePlayer(player, index))
+    .filter(Boolean);
+}
+
+function normalizeShufflePlayer(player, index) {
+  const teamId = normalizeTeamId(player?.teamId ?? player?.teamID);
+  if (teamId == null) return null;
+
+  const playtimeSeconds = normalizePlaytimeSeconds(
+    player?.playtimeSeconds ?? player?.gameSeconds ?? player?.playtime?.gameSeconds,
+  );
+
+  return {
+    index,
+    playerId: normalizeText(player?.playerId ?? player?.playerID ?? ""),
+    steamId: normalizeText(player?.steamId ?? player?.steamID ?? ""),
+    eosId: normalizeText(player?.eosId ?? player?.eosID ?? ""),
+    playerName: normalizeText(player?.playerName ?? player?.name ?? "") || "Unknown",
+    teamId,
+    squadId: normalizeNullableInteger(player?.squadId ?? player?.squadID),
+    role: normalizeText(player?.role ?? ""),
+    online: player?.online !== false,
+    playtimeSeconds,
+    playtimeHours: toRoundedHours(playtimeSeconds),
+  };
+}
+
+function buildPlaytimeShufflePlan(players) {
+  const teamSizes = {
+    1: players.filter((player) => player.teamId === 1).length,
+    2: players.filter((player) => player.teamId === 2).length,
+  };
+  const knownPlayers = players
+    .filter((player) => Number.isFinite(player.playtimeSeconds))
+    .sort(compareShufflePlayersByPlaytime);
+  const unknownPlayers = players
+    .filter((player) => !Number.isFinite(player.playtimeSeconds))
+    .sort(compareShufflePlayersByName);
+
+  const assigned = {
+    1: [],
+    2: [],
+  };
+  const knownTotals = {
+    1: 0,
+    2: 0,
+  };
+  const knownCounts = {
+    1: 0,
+    2: 0,
+  };
+
+  for (const player of knownPlayers) {
+    const targetTeamId = chooseKnownTargetTeam({ assigned, knownTotals, teamSizes });
+    assigned[targetTeamId].push({
+      ...player,
+      targetTeamId,
+    });
+    knownTotals[targetTeamId] += Number(player.playtimeSeconds ?? 0);
+    knownCounts[targetTeamId] += 1;
+  }
+
+  for (const player of unknownPlayers) {
+    const targetTeamId = chooseUnknownTargetTeam({ assigned, teamSizes });
+    assigned[targetTeamId].push({
+      ...player,
+      targetTeamId,
+    });
+  }
+
+  const assignments = [...assigned[1], ...assigned[2]]
+    .sort((left, right) => left.index - right.index)
+    .map((player) => ({
+      playerId: player.playerId || null,
+      steamId: player.steamId || null,
+      eosId: player.eosId || null,
+      playerName: player.playerName,
+      role: player.role || null,
+      squadId: player.squadId,
+      fromTeamId: player.teamId,
+      targetTeamId: player.targetTeamId,
+      playtimeSeconds: Number.isFinite(player.playtimeSeconds) ? player.playtimeSeconds : null,
+      playtimeHours: toRoundedHours(player.playtimeSeconds),
+      hasKnownPlaytime: Number.isFinite(player.playtimeSeconds),
+      switchRequired: player.teamId !== player.targetTeamId,
+      online: player.online !== false,
+    }));
+
+  const moves = assignments
+    .filter((player) => player.switchRequired)
+    .sort((left, right) => {
+      const diff = Number(right.playtimeSeconds ?? -1) - Number(left.playtimeSeconds ?? -1);
+      if (diff !== 0) return diff;
+      return String(left.playerName).localeCompare(String(right.playerName), "zh-CN");
+    });
+
+  const before = buildTeamSummary(players, "teamId");
+  const after = buildTeamSummary(assignments, "targetTeamId");
+  const averageDeltaHours = roundHours(Math.abs(
+    Number(after.team1.averagePlaytimeHours ?? 0) - Number(after.team2.averagePlaytimeHours ?? 0),
+  ));
+
+  return {
+    summary: {
+      totalPlayers: players.length,
+      plannedMoveCount: moves.length,
+      knownPlaytimePlayers: knownPlayers.length,
+      unknownPlaytimePlayers: unknownPlayers.length,
+      averageDeltaHours,
+      before,
+      after,
+    },
+    plan: {
+      generatedAt: new Date().toISOString(),
+      mode: "playtime_balanced_shuffle",
+      players: assignments,
+      moves,
+    },
+  };
+}
+
+function buildTeamSummary(players, teamKey) {
+  return {
+    team1: buildSingleTeamSummary(players, teamKey, 1),
+    team2: buildSingleTeamSummary(players, teamKey, 2),
+  };
+}
+
+function buildSingleTeamSummary(players, teamKey, teamId) {
+  const list = players.filter((player) => normalizeTeamId(player?.[teamKey]) === teamId);
+  const known = list.filter((player) => Number.isFinite(player.playtimeSeconds));
+  const totalPlaytimeSeconds = known.reduce((sum, player) => sum + Number(player.playtimeSeconds ?? 0), 0);
+  return {
+    teamId,
+    playerCount: list.length,
+    knownPlaytimePlayers: known.length,
+    unknownPlaytimePlayers: list.length - known.length,
+    totalPlaytimeSeconds,
+    averagePlaytimeHours: known.length > 0 ? roundHours(totalPlaytimeSeconds / known.length / 3600) : null,
+  };
+}
+
+function chooseKnownTargetTeam({ assigned, knownTotals, teamSizes }) {
+  const team1Full = assigned[1].length >= teamSizes[1];
+  const team2Full = assigned[2].length >= teamSizes[2];
+  if (team1Full && !team2Full) return 2;
+  if (team2Full && !team1Full) return 1;
+  if (knownTotals[1] < knownTotals[2]) return 1;
+  if (knownTotals[2] < knownTotals[1]) return 2;
+  if (assigned[1].length < assigned[2].length) return 1;
+  if (assigned[2].length < assigned[1].length) return 2;
+  return 1;
+}
+
+function chooseUnknownTargetTeam({ assigned, teamSizes }) {
+  const team1Remaining = teamSizes[1] - assigned[1].length;
+  const team2Remaining = teamSizes[2] - assigned[2].length;
+  if (team1Remaining <= 0 && team2Remaining > 0) return 2;
+  if (team2Remaining <= 0 && team1Remaining > 0) return 1;
+  if (assigned[1].length < assigned[2].length) return 1;
+  if (assigned[2].length < assigned[1].length) return 2;
+  if (team1Remaining > team2Remaining) return 1;
+  if (team2Remaining > team1Remaining) return 2;
+  return 1;
+}
+
+function compareShufflePlayersByPlaytime(left, right) {
+  const secondsDiff = Number(right.playtimeSeconds ?? -1) - Number(left.playtimeSeconds ?? -1);
+  if (secondsDiff !== 0) return secondsDiff;
+  return compareShufflePlayersByName(left, right);
+}
+
+function compareShufflePlayersByName(left, right) {
+  return String(left.playerName ?? "").localeCompare(String(right.playerName ?? ""), "zh-CN");
+}
+
+function normalizeTeamId(value) {
+  const numeric = Number(value);
+  if (numeric === 1 || numeric === 2) return numeric;
+  return null;
+}
+
+function normalizePlaytimeSeconds(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  if (numeric < 0) return null;
+  return Math.round(numeric);
+}
+
+function normalizeNullableInteger(value) {
+  if (value == null || value === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.trunc(numeric) : null;
+}
+
+function toRoundedHours(seconds) {
+  if (!Number.isFinite(seconds)) return null;
+  return roundHours(Number(seconds) / 3600);
+}
+
+function roundHours(value) {
+  if (!Number.isFinite(value)) return null;
+  return Math.round(Number(value) * 10) / 10;
 }

@@ -3,6 +3,7 @@
 const LEGACY_PATH = "/api/team-balance/switch";
 const TB_PATH = "/api/tb/force-team-change";
 const RECORDS_PATH = "/api/tb/records";
+const SHUFFLE_PLAN_PATH = "/api/tb/shuffle-plan";
 
 export async function handleTbRoutes({
   modules,
@@ -12,7 +13,7 @@ export async function handleTbRoutes({
   readJsonBody,
   json,
 }) {
-  if (url.pathname !== TB_PATH && url.pathname !== LEGACY_PATH && url.pathname !== RECORDS_PATH) {
+  if (url.pathname !== TB_PATH && url.pathname !== LEGACY_PATH && url.pathname !== RECORDS_PATH && url.pathname !== SHUFFLE_PLAN_PATH) {
     return false;
   }
 
@@ -51,6 +52,42 @@ export async function handleTbRoutes({
       ok: true,
       records,
     });
+    return true;
+  }
+
+  if (url.pathname === SHUFFLE_PLAN_PATH) {
+    if (req.method !== "POST") {
+      json(405, {
+        error: "MethodNotAllowed",
+        message: "Only POST is supported.",
+      });
+      return true;
+    }
+
+    if (!user) {
+      json(401, {
+        error: "Unauthorized",
+        message: "Authentication required.",
+      });
+      return true;
+    }
+
+    const body = (await readJsonBody(req)) ?? {};
+    const result = typeof teamBalance.createPlaytimeShufflePlan === "function"
+      ? await teamBalance.createPlaytimeShufflePlan({
+          ...body,
+          source: body.source ?? "web.matchStatus.shufflePlan",
+          reason: body.reason ?? "match_status_playtime_shuffle_plan",
+          operator: buildOperator(user),
+          system: false,
+        })
+      : {
+          ok: false,
+          error: "ShufflePlanUnavailable",
+          message: "Shuffle planning is not available.",
+        };
+
+    json(result.ok ? 200 : mapErrorStatus(result.error), result);
     return true;
   }
 

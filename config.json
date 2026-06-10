@@ -459,7 +459,7 @@
   },
   "steam": {
     "appId": 393380,
-    "maxConcurrent": 16,
+    "maxConcurrent": 2,
     "requestTimeoutMs": 20000,
     "defaultWaitMs": 15000,
     "retryCount": 4,
@@ -467,7 +467,8 @@
     "usePythonScript": true,
     "scriptTimeoutMs": 12000,
     "scriptFallbackToApi": false,
-    "onlineRefreshFreshnessWindowMinutes": 240
+    "onlineRefreshFreshnessWindowMinutes": 240,
+    "autoRefreshEnabled": false
   },
   "rcon": {
     "enabled": true,

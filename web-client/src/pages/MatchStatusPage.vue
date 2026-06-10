@@ -1567,6 +1567,13 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
   gap: 8px;
 }
 
+@media (max-width: 980px) {
+  .shuffle-plan-stats,
+  .battle-log-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .battle-log-summary-stat {
   display: grid;
   gap: 4px;

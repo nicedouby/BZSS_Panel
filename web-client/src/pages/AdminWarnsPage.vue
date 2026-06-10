@@ -31,6 +31,15 @@
             <input v-model="warningForm.targetSteamId" type="text" placeholder="SteamID64" />
             <input v-model="warningForm.targetEosId" type="text" placeholder="EOS ID" />
           </div>
+
+          <!-- 场景模板磁贴 -->
+          <div class="input-row tpl-tiles warning-tpl">
+            <button v-for="t in templates.warning" :key="t.label" class="tpl-tile" @click="applyTemplate('warning', t)">
+              <div class="t-name">{{ t.label }}</div>
+              <div class="t-reason">{{ t.reason }}</div>
+            </button>
+          </div>
+
           <div class="input-row msg">
             <textarea v-model="warningForm.message" placeholder="警告内容..." maxlength="180"></textarea>
             <div class="char-count" :class="{ limit: warningForm.message.length > 170 }">{{ warningForm.message.length }}/180</div>
@@ -164,9 +173,12 @@ const broadcastBusy = ref(false);
 
 const templates = {
   warning: [
-    { label: "恶意TK", reason: "teamkill", message: "请停止恶意击杀队友行为。再次发生将被踢出服务器。" },
-    { label: "违规载具", reason: "asset_waste", message: "您正在违规使用重要载具，请将其交回或按规则操作。" },
-    { label: "无麦队长", reason: "no_mic_sl", message: "队长必须有麦克风，请回复或交出职位。" },
+    { label: "压家意图警告", reason: "main_camping_intent", message: "请注意，已有压家意图，请立即离开该区域。" },
+    { label: "压家警告", reason: "main_camping", message: "严禁压家行为，请立即撤离，否则将被处理。" },
+    { label: "擦边压家警告", reason: "main_camping_border", message: "您当前位置属于擦边压家，请保持距离。" },
+    { label: "禁止单载", reason: "solo_vehicle", message: "本服严禁单人驾驶重要载具，请组队或下车。" },
+    { label: "步兵队禁止锁队", reason: "infantry_lock", message: "步兵小队禁止锁队，请保持队伍开放。" },
+    { label: "5人队禁锁", reason: "infantry_lock_5", message: "大于等于五人为步兵队，步兵队禁止锁队。" },
   ],
   broadcast: [
     { label: "欢迎语", reason: "welcome", message: "欢迎来到 BZSS 社区服务器！请遵守规则，祝您游戏愉快。" },
@@ -308,7 +320,7 @@ function formatTimeOnly(v: any) {
   flex-direction: column;
   gap: 8px;
   flex-shrink: 0;
-  height: 230px;
+  height: 270px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
 }
 
@@ -328,14 +340,14 @@ function formatTimeOnly(v: any) {
 .p-chips button { background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255, 255, 255, 0.05); color: #38bdf8; font-size: 9px; font-weight: 900; padding: 1px 6px; border-radius: 3px; cursor: pointer; transition: all 0.2s; }
 .p-chips button:hover { background: #38bdf8; color: #000; }
 
-.tpl-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; height: 36px; }
+.tpl-tiles { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; min-height: 36px; }
 .tpl-tile { background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 4px; padding: 2px 8px; text-align: left; cursor: pointer; display: flex; flex-direction: column; justify-content: center; transition: all 0.2s; color: inherit; }
 .tpl-tile:hover { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.2); }
 .tpl-tile .t-name { font-size: 9px; font-weight: 900; color: #cbd5e1; }
 .tpl-tile .t-reason { font-size: 7px; color: #475569; text-transform: uppercase; }
 
-.broadcast-msg textarea { height: 86px !important; }
-.warning-op-card .msg textarea { height: 74px; }
+.broadcast-msg textarea { height: 74px !important; }
+.warning-op-card .msg textarea { height: 60px; }
 
 .char-count { position: absolute; right: 8px; bottom: 8px; font-size: 8px; color: #475569; font-family: 'JetBrains Mono', monospace; font-weight: 700; }
 .char-count.limit { color: #f87171; text-shadow: 0 0 5px #ef4444; }

@@ -799,20 +799,34 @@ class SteamGameDurationService {
   }
 
   async _fetchSteamDuration(steamID) {
-    if (this.usePythonScript) {
+    const maxAttempts = this.retryCount + 1;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
-        return await this._fetchSteamDurationViaPython(steamID);
+        if (this.usePythonScript) {
+          try {
+            return await this._fetchSteamDurationViaPython(steamID);
+          } catch (error) {
+            if (!this.scriptFallbackToApi) throw error;
+            this.logger?.warn(`Python Steam lookup failed, falling back to API: ${error.message}`, {
+              operation: "steamLookup",
+              data: { steamID, attempt },
+            });
+          }
+        }
+
+        if (!this.apiKey) throw new Error("Steam API key is not configured.");
+        return await this._fetchSteamDurationFromApiOnce(steamID);
       } catch (error) {
-        if (!this.scriptFallbackToApi) throw error;
-        this.logger?.warn(`Python Steam lookup failed, falling back to API: ${error.message}`, {
-          operation: "steamLookup",
-          data: { steamID },
-        });
+        lastError = error;
+        const canRetry = attempt < maxAttempts && this._isRetryableSteamError(error);
+        if (!canRetry) break;
+        await delay(this.retryDelayMs * attempt);
       }
     }
 
-    if (!this.apiKey) throw new Error("Steam API key is not configured.");
-    return this._fetchSteamDurationFromApi(steamID);
+    throw lastError || new Error("Steam API request failed.");
   }
 
   async _fetchSteamDurationViaPython(steamID) {
@@ -893,21 +907,21 @@ class SteamGameDurationService {
               return;
             }
 
-        if (code !== 0 || payload.error) {
-          const stderrText = String(stderr || "").trim();
-          if (code === 9009) {
-            reject(Object.assign(new Error(`Python candidate "${candidate}" is not executable in this environment.`), {
-              retryable: true,
-              candidate,
-              code,
-              stderr: stderrText,
-            }));
-            return;
-          }
-          reject(new Error([
-            String(payload.error || `Python lookup failed with exit code ${code}`),
-            stderrText ? `stderr: ${stderrText}` : "",
-          ].filter(Boolean).join(" | ")));
+            if (code !== 0 || payload.error) {
+              const stderrText = String(stderr || "").trim();
+              if (code === 9009) {
+                reject(Object.assign(new Error(`Python candidate "${candidate}" is not executable in this environment.`), {
+                  retryable: true,
+                  candidate,
+                  code,
+                  stderr: stderrText,
+                }));
+                return;
+              }
+              reject(new Error([
+                String(payload.error || `Python lookup failed with exit code ${code}`),
+                stderrText ? `stderr: ${stderrText}` : "",
+              ].filter(Boolean).join(" | ")));
               return;
             }
 
@@ -941,45 +955,31 @@ class SteamGameDurationService {
     throw new Error(`Failed to start python process after trying: ${tried}${details}`);
   }
 
-  async _fetchSteamDurationFromApi(steamID) {
-    const maxAttempts = this.retryCount + 1;
-    let lastError = null;
+  async _fetchSteamDurationFromApiOnce(steamID) {
+    const payloadWithFilter = await this._requestOwnedGames(steamID, { withAppFilter: true });
+    let games = Array.isArray(payloadWithFilter?.response?.games) ? payloadWithFilter.response.games : [];
+    let match = games.find((game) => Number(game?.appid) === this.appId) || null;
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      try {
-        const payloadWithFilter = await this._requestOwnedGames(steamID, { withAppFilter: true });
-        let games = Array.isArray(payloadWithFilter?.response?.games) ? payloadWithFilter.response.games : [];
-        let match = games.find((game) => Number(game?.appid) === this.appId) || null;
-
-        if (!match) {
-          const payloadWithoutFilter = await this._requestOwnedGames(steamID, { withAppFilter: false });
-          games = Array.isArray(payloadWithoutFilter?.response?.games) ? payloadWithoutFilter.response.games : [];
-          match = games.find((game) => Number(game?.appid) === this.appId) || null;
-        }
-
-        return buildLookupResult({
-          steamID,
-          appId: this.appId,
-          gameName: match?.name || "Squad",
-          gameSeconds: Number(match?.playtime_forever || 0) * 60,
-          found: Boolean(match),
-        });
-      } catch (error) {
-        lastError = error;
-        const canRetry = attempt < maxAttempts && this._isRetryableSteamError(error);
-        if (!canRetry) break;
-        await delay(this.retryDelayMs * attempt);
-      }
+    if (!match) {
+      const payloadWithoutFilter = await this._requestOwnedGames(steamID, { withAppFilter: false });
+      games = Array.isArray(payloadWithoutFilter?.response?.games) ? payloadWithoutFilter.response.games : [];
+      match = games.find((game) => Number(game?.appid) === this.appId) || null;
     }
 
-    throw lastError || new Error("Steam API request failed.");
+    return buildLookupResult({
+      steamID,
+      appId: this.appId,
+      gameName: match?.name || "Squad",
+      gameSeconds: Number(match?.playtime_forever || 0) * 60,
+      found: Boolean(match),
+    });
   }
 
   _isRetryableSteamError(error) {
     if (!error) return false;
     if (error?.statusCode && [429, 500, 502, 503, 504].includes(Number(error.statusCode))) return true;
     const message = String(error?.message || "").toLowerCase();
-    return message.includes("timed out") || message.includes("network") || message.includes("fetch failed");
+    return message.includes("timed out") || message.includes("network") || message.includes("fetch failed") || message.includes("429");
   }
 
   async _requestOwnedGames(steamID, { withAppFilter } = {}) {
