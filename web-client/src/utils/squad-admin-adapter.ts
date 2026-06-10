@@ -24,6 +24,7 @@ export function adaptPlayerRow(
   player: RuntimePlayer,
   playtimeHours: number | null = null,
   combatStatsLookup: Record<string, CombatStats> = {},
+  steamAvatar: string | null = null,
 ): PlayerRowViewModel {
   const steam64 = normalizeSteam64(player.steamID ?? (player as any).steamId ?? (player as any).steam64 ?? (player as any).steam64ID);
   const combatStats = cloneCombatStats(resolveCombatStats(player, combatStatsLookup));
@@ -40,6 +41,7 @@ export function adaptPlayerRow(
     eosId: player.eosID ?? null,
     ip: (player as any).current_ip || (player as any).ip || null,
     playtimeHours,
+    steamAvatar,
     combatStats,
     statsLabel: formatCombatStatsLabel(combatStats),
     raw: player,
@@ -59,11 +61,17 @@ export function separateSquadLeader(
         leader,
         extractPlaytimeHours(leader.steamID, playtimes),
         combatStatsLookup,
+        extractSteamAvatar(leader.steamID, playtimes),
       ) as SquadLeaderRowViewModel)
     : null;
 
   const memberVms = others.map((m) =>
-    adaptPlayerRow(m, extractPlaytimeHours(m.steamID, playtimes), combatStatsLookup),
+    adaptPlayerRow(
+      m,
+      extractPlaytimeHours(m.steamID, playtimes),
+      combatStatsLookup,
+      extractSteamAvatar(m.steamID, playtimes),
+    ),
   );
 
   return [leaderVm, memberVms];
@@ -81,6 +89,16 @@ export function extractPlaytimeHours(
   if (seconds === 0) return 0;
   if (seconds < 0) return null;
   return Math.round((seconds / 3600) * 10) / 10;
+}
+
+export function extractSteamAvatar(
+  steamId: string | null | undefined,
+  playtimes: Record<string, any>,
+): string | null {
+  if (!steamId) return null;
+  const playtime = playtimes[steamId];
+  if (!playtime) return null;
+  return playtime.steam_avatar || playtime.steamAvatar || null;
 }
 
 export function adaptSquad(

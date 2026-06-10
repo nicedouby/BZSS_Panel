@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS players (
     total_lead_wins INTEGER NOT NULL DEFAULT 0,
     total_cmd_matches INTEGER NOT NULL DEFAULT 0,
     total_cmd_wins INTEGER NOT NULL DEFAULT 0,
+    steam_avatar TEXT,
     UNIQUE(steam_id),
     UNIQUE(eos_id)
 );
@@ -441,6 +442,7 @@ async function ensureCompatibleColumns(db) {
     total_lead_wins: "INTEGER NOT NULL DEFAULT 0",
     total_cmd_matches: "INTEGER NOT NULL DEFAULT 0",
     total_cmd_wins: "INTEGER NOT NULL DEFAULT 0",
+    steam_avatar: "TEXT",
   };
 
   for (const [column, definition] of Object.entries(playerColumns)) {

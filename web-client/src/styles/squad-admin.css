@@ -323,6 +323,8 @@
   grid-template-columns: 52px minmax(0, 1fr);
   gap: 8px;
   align-items: center;
+  position: relative;
+  overflow: hidden;
 
   /* 从 72px 压缩至 58px，更紧凑 */
   min-height: 58px;
@@ -396,6 +398,65 @@
   height: 16px;
   object-fit: contain;
   display: block;
+}
+
+.steam-avatar-link {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.player-avatar-container {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ─── Right-side Steam avatar with slanted fade ──────────────────────────── */
+
+.player-steam-bg {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 72px;
+  z-index: 0;
+  pointer-events: auto;
+  cursor: pointer;
+  text-decoration: none;
+  display: block;
+  /* Slanted fade mask: diagonal cut from transparent to visible */
+  -webkit-mask-image: linear-gradient(105deg, transparent 5%, rgba(0,0,0,0.25) 35%, rgba(0,0,0,0.7) 100%);
+  mask-image: linear-gradient(105deg, transparent 5%, rgba(0,0,0,0.25) 35%, rgba(0,0,0,0.7) 100%);
+  transition: opacity 0.2s ease, width 0.2s ease;
+  opacity: 0.85;
+}
+
+.squad-player-row:hover .player-steam-bg {
+  opacity: 1;
+  width: 80px;
+}
+
+.player-steam-bg-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: saturate(0.8) brightness(0.9);
+  transition: filter 0.2s ease;
+}
+
+.squad-player-row:hover .player-steam-bg-img {
+  filter: saturate(1) brightness(1.05);
+}
+
+/* Ensure main content stays above the avatar background */
+.squad-player-row.has-steam-avatar .player-side,
+.squad-player-row.has-steam-avatar .player-main {
+  position: relative;
+  z-index: 1;
 }
 
 .player-avatar-text {

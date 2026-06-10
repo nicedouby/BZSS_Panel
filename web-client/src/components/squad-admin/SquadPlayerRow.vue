@@ -1,21 +1,26 @@
 <template>
   <div
     class="squad-player-row player-row"
-    :class="{ selected: isSelected, 'is-leader': player.isLeader, 'is-checked': multiSelectMode && checked }"
+    :class="{ selected: isSelected, 'is-leader': player.isLeader, 'is-checked': multiSelectMode && checked, 'has-steam-avatar': !!avatarUrl }"
     @click="handleSelect"
   >
     <div class="player-side">
       <div v-if="multiSelectMode" class="player-checkbox-container">
         <div class="player-checkbox-custom" :class="{ 'is-checked': checked }"></div>
       </div>
-      <div v-else class="player-avatar" :title="displayRole(player.role)">
-        <img
-          v-if="isRoleIconImage"
-          class="player-avatar-image"
-          :src="roleIcon.icon"
-          :alt="roleIcon.label"
-        />
-        <span v-else class="player-avatar-text" aria-hidden="true">{{ roleIcon.icon }}</span>
+      <div v-else class="player-avatar-container">
+        <div
+          class="player-avatar"
+          :title="displayRole(player.role)"
+        >
+          <img
+            v-if="isRoleIconImage"
+            class="player-avatar-image"
+            :src="roleIcon.icon"
+            :alt="roleIcon.label"
+          />
+          <span v-else class="player-avatar-text" aria-hidden="true">{{ roleIcon.icon }}</span>
+        </div>
       </div>
       <div class="playtime-chip" :title="playtimeTitle">
         {{ playtimeText }}
@@ -65,6 +70,19 @@
         </span>
       </div>
     </div>
+
+    <!-- Steam Avatar - Right side decorative with slanted fade -->
+    <a
+      v-if="avatarUrl"
+      class="player-steam-bg"
+      :href="`https://steamcommunity.com/profiles/${player.steamId}`"
+      target="_blank"
+      rel="noopener noreferrer"
+      :title="`查看 ${displayName} 的 Steam 个人资料`"
+      @click.stop
+    >
+      <img class="player-steam-bg-img" :src="avatarUrl" alt="" />
+    </a>
   </div>
 </template>
 
@@ -80,6 +98,7 @@ const props = defineProps<{
   combatStats: CombatStats;
   multiSelectMode?: boolean;
   checked?: boolean;
+  steamAvatar?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -94,6 +113,7 @@ const isSelected = computed(() => {
 });
 const roleIcon = computed(() => resolveRoleIcon(props.player.role));
 const isRoleIconImage = computed(() => roleIcon.value.icon.startsWith("/"));
+const avatarUrl = computed(() => props.steamAvatar || props.player.steamAvatar || null);
 
 const displayName = computed(() => {
   const raw = String(props.player.name ?? "").trim();

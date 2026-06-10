@@ -906,7 +906,10 @@ function buildPlayerDetailViewModel(player: PlayerRowViewModel): PlayerDetailVie
     online: player.isOnline,
     current_ip: player.ip ?? undefined,
   } as RuntimePlayer;
-  return adaptPlayerDetail(rawPlayer, player.playtimeHours ?? null, combatStatsLookup.value);
+  const detail = adaptPlayerDetail(rawPlayer, player.playtimeHours ?? null, combatStatsLookup.value);
+  const cacheRecord = player.steamId ? stablePlaytimes.value[player.steamId] : null;
+  detail.steamAvatar = cacheRecord?.steam_avatar || cacheRecord?.steamAvatar || player.steamAvatar || null;
+  return detail;
 }
 
 async function refreshActivePlayerBattleStats() {

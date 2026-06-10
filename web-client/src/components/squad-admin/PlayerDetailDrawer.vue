@@ -20,13 +20,28 @@
             
             <div class="hud-profile-row">
               <!-- Animated Avatar Frame -->
-              <div class="hud-avatar-frame" :style="glowShadowStyle">
+              <component
+                :is="props.player.steamId ? 'a' : 'div'"
+                :href="props.player.steamId ? `https://steamcommunity.com/profiles/${props.player.steamId}` : undefined"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="hud-avatar-frame"
+                :class="{ 'hud-avatar-link': props.player.steamId }"
+                :style="glowShadowStyle"
+                :title="props.player.steamId ? '查看 Steam 个人资料' : undefined"
+              >
                 <div class="hud-avatar-inner">
-                  <span class="hud-avatar-letter">{{ playerInitials }}</span>
+                  <img
+                    v-if="props.player.steamAvatar"
+                    class="hud-avatar-image-steam"
+                    :src="props.player.steamAvatar"
+                    alt="Steam Avatar"
+                  />
+                  <span v-else class="hud-avatar-letter">{{ playerInitials }}</span>
                 </div>
                 <!-- Status indicator ring -->
                 <div class="hud-avatar-status-ring" :class="{ online: props.player.isOnline }"></div>
-              </div>
+              </component>
 
               <!-- Gamer Title Info -->
               <div class="hud-title-block">
@@ -47,6 +62,20 @@
                       <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.53c-.26-.81-1-1.4-1.9-1.4h-1v-3c0-.55-.45-1-1-1h-6v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
                     </svg>
                     数据库
+                  </button>
+                  <button
+                    type="button"
+                    class="hud-header-db-btn"
+                    :class="{ 'is-refreshing': steamProfileRefreshing }"
+                    @click="refreshSteamProfile"
+                    :disabled="steamProfileRefreshing || !props.player?.steamId"
+                    :title="'刷新 ' + (props.player?.name || '玩家') + ' 的 Steam 个人资料（时长+头像）'"
+                  >
+                    <svg v-if="!steamProfileRefreshing" viewBox="0 0 24 24" width="12" height="12" class="btn-icon">
+                      <path fill="currentColor" d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                    </svg>
+                    <span v-else class="refresh-spinner"></span>
+                    刷新资料
                   </button>
                 </div>
                 <div class="hud-header-identities">
@@ -484,6 +513,7 @@ const panelStyle = computed(() => {
 const showAdvanced = ref(false);
 const showCombatTimeline = ref(false);
 const actionBusy = ref(false);
+const steamProfileRefreshing = ref(false);
 const databaseDetail = ref<any | null>(null);
 const databaseLoading = ref(false);
 const databaseError = ref("");
@@ -848,6 +878,65 @@ function openDatabase() {
   }
 }
 
+async function refreshSteamProfile() {
+  const player = props.player;
+  if (!player || steamProfileRefreshing.value) return;
+  const steamId = player.steamId;
+  if (!steamId) {
+    ui.pushToast({ title: "刷新失败", message: "该玩家没有 Steam ID", tone: "error" });
+    return;
+  }
+
+  steamProfileRefreshing.value = true;
+  try {
+    // Step 1: Refresh playtime (this also triggers avatar fetch on backend)
+    const response = await apiPost<any>("/api/playtime/players/refresh", {
+      steamID: steamId,
+      name: player.name || null,
+      eosID: player.eosId || null,
+      waitMs: 0,
+    });
+
+    // Wait for job completion
+    let finalJob = response;
+    if (response?.status !== "completed" && response?.status !== "failed" && response?.id) {
+      const startedAt = Date.now();
+      while (Date.now() - startedAt < 20_000) {
+        const job = await apiGet<any>(`/api/playtime/jobs/${encodeURIComponent(response.id)}?waitMs=3000`);
+        if (job?.status === "completed" || job?.status === "failed") {
+          finalJob = job;
+          break;
+        }
+      }
+    }
+
+    if (finalJob?.status === "failed") {
+      throw new Error(finalJob?.error?.message || "Steam 资料刷新失败");
+    }
+
+    const lookup = finalJob?.result?.lookup;
+    const hoursText = lookup?.gameHours != null ? `${lookup.gameHours}h` : "--";
+
+    // Step 2: Reload database detail to get updated avatar and playtime
+    await loadDatabaseDetail();
+
+    emit("playtime-updated");
+    ui.pushToast({
+      title: "个人资料已刷新",
+      message: `时长: ${hoursText}，头像已同步`,
+      tone: "ok",
+    });
+  } catch (error) {
+    ui.pushToast({
+      title: "刷新失败",
+      message: error instanceof Error ? error.message : String(error),
+      tone: "error",
+    });
+  } finally {
+    steamProfileRefreshing.value = false;
+  }
+}
+
 async function handleWarn() {
   const player = props.player;
   if (!player || actionBusy.value) return;
@@ -1136,6 +1225,23 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.hud-avatar-frame.hud-avatar-link {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.hud-avatar-frame.hud-avatar-link:hover {
+  transform: scale(1.06);
+}
+
+.hud-avatar-image-steam {
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+  object-fit: cover;
+  display: block;
 }
 
 .hud-avatar-letter {

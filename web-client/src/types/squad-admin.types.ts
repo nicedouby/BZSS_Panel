@@ -16,6 +16,7 @@ export interface PlayerRowViewModel {
   eosId: string | null;
   ip: string | null;
   playtimeHours: number | null;
+  steamAvatar?: string | null;
   combatStats: CombatStats;
   statsLabel: string;
   raw?: any;
@@ -96,6 +97,7 @@ export interface PlayerDetailViewModel {
   ipSource?: "current" | "last" | "none";
   ipLookupLoading?: boolean;
   playtimeHours: number | null;
+  steamAvatar?: string | null;
   combatStats: CombatStats;
   statsLabel: string;
   battleStats?: CombatStats;

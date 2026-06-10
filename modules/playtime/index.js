@@ -114,6 +114,8 @@ function normalizePlaytimeRow(row) {
     fetchedAt: Number(row?.fetched_at ?? row?.fetchedAt ?? row?.updated_at ?? row?.updatedAt ?? 0) || null,
     last_seen_name: row?.last_seen_name ?? row?.lastSeenName ?? row?.current_name ?? row?.currentName ?? null,
     lastSeenName: row?.last_seen_name ?? row?.lastSeenName ?? row?.current_name ?? row?.currentName ?? null,
+    steam_avatar: row?.steam_avatar ?? row?.steamAvatar ?? null,
+    steamAvatar: row?.steam_avatar ?? row?.steamAvatar ?? null,
   };
 }
 
@@ -390,6 +392,10 @@ class SteamGameDurationService {
     let processed = 0;
     let running = 0;
 
+    if (this.apiKey && selectedTargets.length > 0) {
+      this.fetchAndCacheSteamAvatars(selectedTargets.map((t) => t.steamID)).catch(() => {});
+    }
+
     this._setJobProgress(job, {
       phase: selectedTargets.length ? "filter" : "completed",
       message: selectedTargets.length
@@ -526,6 +532,11 @@ class SteamGameDurationService {
     if (!this.isConfigured()) throw new Error("Steam API key or Python lookup config is not configured.");
 
     const normalizedSteamID = normalizeSteamID(steamID);
+
+    if (this.apiKey) {
+      this.fetchAndCacheSteamAvatars([normalizedSteamID]).catch(() => {});
+    }
+
     const cacheKey = `${normalizedSteamID}:${this.appId}`;
     const inflight = this.inflightLookups.get(cacheKey);
     if (inflight) return inflight;
@@ -1007,6 +1018,113 @@ class SteamGameDurationService {
     }
   }
 
+  async fetchSteamPlayerSummaries(steamIDs) {
+    if (!this.apiKey) {
+      this.logger?.warn("fetchSteamPlayerSummaries: No Steam API Key configured.");
+      console.log("[SteamAvatar] Warning: Steam API key is not configured.");
+      return [];
+    }
+    const ids = Array.isArray(steamIDs) ? steamIDs : [steamIDs];
+    const validIds = ids.map((id) => {
+      try {
+        return normalizeSteamID(id);
+      } catch {
+        return null;
+      }
+    }).filter(Boolean);
+    if (validIds.length === 0) {
+      console.log("[SteamAvatar] Info: No valid Steam IDs to query.");
+      return [];
+    }
+
+    console.log(`[SteamAvatar] Info: Start fetching summaries for ${validIds.length} players: ${validIds.join(", ")}`);
+
+    const chunks = [];
+    for (let i = 0; i < validIds.length; i += 100) {
+      chunks.push(validIds.slice(i, i + 100));
+    }
+
+    const results = [];
+    for (const chunk of chunks) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+      const params = new URLSearchParams({
+        key: this.apiKey,
+        steamids: chunk.join(","),
+      });
+
+      console.log(`[SteamAvatar] Fetching: https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/ for chunk of ${chunk.length} IDs.`);
+
+      try {
+        const response = await fetch(
+          `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?${params.toString()}`,
+          {
+            method: "GET",
+            signal: controller.signal,
+            headers: { Accept: "application/json" },
+          },
+        );
+
+        console.log(`[SteamAvatar] Response status: ${response.status} ${response.statusText}`);
+
+        if (!response.ok) {
+          throw new Error(`Steam GetPlayerSummaries failed with status ${response.status}.`);
+        }
+
+        const data = await response.json();
+        const players = data?.response?.players;
+        if (Array.isArray(players)) {
+          console.log(`[SteamAvatar] Success: Found ${players.length} player profiles from Steam API.`);
+          results.push(...players);
+        } else {
+          console.log(`[SteamAvatar] Warning: data.response.players is not an array. Response body:`, JSON.stringify(data));
+        }
+      } catch (error) {
+        console.error(`[SteamAvatar] Error fetching player summaries:`, error);
+        this.logger?.warn(`Failed to fetch Steam player summaries: ${error.message}`);
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+    return results;
+  }
+
+  async fetchAndCacheSteamAvatars(steamIDs) {
+    if (!this.apiKey) {
+      console.log("[SteamAvatar] Warning: fetchAndCacheSteamAvatars called but apiKey is missing.");
+      return;
+    }
+    const ids = Array.isArray(steamIDs) ? steamIDs : [steamIDs];
+    const validIds = ids.map((id) => {
+      try {
+        return normalizeSteamID(id);
+      } catch {
+        return null;
+      }
+    }).filter(Boolean);
+    if (validIds.length === 0) return;
+
+    console.log(`[SteamAvatar] Info: Requesting fetch and cache for Steam IDs: ${validIds.join(", ")}`);
+
+    try {
+      const summaries = await this.fetchSteamPlayerSummaries(validIds);
+      console.log(`[SteamAvatar] Info: Retrieved ${summaries.length} summaries. Writing to player-database...`);
+      for (const summary of summaries) {
+        const steamID = summary.steamid;
+        const avatar = summary.avatarmedium || summary.avatar || summary.avatarfull;
+        if (steamID && avatar) {
+          console.log(`[SteamAvatar] Saving: ID=${steamID} -> URL=${avatar}`);
+          await this.playerDatabase?.updateSteamAvatarBySteamID?.(steamID, avatar);
+        } else {
+          console.log(`[SteamAvatar] Warning: Missing steamid or avatar in summary:`, JSON.stringify(summary));
+        }
+      }
+    } catch (error) {
+      console.error(`[SteamAvatar] Cache execution error:`, error);
+      this.logger?.warn(`Failed to fetch and cache Steam avatars: ${error.message}`);
+    }
+  }
+
   _createJob(type, input) {
     const id = `steam-${now()}-${++this.jobCounter}`;
     const job = {
@@ -1280,6 +1398,7 @@ export function createPlaytimeModule({ core, modules, config, logger }) {
             gameHours: Number((gameSeconds / 3600).toFixed(2)),
             fetchedAt: Number(normalized.fetched_at || 0) || null,
             lastSeenName: normalized.last_seen_name || null,
+            steamAvatar: normalized.steamAvatar || null,
           },
         };
       });

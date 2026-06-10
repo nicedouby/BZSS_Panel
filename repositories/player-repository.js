@@ -289,7 +289,7 @@ export class PlayerRepository {
               players.permission_group, players.steam_game_seconds, players.game_seconds,
               players.game_seconds_override, players.server_seconds,
               players.commander_seconds, players.squad_leader_seconds, players.in_squad_seconds, players.warmup_seconds,
-              players.updated_at
+              players.steam_avatar, players.updated_at
        FROM players
        WHERE ${search.where}
        ORDER BY ${orderBy}
@@ -317,7 +317,7 @@ export class PlayerRepository {
   }
 
   async listPlayersWithSteamID({ limit, offset, order = "DESC" } = {}) {
-    let query = `SELECT id, current_name, steam_id, eos_id, game_seconds, updated_at
+    let query = `SELECT id, current_name, steam_id, eos_id, game_seconds, steam_avatar, updated_at
        FROM players
        WHERE steam_id IS NOT NULL
          AND TRIM(steam_id) <> ''
@@ -345,7 +345,7 @@ export class PlayerRepository {
 
     const placeholders = ids.map(() => "?").join(", ");
     const rows = await this.db.all(
-      `SELECT id, current_name, steam_id, eos_id, steam_game_seconds, game_seconds, game_seconds_override, updated_at
+      `SELECT id, current_name, steam_id, eos_id, steam_game_seconds, game_seconds, game_seconds_override, steam_avatar, updated_at
        FROM players
        WHERE steam_id IN (${placeholders})`,
       ...ids,
@@ -381,7 +381,7 @@ export class PlayerRepository {
     if (!clauses.length) return [];
 
     const rows = await this.db.all(
-      `SELECT id, current_name, steam_id, eos_id, steam_game_seconds, game_seconds, game_seconds_override, updated_at
+      `SELECT id, current_name, steam_id, eos_id, steam_game_seconds, game_seconds, game_seconds_override, steam_avatar, updated_at
        FROM players
        WHERE ${clauses.join(" OR ")}`,
       ...params,
@@ -432,6 +432,22 @@ export class PlayerRepository {
     const updated = mapPlayerPlaytimeRow(await this.getPlayerById(id));
     this.cache(updated, existing);
     return updated;
+  }
+
+  async updateSteamAvatarBySteamID(steamID, steamAvatar) {
+    const ts = now();
+    await this.db.run(
+      "UPDATE players SET steam_avatar = ?, updated_at = ? WHERE steam_id = ?",
+      steamAvatar,
+      ts,
+      steamID
+    );
+    const steam = cleanId(steamID);
+    if (steam && this.bySteamID.has(steam)) {
+      const player = this.bySteamID.get(steam);
+      player.steam_avatar = steamAvatar;
+      player.updated_at = ts;
+    }
   }
 
   normalizePaging({ limit = 12, offset = 0 } = {}) {

@@ -60,6 +60,7 @@
           :player="squad.leader"
           :playtime-hours="getPlayerPlaytime(squad.leader.steamId)"
           :combat-stats="getPlayerCombatStats(squad.leader)"
+          :steam-avatar="getPlayerSteamAvatar(squad.leader.steamId)"
           :multi-select-mode="multiSelectMode"
           :checked="isPlayerChecked(squad.leader.playerId)"
           @select="handlePlayerSelect"
@@ -76,6 +77,7 @@
           :player="member"
           :playtime-hours="getPlayerPlaytime(member.steamId)"
           :combat-stats="getPlayerCombatStats(member)"
+          :steam-avatar="getPlayerSteamAvatar(member.steamId)"
           :multi-select-mode="multiSelectMode"
           :checked="isPlayerChecked(member.playerId)"
           @select="handlePlayerSelect"
@@ -179,6 +181,12 @@ const squadWarnings = computed(() => {
 
 function getPlayerPlaytime(steamId: string | null | undefined): number | null {
   return extractPlaytimeHours(steamId, props.playtimes);
+}
+
+function getPlayerSteamAvatar(steamId: string | null | undefined): string | null {
+  if (!steamId) return null;
+  const playtime = props.playtimes[steamId];
+  return playtime?.steam_avatar || playtime?.steamAvatar || null;
 }
 
 function getPlayerCombatStats(player: PlayerRowViewModel): CombatStats {

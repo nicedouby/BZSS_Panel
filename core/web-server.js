@@ -3028,5 +3028,7 @@ function normalizePlaytimeRow(row) {
     steamGameHours: Number((safeSteamSeconds / 3600).toFixed(2)),
     fetchedAt: Number(row?.fetched_at ?? row?.fetchedAt ?? 0) || null,
     lastSeenName: row?.last_seen_name ?? row?.lastSeenName ?? null,
+    steam_avatar: row?.steam_avatar ?? row?.steamAvatar ?? null,
+    steamAvatar: row?.steam_avatar ?? row?.steamAvatar ?? null,
   };
 }

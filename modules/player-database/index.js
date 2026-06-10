@@ -57,6 +57,7 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
           warmupSeconds: Number(p.warmup_seconds ?? 0),
           suicides: Number(p.total_suicides ?? 0),
           updatedAt: Number(p.updated_at ?? 0) || null,
+          steamAvatar: p.steam_avatar ?? null,
         })),
         total,
       };
@@ -102,6 +103,10 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
 
     async setGameDurationOverride(playerId, gameSeconds) {
       return repo.setGameDurationOverride(playerId, gameSeconds);
+    },
+
+    async updateSteamAvatarBySteamID(steamID, steamAvatar) {
+      return repo.updateSteamAvatarBySteamID(steamID, steamAvatar);
     },
 
     async listPlayersWithSteamID(options = {}) {
