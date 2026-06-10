@@ -1,8 +1,8 @@
-﻿<template>
+<template>
   <Teleport to="body">
     <Transition name="drawer">
-      <div v-if="open && props.squad" class="drawer-root" @click.self="close">
-        <aside class="squad-detail-drawer">
+      <div v-if="open && props.squad" class="drawer-root" @click="close">
+        <aside class="squad-detail-drawer" :style="panelStyle" @click.stop>
           <header class="drawer-header" :class="teamColorClass">
             <div class="drawer-header-content">
               <h2 class="drawer-squad-name">{{ props.squad.squadName }}</h2>
@@ -108,6 +108,35 @@ const emit = defineEmits<{
 const ui = useUiStore();
 const actionBusy = ref(false);
 
+const viewport = ref({
+  width: typeof window !== "undefined" ? window.innerWidth : 1280,
+  height: typeof window !== "undefined" ? window.innerHeight : 800,
+});
+
+const updateViewport = () => {
+  viewport.value = {
+    width: window.innerWidth,
+    height: window.innerHeight,
+  };
+};
+
+const panelStyle = computed(() => {
+  const compactViewport = viewport.value.width < 920 || viewport.value.height < 760;
+  if (compactViewport) {
+    return {
+      width: "calc(100vw - 24px)",
+      maxHeight: "calc(100vh - 24px)",
+    };
+  }
+
+  const panelWidth = Math.min(480, Math.max(380, Math.round(viewport.value.width * 0.34)));
+
+  return {
+    width: `${panelWidth}px`,
+    maxHeight: `${Math.max(320, viewport.value.height - 48)}px`,
+  };
+});
+
 const teamColorClass = computed(() => {
   if (!props.squad) return "";
   return props.squad.teamId === 1 ? "team1-theme" : "team2-theme";
@@ -204,10 +233,12 @@ async function handleDisbandSquad() {
 }
 
 onMounted(() => {
+  window.addEventListener("resize", updateViewport);
   document.addEventListener("keydown", handleEscape);
 });
 
 onUnmounted(() => {
+  window.removeEventListener("resize", updateViewport);
   document.removeEventListener("keydown", handleEscape);
 });
 </script>
@@ -217,106 +248,140 @@ onUnmounted(() => {
   position: fixed;
   inset: 0;
   z-index: var(--z-player-drawer);
+  background:
+    radial-gradient(circle at 20% 18%, rgba(96, 165, 250, 0.14), transparent 28%),
+    radial-gradient(circle at 80% 10%, rgba(34, 197, 94, 0.08), transparent 26%),
+    rgba(8, 12, 16, 0.42);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
 }
 
 .squad-detail-drawer {
-  position: absolute;
-  top: 0;
-  right: 0;
-  height: 100dvh;
-  width: 420px;
-  background: var(--color-bg-panel);
-  border-left: 1px solid var(--color-border-default);
+  position: relative;
+  width: min(480px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow: hidden;
+  border-radius: 22px;
+  background:
+    linear-gradient(145deg, rgba(55, 200, 255, 0.06), rgba(168, 85, 247, 0.04)),
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.025)), rgba(255, 255, 255, 0.008)),
+    var(--color-bg-panel);
+  border: 1px solid rgba(140, 160, 200, 0.28);
   display: grid;
   grid-template-rows: auto 1fr;
-  box-shadow: var(--shadow-lg);
+  box-shadow:
+    0 32px 80px rgba(0, 0, 0, 0.52),
+    0 8px 24px rgba(0, 0, 0, 0.32),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  backdrop-filter: blur(28px) saturate(1.4);
 }
 
 .drawer-enter-active,
 .drawer-leave-active {
-  transition: all 0.2s ease;
+  transition: opacity 0.16s ease, transform 0.16s ease;
 }
 
-.drawer-enter-from {
-  transform: translateX(100%);
-}
-
+.drawer-enter-from,
 .drawer-leave-to {
-  transform: translateX(100%);
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
 }
 
 .drawer-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--spacing-md);
-  padding: var(--spacing-lg);
-  border-bottom: 1px solid var(--color-border-default);
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 12px var(--spacing-md) 11px;
+  border-bottom: 1px solid var(--color-border-soft);
   flex-shrink: 0;
-  background: var(--color-bg-elevated);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)),
+    var(--color-bg-elevated);
 }
 
 .drawer-header.team1-theme {
-  background: var(--color-bg-elevated);
   box-shadow: inset 0 3px 0 rgba(55, 200, 255, 0.7);
 }
 
 .drawer-header.team2-theme {
-  background: var(--color-bg-elevated);
   box-shadow: inset 0 3px 0 rgba(255, 155, 69, 0.7);
 }
 
 .drawer-header-content {
   display: grid;
-  gap: 8px;
+  gap: 5px;
   min-width: 0;
   flex: 1;
 }
 
 .drawer-squad-name {
   margin: 0;
-  font-size: var(--font-size-xl);
+  font-size: 16px;
   font-weight: 800;
   color: var(--color-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  letter-spacing: -0.01em;
 }
 
 .drawer-header-badges {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
   flex-wrap: wrap;
 }
 
 .drawer-close-button {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--color-border-soft);
   color: var(--color-text-muted);
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   flex-shrink: 0;
+  font-size: 13px;
+  display: grid;
+  place-items: center;
+  transition: all 0.14s ease;
 }
 
 .drawer-close-button:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-text-primary);
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
 }
 
 .drawer-body {
-  padding: var(--spacing-lg);
+  padding: 12px 14px;
   overflow-y: auto;
   display: grid;
-  gap: var(--spacing-lg);
+  gap: 10px;
+  overscroll-behavior: contain;
+}
+
+.drawer-body::-webkit-scrollbar {
+  width: 5px;
+}
+
+.drawer-body::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.22);
+}
+
+.drawer-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.38);
 }
 
 .detail-section {
   display: grid;
-  gap: var(--spacing-sm);
-  padding: 16px;
+  gap: 8px;
+  padding: 12px;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border-soft);
   background: var(--color-bg-card);
@@ -338,25 +403,28 @@ onUnmounted(() => {
 .stats-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-top: 4px;
+  gap: 10px;
+  margin-top: 2px;
 }
 
 .stat-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .stat-label {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
   text-transform: uppercase;
   color: var(--color-text-muted);
+  opacity: 0.8;
+  letter-spacing: 0.06em;
 }
 
 .stat-value {
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 700;
   color: var(--color-text-primary);
 }
 
@@ -366,19 +434,22 @@ onUnmounted(() => {
 
 /* ACTION CENTER */
 .action-center {
-  gap: 20px;
+  gap: 14px;
 }
 
 .action-group {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .group-label {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   color: var(--color-text-muted);
-  opacity: 0.6;
+  opacity: 0.7;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 1px;
 }
 
 .squad-actions-grid {
@@ -459,9 +530,10 @@ onUnmounted(() => {
   color: var(--color-text-muted);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 900px), (max-height: 760px) {
   .squad-detail-drawer {
-    width: 100vw;
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
   }
 }
 </style>

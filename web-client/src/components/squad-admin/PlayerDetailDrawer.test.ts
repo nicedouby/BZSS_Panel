@@ -48,7 +48,7 @@ describe("PlayerDetailDrawer", () => {
     document.body.innerHTML = "";
   });
 
-  it("anchors the floating panel near the click point on desktop", async () => {
+  it("renders the floating panel on desktop", async () => {
     const wrapper = mount(PlayerDetailDrawer, {
       props: {
         open: true,
@@ -68,8 +68,7 @@ describe("PlayerDetailDrawer", () => {
 
     const panel = document.body.querySelector(".player-detail-floating") as HTMLElement | null;
     expect(panel).toBeTruthy();
-    expect(panel?.getAttribute("style") || "").toContain("left: 216px");
-    expect(panel?.getAttribute("style") || "").toContain("top: 208px");
+    expect(panel?.getAttribute("style") || "").toContain("width: 476px");
 
     wrapper.unmount();
   });

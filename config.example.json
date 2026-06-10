@@ -382,7 +382,6 @@
       "maxRecords": 2000
     },
     "playerState": { "enabled": true },
-    "squadState": { "enabled": true },
     "squadLifecycle": {
       "enabled": true,
       "rconPollIntervalMs": 1000,

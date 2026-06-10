@@ -2022,7 +2022,7 @@ export class WebServer {
       const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
       const squadManagement = this.modules.squadManagement;
       return this.json(res, 200, {
-        squads: squadManagement?.getSquads?.(serverId) ?? this.modules.squadState.getSquads(serverId),
+        squads: squadManagement?.getSquads?.(serverId) ?? [],
       });
     }
 

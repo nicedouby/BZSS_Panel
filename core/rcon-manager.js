@@ -107,26 +107,6 @@ export class RconManager {
   async start() {
     if (!this.enabled) {
       this.webStatus.set("rcon", "disabled");
-
-    this.status = {
-      enabled: this.enabled,
-      connected: false,
-      authenticated: false,
-      queueSize: 0,
-      lastError: "",
-      lastPlayersRefresh: "",
-      lastSquadsRefresh: "",
-    };
-
-    this.refreshInFlight = {
-      players: false,
-      squads: false,
-    };
-  }
-
-  async start() {
-    if (!this.enabled) {
-      this.webStatus.set("rcon", "disabled");
       this.logger.info("RconManager disabled.", {
         operation: "start",
       });
@@ -144,7 +124,7 @@ export class RconManager {
 
     this.attachSquadRconEvents();
 
-    const workerCount = 2;
+    const workerCount = Math.max(0, Number(this.config.workers ?? 0));
     this.rconWorkers = [];
     for (let i = 0; i < workerCount; i++) {
       const workerClient = new SquadRcon({
@@ -497,8 +477,99 @@ export class RconManager {
               bypassRateLimit: Boolean(item?.bypassRateLimit),
             },
           });
+          const response = await this.squadRcon.execute(item.request.command);
+
+          this.logger.debug(() => `RCON command completed ${item.request.command}`, {
+            operation: "processQueue",
+            data: {
+              command: item.request.command,
+              responseBytes: String(response ?? "").length,
+            },
+          });
+          item.resolve({
+            success: true,
+            message: "RCON command executed.",
+            rconExecuted: true,
+            rconResponse: response,
+          });
+        } catch (error) {
+          this.status.lastError = error.message;
+          this.webStatus.set("rcon", "error");
+          this.logger.warn(`RCON command failed: ${item.request.command} -> ${error.message}`, {
+            operation: "processQueue",
+            data: {
+              command: item.request.command,
+              requestedBy: item.request.requestedBy ?? "",
+            },
+          });
+
+          item.resolve({
+            success: false,
+            message: error.message,
+            rconExecuted: false,
+            rconResponse: "",
+          });
+        }
+      }
     } finally {
       this.processing = false;
+    }
+  }
+
+  async runWorker(worker) {
+    worker.busy = true;
+    try {
+      while (this.getQueueSize() > 0) {
+        const item = this.priorityQueue.length > 0 ? this.priorityQueue.shift() : this.queue.shift();
+        if (!item) continue;
+
+        this.status.queueSize = this.getQueueSize();
+        this.webStatus.set("rconQueue", this.getQueueSize());
+
+        const diff = Date.now() - worker.lastCommandTime;
+        const minIntervalMs = item?.bypassRateLimit
+          ? 0
+          : (item?.priority ? this.priorityMinIntervalMs : this.minIntervalMs);
+        if (diff < minIntervalMs) {
+          await sleep(minIntervalMs - diff);
+        }
+
+        try {
+          if (!worker.client.connected || !worker.client.loggedIn) {
+            await worker.client.connect();
+          }
+
+          worker.lastCommandTime = Date.now();
+          this.logger.debug(() => `Executing command on ${worker.id}: ${item.request.command}`, {
+            operation: "runWorker",
+            worker: worker.id,
+            command: item.request.command,
+          });
+          const response = await worker.client.execute(item.request.command);
+
+          item.resolve({
+            success: true,
+            message: "RCON command executed.",
+            rconExecuted: true,
+            rconResponse: response,
+          });
+        } catch (error) {
+          this.logger.warn(`RCON worker ${worker.id} command failed: ${item.request.command} -> ${error.message}`, {
+            operation: "runWorker",
+            worker: worker.id,
+            command: item.request.command,
+          });
+          item.resolve({
+            success: false,
+            message: error.message,
+            rconExecuted: false,
+            rconResponse: "",
+          });
+        }
+      }
+    } finally {
+      worker.busy = false;
+      void this.processQueue();
     }
   }
 

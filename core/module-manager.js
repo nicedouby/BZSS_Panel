@@ -3,7 +3,6 @@
 import { createAuditModule } from "../modules/audit/index.js";
 import { createServerStatusModule } from "../modules/server-status/index.js";
 import { createPlayerStateModule } from "../modules/player-state/index.js";
-import { createSquadStateModule } from "../modules/squad-state/index.js";
 import { createSquadLifecycleModule } from "../modules/squad-lifecycle/index.js";
 import { createMatchStateModule } from "../modules/match-state/index.js";
 import { createSquadManagementModule } from "../modules/squad-management/index.js";
@@ -58,7 +57,6 @@ export class ModuleManager {
       createLogClockModule,
       createServerStatusModule,
       createPlayerStateModule,
-      createSquadStateModule,
       createSquadLifecycleModule,
       createMatchStateModule,
       createSquadManagementModule,

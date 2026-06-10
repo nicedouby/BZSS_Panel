@@ -516,9 +516,6 @@
     "playerState": {
       "enabled": true
     },
-    "squadState": {
-      "enabled": true
-    },
     "matchState": {
       "enabled": true,
       "polling": {

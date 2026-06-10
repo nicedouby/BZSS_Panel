@@ -704,8 +704,8 @@ function buildWebSocketUrl(path: string) {
   min-width: 0;
   min-height: 0;
   height: 100%;
-  display: grid;
-  grid-template-rows: minmax(0, 1.35fr) minmax(0, 1.2fr);
+  display: flex;
+  flex-direction: column;
   gap: 14px;
   overflow: hidden;
 }
@@ -722,6 +722,7 @@ function buildWebSocketUrl(path: string) {
 }
 
 .match-feed-card-chat {
+  flex: 1.35 1 0;
   background:
     radial-gradient(circle at 0% 0%, rgba(96, 165, 250, 0.1), transparent 28%),
     radial-gradient(circle at 100% 0%, rgba(34, 197, 94, 0.06), transparent 24%),
@@ -730,6 +731,7 @@ function buildWebSocketUrl(path: string) {
 }
 
 .match-feed-card-xm {
+  flex: 1.2 1 0;
   background:
     radial-gradient(circle at 0% 0%, rgba(250, 204, 21, 0.12), transparent 26%),
     radial-gradient(circle at 100% 0%, rgba(251, 191, 36, 0.08), transparent 24%),
@@ -886,10 +888,9 @@ function buildWebSocketUrl(path: string) {
   overflow-y: auto;
   overflow-x: hidden;
   padding: 6px 8px 8px;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 5px;
-  align-content: start;
-  align-items: start;
 }
 
 .match-chat-list::-webkit-scrollbar {
@@ -910,6 +911,7 @@ function buildWebSocketUrl(path: string) {
 }
 
 .match-chat-empty {
+  flex-shrink: 0;
   padding: 24px 12px;
   border-radius: 12px;
   border: 1px dashed rgba(130, 154, 180, 0.22);
@@ -919,13 +921,15 @@ function buildWebSocketUrl(path: string) {
 }
 
 .match-chat-row {
-  display: grid;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
   gap: 3px;
   padding: 5px 8px;
   border-radius: 8px;
   border: 1px solid rgba(130, 154, 180, 0.12);
   background: rgba(255, 255, 255, 0.025);
-  align-self: start;
+  align-self: stretch;
   overflow: hidden;
   transition: background-color 0.12s ease;
 }
@@ -941,6 +945,7 @@ function buildWebSocketUrl(path: string) {
   gap: 5px;
   align-items: center;
   min-width: 0;
+  flex-shrink: 0;
 }
 
 .match-chat-time {
@@ -1064,9 +1069,9 @@ function buildWebSocketUrl(path: string) {
   overflow-y: auto;
   overflow-x: hidden;
   padding: 8px 10px 10px;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 7px;
-  align-content: start;
 }
 
 .match-xm-log-list::-webkit-scrollbar {
@@ -1084,6 +1089,7 @@ function buildWebSocketUrl(path: string) {
 
 .match-xm-log-empty,
 .match-xm-log-error {
+  flex-shrink: 0;
   padding: 16px 14px;
   border-radius: 13px;
   font-size: 12px;
@@ -1102,7 +1108,9 @@ function buildWebSocketUrl(path: string) {
 }
 
 .match-xm-log-row {
-  display: grid;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
   gap: 5px;
   padding: 8px 10px;
   border-radius: 10px;
