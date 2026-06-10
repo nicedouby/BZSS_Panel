@@ -118,7 +118,29 @@ function buildNormalizedPayload(event) {
     };
   }
 
+  if (event.eventName === "On_PlayerConnected") {
+    return {
+      category: "player_connection",
+      playerConnected: normalizePlayerConnectedPayload(event),
+    };
+  }
+
   return null;
+}
+
+export function normalizePlayerConnectedPayload(event) {
+  return {
+    type: "player_connected",
+    serverId: event.serverId,
+    playerName: getParam(event, "PlayerName"),
+    controllerId: getParam(event, "ControllerID"),
+    ip: getParam(event, "IP"),
+    eosID: getParam(event, "EOSID"),
+    steamID: getParam(event, "Steam64ID"),
+    time: event.time,
+    logTime: event.logTime,
+    rawLog: event.rawLog,
+  };
 }
 
 export function normalizeRoundMatchWinnerPayload(event) {

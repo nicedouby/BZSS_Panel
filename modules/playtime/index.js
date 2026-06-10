@@ -16,10 +16,10 @@ const DEFAULT_SCRIPT_TIMEOUT_MS = 12_000;
 const DEFAULT_ONLINE_REFRESH_FRESHNESS_WINDOW_MINUTES = 120;
 const DEFAULT_MANUAL_REFRESH_COOLDOWN_MINUTES = 30;
 const DEFAULT_AUTO_REFRESH_ENABLED = true;
-const DEFAULT_AUTO_REFRESH_INTERVAL_MS = 30_000;
+const DEFAULT_AUTO_REFRESH_INTERVAL_MS = 15_000;
 const DEFAULT_AUTO_REFRESH_COOLDOWN_MINUTES = 30;
 const DEFAULT_AUTO_REFRESH_MISSING_ONLY = true;
-const DEFAULT_AUTO_REFRESH_BATCH_SIZE = 8;
+const DEFAULT_AUTO_REFRESH_BATCH_SIZE = 12;
 const MAX_JOB_HISTORY = 200;
 const MAX_JOB_EVENTS = 100;
 
@@ -1436,6 +1436,26 @@ export function createPlaytimeModule({ core, modules, config, logger }) {
       await service.startBackgroundAutoRefresh({
         getOnlinePlayers,
         playerDatabase: modules.playerDatabase,
+      });
+
+      core.eventBus.onCoreEvent("On_PlayerConnected", async (event) => {
+        const steamID = optionalSteamID(event.steamID || event.paramMap?.Steam64ID);
+        if (!steamID) return;
+
+        moduleLogger?.info(`Player connected, triggering immediate Steam refresh: ${event.playerName || event.paramMap?.PlayerName} steam=${steamID}`, {
+          operation: "onPlayerConnected",
+          data: { steamID, name: event.playerName || event.paramMap?.PlayerName },
+        });
+
+        service.createLookupJob({
+          steamID,
+          label: event.playerName || event.paramMap?.PlayerName || steamID,
+          player: {
+            name: event.playerName || event.paramMap?.PlayerName || null,
+            steamID,
+            eosID: event.eosID || event.paramMap?.EOSID || null,
+          },
+        });
       });
 
       moduleLogger?.info("Steam playtime module initialized.", {

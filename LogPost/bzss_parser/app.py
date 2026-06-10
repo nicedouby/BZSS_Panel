@@ -14,6 +14,7 @@ from bzss_parser.identity_cache import IdentityCache
 from bzss_parser.logpost_writer import LogPostWriter
 from bzss_parser.matchers.auxiliary_identity_matcher import AuxiliaryIdentityMatcher
 from bzss_parser.matchers.combat_matcher import CombatMatcher
+from bzss_parser.matchers.login_matcher import LoginMatcher
 from bzss_parser.matchers.round_end_matcher import RoundEndMatcher
 from bzss_parser.matchers.server_tick_rate_matcher import ServerTickRateMatcher
 from bzss_parser.matchers.spawn_matcher import SpawnMatcher
@@ -37,6 +38,7 @@ class BzssLogParserApp:
 
         self.auxiliary_identity_matcher = AuxiliaryIdentityMatcher(self.identity_cache)
         self.matchers = [
+            LoginMatcher(),
             CombatMatcher(self.identity_cache),
             ServerTickRateMatcher(self.config.get("server_tick_rate", {})),
             WorldBringUpMatcher(),

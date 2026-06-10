@@ -428,8 +428,8 @@
   text-decoration: none;
   display: block;
   /* Slanted fade mask: diagonal cut from transparent to visible */
-  -webkit-mask-image: linear-gradient(105deg, transparent 5%, rgba(0,0,0,0.25) 35%, rgba(0,0,0,0.7) 100%);
-  mask-image: linear-gradient(105deg, transparent 5%, rgba(0,0,0,0.25) 35%, rgba(0,0,0,0.7) 100%);
+  -webkit-mask-image: linear-gradient(125deg, transparent 0%, rgba(0,0,0,0.1) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.9) 100%);
+  mask-image: linear-gradient(125deg, transparent 0%, rgba(0,0,0,0.1) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.9) 100%);
   transition: opacity 0.2s ease, width 0.2s ease;
   opacity: 0.85;
 }

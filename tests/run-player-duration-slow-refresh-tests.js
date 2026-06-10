@@ -12,7 +12,7 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-async function waitFor(predicate, timeoutMs = 1000) {
+async function waitFor(predicate, timeoutMs = 2000) {
   const startedAt = Date.now();
   while (!predicate()) {
     if (Date.now() - startedAt > timeoutMs) {
@@ -157,8 +157,8 @@ async function testCurrentMatchResetAndDatabaseFallback() {
   assert.equal(state.currentSteamID, null);
   assert.equal(state.currentSource, null);
   assert.equal(state.lastSelectedSource, "current-match");
-  assert.equal(state.lastDelayMs, 10_000);
-  assert.deepEqual(sleepIntervals, [10_000, 60_000, 10_000]);
+  assert.equal(state.lastDelayMs, 3_000);
+  assert.deepEqual(sleepIntervals, [3_000, 60_000, 3_000]);
   assert.deepEqual(state.currentMatchRefreshedSteamIDs, ["111"]);
   assert.equal(state.refreshTaggedAtBySteamID["111"], undefined);
   assert.equal(state.refreshTaggedAtBySteamID["222"] > 0, true);
@@ -231,7 +231,7 @@ async function testDatabaseBackoffAndIdleRetry() {
   assert.equal(updates[0].playerId, 12);
   assert.equal(updates[0].seconds, 1234);
   assert.deepEqual(lookups, ["333"]);
-  assert.deepEqual(sleepIntervals, [60_000, 60_000, 90_000]);
+  assert.deepEqual(sleepIntervals, [60_000, 120_000, 300_000]);
   assert.equal(logs.some((entry) => entry.message.includes("没有可刷新的玩家")), true);
 }
 

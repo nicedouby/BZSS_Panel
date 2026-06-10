@@ -1,10 +1,10 @@
 // -*- coding: utf-8 -*-
 
 const LOG_SCOPE = "PlayerDurationSlowRefresh";
-const CURRENT_REFRESH_INTERVALS_MS = [10_000, 15_000, 20_000, 30_000, 45_000, 60_000];
-const DATABASE_REFRESH_INTERVALS_MS = [60_000, 75_000, 90_000, 120_000, 180_000];
-const IDLE_REFRESH_INTERVALS_MS = [60_000, 90_000, 120_000, 180_000, 300_000];
-const FAILURE_REFRESH_INTERVALS_MS = [60_000, 120_000, 180_000, 300_000];
+const CURRENT_REFRESH_INTERVALS_MS = [3_000, 5_000, 10_000];
+const DATABASE_REFRESH_INTERVALS_MS = [60_000, 120_000, 300_000];
+const IDLE_REFRESH_INTERVALS_MS = [120_000, 300_000, 600_000];
+const FAILURE_REFRESH_INTERVALS_MS = [60_000, 180_000, 600_000];
 const DATABASE_REFRESH_COOLDOWN_MS = 30 * 60_000;
 
 function sleep(ms) {
@@ -217,14 +217,12 @@ export function createPlugin(context = {}) {
 
   function computeInterval(source, eligibleCount, matchChanged, explicitStreak = null) {
     if (source === "current-match") {
-      if (matchChanged) {
+      if (matchChanged || eligibleCount > 0) {
         return CURRENT_REFRESH_INTERVALS_MS[0];
       }
-
-      const pressure = eligibleCount <= 1 ? 1 : 0;
       return pickInterval(
         CURRENT_REFRESH_INTERVALS_MS,
-        Math.min(CURRENT_REFRESH_INTERVALS_MS.length - 1, state.matchStableLoops + pressure),
+        Math.min(CURRENT_REFRESH_INTERVALS_MS.length - 1, state.matchStableLoops),
       );
     }
 
