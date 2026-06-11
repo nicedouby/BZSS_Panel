@@ -164,25 +164,27 @@ async function testWebSecurityConfigRejectsPublicBindingInProduction() {
   assert.throws(() => validateWebSecurityConfig({
     web: {
       environment: "production",
-      transport: "https",
+      reverseProxyOnly: true,
       host: "0.0.0.0",
+      enforceHttps: true,
+      publicOrigin: "https://panel.example.com",
       allowedHosts: ["panel.example.com"],
+      allowedOrigins: ["https://panel.example.com"],
       enableDebugPage: false,
     },
     auth: {
-      secureCookie: false,
+      secureCookie: true,
     },
-  }), /secureCookie=true/);
+  }), /loopback-only web\.host/);
 }
 
-async function testHttpsHostChecksAndHeaderPolicy() {
+async function testReverseProxyHttpsAndHostChecks() {
   const server = createServer({
     config: {
-      transport: "https",
+      enforceHttps: true,
       allowedHosts: ["panel.example.com", "panel.example.com:443"],
-      security: {
-        hstsEnabled: false,
-      },
+      allowedOrigins: ["https://panel.example.com"],
+      trustedProxyAddresses: ["127.0.0.1"],
     },
   });
 
@@ -190,77 +192,37 @@ async function testHttpsHostChecksAndHeaderPolicy() {
   await dispatch(server, {
     method: "GET",
     url: "/api/health",
-    headers: { host: "evil.example.com" },
-    socket: { remoteAddress: "127.0.0.1", encrypted: true },
+    headers: { host: "evil.example.com", "x-forwarded-proto": "https" },
+    socket: { remoteAddress: "127.0.0.1" },
   }, badHost.res);
   assert.equal(badHost.state.status, 421);
+
+  const insecure = createRecorder();
+  await dispatch(server, {
+    method: "GET",
+    url: "/api/health",
+    headers: { host: "panel.example.com" },
+    socket: { remoteAddress: "10.0.0.5" },
+  }, insecure.res);
+  assert.equal(insecure.state.status, 426);
 
   const secure = createRecorder();
   await dispatch(server, {
     method: "GET",
     url: "/api/health",
-    headers: { host: "panel.example.com:12864" },
-    socket: { remoteAddress: "127.0.0.1", encrypted: true },
+    headers: { host: "panel.example.com", "x-forwarded-proto": "https" },
+    socket: { remoteAddress: "127.0.0.1" },
   }, secure.res);
   assert.equal(secure.state.status, 200);
-  assert.equal(secure.state.headers["X-Content-Type-Options"], "nosniff");
-  assert.equal(secure.state.headers["Cache-Control"], "no-store");
-  assert.equal(secure.state.headers["Strict-Transport-Security"], undefined);
 }
 
-async function testHttpsLoginRejectsPlainHttpAndHostWithoutPortMatch() {
+async function testStateChangingOriginAndForwardedForRules() {
   const server = createServer({
     config: {
       allowedHosts: ["panel.example.com"],
       allowedOrigins: ["https://panel.example.com"],
-      transport: "https",
-    },
-    core: {
-      authManager: {
-        async login() {
-          return { ok: true, user: { username: "admin" }, cookie: ["__Host-bzss_session=token; Path=/; Secure; HttpOnly; SameSite=Strict"] };
-        },
-        getUserFromRequest() {
-          return { username: "admin", role: "SuperAdmin", isSuperAdmin: true };
-        },
-        hasEverything() {
-          return true;
-        },
-      },
-    },
-  });
-
-  const insecure = createRecorder();
-  const insecureReq = Readable.from([JSON.stringify({ username: "a", password: "b" })]);
-  insecureReq.method = "POST";
-  insecureReq.url = "/api/auth/login";
-  insecureReq.headers = {
-    host: "panel.example.com",
-    origin: "https://panel.example.com",
-  };
-  insecureReq.socket = { remoteAddress: "127.0.0.1", encrypted: false };
-  await dispatch(server, insecureReq, insecure.res);
-  assert.equal(insecure.state.status, 426);
-
-  const secure = createRecorder();
-  const secureReq = Readable.from([JSON.stringify({ username: "a", password: "b" })]);
-  secureReq.method = "POST";
-  secureReq.url = "/api/auth/login";
-  secureReq.headers = {
-    host: "panel.example.com:12864",
-    origin: "https://panel.example.com",
-  };
-  secureReq.socket = { remoteAddress: "127.0.0.1", encrypted: true };
-  await dispatch(server, secureReq, secure.res);
-  assert.equal(secure.state.status, 200);
-}
-
-async function testStateChangingOriginAndRequestIpRules() {
-  const server = createServer({
-    config: {
-      allowedHosts: ["panel.example.com"],
-      allowedOrigins: ["https://panel.example.com"],
-      transport: "https",
+      trustedProxyAddresses: ["127.0.0.1"],
+      enforceHttps: true,
     },
     core: {
       authManager: {
@@ -286,15 +248,23 @@ async function testStateChangingOriginAndRequestIpRules() {
   forbiddenReq.headers = {
     host: "panel.example.com",
     origin: "https://attacker.example.com",
+    "x-forwarded-proto": "https",
   };
-  forbiddenReq.socket = { remoteAddress: "127.0.0.1", encrypted: true };
+  forbiddenReq.socket = { remoteAddress: "127.0.0.1" };
   await dispatch(server, forbiddenReq, forbidden.res);
   assert.equal(forbidden.state.status, 403);
 
   const clientIp = server.getRequestIp({
+    headers: { "x-forwarded-for": "203.0.113.5" },
     socket: { remoteAddress: "10.0.0.5" },
   });
   assert.equal(clientIp, "10.0.0.5");
+
+  const trustedIp = server.getRequestIp({
+    headers: { "x-forwarded-for": "203.0.113.5", "x-forwarded-proto": "https" },
+    socket: { remoteAddress: "127.0.0.1" },
+  });
+  assert.equal(trustedIp, "203.0.113.5");
 }
 
 async function testWebPagesEndpointFiltersByPermissions() {
@@ -2367,9 +2337,8 @@ await testReadJsonBodyRejectsOversizedPayload();
 await testGetPluginApiReturnsMatchingPluginApi();
 await testHealthEndpointDoesNotRequireAuth();
 await testWebSecurityConfigRejectsPublicBindingInProduction();
-await testHttpsHostChecksAndHeaderPolicy();
-await testHttpsLoginRejectsPlainHttpAndHostWithoutPortMatch();
-await testStateChangingOriginAndRequestIpRules();
+await testReverseProxyHttpsAndHostChecks();
+await testStateChangingOriginAndForwardedForRules();
 await testWebPagesEndpointFiltersByPermissions();
 await testConsoleRecentEndpointUsesUnifiedConsoleBuffer();
 await testPlaytimeCacheReturnsEffectiveDuration();

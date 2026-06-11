@@ -10,9 +10,6 @@ data/*.db-*
 data/weapon-stats.json
 /data
 /data
-/data/certs/
-data/certs/*.key
-data/certs/*.crt
 server.out.log
 config.local.json
 config.local.*.json

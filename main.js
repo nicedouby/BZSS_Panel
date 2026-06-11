@@ -52,7 +52,10 @@ async function main() {
   const logger = new Logger(configManager.get("core.logger", { useColor: true }));
   validateWebSecurityConfig({
     web: configManager.get("web", {}),
-    auth: configManager.get("auth", {}),
+    auth: {
+      ...configManager.get("auth", {}),
+      environment: configManager.get("web.environment", "development"),
+    },
   });
   logger.info("BZSS Panel WebCore starting...", {
     scope: "app",
