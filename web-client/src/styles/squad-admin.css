@@ -427,12 +427,46 @@
   cursor: pointer;
   text-decoration: none;
   display: block;
-  /* Slanted fade mask: diagonal cut from transparent to visible */
   -webkit-mask-image: linear-gradient(125deg, transparent 0%, rgba(0,0,0,0.1) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.9) 100%);
   mask-image: linear-gradient(125deg, transparent 0%, rgba(0,0,0,0.1) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.9) 100%);
   transition: opacity 0.2s ease, width 0.2s ease;
   opacity: 0.85;
 }
+.team-faction-bg {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 72px;
+  z-index: 0;
+  cursor: pointer;
+  display: block;
+  -webkit-mask-image: linear-gradient(125deg, transparent 0%, rgba(0,0,0,0.1) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.9) 100%);
+  mask-image: linear-gradient(125deg, transparent 0%, rgba(0,0,0,0.1) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.9) 100%);
+  transition: opacity 0.2s ease, width 0.2s ease;
+  opacity: 0.85;
+}
+
+.team-faction-bg-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: saturate(0.8) brightness(0.9);
+  transition: filter 0.2s ease;
+}
+
+.team-faction-bg:hover {
+  opacity: 1;
+  width: 80px;
+}
+
+.team-faction-bg:hover .team-faction-bg-img {
+  filter: saturate(1) brightness(1.05);
+}
+
+
+
 
 .squad-player-row:hover .player-steam-bg {
   opacity: 1;

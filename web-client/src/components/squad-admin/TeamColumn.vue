@@ -1,14 +1,14 @@
 <template>
   <section class="team-column" :class="[teamColorClass, densityMode]">
+  <!-- Top flag background (similar to avatar style) -->
+  <a v-if="factionFlagUrl" class="team-faction-bg" :href="factionFlagUrl" target="_blank" @click.stop>
+    <img class="team-faction-bg-img" :src="factionFlagUrl" alt="" />
+  </a>
     <header
       class="team-column-header"
       :class="{ 'has-flag': !!factionFlagUrl }"
-      :style="factionFlagUrl ? { '--faction-flag-url': `url(${factionFlagUrl})` } : {}"
+      style="position: relative;"
     >
-      <!-- DEBUG -->
-      <div style="position: absolute; top: 0; left: 0; font-size: 10px; color: yellow; background: rgba(0,0,0,0.8); padding: 2px; z-index: 999;">
-        Flag: {{ factionFlagUrl ? 'YES' : 'NO' }} | Badge: {{ formationBadgeUrl ? 'YES' : 'NO' }}
-      </div>
       <div class="team-column-title">
         <h2 class="team-title-line">
           <img v-if="formationBadgeUrl" class="formation-badge" :src="formationBadgeUrl" alt="" />
@@ -90,14 +90,10 @@ const teamColorClass = computed(() => (props.team.teamColorType === "team1" ? "t
 const isComfortable = computed(() => props.densityMode !== "compact");
 
 const factionFlagUrl = computed(() => {
-  const url = getFlagUrlByTeamName(props.team.teamName);
-  console.log('[TeamColumn] factionFlagUrl:', { teamName: props.team.teamName, url });
-  return url;
+  return getFlagUrlByTeamName(props.team.teamName);
 });
 const formationBadgeUrl = computed(() => {
-  const url = getBadgeUrl(props.team.teamName);
-  console.log('[TeamColumn] formationBadgeUrl:', { teamName: props.team.teamName, url });
-  return url;
+  return getBadgeUrl(props.team.teamName);
 });
 
 const teamPlayers = computed(() => {
@@ -184,6 +180,7 @@ const teamLeaderAveragePlaytimeShortText = computed(() => {
     var(--color-bg-panel);
   box-shadow: var(--shadow-lg);
   transition: border-color 0.2s ease;
+  position: relative;
 }
 
 .team-column.team1 {
@@ -214,20 +211,42 @@ const teamLeaderAveragePlaytimeShortText = computed(() => {
   gap: 5px;
   transition: border-color 0.2s ease;
   position: relative;
+  z-index: 1;
   overflow: hidden;
 }
 
-.team-column-header.has-flag::before {
-  content: "";
+/* ─── Faction flag background with slanted fade (Avatar style) ───────────── */
+.team-column.team2 .team-faction-top-bg {
+  left: 0;
+  right: auto;
+}
+
+/* Top flag background (similar to avatar style) */
+.team-faction-top-bg {
   position: absolute;
-  inset: 0;
-  background-image: var(--faction-flag-url);
-  background-size: cover;
-  background-position: center right;
-  opacity: 0.25;
-  pointer-events: none;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 70px;
   z-index: 0;
-  border: 2px solid red; /* DEBUG */
+  pointer-events: none;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(125deg, transparent 0%, rgba(0,0,0,0.1) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,1) 100%);
+  mask-image: linear-gradient(125deg, transparent 0%, rgba(0,0,0,0.1) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,1) 100%);
+  opacity: 0.85;
+  transition: opacity 0.3s ease;
+}
+.team-faction-top-bg-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  filter: saturate(0.8) brightness(0.9);
+  transition: filter 0.3s ease;
+}
+.team-column:hover .team-faction-top-bg-img {
+  filter: saturate(1) brightness(1.05);
 }
 
 .team-column-header > * {

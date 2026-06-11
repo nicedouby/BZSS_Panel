@@ -1,5 +1,6 @@
 // Faction Flags
 import flagADF from "./flag_adf.jpg";
+import flagWPMC from "./flag_wpmc.png";
 import flagAFU from "./flag_afu.png";
 import flagBAF from "./flag_baf.png";
 import flagCAF from "./flag_caf.png";
@@ -118,6 +119,7 @@ const factionFlags: Record<string, string> = {
   AFU: flagAFU,
   BAF: flagBAF,
   CAF: flagCAF,
+  WPMC: flagWPMC,
   USA: flagUSA,
   USMC: flagUSMC,
   RGF: flagRGF,
@@ -198,6 +200,8 @@ const formationBadges: Record<string, string> = {
 };
 
 const formationToFaction: Record<string, string> = {
+  // Custom mapping for Manticore Security Task Force
+  "Manticore Security Task Force": "WPMC",
   "3rd Battalion, Royal Australian Regiment": "ADF",
   "3rd Brigade": "ADF",
   "1st Battalion, Royal Australian Regiment": "ADF",
@@ -288,7 +292,22 @@ const formationToFaction: Record<string, string> = {
 };
 
 export function getFactionFromTeamName(teamName: string): string | null {
-  return formationToFaction[teamName] ?? null;
+  const normalized = String(teamName || "").trim();
+  if (formationToFaction[normalized]) return formationToFaction[normalized];
+
+  // Fuzzy match: check if any formation name is contained within the teamName
+  for (const formation of Object.keys(formationToFaction)) {
+    if (normalized.includes(formation)) return formationToFaction[formation];
+  }
+
+  // Check for common faction codes directly in the name
+  const factionCodes = Object.values(formationToFaction);
+  for (const code of factionCodes) {
+    const regex = new RegExp(`\\b${code}\\b`, "i");
+    if (regex.test(normalized)) return code;
+  }
+
+  return null;
 }
 
 export function getFlagUrl(factionCode: string): string | null {
@@ -301,7 +320,6 @@ export function getBadgeUrl(teamName: string): string | null {
 
 export function getFlagUrlByTeamName(teamName: string): string | null {
   const faction = getFactionFromTeamName(teamName);
-  console.log('[faction-data] getFlagUrlByTeamName:', { teamName, faction, flagUrl: faction ? factionFlags[faction] : null });
   if (!faction) return null;
   return getFlagUrl(faction);
 }
