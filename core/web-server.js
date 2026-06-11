@@ -1,6 +1,7 @@
 // -*- coding: utf-8 -*-
 
 import http from "node:http";
+import https from "node:https";
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -12,11 +13,12 @@ import { handleReserveSlotsRoutes } from "../modules/reserve-slots/routes.js";
 import {
   applySecurityHeaders,
   isStateChangingMethod,
-  resolveClientIp,
   resolveRequestProtocol,
+  normalizeTransport,
   validateHost,
   validateOrigin,
 } from "./web-security.js";
+import { HttpsCertificateManager } from "./https-certificate-manager.js";
 import {
   classifySquadName,
   getSquadNameClassifierRules,
@@ -43,16 +45,12 @@ export class WebServer {
       process.cwd(),
       this.useVueClient ? "./web-client/dist" : (config.staticDirectory ?? "./web"),
     );
-    this.reverseProxyOnly = config.reverseProxyOnly === true;
-    this.enforceHttps = config.enforceHttps === true;
-    this.publicOrigin = String(config.publicOrigin ?? "").trim();
+    this.transport = normalizeTransport(config.transport, config.https?.enabled);
+    this.httpsConfig = config.https ?? {};
+    this.enforceHttps = this.transport === "https" || config.enforceHttps === true;
     this.allowedHosts = Array.isArray(config.allowedHosts) ? config.allowedHosts : [];
     this.allowedOrigins = Array.isArray(config.allowedOrigins) ? config.allowedOrigins : [];
-    this.trustedProxyAddresses = Array.isArray(config.trustedProxyAddresses) ? config.trustedProxyAddresses : [];
-    this.securityConfig = {
-      trustedProxyAddresses: this.trustedProxyAddresses,
-      ...(config.security ?? {}),
-    };
+    this.securityConfig = config.security ?? {};
     this.timeoutConfig = config.timeouts ?? {};
 
     this.logger = logger;
@@ -78,8 +76,7 @@ export class WebServer {
     }
 
     await this.warnIfStaticIndexMissing();
-
-    this.server = http.createServer((req, res) => {
+    const requestHandler = (req, res) => {
       requestStorage.run({ req }, () => {
         this.handleRequest(req, res).catch((error) => {
           const statusCode = error.statusCode ?? 500;
@@ -94,7 +91,18 @@ export class WebServer {
           });
         });
       });
-    });
+    };
+
+    if (this.transport === "https") {
+      const certificateManager = new HttpsCertificateManager({
+        config: this.httpsConfig,
+        logger: this.logger,
+      });
+      const tlsOptions = await certificateManager.loadTlsOptions();
+      this.server = https.createServer(tlsOptions, requestHandler);
+    } else {
+      this.server = http.createServer(requestHandler);
+    }
 
     this.server.on("upgrade", (req, socket, head) => {
       this.handleUpgrade(req, socket, head).catch((error) => {
@@ -155,11 +163,7 @@ export class WebServer {
     recordMemory(); // Record first data point immediately
     this.memoryInterval = setInterval(recordMemory, 10000);
 
-    this.logger.info(`Web internal upstream listening on http://${this.host}:${this.port}`);
-    if (this.publicOrigin) {
-      this.logger.info(`Public origin: ${this.publicOrigin}`);
-    }
-    this.logger.info(`Exposure mode: ${this.reverseProxyOnly ? "reverse-proxy-only" : "direct"}`);
+    this.logger.info(`WebServer listening on ${this.transport}://${this.host}:${this.port}`);
   }
 
   async stop() {
@@ -244,10 +248,7 @@ export class WebServer {
 
   enforceRequestBoundary(req) {
     this.enforceHost(req);
-    if (this.isRequestSecure(req)) {
-      return;
-    }
-    if (this.enforceHttps) {
+    if (!this.isRequestSecure(req) && this.enforceHttps) {
       throw createHttpError(426, "UpgradeRequired", "HTTPS is required.");
     }
   }
@@ -273,7 +274,7 @@ export class WebServer {
   }
 
   isRequestSecure(req) {
-    return resolveRequestProtocol(req, this.trustedProxyAddresses) === "https";
+    return resolveRequestProtocol(req) === "https";
   }
 
   async handleApi(url, req, res) {
@@ -2621,7 +2622,7 @@ export class WebServer {
       const data = await fs.readFile(abs);
       res.writeHead(200, {
         "Content-Type": contentType(abs),
-        "Cache-Control": shouldUseImmutableAssetCache(abs) ? "public, max-age=31536000, immutable" : "no-store",
+        "Cache-Control": "no-store",
       });
       res.end(data);
     } catch {
@@ -2684,7 +2685,7 @@ export class WebServer {
   }
 
   getRequestIp(req) {
-    return resolveClientIp(req, this.trustedProxyAddresses);
+    return req.socket?.remoteAddress ?? "";
   }
 
   async handleUpgrade(req, socket, head) {
@@ -3049,10 +3050,6 @@ function contentType(filePath) {
   if (filePath.endsWith(".csv")) return "text/csv; charset=utf-8";
   if (filePath.endsWith(".md")) return "text/markdown; charset=utf-8";
   return "application/octet-stream";
-}
-
-function shouldUseImmutableAssetCache(filePath) {
-  return /\.(css|js|png|svg|woff2?)$/i.test(filePath);
 }
 
 function safeHeaderFileName(fileName) {

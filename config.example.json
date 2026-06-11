@@ -14,22 +14,26 @@
   "web": {
     "enabled": true,
     "environment": "production",
-    "host": "127.0.0.1",
+    "host": "0.0.0.0",
     "port": 12864,
+    "transport": "https",
     "staticDirectory": "./web-client/dist",
     "useVueClient": true,
     "title": "BZSS Panel",
-    "reverseProxyOnly": true,
-    "enforceHttps": true,
-    "publicOrigin": "https://panel.example.com",
-    "allowedHosts": ["panel.example.com", "panel.example.com:443"],
-    "allowedOrigins": ["https://panel.example.com"],
-    "trustedProxyAddresses": ["127.0.0.1", "::1", "::ffff:127.0.0.1"],
+    "https": {
+      "enabled": true,
+      "autoGenerateSelfSigned": true,
+      "certDir": "./data/certs",
+      "keyPath": "./data/certs/bzss-panel.key",
+      "certPath": "./data/certs/bzss-panel.crt",
+      "commonName": "BZSS Panel",
+      "validDays": 825
+    },
+    "allowedHosts": ["服务器公网IP", "服务器公网IP:12864"],
     "enableDebugPage": false,
     "security": {
-      "hstsEnabled": true,
+      "hstsEnabled": false,
       "hstsMaxAgeSeconds": 31536000,
-      "contentSecurityPolicyEnabled": true,
       "frameProtectionEnabled": true
     },
     "timeouts": {
