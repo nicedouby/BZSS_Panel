@@ -1,325 +1,506 @@
-// Faction Flags
-import flagADF from "./flag_adf.jpg";
-import flagWPMC from "./flag_wpmc.png";
-import flagAFU from "./flag_afu.png";
-import flagBAF from "./flag_baf.png";
-import flagCAF from "./flag_caf.png";
-import flagUSA from "./flag_usa.png";
-import flagUSMC from "./flag_usmc.png";
-import flagRGF from "./flag_rgf.png";
-import flagVDV from "./flag_vdv.png";
-import flagPLA from "./flag_pla.png";
-import flagPLAAGF from "./flag_plaagf.png";
-import flagPLANMC from "./flag_planmc.png";
-import flagCRF from "./flag_crf.png";
-import flagGFI from "./flag_gfi.png";
-import flagIMF from "./flag_imf.png";
-import flagMEI from "./flag_mei.png";
-import flagTLF from "./flag_tlf.png";
+type FactionCode =
+  | "ADF"
+  | "AFU"
+  | "BAF"
+  | "CAF"
+  | "CRF"
+  | "GFI"
+  | "IMF"
+  | "MEA"
+  | "MEI"
+  | "PLA"
+  | "PLAAGF"
+  | "PLANMC"
+  | "RGF"
+  | "TLF"
+  | "USA"
+  | "USMC"
+  | "VDV"
+  | "WPMC";
 
-// Formation Badges - ADF
-import badgeADFAirAssault from "./badge_adf_air_assault.png";
-import badgeADFCombinedArms from "./badge_adf_combined_arms.png";
-import badgeADFMechanized from "./badge_adf_mechanized.png";
+interface BattlegroupVisual {
+  name: string;
+  faction: FactionCode;
+  unitIconBasename: string;
+  aliases?: string[];
+}
 
-// AFU
-import badgeAFUAirAssault from "./badge_afu_air_assault.png";
-import badgeAFUArmored from "./badge_afu_armored.png";
-import badgeAFUCombinedArms from "./badge_afu_combined_arms.png";
-import badgeAFUMechanized from "./badge_afu_mechanized.png";
-import badgeAFUSupport from "./badge_afu_support.png";
+const assetModules = import.meta.glob("./*.{PNG,png,JPG,jpg,JPEG,jpeg}", {
+  eager: true,
+  import: "default",
+}) as Record<string, string>;
 
-// BAF
-import badgeBAFAirAssault from "./badge_baf_air_assault.png";
-import badgeBAFArmored from "./badge_baf_armored.png";
-import badgeBAFCombinedArms from "./badge_baf_combined_arms.png";
-import badgeBAFMechanized from "./badge_baf_mechanized.png";
-import badgeBAFSupport from "./badge_baf_support.png";
+const assetUrlsByBasename = Object.fromEntries(
+  Object.entries(assetModules).map(([assetPath, assetUrl]) => {
+    const segments = assetPath.split("/");
+    return [segments[segments.length - 1], assetUrl];
+  }),
+) as Record<string, string>;
 
-// CAF
-import badgeCAFAirAssault from "./badge_caf_air_assault.png";
-import badgeCAFArmored from "./badge_caf_armored.png";
-import badgeCAFCombinedArms from "./badge_caf_combined_arms.png";
-import badgeCAFMechanized from "./badge_caf_mechanized.png";
-import badgeCAFMotorized from "./badge_caf_motorized.png";
-import badgeCAFSupport from "./badge_caf_support.png";
-
-// USA
-import badgeUSAArmored from "./badge_usa_armored.png";
-import badgeUSACombinedArms from "./badge_usa_combined_arms.png";
-import badgeUSALightInfantry from "./badge_usa_light_infantry.png";
-import badgeUSAMotorized from "./badge_usa_motorized.png";
-import badgeUSASupport from "./badge_usa_support.png";
-
-// USMC
-import badgeUSMCArmored from "./badge_usmc_armored.png";
-import badgeUSMCCombinedArms from "./badge_usmc_combined_arms.png";
-import badgeUSMCLightInfantry from "./badge_usmc_light_infantry.png";
-import badgeUSMCMotorized from "./badge_usmc_motorized.png";
-import badgeUSMCSupport from "./badge_usmc_support.png";
-import badgeUSMCAmphibious from "./badge_usmc_amphibious.png";
-
-// RGF
-import badgeRGFArmored from "./badge_rgf_armored.png";
-import badgeRGFCombinedArms from "./badge_rgf_combined_arms.png";
-import badgeRGFMechanized from "./badge_rgf_mechanized.png";
-import badgeRGFSupport from "./badge_rgf_support.png";
-import badgeRGFAmphibious from "./badge_rgf_amphibious.png";
-
-// VDV
-import badgeVDVAirAssault from "./badge_vdv_air_assault.png";
-import badgeVDVArmored from "./badge_vdv_armored.png";
-import badgeVDVCombinedArms from "./badge_vdv_combined_arms.png";
-import badgeVDVSupport from "./badge_vdv_support.png";
-
-// PLA
-import badgePLAArmored from "./badge_pla_armored.png";
-import badgePLACombinedArms from "./badge_pla_combined_arms.png";
-
-// PLAAGF
-import badgePLAAGFArmored from "./badge_plaagf_armored.png";
-import badgePLAAGFCombinedArms from "./badge_plaagf_combined_arms.png";
-import badgePLAAGFAmphibious from "./badge_plaagf_amphibious.png";
-
-// PLANMC
-import badgePLANMCCombinedArms from "./badge_planmc_combined_arms.png";
-
-// CRF
-import badgeCRFCombinedArms from "./badge_crf_combined_arms.png";
-
-// GFI
-import badgeGFIArmored from "./badge_gfi_armored.png";
-import badgeGFICombinedArms from "./badge_gfi_combined_arms.png";
-import badgeGFILightInfantry from "./badge_gfi_light_infantry.png";
-import badgeGFIMechanized from "./badge_gfi_mechanized.png";
-import badgeGFIMotorized from "./badge_gfi_motorized.png";
-import badgeGFISupport from "./badge_gfi_support.png";
-
-// IMF
-import badgeIMFArmored from "./badge_imf_armored.png";
-import badgeIMFCombinedArms from "./badge_imf_combined_arms.png";
-import badgeIMFLightInfantry from "./badge_imf_light_infantry.png";
-import badgeIMFMechanized from "./badge_imf_mechanized.png";
-import badgeIMFMotorized from "./badge_imf_motorized.png";
-import badgeIMFSupport from "./badge_imf_support.png";
-
-// MEI
-import badgeMEIArmored from "./badge_mei_armored.png";
-import badgeMEICombinedArms from "./badge_mei_combined_arms.png";
-import badgeMEIMechanized from "./badge_mei_mechanized.png";
-import badgeMEIMotorized from "./badge_mei_motorized.png";
-import badgeMEISupport from "./badge_mei_support.png";
-
-// TLF
-import badgeTLFAirAssault from "./badge_tlf_air_assault.png";
-import badgeTLFCombinedArms from "./badge_tlf_combined_arms.png";
-
-const factionFlags: Record<string, string> = {
-  ADF: flagADF,
-  AFU: flagAFU,
-  BAF: flagBAF,
-  CAF: flagCAF,
-  WPMC: flagWPMC,
-  USA: flagUSA,
-  USMC: flagUSMC,
-  RGF: flagRGF,
-  VDV: flagVDV,
-  PLA: flagPLA,
-  PLAAGF: flagPLAAGF,
-  PLANMC: flagPLANMC,
-  CRF: flagCRF,
-  GFI: flagGFI,
-  IMF: flagIMF,
-  MEI: flagMEI,
-  TLF: flagTLF,
+const factionFlagBasenames: Partial<Record<FactionCode, string>> = {
+  ADF: "ADF.PNG",
+  AFU: "AFU.PNG",
+  BAF: "BAF.PNG",
+  CAF: "CAF.PNG",
+  CRF: "CRF.PNG",
+  GFI: "GFI.PNG",
+  IMF: "IMF.PNG",
+  MEI: "MEI.PNG",
+  PLA: "PLA.PNG",
+  PLAAGF: "PLAAGF.PNG",
+  PLANMC: "PLANMC.png",
+  RGF: "RGF.PNG",
+  TLF: "TLF.PNG",
+  USA: "USA.PNG",
+  USMC: "USMC.PNG",
+  VDV: "VDV.png",
+  WPMC: "WPMC.PNG",
 };
 
-const formationBadges: Record<string, string> = {
-  "3rd Battalion, Royal Australian Regiment": badgeADFAirAssault,
-  "3rd Brigade": badgeADFCombinedArms,
-  "1st Battalion, Royal Australian Regiment": badgeADFMechanized,
-  "95th Air Assault Brigade": badgeAFUAirAssault,
-  "1st Tank Brigade": badgeAFUArmored,
-  "11th Army Corps": badgeAFUCombinedArms,
-  "28th Mechanized Brigade": badgeAFUMechanized,
-  "148th Artillery Brigade": badgeAFUSupport,
-  "2nd Battalion, Parachute Regiment": badgeBAFAirAssault,
-  "Queen's Royal Hussars Battle Group": badgeBAFArmored,
-  "3rd Division Battle Group": badgeBAFCombinedArms,
-  "1 Yorks Battle Group": badgeBAFMechanized,
-  "Royal Logistics Corps Battle Group": badgeBAFSupport,
-  "3rd Battalion, Royal Canadian Regiment": badgeCAFAirAssault,
-  "Lord Strathcona's Horse Regiment": badgeCAFArmored,
-  "1 Canadian Mechanized Brigade Group": badgeCAFCombinedArms,
-  "1st Battalion, Royal 22e Régiment": badgeCAFMechanized,
-  "The 12e Régiment Blindé du Canada": badgeCAFMotorized,
-  "6 Canadian Combat Support Brigade": badgeCAFSupport,
-  "37th Armored Regiment": badgeUSAArmored,
-  "1st Infantry Division": badgeUSACombinedArms,
-  "10th Mountain Division": badgeUSALightInfantry,
-  "2nd Cavalry Stryker Brigade": badgeUSAMotorized,
-  "497th Combat Sustainment Support Battalion": badgeUSASupport,
-  "1st Tank Battalion": badgeUSMCArmored,
-  "31st Marine Expeditionary Unit": badgeUSMCCombinedArms,
-  "1st Marines Regimental Combat Team": badgeUSMCLightInfantry,
-  "3rd Light Armored Recon Battalion": badgeUSMCMotorized,
-  "2nd Marine Logistics Group": badgeUSMCSupport,
-  "4th Marines Amphibious Ready Group": badgeUSMCAmphibious,
-  "6th Separate Tank Brigade": badgeRGFArmored,
-  "49th Combined Arms Army": badgeRGFCombinedArms,
-  "205th Separate Motor Rifle Brigade": badgeRGFMechanized,
-  "78th Detached Logistics Brigade": badgeRGFSupport,
-  "336th Guards Naval Infantry Brigade": badgeRGFAmphibious,
-  "217th Guards Airborne Regiment": badgeVDVAirAssault,
-  "104th Tank Battalion": badgeVDVArmored,
-  "150th Support Battalion": badgeVDVSupport,
-  "195th Heavy Combined Arms Brigade": badgePLAArmored,
-  "118th Combined Arms Brigade": badgePLACombinedArms,
-  "9th Heavy Combined Arms Battalion": badgePLAAGFArmored,
-  "14th Amphibious Combined Arms Brigade": badgePLAAGFAmphibious,
-  "51st Wolverine Battalion": badgeCRFCombinedArms,
-  "16th Armored Division": badgeGFIArmored,
-  "21st Division": badgeGFICombinedArms,
-  "64th Infantry Division": badgeGFILightInfantry,
-  "77th Infantry Division": badgeGFIMechanized,
-  "30th Infantry Division": badgeGFIMotorized,
-  "75th Logistics Brigade": badgeGFISupport,
-  "1st Separate Tank Brigade": badgeIMFArmored,
-  "1st Separate Guards Brigade": badgeIMFCombinedArms,
-  "Hoplite Battalion": badgeIMFLightInfantry,
-  "1st Separate Cossack Brigade": badgeIMFMechanized,
-  "3rd Separate Guards Motorized Brigade": badgeIMFMotorized,
-  "3rd Guards Artillery Brigade": badgeIMFSupport,
-  "Irregular Armored Squadron": badgeMEIArmored,
-  "Irregular Battle Group": badgeMEICombinedArms,
-  "Irregular Mechanized Platoon": badgeMEIMechanized,
-  "Irregular Motorized Platoon": badgeMEIMotorized,
-  "Irregular Fire Support Group": badgeMEISupport,
-  "1st Commando Brigade": badgeTLFAirAssault,
-  "1st Army": badgeTLFCombinedArms,
-};
+const battlegroupVisuals: BattlegroupVisual[] = [
+  { name: "1st Regiment", faction: "ADF", unitIconBasename: "T_ADF_1st_Regiment_Armored.PNG" },
+  {
+    name: "1st Battalion, Royal Australian Regiment",
+    faction: "ADF",
+    unitIconBasename: "T_ADF_1RAR_Mechanized.PNG",
+    aliases: ["1RAR"],
+  },
+  {
+    name: "2nd Battalion, Royal Australian Regiment",
+    faction: "ADF",
+    unitIconBasename: "T_ADF_2RAR_LightInfantry.PNG",
+    aliases: ["2RAR"],
+  },
+  {
+    name: "3rd Battalion, Royal Australian Regiment",
+    faction: "ADF",
+    unitIconBasename: "T_ADF_3RAR_AirAssault.PNG",
+    aliases: ["3RAR"],
+  },
+  { name: "3rd Brigade", faction: "ADF", unitIconBasename: "T_ADF_3rd_Brigade_CombinedArms.PNG" },
+  {
+    name: "3rd Combat Service Support Battalion",
+    faction: "ADF",
+    unitIconBasename: "T_ADF_3rd_Combat_Service_Support.PNG",
+    aliases: ["3rd Combat Service Support"],
+  },
+  {
+    name: "5th Battalion, Royal Australian Regiment",
+    faction: "ADF",
+    unitIconBasename: "T_ADF_5RAR_Motorized.PNG",
+    aliases: ["5RAR"],
+  },
 
-const formationToFaction: Record<string, string> = {
-  // Custom mapping for Manticore Security Task Force
-  "Manticore Security Task Force": "WPMC",
-  "3rd Battalion, Royal Australian Regiment": "ADF",
-  "3rd Brigade": "ADF",
-  "1st Battalion, Royal Australian Regiment": "ADF",
-  "95th Air Assault Brigade": "AFU",
-  "1st Tank Brigade": "AFU",
-  "11th Army Corps": "AFU",
-  "10th Mountain Assault Brigade": "AFU",
-  "28th Mechanized Brigade": "AFU",
-  "58th Motorized Brigade": "AFU",
-  "148th Artillery Brigade": "AFU",
-  "35th Marine Brigade": "AFU",
-  "2nd Battalion, Parachute Regiment": "BAF",
-  "Queen's Royal Hussars Battle Group": "BAF",
-  "3rd Division Battle Group": "BAF",
-  "1 Yorks Battle Group": "BAF",
-  "Royal Logistics Corps Battle Group": "BAF",
-  "3rd Battalion, Royal Canadian Regiment": "CAF",
-  "Lord Strathcona's Horse Regiment": "CAF",
-  "1 Canadian Mechanized Brigade Group": "CAF",
-  "1st Battalion, Royal 22e Régiment": "CAF",
-  "The 12e Régiment Blindé du Canada": "CAF",
-  "6 Canadian Combat Support Brigade": "CAF",
-  "504th Paracute Infantry Regiment": "USA",
-  "37th Armored Regiment": "USA",
-  "1st Infantry Division": "USA",
-  "10th Mountain Division": "USA",
-  "1st Cavalry Regiment": "USA",
-  "2nd Cavalry Stryker Brigade": "USA",
-  "497th Combat Sustainment Support Battalion": "USA",
-  "1st Tank Battalion": "USMC",
-  "31st Marine Expeditionary Unit": "USMC",
-  "1st Marines Regimental Combat Team": "USMC",
-  "3rd Light Armored Recon Battalion": "USMC",
-  "2nd Marine Logistics Group": "USMC",
-  "4th Marines Amphibious Ready Group": "USMC",
-  "6th Separate Tank Brigade": "RGF",
-  "49th Combined Arms Army": "RGF",
-  "1398th Separate Reconnaissance Battalion": "RGF",
-  "205th Separate Motor Rifle Brigade": "RGF",
-  "3rd Motor Rifle Brigade": "RGF",
-  "78th Detached Logistics Brigade": "RGF",
-  "336th Guards Naval Infantry Brigade": "RGF",
-  "217th Guards Airborne Regiment": "VDV",
-  "104th Tank Battalion": "VDV",
-  "7th Guards Mountain Air Assault Division": "VDV",
-  "108th Guards Air Assault Regiment": "VDV",
-  "150th Support Battalion": "VDV",
-  "161st Air Assault Brigade": "PLA",
-  "195th Heavy Combined Arms Brigade": "PLA",
-  "118th Combined Arms Brigade": "PLA",
-  "149th Mountain Infantry Brigade": "PLA",
-  "112th Medium Combined Arms Brigade": "PLA",
-  "80th Support Brigade": "PLA",
-  "9th Heavy Combined Arms Battalion": "PLAAGF",
-  "14th Amphibious Combined Arms Brigade": "PLAAGF",
-  "4th Medium Combined Arms Battalion": "PLAAGF",
-  "4th Marine Special Combat Battalion": "PLANMC",
-  "3rd Marine Heavy Battalion": "PLANMC",
-  "5th Marine Combined Arms Brigade": "PLANMC",
-  "7th Marine Medium Battalion": "PLANMC",
-  "17th Marine Support Battalion": "PLANMC",
-  "51st Wolverine Battalion": "CRF",
-  "55th Airborne Brigade": "GFI",
-  "16th Armored Division": "GFI",
-  "21st Division": "GFI",
-  "64th Infantry Division": "GFI",
-  "77th Infantry Division": "GFI",
-  "30th Infantry Division": "GFI",
-  "75th Logistics Brigade": "GFI",
-  "1st Separate Tank Brigade": "IMF",
-  "1st Separate Guards Brigade": "IMF",
-  "Hoplite Battalion": "IMF",
-  "1st Separate Cossack Brigade": "IMF",
-  "3rd Separate Guards Motorized Brigade": "IMF",
-  "3rd Guards Artillery Brigade": "IMF",
-  "Irregular Armored Squadron": "MEI",
-  "Irregular Battle Group": "MEI",
-  "Irregular Light Infantry": "MEI",
-  "Irregular Mechanized Platoon": "MEI",
-  "Irregular Motorized Platoon": "MEI",
-  "Irregular Fire Support Group": "MEI",
-  "1st Commando Brigade": "TLF",
-  "4th Armored Brigade": "TLF",
-  "1st Army": "TLF",
-  "66th Mechanized Infantry Brigade": "TLF",
-  "51st Motorized Infantry Brigade": "TLF",
-  "Land Forces Logistics Command": "TLF",
-};
+  {
+    name: "10th Mountain Assault Brigade",
+    faction: "AFU",
+    unitIconBasename: "T_AFU_10thMAB_LightInfantry.PNG",
+    aliases: ["10th MAB"],
+  },
+  {
+    name: "11th Army Corps",
+    faction: "AFU",
+    unitIconBasename: "T_AFU_11thAC_CombinedArms.PNG",
+    aliases: ["11th AC"],
+  },
+  {
+    name: "148th Artillery Brigade",
+    faction: "AFU",
+    unitIconBasename: "T_AFU_148thAB_Support.PNG",
+    aliases: ["148th AB"],
+  },
+  {
+    name: "1st Tank Brigade",
+    faction: "AFU",
+    unitIconBasename: "T_AFU_1stTB_Armored.PNG",
+    aliases: ["1st TB"],
+  },
+  {
+    name: "28th Mechanized Brigade",
+    faction: "AFU",
+    unitIconBasename: "T_AFU_28thMB_Mechanized.PNG",
+    aliases: ["28th MB"],
+  },
+  {
+    name: "35th Marine Brigade",
+    faction: "AFU",
+    unitIconBasename: "T_AFU_35thMB_AmphibiousAssault.PNG",
+    aliases: ["35th MB"],
+  },
+  {
+    name: "58th Motorized Brigade",
+    faction: "AFU",
+    unitIconBasename: "T_AFU_58thIMIB_Motorized.PNG",
+    aliases: ["58th IMIB", "58th Motorized Infantry Brigade"],
+  },
+  {
+    name: "95th Air Assault Brigade",
+    faction: "AFU",
+    unitIconBasename: "T_AFU_95thAAB_AirAssault.PNG",
+    aliases: ["95th AAB"],
+  },
+
+  {
+    name: "1 Yorks Battle Group",
+    faction: "BAF",
+    unitIconBasename: "T_BAF_1_YORKS_Mechanized.PNG",
+    aliases: ["1 YORKS"],
+  },
+  {
+    name: "2nd Battalion, Parachute Regiment",
+    faction: "BAF",
+    unitIconBasename: "T_BAF_2_BPR_AirAssault.PNG",
+    aliases: ["2 BPR"],
+  },
+  {
+    name: "3 Rifles Battle Group",
+    faction: "BAF",
+    unitIconBasename: "T_BAF_3_RIFLES_Motorized.PNG",
+    aliases: ["3 RIFLES", "3rd Rifles Battle Group"],
+  },
+  {
+    name: "3rd Division Battle Group",
+    faction: "BAF",
+    unitIconBasename: "T_BAF_3DIV_CombinedArms.PNG",
+    aliases: ["3DIV"],
+  },
+  {
+    name: "Queen's Royal Hussars Battle Group",
+    faction: "BAF",
+    unitIconBasename: "T_BAF_QRH_Armored.PNG",
+    aliases: ["QRH"],
+  },
+  {
+    name: "Royal Logistics Corps Battle Group",
+    faction: "BAF",
+    unitIconBasename: "T_BAF_ROYALLOGI_Support.PNG",
+    aliases: ["ROYALLOGI", "Royal Logistics"],
+  },
+
+  {
+    name: "The 12e Regiment Blinde du Canada",
+    faction: "CAF",
+    unitIconBasename: "T_CAF_12e_Regiment_Motorized.PNG",
+    aliases: ["The 12e Régiment Blindé du Canada"],
+  },
+  {
+    name: "1 Canadian Mechanized Brigade Group",
+    faction: "CAF",
+    unitIconBasename: "T_CAF_1_CMBG_CombinedArms.PNG",
+    aliases: ["1 CMBG"],
+  },
+  {
+    name: "3rd Princess Patricia's Canadian Light Infantry",
+    faction: "CAF",
+    unitIconBasename: "T_CAF_3_PPCLI_LightInfantry.PNG",
+    aliases: ["3 PPCLI"],
+  },
+  {
+    name: "3rd Battalion, Royal Canadian Regiment",
+    faction: "CAF",
+    unitIconBasename: "T_CAF_3_RCR_AirAssault.PNG",
+    aliases: ["3 RCR"],
+  },
+  {
+    name: "Canadian Combat Support Brigade",
+    faction: "CAF",
+    unitIconBasename: "T_CAF_CCSB_Support.PNG",
+    aliases: ["6 Canadian Combat Support Brigade", "CCSB"],
+  },
+  {
+    name: "Lord Strathcona's Horse Regiment",
+    faction: "CAF",
+    unitIconBasename: "T_CAF_LdSH_Armored.PNG",
+    aliases: ["LdSH"],
+  },
+  {
+    name: "Royal Newfoundland Regiment",
+    faction: "CAF",
+    unitIconBasename: "T_CAF_R_NFLD_Reserve.PNG",
+    aliases: ["R NFLD"],
+  },
+  { name: "The Westies", faction: "CAF", unitIconBasename: "T_CAF_TheWesties_.PNG" },
+  {
+    name: "Van Doos",
+    faction: "CAF",
+    unitIconBasename: "T_CAF_VanDoos_Mechanized.PNG",
+    aliases: ["1st Battalion, Royal 22e Régiment"],
+  },
+
+  { name: "51st Wolverine Battalion", faction: "CRF", unitIconBasename: "" },
+
+  { name: "16th Armored Division", faction: "GFI", unitIconBasename: "T_GFI_16thAD_Armored.PNG", aliases: ["16th AD"] },
+  { name: "21st Division", faction: "GFI", unitIconBasename: "T_GFI_21stD_CombinedArms.PNG", aliases: ["21st D"] },
+  { name: "30th Infantry Division", faction: "GFI", unitIconBasename: "T_GFI_30thID_Motorized.PNG", aliases: ["30th ID"] },
+  { name: "55th Airborne Brigade", faction: "GFI", unitIconBasename: "T_GFI_55thAB_AirAssault.PNG", aliases: ["55th AB"] },
+  { name: "64th Infantry Division", faction: "GFI", unitIconBasename: "T_GFI_64thID_LightInfantry.PNG", aliases: ["64th ID"] },
+  { name: "75th Logistics Brigade", faction: "GFI", unitIconBasename: "T_GFI_75thLB_Support.PNG", aliases: ["75th LB"] },
+  { name: "77th Infantry Division", faction: "GFI", unitIconBasename: "T_GFI_77thID_Mechanized.PNG", aliases: ["77th ID"] },
+
+  { name: "1st Separate Tank Brigade", faction: "IMF", unitIconBasename: "T_IMF_Armored.PNG" },
+  { name: "1st Separate Guards Brigade", faction: "IMF", unitIconBasename: "T_IMF_BattleGroup_CombinedArms.PNG" },
+  { name: "Hoplite Battalion", faction: "IMF", unitIconBasename: "T_IMF_LightInfantry.PNG" },
+  { name: "1st Separate Cossack Brigade", faction: "IMF", unitIconBasename: "T_IMF_Mechanized.PNG" },
+  { name: "3rd Separate Guards Motorized Brigade", faction: "IMF", unitIconBasename: "T_IMF_Motorized.PNG" },
+  { name: "3rd Guards Artillery Brigade", faction: "IMF", unitIconBasename: "T_IMF_Support.PNG" },
+
+  { name: "60th Prince Assur Armored Brigade", faction: "MEA", unitIconBasename: "T_MEA_60th_Prince_Assur_Armored.PNG", aliases: ["60th Prince Assur"] },
+  { name: "1st Legion of Babylon", faction: "MEA", unitIconBasename: "T_MEA_1st_LegionofBabylon_CombinedArms.PNG" },
+  { name: "4th Border Guard", faction: "MEA", unitIconBasename: "T_MEA_4th_Border_Guard_LightInfantry.PNG" },
+  { name: "3rd King Qadesh Brigade", faction: "MEA", unitIconBasename: "T_MEA_3rd_King_Qadesh_Mechanized.PNG", aliases: ["3rd King Qadesh"] },
+  { name: "83rd Prince Zaid Motorized Brigade", faction: "MEA", unitIconBasename: "T_MEA_83rd_Prince_Zaid_Motorized.PNG", aliases: ["83rd Prince Zaid"] },
+  { name: "2nd Vizir Hussein Support Brigade", faction: "MEA", unitIconBasename: "T_MEA_2nd_Vizir_Hussein_Support.PNG", aliases: ["2nd Vizir Hussein"] },
+  { name: "91st Battalion", faction: "MEA", unitIconBasename: "T_MEA_91st_Battalion_AirAssault.PNG" },
+
+  { name: "Irregular Armored Squadron", faction: "MEI", unitIconBasename: "T_MEI_Armored.PNG" },
+  { name: "Irregular Battle Group", faction: "MEI", unitIconBasename: "T_MEI_BattleGrp_CombinedArms.PNG", aliases: ["Irregular Battlegroup"] },
+  { name: "Irregular Light Infantry", faction: "MEI", unitIconBasename: "T_MEI_LightInfantry.PNG" },
+  { name: "Irregular Mechanized Platoon", faction: "MEI", unitIconBasename: "T_MEI_Mechanized.PNG" },
+  { name: "Irregular Motorized Platoon", faction: "MEI", unitIconBasename: "T_MEI_Motorized.PNG" },
+  { name: "Irregular Fire Support Group", faction: "MEI", unitIconBasename: "T_MEI_Support.PNG" },
+
+  { name: "112th Medium Combined Arms Brigade", faction: "PLA", unitIconBasename: "T_PLA_112th_Brigade_Motorized.PNG", aliases: ["112th Brigade"] },
+  { name: "118th Combined Arms Brigade", faction: "PLA", unitIconBasename: "T_PLA_118th_Brigade_CombinedArms.PNG" },
+  { name: "149th Mountain Infantry Brigade", faction: "PLA", unitIconBasename: "T_PLA_149th_Brigade_LightInfantry.PNG", aliases: ["149th Brigade"] },
+  { name: "161st Air Assault Brigade", faction: "PLA", unitIconBasename: "T_PLA_161st_Brigade_AirAssault.PNG", aliases: ["161st Brigade"] },
+  { name: "195th Heavy Combined Arms Brigade", faction: "PLA", unitIconBasename: "T_PLA_195th_Brigade_Armored.PNG", aliases: ["195th Brigade"] },
+  { name: "80th Support Brigade", faction: "PLA", unitIconBasename: "T_PLA_80th_Brigade_Support.PNG", aliases: ["80th Brigade"] },
+
+  {
+    name: "10th Light Combined Arms Battalion",
+    faction: "PLAAGF",
+    unitIconBasename: "T_PLAAGF_10th_Light_Battalion_LightInfantry.PNG",
+    aliases: ["10th Light Battalion"],
+  },
+  {
+    name: "14th Amphibious Combined Arms Brigade",
+    faction: "PLAAGF",
+    unitIconBasename: "T_PLAAGF_14th_Brigade_CombinedArms.PNG",
+    aliases: ["14th Brigade"],
+  },
+  {
+    name: "4th Medium Combined Arms Battalion",
+    faction: "PLAAGF",
+    unitIconBasename: "T_PLAAGF_4th_Medium_Battalion_Mechanized.PNG",
+  },
+  {
+    name: "9th Heavy Combined Arms Battalion",
+    faction: "PLAAGF",
+    unitIconBasename: "T_PLAAGF_9th_Heavy_Battalion_Armored.PNG",
+  },
+
+  { name: "17th Marine Support Battalion", faction: "PLANMC", unitIconBasename: "T_PLANMC_17th_MarineBattalion_Support.PNG" },
+  { name: "3rd Marine Heavy Battalion", faction: "PLANMC", unitIconBasename: "T_PLANMC_3rd_Heavy_Battalion_Armored.PNG" },
+  { name: "4th Marine Special Combat Battalion", faction: "PLANMC", unitIconBasename: "T_PLANMC_4th_SpecialCombatBattalion_LightInfantry.PNG" },
+  { name: "5th Marine Combined Arms Brigade", faction: "PLANMC", unitIconBasename: "T_PLANMC_5th_MarineBrigade_CombinedArms.PNG" },
+  { name: "7th Marine Medium Battalion", faction: "PLANMC", unitIconBasename: "T_PLANMC_7th_Medium_Battalion_Motorized.PNG" },
+
+  {
+    name: "1398th Separate Reconnaissance Battalion",
+    faction: "RGF",
+    unitIconBasename: "T_RGF_1398th_Recon_LightInfantry.PNG",
+    aliases: ["1398th Recon Battalion"],
+  },
+  {
+    name: "205th Separate Motor Rifle Brigade",
+    faction: "RGF",
+    unitIconBasename: "T_RGF_205th_OMSBr_Mechanized.PNG",
+    aliases: ["205th OMSBr"],
+  },
+  {
+    name: "336th Guards Naval Infantry Brigade",
+    faction: "RGF",
+    unitIconBasename: "T_RGF_336th_GNIBr_AmphibiousAssault.PNG",
+    aliases: ["336th GNIBr"],
+  },
+  {
+    name: "3rd Motor Rifle Brigade",
+    faction: "RGF",
+    unitIconBasename: "T_RGF_3rd_Mtr_Div_Motorized.PNG",
+    aliases: ["3rd Mtr Div"],
+  },
+  {
+    name: "49th Combined Arms Army",
+    faction: "RGF",
+    unitIconBasename: "T_RGF_49th_OA_CombinedArms.PNG",
+    aliases: ["49th OA"],
+  },
+  {
+    name: "6th Separate Tank Brigade",
+    faction: "RGF",
+    unitIconBasename: "T_RGF_6th_OTBr_Armored.PNG",
+    aliases: ["6th OTBr"],
+  },
+  {
+    name: "78th Detached Logistics Brigade",
+    faction: "RGF",
+    unitIconBasename: "T_RGF_78th_OBrMTO_Support.PNG",
+    aliases: ["78th OBrMTO"],
+  },
+
+  { name: "1st Army", faction: "TLF", unitIconBasename: "T_TLF_1st_Army_CombinedArms.PNG" },
+  {
+    name: "1st Commando Brigade",
+    faction: "TLF",
+    unitIconBasename: "T_TLF_1st_Cmdo_Brigade_AirAssault.PNG",
+    aliases: ["1st Cmdo Brigade"],
+  },
+  {
+    name: "2nd Border Brigade",
+    faction: "TLF",
+    unitIconBasename: "T_TLF_2nd_BorderBrigade_LightInfantry.PNG",
+  },
+  {
+    name: "4th Armored Brigade",
+    faction: "TLF",
+    unitIconBasename: "T_TLF_4th_ArmoredBrigade_Armored.PNG",
+  },
+  {
+    name: "51st Motorized Infantry Brigade",
+    faction: "TLF",
+    unitIconBasename: "T_TLF_51st_MotorInf_Brigade_Motorized.PNG",
+    aliases: ["51st MotorInf Brigade"],
+  },
+  {
+    name: "66th Mechanized Infantry Brigade",
+    faction: "TLF",
+    unitIconBasename: "T_TLF_66th_MechInfBrigade_Mechanized.PNG",
+    aliases: ["66th MechInf Brigade"],
+  },
+  {
+    name: "Land Forces Logistics Command",
+    faction: "TLF",
+    unitIconBasename: "T_TLF_LandForcesLogiCmd_Support.PNG",
+    aliases: ["Land Forces Logi Cmd"],
+  },
+
+  {
+    name: "10th Mountain Division",
+    faction: "USA",
+    unitIconBasename: "T_USA_10th_MTN_LightInfantry.PNG",
+    aliases: ["10th MTN"],
+  },
+  {
+    name: "1st Cavalry Regiment",
+    faction: "USA",
+    unitIconBasename: "T_USA_1st_Cav_Mechanized.PNG",
+    aliases: ["1st Cav"],
+  },
+  {
+    name: "1st Infantry Division",
+    faction: "USA",
+    unitIconBasename: "T_USA_1st_INFDIV_CombinedArms.PNG",
+    aliases: ["1st INFDIV"],
+  },
+  {
+    name: "2nd Cavalry Stryker Brigade",
+    faction: "USA",
+    unitIconBasename: "T_USA_2nd_CAV_Motorized.PNG",
+    aliases: ["2nd CAV"],
+  },
+  {
+    name: "37th Armored Regiment",
+    faction: "USA",
+    unitIconBasename: "T_USA_37th_ArmorRegiment_Armored.PNG",
+    aliases: ["37th Armor Regiment"],
+  },
+  {
+    name: "497th Combat Sustainment Support Battalion",
+    faction: "USA",
+    unitIconBasename: "T_USA_497th_CSSB_Support.PNG",
+    aliases: ["497th CSSB"],
+  },
+  {
+    name: "504th Paracute Infantry Regiment",
+    faction: "USA",
+    unitIconBasename: "T_USA_504th_PIR_AirAssault.PNG",
+    aliases: ["504th Parachute Infantry Regiment", "504th PIR"],
+  },
+
+  { name: "1st Marines Regiment", faction: "USMC", unitIconBasename: "T_USMC_1-1stMarines_LightInfantry.PNG", aliases: ["1st Marines Regimental Combat Team", "1-1st Marines"] },
+  { name: "1st Tank Battalion", faction: "USMC", unitIconBasename: "T_USMC_1st_TNK_BN_Armored.PNG", aliases: ["1st TNK BN"] },
+  { name: "2nd Marine Logistics Group", faction: "USMC", unitIconBasename: "T_USMC_2nd_MLG_Support.PNG", aliases: ["2nd MLG"] },
+  { name: "3rd Battalion, 2nd Marines", faction: "USMC", unitIconBasename: "T_USMC_3-2nd_Marines_AirAssault.PNG", aliases: ["3-2nd Marines"] },
+  { name: "31st Marine Expeditionary Unit", faction: "USMC", unitIconBasename: "T_USMC_31st_MEU_CombinedArms.PNG", aliases: ["31st MEU"] },
+  { name: "3rd Light Armored Recon Battalion", faction: "USMC", unitIconBasename: "T_USMC_3rd_LAR_BN_Motorized.PNG", aliases: ["3rd LAR BN"] },
+  { name: "4th Marines Amphibious Ready Group", faction: "USMC", unitIconBasename: "T_USMC_4th_MARG_AmphibiousAssault.PNG", aliases: ["4th MARG"] },
+
+  { name: "104th Tank Battalion", faction: "VDV", unitIconBasename: "T_VDV_104th_Tank_Battalion_Armored.PNG" },
+  { name: "108th Guards Air Assault Regiment", faction: "VDV", unitIconBasename: "T_VDV_108th_Guards_AirAssault.PNG" },
+  { name: "150th Support Battalion", faction: "VDV", unitIconBasename: "T_VDV_150th_Batallion_Support.PNG" },
+  { name: "173rd Guards Regiment", faction: "VDV", unitIconBasename: "T_VDV_173rd_Guards_LightInfantry.PNG" },
+  { name: "217th Guards Airborne Regiment", faction: "VDV", unitIconBasename: "T_VDV_217th_Guards_AirAssaut.PNG" },
+  { name: "7th Guards Mountain Air Assault Division", faction: "VDV", unitIconBasename: "T_VDV_7th_Guards_CombinedArms.PNG", aliases: ["7th Guards"] },
+
+  { name: "Manticore Security Task Force", faction: "WPMC", unitIconBasename: "T_WPMC_ManticoreSecurityTaskForce_CombinedArms.PNG" },
+  { name: "Minotaur Solutions Patrol Group", faction: "WPMC", unitIconBasename: "T_WPMC_MinotaurSolutionsPatrolGroup_LightInfantry.PNG" },
+  { name: "Murk Water Air Wing", faction: "WPMC", unitIconBasename: "T_WPMC_MurkWaterAirWing_AirAssault.PNG", aliases: ["MurkWater Air Wing"] },
+  { name: "Overwatch 6 Patrol Group", faction: "WPMC", unitIconBasename: "T_WPMC_Overwatch6PatrolGroup_LightInfantry.PNG", aliases: ["Overwatch6 Patrol Group"] },
+];
+
+export const __factionAssetManifestForTests = {
+  battlegroupVisuals,
+  factionFlagBasenames,
+} as const;
+
+const factionCodes = new Set<FactionCode>(Object.keys(factionFlagBasenames) as FactionCode[]);
+factionCodes.add("MEA");
+
+const battlegroupByNormalizedName = new Map<string, BattlegroupVisual>();
+
+for (const visual of battlegroupVisuals) {
+  registerLookupName(visual.name, visual);
+  for (const alias of visual.aliases ?? []) {
+    registerLookupName(alias, visual);
+  }
+}
+
+for (const factionCode of factionCodes) {
+  registerLookupName(factionCode, {
+    name: factionCode,
+    faction: factionCode,
+    unitIconBasename: "",
+  });
+}
+
+function registerLookupName(name: string, visual: BattlegroupVisual) {
+  battlegroupByNormalizedName.set(normalizeLookupName(name), visual);
+}
+
+function normalizeLookupName(name: string): string {
+  return String(name ?? "")
+    .trim()
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function getAssetUrlByBasename(basename: string | null | undefined): string | null {
+  if (!basename) return null;
+  return assetUrlsByBasename[basename] ?? null;
+}
+
+function resolveBattlegroupVisual(teamName: string): BattlegroupVisual | null {
+  const normalized = normalizeLookupName(teamName);
+  if (!normalized) return null;
+  return battlegroupByNormalizedName.get(normalized) ?? null;
+}
 
 export function getFactionFromTeamName(teamName: string): string | null {
-  const normalized = String(teamName || "").trim();
-  if (formationToFaction[normalized]) return formationToFaction[normalized];
-
-  // Fuzzy match: check if any formation name is contained within the teamName
-  for (const formation of Object.keys(formationToFaction)) {
-    if (normalized.includes(formation)) return formationToFaction[formation];
-  }
-
-  // Check for common faction codes directly in the name
-  const factionCodes = Object.values(formationToFaction);
-  for (const code of factionCodes) {
-    const regex = new RegExp(`\\b${code}\\b`, "i");
-    if (regex.test(normalized)) return code;
-  }
-
-  return null;
+  return resolveBattlegroupVisual(teamName)?.faction ?? null;
 }
 
 export function getFlagUrl(factionCode: string): string | null {
-  return factionFlags[factionCode] ?? null;
-}
-
-export function getBadgeUrl(teamName: string): string | null {
-  return formationBadges[teamName] ?? null;
+  const normalizedCode = String(factionCode ?? "").trim().toUpperCase() as FactionCode;
+  return getAssetUrlByBasename(factionFlagBasenames[normalizedCode] ?? null);
 }
 
 export function getFlagUrlByTeamName(teamName: string): string | null {
-  const faction = getFactionFromTeamName(teamName);
-  if (!faction) return null;
-  return getFlagUrl(faction);
+  const factionCode = getFactionFromTeamName(teamName);
+  if (!factionCode) return null;
+  return getFlagUrl(factionCode);
+}
+
+export function getUnitIconUrlByTeamName(teamName: string): string | null {
+  return getAssetUrlByBasename(resolveBattlegroupVisual(teamName)?.unitIconBasename ?? null);
 }

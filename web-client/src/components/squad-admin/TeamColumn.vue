@@ -1,48 +1,51 @@
 <template>
   <section class="team-column" :class="[teamColorClass, densityMode]">
-  <!-- Top flag background (similar to avatar style) -->
-  <a v-if="factionFlagUrl" class="team-faction-bg" :href="factionFlagUrl" target="_blank" @click.stop>
-    <img class="team-faction-bg-img" :src="factionFlagUrl" alt="" />
-  </a>
     <header
       class="team-column-header"
       :class="{ 'has-flag': !!factionFlagUrl }"
       style="position: relative;"
     >
-      <div class="team-column-title">
-        <h2 class="team-title-line">
-          <img v-if="formationBadgeUrl" class="formation-badge" :src="formationBadgeUrl" alt="" />
-          <span class="team-id-badge">TEAM {{ team.teamId }}</span>
-          <span class="team-name">{{ team.teamName }}</span>
-        </h2>
-        <div class="team-stats-row">
-          <span class="team-stat-chip count">
-            <span class="tsc-label">玩家</span>
-            <span class="tsc-value">{{ team.playerCount }}/{{ team.maxPlayers }}</span>
-          </span>
-          <span class="team-stat-chip avg">
-            <span class="tsc-label">均时</span>
-            <span class="tsc-value">{{ teamAveragePlaytimeShortText }}</span>
-          </span>
-          <span class="team-stat-chip leader-avg">
-            <span class="tsc-label">队长</span>
-            <span class="tsc-value">{{ teamLeaderAveragePlaytimeShortText }}</span>
-          </span>
-          <span class="team-stat-chip squads">
-            <span class="tsc-label">小队</span>
-            <span class="tsc-value">{{ team.squads.length }}</span>
-          </span>
-          <template v-if="isComfortable">
-            <span class="team-stat-chip">
-              <span class="tsc-label">公开</span>
-              <span class="tsc-value">{{ team.publicPlaytimePlayers }}</span>
+      <div class="team-column-main">
+        <div class="team-column-title">
+          <h2 class="team-title-line">
+            <span class="team-id-badge">TEAM {{ team.teamId }}</span>
+            <span class="team-name">{{ team.teamName }}</span>
+          </h2>
+          <div class="team-stats-row">
+            <span class="team-stat-chip count">
+              <span class="tsc-label">玩家</span>
+              <span class="tsc-value">{{ team.playerCount }}/{{ team.maxPlayers }}</span>
             </span>
-            <span class="team-stat-chip">
-              <span class="tsc-label">私密</span>
-              <span class="tsc-value">{{ team.privatePlaytimePlayers }}</span>
+            <span class="team-stat-chip avg">
+              <span class="tsc-label">均时</span>
+              <span class="tsc-value">{{ teamAveragePlaytimeShortText }}</span>
             </span>
-          </template>
+            <span class="team-stat-chip leader-avg">
+              <span class="tsc-label">队长</span>
+              <span class="tsc-value">{{ teamLeaderAveragePlaytimeShortText }}</span>
+            </span>
+            <span class="team-stat-chip squads">
+              <span class="tsc-label">小队</span>
+              <span class="tsc-value">{{ team.squads.length }}</span>
+            </span>
+            <template v-if="isComfortable">
+              <span class="team-stat-chip">
+                <span class="tsc-label">公开</span>
+                <span class="tsc-value">{{ team.publicPlaytimePlayers }}</span>
+              </span>
+              <span class="team-stat-chip">
+                <span class="tsc-label">私密</span>
+                <span class="tsc-value">{{ team.privatePlaytimePlayers }}</span>
+              </span>
+            </template>
+          </div>
         </div>
+      </div>
+      <div class="team-column-visuals">
+        <img v-if="unitIconUrl" class="unit-icon" :src="unitIconUrl" alt="" />
+        <a v-if="factionFlagUrl" class="team-faction-bg" :href="factionFlagUrl" target="_blank" @click.stop>
+          <img class="team-faction-bg-img" :src="factionFlagUrl" alt="" />
+        </a>
       </div>
     </header>
 
@@ -69,7 +72,7 @@ import { computed } from "vue";
 import type { PlayerRowViewModel, TeamViewModel, SquadViewModel, CombatStats, SquadLeaderRowViewModel } from "../../types/squad-admin.types";
 import SquadCard from "./SquadCard.vue";
 import { extractPlaytimeHours } from "../../utils/squad-admin-adapter";
-import { getFlagUrlByTeamName, getBadgeUrl } from "../../shared/faction-assets/faction-data";
+import { getFlagUrlByTeamName, getUnitIconUrlByTeamName } from "../../shared/faction-assets/faction-data";
 
 const props = defineProps<{
   team: TeamViewModel;
@@ -92,8 +95,8 @@ const isComfortable = computed(() => props.densityMode !== "compact");
 const factionFlagUrl = computed(() => {
   return getFlagUrlByTeamName(props.team.teamName);
 });
-const formationBadgeUrl = computed(() => {
-  return getBadgeUrl(props.team.teamName);
+const unitIconUrl = computed(() => {
+  return getUnitIconUrlByTeamName(props.team.teamName);
 });
 
 const teamPlayers = computed(() => {
@@ -207,8 +210,9 @@ const teamLeaderAveragePlaytimeShortText = computed(() => {
     linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.015)), rgba(255, 255, 255, 0.012)),
     var(--color-bg-card);
   box-shadow: var(--shadow-sm);
-  display: grid;
-  gap: 5px;
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
   transition: border-color 0.2s ease;
   position: relative;
   z-index: 1;
@@ -254,6 +258,49 @@ const teamLeaderAveragePlaytimeShortText = computed(() => {
   z-index: 1;
 }
 
+
+.team-column-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.team-column-visuals {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.team-column-visuals > .unit-icon {
+  align-self: center;
+  display: block;
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  flex: 0 0 auto;
+  padding: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.team-column-visuals > .team-faction-bg {
+  position: static;
+  width: 72px;
+  height: 100%;
+  flex: 0 0 auto;
+}
+
+.team-column-visuals > .team-faction-bg .team-faction-bg-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.team-title-line {
+  width: 100%;
+}
 /* ─── 编制徽章 ───────────────────────────────────────────────────────────── */
 .formation-badge {
   width: 22px;
@@ -428,10 +475,24 @@ const teamLeaderAveragePlaytimeShortText = computed(() => {
 }
 
 .team-column.compact .team-column-header {
-  padding: 7px 9px 8px;
+  padding: 7px 10px 8px;
+}
+
+.team-column.compact .team-column-visuals {
+  gap: 6px;
+}
+
+.team-column.compact .team-column-visuals > .team-faction-bg {
+  width: 66px;
+}
+
+.team-column.compact .team-column-visuals > .unit-icon {
+  padding: 1px;
 }
 
 .team-column.compact .squad-list {
   gap: 6px;
 }
 </style>
+
+

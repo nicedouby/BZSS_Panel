@@ -978,8 +978,18 @@ class SteamGameDurationService {
   _isRetryableSteamError(error) {
     if (!error) return false;
     if (error?.statusCode && [429, 500, 502, 503, 504].includes(Number(error.statusCode))) return true;
+    
     const message = String(error?.message || "").toLowerCase();
-    return message.includes("timed out") || message.includes("network") || message.includes("fetch failed") || message.includes("429");
+    const causeMessage = error?.cause ? String(error.cause.message || error.cause).toLowerCase() : "";
+    
+    return message.includes("timed out") || 
+           message.includes("network") || 
+           message.includes("fetch failed") || 
+           message.includes("429") ||
+           causeMessage.includes("other side closed") ||
+           causeMessage.includes("econnreset") ||
+           causeMessage.includes("etimedout") ||
+           causeMessage.includes("socket");
   }
 
   async _requestOwnedGames(steamID, { withAppFilter } = {}) {
@@ -1045,45 +1055,74 @@ class SteamGameDurationService {
     }
 
     const results = [];
+    const maxAttempts = Math.max(1, (this.retryCount || 0) + 1);
+
     for (const chunk of chunks) {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
-      const params = new URLSearchParams({
-        key: this.apiKey,
-        steamids: chunk.join(","),
-      });
+      let chunkSuccess = false;
+      let lastChunkError = null;
 
-      console.log(`[SteamAvatar] Fetching: https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/ for chunk of ${chunk.length} IDs.`);
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+        const params = new URLSearchParams({
+          key: this.apiKey,
+          steamids: chunk.join(","),
+        });
 
-      try {
-        const response = await fetch(
-          `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?${params.toString()}`,
-          {
-            method: "GET",
-            signal: controller.signal,
-            headers: { Accept: "application/json" },
-          },
-        );
-
-        console.log(`[SteamAvatar] Response status: ${response.status} ${response.statusText}`);
-
-        if (!response.ok) {
-          throw new Error(`Steam GetPlayerSummaries failed with status ${response.status}.`);
-        }
-
-        const data = await response.json();
-        const players = data?.response?.players;
-        if (Array.isArray(players)) {
-          console.log(`[SteamAvatar] Success: Found ${players.length} player profiles from Steam API.`);
-          results.push(...players);
+        if (attempt > 1) {
+          console.log(`[SteamAvatar] Retrying (${attempt}/${maxAttempts}): https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/`);
         } else {
-          console.log(`[SteamAvatar] Warning: data.response.players is not an array. Response body:`, JSON.stringify(data));
+          console.log(`[SteamAvatar] Fetching: https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/ for chunk of ${chunk.length} IDs.`);
         }
-      } catch (error) {
-        console.error(`[SteamAvatar] Error fetching player summaries:`, error);
-        this.logger?.warn(`Failed to fetch Steam player summaries: ${error.message}`);
-      } finally {
-        clearTimeout(timeout);
+
+        try {
+          const response = await fetch(
+            `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?${params.toString()}`,
+            {
+              method: "GET",
+              signal: controller.signal,
+              headers: { Accept: "application/json" },
+            },
+          );
+
+          if (!response.ok) {
+            const error = new Error(`Steam GetPlayerSummaries failed with status ${response.status}.`);
+            error.statusCode = response.status;
+            throw error;
+          }
+
+          const data = await response.json();
+          const players = data?.response?.players;
+          if (Array.isArray(players)) {
+            console.log(`[SteamAvatar] Success: Found ${players.length} player profiles from Steam API.`);
+            results.push(...players);
+            chunkSuccess = true;
+            break;
+          } else {
+            console.log(`[SteamAvatar] Warning: data.response.players is not an array. Response body:`, JSON.stringify(data));
+            // Non-array response might be a temporary API glitch, but usually indicates success with no results or bad API key.
+            // We'll treat it as success for the chunk to avoid infinite retries if the API key is valid but returning weird data.
+            chunkSuccess = true;
+            break;
+          }
+        } catch (error) {
+          lastChunkError = error;
+          const canRetry = attempt < maxAttempts && this._isRetryableSteamError(error);
+          
+          if (canRetry) {
+            console.log(`[SteamAvatar] Attempt ${attempt} failed: ${error.message}. Retrying in ${this.retryDelayMs * attempt}ms...`);
+            await delay(this.retryDelayMs * attempt);
+          } else {
+            break;
+          }
+        } finally {
+          clearTimeout(timeout);
+        }
+      }
+
+      if (!chunkSuccess && lastChunkError) {
+        console.error(`[SteamAvatar] Error fetching player summaries after ${maxAttempts} attempts:`, lastChunkError);
+        this.logger?.warn(`Failed to fetch Steam player summaries after ${maxAttempts} attempts: ${lastChunkError.message}`);
       }
     }
     return results;
