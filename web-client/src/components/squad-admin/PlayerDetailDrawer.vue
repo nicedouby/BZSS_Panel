@@ -17,6 +17,13 @@
           <header class="drawer-header-hud">
             <!-- Dynamic radial glow matching team color -->
             <div class="hud-header-glow" :style="glowRadialBgStyle"></div>
+            <div
+              v-if="factionFlagUrl"
+              class="hud-faction-emblem"
+              :style="{ backgroundImage: `url(${factionFlagUrl})` }"
+            >
+              <img v-if="unitIconUrl" class="hud-faction-emblem-icon" :src="unitIconUrl" alt="" />
+            </div>
             
             <div class="hud-profile-row">
               <!-- Animated Avatar Frame -->
@@ -345,7 +352,15 @@
                   </div>
                   <div class="playtime-control-hud">
                     <div class="playtime-stats-rail">
-                      <div class="playtime-stat-box highlight">
+                      <div
+                        class="playtime-stat-box highlight playtime-stat-box-refreshable"
+                        role="button"
+                        tabindex="0"
+                        :title="'点击刷新当前有效时长'"
+                        @click="refreshSteamProfile"
+                        @keydown.enter.prevent="refreshSteamProfile"
+                        @keydown.space.prevent="refreshSteamProfile"
+                      >
                         <span class="lbl">当前有效时长</span>
                         <strong class="val">{{ playtimeEffectiveText }}</strong>
                       </div>
@@ -388,6 +403,14 @@
                         @click="savePlaytimeOverride(true)"
                       >
                         恢复默认
+                      </button>
+                      <button
+                        type="button"
+                        class="hud-mini-btn refresh-btn"
+                        :disabled="steamProfileRefreshing || !props.player?.steamId"
+                        @click="refreshSteamProfile"
+                      >
+                        刷新时长
                       </button>
                     </div>
 
@@ -443,12 +466,14 @@ import CopyableValue from "./CopyableValue.vue";
 import PlayerCombatTimeline from "./PlayerCombatTimeline.vue";
 import { useAuthStore } from "../../stores/auth.store";
 import { t } from "../../i18n";
+import { getFlagUrlByTeamName, getUnitIconUrlByTeamName } from "../../shared/faction-assets/faction-data";
 
 const props = withDefaults(
   defineProps<{
     player: PlayerDetailViewModel | null;
     open: boolean;
     serverId?: string | null;
+    teamName?: string | null;
     mode?: "drawer" | "floating";
     anchorX?: number | null;
     anchorY?: number | null;
@@ -571,6 +596,8 @@ const getRoleIconSvg = (role: string | null | undefined): string => {
 };
 
 const roleIconSvg = computed(() => getRoleIconSvg(props.player?.role));
+const factionFlagUrl = computed(() => (props.teamName ? getFlagUrlByTeamName(props.teamName) : null));
+const unitIconUrl = computed(() => (props.teamName ? getUnitIconUrlByTeamName(props.teamName) : null));
 
 const teamColorClass = computed(() => {
   if (!props.player) return "neutral";
@@ -1178,9 +1205,10 @@ onUnmounted(() => {
 .drawer-header-hud {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: stretch;
   gap: var(--spacing-sm);
   padding: 20px 22px 16px;
+  min-height: 136px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   position: relative;
   overflow: hidden;
@@ -1194,6 +1222,57 @@ onUnmounted(() => {
   opacity: 0.75;
 }
 
+.hud-faction-emblem {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 252px;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  border-bottom-right-radius: 18px;
+  background-size: cover;
+  background-position: 76% 70%;
+  background-repeat: no-repeat;
+  filter: saturate(0.9) brightness(0.94);
+  -webkit-mask-image: linear-gradient(to top left, transparent 0%, rgba(0, 0, 0, 0.12) 18%, rgba(0, 0, 0, 0.44) 42%, rgba(0, 0, 0, 0.82) 74%, rgba(0, 0, 0, 1) 100%);
+  mask-image: linear-gradient(to top left, transparent 0%, rgba(0, 0, 0, 0.12) 18%, rgba(0, 0, 0, 0.44) 42%, rgba(0, 0, 0, 0.82) 74%, rgba(0, 0, 0, 1) 100%);
+}
+
+.hud-faction-emblem::before {
+  content: "";
+  position: absolute;
+  inset: -6px -18px -12px -8px;
+  background-image: inherit;
+  background-size: 150% auto;
+  background-position: 78% 68%;
+  background-repeat: no-repeat;
+  filter: blur(18px) saturate(1.08) brightness(1.02);
+  opacity: 0.62;
+  mix-blend-mode: screen;
+  transform: scale(1.06);
+}
+
+.hud-faction-emblem::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(7, 11, 17, 0.02) 0%, rgba(7, 11, 17, 0.12) 34%, rgba(7, 11, 17, 0.42) 72%, rgba(7, 11, 17, 0.78) 100%);
+  mix-blend-mode: multiply;
+}
+
+.hud-faction-emblem-icon {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+  z-index: 1;
+  filter: drop-shadow(0 3px 12px rgba(0, 0, 0, 0.5));
+}
+
 .hud-profile-row {
   display: flex;
   align-items: center;
@@ -1202,13 +1281,15 @@ onUnmounted(() => {
   z-index: 1;
   min-width: 0;
   flex: 1;
+  min-height: 112px;
+  margin-left: 176px;
 }
 
 /* Animated HUD Avatar Frame */
 .hud-avatar-frame {
-  width: 50px;
-  height: 50px;
-  border-radius: 12px;
+  width: 60px;
+  height: 60px;
+  border-radius: 14px;
   position: relative;
   padding: 2px;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.02));
@@ -1219,7 +1300,7 @@ onUnmounted(() => {
 .hud-avatar-inner {
   width: 100%;
   height: 100%;
-  border-radius: 10px;
+  border-radius: 12px;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.4));
   display: flex;
   align-items: center;
@@ -1239,14 +1320,14 @@ onUnmounted(() => {
 .hud-avatar-image-steam {
   width: 100%;
   height: 100%;
-  border-radius: 10px;
+  border-radius: 12px;
   object-fit: cover;
   display: block;
 }
 
 .hud-avatar-letter {
   font-family: system-ui, -apple-system, sans-serif;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 800;
   color: #fff;
   letter-spacing: -0.02em;
@@ -1255,10 +1336,10 @@ onUnmounted(() => {
 
 .hud-avatar-status-ring {
   position: absolute;
-  bottom: -3px;
-  right: -3px;
-  width: 14px;
-  height: 14px;
+  bottom: -4px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: #64748b;
   border: 2px solid #06090f;
@@ -1870,6 +1951,17 @@ onUnmounted(() => {
   text-shadow: 0 0 8px rgba(96, 165, 250, 0.2);
 }
 
+.playtime-stat-box-refreshable {
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.playtime-stat-box-refreshable:hover {
+  transform: translateY(-1px);
+  border-color: rgba(96, 165, 250, 0.36);
+  background: rgba(96, 165, 250, 0.08);
+}
+
 .playtime-stat-box .val.overridden {
   color: #a855f7;
 }
@@ -1936,6 +2028,18 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.08);
   color: #cbd5e1;
+}
+
+.hud-mini-btn.refresh-btn {
+  background: rgba(96, 165, 250, 0.12);
+  border: 1px solid rgba(96, 165, 250, 0.2);
+  color: #bfdbfe;
+}
+
+.hud-mini-btn.refresh-btn:hover:not(:disabled) {
+  background: rgba(96, 165, 250, 0.2);
+  border-color: rgba(96, 165, 250, 0.32);
+  color: #eff6ff;
 }
 
 .hud-mini-btn.reset-btn:hover:not(:disabled) {

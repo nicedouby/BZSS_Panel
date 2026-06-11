@@ -13,6 +13,7 @@ function buildTeam(teamName: string): TeamViewModel {
     playerCount: 12,
     maxPlayers: 50,
     averagePlaytimeHours: 4.5,
+    avgPing: null,
     leaderAveragePlaytimeHours: 8.1,
     publicLeaderPlaytimePlayers: 1,
     privateLeaderPlaytimePlayers: 0,
@@ -40,10 +41,13 @@ describe("TeamColumn", () => {
     });
 
     const factionFlag = wrapper.get("img.team-faction-bg-img");
-    const unitIcon = wrapper.get("img.unit-icon");
+    const unitIcon = wrapper.get("img.unit-icon-inline");
+    const titleLine = wrapper.get(".team-title-line").element;
 
     expect(factionFlag.attributes("src")).toContain("AFU.PNG");
     expect(unitIcon.attributes("src")).toContain("T_AFU_95thAAB_AirAssault.PNG");
+    expect(titleLine.firstElementChild?.classList.contains("unit-icon-inline")).toBe(true);
+    expect(titleLine.children[1].classList.contains("team-id-badge")).toBe(true);
     expect(wrapper.text()).toContain("TEAM 1");
     expect(wrapper.text()).toContain("95th Air Assault Brigade");
   });

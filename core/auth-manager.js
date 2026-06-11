@@ -1,6 +1,7 @@
 // -*- coding: utf-8 -*-
 
 import crypto from "node:crypto";
+import { WebSecurityConfigurationError } from "./web-security.js";
 
 const DEFAULT_USERNAME = "DoubyBear";
 const DEFAULT_ROLE = "SuperAdmin";
@@ -22,9 +23,11 @@ export class AuthManager {
     this.config = config;
     this.enabled = config.enabled ?? true;
     this.logger = logger;
-    this.sessionCookieName = config.sessionCookieName ?? "bzss_session";
+    this.sessionCookieName = config.sessionCookieName ?? "__Host-bzss_session";
     this.sessionTtlMs = Number(config.sessionTtlMs ?? 1000 * 60 * 60 * 12);
     this.secureCookie = Boolean(config.secureCookie ?? false);
+    this.environment = String(config.environment ?? "development").trim().toLowerCase();
+    this.legacySessionCookieName = "bzss_session";
 
     this.users = new Map();
     this.sessions = new Map();
@@ -34,6 +37,10 @@ export class AuthManager {
     if (!this.enabled) {
       this.logger?.warn?.("AuthManager disabled. Web API will not require login.");
       return;
+    }
+
+    if (this.environment === "production" && !this.secureCookie) {
+      throw new WebSecurityConfigurationError("production auth requires secureCookie=true");
     }
 
     this.seedConfiguredUsers();
@@ -141,7 +148,10 @@ export class AuthManager {
   logout(req) {
     const token = this.getTokenFromRequest(req);
     if (token) this.sessions.delete(hashToken(token));
-    return this.makeExpiredCookie();
+    return [
+      this.makeExpiredCookie(),
+      this.makeExpiredCookie(this.legacySessionCookieName),
+    ];
   }
 
   getUserFromRequest(req) {
@@ -231,7 +241,7 @@ export class AuthManager {
 
   getTokenFromRequest(req) {
     const cookies = parseCookies(req.headers.cookie ?? "");
-    return cookies[this.sessionCookieName] ?? "";
+    return cookies[this.sessionCookieName] ?? cookies[this.legacySessionCookieName] ?? "";
   }
 
   makeSessionCookie(token, expiresAt) {
@@ -245,11 +255,23 @@ export class AuthManager {
     ];
 
     if (this.secureCookie) parts.push("Secure");
-    return parts.join("; ");
+    return [
+      parts.join("; "),
+      this.makeExpiredCookie(this.legacySessionCookieName),
+    ];
   }
 
-  makeExpiredCookie() {
-    return `${this.sessionCookieName}=; Path=/; HttpOnly; SameSite=Strict; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0`;
+  makeExpiredCookie(cookieName = this.sessionCookieName) {
+    const parts = [
+      `${cookieName}=`,
+      "Path=/",
+      "HttpOnly",
+      "SameSite=Strict",
+      "Expires=Thu, 01 Jan 1970 00:00:00 GMT",
+      "Max-Age=0",
+    ];
+    if (this.secureCookie) parts.push("Secure");
+    return parts.join("; ");
   }
 }
 

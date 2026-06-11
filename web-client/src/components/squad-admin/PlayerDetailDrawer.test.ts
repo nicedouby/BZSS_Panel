@@ -53,6 +53,7 @@ describe("PlayerDetailDrawer", () => {
       props: {
         open: true,
         player: buildPlayer(),
+        teamName: "95th Air Assault Brigade",
         mode: "floating",
         anchorX: 200,
         anchorY: 240,
@@ -80,6 +81,7 @@ describe("PlayerDetailDrawer", () => {
       props: {
         open: true,
         player: buildPlayer(),
+        teamName: "95th Air Assault Brigade",
         mode: "floating",
         anchorX: 500,
         anchorY: 500,
@@ -97,6 +99,9 @@ describe("PlayerDetailDrawer", () => {
     expect(panel).toBeTruthy();
     expect(panel?.getAttribute("style") || "").toContain("width: calc(100vw - 24px)");
     expect(panel?.getAttribute("style") || "").toContain("max-height: calc(100vh - 24px)");
+
+    expect(document.body.querySelector(".hud-faction-emblem")).toBeTruthy();
+    expect(document.body.querySelector(".hud-faction-emblem-icon")).toBeTruthy();
 
     const backdrop = document.body.querySelector(".floating-window-layer") as HTMLElement | null;
     expect(backdrop).toBeTruthy();

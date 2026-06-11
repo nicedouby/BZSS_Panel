@@ -8,6 +8,7 @@
       <div class="team-column-main">
         <div class="team-column-title">
           <h2 class="team-title-line">
+            <img v-if="unitIconUrl" class="unit-icon unit-icon-inline" :src="unitIconUrl" alt="" />
             <span class="team-id-badge">TEAM {{ team.teamId }}</span>
             <span class="team-name">{{ team.teamName }}</span>
           </h2>
@@ -28,6 +29,10 @@
               <span class="tsc-label">小队</span>
               <span class="tsc-value">{{ team.squads.length }}</span>
             </span>
+            <span class="team-stat-chip ping">
+              <span class="tsc-label">Ping</span>
+              <span class="tsc-value">{{ team.avgPing ?? '--' }}ms</span>
+            </span>
             <template v-if="isComfortable">
               <span class="team-stat-chip">
                 <span class="tsc-label">公开</span>
@@ -42,7 +47,6 @@
         </div>
       </div>
       <div class="team-column-visuals">
-        <img v-if="unitIconUrl" class="unit-icon" :src="unitIconUrl" alt="" />
         <a v-if="factionFlagUrl" class="team-faction-bg" :href="factionFlagUrl" target="_blank" @click.stop>
           <img class="team-faction-bg-img" :src="factionFlagUrl" alt="" />
         </a>
@@ -61,6 +65,7 @@
         :selected-player-ids="selectedPlayerIds"
         @select-player="($event) => $emit('select-player', $event)"
         @toggle-player-check="($event) => $emit('toggle-player-check', $event)"
+        @refresh-player-playtime="($event) => $emit('refresh-player-playtime', $event)"
         @select-squad="$emit('select-squad', $event)"
       />
     </div>
@@ -86,6 +91,7 @@ const props = defineProps<{
 defineEmits<{
   (event: "select-player", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
   (event: "toggle-player-check", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
+  (event: "refresh-player-playtime", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
   (event: "select-squad", squad: SquadViewModel): void;
 }>();
 
@@ -273,10 +279,12 @@ const teamLeaderAveragePlaytimeShortText = computed(() => {
 }
 
 .team-column-visuals > .unit-icon {
-  align-self: center;
-  display: block;
-  width: 22px;
-  height: 22px;
+  display: none;
+}
+
+.unit-icon-inline {
+  width: 26px;
+  height: 26px;
   object-fit: contain;
   flex: 0 0 auto;
   padding: 2px;
@@ -300,6 +308,7 @@ const teamLeaderAveragePlaytimeShortText = computed(() => {
 
 .team-title-line {
   width: 100%;
+  gap: 10px;
 }
 /* ─── 编制徽章 ───────────────────────────────────────────────────────────── */
 .formation-badge {
@@ -423,6 +432,12 @@ const teamLeaderAveragePlaytimeShortText = computed(() => {
   color: var(--color-text-secondary);
 }
 
+.team-stat-chip.ping {
+  color: #94a3b8;
+  border-color: rgba(148, 163, 184, 0.22);
+  background: rgba(148, 163, 184, 0.06);
+}
+
 .tsc-label {
   color: var(--color-text-muted);
   font-size: 9px;
@@ -486,7 +501,9 @@ const teamLeaderAveragePlaytimeShortText = computed(() => {
   width: 66px;
 }
 
-.team-column.compact .team-column-visuals > .unit-icon {
+.team-column.compact .unit-icon-inline {
+  width: 24px;
+  height: 24px;
   padding: 1px;
 }
 

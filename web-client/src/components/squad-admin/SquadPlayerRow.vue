@@ -9,7 +9,25 @@
         <div class="player-checkbox-custom" :class="{ 'is-checked': checked }"></div>
       </div>
       <div v-else class="player-avatar-container">
+        <button
+          v-if="canOpenPlayerPage"
+          type="button"
+          class="player-avatar-link"
+          :title="`Open ${displayName} profile`"
+          @click.stop="openPlayerPage"
+        >
+          <div class="player-avatar" :title="displayRole(player.role)">
+            <img
+              v-if="isRoleIconImage"
+              class="player-avatar-image"
+              :src="roleIcon.icon"
+              :alt="roleIcon.label"
+            />
+            <span v-else class="player-avatar-text" aria-hidden="true">{{ roleIcon.icon }}</span>
+          </div>
+        </button>
         <div
+          v-else
           class="player-avatar"
           :title="displayRole(player.role)"
         >
@@ -22,9 +40,14 @@
           <span v-else class="player-avatar-text" aria-hidden="true">{{ roleIcon.icon }}</span>
         </div>
       </div>
-      <div class="playtime-chip" :title="playtimeTitle">
+      <button
+        type="button"
+        class="playtime-chip playtime-chip-refreshable"
+        :title="`${playtimeTitle}, click to refresh`"
+        @click.stop="refreshPlaytime"
+      >
         {{ playtimeText }}
-      </div>
+      </button>
     </div>
 
     <div class="player-main">
@@ -35,7 +58,7 @@
           :class="{ leader: player.isLeader }"
           :title="player.isLeader ? t('match.squadLeader') : t('match.squadMember')"
         >
-          {{ player.isLeader ? "队长" : "成员" }}
+          {{ player.isLeader ? "Leader" : "Member" }}
         </span>
       </div>
 
@@ -44,53 +67,56 @@
       </div>
 
       <div class="player-stat-line">
-        <span class="stat-chip wound" :title="`击倒: ${downs}`">
-          <span class="label">倒</span>
+        <span class="stat-chip wound" :title="`Downs: ${downs}`">
+          <span class="label">D</span>
           <span class="value">{{ downs }}</span>
         </span>
-        <span class="stat-chip kill" :title="`击杀: ${kills}`">
-          <span class="label">杀</span>
+        <span class="stat-chip kill" :title="`Kills: ${kills}`">
+          <span class="label">K</span>
           <span class="value">{{ kills }}</span>
         </span>
-        <span class="stat-chip death" :title="`死亡: ${deaths}`">
-          <span class="label">亡</span>
+        <span class="stat-chip death" :title="`Deaths: ${deaths}`">
+          <span class="label">X</span>
           <span class="value">{{ deaths }}</span>
         </span>
         <span class="stat-chip tk" :title="`TK: ${tk}`">
           <span class="label">TK</span>
           <span class="value">{{ tk }}</span>
         </span>
-        <span class="stat-chip revive" :title="`复苏: ${revives}`">
-          <span class="label">苏</span>
+        <span class="stat-chip revive" :title="`Revives: ${revives}`">
+          <span class="label">R</span>
           <span class="value">{{ revives }}</span>
         </span>
-        <span v-if="squadlessText" class="stat-chip" :title="`游离时长: ${squadlessText}`">
-          <span class="label">游离</span>
+        <span v-if="squadlessText" class="stat-chip" :title="`Squadless time: ${squadlessText}`">
+          <span class="label">S</span>
           <span class="value">{{ squadlessText }}</span>
+        </span>
+        <span class="stat-chip ping" :title="`Ping: ${player.ping ?? '--'}ms`">
+          <span class="label">P</span>
+          <span class="value">{{ player.ping ?? '--' }}</span>
         </span>
       </div>
     </div>
 
-    <!-- Steam Avatar - Right side decorative with slanted fade -->
-    <a
+    <button
       v-if="avatarUrl"
       class="player-steam-bg"
-      :href="`https://steamcommunity.com/profiles/${player.steamId}`"
-      target="_blank"
-      rel="noopener noreferrer"
-      :title="`查看 ${displayName} 的 Steam 个人资料`"
-      @click.stop
+      type="button"
+      :title="`Open ${displayName} profile`"
+      @click.stop="openPlayerPage"
     >
       <img class="player-steam-bg-img" :src="avatarUrl" alt="" />
-    </a>
+    </button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, inject, ref } from "vue";
+import { useRouter } from "vue-router";
 import type { PlayerRowViewModel, CombatStats } from "../../types/squad-admin.types";
 import { resolveRoleIcon } from "../../utils/role-icons";
 import { t } from "../../i18n";
+import { goToPlayerDatabaseSearch } from "../../utils/player-database";
 
 const props = defineProps<{
   player: PlayerRowViewModel;
@@ -104,9 +130,12 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: "select", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
   (event: "toggle-check", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
+  (event: "refresh-playtime", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
 }>();
 
 const selectedPlayerId = inject<any>("selectedPlayerId", ref(null));
+const router = useRouter();
+
 const isSelected = computed(() => {
   if (selectedPlayerId.value == null || props.player.playerId == null) return false;
   return String(selectedPlayerId.value) === String(props.player.playerId);
@@ -114,17 +143,18 @@ const isSelected = computed(() => {
 const roleIcon = computed(() => resolveRoleIcon(props.player.role));
 const isRoleIconImage = computed(() => roleIcon.value.icon.startsWith("/"));
 const avatarUrl = computed(() => props.steamAvatar || props.player.steamAvatar || null);
+const canOpenPlayerPage = computed(() => Boolean(props.player.steamId || props.player.eosId || props.player.name));
 
 const displayName = computed(() => {
   const raw = String(props.player.name ?? "").trim();
-  return raw || "未知玩家";
+  return raw || "Unknown";
 });
 
 const playtimeText = computed(() => formatPlaytime(props.playtimeHours));
 const playtimeTitle = computed(() => {
   const hours = props.playtimeHours;
-  if (typeof hours !== "number" || !Number.isFinite(hours) || hours === 0) return "Steam 时长未公开";
-  return `Steam 游戏时长: ${hours.toFixed(1)}h`;
+  if (typeof hours !== "number" || !Number.isFinite(hours) || hours === 0) return "Steam playtime unavailable";
+  return `Steam playtime: ${hours.toFixed(1)}h`;
 });
 
 const secondaryIdentityText = computed(() => {
@@ -176,11 +206,11 @@ function normalizeStat(value: unknown) {
 
 function formatPlaytime(hours?: number | null) {
   if (typeof hours !== "number" || !Number.isFinite(hours)) {
-    return "未公开";
+    return "Unknown";
   }
 
   if (hours === 0) {
-    return "未公开";
+    return "Unknown";
   }
 
   if (hours >= 1000) {
@@ -196,6 +226,16 @@ function handleSelect(event: MouseEvent) {
   } else {
     emit("select", { player: props.player, event });
   }
+}
+
+function openPlayerPage() {
+  const searchKey = props.player.steamId || props.player.eosId || props.player.name || "";
+  if (!searchKey) return;
+  goToPlayerDatabaseSearch(router, searchKey);
+}
+
+function refreshPlaytime(event: MouseEvent) {
+  emit("refresh-playtime", { player: props.player, event });
 }
 
 function formatDurationShort(secondsValue: number) {

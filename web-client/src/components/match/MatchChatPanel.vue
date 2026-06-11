@@ -135,6 +135,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { useQuery } from "@tanstack/vue-query";
 import { apiGet } from "../../app/apiClient";
 import { useAuthStore } from "../../stores/auth.store";
+import { buildSameOriginWebSocketUrl } from "../../shared/network";
 import StatusBadge from "../common/StatusBadge.vue";
 import type { ConsoleLine } from "../../composables/useConsoleLines";
 
@@ -392,7 +393,7 @@ function connectChatSocket() {
   clearReconnectTimer();
   transportState.value = socketRef.value ? "reconnecting" : "connecting";
 
-  const socket = new WebSocket(buildWebSocketUrl("/ws/chat"));
+  const socket = new WebSocket(buildSameOriginWebSocketUrl("/ws/chat"));
   socketRef.value = socket;
 
   socket.addEventListener("open", handleSocketOpen);
@@ -693,10 +694,6 @@ function toggleXmExpanded(seq: number) {
   expandedXmSeq.value = expandedXmSeq.value === seq ? null : seq;
 }
 
-function buildWebSocketUrl(path: string) {
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.host}${path}`;
-}
 </script>
 
 <style scoped>

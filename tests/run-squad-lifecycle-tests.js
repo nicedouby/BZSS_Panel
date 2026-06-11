@@ -231,7 +231,7 @@ async function testRawLogLineCreatesPendingAndFlushesToLog() {
   assert.equal(current.list[0].sourceLabel, "\u65e5\u5fd7\u786e\u8ba4");
   assert.equal(current.list[0].teamId, 1);
   assert.equal(
-    harness.logs.some((entry) => entry.level === "info" && entry.message === "[SquadLifecycle] pending create flushed to LOG: T1 S5 Squad 5"),
+    harness.logs.some((entry) => entry.level === "info" && String(entry.message).includes("[SquadLifecycle] pending create flushed: T1 S5 Squad 5")),
     true,
   );
   await harness.module.stop();

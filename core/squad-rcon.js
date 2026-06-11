@@ -204,7 +204,7 @@ export function parseListPlayers(raw) {
     }
 
     const m = trimmed.match(
-      /^ID: (?<playerID>\d+) \| Online IDs:([^|]+)\| Name: (?<name>.+) \| Team ID: (?<teamID>\d+|N\/A) \| Squad ID: (?<squadID>\d+|N\/A) \| Is Leader: (?<isLeader>True|False) \| Role: (?<role>.+)$/
+      /^ID: (?<playerID>\d+) \| Online IDs:([^|]+)\| Name: (?<name>.+) \| Team ID: (?<teamID>\d+|N\/A) \| Squad ID: (?<squadID>\d+|N\/A) \| Is Leader: (?<isLeader>True|False) \| Role: (?<role>[^|]+?)(?:\s*\|\s*Ping:\s*(?<ping>\d+))?\s*$/
     );
     if (!m) continue;
 
@@ -212,6 +212,7 @@ export function parseListPlayers(raw) {
     p.playerID = Number(p.playerID);
     p.name = String(p.name ?? "").trim();
     p.role = String(p.role ?? "").trim();
+    p.ping = p.ping ? Number(p.ping) : null;
     p.isLeader = p.isLeader === "True";
     p.teamID = p.teamID !== "N/A" ? Number(p.teamID) : null;
     p.squadID = p.squadID !== "N/A" ? Number(p.squadID) : null;

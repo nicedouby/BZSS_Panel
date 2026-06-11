@@ -102,6 +102,11 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         team1: null,
         team2: null,
       },
+      delay: {
+        team1: null,
+        team2: null,
+        all: null,
+      },
       phase: "unknown", // 预热、进行中、结算中
       lastUpdatedAt: "",
     },
@@ -454,6 +459,23 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     const enrichedPlayers = enrichPlayersWithPlayerStateTiming(state.serverId, players);
     state.players = makePlayersSnapshot(enrichedPlayers);
 
+    // Compute team delay averages
+    const pingsByTeam = { 1: [], 2: [], all: [] };
+    for (const p of enrichedPlayers) {
+      if (typeof p.ping === "number" && p.ping >= 0) {
+        pingsByTeam.all.push(p.ping);
+        if (p.teamID === 1 || p.teamID === 2) {
+          pingsByTeam[p.teamID].push(p.ping);
+        }
+      }
+    }
+
+    state.match.delay = {
+      team1: computeAverage(pingsByTeam[1]),
+      team2: computeAverage(pingsByTeam[2]),
+      all: computeAverage(pingsByTeam.all),
+    };
+
     emitPlayersUpdated();
     emitUpdated("players");
   }
@@ -525,9 +547,28 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     if (serverId) state.serverId = serverId;
 
     const classifiedSquads = squads.map(classifySquad);
+
+    // Compute squad delay averages
+    const pingsBySquad = new Map();
+    for (const p of state.players.list) {
+      if (typeof p.ping === "number" && p.ping >= 0 && p.squadID != null) {
+        const squadKey = `${p.teamID}:${p.squadID}`;
+        if (!pingsBySquad.has(squadKey)) pingsBySquad.set(squadKey, []);
+        pingsBySquad.get(squadKey).push(p.ping);
+      }
+    }
+
+    const enrichedSquads = classifiedSquads.map((s) => {
+      const squadKey = `${s.teamID}:${s.squadID}`;
+      return {
+        ...s,
+        avgPing: computeAverage(pingsBySquad.get(squadKey)),
+      };
+    });
+
     state.squads = {
-      list: classifiedSquads,
-      count: classifiedSquads.length,
+      list: enrichedSquads,
+      count: enrichedSquads.length,
       lastUpdatedAt: new Date().toISOString(),
     };
     updateWebStatus();
@@ -1609,4 +1650,10 @@ function normalizeText(value) {
   return String(value ?? "")
     .trim()
     .replace(/\s+/g, " ");
+}
+
+function computeAverage(values) {
+  if (!Array.isArray(values) || values.length === 0) return null;
+  const sum = values.reduce((acc, v) => acc + (Number.isFinite(v) ? v : 0), 0);
+  return Math.round(sum / values.length);
 }

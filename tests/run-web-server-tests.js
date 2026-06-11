@@ -7,6 +7,7 @@ import { Readable } from "node:stream";
 import { WebRegistry } from "../core/web-registry.js";
 import { WebServer } from "../core/web-server.js";
 import { classifySquadName } from "../core/squad-name-classifier.js";
+import { validateWebSecurityConfig } from "../core/web-security.js";
 import { GroupReportService } from "../plugins/group-report.service.js";
 
 function createServer(overrides = {}) {
@@ -41,15 +42,33 @@ function createRecorder() {
   return {
     state,
     res: {
+      setHeader(name, value) {
+        state.headers ??= {};
+        state.headers[name] = value;
+      },
       writeHead(status, headers) {
         state.status = status;
-        state.headers = headers;
+        state.headers = {
+          ...(state.headers ?? {}),
+          ...(headers ?? {}),
+        };
       },
       end(body) {
         state.body = Buffer.isBuffer(body) ? body.toString("utf8") : String(body ?? "");
       },
     },
   };
+}
+
+async function dispatch(server, req, res) {
+  try {
+    await server.handleRequest(req, res);
+  } catch (error) {
+    server.json(res, error.statusCode ?? 500, {
+      error: error.code ?? "InternalServerError",
+      message: (error.statusCode ?? 500) >= 500 ? "Internal server error." : error.message,
+    });
+  }
 }
 
 async function testReadJsonBodyParsesValidPayload() {
@@ -138,9 +157,114 @@ async function testHealthEndpointDoesNotRequireAuth() {
   assert.equal(health.state.status, 200);
   const body = JSON.parse(health.state.body);
   assert.equal(body.ok, true);
-  assert.equal(body.service, "BZSS Panel WebServer");
-  assert.equal(body.runtimeState, true);
-  assert.equal(body.auth.enabled, true);
+  assert.deepEqual(body, { ok: true });
+}
+
+async function testWebSecurityConfigRejectsPublicBindingInProduction() {
+  assert.throws(() => validateWebSecurityConfig({
+    web: {
+      environment: "production",
+      reverseProxyOnly: true,
+      host: "0.0.0.0",
+      enforceHttps: true,
+      publicOrigin: "https://panel.example.com",
+      allowedHosts: ["panel.example.com"],
+      allowedOrigins: ["https://panel.example.com"],
+      enableDebugPage: false,
+    },
+    auth: {
+      secureCookie: true,
+    },
+  }), /loopback-only web\.host/);
+}
+
+async function testReverseProxyHttpsAndHostChecks() {
+  const server = createServer({
+    config: {
+      enforceHttps: true,
+      allowedHosts: ["panel.example.com", "panel.example.com:443"],
+      allowedOrigins: ["https://panel.example.com"],
+      trustedProxyAddresses: ["127.0.0.1"],
+    },
+  });
+
+  const badHost = createRecorder();
+  await dispatch(server, {
+    method: "GET",
+    url: "/api/health",
+    headers: { host: "evil.example.com", "x-forwarded-proto": "https" },
+    socket: { remoteAddress: "127.0.0.1" },
+  }, badHost.res);
+  assert.equal(badHost.state.status, 421);
+
+  const insecure = createRecorder();
+  await dispatch(server, {
+    method: "GET",
+    url: "/api/health",
+    headers: { host: "panel.example.com" },
+    socket: { remoteAddress: "10.0.0.5" },
+  }, insecure.res);
+  assert.equal(insecure.state.status, 426);
+
+  const secure = createRecorder();
+  await dispatch(server, {
+    method: "GET",
+    url: "/api/health",
+    headers: { host: "panel.example.com", "x-forwarded-proto": "https" },
+    socket: { remoteAddress: "127.0.0.1" },
+  }, secure.res);
+  assert.equal(secure.state.status, 200);
+}
+
+async function testStateChangingOriginAndForwardedForRules() {
+  const server = createServer({
+    config: {
+      allowedHosts: ["panel.example.com"],
+      allowedOrigins: ["https://panel.example.com"],
+      trustedProxyAddresses: ["127.0.0.1"],
+      enforceHttps: true,
+    },
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin", role: "SuperAdmin", isSuperAdmin: true };
+        },
+        hasEverything() {
+          return true;
+        },
+      },
+      webStatus: {
+        setLogClockSeconds() {
+          return 12;
+        },
+      },
+    },
+  });
+
+  const forbidden = createRecorder();
+  const forbiddenReq = Readable.from([JSON.stringify({ seconds: 12 })]);
+  forbiddenReq.method = "POST";
+  forbiddenReq.url = "/api/log-clock/set";
+  forbiddenReq.headers = {
+    host: "panel.example.com",
+    origin: "https://attacker.example.com",
+    "x-forwarded-proto": "https",
+  };
+  forbiddenReq.socket = { remoteAddress: "127.0.0.1" };
+  await dispatch(server, forbiddenReq, forbidden.res);
+  assert.equal(forbidden.state.status, 403);
+
+  const clientIp = server.getRequestIp({
+    headers: { "x-forwarded-for": "203.0.113.5" },
+    socket: { remoteAddress: "10.0.0.5" },
+  });
+  assert.equal(clientIp, "10.0.0.5");
+
+  const trustedIp = server.getRequestIp({
+    headers: { "x-forwarded-for": "203.0.113.5", "x-forwarded-proto": "https" },
+    socket: { remoteAddress: "127.0.0.1" },
+  });
+  assert.equal(trustedIp, "203.0.113.5");
 }
 
 async function testWebPagesEndpointFiltersByPermissions() {
@@ -1450,13 +1574,11 @@ async function testSettingsRoutesRequireAuthAndSuperAdmin() {
     enabled: true,
     settings: [
       {
-        path: "web.port",
-        label: "Web Port",
-        type: "number",
-        min: 1,
-        max: 65535,
+        path: "server.name",
+        label: "Server Name",
+        type: "string",
         restartRequired: true,
-        value: 8899,
+        value: "BZSS Main",
       },
     ],
   };
@@ -1512,7 +1634,7 @@ async function testSettingsRoutesRequireAuthAndSuperAdmin() {
     socket: {},
   }, authGet.res);
   assert.equal(authGet.state.status, 200);
-  assert.equal(JSON.parse(authGet.state.body).settings[0].path, "web.port");
+  assert.equal(JSON.parse(authGet.state.body).settings[0].path, "server.name");
 
   const forbiddenPatch = createRecorder();
   await server.handleRequest({
@@ -1533,7 +1655,7 @@ async function testSettingsRoutesRequireAuthAndSuperAdmin() {
   assert.equal(patchMissingBody.state.status, 400);
 
   const successfulPatch = createRecorder();
-  const patchReq = Readable.from([JSON.stringify({ changes: { "web.port": 7800 } })]);
+  const patchReq = Readable.from([JSON.stringify({ changes: { "server.name": "BZSS" } })]);
   patchReq.method = "PATCH";
   patchReq.url = "/api/settings/exposed";
   patchReq.headers = { host: "localhost", authorization: "super" };
@@ -2214,6 +2336,9 @@ await testReadJsonBodyRejectsInvalidJson();
 await testReadJsonBodyRejectsOversizedPayload();
 await testGetPluginApiReturnsMatchingPluginApi();
 await testHealthEndpointDoesNotRequireAuth();
+await testWebSecurityConfigRejectsPublicBindingInProduction();
+await testReverseProxyHttpsAndHostChecks();
+await testStateChangingOriginAndForwardedForRules();
 await testWebPagesEndpointFiltersByPermissions();
 await testConsoleRecentEndpointUsesUnifiedConsoleBuffer();
 await testPlaytimeCacheReturnsEffectiveDuration();

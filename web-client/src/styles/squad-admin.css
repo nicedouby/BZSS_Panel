@@ -414,6 +414,22 @@
   justify-content: center;
 }
 
+.player-avatar-link {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  display: inline-flex;
+}
+
+.player-avatar-link:focus-visible {
+  outline: 2px solid rgba(96, 165, 250, 0.8);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
 /* ─── Right-side Steam avatar with slanted fade ──────────────────────────── */
 
 .player-steam-bg {
@@ -426,6 +442,10 @@
   pointer-events: auto;
   cursor: pointer;
   text-decoration: none;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
   display: block;
   -webkit-mask-image: linear-gradient(125deg, transparent 0%, rgba(0,0,0,0.1) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.9) 100%);
   mask-image: linear-gradient(125deg, transparent 0%, rgba(0,0,0,0.1) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.9) 100%);
@@ -520,6 +540,22 @@
   overflow: hidden;
   text-overflow: ellipsis;
   font-variant-numeric: tabular-nums;
+}
+
+.playtime-chip-refreshable {
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.playtime-chip-refreshable:hover {
+  transform: translateY(-1px);
+  border-color: rgba(34, 197, 94, 0.48);
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.playtime-chip-refreshable:focus-visible {
+  outline: 2px solid rgba(34, 197, 94, 0.7);
+  outline-offset: 2px;
 }
 
 /* ─── Player main column ──────────────────────────────────────────────────── */
@@ -653,6 +689,12 @@
   color: #6ee7b7;
   border-color: rgba(52, 211, 153, 0.2);
   background: rgba(52, 211, 153, 0.07);
+}
+
+.stat-chip.ping {
+  color: #94a3b8;
+  border-color: rgba(148, 163, 184, 0.16);
+  background: rgba(148, 163, 184, 0.05);
 }
 
 @media (max-width: 900px) {
