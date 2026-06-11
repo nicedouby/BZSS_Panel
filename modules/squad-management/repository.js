@@ -193,38 +193,6 @@ export function createSquadManagementRepository({ config, logger } = {}) {
         byResult,
       };
     },
-
-    async clearRecords(query = {}) {
-      const database = await ensureDb();
-      const shape = await ensureTableShape(database);
-      const clauses = [];
-      const params = [];
-
-      if (query.serverId) {
-        clauses.push("server_id = ?");
-        params.push(String(query.serverId).trim());
-      }
-
-      if (query.matchId) {
-        clauses.push("match_id = ?");
-        params.push(String(query.matchId).trim());
-      }
-
-      if (query.kind && query.kind !== "all") {
-        clauses.push(`${kindExpr(shape)} = ?`);
-        params.push(query.kind);
-      }
-
-      const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
-      const result = await database.run(
-        `DELETE FROM squad_management_records ${where}`,
-        ...params,
-      );
-
-      return {
-        deleted: result.changes || 0,
-      };
-    },
   };
 
   async function ensureDb() {
