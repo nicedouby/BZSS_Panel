@@ -5,18 +5,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
+
 const requestStorage = new AsyncLocalStorage();
 import { handleSquadManagementRoutes } from "../modules/squad-management/routes.js";
 import { handleTeamBalanceRoutes } from "../modules/team-balance/routes.js";
 import { handleReserveSlotsRoutes } from "../modules/reserve-slots/routes.js";
-import {
-  applySecurityHeaders,
-  isStateChangingMethod,
-  resolveClientIp,
-  resolveRequestProtocol,
-  validateHost,
-  validateOrigin,
-} from "./web-security.js";
 import {
   classifySquadName,
   getSquadNameClassifierRules,
@@ -33,27 +26,14 @@ const MAX_JSON_BODY_BYTES = 1024 * 1024;
 
 export class WebServer {
   constructor({ config, logger, core, modules }) {
-    this.config = config;
     this.enabled = config.enabled ?? true;
     this.host = config.host ?? "127.0.0.1";
     this.port = Number(config.port ?? 8899);
-    this.environment = String(config.environment ?? "development").trim().toLowerCase();
     this.useVueClient = Boolean(config.useVueClient);
     this.staticDirectory = path.resolve(
       process.cwd(),
       this.useVueClient ? "./web-client/dist" : (config.staticDirectory ?? "./web"),
     );
-    this.reverseProxyOnly = config.reverseProxyOnly === true;
-    this.enforceHttps = config.enforceHttps === true;
-    this.publicOrigin = String(config.publicOrigin ?? "").trim();
-    this.allowedHosts = Array.isArray(config.allowedHosts) ? config.allowedHosts : [];
-    this.allowedOrigins = Array.isArray(config.allowedOrigins) ? config.allowedOrigins : [];
-    this.trustedProxyAddresses = Array.isArray(config.trustedProxyAddresses) ? config.trustedProxyAddresses : [];
-    this.securityConfig = {
-      trustedProxyAddresses: this.trustedProxyAddresses,
-      ...(config.security ?? {}),
-    };
-    this.timeoutConfig = config.timeouts ?? {};
 
     this.logger = logger;
     this.core = core;
@@ -90,7 +70,7 @@ export class WebServer {
           }
           this.json(res, statusCode, {
             error: error.code ?? "InternalServerError",
-            message: statusCode >= 500 ? "Internal server error." : error.message,
+            message: error.message,
           });
         });
       });
@@ -103,19 +83,6 @@ export class WebServer {
           socket.destroy();
         } catch {}
       });
-    });
-
-    this.server.headersTimeout = Number(this.timeoutConfig.headersTimeoutMs ?? 10_000);
-    this.server.requestTimeout = Number(this.timeoutConfig.requestTimeoutMs ?? 30_000);
-    this.server.keepAliveTimeout = Number(this.timeoutConfig.keepAliveTimeoutMs ?? 5_000);
-    this.server.timeout = Number(this.timeoutConfig.socketTimeoutMs ?? 30_000);
-    this.server.maxHeadersCount = 100;
-    this.server.maxRequestsPerSocket = 1000;
-    this.server.on("clientError", (error, socket) => {
-      this.logger.warn(`HTTP client error: ${error?.code ?? error?.message ?? "unknown"}`);
-      try {
-        socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
-      } catch {}
     });
 
     if (this.core.console?.subscribe) {
@@ -155,11 +122,7 @@ export class WebServer {
     recordMemory(); // Record first data point immediately
     this.memoryInterval = setInterval(recordMemory, 10000);
 
-    this.logger.info(`Web internal upstream listening on http://${this.host}:${this.port}`);
-    if (this.publicOrigin) {
-      this.logger.info(`Public origin: ${this.publicOrigin}`);
-    }
-    this.logger.info(`Exposure mode: ${this.reverseProxyOnly ? "reverse-proxy-only" : "direct"}`);
+    this.logger.info(`WebServer listening on http://${this.host}:${this.port}`);
   }
 
   async stop() {
@@ -203,9 +166,7 @@ export class WebServer {
   }
 
   async handleRequest(req, res) {
-    this.applyResponseSecurity(req, res);
-    this.enforceRequestBoundary(req);
-    const url = this.parseInternalUrl(req.url);
+    const url = new URL(req.url, `http://${req.headers.host}`);
 
     if (url.pathname.startsWith("/api/")) {
       return this.handleApi(url, req, res);
@@ -233,54 +194,26 @@ export class WebServer {
     }
   }
 
-  parseInternalUrl(rawUrl) {
-    return new URL(rawUrl, "http://internal.invalid");
-  }
-
-  applyResponseSecurity(req, res) {
-    if (typeof res.setHeader !== "function") return;
-    applySecurityHeaders(req, res, this.securityConfig);
-  }
-
-  enforceRequestBoundary(req) {
-    this.enforceHost(req);
-    if (this.isRequestSecure(req)) {
-      return;
-    }
-    if (this.enforceHttps) {
-      throw createHttpError(426, "UpgradeRequired", "HTTPS is required.");
-    }
-  }
-
-  enforceHost(req) {
-    if (!validateHost(req, this.allowedHosts)) {
-      throw createHttpError(421, "MisdirectedRequest", "Host is not allowed.");
-    }
-  }
-
-  requireAllowedOrigin(req) {
-    if (!isStateChangingMethod(req?.method)) return;
-    if (!this.allowedOrigins.length) return;
-    if (!validateOrigin(req, this.allowedOrigins)) {
-      throw createHttpError(403, "ForbiddenOrigin", "Origin is not allowed.");
-    }
-  }
-
-  requireSecureRequest(req) {
-    if (!this.isRequestSecure(req)) {
-      throw createHttpError(426, "UpgradeRequired", "HTTPS is required.");
-    }
-  }
-
-  isRequestSecure(req) {
-    return resolveRequestProtocol(req, this.trustedProxyAddresses) === "https";
-  }
-
   async handleApi(url, req, res) {
-    this.requireAllowedOrigin(req);
-
     if (url.pathname === "/api/health" && req.method === "GET") {
-      return this.json(res, 200, { ok: true });
+      return this.json(res, 200, {
+        ok: true,
+        service: "BZSS Panel WebServer",
+        time: new Date().toISOString(),
+        uptimeMs: Math.floor(process.uptime() * 1000),
+        web: {
+          host: this.host,
+          port: this.port,
+          useVueClient: this.useVueClient,
+          staticDirectory: this.staticDirectory,
+          mode: this.useVueClient ? "vue" : "legacy",
+        },
+        auth: {
+          enabled: true,
+        },
+        rcon: this.core.rconManager?.getStatus?.() ?? null,
+        runtimeState: Boolean(this.core.runtimeState),
+      });
     }
 
     if (url.pathname === "/api/auth/session") {
@@ -292,8 +225,6 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/auth/login" && req.method === "POST") {
-      this.requireSecureRequest(req);
-      this.requireAllowedOrigin(req);
       const body = await this.readJsonBody(req);
       const result = await this.core.authManager.login({
         username: body.username,
@@ -319,15 +250,12 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/auth/logout" && req.method === "POST") {
-      this.requireSecureRequest(req);
-      this.requireAllowedOrigin(req);
       const expiredCookie = this.core.authManager.logout(req);
       return this.json(res, 200, {
         ok: true,
         authenticated: false,
       }, {
         "Set-Cookie": expiredCookie,
-        ...(this.isRequestSecure(req) ? { "Clear-Site-Data": "\"cache\", \"cookies\", \"storage\"" } : {}),
       });
     }
 
@@ -2619,10 +2547,7 @@ export class WebServer {
       }
 
       const data = await fs.readFile(abs);
-      res.writeHead(200, {
-        "Content-Type": contentType(abs),
-        "Cache-Control": shouldUseImmutableAssetCache(abs) ? "public, max-age=31536000, immutable" : "no-store",
-      });
+      res.writeHead(200, { "Content-Type": contentType(abs) });
       res.end(data);
     } catch {
       return this.serveIndex(res);
@@ -2641,10 +2566,7 @@ export class WebServer {
         `Vue client index.html not found at ${indexPath}. Run npm run client:build before using production static hosting.`,
       );
     }
-    res.writeHead(200, {
-      "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "no-store",
-    });
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(data);
   }
 
@@ -2684,19 +2606,15 @@ export class WebServer {
   }
 
   getRequestIp(req) {
-    return resolveClientIp(req, this.trustedProxyAddresses);
+    const forwarded = req.headers["x-forwarded-for"];
+    if (typeof forwarded === "string" && forwarded.trim()) {
+      return forwarded.split(",")[0].trim();
+    }
+    return req.socket?.remoteAddress ?? "";
   }
 
   async handleUpgrade(req, socket, head) {
-    try {
-      this.enforceHost(req);
-      this.requireSecureRequest(req);
-      this.requireAllowedOrigin(req);
-    } catch (error) {
-      return this.rejectUpgrade(socket, error.statusCode ?? 403, error.message);
-    }
-
-    const url = this.parseInternalUrl(req.url);
+    const url = new URL(req.url, `http://${req.headers.host}`);
     const connectionKind = url.pathname === "/ws/console"
       ? "console"
       : url.pathname === "/ws/chat"
@@ -3051,10 +2969,6 @@ function contentType(filePath) {
   return "application/octet-stream";
 }
 
-function shouldUseImmutableAssetCache(filePath) {
-  return /\.(css|js|png|svg|woff2?)$/i.test(filePath);
-}
-
 function safeHeaderFileName(fileName) {
   return path.basename(String(fileName ?? "download"))
     .replace(/[^\x20-\x7E]/g, "_")
@@ -3074,10 +2988,6 @@ function statusText(code) {
       return "Bad Request";
     case 401:
       return "Unauthorized";
-    case 421:
-      return "Misdirected Request";
-    case 426:
-      return "Upgrade Required";
     case 403:
       return "Forbidden";
     case 404:

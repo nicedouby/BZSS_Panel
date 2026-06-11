@@ -26,9 +26,6 @@
         <!-- 元信息行：均时 + 创建者 + 时间 -->
         <div class="squad-meta-row">
           <span class="squad-meta-playtime">{{ squadAveragePlaytimeText }}</span>
-          <span class="squad-meta-ping" title="Squad Average Ping">
-            Ping: {{ squad.avgPing ?? '--' }}ms
-          </span>
           <span v-if="squad.creatorName || squad.createdAtLabel" class="squad-meta-right">
             <span v-if="squad.creatorName" class="squad-meta-creator">{{ squad.creatorName }}</span>
             <span v-if="squad.createdAtLabel" class="squad-created-time">
@@ -68,7 +65,6 @@
           :checked="isPlayerChecked(squad.leader.playerId)"
           @select="handlePlayerSelect"
           @toggle-check="handlePlayerToggleCheck"
-          @refresh-playtime="handlePlayerRefreshPlaytime"
         />
 
         <div v-if="squad.state === 'no_leader'" class="squad-warning">
@@ -86,7 +82,6 @@
           :checked="isPlayerChecked(member.playerId)"
           @select="handlePlayerSelect"
           @toggle-check="handlePlayerToggleCheck"
-          @refresh-playtime="handlePlayerRefreshPlaytime"
         />
       </div>
     </template>
@@ -113,7 +108,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: "select-player", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
   (event: "toggle-player-check", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
-  (event: "refresh-player-playtime", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
   (event: "select-squad", squad: SquadViewModel): void;
 }>();
 
@@ -231,10 +225,6 @@ function isPlayerChecked(playerId: string | number | null) {
 
 function handlePlayerToggleCheck(payload: { player: PlayerRowViewModel; event: MouseEvent }) {
   emit("toggle-player-check", payload);
-}
-
-function handlePlayerRefreshPlaytime(payload: { player: PlayerRowViewModel; event: MouseEvent }) {
-  emit("refresh-player-playtime", payload);
 }
 </script>
 
@@ -393,13 +383,6 @@ function handlePlayerRefreshPlaytime(payload: { player: PlayerRowViewModel; even
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.squad-meta-ping {
-  color: #94a3b8;
-  font-size: 10px;
-  white-space: nowrap;
-  flex: 0 0 auto;
 }
 
 .squad-meta-right {

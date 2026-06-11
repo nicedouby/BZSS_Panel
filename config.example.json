@@ -13,31 +13,11 @@
   },
   "web": {
     "enabled": true,
-    "environment": "production",
     "host": "127.0.0.1",
     "port": 12864,
     "staticDirectory": "./web-client/dist",
     "useVueClient": true,
-    "title": "BZSS Panel",
-    "reverseProxyOnly": true,
-    "enforceHttps": true,
-    "publicOrigin": "https://panel.example.com",
-    "allowedHosts": ["panel.example.com", "panel.example.com:443"],
-    "allowedOrigins": ["https://panel.example.com"],
-    "trustedProxyAddresses": ["127.0.0.1", "::1", "::ffff:127.0.0.1"],
-    "enableDebugPage": false,
-    "security": {
-      "hstsEnabled": true,
-      "hstsMaxAgeSeconds": 31536000,
-      "contentSecurityPolicyEnabled": true,
-      "frameProtectionEnabled": true
-    },
-    "timeouts": {
-      "headersTimeoutMs": 10000,
-      "requestTimeoutMs": 30000,
-      "keepAliveTimeoutMs": 5000,
-      "socketTimeoutMs": 30000
-    }
+    "title": "BZSS Panel"
   },
   "squadNameClassifier": {
     "rulesPath": "./config/squad_name_nature_rules.json"
@@ -45,10 +25,7 @@
   "auth": {
     "enabled": true,
     "defaultSteam64": "",
-    "viewerTeamAutoSwapEnabled": true,
-    "secureCookie": true,
-    "sessionCookieName": "__Host-bzss_session",
-    "sessionTtlMs": 43200000
+    "viewerTeamAutoSwapEnabled": true
   },
   "settingsEditor": {
     "enabled": true,

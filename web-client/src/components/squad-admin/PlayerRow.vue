@@ -37,7 +37,6 @@
           <span class="stat-chip stat-death">死亡 {{ player.combatStats.deaths }}</span>
           <span class="stat-chip stat-tk">TK {{ player.combatStats.tk }}</span>
           <span class="stat-chip stat-revive">复苏 {{ player.combatStats.revives }}</span>
-          <span class="stat-chip stat-ping">Ping {{ player.ping ?? '--' }}</span>
         </div>
       </div>
     </div>
@@ -224,12 +223,6 @@ function displayRole(role: string | null | undefined) {
   border-color: rgba(34, 197, 94, 0.35);
   background: rgba(34, 197, 94, 0.12);
   color: #22c55e;
-}
-
-.stat-ping {
-  border-color: rgba(148, 163, 184, 0.35);
-  background: rgba(148, 163, 184, 0.12);
-  color: #94a3b8;
 }
 
 .stat-playtime {

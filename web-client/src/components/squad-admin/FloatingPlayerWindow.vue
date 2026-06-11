@@ -3,7 +3,6 @@
     :open="open"
     :player="player"
     :server-id="serverId"
-    :team-name="teamName"
     mode="floating"
     :anchor-x="anchorX"
     :anchor-y="anchorY"
@@ -21,7 +20,6 @@ defineProps<{
   open: boolean;
   player: PlayerDetailViewModel | null;
   serverId?: string | null;
-  teamName?: string | null;
   anchorX?: number | null;
   anchorY?: number | null;
   notice?: string | null;

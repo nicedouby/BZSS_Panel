@@ -43,20 +43,12 @@ import { EventPipeline } from "./core/event-pipeline.js";
 import { RuntimeState } from "./core/runtime-state.js";
 import { RawLogDerivedEvents } from "./core/raw-log-derived-events.js";
 import { PerformanceMonitor } from "./core/performance-monitor.js";
-import { validateWebSecurityConfig } from "./core/web-security.js";
 
 async function main() {
   const configManager = new ConfigManager("./config.json");
   await configManager.load();
 
   const logger = new Logger(configManager.get("core.logger", { useColor: true }));
-  validateWebSecurityConfig({
-    web: configManager.get("web", {}),
-    auth: {
-      ...configManager.get("auth", {}),
-      environment: configManager.get("web.environment", "development"),
-    },
-  });
   logger.info("BZSS Panel WebCore starting...", {
     scope: "app",
     source: "app.main",
@@ -81,10 +73,7 @@ async function main() {
     logger: logger.child({ moduleId: "core.webStatus", source: "core.webStatus" }),
   });
   const authManager = new AuthManager({
-    config: {
-      ...configManager.get("auth", {}),
-      environment: configManager.get("web.environment", "development"),
-    },
+    config: configManager.get("auth", {}),
     logger: logger.child({ moduleId: "core.authManager", source: "core.authManager" }),
   });
   const runtimeState = new RuntimeState({

@@ -16,7 +16,6 @@ export interface PlayerRowViewModel {
   eosId: string | null;
   ip: string | null;
   playtimeHours: number | null;
-  ping: number | null;
   steamAvatar?: string | null;
   combatStats: CombatStats;
   statsLabel: string;
@@ -44,7 +43,6 @@ export interface SquadViewModel {
   memberCount: number;
   maxMembers: number;
   averagePlaytimeHours: number | null;
-  avgPing: number | null;
   publicPlaytimePlayers: number;
   privatePlaytimePlayers: number;
   knownPlaytimePlayers: number;
@@ -73,7 +71,6 @@ export interface TeamViewModel {
   playerCount: number;
   maxPlayers: number;
   averagePlaytimeHours: number | null;
-  avgPing: number | null;
   leaderAveragePlaytimeHours: number | null;
   publicLeaderPlaytimePlayers: number;
   privateLeaderPlaytimePlayers: number;

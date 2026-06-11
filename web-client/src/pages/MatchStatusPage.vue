@@ -119,7 +119,6 @@
               :selected-player-ids="selectedPlayerIds"
               @select-player="selectPlayer"
               @toggle-player-check="togglePlayerCheck"
-              @refresh-player-playtime="refreshSinglePlayerPlaytime"
               @select-squad="handleSquadClick"
             />
           </div>
@@ -133,7 +132,6 @@
       :open="activePlayerWindow !== null"
       :player="activePlayerWindow?.detail ?? null"
       :server-id="currentServerId"
-      :team-name="activePlayerWindow?.teamName ?? null"
       :anchor-x="activePlayerWindow?.anchorX ?? null"
       :anchor-y="activePlayerWindow?.anchorY ?? null"
       :notice="activePlayerWindow?.notice ?? ''"
@@ -275,7 +273,6 @@ const playtimeRequested = ref(true);
 const playtimeJob = ref<PlaytimeJobViewModel | null>(null);
 const activePlayerWindow = ref<{
   detail: PlayerDetailViewModel;
-  teamName: string | null;
   anchorX: number;
   anchorY: number;
   notice: string;
@@ -582,7 +579,6 @@ function selectPlayer(payload: { player: PlayerRowViewModel; event: MouseEvent }
 
   activePlayerWindow.value = {
     detail: buildPlayerDetailViewModel(player),
-    teamName: findTeamNameByTeamId(player.teamId),
     anchorX: payload.event?.clientX ?? Math.floor(window.innerWidth / 2),
     anchorY: payload.event?.clientY ?? Math.floor(window.innerHeight / 2),
     notice: "",
@@ -875,7 +871,7 @@ async function handlePlayerPlaytimeUpdated() {
     const existingBattleStatsSource = activePlayerWindow.value.detail.battleStatsSource ?? "";
     const existingBattleStatsLastUpdatedAt = activePlayerWindow.value.detail.battleStatsLastUpdatedAt ?? null;
 
-      activePlayerWindow.value = {
+    activePlayerWindow.value = {
       ...activePlayerWindow.value,
       detail: {
         ...buildPlayerDetailViewModel(player),
@@ -886,60 +882,8 @@ async function handlePlayerPlaytimeUpdated() {
           battleStatsLastUpdatedAt: existingBattleStatsLastUpdatedAt,
         } : {}),
       },
-      teamName: findTeamNameByTeamId(player.teamId),
       notice: "",
     };
-  } catch (error) {
-    ui.pushToast({
-      title: t("common.error"),
-      message: renderApiError(error, t("common.error")),
-      tone: "error",
-    });
-  }
-}
-
-async function refreshSinglePlayerPlaytime(payload: { player: PlayerRowViewModel; event: MouseEvent }) {
-  const player = payload.player;
-  const steamId = String(player.steamId ?? "").trim();
-  if (!steamId) {
-    ui.pushToast({
-      title: t("common.error"),
-      message: "该玩家没有可刷新的 Steam ID",
-      tone: "error",
-    });
-    return;
-  }
-
-  try {
-    const response = await apiPost<any>("/api/playtime/players/refresh", {
-      steamID: steamId,
-      name: player.name || null,
-      eosID: player.eosId || null,
-      waitMs: 0,
-    });
-
-    let finalJob = response;
-    if (response?.status !== "completed" && response?.status !== "failed" && response?.id) {
-      finalJob = await waitForPlaytimeJob(response.id, 20_000);
-    }
-
-    if (finalJob?.status === "failed") {
-      throw new Error(finalJob?.error?.message || "Steam 时长刷新失败");
-    }
-
-    const items = await fetchPlaytimes([steamId]);
-    stablePlaytimes.value = {
-      ...stablePlaytimes.value,
-      ...items,
-    };
-
-    await handlePlayerPlaytimeUpdated();
-
-    ui.pushToast({
-      title: t("common.updated"),
-      message: `${player.name} 的 Steam 时长已刷新`,
-      tone: "ok",
-    });
   } catch (error) {
     ui.pushToast({
       title: t("common.error"),
@@ -1146,12 +1090,6 @@ function findPlayerById(playerId: PlayerDetailViewModel["playerId"]) {
     }
   }
   return null;
-}
-
-function findTeamNameByTeamId(teamId: number | null) {
-  if (teamId == null) return null;
-  const team = rawTeams.value.find((item) => item.teamId === teamId);
-  return team?.teamName ?? null;
 }
 
 async function refreshOnlinePlaytime(force = false) {
