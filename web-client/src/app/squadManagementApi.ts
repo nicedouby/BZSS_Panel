@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from "./apiClient";
+import { apiGet, apiPost, apiDelete } from "./apiClient";
 
 export interface SquadManagementViewer {
   username: string;
@@ -316,4 +316,13 @@ export function getSquadManagementRecords(params: {
   if (params.offset != null) search.set("offset", String(params.offset));
   const query = search.toString();
   return apiGet<SquadManagementRecordsResponse>(`/api/squad-management/records${query ? `?${query}` : ""}`);
+}
+
+export function clearSquadManagementRecords(params: {
+  kind?: string;
+} = {}) {
+  const search = new URLSearchParams();
+  if (params.kind && params.kind !== "all") search.set("kind", String(params.kind));
+  const query = search.toString();
+  return apiDelete<any>(`/api/squad-management/records${query ? `?${query}` : ""}`);
 }

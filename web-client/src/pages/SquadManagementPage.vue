@@ -148,65 +148,78 @@
 
             <AppCard title="系统操作审计" description="按指令类型查看执行结果。">
               <div class="audit-filter-bar">
-                <AppStatusBadge
-                  v-for="item in kindOptions"
-                  :key="item.value"
-                  interactive
-                  :active="selectedKind === item.value"
-                  :tone="selectedKind === item.value ? item.tone : 'idle'"
-                  @click="selectedKind = item.value"
+                <div class="filter-badges">
+                  <AppStatusBadge
+                    v-for="item in kindOptions"
+                    :key="item.value"
+                    interactive
+                    :active="selectedKind === item.value"
+                    :tone="selectedKind === item.value ? item.tone : 'idle'"
+                    @click="selectedKind = item.value"
+                  >
+                    {{ item.label }} {{ item.count }}
+                  </AppStatusBadge>
+                </div>
+                <button
+                  v-if="auth.user?.isSuperAdmin"
+                  class="clear-records-btn"
+                  type="button"
+                  :disabled="actionBusy"
+                  @click="handleClearRecords"
                 >
-                  {{ item.label }} {{ item.count }}
-                </AppStatusBadge>
+                  清除当前视图记录
+                </button>
               </div>
 
-              <AppTable compact>
-                <thead>
-                  <tr>
-                    <th>时间 / 节点</th>
-                    <th>指令类型</th>
-                    <th>详细负载（来源 / 操作 / 目标）</th>
-                    <th>执行状态</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-if="!filteredRecords.length">
-                    <td colspan="4" class="empty-row">无审计记录数据</td>
-                  </tr>
-                  <tr v-for="record in filteredRecords" :key="record.recordKey">
-                    <td class="col-time">
-                      <div class="time-stack">
-                        <span class="clock">{{ formatTime(record.time).split(" ")[1] }}</span>
-                        <span class="date">{{ formatTime(record.time).split(" ")[0] }}</span>
-                      </div>
-                    </td>
-                    <td class="col-type">
-                      <AppStatusBadge :tone="kindTone(record.kind)">{{ kindLabel(record.kind) }}</AppStatusBadge>
-                    </td>
-                    <td class="col-detail">
-                      <div class="detail-payload">
-                        <div class="payload-meta">
-                          <span class="source">{{ record.source || "Manual" }}</span>
-                          <span v-if="record.operatorName" class="operator">BY {{ record.operatorName }}</span>
+              <div class="audit-table-container">
+                <AppTable compact>
+                  <thead>
+                    <tr>
+                      <th>时间 / 节点</th>
+                      <th>指令类型</th>
+                      <th>详细负载（来源 / 操作 / 目标）</th>
+                      <th>执行状态</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-if="!filteredRecords.length">
+                      <td colspan="4" class="empty-row">无审计记录数据</td>
+                    </tr>
+                    <tr v-for="record in filteredRecords" :key="record.recordKey">
+                      <td class="col-time">
+                        <div class="time-stack">
+                          <span class="clock">{{ formatTime(record.time).split(" ")[1] }}</span>
+                          <span class="date">{{ formatTime(record.time).split(" ")[0] }}</span>
                         </div>
-                        <div class="payload-main">
-                          <strong>{{ recordTargetTitle(record) }}</strong>
-                          <span class="sub">{{ recordTargetSubline(record) }}</span>
+                      </td>
+                      <td class="col-type">
+                        <AppStatusBadge :tone="kindTone(record.kind)">{{ kindLabel(record.kind) }}</AppStatusBadge>
+                      </td>
+                      <td class="col-detail">
+                        <div class="detail-payload">
+                          <div class="payload-meta">
+                            <span class="source">{{ record.source || "Manual" }}</span>
+                            <span v-if="record.operatorName" class="operator">BY {{ record.operatorName }}</span>
+                          </div>
+                          <div class="payload-main">
+                            <strong>{{ recordTargetTitle(record) }}</strong>
+                            <span class="sub">{{ recordTargetSubline(record) }}</span>
+                          </div>
+                          <div v-if="record.reason" class="payload-reason">
+                            {{ record.reason }}
+                          </div>
                         </div>
-                        <div v-if="record.reason" class="payload-reason">
-                          {{ record.reason }}
-                        </div>
-                      </div>
-                    </td>
-                    <td class="col-result">
-                      <AppStatusBadge :tone="resultTone(record.result, record.error)">
-                        {{ record.result || "FAILED" }}
-                      </AppStatusBadge>
-                      <div v-if="record.error" class="res-error">{{ record.error }}</div>
-                    </td>
-                  </tr>
-                </tbody>
-              </AppTable>
+                      </td>
+                      <td class="col-result">
+                        <AppStatusBadge :tone="resultTone(record.result, record.error)">
+                          {{ record.result || "FAILED" }}
+                        </AppStatusBadge>
+                        <div v-if="record.error" class="res-error">{{ record.error }}</div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </AppTable>
+              </div>
             </AppCard>
           </div>
         </DataState>
@@ -224,6 +237,7 @@ import {
   kickPlayer,
   removePlayerFromSquad,
   getSquadManagementRecords,
+  clearSquadManagementRecords,
   type SquadManagementRecord,
   type SquadManagementRecordsResponse,
   type SquadManagementActionResponse,
@@ -426,6 +440,40 @@ async function handleRemove() {
   );
 }
 
+async function handleClearRecords() {
+  if (actionBusy.value) return;
+  const targetKind = selectedKind.value;
+  const isAll = targetKind === "all";
+
+  const confirmed = await ui.openConfirm({
+    title: isAll ? "清除所有记录" : `清除 ${kindLabel(targetKind)}`,
+    message: isAll ? "确定要清除所有系统操作审计记录吗？此操作不可恢复。" : `确定要清除所有 [${kindLabel(targetKind)}] 类型的记录吗？此操作不可恢复。`,
+    tone: "error",
+  });
+
+  if (!confirmed) return;
+
+  actionBusy.value = true;
+  try {
+    const res = await clearSquadManagementRecords({ kind: targetKind });
+    if (!res.ok) throw new Error("清除执行失败");
+    ui.pushToast({
+      title: "清除成功",
+      message: `已清除 ${res.deleted ?? 0} 条记录。`,
+      tone: "ok",
+    });
+    void reload();
+  } catch (error) {
+    ui.pushToast({
+      title: "清除失败",
+      message: error instanceof Error ? error.message : String(error),
+      tone: "error",
+    });
+  } finally {
+    actionBusy.value = false;
+  }
+}
+
 function kindLabel(kind: string) {
   if (kind === "squad_created") return "新建小队";
   if (kind === "disband") return "解散指令";
@@ -564,8 +612,30 @@ function timeValue(value: string) {
 }
 
 .creation-feed {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* 滚动条样式 */
+.creation-feed::-webkit-scrollbar {
+  width: 4px;
+}
+
+.creation-feed::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.creation-feed::-webkit-scrollbar-thumb {
+  border-radius: 2px;
+  background: rgba(140, 160, 185, 0.2);
+}
+
+.creation-feed::-webkit-scrollbar-thumb:hover {
+  background: rgba(140, 160, 185, 0.35);
 }
 
 .right-stack {
@@ -630,8 +700,59 @@ function timeValue(value: string) {
 .audit-filter-bar {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
   margin-bottom: 14px;
+}
+
+.filter-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.clear-records-btn {
+  font-size: 12px;
+  color: var(--color-status-error);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.clear-records-btn:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.clear-records-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.audit-table-container {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.audit-table-container::-webkit-scrollbar {
+  width: 4px;
+}
+
+.audit-table-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.audit-table-container::-webkit-scrollbar-thumb {
+  border-radius: 2px;
+  background: rgba(140, 160, 185, 0.2);
+}
+
+.audit-table-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(140, 160, 185, 0.35);
 }
 
 .time-stack {

@@ -28,7 +28,10 @@
     },
     "allowedHosts": [
       "127.0.0.1",
-      "127.0.0.1:12864"
+      "127.0.0.1:12864",
+      "localhost",
+      "localhost:12864",
+      "183.149.179.99:12864"
     ],
     "enableDebugPage": false,
     "security": {

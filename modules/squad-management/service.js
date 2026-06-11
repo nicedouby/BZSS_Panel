@@ -101,6 +101,13 @@ export function createSquadManagementService({ core, modules, config, logger, re
       return listRecords(query);
     },
 
+    async clearRecords(query = {}) {
+      if (repositoryApi?.clearRecords) {
+        return repositoryApi.clearRecords(query);
+      }
+      return { deleted: 0 };
+    },
+
     getSquads(serverId = getDefaultServerId()) {
       return buildStateSnapshot(serverId).squads;
     },

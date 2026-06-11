@@ -58,6 +58,30 @@ export async function handleSquadManagementRoutes({
     return true;
   }
 
+  if (url.pathname === "/api/squad-management/records" && req.method === "DELETE") {
+    if (!core.authManager?.hasEverything?.(user)) {
+      json(403, {
+        error: "Forbidden",
+        message: "SuperAdmin permission is required to clear records.",
+      });
+      return true;
+    }
+
+    const serverId = url.searchParams.get("serverId") ?? core.webStatus?.serverId ?? "";
+    const state = squadManagement.getState(serverId);
+    const result = await squadManagement.clearRecords({
+      serverId,
+      matchId: url.searchParams.get("matchId") ?? state.matchId ?? "",
+      kind: url.searchParams.get("kind") ?? url.searchParams.get("type") ?? "all",
+    });
+
+    json(200, {
+      ok: true,
+      ...result,
+    });
+    return true;
+  }
+
   if (url.pathname === "/api/squad-management/actions" && req.method === "POST") {
     if (!core.authManager?.hasEverything?.(user)) {
       json(403, {
