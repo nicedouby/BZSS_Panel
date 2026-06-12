@@ -455,13 +455,14 @@ function normalizeStoredUser(input) {
   };
 }
 
-export const ALLOWED_RCON_PERMISSIONS = Object.freeze([
+export const ALLOWED_ADMIN_PERMISSIONS = Object.freeze([
   "rcon.tb",
   "rcon.warn",
   "rcon.broadcast",
   "rcon.kick",
   "rcon.disband",
   "rcon.remove",
+  "settings.manage",
 ]);
 
 function normalizePermissionGroup(input) {
@@ -482,7 +483,7 @@ function normalizePermissionGroup(input) {
 
 function normalizePermissionGroupPermissions(value) {
   const items = normalizePermissions(value);
-  const invalid = items.find((item) => !ALLOWED_RCON_PERMISSIONS.includes(item));
+  const invalid = items.find((item) => !ALLOWED_ADMIN_PERMISSIONS.includes(item));
   if (invalid) {
     throw createAuthUserStoreError(400, "InvalidPermission", `Unsupported permission: ${invalid}`);
   }

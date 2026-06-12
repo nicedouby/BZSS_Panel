@@ -761,9 +761,11 @@ function recordDecisionTone(record: StepwiseRecord) {
 
 <style scoped>
 .stepwise-page {
-  --panel-bg: linear-gradient(180deg, rgba(8, 15, 28, 0.86), rgba(10, 22, 34, 0.92));
-  --panel-border: rgba(148, 163, 184, 0.16);
-  --panel-soft: rgba(15, 23, 42, 0.42);
+  --panel-bg:
+    var(--theme-panel-highlight),
+    color-mix(in srgb, var(--color-bg-card) 92%, transparent);
+  --panel-border: var(--color-border-default);
+  --panel-soft: color-mix(in srgb, var(--color-bg-elevated) 86%, transparent);
   --accent-cyan: #67e8f9;
   --accent-lime: #bef264;
   --accent-salmon: #fca5a5;
@@ -789,14 +791,14 @@ function recordDecisionTone(record: StepwiseRecord) {
   inset: -80px auto auto -80px;
   width: 240px;
   height: 240px;
-  background: radial-gradient(circle, rgba(103, 232, 249, 0.16), transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--theme-brand-glow) 85%, transparent), transparent 70%);
 }
 
 .stepwise-page::after {
   inset: auto -120px -120px auto;
   width: 280px;
   height: 280px;
-  background: radial-gradient(circle, rgba(190, 242, 100, 0.12), transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--theme-warn-glow) 72%, transparent), transparent 70%);
 }
 
 .stepwise-page > * {
@@ -896,7 +898,7 @@ function recordDecisionTone(record: StepwiseRecord) {
 
 .tabs-header {
   display: flex;
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--color-bg-elevated) 86%, transparent);
   padding: 3px;
   border-radius: 8px;
   border: 1px solid rgba(148, 163, 184, 0.16);
@@ -919,8 +921,8 @@ function recordDecisionTone(record: StepwiseRecord) {
 }
 
 .tab-btn.active {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
@@ -954,7 +956,7 @@ function recordDecisionTone(record: StepwiseRecord) {
   padding: 0 10px;
   border-radius: 999px;
   border: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--color-bg-elevated) 86%, transparent);
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
@@ -1005,7 +1007,7 @@ function recordDecisionTone(record: StepwiseRecord) {
   border: 1px solid var(--panel-border);
   border-radius: 12px;
   background: var(--panel-bg);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 var(--theme-panel-rim);
 }
 
 .stats-grid > div {
@@ -1095,9 +1097,9 @@ function recordDecisionTone(record: StepwiseRecord) {
 .rule-row input {
   width: 100%;
   min-height: 32px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
+  border: 1px solid var(--color-border-default);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--color-bg-elevated);
   color: var(--color-text-primary);
   padding: 6px 10px;
   font-size: 13px;
@@ -1108,8 +1110,8 @@ function recordDecisionTone(record: StepwiseRecord) {
 .field input:focus,
 .field select:focus,
 .rule-row input:focus {
-  border-color: rgba(103, 232, 249, 0.42);
-  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.12);
+  border-color: var(--color-border-highlight);
+  box-shadow: var(--theme-field-glow);
 }
 
 .simulate-grid {
@@ -1145,7 +1147,7 @@ function recordDecisionTone(record: StepwiseRecord) {
 }
 
 .ghost-btn {
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--color-bg-elevated) 86%, transparent);
   color: var(--color-text-primary);
 }
 
@@ -1231,7 +1233,7 @@ function recordDecisionTone(record: StepwiseRecord) {
   min-height: 0;
   border-radius: 10px;
   border: 1px solid var(--panel-border);
-  background: rgba(3, 7, 18, 0.28);
+  background: color-mix(in srgb, var(--color-bg-page) 84%, transparent);
 }
 
 .records-table {
@@ -1256,7 +1258,9 @@ function recordDecisionTone(record: StepwiseRecord) {
 .records-table th {
   position: sticky;
   top: 0;
-  background: #09111e;
+  background:
+    var(--theme-panel-highlight),
+    color-mix(in srgb, var(--color-bg-elevated) 96%, transparent);
   z-index: 1;
   border-bottom: 2px solid rgba(148, 163, 184, 0.22);
 }

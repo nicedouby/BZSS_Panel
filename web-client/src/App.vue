@@ -124,12 +124,12 @@ textarea {
 button {
   border: 1px solid var(--color-border-default);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.02)), rgba(255, 255, 255, 0.005)),
+    var(--theme-panel-highlight),
     var(--color-bg-elevated);
   color: var(--color-text-primary);
   padding: 8px 14px;
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-sm), 0 0 0 1px var(--theme-panel-rim);
   transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -196,7 +196,7 @@ a {
 .app-root::before {
   z-index: 0;
   background: var(--theme-root-overlay);
-  opacity: 0.95;
+  opacity: 1;
 }
 
 .app-root::after {
@@ -226,12 +226,12 @@ a {
   width: min(420px, 100%);
   border: 1px solid var(--color-border-default);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.02)), rgba(255, 255, 255, 0.006)),
+    var(--theme-panel-highlight),
     var(--color-bg-card);
   border-radius: 20px;
   padding: 20px 22px;
   color: var(--color-text-primary);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-lg), var(--theme-panel-glow);
   backdrop-filter: blur(12px);
 }
 
@@ -283,10 +283,10 @@ a {
 .bz-card {
   border: 1px solid var(--color-border-default);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.016)), rgba(255, 255, 255, 0.006)),
+    var(--theme-panel-highlight),
     var(--color-bg-card);
   border-radius: 18px;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-md), var(--theme-panel-glow);
   overflow: hidden;
   backdrop-filter: blur(12px);
 }
@@ -387,7 +387,9 @@ a {
   padding: 0 14px;
   border-radius: 10px;
   border: 1px solid var(--color-border-default);
-  background: color-mix(in srgb, var(--color-bg-elevated) 88%, transparent);
+  background:
+    var(--theme-panel-highlight),
+    color-mix(in srgb, var(--color-bg-elevated) 88%, transparent);
   color: var(--color-text-primary);
   font-weight: 700;
   cursor: pointer;
@@ -411,6 +413,7 @@ a {
 .bz-btn-primary {
   border-color: color-mix(in srgb, var(--color-brand-primary) 55%, transparent);
   background: color-mix(in srgb, var(--color-brand-primary) 28%, transparent);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--theme-brand-glow) 80%, transparent);
 }
 
 .bz-btn-danger {
@@ -429,7 +432,9 @@ a {
   padding: 0 8px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--color-border-default) 88%, transparent);
-  background: color-mix(in srgb, var(--color-border-default) 55%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel-rim) 85%, transparent), transparent),
+    color-mix(in srgb, var(--color-border-default) 55%, transparent);
   color: var(--color-text-secondary);
   font-size: 11px;
   white-space: nowrap;
@@ -474,10 +479,10 @@ a {
 .panel {
   border: 1px solid var(--color-border-default);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.016)), rgba(255, 255, 255, 0.006)),
+    var(--theme-panel-highlight),
     var(--color-bg-card);
   border-radius: 16px;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-md), var(--theme-panel-glow);
   backdrop-filter: blur(12px);
 }
 

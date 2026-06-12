@@ -257,12 +257,12 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   background:
-    radial-gradient(ellipse 60% 30% at 50% 0%, rgba(56, 189, 248, 0.06), transparent),
-    radial-gradient(ellipse 40% 40% at 80% 60%, rgba(168, 85, 247, 0.04), transparent),
-    #06090f;
-  color: #f1f5f9;
+    radial-gradient(ellipse 60% 30% at 50% 0%, color-mix(in srgb, var(--theme-brand-glow) 70%, transparent), transparent),
+    radial-gradient(ellipse 40% 40% at 80% 60%, color-mix(in srgb, var(--theme-warn-glow) 52%, transparent), transparent),
+    var(--theme-background-flat);
+  color: var(--color-text-primary);
   overflow: hidden;
-  font-family: 'Inter', -apple-system, sans-serif;
+  font-family: "Segoe UI Variable Text", "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 /* ─── 顶部 Header ────────────────────────────────────────────────── */
@@ -274,9 +274,9 @@ onUnmounted(() => {
   align-items: center;
   gap: 16px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.01)),
-    rgba(8, 12, 20, 0.92);
-  border-bottom: 1px solid rgba(56, 189, 248, 0.1);
+    var(--theme-panel-highlight),
+    color-mix(in srgb, var(--color-bg-card) 94%, transparent);
+  border-bottom: 1px solid var(--color-border-default);
   backdrop-filter: blur(12px);
 }
 
@@ -316,14 +316,14 @@ onUnmounted(() => {
   margin: 0;
   font-size: 14px;
   font-weight: 900;
-  color: #f1f5f9;
+  color: var(--color-text-primary);
   letter-spacing: 0.5px;
   line-height: 1.1;
 }
 
 .header-sub {
   font-size: 10px;
-  color: #475569;
+  color: var(--color-text-muted);
   font-family: 'JetBrains Mono', monospace;
   font-weight: 600;
   white-space: nowrap;
@@ -345,20 +345,22 @@ onUnmounted(() => {
   min-width: 110px;
   padding: 5px 14px 7px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--color-border-default);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel-rim) 85%, transparent), transparent),
+    color-mix(in srgb, var(--color-bg-elevated) 88%, transparent);
   overflow: hidden;
   transition: border-color 0.2s ease;
 }
 
 .kpi-tile:hover {
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: var(--color-border-highlight);
 }
 
 .kpi-label {
   font-size: 8px;
   font-weight: 900;
-  color: #475569;
+  color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 1px;
   margin-bottom: 2px;
@@ -369,12 +371,12 @@ onUnmounted(() => {
   font-weight: 950;
   font-family: 'JetBrains Mono', monospace;
   line-height: 1;
-  color: #f1f5f9;
+  color: var(--color-text-primary);
 }
 
 .kpi-number small {
   font-size: 10px;
-  color: #334155;
+  color: var(--color-text-secondary);
   margin-left: 2px;
   font-weight: 500;
 }
@@ -406,7 +408,7 @@ onUnmounted(() => {
 
 .kpi-sub {
   font-size: 9px;
-  color: #475569;
+  color: var(--color-text-muted);
   font-family: 'JetBrains Mono', monospace;
   margin-top: 1px;
 }
@@ -443,9 +445,9 @@ onUnmounted(() => {
   height: 30px;
   padding: 0 10px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.04);
-  color: #94a3b8;
+  border: 1px solid var(--color-border-default);
+  background: color-mix(in srgb, var(--color-bg-elevated) 88%, transparent);
+  color: var(--color-text-secondary);
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
@@ -456,8 +458,8 @@ onUnmounted(() => {
 }
 
 .hdr-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
-  color: #f1f5f9;
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
 }
 
 .hdr-btn.icon {
@@ -508,16 +510,16 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 0;
   padding: 14px 14px 10px;
-  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  border-right: 1px solid var(--color-border-soft);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0.01)),
-    rgba(6, 9, 15, 0.7);
+    var(--theme-panel-highlight),
+    color-mix(in srgb, var(--color-bg-card) 94%, transparent);
   overflow-y: auto;
   overflow-x: hidden;
 }
 
 .stats-sidebar::-webkit-scrollbar { width: 4px; }
-.stats-sidebar::-webkit-scrollbar-thumb { border-radius: 2px; background: rgba(255,255,255,0.08); }
+.stats-sidebar::-webkit-scrollbar-thumb { border-radius: 2px; background: color-mix(in srgb, var(--color-border-default) 90%, transparent); }
 
 .sidebar-section {
   margin-bottom: 18px;
@@ -538,7 +540,7 @@ onUnmounted(() => {
 .section-title {
   font-size: 9px;
   font-weight: 900;
-  color: #334155;
+  color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 1px;
 }
@@ -554,9 +556,9 @@ onUnmounted(() => {
   height: 30px;
   padding: 0 6px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.03);
-  color: #64748b;
+  border: 1px solid var(--color-border-soft);
+  background: color-mix(in srgb, var(--color-bg-elevated) 86%, transparent);
+  color: var(--color-text-secondary);
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
@@ -567,9 +569,9 @@ onUnmounted(() => {
 }
 
 .range-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #94a3b8;
-  border-color: rgba(255, 255, 255, 0.1);
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-default);
 }
 
 .range-btn.active {
@@ -595,20 +597,20 @@ onUnmounted(() => {
   border-radius: 7px;
   border: 1px solid transparent;
   background: transparent;
-  color: #475569;
+  color: var(--color-text-muted);
   cursor: pointer;
   transition: all 0.14s ease;
 }
 
 .channel-strip:hover {
-  background: rgba(255, 255, 255, 0.03);
-  color: #94a3b8;
+  background: color-mix(in srgb, var(--color-bg-elevated) 84%, transparent);
+  color: var(--color-text-secondary);
 }
 
 .channel-strip.enabled {
-  color: #cbd5e1;
-  border-color: rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.025);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-default);
+  background: color-mix(in srgb, var(--color-bg-elevated) 88%, transparent);
 }
 
 .cs-left {
@@ -642,20 +644,20 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 800;
   font-family: 'JetBrains Mono', monospace;
-  color: #334155;
+  color: var(--color-text-muted);
   flex-shrink: 0;
 }
 
 .channel-strip.enabled .cs-val {
-  color: #64748b;
+  color: var(--color-text-secondary);
 }
 
 /* 衍生分析区 */
 .analytics-section {
   padding: 11px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.018);
+  border: 1px solid var(--color-border-soft);
+  background: color-mix(in srgb, var(--color-bg-card) 90%, transparent);
 }
 
 .analytics-grid {
@@ -673,7 +675,7 @@ onUnmounted(() => {
 .anlx-label {
   font-size: 8px;
   font-weight: 800;
-  color: #1e293b;
+  color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -681,7 +683,7 @@ onUnmounted(() => {
 .anlx-value {
   font-size: 13px;
   font-weight: 900;
-  color: #94a3b8;
+  color: var(--color-text-secondary);
   font-family: 'JetBrains Mono', monospace;
 }
 
@@ -694,9 +696,9 @@ onUnmounted(() => {
 .sidebar-footer-tag {
   margin-top: auto;
   padding-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  border-top: 1px solid var(--color-border-soft);
   font-size: 8px;
-  color: #1e293b;
+  color: var(--color-text-muted);
   font-weight: 800;
   letter-spacing: 0.5px;
 }
@@ -706,7 +708,7 @@ onUnmounted(() => {
   flex: 1;
   min-width: 0;
   height: 100%;
-  background: #05070a;
+  background: color-mix(in srgb, var(--color-bg-page) 96%, transparent);
   position: relative;
 }
 
@@ -722,8 +724,8 @@ onUnmounted(() => {
   inset: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(56, 189, 248, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(56, 189, 248, 0.025) 1px, transparent 1px);
+    linear-gradient(var(--theme-grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--theme-grid-color) 1px, transparent 1px);
   background-size: 60px 60px;
   mask-image: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.35) 15%, rgba(0,0,0,0.35) 85%, transparent 100%);
 }
@@ -753,7 +755,7 @@ onUnmounted(() => {
   .stats-sidebar {
     width: 100%;
     border-right: none;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid var(--color-border-soft);
     padding: 12px 16px;
   }
 

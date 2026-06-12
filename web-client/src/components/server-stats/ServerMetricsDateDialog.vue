@@ -51,7 +51,7 @@ const emit = defineEmits<{
   display: grid;
   place-items: center;
   padding: 20px;
-  background: rgba(6, 10, 16, 0.72);
+  background: var(--theme-overlay-scrim);
   backdrop-filter: blur(10px);
 }
 
@@ -80,8 +80,8 @@ const emit = defineEmits<{
   border-radius: 12px;
   border: 1px solid var(--color-border-default);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)),
-    rgba(255, 255, 255, 0.02);
+    var(--theme-panel-highlight),
+    color-mix(in srgb, var(--color-bg-elevated) 86%, transparent);
   color: var(--color-text-primary);
   font-size: 13px;
   cursor: pointer;
@@ -97,8 +97,8 @@ const emit = defineEmits<{
   border-color: rgba(96, 165, 250, 0.64);
   background:
     linear-gradient(180deg, rgba(96, 165, 250, 0.12), rgba(96, 165, 250, 0.04)),
-    rgba(255, 255, 255, 0.03);
-  color: #dbeafe;
+    color-mix(in srgb, var(--color-bg-elevated) 86%, transparent);
+  color: color-mix(in srgb, var(--color-brand-primary) 70%, white 30%);
 }
 
 .empty-state {
@@ -128,7 +128,7 @@ const emit = defineEmits<{
 }
 
 .secondary-button {
-  background: rgba(255, 255, 255, 0.03);
+  background: color-mix(in srgb, var(--color-bg-elevated) 86%, transparent);
   color: var(--color-text-secondary);
   border-color: var(--color-border-default);
 }

@@ -80,7 +80,7 @@ function cancel() {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(5, 8, 12, 0.82);
+  background: var(--theme-overlay-scrim);
   backdrop-filter: blur(4px);
 }
 
@@ -91,10 +91,10 @@ function cancel() {
   border: 1px solid rgba(251, 191, 36, 0.24);
   border-radius: 18px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.02)), rgba(255, 255, 255, 0.006)),
+    var(--theme-panel-highlight),
     var(--color-bg-card);
   padding: 22px;
-  box-shadow: var(--shadow-lg), 0 0 20px rgba(251, 191, 36, 0.05);
+  box-shadow: var(--shadow-lg), 0 0 24px var(--theme-warn-glow);
   backdrop-filter: blur(12px);
 }
 
@@ -144,7 +144,7 @@ function cancel() {
 .warn-textarea:focus {
   outline: none;
   border-color: rgba(251, 191, 36, 0.5);
-  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.12);
+  box-shadow: var(--theme-field-glow);
 }
 
 .quick-hints {
@@ -157,7 +157,7 @@ function cancel() {
 .hint-chip {
   font-size: 12px;
   padding: 4px 10px;
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--color-bg-elevated) 86%, transparent);
   border: 1px solid var(--color-border-soft);
   border-radius: var(--radius-full);
   color: var(--color-text-secondary);
@@ -180,7 +180,7 @@ function cancel() {
 
 .cancel-btn {
   padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.02);
+  background: color-mix(in srgb, var(--color-bg-elevated) 86%, transparent);
   border: 1px solid var(--color-border-default);
   color: var(--color-text-secondary);
   border-radius: 12px;

@@ -12,6 +12,8 @@ import { onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
 import * as echarts from "echarts";
 
 import type { ServerMetricChannel, ServerMetricSample } from "../../composables/useServerMetrics";
+import { readChartThemeTokens } from "../../theme/chartTheme";
+import { useUiStore } from "../../stores/ui.store";
 
 const props = defineProps<{
   samples: ServerMetricSample[];
@@ -22,6 +24,7 @@ const props = defineProps<{
 const chartRef = ref<HTMLElement | null>(null);
 const chartInstance = shallowRef<echarts.ECharts | null>(null);
 const chartError = ref("");
+const ui = useUiStore();
 
 let resizeObserver: ResizeObserver | null = null;
 let resizeFallbackHandler: (() => void) | null = null;
@@ -30,7 +33,7 @@ function ensureChart() {
   if (chartInstance.value || !chartRef.value) return;
 
   try {
-    chartInstance.value = echarts.init(chartRef.value, "dark");
+    chartInstance.value = echarts.init(chartRef.value);
     chartInstance.value.setOption(buildBaseOption());
 
     if (typeof ResizeObserver !== "undefined") {
@@ -51,6 +54,9 @@ function ensureChart() {
 }
 
 function buildBaseOption(): echarts.EChartsOption {
+  const tokens = readChartThemeTokens();
+  const accent = tokens.series[0];
+
   return {
     backgroundColor: "transparent",
     animation: false,
@@ -67,21 +73,21 @@ function buildBaseOption(): echarts.EChartsOption {
       axisPointer: {
         type: "cross",
         lineStyle: {
-          color: "rgba(96, 165, 250, 0.5)",
+          color: alphaColor(accent, 0.5),
           width: 1,
           type: "dashed",
         },
         crossStyle: {
-          color: "rgba(96, 165, 250, 0.3)",
+          color: alphaColor(accent, 0.3),
           width: 1,
         },
       },
-      backgroundColor: "rgba(8, 14, 22, 0.96)",
-      borderColor: "rgba(56, 189, 248, 0.22)",
+      backgroundColor: tokens.tooltipBg,
+      borderColor: tokens.grid,
       borderWidth: 1,
       padding: 0,
       textStyle: {
-        color: "#e5eef7",
+        color: tokens.tooltipText,
       },
       extraCssText: "box-shadow: 0 12px 36px rgba(0,0,0,0.48); border-radius: 12px; overflow: hidden;",
       formatter: buildTooltip as any,
@@ -91,18 +97,18 @@ function buildBaseOption(): echarts.EChartsOption {
       boundaryGap: false,
       axisLine: {
         lineStyle: {
-          color: "rgba(255,255,255,0.06)",
+          color: tokens.grid,
         },
       },
       axisLabel: {
-        color: "#4a5568",
+        color: tokens.axis,
         fontSize: 11,
         fontFamily: "JetBrains Mono, monospace",
       },
       splitLine: {
         show: true,
         lineStyle: {
-          color: "rgba(255,255,255,0.04)",
+          color: tokens.grid,
         },
       },
     } as any,
@@ -111,14 +117,14 @@ function buildBaseOption(): echarts.EChartsOption {
         type: "value",
         scale: true,
         axisLabel: {
-          color: "#4a5568",
+          color: tokens.axis,
           fontSize: 11,
           fontFamily: "JetBrains Mono, monospace",
         },
         splitLine: {
           show: true,
           lineStyle: {
-            color: "rgba(255,255,255,0.04)",
+            color: tokens.grid,
           },
         },
         axisLine: { show: false },
@@ -129,7 +135,7 @@ function buildBaseOption(): echarts.EChartsOption {
         min: 0,
         max: 50,
         axisLabel: {
-          color: "#4a5568",
+          color: tokens.axis,
           fontSize: 11,
           fontFamily: "JetBrains Mono, monospace",
         },
@@ -150,21 +156,21 @@ function buildBaseOption(): echarts.EChartsOption {
         height: 20,
         bottom: 4,
         borderColor: "transparent",
-        fillerColor: "rgba(56, 189, 248, 0.1)",
+        fillerColor: alphaColor(accent, 0.12),
         handleStyle: {
-          color: "#38bdf8",
+          color: accent,
           borderColor: "transparent",
         },
         dataBackground: {
-          lineStyle: { color: "rgba(56, 189, 248, 0.3)" },
-          areaStyle: { color: "rgba(56, 189, 248, 0.05)" },
+          lineStyle: { color: alphaColor(accent, 0.3) },
+          areaStyle: { color: alphaColor(accent, 0.05) },
         },
         selectedDataBackground: {
-          lineStyle: { color: "rgba(56, 189, 248, 0.5)" },
-          areaStyle: { color: "rgba(56, 189, 248, 0.1)" },
+          lineStyle: { color: alphaColor(accent, 0.5) },
+          areaStyle: { color: alphaColor(accent, 0.1) },
         },
         textStyle: {
-          color: "#4a5568",
+          color: tokens.axis,
           fontFamily: "JetBrains Mono, monospace",
         },
         brushSelect: false,
@@ -176,6 +182,8 @@ function buildBaseOption(): echarts.EChartsOption {
 
 function buildTooltip(params: any[]) {
   if (!params || params.length === 0) return "";
+  const tokens = readChartThemeTokens();
+  const accent = tokens.series[0];
 
   const first = params[0];
   const time = formatTooltipTime(Number(first.axisValue ?? first.value?.[0] ?? Date.now()));
@@ -185,15 +193,15 @@ function buildTooltip(params: any[]) {
     return `
       <div style="display:flex;align-items:center;gap:10px;padding:4px 0;">
         <span style="width:3px;height:16px;border-radius:2px;background:${item.color};flex:none;border-radius:1px;"></span>
-        <span style="flex:1;font-size:11px;color:#64748b;font-weight:500;">${escapeHtml(String(item.seriesName ?? ""))}</span>
-        <strong style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:800;color:#f8fafc;">${escapeHtml(formatTooltipValue(value))}${unit ? `<span style="margin-left:3px;color:#475569;font-size:10px;font-weight:600;">${escapeHtml(unit)}</span>` : ""}</strong>
+        <span style="flex:1;font-size:11px;color:${tokens.axis};font-weight:500;">${escapeHtml(String(item.seriesName ?? ""))}</span>
+        <strong style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:800;color:${tokens.tooltipText};">${escapeHtml(formatTooltipValue(value))}${unit ? `<span style="margin-left:3px;color:${tokens.axis};font-size:10px;font-weight:600;">${escapeHtml(unit)}</span>` : ""}</strong>
       </div>
     `;
   }).join("");
 
   return `
     <div style="min-width:200px;">
-      <div style="padding:9px 13px 7px;background:rgba(56,189,248,0.06);border-bottom:1px solid rgba(56,189,248,0.12);font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:#38bdf8;letter-spacing:0.04em;">${escapeHtml(time)}</div>
+      <div style="padding:9px 13px 7px;background:${alphaColor(accent, 0.08)};border-bottom:1px solid ${alphaColor(accent, 0.16)};font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:${accent};letter-spacing:0.04em;">${escapeHtml(time)}</div>
       <div style="padding:6px 13px 10px;">${rows}</div>
     </div>
   `;
@@ -362,6 +370,15 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#39;");
 }
 
+function alphaColor(color: string, alpha: number) {
+  const normalized = color.trim().startsWith("#") ? color.trim().slice(1) : color.trim();
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return color;
+  const r = parseInt(normalized.slice(0, 2), 16);
+  const g = parseInt(normalized.slice(2, 4), 16);
+  const b = parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 onMounted(() => {
   ensureChart();
   updateChart();
@@ -377,6 +394,12 @@ watch(
     updateChart();
   }
 );
+
+watch(() => ui.theme, () => {
+  if (!chartInstance.value) return;
+  chartInstance.value.setOption(buildBaseOption(), true);
+  updateChart();
+});
 
 onUnmounted(() => {
   resizeObserver?.disconnect();
@@ -408,7 +431,7 @@ onUnmounted(() => {
   display: grid;
   place-items: center;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.02);
+  background: color-mix(in srgb, var(--color-bg-card) 90%, transparent);
   color: var(--color-text-muted);
   font-size: 13px;
   pointer-events: none;

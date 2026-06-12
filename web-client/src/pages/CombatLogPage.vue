@@ -500,8 +500,11 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
 .combat-log-page {
   height: 100%;
   padding: 16px;
-  background: linear-gradient(135deg, #0f172a, #020617);
-  color: #e2e8f0;
+  background:
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--theme-brand-glow) 90%, transparent), transparent 26%),
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--theme-warn-glow) 80%, transparent), transparent 24%),
+    var(--theme-background-flat);
+  color: var(--color-text-primary);
 }
 
 .status-compact {
@@ -519,7 +522,7 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
   padding: 0 12px;
   border-radius: 999px;
   border: 1px solid var(--color-border-default);
-  background: rgba(255, 255, 255, 0.03);
+  background: color-mix(in srgb, var(--color-bg-elevated) 88%, transparent);
   color: var(--color-text-secondary);
   font-size: 13px;
   font-weight: 600;
@@ -536,7 +539,7 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
   border-radius: 12px;
   border: 1px solid rgba(248, 113, 113, 0.25);
   background: rgba(248, 113, 113, 0.08);
-  color: #fca5a5;
+  color: color-mix(in srgb, var(--color-status-error) 34%, white 66%);
   font-size: 14px;
 }
 
@@ -581,8 +584,8 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border-default);
+  background: color-mix(in srgb, var(--color-bg-card) 90%, transparent);
   border-radius: 8px;
   padding: 10px 12px;
   color: var(--color-text-secondary);
@@ -601,7 +604,7 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
 .list-item.active {
   border-color: rgba(96, 165, 250, 0.55);
   background: rgba(96, 165, 250, 0.12);
-  color: #fff;
+  color: var(--color-text-primary);
 }
 
 .list-item small {
@@ -642,9 +645,9 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
   min-width: 0;
   height: 36px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.02);
-  color: #f1f5f9;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
   padding: 0 12px;
   font-size: 13px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -653,15 +656,15 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
 .search-input:focus {
   outline: none;
   border-color: var(--color-border-highlight);
-  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.14);
+  box-shadow: var(--theme-field-glow);
 }
 
 .clear-button {
   height: 36px;
   padding: 0 12px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--color-border-default);
+  background: color-mix(in srgb, var(--color-bg-elevated) 88%, transparent);
   color: var(--color-text-secondary);
   font-size: 13px;
   cursor: pointer;
@@ -669,7 +672,7 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
 }
 
 .clear-button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--color-bg-hover);
 }
 
 .clear-button:disabled {
@@ -681,9 +684,9 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
   height: 36px;
   width: 110px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(15, 23, 34, 0.94);
-  color: #f1f5f9;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
   padding: 0 8px;
   font-size: 13px;
   outline: none;
@@ -707,16 +710,16 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
   height: 36px;
   padding: 0 14px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
-  color: #f1f5f9;
+  border: 1px solid var(--color-border-default);
+  background: color-mix(in srgb, var(--color-bg-elevated) 88%, transparent);
+  color: var(--color-text-primary);
   font-size: 13px;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
 }
 
 .action-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--color-bg-hover);
   border-color: var(--color-border-highlight);
 }
 
@@ -733,7 +736,7 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
   padding: 0 16px;
   border-radius: 10px;
   border: 1px solid var(--color-border-default);
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--color-bg-elevated) 88%, transparent);
   color: var(--color-text-secondary);
   font-size: 13px;
   font-weight: 700;
@@ -744,8 +747,8 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
 .refresh-button:hover:not(:disabled) {
   transform: translateY(-1px);
   border-color: var(--color-border-highlight);
-  color: #fff;
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
 }
 
 .refresh-button:disabled {
@@ -757,9 +760,9 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--color-border-default);
   border-radius: 12px;
-  background: rgba(15, 23, 34, 0.5);
+  background: color-mix(in srgb, var(--color-bg-card) 92%, transparent);
   transition: opacity 0.15s ease;
 }
 
@@ -778,19 +781,21 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
 .log-table thead th {
   position: sticky;
   top: 0;
-  background: #0f172a;
+  background:
+    var(--theme-panel-highlight),
+    color-mix(in srgb, var(--color-bg-elevated) 96%, transparent);
   z-index: 1;
   text-align: left;
   color: var(--color-text-muted);
   font-weight: 600;
-  border-bottom: 2px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 2px solid var(--color-border-default);
   padding: 12px 14px;
 }
 
 .log-table th,
 .log-table td {
   padding: 10px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--color-border-soft);
   font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -798,7 +803,7 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
 }
 
 .log-table tbody tr:nth-child(even) {
-  background: rgba(255, 255, 255, 0.01);
+  background: color-mix(in srgb, var(--color-bg-card) 92%, transparent);
 }
 
 .log-table tbody tr:hover {
@@ -822,7 +827,7 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
 .damage-cell {
   text-align: center;
   font-weight: 700;
-  color: #f87171;
+  color: var(--color-status-error);
 }
 
 .name-cell {
@@ -850,8 +855,8 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
   min-height: 22px;
   min-width: 70px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #fff;
+  background: color-mix(in srgb, var(--color-bg-hover) 90%, transparent);
+  color: var(--color-text-primary);
   text-transform: uppercase;
   font-size: 10px;
   font-weight: 800;
@@ -898,7 +903,7 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
   display: inline-block;
   width: 12px;
   height: 12px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid color-mix(in srgb, var(--color-border-default) 90%, transparent);
   border-top-color: currentColor;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;

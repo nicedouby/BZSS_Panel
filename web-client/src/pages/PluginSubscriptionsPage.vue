@@ -221,7 +221,10 @@ const stats = computed(() => {
   };
 });
 
-const canManage = computed(() => auth.user?.isSuperAdmin === true);
+const canManage = computed(() => Boolean(
+  auth.user?.isSuperAdmin === true
+  || auth.user?.permissions?.includes("settings.manage"),
+));
 
 onMounted(() => {
   void refreshState(false);

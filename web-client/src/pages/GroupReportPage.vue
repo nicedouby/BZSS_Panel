@@ -473,11 +473,11 @@ function formatTime(value: number) {
   grid-template-rows: auto auto minmax(0, 1fr);
   gap: 12px;
   padding: 16px;
-  color: #e5eef7;
+  color: var(--color-text-primary);
   background:
-    radial-gradient(circle at top right, rgba(37, 99, 235, 0.18), transparent 34%),
-    radial-gradient(circle at left center, rgba(16, 185, 129, 0.12), transparent 24%),
-    #0b1220;
+    radial-gradient(circle at top right, color-mix(in srgb, var(--theme-brand-glow) 90%, transparent), transparent 34%),
+    radial-gradient(circle at left center, color-mix(in srgb, var(--theme-warn-glow) 62%, transparent), transparent 24%),
+    var(--theme-background-flat);
 }
 
 .page-header {
@@ -494,7 +494,7 @@ function formatTime(value: number) {
 
 .eyebrow {
   margin: 0 0 6px;
-  color: #7dd3fc;
+  color: var(--color-brand-primary);
   font-size: 12px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -502,7 +502,7 @@ function formatTime(value: number) {
 
 .subtitle {
   margin: 8px 0 0;
-  color: #93a4bf;
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 
@@ -518,9 +518,9 @@ function formatTime(value: number) {
   align-items: center;
   padding: 8px 12px;
   border-radius: 8px;
-  border: 1px solid #2b3540;
-  background: rgba(255, 255, 255, 0.02);
-  color: #dce4e8;
+  border: 1px solid var(--color-border-default);
+  background: color-mix(in srgb, var(--color-bg-elevated) 86%, transparent);
+  color: var(--color-text-secondary);
   text-decoration: none;
   font-size: 13px;
 }
@@ -561,10 +561,12 @@ function formatTime(value: number) {
 .right-pane {
   min-width: 0;
   min-height: 0;
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  border: 1px solid var(--color-border-default);
   border-radius: 14px;
-  background: rgba(8, 15, 28, 0.8);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  background:
+    var(--theme-panel-highlight),
+    color-mix(in srgb, var(--color-bg-card) 92%, transparent);
+  box-shadow: inset 0 1px 0 var(--theme-panel-rim), var(--theme-panel-glow);
 }
 
 .left-pane {
@@ -576,7 +578,7 @@ function formatTime(value: number) {
   display: flex;
   gap: 8px;
   padding: 12px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  border-bottom: 1px solid var(--color-border-soft);
 }
 
 .create-row input,
@@ -585,9 +587,9 @@ function formatTime(value: number) {
   min-width: 0;
   height: 36px;
   border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  background: rgba(2, 6, 23, 0.72);
-  color: #e5eef7;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
   padding: 0 12px;
   outline: none;
 }
@@ -614,8 +616,8 @@ function formatTime(value: number) {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(30, 41, 59, 0.65);
+  border: 1px solid var(--color-border-default);
+  background: color-mix(in srgb, var(--color-bg-card) 90%, transparent);
   border-radius: 14px;
   padding: 12px;
   cursor: pointer;
@@ -644,7 +646,7 @@ function formatTime(value: number) {
 
 .group-head-copy p {
   margin: 4px 0 0;
-  color: #94a3b8;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -677,8 +679,8 @@ function formatTime(value: number) {
   gap: 10px;
   padding: 10px;
   border-radius: 12px;
-  background: rgba(15, 23, 42, 0.56);
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: color-mix(in srgb, var(--color-bg-elevated) 88%, transparent);
+  border: 1px solid var(--color-border-soft);
 }
 
 .member-copy,
@@ -704,7 +706,7 @@ function formatTime(value: number) {
 
 .member-primary-id {
   flex: 0 0 auto;
-  color: #cbd5e1;
+  color: var(--color-text-secondary);
   font-size: 12px;
 }
 
@@ -721,9 +723,9 @@ function formatTime(value: number) {
   height: 24px;
   padding: 0 8px;
   border-radius: 999px;
-  background: rgba(30, 41, 59, 0.92);
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  color: #dbeafe;
+  background: color-mix(in srgb, var(--color-bg-elevated) 88%, transparent);
+  border: 1px solid var(--color-border-soft);
+  color: var(--color-text-secondary);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -731,8 +733,8 @@ function formatTime(value: number) {
 .note-box {
   padding: 8px 10px;
   border-radius: 10px;
-  color: #cbd5e1;
-  background: rgba(15, 23, 42, 0.52);
+  color: var(--color-text-secondary);
+  background: color-mix(in srgb, var(--color-bg-elevated) 86%, transparent);
   font-size: 13px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -756,7 +758,7 @@ function formatTime(value: number) {
 
 .search-head p {
   margin: 5px 0 0;
-  color: #94a3b8;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 
@@ -780,7 +782,7 @@ function formatTime(value: number) {
 
 .empty-hint {
   padding: 16px;
-  color: #94a3b8;
+  color: var(--color-text-muted);
   text-align: center;
   font-size: 13px;
 }
@@ -788,16 +790,18 @@ function formatTime(value: number) {
 button {
   height: 32px;
   padding: 0 10px;
-  border: 1px solid rgba(148, 163, 184, 0.24);
+  border: 1px solid var(--color-border-default);
   border-radius: 10px;
-  color: #e5eef7;
-  background: rgba(51, 65, 85, 0.9);
+  color: var(--color-text-primary);
+  background:
+    var(--theme-panel-highlight),
+    color-mix(in srgb, var(--color-bg-elevated) 88%, transparent);
   cursor: pointer;
   white-space: nowrap;
 }
 
 button:hover:not(:disabled) {
-  background: rgba(71, 85, 105, 0.95);
+  background: var(--color-bg-hover);
 }
 
 button:disabled {

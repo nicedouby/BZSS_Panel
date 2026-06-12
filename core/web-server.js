@@ -5,7 +5,6 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { ALLOWED_RCON_PERMISSIONS } from "./auth-user-store.js";
 
 const requestStorage = new AsyncLocalStorage();
 import { handleSquadManagementRoutes } from "../modules/squad-management/routes.js";
@@ -400,11 +399,22 @@ export class WebServer {
       }
 
       if (req.method === "GET") {
+        if (!this.canManageSettingsTools(user)) {
+          return this.json(res, 403, {
+            error: "Forbidden",
+            message: "settings.manage permission is required.",
+          });
+        }
         return this.json(res, 200, configManager.getExposedSettings());
       }
 
       if (req.method === "PATCH") {
-        if (!this.requireSuperAdmin(user, res)) return;
+        if (!this.canManageSettingsTools(user)) {
+          return this.json(res, 403, {
+            error: "Forbidden",
+            message: "settings.manage permission is required.",
+          });
+        }
         const body = await this.readJsonBody(req);
         if (!body || typeof body !== "object" || Array.isArray(body) || !body.changes || typeof body.changes !== "object" || Array.isArray(body.changes)) {
           return this.json(res, 400, {
@@ -422,7 +432,12 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/system/status" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.canManageSettingsTools(user)) {
+        return this.json(res, 403, {
+          error: "Forbidden",
+          message: "settings.manage permission is required.",
+        });
+      }
       const modules = this.core.moduleManager?.instances
         ?.filter((inst) => !inst.manifest?.hidden && !inst.manifest?.deprecated)
         .map((inst) => ({
@@ -583,6 +598,12 @@ export class WebServer {
     }
 
     if (url.pathname.startsWith("/api/plugin-subscriptions")) {
+      if (!this.canManageSettingsTools(user)) {
+        return this.json(res, 403, {
+          error: "Forbidden",
+          message: "settings.manage permission is required.",
+        });
+      }
       const pluginSubscriptions = this.modules.pluginSubscriptions;
       if (!pluginSubscriptions) {
         return this.json(res, 404, {
@@ -596,13 +617,11 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/plugin-subscriptions/set" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
         return this.json(res, 200, await pluginSubscriptions.setSubscribed(body.id, body.subscribed));
       }
 
       if (url.pathname === "/api/plugin-subscriptions/toggle" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
         return this.json(res, 200, await pluginSubscriptions.toggleSubscribed(body.id));
       }
@@ -1084,9 +1103,8 @@ export class WebServer {
         resultResolver: () => AUDIT_RESULTS.ACCEPTED,
         resultDataBuilder: (job) => this.summarizePlaytimeJobForAudit(job),
       };
-      if (!this.core.authManager?.hasEverything?.(user)) {
-        await this.auditForbidden(auditContext, "SuperAdmin role is required.");
-        return this.json(res, 403, { error: "Forbidden", message: "SuperAdmin role is required." });
+      if (!this.requireSuperAdmin(user, res)) {
+        return;
       }
 
       const job = await this.executeAudited(auditContext, () => this.modules.playtime.refreshOnline({
@@ -1129,9 +1147,9 @@ export class WebServer {
         resultResolver: () => AUDIT_RESULTS.ACCEPTED,
         resultDataBuilder: (job) => this.summarizePlaytimeJobForAudit(job),
       };
-      if (!this.core.authManager?.hasEverything?.(user)) {
-        await this.auditForbidden(auditContext, "SuperAdmin role is required.");
-        return this.json(res, 403, { error: "Forbidden", message: "SuperAdmin role is required." });
+      if (!this.canManageSettingsTools(user)) {
+        await this.auditForbidden(auditContext, "settings.manage permission is required.");
+        return this.json(res, 403, { error: "Forbidden", message: "settings.manage permission is required." });
       }
 
       const job = await this.executeAudited(auditContext, () => this.modules.playtime.refreshPlayer(body));
@@ -1276,7 +1294,12 @@ export class WebServer {
 
     // Compatibility endpoint for tank-battle status panel.
     if (url.pathname === "/api/auto-tank-battle/status" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.canManageSettingsTools(user)) {
+        return this.json(res, 403, {
+          error: "Forbidden",
+          message: "settings.manage permission is required.",
+        });
+      }
       return this.json(res, 200, {
         enabled: false,
         settings: {
@@ -3331,6 +3354,13 @@ export class WebServer {
     if (Array.isArray(permissions)) return permissions.includes("plugins.manage");
     if (permissions && typeof permissions === "object") return Boolean(permissions["plugins.manage"]);
     return false;
+  }
+
+  canManageSettingsTools(user) {
+    return Boolean(
+      this.core.authManager?.hasEverything?.(user)
+      || this.core.authManager?.hasPermission?.(user, "settings.manage"),
+    );
   }
 
   async handleAdminUsersApi(url, req, res, user) {

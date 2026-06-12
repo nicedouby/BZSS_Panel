@@ -17,17 +17,36 @@
           <span>{{ roleLabel }}</span>
         </div>
 
-        <button type="button" class="menu-item" role="menuitem" @click="openSettings">设置与主题</button>
+        <section class="menu-section" aria-label="theme switcher">
+          <div class="menu-section-head">
+            <strong>主题</strong>
+            <span>当前 {{ activeThemeLabel }}</span>
+          </div>
+          <div class="theme-switch-grid">
+            <button
+              v-for="option in themeOptions"
+              :key="option.id"
+              type="button"
+              class="theme-switch-item"
+              :class="{ active: ui.theme === option.id }"
+              @click="selectTheme(option.id, option.label)"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+        </section>
+
+        <button type="button" class="menu-item" role="menuitem" @click="openSettings">设置</button>
         <button v-if="canUseArbitraryRcon" type="button" class="menu-item" role="menuitem" @click="openRconModal">
           执行命令
         </button>
-        <button type="button" class="menu-item" role="menuitem" @click="openPluginCenter">
+        <button v-if="canManageSettingsTools" type="button" class="menu-item" role="menuitem" @click="openPluginCenter">
           插件中心
         </button>
-        <button type="button" class="menu-item" role="menuitem" @click="openRuntimeStatus">
+        <button v-if="canManageSettingsTools" type="button" class="menu-item" role="menuitem" @click="openRuntimeStatus">
           运行状态
         </button>
-        <button v-if="canUseArbitraryRcon" type="button" class="menu-item" role="menuitem" :disabled="!canManageTankBattle" @click="openTankBattleDialog">
+        <button v-if="canManageTankBattle" type="button" class="menu-item" role="menuitem" @click="openTankBattleDialog">
           开启坦克大战
         </button>
         <button type="button" class="menu-item danger" role="menuitem" @click="logout">
@@ -116,9 +135,10 @@ import { useRouter } from "vue-router";
 import { useAuthStore } from "../../stores/auth.store";
 import { useSettingsStore } from "../../stores/settings.store";
 import { apiGet, apiPost } from "../../app/apiClient";
-import { useUiStore } from "../../stores/ui.store";
+import { useUiStore, type UiTheme } from "../../stores/ui.store";
+import { UI_THEME_OPTIONS } from "../../theme/uiThemes";
 import { t } from "../../i18n";
-import { canSendRconCommand } from "../../shared/rcon-permissions.js";
+import { canSendRconCommand, hasPermission as hasSharedPermission } from "../../shared/rcon-permissions.js";
 
 const emit = defineEmits<{
   (event: "open-plugin-center"): void;
@@ -129,6 +149,7 @@ const auth = useAuthStore();
 const settings = useSettingsStore();
 const ui = useUiStore();
 const router = useRouter();
+const themeOptions = UI_THEME_OPTIONS;
 
 const menuOpen = ref(false);
 const rootEl = ref<HTMLElement | null>(null);
@@ -178,7 +199,13 @@ const tankBattleOptions = [
 const usernameLabel = computed(() => String(auth.user?.username ?? t("user.user")));
 const roleLabel = computed(() => String(auth.user?.role ?? t("common.unknown")));
 const canUseArbitraryRcon = computed(() => auth.user?.isSuperAdmin === true);
-const canManageTankBattle = computed(() => canSendRconCommand(auth.user, "AdminForceAllVehicleAvailability 1"));
+const canManageSettingsTools = computed(() => hasSharedPermission(auth.user?.permissions, "settings.manage"));
+const canOpenSettings = computed(() => auth.user?.isSuperAdmin === true || canManageSettingsTools.value);
+const canManageTankBattle = computed(() => (
+  auth.user?.isSuperAdmin === true
+  || (canManageSettingsTools.value && canSendRconCommand(auth.user, "AdminForceAllVehicleAvailability 1"))
+));
+const activeThemeLabel = computed(() => themeOptions.find((option) => option.id === ui.theme)?.label ?? ui.theme);
 const avatarUrl = computed(() => String(auth.user?.steamAvatar ?? "").trim() || null);
 const avatarLabel = computed(() => {
   const name = usernameLabel.value.trim();
@@ -225,8 +252,23 @@ function removeWindowListeners() {
 }
 
 async function openSettings() {
+  if (!canOpenSettings.value) {
+    ui.pushToast({ title: t("common.error"), message: "You do not have access to settings.", tone: "error" });
+    return;
+  }
   closeMenu();
   settings.openDrawer();
+}
+
+function selectTheme(themeId: UiTheme, label: string) {
+  if (ui.theme === themeId) return;
+  ui.setTheme(themeId);
+  ui.pushToast({
+    title: "Theme updated",
+    message: `Switched to ${label}.`,
+    tone: "ok",
+    durationMs: 1800,
+  });
 }
 
 function openRconModal() {
@@ -236,18 +278,20 @@ function openRconModal() {
 }
 
 function openPluginCenter() {
+  if (!canManageSettingsTools.value) return;
   closeMenu();
   emit("open-plugin-center");
 }
 
 function openRuntimeStatus() {
+  if (!canManageSettingsTools.value) return;
   closeMenu();
   router.push("/system/status");
 }
 
 function openTankBattleDialog() {
   closeMenu();
-  if (!canUseArbitraryRcon.value || !canManageTankBattle.value) {
+  if (!canManageTankBattle.value) {
     ui.pushToast({ title: t("common.error"), message: "只有具备坦克大战 RCON 权限的管理员可以使用快捷操作。", tone: "error" });
     return;
   }
@@ -483,6 +527,55 @@ onBeforeUnmount(() => {
 .user-meta span {
   color: var(--color-text-muted);
   font-size: 12px;
+}
+
+.menu-section {
+  padding: 8px 10px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--color-border-soft);
+  background: rgba(255, 255, 255, 0.02);
+  display: grid;
+  gap: 10px;
+}
+
+.menu-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.menu-section-head strong {
+  font-size: 13px;
+  color: var(--color-text-primary);
+}
+
+.menu-section-head span {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.theme-switch-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.theme-switch-item {
+  border: 1px solid var(--color-border-soft);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--color-text-secondary);
+  min-height: 34px;
+  padding: 0 10px;
+  text-align: center;
+}
+
+.theme-switch-item.active {
+  border-color: var(--color-border-highlight);
+  background: color-mix(in srgb, var(--color-brand-primary) 12%, transparent);
+  color: var(--color-text-primary);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-brand-primary) 14%, transparent);
 }
 
 .menu-item {
@@ -754,6 +847,10 @@ onBeforeUnmount(() => {
 
   .user-copy {
     display: none;
+  }
+
+  .theme-switch-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

@@ -346,6 +346,8 @@ const permissionOptions = [
   { value: "rcon.remove", label: "移出队伍 Remove" },
 ];
 
+permissionOptions.push({ value: "settings.manage", label: "设置 / 坦克大战" });
+
 const permissionLabelMap = new Map(permissionOptions.map((item) => [item.value, item.label]));
 
 const auth = useAuthStore();

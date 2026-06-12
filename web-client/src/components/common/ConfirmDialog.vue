@@ -34,7 +34,7 @@ const ui = useUiStore();
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(5, 8, 12, 0.76);
+  background: var(--theme-overlay-scrim);
   backdrop-filter: blur(4px);
 }
 
@@ -45,10 +45,10 @@ const ui = useUiStore();
   border: 1px solid var(--color-border-default);
   border-radius: 18px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.02)), rgba(255, 255, 255, 0.006)),
+    var(--theme-panel-highlight),
     var(--color-bg-card);
   padding: 20px;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-lg), var(--theme-panel-glow);
   backdrop-filter: blur(12px);
 }
 
@@ -79,7 +79,7 @@ const ui = useUiStore();
 .danger-button[data-tone="warn"] {
   border-color: rgba(248, 113, 113, 0.3);
   background: linear-gradient(180deg, rgba(248, 113, 113, 0.14), rgba(248, 113, 113, 0.08));
-  color: #ffd4d4;
+  color: color-mix(in srgb, var(--color-status-error) 38%, white 62%);
 }
 
 .danger-button[data-tone="idle"] {

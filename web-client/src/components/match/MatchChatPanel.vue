@@ -717,8 +717,8 @@ function buildWebSocketUrl(path: string) {
   flex-direction: column;
   overflow: hidden;
   border-radius: 16px;
-  border: 1px solid rgba(130, 154, 180, 0.22);
-  box-shadow: var(--shadow-md);
+  border: 1px solid var(--color-border-default);
+  box-shadow: var(--shadow-md), var(--theme-panel-glow);
 }
 
 .match-feed-card-chat {
@@ -748,7 +748,9 @@ function buildWebSocketUrl(path: string) {
   align-items: center;
   padding: 7px 11px 6px;
   border-bottom: 1px solid var(--color-border-soft);
-  background: color-mix(in srgb, var(--color-bg-elevated) 78%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel-rim) 92%, transparent), transparent),
+    color-mix(in srgb, var(--color-bg-elevated) 78%, transparent);
 }
 
 .match-chat-title-block {
@@ -788,7 +790,9 @@ function buildWebSocketUrl(path: string) {
   padding: 0 10px;
   border-radius: 999px;
   border: 1px solid var(--color-border-default);
-  background: color-mix(in srgb, var(--color-bg-elevated) 86%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel-rim) 90%, transparent), transparent),
+    color-mix(in srgb, var(--color-bg-elevated) 86%, transparent);
   color: var(--color-text-secondary);
   font-size: 12px;
   cursor: pointer;
@@ -824,7 +828,9 @@ function buildWebSocketUrl(path: string) {
   padding: 0 4px;
   border-radius: 4px;
   border: 1px solid var(--color-border-default);
-  background: color-mix(in srgb, var(--color-bg-elevated) 84%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel-rim) 85%, transparent), transparent),
+    color-mix(in srgb, var(--color-bg-elevated) 84%, transparent);
   color: var(--color-text-muted);
   cursor: pointer;
   font-size: 10px;
@@ -928,7 +934,9 @@ function buildWebSocketUrl(path: string) {
   padding: 5px 8px;
   border-radius: 8px;
   border: 1px solid var(--color-border-soft);
-  background: color-mix(in srgb, var(--color-bg-card) 82%, white 18%);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel-rim) 90%, transparent), transparent),
+    color-mix(in srgb, var(--color-bg-card) 88%, transparent);
   align-self: stretch;
   overflow: hidden;
   transition: background-color 0.12s ease;
@@ -994,27 +1002,27 @@ function buildWebSocketUrl(path: string) {
 }
 
 .match-chat-row.channel-all {
-  border-color: rgba(96, 165, 250, 0.18);
+  border-color: color-mix(in srgb, var(--chart-series-1) 22%, var(--color-border-default));
 }
 
 .match-chat-row.channel-team {
-  border-color: rgba(52, 211, 153, 0.18);
+  border-color: color-mix(in srgb, var(--color-status-online) 22%, var(--color-border-default));
 }
 
 .match-chat-row.channel-squad {
-  border-color: rgba(250, 204, 21, 0.18);
+  border-color: color-mix(in srgb, var(--color-status-leader) 22%, var(--color-border-default));
 }
 
 .match-chat-row.channel-admin {
-  border-color: rgba(248, 113, 113, 0.18);
+  border-color: color-mix(in srgb, var(--color-status-error) 22%, var(--color-border-default));
 }
 
 .match-chat-row.channel-system {
-  border-color: rgba(192, 132, 252, 0.18);
+  border-color: color-mix(in srgb, var(--color-brand-tertiary) 22%, var(--color-border-default));
 }
 
 .match-chat-row.channel-unknown {
-  border-color: rgba(148, 163, 184, 0.16);
+  border-color: var(--color-border-soft);
 }
 
 .match-chat-row.channel-all .match-chat-channel {
@@ -1049,6 +1057,9 @@ function buildWebSocketUrl(path: string) {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-warn-glow) 60%, transparent), transparent),
+    color-mix(in srgb, var(--color-bg-elevated) 78%, transparent);
 }
 
 .match-xm-log-title {
@@ -1097,13 +1108,13 @@ function buildWebSocketUrl(path: string) {
 }
 
 .match-xm-log-empty {
-  border: 1px dashed rgba(250, 204, 21, 0.28);
-  color: rgba(254, 240, 138, 0.9);
+  border: 1px dashed color-mix(in srgb, var(--color-status-warning) 36%, transparent);
+  color: color-mix(in srgb, var(--color-status-warning) 82%, var(--color-text-primary));
 }
 
 .match-xm-log-error {
   border: 1px solid rgba(248, 113, 113, 0.28);
-  color: #fecaca;
+  color: color-mix(in srgb, var(--color-status-error) 34%, white 66%);
   background: rgba(248, 113, 113, 0.08);
 }
 
@@ -1114,20 +1125,24 @@ function buildWebSocketUrl(path: string) {
   gap: 5px;
   padding: 8px 10px;
   border-radius: 10px;
-  border: 1px solid rgba(250, 204, 21, 0.2);
-  background: rgba(250, 204, 21, 0.06);
+  border: 1px solid color-mix(in srgb, var(--color-status-warning) 24%, var(--color-border-default));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-warn-glow) 75%, transparent), transparent),
+    color-mix(in srgb, var(--color-bg-card) 90%, transparent);
   cursor: pointer;
   overflow: hidden;
   transition: background-color 0.12s ease;
 }
 
 .match-xm-log-row:hover {
-  background: rgba(250, 204, 21, 0.1);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-warn-glow) 90%, transparent), transparent),
+    color-mix(in srgb, var(--color-bg-hover) 92%, transparent);
 }
 
 .match-xm-log-message {
   min-width: 0;
-  color: #fef3c7;
+  color: color-mix(in srgb, var(--color-status-warning) 78%, var(--color-text-primary));
   font-size: 11px;
   line-height: 1.4;
   word-break: break-word;
@@ -1138,7 +1153,7 @@ function buildWebSocketUrl(path: string) {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  color: rgba(253, 224, 71, 0.88);
+  color: color-mix(in srgb, var(--color-status-warning) 72%, var(--color-text-secondary));
   font-size: 10px;
   font-weight: 400;
   opacity: 0.9;
@@ -1148,7 +1163,7 @@ function buildWebSocketUrl(path: string) {
   min-width: 0;
   border-top: 1px solid rgba(250, 204, 21, 0.16);
   padding-top: 6px;
-  color: rgba(254, 243, 199, 0.82);
+  color: color-mix(in srgb, var(--color-status-warning) 64%, var(--color-text-secondary));
   font-size: 11px;
   line-height: 1.45;
   word-break: break-word;

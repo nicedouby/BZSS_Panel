@@ -12,7 +12,7 @@
             <button type="button" class="ghost-btn" :disabled="loading" @click="load">
               {{ loading ? "刷新中..." : "刷新" }}
             </button>
-            <button type="button" class="ghost-btn" @click="settings.openDrawer()">
+            <button type="button" class="ghost-btn" :disabled="!canManageSettingsTools" @click="settings.openDrawer()">
               打开设置
             </button>
           </div>
@@ -271,15 +271,22 @@ import {
   type FairSquadGuardRecord,
   type FairSquadGuardStatus,
 } from "../app/fairSquadGuardApi";
+import { useAuthStore } from "../stores/auth.store";
 import { useSettingsStore } from "../stores/settings.store";
 import { useConsoleLines, type ConsoleLine } from "../composables/useConsoleLines";
+import { hasPermission as hasSharedPermission } from "../shared/rcon-permissions.js";
 
+const auth = useAuthStore();
 const settings = useSettingsStore();
 const status = ref<FairSquadGuardStatus | null>(null);
 const records = ref<FairSquadGuardRecord[]>([]);
 const loading = ref(false);
 const actionBusy = ref(false);
 const error = ref("");
+const canManageSettingsTools = computed(() => Boolean(
+  auth.user?.isSuperAdmin
+  || hasSharedPermission(auth.user?.permissions, "settings.manage"),
+));
 
 const xmFilters = reactive({
   stream: "modules",

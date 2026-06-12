@@ -24,16 +24,25 @@
   --color-focus-ring: rgba(96, 165, 250, 0.5);
 
   --theme-background-rich:
-    radial-gradient(circle at 12% 0%, rgba(56, 189, 248, 0.12), transparent 28%),
-    radial-gradient(circle at 88% 0%, rgba(251, 146, 60, 0.09), transparent 30%),
+    radial-gradient(circle at 12% 0%, rgba(56, 189, 248, 0.18), transparent 28%),
+    radial-gradient(circle at 88% 0%, rgba(251, 146, 60, 0.14), transparent 30%),
+    radial-gradient(circle at 50% 18%, rgba(244, 114, 182, 0.06), transparent 34%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.01), transparent 24%),
     #06090f;
   --theme-background-flat: #06090f;
   --theme-root-overlay:
-    radial-gradient(circle at 14% 0%, rgba(56, 189, 248, 0.12), transparent 30%),
-    radial-gradient(circle at 86% 0%, rgba(251, 146, 60, 0.08), transparent 28%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 18%);
+    radial-gradient(circle at 14% 0%, rgba(56, 189, 248, 0.18), transparent 30%),
+    radial-gradient(circle at 86% 0%, rgba(251, 146, 60, 0.12), transparent 28%),
+    radial-gradient(circle at 50% 14%, rgba(244, 114, 182, 0.05), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 18%);
   --theme-grid-color: rgba(255, 255, 255, 0.035);
+  --theme-panel-highlight: linear-gradient(180deg, rgba(255, 255, 255, 0.072), rgba(255, 255, 255, 0.008));
+  --theme-panel-rim: rgba(255, 255, 255, 0.05);
+  --theme-panel-glow: 0 18px 44px rgba(2, 8, 18, 0.34), 0 0 0 1px rgba(56, 189, 248, 0.04);
+  --theme-overlay-scrim: rgba(4, 8, 14, 0.72);
+  --theme-field-glow: 0 0 0 3px rgba(96, 165, 250, 0.14);
+  --theme-brand-glow: rgba(56, 189, 248, 0.18);
+  --theme-warn-glow: rgba(251, 191, 36, 0.16);
 
   --chart-grid: rgba(148, 163, 184, 0.14);
   --chart-axis: #718096;
@@ -50,11 +59,11 @@
 :root[data-ui-theme="daylight"] {
   color-scheme: light;
 
-  --color-bg-page: #edf2f7;
-  --color-bg-panel: rgba(248, 250, 252, 0.94);
-  --color-bg-card: rgba(255, 255, 255, 0.96);
-  --color-bg-elevated: #f8fafc;
-  --color-bg-hover: #e7eef6;
+  --color-bg-page: #dde6f0;
+  --color-bg-panel: rgba(236, 242, 247, 0.9);
+  --color-bg-card: rgba(245, 248, 252, 0.92);
+  --color-bg-elevated: #eef3f8;
+  --color-bg-hover: #d9e4ef;
   --color-bg-selected: rgba(37, 99, 235, 0.11);
 
   --color-border-default: rgba(71, 85, 105, 0.22);
@@ -72,15 +81,24 @@
   --color-focus-ring: rgba(37, 99, 235, 0.42);
 
   --theme-background-rich:
-    radial-gradient(circle at 12% 0%, rgba(59, 130, 246, 0.12), transparent 30%),
-    radial-gradient(circle at 88% 0%, rgba(249, 115, 22, 0.09), transparent 28%),
-    linear-gradient(180deg, #f8fafc, #edf2f7);
-  --theme-background-flat: #edf2f7;
+    radial-gradient(circle at 12% 0%, rgba(59, 130, 246, 0.17), transparent 30%),
+    radial-gradient(circle at 88% 0%, rgba(249, 115, 22, 0.12), transparent 28%),
+    radial-gradient(circle at 52% 18%, rgba(14, 165, 233, 0.08), transparent 34%),
+    linear-gradient(180deg, #edf3f8, #dde6f0);
+  --theme-background-flat: #dde6f0;
   --theme-root-overlay:
-    radial-gradient(circle at 14% 0%, rgba(59, 130, 246, 0.12), transparent 30%),
-    radial-gradient(circle at 86% 0%, rgba(249, 115, 22, 0.08), transparent 28%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.35), transparent 22%);
+    radial-gradient(circle at 14% 0%, rgba(59, 130, 246, 0.16), transparent 30%),
+    radial-gradient(circle at 86% 0%, rgba(249, 115, 22, 0.1), transparent 28%),
+    radial-gradient(circle at 52% 14%, rgba(14, 165, 233, 0.07), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 22%);
   --theme-grid-color: rgba(15, 23, 42, 0.055);
+  --theme-panel-highlight: linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.1));
+  --theme-panel-rim: rgba(255, 255, 255, 0.35);
+  --theme-panel-glow: 0 18px 42px rgba(52, 72, 96, 0.14), 0 0 0 1px rgba(37, 99, 235, 0.05);
+  --theme-overlay-scrim: rgba(214, 224, 236, 0.72);
+  --theme-field-glow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  --theme-brand-glow: rgba(37, 99, 235, 0.14);
+  --theme-warn-glow: rgba(234, 88, 12, 0.14);
 
   --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08);
   --shadow-md: 0 12px 30px rgba(15, 23, 42, 0.12);
@@ -117,16 +135,24 @@
   --color-focus-ring: rgba(167, 139, 250, 0.5);
 
   --theme-background-rich:
-    radial-gradient(circle at 12% 0%, rgba(139, 92, 246, 0.2), transparent 30%),
-    radial-gradient(circle at 88% 4%, rgba(34, 211, 238, 0.15), transparent 29%),
-    radial-gradient(circle at 50% 100%, rgba(244, 114, 182, 0.1), transparent 36%),
+    radial-gradient(circle at 12% 0%, rgba(139, 92, 246, 0.26), transparent 30%),
+    radial-gradient(circle at 88% 4%, rgba(34, 211, 238, 0.2), transparent 29%),
+    radial-gradient(circle at 50% 100%, rgba(244, 114, 182, 0.16), transparent 36%),
     #090b19;
   --theme-background-flat: #090b19;
   --theme-root-overlay:
-    radial-gradient(circle at 14% 0%, rgba(139, 92, 246, 0.18), transparent 30%),
-    radial-gradient(circle at 86% 0%, rgba(34, 211, 238, 0.12), transparent 28%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 18%);
+    radial-gradient(circle at 14% 0%, rgba(139, 92, 246, 0.24), transparent 30%),
+    radial-gradient(circle at 86% 0%, rgba(34, 211, 238, 0.16), transparent 28%),
+    radial-gradient(circle at 50% 18%, rgba(244, 114, 182, 0.09), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 18%);
   --theme-grid-color: rgba(196, 181, 253, 0.045);
+  --theme-panel-highlight: linear-gradient(180deg, rgba(255, 255, 255, 0.085), rgba(255, 255, 255, 0.01));
+  --theme-panel-rim: rgba(196, 181, 253, 0.08);
+  --theme-panel-glow: 0 20px 50px rgba(12, 10, 28, 0.38), 0 0 0 1px rgba(167, 139, 250, 0.05);
+  --theme-overlay-scrim: rgba(7, 8, 18, 0.72);
+  --theme-field-glow: 0 0 0 3px rgba(167, 139, 250, 0.14);
+  --theme-brand-glow: rgba(167, 139, 250, 0.18);
+  --theme-warn-glow: rgba(34, 211, 238, 0.16);
 }
 
 :root[data-ui-theme="green"] {
@@ -154,16 +180,25 @@
   --color-focus-ring: rgba(74, 222, 128, 0.45);
 
   --theme-background-rich:
-    radial-gradient(circle at 12% 0%, rgba(34, 197, 94, 0.16), transparent 31%),
-    radial-gradient(circle at 88% 0%, rgba(202, 138, 4, 0.08), transparent 28%),
+    radial-gradient(circle at 12% 0%, rgba(34, 197, 94, 0.22), transparent 31%),
+    radial-gradient(circle at 88% 0%, rgba(202, 138, 4, 0.12), transparent 28%),
+    radial-gradient(circle at 50% 16%, rgba(34, 211, 238, 0.06), transparent 32%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.012), transparent 24%),
     #06100b;
   --theme-background-flat: #06100b;
   --theme-root-overlay:
-    radial-gradient(circle at 14% 0%, rgba(34, 197, 94, 0.14), transparent 30%),
-    radial-gradient(circle at 86% 0%, rgba(202, 138, 4, 0.08), transparent 28%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 18%);
+    radial-gradient(circle at 14% 0%, rgba(34, 197, 94, 0.2), transparent 30%),
+    radial-gradient(circle at 86% 0%, rgba(202, 138, 4, 0.12), transparent 28%),
+    radial-gradient(circle at 50% 18%, rgba(34, 211, 238, 0.05), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 18%);
   --theme-grid-color: rgba(134, 239, 172, 0.035);
+  --theme-panel-highlight: linear-gradient(180deg, rgba(255, 255, 255, 0.072), rgba(255, 255, 255, 0.008));
+  --theme-panel-rim: rgba(110, 231, 183, 0.07);
+  --theme-panel-glow: 0 20px 48px rgba(2, 20, 10, 0.38), 0 0 0 1px rgba(74, 222, 128, 0.05);
+  --theme-overlay-scrim: rgba(4, 14, 9, 0.72);
+  --theme-field-glow: 0 0 0 3px rgba(74, 222, 128, 0.13);
+  --theme-brand-glow: rgba(74, 222, 128, 0.16);
+  --theme-warn-glow: rgba(212, 167, 44, 0.14);
 }
 
 .theme-preview-default {
@@ -174,8 +209,8 @@
 }
 
 .theme-preview-daylight {
-  --theme-preview-page: #edf2f7;
-  --theme-preview-card: #ffffff;
+  --theme-preview-page: #dde6f0;
+  --theme-preview-card: #f2f6fb;
   --theme-preview-primary: #2563eb;
   --theme-preview-secondary: #ea580c;
 }

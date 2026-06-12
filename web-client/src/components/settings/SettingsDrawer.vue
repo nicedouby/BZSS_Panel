@@ -1,329 +1,281 @@
 <template>
-  <div v-if="settings.open" class="settings-overlay" @click.self="settings.closeDrawer()">
-    <aside class="settings-panel">
-      <header class="settings-head settings-hero">
-        <div class="settings-head-copy">
-          <p class="settings-kicker">Control Center</p>
-          <h2>设置与主题</h2>
-          <p>主题、本地外观偏好和服务器设置。</p>
-        </div>
-        <button type="button" @click="settings.closeDrawer()">{{ t("common.close") }}</button>
-      </header>
-
-      <section class="settings-section appearance-section">
-        <div class="settings-section-head">
-          <h3>界面外观</h3>
-          <p>这些设置只保存在当前浏览器，不影响服务器配置。</p>
-        </div>
-
-        <div class="appearance-grid">
-          <div class="appearance-field">
-            <div class="appearance-label">
-              <span>主题</span>
-              <small>点击后立即切换</small>
+  <teleport to="body">
+    <transition name="settings-fade">
+      <div v-if="settings.open" class="settings-overlay" @click.self="settings.closeDrawer()">
+        <section class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title">
+          <header class="main-head">
+            <div class="main-head-copy">
+              <p class="head-kicker">Control</p>
+              <h2 id="settings-dialog-title">{{ t("settings.title") }}</h2>
+              <p>Server settings only. Theme switching has moved to the top-right user menu.</p>
             </div>
-            <div class="theme-grid" role="radiogroup" aria-label="主题">
-              <button
-                v-for="option in themeOptions"
-                :key="option.id"
-                type="button"
-                class="theme-card"
-                role="radio"
-                :aria-checked="ui.theme === option.id"
-                :class="[option.previewClass, { active: ui.theme === option.id }]"
-                @click="selectTheme(option.id, option.label)"
+            <button type="button" class="ghost-button" @click="settings.closeDrawer()">{{ t("common.close") }}</button>
+          </header>
+
+          <section class="toolbar-card">
+            <label class="search-field">
+              <span>Search field or path</span>
+              <input
+                v-model.trim="searchQuery"
+                type="text"
+                placeholder="web.port / rcon / tick / squad"
               >
-                <span class="theme-preview">
-                  <i class="swatch swatch-page" />
-                  <i class="swatch swatch-card" />
-                  <i class="swatch swatch-primary" />
-                  <i class="swatch swatch-secondary" />
-                </span>
-
-                <span class="theme-copy">
-                  <strong>{{ option.label }}</strong>
-                  <small>{{ option.description }}</small>
-                </span>
-
-                <span v-if="ui.theme === option.id" class="theme-check">✓</span>
-              </button>
-            </div>
-          </div>
-
-          <div class="appearance-field">
-            <div class="appearance-label">
-              <span>视觉模式</span>
-              <small>高级外观</small>
-            </div>
-            <div class="segmented-options">
-              <button
-                v-for="option in visualModeOptions"
-                :key="option.value"
-                type="button"
-                class="segment-option"
-                :class="{ active: ui.visualMode === option.value }"
-                @click="ui.setVisualMode(option.value)"
-              >
-                <strong>{{ option.label }}</strong>
-                <small>{{ option.description }}</small>
-              </button>
-            </div>
-          </div>
-
-          <div class="appearance-field">
-            <div class="appearance-label">
-              <span>显示密度</span>
-              <small>辅助选项</small>
-            </div>
-            <div class="segmented-options two">
-              <button
-                v-for="option in densityOptions"
-                :key="option.value"
-                type="button"
-                class="segment-option"
-                :class="{ active: ui.globalDensity === option.value }"
-                @click="ui.setGlobalDensity(option.value)"
-              >
-                <strong>{{ option.label }}</strong>
-                <small>{{ option.description }}</small>
-              </button>
-            </div>
-          </div>
-
-          <div class="appearance-field">
-            <div class="appearance-label">
-              <span>阵营配色</span>
-              <small>高级外观</small>
-            </div>
-            <div class="segmented-options">
-              <button
-                v-for="option in accentOptions"
-                :key="option.value"
-                type="button"
-                class="segment-option"
-                :class="{ active: ui.accent === option.value }"
-                @click="ui.setAccent(option.value)"
-              >
-                <strong>{{ option.label }}</strong>
-                <small>{{ option.description }}</small>
-              </button>
-            </div>
-          </div>
-
-          <div class="appearance-field">
-            <div class="appearance-label">
-              <span>动效强度</span>
-              <small>辅助选项</small>
-            </div>
-            <div class="segmented-options two">
-              <button
-                v-for="option in motionOptions"
-                :key="option.value"
-                type="button"
-                class="segment-option"
-                :class="{ active: ui.motion === option.value }"
-                @click="ui.setMotion(option.value)"
-              >
-                <strong>{{ option.label }}</strong>
-                <small>{{ option.description }}</small>
-              </button>
-            </div>
-          </div>
-
-          <label class="toggle-row">
-            <span>
-              <strong>背景层次</strong>
-              <small>更丰富的环境光与渐变</small>
-            </span>
-            <input type="checkbox" :checked="ui.richBackground" @change="updateRichBackground">
-          </label>
-
-          <label class="toggle-row">
-            <span>
-              <strong>卡片光效</strong>
-              <small>增强面板层次感</small>
-            </span>
-            <input type="checkbox" :checked="ui.cardGlow" @change="updateCardGlow">
-          </label>
-
-          <label class="toggle-row">
-            <span>
-              <strong>阵营视角提示</strong>
-              <small>显示“当前视角 TEAM X”提示</small>
-            </span>
-            <input type="checkbox" :checked="ui.showTeamPerspectiveHint" @change="updateShowTeamPerspectiveHint">
-          </label>
-        </div>
-      </section>
-
-      <section class="settings-section backend-section">
-        <div class="settings-section-head">
-          <h3>服务器设置</h3>
-          <p>这些设置会写入服务器配置，部分改动可能需要重启。</p>
-        </div>
-
-        <template v-if="settings.loading">
-          <section class="settings-state">
-            {{ t("settings.loading") }}
-          </section>
-        </template>
-
-        <template v-else-if="settings.error">
-          <section class="settings-state error">
-            {{ settings.error }}
-            <button type="button" @click="settings.load(true)">{{ t("common.retry") }}</button>
-          </section>
-        </template>
-
-        <template v-else>
-          <div v-if="!settings.enabled" class="settings-note">
-            {{ t("settings.disabled") }}
-          </div>
-
-          <div v-if="!canEdit" class="settings-note warn">
-            {{ t("settings.readonly") }}
-          </div>
-
-          <div v-if="settings.noticeRestartRequired" class="settings-note warn">
-            {{ t("settings.restartRequired") }}
-          </div>
-
-          <div v-if="!settings.fields.length" class="settings-empty">
-            {{ t("settings.noExposedSettings") }}
-          </div>
-
-          <div v-for="field in settings.fields" :key="field.path" class="setting-field">
-            <label class="setting-label">
-              <span class="setting-label-row">
-                <span>{{ settingLabel(field) }}</span>
-                <strong v-if="isDangerousField(field)" class="setting-pill">{{ t("common.advanced") }}</strong>
-              </span>
-              <small>{{ field.path }}</small>
             </label>
 
-            <p v-if="field.description" class="setting-description">{{ field.description }}</p>
-            <p v-if="isDangerousField(field)" class="setting-warning">
-              {{ t("settings.advancedWarning") }}
-            </p>
+            <label class="inline-toggle">
+              <input v-model="showAdvancedFields" type="checkbox">
+              <span>Show advanced fields</span>
+            </label>
+          </section>
 
-            <template v-if="field.type === 'boolean'">
-              <label class="setting-control checkbox">
-                <input
-                  type="checkbox"
-                  :checked="Boolean(settings.getDraftValue(field.path))"
-                  :disabled="!canSave || settings.loading || settings.saving"
-                  @change="updateBoolean(field.path, $event)"
-                >
-                <span>{{ Boolean(settings.getDraftValue(field.path)) ? t("common.enabled") : t("common.disabled") }}</span>
-              </label>
-            </template>
+          <div class="settings-scroll">
+            <section v-if="settings.loading" class="state-card">
+              {{ t("settings.loading") }}
+            </section>
 
-            <template v-else-if="field.type === 'number'">
-              <input
-                class="setting-input"
-                type="number"
-                :min="field.min"
-                :max="field.max"
-                step="any"
-                :value="numberInputValue(field.path)"
-                :disabled="!canSave || settings.loading || settings.saving"
-                @input="updateNumber(field.path, $event)"
-              >
-            </template>
-
-            <template v-else-if="field.type === 'select'">
-              <select
-                class="setting-input"
-                :value="selectInputValue(field.path)"
-                :disabled="!canSave || settings.loading || settings.saving"
-                @change="updateSelect(field.path, $event)"
-              >
-                <option v-for="option in field.options ?? []" :key="String(option.value)" :value="option.value">
-                  {{ option.label }}
-                </option>
-              </select>
-            </template>
+            <section v-else-if="settings.error" class="state-card error">
+              <span>{{ settings.error }}</span>
+              <button type="button" class="ghost-button" @click="settings.load(true)">{{ t("common.retry") }}</button>
+            </section>
 
             <template v-else>
-              <input
-                class="setting-input"
-                type="text"
-                :value="stringInputValue(field.path)"
-                :disabled="!canSave || settings.loading || settings.saving"
-                @input="updateString(field.path, $event)"
-              >
+              <section class="summary-grid">
+                <div class="summary-card">
+                  <span class="summary-label">Visible fields</span>
+                  <strong>{{ visibleFieldCount }}</strong>
+                  <small>{{ changedFieldCount }} pending changes</small>
+                </div>
+
+                <div class="summary-card" :class="{ warn: !canSave || settings.noticeRestartRequired }">
+                  <span class="summary-label">Status</span>
+                  <strong>{{ statusTitle }}</strong>
+                  <small>{{ statusDescription }}</small>
+                </div>
+              </section>
+
+              <section class="note-grid">
+                <div v-if="!settings.enabled" class="note-card">
+                  {{ t("settings.disabled") }}
+                </div>
+
+                <div v-if="!canEdit" class="note-card warn">
+                  {{ t("settings.readonly") }}
+                </div>
+
+                <div v-if="settings.noticeRestartRequired" class="note-card warn">
+                  {{ t("settings.restartRequired") }}
+                </div>
+              </section>
+
+              <section v-if="!visibleGroups.length" class="state-card">
+                {{ searchQuery ? "No fields match the current filter." : t("settings.noExposedSettings") }}
+              </section>
+
+              <section v-for="group in visibleGroups" :key="group.id" class="group-card">
+                <header class="group-head">
+                  <div>
+                    <h3>{{ group.title }}</h3>
+                    <p>{{ group.description }}</p>
+                  </div>
+                  <span class="group-count">{{ group.fields.length }}</span>
+                </header>
+
+                <div class="field-list">
+                  <div v-for="field in group.fields" :key="field.path" class="setting-field">
+                    <label class="setting-label">
+                      <span class="setting-label-row">
+                        <span>{{ settingLabel(field) }}</span>
+                        <strong v-if="isDangerousField(field)" class="setting-pill">{{ t("common.advanced") }}</strong>
+                        <strong v-if="field.restartRequired" class="setting-pill restart">Restart</strong>
+                      </span>
+                      <small>{{ field.path }}</small>
+                    </label>
+
+                    <p v-if="field.description" class="setting-description">{{ field.description }}</p>
+                    <p v-if="isDangerousField(field)" class="setting-warning">
+                      {{ t("settings.advancedWarning") }}
+                    </p>
+
+                    <template v-if="field.type === 'boolean'">
+                      <label class="setting-control checkbox">
+                        <input
+                          type="checkbox"
+                          :checked="Boolean(settings.getDraftValue(field.path))"
+                          :disabled="!canSave || settings.loading || settings.saving"
+                          @change="updateBoolean(field.path, $event)"
+                        >
+                        <span>{{ Boolean(settings.getDraftValue(field.path)) ? t("common.enabled") : t("common.disabled") }}</span>
+                      </label>
+                    </template>
+
+                    <template v-else-if="field.type === 'number'">
+                      <input
+                        class="setting-input"
+                        type="number"
+                        :min="field.min"
+                        :max="field.max"
+                        step="any"
+                        :value="numberInputValue(field.path)"
+                        :disabled="!canSave || settings.loading || settings.saving"
+                        @input="updateNumber(field.path, $event)"
+                      >
+                    </template>
+
+                    <template v-else-if="field.type === 'select'">
+                      <select
+                        class="setting-input"
+                        :value="selectInputValue(field.path)"
+                        :disabled="!canSave || settings.loading || settings.saving"
+                        @change="updateSelect(field.path, $event)"
+                      >
+                        <option v-for="option in field.options ?? []" :key="String(option.value)" :value="option.value">
+                          {{ option.label }}
+                        </option>
+                      </select>
+                    </template>
+
+                    <template v-else>
+                      <input
+                        class="setting-input"
+                        type="text"
+                        :value="stringInputValue(field.path)"
+                        :disabled="!canSave || settings.loading || settings.saving"
+                        @input="updateString(field.path, $event)"
+                      >
+                    </template>
+                  </div>
+                </div>
+              </section>
             </template>
           </div>
-        </template>
-      </section>
 
-      <footer class="settings-footer">
-        <div class="settings-footer-copy">
-          主题与外观已自动保存在当前浏览器；服务器设置需要手动保存。
-        </div>
-        <div class="settings-footer-actions">
-          <button type="button" @click="settings.closeDrawer()">{{ t("common.cancel") }}</button>
-          <button
-            type="button"
-            class="save-button"
-            :disabled="!canSave || settings.loading || settings.saving || !settings.hasChanges"
-            @click="save"
-          >
-            {{ settings.saving ? t("common.saving") : t("common.saveChanges") }}
-          </button>
-        </div>
-      </footer>
-    </aside>
-  </div>
+          <footer class="settings-footer">
+            <div class="footer-copy">
+              This dialog has its own scroll area. Server config still requires manual save.
+            </div>
+            <div class="footer-actions">
+              <button
+                type="button"
+                class="ghost-button"
+                :disabled="settings.loading || settings.saving || !settings.hasChanges"
+                @click="settings.resetDraft()"
+              >
+                Reset draft
+              </button>
+              <button type="button" class="ghost-button" @click="settings.closeDrawer()">{{ t("common.cancel") }}</button>
+              <button
+                type="button"
+                class="save-button"
+                :disabled="!canSave || settings.loading || settings.saving || !settings.hasChanges"
+                @click="save"
+              >
+                {{ settings.saving ? t("common.saving") : t("common.saveChanges") }}
+              </button>
+            </div>
+          </footer>
+        </section>
+      </div>
+    </transition>
+  </teleport>
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useAuthStore } from "../../stores/auth.store";
 import { useSettingsStore } from "../../stores/settings.store";
-import { useUiStore, type UiTheme } from "../../stores/ui.store";
-import { UI_THEME_OPTIONS } from "../../theme/uiThemes";
 import { t } from "../../i18n";
+import type { ExposedSetting } from "../../app/settingsApi";
+import { hasPermission as hasSharedPermission } from "../../shared/rcon-permissions.js";
+
+interface SettingsGroup {
+  id: string;
+  title: string;
+  description: string;
+  fields: ExposedSetting[];
+}
 
 const auth = useAuthStore();
 const settings = useSettingsStore();
-const ui = useUiStore();
 
-const canEdit = computed(() => Boolean(auth.user?.isSuperAdmin));
+const canEdit = computed(() => Boolean(
+  auth.user?.isSuperAdmin
+  || hasSharedPermission(auth.user?.permissions, "settings.manage"),
+));
 const canSave = computed(() => canEdit.value && settings.enabled);
-const themeOptions = UI_THEME_OPTIONS;
+const searchQuery = ref("");
+const showAdvancedFields = ref(false);
 
-const visualModeOptions = [
-  { value: "classic", label: "经典", description: "更克制，接近原始面板" },
-  { value: "tactical", label: "战术", description: "默认推荐，层次更清晰" },
-  { value: "glass", label: "玻璃", description: "更通透的控制中心" },
-] as const;
+const groupedFields = computed<SettingsGroup[]>(() => {
+  const groups = new Map<string, SettingsGroup>();
 
-const densityOptions = [
-  { value: "comfortable", label: "舒展", description: "保留更大留白" },
-  { value: "compact", label: "紧凑", description: "提高信息密度" },
-] as const;
+  for (const field of settings.fields) {
+    if (!showAdvancedFields.value && isDangerousField(field)) continue;
+    if (!matchesSearch(field, searchQuery.value)) continue;
 
-const accentOptions = [
-  { value: "blueOrange", label: "蓝 / 橙", description: "经典战术对比" },
-  { value: "greenAmber", label: "绿 / 琥珀", description: "更偏战场态势感" },
-  { value: "steelRed", label: "钢蓝 / 红", description: "更冷静，警示更强" },
-] as const;
+    const definition = resolveGroup(field.path);
+    const existing = groups.get(definition.id);
+    if (existing) {
+      existing.fields.push(field);
+      continue;
+    }
 
-const motionOptions = [
-  { value: "normal", label: "正常", description: "保留当前过渡效果" },
-  { value: "reduced", label: "减少", description: "降低动效干扰" },
-] as const;
+    groups.set(definition.id, {
+      ...definition,
+      fields: [field],
+    });
+  }
+
+  return Array.from(groups.values()).map((group) => ({
+    ...group,
+    fields: [...group.fields].sort(compareFields),
+  }));
+});
+
+const visibleGroups = computed(() => groupedFields.value.filter((group) => group.fields.length > 0));
+const visibleFieldCount = computed(() => visibleGroups.value.reduce((sum, group) => sum + group.fields.length, 0));
+const changedFieldCount = computed(() => settings.fields.reduce((sum, field) => {
+  return sameValue(settings.getDraftValue(field.path), field.value) ? sum : sum + 1;
+}, 0));
+
+const statusTitle = computed(() => {
+  if (!canEdit.value) return "Read only";
+  if (settings.noticeRestartRequired) return "Restart required";
+  if (settings.hasChanges) return "Unsaved changes";
+  return "Ready";
+});
+
+const statusDescription = computed(() => {
+  if (!canEdit.value) return "You can inspect fields but cannot save.";
+  if (settings.noticeRestartRequired) return "One or more edited fields take effect after restart.";
+  if (settings.hasChanges) return "Save the draft to write changes into config.";
+  return "No pending config change.";
+});
 
 watch(
   () => settings.open,
   (open) => {
     if (open) {
       void settings.load(true);
+      window.addEventListener("keydown", onWindowKeyDown);
+      return;
     }
+
+    searchQuery.value = "";
+    showAdvancedFields.value = false;
+    window.removeEventListener("keydown", onWindowKeyDown);
   },
   { immediate: true },
 );
+
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onWindowKeyDown);
+});
+
+function onWindowKeyDown(event: KeyboardEvent) {
+  if (event.key === "Escape") {
+    settings.closeDrawer();
+  }
+}
 
 function numberInputValue(path: string) {
   const value = settings.getDraftValue(path);
@@ -366,32 +318,6 @@ function updateSelect(path: string, event: Event) {
   settings.setDraftValue(path, input.value);
 }
 
-function updateRichBackground(event: Event) {
-  const input = event.target as HTMLInputElement;
-  ui.setRichBackground(input.checked);
-}
-
-function updateCardGlow(event: Event) {
-  const input = event.target as HTMLInputElement;
-  ui.setCardGlow(input.checked);
-}
-
-function updateShowTeamPerspectiveHint(event: Event) {
-  const input = event.target as HTMLInputElement;
-  ui.setShowTeamPerspectiveHint(input.checked);
-}
-
-function selectTheme(themeId: UiTheme, label: string) {
-  if (ui.theme === themeId) return;
-  ui.setTheme(themeId);
-  ui.pushToast({
-    title: "主题已切换",
-    message: `已切换到${label}主题`,
-    tone: "ok",
-    durationMs: 1800,
-  });
-}
-
 function isDangerousField(field: { path: string; advanced?: boolean }) {
   if (field.advanced) return true;
   return [
@@ -406,6 +332,85 @@ function settingLabel(field: { path: string; label: string }) {
   return t(`settingsField.${field.path}`, field.label);
 }
 
+function matchesSearch(field: ExposedSetting, rawQuery: string) {
+  const query = rawQuery.trim().toLowerCase();
+  if (!query) return true;
+
+  return [
+    field.path,
+    field.label,
+    field.description ?? "",
+    settingLabel(field),
+  ].some((value) => String(value).toLowerCase().includes(query));
+}
+
+function resolveGroup(path: string) {
+  if (path.startsWith("web.")) {
+    return {
+      id: "web",
+      title: "Web panel",
+      description: "Panel binding, title, and client selection.",
+    };
+  }
+
+  if (path.startsWith("rcon.")) {
+    return {
+      id: "rcon",
+      title: "RCON",
+      description: "Connection state and remote command endpoint.",
+    };
+  }
+
+  if (path.startsWith("ipLookup.") || path.startsWith("playerIdentityDisplay.")) {
+    return {
+      id: "identity",
+      title: "Identity and IP display",
+      description: "Lookup provider and where IP data is exposed in UI.",
+    };
+  }
+
+  if (path.startsWith("serverTickRate.")) {
+    return {
+      id: "tick-rate",
+      title: "Tick rate",
+      description: "Expected tick rate and alert thresholds.",
+    };
+  }
+
+  if (path.startsWith("modules.matchState.polling.")) {
+    return {
+      id: "polling",
+      title: "Runtime refresh",
+      description: "Server, player, squad, and map polling cadence.",
+    };
+  }
+
+  if (path.startsWith("plugins.fairSquadGuard.")) {
+    return {
+      id: "fair-squad-guard",
+      title: "Fair Squad Guard",
+      description: "Guard thresholds, windows, and broadcast behavior.",
+    };
+  }
+
+  return {
+    id: "other",
+    title: "Other",
+    description: "Exposed settings that do not fit the main groups.",
+  };
+}
+
+function compareFields(left: ExposedSetting, right: ExposedSetting) {
+  const leftDanger = isDangerousField(left) ? 1 : 0;
+  const rightDanger = isDangerousField(right) ? 1 : 0;
+  if (leftDanger !== rightDanger) return leftDanger - rightDanger;
+  return settingLabel(left).localeCompare(settingLabel(right));
+}
+
+function sameValue(left: unknown, right: unknown) {
+  return Object.is(left, right);
+}
+
 async function save() {
   try {
     await settings.save();
@@ -418,307 +423,217 @@ async function save() {
   position: fixed;
   inset: 0;
   z-index: var(--z-settings-drawer);
-  background: color-mix(in srgb, var(--color-bg-page) 62%, transparent);
-  backdrop-filter: blur(4px);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background:
+    radial-gradient(circle at top, color-mix(in srgb, var(--color-brand-primary) 18%, transparent), transparent 34%),
+    color-mix(in srgb, var(--color-bg-page) 76%, transparent);
+  backdrop-filter: blur(14px) saturate(1.05);
 }
 
-.settings-panel {
-  margin-left: auto;
-  width: min(620px, 100vw);
-  height: 100vh;
-  overflow: auto;
+.settings-dialog {
+  width: min(1080px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  border-radius: 28px;
+  border: 1px solid var(--color-border-default);
   background:
-    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--color-brand-primary) 16%, transparent), transparent 32%),
-    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--color-brand-secondary) 12%, transparent), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.02)), rgba(255, 255, 255, 0.006)),
+    radial-gradient(circle at top left, color-mix(in srgb, var(--color-brand-primary) 18%, transparent), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.02)), rgba(255, 255, 255, 0.008)),
     var(--color-bg-card);
-  border-left: 1px solid var(--color-border-default);
-  box-shadow: -24px 0 60px rgba(0, 0, 0, 0.38);
-  padding: 18px;
+  box-shadow: 0 36px 120px rgba(0, 0, 0, 0.52);
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
-  gap: 14px;
-  position: relative;
-  z-index: calc(var(--z-settings-drawer) + 1);
-  backdrop-filter: blur(12px);
 }
 
-.settings-head,
+.main-head,
+.toolbar-card,
 .settings-footer {
+  padding-left: 24px;
+  padding-right: 24px;
+}
+
+.main-head {
+  padding-top: 24px;
+  padding-bottom: 16px;
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
-  align-items: center;
   gap: 12px;
+  border-bottom: 1px solid var(--color-border-soft);
 }
 
-.settings-hero {
-  padding: 16px;
-  border: 1px solid var(--color-border-soft);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.settings-head-copy {
+.main-head-copy {
   display: grid;
-  gap: 4px;
+  gap: 6px;
 }
 
-.settings-kicker {
+.head-kicker {
   margin: 0;
   color: var(--color-status-info);
   font-size: 11px;
   font-weight: 700;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
 }
 
-.settings-head h2 {
+.main-head h2,
+.group-head h3 {
   margin: 0;
-  font-size: 18px;
 }
 
-.settings-head p {
+.main-head p,
+.group-head p {
   margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 13px;
-}
-
-.settings-section {
-  border: 1px solid var(--color-border-soft);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.022);
-  padding: 14px;
-  display: grid;
-  gap: 12px;
-}
-
-.settings-section-head h3 {
-  margin: 0;
-  font-size: 14px;
-  color: var(--color-text-primary);
-}
-
-.settings-section-head p {
-  margin: 4px 0 0;
+  color: var(--color-text-muted);
   font-size: 12px;
-  color: var(--color-text-muted);
-}
-
-.appearance-grid {
-  display: grid;
-  gap: 12px;
-}
-
-.appearance-field {
-  display: grid;
-  gap: 8px;
-}
-
-.appearance-label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: var(--color-text-primary);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.appearance-label small {
-  color: var(--color-text-muted);
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.theme-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.theme-card {
-  position: relative;
-  min-height: 112px;
-  border: 1px solid var(--color-border-soft);
-  border-radius: 16px;
-  padding: 12px;
-  display: grid;
-  gap: 10px;
-  justify-items: start;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.018)), rgba(255, 255, 255, 0.008)),
-    var(--color-bg-card);
-  color: var(--color-text-primary);
-}
-
-.theme-card.active {
-  border-color: var(--color-border-highlight);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--color-brand-primary) 14%, transparent), rgba(255, 255, 255, 0.01)),
-    var(--color-bg-card);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-brand-primary) 16%, transparent);
-}
-
-.theme-preview {
-  width: 100%;
-  min-height: 52px;
-  border-radius: 12px;
-  padding: 10px;
-  display: grid;
-  grid-template-columns: 1.3fr 1fr 0.8fr 0.8fr;
-  gap: 8px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-preview-page) 92%, white 8%), var(--theme-preview-page));
-  border: 1px solid color-mix(in srgb, var(--theme-preview-primary) 24%, transparent);
-}
-
-.swatch {
-  display: block;
-  border-radius: 8px;
-}
-
-.swatch-page {
-  background: var(--theme-preview-page);
-  border: 1px solid color-mix(in srgb, var(--theme-preview-primary) 24%, transparent);
-}
-
-.swatch-card {
-  background: var(--theme-preview-card);
-  border: 1px solid color-mix(in srgb, var(--theme-preview-primary) 18%, transparent);
-}
-
-.swatch-primary {
-  background: var(--theme-preview-primary);
-}
-
-.swatch-secondary {
-  background: var(--theme-preview-secondary);
-}
-
-.theme-copy {
-  display: grid;
-  gap: 4px;
-  text-align: left;
-}
-
-.theme-copy strong {
-  font-size: 13px;
-}
-
-.theme-copy small {
-  color: var(--color-text-muted);
-  font-size: 11px;
   line-height: 1.45;
 }
 
-.theme-check {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  min-width: 22px;
-  min-height: 22px;
-  border-radius: 999px;
+.toolbar-card {
+  padding-top: 14px;
+  padding-bottom: 14px;
   display: grid;
-  place-items: center;
-  background: var(--color-brand-primary);
-  color: white;
-  font-size: 12px;
-}
-
-.segmented-options {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.segmented-options.two {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.segment-option {
-  border: 1px solid var(--color-border-soft);
-  background: rgba(255, 255, 255, 0.025);
-  color: var(--color-text-secondary);
-  border-radius: 14px;
-  padding: 10px;
-  text-align: left;
-  display: grid;
-  gap: 4px;
-  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
-}
-
-.segment-option strong {
-  color: var(--color-text-primary);
-  font-size: 13px;
-}
-
-.segment-option small {
-  color: var(--color-text-muted);
-  font-size: 11px;
-}
-
-.segment-option.active {
-  border-color: var(--color-border-highlight);
-  background: color-mix(in srgb, var(--color-brand-primary) 12%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-brand-primary) 14%, transparent);
-}
-
-.toggle-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
-  border: 1px solid var(--color-border-soft);
-  background: rgba(255, 255, 255, 0.018);
-  border-radius: 14px;
+  align-items: end;
+  border-bottom: 1px solid var(--color-border-soft);
+}
+
+.search-field {
+  display: grid;
+  gap: 6px;
+}
+
+.search-field span,
+.summary-label {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.search-field input,
+.setting-input {
+  width: 100%;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  border-radius: 12px;
   padding: 10px 12px;
 }
 
-.toggle-row strong {
-  display: block;
+.inline-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   color: var(--color-text-primary);
   font-size: 13px;
 }
 
-.toggle-row small {
-  display: block;
-  margin-top: 3px;
-  color: var(--color-text-muted);
-  font-size: 11px;
+.settings-scroll {
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 24px;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  scrollbar-gutter: stable;
 }
 
-.settings-state {
-  border: 1px solid var(--color-border-default);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.016)), rgba(255, 255, 255, 0.006)),
-    var(--color-bg-card);
-  border-radius: 14px;
-  padding: 14px;
-  color: var(--color-text-primary);
-}
-
-.settings-state.error {
-  color: #ffc4c4;
+.summary-grid,
+.note-grid {
   display: grid;
   gap: 10px;
 }
 
-.settings-note,
-.settings-empty {
-  border: 1px solid var(--color-border-default);
+.summary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.summary-card,
+.note-card,
+.group-card,
+.state-card,
+.settings-footer {
+  border: 1px solid var(--color-border-soft);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.016)), rgba(255, 255, 255, 0.006)),
     var(--color-bg-card);
-  border-radius: 14px;
-  padding: 12px 14px;
-  color: var(--color-text-secondary);
+  border-radius: 18px;
 }
 
-.settings-note.warn {
+.summary-card,
+.note-card,
+.state-card {
+  padding: 14px 16px;
+}
+
+.summary-card {
+  display: grid;
+  gap: 4px;
+}
+
+.summary-card strong {
+  font-size: 20px;
+  color: var(--color-text-primary);
+}
+
+.summary-card small {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.summary-card.warn,
+.note-card.warn,
+.state-card.error {
   border-color: rgba(245, 158, 11, 0.28);
   background:
     linear-gradient(180deg, rgba(245, 158, 11, 0.12), rgba(255, 255, 255, 0.02)),
     var(--color-bg-card);
-  color: #f1d58b;
+}
+
+.state-card {
+  color: var(--color-text-primary);
+}
+
+.state-card.error {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.group-card {
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.group-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.group-count {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--color-border-default);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.field-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .setting-field {
@@ -748,20 +663,19 @@ async function save() {
   font-weight: 600;
 }
 
-.setting-label small {
+.setting-label small,
+.setting-description {
   color: var(--color-text-muted);
   font-size: 12px;
 }
 
-.setting-description {
+.setting-description,
+.setting-warning {
   margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 12px;
   line-height: 1.45;
 }
 
 .setting-warning {
-  margin: -2px 0 0;
   padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid rgba(245, 158, 11, 0.28);
@@ -770,7 +684,6 @@ async function save() {
     var(--color-bg-card);
   color: #f1d58b;
   font-size: 12px;
-  line-height: 1.45;
 }
 
 .setting-pill {
@@ -790,13 +703,11 @@ async function save() {
   text-transform: uppercase;
 }
 
-.setting-input {
-  width: 100%;
-  border: 1px solid var(--color-border-default);
-  background: var(--color-bg-elevated);
-  color: var(--color-text-primary);
-  border-radius: 12px;
-  padding: 9px 10px;
+.setting-pill.restart {
+  border-color: rgba(248, 113, 113, 0.28);
+  background:
+    linear-gradient(180deg, rgba(248, 113, 113, 0.12), rgba(255, 255, 255, 0.02)),
+    var(--color-bg-card);
 }
 
 .setting-control.checkbox {
@@ -807,47 +718,76 @@ async function save() {
 }
 
 .settings-footer {
-  padding-top: 4px;
-  border-top: 1px solid var(--color-border-soft);
+  margin: 0 24px 24px;
+  padding: 14px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
 }
 
-.settings-footer-copy {
+.footer-copy {
   color: var(--color-text-muted);
   font-size: 12px;
 }
 
-.settings-footer-actions {
+.footer-actions {
   display: inline-flex;
   align-items: center;
   gap: 10px;
+}
+
+.ghost-button,
+.save-button {
+  border-radius: 12px;
+  min-height: 40px;
+  padding: 0 14px;
 }
 
 .save-button:disabled {
   opacity: 0.5;
 }
 
-@media (max-width: 760px) {
-  .settings-panel {
-    width: 100vw;
+.settings-fade-enter-active,
+.settings-fade-leave-active {
+  transition: opacity 0.16s ease;
+}
+
+.settings-fade-enter-from,
+.settings-fade-leave-to {
+  opacity: 0;
+}
+
+@media (max-width: 820px) {
+  .settings-overlay {
+    padding: 0;
   }
 
-  .segmented-options,
-  .segmented-options.two,
-  .theme-grid {
+  .settings-dialog {
+    width: 100vw;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+
+  .toolbar-card,
+  .summary-grid,
+  .field-list {
     grid-template-columns: 1fr;
   }
 
-  .settings-footer {
+  .main-head,
+  .settings-footer,
+  .footer-actions {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .settings-footer-actions {
-    justify-content: stretch;
+  .settings-footer {
+    margin: 0 12px 12px;
   }
 
-  .settings-footer-actions button {
-    flex: 1 1 auto;
+  .footer-actions > * {
+    width: 100%;
   }
 }
 </style>

@@ -629,6 +629,7 @@ function roundHours(value: number) {
   padding: 24px;
   display: grid;
   gap: 16px;
+  color: var(--color-text-primary);
 }
 
 .tb-card {
@@ -637,8 +638,10 @@ function roundHours(value: number) {
   border-radius: 18px;
   padding: 20px;
   background:
-    radial-gradient(circle at top right, rgba(245, 158, 11, 0.08), transparent 28%),
-    var(--color-surface-panel);
+    radial-gradient(circle at top right, color-mix(in srgb, var(--theme-warn-glow) 70%, transparent), transparent 28%),
+    var(--theme-panel-highlight),
+    var(--color-bg-card);
+  box-shadow: var(--shadow-md), var(--theme-panel-glow);
 }
 
 .tb-header {
@@ -685,7 +688,7 @@ function roundHours(value: number) {
   overflow: auto;
   border: 1px solid var(--color-border-default);
   border-radius: 12px;
-  background: var(--color-surface-panel);
+  background: var(--color-bg-card);
   padding: 6px;
   display: grid;
   gap: 4px;
@@ -702,12 +705,12 @@ function roundHours(value: number) {
   border-radius: 10px;
   padding: 8px 10px;
   background: transparent;
-  color: var(--color-text-main);
+  color: var(--color-text-primary);
   cursor: pointer;
 }
 
 .tb-player-option:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--color-bg-hover);
   border-color: var(--color-border-default);
 }
 
@@ -730,8 +733,8 @@ function roundHours(value: number) {
   padding: 0 12px;
   border: 1px solid var(--color-border-default);
   border-radius: 10px;
-  background: var(--color-surface-input);
-  color: var(--color-text-main);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
 }
 
 .tb-primary-button,
@@ -747,21 +750,21 @@ function roundHours(value: number) {
 .tb-primary-button {
   border: 1px solid rgba(245, 158, 11, 0.35);
   background: rgba(245, 158, 11, 0.12);
-  color: #fde68a;
+  color: color-mix(in srgb, var(--color-status-warning) 76%, white 24%);
   font-weight: 700;
 }
 
 .tb-secondary-button {
   border: 1px solid var(--color-border-default);
-  background: transparent;
-  color: var(--color-text-main);
+  background: color-mix(in srgb, var(--color-bg-elevated) 86%, transparent);
+  color: var(--color-text-primary);
 }
 
 .tb-result {
   margin-top: 16px;
   padding: 12px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--color-bg-elevated) 86%, transparent);
   white-space: pre-wrap;
 }
 
@@ -792,7 +795,7 @@ function roundHours(value: number) {
   padding: 12px 14px;
   border-radius: 14px;
   border: 1px solid rgba(245, 158, 11, 0.18);
-  background: rgba(255, 255, 255, 0.025);
+  background: color-mix(in srgb, var(--color-bg-elevated) 88%, transparent);
 }
 
 .tb-shuffle-stat span {
@@ -811,7 +814,7 @@ function roundHours(value: number) {
   padding: 14px;
   border-radius: 16px;
   border: 1px solid rgba(245, 158, 11, 0.18);
-  background: rgba(255, 255, 255, 0.02);
+  background: color-mix(in srgb, var(--color-bg-card) 92%, transparent);
 }
 
 .tb-shuffle-result-head {
@@ -839,7 +842,7 @@ function roundHours(value: number) {
   align-items: center;
   border-radius: 999px;
   border: 1px solid rgba(245, 158, 11, 0.22);
-  color: #fde68a;
+  color: color-mix(in srgb, var(--color-status-warning) 76%, white 24%);
   background: rgba(245, 158, 11, 0.08);
 }
 
@@ -855,7 +858,7 @@ function roundHours(value: number) {
   padding: 12px;
   border-radius: 14px;
   border: 1px solid var(--color-border-soft);
-  background: rgba(255, 255, 255, 0.025);
+  background: color-mix(in srgb, var(--color-bg-card) 90%, transparent);
 }
 
 .tb-shuffle-team__head {
@@ -887,7 +890,7 @@ function roundHours(value: number) {
 .tb-shuffle-player strong,
 .tb-record-plan-player strong,
 .tb-record-plan-move strong {
-  color: var(--color-text-main);
+  color: var(--color-text-primary);
 }
 
 .tb-shuffle-player span,
@@ -916,7 +919,7 @@ function roundHours(value: number) {
   padding: 14px;
   border: 1px solid var(--color-border-default);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.03);
+  background: color-mix(in srgb, var(--color-bg-card) 90%, transparent);
 }
 
 .tb-record-main,
@@ -961,7 +964,7 @@ function roundHours(value: number) {
   padding: 12px;
   border-radius: 14px;
   border: 1px solid var(--color-border-soft);
-  background: rgba(255, 255, 255, 0.02);
+  background: color-mix(in srgb, var(--color-bg-elevated) 88%, transparent);
 }
 
 .tb-record-plan-group h3 {
@@ -976,7 +979,7 @@ function roundHours(value: number) {
 
 .tb-record-plan-moves summary {
   cursor: pointer;
-  color: var(--color-text-main);
+  color: var(--color-text-primary);
   font-weight: 600;
 }
 

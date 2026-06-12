@@ -102,6 +102,8 @@ import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } fr
 import { apiGet } from "../app/apiClient";
 import RuntimeLogModal from "../components/runtime/RuntimeLogModal.vue";
 import * as echarts from "echarts";
+import { readChartThemeTokens } from "../theme/chartTheme";
+import { useUiStore } from "../stores/ui.store";
 
 interface SystemStatus {
   ok: boolean;
@@ -152,12 +154,13 @@ let timer: number | null = null;
 const chartRef = ref<HTMLElement | null>(null);
 const chartInstance = shallowRef<echarts.ECharts | null>(null);
 let resizeObserver: ResizeObserver | null = null;
+const ui = useUiStore();
 
 function initChartIfNeeded() {
   if (chartInstance.value || !chartRef.value) return;
 
   try {
-    chartInstance.value = echarts.init(chartRef.value, "dark");
+    chartInstance.value = echarts.init(chartRef.value);
     if (typeof ResizeObserver !== "undefined") {
       resizeObserver = new ResizeObserver(() => {
         chartInstance.value?.resize();
@@ -171,6 +174,10 @@ function initChartIfNeeded() {
 
 function updateChart(history: NonNullable<SystemStatus["system"]["memoryHistory"]>) {
   if (!chartInstance.value) return;
+  const tokens = readChartThemeTokens();
+  const rssColor = tokens.series[0];
+  const heapTotalColor = tokens.series[4] ?? tokens.series[1];
+  const heapUsedColor = tokens.series[5] ?? tokens.series[2];
 
   const rssData = history.map(h => [h.timestamp, h.rss / 1024 / 1024]);
   const heapTotalData = history.map(h => [h.timestamp, h.heapTotal / 1024 / 1024]);
@@ -182,12 +189,12 @@ function updateChart(history: NonNullable<SystemStatus["system"]["memoryHistory"
     tooltip: {
       trigger: "axis",
       confine: true,
-      backgroundColor: "rgba(27, 34, 41, 0.96)",
-      borderColor: "rgba(56, 189, 248, 0.22)",
+      backgroundColor: tokens.tooltipBg,
+      borderColor: tokens.grid,
       borderWidth: 1,
       padding: [8, 12],
       textStyle: {
-        color: "#edf2f4"
+        color: tokens.tooltipText
       },
       extraCssText: "box-shadow: 0 8px 24px rgba(0,0,0,0.3); border-radius: 8px;",
       valueFormatter: (value: any) => `${Number(value).toFixed(1)} MB`
@@ -195,7 +202,7 @@ function updateChart(history: NonNullable<SystemStatus["system"]["memoryHistory"
     legend: {
       data: ["RSS", "Heap Total", "Heap Used"],
       textStyle: {
-        color: "#9aa7b2"
+        color: tokens.axis
       },
       bottom: 0
     },
@@ -209,7 +216,7 @@ function updateChart(history: NonNullable<SystemStatus["system"]["memoryHistory"
     xAxis: {
       type: "time",
       axisLabel: {
-        color: "#9aa7b2",
+        color: tokens.axis,
         fontSize: 10,
         formatter: (value: any) => {
           const date = new Date(value);
@@ -220,13 +227,13 @@ function updateChart(history: NonNullable<SystemStatus["system"]["memoryHistory"
       },
       axisLine: {
         lineStyle: {
-          color: "#2e3944"
+          color: tokens.grid
         }
       },
       splitLine: {
         show: true,
         lineStyle: {
-          color: "rgba(46, 57, 68, 0.3)"
+          color: tokens.grid
         }
       }
     },
@@ -234,22 +241,22 @@ function updateChart(history: NonNullable<SystemStatus["system"]["memoryHistory"
       type: "value",
       name: "MB",
       nameTextStyle: {
-        color: "#9aa7b2",
+        color: tokens.axis,
         align: "right"
       },
       axisLabel: {
-        color: "#9aa7b2",
+        color: tokens.axis,
         fontSize: 10
       },
       axisLine: {
         lineStyle: {
-          color: "#2e3944"
+          color: tokens.grid
         }
       },
       splitLine: {
         show: true,
         lineStyle: {
-          color: "rgba(46, 57, 68, 0.3)"
+          color: tokens.grid
         }
       }
     },
@@ -261,20 +268,20 @@ function updateChart(history: NonNullable<SystemStatus["system"]["memoryHistory"
         showSymbol: false,
         smooth: 0.35,
         lineStyle: {
-          color: "#38bdf8",
+          color: rssColor,
           width: 2.5
         },
         itemStyle: {
-          color: "#38bdf8"
+          color: rssColor
         },
         areaStyle: {
           color: {
             type: "linear",
             x: 0, y: 0, x2: 0, y2: 1,
             colorStops: [
-              { offset: 0, color: "rgba(56, 189, 248, 0.18)" },
-              { offset: 0.6, color: "rgba(56, 189, 248, 0.05)" },
-              { offset: 1, color: "rgba(56, 189, 248, 0)" }
+              { offset: 0, color: alphaColor(rssColor, 0.2) },
+              { offset: 0.6, color: alphaColor(rssColor, 0.06) },
+              { offset: 1, color: alphaColor(rssColor, 0) }
             ]
           }
         }
@@ -286,12 +293,12 @@ function updateChart(history: NonNullable<SystemStatus["system"]["memoryHistory"
         showSymbol: false,
         smooth: 0.35,
         lineStyle: {
-          color: "#818cf8",
+          color: heapTotalColor,
           width: 1.5,
           type: "dashed"
         },
         itemStyle: {
-          color: "#818cf8"
+          color: heapTotalColor
         }
       },
       {
@@ -301,20 +308,20 @@ function updateChart(history: NonNullable<SystemStatus["system"]["memoryHistory"
         showSymbol: false,
         smooth: 0.35,
         lineStyle: {
-          color: "#34d399",
+          color: heapUsedColor,
           width: 2.5
         },
         itemStyle: {
-          color: "#34d399"
+          color: heapUsedColor
         },
         areaStyle: {
           color: {
             type: "linear",
             x: 0, y: 0, x2: 0, y2: 1,
             colorStops: [
-              { offset: 0, color: "rgba(52, 211, 153, 0.15)" },
-              { offset: 0.6, color: "rgba(52, 211, 153, 0.04)" },
-              { offset: 1, color: "rgba(52, 211, 153, 0)" }
+              { offset: 0, color: alphaColor(heapUsedColor, 0.18) },
+              { offset: 0.6, color: alphaColor(heapUsedColor, 0.05) },
+              { offset: 1, color: alphaColor(heapUsedColor, 0) }
             ]
           }
         }
@@ -325,6 +332,16 @@ function updateChart(history: NonNullable<SystemStatus["system"]["memoryHistory"
   chartInstance.value.setOption(option);
 }
 
+function alphaColor(color: string, alpha: number) {
+  const hex = color.trim();
+  const normalized = hex.startsWith("#") ? hex.slice(1) : hex;
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return color;
+  const r = parseInt(normalized.slice(0, 2), 16);
+  const g = parseInt(normalized.slice(2, 4), 16);
+  const b = parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 watch(() => status.value?.system?.memoryHistory, (newHistory) => {
   if (newHistory && newHistory.length > 0) {
     nextTick(() => {
@@ -333,6 +350,12 @@ watch(() => status.value?.system?.memoryHistory, (newHistory) => {
     });
   }
 }, { immediate: true });
+
+watch(() => ui.theme, () => {
+  const history = status.value?.system?.memoryHistory;
+  if (!history?.length) return;
+  nextTick(() => updateChart(history));
+});
 
 const hasSelection = computed(() => Boolean(selectedTarget.value));
 
@@ -406,6 +429,7 @@ onUnmounted(() => {
   height: 100%;
   overflow-y: auto;
   scrollbar-gutter: stable;
+  color: var(--color-text-primary);
 }
 
 .page-header {
@@ -422,15 +446,17 @@ onUnmounted(() => {
 }
 
 .header-content p {
-  color: #9aa7b2;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
 .refresh-btn {
   padding: 8px 16px;
-  background: #2d3944;
-  border: 1px solid #41505d;
-  color: #edf2f4;
+  background:
+    var(--theme-panel-highlight),
+    color-mix(in srgb, var(--color-bg-elevated) 90%, transparent);
+  border: 1px solid var(--color-border-default);
+  color: var(--color-text-primary);
   border-radius: 6px;
   cursor: pointer;
 }
@@ -456,7 +482,7 @@ onUnmounted(() => {
 .section-title {
   font-size: 18px;
   margin-bottom: 16px;
-  color: #edf2f4;
+  color: var(--color-text-primary);
 }
 
 .system-grid {
@@ -467,8 +493,10 @@ onUnmounted(() => {
 
 .system-card {
   padding: 16px;
-  background: #1b2229;
-  border: 1px solid #2e3944;
+  background:
+    var(--theme-panel-highlight),
+    color-mix(in srgb, var(--color-bg-card) 92%, transparent);
+  border: 1px solid var(--color-border-default);
   border-radius: 10px;
   display: flex;
   flex-direction: column;
@@ -477,13 +505,13 @@ onUnmounted(() => {
 
 .system-card .label {
   font-size: 12px;
-  color: #9aa7b2;
+  color: var(--color-text-muted);
 }
 
 .system-card .value {
   font-size: 18px;
   font-weight: 600;
-  color: #edf2f4;
+  color: var(--color-text-primary);
 }
 
 .item-grid {
@@ -494,8 +522,10 @@ onUnmounted(() => {
 
 .item-card {
   padding: 16px;
-  background: #1b2229;
-  border: 1px solid #2e3944;
+  background:
+    var(--theme-panel-highlight),
+    color-mix(in srgb, var(--color-bg-card) 92%, transparent);
+  border: 1px solid var(--color-border-default);
   border-radius: 12px;
 }
 
@@ -507,12 +537,12 @@ onUnmounted(() => {
 }
 
 .runtime-item-card:hover {
-  border-color: #4f6c86;
-  background: #212a33;
+  border-color: var(--color-border-highlight);
+  background: var(--color-bg-hover);
 }
 
 .runtime-item-card:focus-visible {
-  outline: 2px solid #6aa6ff;
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
 }
 
@@ -526,7 +556,7 @@ onUnmounted(() => {
 
 .item-name {
   font-weight: 600;
-  color: #edf2f4;
+  color: var(--color-text-primary);
 }
 
 .status-badge {
@@ -545,21 +575,23 @@ onUnmounted(() => {
 
 .item-meta {
   font-size: 11px;
-  color: #6c7a89;
+  color: var(--color-text-muted);
   font-family: monospace;
   margin-bottom: 8px;
 }
 
 .item-desc {
   font-size: 13px;
-  color: #9aa7b2;
+  color: var(--color-text-secondary);
   margin: 0;
   line-height: 1.4;
 }
 
 .chart-container {
-  background: #1b2229;
-  border: 1px solid #2e3944;
+  background:
+    var(--theme-panel-highlight),
+    color-mix(in srgb, var(--color-bg-card) 92%, transparent);
+  border: 1px solid var(--color-border-default);
   border-radius: 12px;
   padding: 20px;
   height: 320px;

@@ -458,8 +458,10 @@ function formatNumber(value: unknown) {
 
 .metric,
 .status-grid > div {
-  border: 1px solid rgba(130, 154, 180, 0.16);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border-default);
+  background:
+    var(--theme-panel-highlight),
+    color-mix(in srgb, var(--color-bg-card) 90%, transparent);
   border-radius: 10px;
   padding: 12px;
 }
@@ -468,7 +470,7 @@ function formatNumber(value: unknown) {
 .status-grid span,
 .detail-meta span {
   display: block;
-  color: #8a9dad;
+  color: var(--color-text-muted);
   font-size: 12px;
   margin-bottom: 4px;
 }
@@ -477,7 +479,7 @@ function formatNumber(value: unknown) {
 .status-grid strong,
 .detail-meta strong {
   display: block;
-  color: #eef5fb;
+  color: var(--color-text-primary);
   font-size: 15px;
   word-break: break-word;
 }
@@ -498,9 +500,9 @@ function formatNumber(value: unknown) {
 .toolbar input,
 .toolbar select {
   min-width: 0;
-  border: 1px solid #38414c;
-  background: #11171d;
-  color: #edf2f4;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
   border-radius: 6px;
   padding: 8px 10px;
 }
@@ -513,7 +515,7 @@ function formatNumber(value: unknown) {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  color: #9aa7b2;
+  color: var(--color-text-muted);
   font-size: 12px;
   margin-bottom: 12px;
 }
@@ -521,7 +523,7 @@ function formatNumber(value: unknown) {
 .log-table-wrap {
   overflow: auto;
   max-height: calc(100vh - 330px);
-  border: 1px solid rgba(130, 154, 180, 0.12);
+  border: 1px solid var(--color-border-soft);
   border-radius: 10px;
 }
 
@@ -533,7 +535,7 @@ function formatNumber(value: unknown) {
 .log-table th,
 .log-table td {
   padding: 10px 12px;
-  border-bottom: 1px solid rgba(130, 154, 180, 0.12);
+  border-bottom: 1px solid var(--color-border-soft);
   text-align: left;
   vertical-align: top;
   font-size: 13px;
@@ -543,8 +545,10 @@ function formatNumber(value: unknown) {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: #171d23;
-  color: #aebdca;
+  background:
+    var(--theme-panel-highlight),
+    color-mix(in srgb, var(--color-bg-elevated) 96%, transparent);
+  color: var(--color-text-secondary);
   font-size: 12px;
 }
 
@@ -564,7 +568,7 @@ function formatNumber(value: unknown) {
 }
 
 .cell-stack span {
-  color: #8a9dad;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -586,7 +590,7 @@ function formatNumber(value: unknown) {
 
 .detail-subtitle {
   margin: 6px 0 0;
-  color: #8a9dad;
+  color: var(--color-text-muted);
   font-size: 12px;
   word-break: break-all;
 }
@@ -605,10 +609,10 @@ function formatNumber(value: unknown) {
 .json-block {
   margin: 0;
   padding: 14px;
-  border: 1px solid rgba(130, 154, 180, 0.16);
+  border: 1px solid var(--color-border-default);
   border-radius: 10px;
-  background: #0f141b;
-  color: #dce7ef;
+  background: color-mix(in srgb, var(--color-bg-page) 88%, transparent);
+  color: var(--color-text-secondary);
   overflow: auto;
   max-height: 56vh;
   font-size: 12px;
@@ -616,7 +620,7 @@ function formatNumber(value: unknown) {
 }
 
 .detail-empty {
-  color: #8a9dad;
+  color: var(--color-text-muted);
   font-size: 13px;
   padding: 16px 0 4px;
 }

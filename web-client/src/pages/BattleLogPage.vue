@@ -386,13 +386,15 @@ function formatNumber(value: unknown) {
   display: grid;
   gap: 4px;
   padding: 10px 12px;
-  border: 1px solid #2b3440;
+  border: 1px solid var(--color-border-default);
   border-radius: 10px;
-  background: rgba(8, 12, 16, 0.35);
+  background:
+    var(--theme-panel-highlight),
+    color-mix(in srgb, var(--color-bg-card) 92%, transparent);
 }
 
 .stat-item span {
-  color: #9aa7b2;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -403,7 +405,7 @@ function formatNumber(value: unknown) {
 .summary-meta,
 .player-meta {
   margin-top: 10px;
-  color: #9aa7b2;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -419,9 +421,9 @@ function formatNumber(value: unknown) {
   gap: 10px;
   align-items: center;
   padding: 8px 10px;
-  border: 1px solid #2b3440;
+  border: 1px solid var(--color-border-default);
   border-radius: 8px;
-  background: rgba(8, 12, 16, 0.24);
+  background: color-mix(in srgb, var(--color-bg-elevated) 90%, transparent);
 }
 
 .battle-table-wrap {
@@ -436,17 +438,19 @@ function formatNumber(value: unknown) {
 .battle-table th,
 .battle-table td {
   padding: 10px 8px;
-  border-bottom: 1px solid #27313c;
+  border-bottom: 1px solid var(--color-border-soft);
   vertical-align: top;
 }
 
 .battle-table th {
   position: sticky;
   top: 0;
-  background: #121820;
+  background:
+    var(--theme-panel-highlight),
+    color-mix(in srgb, var(--color-bg-elevated) 96%, transparent);
   z-index: 1;
   text-align: left;
-  color: #9aa7b2;
+  color: var(--color-text-muted);
 }
 
 .battle-row--tk {
@@ -503,7 +507,7 @@ function formatNumber(value: unknown) {
 
 .player-cell small,
 .source-cell small {
-  color: #9aa7b2;
+  color: var(--color-text-muted);
 }
 
 .meta-chip {
@@ -512,9 +516,9 @@ function formatNumber(value: unknown) {
   min-height: 28px;
   padding: 0 10px;
   border-radius: 999px;
-  border: 1px solid #33404d;
-  background: rgba(10, 14, 18, 0.55);
-  color: #c2d0db;
+  border: 1px solid var(--color-border-default);
+  background: color-mix(in srgb, var(--color-bg-elevated) 90%, transparent);
+  color: var(--color-text-secondary);
   font-size: 12px;
 }
 

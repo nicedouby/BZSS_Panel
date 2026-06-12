@@ -15,7 +15,7 @@ export const WEB_PAGE_PERMISSION_MATRIX = Object.freeze([
   { route: "/admin-warns", requiredPermission: "admin_warn.view" },
   { route: "/scheduled-broadcasts", requiredPermission: "scheduled_broadcast.view" },
   { route: "/squad-management", requiredPermission: "squad_management.view" },
-  { route: "/plugin-subscriptions", requiredPermission: "plugins.manage" },
+  { route: "/plugin-subscriptions", requiredPermission: "settings.manage" },
   { route: "/plugins/infantry-combat-enhancer", requiredPermission: "infantry_combat_enhancer.view" },
   { route: "/plugins/group-report", requiredPermission: "group_report.view" },
   { route: "/plugins/lianban-kick", requiredPermission: "squad_management.view" },
@@ -27,7 +27,7 @@ export const WEB_PAGE_PERMISSION_MATRIX = Object.freeze([
   { route: "/debug/draw-vote-guard", requiredPermission: "debug.draw_vote_guard.view" },
   { route: "/debug/welcome-join-warning", requiredPermission: "debug.welcome_join_warning.view" },
   { route: "/debug/squad-name-classifier", requiredPermission: "debug.squad_name_classifier.view" },
-  { route: "/system/status", requiredPermission: "system.status.view" },
+  { route: "/system/status", requiredPermission: "settings.manage" },
   { route: "/system/admin-users", requiredPermission: "admin_users.manage", superAdminOnly: true },
   { route: "/system/audit-records", requiredPermission: "audit.view" },
 ]);
