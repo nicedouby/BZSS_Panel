@@ -19,7 +19,7 @@
         <button type="button" class="menu-item" role="menuitem" @click="openSettings">
           {{ t("user.settings") }}
         </button>
-        <button type="button" class="menu-item" role="menuitem" @click="openRconModal">
+        <button v-if="canUseArbitraryRcon" type="button" class="menu-item" role="menuitem" @click="openRconModal">
           执行命令
         </button>
         <button type="button" class="menu-item" role="menuitem" @click="openPluginCenter">
@@ -28,7 +28,7 @@
         <button type="button" class="menu-item" role="menuitem" @click="openRuntimeStatus">
           运行状态
         </button>
-        <button type="button" class="menu-item" role="menuitem" :disabled="!canManageTankBattle" @click="openTankBattleDialog">
+        <button v-if="canUseArbitraryRcon" type="button" class="menu-item" role="menuitem" :disabled="!canManageTankBattle" @click="openTankBattleDialog">
           开启坦克大战
         </button>
         <button type="button" class="menu-item danger" role="menuitem" @click="logout">
@@ -178,6 +178,7 @@ const tankBattleOptions = [
 
 const usernameLabel = computed(() => String(auth.user?.username ?? t("user.user")));
 const roleLabel = computed(() => String(auth.user?.role ?? t("common.unknown")));
+const canUseArbitraryRcon = computed(() => auth.user?.isSuperAdmin === true);
 const canManageTankBattle = computed(() => canSendRconCommand(auth.user, "AdminForceAllVehicleAvailability 1"));
 const avatarLabel = computed(() => {
   const name = usernameLabel.value.trim();
@@ -229,6 +230,7 @@ async function openSettings() {
 }
 
 function openRconModal() {
+  if (!canUseArbitraryRcon.value) return;
   closeMenu();
   emit("open-rcon-modal");
 }
@@ -245,7 +247,7 @@ function openRuntimeStatus() {
 
 function openTankBattleDialog() {
   closeMenu();
-  if (!canManageTankBattle.value) {
+  if (!canUseArbitraryRcon.value || !canManageTankBattle.value) {
     ui.pushToast({ title: t("common.error"), message: "只有具备坦克大战 RCON 权限的管理员可以使用快捷操作。", tone: "error" });
     return;
   }

@@ -144,7 +144,9 @@ function canShowRoute(route: unknown, legacyRequiredPermissions: unknown[] = [])
   const resolved = resolveWebPagePermission(route);
   const requiredPermission = resolved?.requiredPermission ?? "";
   const legacyPermissions = normalizePermissionList(legacyRequiredPermissions);
-  return canAccessPage(auth.user, requiredPermission, legacyPermissions);
+  return canAccessPage(auth.user, requiredPermission, legacyPermissions, {
+    superAdminOnly: Boolean(resolved?.superAdminOnly),
+  });
 }
 
 function canShowPage(page: any) {
@@ -152,6 +154,7 @@ function canShowPage(page: any) {
     auth.user,
     String(page?.requiredPermission ?? "").trim(),
     normalizePermissionList(page?.legacyRequiredPermissions ?? []),
+    { superAdminOnly: Boolean(page?.superAdminOnly) },
   );
 }
 

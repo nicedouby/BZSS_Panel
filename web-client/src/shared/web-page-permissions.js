@@ -3,7 +3,7 @@
 export const WEB_PAGE_PERMISSION_MATRIX = Object.freeze([
   { route: "/match-status", requiredPermission: "match_state.view" },
   { route: "/match-state", requiredPermission: "match_state.view" },
-  { route: "/console", requiredPermission: "console.view" },
+  { route: "/console", requiredPermission: "console.view", superAdminOnly: true },
   { route: "/chat-monitor", requiredPermission: "chat_monitor.view" },
   { route: "/player-session-records", requiredPermission: "player_session_records.view" },
   { route: "/player-database", requiredPermission: "player_database.view" },
@@ -39,6 +39,7 @@ const WEB_PAGE_PERMISSION_MAP = new Map(
         route,
         requiredPermission: String(entry.requiredPermission ?? "").trim(),
         legacyRequiredPermissions: normalizePermissionList(entry.legacyRequiredPermissions),
+        superAdminOnly: Boolean(entry.superAdminOnly),
       },
     ];
   }),
@@ -110,7 +111,11 @@ export function hasPermission(permissions, wanted) {
   return false;
 }
 
-export function canAccessPage(user, requiredPermission, legacyRequiredPermissions = []) {
+export function canAccessPage(user, requiredPermission, legacyRequiredPermissions = [], options = {}) {
+  const superAdminOnly = Boolean(options?.superAdminOnly);
+  if (superAdminOnly) return Boolean(user?.isSuperAdmin);
+  if (user?.authorizationMode === "transitional") return Boolean(user);
+
   const required = String(requiredPermission ?? "").trim();
   if (!required) return true;
 

@@ -52,6 +52,7 @@ export function resolveRconPermission(commandText, options = {}) {
 export function canSendRconCommand(user, commandText, options = {}) {
   if (!user) return false;
   if (Boolean(user.isSuperAdmin)) return true;
+  if (user.authorizationMode === "transitional" && options?.superAdminOnly !== true) return true;
 
   const permissions = normalizePermissionList(user.permissions ?? user.permission);
   if (permissions.includes("*")) return true;

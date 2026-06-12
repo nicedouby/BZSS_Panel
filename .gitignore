@@ -6,6 +6,7 @@ web-client/dist/
 data/*.db
 data/*.db-*
 /data
+data/auth/users.json
 /data
 data/weapon-stats.json
 /data

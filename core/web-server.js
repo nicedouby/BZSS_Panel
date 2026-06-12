@@ -209,7 +209,7 @@ export class WebServer {
           mode: this.useVueClient ? "vue" : "legacy",
         },
         auth: {
-          enabled: true,
+          enabled: Boolean(this.core.authManager?.enabled),
         },
         rcon: this.core.rconManager?.getStatus?.() ?? null,
         runtimeState: Boolean(this.core.runtimeState),
@@ -233,10 +233,13 @@ export class WebServer {
       });
 
       if (!result.ok) {
-        return this.json(res, 401, {
+        const statusCode = result.error === "AuthDisabled" ? 503 : 401;
+        return this.json(res, statusCode, {
           ok: false,
           error: result.error ?? "InvalidCredentials",
-          message: "Invalid username or password.",
+          message: result.error === "AuthDisabled"
+            ? "Authentication is disabled."
+            : "Invalid username or password.",
         });
       }
 
@@ -1027,12 +1030,14 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/console/channels") {
+      if (!this.requireSuperAdmin(user, res)) return;
       return this.json(res, 200, this.getConsoleChannels({
         stream: url.searchParams.get("stream") ?? "modules",
       }));
     }
 
     if (url.pathname === "/api/console/lines") {
+      if (!this.requireSuperAdmin(user, res)) return;
       return this.json(res, 200, {
         lines: this.getConsoleLines({
           stream: url.searchParams.get("stream") ?? "modules",
@@ -1046,6 +1051,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/console/recent") {
+      if (!this.requireSuperAdmin(user, res)) return;
       return this.json(res, 200, {
         items: this.core.console?.getRecent?.({
           limit: url.searchParams.get("limit") ?? "500",
@@ -1058,6 +1064,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/rcon/execute" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
       const result = await this.executeConsoleRconCommand(body.command, {
         requestedBy: "web.console",
@@ -1068,6 +1075,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/console/rcon" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
       const result = await this.executeConsoleRconCommand(body.command, {
         requestedBy: "web.console",
@@ -1079,6 +1087,7 @@ export class WebServer {
 
     // Compatibility endpoint used by some Vue client builds.
     if (url.pathname === "/api/rcon-command" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
       const result = await this.executeConsoleRconCommand(body.command, {
         requestedBy: "web.console",
@@ -2629,6 +2638,9 @@ export class WebServer {
     if (!user) {
       return this.rejectUpgrade(socket, 401, "Authentication required.");
     }
+    if (connectionKind === "console" && !this.core.authManager?.hasEverything?.(user)) {
+      return this.rejectUpgrade(socket, 403, "SuperAdmin role is required.");
+    }
 
     const key = String(req.headers["sec-websocket-key"] ?? "").trim();
     if (!key) {
@@ -2778,6 +2790,7 @@ export class WebServer {
     const payload = Buffer.from(JSON.stringify(entry), "utf8");
 
     for (const client of [...this.consoleConnections]) {
+      if (!client?.user?.isSuperAdmin) continue;
       try {
         this.sendWebSocketFrame(client.socket, payload, 0x1);
       } catch {
@@ -2897,7 +2910,7 @@ export class WebServer {
     if (!this.core.authManager?.hasEverything?.(user)) {
       this.json(res, 403, {
         error: "Forbidden",
-        message: "SuperAdmin permission is required.",
+        message: "SuperAdmin role is required.",
       });
       return false;
     }

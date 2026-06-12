@@ -118,6 +118,9 @@ async function testHealthEndpointDoesNotRequireAuth() {
       staticDirectory: "./web-client/dist",
     },
     core: {
+      authManager: {
+        enabled: true,
+      },
       rconManager: {
         getStatus() {
           return { enabled: true, connected: false };
@@ -162,8 +165,9 @@ async function testWebPagesEndpointFiltersByPermissions() {
           if (req.headers.authorization === "viewer") {
             return {
               username: "viewer",
-              role: "Operator",
-              permissions: ["match_state.view", "console.view"],
+              role: "Admin",
+              authorizationMode: "transitional",
+              permissions: [],
             };
           }
           if (req.headers.authorization === "super") {
@@ -191,7 +195,9 @@ async function testWebPagesEndpointFiltersByPermissions() {
 
   assert.equal(viewer.state.status, 200);
   const viewerPages = JSON.parse(viewer.state.body).pages;
-  assert.deepEqual(viewerPages.map((page) => page.route), ["/match-status", "/console"]);
+  const viewerRoutes = viewerPages.map((page) => page.route);
+  assert.equal(viewerRoutes.includes("/match-status"), true);
+  assert.equal(viewerRoutes.includes("/console"), false);
 
   const superAdmin = createRecorder();
   await server.handleRequest({
@@ -284,12 +290,13 @@ async function testConsoleRconEndpointsUseLoggedInUser() {
           return {
             id: "user-1",
             username: "admin",
-            role: "Operator",
-            permissions: ["rcon.broadcast"],
+            role: "SuperAdmin",
+            isSuperAdmin: true,
+            permissions: [],
           };
         },
-        hasEverything() {
-          return false;
+        hasEverything(user) {
+          return user?.isSuperAdmin === true;
         },
       },
       console: {
@@ -337,9 +344,12 @@ async function testConsoleRconForbiddenMapsTo403() {
           return {
             id: "user-2",
             username: "viewer",
-            role: "Operator",
+            role: "Admin",
             permissions: [],
           };
+        },
+        hasEverything() {
+          return false;
         },
       },
       console: {
@@ -353,32 +363,78 @@ async function testConsoleRconForbiddenMapsTo403() {
           return [];
         },
         async executeRconCommand() {
-          return {
-            success: false,
-            code: "Forbidden",
-            message: "Permission 'rcon.broadcast' is required.",
-            response: "",
-            status: "failed",
-            durationMs: 0,
-          };
+          throw new Error("should not execute");
         },
       },
     },
   });
 
-  for (const pathName of ["/api/console/rcon", "/api/rcon-command"]) {
+  for (const pathName of ["/api/console/recent", "/api/console/rcon", "/api/rcon-command"]) {
     const recorder = createRecorder();
-    const req = Readable.from([JSON.stringify({ command: "AdminBroadcast Hello" })]);
-    req.method = "POST";
-    req.url = pathName;
-    req.headers = { host: "localhost" };
-    req.socket = {};
+    const req = pathName === "/api/console/recent"
+      ? {
+          method: "GET",
+          url: pathName,
+          headers: { host: "localhost" },
+          socket: {},
+        }
+      : Readable.from([JSON.stringify({ command: "AdminBroadcast Hello" })]);
+
+    if (pathName !== "/api/console/recent") {
+      req.method = "POST";
+      req.url = pathName;
+      req.headers = { host: "localhost" };
+      req.socket = {};
+    }
 
     await server.handleRequest(req, recorder.res);
     assert.equal(recorder.state.status, 403);
     const body = JSON.parse(recorder.state.body);
-    assert.equal(body.code, "Forbidden");
+    assert.equal(body.error, "Forbidden");
+    assert.equal(body.message, "SuperAdmin role is required.");
   }
+}
+
+async function testConsoleWebSocketRequiresSuperAdmin() {
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return {
+            username: "viewer",
+            role: "Admin",
+            isSuperAdmin: false,
+          };
+        },
+        hasEverything() {
+          return false;
+        },
+      },
+    },
+  });
+
+  const writes = [];
+  const socket = {
+    end(buffer) {
+      writes.push(Buffer.isBuffer(buffer) ? buffer.toString("utf8") : String(buffer ?? ""));
+    },
+    write(buffer) {
+      writes.push(Buffer.isBuffer(buffer) ? buffer.toString("utf8") : String(buffer ?? ""));
+    },
+    destroy() {},
+    on() {},
+  };
+
+  await server.handleUpgrade({
+    url: "/ws/console",
+    headers: {
+      host: "localhost",
+      "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+    },
+    socket,
+  }, socket, Buffer.alloc(0));
+
+  assert.equal(writes.some((entry) => entry.includes("403 Forbidden")), true);
 }
 
 async function testPlaytimeCacheReturnsEffectiveDuration() {
@@ -2216,6 +2272,9 @@ await testGetPluginApiReturnsMatchingPluginApi();
 await testHealthEndpointDoesNotRequireAuth();
 await testWebPagesEndpointFiltersByPermissions();
 await testConsoleRecentEndpointUsesUnifiedConsoleBuffer();
+await testConsoleRconEndpointsUseLoggedInUser();
+await testConsoleRconForbiddenMapsTo403();
+await testConsoleWebSocketRequiresSuperAdmin();
 await testPlaytimeCacheReturnsEffectiveDuration();
 await testPlayerPlaytimeOverrideRouteRequiresSuperAdmin();
 await testPlayerPlaytimeOverrideRouteSetsHours();

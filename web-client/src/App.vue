@@ -30,9 +30,14 @@ onMounted(() => {
 });
 
 watch(
-  () => [auth.checked, auth.authenticated, route.fullPath, route.meta.requiredPermission, route.meta.legacyRequiredPermissions] as const,
+  () => [auth.checked, auth.authenticated, route.fullPath, route.meta.requiredPermission, route.meta.legacyRequiredPermissions, route.meta.superAdminOnly] as const,
   ([checked, authenticated]) => {
     if (!checked || !authenticated) return;
+    if (route.meta.superAdminOnly && !auth.user?.isSuperAdmin) {
+      const current = String(route.fullPath ?? route.path ?? "/").trim() || "/";
+      void router.replace({ path: "/access-denied", query: { from: current } });
+      return;
+    }
 
     const requiredPermission = String(route.meta.requiredPermission ?? "").trim();
     if (!requiredPermission) return;
@@ -44,7 +49,9 @@ watch(
       isSuperAdmin?: boolean;
     } | null | undefined;
     const legacyPermissions = normalizePermissionList(route.meta.legacyRequiredPermissions);
-    if (canAccessPage(user, requiredPermission, legacyPermissions)) return;
+    if (canAccessPage(user, requiredPermission, legacyPermissions, {
+      superAdminOnly: Boolean(route.meta.superAdminOnly),
+    })) return;
 
     const current = String(route.fullPath ?? route.path ?? "/").trim() || "/";
     void router.replace({ path: "/access-denied", query: { from: current } });

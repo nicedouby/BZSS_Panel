@@ -60,8 +60,8 @@ const router = useRouter();
 const route = useRoute();
 const auth = useAuthStore();
 
-const username = ref("DoubyBear");
-const password = ref("DoubyBear");
+const username = ref("");
+const password = ref("");
 const loading = ref(false);
 const localError = ref("");
 const errorText = computed(() => localError.value || auth.error || "");

@@ -183,6 +183,7 @@ export class WebRegistry {
       hiddenFromSidebar: Boolean(page.hiddenFromSidebar),
       requiredPermission,
       legacyRequiredPermissions,
+      superAdminOnly: Boolean(page.superAdminOnly ?? resolvedPermission?.superAdminOnly),
     };
 
     for (const existing of this.pages.values()) {
@@ -206,7 +207,9 @@ export class WebRegistry {
     return dedupePagesByRoute(
       [...this.pages.values()]
         .filter((page) => page.enabled)
-        .filter((page) => canAccessPage(user, page.requiredPermission, page.legacyRequiredPermissions))
+        .filter((page) => canAccessPage(user, page.requiredPermission, page.legacyRequiredPermissions, {
+          superAdminOnly: page.superAdminOnly,
+        }))
         .sort((a, b) => a.order - b.order),
     );
   }

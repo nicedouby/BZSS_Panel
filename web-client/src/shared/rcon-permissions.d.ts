@@ -11,6 +11,7 @@ export function canSendRconCommand(
     permissions?: unknown;
     permission?: unknown;
     isSuperAdmin?: boolean;
+    authorizationMode?: string;
   } | null | undefined,
   commandText: unknown,
   options?: {

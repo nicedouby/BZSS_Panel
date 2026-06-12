@@ -53,6 +53,7 @@ function applyPagePermissions(routes: any[]) {
       meta.legacyRequiredPermissions,
       resolved.legacyRequiredPermissions,
     );
+    const superAdminOnly = Boolean(meta.superAdminOnly ?? resolved.superAdminOnly);
 
     return {
       ...route,
@@ -60,6 +61,7 @@ function applyPagePermissions(routes: any[]) {
         ...meta,
         requiredPermission,
         legacyRequiredPermissions,
+        superAdminOnly,
       },
     };
   });
@@ -105,6 +107,7 @@ export const router = createRouter({
         ...coreRealtimeMeta,
         titleKey: "routeTitle.console",
         fullBleed: true,
+        superAdminOnly: true,
       },
     },
     {
@@ -363,13 +366,20 @@ router.beforeEach((to: any) => {
   const auth = useAuthStore();
   if (!auth.checked) return true;
 
+  if (to.meta?.superAdminOnly) {
+    if (!auth.authenticated) return true;
+    return auth.user?.isSuperAdmin ? true : { path: "/access-denied" };
+  }
+
   const requiredPermission = String(to.meta?.requiredPermission ?? "").trim();
   if (!requiredPermission) return true;
 
   const authUser = auth.user as { permissions?: unknown; permission?: unknown; isSuperAdmin?: boolean } | null | undefined;
   const permissions = normalizePermissionList(authUser?.permissions ?? authUser?.permission);
   const legacyPermissions = normalizePermissionList(to.meta?.legacyRequiredPermissions);
-  const allowed = canAccessPage(authUser, requiredPermission, legacyPermissions);
+  const allowed = canAccessPage(authUser, requiredPermission, legacyPermissions, {
+    superAdminOnly: Boolean(to.meta?.superAdminOnly),
+  });
 
   if (allowed) {
     if (!permissions.includes(requiredPermission) && legacyPermissions.some((permission) => permissions.includes(permission))) {

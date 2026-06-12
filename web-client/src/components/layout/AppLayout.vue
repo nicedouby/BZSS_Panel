@@ -19,6 +19,7 @@
       @close="pluginCenterOpen = false"
     />
     <RconCommandModal
+      v-if="auth.user?.isSuperAdmin"
       :open="rconModalOpen"
       @close="rconModalOpen = false"
     />
@@ -29,6 +30,7 @@
 import { computed, ref } from "vue";
 import { RouterView } from "vue-router";
 import { useRoute } from "vue-router";
+import { useAuthStore } from "../../stores/auth.store";
 import { useUiStore } from "../../stores/ui.store";
 import Topbar from "./Topbar.vue";
 import Sidebar from "./Sidebar.vue";
@@ -40,6 +42,7 @@ import PluginCenterDrawer from "../../features/plugins/PluginCenterDrawer.vue";
 import RconCommandModal from "../console/RconCommandModal.vue";
 
 const ui = useUiStore();
+const auth = useAuthStore();
 const route = useRoute();
 const pluginCenterOpen = ref(false);
 const rconModalOpen = ref(false);

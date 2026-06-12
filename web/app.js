@@ -367,17 +367,17 @@ function renderLoginScreen(message = "") {
       <div class="login-card">
         <div class="login-eyebrow">Secure Access</div>
         <h1>BZSS Panel Login</h1>
-        <p class="login-copy">Only a user marked as SuperAdmin can enter the control panel.</p>
+        <p class="login-copy">Enter the panel using your operator credentials.</p>
         <form id="login-form" class="login-form">
           <label>
             <span>Username</span>
-            <input id="login-username" name="username" autocomplete="username" value="DoubyBear" required>
+            <input id="login-username" name="username" autocomplete="username" value="" required>
           </label>
           <label>
             <span>Password</span>
-            <input id="login-password" name="password" type="password" autocomplete="current-password" value="DoubyBear" required>
+            <input id="login-password" name="password" type="password" autocomplete="current-password" value="" required>
           </label>
-          <button id="login-submit" type="submit">Login as SuperAdmin</button>
+          <button id="login-submit" type="submit">Login</button>
           <div id="login-message" class="login-message">${escapeHtml(message)}</div>
         </form>
       </div>

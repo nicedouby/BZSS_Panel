@@ -2,42 +2,47 @@
 
 import crypto from "node:crypto";
 
+import { hashToken, INVALID_PASSWORD_HASH, verifyPassword } from "./auth-crypto.js";
+import { AuthUserStore, normalizeRole } from "./auth-user-store.js";
+
 const DEFAULT_USERNAME = "DoubyBear";
 const DEFAULT_ROLE = "SuperAdmin";
 const DEFAULT_PASSWORD_HASH = "scrypt$bzss-default-v1$1ZZCEAyPd4n5hgfHwMsYr9ftwYX2yS-VzBhU0tZRr1olmbHtTdDGO-dHJw43NGv0fg2meuR3LbLHOqdxNsQPvQ";
-const INVALID_PASSWORD_HASH = "scrypt$bzss-invalid-v1$UpgdHuTdcHnUYRfcBTFvC0by9qv9iboyj_VwZCfhJH5Xg1ZceJ637AMeDSSBZKSphN2Z_uIfGyl_AaOkBENdZw";
 
 /**
  * Core: AuthManager
  *
- * 简单但安全的 Web 登录系统：
- * - 密码只保存 scrypt 哈希，不保存明文。
- * - Session token 只保存 SHA-256 哈希，不保存原始 token。
- * - Cookie 使用 HttpOnly / SameSite=Strict。
- *
- * 注意：绝对安全不存在。生产环境仍应使用 HTTPS、强密码、反向代理限流和定期改密。
+ * 只负责密码校验、Session 生命周期和请求鉴权。
+ * 账号持久化由 AuthUserStore 单独承担。
  */
 export class AuthManager {
   constructor({ config = {}, logger }) {
     this.config = config;
     this.enabled = config.enabled ?? true;
     this.logger = logger;
+    this.authorizationMode = String(config.authorizationMode ?? "transitional").trim() || "transitional";
     this.sessionCookieName = config.sessionCookieName ?? "bzss_session";
     this.sessionTtlMs = Number(config.sessionTtlMs ?? 1000 * 60 * 60 * 12);
     this.secureCookie = Boolean(config.secureCookie ?? false);
 
-    this.users = new Map();
+    this.userStore = new AuthUserStore({ config, logger });
     this.sessions = new Map();
   }
 
   async start() {
+    await this.userStore.start();
+
     if (!this.enabled) {
-      this.logger?.warn?.("AuthManager disabled. Web API will not require login.");
+      this.logger?.warn?.("AuthManager disabled. No authenticated web session will be created.");
       return;
     }
 
-    this.seedConfiguredUsers();
-    await this.ensureDefaultSuperAdmin();
+    await this.bootstrapInitialUsersIfNeeded();
+
+    if (!this.userStore.hasEnabledSuperAdmin()) {
+      throw new Error(`Auth startup aborted: no enabled SuperAdmin found in ${this.userStore.filePath}`);
+    }
+
     this.logger?.info?.("AuthManager started.");
   }
 
@@ -45,64 +50,20 @@ export class AuthManager {
     this.sessions.clear();
   }
 
-  async ensureDefaultSuperAdmin() {
-    if (this.users.has(DEFAULT_USERNAME)) return;
-
-    this.users.set(DEFAULT_USERNAME, {
-      id: "user:superadmin",
-      username: DEFAULT_USERNAME,
-      passwordHash: DEFAULT_PASSWORD_HASH,
-      role: DEFAULT_ROLE,
-      steam64: normalizeSteam64(this.config?.defaultSteam64),
-      viewerTeamAutoSwapEnabled: this.config?.viewerTeamAutoSwapEnabled !== false,
-      permissions: ["*"],
-      enabled: true,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-  }
-
-  seedConfiguredUsers() {
-    const configuredUsers = Array.isArray(this.config?.users) ? this.config.users : [];
-    for (const user of configuredUsers) {
-      const username = String(user?.username ?? "").trim();
-      if (!username || this.users.has(username)) continue;
-
-      this.users.set(username, {
-        id: String(user?.id ?? `user:${username}`),
-        username,
-        passwordHash: String(user?.passwordHash ?? INVALID_PASSWORD_HASH),
-        role: String(user?.role ?? DEFAULT_ROLE),
-        steam64: normalizeSteam64(user?.steam64 ?? user?.steamID ?? user?.steamId ?? user?.steam64ID ?? user?.steam64Id),
-        viewerTeamAutoSwapEnabled: user?.viewerTeamAutoSwapEnabled !== false,
-        permissions: normalizePermissions(user?.permissions),
-        enabled: user?.enabled !== false,
-        createdAt: Number(user?.createdAt ?? Date.now()),
-        updatedAt: Number(user?.updatedAt ?? Date.now()),
-      });
-    }
-  }
-
   async login({ username, password, ip = "" }) {
     if (!this.enabled) {
       return {
-        ok: true,
-        user: this.safeUser({
-          id: "auth-disabled",
-          username: "disabled-auth",
-          role: DEFAULT_ROLE,
-          steam64: "",
-          viewerTeamAutoSwapEnabled: false,
-        }),
-        cookie: "",
+        ok: false,
+        error: "AuthDisabled",
       };
     }
 
+    this.userStore.refreshFromDiskIfChangedSync();
+
     const normalizedUsername = String(username ?? "").trim();
     const rawPassword = String(password ?? "");
-    const user = this.users.get(normalizedUsername);
+    const user = this.userStore.findByUsername(normalizedUsername);
 
-    // 固定做一次 hash 校验，降低用户名枚举的 timing 差异。
     const passwordHash = user?.passwordHash ?? INVALID_PASSWORD_HASH;
     const passwordOk = await verifyPassword(rawPassword, passwordHash);
 
@@ -119,11 +80,7 @@ export class AuthManager {
     this.sessions.set(tokenHash, {
       tokenHash,
       userId: user.id,
-      username: user.username,
-      role: user.role,
-      steam64: normalizeSteam64(user.steam64 ?? user.steamID ?? user.steamId ?? user.steam64ID ?? user.steam64Id),
-      viewerTeamAutoSwapEnabled: user.viewerTeamAutoSwapEnabled !== false,
-      permissions: normalizePermissions(user.permissions),
+      authVersion: Number(user.authVersion ?? 1),
       createdAt: now,
       expiresAt,
       ip,
@@ -145,17 +102,8 @@ export class AuthManager {
   }
 
   getUserFromRequest(req) {
-    if (!this.enabled) {
-      return {
-        id: "auth-disabled",
-        username: "auth-disabled",
-        role: DEFAULT_ROLE,
-        isSuperAdmin: true,
-        steam64: "",
-        viewerTeamAutoSwapEnabled: false,
-        permissions: ["*"],
-      };
-    }
+    if (!this.enabled) return null;
+    this.userStore.refreshFromDiskIfChangedSync();
 
     const token = this.getTokenFromRequest(req);
     if (!token) return null;
@@ -169,15 +117,13 @@ export class AuthManager {
       return null;
     }
 
-    return {
-      id: session.userId,
-      username: session.username,
-      role: session.role,
-      isSuperAdmin: this.isSuperAdminRole(session.role),
-      steam64: normalizeSteam64(session.steam64),
-      viewerTeamAutoSwapEnabled: session.viewerTeamAutoSwapEnabled !== false,
-      permissions: normalizePermissions(session.permissions),
-    };
+    const user = this.userStore.getUserById(session.userId);
+    if (!user || !user.enabled || Number(user.authVersion ?? 1) !== Number(session.authVersion ?? 0)) {
+      this.sessions.delete(tokenHash);
+      return null;
+    }
+
+    return this.safeUser(user);
   }
 
   requireLogin(req) {
@@ -214,7 +160,7 @@ export class AuthManager {
   }
 
   isSuperAdminRole(role) {
-    return String(role ?? "").toLowerCase().includes("superadmin");
+    return normalizeRole(role) === "SuperAdmin";
   }
 
   safeUser(user) {
@@ -223,9 +169,10 @@ export class AuthManager {
       username: user.username,
       role: user.role,
       isSuperAdmin: this.isSuperAdminRole(user.role),
-      steam64: normalizeSteam64(user.steam64 ?? user.steamID ?? user.steamId ?? user.steam64ID ?? user.steam64Id),
-      viewerTeamAutoSwapEnabled: user.viewerTeamAutoSwapEnabled !== false,
+      steam64: normalizeSteam64(user.steam64 ?? this.config?.defaultSteam64),
+      viewerTeamAutoSwapEnabled: user.viewerTeamAutoSwapEnabled ?? (this.config?.viewerTeamAutoSwapEnabled !== false),
       permissions: normalizePermissions(user.permissions),
+      authorizationMode: this.authorizationMode,
     };
   }
 
@@ -251,45 +198,47 @@ export class AuthManager {
   makeExpiredCookie() {
     return `${this.sessionCookieName}=; Path=/; HttpOnly; SameSite=Strict; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0`;
   }
-}
 
-async function hashPassword(password) {
-  const salt = crypto.randomBytes(16).toString("base64url");
-  const hash = await scrypt(password, salt);
-  return `scrypt$${salt}$${hash}`;
-}
+  async bootstrapInitialUsersIfNeeded() {
+    if (this.userStore.listUsers().length > 0) return false;
 
-async function verifyPassword(password, encoded) {
-  const [kind, salt, expected] = String(encoded ?? "").split("$");
-  if (kind !== "scrypt" || !salt || !expected) return false;
+    const configuredUsers = Array.isArray(this.config?.users) ? this.config.users : [];
+    if (configuredUsers.length > 0) {
+      for (const user of configuredUsers) {
+        const username = String(user?.username ?? "").trim();
+        if (!username) continue;
+        await this.userStore.createUser({
+          id: String(user?.id ?? `user:${username.toLowerCase()}`),
+          username,
+          passwordHash: String(user?.passwordHash ?? INVALID_PASSWORD_HASH),
+          role: user?.role ?? DEFAULT_ROLE,
+          enabled: user?.enabled ?? true,
+          authVersion: Number(user?.authVersion ?? 1),
+          permissions: user?.permissions ?? [],
+          createdAt: Number(user?.createdAt ?? Date.now()),
+          updatedAt: Number(user?.updatedAt ?? Date.now()),
+          passwordChangedAt: Number(user?.passwordChangedAt ?? Date.now()),
+        });
+      }
+      this.logger?.warn?.(`AuthManager bootstrapped ${this.userStore.listUsers().length} user(s) from auth.users into ${this.userStore.filePath}.`);
+      return true;
+    }
 
-  const actual = await scrypt(password, salt);
-  return timingSafeEqual(actual, expected);
-}
-
-function scrypt(password, salt) {
-  return new Promise((resolve, reject) => {
-    crypto.scrypt(String(password), String(salt), 64, {
-      N: 32768,
-      r: 8,
-      p: 1,
-      maxmem: 64 * 1024 * 1024,
-    }, (error, derivedKey) => {
-      if (error) reject(error);
-      else resolve(derivedKey.toString("base64url"));
+    await this.userStore.createUser({
+      id: "user:superadmin",
+      username: DEFAULT_USERNAME,
+      passwordHash: DEFAULT_PASSWORD_HASH,
+      role: DEFAULT_ROLE,
+      enabled: true,
+      authVersion: 1,
+      permissions: ["*"],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      passwordChangedAt: Date.now(),
     });
-  });
-}
-
-function hashToken(token) {
-  return crypto.createHash("sha256").update(String(token)).digest("base64url");
-}
-
-function timingSafeEqual(a, b) {
-  const left = Buffer.from(String(a));
-  const right = Buffer.from(String(b));
-  if (left.length !== right.length) return false;
-  return crypto.timingSafeEqual(left, right);
+    this.logger?.warn?.(`AuthManager bootstrapped legacy default SuperAdmin into ${this.userStore.filePath}.`);
+    return true;
+  }
 }
 
 function parseCookies(cookieHeader) {

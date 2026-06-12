@@ -6,6 +6,7 @@ export interface AuthUser {
   username: string;
   role: string;
   isSuperAdmin: boolean;
+  authorizationMode?: string;
   steam64?: string;
   viewerTeamAutoSwapEnabled?: boolean;
   permissions?: string[];
