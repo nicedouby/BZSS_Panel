@@ -767,7 +767,7 @@ h3 {
   padding: 16px;
   border-radius: 8px;
   border: 1px solid var(--color-border-soft);
-  background: rgba(255, 255, 255, 0.035);
+  background: color-mix(in srgb, var(--color-bg-card) 84%, white 16%);
 }
 
 .stat-card span {
@@ -837,7 +837,7 @@ textarea {
   min-height: 38px;
   border-radius: 6px;
   border: 1px solid var(--color-border-default);
-  background: rgba(0, 0, 0, 0.2);
+  background: color-mix(in srgb, var(--color-bg-elevated) 88%, transparent);
   color: var(--color-text-primary);
   padding: 8px 10px;
   font: inherit;
@@ -872,7 +872,7 @@ button:disabled {
 
 .ghost-button {
   border: 1px solid var(--color-border-default);
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--color-bg-elevated) 82%, transparent);
 }
 
 .table-shell {
@@ -997,7 +997,7 @@ td small {
   padding: 10px 12px;
   border-radius: 8px;
   border: 1px solid var(--color-border-soft);
-  background: rgba(255, 255, 255, 0.03);
+  background: color-mix(in srgb, var(--color-bg-card) 86%, white 14%);
 }
 
 .permission-option input,
@@ -1035,7 +1035,7 @@ td small {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(0, 0, 0, 0.62);
+  background: color-mix(in srgb, var(--color-bg-page) 74%, transparent);
 }
 
 .modal-panel {

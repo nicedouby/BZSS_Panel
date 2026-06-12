@@ -85,7 +85,7 @@ const ui = useUiStore();
 
 .close-button:hover {
   border-color: var(--color-border-default);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--color-bg-hover);
   transform: none;
 }
 

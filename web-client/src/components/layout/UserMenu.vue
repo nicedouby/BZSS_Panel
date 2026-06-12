@@ -17,9 +17,7 @@
           <span>{{ roleLabel }}</span>
         </div>
 
-        <button type="button" class="menu-item" role="menuitem" @click="openSettings">
-          {{ t("user.settings") }}
-        </button>
+        <button type="button" class="menu-item" role="menuitem" @click="openSettings">设置与主题</button>
         <button v-if="canUseArbitraryRcon" type="button" class="menu-item" role="menuitem" @click="openRconModal">
           执行命令
         </button>
@@ -501,7 +499,7 @@ onBeforeUnmount(() => {
 
 .menu-item:hover {
   border-color: var(--color-border-default);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--color-bg-hover);
   transform: none;
 }
 
@@ -522,8 +520,8 @@ onBeforeUnmount(() => {
   place-items: center;
   padding: 20px;
   background:
-    radial-gradient(circle at top, rgba(96, 165, 250, 0.18), transparent 34%),
-    rgba(6, 10, 14, 0.78);
+    radial-gradient(circle at top, color-mix(in srgb, var(--color-brand-primary) 22%, transparent), transparent 34%),
+    color-mix(in srgb, var(--color-bg-page) 82%, transparent);
   backdrop-filter: blur(14px) saturate(1.08);
 }
 

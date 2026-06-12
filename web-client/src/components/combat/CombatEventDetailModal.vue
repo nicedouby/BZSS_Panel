@@ -207,7 +207,7 @@ function searchPlayer(value: string) {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(8, 12, 16, 0.72);
+  background: color-mix(in srgb, var(--color-bg-page) 74%, transparent);
 }
 
 .detail-card {
@@ -221,8 +221,8 @@ function searchPlayer(value: string) {
 .detail-panel {
   display: grid;
   gap: 12px;
-  border: 1px solid #2b3540;
-  background: #171d23;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-card);
   padding: 14px;
 }
 
@@ -253,7 +253,7 @@ function searchPlayer(value: string) {
 
 .dialog-head p {
   margin: 6px 0 0;
-  color: #9aa7b2;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -264,8 +264,8 @@ function searchPlayer(value: string) {
 }
 
 .detail-grid > div {
-  border: 1px solid #2b3540;
-  background: #11171d;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-elevated);
   border-radius: 8px;
   padding: 8px 10px;
 }
@@ -276,12 +276,12 @@ function searchPlayer(value: string) {
 }
 
 .identity-card.is-highlighted {
-  outline: 2px solid rgba(139, 182, 255, 0.58);
-  box-shadow: 0 0 0 1px rgba(139, 182, 255, 0.2), 0 0 18px rgba(139, 182, 255, 0.12);
+  outline: 2px solid var(--color-focus-ring);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-brand-primary) 20%, transparent), 0 0 18px color-mix(in srgb, var(--color-brand-primary) 12%, transparent);
 }
 
 .identity-card small {
-  color: #98a5af;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -297,9 +297,9 @@ function searchPlayer(value: string) {
   min-height: 20px;
   padding: 0 7px;
   border-radius: 999px;
-  border: 1px solid #3c4a57;
-  background: rgba(10, 14, 18, 0.36);
-  color: #b8c3cb;
+  border: 1px solid var(--color-border-default);
+  background: color-mix(in srgb, var(--color-bg-page) 30%, var(--color-bg-elevated));
+  color: var(--color-text-secondary);
   font-size: 11px;
 }
 
@@ -313,7 +313,7 @@ function searchPlayer(value: string) {
   border: 0;
   padding: 0;
   background: transparent;
-  color: #8bb6ff;
+  color: var(--color-brand-primary);
   font-size: 12px;
 }
 
@@ -327,7 +327,7 @@ function searchPlayer(value: string) {
 }
 
 .detail-grid span {
-  color: #98a5af;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -359,15 +359,15 @@ function searchPlayer(value: string) {
   min-height: 22px;
   padding: 0 8px;
   border-radius: 999px;
-  border: 1px solid #3a4651;
+  border: 1px solid var(--color-border-default);
   background: rgba(255, 255, 255, 0.03);
-  color: #d7e0e5;
+  color: var(--color-text-primary);
   font-size: 12px;
   white-space: nowrap;
 }
 
 .flag-empty {
-  color: #7f8c96;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -424,9 +424,9 @@ function searchPlayer(value: string) {
   margin: 0;
   min-height: 0;
   overflow: auto;
-  border: 1px solid #2b3540;
+  border: 1px solid var(--color-border-default);
   border-radius: 8px;
-  background: #11171d;
+  background: color-mix(in srgb, var(--color-bg-page) 30%, var(--color-bg-elevated));
   padding: 10px;
   white-space: pre-wrap;
   word-break: break-word;
@@ -438,15 +438,15 @@ function searchPlayer(value: string) {
   align-content: center;
   justify-items: center;
   min-height: 100%;
-  border: 1px dashed #34404c;
+  border: 1px dashed var(--color-border-highlight);
   border-radius: 12px;
   padding: 18px;
-  color: #9aa7b2;
+  color: var(--color-text-muted);
   text-align: center;
 }
 
 .empty-state strong {
-  color: #edf2f4;
+  color: var(--color-text-primary);
 }
 
 @media (max-width: 720px) {

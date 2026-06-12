@@ -9,11 +9,9 @@
 
     <div v-else class="bz-empty bz-empty--compact combat-rate-chart-empty">
       <div class="bz-empty-inner">
-        <div class="bz-empty-icon">∅</div>
+        <div class="bz-empty-icon">∿</div>
         <div class="bz-empty-title">暂无趋势数据</div>
-        <div class="bz-empty-desc">
-          至少需要两个有效时间点后，才会显示伤害、击倒、击杀趋势图。
-        </div>
+        <div class="bz-empty-desc">至少需要两个有效时间点后，才会显示伤害、击倒、击杀趋势图。</div>
       </div>
     </div>
   </section>
@@ -22,6 +20,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
 import * as echarts from "echarts";
+import { readChartThemeTokens } from "../../theme/chartTheme";
+import { useUiStore } from "../../stores/ui.store";
 
 const props = defineProps<{
   serverId?: string;
@@ -29,6 +29,7 @@ const props = defineProps<{
   endpoint?: string;
 }>();
 
+const ui = useUiStore();
 const chartRef = ref<HTMLElement | null>(null);
 const chartInstance = shallowRef<echarts.ECharts | null>(null);
 const loading = ref(false);
@@ -66,32 +67,8 @@ function updateChart() {
   const damageData = safeRates.value.map((rate) => toNumber(rate.damage));
   const woundData = safeRates.value.map((rate) => toNumber(rate.wound));
   const killData = safeRates.value.map((rate) => toNumber(rate.kill));
+  const tokens = readChartThemeTokens();
 
-  chartInstance.value.setOption({
-    xAxis: {
-      data: labels,
-    },
-    series: [
-      {
-        name: "伤害",
-        data: damageData,
-      },
-      {
-        name: "击倒",
-        data: woundData,
-      },
-      {
-        name: "击杀",
-        data: killData,
-      },
-    ],
-  });
-}
-
-onMounted(() => {
-  if (!chartRef.value) return;
-
-  chartInstance.value = echarts.init(chartRef.value, "dark");
   chartInstance.value.setOption({
     backgroundColor: "transparent",
     animation: false,
@@ -105,96 +82,76 @@ onMounted(() => {
     tooltip: {
       trigger: "axis",
       axisPointer: { type: "shadow" },
-      backgroundColor: "#1a2128",
-      borderColor: "#38414c",
-      textStyle: { color: "#fff" },
-      formatter: (params: any[]) => {
-        if (!params || params.length === 0) return "";
-        const timeStr = formatTooltipTime(params[0].axisValue);
-        const rows = params
-          .map((p) => {
-            const label = p.seriesName === "伤害" ? "DPM" : p.seriesName === "击倒" ? "WPM" : "KPM";
-            return `
-            <div style="display:flex;align-items:center;gap:16px;margin-top:8px;">
-              <span style="width:8px;height:8px;border-radius:2px;background:${p.color};"></span>
-              <div style="flex:1;display:flex;flex-direction:column;">
-                <span style="font-size:12px;color:#fff;line-height:1.2;font-weight:600;">${p.seriesName}</span>
-                <span style="font-size:10px;color:#666;">频率</span>
-              </div>
-              <div style="text-align:right;min-width:60px;">
-                <b style="font-family:JetBrains Mono, monospace;font-size:15px;color:#fff;">${p.data}</b>
-                <span style="font-size:10px;color:#3b82f6;margin-left:4px;font-weight:700;">${label}</span>
-              </div>
-            </div>
-          `;
-          })
-          .join("");
-        return `
-          <div style="min-width:210px; padding: 12px; background: #161b22; border: 1px solid #38414c; border-radius: 8px; box-shadow: 0 10px 20px rgba(0,0,0,0.4);">
-            <div style="font-weight:700;margin-bottom:12px;border-bottom:1px solid #38414c;padding-bottom:10px;font-size:13px;color:#f0f6fc;display:flex;justify-content:space-between;">
-              <span>战斗趋势</span>
-              <span style="color:#8b949e;font-weight:400;">${timeStr}</span>
-            </div>
-            ${rows}
-          </div>
-        `;
-      },
+      backgroundColor: tokens.tooltipBg,
+      borderColor: tokens.grid,
+      textStyle: { color: tokens.tooltipText },
+      formatter: (params: any[]) => formatTooltip(params, tokens),
     },
     legend: {
       data: ["伤害", "击倒", "击杀"],
-      textStyle: { color: "#9aa7b2" },
+      textStyle: { color: tokens.axis },
       top: 0,
     },
     xAxis: {
       type: "category",
       boundaryGap: false,
-      axisLine: { lineStyle: { color: "#2d3748" } },
+      data: labels,
+      axisLine: { lineStyle: { color: tokens.grid } },
       axisLabel: {
-        color: "#718096",
+        color: tokens.axis,
         fontSize: 10,
         formatter: (value: number) => formatShortTime(value),
       },
     },
     yAxis: {
       type: "value",
-      splitLine: { lineStyle: { color: "#1a212c" } },
-      axisLabel: { color: "#718096", fontSize: 10 },
+      splitLine: { lineStyle: { color: tokens.grid } },
+      axisLabel: { color: tokens.axis, fontSize: 10 },
     },
     series: [
-      {
-        name: "伤害",
-        type: "line",
-        smooth: true,
-        showSymbol: false,
-        areaStyle: { opacity: 0.1 },
-        lineStyle: { width: 2, color: "#3b82f6" },
-        itemStyle: { color: "#3b82f6" },
-        data: [],
-      },
-      {
-        name: "击倒",
-        type: "line",
-        smooth: true,
-        showSymbol: false,
-        areaStyle: { opacity: 0.1 },
-        lineStyle: { width: 2, color: "#f59e0b" },
-        itemStyle: { color: "#f59e0b" },
-        data: [],
-      },
-      {
-        name: "击杀",
-        type: "line",
-        smooth: true,
-        showSymbol: false,
-        areaStyle: { opacity: 0.1 },
-        lineStyle: { width: 2, color: "#ef4444" },
-        itemStyle: { color: "#ef4444" },
-        data: [],
-      },
+      { name: "伤害", type: "line", smooth: true, showSymbol: false, areaStyle: { opacity: 0.1 }, lineStyle: { width: 2, color: tokens.series[0] }, itemStyle: { color: tokens.series[0] }, data: damageData },
+      { name: "击倒", type: "line", smooth: true, showSymbol: false, areaStyle: { opacity: 0.1 }, lineStyle: { width: 2, color: tokens.series[1] }, itemStyle: { color: tokens.series[1] }, data: woundData },
+      { name: "击杀", type: "line", smooth: true, showSymbol: false, areaStyle: { opacity: 0.1 }, lineStyle: { width: 2, color: tokens.series[2] }, itemStyle: { color: tokens.series[2] }, data: killData },
     ],
-  });
+  }, true);
+}
 
-  window.addEventListener("resize", () => chartInstance.value?.resize());
+function formatTooltip(params: any[], tokens: ReturnType<typeof readChartThemeTokens>) {
+  if (!params || params.length === 0) return "";
+  const timeStr = formatTooltipTime(params[0].axisValue);
+  const rows = params.map((point) => {
+    const label = point.seriesName === "伤害" ? "DPM" : point.seriesName === "击倒" ? "WPM" : "KPM";
+    return `
+      <div style="display:flex;align-items:center;gap:16px;margin-top:8px;">
+        <span style="width:8px;height:8px;border-radius:2px;background:${point.color};"></span>
+        <div style="flex:1;display:flex;flex-direction:column;">
+          <span style="font-size:12px;color:${tokens.tooltipText};line-height:1.2;font-weight:600;">${point.seriesName}</span>
+          <span style="font-size:10px;color:${tokens.axis};">频率</span>
+        </div>
+        <div style="text-align:right;min-width:60px;">
+          <b style="font-family:JetBrains Mono, monospace;font-size:15px;color:${tokens.tooltipText};">${point.data}</b>
+          <span style="font-size:10px;color:${point.color};margin-left:4px;font-weight:700;">${label}</span>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div style="min-width:210px;padding:12px;background:${tokens.tooltipBg};border:1px solid ${tokens.grid};border-radius:8px;box-shadow:0 10px 20px rgba(0,0,0,0.22);">
+      <div style="font-weight:700;margin-bottom:12px;border-bottom:1px solid ${tokens.grid};padding-bottom:10px;font-size:13px;color:${tokens.tooltipText};display:flex;justify-content:space-between;">
+        <span>战斗趋势</span>
+        <span style="color:${tokens.axis};font-weight:400;">${timeStr}</span>
+      </div>
+      ${rows}
+    </div>
+  `;
+}
+
+onMounted(() => {
+  if (!chartRef.value) return;
+  chartInstance.value = echarts.init(chartRef.value);
+  window.addEventListener("resize", handleResize);
+  updateChart();
   void fetchRates();
 });
 
@@ -202,9 +159,18 @@ watch(() => props.refreshKey, () => {
   void fetchRates();
 });
 
+watch(() => ui.theme, () => {
+  updateChart();
+});
+
 onUnmounted(() => {
+  window.removeEventListener("resize", handleResize);
   chartInstance.value?.dispose();
 });
+
+function handleResize() {
+  chartInstance.value?.resize();
+}
 
 function isValidTimestamp(value: unknown) {
   const number = Number(value);
@@ -224,11 +190,7 @@ function formatTooltipTime(value: unknown) {
   if (!Number.isFinite(timestamp) || timestamp <= 0) return "--:--";
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return "--:--";
-  return date.toLocaleTimeString("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+  return date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 function toNumber(value: unknown) {
@@ -246,8 +208,8 @@ function toNumber(value: unknown) {
   position: relative;
   width: 100%;
   height: 108px;
-  background: #161b22;
-  border: 1px solid #30363d;
+  background: color-mix(in srgb, var(--color-bg-elevated) 85%, transparent);
+  border: 1px solid var(--color-border-default);
   border-radius: 8px;
   padding: 10px;
 }
@@ -266,15 +228,15 @@ function toNumber(value: unknown) {
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgba(13, 17, 23, 0.5);
+  background: color-mix(in srgb, var(--color-bg-page) 55%, transparent);
   border-radius: 8px;
 }
 
 .spinner {
   width: 24px;
   height: 24px;
-  border: 2px solid rgba(255, 255, 255, 0.1);
-  border-top-color: #3b82f6;
+  border: 2px solid color-mix(in srgb, var(--color-border-default) 60%, transparent);
+  border-top-color: var(--chart-series-1);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }

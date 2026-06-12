@@ -1,0 +1,195 @@
+:root,
+:root[data-ui-theme="default"] {
+  color-scheme: dark;
+
+  --color-bg-page: #06090f;
+  --color-bg-panel: rgba(11, 17, 25, 0.88);
+  --color-bg-card: rgba(15, 23, 34, 0.94);
+  --color-bg-elevated: rgba(22, 33, 48, 0.98);
+  --color-bg-hover: rgba(31, 45, 63, 0.96);
+  --color-bg-selected: rgba(96, 165, 250, 0.14);
+
+  --color-border-default: rgba(140, 160, 185, 0.18);
+  --color-border-soft: rgba(140, 160, 185, 0.1);
+  --color-border-highlight: rgba(96, 165, 250, 0.34);
+
+  --color-text-primary: #f4f8fb;
+  --color-text-secondary: #c2cfdb;
+  --color-text-muted: #90a1b2;
+  --color-text-disabled: #617082;
+
+  --color-brand-primary: #37c8ff;
+  --color-brand-secondary: #ff9b45;
+  --color-brand-tertiary: #f472b6;
+  --color-focus-ring: rgba(96, 165, 250, 0.5);
+
+  --theme-background-rich:
+    radial-gradient(circle at 12% 0%, rgba(56, 189, 248, 0.12), transparent 28%),
+    radial-gradient(circle at 88% 0%, rgba(251, 146, 60, 0.09), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.01), transparent 24%),
+    #06090f;
+  --theme-background-flat: #06090f;
+  --theme-root-overlay:
+    radial-gradient(circle at 14% 0%, rgba(56, 189, 248, 0.12), transparent 30%),
+    radial-gradient(circle at 86% 0%, rgba(251, 146, 60, 0.08), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 18%);
+  --theme-grid-color: rgba(255, 255, 255, 0.035);
+
+  --chart-grid: rgba(148, 163, 184, 0.14);
+  --chart-axis: #718096;
+  --chart-tooltip-bg: #161b22;
+  --chart-tooltip-text: #f0f6fc;
+  --chart-series-1: #3b82f6;
+  --chart-series-2: #f59e0b;
+  --chart-series-3: #ef4444;
+  --chart-series-4: #22d3ee;
+  --chart-series-5: #c084fc;
+  --chart-series-6: #34d399;
+}
+
+:root[data-ui-theme="daylight"] {
+  color-scheme: light;
+
+  --color-bg-page: #edf2f7;
+  --color-bg-panel: rgba(248, 250, 252, 0.94);
+  --color-bg-card: rgba(255, 255, 255, 0.96);
+  --color-bg-elevated: #f8fafc;
+  --color-bg-hover: #e7eef6;
+  --color-bg-selected: rgba(37, 99, 235, 0.11);
+
+  --color-border-default: rgba(71, 85, 105, 0.22);
+  --color-border-soft: rgba(71, 85, 105, 0.12);
+  --color-border-highlight: rgba(37, 99, 235, 0.38);
+
+  --color-text-primary: #172033;
+  --color-text-secondary: #40516b;
+  --color-text-muted: #64748b;
+  --color-text-disabled: #94a3b8;
+
+  --color-brand-primary: #2563eb;
+  --color-brand-secondary: #ea580c;
+  --color-brand-tertiary: #db2777;
+  --color-focus-ring: rgba(37, 99, 235, 0.42);
+
+  --theme-background-rich:
+    radial-gradient(circle at 12% 0%, rgba(59, 130, 246, 0.12), transparent 30%),
+    radial-gradient(circle at 88% 0%, rgba(249, 115, 22, 0.09), transparent 28%),
+    linear-gradient(180deg, #f8fafc, #edf2f7);
+  --theme-background-flat: #edf2f7;
+  --theme-root-overlay:
+    radial-gradient(circle at 14% 0%, rgba(59, 130, 246, 0.12), transparent 30%),
+    radial-gradient(circle at 86% 0%, rgba(249, 115, 22, 0.08), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.35), transparent 22%);
+  --theme-grid-color: rgba(15, 23, 42, 0.055);
+
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 12px 30px rgba(15, 23, 42, 0.12);
+  --shadow-lg: 0 22px 50px rgba(15, 23, 42, 0.16);
+
+  --chart-grid: rgba(71, 85, 105, 0.15);
+  --chart-axis: #64748b;
+  --chart-tooltip-bg: #ffffff;
+  --chart-tooltip-text: #172033;
+}
+
+:root[data-ui-theme="colorful"] {
+  color-scheme: dark;
+
+  --color-bg-page: #090b19;
+  --color-bg-panel: rgba(17, 20, 42, 0.9);
+  --color-bg-card: rgba(23, 27, 54, 0.94);
+  --color-bg-elevated: rgba(31, 36, 70, 0.98);
+  --color-bg-hover: rgba(46, 52, 92, 0.96);
+  --color-bg-selected: rgba(139, 92, 246, 0.18);
+
+  --color-border-default: rgba(180, 177, 225, 0.2);
+  --color-border-soft: rgba(180, 177, 225, 0.11);
+  --color-border-highlight: rgba(167, 139, 250, 0.45);
+
+  --color-text-primary: #f8f7ff;
+  --color-text-secondary: #d6d3ec;
+  --color-text-muted: #9d9ab8;
+  --color-text-disabled: #676580;
+
+  --color-brand-primary: #a78bfa;
+  --color-brand-secondary: #22d3ee;
+  --color-brand-tertiary: #f472b6;
+  --color-focus-ring: rgba(167, 139, 250, 0.5);
+
+  --theme-background-rich:
+    radial-gradient(circle at 12% 0%, rgba(139, 92, 246, 0.2), transparent 30%),
+    radial-gradient(circle at 88% 4%, rgba(34, 211, 238, 0.15), transparent 29%),
+    radial-gradient(circle at 50% 100%, rgba(244, 114, 182, 0.1), transparent 36%),
+    #090b19;
+  --theme-background-flat: #090b19;
+  --theme-root-overlay:
+    radial-gradient(circle at 14% 0%, rgba(139, 92, 246, 0.18), transparent 30%),
+    radial-gradient(circle at 86% 0%, rgba(34, 211, 238, 0.12), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 18%);
+  --theme-grid-color: rgba(196, 181, 253, 0.045);
+}
+
+:root[data-ui-theme="green"] {
+  color-scheme: dark;
+
+  --color-bg-page: #06100b;
+  --color-bg-panel: rgba(9, 24, 16, 0.9);
+  --color-bg-card: rgba(14, 34, 23, 0.95);
+  --color-bg-elevated: rgba(20, 48, 32, 0.98);
+  --color-bg-hover: rgba(29, 65, 44, 0.96);
+  --color-bg-selected: rgba(34, 197, 94, 0.15);
+
+  --color-border-default: rgba(121, 172, 139, 0.2);
+  --color-border-soft: rgba(121, 172, 139, 0.11);
+  --color-border-highlight: rgba(74, 222, 128, 0.38);
+
+  --color-text-primary: #effaf2;
+  --color-text-secondary: #bdd7c5;
+  --color-text-muted: #83a48e;
+  --color-text-disabled: #567061;
+
+  --color-brand-primary: #4ade80;
+  --color-brand-secondary: #d4a72c;
+  --color-brand-tertiary: #22d3ee;
+  --color-focus-ring: rgba(74, 222, 128, 0.45);
+
+  --theme-background-rich:
+    radial-gradient(circle at 12% 0%, rgba(34, 197, 94, 0.16), transparent 31%),
+    radial-gradient(circle at 88% 0%, rgba(202, 138, 4, 0.08), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.012), transparent 24%),
+    #06100b;
+  --theme-background-flat: #06100b;
+  --theme-root-overlay:
+    radial-gradient(circle at 14% 0%, rgba(34, 197, 94, 0.14), transparent 30%),
+    radial-gradient(circle at 86% 0%, rgba(202, 138, 4, 0.08), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 18%);
+  --theme-grid-color: rgba(134, 239, 172, 0.035);
+}
+
+.theme-preview-default {
+  --theme-preview-page: #06090f;
+  --theme-preview-card: rgba(15, 23, 34, 0.94);
+  --theme-preview-primary: #37c8ff;
+  --theme-preview-secondary: #ff9b45;
+}
+
+.theme-preview-daylight {
+  --theme-preview-page: #edf2f7;
+  --theme-preview-card: #ffffff;
+  --theme-preview-primary: #2563eb;
+  --theme-preview-secondary: #ea580c;
+}
+
+.theme-preview-colorful {
+  --theme-preview-page: #090b19;
+  --theme-preview-card: rgba(23, 27, 54, 0.94);
+  --theme-preview-primary: #a78bfa;
+  --theme-preview-secondary: #22d3ee;
+}
+
+.theme-preview-green {
+  --theme-preview-page: #06100b;
+  --theme-preview-card: rgba(14, 34, 23, 0.95);
+  --theme-preview-primary: #4ade80;
+  --theme-preview-secondary: #d4a72c;
+}

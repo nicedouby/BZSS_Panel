@@ -81,7 +81,6 @@ watch(
 
 <style>
 :root {
-  color-scheme: dark;
   font-family: "Segoe UI Variable Text", "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
   background: var(--color-bg-page);
   color: var(--color-text-primary);
@@ -165,7 +164,7 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid rgba(96, 165, 250, 0.5);
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
 }
 
@@ -196,18 +195,15 @@ a {
 
 .app-root::before {
   z-index: 0;
-  background:
-    radial-gradient(circle at 14% 0%, rgba(56, 189, 248, 0.12), transparent 30%),
-    radial-gradient(circle at 86% 0%, rgba(251, 146, 60, 0.08), transparent 28%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 18%);
+  background: var(--theme-root-overlay);
   opacity: 0.95;
 }
 
 .app-root::after {
   z-index: 0;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    linear-gradient(var(--theme-grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--theme-grid-color) 1px, transparent 1px);
   background-size: 72px 72px;
   mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.65), transparent 82%);
   opacity: 0.18;
@@ -327,11 +323,11 @@ a {
 
 .bz-empty {
   min-height: 220px;
-  border: 1px dashed rgba(120, 160, 190, 0.28);
+  border: 1px dashed var(--color-border-highlight);
   border-radius: 16px;
   background:
-    radial-gradient(circle at 50% 0%, rgba(60, 140, 220, 0.10), transparent 38%),
-    rgba(8, 16, 24, 0.28);
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--color-brand-primary) 16%, transparent), transparent 38%),
+    color-mix(in srgb, var(--color-bg-elevated) 72%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -355,9 +351,9 @@ a {
   border-radius: 999px;
   display: grid;
   place-items: center;
-  background: rgba(88, 166, 255, 0.12);
-  border: 1px solid rgba(88, 166, 255, 0.25);
-  color: #9ecbff;
+  background: color-mix(in srgb, var(--color-brand-primary) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-brand-primary) 24%, transparent);
+  color: color-mix(in srgb, var(--color-brand-primary) 72%, white 28%);
   font-size: 18px;
 }
 
@@ -390,8 +386,8 @@ a {
   min-height: 34px;
   padding: 0 14px;
   border-radius: 10px;
-  border: 1px solid rgba(110, 150, 180, 0.35);
-  background: rgba(20, 36, 50, 0.85);
+  border: 1px solid var(--color-border-default);
+  background: color-mix(in srgb, var(--color-bg-elevated) 88%, transparent);
   color: var(--color-text-primary);
   font-weight: 700;
   cursor: pointer;
@@ -401,7 +397,7 @@ a {
 
 .bz-btn:hover:not(:disabled) {
   border-color: var(--color-border-highlight);
-  background: rgba(34, 58, 78, 0.95);
+  background: var(--color-bg-hover);
   transform: translateY(-1px);
   box-shadow: var(--shadow-md);
 }
@@ -413,8 +409,8 @@ a {
 }
 
 .bz-btn-primary {
-  border-color: rgba(72, 170, 255, 0.55);
-  background: rgba(42, 105, 170, 0.42);
+  border-color: color-mix(in srgb, var(--color-brand-primary) 55%, transparent);
+  background: color-mix(in srgb, var(--color-brand-primary) 28%, transparent);
 }
 
 .bz-btn-danger {
@@ -432,9 +428,9 @@ a {
   min-height: 22px;
   padding: 0 8px;
   border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.26);
-  background: rgba(148, 163, 184, 0.12);
-  color: #dbe4ea;
+  border: 1px solid color-mix(in srgb, var(--color-border-default) 88%, transparent);
+  background: color-mix(in srgb, var(--color-border-default) 55%, transparent);
+  color: var(--color-text-secondary);
   font-size: 11px;
   white-space: nowrap;
 }
@@ -520,14 +516,14 @@ a {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.18);
+  background: color-mix(in srgb, var(--color-border-default) 90%, transparent);
   border: 3px solid transparent;
   border-radius: 999px;
   background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.3);
+  background: color-mix(in srgb, var(--color-border-highlight) 80%, transparent);
   border: 3px solid transparent;
   background-clip: padding-box;
 }

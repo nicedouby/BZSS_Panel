@@ -3,9 +3,9 @@
     <aside class="settings-panel">
       <header class="settings-head settings-hero">
         <div class="settings-head-copy">
-          <p class="settings-kicker">控制中心</p>
-          <h2>控制中心</h2>
-          <p>界面、显示密度、系统设置</p>
+          <p class="settings-kicker">Control Center</p>
+          <h2>设置与主题</h2>
+          <p>主题、本地外观偏好和服务器设置。</p>
         </div>
         <button type="button" @click="settings.closeDrawer()">{{ t("common.close") }}</button>
       </header>
@@ -19,8 +19,41 @@
         <div class="appearance-grid">
           <div class="appearance-field">
             <div class="appearance-label">
+              <span>主题</span>
+              <small>点击后立即切换</small>
+            </div>
+            <div class="theme-grid" role="radiogroup" aria-label="主题">
+              <button
+                v-for="option in themeOptions"
+                :key="option.id"
+                type="button"
+                class="theme-card"
+                role="radio"
+                :aria-checked="ui.theme === option.id"
+                :class="[option.previewClass, { active: ui.theme === option.id }]"
+                @click="selectTheme(option.id, option.label)"
+              >
+                <span class="theme-preview">
+                  <i class="swatch swatch-page" />
+                  <i class="swatch swatch-card" />
+                  <i class="swatch swatch-primary" />
+                  <i class="swatch swatch-secondary" />
+                </span>
+
+                <span class="theme-copy">
+                  <strong>{{ option.label }}</strong>
+                  <small>{{ option.description }}</small>
+                </span>
+
+                <span v-if="ui.theme === option.id" class="theme-check">✓</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="appearance-field">
+            <div class="appearance-label">
               <span>视觉模式</span>
-              <small>立即生效</small>
+              <small>高级外观</small>
             </div>
             <div class="segmented-options">
               <button
@@ -40,7 +73,7 @@
           <div class="appearance-field">
             <div class="appearance-label">
               <span>显示密度</span>
-              <small>影响页面间距</small>
+              <small>辅助选项</small>
             </div>
             <div class="segmented-options two">
               <button
@@ -60,7 +93,7 @@
           <div class="appearance-field">
             <div class="appearance-label">
               <span>阵营配色</span>
-              <small>主界面与战队色彩</small>
+              <small>高级外观</small>
             </div>
             <div class="segmented-options">
               <button
@@ -80,7 +113,7 @@
           <div class="appearance-field">
             <div class="appearance-label">
               <span>动效强度</span>
-              <small>减少动画负担</small>
+              <small>辅助选项</small>
             </div>
             <div class="segmented-options two">
               <button
@@ -102,23 +135,15 @@
               <strong>背景层次</strong>
               <small>更丰富的环境光与渐变</small>
             </span>
-            <input
-              type="checkbox"
-              :checked="ui.richBackground"
-              @change="updateRichBackground"
-            >
+            <input type="checkbox" :checked="ui.richBackground" @change="updateRichBackground">
           </label>
 
           <label class="toggle-row">
             <span>
               <strong>卡片光效</strong>
-              <small>增强面板的层次感</small>
+              <small>增强面板层次感</small>
             </span>
-            <input
-              type="checkbox"
-              :checked="ui.cardGlow"
-              @change="updateCardGlow"
-            >
+            <input type="checkbox" :checked="ui.cardGlow" @change="updateCardGlow">
           </label>
 
           <label class="toggle-row">
@@ -126,11 +151,7 @@
               <strong>阵营视角提示</strong>
               <small>显示“当前视角 TEAM X”提示</small>
             </span>
-            <input
-              type="checkbox"
-              :checked="ui.showTeamPerspectiveHint"
-              @change="updateShowTeamPerspectiveHint"
-            >
+            <input type="checkbox" :checked="ui.showTeamPerspectiveHint" @change="updateShowTeamPerspectiveHint">
           </label>
         </div>
       </section>
@@ -138,7 +159,7 @@
       <section class="settings-section backend-section">
         <div class="settings-section-head">
           <h3>服务器设置</h3>
-          <p>这些设置会写入服务端配置，部分改动可能需要重启。</p>
+          <p>这些设置会写入服务器配置，部分改动可能需要重启。</p>
         </div>
 
         <template v-if="settings.loading">
@@ -238,7 +259,7 @@
 
       <footer class="settings-footer">
         <div class="settings-footer-copy">
-          本地外观即时生效，服务器设置需要保存。
+          主题与外观已自动保存在当前浏览器；服务器设置需要手动保存。
         </div>
         <div class="settings-footer-actions">
           <button type="button" @click="settings.closeDrawer()">{{ t("common.cancel") }}</button>
@@ -260,7 +281,8 @@
 import { computed, watch } from "vue";
 import { useAuthStore } from "../../stores/auth.store";
 import { useSettingsStore } from "../../stores/settings.store";
-import { useUiStore } from "../../stores/ui.store";
+import { useUiStore, type UiTheme } from "../../stores/ui.store";
+import { UI_THEME_OPTIONS } from "../../theme/uiThemes";
 import { t } from "../../i18n";
 
 const auth = useAuthStore();
@@ -269,67 +291,28 @@ const ui = useUiStore();
 
 const canEdit = computed(() => Boolean(auth.user?.isSuperAdmin));
 const canSave = computed(() => canEdit.value && settings.enabled);
+const themeOptions = UI_THEME_OPTIONS;
 
 const visualModeOptions = [
-  {
-    value: "classic",
-    label: "经典",
-    description: "更克制、更接近原始面板",
-  },
-  {
-    value: "tactical",
-    label: "战术",
-    description: "默认推荐，层次分明",
-  },
-  {
-    value: "glass",
-    label: "玻璃",
-    description: "更通透的控制中心",
-  },
+  { value: "classic", label: "经典", description: "更克制，接近原始面板" },
+  { value: "tactical", label: "战术", description: "默认推荐，层次更清晰" },
+  { value: "glass", label: "玻璃", description: "更通透的控制中心" },
 ] as const;
 
 const densityOptions = [
-  {
-    value: "comfortable",
-    label: "舒适",
-    description: "保留更大的留白",
-  },
-  {
-    value: "compact",
-    label: "紧凑",
-    description: "提高信息密度",
-  },
+  { value: "comfortable", label: "舒展", description: "保留更大留白" },
+  { value: "compact", label: "紧凑", description: "提高信息密度" },
 ] as const;
 
 const accentOptions = [
-  {
-    value: "blueOrange",
-    label: "蓝 / 橙",
-    description: "经典战术对比",
-  },
-  {
-    value: "greenAmber",
-    label: "绿 / 琥珀",
-    description: "偏战场态势感",
-  },
-  {
-    value: "steelRed",
-    label: "钢蓝 / 红",
-    description: "更冷静、警示感更强",
-  },
+  { value: "blueOrange", label: "蓝 / 橙", description: "经典战术对比" },
+  { value: "greenAmber", label: "绿 / 琥珀", description: "更偏战场态势感" },
+  { value: "steelRed", label: "钢蓝 / 红", description: "更冷静，警示更强" },
 ] as const;
 
 const motionOptions = [
-  {
-    value: "normal",
-    label: "正常",
-    description: "保留当前过渡效果",
-  },
-  {
-    value: "reduced",
-    label: "减少",
-    description: "降低动画干扰",
-  },
+  { value: "normal", label: "正常", description: "保留当前过渡效果" },
+  { value: "reduced", label: "减少", description: "降低动效干扰" },
 ] as const;
 
 watch(
@@ -398,6 +381,17 @@ function updateShowTeamPerspectiveHint(event: Event) {
   ui.setShowTeamPerspectiveHint(input.checked);
 }
 
+function selectTheme(themeId: UiTheme, label: string) {
+  if (ui.theme === themeId) return;
+  ui.setTheme(themeId);
+  ui.pushToast({
+    title: "主题已切换",
+    message: `已切换到${label}主题`,
+    tone: "ok",
+    durationMs: 1800,
+  });
+}
+
 function isDangerousField(field: { path: string; advanced?: boolean }) {
   if (field.advanced) return true;
   return [
@@ -424,7 +418,7 @@ async function save() {
   position: fixed;
   inset: 0;
   z-index: var(--z-settings-drawer);
-  background: rgba(5, 8, 12, 0.4);
+  background: color-mix(in srgb, var(--color-bg-page) 62%, transparent);
   backdrop-filter: blur(4px);
 }
 
@@ -434,8 +428,8 @@ async function save() {
   height: 100vh;
   overflow: auto;
   background:
-    radial-gradient(circle at 0% 0%, rgba(96, 165, 250, 0.1), transparent 32%),
-    radial-gradient(circle at 100% 0%, rgba(251, 146, 60, 0.08), transparent 34%),
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--color-brand-primary) 16%, transparent), transparent 32%),
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--color-brand-secondary) 12%, transparent), transparent 34%),
     linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.02)), rgba(255, 255, 255, 0.006)),
     var(--color-bg-card);
   border-left: 1px solid var(--color-border-default);
@@ -501,13 +495,13 @@ async function save() {
 .settings-section-head h3 {
   margin: 0;
   font-size: 14px;
-  color: var(--color-text-primary, #edf2f4);
+  color: var(--color-text-primary);
 }
 
 .settings-section-head p {
   margin: 4px 0 0;
   font-size: 12px;
-  color: var(--color-text-muted, #9aa7b2);
+  color: var(--color-text-muted);
 }
 
 .appearance-grid {
@@ -534,6 +528,100 @@ async function save() {
   color: var(--color-text-muted);
   font-size: 11px;
   font-weight: 500;
+}
+
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.theme-card {
+  position: relative;
+  min-height: 112px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 16px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.018)), rgba(255, 255, 255, 0.008)),
+    var(--color-bg-card);
+  color: var(--color-text-primary);
+}
+
+.theme-card.active {
+  border-color: var(--color-border-highlight);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--color-brand-primary) 14%, transparent), rgba(255, 255, 255, 0.01)),
+    var(--color-bg-card);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-brand-primary) 16%, transparent);
+}
+
+.theme-preview {
+  width: 100%;
+  min-height: 52px;
+  border-radius: 12px;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 0.8fr 0.8fr;
+  gap: 8px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-preview-page) 92%, white 8%), var(--theme-preview-page));
+  border: 1px solid color-mix(in srgb, var(--theme-preview-primary) 24%, transparent);
+}
+
+.swatch {
+  display: block;
+  border-radius: 8px;
+}
+
+.swatch-page {
+  background: var(--theme-preview-page);
+  border: 1px solid color-mix(in srgb, var(--theme-preview-primary) 24%, transparent);
+}
+
+.swatch-card {
+  background: var(--theme-preview-card);
+  border: 1px solid color-mix(in srgb, var(--theme-preview-primary) 18%, transparent);
+}
+
+.swatch-primary {
+  background: var(--theme-preview-primary);
+}
+
+.swatch-secondary {
+  background: var(--theme-preview-secondary);
+}
+
+.theme-copy {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+}
+
+.theme-copy strong {
+  font-size: 13px;
+}
+
+.theme-copy small {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.theme-check {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  min-width: 22px;
+  min-height: 22px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--color-brand-primary);
+  color: white;
+  font-size: 12px;
 }
 
 .segmented-options {
@@ -569,9 +657,9 @@ async function save() {
 }
 
 .segment-option.active {
-  border-color: rgba(96, 165, 250, 0.36);
-  background: rgba(96, 165, 250, 0.12);
-  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.14);
+  border-color: var(--color-border-highlight);
+  background: color-mix(in srgb, var(--color-brand-primary) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-brand-primary) 14%, transparent);
 }
 
 .toggle-row {
@@ -596,11 +684,6 @@ async function save() {
   margin-top: 3px;
   color: var(--color-text-muted);
   font-size: 11px;
-}
-
-.settings-body {
-  display: grid;
-  gap: 14px;
 }
 
 .settings-state {
@@ -749,7 +832,8 @@ async function save() {
   }
 
   .segmented-options,
-  .segmented-options.two {
+  .segmented-options.two,
+  .theme-grid {
     grid-template-columns: 1fr;
   }
 

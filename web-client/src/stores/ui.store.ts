@@ -2,6 +2,7 @@ import { computed, ref, watch } from "vue";
 import { defineStore } from "pinia";
 
 export type UiTone = "ok" | "warn" | "error" | "idle";
+export type UiTheme = "default" | "daylight" | "colorful" | "green";
 export type UiVisualMode = "classic" | "tactical" | "glass";
 export type UiDensity = "comfortable" | "compact";
 export type UiAccent = "blueOrange" | "greenAmber" | "steelRed";
@@ -46,6 +47,8 @@ interface ConfirmState extends Required<Omit<ConfirmOptions, "tone">> {
 }
 
 interface StoredUiPrefs {
+  version?: number;
+  theme?: UiTheme;
   visualMode?: UiVisualMode;
   globalDensity?: UiDensity;
   accent?: UiAccent;
@@ -56,6 +59,7 @@ interface StoredUiPrefs {
 }
 
 const UI_PREFS_STORAGE_KEY = "bzss.ui.preferences";
+const themes: UiTheme[] = ["default", "daylight", "colorful", "green"];
 const visualModes: UiVisualMode[] = ["classic", "tactical", "glass"];
 const densities: UiDensity[] = ["comfortable", "compact"];
 const accents: UiAccent[] = ["blueOrange", "greenAmber", "steelRed"];
@@ -83,6 +87,7 @@ export const useUiStore = defineStore("ui", () => {
     defaultMessage: "",
     confirmText: "Send Warning",
   });
+  const theme = ref<UiTheme>(savedPrefs.theme);
   const visualMode = ref<UiVisualMode>(savedPrefs.visualMode);
   const globalDensity = ref<UiDensity>(savedPrefs.globalDensity);
   const accent = ref<UiAccent>(savedPrefs.accent);
@@ -93,6 +98,7 @@ export const useUiStore = defineStore("ui", () => {
 
   const isSidebarExpanded = computed(() => !sidebarCollapsed.value);
   const uiClassList = computed(() => [
+    `ui-theme-${theme.value}`,
     `ui-mode-${visualMode.value}`,
     `ui-density-${globalDensity.value}`,
     `ui-accent-${accent.value}`,
@@ -104,7 +110,17 @@ export const useUiStore = defineStore("ui", () => {
   let warnPromptResolver: ((value: string | null) => void) | null = null;
 
   watch(
+    theme,
+    (next) => {
+      if (typeof document === "undefined") return;
+      document.documentElement.dataset.uiTheme = next;
+    },
+    { immediate: true },
+  );
+
+  watch(
     () => [
+      theme.value,
       visualMode.value,
       globalDensity.value,
       accent.value,
@@ -115,6 +131,8 @@ export const useUiStore = defineStore("ui", () => {
     ],
     () => {
       persistUiPrefs({
+        version: 2,
+        theme: theme.value,
         visualMode: visualMode.value,
         globalDensity: globalDensity.value,
         accent: accent.value,
@@ -133,6 +151,10 @@ export const useUiStore = defineStore("ui", () => {
 
   function setSidebarCollapsed(next: boolean) {
     sidebarCollapsed.value = Boolean(next);
+  }
+
+  function setTheme(next: UiTheme) {
+    theme.value = resolveUiValue(next, themes, "default");
   }
 
   function setVisualMode(next: UiVisualMode) {
@@ -268,6 +290,7 @@ export const useUiStore = defineStore("ui", () => {
     confirmCancel,
     openWarnPrompt,
     resolveWarnPrompt,
+    theme,
     visualMode,
     globalDensity,
     accent,
@@ -276,6 +299,7 @@ export const useUiStore = defineStore("ui", () => {
     cardGlow,
     showTeamPerspectiveHint,
     uiClassList,
+    setTheme,
     setVisualMode,
     setGlobalDensity,
     setAccent,
@@ -288,6 +312,8 @@ export const useUiStore = defineStore("ui", () => {
 
 function readStoredUiPrefs(): Required<StoredUiPrefs> {
   const defaults = {
+    version: 2,
+    theme: "default" as UiTheme,
     visualMode: "tactical" as UiVisualMode,
     globalDensity: "compact" as UiDensity,
     accent: "blueOrange" as UiAccent,
@@ -307,6 +333,8 @@ function readStoredUiPrefs(): Required<StoredUiPrefs> {
   try {
     const parsed = JSON.parse(raw) as StoredUiPrefs;
     return {
+      version: Number.isFinite(parsed.version) ? Number(parsed.version) : defaults.version,
+      theme: resolveUiValue(parsed.theme, themes, defaults.theme),
       visualMode: resolveUiValue(parsed.visualMode, visualModes, defaults.visualMode),
       globalDensity: resolveUiValue(parsed.globalDensity, densities, defaults.globalDensity),
       accent: resolveUiValue(parsed.accent, accents, defaults.accent),

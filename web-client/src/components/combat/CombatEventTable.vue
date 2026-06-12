@@ -324,13 +324,13 @@ th,
 td {
   padding: 7px 10px;
   text-align: left;
-  border-bottom: 1px solid #26303a;
+  border-bottom: 1px solid var(--color-border-soft);
   white-space: nowrap;
   line-height: 1.15;
 }
 
 th {
-  color: #98a5af;
+  color: var(--color-text-muted);
   font-size: 11px;
   font-weight: 600;
 }
@@ -366,7 +366,7 @@ th {
 .combat-row--highlighted td {
   background: linear-gradient(90deg, rgba(59, 130, 246, 0.35), rgba(96, 165, 250, 0.22)) !important;
   box-shadow: inset 0 0 0 1px rgba(191, 219, 254, 0.58), 0 0 0 1px rgba(96, 165, 250, 0.28);
-  color: #f8fbff;
+  color: var(--color-text-primary);
 }
 
 .combat-row--unknown td {
@@ -385,9 +385,9 @@ th {
   min-height: 20px;
   padding: 0 8px;
   border-radius: 999px;
-  border: 1px solid #3a4651;
+  border: 1px solid var(--color-border-default);
   background: rgba(255, 255, 255, 0.03);
-  color: #edf2f4;
+  color: var(--color-text-primary);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.02em;
@@ -397,13 +397,13 @@ th {
   border: 0;
   padding: 0;
   background: transparent;
-  color: #edf2f4;
+  color: var(--color-text-primary);
   font: inherit;
   cursor: pointer;
 }
 
 .name-button:hover {
-  color: #8bb6ff;
+  color: var(--color-brand-primary);
   text-decoration: underline;
 }
 
@@ -441,9 +441,9 @@ th {
   min-height: 18px;
   padding: 0 6px;
   border-radius: 999px;
-  border: 1px solid #3c4a57;
-  background: rgba(10, 14, 18, 0.36);
-  color: #b8c3cb;
+  border: 1px solid var(--color-border-default);
+  background: color-mix(in srgb, var(--color-bg-page) 30%, var(--color-bg-elevated));
+  color: var(--color-text-secondary);
   font-size: 10px;
 }
 
@@ -468,7 +468,7 @@ th {
 }
 
 .flag-empty {
-  color: #7f8c96;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 

@@ -553,7 +553,7 @@ function describeItem(item: HistoryItem) {
     radial-gradient(circle at top right, rgba(56, 189, 248, 0.06), transparent 40%),
     linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.02)), rgba(255, 255, 255, 0.008)),
     var(--color-bg-card);
-  box-shadow: 0 16px 32px rgba(2, 6, 23, 0.24);
+  box-shadow: var(--shadow-md);
   transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.22s ease, box-shadow 0.22s ease;
 }
 
@@ -757,7 +757,7 @@ function describeItem(item: HistoryItem) {
   border-radius: 8px;
   border: 1px solid var(--color-border-default);
   padding: 8px 12px;
-  background: rgba(10, 15, 23, 0.65);
+  background: color-mix(in srgb, var(--color-bg-elevated) 88%, transparent);
   color: var(--color-text-primary);
   outline: none;
   font-size: 13px;
@@ -811,7 +811,7 @@ function describeItem(item: HistoryItem) {
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 12px;
   overflow: hidden;
-  background: #020617;
+  background: color-mix(in srgb, var(--color-bg-page) 88%, black 12%);
   position: relative;
   box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.95);
 }
@@ -944,7 +944,7 @@ function describeItem(item: HistoryItem) {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(10, 15, 23, 0.55);
+  background: color-mix(in srgb, var(--color-bg-elevated) 84%, transparent);
   border: 1px solid var(--color-border-soft);
   border-radius: 8px;
   padding: 4px 10px;

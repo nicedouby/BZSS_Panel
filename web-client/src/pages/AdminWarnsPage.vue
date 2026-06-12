@@ -269,8 +269,8 @@ function formatTimeOnly(v: any) {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: radial-gradient(circle at 50% 0%, #1e293b 0%, #0f172a 100%);
-  color: #f1f5f9;
+  background: var(--theme-background-rich);
+  color: var(--color-text-primary);
   overflow: hidden;
   font-family: 'Inter', -apple-system, sans-serif;
 }
@@ -278,17 +278,17 @@ function formatTimeOnly(v: any) {
 /* Header: Tactical Glass Look */
 .dashboard-header {
   padding: 8px 24px;
-  background: rgba(15, 23, 42, 0.6);
+  background: color-mix(in srgb, var(--color-bg-panel) 92%, transparent);
   backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--color-border-soft);
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-shrink: 0;
   z-index: 10;
 }
-.dashboard-header .title { font-size: 15px; font-weight: 900; margin: 0; color: #fff; letter-spacing: 1px; text-transform: uppercase; }
-.dashboard-header .subtitle { font-size: 10px; margin: 0; color: #64748b; font-weight: 700; }
+.dashboard-header .title { font-size: 15px; font-weight: 900; margin: 0; color: var(--color-text-primary); letter-spacing: 1px; text-transform: uppercase; }
+.dashboard-header .subtitle { font-size: 10px; margin: 0; color: var(--color-text-muted); font-weight: 700; }
 
 .header-right { display: flex; align-items: center; gap: 24px; }
 .header-stat { display: flex; align-items: baseline; gap: 8px; }
@@ -300,7 +300,7 @@ function formatTimeOnly(v: any) {
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 /* Grid */
-.dashboard-grid { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: rgba(255, 255, 255, 0.03); min-height: 0; }
+.dashboard-grid { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--color-border-soft); min-height: 0; }
 .dashboard-col { background: transparent; display: flex; flex-direction: column; min-height: 0; padding: 12px; gap: 12px; }
 
 .col-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: -4px; }
@@ -311,9 +311,9 @@ function formatTimeOnly(v: any) {
 
 /* Op Card: Glassmorphism */
 .op-card {
-  background: rgba(30, 41, 59, 0.4);
+  background: color-mix(in srgb, var(--color-bg-card) 88%, transparent);
   backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-border-soft);
   border-radius: 8px;
   padding: 12px;
   display: flex;
@@ -325,11 +325,11 @@ function formatTimeOnly(v: any) {
 }
 
 .input-row { display: flex; gap: 8px; position: relative; }
-.hero-input { flex: 1; background: rgba(15, 23, 42, 0.5); border: 1px solid rgba(255, 255, 255, 0.1); color: #fff; font-size: 13px; font-weight: 800; padding: 6px 10px; border-radius: 4px; }
+.hero-input { flex: 1; background: var(--color-bg-elevated); border: 1px solid var(--color-border-default); color: var(--color-text-primary); font-size: 13px; font-weight: 800; padding: 6px 10px; border-radius: 4px; }
 .hero-input:focus { border-color: rgba(56, 189, 248, 0.5); outline: none; }
-.input-row.sub input { flex: 1; background: rgba(15, 23, 42, 0.3); border: 1px solid rgba(255, 255, 255, 0.05); color: #94a3b8; font-size: 10px; padding: 4px 8px; border-radius: 4px; }
+.input-row.sub input { flex: 1; background: color-mix(in srgb, var(--color-bg-elevated) 92%, transparent); border: 1px solid var(--color-border-soft); color: var(--color-text-muted); font-size: 10px; padding: 4px 8px; border-radius: 4px; }
 
-.input-row textarea { flex: 1; background: rgba(15, 23, 42, 0.5); border: 1px solid rgba(255, 255, 255, 0.1); color: #e2e8f0; padding: 8px; border-radius: 4px; font-size: 12px; resize: none; width: 100%; line-height: 1.5; }
+.input-row textarea { flex: 1; background: var(--color-bg-elevated); border: 1px solid var(--color-border-default); color: var(--color-text-primary); padding: 8px; border-radius: 4px; font-size: 12px; resize: none; width: 100%; line-height: 1.5; }
 .input-row textarea:focus { border-color: rgba(56, 189, 248, 0.5); outline: none; }
 
 /* Broadcast Specific */

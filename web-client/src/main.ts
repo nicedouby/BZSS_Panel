@@ -3,6 +3,7 @@ import { createPinia } from "pinia";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import "vue-virtual-scroller/dist/vue-virtual-scroller.css";
 import "./styles/squad-admin.css";
+import "./styles/themes.css";
 
 function escapeHtml(text: string) {
   return text
