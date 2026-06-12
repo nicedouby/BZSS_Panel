@@ -87,8 +87,9 @@ function createHarness(overrides = {}) {
 async function testResolveRconPermissionAliases() {
   assert.equal(resolveRconPermission("tb"), "rcon.tb");
   assert.equal(resolveRconPermission("AdminBroadcast Hello"), "rcon.broadcast");
-  assert.equal(resolveRconPermission("AdminForceAllVehicleAvailability 1"), "rcon.tank_battle");
-  assert.equal(resolveRconPermission("ListPlayers"), "rcon.read");
+  assert.equal(resolveRconPermission("AdminDisbandSquad 1 2"), "rcon.disband");
+  assert.equal(resolveRconPermission("AdminKickFromSquad 1 2 3"), "rcon.remove");
+  assert.equal(resolveRconPermission("ListPlayers"), "");
 }
 
 async function generateForceTeamChangeCommand() {
@@ -183,6 +184,22 @@ async function testDispatchCommandAllowsSystemBypass() {
   assert.equal(result.success, true);
   assert.equal(result.rconExecuted, true);
   assert.deepEqual(executedCommands, ["ListPlayers"]);
+}
+
+async function testDispatchCommandRejectsUnknownManualCommandForAdmin() {
+  const { manager, executedCommands } = createHarness();
+  const result = await manager.dispatchCommand({
+    command: "ListPlayers",
+    actor: {
+      username: "operator",
+      permissions: ["rcon.tb", "rcon.warn", "rcon.broadcast", "rcon.kick", "rcon.disband", "rcon.remove"],
+    },
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.code, "Forbidden");
+  assert.equal(result.requiredPermission, "");
+  assert.equal(executedCommands.length, 0);
 }
 
 async function testBypassRateLimitSkipsInterval() {
@@ -300,6 +317,7 @@ await testResolveRconPermissionAliases();
 await testDispatchCommandRejectsMissingPermission();
 await testDispatchCommandAllowsMatchingPermission();
 await testDispatchCommandAllowsSystemBypass();
+await testDispatchCommandRejectsUnknownManualCommandForAdmin();
 await testBypassRateLimitSkipsInterval();
 await testDynamicPollingIntervalsFollowLogClock();
 await testSchedulePollingRecomputesNextDelay();

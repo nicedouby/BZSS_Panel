@@ -5,21 +5,18 @@ const COMMAND_PERMISSION_ALIASES = new Map([
   ["adminbroadcast", "rcon.broadcast"],
   ["adminwarn", "rcon.warn"],
   ["adminkick", "rcon.kick"],
-  ["adminban", "rcon.ban"],
   ["adminforceteamchange", "rcon.tb"],
-  ["admindisbandsquad", "rcon.disband_squad"],
-  ["adminkickfromsquad", "rcon.kick_squad"],
-  ["listplayers", "rcon.read"],
-  ["listsquads", "rcon.read"],
-  ["showcurrentmap", "rcon.read"],
-  ["shownextmap", "rcon.read"],
-  ["showserverinfo", "rcon.read"],
-  ["adminnorespawntimer", "rcon.tank_battle"],
-  ["adminforceallvehicleavailability", "rcon.tank_battle"],
-  ["adminforceallroleavailability", "rcon.tank_battle"],
-  ["admindisablevehiclekitrequirement", "rcon.tank_battle"],
-  ["admindisablevehicleclaiming", "rcon.tank_battle"],
-  ["adminforcealldeployableavailability", "rcon.tank_battle"],
+  ["admindisbandsquad", "rcon.disband"],
+  ["adminkickfromsquad", "rcon.remove"],
+]);
+
+export const ALLOWED_MANUAL_RCON_PERMISSIONS = Object.freeze([
+  "rcon.tb",
+  "rcon.warn",
+  "rcon.broadcast",
+  "rcon.kick",
+  "rcon.disband",
+  "rcon.remove",
 ]);
 
 export function normalizeRconCommandName(commandText) {
@@ -41,24 +38,22 @@ export function resolveRconPermission(commandText, options = {}) {
   if (explicit) return explicit;
 
   const normalizedName = normalizeRconCommandName(commandText);
-  if (!normalizedName) return "rcon.command";
+  if (!normalizedName) return "";
 
   const alias = COMMAND_PERMISSION_ALIASES.get(normalizedName);
-  if (alias) return alias;
-
-  return `rcon.${toPermissionSegment(normalizedName)}`;
+  return alias ?? "";
 }
 
 export function canSendRconCommand(user, commandText, options = {}) {
   if (!user) return false;
   if (Boolean(user.isSuperAdmin)) return true;
-  if (user.authorizationMode === "transitional" && options?.superAdminOnly !== true) return true;
 
   const permissions = normalizePermissionList(user.permissions ?? user.permission);
   if (permissions.includes("*")) return true;
 
   const requiredPermission = resolveRconPermission(commandText, options);
   if (!requiredPermission) return false;
+  if (!ALLOWED_MANUAL_RCON_PERMISSIONS.includes(requiredPermission)) return false;
 
   return hasPermission(permissions, requiredPermission);
 }
@@ -105,18 +100,4 @@ export function normalizePermissionList(value) {
 
 function normalizePermissionName(value) {
   return String(value ?? "").trim();
-}
-
-function toPermissionSegment(value) {
-  const text = String(value ?? "").trim();
-  if (!text) return "command";
-
-  const snake = text
-    .replace(/([a-z\d])([A-Z])/g, "$1_$2")
-    .replace(/[^a-z\d]+/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .toLowerCase();
-
-  return snake || "command";
 }

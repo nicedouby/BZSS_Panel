@@ -100,6 +100,7 @@ const staticItems: SidebarItem[] = [
   { path: "/plugins/fair-squad-guard", icon: "FSG", label: t("nav.fairSquadGuard"), section: "plugins", order: 132 },
   { path: "/system/status", icon: "SYS", label: t("nav.runtimeStatus"), section: "system", order: 140 },
   { path: "/system/admin-users", icon: "USR", label: t("nav.adminUsers"), section: "system", order: 145 },
+  { path: "/system/audit-records", icon: "AUD", label: "操作记录", section: "system", order: 148 },
   { path: "/debug/udp-forwarder", icon: "UDP", label: t("nav.udpForwarder"), section: "debug", order: 150 },
   { path: "/debug/match-snapshots", icon: "SNP", label: t("nav.matchSnapshots"), section: "debug", order: 160 },
   { path: "/debug/pjsc-average-duration", icon: "PJ", label: t("nav.pjscAverageDuration"), section: "debug", order: 170 },

@@ -29,6 +29,7 @@ export const WEB_PAGE_PERMISSION_MATRIX = Object.freeze([
   { route: "/debug/squad-name-classifier", requiredPermission: "debug.squad_name_classifier.view" },
   { route: "/system/status", requiredPermission: "system.status.view" },
   { route: "/system/admin-users", requiredPermission: "admin_users.manage", superAdminOnly: true },
+  { route: "/system/audit-records", requiredPermission: "audit.view" },
 ]);
 
 const WEB_PAGE_PERMISSION_MAP = new Map(

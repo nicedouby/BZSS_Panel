@@ -150,6 +150,21 @@ export class WebRegistry {
       icon: "💡",
       hiddenFromSidebar: false,
     });
+
+    this.registerPage({
+      id: "web.auditRecords",
+      title: "操作记录",
+      group: "系统",
+      route: "/system/audit-records",
+      source: "core.auditManager",
+      description: "Web 人工操作安全审计记录。展示操作人、动作、目标、来源、服务器、IP、结果、请求参数和执行结果快照。",
+      required: true,
+      enabled: true,
+      order: 1005,
+      icon: "AUD",
+      requiredPermission: "audit.view",
+      hiddenFromSidebar: false,
+    });
   }
 
   /**

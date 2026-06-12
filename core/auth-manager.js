@@ -149,7 +149,7 @@ export class AuthManager {
     const wanted = String(permission ?? "").trim();
     if (!wanted) return false;
 
-    const permissions = normalizePermissions(user.permissions ?? user.permission);
+    const permissions = this.resolveEffectivePermissions(user);
 
     if (permissions.includes("*")) return true;
     if (permissions.includes(wanted)) return true;
@@ -165,6 +165,8 @@ export class AuthManager {
   }
 
   safeUser(user) {
+    const permissionGroup = user?.permissionGroupId ? this.userStore.getPermissionGroupById(user.permissionGroupId) : null;
+    const permissions = this.resolveEffectivePermissions(user);
     return {
       id: user.id,
       username: user.username,
@@ -173,9 +175,26 @@ export class AuthManager {
       isSuperAdmin: this.isSuperAdminRole(user.role),
       steam64: normalizeSteam64(user.steam64 ?? this.config?.defaultSteam64),
       viewerTeamAutoSwapEnabled: user.viewerTeamAutoSwapEnabled ?? (this.config?.viewerTeamAutoSwapEnabled !== false),
-      permissions: normalizePermissions(user.permissions),
+      permissions,
+      permissionGroupId: user.permissionGroupId ?? null,
+      permissionGroupName: permissionGroup?.name ?? "",
       authorizationMode: this.authorizationMode,
     };
+  }
+
+  resolveEffectivePermissions(user) {
+    if (!user) return [];
+    if (this.hasEverything(user)) return ["*"];
+
+    const groupId = String(user.permissionGroupId ?? "").trim();
+    if (groupId) {
+      const group = this.userStore.getPermissionGroupById(groupId);
+      if (group?.enabled !== false) {
+        return normalizePermissions(group.permissions);
+      }
+    }
+
+    return normalizePermissions(user.permissions ?? user.permission);
   }
 
   getTokenFromRequest(req) {

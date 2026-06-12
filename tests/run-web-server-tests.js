@@ -312,6 +312,7 @@ async function testAdminUsersRouteReturnsOnceAndHidesPasswordHash() {
                 viewerTeamAutoSwapEnabled: true,
                 enabled: true,
                 note: "",
+                permissionGroupId: null,
                 passwordHash: "scrypt$secret",
                 authVersion: 3,
                 createdAt: 1,
@@ -319,6 +320,9 @@ async function testAdminUsersRouteReturnsOnceAndHidesPasswordHash() {
                 passwordChangedAt: 3,
               },
             ];
+          },
+          listPermissionGroups() {
+            return [];
           },
         },
       },
@@ -353,6 +357,136 @@ async function testAdminUsersRouteReturnsOnceAndHidesPasswordHash() {
   assert.equal(body.items[0].steamAvatar, "https://avatars.example/root.jpg");
   assert.equal(Object.hasOwn(body.items[0], "passwordHash"), false);
   assert.equal(Object.hasOwn(body.items[0], "authVersion"), false);
+  assert.deepEqual(body.permissionGroups, []);
+}
+
+async function testAdminPermissionGroupsApiSupportsCrudAndInUseConflict() {
+  const permissionGroups = [
+    {
+      id: "group:intern",
+      name: "Intern",
+      enabled: true,
+      permissions: ["rcon.warn"],
+      createdAt: 10,
+      updatedAt: 11,
+    },
+  ];
+  const users = [
+    {
+      id: "user:root",
+      username: "Root",
+      role: "SuperAdmin",
+      enabled: true,
+      permissionGroupId: null,
+    },
+    {
+      id: "user:op",
+      username: "Op",
+      role: "Admin",
+      enabled: true,
+      permissionGroupId: "group:intern",
+    },
+  ];
+  const calls = [];
+
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return {
+            id: "user:root",
+            username: "Root",
+            role: "SuperAdmin",
+            isSuperAdmin: true,
+          };
+        },
+        hasEverything(user) {
+          return user?.isSuperAdmin === true;
+        },
+        hashPassword: async () => "hash",
+        userStore: {
+          listUsers() {
+            return users;
+          },
+          listPermissionGroups() {
+            return permissionGroups;
+          },
+          async createPermissionGroup(payload) {
+            calls.push({ type: "create", payload });
+            return {
+              id: "group:new",
+              name: payload.name,
+              enabled: payload.enabled,
+              permissions: payload.permissions,
+              createdAt: 20,
+              updatedAt: 20,
+            };
+          },
+          async updatePermissionGroup(groupId, payload) {
+            calls.push({ type: "update", groupId, payload });
+            return {
+              id: groupId,
+              name: payload.name,
+              enabled: payload.enabled,
+              permissions: payload.permissions,
+              createdAt: 10,
+              updatedAt: 30,
+            };
+          },
+          async deletePermissionGroup() {
+            const error = new Error("Permission group is still assigned to user Op.");
+            error.statusCode = 409;
+            error.code = "PermissionGroupInUse";
+            throw error;
+          },
+        },
+      },
+    },
+  });
+
+  const list = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/admin/permission-groups",
+    headers: { host: "localhost" },
+    socket: {},
+  }, list.res);
+  assert.equal(list.state.status, 200);
+  const listBody = JSON.parse(list.state.body);
+  assert.equal(listBody.items.length, 1);
+  assert.equal(listBody.items[0].assignedUsers, 1);
+
+  const createReq = Readable.from([JSON.stringify({ name: "Senior", enabled: true, permissions: ["rcon.tb", "rcon.kick"] })]);
+  createReq.method = "POST";
+  createReq.url = "/api/admin/permission-groups";
+  createReq.headers = { host: "localhost", "content-type": "application/json" };
+  createReq.socket = {};
+  const createRes = createRecorder();
+  await server.handleRequest(createReq, createRes.res);
+  assert.equal(createRes.state.status, 201);
+  assert.equal(calls[0].type, "create");
+
+  const updateReq = Readable.from([JSON.stringify({ name: "Intern Updated", enabled: false, permissions: ["rcon.warn", "rcon.broadcast"] })]);
+  updateReq.method = "PATCH";
+  updateReq.url = "/api/admin/permission-groups/group%3Aintern";
+  updateReq.headers = { host: "localhost", "content-type": "application/json" };
+  updateReq.socket = {};
+  const updateRes = createRecorder();
+  await server.handleRequest(updateReq, updateRes.res);
+  assert.equal(updateRes.state.status, 200);
+  assert.equal(calls[1].type, "update");
+
+  const deleteReq = {
+    method: "DELETE",
+    url: "/api/admin/permission-groups/group%3Aintern",
+    headers: { host: "localhost" },
+    socket: {},
+  };
+  const deleteRes = createRecorder();
+  await server.handleRequest(deleteReq, deleteRes.res);
+  assert.equal(deleteRes.state.status, 409);
+  const deleteBody = JSON.parse(deleteRes.state.body);
+  assert.equal(deleteBody.error, "PermissionGroupInUse");
 }
 
 async function testConsoleRecentEndpointUsesUnifiedConsoleBuffer() {
@@ -2416,6 +2550,7 @@ await testHealthEndpointDoesNotRequireAuth();
 await testAuthSessionAndLoginIncludeSteamAvatar();
 await testWebPagesEndpointFiltersByPermissions();
 await testAdminUsersRouteReturnsOnceAndHidesPasswordHash();
+await testAdminPermissionGroupsApiSupportsCrudAndInUseConflict();
 await testConsoleRecentEndpointUsesUnifiedConsoleBuffer();
 await testConsoleRconEndpointsUseLoggedInUser();
 await testConsoleRconForbiddenMapsTo403();

@@ -5,6 +5,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { ALLOWED_RCON_PERMISSIONS } from "./auth-user-store.js";
 
 const requestStorage = new AsyncLocalStorage();
 import { handleSquadManagementRoutes } from "../modules/squad-management/routes.js";
@@ -21,6 +22,8 @@ import {
   setPluginEnabled as updatePluginEnabled,
   updatePluginConfig as updatePluginManifestConfig,
 } from "./plugins/plugin.service.js";
+import { AUDIT_ACTIONS, AUDIT_CATEGORIES, AUDIT_RESULTS, AUDIT_SOURCE_PAGES } from "./audit/audit-actions.js";
+import { sanitizeRconCommand } from "./audit/audit-sanitizer.js";
 
 const MAX_JSON_BODY_BYTES = 1024 * 1024;
 
@@ -283,7 +286,12 @@ export class WebServer {
       });
     }
 
-    if (url.pathname === "/api/admin/users" || url.pathname.startsWith("/api/admin/users/")) {
+    if (
+      url.pathname === "/api/admin/users"
+      || url.pathname.startsWith("/api/admin/users/")
+      || url.pathname === "/api/admin/permission-groups"
+      || url.pathname.startsWith("/api/admin/permission-groups/")
+    ) {
       await this.handleAdminUsersApi(url, req, res, user);
       return;
     }
@@ -455,6 +463,48 @@ export class WebServer {
 
     if (url.pathname === "/api/web/status") {
       return this.json(res, 200, this.core.webStatus.getSnapshot());
+    }
+
+    if (url.pathname === "/api/audit/records" && req.method === "GET") {
+      if (!this.canViewAudit(user)) {
+        return this.json(res, 403, {
+          error: "Forbidden",
+          message: "audit.view permission is required.",
+        });
+      }
+      const records = await this.core.auditManager.list({
+        limit: url.searchParams.get("limit") ?? "100",
+        offset: url.searchParams.get("offset") ?? "0",
+        actor: url.searchParams.get("actor") ?? "",
+        action: url.searchParams.get("action") ?? "",
+        serverId: url.searchParams.get("serverId") ?? "",
+        result: url.searchParams.get("result") ?? "",
+        playerName: url.searchParams.get("playerName") ?? "",
+        steamId: url.searchParams.get("steamId") ?? "",
+        clientIp: url.searchParams.get("clientIp") ?? "",
+        requestId: url.searchParams.get("requestId") ?? "",
+        fromMs: url.searchParams.get("fromMs") ?? "",
+        toMs: url.searchParams.get("toMs") ?? "",
+      });
+      return this.json(res, 200, { ok: true, ...records });
+    }
+
+    const auditDetailMatch = url.pathname.match(/^\/api\/audit\/records\/([^/]+)$/);
+    if (auditDetailMatch && req.method === "GET") {
+      if (!this.canViewAudit(user)) {
+        return this.json(res, 403, {
+          error: "Forbidden",
+          message: "audit.view permission is required.",
+        });
+      }
+      const record = await this.core.auditManager.get(decodeURIComponent(auditDetailMatch[1]));
+      if (!record) {
+        return this.json(res, 404, {
+          error: "AuditRecordNotFound",
+          message: "Audit record was not found.",
+        });
+      }
+      return this.json(res, 200, { ok: true, record });
     }
 
     if (url.pathname === "/api/server/warmup") {
@@ -860,7 +910,7 @@ export class WebServer {
       if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
       const job = await this.modules.playtime.refreshOnline({
-        serverId: body.serverId ?? url.searchParams.get("serverId") ?? this.core.webStatus.serverId,
+        serverId: body.serverId ?? url.searchParams.get("serverId") ?? this.getCurrentServerId(""),
         force: Boolean(body.force ?? url.searchParams.get("force") === "true"),
       });
       this.core.runtimeState.updateJob(job);
@@ -1012,12 +1062,38 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/playtime/online/refresh" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
-      const job = await this.modules.playtime.refreshOnline({
-        serverId: body.serverId ?? url.searchParams.get("serverId") ?? this.core.webStatus.serverId,
-        force: Boolean(body.force ?? url.searchParams.get("force") === "true"),
-      });
+      const serverId = body.serverId ?? url.searchParams.get("serverId") ?? this.core.webStatus?.serverId ?? "";
+      const force = Boolean(body.force ?? url.searchParams.get("force") === "true");
+      const createdAtMs = Date.now();
+      const auditContext = {
+        requestId: `audit_${createdAtMs}_${crypto.randomBytes(8).toString("hex")}`,
+        createdAtMs,
+        action: force ? AUDIT_ACTIONS.PLAYTIME_REFRESH_FORCE : AUDIT_ACTIONS.PLAYTIME_REFRESH_SMART,
+        category: AUDIT_CATEGORIES.PLAYTIME,
+        actor: user,
+        request: req,
+        sourcePage: body.sourcePage ?? AUDIT_SOURCE_PAGES.MATCH_STATUS,
+        serverId,
+        target: { type: "server", id: serverId, name: this.getServerName(serverId) },
+        parameters: {
+          force,
+          onlinePlayerCount: this.getOnlinePlayerCount(serverId),
+        },
+        allowWithoutAudit: true,
+        resultResolver: () => AUDIT_RESULTS.ACCEPTED,
+        resultDataBuilder: (job) => this.summarizePlaytimeJobForAudit(job),
+      };
+      if (!this.core.authManager?.hasEverything?.(user)) {
+        await this.auditForbidden(auditContext, "SuperAdmin role is required.");
+        return this.json(res, 403, { error: "Forbidden", message: "SuperAdmin role is required." });
+      }
+
+      const job = await this.executeAudited(auditContext, () => this.modules.playtime.refreshOnline({
+        serverId,
+        force,
+      }));
+      this.watchPlaytimeAuditJob(job?.id, auditContext);
       const waitMs = Number(body.waitMs ?? 0);
       const payload = waitMs > 0
         ? await this.modules.playtime.waitForJob(job.id, waitMs)
@@ -1026,9 +1102,40 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/playtime/players/refresh" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
-      const job = await this.modules.playtime.refreshPlayer(body);
+      const steamId = body.steamID ?? body.steamId ?? "";
+      const createdAtMs = Date.now();
+      const auditContext = {
+        requestId: `audit_${createdAtMs}_${crypto.randomBytes(8).toString("hex")}`,
+        createdAtMs,
+        action: AUDIT_ACTIONS.PLAYTIME_REFRESH_SMART,
+        category: AUDIT_CATEGORIES.PLAYTIME,
+        actor: user,
+        request: req,
+        sourcePage: body.sourcePage ?? AUDIT_SOURCE_PAGES.MATCH_STATUS,
+        serverId: body.serverId ?? this.core.webStatus?.serverId ?? "",
+        target: {
+          type: "player",
+          id: steamId,
+          name: body.name ?? body.currentName ?? body.label ?? "",
+          steamId,
+          eosId: body.eosID ?? body.eosId ?? "",
+        },
+        parameters: {
+          steamId,
+          label: body.label ?? body.name ?? "",
+        },
+        allowWithoutAudit: true,
+        resultResolver: () => AUDIT_RESULTS.ACCEPTED,
+        resultDataBuilder: (job) => this.summarizePlaytimeJobForAudit(job),
+      };
+      if (!this.core.authManager?.hasEverything?.(user)) {
+        await this.auditForbidden(auditContext, "SuperAdmin role is required.");
+        return this.json(res, 403, { error: "Forbidden", message: "SuperAdmin role is required." });
+      }
+
+      const job = await this.executeAudited(auditContext, () => this.modules.playtime.refreshPlayer(body));
+      this.watchPlaytimeAuditJob(job?.id, auditContext);
       const waitMs = Number(body.waitMs ?? 0);
       const payload = waitMs > 0
         ? await this.modules.playtime.waitForJob(job.id, waitMs)
@@ -1082,37 +1189,89 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/rcon/execute" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
-      const result = await this.executeConsoleRconCommand(body.command, {
+      const auditContext = this.buildRconAuditContext(req, user, body, url.pathname);
+      if (!this.core.authManager?.hasEverything?.(user)) {
+        await this.auditForbidden(auditContext, "SuperAdmin role is required.");
+        return this.json(res, 403, { error: "Forbidden", message: "SuperAdmin role is required." });
+      }
+      const result = await this.executeAudited(auditContext, () => this.executeConsoleRconCommand(body.command, {
         requestedBy: "web.console",
         actor: user,
         system: false,
-      });
+      }));
       return this.json(res, result?.code === "Forbidden" ? 403 : result?.success ? 200 : 400, result);
     }
 
     if (url.pathname === "/api/console/rcon" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
-      const result = await this.executeConsoleRconCommand(body.command, {
+      const auditContext = this.buildRconAuditContext(req, user, body, url.pathname);
+      if (!this.core.authManager?.hasEverything?.(user)) {
+        await this.auditForbidden(auditContext, "SuperAdmin role is required.");
+        return this.json(res, 403, { error: "Forbidden", message: "SuperAdmin role is required." });
+      }
+      const result = await this.executeAudited(auditContext, () => this.executeConsoleRconCommand(body.command, {
         requestedBy: "web.console",
         actor: user,
         system: false,
-      });
+      }));
       return this.json(res, result?.code === "Forbidden" ? 403 : result?.success ? 200 : 400, result);
     }
 
     // Compatibility endpoint used by some Vue client builds.
     if (url.pathname === "/api/rcon-command" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
-      const result = await this.executeConsoleRconCommand(body.command, {
+      const auditContext = this.buildRconAuditContext(req, user, body, url.pathname);
+      if (!this.core.authManager?.hasEverything?.(user)) {
+        await this.auditForbidden(auditContext, "SuperAdmin role is required.");
+        return this.json(res, 403, { error: "Forbidden", message: "SuperAdmin role is required." });
+      }
+      const result = await this.executeAudited(auditContext, () => this.executeConsoleRconCommand(body.command, {
         requestedBy: "web.console",
         actor: user,
         system: false,
-      });
+      }));
       return this.json(res, result?.code === "Forbidden" ? 403 : result?.success ? 200 : 400, result);
+    }
+
+    if (url.pathname === "/api/tank-battle/execute" && req.method === "POST") {
+      const body = await this.readJsonBody(req);
+      const commands = Array.isArray(body?.commands)
+        ? body.commands.map((item) => String(item ?? "").trim()).filter(Boolean).slice(0, 20)
+        : [];
+      const auditContext = {
+        action: AUDIT_ACTIONS.TANK_BATTLE_EXECUTE,
+        category: AUDIT_CATEGORIES.RCON,
+        actor: user,
+        request: req,
+        sourcePage: body.sourcePage ?? AUDIT_SOURCE_PAGES.TANK_BATTLE_DIALOG,
+        serverId: body.serverId ?? this.core.webStatus?.serverId ?? "",
+        target: { type: "server", id: body.serverId ?? this.core.webStatus?.serverId ?? "", name: this.getServerName(body.serverId ?? this.core.webStatus?.serverId ?? "") },
+        parameters: {
+          preset: body.preset ?? body.label ?? "custom",
+          commandCount: commands.length,
+          commands: commands.map((command) => sanitizeRconCommand(command)),
+        },
+        resultResolver: (result) => result?.auditResult ?? AUDIT_RESULTS.SUCCESS,
+        resultDataBuilder: (result) => ({
+          commandCount: commands.length,
+          commands: Array.isArray(result?.commands) ? result.commands : [],
+        }),
+      };
+      if (!this.core.authManager?.hasEverything?.(user)) {
+        await this.auditForbidden(auditContext, "SuperAdmin role is required.");
+        return this.json(res, 403, { error: "Forbidden", message: "SuperAdmin role is required." });
+      }
+      if (!commands.length) {
+        await this.auditInvalid(auditContext, "InvalidTankBattleCommands", "At least one command is required.");
+        return this.json(res, 400, { error: "InvalidTankBattleCommands", message: "At least one command is required." });
+      }
+
+      const result = await this.executeAudited(auditContext, () => this.executeTankBattleCommands(commands, {
+        requestedBy: "web.tankBattle",
+        actor: user,
+      }));
+      return this.json(res, result.ok ? 200 : 400, result);
     }
 
     // Compatibility endpoint for tank-battle status panel.
@@ -1929,7 +2088,7 @@ export class WebServer {
       return this.json(
         res,
         200,
-        await this.modules.playerDatabase.syncOnline(url.searchParams.get("serverId") ?? this.core.webStatus.serverId),
+        await this.modules.playerDatabase.syncOnline(url.searchParams.get("serverId") ?? this.getCurrentServerId("")),
       );
     }
 
@@ -2046,7 +2205,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/squads/list") {
-      const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
+      const serverId = url.searchParams.get("serverId") ?? this.getCurrentServerId("");
       const squadManagement = this.modules.squadManagement;
       return this.json(res, 200, {
         squads: squadManagement?.getSquads?.(serverId) ?? [],
@@ -2054,7 +2213,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/squad-lifecycle/current" && req.method === "GET") {
-      const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
+      const serverId = url.searchParams.get("serverId") ?? this.getCurrentServerId("");
       const lifecycle = this.modules.squadLifecycle?.getCurrent?.(serverId);
       return this.json(res, 200, {
         current: lifecycle ?? {
@@ -2068,7 +2227,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/kills/recent") {
-      const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
+      const serverId = url.searchParams.get("serverId") ?? this.getCurrentServerId("");
       const records = this.modules.combatManager?.getEvents
         ? this.modules.combatManager.getEvents({
             serverId,
@@ -2092,7 +2251,7 @@ export class WebServer {
       if (!pluginApi) {
         return this.json(res, 404, { error: "WeaponCollectorNotLoaded" });
       }
-      const serverId = url.searchParams.get("serverId") ?? this.core.webStatus.serverId;
+      const serverId = url.searchParams.get("serverId") ?? this.getCurrentServerId("");
       const weapons = pluginApi.getWeaponStats(serverId);
       const totals = weapons.reduce(
         (acc, w) => {
@@ -2180,13 +2339,18 @@ export class WebServer {
       const api = this.modules.squadManagement;
       if (!api?.executeAction) return this.json(res, 404, { error: "SquadManagementUnavailable" });
       try {
-        const result = await api.executeAction({
-          ...body,
-          actor: user,
-          type: "remove_from_squad",
-          source: body.source ?? "web.squadRemove",
-          system: Boolean(body.system ?? false),
-        });
+        const auditContext = this.buildRemoveFromSquadAuditContext(req, user, body);
+        const result = await this.executeAudited(auditContext, ({ requestId }) => api.executeAction({
+            ...body,
+            actor: user,
+            type: "remove_from_squad",
+            source: body.source ?? "web.squadRemove",
+            system: false,
+            operatorName: user?.username ?? "",
+            requestId,
+          }), {
+            relatedRecordIdBuilder: (payload) => payload?.record?.id ?? payload?.recordId ?? "",
+          });
         return this.json(res, result.ok ? 200 : 400, result);
       } catch (err) {
         return this.json(res, 500, { error: "InternalError", message: err.message });
@@ -2198,7 +2362,31 @@ export class WebServer {
       if (!api) return this.json(res, 404, { error: "ModuleNotFound" });
       const body = await this.readJsonBody(req);
       try {
-        const result = await api.warnPlayer({ ...body, actor: user, system: false });
+        const auditContext = {
+          action: AUDIT_ACTIONS.PLAYER_WARN,
+          category: AUDIT_CATEGORIES.PLAYER_MANAGEMENT,
+          actor: user,
+          request: req,
+          sourcePage: body.sourcePage ?? AUDIT_SOURCE_PAGES.SQUAD_MANAGEMENT,
+          serverId: body.serverId ?? this.getCurrentServerId(""),
+          target: {
+            type: "player",
+            id: body.targetSteamId ?? body.steamId ?? body.steamID ?? body.targetEosId ?? body.eosId ?? body.eosID ?? body.targetName,
+            name: body.targetName ?? body.name ?? "",
+            steamId: body.targetSteamId ?? body.steamId ?? body.steamID ?? "",
+            eosId: body.targetEosId ?? body.eosId ?? body.eosID ?? "",
+          },
+          parameters: { message: body.message ?? "" },
+          resultResolver: (payload) => payload?.success === false ? AUDIT_RESULTS.FAILED : AUDIT_RESULTS.SUCCESS,
+        };
+        const result = await this.executeAudited(auditContext, ({ requestId }) => api.warnPlayer({
+          ...body,
+          origin: "web",
+          actor: user,
+          sourcePage: body.sourcePage ?? AUDIT_SOURCE_PAGES.SQUAD_MANAGEMENT,
+          requestId,
+          system: false,
+        }));
         return this.json(res, result?.code === "Forbidden" ? 403 : result.success ? 200 : 400, result);
       } catch (err) {
         return this.json(res, 500, { error: "InternalError", message: err.message });
@@ -2210,7 +2398,28 @@ export class WebServer {
       if (!api) return this.json(res, 404, { error: "ModuleNotFound" });
       const body = await this.readJsonBody(req);
       try {
-        const result = await api.broadcastMessage({ ...body, actor: user, system: false });
+        const auditContext = {
+          action: AUDIT_ACTIONS.SERVER_BROADCAST,
+          category: AUDIT_CATEGORIES.SERVER_MANAGEMENT,
+          actor: user,
+          request: req,
+          sourcePage: body.sourcePage ?? AUDIT_SOURCE_PAGES.RCON_CONSOLE,
+          serverId: body.serverId ?? this.getCurrentServerId(""),
+          target: { type: "server", id: body.serverId ?? this.getCurrentServerId(""), name: this.getServerName(body.serverId ?? this.getCurrentServerId("")) },
+          parameters: {
+            message: body.message ?? "",
+            messageLength: String(body.message ?? "").length,
+          },
+          resultResolver: (payload) => payload?.success === false ? AUDIT_RESULTS.FAILED : AUDIT_RESULTS.SUCCESS,
+        };
+        const result = await this.executeAudited(auditContext, ({ requestId }) => api.broadcastMessage({
+          ...body,
+          origin: "web",
+          actor: user,
+          sourcePage: body.sourcePage ?? AUDIT_SOURCE_PAGES.RCON_CONSOLE,
+          requestId,
+          system: false,
+        }));
         return this.json(res, result?.code === "Forbidden" ? 403 : result.success ? 200 : 400, result);
       } catch (err) {
         return this.json(res, 500, { error: "InternalError", message: err.message });
@@ -2315,7 +2524,7 @@ export class WebServer {
       }
 
       return this.json(res, 200, await api.getHistory({
-        serverId: url.searchParams.get("server_id") ?? url.searchParams.get("serverId") ?? this.core.webStatus.serverId,
+        serverId: url.searchParams.get("server_id") ?? url.searchParams.get("serverId") ?? this.getCurrentServerId(""),
         fromMs: url.searchParams.get("from_ms") ?? url.searchParams.get("fromMs"),
         toMs: url.searchParams.get("to_ms") ?? url.searchParams.get("toMs"),
         includeCurrent: (url.searchParams.get("include_current") ?? url.searchParams.get("includeCurrent")) === "1",
@@ -2332,7 +2541,7 @@ export class WebServer {
       }
 
       return this.json(res, 200, await api.getCurrent({
-        serverId: url.searchParams.get("server_id") ?? url.searchParams.get("serverId") ?? this.core.webStatus.serverId,
+        serverId: url.searchParams.get("server_id") ?? url.searchParams.get("serverId") ?? this.getCurrentServerId(""),
       }));
     }
 
@@ -2347,7 +2556,7 @@ export class WebServer {
 
       return this.json(res, 200, {
         dates: await api.listAvailableDates({
-          serverId: url.searchParams.get("server_id") ?? url.searchParams.get("serverId") ?? this.core.webStatus.serverId,
+          serverId: url.searchParams.get("server_id") ?? url.searchParams.get("serverId") ?? this.getCurrentServerId(""),
         }),
       });
     }
@@ -2869,6 +3078,10 @@ export class WebServer {
     socket.write(Buffer.concat([header, body]));
   }
 
+  getCurrentServerId(fallback = "") {
+    return this.core.webStatus?.serverId ?? fallback;
+  }
+
   getConsoleChannels(options = {}) {
     if (this.core.console?.getLegacyChannels) {
       return this.core.console.getLegacyChannels(options);
@@ -2916,6 +3129,202 @@ export class WebServer {
     };
   }
 
+  async executeAudited(context, executor, options = {}) {
+    if (!this.core.auditManager?.execute) {
+      return executor({ requestId: "" });
+    }
+    return this.core.auditManager.execute(context, executor, options);
+  }
+
+  async auditForbidden(context, message = "Permission denied.") {
+    await this.auditSyntheticFailure(context, {
+      statusCode: 403,
+      code: "Forbidden",
+      message,
+    });
+  }
+
+  async auditInvalid(context, code = "InvalidRequest", message = "Invalid request.") {
+    await this.auditSyntheticFailure(context, {
+      statusCode: 400,
+      code,
+      message,
+    });
+  }
+
+  async auditSyntheticFailure(context, errorInfo) {
+    if (!this.core.auditManager?.execute) return;
+    try {
+      await this.core.auditManager.execute(context, async () => {
+        const error = new Error(errorInfo.message);
+        error.statusCode = errorInfo.statusCode;
+        error.code = errorInfo.code;
+        throw error;
+      });
+    } catch {}
+  }
+
+  buildRconAuditContext(req, user, body = {}, route = "") {
+    const serverId = body.serverId ?? this.core.webStatus?.serverId ?? "";
+    return {
+      action: AUDIT_ACTIONS.RCON_COMMAND_EXECUTE,
+      category: AUDIT_CATEGORIES.RCON,
+      actor: user,
+      request: req,
+      sourcePage: body.sourcePage ?? AUDIT_SOURCE_PAGES.RCON_CONSOLE,
+      serverId,
+      target: { type: "server", id: serverId, name: this.getServerName(serverId) },
+      parameters: {
+        command: sanitizeRconCommand(body.command),
+        route,
+      },
+      resultResolver: (payload) => payload?.code === "Forbidden"
+        ? AUDIT_RESULTS.FORBIDDEN
+        : payload?.success === false
+          ? AUDIT_RESULTS.FAILED
+          : AUDIT_RESULTS.SUCCESS,
+      resultDataBuilder: (payload) => ({
+        success: Boolean(payload?.success),
+        message: payload?.message ?? "",
+        status: payload?.status ?? "",
+        durationMs: payload?.durationMs ?? null,
+      }),
+    };
+  }
+
+  buildRemoveFromSquadAuditContext(req, user, body = {}) {
+    const serverId = body.serverId ?? body.serverID ?? this.getCurrentServerId("");
+    return {
+      action: AUDIT_ACTIONS.PLAYER_REMOVE_FROM_SQUAD,
+      category: AUDIT_CATEGORIES.PLAYER_MANAGEMENT,
+      actor: user,
+      request: req,
+      sourcePage: body.sourcePage ?? AUDIT_SOURCE_PAGES.SQUAD_MANAGEMENT,
+      serverId,
+      target: {
+        type: "player",
+        id: body.steamId ?? body.steamID ?? body.anyId ?? body.playerKey ?? body.playerId ?? "",
+        name: body.name ?? body.playerName ?? body.creatorName ?? "",
+        steamId: body.steamId ?? body.steamID ?? "",
+        eosId: body.eosId ?? body.eosID ?? "",
+        teamId: body.teamId ?? body.teamID ?? null,
+        squadId: body.squadId ?? body.squadID ?? null,
+      },
+      parameters: {
+        reason: body.reason ?? "",
+        source: body.source ?? "web.squadRemove",
+      },
+      resultResolver: (payload) => payload?.ok
+        ? AUDIT_RESULTS.SUCCESS
+        : payload?.error === "Forbidden"
+          ? AUDIT_RESULTS.FORBIDDEN
+          : AUDIT_RESULTS.FAILED,
+    };
+  }
+
+  async executeTankBattleCommands(commands, meta = {}) {
+    const results = [];
+    for (const command of commands) {
+      const result = await this.executeConsoleRconCommand(command, {
+        requestedBy: meta.requestedBy ?? "web.tankBattle",
+        actor: meta.actor ?? null,
+        system: false,
+      });
+      results.push({
+        command: sanitizeRconCommand(command),
+        result: result?.success ? AUDIT_RESULTS.SUCCESS : AUDIT_RESULTS.FAILED,
+        message: result?.message ?? "",
+      });
+    }
+
+    const succeeded = results.filter((item) => item.result === AUDIT_RESULTS.SUCCESS).length;
+    const failed = results.length - succeeded;
+    const auditResult = failed === 0
+      ? AUDIT_RESULTS.SUCCESS
+      : succeeded > 0
+        ? AUDIT_RESULTS.PARTIAL
+        : AUDIT_RESULTS.FAILED;
+
+    return {
+      ok: failed === 0,
+      success: failed === 0,
+      auditResult,
+      totalCommands: results.length,
+      succeededCommands: succeeded,
+      failedCommands: failed,
+      commands: results,
+    };
+  }
+
+  summarizePlaytimeJobForAudit(job) {
+    const progress = job?.progress ?? {};
+    const result = job?.result ?? {};
+    return {
+      jobId: job?.id ?? "",
+      status: job?.status ?? "",
+      selected: Number(result.selected ?? progress.selected ?? 0),
+      updated: Number(result.updated ?? progress.updated ?? 0),
+      skipped: Number(result.skipped ?? progress.skipped ?? 0),
+      failed: Number(result.failed ?? progress.failed ?? 0),
+      total: Number(result.total ?? progress.total ?? progress.selected ?? 0),
+    };
+  }
+
+  watchPlaytimeAuditJob(jobId, context = {}) {
+    const id = String(jobId ?? "").trim();
+    if (!id || !this.core.auditManager?.update || !this.modules.playtime?.getJob) return;
+    const requestId = String(context?.requestId ?? "").trim();
+    if (!requestId && !context) return;
+
+    const auditRequestId = context.requestId;
+    const startedAt = Date.now();
+    const timeoutMs = Math.max(10_000, Number(this.core.config?.get?.("audit.playtimeJobWatchTimeoutMs", 30 * 60_000)) || 30 * 60_000);
+    const tick = async () => {
+      const job = this.modules.playtime.getJob(id);
+      if (!job) return;
+      const done = job.status === "completed" || job.status === "failed";
+      if (done) {
+        await this.core.auditManager.update(auditRequestId, {
+          result: job.status === "completed" ? AUDIT_RESULTS.SUCCESS : AUDIT_RESULTS.FAILED,
+          resultData: this.summarizePlaytimeJobForAudit(job),
+          errorCode: job.status === "failed" ? "PlaytimeJobFailed" : null,
+          errorMessage: job.status === "failed" ? job?.error?.message ?? "Playtime job failed." : null,
+          completedAt: new Date().toISOString(),
+          durationMs: Date.now() - Number(context?.createdAtMs ?? startedAt),
+        });
+        return;
+      }
+      if (Date.now() - startedAt >= timeoutMs) return;
+      setTimeout(() => {
+        tick().catch((error) => this.logger?.warn?.(`[AuditManager] playtime audit watcher failed: ${error.message}`));
+      }, 2000).unref?.();
+    };
+
+    setTimeout(() => {
+      tick().catch((error) => this.logger?.warn?.(`[AuditManager] playtime audit watcher failed: ${error.message}`));
+    }, 500).unref?.();
+  }
+
+  getOnlinePlayerCount(serverId = this.getCurrentServerId("")) {
+    try {
+      return this.modules.playerState?.getOnlinePlayers?.(serverId)?.length ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  getServerName(serverId = "") {
+    const status = this.core.webStatus?.getSnapshot?.() ?? {};
+    return status.serverName ?? status.server?.name ?? String(serverId ?? "");
+  }
+
+  canViewAudit(user) {
+    return Boolean(
+      this.core.authManager?.hasEverything?.(user)
+      || this.core.authManager?.hasPermission?.(user, "audit.view"),
+    );
+  }
+
   canManagePlugins(user) {
     if (this.core.authManager?.hasEverything?.(user)) return true;
     const permissions = user?.permissions ?? user?.permission ?? [];
@@ -2925,7 +3334,12 @@ export class WebServer {
   }
 
   async handleAdminUsersApi(url, req, res, user) {
-    if (url.pathname !== "/api/admin/users" && !url.pathname.startsWith("/api/admin/users/")) {
+    if (
+      url.pathname !== "/api/admin/users"
+      && !url.pathname.startsWith("/api/admin/users/")
+      && url.pathname !== "/api/admin/permission-groups"
+      && !url.pathname.startsWith("/api/admin/permission-groups/")
+    ) {
       return false;
     }
 
@@ -2940,121 +3354,181 @@ export class WebServer {
       return true;
     }
 
-    if (url.pathname === "/api/admin/users" && req.method === "GET") {
-      const avatarMap = await this.getAdminSteamAvatarMap(store.listUsers());
-      const items = store.listUsers().map((item) => this.serializeAdminUser(item, avatarMap));
-      return this.json(res, 200, {
-        ok: true,
-        items,
-        stats: this.buildAdminUserStats(items),
-      });
-    }
-
-    if (url.pathname === "/api/admin/users" && req.method === "POST") {
-      const body = await this.readJsonBody(req);
-      const username = String(body?.username ?? "").trim();
-      const password = String(body?.password ?? "");
-      if (!username) {
-        return this.json(res, 400, { error: "InvalidUsername", message: "Username is required." });
-      }
-      if (password.length < 8) {
-        return this.json(res, 400, { error: "InvalidPassword", message: "Password must be at least 8 characters." });
-      }
-
-      const steam64 = normalizeAdminSteam64ForRequest(body?.steam64);
-      if (steam64) store.assertSteam64Available(steam64);
-
-      const passwordHash = await this.core.authManager.hashPassword(password);
-      const created = await store.createUser({
-        username,
-        passwordHash,
-        role: body?.role ?? "Admin",
-        displayName: body?.displayName ?? "",
-        steam64,
-        viewerTeamAutoSwapEnabled: body?.viewerTeamAutoSwapEnabled,
-        enabled: body?.enabled ?? true,
-        note: body?.note ?? "",
-      });
-      return this.json(res, 201, {
-        ok: true,
-        user: this.serializeAdminUser(created, await this.getAdminSteamAvatarMap([created])),
-      });
-    }
-
-    const resetMatch = url.pathname.match(/^\/api\/admin\/users\/([^/]+)\/reset-password$/);
-    if (resetMatch && req.method === "POST") {
-      const userId = decodeURIComponent(resetMatch[1]);
-      const body = await this.readJsonBody(req);
-      const password = String(body?.password ?? "");
-      if (password.length < 8) {
-        return this.json(res, 400, { error: "InvalidPassword", message: "Password must be at least 8 characters." });
-      }
-
-      const passwordHash = await this.core.authManager.hashPassword(password);
-      const updated = await store.updatePassword(userId, passwordHash);
-      return this.json(res, 200, {
-        ok: true,
-        user: this.serializeAdminUser(updated, await this.getAdminSteamAvatarMap([updated])),
-      });
-    }
-
-    const userMatch = url.pathname.match(/^\/api\/admin\/users\/([^/]+)$/);
-    if (!userMatch) {
-      return this.json(res, 404, {
-        error: "ApiNotFound",
-        message: "Admin user API route not found.",
-      });
-    }
-
-    const userId = decodeURIComponent(userMatch[1]);
-
-    if (req.method === "PATCH") {
-      const target = store.requireExistingUser(userId);
-      const body = await this.readJsonBody(req);
-      const nextEnabled = body?.enabled === undefined ? target.enabled : Boolean(body.enabled);
-      const nextRole = body?.role === undefined ? target.role : body.role;
-      if (target.id === user.id && target.enabled && !nextEnabled) {
-        return this.json(res, 400, {
-          error: "CannotDisableSelf",
-          message: "Cannot disable the current account.",
+    try {
+      if (url.pathname === "/api/admin/permission-groups" && req.method === "GET") {
+        const items = this.serializePermissionGroups(store.listPermissionGroups(), store.listUsers());
+        return this.json(res, 200, {
+          ok: true,
+          items,
         });
       }
 
-      const steam64 = body?.steam64 === undefined ? undefined : normalizeAdminSteam64ForRequest(body.steam64);
-      const updated = await store.updateUser(userId, {
-        displayName: body?.displayName,
-        role: nextRole,
-        steam64,
-        viewerTeamAutoSwapEnabled: body?.viewerTeamAutoSwapEnabled,
-        enabled: nextEnabled,
-        note: body?.note,
-      });
-      return this.json(res, 200, {
-        ok: true,
-        user: this.serializeAdminUser(updated, await this.getAdminSteamAvatarMap([updated])),
-      });
-    }
-
-    if (req.method === "DELETE") {
-      const target = store.requireExistingUser(userId);
-      if (target.id === user.id) {
-        return this.json(res, 400, {
-          error: "CannotDeleteSelf",
-          message: "Cannot delete the current account.",
+      if (url.pathname === "/api/admin/permission-groups" && req.method === "POST") {
+        const body = await this.readJsonBody(req);
+        const created = await store.createPermissionGroup({
+          name: body?.name,
+          enabled: body?.enabled ?? true,
+          permissions: body?.permissions ?? [],
+        });
+        return this.json(res, 201, {
+          ok: true,
+          group: this.serializePermissionGroup(created, store.listUsers()),
         });
       }
 
-      const deleted = await store.deleteUser(userId);
-      return this.json(res, 200, {
-        ok: true,
-        user: this.serializeAdminUser(deleted),
+      const permissionGroupMatch = url.pathname.match(/^\/api\/admin\/permission-groups\/([^/]+)$/);
+      if (permissionGroupMatch) {
+        const groupId = decodeURIComponent(permissionGroupMatch[1]);
+
+        if (req.method === "PATCH") {
+          const body = await this.readJsonBody(req);
+          const updated = await store.updatePermissionGroup(groupId, {
+            name: body?.name,
+            enabled: body?.enabled,
+            permissions: body?.permissions,
+          });
+          return this.json(res, 200, {
+            ok: true,
+            group: this.serializePermissionGroup(updated, store.listUsers()),
+          });
+        }
+
+        if (req.method === "DELETE") {
+          const deleted = await store.deletePermissionGroup(groupId);
+          return this.json(res, 200, {
+            ok: true,
+            group: this.serializePermissionGroup(deleted, store.listUsers()),
+          });
+        }
+      }
+
+      if (url.pathname === "/api/admin/users" && req.method === "GET") {
+        const avatarMap = await this.getAdminSteamAvatarMap(store.listUsers());
+        const groups = store.listPermissionGroups();
+        const items = store.listUsers().map((item) => this.serializeAdminUser(item, avatarMap, groups));
+        return this.json(res, 200, {
+          ok: true,
+          items,
+          stats: this.buildAdminUserStats(items),
+          permissionGroups: this.serializePermissionGroups(groups, store.listUsers()),
+        });
+      }
+
+      if (url.pathname === "/api/admin/users" && req.method === "POST") {
+        const body = await this.readJsonBody(req);
+        const username = String(body?.username ?? "").trim();
+        const password = String(body?.password ?? "");
+        if (!username) {
+          return this.json(res, 400, { error: "InvalidUsername", message: "Username is required." });
+        }
+        if (password.length < 8) {
+          return this.json(res, 400, { error: "InvalidPassword", message: "Password must be at least 8 characters." });
+        }
+
+        const steam64 = normalizeAdminSteam64ForRequest(body?.steam64);
+        if (steam64) store.assertSteam64Available(steam64);
+
+        const passwordHash = await this.core.authManager.hashPassword(password);
+        const created = await store.createUser({
+          username,
+          passwordHash,
+          role: body?.role ?? "Admin",
+          displayName: body?.displayName ?? "",
+          steam64,
+          viewerTeamAutoSwapEnabled: body?.viewerTeamAutoSwapEnabled,
+          enabled: body?.enabled ?? true,
+          note: body?.note ?? "",
+          permissionGroupId: this.normalizePermissionGroupIdForRequest(store, body?.permissionGroupId),
+        });
+        return this.json(res, 201, {
+          ok: true,
+          user: this.serializeAdminUser(created, await this.getAdminSteamAvatarMap([created]), store.listPermissionGroups()),
+        });
+      }
+
+      const resetMatch = url.pathname.match(/^\/api\/admin\/users\/([^/]+)\/reset-password$/);
+      if (resetMatch && req.method === "POST") {
+        const userId = decodeURIComponent(resetMatch[1]);
+        const body = await this.readJsonBody(req);
+        const password = String(body?.password ?? "");
+        if (password.length < 8) {
+          return this.json(res, 400, { error: "InvalidPassword", message: "Password must be at least 8 characters." });
+        }
+
+        const passwordHash = await this.core.authManager.hashPassword(password);
+        const updated = await store.updatePassword(userId, passwordHash);
+        return this.json(res, 200, {
+          ok: true,
+          user: this.serializeAdminUser(updated, await this.getAdminSteamAvatarMap([updated]), store.listPermissionGroups()),
+        });
+      }
+
+      const userMatch = url.pathname.match(/^\/api\/admin\/users\/([^/]+)$/);
+      if (!userMatch) {
+        return this.json(res, 404, {
+          error: "ApiNotFound",
+          message: "Admin user API route not found.",
+        });
+      }
+
+      const userId = decodeURIComponent(userMatch[1]);
+
+      if (req.method === "PATCH") {
+        const target = store.requireExistingUser(userId);
+        const body = await this.readJsonBody(req);
+        const nextEnabled = body?.enabled === undefined ? target.enabled : Boolean(body.enabled);
+        const nextRole = body?.role === undefined ? target.role : body.role;
+        if (target.id === user.id && target.enabled && !nextEnabled) {
+          return this.json(res, 400, {
+            error: "CannotDisableSelf",
+            message: "Cannot disable the current account.",
+          });
+        }
+
+        const steam64 = body?.steam64 === undefined ? undefined : normalizeAdminSteam64ForRequest(body.steam64);
+        const updated = await store.updateUser(userId, {
+          displayName: body?.displayName,
+          role: nextRole,
+          steam64,
+          viewerTeamAutoSwapEnabled: body?.viewerTeamAutoSwapEnabled,
+          enabled: nextEnabled,
+          note: body?.note,
+          permissionGroupId: body?.permissionGroupId === undefined
+            ? undefined
+            : this.normalizePermissionGroupIdForRequest(store, body?.permissionGroupId),
+        });
+        return this.json(res, 200, {
+          ok: true,
+          user: this.serializeAdminUser(updated, await this.getAdminSteamAvatarMap([updated]), store.listPermissionGroups()),
+        });
+      }
+
+      if (req.method === "DELETE") {
+        const target = store.requireExistingUser(userId);
+        if (target.id === user.id) {
+          return this.json(res, 400, {
+            error: "CannotDeleteSelf",
+            message: "Cannot delete the current account.",
+          });
+        }
+
+        const deleted = await store.deleteUser(userId);
+        return this.json(res, 200, {
+          ok: true,
+          user: this.serializeAdminUser(deleted, new Map(), store.listPermissionGroups()),
+        });
+      }
+
+      return this.json(res, 405, {
+        error: "MethodNotAllowed",
+        message: "Unsupported admin user API method.",
+      });
+    } catch (error) {
+      return this.json(res, Number(error?.statusCode ?? 500), {
+        error: String(error?.code ?? "AdminUserApiError"),
+        message: String(error?.message ?? "Admin user API request failed."),
       });
     }
-
-    return this.json(res, 405, {
-      error: "MethodNotAllowed",
-      message: "Unsupported admin user API method.",
-    });
   }
 
   async getAdminSteamAvatarMap(users = []) {
@@ -3116,6 +3590,12 @@ export class WebServer {
   }
 
   serializeAdminUser(user, steamAvatarMap = new Map()) {
+    const groups = arguments[2] ?? [];
+    const groupMap = new Map((Array.isArray(groups) ? groups : []).map((group) => [group.id, group]));
+    const permissionGroup = user.permissionGroupId ? groupMap.get(user.permissionGroupId) : null;
+    const permissions = user.role === "SuperAdmin"
+      ? ["*"]
+      : (permissionGroup?.enabled !== false ? [...(permissionGroup?.permissions ?? [])] : []);
     return {
       id: user.id,
       username: user.username,
@@ -3126,10 +3606,30 @@ export class WebServer {
       viewerTeamAutoSwapEnabled: user.viewerTeamAutoSwapEnabled !== false,
       enabled: user.enabled !== false,
       note: user.note ?? "",
+      permissionGroupId: user.permissionGroupId ?? null,
+      permissionGroupName: permissionGroup?.name ?? "",
+      permissions,
       createdAt: Number(user.createdAt ?? 0),
       updatedAt: Number(user.updatedAt ?? 0),
       passwordChangedAt: Number(user.passwordChangedAt ?? 0),
     };
+  }
+
+  serializePermissionGroup(group, users = []) {
+    const count = (Array.isArray(users) ? users : []).filter((user) => user.permissionGroupId === group.id).length;
+    return {
+      id: group.id,
+      name: group.name,
+      enabled: group.enabled !== false,
+      permissions: Array.isArray(group.permissions) ? [...group.permissions] : [],
+      assignedUsers: count,
+      createdAt: Number(group.createdAt ?? 0),
+      updatedAt: Number(group.updatedAt ?? 0),
+    };
+  }
+
+  serializePermissionGroups(groups = [], users = []) {
+    return (Array.isArray(groups) ? groups : []).map((group) => this.serializePermissionGroup(group, users));
   }
 
   buildAdminUserStats(items) {
@@ -3139,6 +3639,20 @@ export class WebServer {
       superAdmins: items.filter((item) => item.role === "SuperAdmin").length,
       steamBound: items.filter((item) => Boolean(item.steam64)).length,
     };
+  }
+
+  normalizePermissionGroupIdForRequest(store, value) {
+    if (value === undefined) return undefined;
+    if (value === null || String(value ?? "").trim() === "") return null;
+    const groupId = String(value ?? "").trim();
+    const group = store.getPermissionGroupById(groupId);
+    if (!group) {
+      const error = new Error("Permission group not found.");
+      error.statusCode = 400;
+      error.code = "PermissionGroupNotFound";
+      throw error;
+    }
+    return groupId;
   }
 
   requireSuperAdmin(user, res) {

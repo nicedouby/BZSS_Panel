@@ -12,6 +12,8 @@ export class AuthUserStore {
     this.users = [];
     this.usersById = new Map();
     this.usersByUsername = new Map();
+    this.permissionGroups = [];
+    this.permissionGroupsById = new Map();
     this.writeQueue = Promise.resolve();
     this.lastLoadedMtimeMs = 0;
   }
@@ -30,6 +32,7 @@ export class AuthUserStore {
       if (error?.code === "ENOENT") {
         this.version = 1;
         this.replaceUsers([]);
+        this.replacePermissionGroups([]);
         this.lastLoadedMtimeMs = 0;
         return;
       }
@@ -85,6 +88,18 @@ export class AuthUserStore {
       .map((user) => cloneUser(user));
   }
 
+  listPermissionGroups() {
+    return this.permissionGroups
+      .slice()
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map((group) => clonePermissionGroup(group));
+  }
+
+  getPermissionGroupById(groupId) {
+    const group = this.permissionGroupsById.get(String(groupId ?? "").trim());
+    return group ? clonePermissionGroup(group) : null;
+  }
+
   async createUser(input) {
     const username = normalizeUsernameForDisplay(input?.username);
     const usernameNormalized = normalizeUsername(username);
@@ -106,6 +121,7 @@ export class AuthUserStore {
       steam64: input?.steam64,
       viewerTeamAutoSwapEnabled: input?.viewerTeamAutoSwapEnabled,
       note: input?.note,
+      permissionGroupId: input?.permissionGroupId,
       enabled: input?.enabled ?? true,
       authVersion: Number(input?.authVersion ?? 1),
       permissions: input?.permissions ?? [],
@@ -158,6 +174,7 @@ export class AuthUserStore {
         : changes.viewerTeamAutoSwapEnabled,
       enabled: nextEnabled,
       note: changes.note === undefined ? current.note : changes.note,
+      permissionGroupId: changes.permissionGroupId === undefined ? current.permissionGroupId : changes.permissionGroupId,
       updatedAt: Date.now(),
       authVersion: nextEnabled === current.enabled && nextRole === current.role
         ? Number(current.authVersion ?? 1)
@@ -249,6 +266,81 @@ export class AuthUserStore {
     }
   }
 
+  replacePermissionGroups(groups) {
+    this.permissionGroups = groups.map((group) => normalizePermissionGroup(group));
+    this.permissionGroupsById = new Map();
+
+    for (const group of this.permissionGroups) {
+      if (this.permissionGroupsById.has(group.id)) {
+        throw createAuthUserStoreError(500, "DuplicatePermissionGroupId", `Duplicate permission group id: ${group.id}`);
+      }
+      this.permissionGroupsById.set(group.id, group);
+    }
+  }
+
+  async createPermissionGroup(input = {}) {
+    const now = Date.now();
+    const group = normalizePermissionGroup({
+      id: input?.id ?? `group:${cryptoSafeId()}`,
+      name: input?.name,
+      enabled: input?.enabled ?? true,
+      permissions: input?.permissions ?? [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    this.assertPermissionGroupNameAvailable(group.name);
+    this.replacePermissionGroups([...this.permissionGroups, group]);
+    await this.save();
+    return clonePermissionGroup(group);
+  }
+
+  async updatePermissionGroup(groupId, changes = {}) {
+    const current = this.requireExistingPermissionGroup(groupId);
+    const nextGroup = normalizePermissionGroup({
+      ...current,
+      name: changes.name === undefined ? current.name : changes.name,
+      enabled: changes.enabled === undefined ? current.enabled : changes.enabled,
+      permissions: changes.permissions === undefined ? current.permissions : changes.permissions,
+      updatedAt: Date.now(),
+    });
+    this.assertPermissionGroupNameAvailable(nextGroup.name, current.id);
+    this.replacePermissionGroups(this.permissionGroups.map((group) => (group.id === nextGroup.id ? nextGroup : group)));
+    await this.save();
+    return clonePermissionGroup(nextGroup);
+  }
+
+  async deletePermissionGroup(groupId) {
+    const current = this.requireExistingPermissionGroup(groupId);
+    const usingUser = this.users.find((user) => user.permissionGroupId === current.id);
+    if (usingUser) {
+      throw createAuthUserStoreError(409, "PermissionGroupInUse", `Permission group is still assigned to user ${usingUser.username}.`);
+    }
+    this.replacePermissionGroups(this.permissionGroups.filter((group) => group.id !== current.id));
+    await this.save();
+    return clonePermissionGroup(current);
+  }
+
+  requireExistingPermissionGroup(groupId) {
+    const id = String(groupId ?? "").trim();
+    const group = id ? this.permissionGroupsById.get(id) : null;
+    if (!group) {
+      throw createAuthUserStoreError(404, "PermissionGroupNotFound", "Permission group not found.");
+    }
+    return clonePermissionGroup(group);
+  }
+
+  assertPermissionGroupNameAvailable(name, excludeGroupId = "") {
+    const normalized = normalizePermissionGroupName(name);
+    if (!normalized) {
+      throw createAuthUserStoreError(400, "InvalidPermissionGroupName", "Permission group name is required.");
+    }
+    const existing = this.permissionGroups.find((group) => normalizePermissionGroupName(group.name) === normalized && group.id !== excludeGroupId);
+    if (existing) {
+      throw createAuthUserStoreError(409, "PermissionGroupAlreadyExists", "Permission group name already exists.");
+    }
+    return true;
+  }
+
   async save() {
     return this.runWriteQueue(() => this.performSave());
   }
@@ -267,11 +359,20 @@ export class AuthUserStore {
         viewerTeamAutoSwapEnabled: user.viewerTeamAutoSwapEnabled,
         enabled: user.enabled,
         note: user.note,
+        permissionGroupId: user.permissionGroupId,
         authVersion: user.authVersion,
         permissions: Array.isArray(user.permissions) ? user.permissions : [],
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
         passwordChangedAt: user.passwordChangedAt,
+      })),
+      permissionGroups: this.permissionGroups.map((group) => ({
+        id: group.id,
+        name: group.name,
+        enabled: group.enabled,
+        permissions: Array.isArray(group.permissions) ? [...group.permissions] : [],
+        createdAt: group.createdAt,
+        updatedAt: group.updatedAt,
       })),
     };
 
@@ -304,7 +405,9 @@ export class AuthUserStore {
 
   applyLoadedDocument(parsed, mtimeMs = 0) {
     const rawUsers = Array.isArray(parsed?.users) ? parsed.users : [];
+    const rawGroups = Array.isArray(parsed?.permissionGroups) ? parsed.permissionGroups : [];
     this.version = Number(parsed?.version ?? 1) || 1;
+    this.replacePermissionGroups(rawGroups.map((group) => normalizePermissionGroup(group)));
     this.replaceUsers(rawUsers.map((user) => normalizeStoredUser(user)));
     this.lastLoadedMtimeMs = Number(mtimeMs ?? 0) || 0;
   }
@@ -343,12 +446,56 @@ function normalizeStoredUser(input) {
     viewerTeamAutoSwapEnabled: input?.viewerTeamAutoSwapEnabled !== false,
     enabled: input?.enabled !== false,
     note: String(input?.note ?? ""),
+    permissionGroupId: normalizePermissionGroupId(input?.permissionGroupId),
     authVersion: Math.max(1, Math.floor(Number(input?.authVersion ?? 1) || 1)),
     permissions: normalizePermissions(input?.permissions),
     createdAt: Number(input?.createdAt ?? Date.now()),
     updatedAt: Number(input?.updatedAt ?? Date.now()),
     passwordChangedAt: Number(input?.passwordChangedAt ?? 0),
   };
+}
+
+export const ALLOWED_RCON_PERMISSIONS = Object.freeze([
+  "rcon.tb",
+  "rcon.warn",
+  "rcon.broadcast",
+  "rcon.kick",
+  "rcon.disband",
+  "rcon.remove",
+]);
+
+function normalizePermissionGroup(input) {
+  const name = String(input?.name ?? "").trim();
+  if (!name) {
+    throw createAuthUserStoreError(400, "InvalidPermissionGroupName", "Permission group name is required.");
+  }
+
+  return {
+    id: String(input?.id ?? `group:${cryptoSafeId()}`).trim(),
+    name,
+    enabled: input?.enabled !== false,
+    permissions: normalizePermissionGroupPermissions(input?.permissions),
+    createdAt: Number(input?.createdAt ?? Date.now()),
+    updatedAt: Number(input?.updatedAt ?? Date.now()),
+  };
+}
+
+function normalizePermissionGroupPermissions(value) {
+  const items = normalizePermissions(value);
+  const invalid = items.find((item) => !ALLOWED_RCON_PERMISSIONS.includes(item));
+  if (invalid) {
+    throw createAuthUserStoreError(400, "InvalidPermission", `Unsupported permission: ${invalid}`);
+  }
+  return [...new Set(items)];
+}
+
+function normalizePermissionGroupId(value) {
+  const text = String(value ?? "").trim();
+  return text || null;
+}
+
+function normalizePermissionGroupName(value) {
+  return String(value ?? "").trim().toLowerCase();
 }
 
 function normalizeSteam64(value) {
@@ -383,6 +530,17 @@ function cloneUser(user) {
     ...user,
     permissions: Array.isArray(user.permissions) ? [...user.permissions] : [],
   };
+}
+
+function clonePermissionGroup(group) {
+  return {
+    ...group,
+    permissions: Array.isArray(group.permissions) ? [...group.permissions] : [],
+  };
+}
+
+function cryptoSafeId() {
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function createAuthUserStoreError(statusCode, code, message) {

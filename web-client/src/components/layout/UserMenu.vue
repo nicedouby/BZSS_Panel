@@ -298,9 +298,11 @@ async function runTankBattlePreset(open: boolean) {
 
   tankBattleBusy.value = true;
   try {
-    for (const command of commands) {
-      await apiPost("/api/rcon-command", { command });
-    }
+    await apiPost("/api/tank-battle/execute", {
+      preset: open ? "open" : "close",
+      commands,
+      sourcePage: "tank_battle_dialog",
+    });
     ui.pushToast({ title: "已执行", message: `坦克大战已${open ? "打开" : "关闭"}。`, tone: "ok" });
     closeTankBattleDialog();
   } catch (error: any) {
@@ -319,7 +321,11 @@ async function setDeployableAvailability(next: boolean) {
 
   tankBattleBusy.value = true;
   try {
-    await apiPost("/api/rcon-command", { command });
+    await apiPost("/api/tank-battle/execute", {
+      preset: next ? "deployable_on" : "deployable_off",
+      commands: [command],
+      sourcePage: "tank_battle_dialog",
+    });
     deployableAvailability.value = next;
     ui.pushToast({ title: "已执行", message: next ? "无限工事已开启。" : "无限工事已关闭。", tone: "ok" });
   } catch (error: any) {
@@ -337,7 +343,11 @@ async function runTankBattleCommand(actionLabel: string, command: string, succes
 
   tankBattleBusy.value = true;
   try {
-    await apiPost("/api/rcon-command", { command });
+    await apiPost("/api/tank-battle/execute", {
+      preset: actionLabel,
+      commands: [command],
+      sourcePage: "tank_battle_dialog",
+    });
     if (command === "AdminForceAllDeployableAvailability 1") {
       deployableAvailability.value = true;
     } else if (command === "AdminForceAllDeployableAvailability 0") {

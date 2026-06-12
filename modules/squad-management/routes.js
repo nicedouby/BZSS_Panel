@@ -74,12 +74,14 @@ export async function handleSquadManagementRoutes({
       return true;
     }
 
-    const result = await api.executeAction({
-      ...body,
-      actor: user,
-      source: body.source ?? "web.squadManagement",
-      system: false,
-    });
+    const result = await executeAudited(core, buildActionAuditContext(core, req, user, body), ({ requestId }) => api.executeAction({
+        ...body,
+        actor: user,
+        source: body.source ?? "web.squadManagement",
+        system: false,
+        operatorName: user?.username ?? "",
+        requestId,
+      }));
 
     json(result.ok ? 200 : 400, result);
     return true;
@@ -92,7 +94,7 @@ export async function handleSquadManagementRoutes({
       json(404, { error: "SquadManagementUnavailable" });
       return true;
     }
-    const result = await squadManagement.executeAction({
+    const result = await executeAudited(core, buildRemoveAuditContext(core, req, user, body, serverId, "squad"), ({ requestId }) => squadManagement.executeAction({
       actor: user,
       type: "disband_squad",
       serverId,
@@ -101,8 +103,9 @@ export async function handleSquadManagementRoutes({
       reason: body.reason ?? "",
       source: body.source ?? "manual",
       system: false,
-      operatorName: body.operatorName ?? user?.username ?? "",
-    });
+      operatorName: user?.username ?? "",
+      requestId,
+    }));
 
     json(result.ok ? 200 : (result.error === "Forbidden" ? 403 : 400), {
       ok: result.ok,
@@ -119,7 +122,7 @@ export async function handleSquadManagementRoutes({
       json(404, { error: "SquadManagementUnavailable" });
       return true;
     }
-    const result = await squadManagement.executeAction({
+    const result = await executeAudited(core, buildRemoveAuditContext(core, req, user, body, serverId, "player"), ({ requestId }) => squadManagement.executeAction({
       actor: user,
       type: "kick_player",
       serverId,
@@ -131,8 +134,9 @@ export async function handleSquadManagementRoutes({
       reason: body.reason ?? "",
       source: body.source ?? "manual",
       system: false,
-      operatorName: body.operatorName ?? user?.username ?? "",
-    });
+      operatorName: user?.username ?? "",
+      requestId,
+    }));
 
     json(result.ok ? 200 : (result.error === "Forbidden" ? 403 : 400), {
       ok: result.ok,
@@ -149,7 +153,7 @@ export async function handleSquadManagementRoutes({
       json(404, { error: "SquadManagementUnavailable" });
       return true;
     }
-    const result = await squadManagement.executeAction({
+    const result = await executeAudited(core, buildRemoveAuditContext(core, req, user, body, serverId, "player"), ({ requestId }) => squadManagement.executeAction({
       actor: user,
       type: "remove_from_squad",
       serverId,
@@ -161,8 +165,9 @@ export async function handleSquadManagementRoutes({
       reason: body.reason ?? "",
       source: body.source ?? "manual",
       system: false,
-      operatorName: body.operatorName ?? user?.username ?? "",
-    });
+      operatorName: user?.username ?? "",
+      requestId,
+    }));
 
     json(result.ok ? 200 : (result.error === "Forbidden" ? 403 : 400), {
       ok: result.ok,
@@ -173,6 +178,79 @@ export async function handleSquadManagementRoutes({
   }
 
   return false;
+}
+
+async function executeAudited(core, context, executor) {
+  if (!context || !core?.auditManager?.execute) return executor({ requestId: "" });
+  return core.auditManager.execute(context, executor, {
+    relatedRecordIdBuilder: (payload) => payload?.record?.id ?? payload?.recordId ?? payload?.result?.record?.id ?? "",
+  });
+}
+
+function buildActionAuditContext(core, req, user, body = {}) {
+  const type = String(body?.type ?? body?.kind ?? "").trim();
+  if (type === "remove_from_squad" || type === "kick_player") {
+    return buildRemoveAuditContext(core, req, user, body, body.serverId ?? body.serverID ?? core.webStatus?.serverId ?? "", "player");
+  }
+  if (type === "switch_team") {
+    return {
+      action: "player.switch_team",
+      category: "player_management",
+      actor: user,
+      request: req,
+      sourcePage: body.sourcePage ?? "squad_management",
+      serverId: body.serverId ?? body.serverID ?? core.webStatus?.serverId ?? "",
+      target: {
+        type: "player",
+        id: body.steamId ?? body.steamID ?? body.playerKey ?? body.playerId ?? "",
+        name: body.name ?? body.playerName ?? "",
+        steamId: body.steamId ?? body.steamID ?? "",
+        eosId: body.eosId ?? body.eosID ?? "",
+        teamId: body.teamId ?? body.teamID ?? null,
+        squadId: body.squadId ?? body.squadID ?? null,
+      },
+      parameters: {
+        fromTeamId: body.fromTeamId ?? body.teamId ?? body.teamID ?? null,
+        requestedTeamId: body.requestedTeamId ?? body.targetTeamId ?? null,
+        reason: body.reason ?? "",
+      },
+      resultResolver: squadResultResolver,
+    };
+  }
+  return null;
+}
+
+function buildRemoveAuditContext(core, req, user, body = {}, serverId = "", targetKind = "player") {
+  const type = String(body?.type ?? "").trim();
+  return {
+    action: type === "switch_team" ? "player.switch_team" : "player.remove_from_squad",
+    category: "player_management",
+    actor: user,
+    request: req,
+    sourcePage: body.sourcePage ?? "squad_management",
+    serverId,
+    target: {
+      type: targetKind,
+      id: body.steamId ?? body.steamID ?? body.playerKey ?? body.playerId ?? body.playerID ?? body.squadId ?? body.squadID ?? "",
+      name: body.name ?? body.playerName ?? body.creatorName ?? body.squadName ?? "",
+      steamId: body.steamId ?? body.steamID ?? "",
+      eosId: body.eosId ?? body.eosID ?? "",
+      teamId: body.teamId ?? body.teamID ?? null,
+      squadId: body.squadId ?? body.squadID ?? null,
+    },
+    parameters: {
+      reason: body.reason ?? "",
+      source: body.source ?? "manual",
+    },
+    resultResolver: squadResultResolver,
+  };
+}
+
+function squadResultResolver(payload) {
+  if (payload?.ok) return "success";
+  if (payload?.error === "Forbidden") return "forbidden";
+  if (payload?.error === "InvalidRequest" || payload?.error === "MissingTarget") return "invalid";
+  return "failed";
 }
 
 function buildViewer(core, user, state) {

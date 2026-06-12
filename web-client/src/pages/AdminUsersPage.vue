@@ -4,9 +4,12 @@
       <div>
         <p class="eyebrow">System</p>
         <h1>管理员账号</h1>
-        <p class="subtitle">管理 Web 登录账号、角色、Steam64 绑定和启用状态。</p>
+        <p class="subtitle">管理 Web 登录账号、RCON 权限组以及账号绑定关系。</p>
       </div>
-      <button class="primary-button" type="button" @click="openCreateDialog">添加管理员</button>
+      <div class="header-actions">
+        <button class="ghost-button" type="button" :disabled="loading" @click="loadAll">刷新</button>
+        <button class="primary-button" type="button" @click="openCreateDialog">添加管理员</button>
+      </div>
     </header>
 
     <section class="stats-grid">
@@ -23,15 +26,59 @@
         <strong>{{ stats.superAdmins }}</strong>
       </div>
       <div class="stat-card">
-        <span>已绑定 Steam</span>
-        <strong>{{ stats.steamBound }}</strong>
+        <span>权限组</span>
+        <strong>{{ permissionGroups.length }}</strong>
+      </div>
+    </section>
+
+    <section class="permission-groups-shell">
+      <div class="section-title-row">
+        <div>
+          <h2>RCON 权限组</h2>
+          <p class="subtitle">首批只开放 6 类手动 RCON 能力，其余命令仍仅允许 SuperAdmin。</p>
+        </div>
+        <button class="primary-button" type="button" @click="openCreateGroupDialog">新建权限组</button>
+      </div>
+
+      <p v-if="error" class="error-banner">{{ error }}</p>
+
+      <div v-if="permissionGroups.length === 0" class="empty-card">
+        还没有权限组。普通管理员未绑定权限组时，将无法执行手动 RCON 命令。
+      </div>
+
+      <div v-else class="group-grid">
+        <article v-for="group in permissionGroups" :key="group.id" class="group-card">
+          <div class="group-card-head">
+            <div>
+              <h3>{{ group.name }}</h3>
+              <p class="group-meta">
+                <span class="status-pill" :data-enabled="String(group.enabled)">{{ group.enabled ? "启用" : "禁用" }}</span>
+                <span>{{ group.assignedUsers }} 个账号绑定</span>
+              </p>
+            </div>
+            <div class="action-row">
+              <button class="link-button" type="button" @click="openEditGroupDialog(group)">编辑</button>
+              <button class="danger-link" type="button" @click="deletePermissionGroupAction(group)">删除</button>
+            </div>
+          </div>
+          <div class="permission-chip-row">
+            <span
+              v-for="option in permissionOptions"
+              :key="option.value"
+              class="permission-chip"
+              :data-enabled="String(group.permissions.includes(option.value))"
+            >
+              {{ option.label }}
+            </span>
+          </div>
+        </article>
       </div>
     </section>
 
     <section class="toolbar">
       <label>
         <span>搜索账号</span>
-        <input v-model.trim="filters.search" type="search" placeholder="用户名 / 显示名 / Steam64" />
+        <input v-model.trim="filters.search" type="search" placeholder="用户名 / 显示名 / Steam64 / 权限组" />
       </label>
       <label>
         <span>角色</span>
@@ -50,25 +97,23 @@
         </select>
       </label>
       <label>
-        <span>Steam</span>
-        <select v-model="filters.steam">
+        <span>权限组</span>
+        <select v-model="filters.permissionGroupId">
           <option value="">全部</option>
-          <option value="bound">已绑定</option>
-          <option value="unbound">未绑定</option>
+          <option value="__none__">未绑定</option>
+          <option v-for="group in permissionGroups" :key="group.id" :value="group.id">{{ group.name }}</option>
         </select>
       </label>
-      <button class="ghost-button" type="button" :disabled="loading" @click="loadUsers">刷新</button>
     </section>
-
-    <p v-if="error" class="error-banner">{{ error }}</p>
 
     <section class="table-shell">
       <table>
         <thead>
           <tr>
             <th>账号</th>
-            <th>显示名</th>
             <th>角色</th>
+            <th>权限组</th>
+            <th>权限</th>
             <th>Steam64</th>
             <th>状态</th>
             <th>最后修改</th>
@@ -77,10 +122,10 @@
         </thead>
         <tbody>
           <tr v-if="loading">
-            <td colspan="7" class="empty-cell">正在加载账号...</td>
+            <td colspan="8" class="empty-cell">正在加载账号...</td>
           </tr>
           <tr v-else-if="filteredUsers.length === 0">
-            <td colspan="7" class="empty-cell">没有匹配的账号</td>
+            <td colspan="8" class="empty-cell">没有匹配的账号</td>
           </tr>
           <template v-else>
             <tr v-for="item in filteredUsers" :key="item.id">
@@ -90,12 +135,28 @@
                   <span v-else class="admin-avatar fallback">{{ getAccountInitial(item) }}</span>
                   <div>
                     <strong>{{ item.username }}</strong>
+                    <small v-if="item.displayName">{{ item.displayName }}</small>
                     <small v-if="item.id === auth.user?.id">当前账号</small>
                   </div>
                 </div>
               </td>
-              <td>{{ item.displayName || "-" }}</td>
               <td><span class="role-badge" :data-role="item.role">{{ item.role }}</span></td>
+              <td>
+                <span v-if="item.role === 'SuperAdmin'" class="superadmin-note">全权限</span>
+                <span v-else>{{ item.permissionGroupName || "未绑定" }}</span>
+              </td>
+              <td>
+                <div class="permission-chip-row compact">
+                  <span
+                    v-for="permission in renderUserPermissions(item)"
+                    :key="permission"
+                    class="permission-chip"
+                    data-enabled="true"
+                  >
+                    {{ permissionLabelMap.get(permission) ?? permission }}
+                  </span>
+                </div>
+              </td>
               <td>{{ item.steam64 || "未绑定" }}</td>
               <td><span class="status-pill" :data-enabled="String(item.enabled)">{{ item.enabled ? "启用" : "禁用" }}</span></td>
               <td>{{ formatDate(item.updatedAt) }}</td>
@@ -115,7 +176,10 @@
     <div v-if="editorOpen" class="modal-backdrop" @click.self="closeEditor">
       <form class="modal-panel" @submit.prevent="submitEditor">
         <header>
-          <h2>{{ editingUser ? "编辑管理员" : "添加管理员" }}</h2>
+          <div>
+            <h2>{{ editingUser ? "编辑管理员" : "添加管理员" }}</h2>
+            <p class="subtitle">普通管理员只能绑定一个 RCON 权限组；SuperAdmin 不受权限组限制。</p>
+          </div>
           <button class="icon-button" type="button" @click="closeEditor">×</button>
         </header>
 
@@ -135,8 +199,18 @@
           </select>
         </label>
         <label>
+          <span>权限组</span>
+          <select v-model="form.permissionGroupId" :disabled="form.role === 'SuperAdmin'">
+            <option value="">未绑定</option>
+            <option v-for="group in permissionGroups" :key="group.id" :value="group.id">
+              {{ group.name }}{{ group.enabled ? "" : " (已禁用)" }}
+            </option>
+          </select>
+        </label>
+        <p v-if="form.role === 'SuperAdmin'" class="hint">SuperAdmin 始终拥有全部权限，不依赖权限组。</p>
+        <label>
           <span>Steam64</span>
-          <input v-model.trim="form.steam64" inputmode="numeric" pattern="\d{17}" maxlength="17" placeholder="17 位 Steam64，留空表示未绑定" />
+          <input v-model.trim="form.steam64" inputmode="numeric" pattern="\d{17}" maxlength="17" placeholder="17 位 Steam64，可留空" />
         </label>
         <label class="checkbox-row">
           <input v-model="form.viewerTeamAutoSwapEnabled" type="checkbox" />
@@ -178,6 +252,40 @@
       </form>
     </div>
 
+    <div v-if="groupEditorOpen" class="modal-backdrop" @click.self="closeGroupEditor">
+      <form class="modal-panel compact" @submit.prevent="submitGroupEditor">
+        <header>
+          <div>
+            <h2>{{ editingPermissionGroup ? "编辑权限组" : "新建权限组" }}</h2>
+            <p class="subtitle">每个权限组可勾选首批 6 类手动 RCON 能力。</p>
+          </div>
+          <button class="icon-button" type="button" @click="closeGroupEditor">×</button>
+        </header>
+
+        <label>
+          <span>权限组名称</span>
+          <input v-model.trim="groupForm.name" required placeholder="例如：实习管理员" />
+        </label>
+        <label class="checkbox-row">
+          <input v-model="groupForm.enabled" type="checkbox" />
+          <span>权限组启用</span>
+        </label>
+        <div class="permission-option-grid">
+          <label v-for="option in permissionOptions" :key="option.value" class="permission-option">
+            <input v-model="groupForm.permissions" type="checkbox" :value="option.value" />
+            <span>{{ option.label }}</span>
+          </label>
+        </div>
+
+        <p v-if="dialogError" class="error-banner">{{ dialogError }}</p>
+
+        <footer>
+          <button class="ghost-button" type="button" @click="closeGroupEditor">取消</button>
+          <button class="primary-button" type="submit" :disabled="saving">{{ saving ? "保存中..." : "保存" }}</button>
+        </footer>
+      </form>
+    </div>
+
     <div v-if="resetOpen && resetUser" class="modal-backdrop" @click.self="closeReset">
       <form class="modal-panel compact" @submit.prevent="submitReset">
         <header>
@@ -200,7 +308,7 @@
           <input v-model="showResetPassword" type="checkbox" />
           <span>显示本次输入的密码</span>
         </label>
-        <p class="hint">关闭窗口后无法再次查看密码，只能重新重置。</p>
+        <p class="hint">关闭窗口后将无法再次查看密码，只能重新重置。</p>
         <p v-if="dialogError" class="error-banner">{{ dialogError }}</p>
         <footer>
           <button class="ghost-button" type="button" @click="closeReset">取消</button>
@@ -215,26 +323,44 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import {
   createAdminUser,
+  createPermissionGroup,
   deleteAdminUser,
+  deletePermissionGroup,
   fetchAdminUsers,
   resetAdminUserPassword,
   updateAdminUser,
+  updatePermissionGroup,
   type AdminUser,
   type AdminUserRole,
   type AdminUserStats,
+  type PermissionGroup,
 } from "../app/adminUsersApi";
 import { useAuthStore } from "../stores/auth.store";
 
+const permissionOptions = [
+  { value: "rcon.tb", label: "跳边 TB" },
+  { value: "rcon.warn", label: "警告 Warn" },
+  { value: "rcon.broadcast", label: "广播 Broadcast" },
+  { value: "rcon.kick", label: "踢出 Kick" },
+  { value: "rcon.disband", label: "解散 Disband" },
+  { value: "rcon.remove", label: "移出队伍 Remove" },
+];
+
+const permissionLabelMap = new Map(permissionOptions.map((item) => [item.value, item.label]));
+
 const auth = useAuthStore();
 const users = ref<AdminUser[]>([]);
+const permissionGroups = ref<PermissionGroup[]>([]);
 const stats = reactive<AdminUserStats>({ total: 0, enabled: 0, superAdmins: 0, steamBound: 0 });
 const loading = ref(false);
 const saving = ref(false);
 const error = ref("");
 const dialogError = ref("");
 const editorOpen = ref(false);
+const groupEditorOpen = ref(false);
 const resetOpen = ref(false);
 const editingUser = ref<AdminUser | null>(null);
+const editingPermissionGroup = ref<PermissionGroup | null>(null);
 const resetUser = ref<AdminUser | null>(null);
 const showCreatePassword = ref(false);
 const showResetPassword = ref(false);
@@ -243,19 +369,26 @@ const filters = reactive({
   search: "",
   role: "",
   enabled: "",
-  steam: "",
+  permissionGroupId: "",
 });
 
 const form = reactive({
   username: "",
   displayName: "",
   role: "Admin" as AdminUserRole,
+  permissionGroupId: "",
   steam64: "",
   viewerTeamAutoSwapEnabled: true,
   enabled: true,
   note: "",
   password: "",
   confirmPassword: "",
+});
+
+const groupForm = reactive({
+  name: "",
+  enabled: true,
+  permissions: [] as string[],
 });
 
 const resetForm = reactive({
@@ -269,25 +402,31 @@ const filteredUsers = computed(() => {
     if (filters.role && item.role !== filters.role) return false;
     if (filters.enabled === "enabled" && !item.enabled) return false;
     if (filters.enabled === "disabled" && item.enabled) return false;
-    if (filters.steam === "bound" && !item.steam64) return false;
-    if (filters.steam === "unbound" && item.steam64) return false;
+    if (filters.permissionGroupId === "__none__" && item.role !== "SuperAdmin" && item.permissionGroupId) return false;
+    if (filters.permissionGroupId && filters.permissionGroupId !== "__none__" && item.permissionGroupId !== filters.permissionGroupId) return false;
     if (!needle) return true;
-    return [item.username, item.displayName, item.steam64, item.note]
-      .some((value) => String(value ?? "").toLowerCase().includes(needle));
+    return [
+      item.username,
+      item.displayName,
+      item.steam64,
+      item.note,
+      item.permissionGroupName,
+    ].some((value) => String(value ?? "").toLowerCase().includes(needle));
   });
 });
 
-onMounted(loadUsers);
+onMounted(loadAll);
 
-async function loadUsers() {
+async function loadAll() {
   loading.value = true;
   error.value = "";
   try {
     const response = await fetchAdminUsers();
     users.value = response.items ?? [];
+    permissionGroups.value = response.permissionGroups ?? [];
     Object.assign(stats, response.stats ?? buildStats(users.value));
   } catch (err: any) {
-    error.value = err?.message ?? "加载账号失败";
+    error.value = err?.message ?? "加载管理员数据失败";
   } finally {
     loading.value = false;
   }
@@ -308,6 +447,7 @@ function openCreateDialog() {
     username: "",
     displayName: "",
     role: "Admin",
+    permissionGroupId: "",
     steam64: "",
     viewerTeamAutoSwapEnabled: true,
     enabled: true,
@@ -326,6 +466,7 @@ function openEditDialog(user: AdminUser) {
     username: user.username,
     displayName: user.displayName,
     role: user.role,
+    permissionGroupId: user.permissionGroupId ?? "",
     steam64: user.steam64 ?? "",
     viewerTeamAutoSwapEnabled: user.viewerTeamAutoSwapEnabled,
     enabled: user.enabled,
@@ -344,16 +485,18 @@ function closeEditor() {
 async function submitEditor() {
   dialogError.value = "";
   if (!editingUser.value && form.password !== form.confirmPassword) {
-    dialogError.value = "两次输入的密码不一致";
+    dialogError.value = "两次输入的密码不一致。";
     return;
   }
 
   saving.value = true;
   try {
+    const permissionGroupId = form.role === "SuperAdmin" ? null : (form.permissionGroupId || null);
     if (editingUser.value) {
       await updateAdminUser(editingUser.value.id, {
         displayName: form.displayName,
         role: form.role,
+        permissionGroupId,
         steam64: form.steam64 || null,
         viewerTeamAutoSwapEnabled: form.viewerTeamAutoSwapEnabled,
         enabled: form.enabled,
@@ -364,6 +507,7 @@ async function submitEditor() {
         username: form.username,
         displayName: form.displayName,
         role: form.role,
+        permissionGroupId,
         steam64: form.steam64 || null,
         viewerTeamAutoSwapEnabled: form.viewerTeamAutoSwapEnabled,
         enabled: form.enabled,
@@ -372,9 +516,76 @@ async function submitEditor() {
       });
     }
     closeEditor();
-    await loadUsers();
+    await loadAll();
   } catch (err: any) {
     dialogError.value = err?.message ?? "保存失败";
+  } finally {
+    saving.value = false;
+  }
+}
+
+function openCreateGroupDialog() {
+  editingPermissionGroup.value = null;
+  Object.assign(groupForm, {
+    name: "",
+    enabled: true,
+    permissions: [],
+  });
+  dialogError.value = "";
+  groupEditorOpen.value = true;
+}
+
+function openEditGroupDialog(group: PermissionGroup) {
+  editingPermissionGroup.value = group;
+  Object.assign(groupForm, {
+    name: group.name,
+    enabled: group.enabled,
+    permissions: [...group.permissions],
+  });
+  dialogError.value = "";
+  groupEditorOpen.value = true;
+}
+
+function closeGroupEditor() {
+  groupEditorOpen.value = false;
+}
+
+async function submitGroupEditor() {
+  dialogError.value = "";
+  saving.value = true;
+  try {
+    if (editingPermissionGroup.value) {
+      await updatePermissionGroup(editingPermissionGroup.value.id, {
+        name: groupForm.name,
+        enabled: groupForm.enabled,
+        permissions: groupForm.permissions,
+      });
+    } else {
+      await createPermissionGroup({
+        name: groupForm.name,
+        enabled: groupForm.enabled,
+        permissions: groupForm.permissions,
+      });
+    }
+    closeGroupEditor();
+    await loadAll();
+  } catch (err: any) {
+    dialogError.value = err?.message ?? "保存权限组失败";
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function deletePermissionGroupAction(group: PermissionGroup) {
+  const ok = window.confirm(`确认删除权限组 ${group.name}？`);
+  if (!ok) return;
+  saving.value = true;
+  error.value = "";
+  try {
+    await deletePermissionGroup(group.id);
+    await loadAll();
+  } catch (err: any) {
+    error.value = err?.message ?? "删除权限组失败";
   } finally {
     saving.value = false;
   }
@@ -397,7 +608,7 @@ async function submitReset() {
   if (!resetUser.value) return;
   dialogError.value = "";
   if (resetForm.password !== resetForm.confirmPassword) {
-    dialogError.value = "两次输入的密码不一致";
+    dialogError.value = "两次输入的密码不一致。";
     return;
   }
 
@@ -405,7 +616,7 @@ async function submitReset() {
   try {
     await resetAdminUserPassword(resetUser.value.id, resetForm.password);
     closeReset();
-    await loadUsers();
+    await loadAll();
   } catch (err: any) {
     dialogError.value = err?.message ?? "重置失败";
   } finally {
@@ -414,13 +625,13 @@ async function submitReset() {
 }
 
 async function deleteUser(user: AdminUser) {
-  const ok = window.confirm(`确认删除管理员 ${user.username}？\n删除后该账号将无法登录，此操作不可撤销。`);
+  const ok = window.confirm(`确认删除管理员 ${user.username}？删除后该账号将无法登录，此操作不可撤销。`);
   if (!ok) return;
   saving.value = true;
   error.value = "";
   try {
     await deleteAdminUser(user.id);
-    await loadUsers();
+    await loadAll();
   } catch (err: any) {
     error.value = err?.message ?? "删除失败";
   } finally {
@@ -464,6 +675,11 @@ function getAccountInitial(user: AdminUser) {
   const source = user.displayName || user.username || user.steam64 || "?";
   return source.trim().slice(0, 1).toUpperCase();
 }
+
+function renderUserPermissions(user: AdminUser) {
+  if (user.role === "SuperAdmin") return ["*"];
+  return user.permissions?.length ? user.permissions : ["无权限"];
+}
 </script>
 
 <style scoped>
@@ -476,18 +692,34 @@ function getAccountInitial(user: AdminUser) {
 .admin-users-header,
 .toolbar,
 .table-shell,
-.modal-panel {
+.modal-panel,
+.permission-groups-shell {
   border: 1px solid var(--color-border-default);
   background: var(--color-bg-panel);
 }
 
-.admin-users-header {
+.admin-users-header,
+.section-title-row,
+.modal-panel header,
+.modal-panel footer,
+.password-tools {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
+}
+
+.admin-users-header {
+  align-items: flex-start;
   padding: 20px;
   border-radius: 8px;
+}
+
+.header-actions,
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .eyebrow {
@@ -499,6 +731,7 @@ function getAccountInitial(user: AdminUser) {
 
 h1,
 h2,
+h3,
 .subtitle {
   margin: 0;
 }
@@ -511,8 +744,13 @@ h2 {
   font-size: 20px;
 }
 
+h3 {
+  font-size: 18px;
+}
+
 .subtitle,
-.hint {
+.hint,
+.group-meta {
   color: var(--color-text-muted);
 }
 
@@ -523,7 +761,9 @@ h2 {
   margin: 16px 0;
 }
 
-.stat-card {
+.stat-card,
+.group-card,
+.empty-card {
   padding: 16px;
   border-radius: 8px;
   border: 1px solid var(--color-border-soft);
@@ -542,9 +782,41 @@ h2 {
   font-size: 26px;
 }
 
+.permission-groups-shell {
+  margin-bottom: 16px;
+  padding: 16px;
+  border-radius: 8px;
+}
+
+.group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.group-card {
+  display: grid;
+  gap: 14px;
+}
+
+.group-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.group-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 13px;
+}
+
 .toolbar {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) repeat(3, minmax(120px, 160px)) auto;
+  grid-template-columns: minmax(220px, 1fr) repeat(3, minmax(120px, 180px));
   gap: 12px;
   align-items: end;
   padding: 14px;
@@ -611,7 +883,7 @@ button:disabled {
 
 table {
   width: 100%;
-  min-width: 920px;
+  min-width: 1100px;
   border-collapse: collapse;
 }
 
@@ -666,7 +938,9 @@ td small {
 }
 
 .role-badge,
-.status-pill {
+.status-pill,
+.permission-chip,
+.superadmin-note {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
@@ -676,7 +950,8 @@ td small {
   font-weight: 700;
 }
 
-.role-badge[data-role="SuperAdmin"] {
+.role-badge[data-role="SuperAdmin"],
+.superadmin-note {
   color: #fbbf24;
   background: rgba(251, 191, 36, 0.14);
 }
@@ -686,20 +961,49 @@ td small {
   background: rgba(147, 197, 253, 0.12);
 }
 
-.status-pill[data-enabled="true"] {
+.status-pill[data-enabled="true"],
+.permission-chip[data-enabled="true"] {
   color: #86efac;
   background: rgba(134, 239, 172, 0.12);
 }
 
-.status-pill[data-enabled="false"] {
+.status-pill[data-enabled="false"],
+.permission-chip[data-enabled="false"] {
   color: #fca5a5;
   background: rgba(252, 165, 165, 0.12);
 }
 
-.action-row {
+.permission-chip-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.permission-chip-row.compact {
+  gap: 6px;
+}
+
+.permission-option-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.permission-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border-soft);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.permission-option input,
+.checkbox-row input {
+  width: 16px;
+  min-height: 16px;
 }
 
 .link-button,
@@ -735,7 +1039,7 @@ td small {
 }
 
 .modal-panel {
-  width: min(640px, 100%);
+  width: min(720px, 100%);
   max-height: calc(100vh - 48px);
   overflow: auto;
   display: grid;
@@ -745,16 +1049,7 @@ td small {
 }
 
 .modal-panel.compact {
-  width: min(480px, 100%);
-}
-
-.modal-panel header,
-.modal-panel footer,
-.password-tools {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  width: min(520px, 100%);
 }
 
 .modal-panel footer {
@@ -774,18 +1069,16 @@ td small {
   gap: 8px;
 }
 
-.checkbox-row input {
-  width: 16px;
-  min-height: 16px;
-}
-
 @media (max-width: 900px) {
   .stats-grid,
-  .toolbar {
+  .toolbar,
+  .permission-option-grid {
     grid-template-columns: 1fr 1fr;
   }
 
-  .admin-users-header {
+  .admin-users-header,
+  .section-title-row,
+  .group-card-head {
     flex-direction: column;
   }
 }
@@ -796,7 +1089,8 @@ td small {
   }
 
   .stats-grid,
-  .toolbar {
+  .toolbar,
+  .permission-option-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -43,6 +43,7 @@ import { EventPipeline } from "./core/event-pipeline.js";
 import { RuntimeState } from "./core/runtime-state.js";
 import { RawLogDerivedEvents } from "./core/raw-log-derived-events.js";
 import { PerformanceMonitor } from "./core/performance-monitor.js";
+import { AuditManager } from "./core/audit/audit-manager.js";
 
 async function main() {
   const configManager = new ConfigManager("./config.json");
@@ -91,6 +92,11 @@ async function main() {
   const consoleService = new ConsoleService({
     maxEntries: configManager.get("console.maxEntries", 5000),
   });
+  const auditManager = new AuditManager({
+    config: configManager,
+    logger: logger.child({ moduleId: "core.auditManager", source: "core.auditManager" }),
+  });
+  await auditManager.init();
 
   let rawLogDerivedEvents = null;
 
@@ -142,7 +148,9 @@ async function main() {
     rconManager,
     authManager,
     performanceMonitor,
+    auditManager,
   };
+  auditManager.core = coreContext;
 
   consoleService.attachCore(coreContext);
 
@@ -268,6 +276,7 @@ async function main() {
     await rconManager.stop();
     runtimeState.stop();
     performanceMonitor.stop();
+    await auditManager.close();
     await authManager.stop();
 
     logger.info("BZSS Panel WebCore stopped.", {

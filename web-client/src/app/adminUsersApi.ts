@@ -12,9 +12,22 @@ export interface AdminUser {
   viewerTeamAutoSwapEnabled: boolean;
   enabled: boolean;
   note: string;
+  permissionGroupId: string | null;
+  permissionGroupName: string;
+  permissions: string[];
   createdAt: number;
   updatedAt: number;
   passwordChangedAt: number;
+}
+
+export interface PermissionGroup {
+  id: string;
+  name: string;
+  enabled: boolean;
+  permissions: string[];
+  assignedUsers: number;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface AdminUserStats {
@@ -28,6 +41,7 @@ export interface AdminUsersResponse {
   ok: boolean;
   items: AdminUser[];
   stats: AdminUserStats;
+  permissionGroups: PermissionGroup[];
 }
 
 export interface AdminUserResponse {
@@ -40,6 +54,7 @@ export interface CreateAdminUserPayload {
   displayName?: string;
   password: string;
   role: AdminUserRole;
+  permissionGroupId?: string | null;
   steam64?: string | null;
   viewerTeamAutoSwapEnabled?: boolean;
   enabled?: boolean;
@@ -49,10 +64,27 @@ export interface CreateAdminUserPayload {
 export interface UpdateAdminUserPayload {
   displayName?: string;
   role?: AdminUserRole;
+  permissionGroupId?: string | null;
   steam64?: string | null;
   viewerTeamAutoSwapEnabled?: boolean;
   enabled?: boolean;
   note?: string;
+}
+
+export interface PermissionGroupsResponse {
+  ok: boolean;
+  items: PermissionGroup[];
+}
+
+export interface PermissionGroupResponse {
+  ok: boolean;
+  group: PermissionGroup;
+}
+
+export interface PermissionGroupPayload {
+  name: string;
+  enabled?: boolean;
+  permissions?: string[];
 }
 
 export function fetchAdminUsers() {
@@ -73,4 +105,20 @@ export function resetAdminUserPassword(userId: string, password: string) {
 
 export function deleteAdminUser(userId: string) {
   return apiDelete<AdminUserResponse>(`/api/admin/users/${encodeURIComponent(userId)}`);
+}
+
+export function fetchPermissionGroups() {
+  return apiGet<PermissionGroupsResponse>("/api/admin/permission-groups");
+}
+
+export function createPermissionGroup(payload: PermissionGroupPayload) {
+  return apiPost<PermissionGroupResponse>("/api/admin/permission-groups", payload);
+}
+
+export function updatePermissionGroup(groupId: string, payload: PermissionGroupPayload) {
+  return apiPatch<PermissionGroupResponse>(`/api/admin/permission-groups/${encodeURIComponent(groupId)}`, payload);
+}
+
+export function deletePermissionGroup(groupId: string) {
+  return apiDelete<PermissionGroupResponse>(`/api/admin/permission-groups/${encodeURIComponent(groupId)}`);
 }

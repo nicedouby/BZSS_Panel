@@ -6,6 +6,7 @@ const RECORDS_PATH = "/api/tb/records";
 const SHUFFLE_PLAN_PATH = "/api/tb/shuffle-plan";
 
 export async function handleTbRoutes({
+  core,
   modules,
   url,
   req,
@@ -108,18 +109,48 @@ export async function handleTbRoutes({
   }
 
   const body = (await readJsonBody(req)) ?? {};
-  const result = await teamBalance.forceTeamChange({
-    ...body,
-    steamId: body.steamId ?? body.steamID ?? body.anyId ?? body.playerKey ?? body.playerId ?? "",
-    playerName: body.playerName ?? body.name ?? "",
-    source: body.source ?? "web.teamBalance",
-    reason: body.reason ?? "manual_team_balance",
-    operator: buildOperator(user),
-    system: false,
-  });
+  const steamId = body.steamId ?? body.steamID ?? body.anyId ?? body.playerKey ?? body.playerId ?? "";
+  const playerName = body.playerName ?? body.name ?? "";
+  const auditContext = {
+    action: "player.switch_team",
+    category: "player_management",
+    actor: user,
+    request: req,
+    sourcePage: body.sourcePage ?? "match_status",
+    serverId: body.serverId ?? body.serverID ?? core?.webStatus?.serverId ?? "",
+    target: {
+      type: "player",
+      id: steamId,
+      name: playerName,
+      steamId,
+      teamId: body.teamId ?? body.fromTeamId ?? null,
+      squadId: body.squadId ?? null,
+    },
+    parameters: {
+      fromTeamId: body.fromTeamId ?? body.teamId ?? null,
+      requestedTeamId: body.requestedTeamId ?? body.targetTeamId ?? null,
+      reason: body.reason ?? "manual_team_balance",
+    },
+    resultResolver: (payload) => payload?.ok ? "success" : payload?.error === "Forbidden" ? "forbidden" : "failed",
+  };
+  const result = await executeAudited(core, auditContext, () => teamBalance.forceTeamChange({
+      ...body,
+      steamId,
+      playerName,
+      source: body.source ?? "web.teamBalance",
+      reason: body.reason ?? "manual_team_balance",
+      operator: buildOperator(user),
+      system: false,
+      operatorName: user?.username ?? "",
+    }));
 
   json(result.ok ? 200 : mapErrorStatus(result.error), result);
   return true;
+}
+
+async function executeAudited(core, context, executor) {
+  if (!core?.auditManager?.execute) return executor({ requestId: "" });
+  return core.auditManager.execute(context, executor);
 }
 
 function buildOperator(user) {

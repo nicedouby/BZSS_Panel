@@ -303,6 +303,102 @@ async function testUserStoreProtectsLastSuperAdminDowngrade() {
   }
 }
 
+async function testPermissionGroupsPersistAndResolveForAdminUser() {
+  const originalCwd = process.cwd();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-auth-permission-groups-"));
+  process.chdir(tempDir);
+
+  try {
+    const store = new AuthUserStore({
+      config: {
+        usersFilePath: "./data/auth/users.json",
+      },
+    });
+    await store.start();
+
+    const group = await store.createPermissionGroup({
+      name: "Intern Admin",
+      permissions: ["rcon.warn", "rcon.broadcast"],
+    });
+    await store.createUser({
+      username: "Root",
+      role: "SuperAdmin",
+      passwordHash: await hashPassword("Secret123"),
+    });
+    await store.createUser({
+      username: "Operator",
+      role: "Admin",
+      passwordHash: await hashPassword("Secret123"),
+      permissionGroupId: group.id,
+    });
+
+    const reloaded = new AuthUserStore({
+      config: {
+        usersFilePath: "./data/auth/users.json",
+      },
+    });
+    await reloaded.start();
+
+    assert.equal(reloaded.listPermissionGroups().length, 1);
+    assert.equal(reloaded.findByUsername("operator")?.permissionGroupId, group.id);
+
+    const manager = new AuthManager({
+      config: {
+        enabled: true,
+        usersFilePath: "./data/auth/users.json",
+      },
+      logger: { info() {}, warn() {}, error() {} },
+    });
+    await manager.start();
+
+    const safeUser = manager.safeUser(reloaded.findByUsername("operator"));
+    assert.equal(safeUser.permissionGroupId, group.id);
+    assert.equal(safeUser.permissionGroupName, "Intern Admin");
+    assert.deepEqual(safeUser.permissions, ["rcon.warn", "rcon.broadcast"]);
+  } finally {
+    process.chdir(originalCwd);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+async function testPermissionGroupDeleteRejectsAssignedUsers() {
+  const originalCwd = process.cwd();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-auth-permission-group-in-use-"));
+  process.chdir(tempDir);
+
+  try {
+    const store = new AuthUserStore({
+      config: {
+        usersFilePath: "./data/auth/users.json",
+      },
+    });
+    await store.start();
+    const group = await store.createPermissionGroup({
+      name: "Senior Admin",
+      permissions: ["rcon.tb"],
+    });
+    await store.createUser({
+      username: "Root",
+      role: "SuperAdmin",
+      passwordHash: await hashPassword("Secret123"),
+    });
+    await store.createUser({
+      username: "Operator",
+      role: "Admin",
+      passwordHash: await hashPassword("Secret123"),
+      permissionGroupId: group.id,
+    });
+
+    await assert.rejects(
+      () => store.deletePermissionGroup(group.id),
+      (error) => error.code === "PermissionGroupInUse",
+    );
+  } finally {
+    process.chdir(originalCwd);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
 await testUserStorePreventsDuplicateUsernamesAndKeepsLastSuperAdmin();
 await testAuthManagerBootstrapsLegacyDefaultSuperAdminOnEmptyStore();
 await testAuthManagerMigratesDefaultSteam64ToExistingSuperAdmin();
@@ -310,5 +406,7 @@ await testAuthManagerRejectsNonEmptyStoreWithoutEnabledSuperAdmin();
 await testAuthManagerInvalidatesSessionOnDisableAndPasswordReset();
 await testUserStorePersistsAdminProfileFieldsAndSteamBinding();
 await testUserStoreProtectsLastSuperAdminDowngrade();
+await testPermissionGroupsPersistAndResolveForAdminUser();
+await testPermissionGroupDeleteRejectsAssignedUsers();
 
 console.log("auth tests passed");

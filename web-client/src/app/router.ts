@@ -28,6 +28,7 @@ import ComingSoonPage from "../pages/ComingSoonPage.vue";
 import ChatMonitorPage from "../pages/ChatMonitorPage.vue";
 import RuntimeStatusPage from "../pages/RuntimeStatusPage.vue";
 import AdminUsersPage from "../pages/AdminUsersPage.vue";
+import AuditRecordsPage from "../pages/AuditRecordsPage.vue";
 import { useAuthStore } from "../stores/auth.store";
 import {
   canAccessPage,
@@ -347,6 +348,16 @@ export const router = createRouter({
         ...systemPollingMeta,
         title: "管理员账号",
         superAdminOnly: true,
+        fullBleed: true,
+      },
+    },
+    {
+      path: "/system/audit-records",
+      component: AuditRecordsPage,
+      meta: {
+        ...systemPollingMeta,
+        title: "操作记录",
+        requiredPermission: "audit.view",
         fullBleed: true,
       },
     },

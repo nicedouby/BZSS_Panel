@@ -153,6 +153,50 @@ CREATE TABLE IF NOT EXISTS squad_management_records (
 CREATE INDEX IF NOT EXISTS idx_squad_management_records_kind_time ON squad_management_records(kind, time_ms DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_squad_management_records_server_time ON squad_management_records(server_id, time_ms DESC, id DESC);
 
+CREATE TABLE IF NOT EXISTS web_action_audit_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    request_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    category TEXT NOT NULL,
+    actor_type TEXT NOT NULL,
+    actor_user_id TEXT,
+    actor_username TEXT,
+    actor_role TEXT,
+    actor_groups_json TEXT,
+    source_page TEXT,
+    request_method TEXT,
+    request_route TEXT,
+    client_ip TEXT,
+    user_agent TEXT,
+    server_id TEXT,
+    server_name TEXT,
+    match_id TEXT,
+    target_type TEXT,
+    target_id TEXT,
+    target_name TEXT,
+    target_data_json TEXT,
+    parameters_json TEXT,
+    result_data_json TEXT,
+    result TEXT NOT NULL,
+    error_code TEXT,
+    error_message TEXT,
+    created_at TEXT NOT NULL,
+    created_at_ms INTEGER NOT NULL,
+    completed_at TEXT,
+    duration_ms INTEGER,
+    related_record_id TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_web_audit_created_at
+ON web_action_audit_records(created_at_ms DESC);
+CREATE INDEX IF NOT EXISTS idx_web_audit_actor
+ON web_action_audit_records(actor_username, created_at_ms DESC);
+CREATE INDEX IF NOT EXISTS idx_web_audit_action
+ON web_action_audit_records(action, created_at_ms DESC);
+CREATE INDEX IF NOT EXISTS idx_web_audit_server
+ON web_action_audit_records(server_id, created_at_ms DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_web_audit_request_id
+ON web_action_audit_records(request_id);
+
 CREATE TABLE IF NOT EXISTS ladder_rating_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     player_id INTEGER NOT NULL,
@@ -453,6 +497,43 @@ async function ensureCompatibleColumns(db) {
   await addColumnIfMissing(db, "player_aliases", "seen_at", "INTEGER NOT NULL DEFAULT 0");
   await addColumnIfMissing(db, "player_ips", "ip", "TEXT");
   await addColumnIfMissing(db, "player_ips", "seen_at", "INTEGER NOT NULL DEFAULT 0");
+
+  const auditColumns = {
+    request_id: "TEXT NOT NULL DEFAULT ''",
+    action: "TEXT NOT NULL DEFAULT 'unknown'",
+    category: "TEXT NOT NULL DEFAULT 'unknown'",
+    actor_type: "TEXT NOT NULL DEFAULT 'user'",
+    actor_user_id: "TEXT",
+    actor_username: "TEXT",
+    actor_role: "TEXT",
+    actor_groups_json: "TEXT",
+    source_page: "TEXT",
+    request_method: "TEXT",
+    request_route: "TEXT",
+    client_ip: "TEXT",
+    user_agent: "TEXT",
+    server_id: "TEXT",
+    server_name: "TEXT",
+    match_id: "TEXT",
+    target_type: "TEXT",
+    target_id: "TEXT",
+    target_name: "TEXT",
+    target_data_json: "TEXT",
+    parameters_json: "TEXT",
+    result_data_json: "TEXT",
+    result: "TEXT NOT NULL DEFAULT 'running'",
+    error_code: "TEXT",
+    error_message: "TEXT",
+    created_at: "TEXT NOT NULL DEFAULT ''",
+    created_at_ms: "INTEGER NOT NULL DEFAULT 0",
+    completed_at: "TEXT",
+    duration_ms: "INTEGER",
+    related_record_id: "TEXT",
+  };
+
+  for (const [column, definition] of Object.entries(auditColumns)) {
+    await addColumnIfMissing(db, "web_action_audit_records", column, definition);
+  }
 }
 
 async function migrateLegacyColumns(db) {
