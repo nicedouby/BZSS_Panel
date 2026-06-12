@@ -453,8 +453,7 @@ function formatTime(value: unknown) {
 
 .broadcast-panel {
   min-height: 0;
-  height: clamp(560px, calc(100vh - 220px), 920px);
-  max-height: calc(100vh - 220px);
+  height: 100%;
   overflow: hidden;
   display: grid;
   grid-template-rows: minmax(0, 1fr);

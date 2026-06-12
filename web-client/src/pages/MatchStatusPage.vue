@@ -95,6 +95,7 @@
     </section>
 
     <DataState
+      mode="fill"
       :loading="showInitialLoading"
       :error="blockingRuntimeError"
       :stale="showStaleBanner"
@@ -1441,12 +1442,12 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 
 .match-state-content {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
   gap: 10px;
   min-height: 0;
   height: 100%;
   overflow: hidden;
-  align-items: start;
+  align-items: stretch;
 }
 
 .match-state-main {
@@ -1461,8 +1462,8 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 .match-chat-column {
   min-width: 0;
   min-height: 0;
-  height: clamp(700px, 84vh, 1080px);
-  align-self: start;
+  height: auto;
+  align-self: stretch;
 }
 
 .match-error-stack {
@@ -1796,6 +1797,7 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 @media (max-width: 1180px) {
   .match-state-content {
     grid-template-columns: 1fr;
+    grid-template-rows: minmax(360px, 1fr) minmax(280px, 40%);
   }
 
   .battle-log-summary-grid {
@@ -1807,7 +1809,7 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
   }
 
   .match-chat-column {
-    height: 760px;
+    min-height: 280px;
   }
 }
 
@@ -1839,7 +1841,9 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
     0 8px 20px rgba(0, 0, 0, 0.36),
     0 0 0 1px rgba(255, 255, 255, 0.03) inset;
   backdrop-filter: blur(20px) saturate(1.3);
-  min-width: 480px;
+  width: min(720px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   animation: bar-slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
@@ -1847,6 +1851,8 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .batch-count-badge {
@@ -1874,6 +1880,7 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
   flex-grow: 1;
   justify-content: flex-end;
 }

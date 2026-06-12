@@ -1,5 +1,5 @@
 <template>
-  <section class="page fair-team-balance-page">
+  <section class="page fair-team-balance-page workspace-page">
     <PageHeader
       eyebrow="Plugin"
       title="均衡组队系统"
@@ -126,8 +126,42 @@
       </article>
     </section>
 
+    <section class="detail-tabs" aria-label="公平跳边详情分区">
+      <button
+        type="button"
+        class="detail-tab"
+        :class="{ 'detail-tab--active': detailTab === 'quota' }"
+        @click="detailTab = 'quota'"
+      >
+        配额
+      </button>
+      <button
+        type="button"
+        class="detail-tab"
+        :class="{ 'detail-tab--active': detailTab === 'requests' }"
+        @click="detailTab = 'requests'"
+      >
+        请求
+      </button>
+      <button
+        type="button"
+        class="detail-tab"
+        :class="{ 'detail-tab--active': detailTab === 'history' }"
+        @click="detailTab = 'history'"
+      >
+        历史
+      </button>
+    </section>
+
     <section class="detail-grid">
-      <PageCard class="quota-card" title="玩家配额审计" description="监控所有在周期内活跃过的玩家配额使用情况。" compact>
+      <PageCard
+        class="quota-card detail-panel"
+        :class="{ 'detail-panel--active': detailTab === 'quota' }"
+        title="玩家配额审计"
+        description="监控所有在周期内活跃过的玩家配额使用情况。"
+        compact
+        body-mode="fill"
+      >
         <template #actions>
           <div class="quota-actions">
             <button
@@ -155,7 +189,7 @@
         </div>
         <p v-else-if="!sortedPlayerQuotas.length" class="empty-state">暂无活跃玩家配额数据。</p>
 
-        <div v-else class="quota-list">
+        <div v-else class="quota-list scroll-region-y">
           <article v-for="quota in sortedPlayerQuotas" :key="quota.playerKey" class="quota-item">
             <div class="quota-item__head">
               <div>
@@ -199,7 +233,14 @@
         </div>
       </PageCard>
 
-      <PageCard class="request-card" title="SQTB 实时认领" description="管理所有待处理的 SQTB 认领请求。支持直接审批或认领后审批。" compact>
+      <PageCard
+        class="request-card detail-panel"
+        :class="{ 'detail-panel--active': detailTab === 'requests' }"
+        title="SQTB 实时认领"
+        description="管理所有待处理的 SQTB 认领请求。支持直接审批或认领后审批。"
+        compact
+        body-mode="fill"
+      >
         <template #actions>
           <button
             type="button"
@@ -216,7 +257,7 @@
         </div>
         <p v-else-if="!requests.length" class="empty-state">暂无待处理的认领请求。</p>
 
-        <div v-else class="request-list">
+        <div v-else class="request-list scroll-region-y">
           <article v-for="request in requests" :key="request.id" class="request-item">
             <div class="request-item__head">
               <div>
@@ -291,7 +332,14 @@
         </div>
       </PageCard>
 
-      <PageCard class="history-card" title="近期变更日志" description="展示最近执行的周期重置与名额消耗记录。" compact>
+      <PageCard
+        class="history-card detail-panel"
+        :class="{ 'detail-panel--active': detailTab === 'history' }"
+        title="近期变更日志"
+        description="展示最近执行的周期重置与名额消耗记录。"
+        compact
+        body-mode="fill"
+      >
         <template #actions>
           <div class="history-actions">
             <button
@@ -318,7 +366,7 @@
         </div>
         <p v-else-if="!history.length" class="empty-state">暂无近期历史记录。</p>
 
-        <div v-else class="history-list">
+        <div v-else class="history-list scroll-region-y">
           <article v-for="(entry, index) in history" :key="index" class="history-item">
             <div class="history-item__head">
               <div>
@@ -464,6 +512,7 @@ const actioningRequestId = ref("");
 const playerResettingKey = ref("");
 const historyClearing = ref(false);
 const resettingAction = ref<"" | "period" | "round">("");
+const detailTab = ref<"quota" | "requests" | "history">("quota");
 const nowMs = ref(Date.now());
 let timer: number | null = null;
 let requestsTimer: number | null = null;
@@ -872,9 +921,12 @@ function normalizeStatusLabel(status: string) {
 .fair-team-balance-page {
   position: relative;
   display: grid;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
   gap: 18px;
+  height: 100%;
+  min-height: 0;
   padding: 16px;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .fair-team-balance-page::before {
@@ -904,6 +956,8 @@ function normalizeStatusLabel(status: string) {
 .fair-team-balance-page > * {
   position: relative;
   z-index: 1;
+  min-width: 0;
+  min-height: 0;
 }
 
 .fair-team-balance-page :deep(.page-card) {
@@ -932,11 +986,10 @@ function normalizeStatusLabel(status: string) {
 
 .hero-card,
 .quota-card,
-.request-card {
+.request-card,
+.history-card {
   min-width: 0;
-}
-
-.request-card {
+  min-height: 0;
 }
 
 .hero-grid,
@@ -1147,6 +1200,31 @@ function normalizeStatusLabel(status: string) {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 12px;
+  min-width: 0;
+}
+
+.detail-tabs {
+  display: none;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.detail-tab {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-weight: 700;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.detail-tab--active {
+  border-color: rgba(96, 165, 250, 0.34);
+  background: rgba(59, 130, 246, 0.14);
+  color: var(--color-text-primary);
 }
 
 .summary-card {
@@ -1192,24 +1270,22 @@ function normalizeStatusLabel(status: string) {
 }
 
 .detail-grid {
+  height: 100%;
+  min-height: 0;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: stretch;
-  min-height: 0;
 }
 
 .detail-grid :deep(.page-card) {
+  min-width: 0;
   min-height: 0;
-  height: 100%;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .detail-grid :deep(.card-body) {
-  min-height: 0;
-  height: 100%;
-  overflow: hidden;
   display: grid;
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
 }
 
 .quota-list,
@@ -1218,32 +1294,13 @@ function normalizeStatusLabel(status: string) {
   display: grid;
   gap: 12px;
   min-height: 0;
-}
-
-.detail-grid {
-  height: clamp(580px, calc(100vh - 360px), 940px);
-  max-height: calc(100vh - 360px);
-}
-
-.quota-card,
-.request-card,
-.history-card {
-  min-height: 0;
-}
-
-.quota-card :deep(.card-body),
-.request-card :deep(.card-body),
-.history-card :deep(.card-body) {
-  min-height: 0;
-}
-
-.quota-list,
-.request-list,
-.history-list {
+  align-content: start;
   overflow: auto;
-  scrollbar-gutter: stable;
   padding-right: 4px;
-  overscroll-behavior: contain;
+}
+
+.detail-panel {
+  min-height: 0;
 }
 
 .quota-item,
@@ -1451,15 +1508,38 @@ function normalizeStatusLabel(status: string) {
 }
 
 @media (max-width: 1280px) {
+  .fair-team-balance-page {
+    gap: 16px;
+  }
+
   .hero-grid {
     grid-template-columns: minmax(0, 1.3fr) minmax(240px, 0.9fr);
   }
 }
 
 @media (max-width: 900px) {
-  .hero-grid,
+  .fair-team-balance-page {
+    grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
+  }
+
+  .hero-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-tabs {
+    display: grid;
+  }
+
   .detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .detail-panel {
+    display: none;
+  }
+
+  .detail-panel.detail-panel--active {
+    display: grid;
   }
 
   .action-stack {

@@ -37,6 +37,7 @@
     </div>
 
     <DataState
+      mode="fill"
       :loading="bootLoading"
       :error="bootError"
       :empty="!bootLoading && !bootError && months.length === 0"
@@ -113,6 +114,7 @@
           </div>
 
           <DataState
+            mode="fill"
             :loading="entriesLoading && !entries.length"
             :error="entriesError"
             :empty="!entriesLoading && !entriesError && entries.length === 0"
@@ -921,13 +923,15 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
 
 @media (max-width: 1200px) {
   .layout {
-    grid-template-columns: 1fr;
-    height: auto;
-    overflow: visible;
+    grid-template-columns: minmax(180px, 0.72fr) minmax(0, 1fr);
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
   }
   .side-card,
   .viewer-card {
-    height: 400px;
+    height: 100%;
+    min-height: 0;
   }
 }
 </style>

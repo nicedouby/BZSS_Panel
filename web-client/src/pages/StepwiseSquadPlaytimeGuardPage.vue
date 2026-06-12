@@ -1288,45 +1288,51 @@ function recordDecisionTone(record: StepwiseRecord) {
 
 @media (max-width: 1180px) {
   .stepwise-page {
-    height: auto;
-    overflow: visible;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .main-layout {
     grid-template-columns: 1fr;
-    height: auto;
-    overflow: visible;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .control-col,
   .data-col {
-    height: auto;
-    overflow: visible;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .workbench-card,
   .monitor-card {
-    height: auto;
-    flex: none;
+    height: 100%;
+    min-height: 0;
+    flex: 1 1 auto;
   }
 
   .rules-layout {
     grid-template-rows: auto auto;
-    height: auto;
+    height: 100%;
+    min-height: 0;
   }
 
   .rule-group {
-    height: auto;
+    min-height: 0;
   }
 
   .rule-list {
-    max-height: 300px;
-    flex: none;
+    max-height: none;
+    flex: 1 1 auto;
   }
 
   .table-wrap {
-    max-height: 400px;
-    flex: none;
+    max-height: none;
+    flex: 1 1 auto;
   }
 
   .stats-grid {

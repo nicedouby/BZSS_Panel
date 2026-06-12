@@ -97,15 +97,13 @@ async function saveConfig(next: InfantryCombatConfig) {
 
 <style scoped>
 .infantry-combat-page {
-  --ice-page-height: calc(100dvh - 72px);
   --ice-detail-width: 284px;
 
   width: 100%;
   max-width: none;
   display: grid;
   gap: 12px;
-  height: var(--ice-page-height);
-  max-height: var(--ice-page-height);
+  height: 100%;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;

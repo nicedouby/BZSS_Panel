@@ -241,15 +241,18 @@ watch(
 );
 
 let timer: number | null = null;
+const resizeChart = () => myChart?.resize();
+
 onMounted(() => {
   initChart();
   fetchData();
   timer = window.setInterval(fetchData, 2000);
-  window.addEventListener("resize", () => myChart?.resize());
+  window.addEventListener("resize", resizeChart);
 });
 
 onBeforeUnmount(() => {
   if (timer) clearInterval(timer);
+  window.removeEventListener("resize", resizeChart);
   myChart?.dispose();
 });
 </script>
@@ -257,8 +260,8 @@ onBeforeUnmount(() => {
 <style scoped>
 .page.full-height {
   height: 100%;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   padding: 0;
   overflow: hidden;
   background:
@@ -283,6 +286,7 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 10px;
   margin-right: 15px;
+  flex-wrap: wrap;
 }
 
 .filter-input {
@@ -292,7 +296,8 @@ onBeforeUnmount(() => {
   padding: 4px 12px;
   border-radius: 6px;
   font-size: 13px;
-  width: 180px;
+  width: min(260px, 100%);
+  flex: 1 1 180px;
 }
 
 .filter-select {
@@ -305,20 +310,19 @@ onBeforeUnmount(() => {
 }
 
 .chat-layout-main {
-  flex: 1;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 280px);
   min-height: 0;
 }
 
 .chat-column-left {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
+  min-height: 0;
 }
 
 .chat-column-right {
-  width: 280px;
   background:
     var(--theme-panel-highlight),
     color-mix(in srgb, var(--color-bg-card) 96%, transparent);
@@ -553,5 +557,39 @@ onBeforeUnmount(() => {
 .chat-log-shell,
 .chat-log {
   max-height: 100%;
+}
+
+@media (max-width: 980px) {
+  .chat-header,
+  .header-right {
+    flex-wrap: wrap;
+  }
+
+  .chat-layout-main {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(360px, 1fr) auto;
+  }
+
+  .chat-column-right {
+    width: auto;
+    max-height: 32vh;
+    border-left: 0;
+    border-top: 1px solid var(--color-border-default);
+  }
+}
+
+@media (max-width: 620px) {
+  .chat-header {
+    padding: 10px 12px;
+  }
+
+  .filter-group {
+    margin-right: 0;
+  }
+
+  .filter-input,
+  .filter-select {
+    flex: 1 1 100%;
+  }
 }
 </style>

@@ -1186,7 +1186,7 @@ td small {
 
 .modal-panel {
   width: min(720px, 100%);
-  max-height: calc(100vh - 48px);
+  max-height: 100%;
   overflow: auto;
   display: grid;
   gap: 14px;

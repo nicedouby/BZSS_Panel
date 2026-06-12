@@ -58,6 +58,7 @@
     </AppPageToolbar>
 
     <DataState
+      mode="fill"
       :loading="bootLoading"
       :error="bootError"
       :empty="!bootLoading && !bootError && events.length === 0"
@@ -109,6 +110,7 @@
 
         <AppCard compact class="battle-table-card" title="战绩事件">
           <DataState
+            mode="fill"
             :loading="eventsLoading && !events.length"
             :error="eventsError"
             :empty="!eventsLoading && !eventsError && events.length === 0"

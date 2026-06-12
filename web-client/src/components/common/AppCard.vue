@@ -1,5 +1,11 @@
 <template>
-  <PageCard :title="title" :description="description" :compact="compact" class="app-card">
+  <PageCard
+    :title="title"
+    :description="description"
+    :compact="compact"
+    :body-mode="bodyMode"
+    class="app-card"
+  >
     <slot />
   </PageCard>
 </template>
@@ -11,10 +17,12 @@ withDefaults(defineProps<{
   title?: string;
   description?: string;
   compact?: boolean;
+  bodyMode?: "normal" | "fill" | "scroll";
 }>(), {
   title: "",
   description: "",
   compact: false,
+  bodyMode: "normal",
 });
 </script>
 

@@ -94,12 +94,16 @@ watch(
 html,
 body,
 #app {
-  min-height: 100%;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
 }
 
 body {
   margin: 0;
   min-width: 320px;
+  overflow: hidden;
   background: var(--color-bg-page);
   color: var(--color-text-primary);
   text-rendering: optimizeLegibility;
@@ -173,12 +177,15 @@ a {
 }
 
 #app {
-  min-height: 100vh;
+  height: 100%;
 }
 
 .app-root {
   position: relative;
-  min-height: 100vh;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
   color: var(--color-text-primary);
   background: var(--app-background, var(--color-bg-page));
   isolation: isolate;
@@ -215,7 +222,7 @@ a {
 }
 
 .boot-screen {
-  min-height: 100vh;
+  min-height: 100%;
   display: grid;
   place-items: center;
   padding: 24px;
@@ -505,6 +512,41 @@ a {
 
 .panel {
   overflow: hidden;
+}
+
+.workspace-page {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-fill {
+  min-width: 0;
+  min-height: 0;
+}
+
+.scroll-region {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.scroll-region-y {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.scroll-region-x {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .muted {

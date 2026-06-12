@@ -114,6 +114,7 @@
 
       <template #right>
         <DataState
+          mode="fill"
           :loading="loading && !records.length"
           :error="errorText"
           :empty="!loading && !errorText && !records.length"

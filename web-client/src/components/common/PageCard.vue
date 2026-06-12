@@ -1,5 +1,5 @@
 <template>
-  <section class="page-card">
+  <section class="page-card" :class="[`page-card--overflow-${overflow}`, `page-card--body-${bodyMode}`]">
     <header v-if="$slots.header || title || $slots.actions" class="card-header">
       <div class="card-title-block">
         <slot name="header">
@@ -22,10 +22,14 @@ withDefaults(defineProps<{
   title?: string;
   description?: string;
   compact?: boolean;
+  overflow?: "visible" | "clip" | "auto";
+  bodyMode?: "normal" | "fill" | "scroll";
 }>(), {
   title: "",
   description: "",
   compact: false,
+  overflow: "visible",
+  bodyMode: "normal",
 });
 </script>
 
@@ -37,8 +41,27 @@ withDefaults(defineProps<{
     var(--color-bg-card);
   border-radius: 18px;
   box-shadow: var(--shadow-md);
-  overflow: hidden;
   backdrop-filter: blur(12px);
+}
+
+.page-card--body-fill,
+.page-card--body-scroll {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  height: 100%;
+}
+
+.page-card--overflow-visible {
+  overflow: visible;
+}
+
+.page-card--overflow-clip {
+  overflow: hidden;
+}
+
+.page-card--overflow-auto {
+  overflow: auto;
 }
 
 .card-header {
@@ -75,9 +98,22 @@ withDefaults(defineProps<{
 
 .card-body {
   padding: 18px;
+  min-width: 0;
+  min-height: 0;
 }
 
 .card-body.compact {
   padding: 14px 16px;
+}
+
+.page-card--body-fill > .card-body {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.page-card--body-scroll > .card-body {
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 </style>

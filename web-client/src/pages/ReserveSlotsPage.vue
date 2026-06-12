@@ -24,13 +24,17 @@ const canEdit = computed(() => Boolean(auth.user?.isSuperAdmin));
 <style scoped>
 .reserve-slots-page {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
+  height: 100%;
   min-height: 0;
-  padding-bottom: 12px;
+  overflow: hidden;
 }
 
 .reserve-shell {
+  height: 100%;
   min-height: 0;
   display: grid;
+  overflow: hidden;
 }
 </style>

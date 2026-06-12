@@ -43,6 +43,8 @@ const corePollingMeta = { category: "core", refreshPolicy: "polling" } as const;
 const pluginPollingMeta = { category: "plugin", refreshPolicy: "polling" } as const;
 const systemPollingMeta = { category: "system", refreshPolicy: "polling" } as const;
 const debugManualMeta = { category: "debug", refreshPolicy: "manual" } as const;
+const workspaceLayoutMeta = { layoutMode: "workspace", contentPadding: "none" } as const;
+const documentLayoutMeta = { layoutMode: "document", contentPadding: "default" } as const;
 
 function applyPagePermissions(routes: any[]) {
   return routes.map((route) => {
@@ -91,7 +93,7 @@ export const router = createRouter({
       meta: {
         ...coreRealtimeMeta,
         titleKey: "routeTitle.matchStatus",
-        fullBleed: true,
+        ...workspaceLayoutMeta,
       },
     },
     {
@@ -100,7 +102,7 @@ export const router = createRouter({
       meta: {
         ...coreRealtimeMeta,
         titleKey: "routeTitle.matchStatus",
-        fullBleed: true,
+        ...workspaceLayoutMeta,
       },
     },
     {
@@ -109,7 +111,7 @@ export const router = createRouter({
       meta: {
         ...coreRealtimeMeta,
         titleKey: "routeTitle.console",
-        fullBleed: true,
+        ...workspaceLayoutMeta,
         superAdminOnly: true,
       },
     },
@@ -119,7 +121,7 @@ export const router = createRouter({
       meta: {
         ...coreRealtimeMeta,
         title: "鑱婂ぉ鐩戞帶",
-        fullBleed: true,
+        ...workspaceLayoutMeta,
       },
     },
     {
@@ -128,7 +130,7 @@ export const router = createRouter({
       meta: {
         ...corePollingMeta,
         title: "进出服记录",
-        fullBleed: true,
+        ...workspaceLayoutMeta,
       },
     },
     {
@@ -137,6 +139,7 @@ export const router = createRouter({
       meta: {
         ...coreManualMeta,
         titleKey: "routeTitle.playerDatabase",
+        ...workspaceLayoutMeta,
       },
     },
     {
@@ -145,6 +148,7 @@ export const router = createRouter({
       meta: {
         ...coreManualMeta,
         titleKey: "routeTitle.reserveSlots",
+        ...workspaceLayoutMeta,
       },
     },
     {
@@ -155,7 +159,7 @@ export const router = createRouter({
         titleKey: "routeTitle.combatManager",
         requiredPermission: "combat_manager.view",
         legacyRequiredPermissions: ["kill_manager.view"],
-        fullBleed: true,
+        ...workspaceLayoutMeta,
       },
     },
     {
@@ -168,7 +172,7 @@ export const router = createRouter({
       meta: {
         ...corePollingMeta,
         titleKey: "routeTitle.combatLog",
-        fullBleed: true,
+        ...workspaceLayoutMeta,
       },
     },
     {
@@ -179,7 +183,7 @@ export const router = createRouter({
         titleKey: "routeTitle.battleLog",
         requiredPermission: "combat_manager.view",
         legacyRequiredPermissions: ["kill_manager.view"],
-        fullBleed: true,
+        ...workspaceLayoutMeta,
       },
     },
     {
@@ -188,6 +192,7 @@ export const router = createRouter({
       meta: {
         ...corePollingMeta,
         titleKey: "routeTitle.adminWarns",
+        ...workspaceLayoutMeta,
       },
     },
     {
@@ -196,6 +201,7 @@ export const router = createRouter({
       meta: {
         ...corePollingMeta,
         title: "瀹氭椂骞挎挱",
+        ...workspaceLayoutMeta,
       },
     },
     {
@@ -204,7 +210,7 @@ export const router = createRouter({
       meta: {
         ...pluginPollingMeta,
         titleKey: "routeTitle.infantryCombatEnhancer",
-        fullBleed: true,
+        ...workspaceLayoutMeta,
       },
     },
     {
@@ -213,7 +219,7 @@ export const router = createRouter({
       meta: {
         ...pluginPollingMeta,
         title: "鎶卞洟鎶ュ",
-        fullBleed: true,
+        ...workspaceLayoutMeta,
       },
     },
     {
@@ -222,7 +228,7 @@ export const router = createRouter({
       meta: {
         ...pluginPollingMeta,
         title: "公平跳边",
-        fullBleed: true,
+        ...workspaceLayoutMeta,
       },
     },
     {
@@ -231,7 +237,7 @@ export const router = createRouter({
       meta: {
         ...pluginPollingMeta,
         titleKey: "routeTitle.fairSquadGuard",
-        fullBleed: true,
+        ...workspaceLayoutMeta,
       },
     },
     {
@@ -240,7 +246,7 @@ export const router = createRouter({
       meta: {
         ...pluginPollingMeta,
         title: "阶梯式建队时长",
-        fullBleed: true,
+        ...workspaceLayoutMeta,
       },
     },
     {
@@ -249,7 +255,7 @@ export const router = createRouter({
       meta: {
         ...pluginPollingMeta,
         title: "联办踢出",
-        fullBleed: true,
+        ...workspaceLayoutMeta,
       },
     },
     {
@@ -258,7 +264,7 @@ export const router = createRouter({
       meta: {
         ...corePollingMeta,
         titleKey: "routeTitle.squadManagement",
-        fullBleed: true,
+        ...workspaceLayoutMeta,
       },
     },
     {
@@ -267,7 +273,7 @@ export const router = createRouter({
       meta: {
         ...coreManualMeta,
         titleKey: "routeTitle.teamBalance",
-        fullBleed: true,
+        ...workspaceLayoutMeta,
       },
     },
     {
@@ -276,7 +282,7 @@ export const router = createRouter({
       meta: {
         ...systemPollingMeta,
         titleKey: "routeTitle.pluginSubscriptions",
-        fullBleed: true,
+        ...workspaceLayoutMeta,
       },
     },
     {
@@ -285,6 +291,7 @@ export const router = createRouter({
       meta: {
         ...debugManualMeta,
         title: "UDP 杞彂鏃ュ織",
+        ...documentLayoutMeta,
       },
     },
     {
@@ -293,7 +300,7 @@ export const router = createRouter({
       meta: {
         ...pluginPollingMeta,
         title: "服务器统计",
-        fullBleed: true,
+        ...workspaceLayoutMeta,
       },
     },
     {
@@ -302,7 +309,7 @@ export const router = createRouter({
       meta: {
         ...debugManualMeta,
         title: "快照录制",
-        fullBleed: true,
+        ...documentLayoutMeta,
       },
     },
     {
@@ -311,7 +318,7 @@ export const router = createRouter({
       meta: {
         ...debugManualMeta,
         title: "PJSC 骞冲潎鏃堕暱",
-        fullBleed: true,
+        ...documentLayoutMeta,
       },
     },
     {
@@ -320,7 +327,7 @@ export const router = createRouter({
       meta: {
         ...debugManualMeta,
         title: "骞冲眬鎶曠エ闃舵鎻愮ず",
-        fullBleed: true,
+        ...documentLayoutMeta,
       },
     },
     {
@@ -329,7 +336,7 @@ export const router = createRouter({
       meta: {
         ...debugManualMeta,
         title: "鍏ユ湇娆㈣繋璀﹀憡",
-        fullBleed: true,
+        ...documentLayoutMeta,
       },
     },
     {
@@ -338,7 +345,7 @@ export const router = createRouter({
       meta: {
         ...debugManualMeta,
         title: "小队名称分类器",
-        fullBleed: true,
+        ...documentLayoutMeta,
       },
     },
     {
@@ -347,7 +354,7 @@ export const router = createRouter({
       meta: {
         ...systemPollingMeta,
         titleKey: "routeTitle.runtimeStatus",
-        fullBleed: true,
+        ...documentLayoutMeta,
       },
     },
     {
@@ -357,7 +364,7 @@ export const router = createRouter({
         ...systemPollingMeta,
         title: "管理员账号",
         superAdminOnly: true,
-        fullBleed: true,
+        ...documentLayoutMeta,
       },
     },
     {
@@ -367,7 +374,7 @@ export const router = createRouter({
         ...systemPollingMeta,
         title: "操作记录",
         requiredPermission: "audit.view",
-        fullBleed: true,
+        ...workspaceLayoutMeta,
       },
     },
     {
@@ -378,7 +385,7 @@ export const router = createRouter({
         subtitle: "鏉冮檺涓嶈冻",
         message: "当前登录账号没有访问该页面所需的模块权限，请联系管理员分配对应权限后再试。",
       },
-      meta: { title: "Access denied" },
+      meta: { title: "Access denied", ...documentLayoutMeta },
     },
     {
       path: "/:pathMatch(.*)*",
@@ -388,7 +395,7 @@ export const router = createRouter({
         subtitle: "",
         message: "",
       },
-      meta: { titleKey: "routeTitle.comingSoon" },
+      meta: { titleKey: "routeTitle.comingSoon", ...documentLayoutMeta },
     },
   ]),
 });

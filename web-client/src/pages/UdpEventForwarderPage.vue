@@ -522,7 +522,6 @@ function formatNumber(value: unknown) {
 
 .log-table-wrap {
   overflow: auto;
-  max-height: calc(100vh - 330px);
   border: 1px solid var(--color-border-soft);
   border-radius: 10px;
 }

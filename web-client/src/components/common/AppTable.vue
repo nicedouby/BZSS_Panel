@@ -19,11 +19,16 @@ withDefaults(defineProps<{
 <style scoped>
 .app-table-shell {
   min-width: 0;
+  min-height: 0;
+  height: 100%;
   display: grid;
 }
 
 .app-table-scroll {
+  width: 100%;
+  height: 100%;
   min-width: 0;
+  min-height: 0;
   overflow: auto;
   scrollbar-gutter: stable both-edges;
 }

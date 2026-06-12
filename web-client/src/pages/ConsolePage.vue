@@ -27,6 +27,7 @@
 
     <main class="console-main">
       <DataState
+        mode="fill"
         :error="pageError"
         :empty="!pageError && !lines.length && !linesQuery.isFetching.value"
         :empty-title="t('console.noLogsTitle')"

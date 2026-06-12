@@ -651,7 +651,11 @@ function fromDatetimeLocal(value: string) {
 <style scoped>
 .reserve-slots-section {
   display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   gap: 14px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .reserve-head,
@@ -807,7 +811,9 @@ function fromDatetimeLocal(value: string) {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.95fr);
   gap: 14px;
+  height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .reserve-list-panel,
@@ -818,7 +824,23 @@ function fromDatetimeLocal(value: string) {
   display: grid;
   gap: 12px;
   min-height: 0;
+  overflow: hidden;
+}
+
+.reserve-list-panel {
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+}
+
+.reserve-side {
+  grid-template-rows: auto minmax(0, 1.2fr) minmax(0, 0.95fr);
+}
+
+.reserve-edit-panel,
+.reserve-detail-panel {
   align-content: start;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .reserve-meta-strip {
@@ -844,7 +866,8 @@ function fromDatetimeLocal(value: string) {
 }
 
 .reserve-list-scroll {
-  max-height: 60vh;
+  height: 100%;
+  min-height: 0;
   overflow: auto;
   display: grid;
   gap: 6px;
@@ -1067,10 +1090,47 @@ function fromDatetimeLocal(value: string) {
 @media (max-width: 1100px) {
   .reserve-workspace {
     grid-template-columns: 1fr;
+    grid-template-rows: minmax(220px, 0.82fr) minmax(0, 1.18fr);
+  }
+
+  .reserve-side {
+    grid-template-columns: minmax(0, 0.7fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .reserve-ops-panel {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+
+  .reserve-edit-panel {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .reserve-detail-panel {
+    grid-column: 2;
+    grid-row: 2;
   }
 }
 
 @media (max-width: 760px) {
+  .reserve-workspace {
+    grid-template-rows: minmax(200px, 0.72fr) minmax(0, 1.28fr);
+  }
+
+  .reserve-side {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr) minmax(0, 0.9fr);
+  }
+
+  .reserve-ops-panel,
+  .reserve-edit-panel,
+  .reserve-detail-panel {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
   .reserve-head,
   .reserve-state-box.error {
     flex-direction: column;

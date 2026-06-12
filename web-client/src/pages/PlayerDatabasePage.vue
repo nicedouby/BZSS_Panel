@@ -302,10 +302,11 @@ function getSortTime(row: any) {
 @media (max-width: 1000px) {
   .db-main {
     grid-template-columns: 1fr;
+    grid-template-rows: minmax(180px, 0.42fr) minmax(0, 1fr);
   }
   
   .db-sidebar {
-    max-height: 420px;
+    min-height: 0;
   }
 }
 </style>

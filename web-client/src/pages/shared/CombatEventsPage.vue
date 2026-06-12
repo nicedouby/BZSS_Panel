@@ -226,16 +226,13 @@ function formatTime(value: unknown) {
 }
 
 .combat-page {
-  --combat-page-height: calc(100dvh - 72px);
   --combat-header-height: 72px;
   --combat-top-height: 108px;
-  --combat-event-table-height: calc(var(--combat-page-height) - var(--combat-header-height) - var(--combat-top-height) - 24px);
   width: 100%;
   max-width: none;
   display: grid;
   gap: 12px;
-  height: var(--combat-page-height);
-  max-height: var(--combat-page-height);
+  height: 100%;
   min-height: 0;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
@@ -278,8 +275,7 @@ function formatTime(value: unknown) {
 
 .combat-table-card {
   min-height: 0;
-  height: var(--combat-event-table-height);
-  max-height: var(--combat-event-table-height);
+  height: 100%;
   overflow: hidden;
 }
 
@@ -290,8 +286,7 @@ function formatTime(value: unknown) {
 
 .combat-detail-pane {
   min-height: 0;
-  height: var(--combat-event-table-height);
-  max-height: var(--combat-event-table-height);
+  height: 100%;
   overflow: hidden;
 }
 

@@ -266,7 +266,8 @@ function formatTimeOnly(v: any) {
 
 <style scoped>
 .admin-warns-page {
-  height: 100vh;
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--theme-background-rich);

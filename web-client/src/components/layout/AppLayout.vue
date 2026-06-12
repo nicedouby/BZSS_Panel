@@ -49,20 +49,41 @@ const route = useRoute();
 const pluginCenterOpen = ref(false);
 const rconModalOpen = ref(false);
 
-const contentShellClass = computed(() => ({
-  "full-bleed": Boolean(route.meta.fullBleed),
-}));
+const contentShellClass = computed(() => {
+  const legacyFullBleed = Boolean(route.meta.fullBleed);
+  const layoutMode = route.meta.layoutMode === "workspace" || route.meta.layoutMode === "document"
+    ? route.meta.layoutMode
+    : legacyFullBleed ? "workspace" : "document";
+  const contentPadding = route.meta.contentPadding === "none" || route.meta.contentPadding === "default"
+    ? route.meta.contentPadding
+    : legacyFullBleed ? "none" : "default";
+
+  return {
+    "content-shell--document": layoutMode === "document",
+    "content-shell--workspace": layoutMode === "workspace",
+    "content-shell--padded": contentPadding === "default",
+    "content-shell--flush": contentPadding === "none",
+    "full-bleed": legacyFullBleed,
+  };
+});
 </script>
 
 <style scoped>
 .app-shell {
   position: relative;
-  height: 100vh;
+  height: 100dvh;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
   display: grid;
   grid-template-columns: 248px minmax(0, 1fr);
   background: var(--app-background, var(--color-bg-page));
+}
+
+@supports not (height: 100dvh) {
+  .app-shell {
+    height: 100vh;
+  }
 }
 
 .app-shell.collapsed {
@@ -71,7 +92,7 @@ const contentShellClass = computed(() => ({
 
 .main-shell {
   min-width: 0;
-  height: 100vh;
+  height: 100%;
   min-height: 0;
   overflow: hidden;
   display: grid;
@@ -82,25 +103,35 @@ const contentShellClass = computed(() => ({
 }
 
 .content-shell {
-  padding: clamp(14px, 1.4vw, 22px);
   min-width: 0;
   min-height: 0;
-  height: 100%;
-  overflow: auto;
   scrollbar-gutter: stable both-edges;
 }
 
-.content-shell.full-bleed {
+.content-shell--document {
+  display: block;
+  min-height: 0;
+  height: auto;
+  overflow: auto;
+}
+
+.content-shell--workspace {
   display: grid;
   grid-template-rows: minmax(0, 1fr);
-  min-width: 0;
-  min-height: 0;
   height: 100%;
-  padding: 0;
   overflow: hidden;
 }
 
-.content-shell.full-bleed > * {
+.content-shell--padded {
+  padding: clamp(14px, 1.4vw, 22px);
+}
+
+.content-shell--flush {
+  padding: 0;
+}
+
+.content-shell--workspace > * {
+  width: 100%;
   min-width: 0;
   min-height: 0;
   height: 100%;

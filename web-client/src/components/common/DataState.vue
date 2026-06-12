@@ -1,5 +1,5 @@
 <template>
-  <div class="bz-data-state" v-bind="$attrs">
+  <div class="bz-data-state" :class="`bz-data-state--${mode}`" v-bind="$attrs">
     <div v-if="loading" class="state-block">
       <strong>{{ loadingTitle }}</strong>
       <p>{{ loadingText }}</p>
@@ -37,6 +37,7 @@ withDefaults(defineProps<{
   error?: string;
   empty?: boolean;
   stale?: boolean;
+  mode?: "flow" | "fill";
   loadingTitle?: string;
   loadingText?: string;
   errorTitle?: string;
@@ -48,6 +49,7 @@ withDefaults(defineProps<{
   error: "",
   empty: false,
   stale: false,
+  mode: "flow",
   loadingTitle: t("common.loading", "Loading"),
   loadingText: t("dataState.loadingText", "Fetching the latest data."),
   errorTitle: t("dataState.errorTitle", "Request failed"),
@@ -59,16 +61,31 @@ withDefaults(defineProps<{
 
 <style scoped>
 .bz-data-state {
+  min-height: 0;
+}
+
+.bz-data-state--flow {
+  display: block;
+}
+
+.bz-data-state--fill {
   display: flex;
   flex-direction: column;
-  min-height: 0;
   height: 100%;
 }
 
 .state-shell {
+  min-height: 0;
+}
+
+.bz-data-state--flow .state-shell {
+  display: grid;
+  gap: 10px;
+}
+
+.bz-data-state--fill .state-shell {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  min-height: 0;
   height: 100%;
   overflow: hidden;
 }
@@ -78,19 +95,29 @@ withDefaults(defineProps<{
 }
 
 .state-content {
-  display: grid;
   min-height: 0;
+}
+
+.bz-data-state--flow .state-content {
+  display: block;
+}
+
+.bz-data-state--fill .state-content {
+  display: grid;
   height: 100%;
   overflow: hidden;
 }
 
 .state-block {
-  flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   text-align: center;
+}
+
+.bz-data-state--fill .state-block {
+  flex: 1;
 }
 
 .state-block,

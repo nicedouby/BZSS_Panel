@@ -297,6 +297,7 @@ onMounted(fetchRecords);
 
 <style scoped>
 .audit-records-page {
+  height: 100%;
   min-height: 0;
 }
 
@@ -350,6 +351,9 @@ onMounted(fetchRecords);
 }
 
 .table-region {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
   min-height: 0;
   overflow: hidden;
 }
