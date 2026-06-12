@@ -1004,8 +1004,9 @@ export function createSquadManagementService({ core, modules, config, logger, re
       });
     }
 
-    const targetId = target.steamId || target.eosId || target.name || target.playerId || requestedPlayer.playerKey;
-    const command = `AdminKickFromSquad "${escapeCommandString(targetId)}" ${escapeCommandString(reason)}`.trim();
+    const targetId = target.playerId || target.name || requestedPlayer.playerKey;
+    const commandName = target.playerId ? "AdminRemovePlayerFromSquadById" : "AdminRemovePlayerFromSquad";
+    const command = `${commandName} ${escapeCommandString(targetId)}`.trim();
     const commandResult = await executeRemoveCommand({ command, serverId, target, reason, source, operatorName, system, actor });
 
     const record = await persistActionRecord({
@@ -1450,12 +1451,16 @@ export function createSquadManagementService({ core, modules, config, logger, re
     }
 
     if (action === "kick" || action === "remove") {
-      const target = resolveRconPlayerTarget(meta.target);
       if (action === "kick") {
+        const target = resolveRconPlayerTarget(meta.target);
         if (typeof core.squadRcon?.kick === "function") {
           return await core.squadRcon.kick(target, meta.reason ?? "");
         }
       } else {
+        const target = resolveRconRemoveTarget(meta.target);
+        if (typeof core.squadRcon?.removePlayerFromSquad === "function") {
+          return await core.squadRcon.removePlayerFromSquad(target, meta.reason ?? "");
+        }
         if (typeof core.squadRcon?.kickFromSquad === "function") {
           return await core.squadRcon.kickFromSquad(target, meta.reason ?? "");
         }
@@ -1487,6 +1492,11 @@ export function createSquadManagementService({ core, modules, config, logger, re
   function resolveRconPlayerTarget(target) {
     if (!target || typeof target !== "object") return String(target ?? "");
     return normalizeText(target.steamId ?? target.eosId ?? target.name ?? target.playerId ?? target.anyId ?? target.playerKey ?? "");
+  }
+
+  function resolveRconRemoveTarget(target) {
+    if (!target || typeof target !== "object") return String(target ?? "");
+    return normalizeText(target.playerId ?? target.name ?? target.anyId ?? target.playerKey ?? "");
   }
 
   function getDefaultServerId() {

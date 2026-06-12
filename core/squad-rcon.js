@@ -178,6 +178,14 @@ export default class SquadRcon extends Rcon {
     return this.execute(`AdminKick "${anyID}" ${message}`);
   }
 
+  removePlayerFromSquad(anyID, message) {
+    return this.execute(`AdminRemovePlayerFromSquad ${anyID} ${message}`);
+  }
+
+  kickFromSquad(anyID, message) {
+    return this.removePlayerFromSquad(anyID, message);
+  }
+
   ban(anyID, banLength, message) {
     return this.execute(`AdminBan "${anyID}" ${banLength} ${message}`);
   }

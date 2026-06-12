@@ -50,8 +50,8 @@ export async function handleSquadManagementRoutes({
       viewer: buildViewer(core, user, state),
       policy: {
         enforcementEnabled: Boolean(state.enforcementEnabled),
-        disbandPermission: state.disbandPermission ?? "squad.disband",
-        kickPermission: state.kickPermission ?? "squad.kick",
+        disbandPermission: state.disbandPermission || "squad.disband",
+        kickPermission: state.kickPermission || "squad.kick",
         kickThreshold: Number(state.kickThreshold ?? 10),
       },
     });
@@ -194,9 +194,9 @@ export async function handleSquadManagementRoutes({
 
 function resolveActionPermission(body = {}, state = {}) {
   const type = String(body.type ?? body.action ?? body.kind ?? "").trim().toLowerCase();
-  if (type === "disband_squad" || type === "disband") return state.disbandPermission ?? "squad.disband";
-  if (type === "kick_player" || type === "kick") return state.kickPermission ?? "squad.kick";
-  if (type === "remove_from_squad" || type === "remove") return state.removePermission ?? "squad.remove";
+  if (type === "disband_squad" || type === "disband") return state.disbandPermission || "squad.disband";
+  if (type === "kick_player" || type === "kick") return state.kickPermission || "squad.kick";
+  if (type === "remove_from_squad" || type === "remove") return state.removePermission || "squad.remove";
   return "";
 }
 
@@ -279,9 +279,9 @@ function buildViewer(core, user, state) {
     username: user.username,
     role: user.role,
     isSuperAdmin,
-    canDisband: core.authManager?.hasPermission?.(user, state.disbandPermission ?? "squad.disband") ?? isSuperAdmin,
-    canKick: core.authManager?.hasPermission?.(user, state.kickPermission ?? "squad.kick") ?? isSuperAdmin,
-    canRemove: core.authManager?.hasPermission?.(user, state.removePermission ?? "squad.remove") ?? isSuperAdmin,
+    canDisband: core.authManager?.hasPermission?.(user, state.disbandPermission || "squad.disband") ?? isSuperAdmin,
+    canKick: core.authManager?.hasPermission?.(user, state.kickPermission || "squad.kick") ?? isSuperAdmin,
+    canRemove: core.authManager?.hasPermission?.(user, state.removePermission || "squad.remove") ?? isSuperAdmin,
     canSwitch: core.authManager?.hasPermission?.(user, state.switchPermission ?? "squad.switch") ?? isSuperAdmin,
     permissions: user.permissions ?? [],
   };

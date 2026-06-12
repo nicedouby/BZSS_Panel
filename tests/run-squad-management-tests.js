@@ -89,8 +89,12 @@ function createHarness(overrides = {}) {
         commandCalls.kick.push({ target, reason });
         return "OK";
       },
+      async removePlayerFromSquad(target, reason) {
+        commandCalls.remove.push({ target, reason, method: "removePlayerFromSquad" });
+        return "OK";
+      },
       async kickFromSquad(target, reason) {
-        commandCalls.remove.push({ target, reason });
+        commandCalls.remove.push({ target, reason, method: "kickFromSquad" });
         return "OK";
       },
     },
@@ -355,7 +359,7 @@ async function testExecuteActionRemoveFromSquad() {
   await harness.module.init();
   await harness.module.start();
   await seedPlayers(harness, [
-    { name: "RemoveTarget", steamId: "76561198000000031" },
+    { name: "RemoveTarget", playerId: 31, steamId: "76561198000000031" },
   ]);
 
   const result = await harness.module.api.executeAction({
@@ -369,11 +373,12 @@ async function testExecuteActionRemoveFromSquad() {
   assert.equal(result.ok, true);
   assert.equal(result.type, "remove_from_squad");
   assert.equal(result.action, "remove");
-  assert.equal(result.command, 'AdminKickFromSquad "76561198000000031" test');
+  assert.equal(result.command, "AdminRemovePlayerFromSquadById 31");
   assert.equal(harness.commandCalls.remove.length, 1);
   assert.deepEqual(harness.commandCalls.remove[0], {
-    target: "76561198000000031",
+    target: "31",
     reason: "test",
+    method: "removePlayerFromSquad",
   });
   assert.equal(Boolean(latestModuleEvent(harness, "playerRemovedFromSquad")), true);
 

@@ -8,6 +8,7 @@ const COMMAND_PERMISSION_ALIASES = new Map([
   ["adminforceteamchange", "rcon.tb"],
   ["admindisbandsquad", "rcon.disband"],
   ["adminkickfromsquad", "rcon.remove"],
+  ["adminremoveplayerfromsquad", "rcon.remove"],
 ]);
 
 const PERMISSION_ALIASES = new Map([
