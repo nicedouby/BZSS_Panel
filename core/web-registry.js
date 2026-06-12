@@ -85,6 +85,21 @@ export class WebRegistry {
     });
 
     this.registerPage({
+      id: "web.reserveSlots",
+      title: "预留位管理",
+      group: "基础",
+      route: "/reserve-slots",
+      source: "module.reserveSlots",
+      description:
+        "预留位管理页面。读取 admins.CFG 中的 // 预留位 区块，展示玩家预留位状态，并允许 SuperAdmin 为玩家新增或续期预留位。",
+      required: true,
+      enabled: true,
+      order: 35,
+      icon: "VIP",
+      requiredPermission: "player_database.view",
+    });
+
+    this.registerPage({
       id: "web.chatMonitor",
       title: "聊天监控",
       group: "调试",

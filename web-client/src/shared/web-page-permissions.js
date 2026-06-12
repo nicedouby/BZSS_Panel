@@ -7,6 +7,7 @@ export const WEB_PAGE_PERMISSION_MATRIX = Object.freeze([
   { route: "/chat-monitor", requiredPermission: "chat_monitor.view" },
   { route: "/player-session-records", requiredPermission: "player_session_records.view" },
   { route: "/player-database", requiredPermission: "player_database.view" },
+  { route: "/reserve-slots", requiredPermission: "player_database.view" },
   { route: "/combat-manager", requiredPermission: "combat_manager.view", legacyRequiredPermissions: ["kill_manager.view"] },
   { route: "/kill-manage", requiredPermission: "combat_manager.view", legacyRequiredPermissions: ["kill_manager.view"] },
   { route: "/combat-clean", requiredPermission: "combat_manager.view", legacyRequiredPermissions: ["kill_manager.view"] },

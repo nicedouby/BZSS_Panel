@@ -1,5 +1,7 @@
 // -*- coding: utf-8 -*-
 
+import { AUDIT_ACTIONS, AUDIT_CATEGORIES, AUDIT_SOURCE_PAGES } from "../../core/audit/audit-actions.js";
+
 export async function handleReserveSlotsRoutes({
   core,
   modules,
@@ -25,6 +27,119 @@ export async function handleReserveSlotsRoutes({
 
   if (url.pathname === "/api/reserve-slots" && req.method === "GET") {
     json(200, await reserveSlots.getState());
+    return true;
+  }
+
+  const reserveMemberDeleteMatch = url.pathname.match(/^\/api\/reserve-slots\/members\/([^/]+)$/);
+  if (reserveMemberDeleteMatch && req.method === "DELETE") {
+    if (!core.authManager?.hasEverything?.(user)) {
+      json(403, {
+        error: "Forbidden",
+        message: "SuperAdmin permission is required.",
+      });
+      return true;
+    }
+
+    const steamId = decodeURIComponent(reserveMemberDeleteMatch[1]);
+    const auditContext = {
+      action: AUDIT_ACTIONS.RESERVE_SLOT_MANAGEMENT,
+      category: AUDIT_CATEGORIES.RESERVE_SLOT_MANAGEMENT,
+      actor: user,
+      request: req,
+      sourcePage: AUDIT_SOURCE_PAGES.RESERVE_SLOT_MANAGEMENT,
+      target: {
+        type: "player",
+        id: steamId,
+        steamId,
+      },
+      parameters: {
+        steamId,
+        operation: "delete_member",
+      },
+    };
+
+    const result = await executeAudited(core, auditContext, () => reserveSlots.deleteMember({ steamId }));
+    json(200, {
+      ok: true,
+      success: true,
+      message: result.message ?? "预留位已删除。",
+      ...result,
+    });
+    return true;
+  }
+
+  if (url.pathname === "/api/reserve-slots/members" && req.method === "POST") {
+    if (!core.authManager?.hasEverything?.(user)) {
+      json(403, {
+        error: "Forbidden",
+        message: "SuperAdmin permission is required.",
+      });
+      return true;
+    }
+
+    const body = await readJsonBody(req);
+    const auditContext = {
+      action: AUDIT_ACTIONS.RESERVE_SLOT_MANAGEMENT,
+      category: AUDIT_CATEGORIES.RESERVE_SLOT_MANAGEMENT,
+      actor: user,
+      request: req,
+      sourcePage: body?.sourcePage ?? AUDIT_SOURCE_PAGES.RESERVE_SLOT_MANAGEMENT,
+      target: {
+        type: "player",
+        id: body?.steamId ?? body?.steamID ?? body?.steam64 ?? "",
+        name: body?.name ?? "",
+        steamId: body?.steamId ?? body?.steamID ?? body?.steam64 ?? "",
+      },
+      parameters: {
+        steamId: body?.steamId ?? body?.steamID ?? body?.steam64 ?? "",
+        group: body?.group ?? "",
+        expireAt: body?.expireAt ?? "",
+        reason: body?.reason ?? "",
+      },
+    };
+
+    const result = await executeAudited(core, auditContext, () => reserveSlots.upsertMember(body));
+    json(200, {
+      ok: true,
+      success: true,
+      message: result.message ?? "预留位已保存到管理员配置文件。",
+      ...result,
+    });
+    return true;
+  }
+
+  if (url.pathname === "/api/reserve-slots/delete-expired" && req.method === "POST") {
+    if (!core.authManager?.hasEverything?.(user)) {
+      json(403, {
+        error: "Forbidden",
+        message: "SuperAdmin permission is required.",
+      });
+      return true;
+    }
+
+    const auditContext = {
+      action: AUDIT_ACTIONS.RESERVE_SLOT_MANAGEMENT,
+      category: AUDIT_CATEGORIES.RESERVE_SLOT_MANAGEMENT,
+      actor: user,
+      request: req,
+      sourcePage: AUDIT_SOURCE_PAGES.RESERVE_SLOT_MANAGEMENT,
+      target: {
+        type: "reserve_slot",
+        id: "expired",
+        name: "expired",
+      },
+      parameters: {
+        operation: "delete_expired",
+      },
+    };
+
+    const result = await executeAudited(core, auditContext, () => reserveSlots.deleteExpiredMembers());
+    json(200, {
+      ok: true,
+      success: true,
+      message: result.message ?? "过期预留位已删除。",
+      ...result,
+    });
     return true;
   }
 
@@ -112,4 +227,9 @@ export async function handleReserveSlotsRoutes({
   }
 
   return false;
+}
+
+async function executeAudited(core, context, executor) {
+  if (!core?.auditManager?.execute) return executor({ requestId: "" });
+  return core.auditManager.execute(context, executor);
 }

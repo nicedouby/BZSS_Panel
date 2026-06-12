@@ -241,7 +241,7 @@ async function testWebPagesEndpointFiltersByPermissions() {
               username: "viewer",
               role: "Admin",
               authorizationMode: "transitional",
-              permissions: [],
+              permissions: ["match_state.view"],
             };
           }
           if (req.headers.authorization === "super") {
@@ -457,7 +457,7 @@ async function testAdminPermissionGroupsApiSupportsCrudAndInUseConflict() {
   assert.equal(listBody.items.length, 1);
   assert.equal(listBody.items[0].assignedUsers, 1);
 
-  const createReq = Readable.from([JSON.stringify({ name: "Senior", enabled: true, permissions: ["rcon.tb", "rcon.kick"] })]);
+  const createReq = Readable.from([JSON.stringify({ name: "Senior", enabled: true, permissions: ["rcon.tb", "rcon.kick", "match_state.view"] })]);
   createReq.method = "POST";
   createReq.url = "/api/admin/permission-groups";
   createReq.headers = { host: "localhost", "content-type": "application/json" };
@@ -466,8 +466,9 @@ async function testAdminPermissionGroupsApiSupportsCrudAndInUseConflict() {
   await server.handleRequest(createReq, createRes.res);
   assert.equal(createRes.state.status, 201);
   assert.equal(calls[0].type, "create");
+  assert.deepEqual(calls[0].payload.permissions, ["rcon.tb", "rcon.kick", "match_state.view"]);
 
-  const updateReq = Readable.from([JSON.stringify({ name: "Intern Updated", enabled: false, permissions: ["rcon.warn", "rcon.broadcast"] })]);
+  const updateReq = Readable.from([JSON.stringify({ name: "Intern Updated", enabled: false, permissions: ["rcon.warn", "rcon.broadcast", "player_database.view"] })]);
   updateReq.method = "PATCH";
   updateReq.url = "/api/admin/permission-groups/group%3Aintern";
   updateReq.headers = { host: "localhost", "content-type": "application/json" };
@@ -476,6 +477,7 @@ async function testAdminPermissionGroupsApiSupportsCrudAndInUseConflict() {
   await server.handleRequest(updateReq, updateRes.res);
   assert.equal(updateRes.state.status, 200);
   assert.equal(calls[1].type, "update");
+  assert.deepEqual(calls[1].payload.permissions, ["rcon.warn", "rcon.broadcast", "player_database.view"]);
 
   const deleteReq = {
     method: "DELETE",
@@ -1825,12 +1827,18 @@ async function testSettingsRoutesRequireAuthAndSuperAdmin() {
             return { username: "admin", role: "SuperAdmin" };
           }
           if (req.headers.authorization === "user") {
-            return { username: "viewer", role: "Operator" };
+            return { username: "viewer", role: "Operator", permissions: ["settings.manage"] };
+          }
+          if (req.headers.authorization === "limited") {
+            return { username: "limited", role: "Operator", permissions: [] };
           }
           return null;
         },
         hasEverything(user) {
           return String(user?.role ?? "").toLowerCase().includes("superadmin");
+        },
+        hasPermission(user, permission) {
+          return Array.isArray(user?.permissions) && user.permissions.includes(permission);
         },
       },
       config: {
@@ -1874,7 +1882,7 @@ async function testSettingsRoutesRequireAuthAndSuperAdmin() {
   await server.handleRequest({
     method: "PATCH",
     url: "/api/settings/exposed",
-    headers: { host: "localhost", authorization: "user" },
+    headers: { host: "localhost", authorization: "limited" },
     socket: {},
   }, forbiddenPatch.res);
   assert.equal(forbiddenPatch.state.status, 403);

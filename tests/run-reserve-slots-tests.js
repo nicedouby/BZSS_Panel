@@ -9,6 +9,8 @@ import {
   createReserveSlotsModule,
   ensureReserveSlotStoreFile,
   parseReserveSlotsFromAdminFileContent,
+  removeReserveSlotMembersFromAdminFileContent,
+  upsertReserveSlotInAdminFileContent,
 } from "../modules/reserve-slots/index.js";
 
 function createConfig(initial = {}) {
@@ -110,6 +112,84 @@ async function testEnsureReserveSlotStoreFileCreatesAndRepairs() {
   assert.equal(backups.some((file) => file.includes(".broken-")), true);
 
   await fs.rm(tempDir, { recursive: true, force: true });
+}
+
+async function testUpsertAdminFileContentAppendsMissingBlock() {
+  const content = [
+    "Admin=76561198000000000:Admin",
+    "Group=Admin:admin",
+  ].join("\r\n");
+
+  const next = upsertReserveSlotInAdminFileContent(content, {
+    steamId: "76561198377609640",
+    group: "BZSSVIP",
+    expireAt: "2026-06-02 21:26:59",
+  });
+
+  assert.match(next, /\r\n\/\/ 预留位\r\nGroup=BZSSVIP:reserve\r\nAdmin=76561198377609640:BZSSVIP \/\/2026-06-02 21:26:59\r\n$/);
+  assert.match(next, /^Admin=76561198000000000:Admin\r\nGroup=Admin:admin\r\n\r\n\/\/ 预留位/m);
+}
+
+async function testUpsertAdminFileContentUpdatesExistingMember() {
+  const content = [
+    "header",
+    "// 预留位",
+    "Group=BZSSVIP:reserve",
+    "Admin=76561198377609640:BZSSVIP //2026-06-02 21:26:59",
+    "Admin=76561198992120471:BZSSVIP //2026-06-06 22:31:03",
+    "footer",
+  ].join("\n");
+
+  const next = upsertReserveSlotInAdminFileContent(content, {
+    steamId: "76561198377609640",
+    group: "BZSSVIP",
+    expireAt: "2026-07-02 21:26:59",
+    name: "Alpha",
+  });
+
+  assert.equal((next.match(/Admin=76561198377609640/g) ?? []).length, 1);
+  assert.match(next, /Admin=76561198377609640:BZSSVIP \/\/2026-07-02 21:26:59 名称:Alpha/);
+  assert.match(next, /Admin=76561198992120471:BZSSVIP \/\/2026-06-06 22:31:03/);
+  assert.match(next, /footer$/);
+}
+
+async function testUpsertAdminFileContentValidatesInput() {
+  assert.throws(() => upsertReserveSlotInAdminFileContent("// 预留位", {
+    steamId: "bad",
+    group: "BZSSVIP",
+    expireAt: "2026-06-02 21:26:59",
+  }), /Steam64/);
+
+  assert.throws(() => upsertReserveSlotInAdminFileContent("// 预留位", {
+    steamId: "76561198377609640",
+    group: "BZSSVIP",
+    expireAt: "2026-06-02",
+  }), /YYYY-MM-DD HH:mm:ss/);
+}
+
+async function testRemoveReserveSlotMembersFromAdminFileContent() {
+  const content = [
+    "header",
+    "// 预留位",
+    "Group=BZSSVIP:reserve",
+    "Admin=76561198377609640:BZSSVIP //2020-06-02 21:26:59 名称:Alpha",
+    "Admin=76561198992120471:BZSSVIP //2099-06-06 22:31:03 名称:Bravo",
+    "footer",
+  ].join("\n");
+
+  const removedBySteamId = removeReserveSlotMembersFromAdminFileContent(content, {
+    steamIds: ["76561198992120471"],
+  });
+  assert.equal(removedBySteamId.removedCount, 1);
+  assert.doesNotMatch(removedBySteamId.content, /76561198992120471/);
+  assert.match(removedBySteamId.content, /76561198377609640/);
+
+  const removedExpired = removeReserveSlotMembersFromAdminFileContent(content, {
+    removeExpiredOnly: true,
+  });
+  assert.equal(removedExpired.removedCount, 1);
+  assert.doesNotMatch(removedExpired.content, /76561198377609640/);
+  assert.match(removedExpired.content, /76561198992120471/);
 }
 
 async function testModuleAndRoutesWorkEndToEnd() {
@@ -283,11 +363,84 @@ async function testModuleAndRoutesWorkEndToEnd() {
   assert.equal(csvImported.members[0].name, "Bravo");
   assert.deepEqual(csvImported.members[0].reasons, ["原因A", "原因B"]);
 
+  const forbiddenRecorder = createRecorder();
+  const forbiddenReq = Readable.from([JSON.stringify({
+    steamId: "76561199161919155",
+    group: "BZSSVIP",
+    expireAt: "2026-06-07 22:22:53",
+  })]);
+  forbiddenReq.method = "POST";
+  forbiddenReq.url = "/api/reserve-slots/members";
+  forbiddenReq.headers = { host: "localhost", authorization: "user", "content-type": "application/json" };
+  forbiddenReq.socket = {};
+  await server.handleRequest(forbiddenReq, forbiddenRecorder.res);
+  assert.equal(forbiddenRecorder.state.status, 403);
+
+  const memberRecorder = createRecorder();
+  const memberReq = Readable.from([JSON.stringify({
+    steamId: "76561198377609640",
+    group: "BZSSVIP",
+    expireAt: "2026-08-02 21:26:59",
+    name: "Alpha",
+    reason: "manual",
+  })]);
+  memberReq.method = "POST";
+  memberReq.url = "/api/reserve-slots/members";
+  memberReq.headers = { host: "localhost", authorization: "super", "content-type": "application/json" };
+  memberReq.socket = {};
+  await server.handleRequest(memberReq, memberRecorder.res);
+  assert.equal(memberRecorder.state.status, 200);
+  const memberBody = JSON.parse(memberRecorder.state.body);
+  assert.equal(memberBody.success, true);
+  assert.equal(memberBody.members.find((member) => member.steamId === "76561198377609640").expireAt, "2026-08-02 21:26:59");
+
+  const adminFileAfterMemberUpsert = await fs.readFile(adminFilePath, "utf8");
+  assert.equal((adminFileAfterMemberUpsert.match(/Admin=76561198377609640/g) ?? []).length, 1);
+  assert.match(adminFileAfterMemberUpsert, /Admin=76561198377609640:BZSSVIP \/\/2026-08-02 21:26:59 名称:Alpha/);
+
+  const deleteMemberRecorder = createRecorder();
+  const deleteMemberReq = Readable.from([]);
+  deleteMemberReq.method = "DELETE";
+  deleteMemberReq.url = "/api/reserve-slots/members/76561198377609640";
+  deleteMemberReq.headers = { host: "localhost", authorization: "super" };
+  deleteMemberReq.socket = {};
+  await server.handleRequest(deleteMemberReq, deleteMemberRecorder.res);
+  assert.equal(deleteMemberRecorder.state.status, 200);
+  const deleteMemberBody = JSON.parse(deleteMemberRecorder.state.body);
+  assert.equal(deleteMemberBody.success, true);
+  assert.equal(deleteMemberBody.members.some((member) => member.steamId === "76561198377609640"), false);
+
+  await fs.writeFile(adminFilePath, [
+    "header",
+    "// 预留位",
+    "Group=BZSSVIP:reserve",
+    "Admin=76561198377609640:BZSSVIP //2020-06-02 21:26:59 名称:Expired",
+    "Admin=76561198992120471:BZSSVIP //2099-06-06 22:31:03 名称:Active",
+  ].join("\n"), "utf8");
+  await reserveModule.api.importFromAdminFile();
+
+  const deleteExpiredRecorder = createRecorder();
+  const deleteExpiredReq = Readable.from([]);
+  deleteExpiredReq.method = "POST";
+  deleteExpiredReq.url = "/api/reserve-slots/delete-expired";
+  deleteExpiredReq.headers = { host: "localhost", authorization: "super" };
+  deleteExpiredReq.socket = {};
+  await server.handleRequest(deleteExpiredReq, deleteExpiredRecorder.res);
+  assert.equal(deleteExpiredRecorder.state.status, 200);
+  const deleteExpiredBody = JSON.parse(deleteExpiredRecorder.state.body);
+  assert.equal(deleteExpiredBody.success, true);
+  assert.equal(deleteExpiredBody.members.some((member) => member.steamId === "76561198377609640"), false);
+  assert.equal(deleteExpiredBody.members.some((member) => member.steamId === "76561198992120471"), true);
+
   await fs.rm(tempDir, { recursive: true, force: true });
 }
 
 await testParserHandlesAdminBlock();
 await testEnsureReserveSlotStoreFileCreatesAndRepairs();
+await testUpsertAdminFileContentAppendsMissingBlock();
+await testUpsertAdminFileContentUpdatesExistingMember();
+await testUpsertAdminFileContentValidatesInput();
+await testRemoveReserveSlotMembersFromAdminFileContent();
 await testModuleAndRoutesWorkEndToEnd();
 
 console.log("reserve slots tests passed");

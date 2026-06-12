@@ -3,6 +3,7 @@
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { WEB_PAGE_PERMISSION_MATRIX } from "../web-client/src/shared/web-page-permissions.js";
 
 export class AuthUserStore {
   constructor({ config = {}, logger } = {}) {
@@ -463,6 +464,8 @@ export const ALLOWED_ADMIN_PERMISSIONS = Object.freeze([
   "rcon.disband",
   "rcon.remove",
   "settings.manage",
+  "admin_users.manage",
+  ...WEB_PAGE_PERMISSION_MATRIX.map((entry) => String(entry.requiredPermission ?? "").trim()).filter(Boolean),
 ]);
 
 function normalizePermissionGroup(input) {

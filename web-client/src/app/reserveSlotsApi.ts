@@ -52,6 +52,15 @@ export interface UpdateReserveSlotsPayload {
   localReserveFilePath: string;
 }
 
+export interface UpsertReserveSlotMemberPayload {
+  steamId: string;
+  group: string;
+  expireAt: string;
+  name?: string;
+  reason?: string;
+  sourcePage?: string;
+}
+
 export async function fetchReserveSlotsState() {
   return request<ReserveSlotsState>("/api/reserve-slots", {
     method: "GET",
@@ -76,6 +85,40 @@ export async function updateReserveSlotsConfig(payload: UpdateReserveSlotsPayloa
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function upsertReserveSlotMember(payload: UpsertReserveSlotMemberPayload) {
+  return request<ReserveSlotsState & { success: boolean; message?: string }>(
+    "/api/reserve-slots/members",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ...payload,
+        sourcePage: payload.sourcePage ?? "reserve_slot_management",
+      }),
+    },
+  );
+}
+
+export async function deleteReserveSlotMember(steamId: string) {
+  return request<ReserveSlotsState & { success: boolean; message?: string }>(
+    `/api/reserve-slots/members/${encodeURIComponent(String(steamId ?? "").trim())}`,
+    {
+      method: "DELETE",
+    },
+  );
+}
+
+export async function deleteExpiredReserveSlotMembers() {
+  return request<ReserveSlotsState & { success: boolean; message?: string }>(
+    "/api/reserve-slots/delete-expired",
+    {
+      method: "POST",
     },
   );
 }

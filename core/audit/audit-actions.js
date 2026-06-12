@@ -9,6 +9,7 @@ export const AUDIT_ACTIONS = Object.freeze({
   SERVER_BROADCAST: "server.broadcast",
   TANK_BATTLE_EXECUTE: "tank_battle.execute",
   RCON_COMMAND_EXECUTE: "rcon.command.execute",
+  RESERVE_SLOT_MANAGEMENT: "reserve_slot_management",
 });
 
 export const AUDIT_CATEGORIES = Object.freeze({
@@ -16,6 +17,7 @@ export const AUDIT_CATEGORIES = Object.freeze({
   PLAYER_MANAGEMENT: "player_management",
   SERVER_MANAGEMENT: "server_management",
   RCON: "rcon",
+  RESERVE_SLOT_MANAGEMENT: "reserve_slot_management",
 });
 
 export const AUDIT_RESULTS = Object.freeze({

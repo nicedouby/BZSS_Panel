@@ -6,6 +6,7 @@ const DATABASE_REFRESH_INTERVALS_MS = [120_000, 300_000, 600_000];
 const IDLE_REFRESH_INTERVALS_MS = [300_000, 600_000, 1200_000];
 const FAILURE_REFRESH_INTERVALS_MS = [180_000, 600_000, 1800_000];
 const DATABASE_REFRESH_COOLDOWN_MS = 30 * 60_000;
+const SCHEDULE_LOG_INTERVAL_MS = 10 * 60_000;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -19,10 +20,6 @@ function cleanText(value, fallback = "") {
 function normalizeSteamID(value) {
   const text = String(value ?? "").trim();
   return text || "";
-}
-
-function formatHours(seconds) {
-  return (Math.max(0, Number(seconds) || 0) / 3600).toFixed(1);
 }
 
 function pickInterval(intervals, streak = 0) {
@@ -149,10 +146,13 @@ export function createPlugin(context = {}) {
     lastDelayMs: null,
     lastSelectedSource: null,
     lastTargetSteamID: null,
+    lastGameSeconds: null,
     currentMatchEligibleCount: 0,
     databaseEligibleCount: 0,
     totalSuccess: 0,
     totalFailed: 0,
+    lastScheduleLogAt: 0,
+    lastScheduleLogKey: "",
   };
 
   function isDatabaseCoolingDown(steamID) {
@@ -217,7 +217,7 @@ export function createPlugin(context = {}) {
 
   function computeInterval(source, eligibleCount, matchChanged, explicitStreak = null) {
     if (source === "current-match") {
-      if (matchChanged || eligibleCount > 0) {
+      if (matchChanged) {
         return CURRENT_REFRESH_INTERVALS_MS[0];
       }
       return pickInterval(
@@ -238,6 +238,41 @@ export function createPlugin(context = {}) {
       IDLE_REFRESH_INTERVALS_MS,
       Math.min(IDLE_REFRESH_INTERVALS_MS.length - 1, streak),
     );
+  }
+
+  function sourceLabel(source) {
+    if (source === "current-match") return "current-match";
+    if (source === "database") return "database";
+    return "idle";
+  }
+
+  function maybeLogSchedule(target) {
+    const now = Date.now();
+    const key = [
+      target.source,
+      target.intervalMs,
+      target.totalCount,
+      target.eligibleCount > 0 ? "eligible" : "none",
+      target.matchChanged ? "match-changed" : "match-stable",
+    ].join(":");
+
+    if (key === state.lastScheduleLogKey && now - state.lastScheduleLogAt < SCHEDULE_LOG_INTERVAL_MS) {
+      return;
+    }
+
+    state.lastScheduleLogKey = key;
+    state.lastScheduleLogAt = now;
+
+    const delaySeconds = Math.round(target.intervalMs / 1000);
+    if (target.player) {
+      log.info(
+        `Player duration slow refresh: source=${sourceLabel(target.source)} eligible=${target.eligibleCount}/${target.totalCount} next=${delaySeconds}s target=${target.player.name} steam=${target.player.steamID}`,
+      );
+    } else {
+      log.info(
+        `Player duration slow refresh: source=${sourceLabel(target.source)} eligible=0/${target.totalCount} next=${delaySeconds}s`,
+      );
+    }
   }
 
   async function resolvePlayerRecord(player) {
@@ -284,9 +319,6 @@ export function createPlugin(context = {}) {
     state.lastTargetSteamID = player.steamID;
 
     try {
-      const sourceLabel = source === "current-match" ? "当前对局" : "数据库";
-      log.info(`开始刷新${sourceLabel}玩家时长：${player.name} steam=${player.steamID}`);
-
       const seconds = await fetchGameDurationSeconds(steamGameDurationService, player.steamID, player.name);
       await playerRepository.updateGameDuration(playerId, seconds);
 
@@ -299,12 +331,9 @@ export function createPlugin(context = {}) {
 
       state.lastSuccessAt = Date.now();
       state.totalSuccess += 1;
+      state.lastGameSeconds = seconds;
       state.databaseStableLoops = source === "database" ? state.databaseStableLoops + 1 : 0;
       state.idleStreak = 0;
-
-      log.info(
-        `玩家时长刷新成功：${player.name} steam=${player.steamID} seconds=${seconds} hours=${formatHours(seconds)} source=${source}`,
-      );
       return true;
     } catch (error) {
       state.lastErrorAt = Date.now();
@@ -409,18 +438,14 @@ export function createPlugin(context = {}) {
           state.matchRevision = target.matchContext?.revision ?? state.matchRevision;
           state.matchUpdatedAt = target.matchContext?.updatedAt ?? state.matchUpdatedAt;
           state.matchFingerprint = target.matchContext?.fingerprint ?? state.matchFingerprint;
+          maybeLogSchedule(target);
 
           if (!target.player) {
-            log.info(`第 ${state.round} 轮没有可刷新的玩家，${Math.round(target.intervalMs / 1000)} 秒后重试。`);
             if (!state.stopRequested) {
               await sleepImpl(target.intervalMs);
             }
             continue;
           }
-
-          log.info(
-            `第 ${state.round} 轮刷新 ${target.source === "current-match" ? "当前对局" : "数据库"} 玩家：${target.player.name} steam=${target.player.steamID}，间隔=${Math.round(target.intervalMs / 1000)} 秒`,
-          );
 
           const success = await processPlayer(target.player, target.source);
           if (success && target.source === "database") {

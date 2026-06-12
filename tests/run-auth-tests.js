@@ -318,7 +318,7 @@ async function testPermissionGroupsPersistAndResolveForAdminUser() {
 
     const group = await store.createPermissionGroup({
       name: "Intern Admin",
-      permissions: ["rcon.warn", "rcon.broadcast"],
+      permissions: ["rcon.warn", "rcon.broadcast", "match_state.view", "player_database.view"],
     });
     await store.createUser({
       username: "Root",
@@ -354,7 +354,7 @@ async function testPermissionGroupsPersistAndResolveForAdminUser() {
     const safeUser = manager.safeUser(reloaded.findByUsername("operator"));
     assert.equal(safeUser.permissionGroupId, group.id);
     assert.equal(safeUser.permissionGroupName, "Intern Admin");
-    assert.deepEqual(safeUser.permissions, ["rcon.warn", "rcon.broadcast"]);
+    assert.deepEqual(safeUser.permissions, ["rcon.warn", "rcon.broadcast", "match_state.view", "player_database.view"]);
   } finally {
     process.chdir(originalCwd);
     await fs.rm(tempDir, { recursive: true, force: true });

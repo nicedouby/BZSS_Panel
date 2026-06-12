@@ -3,6 +3,7 @@
 import MatchStatusPage from "../pages/MatchStatusPage.vue";
 import ConsolePage from "../pages/ConsolePage.vue";
 import PlayerDatabasePage from "../pages/PlayerDatabasePage.vue";
+import ReserveSlotsPage from "../pages/ReserveSlotsPage.vue";
 import CombatManagerPage from "../pages/CombatManagerPage.vue";
 import BattleLogPage from "../pages/BattleLogPage.vue";
 import AdminWarnsPage from "../pages/AdminWarnsPage.vue";
@@ -136,6 +137,14 @@ export const router = createRouter({
       meta: {
         ...coreManualMeta,
         titleKey: "routeTitle.playerDatabase",
+      },
+    },
+    {
+      path: "/reserve-slots",
+      component: ReserveSlotsPage,
+      meta: {
+        ...coreManualMeta,
+        titleKey: "routeTitle.reserveSlots",
       },
     },
     {

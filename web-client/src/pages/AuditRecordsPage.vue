@@ -237,6 +237,7 @@ function actionLabel(action: string) {
     "server.broadcast": "全服广播",
     "tank_battle.execute": "坦克大战执行",
     "rcon.command.execute": "手动 RCON 指令",
+    reserve_slot_management: "预留位管理",
   };
   return labels[action] ?? action;
 }

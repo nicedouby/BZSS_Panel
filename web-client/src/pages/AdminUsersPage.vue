@@ -34,8 +34,8 @@
     <section class="permission-groups-shell">
       <div class="section-title-row">
         <div>
-          <h2>RCON 权限组</h2>
-          <p class="subtitle">首批只开放 6 类手动 RCON 能力，其余命令仍仅允许 SuperAdmin。</p>
+          <h2>权限组</h2>
+          <p class="subtitle">权限组同时控制页面入口显示与已开放的手动 RCON 能力。</p>
         </div>
         <button class="primary-button" type="button" @click="openCreateGroupDialog">新建权限组</button>
       </div>
@@ -61,15 +61,24 @@
               <button class="danger-link" type="button" @click="deletePermissionGroupAction(group)">删除</button>
             </div>
           </div>
-          <div class="permission-chip-row">
-            <span
-              v-for="option in permissionOptions"
-              :key="option.value"
-              class="permission-chip"
-              :data-enabled="String(group.permissions.includes(option.value))"
+          <div class="permission-summary-grid">
+            <div
+              v-for="section in permissionSections"
+              :key="section.key"
+              class="permission-summary-section"
             >
-              {{ option.label }}
-            </span>
+              <span class="permission-section-title">{{ section.label }}</span>
+              <div class="permission-chip-row">
+                <span
+                  v-for="option in section.options"
+                  :key="option.value"
+                  class="permission-chip"
+                  :data-enabled="String(group.permissions.includes(option.value))"
+                >
+                  {{ option.label }}
+                </span>
+              </div>
+            </div>
           </div>
         </article>
       </div>
@@ -257,7 +266,7 @@
         <header>
           <div>
             <h2>{{ editingPermissionGroup ? "编辑权限组" : "新建权限组" }}</h2>
-            <p class="subtitle">每个权限组可勾选首批 6 类手动 RCON 能力。</p>
+            <p class="subtitle">勾选页面访问权限后，该权限组账号才能在左侧导航看到并进入对应页面。</p>
           </div>
           <button class="icon-button" type="button" @click="closeGroupEditor">×</button>
         </header>
@@ -270,11 +279,28 @@
           <input v-model="groupForm.enabled" type="checkbox" />
           <span>权限组启用</span>
         </label>
-        <div class="permission-option-grid">
-          <label v-for="option in permissionOptions" :key="option.value" class="permission-option">
-            <input v-model="groupForm.permissions" type="checkbox" :value="option.value" />
-            <span>{{ option.label }}</span>
-          </label>
+        <div class="permission-section-list">
+          <section
+            v-for="section in permissionSections"
+            :key="section.key"
+            class="permission-editor-section"
+          >
+            <div class="permission-editor-head">
+              <div>
+                <h3>{{ section.label }}</h3>
+                <p class="hint">{{ section.description }}</p>
+              </div>
+              <button class="ghost-button small" type="button" @click="togglePermissionSection(section)">
+                {{ isPermissionSectionFullySelected(section) ? "清空" : "全选" }}
+              </button>
+            </div>
+            <div class="permission-option-grid">
+              <label v-for="option in section.options" :key="option.value" class="permission-option">
+                <input v-model="groupForm.permissions" type="checkbox" :value="option.value" />
+                <span>{{ option.label }}</span>
+              </label>
+            </div>
+          </section>
         </div>
 
         <p v-if="dialogError" class="error-banner">{{ dialogError }}</p>
@@ -335,9 +361,22 @@ import {
   type AdminUserStats,
   type PermissionGroup,
 } from "../app/adminUsersApi";
+import { WEB_PAGE_PERMISSION_MATRIX } from "../shared/web-page-permissions.js";
 import { useAuthStore } from "../stores/auth.store";
 
-const permissionOptions = [
+interface PermissionOption {
+  value: string;
+  label: string;
+}
+
+interface PermissionSection {
+  key: string;
+  label: string;
+  description: string;
+  options: PermissionOption[];
+}
+
+const rconPermissionOptions: PermissionOption[] = [
   { value: "rcon.tb", label: "跳边 TB" },
   { value: "rcon.warn", label: "警告 Warn" },
   { value: "rcon.broadcast", label: "广播 Broadcast" },
@@ -346,7 +385,56 @@ const permissionOptions = [
   { value: "rcon.remove", label: "移出队伍 Remove" },
 ];
 
-permissionOptions.push({ value: "settings.manage", label: "设置 / 坦克大战" });
+const pagePermissionLabels = new Map([
+  ["match_state.view", "对局状态"],
+  ["console.view", "控制台"],
+  ["chat_monitor.view", "聊天监控"],
+  ["player_session_records.view", "进出服记录"],
+  ["player_database.view", "玩家数据库 / 预留位"],
+  ["combat_manager.view", "战斗管理 / 战斗日志"],
+  ["admin_warn.view", "警告记录"],
+  ["scheduled_broadcast.view", "定时广播"],
+  ["squad_management.view", "小队管理 / 联办踢出"],
+  ["infantry_combat_enhancer.view", "步战增强"],
+  ["group_report.view", "抱团报备"],
+  ["server_stats.view", "服务器统计"],
+  ["debug.udp_forwarder.view", "UDP 转发日志"],
+  ["debug.match_snapshots.view", "快照录制"],
+  ["debug.pjsc_average_duration.view", "PJSC 平均时长"],
+  ["debug.draw_vote_guard.view", "平局投票提示"],
+  ["debug.welcome_join_warning.view", "入服欢迎警告"],
+  ["debug.squad_name_classifier.view", "小队名称分类器"],
+  ["audit.view", "操作记录"],
+]);
+
+const pagePermissionOptions = buildPagePermissionOptions();
+const systemPermissionOptions: PermissionOption[] = [
+  { value: "settings.manage", label: "系统设置 / 插件订阅" },
+  { value: "admin_users.manage", label: "管理员账号" },
+];
+
+const permissionSections: PermissionSection[] = [
+  {
+    key: "page",
+    label: "页面访问",
+    description: "控制账号能看到哪些页面入口，并限制直接访问对应路由。",
+    options: pagePermissionOptions,
+  },
+  {
+    key: "rcon",
+    label: "RCON 操作",
+    description: "只开放这些手动 RCON 命令，其余命令仍仅允许 SuperAdmin。",
+    options: rconPermissionOptions,
+  },
+  {
+    key: "system",
+    label: "系统权限",
+    description: "用于插件订阅、系统配置、审计与账号管理等系统能力。",
+    options: systemPermissionOptions,
+  },
+];
+
+const permissionOptions = permissionSections.flatMap((section) => section.options);
 
 const permissionLabelMap = new Map(permissionOptions.map((item) => [item.value, item.label]));
 
@@ -552,21 +640,62 @@ function closeGroupEditor() {
   groupEditorOpen.value = false;
 }
 
+function buildPagePermissionOptions(): PermissionOption[] {
+  const seen = new Set<string>();
+  const options: PermissionOption[] = [];
+
+  for (const entry of WEB_PAGE_PERMISSION_MATRIX) {
+    const value = String(entry.requiredPermission ?? "").trim();
+    if (!value || seen.has(value)) continue;
+    if (value === "settings.manage" || value === "admin_users.manage") continue;
+
+    seen.add(value);
+    options.push({
+      value,
+      label: pagePermissionLabels.get(value) ?? value,
+    });
+  }
+
+  return options;
+}
+
+function isPermissionSectionFullySelected(section: PermissionSection) {
+  return section.options.every((option) => groupForm.permissions.includes(option.value));
+}
+
+function togglePermissionSection(section: PermissionSection) {
+  const values = section.options.map((option) => option.value);
+  const next = new Set(groupForm.permissions);
+
+  if (isPermissionSectionFullySelected(section)) {
+    for (const value of values) next.delete(value);
+  } else {
+    for (const value of values) next.add(value);
+  }
+
+  groupForm.permissions = permissionOptions
+    .map((option) => option.value)
+    .filter((value) => next.has(value));
+}
+
 async function submitGroupEditor() {
   dialogError.value = "";
   saving.value = true;
+  const permissions = permissionOptions
+    .map((option) => option.value)
+    .filter((value) => groupForm.permissions.includes(value));
   try {
     if (editingPermissionGroup.value) {
       await updatePermissionGroup(editingPermissionGroup.value.id, {
         name: groupForm.name,
         enabled: groupForm.enabled,
-        permissions: groupForm.permissions,
+        permissions,
       });
     } else {
       await createPermissionGroup({
         name: groupForm.name,
         enabled: groupForm.enabled,
-        permissions: groupForm.permissions,
+        permissions,
       });
     }
     closeGroupEditor();
@@ -877,6 +1006,12 @@ button:disabled {
   background: color-mix(in srgb, var(--color-bg-elevated) 82%, transparent);
 }
 
+.ghost-button.small {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
 .table-shell {
   margin-top: 16px;
   border-radius: 8px;
@@ -983,6 +1118,31 @@ td small {
 
 .permission-chip-row.compact {
   gap: 6px;
+}
+
+.permission-summary-grid,
+.permission-section-list {
+  display: grid;
+  gap: 12px;
+}
+
+.permission-summary-section,
+.permission-editor-section {
+  display: grid;
+  gap: 8px;
+}
+
+.permission-section-title {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.permission-editor-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .permission-option-grid {

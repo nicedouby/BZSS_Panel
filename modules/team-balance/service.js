@@ -548,35 +548,23 @@ function buildPlaytimeShufflePlan(players) {
     .filter((player) => !Number.isFinite(player.playtimeSeconds))
     .sort(compareShufflePlayersByName);
 
-  const assigned = {
-    1: [],
-    2: [],
-  };
-  const knownTotals = {
-    1: 0,
-    2: 0,
-  };
-  const knownCounts = {
-    1: 0,
-    2: 0,
-  };
+  // --- Phase 1: greedy LPT assignment (respects team size caps) ---
+  const assigned = { 1: [], 2: [] };
+  const knownTotals = { 1: 0, 2: 0 };
 
   for (const player of knownPlayers) {
     const targetTeamId = chooseKnownTargetTeam({ assigned, knownTotals, teamSizes });
-    assigned[targetTeamId].push({
-      ...player,
-      targetTeamId,
-    });
+    assigned[targetTeamId].push({ ...player, targetTeamId });
     knownTotals[targetTeamId] += Number(player.playtimeSeconds ?? 0);
-    knownCounts[targetTeamId] += 1;
   }
 
+  // --- Phase 2: 2-opt swap improvement (fixed team sizes) ---
+  improveKnownAssignment(assigned);
+
+  // --- Phase 3: fill unknown players to maintain team sizes ---
   for (const player of unknownPlayers) {
     const targetTeamId = chooseUnknownTargetTeam({ assigned, teamSizes });
-    assigned[targetTeamId].push({
-      ...player,
-      targetTeamId,
-    });
+    assigned[targetTeamId].push({ ...player, targetTeamId });
   }
 
   const assignments = [...assigned[1], ...assigned[2]]
@@ -628,6 +616,52 @@ function buildPlaytimeShufflePlan(players) {
       moves,
     },
   };
+}
+
+/**
+ * Iterative pairwise swap: try every (i in T1, j in T2) swap.
+ * Accept the swap if it strictly reduces |total1 - total2|.
+ * Repeat until no improvement is found (convergence).
+ * Complexity: O(k^2) per pass, passes ≤ k, so O(k^3) worst-case
+ * which is fine for k ≤ 100 players.
+ */
+function improveKnownAssignment(assigned) {
+  let improved = true;
+  while (improved) {
+    improved = false;
+    const t1 = assigned[1];
+    const t2 = assigned[2];
+    const total1 = t1.reduce((s, p) => s + Number(p.playtimeSeconds ?? 0), 0);
+    const total2 = t2.reduce((s, p) => s + Number(p.playtimeSeconds ?? 0), 0);
+    const current = calcImbalance(total1, total2);
+
+    for (let i = 0; i < t1.length; i++) {
+      for (let j = 0; j < t2.length; j++) {
+        const s1 = Number(t1[i].playtimeSeconds ?? 0);
+        const s2 = Number(t2[j].playtimeSeconds ?? 0);
+        if (s1 === s2) continue; // swap has no effect
+        const newTotal1 = total1 - s1 + s2;
+        const newTotal2 = total2 - s2 + s1;
+        if (calcImbalance(newTotal1, newTotal2) < current) {
+          // Perform the swap
+          const tmp = { ...t1[i], targetTeamId: 2 };
+          t1[i] = { ...t2[j], targetTeamId: 1 };
+          t2[j] = tmp;
+          // Update assigned arrays in-place
+          assigned[1] = t1;
+          assigned[2] = t2;
+          improved = true;
+          // Restart the inner scan after a successful swap
+          break;
+        }
+      }
+      if (improved) break;
+    }
+  }
+}
+
+function calcImbalance(total1, total2) {
+  return Math.abs(total1 - total2);
 }
 
 function buildTeamSummary(players, teamKey) {

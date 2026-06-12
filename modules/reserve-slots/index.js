@@ -6,7 +6,11 @@ import path from "node:path";
 const MODULE_ID = "module.reserveSlots";
 const DEFAULT_LOCAL_RESERVE_FILE = "data/reserve-slots.json";
 const DEFAULT_STORE_VERSION = 1;
+const DEFAULT_RESERVE_GROUP = "BZSSVIP";
+const DEFAULT_RESERVE_PERMISSION = "reserve";
 const RESERVE_MARKER_RE = /\/\/\s*预留位/;
+const STEAM64_RE = /^7656119\d{10}$/;
+const RESERVE_EXPIRE_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 
 export function createReserveSlotsModule({ core, modules, config, logger }) {
   const moduleLogger =
@@ -49,6 +53,18 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
 
     async importFromCsv(csvText = "") {
       return await importReserveSlotsFromCsv(csvText);
+    },
+
+    async upsertMember(input = {}) {
+      return await upsertReserveSlotMember(input);
+    },
+
+    async deleteMember(input = {}) {
+      return await deleteReserveSlotMember(input);
+    },
+
+    async deleteExpiredMembers() {
+      return await deleteExpiredReserveSlotMembers();
     },
 
     async reload() {
@@ -230,7 +246,147 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
     });
   }
 
-async function buildState(extra = {}) {
+  async function upsertReserveSlotMember(input = {}) {
+    refreshConfigFromRuntime();
+    const member = normalizeReserveMemberInput(input);
+    const adminFilePath = runtime.config.adminFilePath;
+    if (!adminFilePath) {
+      throw createReserveSlotError(400, "AdminFileNotConfigured", "管理员配置文件未配置。");
+    }
+
+    const resolvedAdminFilePath = resolveConfigPath(adminFilePath, "");
+    let content = "";
+    try {
+      content = await fs.readFile(resolvedAdminFilePath, "utf8");
+    } catch (error) {
+      if (error?.code === "ENOENT") {
+        throw createReserveSlotError(404, "AdminFileNotFound", "管理员配置文件不存在。");
+      }
+      throw error;
+    }
+
+    const nextContent = upsertReserveSlotInAdminFileContent(content, member);
+    await writeTextFileAtomic(resolvedAdminFilePath, nextContent);
+
+    const importedAt = new Date().toISOString();
+    const parsed = parseReserveSlotsFromAdminFileContent(nextContent, {
+      adminFilePath,
+      importedAt,
+      logger: moduleLogger,
+      runtimeState: core?.runtimeState,
+    });
+    parsed.source.adminFilePath = adminFilePath;
+    parsed.source.lastImportedAt = importedAt;
+    parsed.members = await enrichMembersWithLinkedNames(parsed.members, {
+      playerDatabase: modules?.playerDatabase,
+      runtimeState: core?.runtimeState,
+    });
+
+    await persistStore(runtime.resolvedLocalReserveFilePath, parsed);
+    runtime.store = parsed;
+    runtime.loadedAt = importedAt;
+
+    moduleLogger?.info?.(`[ReserveSlots] 已写入预留位: steamId=${member.steamId} group=${member.group} expireAt=${member.expireAt}`);
+    return buildState({
+      message: "预留位已保存到管理员配置文件。",
+      savedMember: member,
+    });
+  }
+
+  async function deleteReserveSlotMember(input = {}) {
+    refreshConfigFromRuntime();
+    const steamId = normalizeReserveSteamId(input.steamId ?? input.steamID ?? input.steam64 ?? "");
+    const adminFilePath = runtime.config.adminFilePath;
+    if (!adminFilePath) {
+      throw createReserveSlotError(400, "AdminFileNotConfigured", "管理员配置文件未配置。");
+    }
+
+    const resolvedAdminFilePath = resolveConfigPath(adminFilePath, "");
+    let content = "";
+    try {
+      content = await fs.readFile(resolvedAdminFilePath, "utf8");
+    } catch (error) {
+      if (error?.code === "ENOENT") {
+        throw createReserveSlotError(404, "AdminFileNotFound", "管理员配置文件不存在。");
+      }
+      throw error;
+    }
+
+    const result = removeReserveSlotMembersFromAdminFileContent(content, {
+      steamIds: [steamId],
+    });
+    if (result.removedCount <= 0) {
+      throw createReserveSlotError(404, "ReserveSlotNotFound", "未找到该玩家的预留位。");
+    }
+
+    await writeTextFileAtomic(resolvedAdminFilePath, result.content);
+    return await syncRuntimeStoreFromAdminContent(result.content, {
+      adminFilePath,
+      message: `已删除 ${result.removedCount} 条预留位。`,
+      removedCount: result.removedCount,
+      removedSteamIds: [steamId],
+    });
+  }
+
+  async function deleteExpiredReserveSlotMembers() {
+    refreshConfigFromRuntime();
+    const adminFilePath = runtime.config.adminFilePath;
+    if (!adminFilePath) {
+      throw createReserveSlotError(400, "AdminFileNotConfigured", "管理员配置文件未配置。");
+    }
+
+    const resolvedAdminFilePath = resolveConfigPath(adminFilePath, "");
+    let content = "";
+    try {
+      content = await fs.readFile(resolvedAdminFilePath, "utf8");
+    } catch (error) {
+      if (error?.code === "ENOENT") {
+        throw createReserveSlotError(404, "AdminFileNotFound", "管理员配置文件不存在。");
+      }
+      throw error;
+    }
+
+    const result = removeReserveSlotMembersFromAdminFileContent(content, {
+      removeExpiredOnly: true,
+    });
+    if (result.removedCount <= 0) {
+      return buildState({
+        message: "没有可删除的过期预留位。",
+        removedCount: 0,
+      });
+    }
+
+    await writeTextFileAtomic(resolvedAdminFilePath, result.content);
+    return await syncRuntimeStoreFromAdminContent(result.content, {
+      adminFilePath,
+      message: `已删除 ${result.removedCount} 条过期预留位。`,
+      removedCount: result.removedCount,
+      removedSteamIds: result.removedSteamIds,
+    });
+  }
+
+  async function syncRuntimeStoreFromAdminContent(content, extra = {}) {
+    const importedAt = new Date().toISOString();
+    const parsed = parseReserveSlotsFromAdminFileContent(content, {
+      adminFilePath: extra.adminFilePath ?? runtime.config.adminFilePath,
+      importedAt,
+      logger: moduleLogger,
+      runtimeState: core?.runtimeState,
+    });
+    parsed.source.adminFilePath = extra.adminFilePath ?? runtime.config.adminFilePath;
+    parsed.source.lastImportedAt = importedAt;
+    parsed.members = await enrichMembersWithLinkedNames(parsed.members, {
+      playerDatabase: modules?.playerDatabase,
+      runtimeState: core?.runtimeState,
+    });
+
+    await persistStore(runtime.resolvedLocalReserveFilePath, parsed);
+    runtime.store = parsed;
+    runtime.loadedAt = importedAt;
+    return buildState(extra);
+  }
+
+  async function buildState(extra = {}) {
     refreshConfigFromRuntime();
     const [adminFileExists, localReserveFileExists] = await Promise.all([
       pathExists(runtime.config.adminFilePath ? resolveConfigPath(runtime.config.adminFilePath, "") : ""),
@@ -348,6 +504,107 @@ export function parseReserveSlotsFromAdminFileContent(content, options = {}) {
   });
 }
 
+export function upsertReserveSlotInAdminFileContent(content, input = {}) {
+  const member = normalizeReserveMemberInput(input);
+  const text = String(content ?? "");
+  const newline = text.includes("\r\n") ? "\r\n" : "\n";
+  const hadTrailingNewline = /\r?\n$/.test(text);
+  const lines = text.split(/\r?\n/);
+  if (lines.length && lines[lines.length - 1] === "" && hadTrailingNewline) {
+    lines.pop();
+  }
+
+  const markerIndex = lines.findIndex((line) => RESERVE_MARKER_RE.test(line));
+  const memberLine = formatReserveMemberLine(member);
+
+  if (markerIndex < 0) {
+    if (lines.length && String(lines[lines.length - 1] ?? "").trim() !== "") {
+      lines.push("");
+    }
+    lines.push("// 预留位");
+    lines.push(formatReserveGroupLine(member.group));
+    lines.push(memberLine);
+    return `${lines.join(newline)}${newline}`;
+  }
+
+  const reserveRange = findReserveBlockRange(lines, markerIndex);
+  const groupIndex = findReserveGroupLineIndex(lines, reserveRange, member.group);
+  if (groupIndex < 0) {
+    lines.splice(markerIndex + 1, 0, formatReserveGroupLine(member.group));
+    reserveRange.end += 1;
+  }
+
+  const memberIndex = findReserveMemberLineIndex(lines, reserveRange, member.steamId);
+  if (memberIndex >= 0) {
+    lines[memberIndex] = memberLine;
+  } else {
+    const insertIndex = findReserveMemberInsertIndex(lines, reserveRange);
+    lines.splice(insertIndex, 0, memberLine);
+  }
+
+  return `${lines.join(newline)}${hadTrailingNewline ? newline : ""}`;
+}
+
+export function removeReserveSlotMembersFromAdminFileContent(content, options = {}) {
+  const text = String(content ?? "");
+  const newline = text.includes("\r\n") ? "\r\n" : "\n";
+  const hadTrailingNewline = /\r?\n$/.test(text);
+  const lines = text.split(/\r?\n/);
+  if (lines.length && lines[lines.length - 1] === "" && hadTrailingNewline) {
+    lines.pop();
+  }
+
+  const markerIndex = lines.findIndex((line) => RESERVE_MARKER_RE.test(line));
+  if (markerIndex < 0) {
+    return {
+      content: `${lines.join(newline)}${hadTrailingNewline ? newline : ""}`,
+      removedCount: 0,
+      removedSteamIds: [],
+    };
+  }
+
+  const steamIdSet = new Set(
+    (Array.isArray(options.steamIds) ? options.steamIds : [])
+      .map((value) => String(value ?? "").trim())
+      .filter(Boolean),
+  );
+  const reserveRange = findReserveBlockRange(lines, markerIndex);
+  const kept = [];
+  const removedSteamIds = [];
+  let removedCount = 0;
+
+  for (let index = reserveRange.start; index < reserveRange.end; index += 1) {
+    const line = String(lines[index] ?? "");
+    const parsed = parseReserveMemberLine(line.trim());
+    if (!parsed) {
+      kept.push(line);
+      continue;
+    }
+
+    const shouldRemove = options.removeExpiredOnly
+      ? Boolean(parsed.isExpired)
+      : steamIdSet.has(parsed.steamId);
+    if (shouldRemove) {
+      removedCount += 1;
+      removedSteamIds.push(parsed.steamId);
+      continue;
+    }
+    kept.push(line);
+  }
+
+  const nextLines = [
+    ...lines.slice(0, reserveRange.start),
+    ...kept,
+    ...lines.slice(reserveRange.end),
+  ];
+
+  return {
+    content: `${nextLines.join(newline)}${hadTrailingNewline ? newline : ""}`,
+    removedCount,
+    removedSteamIds: [...new Set(removedSteamIds)],
+  };
+}
+
 function parseReserveGroupLine(line) {
   const content = String(line ?? "").trim();
   const payload = content.slice("Group=".length);
@@ -363,6 +620,69 @@ function parseReserveGroupLine(line) {
     permission,
     rawLine: content,
   };
+}
+
+function formatReserveGroupLine(groupName) {
+  return `Group=${groupName}:${DEFAULT_RESERVE_PERMISSION}`;
+}
+
+function formatReserveMemberLine(member) {
+  const commentParts = [member.expireAt];
+  if (member.name) {
+    commentParts.push(`名称:${member.name}`);
+  }
+  if (member.reason) {
+    commentParts.push(member.reason);
+  }
+  return `Admin=${member.steamId}:${member.group} //${commentParts.join(" ")}`;
+}
+
+function findReserveBlockRange(lines, markerIndex) {
+  let end = lines.length;
+  for (let index = markerIndex + 1; index < lines.length; index += 1) {
+    const line = String(lines[index] ?? "").trim();
+    if (!line) continue;
+    if (RESERVE_MARKER_RE.test(line)) {
+      end = index;
+      break;
+    }
+  }
+  return { start: markerIndex + 1, end };
+}
+
+function findReserveGroupLineIndex(lines, range, groupName) {
+  const expected = String(groupName ?? "").trim().toLowerCase();
+  for (let index = range.start; index < range.end; index += 1) {
+    const group = parseReserveGroupLine(String(lines[index] ?? "").trim());
+    if (group && group.name.toLowerCase() === expected && group.permission === DEFAULT_RESERVE_PERMISSION) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function findReserveMemberLineIndex(lines, range, steamId) {
+  const expected = String(steamId ?? "").trim();
+  for (let index = range.start; index < range.end; index += 1) {
+    const member = parseReserveMemberLine(String(lines[index] ?? "").trim());
+    if (member && member.steamId === expected) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function findReserveMemberInsertIndex(lines, range) {
+  let lastGroupIndex = -1;
+  let lastAdminIndex = -1;
+  for (let index = range.start; index < range.end; index += 1) {
+    const line = String(lines[index] ?? "").trim();
+    if (line.startsWith("Group=")) lastGroupIndex = index;
+    if (line.startsWith("Admin=")) lastAdminIndex = index;
+  }
+  if (lastAdminIndex >= 0) return lastAdminIndex + 1;
+  if (lastGroupIndex >= 0) return lastGroupIndex + 1;
+  return range.start;
 }
 
 function parseReserveMemberLine(line) {
@@ -405,10 +725,11 @@ function parseReserveComment(commentText) {
   const localDateMatch = text.match(/^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})(?:\s+(.*))?$/);
   if (localDateMatch) {
     const payload = String(localDateMatch[2] ?? "").trim();
+    const namedPayload = payload ? parseReserveNamedComment(payload) : null;
     return {
       expireAt: localDateMatch[1],
-      name: "",
-      reasons: splitReserveReasons(payload),
+      name: namedPayload?.name ?? "",
+      reasons: namedPayload?.reasons ?? splitReserveReasons(payload),
       remark: payload,
     };
   }
@@ -416,10 +737,11 @@ function parseReserveComment(commentText) {
   const isoDateMatch = text.match(/^(\d{4}-\d{2}-\d{2}T[^\s]+)(?:\s+(.*))?$/);
   if (isoDateMatch) {
     const payload = String(isoDateMatch[2] ?? "").trim();
+    const namedPayload = payload ? parseReserveNamedComment(payload) : null;
     return {
       expireAt: isoDateMatch[1],
-      name: "",
-      reasons: splitReserveReasons(payload),
+      name: namedPayload?.name ?? "",
+      reasons: namedPayload?.reasons ?? splitReserveReasons(payload),
       remark: payload,
     };
   }
@@ -442,6 +764,58 @@ function parseReserveDate(text) {
   const parsed = new Date(value.includes(" ") ? value.replace(" ", "T") : value);
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed;
+}
+
+function normalizeReserveMemberInput(input = {}) {
+  const steamId = normalizeReserveSteamId(input.steamId ?? input.steamID ?? input.steam64 ?? "");
+  const group = String(input.group ?? DEFAULT_RESERVE_GROUP).trim() || DEFAULT_RESERVE_GROUP;
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(group)) {
+    throw createReserveSlotError(400, "InvalidReserveGroup", "预留位组名只能包含字母、数字、下划线、点和短横线。");
+  }
+
+  const expireAt = normalizeReserveExpireAt(input.expireAt);
+  const name = String(input.name ?? "").trim();
+  const reason = String(input.reason ?? "").trim();
+
+  return {
+    steamId,
+    group,
+    expireAt,
+    name,
+    reason,
+  };
+}
+
+function normalizeReserveExpireAt(value) {
+  const text = String(value ?? "").trim().replace("T", " ");
+  if (!text) {
+    throw createReserveSlotError(400, "ExpireAtRequired", "新增或续期预留位必须填写到期时间。");
+  }
+  if (!RESERVE_EXPIRE_RE.test(text)) {
+    throw createReserveSlotError(400, "InvalidExpireAt", "到期时间格式必须是 YYYY-MM-DD HH:mm:ss。");
+  }
+
+  const parsed = parseReserveDate(text);
+  if (!parsed || formatLocalDateTime(parsed) !== text) {
+    throw createReserveSlotError(400, "InvalidExpireAt", "到期时间无效。");
+  }
+  return text;
+}
+
+function normalizeReserveSteamId(value) {
+  const steamId = String(value ?? "").trim();
+  if (!STEAM64_RE.test(steamId)) {
+    throw createReserveSlotError(400, "InvalidSteamId", "Steam64 必须是有效的 17 位 SteamID。");
+  }
+  return steamId;
+}
+
+function formatLocalDateTime(date) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
+}
+
+function pad2(value) {
+  return String(value).padStart(2, "0");
 }
 
 function normalizeStore(raw, { adminFilePath = "" } = {}) {
@@ -770,6 +1144,25 @@ async function persistStore(filePath, store) {
 
   await fs.writeFile(tempPath, payload, "utf8");
   await fs.rename(tempPath, normalizedPath);
+}
+
+async function writeTextFileAtomic(filePath, content) {
+  const normalizedPath = String(filePath ?? "").trim();
+  if (!normalizedPath) {
+    throw createReserveSlotError(400, "AdminFileNotConfigured", "管理员配置文件未配置。");
+  }
+
+  await fs.mkdir(path.dirname(normalizedPath), { recursive: true });
+  const tempPath = `${normalizedPath}.${process.pid}.${Date.now()}.tmp`;
+  await fs.writeFile(tempPath, String(content ?? ""), "utf8");
+  await fs.rename(tempPath, normalizedPath);
+}
+
+function createReserveSlotError(statusCode, code, message) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  error.code = code;
+  return error;
 }
 
 async function pathExists(filePath) {

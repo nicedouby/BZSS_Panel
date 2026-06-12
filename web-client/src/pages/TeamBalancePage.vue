@@ -1,7 +1,8 @@
 <template>
   <main class="tb-page">
-    <section class="tb-card">
-      <header class="tb-header">
+    <div class="tb-top-row">
+      <section class="tb-card tb-switch-card">
+        <header class="tb-header">
         <div>
           <h1>跳边入口</h1>
           <p>统一通过 TeamBalance 模块处理跳边执行和打乱方案记录。</p>
@@ -148,6 +149,7 @@
         只会写入跳边入口记录，审核通过前不会触发任何实际跳边。当前的目标是让两边平均时长尽量接近。
       </div>
     </section>
+    </div>
 
     <section class="tb-card tb-records-card">
       <header class="tb-header">
@@ -632,8 +634,19 @@ function roundHours(value: number) {
   color: var(--color-text-primary);
 }
 
+.tb-top-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.tb-switch-card {
+  position: sticky;
+  top: 16px;
+}
+
 .tb-card {
-  max-width: 1120px;
   border: 1px solid var(--color-border-default);
   border-radius: 18px;
   padding: 20px;
@@ -985,6 +998,16 @@ function roundHours(value: number) {
 
 .tb-record-plan-move-list {
   margin-top: 10px;
+}
+
+@media (max-width: 1100px) {
+  .tb-top-row {
+    grid-template-columns: 1fr;
+  }
+
+  .tb-switch-card {
+    position: static;
+  }
 }
 
 @media (max-width: 960px) {
