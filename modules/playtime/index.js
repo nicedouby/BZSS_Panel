@@ -141,6 +141,8 @@ class SteamGameDurationService {
     autoRefreshCooldownMinutes,
     autoRefreshMissingOnly,
     autoRefreshBatchSize,
+    fetchAvatarsEnabled,
+    apiBaseUrl,
     steamPlaytimeRepo,
     playerDatabase,
     logger,
@@ -152,6 +154,8 @@ class SteamGameDurationService {
     this.defaultWaitMs = clampWaitMs(defaultWaitMs, DEFAULT_WAIT_MS);
     this.retryCount = Math.max(0, Math.min(Math.floor(Number(retryCount) || DEFAULT_RETRY_COUNT), 5));
     this.retryDelayMs = Math.max(100, Math.min(Math.floor(Number(retryDelayMs) || DEFAULT_RETRY_DELAY_MS), 10_000));
+    this.fetchAvatarsEnabled = fetchAvatarsEnabled == null ? true : Boolean(fetchAvatarsEnabled);
+    this.apiBaseUrl = String(apiBaseUrl || "https://api.steampowered.com").trim().replace(/\/+$/, "");
     this.usePythonScript = usePythonScript !== false;
     this.pythonBin = String(pythonBin || "python").trim() || "python";
     this.pythonScriptPath = path.resolve(process.cwd(), String(pythonScript || "./MicePanel/FetchGameDuration.py"));
@@ -533,7 +537,7 @@ class SteamGameDurationService {
 
     const normalizedSteamID = normalizeSteamID(steamID);
 
-    if (this.apiKey) {
+    if (this.apiKey && this.fetchAvatarsEnabled) {
       this.fetchAndCacheSteamAvatars([normalizedSteamID]).catch(() => {});
     }
 
@@ -1005,7 +1009,7 @@ class SteamGameDurationService {
 
     try {
       const response = await fetch(
-        `https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?${params.toString()}`,
+        `${this.apiBaseUrl}/IPlayerService/GetOwnedGames/v0001/?${params.toString()}`,
         {
           method: "GET",
           signal: controller.signal,
@@ -1029,6 +1033,7 @@ class SteamGameDurationService {
   }
 
   async fetchSteamPlayerSummaries(steamIDs) {
+    if (!this.fetchAvatarsEnabled) return [];
     if (!this.apiKey) {
       this.logger?.warn("fetchSteamPlayerSummaries: No Steam API Key configured.");
       console.log("[SteamAvatar] Warning: Steam API key is not configured.");
@@ -1070,14 +1075,14 @@ class SteamGameDurationService {
         });
 
         if (attempt > 1) {
-          console.log(`[SteamAvatar] Retrying (${attempt}/${maxAttempts}): https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/`);
+          console.log(`[SteamAvatar] Retrying (${attempt}/${maxAttempts}): ${this.apiBaseUrl}/ISteamUser/GetPlayerSummaries/v0002/`);
         } else {
-          console.log(`[SteamAvatar] Fetching: https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/ for chunk of ${chunk.length} IDs.`);
+          console.log(`[SteamAvatar] Fetching: ${this.apiBaseUrl}/ISteamUser/GetPlayerSummaries/v0002/ for chunk of ${chunk.length} IDs.`);
         }
 
         try {
           const response = await fetch(
-            `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?${params.toString()}`,
+            `${this.apiBaseUrl}/ISteamUser/GetPlayerSummaries/v0002/?${params.toString()}`,
             {
               method: "GET",
               signal: controller.signal,
@@ -1100,8 +1105,6 @@ class SteamGameDurationService {
             break;
           } else {
             console.log(`[SteamAvatar] Warning: data.response.players is not an array. Response body:`, JSON.stringify(data));
-            // Non-array response might be a temporary API glitch, but usually indicates success with no results or bad API key.
-            // We'll treat it as success for the chunk to avoid infinite retries if the API key is valid but returning weird data.
             chunkSuccess = true;
             break;
           }
@@ -1121,16 +1124,22 @@ class SteamGameDurationService {
       }
 
       if (!chunkSuccess && lastChunkError) {
-        console.error(`[SteamAvatar] Error fetching player summaries after ${maxAttempts} attempts:`, lastChunkError);
-        this.logger?.warn(`Failed to fetch Steam player summaries after ${maxAttempts} attempts: ${lastChunkError.message}`);
+        const isNetworkError = this._isRetryableSteamError(lastChunkError);
+        const errorMessage = lastChunkError.cause ? `${lastChunkError.message} (cause: ${lastChunkError.cause.message || lastChunkError.cause})` : lastChunkError.message;
+        
+        if (isNetworkError) {
+          console.log(`[SteamAvatar] Network error fetching summaries after ${maxAttempts} attempts: ${errorMessage}`);
+        } else {
+          console.error(`[SteamAvatar] Error fetching player summaries after ${maxAttempts} attempts:`, lastChunkError);
+        }
+        this.logger?.warn(`Failed to fetch Steam player summaries after ${maxAttempts} attempts: ${errorMessage}`);
       }
     }
     return results;
   }
 
   async fetchAndCacheSteamAvatars(steamIDs) {
-    if (!this.apiKey) {
-      console.log("[SteamAvatar] Warning: fetchAndCacheSteamAvatars called but apiKey is missing.");
+    if (!this.fetchAvatarsEnabled || !this.apiKey) {
       return;
     }
     const ids = Array.isArray(steamIDs) ? steamIDs : [steamIDs];

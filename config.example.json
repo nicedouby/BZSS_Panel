@@ -191,6 +191,20 @@
         "restartRequired": true
       },
       {
+        "path": "steam.fetchAvatarsEnabled",
+        "label": "Steam Fetch Avatars Enabled",
+        "type": "boolean",
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "steam.apiBaseUrl",
+        "label": "Steam API Base URL",
+        "type": "string",
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
         "path": "steam.usePythonScript",
         "label": "Steam Use Python Script",
         "type": "boolean",
