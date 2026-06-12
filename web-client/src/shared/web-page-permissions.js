@@ -116,7 +116,6 @@ export function hasPermission(permissions, wanted) {
 export function canAccessPage(user, requiredPermission, legacyRequiredPermissions = [], options = {}) {
   const superAdminOnly = Boolean(options?.superAdminOnly);
   if (superAdminOnly) return Boolean(user?.isSuperAdmin);
-  if (user?.authorizationMode === "transitional") return Boolean(user);
 
   const required = String(requiredPermission ?? "").trim();
   if (!required) return true;
