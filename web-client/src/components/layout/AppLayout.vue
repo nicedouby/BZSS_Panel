@@ -6,6 +6,7 @@
         @open-plugin-center="pluginCenterOpen = true"
         @open-rcon-modal="rconModalOpen = true"
       />
+      <SectionSubnav />
       <section class="content-shell" :class="contentShellClass">
         <RouterView />
       </section>
@@ -34,6 +35,7 @@ import { useAuthStore } from "../../stores/auth.store";
 import { useUiStore } from "../../stores/ui.store";
 import Topbar from "./Topbar.vue";
 import Sidebar from "./Sidebar.vue";
+import SectionSubnav from "./SectionSubnav.vue";
 import AppConfirmDialog from "../common/AppConfirmDialog.vue";
 import WarnPrompt from "../common/WarnPrompt.vue";
 import ToastHost from "../common/ToastHost.vue";
@@ -73,7 +75,7 @@ const contentShellClass = computed(() => ({
   min-height: 0;
   overflow: hidden;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 16%),
     var(--app-background, var(--color-bg-page));
