@@ -3,61 +3,61 @@
     <div class="tb-top-row">
       <section class="tb-card tb-switch-card">
         <header class="tb-header">
-        <div>
-          <h1>跳边入口</h1>
-          <p>统一通过 TeamBalance 模块处理跳边执行和打乱方案记录。</p>
-        </div>
-      </header>
+          <div>
+            <h1>跳边入口</h1>
+            <p>统一通过 TeamBalance 模块处理跳边执行和打乱方案记录。</p>
+          </div>
+        </header>
 
-      <form class="tb-form" @submit.prevent="submit">
-        <label>
-          <span>SteamID</span>
-          <input v-model.trim="steamId" placeholder="7656119..." />
-        </label>
+        <form class="tb-form" @submit.prevent="submit">
+          <label>
+            <span>SteamID</span>
+            <input v-model.trim="steamId" placeholder="7656119..." />
+          </label>
 
-        <label>
-          <span>玩家名，可选</span>
-          <div ref="playerPickerRoot" class="tb-player-picker">
-            <input
-              v-model.trim="playerName"
-              placeholder="PlayerName"
-              autocomplete="off"
-              @focus="openPlayerPicker"
-              @click="openPlayerPicker"
-              @keydown.escape.prevent="closePlayerPicker"
-            />
+          <label>
+            <span>玩家名，可选</span>
+            <div ref="playerPickerRoot" class="tb-player-picker">
+              <input
+                v-model.trim="playerName"
+                placeholder="PlayerName"
+                autocomplete="off"
+                @focus="openPlayerPicker"
+                @click="openPlayerPicker"
+                @keydown.escape.prevent="closePlayerPicker"
+              />
 
-            <div v-if="showPlayerPicker" class="tb-player-dropdown" role="listbox" aria-label="当前在线玩家">
-              <div v-if="loadingPlayers" class="tb-player-empty">加载中...</div>
-              <div v-else-if="playersError" class="tb-player-empty">{{ playersError }}</div>
-              <button
-                v-for="(player, index) in filteredPlayers"
-                :key="playerKey(player, index)"
-                type="button"
-                class="tb-player-option"
-                role="option"
-                @mousedown.prevent
-                @click="pickPlayer(player)"
-              >
-                <span class="tb-player-option__name">{{ player.name || "未知玩家" }}</span>
-                <span v-if="player.steamID" class="tb-player-option__meta">{{ player.steamID }}</span>
-              </button>
+              <div v-if="showPlayerPicker" class="tb-player-dropdown" role="listbox" aria-label="当前在线玩家">
+                <div v-if="loadingPlayers" class="tb-player-empty">加载中...</div>
+                <div v-else-if="playersError" class="tb-player-empty">{{ playersError }}</div>
+                <button
+                  v-for="(player, index) in filteredPlayers"
+                  :key="playerKey(player, index)"
+                  type="button"
+                  class="tb-player-option"
+                  role="option"
+                  @mousedown.prevent
+                  @click="pickPlayer(player)"
+                >
+                  <span class="tb-player-option__name">{{ player.name || "未知玩家" }}</span>
+                  <span v-if="player.steamID" class="tb-player-option__meta">{{ player.steamID }}</span>
+                </button>
 
-              <div v-if="!filteredPlayers.length && !loadingPlayers && !playersError" class="tb-player-empty">
-                暂无在线玩家
+                <div v-if="!filteredPlayers.length && !loadingPlayers && !playersError" class="tb-player-empty">
+                  暂无在线玩家
+                </div>
               </div>
             </div>
-          </div>
-        </label>
+          </label>
 
-        <button :disabled="submitting || !steamId">
-          {{ submitting ? "执行中..." : "执行跳边" }}
-        </button>
-      </form>
+          <button :disabled="submitting || !steamId">
+            {{ submitting ? "执行中..." : "执行跳边" }}
+          </button>
+        </form>
 
-      <pre v-if="result" class="tb-result">{{ result }}</pre>
-      <p v-if="error" class="tb-error">{{ error }}</p>
-    </section>
+        <pre v-if="result" class="tb-result">{{ result }}</pre>
+        <p v-if="error" class="tb-error">{{ error }}</p>
+      </section>
 
     <section class="tb-card tb-shuffle-card">
       <header class="tb-header">
@@ -628,7 +628,7 @@ function roundHours(value: number) {
 
 <style scoped>
 .tb-page {
-  padding: 24px;
+  padding: 0;
   display: grid;
   gap: 16px;
   color: var(--color-text-primary);
@@ -642,8 +642,8 @@ function roundHours(value: number) {
 }
 
 .tb-switch-card {
-  position: sticky;
-  top: 16px;
+  /* sticky works only if a true scroll ancestor exists;
+     content-shell is the scroller so we just let it flow */
 }
 
 .tb-card {

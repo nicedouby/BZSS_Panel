@@ -61,24 +61,15 @@
               <button class="danger-link" type="button" @click="deletePermissionGroupAction(group)">删除</button>
             </div>
           </div>
-          <div class="permission-summary-grid">
-            <div
+          <div class="permission-summary-row" aria-label="权限摘要">
+            <span
               v-for="section in permissionSections"
               :key="section.key"
-              class="permission-summary-section"
+              class="permission-count-pill"
+              :data-empty="String(countGroupSectionPermissions(group, section) === 0)"
             >
-              <span class="permission-section-title">{{ section.label }}</span>
-              <div class="permission-chip-row">
-                <span
-                  v-for="option in section.options"
-                  :key="option.value"
-                  class="permission-chip"
-                  :data-enabled="String(group.permissions.includes(option.value))"
-                >
-                  {{ option.label }}
-                </span>
-              </div>
-            </div>
+              {{ section.label }} {{ countGroupSectionPermissions(group, section) }}/{{ section.options.length }}
+            </span>
           </div>
         </article>
       </div>
@@ -155,16 +146,12 @@
                 <span v-else>{{ item.permissionGroupName || "未绑定" }}</span>
               </td>
               <td>
-                <div class="permission-chip-row compact">
-                  <span
-                    v-for="permission in renderUserPermissions(item)"
-                    :key="permission"
-                    class="permission-chip"
-                    data-enabled="true"
-                  >
-                    {{ permissionLabelMap.get(permission) ?? permission }}
-                  </span>
-                </div>
+                <span
+                  class="permission-count-pill"
+                  :data-empty="String(item.role !== 'SuperAdmin' && countKnownPermissions(item.permissions) === 0)"
+                >
+                  {{ renderUserPermissionSummary(item) }}
+                </span>
               </td>
               <td>{{ item.steam64 || "未绑定" }}</td>
               <td><span class="status-pill" :data-enabled="String(item.enabled)">{{ item.enabled ? "启用" : "禁用" }}</span></td>
@@ -435,8 +422,7 @@ const permissionSections: PermissionSection[] = [
 ];
 
 const permissionOptions = permissionSections.flatMap((section) => section.options);
-
-const permissionLabelMap = new Map(permissionOptions.map((item) => [item.value, item.label]));
+const knownPermissionValues = new Set(permissionOptions.map((item) => item.value));
 
 const auth = useAuthStore();
 const users = ref<AdminUser[]>([]);
@@ -807,9 +793,19 @@ function getAccountInitial(user: AdminUser) {
   return source.trim().slice(0, 1).toUpperCase();
 }
 
-function renderUserPermissions(user: AdminUser) {
-  if (user.role === "SuperAdmin") return ["*"];
-  return user.permissions?.length ? user.permissions : ["无权限"];
+function countGroupSectionPermissions(group: PermissionGroup, section: PermissionSection) {
+  return section.options.filter((option) => group.permissions.includes(option.value)).length;
+}
+
+function countKnownPermissions(permissions: string[] | null | undefined) {
+  if (!Array.isArray(permissions)) return 0;
+  return permissions.filter((permission) => knownPermissionValues.has(permission)).length;
+}
+
+function renderUserPermissionSummary(user: AdminUser) {
+  if (user.role === "SuperAdmin") return "全权限";
+  const count = countKnownPermissions(user.permissions);
+  return count > 0 ? `${count} 项权限` : "无权限";
 }
 </script>
 
@@ -1076,7 +1072,7 @@ td small {
 
 .role-badge,
 .status-pill,
-.permission-chip,
+.permission-count-pill,
 .superadmin-note {
   display: inline-flex;
   align-items: center;
@@ -1099,43 +1095,31 @@ td small {
 }
 
 .status-pill[data-enabled="true"],
-.permission-chip[data-enabled="true"] {
+.permission-count-pill[data-empty="false"] {
   color: #86efac;
   background: rgba(134, 239, 172, 0.12);
 }
 
 .status-pill[data-enabled="false"],
-.permission-chip[data-enabled="false"] {
+.permission-count-pill[data-empty="true"] {
   color: #fca5a5;
   background: rgba(252, 165, 165, 0.12);
 }
 
-.permission-chip-row {
+.permission-summary-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.permission-chip-row.compact {
-  gap: 6px;
-}
-
-.permission-summary-grid,
 .permission-section-list {
   display: grid;
   gap: 12px;
 }
 
-.permission-summary-section,
 .permission-editor-section {
   display: grid;
   gap: 8px;
-}
-
-.permission-section-title {
-  color: var(--color-text-muted);
-  font-size: 12px;
-  font-weight: 800;
 }
 
 .permission-editor-head {
