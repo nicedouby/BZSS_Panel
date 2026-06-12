@@ -1,7 +1,8 @@
 <template>
   <div ref="rootEl" class="user-menu">
     <button type="button" class="user-trigger" @click.stop="toggleMenu">
-      <span class="user-avatar">{{ avatarLabel }}</span>
+      <img v-if="avatarUrl" class="user-avatar-image" :src="avatarUrl" alt="" referrerpolicy="no-referrer" />
+      <span v-else class="user-avatar">{{ avatarLabel }}</span>
       <span class="user-copy">
         <strong>{{ usernameLabel }}</strong>
         <small>{{ roleLabel }}</small>
@@ -180,6 +181,7 @@ const usernameLabel = computed(() => String(auth.user?.username ?? t("user.user"
 const roleLabel = computed(() => String(auth.user?.role ?? t("common.unknown")));
 const canUseArbitraryRcon = computed(() => auth.user?.isSuperAdmin === true);
 const canManageTankBattle = computed(() => canSendRconCommand(auth.user, "AdminForceAllVehicleAvailability 1"));
+const avatarUrl = computed(() => String(auth.user?.steamAvatar ?? "").trim() || null);
 const avatarLabel = computed(() => {
   const name = usernameLabel.value.trim();
   if (!name) return "?";
@@ -398,6 +400,15 @@ onBeforeUnmount(() => {
   color: #d7ecff;
   font-size: 12px;
   letter-spacing: 0.03em;
+  flex: 0 0 auto;
+}
+
+.user-avatar-image {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(96, 165, 250, 0.24);
   flex: 0 0 auto;
 }
 

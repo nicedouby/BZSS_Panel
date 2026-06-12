@@ -2,7 +2,7 @@
 
 import crypto from "node:crypto";
 
-import { hashToken, INVALID_PASSWORD_HASH, verifyPassword } from "./auth-crypto.js";
+import { hashPassword, hashToken, INVALID_PASSWORD_HASH, verifyPassword } from "./auth-crypto.js";
 import { AuthUserStore, normalizeRole } from "./auth-user-store.js";
 
 const DEFAULT_USERNAME = "DoubyBear";
@@ -38,6 +38,7 @@ export class AuthManager {
     }
 
     await this.bootstrapInitialUsersIfNeeded();
+    await this.migrateDefaultSteam64ToSuperAdminIfNeeded();
 
     if (!this.userStore.hasEnabledSuperAdmin()) {
       throw new Error(`Auth startup aborted: no enabled SuperAdmin found in ${this.userStore.filePath}`);
@@ -167,6 +168,7 @@ export class AuthManager {
     return {
       id: user.id,
       username: user.username,
+      displayName: user.displayName ?? "",
       role: user.role,
       isSuperAdmin: this.isSuperAdminRole(user.role),
       steam64: normalizeSteam64(user.steam64 ?? this.config?.defaultSteam64),
@@ -212,6 +214,10 @@ export class AuthManager {
           username,
           passwordHash: String(user?.passwordHash ?? INVALID_PASSWORD_HASH),
           role: user?.role ?? DEFAULT_ROLE,
+          displayName: user?.displayName ?? "",
+          steam64: user?.steam64 ?? (this.isSuperAdminRole(user?.role ?? DEFAULT_ROLE) ? this.config?.defaultSteam64 : null),
+          viewerTeamAutoSwapEnabled: user?.viewerTeamAutoSwapEnabled ?? (this.config?.viewerTeamAutoSwapEnabled !== false),
+          note: user?.note ?? "",
           enabled: user?.enabled ?? true,
           authVersion: Number(user?.authVersion ?? 1),
           permissions: user?.permissions ?? [],
@@ -229,6 +235,10 @@ export class AuthManager {
       username: DEFAULT_USERNAME,
       passwordHash: DEFAULT_PASSWORD_HASH,
       role: DEFAULT_ROLE,
+      displayName: DEFAULT_USERNAME,
+      steam64: this.config?.defaultSteam64 ?? null,
+      viewerTeamAutoSwapEnabled: this.config?.viewerTeamAutoSwapEnabled !== false,
+      note: "",
       enabled: true,
       authVersion: 1,
       permissions: ["*"],
@@ -238,6 +248,30 @@ export class AuthManager {
     });
     this.logger?.warn?.(`AuthManager bootstrapped legacy default SuperAdmin into ${this.userStore.filePath}.`);
     return true;
+  }
+
+  async migrateDefaultSteam64ToSuperAdminIfNeeded() {
+    const defaultSteam64 = normalizeSteam64(this.config?.defaultSteam64);
+    if (!defaultSteam64) return false;
+
+    const users = this.userStore.listUsers();
+    if (users.some((user) => user.steam64 === defaultSteam64)) return false;
+    if (users.some((user) => user.steam64)) return false;
+
+    const target = users.find((user) => user.enabled && this.isSuperAdminRole(user.role))
+      ?? users.find((user) => this.isSuperAdminRole(user.role));
+    if (!target) return false;
+
+    await this.userStore.updateUser(target.id, {
+      steam64: defaultSteam64,
+      viewerTeamAutoSwapEnabled: this.config?.viewerTeamAutoSwapEnabled !== false,
+    });
+    this.logger?.warn?.(`AuthManager migrated auth.defaultSteam64 to SuperAdmin account ${target.username}.`);
+    return true;
+  }
+
+  async hashPassword(password) {
+    return hashPassword(password);
   }
 }
 

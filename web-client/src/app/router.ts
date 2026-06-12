@@ -27,6 +27,7 @@ import CombatLogPage from "../pages/CombatLogPage.vue";
 import ComingSoonPage from "../pages/ComingSoonPage.vue";
 import ChatMonitorPage from "../pages/ChatMonitorPage.vue";
 import RuntimeStatusPage from "../pages/RuntimeStatusPage.vue";
+import AdminUsersPage from "../pages/AdminUsersPage.vue";
 import { useAuthStore } from "../stores/auth.store";
 import {
   canAccessPage,
@@ -336,6 +337,16 @@ export const router = createRouter({
       meta: {
         ...systemPollingMeta,
         titleKey: "routeTitle.runtimeStatus",
+        fullBleed: true,
+      },
+    },
+    {
+      path: "/system/admin-users",
+      component: AdminUsersPage,
+      meta: {
+        ...systemPollingMeta,
+        title: "管理员账号",
+        superAdminOnly: true,
         fullBleed: true,
       },
     },

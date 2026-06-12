@@ -102,6 +102,10 @@ export class AuthUserStore {
       usernameNormalized,
       passwordHash: String(input?.passwordHash ?? ""),
       role: input?.role,
+      displayName: input?.displayName,
+      steam64: input?.steam64,
+      viewerTeamAutoSwapEnabled: input?.viewerTeamAutoSwapEnabled,
+      note: input?.note,
       enabled: input?.enabled ?? true,
       authVersion: Number(input?.authVersion ?? 1),
       permissions: input?.permissions ?? [],
@@ -135,6 +139,40 @@ export class AuthUserStore {
     return cloneUser(nextUser);
   }
 
+  async updateUser(usernameOrId, changes = {}) {
+    const current = this.requireExistingUser(usernameOrId);
+    const nextRole = changes.role === undefined ? current.role : normalizeRole(changes.role);
+    const nextEnabled = changes.enabled === undefined ? current.enabled : Boolean(changes.enabled);
+
+    if (current.role === "SuperAdmin" && current.enabled && (nextRole !== "SuperAdmin" || !nextEnabled) && this.countEnabledSuperAdmins(current.id) < 1) {
+      throw createAuthUserStoreError(400, "LastSuperAdmin", "Cannot remove the last enabled SuperAdmin.");
+    }
+
+    const nextUser = normalizeStoredUser({
+      ...current,
+      displayName: changes.displayName === undefined ? current.displayName : changes.displayName,
+      role: nextRole,
+      steam64: changes.steam64 === undefined ? current.steam64 : changes.steam64,
+      viewerTeamAutoSwapEnabled: changes.viewerTeamAutoSwapEnabled === undefined
+        ? current.viewerTeamAutoSwapEnabled
+        : changes.viewerTeamAutoSwapEnabled,
+      enabled: nextEnabled,
+      note: changes.note === undefined ? current.note : changes.note,
+      updatedAt: Date.now(),
+      authVersion: nextEnabled === current.enabled && nextRole === current.role
+        ? Number(current.authVersion ?? 1)
+        : Number(current.authVersion ?? 1) + 1,
+    });
+
+    if (nextUser.steam64) {
+      this.assertSteam64Available(nextUser.steam64, current.id);
+    }
+
+    this.replaceUser(nextUser);
+    await this.save();
+    return cloneUser(nextUser);
+  }
+
   async updatePassword(usernameOrId, passwordHash) {
     const current = this.requireExistingUser(usernameOrId);
     const now = Date.now();
@@ -160,6 +198,23 @@ export class AuthUserStore {
     this.replaceUsers(this.users.filter((user) => user.id !== current.id));
     await this.save();
     return cloneUser(current);
+  }
+
+  findBySteam64(steam64) {
+    const normalized = normalizeSteam64(steam64);
+    if (!normalized) return null;
+    const user = this.users.find((candidate) => candidate.steam64 === normalized);
+    return user ? cloneUser(user) : null;
+  }
+
+  assertSteam64Available(steam64, excludeUserId = "") {
+    const normalized = normalizeSteam64(steam64);
+    if (!normalized) return true;
+    const existing = this.users.find((user) => user.steam64 === normalized && user.id !== excludeUserId);
+    if (existing) {
+      throw createAuthUserStoreError(409, "SteamAlreadyBound", `Steam64 is already bound to user ${existing.username}.`);
+    }
+    return true;
   }
 
   requireExistingUser(usernameOrId) {
@@ -207,7 +262,11 @@ export class AuthUserStore {
         usernameNormalized: user.usernameNormalized,
         passwordHash: user.passwordHash,
         role: user.role,
+        displayName: user.displayName,
+        steam64: user.steam64,
+        viewerTeamAutoSwapEnabled: user.viewerTeamAutoSwapEnabled,
         enabled: user.enabled,
+        note: user.note,
         authVersion: user.authVersion,
         permissions: Array.isArray(user.permissions) ? user.permissions : [],
         createdAt: user.createdAt,
@@ -279,13 +338,27 @@ function normalizeStoredUser(input) {
     usernameNormalized,
     passwordHash: String(input?.passwordHash ?? ""),
     role: normalizeRole(input?.role),
+    displayName: String(input?.displayName ?? "").trim(),
+    steam64: normalizeSteam64(input?.steam64),
+    viewerTeamAutoSwapEnabled: input?.viewerTeamAutoSwapEnabled !== false,
     enabled: input?.enabled !== false,
+    note: String(input?.note ?? ""),
     authVersion: Math.max(1, Math.floor(Number(input?.authVersion ?? 1) || 1)),
     permissions: normalizePermissions(input?.permissions),
     createdAt: Number(input?.createdAt ?? Date.now()),
     updatedAt: Number(input?.updatedAt ?? Date.now()),
     passwordChangedAt: Number(input?.passwordChangedAt ?? 0),
   };
+}
+
+function normalizeSteam64(value) {
+  if (value === null || value === undefined) return null;
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  if (!/^\d{17}$/.test(text)) {
+    throw createAuthUserStoreError(400, "InvalidSteam64", "Steam64 must be a 17-digit number.");
+  }
+  return text;
 }
 
 function normalizePermissions(value) {

@@ -76,6 +76,50 @@ async function testAuthManagerBootstrapsLegacyDefaultSuperAdminOnEmptyStore() {
   }
 }
 
+async function testAuthManagerMigratesDefaultSteam64ToExistingSuperAdmin() {
+  const originalCwd = process.cwd();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-auth-steam-migration-"));
+  process.chdir(tempDir);
+
+  try {
+    const store = new AuthUserStore({
+      config: {
+        usersFilePath: "./data/auth/users.json",
+      },
+    });
+    await store.start();
+    await store.createUser({
+      username: "Root",
+      role: "SuperAdmin",
+      passwordHash: await hashPassword("Secret123"),
+    });
+
+    const manager = new AuthManager({
+      config: {
+        enabled: true,
+        usersFilePath: "./data/auth/users.json",
+        defaultSteam64: "76561198194428818",
+        viewerTeamAutoSwapEnabled: false,
+      },
+      logger: { info() {}, warn() {}, error() {} },
+    });
+    await manager.start();
+
+    const reloaded = new AuthUserStore({
+      config: {
+        usersFilePath: "./data/auth/users.json",
+      },
+    });
+    await reloaded.start();
+    const user = reloaded.findByUsername("Root");
+    assert.equal(user.steam64, "76561198194428818");
+    assert.equal(user.viewerTeamAutoSwapEnabled, false);
+  } finally {
+    process.chdir(originalCwd);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
 async function testAuthManagerRejectsNonEmptyStoreWithoutEnabledSuperAdmin() {
   const originalCwd = process.cwd();
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-auth-no-superadmin-"));
@@ -182,9 +226,89 @@ async function testAuthManagerInvalidatesSessionOnDisableAndPasswordReset() {
   }
 }
 
+async function testUserStorePersistsAdminProfileFieldsAndSteamBinding() {
+  const originalCwd = process.cwd();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-auth-profile-"));
+  process.chdir(tempDir);
+
+  try {
+    const store = new AuthUserStore({
+      config: {
+        usersFilePath: "./data/auth/users.json",
+      },
+    });
+    await store.start();
+    await store.createUser({
+      username: "Root",
+      role: "SuperAdmin",
+      passwordHash: await hashPassword("Secret123"),
+      displayName: "Root User",
+      steam64: "76561198194428818",
+      viewerTeamAutoSwapEnabled: false,
+      note: "primary account",
+    });
+
+    const reloaded = new AuthUserStore({
+      config: {
+        usersFilePath: "./data/auth/users.json",
+      },
+    });
+    await reloaded.start();
+    const user = reloaded.findByUsername("root");
+    assert.equal(user.displayName, "Root User");
+    assert.equal(user.steam64, "76561198194428818");
+    assert.equal(user.viewerTeamAutoSwapEnabled, false);
+    assert.equal(user.note, "primary account");
+
+    await assert.rejects(
+      () => reloaded.createUser({
+        username: "Other",
+        role: "Admin",
+        passwordHash: user.passwordHash,
+        steam64: "bad",
+      }),
+      (error) => error.code === "InvalidSteam64",
+    );
+  } finally {
+    process.chdir(originalCwd);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+async function testUserStoreProtectsLastSuperAdminDowngrade() {
+  const originalCwd = process.cwd();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-auth-downgrade-"));
+  process.chdir(tempDir);
+
+  try {
+    const store = new AuthUserStore({
+      config: {
+        usersFilePath: "./data/auth/users.json",
+      },
+    });
+    await store.start();
+    await store.createUser({
+      username: "Root",
+      role: "SuperAdmin",
+      passwordHash: await hashPassword("Secret123"),
+    });
+
+    await assert.rejects(
+      () => store.updateUser("Root", { role: "Admin" }),
+      (error) => error.code === "LastSuperAdmin",
+    );
+  } finally {
+    process.chdir(originalCwd);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
 await testUserStorePreventsDuplicateUsernamesAndKeepsLastSuperAdmin();
 await testAuthManagerBootstrapsLegacyDefaultSuperAdminOnEmptyStore();
+await testAuthManagerMigratesDefaultSteam64ToExistingSuperAdmin();
 await testAuthManagerRejectsNonEmptyStoreWithoutEnabledSuperAdmin();
 await testAuthManagerInvalidatesSessionOnDisableAndPasswordReset();
+await testUserStorePersistsAdminProfileFieldsAndSteamBinding();
+await testUserStoreProtectsLastSuperAdminDowngrade();
 
 console.log("auth tests passed");

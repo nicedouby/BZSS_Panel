@@ -28,6 +28,7 @@ export const WEB_PAGE_PERMISSION_MATRIX = Object.freeze([
   { route: "/debug/welcome-join-warning", requiredPermission: "debug.welcome_join_warning.view" },
   { route: "/debug/squad-name-classifier", requiredPermission: "debug.squad_name_classifier.view" },
   { route: "/system/status", requiredPermission: "system.status.view" },
+  { route: "/system/admin-users", requiredPermission: "admin_users.manage", superAdminOnly: true },
 ]);
 
 const WEB_PAGE_PERMISSION_MAP = new Map(

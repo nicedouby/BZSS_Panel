@@ -24,6 +24,19 @@ import {
 
 const MAX_JSON_BODY_BYTES = 1024 * 1024;
 
+function normalizeAdminSteam64ForRequest(value) {
+  if (value === null || value === undefined) return null;
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  if (!/^\d{17}$/.test(text)) {
+    const error = new Error("Steam64 must be a 17-digit number.");
+    error.statusCode = 400;
+    error.code = "InvalidSteam64";
+    throw error;
+  }
+  return text;
+}
+
 export class WebServer {
   constructor({ config, logger, core, modules }) {
     this.enabled = config.enabled ?? true;
@@ -220,7 +233,7 @@ export class WebServer {
       const user = this.core.authManager?.getUserFromRequest(req) ?? null;
       return this.json(res, 200, {
         authenticated: Boolean(user),
-        user,
+        user: user ? await this.enrichAuthUserWithSteamAvatar(user) : null,
       });
     }
 
@@ -246,7 +259,7 @@ export class WebServer {
       return this.json(res, 200, {
         ok: true,
         authenticated: true,
-        user: result.user,
+        user: await this.enrichAuthUserWithSteamAvatar(result.user),
       }, {
         "Set-Cookie": result.cookie,
       });
@@ -268,6 +281,11 @@ export class WebServer {
         error: "Unauthorized",
         message: "Authentication required.",
       });
+    }
+
+    if (url.pathname === "/api/admin/users" || url.pathname.startsWith("/api/admin/users/")) {
+      await this.handleAdminUsersApi(url, req, res, user);
+      return;
     }
 
     if (url.pathname === "/api/squad-name/rules") {
@@ -2904,6 +2922,223 @@ export class WebServer {
     if (Array.isArray(permissions)) return permissions.includes("plugins.manage");
     if (permissions && typeof permissions === "object") return Boolean(permissions["plugins.manage"]);
     return false;
+  }
+
+  async handleAdminUsersApi(url, req, res, user) {
+    if (url.pathname !== "/api/admin/users" && !url.pathname.startsWith("/api/admin/users/")) {
+      return false;
+    }
+
+    if (!this.requireSuperAdmin(user, res)) return true;
+
+    const store = this.core.authManager?.userStore;
+    if (!store) {
+      this.json(res, 503, {
+        error: "AuthUserStoreUnavailable",
+        message: "Auth user store is unavailable.",
+      });
+      return true;
+    }
+
+    if (url.pathname === "/api/admin/users" && req.method === "GET") {
+      const avatarMap = await this.getAdminSteamAvatarMap(store.listUsers());
+      const items = store.listUsers().map((item) => this.serializeAdminUser(item, avatarMap));
+      return this.json(res, 200, {
+        ok: true,
+        items,
+        stats: this.buildAdminUserStats(items),
+      });
+    }
+
+    if (url.pathname === "/api/admin/users" && req.method === "POST") {
+      const body = await this.readJsonBody(req);
+      const username = String(body?.username ?? "").trim();
+      const password = String(body?.password ?? "");
+      if (!username) {
+        return this.json(res, 400, { error: "InvalidUsername", message: "Username is required." });
+      }
+      if (password.length < 8) {
+        return this.json(res, 400, { error: "InvalidPassword", message: "Password must be at least 8 characters." });
+      }
+
+      const steam64 = normalizeAdminSteam64ForRequest(body?.steam64);
+      if (steam64) store.assertSteam64Available(steam64);
+
+      const passwordHash = await this.core.authManager.hashPassword(password);
+      const created = await store.createUser({
+        username,
+        passwordHash,
+        role: body?.role ?? "Admin",
+        displayName: body?.displayName ?? "",
+        steam64,
+        viewerTeamAutoSwapEnabled: body?.viewerTeamAutoSwapEnabled,
+        enabled: body?.enabled ?? true,
+        note: body?.note ?? "",
+      });
+      return this.json(res, 201, {
+        ok: true,
+        user: this.serializeAdminUser(created, await this.getAdminSteamAvatarMap([created])),
+      });
+    }
+
+    const resetMatch = url.pathname.match(/^\/api\/admin\/users\/([^/]+)\/reset-password$/);
+    if (resetMatch && req.method === "POST") {
+      const userId = decodeURIComponent(resetMatch[1]);
+      const body = await this.readJsonBody(req);
+      const password = String(body?.password ?? "");
+      if (password.length < 8) {
+        return this.json(res, 400, { error: "InvalidPassword", message: "Password must be at least 8 characters." });
+      }
+
+      const passwordHash = await this.core.authManager.hashPassword(password);
+      const updated = await store.updatePassword(userId, passwordHash);
+      return this.json(res, 200, {
+        ok: true,
+        user: this.serializeAdminUser(updated, await this.getAdminSteamAvatarMap([updated])),
+      });
+    }
+
+    const userMatch = url.pathname.match(/^\/api\/admin\/users\/([^/]+)$/);
+    if (!userMatch) {
+      return this.json(res, 404, {
+        error: "ApiNotFound",
+        message: "Admin user API route not found.",
+      });
+    }
+
+    const userId = decodeURIComponent(userMatch[1]);
+
+    if (req.method === "PATCH") {
+      const target = store.requireExistingUser(userId);
+      const body = await this.readJsonBody(req);
+      const nextEnabled = body?.enabled === undefined ? target.enabled : Boolean(body.enabled);
+      const nextRole = body?.role === undefined ? target.role : body.role;
+      if (target.id === user.id && target.enabled && !nextEnabled) {
+        return this.json(res, 400, {
+          error: "CannotDisableSelf",
+          message: "Cannot disable the current account.",
+        });
+      }
+
+      const steam64 = body?.steam64 === undefined ? undefined : normalizeAdminSteam64ForRequest(body.steam64);
+      const updated = await store.updateUser(userId, {
+        displayName: body?.displayName,
+        role: nextRole,
+        steam64,
+        viewerTeamAutoSwapEnabled: body?.viewerTeamAutoSwapEnabled,
+        enabled: nextEnabled,
+        note: body?.note,
+      });
+      return this.json(res, 200, {
+        ok: true,
+        user: this.serializeAdminUser(updated, await this.getAdminSteamAvatarMap([updated])),
+      });
+    }
+
+    if (req.method === "DELETE") {
+      const target = store.requireExistingUser(userId);
+      if (target.id === user.id) {
+        return this.json(res, 400, {
+          error: "CannotDeleteSelf",
+          message: "Cannot delete the current account.",
+        });
+      }
+
+      const deleted = await store.deleteUser(userId);
+      return this.json(res, 200, {
+        ok: true,
+        user: this.serializeAdminUser(deleted),
+      });
+    }
+
+    return this.json(res, 405, {
+      error: "MethodNotAllowed",
+      message: "Unsupported admin user API method.",
+    });
+  }
+
+  async getAdminSteamAvatarMap(users = []) {
+    const steamIDs = [...new Set(
+      (Array.isArray(users) ? users : [])
+        .map((item) => String(item?.steam64 ?? "").trim())
+        .filter((item) => /^\d{17}$/.test(item)),
+    )];
+    if (!steamIDs.length) return new Map();
+
+    const listPlayersBySteamIDs = this.modules.playerDatabase?.listPlayersBySteamIDs;
+    if (typeof listPlayersBySteamIDs !== "function") return new Map();
+
+    try {
+      const rows = await listPlayersBySteamIDs.call(this.modules.playerDatabase, steamIDs);
+      const map = new Map();
+      for (const row of Array.isArray(rows) ? rows : []) {
+        const steamID = String(row?.steam_id ?? row?.steamID ?? row?.steam64 ?? "").trim();
+        const avatar = String(row?.steam_avatar ?? row?.steamAvatar ?? "").trim();
+        if (steamID && avatar) map.set(steamID, avatar);
+      }
+      return map;
+    } catch (error) {
+      this.logger?.warn?.(`Failed to resolve admin Steam avatars: ${error.message}`);
+      return new Map();
+    }
+  }
+
+  async enrichAuthUserWithSteamAvatar(user) {
+    if (!user) return null;
+    const steam64 = String(user?.steam64 ?? "").trim();
+    if (!/^\d{17}$/.test(steam64)) {
+      return {
+        ...user,
+        steamAvatar: null,
+      };
+    }
+
+    const steamAvatar = await this.getSteamAvatarBySteam64(steam64);
+    return {
+      ...user,
+      steamAvatar,
+    };
+  }
+
+  async getSteamAvatarBySteam64(steam64) {
+    const listPlayersBySteamIDs = this.modules.playerDatabase?.listPlayersBySteamIDs;
+    if (typeof listPlayersBySteamIDs !== "function") return null;
+
+    try {
+      const rows = await listPlayersBySteamIDs.call(this.modules.playerDatabase, [steam64]);
+      const first = Array.isArray(rows) ? rows[0] : null;
+      const avatar = String(first?.steam_avatar ?? first?.steamAvatar ?? "").trim();
+      return avatar || null;
+    } catch (error) {
+      this.logger?.warn?.(`Failed to resolve Steam avatar for auth user: ${error.message}`);
+      return null;
+    }
+  }
+
+  serializeAdminUser(user, steamAvatarMap = new Map()) {
+    return {
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName ?? "",
+      role: user.role,
+      steam64: user.steam64 ?? null,
+      steamAvatar: user.steam64 ? (steamAvatarMap.get(user.steam64) ?? null) : null,
+      viewerTeamAutoSwapEnabled: user.viewerTeamAutoSwapEnabled !== false,
+      enabled: user.enabled !== false,
+      note: user.note ?? "",
+      createdAt: Number(user.createdAt ?? 0),
+      updatedAt: Number(user.updatedAt ?? 0),
+      passwordChangedAt: Number(user.passwordChangedAt ?? 0),
+    };
+  }
+
+  buildAdminUserStats(items) {
+    return {
+      total: items.length,
+      enabled: items.filter((item) => item.enabled).length,
+      superAdmins: items.filter((item) => item.role === "SuperAdmin").length,
+      steamBound: items.filter((item) => Boolean(item.steam64)).length,
+    };
   }
 
   requireSuperAdmin(user, res) {

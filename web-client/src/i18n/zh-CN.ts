@@ -86,6 +86,7 @@ const zhCN = {
     serverInfoStatistics: "服务器统计",
     pluginSubscriptions: "插件订阅",
     runtimeStatus: "运行状态",
+    adminUsers: "管理员账号",
     udpForwarder: "UDP 转发日志",
     matchSnapshots: "快照录制",
     pjscAverageDuration: "PJSC 平均时长",
@@ -110,6 +111,7 @@ const zhCN = {
     infantryCombatEnhancer: "步兵战斗增强",
     fairSquadGuard: "公平建队",
     pluginSubscriptions: "插件订阅",
+    adminUsers: "管理员账号",
     comingSoon: "即将开放",
   },
   login: {

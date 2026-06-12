@@ -86,6 +86,7 @@ const enUS = {
     serverInfoStatistics: "Server Statistics",
     pluginSubscriptions: "Plugin Subscriptions",
     runtimeStatus: "Runtime Status",
+    adminUsers: "Admin Accounts",
     udpForwarder: "UDP Forwarder Logs",
     matchSnapshots: "Snapshot Capture",
     pjscAverageDuration: "PJSC Average Duration",
@@ -110,6 +111,7 @@ const enUS = {
     infantryCombatEnhancer: "Infantry Combat Enhancer",
     fairSquadGuard: "Fair Squad Guard",
     pluginSubscriptions: "Plugin Subscriptions",
+    adminUsers: "Admin Accounts",
     comingSoon: "Coming Soon",
   },
   login: {

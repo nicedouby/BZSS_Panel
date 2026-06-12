@@ -146,6 +146,79 @@ async function testHealthEndpointDoesNotRequireAuth() {
   assert.equal(body.auth.enabled, true);
 }
 
+async function testAuthSessionAndLoginIncludeSteamAvatar() {
+  const avatarUrl = "https://avatars.example/root.jpg";
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return {
+            id: "user:root",
+            username: "Root",
+            role: "SuperAdmin",
+            isSuperAdmin: true,
+            steam64: "76561198194428818",
+            viewerTeamAutoSwapEnabled: true,
+            permissions: [],
+          };
+        },
+        async login() {
+          return {
+            ok: true,
+            cookie: "bzss_session=abc",
+            user: {
+              id: "user:root",
+              username: "Root",
+              role: "SuperAdmin",
+              isSuperAdmin: true,
+              steam64: "76561198194428818",
+              viewerTeamAutoSwapEnabled: true,
+              permissions: [],
+            },
+          };
+        },
+      },
+    },
+    modules: {
+      playerDatabase: {
+        async listPlayersBySteamIDs(steamIDs) {
+          assert.deepEqual(steamIDs, ["76561198194428818"]);
+          return [
+            {
+              steam_id: "76561198194428818",
+              steam_avatar: avatarUrl,
+            },
+          ];
+        },
+      },
+    },
+  });
+
+  const sessionRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/auth/session",
+    headers: { host: "localhost" },
+    socket: {},
+  }, sessionRecorder.res);
+
+  assert.equal(sessionRecorder.state.status, 200);
+  const sessionBody = JSON.parse(sessionRecorder.state.body);
+  assert.equal(sessionBody.user.steamAvatar, avatarUrl);
+
+  const loginRecorder = createRecorder();
+  const loginReq = Readable.from(['{"username":"Root","password":"Secret123"}']);
+  loginReq.method = "POST";
+  loginReq.url = "/api/auth/login";
+  loginReq.headers = { host: "localhost", "content-type": "application/json" };
+  loginReq.socket = {};
+  await server.handleRequest(loginReq, loginRecorder.res);
+
+  assert.equal(loginRecorder.state.status, 200);
+  const loginBody = JSON.parse(loginRecorder.state.body);
+  assert.equal(loginBody.user.steamAvatar, avatarUrl);
+}
+
 async function testWebPagesEndpointFiltersByPermissions() {
   const registry = new WebRegistry({
     config: {
@@ -210,6 +283,76 @@ async function testWebPagesEndpointFiltersByPermissions() {
   assert.equal(superAdmin.state.status, 200);
   const adminPages = JSON.parse(superAdmin.state.body).pages;
   assert.equal(adminPages.length, registry.getAllPages().length);
+}
+
+async function testAdminUsersRouteReturnsOnceAndHidesPasswordHash() {
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return {
+            id: "user:root",
+            username: "Root",
+            role: "SuperAdmin",
+            isSuperAdmin: true,
+          };
+        },
+        hasEverything(user) {
+          return user?.role === "SuperAdmin";
+        },
+        userStore: {
+          listUsers() {
+            return [
+              {
+                id: "user:root",
+                username: "Root",
+                displayName: "Root User",
+                role: "SuperAdmin",
+                steam64: "76561198194428818",
+                viewerTeamAutoSwapEnabled: true,
+                enabled: true,
+                note: "",
+                passwordHash: "scrypt$secret",
+                authVersion: 3,
+                createdAt: 1,
+                updatedAt: 2,
+                passwordChangedAt: 3,
+              },
+            ];
+          },
+        },
+      },
+    },
+    modules: {
+      playerDatabase: {
+        async listPlayersBySteamIDs(steamIDs) {
+          assert.deepEqual(steamIDs, ["76561198194428818"]);
+          return [
+            {
+              steamID: "76561198194428818",
+              steamAvatar: "https://avatars.example/root.jpg",
+            },
+          ];
+        },
+      },
+    },
+  });
+
+  const recorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/admin/users",
+    headers: { host: "localhost" },
+    socket: {},
+  }, recorder.res);
+
+  assert.equal(recorder.state.status, 200);
+  const body = JSON.parse(recorder.state.body);
+  assert.equal(body.items.length, 1);
+  assert.equal(body.items[0].username, "Root");
+  assert.equal(body.items[0].steamAvatar, "https://avatars.example/root.jpg");
+  assert.equal(Object.hasOwn(body.items[0], "passwordHash"), false);
+  assert.equal(Object.hasOwn(body.items[0], "authVersion"), false);
 }
 
 async function testConsoleRecentEndpointUsesUnifiedConsoleBuffer() {
@@ -2270,7 +2413,9 @@ await testReadJsonBodyRejectsInvalidJson();
 await testReadJsonBodyRejectsOversizedPayload();
 await testGetPluginApiReturnsMatchingPluginApi();
 await testHealthEndpointDoesNotRequireAuth();
+await testAuthSessionAndLoginIncludeSteamAvatar();
 await testWebPagesEndpointFiltersByPermissions();
+await testAdminUsersRouteReturnsOnceAndHidesPasswordHash();
 await testConsoleRecentEndpointUsesUnifiedConsoleBuffer();
 await testConsoleRconEndpointsUseLoggedInUser();
 await testConsoleRconForbiddenMapsTo403();
