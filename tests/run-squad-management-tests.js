@@ -293,6 +293,38 @@ async function testExecuteActionKick() {
   fs.rmSync(harness.tempDbDir, { recursive: true, force: true });
 }
 
+async function testExecuteActionKickAcceptsRconPermissionAlias() {
+  const harness = createHarness();
+  await harness.module.init();
+  await harness.module.start();
+  await seedPlayers(harness, [
+    { name: "KickAliasTarget", steamId: "76561198000000013", eosId: "eos-13" },
+  ]);
+
+  const result = await harness.module.api.executeAction({
+    type: "kick_player",
+    serverId: SERVER_ID,
+    steamId: "76561198000000013",
+    reason: "alias-test",
+    system: false,
+    actor: {
+      id: "operator-1",
+      username: "Operator",
+      isSuperAdmin: false,
+      permissions: ["rcon.kick"],
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.type, "kick_player");
+  assert.equal(result.action, "kick");
+  assert.equal(result.command, 'AdminKick "76561198000000013" alias-test');
+  assert.equal(harness.commandCalls.kick.length, 1);
+
+  await harness.module.stop();
+  fs.rmSync(harness.tempDbDir, { recursive: true, force: true });
+}
+
 async function testExecuteActionKickRequiresReason() {
   const harness = createHarness();
   await harness.module.init();
@@ -449,6 +481,7 @@ async function testDisbandRefreshRetry() {
 async function main() {
   await testExecuteActionDisband();
   await testExecuteActionKick();
+  await testExecuteActionKickAcceptsRconPermissionAlias();
   await testExecuteActionKickRequiresReason();
   await testExecuteActionRemoveFromSquad();
   await testLegacyCompatibility();

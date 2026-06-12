@@ -77,6 +77,44 @@ async function testForceTeamChangeSuccess() {
   assert.equal(records[0].steamId, "76561198377609640");
 }
 
+async function testForceTeamChangeAcceptsRconPermissionAlias() {
+  const commands = [];
+  const service = createService({
+    core: {
+      logger: createNoopLogger(),
+      rconManager: {
+        async dispatchCommand(payload) {
+          commands.push(payload);
+          return {
+            success: true,
+            rconExecuted: true,
+            rconResponse: "OK",
+            message: "OK",
+          };
+        },
+      },
+    },
+  });
+
+  const result = await service.api.forceTeamChange({
+    steamId: "76561198377609641",
+    playerName: "OperatorTarget",
+    source: "match_state",
+    reason: "match_state_button",
+    operator: {
+      id: "operator-1",
+      name: "Operator",
+      username: "Operator",
+      isSuperAdmin: false,
+      permissions: ["rcon.tb"],
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(commands.length, 1);
+  assert.equal(commands[0].requiredPermission, "rcon.tb");
+}
+
 async function testForceTeamChangeRejectsMissingSteamId() {
   const service = createService();
   const result = await service.api.forceTeamChange({
@@ -362,6 +400,7 @@ function createRecorder() {
 }
 
 await testForceTeamChangeSuccess();
+await testForceTeamChangeAcceptsRconPermissionAlias();
 await testForceTeamChangeRejectsMissingSteamId();
 await testCreatePlaytimeShufflePlanRecordsWithoutRcon();
 await testHandleTbRoutesSupportsNewAndLegacyPaths();

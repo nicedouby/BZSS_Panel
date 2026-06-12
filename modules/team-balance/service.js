@@ -2,6 +2,7 @@
 
 import {
   canSendRconCommand,
+  hasPermission,
   resolveRconPermission,
 } from "../../web-client/src/shared/rcon-permissions.js";
 
@@ -424,7 +425,7 @@ function canSwitch(viewer, config = {}) {
   if (!viewer) return false;
   if (viewer.isSuperAdmin) return true;
   const permissions = normalizePermissionList(viewer.permissions ?? viewer.permission);
-  return permissions.includes(config.switchPermission);
+  return hasPermission(permissions, config.switchPermission || DEFAULT_SWITCH_PERMISSION);
 }
 
 function normalizeDispatchResponse(response) {

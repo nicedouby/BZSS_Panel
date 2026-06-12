@@ -8,6 +8,7 @@ import { WebRegistry } from "../core/web-registry.js";
 import { WebServer } from "../core/web-server.js";
 import { classifySquadName } from "../core/squad-name-classifier.js";
 import { GroupReportService } from "../plugins/group-report.service.js";
+import { hasPermission as hasRconPermission } from "../web-client/src/shared/rcon-permissions.js";
 
 function createServer(overrides = {}) {
   return new WebServer({
@@ -1622,6 +1623,13 @@ async function testSquadManagementRoutesExposeStateAndMutations() {
               permissions: [],
             };
           }
+          if (req.headers.authorization === "rcon-kick") {
+            return {
+              username: "kick-operator",
+              role: "Operator",
+              permissions: ["rcon.kick"],
+            };
+          }
           return null;
         },
         hasEverything(user) {
@@ -1631,7 +1639,7 @@ async function testSquadManagementRoutesExposeStateAndMutations() {
           if (!user) return false;
           if (user.isSuperAdmin) return true;
           const permissions = Array.isArray(user.permissions) ? user.permissions : [];
-          return permissions.includes("*") || permissions.includes(permission);
+          return hasRconPermission(permissions, permission);
         },
       },
     },
@@ -1665,7 +1673,7 @@ async function testSquadManagementRoutesExposeStateAndMutations() {
               message: "Permission 'squad.disband' is required.",
             };
           }
-          if (!input.actor?.isSuperAdmin && !input.actor.permissions.includes("squad.disband") && !input.actor.permissions.includes("*")) {
+          if (!input.actor?.isSuperAdmin && !hasRconPermission(input.actor.permissions, "squad.disband")) {
             return {
               ok: false,
               error: "Forbidden",
@@ -1694,7 +1702,7 @@ async function testSquadManagementRoutesExposeStateAndMutations() {
               message: "Permission 'squad.kick' is required.",
             };
           }
-          if (!input.actor?.isSuperAdmin && !input.actor.permissions.includes("squad.kick") && !input.actor.permissions.includes("*")) {
+          if (!input.actor?.isSuperAdmin && !hasRconPermission(input.actor.permissions, "squad.kick")) {
             return {
               ok: false,
               error: "Forbidden",
@@ -1774,8 +1782,23 @@ async function testSquadManagementRoutesExposeStateAndMutations() {
   assert.equal(kickRecorder.state.status, 403);
   assert.equal(JSON.parse(kickRecorder.state.body).result.error, "Forbidden");
 
+  const actionKickRecorder = createRecorder();
+  const actionKickReq = Readable.from([JSON.stringify({
+    type: "kick_player",
+    anyId: "76561198000005678",
+    reason: "test",
+  })]);
+  actionKickReq.method = "POST";
+  actionKickReq.url = "/api/squad-management/actions";
+  actionKickReq.headers = { host: "localhost", authorization: "rcon-kick" };
+  actionKickReq.socket = {};
+  await server.handleRequest(actionKickReq, actionKickRecorder.res);
+  assert.equal(actionKickRecorder.state.status, 200);
+  assert.equal(JSON.parse(actionKickRecorder.state.body).ok, true);
+
   assert.equal(calls[0].type, "disband");
   assert.equal(calls[1].type, "kick");
+  assert.equal(calls[2].type, "kick");
 }
 
 async function testSettingsRoutesRequireAuthAndSuperAdmin() {

@@ -59,15 +59,27 @@ export async function handleSquadManagementRoutes({
   }
 
   if (url.pathname === "/api/squad-management/actions" && req.method === "POST") {
-    if (!core.authManager?.hasEverything?.(user)) {
-      json(403, {
-        error: "Forbidden",
-        message: "SuperAdmin permission is required.",
+    const body = await readJsonBody(req);
+    const serverId = body.serverId ?? body.serverID ?? core.webStatus?.serverId ?? "";
+    const state = squadManagement.getState?.(serverId) ?? {};
+    const requiredPermission = resolveActionPermission(body, state);
+
+    if (!requiredPermission) {
+      json(400, {
+        error: "InvalidActionType",
+        message: "Unsupported action type.",
       });
       return true;
     }
 
-    const body = await readJsonBody(req);
+    if (!core.authManager?.hasPermission?.(user, requiredPermission)) {
+      json(403, {
+        error: "Forbidden",
+        message: `Permission '${requiredPermission}' is required.`,
+      });
+      return true;
+    }
+
     const api = squadManagement;
     if (!api?.executeAction) {
       json(404, { error: "SquadManagementUnavailable" });
@@ -178,6 +190,14 @@ export async function handleSquadManagementRoutes({
   }
 
   return false;
+}
+
+function resolveActionPermission(body = {}, state = {}) {
+  const type = String(body.type ?? body.action ?? body.kind ?? "").trim().toLowerCase();
+  if (type === "disband_squad" || type === "disband") return state.disbandPermission ?? "squad.disband";
+  if (type === "kick_player" || type === "kick") return state.kickPermission ?? "squad.kick";
+  if (type === "remove_from_squad" || type === "remove") return state.removePermission ?? "squad.remove";
+  return "";
 }
 
 async function executeAudited(core, context, executor) {

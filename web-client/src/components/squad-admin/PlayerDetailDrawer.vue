@@ -304,7 +304,7 @@
                       type="button"
                       class="hud-action-btn-styled warn-btn"
                       @click="handleWarn"
-                      :disabled="actionBusy"
+                      :disabled="actionBusy || !canWarnPlayer"
                     >
                       <div class="btn-inner">
                         <span class="btn-icon">⚠️</span>
@@ -316,7 +316,7 @@
                       type="button"
                       class="hud-action-btn-styled kick-btn"
                       @click="handleKick"
-                      :disabled="actionBusy"
+                      :disabled="actionBusy || !canKickPlayer"
                     >
                       <div class="btn-inner">
                         <span class="btn-icon">🛑</span>
@@ -328,7 +328,7 @@
                       type="button"
                       class="hud-action-btn-styled remove-btn"
                       @click="handleRemove"
-                      :disabled="actionBusy"
+                      :disabled="actionBusy || !canRemovePlayer"
                     >
                       <div class="btn-inner">
                         <span class="btn-icon">❌</span>
@@ -443,6 +443,7 @@ import CopyableValue from "./CopyableValue.vue";
 import PlayerCombatTimeline from "./PlayerCombatTimeline.vue";
 import { useAuthStore } from "../../stores/auth.store";
 import { t } from "../../i18n";
+import { hasPermission } from "../../shared/rcon-permissions.js";
 
 const props = withDefaults(
   defineProps<{
@@ -654,7 +655,14 @@ const battleDeathsPercent = computed(() => {
   return Math.round((d / (k + d)) * 100);
 });
 
-const canSwitchTeam = computed(() => Boolean(auth.user?.isSuperAdmin || auth.user?.permissions?.includes?.("squad.switch")));
+const userPermissions = computed(() => {
+  const user = auth.user as { permissions?: unknown; permission?: unknown } | null | undefined;
+  return user?.permissions ?? user?.permission ?? [];
+});
+const canSwitchTeam = computed(() => Boolean(auth.user?.isSuperAdmin || hasPermission(userPermissions.value, "squad.switch")));
+const canWarnPlayer = computed(() => Boolean(auth.user?.isSuperAdmin || hasPermission(userPermissions.value, "warning.send")));
+const canKickPlayer = computed(() => Boolean(auth.user?.isSuperAdmin || hasPermission(userPermissions.value, "squad.kick")));
+const canRemovePlayer = computed(() => Boolean(auth.user?.isSuperAdmin || hasPermission(userPermissions.value, "squad.remove")));
 const canEditPlaytime = computed(() => Boolean(auth.user?.isSuperAdmin));
 
 const updateViewport = () => {
@@ -718,6 +726,7 @@ watch(
       showCombatTimeline.value = false;
       return;
     }
+    void auth.restoreSession().catch(() => {});
     void loadDatabaseDetail();
   },
   { immediate: true },

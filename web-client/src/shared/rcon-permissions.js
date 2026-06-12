@@ -10,6 +10,15 @@ const COMMAND_PERMISSION_ALIASES = new Map([
   ["adminkickfromsquad", "rcon.remove"],
 ]);
 
+const PERMISSION_ALIASES = new Map([
+  ["squad.switch", ["rcon.tb"]],
+  ["squad.kick", ["rcon.kick"]],
+  ["squad.remove", ["rcon.remove"]],
+  ["squad.disband", ["rcon.disband"]],
+  ["warning.send", ["rcon.warn"]],
+  ["server.broadcast", ["rcon.broadcast"]],
+]);
+
 export const ALLOWED_MANUAL_RCON_PERMISSIONS = Object.freeze([
   "rcon.tb",
   "rcon.warn",
@@ -65,6 +74,11 @@ export function hasPermission(permissions, wanted) {
 
   if (normalizedPermissions.includes("*")) return true;
   if (normalizedPermissions.includes(required)) return true;
+  for (const alias of PERMISSION_ALIASES.get(required) ?? []) {
+    if (normalizedPermissions.includes(alias)) return true;
+    const [aliasNamespace] = alias.split(".");
+    if (aliasNamespace && normalizedPermissions.includes(`${aliasNamespace}.*`)) return true;
+  }
 
   const [namespace] = required.split(".");
   if (namespace && normalizedPermissions.includes(`${namespace}.*`)) return true;

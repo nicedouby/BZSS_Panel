@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 
 import { hashPassword, hashToken, INVALID_PASSWORD_HASH, verifyPassword } from "./auth-crypto.js";
 import { AuthUserStore, normalizeRole } from "./auth-user-store.js";
+import { hasPermission as hasSharedPermission } from "../web-client/src/shared/rcon-permissions.js";
 
 const DEFAULT_USERNAME = "DoubyBear";
 const DEFAULT_ROLE = "SuperAdmin";
@@ -151,8 +152,7 @@ export class AuthManager {
 
     const permissions = this.resolveEffectivePermissions(user);
 
-    if (permissions.includes("*")) return true;
-    if (permissions.includes(wanted)) return true;
+    if (hasSharedPermission(permissions, wanted)) return true;
 
     const [namespace] = wanted.split(".");
     if (namespace && permissions.includes(`${namespace}.*`)) return true;
