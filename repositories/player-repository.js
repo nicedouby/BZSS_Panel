@@ -26,6 +26,31 @@ function optionalSeconds(value) {
   return Math.max(0, Math.floor(numeric));
 }
 
+function normalizeAssetAmount(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, numeric);
+}
+
+function parseAssets(value) {
+  if (!value || String(value).trim() === "") return {};
+  try {
+    const parsed = JSON.parse(String(value));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function enrichAssets(row) {
+  const assets = parseAssets(row?.assets_json ?? row?.assetsJson);
+  return {
+    assets,
+    assetsJson: assets,
+    warmupPoints: normalizeAssetAmount(assets.warmupPoints),
+  };
+}
+
 function resolveEffectiveGameSeconds(row) {
   const override = optionalSeconds(row?.game_seconds_override ?? row?.gameSecondsOverride);
   if (override != null) return override;
@@ -39,6 +64,7 @@ function mapPlayerPlaytimeRow(row) {
   const gameSeconds = resolveEffectiveGameSeconds(row);
   return {
     ...row,
+    ...enrichAssets(row),
     steam_game_seconds: steamGameSeconds,
     steamGameSeconds,
     game_seconds_override: gameSecondsOverride,
@@ -272,6 +298,42 @@ export class PlayerRepository {
     );
   }
 
+  async addTimeStats(playerId, patch = {}) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return null;
+
+    const existing = await this.getPlayerById(id);
+    if (!existing) return null;
+
+    const serverSeconds = normalizeSeconds(patch.serverSeconds ?? patch.server_seconds ?? 0);
+    const warmupSeconds = normalizeSeconds(patch.warmupSeconds ?? patch.warmup_seconds ?? 0);
+    const warmupPoints = normalizeAssetAmount(patch.warmupPoints ?? patch.warmup_points ?? 0);
+    if (serverSeconds <= 0 && warmupSeconds <= 0 && warmupPoints <= 0) {
+      return mapPlayerPlaytimeRow(existing);
+    }
+
+    const assets = parseAssets(existing.assets_json);
+    assets.warmupPoints = normalizeAssetAmount(assets.warmupPoints) + warmupPoints;
+
+    await this.db.run(
+      `UPDATE players
+       SET server_seconds = server_seconds + ?,
+           warmup_seconds = warmup_seconds + ?,
+           assets_json = ?,
+           updated_at = ?
+       WHERE id = ?`,
+      serverSeconds,
+      warmupSeconds,
+      JSON.stringify(assets),
+      now(),
+      id,
+    );
+
+    const updated = mapPlayerPlaytimeRow(await this.getPlayerById(id));
+    this.cache(updated, existing);
+    return updated;
+  }
+
   async listPlayers({ query = "", q: qAlias = "", limit = 100, offset = 0, sort = "updated_desc" } = {}) {
     const searchQuery = query || qAlias || "";
     const search = buildPlayerSearchWhere(searchQuery);
@@ -289,7 +351,7 @@ export class PlayerRepository {
               players.permission_group, players.steam_game_seconds, players.game_seconds,
               players.game_seconds_override, players.server_seconds,
               players.commander_seconds, players.squad_leader_seconds, players.in_squad_seconds, players.warmup_seconds,
-              players.steam_avatar, players.updated_at
+              players.assets_json, players.steam_avatar, players.updated_at
        FROM players
        WHERE ${search.where}
        ORDER BY ${orderBy}
@@ -543,6 +605,7 @@ export class PlayerRepository {
       `SELECT COUNT(*) AS total_players,
               COALESCE(SUM(game_seconds), 0) AS total_game_seconds,
               COALESCE(SUM(server_seconds), 0) AS total_server_seconds,
+              COALESCE(SUM(warmup_seconds), 0) AS total_warmup_seconds,
               COALESCE(SUM(commander_seconds), 0) AS total_commander_seconds,
               COALESCE(SUM(squad_leader_seconds), 0) AS total_squad_leader_seconds,
               COALESCE(SUM(in_squad_seconds), 0) AS total_in_squad_seconds,
@@ -557,6 +620,12 @@ export class PlayerRepository {
       windowStartTs,
     );
 
+    const assetRows = await this.db.all("SELECT assets_json FROM players");
+    const totalWarmupPoints = assetRows.reduce(
+      (sum, row) => sum + normalizeAssetAmount(parseAssets(row.assets_json).warmupPoints),
+      0,
+    );
+
     const permissionGroups = await this.db.all(
       `SELECT permission_group, COUNT(*) AS players
        FROM players
@@ -567,7 +636,7 @@ export class PlayerRepository {
     const topByPlaytime = await this.db.all(
       `SELECT id, current_name, steam_id, eos_id, game_seconds, server_seconds,
               steam_game_seconds, game_seconds_override,
-              commander_seconds, squad_leader_seconds, in_squad_seconds, warmup_seconds
+              commander_seconds, squad_leader_seconds, in_squad_seconds, warmup_seconds, assets_json
        FROM players
        ORDER BY game_seconds DESC, server_seconds DESC, updated_at DESC
        LIMIT ?`,
@@ -698,6 +767,8 @@ export class PlayerRepository {
         activePlayersInWindow: Number(activeWindowRow?.active_players || 0),
         totalGameSeconds: Number(overviewRow?.total_game_seconds || 0),
         totalServerSeconds: Number(overviewRow?.total_server_seconds || 0),
+        totalWarmupSeconds: Number(overviewRow?.total_warmup_seconds || 0),
+        totalWarmupPoints,
         totalCommanderSeconds: Number(overviewRow?.total_commander_seconds || 0),
         totalSquadLeaderSeconds: Number(overviewRow?.total_squad_leader_seconds || 0),
         totalInSquadSeconds: Number(overviewRow?.total_in_squad_seconds || 0),
@@ -751,6 +822,8 @@ export class PlayerRepository {
           squadLeaderSeconds: Number(row.squad_leader_seconds || 0),
           inSquadSeconds: Number(row.in_squad_seconds || 0),
           warmupSeconds: Number(row.warmup_seconds || 0),
+          assets: parseAssets(row.assets_json),
+          warmupPoints: normalizeAssetAmount(parseAssets(row.assets_json).warmupPoints),
         })),
         byViolations: topViolations.map((row) => ({
           playerId: Number(row.player_id),

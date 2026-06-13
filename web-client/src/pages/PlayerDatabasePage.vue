@@ -126,6 +126,8 @@ const overviewCards = computed(() => {
     { label: t("database.matches"), value: overview ? formatNumber(overview.totalMatches ?? 0) : "--" },
     { label: t("database.gameTime"), value: overview ? formatHoursFromSeconds(overview.totalGameSeconds ?? 0) : "--" },
     { label: t("database.serverTime"), value: overview ? formatHoursFromSeconds(overview.totalServerSeconds ?? 0) : "--" },
+    { label: "暖服时长", value: overview ? formatHoursFromSeconds(overview.totalWarmupSeconds ?? 0) : "--" },
+    { label: "暖服分", value: overview ? formatNumber(overview.totalWarmupPoints ?? 0) : "--" },
     { label: t("database.activePlayers7d"), value: playerStats7d ? formatNumber(playerStats7d.activePlayers ?? 0) : "--" },
     { label: t("database.repeatPlayers7d"), value: playerStats7d ? formatNumber(playerStats7d.repeatPlayers ?? 0) : "--" },
     { label: t("database.repeatRate7d"), value: playerStats7d ? formatPercent(playerStats7d.repeatRate ?? 0) : "--" },

@@ -16,6 +16,9 @@ const DEFAULT_PASSWORD_HASH = "scrypt$bzss-default-v1$1ZZCEAyPd4n5hgfHwMsYr9ftwY
  * 只负责密码校验、Session 生命周期和请求鉴权。
  * 账号持久化由 AuthUserStore 单独承担。
  */
+const MAX_SESSIONS = 500;
+const SESSION_CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 每5分钟清理一次
+
 export class AuthManager {
   constructor({ config = {}, logger }) {
     this.config = config;
@@ -28,6 +31,7 @@ export class AuthManager {
 
     this.userStore = new AuthUserStore({ config, logger });
     this.sessions = new Map();
+    this._cleanupInterval = null;
   }
 
   async start() {
@@ -45,11 +49,42 @@ export class AuthManager {
       throw new Error(`Auth startup aborted: no enabled SuperAdmin found in ${this.userStore.filePath}`);
     }
 
+    // 启动 Session 定期清理，防止过期条目长期占用内存
+    this._cleanupInterval = setInterval(() => {
+      this._purgeSessions();
+    }, SESSION_CLEANUP_INTERVAL_MS);
+    this._cleanupInterval.unref?.();
+
     this.logger?.info?.("AuthManager started.");
   }
 
   async stop() {
+    if (this._cleanupInterval) {
+      clearInterval(this._cleanupInterval);
+      this._cleanupInterval = null;
+    }
     this.sessions.clear();
+  }
+
+  /**
+   * 清理所有已过期的 Session，并在超出上限时淘汰最早创建的条目。
+   */
+  _purgeSessions() {
+    const now = Date.now();
+    for (const [hash, session] of this.sessions) {
+      if (session.expiresAt <= now) {
+        this.sessions.delete(hash);
+      }
+    }
+    // 如果仍超限，按 createdAt 升序删除最老的
+    if (this.sessions.size > MAX_SESSIONS) {
+      const sorted = [...this.sessions.entries()].sort((a, b) => a[1].createdAt - b[1].createdAt);
+      const toRemove = sorted.slice(0, this.sessions.size - MAX_SESSIONS);
+      for (const [hash] of toRemove) {
+        this.sessions.delete(hash);
+      }
+      this.logger?.warn?.(`AuthManager: session count exceeded ${MAX_SESSIONS}, pruned ${toRemove.length} oldest sessions.`);
+    }
   }
 
   async login({ username, password, ip = "" }) {
@@ -87,6 +122,11 @@ export class AuthManager {
       expiresAt,
       ip,
     });
+
+    // 每次登录后顺手检查是否超限（兜底，清理间隔之外的保障）
+    if (this.sessions.size > MAX_SESSIONS) {
+      this._purgeSessions();
+    }
 
     this.logger?.info?.(`Login success username=${user.username} role=${user.role} ip=${ip}`);
 

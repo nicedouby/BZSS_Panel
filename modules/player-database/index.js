@@ -11,6 +11,25 @@ function identityFromPlayer(player) {
   };
 }
 
+function parseAssets(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  if (!value || String(value).trim() === "") return {};
+  try {
+    const parsed = JSON.parse(String(value));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function warmupPointsFromPlayer(player) {
+  const direct = Number(player?.warmupPoints ?? 0);
+  if (Number.isFinite(direct) && direct > 0) return direct;
+  const assets = parseAssets(player?.assets ?? player?.assets_json ?? player?.assetsJson);
+  const value = Number(assets.warmupPoints ?? 0);
+  return Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
 /**
  * Module: PlayerDatabase
  *
@@ -37,7 +56,11 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       ]);
 
       return {
-        items: players,
+        items: players.map((p) => ({
+          ...p,
+          assets: parseAssets(p.assets ?? p.assets_json ?? p.assetsJson),
+          warmupPoints: warmupPointsFromPlayer(p),
+        })),
         players: players.map((p) => ({
           id: p.id,
           name: p.current_name ?? "",
@@ -55,6 +78,8 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
           squadLeaderSeconds: Number(p.squad_leader_seconds ?? 0),
           inSquadSeconds: Number(p.in_squad_seconds ?? 0),
           warmupSeconds: Number(p.warmup_seconds ?? 0),
+          assets: parseAssets(p.assets ?? p.assets_json ?? p.assetsJson),
+          warmupPoints: warmupPointsFromPlayer(p),
           suicides: Number(p.total_suicides ?? 0),
           updatedAt: Number(p.updated_at ?? 0) || null,
           steamAvatar: p.steam_avatar ?? null,
@@ -99,6 +124,10 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
 
     async updateGameDuration(playerId, gameSeconds) {
       return repo.updateGameDuration(playerId, gameSeconds);
+    },
+
+    async addTimeStats(playerId, patch = {}) {
+      return repo.addTimeStats(playerId, patch);
     },
 
     async setGameDurationOverride(playerId, gameSeconds) {

@@ -41,6 +41,18 @@
               </div>
 
               <div class="leaderboard-card">
+                <h4>暖服分</h4>
+                <ol class="rank-list">
+                  <li v-for="item in stats.leaderboards?.byPlaytime" :key="`warmup-${item.id}`">
+                    <span class="player-name" @click="$emit('jump', item.id)">
+                      {{ item.currentName || item.steamID || item.eosID || t("common.unknown") }}
+                    </span>
+                    <span class="rank-value">{{ formatAssetAmount(item.warmupPoints ?? 0) }}</span>
+                  </li>
+                </ol>
+              </div>
+
+              <div class="leaderboard-card">
                 <h4>{{ t("database.violations") }}</h4>
                 <ol class="rank-list">
                   <li v-for="item in stats.leaderboards?.byViolations" :key="item.playerId">
@@ -194,6 +206,13 @@ function formatPercent(ratio: number) {
 function formatFloat(value: number) {
   const safe = Number.isFinite(value) ? value : 0;
   return safe.toFixed(2);
+}
+
+function formatAssetAmount(value: number) {
+  const safe = Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0;
+  return new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: safe % 1 === 0 ? 0 : 2,
+  }).format(safe);
 }
 </script>
 

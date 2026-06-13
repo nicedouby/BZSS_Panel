@@ -446,6 +446,12 @@
     "console": { "enabled": true, "maxLines": 500 },
     "combatState": { "enabled": true, "maxEvents": 5000 },
     "playerDatabase": { "enabled": true },
+    "playerTimeStats": {
+      "enabled": true,
+      "tickMs": 10000,
+      "maxDeltaSeconds": 60,
+      "warmupPointsMultiplier": 1
+    },
     "killManage": { "enabled": true },
       "combatClean": {
         "enabled": true,

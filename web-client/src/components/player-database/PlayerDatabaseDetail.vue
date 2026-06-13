@@ -53,6 +53,14 @@
                 <strong class="info-value">{{ formatSeconds(detail.summary?.serverSeconds ?? detail.player?.server_seconds ?? 0) }}</strong>
               </div>
               <div class="info-item">
+                <span class="info-label">暖服时长</span>
+                <strong class="info-value">{{ formatSeconds(detail.player?.warmup_seconds ?? detail.player?.warmupSeconds ?? 0) }}</strong>
+              </div>
+              <div class="info-item">
+                <span class="info-label">暖服分</span>
+                <strong class="info-value">{{ formatAssetAmount(detail.player?.warmupPoints ?? detail.player?.assets?.warmupPoints ?? 0) }}</strong>
+              </div>
+              <div class="info-item">
                 <span class="info-label">{{ t("database.updatedAt") }}</span>
                 <strong class="info-value">{{ formatTime(detail.player?.updated_at) }}</strong>
               </div>
@@ -136,6 +144,14 @@ function formatSeconds(value: unknown) {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   return `${hours}h ${minutes}m (${totalSeconds}s)`;
+}
+
+function formatAssetAmount(value: unknown) {
+  const amount = Math.max(0, Number(value ?? 0));
+  if (!Number.isFinite(amount)) return "0";
+  return new Intl.NumberFormat(currentLocale.value, {
+    maximumFractionDigits: amount % 1 === 0 ? 0 : 2,
+  }).format(amount);
 }
 
 async function copyIp(ip: string) {

@@ -25,6 +25,19 @@ import { AUDIT_ACTIONS, AUDIT_CATEGORIES, AUDIT_RESULTS, AUDIT_SOURCE_PAGES } fr
 import { sanitizeRconCommand } from "./audit/audit-sanitizer.js";
 
 const MAX_JSON_BODY_BYTES = 1024 * 1024;
+const MAX_WS_FRAME_BYTES = 1024 * 1024; // WebSocket 单帧最大 1MB
+
+/**
+ * 所有响应都注入的基础安全头。
+ * 不包含 Cache-Control（由各路由自行控制）。
+ */
+const BASE_SECURITY_HEADERS = {
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "X-XSS-Protection": "0", // 现代浏览器已内置 XSS 防护，就不启用这个旧头了
+  "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' wss: ws:",
+};
 
 function normalizeAdminSteam64ForRequest(value) {
   if (value === null || value === undefined) return null;
@@ -60,6 +73,11 @@ export class WebServer {
     this.chatConnections = new Set();
     this.consoleSubscription = null;
     this.chatSubscription = null;
+
+    // 可信代理 IP 列表，只有来自这些 IP 的请求才信任 X-Forwarded-For。
+    // 空列表表示不信任任何转发头（直接对外场景）。
+    const trustedProxies = config.trustedProxies ?? [];
+    this.trustedProxies = new Set(Array.isArray(trustedProxies) ? trustedProxies : [trustedProxies]);
 
     this.memoryHistory = [];
     this.maxMemoryHistoryPoints = 120;
@@ -2806,7 +2824,12 @@ export class WebServer {
       }
 
       const data = await fs.readFile(abs);
-      res.writeHead(200, { "Content-Type": contentType(abs) });
+      const isHtml = abs.endsWith(".html");
+      res.writeHead(200, {
+        ...BASE_SECURITY_HEADERS,
+        "Content-Type": contentType(abs),
+        "Cache-Control": isHtml ? "no-store" : "public, max-age=31536000, immutable",
+      });
       res.end(data);
     } catch {
       return this.serveIndex(res);
@@ -2825,7 +2848,11 @@ export class WebServer {
         `Vue client index.html not found at ${indexPath}. Run npm run client:build before using production static hosting.`,
       );
     }
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.writeHead(200, {
+      ...BASE_SECURITY_HEADERS,
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+    });
     res.end(data);
   }
 
@@ -2857,6 +2884,7 @@ export class WebServer {
     }
 
     res.writeHead(status, {
+      ...BASE_SECURITY_HEADERS,
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
       ...extraHeaders,
@@ -2865,11 +2893,15 @@ export class WebServer {
   }
 
   getRequestIp(req) {
-    const forwarded = req.headers["x-forwarded-for"];
-    if (typeof forwarded === "string" && forwarded.trim()) {
-      return forwarded.split(",")[0].trim();
+    const remoteAddress = req.socket?.remoteAddress ?? "";
+    // 只有连接来源属于可信代理时，才信任 X-Forwarded-For，防止客户端伪造 IP
+    if (this.trustedProxies.size > 0 && this.trustedProxies.has(remoteAddress)) {
+      const forwarded = req.headers["x-forwarded-for"];
+      if (typeof forwarded === "string" && forwarded.trim()) {
+        return forwarded.split(",")[0].trim();
+      }
     }
-    return req.socket?.remoteAddress ?? "";
+    return remoteAddress;
   }
 
   async handleUpgrade(req, socket, head) {
@@ -2991,6 +3023,13 @@ export class WebServer {
         }
         payloadLength = Number(lengthBig);
         offset += 8;
+      }
+
+      // 防止客户端发送超大帧耗尽服务器内存（DoS 防护）
+      if (payloadLength > MAX_WS_FRAME_BYTES) {
+        this.logger?.warn?.(`WebSocket: oversized frame (${payloadLength} bytes) from ${client.user?.username ?? "unknown"}, closing connection.`);
+        this.closeWebSocketClient(client);
+        return;
       }
 
       let mask;

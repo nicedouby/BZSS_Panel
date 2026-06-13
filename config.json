@@ -15,7 +15,7 @@
     "staticDirectory": "./web-client/dist",
     "useVueClient": true,
     "title": "BZSS Panel",
-    "enableDebugPage": true
+    "enableDebugPage": false
   },
   "squadNameClassifier": {
     "rulesPath": "./config/squad_name_nature_rules.json"
@@ -547,6 +547,12 @@
     "playerDatabase": {
       "enabled": true
     },
+    "playerTimeStats": {
+      "enabled": true,
+      "tickMs": 10000,
+      "maxDeltaSeconds": 60,
+      "warmupPointsMultiplier": 1
+    },
     "killManage": {
       "enabled": true
     },
@@ -734,6 +740,6 @@
     }
   },
   "warmup": {
-    "enabled": false
+    "enabled": true
   }
 }
