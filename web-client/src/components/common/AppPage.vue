@@ -38,12 +38,14 @@ const pageClass = computed(() => {
 }
 
 .app-page--workspace {
+  display: flex;
+  flex-direction: column;
   height: 100%;
-  grid-template-rows: auto auto minmax(0, 1fr);
   overflow: hidden;
 }
 
-.app-page--workspace > .page-content {
+.app-page--workspace > * {
   min-height: 0;
+  min-width: 0;
 }
 </style>

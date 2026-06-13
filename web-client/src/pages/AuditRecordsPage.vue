@@ -299,6 +299,9 @@ onMounted(fetchRecords);
 .audit-records-page {
   height: 100%;
   min-height: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
 }
 
 .filter-bar {
@@ -355,7 +358,8 @@ onMounted(fetchRecords);
   grid-template-rows: minmax(0, 1fr);
   height: 100%;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 .record-row {

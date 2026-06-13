@@ -358,8 +358,12 @@ function formatApiError(err: unknown, fallback: string) {
 <style scoped>
 .plugin-subscriptions-page {
   display: grid;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
   gap: 16px;
   padding: 18px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .summary-grid {
@@ -485,6 +489,10 @@ function formatApiError(err: unknown, fallback: string) {
 .groups {
   display: grid;
   gap: 14px;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  padding-right: 4px;
 }
 
 .table-wrap {
@@ -509,6 +517,10 @@ function formatApiError(err: unknown, fallback: string) {
   font-size: 12px;
   color: var(--color-text-muted);
   font-weight: 700;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-bg-card);
 }
 
 .subscription-table td {

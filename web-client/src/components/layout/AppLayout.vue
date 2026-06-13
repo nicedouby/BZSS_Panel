@@ -161,8 +161,12 @@ const contentShellClass = computed(() => {
     grid-template-columns: 1fr;
   }
 
-  .content-shell {
+  .content-shell--padded {
     padding: 12px;
+  }
+
+  .content-shell--flush {
+    padding: 0;
   }
 }
 

@@ -26,13 +26,15 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
+import { useRoute } from "vue-router";
 import { t } from "../../i18n";
 
 defineOptions({
   inheritAttrs: false,
 });
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   loading?: boolean;
   error?: string;
   empty?: boolean;
@@ -57,6 +59,13 @@ withDefaults(defineProps<{
   emptyText: t("dataState.emptyText", "Nothing to show here yet."),
   staleText: t("dataState.staleText", "Showing cached data because the latest sync failed."),
 });
+
+const route = useRoute();
+const layoutMode = computed(() => String(route.meta?.layoutMode ?? ""));
+
+if (import.meta.env.DEV && layoutMode.value === "workspace" && props.mode === "flow") {
+  console.warn("[layout] DataState in workspace page is using flow mode");
+}
 </script>
 
 <style scoped>

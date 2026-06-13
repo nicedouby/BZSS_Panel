@@ -1,5 +1,14 @@
 <template>
-  <section class="app-split-layout" :class="{ 'right-fixed': rightFixed }">
+  <section
+    class="app-split-layout"
+    :class="[
+      { 'right-fixed': rightFixed },
+      `responsive-${responsiveMode}`,
+      { 'is-stack': isStack },
+      { 'has-active-left': activePane === 'left' },
+      { 'has-active-right': activePane === 'right' },
+    ]"
+  >
     <div class="split-left">
       <slot name="left" />
     </div>
@@ -10,11 +19,19 @@
 </template>
 
 <script setup lang="ts">
-withDefaults(defineProps<{
+import { computed } from "vue";
+
+const props = withDefaults(defineProps<{
   rightFixed?: boolean;
+  responsiveMode?: "tabs" | "stack" | "first-only";
+  activePane?: "left" | "right";
 }>(), {
   rightFixed: false,
+  responsiveMode: "tabs",
+  activePane: "left",
 });
+
+const isStack = computed(() => props.responsiveMode === "stack");
 </script>
 
 <style scoped>
@@ -30,6 +47,18 @@ withDefaults(defineProps<{
 
 .app-split-layout.right-fixed {
   grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
+}
+
+.app-split-layout.is-stack {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-split-layout.responsive-first-only.is-stack .split-right {
+  display: none;
+}
+
+.app-split-layout.responsive-first-only.is-stack .split-left {
+  overflow: visible;
 }
 
 .split-left,
@@ -51,6 +80,17 @@ withDefaults(defineProps<{
   .app-split-layout,
   .app-split-layout.right-fixed {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-split-layout.responsive-stack .split-left,
+  .app-split-layout.responsive-stack .split-right,
+  .app-split-layout.responsive-first-only .split-left {
+    height: auto;
+    overflow: visible;
+  }
+
+  .app-split-layout.responsive-first-only .split-right {
+    display: none;
   }
 }
 </style>

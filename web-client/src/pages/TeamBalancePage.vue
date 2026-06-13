@@ -631,6 +631,10 @@ function roundHours(value: number) {
   padding: 0;
   display: grid;
   gap: 16px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  grid-template-rows: minmax(0, auto) minmax(0, 1fr);
   color: var(--color-text-primary);
 }
 
@@ -924,6 +928,7 @@ function roundHours(value: number) {
   display: grid;
   gap: 12px;
   margin-top: 16px;
+  min-height: 0;
 }
 
 .tb-record {
@@ -998,6 +1003,43 @@ function roundHours(value: number) {
 
 .tb-record-plan-move-list {
   margin-top: 10px;
+}
+
+.tb-records-card {
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.tb-records-card .tb-record-list,
+.tb-records-card .tb-empty,
+.tb-records-card .tb-error {
+  min-height: 0;
+}
+
+.tb-records-card .tb-record-list {
+  overflow: auto;
+  scrollbar-gutter: stable;
+  padding-right: 4px;
+}
+
+.tb-records-card .tb-record-plan-moves {
+  overflow: hidden;
+}
+
+.tb-records-card .tb-record-plan-move-list {
+  max-height: 240px;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.tb-records-card .tb-record-plan-groups {
+  min-height: 0;
+}
+
+.tb-records-card .tb-record-plan-group {
+  min-width: 0;
 }
 
 @media (max-width: 1100px) {

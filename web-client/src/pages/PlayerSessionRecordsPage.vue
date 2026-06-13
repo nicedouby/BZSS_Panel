@@ -276,8 +276,12 @@ function formatTime(value: string | number | null | undefined) {
 <style scoped>
 .page-shell {
   display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   gap: 18px;
   padding: 18px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .cards-grid {
@@ -386,7 +390,10 @@ function formatTime(value: string | number | null | undefined) {
 }
 
 .table-wrap {
-  overflow-x: auto;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 .data-table {
@@ -406,6 +413,10 @@ function formatTime(value: string | number | null | undefined) {
 .data-table th {
   font-size: 12px;
   opacity: 0.8;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-bg-card);
 }
 
 .truncate {
@@ -447,5 +458,11 @@ function formatTime(value: string | number | null | undefined) {
 .pill.skip {
   background: rgba(140, 140, 140, 0.14);
   border-color: rgba(140, 140, 140, 0.36);
+}
+
+@media (max-width: 1100px) {
+  .page-shell {
+    padding: 14px;
+  }
 }
 </style>
