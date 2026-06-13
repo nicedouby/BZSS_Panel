@@ -582,6 +582,18 @@
       "maxRecords": 3000,
       "ttlMs": 1800000
     },
+    "remoteTelemetry": {
+      "enabled": true,
+      "host": "0.0.0.0",
+      "port": 12764,
+      "sampleIntervalMs": 2000,
+      "timeoutMultiplier": 3,
+      "commandHost": "",
+      "commandPort": 12765,
+      "commandTimeoutMs": 3000,
+      "freezeSampleThreshold": 15,
+      "recentSampleLimit": 50
+    },
     "playtime": {
       "enabled": true
     },
@@ -740,6 +752,6 @@
     }
   },
   "warmup": {
-    "enabled": true
+    "enabled": false
   }
 }

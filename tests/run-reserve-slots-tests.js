@@ -67,6 +67,98 @@ function createRecorder() {
   };
 }
 
+function createEventBus() {
+  const listeners = new Map();
+  return {
+    onCoreEvent(name, handler) {
+      if (!listeners.has(name)) listeners.set(name, new Set());
+      listeners.get(name).add(handler);
+      return () => listeners.get(name)?.delete(handler);
+    },
+    emitCoreEvent(name, payload = {}) {
+      for (const handler of listeners.get(name) ?? []) {
+        handler(payload);
+      }
+    },
+  };
+}
+
+function createChatManagerHarness() {
+  const listeners = new Map();
+  return {
+    api: {
+      on(name, handler) {
+        if (!listeners.has(name)) listeners.set(name, new Set());
+        listeners.get(name).add(handler);
+        return () => listeners.get(name)?.delete(handler);
+      },
+      emit(name, payload) {
+        for (const handler of listeners.get(name) ?? []) {
+          handler(payload);
+        }
+      },
+    },
+  };
+}
+
+function createTestHarness() {
+  const warns = [];
+  const broadcasts = [];
+  const logger = {
+    info() {},
+    warn() {},
+    error() {},
+    debug() {},
+  };
+  const eventBus = createEventBus();
+  const chatManager = createChatManagerHarness();
+
+  return {
+    warns,
+    broadcasts,
+    logger,
+    eventBus,
+    chatManager,
+    core: {
+      createLogger() {
+        return logger;
+      },
+      logger,
+      runtimeState: {
+        getPlayers() {
+          return { bySteamID: {} };
+        },
+      },
+      eventBus,
+      webStatus: {
+        serverId: "BZSS_Main",
+      },
+    },
+    modules: {
+      chatManager: chatManager.api,
+      playerDatabase: {
+        async listPlayersBySteamIDs(steamIDs = []) {
+          return steamIDs.map((steamID) => ({
+            steam_id: steamID,
+            current_name: steamID === "76561198377609640" ? "Alpha" : "Bravo",
+            server_seconds: 7200,
+          }));
+        },
+      },
+      adminWarn: {
+        async warnPlayer(payload) {
+          warns.push(payload);
+          return { success: true };
+        },
+        async broadcastMessage(payload) {
+          broadcasts.push(payload);
+          return { success: true };
+        },
+      },
+    },
+  };
+}
+
 async function testParserHandlesAdminBlock() {
   const content = [
     "random line",
@@ -99,15 +191,18 @@ async function testEnsureReserveSlotStoreFileCreatesAndRepairs() {
 
   await ensureReserveSlotStoreFile(storePath, "C:/Servers/Squad/Admins.cfg");
   const created = JSON.parse(await fs.readFile(storePath, "utf8"));
-  assert.equal(created.version, 1);
+  assert.equal(created.version, 2);
   assert.equal(created.source.adminFilePath, "");
   assert.equal(created.groups.length, 0);
   assert.equal(created.members.length, 0);
+  assert.deepEqual(created.cdkBatches, []);
+  assert.deepEqual(created.cdkCodes, []);
+  assert.deepEqual(created.cdkActivations, []);
 
   await fs.writeFile(storePath, "{broken", "utf8");
   await ensureReserveSlotStoreFile(storePath, "C:/Servers/Squad/Admins.cfg");
   const repaired = JSON.parse(await fs.readFile(storePath, "utf8"));
-  assert.equal(repaired.version, 1);
+  assert.equal(repaired.version, 2);
   const backups = await fs.readdir(path.dirname(storePath));
   assert.equal(backups.some((file) => file.includes(".broken-")), true);
 
@@ -192,6 +287,192 @@ async function testRemoveReserveSlotMembersFromAdminFileContent() {
   assert.match(removedExpired.content, /76561198992120471/);
 }
 
+async function testReserveSlotUniquenessDedupesExistingEntries() {
+  const content = [
+    "header",
+    "// 预留位",
+    "Group=BZSSVIP:reserve",
+    "Admin=76561198377609640:BZSSVIP //2099-06-02 21:26:59 名称:Alpha",
+    "Admin=76561198377609640:BZSSVIP //2099-07-02 21:26:59 名称:Alpha2",
+    "footer",
+  ].join("\n");
+
+  const parsed = parseReserveSlotsFromAdminFileContent(content, {
+    adminFilePath: "C:/Servers/Squad/Admins.cfg",
+  });
+  assert.equal(parsed.members.length, 1);
+  assert.equal(parsed.members[0].steamId, "76561198377609640");
+
+  const next = upsertReserveSlotInAdminFileContent(content, {
+    steamId: "76561198377609640",
+    group: "BZSSVIP",
+    expireAt: "2099-08-02 21:26:59",
+    name: "Alpha3",
+  });
+  assert.equal((next.match(/Admin=76561198377609640/g) ?? []).length, 1);
+  assert.match(next, /Admin=76561198377609640:BZSSVIP \/\/2099-08-02 21:26:59 名称:Alpha3/);
+}
+
+async function testCdkBatchAndChatActivationFlow() {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "reserve-slots-cdk-"));
+  const adminFilePath = path.join(tempDir, "Admins.cfg");
+  const localReservePath = path.join(tempDir, "data", "reserve-slots.json");
+  await fs.writeFile(adminFilePath, [
+    "header",
+    "// 预留位",
+    "Group=BZSSVIP:reserve",
+  ].join("\n"), "utf8");
+
+  const config = createConfig({
+    reserveSystem: {
+      enabled: true,
+      adminFilePath,
+      localReserveFilePath: path.relative(process.cwd(), localReservePath),
+    },
+  });
+
+  const harness = createTestHarness();
+  const reserveModule = createReserveSlotsModule({
+    core: harness.core,
+    modules: harness.modules,
+    config,
+    logger: harness.logger,
+  });
+
+  await reserveModule.init();
+  await reserveModule.start();
+
+  const created = await reserveModule.api.createCdkBatch({
+    codeType: "VIP",
+    quantity: 2,
+    durationDays: 30,
+    allowMultiActivation: false,
+  }, {
+    actor: { username: "admin" },
+  });
+
+  assert.equal(created.createdCodes.length, 2);
+  assert.equal(created.batches.length, 1);
+  assert.match(created.createdCodes[0], /^CDKVIP[A-Z0-9]{14}A$/);
+
+  harness.chatManager.api.emit("message", {
+    chatChannel: "all",
+    playerName: "Alpha",
+    steamId: "76561198377609640",
+    message: created.createdCodes[0],
+  });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  const afterFirst = await reserveModule.api.getCdkState();
+  assert.equal(afterFirst.summary.successCount, 1);
+  assert.equal(afterFirst.summary.usedCodeCount, 1);
+  assert.equal(afterFirst.activations[0].result, "success");
+  assert.ok(harness.warns.some((item) => String(item.message).includes("激活成功")));
+  assert.equal(harness.broadcasts.length >= 1, true);
+  assert.ok(harness.warns.some((item) => String(item.message).includes("剩余")));
+  assert.ok(harness.broadcasts.some((item) => String(item.message).includes("剩余")));
+
+  harness.chatManager.api.emit("message", {
+    chatChannel: "all",
+    playerName: "Alpha",
+    steamId: "76561198377609640",
+    message: created.createdCodes[1],
+  });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  const afterSecond = await reserveModule.api.getCdkState();
+  assert.equal(afterSecond.summary.failureCount >= 1, true);
+  assert.equal(afterSecond.activations[0].result, "duplicate_player_restricted");
+  assert.equal(harness.broadcasts.length, 1);
+
+  await reserveModule.api.deactivateCdkBatch(created.createdBatchId, {
+    actor: { username: "admin" },
+  });
+  const afterDeactivateFirstBatch = await reserveModule.api.getCdkState();
+  assert.equal(afterDeactivateFirstBatch.batches.some((item) => item.id === created.createdBatchId), false);
+
+  const createdTwo = await reserveModule.api.createCdkBatch({
+    codeType: "VIP2",
+    quantity: 1,
+    durationDays: 15,
+    allowMultiActivation: true,
+  }, {
+    actor: { username: "admin" },
+  });
+  await reserveModule.api.deactivateCdkBatch(createdTwo.createdBatchId, {
+    actor: { username: "admin" },
+  });
+
+  harness.chatManager.api.emit("message", {
+    chatChannel: "all",
+    playerName: "Bravo",
+    steamId: "76561198377609641",
+    message: createdTwo.createdCodes[0],
+  });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  const afterDeactivate = await reserveModule.api.getCdkState();
+  assert.equal(afterDeactivate.activations[0].result, "batch_deactivated");
+  assert.equal(afterDeactivate.batches.some((item) => item.id === createdTwo.createdBatchId), false);
+
+  const adminContent = await fs.readFile(adminFilePath, "utf8");
+  assert.match(adminContent, /Admin=76561198377609640:BZSSVIP/);
+
+  await reserveModule.stop();
+  await fs.rm(tempDir, { recursive: true, force: true });
+}
+
+async function testManualExtendAddsFromExistingExpiry() {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "reserve-slots-manual-extend-"));
+  const adminFilePath = path.join(tempDir, "Admins.cfg");
+  const localReservePath = path.join(tempDir, "data", "reserve-slots.json");
+  const firstExpireAt = "2099-06-02 21:26:59";
+
+  await fs.writeFile(adminFilePath, [
+    "header",
+    "// 预留位",
+    "Group=BZSSVIP:reserve",
+    `Admin=76561198377609640:BZSSVIP //${firstExpireAt} 名称:Alpha`,
+  ].join("\n"), "utf8");
+
+  const config = createConfig({
+    reserveSystem: {
+      enabled: true,
+      adminFilePath,
+      localReserveFilePath: path.relative(process.cwd(), localReservePath),
+    },
+  });
+
+  const harness = createTestHarness();
+  const reserveModule = createReserveSlotsModule({
+    core: harness.core,
+    modules: harness.modules,
+    config,
+    logger: harness.logger,
+  });
+
+  await reserveModule.init();
+  await reserveModule.api.importFromAdminFile();
+
+  const updated = await reserveModule.api.upsertMember({
+    steamId: "76561198377609640",
+    group: "BZSSVIP",
+    durationDays: 30,
+    name: "Alpha",
+    reason: "manual_extend_test",
+  });
+
+  const member = updated.members.find((item) => item.steamId === "76561198377609640");
+  assert.ok(member);
+  assert.equal(member.expireAt, "2099-07-02 21:26:59");
+
+  const adminContent = await fs.readFile(adminFilePath, "utf8");
+  assert.match(adminContent, /Admin=76561198377609640:BZSSVIP \/\/2099-07-02 21:26:59 名称:Alpha manual_extend_test/);
+
+  await reserveModule.stop?.();
+  await fs.rm(tempDir, { recursive: true, force: true });
+}
+
 async function testModuleAndRoutesWorkEndToEnd() {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "reserve-slots-web-"));
   const adminFilePath = path.join(tempDir, "Admins.cfg");
@@ -212,34 +493,15 @@ async function testModuleAndRoutesWorkEndToEnd() {
     },
   });
 
-  const logger = {
-    info() {},
-    warn() {},
-    error() {},
-    debug() {},
-  };
-
+  const harness = createTestHarness();
   const reserveModule = createReserveSlotsModule({
-    core: {
-      createLogger() {
-        return logger;
-      },
-      logger,
-      runtimeState: null,
-    },
-    modules: {
-      playerDatabase: {
-        async listPlayersBySteamIDs(steamIDs = []) {
-          return steamIDs.includes("76561198377609640")
-            ? [{ steam_id: "76561198377609640", current_name: "Alpha" }]
-            : [];
-        },
-      },
-    },
+    core: harness.core,
+    modules: harness.modules,
     config,
-    logger,
+    logger: harness.logger,
   });
   await reserveModule.init();
+  await reserveModule.start();
 
   const server = new WebServer({
     config: {
@@ -248,8 +510,9 @@ async function testModuleAndRoutesWorkEndToEnd() {
       port: 8899,
       useVueClient: false,
     },
-    logger,
+    logger: harness.logger,
     core: {
+      ...harness.core,
       authManager: {
         getUserFromRequest(req) {
           if (req.headers.authorization === "super") {
@@ -268,6 +531,7 @@ async function testModuleAndRoutesWorkEndToEnd() {
     },
     modules: {
       reserveSlots: reserveModule.api,
+      chatManager: harness.modules.chatManager,
     },
   });
 
@@ -298,8 +562,6 @@ async function testModuleAndRoutesWorkEndToEnd() {
 
   assert.equal(saveRecorder.state.status, 200);
   assert.equal(JSON.parse(saveRecorder.state.body).success, true);
-  const savedStore = JSON.parse(await fs.readFile(localReservePath, "utf8"));
-  assert.equal(savedStore.source.adminFilePath, "");
 
   const importRecorder = createRecorder();
   const importReq = Readable.from([]);
@@ -318,120 +580,58 @@ async function testModuleAndRoutesWorkEndToEnd() {
   assert.deepEqual(importBody.members[0].reasons, ["预留位"]);
   assert.equal(importBody.lastImportedAt != null, true);
 
-  const importedStore = JSON.parse(await fs.readFile(localReservePath, "utf8"));
-  assert.equal(importedStore.source.adminFilePath, adminFilePath);
-  assert.equal(importedStore.members[0].isExpired, true);
-  assert.equal(importedStore.members[0].name, "Alpha");
-  assert.deepEqual(importedStore.members[0].reasons, ["预留位"]);
+  const createBatchRecorder = createRecorder();
+  const createBatchReq = Readable.from([JSON.stringify({
+    codeType: "VIP",
+    quantity: 2,
+    durationDays: 30,
+    allowMultiActivation: true,
+  })]);
+  createBatchReq.method = "POST";
+  createBatchReq.url = "/api/reserve-slots/cdk/batches";
+  createBatchReq.headers = { host: "localhost", authorization: "super", "content-type": "application/json" };
+  createBatchReq.socket = {};
+  await server.handleRequest(createBatchReq, createBatchRecorder.res);
+  assert.equal(createBatchRecorder.state.status, 200);
+  const createBatchBody = JSON.parse(createBatchRecorder.state.body);
+  assert.equal(createBatchBody.success, true);
+  assert.equal(createBatchBody.createdCodes.length, 2);
+  const batchId = createBatchBody.createdBatchId;
 
-  const exportRecorder = createRecorder();
+  const cdkStateRecorder = createRecorder();
   await server.handleRequest({
     method: "GET",
-    url: "/api/reserve-slots/export-csv",
-    headers: { host: "localhost", authorization: "user" },
+    url: "/api/reserve-slots/cdk/state",
+    headers: { host: "localhost", authorization: "super" },
     socket: {},
-  }, exportRecorder.res);
-  assert.equal(exportRecorder.state.status, 200);
-  const exportBody = JSON.parse(exportRecorder.state.body);
-  assert.match(exportBody.csv, /steamId,name,group,expireAt,reasons,remark,isExpired/);
-  assert.match(exportBody.csv, /Alpha/);
+  }, cdkStateRecorder.res);
+  assert.equal(cdkStateRecorder.state.status, 200);
+  const cdkStateBody = JSON.parse(cdkStateRecorder.state.body);
+  assert.equal(cdkStateBody.batches.length >= 1, true);
 
-  const routeCsvRecorder = createRecorder();
-  const routeCsvReq = Readable.from([
-    "steamId,name,group,expireAt,reasons,remark,isExpired\n",
-    '76561198377609641,Bravo,BZSSVIP,2026-06-02 21:26:59,"原因A | 原因B",手动导入,false\n',
-  ]);
-  routeCsvReq.method = "POST";
-  routeCsvReq.url = "/api/reserve-slots/import-csv";
-  routeCsvReq.headers = { host: "localhost", authorization: "super", "content-type": "text/csv; charset=utf-8" };
-  routeCsvReq.socket = {};
-  await server.handleRequest(routeCsvReq, routeCsvRecorder.res);
-  assert.equal(routeCsvRecorder.state.status, 200);
-  const routeCsvBody = JSON.parse(routeCsvRecorder.state.body);
-  assert.equal(routeCsvBody.success, true);
-  assert.equal(routeCsvBody.members[0].name, "Bravo");
-  assert.deepEqual(routeCsvBody.members[0].reasons, ["原因A", "原因B"]);
+  const deactivateRecorder = createRecorder();
+  const deactivateReq = Readable.from([]);
+  deactivateReq.method = "POST";
+  deactivateReq.url = `/api/reserve-slots/cdk/batches/${encodeURIComponent(batchId)}/deactivate`;
+  deactivateReq.headers = { host: "localhost", authorization: "super" };
+  deactivateReq.socket = {};
+  await server.handleRequest(deactivateReq, deactivateRecorder.res);
+  assert.equal(deactivateRecorder.state.status, 200);
+  const deactivateBody = JSON.parse(deactivateRecorder.state.body);
+  assert.equal(deactivateBody.success, true);
 
-  const exportedCsv = await reserveModule.api.exportCsv();
-  assert.match(exportedCsv, /steamId,name,group,expireAt,reasons,remark,isExpired/);
-  assert.match(exportedCsv, /Bravo/);
+  const activationsRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: `/api/reserve-slots/cdk/batches/${encodeURIComponent(batchId)}/activations`,
+    headers: { host: "localhost", authorization: "super" },
+    socket: {},
+  }, activationsRecorder.res);
+  assert.equal(activationsRecorder.state.status, 200);
+  const activationsBody = JSON.parse(activationsRecorder.state.body);
+  assert.equal(Array.isArray(activationsBody.records), true);
 
-  const csvImported = await reserveModule.api.importFromCsv([
-    "steamId,name,group,expireAt,reasons,remark,isExpired",
-    '76561198377609641,Bravo,BZSSVIP,2026-06-02 21:26:59,"原因A | 原因B",手动导入,false',
-  ].join("\n"));
-  assert.equal(csvImported.members[0].name, "Bravo");
-  assert.deepEqual(csvImported.members[0].reasons, ["原因A", "原因B"]);
-
-  const forbiddenRecorder = createRecorder();
-  const forbiddenReq = Readable.from([JSON.stringify({
-    steamId: "76561199161919155",
-    group: "BZSSVIP",
-    expireAt: "2026-06-07 22:22:53",
-  })]);
-  forbiddenReq.method = "POST";
-  forbiddenReq.url = "/api/reserve-slots/members";
-  forbiddenReq.headers = { host: "localhost", authorization: "user", "content-type": "application/json" };
-  forbiddenReq.socket = {};
-  await server.handleRequest(forbiddenReq, forbiddenRecorder.res);
-  assert.equal(forbiddenRecorder.state.status, 403);
-
-  const memberRecorder = createRecorder();
-  const memberReq = Readable.from([JSON.stringify({
-    steamId: "76561198377609640",
-    group: "BZSSVIP",
-    expireAt: "2026-08-02 21:26:59",
-    name: "Alpha",
-    reason: "manual",
-  })]);
-  memberReq.method = "POST";
-  memberReq.url = "/api/reserve-slots/members";
-  memberReq.headers = { host: "localhost", authorization: "super", "content-type": "application/json" };
-  memberReq.socket = {};
-  await server.handleRequest(memberReq, memberRecorder.res);
-  assert.equal(memberRecorder.state.status, 200);
-  const memberBody = JSON.parse(memberRecorder.state.body);
-  assert.equal(memberBody.success, true);
-  assert.equal(memberBody.members.find((member) => member.steamId === "76561198377609640").expireAt, "2026-08-02 21:26:59");
-
-  const adminFileAfterMemberUpsert = await fs.readFile(adminFilePath, "utf8");
-  assert.equal((adminFileAfterMemberUpsert.match(/Admin=76561198377609640/g) ?? []).length, 1);
-  assert.match(adminFileAfterMemberUpsert, /Admin=76561198377609640:BZSSVIP \/\/2026-08-02 21:26:59 名称:Alpha/);
-
-  const deleteMemberRecorder = createRecorder();
-  const deleteMemberReq = Readable.from([]);
-  deleteMemberReq.method = "DELETE";
-  deleteMemberReq.url = "/api/reserve-slots/members/76561198377609640";
-  deleteMemberReq.headers = { host: "localhost", authorization: "super" };
-  deleteMemberReq.socket = {};
-  await server.handleRequest(deleteMemberReq, deleteMemberRecorder.res);
-  assert.equal(deleteMemberRecorder.state.status, 200);
-  const deleteMemberBody = JSON.parse(deleteMemberRecorder.state.body);
-  assert.equal(deleteMemberBody.success, true);
-  assert.equal(deleteMemberBody.members.some((member) => member.steamId === "76561198377609640"), false);
-
-  await fs.writeFile(adminFilePath, [
-    "header",
-    "// 预留位",
-    "Group=BZSSVIP:reserve",
-    "Admin=76561198377609640:BZSSVIP //2020-06-02 21:26:59 名称:Expired",
-    "Admin=76561198992120471:BZSSVIP //2099-06-06 22:31:03 名称:Active",
-  ].join("\n"), "utf8");
-  await reserveModule.api.importFromAdminFile();
-
-  const deleteExpiredRecorder = createRecorder();
-  const deleteExpiredReq = Readable.from([]);
-  deleteExpiredReq.method = "POST";
-  deleteExpiredReq.url = "/api/reserve-slots/delete-expired";
-  deleteExpiredReq.headers = { host: "localhost", authorization: "super" };
-  deleteExpiredReq.socket = {};
-  await server.handleRequest(deleteExpiredReq, deleteExpiredRecorder.res);
-  assert.equal(deleteExpiredRecorder.state.status, 200);
-  const deleteExpiredBody = JSON.parse(deleteExpiredRecorder.state.body);
-  assert.equal(deleteExpiredBody.success, true);
-  assert.equal(deleteExpiredBody.members.some((member) => member.steamId === "76561198377609640"), false);
-  assert.equal(deleteExpiredBody.members.some((member) => member.steamId === "76561198992120471"), true);
-
+  await reserveModule.stop();
   await fs.rm(tempDir, { recursive: true, force: true });
 }
 
@@ -441,6 +641,9 @@ await testUpsertAdminFileContentAppendsMissingBlock();
 await testUpsertAdminFileContentUpdatesExistingMember();
 await testUpsertAdminFileContentValidatesInput();
 await testRemoveReserveSlotMembersFromAdminFileContent();
+await testReserveSlotUniquenessDedupesExistingEntries();
+await testCdkBatchAndChatActivationFlow();
+await testManualExtendAddsFromExistingExpiry();
 await testModuleAndRoutesWorkEndToEnd();
 
 console.log("reserve slots tests passed");

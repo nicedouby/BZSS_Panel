@@ -1,6 +1,4 @@
-// -*- coding: utf-8 -*-
-
-import { AUDIT_ACTIONS, AUDIT_CATEGORIES, AUDIT_SOURCE_PAGES } from "../../core/audit/audit-actions.js";
+﻿import { AUDIT_ACTIONS, AUDIT_CATEGORIES, AUDIT_SOURCE_PAGES } from "../../core/audit/audit-actions.js";
 
 export async function handleReserveSlotsRoutes({
   core,
@@ -27,6 +25,114 @@ export async function handleReserveSlotsRoutes({
 
   if (url.pathname === "/api/reserve-slots" && req.method === "GET") {
     json(200, await reserveSlots.getState());
+    return true;
+  }
+
+  if (url.pathname === "/api/reserve-slots/cdk/state" && req.method === "GET") {
+    if (!core.authManager?.hasEverything?.(user)) {
+      json(403, {
+        error: "Forbidden",
+        message: "SuperAdmin permission is required.",
+      });
+      return true;
+    }
+
+    json(200, await reserveSlots.getCdkState());
+    return true;
+  }
+
+  const batchActivationsMatch = url.pathname.match(/^\/api\/reserve-slots\/cdk\/batches\/([^/]+)\/activations$/);
+  if (batchActivationsMatch && req.method === "GET") {
+    if (!core.authManager?.hasEverything?.(user)) {
+      json(403, {
+        error: "Forbidden",
+        message: "SuperAdmin permission is required.",
+      });
+      return true;
+    }
+
+    const batchId = decodeURIComponent(batchActivationsMatch[1]);
+    const result = await reserveSlots.listBatchActivations(batchId, {
+      steamId: url.searchParams.get("steamId") ?? "",
+      result: url.searchParams.get("result") ?? "",
+    });
+    json(200, result);
+    return true;
+  }
+
+  if (url.pathname === "/api/reserve-slots/cdk/batches" && req.method === "POST") {
+    if (!core.authManager?.hasEverything?.(user)) {
+      json(403, {
+        error: "Forbidden",
+        message: "SuperAdmin permission is required.",
+      });
+      return true;
+    }
+
+    const body = await readJsonBody(req);
+    const auditContext = {
+      action: AUDIT_ACTIONS.RESERVE_SLOT_MANAGEMENT,
+      category: AUDIT_CATEGORIES.RESERVE_SLOT_MANAGEMENT,
+      actor: user,
+      request: req,
+      sourcePage: body?.sourcePage ?? AUDIT_SOURCE_PAGES.RESERVE_SLOT_MANAGEMENT,
+      target: {
+        type: "reserve_slot_cdk_batch",
+        id: body?.codeType ?? "",
+        name: body?.codeType ?? "",
+      },
+      parameters: {
+        operation: "create_cdk_batch",
+        codeType: body?.codeType ?? "",
+        quantity: body?.quantity ?? 0,
+        durationDays: body?.durationDays ?? 0,
+        allowMultiActivation: Boolean(body?.allowMultiActivation),
+      },
+    };
+
+    const result = await executeAudited(core, auditContext, () => reserveSlots.createCdkBatch(body, { actor: user }));
+    json(200, {
+      ok: true,
+      success: true,
+      ...result,
+    });
+    return true;
+  }
+
+  const deactivateBatchMatch = url.pathname.match(/^\/api\/reserve-slots\/cdk\/batches\/([^/]+)\/deactivate$/);
+  if (deactivateBatchMatch && req.method === "POST") {
+    if (!core.authManager?.hasEverything?.(user)) {
+      json(403, {
+        error: "Forbidden",
+        message: "SuperAdmin permission is required.",
+      });
+      return true;
+    }
+
+    const batchId = decodeURIComponent(deactivateBatchMatch[1]);
+    const auditContext = {
+      action: AUDIT_ACTIONS.RESERVE_SLOT_MANAGEMENT,
+      category: AUDIT_CATEGORIES.RESERVE_SLOT_MANAGEMENT,
+      actor: user,
+      request: req,
+      sourcePage: AUDIT_SOURCE_PAGES.RESERVE_SLOT_MANAGEMENT,
+      target: {
+        type: "reserve_slot_cdk_batch",
+        id: batchId,
+        name: batchId,
+      },
+      parameters: {
+        operation: "deactivate_cdk_batch",
+        batchId,
+      },
+    };
+
+    const result = await executeAudited(core, auditContext, () => reserveSlots.deactivateCdkBatch(batchId, { actor: user }));
+    json(200, {
+      ok: true,
+      success: true,
+      ...result,
+    });
     return true;
   }
 
@@ -94,6 +200,7 @@ export async function handleReserveSlotsRoutes({
         steamId: body?.steamId ?? body?.steamID ?? body?.steam64 ?? "",
         group: body?.group ?? "",
         expireAt: body?.expireAt ?? "",
+        durationDays: body?.durationDays ?? 0,
         reason: body?.reason ?? "",
       },
     };
@@ -102,7 +209,7 @@ export async function handleReserveSlotsRoutes({
     json(200, {
       ok: true,
       success: true,
-      message: result.message ?? "预留位已保存到管理员配置文件。",
+      message: result.message ?? "预留位时间已更新。",
       ...result,
     });
     return true;
@@ -156,7 +263,7 @@ export async function handleReserveSlotsRoutes({
     json(200, {
       ok: true,
       success: true,
-      message: result.message ?? "已从管理员文件同步预留位数据",
+      message: result.message ?? "已从管理员文件同步预留位数据。",
       ...result,
     });
     return true;

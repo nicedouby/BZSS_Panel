@@ -130,6 +130,11 @@
                       {{ props.player.isOnline ? t("common.online") : t("common.offline") }}
                     </strong>
                   </div>
+                  <div class="hud-ctx-item hud-ctx-item-wide">
+                    <span class="ctx-lbl">本局在服时长</span>
+                    <strong class="ctx-val">{{ matchOnlineText }}</strong>
+                    <small v-if="matchOnlineSubText" class="ctx-sub">{{ matchOnlineSubText }}</small>
+                  </div>
                 </div>
               </div>
             </div>
@@ -674,6 +679,8 @@ const updateViewport = () => {
 
 const currentIp = computed(() => String(props.player?.ip ?? "").trim());
 const displayIp = computed(() => currentIp.value);
+const matchOnlineText = computed(() => formatMatchOnlineText(props.player?.matchOnlineSeconds ?? null));
+const matchOnlineSubText = computed(() => formatMatchOnlineSubText(props.player));
 const ipSearchUrl = computed(() => buildIpSearchUrl(displayIp.value));
 const ipEmptyText = computed(() => "--");
 const ipSourceHint = computed(() => t("common.none"));
@@ -777,6 +784,31 @@ function formatHours(value: unknown) {
   const seconds = Number(value ?? 0);
   if (!Number.isFinite(seconds) || seconds < 0) return "--";
   return `${(seconds / 3600).toFixed(1)}h`;
+}
+
+function formatMatchOnlineText(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "--";
+  return formatHours(value);
+}
+
+function formatMatchOnlineSubText(player: PlayerDetailViewModel | null | undefined) {
+  if (!player) return "";
+  const parts: string[] = [];
+  if (player.matchJoinCount != null) parts.push(`进服 ${player.matchJoinCount} 次`);
+  if (player.matchFirstSeenAt) parts.push(`首次 ${formatDateTime(player.matchFirstSeenAt)}`);
+  if (player.matchLastSeenAt) parts.push(`最近 ${formatDateTime(player.matchLastSeenAt)}`);
+  return parts.join(" · ");
+}
+
+function formatDateTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function formatHoursInput(value: unknown) {

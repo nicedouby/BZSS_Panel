@@ -451,43 +451,30 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     syncMatchFromServerStatus();
     updateWebStatus();
 
-    const enrichedPlayers = enrichPlayersWithPlayerStateTiming(state.serverId, players);
+    const enrichedPlayers = enrichPlayersWithMatchPresence(state.serverId, players);
     state.players = makePlayersSnapshot(enrichedPlayers);
 
     emitPlayersUpdated();
     emitUpdated("players");
   }
 
-  function enrichPlayersWithPlayerStateTiming(serverId, players) {
+  function enrichPlayersWithMatchPresence(serverId, players) {
     const list = Array.isArray(players) ? players : [];
-    const getList = modules?.playerState?.getPlayerList;
-    if (typeof getList !== "function") return list;
+    const getPlayer = modules?.matchPlayerPresence?.getPlayer;
+    if (typeof getPlayer !== "function") return list;
 
     const serverKey = String(serverId ?? core.webStatus.serverId ?? "").trim();
-    const playerStatePlayers = getList(serverKey) ?? [];
-    if (!Array.isArray(playerStatePlayers) || playerStatePlayers.length === 0) return list;
-
-    const lookup = new Map();
-    for (const p of playerStatePlayers) {
-      const key = getStableIdentityKey(p);
-      if (!key) continue;
-      lookup.set(key, p);
-    }
-
     return list.map((player) => {
-      const key = getStableIdentityKey(player);
-      if (!key) return player;
-      const statePlayer = lookup.get(key);
-      if (!statePlayer) return player;
-
-      const squadlessSince = String(statePlayer?.squadlessSince ?? "");
-      const squadlessSeconds = Number(statePlayer?.squadlessSeconds ?? 0);
-      if (!squadlessSince && (!Number.isFinite(squadlessSeconds) || squadlessSeconds <= 0)) return player;
-
+      const presence = getPlayer(player, serverKey);
+      if (!presence) return player;
       return {
         ...player,
-        squadlessSince,
-        squadlessSeconds: Number.isFinite(squadlessSeconds) ? squadlessSeconds : 0,
+        matchOnlineSeconds: Math.floor(Number(presence.matchOnlineMs ?? 0) / 1000),
+        matchObservedOnlineSeconds: Number(presence.matchObservedOnlineSeconds ?? 0),
+        matchEstimatedOnlineSeconds: Number(presence.matchEstimatedOnlineSeconds ?? 0),
+        matchFirstSeenAt: String(presence.matchFirstSeenAt ?? ""),
+        matchLastSeenAt: String(presence.matchLastSeenAt ?? ""),
+        matchJoinCount: Number(presence.matchJoinCount ?? 0),
       };
     });
   }
@@ -530,6 +517,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       count: classifiedSquads.length,
       lastUpdatedAt: new Date().toISOString(),
     };
+    maybeSetCurrentMatchIdentity("squadsUpdated");
     updateWebStatus();
     emitSquadsUpdated();
     emitUpdated("squads");
@@ -562,6 +550,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         state.serverStatus.layer = currentMap.layer || state.serverStatus.layer || "";
         state.serverStatus.lastUpdatedAt = new Date().toISOString();
         syncMatchFromServerStatus();
+        maybeSetCurrentMatchIdentity("currentMap");
         updateWebStatus();
         emitServerStatusUpdated();
         emitUpdated("currentMap");
@@ -595,6 +584,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         state.serverStatus.nextLayerSource = "showNextMap";
         state.serverStatus.lastUpdatedAt = new Date().toISOString();
         syncMatchFromServerStatus();
+        maybeSetCurrentMatchIdentity("nextMap");
         updateWebStatus();
         emitServerStatusUpdated();
         emitUpdated("nextMap");
@@ -708,6 +698,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         state.match.phase = "in_progress";
       }
     }
+    maybeSetCurrentMatchIdentity("serverStatus");
   }
 
   function getSnapshotCacheKey() {
@@ -1143,6 +1134,233 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     ].join(":");
   }
 
+  function enrichPlayersWithMatchPresence(serverId, players) {
+    const list = Array.isArray(players) ? players : [];
+    const getPlayer = modules?.matchPlayerPresence?.getPlayer;
+    if (typeof getPlayer !== "function") return list;
+
+    const serverKey = String(serverId ?? core.webStatus.serverId ?? "").trim();
+    return list.map((player) => {
+      const presence = getPlayer(player, serverKey);
+      if (!presence) return player;
+      return {
+        ...player,
+        matchOnlineSeconds: Math.floor(Number(presence.matchOnlineMs ?? 0) / 1000),
+        matchObservedOnlineSeconds: Number(presence.matchObservedOnlineSeconds ?? 0),
+        matchEstimatedOnlineSeconds: Number(presence.matchEstimatedOnlineSeconds ?? 0),
+        matchFirstSeenAt: String(presence.matchFirstSeenAt ?? ""),
+        matchLastSeenAt: String(presence.matchLastSeenAt ?? ""),
+        matchJoinCount: Number(presence.matchJoinCount ?? 0),
+      };
+    });
+  }
+
+  function maybeSetCurrentMatchIdentity(trigger = "") {
+    const matchCache = modules?.matchCache;
+    if (typeof matchCache?.setCurrentMatch !== "function") return;
+    const identity = buildCurrentMatchIdentity();
+    if (!identity) return;
+    matchCache.setCurrentMatch({
+      ...identity,
+      savedAt: new Date().toISOString(),
+      trigger,
+    }, state.serverId || core.webStatus.serverId || "");
+  }
+
+  function buildCurrentMatchIdentity() {
+    const map = normalizeMatchFingerprintPart(state.serverStatus.map || state.match.map || "");
+    const layer = normalizeMatchFingerprintPart(state.serverStatus.layer || state.match.layer || "");
+    const mode = normalizeMatchFingerprintPart(state.serverStatus.mode || state.match.mode || "");
+    const baseParts = [map, layer, mode].filter(Boolean);
+    if (baseParts.length === 0) return null;
+
+    const { team1Name, team2Name } = extractSquadTeamNames(state.squads.list);
+    const normalizedTeam1Name = normalizeMatchFingerprintPart(team1Name);
+    const normalizedTeam2Name = normalizeMatchFingerprintPart(team2Name);
+    const fullParts = [baseParts.join("|"), normalizedTeam1Name, normalizedTeam2Name].filter(Boolean);
+    const fullKey = normalizedTeam1Name && normalizedTeam2Name ? fullParts.join("|") : "";
+    const baseKey = baseParts.join("|");
+
+    return {
+      serverId: state.serverId || core.webStatus.serverId || "",
+      baseKey,
+      fullKey,
+      fingerprint: fullKey || baseKey,
+      map,
+      layer,
+      mode,
+      team1Name: String(team1Name ?? "").trim(),
+      team2Name: String(team2Name ?? "").trim(),
+      roundAnchor: {
+        worldPath: String(state.round.current?.worldPath ?? "").trim(),
+        serverPlayAt: String(state.round.current?.serverPlayAt ?? "").trim(),
+        logLineTime: String(state.round.current?.logLineTime ?? "").trim(),
+      },
+      lastObservedPlaytimeSeconds: Number(state.serverStatus.playtime ?? state.match.playtime ?? 0) || 0,
+    };
+  }
+
+  function maybeAnnounceRestoredSameMatch_legacy(trigger = "") {
+    const serverId = normalizeText(state.serverId || core.webStatus.serverId || "");
+    if (!serverId) return false;
+
+    const matchCache = modules?.matchCache;
+    const cachedMatch = typeof matchCache?.getMatchIdentity === "function"
+      ? matchCache.getMatchIdentity(serverId)
+      : null;
+    if (!cachedMatch) return false;
+
+    const comparison = typeof matchCache?.compareCachedMatch === "function"
+      ? matchCache.compareCachedMatch(cachedMatch, serverId)
+      : { status: "pending", reason: "cache_unavailable" };
+
+    if (comparison.status === "pending") return false;
+    if (comparison.status === "ambiguous") {
+      logWithFallback(moduleLogger, "info", "[MatchState] 当前对局信息不足，暂不比对", {
+        operation: "matchState.waitingForCurrentMatch",
+        data: { trigger, serverId, reason: comparison.reason },
+      });
+      return false;
+    }
+    if (comparison.status === "different") {
+      logWithFallback(moduleLogger, "info", "/xm 当前对局与上一轮关闭的对局不是同一对局", {
+        operation: "matchState.differentMatchRestored",
+        data: {
+          trigger,
+          serverId,
+          reason: comparison.reason,
+          currentFingerprint: comparison.currentMatch,
+          previousFingerprint: comparison.cachedMatch,
+        },
+      });
+      return false;
+    }
+
+    logWithFallback(moduleLogger, "info", "/xm 当前对局与上一轮关闭的对局为同一对局", {
+      operation: "matchState.sameMatchRestored",
+      data: {
+        trigger,
+        serverId,
+        reason: comparison.reason,
+        currentFingerprint: comparison.currentMatch,
+        previousFingerprint: comparison.cachedMatch,
+      },
+    });
+    return true;
+  }
+
+  async function loadMatchSessionState_legacy() {
+    if (sessionState.loaded) return;
+    sessionState.loaded = true;
+    const matchCache = modules?.matchCache;
+    if (!matchCache) return;
+
+    const status = typeof matchCache.getStatus === "function"
+      ? matchCache.getStatus(state.serverId || core.webStatus.serverId || "")
+      : null;
+    if (!status?.cachedMatch) return;
+
+    const restored = await matchCache.restoreCurrentMatch(
+      status.cachedMatch,
+      status.serverId || state.serverId || core.webStatus.serverId || "",
+    );
+    if (restored) {
+      const serverKey = normalizeText(status.serverId || state.serverId || core.webStatus.serverId || "");
+      if (serverKey) {
+        sessionState.byServerId.set(serverKey, {
+          sessionId: restored.sessionId || buildMatchSessionId(serverKey, restored),
+          closedAt: restored.closedAt || new Date().toISOString(),
+          ...restored,
+        });
+      }
+    }
+  }
+
+  async function persistMatchSessionState_legacy(options = {}) {
+    const promoteComparisonState = options?.promoteComparisonState === true;
+    const cacheCurrentMatch = modules?.matchCache?.getStatus?.(state.serverId || core.webStatus.serverId || "")?.currentMatch ?? null;
+    const currentFingerprint = buildCurrentMatchIdentity() ?? cacheCurrentMatch;
+    const serverId = normalizeText(state.serverId || core.webStatus.serverId || "");
+    if (serverId && currentFingerprint) {
+      const currentFingerprintKey = currentFingerprint.fingerprint || currentFingerprint.fullKey || currentFingerprint.baseKey || "";
+      const lastPersistedFingerprint = sessionState.lastPersistedFingerprintByServerId.get(serverId) ?? "";
+      if (lastPersistedFingerprint === currentFingerprintKey && sessionState.persistedByServerId.has(serverId)) {
+        if (promoteComparisonState) {
+          const persistedRecord = sessionState.persistedByServerId.get(serverId);
+          if (persistedRecord) {
+            sessionState.byServerId.set(serverId, { ...persistedRecord });
+          }
+        }
+        return;
+      }
+      const record = {
+        sessionId: buildMatchSessionId(serverId, currentFingerprint),
+        closedAt: new Date().toISOString(),
+        ...currentFingerprint,
+      };
+      sessionState.persistedByServerId.set(serverId, record);
+      sessionState.lastPersistedFingerprintByServerId.set(serverId, currentFingerprintKey);
+      if (promoteComparisonState) {
+        sessionState.byServerId.set(serverId, { ...record });
+      }
+    }
+
+    if (sessionState.persistedByServerId.size === 0) return;
+
+    const payload = {
+      version: SESSION_STATE_VERSION,
+      servers: Object.fromEntries(
+        [...sessionState.persistedByServerId.entries()]
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([key, value]) => [key, { ...value }]),
+      ),
+    };
+
+    try {
+      await fs.mkdir(path.dirname(sessionState.filePath), { recursive: true });
+      const tempFile = `${sessionState.filePath}.${process.pid}.${Date.now()}.tmp`;
+      await fs.writeFile(tempFile, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+      await fs.rename(tempFile, sessionState.filePath);
+    } catch (error) {
+      logWithFallback(moduleLogger, "warn", "[MatchState] session state write failed", {
+        operation: "matchState.sessionStateWriteFailed",
+        data: {
+          filePath: sessionState.filePath,
+          message: String(error?.message ?? error),
+        },
+      });
+    }
+
+    const matchCache = modules?.matchCache;
+    if (matchCache) {
+      maybeSetCurrentMatchIdentity("persist");
+      await matchCache.flush(state.serverId || core.webStatus.serverId || "", { force: options?.promoteComparisonState === true });
+    }
+  }
+
+  function normalizeMatchFingerprintPart_legacy(value) {
+    return String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+  }
+
+  function extractSquadTeamNames_legacy(squads = []) {
+    let team1Name = "";
+    let team2Name = "";
+
+    for (const squad of Array.isArray(squads) ? squads : []) {
+      const teamId = Number(squad?.teamID ?? squad?.teamId ?? NaN);
+      const teamName = String(squad?.teamName ?? squad?.factionName ?? "").trim();
+      if (!teamName) continue;
+      if (teamId === 1 && !team1Name) team1Name = teamName;
+      if (teamId === 2 && !team2Name) team2Name = teamName;
+      if (team1Name && team2Name) break;
+    }
+
+    return { team1Name, team2Name };
+  }
+
   return {
     manifest: {
       id: "module.matchState",
@@ -1175,8 +1393,6 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       sessionState.announcedComparisonByServerId.clear();
       sessionState.awaitingComparisonByServerId.clear();
       sessionState.waitingForServerInfoByServerId.clear();
-      sessionState.persistedByServerId.clear();
-      sessionState.lastPersistedFingerprintByServerId.clear();
       sessionState.serverInfoReady = false;
       sessionState.subscriptionActive = isSubscribed();
 

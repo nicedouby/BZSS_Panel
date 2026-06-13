@@ -94,6 +94,61 @@
       </div>
     </section>
 
+    <section v-if="false" class="ticket-control-card">
+      <div class="ticket-control-header">
+        <div>
+          <div class="ticket-control-title">票数控制</div>
+          <div class="ticket-control-subtitle">
+            当前 sender: {{ ticketCommandTargetText }}
+          </div>
+        </div>
+        <div class="ticket-control-meta">
+          <span class="ticket-control-badge" :data-tone="ticketSourceTone">{{ ticketSourceText }}</span>
+          <button
+            v-if="canRefresh"
+            type="button"
+            class="ticket-control-toggle"
+            :disabled="ticketWriteLoading"
+            @click="toggleTicketEditor"
+          >
+            {{ ticketEditorOpen ? "收起编辑" : "修改票数" }}
+          </button>
+        </div>
+      </div>
+
+      <div class="ticket-control-grid">
+        <article class="ticket-side-card team1">
+          <span class="ticket-side-card__label">TEAM 1</span>
+          <strong class="ticket-side-card__value">{{ formatTicketDisplay(remoteTicketCounts.team1) }}</strong>
+        </article>
+        <article class="ticket-side-card team2">
+          <span class="ticket-side-card__label">TEAM 2</span>
+          <strong class="ticket-side-card__value">{{ formatTicketDisplay(remoteTicketCounts.team2) }}</strong>
+        </article>
+      </div>
+
+      <form v-if="ticketEditorOpen && canRefresh" class="ticket-editor-form" @submit.prevent="submitTicketWrite">
+        <label class="ticket-editor-field">
+          <span class="ticket-editor-field__label">TEAM 1</span>
+          <input v-model.trim="ticketForm.t1" type="text" inputmode="numeric" class="ticket-editor-input" placeholder="保持不变" />
+        </label>
+        <label class="ticket-editor-field">
+          <span class="ticket-editor-field__label">TEAM 2</span>
+          <input v-model.trim="ticketForm.t2" type="text" inputmode="numeric" class="ticket-editor-input" placeholder="保持不变" />
+        </label>
+        <div class="ticket-editor-actions">
+          <button type="submit" class="ticket-editor-submit" :disabled="ticketWriteLoading">
+            {{ ticketWriteLoading ? "提交中..." : "写入票数" }}
+          </button>
+          <button type="button" class="ticket-editor-reset" :disabled="ticketWriteLoading" @click="resetTicketFormToCurrent">
+            使用当前值
+          </button>
+        </div>
+      </form>
+
+      <div v-if="ticketWriteError" class="ticket-control-error">{{ ticketWriteError }}</div>
+    </section>
+
     <DataState
       mode="fill"
       :loading="showInitialLoading"
@@ -113,6 +168,7 @@
               v-for="team in viewModels.teams"
               :key="team.teamId"
               :team="team"
+              :can-edit-tickets="canEditTickets"
               :playtimes="playtimes"
               :combat-stats-lookup="combatStatsLookup"
               :density-mode="pageState.densityMode"
@@ -120,6 +176,7 @@
               :selected-player-ids="selectedPlayerIds"
               @select-player="selectPlayer"
               @toggle-player-check="togglePlayerCheck"
+              @edit-tickets="openTicketEditor"
               @select-squad="handleSquadClick"
             />
           </div>
@@ -145,6 +202,54 @@
       :squad="selectedSquadDetail"
       @close="closeSquadDetail"
     />
+
+    <div v-if="ticketEditorOpen" class="ticket-modal-backdrop" @click.self="closeTicketEditor">
+      <form class="ticket-modal-panel" @submit.prevent="submitTicketWrite">
+        <header class="ticket-modal-header">
+          <div>
+            <h3>修改票数</h3>
+            <p>当前 sender: {{ ticketCommandTargetText }}</p>
+          </div>
+          <div class="ticket-modal-header-meta">
+            <span class="ticket-control-badge" :data-tone="ticketSourceTone">{{ ticketSourceText }}</span>
+            <button type="button" class="ticket-modal-close" @click="closeTicketEditor">×</button>
+          </div>
+        </header>
+
+        <div class="ticket-modal-grid">
+          <article class="ticket-side-card team1" :class="{ active: ticketEditorTeamId === 1 }">
+            <span class="ticket-side-card__label">TEAM 1</span>
+            <strong class="ticket-side-card__value">{{ formatTicketDisplay(remoteTicketCounts.team1) }}</strong>
+          </article>
+          <article class="ticket-side-card team2" :class="{ active: ticketEditorTeamId === 2 }">
+            <span class="ticket-side-card__label">TEAM 2</span>
+            <strong class="ticket-side-card__value">{{ formatTicketDisplay(remoteTicketCounts.team2) }}</strong>
+          </article>
+        </div>
+
+        <div class="ticket-editor-form">
+          <label v-if="ticketEditorTeamId === 1" class="ticket-editor-field">
+            <span class="ticket-editor-field__label">TEAM 1</span>
+            <input v-model.trim="ticketForm.t1" type="text" inputmode="numeric" class="ticket-editor-input" placeholder="输入新的 TEAM 1 票数" />
+          </label>
+          <label v-else-if="ticketEditorTeamId === 2" class="ticket-editor-field">
+            <span class="ticket-editor-field__label">TEAM 2</span>
+            <input v-model.trim="ticketForm.t2" type="text" inputmode="numeric" class="ticket-editor-input" placeholder="输入新的 TEAM 2 票数" />
+          </label>
+        </div>
+
+        <div v-if="ticketWriteError" class="ticket-control-error">{{ ticketWriteError }}</div>
+
+        <footer class="ticket-modal-actions">
+          <button type="button" class="ticket-editor-reset" :disabled="ticketWriteLoading" @click="resetTicketFormToCurrent">
+            使用当前值
+          </button>
+          <button type="submit" class="ticket-editor-submit" :disabled="ticketWriteLoading">
+            {{ ticketWriteLoading ? "提交中..." : "写入票数" }}
+          </button>
+        </footer>
+      </form>
+    </div>
 
     <!-- 批量操作悬浮条 -->
     <transition name="bar-slide">
@@ -270,6 +375,14 @@ const refreshingSquads = ref(false);
 const refreshingAll = ref(false);
 const refreshError = ref("");
 const playtimeError = ref("");
+const ticketWriteError = ref("");
+const ticketWriteLoading = ref(false);
+const ticketEditorOpen = ref(false);
+const ticketEditorTeamId = ref<number | null>(null);
+const ticketForm = reactive({
+  t1: "",
+  t2: "",
+});
 const playtimeRequested = ref(true);
 const playtimeJob = ref<PlaytimeJobViewModel | null>(null);
 const activePlayerWindow = ref<{
@@ -329,6 +442,52 @@ const matchSnapshotQuery = useQuery({
   refetchOnWindowFocus: false,
 });
 const matchSnapshot = computed(() => matchSnapshotQuery.data.value?.matchState ?? null);
+const remoteTelemetryQuery = useQuery({
+  queryKey: computed(() => ["remote-telemetry-state", auth.authenticated]),
+  enabled: computed(() => auth.authenticated),
+  queryFn: async () => apiGet<any>("/api/remote-telemetry/state"),
+  refetchInterval: computed(() => (auth.authenticated ? 2_000 : false)),
+  refetchIntervalInBackground: true,
+  refetchOnWindowFocus: false,
+});
+const remoteTelemetryState = computed(() => remoteTelemetryQuery.data.value?.remoteTelemetry ?? null);
+const remoteTicketCounts = computed(() => {
+  const latest = remoteTelemetryState.value?.currentSample ?? null;
+  const latestTickets = latest?.tickets ?? {};
+  const matchTickets = matchSnapshot.value?.match?.tickets ?? {};
+  return {
+    team1: firstFiniteNumber(latestTickets.team1, matchTickets.team1),
+    team2: firstFiniteNumber(latestTickets.team2, matchTickets.team2),
+  };
+});
+const ticketCommandTarget = computed(() => {
+  const target = remoteTelemetryState.value?.commandTarget ?? null;
+  const host = normalizeCommandHost(target?.host ?? "");
+  const port = firstFiniteNumber(target?.port) ?? 12765;
+  return {
+    host,
+    port,
+  };
+});
+const canEditTickets = computed(() => canRefresh.value && Boolean(ticketCommandTarget.value.host));
+const ticketCommandTargetText = computed(() => {
+  if (!ticketCommandTarget.value.host) return "未识别 sender 地址";
+  return `${ticketCommandTarget.value.host}:${ticketCommandTarget.value.port}`;
+});
+const ticketSourceTone = computed(() => {
+  const source = remoteTelemetryState.value?.currentSource ?? null;
+  if (!source) return "idle";
+  if (source.online === false) return "warning";
+  if (source.lastError) return "error";
+  return "success";
+});
+const ticketSourceText = computed(() => {
+  const source = remoteTelemetryState.value?.currentSource ?? null;
+  if (!source) return "等待 sender";
+  if (source.online === false) return "sender 离线";
+  if (source.lastError) return source.lastError;
+  return "sender 在线";
+});
 const runtimeWebStatus = computed(() => server.snapshot?.webStatus ?? server.snapshot ?? {});
 const currentServerId = computed(() => String(
   runtimeWebStatus.value.serverId
@@ -434,6 +593,7 @@ const battleLogLatestText = computed(() => {
 });
 const battleLogSummaryCards = computed(() => buildBattleLogSummaryCards(battleLogSummaryStats.value));
 const showBattleLogPanel = computed(() => Boolean(currentServerId.value));
+const showTicketControlPanel = computed(() => Boolean(currentServerId.value || remoteTelemetryState.value?.currentSource));
 const serverStatusUpdatedAt = computed(() => toMillis(matchSnapshot.value?.serverStatus?.lastUpdatedAt));
 const playersUpdatedAt = computed(() => toMillis(matchSnapshot.value?.players?.lastUpdatedAt));
 const squadsUpdatedAt = computed(() => toMillis(matchSnapshot.value?.squads?.lastUpdatedAt));
@@ -460,7 +620,8 @@ const viewerAutoSwapEnabled = computed(() => auth.user?.viewerTeamAutoSwapEnable
 
 const rawTeams = computed(() => {
   return match.teams.map((team) => {
-    return adaptTeam(team, {}, squadLifecycleLookup.value, {});
+    const ticketCount = team.teamID === 1 ? remoteTicketCounts.value.team1 : remoteTicketCounts.value.team2;
+    return adaptTeam(team, {}, squadLifecycleLookup.value, {}, ticketCount);
   });
 });
 
@@ -514,6 +675,100 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener("visibilitychange", handleVisibilityChange);
 });
+
+function formatTicketDisplay(value: number | null | undefined) {
+  return value == null ? "--" : String(value);
+}
+
+function resetTicketFormToCurrent() {
+  ticketForm.t1 = ticketEditorTeamId.value === 1 && remoteTicketCounts.value.team1 != null
+    ? String(remoteTicketCounts.value.team1)
+    : "";
+  ticketForm.t2 = ticketEditorTeamId.value === 2 && remoteTicketCounts.value.team2 != null
+    ? String(remoteTicketCounts.value.team2)
+    : "";
+  ticketWriteError.value = "";
+}
+
+function openTicketEditor(team: TeamViewModel) {
+  if (!canEditTickets.value) {
+    ui.pushToast({
+      title: "当前无法修改票数",
+      message: ticketCommandTarget.value.host
+        ? "请先等待 sender 恢复在线。"
+        : "当前 sender 没有可用的命令地址，无法下发票数修改。",
+      tone: "warn",
+    });
+    return;
+  }
+  ticketEditorTeamId.value = Number(team?.teamId ?? 0) || null;
+  ticketEditorOpen.value = true;
+  resetTicketFormToCurrent();
+}
+
+function closeTicketEditor() {
+  ticketEditorOpen.value = false;
+  ticketEditorTeamId.value = null;
+  ticketWriteError.value = "";
+}
+
+function toggleTicketEditor() {
+  if (ticketEditorOpen.value) {
+    closeTicketEditor();
+    return;
+  }
+  openTicketEditor({ teamId: 1 } as TeamViewModel);
+}
+
+async function submitTicketWrite() {
+  ticketWriteError.value = "";
+  ticketWriteLoading.value = true;
+  try {
+    if (!ticketCommandTarget.value.host) {
+      throw new Error("当前 sender 没有可用的命令地址。");
+    }
+    const payload: Record<string, number> = {};
+    if (ticketEditorTeamId.value === 1 && ticketForm.t1) payload.t1 = requireIntegerInput(ticketForm.t1, "TEAM 1");
+    if (ticketEditorTeamId.value === 2 && ticketForm.t2) payload.t2 = requireIntegerInput(ticketForm.t2, "TEAM 2");
+    if (payload.t1 == null && payload.t2 == null) {
+      if (ticketEditorTeamId.value === 1) {
+        throw new Error("请填写 TEAM 1 的票数。");
+      }
+      if (ticketEditorTeamId.value === 2) {
+        throw new Error("请填写 TEAM 2 的票数。");
+      }
+      throw new Error("至少填写一个队伍票数。");
+    }
+
+    const result = await apiPost<any>("/api/remote-telemetry/write-tickets", payload);
+    if (!result?.ok) {
+      throw new Error(String(result?.response?.error || result?.error || "票数写入失败"));
+    }
+
+    await Promise.all([
+      matchSnapshotQuery.refetch(),
+      remoteTelemetryQuery.refetch(),
+    ]);
+    resetTicketFormToCurrent();
+    closeTicketEditor();
+    const updatedTeamLabel = payload.t1 != null ? "TEAM 1" : "TEAM 2";
+    const updatedValue = payload.t1 != null ? result?.response?.t1 : result?.response?.t2;
+    ui.pushToast({
+      title: "票数写入成功",
+      message: `${updatedTeamLabel}: ${formatTicketDisplay(updatedValue)}`,
+      tone: "ok",
+    });
+  } catch (error) {
+    ticketWriteError.value = renderApiError(error, "票数写入失败");
+    ui.pushToast({
+      title: "票数写入失败",
+      message: ticketWriteError.value,
+      tone: "error",
+    });
+  } finally {
+    ticketWriteLoading.value = false;
+  }
+}
 
 async function fetchPlaytimes(steamIDsList: string[]) {
   if (steamIDsList.length === 0) return {};
@@ -906,6 +1161,12 @@ function buildPlayerDetailViewModel(player: PlayerRowViewModel): PlayerDetailVie
     role: player.role,
     online: player.isOnline,
     current_ip: player.ip ?? undefined,
+    matchOnlineSeconds: player.matchOnlineSeconds ?? undefined,
+    matchObservedOnlineSeconds: player.matchObservedOnlineSeconds ?? undefined,
+    matchEstimatedOnlineSeconds: player.matchEstimatedOnlineSeconds ?? undefined,
+    matchFirstSeenAt: player.matchFirstSeenAt ?? undefined,
+    matchLastSeenAt: player.matchLastSeenAt ?? undefined,
+    matchJoinCount: player.matchJoinCount ?? undefined,
   } as RuntimePlayer;
   const detail = adaptPlayerDetail(rawPlayer, player.playtimeHours ?? null, combatStatsLookup.value);
   const cacheRecord = player.steamId ? stablePlaytimes.value[player.steamId] : null;
@@ -1356,6 +1617,28 @@ function renderApiErrorText(runtimeError: string) {
   return `${t("common.error")}: ${runtimeError}`;
 }
 
+function firstFiniteNumber(...values: unknown[]): number | null {
+  for (const value of values) {
+    const number = Number(value);
+    if (Number.isFinite(number)) return number;
+  }
+  return null;
+}
+
+function normalizeCommandHost(value: unknown): string {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  return text.startsWith("::ffff:") ? text.slice("::ffff:".length) : text;
+}
+
+function requireIntegerInput(value: string, label: string): number {
+  const text = String(value ?? "").trim();
+  if (!/^-?\d+$/.test(text)) {
+    throw new Error(`${label} 必须是整数。`);
+  }
+  return Number(text);
+}
+
 function toMillis(value: string | number | null | undefined): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (!value) return 0;
@@ -1472,6 +1755,260 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
   padding: 8px var(--spacing-lg) 0;
 }
 
+.ticket-control-card {
+  display: grid;
+  gap: 12px;
+  margin: 8px var(--spacing-lg) 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(245, 158, 11, 0.26);
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(245, 158, 11, 0.12), transparent 28%),
+    radial-gradient(circle at 0% 0%, rgba(59, 130, 246, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015)),
+    var(--color-bg-card);
+  box-shadow: var(--shadow-md);
+  min-width: 0;
+}
+
+.ticket-control-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ticket-control-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.ticket-control-subtitle {
+  margin-top: 4px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.ticket-control-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.ticket-control-badge,
+.ticket-control-toggle,
+.ticket-editor-submit,
+.ticket-editor-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: var(--radius-full);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ticket-control-badge {
+  border: 1px solid var(--color-border-default);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--color-text-secondary);
+}
+
+.ticket-control-badge[data-tone="success"] {
+  color: var(--color-status-online);
+  border-color: rgba(34, 197, 94, 0.28);
+}
+
+.ticket-control-badge[data-tone="warning"] {
+  color: var(--color-status-warning);
+  border-color: rgba(245, 158, 11, 0.28);
+}
+
+.ticket-control-badge[data-tone="error"] {
+  color: var(--color-status-error);
+  border-color: rgba(239, 68, 68, 0.28);
+}
+
+.ticket-control-toggle,
+.ticket-editor-submit,
+.ticket-editor-reset {
+  border: 1px solid var(--color-border-default);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--color-text-primary);
+}
+
+.ticket-control-toggle:disabled,
+.ticket-editor-submit:disabled,
+.ticket-editor-reset:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ticket-editor-submit {
+  border-color: rgba(245, 158, 11, 0.38);
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.18), rgba(245, 158, 11, 0.1));
+}
+
+.ticket-control-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ticket-side-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-soft);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ticket-side-card.team1 {
+  border-color: rgba(56, 189, 248, 0.3);
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.12), rgba(56, 189, 248, 0.05));
+}
+
+.ticket-side-card.team2 {
+  border-color: rgba(251, 146, 60, 0.32);
+  background: linear-gradient(180deg, rgba(251, 146, 60, 0.14), rgba(251, 146, 60, 0.05));
+}
+
+.ticket-side-card__label {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+}
+
+.ticket-side-card__value {
+  color: var(--color-text-primary);
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.ticket-editor-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.ticket-editor-field {
+  display: grid;
+  gap: 6px;
+}
+
+.ticket-editor-field__label {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.ticket-editor-input {
+  min-width: 0;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-default);
+  background: rgba(15, 23, 42, 0.35);
+  color: var(--color-text-primary);
+}
+
+.ticket-editor-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ticket-control-error {
+  color: var(--color-status-error);
+  font-size: 13px;
+}
+
+.ticket-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(2, 6, 23, 0.56);
+  backdrop-filter: blur(8px);
+}
+
+.ticket-modal-panel {
+  width: min(560px, 100%);
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(245, 158, 11, 0.12), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015)),
+    var(--color-bg-card);
+  box-shadow: var(--shadow-lg);
+}
+
+.ticket-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ticket-modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--color-text-primary);
+}
+
+.ticket-modal-header p {
+  margin: 6px 0 0;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.ticket-modal-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ticket-modal-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-default);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--color-text-primary);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.ticket-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ticket-side-card.active {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 10px 24px rgba(15, 23, 42, 0.18);
+}
+
+.ticket-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .playtime-refresh-card {
   display: grid;
   gap: 10px;
@@ -1569,9 +2106,19 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 }
 
 @media (max-width: 980px) {
+  .ticket-control-grid,
+  .ticket-editor-form,
   .shuffle-plan-stats,
   .battle-log-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .ticket-control-grid,
+  .ticket-editor-form,
+  .ticket-modal-grid {
+    grid-template-columns: 1fr;
   }
 }
 

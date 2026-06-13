@@ -16,6 +16,17 @@
               <span class="tsc-label">玩家</span>
               <span class="tsc-value">{{ team.playerCount }}/{{ team.maxPlayers }}</span>
             </span>
+            <button
+              type="button"
+              class="team-stat-chip tickets team-ticket-button"
+              :class="{ clickable: canEditTickets }"
+              :disabled="!canEditTickets"
+              :title="canEditTickets ? '点击修改票数' : '当前 sender 没有可用命令地址'"
+              @click="$emit('edit-tickets', props.team)"
+            >
+              <span class="tsc-label">票数</span>
+              <span class="tsc-value">{{ teamTicketText }}</span>
+            </button>
             <span class="team-stat-chip avg">
               <span class="tsc-label">均时</span>
               <span class="tsc-value">{{ teamAveragePlaytimeShortText }}</span>
@@ -81,12 +92,14 @@ const props = defineProps<{
   densityMode?: "comfortable" | "compact";
   multiSelectMode?: boolean;
   selectedPlayerIds?: Set<string | number>;
+  canEditTickets?: boolean;
 }>();
 
 defineEmits<{
   (event: "select-player", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
   (event: "toggle-player-check", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
   (event: "select-squad", squad: SquadViewModel): void;
+  (event: "edit-tickets", team: TeamViewModel): void;
 }>();
 
 const teamColorClass = computed(() => (props.team.teamColorType === "team1" ? "team1" : "team2"));
@@ -163,6 +176,11 @@ const teamLeaderAveragePlaytimeShortText = computed(() => {
   if (summary.knownPlaytimePlayers <= 0) return "--";
   if (summary.averagePlaytimeHours == null) return "--";
   return `${summary.averagePlaytimeHours}h`;
+});
+
+const teamTicketText = computed(() => {
+  const value = props.team.ticketCount;
+  return value == null ? "--" : String(value);
 });
 </script>
 
@@ -403,6 +421,15 @@ const teamLeaderAveragePlaytimeShortText = computed(() => {
   white-space: nowrap;
 }
 
+.team-ticket-button {
+  appearance: none;
+  cursor: default;
+}
+
+.team-ticket-button.clickable {
+  cursor: pointer;
+}
+
 .team-stat-chip.count {
   border-color: rgba(140, 160, 185, 0.2);
 }
@@ -411,6 +438,15 @@ const teamLeaderAveragePlaytimeShortText = computed(() => {
   color: var(--color-status-online);
   border-color: rgba(52, 211, 153, 0.22);
   background: rgba(52, 211, 153, 0.06);
+}
+
+.team-stat-chip.tickets {
+  color: #f8fafc;
+  border-color: rgba(245, 158, 11, 0.34);
+  background:
+    linear-gradient(180deg, rgba(245, 158, 11, 0.16), rgba(245, 158, 11, 0.08)),
+    rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .team-stat-chip.leader-avg {

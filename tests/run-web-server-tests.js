@@ -1406,6 +1406,19 @@ async function testMatchSnapshotRouteReusesPrebuiltSnapshot() {
       },
     },
     modules: {
+      remoteTelemetry: {
+        getState() {
+          return {
+            listening: true,
+            currentSample: {
+              tickets: {
+                team1: 320,
+                team2: 287,
+              },
+            },
+          };
+        },
+      },
       matchState: {
         getState() {
           getStateCalls += 1;
@@ -1442,8 +1455,91 @@ async function testMatchSnapshotRouteReusesPrebuiltSnapshot() {
   assert.equal(recorder.state.status, 200);
   const body = JSON.parse(recorder.state.body);
   assert.equal(body.matchState.serverStatus.map, "AlBasrah");
+  assert.equal(body.remoteTelemetry.currentSample.tickets.team1, 320);
   assert.equal(getStateCalls, 1);
   assert.equal(getOverviewCalls, 1);
+}
+
+async function testRemoteTelemetryStateRouteUsesModuleState() {
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin", role: "SuperAdmin" };
+        },
+      },
+    },
+    modules: {
+      remoteTelemetry: {
+        getState() {
+          return {
+            listening: true,
+            currentSample: {
+              tickets: { team1: 111, team2: 99 },
+            },
+            sourceCount: 1,
+          };
+        },
+      },
+    },
+  });
+
+  const recorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/remote-telemetry/state",
+    headers: { host: "localhost" },
+    socket: {},
+  }, recorder.res);
+
+  assert.equal(recorder.state.status, 200);
+  const body = JSON.parse(recorder.state.body);
+  assert.equal(body.ok, true);
+  assert.equal(body.source, "module.remoteTelemetry");
+  assert.equal(body.remoteTelemetry.currentSample.tickets.team2, 99);
+}
+
+async function testRemoteTelemetryWriteTicketsRouteDelegatesToModule() {
+  let receivedPayload = null;
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin", role: "SuperAdmin" };
+        },
+        hasEverything() {
+          return true;
+        },
+      },
+    },
+    modules: {
+      remoteTelemetry: {
+        async writeTickets(payload) {
+          receivedPayload = payload;
+          return {
+            ok: true,
+            target: { host: "127.0.0.1", port: 12765 },
+            request: { action: "set_tickets", t1: 300, t2: 250 },
+            response: { ok: true, type: "ticket_write", pid: 2952, t1: 300, t2: 250 },
+          };
+        },
+      },
+    },
+  });
+
+  const recorder = createRecorder();
+  const req = Readable.from([JSON.stringify({ t1: 300, t2: 250 })]);
+  req.method = "POST";
+  req.url = "/api/remote-telemetry/write-tickets";
+  req.headers = { host: "localhost" };
+  req.socket = {};
+  await server.handleRequest(req, recorder.res);
+
+  assert.equal(recorder.state.status, 200);
+  const body = JSON.parse(recorder.state.body);
+  assert.deepEqual(receivedPayload, { t1: 300, t2: 250 });
+  assert.equal(body.ok, true);
+  assert.equal(body.response.t2, 250);
 }
 
 async function testMatchRefreshRoutesDelegateToMatchState() {
@@ -2598,6 +2694,8 @@ await testGroupReportSnapshotRouteReturnsWrappedSnapshot();
 await testSnapshotAllRequiresAuth();
 await testSnapshotAllDoesNotTriggerSlowTasks();
 await testMatchSnapshotRouteReusesPrebuiltSnapshot();
+await testRemoteTelemetryStateRouteUsesModuleState();
+await testRemoteTelemetryWriteTicketsRouteDelegatesToModule();
 await testMatchRefreshRoutesDelegateToMatchState();
 await testSquadLifecycleRouteReturnsCurrentSnapshot();
 await testSquadManagementRoutesExposeStateAndMutations();

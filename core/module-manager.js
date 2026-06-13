@@ -5,6 +5,8 @@ import { createServerStatusModule } from "../modules/server-status/index.js";
 import { createPlayerStateModule } from "../modules/player-state/index.js";
 import { createSquadLifecycleModule } from "../modules/squad-lifecycle/index.js";
 import { createMatchStateModule } from "../modules/match-state/index.js";
+import { createMatchCacheModule } from "../modules/match-cache/index.js";
+import { createMatchPlayerPresenceModule } from "../modules/match-player-presence/index.js";
 import { createSquadManagementModule } from "../modules/squad-management/index.js";
 import { createTeamBalanceModule } from "../modules/team-balance/index.js";
 import { createSquadDisbandModule } from "../modules/squad-disband/index.js";
@@ -28,6 +30,7 @@ import { createInfantryCombatEnhancerModule } from "../modules/infantry-combat-e
 import { createPlaytimeModule } from "../modules/playtime/index.js";
 import { createPluginSubscriptionsModule } from "../modules/plugin-subscriptions/index.js";
 import { createServerStatsModule } from "../modules/server-stats/index.js";
+import { createRemoteTelemetryModule } from "../modules/remote-telemetry/index.js";
 import { createScheduledBroadcastModule } from "../modules/scheduled-broadcast/index.js";
 import { createPlayerSessionRecordsModule } from "../modules/player-session-records/index.js";
 import { createReserveSlotsModule } from "../modules/reserve-slots/index.js";
@@ -59,6 +62,8 @@ export class ModuleManager {
       createServerStatusModule,
       createPlayerStateModule,
       createSquadLifecycleModule,
+      createMatchCacheModule,
+      createMatchPlayerPresenceModule,
       createMatchStateModule,
       createSquadManagementModule,
       createTeamBalanceModule,
@@ -78,6 +83,7 @@ export class ModuleManager {
       createInfantryCombatEnhancerModule,
       createPlaytimeModule,
       createServerStatsModule,
+      createRemoteTelemetryModule,
       createScheduledBroadcastModule,
       createPlayerSessionRecordsModule,
       createReserveSlotsModule,

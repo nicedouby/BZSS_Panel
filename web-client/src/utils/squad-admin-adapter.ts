@@ -42,6 +42,12 @@ export function adaptPlayerRow(
     eosId: player.eosID ?? null,
     ip: (player as any).current_ip || (player as any).ip || null,
     playtimeHours,
+    matchOnlineSeconds: normalizeOptionalNumber((player as any).matchOnlineSeconds),
+    matchObservedOnlineSeconds: normalizeOptionalNumber((player as any).matchObservedOnlineSeconds),
+    matchEstimatedOnlineSeconds: normalizeOptionalNumber((player as any).matchEstimatedOnlineSeconds),
+    matchFirstSeenAt: normalizeOptionalString((player as any).matchFirstSeenAt),
+    matchLastSeenAt: normalizeOptionalString((player as any).matchLastSeenAt),
+    matchJoinCount: normalizeOptionalNumber((player as any).matchJoinCount),
     steamAvatar,
     combatStats,
     statsLabel: formatCombatStatsLabel(combatStats),
@@ -174,6 +180,7 @@ export function adaptTeam(
   playtimes: Record<string, any> = {},
   lifecycleByKey: Record<string, SquadLifecycleViewModel> = {},
   combatStatsLookup: Record<string, CombatStats> = {},
+  ticketCount: number | null = null,
 ): TeamViewModel {
   const squads = runtimeTeam.squads.map((squad) =>
     adaptSquad(squad, squad.members ?? [], playtimes, lifecycleByKey, combatStatsLookup),
@@ -210,6 +217,7 @@ export function adaptTeam(
     factionCode: getFactionFromTeamName(runtimeTeam.teamName),
     playerCount: runtimeTeam.playerCount,
     maxPlayers: 50,
+    ticketCount: normalizeOptionalNumber(ticketCount),
     averagePlaytimeHours: playtimeSummary.averagePlaytimeHours,
     leaderAveragePlaytimeHours: leaderPlaytimeSummary.averagePlaytimeHours,
     publicLeaderPlaytimePlayers: leaderPlaytimeSummary.publicPlaytimePlayers,
@@ -318,12 +326,30 @@ export function adaptPlayerDetail(
     ipSource: currentIp ? "current" : "none",
     ipLookupLoading: false,
     playtimeHours,
+    matchOnlineSeconds: normalizeOptionalNumber((player as any).matchOnlineSeconds),
+    matchObservedOnlineSeconds: normalizeOptionalNumber((player as any).matchObservedOnlineSeconds),
+    matchEstimatedOnlineSeconds: normalizeOptionalNumber((player as any).matchEstimatedOnlineSeconds),
+    matchFirstSeenAt: normalizeOptionalString((player as any).matchFirstSeenAt),
+    matchLastSeenAt: normalizeOptionalString((player as any).matchLastSeenAt),
+    matchJoinCount: normalizeOptionalNumber((player as any).matchJoinCount),
     combatStats,
     statsLabel: formatCombatStatsLabel(combatStats),
     source: (player as any).source || "unknown",
     controller: (player as any).controllerID || (player as any).controller || "",
     raw: player,
   };
+}
+
+function normalizeOptionalNumber(value: any): number | null {
+  if (value == null || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.floor(parsed) : null;
+}
+
+function normalizeOptionalString(value: any): string | null {
+  if (value == null) return null;
+  const text = String(value).trim();
+  return text ? text : null;
 }
 
 export function buildCombatStatsLookup(events: any[] = []): Record<string, CombatStats> {

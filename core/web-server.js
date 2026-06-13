@@ -2602,6 +2602,50 @@ export class WebServer {
       });
     }
 
+    if (url.pathname === "/api/remote-telemetry/state" && req.method === "GET") {
+      const api = this.modules.remoteTelemetry;
+      if (!api?.getState) {
+        return this.json(res, 404, {
+          error: "RemoteTelemetryUnavailable",
+          message: "Remote telemetry module is not loaded.",
+        });
+      }
+
+      return this.json(res, 200, {
+        ok: true,
+        source: "module.remoteTelemetry",
+        remoteTelemetry: api.getState(),
+      });
+    }
+
+    if (url.pathname === "/api/remote-telemetry/write-tickets" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const api = this.modules.remoteTelemetry;
+      if (!api?.writeTickets) {
+        return this.json(res, 404, {
+          error: "RemoteTelemetryUnavailable",
+          message: "Remote telemetry module is not loaded.",
+        });
+      }
+
+      try {
+        const body = await this.readJsonBody(req);
+        const result = await api.writeTickets(body);
+        return this.json(res, result?.ok ? 200 : 502, {
+          ok: Boolean(result?.ok),
+          source: "module.remoteTelemetry",
+          type: "ticket_write",
+          ...result,
+        });
+      } catch (error) {
+        return this.json(res, 400, {
+          ok: false,
+          source: "module.remoteTelemetry",
+          error: error?.message || "Ticket write failed.",
+        });
+      }
+    }
+
     if (url.pathname === "/api/chat/history" && req.method === "GET") {
       const history = this.modules.chatManager.getHistory();
       return this.json(res, 200, { history });
@@ -2889,6 +2933,7 @@ export class WebServer {
 
   getMatchStateSnapshotResponse() {
     const matchStateModule = this.modules.matchState;
+    const remoteTelemetry = this.modules.remoteTelemetry?.getState?.() ?? null;
     const matchState = matchStateModule?.getState?.() ?? null;
     const overview = matchStateModule?.getOverview?.(matchState) ?? this.getMatchOverview();
     const resolvedMatchState = matchState ?? overview?.matchState ?? null;
@@ -2898,6 +2943,7 @@ export class WebServer {
       type: "snapshot",
       matchState: resolvedMatchState,
       overview,
+      remoteTelemetry,
     };
   }
 

@@ -1,16 +1,36 @@
-// -*- coding: utf-8 -*-
-
 import fs from "node:fs/promises";
 import path from "node:path";
 
 const MODULE_ID = "module.reserveSlots";
 const DEFAULT_LOCAL_RESERVE_FILE = "data/reserve-slots.json";
-const DEFAULT_STORE_VERSION = 1;
+const DEFAULT_STORE_VERSION = 2;
 const DEFAULT_RESERVE_GROUP = "BZSSVIP";
 const DEFAULT_RESERVE_PERMISSION = "reserve";
+const DEFAULT_CDK_CODE_LENGTH = 14;
+const DEFAULT_CDK_PREFIX = "CDK";
+const DEFAULT_ACTIVATION_RECORD_LIMIT = 500;
 const RESERVE_MARKER_RE = /\/\/\s*预留位/;
 const STEAM64_RE = /^7656119\d{10}$/;
 const RESERVE_EXPIRE_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+const CDK_INPUT_RE = /^CDK([A-Za-z0-9_-]+)$/;
+
+const ACTIVATION_RESULTS = {
+  SUCCESS: "success",
+  CODE_NOT_FOUND: "code_not_found",
+  BATCH_DEACTIVATED: "batch_deactivated",
+  CODE_USED: "code_used",
+  DUPLICATE_PLAYER_RESTRICTED: "duplicate_player_restricted",
+  TYPE_MISMATCH: "type_mismatch",
+  FUTURE_REQUIREMENT_NOT_MET: "future_requirement_not_met",
+  INVALID_MESSAGE: "invalid_message",
+  INVALID_PLAYER: "invalid_player",
+  INTERNAL_ERROR: "internal_error",
+};
+
+const CDK_REQUIREMENT_SUFFIXES = {
+  DIRECT: "A",
+  GATED: "B",
+};
 
 export function createReserveSlotsModule({ core, modules, config, logger }) {
   const moduleLogger =
@@ -27,6 +47,7 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
     store: createEmptyStore(""),
     resolvedLocalReserveFilePath: "",
     loadedAt: null,
+    unsubscribeChatMessage: null,
   };
 
   runtime.resolvedLocalReserveFilePath = resolveConfigPath(
@@ -39,32 +60,48 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
       return buildState();
     },
 
+    async getCdkState() {
+      return buildCdkState();
+    },
+
+    async listBatchActivations(batchId, filters = {}) {
+      return buildBatchActivationState(batchId, filters);
+    },
+
+    async createCdkBatch(input = {}, context = {}) {
+      return createReserveCdkBatch(input, context);
+    },
+
+    async deactivateCdkBatch(batchId, context = {}) {
+      return deactivateReserveCdkBatch(batchId, context);
+    },
+
     async updateConfig(nextConfig = {}) {
-      return await updateReserveSystemConfig(nextConfig);
+      return updateReserveSystemConfig(nextConfig);
     },
 
     async importFromAdminFile() {
-      return await importReserveSlotsFromAdminFile();
+      return importReserveSlotsFromAdminFile();
     },
 
     async exportCsv() {
-      return await exportReserveSlotsCsv();
+      return exportReserveSlotsCsv();
     },
 
     async importFromCsv(csvText = "") {
-      return await importReserveSlotsFromCsv(csvText);
+      return importReserveSlotsFromCsv(csvText);
     },
 
     async upsertMember(input = {}) {
-      return await upsertReserveSlotMember(input);
+      return upsertReserveSlotMember(input);
     },
 
     async deleteMember(input = {}) {
-      return await deleteReserveSlotMember(input);
+      return deleteReserveSlotMember(input);
     },
 
     async deleteExpiredMembers() {
-      return await deleteExpiredReserveSlotMembers();
+      return deleteExpiredReserveSlotMembers();
     },
 
     async reload() {
@@ -78,8 +115,8 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
       id: MODULE_ID,
       name: "预留位系统",
       kind: "module",
-      version: "1.0.0",
-      description: "读取 Squad 管理员配置文件中的预留位区块，并同步到本地 JSON 存储供页面展示。",
+      version: "1.1.0",
+      description: "管理 Squad 管理员配置中的预留位，并扩展 CDK 批次发放与聊天激活记录。",
     },
     apiName: "reserveSlots",
     api,
@@ -89,10 +126,17 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
     },
 
     async start() {
+      subscribeChatMessages();
       moduleLogger?.info?.(`[ReserveSlots] started. enabled=${Boolean(runtime.config.enabled)} local=${runtime.resolvedLocalReserveFilePath}`);
     },
 
     async stop() {
+      if (typeof runtime.unsubscribeChatMessage === "function") {
+        try {
+          runtime.unsubscribeChatMessage();
+        } catch {}
+        runtime.unsubscribeChatMessage = null;
+      }
       moduleLogger?.info?.("[ReserveSlots] stopped.");
     },
   };
@@ -112,6 +156,14 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
       runtime.config.localReserveFilePath,
       DEFAULT_LOCAL_RESERVE_FILE,
     );
+  }
+
+  function subscribeChatMessages() {
+    if (typeof runtime.unsubscribeChatMessage === "function") return;
+    if (typeof modules?.chatManager?.on !== "function") return;
+    runtime.unsubscribeChatMessage = modules.chatManager.on("message", (event) => {
+      void handleChatMessage(event);
+    });
   }
 
   async function loadStoreFromDisk({ repair = false } = {}) {
@@ -161,7 +213,7 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
     const adminFilePath = runtime.config.adminFilePath;
 
     if (!adminFilePath) {
-      moduleLogger?.info?.("[ReserveSlots] 管理员配置文件未配置，跳过同步。");
+      moduleLogger?.info?.("[ReserveSlots] admin file is not configured. Skip sync.");
       return buildState({
         message: "管理员配置文件未配置，已跳过同步。",
         localStore: currentLocalStore,
@@ -186,24 +238,25 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
         runtimeState: core?.runtimeState,
       });
 
-      await persistStore(runtime.resolvedLocalReserveFilePath, parsed);
-      runtime.store = parsed;
+      const nextStore = mergeStoreWithCdkData(runtime.store, parsed);
+      await persistStore(runtime.resolvedLocalReserveFilePath, nextStore);
+      runtime.store = nextStore;
       runtime.loadedAt = importedAt;
 
-      moduleLogger?.info?.(`[ReserveSlots] 已从管理员文件同步预留位: groups=${parsed.groups.length} members=${parsed.members.length}`);
+      moduleLogger?.info?.(`[ReserveSlots] synced reserve slots from admin file: groups=${parsed.groups.length} members=${parsed.members.length}`);
       return buildState({
         message: "已从管理员文件同步预留位数据",
       });
     } catch (error) {
       if (error?.code === "ENOENT") {
-        moduleLogger?.warn?.(`[ReserveSlots] 管理员配置文件不存在: ${resolvedAdminFilePath}`);
+        moduleLogger?.warn?.(`[ReserveSlots] admin file does not exist: ${resolvedAdminFilePath}`);
         return buildState({
           message: "管理员配置文件不存在，已返回当前本地数据。",
           adminFileMissing: true,
         });
       }
 
-      moduleLogger?.warn?.(`[ReserveSlots] 读取管理员配置文件失败: ${error?.message ?? String(error)}`);
+      moduleLogger?.warn?.(`[ReserveSlots] failed to read admin file: ${error?.message ?? String(error)}`);
       return buildState({
         message: "读取管理员配置文件失败，已返回当前本地数据。",
         adminFileReadFailed: true,
@@ -238,8 +291,9 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
       runtimeState: core?.runtimeState,
     });
 
-    await persistStore(runtime.resolvedLocalReserveFilePath, parsed);
-    runtime.store = parsed;
+    const nextStore = mergeStoreWithCdkData(runtime.store, parsed);
+    await persistStore(runtime.resolvedLocalReserveFilePath, nextStore);
+    runtime.store = nextStore;
     runtime.loadedAt = importedAt;
     return buildState({
       message: "CSV 导入完成。",
@@ -248,7 +302,16 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
 
   async function upsertReserveSlotMember(input = {}) {
     refreshConfigFromRuntime();
-    const member = normalizeReserveMemberInput(input);
+    await loadStoreFromDisk({ repair: true });
+    const normalizedSteamId = normalizeReserveSteamId(input.steamId ?? input.steamID ?? input.steam64 ?? "");
+    const existingMember = (runtime.store.members ?? []).find((item) => item.steamId === normalizedSteamId) ?? null;
+    const member = normalizeReserveMemberInput(
+      {
+        ...input,
+        steamId: normalizedSteamId,
+      },
+      { existingMember },
+    );
     const adminFilePath = runtime.config.adminFilePath;
     if (!adminFilePath) {
       throw createReserveSlotError(400, "AdminFileNotConfigured", "管理员配置文件未配置。");
@@ -282,13 +345,14 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
       runtimeState: core?.runtimeState,
     });
 
-    await persistStore(runtime.resolvedLocalReserveFilePath, parsed);
-    runtime.store = parsed;
+    const nextStore = mergeStoreWithCdkData(runtime.store, parsed);
+    await persistStore(runtime.resolvedLocalReserveFilePath, nextStore);
+    runtime.store = nextStore;
     runtime.loadedAt = importedAt;
 
-    moduleLogger?.info?.(`[ReserveSlots] 已写入预留位: steamId=${member.steamId} group=${member.group} expireAt=${member.expireAt}`);
+    moduleLogger?.info?.(`[ReserveSlots] wrote reserve slot: steamId=${member.steamId} group=${member.group} expireAt=${member.expireAt}`);
     return buildState({
-      message: "预留位已保存到管理员配置文件。",
+      message: "预留位时间已更新。",
       savedMember: member,
     });
   }
@@ -320,7 +384,7 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
     }
 
     await writeTextFileAtomic(resolvedAdminFilePath, result.content);
-    return await syncRuntimeStoreFromAdminContent(result.content, {
+    return syncRuntimeStoreFromAdminContent(result.content, {
       adminFilePath,
       message: `已删除 ${result.removedCount} 条预留位。`,
       removedCount: result.removedCount,
@@ -357,12 +421,99 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
     }
 
     await writeTextFileAtomic(resolvedAdminFilePath, result.content);
-    return await syncRuntimeStoreFromAdminContent(result.content, {
+    return syncRuntimeStoreFromAdminContent(result.content, {
       adminFilePath,
       message: `已删除 ${result.removedCount} 条过期预留位。`,
       removedCount: result.removedCount,
       removedSteamIds: result.removedSteamIds,
     });
+  }
+
+  async function createReserveCdkBatch(input = {}, context = {}) {
+    await loadStoreFromDisk({ repair: true });
+
+    const payload = normalizeCreateCdkBatchInput(input);
+    const createdAt = new Date().toISOString();
+    const batchId = `cdk_batch_${Date.now()}_${randomToken(6)}`;
+    const codes = [];
+    const codeRecords = [];
+
+    for (let index = 0; index < payload.quantity; index += 1) {
+      const requirementSuffix = resolveCdkRequirementSuffix(payload);
+      const codeBody = `${randomToken(DEFAULT_CDK_CODE_LENGTH)}${requirementSuffix}`;
+      const fullCode = `${DEFAULT_CDK_PREFIX}${payload.codeType}${codeBody}`;
+      codes.push(fullCode);
+      codeRecords.push({
+        code: fullCode,
+        codeType: payload.codeType,
+        codeBody,
+        batchId,
+        status: "unused",
+        activatedBySteamId: null,
+        activatedByPlayerName: null,
+        activatedAt: null,
+        grantedExpireAt: null,
+      });
+    }
+
+    const batch = {
+      id: batchId,
+      codeType: payload.codeType,
+      quantity: payload.quantity,
+      durationDays: payload.durationDays,
+      allowMultiActivation: payload.allowMultiActivation,
+      deactivated: false,
+      deactivatedAt: null,
+      deactivatedBy: null,
+      minCurrentSessionSeconds: 0,
+      minServerSeconds: 0,
+      createdAt,
+      createdBy: normalizeActorName(context.actor),
+    };
+
+    runtime.store = {
+      ...runtime.store,
+      cdkBatches: [batch, ...(runtime.store.cdkBatches ?? [])],
+      cdkCodes: [...codeRecords, ...(runtime.store.cdkCodes ?? [])],
+    };
+    await persistStore(runtime.resolvedLocalReserveFilePath, runtime.store);
+    runtime.loadedAt = new Date().toISOString();
+
+    return {
+      ...(await buildCdkState()),
+      createdBatchId: batchId,
+      createdCodes: codes,
+      message: `已生成 ${payload.quantity} 条 CDK。`,
+    };
+  }
+
+  async function deactivateReserveCdkBatch(batchId, context = {}) {
+    await loadStoreFromDisk({ repair: true });
+    const normalizedBatchId = String(batchId ?? "").trim();
+    const batchIndex = (runtime.store.cdkBatches ?? []).findIndex((item) => item.id === normalizedBatchId);
+    if (batchIndex < 0) {
+      throw createReserveSlotError(404, "CdkBatchNotFound", "未找到该 CDK 批次。");
+    }
+
+    const nextBatches = cloneValue(runtime.store.cdkBatches ?? []);
+    nextBatches[batchIndex] = {
+      ...nextBatches[batchIndex],
+      deactivated: true,
+      deactivatedAt: new Date().toISOString(),
+      deactivatedBy: normalizeActorName(context.actor),
+    };
+
+    runtime.store = {
+      ...runtime.store,
+      cdkBatches: nextBatches,
+    };
+    await persistStore(runtime.resolvedLocalReserveFilePath, runtime.store);
+    runtime.loadedAt = new Date().toISOString();
+
+    return {
+      ...(await buildCdkState()),
+      message: "该批次预留位已失效，未使用的 CDK 将无法继续激活。",
+    };
   }
 
   async function syncRuntimeStoreFromAdminContent(content, extra = {}) {
@@ -380,8 +531,9 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
       runtimeState: core?.runtimeState,
     });
 
-    await persistStore(runtime.resolvedLocalReserveFilePath, parsed);
-    runtime.store = parsed;
+    const nextStore = mergeStoreWithCdkData(runtime.store, parsed);
+    await persistStore(runtime.resolvedLocalReserveFilePath, nextStore);
+    runtime.store = nextStore;
     runtime.loadedAt = importedAt;
     return buildState(extra);
   }
@@ -411,9 +563,343 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
       groups: cloneValue(store.groups ?? []),
       members: cloneValue(members),
       summary: buildSummary({ ...store, members }),
+      cdkSummary: buildCdkSummary(store),
       loadedAt: runtime.loadedAt,
       ...extra,
     };
+  }
+
+  async function buildCdkState(extra = {}) {
+    const store = runtime.store ?? createEmptyStore(runtime.config.adminFilePath);
+    const batches = buildCdkBatchView(store);
+    const activations = cloneValue(store.cdkActivations ?? []);
+    return {
+      ok: true,
+      batches,
+      activations,
+      summary: buildCdkSummary(store),
+      loadedAt: runtime.loadedAt,
+      ...extra,
+    };
+  }
+
+  async function buildBatchActivationState(batchId, filters = {}) {
+    const normalizedBatchId = String(batchId ?? "").trim();
+    const store = runtime.store ?? createEmptyStore(runtime.config.adminFilePath);
+    const batch = (store.cdkBatches ?? []).find((item) => item.id === normalizedBatchId);
+    if (!batch) {
+      throw createReserveSlotError(404, "CdkBatchNotFound", "未找到该 CDK 批次。");
+    }
+
+    const steamIdFilter = String(filters.steamId ?? filters.steamID ?? "").trim().toLowerCase();
+    const resultFilter = String(filters.result ?? "").trim().toLowerCase();
+    const records = (store.cdkActivations ?? []).filter((record) => {
+      if (record.batchId !== normalizedBatchId) return false;
+      if (steamIdFilter && !String(record.steamId ?? "").toLowerCase().includes(steamIdFilter)) return false;
+      if (resultFilter && String(record.result ?? "").toLowerCase() !== resultFilter) return false;
+      return true;
+    });
+
+    return {
+      ok: true,
+      batch: cloneValue(batch),
+      records: cloneValue(records),
+    };
+  }
+
+  async function handleChatMessage(event = {}) {
+    try {
+      const channel = normalizeChatChannel(event?.chatChannel ?? event?.channel);
+      if (channel !== "all") return;
+      const rawMessage = String(event?.message ?? "").trim();
+      if (!rawMessage || !CDK_INPUT_RE.test(rawMessage)) return;
+
+      const playerName = String(event?.playerName ?? event?.name ?? "").trim();
+      const steamId = String(event?.steamId ?? event?.steamID ?? "").trim();
+      if (!playerName || !STEAM64_RE.test(steamId)) {
+        await logActivation({
+          playerName,
+          steamId,
+          message: rawMessage,
+          batchId: null,
+          code: rawMessage,
+          codeType: null,
+          result: ACTIVATION_RESULTS.INVALID_PLAYER,
+          failureReason: "玩家身份无效，无法激活 CDK。",
+          grantedExpireAt: null,
+          matchedFutureRequirement: false,
+        });
+        return;
+      }
+
+      const activation = await activateCdkFromChat({
+        playerName,
+        steamId,
+        message: rawMessage,
+      });
+      await sendActivationNotice(activation);
+    } catch (error) {
+      moduleLogger?.warn?.(`[ReserveSlots] failed to process chat CDK activation: ${error?.message ?? error}`);
+    }
+  }
+
+  async function activateCdkFromChat({ playerName, steamId, message }) {
+    const body = String(message ?? "").trim().slice(DEFAULT_CDK_PREFIX.length);
+    const knownTypes = [...new Set((runtime.store.cdkBatches ?? []).map((item) => String(item.codeType ?? "").trim()).filter(Boolean))];
+    const matchedType = knownTypes.find((codeType) => body.startsWith(codeType)) ?? null;
+
+    if (!matchedType) {
+      return logActivation({
+        playerName,
+        steamId,
+        message,
+        batchId: null,
+        code: message,
+        codeType: null,
+        result: ACTIVATION_RESULTS.TYPE_MISMATCH,
+        failureReason: "CDK 类型不匹配。",
+        grantedExpireAt: null,
+        matchedFutureRequirement: false,
+      });
+    }
+
+    const code = `${DEFAULT_CDK_PREFIX}${body}`;
+    const codeRecord = (runtime.store.cdkCodes ?? []).find((item) => item.code === code);
+    if (!codeRecord) {
+      return logActivation({
+        playerName,
+        steamId,
+        message,
+        batchId: null,
+        code,
+        codeType: matchedType,
+        result: ACTIVATION_RESULTS.CODE_NOT_FOUND,
+        failureReason: "CDK 不存在。",
+        grantedExpireAt: null,
+        matchedFutureRequirement: false,
+      });
+    }
+
+    const batch = (runtime.store.cdkBatches ?? []).find((item) => item.id === codeRecord.batchId);
+    if (!batch) {
+      return logActivation({
+        playerName,
+        steamId,
+        message,
+        batchId: codeRecord.batchId,
+        code,
+        codeType: matchedType,
+        result: ACTIVATION_RESULTS.CODE_NOT_FOUND,
+        failureReason: "CDK 批次不存在。",
+        grantedExpireAt: null,
+        matchedFutureRequirement: false,
+      });
+    }
+
+    if (batch.deactivated) {
+      return logActivation({
+        playerName,
+        steamId,
+        message,
+        batchId: batch.id,
+        code,
+        codeType: matchedType,
+        result: ACTIVATION_RESULTS.BATCH_DEACTIVATED,
+        failureReason: "该批次已停用，无法继续激活。",
+        grantedExpireAt: null,
+        matchedFutureRequirement: false,
+      });
+    }
+
+    if (codeRecord.status === "used") {
+      return logActivation({
+        playerName,
+        steamId,
+        message,
+        batchId: batch.id,
+        code,
+        codeType: matchedType,
+        result: ACTIVATION_RESULTS.CODE_USED,
+        failureReason: "该 CDK 已被使用。",
+        grantedExpireAt: codeRecord.grantedExpireAt ?? null,
+        matchedFutureRequirement: false,
+      });
+    }
+
+    const alreadyActivatedSameBatch = (runtime.store.cdkActivations ?? []).some((item) => (
+      item.batchId === batch.id
+      && item.steamId === steamId
+      && item.result === ACTIVATION_RESULTS.SUCCESS
+    ));
+    if (!batch.allowMultiActivation && alreadyActivatedSameBatch) {
+      return logActivation({
+        playerName,
+        steamId,
+        message,
+        batchId: batch.id,
+        code,
+        codeType: matchedType,
+        result: ACTIVATION_RESULTS.DUPLICATE_PLAYER_RESTRICTED,
+        failureReason: "该批次不允许同一玩家重复激活。",
+        grantedExpireAt: null,
+        matchedFutureRequirement: false,
+      });
+    }
+
+    const requirement = await checkFutureRequirements(batch, { playerName, steamId });
+    if (!requirement.matched) {
+      return logActivation({
+        playerName,
+        steamId,
+        message,
+        batchId: batch.id,
+        code,
+        codeType: matchedType,
+        result: ACTIVATION_RESULTS.FUTURE_REQUIREMENT_NOT_MET,
+        failureReason: requirement.reason || "未满足激活条件。",
+        grantedExpireAt: null,
+        matchedFutureRequirement: false,
+      });
+    }
+
+    const expireAt = await grantReserveSlotFromBatch(batch, { playerName, steamId, code });
+    const activatedAt = new Date().toISOString();
+    const nextCodes = cloneValue(runtime.store.cdkCodes ?? []);
+    const codeIndex = nextCodes.findIndex((item) => item.code === code);
+    nextCodes[codeIndex] = {
+      ...nextCodes[codeIndex],
+      status: "used",
+      activatedBySteamId: steamId,
+      activatedByPlayerName: playerName,
+      activatedAt,
+      grantedExpireAt: expireAt,
+    };
+
+    runtime.store = {
+      ...runtime.store,
+      cdkCodes: nextCodes,
+    };
+
+    const activation = await logActivation({
+      playerName,
+      steamId,
+      message,
+      batchId: batch.id,
+      code,
+      codeType: matchedType,
+      result: ACTIVATION_RESULTS.SUCCESS,
+      failureReason: "",
+      grantedExpireAt: expireAt,
+      matchedFutureRequirement: true,
+    });
+    await persistStore(runtime.resolvedLocalReserveFilePath, runtime.store);
+    runtime.loadedAt = new Date().toISOString();
+    return activation;
+  }
+
+  async function grantReserveSlotFromBatch(batch, { playerName, steamId, code }) {
+    const currentMember = (runtime.store.members ?? []).find((item) => item.steamId === steamId) ?? null;
+    const baseDate = pickGrantBaseDate(currentMember?.expireAt);
+    const expireAt = formatLocalDateTime(addDays(baseDate, Number(batch.durationDays ?? 0)));
+    await upsertReserveSlotMember({
+      steamId,
+      group: DEFAULT_RESERVE_GROUP,
+      expireAt,
+      name: playerName,
+      reason: `CDK:${batch.codeType}:${code}`,
+    });
+    return expireAt;
+  }
+
+  async function checkFutureRequirements(batch, player) {
+    const minCurrentSessionSeconds = Math.max(0, Number(batch?.minCurrentSessionSeconds ?? 0) || 0);
+    const minServerSeconds = Math.max(0, Number(batch?.minServerSeconds ?? 0) || 0);
+    if (minCurrentSessionSeconds <= 0 && minServerSeconds <= 0) {
+      return { matched: true, reason: "" };
+    }
+
+    const serverSeconds = await resolvePlayerServerSeconds(player);
+    if (minServerSeconds > 0 && serverSeconds < minServerSeconds) {
+      return {
+        matched: false,
+        reason: `当前累计服内时长不足 ${minServerSeconds} 秒。`,
+      };
+    }
+
+    return { matched: true, reason: "" };
+  }
+
+  async function resolvePlayerServerSeconds(player) {
+    if (typeof modules?.playerDatabase?.listPlayersBySteamIDs !== "function") return 0;
+    const rows = await modules.playerDatabase.listPlayersBySteamIDs([player.steamId]);
+    const row = Array.isArray(rows) ? rows[0] : null;
+    return Math.max(0, Number(row?.server_seconds ?? row?.serverSeconds ?? 0) || 0);
+  }
+
+  async function sendActivationNotice(activation) {
+    let notice = buildActivationNotice(activation);
+    if (!notice) return;
+    const remainingDays = formatRemainingReserveDays(activation.grantedExpireAt);
+    if (activation.result === ACTIVATION_RESULTS.SUCCESS) {
+      notice = `${notice}\uFF0C\u5269\u4F59 ${remainingDays ?? "\u672A\u77E5"} \u5929`;
+    }
+    const targetName = String(activation.playerName ?? "").trim();
+    const targetSteamId = String(activation.steamId ?? "").trim();
+    if (targetName && typeof modules?.adminWarn?.warnPlayer === "function") {
+      try {
+        await modules.adminWarn.warnPlayer({
+          targetName,
+          targetSteamId,
+          message: notice,
+          reason: "reserve_slots_cdk_activation",
+          sourceModule: MODULE_ID,
+          system: true,
+        });
+      } catch (error) {
+        moduleLogger?.warn?.(`[ReserveSlots] failed to send CDK activation notice: ${error?.message ?? error}`);
+      }
+    }
+
+    const broadcastNotice = activation.result === ACTIVATION_RESULTS.SUCCESS
+      ? `[\u9884\u7559\u4F4D CDK] \u73A9\u5BB6 ${targetName || "\u672A\u77E5\u73A9\u5BB6"} \u5DF2\u6FC0\u6D3B\u9884\u7559\u4F4D\uFF0C\u5269\u4F59 ${remainingDays ?? "\u672A\u77E5"} \u5929`
+      : "";
+    if (!broadcastNotice || typeof modules?.adminWarn?.broadcastMessage !== "function") return;
+    try {
+      await modules.adminWarn.broadcastMessage({
+        message: broadcastNotice,
+        reason: "reserve_slots_cdk_activation_broadcast",
+        sourceModule: MODULE_ID,
+        system: true,
+      });
+    } catch (error) {
+      moduleLogger?.warn?.(`[ReserveSlots] failed to broadcast CDK activation notice: ${error?.message ?? error}`);
+    }
+  }
+
+  async function logActivation(record) {
+    const activationRecord = {
+      id: `cdk_activation_${Date.now()}_${randomToken(6)}`,
+      createdAt: new Date().toISOString(),
+      playerName: String(record.playerName ?? "").trim(),
+      steamId: String(record.steamId ?? "").trim(),
+      message: String(record.message ?? "").trim(),
+      code: String(record.code ?? "").trim(),
+      codeType: record.codeType ? String(record.codeType).trim() : null,
+      batchId: record.batchId ? String(record.batchId).trim() : null,
+      result: String(record.result ?? ACTIVATION_RESULTS.INTERNAL_ERROR),
+      failureReason: String(record.failureReason ?? "").trim(),
+      grantedExpireAt: record.grantedExpireAt ? String(record.grantedExpireAt).trim() : null,
+      matchedFutureRequirement: Boolean(record.matchedFutureRequirement),
+    };
+
+    const nextActivations = [activationRecord, ...(runtime.store.cdkActivations ?? [])].slice(0, DEFAULT_ACTIVATION_RECORD_LIMIT);
+    runtime.store = {
+      ...runtime.store,
+      cdkActivations: nextActivations,
+    };
+    await persistStore(runtime.resolvedLocalReserveFilePath, runtime.store);
+    runtime.loadedAt = new Date().toISOString();
+    return activationRecord;
   }
 }
 
@@ -454,7 +940,7 @@ export function parseReserveSlotsFromAdminFileContent(content, options = {}) {
   const markerIndex = lines.findIndex((line) => RESERVE_MARKER_RE.test(line));
 
   if (markerIndex < 0) {
-    options.logger?.info?.("[ReserveSlots] 未找到 // 预留位 标记，返回空列表。");
+    options.logger?.info?.("[ReserveSlots] reserve marker not found. Return empty store.");
     return createEmptyStore("");
   }
 
@@ -470,7 +956,7 @@ export function parseReserveSlotsFromAdminFileContent(content, options = {}) {
     if (line.startsWith("Group=")) {
       const group = parseReserveGroupLine(line);
       if (!group) {
-        options.logger?.warn?.(`[ReserveSlots] 无法解析 Group 行，已跳过: ${line}`);
+        options.logger?.warn?.(`[ReserveSlots] failed to parse group line: ${line}`);
         continue;
       }
       groups.push(group);
@@ -480,14 +966,14 @@ export function parseReserveSlotsFromAdminFileContent(content, options = {}) {
     if (line.startsWith("Admin=")) {
       const member = parseReserveMemberLine(line);
       if (!member) {
-        options.logger?.warn?.(`[ReserveSlots] 无法解析 Admin 行，已跳过: ${line}`);
+        options.logger?.warn?.(`[ReserveSlots] failed to parse admin line: ${line}`);
         continue;
       }
       members.push(member);
       continue;
     }
 
-    options.logger?.debug?.(`[ReserveSlots] 跳过未识别行: ${line}`);
+    options.logger?.debug?.(`[ReserveSlots] ignored line: ${line}`);
   }
 
   return normalizeStore({
@@ -534,9 +1020,13 @@ export function upsertReserveSlotInAdminFileContent(content, input = {}) {
     reserveRange.end += 1;
   }
 
-  const memberIndex = findReserveMemberLineIndex(lines, reserveRange, member.steamId);
-  if (memberIndex >= 0) {
-    lines[memberIndex] = memberLine;
+  const memberIndexes = findReserveMemberLineIndexes(lines, reserveRange, member.steamId);
+  if (memberIndexes.length > 0) {
+    const [firstIndex, ...duplicateIndexes] = memberIndexes;
+    lines[firstIndex] = memberLine;
+    for (let index = duplicateIndexes.length - 1; index >= 0; index -= 1) {
+      lines.splice(duplicateIndexes[index], 1);
+    }
   } else {
     const insertIndex = findReserveMemberInsertIndex(lines, reserveRange);
     lines.splice(insertIndex, 0, memberLine);
@@ -672,6 +1162,18 @@ function findReserveMemberLineIndex(lines, range, steamId) {
   return -1;
 }
 
+function findReserveMemberLineIndexes(lines, range, steamId) {
+  const expected = String(steamId ?? "").trim();
+  const indexes = [];
+  for (let index = range.start; index < range.end; index += 1) {
+    const member = parseReserveMemberLine(String(lines[index] ?? "").trim());
+    if (member && member.steamId === expected) {
+      indexes.push(index);
+    }
+  }
+  return indexes;
+}
+
 function findReserveMemberInsertIndex(lines, range) {
   let lastGroupIndex = -1;
   let lastAdminIndex = -1;
@@ -687,6 +1189,7 @@ function findReserveMemberInsertIndex(lines, range) {
 
 function parseReserveMemberLine(line) {
   const content = String(line ?? "").trim();
+  if (!content.startsWith("Admin=")) return null;
   const payload = content.slice("Admin=".length);
   const [head, commentTail = ""] = payload.split("//");
   const separatorIndex = head.indexOf(":");
@@ -766,14 +1269,14 @@ function parseReserveDate(text) {
   return parsed;
 }
 
-function normalizeReserveMemberInput(input = {}) {
+function normalizeReserveMemberInput(input = {}, context = {}) {
   const steamId = normalizeReserveSteamId(input.steamId ?? input.steamID ?? input.steam64 ?? "");
   const group = String(input.group ?? DEFAULT_RESERVE_GROUP).trim() || DEFAULT_RESERVE_GROUP;
   if (!/^[A-Za-z0-9_.-]{1,64}$/.test(group)) {
-    throw createReserveSlotError(400, "InvalidReserveGroup", "预留位组名只能包含字母、数字、下划线、点和短横线。");
+    throw createReserveSlotError(400, "InvalidReserveGroup", "预留位组名只允许字母、数字、下划线、点和短横线。");
   }
 
-  const expireAt = normalizeReserveExpireAt(input.expireAt);
+  const expireAt = resolveReserveExpireAtInput(input, context);
   const name = String(input.name ?? "").trim();
   const reason = String(input.reason ?? "").trim();
 
@@ -784,6 +1287,48 @@ function normalizeReserveMemberInput(input = {}) {
     name,
     reason,
   };
+}
+
+function resolveReserveExpireAtInput(input = {}, context = {}) {
+  const durationDays = Number(input.durationDays ?? 0);
+  if (Number.isFinite(durationDays) && durationDays > 0) {
+    const baseDate = pickGrantBaseDate(context.existingMember?.expireAt ?? null);
+    return formatLocalDateTime(addDays(baseDate, durationDays));
+  }
+  return normalizeReserveExpireAt(input.expireAt);
+}
+
+function normalizeCreateCdkBatchInput(input = {}) {
+  const codeType = String(input.codeType ?? input.type ?? "").trim();
+  if (!/^[A-Za-z0-9_-]{1,24}$/.test(codeType)) {
+    throw createReserveSlotError(400, "InvalidCdkType", "CDK 类型只能包含字母、数字、下划线和短横线。");
+  }
+
+  const quantity = Math.max(1, Math.min(500, Number(input.quantity ?? 0) || 0));
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    throw createReserveSlotError(400, "InvalidCdkQuantity", "CDK 数量必须大于 0。");
+  }
+
+  const durationDays = Math.max(1, Math.min(3650, Number(input.durationDays ?? 0) || 0));
+  if (!Number.isFinite(durationDays) || durationDays <= 0) {
+    throw createReserveSlotError(400, "InvalidCdkDurationDays", "激活天数必须大于 0。");
+  }
+
+  return {
+    codeType,
+    quantity,
+    durationDays,
+    allowMultiActivation: Boolean(input.allowMultiActivation),
+  };
+}
+
+function resolveCdkRequirementSuffix(payload = {}) {
+  const minCurrentSessionSeconds = Math.max(0, Number(payload.minCurrentSessionSeconds ?? 0) || 0);
+  const minServerSeconds = Math.max(0, Number(payload.minServerSeconds ?? 0) || 0);
+  if (minCurrentSessionSeconds <= 0 && minServerSeconds <= 0) {
+    return CDK_REQUIREMENT_SUFFIXES.DIRECT;
+  }
+  return CDK_REQUIREMENT_SUFFIXES.GATED;
 }
 
 function normalizeReserveExpireAt(value) {
@@ -823,8 +1368,13 @@ function normalizeStore(raw, { adminFilePath = "" } = {}) {
     ? raw.source
     : null;
   const groups = Array.isArray(raw?.groups) ? raw.groups.map(normalizeGroup).filter(Boolean) : [];
-  const members = Array.isArray(raw?.members) ? raw.members.map(normalizeMember).filter(Boolean) : [];
+  const members = dedupeReserveMembers(
+    Array.isArray(raw?.members) ? raw.members.map(normalizeMember).filter(Boolean) : [],
+  );
   const lastImportedAt = String(source?.lastImportedAt ?? raw?.lastImportedAt ?? "").trim() || null;
+  const cdkBatches = Array.isArray(raw?.cdkBatches) ? raw.cdkBatches.map(normalizeCdkBatch).filter(Boolean) : [];
+  const cdkCodes = Array.isArray(raw?.cdkCodes) ? raw.cdkCodes.map(normalizeCdkCode).filter(Boolean) : [];
+  const cdkActivations = Array.isArray(raw?.cdkActivations) ? raw.cdkActivations.map(normalizeCdkActivation).filter(Boolean) : [];
 
   return {
     version: Number(raw?.version ?? DEFAULT_STORE_VERSION) || DEFAULT_STORE_VERSION,
@@ -834,7 +1384,22 @@ function normalizeStore(raw, { adminFilePath = "" } = {}) {
     },
     groups,
     members,
+    cdkBatches,
+    cdkCodes,
+    cdkActivations,
   };
+}
+
+function dedupeReserveMembers(members) {
+  const result = [];
+  const seen = new Set();
+  for (const member of Array.isArray(members) ? members : []) {
+    const steamId = String(member?.steamId ?? "").trim();
+    if (!steamId || seen.has(steamId)) continue;
+    seen.add(steamId);
+    result.push(member);
+  }
+  return result;
 }
 
 function normalizeGroup(group) {
@@ -871,9 +1436,70 @@ function normalizeMember(member) {
     name,
     expireAt,
     reasons,
-    remark: String(member.remark ?? reasons.join("；")).trim(),
+    remark: String(member.remark ?? reasons.join("，")).trim(),
     rawLine,
     isExpired: Boolean(parsedExpireAt && parsedExpireAt.getTime() < Date.now()),
+  };
+}
+
+function normalizeCdkBatch(batch) {
+  if (!batch || typeof batch !== "object" || Array.isArray(batch)) return null;
+  const id = String(batch.id ?? "").trim();
+  const codeType = String(batch.codeType ?? batch.type ?? "").trim();
+  if (!id || !codeType) return null;
+  return {
+    id,
+    codeType,
+    quantity: Math.max(0, Number(batch.quantity ?? 0) || 0),
+    durationDays: Math.max(0, Number(batch.durationDays ?? 0) || 0),
+    allowMultiActivation: Boolean(batch.allowMultiActivation),
+    deactivated: Boolean(batch.deactivated),
+    deactivatedAt: optionalText(batch.deactivatedAt),
+    deactivatedBy: optionalText(batch.deactivatedBy),
+    minCurrentSessionSeconds: Math.max(0, Number(batch.minCurrentSessionSeconds ?? 0) || 0),
+    minServerSeconds: Math.max(0, Number(batch.minServerSeconds ?? 0) || 0),
+    createdAt: optionalText(batch.createdAt),
+    createdBy: optionalText(batch.createdBy),
+  };
+}
+
+function normalizeCdkCode(code) {
+  if (!code || typeof code !== "object" || Array.isArray(code)) return null;
+  const fullCode = String(code.code ?? "").trim();
+  const batchId = String(code.batchId ?? "").trim();
+  const codeType = String(code.codeType ?? "").trim();
+  if (!fullCode || !batchId || !codeType) return null;
+  return {
+    code: fullCode,
+    codeType,
+    codeBody: String(code.codeBody ?? "").trim(),
+    batchId,
+    status: String(code.status ?? "unused").trim() || "unused",
+    activatedBySteamId: optionalText(code.activatedBySteamId),
+    activatedByPlayerName: optionalText(code.activatedByPlayerName),
+    activatedAt: optionalText(code.activatedAt),
+    grantedExpireAt: optionalText(code.grantedExpireAt),
+  };
+}
+
+function normalizeCdkActivation(record) {
+  if (!record || typeof record !== "object" || Array.isArray(record)) return null;
+  const id = String(record.id ?? "").trim();
+  const result = String(record.result ?? "").trim();
+  if (!id || !result) return null;
+  return {
+    id,
+    createdAt: optionalText(record.createdAt),
+    playerName: String(record.playerName ?? "").trim(),
+    steamId: String(record.steamId ?? "").trim(),
+    message: String(record.message ?? "").trim(),
+    code: String(record.code ?? "").trim(),
+    codeType: optionalText(record.codeType),
+    batchId: optionalText(record.batchId),
+    result,
+    failureReason: String(record.failureReason ?? "").trim(),
+    grantedExpireAt: optionalText(record.grantedExpireAt),
+    matchedFutureRequirement: Boolean(record.matchedFutureRequirement),
   };
 }
 
@@ -886,7 +1512,21 @@ function createEmptyStore(adminFilePath = "") {
     },
     groups: [],
     members: [],
+    cdkBatches: [],
+    cdkCodes: [],
+    cdkActivations: [],
   };
+}
+
+function mergeStoreWithCdkData(previousStore, nextBaseStore) {
+  return normalizeStore({
+    ...nextBaseStore,
+    cdkBatches: cloneValue(previousStore?.cdkBatches ?? []),
+    cdkCodes: cloneValue(previousStore?.cdkCodes ?? []),
+    cdkActivations: cloneValue(previousStore?.cdkActivations ?? []),
+  }, {
+    adminFilePath: nextBaseStore?.source?.adminFilePath ?? "",
+  });
 }
 
 function buildSummary(store) {
@@ -902,6 +1542,45 @@ function buildSummary(store) {
     noExpireCount,
     activeCount: Math.max(0, members.length - expiredCount),
   };
+}
+
+function buildCdkSummary(store) {
+  const batches = Array.isArray(store?.cdkBatches) ? store.cdkBatches : [];
+  const codes = Array.isArray(store?.cdkCodes) ? store.cdkCodes : [];
+  const activations = Array.isArray(store?.cdkActivations) ? store.cdkActivations : [];
+  const visibleBatches = batches.filter((item) => !item.deactivated);
+  const usedCodeCount = codes.filter((item) => item.status === "used").length;
+  const activeBatchCount = visibleBatches.length;
+  const deactivatedBatchCount = batches.filter((item) => item.deactivated).length;
+
+  return {
+    batchCount: visibleBatches.length,
+    activeBatchCount,
+    deactivatedBatchCount,
+    codeCount: codes.length,
+    usedCodeCount,
+    remainingCodeCount: Math.max(0, codes.length - usedCodeCount),
+    activationCount: activations.length,
+    successCount: activations.filter((item) => item.result === ACTIVATION_RESULTS.SUCCESS).length,
+    failureCount: activations.filter((item) => item.result !== ACTIVATION_RESULTS.SUCCESS).length,
+  };
+}
+
+function buildCdkBatchView(store) {
+  const batches = cloneValue((store?.cdkBatches ?? []).filter((batch) => !batch?.deactivated));
+  const codes = store?.cdkCodes ?? [];
+  return batches.map((batch) => {
+    const relatedCodes = codes.filter((item) => item.batchId === batch.id);
+    const usedCount = relatedCodes.filter((item) => item.status === "used").length;
+    return {
+      ...batch,
+      codes: relatedCodes.map((item) => String(item?.code ?? "").trim()).filter(Boolean),
+      usedCount,
+      remainingCount: Math.max(0, relatedCodes.length - usedCount),
+      activationCount: (store?.cdkActivations ?? []).filter((item) => item.batchId === batch.id).length,
+      status: batch.deactivated ? "deactivated" : "active",
+    };
+  });
 }
 
 async function enrichMembersWithLinkedNames(members = [], { playerDatabase = null, runtimeState = null } = {}) {
@@ -943,7 +1622,7 @@ function splitReserveReasons(text) {
   if (!value) return [];
 
   return value
-    .split(/[|;,，、\/]+/)
+    .split(/[|;,，、/]+/)
     .map((item) => item.trim())
     .filter(Boolean);
 }
@@ -999,7 +1678,7 @@ function parseReserveSlotsFromCsvContent(csvText, options = {}) {
   const remarkIndex = indexOf("remark");
 
   if (steamIdIndex < 0 || groupIndex < 0) {
-    options.logger?.warn?.("[ReserveSlots] CSV 缺少 steamId/group 列，返回空列表。");
+    options.logger?.warn?.("[ReserveSlots] CSV is missing steamId/group columns.");
     return createEmptyStore(String(options.adminFilePath ?? ""));
   }
 
@@ -1022,7 +1701,7 @@ function parseReserveSlotsFromCsvContent(csvText, options = {}) {
       group,
       expireAt: expireAt || null,
       reasons,
-      remark: remark || reasons.join("；"),
+      remark: remark || reasons.join("，"),
       rawLine: `CSV:${steamId}:${group}`,
       isExpired: Boolean(parsedExpireAt && parsedExpireAt.getTime() < Date.now()),
     });
@@ -1116,8 +1795,8 @@ function csvEscape(value) {
 
 function parseReserveNamedComment(text) {
   const parts = splitReserveReasons(text);
-  const namePart = parts.find((item) => /^(name|昵称|名称)\s*[:=]/i.test(item));
-  const reasonParts = parts.filter((item) => !/^(name|昵称|名称)\s*[:=]/i.test(item));
+  const namePart = parts.find((item) => /^(name|显示|名称)\s*[:=]/i.test(item));
+  const reasonParts = parts.filter((item) => !/^(name|显示|名称)\s*[:=]/i.test(item));
   if (!namePart && !reasonParts.length) return null;
 
   const name = namePart ? String(namePart.split(/[:=]/, 2)[1] ?? "").trim() : "";
@@ -1190,5 +1869,73 @@ function cloneValue(value) {
     return structuredClone(value);
   } catch {
     return JSON.parse(JSON.stringify(value));
+  }
+}
+
+function randomToken(length) {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let output = "";
+  while (output.length < length) {
+    output += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return output;
+}
+
+function addDays(date, days) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + Number(days || 0));
+  return next;
+}
+
+function pickGrantBaseDate(currentExpireAt) {
+  const currentExpire = parseReserveDate(currentExpireAt);
+  const now = new Date();
+  if (!currentExpire) return now;
+  return currentExpire.getTime() > now.getTime() ? currentExpire : now;
+}
+
+function optionalText(value) {
+  const text = String(value ?? "").trim();
+  return text || null;
+}
+
+function normalizeActorName(actor) {
+  if (!actor || typeof actor !== "object") return "system";
+  return String(actor.username ?? actor.name ?? actor.id ?? "system").trim() || "system";
+}
+
+function normalizeChatChannel(value) {
+  const text = String(value ?? "").trim().toLowerCase();
+  if (text === "chatall" || text === "all") return "all";
+  return text;
+}
+
+function formatRemainingReserveDays(expireAt) {
+  const parsed = parseReserveDate(expireAt);
+  if (!parsed) return null;
+  const diffMs = parsed.getTime() - Date.now();
+  return Math.max(0, Math.ceil(diffMs / 86400000));
+}
+
+function buildActivationNotice(record) {
+  switch (record.result) {
+    case ACTIVATION_RESULTS.SUCCESS:
+      return `[预留位 CDK] 激活成功，到期时间 ${record.grantedExpireAt || "未知"}`;
+    case ACTIVATION_RESULTS.TYPE_MISMATCH:
+      return "[预留位 CDK] CDK 类型不匹配。";
+    case ACTIVATION_RESULTS.CODE_NOT_FOUND:
+      return "[预留位 CDK] CDK 不存在。";
+    case ACTIVATION_RESULTS.BATCH_DEACTIVATED:
+      return "[预留位 CDK] 该批次已停用，无法继续激活。";
+    case ACTIVATION_RESULTS.CODE_USED:
+      return "[预留位 CDK] 该 CDK 已被使用。";
+    case ACTIVATION_RESULTS.DUPLICATE_PLAYER_RESTRICTED:
+      return "[预留位 CDK] 该批次不允许你重复激活。";
+    case ACTIVATION_RESULTS.FUTURE_REQUIREMENT_NOT_MET:
+      return `[预留位 CDK] ${record.failureReason || "未满足激活条件。"}`;
+    case ACTIVATION_RESULTS.INVALID_PLAYER:
+      return "[预留位 CDK] 无法识别你的身份信息。";
+    default:
+      return `[预留位 CDK] ${record.failureReason || "激活失败。"} `;
   }
 }

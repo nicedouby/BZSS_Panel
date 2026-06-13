@@ -298,6 +298,12 @@ describe("MatchStatusPage", () => {
                   role: "Rifleman",
                   isLeader: false,
                   online: true,
+                  matchOnlineSeconds: 3661,
+                  matchObservedOnlineSeconds: 3600,
+                  matchEstimatedOnlineSeconds: 61,
+                  matchFirstSeenAt: "2026-05-12T00:00:00.000Z",
+                  matchLastSeenAt: "2026-05-12T00:10:00.000Z",
+                  matchJoinCount: 2,
                 },
               ],
               lastUpdatedAt: "2026-05-12T00:00:00.000Z",
@@ -411,6 +417,9 @@ describe("MatchStatusPage", () => {
     const panel = document.body.querySelector(".player-detail-floating");
     expect(panel).toBeTruthy();
     expect(panel?.textContent).toContain("Alice");
+    expect(panel?.textContent).toContain("本局在服时长");
+    expect(panel?.textContent).toContain("1.0h");
+    expect(panel?.textContent).toContain("进服 2 次");
     expect(panel?.textContent).toContain("战绩（battleLog）");
     expect(panel?.textContent).toContain("击倒 2 / 击杀 4 / 死亡 3 / TK 1 / 复苏 1");
     expect(panel?.getAttribute("style") || "").toContain("left: 12px");

@@ -16,6 +16,12 @@ export interface PlayerRowViewModel {
   eosId: string | null;
   ip: string | null;
   playtimeHours: number | null;
+  matchOnlineSeconds?: number | null;
+  matchObservedOnlineSeconds?: number | null;
+  matchEstimatedOnlineSeconds?: number | null;
+  matchFirstSeenAt?: string | null;
+  matchLastSeenAt?: string | null;
+  matchJoinCount?: number | null;
   steamAvatar?: string | null;
   combatStats: CombatStats;
   statsLabel: string;
@@ -70,6 +76,7 @@ export interface TeamViewModel {
   factionCode: string | null;
   playerCount: number;
   maxPlayers: number;
+  ticketCount: number | null;
   averagePlaytimeHours: number | null;
   leaderAveragePlaytimeHours: number | null;
   publicLeaderPlaytimePlayers: number;
@@ -98,6 +105,12 @@ export interface PlayerDetailViewModel {
   ipSource?: "current" | "last" | "none";
   ipLookupLoading?: boolean;
   playtimeHours: number | null;
+  matchOnlineSeconds?: number | null;
+  matchObservedOnlineSeconds?: number | null;
+  matchEstimatedOnlineSeconds?: number | null;
+  matchFirstSeenAt?: string | null;
+  matchLastSeenAt?: string | null;
+  matchJoinCount?: number | null;
   steamAvatar?: string | null;
   combatStats: CombatStats;
   statsLabel: string;

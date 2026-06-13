@@ -4,8 +4,8 @@ const MODULE_ID = "module.playerSessionRecords";
 const PAGE_ROUTE = "/player-session-records";
 const DEFAULT_MAX_RECORDS = 2000;
 
-const JOIN_EVENT_NAMES = ["On_PlayerJoined", "PLAYER_JOINED", "On_PlayerConnected", "PLAYER_CONNECTED", "PLAYER_POST_LOGIN"];
-const LEAVE_EVENT_NAMES = ["On_PlayerLeft", "PLAYER_LEFT", "On_PlayerDisconnected", "PLAYER_DISCONNECTED"];
+const JOIN_EVENT_NAMES = ["PLAYER_POST_LOGIN", "On_PlayerConnected"];
+const LEAVE_EVENT_NAMES = ["PLAYER_DISCONNECTED", "On_PlayerDisconnected", "PLAYER_LEFT", "On_PlayerLeft"];
 
 export function createPlayerSessionRecordsModule({ core, config, logger }) {
   const moduleLogger =
@@ -74,6 +74,36 @@ export function createPlayerSessionRecordsModule({ core, config, logger }) {
 
   function buildOnlineKey(serverId, playerName) {
     return `${String(serverId ?? "").trim()}::${String(playerName ?? "").trim().toLowerCase()}`;
+  }
+
+  function isAnchoredJoinEvent(event = {}) {
+    const eventName = String(event?.eventName ?? "").trim();
+    if (!JOIN_EVENT_NAMES.includes(eventName)) return false;
+
+    const ip = resolvePlayerIp(event);
+    if (!ip) return false;
+
+    // Prefer the raw-log-derived post-login anchor. The legacy Python event is
+    // kept only as a fallback for environments that do not emit PLAYER_POST_LOGIN.
+    if (eventName === "On_PlayerConnected") {
+      const rawLog = String(event?.rawLog ?? event?.rawEvent?.Raw ?? "");
+      if (!/\bLogNet:\s*PostLogin:\s*NewPlayer:/i.test(rawLog)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  function isAnchoredLeaveEvent(event = {}) {
+    const eventName = String(event?.eventName ?? "").trim();
+    if (!LEAVE_EVENT_NAMES.includes(eventName)) return false;
+
+    if (eventName === "PLAYER_DISCONNECTED" || eventName === "On_PlayerDisconnected") {
+      return true;
+    }
+
+    return Boolean(resolvePlayerIp(event));
   }
 
   function pushRecord(kind, event = {}) {
@@ -213,12 +243,14 @@ export function createPlayerSessionRecordsModule({ core, config, logger }) {
 
       for (const eventName of JOIN_EVENT_NAMES) {
         unsubscribers.push(core.eventBus.onCoreEvent(eventName, (event) => {
+          if (!isAnchoredJoinEvent(event)) return;
           pushRecord("join", event);
         }));
       }
 
       for (const eventName of LEAVE_EVENT_NAMES) {
         unsubscribers.push(core.eventBus.onCoreEvent(eventName, (event) => {
+          if (!isAnchoredLeaveEvent(event)) return;
           pushRecord("leave", event);
         }));
       }

@@ -12,6 +12,7 @@ function buildTeam(teamName: string): TeamViewModel {
     factionCode: null,
     playerCount: 12,
     maxPlayers: 50,
+    ticketCount: 320,
     averagePlaytimeHours: 4.5,
     leaderAveragePlaytimeHours: 8.1,
     publicLeaderPlaytimePlayers: 1,
@@ -65,5 +66,42 @@ describe("TeamColumn", () => {
     expect(wrapper.find("img.team-faction-bg-img").exists()).toBe(false);
     expect(wrapper.find("img.unit-icon").exists()).toBe(false);
     expect(wrapper.text()).toContain("Unknown Battlegroup");
+  });
+
+  it("renders the team ticket count when provided", () => {
+    const wrapper = mount(TeamColumn, {
+      props: {
+        team: buildTeam("95th Air Assault Brigade"),
+        playtimes: {},
+        combatStatsLookup: {},
+      },
+      global: {
+        stubs: {
+          SquadCard: true,
+        },
+      },
+    });
+
+    expect(wrapper.text()).toContain("320");
+  });
+
+  it("renders a ticket placeholder when the ticket count is missing", () => {
+    const wrapper = mount(TeamColumn, {
+      props: {
+        team: {
+          ...buildTeam("95th Air Assault Brigade"),
+          ticketCount: null,
+        },
+        playtimes: {},
+        combatStatsLookup: {},
+      },
+      global: {
+        stubs: {
+          SquadCard: true,
+        },
+      },
+    });
+
+    expect(wrapper.text()).toContain("--");
   });
 });

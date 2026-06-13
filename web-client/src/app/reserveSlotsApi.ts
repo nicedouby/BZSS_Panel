@@ -17,6 +17,41 @@ export interface ReserveSlotMember {
   isExpired: boolean;
 }
 
+export interface ReserveSlotCdkBatch {
+  id: string;
+  codeType: string;
+  quantity: number;
+  durationDays: number;
+  allowMultiActivation: boolean;
+  deactivated: boolean;
+  deactivatedAt: string | null;
+  deactivatedBy: string | null;
+  minCurrentSessionSeconds: number;
+  minServerSeconds: number;
+  createdAt: string | null;
+  createdBy: string | null;
+  codes?: string[];
+  usedCount: number;
+  remainingCount: number;
+  activationCount?: number;
+  status: "active" | "deactivated";
+}
+
+export interface ReserveSlotCdkActivationRecord {
+  id: string;
+  createdAt: string | null;
+  playerName: string;
+  steamId: string;
+  message: string;
+  code: string;
+  codeType: string | null;
+  batchId: string | null;
+  result: string;
+  failureReason: string;
+  grantedExpireAt: string | null;
+  matchedFutureRequirement: boolean;
+}
+
 export interface ReserveSlotStore {
   version: number;
   source: {
@@ -42,8 +77,38 @@ export interface ReserveSlotsState extends ReserveSlotStore {
     noExpireCount: number;
     activeCount: number;
   };
+  cdkSummary?: ReserveSlotsCdkSummary;
   loadedAt: string | null;
   message?: string;
+}
+
+export interface ReserveSlotsCdkSummary {
+  batchCount: number;
+  activeBatchCount: number;
+  deactivatedBatchCount: number;
+  codeCount: number;
+  usedCodeCount: number;
+  remainingCodeCount: number;
+  activationCount: number;
+  successCount: number;
+  failureCount: number;
+}
+
+export interface ReserveSlotsCdkState {
+  ok: true;
+  batches: ReserveSlotCdkBatch[];
+  activations: ReserveSlotCdkActivationRecord[];
+  summary: ReserveSlotsCdkSummary;
+  loadedAt: string | null;
+  createdBatchId?: string;
+  createdCodes?: string[];
+  message?: string;
+}
+
+export interface ReserveSlotBatchActivationState {
+  ok: true;
+  batch: ReserveSlotCdkBatch;
+  records: ReserveSlotCdkActivationRecord[];
 }
 
 export interface UpdateReserveSlotsPayload {
@@ -55,9 +120,18 @@ export interface UpdateReserveSlotsPayload {
 export interface UpsertReserveSlotMemberPayload {
   steamId: string;
   group: string;
-  expireAt: string;
+  expireAt?: string;
+  durationDays?: number;
   name?: string;
   reason?: string;
+  sourcePage?: string;
+}
+
+export interface CreateReserveSlotCdkBatchPayload {
+  codeType: string;
+  quantity: number;
+  durationDays: number;
+  allowMultiActivation: boolean;
   sourcePage?: string;
 }
 
@@ -65,6 +139,47 @@ export async function fetchReserveSlotsState() {
   return request<ReserveSlotsState>("/api/reserve-slots", {
     method: "GET",
   });
+}
+
+export async function fetchReserveSlotsCdkState() {
+  return request<ReserveSlotsCdkState>("/api/reserve-slots/cdk/state", {
+    method: "GET",
+  });
+}
+
+export async function fetchReserveSlotBatchActivations(batchId: string, filters: { steamId?: string; result?: string } = {}) {
+  const query = new URLSearchParams();
+  if (filters.steamId) query.set("steamId", filters.steamId);
+  if (filters.result) query.set("result", filters.result);
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return request<ReserveSlotBatchActivationState>(`/api/reserve-slots/cdk/batches/${encodeURIComponent(batchId)}/activations${suffix}`, {
+    method: "GET",
+  });
+}
+
+export async function createReserveSlotCdkBatch(payload: CreateReserveSlotCdkBatchPayload) {
+  return request<ReserveSlotsCdkState & { success: boolean }>(
+    "/api/reserve-slots/cdk/batches",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ...payload,
+        sourcePage: payload.sourcePage ?? "reserve_slot_management",
+      }),
+    },
+  );
+}
+
+export async function deactivateReserveSlotCdkBatch(batchId: string) {
+  return request<ReserveSlotsCdkState & { success: boolean }>(
+    `/api/reserve-slots/cdk/batches/${encodeURIComponent(batchId)}/deactivate`,
+    {
+      method: "POST",
+    },
+  );
 }
 
 export async function importReserveSlotsFromAdmin() {
