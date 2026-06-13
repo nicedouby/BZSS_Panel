@@ -137,6 +137,21 @@ const contentShellClass = computed(() => {
   height: 100%;
 }
 
+@media (max-width: 1100px) {
+  /* md 断点：强制侧边栏折叠为 84px 图标模式 */
+  .app-shell {
+    grid-template-columns: 84px minmax(0, 1fr);
+  }
+
+  .app-shell.collapsed {
+    grid-template-columns: 84px minmax(0, 1fr);
+  }
+
+  .content-shell--padded {
+    padding: 14px;
+  }
+}
+
 @media (max-width: 780px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -148,6 +163,12 @@ const contentShellClass = computed(() => {
 
   .content-shell {
     padding: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .content-shell--padded {
+    padding: 8px;
   }
 }
 </style>

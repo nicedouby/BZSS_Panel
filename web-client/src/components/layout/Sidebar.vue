@@ -419,4 +419,46 @@ nav::-webkit-scrollbar-thumb {
     display: grid;
   }
 }
+
+/* ─── md 断点（781–1100px）：侧边栏被 AppLayout 压缩为 84px，强制应用折叠视觉 ─ */
+@media (min-width: 781px) and (max-width: 1100px) {
+  .sidebar {
+    width: 84px;
+  }
+
+  .sidebar .brand span,
+  .sidebar .section-copy,
+  .sidebar .section-children {
+    display: none;
+  }
+
+  .sidebar .brand {
+    padding: 22px 10px 18px;
+    text-align: center;
+  }
+
+  .sidebar .brand strong {
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    margin: 0 auto;
+    padding: 7px 8px;
+  }
+
+  .sidebar nav {
+    padding: 14px 8px 18px;
+  }
+
+  .sidebar .section-link {
+    justify-content: center;
+    min-height: 48px;
+    padding: 8px 0;
+  }
+
+  .sidebar .nav-section.open {
+    padding: 0;
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+  }
+}
 </style>

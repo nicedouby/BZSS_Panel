@@ -2800,6 +2800,181 @@ export class WebServer {
         this.core.runtimeState?.updateJob?.(job);
       });
   }
+    // API route handling has been refactored to appropriate modules.
+
+
+
+  async readJsonBody(req) {
+    const text = (await this.readTextBody(req)).trim();
+    if (!text) return {};
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw createHttpError(400, "InvalidJson", "Request body must be valid JSON.");
+    }
+  }
+
+  async readTextBody(req) {
+    const chunks = [];
+    let totalLength = 0;
+
+    for await (const chunk of req) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      totalLength += buffer.length;
+      if (totalLength > MAX_JSON_BODY_BYTES) {
+        throw createHttpError(413, "RequestBodyTooLarge", "Request body too large.");
+      }
+      chunks.push(buffer);
+    }
+
+    return Buffer.concat(chunks, totalLength).toString("utf8");
+  }
+
+  getMatchOverviewFromRuntime() {
+    if (!this.core.runtimeState) {
+      return this.modules.matchState?.getOverview?.() ?? {};
+    }
+
+    const match = this.core.runtimeState.getMatch();
+    const webStatus = this.core.webStatus?.getSnapshot?.() ?? {};
+    const rconStatus = this.core.rconManager?.getStatus?.() ?? {};
+    return {
+      status: webStatus,
+      matchState: match,
+      serverStatus: {
+        ...webStatus,
+        ...(match.server ?? {}),
+      },
+      match,
+      players: match.players?.active ?? [],
+      recentlyDisconnected: match.players?.recentlyDisconnected ?? [],
+      squads: match.squads?.list ?? [],
+      teams: match.teams ?? [],
+      rconStatus,
+      logAccess: {
+        granted: webStatus.pythonLogParser === "running" || webStatus.udpReceiver === "listening",
+        pythonLogParser: webStatus.pythonLogParser ?? "unknown",
+        udpReceiver: webStatus.udpReceiver ?? "unknown",
+      },
+    };
+  }
+
+  getRoundStateFromRuntime() {
+    const snapshot = this.core.runtimeState?.getAll?.() ?? null;
+    const roundEvents = snapshot?.events?.round ?? [];
+    return {
+      serverId: this.core.webStatus?.serverId ?? "",
+      updatedAt: snapshot?.events?.updatedAt ?? "",
+      current: roundEvents.length ? roundEvents[roundEvents.length - 1] : null,
+      history: roundEvents,
+      lastAcceptedAt: roundEvents.length ? String(roundEvents[roundEvents.length - 1]?.receivedAt ?? roundEvents[roundEvents.length - 1]?.time ?? "") : "",
+      lastDedupedAt: "",
+    };
+  }
+
+  getRoundOverviewFromRuntime() {
+    const roundState = this.getRoundStateFromRuntime();
+    const status = this.core.webStatus?.getSnapshot?.() ?? {};
+    return {
+      status,
+      roundState,
+      latest: roundState.history.slice(-20).reverse(),
+    };
+  }
+
+  getMatchOverview() {
+    return this.modules.matchState?.getOverview?.() ?? this.getMatchOverviewFromRuntime();
+  }
+
+  getMatchStateSnapshotResponse() {
+    const matchStateModule = this.modules.matchState;
+    const matchState = matchStateModule?.getState?.() ?? null;
+    const overview = matchStateModule?.getOverview?.(matchState) ?? this.getMatchOverview();
+    const resolvedMatchState = matchState ?? overview?.matchState ?? null;
+    return {
+      ok: true,
+      source: "module.matchState",
+      type: "snapshot",
+      matchState: resolvedMatchState,
+      overview,
+    };
+  }
+
+  async refreshMatchState(type = "all") {
+    const matchStateModule = this.modules.matchState;
+    if (!matchStateModule?.refresh) {
+      return {
+        ok: false,
+        source: "module.matchState",
+        type,
+        error: "MatchStateUnavailable",
+        message: "Match state module is not loaded.",
+      };
+    }
+
+    const matchState = await matchStateModule.refresh(type);
+    const snapshot = matchStateModule.getState?.() ?? matchState ?? null;
+    const overview = matchStateModule.getOverview?.() ?? null;
+    return {
+      ok: true,
+      source: "module.matchState",
+      type,
+      matchState: snapshot,
+      overview,
+    };
+  }
+
+  normalizeMatchRefreshType(type) {
+    const normalized = String(type ?? "all").trim();
+    if (["players", "squads", "serverInfo", "currentMap", "nextMap", "all"].includes(normalized)) {
+      return normalized;
+    }
+    return "all";
+  }
+
+  createLocalJob(type, input = {}) {
+    const now = Date.now();
+    const job = {
+      id: `local-${now}-${++this.jobCounter}`,
+      type,
+      status: "queued",
+      createdAt: now,
+      startedAt: null,
+      finishedAt: null,
+      input,
+      result: null,
+      error: null,
+    };
+    this.jobs.set(job.id, job);
+    this.core.runtimeState?.updateJob?.(job);
+    return { ...job };
+  }
+
+  runLocalJob(publicJob, runner) {
+    const job = this.jobs.get(publicJob.id);
+    if (!job) return;
+    job.status = "running";
+    job.startedAt = Date.now();
+    this.core.runtimeState?.updateJob?.(job);
+
+    Promise.resolve()
+      .then(runner)
+      .then((result) => {
+        job.status = "completed";
+        job.result = result;
+      })
+      .catch((error) => {
+        job.status = "failed";
+        job.error = {
+          message: error?.message || "Job failed.",
+        };
+      })
+      .finally(() => {
+        job.finishedAt = Date.now();
+        this.core.runtimeState?.updateJob?.(job);
+      });
+  }
 
   async getJob(jobId, { waitMs = 0 } = {}) {
     const localJob = this.jobs.get(String(jobId ?? ""));
@@ -2825,9 +3000,13 @@ export class WebServer {
 
       const data = await fs.readFile(abs);
       const isHtml = abs.endsWith(".html");
+      let mime = contentType(abs);
+      if (isHtml && (!mime || !mime.includes("charset"))) {
+        mime = mime ? `${mime}; charset=utf-8` : "text/html; charset=utf-8";
+      }
       res.writeHead(200, {
         ...BASE_SECURITY_HEADERS,
-        "Content-Type": contentType(abs),
+        "Content-Type": mime,
         "Cache-Control": isHtml ? "no-store" : "public, max-age=31536000, immutable",
       });
       res.end(data);

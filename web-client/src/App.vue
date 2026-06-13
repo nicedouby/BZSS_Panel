@@ -131,7 +131,7 @@ button {
     var(--theme-panel-highlight),
     var(--color-bg-elevated);
   color: var(--color-text-primary);
-  padding: 8px 14px;
+  padding: clamp(6px, 0.7vw, 8px) clamp(10px, 1.1vw, 14px);
   cursor: pointer;
   box-shadow: var(--shadow-sm), 0 0 0 1px var(--theme-panel-rim);
   transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
@@ -155,7 +155,7 @@ textarea {
   border: 1px solid var(--color-border-default);
   background: var(--color-bg-elevated);
   color: var(--color-text-primary);
-  padding: 10px 12px;
+  padding: clamp(7px, 0.8vw, 10px) clamp(9px, 1vw, 12px);
   transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -250,9 +250,9 @@ a {
 .bz-page {
   width: min(100%, 1760px);
   margin: 0 auto;
-  padding: 18px 22px 28px;
+  padding: clamp(10px, 1.4vw, 18px) clamp(12px, 1.8vw, 22px) clamp(14px, 2vw, 28px);
   display: grid;
-  gap: 14px;
+  gap: clamp(10px, 1.2vw, 14px);
   min-width: 0;
 }
 
@@ -292,7 +292,7 @@ a {
   background:
     var(--theme-panel-highlight),
     var(--color-bg-card);
-  border-radius: 18px;
+  border-radius: clamp(12px, 1.6vw, 18px);
   box-shadow: var(--shadow-md), var(--theme-panel-glow);
   overflow: hidden;
   backdrop-filter: blur(12px);
@@ -575,9 +575,41 @@ a {
   background-clip: padding-box;
 }
 
+@media (max-width: 1100px) {
+  .bz-card-body {
+    padding: 14px;
+  }
+}
+
 @media (max-width: 900px) {
   .stat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bz-page {
+    padding: 8px 10px 12px;
+    gap: 8px;
+  }
+
+  .bz-card {
+    border-radius: 12px;
+  }
+
+  .bz-card-body {
+    padding: 10px 12px;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    border-radius: 8px;
   }
 }
 </style>
