@@ -120,7 +120,7 @@ export const router = createRouter({
       component: ChatMonitorPage,
       meta: {
         ...coreRealtimeMeta,
-        title: "鑱婂ぉ鐩戞帶",
+        title: "聊天监控",
         ...workspaceLayoutMeta,
       },
     },
@@ -200,7 +200,7 @@ export const router = createRouter({
       component: ScheduledBroadcastPage,
       meta: {
         ...corePollingMeta,
-        title: "瀹氭椂骞挎挱",
+        title: "定时广播",
         ...workspaceLayoutMeta,
       },
     },
@@ -218,7 +218,7 @@ export const router = createRouter({
       component: GroupReportPage,
       meta: {
         ...pluginPollingMeta,
-        title: "鎶卞洟鎶ュ",
+        title: "组队举报",
         ...workspaceLayoutMeta,
       },
     },
@@ -290,7 +290,7 @@ export const router = createRouter({
       component: UdpEventForwarderPage,
       meta: {
         ...debugManualMeta,
-        title: "UDP 杞彂鏃ュ織",
+        title: "UDP 转发日志",
         ...documentLayoutMeta,
       },
     },
@@ -317,7 +317,7 @@ export const router = createRouter({
       component: PjscAverageDurationPage,
       meta: {
         ...debugManualMeta,
-        title: "PJSC 骞冲潎鏃堕暱",
+        title: "PJSC 平均时长",
         ...documentLayoutMeta,
       },
     },
@@ -326,7 +326,7 @@ export const router = createRouter({
       component: DrawVoteGuardDebugPage,
       meta: {
         ...debugManualMeta,
-        title: "骞冲眬鎶曠エ闃舵鎻愮ず",
+        title: "平局投票提示",
         ...documentLayoutMeta,
       },
     },
@@ -335,7 +335,7 @@ export const router = createRouter({
       component: WelcomeJoinWarningDebugPage,
       meta: {
         ...debugManualMeta,
-        title: "鍏ユ湇娆㈣繋璀﹀憡",
+        title: "入服欢迎警告",
         ...documentLayoutMeta,
       },
     },
@@ -382,7 +382,7 @@ export const router = createRouter({
       component: ComingSoonPage,
       props: {
         title: "Access denied",
-        subtitle: "鏉冮檺涓嶈冻",
+        subtitle: "权限不足",
         message: "当前登录账号没有访问该页面所需的模块权限，请联系管理员分配对应权限后再试。",
       },
       meta: { title: "Access denied", ...documentLayoutMeta },

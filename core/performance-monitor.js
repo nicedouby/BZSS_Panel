@@ -1,5 +1,6 @@
 // -*- coding: utf-8 -*-
 
+import { execFileSync } from "node:child_process";
 import { monitorEventLoopDelay } from "node:perf_hooks";
 
 /**
@@ -22,6 +23,8 @@ export class PerformanceMonitor {
     this.sampleTimer = null;
     this.logTimer = null;
     this.histogram = null;
+    this.lastNetworkTotals = null;
+    this.lastNetworkSampleAt = null;
 
     if (this.enabled) {
       try {
@@ -79,6 +82,7 @@ export class PerformanceMonitor {
   sample() {
     try {
       const memory = process.memoryUsage();
+      const network = this.#sampleNetworkTraffic();
       const eventLoopDelayMs = this.histogram
         ? {
             mean: this.histogram.mean / 1e6,
@@ -102,6 +106,7 @@ export class PerformanceMonitor {
           external: memory.external,
           arrayBuffers: memory.arrayBuffers || 0,
         },
+        network,
         eventLoop: eventLoopDelayMs,
       });
 
@@ -122,6 +127,11 @@ export class PerformanceMonitor {
       `HeapUsed=${(latest.memory.heapUsed / 1024 / 1024).toFixed(2)}MB ` +
       `External=${(latest.memory.external / 1024 / 1024).toFixed(2)}MB ` +
       `ArrayBuffers=${(latest.memory.arrayBuffers / 1024 / 1024).toFixed(2)}MB ` +
+      (latest.network
+        ? `NetIn=${this.#formatBytesPerSecond(latest.network.bytesInPerSec)} `
+          + `NetOut=${this.#formatBytesPerSecond(latest.network.bytesOutPerSec)} `
+          + `NetTotal=${this.#formatBytesPerSecond(latest.network.bytesTotalPerSec)} `
+        : "") +
       `EventLoopMean=${latest.eventLoop.mean.toFixed(2)}ms ` +
       `EventLoopP95=${latest.eventLoop.p95.toFixed(2)}ms ` +
       `EventLoopP99=${latest.eventLoop.p99.toFixed(2)}ms ` +
@@ -134,5 +144,99 @@ export class PerformanceMonitor {
       history: this.history,
       latest: this.history[this.history.length - 1] ?? null,
     };
+  }
+
+  #sampleNetworkTraffic() {
+    const current = this.#readNetworkCounters();
+    if (!current) return null;
+
+    const now = Date.now();
+    const previous = this.lastNetworkTotals;
+    this.lastNetworkTotals = current;
+    this.lastNetworkSampleAt = now;
+
+    if (!previous || !Number.isFinite(this.lastNetworkSampleAt) || !current.timestamp) {
+      return {
+        bytesInTotal: current.bytesInTotal,
+        bytesOutTotal: current.bytesOutTotal,
+        bytesInPerSec: null,
+        bytesOutPerSec: null,
+        bytesTotalPerSec: null,
+        sampleIntervalMs: null,
+        source: current.source,
+      };
+    }
+
+    const elapsedMs = Math.max(now - previous.timestamp, 1);
+    const inDelta = Math.max(0, current.bytesInTotal - previous.bytesInTotal);
+    const outDelta = Math.max(0, current.bytesOutTotal - previous.bytesOutTotal);
+    return {
+      bytesInTotal: current.bytesInTotal,
+      bytesOutTotal: current.bytesOutTotal,
+      bytesInPerSec: (inDelta * 1000) / elapsedMs,
+      bytesOutPerSec: (outDelta * 1000) / elapsedMs,
+      bytesTotalPerSec: ((inDelta + outDelta) * 1000) / elapsedMs,
+      sampleIntervalMs: elapsedMs,
+      source: current.source,
+    };
+  }
+
+  #readNetworkCounters() {
+    if (process.platform !== "win32") {
+      return null;
+    }
+
+    try {
+      const script = [
+        "$items = Get-NetAdapterStatistics | Select-Object ReceivedBytes,SentBytes;",
+        "if ($items -is [array]) { $items | ConvertTo-Json -Compress } else { @($items) | ConvertTo-Json -Compress }",
+      ].join(" ");
+      const output = execFileSync("powershell.exe", [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        script,
+      ], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+
+      if (!output) return null;
+      const parsed = JSON.parse(output);
+      const items = Array.isArray(parsed) ? parsed : [parsed];
+      let bytesInTotal = 0;
+      let bytesOutTotal = 0;
+
+      for (const item of items) {
+        const received = Number(item?.ReceivedBytes ?? 0);
+        const sent = Number(item?.SentBytes ?? 0);
+        if (Number.isFinite(received)) bytesInTotal += Math.max(0, received);
+        if (Number.isFinite(sent)) bytesOutTotal += Math.max(0, sent);
+      }
+
+      return {
+        bytesInTotal,
+        bytesOutTotal,
+        timestamp: Date.now(),
+        source: "Get-NetAdapterStatistics",
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  #formatBytesPerSecond(bytesPerSec) {
+    if (!Number.isFinite(Number(bytesPerSec))) return "--";
+    return `${this.#formatBytes(bytesPerSec)}/s`;
+  }
+
+  #formatBytes(bytes) {
+    const value = Number(bytes);
+    if (!Number.isFinite(value) || value < 0) return "0 B";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let size = value;
+    let unitIndex = 0;
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex += 1;
+    }
+    return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
   }
 }

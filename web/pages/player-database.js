@@ -17,73 +17,73 @@ export async function renderPage({ root, api, apiFetch, routeInfo }) {
     <section class="page db-page-shell">
       <div class="page-title-row">
         <div>
-          <div class="page-title">鐜╁鏁版嵁搴?/div>
+          <div class="page-title">玩家数据库</div>
           <div class="match-empty">MicePanel 椋庢牸妗ｆ搴擄細鐜╁銆佸埆鍚嶃€両P銆佺櫥褰曘€佹垬鏂椼€佹殩鏈嶃€佹爣绛句笌杩濊缁熻</div>
         </div>
-        <span id="db-sync-status" class="status-text" data-tone="idle">绛夊緟鎿嶄綔</span>
+        <span id="db-sync-status" class="status-text" data-tone="idle">等待操作</span>
       </div>
 
       <section class="db-overview-card">
-        <div class="db-stat-item"><span>鐜╁鎬绘暟</span><strong id="db-ov-total-players">--</strong></div>
-        <div class="db-stat-item"><span>绐楀彛娲昏穬</span><strong id="db-ov-active-players">--</strong></div>
-        <div class="db-stat-item"><span>鎬绘湇鍔″櫒鏃堕暱</span><strong id="db-ov-kd">--</strong></div>
-        <div class="db-stat-item"><span>鎬绘瘮璧?/span><strong id="db-ov-total-matches">--</strong></div>
-        <div class="db-stat-item"><span>鎬绘椂闀?/span><strong id="db-ov-total-hours">--</strong></div>
-        <div class="db-stat-item"><span>鎬绘寚鎸ユ椂闀?/span><strong id="db-ov-rating">--</strong></div>
+        <div class="db-stat-item"><span>玩家总数</span><strong id="db-ov-total-players">--</strong></div>
+        <div class="db-stat-item"><span>窗口活跃</span><strong id="db-ov-active-players">--</strong></div>
+        <div class="db-stat-item"><span>总服务器时长</span><strong id="db-ov-kd">--</strong></div>
+        <div class="db-stat-item"><span>总比赛</span><strong id="db-ov-total-matches">--</strong></div>
+        <div class="db-stat-item"><span>总时长</span><strong id="db-ov-total-hours">--</strong></div>
+        <div class="db-stat-item"><span>总指挥时长</span><strong id="db-ov-rating">--</strong></div>
       </section>
 
       <section class="card db-toolbar-card">
         <div class="console-actions db-toolbar-row">
-          <input id="db-search" class="console-search db-search" placeholder="鎼滅储锛氭樀绉?/ Steam64 / EOS / IP">
+          <input id="db-search" class="console-search db-search" placeholder="搜索：昵称 / Steam64 / EOS / IP">
           <select id="db-sort">
-            <option value="updated_desc">鎺掑簭锛氭渶杩戞洿鏂?/option>
-            <option value="name_asc">鎺掑簭锛欰-Z</option>
+            <option value="updated_desc">排序：最近更新</option>
+            <option value="name_asc">排序：A-Z</option>
           </select>
           <select id="db-stats-days">
-            <option value="7">缁熻绐楀彛锛?澶?/option>
-            <option value="14" selected>缁熻绐楀彛锛?4澶?/option>
-            <option value="30">缁熻绐楀彛锛?0澶?/option>
-            <option value="60">缁熻绐楀彛锛?0澶?/option>
-            <option value="90">缁熻绐楀彛锛?0澶?/option>
+            <option value="7">统计窗口：7天</option>
+            <option value="14" selected>统计窗口：14天</option>
+            <option value="30">统计窗口：30天</option>
+            <option value="60">统计窗口：60天</option>
+            <option value="90">统计窗口：90天</option>
           </select>
           <select id="db-stats-top">
-            <option value="5">姒滃崟鏁伴噺锛?</option>
-            <option value="10" selected>姒滃崟鏁伴噺锛?0</option>
-            <option value="20">姒滃崟鏁伴噺锛?0</option>
-            <option value="50">姒滃崟鏁伴噺锛?0</option>
+            <option value="5">榜单数量：5</option>
+            <option value="10" selected>榜单数量：10</option>
+            <option value="20">榜单数量：20</option>
+            <option value="50">榜单数量：50</option>
           </select>
-          <button id="db-stats-toggle-btn">鎵撳紑缁熻寮圭獥</button>
-          <button id="db-sync-online-btn">鍚屾鍦ㄧ嚎鐜╁</button>
-          <button id="db-reset-combat-stats-btn" class="danger-lite">閲嶇疆鍑绘潃缁熻</button>
+          <button id="db-stats-toggle-btn">打开统计弹窗</button>
+          <button id="db-sync-online-btn">同步在线玩家</button>
+          <button id="db-reset-combat-stats-btn" class="danger-lite">重置击杀统计</button>
         </div>
       </section>
 
       <div class="db-panel">
         <aside class="db-list-col" id="db-list"></aside>
         <section class="db-detail-col" id="db-detail">
-          <div class="placeholder">璇烽€夋嫨宸︿晶鐜╁鏌ョ湅妗ｆ璇︽儏</div>
+          <div class="placeholder">请选择左侧玩家查看档案详情</div>
         </section>
       </div>
 
       <div class="db-stats-modal is-hidden" id="db-stats-modal" aria-hidden="true">
-        <button class="db-stats-modal-backdrop" id="db-stats-modal-backdrop" type="button" aria-label="鍏抽棴缁熻寮圭獥"></button>
-        <section class="db-stats-modal-card" role="dialog" aria-modal="true" aria-label="鏁版嵁搴撶粺璁″脊绐?>
+        <button class="db-stats-modal-backdrop" id="db-stats-modal-backdrop" type="button" aria-label="关闭统计弹窗"></button>
+        <section class="db-stats-modal-card" role="dialog" aria-modal="true" aria-label="数据库统计弹窗"
           <header class="db-stats-modal-head">
-            <h2>鏁版嵁搴撶粺璁?/h2>
-            <button id="db-stats-modal-close" type="button">鍏抽棴</button>
+            <h2>数据库统计</h2>
+            <button id="db-stats-modal-close" type="button">关闭</button>
           </header>
           <section class="db-analytics-grid">
             <div class="db-card db-analytics-card">
-              <h3>Breakdowns 鍒嗗竷缁熻</h3>
-              <div id="db-breakdowns" class="db-analytics-body">绛夊緟鍔犺浇...</div>
+              <h3>Breakdowns 分布统计</h3>
+              <div id="db-breakdowns" class="db-analytics-body">等待加载...</div>
             </div>
             <div class="db-card db-analytics-card">
-              <h3>Leaderboards 鎺掕姒?/h3>
-              <div id="db-leaderboards" class="db-analytics-body">绛夊緟鍔犺浇...</div>
+              <h3>Leaderboards 排行榜</h3>
+              <div id="db-leaderboards" class="db-analytics-body">等待加载...</div>
             </div>
             <div class="db-card db-analytics-card">
-              <h3>Trends 瓒嬪娍</h3>
-              <div id="db-trends" class="db-analytics-body">绛夊緟鍔犺浇...</div>
+              <h3>Trends 趋势</h3>
+              <div id="db-trends" class="db-analytics-body">等待加载...</div>
             </div>
           </section>
         </section>
@@ -126,7 +126,7 @@ export async function renderPage({ root, api, apiFetch, routeInfo }) {
       closeStatsModal(els.statsModal);
     });
     renderTrends(els.trends, stats);
-    if (!silent) setStatus(`缁熻宸插埛鏂帮細${state.days}澶╃獥鍙ｏ紝姒滃崟${state.top}`, "success");
+    if (!silent) setStatus(`统计已刷新：${state.days}天窗口，榜单${state.top}`, "success");
   }
 
   async function loadList() {
@@ -152,7 +152,7 @@ export async function renderPage({ root, api, apiFetch, routeInfo }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ permissionGroup }),
         });
-        setStatus("鏉冮檺缁勫凡鏇存柊", "success");
+        setStatus("权限组已更新", "success");
         await loadList();
       },
     });
@@ -191,7 +191,7 @@ export async function renderPage({ root, api, apiFetch, routeInfo }) {
   root.querySelector("#db-stats-modal-backdrop").addEventListener("click", () => closeStatsModal(els.statsModal));
 
   root.querySelector("#db-sync-online-btn").addEventListener("click", async () => {
-    setStatus("姝ｅ湪鍚屾鍦ㄧ嚎鐜╁...", "pending");
+    setStatus("正在同步在线玩家...", "pending");
     await apiFetch("/api/player-database/sync-online", { method: "POST" });
     await loadList();
     await loadStats({ silent: true });
@@ -200,10 +200,10 @@ export async function renderPage({ root, api, apiFetch, routeInfo }) {
 
   root.querySelector("#db-reset-combat-stats-btn").addEventListener("click", async () => {
     if (!window.confirm("纭閲嶇疆鎵€鏈夌帺瀹跺嚮鏉€缁熻鍜屾殩鏈嶇粺璁″悧锛熸鎿嶄綔涓嶅彲鎾ら攢銆�?")) return;
-    setStatus("姝ｅ湪閲嶇疆鍑绘潃缁熻...", "pending");
+    setStatus("正在重置击杀统计...", "pending");
     const res = await apiFetch("/api/db/reset-combat-stats", { method: "POST" });
     const json = await res.json();
-    if (!res.ok) throw new Error(json?.error || "閲嶇疆澶辫触");
+    if (!res.ok) throw new Error(json?.error || "重置失败");
     await loadList();
     await loadStats({ silent: true });
     setStatus(`鍑绘潃缁熻宸查噸缃紝褰卞搷 ${Number(json.changed || 0)} 鏉¤褰�`, "success");
@@ -231,15 +231,15 @@ function renderOverview(root, stats) {
 
 function renderList(els, loadDetail) {
   if (!rows.length) {
-    els.list.innerHTML = '<div class="placeholder">娌℃湁鍖归厤鐨勭帺瀹?/div>';
+    els.list.innerHTML = '<div class="placeholder">没有匹配的玩家</div>';
     return;
   }
 
   els.list.innerHTML = rows.map((p) => `
     <button class="db-row ${Number(p.id) === Number(selectedId) ? "active" : ""}" data-id="${p.id}">
-      <div class="db-row-name">${esc(p.current_name || "(鏈懡鍚?")}</div>
+      <div class="db-row-name">${esc(p.current_name || "(未命名)")}</div>
       <div class="db-row-meta">${esc(p.permission_group || "default")}</div>
-      <div class="db-row-meta">鏇存柊 ${rowTime(p.updated_at)}</div>
+      <div class="db-row-meta">更新 ${rowTime(p.updated_at)}</div>
     </button>
   `).join("");
 
@@ -341,18 +341,18 @@ function renderDetail(els, data, actions) {
 function renderBreakdowns(root, stats) {
   const b = stats?.breakdowns || {};
   root.innerHTML = `
-    ${analyticsBlock("鏉冮檺缁勫垎甯�", chipList(b.permissionGroups, "permissionGroup", "players"))}
-    ${analyticsBlock("瑙掕壊鏍囩鍒嗗竷", chipList(b.roleTags, "tagValue", "players"))}
-    ${analyticsBlock("鎴愬垎鏍囩鍒嗗竷", chipList(b.componentTags, "tagValue", "players"))}
-    ${analyticsBlock("杩濊绫诲瀷鍒嗗竷", chipList((b.violationTypes || []).map((row) => ({ key: row.violationLabel || row.violationKey, value: row.totalCount })), "key", "value"))}
+    ${analyticsBlock("权限组分布", chipList(b.permissionGroups, "permissionGroup", "players"))}
+    ${analyticsBlock("角色标签分布", chipList(b.roleTags, "tagValue", "players"))}
+    ${analyticsBlock("成分标签分布", chipList(b.componentTags, "tagValue", "players"))}
+    ${analyticsBlock("违规类型分布", chipList((b.violationTypes || []).map((row) => ({ key: row.violationLabel || row.violationKey, value: row.totalCount })), "key", "value"))}
   `;
 }
 
 function renderLeaderboards(root, stats, jumpToPlayer) {
   const l = stats?.leaderboards || {};
   root.innerHTML = `
-    ${analyticsBlock("鏃堕暱姒�", rankList(l.byPlaytime, (row) => row.currentName || row.steamID || row.eosID || "鏈煡鐜╁", (row) => fmtHours(row.gameSeconds), "id"))}
-    ${analyticsBlock("杩濊姒�", rankList(l.byViolations, (row) => row.currentName || row.steamID || row.eosID || "鏈煡鐜╁", (row) => `杩濊 ${fmtNumber(row.totalViolations)}`, "playerId"))}
+    ${analyticsBlock("时长榜", rankList(l.byPlaytime, (row) => row.currentName || row.steamID || row.eosID || "未知玩家", (row) => fmtHours(row.gameSeconds), "id"))}
+    ${analyticsBlock("违规榜", rankList(l.byViolations, (row) => row.currentName || row.steamID || row.eosID || "未知玩家", (row) => `违规 ${fmtNumber(row.totalViolations)}`, "playerId"))}
   `;
 
   root.querySelectorAll(".db-rank-player").forEach((btn) => {
@@ -363,7 +363,7 @@ function renderLeaderboards(root, stats, jumpToPlayer) {
 function renderTrends(root, stats) {
   const t = stats?.trends || {};
   root.innerHTML = `
-    ${analyticsBlock("杩?N 澶╁灞€瓒嬪娍", trendList(t.matchesByDay, (row) => `瀵瑰眬 ${fmtNumber(row.matchCount)} 路 宸茬粨鏉?${fmtNumber(row.completedCount)}`))}
+    ${analyticsBlock("近 N 天对局趋势", trendList(t.matchesByDay, (row) => `对局 ${fmtNumber(row.matchCount)} · 已结束 ${fmtNumber(row.completedCount)}`))}
   `;
 }
 
@@ -379,7 +379,7 @@ function miniList(title, items) {
   return `
     <div class="db-card">
       <h3>${esc(title)}</h3>
-      <ul class="db-list-mini">${items.length ? items.map((item) => `<li>${esc(item)}</li>`).join("") : "<li>鏃?/li>"}</ul>
+      <ul class="db-list-mini">${items.length ? items.map((item) => `<li>${esc(item)}</li>`).join("") : "<li>无</li>"}</ul>
     </div>
   `;
 }
@@ -389,14 +389,14 @@ function analyticsBlock(title, body) {
 }
 
 function chipList(items, keyField, valueField) {
-  if (!Array.isArray(items) || !items.length) return '<div class="placeholder">鏆傛棤鏁版嵁</div>';
+  if (!Array.isArray(items) || !items.length) return '<div class="placeholder">暂无数据</div>';
   return `<div class="db-chip-wrap">${items.map((item) => `
     <span class="db-chip"><span>${esc(item?.[keyField] ?? "--")}</span><small>${fmtNumber(item?.[valueField] ?? 0)}</small></span>
   `).join("")}</div>`;
 }
 
 function rankList(items, nameGetter, valueGetter, idField) {
-  if (!Array.isArray(items) || !items.length) return '<div class="placeholder">鏆傛棤鏁版嵁</div>';
+  if (!Array.isArray(items) || !items.length) return '<div class="placeholder">暂无数据</div>';
   return `<ol class="db-rank-list">${items.map((item) => `
     <li>
       <button class="name db-rank-player" type="button" data-player-id="${Number(item?.[idField] || 0)}">${esc(nameGetter(item))}</button>
@@ -406,7 +406,7 @@ function rankList(items, nameGetter, valueGetter, idField) {
 }
 
 function trendList(items, valueGetter) {
-  if (!Array.isArray(items) || !items.length) return '<div class="placeholder">鏆傛棤鏁版嵁</div>';
+  if (!Array.isArray(items) || !items.length) return '<div class="placeholder">暂无数据</div>';
   return `<ul class="db-trend-list">${items.map((item) => `
     <li><span class="name">${esc(item.day || "--")}</span><span class="value">${esc(valueGetter(item))}</span></li>
   `).join("")}</ul>`;

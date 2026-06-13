@@ -49,6 +49,18 @@ export async function renderPage({ root, api, taskManager }) {
               <div class="status-value">${formatMemory(system.memory.rss)}</div>
             </div>
             <div class="status-item">
+              <div class="status-label">Network In</div>
+              <div class="status-value">${formatRate(system.performance?.latest?.network?.bytesInPerSec)}</div>
+            </div>
+            <div class="status-item">
+              <div class="status-label">Network Out</div>
+              <div class="status-value">${formatRate(system.performance?.latest?.network?.bytesOutPerSec)}</div>
+            </div>
+            <div class="status-item">
+              <div class="status-label">Network Total</div>
+              <div class="status-value">${formatRate(system.performance?.latest?.network?.bytesTotalPerSec)}</div>
+            </div>
+            <div class="status-item">
               <div class="status-label">Node.js</div>
               <div class="status-value">${escapeHtml(system.nodeVersion)}</div>
             </div>
@@ -547,6 +559,19 @@ export async function renderPage({ root, api, taskManager }) {
   function formatMemory(bytes) {
     const mb = bytes / 1024 / 1024;
     return `${mb.toFixed(1)} MB`;
+  }
+
+  function formatRate(bytesPerSec) {
+    if (!Number.isFinite(Number(bytesPerSec))) return "--";
+    const value = Number(bytesPerSec);
+    const units = ["B/s", "KB/s", "MB/s", "GB/s"];
+    let size = Math.max(0, value);
+    let unitIndex = 0;
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex += 1;
+    }
+    return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
   }
 
   function renderMemoryChart(history) {

@@ -29,6 +29,18 @@
             <span class="value">{{ formatMemory(status.system.memory.rss) }}</span>
           </div>
           <div class="system-card">
+            <span class="label">Network In</span>
+            <span class="value">{{ formatRate(status.system.performance?.latest?.network?.bytesInPerSec) }}</span>
+          </div>
+          <div class="system-card">
+            <span class="label">Network Out</span>
+            <span class="value">{{ formatRate(status.system.performance?.latest?.network?.bytesOutPerSec) }}</span>
+          </div>
+          <div class="system-card">
+            <span class="label">Network Total</span>
+            <span class="value">{{ formatRate(status.system.performance?.latest?.network?.bytesTotalPerSec) }}</span>
+          </div>
+          <div class="system-card">
             <span class="label">Node.js</span>
             <span class="value">{{ status.system.nodeVersion }}</span>
           </div>
@@ -116,6 +128,15 @@ interface SystemStatus {
       heapUsed: number;
       heapTotal: number;
     }>;
+    performance?: {
+      latest?: {
+        network?: {
+          bytesInPerSec: number | null;
+          bytesOutPerSec: number | null;
+          bytesTotalPerSec: number | null;
+        } | null;
+      } | null;
+    } | null;
     nodeVersion: string;
     platform: string;
     arch: string;
@@ -394,6 +415,19 @@ function formatUptime(seconds: number) {
 
 function formatMemory(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function formatRate(bytesPerSec?: number | null) {
+  if (!Number.isFinite(Number(bytesPerSec))) return "--";
+  const value = Number(bytesPerSec);
+  const units = ["B/s", "KB/s", "MB/s", "GB/s"];
+  let size = Math.max(0, value);
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
 function onWindowKeyDown(event: KeyboardEvent) {
