@@ -1,25 +1,26 @@
-<template>
+﻿<template>
   <AppPage full-bleed class="combat-log-page">
-    <AppPageHeader
-      eyebrow="SYSTEM LOGS"
-      title="战斗日志"
-      subtitle="按月分文件夹、按天分文件。记录时间、事件类型、标记、攻击者、受害者、伤害与武器。"
-      :status-items="headerStatusItems"
-    >
+        <h1 class="sr-only">战斗日志</h1>
+
+    <WorkspaceToolbar>
+      <div class="toolbar-status">
+        <AppStatusBadge v-for="item in headerStatusItems" :key="item.label" :tone="item.tone ?? 'idle'">
+          {{ item.label }}
+        </AppStatusBadge>
+      </div>
+
       <template #actions>
         <button
           type="button"
           class="refresh-button"
           :disabled="refreshing"
-          @click="refreshAll"
+          @click="refreshAll()"
         >
           <span v-if="refreshing" class="spinner button-spinner"></span>
-          <span>{{ refreshing ? "刷新中..." : "全部刷新" }}</span>
+          <span>{{ refreshing ? t("common.refreshing") : t("common.refresh") }}</span>
         </button>
       </template>
-    </AppPageHeader>
-
-    <AppPageToolbar>
+    </WorkspaceToolbar><AppPageToolbar>
       <div class="status-compact">
         <span class="live-pill" :class="{ live: isLiveSelected }">{{ liveBadgeLabel }}</span>
         <span class="meta-chip">最近写入：{{ formatDateTime(status?.lastWrittenAt) }}</span>
@@ -162,10 +163,12 @@ import { useRoute, useRouter } from "vue-router";
 import { apiGet } from "../app/apiClient";
 import { renderApiError } from "../app/errors";
 import AppPage from "../components/common/AppPage.vue";
-import AppPageHeader from "../components/common/AppPageHeader.vue";
+import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
+import AppStatusBadge from "../components/common/AppStatusBadge.vue";
 import AppPageToolbar from "../components/common/AppPageToolbar.vue";
 import AppCard from "../components/common/AppCard.vue";
 import DataState from "../components/common/DataState.vue";
+import { t } from "../i18n";
 
 interface CombatLogStatus {
   currentFilePath?: string;
@@ -935,3 +938,7 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
   }
 }
 </style>
+
+
+
+

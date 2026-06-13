@@ -1,19 +1,20 @@
-<template>
+﻿<template>
   <AppPage full-bleed>
-    <AppPageHeader
-      eyebrow="COMMAND & CONTROL"
-      title="小队管理"
-      subtitle="解散、踢出、移出小队与审计记录"
-      :status-items="headerStatusItems"
-    >
+        <h1 class="sr-only">小队管理</h1>
+
+    <WorkspaceToolbar>
+      <div class="toolbar-status">
+        <AppStatusBadge v-for="item in headerStatusItems" :key="item.label" :tone="item.tone ?? 'idle'">
+          {{ item.label }}
+        </AppStatusBadge>
+      </div>
+
       <template #actions>
         <button class="refresh-button" type="button" :disabled="loading" @click="reload">
-          {{ loading ? "同步中..." : "刷新数据" }}
+          {{ loading ? "同步中.." : "刷新数据" }}
         </button>
       </template>
-    </AppPageHeader>
-
-    <AppPageToolbar>
+    </WorkspaceToolbar><AppPageToolbar>
       <div class="toolbar-status">
         <AppStatusBadge tone="idle">自动轮询 5s</AppStatusBadge>
         <AppStatusBadge :tone="stale ? 'warn' : 'ok'">
@@ -233,7 +234,7 @@ import { useAuthStore } from "../stores/auth.store";
 import { useUiStore } from "../stores/ui.store";
 
 import AppPage from "../components/common/AppPage.vue";
-import AppPageHeader from "../components/common/AppPageHeader.vue";
+import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
 import AppPageToolbar from "../components/common/AppPageToolbar.vue";
 import AppCard from "../components/common/AppCard.vue";
 import AppSection from "../components/common/AppSection.vue";
@@ -725,3 +726,6 @@ function timeValue(value: string) {
   }
 }
 </style>
+
+
+

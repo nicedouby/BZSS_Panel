@@ -1,24 +1,18 @@
-<template>
+﻿<template>
   <section class="group-report-page">
-    <header class="page-header">
-      <div class="page-title-block">
-        <p class="eyebrow">Plugin</p>
-        <h1>抱团报备</h1>
-        <p class="subtitle">只维护抱团数据，不处理打乱、换队或 RCON。</p>
-      </div>
+        <h1 class="sr-only">报告</h1>
 
-      <div class="header-actions">
-        <RouterLink class="tab-link active" to="/plugins/group-report">抱团报备</RouterLink>
+    <WorkspaceToolbar>
+      <template #actions>
+        <RouterLink class="tab-link active" to="/plugins/group-report">报告</RouterLink>
         <button type="button" class="danger" @click="clearAllGroups" :disabled="!groups.length">
           一键全部删除
         </button>
         <button type="button" @click="reloadAll" :disabled="loadingGroups || loadingPlayers">
-          {{ loadingGroups || loadingPlayers ? "刷新中..." : "刷新" }}
+          {{ loadingGroups || loadingPlayers ? "刷新中.." : "刷新" }}
         </button>
-      </div>
-    </header>
-
-    <div v-if="error" class="banner error">{{ error }}</div>
+      </template>
+    </WorkspaceToolbar><div v-if="error" class="banner error">{{ error }}</div>
     <div v-if="info" class="banner info">{{ info }}</div>
 
     <div class="workspace">
@@ -143,6 +137,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { apiGet } from "../app/apiClient";
 import { groupReportApi, type GroupReportGroup, type GroupReportMember, type GroupReportSnapshot } from "../features/group-report/groupReport.api";
 import { searchPlayers, type SearchablePlayer } from "../features/group-report/playerSearch";
+import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
 
 const groups = ref<GroupReportGroup[]>([]);
 const players = ref<SearchablePlayer[]>([]);
@@ -848,3 +843,7 @@ button.danger:hover:not(:disabled) {
   }
 }
 </style>
+
+
+
+

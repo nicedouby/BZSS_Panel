@@ -1,32 +1,29 @@
-<template>
+﻿<template>
   <section class="page full-height">
-    <header class="chat-header">
-      <div class="header-left">
-        <PageHeader title="鉴于聊天监控 / Chat Monitor" subtitle="实时聊天过滤与各个玩家频率监控" />
+        <h1 class="sr-only">聊天监控</h1>
+
+    <WorkspaceToolbar class="chat-header">
+      <div class="filter-group">
+        <input
+          v-model="filters.query"
+          type="text"
+          placeholder="搜索玩家名/内容..."
+          class="filter-input"
+        />
+        <select v-model="filters.channel" class="filter-select">
+          <option value="all">全部频道</option>
+          <option value="ChatAll">公开</option>
+          <option value="ChatTeam">阵营</option>
+          <option value="ChatSquad">小队</option>
+          <option value="ChatAdmin">管理</option>
+        </select>
       </div>
-      <div class="header-right">
-        <div class="filter-group">
-          <input
-            v-model="filters.query"
-            type="text"
-            placeholder="搜索玩家名/内容..."
-            class="filter-input"
-          />
-          <select v-model="filters.channel" class="filter-select">
-            <option value="all">全部频道</option>
-            <option value="ChatAll">公开</option>
-            <option value="ChatTeam">阵营</option>
-            <option value="ChatSquad">小队</option>
-            <option value="ChatAdmin">管理</option>
-          </select>
-        </div>
+      <template #actions>
         <StatusBadge :tone="autoScroll ? 'ok' : 'idle'" @click="autoScroll = !autoScroll">
           {{ autoScroll ? "自动滚动" : "手动滚动" }}
         </StatusBadge>
-      </div>
-    </header>
-
-    <div class="chat-layout-main">
+      </template>
+    </WorkspaceToolbar><div class="chat-layout-main">
       <div class="chat-column-left">
         <div class="chat-dashboard-inline">
           <div class="stats-card-mini">
@@ -100,7 +97,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from "vue";
 import * as echarts from "echarts";
-import PageHeader from "../components/common/PageHeader.vue";
+import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
 import StatusBadge from "../components/common/StatusBadge.vue";
 import { apiGet } from "../app/apiClient";
 
@@ -593,3 +590,5 @@ onBeforeUnmount(() => {
   }
 }
 </style>
+
+

@@ -1,27 +1,22 @@
-<template>
+﻿<template>
   <section class="page stepwise-page">
-    <PageHeader
-      eyebrow="Plugin"
-      title="阶梯式建队时长"
-      subtitle="围绕日志时钟判定步兵队与载具队的建队门槛，并把收到的建队事件、判定结果和实际动作放到同一页里。"
-    >
-      <template #actions>
-        <div class="header-actions">
-          <span class="status-pill" :data-tone="statusTone">{{ statusLabel }}</span>
-          <button type="button" class="ghost-btn" :disabled="loading" @click="refreshState">
-            {{ loading ? "刷新中..." : "刷新" }}
-          </button>
-          <button type="button" class="ghost-btn" :disabled="saving" @click="saveSettings">
-            {{ saving ? "保存中..." : "保存规则" }}
-          </button>
-          <button type="button" class="ghost-btn" :disabled="toggling" @click="toggleEnabled">
-            {{ toggling ? "切换中..." : (state?.enabled ? "停用插件" : "启用插件") }}
-          </button>
-        </div>
-      </template>
-    </PageHeader>
+        <h1 class="sr-only">阶梯式建队时长</h1>
 
-    <div v-if="error" class="banner error">{{ error }}</div>
+    <WorkspaceToolbar>
+      <span class="status-pill" :data-tone="statusTone">{{ statusLabel }}</span>
+
+      <template #actions>
+        <button type="button" class="ghost-btn" :disabled="loading" @click="refreshState">
+          {{ loading ? "刷新中.." : "刷新" }}
+        </button>
+        <button type="button" class="ghost-btn" :disabled="saving" @click="saveSettings">
+          {{ saving ? "保存中.." : "保存规则" }}
+        </button>
+        <button type="button" class="ghost-btn" :disabled="toggling" @click="toggleEnabled">
+          {{ toggling ? "切换中.." : (state?.enabled ? "停用插件" : "启用插件") }}
+        </button>
+      </template>
+    </WorkspaceToolbar><div v-if="error" class="banner error">{{ error }}</div>
     <div v-if="info" class="banner info">{{ info }}</div>
 
     <div class="main-layout">
@@ -411,7 +406,7 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { apiGet, apiPost } from "../app/apiClient";
 import { setPluginEnabled, updatePluginConfig } from "../features/plugins/plugin.api";
-import PageHeader from "../components/common/PageHeader.vue";
+import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
 import PageCard from "../components/common/PageCard.vue";
 
 const PLUGIN_ID = "plugin.stepwiseSquadPlaytimeGuard";
@@ -1375,3 +1370,4 @@ function recordDecisionTone(record: StepwiseRecord) {
   }
 }
 </style>
+

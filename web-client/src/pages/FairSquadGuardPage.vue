@@ -1,26 +1,19 @@
-<template>
+﻿<template>
   <section class="page fair-squad-guard-page">
-    <PageHeader
-      eyebrow="Plugin"
-      title="公平建队"
-      subtitle="通过日志和 RCON 来源检测并按窗口自动管理违规小队。"
-    >
-      <template #actions>
-        <div class="header-actions">
-          <div class="header-toolbar">
-            <span class="status-chip" :data-tone="statusTone">{{ statusLabel }}</span>
-            <button type="button" class="ghost-btn" :disabled="loading" @click="load">
-              {{ loading ? "刷新中..." : "刷新" }}
-            </button>
-            <button type="button" class="ghost-btn" :disabled="!canManageSettingsTools" @click="settings.openDrawer()">
-              打开设置
-            </button>
-          </div>
-        </div>
-      </template>
-    </PageHeader>
+        <h1 class="sr-only">公平建队</h1>
 
-    <div v-if="error" class="error-banner">{{ error }}</div>
+    <WorkspaceToolbar>
+      <span class="status-chip" :data-tone="statusTone">{{ statusLabel }}</span>
+
+      <template #actions>
+        <button type="button" class="ghost-btn" :disabled="loading" @click="load">
+          {{ loading ? "刷新中.." : "刷新" }}
+        </button>
+        <button type="button" class="ghost-btn" :disabled="!canManageSettingsTools" @click="settings.openDrawer()">
+          打开设置
+        </button>
+      </template>
+    </WorkspaceToolbar><div v-if="error" class="error-banner">{{ error }}</div>
 
     <div class="rules-bar">
       <div class="rules-item">
@@ -261,7 +254,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
-import PageHeader from "../components/common/PageHeader.vue";
+import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
 import PageCard from "../components/common/PageCard.vue";
 import {
   fetchFairSquadGuardRecords,
@@ -948,3 +941,4 @@ onMounted(() => {
   }
 }
 </style>
+

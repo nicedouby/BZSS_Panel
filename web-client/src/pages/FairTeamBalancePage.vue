@@ -1,22 +1,16 @@
-<template>
+﻿<template>
   <section class="page fair-team-balance-page workspace-page">
-    <PageHeader
-      eyebrow="Plugin"
-      title="均衡组队系统"
-      subtitle="管理公平组队插件的状态与请求。系统将自动平衡小队实力并记录所有 TB/SQTB 变更。"
-    >
+        <h1 class="sr-only">均衡组队系统</h1>
+
+    <WorkspaceToolbar>
+      <span class="status-chip subtle">{{ modeLabel }}</span>
+
       <template #actions>
-        <button
-          type="button"
-          class="ghost-btn"
-          @click="refreshPanel"
-        >
+        <button type="button" class="ghost-btn" @click="refreshPanel">
           刷新面板
         </button>
       </template>
-    </PageHeader>
-
-    <div v-if="stateError" class="error-banner">
+    </WorkspaceToolbar><div v-if="stateError" class="error-banner">
       {{ stateError }}
     </div>
 
@@ -391,7 +385,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { apiGet, apiPost } from "../app/apiClient";
 import { getScheduledBroadcastState, type ScheduledBroadcastItem } from "../app/scheduledBroadcastApi";
-import PageHeader from "../components/common/PageHeader.vue";
+import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
 import PageCard from "../components/common/PageCard.vue";
 
 interface FairTeamBalanceActor {
@@ -1570,3 +1564,4 @@ function normalizeStatusLabel(status: string) {
   }
 }
 </style>
+

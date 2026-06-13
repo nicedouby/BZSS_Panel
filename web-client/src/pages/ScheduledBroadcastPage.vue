@@ -1,17 +1,14 @@
-<template>
+﻿<template>
   <section class="bz-page scheduled-broadcast-page">
-    <PageHeader
-      title="定时广播"
-      subtitle="管理自动轮播的消息。首条广播的间隔将同步为全局开始延迟，后续广播依序循环。"
-    >
+        <h1 class="sr-only">定时广播</h1>
+
+    <WorkspaceToolbar>
       <template #actions>
         <button type="button" class="bz-btn bz-btn-ghost" :disabled="isFetching" @click="query.refetch()">
-          {{ isFetching ? "同步中..." : "刷新数据" }}
+          {{ isFetching ? "同步中.." : "刷新数据" }}
         </button>
       </template>
-    </PageHeader>
-
-    <section class="bz-card summary-card">
+    </WorkspaceToolbar><section class="bz-card summary-card">
       <div class="bz-card-body compact summary-bar">
         <div class="summary-stats">
           <div class="stat-pill">
@@ -173,7 +170,7 @@ import {
   type ScheduledBroadcastItem,
 } from "../app/scheduledBroadcastApi";
 import { useUiStore } from "../stores/ui.store";
-import PageHeader from "../components/common/PageHeader.vue";
+import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
 import DataState from "../components/common/DataState.vue";
 
 type DraftItem = {
@@ -812,3 +809,4 @@ function formatTime(value: unknown) {
   }
 }
 </style>
+

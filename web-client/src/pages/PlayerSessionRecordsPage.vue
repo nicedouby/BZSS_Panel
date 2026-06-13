@@ -1,24 +1,20 @@
-<template>
+﻿<template>
   <section class="page-shell">
-    <PageHeader
-      eyebrow="Module"
-      title="进退服记录"
-      subtitle="追踪玩家加入/离开事件，便于排查玩家在线状态变化和异常掉线。"
-    >
+        <h1 class="sr-only">进退服记录</h1>
+
+    <WorkspaceToolbar>
       <template #actions>
         <button type="button" class="btn ghost" :disabled="loading" @click="loadState">
-          {{ loading ? "刷新中..." : "刷新" }}
+          {{ loading ? "刷新中.." : "刷新" }}
         </button>
         <button type="button" :class="['btn', autoRefresh ? 'primary' : 'ghost']" @click="toggleAutoRefresh">
           {{ autoRefresh ? "自动刷新中" : "开启自动刷新" }}
         </button>
         <button type="button" class="btn danger" :disabled="busy || !canClear" @click="clearRecords">
-          {{ busy ? "清理中..." : "清空记录" }}
+          {{ busy ? "清理中.." : "清空记录" }}
         </button>
       </template>
-    </PageHeader>
-
-    <div v-if="error" class="banner error">{{ error }}</div>
+    </WorkspaceToolbar><div v-if="error" class="banner error">{{ error }}</div>
     <div v-if="info" class="banner info">{{ info }}</div>
 
     <div class="cards-grid">
@@ -137,7 +133,7 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { apiGet, apiPost } from "../app/apiClient";
 import { useAuthStore } from "../stores/auth.store";
-import PageHeader from "../components/common/PageHeader.vue";
+import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
 import PageCard from "../components/common/PageCard.vue";
 
 type SessionRecord = {
@@ -466,3 +462,4 @@ function formatTime(value: string | number | null | undefined) {
   }
 }
 </style>
+

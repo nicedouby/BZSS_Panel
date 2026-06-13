@@ -1,8 +1,14 @@
-<template>
+﻿<template>
   <section class="bz-page combat-page">
-    <PageHeader :title="pageTitle" :subtitle="pageSubtitle" />
+        <h1 class="sr-only">{{ pageTitle }}</h1>
 
-    <DataState
+    <WorkspaceToolbar>
+      <template #actions>
+        <button type="button" class="bz-btn bz-btn-ghost" :disabled="filters.offset === 0" @click="previousPage">{{ text.previous }}</button>
+        <button type="button" class="bz-btn bz-btn-ghost" :disabled="!hasNextPage" @click="nextPage">{{ text.next }}</button>
+        <button type="button" class="bz-btn bz-btn-danger" @click="clearEvents">{{ text.clearMemoryEvents }}</button>
+      </template>
+    </WorkspaceToolbar><DataState
       class="combat-state"
       :loading="query.isLoading.value"
       :error="pageError"
@@ -70,7 +76,7 @@ import { apiPost } from "../../app/apiClient";
 import { renderApiError } from "../../app/errors";
 import { useUiStore } from "../../stores/ui.store";
 import { goToPlayerDatabaseSearch } from "../../utils/player-database";
-import PageHeader from "../../components/common/PageHeader.vue";
+import WorkspaceToolbar from "../../components/common/WorkspaceToolbar.vue";
 import PageCard from "../../components/common/PageCard.vue";
 import DataState from "../../components/common/DataState.vue";
 import CombatRateChart from "../../components/combat/CombatRateChart.vue";
@@ -374,3 +380,5 @@ function formatTime(value: unknown) {
   }
 }
 </style>
+
+

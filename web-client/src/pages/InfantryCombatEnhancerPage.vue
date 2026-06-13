@@ -1,16 +1,14 @@
-<template>
+﻿<template>
   <section class="bz-page infantry-combat-page">
-    <PageHeader
-      :title="t('routeTitle.infantryCombatEnhancer')"
-    >
+        <h1 class="sr-only">{{ t('routeTitle.infantryCombatEnhancer') }}</h1>
+
+    <WorkspaceToolbar>
       <template #actions>
         <button type="button" class="bz-btn bz-btn-ghost" @click="reload">刷新</button>
         <button type="button" class="bz-btn bz-btn-ghost" @click="settingsOpen = true">设置</button>
         <button type="button" class="bz-btn bz-btn-danger" @click="clearEvents">清空记录</button>
       </template>
-    </PageHeader>
-
-    <div class="ice-shell">
+    </WorkspaceToolbar><div class="ice-shell">
       <div class="ice-top">
         <InfantryCombatSummaryBar :overview="overview" :loading="isEventsFetching" />
 
@@ -54,7 +52,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { t } from "../i18n";
-import PageHeader from "../components/common/PageHeader.vue";
+import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
 import DataState from "../components/common/DataState.vue";
 import InfantryCombatSummaryBar from "../components/infantry-combat/InfantryCombatSummaryBar.vue";
 import InfantryCombatToolbar from "../components/infantry-combat/InfantryCombatToolbar.vue";
@@ -184,3 +182,4 @@ async function saveConfig(next: InfantryCombatConfig) {
   }
 }
 </style>
+

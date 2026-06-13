@@ -1,10 +1,8 @@
-<template>
+﻿<template>
   <AppPage full-bleed class="battle-log-page">
-    <AppPageHeader
-      eyebrow="BATTLE LOG"
-      :title="t('routeTitle.battleLog')"
-      subtitle="战绩订阅页。击倒来自 combatClean，击杀 / 死亡 / 复苏来自 combatClean，TK 仅来自 RCON TEAM_KILL。"
-    >
+        <h1 class="sr-only">战绩订阅</h1>
+
+    <WorkspaceToolbar>
       <template #actions>
         <button
           type="button"
@@ -16,9 +14,7 @@
           <span>{{ refreshing ? t("common.refreshing") : t("common.refresh") }}</span>
         </button>
       </template>
-    </AppPageHeader>
-
-    <AppPageToolbar>
+    </WorkspaceToolbar><AppPageToolbar>
       <div class="toolbar-row">
         <select v-model="filters.type" class="filter-input">
           <option v-for="option in typeOptions" :key="option.value" :value="option.value">
@@ -168,7 +164,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { apiGet } from "../app/apiClient";
 import { renderApiError } from "../app/errors";
 import AppPage from "../components/common/AppPage.vue";
-import AppPageHeader from "../components/common/AppPageHeader.vue";
+import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
 import AppPageToolbar from "../components/common/AppPageToolbar.vue";
 import AppCard from "../components/common/AppCard.vue";
 import DataState from "../components/common/DataState.vue";
@@ -541,3 +537,6 @@ function formatNumber(value: unknown) {
   }
 }
 </style>
+
+
+

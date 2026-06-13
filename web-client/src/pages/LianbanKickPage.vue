@@ -1,21 +1,16 @@
-<template>
+﻿<template>
   <section class="page lianban-kick-page">
-    <PageHeader
-      eyebrow="Plugin"
-      title="联办踢出"
-      subtitle="查看联办名单是否已加载、当前扫描状态，以及最近自动踢出记录。这个页面只读，不修改名单文件。"
-    >
-      <template #actions>
-        <div class="header-actions">
-          <span class="status-pill" :data-tone="statusTone">{{ statusLabel }}</span>
-          <button type="button" class="ghost-btn" :disabled="loading" @click="refreshState">
-            {{ loading ? "刷新中..." : "刷新" }}
-          </button>
-        </div>
-      </template>
-    </PageHeader>
+        <h1 class="sr-only">联办踢出</h1>
 
-    <div v-if="error" class="banner error">{{ error }}</div>
+    <WorkspaceToolbar>
+      <span class="status-pill" :data-tone="statusTone">{{ statusLabel }}</span>
+
+      <template #actions>
+        <button type="button" class="ghost-btn" :disabled="loading" @click="refreshState">
+          {{ loading ? "刷新中.." : "刷新" }}
+        </button>
+      </template>
+    </WorkspaceToolbar><div v-if="error" class="banner error">{{ error }}</div>
 
     <div class="summary-grid">
       <article class="summary-card">
@@ -166,7 +161,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
 import { apiGet } from "../app/apiClient";
 import PageCard from "../components/common/PageCard.vue";
-import PageHeader from "../components/common/PageHeader.vue";
+import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
 
 type LianbanEvent = {
   id: string;
@@ -430,3 +425,4 @@ onBeforeUnmount(() => {
   }
 }
 </style>
+

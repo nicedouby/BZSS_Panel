@@ -1,19 +1,20 @@
-<template>
+﻿<template>
   <AppPage class="audit-records-page" full-bleed>
-    <AppPageHeader
-      title="操作记录"
-      subtitle="Web 人工操作审计"
-      eyebrow="系统管理"
-      :status-items="statusItems"
-    >
+        <h1 class="sr-only">操作记录</h1>
+
+    <WorkspaceToolbar>
+      <div class="toolbar-status">
+        <AppStatusBadge v-for="item in statusItems" :key="item.label" :tone="item.tone ?? 'idle'">
+          {{ item.label }}
+        </AppStatusBadge>
+      </div>
+
       <template #actions>
         <button class="toolbar-button" type="button" :disabled="loading" @click="fetchRecords">
           刷新
         </button>
       </template>
-    </AppPageHeader>
-
-    <section class="filter-bar" aria-label="审计筛选">
+    </WorkspaceToolbar><section class="filter-bar" aria-label="审计筛选">
       <label>
         <span>操作人</span>
         <input v-model.trim="filters.actor" type="search" placeholder="username" @keyup.enter="fetchRecords" />
@@ -144,7 +145,8 @@ import { computed, onMounted, reactive, ref } from "vue";
 
 import { apiGet } from "../app/apiClient";
 import AppPage from "../components/common/AppPage.vue";
-import AppPageHeader from "../components/common/AppPageHeader.vue";
+import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
+import AppStatusBadge from "../components/common/AppStatusBadge.vue";
 import AppTable from "../components/common/AppTable.vue";
 
 interface AuditRecord {
@@ -512,3 +514,6 @@ td small {
   }
 }
 </style>
+
+
+

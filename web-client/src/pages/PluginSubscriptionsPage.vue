@@ -1,18 +1,14 @@
-<template>
+﻿<template>
   <section class="page plugin-subscriptions-page">
-    <PageHeader
-      title="插件订阅"
-      subtitle="管理当前面板中已注册的模块、插件和网页入口，控制它们是否继续接收实时事件。"
-      eyebrow="System"
-    >
+        <h1 class="sr-only">插件订阅</h1>
+
+    <WorkspaceToolbar>
       <template #actions>
         <button type="button" class="ghost-btn" :disabled="loading" @click="refreshState(false)">
-          {{ loading ? "刷新中..." : "刷新" }}
+          {{ loading ? "刷新中.." : "刷新" }}
         </button>
       </template>
-    </PageHeader>
-
-    <section class="summary-grid">
+    </WorkspaceToolbar><section class="summary-grid">
       <article class="summary-card">
         <span>总条目</span>
         <strong>{{ stats.total }}</strong>
@@ -136,7 +132,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { ApiError, apiGet, apiPost } from "../app/apiClient";
 import { useAuthStore } from "../stores/auth.store";
 import { useUiStore } from "../stores/ui.store";
-import PageHeader from "../components/common/PageHeader.vue";
+import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
 import PageCard from "../components/common/PageCard.vue";
 import DataState from "../components/common/DataState.vue";
 import { t } from "../i18n";
@@ -625,3 +621,4 @@ code {
   }
 }
 </style>
+
