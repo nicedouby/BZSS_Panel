@@ -553,6 +553,72 @@ export class PlayerRepository {
     );
   }
 
+  async addSessionHistory(playerId, session = {}) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return null;
+
+    const joinedAt = Number(session.joinedAt ?? session.joined_at ?? 0);
+    if (!Number.isFinite(joinedAt) || joinedAt <= 0) return null;
+
+    const result = await this.db.run(
+      `INSERT INTO player_session_history (player_id, joined_at, left_at, duration_seconds, source)
+       VALUES (?, ?, NULL, NULL, ?)`,
+      id,
+      joinedAt,
+      cleanText(session.source) ?? null,
+    );
+
+    return Number(result?.lastID ?? 0) || null;
+  }
+
+  async closeOpenSessionHistory(playerId, session = {}) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return false;
+
+    const leftAt = Number(session.leftAt ?? session.left_at ?? 0);
+    if (!Number.isFinite(leftAt) || leftAt <= 0) return false;
+
+    const openRow = await this.db.get(
+      `SELECT id, joined_at
+       FROM player_session_history
+       WHERE player_id = ? AND left_at IS NULL
+       ORDER BY joined_at DESC, id DESC
+       LIMIT 1`,
+      id,
+    );
+    if (!openRow) return false;
+
+    const joinedAt = Number(openRow.joined_at ?? 0);
+    const durationSeconds = joinedAt > 0 ? Math.max(0, Math.floor((leftAt - joinedAt) / 1000)) : null;
+
+    await this.db.run(
+      `UPDATE player_session_history
+       SET left_at = ?, duration_seconds = ?, source = COALESCE(source, ?)
+       WHERE id = ?`,
+      leftAt,
+      durationSeconds,
+      cleanText(session.source) ?? null,
+      Number(openRow.id),
+    );
+    return true;
+  }
+
+  async listPlayerSessionHistory(playerId, options = {}) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return [];
+    const { limit, offset } = this.normalizePaging(options);
+    return this.db.all(
+      `SELECT id, joined_at, left_at, duration_seconds, source
+       FROM player_session_history
+       WHERE player_id = ?
+       ORDER BY joined_at DESC, id DESC
+       LIMIT ? OFFSET ?`,
+      id,
+      limit,
+      offset,
+    );
+  }
+
   async getPlayerDetail(playerId) {
     const id = Number(playerId);
     if (!Number.isFinite(id)) return null;
@@ -560,15 +626,17 @@ export class PlayerRepository {
     const player = await this.getPlayerById(id);
     if (!player) return null;
 
-    const [aliases, ips] = await Promise.all([
+    const [aliases, ips, sessions] = await Promise.all([
       this.listPlayerAliases(id, { limit: 12 }),
       this.listPlayerIps(id, { limit: 12 }),
+      this.listPlayerSessionHistory(id, { limit: 20 }),
     ]);
 
     return {
       player: mapPlayerPlaytimeRow(player),
       aliases,
       ips,
+      sessionHistory: sessions,
       summary: {
         gameSeconds: resolveEffectiveGameSeconds(player),
         steamGameSeconds: normalizeSeconds(player.steam_game_seconds ?? player.game_seconds ?? 0),

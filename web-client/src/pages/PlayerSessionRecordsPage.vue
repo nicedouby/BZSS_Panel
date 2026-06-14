@@ -92,11 +92,11 @@
               <th>时间</th>
               <th>类型</th>
               <th>玩家</th>
+              <th>EOS ID</th>
+              <th>Steam64</th>
               <th>IP</th>
               <th>服务器</th>
               <th>事件名</th>
-              <th>事件ID</th>
-              <th>来源数据</th>
             </tr>
           </thead>
           <tbody>
@@ -111,16 +111,11 @@
                 </span>
               </td>
               <td class="truncate">{{ item.playerName || "-" }}</td>
+              <td class="truncate">{{ item.eosId || "-" }}</td>
+              <td class="truncate">{{ item.steam64Id || "-" }}</td>
               <td>{{ item.ip || "-" }}</td>
               <td class="truncate">{{ item.serverId || "-" }}</td>
               <td class="truncate">{{ item.eventName || "-" }}</td>
-              <td class="truncate">{{ item.eventId || "-" }}</td>
-              <td>
-                <span v-if="item.hasPayload" class="pill ok">payload</span>
-                <span v-if="item.hasParams" class="pill ok">params</span>
-                <span v-if="item.hasParamMap" class="pill ok">paramMap</span>
-                <span v-if="!item.hasPayload && !item.hasParams && !item.hasParamMap" class="pill skip">无</span>
-              </td>
             </tr>
           </tbody>
         </table>
@@ -145,6 +140,8 @@ type SessionRecord = {
   eventId?: string;
   serverId?: string;
   playerName?: string;
+  eosId?: string;
+  steam64Id?: string;
   ip?: string;
   hasPayload?: boolean;
   hasParams?: boolean;
@@ -179,6 +176,7 @@ const serverFilter = ref("");
 const limit = ref(200);
 
 const canClear = computed(() => auth.user?.isSuperAdmin === true);
+const inFlightNameLookups = new Set<string>();
 
 const filteredRecords = computed<SessionRecord[]>(() => {
   const rows = Array.isArray(state.value?.records) ? state.value.records : [];
@@ -233,6 +231,7 @@ async function loadState() {
       `/api/modules/player-session-records/state?limit=${encodeURIComponent(String(limit.value))}`,
     );
     state.value = response.data ?? null;
+    void hydrateMissingNames();
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
@@ -266,6 +265,50 @@ function formatTime(value: string | number | null | undefined) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleString();
+}
+
+async function hydrateMissingNames() {
+  const rows = Array.isArray(state.value?.records) ? state.value.records : [];
+  await Promise.all(rows.map(async (item) => {
+    if (String(item.playerName ?? "").trim()) return;
+
+    const lookupKey = String(item.steam64Id ?? item.eosId ?? "").trim();
+    if (!lookupKey || inFlightNameLookups.has(lookupKey)) return;
+
+    inFlightNameLookups.add(lookupKey);
+    try {
+      const resolvedName = await resolvePlayerNameFromApi(item);
+      if (!resolvedName) return;
+      item.playerName = resolvedName;
+    } finally {
+      inFlightNameLookups.delete(lookupKey);
+    }
+  }));
+}
+
+async function resolvePlayerNameFromApi(item: SessionRecord) {
+  const searchKeys = [
+    String(item.steam64Id ?? "").trim(),
+    String(item.eosId ?? "").trim(),
+  ].filter(Boolean);
+
+  for (const searchKey of searchKeys) {
+    try {
+      const params = new URLSearchParams({
+        q: searchKey,
+        limit: "1",
+        sort: "updated_desc",
+      });
+      const response = await apiGet<any>(`/api/query/player-database?${params.toString()}`);
+      const match = response?.items?.[0] ?? response?.players?.[0] ?? null;
+      const name = String(match?.current_name ?? match?.name ?? "").trim();
+      if (name) return name;
+    } catch {
+      continue;
+    }
+  }
+
+  return "";
 }
 </script>
 
@@ -395,7 +438,7 @@ function formatTime(value: string | number | null | undefined) {
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 760px;
+  min-width: 1120px;
 }
 
 .data-table th,

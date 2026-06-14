@@ -37,6 +37,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "contains": [
             "LogNet: Join succeeded:",
             "LogNet: PostLogin: NewPlayer:",
+            "LogSquad: PostLogin: NewPlayer:",
             "LogNet: UNetConnection::Close:",
         ],
     },

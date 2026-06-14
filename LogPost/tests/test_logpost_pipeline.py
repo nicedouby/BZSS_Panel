@@ -74,6 +74,7 @@ class LogPostPipelineTests(unittest.TestCase):
                 "contains": [
                     "LogNet: Join succeeded:",
                     "LogNet: PostLogin: NewPlayer:",
+                    "LogSquad: PostLogin: NewPlayer:",
                     "LogNet: UNetConnection::Close:",
                 ],
             },
@@ -143,6 +144,20 @@ class LogPostPipelineTests(unittest.TestCase):
         preserved_path = pathlib.Path(app.writer.output_dir) / today_string() / "Preserved.jsonl"
         preserved = self.read_jsonl(preserved_path)
         self.assertEqual(preserved[0]["MatchedRule"], "LogNet: PostLogin: NewPlayer:")
+        self.assertEqual(len(app.udp_sender.sent), 1)
+
+    def test_log_squad_post_login_is_preserved(self) -> None:
+        app = self.make_app()
+        line = (
+            "LogSquad: PostLogin: NewPlayer: BP_PlayerController_C_1 "
+            "(IP: 127.0.0.1 | Online IDs: EOS: 1234567890abcdef steam: 76561198000000000)"
+        )
+
+        app.process_line(line)
+
+        preserved_path = pathlib.Path(app.writer.output_dir) / today_string() / "Preserved.jsonl"
+        preserved = self.read_jsonl(preserved_path)
+        self.assertEqual(preserved[0]["MatchedRule"], "LogSquad: PostLogin: NewPlayer:")
         self.assertEqual(len(app.udp_sender.sent), 1)
 
     def test_connection_close_is_preserved(self) -> None:

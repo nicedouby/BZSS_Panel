@@ -260,7 +260,7 @@ function matchGroup(text, regex) {
 
 function parsePostLogin(raw) {
   const text = String(raw ?? "");
-  if (!/\bLogNet:\s*PostLogin:\s*NewPlayer:/i.test(text)) return null;
+  if (!/\bLog(?:Net|Squad):\s*PostLogin:\s*NewPlayer:/i.test(text)) return null;
 
   const playerControllerId = matchGroup(text, /NewPlayer:\s*([^(\s]+)/i);
   const ip = matchGroup(text, /\(IP:\s*([^|]+)\|/i);
@@ -285,20 +285,16 @@ function cleanIp(value) {
 function parseUniqueId(uniqueIdText) {
   const text = String(uniqueIdText ?? "").trim();
 
-  const redpoint = text.match(/RedpointEOS:([0-9a-f]{16,})/i);
+  const redpoint = text.match(/RedpointEOS:\s*([0-9a-f]{16,})/i);
   if (redpoint) {
     return { eosId: String(redpoint[1]).toLowerCase(), steam64Id: "" };
   }
 
-  const eos = text.match(/\bEOS:([0-9a-f]{16,})/i);
-  if (eos) {
-    return { eosId: String(eos[1]).toLowerCase(), steam64Id: "" };
-  }
+  const eos = text.match(/\bEOS:\s*([0-9a-f]{16,})/i);
+  const steam = text.match(/\bSteam:\s*([0-9]{16,})/i);
 
-  const steam = text.match(/\bSteam:([0-9]{16,})/i);
-  if (steam) {
-    return { eosId: "", steam64Id: String(steam[1]) };
-  }
-
-  return { eosId: "", steam64Id: "" };
+  return {
+    eosId: eos ? String(eos[1]).toLowerCase() : "",
+    steam64Id: steam ? String(steam[1]) : "",
+  };
 }

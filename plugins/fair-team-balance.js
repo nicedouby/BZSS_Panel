@@ -729,8 +729,14 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     const counts = getTeamCounts(matchState);
     const ownCount = teamId === 1 ? counts.team1 : counts.team2;
     const otherCount = teamId === 1 ? counts.team2 : counts.team1;
+    const beforeDelta = Math.abs(ownCount - otherCount);
+    const ownAfter = ownCount - 1;
+    const otherAfter = otherCount + 1;
+    const afterDelta = Math.abs(ownAfter - otherAfter);
+    const improvesBalance = afterDelta < beforeDelta;
+    const withinDeltaLimit = afterDelta <= 3;
 
-    if (ownCount <= otherCount) {
+    if (!improvesBalance && !withinDeltaLimit) {
       const countsMessage = `当前人数: 1队 ${counts.team1}，2队 ${counts.team2}。`;
       return {
         ok: false,
@@ -744,6 +750,12 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       teamId,
       ownCount,
       otherCount,
+      ownAfter,
+      otherAfter,
+      beforeDelta,
+      afterDelta,
+      improvesBalance,
+      withinDeltaLimit,
     };
   }
 
@@ -859,7 +871,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     return { ok: true };
   }
 
-  function validateTbBeforeSwitch({ playerKey, playerName, player, matchState, webStatus, period }) {
+function validateTbBeforeSwitch({ playerKey, playerName, player, matchState, webStatus, period }) {
     const common = validateCommonPlayerState(matchState, player);
     if (!common.ok) return common;
 
@@ -889,12 +901,16 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       return { ok: false, error: "PlayerTbQuotaExhausted", message: "玩家在当前周期内的跳边额度已用尽。" };
     }
 
-    const counts = getTeamCounts(matchState);
-    if (Math.abs(counts.team1 - counts.team2) >= 3) {
-      return { ok: false, error: "TeamDeltaExceeded", message: "当前队伍分差已达到 3 人或更多。" };
+    const sideCheck = getSwitchEligibility(matchState, player);
+    if (!sideCheck.ok) {
+      return {
+        ok: false,
+        error: sideCheck.error === "TeamDeltaNotAllowed" ? "TeamDeltaExceeded" : sideCheck.error,
+        message: sideCheck.message,
+      };
     }
 
-    return { ok: true, mode: "normal" };
+    return { ok: true, mode: "normal", sideCheck };
   }
 
   function validateSqtbCreate({ playerKey, playerName, player, matchState, webStatus, period }) {
@@ -921,7 +937,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     return { ok: true };
   }
 
-  function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPlayerKey, matchState, period }) {
+function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPlayerKey, matchState, period }) {
     const common = validateCommonPlayerState(matchState, claimantPlayer);
     if (!common.ok) return common;
 
@@ -942,9 +958,18 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       return { ok: false, error: "LockedSquadForbidden", message: "禁止锁队认领" };
     }
 
-    const counts = getTeamCounts(matchState);
-    if (Math.abs(counts.team1 - counts.team2) >= 3) {
-      return { ok: false, error: "TeamDeltaExceeded", message: "当前队伍人数差已达到 3 人或更多。" };
+    const applicantPlayer = findPlayerByActor(matchState, { playerKey: applicantPlayerKey });
+    if (!applicantPlayer) {
+      return { ok: false, error: "ApplicantUnavailable", message: "Applicant is unavailable for switch." };
+    }
+
+    const sideCheck = getSwitchEligibility(matchState, applicantPlayer);
+    if (!sideCheck.ok) {
+      return {
+        ok: false,
+        error: sideCheck.error === "TeamDeltaNotAllowed" ? "TeamDeltaExceeded" : sideCheck.error,
+        message: sideCheck.message,
+      };
     }
 
     return { ok: true };

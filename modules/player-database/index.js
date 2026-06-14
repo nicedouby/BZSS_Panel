@@ -104,6 +104,10 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       return repo.listPlayerIps(playerId, options);
     },
 
+    async listPlayerSessionHistory(playerId, options = {}) {
+      return repo.listPlayerSessionHistory(playerId, options);
+    },
+
     async setPermissionGroup(playerId, permissionGroup) {
       await repo.setPermissionGroup(playerId, permissionGroup);
       return { ok: true };
@@ -152,6 +156,14 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
 
     async getCachedPlayer(identity = {}) {
       return repo.findCachedPlayer(identity);
+    },
+
+    async addSessionHistory(playerId, session = {}) {
+      return repo.addSessionHistory(playerId, session);
+    },
+
+    async closeOpenSessionHistory(playerId, session = {}) {
+      return repo.closeOpenSessionHistory(playerId, session);
     },
 
   };

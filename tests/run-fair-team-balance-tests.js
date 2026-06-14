@@ -332,7 +332,42 @@ async function testGreenBalanceTbStillRejectsRoundReuse() {
   }
 }
 
-async function testTbRejectsWhenSwitchWouldNotImproveBalance() {
+async function testTbAllowsLargeDeltaWhenSwitchImprovesBalance() {
+  const harness = await createHarness({
+    matchState: {
+      players: [
+        ...Array.from({ length: 52 }, (_, index) => ({
+          name: `Team1-${index + 1}`,
+          steamId: `steam-team1-${index + 1}`,
+          teamId: 1,
+          squadId: 0,
+        })),
+        ...Array.from({ length: 48 }, (_, index) => ({
+          name: `Team2-${index + 1}`,
+          steamId: `steam-team2-${index + 1}`,
+          teamId: 2,
+          squadId: 0,
+        })),
+      ],
+    },
+  });
+
+  try {
+    const result = await harness.plugin.api.simulateChatMessage({
+      message: "tb",
+      steamId: "steam-team1-1",
+      playerName: "Team1-1",
+    });
+
+    assert.equal(result.matched, true);
+    assert.equal(result.ok, true);
+    assert.equal(harness.teamBalanceCalls.length, 1);
+  } finally {
+    await harness.stop();
+  }
+}
+
+async function testTbAllowsSwitchWhenPostSwitchDeltaIsWithinThree() {
   const harness = await createHarness({
     matchState: {
       players: [
@@ -350,13 +385,46 @@ async function testTbRejectsWhenSwitchWouldNotImproveBalance() {
     });
 
     assert.equal(result.matched, true);
+    assert.equal(result.ok, true);
+    assert.equal(harness.teamBalanceCalls.length, 1);
+    assert.equal(harness.plugin.api.getState().publicTbRemaining, 4);
+    assert.equal(harness.plugin.api.getState().roundUsedCount, 1);
+  } finally {
+    await harness.stop();
+  }
+}
+
+async function testTbRejectsWhenSwitchWouldNotImproveBalanceAndWouldStillExceedThree() {
+  const harness = await createHarness({
+    matchState: {
+      players: [
+        ...Array.from({ length: 47 }, (_, index) => ({
+          name: `Team1-${index + 1}`,
+          steamId: `steam-team1-${index + 1}`,
+          teamId: 1,
+          squadId: 0,
+        })),
+        ...Array.from({ length: 52 }, (_, index) => ({
+          name: `Team2-${index + 1}`,
+          steamId: `steam-team2-${index + 1}`,
+          teamId: 2,
+          squadId: 0,
+        })),
+      ],
+    },
+  });
+
+  try {
+    const result = await harness.plugin.api.simulateChatMessage({
+      message: "tb",
+      steamId: "steam-team1-1",
+      playerName: "Team1-1",
+    });
+
+    assert.equal(result.matched, true);
     assert.equal(result.ok, false);
     assert.equal(result.error, "TeamDeltaNotAllowed");
     assert.equal(harness.teamBalanceCalls.length, 0);
-    assert.equal(harness.plugin.api.getState().publicTbRemaining, 5);
-    assert.equal(harness.plugin.api.getState().roundUsedCount, 0);
-    assert.equal(harness.broadcasts.length, 1);
-    assert.equal(harness.broadcasts[0].reason, "fair_tb_rejected_broadcast");
   } finally {
     await harness.stop();
   }
@@ -414,10 +482,8 @@ async function testTbUsesLivePlayersForCountsAndIncludesCountsInError() {
     });
 
     assert.equal(result.matched, true);
-    assert.equal(result.ok, false);
-    assert.equal(result.error, "TeamDeltaNotAllowed");
-    assert.match(result.message, /当前人数: 1队 1，2队 1。/);
-    assert.equal(harness.teamBalanceCalls.length, 0);
+    assert.equal(result.ok, true);
+    assert.equal(harness.teamBalanceCalls.length, 1);
   } finally {
     await harness.stop();
   }
@@ -456,6 +522,49 @@ async function testSqtbCreatesRequestAndClaimExecutes() {
     assert.equal(harness.teamBalanceCalls.length, 1);
     assert.equal(harness.plugin.api.listRequests().length, 0);
     assert.equal(harness.broadcasts.length >= 2, true);
+  } finally {
+    await harness.stop();
+  }
+}
+
+async function testSqtbClaimRejectsWhenApplicantSwitchWouldNotPassNewDeltaRule() {
+  const harness = await createHarness({
+    matchState: {
+      players: [
+        ...Array.from({ length: 47 }, (_, index) => ({
+          name: `Team1-${index + 1}`,
+          steamId: `steam-team1-${index + 1}`,
+          teamId: 1,
+          squadId: 0,
+        })),
+        ...Array.from({ length: 52 }, (_, index) => ({
+          name: `Team2-${index + 1}`,
+          steamId: `steam-team2-${index + 1}`,
+          teamId: 2,
+          squadId: 0,
+        })),
+      ],
+    },
+  });
+
+  try {
+    const created = await harness.plugin.api.simulateChatMessage({
+      message: "sqtb",
+      steamId: "steam-team1-1",
+      playerName: "Team1-1",
+    });
+
+    assert.equal(created.ok, true);
+
+    const claimed = await harness.plugin.api.simulateChatMessage({
+      message: created.claimMessage,
+      steamId: "steam-team2-1",
+      playerName: "Team2-1",
+    });
+
+    assert.equal(claimed.ok, false);
+    assert.equal(claimed.error, "TeamDeltaExceeded");
+    assert.equal(harness.teamBalanceCalls.length, 0);
   } finally {
     await harness.stop();
   }
@@ -709,10 +818,13 @@ await testTbAllowsSwitchFromLargerTeam();
 await testTbAllowsSwitchFromLargerTeamAtFortyNineVsFortyEight();
 await testGreenBalanceTbBypassesBasicLayerButUsesRoundQuota();
 await testGreenBalanceTbStillRejectsRoundReuse();
-await testTbRejectsWhenSwitchWouldNotImproveBalance();
+await testTbAllowsLargeDeltaWhenSwitchImprovesBalance();
+await testTbAllowsSwitchWhenPostSwitchDeltaIsWithinThree();
+await testTbRejectsWhenSwitchWouldNotImproveBalanceAndWouldStillExceedThree();
 await testSqtbRejectBroadcastsOnIntercept();
 await testTbUsesLivePlayersForCountsAndIncludesCountsInError();
 await testSqtbCreatesRequestAndClaimExecutes();
+await testSqtbClaimRejectsWhenApplicantSwitchWouldNotPassNewDeltaRule();
 await testSqtbDirectApproveStillWorks();
 await testHistoryIncludesClaimAndApprovalEvents();
 await testHistoryIncludesClaimAndApprovalRejections();

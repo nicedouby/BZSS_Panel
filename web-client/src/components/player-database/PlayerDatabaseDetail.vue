@@ -64,6 +64,10 @@
                 <span class="info-label">{{ t("database.updatedAt") }}</span>
                 <strong class="info-value">{{ formatTime(detail.player?.updated_at) }}</strong>
               </div>
+              <div class="info-item">
+                <span class="info-label">当前 IP</span>
+                <strong class="info-value">{{ detail.player?.current_ip || "--" }}</strong>
+              </div>
             </div>
           </div>
 
@@ -90,6 +94,20 @@
                 <span class="alias-time">{{ formatTime(alias.seen_at) }}</span>
               </div>
               <p v-if="!(detail.aliases || []).length" class="empty-hint">{{ t("common.none") }}</p>
+            </div>
+          </div>
+
+          <div class="detail-card detail-card-wide">
+            <h3>进退服记录</h3>
+            <div class="timeline-list">
+              <div v-for="item in detail.sessionHistory || []" :key="item.id" class="timeline-item">
+                <div class="timeline-main">
+                  <strong>{{ formatSessionLine(item) }}</strong>
+                  <small v-if="item.duration_seconds != null">{{ formatDuration(item.duration_seconds) }}</small>
+                </div>
+                <span class="timeline-time">{{ formatTime(item.joined_at) }}</span>
+              </div>
+              <p v-if="!(detail.sessionHistory || []).length" class="empty-hint">{{ t("common.none") }}</p>
             </div>
           </div>
 
@@ -152,6 +170,20 @@ function formatAssetAmount(value: unknown) {
   return new Intl.NumberFormat(currentLocale.value, {
     maximumFractionDigits: amount % 1 === 0 ? 0 : 2,
   }).format(amount);
+}
+
+function formatDuration(value: unknown) {
+  const totalSeconds = Math.max(0, Math.floor(Number(value ?? 0)));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}m ${seconds}s`;
+}
+
+function formatSessionLine(item: any) {
+  const joined = formatTime(item?.joined_at);
+  const left = item?.left_at ? formatTime(item.left_at) : "";
+  if (left) return `${joined} 加入，${left} 离开`;
+  return `${joined} 加入了游戏`;
 }
 
 async function copyIp(ip: string) {
@@ -249,6 +281,10 @@ async function copyIp(ip: string) {
   gap: 12px;
 }
 
+.detail-card-wide {
+  grid-column: 1 / -1;
+}
+
 .detail-card h3 {
   margin: 0;
   font-size: 14px;
@@ -323,6 +359,37 @@ async function copyIp(ip: string) {
 .session-list {
   display: grid;
   gap: 8px;
+}
+
+.timeline-list {
+  display: grid;
+  gap: 8px;
+}
+
+.timeline-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+}
+
+.timeline-main {
+  display: grid;
+  gap: 4px;
+}
+
+.timeline-main strong {
+  color: var(--color-text-primary);
+  font-size: 13px;
+}
+
+.timeline-main small,
+.timeline-time {
+  color: var(--color-text-muted);
+  font-size: 11px;
 }
 
 .session-item {
