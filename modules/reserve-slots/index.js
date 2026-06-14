@@ -222,7 +222,7 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
 
     const resolvedAdminFilePath = resolveConfigPath(adminFilePath, "");
     try {
-      const content = await fs.readFile(resolvedAdminFilePath, "utf8");
+      let content = await fs.readFile(resolvedAdminFilePath, "utf8");
       const importedAt = new Date().toISOString();
       const parsed = parseReserveSlotsFromAdminFileContent(content, {
         adminFilePath,
@@ -237,6 +237,11 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
         playerDatabase: modules?.playerDatabase,
         runtimeState: core?.runtimeState,
       });
+      const namedSync = syncReserveMemberNamesInAdminFileContent(content, parsed.members);
+      if (namedSync.changed) {
+        content = namedSync.content;
+        await writeTextFileAtomic(resolvedAdminFilePath, content);
+      }
 
       const nextStore = mergeStoreWithCdkData(runtime.store, parsed);
       await persistStore(runtime.resolvedLocalReserveFilePath, nextStore);
@@ -806,7 +811,7 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
       group: DEFAULT_RESERVE_GROUP,
       expireAt,
       name: playerName,
-      reason: `CDK:${batch.codeType}:${code}`,
+      reason: "",
     });
     return expireAt;
   }
@@ -1125,6 +1130,65 @@ function formatReserveMemberLine(member) {
     commentParts.push(member.reason);
   }
   return `Admin=${member.steamId}:${member.group} //${commentParts.join(" ")}`;
+}
+
+export function syncReserveMemberNamesInAdminFileContent(content, members = []) {
+  const text = String(content ?? "");
+  const newline = text.includes("\r\n") ? "\r\n" : "\n";
+  const hadTrailingNewline = /\r?\n$/.test(text);
+  const lines = text.split(/\r?\n/);
+  if (lines.length && lines[lines.length - 1] === "" && hadTrailingNewline) lines.pop();
+
+  const markerIndex = lines.findIndex((line) => RESERVE_MARKER_RE.test(line));
+  if (markerIndex < 0) {
+    return {
+      content: `${lines.join(newline)}${hadTrailingNewline ? newline : ""}`,
+      changed: false,
+      updatedSteamIds: [],
+    };
+  }
+
+  const memberNameMap = new Map(
+    (Array.isArray(members) ? members : [])
+      .map((member) => [String(member?.steamId ?? "").trim(), String(member?.name ?? "").trim()])
+      .filter(([steamId, name]) => steamId && name),
+  );
+  if (!memberNameMap.size) {
+    return {
+      content: `${lines.join(newline)}${hadTrailingNewline ? newline : ""}`,
+      changed: false,
+      updatedSteamIds: [],
+    };
+  }
+
+  const reserveRange = findReserveBlockRange(lines, markerIndex);
+  const updatedSteamIds = [];
+  let changed = false;
+
+  for (let index = reserveRange.start; index < reserveRange.end; index += 1) {
+    const parsed = parseReserveMemberLine(String(lines[index] ?? "").trim());
+    if (!parsed) continue;
+    if (String(parsed.name ?? "").trim()) continue;
+
+    const syncedName = memberNameMap.get(parsed.steamId) || "";
+    if (!syncedName) continue;
+
+    lines[index] = formatReserveMemberLine({
+      steamId: parsed.steamId,
+      group: parsed.group,
+      expireAt: parsed.expireAt,
+      name: syncedName,
+      reason: Array.isArray(parsed.reasons) ? parsed.reasons.join(" | ") : "",
+    });
+    updatedSteamIds.push(parsed.steamId);
+    changed = true;
+  }
+
+  return {
+    content: `${lines.join(newline)}${hadTrailingNewline ? newline : ""}`,
+    changed,
+    updatedSteamIds: [...new Set(updatedSteamIds)],
+  };
 }
 
 function findReserveBlockRange(lines, markerIndex) {

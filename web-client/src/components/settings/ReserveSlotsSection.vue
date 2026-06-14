@@ -39,6 +39,9 @@
         >
           {{ tab.label }}
         </button>
+        <button type="button" class="reserve-tab" :class="{ active: batchWindow.open }" @click="openBatchWindow">
+          CDK批次窗口
+        </button>
       </div>
 
       <section v-if="activeTab === 'manual'" class="reserve-tab-panel">
@@ -339,8 +342,18 @@
           </div>
         </div>
 
+        <div class="cdk-toolbar">
+          <div>
+            <h4>CDK 批次列表</h4>
+            <p class="subtitle">批次单独成列表，新增入口改为按钮。</p>
+          </div>
+          <button type="button" class="reserve-btn primary" :disabled="!canEdit" @click="openBatchCreateModal">
+            新增批次
+          </button>
+        </div>
+
         <div class="cdk-batch-grid">
-          <article class="cdk-batch-card batch-create-card">
+          <article v-if="false" class="cdk-batch-card batch-create-card">
             <div class="cdk-batch-head">
               <div>
                 <div class="cdk-batch-title-row">
@@ -357,7 +370,13 @@
             </div>
           </article>
 
-          <article v-for="batch in cdkBatches" :key="batch.id" class="cdk-batch-card">
+          <article
+            v-for="batch in cdkBatches"
+            :key="batch.id"
+            class="cdk-batch-card"
+            :class="{ active: selectedBatchId === batch.id }"
+            @click="selectedBatchId = batch.id"
+          >
             <div class="cdk-batch-head">
               <div>
                 <div class="cdk-batch-title-row">
@@ -600,6 +619,105 @@
         <div v-else class="reserve-empty card-empty">该批次没有可展示的 CDK。</div>
       </section>
     </div>
+
+    <div v-if="batchWindow.open" class="modal-backdrop" @click.self="closeBatchWindow">
+      <section class="modal-panel batch-window-modal">
+        <header>
+          <div>
+            <h2>CDK 批次窗口</h2>
+            <p class="subtitle">专门查看、创建、复制和报销 CDK 批次。</p>
+          </div>
+          <button class="icon-button" type="button" @click="closeBatchWindow">脳</button>
+        </header>
+
+        <div class="reserve-summary-grid compact-grid">
+          <div class="reserve-summary-card">
+            <span>有效批次</span>
+            <strong>{{ cdkState?.summary.batchCount ?? 0 }}</strong>
+          </div>
+          <div class="reserve-summary-card active">
+            <span>剩余 CDK</span>
+            <strong>{{ cdkState?.summary.remainingCodeCount ?? 0 }}</strong>
+          </div>
+          <div class="reserve-summary-card expired">
+            <span>已用 CDK</span>
+            <strong>{{ cdkState?.summary.usedCodeCount ?? 0 }}</strong>
+          </div>
+          <div class="reserve-summary-card subtle">
+            <span>停用批次</span>
+            <strong>{{ cdkState?.summary.deactivatedBatchCount ?? 0 }}</strong>
+          </div>
+        </div>
+
+        <div class="cdk-toolbar">
+          <div>
+            <h4>CDK 批次列表</h4>
+            <p class="subtitle">窗口内集中处理，不再挤在主页面。</p>
+          </div>
+          <button type="button" class="reserve-btn primary" :disabled="!canEdit" @click="openBatchCreateModal">
+            新增批次
+          </button>
+        </div>
+
+        <div v-if="!cdkBatches.length" class="reserve-empty card-empty">暂无有效 CDK 批次。</div>
+        <div v-else class="cdk-batch-grid batch-window-grid">
+          <article
+            v-for="batch in cdkBatches"
+            :key="batch.id"
+            class="cdk-batch-card"
+            :class="{ active: selectedBatchId === batch.id }"
+            @click="selectedBatchId = batch.id"
+          >
+            <div class="cdk-batch-head">
+              <div>
+                <div class="cdk-batch-title-row">
+                  <strong>{{ batch.codeType }}</strong>
+                  <span class="reserve-pill active">有效</span>
+                </div>
+                <p class="cdk-batch-meta mono">{{ batch.id }}</p>
+              </div>
+              <div class="cdk-batch-actions">
+                <button type="button" class="reserve-mini-btn" @click.stop="openBatchDetail(batch)">查看概览</button>
+                <button type="button" class="reserve-mini-btn" @click.stop="openBatchRecords(batch)">查看激活记录</button>
+                <button type="button" class="reserve-mini-btn danger" :disabled="!canEdit || batchActionLoadingId === batch.id" @click.stop="confirmDeactivateBatch(batch)">
+                  {{ batchActionLoadingId === batch.id ? "处理中..." : "报销" }}
+                </button>
+              </div>
+            </div>
+
+            <div class="cdk-batch-metrics">
+              <div class="cdk-metric">
+                <span>数量</span>
+                <strong>{{ batch.quantity }}</strong>
+              </div>
+              <div class="cdk-metric">
+                <span>已用</span>
+                <strong>{{ batch.usedCount }}</strong>
+              </div>
+              <div class="cdk-metric">
+                <span>剩余</span>
+                <strong>{{ batch.remainingCount }}</strong>
+              </div>
+              <div class="cdk-metric">
+                <span>激活天数</span>
+                <strong>{{ batch.durationDays }}</strong>
+              </div>
+              <div class="cdk-metric">
+                <span>激活记录</span>
+                <strong>{{ batch.activationCount ?? 0 }}</strong>
+              </div>
+            </div>
+
+            <div class="cdk-batch-details">
+              <span>同玩家可重复激活：{{ batch.allowMultiActivation ? "允许" : "禁止" }}</span>
+              <span>创建时间：{{ formatDate(batch.createdAt) }}</span>
+              <span>创建人：{{ batch.createdBy || "system" }}</span>
+              <span>格式：CDK{{ batch.codeType }}XXXXXXXXXXXXXXA</span>
+            </div>
+          </article>
+        </div>
+      </section>
+    </div>
   </section>
 </template>
 
@@ -715,6 +833,10 @@ const detailModal = reactive<{
   batch: null,
 });
 
+const batchWindow = reactive({
+  open: false,
+});
+
 const form = reactive({
   steamId: "",
   group: "BZSSVIP",
@@ -734,6 +856,7 @@ const batchForm = reactive<CreateReserveSlotCdkBatchPayload>({
 const canEdit = computed(() => Boolean(props.canEdit));
 const memberRows = computed(() => Array.isArray(state.value?.members) ? state.value.members : []);
 const cdkBatches = computed(() => cdkState.value?.batches ?? []);
+const selectedBatchId = ref("");
 const groupOptions = computed(() => {
   const groups = (state.value?.groups ?? [])
     .filter((group) => group.permission === "reserve")
@@ -758,6 +881,13 @@ const selectedMember = computed(() => {
   return memberRows.value.find((member) => member.steamId === selectedSteamId.value)
     ?? filteredMemberRows.value[0]
     ?? memberRows.value[0]
+    ?? null;
+});
+
+const currentBatch = computed(() => {
+  if (!cdkBatches.value.length) return null;
+  return cdkBatches.value.find((batch) => batch.id === selectedBatchId.value)
+    ?? cdkBatches.value[0]
     ?? null;
 });
 
@@ -819,6 +949,16 @@ onUnmounted(() => {
 watch(groupOptions, (groups) => {
   if (!groups.includes(form.group)) {
     form.group = groups[0] ?? "BZSSVIP";
+  }
+}, { immediate: true });
+
+watch(cdkBatches, (batches) => {
+  if (!batches.length) {
+    selectedBatchId.value = "";
+    return;
+  }
+  if (!batches.some((batch) => batch.id === selectedBatchId.value)) {
+    selectedBatchId.value = batches[0].id;
   }
 }, { immediate: true });
 
@@ -1083,7 +1223,16 @@ function openPlayerDatabase(value: string) {
   goToPlayerDatabaseSearch(router, value);
 }
 
+function openBatchWindow() {
+  batchWindow.open = true;
+}
+
+function closeBatchWindow() {
+  batchWindow.open = false;
+}
+
 function openBatchCreateModal() {
+  batchWindow.open = true;
   batchModalOpen.value = true;
 }
 
@@ -1099,8 +1248,10 @@ async function submitBatchCreate() {
   try {
     const result = await createReserveSlotCdkBatch(batchForm);
     cdkState.value = result;
+    selectedBatchId.value = result.createdBatchId ?? result.batches?.[0]?.id ?? "";
+    batchWindow.open = true;
     batchModalOpen.value = false;
-    activeTab.value = "batches";
+    activeTab.value = "manual";
     notice.value = result.message ?? "CDK 批次已创建。";
     detailModal.batch = result.batches.find((item) => item.id === result.createdBatchId) ?? null;
     detailModal.open = Boolean(detailModal.batch);
@@ -1131,6 +1282,9 @@ async function deactivateBatch(batch: ReserveSlotCdkBatch) {
   try {
     const result = await deactivateReserveSlotCdkBatch(batch.id);
     cdkState.value = result;
+    if (selectedBatchId.value === batch.id) {
+      selectedBatchId.value = result.batches?.[0]?.id ?? "";
+    }
     if (detailModal.batch?.id === batch.id) {
       closeBatchDetail();
     }
@@ -1442,7 +1596,7 @@ function fromDatetimeLocal(value: string) {
 .cdk-batch-card,
 .card-empty,
 .modal-panel {
-  padding: 14px;
+  padding: 12px;
 }
 
 .reserve-state-box.error {
@@ -1456,13 +1610,13 @@ function fromDatetimeLocal(value: string) {
 .reserve-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .reserve-summary-card {
   display: grid;
-  gap: 6px;
-  padding: 14px;
+  gap: 4px;
+  padding: 10px 12px;
 }
 
 .reserve-summary-card span {
@@ -1471,7 +1625,7 @@ function fromDatetimeLocal(value: string) {
 }
 
 .reserve-summary-card strong {
-  font-size: 24px;
+  font-size: 22px;
   line-height: 1;
 }
 
@@ -1788,15 +1942,24 @@ function fromDatetimeLocal(value: string) {
 
 .cdk-batch-grid {
   display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 6px;
+  grid-template-columns: minmax(0, 1fr);
   overflow: auto;
   padding-right: 2px;
+  align-content: start;
 }
 
 .cdk-batch-card {
   display: grid;
-  gap: 12px;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.cdk-batch-card.active {
+  border-color: #60a5fa9a;
+  background:
+    linear-gradient(180deg, rgba(37, 99, 235, 0.18), rgba(37, 99, 235, 0.08)),
+    rgba(255,255,255,0.02);
 }
 
 .batch-create-card {
@@ -1806,59 +1969,64 @@ function fromDatetimeLocal(value: string) {
 .cdk-batch-head {
   display: flex;
   justify-content: space-between;
-  gap: 10px;
+  gap: 6px;
   align-items: flex-start;
 }
 
 .cdk-batch-title-row {
   display: flex;
-  gap: 8px;
+  gap: 4px;
   align-items: center;
   flex-wrap: wrap;
 }
 
 .cdk-batch-metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
 }
 
 .cdk-metric {
   display: grid;
-  gap: 4px;
-  padding: 10px;
-  border-radius: 8px;
+  gap: 1px;
+  padding: 5px 6px;
+  border-radius: 5px;
   border: 1px solid rgba(255,255,255,0.06);
   background: rgba(255,255,255,0.03);
 }
 
 .cdk-metric span {
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: 10px;
 }
 
 .cdk-metric strong {
-  font-size: 20px;
+  font-size: 15px;
+  line-height: 1.1;
 }
 
 .cdk-batch-details {
   display: grid;
-  gap: 4px;
+  gap: 1px;
+  font-size: 10px;
+  line-height: 1.35;
 }
 
 .created-code-list {
   display: grid;
-  gap: 6px;
-  max-height: 240px;
+  gap: 4px;
+  max-height: 220px;
   overflow: auto;
 }
 
 .created-code-list code {
   display: block;
-  padding: 8px 10px;
-  border-radius: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(255,255,255,0.06);
+  font-size: 12px;
+  line-height: 1.25;
 }
 
 .activation-table-wrap {
@@ -1905,7 +2073,7 @@ function fromDatetimeLocal(value: string) {
 .modal-panel {
   width: min(720px, 100%);
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 
 .modal-panel.compact {
@@ -1916,12 +2084,47 @@ function fromDatetimeLocal(value: string) {
 .modal-panel footer {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  align-items: flex-start;
+  gap: 10px;
+  align-items: center;
+}
+
+.modal-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.compact-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.detail-stack {
+  gap: 3px;
+}
+
+.cdk-batch-actions .reserve-mini-btn {
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.cdk-batch-meta {
+  font-size: 11px;
+  line-height: 1.2;
 }
 
 .records-modal {
   max-height: min(80vh, 900px);
+}
+
+.batch-window-modal {
+  width: min(1180px, 100%);
+  max-height: min(86vh, 980px);
+  overflow: hidden;
+}
+
+.batch-window-grid {
+  min-height: 0;
+  max-height: 100%;
 }
 
 .checkbox-row {

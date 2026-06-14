@@ -10,6 +10,7 @@ import {
   ensureReserveSlotStoreFile,
   parseReserveSlotsFromAdminFileContent,
   removeReserveSlotMembersFromAdminFileContent,
+  syncReserveMemberNamesInAdminFileContent,
   upsertReserveSlotInAdminFileContent,
 } from "../modules/reserve-slots/index.js";
 
@@ -313,6 +314,30 @@ async function testReserveSlotUniquenessDedupesExistingEntries() {
   assert.match(next, /Admin=76561198377609640:BZSSVIP \/\/2099-08-02 21:26:59 名称:Alpha3/);
 }
 
+async function testSyncReserveMemberNamesInAdminFileContentFillsMissingNames() {
+  const seeded = upsertReserveSlotInAdminFileContent(["header", "footer"].join("\n"), {
+    steamId: "76561198377609640",
+    group: "BZSSVIP",
+    expireAt: "2099-06-02 21:26:59",
+  });
+  const content = upsertReserveSlotInAdminFileContent(seeded, {
+    steamId: "76561198992120471",
+    group: "BZSSVIP",
+    expireAt: "2099-06-06 22:31:03",
+    name: "Bravo",
+  });
+
+  const result = syncReserveMemberNamesInAdminFileContent(content, [
+    { steamId: "76561198377609640", name: "Alpha" },
+    { steamId: "76561198992120471", name: "BravoNew" },
+  ]);
+
+  assert.equal(result.changed, true);
+  assert.deepEqual(result.updatedSteamIds, ["76561198377609640"]);
+  assert.match(result.content, /Admin=76561198377609640:BZSSVIP \/\/2099-06-02 21:26:59 名称:Alpha/);
+  assert.match(result.content, /Admin=76561198992120471:BZSSVIP \/\/2099-06-06 22:31:03 名称:Bravo/);
+}
+
 async function testCdkBatchAndChatActivationFlow() {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "reserve-slots-cdk-"));
   const adminFilePath = path.join(tempDir, "Admins.cfg");
@@ -417,6 +442,7 @@ async function testCdkBatchAndChatActivationFlow() {
 
   const adminContent = await fs.readFile(adminFilePath, "utf8");
   assert.match(adminContent, /Admin=76561198377609640:BZSSVIP/);
+  assert.doesNotMatch(adminContent, /CDK:VIP:/);
 
   await reserveModule.stop();
   await fs.rm(tempDir, { recursive: true, force: true });
@@ -642,6 +668,7 @@ await testUpsertAdminFileContentUpdatesExistingMember();
 await testUpsertAdminFileContentValidatesInput();
 await testRemoveReserveSlotMembersFromAdminFileContent();
 await testReserveSlotUniquenessDedupesExistingEntries();
+await testSyncReserveMemberNamesInAdminFileContentFillsMissingNames();
 await testCdkBatchAndChatActivationFlow();
 await testManualExtendAddsFromExistingExpiry();
 await testModuleAndRoutesWorkEndToEnd();
