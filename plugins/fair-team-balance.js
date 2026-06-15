@@ -815,7 +815,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       if (!sideCheck.ok) return sideCheck;
 
       const logClockSeconds = Number(webStatus?.logClockSeconds ?? 0);
-      if (!isWithinTbWindow(logClockSeconds)) {
+      if (!Boolean(webStatus?.isWarmup) && !isWithinTbWindow(logClockSeconds)) {
         return { ok: false, error: "WindowClosed", message: "tb 仅在开局 20 到 120 秒之间可用。" };
       }
 
@@ -887,7 +887,7 @@ function validateTbBeforeSwitch({ playerKey, playerName, player, matchState, web
     }
 
     const logClockSeconds = Number(webStatus?.logClockSeconds ?? 0);
-    if (!isWithinTbWindow(logClockSeconds)) {
+    if (!Boolean(webStatus?.isWarmup) && !isWithinTbWindow(logClockSeconds)) {
       return { ok: false, error: "WindowClosed", message: "tb 仅在开局 20 到 120 秒之间可用。" };
     }
 

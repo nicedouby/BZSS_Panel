@@ -772,6 +772,7 @@ import {
 } from "../../app/reserveSlotsApi";
 import { searchPlayers, type SearchablePlayer } from "../../features/group-report/playerSearch";
 import { useUiStore } from "../../stores/ui.store";
+import { copyTextWithToast } from "../../utils/clipboard";
 import { goToPlayerDatabaseSearch } from "../../utils/player-database";
 
 type ActiveTab = "manual" | "batches" | "activations";
@@ -1363,14 +1364,13 @@ function closeBatchRecords() {
 async function copyBatchCodes(batch: ReserveSlotCdkBatch) {
   const codes = (batch.codes ?? []).filter(Boolean);
   if (!codes.length) return;
-  try {
-    await navigator.clipboard.writeText(codes.join("\n"));
-    notice.value = `已复制批次 ${batch.codeType} / ${batch.id} 的全部 CDK。`;
-  } catch {
-    notice.value = "复制失败，请手动选择复制。";
-  }
+  const copied = await copyTextWithToast(codes.join("\n"), ui, {
+    label: `${batch.codeType} CDK`,
+    successMessage: `Copied all CDK codes for batch ${batch.codeType} / ${batch.id}.`,
+    errorMessage: "Copy failed. Please select and copy manually.",
+  });
+  if (copied) notice.value = `Copied all CDK codes for batch ${batch.codeType} / ${batch.id}.`;
 }
-
 function resolveBatchLabel(batchId: string | null, codeType: string | null) {
   if (!batchId) return codeType || "-";
   const batch = cdkBatches.value.find((item) => item.id === batchId);

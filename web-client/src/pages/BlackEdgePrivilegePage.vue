@@ -229,8 +229,11 @@ import {
 } from "../app/blackEdgePrivilegeApi";
 import { ApiError } from "../app/apiClient";
 import { useAuthStore } from "../stores/auth.store";
+import { useUiStore } from "../stores/ui.store";
+import { copyTextWithToast } from "../utils/clipboard";
 
 const auth = useAuthStore();
+const ui = useUiStore();
 const canEdit = computed(() => Boolean(auth.user?.isSuperAdmin));
 
 const loading = ref(false);
@@ -357,24 +360,23 @@ function closeRecords() {
 async function copyBatchCodes(batch: BlackEdgeCdkBatch) {
   const codes = (batch.codes ?? []).filter(Boolean);
   if (!codes.length) return;
-  try {
-    await navigator.clipboard.writeText(codes.join("\n"));
-    notice.value = `已复制 ${batch.codeType} 批次的全部 CDK。`;
-  } catch {
-    notice.value = "复制失败，请手动选择复制。";
-  }
+  const copied = await copyTextWithToast(codes.join("\n"), ui, {
+    label: `${batch.codeType} CDK`,
+    successMessage: `Copied all CDK codes for batch ${batch.codeType}.`,
+    errorMessage: "Copy failed. Please select and copy manually.",
+  });
+  if (copied) notice.value = `Copied all CDK codes for batch ${batch.codeType}.`;
 }
 
 async function copyCreatedCodes() {
   if (!createdCodes.value.length) return;
-  try {
-    await navigator.clipboard.writeText(createdCodes.value.join("\n"));
-    notice.value = "最近生成的黑奴跳边 CDK 已复制。";
-  } catch {
-    notice.value = "复制失败，请手动选择复制。";
-  }
+  const copied = await copyTextWithToast(createdCodes.value.join("\n"), ui, {
+    label: "CDK",
+    successMessage: "Recent black-edge CDK codes copied.",
+    errorMessage: "Copy failed. Please select and copy manually.",
+  });
+  if (copied) notice.value = "Recent black-edge CDK codes copied.";
 }
-
 function formatTime(value: string | null | undefined) {
   if (!value) return "-";
   const date = new Date(value);
@@ -385,19 +387,19 @@ function formatTime(value: string | null | undefined) {
 function resultLabel(result: string, failureReason: string) {
   switch (result) {
     case "success":
-      return "成功";
+      return "Success";
     case "code_used":
-      return "CDK 已使用";
+      return "CDK used";
     case "duplicate_player_restricted":
-      return "重复限制";
+      return "Duplicate player restricted";
     case "batch_deactivated":
-      return "批次停用";
+      return "Batch deactivated";
     case "code_not_found":
-      return "无此 CDK";
+      return "CDK not found";
     case "type_mismatch":
-      return "类型不匹配";
+      return "Type mismatch";
     case "invalid_player":
-      return "玩家无效";
+      return "Invalid player";
     default:
       return failureReason || result || "-";
   }
@@ -406,9 +408,11 @@ function resultLabel(result: string, failureReason: string) {
 function renderError(err: unknown) {
   if (err instanceof ApiError) return err.message;
   if (err instanceof Error) return err.message;
-  return "黑奴跳边 CDK 页面请求失败。";
+  return "Black-edge CDK page request failed.";
 }
 </script>
+
+
 
 <style scoped>
 .black-edge-page {

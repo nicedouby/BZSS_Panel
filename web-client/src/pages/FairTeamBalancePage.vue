@@ -374,6 +374,10 @@
               <span v-if="entry.reason" class="history-reason">原因: {{ entry.reason }}</span>
               <span v-if="entry.message" class="history-message">消息: {{ entry.message }}</span>
             </div>
+
+            <div v-if="entry.details.length" class="history-details">
+              <span v-for="detail in entry.details" :key="detail">{{ detail }}</span>
+            </div>
           </article>
         </div>
       </PageCard>
@@ -424,6 +428,7 @@ interface FairTeamBalanceHistoryEntry {
   actorName: string;
   reason: string;
   message: string;
+  details: string[];
 }
 
 interface FairTeamBalancePlayerQuota {
@@ -509,7 +514,7 @@ const resettingAction = ref<"" | "period" | "round">("");
 const detailTab = ref<"quota" | "requests" | "history">("quota");
 const nowMs = ref(Date.now());
 let timer: number | null = null;
-let requestsTimer: number | null = null;
+let autoRefreshTimer: number | null = null;
 let visibilityRefreshHandler: (() => void) | null = null;
 
 const systemStatusLabel = computed(() => {
@@ -549,14 +554,14 @@ onMounted(() => {
   timer = window.setInterval(() => {
     nowMs.value = Date.now();
   }, 1000);
-  requestsTimer = window.setInterval(() => {
-    if (document.visibilityState === "visible" && !loadingRequests.value) {
-      void loadRequests();
+  autoRefreshTimer = window.setInterval(() => {
+    if (document.visibilityState === "visible") {
+      void refreshLiveData();
     }
-  }, 1200);
+  }, 2500);
   visibilityRefreshHandler = () => {
-    if (document.visibilityState === "visible" && !loadingRequests.value) {
-      void loadRequests();
+    if (document.visibilityState === "visible") {
+      void refreshLiveData();
     }
   };
   document.addEventListener("visibilitychange", visibilityRefreshHandler);
@@ -568,9 +573,9 @@ onBeforeUnmount(() => {
     window.clearInterval(timer);
     timer = null;
   }
-  if (requestsTimer != null) {
-    window.clearInterval(requestsTimer);
-    requestsTimer = null;
+  if (autoRefreshTimer != null) {
+    window.clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
   }
   if (visibilityRefreshHandler) {
     document.removeEventListener("visibilitychange", visibilityRefreshHandler);
@@ -581,10 +586,15 @@ onBeforeUnmount(() => {
 
 async function refreshPanel() {
   quotaError.value = "";
+  await refreshLiveData();
+}
+
+async function refreshLiveData() {
   await Promise.all([loadState(), loadRequests(), loadHistory(), loadBroadcastState()]);
 }
 
 async function loadState() {
+  if (loadingState.value) return;
   loadingState.value = true;
   stateError.value = "";
   try {
@@ -614,6 +624,7 @@ async function loadRequests() {
 }
 
 async function loadHistory() {
+  if (loadingHistory.value) return;
   loadingHistory.value = true;
   historyError.value = "";
   try {
@@ -629,6 +640,7 @@ async function loadHistory() {
 }
 
 async function loadBroadcastState() {
+  if (loadingBroadcasts.value) return;
   loadingBroadcasts.value = true;
   broadcastError.value = "";
   try {
@@ -864,22 +876,116 @@ function normalizeHistoryEntry(value: any): FairTeamBalanceHistoryEntry {
 
   let typeLabel = type;
   let statusClass = "info";
+  const details = new Set<string>();
+
+  const addDetail = (label: string, raw?: string | number | boolean | null | undefined) => {
+    if (raw === null || raw === undefined || raw === "") return;
+    details.add(`${label}: ${String(raw)}`);
+  };
+
+  addDetail("来源", value?.source);
+  addDetail("服务器", value?.serverId);
+  addDetail("申请码", value?.code);
+  addDetail("请求ID", value?.requestId);
+  addDetail("玩家", value?.playerName || value?.applicant?.playerName || value?.steamId || value?.applicant?.steamId);
+  addDetail("申请人 Steam", value?.applicant?.steamId);
+  addDetail("申请人 EOS", value?.applicant?.eosId);
+  addDetail("认领人", claimantName);
+  addDetail("认领人 Steam", value?.claimant?.steamId);
+  addDetail("审批人", approverName);
+  addDetail("拒绝人", rejectorName);
+  addDetail("模式", value?.mode);
+  addDetail("事件", value?.sourceMessageId || value?.relatedEventId);
+  addDetail("剩余公共TB", value?.roundPublicTbRemainingAfter);
+  addDetail("直接审批", value?.directApproval ? "是" : "否");
+  addDetail("有效期至", value?.expiresAt);
+  addDetail("执行结果", value?.teamBalanceResult?.message);
+  addDetail("执行命令", value?.teamBalanceResult?.command);
+  addDetail("审批状态", value?.statusLabel || value?.status);
 
   switch(type) {
-    case "TB_REQUESTED": typeLabel = "请求 TB"; statusClass = "info"; break;
-    case "TB_EXECUTED": typeLabel = "TB 执行完成"; statusClass = "ok"; break;
-    case "TB_REJECTED": typeLabel = "TB 被拒绝"; statusClass = "danger"; break;
-    case "SQTB_CREATED": typeLabel = "发起 SQTB"; statusClass = "info"; break;
-    case "SQTB_CLAIMED": typeLabel = "认领 SQTB"; statusClass = "info"; actorName = claimantName || actorName; break;
-    case "SQTB_CLAIM_REJECTED": typeLabel = "认领被拒绝"; statusClass = "danger"; actorName = claimantName || actorName; break;
-    case "SQTB_APPROVAL_REJECTED": typeLabel = "准许被拒绝"; statusClass = "danger"; actorName = approverName || actorName; break;
-    case "SQTB_APPROVED": typeLabel = "准许 SQTB"; statusClass = "ok"; actorName = approverName || claimantName || actorName; break;
-    case "SQTB_REJECTED": typeLabel = "SQTB 被拒绝"; statusClass = "danger"; break;
-    case "SQTB_EXPIRED": typeLabel = "SQTB 已过期"; statusClass = "warning"; break;
+    case "TB_REQUESTED":
+      typeLabel = "请求 TB";
+      statusClass = "info";
+      break;
+    case "TB_EXECUTED":
+      typeLabel = "TB 执行完成";
+      statusClass = "ok";
+      break;
+    case "TB_REJECTED":
+      typeLabel = "TB 被拒绝";
+      statusClass = "danger";
+      break;
+    case "SQTB_CREATED":
+      typeLabel = "发起 SQTB";
+      statusClass = "info";
+      break;
+    case "SQTB_CLAIMED":
+      typeLabel = "认领 SQTB";
+      statusClass = "info";
+      actorName = claimantName || actorName;
+      break;
+    case "SQTB_CLAIM_REJECTED":
+      typeLabel = "认领被拒绝";
+      statusClass = "danger";
+      actorName = claimantName || actorName;
+      break;
+    case "SQTB_APPROVAL_REJECTED":
+      typeLabel = "审批被拒绝";
+      statusClass = "danger";
+      actorName = approverName || actorName;
+      break;
+    case "SQTB_APPROVED":
+      typeLabel = "SQTB 审批通过";
+      statusClass = "ok";
+      actorName = approverName || claimantName || actorName;
+      break;
+    case "SQTB_REJECTED":
+      typeLabel = "SQTB 被拒绝";
+      statusClass = "danger";
+      break;
+    case "SQTB_EXPIRED":
+      typeLabel = "SQTB 已过期";
+      statusClass = "warning";
+      break;
+    case "ROUND_RESET":
+      typeLabel = "当局额度重置";
+      statusClass = "warning";
+      break;
+    case "PERIOD_RESET":
+      typeLabel = "周期额度重置";
+      statusClass = "warning";
+      break;
   }
 
   if (type === "SQTB_REJECTED") {
     actorName = rejectorName || approverName || claimantName || actorName;
+  }
+
+  if (type === "ROUND_RESET") {
+    addDetail("重置原因", value?.reason);
+  }
+
+  if (type === "PERIOD_RESET") {
+    addDetail("玩家", value?.playerName || value?.steamId || value?.playerKey);
+  }
+
+  if (type === "TB_EXECUTED" || type === "TB_REJECTED" || type === "TB_REQUESTED") {
+    addDetail("Steam", value?.steamId);
+    addDetail("EOS", value?.eosId);
+  }
+
+  if (type === "SQTB_CREATED" || type === "SQTB_CLAIMED" || type === "SQTB_APPROVED" || type === "SQTB_REJECTED" || type === "SQTB_EXPIRED") {
+    addDetail("申请人", applicantName);
+  }
+
+  if (type === "SQTB_CLAIMED") {
+    addDetail("认领状态", value?.statusLabel || value?.status);
+  }
+
+  if (type === "SQTB_APPROVED") {
+    addDetail("审批方式", value?.directApproval ? "直接审批" : "认领审批");
+    addDetail("审批结果", value?.teamBalanceResult?.message);
   }
 
   return {
@@ -890,6 +996,7 @@ function normalizeHistoryEntry(value: any): FairTeamBalanceHistoryEntry {
     actorName: String(actorName),
     reason: String(value?.reason ?? value?.rejectedReason ?? ""),
     message: String(value?.message ?? ""),
+    details: [...details],
   };
 }
 
@@ -1414,6 +1521,26 @@ function normalizeStatusLabel(status: string) {
 .history-meta span {
   font-size: 12px;
   color: var(--color-text-secondary);
+}
+
+.history-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.history-details span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1;
 }
 
 .request-actions {

@@ -244,6 +244,50 @@ async function testTbAllowsSwitchFromLargerTeamAtFortyNineVsFortyEight() {
   }
 }
 
+async function testWarmupTbIgnoresWindowRestriction() {
+  const harness = await createHarness({
+    webStatus: {
+      isWarmup: true,
+      logClockSeconds: 5,
+    },
+    matchState: {
+      players: [
+        ...Array.from({ length: 49 }, (_, index) => ({
+          name: `Team1-${index + 1}`,
+          steamId: `steam-team1-${index + 1}`,
+          teamId: 1,
+          squadId: 0,
+        })),
+        ...Array.from({ length: 48 }, (_, index) => ({
+          name: `Team2-${index + 1}`,
+          steamId: `steam-team2-${index + 1}`,
+          teamId: 2,
+          squadId: 0,
+        })),
+      ],
+    },
+  });
+
+  try {
+    const result = await harness.plugin.api.simulateChatMessage({
+      message: "tb",
+      steamId: "steam-team1-1",
+      playerName: "Team1-1",
+    });
+
+    assert.equal(result.matched, true);
+    assert.equal(result.ok, true);
+    assert.equal(result.mode, "warmup");
+    assert.equal(harness.teamBalanceCalls.length, 1);
+    const state = harness.plugin.api.getState();
+    assert.equal(state.publicTbRemaining, 5);
+    assert.equal(state.roundUsedCount, 0);
+    assert.equal(state.playerQuotas.find((entry) => entry.steamId === "steam-team1-1")?.tbUsed, 0);
+  } finally {
+    await harness.stop();
+  }
+}
+
 async function testGreenBalanceTbBypassesBasicLayerButUsesRoundQuota() {
   const harness = await createHarness({
     webStatus: {
@@ -816,6 +860,7 @@ async function testClaimCodeIsStillHandled() {
 
 await testTbAllowsSwitchFromLargerTeam();
 await testTbAllowsSwitchFromLargerTeamAtFortyNineVsFortyEight();
+await testWarmupTbIgnoresWindowRestriction();
 await testGreenBalanceTbBypassesBasicLayerButUsesRoundQuota();
 await testGreenBalanceTbStillRejectsRoundReuse();
 await testTbAllowsLargeDeltaWhenSwitchImprovesBalance();
