@@ -1,6 +1,8 @@
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onScopeDispose, ref, shallowRef, watch } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { apiGet } from "../app/apiClient";
+import { queryKeys } from "../app/queryKeys";
+import { usePageActivity } from "./usePageActivity";
 
 export interface ConsoleFilterState {
   stream: string;
@@ -27,21 +29,16 @@ export interface ConsoleLine {
 
 export function useConsoleLines(filters: ConsoleFilterState) {
   const MAX_VISIBLE_LINES = 2000;
-  const lines = ref<ConsoleLine[]>([]);
+  const lines = shallowRef<ConsoleLine[]>([]);
   const lineSeqSet = new Set<number>();
-  const hidden = ref(typeof document !== "undefined" ? document.hidden : false);
-  const active = ref(true);
   const lastSeq = ref(0);
+  const { isDocumentVisible, canPoll } = usePageActivity();
   const currentFilterKey = computed(() => JSON.stringify({
     stream: filters.stream,
     scope: filters.scope,
     level: filters.level,
     q: filters.q,
   }));
-
-  function handleVisibilityChange() {
-    hidden.value = document.hidden;
-  }
 
   function reset() {
     lines.value = [];
@@ -55,7 +52,7 @@ export function useConsoleLines(filters: ConsoleFilterState) {
   }
 
   const channelsQuery = useQuery({
-    queryKey: computed(() => ["console-channels", filters.stream]),
+    queryKey: computed(() => queryKeys.console.channels(filters.stream)),
     queryFn: async () => apiGet<{
       streams?: Array<{ id: string; title: string }>;
       scopes?: Array<{ id: string; title: string }>;
@@ -65,7 +62,8 @@ export function useConsoleLines(filters: ConsoleFilterState) {
   });
 
   const linesQuery = useQuery({
-    queryKey: computed(() => ["console-lines", filters.stream, filters.scope, filters.level, filters.q, filters.paused]),
+    queryKey: computed(() => queryKeys.console.lines(filters.stream, filters.scope, filters.level, filters.q)),
+    enabled: computed(() => canPoll.value && !filters.paused),
     queryFn: async () => {
       const params = new URLSearchParams({
         stream: filters.stream,
@@ -79,7 +77,7 @@ export function useConsoleLines(filters: ConsoleFilterState) {
       return apiGet<{ lines?: ConsoleLine[] }>(`/api/console/lines?${params.toString()}`);
     },
     refetchInterval: () => {
-      if (!active.value || filters.paused || hidden.value) return false;
+      if (!canPoll.value || filters.paused) return false;
       return 1000;
     },
     refetchOnMount: true,
@@ -88,7 +86,6 @@ export function useConsoleLines(filters: ConsoleFilterState) {
 
   watch(currentFilterKey, () => {
     reset();
-    void linesQuery.refetch();
   });
 
   watch(
@@ -131,18 +128,13 @@ export function useConsoleLines(filters: ConsoleFilterState) {
     { immediate: true },
   );
 
-  onMounted(() => {
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-  });
-
-  onBeforeUnmount(() => {
-    active.value = false;
-    document.removeEventListener("visibilitychange", handleVisibilityChange);
+  onScopeDispose(() => {
+    lineSeqSet.clear();
   });
 
   return {
     lines,
-    hidden,
+    hidden: computed(() => !isDocumentVisible.value),
     clearVisibleLines,
     reset,
     channelsQuery,

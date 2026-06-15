@@ -44,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from "vue";
+import { onScopeDispose, reactive, ref, watch } from "vue";
 import DataState from "../components/common/DataState.vue";
 import StatusBadge from "../components/common/StatusBadge.vue";
 import ConsoleToolbar from "../components/console/ConsoleToolbar.vue";
@@ -87,6 +87,10 @@ watch(searchInput, (value) => {
   searchTimer = window.setTimeout(() => {
     filters.q = value.trim();
   }, 220);
+});
+
+onScopeDispose(() => {
+  if (searchTimer != null) window.clearTimeout(searchTimer);
 });
 
 watch(

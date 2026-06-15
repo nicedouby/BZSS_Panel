@@ -1,6 +1,8 @@
 import { defineStore } from "pinia";
 import { apiGet, apiPost, ApiError } from "../app/apiClient";
 
+let restoreSessionPromise: Promise<void> | null = null;
+
 export interface AuthUser {
   id: string;
   username: string;
@@ -22,6 +24,16 @@ export const useAuthStore = defineStore("auth", {
   }),
   actions: {
     async restoreSession() {
+      if (restoreSessionPromise) return restoreSessionPromise;
+      restoreSessionPromise = this.performRestoreSession();
+      try {
+        await restoreSessionPromise;
+      } finally {
+        restoreSessionPromise = null;
+      }
+    },
+
+    async performRestoreSession() {
       this.error = null;
       try {
         const data = await apiGet<{ authenticated: boolean; user: AuthUser | null }>("/api/auth/session", {}, { timeoutMs: 8_000 });

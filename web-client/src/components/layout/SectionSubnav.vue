@@ -35,9 +35,10 @@ import { useAuthStore } from "../../stores/auth.store";
 const auth = useAuthStore();
 const route = useRoute();
 const apiPages = ref<RegisteredWebPage[]>([]);
+const registeredPages = computed(() => Array.isArray(apiPages.value) ? apiPages.value : []);
 
 const sections = computed(() => buildNavSections({
-  apiPages: apiPages.value,
+  apiPages: registeredPages.value,
   user: auth.user,
 }));
 
@@ -46,7 +47,7 @@ const activeSection = computed(() => findSectionForRoute(sections.value, route.p
 async function fetchPages() {
   try {
     const res = await apiGet<{ pages?: RegisteredWebPage[] }>("/api/web/pages");
-    apiPages.value = res.pages || [];
+    apiPages.value = Array.isArray(res.pages) ? res.pages : [];
   } catch (error) {
     console.error("Failed to fetch section subnav pages:", error);
   }

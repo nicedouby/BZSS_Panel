@@ -2,8 +2,12 @@ import {
   canAccessPage,
   normalizePermissionList,
   normalizeRoute,
-  resolveWebPagePermission,
 } from "../shared/web-page-permissions.js";
+import {
+  getStaticNavItems,
+  pageRegistry,
+  resolvePagePermissions,
+} from "./pageRegistry";
 
 export type NavSectionKey =
   | "opsLive"
@@ -68,46 +72,7 @@ export const sectionMeta: Record<NavSectionKey, { label: string; description: st
   other: { label: "其他工具", description: "暂未归类的页面", icon: "OTH" },
 };
 
-export const staticNavItems: NavItem[] = [
-  { path: "/match-status", icon: "MS", label: "对局状态", section: "opsLive", order: 10 },
-  { path: "/chat-monitor", icon: "CHAT", label: "聊天监控", section: "opsLive", order: 20 },
-
-  { path: "/player-database", icon: "DB", label: "玩家数据库", section: "players", order: 10 },
-  { path: "/reserve-slots", icon: "VIP", label: "预留位管理", section: "players", order: 20 },
-  { path: "/black-edge-privilege", icon: "HN", label: "黑奴跳边 CDK", section: "players", order: 30 },
-  { path: "/player-session-records", icon: "REC", label: "进出服记录", section: "players", order: 40 },
-  { path: "/squad-management", icon: "SQ", label: "小队管理", section: "players", order: 50 },
-  { path: "/plugins/group-report", icon: "GR", label: "组队举报", section: "players", order: 60 },
-  { path: "/plugins/fair-squad-guard", icon: "FSG", label: "公平建队", section: "players", order: 70 },
-  { path: "/plugins/stepwise-squad-playtime-guard", icon: "SSP", label: "阶梯式建队时长", section: "players", order: 80 },
-  { path: "/plugins/lianban-kick", icon: "LB", label: "联办踢出", section: "players", order: 90 },
-  { path: "/debug/squad-name-classifier", icon: "SNC", label: "小队名称分类器", section: "players", order: 100 },
-
-  { path: "/tb", icon: "TB", label: "跳边入口", section: "balance", order: 10 },
-  { path: "/plugins/fair-team-balance", icon: "FTB", label: "公平跳边", section: "balance", order: 20 },
-  { path: "/debug/fair-team-balance-lab", icon: "LAB", label: "公平跳边模拟", section: "balance", order: 30 },
-
-  { path: "/combat-manager", icon: "CM", label: "战斗管理", section: "combat", order: 10 },
-  { path: "/battle-log", icon: "BTL", label: "战绩记录", section: "combat", order: 20 },
-  { path: "/combat-log", icon: "LOG", label: "战斗日志", section: "combat", order: 30 },
-  { path: "/plugins/infantry-combat-enhancer", icon: "ICE", label: "步兵战斗增强", section: "combat", order: 40 },
-
-  { path: "/admin-warns", icon: "WARN", label: "广播模块", section: "broadcast", order: 10 },
-  { path: "/scheduled-broadcasts", icon: "SCH", label: "定时广播", section: "broadcast", order: 20 },
-  { path: "/debug/draw-vote-guard", icon: "DVG", label: "平局投票提示", section: "broadcast", order: 30 },
-  { path: "/debug/welcome-join-warning", icon: "WJW", label: "入服欢迎警告", section: "broadcast", order: 40 },
-
-  { path: "/plugins/server-info-statistics", icon: "STS", label: "服务器统计", section: "analytics", order: 10 },
-  { path: "/debug/match-snapshots", icon: "SNP", label: "快照录制", section: "analytics", order: 20 },
-  { path: "/debug/pjsc-average-duration", icon: "PJ", label: "PJSC 平均时长", section: "analytics", order: 30 },
-
-  { path: "/system/status", icon: "RUN", label: "运行状态", section: "system", order: 10 },
-  { path: "/console", icon: "CON", label: "控制台", section: "system", order: 20 },
-  { path: "/system/admin-users", icon: "USR", label: "管理员账号", section: "system", order: 30 },
-  { path: "/system/audit-records", icon: "AUD", label: "操作记录", section: "system", order: 40 },
-  { path: "/plugin-subscriptions", icon: "SUB", label: "插件订阅", section: "system", order: 50 },
-  { path: "/debug/udp-forwarder", icon: "UDP", label: "UDP 转发日志", section: "system", order: 60 },
-];
+export const staticNavItems: NavItem[] = getStaticNavItems();
 
 export function buildNavSections(options: {
   apiPages?: RegisteredWebPage[];
@@ -116,13 +81,14 @@ export function buildNavSections(options: {
   const groupMap = createSectionMap();
   const seenPaths = new Set<string>();
   const seenLabels = new Set<string>();
+  const apiPages = Array.isArray(options.apiPages) ? options.apiPages : [];
 
   for (const item of staticNavItems) {
     if (!canShowRoute(item.path, options.user)) continue;
     addItem(groupMap, seenPaths, seenLabels, item);
   }
 
-  for (const page of options.apiPages ?? []) {
+  for (const page of apiPages) {
     if (!page.enabled || page.hiddenFromSidebar) continue;
     if (!canShowPage(page, options.user)) continue;
 
@@ -130,12 +96,13 @@ export function buildNavSections(options: {
     const label = String(page.title ?? "").trim();
     if (!path || !label) continue;
 
+    const section = resolveSection(path, page);
     addItem(groupMap, seenPaths, seenLabels, {
       path,
       icon: normalizeIcon(page.icon),
       label,
-      section: resolveSection(path, page),
-      order: normalizeDynamicOrder(resolveSection(path, page), Number(page.order ?? 9999)),
+      section,
+      order: normalizeDynamicOrder(section, Number(page.order ?? 9999)),
     });
   }
 
@@ -198,12 +165,17 @@ function addItem(
 }
 
 function canShowRoute(route: unknown, user: any) {
-  const resolved = resolveWebPagePermission(route);
+  const normalizedRoute = normalizeRoute(route);
+  const definition = pageRegistry.find((page) => page.path === normalizedRoute);
+  const resolved = definition
+    ? resolvePagePermissions(definition)
+    : { requiredPermission: "", legacyRequiredPermissions: [], superAdminOnly: false };
+
   return canAccessPage(
     user,
-    resolved?.requiredPermission ?? "",
-    normalizePermissionList(resolved?.legacyRequiredPermissions ?? []),
-    { superAdminOnly: Boolean(resolved?.superAdminOnly) },
+    resolved.requiredPermission,
+    normalizePermissionList(resolved.legacyRequiredPermissions),
+    { superAdminOnly: resolved.superAdminOnly },
   );
 }
 

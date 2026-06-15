@@ -1,0 +1,111 @@
+body {
+  min-width: 320px;
+  overflow: hidden;
+  background: var(--color-bg-page);
+  color: var(--color-text-primary);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+select,
+textarea {
+  border-radius: 12px;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+a {
+  color: inherit;
+}
+
+.app-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  color: var(--color-text-primary);
+  background: var(--app-background, var(--color-bg-page));
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.app-root::before,
+.app-root::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.app-root::before {
+  z-index: 0;
+  background: var(--theme-root-overlay);
+}
+
+.app-root::after {
+  z-index: 0;
+  background-image:
+    linear-gradient(var(--theme-grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--theme-grid-color) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.65), transparent 82%);
+  opacity: 0.18;
+}
+
+.app-root > * {
+  position: relative;
+  z-index: 1;
+}
+
+.boot-screen {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--app-background, var(--color-bg-page));
+}
+
+.boot-card {
+  width: min(420px, 100%);
+  border: 1px solid var(--color-border-default);
+  background:
+    var(--theme-panel-highlight),
+    var(--color-bg-card);
+  border-radius: 20px;
+  padding: 20px 22px;
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-lg), var(--theme-panel-glow);
+  backdrop-filter: blur(12px);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-border-default) 90%, transparent);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--color-border-highlight) 80%, transparent);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}

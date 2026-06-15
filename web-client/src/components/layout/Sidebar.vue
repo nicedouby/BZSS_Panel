@@ -31,18 +31,18 @@
 
         <Transition
           name="section-children"
-          @enter="onChildrenEnter"
-          @after-enter="onChildrenAfterEnter"
-          @leave="onChildrenLeave"
+          @enter="transition.onEnter"
+          @after-enter="transition.onAfterEnter"
+          @leave="transition.onLeave"
         >
           <div v-if="activeSectionKey === section.key" class="section-children-wrap">
             <div class="section-children">
               <RouterLink
-                v-for="item in section.items"
+                v-for="(item, index) in section.items"
                 :key="item.path"
                 :to="item.path"
                 class="child-link"
-                :style="{ '--child-index': String(section.items.indexOf(item)) }"
+                :style="{ '--child-index': String(index) }"
                 :class="{ active: isRouteActive(route.path, item.path) }"
                 :title="item.label"
                 @click="ui.closeMobileSidebar()"
@@ -59,76 +59,32 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
-import { apiGet } from "../../app/apiClient";
 import {
   buildNavSections,
   findSectionForRoute,
   isRouteActive,
-  type RegisteredWebPage,
 } from "../../app/sidebarNav";
 import { t } from "../../i18n";
 import { useAuthStore } from "../../stores/auth.store";
 import { useUiStore } from "../../stores/ui.store";
+import { useExpandableTransition } from "./useExpandableTransition";
+import { useRegisteredWebPagesQuery } from "./useRegisteredWebPagesQuery";
 
 const ui = useUiStore();
 const auth = useAuthStore();
 const route = useRoute();
-const apiPages = ref<RegisteredWebPage[]>([]);
+const pagesQuery = useRegisteredWebPagesQuery();
+const transition = useExpandableTransition();
+const registeredPages = computed(() => Array.isArray(pagesQuery.data.value) ? pagesQuery.data.value : []);
 
 const sections = computed(() => buildNavSections({
-  apiPages: apiPages.value,
+  apiPages: registeredPages.value,
   user: auth.user,
 }));
 
 const activeSectionKey = computed(() => findSectionForRoute(sections.value, route.path)?.key ?? "");
-
-function onChildrenEnter(element: Element) {
-  const node = element as HTMLElement;
-  node.style.height = "0";
-  node.style.opacity = "0";
-  node.style.overflow = "hidden";
-  node.style.transform = "translateY(-6px)";
-
-  requestAnimationFrame(() => {
-    node.style.height = `${node.scrollHeight}px`;
-    node.style.opacity = "1";
-    node.style.transform = "translateY(0)";
-  });
-}
-
-function onChildrenAfterEnter(element: Element) {
-  const node = element as HTMLElement;
-  node.style.height = "auto";
-  node.style.overflow = "";
-  node.style.transform = "";
-}
-
-function onChildrenLeave(element: Element) {
-  const node = element as HTMLElement;
-  node.style.height = `${node.scrollHeight}px`;
-  node.style.opacity = "1";
-  node.style.overflow = "hidden";
-  node.style.transform = "translateY(0)";
-
-  requestAnimationFrame(() => {
-    node.style.height = "0";
-    node.style.opacity = "0";
-    node.style.transform = "translateY(-4px)";
-  });
-}
-
-async function fetchPages() {
-  try {
-    const res = await apiGet<{ pages?: RegisteredWebPage[] }>("/api/web/pages");
-    apiPages.value = res.pages || [];
-  } catch (error) {
-    console.error("Failed to fetch sidebar pages:", error);
-  }
-}
-
-onMounted(fetchPages);
 </script>
 
 <style scoped>

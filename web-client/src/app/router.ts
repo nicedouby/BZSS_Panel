@@ -1,402 +1,21 @@
-﻿import { createRouter, createWebHistory } from "vue-router";
+import { createRouter, createWebHistory } from "vue-router";
 
-import MatchStatusPage from "../pages/MatchStatusPage.vue";
-import ConsolePage from "../pages/ConsolePage.vue";
-import PlayerDatabasePage from "../pages/PlayerDatabasePage.vue";
-import ReserveSlotsPage from "../pages/ReserveSlotsPage.vue";
-import BlackEdgePrivilegePage from "../pages/BlackEdgePrivilegePage.vue";
-import CombatManagerPage from "../pages/CombatManagerPage.vue";
-import BattleLogPage from "../pages/BattleLogPage.vue";
-import AdminWarnsPage from "../pages/AdminWarnsPage.vue";
-import ScheduledBroadcastPage from "../pages/ScheduledBroadcastPage.vue";
-import InfantryCombatEnhancerPage from "../pages/InfantryCombatEnhancerPage.vue";
-import GroupReportPage from "../pages/GroupReportPage.vue";
-import FairTeamBalancePage from "../pages/FairTeamBalancePage.vue";
-import FairTeamBalanceLabPage from "../pages/FairTeamBalanceLabPage.vue";
-import FairSquadGuardPage from "../pages/FairSquadGuardPage.vue";
-import StepwiseSquadPlaytimeGuardPage from "../pages/StepwiseSquadPlaytimeGuardPage.vue";
-import LianbanKickPage from "../pages/LianbanKickPage.vue";
-import SquadManagementPage from "../pages/SquadManagementPage.vue";
-import TeamBalancePage from "../pages/TeamBalancePage.vue";
-import UdpEventForwarderPage from "../pages/UdpEventForwarderPage.vue";
-import ServerInfoStatisticsPage from "../pages/ServerInfoStatisticsPage.vue";
-import MatchSnapshotDebugPage from "../pages/MatchSnapshotDebugPage.vue";
-import PjscAverageDurationPage from "../pages/PjscAverageDurationPage.vue";
-import DrawVoteGuardDebugPage from "../pages/DrawVoteGuardDebugPage.vue";
-import SquadNameClassifierDebugPage from "../pages/SquadNameClassifierDebugPage.vue";
-import WelcomeJoinWarningDebugPage from "../pages/WelcomeJoinWarningDebugPage.vue";
-import PlayerSessionRecordsPage from "../pages/PlayerSessionRecordsPage.vue";
-import CombatLogPage from "../pages/CombatLogPage.vue";
 import ComingSoonPage from "../pages/ComingSoonPage.vue";
-import ChatMonitorPage from "../pages/ChatMonitorPage.vue";
-import RuntimeStatusPage from "../pages/RuntimeStatusPage.vue";
-import AdminUsersPage from "../pages/AdminUsersPage.vue";
-import AuditRecordsPage from "../pages/AuditRecordsPage.vue";
-import PluginSubscriptionsPage from "../pages/PluginSubscriptionsPage.vue";
 import { useAuthStore } from "../stores/auth.store";
 import {
   canAccessPage,
   normalizePermissionList,
-  resolveWebPagePermission,
 } from "../shared/web-page-permissions.js";
-
-const coreRealtimeMeta = { category: "core", refreshPolicy: "realtime" } as const;
-const coreManualMeta = { category: "core", refreshPolicy: "manual" } as const;
-const corePollingMeta = { category: "core", refreshPolicy: "polling" } as const;
-const pluginPollingMeta = { category: "plugin", refreshPolicy: "polling" } as const;
-const systemPollingMeta = { category: "system", refreshPolicy: "polling" } as const;
-const debugManualMeta = { category: "debug", refreshPolicy: "manual" } as const;
-const workspaceLayoutMeta = { layoutMode: "workspace", contentPadding: "none" } as const;
-const documentLayoutMeta = { layoutMode: "document", contentPadding: "default" } as const;
-
-function applyPagePermissions(routes: any[]) {
-  return routes.map((route) => {
-    if (!route || typeof route !== "object") return route;
-    const resolved = resolveWebPagePermission(route.path);
-    if (!resolved) return route;
-
-    const meta = route.meta ?? {};
-    const requiredPermission = String(meta.requiredPermission ?? resolved.requiredPermission ?? "").trim();
-    const legacyRequiredPermissions = mergePermissionLists(
-      meta.legacyRequiredPermissions,
-      resolved.legacyRequiredPermissions,
-    );
-    const superAdminOnly = Boolean(meta.superAdminOnly ?? resolved.superAdminOnly);
-
-    return {
-      ...route,
-      meta: {
-        ...meta,
-        requiredPermission,
-        legacyRequiredPermissions,
-        superAdminOnly,
-      },
-    };
-  });
-}
-
-function mergePermissionLists(...values: any[]) {
-  const merged: string[] = [];
-  for (const value of values) {
-    for (const permission of normalizePermissionList(value)) {
-      if (merged.includes(permission)) continue;
-      merged.push(permission);
-    }
-  }
-  return merged;
-}
+import { buildPageRoutes } from "./pageRegistry";
 
 export const router = createRouter({
   history: createWebHistory(),
-  routes: applyPagePermissions([
+  routes: [
     { path: "/", redirect: "/match-status" },
-    {
-      path: "/match-status",
-      component: MatchStatusPage,
-      meta: {
-        ...coreRealtimeMeta,
-        titleKey: "routeTitle.matchStatus",
-        ...workspaceLayoutMeta,
-      },
-    },
-    {
-      path: "/match-state",
-      component: MatchStatusPage,
-      meta: {
-        ...coreRealtimeMeta,
-        titleKey: "routeTitle.matchStatus",
-        ...workspaceLayoutMeta,
-      },
-    },
-    {
-      path: "/console",
-      component: ConsolePage,
-      meta: {
-        ...coreRealtimeMeta,
-        titleKey: "routeTitle.console",
-        ...workspaceLayoutMeta,
-        superAdminOnly: true,
-      },
-    },
-    {
-      path: "/chat-monitor",
-      component: ChatMonitorPage,
-      meta: {
-        ...coreRealtimeMeta,
-        title: "聊天监控",
-        ...workspaceLayoutMeta,
-      },
-    },
-    {
-      path: "/player-session-records",
-      component: PlayerSessionRecordsPage,
-      meta: {
-        ...corePollingMeta,
-        title: "进出服记录",
-        ...workspaceLayoutMeta,
-      },
-    },
-    {
-      path: "/player-database",
-      component: PlayerDatabasePage,
-      meta: {
-        ...coreManualMeta,
-        titleKey: "routeTitle.playerDatabase",
-        ...workspaceLayoutMeta,
-      },
-    },
-    {
-      path: "/reserve-slots",
-      component: ReserveSlotsPage,
-      meta: {
-        ...coreManualMeta,
-        titleKey: "routeTitle.reserveSlots",
-        ...workspaceLayoutMeta,
-      },
-    },
-    {
-      path: "/black-edge-privilege",
-      component: BlackEdgePrivilegePage,
-      meta: {
-        ...coreManualMeta,
-        title: "黑奴跳边 CDK",
-        ...workspaceLayoutMeta,
-      },
-    },
-    {
-      path: "/combat-manager",
-      component: CombatManagerPage,
-      meta: {
-        ...corePollingMeta,
-        titleKey: "routeTitle.combatManager",
-        requiredPermission: "combat_manager.view",
-        legacyRequiredPermissions: ["kill_manager.view"],
-        ...workspaceLayoutMeta,
-      },
-    },
+    ...buildPageRoutes(),
     {
       path: "/combat-clean",
-      redirect: (to: any) => ({ path: "/combat-manager", query: to.query, hash: to.hash }),
-    },
-    {
-      path: "/combat-log",
-      component: CombatLogPage,
-      meta: {
-        ...corePollingMeta,
-        titleKey: "routeTitle.combatLog",
-        ...workspaceLayoutMeta,
-      },
-    },
-    {
-      path: "/battle-log",
-      component: BattleLogPage,
-      meta: {
-        ...corePollingMeta,
-        titleKey: "routeTitle.battleLog",
-        requiredPermission: "combat_manager.view",
-        legacyRequiredPermissions: ["kill_manager.view"],
-        ...workspaceLayoutMeta,
-      },
-    },
-    {
-      path: "/admin-warns",
-      component: AdminWarnsPage,
-      meta: {
-        ...corePollingMeta,
-        titleKey: "routeTitle.adminWarns",
-        ...workspaceLayoutMeta,
-      },
-    },
-    {
-      path: "/scheduled-broadcasts",
-      component: ScheduledBroadcastPage,
-      meta: {
-        ...corePollingMeta,
-        title: "定时广播",
-        ...workspaceLayoutMeta,
-      },
-    },
-    {
-      path: "/plugins/infantry-combat-enhancer",
-      component: InfantryCombatEnhancerPage,
-      meta: {
-        ...pluginPollingMeta,
-        titleKey: "routeTitle.infantryCombatEnhancer",
-        ...workspaceLayoutMeta,
-      },
-    },
-    {
-      path: "/plugins/group-report",
-      component: GroupReportPage,
-      meta: {
-        ...pluginPollingMeta,
-        title: "组队举报",
-        ...workspaceLayoutMeta,
-      },
-    },
-    {
-      path: "/plugins/fair-team-balance",
-      component: FairTeamBalancePage,
-      meta: {
-        ...pluginPollingMeta,
-        title: "公平跳边",
-        ...workspaceLayoutMeta,
-      },
-    },
-    {
-      path: "/plugins/fair-squad-guard",
-      component: FairSquadGuardPage,
-      meta: {
-        ...pluginPollingMeta,
-        titleKey: "routeTitle.fairSquadGuard",
-        ...workspaceLayoutMeta,
-      },
-    },
-    {
-      path: "/plugins/stepwise-squad-playtime-guard",
-      component: StepwiseSquadPlaytimeGuardPage,
-      meta: {
-        ...pluginPollingMeta,
-        title: "阶梯式建队时长",
-        ...workspaceLayoutMeta,
-      },
-    },
-    {
-      path: "/plugins/lianban-kick",
-      component: LianbanKickPage,
-      meta: {
-        ...pluginPollingMeta,
-        title: "联办踢出",
-        ...workspaceLayoutMeta,
-      },
-    },
-    {
-      path: "/squad-management",
-      component: SquadManagementPage,
-      meta: {
-        ...corePollingMeta,
-        titleKey: "routeTitle.squadManagement",
-        ...workspaceLayoutMeta,
-      },
-    },
-    {
-      path: "/tb",
-      component: TeamBalancePage,
-      meta: {
-        ...coreManualMeta,
-        titleKey: "routeTitle.teamBalance",
-        ...workspaceLayoutMeta,
-      },
-    },
-    {
-      path: "/plugin-subscriptions",
-      component: PluginSubscriptionsPage,
-      meta: {
-        ...systemPollingMeta,
-        titleKey: "routeTitle.pluginSubscriptions",
-        ...workspaceLayoutMeta,
-      },
-    },
-    {
-      path: "/debug/udp-forwarder",
-      component: UdpEventForwarderPage,
-      meta: {
-        ...debugManualMeta,
-        title: "UDP 转发日志",
-        ...documentLayoutMeta,
-      },
-    },
-    {
-      path: "/plugins/server-info-statistics",
-      component: ServerInfoStatisticsPage,
-      meta: {
-        ...pluginPollingMeta,
-        title: "服务器统计",
-        ...workspaceLayoutMeta,
-      },
-    },
-    {
-      path: "/debug/match-snapshots",
-      component: MatchSnapshotDebugPage,
-      meta: {
-        ...debugManualMeta,
-        title: "快照录制",
-        ...documentLayoutMeta,
-      },
-    },
-    {
-      path: "/debug/pjsc-average-duration",
-      component: PjscAverageDurationPage,
-      meta: {
-        ...debugManualMeta,
-        title: "PJSC 平均时长",
-        ...documentLayoutMeta,
-      },
-    },
-    {
-      path: "/debug/draw-vote-guard",
-      component: DrawVoteGuardDebugPage,
-      meta: {
-        ...debugManualMeta,
-        title: "平局投票提示",
-        ...documentLayoutMeta,
-      },
-    },
-    {
-      path: "/debug/fair-team-balance-lab",
-      component: FairTeamBalanceLabPage,
-      meta: {
-        ...debugManualMeta,
-        title: "公平跳边实验室",
-        ...workspaceLayoutMeta,
-      },
-    },
-    {
-      path: "/debug/welcome-join-warning",
-      component: WelcomeJoinWarningDebugPage,
-      meta: {
-        ...debugManualMeta,
-        title: "入服欢迎警告",
-        ...documentLayoutMeta,
-      },
-    },
-    {
-      path: "/debug/squad-name-classifier",
-      component: SquadNameClassifierDebugPage,
-      meta: {
-        ...debugManualMeta,
-        title: "小队名称分类器",
-        ...documentLayoutMeta,
-      },
-    },
-    {
-      path: "/system/status",
-      component: RuntimeStatusPage,
-      meta: {
-        ...systemPollingMeta,
-        titleKey: "routeTitle.runtimeStatus",
-        ...documentLayoutMeta,
-      },
-    },
-    {
-      path: "/system/admin-users",
-      component: AdminUsersPage,
-      meta: {
-        ...systemPollingMeta,
-        title: "管理员账号",
-        superAdminOnly: true,
-        ...documentLayoutMeta,
-      },
-    },
-    {
-      path: "/system/audit-records",
-      component: AuditRecordsPage,
-      meta: {
-        ...systemPollingMeta,
-        title: "操作记录",
-        requiredPermission: "audit.view",
-        ...workspaceLayoutMeta,
-      },
+      redirect: (to) => ({ name: "combat-manager", query: to.query, hash: to.hash }),
     },
     {
       path: "/access-denied",
@@ -406,7 +25,7 @@ export const router = createRouter({
         subtitle: "权限不足",
         message: "当前登录账号没有访问该页面所需的模块权限，请联系管理员分配对应权限后再试。",
       },
-      meta: { title: "Access denied", ...documentLayoutMeta },
+      meta: { title: "Access denied", layoutMode: "document", contentPadding: "default" },
     },
     {
       path: "/:pathMatch(.*)*",
@@ -416,14 +35,18 @@ export const router = createRouter({
         subtitle: "",
         message: "",
       },
-      meta: { titleKey: "routeTitle.comingSoon", ...documentLayoutMeta },
+      meta: {
+        titleKey: "routeTitle.comingSoon",
+        layoutMode: "document",
+        contentPadding: "default",
+      },
     },
-  ]),
+  ],
 });
 
-router.beforeEach((to: any) => {
+router.beforeEach(async (to) => {
   const auth = useAuthStore();
-  if (!auth.checked) return true;
+  if (!auth.checked) await auth.restoreSession();
 
   if (to.meta?.superAdminOnly) {
     if (!auth.authenticated) return true;
@@ -449,49 +72,3 @@ router.beforeEach((to: any) => {
 
   return { path: "/access-denied" };
 });
-
-const preloadPages = [
-  () => import("../pages/MatchStatusPage.vue"),
-  () => import("../pages/ConsolePage.vue"),
-  () => import("../pages/PlayerDatabasePage.vue"),
-  () => import("../pages/ReserveSlotsPage.vue"),
-  () => import("../pages/BlackEdgePrivilegePage.vue"),
-  () => import("../pages/CombatManagerPage.vue"),
-  () => import("../pages/BattleLogPage.vue"),
-  () => import("../pages/AdminWarnsPage.vue"),
-  () => import("../pages/ScheduledBroadcastPage.vue"),
-  () => import("../pages/InfantryCombatEnhancerPage.vue"),
-  () => import("../pages/GroupReportPage.vue"),
-  () => import("../pages/FairTeamBalancePage.vue"),
-  () => import("../pages/FairTeamBalanceLabPage.vue"),
-  () => import("../pages/FairSquadGuardPage.vue"),
-  () => import("../pages/StepwiseSquadPlaytimeGuardPage.vue"),
-  () => import("../pages/LianbanKickPage.vue"),
-  () => import("../pages/SquadManagementPage.vue"),
-  () => import("../pages/TeamBalancePage.vue"),
-  () => import("../pages/UdpEventForwarderPage.vue"),
-  () => import("../pages/ServerInfoStatisticsPage.vue"),
-  () => import("../pages/MatchSnapshotDebugPage.vue"),
-  () => import("../pages/PjscAverageDurationPage.vue"),
-  () => import("../pages/DrawVoteGuardDebugPage.vue"),
-  () => import("../pages/SquadNameClassifierDebugPage.vue"),
-  () => import("../pages/WelcomeJoinWarningDebugPage.vue"),
-  () => import("../pages/PlayerSessionRecordsPage.vue"),
-  () => import("../pages/CombatLogPage.vue"),
-  () => import("../pages/ComingSoonPage.vue"),
-  () => import("../pages/ChatMonitorPage.vue"),
-  () => import("../pages/RuntimeStatusPage.vue"),
-  () => import("../pages/AdminUsersPage.vue"),
-  () => import("../pages/AuditRecordsPage.vue"),
-  () => import("../pages/PluginSubscriptionsPage.vue"),
-];
-
-let preloadStarted = false;
-
-export function preloadRouteComponents() {
-  if (preloadStarted) return;
-  preloadStarted = true;
-  preloadPages.forEach((loadPage) => {
-    void loadPage();
-  });
-}
