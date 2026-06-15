@@ -61,6 +61,10 @@
                 <strong class="info-value">{{ formatAssetAmount(detail.player?.warmupPoints ?? detail.player?.assets?.warmupPoints ?? 0) }}</strong>
               </div>
               <div class="info-item">
+                <span class="info-label">黑奴跳边次数</span>
+                <strong class="info-value">{{ formatAssetAmount(detail.player?.blackEdgeSwitchCount ?? detail.player?.assets?.blackEdgeSwitchCount ?? 0) }}</strong>
+              </div>
+              <div class="info-item">
                 <span class="info-label">{{ t("database.updatedAt") }}</span>
                 <strong class="info-value">{{ formatTime(detail.player?.updated_at) }}</strong>
               </div>

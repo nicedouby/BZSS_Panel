@@ -30,6 +30,14 @@ function warmupPointsFromPlayer(player) {
   return Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
+function blackEdgeSwitchCountFromPlayer(player) {
+  const direct = Number(player?.blackEdgeSwitchCount ?? 0);
+  if (Number.isFinite(direct) && direct > 0) return direct;
+  const assets = parseAssets(player?.assets ?? player?.assets_json ?? player?.assetsJson);
+  const value = Number(assets.blackEdgeSwitchCount ?? 0);
+  return Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
 /**
  * Module: PlayerDatabase
  *
@@ -60,6 +68,7 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
           ...p,
           assets: parseAssets(p.assets ?? p.assets_json ?? p.assetsJson),
           warmupPoints: warmupPointsFromPlayer(p),
+          blackEdgeSwitchCount: blackEdgeSwitchCountFromPlayer(p),
         })),
         players: players.map((p) => ({
           id: p.id,
@@ -80,6 +89,7 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
           warmupSeconds: Number(p.warmup_seconds ?? 0),
           assets: parseAssets(p.assets ?? p.assets_json ?? p.assetsJson),
           warmupPoints: warmupPointsFromPlayer(p),
+          blackEdgeSwitchCount: blackEdgeSwitchCountFromPlayer(p),
           suicides: Number(p.total_suicides ?? 0),
           updatedAt: Number(p.updated_at ?? 0) || null,
           steamAvatar: p.steam_avatar ?? null,
@@ -132,6 +142,34 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
 
     async addTimeStats(playerId, patch = {}) {
       return repo.addTimeStats(playerId, patch);
+    },
+
+    async addAssetAmount(playerId, assetKey, amount) {
+      return repo.addAssetAmount(playerId, assetKey, amount);
+    },
+
+    async consumeAssetAmount(playerId, assetKey, amount) {
+      return repo.consumeAssetAmount(playerId, assetKey, amount);
+    },
+
+    async addAssetByIdentity(identity = {}, assetKey, amount) {
+      const player = await repo.upsertFromPresence(identityFromPlayer(identity));
+      if (!player?.id) return null;
+      return repo.addAssetAmount(player.id, assetKey, amount);
+    },
+
+    async consumeAssetByIdentity(identity = {}, assetKey, amount) {
+      const player = await repo.findByIdentity(identityFromPlayer(identity));
+      if (!player?.id) {
+        return {
+          ok: false,
+          error: "PlayerNotFound",
+          message: "Player not found.",
+          player: null,
+          remaining: 0,
+        };
+      }
+      return repo.consumeAssetAmount(player.id, assetKey, amount);
     },
 
     async setGameDurationOverride(playerId, gameSeconds) {

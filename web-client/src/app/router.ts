@@ -4,6 +4,7 @@ import MatchStatusPage from "../pages/MatchStatusPage.vue";
 import ConsolePage from "../pages/ConsolePage.vue";
 import PlayerDatabasePage from "../pages/PlayerDatabasePage.vue";
 import ReserveSlotsPage from "../pages/ReserveSlotsPage.vue";
+import BlackEdgePrivilegePage from "../pages/BlackEdgePrivilegePage.vue";
 import CombatManagerPage from "../pages/CombatManagerPage.vue";
 import BattleLogPage from "../pages/BattleLogPage.vue";
 import AdminWarnsPage from "../pages/AdminWarnsPage.vue";
@@ -149,6 +150,15 @@ export const router = createRouter({
       meta: {
         ...coreManualMeta,
         titleKey: "routeTitle.reserveSlots",
+        ...workspaceLayoutMeta,
+      },
+    },
+    {
+      path: "/black-edge-privilege",
+      component: BlackEdgePrivilegePage,
+      meta: {
+        ...coreManualMeta,
+        title: "黑奴跳边 CDK",
         ...workspaceLayoutMeta,
       },
     },

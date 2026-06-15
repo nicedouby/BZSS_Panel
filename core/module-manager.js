@@ -34,6 +34,7 @@ import { createRemoteTelemetryModule } from "../modules/remote-telemetry/index.j
 import { createScheduledBroadcastModule } from "../modules/scheduled-broadcast/index.js";
 import { createPlayerSessionRecordsModule } from "../modules/player-session-records/index.js";
 import { createReserveSlotsModule } from "../modules/reserve-slots/index.js";
+import { createBlackEdgePrivilegeModule } from "../modules/black-edge-privilege/index.js";
 
 import { createChatManagerModule } from "../modules/chat-manager/index.js";
 
@@ -87,6 +88,7 @@ export class ModuleManager {
       createScheduledBroadcastModule,
       createPlayerSessionRecordsModule,
       createReserveSlotsModule,
+      createBlackEdgePrivilegeModule,
     ];
 
     for (const factory of factories) {

@@ -10,6 +10,7 @@ const requestStorage = new AsyncLocalStorage();
 import { handleSquadManagementRoutes } from "../modules/squad-management/routes.js";
 import { handleTeamBalanceRoutes } from "../modules/team-balance/routes.js";
 import { handleReserveSlotsRoutes } from "../modules/reserve-slots/routes.js";
+import { handleBlackEdgePrivilegeRoutes } from "../modules/black-edge-privilege/routes.js";
 import {
   classifySquadName,
   getSquadNameClassifierRules,
@@ -404,6 +405,19 @@ export class WebServer {
       json: (status, obj, extraHeaders = {}) => this.json(res, status, obj, extraHeaders),
     });
     if (reserveSlotsHandled) {
+      return;
+    }
+
+    const blackEdgePrivilegeHandled = await handleBlackEdgePrivilegeRoutes({
+      core: this.core,
+      modules: this.modules,
+      url,
+      req,
+      user,
+      readJsonBody: (request) => this.readJsonBody(request),
+      json: (status, obj, extraHeaders = {}) => this.json(res, status, obj, extraHeaders),
+    });
+    if (blackEdgePrivilegeHandled) {
       return;
     }
 

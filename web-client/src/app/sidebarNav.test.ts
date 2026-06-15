@@ -13,6 +13,7 @@ describe("sidebar navigation sections", () => {
     expect(sections.map((section) => section.key)).toContain("players");
     expect(sections.find((section) => section.key === "players")?.defaultPath).toBe("/player-database");
     expect(sections.find((section) => section.key === "players")?.items.map((item) => item.path)).toContain("/plugins/fair-squad-guard");
+    expect(sections.find((section) => section.key === "players")?.items.map((item) => item.path)).toContain("/black-edge-privilege");
     expect(sections.find((section) => section.key === "balance")?.items.map((item) => item.path)).toEqual([
       "/tb",
       "/plugins/fair-team-balance",

@@ -13,6 +13,7 @@ const DEFAULT_PERIOD_MS = 18 * 60 * 60 * 1000;
 const DEFAULT_REQUEST_TTL_MS = 120 * 1000;
 const EXPIRY_SWEEP_MS = 1000;
 const PAGE_ROUTE = "/plugins/fair-team-balance";
+const BLACK_EDGE_ASSET_KEY = "blackEdgeSwitchCount";
 const CLAIM_MESSAGE_PATTERN = /^认领(\d{5})$/;
 
 export function createPlugin({ core, modules, config, logger } = {}) {
@@ -161,13 +162,23 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         ? "管理员协助跳边成功"
         : mode === "warmup_tb"
           ? "暖服模式公平跳边执行成功"
+          : mode === "black_edge_tb"
+            ? "成功为暖服黑奴"
           : mode === "green_balance_tb"
             ? "绿色平衡跳边通道执行成功"
             : "公平跳边执行成功";
     if (mode === "warmup_tb") {
       return `${actionLabel}: ${safePlayerName}`;
     }
+    if (mode === "black_edge_tb") {
+      return `成功为暖服黑奴 ${safePlayerName} 完成黑奴跳边`;
+    }
     return `${actionLabel}: ${safePlayerName}，公共TB剩余 ${state.round.publicTbRemaining}/${runtimeConfig.publicTbLimit}`;
+  }
+
+  function consumesTbQuotaMode(mode = "") {
+    const normalizedMode = normalizeText(mode);
+    return normalizedMode === "tb";
   }
 
   function buildViolationBroadcastMessage({ playerName = "", actionLabel = "公平跳边", reason = "" } = {}) {
@@ -339,17 +350,17 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         eosId: entry?.eosId,
         persistReset: false,
       });
-      if (normalizeText(entry?.mode) !== "green_balance_tb") {
+      if (consumesTbQuotaMode(entry?.mode)) {
         period.tbUsed += 1;
+        state.round.publicTbRemaining = clampInteger(
+          Number(entry?.roundPublicTbRemainingAfter ?? state.round.publicTbRemaining - 1),
+          0,
+          runtimeConfig.publicTbLimit,
+        );
+        state.round.usedPlayerKeys.add(playerKey);
       }
       period.lastActivityAt = at;
       period.lastActivityAtMs = atMs;
-      state.round.publicTbRemaining = clampInteger(
-        Number(entry?.roundPublicTbRemainingAfter ?? state.round.publicTbRemaining - 1),
-        0,
-        runtimeConfig.publicTbLimit,
-      );
-      state.round.usedPlayerKeys.add(playerKey);
       return;
     }
 
@@ -716,6 +727,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     return Number(player?.teamId ?? player?.teamID ?? 0) || 0;
   }
 
+  function isWithinTbWindow(logClockSeconds = 0) {
+    const seconds = Number(logClockSeconds ?? 0);
+    return seconds >= 20 && seconds <= 120;
+  }
+
   function getSwitchEligibility(matchState, player) {
     const teamId = getPlayerTeamId(player);
     if (teamId !== 1 && teamId !== 2) {
@@ -734,14 +750,15 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     const otherAfter = otherCount + 1;
     const afterDelta = Math.abs(ownAfter - otherAfter);
     const improvesBalance = afterDelta < beforeDelta;
-    const withinDeltaLimit = afterDelta <= 3;
+    const withinDeltaLimit = afterDelta < 3;
+    const deltaRelief = beforeDelta >= 3 && improvesBalance;
 
-    if (!improvesBalance && !withinDeltaLimit) {
+    if (!withinDeltaLimit && !deltaRelief) {
       const countsMessage = `当前人数: 1队 ${counts.team1}，2队 ${counts.team2}。`;
       return {
         ok: false,
         error: "TeamDeltaNotAllowed",
-        message: `只有从人数更多的一边跳到人数更少的一边时，才允许直接 tb。${countsMessage}`,
+        message: `执行后双方人数差距不能大于等于 3，除非执行后可以让差距变少。${countsMessage}`,
       };
     }
 
@@ -756,6 +773,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       afterDelta,
       improvesBalance,
       withinDeltaLimit,
+      deltaRelief,
     };
   }
 
@@ -767,10 +785,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   function validateDirectSwitch({ playerKey, playerName, player, matchState, webStatus, period, action }) {
     const common = validateCommonPlayerState(matchState, player);
     if (!common.ok) return common;
-
-    if (action === "tb" && Boolean(webStatus?.isWarmup)) {
-      return { ok: true, mode: "warmup" };
-    }
 
     if (action === "sqtb" && Boolean(webStatus?.isWarmup)) {
       return {
@@ -798,18 +812,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       }
 
       const sideCheck = getSwitchEligibility(matchState, player);
-      if (sideCheck.ok && isGreenBalanceSwitch(sideCheck)) {
-        return {
-          ok: true,
-          mode: "green_balance",
-          sideCheck,
-        };
-      }
       if (!sideCheck.ok) return sideCheck;
 
       const logClockSeconds = Number(webStatus?.logClockSeconds ?? 0);
-      if (logClockSeconds < 20 || logClockSeconds > 60) {
-        return { ok: false, error: "WindowClosed", message: "tb 仅在开局 20 到 60 秒之间可用。" };
+      if (!isWithinTbWindow(logClockSeconds)) {
+        return { ok: false, error: "WindowClosed", message: "tb 仅在开局 20 到 120 秒之间可用。" };
       }
 
       const squadId = Number(player?.squadId ?? player?.squadID ?? 0);
@@ -875,17 +882,13 @@ function validateTbBeforeSwitch({ playerKey, playerName, player, matchState, web
     const common = validateCommonPlayerState(matchState, player);
     if (!common.ok) return common;
 
-    if (Boolean(webStatus?.isWarmup)) {
-      return { ok: true, mode: "warmup" };
-    }
-
     if (hasRoundUse(playerKey)) {
       return { ok: false, error: "RoundPlayerQuotaExhausted", message: `${playerName || "玩家"} 本回合已使用过 tb/sqtb/认领。` };
     }
 
     const logClockSeconds = Number(webStatus?.logClockSeconds ?? 0);
-    if (logClockSeconds < 20 || logClockSeconds > 60) {
-      return { ok: false, error: "WindowClosed", message: "tb 仅在开局 20 到 60 秒之间可用。" };
+    if (!isWithinTbWindow(logClockSeconds)) {
+      return { ok: false, error: "WindowClosed", message: "tb 仅在开局 20 到 120 秒之间可用。" };
     }
 
     const squadId = Number(player?.squadId ?? player?.squadID ?? 0);
@@ -910,7 +913,47 @@ function validateTbBeforeSwitch({ playerKey, playerName, player, matchState, web
       };
     }
 
-    return { ok: true, mode: "normal", sideCheck };
+    return { ok: true, mode: Boolean(webStatus?.isWarmup) ? "warmup" : "normal", sideCheck };
+  }
+
+  async function validateBlackEdgeSwitch({ player, matchState, webStatus, actor }) {
+    const common = validateCommonPlayerState(matchState, player);
+    if (!common.ok) return common;
+
+    const logClockSeconds = Number(webStatus?.logClockSeconds ?? 0);
+    if (!isWithinTbWindow(logClockSeconds)) {
+      return { ok: false, error: "WindowClosed", message: "黑奴跳边仅在开局 20 到 120 秒之间可用。" };
+    }
+
+    const sideCheck = getSwitchEligibility(matchState, player);
+    if (!sideCheck.ok) return sideCheck;
+
+    const steamIds = [normalizeText(actor?.steamId)].filter(Boolean);
+    const playerRows = steamIds.length
+      ? (await modules?.playerDatabase?.listPlayersBySteamIDs?.(steamIds) ?? [])
+      : [];
+    const playerRow = Array.isArray(playerRows) ? playerRows[0] : null;
+    const assetCount = Math.max(0, Number(
+      playerRow?.blackEdgeSwitchCount
+      ?? playerRow?.assets?.[BLACK_EDGE_ASSET_KEY]
+      ?? playerRow?.assetsJson?.[BLACK_EDGE_ASSET_KEY]
+      ?? 0,
+    ) || 0);
+
+    if (assetCount < 1) {
+      return {
+        ok: false,
+        error: "BlackEdgeQuotaExhausted",
+        message: "黑奴跳边额度不足。",
+      };
+    }
+
+    return {
+      ok: true,
+      mode: "black_edge",
+      sideCheck,
+      assetCount,
+    };
   }
 
   function validateSqtbCreate({ playerKey, playerName, player, matchState, webStatus, period }) {
@@ -1249,7 +1292,7 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
 
     if (action === "tb") {
       if (!Boolean(validation.mode === "warmup")) {
-        if (validation.mode !== "green_balance") {
+        if (consumesTbQuotaMode(validation.mode)) {
           period.tbUsed += 1;
         }
         state.round.publicTbRemaining = Math.max(0, state.round.publicTbRemaining - 1);
@@ -1272,7 +1315,7 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
       eosId: actor.eosId,
       mode: action === "tb" && Boolean(validation.mode === "warmup")
         ? "warmup_tb"
-        : (action === "tb" && validation.mode === "green_balance" ? "green_balance_tb" : action),
+        : action,
       roundPublicTbRemainingAfter: state.round.publicTbRemaining,
       teamBalanceResult: {
         ok: Boolean(switchResult?.ok),
@@ -1286,15 +1329,13 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
         playerName,
         mode: Boolean(validation.mode === "warmup")
           ? "warmup_tb"
-          : (validation.mode === "green_balance" ? "green_balance_tb" : "tb"),
+          : "tb",
       }), "fair_tb_broadcast", {
         relatedEventId: sourceMessageId,
       });
       await warnPlayer(actor, Boolean(validation.mode === "warmup")
         ? "公平跳边提醒: 已在暖服模式执行完成"
-        : (validation.mode === "green_balance"
-          ? `绿色平衡跳边通道执行完成，公共TB剩余 ${state.round.publicTbRemaining}/${runtimeConfig.publicTbLimit}`
-          : `公平跳边提醒: 已在非暖服模式执行完成，公共TB剩余 ${state.round.publicTbRemaining}/${runtimeConfig.publicTbLimit}`), "fair_tb_success_warning", {
+        : `公平跳边提醒: 已在非暖服模式执行完成，公共TB剩余 ${state.round.publicTbRemaining}/${runtimeConfig.publicTbLimit}`, "fair_tb_success_warning", {
         relatedEventId: sourceMessageId,
       });
       return {
@@ -1325,6 +1366,165 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
 
   async function handleDirectSqtbMessage(event = {}) {
     return handleSqtbMessage(event);
+  }
+
+  async function handleBlackEdgeSwitchMessage(event = {}) {
+    const serverId = getServerId(event?.serverId);
+    const { matchState, player } = getOnlinePlayerSnapshot(serverId, event);
+    const actor = formatActor(player, event);
+    const playerName = actor.playerName;
+    const sourceMessageId = normalizeText(event?.id ?? event?.seq);
+    const webStatus = getCurrentWebStatus();
+    const validation = await validateBlackEdgeSwitch({
+      player,
+      matchState,
+      webStatus,
+      actor,
+    });
+
+    await appendLog({
+      type: "TB_REQUESTED",
+      serverId,
+      playerKey: actor.playerKey,
+      playerName,
+      steamId: actor.steamId,
+      eosId: actor.eosId,
+      message: normalizeText(event?.message),
+      mode: "black_edge",
+      sourceMessageId,
+    });
+
+    if (!validation.ok) {
+      await appendLog({
+        type: "TB_REJECTED",
+        serverId,
+        playerKey: actor.playerKey,
+        playerName,
+        steamId: actor.steamId,
+        eosId: actor.eosId,
+        reason: validation.error,
+        message: validation.message,
+      });
+      await warnPlayer(actor, `黑奴跳边失败: ${validation.message}`, "black_edge_tb_rejected", {
+        relatedEventId: sourceMessageId,
+      });
+      await broadcastViolationMessage(buildViolationBroadcastMessage({
+        playerName,
+        actionLabel: "黑奴跳边",
+        reason: validation.message,
+      }), "black_edge_tb_rejected_broadcast", {
+        relatedEventId: sourceMessageId,
+      });
+      return {
+        ok: false,
+        error: validation.error,
+        message: validation.message,
+      };
+    }
+
+    const consumeResult = await modules?.playerDatabase?.consumeAssetByIdentity?.({
+      name: actor.playerName,
+      steamID: actor.steamId,
+      eosID: actor.eosId,
+    }, BLACK_EDGE_ASSET_KEY, 1);
+
+    if (!consumeResult?.ok) {
+      const message = normalizeText(consumeResult?.message) || "黑奴跳边额度不足。";
+      await appendLog({
+        type: "TB_REJECTED",
+        serverId,
+        playerKey: actor.playerKey,
+        playerName,
+        steamId: actor.steamId,
+        eosId: actor.eosId,
+        reason: normalizeText(consumeResult?.error) || "BlackEdgeQuotaExhausted",
+        message,
+      });
+      await warnPlayer(actor, `黑奴跳边失败: ${message}`, "black_edge_tb_rejected", {
+        relatedEventId: sourceMessageId,
+      });
+      return {
+        ok: false,
+        error: normalizeText(consumeResult?.error) || "BlackEdgeQuotaExhausted",
+        message,
+      };
+    }
+
+    const switchResult = await modules?.teamBalance?.forceTeamChange?.({
+      steamId: actor.steamId,
+      playerName,
+      source: `${PLUGIN_ID}.black_edge`,
+      reason: "black_edge_tb_chat",
+      operator: {
+        id: PLUGIN_ID,
+        name: "FairTeamBalance",
+        username: "FairTeamBalance",
+        role: "system",
+        isSuperAdmin: true,
+        permissions: ["*"],
+      },
+      system: true,
+    });
+
+    if (!switchResult?.ok) {
+      await modules?.playerDatabase?.addAssetByIdentity?.({
+        name: actor.playerName,
+        steamID: actor.steamId,
+        eosID: actor.eosId,
+      }, BLACK_EDGE_ASSET_KEY, 1);
+
+      await appendLog({
+        type: "TB_REJECTED",
+        serverId,
+        playerKey: actor.playerKey,
+        playerName,
+        steamId: actor.steamId,
+        eosId: actor.eosId,
+        reason: normalizeText(switchResult?.error) || "TeamBalanceRejected",
+        message: normalizeText(switchResult?.message) || "TeamBalance rejected the switch.",
+      });
+      await warnPlayer(actor, `黑奴跳边失败: ${normalizeText(switchResult?.message) || "跳边执行被拒绝"}`, "black_edge_tb_switch_rejected", {
+        relatedEventId: sourceMessageId,
+      });
+      return {
+        ok: false,
+        error: normalizeText(switchResult?.error) || "TeamBalanceRejected",
+        message: normalizeText(switchResult?.message) || "TeamBalance rejected the switch.",
+      };
+    }
+
+    await appendLog({
+      type: "TB_EXECUTED",
+      serverId,
+      playerKey: actor.playerKey,
+      playerName,
+      steamId: actor.steamId,
+      eosId: actor.eosId,
+      mode: "black_edge_tb",
+      roundPublicTbRemainingAfter: state.round.publicTbRemaining,
+      teamBalanceResult: {
+        ok: Boolean(switchResult?.ok),
+        message: normalizeText(switchResult?.message),
+        command: normalizeText(switchResult?.command),
+      },
+    });
+
+    await broadcastApprovedMessage(buildQuotaBroadcastMessage({
+      playerName,
+      mode: "black_edge_tb",
+    }), "black_edge_tb_broadcast", {
+      relatedEventId: sourceMessageId,
+    });
+    await warnPlayer(actor, `成功为暖服黑奴 ${playerName || "unknown"} 完成黑奴跳边`, "black_edge_tb_success_warning", {
+      relatedEventId: sourceMessageId,
+    });
+
+    return {
+      ok: true,
+      mode: "black_edge",
+      result: switchResult,
+      remaining: Math.max(0, Number(consumeResult?.remaining ?? 0) || 0),
+    };
   }
 
   function buildRequestId() {
@@ -1718,7 +1918,7 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
         return {
           ok: false,
           error: "WarmupModeDisabled",
-          message: "鏆栨湇妯″紡涓嬪凡鍏抽棴公平跳边锛岃鍒囨崲鍒伴潪鏆栨湇妯″紡鍚庡啀澶勭悊璇锋眰銆?",
+          message: "暖服模式下已关闭公平跳边，请切换到非暖服模式后再处理请求。",
         };
       }
 
@@ -2192,9 +2392,19 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
       const lowerMessage = message.toLowerCase();
       const isTb = lowerMessage === "tb" || message === "公平跳边" || message === "跳边";
       const isSqtb = lowerMessage === "sqtb" || message === "申请跳边";
+      const isBlackEdge = message === "黑奴跳边";
 
-      if (!isTb && !isSqtb && !CLAIM_MESSAGE_PATTERN.test(message)) {
+      if (!isTb && !isSqtb && !isBlackEdge && !CLAIM_MESSAGE_PATTERN.test(message)) {
         return { matched: false };
+      }
+
+      if (isBlackEdge) {
+        const result = await handleBlackEdgeSwitchMessage(event);
+        return {
+          matched: true,
+          trigger: "black_edge",
+          ...result,
+        };
       }
 
       if (isTb) {

@@ -146,7 +146,7 @@ export async function renderPage({ root, api, apiFetch }) {
     state.overview = data.overview ?? state.overview;
     renderStats(els, state.overview);
     renderTable(els.body, state.events, state.hoverKey);
-    els.status.textContent = `宸插埛鏂?${new Date().toLocaleTimeString("zh-CN", { hour12: false })}`;
+    els.status.textContent = `已刷新 ${new Date().toLocaleTimeString("zh-CN", { hour12: false })}`;
   }
 
   function scheduleRefresh() {

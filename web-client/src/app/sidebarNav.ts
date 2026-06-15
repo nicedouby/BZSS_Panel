@@ -74,13 +74,14 @@ export const staticNavItems: NavItem[] = [
 
   { path: "/player-database", icon: "DB", label: "玩家数据库", section: "players", order: 10 },
   { path: "/reserve-slots", icon: "VIP", label: "预留位管理", section: "players", order: 20 },
-  { path: "/player-session-records", icon: "REC", label: "进出服记录", section: "players", order: 30 },
-  { path: "/squad-management", icon: "SQ", label: "小队管理", section: "players", order: 40 },
-  { path: "/plugins/group-report", icon: "GR", label: "组队举报", section: "players", order: 50 },
-  { path: "/plugins/fair-squad-guard", icon: "FSG", label: "公平建队", section: "players", order: 60 },
-  { path: "/plugins/stepwise-squad-playtime-guard", icon: "SSP", label: "阶梯式建队时长", section: "players", order: 70 },
-  { path: "/plugins/lianban-kick", icon: "LB", label: "联办踢出", section: "players", order: 80 },
-  { path: "/debug/squad-name-classifier", icon: "SNC", label: "小队名称分类器", section: "players", order: 90 },
+  { path: "/black-edge-privilege", icon: "HN", label: "黑奴跳边 CDK", section: "players", order: 30 },
+  { path: "/player-session-records", icon: "REC", label: "进出服记录", section: "players", order: 40 },
+  { path: "/squad-management", icon: "SQ", label: "小队管理", section: "players", order: 50 },
+  { path: "/plugins/group-report", icon: "GR", label: "组队举报", section: "players", order: 60 },
+  { path: "/plugins/fair-squad-guard", icon: "FSG", label: "公平建队", section: "players", order: 70 },
+  { path: "/plugins/stepwise-squad-playtime-guard", icon: "SSP", label: "阶梯式建队时长", section: "players", order: 80 },
+  { path: "/plugins/lianban-kick", icon: "LB", label: "联办踢出", section: "players", order: 90 },
+  { path: "/debug/squad-name-classifier", icon: "SNC", label: "小队名称分类器", section: "players", order: 100 },
 
   { path: "/tb", icon: "TB", label: "跳边入口", section: "balance", order: 10 },
   { path: "/plugins/fair-team-balance", icon: "FTB", label: "公平跳边", section: "balance", order: 20 },
@@ -222,7 +223,7 @@ function resolveSection(route: string, page: RegisteredWebPage): NavSectionKey {
 
   if (route === "/match-status" || route === "/match-state" || route === "/chat-monitor") return "opsLive";
   if (route === "/tb" || route.includes("fair-team-balance") || id.includes("team-balance")) return "balance";
-  if (route === "/player-database" || route === "/reserve-slots" || route === "/player-session-records" || route === "/squad-management") return "players";
+  if (route === "/player-database" || route === "/reserve-slots" || route === "/black-edge-privilege" || route === "/player-session-records" || route === "/squad-management") return "players";
   if (route.includes("group-report") || route.includes("fair-squad") || route.includes("stepwise-squad") || route.includes("lianban")) return "players";
   if (route.includes("squad-name-classifier") || id.includes("player") || id.includes("squad")) return "players";
   if (route === "/combat-manager" || route === "/battle-log" || route === "/combat-log" || route === "/combat-clean") return "combat";

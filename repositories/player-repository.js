@@ -48,6 +48,7 @@ function enrichAssets(row) {
     assets,
     assetsJson: assets,
     warmupPoints: normalizeAssetAmount(assets.warmupPoints),
+    blackEdgeSwitchCount: normalizeAssetAmount(assets.blackEdgeSwitchCount),
   };
 }
 
@@ -347,6 +348,106 @@ export class PlayerRepository {
     return updated;
   }
 
+  async addAssetAmount(playerId, assetKey, amount = 0) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return null;
+
+    const key = cleanText(assetKey);
+    const delta = Number(amount);
+    if (!key || !Number.isFinite(delta) || delta === 0) {
+      return mapPlayerPlaytimeRow(await this.getPlayerById(id));
+    }
+
+    const existing = await this.getPlayerById(id);
+    if (!existing) return null;
+
+    const assets = parseAssets(existing.assets_json);
+    const currentAmount = normalizeAssetAmount(assets[key]);
+    assets[key] = Math.max(0, currentAmount + delta);
+
+    await this.db.run(
+      `UPDATE players
+       SET assets_json = ?,
+           updated_at = ?
+       WHERE id = ?`,
+      JSON.stringify(assets),
+      now(),
+      id,
+    );
+
+    const updated = mapPlayerPlaytimeRow(await this.getPlayerById(id));
+    this.cache(updated, existing);
+    return updated;
+  }
+
+  async consumeAssetAmount(playerId, assetKey, amount = 1) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) {
+      return {
+        ok: false,
+        error: "InvalidPlayerId",
+        message: "Player id is invalid.",
+        player: null,
+        remaining: 0,
+      };
+    }
+
+    const key = cleanText(assetKey);
+    const cost = normalizeAssetAmount(amount);
+    if (!key || cost <= 0) {
+      return {
+        ok: false,
+        error: "InvalidAssetRequest",
+        message: "Asset key and amount are required.",
+        player: null,
+        remaining: 0,
+      };
+    }
+
+    const existing = await this.getPlayerById(id);
+    if (!existing) {
+      return {
+        ok: false,
+        error: "PlayerNotFound",
+        message: "Player not found.",
+        player: null,
+        remaining: 0,
+      };
+    }
+
+    const assets = parseAssets(existing.assets_json);
+    const currentAmount = normalizeAssetAmount(assets[key]);
+    if (currentAmount < cost) {
+      return {
+        ok: false,
+        error: "AssetInsufficient",
+        message: "Asset amount is insufficient.",
+        player: mapPlayerPlaytimeRow(existing),
+        remaining: currentAmount,
+      };
+    }
+
+    assets[key] = Math.max(0, currentAmount - cost);
+
+    await this.db.run(
+      `UPDATE players
+       SET assets_json = ?,
+           updated_at = ?
+       WHERE id = ?`,
+      JSON.stringify(assets),
+      now(),
+      id,
+    );
+
+    const updated = mapPlayerPlaytimeRow(await this.getPlayerById(id));
+    this.cache(updated, existing);
+    return {
+      ok: true,
+      player: updated,
+      remaining: normalizeAssetAmount(updated?.assets?.[key]),
+    };
+  }
+
   async listPlayers({ query = "", q: qAlias = "", limit = 100, offset = 0, sort = "updated_desc" } = {}) {
     const searchQuery = query || qAlias || "";
     const search = buildPlayerSearchWhere(searchQuery);
@@ -420,7 +521,7 @@ export class PlayerRepository {
 
     const placeholders = ids.map(() => "?").join(", ");
     const rows = await this.db.all(
-      `SELECT id, current_name, steam_id, eos_id, steam_game_seconds, game_seconds, game_seconds_override, steam_avatar, updated_at
+      `SELECT id, current_name, steam_id, eos_id, steam_game_seconds, game_seconds, game_seconds_override, steam_avatar, updated_at, assets_json
        FROM players
        WHERE steam_id IN (${placeholders})`,
       ...ids,
@@ -456,7 +557,7 @@ export class PlayerRepository {
     if (!clauses.length) return [];
 
     const rows = await this.db.all(
-      `SELECT id, current_name, steam_id, eos_id, steam_game_seconds, game_seconds, game_seconds_override, steam_avatar, updated_at
+      `SELECT id, current_name, steam_id, eos_id, steam_game_seconds, game_seconds, game_seconds_override, steam_avatar, updated_at, assets_json
        FROM players
        WHERE ${clauses.join(" OR ")}`,
       ...params,

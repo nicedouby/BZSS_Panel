@@ -18,7 +18,7 @@ export async function renderPage({ root, api, apiFetch, routeInfo }) {
       <div class="page-title-row">
         <div>
           <div class="page-title">玩家数据库</div>
-          <div class="match-empty">MicePanel 椋庢牸妗ｆ搴擄細鐜╁銆佸埆鍚嶃€両P銆佺櫥褰曘€佹垬鏂椼€佹殩鏈嶃€佹爣绛句笌杩濊缁熻</div>
+          <div class="match-empty">MicePanel 玩家档案库：玩家、别名、IP、登录、战斗、暖服、标签与违规统计</div>
         </div>
         <span id="db-sync-status" class="status-text" data-tone="idle">等待操作</span>
       </div>
@@ -195,18 +195,18 @@ export async function renderPage({ root, api, apiFetch, routeInfo }) {
     await apiFetch("/api/player-database/sync-online", { method: "POST" });
     await loadList();
     await loadStats({ silent: true });
-    setStatus("鍦ㄧ嚎鐜╁宸插悓姝�", "success");
+    setStatus("在线玩家已同步", "success");
   });
 
   root.querySelector("#db-reset-combat-stats-btn").addEventListener("click", async () => {
-    if (!window.confirm("纭閲嶇疆鎵€鏈夌帺瀹跺嚮鏉€缁熻鍜屾殩鏈嶇粺璁″悧锛熸鎿嶄綔涓嶅彲鎾ら攢銆�?")) return;
+    if (!window.confirm("确认重置所有玩家击杀统计和暖服统计吗？此操作不可撤销。")) return;
     setStatus("正在重置击杀统计...", "pending");
     const res = await apiFetch("/api/db/reset-combat-stats", { method: "POST" });
     const json = await res.json();
     if (!res.ok) throw new Error(json?.error || "重置失败");
     await loadList();
     await loadStats({ silent: true });
-    setStatus(`鍑绘潃缁熻宸查噸缃紝褰卞搷 ${Number(json.changed || 0)} 鏉¤褰�`, "success");
+    setStatus(`击杀统计已重置，影响 ${Number(json.changed || 0)} 条记录`, "success");
   });
 
   await loadStats({ silent: true });
