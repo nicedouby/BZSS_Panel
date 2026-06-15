@@ -84,41 +84,49 @@
       </PageCard>
     </div>
 
-    <PageCard title="最近进退服记录" description="按时间倒序" compact>
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>时间</th>
-              <th>类型</th>
-              <th>玩家</th>
-              <th>EOS ID</th>
-              <th>Steam64</th>
-              <th>IP</th>
-              <th>服务器</th>
-              <th>事件名</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="!filteredRecords.length">
-              <td colspan="8" class="empty-cell">暂无记录</td>
-            </tr>
-            <tr v-for="item in filteredRecords" :key="item.id">
-              <td>{{ formatTime(item.at || item.time) }}</td>
-              <td>
-                <span :class="['pill', item.kind === 'join' ? 'ok' : 'warn']">
-                  {{ item.kind === "join" ? "加入" : "离开" }}
-                </span>
-              </td>
-              <td class="truncate">{{ item.playerName || "-" }}</td>
-              <td class="truncate">{{ item.eosId || "-" }}</td>
-              <td class="truncate">{{ item.steam64Id || "-" }}</td>
-              <td>{{ item.ip || "-" }}</td>
-              <td class="truncate">{{ item.serverId || "-" }}</td>
-              <td class="truncate">{{ item.eventName || "-" }}</td>
-            </tr>
-          </tbody>
-        </table>
+    <PageCard title="最近进退服记录" description="按时间倒序，分开查看进服和退服" compact body-mode="fill">
+      <div class="session-columns">
+        <section class="session-panel join-panel">
+          <header class="session-panel-header">
+            <div>
+              <h3>进服记录</h3>
+              <p>共 {{ joinRecords.length }} 条</p>
+            </div>
+            <span class="pill ok">加入</span>
+          </header>
+
+          <div v-if="joinRecords.length" class="session-list">
+            <article v-for="item in joinRecords" :key="item.id" class="session-item">
+              <time class="session-time">{{ formatTime(item.at || item.time) }}</time>
+              <strong class="session-player truncate">{{ item.playerName || "-" }}</strong>
+              <span class="session-server truncate">{{ item.serverId || "未知服务器" }}</span>
+              <span class="session-event truncate">{{ item.eventName || "未知事件" }}</span>
+              <span class="session-extra truncate">{{ item.ip || item.steam64Id || item.eosId || "-" }}</span>
+            </article>
+          </div>
+          <div v-else class="empty-list">暂无进服记录</div>
+        </section>
+
+        <section class="session-panel leave-panel">
+          <header class="session-panel-header">
+            <div>
+              <h3>退服记录</h3>
+              <p>共 {{ leaveRecords.length }} 条</p>
+            </div>
+            <span class="pill warn">离开</span>
+          </header>
+
+          <div v-if="leaveRecords.length" class="session-list">
+            <article v-for="item in leaveRecords" :key="item.id" class="session-item">
+              <time class="session-time">{{ formatTime(item.at || item.time) }}</time>
+              <strong class="session-player truncate">{{ item.playerName || "-" }}</strong>
+              <span class="session-server truncate">{{ item.serverId || "未知服务器" }}</span>
+              <span class="session-event truncate">{{ item.eventName || "未知事件" }}</span>
+              <span class="session-extra truncate">{{ item.ip || item.steam64Id || item.eosId || "-" }}</span>
+            </article>
+          </div>
+          <div v-else class="empty-list">暂无退服记录</div>
+        </section>
       </div>
     </PageCard>
   </section>
@@ -184,13 +192,19 @@ const filteredRecords = computed<SessionRecord[]>(() => {
   const byPlayer = playerFilter.value.trim().toLowerCase();
   const byServer = serverFilter.value.trim().toLowerCase();
 
-  return rows.filter((item) => {
-    if (byKind !== "all" && item.kind !== byKind) return false;
-    if (byPlayer && !String(item.playerName ?? "").toLowerCase().includes(byPlayer)) return false;
-    if (byServer && String(item.serverId ?? "").toLowerCase() !== byServer) return false;
-    return true;
-  });
+  return rows
+    .filter((item) => {
+      if (byKind !== "all" && item.kind !== byKind) return false;
+      if (byPlayer && !String(item.playerName ?? "").toLowerCase().includes(byPlayer)) return false;
+      if (byServer && String(item.serverId ?? "").toLowerCase() !== byServer) return false;
+      return true;
+    })
+    .slice()
+    .sort((left, right) => toTimeMs(right) - toTimeMs(left));
 });
+
+const joinRecords = computed(() => filteredRecords.value.filter((item) => item.kind === "join"));
+const leaveRecords = computed(() => filteredRecords.value.filter((item) => item.kind === "leave"));
 
 onMounted(() => {
   void loadState();
@@ -265,6 +279,11 @@ function formatTime(value: string | number | null | undefined) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleString();
+}
+
+function toTimeMs(item: SessionRecord) {
+  const parsed = Date.parse(String(item.at ?? item.time ?? ""));
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 async function hydrateMissingNames() {
@@ -428,36 +447,6 @@ async function resolvePlayerNameFromApi(item: SessionRecord) {
   border: 1px solid rgba(24, 144, 255, 0.34);
 }
 
-.table-wrap {
-  height: 100%;
-  min-height: 0;
-  overflow: auto;
-  scrollbar-gutter: stable;
-}
-
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 1120px;
-}
-
-.data-table th,
-.data-table td {
-  text-align: left;
-  padding: 9px 10px;
-  border-bottom: 1px solid var(--line-soft, rgba(255, 255, 255, 0.08));
-  vertical-align: top;
-}
-
-.data-table th {
-  font-size: 12px;
-  opacity: 0.8;
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--color-bg-card);
-}
-
 .truncate {
   max-width: 240px;
   white-space: nowrap;
@@ -465,10 +454,93 @@ async function resolvePlayerNameFromApi(item: SessionRecord) {
   text-overflow: ellipsis;
 }
 
-.empty-cell {
+.session-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  height: 100%;
+  min-height: 0;
+}
+
+.session-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  border: 1px solid var(--line-soft, rgba(255, 255, 255, 0.08));
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+.session-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid var(--line-soft, rgba(255, 255, 255, 0.08));
+}
+
+.session-panel-header h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.session-panel-header p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  opacity: 0.72;
+}
+
+.session-list {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+
+.session-item {
+  display: grid;
+  grid-template-columns: minmax(156px, 1.25fr) minmax(110px, 0.9fr) minmax(110px, 0.9fr) minmax(120px, 1fr) minmax(120px, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line-soft, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  white-space: nowrap;
+}
+
+.session-item + .session-item {
+  margin-top: 8px;
+}
+
+.session-player {
+  font-size: 14px;
+}
+
+.session-time {
+  font-size: 12px;
+  opacity: 0.72;
+  min-width: 0;
+}
+
+.session-server,
+.session-event,
+.session-extra {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.empty-list {
+  display: grid;
+  place-items: center;
+  min-height: 180px;
+  padding: 18px 12px;
   text-align: center;
   opacity: 0.7;
-  padding: 18px 12px;
 }
 
 .pill {
@@ -502,6 +574,22 @@ async function resolvePlayerNameFromApi(item: SessionRecord) {
 @media (max-width: 1100px) {
   .page-shell {
     padding: 14px;
+  }
+
+  .session-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .session-item {
+    grid-template-columns: minmax(132px, 1fr) minmax(90px, 0.8fr) minmax(100px, 0.9fr);
+    gap: 8px;
+  }
+
+  .session-event,
+  .session-extra {
+    display: none;
   }
 }
 </style>

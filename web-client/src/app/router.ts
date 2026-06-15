@@ -11,6 +11,7 @@ import ScheduledBroadcastPage from "../pages/ScheduledBroadcastPage.vue";
 import InfantryCombatEnhancerPage from "../pages/InfantryCombatEnhancerPage.vue";
 import GroupReportPage from "../pages/GroupReportPage.vue";
 import FairTeamBalancePage from "../pages/FairTeamBalancePage.vue";
+import FairTeamBalanceLabPage from "../pages/FairTeamBalanceLabPage.vue";
 import FairSquadGuardPage from "../pages/FairSquadGuardPage.vue";
 import StepwiseSquadPlaytimeGuardPage from "../pages/StepwiseSquadPlaytimeGuardPage.vue";
 import LianbanKickPage from "../pages/LianbanKickPage.vue";
@@ -328,6 +329,15 @@ export const router = createRouter({
         ...debugManualMeta,
         title: "平局投票提示",
         ...documentLayoutMeta,
+      },
+    },
+    {
+      path: "/debug/fair-team-balance-lab",
+      component: FairTeamBalanceLabPage,
+      meta: {
+        ...debugManualMeta,
+        title: "公平跳边实验室",
+        ...workspaceLayoutMeta,
       },
     },
     {

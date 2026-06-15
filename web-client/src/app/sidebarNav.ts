@@ -84,6 +84,7 @@ export const staticNavItems: NavItem[] = [
 
   { path: "/tb", icon: "TB", label: "跳边入口", section: "balance", order: 10 },
   { path: "/plugins/fair-team-balance", icon: "FTB", label: "公平跳边", section: "balance", order: 20 },
+  { path: "/debug/fair-team-balance-lab", icon: "LAB", label: "公平跳边模拟", section: "balance", order: 30 },
 
   { path: "/combat-manager", icon: "CM", label: "战斗管理", section: "combat", order: 10 },
   { path: "/battle-log", icon: "BTL", label: "战绩记录", section: "combat", order: 20 },
