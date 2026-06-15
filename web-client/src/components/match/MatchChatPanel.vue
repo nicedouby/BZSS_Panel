@@ -131,7 +131,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { apiGet } from "../../app/apiClient";
 import { useAuthStore } from "../../stores/auth.store";
@@ -174,7 +174,7 @@ const MAX_CHAT_MESSAGES = 300;
 const MAX_XM_MESSAGES = 120;
 
 const auth = useAuthStore();
-const chatListRef = ref<HTMLElement | null>(null);
+const chatListRef = ref<any>(null);
 const socketRef = ref<WebSocket | null>(null);
 const autoScroll = ref(true);
 const chatMessages = ref<ChatMessageEvent[]>([]);
@@ -183,6 +183,7 @@ const xmLastSeq = ref(0);
 const expandedXmSeq = ref<number | null>(null);
 const reconnectDelay = ref(1000);
 const transportState = ref<"idle" | "connecting" | "live" | "reconnecting" | "offline" | "unsupported">("idle");
+const active = ref(true);
 
 const enabledChannels = reactive<Record<ChatChannel, boolean>>({
   all: true,
@@ -304,7 +305,7 @@ const xmQuery = useQuery({
     return apiGet<{ lines?: ConsoleLine[] }>(`/api/console/lines?${params.toString()}`);
   },
   refetchInterval: () => {
-    if (!auth.checked || !auth.authenticated) return false;
+    if (!auth.checked || !auth.authenticated || !active.value) return false;
     return 1200;
   },
   refetchOnWindowFocus: false,
@@ -319,6 +320,18 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  shouldReconnect = false;
+  disconnectChatSocket();
+  clearReconnectTimer();
+});
+
+onActivated(() => {
+  active.value = true;
+  watchAuthState();
+});
+
+onDeactivated(() => {
+  active.value = false;
   shouldReconnect = false;
   disconnectChatSocket();
   clearReconnectTimer();
@@ -376,6 +389,7 @@ function watchAuthState() {
     return;
   }
 
+  if (!active.value) return;
   shouldReconnect = true;
 
   if (!socketRef.value) {
@@ -671,9 +685,8 @@ function consoleTooltip(entry: ConsoleFeedLine): string {
 }
 
 function scrollChatToBottom() {
-  const el = chatListRef.value;
-  if (!el) return;
-  el.scrollTop = el.scrollHeight;
+  if (!chatListRef.value?.scrollToItem) return;
+  chatListRef.value.scrollToItem(Math.max(visibleChatMessages.value.length - 1, 0));
 }
 
 function clearChatMessages() {

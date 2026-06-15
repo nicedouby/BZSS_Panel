@@ -32,6 +32,7 @@ import ChatMonitorPage from "../pages/ChatMonitorPage.vue";
 import RuntimeStatusPage from "../pages/RuntimeStatusPage.vue";
 import AdminUsersPage from "../pages/AdminUsersPage.vue";
 import AuditRecordsPage from "../pages/AuditRecordsPage.vue";
+import PluginSubscriptionsPage from "../pages/PluginSubscriptionsPage.vue";
 import { useAuthStore } from "../stores/auth.store";
 import {
   canAccessPage,
@@ -289,7 +290,7 @@ export const router = createRouter({
     },
     {
       path: "/plugin-subscriptions",
-      component: () => import("../pages/PluginSubscriptionsPage.vue"),
+      component: PluginSubscriptionsPage,
       meta: {
         ...systemPollingMeta,
         titleKey: "routeTitle.pluginSubscriptions",
@@ -448,3 +449,49 @@ router.beforeEach((to: any) => {
 
   return { path: "/access-denied" };
 });
+
+const preloadPages = [
+  () => import("../pages/MatchStatusPage.vue"),
+  () => import("../pages/ConsolePage.vue"),
+  () => import("../pages/PlayerDatabasePage.vue"),
+  () => import("../pages/ReserveSlotsPage.vue"),
+  () => import("../pages/BlackEdgePrivilegePage.vue"),
+  () => import("../pages/CombatManagerPage.vue"),
+  () => import("../pages/BattleLogPage.vue"),
+  () => import("../pages/AdminWarnsPage.vue"),
+  () => import("../pages/ScheduledBroadcastPage.vue"),
+  () => import("../pages/InfantryCombatEnhancerPage.vue"),
+  () => import("../pages/GroupReportPage.vue"),
+  () => import("../pages/FairTeamBalancePage.vue"),
+  () => import("../pages/FairTeamBalanceLabPage.vue"),
+  () => import("../pages/FairSquadGuardPage.vue"),
+  () => import("../pages/StepwiseSquadPlaytimeGuardPage.vue"),
+  () => import("../pages/LianbanKickPage.vue"),
+  () => import("../pages/SquadManagementPage.vue"),
+  () => import("../pages/TeamBalancePage.vue"),
+  () => import("../pages/UdpEventForwarderPage.vue"),
+  () => import("../pages/ServerInfoStatisticsPage.vue"),
+  () => import("../pages/MatchSnapshotDebugPage.vue"),
+  () => import("../pages/PjscAverageDurationPage.vue"),
+  () => import("../pages/DrawVoteGuardDebugPage.vue"),
+  () => import("../pages/SquadNameClassifierDebugPage.vue"),
+  () => import("../pages/WelcomeJoinWarningDebugPage.vue"),
+  () => import("../pages/PlayerSessionRecordsPage.vue"),
+  () => import("../pages/CombatLogPage.vue"),
+  () => import("../pages/ComingSoonPage.vue"),
+  () => import("../pages/ChatMonitorPage.vue"),
+  () => import("../pages/RuntimeStatusPage.vue"),
+  () => import("../pages/AdminUsersPage.vue"),
+  () => import("../pages/AuditRecordsPage.vue"),
+  () => import("../pages/PluginSubscriptionsPage.vue"),
+];
+
+let preloadStarted = false;
+
+export function preloadRouteComponents() {
+  if (preloadStarted) return;
+  preloadStarted = true;
+  preloadPages.forEach((loadPage) => {
+    void loadPage();
+  });
+}

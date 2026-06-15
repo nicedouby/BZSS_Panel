@@ -8,7 +8,11 @@
       />
       <SectionSubnav />
       <section class="content-shell" :class="contentShellClass">
-        <RouterView />
+        <RouterView v-slot="{ Component }">
+          <KeepAlive>
+            <component :is="Component" />
+          </KeepAlive>
+        </RouterView>
       </section>
     </main>
     <AppConfirmDialog />
@@ -28,7 +32,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, KeepAlive, ref } from "vue";
 import { RouterView } from "vue-router";
 import { useRoute } from "vue-router";
 import { useAuthStore } from "../../stores/auth.store";

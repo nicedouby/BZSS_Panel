@@ -34,11 +34,17 @@
 
         <main class="chat-log-area">
           <div class="chat-log-shell">
-            <div ref="scrollerRef" class="chat-log">
-              <div v-if="filteredHistory.length === 0" class="chat-empty-state">暂无聊天记录</div>
+            <div v-if="filteredHistory.length === 0" class="chat-empty-state">暂无聊天记录</div>
+            <RecycleScroller
+              v-else
+              ref="scrollerRef"
+              class="chat-log"
+              :items="filteredHistory"
+              :item-size="36"
+              key-field="seq"
+              v-slot="{ item: msg }"
+            >
               <article
-                v-for="msg in filteredHistory"
-                :key="msg.seq"
                 class="chat-line"
                 :class="[`channel-${msg.channel.toLowerCase()}`]"
               >
@@ -47,7 +53,7 @@
                 <span class="chat-name" :title="`${msg.name}${msg.steamID ? ' (' + msg.steamID + ')' : ''}`">{{ msg.name }}:</span>
                 <span class="chat-message">{{ msg.message }}</span>
               </article>
-            </div>
+            </RecycleScroller>
           </div>
         </main>
       </div>
@@ -95,11 +101,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from "vue";
+import { ref, reactive, computed, onActivated, onMounted, onBeforeUnmount, onDeactivated, nextTick, watch } from "vue";
 import * as echarts from "echarts";
+import { RecycleScroller } from "vue-virtual-scroller";
 import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
 import StatusBadge from "../components/common/StatusBadge.vue";
 import { apiGet } from "../app/apiClient";
+import { scheduleIdleTask } from "../utils/idle";
 
 interface ChatMessage {
   time: string;
@@ -132,9 +140,10 @@ const stats = ref<StatPoint[]>([]);
 const activeSpammers = ref<Spammer[]>([]);
 const playerFrequencies = ref<PlayerFreq[]>([]);
 const autoScroll = ref(true);
-const scrollerRef = ref<HTMLElement | null>(null);
+const scrollerRef = ref<any>(null);
 const chartRef = ref<HTMLElement | null>(null);
 let myChart: echarts.ECharts | null = null;
+const active = ref(true);
 
 const channelLabels: Record<string, string> = {
   ChatAll: "公开",
@@ -160,6 +169,7 @@ const filteredHistory = computed(() => {
 });
 
 async function fetchData() {
+  if (!active.value) return;
   try {
     const [hRes, sRes] = await Promise.all([
       apiGet<{ history: ChatMessage[] }>("/api/chat/history"),
@@ -225,8 +235,8 @@ function formatTime(iso: string) {
 }
 
 function scrollToEnd() {
-  if (autoScroll.value && scrollerRef.value) {
-    scrollerRef.value.scrollTop = scrollerRef.value.scrollHeight;
+  if (autoScroll.value && scrollerRef.value?.scrollToItem) {
+    scrollerRef.value.scrollToItem(Math.max(filteredHistory.value.length - 1, 0));
   }
 }
 
@@ -241,9 +251,14 @@ let timer: number | null = null;
 const resizeChart = () => myChart?.resize();
 
 onMounted(() => {
-  initChart();
-  fetchData();
-  timer = window.setInterval(fetchData, 2000);
+  scheduleIdleTask(() => {
+    if (!active.value) return;
+    initChart();
+    void fetchData();
+  });
+  timer = window.setInterval(() => {
+    void fetchData();
+  }, 2000);
   window.addEventListener("resize", resizeChart);
 });
 
@@ -251,6 +266,15 @@ onBeforeUnmount(() => {
   if (timer) clearInterval(timer);
   window.removeEventListener("resize", resizeChart);
   myChart?.dispose();
+});
+
+onActivated(() => {
+  active.value = true;
+  void fetchData();
+});
+
+onDeactivated(() => {
+  active.value = false;
 });
 </script>
 

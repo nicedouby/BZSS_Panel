@@ -1,125 +1,70 @@
-import { reactive } from "vue";
-import { apiGet, apiPost, ApiError, type ApiErrorType } from "./apiClient";
-import { useServerStore } from "../stores/server.store";
-import { usePlayerStore } from "../stores/player.store";
-import { useSquadStore } from "../stores/squad.store";
+import { markRaw, reactive, shallowRef } from "vue";
+import { applyMatchSnapshotResponse, applyRuntimeSnapshotResponse } from "./matchSnapshot";
 import { useAuthStore } from "../stores/auth.store";
-import { normalizeRefreshPolicy, resolveRefreshDelay } from "./refreshPolicy";
-import {
-  applyMatchSnapshotResponse,
-  applyRuntimeSnapshotResponse,
-  hasEmptyMatchLists,
-  isMatchSnapshotConnected,
-} from "./matchSnapshot";
+import { usePlayerStore } from "../stores/player.store";
+import { useServerStore } from "../stores/server.store";
+import { useSquadStore } from "../stores/squad.store";
+
+export interface SnapshotStore {
+  snapshot: any;
+}
+
+const snapshot = shallowRef<any>(null);
 
 const runtimeSyncState = reactive({
   started: false,
   inFlight: false,
   lastSuccessAt: 0,
   lastError: null as string | null,
-  errorType: null as ApiErrorType | "unauthorized" | null,
+  errorType: null as "network" | "http" | "parse" | "timeout" | "unauthorized" | null,
   consecutiveFailures: 0,
-  bootstrapRefreshAttempted: false,
-  refreshPolicy: "polling" as "realtime" | "polling" | "manual",
-  lastRuntimeSnapshotAttemptAt: 0,
-  lastRuntimeSnapshotAt: 0,
 });
 
 let timer: number | null = null;
 
-export function setRuntimeSyncRefreshPolicy(policy: unknown) {
-  runtimeSyncState.refreshPolicy = normalizeRefreshPolicy(policy);
-  scheduleRuntimeSync();
-}
-
 export function startRuntimeSync() {
   if (runtimeSyncState.started) return;
   runtimeSyncState.started = true;
-  document.addEventListener("visibilitychange", handleVisibilityChange);
-  void performRuntimeSync({ scheduleNext: true });
+  void fetchSnapshot();
+  timer = window.setInterval(() => {
+    void fetchSnapshot();
+  }, 2_000);
 }
 
 export function stopRuntimeSync() {
   runtimeSyncState.started = false;
   runtimeSyncState.inFlight = false;
-  runtimeSyncState.bootstrapRefreshAttempted = false;
-  runtimeSyncState.lastRuntimeSnapshotAttemptAt = 0;
-  runtimeSyncState.lastRuntimeSnapshotAt = 0;
   if (timer != null) {
-    window.clearTimeout(timer);
+    window.clearInterval(timer);
     timer = null;
   }
-  document.removeEventListener("visibilitychange", handleVisibilityChange);
-}
-
-export function restartRuntimeSync() {
-  stopRuntimeSync();
-  startRuntimeSync();
 }
 
 export async function syncOnce() {
-  return performRuntimeSync({ scheduleNext: false });
+  await fetchSnapshot();
+}
+
+export function useSnapshot() {
+  return snapshot;
 }
 
 export function getRuntimeSyncState() {
   return runtimeSyncState;
 }
 
-function handleVisibilityChange() {
-  scheduleRuntimeSync();
-}
-
-async function performRuntimeSync({ scheduleNext }: { scheduleNext: boolean }) {
+async function fetchSnapshot() {
   if (!runtimeSyncState.started || runtimeSyncState.inFlight) return;
 
   runtimeSyncState.inFlight = true;
   try {
-    const matchSnapshot = await apiGet<any>("/api/match/snapshot");
-    if (!runtimeSyncState.started) return;
-    applyMatchSnapshotResponse(matchSnapshot);
+    const response = await fetch("/api/snapshot/all", {
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+      },
+    });
 
-    const playerCount = getPlayerCount(matchSnapshot);
-    if (shouldRefreshRuntimeSnapshot(playerCount)) {
-      runtimeSyncState.lastRuntimeSnapshotAttemptAt = Date.now();
-      const snapshot = await apiGet<any>("/api/snapshot/all");
-      if (!runtimeSyncState.started) return;
-      applyRuntimeSnapshotResponse(snapshot);
-      runtimeSyncState.lastRuntimeSnapshotAt = Date.now();
-    }
-
-    await maybeBootstrapMatchRefresh(matchSnapshot);
-
-    runtimeSyncState.lastSuccessAt = Date.now();
-    runtimeSyncState.lastError = null;
-    runtimeSyncState.errorType = null;
-    runtimeSyncState.consecutiveFailures = 0;
-  } catch (error) {
-    handleSyncError(error);
-  } finally {
-    runtimeSyncState.inFlight = false;
-    if (scheduleNext) {
-      scheduleRuntimeSync();
-    }
-  }
-}
-
-function scheduleRuntimeSync() {
-  if (!runtimeSyncState.started) return;
-  if (runtimeSyncState.inFlight) return;
-  if (timer != null) window.clearTimeout(timer);
-
-  const delay = resolveRuntimeSyncDelay("primary");
-  timer = window.setTimeout(() => {
-    timer = null;
-    void performRuntimeSync({ scheduleNext: true });
-  }, delay);
-}
-
-function handleSyncError(error: unknown) {
-  if (error instanceof ApiError) {
-    if (error.type === "abort") return;
-
-    if (error.type === "http" && error.status === 401) {
+    if (response.status === 401) {
       runtimeSyncState.lastError = "Unauthorized";
       runtimeSyncState.errorType = "unauthorized";
       runtimeSyncState.consecutiveFailures += 1;
@@ -129,17 +74,38 @@ function handleSyncError(error: unknown) {
       return;
     }
 
-    runtimeSyncState.lastError = error.message;
-    runtimeSyncState.errorType = error.type;
+    if (!response.ok) {
+      runtimeSyncState.lastError = `HTTP ${response.status}`;
+      runtimeSyncState.errorType = "http";
+      runtimeSyncState.consecutiveFailures += 1;
+      markRuntimeStoresStale();
+      return;
+    }
+
+    const data = await response.json();
+    if (!runtimeSyncState.started) return;
+
+    const normalized = markRaw(normalizeRuntimeSnapshot(data));
+    snapshot.value = normalized;
+    applySnapshotToStores(normalized);
+
+    runtimeSyncState.lastSuccessAt = Date.now();
+    runtimeSyncState.lastError = null;
+    runtimeSyncState.errorType = null;
+    runtimeSyncState.consecutiveFailures = 0;
+  } catch (error) {
+    runtimeSyncState.lastError = error instanceof Error ? error.message : "Runtime snapshot failed";
+    runtimeSyncState.errorType = "network";
     runtimeSyncState.consecutiveFailures += 1;
     markRuntimeStoresStale();
-    return;
+  } finally {
+    runtimeSyncState.inFlight = false;
   }
+}
 
-  runtimeSyncState.lastError = "Runtime snapshot failed";
-  runtimeSyncState.errorType = "network";
-  runtimeSyncState.consecutiveFailures += 1;
-  markRuntimeStoresStale();
+function applySnapshotToStores(data: any) {
+  applyMatchSnapshotResponse(data);
+  applyRuntimeSnapshotResponse(data);
 }
 
 function markRuntimeStoresStale() {
@@ -148,58 +114,54 @@ function markRuntimeStoresStale() {
   useSquadStore().markStale();
 }
 
-function getPlayerCount(matchSnapshot: any) {
-  const serverStore = useServerStore();
-  const storeCount = Number(serverStore.snapshot?.webStatus?.playerCount ?? serverStore.snapshot?.playerCount ?? Number.NaN);
-  if (Number.isFinite(storeCount) && storeCount >= 0) return storeCount;
+function normalizeRuntimeSnapshot(input: any) {
+  const payload = input?.snapshot ?? input ?? {};
+  const match = payload?.match ?? {};
+  const server = payload?.server ?? match?.server ?? {};
+  const players = payload?.players ?? match?.players ?? {};
+  const squads = payload?.squads ?? match?.squads ?? {};
+  const rcon = payload?.rcon ?? {};
+  const webStatus = server?.webStatus ?? {};
+  const matchState = payload?.matchState ?? {
+    serverStatus: {
+      ...(match?.server ?? {}),
+      ...webStatus,
+      lastUpdatedAt: server?.updatedAt ?? match?.updatedAt ?? payload?.updatedAt ?? Date.now(),
+    },
+    players: {
+      list: Array.isArray(players?.active) ? players.active : [],
+      lastUpdatedAt: players?.updatedAt ?? payload?.updatedAt ?? Date.now(),
+    },
+    squads: {
+      list: Array.isArray(squads?.list) ? squads.list : [],
+      lastUpdatedAt: squads?.updatedAt ?? payload?.updatedAt ?? Date.now(),
+    },
+    teams: Array.isArray(match?.teams) ? match.teams : Array.isArray(payload?.teams) ? payload.teams : [],
+    rconStatus: {
+      ...rcon,
+      connected: Boolean(rcon?.connected ?? webStatus?.rconConnected ?? false),
+    },
+    match: match?.match ?? {},
+    updatedAt: match?.updatedAt ?? payload?.updatedAt ?? Date.now(),
+  };
 
-  const fromSnapshot = Number(matchSnapshot?.matchState?.serverStatus?.playerCount ?? matchSnapshot?.matchState?.players?.list?.length ?? 0);
-  if (Number.isFinite(fromSnapshot) && fromSnapshot >= 0) return fromSnapshot;
+  const overview = payload?.overview ?? {
+    status: webStatus,
+    matchState,
+    serverStatus: matchState.serverStatus,
+    match: matchState.match,
+    players: matchState.players.list,
+    squads: matchState.squads.list,
+    teams: matchState.teams,
+    rconStatus: matchState.rconStatus,
+  };
 
-  return 0;
-}
-
-function resolveRuntimeSyncDelay(surface: "primary" | "auxiliary") {
-  return resolveRefreshDelay({
-    policy: runtimeSyncState.refreshPolicy,
-    playerCount: getCurrentPlayerCount(),
-    hidden: typeof document !== "undefined" ? document.hidden : false,
-    surface,
-  });
-}
-
-function getCurrentPlayerCount() {
-  const serverStore = useServerStore();
-  const storeCount = Number(serverStore.snapshot?.webStatus?.playerCount ?? serverStore.snapshot?.playerCount ?? Number.NaN);
-  if (Number.isFinite(storeCount) && storeCount >= 0) return storeCount;
-  return 0;
-}
-
-function shouldRefreshRuntimeSnapshot(playerCount: number) {
-  if (!runtimeSyncState.lastRuntimeSnapshotAttemptAt) return true;
-  const interval = resolveRefreshDelay({
-    policy: runtimeSyncState.refreshPolicy,
-    playerCount,
-    hidden: typeof document !== "undefined" ? document.hidden : false,
-    surface: "auxiliary",
-  });
-  return Date.now() - runtimeSyncState.lastRuntimeSnapshotAttemptAt >= interval;
-}
-
-async function maybeBootstrapMatchRefresh(matchSnapshot: any) {
-  const auth = useAuthStore();
-  if (!auth.user?.isSuperAdmin) return;
-  if (!isMatchSnapshotConnected(matchSnapshot)) return;
-  if (!hasEmptyMatchLists(matchSnapshot)) return;
-
-  if (runtimeSyncState.bootstrapRefreshAttempted) return;
-  runtimeSyncState.bootstrapRefreshAttempted = true;
-
-  try {
-    const refreshed = await apiPost<any>("/api/match/refresh/all", {});
-    if (!runtimeSyncState.started || !refreshed?.ok) return;
-    applyMatchSnapshotResponse(refreshed);
-  } catch {
-    return;
-  }
+  return {
+    ...payload,
+    raw: input,
+    matchState,
+    overview,
+    events: payload?.events ?? {},
+    jobs: payload?.jobs ?? {},
+  };
 }

@@ -123,32 +123,34 @@
             empty-text="当前文件或搜索条件下没有匹配内容。"
           >
             <div class="table-wrap" :class="{ 'is-loading': entriesLoading }">
-              <table class="log-table">
-                <thead>
-                  <tr>
-                    <th style="width: 80px">时间</th>
-                    <th style="width: 100px">事件</th>
-                    <th style="width: 60px">标记</th>
-                    <th>攻击者</th>
-                    <th>受害者</th>
-                    <th style="width: 60px">伤害</th>
-                    <th style="width: 180px">武器</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="line in entries" :key="`${line.lineNumber}-${line.raw}`">
-                    <td class="time-cell">{{ line.time || "--" }}</td>
-                    <td class="type-cell">
-                      <span class="type-pill" :class="line.type?.toLowerCase()">{{ line.type || "--" }}</span>
-                    </td>
-                    <td class="mark-cell">{{ line.mark || "-" }}</td>
-                    <td class="name-cell attacker">{{ line.attacker || "-" }}</td>
-                    <td class="name-cell victim">{{ line.victim || "-" }}</td>
-                    <td class="damage-cell">{{ line.damage || "-" }}</td>
-                    <td class="weapon-cell">{{ line.weapon || "-" }}</td>
-                  </tr>
-                </tbody>
-              </table>
+              <div class="log-grid log-grid-head">
+                <div>时间</div>
+                <div>事件</div>
+                <div>标记</div>
+                <div>攻击者</div>
+                <div>受害者</div>
+                <div>伤害</div>
+                <div>武器</div>
+              </div>
+              <RecycleScroller
+                class="log-scroller"
+                :items="entries"
+                :item-size="44"
+                key-field="lineNumber"
+                v-slot="{ item: line }"
+              >
+                <div class="log-grid log-grid-row">
+                  <div class="time-cell">{{ line.time || "--" }}</div>
+                  <div class="type-cell">
+                    <span class="type-pill" :class="line.type?.toLowerCase()">{{ line.type || "--" }}</span>
+                  </div>
+                  <div class="mark-cell">{{ line.mark || "-" }}</div>
+                  <div class="name-cell attacker">{{ line.attacker || "-" }}</div>
+                  <div class="name-cell victim">{{ line.victim || "-" }}</div>
+                  <div class="damage-cell">{{ line.damage || "-" }}</div>
+                  <div class="weapon-cell">{{ line.weapon || "-" }}</div>
+                </div>
+              </RecycleScroller>
             </div>
           </DataState>
         </AppCard>
@@ -158,7 +160,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from "vue";
+import { RecycleScroller } from "vue-virtual-scroller";
 import { useRoute, useRouter } from "vue-router";
 import { apiGet } from "../app/apiClient";
 import { renderApiError } from "../app/errors";
@@ -169,6 +172,7 @@ import AppPageToolbar from "../components/common/AppPageToolbar.vue";
 import AppCard from "../components/common/AppCard.vue";
 import DataState from "../components/common/DataState.vue";
 import { t } from "../i18n";
+import { scheduleIdleTask } from "../utils/idle";
 
 interface CombatLogStatus {
   currentFilePath?: string;
@@ -230,6 +234,7 @@ const refreshError = ref("");
 const refreshing = ref(false);
 const entriesLoading = ref(false);
 const entriesError = ref("");
+const active = ref(true);
 
 let statusTimer: number | null = null;
 let refreshSeq = 0;
@@ -300,8 +305,12 @@ watch(
 );
 
 onMounted(async () => {
-  await bootstrap();
+  scheduleIdleTask(() => {
+    if (!active.value) return;
+    void bootstrap();
+  });
   statusTimer = window.setInterval(() => {
+    if (!active.value) return;
     void refreshStatusAndMaybeEntries();
   }, 5000);
 });
@@ -311,6 +320,15 @@ onBeforeUnmount(() => {
     window.clearInterval(statusTimer);
     statusTimer = null;
   }
+});
+
+onActivated(() => {
+  active.value = true;
+  void refreshStatusAndMaybeEntries();
+});
+
+onDeactivated(() => {
+  active.value = false;
 });
 
 async function bootstrap() {
@@ -356,6 +374,7 @@ async function refreshStatus() {
 }
 
 async function refreshStatusAndMaybeEntries() {
+  if (!active.value) return;
   await refreshStatus();
   if (isLiveSelected.value && !entriesLoading.value) {
     await reloadEntries(true);
@@ -764,7 +783,7 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
 .table-wrap {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
   border: 1px solid var(--color-border-default);
   border-radius: 12px;
   background: color-mix(in srgb, var(--color-bg-card) 92%, transparent);
@@ -776,29 +795,14 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
   pointer-events: none;
 }
 
-.log-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  table-layout: fixed;
+.log-grid {
+  display: grid;
+  grid-template-columns: 80px 100px 60px minmax(140px, 1fr) minmax(140px, 1fr) 60px 180px;
+  gap: 0;
+  align-items: center;
 }
 
-.log-table thead th {
-  position: sticky;
-  top: 0;
-  background:
-    var(--theme-panel-highlight),
-    color-mix(in srgb, var(--color-bg-elevated) 96%, transparent);
-  z-index: 1;
-  text-align: left;
-  color: var(--color-text-muted);
-  font-weight: 600;
-  border-bottom: 2px solid var(--color-border-default);
-  padding: 12px 14px;
-}
-
-.log-table th,
-.log-table td {
+.log-grid > div {
   padding: 10px 12px;
   border-bottom: 1px solid var(--color-border-soft);
   font-size: 13px;
@@ -807,12 +811,32 @@ function clampInt(value: unknown, defaultValue: number, min: number, max: number
   white-space: nowrap;
 }
 
-.log-table tbody tr:nth-child(even) {
+.log-grid-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background:
+    var(--theme-panel-highlight),
+    color-mix(in srgb, var(--color-bg-elevated) 96%, transparent);
+}
+
+.log-grid-head > div {
+  color: var(--color-text-muted);
+  font-weight: 600;
+  border-bottom: 2px solid var(--color-border-default);
+}
+
+.log-grid-row:nth-child(even) {
   background: color-mix(in srgb, var(--color-bg-card) 92%, transparent);
 }
 
-.log-table tbody tr:hover {
+.log-grid-row:hover {
   background: rgba(96, 165, 250, 0.08);
+}
+
+.log-scroller {
+  height: 100%;
+  min-height: 0;
 }
 
 .time-cell {

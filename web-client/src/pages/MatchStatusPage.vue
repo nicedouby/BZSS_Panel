@@ -65,35 +65,6 @@
       </div>
     </section>
 
-    <section v-if="showBattleLogPanel" class="battle-log-summary-card" :data-tone="battleLogSummaryTone">
-      <div class="battle-log-summary-header">
-        <div>
-          <div class="battle-log-summary-title">{{ t("player.battleStats", "战绩概览") }}</div>
-          <div class="battle-log-summary-subtitle">{{ battleLogSummarySubtitle }}</div>
-        </div>
-        <div class="battle-log-summary-meta">
-          <span class="battle-log-summary-badge" :data-tone="battleLogSummaryTone">{{ battleLogSummaryStatusText }}</span>
-          <span class="battle-log-summary-updated">{{ battleLogSummaryUpdatedText }}</span>
-        </div>
-      </div>
-
-      <div class="battle-log-summary-grid">
-        <article
-          v-for="card in battleLogSummaryCards"
-          :key="card.key"
-          class="battle-log-summary-stat"
-          :data-tone="card.tone"
-        >
-          <span class="battle-log-summary-stat-label">{{ battleLogSummaryCardLabel(card.key) }}</span>
-          <strong class="battle-log-summary-stat-value">{{ card.value }}</strong>
-        </article>
-      </div>
-
-      <div v-if="battleLogLatestText" class="battle-log-summary-latest">
-        {{ battleLogLatestText }}
-      </div>
-    </section>
-
     <section v-if="false" class="ticket-control-card">
       <div class="ticket-control-header">
         <div>
@@ -281,12 +252,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch, provide } from "vue";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch, provide } from "vue";
+import { useQuery } from "@tanstack/vue-query";
 import { useRoute } from "vue-router";
 import { apiGet, apiPost } from "../app/apiClient";
 import { renderApiError } from "../app/errors";
-import { getRuntimeSyncState } from "../app/runtimeSync";
+import { getRuntimeSyncState, syncOnce, useSnapshot } from "../app/runtimeSync";
 import { applyMatchSnapshotResponse } from "../app/matchSnapshot";
 import { useAuthStore } from "../stores/auth.store";
 import { usePlayerStore } from "../stores/player.store";
@@ -314,6 +285,7 @@ import FloatingPlayerWindow from "../components/squad-admin/FloatingPlayerWindow
 import SquadDetailDrawer from "../components/squad-admin/SquadDetailDrawer.vue";
 import { t } from "../i18n";
 import { normalizeRefreshPolicy, resolveRefreshDelay } from "../app/refreshPolicy";
+import { cancelIdleTask, scheduleIdleTask } from "../utils/idle";
 import type {
   PageState,
   PlayerDetailViewModel,
@@ -367,7 +339,7 @@ const match = useMatchStore();
 const jobs = useJobStore();
 const ui = useUiStore();
 const runtime = getRuntimeSyncState();
-const queryClient = useQueryClient();
+const snapshot = useSnapshot();
 const route = useRoute();
 
 const refreshingPlaytime = ref(false);
@@ -394,7 +366,9 @@ const activePlayerWindow = ref<{
 } | null>(null);
 const selectedSquadDetail = ref<SquadViewModel | null>(null);
 const pageHidden = ref(typeof document !== "undefined" ? document.hidden : false);
+const active = ref(true);
 let battlePlayerRefreshToken = 0;
+let battleStatsRefreshIdleHandle: number | null = null;
 
 const multiSelectMode = ref(false);
 const selectedPlayerIds = ref<Set<string | number>>(new Set());
@@ -436,18 +410,12 @@ const refreshingType = computed(() => {
 const snapshotUpdatedAt = computed(() => Math.max(server.updatedAt, players.updatedAt, squads.updatedAt));
 const hasSnapshotData = computed(() => snapshotUpdatedAt.value > 0);
 const routeRefreshPolicy = computed(() => normalizeRefreshPolicy(route.meta.refreshPolicy));
-const matchSnapshotQuery = useQuery({
-  queryKey: computed(() => ["match-snapshot", auth.authenticated]),
-  enabled: computed(() => auth.authenticated),
-  queryFn: async () => apiGet<any>("/api/match/snapshot"),
-  refetchOnWindowFocus: false,
-});
-const matchSnapshot = computed(() => matchSnapshotQuery.data.value?.matchState ?? null);
+const matchSnapshot = computed(() => snapshot.value?.snapshot?.matchState ?? snapshot.value?.matchState ?? null);
 const remoteTelemetryQuery = useQuery({
   queryKey: computed(() => ["remote-telemetry-state", auth.authenticated]),
   enabled: computed(() => auth.authenticated),
   queryFn: async () => apiGet<any>("/api/remote-telemetry/state"),
-  refetchInterval: computed(() => (auth.authenticated ? 2_000 : false)),
+  refetchInterval: computed(() => (auth.authenticated && active.value ? 2_000 : false)),
   refetchIntervalInBackground: true,
   refetchOnWindowFocus: false,
 });
@@ -528,7 +496,7 @@ const combatCacheQuery = useQuery({
     }
   },
   staleTime: 5_000,
-  refetchInterval: combatCacheRefetchInterval,
+  refetchInterval: computed(() => (active.value ? combatCacheRefetchInterval.value : false)),
   refetchIntervalInBackground: true,
   refetchOnWindowFocus: false,
 });
@@ -536,7 +504,7 @@ const squadLifecycleQuery = useQuery({
   queryKey: computed(() => ["squad-lifecycle-current", auth.authenticated]),
   enabled: computed(() => auth.authenticated),
   queryFn: async () => apiGet<any>("/api/squad-lifecycle/current"),
-  refetchInterval: squadLifecycleRefetchInterval,
+  refetchInterval: computed(() => (active.value ? squadLifecycleRefetchInterval.value : false)),
   refetchIntervalInBackground: true,
   refetchOnWindowFocus: false,
 });
@@ -556,7 +524,7 @@ const battleLogOverviewQuery = useQuery({
     }
   },
   staleTime: 5_000,
-  refetchInterval: combatCacheRefetchInterval,
+  refetchInterval: computed(() => (active.value ? combatCacheRefetchInterval.value : false)),
   refetchIntervalInBackground: true,
   refetchOnWindowFocus: false,
 });
@@ -675,6 +643,15 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener("visibilitychange", handleVisibilityChange);
+  cancelIdleTask(battleStatsRefreshIdleHandle);
+});
+
+onActivated(() => {
+  active.value = true;
+});
+
+onDeactivated(() => {
+  active.value = false;
 });
 
 function formatTicketDisplay(value: number | null | undefined) {
@@ -747,7 +724,7 @@ async function submitTicketWrite() {
     }
 
     await Promise.all([
-      matchSnapshotQuery.refetch(),
+      syncOnce(),
       remoteTelemetryQuery.refetch(),
     ]);
     resetTicketFormToCurrent();
@@ -806,15 +783,6 @@ watch(
 );
 
 watch(
-  () => matchSnapshotQuery.data.value,
-  (data) => {
-    if (!data?.matchState) return;
-    applyMatchSnapshotResponse(data);
-  },
-  { immediate: true },
-);
-
-watch(
   () => [
     currentServerId.value,
     activePlayerWindow.value?.detail.playerId,
@@ -825,7 +793,12 @@ watch(
     activePlayerWindow.value?.detail.name,
   ],
   () => {
-    void refreshActivePlayerBattleStats();
+    if (!active.value) return;
+    cancelIdleTask(battleStatsRefreshIdleHandle);
+    battleStatsRefreshIdleHandle = scheduleIdleTask(() => {
+      if (!active.value) return;
+      void refreshActivePlayerBattleStats();
+    });
   },
   { immediate: true },
 );
@@ -1542,7 +1515,6 @@ function applyMatchRefreshResult(result: any) {
 
   if (!result.ok) return;
 
-  queryClient.setQueryData(["match-snapshot", auth.authenticated], result);
   applyMatchSnapshotResponse(result);
 }
 

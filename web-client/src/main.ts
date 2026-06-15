@@ -44,11 +44,13 @@ window.addEventListener("unhandledrejection", (event) => {
 
 async function bootstrap() {
   try {
-    const [{ default: App }, { router }, { queryClient }] = await Promise.all([
+    const [{ default: App }, { preloadRouteComponents, router }, { queryClient }] = await Promise.all([
       import("./App.vue"),
       import("./app/router"),
       import("./app/queryClient"),
     ]);
+
+    preloadRouteComponents();
 
     const app = createApp(App);
     app.use(createPinia());
