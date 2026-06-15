@@ -10,6 +10,7 @@ export interface PlayerRowViewModel {
   isLeader: boolean;
   isOnline: boolean;
   teamId: number | null;
+  teamName?: string | null;
   squadId: number | null;
   steamId: string | null;
   steam64?: string | null;
@@ -23,6 +24,7 @@ export interface PlayerRowViewModel {
   matchLastSeenAt?: string | null;
   matchJoinCount?: number | null;
   steamAvatar?: string | null;
+  factionFlagUrl?: string | null;
   combatStats: CombatStats;
   statsLabel: string;
   raw?: any;
@@ -95,6 +97,7 @@ export interface PlayerDetailViewModel {
   isLeader: boolean;
   isOnline: boolean;
   teamId: number | null;
+  teamName?: string | null;
   squadId: number | null;
   steamId: string | null;
   steam64?: string | null;
@@ -112,6 +115,7 @@ export interface PlayerDetailViewModel {
   matchLastSeenAt?: string | null;
   matchJoinCount?: number | null;
   steamAvatar?: string | null;
+  factionFlagUrl?: string | null;
   combatStats: CombatStats;
   statsLabel: string;
   battleStats?: CombatStats;

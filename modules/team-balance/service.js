@@ -200,6 +200,14 @@ export function createTeamBalanceService({ core, config, logger }) {
     const reason = normalizeText(request.reason) || DEFAULT_SHUFFLE_REASON;
     const system = Boolean(request.system);
     const roster = normalizeShuffleRoster(request.players ?? request.roster);
+    const rawGroups = Array.isArray(request.groups)
+      ? request.groups
+      : typeof core.groupReport?.getShuffleGroups === "function"
+        ? core.groupReport.getShuffleGroups()
+        : typeof core.groupReport?.getGroups === "function"
+          ? core.groupReport.getGroups()
+          : [];
+    const shuffleGroups = normalizeShuffleGroups(rawGroups, roster);
 
     if (!enabled) {
       const result = buildShufflePlanResult({
@@ -258,7 +266,7 @@ export function createTeamBalanceService({ core, config, logger }) {
       return result;
     }
 
-    const plan = buildPlaytimeShufflePlan(roster);
+    const plan = buildPlaytimeShufflePlanWithGroups(roster, shuffleGroups);
     const result = buildShufflePlanResult({
       ok: true,
       error: "",
@@ -513,6 +521,62 @@ function normalizeShuffleRoster(players) {
     .filter(Boolean);
 }
 
+function normalizeShuffleGroups(groups, players) {
+  if (!Array.isArray(groups) || !groups.length) return [];
+  const playerMap = new Map();
+  for (const player of Array.isArray(players) ? players : []) {
+    const steamId = normalizeText(player?.steamId ?? player?.steamID);
+    const eosId = normalizeText(player?.eosId ?? player?.eosID);
+    const playerId = normalizeText(player?.playerId ?? player?.playerID);
+    if (steamId) playerMap.set(`steam:${steamId}`, player);
+    if (eosId) playerMap.set(`eos:${eosId}`, player);
+    if (playerId) playerMap.set(`pid:${playerId}`, player);
+  }
+
+  return groups
+    .map((group, index) => normalizeShuffleGroup(group, index, playerMap))
+    .filter((group) => group && group.members.length > 0 && group.anchorPlayerKey);
+}
+
+function normalizeShuffleGroup(group, index, playerMap) {
+  const members = Array.isArray(group?.members)
+    ? group.members
+      .map((member) => normalizeShuffleGroupMember(member, playerMap))
+      .filter(Boolean)
+    : [];
+  const memberKeys = new Set(members.map((member) => member.playerKey));
+  const anchorPlayerKey = normalizeText(group?.anchorPlayerKey);
+  const normalizedAnchor = memberKeys.has(anchorPlayerKey) ? anchorPlayerKey : members[0]?.playerKey || "";
+  if (!normalizedAnchor || members.length === 0) return null;
+  return {
+    index,
+    id: normalizeText(group?.id) || `group-${index + 1}`,
+    name: normalizeText(group?.name) || `Group ${index + 1}`,
+    color: normalizeColorValue(group?.color),
+    anchorPlayerKey: normalizedAnchor,
+    members,
+  };
+}
+
+function normalizeShuffleGroupMember(member, playerMap) {
+  const playerKey = normalizeText(member?.playerKey);
+  const linked = playerMap.get(playerKey)
+    ?? playerMap.get(`steam:${normalizeText(member?.steamId)}`)
+    ?? playerMap.get(`eos:${normalizeText(member?.eosId)}`)
+    ?? playerMap.get(`pid:${normalizeText(member?.playerId)}`);
+  if (!playerKey || !linked) return null;
+  return {
+    playerKey,
+    steamId: normalizeText(member?.steamId ?? linked?.steamId ?? linked?.steamID),
+    eosId: normalizeText(member?.eosId ?? linked?.eosId ?? linked?.eosID),
+  };
+}
+
+function normalizeColorValue(value) {
+  const text = normalizeText(value);
+  return /^#[0-9A-Fa-f]{6}$/.test(text) ? text.toUpperCase() : "";
+}
+
 function normalizeShufflePlayer(player, index) {
   const teamId = normalizeTeamId(player?.teamId ?? player?.teamID);
   if (teamId == null) return null;
@@ -537,20 +601,36 @@ function normalizeShufflePlayer(player, index) {
 }
 
 function buildPlaytimeShufflePlan(players) {
+  return buildPlaytimeShufflePlanWithGroups(players, []);
+}
+
+function buildPlaytimeShufflePlanWithGroups(players, groups = []) {
   const teamSizes = {
     1: players.filter((player) => player.teamId === 1).length,
     2: players.filter((player) => player.teamId === 2).length,
   };
-  const knownPlayers = players
+  const groupedKeys = new Set();
+  const validGroups = Array.isArray(groups) ? groups : [];
+  for (const group of validGroups) {
+    for (const member of group.members) groupedKeys.add(member.playerKey);
+  }
+
+  const ungroupedPlayers = players.filter((player) => !groupedKeys.has(resolveShufflePlayerKey(player)));
+  const knownPlayers = ungroupedPlayers
     .filter((player) => Number.isFinite(player.playtimeSeconds))
     .sort(compareShufflePlayersByPlaytime);
-  const unknownPlayers = players
+  const unknownPlayers = ungroupedPlayers
     .filter((player) => !Number.isFinite(player.playtimeSeconds))
     .sort(compareShufflePlayersByName);
 
   // --- Phase 1: greedy LPT assignment (respects team size caps) ---
   const assigned = { 1: [], 2: [] };
   const knownTotals = { 1: 0, 2: 0 };
+
+  for (const group of validGroups) {
+    const assignment = assignGroupedPlayers(group, players, assigned, knownTotals, teamSizes);
+    if (!assignment) continue;
+  }
 
   for (const player of knownPlayers) {
     const targetTeamId = chooseKnownTargetTeam({ assigned, knownTotals, teamSizes });
@@ -583,6 +663,10 @@ function buildPlaytimeShufflePlan(players) {
       hasKnownPlaytime: Number.isFinite(player.playtimeSeconds),
       switchRequired: player.teamId !== player.targetTeamId,
       online: player.online !== false,
+      groupId: player.groupId || null,
+      groupName: player.groupName || null,
+      groupColor: player.groupColor || null,
+      anchorPlayerKey: player.anchorPlayerKey || null,
     }));
 
   const moves = assignments
@@ -614,8 +698,70 @@ function buildPlaytimeShufflePlan(players) {
       mode: "playtime_balanced_shuffle",
       players: assignments,
       moves,
+      groups: validGroups.map((group) => ({
+        id: group.id,
+        name: group.name,
+        color: group.color || null,
+        anchorPlayerKey: group.anchorPlayerKey,
+        memberCount: group.members.length,
+      })),
     },
   };
+}
+
+function assignGroupedPlayers(group, players, assigned, knownTotals, teamSizes) {
+  const members = group.members
+    .map((member) => findRosterPlayer(players, member))
+    .filter(Boolean);
+  if (!members.length) return null;
+
+  const anchor = members.find((member) => resolveShufflePlayerKey(member) === group.anchorPlayerKey) ?? members[0];
+  const targetTeamId = normalizeTeamId(anchor?.teamId);
+  if (targetTeamId == null) return null;
+
+  const otherTeamId = targetTeamId === 1 ? 2 : 1;
+  const targetRemaining = teamSizes[targetTeamId] - assigned[targetTeamId].length;
+  if (members.length > targetRemaining) return null;
+
+  for (const player of members) {
+    const playtimeSeconds = Number.isFinite(player.playtimeSeconds) ? Number(player.playtimeSeconds) : 0;
+    assigned[targetTeamId].push({
+      ...player,
+      targetTeamId,
+      groupId: group.id,
+      groupName: group.name,
+      groupColor: group.color || "",
+      anchorPlayerKey: group.anchorPlayerKey,
+    });
+    if (Number.isFinite(player.playtimeSeconds)) {
+      knownTotals[targetTeamId] += playtimeSeconds;
+    }
+  }
+
+  return {
+    targetTeamId,
+    otherTeamId,
+  };
+}
+
+function findRosterPlayer(players, member) {
+  const steamId = normalizeText(member?.steamId);
+  const eosId = normalizeText(member?.eosId);
+  return players.find((player) => {
+    if (steamId && normalizeText(player?.steamId) === steamId) return true;
+    if (eosId && normalizeText(player?.eosId) === eosId) return true;
+    return resolveShufflePlayerKey(player) === member.playerKey;
+  }) ?? null;
+}
+
+function resolveShufflePlayerKey(player) {
+  const eosId = normalizeText(player?.eosId ?? player?.eosID);
+  if (eosId) return `eos:${eosId}`;
+  const steamId = normalizeText(player?.steamId ?? player?.steamID);
+  if (steamId) return `steam:${steamId}`;
+  const playerId = normalizeText(player?.playerId ?? player?.playerID);
+  if (playerId) return `pid:${playerId}`;
+  return "";
 }
 
 /**

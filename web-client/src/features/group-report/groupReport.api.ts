@@ -17,6 +17,8 @@ export interface GroupReportGroup {
   id: string;
   name: string;
   note?: string;
+  color?: string;
+  anchorPlayerKey?: string;
   createdAt: number;
   updatedAt: number;
   createdBy?: string;
@@ -54,7 +56,7 @@ export const groupReportApi = {
       .then((result) => result.groups);
   },
 
-  createGroup(input: { name?: string; note?: string }): Promise<GroupReportGroup> {
+  createGroup(input: { name?: string; note?: string; color?: string; anchorPlayerKey?: string }): Promise<GroupReportGroup> {
     return unwrap<GroupReportGroup>("/api/plugins/group-report/groups", {
       method: "POST",
       headers: {
@@ -64,7 +66,7 @@ export const groupReportApi = {
     });
   },
 
-  updateGroup(groupId: string, input: { name?: string; note?: string }): Promise<GroupReportGroup> {
+  updateGroup(groupId: string, input: { name?: string; note?: string; color?: string; anchorPlayerKey?: string }): Promise<GroupReportGroup> {
     return unwrap<GroupReportGroup>(`/api/plugins/group-report/groups/${encodeURIComponent(groupId)}`, {
       method: "PATCH",
       headers: {

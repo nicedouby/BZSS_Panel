@@ -707,6 +707,8 @@ export class WebServer {
           data: await pluginApi.createGroup({
             name: body.name,
             note: body.note,
+            color: body.color,
+            anchorPlayerKey: body.anchorPlayerKey,
             createdBy: user?.username ?? user?.name ?? "",
           }),
         });
@@ -743,6 +745,8 @@ export class WebServer {
           data: await pluginApi.updateGroup(decodeURIComponent(groupMatch[1]), {
             name: body.name,
             note: body.note,
+            color: body.color,
+            anchorPlayerKey: body.anchorPlayerKey,
           }),
         });
       }

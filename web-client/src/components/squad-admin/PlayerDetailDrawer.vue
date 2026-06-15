@@ -39,6 +39,13 @@
                   />
                   <span v-else class="hud-avatar-letter">{{ playerInitials }}</span>
                 </div>
+                <img
+                  v-if="props.player.factionFlagUrl"
+                  class="hud-avatar-country-flag hud-avatar-faction-flag"
+                  :src="props.player.factionFlagUrl"
+                  alt=""
+                  :title="props.player.teamName || 'Faction'"
+                />
                 <!-- Status indicator ring -->
                 <div class="hud-avatar-status-ring" :class="{ online: props.player.isOnline }"></div>
               </component>
@@ -685,6 +692,9 @@ const ipSearchUrl = computed(() => buildIpSearchUrl(displayIp.value));
 const ipEmptyText = computed(() => "--");
 const ipSourceHint = computed(() => t("common.none"));
 
+const playerDatabaseRecord = computed(() => databaseDetail.value?.player ?? null);
+const playerDatabaseSummary = computed(() => databaseDetail.value?.summary ?? null);
+
 const rawDataText = computed(() => (showAdvanced.value ? safeStringify(props.player?.raw) : ""));
 
 const playerDatabaseSearchKey = computed(() => {
@@ -692,9 +702,6 @@ const playerDatabaseSearchKey = computed(() => {
     || String(props.player?.eosId ?? "").trim()
     || String(props.player?.name ?? "").trim();
 });
-
-const playerDatabaseRecord = computed(() => databaseDetail.value?.player ?? null);
-const playerDatabaseSummary = computed(() => databaseDetail.value?.summary ?? null);
 const effectivePlaytimeSeconds = computed(() => {
   if (!playerDatabaseRecord.value) return null;
   return Number(playerDatabaseSummary.value?.gameSeconds ?? playerDatabaseRecord.value?.game_seconds ?? 0);
@@ -769,6 +776,7 @@ function buildIpSearchUrl(value: string | null | undefined) {
   if (!ip) return "";
   return `https://www.baidu.com/s?wd=${encodeURIComponent(`IP查询 ${ip}`)}`;
 }
+
 
 function safeStringify(value: unknown) {
   if (value == null) return "";
@@ -1292,6 +1300,25 @@ onUnmounted(() => {
   color: #fff;
   letter-spacing: -0.02em;
   text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+
+.hud-avatar-country-flag {
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  width: 22px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(6, 9, 15, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  z-index: 2;
+  object-fit: cover;
+  display: block;
+}
+
+.hud-avatar-faction-flag {
+  overflow: hidden;
 }
 
 .hud-avatar-status-ring {

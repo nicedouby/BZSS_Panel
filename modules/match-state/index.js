@@ -461,20 +461,35 @@ export function createMatchStateModule({ core, modules, config, logger }) {
   function enrichPlayersWithMatchPresence(serverId, players) {
     const list = Array.isArray(players) ? players : [];
     const getPlayer = modules?.matchPlayerPresence?.getPlayer;
-    if (typeof getPlayer !== "function") return list;
+    const findPlayerState = modules?.playerState?.findPlayer;
+    if (typeof getPlayer !== "function" && typeof findPlayerState !== "function") return list;
 
     const serverKey = String(serverId ?? core.webStatus.serverId ?? "").trim();
     return list.map((player) => {
-      const presence = getPlayer(player, serverKey);
-      if (!presence) return player;
+      const presence = typeof getPlayer === "function" ? getPlayer(player, serverKey) : null;
+      const playerState = typeof findPlayerState === "function" ? findPlayerState(serverKey, player) : null;
+      if (!presence && !playerState) return player;
+
       return {
         ...player,
-        matchOnlineSeconds: Math.floor(Number(presence.matchOnlineMs ?? 0) / 1000),
-        matchObservedOnlineSeconds: Number(presence.matchObservedOnlineSeconds ?? 0),
-        matchEstimatedOnlineSeconds: Number(presence.matchEstimatedOnlineSeconds ?? 0),
-        matchFirstSeenAt: String(presence.matchFirstSeenAt ?? ""),
-        matchLastSeenAt: String(presence.matchLastSeenAt ?? ""),
-        matchJoinCount: Number(presence.matchJoinCount ?? 0),
+        ...(playerState ? {
+          squadlessSince: String(playerState.squadlessSince ?? ""),
+          squadlessSeconds: Number(playerState.squadlessSeconds ?? 0),
+          firstSeenAt: String(playerState.firstSeenAt ?? ""),
+          lastSquadChangeAt: String(playerState.lastSquadChangeAt ?? ""),
+          squadJoinedAt: String(playerState.squadJoinedAt ?? ""),
+          squadLeftAt: String(playerState.squadLeftAt ?? ""),
+          lastSeenTime: String(playerState.lastSeenTime ?? ""),
+          state: String(playerState.state ?? ""),
+        } : {}),
+        ...(presence ? {
+          matchOnlineSeconds: Math.floor(Number(presence.matchOnlineMs ?? 0) / 1000),
+          matchObservedOnlineSeconds: Number(presence.matchObservedOnlineSeconds ?? 0),
+          matchEstimatedOnlineSeconds: Number(presence.matchEstimatedOnlineSeconds ?? 0),
+          matchFirstSeenAt: String(presence.matchFirstSeenAt ?? ""),
+          matchLastSeenAt: String(presence.matchLastSeenAt ?? ""),
+          matchJoinCount: Number(presence.matchJoinCount ?? 0),
+        } : {}),
       };
     });
   }
@@ -1137,20 +1152,35 @@ export function createMatchStateModule({ core, modules, config, logger }) {
   function enrichPlayersWithMatchPresence(serverId, players) {
     const list = Array.isArray(players) ? players : [];
     const getPlayer = modules?.matchPlayerPresence?.getPlayer;
-    if (typeof getPlayer !== "function") return list;
+    const findPlayerState = modules?.playerState?.findPlayer;
+    if (typeof getPlayer !== "function" && typeof findPlayerState !== "function") return list;
 
     const serverKey = String(serverId ?? core.webStatus.serverId ?? "").trim();
     return list.map((player) => {
-      const presence = getPlayer(player, serverKey);
-      if (!presence) return player;
+      const presence = typeof getPlayer === "function" ? getPlayer(player, serverKey) : null;
+      const playerState = typeof findPlayerState === "function" ? findPlayerState(serverKey, player) : null;
+      if (!presence && !playerState) return player;
+
       return {
         ...player,
-        matchOnlineSeconds: Math.floor(Number(presence.matchOnlineMs ?? 0) / 1000),
-        matchObservedOnlineSeconds: Number(presence.matchObservedOnlineSeconds ?? 0),
-        matchEstimatedOnlineSeconds: Number(presence.matchEstimatedOnlineSeconds ?? 0),
-        matchFirstSeenAt: String(presence.matchFirstSeenAt ?? ""),
-        matchLastSeenAt: String(presence.matchLastSeenAt ?? ""),
-        matchJoinCount: Number(presence.matchJoinCount ?? 0),
+        ...(playerState ? {
+          squadlessSince: String(playerState.squadlessSince ?? ""),
+          squadlessSeconds: Number(playerState.squadlessSeconds ?? 0),
+          firstSeenAt: String(playerState.firstSeenAt ?? ""),
+          lastSquadChangeAt: String(playerState.lastSquadChangeAt ?? ""),
+          squadJoinedAt: String(playerState.squadJoinedAt ?? ""),
+          squadLeftAt: String(playerState.squadLeftAt ?? ""),
+          lastSeenTime: String(playerState.lastSeenTime ?? ""),
+          state: String(playerState.state ?? ""),
+        } : {}),
+        ...(presence ? {
+          matchOnlineSeconds: Math.floor(Number(presence.matchOnlineMs ?? 0) / 1000),
+          matchObservedOnlineSeconds: Number(presence.matchObservedOnlineSeconds ?? 0),
+          matchEstimatedOnlineSeconds: Number(presence.matchEstimatedOnlineSeconds ?? 0),
+          matchFirstSeenAt: String(presence.matchFirstSeenAt ?? ""),
+          matchLastSeenAt: String(presence.matchLastSeenAt ?? ""),
+          matchJoinCount: Number(presence.matchJoinCount ?? 0),
+        } : {}),
       };
     });
   }

@@ -14,6 +14,7 @@ export function createPlugin({ core } = {}) {
     getSnapshot: () => service.getSnapshot(),
     getGroups: () => service.getGroups(),
     getGroup: (groupId) => service.getGroup(groupId),
+    getShuffleGroups: () => service.getGroups(),
     createGroup: (input) => service.createGroup(input),
     updateGroup: (groupId, input) => service.updateGroup(groupId, input),
     deleteGroup: (groupId) => service.deleteGroup(groupId),

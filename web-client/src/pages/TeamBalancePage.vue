@@ -92,6 +92,25 @@
           <span>当前 T1 / T2</span>
           <strong>T1 {{ shuffleTeam1Count }} / T2 {{ shuffleTeam2Count }}</strong>
         </article>
+        <article class="tb-shuffle-stat">
+          <span>抱团小组</span>
+          <strong>{{ shuffleGroups.length }}</strong>
+        </article>
+      </div>
+
+      <div v-if="shuffleGroups.length" class="tb-group-list">
+        <article v-for="group in shuffleGroups" :key="group.id" class="tb-group-card">
+          <div class="tb-group-card__head">
+            <strong>{{ group.name }}</strong>
+            <span class="tb-group-color" :style="{ borderColor: group.color || '#94A3B8', color: group.color || '#94A3B8' }">
+              {{ group.color || "#94A3B8" }}
+            </span>
+          </div>
+          <div class="tb-group-card__meta">
+            <span>锚定 {{ groupAnchorName(group) }}</span>
+            <span>{{ group.members.length }} 人</span>
+          </div>
+        </article>
       </div>
 
       <div v-if="latestShufflePlan" class="tb-shuffle-result">
@@ -121,6 +140,9 @@
                 <strong>{{ player.playerName }}</strong>
                 <span>{{ formatHours(player.playtimeHours) }}</span>
                 <span v-if="player.steamId">{{ player.steamId }}</span>
+                <span v-if="player.groupName" class="tb-player-group" :style="{ borderColor: player.groupColor || '#94A3B8', color: player.groupColor || '#94A3B8' }">
+                  {{ player.groupName }}
+                </span>
               </div>
             </div>
           </article>
@@ -139,6 +161,9 @@
                 <strong>{{ player.playerName }}</strong>
                 <span>{{ formatHours(player.playtimeHours) }}</span>
                 <span v-if="player.steamId">{{ player.steamId }}</span>
+                <span v-if="player.groupName" class="tb-player-group" :style="{ borderColor: player.groupColor || '#94A3B8', color: player.groupColor || '#94A3B8' }">
+                  {{ player.groupName }}
+                </span>
               </div>
             </div>
           </article>
@@ -259,6 +284,7 @@ import {
 } from "../app/matchSnapshot";
 import { usePlayerStore, type RuntimePlayer } from "../stores/player.store";
 import { createPlaytimeShufflePlan, type TeamShufflePlanResponse } from "../app/teamBalanceApi";
+import { groupReportApi, type GroupReportGroup } from "../features/group-report/groupReport.api";
 
 interface TeamBalancePlanSummary {
   totalPlayers?: number;
@@ -278,6 +304,10 @@ interface TeamBalancePlanMove {
   targetTeamId?: number;
   playtimeHours?: number | null;
   hasKnownPlaytime?: boolean;
+  groupId?: string | null;
+  groupName?: string | null;
+  groupColor?: string | null;
+  anchorPlayerKey?: string | null;
 }
 
 interface ShuffleRosterPlayer {
@@ -312,6 +342,13 @@ interface TeamBalanceRecord {
     mode?: string;
     players?: TeamBalancePlanMove[];
     moves?: TeamBalancePlanMove[];
+    groups?: Array<{
+      id: string;
+      name: string;
+      color?: string | null;
+      anchorPlayerKey: string;
+      memberCount: number;
+    }>;
   } | null;
 }
 
@@ -334,6 +371,7 @@ const lastPlayersFetchAt = ref(0);
 const bootstrapRefreshAttempted = ref(false);
 const creatingShufflePlan = ref(false);
 const latestShufflePlan = ref<TeamShufflePlanResponse | null>(null);
+const shuffleGroups = ref<GroupReportGroup[]>([]);
 
 const filteredPlayers = computed(() => {
   const query = String(playerName.value || "").trim().toLowerCase();
@@ -356,6 +394,7 @@ const canCreateShufflePlan = computed(() => shuffleTeam1Count.value > 0 && shuff
 onMounted(() => {
   void loadRecords();
   void refreshPlayersIfNeeded();
+  void loadShuffleGroups();
 });
 
 onBeforeUnmount(() => {
@@ -423,6 +462,15 @@ async function refreshPlayersIfNeeded() {
     playersError.value = String(err?.message || err || "玩家列表加载失败");
   } finally {
     loadingPlayers.value = false;
+  }
+}
+
+async function loadShuffleGroups() {
+  try {
+    const snapshot = await groupReportApi.getSnapshot();
+    shuffleGroups.value = Array.isArray(snapshot?.groups) ? snapshot.groups.filter((group) => group.members?.length) : [];
+  } catch {
+    shuffleGroups.value = [];
   }
 }
 
@@ -494,6 +542,17 @@ async function handleCreateShufflePlan() {
     const result = await createPlaytimeShufflePlan({
       source: "web.teamBalance",
       reason: "team_balance_playtime_shuffle_plan",
+      groups: shuffleGroups.value.map((group) => ({
+        id: group.id,
+        name: group.name,
+        color: group.color ?? null,
+        anchorPlayerKey: group.anchorPlayerKey,
+        members: group.members.map((member) => ({
+          playerKey: member.playerKey,
+          steamId: member.steamId ?? null,
+          eosId: member.eosId ?? null,
+        })),
+      })),
       players: roster.map((player) => ({
         playerId: player.playerId,
         steamId: player.steamId,
@@ -541,6 +600,10 @@ function recordTeamPlayers(record: TeamBalanceRecord, teamId: number) {
       if (diff !== 0) return diff;
       return String(left.playerName ?? "").localeCompare(String(right.playerName ?? ""), "zh-CN");
     });
+}
+
+function groupAnchorName(group: GroupReportGroup) {
+  return group.members.find((member) => member.playerKey === group.anchorPlayerKey)?.name || "--";
 }
 
 function pickPlayer(player: RuntimePlayer) {
@@ -802,8 +865,44 @@ function roundHours(value: number) {
 
 .tb-shuffle-hero {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
+}
+
+.tb-group-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.tb-group-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--color-border-soft);
+  background: color-mix(in srgb, var(--color-bg-card) 90%, transparent);
+}
+
+.tb-group-card__head,
+.tb-group-card__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tb-group-color,
+.tb-player-group {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 12px;
 }
 
 .tb-shuffle-stat {

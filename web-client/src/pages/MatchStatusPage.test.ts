@@ -292,12 +292,13 @@ describe("MatchStatusPage", () => {
                   playerID: 1,
                   name: "Alice",
                   teamID: 1,
-                  squadID: 2,
+                  squadID: null,
                   steamID: "76561198000000001",
                   eosID: "EOS-1",
                   role: "Rifleman",
                   isLeader: false,
                   online: true,
+                  squadlessSeconds: 95,
                   matchOnlineSeconds: 3661,
                   matchObservedOnlineSeconds: 3600,
                   matchEstimatedOnlineSeconds: 61,
@@ -409,6 +410,7 @@ describe("MatchStatusPage", () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain("Alice");
+    expect(wrapper.text()).toContain("游离");
 
     await wrapper.find(".player-row").trigger("click", { clientX: 120, clientY: 150 });
     await flushPromises();
@@ -425,6 +427,7 @@ describe("MatchStatusPage", () => {
     expect(panel?.getAttribute("style") || "").toContain("left: 12px");
     expect(panel?.getAttribute("style") || "").toContain("top: 12px");
 
+    expect((wrapper.vm as any).activePlayerWindow?.detail?.raw?.squadlessSeconds).toBe(95);
     wrapper.unmount();
   });
 

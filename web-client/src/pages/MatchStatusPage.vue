@@ -304,6 +304,7 @@ import {
   buildSquadLifecycleLookup,
   filterTeamsBySearch,
 } from "../utils/squad-admin-adapter";
+import { getFlagUrlByTeamName } from "../shared/faction-assets/faction-data";
 import DataState from "../components/common/DataState.vue";
 import ErrorBlock from "../components/common/ErrorBlock.vue";
 import SquadPageToolbar from "../components/squad-admin/SquadPageToolbar.vue";
@@ -1150,25 +1151,42 @@ async function handlePlayerPlaytimeUpdated() {
 }
 
 function buildPlayerDetailViewModel(player: PlayerRowViewModel): PlayerDetailViewModel {
+  const rawBase = player.raw && typeof player.raw === "object" ? player.raw : {};
   const rawPlayer: RuntimePlayer = {
+    ...rawBase,
     playerID: normalizePlayerId(player.playerId),
     name: player.name,
     teamID: player.teamId ?? null,
     squadID: player.squadId ?? null,
     steamID: player.steamId ?? undefined,
+    steam64: player.steam64 ?? (rawBase as any).steam64 ?? undefined,
     eosID: player.eosId ?? undefined,
     isLeader: player.isLeader,
     role: player.role,
     online: player.isOnline,
-    current_ip: player.ip ?? undefined,
-    matchOnlineSeconds: player.matchOnlineSeconds ?? undefined,
-    matchObservedOnlineSeconds: player.matchObservedOnlineSeconds ?? undefined,
-    matchEstimatedOnlineSeconds: player.matchEstimatedOnlineSeconds ?? undefined,
-    matchFirstSeenAt: player.matchFirstSeenAt ?? undefined,
-    matchLastSeenAt: player.matchLastSeenAt ?? undefined,
-    matchJoinCount: player.matchJoinCount ?? undefined,
+    current_ip: player.ip ?? (rawBase as any).current_ip ?? (rawBase as any).ip ?? undefined,
+    matchOnlineSeconds: player.matchOnlineSeconds ?? (rawBase as any).matchOnlineSeconds ?? undefined,
+    matchObservedOnlineSeconds: player.matchObservedOnlineSeconds ?? (rawBase as any).matchObservedOnlineSeconds ?? undefined,
+    matchEstimatedOnlineSeconds: player.matchEstimatedOnlineSeconds ?? (rawBase as any).matchEstimatedOnlineSeconds ?? undefined,
+    matchFirstSeenAt: player.matchFirstSeenAt ?? (rawBase as any).matchFirstSeenAt ?? undefined,
+    matchLastSeenAt: player.matchLastSeenAt ?? (rawBase as any).matchLastSeenAt ?? undefined,
+    matchJoinCount: player.matchJoinCount ?? (rawBase as any).matchJoinCount ?? undefined,
   } as RuntimePlayer;
   const detail = adaptPlayerDetail(rawPlayer, player.playtimeHours ?? null, combatStatsLookup.value);
+  const currentTeam =
+    viewModels.value.teams.find((team) => team.teamId === player.teamId)
+    ?? rawTeams.value.find((team) => team.teamId === player.teamId)
+    ?? null;
+  const resolvedTeamName = normalizeResolvedTeamName(
+    currentTeam?.teamName
+    ?? player.teamName
+    ?? (rawBase as any).teamName
+    ?? (rawBase as any).TeamName,
+  );
+  detail.teamName = resolvedTeamName;
+  detail.factionFlagUrl = resolvedTeamName
+    ? getFlagUrlByTeamName(resolvedTeamName)
+    : (player.factionFlagUrl ?? null);
   const cacheRecord = player.steamId ? stablePlaytimes.value[player.steamId] : null;
   detail.steamAvatar = cacheRecord?.steam_avatar || cacheRecord?.steamAvatar || player.steamAvatar || null;
   return detail;
@@ -1208,6 +1226,12 @@ function normalizePlayerId(value: string | number | null | undefined) {
   if (value == null) return null;
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
+}
+
+function normalizeResolvedTeamName(value: unknown): string | null {
+  if (value == null) return null;
+  const text = String(value).trim();
+  return text ? text : null;
 }
 
 function buildBattlePlayerQuery(detail: PlayerDetailViewModel | null | undefined) {

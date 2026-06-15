@@ -190,24 +190,30 @@ export class PlayerRepository {
     const steam = cleanId(steamID);
     const eos = cleanId(eosID);
     const currentIp = cleanText(ip);
-    const existing = await this.findByIdentity({ name: playerName, steamID: steam, eosID: eos });
+    let existing = await this.findByIdentity({ name: playerName, steamID: steam, eosID: eos });
 
     if (!existing) {
-      const result = await this.db.run(
-        `INSERT INTO players (current_name, steam_id, eos_id, current_ip, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        playerName,
-        steam,
-        eos,
-        currentIp,
-        ts,
-        ts,
-      );
-      const created = await this.getPlayerById(result.lastID);
-      if (playerName) await this.touchAlias(created.id, playerName, ts);
-      if (currentIp) await this.touchIp(created.id, currentIp, ts);
-      this.cache(created);
-      return created;
+      try {
+        const result = await this.db.run(
+          `INSERT INTO players (current_name, steam_id, eos_id, current_ip, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          playerName,
+          steam,
+          eos,
+          currentIp,
+          ts,
+          ts,
+        );
+        const created = await this.getPlayerById(result.lastID);
+        if (playerName) await this.touchAlias(created.id, playerName, ts);
+        if (currentIp) await this.touchIp(created.id, currentIp, ts);
+        this.cache(created);
+        return created;
+      } catch (error) {
+        if (!isPlayerIdentityConflict(error)) throw error;
+        existing = await this.findByIdentity({ name: playerName, steamID: steam, eosID: eos });
+        if (!existing) throw error;
+      }
     }
 
     const next = {
@@ -217,17 +223,24 @@ export class PlayerRepository {
       current_ip: currentIp ?? existing.current_ip,
     };
 
-    await this.db.run(
-      `UPDATE players
-       SET current_name = ?, steam_id = ?, eos_id = ?, current_ip = ?, updated_at = ?
-       WHERE id = ?`,
-      next.current_name,
-      next.steam_id,
-      next.eos_id,
-      next.current_ip,
-      ts,
-      existing.id,
-    );
+    try {
+      await this.db.run(
+        `UPDATE players
+         SET current_name = ?, steam_id = ?, eos_id = ?, current_ip = ?, updated_at = ?
+         WHERE id = ?`,
+        next.current_name,
+        next.steam_id,
+        next.eos_id,
+        next.current_ip,
+        ts,
+        existing.id,
+      );
+    } catch (error) {
+      if (!isPlayerIdentityConflict(error)) throw error;
+      const conflicted = await this.findByIdentity({ name: playerName, steamID: steam, eosID: eos });
+      if (!conflicted) throw error;
+      existing = conflicted;
+    }
 
     if (next.current_name) await this.touchAlias(existing.id, next.current_name, ts);
     if (currentIp) await this.touchIp(existing.id, currentIp, ts);
@@ -951,4 +964,12 @@ export class PlayerRepository {
     if (eos) this.byEOSID.delete(eos);
     if (name) this.byName.delete(name);
   }
+}
+
+function isPlayerIdentityConflict(error) {
+  const message = String(error?.message ?? "");
+  return message.includes("SQLITE_CONSTRAINT") && (
+    message.includes("players.eos_id") ||
+    message.includes("players.steam_id")
+  );
 }

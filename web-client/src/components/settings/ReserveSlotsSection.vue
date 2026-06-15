@@ -39,9 +39,6 @@
         >
           {{ tab.label }}
         </button>
-        <button type="button" class="reserve-tab" :class="{ active: batchWindow.open }" @click="openBatchWindow">
-          CDK批次窗口
-        </button>
       </div>
 
       <section v-if="activeTab === 'manual'" class="reserve-tab-panel">
@@ -322,7 +319,7 @@
         </div>
       </section>
 
-      <section v-else-if="activeTab === 'batches'" class="reserve-tab-panel">
+      <section v-else-if="activeTab === 'batches'" class="reserve-tab-panel reserve-tab-panel-fixed">
         <div class="reserve-summary-grid">
           <div class="reserve-summary-card">
             <span>有效批次</span>
@@ -345,91 +342,120 @@
         <div class="cdk-toolbar">
           <div>
             <h4>CDK 批次列表</h4>
-            <p class="subtitle">批次单独成列表，新增入口改为按钮。</p>
+            <p class="subtitle">左侧直接展示每批次 CDK，右侧固定用于新增预留位 CDK 批次。</p>
           </div>
-          <button type="button" class="reserve-btn primary" :disabled="!canEdit" @click="openBatchCreateModal">
-            新增批次
-          </button>
         </div>
 
-        <div class="cdk-batch-grid">
-          <article v-if="false" class="cdk-batch-card batch-create-card">
-            <div class="cdk-batch-head">
+        <div class="batch-workspace batch-workspace-split">
+          <section class="batch-list-panel">
+            <div class="reserve-section-head">
               <div>
-                <div class="cdk-batch-title-row">
-                  <strong>新建 CDK 批次</strong>
-                </div>
-                <p class="cdk-batch-meta">点击加号打开发放窗口。</p>
+                <h4>已有批次</h4>
+                <p>每个批次直接展开可复制的 CDK。</p>
               </div>
-              <div class="cdk-batch-actions">
-                <button type="button" class="reserve-mini-btn primary-like" :disabled="!canEdit" @click="openBatchCreateModal">+</button>
-              </div>
+              <span class="reserve-section-stat">{{ cdkBatches.length }}</span>
             </div>
-            <div class="cdk-batch-details">
-              <span>批次内会直接显示生成出的 CDK，可按批次复制。</span>
-            </div>
-          </article>
 
-          <article
-            v-for="batch in cdkBatches"
-            :key="batch.id"
-            class="cdk-batch-card"
-            :class="{ active: selectedBatchId === batch.id }"
-            @click="selectedBatchId = batch.id"
-          >
-            <div class="cdk-batch-head">
+            <div v-if="!cdkBatches.length" class="reserve-empty card-empty batch-empty">暂无有效 CDK 批次。</div>
+            <div v-else class="cdk-batch-grid">
+              <article
+                v-for="batch in cdkBatches"
+                :key="batch.id"
+                class="cdk-batch-card compact"
+                :class="{ active: selectedBatchId === batch.id }"
+                @click="selectedBatchId = batch.id"
+              >
+                <div class="cdk-batch-head">
+                  <div>
+                    <div class="cdk-batch-title-row">
+                      <strong>{{ batch.codeType }}</strong>
+                      <span class="reserve-pill active">有效</span>
+                    </div>
+                    <p class="cdk-batch-meta mono">{{ batch.id }}</p>
+                  </div>
+                  <div class="cdk-batch-actions">
+                    <button type="button" class="reserve-mini-btn" @click.stop="copyBatchCodes(batch)">复制 CDK</button>
+                    <button type="button" class="reserve-mini-btn" @click.stop="openBatchRecords(batch)">激活记录</button>
+                    <button type="button" class="reserve-mini-btn danger" :disabled="!canEdit || batchActionLoadingId === batch.id" @click.stop="confirmDeactivateBatch(batch)">
+                      {{ batchActionLoadingId === batch.id ? "处理中..." : "报销" }}
+                    </button>
+                  </div>
+                </div>
+
+                <div class="cdk-batch-metrics compact-metrics">
+                  <div class="cdk-metric">
+                    <span>数量</span>
+                    <strong>{{ batch.quantity }}</strong>
+                  </div>
+                  <div class="cdk-metric">
+                    <span>已用</span>
+                    <strong>{{ batch.usedCount }}</strong>
+                  </div>
+                  <div class="cdk-metric">
+                    <span>剩余</span>
+                    <strong>{{ batch.remainingCount }}</strong>
+                  </div>
+                  <div class="cdk-metric">
+                    <span>天数</span>
+                    <strong>{{ batch.durationDays }}</strong>
+                  </div>
+                  <div class="cdk-metric">
+                    <span>记录</span>
+                    <strong>{{ batch.activationCount ?? 0 }}</strong>
+                  </div>
+                </div>
+
+                <div class="cdk-batch-details compact-details">
+                  <span>同玩家：{{ batch.allowMultiActivation ? "允许多次" : "单次使用" }}</span>
+                  <span>创建时间：{{ formatDate(batch.createdAt) }}</span>
+                  <span>创建人：{{ batch.createdBy || "system" }}</span>
+                </div>
+
+                <div v-if="batch.codes?.length" class="created-code-list inline-code-list">
+                  <code v-for="code in batch.codes" :key="code">{{ code }}</code>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <form class="reserve-edit-panel batch-create-panel" @submit.prevent="submitBatchCreate">
+            <div class="reserve-section-head">
               <div>
-                <div class="cdk-batch-title-row">
-                  <strong>{{ batch.codeType }}</strong>
-                  <span class="reserve-pill active">
-                    有效
-                  </span>
-                </div>
-                <p class="cdk-batch-meta mono">{{ batch.id }}</p>
-              </div>
-              <div class="cdk-batch-actions">
-                <button type="button" class="reserve-mini-btn" @click="openBatchDetail(batch)">查看概览</button>
-                <button type="button" class="reserve-mini-btn" @click="openBatchRecords(batch)">查看激活记录</button>
-                <button type="button" class="reserve-mini-btn danger" :disabled="!canEdit || batchActionLoadingId === batch.id" @click="confirmDeactivateBatch(batch)">
-                  {{ batchActionLoadingId === batch.id ? "处理中..." : "报销" }}
-                </button>
+                <h4>新增预留位 CDK 批次</h4>
+                <p>右侧固定窗口专门用于创建批次。</p>
               </div>
             </div>
 
-            <div class="cdk-batch-metrics">
-              <div class="cdk-metric">
-                <span>数量</span>
-                <strong>{{ batch.quantity }}</strong>
-              </div>
-              <div class="cdk-metric">
-                <span>已用</span>
-                <strong>{{ batch.usedCount }}</strong>
-              </div>
-              <div class="cdk-metric">
-                <span>剩余</span>
-                <strong>{{ batch.remainingCount }}</strong>
-              </div>
-              <div class="cdk-metric">
-                <span>激活天数</span>
-                <strong>{{ batch.durationDays }}</strong>
-              </div>
-              <div class="cdk-metric">
-                <span>激活记录</span>
-                <strong>{{ batch.activationCount ?? 0 }}</strong>
-              </div>
+            <label class="reserve-field">
+              <span>CDK 类型</span>
+              <input v-model.trim="batchForm.codeType" class="reserve-input" type="text" placeholder="例如 VIP" required>
+            </label>
+            <label class="reserve-field">
+              <span>该批次数量</span>
+              <input v-model.number="batchForm.quantity" class="reserve-input" type="number" min="1" step="1" required>
+            </label>
+            <label class="reserve-field">
+              <span>激活天数</span>
+              <input v-model.number="batchForm.durationDays" class="reserve-input" type="number" min="1" step="1" required>
+            </label>
+            <label class="checkbox-row">
+              <input v-model="batchForm.allowMultiActivation" type="checkbox">
+              <span>允许同一玩家多次使用该批次中的不同 CDK</span>
+            </label>
+
+            <div class="reserve-save-preview">
+              <span>批次预览</span>
+              <strong>{{ batchForm.codeType || "CDK" }} / {{ Number(batchForm.quantity) || 0 }} 个 / {{ Number(batchForm.durationDays) || 0 }} 天</strong>
             </div>
 
-            <div class="cdk-batch-details">
-              <span>同玩家可重复激活：{{ batch.allowMultiActivation ? "允许" : "禁止" }}</span>
-              <span>创建时间：{{ formatDate(batch.createdAt) }}</span>
-              <span>创建人：{{ batch.createdBy || "system" }}</span>
-              <span>格式：CDK{{ batch.codeType }}XXXXXXXXXXXXXXA</span>
-            </div>
-          </article>
+            <button type="submit" class="reserve-btn primary full" :disabled="!canEdit || batchCreating">
+              {{ batchCreating ? "创建中..." : "创建批次" }}
+            </button>
+          </form>
         </div>
       </section>
 
-      <section v-else class="reserve-tab-panel">
+      <section v-else class="reserve-tab-panel reserve-tab-panel-fixed">
         <div class="reserve-summary-grid">
           <div class="reserve-summary-card">
             <span>激活总数</span>
@@ -1249,12 +1275,8 @@ async function submitBatchCreate() {
     const result = await createReserveSlotCdkBatch(batchForm);
     cdkState.value = result;
     selectedBatchId.value = result.createdBatchId ?? result.batches?.[0]?.id ?? "";
-    batchWindow.open = true;
-    batchModalOpen.value = false;
-    activeTab.value = "manual";
+    activeTab.value = "batches";
     notice.value = result.message ?? "CDK 批次已创建。";
-    detailModal.batch = result.batches.find((item) => item.id === result.createdBatchId) ?? null;
-    detailModal.open = Boolean(detailModal.batch);
   } catch (err) {
     error.value = renderError(err);
   } finally {
@@ -1516,6 +1538,10 @@ function fromDatetimeLocal(value: string) {
   overflow: hidden;
 }
 
+.reserve-tab-panel-fixed {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
 .reserve-btn,
 .reserve-mini-btn,
 .reserve-duration-btn,
@@ -1648,6 +1674,38 @@ function fromDatetimeLocal(value: string) {
   height: 100%;
   min-height: 0;
   overflow: hidden;
+}
+
+.batch-workspace,
+.activation-workspace {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.batch-workspace {
+  display: grid;
+}
+
+.batch-workspace-split {
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr);
+  gap: 14px;
+  height: 100%;
+}
+
+.batch-list-panel,
+.batch-create-panel {
+  min-height: 0;
+}
+
+.batch-list-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+}
+
+.activation-workspace {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .reserve-list-panel,
@@ -1944,6 +2002,7 @@ function fromDatetimeLocal(value: string) {
   display: grid;
   gap: 6px;
   grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
   overflow: auto;
   padding-right: 2px;
   align-content: start;
@@ -1953,6 +2012,10 @@ function fromDatetimeLocal(value: string) {
   display: grid;
   gap: 6px;
   cursor: pointer;
+}
+
+.cdk-batch-card.compact {
+  gap: 8px;
 }
 
 .cdk-batch-card.active {
@@ -1986,6 +2049,10 @@ function fromDatetimeLocal(value: string) {
   gap: 4px;
 }
 
+.compact-metrics {
+  grid-template-columns: repeat(5, minmax(72px, 1fr));
+}
+
 .cdk-metric {
   display: grid;
   gap: 1px;
@@ -2012,11 +2079,21 @@ function fromDatetimeLocal(value: string) {
   line-height: 1.35;
 }
 
+.compact-details {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 10px;
+}
+
 .created-code-list {
   display: grid;
   gap: 4px;
   max-height: 220px;
   overflow: auto;
+}
+
+.inline-code-list {
+  max-height: 136px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
 .created-code-list code {
@@ -2030,10 +2107,16 @@ function fromDatetimeLocal(value: string) {
 }
 
 .activation-table-wrap {
+  height: 100%;
   min-height: 0;
   overflow: auto;
   border: 1px solid var(--color-border-soft);
   border-radius: 10px;
+}
+
+.batch-empty,
+.activation-empty {
+  align-content: start;
 }
 
 .activation-table {
@@ -2116,17 +2199,6 @@ function fromDatetimeLocal(value: string) {
   max-height: min(80vh, 900px);
 }
 
-.batch-window-modal {
-  width: min(1180px, 100%);
-  max-height: min(86vh, 980px);
-  overflow: hidden;
-}
-
-.batch-window-grid {
-  min-height: 0;
-  max-height: 100%;
-}
-
 .checkbox-row {
   display: flex;
   gap: 8px;
@@ -2136,6 +2208,10 @@ function fromDatetimeLocal(value: string) {
 
 @media (max-width: 1100px) {
   .reserve-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .batch-workspace-split {
     grid-template-columns: 1fr;
   }
 

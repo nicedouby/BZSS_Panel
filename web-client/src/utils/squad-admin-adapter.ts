@@ -1,7 +1,7 @@
 import type { RuntimePlayer } from "../stores/player.store";
 import type { RuntimeSquad } from "../stores/squad.store";
 import type { RuntimeTeam } from "../stores/match.store";
-import { getFactionFromTeamName } from "../shared/faction-assets/faction-data";
+import { getFactionFromTeamName, getFlagUrlByTeamName } from "../shared/faction-assets/faction-data";
 import type {
   CombatStats,
   PlayerRowViewModel,
@@ -29,6 +29,7 @@ export function adaptPlayerRow(
 ): PlayerRowViewModel {
   const steam64 = normalizeSteam64(player.steamID ?? (player as any).steamId ?? (player as any).steam64 ?? (player as any).steam64ID);
   const combatStats = cloneCombatStats(resolveCombatStats(player, combatStatsLookup));
+  const teamName = resolvePlayerTeamName(player);
   return {
     playerId: player.playerID ?? null,
     name: player.name || "Unknown",
@@ -36,6 +37,7 @@ export function adaptPlayerRow(
     isLeader: Boolean(player.isLeader),
     isOnline: Boolean(player.online),
     teamId: player.teamID ?? null,
+    teamName,
     squadId: player.squadID ?? null,
     steamId: player.steamID ?? null,
     steam64,
@@ -49,6 +51,7 @@ export function adaptPlayerRow(
     matchLastSeenAt: normalizeOptionalString((player as any).matchLastSeenAt),
     matchJoinCount: normalizeOptionalNumber((player as any).matchJoinCount),
     steamAvatar,
+    factionFlagUrl: teamName ? getFlagUrlByTeamName(teamName) : null,
     combatStats,
     statsLabel: formatCombatStatsLabel(combatStats),
     raw: player,
@@ -350,6 +353,15 @@ function normalizeOptionalString(value: any): string | null {
   if (value == null) return null;
   const text = String(value).trim();
   return text ? text : null;
+}
+
+function resolvePlayerTeamName(player: RuntimePlayer): string | null {
+  return normalizeOptionalString(
+    (player as any).teamName
+    ?? (player as any).TeamName
+    ?? (player as any).raw?.teamName
+    ?? (player as any).raw?.TeamName,
+  );
 }
 
 export function buildCombatStatsLookup(events: any[] = []): Record<string, CombatStats> {

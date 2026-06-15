@@ -34,6 +34,13 @@ export function normalizeOptionalNumber(value) {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+export function normalizeOptionalColor(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return undefined;
+  if (/^#[0-9a-fA-F]{6}$/.test(text)) return text.toUpperCase();
+  return undefined;
+}
+
 export function buildPlayerKey(input = {}) {
   const eosId = String(input.eosId ?? "").trim();
   if (eosId) return `eos:${eosId}`;
@@ -122,6 +129,8 @@ export class GroupReportService {
       id: createGroupId(),
       name: normalizeGroupName(input.name),
       note: normalizeOptionalText(input.note),
+      color: normalizeOptionalColor(input.color),
+      anchorPlayerKey: normalizeOptionalText(input.anchorPlayerKey),
       createdAt: at,
       updatedAt: at,
       createdBy: normalizeOptionalText(input.createdBy),
@@ -149,7 +158,16 @@ export class GroupReportService {
       group.note = normalizeOptionalText(input.note);
     }
 
+    if (input.color !== undefined) {
+      group.color = normalizeOptionalColor(input.color);
+    }
+
+    if (input.anchorPlayerKey !== undefined) {
+      group.anchorPlayerKey = normalizeOptionalText(input.anchorPlayerKey);
+    }
+
     group.updatedAt = nowMs();
+    this.ensureValidAnchor(group);
     this.touch();
     await this.save();
     this.emitChanged("group-report.group-updated", group.id);
@@ -234,7 +252,11 @@ export class GroupReportService {
       });
     }
 
+    if (!group.anchorPlayerKey) {
+      group.anchorPlayerKey = playerKey;
+    }
     group.updatedAt = at;
+    this.ensureValidAnchor(group);
     this.touch();
     await this.save();
 
@@ -255,6 +277,7 @@ export class GroupReportService {
     }
 
     const removedMembers = group.members.splice(0);
+    group.anchorPlayerKey = undefined;
     group.updatedAt = nowMs();
     this.touch();
     await this.save();
@@ -303,7 +326,12 @@ export class GroupReportService {
       member.playtimeHours = normalizeOptionalNumber(input.playtimeHours);
     }
 
+    if (input.anchor !== undefined) {
+      group.anchorPlayerKey = input.anchor ? member.playerKey : (group.anchorPlayerKey === member.playerKey ? undefined : group.anchorPlayerKey);
+    }
+
     group.updatedAt = nowMs();
+    this.ensureValidAnchor(group);
     this.touch();
     await this.save();
     this.emitChanged("group-report.member-updated", group.id, member.playerKey);
@@ -322,7 +350,11 @@ export class GroupReportService {
       throw new Error(`Member not found: ${playerKey}`);
     }
 
+    if (group.anchorPlayerKey === String(playerKey ?? "")) {
+      group.anchorPlayerKey = group.members[0]?.playerKey;
+    }
     group.updatedAt = nowMs();
+    this.ensureValidAnchor(group);
     this.touch();
     await this.save();
     this.emitChanged("group-report.member-removed", group.id, String(playerKey));
@@ -393,15 +425,19 @@ export class GroupReportService {
 
   normalizeGroup(group) {
     const members = Array.isArray(group?.members) ? group.members.map((member) => this.normalizeMember(member)).filter(Boolean) : [];
-    return {
+    const normalized = {
       id: String(group?.id ?? createGroupId()),
       name: normalizeGroupName(group?.name),
       note: normalizeOptionalText(group?.note),
+      color: normalizeOptionalColor(group?.color),
+      anchorPlayerKey: normalizeOptionalText(group?.anchorPlayerKey),
       createdAt: Number(group?.createdAt ?? nowMs()) || nowMs(),
       updatedAt: Number(group?.updatedAt ?? nowMs()) || nowMs(),
       createdBy: normalizeOptionalText(group?.createdBy),
       members,
     };
+    this.ensureValidAnchor(normalized);
+    return normalized;
   }
 
   normalizeMember(member) {
@@ -422,5 +458,15 @@ export class GroupReportService {
     } catch {
       return null;
     }
+  }
+
+  ensureValidAnchor(group) {
+    const anchorKey = normalizeOptionalText(group?.anchorPlayerKey);
+    if (!anchorKey) {
+      group.anchorPlayerKey = group?.members?.[0]?.playerKey;
+      return;
+    }
+    const exists = Array.isArray(group?.members) && group.members.some((member) => member.playerKey === anchorKey);
+    group.anchorPlayerKey = exists ? anchorKey : group?.members?.[0]?.playerKey;
   }
 }

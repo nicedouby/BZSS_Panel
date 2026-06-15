@@ -39,11 +39,17 @@
               <div class="group-head-copy">
                 <h2>{{ group.name }}</h2>
                 <p>{{ group.members.length }} 人 · 更新 {{ formatTime(group.updatedAt) }}</p>
+                <div class="group-meta-row">
+                  <span class="group-color-chip" :style="groupChipStyle(group)">{{ group.color || "#9CA3AF" }}</span>
+                  <span class="tag">锚定 {{ anchorMemberName(group) }}</span>
+                </div>
               </div>
 
               <div class="inline-actions">
                 <button type="button" @click.stop="renameGroup(group)">改名</button>
                 <button type="button" @click.stop="editGroupNote(group)">备注</button>
+                <button type="button" @click.stop="editGroupColor(group)">颜色</button>
+                <button type="button" @click.stop="chooseAnchor(group)">锚定人</button>
                 <button type="button" @click.stop="clearMembers(group)">清空成员</button>
                 <button type="button" class="danger" @click.stop="deleteGroup(group)">删除</button>
               </div>
@@ -59,6 +65,7 @@
                   <div class="member-line member-line-main">
                     <strong>{{ member.name }}</strong>
                     <span class="member-primary-id">{{ steamLabel(member) }}</span>
+                    <span v-if="group.anchorPlayerKey === member.playerKey" class="tag anchor-tag">锚定人</span>
                   </div>
 
                   <div class="member-tags">
@@ -71,6 +78,7 @@
                 </div>
 
                 <div class="inline-actions">
+                  <button type="button" @click.stop="setAnchor(group, member)">设为锚定人</button>
                   <button type="button" @click.stop="editMemberNote(group, member)">备注</button>
                   <button type="button" class="danger" @click.stop="removeMember(group, member)">移除</button>
                 </div>
@@ -286,6 +294,47 @@ async function editGroupNote(group: GroupReportGroup) {
   }
 }
 
+async function editGroupColor(group: GroupReportGroup) {
+  const nextColor = window.prompt("抱团颜色（#RRGGBB）：", group.color ?? "#60A5FA");
+  if (nextColor === null) return;
+  try {
+    const updated = await groupReportApi.updateGroup(group.id, {
+      name: group.name,
+      note: group.note,
+      color: nextColor,
+      anchorPlayerKey: group.anchorPlayerKey,
+    });
+    replaceGroup(updated);
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err);
+  }
+}
+
+async function chooseAnchor(group: GroupReportGroup) {
+  if (!group.members.length) return;
+  const candidates = group.members.map((member, index) => `${index + 1}. ${member.name}`).join("\n");
+  const picked = window.prompt(`输入锚定人成员序号：\n${candidates}`, "1");
+  if (picked === null) return;
+  const index = Number.parseInt(String(picked), 10) - 1;
+  const member = group.members[index];
+  if (!member) return;
+  await setAnchor(group, member);
+}
+
+async function setAnchor(group: GroupReportGroup, member: GroupReportMember) {
+  try {
+    const updated = await groupReportApi.updateGroup(group.id, {
+      name: group.name,
+      note: group.note,
+      color: group.color,
+      anchorPlayerKey: member.playerKey,
+    });
+    replaceGroup(updated);
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err);
+  }
+}
+
 async function deleteGroup(group: GroupReportGroup) {
   if (!window.confirm(`确定删除抱团「${group.name}」吗？`)) return;
 
@@ -373,6 +422,19 @@ async function removeMember(group: GroupReportGroup, member: GroupReportMember) 
 
 function replaceGroup(updated: GroupReportGroup) {
   groups.value = groups.value.map((group) => (group.id === updated.id ? updated : group));
+}
+
+function anchorMemberName(group: GroupReportGroup) {
+  const anchor = group.members.find((member) => member.playerKey === group.anchorPlayerKey);
+  return anchor?.name || "--";
+}
+
+function groupChipStyle(group: GroupReportGroup) {
+  const color = group.color || "#9CA3AF";
+  return {
+    borderColor: color,
+    color,
+  };
 }
 
 function isAlreadyInSelectedGroup(player: SearchablePlayer) {
@@ -712,6 +774,25 @@ function formatTime(value: number) {
   gap: 6px;
 }
 
+.group-meta-row {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.group-color-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .tag {
   display: inline-flex;
   align-items: center;
@@ -723,6 +804,11 @@ function formatTime(value: number) {
   color: var(--color-text-secondary);
   font-size: 12px;
   white-space: nowrap;
+}
+
+.anchor-tag {
+  border-color: rgba(96, 165, 250, 0.35);
+  color: #bfdbfe;
 }
 
 .note-box {

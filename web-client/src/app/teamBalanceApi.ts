@@ -40,6 +40,10 @@ export interface TeamShufflePlanPlayer {
   hasKnownPlaytime: boolean;
   switchRequired: boolean;
   online: boolean;
+  groupId?: string | null;
+  groupName?: string | null;
+  groupColor?: string | null;
+  anchorPlayerKey?: string | null;
 }
 
 export interface TeamShufflePlanSummaryTeam {
@@ -84,6 +88,13 @@ export interface TeamShufflePlanResponse {
     mode: string;
     players: TeamShufflePlanPlayer[];
     moves: TeamShufflePlanPlayer[];
+    groups?: Array<{
+      id: string;
+      name: string;
+      color?: string | null;
+      anchorPlayerKey: string;
+      memberCount: number;
+    }>;
   } | null;
 }
 
@@ -120,6 +131,17 @@ export function requestSwitchTeam(payload: {
 export function createPlaytimeShufflePlan(payload: {
   source?: string;
   reason?: string;
+  groups?: Array<{
+    id?: string;
+    name?: string;
+    color?: string | null;
+    anchorPlayerKey?: string;
+    members?: Array<{
+      playerKey?: string;
+      steamId?: string | null;
+      eosId?: string | null;
+    }>;
+  }>;
   players: Array<{
     playerId?: string | number | null;
     steamId?: string | null;

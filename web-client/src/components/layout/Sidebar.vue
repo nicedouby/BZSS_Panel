@@ -29,20 +29,30 @@
           </span>
         </RouterLink>
 
-        <div v-if="activeSectionKey === section.key" class="section-children">
-          <RouterLink
-            v-for="item in section.items"
-            :key="item.path"
-            :to="item.path"
-            class="child-link"
-            :class="{ active: isRouteActive(route.path, item.path) }"
-            :title="item.label"
-            @click="ui.closeMobileSidebar()"
-          >
-            <span class="child-icon" aria-hidden="true">{{ item.icon }}</span>
-            <span class="child-label">{{ item.label }}</span>
-          </RouterLink>
-        </div>
+        <Transition
+          name="section-children"
+          @enter="onChildrenEnter"
+          @after-enter="onChildrenAfterEnter"
+          @leave="onChildrenLeave"
+        >
+          <div v-if="activeSectionKey === section.key" class="section-children-wrap">
+            <div class="section-children">
+              <RouterLink
+                v-for="item in section.items"
+                :key="item.path"
+                :to="item.path"
+                class="child-link"
+                :style="{ '--child-index': String(section.items.indexOf(item)) }"
+                :class="{ active: isRouteActive(route.path, item.path) }"
+                :title="item.label"
+                @click="ui.closeMobileSidebar()"
+              >
+                <span class="child-icon" aria-hidden="true">{{ item.icon }}</span>
+                <span class="child-label">{{ item.label }}</span>
+              </RouterLink>
+            </div>
+          </div>
+        </Transition>
       </section>
     </nav>
   </aside>
@@ -73,6 +83,41 @@ const sections = computed(() => buildNavSections({
 }));
 
 const activeSectionKey = computed(() => findSectionForRoute(sections.value, route.path)?.key ?? "");
+
+function onChildrenEnter(element: Element) {
+  const node = element as HTMLElement;
+  node.style.height = "0";
+  node.style.opacity = "0";
+  node.style.overflow = "hidden";
+  node.style.transform = "translateY(-6px)";
+
+  requestAnimationFrame(() => {
+    node.style.height = `${node.scrollHeight}px`;
+    node.style.opacity = "1";
+    node.style.transform = "translateY(0)";
+  });
+}
+
+function onChildrenAfterEnter(element: Element) {
+  const node = element as HTMLElement;
+  node.style.height = "auto";
+  node.style.overflow = "";
+  node.style.transform = "";
+}
+
+function onChildrenLeave(element: Element) {
+  const node = element as HTMLElement;
+  node.style.height = `${node.scrollHeight}px`;
+  node.style.opacity = "1";
+  node.style.overflow = "hidden";
+  node.style.transform = "translateY(0)";
+
+  requestAnimationFrame(() => {
+    node.style.height = "0";
+    node.style.opacity = "0";
+    node.style.transform = "translateY(-4px)";
+  });
+}
 
 async function fetchPages() {
   try {
@@ -200,6 +245,13 @@ nav::-webkit-scrollbar-thumb {
   gap: 4px;
   min-width: 0;
   border-radius: 14px;
+  transform-origin: top center;
+  transition:
+    background-color 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    padding 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .nav-section.open {
@@ -209,6 +261,7 @@ nav::-webkit-scrollbar-thumb {
     color-mix(in srgb, var(--color-bg-elevated) 30%, transparent);
   border: 1px solid color-mix(in srgb, var(--section-accent) 18%, transparent);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.018), 0 12px 26px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
 }
 
 .nav-section[data-section="opsLive"] { --section-accent: #38bdf8; }
@@ -334,12 +387,31 @@ nav::-webkit-scrollbar-thumb {
   box-shadow: 0 0 18px color-mix(in srgb, var(--section-accent) 14%, transparent);
 }
 
+.section-children-wrap {
+  overflow: hidden;
+  will-change: height, opacity, transform;
+}
+
 .section-children {
   display: grid;
   gap: 3px;
   margin: 0 2px 2px 16px;
   padding: 2px 0 2px 10px;
   border-left: 1px solid color-mix(in srgb, var(--section-accent) 22%, var(--color-border-soft));
+}
+
+.section-children-enter-active,
+.section-children-leave-active {
+  transition:
+    height 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.26s ease,
+    transform 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.section-children-enter-from,
+.section-children-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 
 .child-link {
@@ -353,13 +425,22 @@ nav::-webkit-scrollbar-thumb {
   color: var(--color-text-secondary);
   text-decoration: none;
   border: 1px solid transparent;
-  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  animation: sidebar-child-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--child-index, 0) * 24ms + 28ms);
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease,
+    transform 0.18s ease;
 }
 
 .child-link:hover {
   color: var(--color-text-primary);
   border-color: color-mix(in srgb, var(--section-accent) 20%, var(--color-border-soft));
   background: color-mix(in srgb, var(--section-accent) 7%, rgba(255, 255, 255, 0.025));
+  transform: translateX(1px);
 }
 
 .child-link.active {
@@ -391,6 +472,18 @@ nav::-webkit-scrollbar-thumb {
 .child-label {
   font-size: 12px;
   font-weight: 650;
+}
+
+@keyframes sidebar-child-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 @media (max-width: 780px) {
