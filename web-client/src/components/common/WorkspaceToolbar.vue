@@ -4,6 +4,8 @@
     :class="{
       'workspace-toolbar--compact': compact,
       'workspace-toolbar--bordered': bordered,
+      'workspace-toolbar--sticky': sticky,
+      'workspace-toolbar--wrap': wrap,
     }"
   >
     <div class="workspace-toolbar__main">
@@ -20,9 +22,13 @@
 withDefaults(defineProps<{
   compact?: boolean;
   bordered?: boolean;
+  sticky?: boolean;
+  wrap?: boolean;
 }>(), {
   compact: true,
   bordered: true,
+  sticky: false,
+  wrap: true,
 });
 </script>
 
@@ -50,12 +56,23 @@ withDefaults(defineProps<{
   border: 1px solid var(--color-border-soft);
 }
 
+.workspace-toolbar--sticky {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
 .workspace-toolbar__main,
 .workspace-toolbar__actions {
   min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.workspace-toolbar--wrap .workspace-toolbar__main,
+.workspace-toolbar--wrap .workspace-toolbar__actions {
   flex-wrap: wrap;
 }
 

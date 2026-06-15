@@ -752,6 +752,6 @@
     }
   },
   "warmup": {
-    "enabled": true
+    "enabled": false
   }
 }

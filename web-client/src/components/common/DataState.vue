@@ -8,10 +8,12 @@
       <strong>{{ errorTitle }}</strong>
       <p>{{ error }}</p>
     </div>
-    <div v-else-if="empty" class="state-block">
-      <strong>{{ emptyTitle }}</strong>
-      <p>{{ emptyText }}</p>
-    </div>
+    <EmptyState
+      v-else-if="empty"
+      :title="emptyTitle"
+      :description="emptyText"
+      :compact="mode === 'flow'"
+    />
     <div v-else class="state-shell">
       <div v-if="stale" class="state-banner-row">
         <div class="stale-banner">
@@ -26,9 +28,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, watchEffect } from "vue";
 import { useRoute } from "vue-router";
 import { t } from "../../i18n";
+import EmptyState from "../ui/EmptyState.vue";
 
 defineOptions({
   inheritAttrs: false,
@@ -63,9 +66,11 @@ const props = withDefaults(defineProps<{
 const route = useRoute();
 const layoutMode = computed(() => String(route.meta?.layoutMode ?? ""));
 
-if (import.meta.env.DEV && layoutMode.value === "workspace" && props.mode === "flow") {
-  console.warn("[layout] DataState in workspace page is using flow mode");
-}
+watchEffect(() => {
+  if (import.meta.env.DEV && layoutMode.value === "workspace" && props.mode === "flow") {
+    console.warn("[layout] DataState in workspace page is using flow mode");
+  }
+});
 </script>
 
 <style scoped>

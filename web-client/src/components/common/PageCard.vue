@@ -1,5 +1,13 @@
 <template>
-  <section class="page-card" :class="[`page-card--overflow-${overflow}`, `page-card--body-${bodyMode}`]">
+  <section
+    class="page-card"
+    :class="[
+      `page-card--overflow-${overflow}`,
+      `page-card--body-${bodyMode}`,
+      `page-card--tone-${tone}`,
+      `page-card--padding-${padding}`,
+    ]"
+  >
     <header v-if="$slots.header || title || $slots.actions" class="card-header">
       <div class="card-title-block">
         <slot name="header">
@@ -14,6 +22,9 @@
     <div class="card-body" :class="{ compact }">
       <slot />
     </div>
+    <footer v-if="$slots.footer" class="card-footer">
+      <slot name="footer" />
+    </footer>
   </section>
 </template>
 
@@ -24,12 +35,16 @@ withDefaults(defineProps<{
   compact?: boolean;
   overflow?: "visible" | "clip" | "auto";
   bodyMode?: "normal" | "fill" | "scroll";
+  tone?: "default" | "info" | "warning" | "danger";
+  padding?: "none" | "sm" | "md";
 }>(), {
   title: "",
   description: "",
   compact: false,
   overflow: "visible",
   bodyMode: "normal",
+  tone: "default",
+  padding: "md",
 });
 </script>
 
@@ -47,9 +62,21 @@ withDefaults(defineProps<{
 .page-card--body-fill,
 .page-card--body-scroll {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: 0;
   height: 100%;
+}
+
+.page-card--tone-info {
+  border-color: color-mix(in srgb, var(--color-status-info) 24%, var(--color-border-default));
+}
+
+.page-card--tone-warning {
+  border-color: color-mix(in srgb, var(--color-status-warning) 24%, var(--color-border-default));
+}
+
+.page-card--tone-danger {
+  border-color: color-mix(in srgb, var(--color-status-danger, var(--color-status-error)) 24%, var(--color-border-default));
 }
 
 .page-card--overflow-visible {
@@ -106,6 +133,18 @@ withDefaults(defineProps<{
   padding: 14px 16px;
 }
 
+.page-card--padding-none > .card-body {
+  padding: 0;
+}
+
+.page-card--padding-sm > .card-body {
+  padding: 14px 16px;
+}
+
+.page-card--padding-md > .card-body {
+  padding: 18px;
+}
+
 .page-card--body-fill > .card-body {
   display: grid;
   grid-template-rows: minmax(0, 1fr);
@@ -115,5 +154,9 @@ withDefaults(defineProps<{
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+}
+
+.card-footer {
+  padding: 0 18px 18px;
 }
 </style>

@@ -22,6 +22,20 @@
   --color-brand-secondary: #ff9b45;
   --color-brand-tertiary: #f472b6;
   --color-focus-ring: rgba(96, 165, 250, 0.5);
+  --color-status-success: #34d399;
+  --color-status-danger: #f87171;
+  --color-status-warning: #f59e0b;
+  --color-status-info: #60a5fa;
+  --color-status-online: var(--color-status-success);
+  --color-status-error: var(--color-status-danger);
+  --control-height-sm: 30px;
+  --control-height-md: 34px;
+  --control-radius: 10px;
+  --card-radius: 14px;
+  --card-padding-sm: 14px;
+  --card-padding-md: 16px;
+  --layout-gap-sm: 12px;
+  --layout-gap-md: 16px;
 
   --theme-background-rich:
     radial-gradient(circle at 12% 0%, rgba(56, 189, 248, 0.18), transparent 28%),
@@ -79,6 +93,12 @@
   --color-brand-secondary: #ea580c;
   --color-brand-tertiary: #db2777;
   --color-focus-ring: rgba(37, 99, 235, 0.42);
+  --color-status-success: #059669;
+  --color-status-danger: #dc2626;
+  --color-status-warning: #d97706;
+  --color-status-info: #2563eb;
+  --color-status-online: var(--color-status-success);
+  --color-status-error: var(--color-status-danger);
 
   --theme-background-rich:
     radial-gradient(circle at 12% 0%, rgba(59, 130, 246, 0.17), transparent 30%),
@@ -133,6 +153,12 @@
   --color-brand-secondary: #22d3ee;
   --color-brand-tertiary: #f472b6;
   --color-focus-ring: rgba(167, 139, 250, 0.5);
+  --color-status-success: #34d399;
+  --color-status-danger: #fb7185;
+  --color-status-warning: #f59e0b;
+  --color-status-info: #22d3ee;
+  --color-status-online: var(--color-status-success);
+  --color-status-error: var(--color-status-danger);
 
   --theme-background-rich:
     radial-gradient(circle at 12% 0%, rgba(139, 92, 246, 0.26), transparent 30%),
@@ -178,6 +204,12 @@
   --color-brand-secondary: #d4a72c;
   --color-brand-tertiary: #22d3ee;
   --color-focus-ring: rgba(74, 222, 128, 0.45);
+  --color-status-success: #4ade80;
+  --color-status-danger: #f87171;
+  --color-status-warning: #d4a72c;
+  --color-status-info: #22d3ee;
+  --color-status-online: var(--color-status-success);
+  --color-status-error: var(--color-status-danger);
 
   --theme-background-rich:
     radial-gradient(circle at 12% 0%, rgba(34, 197, 94, 0.22), transparent 31%),
