@@ -314,6 +314,32 @@
                   <div class="actions-grid-hud">
                     <button
                       type="button"
+                      class="hud-action-btn-styled track-btn"
+                      @click="handleAdminTrack"
+                      :disabled="actionBusy || !canUseBzssCoreTrack"
+                      :title="adminTrackTitle"
+                    >
+                      <div class="btn-inner">
+                        <span class="btn-icon">TRK</span>
+                        <span class="btn-text">Track</span>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      class="hud-action-btn-styled untrack-btn"
+                      @click="handleRemoveAdminTrack"
+                      :disabled="actionBusy || !canUseBzssCoreTrack"
+                      :title="adminTrackTitle"
+                    >
+                      <div class="btn-inner">
+                        <span class="btn-icon">OFF</span>
+                        <span class="btn-text">Untrack</span>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
                       class="hud-action-btn-styled warn-btn"
                       @click="handleWarn"
                       :disabled="actionBusy || !canWarnPlayer"
@@ -449,11 +475,13 @@ import { copyTextWithToast } from "../../utils/clipboard";
 import { goToPlayerDatabaseSearch } from "../../utils/player-database";
 import { forceTeamChange } from "../../app/teamBalanceApi";
 import { warnPlayer, kickPlayer, removePlayerFromSquad } from "../../app/squadManagementApi";
+import { executeBzssCoreCommand } from "../../app/bzssCoreApi";
 import { apiGet, apiPatch, apiPost } from "../../app/apiClient";
 import StatusBadge from "../common/StatusBadge.vue";
 import CopyableValue from "./CopyableValue.vue";
 import PlayerCombatTimeline from "./PlayerCombatTimeline.vue";
 import { useAuthStore } from "../../stores/auth.store";
+import { usePlayerStore } from "../../stores/player.store";
 import { t } from "../../i18n";
 import { hasPermission } from "../../shared/rcon-permissions.js";
 
@@ -479,6 +507,7 @@ const emit = defineEmits<{
 
 const ui = useUiStore();
 const auth = useAuthStore();
+const playerStore = usePlayerStore();
 const router = useRouter();
 
 const viewport = ref({
@@ -676,6 +705,21 @@ const canWarnPlayer = computed(() => Boolean(auth.user?.isSuperAdmin || hasPermi
 const canKickPlayer = computed(() => Boolean(auth.user?.isSuperAdmin || hasPermission(userPermissions.value, "squad.kick")));
 const canRemovePlayer = computed(() => Boolean(auth.user?.isSuperAdmin || hasPermission(userPermissions.value, "squad.remove")));
 const canEditPlaytime = computed(() => Boolean(auth.user?.isSuperAdmin));
+const viewerSteam64 = computed(() => normalizeSteam64(auth.user?.steam64));
+const adminRuntimePlayer = computed(() => {
+  const steam64 = viewerSteam64.value;
+  if (!steam64) return null;
+  return playerStore.active.find((item) => normalizeSteam64(item?.steamID ?? item?.steamId ?? item?.steam64) === steam64) ?? null;
+});
+const adminRuntimeName = computed(() => stripPlayerNamePrefix(adminRuntimePlayer.value?.name));
+const canUseBzssCore = computed(() => Boolean(auth.user?.isSuperAdmin || hasPermission(userPermissions.value, "bzss_core.use")));
+const canUseBzssCoreTrack = computed(() => Boolean(canUseBzssCore.value && adminRuntimeName.value && props.player?.name));
+const adminTrackTitle = computed(() => {
+  if (!canUseBzssCore.value) return "BZSS-Core permission is required.";
+  if (!viewerSteam64.value) return "Bind Steam64 to this admin account first.";
+  if (!adminRuntimeName.value) return "The bound admin Steam64 is not online in the current player list.";
+  return `Admin: ${adminRuntimeName.value}`;
+});
 
 const updateViewport = () => {
   viewport.value = {
@@ -1123,6 +1167,108 @@ async function handleForceTeamChange() {
   }
 }
 
+async function handleAdminTrack() {
+  const player = props.player;
+  const adminName = adminRuntimeName.value;
+  if (!player || actionBusy.value) return;
+  if (!adminName) {
+    ui.pushToast({
+      title: "AdminTrack failed",
+      message: "Current admin Steam64 is not matched to an online player name.",
+      tone: "error",
+    });
+    return;
+  }
+
+  const targetName = stripPlayerNamePrefix(player.name);
+  if (!targetName) return;
+
+  const confirmed = await ui.openConfirm({
+    title: "Confirm AdminTrack",
+    message: `Run AdminTrack:${adminName},${targetName}?`,
+    tone: "warn",
+  });
+  if (!confirmed) return;
+
+  await executeBzssCoreTrackSequence(adminName, targetName);
+}
+
+async function handleRemoveAdminTrack() {
+  const adminName = adminRuntimeName.value;
+  if (actionBusy.value) return;
+  if (!adminName) {
+    ui.pushToast({
+      title: "RemoveAdminTrack failed",
+      message: "Current admin Steam64 is not matched to an online player name.",
+      tone: "error",
+    });
+    return;
+  }
+
+  const confirmed = await ui.openConfirm({
+    title: "Confirm RemoveAdminTrack",
+    message: `Run RemoveAdminTrack:${adminName}?`,
+    tone: "warn",
+  });
+  if (!confirmed) return;
+
+  await executeBzssCorePlayerCommand("RemoveAdminTrack", adminName, "Tracking cancelled");
+}
+
+async function executeBzssCorePlayerCommand(directive: "AdminTrack" | "RemoveAdminTrack", parameter: string, successMessage: string) {
+  if (actionBusy.value) return;
+  actionBusy.value = true;
+  try {
+    const result = await executeBzssCoreCommand({ directive, parameter });
+    if (!result.ok) throw new Error(result.message || "BZSS-Core command failed.");
+    ui.pushToast({
+      title: "BZSS-Core executed",
+      message: `${successMessage}: ${result.command}`,
+      tone: "ok",
+    });
+  } catch (error) {
+    ui.pushToast({
+      title: "BZSS-Core failed",
+      message: error instanceof Error ? error.message : String(error),
+      tone: "error",
+    });
+  } finally {
+    actionBusy.value = false;
+  }
+}
+
+async function executeBzssCoreTrackSequence(adminName: string, targetName: string) {
+  if (actionBusy.value) return;
+  actionBusy.value = true;
+  try {
+    const untrackResult = await executeBzssCoreCommand({
+      directive: "RemoveAdminTrack",
+      parameter: adminName,
+    });
+    if (!untrackResult.ok) throw new Error(untrackResult.message || "RemoveAdminTrack failed.");
+
+    const trackResult = await executeBzssCoreCommand({
+      directive: "AdminTrack",
+      parameter: `${adminName},${targetName}`,
+    });
+    if (!trackResult.ok) throw new Error(trackResult.message || "AdminTrack failed.");
+
+    ui.pushToast({
+      title: "BZSS-Core executed",
+      message: `Tracking ${targetName}: ${trackResult.command}`,
+      tone: "ok",
+    });
+  } catch (error) {
+    ui.pushToast({
+      title: "BZSS-Core failed",
+      message: error instanceof Error ? error.message : String(error),
+      tone: "error",
+    });
+  } finally {
+    actionBusy.value = false;
+  }
+}
+
 function displayRole(role: string | null | undefined) {
   const raw = String(role ?? "").trim();
   if (!raw) return t("role.unknownRole");
@@ -1145,6 +1291,18 @@ function displayRole(role: string | null | undefined) {
   };
   const key = keyMap[normalized];
   return key ? t(key, raw) : raw;
+}
+
+function normalizeSteam64(value: unknown) {
+  const text = String(value ?? "").trim();
+  return /^\d{17}$/.test(text) ? text : "";
+}
+
+function stripPlayerNamePrefix(value: unknown) {
+  const text = String(value ?? "").trim().replace(/\s+/g, " ");
+  if (!text) return "";
+  const parts = text.split(" ").filter(Boolean);
+  return parts[parts.length - 1] ?? text;
 }
 
 onMounted(() => {
@@ -1878,6 +2036,18 @@ onUnmounted(() => {
   border-color: rgba(251, 191, 36, 0.4);
   box-shadow: 0 4px 14px rgba(251, 191, 36, 0.15);
   color: #f59e0b;
+}
+
+.hud-action-btn-styled.track-btn:hover:not(:disabled) {
+  border-color: rgba(56, 189, 248, 0.45);
+  box-shadow: 0 4px 14px rgba(56, 189, 248, 0.16);
+  color: #38bdf8;
+}
+
+.hud-action-btn-styled.untrack-btn:hover:not(:disabled) {
+  border-color: rgba(148, 163, 184, 0.45);
+  box-shadow: 0 4px 14px rgba(148, 163, 184, 0.14);
+  color: #cbd5e1;
 }
 
 .hud-action-btn-styled.kick-btn:hover:not(:disabled) {

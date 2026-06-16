@@ -396,6 +396,54 @@ async function testPendingLogWithoutTeamIdMatchesRconSnapshot() {
   await harness.module.stop();
 }
 
+async function testCreateLogUsesKnownFactionTeamMappingImmediately() {
+  const harness = createHarness();
+  await harness.module.start();
+  const emitted = [];
+  const unsubscribe = harness.core.eventBus.onModuleEvent("module.squadLifecycle", "squadCreated", (event) => {
+    emitted.push(event);
+  });
+
+  harness.core.eventBus.emitModuleEvent("module.matchState", "squadsUpdated", {
+    serverId: "BZSS_Main",
+    sessionId: "session-1",
+    time: "2026-05-13 20:31:00",
+    squads: [
+      {
+        teamID: 1,
+        squadID: 1,
+        squadName: "Alpha",
+        teamName: "United States Army",
+        creatorName: "Existing",
+      },
+      {
+        teamID: 2,
+        squadID: 1,
+        squadName: "Bravo",
+        teamName: "PMCs",
+        creatorName: "Existing Two",
+      },
+    ],
+  });
+
+  harness.core.eventBus.emitCoreEvent("On_RawLogLine", {
+    serverId: "BZSS_Main",
+    sessionId: "session-1",
+    rawLog: "[2026.05.14-14.29.22:169][495]LogSquad: Fast Leader (Online IDs: EOS: eos-fast steam: 76561198000000999) has created Squad 5 (Squad Name: Tank) on United States Army",
+    eventName: "On_RawLogLine",
+  });
+
+  const current = harness.module.api.getCurrent("BZSS_Main");
+  assert.equal(harness.module.api.getPendingCount(), 0);
+  assert.equal(current.list.some((record) => record.squadId === 5 && record.teamId === 1), true);
+  const created = emitted.find((event) => event.squadId === 5);
+  assert.equal(created?.teamId, 1);
+  assert.equal(created?.factionName, "United States Army");
+
+  unsubscribe();
+  await harness.module.stop();
+}
+
 async function testSyntheticCurrentMatchIdKeepsPendingAndSnapshotAligned() {
   const harness = createHarness();
   await harness.module.start();
@@ -603,6 +651,7 @@ await testRawLogLineParseFailureWarns();
 await testPendingFlushWarnsWhenRconMissingMatch();
 await testRconFirstThenLogPromotesToLog();
 await testPendingLogWithoutTeamIdMatchesRconSnapshot();
+await testCreateLogUsesKnownFactionTeamMappingImmediately();
 await testSyntheticCurrentMatchIdKeepsPendingAndSnapshotAligned();
 await testReusedSquadIdCreatesNewGeneration();
 await testRconOnlySnapshotCreatesFallbackLifecycle();

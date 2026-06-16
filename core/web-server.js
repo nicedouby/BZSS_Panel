@@ -4,6 +4,7 @@ import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
+import { execFile } from "node:child_process";
 import { AsyncLocalStorage } from "node:async_hooks";
 
 const requestStorage = new AsyncLocalStorage();
@@ -1343,6 +1344,51 @@ export class WebServer {
         },
         source: "compat",
       });
+    }
+
+    if (url.pathname === "/api/bzss-core/config") {
+      if (!this.canManageSettingsTools(user)) {
+        return this.json(res, 403, {
+          error: "Forbidden",
+          message: "settings.manage permission is required.",
+        });
+      }
+
+      if (req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          config: this.getBzssCoreConfig(),
+        });
+      }
+
+      if (req.method === "PATCH" || req.method === "POST") {
+        const body = await this.readJsonBody(req);
+        const config = await this.updateBzssCoreConfig(body?.config ?? body ?? {});
+        return this.json(res, 200, {
+          ok: true,
+          config,
+        });
+      }
+
+      return this.json(res, 405, {
+        error: "MethodNotAllowed",
+        message: "Only GET, PATCH and POST are supported.",
+      });
+    }
+
+    if (url.pathname === "/api/bzss-core/execute" && req.method === "POST") {
+      if (!this.canUseBzssCoreTool(user)) {
+        return this.json(res, 403, {
+          error: "Forbidden",
+          message: "bzss_core.use permission is required.",
+        });
+      }
+
+      const body = await this.readJsonBody(req);
+      const result = await this.executeBzssCoreCommand(body ?? {}, {
+        actor: user,
+      });
+      return this.json(res, result.ok ? 200 : 400, result);
     }
 
     if (url.pathname === "/api/logpost/raw-output" && req.method === "GET") {
@@ -3561,6 +3607,202 @@ export class WebServer {
     };
   }
 
+  getBzssCoreConfig() {
+    const config = this.core.config?.get?.("bzssCore", {}) ?? {};
+    return {
+      modifyScriptPath: String(config.modifyScriptPath ?? config.modifySaveGamePath ?? "").trim(),
+      remoteSaveGamePath: String(config.remoteSaveGamePath ?? config.saveGamePath ?? "").trim(),
+    };
+  }
+
+  async updateBzssCoreConfig(nextConfig = {}) {
+    const previous = this.core.config?.get?.("bzssCore", {}) ?? {};
+    const normalized = {
+      ...previous,
+      modifyScriptPath: String(nextConfig.modifyScriptPath ?? nextConfig.modifySaveGamePath ?? "").trim(),
+      remoteSaveGamePath: String(nextConfig.remoteSaveGamePath ?? nextConfig.saveGamePath ?? "").trim(),
+    };
+
+    this.core.config?.set?.("bzssCore", normalized);
+    await this.core.config?.save?.();
+    return this.getBzssCoreConfig();
+  }
+
+  async executeBzssCoreCommand(body = {}) {
+    const config = this.getBzssCoreConfig();
+    const scriptPath = String(config.modifyScriptPath ?? "").trim();
+    const saveGamePath = String(config.remoteSaveGamePath ?? "").trim();
+    const command = this.normalizeBzssCoreCommand(body);
+
+    if (!scriptPath) {
+      return {
+        ok: false,
+        error: "MissingModifyScriptPath",
+        message: "ModifySaveGame.py path is not configured.",
+      };
+    }
+
+    if (!saveGamePath) {
+      return {
+        ok: false,
+        error: "MissingRemoteSaveGamePath",
+        message: "Remote save game path is not configured.",
+      };
+    }
+
+    if (!command.ok) {
+      return command;
+    }
+
+    const resolvedScriptPath = path.isAbsolute(scriptPath)
+      ? scriptPath
+      : path.resolve(process.cwd(), scriptPath);
+
+    const startedAt = Date.now();
+    try {
+      const output = await this.execFileAsync("python", [
+        resolvedScriptPath,
+        saveGamePath,
+        command.command,
+      ], {
+        cwd: path.dirname(resolvedScriptPath),
+        timeout: Math.max(1000, Number(this.core.config?.get?.("bzssCore.timeoutMs", 15000)) || 15000),
+        windowsHide: true,
+        maxBuffer: 1024 * 1024,
+      });
+
+      return {
+        ok: true,
+        command: command.command,
+        directive: command.directive,
+        scriptPath: resolvedScriptPath,
+        remoteSaveGamePath: saveGamePath,
+        stdout: output.stdout,
+        stderr: output.stderr,
+        durationMs: Date.now() - startedAt,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: "BzssCoreExecuteFailed",
+        message: error?.message ?? "Failed to execute BZSS-Core command.",
+        command: command.command,
+        directive: command.directive,
+        scriptPath: resolvedScriptPath,
+        remoteSaveGamePath: saveGamePath,
+        stdout: String(error?.stdout ?? ""),
+        stderr: String(error?.stderr ?? ""),
+        exitCode: error?.code ?? null,
+        durationMs: Date.now() - startedAt,
+      };
+    }
+  }
+
+  normalizeBzssCoreCommand(body = {}) {
+    const directive = String(body.directive ?? "").trim();
+    const parameter = String(body.parameter ?? body.value ?? "").trim();
+    const rawCommand = String(body.command ?? "").trim();
+    const rawMode = body?.raw === true;
+
+    if (rawMode) {
+      if (!rawCommand) {
+        return {
+          ok: false,
+          error: "MissingBzssCoreCommand",
+          message: "Raw command is required.",
+        };
+      }
+      if (/[\r\n]/.test(rawCommand)) {
+        return {
+          ok: false,
+          error: "InvalidBzssCoreCommand",
+          message: "Raw command must be a single line.",
+        };
+      }
+      return {
+        ok: true,
+        directive: "Raw",
+        parameter: rawCommand,
+        command: rawCommand,
+        raw: true,
+      };
+    }
+
+    if (rawCommand) {
+      const match = rawCommand.match(/^([A-Za-z]+):(.*)$/);
+      if (!match) {
+        return {
+          ok: false,
+          error: "InvalidBzssCoreCommand",
+          message: "Command must use Directive:Value format.",
+        };
+      }
+      return this.normalizeBzssCoreDirective(match[1], match[2]);
+    }
+
+    return this.normalizeBzssCoreDirective(directive, parameter);
+  }
+
+  normalizeBzssCoreDirective(directive, parameter) {
+    const normalizedDirective = String(directive ?? "").trim();
+    const text = String(parameter ?? "").trim();
+    const allowed = new Set([
+      "SetTime",
+      "TransitionWeather",
+      "CreateVehicle",
+      "AdminTrack",
+      "RemoveAdminTrack",
+    ]);
+
+    if (!allowed.has(normalizedDirective)) {
+      return {
+        ok: false,
+        error: "UnsupportedBzssCoreDirective",
+        message: "Supported directives: SetTime, TransitionWeather, CreateVehicle, AdminTrack, RemoveAdminTrack.",
+      };
+    }
+
+    if (!text) {
+      return {
+        ok: false,
+        error: "MissingBzssCoreParameter",
+        message: `${normalizedDirective} requires a parameter.`,
+      };
+    }
+
+    if (/[\r\n]/.test(text)) {
+      return {
+        ok: false,
+        error: "InvalidBzssCoreParameter",
+        message: "Parameter must be a single line.",
+      };
+    }
+
+    return {
+      ok: true,
+      directive: normalizedDirective,
+      parameter: text,
+      command: `${normalizedDirective}:${text}`,
+    };
+  }
+
+  execFileAsync(file, args, options = {}) {
+    return new Promise((resolve, reject) => {
+      execFile(file, args, options, (error, stdout, stderr) => {
+        if (error) {
+          error.stdout = stdout;
+          error.stderr = stderr;
+          reject(error);
+          return;
+        }
+        resolve({
+          stdout: String(stdout ?? ""),
+          stderr: String(stderr ?? ""),
+        });
+      });
+    });
+  }
+
   summarizePlaytimeJobForAudit(job) {
     const progress = job?.progress ?? {};
     const result = job?.result ?? {};
@@ -3642,6 +3884,13 @@ export class WebServer {
     return Boolean(
       this.core.authManager?.hasEverything?.(user)
       || this.core.authManager?.hasPermission?.(user, "settings.manage"),
+    );
+  }
+
+  canUseBzssCoreTool(user) {
+    return Boolean(
+      this.core.authManager?.hasEverything?.(user)
+      || this.core.authManager?.hasPermission?.(user, "bzss_core.use"),
     );
   }
 

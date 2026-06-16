@@ -80,6 +80,7 @@ function createHarness(overrides = {}) {
       return [];
     },
   };
+  manager.disbandRcon = overrides.disbandRcon ?? null;
 
   return { manager, executedCommands, statusUpdates, webStatusSnapshot };
 }
@@ -313,6 +314,51 @@ async function testRefreshPlayersSkipsWhenAlreadyInFlight() {
   manager.refreshInFlight.players = false;
 }
 
+async function testDisbandLaneDoesNotWaitForBlockedDefaultCommand() {
+  let releaseDefault;
+  const defaultStarted = new Promise((resolve) => {
+    releaseDefault = resolve;
+  });
+  const defaultFinished = new Promise(() => {});
+  const disbandCommands = [];
+  const { manager } = createHarness({
+    disbandRcon: {
+      connected: true,
+      loggedIn: true,
+      async connect() {
+        this.connected = true;
+        this.loggedIn = true;
+      },
+      async execute(command) {
+        disbandCommands.push(command);
+        return "DISBANDED";
+      },
+    },
+  });
+  manager.squadRcon.execute = async () => {
+    releaseDefault();
+    return defaultFinished;
+  };
+
+  const normalPromise = manager.dispatchCommand({
+    command: "AdminBroadcast Slow",
+    system: true,
+  });
+  await defaultStarted;
+
+  const disbandResult = await manager.dispatchCommand({
+    command: "AdminDisbandSquad 1 2",
+    system: true,
+  });
+
+  assert.equal(disbandResult.success, true);
+  assert.equal(disbandResult.rconResponse, "DISBANDED");
+  assert.equal(disbandResult.queueLane, "disband");
+  assert.deepEqual(disbandCommands, ["AdminDisbandSquad 1 2"]);
+
+  normalPromise.catch(() => {});
+}
+
 await testResolveRconPermissionAliases();
 await testDispatchCommandRejectsMissingPermission();
 await testDispatchCommandAllowsMatchingPermission();
@@ -322,5 +368,6 @@ await testBypassRateLimitSkipsInterval();
 await testDynamicPollingIntervalsFollowLogClock();
 await testSchedulePollingRecomputesNextDelay();
 await testRefreshPlayersSkipsWhenAlreadyInFlight();
+await testDisbandLaneDoesNotWaitForBlockedDefaultCommand();
 
 console.log("rcon manager tests passed");

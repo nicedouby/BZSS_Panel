@@ -48,11 +48,15 @@ export class RconManager {
     this.maxQueueSize = Number(this.config.rateLimit?.maxQueueSize ?? 100);
 
     this.squadRcon = null;
+    this.disbandRcon = null;
     this.rconWorkers = [];
     this.queue = [];
     this.priorityQueue = [];
+    this.disbandQueue = [];
     this.processing = false;
+    this.disbandProcessing = false;
     this.lastCommandTime = 0;
+    this.lastDisbandCommandTime = 0;
 
     this.polling = {
       enabled: Boolean(this.config.polling?.enabled ?? false),
@@ -124,6 +128,15 @@ export class RconManager {
 
     this.attachSquadRconEvents();
 
+    this.disbandRcon = new SquadRcon({
+      host: this.config.host,
+      port: this.config.port,
+      password: resolveRconPassword(this.config, this.logger),
+      autoReconnectDelay: this.config.autoReconnectDelay ?? 5000,
+      commandTimeoutMs: this.config.commandTimeoutMs ?? 15000,
+      logger: this.logger,
+    });
+
     const workerCount = Math.max(0, Number(this.config.workers ?? 0));
     this.rconWorkers = [];
     for (let i = 0; i < workerCount; i++) {
@@ -151,6 +164,14 @@ export class RconManager {
       this.pollingKickPending.squads = true;
       await this.squadRcon.connect();
       this.setConnected(true);
+
+      this.disbandRcon.connect()
+        .then(() => {
+          this.logger.info("RCON disband lane connected.", { operation: "start" });
+        })
+        .catch((err) => {
+          this.logger.error(`RCON disband lane connection failed: ${err.message}`, { operation: "start" });
+        });
 
       for (const worker of this.rconWorkers) {
         worker.client.connect()
@@ -189,6 +210,11 @@ export class RconManager {
 
     if (this.squadRcon) {
       await this.squadRcon.disconnect().catch(() => {});
+    }
+
+    if (this.disbandRcon) {
+      await this.disbandRcon.disconnect().catch(() => {});
+      this.disbandRcon = null;
     }
 
     for (const worker of this.rconWorkers) {
@@ -397,14 +423,19 @@ export class RconManager {
     }
 
     return await new Promise((resolve) => {
+      const enqueuedAt = Date.now();
       const item = {
         request: { ...request, command },
         priority,
         bypassRateLimit,
         resolve,
+        enqueuedAt,
       };
 
-      if (priority) {
+      const disbandLane = isDisbandLaneRequest(request, command);
+      if (disbandLane) {
+        this.disbandQueue.push(item);
+      } else if (priority) {
         this.priorityQueue.push(item);
       } else {
         this.queue.push(item);
@@ -420,13 +451,45 @@ export class RconManager {
           requiredPermission,
           queueSize: this.getQueueSize(),
           priority,
+          lane: disbandLane ? "disband" : "default",
         },
       });
 
-      this.processQueue().catch((error) => {
+      const processor = disbandLane ? this.processDisbandQueue() : this.processQueue();
+      processor.catch((error) => {
         this.logger.error(`RCON queue processor failed: ${error.stack ?? error}`);
       });
     });
+  }
+
+  async processDisbandQueue() {
+    if (this.disbandProcessing || this.disbandQueue.length === 0) return;
+    this.disbandProcessing = true;
+
+    try {
+      while (this.disbandQueue.length > 0) {
+        const item = this.disbandQueue.shift();
+        if (!item) continue;
+
+        this.status.queueSize = this.getQueueSize();
+        this.webStatus.set("rconQueue", this.getQueueSize());
+
+        const diff = Date.now() - this.lastDisbandCommandTime;
+        const minIntervalMs = item?.bypassRateLimit ? 0 : this.priorityMinIntervalMs;
+        if (diff < minIntervalMs) {
+          await sleep(minIntervalMs - diff);
+        }
+
+        await this.executeQueuedItem(item, this.disbandRcon ?? this.squadRcon, {
+          lane: "disband",
+          updateLastCommandTime: (value) => {
+            this.lastDisbandCommandTime = value;
+          },
+        });
+      }
+    } finally {
+      this.disbandProcessing = false;
+    }
   }
 
   async processQueue() {
@@ -461,55 +524,12 @@ export class RconManager {
           await sleep(minIntervalMs - diff);
         }
 
-        try {
-          if (!this.squadRcon?.connected || !this.squadRcon?.loggedIn) {
-            await this.squadRcon.connect();
-          }
-
-          this.lastCommandTime = Date.now();
-          this.logger.debug(() => `Executing queued RCON command ${item.request.command}`, {
-            operation: "processQueue",
-            data: {
-              command: item.request.command,
-              requestedBy: item.request.requestedBy ?? "",
-              queueSize: this.getQueueSize(),
-              priority: Boolean(item?.priority),
-              bypassRateLimit: Boolean(item?.bypassRateLimit),
-            },
-          });
-          const response = await this.squadRcon.execute(item.request.command);
-
-          this.logger.debug(() => `RCON command completed ${item.request.command}`, {
-            operation: "processQueue",
-            data: {
-              command: item.request.command,
-              responseBytes: String(response ?? "").length,
-            },
-          });
-          item.resolve({
-            success: true,
-            message: "RCON command executed.",
-            rconExecuted: true,
-            rconResponse: response,
-          });
-        } catch (error) {
-          this.status.lastError = error.message;
-          this.webStatus.set("rcon", "error");
-          this.logger.warn(`RCON command failed: ${item.request.command} -> ${error.message}`, {
-            operation: "processQueue",
-            data: {
-              command: item.request.command,
-              requestedBy: item.request.requestedBy ?? "",
-            },
-          });
-
-          item.resolve({
-            success: false,
-            message: error.message,
-            rconExecuted: false,
-            rconResponse: "",
-          });
-        }
+        await this.executeQueuedItem(item, this.squadRcon, {
+          lane: "default",
+          updateLastCommandTime: (value) => {
+            this.lastCommandTime = value;
+          },
+        });
       }
     } finally {
       this.processing = false;
@@ -534,42 +554,103 @@ export class RconManager {
           await sleep(minIntervalMs - diff);
         }
 
-        try {
-          if (!worker.client.connected || !worker.client.loggedIn) {
-            await worker.client.connect();
-          }
-
-          worker.lastCommandTime = Date.now();
-          this.logger.debug(() => `Executing command on ${worker.id}: ${item.request.command}`, {
-            operation: "runWorker",
-            worker: worker.id,
-            command: item.request.command,
-          });
-          const response = await worker.client.execute(item.request.command);
-
-          item.resolve({
-            success: true,
-            message: "RCON command executed.",
-            rconExecuted: true,
-            rconResponse: response,
-          });
-        } catch (error) {
-          this.logger.warn(`RCON worker ${worker.id} command failed: ${item.request.command} -> ${error.message}`, {
-            operation: "runWorker",
-            worker: worker.id,
-            command: item.request.command,
-          });
-          item.resolve({
-            success: false,
-            message: error.message,
-            rconExecuted: false,
-            rconResponse: "",
-          });
-        }
+        await this.executeQueuedItem(item, worker.client, {
+          lane: worker.id,
+          updateLastCommandTime: (value) => {
+            worker.lastCommandTime = value;
+          },
+        });
       }
     } finally {
       worker.busy = false;
       void this.processQueue();
+    }
+  }
+
+  async executeQueuedItem(item, client, { lane = "default", updateLastCommandTime = () => {} } = {}) {
+    const command = item.request.command;
+    const queuedMs = Date.now() - Number(item.enqueuedAt ?? Date.now());
+    const startedAt = Date.now();
+
+    try {
+      if (!client?.connected || !client?.loggedIn) {
+        await client.connect();
+      }
+
+      updateLastCommandTime(Date.now());
+      this.emitNativeLog({
+        level: "status",
+        message: `[RCON:${lane}] start ${command} queued=${queuedMs}ms`,
+        command,
+        lane,
+        queuedMs,
+        requestedBy: item.request.requestedBy ?? "",
+        source: "core.rconManager",
+      });
+      this.logger.debug(() => `Executing queued RCON command ${command}`, {
+        operation: "executeQueuedItem",
+        data: {
+          command,
+          requestedBy: item.request.requestedBy ?? "",
+          queueSize: this.getQueueSize(),
+          priority: Boolean(item?.priority),
+          bypassRateLimit: Boolean(item?.bypassRateLimit),
+          lane,
+          queuedMs,
+        },
+      });
+      const response = await client.execute(command);
+      const executionMs = Date.now() - startedAt;
+
+      this.emitNativeLog({
+        level: "status",
+        message: `[RCON:${lane}] done ${command} queued=${queuedMs}ms exec=${executionMs}ms`,
+        command,
+        lane,
+        queuedMs,
+        executionMs,
+        source: "core.rconManager",
+      });
+      item.resolve({
+        success: true,
+        message: "RCON command executed.",
+        rconExecuted: true,
+        rconResponse: response,
+        queueLane: lane,
+        queuedMs,
+        executionMs,
+      });
+    } catch (error) {
+      const executionMs = Date.now() - startedAt;
+      this.status.lastError = error.message;
+      this.webStatus.set("rcon", "error");
+      this.emitNativeLog({
+        level: "error",
+        message: `[RCON:${lane}] failed ${command} queued=${queuedMs}ms exec=${executionMs}ms error=${error.message}`,
+        command,
+        lane,
+        queuedMs,
+        executionMs,
+        source: "core.rconManager",
+      });
+      this.logger.warn(`RCON command failed: ${command} -> ${error.message}`, {
+        operation: "executeQueuedItem",
+        data: {
+          command,
+          requestedBy: item.request.requestedBy ?? "",
+          lane,
+        },
+      });
+
+      item.resolve({
+        success: false,
+        message: error.message,
+        rconExecuted: false,
+        rconResponse: "",
+        queueLane: lane,
+        queuedMs,
+        executionMs,
+      });
     }
   }
 
@@ -719,6 +800,12 @@ export class RconManager {
         authenticated: Boolean(w.client?.loggedIn),
         busy: w.busy,
       })),
+      disbandLane: {
+        connected: Boolean(this.disbandRcon?.connected),
+        authenticated: Boolean(this.disbandRcon?.loggedIn),
+        queueSize: this.disbandQueue.length,
+        busy: this.disbandProcessing,
+      },
       polling: {
         enabled: this.polling.enabled,
         dynamicEnabled: this.polling.dynamic.enabled,
@@ -735,7 +822,7 @@ export class RconManager {
   }
 
   getQueueSize() {
-    return this.queue.length + this.priorityQueue.length;
+    return this.queue.length + this.priorityQueue.length + this.disbandQueue.length;
   }
 
   onNativeLog(handler) {
@@ -803,6 +890,11 @@ function isPriorityRequest(request) {
   return String(request?.priority ?? "").trim().toLowerCase() === "high"
     || request?.priority === true
     || request?.bypassRateLimit === true;
+}
+
+function isDisbandLaneRequest(request, command) {
+  const lane = String(request?.rconChannel ?? request?.lane ?? "").trim().toLowerCase();
+  return lane === "disband" || /^AdminDisbandSquad\b/i.test(String(command ?? "").trim());
 }
 
 function mapNativeRconEventToConsoleEntry(eventName, payload) {

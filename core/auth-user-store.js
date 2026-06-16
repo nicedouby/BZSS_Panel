@@ -465,6 +465,7 @@ export const ALLOWED_ADMIN_PERMISSIONS = Object.freeze([
   "rcon.remove",
   "settings.manage",
   "admin_users.manage",
+  "bzss_core.use",
   ...WEB_PAGE_PERMISSION_MATRIX.map((entry) => String(entry.requiredPermission ?? "").trim()).filter(Boolean),
 ]);
 

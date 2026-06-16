@@ -2,8 +2,43 @@
   <div v-if="ui.mobileSidebarOpen" class="sidebar-backdrop" @click="ui.closeMobileSidebar()" />
   <aside class="sidebar" :class="{ collapsed: ui.sidebarCollapsed, mobileOpen: ui.mobileSidebarOpen }">
     <div class="brand">
-      <strong>BZSS</strong>
-      <span>Vue {{ t("common.panel") }}</span>
+      <div class="brand-title">
+        <strong>BZSS</strong>
+        <span>Vue {{ t("common.panel") }}</span>
+      </div>
+      <button
+        type="button"
+        class="collapse-button"
+        :title="sidebarButtonLabel"
+        @click="toggleSidebar"
+      >
+        <svg
+          v-if="ui.sidebarCollapsed"
+          viewBox="0 0 24 24"
+          width="14"
+          height="14"
+          stroke="currentColor"
+          stroke-width="2.5"
+          fill="none"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <polyline points="9 18 15 12 9 6"></polyline>
+        </svg>
+        <svg
+          v-else
+          viewBox="0 0 24 24"
+          width="14"
+          height="14"
+          stroke="currentColor"
+          stroke-width="2.5"
+          fill="none"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+      </button>
     </div>
 
     <nav aria-label="主导航">
@@ -85,6 +120,16 @@ const sections = computed(() => buildNavSections({
 }));
 
 const activeSectionKey = computed(() => findSectionForRoute(sections.value, route.path)?.key ?? "");
+
+const sidebarButtonLabel = computed(() => ui.sidebarCollapsed ? t("topbar.expand") : t("topbar.collapse"));
+
+function toggleSidebar() {
+  if (window.matchMedia("(max-width: 780px)").matches) {
+    ui.toggleMobileSidebar();
+    return;
+  }
+  ui.toggleSidebarCollapsed();
+}
 </script>
 
 <style scoped>
@@ -118,6 +163,10 @@ const activeSectionKey = computed(() => findSectionForRoute(sections.value, rout
 }
 
 .brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 22px 20px 18px;
   flex: 0 0 auto;
   border-bottom: 1px solid var(--color-border-soft);
@@ -127,8 +176,21 @@ const activeSectionKey = computed(() => findSectionForRoute(sections.value, rout
 }
 
 .sidebar.collapsed .brand {
-  padding: 22px 10px 18px;
-  text-align: center;
+  padding: 18px 10px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+}
+
+.brand-title {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sidebar.collapsed .brand-title {
+  align-items: center;
 }
 
 .brand strong {
@@ -153,7 +215,6 @@ const activeSectionKey = computed(() => findSectionForRoute(sections.value, rout
 
 .brand span {
   display: inline-flex;
-  margin-top: 8px;
   padding: 4px 8px;
   border-radius: var(--radius-full);
   border: 1px solid var(--color-border-soft);
@@ -166,6 +227,33 @@ const activeSectionKey = computed(() => findSectionForRoute(sections.value, rout
 .sidebar.collapsed .section-copy,
 .sidebar.collapsed .section-children {
   display: none;
+}
+
+.collapse-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border-soft);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+  flex: 0 0 auto;
+}
+
+.collapse-button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-primary);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.sidebar.collapsed .collapse-button {
+  width: 22px;
+  height: 22px;
 }
 
 nav {
@@ -274,8 +362,8 @@ nav::-webkit-scrollbar-thumb {
     rgba(255, 255, 255, 0.035);
   border: 1px solid color-mix(in srgb, var(--section-accent) 18%, var(--color-border-soft));
   color: var(--color-text-muted);
-  font-size: 9px;
-  font-weight: 800;
+  font-size: 18px;
+  line-height: 1;
   flex: 0 0 auto;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
@@ -414,8 +502,8 @@ nav::-webkit-scrollbar-thumb {
   border: 1px solid color-mix(in srgb, var(--section-accent) 14%, var(--color-border-soft));
   background: rgba(255, 255, 255, 0.035);
   color: var(--color-text-muted);
-  font-size: 8px;
-  font-weight: 800;
+  font-size: 13px;
+  line-height: 1;
   flex: 0 0 auto;
 }
 
@@ -467,6 +555,10 @@ nav::-webkit-scrollbar-thumb {
   .sidebar.collapsed .brand span {
     display: grid;
   }
+
+  .collapse-button {
+    display: none !important;
+  }
 }
 
 /* ─── md 断点（781–1100px）：侧边栏被 AppLayout 压缩为 84px，强制应用折叠视觉 ─ */
@@ -508,6 +600,10 @@ nav::-webkit-scrollbar-thumb {
     background: transparent;
     border-color: transparent;
     box-shadow: none;
+  }
+
+  .collapse-button {
+    display: none !important;
   }
 }
 </style>

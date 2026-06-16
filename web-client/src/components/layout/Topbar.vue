@@ -1,5 +1,5 @@
 <template>
-  <header class="topbar" :class="{ 'match-context': showMatchContext }">
+  <header class="topbar">
     <div class="topbar-grid">
       <div class="topbar-brand">
         <button type="button" class="menu-button" @click="toggleSidebar">
@@ -22,51 +22,36 @@
         </div>
       </div>
 
-      <div v-if="showMatchContext" class="topbar-center">
+      <div class="topbar-center">
         <div class="match-summary">
           <span class="match-chip match-chip-strong">{{ matchPlayersLabel }}</span>
           <span class="match-chip match-chip-team1">{{ t("match.team1", "", { count: matchTeam1Count }) }}</span>
           <span class="match-chip match-chip-team2">{{ t("match.team2", "", { count: matchTeam2Count }) }}</span>
-          <span v-if="matchQueueCount > 0" class="match-chip match-chip-team2">{{ matchQueueLabel }}</span>
-          <span class="match-chip">{{ matchTimeLabel }}</span>
-          <span class="match-chip">{{ matchTpsLabel }}</span>
-          <span class="match-chip" :class="statusTone(matchRconStatus)">{{ matchRconLabel }}</span>
-          <span class="match-chip" :class="statusTone(matchLogsStatus)">{{ matchLogsLabel }}</span>
-          <span class="match-chip match-chip-muted">{{ matchUpdatedLabel }}</span>
-        </div>
-      </div>
-
-      <div class="topbar-actions">
-        <div class="topbar-metrics">
-          <span class="metric optional" :title="t('topbar.queue', '', { count: matchQueueCount })">
-            Q {{ matchQueueCount }}
-          </span>
-          <span
-            v-if="rconQueueCount > 0"
-            class="metric optional error"
-            title="RCON Command Queue"
-          >
-            RQ {{ rconQueueCount }}
-          </span>
-          <StatusBadge class="runtime-badge" :tone="runtimeTone">{{ runtimeLabel }}</StatusBadge>
           <button
             type="button"
-            class="metric metric-button log-clock"
+            class="match-chip match-chip-button"
             :disabled="!canEditLogClock || logClockSaving"
             :title="logClockTitle"
             @click="editLogClock"
           >
-            Log {{ logClockLabel }}
+            {{ mergedClockLabel }}
           </button>
-          <span class="metric refresh-speed" :class="refreshSpeedTone" :title="refreshSpeedTitle">
-            {{ refreshSpeedLabel }}
-          </span>
-          <span v-if="runtimeError" class="metric error optional">{{ runtimeError }}</span>
+          <span class="match-chip">{{ matchTpsLabel }}</span>
+        </div>
+      </div>
+
+      <div class="topbar-actions">
+        <span v-if="runtimeError" class="metric error optional">{{ runtimeError }}</span>
+        <BzssCoreMenu />
+        <div class="topbar-health" aria-label="RCON and log status">
+          <span class="health-chip" :class="rconHealthTone">R</span>
+          <span class="health-chip" :class="logHealthTone">L</span>
         </div>
         <UserMenu
           @open-plugin-center="emit('open-plugin-center')"
           @open-rcon-modal="emit('open-rcon-modal')"
         />
+        <span class="metric updated-metric">{{ matchUpdatedLabel }}</span>
       </div>
     </div>
   </header>
@@ -84,8 +69,8 @@ import { useMatchStore } from "../../stores/match.store";
 import { getRuntimeSyncState } from "../../app/runtimeSync";
 import { useUiStore } from "../../stores/ui.store";
 import { fetchWarmupState, updateWarmupState } from "../../app/warmupApi";
-import StatusBadge from "../common/StatusBadge.vue";
 import UserMenu from "./UserMenu.vue";
+import BzssCoreMenu from "./BzssCoreMenu.vue";
 import { t } from "../../i18n";
 
 const emit = defineEmits<{
@@ -107,7 +92,6 @@ const warmupSaving = ref(false);
 const logClockSaving = ref(false);
 
 const webStatus = computed(() => server.snapshot.webStatus ?? server.snapshot ?? {});
-const showMatchContext = computed(() => route.path === "/match-status");
 const currentLayer = computed(() => stableDisplayValue(
   server.snapshot.currentLayer,
   webStatus.value.currentLayer,
@@ -139,13 +123,12 @@ const matchServerName = computed(() => stableDisplayValue(
   t("match.unknownServer", "Unknown Server"),
 ));
 const pageTitle = computed(() => {
-  if (showMatchContext.value) return matchServerName.value;
+  if (route.path === "/match-status") return matchServerName.value;
   const titleKey = route.meta.titleKey ? String(route.meta.titleKey) : "";
   const title = route.meta.title ? String(route.meta.title) : "";
   if (titleKey) return t(titleKey, title);
   return String(title || server.snapshot.serverName || webStatus.value.serverName || server.snapshot.name || webStatus.value.name || "BZSS Panel");
 });
-const tps = computed(() => formatTps(server.snapshot?.tps ?? server.snapshot?.webStatus?.tps ?? null));
 const logClockSeconds = computed(() => {
   const value = Number(
     webStatus.value.logClockSeconds
@@ -159,39 +142,6 @@ const logClockLabel = computed(() => {
   if (logClockSeconds.value == null) return "--:--";
   return formatDuration(logClockSeconds.value);
 });
-const logClockHasAnchor = computed(() => Boolean(
-  webStatus.value.logClockHasAnchor
-    ?? server.snapshot.logClockHasAnchor
-    ?? server.snapshot.webStatus?.logClockHasAnchor,
-));
-const logClockManual = computed(() => Boolean(
-  webStatus.value.logClockManual
-    ?? server.snapshot.logClockManual
-    ?? server.snapshot.webStatus?.logClockManual,
-));
-const rconPollingSnapshot = computed(() => asRecord(
-  webStatus.value.rconPolling
-    ?? server.snapshot.rconPolling
-    ?? server.snapshot.webStatus?.rconPolling,
-));
-const refreshSpeedPolicy = computed(() => resolveRefreshSpeedPolicy(
-  rconPollingSnapshot.value,
-  logClockSeconds.value,
-  logClockHasAnchor.value,
-  logClockManual.value,
-));
-const refreshSpeedLabel = computed(() => formatRefreshSpeedLabel(refreshSpeedPolicy.value));
-const refreshSpeedTitle = computed(() => formatRefreshSpeedTitle(refreshSpeedPolicy.value, logClockSeconds.value, logClockHasAnchor.value, logClockManual.value));
-const refreshSpeedTone = computed(() => refreshSpeedToneClass(refreshSpeedPolicy.value.mode));
-const rconQueueCount = computed(() => {
-  const value = Number(
-    webStatus.value.rconQueue
-      ?? server.snapshot.rconQueue
-      ?? server.snapshot.webStatus?.rconQueue
-      ?? 0
-  );
-  return Number.isFinite(value) ? Math.floor(value) : 0;
-});
 const canEditLogClock = computed(() => auth.user?.isSuperAdmin === true);
 const logClockTitle = computed(() => {
   if (!canEditLogClock.value) return t("topbar.logClockReadonly", "Only super admins can edit the log clock.");
@@ -199,18 +149,6 @@ const logClockTitle = computed(() => {
   return t("topbar.logClockEditable", "Click to edit the log clock.");
 });
 const sidebarButtonLabel = computed(() => ui.sidebarCollapsed ? t("topbar.expand") : t("topbar.collapse"));
-const runtimeLabel = computed(() => {
-  if (runtime.inFlight) return t("common.syncing");
-  if (runtime.errorType === "unauthorized") return t("common.unauthorized");
-  if (runtime.errorType === "network" || runtime.errorType === "timeout") return t("common.apiOffline");
-  if (runtime.lastError || server.stale) return t("common.stale");
-  return t("common.live");
-});
-const runtimeTone = computed(() => {
-  if (runtimeLabel.value === t("common.live")) return "ok";
-  if (runtimeLabel.value === t("common.unauthorized") || runtimeLabel.value === t("common.apiOffline")) return "error";
-  return "warn";
-});
 const runtimeError = computed(() => runtime.lastError ? briefRuntimeError(runtime.lastError) : "");
 const warmupState = computed(() => resolveWarmupState(webStatus.value, server.snapshot));
 const warmupLabel = computed(() => {
@@ -267,9 +205,10 @@ const matchRconStatus = computed(() => String(
     ?? webStatus.value.rcon
     ?? "unknown",
 ));
-const matchRconLabel = computed(() => `RCON ${formatRconStatus(matchRconStatus.value)}`);
 const matchLogsStatus = computed(() => (runtime.lastError ? "stale" : "live"));
-const matchLogsLabel = computed(() => `Log ${formatLogsStatus(matchLogsStatus.value)}`);
+const rconHealthTone = computed(() => statusTone(matchRconStatus.value) === "ok" ? "ok" : "error");
+const logHealthTone = computed(() => statusTone(matchLogsStatus.value) === "ok" ? "ok" : "error");
+const mergedClockLabel = computed(() => `RCON ${formatMatchTime(matchMatchTimeSeconds.value)} / Log ${logClockLabel.value}`);
 const matchUpdatedAt = computed(() => Math.max(
   server.updatedAt,
   players.updatedAt,
@@ -416,138 +355,9 @@ function formatDuration(totalSeconds: number) {
   return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
 }
 
-function resolveRefreshSpeedPolicy(
-  polling: Record<string, any> | null,
-  logClockValue: number | null,
-  hasAnchor: boolean,
-  manual: boolean,
-) {
-  const enabled = Boolean(polling?.enabled ?? true);
-  const dynamicEnabled = Boolean(polling?.dynamicEnabled ?? polling?.dynamic?.enabled ?? true);
-  const fastUntilSeconds = normalizePositiveInteger(polling?.fastUntilSeconds, 90);
-  const mediumUntilSeconds = Math.max(
-    fastUntilSeconds,
-    normalizePositiveInteger(polling?.mediumUntilSeconds, 180),
-  );
-  const seconds = Number.isFinite(Number(logClockValue)) ? Math.max(0, Math.floor(Number(logClockValue))) : 0;
-  const isAnchored = Boolean(hasAnchor) && !Boolean(manual);
-  let mode = String(polling?.mode ?? "disabled");
-
-  if (!enabled) {
-    mode = "disabled";
-  } else if (!dynamicEnabled || !isAnchored) {
-    mode = "fallback";
-  } else if (seconds < fastUntilSeconds) {
-    mode = "fast";
-  } else if (seconds < mediumUntilSeconds) {
-    mode = "medium";
-  } else {
-    mode = "fallback";
-  }
-
-  const playersIntervalMs = resolveIntervalMs(
-    mode === "fast"
-      ? polling?.fastPlayersIntervalMs
-      : mode === "medium"
-        ? polling?.mediumPlayersIntervalMs
-        : polling?.playersIntervalMs,
-    polling?.playersIntervalMs,
-  );
-  const squadsIntervalMs = resolveIntervalMs(
-    mode === "fast"
-      ? polling?.fastSquadsIntervalMs
-      : mode === "medium"
-        ? polling?.mediumSquadsIntervalMs
-        : polling?.squadsIntervalMs,
-    polling?.squadsIntervalMs,
-  );
-
-  return {
-    mode,
-    enabled,
-    dynamicEnabled,
-    fastUntilSeconds,
-    mediumUntilSeconds,
-    logClockSeconds: seconds,
-    playersIntervalMs: playersIntervalMs > 0 ? playersIntervalMs : Number(polling?.playersIntervalMs ?? 0) || 0,
-    squadsIntervalMs: squadsIntervalMs > 0 ? squadsIntervalMs : Number(polling?.squadsIntervalMs ?? 0) || 0,
-  };
-}
-
-function formatRefreshSpeedLabel(policy: Record<string, any>) {
-  if (policy.mode === "disabled") return t("topbar.refreshDisabled");
-  const modeLabel = resolveRefreshModeLabel(policy.mode);
-  return t("topbar.refreshSpeed", "", {
-    mode: modeLabel,
-    players: formatIntervalMs(policy.playersIntervalMs),
-    squads: formatIntervalMs(policy.squadsIntervalMs),
-  });
-}
-
-function formatRefreshSpeedTitle(
-  policy: Record<string, any>,
-  logClockValue: number | null,
-  hasAnchor: boolean,
-  manual: boolean,
-) {
-  if (policy.mode === "disabled") {
-    return t("topbar.refreshDisabledTitle", "Dynamic players/squads refresh is disabled.");
-  }
-
-  const clockLabel = logClockValue == null ? "--:--" : formatDuration(logClockValue);
-  const anchorLabel = manual
-    ? t("topbar.refreshManual", "manual")
-    : hasAnchor
-      ? t("topbar.refreshAnchored", "anchored")
-      : t("topbar.refreshUnanchored", "unanchored");
-
-  return t("topbar.refreshSpeedTitle", "", {
-    clock: clockLabel,
-    state: anchorLabel,
-    players: formatIntervalMs(policy.playersIntervalMs),
-    squads: formatIntervalMs(policy.squadsIntervalMs),
-  });
-}
-
-function resolveRefreshModeLabel(mode: string) {
-  if (mode === "fast") return t("topbar.refreshFast");
-  if (mode === "medium") return t("topbar.refreshMedium");
-  if (mode === "fallback") return t("topbar.refreshFallback");
-  return t("topbar.refreshUnknown");
-}
-
-function formatIntervalMs(value: number) {
-  const ms = Number(value);
-  if (!Number.isFinite(ms) || ms <= 0) return "--";
-  return `${(ms / 1000).toFixed(ms % 1000 === 0 ? 0 : 1)}s`;
-}
-
-function refreshSpeedToneClass(mode: string) {
-  if (mode === "fast") return "refresh-fast";
-  if (mode === "medium") return "refresh-medium";
-  if (mode === "disabled") return "refresh-disabled";
-  return "refresh-fallback";
-}
-
 function asRecord(value: unknown): Record<string, any> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, any>;
-}
-
-function normalizePositiveInteger(value: unknown, fallback: number) {
-  const number = Number(value);
-  if (!Number.isFinite(number) || number <= 0) {
-    return Math.max(1, Math.floor(Number(fallback) || 1));
-  }
-  return Math.max(1, Math.floor(number));
-}
-
-function resolveIntervalMs(value: unknown, fallback: unknown) {
-  const primary = Number(value);
-  if (Number.isFinite(primary) && primary > 0) return Math.floor(primary);
-  const secondary = Number(fallback);
-  if (Number.isFinite(secondary) && secondary > 0) return Math.floor(secondary);
-  return 0;
 }
 
 function parseClockInput(value: string): number | null {
@@ -584,21 +394,6 @@ function formatMatchTime(seconds: number): string {
 function formatTps(value: number | null | undefined): string {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number.toFixed(1) : "--";
-}
-
-function formatRconStatus(status: string): string {
-  if (status === "connected") return t("match.rconConnected");
-  if (status === "disconnected") return t("match.rconDisconnected");
-  if (status === "error") return t("match.rconError");
-  if (status === "disabled") return t("match.rconDisabled");
-  return t("common.unknown");
-}
-
-function formatLogsStatus(status: string): string {
-  if (status === "live") return t("match.logsLive");
-  if (status === "stale") return t("match.logsStale");
-  if (status === "error") return t("common.error");
-  return t("common.unknown");
 }
 
 function formatUpdateTime(time: number): string {
@@ -654,7 +449,7 @@ function toggleSidebar() {
   position: relative;
   z-index: var(--z-user-dropdown);
   overflow: visible;
-  padding: 12px 18px 14px;
+  padding: 9px 16px 10px;
   border-bottom: 1px solid var(--color-border-default);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.016)), rgba(255, 255, 255, 0.006)),
@@ -665,7 +460,7 @@ function toggleSidebar() {
 
 .topbar-grid {
   display: grid;
-  grid-template-columns: minmax(300px, 1.05fr) minmax(0, 1.5fr) auto;
+  grid-template-columns: minmax(280px, 1.05fr) minmax(0, 1.3fr) auto;
   align-items: center;
   gap: 14px;
   min-width: 0;
@@ -688,7 +483,7 @@ function toggleSidebar() {
 }
 
 .topbar-copy strong {
-  font-size: 17px;
+  font-size: 16px;
   line-height: 1.18;
   letter-spacing: -0.02em;
 }
@@ -696,8 +491,8 @@ function toggleSidebar() {
 .topbar-meta {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 4px;
+  gap: 8px;
+  margin-top: 2px;
   min-width: 0;
   flex-wrap: wrap;
 }
@@ -713,8 +508,8 @@ function toggleSidebar() {
 .warmup-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 28px;
-  padding: 0 12px;
+  min-height: 24px;
+  padding: 0 9px;
   border-radius: 999px;
   border: 1px solid rgba(122, 162, 184, 0.26);
   background:
@@ -749,20 +544,29 @@ function toggleSidebar() {
 }
 
 .menu-button {
-  min-width: 82px;
-  box-shadow: var(--shadow-sm);
+  display: none;
+}
+
+@media (max-width: 780px) {
+  .menu-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 72px;
+    box-shadow: var(--shadow-sm);
+  }
 }
 
 .topbar-center {
   min-width: 0;
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .match-summary {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8px;
   flex-wrap: wrap;
   min-width: 0;
@@ -771,16 +575,16 @@ function toggleSidebar() {
 .match-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 28px;
-  padding: 0 12px;
+  min-height: 26px;
+  padding: 0 10px;
   border-radius: 999px;
   border: 1px solid rgba(122, 162, 184, 0.22);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.018)), rgba(255, 255, 255, 0.004)),
     rgba(122, 162, 184, 0.09);
   color: var(--color-text-secondary);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0.01em;
   line-height: 1;
   white-space: nowrap;
@@ -790,48 +594,45 @@ function toggleSidebar() {
 
 .match-chip-strong {
   color: var(--color-text-primary);
-  border-color: rgba(122, 162, 184, 0.32);
 }
 
 .match-chip-team1 {
   color: var(--color-team1-primary);
-  border-color: rgba(55, 200, 255, 0.25);
-  background: rgba(55, 200, 255, 0.07);
 }
 
 .match-chip-team2 {
   color: var(--color-team2-primary);
-  border-color: rgba(255, 155, 69, 0.25);
-  background: rgba(255, 155, 69, 0.07);
 }
 
-.match-chip-muted {
-  color: var(--color-text-muted);
+.match-chip-button {
+  appearance: none;
+  -webkit-appearance: none;
+  text-align: left;
+  border-color: rgba(122, 162, 184, 0.3);
+  padding: 0 10px;
+  color: #d7f3ff;
+  cursor: pointer;
+  font: inherit;
+}
+
+.match-chip-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
 }
 
 .topbar-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
-  justify-content: flex-end;
-  min-width: 0;
-}
-
-.topbar-metrics {
-  display: flex;
-  align-items: center;
   gap: 8px;
-  white-space: nowrap;
-  min-width: 0;
-  flex-wrap: wrap;
   justify-content: flex-end;
+  min-width: 0;
 }
 
 .metric {
   display: inline-flex;
   align-items: center;
-  min-height: 28px;
-  padding: 0 12px;
+  min-height: 24px;
+  padding: 0 10px;
   border-radius: 999px;
   border: 1px solid rgba(122, 162, 184, 0.22);
   background:
@@ -865,43 +666,6 @@ function toggleSidebar() {
   border-color: rgba(122, 162, 184, 0.3);
 }
 
-.metric.log-clock {
-  color: #d7f3ff;
-  border-color: rgba(122, 162, 184, 0.32);
-  cursor: pointer;
-}
-
-.metric.refresh-speed {
-  color: #d7f3ff;
-  border-color: rgba(122, 162, 184, 0.26);
-}
-
-.metric.refresh-speed.refresh-fast {
-  color: #bbf7d0;
-  border-color: rgba(52, 211, 153, 0.36);
-  background: rgba(52, 211, 153, 0.12);
-}
-
-.metric.refresh-speed.refresh-medium {
-  color: #fde68a;
-  border-color: rgba(245, 158, 11, 0.36);
-  background: rgba(245, 158, 11, 0.1);
-}
-
-.metric.refresh-speed.refresh-fallback {
-  color: #d7f3ff;
-}
-
-.metric.refresh-speed.refresh-disabled {
-  color: #cbd5e1;
-  border-color: rgba(148, 163, 184, 0.28);
-  background: rgba(148, 163, 184, 0.08);
-}
-
-.runtime-badge {
-  min-width: 76px;
-}
-
 .metric.error {
   color: #ffb1b1;
 }
@@ -910,9 +674,51 @@ function toggleSidebar() {
   display: inline-flex;
 }
 
+.topbar-health {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.health-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(122, 162, 184, 0.22);
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  box-shadow: var(--shadow-sm);
+}
+
+.health-chip.ok {
+  border-color: rgba(52, 211, 153, 0.38);
+  background: rgba(52, 211, 153, 0.14);
+  color: #bbf7d0;
+}
+
+.health-chip.error {
+  border-color: rgba(248, 113, 113, 0.42);
+  background: rgba(248, 113, 113, 0.13);
+  color: #fecaca;
+}
+
+.updated-metric {
+  color: var(--color-text-muted);
+}
+
 @media (max-width: 1180px) {
   .topbar-grid {
-    grid-template-columns: minmax(250px, 1fr) minmax(0, 1.1fr);
+    grid-template-columns: minmax(250px, 1fr) minmax(0, 1fr);
     grid-template-areas:
       "brand actions"
       "center center";
@@ -924,26 +730,26 @@ function toggleSidebar() {
 
   .topbar-center {
     grid-area: center;
-    justify-content: flex-start;
   }
 
   .topbar-actions {
     grid-area: actions;
+    flex-wrap: wrap;
   }
 }
 
 @media (max-width: 780px) {
   .topbar {
-    padding: 10px 14px 12px;
+    padding: 8px 12px 9px;
   }
 
   .topbar-grid {
     grid-template-columns: 1fr;
+    gap: 10px;
     grid-template-areas:
       "brand"
       "actions"
       "center";
-    gap: 10px;
   }
 
   .topbar-brand {
@@ -953,11 +759,6 @@ function toggleSidebar() {
 
   .topbar-actions {
     justify-content: space-between;
-  }
-
-  .topbar-metrics {
-    gap: 8px;
-    overflow: hidden;
   }
 
   .topbar-center {

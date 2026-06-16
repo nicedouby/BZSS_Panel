@@ -86,7 +86,7 @@ export const pageRegistry: PageDefinition[] = [
     titleKey: "routeTitle.matchStatus",
     category: "core",
     refreshPolicy: "realtime",
-    nav: { section: "opsLive", label: "对局状态", icon: "MS", order: 10 },
+    nav: { section: "opsLive", label: "对局状态", icon: "📹", order: 10 },
     ...workspacePage,
   },
   {
@@ -96,7 +96,7 @@ export const pageRegistry: PageDefinition[] = [
     titleKey: "routeTitle.console",
     category: "core",
     refreshPolicy: "realtime",
-    nav: { section: "system", label: "控制台", icon: "CON", order: 20 },
+    nav: { section: "system", label: "控制台", icon: "🖥️", order: 20 },
     superAdminOnly: true,
     ...workspacePage,
   },
@@ -107,7 +107,7 @@ export const pageRegistry: PageDefinition[] = [
     title: "聊天监控",
     category: "core",
     refreshPolicy: "realtime",
-    nav: { section: "opsLive", label: "聊天监控", icon: "CHAT", order: 20 },
+    nav: { section: "opsLive", label: "聊天监控", icon: "💬", order: 20 },
     ...workspacePage,
   },
   {
@@ -117,7 +117,7 @@ export const pageRegistry: PageDefinition[] = [
     title: "进出服记录",
     category: "core",
     refreshPolicy: "polling",
-    nav: { section: "players", label: "进出服记录", icon: "REC", order: 40 },
+    nav: { section: "players", label: "进出服记录", icon: "🕛", order: 40 },
     ...workspacePage,
   },
   {
@@ -127,7 +127,7 @@ export const pageRegistry: PageDefinition[] = [
     titleKey: "routeTitle.playerDatabase",
     category: "core",
     refreshPolicy: "manual",
-    nav: { section: "players", label: "玩家数据库", icon: "DB", order: 10 },
+    nav: { section: "players", label: "玩家数据库", icon: "🗄️", order: 10 },
     ...workspacePage,
   },
   {
@@ -137,7 +137,7 @@ export const pageRegistry: PageDefinition[] = [
     titleKey: "routeTitle.reserveSlots",
     category: "core",
     refreshPolicy: "manual",
-    nav: { section: "players", label: "预留位管理", icon: "VIP", order: 20 },
+    nav: { section: "players", label: "预留位管理", icon: "🎫", order: 20 },
     ...workspacePage,
   },
   {
@@ -147,7 +147,7 @@ export const pageRegistry: PageDefinition[] = [
     title: "黑奴跳边 CDK",
     category: "core",
     refreshPolicy: "manual",
-    nav: { section: "players", label: "黑奴跳边 CDK", icon: "HN", order: 30 },
+    nav: { section: "players", label: "黑奴跳边 CDK", icon: "🔑", order: 30 },
     ...workspacePage,
   },
   {
@@ -157,7 +157,7 @@ export const pageRegistry: PageDefinition[] = [
     titleKey: "routeTitle.combatManager",
     category: "core",
     refreshPolicy: "polling",
-    nav: { section: "combat", label: "战斗管理", icon: "CM", order: 10 },
+    nav: { section: "combat", label: "战斗管理", icon: "🛡️", order: 10 },
     requiredPermission: "combat_manager.view",
     legacyRequiredPermissions: ["kill_manager.view"],
     ...workspacePage,
@@ -169,7 +169,7 @@ export const pageRegistry: PageDefinition[] = [
     titleKey: "routeTitle.combatLog",
     category: "core",
     refreshPolicy: "polling",
-    nav: { section: "combat", label: "战斗日志", icon: "LOG", order: 30 },
+    nav: { section: "combat", label: "战斗日志", icon: "📝", order: 30 },
     ...workspacePage,
   },
   {
@@ -179,7 +179,7 @@ export const pageRegistry: PageDefinition[] = [
     titleKey: "routeTitle.battleLog",
     category: "core",
     refreshPolicy: "polling",
-    nav: { section: "combat", label: "战绩记录", icon: "BTL", order: 20 },
+    nav: { section: "combat", label: "战绩记录", icon: "🏆", order: 20 },
     requiredPermission: "combat_manager.view",
     legacyRequiredPermissions: ["kill_manager.view"],
     ...workspacePage,
@@ -191,7 +191,7 @@ export const pageRegistry: PageDefinition[] = [
     titleKey: "routeTitle.adminWarns",
     category: "core",
     refreshPolicy: "polling",
-    nav: { section: "broadcast", label: "广播模块", icon: "WARN", order: 10 },
+    nav: { section: "broadcast", label: "广播模块", icon: "🚨", order: 10 },
     ...workspacePage,
   },
   {
@@ -201,7 +201,7 @@ export const pageRegistry: PageDefinition[] = [
     title: "定时广播",
     category: "core",
     refreshPolicy: "polling",
-    nav: { section: "broadcast", label: "定时广播", icon: "SCH", order: 20 },
+    nav: { section: "broadcast", label: "定时广播", icon: "⏰", order: 20 },
     ...workspacePage,
   },
   {
@@ -211,7 +211,7 @@ export const pageRegistry: PageDefinition[] = [
     titleKey: "routeTitle.infantryCombatEnhancer",
     category: "plugin",
     refreshPolicy: "polling",
-    nav: { section: "combat", label: "步兵战斗增强", icon: "ICE", order: 40 },
+    nav: { section: "combat", label: "步兵战斗增强", icon: "💂", order: 40 },
     ...workspacePage,
   },
   {
@@ -221,7 +221,7 @@ export const pageRegistry: PageDefinition[] = [
     title: "组队举报",
     category: "plugin",
     refreshPolicy: "polling",
-    nav: { section: "players", label: "组队举报", icon: "GR", order: 60 },
+    nav: { section: "players", label: "组队举报", icon: "🚩", order: 60 },
     ...workspacePage,
   },
   {
@@ -231,7 +231,7 @@ export const pageRegistry: PageDefinition[] = [
     title: "公平跳边",
     category: "plugin",
     refreshPolicy: "polling",
-    nav: { section: "balance", label: "公平跳边", icon: "FTB", order: 20 },
+    nav: { section: "balance", label: "公平跳边", icon: "🔀", order: 20 },
     ...workspacePage,
   },
   {
@@ -241,7 +241,7 @@ export const pageRegistry: PageDefinition[] = [
     titleKey: "routeTitle.fairSquadGuard",
     category: "plugin",
     refreshPolicy: "polling",
-    nav: { section: "players", label: "公平建队", icon: "FSG", order: 70 },
+    nav: { section: "players", label: "公平建队", icon: "🛡️", order: 70 },
     ...workspacePage,
   },
   {
@@ -251,7 +251,7 @@ export const pageRegistry: PageDefinition[] = [
     title: "阶梯式建队时长",
     category: "plugin",
     refreshPolicy: "polling",
-    nav: { section: "players", label: "阶梯式建队时长", icon: "SSP", order: 80 },
+    nav: { section: "players", label: "阶梯式建队时长", icon: "⏳", order: 80 },
     ...workspacePage,
   },
   {
@@ -261,7 +261,7 @@ export const pageRegistry: PageDefinition[] = [
     title: "联办踢出",
     category: "plugin",
     refreshPolicy: "polling",
-    nav: { section: "players", label: "联办踢出", icon: "LB", order: 90 },
+    nav: { section: "players", label: "联办踢出", icon: "🚫", order: 90 },
     ...workspacePage,
   },
   {
@@ -271,7 +271,7 @@ export const pageRegistry: PageDefinition[] = [
     titleKey: "routeTitle.squadManagement",
     category: "core",
     refreshPolicy: "polling",
-    nav: { section: "players", label: "小队管理", icon: "SQ", order: 50 },
+    nav: { section: "players", label: "小队管理", icon: "💻", order: 50 },
     ...workspacePage,
   },
   {
@@ -281,7 +281,7 @@ export const pageRegistry: PageDefinition[] = [
     titleKey: "routeTitle.teamBalance",
     category: "core",
     refreshPolicy: "manual",
-    nav: { section: "balance", label: "跳边入口", icon: "TB", order: 10 },
+    nav: { section: "balance", label: "跳边入口", icon: "🔁", order: 10 },
     ...workspacePage,
   },
   {
@@ -291,7 +291,7 @@ export const pageRegistry: PageDefinition[] = [
     titleKey: "routeTitle.pluginSubscriptions",
     category: "system",
     refreshPolicy: "polling",
-    nav: { section: "system", label: "插件订阅", icon: "SUB", order: 50 },
+    nav: { section: "system", label: "插件订阅", icon: "🔌", order: 50 },
     ...workspacePage,
   },
   {
@@ -301,7 +301,7 @@ export const pageRegistry: PageDefinition[] = [
     title: "UDP 转发日志",
     category: "debug",
     refreshPolicy: "manual",
-    nav: { section: "system", label: "UDP 转发日志", icon: "UDP", order: 60 },
+    nav: { section: "system", label: "UDP 转发日志", icon: "📡", order: 60 },
     ...documentPage,
   },
   {
@@ -311,7 +311,7 @@ export const pageRegistry: PageDefinition[] = [
     title: "服务器统计",
     category: "plugin",
     refreshPolicy: "polling",
-    nav: { section: "analytics", label: "服务器统计", icon: "STS", order: 10 },
+    nav: { section: "analytics", label: "服务器统计", icon: "📈", order: 10 },
     ...workspacePage,
   },
   {
@@ -321,7 +321,7 @@ export const pageRegistry: PageDefinition[] = [
     title: "快照录制",
     category: "debug",
     refreshPolicy: "manual",
-    nav: { section: "analytics", label: "快照录制", icon: "SNP", order: 20 },
+    nav: { section: "analytics", label: "快照录制", icon: "📸", order: 20 },
     ...documentPage,
   },
   {
@@ -331,7 +331,7 @@ export const pageRegistry: PageDefinition[] = [
     title: "PJSC 平均时长",
     category: "debug",
     refreshPolicy: "manual",
-    nav: { section: "analytics", label: "PJSC 平均时长", icon: "PJ", order: 30 },
+    nav: { section: "analytics", label: "PJSC 平均时长", icon: "⏱️", order: 30 },
     ...documentPage,
   },
   {
@@ -341,7 +341,7 @@ export const pageRegistry: PageDefinition[] = [
     title: "平局投票提示",
     category: "debug",
     refreshPolicy: "manual",
-    nav: { section: "broadcast", label: "平局投票提示", icon: "DVG", order: 30 },
+    nav: { section: "broadcast", label: "平局投票提示", icon: "⚖️", order: 30 },
     ...documentPage,
   },
   {
@@ -351,7 +351,7 @@ export const pageRegistry: PageDefinition[] = [
     title: "公平跳边实验室",
     category: "debug",
     refreshPolicy: "manual",
-    nav: { section: "balance", label: "公平跳边模拟", icon: "LAB", order: 30 },
+    nav: { section: "balance", label: "公平跳边模拟", icon: "🧪", order: 30 },
     ...workspacePage,
   },
   {
@@ -361,7 +361,7 @@ export const pageRegistry: PageDefinition[] = [
     title: "入服欢迎警告",
     category: "debug",
     refreshPolicy: "manual",
-    nav: { section: "broadcast", label: "入服欢迎警告", icon: "WJW", order: 40 },
+    nav: { section: "broadcast", label: "入服欢迎警告", icon: "👋", order: 40 },
     ...documentPage,
   },
   {
@@ -371,7 +371,7 @@ export const pageRegistry: PageDefinition[] = [
     title: "小队名称分类器",
     category: "debug",
     refreshPolicy: "manual",
-    nav: { section: "players", label: "小队名称分类器", icon: "SNC", order: 100 },
+    nav: { section: "players", label: "小队名称分类器", icon: "🏷️", order: 100 },
     ...documentPage,
   },
   {
@@ -381,7 +381,7 @@ export const pageRegistry: PageDefinition[] = [
     titleKey: "routeTitle.runtimeStatus",
     category: "system",
     refreshPolicy: "polling",
-    nav: { section: "system", label: "运行状态", icon: "RUN", order: 10 },
+    nav: { section: "system", label: "运行状态", icon: "📶", order: 10 },
     ...documentPage,
   },
   {
@@ -391,7 +391,7 @@ export const pageRegistry: PageDefinition[] = [
     title: "管理员账号",
     category: "system",
     refreshPolicy: "polling",
-    nav: { section: "system", label: "管理员账号", icon: "USR", order: 30 },
+    nav: { section: "system", label: "管理员账号", icon: "👤", order: 30 },
     superAdminOnly: true,
     ...documentPage,
   },
@@ -402,7 +402,7 @@ export const pageRegistry: PageDefinition[] = [
     title: "操作记录",
     category: "system",
     refreshPolicy: "polling",
-    nav: { section: "system", label: "操作记录", icon: "AUD", order: 40 },
+    nav: { section: "system", label: "操作记录", icon: "📋", order: 40 },
     requiredPermission: "audit.view",
     ...workspacePage,
   },

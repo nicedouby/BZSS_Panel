@@ -62,14 +62,14 @@ export const sectionOrder: NavSectionKey[] = [
 ];
 
 export const sectionMeta: Record<NavSectionKey, { label: string; description: string; icon: string }> = {
-  opsLive: { label: "对局态势", description: "实时态势与现场沟通", icon: "OPS" },
-  players: { label: "玩家与小队", description: "玩家档案、小队动作与建队规则", icon: "PLY" },
-  balance: { label: "队伍平衡", description: "跳边入口与公平换边", icon: "BAL" },
-  combat: { label: "战斗管理", description: "处置、战绩与战斗事件", icon: "CBT" },
-  broadcast: { label: "通知广播", description: "公告、警告与阶段提示", icon: "BRD" },
-  analytics: { label: "数据分析", description: "统计、快照与诊断数据", icon: "DAT" },
-  system: { label: "系统维护", description: "运行状态、权限与审计", icon: "SYS" },
-  other: { label: "其他工具", description: "暂未归类的页面", icon: "OTH" },
+  opsLive:   { label: "对局态势", description: "实时态势与现场沟通",       icon: "🎯" },
+  players:   { label: "玩家与小队", description: "玩家档案、小队动作与建队规则", icon: "👥" },
+  balance:   { label: "队伍平衡", description: "跳边入口与公平换边",       icon: "⚖️" },
+  combat:    { label: "战斗管理", description: "处置、战绩与战斗事件",     icon: "⚔️" },
+  broadcast: { label: "通知广播", description: "公告、警告与阶段提示",     icon: "📢" },
+  analytics: { label: "数据分析", description: "统计、快照与诊断数据",     icon: "📊" },
+  system:    { label: "系统维护", description: "运行状态、权限与审计",     icon: "🔧" },
+  other:     { label: "其他工具", description: "暂未归类的页面",           icon: "🧩" },
 };
 
 export const staticNavItems: NavItem[] = getStaticNavItems();
@@ -233,7 +233,9 @@ function normalizeLabel(label: unknown): string {
 
 function normalizeIcon(icon: unknown): string {
   const text = String(icon ?? "").trim();
-  if (!text) return "P";
+  if (!text) return "🔌";
+  // 如果已经是 emoji（字符长度 ≤ 4 个代码点），直接返回
+  if ([...text].length <= 4) return text;
   return text.length > 5 ? text.slice(0, 5).toUpperCase() : text.toUpperCase();
 }
 

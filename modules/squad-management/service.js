@@ -698,6 +698,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
     const operatorName = normalizeText(request.operatorName ?? request.actor?.username ?? request.actor?.name);
     const system = Boolean(request.system);
     const actor = request.actor ?? request.viewer ?? null;
+    const allowUnverifiedTarget = Boolean(request.allowUnverifiedTarget && system);
 
     if (!serverId) {
       return buildInvalidActionResult("disband", "InvalidServerId", "serverId is required.", { serverId, teamId, squadId, reason, source, system });
@@ -722,14 +723,14 @@ export function createSquadManagementService({ core, modules, config, logger, re
     let target = state.squads.find((squad) => sameSquadKey(squad, teamId, squadId))
       ?? state.snapshotOnlySquads?.find((squad) => sameSquadKey(squad, teamId, squadId))
       ?? null;
-    if (!target && request.allowRefresh !== false) {
+    if (!target && !allowUnverifiedTarget && request.allowRefresh !== false) {
       await refreshSquadsSnapshot(serverId);
       state = buildStateSnapshot(serverId);
       target = state.squads.find((squad) => sameSquadKey(squad, teamId, squadId))
         ?? state.snapshotOnlySquads?.find((squad) => sameSquadKey(squad, teamId, squadId))
         ?? null;
     }
-    if (!target) {
+    if (!target && !allowUnverifiedTarget) {
       return recordFailedAction({
         kind: "disband",
         serverId,
@@ -743,6 +744,19 @@ export function createSquadManagementService({ core, modules, config, logger, re
         error: "TargetNotFound",
         message: "Target squad is not present in the current snapshot.",
       });
+    }
+    if (!target && allowUnverifiedTarget) {
+      target = {
+        teamId,
+        squadId,
+        squadName: normalizeText(request.squadName) || `Squad ${squadId}`,
+        teamName: normalizeText(request.teamName ?? request.factionName),
+        creatorName: normalizeText(request.creatorName),
+        creatorSteamId: normalizeText(request.creatorSteamId ?? request.steamId),
+        creatorEosId: normalizeText(request.creatorEosId ?? request.eosId),
+        creatorKey: "",
+        unverified: true,
+      };
     }
 
     if (!system && !canDisband(actor, { disbandPermission })) {
@@ -1475,6 +1489,9 @@ export function createSquadManagementService({ core, modules, config, logger, re
         system: meta.system,
         actor: meta.actor,
         requiredPermission,
+        priority: action === "disband" ? "high" : undefined,
+        bypassRateLimit: action === "disband",
+        rconChannel: action === "disband" ? "disband" : undefined,
       });
       if (response?.success || response?.rconExecuted) {
         return response?.rconResponse ?? response;

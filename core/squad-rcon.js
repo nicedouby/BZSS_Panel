@@ -174,6 +174,10 @@ export default class SquadRcon extends Rcon {
     return this.execute(`AdminBroadcast ${message}`);
   }
 
+  adminDisbandSquad(teamID, squadID) {
+    return this.execute(`AdminDisbandSquad ${teamID} ${squadID}`);
+  }
+
   kick(anyID, message) {
     return this.execute(`AdminKick "${anyID}" ${message}`);
   }

@@ -361,6 +361,14 @@ function resolveGroup(path: string) {
     };
   }
 
+  if (path.startsWith("bzssCore.")) {
+    return {
+      id: "bzss-core",
+      title: "BZSS-Core",
+      description: "Save-game script and remote logger path.",
+    };
+  }
+
   if (path.startsWith("ipLookup.") || path.startsWith("playerIdentityDisplay.")) {
     return {
       id: "identity",

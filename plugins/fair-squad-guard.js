@@ -452,6 +452,24 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       record.actions.push({ type: "violation_recorded" });
     }
 
+    const alreadyDisbanded = record.actions.some((action) => action.type === "disbanded");
+    if (!alreadyDisbanded && record.teamId != null && record.squadId != null) {
+      const disbandResult = await disbandSquad(record);
+      record.actions.push({
+        type: disbandResult?.ok === false ? "disband_failed" : "disbanded",
+        teamId: record.teamId,
+        squadId: record.squadId,
+        result: summarizeActionResult(disbandResult),
+      });
+      if (disbandResult?.ok !== false) {
+        record.active = false;
+        record.resolvedAt = nowIso();
+      }
+      state.summary.disbanded += disbandResult?.ok === false ? 0 : 1;
+    } else if (!alreadyDisbanded) {
+      record.actions.push({ type: "disband_skipped", reason: "team_or_squad_missing" });
+    }
+
     if (shouldBroadcastViolation(record)) {
       const broadcastResult = await broadcastViolation(record);
       const ok = broadcastResult?.success !== false;
@@ -473,24 +491,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         result: summarizeActionResult(warnResult),
       });
       state.summary.warned += warnResult?.success === false ? 0 : 1;
-    }
-
-    const alreadyDisbanded = record.actions.some((action) => action.type === "disbanded");
-    if (!alreadyDisbanded && record.teamId != null && record.squadId != null) {
-      const disbandResult = await disbandSquad(record);
-      record.actions.push({
-        type: disbandResult?.ok === false ? "disband_failed" : "disbanded",
-        teamId: record.teamId,
-        squadId: record.squadId,
-        result: summarizeActionResult(disbandResult),
-      });
-      if (disbandResult?.ok !== false) {
-        record.active = false;
-        record.resolvedAt = nowIso();
-      }
-      state.summary.disbanded += disbandResult?.ok === false ? 0 : 1;
-    } else if (!alreadyDisbanded) {
-      record.actions.push({ type: "disband_skipped", reason: "team_or_squad_missing" });
     }
 
     const alreadyCounted = record.actions.some((action) => action.type === "violation_counted");
@@ -627,6 +627,16 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       system: true,
       operatorName: PLUGIN_ID,
       commandNameSuffix: runtimeConfig.disbandCommandNameSuffix,
+      squadName: record.squadName,
+      teamName: record.factionName,
+      creatorName: record.creatorName,
+      creatorSteamId: record.creatorSteamId,
+      creatorEosId: record.creatorEosId,
+      allowRefresh: false,
+      allowUnverifiedTarget: true,
+      priority: "high",
+      bypassRateLimit: true,
+      rconChannel: "disband",
     };
     if (typeof api?.requestDisband === "function") return await api.requestDisband(request);
     if (typeof api?.disband === "function") return await api.disband(request);

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="admin-users-page">
     <header class="admin-users-header">
       <div>
@@ -398,6 +398,7 @@ const pagePermissionOptions = buildPagePermissionOptions();
 const systemPermissionOptions: PermissionOption[] = [
   { value: "settings.manage", label: "系统设置 / 插件订阅" },
   { value: "admin_users.manage", label: "管理员账号" },
+  { value: "bzss_core.use", label: "BZSS-Core" },
 ];
 
 const permissionSections: PermissionSection[] = [
@@ -1241,3 +1242,4 @@ td small {
   }
 }
 </style>
+

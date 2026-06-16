@@ -23,6 +23,7 @@ export function createSquadLifecycleModule({ core, config, logger }) {
   const reducer = createSquadLifecycleReducer({ config, logger: moduleLogger });
   const pendingCreateLogs = new Map();
   const recentCreateEventKeys = new Map();
+  const teamIdsByFactionByServer = new Map();
   const unsubscribers = [];
 
   const api = {
@@ -140,6 +141,13 @@ export function createSquadLifecycleModule({ core, config, logger }) {
 
     reducer.setCurrentMatchId(serverId, matchId);
     parsed.matchId = matchId;
+    if (parsed.teamId == null) {
+      const mappedTeamId = resolveTeamIdFromFactionName(serverId, parsed.factionName);
+      if (mappedTeamId != null) {
+        parsed.teamId = mappedTeamId;
+        parsed.needsTeamId = false;
+      }
+    }
     rememberCreateEvent(serverId, parsed);
 
     logWithFallback(moduleLogger, "info", `/xm [SquadLifecycle] squad create accepted: S${parsed.squadId} ${parsed.squadName} by ${parsed.creatorName || "unknown"}`, {
@@ -196,6 +204,7 @@ export function createSquadLifecycleModule({ core, config, logger }) {
   }
 
   function flushPendingForSnapshot(serverId, matchId, squads) {
+    rememberFactionTeamIds(serverId, squads);
     const pendingItems = [...pendingCreateLogs.values()].filter((item) => item.serverId === serverId && item.matchId === matchId);
     if (pendingItems.length === 0) return;
 
@@ -224,7 +233,7 @@ export function createSquadLifecycleModule({ core, config, logger }) {
       pendingCreateLogs.delete(buildPendingKey(pending));
       emitSquadCreatedEvent(serverId, matchId, flushedParsed, record);
 
-      logWithFallback(moduleLogger, "info", `/xm [SquadLifecycle] pending create flushed: T${matched.teamID ?? matched.teamId ?? ""} S${pending.squadId} ${pending.squadName || matched.squadName || ""} by ${pending.creatorName || "unknown"}`, {
+      logWithFallback(moduleLogger, "info", `[SquadLifecycle] pending create flushed to LOG: T${matched.teamID ?? matched.teamId ?? ""} S${pending.squadId} ${pending.squadName || matched.squadName || ""}`, {
         operation: "squadLifecycle.flushPending",
         data: {
           serverId: pending.serverId,
@@ -278,6 +287,7 @@ export function createSquadLifecycleModule({ core, config, logger }) {
     } else {
       reducer.clearServer(serverId);
     }
+    teamIdsByFactionByServer.delete(serverId);
   }
 
   function resolveCurrentMatchId(serverId, event) {
@@ -394,6 +404,31 @@ export function createSquadLifecycleModule({ core, config, logger }) {
       record: record ? { ...record } : null,
     });
   }
+
+  function rememberFactionTeamIds(serverId, squads = []) {
+    const key = String(serverId ?? "").trim();
+    if (!key) return;
+    const map = teamIdsByFactionByServer.get(key) ?? new Map();
+
+    for (const squad of squads) {
+      const teamId = toNumber(squad?.teamID ?? squad?.teamId);
+      const teamName = normalizeSquadName(squad?.teamName ?? squad?.factionName);
+      if (teamId == null || !teamName) continue;
+      map.set(teamName, teamId);
+    }
+
+    if (map.size > 0) {
+      teamIdsByFactionByServer.set(key, map);
+    }
+  }
+
+  function resolveTeamIdFromFactionName(serverId, factionName) {
+    const key = String(serverId ?? "").trim();
+    const factionKey = normalizeSquadName(factionName);
+    if (!key || !factionKey) return null;
+    const map = teamIdsByFactionByServer.get(key);
+    return map?.get(factionKey) ?? null;
+  }
 }
 
 function buildPendingKey(pending) {
@@ -450,6 +485,12 @@ function normalizePositiveNumber(value, fallback) {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0) return fallback;
   return number;
+}
+
+function toNumber(value) {
+  if (value == null || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function looksLikeSquadCreateRawLog(event) {

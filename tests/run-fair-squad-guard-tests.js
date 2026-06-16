@@ -36,6 +36,7 @@ async function createHarness(options = {}) {
   const warnings = [];
   const broadcasts = [];
   const kicks = [];
+  const actionSequence = [];
   const webStatus = {
     serverId: "test-server",
     playerCount: options.playerCount ?? 60,
@@ -77,21 +78,25 @@ async function createHarness(options = {}) {
           return matchState;
         },
         async requestDisband(request) {
+          actionSequence.push("disband");
           disbands.push(request);
           if (typeof options.requestDisband === "function") return await options.requestDisband(request);
           return { ok: true, command: `AdminDisbandSquad${request.commandNameSuffix ?? ""} ${request.teamId} ${request.squadId}` };
         },
         async requestKick(request) {
+          actionSequence.push("kick");
           kicks.push(request);
           return { ok: true, command: `AdminKick ${request.steamId || request.name}` };
         },
       },
       adminWarn: {
         async sendAdminWarn(request) {
+          actionSequence.push("warn");
           warnings.push(request);
           return { success: true, commandText: `AdminWarn ${request.targetName}` };
         },
         async sendAdminBroadcast(request) {
+          actionSequence.push("broadcast");
           broadcasts.push(request);
           return { success: true, commandText: `AdminBroadcast ${request.message}` };
         },
@@ -132,6 +137,7 @@ async function createHarness(options = {}) {
     warnings,
     broadcasts,
     kicks,
+    actionSequence,
     async emitCoreEvent(eventName, payload = {}) {
       const handler = coreHandlers.get(eventName);
       if (handler) {
@@ -467,6 +473,31 @@ async function testBroadcastOnApprovedAndViolation() {
   }
 }
 
+async function testViolationDisbandsBeforeBroadcastAndWarnOnFastLane() {
+  const harness = await createHarness();
+  try {
+    harness.webStatus.logClockSeconds = 10;
+    const result = await harness.plugin.api.simulateCreation(logCreation({
+      teamId: 2,
+      squadId: 32,
+      squadName: "Tank Fast",
+      factionName: "United States Army",
+    }));
+
+    assert.equal(result.violation, true);
+    assert.deepEqual(harness.actionSequence.slice(0, 3), ["disband", "broadcast", "warn"]);
+    assert.equal(harness.disbands.length, 1);
+    assert.equal(harness.disbands[0].allowRefresh, false);
+    assert.equal(harness.disbands[0].allowUnverifiedTarget, true);
+    assert.equal(harness.disbands[0].priority, "high");
+    assert.equal(harness.disbands[0].bypassRateLimit, true);
+    assert.equal(harness.disbands[0].rconChannel, "disband");
+    assert.equal(harness.disbands[0].teamName, "United States Army");
+  } finally {
+    await harness.stop();
+  }
+}
+
 await testLowPopulationIgnored();
 await testMissingAnchorLocksRound();
 await testManualClockLocksRoundAndUnlockAllowsExecution();
@@ -478,6 +509,7 @@ await testPendingLogWaitsForRconTeamIdAndStaysLogBacked();
 await testRepeatedViolationsAreNotBlockedByCooldown();
 await testSixteenthViolationKicks();
 await testBroadcastOnApprovedAndViolation();
+await testViolationDisbandsBeforeBroadcastAndWarnOnFastLane();
 await testTransientDisbandFailureRetries();
 
 async function testTransientDisbandFailureRetries() {

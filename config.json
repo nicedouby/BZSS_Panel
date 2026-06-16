@@ -63,6 +63,20 @@
         "restartRequired": true
       },
       {
+        "path": "bzssCore.modifyScriptPath",
+        "label": "BZSS-Core Modify Script Path",
+        "type": "string",
+        "advanced": true,
+        "restartRequired": false
+      },
+      {
+        "path": "bzssCore.remoteSaveGamePath",
+        "label": "BZSS-Core Remote Save Path",
+        "type": "string",
+        "advanced": true,
+        "restartRequired": false
+      },
+      {
         "path": "rcon.enabled",
         "label": "RCON Enabled",
         "type": "boolean",
@@ -753,5 +767,9 @@
   },
   "warmup": {
     "enabled": false
+  },
+  "bzssCore": {
+    "modifyScriptPath": "D:\\BZSS_Panel\\ModifySaveGame.py",
+    "remoteSaveGamePath": "Z:\\Users\\Administrator\\Desktop\\bzss_sq_server\\SquadGame\\Saved\\SaveGames\\BZSS-Logger.sav"
   }
 }

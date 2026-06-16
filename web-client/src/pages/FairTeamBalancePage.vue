@@ -58,16 +58,16 @@
           <div class="broadcast-card">
             <div class="broadcast-card__head">
               <p class="hero-side__label">定时广播记录</p>
-              <span class="status-chip subtle">{{ loadingBroadcasts ? "..." : broadcastItems.length }}</span>
+              <span class="status-chip subtle">{{ broadcastItems.length }}</span>
             </div>
 
-            <div v-if="broadcastError" class="mini-banner">
+            <div v-if="broadcastError && !broadcastItems.length" class="mini-banner">
               {{ broadcastError }}
             </div>
-            <p v-else-if="loadingBroadcasts" class="mini-empty">正在加载定时广播...</p>
+            <p v-else-if="loadingBroadcasts && !broadcastItems.length" class="mini-empty">正在加载定时广播...</p>
             <p v-else-if="!broadcastItems.length" class="mini-empty">暂无定时广播记录</p>
             <div v-else class="broadcast-list">
-              <article v-for="item in broadcastItems" :key="item.id" class="broadcast-item">
+              <article v-for="item in compactBroadcastItems" :key="item.id" class="broadcast-item">
                 <div class="broadcast-item__head">
                   <strong>{{ item.title || "未命名广播" }}</strong>
                   <span :data-tone="item.enabled ? 'ok' : 'muted'">
@@ -79,7 +79,7 @@
                   <span>下次: {{ formatBroadcastTime(item.nextRunAt) }}</span>
                   <span>成功: {{ item.runCount ?? 0 }}</span>
                 </div>
-                <p class="broadcast-item__message">{{ item.message || "未配置内容" }}</p>
+                <p class="broadcast-item__message" :title="item.message || '未配置内容'">{{ item.message || "未配置内容" }}</p>
               </article>
             </div>
           </div>
@@ -568,6 +568,8 @@ onMounted(() => {
   window.addEventListener("focus", visibilityRefreshHandler);
 });
 
+const compactBroadcastItems = computed(() => broadcastItems.value.slice(0, 1));
+
 onBeforeUnmount(() => {
   if (timer != null) {
     window.clearInterval(timer);
@@ -617,7 +619,6 @@ async function loadRequests() {
     requests.value = list.map(normalizeRequest);
   } catch (err: any) {
     requestsError.value = String(err?.message || err || "加载认领请求失败");
-    requests.value = [];
   } finally {
     loadingRequests.value = false;
   }
@@ -633,7 +634,6 @@ async function loadHistory() {
     history.value = list.map(normalizeHistoryEntry);
   } catch (err: any) {
     historyError.value = String(err?.message || err || "加载历史记录失败");
-    history.value = [];
   } finally {
     loadingHistory.value = false;
   }
@@ -655,7 +655,6 @@ async function loadBroadcastState() {
       .slice(0, 4);
   } catch (err: any) {
     broadcastError.value = String(err?.message || err || "加载定时广播记录失败");
-    broadcastItems.value = [];
   } finally {
     loadingBroadcasts.value = false;
   }
@@ -1023,7 +1022,7 @@ function normalizeStatusLabel(status: string) {
   position: relative;
   display: grid;
   grid-template-rows: auto auto auto auto minmax(0, 1fr);
-  gap: 18px;
+  gap: 12px;
   height: 100%;
   min-height: 0;
   padding: 16px;
@@ -1078,11 +1077,24 @@ function normalizeStatusLabel(status: string) {
 }
 
 .fair-team-balance-page :deep(.card-header) {
-  padding: 16px 18px 0;
+  padding: 12px 16px 0;
 }
 
 .fair-team-balance-page :deep(.card-body) {
-  padding: 18px;
+  padding: 14px 16px;
+}
+
+.hero-card :deep(.card-header) {
+  padding-top: 10px;
+}
+
+.hero-card :deep(.card-description) {
+  margin-top: 2px;
+  line-height: 1.35;
+}
+
+.hero-card :deep(.card-body.compact) {
+  padding: 10px 14px 12px;
 }
 
 .hero-card,
@@ -1100,8 +1112,9 @@ function normalizeStatusLabel(status: string) {
 }
 
 .hero-grid {
-  grid-template-columns: minmax(0, 1.55fr) minmax(260px, 0.85fr);
-  align-items: start;
+  grid-template-columns: minmax(0, 1.9fr) minmax(240px, 0.7fr);
+  align-items: stretch;
+  gap: 12px;
 }
 
 .hero-main,
@@ -1113,15 +1126,15 @@ function normalizeStatusLabel(status: string) {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .status-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 30px;
-  padding: 0 12px;
+  min-height: 26px;
+  padding: 0 10px;
   border-radius: 999px;
   border: 1px solid rgba(148, 163, 184, 0.24);
   background: rgba(255, 255, 255, 0.05);
@@ -1161,16 +1174,17 @@ function normalizeStatusLabel(status: string) {
 
 .hero-metrics {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
   margin: 0;
 }
 
 .hero-metrics > div {
   border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 16px;
-  padding: 12px 14px;
+  border-radius: 8px;
+  padding: 8px 10px;
   background: rgba(15, 23, 42, 0.24);
+  min-width: 0;
 }
 
 .hero-metrics dt,
@@ -1179,34 +1193,39 @@ function normalizeStatusLabel(status: string) {
   font-size: 11px;
   color: var(--color-text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
 }
 
 .hero-metrics dd,
 .quota-grid dd,
 .request-grid dd {
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   color: var(--color-text-primary);
-  line-height: 1.45;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hero-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 12px;
-  margin-top: 12px;
+  margin-top: 8px;
   color: var(--color-text-secondary);
   font-size: 11px;
 }
 
 .hero-side {
   display: grid;
-  gap: 12px;
+  gap: 8px;
   align-content: start;
-  padding: 14px;
+  padding: 10px;
   border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 16px;
+  border-radius: 8px;
   background: rgba(15, 23, 42, 0.22);
+  max-height: 124px;
+  overflow: hidden;
 }
 
 .hero-side__label {
@@ -1215,7 +1234,7 @@ function normalizeStatusLabel(status: string) {
   font-weight: 700;
   color: var(--color-text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0;
 }
 
 .action-stack {
@@ -1234,8 +1253,7 @@ function normalizeStatusLabel(status: string) {
 
 .broadcast-card {
   display: grid;
-  gap: 8px;
-  padding-top: 4px;
+  gap: 6px;
 }
 
 .broadcast-card__head {
@@ -1247,16 +1265,18 @@ function normalizeStatusLabel(status: string) {
 
 .broadcast-list {
   display: grid;
-  gap: 8px;
+  gap: 6px;
+  min-height: 0;
 }
 
 .broadcast-item {
   border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 12px;
-  padding: 10px 12px;
+  border-radius: 8px;
+  padding: 7px 9px;
   background: rgba(15, 23, 42, 0.18);
   display: grid;
-  gap: 6px;
+  gap: 4px;
+  min-width: 0;
 }
 
 .broadcast-item__head,
@@ -1269,6 +1289,9 @@ function normalizeStatusLabel(status: string) {
 
 .broadcast-item__head strong {
   font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .broadcast-item__head span {
@@ -1279,14 +1302,19 @@ function normalizeStatusLabel(status: string) {
 .broadcast-item__meta {
   color: var(--color-text-muted);
   font-size: 11px;
-  line-height: 1.4;
+  line-height: 1.3;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .broadcast-item__message {
   margin: 0;
   color: var(--color-text-secondary);
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mini-banner,
@@ -1299,8 +1327,8 @@ function normalizeStatusLabel(status: string) {
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
   min-width: 0;
 }
 
@@ -1330,15 +1358,16 @@ function normalizeStatusLabel(status: string) {
 
 .summary-card {
   display: grid;
-  gap: 6px;
-  padding: 14px 15px;
-  border-radius: 16px;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
   border: 1px solid rgba(148, 163, 184, 0.16);
   background:
     radial-gradient(circle at top right, rgba(56, 189, 248, 0.08), transparent 36%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018));
   box-shadow: 0 16px 28px rgba(2, 6, 23, 0.2);
-  min-height: 96px;
+  min-height: 74px;
+  align-content: center;
 }
 
 .summary-card[data-tone="ok"] {
@@ -1354,20 +1383,21 @@ function normalizeStatusLabel(status: string) {
 }
 
 .summary-card span {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--color-text-muted);
 }
 
 .summary-card strong {
-  font-size: 26px;
+  font-size: 22px;
   line-height: 1.05;
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
 }
 
 .summary-card em {
   font-style: normal;
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .detail-grid {
@@ -1665,6 +1695,12 @@ function normalizeStatusLabel(status: string) {
 
   .action-stack {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1100px) {
+  .summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
