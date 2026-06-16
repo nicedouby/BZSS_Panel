@@ -19,6 +19,7 @@ import StepwiseSquadPlaytimeGuardPage from "../pages/StepwiseSquadPlaytimeGuardP
 import LianbanKickPage from "../pages/LianbanKickPage.vue";
 import SquadManagementPage from "../pages/SquadManagementPage.vue";
 import TeamBalancePage from "../pages/TeamBalancePage.vue";
+import TeamShufflePage from "../pages/TeamShufflePage.vue";
 import UdpEventForwarderPage from "../pages/UdpEventForwarderPage.vue";
 import ServerInfoStatisticsPage from "../pages/ServerInfoStatisticsPage.vue";
 import MatchSnapshotDebugPage from "../pages/MatchSnapshotDebugPage.vue";
@@ -282,6 +283,16 @@ export const pageRegistry: PageDefinition[] = [
     category: "core",
     refreshPolicy: "manual",
     nav: { section: "balance", label: "跳边入口", icon: "🔁", order: 10 },
+    ...workspacePage,
+  },
+  {
+    name: "team-shuffle",
+    path: "/team-shuffle",
+    component: TeamShufflePage,
+    title: "随机打乱",
+    category: "core",
+    refreshPolicy: "manual",
+    nav: { section: "balance", label: "随机打乱", icon: "SHUF", order: 15 },
     ...workspacePage,
   },
   {

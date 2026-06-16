@@ -13,6 +13,7 @@ const DEFAULT_SHUFFLE_SOURCE = "web.matchStatus.shufflePlan";
 const DEFAULT_SHUFFLE_REASON = "match_status_playtime_shuffle_plan";
 const DEFAULT_SWITCH_PERMISSION = "squad.switch";
 const MAX_ACTION_HISTORY = 100;
+const SHUFFLE_ALGORITHMS = new Set(["playtime_balanced", "random_even", "mirror"]);
 
 export function createTeamBalanceService({ core, config, logger }) {
   const moduleLogger = logger
@@ -43,6 +44,10 @@ export function createTeamBalanceService({ core, config, logger }) {
 
     createPlaytimeShufflePlan(request = {}) {
       return createPlaytimeShufflePlan(request);
+    },
+
+    executeShufflePlan(request = {}) {
+      return executeShufflePlan(request);
     },
 
     listForceTeamChangeRecords(request = {}) {
@@ -199,6 +204,7 @@ export function createTeamBalanceService({ core, config, logger }) {
     const source = normalizeText(request.source) || DEFAULT_SHUFFLE_SOURCE;
     const reason = normalizeText(request.reason) || DEFAULT_SHUFFLE_REASON;
     const system = Boolean(request.system);
+    const algorithm = normalizeShuffleAlgorithm(request.algorithm ?? request.mode);
     const roster = normalizeShuffleRoster(request.players ?? request.roster);
     const rawGroups = Array.isArray(request.groups)
       ? request.groups
@@ -266,7 +272,7 @@ export function createTeamBalanceService({ core, config, logger }) {
       return result;
     }
 
-    const plan = buildPlaytimeShufflePlanWithGroups(roster, shuffleGroups);
+    const plan = buildPlaytimeShufflePlanWithGroups(roster, shuffleGroups, algorithm);
     const result = buildShufflePlanResult({
       ok: true,
       error: "",
@@ -275,8 +281,125 @@ export function createTeamBalanceService({ core, config, logger }) {
       reason,
       operator,
       system,
+      algorithm,
       summary: plan.summary,
       plan: plan.plan,
+    });
+    recordAction(result);
+    return result;
+  }
+
+  async function executeShufflePlan(request = {}) {
+    const operator = normalizeOperator(
+      request.operator ?? request.actor ?? request.viewer ?? null,
+      request.operatorName ?? request.actorName ?? "",
+    );
+    const source = normalizeText(request.source) || "web.teamShuffle";
+    const reason = normalizeText(request.reason) || "team_shuffle_execute";
+    const system = Boolean(request.system);
+    const algorithm = normalizeShuffleAlgorithm(request.algorithm ?? request.mode);
+    const roster = normalizeShuffleRoster(request.players ?? request.roster);
+
+    if (!enabled) {
+      const result = buildShuffleExecuteResult({
+        ok: false,
+        error: "ModuleDisabled",
+        message: "TeamBalance module is disabled.",
+        source,
+        reason,
+        operator,
+        system,
+        algorithm,
+      });
+      recordAction(result);
+      return result;
+    }
+
+    if (!system && !canSwitch(operator, { switchPermission })) {
+      const result = buildShuffleExecuteResult({
+        ok: false,
+        error: "Forbidden",
+        message: `Permission '${switchPermission}' is required.`,
+        source,
+        reason,
+        operator,
+        system,
+        algorithm,
+      });
+      recordAction(result);
+      return result;
+    }
+
+    const moves = roster
+      .filter((player) => player.online !== false)
+      .map((player) => ({
+        ...player,
+        targetTeamId: normalizeTeamId(player.targetTeamId ?? player.targetTeamID ?? player.teamId),
+      }))
+      .filter((player) => {
+        if (!player.steamId) return false;
+        if (player.targetTeamId == null) return false;
+        return player.teamId !== player.targetTeamId;
+      });
+
+    if (!moves.length) {
+      const result = buildShuffleExecuteResult({
+        ok: true,
+        error: "",
+        message: "No team switches were required.",
+        source,
+        reason,
+        operator,
+        system,
+        algorithm,
+        executed: [],
+        failed: [],
+      });
+      recordAction(result);
+      return result;
+    }
+
+    const executed = [];
+    const failed = [];
+    for (const move of moves) {
+      const result = await forceTeamChange({
+        steamId: move.steamId,
+        playerName: move.playerName,
+        source,
+        reason,
+        operator,
+        system,
+      });
+      const entry = {
+        playerId: move.playerId || null,
+        steamId: move.steamId || null,
+        eosId: move.eosId || null,
+        playerName: move.playerName,
+        fromTeamId: move.teamId,
+        targetTeamId: move.targetTeamId,
+        ok: Boolean(result.ok),
+        error: result.error || "",
+        message: result.message || "",
+        command: result.command || "",
+        rconResponse: result.rconResponse || "",
+      };
+      if (result.ok) executed.push(entry);
+      else failed.push(entry);
+    }
+
+    const result = buildShuffleExecuteResult({
+      ok: failed.length === 0,
+      error: failed.length ? "PartialFailure" : "",
+      message: failed.length
+        ? `Executed ${executed.length} team switches, ${failed.length} failed.`
+        : `Executed ${executed.length} team switches.`,
+      source,
+      reason,
+      operator,
+      system,
+      algorithm,
+      executed,
+      failed,
     });
     recordAction(result);
     return result;
@@ -401,6 +524,7 @@ function buildShufflePlanResult({
   reason = DEFAULT_SHUFFLE_REASON,
   operator = null,
   system = false,
+  algorithm = "playtime_balanced",
   summary = null,
   plan = null,
 }) {
@@ -415,6 +539,7 @@ function buildShufflePlanResult({
     executor: formatExecutor(operator),
     operator,
     system: Boolean(system),
+    algorithm,
     error,
     message,
     command: "",
@@ -422,6 +547,50 @@ function buildShufflePlanResult({
     rconResponse: "",
     summary,
     plan,
+  };
+}
+
+function buildShuffleExecuteResult({
+  ok,
+  error = "",
+  message = "",
+  source = "web.teamShuffle",
+  reason = "team_shuffle_execute",
+  operator = null,
+  system = false,
+  algorithm = "playtime_balanced",
+  executed = [],
+  failed = [],
+}) {
+  return {
+    ok: Boolean(ok),
+    type: "shuffle_execute",
+    action: "shuffle_execute",
+    steamId: "",
+    playerName: "",
+    source,
+    reason,
+    executor: formatExecutor(operator),
+    operator,
+    system: Boolean(system),
+    algorithm,
+    error,
+    message,
+    command: "",
+    rconExecuted: executed.length > 0,
+    rconResponse: "",
+    summary: {
+      plannedMoveCount: executed.length + failed.length,
+      executedCount: executed.length,
+      failedCount: failed.length,
+    },
+    plan: {
+      generatedAt: new Date().toISOString(),
+      mode: algorithm,
+      moves: [...executed, ...failed],
+      executed,
+      failed,
+    },
   };
 }
 
@@ -497,6 +666,11 @@ function normalizePermissionList(value) {
 
 function normalizeText(value) {
   return String(value ?? "").trim();
+}
+
+function normalizeShuffleAlgorithm(value) {
+  const text = normalizeText(value);
+  return SHUFFLE_ALGORITHMS.has(text) ? text : "playtime_balanced";
 }
 
 function formatExecutor(operator) {
@@ -597,6 +771,7 @@ function normalizeShufflePlayer(player, index) {
     online: player?.online !== false,
     playtimeSeconds,
     playtimeHours: toRoundedHours(playtimeSeconds),
+    targetTeamId: normalizeTeamId(player?.targetTeamId ?? player?.targetTeamID),
   };
 }
 
@@ -604,7 +779,10 @@ function buildPlaytimeShufflePlan(players) {
   return buildPlaytimeShufflePlanWithGroups(players, []);
 }
 
-function buildPlaytimeShufflePlanWithGroups(players, groups = []) {
+function buildPlaytimeShufflePlanWithGroups(players, groups = [], algorithm = "playtime_balanced") {
+  if (algorithm === "random_even") return buildRandomEvenShufflePlan(players, groups, algorithm);
+  if (algorithm === "mirror") return buildMirrorShufflePlan(players, groups, algorithm);
+
   const teamSizes = {
     1: players.filter((player) => player.teamId === 1).length,
     2: players.filter((player) => player.teamId === 2).length,
@@ -695,7 +873,7 @@ function buildPlaytimeShufflePlanWithGroups(players, groups = []) {
     },
     plan: {
       generatedAt: new Date().toISOString(),
-      mode: "playtime_balanced_shuffle",
+      mode: algorithm,
       players: assignments,
       moves,
       groups: validGroups.map((group) => ({
@@ -707,6 +885,126 @@ function buildPlaytimeShufflePlanWithGroups(players, groups = []) {
       })),
     },
   };
+}
+
+function buildRandomEvenShufflePlan(players, groups = [], algorithm = "random_even") {
+  const teamSizes = {
+    1: players.filter((player) => player.teamId === 1).length,
+    2: players.filter((player) => player.teamId === 2).length,
+  };
+  const groupedKeys = new Set();
+  for (const group of Array.isArray(groups) ? groups : []) {
+    for (const member of group.members) groupedKeys.add(member.playerKey);
+  }
+
+  const assigned = { 1: [], 2: [] };
+  for (const group of Array.isArray(groups) ? shuffleArray(groups) : []) {
+    const members = group.members
+      .map((member) => findRosterPlayer(players, member))
+      .filter(Boolean);
+    if (!members.length) continue;
+    const preferred = assigned[1].length <= assigned[2].length ? 1 : 2;
+    const fallback = preferred === 1 ? 2 : 1;
+    const targetTeamId = teamSizes[preferred] - assigned[preferred].length >= members.length
+      ? preferred
+      : teamSizes[fallback] - assigned[fallback].length >= members.length
+        ? fallback
+        : null;
+    if (!targetTeamId) continue;
+    for (const player of members) {
+      assigned[targetTeamId].push({
+        ...player,
+        targetTeamId,
+        groupId: group.id,
+        groupName: group.name,
+        groupColor: group.color || "",
+        anchorPlayerKey: group.anchorPlayerKey,
+      });
+    }
+  }
+
+  for (const player of shuffleArray(players.filter((player) => !groupedKeys.has(resolveShufflePlayerKey(player))))) {
+    const targetTeamId = chooseUnknownTargetTeam({ assigned, teamSizes });
+    assigned[targetTeamId].push({ ...player, targetTeamId });
+  }
+
+  return buildPlanFromAssigned(players, assigned, groups, algorithm);
+}
+
+function buildMirrorShufflePlan(players, groups = [], algorithm = "mirror") {
+  const assigned = { 1: [], 2: [] };
+  for (const player of players) {
+    const targetTeamId = player.teamId === 1 ? 2 : 1;
+    assigned[targetTeamId].push({ ...player, targetTeamId });
+  }
+  return buildPlanFromAssigned(players, assigned, groups, algorithm);
+}
+
+function buildPlanFromAssigned(players, assigned, groups, algorithm) {
+  const assignments = [...assigned[1], ...assigned[2]]
+    .sort((left, right) => left.index - right.index)
+    .map((player) => ({
+      playerId: player.playerId || null,
+      steamId: player.steamId || null,
+      eosId: player.eosId || null,
+      playerName: player.playerName,
+      role: player.role || null,
+      squadId: player.squadId,
+      fromTeamId: player.teamId,
+      targetTeamId: player.targetTeamId,
+      playtimeSeconds: Number.isFinite(player.playtimeSeconds) ? player.playtimeSeconds : null,
+      playtimeHours: toRoundedHours(player.playtimeSeconds),
+      hasKnownPlaytime: Number.isFinite(player.playtimeSeconds),
+      switchRequired: player.teamId !== player.targetTeamId,
+      online: player.online !== false,
+      groupId: player.groupId || null,
+      groupName: player.groupName || null,
+      groupColor: player.groupColor || null,
+      anchorPlayerKey: player.anchorPlayerKey || null,
+    }));
+
+  const moves = assignments
+    .filter((player) => player.switchRequired)
+    .sort((left, right) => String(left.playerName).localeCompare(String(right.playerName), "zh-CN"));
+  const before = buildTeamSummary(players, "teamId");
+  const after = buildTeamSummary(assignments, "targetTeamId");
+  const averageDeltaHours = roundHours(Math.abs(
+    Number(after.team1.averagePlaytimeHours ?? 0) - Number(after.team2.averagePlaytimeHours ?? 0),
+  ));
+
+  return {
+    summary: {
+      totalPlayers: players.length,
+      plannedMoveCount: moves.length,
+      knownPlaytimePlayers: players.filter((player) => Number.isFinite(player.playtimeSeconds)).length,
+      unknownPlaytimePlayers: players.filter((player) => !Number.isFinite(player.playtimeSeconds)).length,
+      averageDeltaHours,
+      before,
+      after,
+    },
+    plan: {
+      generatedAt: new Date().toISOString(),
+      mode: algorithm,
+      players: assignments,
+      moves,
+      groups: (Array.isArray(groups) ? groups : []).map((group) => ({
+        id: group.id,
+        name: group.name,
+        color: group.color || null,
+        anchorPlayerKey: group.anchorPlayerKey,
+        memberCount: group.members.length,
+      })),
+    },
+  };
+}
+
+function shuffleArray(values) {
+  const items = [...values];
+  for (let index = items.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
+  }
+  return items;
 }
 
 function assignGroupedPlayers(group, players, assigned, knownTotals, teamSizes) {

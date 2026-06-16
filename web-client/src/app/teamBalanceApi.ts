@@ -63,6 +63,7 @@ export interface TeamShufflePlanResponse {
   reason: string;
   operator: TeamBalanceForceTeamChangeResponse["operator"];
   system: boolean;
+  algorithm?: string;
   error: string;
   message: string;
   command: string;
@@ -95,6 +96,44 @@ export interface TeamShufflePlanResponse {
       anchorPlayerKey: string;
       memberCount: number;
     }>;
+  } | null;
+}
+
+export interface TeamShuffleExecuteResponse {
+  ok: boolean;
+  type: string;
+  action: string;
+  source: string;
+  reason: string;
+  operator: TeamBalanceForceTeamChangeResponse["operator"];
+  system: boolean;
+  algorithm?: string;
+  error: string;
+  message: string;
+  rconExecuted: boolean;
+  summary: {
+    plannedMoveCount: number;
+    executedCount: number;
+    failedCount: number;
+  } | null;
+  plan: {
+    generatedAt: string;
+    mode: string;
+    moves: Array<{
+      playerId?: string | number | null;
+      steamId?: string | null;
+      eosId?: string | null;
+      playerName?: string | null;
+      fromTeamId?: number;
+      targetTeamId?: number;
+      ok?: boolean;
+      error?: string;
+      message?: string;
+      command?: string;
+      rconResponse?: string;
+    }>;
+    executed?: unknown[];
+    failed?: unknown[];
   } | null;
 }
 
@@ -131,6 +170,8 @@ export function requestSwitchTeam(payload: {
 export function createPlaytimeShufflePlan(payload: {
   source?: string;
   reason?: string;
+  algorithm?: string;
+  mode?: string;
   groups?: Array<{
     id?: string;
     name?: string;
@@ -156,4 +197,26 @@ export function createPlaytimeShufflePlan(payload: {
   }>;
 }) {
   return apiPost<TeamShufflePlanResponse>("/api/tb/shuffle-plan", payload);
+}
+
+export function executeTeamShufflePlan(payload: {
+  source?: string;
+  reason?: string;
+  algorithm?: string;
+  mode?: string;
+  players: Array<{
+    playerId?: string | number | null;
+    steamId?: string | null;
+    eosId?: string | null;
+    playerName?: string;
+    name?: string;
+    role?: string | null;
+    squadId?: number | null;
+    teamId: number;
+    targetTeamId: number;
+    online?: boolean;
+    playtimeSeconds?: number | null;
+  }>;
+}) {
+  return apiPost<TeamShuffleExecuteResponse>("/api/tb/shuffle-execute", payload);
 }
