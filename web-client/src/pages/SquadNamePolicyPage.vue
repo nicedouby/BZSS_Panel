@@ -52,6 +52,10 @@
               <dt>后缀处理</dt>
               <dd>{{ testResult.suffixStripped ? "已剥离用于建议" : "未剥离" }}</dd>
             </div>
+            <div>
+              <dt>分类</dt>
+              <dd>{{ testResult.classification?.label || "-" }}</dd>
+            </div>
           </dl>
 
           <div v-if="testResult.matched" class="matched-card">
@@ -268,6 +272,11 @@ type PolicyTestResult = {
   keywordSuggestions: PolicySuggestion[];
   algorithmSuggestions: PolicySuggestion[];
   warningMessage: string;
+  classification?: {
+    nature: string;
+    label: string;
+    reason: string;
+  } | null;
 };
 
 const auth = useAuthStore();

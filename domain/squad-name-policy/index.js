@@ -3,11 +3,22 @@
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
+import {
+  classifySquadName,
+  SQUAD_NATURE,
+  SQUAD_NATURE_LABEL,
+} from "../squad/squad_name_classifier.js";
 
 const DEFAULT_POLICY_PATH = path.resolve(process.cwd(), "config", "squad_name_policy.json");
 const DEFAULT_SUGGESTION_LIMIT = 5;
 const MAX_SUGGESTION_LIMIT = 50;
 const ALGORITHM_THRESHOLD = 0.42;
+const ADMIN_SQUAD_NAMES = Object.freeze([
+  "op",
+  "admin",
+  "管理员",
+  "管理员小队",
+]);
 const DEFAULT_NAME_PATTERNS = Object.freeze([
   "^squad\\s*\\d+$",
   "^小队\\s*\\d+$",
@@ -104,6 +115,22 @@ export function evaluateSquadName(rawName, policy) {
     });
   }
 
+  const adminMatch = matchAdminSquadName(normalizedInput);
+  if (adminMatch) {
+    return buildAllowedNameResult({
+      input,
+      normalizedInput,
+      normalizedStrippedInput,
+      suffixStripped,
+      name: input.trim(),
+      kind: "admin",
+      label: "Admin squad name",
+      reason: "Matched admin squad name.",
+      matchedValue: adminMatch,
+      classification: buildClassification("admin", "管理员小队", "Matched admin squad name."),
+    });
+  }
+
   const infantryMatch = indexes.infantryNameIndex.get(normalizedInput);
   if (infantryMatch) {
     return buildAllowedNameResult({
@@ -118,6 +145,13 @@ export function evaluateSquadName(rawName, policy) {
         ? "Matched special infantry whitelist."
         : "Matched infantry whitelist.",
       matchedValue: infantryMatch.name,
+      classification: buildClassification(
+        infantryMatch.kind,
+        infantryMatch.kind === "special_infantry" ? "特种步兵队" : "步兵队",
+        infantryMatch.kind === "special_infantry"
+          ? "Matched special infantry whitelist."
+          : "Matched infantry whitelist.",
+      ),
     });
   }
 
@@ -136,6 +170,25 @@ export function evaluateSquadName(rawName, policy) {
       keywordSuggestions: [],
       algorithmSuggestions: [],
       warningMessage: "",
+    };
+  }
+
+  const inferredClassification = inferNonVehicleClassification(input, normalizedInput, normalizedStrippedInput);
+  if (inferredClassification) {
+    return {
+      ok: true,
+      input,
+      normalizedInput,
+      normalizedStrippedInput,
+      suffixStripped,
+      valid: false,
+      reason: inferredClassification.reason,
+      matched: null,
+      suggestions: [],
+      keywordSuggestions: [],
+      algorithmSuggestions: [],
+      warningMessage: "",
+      classification: inferredClassification,
     };
   }
 
@@ -162,6 +215,7 @@ export function evaluateSquadName(rawName, policy) {
     keywordSuggestions,
     algorithmSuggestions,
     warningMessage,
+    classification: null,
   };
 }
 
@@ -175,6 +229,7 @@ function buildAllowedNameResult({
   label,
   reason,
   matchedValue,
+  classification = null,
 }) {
   return {
     ok: true,
@@ -201,7 +256,41 @@ function buildAllowedNameResult({
     keywordSuggestions: [],
     algorithmSuggestions: [],
     warningMessage: "",
+    classification,
   };
+}
+
+function matchAdminSquadName(normalizedInput) {
+  for (const name of ADMIN_SQUAD_NAMES) {
+    if (normalizePolicyName(name) === normalizedInput) return name;
+  }
+  return null;
+}
+
+function inferNonVehicleClassification(input, normalizedInput, normalizedStrippedInput) {
+  const classifier = classifySquadName(input, { includeDebug: false });
+  if (classifier.nature === SQUAD_NATURE.INFANTRY) {
+    return buildClassification("infantry", SQUAD_NATURE_LABEL.infantry, "Classified as infantry squad name. Vehicle suggestions skipped.");
+  }
+  if (isNumericOnlyName(normalizedStrippedInput || normalizedInput)) {
+    return buildClassification("infantry", SQUAD_NATURE_LABEL.infantry, "Numeric-only squad names are treated as infantry/custom squad names. Vehicle suggestions skipped.");
+  }
+  if (containsChinese(input) && classifier.nature === SQUAD_NATURE.OTHER) {
+    return buildClassification("infantry", SQUAD_NATURE_LABEL.infantry, "Chinese custom squad names are treated as infantry squad names. Vehicle suggestions skipped.");
+  }
+  return null;
+}
+
+function buildClassification(nature, label, reason) {
+  return { nature, label, reason };
+}
+
+function isNumericOnlyName(value) {
+  return /^\d{1,4}$/.test(String(value ?? "").trim());
+}
+
+function containsChinese(value) {
+  return /[\u3400-\u9fff]/u.test(String(value ?? ""));
 }
 
 export function normalizePolicyName(value) {

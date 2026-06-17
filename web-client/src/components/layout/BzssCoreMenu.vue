@@ -143,6 +143,15 @@
                 </div>
               </label>
 
+              <label class="bzss-core-field">
+                <span>Team</span>
+                <select v-model="vehicleTeamId" class="bzss-core-select" :disabled="isBatchSpawning">
+                  <option value="0">Neutral (0)</option>
+                  <option value="1">Team 1</option>
+                  <option value="2">Team 2</option>
+                </select>
+              </label>
+
               <!-- Vehicle Asset Shortcuts Bar -->
               <div class="bzss-core-shortcuts-section">
                 <div class="bzss-core-tabs">
@@ -252,13 +261,13 @@
                   v-model.trim="rawCommand"
                   class="bzss-core-textarea"
                   rows="4"
-                  placeholder="CreateVehicle:Donald.DoubyBear,/Game/Vehicles/AUS_M1A1/BP_AUS_M1A1.BP_AUS_M1A1_C"
+                  placeholder="CreateVehicle:Donald.DoubyBear,/Game/Vehicles/AUS_M1A1/BP_AUS_M1A1.BP_AUS_M1A1_C,1"
                 ></textarea>
               </label>
 
               <div class="bzss-core-example-list">
                 <span>Examples</span>
-                <code>CreateVehicle:PlayerName,/Game/Vehicles/AUS_M1A1/BP_AUS_M1A1.BP_AUS_M1A1_C</code>
+                <code>CreateVehicle:PlayerName,/Game/Vehicles/AUS_M1A1/BP_AUS_M1A1.BP_AUS_M1A1_C,1</code>
                 <code>AdminTrack:AdminName,TrackObject</code>
                 <code>RemoveAdminTrack:AdminName</code>
                 <code>TransitionWeather:SnowHeavy,10</code>
@@ -378,6 +387,7 @@ const rawCommand = ref("");
 const targetPlayer = ref("");
 const isCustomPlayer = ref(false);
 const vehicleAssetPath = ref("");
+const vehicleTeamId = ref<"0" | "1" | "2">("0");
 const batchSpawnCount = ref(1);
 const activeTab = ref<keyof typeof vehicleCategories | "favorites">("tanks");
 const favoriteVehicles = ref<VehiclePreset[]>([]);
@@ -409,7 +419,7 @@ const rawPreview = computed(() => rawCommand.value || "Enter a full raw command"
 const vehiclePreview = computed(() => {
   const p = targetPlayer.value || "Player";
   const path = vehicleAssetPath.value || "AssetPath";
-  return `CreateVehicle:${p},${path}`;
+  return `CreateVehicle:${p},${path},${vehicleTeamId.value}`;
 });
 
 const onlinePlayersList = computed(() => {
@@ -554,6 +564,7 @@ function openDialog(mode: DialogMode) {
     rawCommand.value = "";
   } else if (mode === "vehicle") {
     vehicleAssetPath.value = "";
+    vehicleTeamId.value = "0";
     batchSpawnCount.value = 1;
     isBatchSpawning.value = false;
     batchSpawningProgress.value = 0;
@@ -598,13 +609,14 @@ async function submitVehicleCommand() {
   const path = vehicleAssetPath.value.trim();
   const player = targetPlayer.value.trim();
   if (!path || !player) return;
+  const parameter = `${player},${path},${vehicleTeamId.value}`;
 
   const count = Math.max(1, Math.min(5, Number(batchSpawnCount.value) || 1));
   
   if (count === 1) {
     await executeCommand({
       directive: "CreateVehicle",
-      parameter: `${player},${path}`,
+      parameter,
     });
     return;
   }
@@ -626,7 +638,7 @@ async function submitVehicleCommand() {
 
       const result = await executeBzssCoreCommand({
         directive: "CreateVehicle",
-        parameter: `${player},${path}`,
+        parameter,
       });
 
       if (result.ok) {

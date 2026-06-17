@@ -111,6 +111,46 @@ async function testGetPluginApiReturnsMatchingPluginApi() {
   assert.equal(server.getPluginApi("plugin.missing"), null);
 }
 
+async function testBzssCoreCreateVehicleAcceptsOptionalTeamId() {
+  const server = createServer();
+
+  assert.equal(
+    server.normalizeBzssCoreDirective(
+      "CreateVehicle",
+      "Player,/Game/Vehicles/AUS_M1A1/BP_AUS_M1A1.BP_AUS_M1A1_C",
+    ).command,
+    "CreateVehicle:Player,/Game/Vehicles/AUS_M1A1/BP_AUS_M1A1.BP_AUS_M1A1_C",
+  );
+  assert.equal(
+    server.normalizeBzssCoreDirective(
+      "CreateVehicle",
+      "Player,/Game/Vehicles/AUS_M1A1/BP_AUS_M1A1.BP_AUS_M1A1_C,0",
+    ).command,
+    "CreateVehicle:Player,/Game/Vehicles/AUS_M1A1/BP_AUS_M1A1.BP_AUS_M1A1_C,0",
+  );
+  assert.equal(
+    server.normalizeBzssCoreDirective(
+      "CreateVehicle",
+      "Player,/Game/Vehicles/AUS_M1A1/BP_AUS_M1A1.BP_AUS_M1A1_C,2",
+    ).command,
+    "CreateVehicle:Player,/Game/Vehicles/AUS_M1A1/BP_AUS_M1A1.BP_AUS_M1A1_C,2",
+  );
+
+  const invalidDirective = server.normalizeBzssCoreDirective(
+    "CreateVehicle",
+    "Player,/Game/Vehicles/AUS_M1A1/BP_AUS_M1A1.BP_AUS_M1A1_C,3",
+  );
+  assert.equal(invalidDirective.ok, false);
+  assert.equal(invalidDirective.error, "InvalidCreateVehicleTeamId");
+
+  const invalidRaw = server.normalizeBzssCoreCommand({
+    raw: true,
+    command: "CreateVehicle:Player,/Game/Vehicles/AUS_M1A1/BP_AUS_M1A1.BP_AUS_M1A1_C,blue",
+  });
+  assert.equal(invalidRaw.ok, false);
+  assert.equal(invalidRaw.error, "InvalidCreateVehicleTeamId");
+}
+
 async function testHealthEndpointDoesNotRequireAuth() {
   const server = createServer({
     config: {
@@ -2796,6 +2836,7 @@ await testReadJsonBodyParsesValidPayload();
 await testReadJsonBodyRejectsInvalidJson();
 await testReadJsonBodyRejectsOversizedPayload();
 await testGetPluginApiReturnsMatchingPluginApi();
+await testBzssCoreCreateVehicleAcceptsOptionalTeamId();
 await testHealthEndpointDoesNotRequireAuth();
 await testAuthSessionAndLoginIncludeSteamAvatar();
 await testWebPagesEndpointFiltersByPermissions();

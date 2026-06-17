@@ -3759,6 +3759,11 @@ export class WebServer {
           message: "Raw command must be a single line.",
         };
       }
+      const rawDirectiveMatch = rawCommand.match(/^([A-Za-z]+):(.*)$/);
+      if (rawDirectiveMatch?.[1] === "CreateVehicle") {
+        const validation = this.validateCreateVehicleParameter(rawDirectiveMatch[2]);
+        if (!validation.ok) return validation;
+      }
       return {
         ok: true,
         directive: "Raw",
@@ -3818,12 +3823,49 @@ export class WebServer {
       };
     }
 
+    if (normalizedDirective === "CreateVehicle") {
+      const validation = this.validateCreateVehicleParameter(text);
+      if (!validation.ok) return validation;
+    }
+
     return {
       ok: true,
       directive: normalizedDirective,
       parameter: text,
       command: `${normalizedDirective}:${text}`,
     };
+  }
+
+  validateCreateVehicleParameter(parameter) {
+    const parts = String(parameter ?? "").split(",").map((part) => part.trim());
+    if (parts.length !== 2 && parts.length !== 3) {
+      return {
+        ok: false,
+        error: "InvalidCreateVehicleParameter",
+        message: "CreateVehicle requires player, vehicle asset path, and optional team id.",
+      };
+    }
+
+    if (!parts[0] || !parts[1]) {
+      return {
+        ok: false,
+        error: "InvalidCreateVehicleParameter",
+        message: "CreateVehicle requires player and vehicle asset path.",
+      };
+    }
+
+    if (parts.length === 3) {
+      const teamId = parts[2];
+      if (teamId !== "0" && teamId !== "1" && teamId !== "2") {
+        return {
+          ok: false,
+          error: "InvalidCreateVehicleTeamId",
+          message: "CreateVehicle team id must be 0, 1, or 2.",
+        };
+      }
+    }
+
+    return { ok: true };
   }
 
   execFileAsync(file, args, options = {}) {

@@ -67,6 +67,9 @@ const samplePolicy = normalizePolicyDocument({
   ],
 });
 
+assert.equal(evaluateSquadName("op", samplePolicy).valid, true);
+assert.equal(evaluateSquadName("op", samplePolicy).matched.matchedKind, "admin");
+
 assert.equal(evaluateSquadName("BMP1", samplePolicy).valid, true);
 assert.equal(evaluateSquadName("BMP-1", samplePolicy).matched.name, "BMP-1");
 assert.equal(evaluateSquadName("BMP 1", samplePolicy).matched.name, "BMP-1");
@@ -104,6 +107,16 @@ assert.equal(empty.suggestions.length, 0);
 const none = evaluateSquadName("hello", samplePolicy);
 assert.equal(none.valid, false);
 assert.equal(none.suggestions.length, 0);
+
+const numeric = evaluateSquadName("131", samplePolicy);
+assert.equal(numeric.valid, false);
+assert.equal(numeric.suggestions.length, 0);
+assert.equal(numeric.classification?.nature, "infantry");
+
+const weirdChinese = evaluateSquadName("离谱中文队名", samplePolicy);
+assert.equal(weirdChinese.valid, false);
+assert.equal(weirdChinese.suggestions.length, 0);
+assert.equal(weirdChinese.classification?.nature, "infantry");
 
 const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-squad-name-policy-"));
 const policyPath = path.join(tempDir, "policy.json");
