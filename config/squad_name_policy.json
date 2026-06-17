@@ -1,0 +1,5177 @@
+{
+  "version": 1,
+  "source": {
+    "type": "xlsx",
+    "fileName": "载具队队名规范.xlsx",
+    "path": "D:\\BZSS_Panel\\载具队队名规范.xlsx",
+    "sheetName": "Sheet1"
+  },
+  "importedAt": "2026-06-17T09:50:53.381Z",
+  "updatedAt": "2026-06-17T11:17:40.876Z",
+  "suggestionLimit": 5,
+  "entries": [
+    {
+      "id": "adf:mrap:pmvmag58:/game/vehicles/pmv/bppmvmag58.bppmvmag58",
+      "faction": "ADF",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/PMV/BP_PMV_Mag58.BP_PMV_Mag58",
+      "name": "PMV Mag58",
+      "aliases": [
+        "PMV Mag58"
+      ],
+      "keywords": [
+        "PMV",
+        "PMVMAG",
+        "PMVMAG58"
+      ],
+      "searchTokens": [
+        "PMV",
+        "Mag58",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "adf:mrap:pmvrwsm2:/game/vehicles/pmv/bppmvrws.bppmvrws",
+      "faction": "ADF",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/PMV/BP_PMV_RWS.BP_PMV_RWS",
+      "name": "PMV RWS M2",
+      "aliases": [
+        "PMV RWS",
+        "PMV M2"
+      ],
+      "keywords": [
+        "PMV",
+        "PMVRWSM",
+        "PMVRWS",
+        "PMVM"
+      ],
+      "searchTokens": [
+        "PMV",
+        "RWS",
+        "M2",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "adf:td:m1151tow:/game/vehicles/m1151/bpm1151tow.bpm1151tow",
+      "faction": "ADF",
+      "vehicleType": "TD",
+      "asset": "/Game/Vehicles/M1151/BP_M1151_TOW.BP_M1151_TOW",
+      "name": "M1151 TOW",
+      "aliases": [
+        "Tow"
+      ],
+      "keywords": [
+        "M1151",
+        "TOW"
+      ],
+      "searchTokens": [
+        "M1151",
+        "TOW",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "adf:mbt:m1a1:/game/vehicles/ausm1a1/bpausm1a1.bpausm1a1",
+      "faction": "ADF",
+      "vehicleType": "MBT",
+      "asset": "/Game/Vehicles/AUS_M1A1/BP_AUS_M1A1.BP_AUS_M1A1",
+      "name": "M1A1",
+      "aliases": [
+        "M1A1 Abrams",
+        "Abrams",
+        "������ķ˹"
+      ],
+      "keywords": [
+        "TANK",
+        "ABRAMS"
+      ],
+      "searchTokens": [
+        "M1A1",
+        "Abrams",
+        "Game",
+        "Vehicles",
+        "AUS",
+        "BP"
+      ]
+    },
+    {
+      "id": "adf:ifv:aslav:/game/vehicles/aslav/bpaslav.bpaslav",
+      "faction": "ADF",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/ASLAV/BP_ASLAV.BP_ASLAV",
+      "name": "ASLAV",
+      "aliases": [
+        "ASLAV",
+        "LAV"
+      ],
+      "keywords": [
+        "ASLAV",
+        "LAV"
+      ],
+      "searchTokens": [
+        "ASLAV",
+        "LAV",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "afu:mrap:kozak2m1ags17:/game/vehicles/kozak2m1afu/bpkozak2m1ags.bpkozak2m1ags",
+      "faction": "AFU",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/Kozak_2M1_AFU/BP_Kozak_2M1_AGS.BP_Kozak_2M1_AGS",
+      "name": "Kozak-2M1 AGS-17",
+      "aliases": [
+        "Kozak AGS-17"
+      ],
+      "keywords": [
+        "Kozak",
+        "KOZAKAGS",
+        "KOZAKAGS17"
+      ],
+      "searchTokens": [
+        "Kozak",
+        "2M1",
+        "AGS",
+        "17",
+        "Game",
+        "Vehicles",
+        "AFU",
+        "BP"
+      ]
+    },
+    {
+      "id": "afu:ltv:brdm2l1:/game/vehicles/brdm2l1afu/bpbrdm2l1afu.bpbrdm2l1afu",
+      "faction": "AFU",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/BRDM2-L1_AFU/BP_BRDM-2L1_AFU.BP_BRDM-2L1_AFU",
+      "name": "BRDM-2L1",
+      "aliases": [
+        "BRDM-2L1"
+      ],
+      "keywords": [
+        "BRDM"
+      ],
+      "searchTokens": [
+        "BRDM",
+        "2L1",
+        "Game",
+        "Vehicles",
+        "BRDM2",
+        "L1",
+        "AFU",
+        "BP"
+      ]
+    },
+    {
+      "id": "afu:ltv:kozak2m1nsv:/game/vehicles/kozak2m1afu/bpkozak2m1kord.bpkozak2m1kord",
+      "faction": "AFU",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/Kozak_2M1_AFU/BP_Kozak_2M1_Kord.BP_Kozak_2M1_Kord",
+      "name": "Kozak-2M1 NSV",
+      "aliases": [
+        "Kozak NSV"
+      ],
+      "keywords": [
+        "Kozak",
+        "KOZAKNSV"
+      ],
+      "searchTokens": [
+        "Kozak",
+        "2M1",
+        "NSV",
+        "Game",
+        "Vehicles",
+        "AFU",
+        "BP",
+        "Kord"
+      ]
+    },
+    {
+      "id": "afu:td:technicalkornet:/game/vehicles/technical2seater/bptechnical2seaterafukornet.bptechnical2seaterafukornet",
+      "faction": "AFU",
+      "vehicleType": "TD",
+      "asset": "/Game/Vehicles/Technical2Seater/BP_Technical2Seater_AFU_Kornet.BP_Technical2Seater_AFU_Kornet",
+      "name": "Technical Kornet",
+      "aliases": [
+        "Tow"
+      ],
+      "keywords": [
+        "TECHNICALKORNET",
+        "TOW"
+      ],
+      "searchTokens": [
+        "Technical",
+        "Kornet",
+        "Tow",
+        "Game",
+        "Vehicles",
+        "Technical2Seater",
+        "BP",
+        "AFU"
+      ]
+    },
+    {
+      "id": "afu:apc:mtlbpkt:/game/vehicles/mtlbafu/bpmtlbafu.bpmtlbafu",
+      "faction": "AFU",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/MTLB_AFU/BP_MTLB_AFU.BP_MTLB_AFU",
+      "name": "MTLB PKT",
+      "aliases": [],
+      "keywords": [
+        "PKT",
+        "MTLB",
+        "MTLBPKT"
+      ],
+      "searchTokens": [
+        "MTLB",
+        "PKT",
+        "Game",
+        "Vehicles",
+        "AFU",
+        "BP"
+      ]
+    },
+    {
+      "id": "afu:apc:mtlbzu23:/game/vehicles/mtlbafu/bpmtlbzu23afu.bpmtlbzu23afu",
+      "faction": "AFU",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/MTLB_AFU/BP_MTLB_ZU23_AFU.BP_MTLB_ZU23_AFU",
+      "name": "MTLB ZU23",
+      "aliases": [],
+      "keywords": [
+        "MTLBZU",
+        "MTLBZU23"
+      ],
+      "searchTokens": [
+        "MTLB",
+        "ZU23",
+        "Game",
+        "Vehicles",
+        "AFU",
+        "BP"
+      ]
+    },
+    {
+      "id": "afu:mbt:t64bm2:/game/vehicles/t64bm2/bpt64bm2cage.bpt64bm2cage",
+      "faction": "AFU",
+      "vehicleType": "MBT",
+      "asset": "/Game/Vehicles/T64_BM2/BP_T64BM2_Cage.BP_T64BM2_Cage",
+      "name": "T-64BM2",
+      "aliases": [
+        "T-64"
+      ],
+      "keywords": [
+        "T64"
+      ],
+      "searchTokens": [
+        "64BM2",
+        "64",
+        "Game",
+        "Vehicles",
+        "T64",
+        "BM2",
+        "BP",
+        "T64BM2",
+        "Cage"
+      ]
+    },
+    {
+      "id": "afu:spa:kraz6322bm21grad:/game/vehicles/kraz6322bm21grad/bpkraz6322bm21grad.bpkraz6322bm21grad",
+      "faction": "AFU",
+      "vehicleType": "SPA",
+      "asset": "/Game/Vehicles/Kraz-6322_BM21Grad/BP_Kraz_6322_BM21Grad.BP_Kraz_6322_BM21Grad",
+      "name": "KrAZ-6322 BM-21 Grad",
+      "aliases": [
+        "BM21"
+      ],
+      "keywords": [
+        "KRAZ",
+        "KRAZ6322",
+        "BM",
+        "BM21"
+      ],
+      "searchTokens": [
+        "KrAZ",
+        "6322",
+        "BM",
+        "21",
+        "Grad",
+        "BM21",
+        "Game",
+        "Vehicles",
+        "BM21Grad",
+        "BP"
+      ]
+    },
+    {
+      "id": "afu:ifv:bmp1:/game/vehicles/bmp1afu/bpbmp1afu.bpbmp1afu",
+      "faction": "AFU",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/BMP1_AFU/BP_BMP1_AFU.BP_BMP1_AFU",
+      "name": "BMP-1",
+      "aliases": [],
+      "keywords": [
+        "BMP"
+      ],
+      "searchTokens": [
+        "BMP",
+        "Game",
+        "Vehicles",
+        "BMP1",
+        "AFU",
+        "BP"
+      ]
+    },
+    {
+      "id": "afu:ifv:bmp1ts:/game/vehicles/bmp1tsafu/bpbmp1tsafu.bpbmp1tsafu",
+      "faction": "AFU",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/BMP1TS_AFU/BP_BMP1TS_AFU.BP_BMP1TS_AFU",
+      "name": "BMP-1TS",
+      "aliases": [],
+      "keywords": [
+        "BMP"
+      ],
+      "searchTokens": [
+        "BMP",
+        "1TS",
+        "Game",
+        "Vehicles",
+        "BMP1TS",
+        "AFU",
+        "BP"
+      ]
+    },
+    {
+      "id": "afu:ifv:bmp2:/game/vehicles/bmp2afu/bpbmp2afu.bpbmp2afu",
+      "faction": "AFU",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/BMP2_AFU/BP_BMP2_AFU.BP_BMP2_AFU",
+      "name": "BMP-2",
+      "aliases": [],
+      "keywords": [
+        "BMP"
+      ],
+      "searchTokens": [
+        "BMP",
+        "Game",
+        "Vehicles",
+        "BMP2",
+        "AFU",
+        "BP"
+      ]
+    },
+    {
+      "id": "afu:ifv:btr4:/game/vehicles/btr4/bpbtr4afu.bpbtr4afu",
+      "faction": "AFU",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/BTR4/BP_BTR4_AFU.BP_BTR4_AFU",
+      "name": "BTR-4",
+      "aliases": [],
+      "keywords": [
+        "BTR"
+      ],
+      "searchTokens": [
+        "BTR",
+        "Game",
+        "Vehicles",
+        "BTR4",
+        "BP",
+        "AFU"
+      ]
+    },
+    {
+      "id": "baf:mrap:lppv:/game/vehicles/lppv/bplppv.bplppv",
+      "faction": "BAF",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/LPPV/BP_LPPV.BP_LPPV",
+      "name": "LPPV",
+      "aliases": [],
+      "keywords": [
+        "LPPV"
+      ],
+      "searchTokens": [
+        "LPPV",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "baf:mrap:lppvrws:/game/vehicles/lppv/bplppvm2rws.bplppvm2rws",
+      "faction": "BAF",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/LPPV/BP_LPPV_M2RWS.BP_LPPV_M2RWS",
+      "name": "LPPV RWS",
+      "aliases": [],
+      "keywords": [
+        "LPPVRWS"
+      ],
+      "searchTokens": [
+        "LPPV",
+        "RWS",
+        "Game",
+        "Vehicles",
+        "BP",
+        "M2RWS"
+      ]
+    },
+    {
+      "id": "baf:td:m1151tow:/game/vehicles/m1151/bpm1151tow.bpm1151tow",
+      "faction": "BAF",
+      "vehicleType": "TD",
+      "asset": "/Game/Vehicles/M1151/BP_M1151_TOW.BP_M1151_TOW",
+      "name": "M1151 TOW",
+      "aliases": [],
+      "keywords": [
+        "M1151"
+      ],
+      "searchTokens": [
+        "M1151",
+        "TOW",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "baf:apc:fv107:/game/vehicles/fv107/bpfv107.bpfv107",
+      "faction": "BAF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/FV107/BP_FV107.BP_FV107",
+      "name": "FV107",
+      "aliases": [],
+      "keywords": [
+        "FV",
+        "FV107"
+      ],
+      "searchTokens": [
+        "FV107",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "baf:apc:fv432l11a1:/game/vehicles/fv432/bpfv432.bpfv432",
+      "faction": "BAF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/FV432/BP_FV432.BP_FV432",
+      "name": "FV432 L11A1",
+      "aliases": [],
+      "keywords": [
+        "FV432",
+        "FV"
+      ],
+      "searchTokens": [
+        "FV432",
+        "L11A1",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "baf:apc:fv432l11a1rws:/game/vehicles/fv432/bpfv432m2rws.bpfv432m2rws",
+      "faction": "BAF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/FV432/BP_FV432_M2_RWS.BP_FV432_M2_RWS",
+      "name": "FV432 L11A1 RWS",
+      "aliases": [],
+      "keywords": [
+        "FV",
+        "FV432"
+      ],
+      "searchTokens": [
+        "FV432",
+        "L11A1",
+        "RWS",
+        "Game",
+        "Vehicles",
+        "BP",
+        "M2"
+      ]
+    },
+    {
+      "id": "baf:apc:fv432l37a2rws:/game/vehicles/fv432/bpfv432l37a2rws.bpfv432l37a2rws",
+      "faction": "BAF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/FV432/BP_FV432_L37A2_RWS.BP_FV432_L37A2_RWS",
+      "name": "FV432 L37A2 RWS",
+      "aliases": [],
+      "keywords": [
+        "FV",
+        "FV432"
+      ],
+      "searchTokens": [
+        "FV432",
+        "L37A2",
+        "RWS",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "baf:mbt:fv4034:/game/vehicles/fv4034/bpfv4034.bpfv4034",
+      "faction": "BAF",
+      "vehicleType": "MBT",
+      "asset": "/Game/Vehicles/FV4034/BP_FV4034.BP_FV4034",
+      "name": "FV4034",
+      "aliases": [],
+      "keywords": [
+        "Tank",
+        "FV",
+        "FV4034"
+      ],
+      "searchTokens": [
+        "FV4034",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "baf:ifv:fv510:/game/vehicles/fv510/bpfv510.bpfv510",
+      "faction": "BAF",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/FV510/BP_FV510.BP_FV510",
+      "name": "FV510",
+      "aliases": [],
+      "keywords": [
+        "FV",
+        "FV510"
+      ],
+      "searchTokens": [
+        "FV510",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "baf:ifv:fv510ua:/game/vehicles/fv510/bpfv510ua.bpfv510ua",
+      "faction": "BAF",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/FV510/BP_FV510UA.BP_FV510UA",
+      "name": "FV510 UA",
+      "aliases": [],
+      "keywords": [
+        "FV",
+        "FV510"
+      ],
+      "searchTokens": [
+        "FV510",
+        "UA",
+        "Game",
+        "Vehicles",
+        "BP",
+        "FV510UA"
+      ]
+    },
+    {
+      "id": "baf:ifv:fv520ctas40:/game/vehicles/fv51040mm/bpfv510uactas40.bpfv510uactas40",
+      "faction": "BAF",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/FV510_40mm/BP_FV510UA_CTAS40.BP_FV510UA_CTAS40",
+      "name": "FV520 CTAS40",
+      "aliases": [],
+      "keywords": [
+        "FV",
+        "FV520"
+      ],
+      "searchTokens": [
+        "FV520",
+        "CTAS40",
+        "Game",
+        "Vehicles",
+        "FV510",
+        "40mm",
+        "BP",
+        "FV510UA"
+      ]
+    },
+    {
+      "id": "caf:mrap:luvwc6:/game/vehicles/luvw/bpluvwc6.bpluvwc6",
+      "faction": "CAF",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/LUVW/BP_LUVW_C6.BP_LUVW_C6",
+      "name": "LUVW C6",
+      "aliases": [],
+      "keywords": [
+        "LUVWC"
+      ],
+      "searchTokens": [
+        "LUVW",
+        "C6",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "caf:mrap:luvwm2:/game/vehicles/luvw/bpluvwm2.bpluvwm2",
+      "faction": "CAF",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/LUVW/BP_LUVW_M2.BP_LUVW_M2",
+      "name": "LUVW M2",
+      "aliases": [],
+      "keywords": [
+        "LUVWM"
+      ],
+      "searchTokens": [
+        "LUVW",
+        "M2",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "caf:mrap:tapv:/game/vehicles/tapv/bptapv.bptapv",
+      "faction": "CAF",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/TAPV/BP_TAPV.BP_TAPV",
+      "name": "TAPV",
+      "aliases": [],
+      "keywords": [
+        "TAPV"
+      ],
+      "searchTokens": [
+        "TAPV",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "caf:td:m1151tow:/game/vehicles/m1151/bpm1151tow.bpm1151tow",
+      "faction": "CAF",
+      "vehicleType": "TD",
+      "asset": "/Game/Vehicles/M1151/BP_M1151_TOW.BP_M1151_TOW",
+      "name": "M1151 TOW",
+      "aliases": [],
+      "keywords": [
+        "M1151"
+      ],
+      "searchTokens": [
+        "M1151",
+        "TOW",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "caf:apc:laviiic6rws:/game/vehicles/lavrws/bplavrwsc6.bplavrwsc6",
+      "faction": "CAF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/LAV_RWS/BP_LAV_RWS_C6.BP_LAV_RWS_C6",
+      "name": "LAV III C6 RWS",
+      "aliases": [
+        "LAV C6"
+      ],
+      "keywords": [
+        "LAV",
+        "LAV RWS",
+        "LAVIIIC",
+        "LAVC"
+      ],
+      "searchTokens": [
+        "LAV",
+        "III",
+        "C6",
+        "RWS",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "caf:apc:laviiim2rws:/game/vehicles/lavrws/bplavrwsm2.bplavrwsm2",
+      "faction": "CAF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/LAV_RWS/BP_LAV_RWS_M2.BP_LAV_RWS_M2",
+      "name": "LAV III M2 RWS",
+      "aliases": [
+        "LAV M2"
+      ],
+      "keywords": [
+        "LAV",
+        "LAV RWS",
+        "LAVIIIM",
+        "LAVM"
+      ],
+      "searchTokens": [
+        "LAV",
+        "III",
+        "M2",
+        "RWS",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "caf:apc:m113a3c6:/game/vehicles/tlav/bpm113a3cafc6.bpm113a3cafc6",
+      "faction": "CAF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/TLAV/BP_M113A3_CAF_C6.BP_M113A3_CAF_C6",
+      "name": "M113A3 C6",
+      "aliases": [],
+      "keywords": [
+        "M113"
+      ],
+      "searchTokens": [
+        "M113A3",
+        "C6",
+        "Game",
+        "Vehicles",
+        "TLAV",
+        "BP",
+        "CAF"
+      ]
+    },
+    {
+      "id": "caf:apc:m113a3m2:/game/vehicles/tlav/bpm113a3cafm2.bpm113a3cafm2",
+      "faction": "CAF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/TLAV/BP_M113A3_CAF_M2.BP_M113A3_CAF_M2",
+      "name": "M113A3 M2",
+      "aliases": [],
+      "keywords": [
+        "M113"
+      ],
+      "searchTokens": [
+        "M113A3",
+        "M2",
+        "Game",
+        "Vehicles",
+        "TLAV",
+        "BP",
+        "CAF"
+      ]
+    },
+    {
+      "id": "caf:apc:m113a3tlav:/game/vehicles/tlav/bpm113a3caftlav.bpm113a3caftlav",
+      "faction": "CAF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/TLAV/BP_M113A3_CAF_TLAV.BP_M113A3_CAF_TLAV",
+      "name": "M113A3 TLAV",
+      "aliases": [],
+      "keywords": [
+        "M113"
+      ],
+      "searchTokens": [
+        "M113A3",
+        "TLAV",
+        "Game",
+        "Vehicles",
+        "BP",
+        "CAF"
+      ]
+    },
+    {
+      "id": "caf:mbt:leopard2a6mcan:/game/vehicles/leopard2/bp2a6desert.bp2a6desert",
+      "faction": "CAF",
+      "vehicleType": "MBT",
+      "asset": "/Game/Vehicles/Leopard2/BP_2A6_Desert.BP_2A6_Desert",
+      "name": "Leopard 2A6M CAN",
+      "aliases": [
+        "Leo",
+        "Leopard",
+        "2A6M",
+        "Leopard 2A6M"
+      ],
+      "keywords": [
+        "LEOPARD",
+        "TANK",
+        "LEO"
+      ],
+      "searchTokens": [
+        "Leopard",
+        "2A6M",
+        "CAN",
+        "Leo",
+        "Game",
+        "Vehicles",
+        "Leopard2",
+        "BP",
+        "2A6",
+        "Desert"
+      ]
+    },
+    {
+      "id": "caf:ah:ch146cas:/game/vehicles/ch146/bpch146cas.bpch146cas",
+      "faction": "CAF",
+      "vehicleType": "AH",
+      "asset": "/Game/Vehicles/CH146/BP_CH146_CAS.BP_CH146_CAS",
+      "name": "CH-146 CAS",
+      "aliases": [
+        "CAS"
+      ],
+      "keywords": [
+        "CH",
+        "CH146",
+        "CAS"
+      ],
+      "searchTokens": [
+        "CH",
+        "146",
+        "CAS",
+        "Game",
+        "Vehicles",
+        "CH146",
+        "BP"
+      ]
+    },
+    {
+      "id": "caf:ifv:coyote:/game/vehicles/coyote/bplav2coyote.bplav2coyote",
+      "faction": "CAF",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/Coyote/BP_LAV2_Coyote.BP_LAV2_Coyote",
+      "name": "Coyote",
+      "aliases": [
+        "���ǲ�ս��"
+      ],
+      "keywords": [
+        "COYOTE",
+        "DZ"
+      ],
+      "searchTokens": [
+        "Coyote",
+        "Dz",
+        "Game",
+        "Vehicles",
+        "BP",
+        "LAV2"
+      ]
+    },
+    {
+      "id": "caf:ifv:lav6:/game/vehicles/lav6/bplav6desert.bplav6desert",
+      "faction": "CAF",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/LAV6/BP_LAV6_Desert.BP_LAV6_Desert",
+      "name": "LAV 6",
+      "aliases": [],
+      "keywords": [
+        "LAV"
+      ],
+      "searchTokens": [
+        "LAV",
+        "Game",
+        "Vehicles",
+        "LAV6",
+        "BP",
+        "Desert"
+      ]
+    },
+    {
+      "id": "crf:mrap:lighttransport:/game/vehicles/luvwcrf/bpluvwcrf.bpluvwcrf",
+      "faction": "CRF",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/LUVW_CRF/BP_LUVW_CRF.BP_LUVW_CRF",
+      "name": "Light Transport",
+      "aliases": [],
+      "keywords": [
+        "LIGHTTRANSPORT"
+      ],
+      "searchTokens": [
+        "Light",
+        "Transport",
+        "Game",
+        "Vehicles",
+        "LUVW",
+        "CRF",
+        "BP"
+      ]
+    },
+    {
+      "id": "crf:ltv:lightfsv:/game/vehicles/m1151crf/bpm1151lightwoodlandcrf.bpm1151lightwoodlandcrf",
+      "faction": "CRF",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/M1151_CRF/BP_M1151_Light_Woodland_CRF.BP_M1151_Light_Woodland_CRF",
+      "name": "Light FSV",
+      "aliases": [],
+      "keywords": [
+        "LIGHTFSV"
+      ],
+      "searchTokens": [
+        "Light",
+        "FSV",
+        "Game",
+        "Vehicles",
+        "M1151",
+        "CRF",
+        "BP",
+        "Woodland"
+      ]
+    },
+    {
+      "id": "crf:td:m1151tow:/game/vehicles/m1151crf/bpm1151lighttowwoodlandcrf.bpm1151lighttowwoodlandcrf",
+      "faction": "CRF",
+      "vehicleType": "TD",
+      "asset": "/Game/Vehicles/M1151_CRF/BP_M1151_Light_TOW_Woodland_CRF.BP_M1151_Light_TOW_Woodland_CRF",
+      "name": "M1151 TOW",
+      "aliases": [],
+      "keywords": [
+        "M1151"
+      ],
+      "searchTokens": [
+        "M1151",
+        "TOW",
+        "Game",
+        "Vehicles",
+        "CRF",
+        "BP",
+        "Light",
+        "Woodland"
+      ]
+    },
+    {
+      "id": "crf:apc:m113a3:/game/vehicles/m113a3/bpm113a3m2crf.bpm113a3m2crf",
+      "faction": "CRF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/M113A3/BP_M113A3_M2_CRF.BP_M113A3_M2_CRF",
+      "name": "M113A3",
+      "aliases": [],
+      "keywords": [
+        "M113"
+      ],
+      "searchTokens": [
+        "M113A3",
+        "Game",
+        "Vehicles",
+        "BP",
+        "M2",
+        "CRF"
+      ]
+    },
+    {
+      "id": "crf:ifv:coyote:/game/vehicles/coyote/bplav2coyotecrf.bplav2coyotecrf",
+      "faction": "CRF",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/Coyote/BP_LAV2_Coyote_CRF.BP_LAV2_Coyote_CRF",
+      "name": "Coyote",
+      "aliases": [
+        "���ǲ�ս��"
+      ],
+      "keywords": [
+        "COYOTE",
+        "DZ"
+      ],
+      "searchTokens": [
+        "Coyote",
+        "Dz",
+        "Game",
+        "Vehicles",
+        "BP",
+        "LAV2",
+        "CRF"
+      ]
+    },
+    {
+      "id": "gfi:mrap:m1151m2:/game/vehicles/m1151gfi/bpm1151gfi.bpm1151gfi",
+      "faction": "GFI",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/M1151_GFI/BP_M1151_GFI.BP_M1151_GFI",
+      "name": "M1151 M2",
+      "aliases": [],
+      "keywords": [
+        "M1151"
+      ],
+      "searchTokens": [
+        "M1151",
+        "M2",
+        "Game",
+        "Vehicles",
+        "GFI",
+        "BP"
+      ]
+    },
+    {
+      "id": "gfi:ltv:safirags17:/game/vehicles/safir/bpsafirags17.bpsafirags17",
+      "faction": "GFI",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/Safir/BP_Safir_AGS-17.BP_Safir_AGS-17",
+      "name": "Safir AGS-17",
+      "aliases": [],
+      "keywords": [
+        "Safir",
+        "SAFIRAGS",
+        "SAFIRAGS17"
+      ],
+      "searchTokens": [
+        "Safir",
+        "AGS",
+        "17",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "gfi:ltv:safirkord:/game/vehicles/safir/bpsafirkord.bpsafirkord",
+      "faction": "GFI",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/Safir/BP_Safir_Kord.BP_Safir_Kord",
+      "name": "Safir Kord",
+      "aliases": [],
+      "keywords": [
+        "Safir",
+        "SAFIRKORD"
+      ],
+      "searchTokens": [
+        "Safir",
+        "Kord",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "gfi:ltv:safirmg3:/game/vehicles/safir/bpsafirmg3.bpsafirmg3",
+      "faction": "GFI",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/Safir/BP_Safir_MG3.BP_Safir_MG3",
+      "name": "Safir MG3",
+      "aliases": [],
+      "keywords": [
+        "Safir",
+        "SAFIRMG"
+      ],
+      "searchTokens": [
+        "Safir",
+        "MG3",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "gfi:td:brdm2spandrel:/game/vehicles/brdm2/bpbrdm2gfispandrel.bpbrdm2gfispandrel",
+      "faction": "GFI",
+      "vehicleType": "TD",
+      "asset": "/Game/Vehicles/BRDM-2/BP_BRDM-2_GFI_Spandrel.BP_BRDM-2_GFI_Spandrel",
+      "name": "BRDM-2 Spandrel",
+      "aliases": [],
+      "keywords": [
+        "BRDM"
+      ],
+      "searchTokens": [
+        "BRDM",
+        "Spandrel",
+        "Game",
+        "Vehicles",
+        "BP",
+        "GFI"
+      ]
+    },
+    {
+      "id": "gfi:td:m1151tow:/game/vehicles/m1151gfi/bpm1151towgfi.bpm1151towgfi",
+      "faction": "GFI",
+      "vehicleType": "TD",
+      "asset": "/Game/Vehicles/M1151_GFI/BP_M1151_TOW_GFI.BP_M1151_TOW_GFI",
+      "name": "M1151 TOW",
+      "aliases": [],
+      "keywords": [
+        "Tow",
+        "M1151"
+      ],
+      "searchTokens": [
+        "M1151",
+        "TOW",
+        "Game",
+        "Vehicles",
+        "GFI",
+        "BP"
+      ]
+    },
+    {
+      "id": "gfi:td:safirkornet:/game/vehicles/safir/bpsafirkornet.bpsafirkornet",
+      "faction": "GFI",
+      "vehicleType": "TD",
+      "asset": "/Game/Vehicles/Safir/BP_Safir_Kornet.BP_Safir_Kornet",
+      "name": "Safir Kornet",
+      "aliases": [],
+      "keywords": [
+        "Tow",
+        "SAFIRKORNET"
+      ],
+      "searchTokens": [
+        "Safir",
+        "Kornet",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "gfi:apc:mtlb6maub32:/game/vehicles/mtlb/bpmtlbm6magfi.bpmtlbm6magfi",
+      "faction": "GFI",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/MTLB/BP_MTLBM_6MA_GFI.BP_MTLBM_6MA_GFI",
+      "name": "MTLB 6MA UB-32",
+      "aliases": [
+        "MTLB 6MA"
+      ],
+      "keywords": [
+        "MTLB"
+      ],
+      "searchTokens": [
+        "MTLB",
+        "6MA",
+        "UB",
+        "32",
+        "Game",
+        "Vehicles",
+        "BP",
+        "MTLBM",
+        "GFI"
+      ]
+    },
+    {
+      "id": "gfi:apc:mtlbvmk:/game/vehicles/mtlb/bpmtlbvmkgfi.bpmtlbvmkgfi",
+      "faction": "GFI",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/MTLB/BP_MTLB_VMK_GFI.BP_MTLB_VMK_GFI",
+      "name": "MTLB VMK",
+      "aliases": [],
+      "keywords": [
+        "MTLBVMK"
+      ],
+      "searchTokens": [
+        "MTLB",
+        "VMK",
+        "Game",
+        "Vehicles",
+        "BP",
+        "GFI"
+      ]
+    },
+    {
+      "id": "gfi:mbt:t62:/game/vehicles/t62/bpt62gfi.bpt62gfi",
+      "faction": "GFI",
+      "vehicleType": "MBT",
+      "asset": "/Game/Vehicles/T62/BP_T62_GFI.BP_T62_GFI",
+      "name": "T-62",
+      "aliases": [
+        "T62"
+      ],
+      "keywords": [
+        "TANK",
+        "T62"
+      ],
+      "searchTokens": [
+        "62",
+        "T62",
+        "Game",
+        "Vehicles",
+        "BP",
+        "GFI"
+      ]
+    },
+    {
+      "id": "gfi:mbt:t72s:/game/vehicles/t72av/bpt72sgfi.bpt72sgfi",
+      "faction": "GFI",
+      "vehicleType": "MBT",
+      "asset": "/Game/Vehicles/T72AV/BP_T72S_GFI.BP_T72S_GFI",
+      "name": "T-72S",
+      "aliases": [
+        "T72S"
+      ],
+      "keywords": [
+        "TANK",
+        "T72"
+      ],
+      "searchTokens": [
+        "72S",
+        "T72S",
+        "Game",
+        "Vehicles",
+        "T72AV",
+        "BP",
+        "GFI"
+      ]
+    },
+    {
+      "id": "gfi:ifv:bmp1:/game/vehicles/bmp1/bpbmp1gfi.bpbmp1gfi",
+      "faction": "GFI",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/BMP-1/BP_BMP1_GFI.BP_BMP1_GFI",
+      "name": "BMP-1",
+      "aliases": [
+        "BMP1"
+      ],
+      "keywords": [
+        "BMP"
+      ],
+      "searchTokens": [
+        "BMP",
+        "BMP1",
+        "Game",
+        "Vehicles",
+        "BP",
+        "GFI"
+      ]
+    },
+    {
+      "id": "gfi:ifv:bmp2:/game/vehicles/bmp2/bpbmp2gfi.bpbmp2gfi",
+      "faction": "GFI",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/BMP-2/BP_BMP2_GFI.BP_BMP2_GFI",
+      "name": "BMP-2",
+      "aliases": [
+        "BMP2"
+      ],
+      "keywords": [
+        "BMP"
+      ],
+      "searchTokens": [
+        "BMP",
+        "BMP2",
+        "Game",
+        "Vehicles",
+        "BP",
+        "GFI"
+      ]
+    },
+    {
+      "id": "gfi:rsv:brdm2ub32:/game/vehicles/brdm2/weapons/bpbrdm2gfiub32.bpbrdm2gfiub32",
+      "faction": "GFI",
+      "vehicleType": "RSV",
+      "asset": "/Game/Vehicles/BRDM-2/Weapons/BP_BRDM2_GFI_UB32.BP_BRDM2_GFI_UB32",
+      "name": "BRDM-2 UB-32",
+      "aliases": [
+        "BRDM UB-32"
+      ],
+      "keywords": [
+        "BRDM",
+        "BRDMUB",
+        "BRDMUB32"
+      ],
+      "searchTokens": [
+        "BRDM",
+        "UB",
+        "32",
+        "Game",
+        "Vehicles",
+        "Weapons",
+        "BP",
+        "BRDM2",
+        "GFI",
+        "UB32"
+      ]
+    },
+    {
+      "id": "imf:mrap:tigrmkord:/game/vehicles/tigr/bptigrags17.bptigrags17",
+      "faction": "IMF",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/Tigr/BP_Tigr_AGS17.BP_Tigr_AGS17",
+      "name": "Tigr-M Kord",
+      "aliases": [
+        "Tigr kord"
+      ],
+      "keywords": [
+        "Tigr",
+        "kord",
+        "TIGRMKORD",
+        "TIGRKORD"
+      ],
+      "searchTokens": [
+        "Tigr",
+        "Kord",
+        "Game",
+        "Vehicles",
+        "BP",
+        "AGS17"
+      ]
+    },
+    {
+      "id": "imf:ltv:brdm2:/game/vehicles/brdm2/bpbrdm2mil.bpbrdm2mil",
+      "faction": "IMF",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/BRDM-2/BP_BRDM-2_MIL.BP_BRDM-2_MIL",
+      "name": "BRDM-2",
+      "aliases": [
+        "BRDM2"
+      ],
+      "keywords": [
+        "BRDM"
+      ],
+      "searchTokens": [
+        "BRDM",
+        "BRDM2",
+        "Game",
+        "Vehicles",
+        "BP",
+        "MIL"
+      ]
+    },
+    {
+      "id": "imf:ltv:technicalags17:/game/vehicles/technicalarmoured/bparmoredtechnical2seatercamoags17.bparmoredtechnical2seatercamoags17",
+      "faction": "IMF",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/Technical_Armoured/BP_Armored_Technical2Seater_Camo_AGS17.BP_Armored_Technical2Seater_Camo_AGS17",
+      "name": "Technical AGS-17",
+      "aliases": [
+        "SUV AGS17"
+      ],
+      "keywords": [
+        "TECHNICALAGS",
+        "TECHNICALAGS17",
+        "SUVAGS",
+        "SUVAGS17"
+      ],
+      "searchTokens": [
+        "Technical",
+        "AGS",
+        "17",
+        "SUV",
+        "AGS17",
+        "Game",
+        "Vehicles",
+        "Armoured",
+        "BP",
+        "Armored",
+        "Technical2Seater",
+        "Camo"
+      ]
+    },
+    {
+      "id": "imf:ltv:technicalhmg:/game/vehicles/technical2seater/bparmoredtechnical2seatercamodshk.bparmoredtechnical2seatercamodshk",
+      "faction": "IMF",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/Technical2Seater/BP_Armored_Technical2Seater_Camo_DSHK.BP_Armored_Technical2Seater_Camo_DSHK",
+      "name": "Technical HMG",
+      "aliases": [
+        "SUV HMG"
+      ],
+      "keywords": [
+        "TECHNICALHMG",
+        "SUVHMG"
+      ],
+      "searchTokens": [
+        "Technical",
+        "HMG",
+        "SUV",
+        "Game",
+        "Vehicles",
+        "Technical2Seater",
+        "BP",
+        "Armored",
+        "Camo",
+        "DSHK"
+      ]
+    },
+    {
+      "id": "imf:td:technicalkornet:/game/vehicles/technical2seater/bptechnical2seatercamokornet.bptechnical2seatercamokornet",
+      "faction": "IMF",
+      "vehicleType": "TD",
+      "asset": "/Game/Vehicles/Technical2Seater/BP_Technical2Seater_Camo_Kornet.BP_Technical2Seater_Camo_Kornet",
+      "name": "Technical Kornet",
+      "aliases": [],
+      "keywords": [
+        "Tow",
+        "TECHNICALKORNET"
+      ],
+      "searchTokens": [
+        "Technical",
+        "Kornet",
+        "Game",
+        "Vehicles",
+        "Technical2Seater",
+        "BP",
+        "Camo"
+      ]
+    },
+    {
+      "id": "imf:td:technicalspg9:/game/vehicles/technical2seater/bparmoredtechnical2seatercamospg9.bparmoredtechnical2seatercamospg9",
+      "faction": "IMF",
+      "vehicleType": "TD",
+      "asset": "/Game/Vehicles/Technical2Seater/BP_Armored_Technical2Seater_Camo_SPG9.BP_Armored_Technical2Seater_Camo_SPG9",
+      "name": "Technical SPG-9",
+      "aliases": [
+        "SUV SPG9"
+      ],
+      "keywords": [
+        "SPG",
+        "TECHNICALSPG",
+        "SUVSPG"
+      ],
+      "searchTokens": [
+        "Technical",
+        "SPG",
+        "SUV",
+        "SPG9",
+        "Game",
+        "Vehicles",
+        "Technical2Seater",
+        "BP",
+        "Armored",
+        "Camo"
+      ]
+    },
+    {
+      "id": "imf:apc:btr80:/game/vehicles/btr80/bpbtr80militia.bpbtr80militia",
+      "faction": "IMF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/BTR80/BP_BTR80_Militia.BP_BTR80_Militia",
+      "name": "BTR-80",
+      "aliases": [
+        "BTR80"
+      ],
+      "keywords": [
+        "BTR",
+        "BTR80"
+      ],
+      "searchTokens": [
+        "BTR",
+        "80",
+        "BTR80",
+        "Game",
+        "Vehicles",
+        "BP",
+        "Militia"
+      ]
+    },
+    {
+      "id": "imf:apc:mtlbvmk:/game/vehicles/mtlb/bpmtlbvmkmil.bpmtlbvmkmil",
+      "faction": "IMF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/MTLB/BP_MTLB_VMK_MIL.BP_MTLB_VMK_MIL",
+      "name": "MT-LB VMK",
+      "aliases": [
+        "MTLB VMK"
+      ],
+      "keywords": [
+        "VMK",
+        "MTLBVMK"
+      ],
+      "searchTokens": [
+        "MT",
+        "LB",
+        "VMK",
+        "MTLB",
+        "Game",
+        "Vehicles",
+        "BP",
+        "MIL"
+      ]
+    },
+    {
+      "id": "imf:mbt:t62:/game/vehicles/t62/bpt62mil.bpt62mil",
+      "faction": "IMF",
+      "vehicleType": "MBT",
+      "asset": "/Game/Vehicles/T62/BP_T62_MIL.BP_T62_MIL",
+      "name": "T-62",
+      "aliases": [
+        "T62"
+      ],
+      "keywords": [
+        "T62"
+      ],
+      "searchTokens": [
+        "62",
+        "T62",
+        "Game",
+        "Vehicles",
+        "BP",
+        "MIL"
+      ]
+    },
+    {
+      "id": "imf:mbt:t72a:/game/vehicles/t72a/bpt72aimf.bpt72aimf",
+      "faction": "IMF",
+      "vehicleType": "MBT",
+      "asset": "/Game/Vehicles/T72A/BP_T72A_IMF.BP_T72A_IMF",
+      "name": "T-72A",
+      "aliases": [
+        "T72A"
+      ],
+      "keywords": [
+        "T72"
+      ],
+      "searchTokens": [
+        "72A",
+        "T72A",
+        "Game",
+        "Vehicles",
+        "BP",
+        "IMF"
+      ]
+    },
+    {
+      "id": "imf:spa:moderntechnicalub32:/game/vehicles/technical/bptechnicalub32mil.bptechnicalub32mil",
+      "faction": "IMF",
+      "vehicleType": "SPA",
+      "asset": "/Game/Vehicles/Technical/BP_Technical_UB32_MIL.BP_Technical_UB32_MIL",
+      "name": "Modern Technical UB-32",
+      "aliases": [
+        "SUV UB32"
+      ],
+      "keywords": [
+        "MODERNTECHNICALUB",
+        "MODERNTECHNICALUB32",
+        "SUVUB",
+        "SUVUB32"
+      ],
+      "searchTokens": [
+        "Modern",
+        "Technical",
+        "UB",
+        "32",
+        "SUV",
+        "UB32",
+        "Game",
+        "Vehicles",
+        "BP",
+        "MIL"
+      ]
+    },
+    {
+      "id": "imf:spa:ural375dbm21grad:/game/vehicles/ural375bm21grad/bpbm21gradimf.bpbm21gradimf",
+      "faction": "IMF",
+      "vehicleType": "SPA",
+      "asset": "/Game/Vehicles/Ural375_BM21Grad/BP_BM21Grad_IMF.BP_BM21Grad_IMF",
+      "name": "Ural-375D BM-21 Grad",
+      "aliases": [
+        "BM21"
+      ],
+      "keywords": [
+        "URAL",
+        "URAL375",
+        "BM",
+        "BM21"
+      ],
+      "searchTokens": [
+        "Ural",
+        "375D",
+        "BM",
+        "21",
+        "Grad",
+        "BM21",
+        "Game",
+        "Vehicles",
+        "Ural375",
+        "BM21Grad",
+        "BP",
+        "IMF"
+      ]
+    },
+    {
+      "id": "imf:ifv:bmp1:/game/vehicles/bmp1/bpbmp1mil.bpbmp1mil",
+      "faction": "IMF",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/BMP-1/BP_BMP1_MIL.BP_BMP1_MIL",
+      "name": "BMP-1",
+      "aliases": [],
+      "keywords": [
+        "BMP"
+      ],
+      "searchTokens": [
+        "BMP",
+        "Game",
+        "Vehicles",
+        "BP",
+        "BMP1",
+        "MIL"
+      ]
+    },
+    {
+      "id": "imf:ifv:bmp2:/game/vehicles/bmp2/bpbmp2imf.bpbmp2imf",
+      "faction": "IMF",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/BMP-2/BP_BMP2_IMF.BP_BMP2_IMF",
+      "name": "BMP-2",
+      "aliases": [],
+      "keywords": [
+        "BMP"
+      ],
+      "searchTokens": [
+        "BMP",
+        "Game",
+        "Vehicles",
+        "BP",
+        "BMP2",
+        "IMF"
+      ]
+    },
+    {
+      "id": "imf:ifv:mtlbm6mb:/game/vehicles/mtlb/bpmtlbm6mbmil.bpmtlbm6mbmil",
+      "faction": "IMF",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/MTLB/BP_MTLBM_6MB_MIL.BP_MTLBM_6MB_MIL",
+      "name": "MT-LBM 6MB",
+      "aliases": [
+        "MTLB6MB"
+      ],
+      "keywords": [
+        "MTLBM",
+        "MTLB"
+      ],
+      "searchTokens": [
+        "MT",
+        "LBM",
+        "6MB",
+        "MTLB6MB",
+        "Game",
+        "Vehicles",
+        "MTLB",
+        "BP",
+        "MTLBM",
+        "MIL"
+      ]
+    },
+    {
+      "id": "imf:spaa:bmp1zu232:/game/vehicles/bmp1/bpbmp1milzu23.bpbmp1milzu23",
+      "faction": "IMF",
+      "vehicleType": "SPAA",
+      "asset": "/Game/Vehicles/BMP-1/BP_BMP1_MIL_ZU23.BP_BMP1_MIL_ZU23",
+      "name": "BMP-1 ZU-23-2",
+      "aliases": [
+        "BMP1 zu23"
+      ],
+      "keywords": [
+        "BMP"
+      ],
+      "searchTokens": [
+        "BMP",
+        "ZU",
+        "23",
+        "BMP1",
+        "zu23",
+        "Game",
+        "Vehicles",
+        "BP",
+        "MIL"
+      ]
+    },
+    {
+      "id": "imf:spaa:mtlbzu232:/game/vehicles/mtlb/bpmtlbzu23mil.bpmtlbzu23mil",
+      "faction": "IMF",
+      "vehicleType": "SPAA",
+      "asset": "/Game/Vehicles/MTLB/BP_MTLB_ZU23_MIL.BP_MTLB_ZU23_MIL",
+      "name": "MT-LB ZU-23-2",
+      "aliases": [],
+      "keywords": [
+        "MTLBZU",
+        "MTLBZU232"
+      ],
+      "searchTokens": [
+        "MT",
+        "LB",
+        "ZU",
+        "23",
+        "Game",
+        "Vehicles",
+        "MTLB",
+        "BP",
+        "ZU23",
+        "MIL"
+      ]
+    },
+    {
+      "id": "imf:spaa:ural375dzu232:/game/vehicles/ural375/bpural375zu23mil.bpural375zu23mil",
+      "faction": "IMF",
+      "vehicleType": "SPAA",
+      "asset": "/Game/Vehicles/Ural375/BP_Ural_375_ZU23_MIL.BP_Ural_375_ZU23_MIL",
+      "name": "Ural-375D ZU-23-2",
+      "aliases": [],
+      "keywords": [
+        "URAL",
+        "URAL375"
+      ],
+      "searchTokens": [
+        "Ural",
+        "375D",
+        "ZU",
+        "23",
+        "Game",
+        "Vehicles",
+        "Ural375",
+        "BP",
+        "375",
+        "ZU23",
+        "MIL"
+      ]
+    },
+    {
+      "id": "mei:ltv:brdm2:/game/vehicles/brdm2/bpbrdm2insurgents.bpbrdm2insurgents",
+      "faction": "MEI",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/BRDM-2/BP_BRDM-2_Insurgents.BP_BRDM-2_Insurgents",
+      "name": "BRDM-2",
+      "aliases": [
+        "brdm2"
+      ],
+      "keywords": [
+        "brdm"
+      ],
+      "searchTokens": [
+        "BRDM",
+        "brdm2",
+        "Game",
+        "Vehicles",
+        "BP",
+        "Insurgents"
+      ]
+    },
+    {
+      "id": "mei:ltv:m1151technicaldshk:/game/vehicles/m1151mei/bpm1151technical.bpm1151technical",
+      "faction": "MEI",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/M1151_MEI/BP_M1151_Technical.BP_M1151_Technical",
+      "name": "M1151 Technical DSHK",
+      "aliases": [
+        "M1151 DSHK",
+        "M11510���˿�"
+      ],
+      "keywords": [
+        "M1151"
+      ],
+      "searchTokens": [
+        "M1151",
+        "Technical",
+        "DSHK",
+        "M11510",
+        "Game",
+        "Vehicles",
+        "MEI",
+        "BP"
+      ]
+    },
+    {
+      "id": "mei:ltv:technicalhmg:/game/vehicles/technical/bptechnicaldshkinsarmoured.bptechnicaldshkinsarmoured",
+      "faction": "MEI",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/Technical/BP_Technical_Dshk_INS_Armoured.BP_Technical_Dshk_INS_Armoured",
+      "name": "Technical HMG",
+      "aliases": [
+        "SUV HMG"
+      ],
+      "keywords": [
+        "TECHNICALHMG",
+        "SUVHMG"
+      ],
+      "searchTokens": [
+        "Technical",
+        "HMG",
+        "SUV",
+        "Game",
+        "Vehicles",
+        "BP",
+        "Dshk",
+        "INS",
+        "Armoured"
+      ]
+    },
+    {
+      "id": "mei:td:technicalags17:/game/vehicles/technicalarmoured/bparmoredtechnical2seaterwhiteags17.bparmoredtechnical2seaterwhiteags17",
+      "faction": "MEI",
+      "vehicleType": "TD",
+      "asset": "/Game/Vehicles/Technical_Armoured/BP_Armored_Technical2Seater_White_AGS17.BP_Armored_Technical2Seater_White_AGS17",
+      "name": "Technical AGS-17",
+      "aliases": [
+        "SUV AGS17"
+      ],
+      "keywords": [
+        "TECHNICALAGS",
+        "TECHNICALAGS17",
+        "SUVAGS",
+        "SUVAGS17"
+      ],
+      "searchTokens": [
+        "Technical",
+        "AGS",
+        "17",
+        "SUV",
+        "AGS17",
+        "Game",
+        "Vehicles",
+        "Armoured",
+        "BP",
+        "Armored",
+        "Technical2Seater",
+        "White"
+      ]
+    },
+    {
+      "id": "mei:td:technicalbmp1:/game/vehicles/technical2seater/bptechnical2seaterwhitebmp1.bptechnical2seaterwhitebmp1",
+      "faction": "MEI",
+      "vehicleType": "TD",
+      "asset": "/Game/Vehicles/Technical2Seater/BP_Technical2Seater_White_BMP1.BP_Technical2Seater_White_BMP1",
+      "name": "Technical BMP-1",
+      "aliases": [
+        "BMP1"
+      ],
+      "keywords": [
+        "TECHNICALBMP",
+        "BMP"
+      ],
+      "searchTokens": [
+        "Technical",
+        "BMP",
+        "BMP1",
+        "Game",
+        "Vehicles",
+        "Technical2Seater",
+        "BP",
+        "White"
+      ]
+    },
+    {
+      "id": "mei:td:technicalkornet:/game/vehicles/technical2seater/bptechnical2seaterwhitekornet.bptechnical2seaterwhitekornet",
+      "faction": "MEI",
+      "vehicleType": "TD",
+      "asset": "/Game/Vehicles/Technical2Seater/BP_Technical2Seater_White_Kornet.BP_Technical2Seater_White_Kornet",
+      "name": "Technical Kornet",
+      "aliases": [],
+      "keywords": [
+        "TECHNICALKORNET"
+      ],
+      "searchTokens": [
+        "Technical",
+        "Kornet",
+        "Game",
+        "Vehicles",
+        "Technical2Seater",
+        "BP",
+        "White"
+      ]
+    },
+    {
+      "id": "mei:td:technicalspg9:/game/vehicles/technical/bptechnicalspg9insarmoured.bptechnicalspg9insarmoured",
+      "faction": "MEI",
+      "vehicleType": "TD",
+      "asset": "/Game/Vehicles/Technical/BP_Technical_SPG9_INS_Armoured.BP_Technical_SPG9_INS_Armoured",
+      "name": "Technical SPG-9",
+      "aliases": [
+        "SUV SPG9"
+      ],
+      "keywords": [
+        "TECHNICALSPG",
+        "SUVSPG"
+      ],
+      "searchTokens": [
+        "Technical",
+        "SPG",
+        "SUV",
+        "SPG9",
+        "Game",
+        "Vehicles",
+        "BP",
+        "INS",
+        "Armoured"
+      ]
+    },
+    {
+      "id": "mei:apc:mtlbpkt:/game/vehicles/mtlb/bpmtlbins.bpmtlbins",
+      "faction": "MEI",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/MTLB/BP_MTLB_INS.BP_MTLB_INS",
+      "name": "MT-LB PKT",
+      "aliases": [
+        "MTLB PKT"
+      ],
+      "keywords": [
+        "MTLBPKT"
+      ],
+      "searchTokens": [
+        "MT",
+        "LB",
+        "PKT",
+        "MTLB",
+        "Game",
+        "Vehicles",
+        "BP",
+        "INS"
+      ]
+    },
+    {
+      "id": "mei:mbt:t62:/game/vehicles/t62/bpt62.bpt62",
+      "faction": "MEI",
+      "vehicleType": "MBT",
+      "asset": "/Game/Vehicles/T62/BP_T62.BP_T62",
+      "name": "T-62",
+      "aliases": [],
+      "keywords": [
+        "T62"
+      ],
+      "searchTokens": [
+        "62",
+        "Game",
+        "Vehicles",
+        "T62",
+        "BP"
+      ]
+    },
+    {
+      "id": "mei:spa:technicalmortar:/game/vehicles/technical2seater/bptechnical2seaterwhitemortar.bptechnical2seaterwhitemortar",
+      "faction": "MEI",
+      "vehicleType": "SPA",
+      "asset": "/Game/Vehicles/Technical2Seater/BP_Technical2Seater_White_Mortar.BP_Technical2Seater_White_Mortar",
+      "name": "Technical Mortar",
+      "aliases": [
+        "SUV Mortar",
+        "SUV PJP"
+      ],
+      "keywords": [
+        "TECHNICALMORTAR",
+        "SUVMORTAR",
+        "SUVPJP"
+      ],
+      "searchTokens": [
+        "Technical",
+        "Mortar",
+        "SUV",
+        "PJP",
+        "Game",
+        "Vehicles",
+        "Technical2Seater",
+        "BP",
+        "White"
+      ]
+    },
+    {
+      "id": "mei:spa:technicalub32:/game/vehicles/technical/bptechnicalub32ins.bptechnicalub32ins",
+      "faction": "MEI",
+      "vehicleType": "SPA",
+      "asset": "/Game/Vehicles/Technical/BP_Technical_UB32_INS.BP_Technical_UB32_INS",
+      "name": "Technical UB-32",
+      "aliases": [],
+      "keywords": [
+        "TECHNICALUB",
+        "TECHNICALUB32"
+      ],
+      "searchTokens": [
+        "Technical",
+        "UB",
+        "32",
+        "Game",
+        "Vehicles",
+        "BP",
+        "UB32",
+        "INS"
+      ]
+    },
+    {
+      "id": "mei:ifv:bmp1:/game/vehicles/bmp1/bpbmp1ins.bpbmp1ins",
+      "faction": "MEI",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/BMP-1/BP_BMP1_INS.BP_BMP1_INS",
+      "name": "BMP-1",
+      "aliases": [],
+      "keywords": [
+        "BMP"
+      ],
+      "searchTokens": [
+        "BMP",
+        "Game",
+        "Vehicles",
+        "BP",
+        "BMP1",
+        "INS"
+      ]
+    },
+    {
+      "id": "mei:spaa:bmp1zu232:/game/vehicles/bmp1/bpbmp1inszu23.bpbmp1inszu23",
+      "faction": "MEI",
+      "vehicleType": "SPAA",
+      "asset": "/Game/Vehicles/BMP-1/BP_BMP1_INS_ZU23.BP_BMP1_INS_ZU23",
+      "name": "BMP-1 ZU-23-2",
+      "aliases": [],
+      "keywords": [
+        "BMP"
+      ],
+      "searchTokens": [
+        "BMP",
+        "ZU",
+        "23",
+        "Game",
+        "Vehicles",
+        "BP",
+        "BMP1",
+        "INS",
+        "ZU23"
+      ]
+    },
+    {
+      "id": "mei:spaa:mtlbzu232:/game/vehicles/mtlb/bpmtlbzu23ins.bpmtlbzu23ins",
+      "faction": "MEI",
+      "vehicleType": "SPAA",
+      "asset": "/Game/Vehicles/MTLB/BP_MTLB_ZU23_INS.BP_MTLB_ZU23_INS",
+      "name": "MT-LB ZU-23-2",
+      "aliases": [],
+      "keywords": [
+        "MTLBZU",
+        "MTLBZU232"
+      ],
+      "searchTokens": [
+        "MT",
+        "LB",
+        "ZU",
+        "23",
+        "Game",
+        "Vehicles",
+        "MTLB",
+        "BP",
+        "ZU23",
+        "INS"
+      ]
+    },
+    {
+      "id": "mei:spaa:technicalzu232:/game/vehicles/technical2seater/bptechnical2seaterwhitezu23.bptechnical2seaterwhitezu23",
+      "faction": "MEI",
+      "vehicleType": "SPAA",
+      "asset": "/Game/Vehicles/Technical2Seater/BP_Technical2Seater_White_ZU23.BP_Technical2Seater_White_ZU23",
+      "name": "Technical ZU-23-2",
+      "aliases": [],
+      "keywords": [
+        "TECHNICALZU",
+        "TECHNICALZU232"
+      ],
+      "searchTokens": [
+        "Technical",
+        "ZU",
+        "23",
+        "Game",
+        "Vehicles",
+        "Technical2Seater",
+        "BP",
+        "White",
+        "ZU23"
+      ]
+    },
+    {
+      "id": "mei:spaa:ural375dzu232:/game/vehicles/ural375/bpural375zu23.bpural375zu23",
+      "faction": "MEI",
+      "vehicleType": "SPAA",
+      "asset": "/Game/Vehicles/Ural375/BP_Ural_375_ZU23.BP_Ural_375_ZU23",
+      "name": "Ural-375D ZU-23-2",
+      "aliases": [],
+      "keywords": [
+        "URAL",
+        "URAL375"
+      ],
+      "searchTokens": [
+        "Ural",
+        "375D",
+        "ZU",
+        "23",
+        "Game",
+        "Vehicles",
+        "Ural375",
+        "BP",
+        "375",
+        "ZU23"
+      ]
+    },
+    {
+      "id": "pla:mrap:csk131qjc88rws:/game/vehicles/csk131/bpcsk131rws.bpcsk131rws",
+      "faction": "PLA",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/CSK131/BP_CSK131_RWS.BP_CSK131_RWS",
+      "name": "CSK131 QJC88 RWS",
+      "aliases": [],
+      "keywords": [
+        "CSK",
+        "CSK131"
+      ],
+      "searchTokens": [
+        "CSK131",
+        "QJC88",
+        "RWS",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "pla:mrap:csk131qjy88:/game/vehicles/csk131/bpcsk131qjy88.bpcsk131qjy88",
+      "faction": "PLA",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/CSK131/BP_CSK131_QJY88.BP_CSK131_QJY88",
+      "name": "CSK131 QJY88",
+      "aliases": [],
+      "keywords": [
+        "CSK",
+        "CSK131"
+      ],
+      "searchTokens": [
+        "CSK131",
+        "QJY88",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "pla:mrap:csk131qjz89:/game/vehicles/csk131/bpcsk131qjz89.bpcsk131qjz89",
+      "faction": "PLA",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/CSK131/BP_CSK131_QJZ89.BP_CSK131_QJZ89",
+      "name": "CSK131 QJZ89",
+      "aliases": [],
+      "keywords": [
+        "CSK",
+        "CSK131"
+      ],
+      "searchTokens": [
+        "CSK131",
+        "QJZ89",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "pla:mrap:csk131qlz87:/game/vehicles/csk131/bpcsk131qlz87.bpcsk131qlz87",
+      "faction": "PLA",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/CSK131/BP_CSK131_QLZ87.BP_CSK131_QLZ87",
+      "name": "CSK131 QLZ87",
+      "aliases": [],
+      "keywords": [
+        "CSK",
+        "CSK131"
+      ],
+      "searchTokens": [
+        "CSK131",
+        "QLZ87",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "pla:ltv:lynx8x8qjz89:/game/vehicles/zbl08/bpzsl10qjz89.bpzsl10qjz89",
+      "faction": "PLA",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/ZBL08/BP_ZSL10_QJZ-89.BP_ZSL10_QJZ-89",
+      "name": "Lynx8x8 QJZ89",
+      "aliases": [],
+      "keywords": [
+        "LYNX"
+      ],
+      "searchTokens": [
+        "Lynx8x8",
+        "QJZ89",
+        "Game",
+        "Vehicles",
+        "ZBL08",
+        "BP",
+        "ZSL10",
+        "QJZ",
+        "89"
+      ]
+    },
+    {
+      "id": "pla:ltv:lynx8x8qlz87:/game/vehicles/zbl08/bpzsl10qlz87.bpzsl10qlz87",
+      "faction": "PLA",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/ZBL08/BP_ZSL10_QLZ-87.BP_ZSL10_QLZ-87",
+      "name": "Lynx8x8 QLZ87",
+      "aliases": [],
+      "keywords": [
+        "LYNX"
+      ],
+      "searchTokens": [
+        "Lynx8x8",
+        "QLZ87",
+        "Game",
+        "Vehicles",
+        "ZBL08",
+        "BP",
+        "ZSL10",
+        "QLZ",
+        "87"
+      ]
+    },
+    {
+      "id": "pla:td:csk131hj8:/game/vehicles/csk131/bpcsk131hj8atgm.bpcsk131hj8atgm",
+      "faction": "PLA",
+      "vehicleType": "TD",
+      "asset": "/Game/Vehicles/CSK131/BP_CSK131_HJ-8ATGM.BP_CSK131_HJ-8ATGM",
+      "name": "CSK131 HJ8",
+      "aliases": [],
+      "keywords": [
+        "CSK",
+        "CSK131"
+      ],
+      "searchTokens": [
+        "CSK131",
+        "HJ8",
+        "Game",
+        "Vehicles",
+        "BP",
+        "HJ",
+        "8ATGM"
+      ]
+    },
+    {
+      "id": "pla:apc:zsd89qjz89:/game/vehicles/zsd89/bpzsd89.bpzsd89",
+      "faction": "PLA",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/ZSD89/BP_ZSD89.BP_ZSD89",
+      "name": "ZSD89 QJZ89",
+      "aliases": [
+        "89�b�� QJZ89"
+      ],
+      "keywords": [
+        "ZSD",
+        "ZSD89"
+      ],
+      "searchTokens": [
+        "ZSD89",
+        "QJZ89",
+        "89",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "pla:apc:zsd89qlz87:/game/vehicles/zsd89/bpzsd89qlz87.bpzsd89qlz87",
+      "faction": "PLA",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/ZSD89/BP_ZSD89_QLZ-87.BP_ZSD89_QLZ-87",
+      "name": "ZSD89 QLZ87",
+      "aliases": [
+        "89�b�� QLZ87"
+      ],
+      "keywords": [
+        "ZSD",
+        "ZSD89"
+      ],
+      "searchTokens": [
+        "ZSD89",
+        "QLZ87",
+        "89",
+        "Game",
+        "Vehicles",
+        "BP",
+        "QLZ",
+        "87"
+      ]
+    },
+    {
+      "id": "pla:apc:zsl10qjz89:/game/vehicles/zbl08/bpzsl10qjz89.bpzsl10qjz89",
+      "faction": "PLA",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/ZBL08/BP_ZSL10_QJZ-89.BP_ZSL10_QJZ-89",
+      "name": "ZSL10 QJZ89",
+      "aliases": [
+        "10�b�� QJZ89"
+      ],
+      "keywords": [
+        "ZSL",
+        "ZSL10"
+      ],
+      "searchTokens": [
+        "ZSL10",
+        "QJZ89",
+        "10",
+        "Game",
+        "Vehicles",
+        "ZBL08",
+        "BP",
+        "QJZ",
+        "89"
+      ]
+    },
+    {
+      "id": "pla:apc:zsl10qlz87:/game/vehicles/zbl08/bpzsl10qlz87.bpzsl10qlz87",
+      "faction": "PLA",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/ZBL08/BP_ZSL10_QLZ-87.BP_ZSL10_QLZ-87",
+      "name": "ZSL10 QLZ87",
+      "aliases": [
+        "10�b�� QLZ87"
+      ],
+      "keywords": [
+        "ZSL",
+        "ZSL10"
+      ],
+      "searchTokens": [
+        "ZSL10",
+        "QLZ87",
+        "10",
+        "Game",
+        "Vehicles",
+        "ZBL08",
+        "BP",
+        "QLZ",
+        "87"
+      ]
+    },
+    {
+      "id": "pla:apc:zsl92aapcqjz89:/game/vehicles/wz551/bpwz551a.bpwz551a",
+      "faction": "PLA",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/WZ551/BP_WZ551A.BP_WZ551A",
+      "name": "ZSL92A APC QJZ89",
+      "aliases": [
+        "ZSL92A QJZ89",
+        "92�b�� QJZ89"
+      ],
+      "keywords": [
+        "ZSL",
+        "ZSL92"
+      ],
+      "searchTokens": [
+        "ZSL92A",
+        "APC",
+        "QJZ89",
+        "92",
+        "Game",
+        "Vehicles",
+        "WZ551",
+        "BP",
+        "WZ551A"
+      ]
+    },
+    {
+      "id": "pla:apc:zsl92aapcqlz87:/game/vehicles/wz551/bpwz551bqlz87.bpwz551bqlz87",
+      "faction": "PLA",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/WZ551/BP_WZ551B_QLZ-87.BP_WZ551B_QLZ-87",
+      "name": "ZSL92A APC QLZ87",
+      "aliases": [
+        "ZSL92A QLZ87",
+        "92�b�� QLZ87"
+      ],
+      "keywords": [
+        "ZSL",
+        "ZSL92"
+      ],
+      "searchTokens": [
+        "ZSL92A",
+        "APC",
+        "QLZ87",
+        "92",
+        "Game",
+        "Vehicles",
+        "WZ551",
+        "BP",
+        "WZ551B",
+        "QLZ",
+        "87"
+      ]
+    },
+    {
+      "id": "pla:mbt:ztz99a:/game/vehicles/ztz99/bpztz99desertwcage.bpztz99desertwcage",
+      "faction": "PLA",
+      "vehicleType": "MBT",
+      "asset": "/Game/Vehicles/ZTZ99/BP_ZTZ99_Desert_wCage.BP_ZTZ99_Desert_wCage",
+      "name": "ZTZ99A",
+      "aliases": [],
+      "keywords": [
+        "ZTZ",
+        "ZTZ99"
+      ],
+      "searchTokens": [
+        "ZTZ99A",
+        "Game",
+        "Vehicles",
+        "ZTZ99",
+        "BP",
+        "Desert",
+        "wCage"
+      ]
+    },
+    {
+      "id": "pla:ifv:zbd04a:/game/vehicles/zbd04a/bpzbd04a.bpzbd04a",
+      "faction": "PLA",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/ZBD04A/BP_ZBD04A.BP_ZBD04A",
+      "name": "ZBD04A",
+      "aliases": [
+        "04Aʽ����ս��",
+        "04A��"
+      ],
+      "keywords": [
+        "ZBD",
+        "ZBD04"
+      ],
+      "searchTokens": [
+        "ZBD04A",
+        "04A",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "pla:ifv:zbl08:/game/vehicles/zbl08/bpzbl08.bpzbl08",
+      "faction": "PLA",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/ZBL08/BP_ZBL08.BP_ZBL08",
+      "name": "ZBL08",
+      "aliases": [],
+      "keywords": [
+        "ZBL",
+        "ZBL08"
+      ],
+      "searchTokens": [
+        "ZBL08",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "pla:ifv:zsd89iiifv:/game/vehicles/zsd89/bpzsd89ii.bpzsd89ii",
+      "faction": "PLA",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/ZSD89/BP_ZSD89II.BP_ZSD89II",
+      "name": "ZSD89II IFV",
+      "aliases": [
+        "ZSD89"
+      ],
+      "keywords": [
+        "ZSD",
+        "ZSD89"
+      ],
+      "searchTokens": [
+        "ZSD89II",
+        "IFV",
+        "ZSD89",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "pla:ifv:zsl92ifv:/game/vehicles/wz551/bpwz551b.bpwz551b",
+      "faction": "PLA",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/WZ551/BP_WZ551B.BP_WZ551B",
+      "name": "ZSL92 IFV",
+      "aliases": [
+        "ZSL92",
+        "92�ֲ�"
+      ],
+      "keywords": [
+        "ZSL",
+        "ZSL92"
+      ],
+      "searchTokens": [
+        "ZSL92",
+        "IFV",
+        "92",
+        "Game",
+        "Vehicles",
+        "WZ551",
+        "BP",
+        "WZ551B"
+      ]
+    },
+    {
+      "id": "pla:mgs:ztd05:/game/vehicles/ztd05/bpztd05.bpztd05",
+      "faction": "PLA",
+      "vehicleType": "MGS",
+      "asset": "/Game/Vehicles/ZTD05/BP_ZTD05.BP_ZTD05",
+      "name": "ZTD05",
+      "aliases": [
+        "05ͻ",
+        "05ʽͻ����"
+      ],
+      "keywords": [
+        "ZTD",
+        "ZTD05"
+      ],
+      "searchTokens": [
+        "ZTD05",
+        "05",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "plaagf:mrap:csk131qjy88:/game/vehicles/csk131/bpcsk131qjy88.bpcsk131qjy88",
+      "faction": "PLAAGF",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/CSK131/BP_CSK131_QJY88.BP_CSK131_QJY88",
+      "name": "CSK131 QJY88",
+      "aliases": [],
+      "keywords": [
+        "CSK",
+        "CSK131"
+      ],
+      "searchTokens": [
+        "CSK131",
+        "QJY88",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "plaagf:mrap:csk131qjz89:/game/vehicles/csk131/bpcsk131qjz89.bpcsk131qjz89",
+      "faction": "PLAAGF",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/CSK131/BP_CSK131_QJZ89.BP_CSK131_QJZ89",
+      "name": "CSK131 QJZ89",
+      "aliases": [],
+      "keywords": [
+        "CSK",
+        "CSK131"
+      ],
+      "searchTokens": [
+        "CSK131",
+        "QJZ89",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "plaagf:ltv:lynx8x8qjz89:/game/vehicles/zbl08/bpzsl10qjz89.bpzsl10qjz89",
+      "faction": "PLAAGF",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/ZBL08/BP_ZSL10_QJZ-89.BP_ZSL10_QJZ-89",
+      "name": "Lynx8x8 QJZ89",
+      "aliases": [],
+      "keywords": [
+        "LYNX"
+      ],
+      "searchTokens": [
+        "Lynx8x8",
+        "QJZ89",
+        "Game",
+        "Vehicles",
+        "ZBL08",
+        "BP",
+        "ZSL10",
+        "QJZ",
+        "89"
+      ]
+    },
+    {
+      "id": "plaagf:ltv:lynx8x8qlz87:/game/vehicles/zbl08/bpzsl10qlz87.bpzsl10qlz87",
+      "faction": "PLAAGF",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/ZBL08/BP_ZSL10_QLZ-87.BP_ZSL10_QLZ-87",
+      "name": "Lynx8x8 QLZ87",
+      "aliases": [],
+      "keywords": [
+        "LYNX"
+      ],
+      "searchTokens": [
+        "Lynx8x8",
+        "QLZ87",
+        "Game",
+        "Vehicles",
+        "ZBL08",
+        "BP",
+        "ZSL10",
+        "QLZ",
+        "87"
+      ]
+    },
+    {
+      "id": "plaagf:td:csk131hj8:/game/vehicles/csk131/bpcsk131hj8atgm.bpcsk131hj8atgm",
+      "faction": "PLAAGF",
+      "vehicleType": "TD",
+      "asset": "/Game/Vehicles/CSK131/BP_CSK131_HJ-8ATGM.BP_CSK131_HJ-8ATGM",
+      "name": "CSK131 HJ8",
+      "aliases": [],
+      "keywords": [
+        "CSK",
+        "CSK131"
+      ],
+      "searchTokens": [
+        "CSK131",
+        "HJ8",
+        "Game",
+        "Vehicles",
+        "BP",
+        "HJ",
+        "8ATGM"
+      ]
+    },
+    {
+      "id": "plaagf:apc:zsd05qjz89:/game/vehicles/zbd05/bpzsd05qjz89.bpzsd05qjz89",
+      "faction": "PLAAGF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/ZBD05/BP_ZSD05_QJZ-89.BP_ZSD05_QJZ-89",
+      "name": "ZSD05 QJZ89",
+      "aliases": [
+        "05�b�� QJZ89"
+      ],
+      "keywords": [
+        "ZSD",
+        "ZSD05"
+      ],
+      "searchTokens": [
+        "ZSD05",
+        "QJZ89",
+        "05",
+        "Game",
+        "Vehicles",
+        "ZBD05",
+        "BP",
+        "QJZ",
+        "89"
+      ]
+    },
+    {
+      "id": "plaagf:apc:zsd89qjz89:/game/vehicles/zsd89/bpzsd89.bpzsd89",
+      "faction": "PLAAGF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/ZSD89/BP_ZSD89.BP_ZSD89",
+      "name": "ZSD89 QJZ89",
+      "aliases": [
+        "89�b�� QJZ89"
+      ],
+      "keywords": [
+        "ZSD",
+        "ZSD89"
+      ],
+      "searchTokens": [
+        "ZSD89",
+        "QJZ89",
+        "89",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "plaagf:apc:zsd89qlz87:/game/vehicles/zsd89/bpzsd89qlz87.bpzsd89qlz87",
+      "faction": "PLAAGF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/ZSD89/BP_ZSD89_QLZ-87.BP_ZSD89_QLZ-87",
+      "name": "ZSD89 QLZ87",
+      "aliases": [
+        "89�b�� QLZ87"
+      ],
+      "keywords": [
+        "ZSD",
+        "ZSD89"
+      ],
+      "searchTokens": [
+        "ZSD89",
+        "QLZ87",
+        "89",
+        "Game",
+        "Vehicles",
+        "BP",
+        "QLZ",
+        "87"
+      ]
+    },
+    {
+      "id": "plaagf:apc:zsl10qjz89:/game/vehicles/zbl08/bpzsl10qjz89.bpzsl10qjz89",
+      "faction": "PLAAGF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/ZBL08/BP_ZSL10_QJZ-89.BP_ZSL10_QJZ-89",
+      "name": "ZSL10 QJZ89",
+      "aliases": [
+        "10�b�� QJZ89"
+      ],
+      "keywords": [
+        "ZSL",
+        "ZSL10"
+      ],
+      "searchTokens": [
+        "ZSL10",
+        "QJZ89",
+        "10",
+        "Game",
+        "Vehicles",
+        "ZBL08",
+        "BP",
+        "QJZ",
+        "89"
+      ]
+    },
+    {
+      "id": "plaagf:apc:zsl10qlz87:/game/vehicles/zbl08/bpzsl10qlz87.bpzsl10qlz87",
+      "faction": "PLAAGF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/ZBL08/BP_ZSL10_QLZ-87.BP_ZSL10_QLZ-87",
+      "name": "ZSL10 QLZ87",
+      "aliases": [
+        "10�b�� QLZ87"
+      ],
+      "keywords": [
+        "ZSL",
+        "ZSL10"
+      ],
+      "searchTokens": [
+        "ZSL10",
+        "QLZ87",
+        "10",
+        "Game",
+        "Vehicles",
+        "ZBL08",
+        "BP",
+        "QLZ",
+        "87"
+      ]
+    },
+    {
+      "id": "plaagf:apc:zsl92aapcqjz89:/game/vehicles/wz551/bpwz551a.bpwz551a",
+      "faction": "PLAAGF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/WZ551/BP_WZ551A.BP_WZ551A",
+      "name": "ZSL92A APC QJZ89",
+      "aliases": [
+        "92�b�� QJZ89"
+      ],
+      "keywords": [
+        "ZSL",
+        "ZSL92"
+      ],
+      "searchTokens": [
+        "ZSL92A",
+        "APC",
+        "QJZ89",
+        "92",
+        "Game",
+        "Vehicles",
+        "WZ551",
+        "BP",
+        "WZ551A"
+      ]
+    },
+    {
+      "id": "plaagf:apc:zsl92aapcqlz87:/game/vehicles/wz551/bpwz551bqlz87.bpwz551bqlz87",
+      "faction": "PLAAGF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/WZ551/BP_WZ551B_QLZ-87.BP_WZ551B_QLZ-87",
+      "name": "ZSL92A APC QLZ87",
+      "aliases": [
+        "92�b�� QLZ87"
+      ],
+      "keywords": [
+        "ZSL",
+        "ZSL92"
+      ],
+      "searchTokens": [
+        "ZSL92A",
+        "APC",
+        "QLZ87",
+        "92",
+        "Game",
+        "Vehicles",
+        "WZ551",
+        "BP",
+        "WZ551B",
+        "QLZ",
+        "87"
+      ]
+    },
+    {
+      "id": "plaagf:mbt:ztz99a:/game/vehicles/ztz99/bpztz99desertwcage.bpztz99desertwcage",
+      "faction": "PLAAGF",
+      "vehicleType": "MBT",
+      "asset": "/Game/Vehicles/ZTZ99/BP_ZTZ99_Desert_wCage.BP_ZTZ99_Desert_wCage",
+      "name": "ZTZ99A",
+      "aliases": [],
+      "keywords": [
+        "ZTZ",
+        "ZTZ99"
+      ],
+      "searchTokens": [
+        "ZTZ99A",
+        "Game",
+        "Vehicles",
+        "ZTZ99",
+        "BP",
+        "Desert",
+        "wCage"
+      ]
+    },
+    {
+      "id": "plaagf:ifv:zbd04a:/game/vehicles/zbd04a/bpzbd04a.bpzbd04a",
+      "faction": "PLAAGF",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/ZBD04A/BP_ZBD04A.BP_ZBD04A",
+      "name": "ZBD04A",
+      "aliases": [],
+      "keywords": [
+        "ZBD",
+        "ZBD04"
+      ],
+      "searchTokens": [
+        "ZBD04A",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "plaagf:ifv:zbd05:/game/vehicles/zbd05/bpzbd05.bpzbd05",
+      "faction": "PLAAGF",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/ZBD05/BP_ZBD05.BP_ZBD05",
+      "name": "ZBD05",
+      "aliases": [
+        "05ʽ����ս��",
+        "05��"
+      ],
+      "keywords": [
+        "ZBD",
+        "ZBD05"
+      ],
+      "searchTokens": [
+        "ZBD05",
+        "05",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "plaagf:ifv:zbl08:/game/vehicles/zbl08/bpzbl08.bpzbl08",
+      "faction": "PLAAGF",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/ZBL08/BP_ZBL08.BP_ZBL08",
+      "name": "ZBL08",
+      "aliases": [
+        "08ʽ����ս��",
+        "08��"
+      ],
+      "keywords": [
+        "ZBL",
+        "ZBL08"
+      ],
+      "searchTokens": [
+        "ZBL08",
+        "08",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "plaagf:ifv:zsd89iiifv:/game/vehicles/zsd89/bpzsd89ii.bpzsd89ii",
+      "faction": "PLAAGF",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/ZSD89/BP_ZSD89II.BP_ZSD89II",
+      "name": "ZSD89II IFV",
+      "aliases": [],
+      "keywords": [
+        "ZSD",
+        "ZSD89"
+      ],
+      "searchTokens": [
+        "ZSD89II",
+        "IFV",
+        "Game",
+        "Vehicles",
+        "ZSD89",
+        "BP"
+      ]
+    },
+    {
+      "id": "plaagf:ifv:zsl92ifv:/game/vehicles/wz551/bpwz551b.bpwz551b",
+      "faction": "PLAAGF",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/WZ551/BP_WZ551B.BP_WZ551B",
+      "name": "ZSL92 IFV",
+      "aliases": [],
+      "keywords": [
+        "ZSL",
+        "ZSL92"
+      ],
+      "searchTokens": [
+        "ZSL92",
+        "IFV",
+        "Game",
+        "Vehicles",
+        "WZ551",
+        "BP",
+        "WZ551B"
+      ]
+    },
+    {
+      "id": "plaagf:mgs:ztd05:/game/vehicles/ztd05/bpztd05.bpztd05",
+      "faction": "PLAAGF",
+      "vehicleType": "MGS",
+      "asset": "/Game/Vehicles/ZTD05/BP_ZTD05.BP_ZTD05",
+      "name": "ZTD05",
+      "aliases": [],
+      "keywords": [
+        "ZTD",
+        "ZTD05"
+      ],
+      "searchTokens": [
+        "ZTD05",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "planmc:mrap:csk131qjc88rws:/game/vehicles/csk131/bpcsk131rws.bpcsk131rws",
+      "faction": "PLANMC",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/CSK131/BP_CSK131_RWS.BP_CSK131_RWS",
+      "name": "CSK131 QJC88 RWS",
+      "aliases": [],
+      "keywords": [
+        "CSK",
+        "CSK131"
+      ],
+      "searchTokens": [
+        "CSK131",
+        "QJC88",
+        "RWS",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "planmc:mrap:csk131qjy88:/game/vehicles/csk131/bpcsk131qjy88.bpcsk131qjy88",
+      "faction": "PLANMC",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/CSK131/BP_CSK131_QJY88.BP_CSK131_QJY88",
+      "name": "CSK131 QJY88",
+      "aliases": [],
+      "keywords": [
+        "CSK",
+        "CSK131"
+      ],
+      "searchTokens": [
+        "CSK131",
+        "QJY88",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "planmc:mrap:csk131qjz89:/game/vehicles/csk131/bpcsk131qjz89.bpcsk131qjz89",
+      "faction": "PLANMC",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/CSK131/BP_CSK131_QJZ89.BP_CSK131_QJZ89",
+      "name": "CSK131 QJZ89",
+      "aliases": [],
+      "keywords": [
+        "CSK",
+        "CSK131"
+      ],
+      "searchTokens": [
+        "CSK131",
+        "QJZ89",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "planmc:ltv:lynx8x8qjz89:/game/vehicles/zbl08/bpzsl10qjz89naval.bpzsl10qjz89naval",
+      "faction": "PLANMC",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/ZBL08/BP_ZSL10_QJZ-89_Naval.BP_ZSL10_QJZ-89_Naval",
+      "name": "Lynx8x8 QJZ89",
+      "aliases": [],
+      "keywords": [
+        "LYNX"
+      ],
+      "searchTokens": [
+        "Lynx8x8",
+        "QJZ89",
+        "Game",
+        "Vehicles",
+        "ZBL08",
+        "BP",
+        "ZSL10",
+        "QJZ",
+        "89",
+        "Naval"
+      ]
+    },
+    {
+      "id": "planmc:ltv:lynx8x8qlz87:/game/vehicles/zbl08/bpzsl10qlz87.bpzsl10qlz87",
+      "faction": "PLANMC",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/ZBL08/BP_ZSL10_QLZ-87.BP_ZSL10_QLZ-87",
+      "name": "Lynx8x8 QLZ87",
+      "aliases": [],
+      "keywords": [
+        "LYNX"
+      ],
+      "searchTokens": [
+        "Lynx8x8",
+        "QLZ87",
+        "Game",
+        "Vehicles",
+        "ZBL08",
+        "BP",
+        "ZSL10",
+        "QLZ",
+        "87"
+      ]
+    },
+    {
+      "id": "planmc:td:csk131hj8:/game/vehicles/csk131/bpcsk131hj8atgmnaval.bpcsk131hj8atgmnaval",
+      "faction": "PLANMC",
+      "vehicleType": "TD",
+      "asset": "/Game/Vehicles/CSK131/BP_CSK131_HJ-8ATGM_Naval.BP_CSK131_HJ-8ATGM_Naval",
+      "name": "CSK131 HJ8",
+      "aliases": [],
+      "keywords": [
+        "CSK",
+        "CSK131"
+      ],
+      "searchTokens": [
+        "CSK131",
+        "HJ8",
+        "Game",
+        "Vehicles",
+        "BP",
+        "HJ",
+        "8ATGM",
+        "Naval"
+      ]
+    },
+    {
+      "id": "planmc:apc:zsd05:/game/vehicles/zbd05/bpzsd05qjz89.bpzsd05qjz89",
+      "faction": "PLANMC",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/ZBD05/BP_ZSD05_QJZ-89.BP_ZSD05_QJZ-89",
+      "name": "ZSD05",
+      "aliases": [
+        "05�b��"
+      ],
+      "keywords": [
+        "ZSD",
+        "ZSD05"
+      ],
+      "searchTokens": [
+        "ZSD05",
+        "05",
+        "Game",
+        "Vehicles",
+        "ZBD05",
+        "BP",
+        "QJZ",
+        "89"
+      ]
+    },
+    {
+      "id": "planmc:apc:zsl10:/game/vehicles/zbl08/bpzsl10qjz89naval.bpzsl10qjz89naval",
+      "faction": "PLANMC",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/ZBL08/BP_ZSL10_QJZ-89_Naval.BP_ZSL10_QJZ-89_Naval",
+      "name": "ZSL10",
+      "aliases": [
+        "10�b��"
+      ],
+      "keywords": [
+        "ZSL",
+        "ZSL10"
+      ],
+      "searchTokens": [
+        "ZSL10",
+        "10",
+        "Game",
+        "Vehicles",
+        "ZBL08",
+        "BP",
+        "QJZ",
+        "89",
+        "Naval"
+      ]
+    },
+    {
+      "id": "planmc:ifv:zbd05:/game/vehicles/zbd05/bpzbd05.bpzbd05",
+      "faction": "PLANMC",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/ZBD05/BP_ZBD05.BP_ZBD05",
+      "name": "ZBD05",
+      "aliases": [
+        "05ʽ����ս��",
+        "05��"
+      ],
+      "keywords": [
+        "ZBD",
+        "ZBD05"
+      ],
+      "searchTokens": [
+        "ZBD05",
+        "05",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "planmc:ifv:zbl08:/game/vehicles/zbl08/bpzbl08naval.bpzbl08naval",
+      "faction": "PLANMC",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/ZBL08/BP_ZBL08_Naval.BP_ZBL08_Naval",
+      "name": "ZBL08",
+      "aliases": [
+        "08ʽ����ս��",
+        "08��"
+      ],
+      "keywords": [
+        "ZBL",
+        "ZBL08"
+      ],
+      "searchTokens": [
+        "ZBL08",
+        "08",
+        "Game",
+        "Vehicles",
+        "BP",
+        "Naval"
+      ]
+    },
+    {
+      "id": "planmc:mgs:ztd05:/game/vehicles/ztd05/bpztd05.bpztd05",
+      "faction": "PLANMC",
+      "vehicleType": "MGS",
+      "asset": "/Game/Vehicles/ZTD05/BP_ZTD05.BP_ZTD05",
+      "name": "ZTD05",
+      "aliases": [
+        "05ͻ",
+        "05ʽͻ����"
+      ],
+      "keywords": [
+        "ZTD",
+        "ZTD05"
+      ],
+      "searchTokens": [
+        "ZTD05",
+        "05",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "rgf:mrap:tigrmags17:/game/vehicles/tigr/bptigrags17.bptigrags17",
+      "faction": "RGF",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/Tigr/BP_Tigr_AGS17.BP_Tigr_AGS17",
+      "name": "Tigr-M AGS-17",
+      "aliases": [
+        "Tigr AGS17"
+      ],
+      "keywords": [
+        "Tigr",
+        "TIGRMAGS",
+        "TIGRMAGS17",
+        "TIGRAGS",
+        "TIGRAGS17"
+      ],
+      "searchTokens": [
+        "Tigr",
+        "AGS",
+        "17",
+        "AGS17",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "rgf:mrap:tigrmkord:/game/vehicles/tigr/bptigrkord.bptigrkord",
+      "faction": "RGF",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/Tigr/BP_Tigr_Kord.BP_Tigr_Kord",
+      "name": "Tigr-M Kord",
+      "aliases": [
+        "Tigr Kord"
+      ],
+      "keywords": [
+        "Tigr",
+        "TIGRMKORD",
+        "TIGRKORD"
+      ],
+      "searchTokens": [
+        "Tigr",
+        "Kord",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "rgf:mrap:tigrmrwskord:/game/vehicles/tigr/bptigrrws.bptigrrws",
+      "faction": "RGF",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/Tigr/BP_Tigr_RWS.BP_Tigr_RWS",
+      "name": "Tigr-M RWS Kord",
+      "aliases": [
+        "Tigr RWS Kord"
+      ],
+      "keywords": [
+        "Tigr",
+        "TIGRMRWSKORD",
+        "TIGRRWSKORD"
+      ],
+      "searchTokens": [
+        "Tigr",
+        "RWS",
+        "Kord",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "rgf:ltv:brdm2:/game/vehicles/brdm2/bpbrdm2rus.bpbrdm2rus",
+      "faction": "RGF",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/BRDM-2/BP_BRDM-2_RUS.BP_BRDM-2_RUS",
+      "name": "BRDM-2",
+      "aliases": [
+        "BRDM2"
+      ],
+      "keywords": [
+        "BRDM"
+      ],
+      "searchTokens": [
+        "BRDM",
+        "BRDM2",
+        "Game",
+        "Vehicles",
+        "BP",
+        "RUS"
+      ]
+    },
+    {
+      "id": "rgf:td:brdm2spandrel:/game/vehicles/brdm2/bpbrdm2spandrelrus.bpbrdm2spandrelrus",
+      "faction": "RGF",
+      "vehicleType": "TD",
+      "asset": "/Game/Vehicles/BRDM-2/BP_BRDM-2_Spandrel_RUS.BP_BRDM-2_Spandrel_RUS",
+      "name": "BRDM-2 Spandrel",
+      "aliases": [],
+      "keywords": [
+        "BRDM"
+      ],
+      "searchTokens": [
+        "BRDM",
+        "Spandrel",
+        "Game",
+        "Vehicles",
+        "BP",
+        "RUS"
+      ]
+    },
+    {
+      "id": "rgf:apc:btr80:/game/vehicles/btr80/bpbtr80rus.bpbtr80rus",
+      "faction": "RGF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/BTR80/BP_BTR80_RUS.BP_BTR80_RUS",
+      "name": "BTR-80",
+      "aliases": [],
+      "keywords": [
+        "BTR",
+        "BTR80"
+      ],
+      "searchTokens": [
+        "BTR",
+        "80",
+        "Game",
+        "Vehicles",
+        "BTR80",
+        "BP",
+        "RUS"
+      ]
+    },
+    {
+      "id": "rgf:apc:btr82a:/game/vehicles/btr80/82a/bpbtr82arus.bpbtr82arus",
+      "faction": "RGF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/BTR80/82A/BP_BTR82A_RUS.BP_BTR82A_RUS",
+      "name": "BTR-82A",
+      "aliases": [],
+      "keywords": [
+        "BTR",
+        "BTR82"
+      ],
+      "searchTokens": [
+        "BTR",
+        "82A",
+        "Game",
+        "Vehicles",
+        "BTR80",
+        "BP",
+        "BTR82A",
+        "RUS"
+      ]
+    },
+    {
+      "id": "rgf:apc:mtlbpkt:/game/vehicles/mtlb/bpmtlbrgf.bpmtlbrgf",
+      "faction": "RGF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/MTLB/BP_MTLB_RGF.BP_MTLB_RGF",
+      "name": "MT-LB PKT",
+      "aliases": [
+        "MTLB PKT"
+      ],
+      "keywords": [
+        "MTLB",
+        "MTLBPKT"
+      ],
+      "searchTokens": [
+        "MT",
+        "LB",
+        "PKT",
+        "MTLB",
+        "Game",
+        "Vehicles",
+        "BP",
+        "RGF"
+      ]
+    },
+    {
+      "id": "rgf:apc:mtlbvmk:/game/vehicles/mtlb/bpmtlbvmkrus.bpmtlbvmkrus",
+      "faction": "RGF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/MTLB/BP_MTLB_VMK_RUS.BP_MTLB_VMK_RUS",
+      "name": "MT-LB VMK",
+      "aliases": [
+        "MTLB VMK"
+      ],
+      "keywords": [
+        "MTLB",
+        "VMK",
+        "MTLBVMK"
+      ],
+      "searchTokens": [
+        "MT",
+        "LB",
+        "VMK",
+        "MTLB",
+        "Game",
+        "Vehicles",
+        "BP",
+        "RUS"
+      ]
+    },
+    {
+      "id": "rgf:apc:mtlbm6ma:/game/vehicles/mtlb/bpmtlbm6marus.bpmtlbm6marus",
+      "faction": "RGF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/MTLB/BP_MTLBM_6MA_RUS.BP_MTLBM_6MA_RUS",
+      "name": "MT-LBM 6MA",
+      "aliases": [],
+      "keywords": [
+        "MTLB",
+        "6MA",
+        "MTLBM"
+      ],
+      "searchTokens": [
+        "MT",
+        "LBM",
+        "6MA",
+        "Game",
+        "Vehicles",
+        "MTLB",
+        "BP",
+        "MTLBM",
+        "RUS"
+      ]
+    },
+    {
+      "id": "rgf:mbt:t72b3:/game/vehicles/t72b3/bpt72b3.bpt72b3",
+      "faction": "RGF",
+      "vehicleType": "MBT",
+      "asset": "/Game/Vehicles/T72B3/BP_T72B3.BP_T72B3",
+      "name": "T-72B3",
+      "aliases": [
+        "T72B3"
+      ],
+      "keywords": [
+        "T-72"
+      ],
+      "searchTokens": [
+        "72B3",
+        "T72B3",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "rgf:mbt:t90a:/game/vehicles/t90a/bpt90a.bpt90a",
+      "faction": "RGF",
+      "vehicleType": "MBT",
+      "asset": "/Game/Vehicles/T90A/BP_T90A.BP_T90A",
+      "name": "T-90A",
+      "aliases": [
+        "T90"
+      ],
+      "keywords": [
+        "TANK",
+        "T90"
+      ],
+      "searchTokens": [
+        "90A",
+        "T90",
+        "Game",
+        "Vehicles",
+        "T90A",
+        "BP"
+      ]
+    },
+    {
+      "id": "rgf:ifv:bmp1am:/game/vehicles/bmp2/bpbmp1am.bpbmp1am",
+      "faction": "RGF",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/BMP-2/BP_BMP1AM.BP_BMP1AM",
+      "name": "BMP-1AM",
+      "aliases": [
+        "BMP1AM"
+      ],
+      "keywords": [
+        "1AM",
+        "BMP"
+      ],
+      "searchTokens": [
+        "BMP",
+        "1AM",
+        "BMP1AM",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "rgf:ifv:bmp2:/game/vehicles/bmp2/bpbmp2.bpbmp2",
+      "faction": "RGF",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/BMP-2/BP_BMP2.BP_BMP2",
+      "name": "BMP-2",
+      "aliases": [
+        "BMP2"
+      ],
+      "keywords": [
+        "BMP"
+      ],
+      "searchTokens": [
+        "BMP",
+        "BMP2",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "rgf:ifv:bmp2m:/game/vehicles/bmp2m/bpbmp2m.bpbmp2m",
+      "faction": "RGF",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/BMP-2M/BP_BMP2M.BP_BMP2M",
+      "name": "BMP-2M",
+      "aliases": [
+        "BMP2M"
+      ],
+      "keywords": [
+        "2M2M",
+        "BMP"
+      ],
+      "searchTokens": [
+        "BMP",
+        "2M",
+        "BMP2M",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "rgf:ifv:bmp3m:/game/vehicles/bmp3m/bpbmp3m.bpbmp3m",
+      "faction": "RGF",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/BMP-3M/BP_BMP3M.BP_BMP3M",
+      "name": "BMP-3M",
+      "aliases": [
+        "BMP3M"
+      ],
+      "keywords": [
+        "3M3M",
+        "BMP"
+      ],
+      "searchTokens": [
+        "BMP",
+        "3M",
+        "BMP3M",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "rgf:ifv:mtlbm6mb:/game/vehicles/mtlb/bpmtlbm6mbrus.bpmtlbm6mbrus",
+      "faction": "RGF",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/MTLB/BP_MTLBM_6MB_RUS.BP_MTLBM_6MB_RUS",
+      "name": "MT-LBM 6MB",
+      "aliases": [],
+      "keywords": [
+        "6MB",
+        "MTLB",
+        "MTLBM"
+      ],
+      "searchTokens": [
+        "MT",
+        "LBM",
+        "6MB",
+        "Game",
+        "Vehicles",
+        "MTLB",
+        "BP",
+        "MTLBM",
+        "RUS"
+      ]
+    },
+    {
+      "id": "tlf:mrap:cobraiim2:/game/vehicles/cobraii/bpcobra2m2.bpcobra2m2",
+      "faction": "TLF",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/Cobra_II/BP_Cobra2_M2.BP_Cobra2_M2",
+      "name": "Cobra II M2",
+      "aliases": [
+        "Cobra M2"
+      ],
+      "keywords": [
+        "Cobra",
+        "COBRAIIM",
+        "COBRAM"
+      ],
+      "searchTokens": [
+        "Cobra",
+        "II",
+        "M2",
+        "Game",
+        "Vehicles",
+        "BP",
+        "Cobra2"
+      ]
+    },
+    {
+      "id": "tlf:mrap:cobraiim2rws:/game/vehicles/cobraii/bpcobra2rwsm2.bpcobra2rwsm2",
+      "faction": "TLF",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/Cobra_II/BP_Cobra2_RWS_M2.BP_Cobra2_RWS_M2",
+      "name": "Cobra II M2 RWS",
+      "aliases": [
+        "Cobra M2 RWS"
+      ],
+      "keywords": [
+        "Cobra",
+        "COBRAIIM",
+        "COBRAM"
+      ],
+      "searchTokens": [
+        "Cobra",
+        "II",
+        "M2",
+        "RWS",
+        "Game",
+        "Vehicles",
+        "BP",
+        "Cobra2"
+      ]
+    },
+    {
+      "id": "tlf:mrap:cobraiimg3:/game/vehicles/cobraii/bpcobra2mg3.bpcobra2mg3",
+      "faction": "TLF",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/Cobra_II/BP_Cobra2_MG3.BP_Cobra2_MG3",
+      "name": "Cobra II MG3",
+      "aliases": [
+        "Cobra MG3"
+      ],
+      "keywords": [
+        "Cobra",
+        "COBRAIIMG",
+        "COBRAMG"
+      ],
+      "searchTokens": [
+        "Cobra",
+        "II",
+        "MG3",
+        "Game",
+        "Vehicles",
+        "BP",
+        "Cobra2"
+      ]
+    },
+    {
+      "id": "tlf:mrap:cobraiimg3rws:/game/vehicles/cobraii/bpcobra2rwsmg3.bpcobra2rwsmg3",
+      "faction": "TLF",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/Cobra_II/BP_Cobra2_RWS_MG3.BP_Cobra2_RWS_MG3",
+      "name": "Cobra II MG3 RWS",
+      "aliases": [
+        "Cobra MG3 RWS"
+      ],
+      "keywords": [
+        "Cobra",
+        "COBRAIIMG",
+        "COBRAMG"
+      ],
+      "searchTokens": [
+        "Cobra",
+        "II",
+        "MG3",
+        "RWS",
+        "Game",
+        "Vehicles",
+        "BP",
+        "Cobra2"
+      ]
+    },
+    {
+      "id": "tlf:apc:acv15m2:/game/vehicles/acv15/bpacv15m2.bpacv15m2",
+      "faction": "TLF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/ACV-15/BP_ACV-15_M2.BP_ACV-15_M2",
+      "name": "ACV-15 M2",
+      "aliases": [],
+      "keywords": [
+        "ACV",
+        "ACV15"
+      ],
+      "searchTokens": [
+        "ACV",
+        "15",
+        "M2",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "tlf:apc:acv15mg3:/game/vehicles/acv15/bpacv15mg3.bpacv15mg3",
+      "faction": "TLF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/ACV-15/BP_ACV-15_MG3.BP_ACV-15_MG3",
+      "name": "ACV-15 MG3",
+      "aliases": [],
+      "keywords": [
+        "ACV",
+        "ACV15"
+      ],
+      "searchTokens": [
+        "ACV",
+        "15",
+        "MG3",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "tlf:apc:m113a2tm2:/game/vehicles/m113a2ttlf/bpm113a2tm2tlf.bpm113a2tm2tlf",
+      "faction": "TLF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/M113A2T_TLF/BP_M113A2T_M2_TLF.BP_M113A2T_M2_TLF",
+      "name": "M113A2T M2",
+      "aliases": [],
+      "keywords": [
+        "M113A2T",
+        "M113"
+      ],
+      "searchTokens": [
+        "M113A2T",
+        "M2",
+        "Game",
+        "Vehicles",
+        "TLF",
+        "BP"
+      ]
+    },
+    {
+      "id": "tlf:apc:m113a2tmk19:/game/vehicles/m113a2ttlf/bpm113a2tmk19tlf.bpm113a2tmk19tlf",
+      "faction": "TLF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/M113A2T_TLF/BP_M113A2T_MK19_TLF.BP_M113A2T_MK19_TLF",
+      "name": "M113A2T Mk19",
+      "aliases": [],
+      "keywords": [
+        "M113"
+      ],
+      "searchTokens": [
+        "M113A2T",
+        "Mk19",
+        "Game",
+        "Vehicles",
+        "TLF",
+        "BP"
+      ]
+    },
+    {
+      "id": "tlf:apc:parsiiim2rws:/game/vehicles/parsiii/bppars3m2.bppars3m2",
+      "faction": "TLF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/PARS_III/BP_PARS3_M2.BP_PARS3_M2",
+      "name": "PARS III M2 RWS",
+      "aliases": [
+        "PARS M2 RWS"
+      ],
+      "keywords": [
+        "PARSIIIM",
+        "PARSM"
+      ],
+      "searchTokens": [
+        "PARS",
+        "III",
+        "M2",
+        "RWS",
+        "Game",
+        "Vehicles",
+        "BP",
+        "PARS3"
+      ]
+    },
+    {
+      "id": "tlf:apc:parsiiimg3rws:/game/vehicles/parsiii/bppars3mg3.bppars3mg3",
+      "faction": "TLF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/PARS_III/BP_PARS3_MG3.BP_PARS3_MG3",
+      "name": "PARS III MG3 RWS",
+      "aliases": [
+        "PARS MG3 RWS"
+      ],
+      "keywords": [
+        "PARSIIIMG",
+        "PARSMG"
+      ],
+      "searchTokens": [
+        "PARS",
+        "III",
+        "MG3",
+        "RWS",
+        "Game",
+        "Vehicles",
+        "BP",
+        "PARS3"
+      ]
+    },
+    {
+      "id": "tlf:apc:parsiiimk19rws:/game/vehicles/parsiii/bppars3mk19.bppars3mk19",
+      "faction": "TLF",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/PARS_III/BP_PARS3_MK19.BP_PARS3_MK19",
+      "name": "PARS III Mk19 RWS",
+      "aliases": [
+        "PARS MK19 RWS"
+      ],
+      "keywords": [
+        "PARSIIIMK",
+        "PARSIIIMK19",
+        "PARSMK",
+        "PARSMK19"
+      ],
+      "searchTokens": [
+        "PARS",
+        "III",
+        "Mk19",
+        "RWS",
+        "Game",
+        "Vehicles",
+        "BP",
+        "PARS3"
+      ]
+    },
+    {
+      "id": "tlf:mbt:m60t:/game/vehicles/m60t/bpm60t.bpm60t",
+      "faction": "TLF",
+      "vehicleType": "MBT",
+      "asset": "/Game/Vehicles/M60T/BP_M60T.BP_M60T",
+      "name": "M60T",
+      "aliases": [],
+      "keywords": [
+        "TANK",
+        "M60"
+      ],
+      "searchTokens": [
+        "M60T",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "tlf:spa:m113a2tm121:/game/vehicles/m1064a2tlf/bpm1064m121tlf.bpm1064m121tlf",
+      "faction": "TLF",
+      "vehicleType": "SPA",
+      "asset": "/Game/Vehicles/M1064A2_TLF/BP_M1064_M121_TLF.BP_M1064_M121_TLF",
+      "name": "M113A2T M121",
+      "aliases": [],
+      "keywords": [
+        "PJP",
+        "PJP che",
+        "M113"
+      ],
+      "searchTokens": [
+        "M113A2T",
+        "M121",
+        "Game",
+        "Vehicles",
+        "M1064A2",
+        "TLF",
+        "BP",
+        "M1064"
+      ]
+    },
+    {
+      "id": "tlf:ifv:acv1525mm:/game/vehicles/acv15/bpacv15.bpacv15",
+      "faction": "TLF",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/ACV-15/BP_ACV-15.BP_ACV-15",
+      "name": "ACV-15 25mm",
+      "aliases": [],
+      "keywords": [
+        "ACV",
+        "ACV1525"
+      ],
+      "searchTokens": [
+        "ACV",
+        "15",
+        "25mm",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "tlf:ifv:parsiii25mm:/game/vehicles/parsiii/bppars3.bppars3",
+      "faction": "TLF",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/PARS_III/BP_PARS3.BP_PARS3",
+      "name": "PARS III 25mm",
+      "aliases": [
+        "PARS 25MM"
+      ],
+      "keywords": [
+        "PARSIII",
+        "PARSIII25",
+        "PARS",
+        "PARS25"
+      ],
+      "searchTokens": [
+        "PARS",
+        "III",
+        "25mm",
+        "Game",
+        "Vehicles",
+        "BP",
+        "PARS3"
+      ]
+    },
+    {
+      "id": "usa:mrap:matvcrowsm2:/game/vehicles/matv/bpmatvcrows.bpmatvcrows",
+      "faction": "USA",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/MATV/BP_MATV_CROWS.BP_MATV_CROWS",
+      "name": "M-ATV CROWS M2",
+      "aliases": [],
+      "keywords": [
+        "MATVCROWSM"
+      ],
+      "searchTokens": [
+        "ATV",
+        "CROWS",
+        "M2",
+        "Game",
+        "Vehicles",
+        "MATV",
+        "BP"
+      ]
+    },
+    {
+      "id": "usa:mrap:matvcrowsm240:/game/vehicles/matv/bpmatvcrowsm240.bpmatvcrowsm240",
+      "faction": "USA",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/MATV/BP_MATV_CROWS_M240.BP_MATV_CROWS_M240",
+      "name": "M-ATV CROWS M240",
+      "aliases": [],
+      "keywords": [
+        "MATVCROWSM",
+        "MATVCROWSM240"
+      ],
+      "searchTokens": [
+        "ATV",
+        "CROWS",
+        "M240",
+        "Game",
+        "Vehicles",
+        "MATV",
+        "BP"
+      ]
+    },
+    {
+      "id": "usa:mrap:matvm2:/game/vehicles/matv/bpmatv.bpmatv",
+      "faction": "USA",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/MATV/BP_MATV.BP_MATV",
+      "name": "M-ATV M2",
+      "aliases": [],
+      "keywords": [
+        "MATVM"
+      ],
+      "searchTokens": [
+        "ATV",
+        "M2",
+        "Game",
+        "Vehicles",
+        "MATV",
+        "BP"
+      ]
+    },
+    {
+      "id": "usa:mrap:matvm240:/game/vehicles/matv/bpmatvm240.bpmatvm240",
+      "faction": "USA",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/MATV/BP_MATV_M240.BP_MATV_M240",
+      "name": "M-ATV M240",
+      "aliases": [],
+      "keywords": [
+        "MATVM",
+        "MATVM240"
+      ],
+      "searchTokens": [
+        "ATV",
+        "M240",
+        "Game",
+        "Vehicles",
+        "MATV",
+        "BP"
+      ]
+    },
+    {
+      "id": "usa:mrap:matvmk19:/game/vehicles/matv/bpmatvmk19.bpmatvmk19",
+      "faction": "USA",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/MATV/BP_MATV_Mk19.BP_MATV_Mk19",
+      "name": "M-ATV Mk19",
+      "aliases": [],
+      "keywords": [
+        "MATVMK",
+        "MATVMK19"
+      ],
+      "searchTokens": [
+        "ATV",
+        "Mk19",
+        "Game",
+        "Vehicles",
+        "MATV",
+        "BP"
+      ]
+    },
+    {
+      "id": "usa:mrap:m1151crowsm2:/game/vehicles/m1151/bpm1151crows.bpm1151crows",
+      "faction": "USA",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/M1151/BP_M1151_CROWS.BP_M1151_CROWS",
+      "name": "M1151 CROWS M2",
+      "aliases": [],
+      "keywords": [
+        "M1151"
+      ],
+      "searchTokens": [
+        "M1151",
+        "CROWS",
+        "M2",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "usa:mrap:m1151m2:/game/vehicles/m1151/bpm1151.bpm1151",
+      "faction": "USA",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/M1151/BP_M1151.BP_M1151",
+      "name": "M1151 M2",
+      "aliases": [],
+      "keywords": [
+        "M1151"
+      ],
+      "searchTokens": [
+        "M1151",
+        "M2",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "usa:mrap:m1151m240:/game/vehicles/m1151/bpm1151m240.bpm1151m240",
+      "faction": "USA",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/M1151/BP_M1151_M240.BP_M1151_M240",
+      "name": "M1151 M240",
+      "aliases": [],
+      "keywords": [
+        "M1151"
+      ],
+      "searchTokens": [
+        "M1151",
+        "M240",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "usa:mrap:m1151mk19:/game/vehicles/m1151/bpm1151mk19.bpm1151mk19",
+      "faction": "USA",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/M1151/BP_M1151_Mk19.BP_M1151_Mk19",
+      "name": "M1151 Mk19",
+      "aliases": [],
+      "keywords": [
+        "M1151"
+      ],
+      "searchTokens": [
+        "M1151",
+        "Mk19",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "usa:mrap:matvcrowsm2:/game/vehicles/matv/bpmatvcrows.bpmatvcrows",
+      "faction": "USA",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/MATV/BP_MATV_CROWS.BP_MATV_CROWS",
+      "name": "MATV CROWS M2",
+      "aliases": [],
+      "keywords": [
+        "MATVCROWSM"
+      ],
+      "searchTokens": [
+        "MATV",
+        "CROWS",
+        "M2",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "usa:td:matvtow:/game/vehicles/matv/bpmatvtow.bpmatvtow",
+      "faction": "USA",
+      "vehicleType": "TD",
+      "asset": "/Game/Vehicles/MATV/BP_MATV_TOW.BP_MATV_TOW",
+      "name": "M-ATV TOW",
+      "aliases": [],
+      "keywords": [
+        "MATVTOW"
+      ],
+      "searchTokens": [
+        "ATV",
+        "TOW",
+        "Game",
+        "Vehicles",
+        "MATV",
+        "BP"
+      ]
+    },
+    {
+      "id": "usa:td:m1151tow:/game/vehicles/m1151/bpm1151tow.bpm1151tow",
+      "faction": "USA",
+      "vehicleType": "TD",
+      "asset": "/Game/Vehicles/M1151/BP_M1151_TOW.BP_M1151_TOW",
+      "name": "M1151 TOW",
+      "aliases": [],
+      "keywords": [
+        "M1151"
+      ],
+      "searchTokens": [
+        "M1151",
+        "TOW",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "usa:apc:m1126crowsm2:/game/vehicles/m1126/bpm1126.bpm1126",
+      "faction": "USA",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/M1126/BP_M1126.BP_M1126",
+      "name": "M1126 CROWS M2",
+      "aliases": [],
+      "keywords": [
+        "M1126"
+      ],
+      "searchTokens": [
+        "M1126",
+        "CROWS",
+        "M2",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "usa:apc:m1126crowsm240:/game/vehicles/m1126/bpm1126m240.bpm1126m240",
+      "faction": "USA",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/M1126/BP_M1126_M240.BP_M1126_M240",
+      "name": "M1126 CROWS M240",
+      "aliases": [],
+      "keywords": [
+        "M1126"
+      ],
+      "searchTokens": [
+        "M1126",
+        "CROWS",
+        "M240",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "usa:apc:m113a3m2:/game/vehicles/m113a3/bpm113a3m2.bpm113a3m2",
+      "faction": "USA",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/M113A3/BP_M113A3_M2.BP_M113A3_M2",
+      "name": "M113A3 M2",
+      "aliases": [],
+      "keywords": [
+        "M113"
+      ],
+      "searchTokens": [
+        "M113A3",
+        "M2",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "usa:apc:m113a3mk19:/game/vehicles/m113a3/bpm113a3mk19.bpm113a3mk19",
+      "faction": "USA",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/M113A3/BP_M113A3_MK19.BP_M113A3_MK19",
+      "name": "M113A3 Mk19",
+      "aliases": [],
+      "keywords": [
+        "M113"
+      ],
+      "searchTokens": [
+        "M113A3",
+        "Mk19",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "usa:mbt:m1a2:/game/vehicles/m1a2/bpm1a2.bpm1a2",
+      "faction": "USA",
+      "vehicleType": "MBT",
+      "asset": "/Game/Vehicles/M1A2/BP_M1A2.BP_M1A2",
+      "name": "M1A2",
+      "aliases": [],
+      "keywords": [],
+      "searchTokens": [
+        "M1A2",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "usa:spa:m1064a3m121:/game/vehicles/m1064a3/bpm1064a3m121.bpm1064a3m121",
+      "faction": "USA",
+      "vehicleType": "SPA",
+      "asset": "/Game/Vehicles/M1064A3/BP_M1064A3_M121.BP_M1064A3_M121",
+      "name": "M1064A3 M121",
+      "aliases": [],
+      "keywords": [
+        "M1064"
+      ],
+      "searchTokens": [
+        "M1064A3",
+        "M121",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "usa:ifv:m2a3:/game/vehicles/bfv/bpbfv.bpbfv",
+      "faction": "USA",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/BFV/BP_BFV.BP_BFV",
+      "name": "M2A3",
+      "aliases": [],
+      "keywords": [
+        "BLDL"
+      ],
+      "searchTokens": [
+        "M2A3",
+        "Game",
+        "Vehicles",
+        "BFV",
+        "BP"
+      ]
+    },
+    {
+      "id": "usa:ifv:m7a3:/game/vehicles/bfv/bpm7a3ifv.bpm7a3ifv",
+      "faction": "USA",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/BFV/BP_M7A3_IFV.BP_M7A3_IFV",
+      "name": "M7A3",
+      "aliases": [],
+      "keywords": [
+        "BLDL"
+      ],
+      "searchTokens": [
+        "M7A3",
+        "Game",
+        "Vehicles",
+        "BFV",
+        "BP",
+        "IFV"
+      ]
+    },
+    {
+      "id": "usa:mgs:m1128mgs:/game/vehicles/m1128mgs/bpm1128.bpm1128",
+      "faction": "USA",
+      "vehicleType": "MGS",
+      "asset": "/Game/Vehicles/M1128_MGS/BP_M1128.BP_M1128",
+      "name": "M1128 MGS",
+      "aliases": [
+        "M1128"
+      ],
+      "keywords": [
+        "M1128"
+      ],
+      "searchTokens": [
+        "M1128",
+        "MGS",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "usmc:mrap:m1151crowsm2:/game/vehicles/matvusmc/bpmatvusmccrows.bpmatvusmccrows",
+      "faction": "USMC",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/MATV_USMC/BP_MATV_USMC_CROWS.BP_MATV_USMC_CROWS",
+      "name": "M1151 CROWS M2",
+      "aliases": [],
+      "keywords": [
+        "M1151"
+      ],
+      "searchTokens": [
+        "M1151",
+        "CROWS",
+        "M2",
+        "Game",
+        "Vehicles",
+        "MATV",
+        "USMC",
+        "BP"
+      ]
+    },
+    {
+      "id": "usmc:mrap:m1151m2:/game/vehicles/matvusmc/bpmatvusmc.bpmatvusmc",
+      "faction": "USMC",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/MATV_USMC/BP_MATV_USMC.BP_MATV_USMC",
+      "name": "M1151 M2",
+      "aliases": [],
+      "keywords": [
+        "M1151"
+      ],
+      "searchTokens": [
+        "M1151",
+        "M2",
+        "Game",
+        "Vehicles",
+        "MATV",
+        "USMC",
+        "BP"
+      ]
+    },
+    {
+      "id": "usmc:mrap:m1151m240:/game/vehicles/matvusmc/bpmatvusmc.bpmatvusmc",
+      "faction": "USMC",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/MATV_USMC/BP_MATV_USMC.BP_MATV_USMC",
+      "name": "M1151 M240",
+      "aliases": [],
+      "keywords": [
+        "M1151"
+      ],
+      "searchTokens": [
+        "M1151",
+        "M240",
+        "Game",
+        "Vehicles",
+        "MATV",
+        "USMC",
+        "BP"
+      ]
+    },
+    {
+      "id": "usmc:mrap:m1151mk19:/game/vehicles/matvusmc/bpmatvmk19usmc.bpmatvmk19usmc",
+      "faction": "USMC",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/MATV_USMC/BP_MATV_Mk19_USMC.BP_MATV_Mk19_USMC",
+      "name": "M1151 Mk19",
+      "aliases": [],
+      "keywords": [
+        "M1151"
+      ],
+      "searchTokens": [
+        "M1151",
+        "Mk19",
+        "Game",
+        "Vehicles",
+        "MATV",
+        "USMC",
+        "BP"
+      ]
+    },
+    {
+      "id": "usmc:mrap:matvcrowsm2:/game/vehicles/matvusmc/bpmatvusmccrows.bpmatvusmccrows",
+      "faction": "USMC",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/MATV_USMC/BP_MATV_USMC_CROWS.BP_MATV_USMC_CROWS",
+      "name": "MATV CROWS M2",
+      "aliases": [],
+      "keywords": [
+        "MATVCROWSM"
+      ],
+      "searchTokens": [
+        "MATV",
+        "CROWS",
+        "M2",
+        "Game",
+        "Vehicles",
+        "USMC",
+        "BP"
+      ]
+    },
+    {
+      "id": "usmc:mrap:matvm2:/game/vehicles/matvusmc/bpmatvusmc.bpmatvusmc",
+      "faction": "USMC",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/MATV_USMC/BP_MATV_USMC.BP_MATV_USMC",
+      "name": "MATV M2",
+      "aliases": [],
+      "keywords": [
+        "MATVM"
+      ],
+      "searchTokens": [
+        "MATV",
+        "M2",
+        "Game",
+        "Vehicles",
+        "USMC",
+        "BP"
+      ]
+    },
+    {
+      "id": "usmc:mrap:matvmk19:/game/vehicles/matvusmc/bpmatvmk19usmc.bpmatvmk19usmc",
+      "faction": "USMC",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/MATV_USMC/BP_MATV_Mk19_USMC.BP_MATV_Mk19_USMC",
+      "name": "MATV Mk19",
+      "aliases": [],
+      "keywords": [
+        "MATVMK",
+        "MATVMK19"
+      ],
+      "searchTokens": [
+        "MATV",
+        "Mk19",
+        "Game",
+        "Vehicles",
+        "USMC",
+        "BP"
+      ]
+    },
+    {
+      "id": "usmc:td:m1151tow:/game/vehicles/m1151/bpm1151tow.bpm1151tow",
+      "faction": "USMC",
+      "vehicleType": "TD",
+      "asset": "/Game/Vehicles/M1151/BP_M1151_TOW.BP_M1151_TOW",
+      "name": "M1151 TOW",
+      "aliases": [],
+      "keywords": [
+        "Tow",
+        "M1151"
+      ],
+      "searchTokens": [
+        "M1151",
+        "TOW",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "usmc:td:matvtow:/game/vehicles/matvusmc/bpmatvusmctow.bpmatvusmctow",
+      "faction": "USMC",
+      "vehicleType": "TD",
+      "asset": "/Game/Vehicles/MATV_USMC/BP_MATV_USMC_TOW.BP_MATV_USMC_TOW",
+      "name": "MATV TOW",
+      "aliases": [],
+      "keywords": [
+        "Tow",
+        "MATVTOW"
+      ],
+      "searchTokens": [
+        "MATV",
+        "TOW",
+        "Game",
+        "Vehicles",
+        "USMC",
+        "BP"
+      ]
+    },
+    {
+      "id": "usmc:apc:aavp7a1:/game/vehicles/aavp7a1/bpaavp7a1.bpaavp7a1",
+      "faction": "USMC",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/AAVP7A1/BP_AAVP7A1.BP_AAVP7A1",
+      "name": "AAVP-7A1",
+      "aliases": [
+        "AAVP"
+      ],
+      "keywords": [
+        "AVP",
+        "AAVP"
+      ],
+      "searchTokens": [
+        "AAVP",
+        "7A1",
+        "Game",
+        "Vehicles",
+        "AAVP7A1",
+        "BP"
+      ]
+    },
+    {
+      "id": "usmc:apc:lav25:/game/vehicles/lav25/bplav25.bplav25",
+      "faction": "USMC",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/LAV25/BP_LAV25.BP_LAV25",
+      "name": "LAV-25",
+      "aliases": [],
+      "keywords": [
+        "LAV",
+        "LAV25"
+      ],
+      "searchTokens": [
+        "LAV",
+        "25",
+        "Game",
+        "Vehicles",
+        "LAV25",
+        "BP"
+      ]
+    },
+    {
+      "id": "usmc:mbt:m1a1:/game/vehicles/m1a1usmc/bpm1a1usmc.bpm1a1usmc",
+      "faction": "USMC",
+      "vehicleType": "MBT",
+      "asset": "/Game/Vehicles/M1A1_USMC/BP_M1A1_USMC.BP_M1A1_USMC",
+      "name": "M1A1",
+      "aliases": [],
+      "keywords": [
+        "Tank"
+      ],
+      "searchTokens": [
+        "M1A1",
+        "Game",
+        "Vehicles",
+        "USMC",
+        "BP"
+      ]
+    },
+    {
+      "id": "vdv:mrap:tigrmags17:/game/vehicles/tigr/bptigrags17.bptigrags17",
+      "faction": "VDV",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/Tigr/BP_Tigr_AGS17.BP_Tigr_AGS17",
+      "name": "Tigr-M AGS-17",
+      "aliases": [
+        "Tigr AGS17"
+      ],
+      "keywords": [
+        "TIGRMAGS",
+        "TIGRMAGS17",
+        "TIGRAGS",
+        "TIGRAGS17"
+      ],
+      "searchTokens": [
+        "Tigr",
+        "AGS",
+        "17",
+        "AGS17",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "vdv:mrap:tigrmkord:/game/vehicles/tigr/bptigrkord.bptigrkord",
+      "faction": "VDV",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/Tigr/BP_Tigr_Kord.BP_Tigr_Kord",
+      "name": "Tigr-M Kord",
+      "aliases": [
+        "Tigr Kord"
+      ],
+      "keywords": [
+        "TIGRMKORD",
+        "TIGRKORD"
+      ],
+      "searchTokens": [
+        "Tigr",
+        "Kord",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "vdv:ltv:brdm2:/game/vehicles/brdm2/bpbrdm2rus.bpbrdm2rus",
+      "faction": "VDV",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/BRDM-2/BP_BRDM-2_RUS.BP_BRDM-2_RUS",
+      "name": "BRDM-2",
+      "aliases": [
+        "BRDM2"
+      ],
+      "keywords": [
+        "BRDM"
+      ],
+      "searchTokens": [
+        "BRDM",
+        "BRDM2",
+        "Game",
+        "Vehicles",
+        "BP",
+        "RUS"
+      ]
+    },
+    {
+      "id": "vdv:apc:btrd:/game/vehicles/btrd/bpbtrdtransport.bpbtrdtransport",
+      "faction": "VDV",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/BTR-D/BP_BTR-D_Transport.BP_BTR-D_Transport",
+      "name": "BTR-D",
+      "aliases": [
+        "BTRD"
+      ],
+      "keywords": [
+        "BTRD"
+      ],
+      "searchTokens": [
+        "BTR",
+        "BTRD",
+        "Game",
+        "Vehicles",
+        "BP",
+        "Transport"
+      ]
+    },
+    {
+      "id": "vdv:apc:btrdags17:/game/vehicles/btrd/bpbtrdags17.bpbtrdags17",
+      "faction": "VDV",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/BTR-D/BP_BTR-D_AGS17.BP_BTR-D_AGS17",
+      "name": "BTR-D AGS-17",
+      "aliases": [
+        "BTRD AGS17"
+      ],
+      "keywords": [
+        "BTRDAGS",
+        "BTRDAGS17"
+      ],
+      "searchTokens": [
+        "BTR",
+        "AGS",
+        "17",
+        "BTRD",
+        "AGS17",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "vdv:apc:btrdkord:/game/vehicles/btrd/bpbtrdkord.bpbtrdkord",
+      "faction": "VDV",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/BTR-D/BP_BTR-D_Kord.BP_BTR-D_Kord",
+      "name": "BTR-D Kord",
+      "aliases": [
+        "BTRD Kord"
+      ],
+      "keywords": [
+        "BTRDKORD"
+      ],
+      "searchTokens": [
+        "BTR",
+        "Kord",
+        "BTRD",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "vdv:apc:btrdpkm:/game/vehicles/btrd/bpbtrdpkm.bpbtrdpkm",
+      "faction": "VDV",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/BTR-D/BP_BTR-D_PKM.BP_BTR-D_PKM",
+      "name": "BTR-D PKM",
+      "aliases": [
+        "BTRD  PKM"
+      ],
+      "keywords": [
+        "BTRDPKM"
+      ],
+      "searchTokens": [
+        "BTR",
+        "PKM",
+        "BTRD",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "vdv:apc:btrmdm:/game/vehicles/btrmdm/bpbtrmdmtransport.bpbtrmdmtransport",
+      "faction": "VDV",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/BTR-MDM/BP_BTRMDM_Transport.BP_BTRMDM_Transport",
+      "name": "BTR-MDM",
+      "aliases": [
+        "BTRD MDM"
+      ],
+      "keywords": [
+        "BTRMDM",
+        "BTRDMDM"
+      ],
+      "searchTokens": [
+        "BTR",
+        "MDM",
+        "BTRD",
+        "Game",
+        "Vehicles",
+        "BP",
+        "BTRMDM",
+        "Transport"
+      ]
+    },
+    {
+      "id": "vdv:mbt:t72b3:/game/vehicles/t72b3/bpt72b3.bpt72b3",
+      "faction": "VDV",
+      "vehicleType": "MBT",
+      "asset": "/Game/Vehicles/T72B3/BP_T72B3.BP_T72B3",
+      "name": "T-72B3",
+      "aliases": [
+        "T72B3"
+      ],
+      "keywords": [
+        "T72"
+      ],
+      "searchTokens": [
+        "72B3",
+        "T72B3",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "vdv:ifv:bmd1m:/game/vehicles/bmd1m/bpbmd1m.bpbmd1m",
+      "faction": "VDV",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/BMD-1M/BP_BMD1M.BP_BMD1M",
+      "name": "BMD-1M",
+      "aliases": [],
+      "keywords": [
+        "BMD",
+        "1M1M"
+      ],
+      "searchTokens": [
+        "BMD",
+        "1M",
+        "Game",
+        "Vehicles",
+        "BP",
+        "BMD1M"
+      ]
+    },
+    {
+      "id": "vdv:ifv:bmd4m:/game/vehicles/bmd4m/bpbmd4m.bpbmd4m",
+      "faction": "VDV",
+      "vehicleType": "IFV",
+      "asset": "/Game/Vehicles/BMD-4M/BP_BMD4M.BP_BMD4M",
+      "name": "BMD-4M",
+      "aliases": [
+        "BMD4"
+      ],
+      "keywords": [
+        "BMD",
+        "4M4M"
+      ],
+      "searchTokens": [
+        "BMD",
+        "4M",
+        "BMD4",
+        "Game",
+        "Vehicles",
+        "BP",
+        "BMD4M"
+      ]
+    },
+    {
+      "id": "vdv:spaa:btrzd:/game/vehicles/btrd/bpbtrzd.bpbtrzd",
+      "faction": "VDV",
+      "vehicleType": "SPAA",
+      "asset": "/Game/Vehicles/BTR-D/BP_BTR-ZD.BP_BTR-ZD",
+      "name": "BTR-ZD",
+      "aliases": [
+        "BTRZD"
+      ],
+      "keywords": [
+        "BTRZD"
+      ],
+      "searchTokens": [
+        "BTR",
+        "ZD",
+        "BTRZD",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "vdv:mgs:sprutsdm1:/game/vehicles/sprutsdm1/bpsprut.bpsprut",
+      "faction": "VDV",
+      "vehicleType": "MGS",
+      "asset": "/Game/Vehicles/Sprut-SDM1/BP_Sprut.BP_Sprut",
+      "name": "Sprut-SDM1",
+      "aliases": [],
+      "keywords": [
+        "SPRUTSDM"
+      ],
+      "searchTokens": [
+        "Sprut",
+        "SDM1",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "wpmc:mrap:cpvm134minigun:/game/vehicles/cpv/bpcpvm134.bpcpvm134",
+      "faction": "WPMC",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/CPV/BP_CPV_M134.BP_CPV_M134",
+      "name": "CPV M134 Minigun",
+      "aliases": [
+        "CPV M134"
+      ],
+      "keywords": [
+        "CPVM",
+        "CPVM134"
+      ],
+      "searchTokens": [
+        "CPV",
+        "M134",
+        "Minigun",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "wpmc:mrap:cpvtransport:/game/vehicles/cpv/bpcpvtransport.bpcpvtransport",
+      "faction": "WPMC",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/CPV/BP_CPV_Transport.BP_CPV_Transport",
+      "name": "CPV Transport",
+      "aliases": [],
+      "keywords": [
+        "CPVTRANSPORT"
+      ],
+      "searchTokens": [
+        "CPV",
+        "Transport",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "wpmc:mrap:m1117:/game/vehicles/m1117/bpm1117.bpm1117",
+      "faction": "WPMC",
+      "vehicleType": "MRAP",
+      "asset": "/Game/Vehicles/M1117/BP_M1117.BP_M1117",
+      "name": "M1117",
+      "aliases": [],
+      "keywords": [
+        "M1117"
+      ],
+      "searchTokens": [
+        "M1117",
+        "Game",
+        "Vehicles",
+        "BP"
+      ]
+    },
+    {
+      "id": "wpmc:ltv:m1151m2:/game/vehicles/m1151wpmc/bpm1151wpmc.bpm1151wpmc",
+      "faction": "WPMC",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/M1151_WPMC/BP_M1151_WPMC.BP_M1151_WPMC",
+      "name": "M1151 M2",
+      "aliases": [],
+      "keywords": [
+        "M1151"
+      ],
+      "searchTokens": [
+        "M1151",
+        "M2",
+        "Game",
+        "Vehicles",
+        "WPMC",
+        "BP"
+      ]
+    },
+    {
+      "id": "wpmc:ltv:m1151m240:/game/vehicles/m1151wpmc/bpm1151m240wpmc.bpm1151m240wpmc",
+      "faction": "WPMC",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/M1151_WPMC/BP_M1151_M240_WPMC.BP_M1151_M240_WPMC",
+      "name": "M1151 M240",
+      "aliases": [],
+      "keywords": [
+        "M1151"
+      ],
+      "searchTokens": [
+        "M1151",
+        "M240",
+        "Game",
+        "Vehicles",
+        "WPMC",
+        "BP"
+      ]
+    },
+    {
+      "id": "wpmc:ltv:technicalm134minigun:/game/vehicles/technical2seaterwpmc/bptechnical2seaterm134black.bptechnical2seaterm134black",
+      "faction": "WPMC",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/Technical2Seater_WPMC/BP_Technical2Seater_M134_Black.BP_Technical2Seater_M134_Black",
+      "name": "Technical M134 Minigun",
+      "aliases": [
+        "SUV M134"
+      ],
+      "keywords": [
+        "TECHNICALM",
+        "TECHNICALM134",
+        "SUVM",
+        "SUVM134"
+      ],
+      "searchTokens": [
+        "Technical",
+        "M134",
+        "Minigun",
+        "SUV",
+        "Game",
+        "Vehicles",
+        "Technical2Seater",
+        "WPMC",
+        "BP",
+        "Black"
+      ]
+    },
+    {
+      "id": "wpmc:ltv:technicalm2:/game/vehicles/technical2seaterwpmc/bptechnical2seaterm2black.bptechnical2seaterm2black",
+      "faction": "WPMC",
+      "vehicleType": "LTV",
+      "asset": "/Game/Vehicles/Technical2Seater_WPMC/BP_Technical2Seater_M2_Black.BP_Technical2Seater_M2_Black",
+      "name": "Technical M2",
+      "aliases": [
+        "SUV M2"
+      ],
+      "keywords": [
+        "TECHNICALM",
+        "SUVM"
+      ],
+      "searchTokens": [
+        "Technical",
+        "M2",
+        "SUV",
+        "Game",
+        "Vehicles",
+        "Technical2Seater",
+        "WPMC",
+        "BP",
+        "Black"
+      ]
+    },
+    {
+      "id": "wpmc:td:m1151tow:/game/vehicles/m1151wpmc/bpm1151towwpmc.bpm1151towwpmc",
+      "faction": "WPMC",
+      "vehicleType": "TD",
+      "asset": "/Game/Vehicles/M1151_WPMC/BP_M1151_TOW_WPMC.BP_M1151_TOW_WPMC",
+      "name": "M1151 TOW",
+      "aliases": [],
+      "keywords": [
+        "TOW",
+        "M1151"
+      ],
+      "searchTokens": [
+        "M1151",
+        "TOW",
+        "Game",
+        "Vehicles",
+        "WPMC",
+        "BP"
+      ]
+    },
+    {
+      "id": "wpmc:apc:m113a3m2:/game/vehicles/m113a3wpmc/bpm113a3wpmcm2.bpm113a3wpmcm2",
+      "faction": "WPMC",
+      "vehicleType": "APC",
+      "asset": "/Game/Vehicles/M113A3_WPMC/BP_M113A3_WPMC_M2.BP_M113A3_WPMC_M2",
+      "name": "M113A3 M2",
+      "aliases": [],
+      "keywords": [
+        "M113"
+      ],
+      "searchTokens": [
+        "M113A3",
+        "M2",
+        "Game",
+        "Vehicles",
+        "WPMC",
+        "BP"
+      ]
+    },
+    {
+      "id": "wpmc:mbt:m60t:/game/vehicles/m60twpmc/bpm60twpmc.bpm60twpmc",
+      "faction": "WPMC",
+      "vehicleType": "MBT",
+      "asset": "/Game/Vehicles/M60T_WPMC/BP_M60T_WPMC.BP_M60T_WPMC",
+      "name": "M60T",
+      "aliases": [],
+      "keywords": [
+        "M60"
+      ],
+      "searchTokens": [
+        "M60T",
+        "Game",
+        "Vehicles",
+        "WPMC",
+        "BP"
+      ]
+    },
+    {
+      "id": "wpmc:ah:loachcas:/game/vehicles/loachcaswpmc/bploachcas.bploachcas",
+      "faction": "WPMC",
+      "vehicleType": "AH",
+      "asset": "/Game/Vehicles/Loach_CAS_WPMC/BP_Loach_CAS.BP_Loach_CAS",
+      "name": "Loach CAS",
+      "aliases": [
+        "CAS"
+      ],
+      "keywords": [
+        "LOACHCAS",
+        "CAS"
+      ],
+      "searchTokens": [
+        "Loach",
+        "CAS",
+        "Game",
+        "Vehicles",
+        "WPMC",
+        "BP"
+      ]
+    },
+    {
+      "id": "wpmc:ah:loachcaslarge:/game/vehicles/loachcaswpmc/bploachcaslarge.bploachcaslarge",
+      "faction": "WPMC",
+      "vehicleType": "AH",
+      "asset": "/Game/Vehicles/Loach_CAS_WPMC/BP_Loach_CAS_Large.BP_Loach_CAS_Large",
+      "name": "Loach CAS Large",
+      "aliases": [
+        "CAS"
+      ],
+      "keywords": [
+        "LOACHCASLARGE",
+        "CAS"
+      ],
+      "searchTokens": [
+        "Loach",
+        "CAS",
+        "Large",
+        "Game",
+        "Vehicles",
+        "WPMC",
+        "BP"
+      ]
+    },
+    {
+      "id": "wpmc:ah:loachcassinglelarge:/game/vehicles/loachcaswpmc/bploachcassinglelarge.bploachcassinglelarge",
+      "faction": "WPMC",
+      "vehicleType": "AH",
+      "asset": "/Game/Vehicles/Loach_CAS_WPMC/BP_Loach_CAS_SingleLarge.BP_Loach_CAS_SingleLarge",
+      "name": "Loach CAS Single Large",
+      "aliases": [
+        "CAS"
+      ],
+      "keywords": [
+        "LOACHCASSINGLELARGE",
+        "CAS"
+      ],
+      "searchTokens": [
+        "Loach",
+        "CAS",
+        "Single",
+        "Large",
+        "Game",
+        "Vehicles",
+        "WPMC",
+        "BP",
+        "SingleLarge"
+      ]
+    },
+    {
+      "id": "wpmc:ah:loachcassmall:/game/vehicles/loachcaswpmc/bploachcassmall.bploachcassmall",
+      "faction": "WPMC",
+      "vehicleType": "AH",
+      "asset": "/Game/Vehicles/Loach_CAS_WPMC/BP_Loach_CAS_Small.BP_Loach_CAS_Small",
+      "name": "Loach CAS Small",
+      "aliases": [
+        "CAS"
+      ],
+      "keywords": [
+        "LOACHCASSMALL",
+        "CAS"
+      ],
+      "searchTokens": [
+        "Loach",
+        "CAS",
+        "Small",
+        "Game",
+        "Vehicles",
+        "WPMC",
+        "BP"
+      ]
+    },
+    {
+      "id": "wpmc:ah:loachscout:/game/vehicles/loachwpmc/bploach.bploach",
+      "faction": "WPMC",
+      "vehicleType": "AH",
+      "asset": "/Game/Vehicles/Loach_WPMC/BP_Loach.BP_Loach",
+      "name": "Loach Scout",
+      "aliases": [
+        "zsj"
+      ],
+      "keywords": [
+        "LOACHSCOUT",
+        "ZSJ"
+      ],
+      "searchTokens": [
+        "Loach",
+        "Scout",
+        "zsj",
+        "Game",
+        "Vehicles",
+        "WPMC",
+        "BP"
+      ]
+    },
+    {
+      "id": "wpmc:spa:technicalmortar:/game/vehicles/technical2seaterwpmc/bptechnical2seatermortarblack.bptechnical2seatermortarblack",
+      "faction": "WPMC",
+      "vehicleType": "SPA",
+      "asset": "/Game/Vehicles/Technical2Seater_WPMC/BP_Technical2Seater_Mortar_Black.BP_Technical2Seater_Mortar_Black",
+      "name": "Technical Mortar",
+      "aliases": [
+        "SUV Mortar"
+      ],
+      "keywords": [
+        "TECHNICALMORTAR",
+        "SUVMORTAR"
+      ],
+      "searchTokens": [
+        "Technical",
+        "Mortar",
+        "SUV",
+        "Game",
+        "Vehicles",
+        "Technical2Seater",
+        "WPMC",
+        "BP",
+        "Black"
+      ]
+    }
+  ],
+  "defaultNamePatterns": [
+    "^squad\\s*\\d+$",
+    "^小队\\s*\\d+$",
+    "^队伍\\s*\\d+$",
+    "^team\\s*\\d+$"
+  ],
+  "infantryNames": [
+    "哕哒曼牌全能战场救火队",
+    "机械化步兵队",
+    "拉点队",
+    "空突步兵队",
+    "空突利刃",
+    "萌新队",
+    "萌新小队",
+    "填线步兵队",
+    "91会员队",
+    "腐竹近卫掷弹皇家队",
+    "SAS特种步兵队",
+    "正面抗线队",
+    "保安大队",
+    "78大队",
+    "虎虎虎",
+    "关注asoul谢谢喵队",
+    "弱智小学生步兵队",
+    "摸鱼大队",
+    "情报支援侦查队",
+    "突击队",
+    "尖刀队",
+    "聊天小组"
+  ],
+  "specialInfantryNames": [
+    "龟壳",
+    "GUIKE",
+    "指挥小队",
+    "迫击炮小队",
+    "后勤队",
+    "后勤",
+    "货拉拉",
+    "创伤小组",
+    "萨尼铁塔"
+  ]
+}

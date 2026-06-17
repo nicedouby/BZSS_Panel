@@ -957,6 +957,129 @@ async function testSquadNameRulesApiReadsAndWritesExactMappings() {
   assert.deepEqual(savedRaw.rules.support.exact, ["logi"]);
 }
 
+async function testSquadNamePolicyRoutesExposeTestAndProtectedSave() {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-squad-name-policy-api-"));
+  const policyPath = path.join(tempDir, "policy.json");
+  await fs.writeFile(policyPath, JSON.stringify({
+    version: 1,
+    suggestionLimit: 5,
+    entries: [
+      {
+        id: "afu-ifv-bmp-1",
+        faction: "AFU",
+        vehicleType: "IFV",
+        asset: "/Game/Vehicles/BMP1_AFU/BP_BMP1_AFU.BP_BMP1_AFU",
+        name: "BMP-1",
+        aliases: [],
+        keywords: ["BMP"],
+      },
+      {
+        id: "afu-ifv-bmp-2",
+        faction: "AFU",
+        vehicleType: "IFV",
+        asset: "/Game/Vehicles/BMP2_AFU/BP_BMP2_AFU.BP_BMP2_AFU",
+        name: "BMP-2",
+        aliases: ["BMP 2"],
+        keywords: ["BMP"],
+      },
+    ],
+  }), "utf8");
+
+  const baseCore = {
+    config: {
+      get(pathText) {
+        return pathText === "squadNamePolicy.path" ? policyPath : undefined;
+      },
+    },
+  };
+
+  const viewerServer = createServer({
+    core: {
+      ...baseCore,
+      authManager: {
+        getUserFromRequest() {
+          return { username: "viewer", role: "Operator" };
+        },
+        hasEverything() {
+          return false;
+        },
+      },
+    },
+  });
+
+  const stateRecorder = createRecorder();
+  await viewerServer.handleRequest({
+    method: "GET",
+    url: "/api/squad-name-policy/state",
+    headers: { host: "localhost" },
+    socket: {},
+  }, stateRecorder.res);
+  assert.equal(stateRecorder.state.status, 200);
+  assert.equal(JSON.parse(stateRecorder.state.body).stats.entries, 2);
+
+  const testRecorder = createRecorder();
+  const testReq = Readable.from([JSON.stringify({ name: "BMP队" })]);
+  testReq.method = "POST";
+  testReq.url = "/api/squad-name-policy/test";
+  testReq.headers = { host: "localhost", "content-type": "application/json" };
+  testReq.socket = {};
+  await viewerServer.handleRequest(testReq, testRecorder.res);
+  assert.equal(testRecorder.state.status, 200);
+  const testBody = JSON.parse(testRecorder.state.body);
+  assert.equal(testBody.valid, false);
+  assert.deepEqual(testBody.keywordSuggestions.map((item) => item.name), ["BMP-1", "BMP-2"]);
+
+  const forbiddenRecorder = createRecorder();
+  const forbiddenReq = Readable.from([JSON.stringify({ suggestionLimit: 3, entries: [] })]);
+  forbiddenReq.method = "POST";
+  forbiddenReq.url = "/api/squad-name-policy/state";
+  forbiddenReq.headers = { host: "localhost", "content-type": "application/json" };
+  forbiddenReq.socket = {};
+  await viewerServer.handleRequest(forbiddenReq, forbiddenRecorder.res);
+  assert.equal(forbiddenRecorder.state.status, 403);
+
+  const adminServer = createServer({
+    core: {
+      ...baseCore,
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin", role: "SuperAdmin", isSuperAdmin: true };
+        },
+        hasEverything() {
+          return true;
+        },
+      },
+    },
+  });
+
+  const saveRecorder = createRecorder();
+  const saveReq = Readable.from([JSON.stringify({
+    suggestionLimit: 3,
+    entries: [
+      {
+        id: "tank",
+        faction: "ADF",
+        vehicleType: "MBT",
+        asset: "/Game/Vehicles/AUS_M1A1/BP_AUS_M1A1.BP_AUS_M1A1",
+        name: "M1A1",
+        aliases: ["Abrams"],
+        keywords: ["TANK"],
+      },
+    ],
+  })]);
+  saveReq.method = "POST";
+  saveReq.url = "/api/squad-name-policy/state";
+  saveReq.headers = { host: "localhost", "content-type": "application/json" };
+  saveReq.socket = {};
+  await adminServer.handleRequest(saveReq, saveRecorder.res);
+  assert.equal(saveRecorder.state.status, 200);
+  const saveBody = JSON.parse(saveRecorder.state.body);
+  assert.equal(saveBody.suggestionLimit, 3);
+  assert.equal(saveBody.stats.entries, 1);
+  const savedRaw = JSON.parse(await fs.readFile(policyPath, "utf8"));
+  assert.equal(savedRaw.entries[0].name, "M1A1");
+}
+
 async function testCombatCleanRoutesDoNotForceCurrentServerFilter() {
   const calls = [];
   const server = createServer({
@@ -2688,6 +2811,7 @@ await testPlayerPlaytimeOverrideRouteSetsHours();
 await testSquadNameClassifierHelperCoversCoreRules();
 await testSquadNameClassifierApiReturnsClassification();
 await testSquadNameRulesApiReadsAndWritesExactMappings();
+await testSquadNamePolicyRoutesExposeTestAndProtectedSave();
 await testCombatCleanRoutesDoNotForceCurrentServerFilter();
 await testWeaponCollectorApiRequiresGet();
 await testGroupReportSnapshotRouteReturnsWrappedSnapshot();

@@ -28,6 +28,7 @@ export const WEB_PAGE_PERMISSION_MATRIX = Object.freeze([
   { route: "/debug/draw-vote-guard", requiredPermission: "debug.draw_vote_guard.view" },
   { route: "/debug/welcome-join-warning", requiredPermission: "debug.welcome_join_warning.view" },
   { route: "/debug/squad-name-classifier", requiredPermission: "debug.squad_name_classifier.view" },
+  { route: "/debug/squad-name-policy", requiredPermission: "debug.squad_name_policy.view" },
   { route: "/system/status", requiredPermission: "settings.manage" },
   { route: "/system/admin-users", requiredPermission: "admin_users.manage", superAdminOnly: true },
   { route: "/system/audit-records", requiredPermission: "audit.view" },

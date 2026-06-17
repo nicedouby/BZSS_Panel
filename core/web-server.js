@@ -19,6 +19,11 @@ import {
   updateSquadNameExactRuleConfig,
 } from "./squad-name-classifier.js";
 import {
+  readSquadNamePolicyState,
+  saveSquadNamePolicyState,
+  testSquadNamePolicy,
+} from "../domain/squad-name-policy/index.js";
+import {
   getAllPlugins,
   setPluginEnabled as updatePluginEnabled,
   updatePluginConfig as updatePluginManifestConfig,
@@ -313,6 +318,41 @@ export class WebServer {
     ) {
       await this.handleAdminUsersApi(url, req, res, user);
       return;
+    }
+
+    if (url.pathname === "/api/squad-name-policy/state") {
+      if (req.method === "GET") {
+        return this.json(res, 200, await readSquadNamePolicyState(this.core.config));
+      }
+
+      if (req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, await saveSquadNamePolicyState(this.core.config, body));
+      }
+
+      return this.json(res, 405, {
+        error: "MethodNotAllowed",
+        message: "Only GET and POST are supported.",
+      });
+    }
+
+    if (url.pathname === "/api/squad-name-policy/test") {
+      if (req.method !== "POST") {
+        return this.json(res, 405, {
+          error: "MethodNotAllowed",
+          message: "Only POST is supported.",
+        });
+      }
+      const body = await this.readJsonBody(req);
+      const name = body?.name ?? body?.squadName ?? "";
+      if (!String(name ?? "").trim()) {
+        return this.json(res, 400, {
+          error: "MissingName",
+          message: "Squad name is required.",
+        });
+      }
+      return this.json(res, 200, testSquadNamePolicy(name, this.core.config));
     }
 
     if (url.pathname === "/api/squad-name/rules") {
