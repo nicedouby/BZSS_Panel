@@ -1,7 +1,7 @@
 <template>
   <teleport to="body">
     <transition name="settings-fade">
-      <div v-if="settings.open" class="settings-overlay" @click.self="settings.closeDrawer()">
+      <div v-if="settings.open" class="settings-overlay" v-backdrop-close="settings.closeDrawer">
         <section class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title">
           <header class="main-head">
             <div class="main-head-copy">

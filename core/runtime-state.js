@@ -72,6 +72,14 @@ export class RuntimeState {
       this.updateSquads(event?.squads ?? []);
     }));
 
+    this.unsubscribers.push(eventBus.onModuleEvent("module.matchState", "playersUpdated", (event) => {
+      this.updatePlayers(event?.players ?? []);
+    }));
+
+    this.unsubscribers.push(eventBus.onModuleEvent("module.matchState", "squadsUpdated", (event) => {
+      this.updateSquads(event?.squads ?? []);
+    }));
+
     this.unsubscribers.push(eventBus.onCoreEvent("*", (event) => {
       this.recordEvent("raw", event);
       if (String(event?.eventName ?? "").startsWith("RCON_")) this.recordEvent("rcon", event);

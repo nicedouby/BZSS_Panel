@@ -1,5 +1,5 @@
 <template>
-  <div v-if="open" class="server-metrics-dialog-overlay" @click.self="emit('close')">
+  <div v-if="open" class="server-metrics-dialog-overlay" v-backdrop-close="() => emit('close')">
     <AppCard class="server-metrics-dialog-card" title="历史日期" description="选择一个或多个日期后点击应用。">
       <div class="dialog-body">
         <div class="date-grid">

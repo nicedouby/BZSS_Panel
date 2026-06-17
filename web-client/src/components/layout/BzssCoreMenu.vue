@@ -14,6 +14,9 @@
         <button type="button" class="bzss-core-item" role="menuitem" @click="openDialog('time')">
           Time
         </button>
+        <button type="button" class="bzss-core-item" role="menuitem" @click="openDialog('vehicle')">
+          Spawn Vehicle
+        </button>
         <button type="button" class="bzss-core-item" role="menuitem" @click="openDialog('raw')">
           Raw Command
         </button>
@@ -22,7 +25,7 @@
 
     <teleport to="body">
       <transition name="menu-fade">
-        <div v-if="dialogOpen" class="bzss-core-overlay" @click.self="closeDialog">
+        <div v-if="dialogOpen" class="bzss-core-overlay" v-backdrop-close="closeDialog">
           <section class="bzss-core-dialog" role="dialog" aria-modal="true" :aria-labelledby="dialogTitleId">
             <header class="bzss-core-dialog-head">
               <div>
@@ -86,6 +89,162 @@
               </footer>
             </form>
 
+            <form v-else-if="dialogMode === 'vehicle'" class="bzss-core-form" @submit.prevent="submitVehicleCommand">
+              <!-- Target Player Selection -->
+              <label class="bzss-core-field">
+                <span>Target Player</span>
+                <div class="bzss-core-player-input-group">
+                  <select v-if="!isCustomPlayer" v-model="targetPlayer" class="bzss-core-select" :disabled="isBatchSpawning">
+                    <option value="" disabled>-- Select Online Player --</option>
+                    <option v-for="player in onlinePlayersList" :key="player.name" :value="player.name">
+                      {{ player.label }}
+                    </option>
+                  </select>
+                  <input
+                    v-else
+                    v-model.trim="targetPlayer"
+                    type="text"
+                    placeholder="Enter Player Name"
+                    autocomplete="off"
+                    :disabled="isBatchSpawning"
+                  />
+                  <button
+                    type="button"
+                    class="bzss-core-toggle-player-btn"
+                    :disabled="isBatchSpawning"
+                    @click="toggleCustomPlayer"
+                  >
+                    {{ isCustomPlayer ? "Select Online" : "Manual Input" }}
+                  </button>
+                </div>
+              </label>
+
+              <!-- Vehicle Asset Path -->
+              <label class="bzss-core-field">
+                <span>Vehicle Asset Path</span>
+                <div class="bzss-core-input-with-action">
+                  <input
+                    v-model.trim="vehicleAssetPath"
+                    type="text"
+                    placeholder="/Game/Vehicles/..."
+                    autocomplete="off"
+                    :disabled="isBatchSpawning"
+                  />
+                  <button
+                    type="button"
+                    class="bzss-core-favorite-btn"
+                    :class="{ 'is-active': isCurrentPathFavorite }"
+                    title="Add to Favorites"
+                    :disabled="!vehicleAssetPath || isBatchSpawning"
+                    @click="toggleFavorite"
+                  >
+                    {{ isCurrentPathFavorite ? "★ Saved" : "☆ Save" }}
+                  </button>
+                </div>
+              </label>
+
+              <!-- Vehicle Asset Shortcuts Bar -->
+              <div class="bzss-core-shortcuts-section">
+                <div class="bzss-core-tabs">
+                  <button
+                    v-for="(cat, key) in vehicleCategories"
+                    :key="key"
+                    type="button"
+                    class="bzss-core-tab-btn"
+                    :class="{ 'is-active': activeTab === key }"
+                    @click="activeTab = key"
+                  >
+                    {{ cat.label }}
+                  </button>
+                  <button
+                    type="button"
+                    class="bzss-core-tab-btn"
+                    :class="{ 'is-active': activeTab === 'favorites' }"
+                    @click="activeTab = 'favorites'"
+                  >
+                    Favorites ({{ favoriteVehicles.length }})
+                  </button>
+                </div>
+
+                <div class="bzss-core-shortcuts-grid">
+                  <template v-if="activeTab !== 'favorites'">
+                    <button
+                      v-for="item in vehicleCategories[activeTab].items"
+                      :key="item.path"
+                      type="button"
+                      class="bzss-core-shortcut-item"
+                      :disabled="isBatchSpawning"
+                      @click="vehicleAssetPath = item.path"
+                    >
+                      <span class="bzss-core-shortcut-name">{{ item.name }}</span>
+                      <span class="bzss-core-shortcut-path">{{ item.path }}</span>
+                    </button>
+                  </template>
+                  <template v-else>
+                    <div v-if="favoriteVehicles.length === 0" class="bzss-core-no-favorites">
+                      No saved paths. Use 'Save' button.
+                    </div>
+                    <button
+                      v-for="item in favoriteVehicles"
+                      :key="item.path"
+                      type="button"
+                      class="bzss-core-shortcut-item"
+                      :disabled="isBatchSpawning"
+                      @click="vehicleAssetPath = item.path"
+                    >
+                      <span class="bzss-core-shortcut-name">{{ item.name }}</span>
+                      <span class="bzss-core-shortcut-path">{{ item.path }}</span>
+                    </button>
+                  </template>
+                </div>
+              </div>
+
+              <!-- Batch Spawn Count -->
+              <label class="bzss-core-field">
+                <span>Batch Spawn Count (1-5, with 0.25s delay)</span>
+                <input
+                  v-model.number="batchSpawnCount"
+                  type="number"
+                  min="1"
+                  max="5"
+                  placeholder="1"
+                  :disabled="isBatchSpawning"
+                />
+              </label>
+
+              <!-- Command Preview -->
+              <div class="bzss-core-preview">
+                <span>Command Preview</span>
+                <code>{{ vehiclePreview }}</code>
+              </div>
+
+              <!-- Batch Spawning Progress -->
+              <div v-if="isBatchSpawning" class="bzss-core-progress-container">
+                <div class="bzss-core-progress-header">
+                  <span>Batch Spawning Sequence</span>
+                  <span>{{ batchSpawningProgress }} / {{ batchSpawningTotal }}</span>
+                </div>
+                <div class="bzss-core-progress-bar-bg">
+                  <div
+                    class="bzss-core-progress-bar-fill"
+                    :style="{ width: `${(batchSpawningProgress / batchSpawningTotal) * 100}%` }"
+                  ></div>
+                </div>
+                <div class="bzss-core-progress-logs">
+                  <div v-for="(log, idx) in batchSpawningLogs" :key="idx" class="bzss-core-log-line">
+                    {{ log }}
+                  </div>
+                </div>
+              </div>
+
+              <footer class="bzss-core-actions">
+                <button type="button" class="bzss-core-secondary" :disabled="isBatchSpawning" @click="closeDialog">Cancel</button>
+                <button type="submit" class="bzss-core-primary" :disabled="busy || !targetPlayer || !vehicleAssetPath">
+                  {{ isBatchSpawning ? "Spawning..." : "Run" }}
+                </button>
+              </footer>
+            </form>
+
             <form v-else class="bzss-core-form" @submit.prevent="submitRawCommand">
               <label class="bzss-core-field">
                 <span>Raw command</span>
@@ -129,8 +288,14 @@ import { t } from "../../i18n";
 import { useAuthStore } from "../../stores/auth.store";
 import { useUiStore } from "../../stores/ui.store";
 import { hasPermission } from "../../shared/rcon-permissions.js";
+import { usePlayerStore } from "../../stores/player.store";
 
-type DialogMode = "weather" | "time" | "raw";
+type DialogMode = "weather" | "time" | "raw" | "vehicle";
+
+interface VehiclePreset {
+  name: string;
+  path: string;
+}
 
 const weatherOptions = [
   "ClearSkies",
@@ -148,8 +313,57 @@ const weatherOptions = [
   "SnowLight",
 ] as const;
 
+const vehicleCategories = {
+  tanks: {
+    label: "Tanks",
+    items: [
+      { name: "M1A2 (US)", path: "/Game/Vehicles/M1A2/BP_M1A2.BP_M1A2_C" },
+      { name: "T-72B3 (RU)", path: "/Game/Vehicles/T72/BP_T72.BP_T72_C" },
+      { name: "Challenger 2 (UK)", path: "/Game/Vehicles/Challenger2/BP_Challenger2.BP_Challenger2_C" },
+      { name: "Leopard 2A6 (GER)", path: "/Game/Vehicles/Leopard2A6/BP_Leopard2A6.BP_Leopard2A6_C" },
+      { name: "M1A1 SA (AUS)", path: "/Game/Vehicles/AUS_M1A1/BP_AUS_M1A1.BP_AUS_M1A1_C" },
+      { name: "ZTZ-99A (CN)", path: "/Game/Vehicles/ZTZ99A/BP_ZTZ99A.BP_ZTZ99A_C" },
+    ],
+  },
+  ifvs: {
+    label: "IFVs",
+    items: [
+      { name: "M2A3 Bradley (US)", path: "/Game/Vehicles/M2A3Bradley/BP_M2A3Bradley.BP_M2A3Bradley_C" },
+      { name: "BMP-3 (RU)", path: "/Game/Vehicles/BMP3/BP_BMP3.BP_BMP3_C" },
+      { name: "FV510 Warrior (UK)", path: "/Game/Vehicles/FV510/BP_FV510_UA.BP_FV510_UA_C" },
+      { name: "ZBD-04A (CN)", path: "/Game/Vehicles/ZBD04A/BP_ZBD04A.BP_ZBD04A_C" },
+    ],
+  },
+  apcs: {
+    label: "APCs",
+    items: [
+      { name: "BTR-82A (RU)", path: "/Game/Vehicles/BTR82/BP_BTR82A.BP_BTR82A_C" },
+      { name: "Stryker (US)", path: "/Game/Vehicles/Stryker/BP_Stryker.BP_Stryker_C" },
+      { name: "Coyote (CAN)", path: "/Game/Vehicles/Coyote/BP_Coyote.BP_Coyote_C" },
+      { name: "ZBL-08 (CN)", path: "/Game/Vehicles/ZBL08/BP_ZBL08.BP_ZBL08_C" },
+    ],
+  },
+  helis: {
+    label: "Helis",
+    items: [
+      { name: "UH-60M Blackhawk (US)", path: "/Game/Vehicles/UH60/BP_UH60.BP_UH60_C" },
+      { name: "Mi-8 Hip (RU)", path: "/Game/Vehicles/Mi8/BP_Mi8.BP_Mi8_C" },
+      { name: "Z-9G (CN)", path: "/Game/Vehicles/Z9/BP_Z9_China.BP_Z9_China_C" },
+    ],
+  },
+  trucks: {
+    label: "Trucks",
+    items: [
+      { name: "M939 Transport (US)", path: "/Game/Vehicles/M939/BP_M939_Transport.BP_M939_Transport_C" },
+      { name: "Kamaz Transport (RU)", path: "/Game/Vehicles/Kamaz/BP_Kamaz_Transport.BP_Kamaz_Transport_C" },
+      { name: "SX2190 Transport (CN)", path: "/Game/Vehicles/SX2190/BP_SX2190_Transport.BP_SX2190_Transport_C" },
+    ],
+  },
+} as const;
+
 const auth = useAuthStore();
 const ui = useUiStore();
+const playerStore = usePlayerStore();
 const rootEl = ref<HTMLElement | null>(null);
 const menuOpen = ref(false);
 const dialogOpen = ref(false);
@@ -160,22 +374,126 @@ const weatherTransitionValue = ref("10");
 const timeParameter = ref("");
 const rawCommand = ref("");
 
+// Vehicle spawning states
+const targetPlayer = ref("");
+const isCustomPlayer = ref(false);
+const vehicleAssetPath = ref("");
+const batchSpawnCount = ref(1);
+const activeTab = ref<keyof typeof vehicleCategories | "favorites">("tanks");
+const favoriteVehicles = ref<VehiclePreset[]>([]);
+
+// Progress tracking states
+const isBatchSpawning = ref(false);
+const batchSpawningProgress = ref(0);
+const batchSpawningTotal = ref(0);
+const batchSpawningLogs = ref<string[]>([]);
+
 const userPermissions = computed(() => auth.user?.permissions ?? []);
 const canUse = computed(() => Boolean(auth.user?.isSuperAdmin || hasPermission(userPermissions.value, "bzss_core.use")));
 const dialogTitleId = computed(() => `bzss-core-${dialogMode.value}-title`);
 const dialogTitle = computed(() => {
   if (dialogMode.value === "weather") return "Set Weather";
   if (dialogMode.value === "time") return "Set Time";
+  if (dialogMode.value === "vehicle") return "Spawn Vehicle";
   return "Raw Command";
 });
 const dialogSubtitle = computed(() => {
   if (dialogMode.value === "weather") return "Pick a weather keyword and set the transition value.";
   if (dialogMode.value === "time") return "Final format: SetTime:XXXX";
+  if (dialogMode.value === "vehicle") return "Select target player, input asset path or choose from shortcuts.";
   return "Everything except the paths is sent as raw text.";
 });
 const weatherPreview = computed(() => `TransitionWeather:${selectedWeather.value},${weatherTransitionValue.value || "10"}`);
 const timePreview = computed(() => `SetTime:${timeParameter.value || "XXXX"}`);
 const rawPreview = computed(() => rawCommand.value || "Enter a full raw command");
+const vehiclePreview = computed(() => {
+  const p = targetPlayer.value || "Player";
+  const path = vehicleAssetPath.value || "AssetPath";
+  return `CreateVehicle:${p},${path}`;
+});
+
+const onlinePlayersList = computed(() => {
+  const list = playerStore.active.map((p) => {
+    const cleanName = stripPlayerNamePrefix(p.name);
+    const isMe = normalizeSteam64(p.steamID ?? p.steamId ?? p.steam64) === normalizeSteam64(auth.user?.steam64);
+    return {
+      name: cleanName,
+      label: isMe ? `${cleanName} (You)` : cleanName,
+    };
+  });
+  return list.sort((a, b) => a.name.localeCompare(b.name));
+});
+
+const isCurrentPathFavorite = computed(() => {
+  const path = vehicleAssetPath.value.trim();
+  if (!path) return false;
+  return favoriteVehicles.value.some((item) => item.path === path);
+});
+
+function normalizeSteam64(value: unknown) {
+  const text = String(value ?? "").trim();
+  return /^\d{17}$/.test(text) ? text : "";
+}
+
+function stripPlayerNamePrefix(value: unknown) {
+  const text = String(value ?? "").trim().replace(/\s+/g, " ");
+  if (!text) return "";
+  const parts = text.split(" ").filter(Boolean);
+  return parts[parts.length - 1] ?? text;
+}
+
+function loadFavorites() {
+  try {
+    const raw = localStorage.getItem("bzss_core_favorite_vehicles");
+    favoriteVehicles.value = raw ? JSON.parse(raw) : [];
+  } catch {
+    favoriteVehicles.value = [];
+  }
+}
+
+function saveFavorites() {
+  localStorage.setItem("bzss_core_favorite_vehicles", JSON.stringify(favoriteVehicles.value));
+}
+
+function toggleFavorite() {
+  const path = vehicleAssetPath.value.trim();
+  if (!path) return;
+  const index = favoriteVehicles.value.findIndex((item) => item.path === path);
+  if (index >= 0) {
+    favoriteVehicles.value.splice(index, 1);
+  } else {
+    const parts = path.split("/");
+    let last = parts[parts.length - 1] || "Vehicle";
+    if (last.includes(".")) {
+      last = last.split(".")[0];
+    }
+    if (last.startsWith("BP_")) {
+      last = last.slice(3);
+    }
+    favoriteVehicles.value.push({ name: last, path });
+  }
+  saveFavorites();
+}
+
+function toggleCustomPlayer() {
+  isCustomPlayer.value = !isCustomPlayer.value;
+  if (!isCustomPlayer.value) {
+    const steam64 = normalizeSteam64(auth.user?.steam64);
+    const matched = steam64 ? playerStore.active.find((item) => normalizeSteam64(item?.steamID ?? item?.steamId ?? item?.steam64) === steam64) : null;
+    if (matched) {
+      targetPlayer.value = stripPlayerNamePrefix(matched.name);
+    } else if (playerStore.active.length > 0) {
+      targetPlayer.value = stripPlayerNamePrefix(playerStore.active[0].name);
+    } else {
+      targetPlayer.value = "";
+    }
+  } else {
+    targetPlayer.value = "";
+  }
+}
+
+// Initial Favorites Load
+loadFavorites();
 
 function addWindowListeners() {
   window.addEventListener("pointerdown", onWindowPointerDown);
@@ -234,6 +552,24 @@ function openDialog(mode: DialogMode) {
     timeParameter.value = "";
   } else if (mode === "raw") {
     rawCommand.value = "";
+  } else if (mode === "vehicle") {
+    vehicleAssetPath.value = "";
+    batchSpawnCount.value = 1;
+    isBatchSpawning.value = false;
+    batchSpawningProgress.value = 0;
+    batchSpawningTotal.value = 0;
+    batchSpawningLogs.value = [];
+    
+    const steam64 = normalizeSteam64(auth.user?.steam64);
+    const matched = steam64 ? playerStore.active.find((item) => normalizeSteam64(item?.steamID ?? item?.steamId ?? item?.steam64) === steam64) : null;
+    
+    if (matched) {
+      targetPlayer.value = stripPlayerNamePrefix(matched.name);
+      isCustomPlayer.value = false;
+    } else {
+      targetPlayer.value = "";
+      isCustomPlayer.value = playerStore.active.length === 0;
+    }
   }
 }
 
@@ -256,6 +592,66 @@ async function submitTimeCommand() {
     directive: "SetTime",
     parameter,
   });
+}
+
+async function submitVehicleCommand() {
+  const path = vehicleAssetPath.value.trim();
+  const player = targetPlayer.value.trim();
+  if (!path || !player) return;
+
+  const count = Math.max(1, Math.min(5, Number(batchSpawnCount.value) || 1));
+  
+  if (count === 1) {
+    await executeCommand({
+      directive: "CreateVehicle",
+      parameter: `${player},${path}`,
+    });
+    return;
+  }
+
+  if (busy.value || isBatchSpawning.value) return;
+  busy.value = true;
+  isBatchSpawning.value = true;
+  batchSpawningProgress.value = 0;
+  batchSpawningTotal.value = count;
+  batchSpawningLogs.value = [];
+
+  try {
+    for (let i = 0; i < count; i++) {
+      batchSpawningProgress.value = i + 1;
+      
+      if (i > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+
+      const result = await executeBzssCoreCommand({
+        directive: "CreateVehicle",
+        parameter: `${player},${path}`,
+      });
+
+      if (result.ok) {
+        batchSpawningLogs.value.push(`[Success] Vehicle #${i + 1} spawned.`);
+      } else {
+        batchSpawningLogs.value.push(`[Failed] Vehicle #${i + 1}: ${result.message || "Unknown error"}`);
+      }
+    }
+
+    ui.pushToast({
+      title: "Batch Spawning Finished",
+      message: `Completed sequential spawning of ${count} vehicles.`,
+      tone: "ok",
+    });
+    closeDialog();
+  } catch (error: any) {
+    ui.pushToast({
+      title: "Batch Spawning Error",
+      message: error?.message || "Sequential spawning failed.",
+      tone: "error",
+    });
+  } finally {
+    busy.value = false;
+    isBatchSpawning.value = false;
+  }
 }
 
 async function submitRawCommand() {
@@ -518,6 +914,186 @@ onBeforeUnmount(() => {
 .menu-fade-leave-to {
   opacity: 0;
   transform: translateY(-4px);
+}
+
+.bzss-core-player-input-group,
+.bzss-core-input-with-action {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.bzss-core-player-input-group input,
+.bzss-core-player-input-group select,
+.bzss-core-input-with-action input {
+  flex: 1;
+}
+
+.bzss-core-toggle-player-btn,
+.bzss-core-favorite-btn {
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.bzss-core-toggle-player-btn:hover,
+.bzss-core-favorite-btn:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-hover);
+  color: var(--color-text-primary);
+}
+
+.bzss-core-favorite-btn.is-active {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.4);
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.bzss-core-shortcuts-section {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.bzss-core-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--color-border-soft);
+  padding-bottom: 6px;
+  overflow-x: auto;
+}
+
+.bzss-core-tab-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.bzss-core-tab-btn:hover {
+  color: var(--color-text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.bzss-core-tab-btn.is-active {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+}
+
+.bzss-core-shortcuts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+  max-height: 140px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.bzss-core-shortcut-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.bzss-core-shortcut-item:hover {
+  border-color: rgba(56, 189, 248, 0.4);
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.bzss-core-shortcut-name {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.bzss-core-shortcut-path {
+  font-size: 9px;
+  color: var(--color-text-muted);
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+.bzss-core-no-favorites {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 24px 12px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.bzss-core-progress-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 10px;
+  background: rgba(56, 189, 248, 0.05);
+  border: 1px solid rgba(56, 189, 248, 0.15);
+}
+
+.bzss-core-progress-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 700;
+  color: #38bdf8;
+}
+
+.bzss-core-progress-bar-bg {
+  height: 6px;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.bzss-core-progress-bar-fill {
+  height: 100%;
+  background: #38bdf8;
+  border-radius: 99px;
+  transition: width 0.2s ease;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
+}
+
+.bzss-core-progress-logs {
+  font-family: Consolas, Monaco, monospace;
+  font-size: 10px;
+  color: var(--color-text-secondary);
+  max-height: 80px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
 }
 
 @media (max-width: 780px) {

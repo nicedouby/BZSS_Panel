@@ -525,7 +525,7 @@
       </section>
     </template>
 
-    <div v-if="batchModalOpen" class="modal-backdrop" @click.self="closeBatchCreateModal">
+    <div v-if="batchModalOpen" class="modal-backdrop" v-backdrop-close="closeBatchCreateModal">
       <form class="modal-panel compact" @submit.prevent="submitBatchCreate">
         <header>
           <div>
@@ -561,7 +561,7 @@
       </form>
     </div>
 
-    <div v-if="recordsModal.open" class="modal-backdrop" @click.self="closeBatchRecords">
+    <div v-if="recordsModal.open" class="modal-backdrop" v-backdrop-close="closeBatchRecords">
       <section class="modal-panel records-modal">
         <header>
           <div>
@@ -610,7 +610,7 @@
       </section>
     </div>
 
-    <div v-if="detailModal.open" class="modal-backdrop" @click.self="closeBatchDetail">
+    <div v-if="detailModal.open" class="modal-backdrop" v-backdrop-close="closeBatchDetail">
       <section class="modal-panel records-modal">
         <header>
           <div>
@@ -646,7 +646,7 @@
       </section>
     </div>
 
-    <div v-if="batchWindow.open" class="modal-backdrop" @click.self="closeBatchWindow">
+    <div v-if="batchWindow.open" class="modal-backdrop" v-backdrop-close="closeBatchWindow">
       <section class="modal-panel batch-window-modal">
         <header>
           <div>

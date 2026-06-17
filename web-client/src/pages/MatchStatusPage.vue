@@ -174,7 +174,7 @@
       @close="closeSquadDetail"
     />
 
-    <div v-if="ticketEditorOpen" class="ticket-modal-backdrop" @click.self="closeTicketEditor">
+    <div v-if="ticketEditorOpen" class="ticket-modal-backdrop" v-backdrop-close="closeTicketEditor">
       <form class="ticket-modal-panel" @submit.prevent="submitTicketWrite">
         <header class="ticket-modal-header">
           <div>

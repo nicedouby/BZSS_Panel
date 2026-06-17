@@ -225,7 +225,7 @@
       </div>
     </div>
 
-    <div v-if="activePlayer" class="dialog-root" @click.self="closePlayerDialog">
+    <div v-if="activePlayer" class="dialog-root" v-backdrop-close="closePlayerDialog">
       <section class="dialog-panel" role="dialog" aria-modal="true">
         <header class="dialog-head">
           <div>

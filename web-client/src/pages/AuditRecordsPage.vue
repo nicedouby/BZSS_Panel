@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <AppPage class="audit-records-page" full-bleed>
         <h1 class="sr-only">操作记录</h1>
 
@@ -104,7 +104,7 @@
       </AppTable>
     </section>
 
-    <div v-if="selected" class="detail-backdrop" @click.self="selected = null">
+    <div v-if="selected" class="detail-backdrop" v-backdrop-close="() => selected = null">
       <aside class="detail-drawer" role="dialog" aria-modal="true">
         <header>
           <div>

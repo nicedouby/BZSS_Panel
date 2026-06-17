@@ -157,7 +157,7 @@
       </section>
     </div>
 
-    <div v-if="recordsOpen" class="modal-backdrop" @click.self="closeRecords">
+    <div v-if="recordsOpen" class="modal-backdrop" v-backdrop-close="closeRecords">
       <section class="modal-panel">
         <div class="panel-head">
           <div>

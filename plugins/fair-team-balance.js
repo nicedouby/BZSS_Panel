@@ -350,8 +350,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         eosId: entry?.eosId,
         persistReset: false,
       });
-      if (consumesTbQuotaMode(entry?.mode)) {
-        period.tbUsed += 1;
+      const isGreenBalance = entry?.mode === "green_balance_tb";
+      if (consumesTbQuotaMode(entry?.mode) || isGreenBalance) {
+        if (!isGreenBalance) {
+          period.tbUsed += 1;
+        }
         state.round.publicTbRemaining = clampInteger(
           Number(entry?.roundPublicTbRemainingAfter ?? state.round.publicTbRemaining - 1),
           0,
@@ -803,6 +806,24 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     }
 
     if (action === "tb") {
+      const sideCheck = getSwitchEligibility(matchState, player);
+      const isGreen = isGreenBalanceSwitch(sideCheck);
+
+      if (isGreen) {
+        if (state.round.publicTbRemaining <= 0) {
+          return {
+            ok: false,
+            error: "RoundTbQuotaExhausted",
+            message: "本回合公共跳边额度已用尽。",
+          };
+        }
+        return {
+          ok: true,
+          mode: "green_balance",
+          sideCheck,
+        };
+      }
+
       if (state.round.publicTbRemaining <= 0) {
         return {
           ok: false,
@@ -811,7 +832,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         };
       }
 
-      const sideCheck = getSwitchEligibility(matchState, player);
       if (!sideCheck.ok) return sideCheck;
 
       const logClockSeconds = Number(webStatus?.logClockSeconds ?? 0);
@@ -835,6 +855,12 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           message: "玩家在当前周期内的跳边额度已用尽。",
         };
       }
+
+      return {
+        ok: true,
+        mode: action === "tb" && Boolean(webStatus?.isWarmup) ? "warmup" : "normal",
+        sideCheck,
+      };
     }
 
     if (action === "sqtb" && Number(period?.sqtbClaimUsed ?? 0) >= runtimeConfig.periodSqtbClaimLimit) {
@@ -859,7 +885,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     return {
       ok: true,
-      mode: action === "tb" && Boolean(webStatus?.isWarmup) ? "warmup" : "normal",
+      mode: "normal",
       sideCheck,
     };
   }
@@ -886,6 +912,16 @@ function validateTbBeforeSwitch({ playerKey, playerName, player, matchState, web
       return { ok: false, error: "RoundPlayerQuotaExhausted", message: `${playerName || "玩家"} 本回合已使用过 tb/sqtb/认领。` };
     }
 
+    const sideCheck = getSwitchEligibility(matchState, player);
+    const isGreen = isGreenBalanceSwitch(sideCheck);
+
+    if (isGreen) {
+      if (state.round.publicTbRemaining <= 0) {
+        return { ok: false, error: "RoundTbQuotaExhausted", message: "本回合公共跳边额度已用尽。" };
+      }
+      return { ok: true, mode: "green_balance", sideCheck };
+    }
+
     const logClockSeconds = Number(webStatus?.logClockSeconds ?? 0);
     if (!Boolean(webStatus?.isWarmup) && !isWithinTbWindow(logClockSeconds)) {
       return { ok: false, error: "WindowClosed", message: "tb 仅在开局 20 到 120 秒之间可用。" };
@@ -904,7 +940,6 @@ function validateTbBeforeSwitch({ playerKey, playerName, player, matchState, web
       return { ok: false, error: "PlayerTbQuotaExhausted", message: "玩家在当前周期内的跳边额度已用尽。" };
     }
 
-    const sideCheck = getSwitchEligibility(matchState, player);
     if (!sideCheck.ok) {
       return {
         ok: false,
@@ -1131,7 +1166,9 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
     }
 
     if (!isWarmupTb) {
-      period.tbUsed += 1;
+      if (validation.mode !== "green_balance") {
+        period.tbUsed += 1;
+      }
       state.round.publicTbRemaining = Math.max(0, state.round.publicTbRemaining - 1);
       consumeRoundUse(playerKey);
     }
@@ -1146,7 +1183,11 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
       playerName,
       steamId: actor.steamId,
       eosId: actor.eosId,
-      mode: isWarmupTb ? "warmup_tb" : validation.mode,
+      mode: isWarmupTb
+        ? "warmup_tb"
+        : validation.mode === "green_balance"
+          ? "green_balance_tb"
+          : validation.mode,
       roundPublicTbRemainingAfter: state.round.publicTbRemaining,
       teamBalanceResult: {
         ok: Boolean(result?.ok),
@@ -1157,20 +1198,26 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
 
     await broadcastMessage(buildQuotaBroadcastMessage({
       playerName,
-      mode: isWarmupTb ? "warmup_tb" : "tb",
+      mode: isWarmupTb
+        ? "warmup_tb"
+        : validation.mode === "green_balance"
+          ? "green_balance_tb"
+          : "tb",
     }), "fair_tb_broadcast", {
       relatedEventId: normalizeText(event?.id ?? event?.seq),
     });
 
     await warnPlayer(actor, isWarmupTb
       ? "公平跳边提醒: 已在暖服模式执行完成"
-      : `公平跳边提醒: 已在非暖服模式执行完成，公共TB剩余 ${state.round.publicTbRemaining}/${runtimeConfig.publicTbLimit}`, "fair_tb_success_warning", {
+      : validation.mode === "green_balance"
+        ? `公平跳边提醒: 已通过绿色通道执行完成，公共TB剩余 ${state.round.publicTbRemaining}/${runtimeConfig.publicTbLimit}`
+        : `公平跳边提醒: 已在非暖服模式执行完成，公共TB剩余 ${state.round.publicTbRemaining}/${runtimeConfig.publicTbLimit}`, "fair_tb_success_warning", {
       relatedEventId: normalizeText(event?.id ?? event?.seq),
     });
 
     return {
       ok: true,
-      mode: isWarmupTb ? "warmup" : "normal",
+      mode: isWarmupTb ? "warmup" : validation.mode,
       result,
       publicTbRemaining: state.round.publicTbRemaining,
     };
@@ -1315,7 +1362,9 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
       eosId: actor.eosId,
       mode: action === "tb" && Boolean(validation.mode === "warmup")
         ? "warmup_tb"
-        : action,
+        : validation.mode === "green_balance"
+          ? "green_balance_tb"
+          : action,
       roundPublicTbRemainingAfter: state.round.publicTbRemaining,
       teamBalanceResult: {
         ok: Boolean(switchResult?.ok),
@@ -1329,13 +1378,17 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
         playerName,
         mode: Boolean(validation.mode === "warmup")
           ? "warmup_tb"
-          : "tb",
+          : validation.mode === "green_balance"
+            ? "green_balance_tb"
+            : "tb",
       }), "fair_tb_broadcast", {
         relatedEventId: sourceMessageId,
       });
       await warnPlayer(actor, Boolean(validation.mode === "warmup")
         ? "公平跳边提醒: 已在暖服模式执行完成"
-        : `公平跳边提醒: 已在非暖服模式执行完成，公共TB剩余 ${state.round.publicTbRemaining}/${runtimeConfig.publicTbLimit}`, "fair_tb_success_warning", {
+        : validation.mode === "green_balance"
+          ? `公平跳边提醒: 已通过绿色通道执行完成，公共TB剩余 ${state.round.publicTbRemaining}/${runtimeConfig.publicTbLimit}`
+          : `公平跳边提醒: 已在非暖服模式执行完成，公共TB剩余 ${state.round.publicTbRemaining}/${runtimeConfig.publicTbLimit}`, "fair_tb_success_warning", {
         relatedEventId: sourceMessageId,
       });
       return {

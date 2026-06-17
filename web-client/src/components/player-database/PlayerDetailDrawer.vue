@@ -1,5 +1,5 @@
-﻿<template>
-  <div v-if="open" class="drawer-root" @click.self="$emit('close')">
+<template>
+  <div v-if="open" class="drawer-root" v-backdrop-close="() => $emit('close')">
     <aside class="drawer-panel">
       <header class="drawer-head">
         <div>

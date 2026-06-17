@@ -1,5 +1,5 @@
 <template>
-  <div v-if="inline || event" :class="inline ? 'detail-card' : 'dialog-root'" @click.self="!inline && emit('close')">
+  <div v-if="inline || event" :class="inline ? 'detail-card' : 'dialog-root'" v-backdrop-close="() => !inline && emit('close')">
     <section :class="inline ? 'detail-panel' : 'dialog-panel'">
       <header class="dialog-head">
         <div>

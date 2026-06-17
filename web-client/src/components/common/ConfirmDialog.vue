@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div v-if="ui.confirm.visible" class="dialog-root" @click.self="ui.confirmCancel()">
+    <div v-if="ui.confirm.visible" class="dialog-root" v-backdrop-close="ui.confirmCancel">
       <section class="dialog-panel">
         <header class="dialog-head">
           <div>

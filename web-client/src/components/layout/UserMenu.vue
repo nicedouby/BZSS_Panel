@@ -58,7 +58,7 @@
 
   <teleport to="body">
     <transition name="menu-fade">
-      <div v-if="tankBattleDialogOpen" class="tank-battle-overlay" @click.self="closeTankBattleDialog">
+      <div v-if="tankBattleDialogOpen" class="tank-battle-overlay" v-backdrop-close="closeTankBattleDialog">
         <section class="tank-battle-dialog" role="dialog" aria-modal="true" aria-labelledby="tank-battle-title">
           <header class="tank-battle-header">
             <div>

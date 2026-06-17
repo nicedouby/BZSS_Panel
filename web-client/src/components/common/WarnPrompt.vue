@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div v-if="ui.warnPrompt.visible" class="dialog-root" @click.self="cancel">
+    <div v-if="ui.warnPrompt.visible" class="dialog-root" v-backdrop-close="cancel">
       <section class="dialog-panel">
         <header class="dialog-head">
           <div>

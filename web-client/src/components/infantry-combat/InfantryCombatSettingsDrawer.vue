@@ -1,6 +1,6 @@
 <template>
   <transition name="slide">
-    <div v-if="open" class="drawer-overlay" @click.self="emit('update:open', false)">
+    <div v-if="open" class="drawer-overlay" v-backdrop-close="() => emit('update:open', false)">
       <aside class="drawer">
         <header class="drawer-head">
           <div>

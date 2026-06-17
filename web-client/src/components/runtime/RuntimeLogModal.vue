@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div v-if="open" class="dialog-root" @click.self="emit('close')">
+    <div v-if="open" class="dialog-root" v-backdrop-close="() => emit('close')">
       <section class="dialog-panel" role="dialog" aria-modal="true" :aria-label="title">
         <header class="dialog-head">
           <div class="title-block">

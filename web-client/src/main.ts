@@ -31,6 +31,10 @@ async function bootstrap() {
     app.use(createPinia());
     app.use(router);
     app.use(VueQueryPlugin, { queryClient });
+    
+    const { backdropCloseDirective } = await import("./directives/backdrop-close");
+    app.directive("backdrop-close", backdropCloseDirective);
+
     app.config.errorHandler = (error) => {
       renderFatalBootError(error);
       console.error("[vue] unhandled error", error);

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="admin-users-page">
     <header class="admin-users-header">
       <div>
@@ -169,7 +169,7 @@
       </table>
     </section>
 
-    <div v-if="editorOpen" class="modal-backdrop" @click.self="closeEditor">
+    <div v-if="editorOpen" class="modal-backdrop" v-backdrop-close="closeEditor">
       <form class="modal-panel" @submit.prevent="submitEditor">
         <header>
           <div>
@@ -248,7 +248,7 @@
       </form>
     </div>
 
-    <div v-if="groupEditorOpen" class="modal-backdrop" @click.self="closeGroupEditor">
+    <div v-if="groupEditorOpen" class="modal-backdrop" v-backdrop-close="closeGroupEditor">
       <form class="modal-panel compact" @submit.prevent="submitGroupEditor">
         <header>
           <div>
@@ -299,7 +299,7 @@
       </form>
     </div>
 
-    <div v-if="resetOpen && resetUser" class="modal-backdrop" @click.self="closeReset">
+    <div v-if="resetOpen && resetUser" class="modal-backdrop" v-backdrop-close="closeReset">
       <form class="modal-panel compact" @submit.prevent="submitReset">
         <header>
           <h2>重置密码</h2>

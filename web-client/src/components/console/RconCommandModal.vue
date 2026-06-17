@@ -1,5 +1,5 @@
 <template>
-  <div v-if="open" class="modal-root" @click.self="emit('close')">
+  <div v-if="open" class="modal-root" v-backdrop-close="() => emit('close')">
     <section class="modal-panel">
       <header class="modal-head">
         <h3>{{ t("console.rconExecute") }}</h3>

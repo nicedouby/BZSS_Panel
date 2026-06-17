@@ -1,5 +1,5 @@
 <template>
-  <div class="dialog-root" @click.self="$emit('close')">
+  <div class="dialog-root" v-backdrop-close="() => $emit('close')">
     <section class="dialog-panel">
       <header class="dialog-head">
         <div>

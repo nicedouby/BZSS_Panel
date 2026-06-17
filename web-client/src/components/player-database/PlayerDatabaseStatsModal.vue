@@ -1,5 +1,5 @@
 <template>
-  <div v-if="open" class="modal-overlay" @click.self="$emit('close')">
+  <div v-if="open" class="modal-overlay" v-backdrop-close="() => $emit('close')">
     <div class="modal-card">
       <header class="modal-header">
         <div class="header-title">
