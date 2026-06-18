@@ -37,6 +37,7 @@ import RuntimeStatusPage from "../pages/RuntimeStatusPage.vue";
 import AdminUsersPage from "../pages/AdminUsersPage.vue";
 import AuditRecordsPage from "../pages/AuditRecordsPage.vue";
 import PluginSubscriptionsPage from "../pages/PluginSubscriptionsPage.vue";
+import TacticalMapPage from "../pages/TacticalMapPage.vue";
 import {
   normalizePermissionList,
   resolveWebPagePermission,
@@ -91,6 +92,16 @@ export const pageRegistry: PageDefinition[] = [
     category: "core",
     refreshPolicy: "realtime",
     nav: { section: "opsLive", label: "对局状态", icon: "📹", order: 10 },
+    ...workspacePage,
+  },
+  {
+    name: "tactical-map",
+    path: "/tactical-map",
+    component: TacticalMapPage,
+    title: "战术地图",
+    category: "core",
+    refreshPolicy: "realtime",
+    nav: { section: "opsLive", label: "战术地图", icon: "🛰️", order: 15 },
     ...workspacePage,
   },
   {
