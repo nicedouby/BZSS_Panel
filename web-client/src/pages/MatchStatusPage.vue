@@ -286,6 +286,7 @@ import SquadDetailDrawer from "../components/squad-admin/SquadDetailDrawer.vue";
 import { t } from "../i18n";
 import { normalizeRefreshPolicy, resolveRefreshDelay } from "../app/refreshPolicy";
 import { cancelIdleTask, scheduleIdleTask } from "../utils/idle";
+import { resolvePlayerIdentityIp } from "../app/playerIdentityApi";
 import type {
   PageState,
   PlayerDetailViewModel,
@@ -806,13 +807,15 @@ watch(
 function selectPlayer(payload: { player: PlayerRowViewModel; event: MouseEvent }) {
   const player = payload.player;
   pageState.selectedPlayerId = player.playerId;
+  const detail = buildPlayerDetailViewModel(player);
 
   activePlayerWindow.value = {
-    detail: buildPlayerDetailViewModel(player),
+    detail,
     anchorX: payload.event?.clientX ?? Math.floor(window.innerWidth / 2),
     anchorY: payload.event?.clientY ?? Math.floor(window.innerHeight / 2),
     notice: "",
   };
+  void hydrateActivePlayerWindowIp(detail);
 
   if (player.steamId) {
     playtimeRequested.value = true;
@@ -1100,11 +1103,20 @@ async function handlePlayerPlaytimeUpdated() {
     const existingBattleStatsLabel = activePlayerWindow.value.detail.battleStatsLabel ?? "";
     const existingBattleStatsSource = activePlayerWindow.value.detail.battleStatsSource ?? "";
     const existingBattleStatsLastUpdatedAt = activePlayerWindow.value.detail.battleStatsLastUpdatedAt ?? null;
+    const existingResolvedIp = String(activePlayerWindow.value.detail.resolvedIp ?? "").trim();
+    const existingLastIp = String(activePlayerWindow.value.detail.lastIp ?? "").trim();
+    const existingIpSource = activePlayerWindow.value.detail.ipSource ?? "none";
+    const nextDetail = buildPlayerDetailViewModel(player);
+    if (!String(nextDetail.resolvedIp ?? "").trim() && existingResolvedIp) {
+      nextDetail.resolvedIp = existingResolvedIp;
+      nextDetail.lastIp = existingLastIp || existingResolvedIp;
+      nextDetail.ipSource = existingIpSource;
+    }
 
     activePlayerWindow.value = {
       ...activePlayerWindow.value,
       detail: {
-        ...buildPlayerDetailViewModel(player),
+        ...nextDetail,
         ...(existingBattleStats ? {
           battleStats: existingBattleStats,
           battleStatsLabel: existingBattleStatsLabel,
@@ -1114,6 +1126,7 @@ async function handlePlayerPlaytimeUpdated() {
       },
       notice: "",
     };
+    void hydrateActivePlayerWindowIp(nextDetail);
   } catch (error) {
     ui.pushToast({
       title: t("common.error"),
@@ -1163,6 +1176,37 @@ function buildPlayerDetailViewModel(player: PlayerRowViewModel): PlayerDetailVie
   const cacheRecord = player.steamId ? stablePlaytimes.value[player.steamId] : null;
   detail.steamAvatar = cacheRecord?.steam_avatar || cacheRecord?.steamAvatar || player.steamAvatar || null;
   return detail;
+}
+
+async function hydrateActivePlayerWindowIp(detail: PlayerDetailViewModel) {
+  const currentIp = String(detail.resolvedIp ?? detail.ip ?? "").trim();
+  if (currentIp) return;
+
+  const identityKey = buildBattlePlayerIdentityKey(detail);
+  if (!identityKey) return;
+
+  try {
+    const result = await resolvePlayerIdentityIp({
+      steamId: detail.steam64 ?? detail.steamId,
+      eosId: detail.eosId,
+      name: detail.name,
+    });
+    if (!result.ip) return;
+    if (!activePlayerWindow.value) return;
+    if (buildBattlePlayerIdentityKey(activePlayerWindow.value.detail) !== identityKey) return;
+
+    activePlayerWindow.value = {
+      ...activePlayerWindow.value,
+      detail: {
+        ...activePlayerWindow.value.detail,
+        lastIp: result.ip,
+        resolvedIp: result.ip,
+        ipSource: result.source,
+      },
+    };
+  } catch {
+    // Leave the floating player window unchanged when database IP backfill fails.
+  }
 }
 
 async function refreshActivePlayerBattleStats() {

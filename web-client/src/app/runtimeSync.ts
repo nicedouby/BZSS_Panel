@@ -1,4 +1,5 @@
 import { markRaw, reactive, shallowRef } from "vue";
+import { normalizeRefreshPolicy, resolveRefreshDelay, type RefreshPolicy } from "./refreshPolicy";
 import { applyMatchSnapshotResponse, applyRuntimeSnapshotResponse } from "./matchSnapshot";
 import { useAuthStore } from "../stores/auth.store";
 import { usePlayerStore } from "../stores/player.store";
@@ -18,30 +19,33 @@ const runtimeSyncState = reactive({
   lastError: null as string | null,
   errorType: null as "network" | "http" | "parse" | "timeout" | "unauthorized" | null,
   consecutiveFailures: 0,
+  refreshPolicy: "polling" as RefreshPolicy,
 });
 
 let timer: number | null = null;
+let visibilityListenerAttached = false;
+
+export function setRuntimeSyncRefreshPolicy(policy: unknown) {
+  runtimeSyncState.refreshPolicy = normalizeRefreshPolicy(policy);
+  scheduleRuntimeSync();
+}
 
 export function startRuntimeSync() {
   if (runtimeSyncState.started) return;
   runtimeSyncState.started = true;
-  void fetchSnapshot();
-  timer = window.setInterval(() => {
-    void fetchSnapshot();
-  }, 2_000);
+  attachVisibilityListener();
+  void fetchSnapshot({ scheduleNext: true, immediate: true });
 }
 
 export function stopRuntimeSync() {
   runtimeSyncState.started = false;
   runtimeSyncState.inFlight = false;
-  if (timer != null) {
-    window.clearInterval(timer);
-    timer = null;
-  }
+  clearRuntimeTimer();
+  detachVisibilityListener();
 }
 
 export async function syncOnce() {
-  await fetchSnapshot();
+  await fetchSnapshot({ scheduleNext: false, immediate: true });
 }
 
 export function useSnapshot() {
@@ -52,8 +56,59 @@ export function getRuntimeSyncState() {
   return runtimeSyncState;
 }
 
-async function fetchSnapshot() {
+function handleVisibilityChange() {
+  if (!runtimeSyncState.started) return;
+  scheduleRuntimeSync();
+}
+
+function attachVisibilityListener() {
+  if (visibilityListenerAttached || typeof document === "undefined") return;
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+  visibilityListenerAttached = true;
+}
+
+function detachVisibilityListener() {
+  if (!visibilityListenerAttached || typeof document === "undefined") return;
+  document.removeEventListener("visibilitychange", handleVisibilityChange);
+  visibilityListenerAttached = false;
+}
+
+function clearRuntimeTimer() {
+  if (timer == null) return;
+  window.clearTimeout(timer);
+  timer = null;
+}
+
+function scheduleRuntimeSync() {
   if (!runtimeSyncState.started || runtimeSyncState.inFlight) return;
+
+  clearRuntimeTimer();
+  const delay = resolveRuntimeSyncDelay();
+  timer = window.setTimeout(() => {
+    timer = null;
+    void fetchSnapshot({ scheduleNext: true, immediate: true });
+  }, delay);
+}
+
+function resolveRuntimeSyncDelay() {
+  return resolveRefreshDelay({
+    policy: runtimeSyncState.refreshPolicy,
+    playerCount: getCurrentPlayerCount(),
+    hidden: typeof document !== "undefined" ? document.hidden : false,
+    surface: "auxiliary",
+  });
+}
+
+function getCurrentPlayerCount() {
+  const serverStore = useServerStore();
+  const count = Number(serverStore.snapshot?.webStatus?.playerCount ?? serverStore.snapshot?.playerCount ?? Number.NaN);
+  if (Number.isFinite(count) && count >= 0) return count;
+  return 0;
+}
+
+async function fetchSnapshot(options: { scheduleNext: boolean; immediate?: boolean }) {
+  if (!runtimeSyncState.started || runtimeSyncState.inFlight) return;
+  if (options.immediate) clearRuntimeTimer();
 
   runtimeSyncState.inFlight = true;
   try {
@@ -100,6 +155,9 @@ async function fetchSnapshot() {
     markRuntimeStoresStale();
   } finally {
     runtimeSyncState.inFlight = false;
+    if (options.scheduleNext && runtimeSyncState.started) {
+      scheduleRuntimeSync();
+    }
   }
 }
 

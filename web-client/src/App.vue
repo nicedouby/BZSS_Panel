@@ -13,7 +13,7 @@ import { watch } from "vue";
 import { useRoute } from "vue-router";
 import AppLayout from "./components/layout/AppLayout.vue";
 import LoginPage from "./pages/LoginPage.vue";
-import { startRuntimeSync, stopRuntimeSync } from "./app/runtimeSync";
+import { setRuntimeSyncRefreshPolicy, startRuntimeSync, stopRuntimeSync } from "./app/runtimeSync";
 import { t } from "./i18n";
 import { useAuthStore } from "./stores/auth.store";
 import { useUiStore } from "./stores/ui.store";
@@ -23,8 +23,9 @@ const ui = useUiStore();
 const route = useRoute();
 
 watch(
-  () => auth.authenticated,
-  (authenticated) => {
+  () => [auth.authenticated, route.meta.refreshPolicy] as const,
+  ([authenticated, refreshPolicy]) => {
+    setRuntimeSyncRefreshPolicy(refreshPolicy);
     if (authenticated) startRuntimeSync();
     else stopRuntimeSync();
   },

@@ -105,4 +105,31 @@ describe("PlayerDetailDrawer", () => {
     expect(wrapper.emitted("close")).toBeTruthy();
     wrapper.unmount();
   });
+
+  it("shows resolved IP when runtime player IP is missing", async () => {
+    const wrapper = mount(PlayerDetailDrawer, {
+      props: {
+        open: true,
+        player: {
+          ...buildPlayer(),
+          resolvedIp: "203.0.113.10",
+          lastIp: "203.0.113.10",
+          ipSource: "last",
+        },
+        mode: "floating",
+        anchorX: 200,
+        anchorY: 240,
+      },
+      global: {
+        stubs: {
+          PlayerCombatTimeline: true,
+          StatusBadge: true,
+          CopyableValue: true,
+        },
+      },
+    });
+
+    expect(document.body.textContent || "").toContain("IP: 203.0.113.10");
+    wrapper.unmount();
+  });
 });

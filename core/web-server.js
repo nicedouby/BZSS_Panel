@@ -2268,6 +2268,35 @@ export class WebServer {
       });
     }
 
+    if (url.pathname === "/api/player-database/detail/steam-friends") {
+      const playerId = url.searchParams.get("id");
+      return this.runTimedPlayerDatabaseQuery("/api/player-database/detail/steam-friends", playerId, async () => {
+        const detail = await this.modules.playerDatabase.getPlayerDetail(playerId);
+        if (!detail?.player?.steam_id) {
+          return this.json(res, 200, { items: [] });
+        }
+        const steamID = detail.player.steam_id;
+
+        let friends = await this.modules.playerDatabase.listSteamFriends(playerId);
+        const staleThreshold = 24 * 60 * 60 * 1000;
+        const force = url.searchParams.get("force") === "true";
+        const isStale = friends.length === 0 || force || (friends[0]?.updated_at && (Date.now() - friends[0].updated_at > staleThreshold));
+
+        const playtimeApi = this.modules.playtime?.api ?? this.modules.playtime;
+        if (isStale && playtimeApi?.fetchSteamFriends) {
+          try {
+            const fetchedFriends = await playtimeApi.fetchSteamFriends(steamID);
+            await this.modules.playerDatabase.upsertSteamFriends(playerId, fetchedFriends);
+            friends = await this.modules.playerDatabase.listSteamFriends(playerId);
+          } catch (err) {
+            this.logger.warn(`Failed to on-demand fetch Steam friends for player ${playerId} (${steamID}): ${err.message}`);
+          }
+        }
+
+        return this.json(res, 200, { items: friends });
+      });
+    }
+
     if (url.pathname === "/api/db/players") {
       const searchQuery = url.searchParams.get("q") ?? url.searchParams.get("query") ?? "";
       const result = await this.modules.playerDatabase.listPlayers({

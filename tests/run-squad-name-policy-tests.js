@@ -112,11 +112,19 @@ const numeric = evaluateSquadName("131", samplePolicy);
 assert.equal(numeric.valid, false);
 assert.equal(numeric.suggestions.length, 0);
 assert.equal(numeric.classification?.nature, "infantry");
+assert.equal(numeric.classification?.reason.includes("步兵队"), true);
 
 const weirdChinese = evaluateSquadName("离谱中文队名", samplePolicy);
 assert.equal(weirdChinese.valid, false);
 assert.equal(weirdChinese.suggestions.length, 0);
 assert.equal(weirdChinese.classification?.nature, "infantry");
+assert.equal(weirdChinese.classification?.reason.includes("已认定为步兵队"), true);
+
+const bizarreChinese = evaluateSquadName("我是傻逼", samplePolicy);
+assert.equal(bizarreChinese.valid, false);
+assert.equal(bizarreChinese.suggestions.length, 0);
+assert.equal(bizarreChinese.classification?.nature, "infantry");
+assert.equal(bizarreChinese.classification?.reason.includes("奇葩中文队名"), true);
 
 const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-squad-name-policy-"));
 const policyPath = path.join(tempDir, "policy.json");

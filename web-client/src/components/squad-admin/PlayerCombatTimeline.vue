@@ -1,16 +1,5 @@
 <template>
-  <section class="player-combat-timeline">
-    <header class="player-combat-timeline-header">
-      <div class="player-combat-timeline-heading">
-        <div class="player-combat-timeline-eyebrow">COMBAT HISTORY</div>
-        <div class="player-combat-timeline-title">个人战斗记录</div>
-        <div class="player-combat-timeline-subtitle">
-          伤害、击倒、击杀的最近频率曲线
-        </div>
-      </div>
-      <div class="player-combat-timeline-range">{{ rangeLabel }}</div>
-    </header>
-
+  <div class="player-combat-timeline-integrated">
     <div v-if="loading && !hasData" class="player-combat-empty">
       正在加载个人战斗记录...
     </div>
@@ -18,26 +7,8 @@
       {{ error }}
     </div>
     <template v-else-if="hasData">
-      <div class="player-combat-summary-rail">
-        <div class="player-combat-summary-card player-combat-summary-card--range">
-          <span>当前选中区间</span>
-          <strong>{{ selectedBucketRange }}</strong>
-        </div>
-        <div class="player-combat-summary-card">
-          <span>伤害</span>
-          <strong class="damage">{{ totals.damage }}</strong>
-        </div>
-        <div class="player-combat-summary-card">
-          <span>击倒</span>
-          <strong class="wound">{{ totals.wound }}</strong>
-        </div>
-        <div class="player-combat-summary-card">
-          <span>击杀</span>
-          <strong class="kill">{{ totals.kill }}</strong>
-        </div>
-      </div>
-
       <div class="player-combat-body">
+        <!-- Left Side: Curve Chart -->
         <div class="player-combat-chart-card">
           <div class="player-combat-chart-wrap">
             <svg
@@ -72,21 +43,21 @@
                   :class="{ selected: selectedBucketIndex === index, empty: bucket.damage === 0 }"
                   :cx="bucket.x"
                   :cy="valueToY(bucket.damage)"
-                  :r="bucket.damage > 0 ? 4.5 : 3"
+                  :r="bucket.damage > 0 ? 4 : 2"
                 />
                 <circle
                   class="player-combat-point wound"
                   :class="{ selected: selectedBucketIndex === index, empty: bucket.wound === 0 }"
                   :cx="bucket.x"
                   :cy="valueToY(bucket.wound)"
-                  :r="bucket.wound > 0 ? 4.5 : 3"
+                  :r="bucket.wound > 0 ? 4 : 2"
                 />
                 <circle
                   class="player-combat-point kill"
                   :class="{ selected: selectedBucketIndex === index, empty: bucket.kill === 0 }"
                   :cx="bucket.x"
                   :cy="valueToY(bucket.kill)"
-                  :r="bucket.kill > 0 ? 4.5 : 3"
+                  :r="bucket.kill > 0 ? 4 : 2"
                 />
                 <rect
                   class="player-combat-hitbox"
@@ -107,74 +78,36 @@
           </div>
 
           <div class="player-combat-legend">
-            <span class="damage">伤害 {{ totals.damage }}</span>
-            <span class="wound">击倒 {{ totals.wound }}</span>
-            <span class="kill">击杀 {{ totals.kill }}</span>
+            <span class="legend-item damage">伤害 ({{ totals.damage }})</span>
+            <span class="legend-item wound">击倒 ({{ totals.wound }})</span>
+            <span class="legend-item kill">击杀 ({{ totals.kill }})</span>
           </div>
         </div>
 
-        <div class="player-combat-detail">
-          <div class="player-combat-detail-header">
-            <div>
-              <div class="player-combat-detail-title">区间 {{ selectedBucketIndex + 1 }} / {{ timeline.buckets.length }}</div>
-              <div class="player-combat-detail-range">
-                {{ selectedBucketRange }} · {{ selectedBucket.events.length }} 条记录
-              </div>
-            </div>
-            <div class="player-combat-detail-stats">
-              <span class="damage">伤害 {{ selectedBucket.damage }}</span>
-              <span class="wound">击倒 {{ selectedBucket.wound }}</span>
-              <span class="kill">击杀 {{ selectedBucket.kill }}</span>
-            </div>
+        <!-- Right Side: Scrollable Event/Kill List -->
+        <div class="player-combat-event-list-container">
+          <div class="player-combat-list-header">
+            <span class="list-header-title">区间记录 ({{ selectedBucketEvents.length }} 条)</span>
+            <span class="list-header-range">{{ selectedBucketRangeShort }}</span>
           </div>
-
-          <button
-            type="button"
-            class="player-combat-details-toggle"
-            @click="showEventDetails = !showEventDetails"
-          >
-            {{ showEventDetails ? "隐藏事件明细" : "展开事件明细" }}
-          </button>
-
-          <div v-if="showEventDetails" class="player-combat-event-detail">
-            <div class="player-combat-event-detail-head">
-              <div>
-                <div class="player-combat-event-detail-title">单条记录</div>
-                <div class="player-combat-event-detail-subtitle">{{ selectedEvent?.displayText || selectedEvent?.id || "-" }}</div>
+          <div v-if="selectedBucketEvents.length === 0" class="player-combat-list-empty">
+            当前区间无战斗事件
+          </div>
+          <div v-else class="player-combat-event-list scrollable">
+            <div
+              v-for="(event, idx) in selectedBucketEvents"
+              :key="event.id || idx"
+              class="player-combat-event-row"
+              :class="{ friendly: isFriendly(event), selected: selectedEventIndex === idx }"
+              @click="selectedEventIndex = idx"
+            >
+              <div class="event-meta-row">
+                <span class="event-time">{{ formatTimeOnly(event.time ?? event.eventTime) }}</span>
+                <span class="event-badge" :class="event.type">{{ labelForType(event.type) }}</span>
               </div>
-              <div class="player-combat-event-detail-type">{{ labelForType(selectedEvent?.type) }}</div>
-            </div>
-
-            <div class="player-combat-event-grid">
-              <div>
-                <span>时间</span>
-                <strong>{{ formatEventTime(selectedEvent?.time) }}</strong>
+              <div class="event-desc-row">
+                <strong class="event-desc">{{ formatEventText(event) }}</strong>
               </div>
-              <div>
-                <span>伤害</span>
-                <strong>{{ formatNumber(selectedEvent?.damage) }}</strong>
-              </div>
-              <div>
-                <span>武器</span>
-                <strong>{{ formatWeapon(selectedEvent?.weapon) }}</strong>
-              </div>
-              <div>
-                <span>关系</span>
-                <strong>{{ relationSummary(selectedEvent?.relation) }}</strong>
-              </div>
-              <div>
-                <span>攻击者</span>
-                <strong>{{ formatPlayerRef(selectedEvent?.attacker) }}</strong>
-              </div>
-              <div>
-                <span>受害者</span>
-                <strong>{{ formatPlayerRef(selectedEvent?.victim) }}</strong>
-              </div>
-            </div>
-
-            <div class="player-combat-raw-card">
-              <div class="player-combat-raw-title">Raw Log</div>
-              <pre class="player-combat-raw-text">{{ selectedEvent?.raw?.rawLog || selectedEvent?.rawLog || "No rawLog" }}</pre>
             </div>
           </div>
         </div>
@@ -183,7 +116,7 @@
     <div v-else class="player-combat-empty">
       暂无个人战斗记录
     </div>
-  </section>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -251,6 +184,34 @@ const selectedBucket = computed(() => timeline.value.buckets[selectedBucketIndex
 const selectedBucketEvents = computed(() => selectedBucket.value.events ?? []);
 const selectedEvent = computed(() => selectedBucketEvents.value[selectedEventIndex.value] ?? selectedBucketEvents.value[0] ?? null);
 const selectedBucketRange = computed(() => formatRange(selectedBucket.value.start, selectedBucket.value.end));
+
+const selectedBucketRangeShort = computed(() => {
+  const start = selectedBucket.value.start;
+  const end = selectedBucket.value.end;
+  if (!start || !end) return "";
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return "";
+  const formatTime = (d: Date) => d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return `${formatTime(startDate)} ~ ${formatTime(endDate)}`;
+});
+
+function formatEventText(event: CombatEvent) {
+  if (event.type === "kill" || event.type === "wound" || event.type === "tk" || event.type === "teamkill") {
+    const attackerName = formatPlayerRef(event.attacker);
+    const victimName = formatPlayerRef(event.victim);
+    const verb = (event.type === "kill") ? "击杀" : (event.type === "wound" ? "击倒" : "TK");
+    const weaponName = formatWeapon(event.weapon);
+    return `${attackerName} ${verb} ${victimName} [${weaponName}]`;
+  }
+  return event.displayText || "";
+}
+
+function formatTimeOnly(value: unknown) {
+  const date = new Date(value as string | number);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("zh-CN", { hour12: false });
+}
 const rangeLabel = computed(() => {
   if (!timeline.value.buckets.length) return "最近 60 分钟";
   const minutes = timeline.value.windowMinutes;
@@ -502,60 +463,9 @@ function emptyBucket(): CombatBucket {
 </script>
 
 <style scoped>
-.player-combat-timeline {
+.player-combat-timeline-integrated {
   display: grid;
   gap: 14px;
-  padding: 16px;
-  border-radius: 16px;
-  border: 1px solid var(--color-border-soft);
-  background:
-    radial-gradient(circle at top left, rgba(59, 130, 246, 0.14), transparent 34%),
-    radial-gradient(circle at top right, rgba(244, 114, 182, 0.08), transparent 28%),
-    var(--color-bg-card);
-}
-
-.player-combat-timeline-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  align-items: flex-start;
-}
-
-.player-combat-timeline-heading {
-  min-width: 0;
-}
-
-.player-combat-timeline-eyebrow {
-  color: var(--color-text-muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.player-combat-timeline-title {
-  margin-top: 4px;
-  font-size: 15px;
-  font-weight: 800;
-  color: var(--color-text-primary);
-}
-
-.player-combat-timeline-subtitle {
-  margin-top: 4px;
-  color: var(--color-text-muted);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.player-combat-timeline-range {
-  padding: 8px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--color-border-soft);
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--color-text-secondary);
-  font-size: 11px;
-  white-space: nowrap;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
 }
 
 .player-combat-empty {
@@ -568,58 +478,28 @@ function emptyBucket(): CombatBucket {
   background: rgba(255, 255, 255, 0.02);
 }
 
-.player-combat-summary-rail {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.player-combat-summary-card {
-  display: grid;
-  gap: 6px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--color-border-soft);
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.player-combat-summary-card span {
-  color: var(--color-text-muted);
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.player-combat-summary-card strong {
-  font-size: 16px;
-  font-weight: 800;
-}
-
-.player-combat-summary-card--range {
-  grid-column: span 2;
-}
-
 .player-combat-body {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
   gap: 14px;
-  align-items: start;
+  height: 200px;
+  align-items: stretch;
 }
 
 .player-combat-chart-card {
-  display: grid;
-  gap: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
 }
 
 .player-combat-chart-wrap {
   position: relative;
-  height: 200px;
-  padding: 10px;
-  border-radius: 16px;
-  border: 1px solid var(--color-border-soft);
-  background:
-    linear-gradient(180deg, rgba(15, 23, 42, 0.82), rgba(2, 6, 23, 0.52)),
-    rgba(10, 14, 22, 0.55);
+  height: 156px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(10, 14, 22, 0.55);
 }
 
 .player-combat-chart {
@@ -638,7 +518,7 @@ function emptyBucket(): CombatBucket {
   stroke-width: 2.5;
 }
 
-.player-combat-line.damage { stroke: var(--color-warning); }
+.player-combat-line.damage { stroke: var(--color-warning, #eab308); }
 .player-combat-line.wound { stroke: #60a5fa; }
 .player-combat-line.kill { stroke: #fb7185; }
 
@@ -647,16 +527,16 @@ function emptyBucket(): CombatBucket {
   stroke-width: 2;
 }
 
-.player-combat-point.damage { fill: var(--color-warning); }
+.player-combat-point.damage { fill: var(--color-warning, #eab308); }
 .player-combat-point.wound { fill: #60a5fa; }
 .player-combat-point.kill { fill: #fb7185; }
 
 .player-combat-point.empty {
-  opacity: 0.35;
+  opacity: 0.2;
 }
 
 .player-combat-point.selected {
-  filter: drop-shadow(0 0 8px rgba(94, 234, 212, 0.45));
+  filter: drop-shadow(0 0 6px rgba(94, 234, 212, 0.6));
 }
 
 .player-combat-hitbox {
@@ -667,253 +547,173 @@ function emptyBucket(): CombatBucket {
 }
 
 .player-combat-hitbox.selected {
-  fill: rgba(94, 234, 212, 0.05);
-  stroke: rgba(94, 234, 212, 0.22);
+  fill: rgba(255, 255, 255, 0.03);
+  stroke: rgba(255, 255, 255, 0.15);
   stroke-width: 1;
 }
 
 .player-combat-legend {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  justify-content: flex-start;
+  gap: 12px;
+  margin-top: 4px;
 }
 
-.player-combat-legend span,
-.player-combat-detail-stats span {
+.legend-item {
   display: inline-flex;
   align-items: center;
-  padding: 6px 9px;
-  border-radius: 999px;
-  border: 1px solid var(--color-border-soft);
-  background: rgba(255, 255, 255, 0.04);
   font-size: 11px;
+  font-weight: 700;
 }
 
-.player-combat-legend .damage,
-.player-combat-detail-stats .damage,
-.player-combat-summary-card .damage {
-  color: var(--color-warning);
-}
+.legend-item.damage { color: var(--color-warning, #eab308); }
+.legend-item.wound { color: #60a5fa; }
+.legend-item.kill { color: #fb7185; }
 
-.player-combat-legend .wound,
-.player-combat-detail-stats .wound,
-.player-combat-summary-card .wound {
-  color: #60a5fa;
-}
-
-.player-combat-legend .kill,
-.player-combat-detail-stats .kill,
-.player-combat-summary-card .kill {
-  color: #fb7185;
-}
-
-.player-combat-detail {
-  display: grid;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 16px;
-  border: 1px solid var(--color-border-soft);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.03)),
-    rgba(255, 255, 255, 0.03);
-  min-width: 0;
-}
-
-.player-combat-detail-header {
+/* Event / Kill List styles */
+.player-combat-event-list-container {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.player-combat-detail-title {
-  font-size: 13px;
-  font-weight: 800;
-  color: var(--color-text-primary);
-}
-
-.player-combat-detail-range {
-  margin-top: 4px;
-  color: var(--color-text-muted);
-  font-size: 11px;
-}
-
-.player-combat-event-list {
-  display: grid;
-  gap: 8px;
-}
-
-.player-combat-event-row {
-  width: 100%;
-  display: grid;
-  grid-template-columns: 54px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  min-height: 48px;
-  padding: 9px 10px;
-  border-radius: 12px;
-  border: 1px solid var(--color-border-soft);
-  background: rgba(255, 255, 255, 0.03);
-  text-align: left;
-  cursor: pointer;
-  transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
-}
-
-.player-combat-event-row.friendly {
-  border-color: rgba(251, 113, 133, 0.22);
-  background: rgba(127, 29, 29, 0.16);
-}
-
-.player-combat-event-row:hover,
-.player-combat-event-row:focus-visible {
-  transform: translateY(-1px);
-  border-color: rgba(148, 163, 184, 0.35);
-  background: rgba(255, 255, 255, 0.06);
-  outline: none;
-}
-
-.player-combat-event-row span {
-  color: var(--color-text-muted);
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.player-combat-event-row strong {
-  min-width: 0;
+  flex-direction: column;
+  height: 100%;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(10, 14, 22, 0.3);
   overflow: hidden;
-  color: var(--color-text-primary);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.player-combat-event-row em {
-  color: var(--color-text-muted);
-  font-size: 11px;
-  font-style: normal;
-}
-
-.player-combat-event-detail {
-  display: grid;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 14px;
-  border: 1px solid var(--color-border-soft);
-  background: rgba(0, 0, 0, 0.14);
-}
-
-.player-combat-event-detail-head {
+.player-combat-list-header {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  align-items: flex-start;
-}
-
-.player-combat-event-detail-title {
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.player-combat-event-detail-subtitle {
-  margin-top: 4px;
-  color: var(--color-text-muted);
-  font-size: 11px;
-}
-
-.player-combat-event-detail-type {
+  align-items: center;
   padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--color-border-soft);
-  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.list-header-title {
   font-size: 11px;
-  white-space: nowrap;
+  font-weight: 800;
+  color: #94a3b8;
 }
 
-.player-combat-event-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+.list-header-range {
+  font-size: 9px;
+  color: #475569;
 }
 
-.player-combat-event-grid > div {
-  display: grid;
-  gap: 4px;
+.player-combat-list-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #475569;
+  font-size: 11px;
 }
 
-.player-combat-event-grid span {
-  color: var(--color-text-muted);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.player-combat-event-grid strong {
-  color: var(--color-text-primary);
-  font-size: 12px;
-  word-break: break-word;
-}
-
-.player-combat-raw-card {
-  display: grid;
+.player-combat-event-list.scrollable {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
   gap: 6px;
 }
 
-.player-combat-raw-title {
-  color: var(--color-text-muted);
+.player-combat-event-list.scrollable::-webkit-scrollbar {
+  width: 4px;
+}
+
+.player-combat-event-list.scrollable::-webkit-scrollbar-thumb {
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.player-combat-event-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.player-combat-event-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.player-combat-event-row.selected {
+  border-color: var(--glow-color, rgba(168, 85, 247, 0.5));
+  background: var(--glow-color-soft, rgba(168, 85, 247, 0.08));
+}
+
+.player-combat-event-row.friendly {
+  border-color: rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.04);
+}
+
+.event-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.event-time {
   font-size: 10px;
-  font-weight: 700;
+  color: #64748b;
+  font-family: Consolas, Monaco, monospace;
+}
+
+.event-badge {
+  font-size: 8px;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 3px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
-.player-combat-raw-text {
-  margin: 0;
-  padding: 10px;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.22);
-  border: 1px solid var(--color-border-soft);
-  color: var(--color-text-secondary);
+.event-badge.damage {
+  background: rgba(234, 179, 8, 0.1);
+  color: #eab308;
+}
+
+.event-badge.wound {
+  background: rgba(96, 165, 250, 0.1);
+  color: #60a5fa;
+}
+
+.event-badge.kill {
+  background: rgba(251, 113, 133, 0.1);
+  color: #fb7185;
+}
+
+.event-badge.tk, .event-badge.teamkill {
+  background: rgba(192, 132, 252, 0.15);
+  color: #c084fc;
+}
+
+.event-desc-row {
+  min-width: 0;
+}
+
+.event-desc {
   font-size: 11px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 180px;
-  overflow: auto;
+  color: #cbd5e1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
 }
 
-@media (max-width: 980px) {
-  .player-combat-summary-rail,
+@media (max-width: 768px) {
   .player-combat-body {
     grid-template-columns: 1fr;
+    height: auto;
   }
-}
-
-@media (max-width: 640px) {
-  .player-combat-timeline-header,
-  .player-combat-detail-header {
-    flex-direction: column;
-  }
-
-  .player-combat-timeline {
-    padding: 14px;
-  }
-
-  .player-combat-summary-rail {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .player-combat-summary-card--range {
-    grid-column: span 2;
-  }
-
-  .player-combat-event-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .player-combat-event-row {
-    grid-template-columns: 42px minmax(0, 1fr) auto;
-  }
-
-  .player-combat-chart-wrap {
+  .player-combat-event-list-container {
     height: 180px;
   }
 }

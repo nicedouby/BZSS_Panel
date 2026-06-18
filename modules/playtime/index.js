@@ -2,7 +2,15 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import http from "node:http";
+import https from "node:https";
 import { spawn } from "node:child_process";
+import HttpProxyAgentModule from "http-proxy-agent";
+import HttpsProxyAgentModule from "https-proxy-agent";
+import { SocksProxyAgent } from "socks-proxy-agent";
+
+const HttpProxyAgent = HttpProxyAgentModule.HttpProxyAgent || HttpProxyAgentModule;
+const HttpsProxyAgent = HttpsProxyAgentModule.HttpsProxyAgent || HttpsProxyAgentModule;
 import { createSteamPlaytimeDatabase } from "../../core/steam-playtime-database.js";
 import { SteamPlaytimeRepository } from "../../repositories/steam-playtime-repository.js";
 
@@ -146,6 +154,8 @@ class SteamGameDurationService {
     steamPlaytimeRepo,
     playerDatabase,
     logger,
+    proxyUrl,
+    noProxy,
   } = {}) {
     this.apiKey = String(apiKey || process.env.STEAM_API_KEY || "").trim();
     this.appId = Number(appId) || DEFAULT_APP_ID;
@@ -172,6 +182,8 @@ class SteamGameDurationService {
     this.steamPlaytimeRepo = steamPlaytimeRepo || null;
     this.playerDatabase = playerDatabase || null;
     this.logger = logger || null;
+    this.proxyUrl = proxyUrl || null;
+    this.noProxy = noProxy || null;
 
     this.jobs = new Map();
     this.jobOrder = [];
@@ -183,6 +195,7 @@ class SteamGameDurationService {
     this.backgroundAutoRefreshRunning = false;
     this.backgroundAutoRefreshGetOnlinePlayers = null;
     this.backgroundAutoRefreshPlayerDatabase = null;
+    this.proxyAgentCache = new Map();
   }
 
   isConfigured() {
@@ -273,6 +286,16 @@ class SteamGameDurationService {
         lastSeenName: player?.name || player?.current_name || label || null,
       });
       const updatedPlayer = await this._syncPlayerDuration({ player, steamID: normalizedSteamID, lookup });
+
+      if (updatedPlayer?.id && this.apiKey) {
+        try {
+          const friends = await this.fetchSteamFriends(normalizedSteamID);
+          await this.playerDatabase?.upsertSteamFriends?.(updatedPlayer.id, friends);
+        } catch (err) {
+          this.logger?.warn(`Failed to fetch Steam friends for ${normalizedSteamID}: ${err.message}`);
+        }
+      }
+
       await this._logRefresh(job, "success", {
         playerId: updatedPlayer?.id || null,
         currentName: updatedPlayer?.current_name || player?.name || player?.current_name || label || null,
@@ -978,6 +1001,47 @@ class SteamGameDurationService {
       found: Boolean(match),
     });
   }
+  _resolveSteamAgent(url) {
+    const targetUrl = new URL(String(url));
+    const resolved = resolveProxyUrlForTarget(targetUrl, {
+      proxyUrl: this.proxyUrl,
+      noProxy: this.noProxy,
+      env: process.env,
+    });
+
+    if (resolved.bypassed || !resolved.proxyUrl) {
+      return null;
+    }
+
+    const cacheKey = `${resolved.proxyUrl}::${targetUrl.protocol}`;
+    if (this.proxyAgentCache.has(cacheKey)) {
+      return this.proxyAgentCache.get(cacheKey);
+    }
+
+    const agent = createProxyAgent(resolved.proxyUrl, targetUrl.protocol);
+    if (agent) {
+      this.proxyAgentCache.set(cacheKey, agent);
+    }
+    return agent;
+  }
+
+  async _requestSteamJson(url) {
+    const agent = this._resolveSteamAgent(url);
+    const options = {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      agent: agent || undefined,
+      timeoutMs: this.requestTimeoutMs,
+    };
+    try {
+      return await requestJson(url, options);
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        throw new Error(`Steam API request timed out after ${this.requestTimeoutMs}ms.`);
+      }
+      throw error;
+    }
+  }
 
   _isRetryableSteamError(error) {
     if (!error) return false;
@@ -997,8 +1061,6 @@ class SteamGameDurationService {
   }
 
   async _requestOwnedGames(steamID, { withAppFilter } = {}) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
     const params = new URLSearchParams({
       key: this.apiKey,
       steamid: steamID,
@@ -1007,29 +1069,8 @@ class SteamGameDurationService {
     });
     if (withAppFilter) params.append("appids_filter[0]", String(this.appId));
 
-    try {
-      const response = await fetch(
-        `${this.apiBaseUrl}/IPlayerService/GetOwnedGames/v0001/?${params.toString()}`,
-        {
-          method: "GET",
-          signal: controller.signal,
-          headers: { Accept: "application/json" },
-        },
-      );
-
-      if (!response.ok) {
-        const error = new Error(`Steam API request failed with status ${response.status}.`);
-        error.statusCode = response.status;
-        throw error;
-      }
-
-      return await response.json();
-    } catch (error) {
-      if (error?.name === "AbortError") throw new Error(`Steam API request timed out after ${this.requestTimeoutMs}ms.`);
-      throw error;
-    } finally {
-      clearTimeout(timeout);
-    }
+    const url = `${this.apiBaseUrl}/IPlayerService/GetOwnedGames/v0001/?${params.toString()}`;
+    return this._requestSteamJson(url);
   }
 
   async fetchSteamPlayerSummaries(steamIDs) {
@@ -1067,8 +1108,6 @@ class SteamGameDurationService {
       let lastChunkError = null;
 
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
         const params = new URLSearchParams({
           key: this.apiKey,
           steamids: chunk.join(","),
@@ -1081,22 +1120,8 @@ class SteamGameDurationService {
         }
 
         try {
-          const response = await fetch(
-            `${this.apiBaseUrl}/ISteamUser/GetPlayerSummaries/v0002/?${params.toString()}`,
-            {
-              method: "GET",
-              signal: controller.signal,
-              headers: { Accept: "application/json" },
-            },
-          );
-
-          if (!response.ok) {
-            const error = new Error(`Steam GetPlayerSummaries failed with status ${response.status}.`);
-            error.statusCode = response.status;
-            throw error;
-          }
-
-          const data = await response.json();
+          const url = `${this.apiBaseUrl}/ISteamUser/GetPlayerSummaries/v0002/?${params.toString()}`;
+          const data = await this._requestSteamJson(url);
           const players = data?.response?.players;
           if (Array.isArray(players)) {
             console.log(`[SteamAvatar] Success: Found ${players.length} player profiles from Steam API.`);
@@ -1118,8 +1143,6 @@ class SteamGameDurationService {
           } else {
             break;
           }
-        } finally {
-          clearTimeout(timeout);
         }
       }
 
@@ -1170,6 +1193,39 @@ class SteamGameDurationService {
     } catch (error) {
       console.error(`[SteamAvatar] Cache execution error:`, error);
       this.logger?.warn(`Failed to fetch and cache Steam avatars: ${error.message}`);
+    }
+  }
+
+  async fetchSteamFriends(steamID) {
+    if (!this.apiKey) {
+      throw new Error("Steam API key is not configured.");
+    }
+    const normalizedSteamID = normalizeSteamID(steamID);
+
+    const params = new URLSearchParams({
+      key: this.apiKey,
+      steamid: normalizedSteamID,
+      relationship: "friend",
+    });
+
+    try {
+      const data = await this._requestSteamJson(
+        `${this.apiBaseUrl}/ISteamUser/GetFriendList/v0001/?${params.toString()}`,
+      );
+      const friends = data?.friendslist?.friends || [];
+      const friendSteamIDs = friends.map((f) => f.steamid).filter(Boolean);
+      if (friendSteamIDs.length === 0) return [];
+
+      const summaries = await this.fetchSteamPlayerSummaries(friendSteamIDs);
+      return summaries.map((s) => ({
+        steamID: s.steamid,
+        name: s.personaname || s.realname || s.steamid,
+        avatar: s.avatarmedium || s.avatar || s.avatarfull || null,
+      }));
+    } catch (error) {
+      if (error?.statusCode === 401 || error?.statusCode === 403) return [];
+      this.logger?.warn(`Failed to fetch Steam friends for ${steamID}: ${error.message}`);
+      return [];
     }
   }
 
@@ -1304,6 +1360,127 @@ class SteamGameDurationService {
   }
 }
 
+function shouldBypassProxy(url, noProxyStr) {
+  if (!noProxyStr || !url) return false;
+  const targetUrl = url instanceof URL ? url : new URL(String(url));
+  const hostname = targetUrl.hostname.toLowerCase();
+  
+  const rules = String(noProxyStr).split(",").map(r => r.trim().toLowerCase()).filter(Boolean);
+  for (const rule of rules) {
+    if (rule === "*") return true;
+    if (rule.startsWith(".")) {
+      if (hostname.endsWith(rule) || hostname === rule.slice(1)) return true;
+    } else {
+      if (hostname === rule) return true;
+    }
+  }
+  return false;
+}
+
+function resolveProxyUrlForTarget(target, options = {}) {
+  const targetUrl = target instanceof URL ? target : new URL(String(target));
+  const env = options.env || process.env || {};
+  
+  let proxyUrl = options.proxyUrl || null;
+  let source = proxyUrl ? "explicit" : null;
+  
+  if (!proxyUrl) {
+    if (targetUrl.protocol === "https:") {
+      proxyUrl = env.HTTPS_PROXY || env.https_proxy || null;
+      if (proxyUrl) source = "env";
+    } else if (targetUrl.protocol === "http:") {
+      proxyUrl = env.HTTP_PROXY || env.http_proxy || null;
+      if (proxyUrl) source = "env";
+    }
+  }
+  
+  const noProxy = options.noProxy || env.NO_PROXY || env.no_proxy || null;
+  if (shouldBypassProxy(targetUrl, noProxy)) {
+    return {
+      proxyUrl: null,
+      source: "no_proxy",
+      bypassed: true
+    };
+  }
+  
+  return {
+    proxyUrl,
+    source,
+    bypassed: false
+  };
+}
+
+function createProxyAgent(proxyUrl, protocol) {
+  if (!proxyUrl) return null;
+  const urlStr = String(proxyUrl);
+  if (urlStr.startsWith("socks")) {
+    return new SocksProxyAgent(urlStr);
+  }
+  const cleanProtocol = String(protocol || "").toLowerCase();
+  if (cleanProtocol === "https:" || cleanProtocol === "https") {
+    return new HttpsProxyAgent(urlStr);
+  }
+  return new HttpProxyAgent(urlStr);
+}
+
+function requestJson(target, options = {}) {
+  return new Promise((resolve, reject) => {
+    const targetUrl = target instanceof URL ? target : new URL(String(target));
+    const isHttps = targetUrl.protocol === "https:";
+    const lib = isHttps ? https : http;
+    
+    const reqOptions = {
+      method: options.method || "GET",
+      headers: options.headers || {},
+      agent: options.agent,
+      family: options.family,
+    };
+    
+    let timer = null;
+    const req = lib.request(targetUrl, reqOptions, (res) => {
+      if (timer) clearTimeout(timer);
+      
+      const statusCode = res.statusCode;
+      if (statusCode < 200 || statusCode >= 300) {
+        const error = new Error(`Request failed with status code ${statusCode}`);
+        error.statusCode = statusCode;
+        reject(error);
+        return;
+      }
+      
+      let data = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => {
+        data += chunk;
+      });
+      res.on("end", () => {
+        try {
+          const parsed = JSON.parse(data);
+          resolve(parsed);
+        } catch (err) {
+          reject(new Error(`Failed to parse JSON response: ${err.message}`));
+        }
+      });
+    });
+    
+    req.on("error", (err) => {
+      if (timer) clearTimeout(timer);
+      reject(err);
+    });
+    
+    if (options.timeoutMs) {
+      timer = setTimeout(() => {
+        req.destroy();
+        const err = new Error(`Request timed out after ${options.timeoutMs}ms.`);
+        err.name = "AbortError";
+        reject(err);
+      }, options.timeoutMs);
+    }
+    
+    req.end();
+  });
+}
+
 export function createPlaytimeModule({ core, modules, config, logger }) {
   let db = null;
   let repo = null;
@@ -1345,6 +1522,10 @@ export function createPlaytimeModule({ core, modules, config, logger }) {
         lastSeenName: options.lastSeenName || null,
       });
       return lookup;
+    },
+
+    async fetchSteamFriends(steamID) {
+      return service.fetchSteamFriends(steamID);
     },
 
     createLookupJob(payload = {}) {
@@ -1615,3 +1796,10 @@ function collectPythonBinCandidates(primary) {
 
   return result;
 }
+
+export {
+  SteamGameDurationService,
+  createProxyAgent,
+  resolveProxyUrlForTarget,
+  shouldBypassProxy,
+};

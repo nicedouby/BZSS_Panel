@@ -313,6 +313,17 @@ CREATE TABLE IF NOT EXISTS player_violation_events (
 CREATE INDEX IF NOT EXISTS idx_player_violation_events_player ON player_violation_events(player_id);
 CREATE INDEX IF NOT EXISTS idx_player_violation_events_at ON player_violation_events(created_at);
 
+CREATE TABLE IF NOT EXISTS steam_friends (
+    player_id INTEGER NOT NULL,
+    friend_steam_id TEXT NOT NULL,
+    friend_name TEXT,
+    friend_avatar TEXT,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY(player_id, friend_steam_id),
+    FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_steam_friends_player ON steam_friends(player_id);
+
 CREATE TABLE IF NOT EXISTS schema_migrations (
     version INTEGER PRIMARY KEY,
     applied_at INTEGER NOT NULL
@@ -455,6 +466,22 @@ DROP TABLE IF EXISTS kill_stats;
     `);
 
     await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 7, Date.now());
+  }
+
+  if (!appliedSet.has(8)) {
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS steam_friends (
+          player_id INTEGER NOT NULL,
+          friend_steam_id TEXT NOT NULL,
+          friend_name TEXT,
+          friend_avatar TEXT,
+          updated_at INTEGER NOT NULL,
+          PRIMARY KEY(player_id, friend_steam_id),
+          FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_steam_friends_player ON steam_friends(player_id);
+    `);
+    await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 8, Date.now());
   }
 }
 

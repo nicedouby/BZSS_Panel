@@ -6,7 +6,7 @@
           {{ sidebarButtonLabel }}
         </button>
         <div class="topbar-copy">
-          <strong>{{ pageTitle }}</strong>
+          <strong v-if="showPageTitle">{{ pageTitle }}</strong>
           <div class="topbar-meta">
             <span class="topbar-subtitle">{{ subtitleLabel }}</span>
             <button
@@ -129,6 +129,7 @@ const pageTitle = computed(() => {
   if (titleKey) return t(titleKey, title);
   return String(title || server.snapshot.serverName || webStatus.value.serverName || server.snapshot.name || webStatus.value.name || "BZSS Panel");
 });
+const showPageTitle = computed(() => route.path !== "/match-status");
 const logClockSeconds = computed(() => {
   const value = Number(
     webStatus.value.logClockSeconds
@@ -449,7 +450,7 @@ function toggleSidebar() {
   position: relative;
   z-index: var(--z-user-dropdown);
   overflow: visible;
-  padding: 9px 16px 10px;
+  padding: 6px 14px 7px;
   border-bottom: 1px solid var(--color-border-default);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.016)), rgba(255, 255, 255, 0.006)),
@@ -462,14 +463,14 @@ function toggleSidebar() {
   display: grid;
   grid-template-columns: minmax(280px, 1.05fr) minmax(0, 1.3fr) auto;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   min-width: 0;
 }
 
 .topbar-brand {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -483,23 +484,23 @@ function toggleSidebar() {
 }
 
 .topbar-copy strong {
-  font-size: 16px;
-  line-height: 1.18;
+  font-size: 14px;
+  line-height: 1.1;
   letter-spacing: -0.02em;
 }
 
 .topbar-meta {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 2px;
+  gap: 6px;
+  margin-top: 1px;
   min-width: 0;
   flex-wrap: wrap;
 }
 
 .topbar-subtitle {
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -508,15 +509,15 @@ function toggleSidebar() {
 .warmup-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
-  padding: 0 9px;
+  min-height: 20px;
+  padding: 0 8px;
   border-radius: 999px;
   border: 1px solid rgba(122, 162, 184, 0.26);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.02)), rgba(255, 255, 255, 0.004)),
     rgba(122, 162, 184, 0.14);
   color: #d7f3ff;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   line-height: 1;
   letter-spacing: 0.01em;
@@ -567,7 +568,7 @@ function toggleSidebar() {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
   min-width: 0;
 }
@@ -575,15 +576,15 @@ function toggleSidebar() {
 .match-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 26px;
-  padding: 0 10px;
+  min-height: 22px;
+  padding: 0 8px;
   border-radius: 999px;
   border: 1px solid rgba(122, 162, 184, 0.22);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.018)), rgba(255, 255, 255, 0.004)),
     rgba(122, 162, 184, 0.09);
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.01em;
   line-height: 1;
@@ -609,7 +610,7 @@ function toggleSidebar() {
   -webkit-appearance: none;
   text-align: left;
   border-color: rgba(122, 162, 184, 0.3);
-  padding: 0 10px;
+  padding: 0 8px;
   color: #d7f3ff;
   cursor: pointer;
   font: inherit;
@@ -623,7 +624,7 @@ function toggleSidebar() {
 .topbar-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   justify-content: flex-end;
   min-width: 0;
 }
@@ -631,15 +632,15 @@ function toggleSidebar() {
 .metric {
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
-  padding: 0 10px;
+  min-height: 20px;
+  padding: 0 8px;
   border-radius: 999px;
   border: 1px solid rgba(122, 162, 184, 0.22);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, calc(var(--panel-surface-alpha) + 0.018)), rgba(255, 255, 255, 0.004)),
     rgba(122, 162, 184, 0.09);
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.01em;
   line-height: 1;
@@ -677,7 +678,7 @@ function toggleSidebar() {
 .topbar-health {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   flex: 0 0 auto;
 }
 
@@ -685,14 +686,14 @@ function toggleSidebar() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  min-width: 24px;
-  min-height: 24px;
+  width: 20px;
+  min-width: 20px;
+  min-height: 20px;
   padding: 0;
   border-radius: 999px;
   border: 1px solid rgba(122, 162, 184, 0.22);
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   line-height: 1;
   text-transform: uppercase;
@@ -740,12 +741,12 @@ function toggleSidebar() {
 
 @media (max-width: 780px) {
   .topbar {
-    padding: 8px 12px 9px;
+    padding: 6px 10px 7px;
   }
 
   .topbar-grid {
     grid-template-columns: 1fr;
-    gap: 10px;
+    gap: 8px;
     grid-template-areas:
       "brand"
       "actions"

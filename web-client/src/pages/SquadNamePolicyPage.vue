@@ -6,17 +6,11 @@
     >
       <template #actions>
         <button type="button" class="action-btn" :disabled="loading" @click="loadState">
-          {{ loading ? "刷新中.." : "刷新规则" }}
+          {{ loading ? "刷新中.." : "刷新" }}
         </button>
-        <button
-          v-if="canSave"
-          type="button"
-          class="action-btn primary"
-          :disabled="saving || !dirty"
-          @click="saveState"
-        >
-          {{ saving ? "保存中.." : "保存 JSON" }}
-        </button>
+        <router-link to="/debug/squad-name-policy/rules" class="action-btn primary">
+          {{ canSave ? "规则维护" : "查看规则" }}
+        </router-link>
       </template>
     </PageHeader>
 
@@ -64,6 +58,12 @@
             <em>{{ testResult.matched.faction || "-" }} / {{ testResult.matched.vehicleType || "-" }} / {{ testResult.matched.matchedKind }}</em>
           </div>
 
+          <div v-if="testResult.classification" class="classification-card">
+            <span>判定</span>
+            <strong>{{ testResult.classification.label }}</strong>
+            <em>{{ testResult.classification.reason }}</em>
+          </div>
+
           <div v-if="testResult.warningMessage" class="warning-message">
             {{ testResult.warningMessage }}
           </div>
@@ -103,106 +103,13 @@
           <span>导入：{{ formatTime(state?.importedAt) }}</span>
           <span>更新：{{ formatTime(state?.updatedAt) }}</span>
         </div>
-
-        <label class="field">
-          <span>建议数量上限</span>
-          <input v-model.number="draft.suggestionLimit" type="number" min="1" max="50" step="1" :disabled="!canSave" @input="markDirty" />
-        </label>
-
-        <div class="allow-list-grid">
-          <label class="field">
-            <span>默认队名正则</span>
-            <textarea v-model="draft.defaultNamePatternsText" :disabled="!canSave" @input="markDirty" />
-          </label>
-          <label class="field">
-            <span>步兵队白名单</span>
-            <textarea v-model="draft.infantryNamesText" :disabled="!canSave" @input="markDirty" />
-          </label>
-          <label class="field">
-            <span>特种步兵队白名单</span>
-            <textarea v-model="draft.specialInfantryNamesText" :disabled="!canSave" @input="markDirty" />
-          </label>
-        </div>
       </PageCard>
     </section>
-
-    <PageCard compact body-mode="scroll" class="rules-card">
-      <template #header>
-        <div>
-          <h2 class="card-headline">规则维护</h2>
-          <p class="card-subtitle">可维护标准名、别名和关键字。普通用户只能查看和测试。</p>
-        </div>
-      </template>
-
-      <div class="table-toolbar">
-        <input v-model.trim="filterText" type="text" placeholder="搜索载具名 / 别名 / 关键字 / 阵营" />
-        <button v-if="canSave" type="button" class="action-btn" @click="addEntry">新增载具</button>
-        <button
-          v-if="filteredEntryCount > visibleEntries.length"
-          type="button"
-          class="action-btn"
-          @click="showMoreEntries"
-        >
-          显示更多 {{ visibleEntries.length }}/{{ filteredEntryCount }}
-        </button>
-        <span v-else class="toolbar-note">显示 {{ visibleEntries.length }}/{{ filteredEntryCount }}</span>
-      </div>
-
-      <div class="table-wrap">
-        <table class="rules-table">
-          <thead>
-            <tr>
-              <th>阵营</th>
-              <th>类型</th>
-              <th>标准队名</th>
-              <th>别名</th>
-              <th>关键字</th>
-              <th>资产</th>
-              <th v-if="canSave">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="entry in visibleEntries" :key="entry.id">
-              <td><input v-model="entry.faction" :disabled="!canSave" @input="markDirty" /></td>
-              <td><input v-model="entry.vehicleType" :disabled="!canSave" @input="markDirty" /></td>
-              <td><input v-model="entry.name" :disabled="!canSave" @input="markDirty" /></td>
-              <td><textarea v-model="entry.aliasText" :disabled="!canSave" @input="markDirty" /></td>
-              <td><textarea v-model="entry.keywordText" :disabled="!canSave" @input="markDirty" /></td>
-              <td><input v-model="entry.asset" :disabled="!canSave" @input="markDirty" /></td>
-              <td v-if="canSave">
-                <button type="button" class="danger-btn" @click="removeEntry(entry.id)">删除</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </PageCard>
-
-    <PageCard compact title="JSON 编辑" description="高级维护入口。保存前会按模块规则重新规范化。">
-      <template #actions>
-        <button type="button" class="action-btn" @click="toggleJsonEditor">
-          {{ showJsonEditor ? "收起 JSON" : "展开 JSON" }}
-        </button>
-        <button v-if="showJsonEditor && canSave" type="button" class="action-btn" @click="syncJsonText">
-          刷新 JSON
-        </button>
-      </template>
-      <textarea
-        v-if="showJsonEditor"
-        v-model="jsonText"
-        class="json-editor"
-        :disabled="!canSave"
-        @input="onJsonEdited"
-      />
-      <div v-else class="json-placeholder">
-        JSON 内容较大，默认不渲染以保持测试输入流畅；需要直接维护原始 JSON 时再展开。
-      </div>
-    </PageCard>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 
 import { apiGet, apiPost, ApiError } from "../app/apiClient";
 import PageCard from "../components/common/PageCard.vue";
@@ -219,11 +126,6 @@ type PolicyEntry = {
   aliases: string[];
   keywords: string[];
   searchTokens?: string[];
-};
-
-type EditableEntry = PolicyEntry & {
-  aliasText: string;
-  keywordText: string;
 };
 
 type PolicyState = {
@@ -284,41 +186,11 @@ const ui = useUiStore();
 const canSave = computed(() => Boolean(auth.user?.isSuperAdmin));
 
 const loading = ref(false);
-const saving = ref(false);
 const testing = ref(false);
 const error = ref("");
-const dirty = ref(false);
 const state = ref<PolicyState | null>(null);
-const entries = ref<EditableEntry[]>([]);
-const jsonText = ref("");
-const showJsonEditor = ref(false);
-const filterText = ref("");
 const testName = ref("BMP队");
 const testResult = ref<PolicyTestResult | null>(null);
-const entryRenderLimit = ref(80);
-const draft = reactive({
-  suggestionLimit: 5,
-  defaultNamePatternsText: "",
-  infantryNamesText: "",
-  specialInfantryNamesText: "",
-});
-
-const matchingEntries = computed(() => {
-  const keyword = filterText.value.toLowerCase();
-  const source = entries.value;
-  if (!keyword) return source;
-  return source.filter((entry) => [
-    entry.faction,
-    entry.vehicleType,
-    entry.name,
-    entry.aliasText,
-    entry.keywordText,
-    entry.asset,
-  ].join(" ").toLowerCase().includes(keyword));
-});
-
-const filteredEntryCount = computed(() => matchingEntries.value.length);
-const visibleEntries = computed(() => matchingEntries.value.slice(0, entryRenderLimit.value));
 
 onMounted(() => {
   void loadState();
@@ -328,8 +200,7 @@ async function loadState() {
   loading.value = true;
   error.value = "";
   try {
-    const payload = await apiGet<PolicyState>("/api/squad-name-policy/state");
-    applyState(payload);
+    state.value = await apiGet<PolicyState>("/api/squad-name-policy/state");
   } catch (err) {
     error.value = formatError(err);
   } finally {
@@ -347,142 +218,6 @@ async function runTest() {
   } finally {
     testing.value = false;
   }
-}
-
-async function saveState() {
-  if (!canSave.value) return;
-  saving.value = true;
-  try {
-    const saved = await apiPost<PolicyState>("/api/squad-name-policy/state", buildSavePayload());
-    applyState(saved);
-    ui.pushToast({ title: "保存完成", message: "队名规范 JSON 已更新。", tone: "ok" });
-  } catch (err) {
-    ui.pushToast({ title: "保存失败", message: formatError(err), tone: "error" });
-  } finally {
-    saving.value = false;
-  }
-}
-
-function applyState(payload: PolicyState) {
-  state.value = payload;
-  draft.suggestionLimit = Number(payload.suggestionLimit || 5);
-  draft.infantryNamesText = (payload.infantryNames ?? []).join("\n");
-  draft.specialInfantryNamesText = (payload.specialInfantryNames ?? []).join("\n");
-  draft.defaultNamePatternsText = (payload.defaultNamePatterns ?? []).join("\n");
-  entries.value = payload.entries.map(toEditableEntry);
-  entryRenderLimit.value = 80;
-  jsonText.value = "";
-  showJsonEditor.value = false;
-  dirty.value = false;
-}
-
-function toEditableEntry(entry: PolicyEntry): EditableEntry {
-  return {
-    ...entry,
-    aliases: Array.isArray(entry.aliases) ? entry.aliases : [],
-    keywords: Array.isArray(entry.keywords) ? entry.keywords : [],
-    aliasText: (entry.aliases ?? []).join("\n"),
-    keywordText: (entry.keywords ?? []).join("\n"),
-  };
-}
-
-function buildSavePayload() {
-  const parsed = showJsonEditor.value ? parseJsonText() : null;
-  if (parsed) return { ...parsed, suggestionLimit: draft.suggestionLimit };
-  return {
-    version: state.value?.version ?? 1,
-    source: state.value?.source ?? { type: "manual", fileName: "", path: "", sheetName: "" },
-    importedAt: state.value?.importedAt ?? null,
-    suggestionLimit: draft.suggestionLimit,
-    defaultNamePatterns: parseList(draft.defaultNamePatternsText),
-    infantryNames: parseList(draft.infantryNamesText),
-    specialInfantryNames: parseList(draft.specialInfantryNamesText),
-    entries: entries.value.map((entry) => ({
-      id: entry.id,
-      faction: entry.faction,
-      vehicleType: entry.vehicleType,
-      asset: entry.asset,
-      name: entry.name,
-      aliases: parseList(entry.aliasText),
-      keywords: parseList(entry.keywordText),
-      searchTokens: entry.searchTokens ?? [],
-    })),
-  };
-}
-
-function parseJsonText() {
-  try {
-    const parsed = JSON.parse(jsonText.value);
-    if (parsed && typeof parsed === "object" && Array.isArray(parsed.entries)) return parsed;
-  } catch {
-    return null;
-  }
-  return null;
-}
-
-function syncJsonText() {
-  jsonText.value = JSON.stringify({
-    version: state.value?.version ?? 1,
-    source: state.value?.source ?? { type: "manual", fileName: "", path: "", sheetName: "" },
-    importedAt: state.value?.importedAt ?? null,
-    updatedAt: state.value?.updatedAt ?? null,
-    suggestionLimit: draft.suggestionLimit,
-    defaultNamePatterns: parseList(draft.defaultNamePatternsText),
-    infantryNames: parseList(draft.infantryNamesText),
-    specialInfantryNames: parseList(draft.specialInfantryNamesText),
-    entries: entries.value.map((entry) => ({
-      id: entry.id,
-      faction: entry.faction,
-      vehicleType: entry.vehicleType,
-      asset: entry.asset,
-      name: entry.name,
-      aliases: parseList(entry.aliasText),
-      keywords: parseList(entry.keywordText),
-      searchTokens: entry.searchTokens ?? [],
-    })),
-  }, null, 2);
-}
-
-function addEntry() {
-  entries.value.unshift(toEditableEntry({
-    id: `manual:${Date.now().toString(36)}`,
-    faction: "",
-    vehicleType: "",
-    asset: "",
-    name: "New Vehicle",
-    aliases: [],
-    keywords: [],
-    searchTokens: [],
-  }));
-  markDirty();
-}
-
-function removeEntry(id: string) {
-  entries.value = entries.value.filter((entry) => entry.id !== id);
-  markDirty();
-}
-
-function markDirty() {
-  dirty.value = true;
-}
-
-function showMoreEntries() {
-  entryRenderLimit.value = Math.min(filteredEntryCount.value, entryRenderLimit.value + 80);
-}
-
-function toggleJsonEditor() {
-  showJsonEditor.value = !showJsonEditor.value;
-  if (showJsonEditor.value && !jsonText.value) {
-    syncJsonText();
-  }
-}
-
-function onJsonEdited() {
-  dirty.value = true;
-}
-
-function parseList(text: string) {
-  return Array.from(new Set(String(text ?? "").split(/[\r\n,，]+/).map((item) => item.trim()).filter(Boolean)));
 }
 
 function formatScore(value: number | null) {
@@ -541,8 +276,7 @@ function formatError(err: unknown) {
   font-size: 12px;
 }
 
-input,
-textarea {
+input {
   width: 100%;
   border: 1px solid var(--color-border-default);
   border-radius: 8px;
@@ -552,29 +286,23 @@ textarea {
   font: inherit;
 }
 
-textarea {
-  min-height: 58px;
-  resize: vertical;
-}
-
-.action-btn,
-.danger-btn {
+.action-btn {
   border: 1px solid var(--color-border-default);
   border-radius: 8px;
   background: var(--color-bg-card);
   color: var(--color-text-primary);
   padding: 9px 12px;
   cursor: pointer;
+  text-decoration: none;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .action-btn.primary {
   border-color: color-mix(in srgb, var(--color-status-info) 46%, var(--color-border-default));
   background: color-mix(in srgb, var(--color-status-info) 18%, var(--color-bg-card));
-}
-
-.danger-btn {
-  border-color: color-mix(in srgb, var(--color-status-error) 44%, var(--color-border-default));
-  color: var(--color-status-error);
 }
 
 button:disabled {
@@ -608,6 +336,7 @@ button:disabled {
 
 .result-head,
 .matched-card,
+.classification-card,
 .warning-message,
 .suggestion-card,
 .stats-grid article {
@@ -625,6 +354,7 @@ button:disabled {
 .result-grid div,
 .stats-grid article,
 .matched-card,
+.classification-card,
 .warning-message,
 .suggestion-card {
   border: 1px solid var(--color-border-subtle, var(--color-border-default));
@@ -652,94 +382,6 @@ button:disabled {
   display: grid;
   gap: 6px;
   margin: 14px 0;
-}
-
-.allow-list-grid {
-  display: grid;
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.allow-list-grid textarea {
-  min-height: 86px;
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.rules-card {
-  min-height: 420px;
-}
-
-.table-toolbar {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 12px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.table-toolbar input {
-  max-width: 420px;
-}
-
-.toolbar-note,
-.json-placeholder {
-  color: var(--color-text-muted);
-  font-size: 12px;
-}
-
-.table-wrap {
-  overflow: auto;
-  max-height: 520px;
-  border: 1px solid var(--color-border-default);
-  border-radius: 8px;
-}
-
-.rules-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 1120px;
-}
-
-.rules-table th,
-.rules-table td {
-  border-bottom: 1px solid var(--color-border-subtle, var(--color-border-default));
-  padding: 8px;
-  vertical-align: top;
-}
-
-.rules-table th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--color-bg-card);
-  text-align: left;
-  font-size: 12px;
-  color: var(--color-text-muted);
-}
-
-.json-editor {
-  min-height: 280px;
-  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.json-placeholder {
-  border: 1px dashed var(--color-border-default);
-  border-radius: 8px;
-  padding: 14px;
-}
-
-.card-headline {
-  margin: 0;
-  font-size: 16px;
-}
-
-.card-subtitle {
-  margin: 6px 0 0;
-  color: var(--color-text-muted);
-  font-size: 12px;
 }
 
 @media (max-width: 900px) {

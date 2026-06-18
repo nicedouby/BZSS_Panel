@@ -16,7 +16,7 @@
       </template>
     </WorkspaceToolbar><AppPageToolbar>
       <div class="toolbar-status">
-        <AppStatusBadge tone="idle">自动轮询 5s</AppStatusBadge>
+        <AppStatusBadge tone="idle">自动轮询 {{ pollIntervalLabel }}</AppStatusBadge>
         <AppStatusBadge :tone="stale ? 'warn' : 'ok'">
           {{ stale ? "缓存数据" : "实时数据" }}
         </AppStatusBadge>
@@ -220,7 +220,9 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useQuery } from "@tanstack/vue-query";
+import { useRoute } from "vue-router";
 import { renderApiError } from "../app/errors";
+import { normalizeRefreshPolicy, resolveRefreshDelay } from "../app/refreshPolicy";
 import {
   disbandSquad,
   kickPlayer,
@@ -244,9 +246,12 @@ import AppTable from "../components/common/AppTable.vue";
 import AppSplitLayout from "../components/common/AppSplitLayout.vue";
 import DataState from "../components/common/DataState.vue";
 import ErrorBlock from "../components/common/ErrorBlock.vue";
+import { usePageActivity } from "../composables/usePageActivity";
 
 const auth = useAuthStore();
 const ui = useUiStore();
+const route = useRoute();
+const pageActivity = usePageActivity();
 
 const actionBusy = ref(false);
 const selectedKind = ref<string>("all");
@@ -264,10 +269,20 @@ const removeTarget = ref("");
 const removeSource = ref("manual");
 const removeReason = ref("");
 
+const routeRefreshPolicy = computed(() => normalizeRefreshPolicy(route.meta.refreshPolicy));
+const recordsRefetchInterval = computed(() => resolveRefreshDelay({
+  policy: routeRefreshPolicy.value,
+  hidden: !pageActivity.isDocumentVisible.value,
+  surface: "pageSlow",
+}));
+const pollIntervalLabel = computed(() => `${Math.round(recordsRefetchInterval.value / 1000)}s`);
+
 const query = useQuery<SquadManagementRecordsResponse>({
   queryKey: ["squad-management-records"],
   queryFn: async () => getSquadManagementRecords({ limit: 1000, offset: 0 }),
-  refetchInterval: 5000,
+  refetchInterval: computed(() => (pageActivity.canPoll.value ? recordsRefetchInterval.value : false)),
+  refetchIntervalInBackground: false,
+  refetchOnWindowFocus: false,
 });
 
 const records = computed(() => {

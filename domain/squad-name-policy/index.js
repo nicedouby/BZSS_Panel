@@ -270,13 +270,13 @@ function matchAdminSquadName(normalizedInput) {
 function inferNonVehicleClassification(input, normalizedInput, normalizedStrippedInput) {
   const classifier = classifySquadName(input, { includeDebug: false });
   if (classifier.nature === SQUAD_NATURE.INFANTRY) {
-    return buildClassification("infantry", SQUAD_NATURE_LABEL.infantry, "Classified as infantry squad name. Vehicle suggestions skipped.");
+    return buildClassification("infantry", SQUAD_NATURE_LABEL.infantry, "已认定为步兵队，跳过载具建议。");
   }
   if (isNumericOnlyName(normalizedStrippedInput || normalizedInput)) {
-    return buildClassification("infantry", SQUAD_NATURE_LABEL.infantry, "Numeric-only squad names are treated as infantry/custom squad names. Vehicle suggestions skipped.");
+    return buildClassification("infantry", SQUAD_NATURE_LABEL.infantry, "数字队名已认定为步兵队，跳过载具建议。");
   }
   if (containsChinese(input) && classifier.nature === SQUAD_NATURE.OTHER) {
-    return buildClassification("infantry", SQUAD_NATURE_LABEL.infantry, "Chinese custom squad names are treated as infantry squad names. Vehicle suggestions skipped.");
+    return buildClassification("infantry", SQUAD_NATURE_LABEL.infantry, "奇葩中文队名已认定为步兵队，跳过载具建议。");
   }
   return null;
 }

@@ -4,7 +4,7 @@
       <span class="subnav-icon" aria-hidden="true">{{ activeSection.icon }}</span>
       <span class="subnav-title">{{ activeSection.label }}</span>
     </div>
-    <nav class="subnav-list" :aria-label="`${activeSection.label}子导航`">
+    <nav class="subnav-list" :aria-label="`${activeSection.label} 子导航`">
       <RouterLink
         v-for="item in activeSection.items"
         :key="item.path"
@@ -63,8 +63,8 @@ onMounted(fetchPages);
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 14px;
-  padding: 9px clamp(14px, 1.4vw, 22px);
+  gap: 10px;
+  padding: 6px clamp(12px, 1.2vw, 18px);
   border-bottom: 1px solid var(--color-border-soft);
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--section-accent) 7%, rgba(255, 255, 255, 0.018)), rgba(255, 255, 255, 0.006)),
@@ -84,32 +84,32 @@ onMounted(fetchPages);
 .subnav-head {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
-  min-height: 36px;
-  padding: 3px 12px 3px 4px;
+  min-height: 28px;
+  padding: 1px 10px 1px 2px;
   border-right: 1px solid color-mix(in srgb, var(--section-accent) 22%, var(--color-border-soft));
 }
 
 .subnav-icon {
-  width: 30px;
-  height: 30px;
+  width: 22px;
+  height: 22px;
   display: inline-grid;
   place-items: center;
-  border-radius: 9px;
+  border-radius: 7px;
   border: 1px solid color-mix(in srgb, var(--section-accent) 24%, var(--color-border-soft));
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--section-accent) 18%, transparent), rgba(255, 255, 255, 0.025)),
     rgba(255, 255, 255, 0.04);
   color: var(--color-text-muted);
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 800;
   flex: 0 0 auto;
 }
 
 .subnav-title {
   color: var(--color-text-primary);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   white-space: nowrap;
   line-height: 1;
@@ -119,7 +119,7 @@ onMounted(fetchPages);
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 5px;
   overflow-x: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
@@ -136,13 +136,13 @@ onMounted(fetchPages);
 
 .subnav-link {
   min-width: 0;
-  height: 34px;
+  height: 28px;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   max-width: 220px;
-  padding: 0 11px 0 8px;
+  padding: 0 9px 0 6px;
   border-radius: 999px;
   border: 1px solid transparent;
   color: var(--color-text-secondary);
@@ -164,15 +164,15 @@ onMounted(fetchPages);
 }
 
 .item-icon {
-  width: 23px;
-  height: 23px;
+  width: 18px;
+  height: 18px;
   display: inline-grid;
   place-items: center;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid color-mix(in srgb, var(--section-accent) 18%, var(--color-border-soft));
   color: var(--color-text-muted);
-  font-size: 8px;
+  font-size: 7px;
   font-weight: 800;
   flex: 0 0 auto;
 }
@@ -188,15 +188,15 @@ onMounted(fetchPages);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 650;
 }
 
 @media (max-width: 900px) {
   .section-subnav {
     grid-template-columns: 1fr;
-    gap: 8px;
-    padding: 9px 12px;
+    gap: 6px;
+    padding: 6px 10px;
   }
 
   .subnav-head {

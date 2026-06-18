@@ -204,6 +204,13 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       return repo.closeOpenSessionHistory(playerId, session);
     },
 
+    async listSteamFriends(playerId) {
+      return repo.listSteamFriends(playerId);
+    },
+
+    async upsertSteamFriends(playerId, friends) {
+      return repo.upsertSteamFriends(playerId, friends);
+    },
   };
 
   return {

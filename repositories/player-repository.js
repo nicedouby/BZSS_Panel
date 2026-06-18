@@ -1056,6 +1056,38 @@ export class PlayerRepository {
     if (name) this.byName.set(name, player);
   }
 
+  async listSteamFriends(playerId) {
+    return this.db.all(
+      `SELECT f.friend_steam_id AS steamID,
+              COALESCE(p.current_name, f.friend_name) AS name,
+              COALESCE(p.steam_avatar, f.friend_avatar) AS avatar,
+              p.id AS dbPlayerId,
+              p.game_seconds AS gameSeconds,
+              p.server_seconds AS serverSeconds,
+              f.updated_at
+       FROM steam_friends f
+       LEFT JOIN players p ON p.steam_id = f.friend_steam_id
+       WHERE f.player_id = ?
+       ORDER BY COALESCE(p.current_name, f.friend_name) COLLATE NOCASE ASC`,
+      Number(playerId),
+    );
+  }
+
+  async upsertSteamFriends(playerId, friends = []) {
+    const ts = Date.now();
+    await this.db.run("DELETE FROM steam_friends WHERE player_id = ?", Number(playerId));
+    if (!friends.length) return;
+
+    const stmt = await this.db.prepare(
+      `INSERT INTO steam_friends (player_id, friend_steam_id, friend_name, friend_avatar, updated_at)
+       VALUES (?, ?, ?, ?, ?)`
+    );
+    for (const friend of friends) {
+      await stmt.run(Number(playerId), friend.steamID, friend.name, friend.avatar, ts);
+    }
+    await stmt.finalize();
+  }
+
   evict(player) {
     if (!player) return;
     const steam = cleanId(player.steam_id);

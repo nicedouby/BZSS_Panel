@@ -27,6 +27,7 @@ import PjscAverageDurationPage from "../pages/PjscAverageDurationPage.vue";
 import DrawVoteGuardDebugPage from "../pages/DrawVoteGuardDebugPage.vue";
 import SquadNameClassifierDebugPage from "../pages/SquadNameClassifierDebugPage.vue";
 import SquadNamePolicyPage from "../pages/SquadNamePolicyPage.vue";
+import SquadNameRulesPage from "../pages/SquadNameRulesPage.vue";
 import WelcomeJoinWarningDebugPage from "../pages/WelcomeJoinWarningDebugPage.vue";
 import PlayerSessionRecordsPage from "../pages/PlayerSessionRecordsPage.vue";
 import CombatLogPage from "../pages/CombatLogPage.vue";
@@ -394,6 +395,15 @@ export const pageRegistry: PageDefinition[] = [
     category: "debug",
     refreshPolicy: "manual",
     nav: { section: "players", label: "队名规范", icon: "NAME", order: 95 },
+    ...workspacePage,
+  },
+  {
+    name: "squad-name-rules",
+    path: "/debug/squad-name-policy/rules",
+    component: SquadNameRulesPage,
+    title: "队名规范规则维护",
+    category: "debug",
+    refreshPolicy: "manual",
     ...workspacePage,
   },
   {

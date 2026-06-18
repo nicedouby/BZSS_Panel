@@ -84,6 +84,32 @@
                     <span v-else class="refresh-spinner"></span>
                     刷新个人资料
                   </button>
+                  <button
+                    type="button"
+                    class="hud-header-db-btn"
+                    @click="handleAdminTrack"
+                    :disabled="actionBusy || !canUseBzssCoreTrack"
+                    :title="adminTrackTitle"
+                  >
+                    <svg viewBox="0 0 24 24" width="12" height="12" class="btn-icon">
+                      <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
+                      <circle cx="12" cy="12" r="3" fill="currentColor"/>
+                    </svg>
+                    Track
+                  </button>
+                  <button
+                    type="button"
+                    class="hud-header-db-btn"
+                    @click="handleRemoveAdminTrack"
+                    :disabled="actionBusy || !canUseBzssCoreTrack"
+                    :title="adminTrackTitle"
+                  >
+                    <svg viewBox="0 0 24 24" width="12" height="12" class="btn-icon" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    Untrack
+                  </button>
                 </div>
                 <div class="hud-header-identities">
                   <span
@@ -108,50 +134,89 @@
                     IP: {{ displayIp || '--' }}
                   </span>
                 </div>
-                <!-- SESSION CTX: Fixed horizontal attributes grid -->
-                <div class="hud-session-ctx-grid">
-                  <div class="hud-ctx-item">
-                    <span class="ctx-lbl">玩家 ID</span>
-                    <strong class="ctx-val">#{{ props.player.playerId ?? "-" }}</strong>
-                  </div>
-                  <div class="hud-ctx-item">
-                    <span class="ctx-lbl">阵营归属</span>
-                    <strong class="ctx-val" :class="teamColorClass">Team {{ props.player.teamId ?? "?" }}</strong>
-                  </div>
-                  <div class="hud-ctx-item">
-                    <span class="ctx-lbl">分配小队</span>
-                    <strong class="ctx-val">
-                      <span v-if="props.player.squadId != null && props.player.squadId !== 0" class="hud-squad-tag">#{{ props.player.squadId }}</span>
-                      {{ props.player.squadId ? `Squad ${props.player.squadId}` : t("match.unassigned") }}
-                    </strong>
-                  </div>
-                  <div class="hud-ctx-item" :class="{ 'is-leader': props.player.isLeader }">
-                    <span class="ctx-lbl">队长属性</span>
-                    <strong class="ctx-val" :class="{ 'leader-active-text': props.player.isLeader }">
-                      <span v-if="props.player.isLeader">⭐ </span>{{ props.player.isLeader ? t("common.yes") : t("common.no") }}
-                    </strong>
-                  </div>
-                  <div class="hud-ctx-item">
-                    <span class="ctx-lbl">在线状态</span>
-                    <strong class="ctx-val online-status" :class="{ online: props.player.isOnline }">
-                      {{ props.player.isOnline ? t("common.online") : t("common.offline") }}
-                    </strong>
-                  </div>
-                  <div class="hud-ctx-item hud-ctx-item-wide">
-                    <span class="ctx-lbl">本局在服时长</span>
-                    <strong class="ctx-val">{{ matchOnlineText }}</strong>
-                    <small v-if="matchOnlineSubText" class="ctx-sub">{{ matchOnlineSubText }}</small>
-                  </div>
-                </div>
+              </div>
+
+              <!-- Close Action button -->
+              <button type="button" class="hud-close-button" @click="close" :title="`${t('common.close')} (Esc)`">
+                <svg viewBox="0 0 24 24" width="14" height="14">
+                  <path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+
+            <!-- SESSION CTX: Fixed horizontal attributes grid -->
+            <div class="hud-session-ctx-grid">
+              <div class="hud-ctx-item">
+                <span class="ctx-lbl">玩家 ID</span>
+                <strong class="ctx-val">#{{ props.player.playerId ?? "-" }}</strong>
+              </div>
+              <div class="hud-ctx-item">
+                <span class="ctx-lbl">阵营归属</span>
+                <strong class="ctx-val" :class="teamColorClass">Team {{ props.player.teamId ?? "?" }}</strong>
+              </div>
+              <div class="hud-ctx-item">
+                <span class="ctx-lbl">分配小队</span>
+                <strong class="ctx-val">
+                  <span v-if="props.player.squadId != null && props.player.squadId !== 0" class="hud-squad-tag">#{{ props.player.squadId }}</span>
+                  {{ props.player.squadId ? `Squad ${props.player.squadId}` : t("match.unassigned") }}
+                </strong>
+              </div>
+              <div class="hud-ctx-item" :class="{ 'is-leader': props.player.isLeader }">
+                <span class="ctx-lbl">队长属性</span>
+                <strong class="ctx-val" :class="{ 'leader-active-text': props.player.isLeader }">
+                  <span v-if="props.player.isLeader">⭐ </span>{{ props.player.isLeader ? t("common.yes") : t("common.no") }}
+                </strong>
+              </div>
+              <div class="hud-ctx-item">
+                <span class="ctx-lbl">在线状态</span>
+                <strong class="ctx-val online-status" :class="{ online: props.player.isOnline }">
+                  {{ props.player.isOnline ? t("common.online") : t("common.offline") }}
+                </strong>
+              </div>
+              <div class="hud-ctx-item hud-ctx-item-wide">
+                <span class="ctx-lbl">本局在服时长</span>
+                <strong class="ctx-val">{{ matchOnlineText }}</strong>
+                <small v-if="matchOnlineSubText" class="ctx-sub">{{ matchOnlineSubText }}</small>
               </div>
             </div>
 
-            <!-- Close Action button -->
-            <button type="button" class="hud-close-button" @click="close" :title="`${t('common.close')} (Esc)`">
-              <svg viewBox="0 0 24 24" width="14" height="14">
-                <path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/>
-              </svg>
-            </button>
+            <!-- CAREER CTX: Career Stats Bar -->
+            <div v-if="props.player.battleStats" class="hud-header-career-bar">
+              <span class="career-bar-title">CAREER</span>
+              <div class="career-bar-items">
+                <div class="cb-item highlight">
+                  <span class="cb-lbl">K/D</span>
+                  <strong class="cb-val">{{ battleKd }}</strong>
+                </div>
+                <div class="cb-divider"></div>
+                <div class="cb-item">
+                  <span class="cb-lbl">击杀</span>
+                  <strong class="cb-val kills">{{ props.player.battleStats.kills }}</strong>
+                </div>
+                <div class="cb-divider"></div>
+                <div class="cb-item">
+                  <span class="cb-lbl">死亡</span>
+                  <strong class="cb-val deaths">{{ props.player.battleStats.deaths }}</strong>
+                </div>
+                <div class="cb-divider"></div>
+                <div class="cb-item">
+                  <span class="cb-lbl">击倒</span>
+                  <strong class="cb-val downs">{{ props.player.battleStats.downs }}</strong>
+                </div>
+                <div class="cb-divider"></div>
+                <div class="cb-item">
+                  <span class="cb-lbl">TK</span>
+                  <strong class="cb-val tk" :class="{ danger: props.player.battleStats.tk > 0 }">
+                    {{ props.player.battleStats.tk }}
+                  </strong>
+                </div>
+                <div class="cb-divider"></div>
+                <div class="cb-item">
+                  <span class="cb-lbl">复苏</span>
+                  <strong class="cb-val revives">{{ props.player.battleStats.revives }}</strong>
+                </div>
+              </div>
+            </div>
           </header>
 
           <!-- System Message Banner -->
@@ -172,7 +237,7 @@
                 <div class="hud-pane-section">
                   <div class="hud-section-header">
                     <span class="hud-section-title">本局战斗表现 / SESSION COMBAT</span>
-                    <span class="hud-section-subtitle">{{ props.player.statsLabel }}</span>
+                    <span class="hud-section-subtitle">实时对局数据统计 / REAL-TIME STATS</span>
                   </div>
 
                   <!-- KD Indicator Block -->
@@ -196,148 +261,85 @@
                   <!-- Stats Card Matrix -->
                   <div class="combat-hud-grid">
                     <div class="combat-hud-card downs">
-                      <span class="ch-lbl">击倒</span>
-                      <strong class="ch-val">{{ props.player.combatStats.downs }}</strong>
+                      <div class="ch-icon-wrapper">
+                        <svg viewBox="0 0 24 24" class="ch-icon" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M12 5v14M19 12l-7 7-7-7" />
+                        </svg>
+                      </div>
+                      <div class="ch-info">
+                        <span class="ch-lbl">击倒</span>
+                        <strong class="ch-val">{{ props.player.combatStats.downs }}</strong>
+                      </div>
                     </div>
                     <div class="combat-hud-card kills">
-                      <span class="ch-lbl">击杀</span>
-                      <strong class="ch-val">{{ props.player.combatStats.kills }}</strong>
+                      <div class="ch-icon-wrapper">
+                        <svg viewBox="0 0 24 24" class="ch-icon" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                          <circle cx="12" cy="12" r="8"></circle>
+                          <line x1="12" y1="1" x2="12" y2="3"></line>
+                          <line x1="12" y1="21" x2="12" y2="23"></line>
+                          <line x1="1" y1="12" x2="3" y2="12"></line>
+                          <line x1="21" y1="12" x2="23" y2="12"></line>
+                        </svg>
+                      </div>
+                      <div class="ch-info">
+                        <span class="ch-lbl">击杀</span>
+                        <strong class="ch-val">{{ props.player.combatStats.kills }}</strong>
+                      </div>
                     </div>
                     <div class="combat-hud-card deaths">
-                      <span class="ch-lbl">死亡</span>
-                      <strong class="ch-val">{{ props.player.combatStats.deaths }}</strong>
+                      <div class="ch-icon-wrapper">
+                        <svg viewBox="0 0 24 24" class="ch-icon" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M9 10h.01M15 10h.01M12 2a8 8 0 0 0-8 8v12h16V10a8 8 0 0 0-8-8zM12 18v-2" />
+                        </svg>
+                      </div>
+                      <div class="ch-info">
+                        <span class="ch-lbl">死亡</span>
+                        <strong class="ch-val">{{ props.player.combatStats.deaths }}</strong>
+                      </div>
                     </div>
                     <div class="combat-hud-card tk">
-                      <span class="ch-lbl">TK (团队伤害)</span>
-                      <strong class="ch-val" :class="{ danger: props.player.combatStats.tk > 0 }">
-                        {{ props.player.combatStats.tk }}
-                      </strong>
+                      <div class="ch-icon-wrapper">
+                        <svg viewBox="0 0 24 24" class="ch-icon" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01" />
+                        </svg>
+                      </div>
+                      <div class="ch-info">
+                        <span class="ch-lbl">TK (团队伤害)</span>
+                        <strong class="ch-val" :class="{ danger: props.player.combatStats.tk > 0 }">
+                          {{ props.player.combatStats.tk }}
+                        </strong>
+                      </div>
                     </div>
                     <div class="combat-hud-card revives">
-                      <span class="ch-lbl">复苏</span>
-                      <strong class="ch-val">{{ props.player.combatStats.revives }}</strong>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- BattleLog persistent profile statistics -->
-                <div v-if="props.player.battleStats" class="hud-pane-section">
-                  <div class="hud-section-header">
-                    <span class="hud-section-title">生涯战绩概览 / BATTLELOG CAREER</span>
-                    <span class="hud-section-subtitle">
-                      {{ props.player.battleStatsLabel || props.player.battleStatsSource || t("common.source") }}
-                    </span>
-                  </div>
-
-                  <!-- KD Carrier Indicator -->
-                  <div class="kd-hero-block battle" :class="teamColorClass">
-                    <div class="kd-metric">
-                      <span class="kd-label">CAREER K/D</span>
-                      <strong class="kd-value">{{ battleKd }}</strong>
-                    </div>
-                    <div class="kd-breakdown">
-                      <div class="kd-bar">
-                        <div class="kd-bar-kills" :style="{ width: battleKillsPercent + '%' }"></div>
-                        <div class="kd-bar-deaths" :style="{ width: battleDeathsPercent + '%' }"></div>
+                      <div class="ch-icon-wrapper">
+                        <svg viewBox="0 0 24 24" class="ch-icon" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                        </svg>
                       </div>
-                      <div class="kd-bar-labels">
-                        <span class="lbl-kills">生涯击杀: {{ props.player.battleStats.kills }}</span>
-                        <span class="lbl-deaths">生涯死亡: {{ props.player.battleStats.deaths }}</span>
+                      <div class="ch-info">
+                        <span class="ch-lbl">复苏</span>
+                        <strong class="ch-val">{{ props.player.combatStats.revives }}</strong>
                       </div>
                     </div>
                   </div>
 
-                  <!-- BattleLog Mini Grid -->
-                  <div class="combat-hud-grid mini">
-                    <div class="combat-hud-card mini downs">
-                      <span class="ch-lbl">击倒</span>
-                      <strong class="ch-val">{{ props.player.battleStats.downs }}</strong>
-                    </div>
-                    <div class="combat-hud-card mini kills">
-                      <span class="ch-lbl">击杀</span>
-                      <strong class="ch-val">{{ props.player.battleStats.kills }}</strong>
-                    </div>
-                    <div class="combat-hud-card mini deaths">
-                      <span class="ch-lbl">死亡</span>
-                      <strong class="ch-val">{{ props.player.battleStats.deaths }}</strong>
-                    </div>
-                    <div class="combat-hud-card mini tk">
-                      <span class="ch-lbl">TK</span>
-                      <strong class="ch-val" :class="{ danger: props.player.battleStats.tk > 0 }">
-                        {{ props.player.battleStats.tk }}
-                      </strong>
-                    </div>
-                    <div class="combat-hud-card mini revives">
-                      <span class="ch-lbl">复苏</span>
-                      <strong class="ch-val">{{ props.player.battleStats.revives }}</strong>
-                    </div>
-                  </div>
-                </div>
+                  <!-- Subtle Divider -->
+                  <div class="hud-divider"></div>
 
-                <!-- Combat Timeline graph directly visible -->
-                <PlayerCombatTimeline :player="props.player" :server-id="props.serverId" />
+                  <!-- Integrated Combat Timeline -->
+                  <PlayerCombatTimeline :player="props.player" :server-id="props.serverId" />
+                </div>
               </div>
 
               <!-- RIGHT COLUMN: Action Controls and Session Context -->
               <div class="hud-column right">
                 
-                <!-- Team Balance switcher -->
-                <div class="hud-pane-section">
-                  <div class="hud-section-header">
-                    <span class="hud-section-title">战局调度与跳边 / TEAM DISPATCH</span>
-                  </div>
-                  <div class="control-box-hud">
-                    <div class="control-info-row">
-                      <span class="label">当前阵营</span>
-                      <strong :class="teamColorClass" class="team-label">Team {{ props.player.teamId ?? "?" }}</strong>
-                    </div>
-                    <button
-                      type="button"
-                      class="hud-action-btn balance-btn"
-                      @click="handleForceTeamChange"
-                      :disabled="actionBusy || !canSwitchTeam"
-                      :style="glowShadowStyle"
-                    >
-                      <svg viewBox="0 0 24 24" width="16" height="16" class="btn-icon">
-                        <path fill="currentColor" d="M19 8l-4 4h3c0 3.31-2.69 6-6 6-1.01 0-1.97-.25-2.8-.7l-1.46 1.46C8.97 19.54 10.43 20 12 20c4.42 0 8-3.58 8-8h3l-4-4zM6 12c0-3.31 2.69-6 6-6 1.01 0 1.97.25 2.8.7l1.46-1.46C15.03 4.46 13.57 4 12 4c-4.42 0-8 3.58-8 8H1l4 4 4-4H6z"/>
-                      </svg>
-                      强制玩家跳边 (Force Switch Team)
-                    </button>
-                  </div>
-                </div>
-
                 <!-- Rcon Command console -->
                 <div class="hud-pane-section">
                   <div class="hud-section-header">
                     <span class="hud-section-title">管理指令面板 / ADMIN CONSOLE</span>
                   </div>
                   <div class="actions-grid-hud">
-                    <button
-                      type="button"
-                      class="hud-action-btn-styled track-btn"
-                      @click="handleAdminTrack"
-                      :disabled="actionBusy || !canUseBzssCoreTrack"
-                      :title="adminTrackTitle"
-                    >
-                      <div class="btn-inner">
-                        <span class="btn-icon">TRK</span>
-                        <span class="btn-text">Track</span>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      class="hud-action-btn-styled untrack-btn"
-                      @click="handleRemoveAdminTrack"
-                      :disabled="actionBusy || !canUseBzssCoreTrack"
-                      :title="adminTrackTitle"
-                    >
-                      <div class="btn-inner">
-                        <span class="btn-icon">OFF</span>
-                        <span class="btn-text">Untrack</span>
-                      </div>
-                    </button>
-
                     <button
                       type="button"
                       class="hud-action-btn-styled warn-btn"
@@ -373,71 +375,141 @@
                         <span class="btn-text">{{ t("player.removeFromSquad") }}</span>
                       </div>
                     </button>
+
+                    <button
+                      type="button"
+                      class="hud-action-btn-styled balance-btn"
+                      @click="handleForceTeamChange"
+                      :disabled="actionBusy || !canSwitchTeam"
+                    >
+                      <div class="btn-inner">
+                        <span class="btn-icon">🔄</span>
+                        <span class="btn-text">强制跳边</span>
+                      </div>
+                    </button>
                   </div>
                 </div>
 
-                <!-- Playtime Override Configuration -->
+                <!-- Steam Friends Section -->
                 <div class="hud-pane-section">
                   <div class="hud-section-header">
-                    <span class="hud-section-title">游戏时长修正覆盖 / PLAYTIME OVERRIDE</span>
+                    <span class="hud-section-title">Steam 好友列表 / STEAM FRIENDS</span>
+                    <span class="hud-section-subtitle" v-if="steamFriends.length > 0">共 {{ steamFriends.length }} 位好友</span>
                   </div>
-                  <div class="playtime-control-hud">
-                    <div class="playtime-stats-rail">
-                      <div class="playtime-stat-box highlight">
-                        <span class="lbl">当前有效时长</span>
-                        <strong class="val">{{ playtimeEffectiveText }}</strong>
-                      </div>
-                      <div class="playtime-stat-box">
-                        <span class="lbl">Steam 原始时长</span>
-                        <strong class="val">{{ playtimeSteamText }}</strong>
-                      </div>
-                      <div class="playtime-stat-box">
-                        <span class="lbl">覆盖状态</span>
-                        <strong class="val" :class="{ overridden: playtimeOverrideSeconds != null }">
-                          {{ playtimeOverrideSeconds == null ? "未覆盖" : "已覆盖" }}
-                        </strong>
-                      </div>
-                    </div>
-
-                    <div class="playtime-editor-hud">
-                      <div class="editor-input-wrapper">
-                        <input
-                          v-model="playtimeOverrideHours"
-                          type="number"
-                          min="0"
-                          step="0.1"
-                          :disabled="!canEditPlaytime || playtimeSaving || databaseLoading || !playerDatabaseRecord"
-                          placeholder="输入时长(小时)"
-                          class="hud-playtime-input"
-                        >
-                      </div>
-                      <button
-                        type="button"
-                        class="hud-mini-btn save-btn"
-                        :disabled="!canEditPlaytime || playtimeSaving || databaseLoading || !playerDatabaseRecord"
-                        @click="savePlaytimeOverride(false)"
-                      >
-                        保存覆盖
-                      </button>
-                      <button
-                        type="button"
-                        class="hud-mini-btn reset-btn"
-                        :disabled="!canEditPlaytime || playtimeSaving || databaseLoading || !playerDatabaseRecord"
-                        @click="savePlaytimeOverride(true)"
-                      >
-                        恢复默认
-                      </button>
-                    </div>
-
-                    <div v-if="databaseError" class="playtime-status-note error">{{ databaseError }}</div>
-                    <div v-else-if="databaseLoading" class="playtime-status-note loading">
+                  <div class="friends-list-hud">
+                    <div v-if="friendsLoading" class="friends-status loading">
                       <span class="loader-dot"></span>
-                      正在同步数据库玩家详情…
+                      正在加载好友列表…
                     </div>
-                    <div v-else class="playtime-status-note">
-                      留空将恢复为默认时长，输入 0 则代表强制覆盖为 0 小时。
+                    <div v-else-if="friendsError" class="friends-status error">
+                      {{ friendsError }}
+                    </div>
+                    <div v-else-if="steamFriends.length === 0" class="friends-status empty">
+                      暂无好友信息（可能未公开好友列表）
+                    </div>
+                    <div v-else class="friends-scroll-container">
+                      <div
+                        v-for="friend in steamFriends"
+                        :key="friend.steamID"
+                        class="friend-item"
+                      >
+                        <img
+                          v-if="friend.avatar"
+                          class="friend-avatar"
+                          :src="friend.avatar"
+                          alt=""
+                        />
+                        <div v-else class="friend-avatar-placeholder">
+                          {{ friend.name.slice(0, 1).toUpperCase() }}
+                        </div>
+                        <div class="friend-info">
+                          <div class="friend-name-row">
+                            <span class="friend-name" :title="friend.name">{{ friend.name }}</span>
+                            <span v-if="friend.dbPlayerId" class="friend-badge" title="该好友曾在此服务器游玩">
+                              在本服游玩
+                            </span>
+                          </div>
+                          <div class="friend-meta">
+                            <span>SteamID: {{ friend.steamID }}</span>
+                            <span v-if="friend.dbPlayerId && friend.serverSeconds">
+                              本服时长: {{ formatHours(friend.serverSeconds) }}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
+                </div>
+
+                <!-- Playtime Override Configuration (Advanced) -->
+                <div class="hud-pane-section advanced-section">
+                  <button type="button" class="hud-accordion-btn" @click="showPlaytimeOverride = !showPlaytimeOverride">
+                    <span class="title-with-icon">
+                      <svg viewBox="0 0 24 24" width="14" height="14" class="acc-arrow" :class="{ open: showPlaytimeOverride }">
+                        <path fill="currentColor" d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/>
+                      </svg>
+                      游戏时长修正覆盖 / PLAYTIME OVERRIDE
+                    </span>
+                  </button>
+                  <Transition name="accordion-slide">
+                    <div v-if="showPlaytimeOverride" class="hud-accordion-content playtime-control-hud">
+                      <div class="playtime-stats-rail">
+                        <div class="playtime-stat-box highlight">
+                          <span class="lbl">当前有效时长</span>
+                          <strong class="val">{{ playtimeEffectiveText }}</strong>
+                        </div>
+                        <div class="playtime-stat-box">
+                          <span class="lbl">Steam 原始时长</span>
+                          <strong class="val">{{ playtimeSteamText }}</strong>
+                        </div>
+                        <div class="playtime-stat-box">
+                          <span class="lbl">覆盖状态</span>
+                          <strong class="val" :class="{ overridden: playtimeOverrideSeconds != null }">
+                            {{ playtimeOverrideSeconds == null ? "未覆盖" : "已覆盖" }}
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div class="playtime-editor-hud">
+                        <div class="editor-input-wrapper">
+                          <input
+                            v-model="playtimeOverrideHours"
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            :disabled="!canEditPlaytime || playtimeSaving || databaseLoading || !playerDatabaseRecord"
+                            placeholder="输入时长(小时)"
+                            class="hud-playtime-input"
+                          >
+                        </div>
+                        <button
+                          type="button"
+                          class="hud-mini-btn save-btn"
+                          :disabled="!canEditPlaytime || playtimeSaving || databaseLoading || !playerDatabaseRecord"
+                          @click="savePlaytimeOverride(false)"
+                        >
+                          保存覆盖
+                        </button>
+                        <button
+                          type="button"
+                          class="hud-mini-btn reset-btn"
+                          :disabled="!canEditPlaytime || playtimeSaving || databaseLoading || !playerDatabaseRecord"
+                          @click="savePlaytimeOverride(true)"
+                        >
+                          恢复默认
+                        </button>
+                      </div>
+
+                      <div v-if="databaseError" class="playtime-status-note error">{{ databaseError }}</div>
+                      <div v-else-if="databaseLoading" class="playtime-status-note loading">
+                        <span class="loader-dot"></span>
+                        正在同步数据库玩家详情…
+                      </div>
+                      <div v-else class="playtime-status-note">
+                        留空将恢复为默认时长，输入 0 则代表强制覆盖为 0 小时。
+                      </div>
+                    </div>
+                  </Transition>
                 </div>
 
                 <!-- Raw Debug Block -->
@@ -553,6 +625,7 @@ const panelStyle = computed(() => {
 
 // UI State
 const showAdvanced = ref(false);
+const showPlaytimeOverride = ref(false);
 const showCombatTimeline = ref(false);
 const actionBusy = ref(false);
 const steamProfileRefreshing = ref(false);
@@ -562,6 +635,9 @@ const databaseError = ref("");
 const playtimeOverrideHours = ref("");
 const playtimeSaving = ref(false);
 const loadToken = ref(0);
+const steamFriends = ref<any[]>([]);
+const friendsLoading = ref(false);
+const friendsError = ref("");
 
 // Computed properties for UI design
 const playerInitials = computed(() => {
@@ -728,7 +804,9 @@ const updateViewport = () => {
   };
 };
 
-const currentIp = computed(() => String(props.player?.ip ?? "").trim());
+const currentIp = computed(() => {
+  return String(props.player?.ip ?? props.player?.resolvedIp ?? props.player?.lastIp ?? "").trim();
+});
 const displayIp = computed(() => currentIp.value);
 const matchOnlineText = computed(() => formatMatchOnlineText(props.player?.matchOnlineSeconds ?? null));
 const matchOnlineSubText = computed(() => formatMatchOnlineSubText(props.player));
@@ -781,6 +859,7 @@ watch(
       databaseError.value = "";
       playtimeOverrideHours.value = "";
       showAdvanced.value = false;
+      showPlaytimeOverride.value = false;
       showCombatTimeline.value = false;
       return;
     }
@@ -792,8 +871,13 @@ watch(
 
 watch(
   () => playerDatabaseRecord.value?.id,
-  () => {
+  (newId) => {
     syncPlaytimeOverrideInput();
+    if (newId) {
+      void loadSteamFriends();
+    } else {
+      steamFriends.value = [];
+    }
   },
 );
 
@@ -916,6 +1000,26 @@ function firstDatabasePlayer(response: any) {
   return response?.items?.[0] ?? response?.players?.[0] ?? response?.rows?.[0] ?? null;
 }
 
+async function loadSteamFriends(force = false) {
+  const playerId = playerDatabaseRecord.value?.id;
+  if (!playerId) {
+    steamFriends.value = [];
+    return;
+  }
+  friendsLoading.value = true;
+  friendsError.value = "";
+  try {
+    const url = `/api/player-database/detail/steam-friends?id=${encodeURIComponent(String(playerId))}${force ? "&force=true" : ""}`;
+    const response = await apiGet<any>(url);
+    steamFriends.value = Array.isArray(response?.items) ? response.items : [];
+  } catch (err) {
+    friendsError.value = err instanceof Error ? err.message : "获取好友列表失败";
+    steamFriends.value = [];
+  } finally {
+    friendsLoading.value = false;
+  }
+}
+
 async function savePlaytimeOverride(clear = false) {
   if (!canEditPlaytime.value || !playerDatabaseRecord.value?.id || playtimeSaving.value) return;
 
@@ -1012,6 +1116,7 @@ async function refreshSteamProfile() {
 
     // Step 2: Reload database detail to get updated avatar and playtime
     await loadDatabaseDetail();
+    await loadSteamFriends(true);
 
     emit("playtime-updated");
     ui.pushToast({
@@ -1384,9 +1489,8 @@ onUnmounted(() => {
 /* Header style rewrite */
 .drawer-header-hud {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--spacing-sm);
+  flex-direction: column;
+  gap: 12px;
   padding: 20px 22px 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   position: relative;
@@ -1742,14 +1846,37 @@ onUnmounted(() => {
 
 /* KD Hero Display */
 .kd-hero-block {
-  padding: 16px;
-  border-radius: 12px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.005));
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  padding: 16px 20px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.6), rgba(15, 23, 42, 0.8));
+  border: 1px solid rgba(255, 255, 255, 0.05);
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
   gap: 20px;
+  box-shadow: 
+    0 4px 24px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.kd-hero-block::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 10% 20%, var(--glow-color-soft, rgba(255,255,255,0.05)), transparent 50%);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.kd-hero-block:hover {
+  border-color: var(--glow-color-soft);
+  box-shadow: 
+    0 8px 30px rgba(0, 0, 0, 0.4),
+    0 0 15px var(--glow-color-soft),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .kd-hero-block.team1 {
@@ -1827,26 +1954,66 @@ onUnmounted(() => {
 /* Combat Stats Cards Grid */
 .combat-hud-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 10px;
 }
 
 .combat-hud-card {
-  padding: 10px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  background: rgba(0, 0, 0, 0.15);
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(4px);
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  text-align: center;
-  transition: all 0.2s ease;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.05);
 }
 
 .combat-hud-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+}
+
+.ch-icon-wrapper {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.03);
-  border-color: rgba(255, 255, 255, 0.08);
-  transform: translateY(-1px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: #94a3b8;
+  transition: all 0.2s ease;
+}
+
+.combat-hud-card:hover .ch-icon-wrapper {
+  background: var(--glow-color-soft, rgba(255, 255, 255, 0.1));
+  border-color: var(--glow-color, rgba(255, 255, 255, 0.2));
+  color: #fff;
+}
+
+.combat-hud-card.kills .ch-icon-wrapper { color: #34d399; }
+.combat-hud-card.deaths .ch-icon-wrapper { color: #f87171; }
+.combat-hud-card.downs .ch-icon-wrapper { color: #facc15; }
+.combat-hud-card.tk .ch-icon-wrapper { color: #c084fc; }
+.combat-hud-card.revives .ch-icon-wrapper { color: #60a5fa; }
+
+.ch-icon {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+}
+
+.ch-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .combat-hud-card .ch-lbl {
@@ -1854,17 +2021,22 @@ onUnmounted(() => {
   font-weight: 800;
   color: #64748b;
   text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
 }
 
 .combat-hud-card .ch-val {
   font-family: Consolas, Monaco, monospace;
-  font-size: 20px;
-  font-weight: 800;
-  color: #f1f5f9;
+  font-size: 18px;
+  font-weight: 950;
+  color: #e2e8f0;
+  line-height: 1.1;
+  margin-top: 1px;
 }
 
 .combat-hud-card.kills .ch-val { color: #34d399; }
 .combat-hud-card.deaths .ch-val { color: #f87171; }
+.combat-hud-card.downs .ch-val { color: #facc15; }
 .combat-hud-card.tk .ch-val { color: #cbd5e1; }
 .combat-hud-card.tk .ch-val.danger { color: #c084fc; text-shadow: 0 0 6px rgba(192, 132, 252, 0.4); }
 .combat-hud-card.revives .ch-val { color: #60a5fa; }
@@ -1991,7 +2163,7 @@ onUnmounted(() => {
 /* Actions Commands Grid */
 .actions-grid-hud {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 8px;
 }
 
@@ -2038,18 +2210,6 @@ onUnmounted(() => {
   color: #f59e0b;
 }
 
-.hud-action-btn-styled.track-btn:hover:not(:disabled) {
-  border-color: rgba(56, 189, 248, 0.45);
-  box-shadow: 0 4px 14px rgba(56, 189, 248, 0.16);
-  color: #38bdf8;
-}
-
-.hud-action-btn-styled.untrack-btn:hover:not(:disabled) {
-  border-color: rgba(148, 163, 184, 0.45);
-  box-shadow: 0 4px 14px rgba(148, 163, 184, 0.14);
-  color: #cbd5e1;
-}
-
 .hud-action-btn-styled.kick-btn:hover:not(:disabled) {
   border-color: rgba(239, 68, 68, 0.4);
   box-shadow: 0 4px 14px rgba(239, 68, 68, 0.15);
@@ -2060,6 +2220,12 @@ onUnmounted(() => {
   border-color: rgba(244, 63, 94, 0.4);
   box-shadow: 0 4px 14px rgba(244, 63, 94, 0.15);
   color: #f43f5e;
+}
+
+.hud-action-btn-styled.balance-btn:hover:not(:disabled) {
+  border-color: rgba(59, 130, 246, 0.4);
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
 }
 
 /* Playtime Override UI */
@@ -2260,9 +2426,9 @@ onUnmounted(() => {
 
 .hud-session-ctx-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 4px;
   width: 100%;
 }
 
@@ -2360,6 +2526,209 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.08);
 }
 
+/* Steam Friends Styles */
+.friends-list-hud {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.friends-status {
+  padding: 16px;
+  text-align: center;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.friends-status.error {
+  color: #ef4444;
+}
+
+.friends-scroll-container {
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.friends-scroll-container::-webkit-scrollbar {
+  width: 4px;
+}
+
+.friends-scroll-container::-webkit-scrollbar-thumb {
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.friend-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: 6px;
+  transition: background-color 0.2s ease;
+}
+
+.friend-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.friend-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.friend-avatar-placeholder {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.friend-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.friend-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.friend-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #f1f5f9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.friend-badge {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  font-size: 9px;
+  padding: 0px 4px;
+  border-radius: 3px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.friend-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.friend-meta span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Career Context Bar Styles */
+.hud-header-career-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(168, 85, 247, 0.05);
+  border: 1px solid rgba(168, 85, 247, 0.15);
+  border-radius: 6px;
+  padding: 6px 12px;
+  width: 100%;
+}
+
+.career-bar-title {
+  font-size: 10px;
+  font-weight: 900;
+  color: #c084fc;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-right: 1px solid rgba(168, 85, 247, 0.3);
+  padding-right: 12px;
+  flex-shrink: 0;
+}
+
+.career-bar-items {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 1;
+  min-width: 0;
+}
+
+.cb-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cb-lbl {
+  font-size: 10px;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.cb-val {
+  font-family: Consolas, Monaco, monospace;
+  font-size: 12px;
+  font-weight: 800;
+  color: #cbd5e1;
+}
+
+.cb-item.highlight .cb-val {
+  color: #c084fc;
+  text-shadow: 0 0 4px rgba(192, 132, 252, 0.4);
+}
+
+.cb-val.kills { color: #34d399; }
+.cb-val.deaths { color: #f87171; }
+.cb-val.downs { color: #facc15; }
+.cb-val.tk.danger { color: #c084fc; text-shadow: 0 0 4px rgba(192, 132, 252, 0.4); }
+.cb-val.revives { color: #60a5fa; }
+
+.cb-divider {
+  width: 1px;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.hud-ctx-item-wide {
+  grid-column: span 2;
+}
+
+/* Subtle Divider */
+.hud-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08) 20%, rgba(255, 255, 255, 0.08) 80%, transparent);
+  margin: 12px 0;
+}
+
+/* Stacking overrides when drawer is in narrow sidebar mode */
+.player-detail-drawer :deep(.player-combat-body) {
+  grid-template-columns: 1fr;
+  height: auto;
+}
+.player-detail-drawer :deep(.player-combat-event-list-container) {
+  height: 180px;
+}
+
 /* Global Transitions */
 .drawer-enter-active,
 .drawer-leave-active {
@@ -2405,11 +2774,29 @@ onUnmounted(() => {
   .hud-session-ctx-grid {
     grid-template-columns: repeat(3, 1fr);
   }
+  .hud-ctx-item-wide {
+    grid-column: span 1;
+  }
 }
 
 @media (max-width: 500px) {
   .hud-session-ctx-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+  .hud-ctx-item-wide {
+    grid-column: span 1;
+  }
+  .hud-header-career-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .career-bar-items {
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-start;
+  }
+  .cb-divider {
+    display: none;
   }
 }
 </style>

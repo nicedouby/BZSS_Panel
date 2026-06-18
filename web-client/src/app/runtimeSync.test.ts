@@ -1,16 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 
-vi.mock("./apiClient", async () => {
-  const actual = await vi.importActual<typeof import("./apiClient")>("./apiClient");
-  return {
-    ...actual,
-    apiGet: vi.fn(),
-  };
-});
-
-import { ApiError, apiGet } from "./apiClient";
-import { getRuntimeSyncState, stopRuntimeSync, syncOnce } from "./runtimeSync";
+import { getRuntimeSyncState, setRuntimeSyncRefreshPolicy, stopRuntimeSync, syncOnce } from "./runtimeSync";
 import { resolveRefreshDelay } from "./refreshPolicy";
 import { useAuthStore } from "../stores/auth.store";
 import { useEventStore } from "../stores/event.store";
@@ -20,10 +11,10 @@ import { useServerStore } from "../stores/server.store";
 import { useSquadStore } from "../stores/squad.store";
 
 describe("runtimeSync", () => {
+  const fetchMock = vi.fn();
+
   beforeEach(() => {
     vi.stubGlobal("window", {
-      setInterval,
-      clearInterval,
       setTimeout,
       clearTimeout,
     });
@@ -32,6 +23,7 @@ describe("runtimeSync", () => {
       addEventListener() {},
       removeEventListener() {},
     });
+    vi.stubGlobal("fetch", fetchMock);
     setActivePinia(createPinia());
     stopRuntimeSync();
     Object.assign(getRuntimeSyncState(), {
@@ -41,12 +33,9 @@ describe("runtimeSync", () => {
       lastError: null,
       errorType: null,
       consecutiveFailures: 0,
-      bootstrapRefreshAttempted: false,
       refreshPolicy: "polling",
-      lastRuntimeSnapshotAttemptAt: 0,
-      lastRuntimeSnapshotAt: 0,
     });
-    vi.mocked(apiGet).mockReset();
+    fetchMock.mockReset();
   });
 
   afterEach(() => {
@@ -58,12 +47,11 @@ describe("runtimeSync", () => {
     auth.checked = true;
     auth.authenticated = true;
 
-    vi.mocked(apiGet).mockRejectedValue(new ApiError({
-      type: "http",
-      path: "/api/match/snapshot",
+    fetchMock.mockResolvedValue({
+      ok: false,
       status: 401,
-      message: "Unauthorized",
-    }));
+      json: vi.fn(),
+    });
 
     await syncOnce();
 
@@ -73,26 +61,24 @@ describe("runtimeSync", () => {
     expect(getRuntimeSyncState().errorType).toBe("unauthorized");
   });
 
-  it("hydrates stores from the dedicated match snapshot first", async () => {
+  it("hydrates stores from the normalized runtime snapshot payload", async () => {
     const server = useServerStore();
     const players = usePlayerStore();
     const squads = useSquadStore();
     const events = useEventStore();
     const jobs = useJobStore();
-    const calls: string[] = [];
 
-    vi.mocked(apiGet).mockImplementation(async (path: string) => {
-      calls.push(path);
-      if (path === "/api/match/snapshot") {
-        return {
-          ok: true,
-          source: "module.matchState",
-          type: "snapshot",
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        snapshot: {
           matchState: {
             serverStatus: {
               map: "AlBasrah",
               layer: "AlBasrah AAS v1",
               lastUpdatedAt: "2026-05-12T00:00:00.000Z",
+              playerCount: 1,
             },
             players: {
               list: [
@@ -130,47 +116,21 @@ describe("runtimeSync", () => {
               rcon: "connected",
             },
           },
-        };
-      }
-
-      if (path === "/api/snapshot/all") {
-        return {
           events: { console: [], raw: [], rcon: [], combat: [], updatedAt: 1 },
           jobs: { byId: {}, activeJobs: [], updatedAt: 1 },
-        };
-      }
-
-      throw new Error(`Unexpected path: ${path}`);
+        },
+      }),
     });
 
     await syncOnce();
-    await syncOnce();
 
-    expect(resolveRefreshDelay({
-      policy: "realtime",
-      playerCount: 120,
-      hidden: false,
-      surface: "auxiliary",
-    })).toBeGreaterThan(resolveRefreshDelay({
-      policy: "realtime",
-      playerCount: 120,
-      hidden: false,
-      surface: "primary",
-    }));
-    expect(resolveRefreshDelay({
-      policy: "realtime",
-      playerCount: 120,
-      hidden: true,
-      surface: "primary",
-    })).toBeGreaterThan(resolveRefreshDelay({
-      policy: "realtime",
-      playerCount: 120,
-      hidden: false,
-      surface: "primary",
-    }));
-    expect(calls.filter((path) => path === "/api/match/snapshot")).toHaveLength(2);
-    expect(calls.filter((path) => path === "/api/snapshot/all")).toHaveLength(1);
-
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith("/api/snapshot/all", {
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+      },
+    });
     expect(server.snapshot.map).toBe("AlBasrah");
     expect(server.snapshot.webStatus.rcon).toBe("connected");
     expect(players.active).toHaveLength(1);
@@ -181,6 +141,8 @@ describe("runtimeSync", () => {
   });
 
   it("resolves route-aware cadences and hidden tab backoff", () => {
+    setRuntimeSyncRefreshPolicy("realtime");
+
     const realtimePrimary = resolveRefreshDelay({
       policy: "realtime",
       playerCount: 120,
@@ -206,6 +168,7 @@ describe("runtimeSync", () => {
       surface: "auxiliary",
     });
 
+    expect(getRuntimeSyncState().refreshPolicy).toBe("realtime");
     expect(realtimePrimary).toBeLessThan(pollingPrimary);
     expect(hiddenRealtimePrimary).toBeGreaterThan(realtimePrimary);
     expect(realtimeAuxiliary).toBeGreaterThan(realtimePrimary);
