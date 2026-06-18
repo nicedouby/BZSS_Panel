@@ -1,6 +1,11 @@
 // -*- coding: utf-8 -*-
 
-import SquadRcon from "./squad-rcon.js";
+import SquadRcon, {
+  parseCurrentMap,
+  parseListPlayers,
+  parseListSquads,
+  parseNextMap,
+} from "./squad-rcon.js";
 import { resolveRconRefreshPolicy } from "./rcon-refresh-policy.js";
 import {
   canSendRconCommand,
@@ -46,13 +51,23 @@ export class RconManager {
     this.minIntervalMs = Number(this.config.rateLimit?.minIntervalMs ?? 500);
     this.priorityMinIntervalMs = Math.max(0, Number(this.config.rateLimit?.priorityMinIntervalMs ?? 50));
     this.maxQueueSize = Number(this.config.rateLimit?.maxQueueSize ?? 100);
+    this.allowMultipleConnections = Boolean(this.config.allowMultipleConnections === true);
+    this.commandPoolSize = this.allowMultipleConnections
+      ? parsePositiveInteger(this.config.commandPoolSize ?? this.config.workers, 4)
+      : 1;
+    this.queryPoolSize = this.allowMultipleConnections
+      ? parsePositiveInteger(this.config.queryPoolSize, 1)
+      : 1;
 
     this.squadRcon = null;
     this.disbandRcon = null;
     this.rconWorkers = [];
-    this.queue = [];
-    this.priorityQueue = [];
-    this.disbandQueue = [];
+    this.commandPool = createRconPool("command");
+    this.queryPool = createRconPool("query");
+    this.disbandPool = createRconPool("disband");
+    this.queue = this.commandPool.queue;
+    this.priorityQueue = this.commandPool.priorityQueue;
+    this.disbandQueue = this.disbandPool.priorityQueue;
     this.processing = false;
     this.disbandProcessing = false;
     this.lastCommandTime = 0;
@@ -128,33 +143,26 @@ export class RconManager {
 
     this.attachSquadRconEvents();
 
-    this.disbandRcon = new SquadRcon({
-      host: this.config.host,
-      port: this.config.port,
-      password: resolveRconPassword(this.config, this.logger),
-      autoReconnectDelay: this.config.autoReconnectDelay ?? 5000,
-      commandTimeoutMs: this.config.commandTimeoutMs ?? 15000,
-      logger: this.logger,
-    });
+    this.disbandRcon = this.allowMultipleConnections
+      ? new SquadRcon({
+          host: this.config.host,
+          port: this.config.port,
+          password: resolveRconPassword(this.config, this.logger),
+          autoReconnectDelay: this.config.autoReconnectDelay ?? 5000,
+          commandTimeoutMs: this.config.commandTimeoutMs ?? 15000,
+          logger: this.logger,
+        })
+      : this.squadRcon;
+    this.disbandPool.lanes = [createPoolLane("disband", this.disbandRcon)];
+    this.disbandQueue = this.disbandPool.priorityQueue;
 
-    const workerCount = Math.max(0, Number(this.config.workers ?? 0));
-    this.rconWorkers = [];
-    for (let i = 0; i < workerCount; i++) {
-      const workerClient = new SquadRcon({
-        host: this.config.host,
-        port: this.config.port,
-        password: resolveRconPassword(this.config, this.logger),
-        autoReconnectDelay: this.config.autoReconnectDelay ?? 5000,
-        commandTimeoutMs: this.config.commandTimeoutMs ?? 15000,
-        logger: this.logger,
-      });
-      this.rconWorkers.push({
-        id: `worker-${i + 1}`,
-        client: workerClient,
-        busy: false,
-        lastCommandTime: 0,
-      });
-    }
+    this.commandPool.lanes = this.allowMultipleConnections
+      ? this.createPoolLanes("command", this.commandPoolSize)
+      : [createPoolLane("command-1", this.squadRcon)];
+    this.queryPool.lanes = this.allowMultipleConnections
+      ? this.createPoolLanes("query", this.queryPoolSize)
+      : [createPoolLane("query-1", this.squadRcon)];
+    this.rconWorkers = this.commandPool.lanes;
 
     try {
       this.logger.info(`Connecting to RCON ${this.config.host}:${this.config.port}`, {
@@ -165,22 +173,24 @@ export class RconManager {
       await this.squadRcon.connect();
       this.setConnected(true);
 
-      this.disbandRcon.connect()
-        .then(() => {
-          this.logger.info("RCON disband lane connected.", { operation: "start" });
-        })
-        .catch((err) => {
-          this.logger.error(`RCON disband lane connection failed: ${err.message}`, { operation: "start" });
-        });
-
-      for (const worker of this.rconWorkers) {
-        worker.client.connect()
+      if (this.allowMultipleConnections) {
+        this.disbandRcon.connect()
           .then(() => {
-            this.logger.info(`RCON Worker ${worker.id} connected.`, { operation: "start" });
+            this.logger.info("RCON disband lane connected.", { operation: "start" });
           })
           .catch((err) => {
-            this.logger.error(`RCON Worker ${worker.id} connection failed: ${err.message}`, { operation: "start" });
+            this.logger.error(`RCON disband lane connection failed: ${err.message}`, { operation: "start" });
           });
+
+        for (const worker of [...this.commandPool.lanes, ...this.queryPool.lanes]) {
+          worker.client.connect()
+            .then(() => {
+              this.logger.info(`RCON lane ${worker.id} connected.`, { operation: "start" });
+            })
+            .catch((err) => {
+              this.logger.error(`RCON lane ${worker.id} connection failed: ${err.message}`, { operation: "start" });
+            });
+        }
       }
 
       this.startPolling();
@@ -212,17 +222,28 @@ export class RconManager {
       await this.squadRcon.disconnect().catch(() => {});
     }
 
-    if (this.disbandRcon) {
+    if (this.disbandRcon && this.disbandRcon !== this.squadRcon) {
       await this.disbandRcon.disconnect().catch(() => {});
       this.disbandRcon = null;
     }
 
     for (const worker of this.rconWorkers) {
-      if (worker.client) {
+      if (worker.client && worker.client !== this.squadRcon) {
+        await worker.client.disconnect().catch(() => {});
+      }
+    }
+    for (const worker of this.queryPool.lanes) {
+      if (worker.client && worker.client !== this.squadRcon) {
         await worker.client.disconnect().catch(() => {});
       }
     }
     this.rconWorkers = [];
+    this.commandPool.lanes = [];
+    this.queryPool.lanes = [];
+    this.disbandPool.lanes = [];
+    this.clearPoolTimer(this.commandPool);
+    this.clearPoolTimer(this.queryPool);
+    this.clearPoolTimer(this.disbandPool);
 
     this.setConnected(false);
     this.webStatus.set("rcon", "stopped");
@@ -349,6 +370,22 @@ export class RconManager {
     this.webStatus.set("rcon", value ? "connected" : "disconnected");
   }
 
+  createPoolLanes(kind, count) {
+    const lanes = [];
+    for (let i = 0; i < count; i++) {
+      const client = new SquadRcon({
+        host: this.config.host,
+        port: this.config.port,
+        password: resolveRconPassword(this.config, this.logger),
+        autoReconnectDelay: this.config.autoReconnectDelay ?? 5000,
+        commandTimeoutMs: this.config.commandTimeoutMs ?? 15000,
+        logger: this.logger,
+      });
+      lanes.push(createPoolLane(`${kind}-${i + 1}`, client));
+    }
+    return lanes;
+  }
+
   startPolling() {
     if (!this.polling.enabled) return;
     const players = this.resolvePollingInterval("players");
@@ -432,14 +469,10 @@ export class RconManager {
         enqueuedAt,
       };
 
-      const disbandLane = isDisbandLaneRequest(request, command);
-      if (disbandLane) {
-        this.disbandQueue.push(item);
-      } else if (priority) {
-        this.priorityQueue.push(item);
-      } else {
-        this.queue.push(item);
-      }
+      const pool = this.resolveCommandPool(request, command);
+      this.ensurePoolLanes(pool);
+      if (priority) pool.priorityQueue.push(item);
+      else pool.queue.push(item);
 
       this.status.queueSize = this.getQueueSize();
       this.webStatus.set("rconQueue", this.getQueueSize());
@@ -451,120 +484,166 @@ export class RconManager {
           requiredPermission,
           queueSize: this.getQueueSize(),
           priority,
-          lane: disbandLane ? "disband" : "default",
+          pool: pool.name,
         },
       });
 
-      const processor = disbandLane ? this.processDisbandQueue() : this.processQueue();
-      processor.catch((error) => {
-        this.logger.error(`RCON queue processor failed: ${error.stack ?? error}`);
-      });
+      this.pumpPool(pool);
     });
   }
 
-  async processDisbandQueue() {
-    if (this.disbandProcessing || this.disbandQueue.length === 0) return;
-    this.disbandProcessing = true;
-
-    try {
-      while (this.disbandQueue.length > 0) {
-        const item = this.disbandQueue.shift();
-        if (!item) continue;
-
-        this.status.queueSize = this.getQueueSize();
-        this.webStatus.set("rconQueue", this.getQueueSize());
-
-        const diff = Date.now() - this.lastDisbandCommandTime;
-        const minIntervalMs = item?.bypassRateLimit ? 0 : this.priorityMinIntervalMs;
-        if (diff < minIntervalMs) {
-          await sleep(minIntervalMs - diff);
-        }
-
-        await this.executeQueuedItem(item, this.disbandRcon ?? this.squadRcon, {
-          lane: "disband",
-          updateLastCommandTime: (value) => {
-            this.lastDisbandCommandTime = value;
-          },
-        });
-      }
-    } finally {
-      this.disbandProcessing = false;
-    }
+  resolveCommandPool(request, command) {
+    if (isDisbandLaneRequest(request, command)) return this.disbandPool;
+    if (isQueryLaneRequest(request, command)) return this.queryPool;
+    return this.commandPool;
   }
 
-  async processQueue() {
-    if (this.getQueueSize() === 0) return;
-
-    if (Array.isArray(this.rconWorkers) && this.rconWorkers.length > 0) {
-      for (const worker of this.rconWorkers) {
-        if (this.getQueueSize() === 0) break;
-        if (!worker.busy) {
-          void this.runWorker(worker);
-        }
-      }
+  ensurePoolLanes(pool) {
+    if (!pool || pool.lanes.length > 0) return;
+    if (pool.name === "disband") {
+      const client = this.disbandRcon ?? this.squadRcon;
+      if (client) pool.lanes = [createPoolLane("disband", client)];
       return;
     }
+    if ((pool.name === "command" || pool.name === "query") && this.squadRcon) {
+      pool.lanes = [createPoolLane(`${pool.name}-1`, this.squadRcon)];
+    }
+    if (pool.name === "command") this.rconWorkers = this.commandPool.lanes;
+  }
 
-    if (this.processing) return;
-    this.processing = true;
+  processDisbandQueue() {
+    this.pumpPool(this.disbandPool);
+    return Promise.resolve();
+  }
+
+  processQueue() {
+    this.pumpPool(this.commandPool);
+    return Promise.resolve();
+  }
+
+  runWorker(worker) {
+    this.pumpPool(this.commandPool);
+    return Promise.resolve(worker);
+  }
+
+  pumpPool(pool) {
+    if (!pool || !this.hasPoolQueue(pool)) return;
+    if (pool.pumping) return;
+    pool.pumping = true;
 
     try {
-      while (this.getQueueSize() > 0) {
-        const item = this.priorityQueue.length > 0 ? this.priorityQueue.shift() : this.queue.shift();
-        if (!item) continue;
+      this.clearPoolTimer(pool);
+      let dispatched = false;
+
+      while (this.hasPoolQueue(pool)) {
+        const lane = this.pickReadyLane(pool);
+        if (!lane) break;
+
+        const item = this.shiftPoolItem(pool);
+        if (!item) break;
+
+        dispatched = true;
+        lane.busy = true;
+        const now = Date.now();
+        lane.lastUsedAt = now;
+        const cooldownMs = this.resolveItemCooldownMs(item);
+        lane.cooldownUntil = now + cooldownMs;
 
         this.status.queueSize = this.getQueueSize();
         this.webStatus.set("rconQueue", this.getQueueSize());
 
-        const diff = Date.now() - this.lastCommandTime;
-        const minIntervalMs = item?.bypassRateLimit
-          ? 0
-          : (item?.priority ? this.priorityMinIntervalMs : this.minIntervalMs);
-        if (diff < minIntervalMs) {
-          await sleep(minIntervalMs - diff);
-        }
-
-        await this.executeQueuedItem(item, this.squadRcon, {
-          lane: "default",
+        void this.executeQueuedItem(item, lane.client, {
+          lane: lane.id,
+          pool: pool.name,
           updateLastCommandTime: (value) => {
-            this.lastCommandTime = value;
+            lane.lastCommandTime = value;
+            lane.lastUsedAt = value;
+            if (pool.name === "command") this.lastCommandTime = value;
+            if (pool.name === "disband") this.lastDisbandCommandTime = value;
           },
+        }).then((result) => {
+          if (result?.success) {
+            lane.failureCount = 0;
+            lane.lastError = "";
+          } else {
+            lane.failureCount += 1;
+            lane.lastError = String(result?.message ?? "RCON command failed.");
+          }
+        }).catch((error) => {
+          lane.failureCount += 1;
+          lane.lastError = error instanceof Error ? error.message : String(error);
+          this.logger.error(`RCON lane ${lane.id} failed: ${error.stack ?? error}`);
+        }).finally(() => {
+          lane.busy = false;
+          this.pumpAllPools();
         });
       }
+
+      if (!dispatched && this.hasPoolQueue(pool)) {
+        this.schedulePoolPump(pool);
+      }
     } finally {
-      this.processing = false;
+      pool.pumping = false;
     }
   }
 
-  async runWorker(worker) {
-    worker.busy = true;
-    try {
-      while (this.getQueueSize() > 0) {
-        const item = this.priorityQueue.length > 0 ? this.priorityQueue.shift() : this.queue.shift();
-        if (!item) continue;
+  pumpAllPools() {
+    this.pumpPool(this.disbandPool);
+    this.pumpPool(this.commandPool);
+    this.pumpPool(this.queryPool);
+  }
 
-        this.status.queueSize = this.getQueueSize();
-        this.webStatus.set("rconQueue", this.getQueueSize());
+  hasPoolQueue(pool) {
+    return pool.priorityQueue.length > 0 || pool.queue.length > 0;
+  }
 
-        const diff = Date.now() - worker.lastCommandTime;
-        const minIntervalMs = item?.bypassRateLimit
-          ? 0
-          : (item?.priority ? this.priorityMinIntervalMs : this.minIntervalMs);
-        if (diff < minIntervalMs) {
-          await sleep(minIntervalMs - diff);
-        }
+  shiftPoolItem(pool) {
+    return pool.priorityQueue.length > 0 ? pool.priorityQueue.shift() : pool.queue.shift();
+  }
 
-        await this.executeQueuedItem(item, worker.client, {
-          lane: worker.id,
-          updateLastCommandTime: (value) => {
-            worker.lastCommandTime = value;
-          },
-        });
-      }
-    } finally {
-      worker.busy = false;
-      void this.processQueue();
-    }
+  pickReadyLane(pool) {
+    const now = Date.now();
+    return pool.lanes
+      .filter((lane) => !lane.busy && !this.isClientBusy(lane.client) && Number(lane.cooldownUntil ?? 0) <= now)
+      .sort(compareLaneIdleOrder)[0] ?? null;
+  }
+
+  isClientBusy(client) {
+    if (!client) return false;
+    const pools = [this.commandPool, this.queryPool, this.disbandPool];
+    return pools.some((pool) => pool.lanes.some((lane) => lane.client === client && lane.busy));
+  }
+
+  schedulePoolPump(pool) {
+    if (pool.timer) return;
+    const delayMs = this.resolveNextPoolDelayMs(pool);
+    if (!Number.isFinite(delayMs)) return;
+
+    pool.timer = setTimeout(() => {
+      pool.timer = null;
+      this.pumpPool(pool);
+    }, Math.max(0, delayMs));
+  }
+
+  clearPoolTimer(pool) {
+    if (!pool?.timer) return;
+    clearTimeout(pool.timer);
+    pool.timer = null;
+  }
+
+  resolveNextPoolDelayMs(pool) {
+    const now = Date.now();
+    const times = pool.lanes
+      .filter((lane) => !lane.busy && !this.isClientBusy(lane.client))
+      .map((lane) => Number(lane.cooldownUntil ?? 0))
+      .filter((value) => Number.isFinite(value));
+    if (times.length === 0) return Number.POSITIVE_INFINITY;
+    return Math.max(0, Math.min(...times) - now);
+  }
+
+  resolveItemCooldownMs(item) {
+    if (item?.bypassRateLimit) return 0;
+    return item?.priority ? this.priorityMinIntervalMs : this.minIntervalMs;
   }
 
   async executeQueuedItem(item, client, { lane = "default", updateLastCommandTime = () => {} } = {}) {
@@ -611,7 +690,7 @@ export class RconManager {
         executionMs,
         source: "core.rconManager",
       });
-      item.resolve({
+      const result = {
         success: true,
         message: "RCON command executed.",
         rconExecuted: true,
@@ -619,7 +698,9 @@ export class RconManager {
         queueLane: lane,
         queuedMs,
         executionMs,
-      });
+      };
+      item.resolve(result);
+      return result;
     } catch (error) {
       const executionMs = Date.now() - startedAt;
       this.status.lastError = error.message;
@@ -642,7 +723,7 @@ export class RconManager {
         },
       });
 
-      item.resolve({
+      const result = {
         success: false,
         message: error.message,
         rconExecuted: false,
@@ -650,22 +731,29 @@ export class RconManager {
         queueLane: lane,
         queuedMs,
         executionMs,
-      });
+      };
+      item.resolve(result);
+      return result;
     }
   }
 
   async refreshPlayers() {
-    if (!this.enabled || !this.squadRcon) return [];
+    if (!this.enabled) return [];
     if (this.refreshInFlight.players) return [];
 
     this.refreshInFlight.players = true;
 
     try {
-      if (!this.squadRcon.connected || !this.squadRcon.loggedIn) {
-        await this.squadRcon.connect();
-      }
+      const result = await this.dispatchCommand({
+        command: "ListPlayers",
+        requestedBy: "core.rconManager",
+        reason: "rcon-poll-players",
+        system: true,
+        rconChannel: "query",
+      });
+      if (!result?.success) return [];
 
-      const players = await this.squadRcon.getListPlayers();
+      const players = parseListPlayers(result.rconResponse);
       this.status.lastPlayersRefresh = new Date().toISOString();
       this.webStatus.set("playerCount", players.length);
       this.logger.debug(() => `ListPlayers refreshed (${players.length})`, {
@@ -693,17 +781,22 @@ export class RconManager {
   }
 
   async refreshSquads() {
-    if (!this.enabled || !this.squadRcon) return [];
+    if (!this.enabled) return [];
     if (this.refreshInFlight.squads) return [];
 
     this.refreshInFlight.squads = true;
 
     try {
-      if (!this.squadRcon.connected || !this.squadRcon.loggedIn) {
-        await this.squadRcon.connect();
-      }
+      const result = await this.dispatchCommand({
+        command: "ListSquads",
+        requestedBy: "core.rconManager",
+        reason: "rcon-poll-squads",
+        system: true,
+        rconChannel: "query",
+      });
+      if (!result?.success) return [];
 
-      const squads = await this.squadRcon.getSquads();
+      const squads = parseListSquads(result.rconResponse);
       this.status.lastSquadsRefresh = new Date().toISOString();
       this.webStatus.set("squadCount", squads.length);
       this.logger.debug(() => `ListSquads refreshed (${squads.length})`, {
@@ -777,13 +870,29 @@ export class RconManager {
   }
 
   async getCurrentMap() {
-    if (!this.enabled || !this.squadRcon) return { level: null, layer: null };
-    return await this.squadRcon.getCurrentMap();
+    if (!this.enabled) return { level: null, layer: null };
+    const result = await this.dispatchCommand({
+      command: "ShowCurrentMap",
+      requestedBy: "core.rconManager",
+      reason: "rcon-query-current-map",
+      system: true,
+      rconChannel: "query",
+    });
+    if (!result?.success) return { level: null, layer: null };
+    return parseCurrentMap(result.rconResponse);
   }
 
   async getNextMap() {
-    if (!this.enabled || !this.squadRcon) return { level: null, layer: null };
-    return await this.squadRcon.getNextMap();
+    if (!this.enabled) return { level: null, layer: null };
+    const result = await this.dispatchCommand({
+      command: "ShowNextMap",
+      requestedBy: "core.rconManager",
+      reason: "rcon-query-next-map",
+      system: true,
+      rconChannel: "query",
+    });
+    if (!result?.success) return { level: null, layer: null };
+    return parseNextMap(result.rconResponse);
   }
 
   getStatus() {
@@ -794,18 +903,18 @@ export class RconManager {
       connected: Boolean(this.squadRcon?.connected),
       authenticated: Boolean(this.squadRcon?.loggedIn),
       queueSize: this.getQueueSize(),
-      workers: this.rconWorkers.map((w) => ({
+      allowMultipleConnections: this.allowMultipleConnections,
+      workers: this.commandPool.lanes.map((w) => ({
         id: w.id,
         connected: Boolean(w.client?.connected),
         authenticated: Boolean(w.client?.loggedIn),
         busy: w.busy,
+        cooldownUntil: Number(w.cooldownUntil ?? 0),
+        failureCount: Number(w.failureCount ?? 0),
       })),
-      disbandLane: {
-        connected: Boolean(this.disbandRcon?.connected),
-        authenticated: Boolean(this.disbandRcon?.loggedIn),
-        queueSize: this.disbandQueue.length,
-        busy: this.disbandProcessing,
-      },
+      commandPool: this.getPoolStatus(this.commandPool),
+      queryPool: this.getPoolStatus(this.queryPool),
+      disbandLane: this.getPoolStatus(this.disbandPool),
       polling: {
         enabled: this.polling.enabled,
         dynamicEnabled: this.polling.dynamic.enabled,
@@ -822,7 +931,37 @@ export class RconManager {
   }
 
   getQueueSize() {
-    return this.queue.length + this.priorityQueue.length + this.disbandQueue.length;
+    return getPoolQueueSize(this.commandPool) + getPoolQueueSize(this.queryPool) + getPoolQueueSize(this.disbandPool);
+  }
+
+  getPoolStatus(pool) {
+    const now = Date.now();
+    const nextReadyAt = pool.lanes
+      .filter((lane) => !lane.busy)
+      .map((lane) => Number(lane.cooldownUntil ?? 0))
+      .filter((value) => Number.isFinite(value) && value > now)
+      .sort((a, b) => a - b)[0] ?? 0;
+    return {
+      name: pool.name,
+      size: pool.lanes.length,
+      busy: pool.lanes.filter((lane) => lane.busy).length,
+      queueSize: getPoolQueueSize(pool),
+      priorityQueueSize: pool.priorityQueue.length,
+      normalQueueSize: pool.queue.length,
+      nextReadyAt,
+      nextReadyInMs: nextReadyAt ? Math.max(0, nextReadyAt - now) : 0,
+      lanes: pool.lanes.map((lane) => ({
+        id: lane.id,
+        connected: Boolean(lane.client?.connected),
+        authenticated: Boolean(lane.client?.loggedIn),
+        busy: Boolean(lane.busy),
+        lastCommandTime: Number(lane.lastCommandTime ?? 0),
+        lastUsedAt: Number(lane.lastUsedAt ?? 0),
+        cooldownUntil: Number(lane.cooldownUntil ?? 0),
+        failureCount: Number(lane.failureCount ?? 0),
+        lastError: String(lane.lastError ?? ""),
+      })),
+    };
   }
 
   onNativeLog(handler) {
@@ -882,8 +1021,45 @@ function normalizeRconPayload(eventName, payload) {
   return payload;
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function createRconPool(name) {
+  return {
+    name,
+    lanes: [],
+    queue: [],
+    priorityQueue: [],
+    timer: null,
+    pumping: false,
+  };
+}
+
+function createPoolLane(id, client) {
+  return {
+    id,
+    client,
+    busy: false,
+    lastCommandTime: 0,
+    lastUsedAt: 0,
+    cooldownUntil: 0,
+    failureCount: 0,
+    lastError: "",
+  };
+}
+
+function getPoolQueueSize(pool) {
+  return Number(pool?.queue?.length ?? 0) + Number(pool?.priorityQueue?.length ?? 0);
+}
+
+function compareLaneIdleOrder(a, b) {
+  const aLast = Number(a?.lastUsedAt ?? 0);
+  const bLast = Number(b?.lastUsedAt ?? 0);
+  if (aLast !== bLast) return aLast - bLast;
+  return String(a?.id ?? "").localeCompare(String(b?.id ?? ""));
+}
+
+function parsePositiveInteger(value, fallback) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return parsed;
 }
 
 function isPriorityRequest(request) {
@@ -895,6 +1071,12 @@ function isPriorityRequest(request) {
 function isDisbandLaneRequest(request, command) {
   const lane = String(request?.rconChannel ?? request?.lane ?? "").trim().toLowerCase();
   return lane === "disband" || /^AdminDisbandSquad\b/i.test(String(command ?? "").trim());
+}
+
+function isQueryLaneRequest(request, command) {
+  const lane = String(request?.rconChannel ?? request?.lane ?? "").trim().toLowerCase();
+  if (lane === "query" || lane === "poll" || lane === "polling") return true;
+  return /^(ListPlayers|ListSquads|ShowCurrentMap|ShowNextMap|ShowServerInfo)\b/i.test(String(command ?? "").trim());
 }
 
 function mapNativeRconEventToConsoleEntry(eventName, payload) {

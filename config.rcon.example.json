@@ -7,9 +7,13 @@
 
     "autoReconnectDelay": 5000,
     "commandTimeoutMs": 15000,
+    "allowMultipleConnections": false,
+    "commandPoolSize": 4,
+    "queryPoolSize": 1,
 
     "rateLimit": {
       "minIntervalMs": 500,
+      "priorityMinIntervalMs": 50,
       "maxQueueSize": 100
     },
 

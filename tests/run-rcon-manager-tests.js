@@ -4,6 +4,37 @@ import { RconManager } from "../core/rcon-manager.js";
 import { createTeamBalanceService } from "../modules/team-balance/service.js";
 import { resolveRconPermission } from "../web-client/src/shared/rcon-permissions.js";
 
+function createFakeClient({ id = "default", executedCommands, response = "OK", delayMs = 0, failCommands = new Set(), blockCommands = new Set() } = {}) {
+  return {
+    id,
+    connected: true,
+    loggedIn: true,
+    async connect() {
+      this.connected = true;
+      this.loggedIn = true;
+    },
+    async execute(command) {
+      executedCommands.push({ lane: id, command });
+      if (blockCommands.has(command)) {
+        return await new Promise(() => {});
+      }
+      if (delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+      if (failCommands.has(command)) {
+        throw new Error(`boom:${command}`);
+      }
+      return typeof response === "function" ? response(command) : response;
+    },
+    async getListPlayers() {
+      return [];
+    },
+    async getSquads() {
+      return [];
+    },
+  };
+}
+
 function createHarness(overrides = {}) {
   const executedCommands = [];
   const statusUpdates = [];
@@ -33,6 +64,8 @@ function createHarness(overrides = {}) {
         playersIntervalMs: 5000,
         squadsIntervalMs: 10000,
       },
+      allowMultipleConnections: Boolean(overrides.allowMultipleConnections ?? false),
+      ...(overrides.rconConfig ?? {}),
       rateLimit: {
         minIntervalMs: 0,
         priorityMinIntervalMs: 0,
@@ -60,27 +93,19 @@ function createHarness(overrides = {}) {
     },
   });
 
-  manager.squadRcon = {
-    connected: true,
-    loggedIn: true,
-    async connect() {
-      this.connected = true;
-      this.loggedIn = true;
-    },
-    async execute(command) {
-      executedCommands.push(command);
-      return "OK";
-    },
-    async getListPlayers() {
-      executedCommands.push("ListPlayers");
-      return [];
-    },
-    async getSquads() {
-      executedCommands.push("ListSquads");
-      return [];
-    },
-  };
+  manager.squadRcon = createFakeClient({ id: "default", executedCommands });
   manager.disbandRcon = overrides.disbandRcon ?? null;
+  if (Array.isArray(overrides.commandLanes)) {
+    manager.commandPool.lanes = overrides.commandLanes;
+    manager.rconWorkers = manager.commandPool.lanes;
+  }
+  if (Array.isArray(overrides.queryLanes)) {
+    manager.queryPool.lanes = overrides.queryLanes;
+  }
+  if (Array.isArray(overrides.disbandLanes)) {
+    manager.disbandPool.lanes = overrides.disbandLanes;
+    manager.disbandQueue = manager.disbandPool.priorityQueue;
+  }
 
   return { manager, executedCommands, statusUpdates, webStatusSnapshot };
 }
@@ -172,7 +197,7 @@ async function testDispatchCommandAllowsMatchingPermission() {
   assert.equal(result.success, true);
   assert.equal(result.rconExecuted, true);
   assert.equal(result.rconResponse, "OK");
-  assert.deepEqual(executedCommands, [command]);
+  assert.deepEqual(executedCommands.map((item) => item.command), [command]);
 }
 
 async function testDispatchCommandAllowsSystemBypass() {
@@ -184,7 +209,7 @@ async function testDispatchCommandAllowsSystemBypass() {
 
   assert.equal(result.success, true);
   assert.equal(result.rconExecuted, true);
-  assert.deepEqual(executedCommands, ["ListPlayers"]);
+  assert.deepEqual(executedCommands.map((item) => item.command), ["ListPlayers"]);
 }
 
 async function testDispatchCommandRejectsUnknownManualCommandForAdmin() {
@@ -242,11 +267,11 @@ async function testBypassRateLimitSkipsInterval() {
     Date.now = originalDateNow;
   }
 
-  assert.deepEqual(executedCommands, [
+  assert.deepEqual(executedCommands.map((item) => item.command), [
     "AdminWarn \"PlayerA\" \"Hello\"",
     "AdminBroadcast Hello",
   ]);
-  assert.deepEqual(delays, [50]);
+  assert.deepEqual(delays, []);
 }
 
 async function testDynamicPollingIntervalsFollowLogClock() {
@@ -330,7 +355,7 @@ async function testDisbandLaneDoesNotWaitForBlockedDefaultCommand() {
         this.loggedIn = true;
       },
       async execute(command) {
-        disbandCommands.push(command);
+        disbandCommands.push({ lane: "disband", command });
         return "DISBANDED";
       },
     },
@@ -354,17 +379,332 @@ async function testDisbandLaneDoesNotWaitForBlockedDefaultCommand() {
   assert.equal(disbandResult.success, true);
   assert.equal(disbandResult.rconResponse, "DISBANDED");
   assert.equal(disbandResult.queueLane, "disband");
-  assert.deepEqual(disbandCommands, ["AdminDisbandSquad 1 2"]);
+  assert.deepEqual(disbandCommands.map((item) => item.command), ["AdminDisbandSquad 1 2"]);
 
   normalPromise.catch(() => {});
 }
 
+async function testDefaultUsesSinglePhysicalConnection() {
+  const { manager } = createHarness();
+  assert.equal(manager.allowMultipleConnections, false);
+  assert.equal(manager.commandPoolSize, 1);
+  assert.equal(manager.queryPoolSize, 1);
+}
+
+async function testMultipleConnectionOptInUsesConfiguredPoolSize() {
+  const { manager } = createHarness({
+    allowMultipleConnections: true,
+    rconConfig: {
+      commandPoolSize: 4,
+      queryPoolSize: 2,
+    },
+  });
+  assert.equal(manager.allowMultipleConnections, true);
+  assert.equal(manager.commandPoolSize, 4);
+  assert.equal(manager.queryPoolSize, 2);
+}
+
+async function testCommandPoolUsesMultipleReadyLanes() {
+  const executedCommands = [];
+  const lanes = ["command-1", "command-2", "command-3", "command-4"]
+    .map((id) => ({
+      id,
+      client: createFakeClient({ id, executedCommands, delayMs: 5 }),
+      busy: false,
+      lastCommandTime: 0,
+      lastUsedAt: 0,
+      cooldownUntil: 0,
+      failureCount: 0,
+      lastError: "",
+    }));
+  const { manager } = createHarness({ commandLanes: lanes });
+
+  const results = await Promise.all([
+    manager.dispatchCommand({ command: "AdminBroadcast A", system: true }),
+    manager.dispatchCommand({ command: "AdminBroadcast B", system: true }),
+    manager.dispatchCommand({ command: "AdminBroadcast C", system: true }),
+    manager.dispatchCommand({ command: "AdminBroadcast D", system: true }),
+  ]);
+
+  assert.equal(results.every((item) => item.success), true);
+  assert.deepEqual(new Set(executedCommands.map((item) => item.lane)), new Set(["command-1", "command-2", "command-3", "command-4"]));
+}
+
+async function testLowVolumeRotatesAwayFromRecentlyUsedLane() {
+  const executedCommands = [];
+  const lanes = ["command-1", "command-2"]
+    .map((id) => ({
+      id,
+      client: createFakeClient({ id, executedCommands }),
+      busy: false,
+      lastCommandTime: 0,
+      lastUsedAt: 0,
+      cooldownUntil: 0,
+      failureCount: 0,
+      lastError: "",
+    }));
+  const { manager } = createHarness({
+    commandLanes: lanes,
+    rateLimit: { minIntervalMs: 0 },
+  });
+
+  const first = await manager.dispatchCommand({ command: "AdminBroadcast A", system: true });
+  const second = await manager.dispatchCommand({ command: "AdminBroadcast B", system: true });
+
+  assert.equal(first.success, true);
+  assert.equal(second.success, true);
+  assert.deepEqual(executedCommands.map((item) => item.lane), ["command-1", "command-2"]);
+}
+
+async function testAllLanesCoolingWaitsForShortestDelay() {
+  const executedCommands = [];
+  const now = 1700000000000;
+  const lanes = [
+    {
+      id: "command-1",
+      client: createFakeClient({ id: "command-1", executedCommands }),
+      busy: false,
+      lastCommandTime: now,
+      lastUsedAt: now,
+      cooldownUntil: now + 100,
+      failureCount: 0,
+      lastError: "",
+    },
+    {
+      id: "command-2",
+      client: createFakeClient({ id: "command-2", executedCommands }),
+      busy: false,
+      lastCommandTime: now,
+      lastUsedAt: now - 1,
+      cooldownUntil: now + 40,
+      failureCount: 0,
+      lastError: "",
+    },
+  ];
+  const { manager } = createHarness({ commandLanes: lanes });
+  const originalDateNow = Date.now;
+  const originalSetTimeout = globalThis.setTimeout;
+  const delays = [];
+  Date.now = () => now;
+  globalThis.setTimeout = (handler, delayMs) => {
+    delays.push(delayMs);
+    return originalSetTimeout(() => {
+      Date.now = () => now + 40;
+      handler();
+    }, 0);
+  };
+
+  try {
+    const result = await manager.dispatchCommand({ command: "AdminBroadcast Cooled", system: true });
+    assert.equal(result.success, true);
+  } finally {
+    Date.now = originalDateNow;
+    globalThis.setTimeout = originalSetTimeout;
+  }
+
+  assert.deepEqual(delays, [40]);
+  assert.deepEqual(executedCommands.map((item) => item.lane), ["command-2"]);
+}
+
+async function testPriorityRunsBeforeNormalButUsesCooldown() {
+  const executedCommands = [];
+  let release;
+  const blockFirst = new Promise((resolve) => { release = resolve; });
+  let callCount = 0;
+  const lane = {
+    id: "command-1",
+    client: {
+      connected: true,
+      loggedIn: true,
+      async connect() {},
+      async execute(command) {
+        executedCommands.push({ lane: "command-1", command });
+        callCount += 1;
+        if (callCount === 1) await blockFirst;
+        return "OK";
+      },
+    },
+    busy: false,
+    lastCommandTime: 0,
+    lastUsedAt: 0,
+    cooldownUntil: 0,
+    failureCount: 0,
+    lastError: "",
+  };
+  const { manager } = createHarness({
+    commandLanes: [lane],
+    rateLimit: { minIntervalMs: 0, priorityMinIntervalMs: 25 },
+  });
+  const originalDateNow = Date.now;
+  const originalSetTimeout = globalThis.setTimeout;
+  const delays = [];
+  let now = 1700000000000;
+  Date.now = () => now;
+  globalThis.setTimeout = (handler, delayMs) => {
+    delays.push(delayMs);
+    return originalSetTimeout(() => {
+      now += delayMs;
+      handler();
+    }, 0);
+  };
+
+  try {
+    const firstPromise = manager.dispatchCommand({ command: "AdminBroadcast First", system: true });
+    await new Promise((resolve) => originalSetTimeout(resolve, 0));
+    const normalPromise = manager.dispatchCommand({ command: "AdminBroadcast Normal", system: true });
+    const priorityPromise = manager.dispatchCommand({ command: "AdminWarn \"P\" \"High\"", system: true, priority: "high" });
+    release();
+    const results = await Promise.all([firstPromise, priorityPromise, normalPromise]);
+    assert.equal(results.every((item) => item.success), true);
+  } finally {
+    Date.now = originalDateNow;
+    globalThis.setTimeout = originalSetTimeout;
+  }
+
+  assert.deepEqual(executedCommands.map((item) => item.command), [
+    "AdminBroadcast First",
+    "AdminWarn \"P\" \"High\"",
+    "AdminBroadcast Normal",
+  ]);
+  assert.deepEqual(delays, [25]);
+}
+
+async function testQueryCommandsUseQueryPool() {
+  const commandExecuted = [];
+  const queryExecuted = [];
+  const { manager } = createHarness({
+    commandLanes: [{
+      id: "command-1",
+      client: createFakeClient({ id: "command-1", executedCommands: commandExecuted }),
+      busy: false,
+      lastCommandTime: 0,
+      lastUsedAt: 0,
+      cooldownUntil: 0,
+      failureCount: 0,
+      lastError: "",
+    }],
+    queryLanes: [{
+      id: "query-1",
+      client: createFakeClient({ id: "query-1", executedCommands: queryExecuted }),
+      busy: false,
+      lastCommandTime: 0,
+      lastUsedAt: 0,
+      cooldownUntil: 0,
+      failureCount: 0,
+      lastError: "",
+    }],
+  });
+
+  const result = await manager.dispatchCommand({ command: "ListPlayers", system: true });
+
+  assert.equal(result.success, true);
+  assert.equal(result.queueLane, "query-1");
+  assert.deepEqual(queryExecuted.map((item) => item.command), ["ListPlayers"]);
+  assert.deepEqual(commandExecuted, []);
+}
+
+async function testSharedClientDoesNotRunPoolsConcurrently() {
+  const executedCommands = [];
+  let releaseCommand;
+  const commandBlocked = new Promise((resolve) => { releaseCommand = resolve; });
+  const sharedClient = {
+    connected: true,
+    loggedIn: true,
+    async connect() {},
+    async execute(command) {
+      executedCommands.push({ lane: "shared", command });
+      if (command === "AdminBroadcast Slow") {
+        await commandBlocked;
+      }
+      return "OK";
+    },
+  };
+  const { manager } = createHarness();
+  manager.squadRcon = sharedClient;
+  manager.commandPool.lanes = [{
+    id: "command-1",
+    client: sharedClient,
+    busy: false,
+    lastCommandTime: 0,
+    lastUsedAt: 0,
+    cooldownUntil: 0,
+    failureCount: 0,
+    lastError: "",
+  }];
+  manager.queryPool.lanes = [{
+    id: "query-1",
+    client: sharedClient,
+    busy: false,
+    lastCommandTime: 0,
+    lastUsedAt: 0,
+    cooldownUntil: 0,
+    failureCount: 0,
+    lastError: "",
+  }];
+
+  const commandPromise = manager.dispatchCommand({ command: "AdminBroadcast Slow", system: true });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const queryPromise = manager.dispatchCommand({ command: "ListPlayers", system: true });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(executedCommands.map((item) => item.command), ["AdminBroadcast Slow"]);
+  releaseCommand();
+  const results = await Promise.all([commandPromise, queryPromise]);
+
+  assert.equal(results.every((item) => item.success), true);
+  assert.deepEqual(executedCommands.map((item) => item.command), ["AdminBroadcast Slow", "ListPlayers"]);
+}
+
+async function testLaneFailureDoesNotBlockOtherLane() {
+  const executedCommands = [];
+  const failingLane = {
+    id: "command-1",
+    client: createFakeClient({ id: "command-1", executedCommands, failCommands: new Set(["AdminBroadcast Fail"]) }),
+    busy: false,
+    lastCommandTime: 0,
+    lastUsedAt: 0,
+    cooldownUntil: 0,
+    failureCount: 0,
+    lastError: "",
+  };
+  const okLane = {
+    id: "command-2",
+    client: createFakeClient({ id: "command-2", executedCommands }),
+    busy: false,
+    lastCommandTime: 0,
+    lastUsedAt: 0,
+    cooldownUntil: 0,
+    failureCount: 0,
+    lastError: "",
+  };
+  const { manager } = createHarness({ commandLanes: [failingLane, okLane] });
+
+  const [failed, ok] = await Promise.all([
+    manager.dispatchCommand({ command: "AdminBroadcast Fail", system: true }),
+    manager.dispatchCommand({ command: "AdminBroadcast OK", system: true }),
+  ]);
+
+  assert.equal(failed.success, false);
+  assert.equal(ok.success, true);
+  assert.equal(failingLane.failureCount, 1);
+  assert.deepEqual(executedCommands.map((item) => item.lane), ["command-1", "command-2"]);
+}
+
 await testResolveRconPermissionAliases();
+await testDefaultUsesSinglePhysicalConnection();
+await testMultipleConnectionOptInUsesConfiguredPoolSize();
 await testDispatchCommandRejectsMissingPermission();
 await testDispatchCommandAllowsMatchingPermission();
 await testDispatchCommandAllowsSystemBypass();
 await testDispatchCommandRejectsUnknownManualCommandForAdmin();
 await testBypassRateLimitSkipsInterval();
+await testCommandPoolUsesMultipleReadyLanes();
+await testLowVolumeRotatesAwayFromRecentlyUsedLane();
+await testAllLanesCoolingWaitsForShortestDelay();
+await testPriorityRunsBeforeNormalButUsesCooldown();
+await testQueryCommandsUseQueryPool();
+await testSharedClientDoesNotRunPoolsConcurrently();
+await testLaneFailureDoesNotBlockOtherLane();
 await testDynamicPollingIntervalsFollowLogClock();
 await testSchedulePollingRecomputesNextDelay();
 await testRefreshPlayersSkipsWhenAlreadyInFlight();

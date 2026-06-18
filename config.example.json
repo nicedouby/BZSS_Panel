@@ -357,8 +357,12 @@
     "port": 30144,
     "password": "",
     "passwordFromEnv": "BZSS_RCON_PASSWORD",
+    "allowMultipleConnections": false,
+    "commandPoolSize": 4,
+    "queryPoolSize": 1,
     "rateLimit": {
       "minIntervalMs": 500,
+      "priorityMinIntervalMs": 50,
       "maxQueueSize": 100
     }
   },
