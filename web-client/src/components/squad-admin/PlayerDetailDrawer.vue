@@ -18,6 +18,13 @@
             <!-- Dynamic radial glow matching team color -->
             <div class="hud-header-glow" :style="glowRadialBgStyle"></div>
             
+            <!-- Slanted blurred flag background in the top-left corner -->
+            <div
+              v-if="props.player.factionFlagUrl"
+              class="hud-header-flag-bg"
+              :style="{ backgroundImage: `url(${props.player.factionFlagUrl})` }"
+            ></div>
+            
             <div class="hud-profile-row">
               <!-- Animated Avatar Frame -->
               <component
@@ -1505,6 +1512,24 @@ onUnmounted(() => {
   opacity: 0.75;
 }
 
+.hud-header-flag-bg {
+  position: absolute;
+  top: -40px;
+  left: -40px;
+  width: 260px;
+  height: 180px;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
+  filter: blur(2px);
+  transform: rotate(-15deg);
+  opacity: 0.25;
+  pointer-events: none;
+  z-index: 0;
+  mask-image: linear-gradient(135deg, rgba(0, 0, 0, 1) 20%, rgba(0, 0, 0, 0) 80%);
+  -webkit-mask-image: linear-gradient(135deg, rgba(0, 0, 0, 1) 20%, rgba(0, 0, 0, 0) 80%);
+}
+
 .hud-profile-row {
   display: flex;
   align-items: center;
@@ -2427,25 +2452,26 @@ onUnmounted(() => {
 .hud-session-ctx-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 8px;
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
   margin-top: 4px;
   width: 100%;
+  overflow: hidden;
 }
 
 .hud-ctx-item {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
-  padding: 6px 10px;
+  background: rgba(20, 28, 42, 0.45);
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
 }
 
 .hud-ctx-item.is-leader {
-  border-color: rgba(251, 191, 36, 0.22);
-  background: rgba(251, 191, 36, 0.06);
+  background: rgba(251, 191, 36, 0.05);
 }
 
 .ctx-lbl {
@@ -2462,7 +2488,7 @@ onUnmounted(() => {
 .ctx-val {
   font-size: 12px;
   font-weight: 800;
-  color: #e2e8f0;
+  color: #cbd5e1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2484,9 +2510,19 @@ onUnmounted(() => {
   color: #34d399;
 }
 
+.ctx-sub {
+  display: block;
+  font-size: 10px;
+  color: #64748b;
+  font-weight: 500;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .leader-active-text {
   color: #fbbf24;
-  text-shadow: 0 0 6px rgba(251, 191, 36, 0.3);
 }
 
 .hud-squad-tag {

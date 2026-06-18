@@ -201,9 +201,8 @@ export function evaluateSquadName(rawName, policy) {
     new Set(keywordSuggestions.map((item) => item.id)),
   );
   const suggestions = mergeSuggestions(keywordSuggestions, algorithmSuggestions, suggestionLimit);
-  const warningMessage = suggestions.length
-    ? `你可能想建立 ${suggestions.map((item) => item.name).join(" ")} 队。`
-    : "";
+  const warningMessages = buildSquadNamePolicyWarningMessages(suggestions);
+  const warningMessage = warningMessages[1] ?? "";
 
   return {
     ok: true,
@@ -220,8 +219,30 @@ export function evaluateSquadName(rawName, policy) {
     keywordSuggestions,
     algorithmSuggestions,
     warningMessage,
+    warningMessages,
     classification: null,
   };
+}
+
+export function buildSquadNamePolicyWarningMessages(suggestions = []) {
+  const names = Array.isArray(suggestions)
+    ? suggestions.map((item) => String(item?.name ?? item ?? "").trim()).filter(Boolean)
+    : [];
+  const messages = [
+    "警告违规队名！\n本服对队名要求十分严格。",
+  ];
+  if (names.length > 0) {
+    messages.push(`警告你可能想建立\n${formatSuggestionNames(names)} 队。`);
+  }
+  return messages;
+}
+
+function formatSuggestionNames(names = []) {
+  const rows = [];
+  for (let index = 0; index < names.length; index += 2) {
+    rows.push(names.slice(index, index + 2).join(" "));
+  }
+  return rows.join("\n");
 }
 
 function buildAllowedNameResult({
@@ -279,9 +300,6 @@ function inferNonVehicleClassification(input, normalizedInput, normalizedStrippe
   }
   if (isNumericOnlyName(normalizedStrippedInput || normalizedInput) && !looksLikeVehicleModelName(input)) {
     return buildClassification("infantry", SQUAD_NATURE_LABEL.infantry, "数字队名已认定为步兵队，跳过载具建议。");
-  }
-  if (containsChinese(input) && classifier.nature === SQUAD_NATURE.OTHER && !looksLikeVehicleModelName(input)) {
-    return buildClassification("infantry", SQUAD_NATURE_LABEL.infantry, "奇葩中文队名已认定为步兵队，跳过载具建议。");
   }
   return null;
 }
@@ -829,6 +847,7 @@ function dedupeStrings(values = []) {
 }
 
 export default {
+  buildSquadNamePolicyWarningMessages,
   evaluateSquadName,
   loadSquadNamePolicy,
   normalizePolicyDocument,

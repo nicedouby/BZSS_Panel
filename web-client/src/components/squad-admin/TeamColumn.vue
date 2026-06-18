@@ -5,6 +5,9 @@
       :class="{ 'has-flag': !!factionFlagUrl }"
       style="position: relative;"
     >
+      <div v-if="factionFlagUrl" class="team-header-flag-bg">
+        <img class="team-faction-bg-img" :src="factionFlagUrl" alt="" />
+      </div>
       <div class="team-column-main">
         <div class="team-column-title">
           <h2 class="team-title-line">
@@ -54,9 +57,6 @@
       </div>
       <div class="team-column-visuals">
         <img v-if="unitIconUrl" class="unit-icon" :src="unitIconUrl" alt="" />
-        <a v-if="factionFlagUrl" class="team-faction-bg" :href="factionFlagUrl" target="_blank" @click.stop>
-          <img class="team-faction-bg-img" :src="factionFlagUrl" alt="" />
-        </a>
       </div>
     </header>
 
@@ -271,9 +271,32 @@ const teamTicketText = computed(() => {
   filter: saturate(1) brightness(1.05);
 }
 
-.team-column-header > * {
+.team-column-header > *:not(.team-header-flag-bg) {
   position: relative;
   z-index: 1;
+}
+
+.team-header-flag-bg {
+  position: absolute;
+  top: -0px;
+  left: -0px;
+  width: 260px;
+  height: 180px;
+  z-index: 0;
+  pointer-events: none;
+  overflow: visible;
+  transform: rotate(-15deg);
+  opacity: 0.25;
+  mask-image: linear-gradient(135deg, rgba(0, 0, 0, 1) 20%, rgba(0, 0, 0, 0) 80%);
+  -webkit-mask-image: linear-gradient(135deg, rgba(0, 0, 0, 1) 20%, rgba(0, 0, 0, 0) 80%);
+}
+
+.team-header-flag-bg .team-faction-bg-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  filter: blur(2px);
 }
 
 
@@ -303,18 +326,7 @@ const teamTicketText = computed(() => {
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
-.team-column-visuals > .team-faction-bg {
-  position: static;
-  width: 72px;
-  height: 100%;
-  flex: 0 0 auto;
-}
 
-.team-column-visuals > .team-faction-bg .team-faction-bg-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
 
 .team-title-line {
   width: 100%;

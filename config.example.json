@@ -428,6 +428,18 @@
       ],
       "defaultSquadNamePattern": "^Squad\\s*\\d+$"
     },
+    "squadNamePolicyGuard": {
+      "enabled": true,
+      "detectLogCreated": true,
+      "action": "disband_then_warn",
+      "dedupeTtlMs": 300000,
+      "warningRepeatDelayMs": 2000,
+      "warningRepeatCount": 2,
+      "rconPatrol": {
+        "enabled": false,
+        "intervalMs": 15000
+      }
+    },
     "matchState": {
       "enabled": true,
       "polling": {

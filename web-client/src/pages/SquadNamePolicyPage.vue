@@ -10,6 +10,17 @@
           <AppStatusBadge tone="idle">关键字: {{ state.stats.keywordCells }}</AppStatusBadge>
           <AppStatusBadge tone="idle">步兵白名单: {{ state.stats.infantryNames + state.stats.specialInfantryNames }}</AppStatusBadge>
         </div>
+        <div v-if="guardState" class="toolbar-badges">
+          <AppStatusBadge :tone="guardState.enabled ? 'ok' : 'idle'">
+            Guard: {{ guardState.enabled ? "开启" : "关闭" }}
+          </AppStatusBadge>
+          <AppStatusBadge :tone="guardState.detectLogCreated ? 'ok' : 'idle'">
+            日志建队: {{ guardState.detectLogCreated ? "开启" : "关闭" }}
+          </AppStatusBadge>
+          <AppStatusBadge :tone="guardState.rconPatrol.enabled ? 'warn' : 'idle'">
+            RCON 巡逻: {{ guardState.rconPatrol.enabled ? "开启" : "关闭" }}
+          </AppStatusBadge>
+        </div>
       </div>
       <template #actions>
         <button type="button" class="toolbar-btn" :disabled="loading" @click="loadState">
@@ -185,7 +196,7 @@
                 </div>
 
                 <!-- Step 4: Details & Suggestions -->
-                <div v-if="testResult.matched || testResult.suggestions.length || testResult.warningMessage" class="pipeline-node node-done">
+                <div v-if="testResult.matched || testResult.suggestions.length || displayedWarningMessages.length || guardPreview" class="pipeline-node node-done">
                   <div class="node-icon">🔍</div>
                   <div class="node-content">
                     <div class="node-title">4. 实体解析与建议</div>
@@ -234,9 +245,32 @@
                     </div>
 
                     <!-- Warning Info -->
-                    <div v-if="testResult.warningMessage" class="warning-alert">
+                    <div
+                      v-for="(message, index) in displayedWarningMessages"
+                      :key="`warning-${index}`"
+                      class="warning-alert"
+                    >
                       <span class="alert-icon">⚠</span>
-                      <span class="alert-text">{{ testResult.warningMessage }}</span>
+                      <span class="alert-text">{{ message }}</span>
+                    </div>
+
+                    <div v-if="guardPreview" class="guard-preview-card">
+                      <div class="guard-preview-header">
+                        <span class="box-label">运行时处置预览</span>
+                        <span class="badge" :class="guardPreview.violation ? 'badge--warn' : 'badge--success'">
+                          {{ guardPreview.violation ? "会判定违规" : "不会触发处置" }}
+                        </span>
+                      </div>
+                      <div class="guard-preview-grid">
+                        <div>
+                          <span>动作</span>
+                          <strong>{{ guardPreview.action || "-" }}</strong>
+                        </div>
+                        <div>
+                          <span>建议消息数</span>
+                          <strong>{{ guardPreview.warningMessages.length }}</strong>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -447,6 +481,64 @@
             </div>
           </AppCard>
 
+          <AppCard title="运行时 Guard">
+            <div v-if="guardState" class="meta-details-list">
+              <div class="meta-row">
+                <span class="lbl">模块状态</span>
+                <span class="val text-right font-semibold">{{ guardState.enabled ? "启用" : "停用" }}</span>
+              </div>
+              <div class="meta-row">
+                <span class="lbl">日志建队检测</span>
+                <span class="val text-right font-semibold">{{ guardState.detectLogCreated ? "开启" : "关闭" }}</span>
+              </div>
+              <div class="meta-row">
+                <span class="lbl">RCON 巡逻</span>
+                <span class="val text-right font-semibold">
+                  {{ guardState.rconPatrol.enabled ? `开启 / ${guardState.rconPatrol.intervalMs}ms` : "默认关闭" }}
+                </span>
+              </div>
+              <div class="meta-row">
+                <span class="lbl">动作策略</span>
+                <span class="val text-right mono font-semibold">{{ guardState.action }}</span>
+              </div>
+              <div class="meta-row">
+                <span class="lbl">最近判定/违规</span>
+                <span class="val text-right font-semibold">
+                  {{ guardState.stats.evaluated }} / {{ guardState.stats.violations }}
+                </span>
+              </div>
+              <div class="meta-row">
+                <span class="lbl">解散/警告</span>
+                <span class="val text-right font-semibold">
+                  {{ guardState.stats.disbanded }} / {{ guardState.stats.warningsSent }}
+                </span>
+              </div>
+              <div class="meta-row">
+                <span class="lbl">去重跳过/错误</span>
+                <span class="val text-right font-semibold">
+                  {{ guardState.stats.duplicatesSkipped }} / {{ guardState.stats.errors }}
+                </span>
+              </div>
+              <div class="guard-actions-row">
+                <button type="button" class="toolbar-btn" :disabled="loading" @click="loadState">
+                  刷新 Guard
+                </button>
+                <button
+                  v-if="canSave"
+                  type="button"
+                  class="toolbar-btn"
+                  :disabled="clearingGuard"
+                  @click="clearGuardRecent"
+                >
+                  {{ clearingGuard ? "清空中..." : "清空最近记录" }}
+                </button>
+              </div>
+            </div>
+            <div v-else class="empty-rules-block">
+              运行时 Guard 状态暂不可用。
+            </div>
+          </AppCard>
+
           <!-- File Metadata Card -->
           <AppCard title="源文件与同步信息">
             <div class="meta-details-list">
@@ -585,11 +677,42 @@ type PolicyTestResult = {
   keywordSuggestions: PolicySuggestion[];
   algorithmSuggestions: PolicySuggestion[];
   warningMessage: string;
+  warningMessages?: string[];
   classification?: {
     nature: string;
     label: string;
     reason: string;
   } | null;
+};
+
+type GuardState = {
+  enabled: boolean;
+  detectLogCreated: boolean;
+  action: string;
+  dedupeTtlMs: number;
+  rconPatrol: {
+    enabled: boolean;
+    intervalMs: number;
+  };
+  stats: {
+    evaluated: number;
+    violations: number;
+    disbanded: number;
+    disbandFailed: number;
+    warningsSent: number;
+    warningsSkipped: number;
+    duplicatesSkipped: number;
+    errors: number;
+  };
+  recent: Array<Record<string, unknown>>;
+};
+
+type GuardSimulation = {
+  event: Record<string, unknown>;
+  evaluation: PolicyTestResult;
+  violation: boolean;
+  warningMessages: string[];
+  action: string;
 };
 
 const auth = useAuthStore();
@@ -598,10 +721,13 @@ const canSave = computed(() => Boolean(auth.user?.isSuperAdmin));
 
 const loading = ref(false);
 const testing = ref(false);
+const clearingGuard = ref(false);
 const error = ref("");
 const state = ref<PolicyState | null>(null);
+const guardState = ref<GuardState | null>(null);
 const testName = ref("BMP队");
 const testResult = ref<PolicyTestResult | null>(null);
+const guardPreview = ref<GuardSimulation | null>(null);
 
 // Rules Browser state
 const activeTab = ref("vehicles");
@@ -618,7 +744,12 @@ async function loadState() {
   loading.value = true;
   error.value = "";
   try {
-    state.value = await apiGet<PolicyState>("/api/squad-name-policy/state");
+    const [policyState, runtimeGuard] = await Promise.all([
+      apiGet<PolicyState>("/api/squad-name-policy/state"),
+      apiGet<{ ok: boolean; data: GuardState }>("/api/modules/squad-name-policy-guard/state").catch(() => null),
+    ]);
+    state.value = policyState;
+    guardState.value = runtimeGuard?.data ?? null;
   } catch (err) {
     error.value = formatError(err);
   } finally {
@@ -630,7 +761,17 @@ async function runTest() {
   if (!testName.value) return;
   testing.value = true;
   try {
-    testResult.value = await apiPost<PolicyTestResult>("/api/squad-name-policy/test", { name: testName.value });
+    const [policyResult, runtimePreview] = await Promise.all([
+      apiPost<PolicyTestResult>("/api/squad-name-policy/test", { name: testName.value }),
+      apiPost<{ ok: boolean; data: GuardSimulation }>("/api/modules/squad-name-policy-guard/simulate", {
+        squadName: testName.value,
+        creatorName: "Simulator",
+        teamId: 1,
+        squadId: 1,
+      }).catch(() => null),
+    ]);
+    testResult.value = policyResult;
+    guardPreview.value = runtimePreview?.data ?? null;
   } catch (err) {
     ui.pushToast({ title: "测试失败", message: formatError(err), tone: "error" });
   } finally {
@@ -638,10 +779,31 @@ async function runTest() {
   }
 }
 
+async function clearGuardRecent() {
+  if (!canSave.value) return;
+  clearingGuard.value = true;
+  try {
+    await apiPost("/api/modules/squad-name-policy-guard/clear", {});
+    await loadState();
+    ui.pushToast({ title: "已清空", message: "队名 Guard 最近记录已清空。", tone: "ok" });
+  } catch (err) {
+    ui.pushToast({ title: "清空失败", message: formatError(err), tone: "error" });
+  } finally {
+    clearingGuard.value = false;
+  }
+}
+
 function triggerPresetTest(name: string) {
   testName.value = name;
   void runTest();
 }
+
+const displayedWarningMessages = computed(() => {
+  const messages = testResult.value?.warningMessages?.length
+    ? testResult.value.warningMessages
+    : (testResult.value?.warningMessage ? [testResult.value.warningMessage] : []);
+  return messages.filter((item) => String(item || "").trim());
+});
 
 function translateMatchedKind(kind?: string) {
   if (!kind) return "未知";
@@ -1121,6 +1283,16 @@ function formatError(err: unknown) {
   color: #60a5fa;
 }
 
+.badge--success {
+  background: rgba(52, 211, 153, 0.14);
+  color: #86efac;
+}
+
+.badge--warn {
+  background: rgba(245, 158, 11, 0.14);
+  color: #fcd34d;
+}
+
 .badge--neutral {
   background: rgba(255, 255, 255, 0.05);
   color: var(--color-text-muted);
@@ -1323,6 +1495,48 @@ function formatError(err: unknown) {
   font-size: 12px;
   color: #fad390;
   line-height: 1.4;
+  white-space: pre-line;
+}
+
+.guard-preview-card {
+  margin-top: 12px;
+  border: 1px solid rgba(96, 165, 250, 0.22);
+  background: rgba(96, 165, 250, 0.06);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.guard-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.guard-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.guard-preview-grid span {
+  display: block;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  margin-bottom: 4px;
+}
+
+.guard-preview-grid strong {
+  font-size: 12px;
+  color: var(--color-text-primary);
+}
+
+.guard-actions-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
 }
 
 /* Guidelines Ol & Workflow styling */

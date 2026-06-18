@@ -1120,6 +1120,145 @@ async function testSquadNamePolicyRoutesExposeTestAndProtectedSave() {
   assert.equal(savedRaw.entries[0].name, "M1A1");
 }
 
+async function testSquadNamePolicyGuardRoutesExposeStateSimulateAndProtectedClear() {
+  const simulateCalls = [];
+  const clearCalls = [];
+  const viewerServer = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "viewer", role: "Operator" };
+        },
+        hasEverything() {
+          return false;
+        },
+      },
+    },
+    modules: {
+      squadNamePolicyGuard: {
+        getState() {
+          return {
+            enabled: true,
+            detectLogCreated: true,
+            action: "disband_then_warn",
+            rconPatrol: { enabled: false, intervalMs: 15000 },
+            dedupeTtlMs: 300000,
+            stats: {
+              evaluated: 2,
+              violations: 1,
+              disbanded: 1,
+              disbandFailed: 0,
+              warningsSent: 2,
+              warningsSkipped: 0,
+              duplicatesSkipped: 0,
+              errors: 0,
+            },
+            recent: [],
+          };
+        },
+        async simulate(payload) {
+          simulateCalls.push(payload);
+          return {
+            violation: true,
+            action: "disband_then_warn",
+            warningMessages: [
+              "警告违规队名！\n本服对队名要求十分严格。",
+              "警告你可能想建立 BMP-1 BMP-2 队。",
+            ],
+          };
+        },
+        clearRecent() {
+          clearCalls.push(true);
+          return { ok: true, cleared: 3 };
+        },
+      },
+    },
+  });
+
+  const stateRecorder = createRecorder();
+  await viewerServer.handleRequest({
+    method: "GET",
+    url: "/api/modules/squad-name-policy-guard/state",
+    headers: { host: "localhost" },
+    socket: {},
+  }, stateRecorder.res);
+  assert.equal(stateRecorder.state.status, 200);
+  const stateBody = JSON.parse(stateRecorder.state.body);
+  assert.equal(stateBody.ok, true);
+  assert.equal(stateBody.data.stats.violations, 1);
+  assert.equal(stateBody.data.rconPatrol.enabled, false);
+
+  const simulateRecorder = createRecorder();
+  const simulateReq = Readable.from([JSON.stringify({
+    squadName: "BMP队",
+    creatorName: "Leader",
+    teamId: 1,
+    squadId: 3,
+  })]);
+  simulateReq.method = "POST";
+  simulateReq.url = "/api/modules/squad-name-policy-guard/simulate";
+  simulateReq.headers = { host: "localhost", "content-type": "application/json" };
+  simulateReq.socket = {};
+  await viewerServer.handleRequest(simulateReq, simulateRecorder.res);
+  assert.equal(simulateRecorder.state.status, 200);
+  const simulateBody = JSON.parse(simulateRecorder.state.body);
+  assert.equal(simulateBody.ok, true);
+  assert.equal(simulateCalls.length, 1);
+  assert.equal(simulateCalls[0].squadName, "BMP队");
+  assert.equal(simulateBody.data.warningMessages[0], "警告违规队名！\n本服对队名要求十分严格。");
+
+  const forbiddenRecorder = createRecorder();
+  await viewerServer.handleRequest({
+    method: "POST",
+    url: "/api/modules/squad-name-policy-guard/clear",
+    headers: { host: "localhost" },
+    socket: {},
+  }, forbiddenRecorder.res);
+  assert.equal(forbiddenRecorder.state.status, 403);
+  assert.equal(clearCalls.length, 0);
+
+  const adminServer = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin", role: "SuperAdmin", isSuperAdmin: true };
+        },
+        hasEverything() {
+          return true;
+        },
+      },
+    },
+    modules: {
+      squadNamePolicyGuard: {
+        getState() {
+          return { enabled: true, stats: {}, recent: [], rconPatrol: { enabled: false, intervalMs: 15000 } };
+        },
+        async simulate(payload) {
+          simulateCalls.push(payload);
+          return { violation: false, action: "disband_then_warn", warningMessages: [] };
+        },
+        clearRecent() {
+          clearCalls.push(true);
+          return { ok: true, cleared: 3 };
+        },
+      },
+    },
+  });
+
+  const clearRecorder = createRecorder();
+  await adminServer.handleRequest({
+    method: "POST",
+    url: "/api/modules/squad-name-policy-guard/clear",
+    headers: { host: "localhost" },
+    socket: {},
+  }, clearRecorder.res);
+  assert.equal(clearRecorder.state.status, 200);
+  const clearBody = JSON.parse(clearRecorder.state.body);
+  assert.equal(clearBody.ok, true);
+  assert.equal(clearBody.data.cleared, 3);
+  assert.equal(clearCalls.length, 1);
+}
+
 async function testCombatCleanRoutesDoNotForceCurrentServerFilter() {
   const calls = [];
   const server = createServer({
@@ -2853,6 +2992,7 @@ await testSquadNameClassifierHelperCoversCoreRules();
 await testSquadNameClassifierApiReturnsClassification();
 await testSquadNameRulesApiReadsAndWritesExactMappings();
 await testSquadNamePolicyRoutesExposeTestAndProtectedSave();
+await testSquadNamePolicyGuardRoutesExposeStateSimulateAndProtectedClear();
 await testCombatCleanRoutesDoNotForceCurrentServerFilter();
 await testWeaponCollectorApiRequiresGet();
 await testGroupReportSnapshotRouteReturnsWrappedSnapshot();

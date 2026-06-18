@@ -26,6 +26,7 @@ import { createCombatManagerModule } from "../modules/combat-manager/index.js";
 import { createBattleLogModule } from "../modules/battle-log/index.js";
 import { createCombatLogModule } from "../modules/combat-log/index.js";
 import { createAdminWarnModule } from "../modules/admin-warn/index.js";
+import { createSquadNamePolicyGuardModule } from "../modules/squad-name-policy-guard/index.js";
 import { createInfantryCombatEnhancerModule } from "../modules/infantry-combat-enhancer/index.js";
 import { createPlaytimeModule } from "../modules/playtime/index.js";
 import { createPluginSubscriptionsModule } from "../modules/plugin-subscriptions/index.js";
@@ -81,6 +82,7 @@ export class ModuleManager {
       createBattleLogModule,
       createCombatLogModule,
       createAdminWarnModule,
+      createSquadNamePolicyGuardModule,
       createInfantryCombatEnhancerModule,
       createPlaytimeModule,
       createServerStatsModule,

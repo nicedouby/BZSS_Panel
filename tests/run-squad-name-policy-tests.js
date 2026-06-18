@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 import {
+  buildSquadNamePolicyWarningMessages,
   evaluateSquadName,
   normalizePolicyDocument,
   readSquadNamePolicyState,
@@ -92,6 +93,20 @@ assert.equal(bmpTeam.valid, false);
 assert.equal(bmpTeam.suffixStripped, true);
 assert.deepEqual(bmpTeam.keywordSuggestions.map((item) => item.name).slice(0, 3), ["BMP-1", "BMP-2", "BMP-2M"]);
 assert.equal(bmpTeam.warningMessage.includes("BMP-1"), true);
+assert.equal(bmpTeam.warningMessages[0], "警告违规队名！\n本服对队名要求十分严格。");
+assert.equal(bmpTeam.warningMessages[1], "警告你可能想建立\nBMP-1 BMP-2\nBMP-2M 队。");
+
+assert.deepEqual(buildSquadNamePolicyWarningMessages([
+  { name: "BMP-1" },
+  { name: "BMP-1TS" },
+  { name: "BMP-2" },
+  { name: "BMP-1" },
+  { name: "ZU-23-2" },
+  { name: "BMP-1AM" },
+]), [
+  "警告违规队名！\n本服对队名要求十分严格。",
+  "警告你可能想建立\nBMP-1 BMP-1TS\nBMP-2 BMP-1\nZU-23-2 BMP-1AM 队。",
+]);
 
 assert.equal(evaluateSquadName("TANK", samplePolicy).suggestions[0].name, "M1A1");
 assert.equal(evaluateSquadName("LAV RWS", samplePolicy).suggestions[0].name, "LAV III C6 RWS");
@@ -125,14 +140,12 @@ assert.equal(numeric.classification?.reason.includes("步兵队"), true);
 const weirdChinese = evaluateSquadName("离谱中文队名", samplePolicy);
 assert.equal(weirdChinese.valid, false);
 assert.equal(weirdChinese.suggestions.length, 0);
-assert.equal(weirdChinese.classification?.nature, "infantry");
-assert.equal(weirdChinese.classification?.reason.includes("已认定为步兵队"), true);
+assert.equal(weirdChinese.classification ?? null, null);
 
 const bizarreChinese = evaluateSquadName("我是傻逼", samplePolicy);
 assert.equal(bizarreChinese.valid, false);
 assert.equal(bizarreChinese.suggestions.length, 0);
-assert.equal(bizarreChinese.classification?.nature, "infantry");
-assert.equal(bizarreChinese.classification?.reason.includes("奇葩中文队名"), true);
+assert.equal(bizarreChinese.classification ?? null, null);
 
 const modelChinese = evaluateSquadName("08式", samplePolicy);
 assert.equal(modelChinese.valid, true);
