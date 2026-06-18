@@ -192,9 +192,14 @@ export function evaluateSquadName(rawName, policy) {
     };
   }
 
-  const suggestionKey = normalizedStrippedInput || normalizedInput;
-  const keywordSuggestions = buildKeywordSuggestions(suggestionKey, indexes, suggestionLimit);
-  const algorithmSuggestions = buildAlgorithmSuggestions(suggestionKey, indexes, suggestionLimit, new Set(keywordSuggestions.map((item) => item.id)));
+  const suggestionKeys = buildSuggestionKeys(input, normalizedInput, normalizedStrippedInput);
+  const keywordSuggestions = buildKeywordSuggestions(suggestionKeys, indexes, suggestionLimit);
+  const algorithmSuggestions = buildAlgorithmSuggestions(
+    suggestionKeys,
+    indexes,
+    suggestionLimit,
+    new Set(keywordSuggestions.map((item) => item.id)),
+  );
   const suggestions = mergeSuggestions(keywordSuggestions, algorithmSuggestions, suggestionLimit);
   const warningMessage = suggestions.length
     ? `你可能想建立 ${suggestions.map((item) => item.name).join(" ")} 队。`
@@ -272,10 +277,10 @@ function inferNonVehicleClassification(input, normalizedInput, normalizedStrippe
   if (classifier.nature === SQUAD_NATURE.INFANTRY) {
     return buildClassification("infantry", SQUAD_NATURE_LABEL.infantry, "已认定为步兵队，跳过载具建议。");
   }
-  if (isNumericOnlyName(normalizedStrippedInput || normalizedInput)) {
+  if (isNumericOnlyName(normalizedStrippedInput || normalizedInput) && !looksLikeVehicleModelName(input)) {
     return buildClassification("infantry", SQUAD_NATURE_LABEL.infantry, "数字队名已认定为步兵队，跳过载具建议。");
   }
-  if (containsChinese(input) && classifier.nature === SQUAD_NATURE.OTHER) {
+  if (containsChinese(input) && classifier.nature === SQUAD_NATURE.OTHER && !looksLikeVehicleModelName(input)) {
     return buildClassification("infantry", SQUAD_NATURE_LABEL.infantry, "奇葩中文队名已认定为步兵队，跳过载具建议。");
   }
   return null;
@@ -289,8 +294,44 @@ function isNumericOnlyName(value) {
   return /^\d{1,4}$/.test(String(value ?? "").trim());
 }
 
+function isRepeatedVehicleModelDigits(value) {
+  const text = String(value ?? "").normalize("NFKC").trim();
+  return /^(\d{2})\1$/.test(text);
+}
+
+function looksLikeVehicleModelName(value) {
+  const text = String(value ?? "").normalize("NFKC").trim();
+  if (!text) return false;
+  if (isRepeatedVehicleModelDigits(text)) return true;
+  if (/[A-Za-z]+\s*\d|\d+\s*[A-Za-z]+/.test(text)) return true;
+  if (/\d+\s*(?:式|型|改|轮式|履带|步战|战车|装甲|突击炮|坦克|运兵|战斗车)/u.test(text)) return true;
+  return false;
+}
+
 function containsChinese(value) {
   return /[\u3400-\u9fff]/u.test(String(value ?? ""));
+}
+
+function extractModelLikeSuggestionKeys(value) {
+  const text = String(value ?? "").normalize("NFKC").trim();
+  if (!text) return [];
+  const compact = text.replace(/\s+/g, "");
+  const results = [];
+  const repeatedDigits = compact.match(/^(\d{2})\1$/);
+  if (repeatedDigits?.[1]) results.push(repeatedDigits[1]);
+  const numericModel = compact.match(/^(\d{1,4})(?:式|型|改|轮式|履带|步战|战车|装甲|突击炮|坦克|运兵|战斗车)+$/u);
+  if (numericModel?.[1]) results.push(numericModel[1]);
+  const alphaNumeric = compact.match(/^([A-Za-z]+[- ]?\d+[A-Za-z0-9-]*)/);
+  if (alphaNumeric?.[1]) results.push(alphaNumeric[1]);
+  return dedupeStrings(results);
+}
+
+function detectRepeatedDigitsPrefix(suggestionKeys) {
+  for (const key of suggestionKeys) {
+    const match = String(key ?? "").match(/^(\d{2})\1$/);
+    if (match?.[1]) return match[1];
+  }
+  return "";
 }
 
 export function normalizePolicyName(value) {
@@ -437,35 +478,65 @@ function matchDefaultNamePattern(normalizedInput, patterns = []) {
   return null;
 }
 
-function buildKeywordSuggestions(suggestionKey, indexes, limit) {
-  const entries = indexes.keywordIndex.get(suggestionKey) ?? [];
-  return entries.slice(0, limit).map((entry) => buildSuggestion(entry, {
-    source: "keyword",
-    score: 1,
-    reason: "Keyword matched.",
-  }));
+function buildSuggestionKeys(input, normalizedInput, normalizedStrippedInput) {
+  const primary = normalizedStrippedInput || normalizedInput;
+  return dedupeStrings([
+    primary,
+    ...extractModelLikeSuggestionKeys(input),
+  ].map((item) => normalizePolicyName(item)).filter(Boolean));
 }
 
-function buildAlgorithmSuggestions(suggestionKey, indexes, limit, excludedIds = new Set()) {
-  if (!suggestionKey) return [];
-  const bestByEntry = new Map();
+function buildKeywordSuggestions(suggestionKeys, indexes, limit) {
+  const results = [];
+  const seen = new Set();
+  for (const suggestionKey of suggestionKeys) {
+    const entries = indexes.keywordIndex.get(suggestionKey) ?? [];
+    for (const entry of entries) {
+      if (seen.has(entry.id)) continue;
+      seen.add(entry.id);
+      results.push(buildSuggestion(entry, {
+        source: "keyword",
+        score: 1,
+        reason: "Keyword matched.",
+      }));
+      if (results.length >= limit) return results;
+    }
+  }
+  return results;
+}
 
-  for (const item of indexes.searchable) {
-    if (!item.normalized || excludedIds.has(item.entry.id)) continue;
-    const score = scoreCandidate(suggestionKey, item.normalized, item.entry);
-    if (score < ALGORITHM_THRESHOLD) continue;
-    const current = bestByEntry.get(item.entry.id);
-    if (!current || score > current.score) {
-      bestByEntry.set(item.entry.id, {
-        entry: item.entry,
-        score,
-        matchedValue: item.value,
-        matchedKind: item.kind,
-      });
+function buildAlgorithmSuggestions(suggestionKeys, indexes, limit, excludedIds = new Set()) {
+  if (!suggestionKeys.length) return [];
+  const bestByEntry = new Map();
+  const repeatedDigitsPrefix = detectRepeatedDigitsPrefix(suggestionKeys);
+
+  for (const suggestionKey of suggestionKeys) {
+    for (const item of indexes.searchable) {
+      if (!item.normalized || excludedIds.has(item.entry.id)) continue;
+      const score = scoreCandidate(suggestionKey, item.normalized, item.entry);
+      if (score < ALGORITHM_THRESHOLD) continue;
+      const current = bestByEntry.get(item.entry.id);
+      if (!current || score > current.score) {
+        bestByEntry.set(item.entry.id, {
+          entry: item.entry,
+          score,
+          matchedValue: item.value,
+          matchedKind: item.kind,
+        });
+      }
     }
   }
 
   return [...bestByEntry.values()]
+    .filter((item) => {
+      if (!repeatedDigitsPrefix) return true;
+      const candidateKeys = [
+        normalizePolicyName(item.entry.name),
+        ...item.entry.aliases.map((alias) => normalizePolicyName(alias)),
+        ...item.entry.keywords.map((keyword) => normalizePolicyName(keyword)),
+      ].filter(Boolean);
+      return candidateKeys.some((key) => key.includes(repeatedDigitsPrefix));
+    })
     .sort((left, right) => right.score - left.score || left.entry.name.localeCompare(right.entry.name, "en"))
     .slice(0, limit)
     .map((item) => buildSuggestion(item.entry, {

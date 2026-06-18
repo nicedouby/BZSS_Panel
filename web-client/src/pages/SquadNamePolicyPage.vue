@@ -1,119 +1,530 @@
 <template>
-  <section class="page squad-name-policy-page">
-    <PageHeader
-      title="队名规范"
-      subtitle="独立测试载具队命名规则。这里不会解散小队、不会发送警告、不会调用 RCON。"
-    >
+  <AppPage class="squad-name-policy-page" full-bleed>
+    <!-- Top toolbar of the workspace -->
+    <WorkspaceToolbar>
+      <div class="toolbar-left">
+        <span class="page-title">队名规范工作区</span>
+        <div v-if="state" class="toolbar-badges">
+          <AppStatusBadge tone="idle">载具: {{ state.stats.entries }}</AppStatusBadge>
+          <AppStatusBadge tone="idle">别名: {{ state.stats.aliases }}</AppStatusBadge>
+          <AppStatusBadge tone="idle">关键字: {{ state.stats.keywordCells }}</AppStatusBadge>
+          <AppStatusBadge tone="idle">步兵白名单: {{ state.stats.infantryNames + state.stats.specialInfantryNames }}</AppStatusBadge>
+        </div>
+      </div>
       <template #actions>
-        <button type="button" class="action-btn" :disabled="loading" @click="loadState">
+        <button type="button" class="toolbar-btn" :disabled="loading" @click="loadState">
           {{ loading ? "刷新中.." : "刷新" }}
         </button>
-        <router-link to="/debug/squad-name-policy/rules" class="action-btn primary">
-          {{ canSave ? "规则维护" : "查看规则" }}
+        <router-link to="/debug/squad-name-policy/rules" class="toolbar-btn primary">
+          {{ canSave ? "规则维护 (Excel)" : "查看规则 (Excel)" }}
         </router-link>
       </template>
-    </PageHeader>
+    </WorkspaceToolbar>
 
-    <div v-if="error" class="banner error">{{ error }}</div>
+    <!-- Error Banner -->
+    <div v-if="error" class="banner error-banner">{{ error }}</div>
 
-    <section class="top-grid">
-      <PageCard compact title="输入测试" description="输入玩家创建的小队名，返回是否规范以及可能想建立的载具队。">
-        <div class="test-form">
-          <label class="field">
-            <span>小队名</span>
-            <input v-model.trim="testName" type="text" placeholder="BMP队 / BMP1 / BPM2" @keyup.enter="runTest" />
-          </label>
-          <button type="button" class="action-btn primary" :disabled="testing || !testName" @click="runTest">
-            {{ testing ? "测试中.." : "测试队名" }}
-          </button>
-        </div>
+    <!-- Main split layout workspace -->
+    <div class="workspace-body">
+      <AppSplitLayout :right-fixed="true">
+        <!-- Left Pane: Interactive Test + Rule Browser -->
+        <template #left>
+          <!-- Test Input & Presets -->
+          <AppCard title="队名合规性校验" description="独立测试载具队或步兵队的队名规范，实时展示匹配机制与推演路径。">
+            <div class="test-workspace">
+              <!-- Search/Test Input Field -->
+              <div class="test-input-row">
+                <div class="input-wrapper">
+                  <input
+                    v-model.trim="testName"
+                    type="text"
+                    placeholder="输入待测队名 (例如 BMP队 / BTR1 / 96b / 步兵)..."
+                    @keyup.enter="runTest"
+                    class="policy-input"
+                  />
+                  <button
+                    v-if="testName"
+                    type="button"
+                    class="clear-input-btn"
+                    @click="testName = ''; testResult = null"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  class="test-run-btn"
+                  :disabled="testing || !testName"
+                  @click="runTest"
+                >
+                  {{ testing ? "分析中..." : "开始分析" }}
+                </button>
+              </div>
 
-        <div v-if="testResult" class="result-panel" :data-valid="testResult.valid">
-          <div class="result-head">
-            <strong>{{ testResult.valid ? "规范队名" : "违规队名" }}</strong>
-            <span>{{ testResult.reason }}</span>
-          </div>
-          <dl class="result-grid">
-            <div>
-              <dt>标准化</dt>
-              <dd>{{ testResult.normalizedInput || "-" }}</dd>
+              <!-- Quick Presets -->
+              <div class="presets-section">
+                <div class="presets-label">快速预设测试点：</div>
+                <div class="presets-groups">
+                  <div class="preset-group">
+                    <span class="group-tag">载具队:</span>
+                    <button
+                      v-for="name in ['BMP', 'BTR-80', '96b', 'T72', 'MATV', 'BMP1队', '99a坦克']"
+                      :key="name"
+                      type="button"
+                      class="preset-pill"
+                      @click="triggerPresetTest(name)"
+                    >
+                      {{ name }}
+                    </button>
+                  </div>
+                  <div class="preset-group">
+                    <span class="group-tag">步兵/特种:</span>
+                    <button
+                      v-for="name in ['步兵一队', '步兵', '防空队', '哈特', '后勤队', 'squad 1']"
+                      :key="name"
+                      type="button"
+                      class="preset-pill preset-pill--info"
+                      @click="triggerPresetTest(name)"
+                    >
+                      {{ name }}
+                    </button>
+                  </div>
+                  <div class="preset-group">
+                    <span class="group-tag">违规/偏僻:</span>
+                    <button
+                      v-for="name in ['1', '12345', 'BPM', 'BMP队123', '哈哈哈哈']"
+                      :key="name"
+                      type="button"
+                      class="preset-pill preset-pill--warn"
+                      @click="triggerPresetTest(name)"
+                    >
+                      {{ name }}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div>
-              <dt>建议用名</dt>
-              <dd>{{ testResult.normalizedStrippedInput || "-" }}</dd>
+
+            <!-- Pipeline Visualizer -->
+            <div v-if="testResult" class="pipeline-section">
+              <div class="section-title">规范决策流水线 (Pipeline Visualizer)</div>
+
+              <div class="pipeline-wrapper">
+                <!-- Step 1: Input Clean -->
+                <div class="pipeline-node node-done">
+                  <div class="node-icon">✨</div>
+                  <div class="node-content">
+                    <div class="node-title">1. 输入预处理</div>
+                    <div class="node-meta-grid">
+                      <div>
+                        <span>原始队名</span>
+                        <strong>{{ testResult.input }}</strong>
+                      </div>
+                      <div>
+                        <span>标准化</span>
+                        <strong>{{ testResult.normalizedInput || "-" }}</strong>
+                      </div>
+                      <div>
+                        <span>剥离建议名</span>
+                        <strong>{{ testResult.normalizedStrippedInput || "-" }}</strong>
+                      </div>
+                      <div>
+                        <span>剥离后缀</span>
+                        <span class="badge" :class="testResult.suffixStripped ? 'badge--info' : 'badge--neutral'">
+                          {{ testResult.suffixStripped ? "已剥离" : "未剥离" }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Step 2: Classifier -->
+                <div class="pipeline-node node-done">
+                  <div class="node-icon">🏷️</div>
+                  <div class="node-content">
+                    <div class="node-title">2. 决策树分类</div>
+                    <div class="node-meta-grid">
+                      <div class="wide-col">
+                        <span>性质划分</span>
+                        <strong v-if="testResult.classification">
+                          <span class="nature-pill" :data-nature="testResult.classification.nature">
+                            {{ testResult.classification.label }}
+                          </span>
+                        </strong>
+                        <strong v-else-if="testResult.valid && testResult.matched">
+                          <span class="nature-pill" data-nature="vehicle">载具队</span>
+                        </strong>
+                        <strong v-else>
+                          <span class="nature-pill" data-nature="other">未知/疑似载具</span>
+                        </strong>
+                      </div>
+                      <div class="wide-col">
+                        <span>决策依据</span>
+                        <span class="reason-text">
+                          {{ testResult.classification?.reason || testResult.reason || "未命中步兵或默认规则，进入相似度匹配流程。" }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Step 3: Result Banner -->
+                <div class="pipeline-node" :class="testResult.valid ? 'node-success' : 'node-warning'">
+                  <div class="node-icon">{{ testResult.valid ? "✓" : "✕" }}</div>
+                  <div class="node-content">
+                    <div class="node-title">3. 规范判定判定</div>
+                    <div class="decision-banner" :data-valid="testResult.valid">
+                      <div class="decision-title">
+                        {{ testResult.valid ? "符合命名规范" : "判定违规命名" }}
+                      </div>
+                      <div class="decision-desc">
+                        {{ testResult.reason }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Step 4: Details & Suggestions -->
+                <div v-if="testResult.matched || testResult.suggestions.length || testResult.warningMessage" class="pipeline-node node-done">
+                  <div class="node-icon">🔍</div>
+                  <div class="node-content">
+                    <div class="node-title">4. 实体解析与建议</div>
+                    
+                    <!-- Matched details -->
+                    <div v-if="testResult.matched" class="matched-box">
+                      <div class="matched-header">
+                        <span class="box-label">已命中标准配置载具</span>
+                        <span class="matched-kind-tag" :data-kind="testResult.matched.matchedKind">
+                          方式: {{ translateMatchedKind(testResult.matched.matchedKind) }} ({{ testResult.matched.matchedValue }})
+                        </span>
+                      </div>
+                      <div class="matched-body">
+                        <div class="vehicle-canonical-name">{{ testResult.matched.name }}</div>
+                        <div class="vehicle-specs">
+                          <span class="spec-tag">{{ testResult.matched.faction || "通用" }}</span>
+                          <span class="spec-tag type-tag">{{ testResult.matched.vehicleType || "未定义类型" }}</span>
+                          <span v-if="testResult.matched.asset" class="spec-tag asset-tag mono">{{ testResult.matched.asset }}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Suggestion Deck -->
+                    <div v-if="testResult.suggestions.length" class="suggestions-deck">
+                      <div class="deck-title">候选建议载具 (按匹配度排序)：</div>
+                      <div class="suggestion-grid">
+                        <div
+                          v-for="item in testResult.suggestions"
+                          :key="`${item.source}:${item.id}`"
+                          class="suggestion-item"
+                        >
+                          <div class="suggestion-top">
+                            <span class="score-badge" :class="getScoreClass(item.score)">
+                              {{ formatScore(item.score) }}
+                            </span>
+                            <span class="source-tag" :class="item.source">
+                              {{ item.source === 'keyword' ? '关键字' : '相似算法' }}
+                            </span>
+                          </div>
+                          <div class="suggestion-name">{{ item.name }}</div>
+                          <div class="suggestion-footer">
+                            <span>{{ item.faction || "通用" }} · {{ item.vehicleType }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Warning Info -->
+                    <div v-if="testResult.warningMessage" class="warning-alert">
+                      <span class="alert-icon">⚠</span>
+                      <span class="alert-text">{{ testResult.warningMessage }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div>
-              <dt>后缀处理</dt>
-              <dd>{{ testResult.suffixStripped ? "已剥离用于建议" : "未剥离" }}</dd>
+          </AppCard>
+
+          <!-- Rules Browser -->
+          <AppCard title="规范规则浏览器" description="快速检索当前加载的所有合法队名与规则。">
+            <!-- Tabs Toolbar -->
+            <div class="browser-toolbar">
+              <div class="tabs-buttons">
+                <button
+                  v-for="tab in [
+                    { id: 'vehicles', label: '载具队名 (Excel)' },
+                    { id: 'infantry', label: '普通步兵白名单' },
+                    { id: 'special', label: '特种步兵白名单' },
+                    { id: 'regex', label: '默认命名正则' }
+                  ]"
+                  :key="tab.id"
+                  type="button"
+                  class="tab-btn"
+                  :class="{ active: activeTab === tab.id }"
+                  @click="activeTab = tab.id; rulesLimit = 50"
+                >
+                  {{ tab.label }}
+                </button>
+              </div>
+
+              <!-- Search input -->
+              <div class="tab-search-box">
+                <input
+                  v-model="ruleSearchQuery"
+                  type="text"
+                  placeholder="搜索规则内容/别名/关键字..."
+                  class="search-input"
+                />
+              </div>
             </div>
-            <div>
-              <dt>分类</dt>
-              <dd>{{ testResult.classification?.label || "-" }}</dd>
+
+            <!-- Tab content: Vehicles -->
+            <div v-if="activeTab === 'vehicles'" class="tab-panel">
+              <!-- Filter Selectors -->
+              <div class="filters-row">
+                <div class="filter-field">
+                  <span>阵营筛选:</span>
+                  <select v-model="factionFilter">
+                    <option v-for="f in factionOptions" :key="f" :value="f">{{ f }}</option>
+                  </select>
+                </div>
+                <div class="filter-field">
+                  <span>载具类型:</span>
+                  <select v-model="vehicleTypeFilter">
+                    <option v-for="t in typeOptions" :key="t" :value="t">{{ t }}</option>
+                  </select>
+                </div>
+                <div class="filter-stats">
+                  已匹配 <strong>{{ filteredEntries.length }}</strong> 条记录
+                </div>
+              </div>
+
+              <!-- Table -->
+              <AppTable v-if="filteredEntries.length" compact class="rules-table-container">
+                <thead>
+                  <tr>
+                    <th style="width: 80px;">阵营</th>
+                    <th style="width: 100px;">类型</th>
+                    <th style="width: 140px;">标准名</th>
+                    <th>允许别名 (Aliases)</th>
+                    <th>匹配关键字 (Keywords)</th>
+                    <th style="width: 120px;">资产代码</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="entry in visibleFilteredEntries" :key="entry.id">
+                    <td>
+                      <span class="badge badge--faction">{{ entry.faction || "通用" }}</span>
+                    </td>
+                    <td>
+                      <span class="badge badge--type">{{ entry.vehicleType || "未定义" }}</span>
+                    </td>
+                    <td>
+                      <strong class="entry-canonical">{{ entry.name }}</strong>
+                    </td>
+                    <td>
+                      <div class="tags-wrap">
+                        <span v-if="!entry.aliases?.length" class="empty-text">-</span>
+                        <span v-for="alias in entry.aliases" :key="alias" class="tag alias-tag">
+                          {{ alias }}
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="tags-wrap">
+                        <span v-if="!entry.keywords?.length" class="empty-text">-</span>
+                        <span v-for="kw in entry.keywords" :key="kw" class="tag keyword-tag">
+                          {{ kw }}
+                        </span>
+                      </div>
+                    </td>
+                    <td class="mono font-sm text-muted">
+                      {{ entry.asset || "-" }}
+                    </td>
+                  </tr>
+                </tbody>
+              </AppTable>
+              <div v-else class="empty-rules-block">
+                无匹配的载具规则。
+              </div>
+
+              <!-- Load more -->
+              <div v-if="filteredEntries.length > visibleFilteredEntries.length" class="load-more-row">
+                <button type="button" class="load-more-btn" @click="loadMoreRules">
+                  显示更多 (当前 {{ visibleFilteredEntries.length }} / {{ filteredEntries.length }})
+                </button>
+              </div>
             </div>
-          </dl>
 
-          <div v-if="testResult.matched" class="matched-card">
-            <span>命中</span>
-            <strong>{{ testResult.matched.name }}</strong>
-            <em>{{ testResult.matched.faction || "-" }} / {{ testResult.matched.vehicleType || "-" }} / {{ testResult.matched.matchedKind }}</em>
-          </div>
+            <!-- Tab content: Infantry Whitelist -->
+            <div v-if="activeTab === 'infantry'" class="tab-panel">
+              <div class="chips-container-desc">
+                当玩家创建此类小队时，直接判定为符合规范的“普通步兵小队”，系统不会发送任何警告，也不会拆分命名。
+              </div>
+              <div v-if="filteredInfantryNames.length" class="chips-grid">
+                <span
+                  v-for="name in filteredInfantryNames"
+                  :key="name"
+                  class="chip-tag chip-tag--success"
+                  @click="triggerPresetTest(name)"
+                  title="点击测试此队名"
+                >
+                  {{ name }} <span class="tag-hover-icon">🔍</span>
+                </span>
+              </div>
+              <div v-else class="empty-rules-block">
+                未配置普通步兵白名单。
+              </div>
+            </div>
 
-          <div v-if="testResult.classification" class="classification-card">
-            <span>判定</span>
-            <strong>{{ testResult.classification.label }}</strong>
-            <em>{{ testResult.classification.reason }}</em>
-          </div>
+            <!-- Tab content: Special Infantry Whitelist -->
+            <div v-if="activeTab === 'special'" class="tab-panel">
+              <div class="chips-container-desc">
+                当玩家创建此类小队时，判定为合规的“特种职能步兵队”（如防空、工兵等），跳过载具名匹配。
+              </div>
+              <div v-if="filteredSpecialInfantryNames.length" class="chips-grid">
+                <span
+                  v-for="name in filteredSpecialInfantryNames"
+                  :key="name"
+                  class="chip-tag chip-tag--primary"
+                  @click="triggerPresetTest(name)"
+                  title="点击测试此队名"
+                >
+                  {{ name }} <span class="tag-hover-icon">🔍</span>
+                </span>
+              </div>
+              <div v-else class="empty-rules-block">
+                未配置特种步兵白名单。
+              </div>
+            </div>
 
-          <div v-if="testResult.warningMessage" class="warning-message">
-            {{ testResult.warningMessage }}
-          </div>
+            <!-- Tab content: Default patterns -->
+            <div v-if="activeTab === 'regex'" class="tab-panel">
+              <div class="chips-container-desc">
+                系统内置默认生成的战局队伍命名正则表达式，匹配成功即视为系统默认步兵队。
+              </div>
+              <div v-if="filteredDefaultNamePatterns.length" class="regex-patterns-list">
+                <div
+                  v-for="pattern in filteredDefaultNamePatterns"
+                  :key="pattern"
+                  class="regex-item"
+                >
+                  <span class="regex-tag">REGEX</span>
+                  <code>{{ pattern }}</code>
+                </div>
+              </div>
+              <div v-else class="empty-rules-block">
+                无默认正则样式。
+              </div>
+            </div>
+          </AppCard>
+        </template>
 
-          <div v-if="testResult.suggestions.length" class="suggestion-list">
-            <article v-for="item in testResult.suggestions" :key="`${item.source}:${item.id}`" class="suggestion-card">
-              <span>{{ item.source === "keyword" ? "关键字" : "算法" }}</span>
-              <strong>{{ item.name }}</strong>
-              <em>{{ item.faction || "-" }} / {{ item.vehicleType || "-" }} / {{ formatScore(item.score) }}</em>
-            </article>
-          </div>
-        </div>
-      </PageCard>
+        <!-- Right Pane: Stats, Meta & Policy Guidelines -->
+        <template #right>
+          <!-- Stats Panel -->
+          <AppCard title="规则运行指标">
+            <div class="stats-panel-content">
+              <div class="dashboard-stats-grid">
+                <div class="dashboard-stat-card">
+                  <span class="stat-label">载具模板</span>
+                  <strong class="stat-value">{{ state?.stats.entries ?? 0 }}</strong>
+                </div>
+                <div class="dashboard-stat-card">
+                  <span class="stat-label">匹配别名</span>
+                  <strong class="stat-value">{{ state?.stats.aliases ?? 0 }}</strong>
+                </div>
+                <div class="dashboard-stat-card">
+                  <span class="stat-label">匹配关键字</span>
+                  <strong class="stat-value">{{ state?.stats.keywordCells ?? 0 }}</strong>
+                </div>
+                <div class="dashboard-stat-card">
+                  <span class="stat-label">阵营/载具类型</span>
+                  <strong class="stat-value text-sm">
+                    {{ state?.stats.factions ?? 0 }} 阵营 / {{ state?.stats.vehicleTypes ?? 0 }} 类型
+                  </strong>
+                </div>
+              </div>
+            </div>
+          </AppCard>
 
-      <PageCard compact title="规则统计" description="当前 JSON 中的载具队规范规模。">
-        <div class="stats-grid">
-          <article>
-            <span>载具记录</span>
-            <strong>{{ state?.stats.entries ?? 0 }}</strong>
-          </article>
-          <article>
-            <span>别名</span>
-            <strong>{{ state?.stats.aliases ?? 0 }}</strong>
-          </article>
-          <article>
-            <span>关键字单元</span>
-            <strong>{{ state?.stats.keywordCells ?? 0 }}</strong>
-          </article>
-          <article>
-            <span>唯一关键字</span>
-            <strong>{{ state?.stats.uniqueKeywords ?? 0 }}</strong>
-          </article>
-        </div>
+          <!-- File Metadata Card -->
+          <AppCard title="源文件与同步信息">
+            <div class="meta-details-list">
+              <div class="meta-row">
+                <span class="lbl">规范文件</span>
+                <span class="val font-sm font-semibold text-right" :title="state?.policyPath">
+                  {{ state?.source.fileName || "-" }}
+                </span>
+              </div>
+              <div class="meta-row">
+                <span class="lbl">存储类型</span>
+                <span class="val font-sm font-semibold capitalize text-right">
+                  {{ state?.source.type || "unknown" }}
+                </span>
+              </div>
+              <div class="meta-row" v-if="state?.source.sheetName">
+                <span class="lbl">工作表 (Sheet)</span>
+                <span class="val text-right font-semibold">{{ state.source.sheetName }}</span>
+              </div>
+              <div class="meta-row">
+                <span class="lbl">版本号</span>
+                <span class="val text-right mono font-semibold">{{ state?.version ?? 0 }}</span>
+              </div>
+              <div class="meta-row">
+                <span class="lbl">同步于</span>
+                <span class="val text-right font-sm font-semibold">{{ formatTime(state?.importedAt) }}</span>
+              </div>
+              <div class="meta-row">
+                <span class="lbl">最新保存</span>
+                <span class="val text-right font-sm font-semibold">{{ formatTime(state?.updatedAt) }}</span>
+              </div>
+            </div>
+          </AppCard>
 
-        <div class="meta-list">
-          <span>来源：{{ state?.source.fileName || "-" }}</span>
-          <span>导入：{{ formatTime(state?.importedAt) }}</span>
-          <span>更新：{{ formatTime(state?.updatedAt) }}</span>
-        </div>
-      </PageCard>
-    </section>
-  </section>
+          <!-- Guidelines -->
+          <AppCard title="队名规范处理逻辑说明">
+            <div class="guidelines-text">
+              <p>为了维护载具专队秩序，当游戏内玩家建立小队时，系统将遵循以下匹配层级进行拦截验证：</p>
+              <ol class="workflow-ol">
+                <li>
+                  <strong class="workflow-highlight workflow-highlight--default">默认命名匹配：</strong>
+                  如果小队名完全命中 <code>Squad 1</code>、<code>小队 2</code> 等默认分配名，直接通过。
+                </li>
+                <li>
+                  <strong class="workflow-highlight workflow-highlight--admin">管理员小队：</strong>
+                  如果小队名为 <code>Admin</code> 或 <code>OP</code>，直接通过。
+                </li>
+                <li>
+                  <strong class="workflow-highlight workflow-highlight--infantry">步兵白名单匹配：</strong>
+                  如果小队名命中 <code>步兵</code> 或 <code>哈特</code> 等白名单名，标记为步兵小队通过。
+                </li>
+                <li>
+                  <strong class="workflow-highlight workflow-highlight--canonical">载具别名精确匹配：</strong>
+                  如果队名命中任意配置载具的“标准队名”或“允许别名”（如 <code>BMP</code>、<code>96B</code> 等，剥离 <code>队</code>/<code>SQUAD</code> 后缀后），直接通过。
+                </li>
+                <li>
+                  <strong class="workflow-highlight workflow-highlight--keyword">非专队相似度检查：</strong>
+                  若未命中以上任何规则，将使用关键字和文本相似度算法扫描载具库。如有高相似度载具，系统将发出提示：“<i>您可能想建立 [载具名] 队</i>”，并视为违规载具队名，游戏内会发送解散警告。
+                </li>
+              </ol>
+            </div>
+          </AppCard>
+        </template>
+      </AppSplitLayout>
+    </div>
+  </AppPage>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 
 import { apiGet, apiPost, ApiError } from "../app/apiClient";
-import PageCard from "../components/common/PageCard.vue";
-import PageHeader from "../components/common/PageHeader.vue";
+import AppPage from "../components/common/AppPage.vue";
+import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
+import AppStatusBadge from "../components/common/AppStatusBadge.vue";
+import AppSplitLayout from "../components/common/AppSplitLayout.vue";
+import AppCard from "../components/common/AppCard.vue";
+import AppTable from "../components/common/AppTable.vue";
 import { useAuthStore } from "../stores/auth.store";
 import { useUiStore } from "../stores/ui.store";
 
@@ -192,6 +603,13 @@ const state = ref<PolicyState | null>(null);
 const testName = ref("BMP队");
 const testResult = ref<PolicyTestResult | null>(null);
 
+// Rules Browser state
+const activeTab = ref("vehicles");
+const ruleSearchQuery = ref("");
+const factionFilter = ref("全部");
+const vehicleTypeFilter = ref("全部");
+const rulesLimit = ref(50);
+
 onMounted(() => {
   void loadState();
 });
@@ -220,6 +638,98 @@ async function runTest() {
   }
 }
 
+function triggerPresetTest(name: string) {
+  testName.value = name;
+  void runTest();
+}
+
+function translateMatchedKind(kind?: string) {
+  if (!kind) return "未知";
+  const mapping: Record<string, string> = {
+    canonical: "标准队名命中",
+    alias: "别名匹配",
+    keyword: "关键字推算",
+    algorithm: "算法模糊匹配",
+    default: "默认小队命名",
+    admin: "管理员小队命名",
+    infantry: "步兵白名单",
+    special_infantry: "特种步兵白名单"
+  };
+  return mapping[kind] || kind;
+}
+
+function getScoreClass(score: number | null) {
+  if (score == null) return "score-neutral";
+  if (score >= 0.8) return "score-high";
+  if (score >= 0.5) return "score-medium";
+  return "score-low";
+}
+
+// Factions options computed
+const factionOptions = computed(() => {
+  if (!state.value?.entries) return ["全部"];
+  const list = state.value.entries.map(e => e.faction).filter(Boolean);
+  return ["全部", ...Array.from(new Set(list))];
+});
+
+// Vehicle Types options computed
+const typeOptions = computed(() => {
+  if (!state.value?.entries) return ["全部"];
+  const list = state.value.entries.map(e => e.vehicleType).filter(Boolean);
+  return ["全部", ...Array.from(new Set(list))];
+});
+
+// Filtered Entries for Tab 1
+const filteredEntries = computed(() => {
+  if (!state.value?.entries) return [];
+  return state.value.entries.filter((e) => {
+    const matchesFaction = factionFilter.value === "全部" || e.faction === factionFilter.value;
+    const matchesType = vehicleTypeFilter.value === "全部" || e.vehicleType === vehicleTypeFilter.value;
+    const matchesSearch = !ruleSearchQuery.value || [
+      e.name,
+      e.faction,
+      e.vehicleType,
+      e.asset,
+      ...(e.aliases || []),
+      ...(e.keywords || [])
+    ].some((v) => String(v || "").toLowerCase().includes(ruleSearchQuery.value.toLowerCase()));
+    return matchesFaction && matchesType && matchesSearch;
+  });
+});
+
+const visibleFilteredEntries = computed(() => {
+  return filteredEntries.value.slice(0, rulesLimit.value);
+});
+
+function loadMoreRules() {
+  rulesLimit.value += 50;
+}
+
+// Whitelists filtered lists
+const filteredInfantryNames = computed(() => {
+  if (!state.value?.infantryNames) return [];
+  if (!ruleSearchQuery.value) return state.value.infantryNames;
+  return state.value.infantryNames.filter((name) =>
+    name.toLowerCase().includes(ruleSearchQuery.value.toLowerCase())
+  );
+});
+
+const filteredSpecialInfantryNames = computed(() => {
+  if (!state.value?.specialInfantryNames) return [];
+  if (!ruleSearchQuery.value) return state.value.specialInfantryNames;
+  return state.value.specialInfantryNames.filter((name) =>
+    name.toLowerCase().includes(ruleSearchQuery.value.toLowerCase())
+  );
+});
+
+const filteredDefaultNamePatterns = computed(() => {
+  if (!state.value?.defaultNamePatterns) return [];
+  if (!ruleSearchQuery.value) return state.value.defaultNamePatterns;
+  return state.value.defaultNamePatterns.filter((pattern) =>
+    pattern.toLowerCase().includes(ruleSearchQuery.value.toLowerCase())
+  );
+});
+
 function formatScore(value: number | null) {
   if (value == null) return "-";
   return `${Math.round(value * 100)}%`;
@@ -239,157 +749,1017 @@ function formatError(err: unknown) {
 </script>
 
 <style scoped>
-.page {
-  display: grid;
-  gap: 16px;
-  padding: 16px;
+/* Page Layout */
+.squad-name-policy-page {
   height: 100%;
-  min-height: 0;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-page);
+  overflow: hidden;
 }
 
-.top-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(300px, 0.7fr);
+.workspace-body {
+  flex: 1;
+  min-height: 0;
+  padding: 16px;
+}
+
+/* Toolbar Left */
+.toolbar-left {
+  display: flex;
+  align-items: center;
   gap: 16px;
 }
 
-.test-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: end;
+.page-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-primary);
 }
 
-.field {
-  display: grid;
+.toolbar-badges {
+  display: flex;
+  align-items: center;
   gap: 8px;
 }
 
-.field span,
-.result-head span,
-.matched-card em,
-.suggestion-card em,
-.meta-list,
-.stats-grid span {
-  color: var(--color-text-muted);
+/* Toolbar Button styling */
+.toolbar-btn {
+  border: 1px solid var(--color-border-default);
+  border-radius: 6px;
+  background: var(--color-bg-card);
+  color: var(--color-text-primary);
+  padding: 0 12px;
+  height: 32px;
+  cursor: pointer;
+  text-decoration: none;
   font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  font-weight: 500;
 }
 
-input {
+.toolbar-btn:hover {
+  background: var(--color-bg-hover, rgba(255, 255, 255, 0.05));
+  border-color: var(--color-text-secondary);
+}
+
+.toolbar-btn.primary {
+  background: var(--color-brand-primary, #60a5fa);
+  border-color: var(--color-brand-primary, #60a5fa);
+  color: #040810;
+  font-weight: 600;
+}
+
+.toolbar-btn.primary:hover {
+  filter: brightness(1.1);
+}
+
+/* Error Banner */
+.banner.error-banner {
+  margin: 12px 16px 0;
+  border: 1px solid color-mix(in srgb, var(--color-status-error) 40%, var(--color-border-default));
+  background: color-mix(in srgb, var(--color-status-error) 12%, transparent);
+  color: var(--color-status-error);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+/* Interactive Test Area */
+.test-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.test-input-row {
+  display: flex;
+  gap: 10px;
+}
+
+.input-wrapper {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.policy-input {
   width: 100%;
   border: 1px solid var(--color-border-default);
   border-radius: 8px;
   background: var(--color-bg-input, rgba(10, 14, 18, 0.72));
   color: var(--color-text-primary);
-  padding: 9px 10px;
-  font: inherit;
+  padding: 10px 14px;
+  padding-right: 36px;
+  font-size: 14px;
+  transition: all 0.2s;
 }
 
-.action-btn {
-  border: 1px solid var(--color-border-default);
-  border-radius: 8px;
-  background: var(--color-bg-card);
-  color: var(--color-text-primary);
-  padding: 9px 12px;
+.policy-input:focus {
+  outline: none;
+  border-color: var(--color-brand-primary, #60a5fa);
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18);
+}
+
+.clear-input-btn {
+  position: absolute;
+  right: 10px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
   cursor: pointer;
-  text-decoration: none;
-  font-size: 13px;
-  display: inline-flex;
+  padding: 4px;
+  font-size: 12px;
+  display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.action-btn.primary {
-  border-color: color-mix(in srgb, var(--color-status-info) 46%, var(--color-border-default));
-  background: color-mix(in srgb, var(--color-status-info) 18%, var(--color-bg-card));
+.clear-input-btn:hover {
+  color: var(--color-text-primary);
 }
 
-button:disabled {
-  opacity: 0.55;
+.test-run-btn {
+  border: 1px solid var(--color-brand-primary, #60a5fa);
+  background: color-mix(in srgb, var(--color-brand-primary, #60a5fa) 15%, var(--color-bg-card));
+  color: var(--color-text-primary);
+  border-radius: 8px;
+  padding: 0 16px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.test-run-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-brand-primary, #60a5fa) 25%, var(--color-bg-card));
+}
+
+.test-run-btn:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
+  border-color: var(--color-border-default);
+  background: var(--color-bg-selected, rgba(255, 255, 255, 0.02));
 }
 
-.banner.error {
-  border: 1px solid color-mix(in srgb, var(--color-status-error) 40%, var(--color-border-default));
-  background: color-mix(in srgb, var(--color-status-error) 12%, transparent);
+/* Presets style */
+.presets-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid var(--color-border-subtle, rgba(255, 255, 255, 0.04));
   border-radius: 8px;
   padding: 10px 12px;
 }
 
-.result-panel {
+.presets-label {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.presets-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.preset-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.group-tag {
+  font-size: 10px;
+  color: var(--color-text-disabled, #66727f);
+  min-width: 60px;
+  font-weight: 500;
+}
+
+.preset-pill {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--color-text-secondary);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: monospace;
+  transition: all 0.15s;
+}
+
+.preset-pill:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--color-text-muted);
+  color: var(--color-text-primary);
+}
+
+.preset-pill--info {
+  background: rgba(96, 165, 250, 0.06);
+  border-color: rgba(96, 165, 250, 0.15);
+  color: #8bbefa;
+}
+
+.preset-pill--info:hover {
+  background: rgba(96, 165, 250, 0.12);
+  border-color: rgba(96, 165, 250, 0.3);
+  color: #a3ccff;
+}
+
+.preset-pill--warn {
+  background: rgba(245, 158, 11, 0.06);
+  border-color: rgba(245, 158, 11, 0.15);
+  color: #fad390;
+}
+
+.preset-pill--warn:hover {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #ffeaa7;
+}
+
+/* Pipeline visualizer style */
+.pipeline-section {
+  margin-top: 20px;
+  border-top: 1px dashed var(--color-border-default);
+  padding-top: 16px;
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: 12px;
+}
+
+.pipeline-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: relative;
+  padding-left: 10px;
+}
+
+.pipeline-wrapper::before {
+  content: "";
+  position: absolute;
+  left: 21px;
+  top: 10px;
+  bottom: 24px;
+  width: 2px;
+  background: linear-gradient(180deg, var(--color-brand-primary, #60a5fa) 30%, var(--color-border-default) 80%);
+}
+
+.pipeline-node {
+  position: relative;
+  display: flex;
+  gap: 16px;
+  min-width: 0;
+}
+
+.node-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--color-bg-card);
+  border: 2px solid var(--color-border-default);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: bold;
+  z-index: 1;
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+}
+
+.pipeline-node.node-done .node-icon {
+  background: rgba(96, 165, 250, 0.1);
+  border-color: var(--color-brand-primary, #60a5fa);
+  color: var(--color-brand-primary, #60a5fa);
+}
+
+.pipeline-node.node-success .node-icon {
+  background: rgba(52, 211, 153, 0.1);
+  border-color: var(--color-status-online, #34d399);
+  color: var(--color-status-online, #34d399);
+}
+
+.pipeline-node.node-warning .node-icon {
+  background: rgba(248, 113, 113, 0.1);
+  border-color: var(--color-status-error, #f87171);
+  color: var(--color-status-error, #f87171);
+}
+
+.node-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.node-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+
+.node-meta-grid {
   display: grid;
-  gap: 12px;
-  margin-top: 14px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.012);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+.node-meta-grid div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.node-meta-grid div span {
+  font-size: 10px;
+  color: var(--color-text-disabled, #66727f);
+}
+
+.node-meta-grid div strong {
+  font-size: 12px;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-meta-grid .wide-col {
+  grid-column: span 2;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  align-self: flex-start;
+}
+
+.badge--info {
+  background: rgba(96, 165, 250, 0.15);
+  color: #60a5fa;
+}
+
+.badge--neutral {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text-muted);
+}
+
+/* Decision Banners */
+.decision-banner {
   border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.decision-banner[data-valid="true"] {
+  border-color: rgba(52, 211, 153, 0.35);
+  background: rgba(52, 211, 153, 0.08);
+}
+
+.decision-banner[data-valid="false"] {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.decision-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.decision-banner[data-valid="true"] .decision-title {
+  color: var(--color-status-online, #34d399);
+}
+
+.decision-banner[data-valid="false"] .decision-title {
+  color: var(--color-status-warning, #f59e0b);
+}
+
+.decision-desc {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+
+/* Entity details style */
+.matched-box {
+  background: rgba(96, 165, 250, 0.03);
+  border: 1px solid rgba(96, 165, 250, 0.18);
+  border-left: 3px solid var(--color-brand-primary, #60a5fa);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.box-label {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.matched-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.matched-kind-tag {
+  font-size: 10px;
+  background: rgba(96, 165, 250, 0.1);
+  color: var(--color-brand-primary, #60a5fa);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.vehicle-canonical-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin-bottom: 6px;
+}
+
+.vehicle-specs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.spec-tag {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
+.spec-tag.type-tag {
+  background: rgba(167, 139, 250, 0.08);
+  color: #a78bfa;
+}
+
+.spec-tag.asset-tag {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-muted);
+  font-family: monospace;
+}
+
+/* Suggestion deck style */
+.suggestions-deck {
+  background: rgba(255, 255, 255, 0.01);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 8px;
   padding: 12px;
 }
 
-.result-panel[data-valid="true"] {
-  border-color: color-mix(in srgb, var(--color-status-success, #22c55e) 36%, var(--color-border-default));
+.deck-title {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  margin-bottom: 8px;
 }
 
-.result-panel[data-valid="false"] {
-  border-color: color-mix(in srgb, var(--color-status-warning) 42%, var(--color-border-default));
-}
-
-.result-head,
-.matched-card,
-.classification-card,
-.warning-message,
-.suggestion-card,
-.stats-grid article {
+.suggestion-grid {
   display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.suggestion-item {
+  border: 1px solid var(--color-border-soft, rgba(255, 255, 255, 0.06));
+  background: rgba(255, 255, 255, 0.015);
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
   gap: 4px;
 }
 
-.result-grid,
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.suggestion-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.score-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.score-high {
+  background: rgba(52, 211, 153, 0.15);
+  color: var(--color-status-online, #34d399);
+}
+
+.score-medium {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--color-status-warning, #f59e0b);
+}
+
+.score-low {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-muted);
+}
+
+.source-tag {
+  font-size: 9px;
+  color: var(--color-text-disabled);
+}
+
+.suggestion-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.suggestion-footer {
+  font-size: 10px;
+  color: var(--color-text-disabled);
+}
+
+/* Warnings and Alerts */
+.warning-alert {
+  background: rgba(245, 158, 11, 0.05);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: 6px;
+  padding: 8px 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.alert-icon {
+  color: var(--color-status-warning, #f59e0b);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.alert-text {
+  font-size: 12px;
+  color: #fad390;
+  line-height: 1.4;
+}
+
+/* Guidelines Ol & Workflow styling */
+.guidelines-text {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+
+.workflow-ol {
+  padding-left: 16px;
+  margin-top: 8px;
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
 }
 
-.result-grid div,
-.stats-grid article,
-.matched-card,
-.classification-card,
-.warning-message,
-.suggestion-card {
-  border: 1px solid var(--color-border-subtle, var(--color-border-default));
-  border-radius: 8px;
-  padding: 10px;
+.workflow-ol li {
+  color: var(--color-text-secondary);
 }
 
-.result-grid dt {
+.workflow-highlight {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.workflow-highlight--default { color: #8bbefa; }
+.workflow-highlight--admin { color: #f59e0b; }
+.workflow-highlight--infantry { color: #34d399; }
+.workflow-highlight--canonical { color: #a78bfa; }
+.workflow-highlight--keyword { color: #f87171; }
+
+.nature-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.nature-pill[data-nature="vehicle"] {
+  background: rgba(96, 165, 250, 0.15);
+  color: #60a5fa;
+}
+
+.nature-pill[data-nature="infantry"] {
+  background: rgba(52, 211, 153, 0.15);
+  color: var(--color-status-online, #34d399);
+}
+
+.nature-pill[data-nature="special_infantry"] {
+  background: rgba(167, 139, 250, 0.15);
+  color: #a78bfa;
+}
+
+.nature-pill[data-nature="admin"] {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+.nature-pill[data-nature="default"] {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-primary);
+}
+
+.nature-pill[data-nature="other"] {
+  background: rgba(248, 113, 113, 0.15);
+  color: var(--color-status-error, #f87171);
+}
+
+.reason-text {
+  font-size: 11px;
   color: var(--color-text-muted);
+  line-height: 1.45;
+  display: inline-block;
+}
+
+/* Rules Browser Toolbar & Layout */
+.browser-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 1px solid var(--color-border-default);
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.tabs-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.tab-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--color-text-muted);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.tab-btn:hover {
+  color: var(--color-text-primary);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tab-btn.active {
+  background: var(--color-bg-selected, rgba(255, 255, 255, 0.05));
+  border-color: var(--color-border-default);
+  color: var(--color-brand-primary, #60a5fa);
+  font-weight: 600;
+}
+
+.tab-search-box {
+  width: 240px;
+}
+
+.search-input {
+  width: 100%;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-input, rgba(0, 0, 0, 0.2));
+  color: var(--color-text-primary);
+  border-radius: 6px;
+  padding: 6px 10px;
   font-size: 12px;
 }
 
-.result-grid dd {
-  margin: 4px 0 0;
-  overflow-wrap: anywhere;
+.search-input:focus {
+  outline: none;
+  border-color: var(--color-brand-primary, #60a5fa);
 }
 
-.suggestion-list {
+/* Rule table customisations */
+.rules-table-container {
+  max-height: 480px;
+  overflow: auto;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+}
+
+.entry-canonical {
+  font-size: 13px;
+  color: var(--color-text-primary);
+}
+
+.tags-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+}
+
+.alias-tag {
+  background: rgba(96, 165, 250, 0.1);
+  color: #60a5fa;
+  border: 1px solid rgba(96, 165, 250, 0.18);
+}
+
+.keyword-tag {
+  background: rgba(167, 139, 250, 0.1);
+  color: #a78bfa;
+  border: 1px solid rgba(167, 139, 250, 0.18);
+}
+
+.empty-text {
+  font-size: 11px;
+  color: var(--color-text-disabled);
+}
+
+.empty-rules-block {
+  text-align: center;
+  padding: 32px;
+  color: var(--color-text-disabled);
+  background: rgba(255, 255, 255, 0.005);
+  border: 1px dashed var(--color-border-default);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.load-more-row {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.load-more-btn {
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-card);
+  color: var(--color-text-secondary);
+  border-radius: 6px;
+  padding: 6px 16px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.load-more-btn:hover {
+  background: var(--color-bg-hover, rgba(255, 255, 255, 0.04));
+  color: var(--color-text-primary);
+}
+
+/* Filters row */
+.filters-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: rgba(255, 255, 255, 0.01);
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  border: 1px solid var(--color-border-subtle);
+  flex-wrap: wrap;
+}
+
+.filter-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.filter-field select {
+  background: var(--color-bg-input, rgba(0, 0, 0, 0.2));
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-default);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  outline: none;
+}
+
+.filter-stats {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.filter-stats strong {
+  color: var(--color-brand-primary, #60a5fa);
+}
+
+/* Whitelists Chips list */
+.chips-container-desc {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.chips-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.005);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.chip-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.chip-tag .tag-hover-icon {
+  opacity: 0;
+  font-size: 10px;
+  transition: opacity 0.2s;
+}
+
+.chip-tag:hover .tag-hover-icon {
+  opacity: 0.8;
+}
+
+.chip-tag--success {
+  background: rgba(52, 211, 153, 0.08);
+  border-color: rgba(52, 211, 153, 0.16);
+  color: var(--color-status-online, #34d399);
+}
+
+.chip-tag--success:hover {
+  background: rgba(52, 211, 153, 0.16);
+  border-color: rgba(52, 211, 153, 0.35);
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.15);
+}
+
+.chip-tag--primary {
+  background: rgba(167, 139, 250, 0.08);
+  border-color: rgba(167, 139, 250, 0.16);
+  color: #a78bfa;
+}
+
+.chip-tag--primary:hover {
+  background: rgba(167, 139, 250, 0.16);
+  border-color: rgba(167, 139, 250, 0.35);
+  box-shadow: 0 0 8px rgba(167, 139, 250, 0.15);
+}
+
+/* Regex patterns style */
+.regex-patterns-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.005);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.regex-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.15);
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border-soft);
+}
+
+.regex-tag {
+  font-size: 9px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-muted);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.regex-item code {
+  font-family: Consolas, monospace;
+  font-size: 13px;
+  color: #fad390;
+}
+
+/* Sidebar Analytics Stats Styles */
+.stats-panel-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
 }
 
-.meta-list {
-  display: grid;
-  gap: 6px;
-  margin: 14px 0;
+.dashboard-stat-card {
+  background: rgba(255, 255, 255, 0.012);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-@media (max-width: 900px) {
-  .top-grid,
-  .test-form,
-  .result-grid,
-  .stats-grid {
-    grid-template-columns: 1fr;
-  }
+.stat-label {
+  font-size: 10px;
+  color: var(--color-text-disabled, #66727f);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  line-height: 1.2;
+}
+
+.stat-value.text-sm {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  padding-top: 4px;
+}
+
+/* Metadata list style */
+.meta-details-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  padding-bottom: 8px;
+}
+
+.meta-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.meta-row .lbl {
+  color: var(--color-text-muted);
+}
+
+.meta-row .val {
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
+/* Font helpers */
+.font-sm { font-size: 11px; }
+.font-semibold { font-weight: 600; }
+.mono { font-family: monospace; }
+.text-right { text-align: right; }
+.capitalize { text-transform: capitalize; }
 </style>

@@ -64,6 +64,14 @@ const samplePolicy = normalizePolicyDocument({
       aliases: [],
       keywords: ["M113"],
     },
+    {
+      faction: "PLA",
+      vehicleType: "IFV",
+      asset: "/Game/Vehicles/ZBL08/BP_ZBL08.BP_ZBL08",
+      name: "ZBL08",
+      aliases: ["08式步战车", "08式"],
+      keywords: ["ZBL", "ZBL08", "08"],
+    },
   ],
 });
 
@@ -125,6 +133,21 @@ assert.equal(bizarreChinese.valid, false);
 assert.equal(bizarreChinese.suggestions.length, 0);
 assert.equal(bizarreChinese.classification?.nature, "infantry");
 assert.equal(bizarreChinese.classification?.reason.includes("奇葩中文队名"), true);
+
+const modelChinese = evaluateSquadName("08式", samplePolicy);
+assert.equal(modelChinese.valid, true);
+assert.equal(modelChinese.matched?.name, "ZBL08");
+assert.equal(modelChinese.classification ?? null, null);
+
+const modelChineseTeam = evaluateSquadName("08式队", samplePolicy);
+assert.equal(modelChineseTeam.valid, false);
+assert.equal(modelChineseTeam.classification ?? null, null);
+assert.equal(modelChineseTeam.suggestions.some((item) => item.name === "ZBL08"), true);
+
+const repeatedDigits = evaluateSquadName("0808", samplePolicy);
+assert.equal(repeatedDigits.valid, false);
+assert.equal(repeatedDigits.classification ?? null, null);
+assert.equal(repeatedDigits.suggestions.some((item) => item.name === "ZBL08"), true);
 
 const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-squad-name-policy-"));
 const policyPath = path.join(tempDir, "policy.json");
