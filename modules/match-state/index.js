@@ -318,6 +318,11 @@ export function createMatchStateModule({ core, modules, config, logger }) {
 
     updateWebStatus();
 
+    // Immediately trigger squad refresh on round start to fetch faction names mapping
+    void refreshSquads().catch((error) => {
+      moduleLogger.warn(`[MatchState] failed to refresh squads on world bring up: ${error?.message ?? error}`);
+    });
+
     const currentLayer = String(
       record.layerName
       || state.serverStatus.layer

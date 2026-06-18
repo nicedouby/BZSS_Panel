@@ -568,6 +568,9 @@ export function createSquadManagementService({ core, modules, config, logger, re
     const resolvedTeamId = resolveTeamIdForCreatedSquad(parsed.serverId, parsed);
     if (resolvedTeamId == null) {
       queuePendingSquadCreation(parsed.serverId, parsed);
+      void refreshSquadsSnapshot(parsed.serverId).catch((error) => {
+        moduleLogger.warn(`[SquadManagement] failed to refresh squads on creation: ${error?.message ?? error}`);
+      });
       return;
     }
     parsed.teamId = resolvedTeamId;
@@ -1776,6 +1779,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
         reason: `No building allowed until ${noBuildUntilSeconds}s (current: ${logSeconds}s)`,
         source: "policy.fairSquadBuilding",
         system: true,
+        allowUnverifiedTarget: true,
       });
     }
 
@@ -1795,6 +1799,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
           reason: `Infantry/Allowed squads only until ${infantryOnlyUntilSeconds}s`,
           source: "policy.fairSquadBuilding",
           system: true,
+          allowUnverifiedTarget: true,
         });
       }
     }
