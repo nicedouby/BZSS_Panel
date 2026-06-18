@@ -48,6 +48,10 @@ async function createHarness(configOverride = {}) {
   const calls = [];
   const modules = {
     squadManagement: {
+      async requestRemoveFromSquad(request) {
+        calls.push({ type: "remove", request });
+        return { ok: true, command: `AdminRemovePlayerFromSquad ${request.name}`, rconExecuted: true };
+      },
       async requestDisband(request) {
         calls.push({ type: "disband", request });
         return { ok: true, command: `AdminDisbandSquad ${request.teamId} ${request.squadId}`, rconExecuted: true };
@@ -82,7 +86,6 @@ async function createHarness(configOverride = {}) {
           dedupeTtlMs: 300000,
           warningRepeatDelayMs: 5,
           warningRepeatCount: 2,
-          rconPatrol: { enabled: false, intervalMs: 15000 },
           ...configOverride,
         };
       }
@@ -106,24 +109,23 @@ async function testLogViolationDisbandsThenWarns() {
   harness.emit("module.squadLifecycle", "squadCreated", createEvent({ squadName: "BMP队" }));
   await waitForHandlers();
 
-  assert.equal(harness.calls.length, 5);
-  assert.equal(harness.calls[0].type, "disband");
-  assert.equal(harness.calls[0].request.system, true);
-  assert.equal(harness.calls[0].request.allowUnverifiedTarget, true);
-  assert.equal(harness.calls[1].type, "warn");
-  assert.equal(harness.calls[1].request.message, "警告违规队名！\n本服对队名要求十分严格。");
+  assert.equal(harness.calls.length, 6);
+  assert.equal(harness.calls[0].type, "remove");
+  assert.equal(harness.calls[0].request.name, "Creator");
+  assert.equal(harness.calls[1].type, "disband");
+  assert.equal(harness.calls[1].request.system, true);
+  assert.equal(harness.calls[1].request.allowUnverifiedTarget, true);
   assert.equal(harness.calls[2].type, "warn");
-  assert.equal(harness.calls[2].request.message, "警告你可能想建立\nBMP-1 BMP-2\nBMP-2M 队。");
   assert.equal(harness.calls[3].type, "warn");
-  assert.equal(harness.calls[3].request.message, "警告违规队名！\n本服对队名要求十分严格。");
   assert.equal(harness.calls[4].type, "warn");
-  assert.equal(harness.calls[4].request.message, "警告你可能想建立\nBMP-1 BMP-2\nBMP-2M 队。");
-  assert.ok(harness.calls[3].at - harness.calls[2].at >= 4);
+  assert.equal(harness.calls[5].type, "warn");
+  assert.ok(harness.calls[4].at - harness.calls[3].at >= 4);
 
   const state = harness.instance.api.getState();
   assert.equal(state.stats.violations, 1);
   assert.equal(state.stats.disbanded, 1);
   assert.equal(state.stats.warningsSent, 4);
+  assert.equal(state.recent[0].actions.some((action) => action.type === "removed"), true);
   await harness.instance.stop();
 }
 
@@ -138,14 +140,18 @@ async function testAllowedNameDoesNothing() {
   await harness.instance.stop();
 }
 
-async function testNonChineseWeirdNameDoesNothing() {
+async function testNonChineseWeirdNameIsViolation() {
   const harness = await createHarness();
   await harness.instance.start();
   harness.emit("module.squadLifecycle", "squadCreated", createEvent({ squadName: "hello" }));
   await waitForHandlers();
 
-  assert.equal(harness.calls.length, 0);
-  assert.equal(harness.instance.api.getState().recent[0].status, "allowed");
+  assert.equal(harness.calls.length, 4);
+  assert.equal(harness.calls[0].type, "remove");
+  assert.equal(harness.calls[1].type, "disband");
+  const recent = harness.instance.api.getState().recent[0];
+  assert.equal(recent.actions.some((action) => action.type === "removed"), true);
+  assert.equal(recent.actions.some((action) => action.type === "disbanded"), true);
   await harness.instance.stop();
 }
 
@@ -157,7 +163,7 @@ async function testDuplicateHandledOnce() {
   harness.emit("module.squadLifecycle", "squadCreated", event);
   await waitForHandlers();
 
-  assert.equal(harness.calls.length, 5);
+  assert.equal(harness.calls.length, 6);
   assert.equal(harness.instance.api.getState().stats.duplicatesSkipped, 1);
   await harness.instance.stop();
 }
@@ -175,7 +181,7 @@ async function testRapidRecreateWithNewCreationSignatureIsHandledAgain() {
   }));
   await waitForHandlers();
 
-  assert.equal(harness.calls.length, 10);
+  assert.equal(harness.calls.length, 12);
   assert.equal(harness.instance.api.getState().stats.duplicatesSkipped, 0);
   assert.equal(harness.instance.api.getState().stats.violations, 2);
   await harness.instance.stop();
@@ -191,6 +197,48 @@ async function testMatchStateEventsDoNotTriggerGuardDirectly() {
   });
   await waitForHandlers();
   assert.equal(harness.calls.length, 0);
+  await harness.instance.stop();
+}
+
+async function testRapidRecreateWithSameSignatureButNewGeneration() {
+  const harness = await createHarness();
+  await harness.instance.start();
+  harness.emit("module.squadLifecycle", "squadCreated", createEvent({
+    squadName: "BMP队",
+    creationSignature: "create-1",
+    generation: 1,
+  }));
+  harness.emit("module.squadLifecycle", "squadCreated", createEvent({
+    squadName: "BMP队",
+    creationSignature: "create-1",
+    record: { generation: 2 },
+  }));
+  await waitForHandlers();
+
+  assert.equal(harness.calls.length, 12);
+  assert.equal(harness.instance.api.getState().stats.duplicatesSkipped, 0);
+  assert.equal(harness.instance.api.getState().stats.violations, 2);
+  await harness.instance.stop();
+}
+
+async function testRapidRecreateWithoutSignatureButNewGeneration() {
+  const harness = await createHarness();
+  await harness.instance.start();
+  harness.emit("module.squadLifecycle", "squadCreated", createEvent({
+    squadName: "BMP队",
+    creationSignature: "",
+    generation: 1,
+  }));
+  harness.emit("module.squadLifecycle", "squadCreated", createEvent({
+    squadName: "BMP队",
+    creationSignature: "",
+    record: { generation: 2 },
+  }));
+  await waitForHandlers();
+
+  assert.equal(harness.calls.length, 12);
+  assert.equal(harness.instance.api.getState().stats.duplicatesSkipped, 0);
+  assert.equal(harness.instance.api.getState().stats.violations, 2);
   await harness.instance.stop();
 }
 
@@ -237,9 +285,11 @@ async function waitForHandlers() {
 
 await testLogViolationDisbandsThenWarns();
 await testAllowedNameDoesNothing();
-await testNonChineseWeirdNameDoesNothing();
+await testNonChineseWeirdNameIsViolation();
 await testDuplicateHandledOnce();
 await testRapidRecreateWithNewCreationSignatureIsHandledAgain();
 await testMatchStateEventsDoNotTriggerGuardDirectly();
+await testRapidRecreateWithSameSignatureButNewGeneration();
+await testRapidRecreateWithoutSignatureButNewGeneration();
 
 console.log("run-squad-name-policy-guard-tests.js passed");

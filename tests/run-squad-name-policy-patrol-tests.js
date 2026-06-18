@@ -113,6 +113,22 @@ async function testAllowedNameStaysAllowed() {
   await harness.instance.stop();
 }
 
+async function testPlainLetterNameIsFlagged() {
+  const harness = await createHarness();
+  await harness.instance.start();
+  harness.emit("module.matchState", "squadsUpdated", {
+    serverId: "BZSS_Main",
+    matchId: "match-1",
+    squads: [createEvent({ squadName: "hello", creationSignature: "patrol-hello" })],
+  });
+  await waitForHandlers();
+
+  const state = harness.instance.api.getState();
+  assert.equal(state.stats.violations, 1);
+  assert.equal(state.recent[0].status, "violation");
+  await harness.instance.stop();
+}
+
 async function testDuplicateSnapshotIsSkipped() {
   const harness = await createHarness();
   await harness.instance.start();
@@ -176,6 +192,7 @@ async function waitForHandlers() {
 
 await testViolationIsFlaggedButNotActedOn();
 await testAllowedNameStaysAllowed();
+await testPlainLetterNameIsFlagged();
 await testDuplicateSnapshotIsSkipped();
 
 console.log("run-squad-name-policy-patrol-tests.js passed");

@@ -13,6 +13,9 @@ const DEFAULT_POLICY_PATH = path.resolve(process.cwd(), "config", "squad_name_po
 const DEFAULT_SUGGESTION_LIMIT = 5;
 const MAX_SUGGESTION_LIMIT = 50;
 const ALGORITHM_THRESHOLD = 0.42;
+const BUILTIN_SPECIAL_INFANTRY_NAMES = Object.freeze([
+  "zsj",
+]);
 const ADMIN_SQUAD_NAMES = Object.freeze([
   "op",
   "admin",
@@ -240,7 +243,7 @@ export function buildSquadNamePolicyWarningMessages(suggestions = []) {
 function formatSuggestionNames(names = []) {
   const rows = [];
   for (let index = 0; index < names.length; index += 2) {
-    rows.push(names.slice(index, index + 2).join(" "));
+    rows.push(names.slice(index, index + 2).join("，"));
   }
   return rows.join("\n");
 }
@@ -393,7 +396,10 @@ export function normalizePolicyDocument(rawPolicy = {}, options = {}) {
       ...asStringArray(source.defaultNamePatterns),
     ]),
     infantryNames: dedupeStrings(asStringArray(source.infantryNames)),
-    specialInfantryNames: dedupeStrings(asStringArray(source.specialInfantryNames)),
+    specialInfantryNames: dedupeStrings([
+      ...asStringArray(source.specialInfantryNames),
+      ...BUILTIN_SPECIAL_INFANTRY_NAMES,
+    ]),
     entries: withAutoKeywords,
   };
 }

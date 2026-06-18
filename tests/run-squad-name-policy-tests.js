@@ -94,7 +94,7 @@ assert.equal(bmpTeam.suffixStripped, true);
 assert.deepEqual(bmpTeam.keywordSuggestions.map((item) => item.name).slice(0, 3), ["BMP-1", "BMP-2", "BMP-2M"]);
 assert.equal(bmpTeam.warningMessage.includes("BMP-1"), true);
 assert.equal(bmpTeam.warningMessages[0], "警告违规队名！\n本服对队名要求十分严格。");
-assert.equal(bmpTeam.warningMessages[1], "警告你可能想建立\nBMP-1 BMP-2\nBMP-2M 队。");
+assert.equal(bmpTeam.warningMessages[1], "警告你可能想建立\nBMP-1，BMP-2\nBMP-2M 队。");
 
 assert.deepEqual(buildSquadNamePolicyWarningMessages([
   { name: "BMP-1" },
@@ -105,11 +105,12 @@ assert.deepEqual(buildSquadNamePolicyWarningMessages([
   { name: "BMP-1AM" },
 ]), [
   "警告违规队名！\n本服对队名要求十分严格。",
-  "警告你可能想建立\nBMP-1 BMP-1TS\nBMP-2 BMP-1\nZU-23-2 BMP-1AM 队。",
+  "警告你可能想建立\nBMP-1，BMP-1TS\nBMP-2，BMP-1\nZU-23-2，BMP-1AM 队。",
 ]);
 
 assert.equal(evaluateSquadName("TANK", samplePolicy).suggestions[0].name, "M1A1");
 assert.equal(evaluateSquadName("LAV RWS", samplePolicy).suggestions[0].name, "LAV III C6 RWS");
+assert.equal(evaluateSquadName("zsj", samplePolicy).matched.matchedKind, "special_infantry");
 
 const typo = evaluateSquadName("BPM2", samplePolicy);
 assert.equal(typo.valid, false);

@@ -1,4 +1,4 @@
-﻿// -*- coding: utf-8 -*-
+// -*- coding: utf-8 -*-
 
 import {
   CombatEventTags,
@@ -273,6 +273,7 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       eosID: cleanPlayerValue(identity.eosID),
       controllerID: cleanPlayerValue(identity.controllerID),
       displayName: cleanPlayerValue(identity.name),
+      playerId: cleanPlayerValue(identity.playerId ?? identity.playerID ?? identity.id),
       role: "",
       isLeader: false,
       resolved: false,
@@ -606,14 +607,24 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       const serverId = String(filter.serverId ?? "").trim();
       const type = String(filter.type ?? "all").trim();
       const search = normalizeSearch(filter.search);
-      const playerKey = normalizeSearch(filter.playerKey);
       const limit = clampLimit(filter.limit, 200);
       const offset = clampOffset(filter.offset);
 
       let result = filterByServer(events, serverId);
       if (VALID_TYPES.has(type)) result = result.filter((event) => event.type === type);
       if (search) result = result.filter((event) => matchesSearch(event, search));
-      if (playerKey) result = result.filter((event) => matchesPlayerKey(event, playerKey));
+
+      const playerKeys = buildPlayerKeys({
+        playerKey: filter.playerKey,
+        steam64ID: filter.steam64ID,
+        steamID: filter.steamID,
+        eosID: filter.eosID,
+        controllerID: filter.controllerID,
+        name: filter.name,
+      });
+      if (playerKeys.length) {
+        result = result.filter((event) => playerKeys.some((key) => matchesPlayerKey(event, key)));
+      }
 
       return result.slice().reverse().slice(offset, offset + limit).map(cloneJsonSafe);
     },
@@ -825,6 +836,9 @@ function mergePlayer(target, player) {
   if ((target.squadID == null || target.squadID === "") && player.squadID != null) target.squadID = player.squadID;
   if (player.role) target.role = String(player.role);
   target.isLeader = Boolean(player.isLeader);
+  if (!target.playerId && (player.playerId || player.playerID || player.id)) {
+    target.playerId = String(player.playerId ?? player.playerID ?? player.id);
+  }
 }
 
 function buildDisplayText(type, attacker, victim, weapon, damage, relation) {
@@ -1059,14 +1073,23 @@ function matchesSearch(event, search) {
 function matchesPlayerKey(event, playerKey) {
   const key = normalizeSearch(playerKey);
   if (!key) return true;
-  return [event.attacker, event.victim].some((player) => [
-    player?.displayName,
-    player?.name,
-    normalizeName(player?.name),
-    player?.steam64ID,
-    player?.eosID,
-    player?.controllerID,
-  ].some((value) => normalizeSearch(value) === key || normalizeSearch(value).includes(key)));
+  return [event.attacker, event.victim].some((player) => {
+    // Exact match for IDs and keys to prevent partial match bugs (e.g., short key "7" matching steam64IDs containing "7")
+    if (player?.steam64ID && normalizeSearch(player.steam64ID) === key) return true;
+    if (player?.eosID && normalizeSearch(player.eosID) === key) return true;
+    if (player?.controllerID && normalizeSearch(player.controllerID) === key) return true;
+    if (player?.playerId && normalizeSearch(player.playerId) === key) return true;
+    if (player?.id && normalizeSearch(player.id) === key) return true;
+
+    // Substring or exact match for name / display name
+    const name = player?.name;
+    const displayName = player?.displayName;
+    return [
+      displayName,
+      name,
+      normalizeName(name),
+    ].some((value) => value && (normalizeSearch(value) === key || normalizeSearch(value).includes(key)));
+  });
 }
 
 function buildPlayerKeys(query) {

@@ -589,8 +589,14 @@
       "./plugins/udp_event_forwarder.js",
       "./plugins/match-snapshot.js",
       "./plugins/fair-squad-guard.js",
-      "./plugins/stepwise-squad-playtime-guard.js"
+      "./plugins/stepwise-squad-playtime-guard.js",
+      "./plugins/squad-creation-broadcast.js"
     ],
+    "squad-creation-broadcast": {
+      "enabled": true,
+      "delaySeconds": 5,
+      "messageTemplate": "[建队播报] 玩家 ${creatorName} 创建了小队: ${squadName} (小队ID: ${squadId})"
+    },
     "fairSquadGuard": {
       "enabled": true,
       "directory": "./data/fair-squad-guard",
@@ -607,7 +613,7 @@
     "stepwiseSquadPlaytimeGuard": {
       "enabled": true,
       "directory": "./data/stepwise-squad-playtime-guard",
-      "broadcastOnApproved": true,
+      "broadcastOnApproved": false,
       "broadcastOnViolation": true,
       "warnOnMissingPlaytime": true,
       "liveLookupWhenMissing": true,

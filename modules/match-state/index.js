@@ -9,6 +9,10 @@ import {
   parseListSquads,
   parseNextMap,
 } from "../../core/squad-rcon.js";
+import {
+  clearTeamFactionMappings,
+  rememberTeamFactionMappings,
+} from "../../core/team-faction-cache.js";
 import { normalizeRoundWorldBringUpPayload } from "../../core/event-normalizer.js";
 import { classifySquadName } from "../../domain/squad/squad_name_classifier.js";
 
@@ -318,6 +322,8 @@ export function createMatchStateModule({ core, modules, config, logger }) {
 
     updateWebStatus();
 
+    clearTeamFactionMappings(serverId);
+
     // Immediately trigger squad refresh on round start to fetch faction names mapping
     void refreshSquads().catch((error) => {
       moduleLogger.warn(`[MatchState] failed to refresh squads on world bring up: ${error?.message ?? error}`);
@@ -544,6 +550,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     if (serverId) state.serverId = serverId;
 
     const classifiedSquads = squads.map(classifySquad);
+    rememberTeamFactionMappings(serverId, classifiedSquads);
     state.squads = {
       list: classifiedSquads,
       count: classifiedSquads.length,

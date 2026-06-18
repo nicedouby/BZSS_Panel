@@ -579,6 +579,10 @@ function selectPrimaryEvents(filter = {}) {
     limit: 5000,
     offset: 0,
     playerKey: String(filter.playerKey ?? "").trim(),
+    steam64ID: String(filter.steam64ID ?? filter.steamID ?? "").trim(),
+    eosID: String(filter.eosID ?? "").trim(),
+    controllerID: String(filter.controllerID ?? "").trim(),
+    name: String(filter.name ?? "").trim(),
   }) ?? [];
   const raw = modulesRef?.combatState?.getEvents?.({
     serverId,
@@ -595,6 +599,36 @@ function selectPrimaryEvents(filter = {}) {
     events = processed;
   } else {
     events = processed.length > 0 ? processed : raw;
+  }
+
+  const playerKeys = [
+    filter.playerKey,
+    filter.steam64ID,
+    filter.steamID,
+    filter.eosID,
+    filter.controllerID,
+    filter.name,
+  ].map((val) => String(val ?? "").trim().toLowerCase()).filter(Boolean);
+
+  if (playerKeys.length) {
+    events = events.filter((event) => {
+      const normalized = normalizeCombatEvent(event, detectSource(event));
+      return playerKeys.some((key) => {
+        const attacker = normalized.attacker;
+        const victim = normalized.victim;
+        return [attacker, victim].some((player) => {
+          if (player?.steam64ID && String(player.steam64ID).toLowerCase() === key) return true;
+          if (player?.eosID && String(player.eosID).toLowerCase() === key) return true;
+          if (player?.controllerID && String(player.controllerID).toLowerCase() === key) return true;
+          if (player?.playerId && String(player.playerId).toLowerCase() === key) return true;
+          if (player?.id && String(player.id).toLowerCase() === key) return true;
+
+          const name = String(player?.name ?? "").toLowerCase();
+          const displayName = String(player?.displayName ?? "").toLowerCase();
+          return (name && (name === key || name.includes(key))) || (displayName && (displayName === key || displayName.includes(key)));
+        });
+      });
+    });
   }
 
   if (search) {

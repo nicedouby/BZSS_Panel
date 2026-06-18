@@ -3,6 +3,11 @@
 import { parseSquadCreateEvent, normalizeSquadName } from "./log-adapter.js";
 import { createSquadLifecycleReducer } from "./reducer.js";
 import { classifySquadName } from "../../domain/squad/squad_name_classifier.js";
+import {
+  clearTeamFactionMappings,
+  getTeamIdByFactionName,
+  rememberTeamFactionMappings,
+} from "../../core/team-faction-cache.js";
 
 const MATCH_END_EVENTS = ["GAME_END", "MATCH_END", "ROUND_END", "ROUND_ENDED", "NEW_GAME"];
 const PENDING_CREATE_LOG_TTL_MS = 5 * 60 * 1000;
@@ -23,7 +28,6 @@ export function createSquadLifecycleModule({ core, config, logger }) {
   const reducer = createSquadLifecycleReducer({ config, logger: moduleLogger });
   const pendingCreateLogs = new Map();
   const recentCreateEventKeys = new Map();
-  const teamIdsByFactionByServer = new Map();
   const unsubscribers = [];
 
   const api = {
@@ -142,7 +146,7 @@ export function createSquadLifecycleModule({ core, config, logger }) {
     reducer.setCurrentMatchId(serverId, matchId);
     parsed.matchId = matchId;
     if (parsed.teamId == null) {
-      const mappedTeamId = resolveTeamIdFromFactionName(serverId, parsed.factionName);
+      const mappedTeamId = getTeamIdByFactionName(serverId, parsed.factionName);
       if (mappedTeamId != null) {
         parsed.teamId = mappedTeamId;
         parsed.needsTeamId = false;
@@ -204,7 +208,7 @@ export function createSquadLifecycleModule({ core, config, logger }) {
   }
 
   function flushPendingForSnapshot(serverId, matchId, squads) {
-    rememberFactionTeamIds(serverId, squads);
+    rememberTeamFactionMappings(serverId, squads);
     const pendingItems = [...pendingCreateLogs.values()].filter((item) => item.serverId === serverId && item.matchId === matchId);
     if (pendingItems.length === 0) return;
 
@@ -287,7 +291,7 @@ export function createSquadLifecycleModule({ core, config, logger }) {
     } else {
       reducer.clearServer(serverId);
     }
-    teamIdsByFactionByServer.delete(serverId);
+    clearTeamFactionMappings(serverId);
   }
 
   function resolveCurrentMatchId(serverId, event) {
@@ -405,30 +409,6 @@ export function createSquadLifecycleModule({ core, config, logger }) {
     });
   }
 
-  function rememberFactionTeamIds(serverId, squads = []) {
-    const key = String(serverId ?? "").trim();
-    if (!key) return;
-    const map = teamIdsByFactionByServer.get(key) ?? new Map();
-
-    for (const squad of squads) {
-      const teamId = toNumber(squad?.teamID ?? squad?.teamId);
-      const teamName = normalizeSquadName(squad?.teamName ?? squad?.factionName);
-      if (teamId == null || !teamName) continue;
-      map.set(teamName, teamId);
-    }
-
-    if (map.size > 0) {
-      teamIdsByFactionByServer.set(key, map);
-    }
-  }
-
-  function resolveTeamIdFromFactionName(serverId, factionName) {
-    const key = String(serverId ?? "").trim();
-    const factionKey = normalizeSquadName(factionName);
-    if (!key || !factionKey) return null;
-    const map = teamIdsByFactionByServer.get(key);
-    return map?.get(factionKey) ?? null;
-  }
 }
 
 function buildPendingKey(pending) {

@@ -454,6 +454,12 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     const alreadyDisbanded = record.actions.some((action) => action.type === "disbanded");
     if (!alreadyDisbanded && record.teamId != null && record.squadId != null) {
+      const removeResult = await removeCreatorFromSquad(record);
+      record.actions.push({
+        type: removeResult?.ok === false ? "remove_failed" : "removed",
+        target: record.creatorName || record.creatorSteamId || record.creatorEosId,
+        result: summarizeActionResult(removeResult),
+      });
       const disbandResult = await disbandSquad(record);
       record.actions.push({
         type: disbandResult?.ok === false ? "disband_failed" : "disbanded",
@@ -642,6 +648,30 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     if (typeof api?.disband === "function") return await api.disband(request);
     if (typeof api?.executeAction === "function") {
       return await api.executeAction({ ...request, type: "disband_squad" });
+    }
+    return { ok: false, error: "squad_management_unavailable" };
+  }
+
+  async function removeCreatorFromSquad(record) {
+    const api = modules?.squadManagement;
+    if (!record.creatorName && !record.creatorSteamId && !record.creatorEosId) {
+      return { ok: false, skipped: true, skipReason: "target_missing" };
+    }
+
+    const request = {
+      serverId: record.serverId,
+      name: record.creatorName,
+      steamId: record.creatorSteamId,
+      eosId: record.creatorEosId,
+      reason: `公平建队守护：解散前移出队长 ${record.reasons.join(" ")}`.trim(),
+      source: PLUGIN_ID,
+      system: true,
+      operatorName: PLUGIN_ID,
+    };
+    if (typeof api?.requestRemoveFromSquad === "function") return await api.requestRemoveFromSquad(request);
+    if (typeof api?.removeFromSquad === "function") return await api.removeFromSquad(request);
+    if (typeof api?.executeAction === "function") {
+      return await api.executeAction({ ...request, type: "remove_from_squad" });
     }
     return { ok: false, error: "squad_management_unavailable" };
   }

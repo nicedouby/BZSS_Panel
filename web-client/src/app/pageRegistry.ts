@@ -28,6 +28,7 @@ import DrawVoteGuardDebugPage from "../pages/DrawVoteGuardDebugPage.vue";
 import SquadNameClassifierDebugPage from "../pages/SquadNameClassifierDebugPage.vue";
 import SquadNamePolicyPage from "../pages/SquadNamePolicyPage.vue";
 import SquadNameRulesPage from "../pages/SquadNameRulesPage.vue";
+import SquadNameTrackingPage from "../pages/SquadNameTrackingPage.vue";
 import WelcomeJoinWarningDebugPage from "../pages/WelcomeJoinWarningDebugPage.vue";
 import PlayerSessionRecordsPage from "../pages/PlayerSessionRecordsPage.vue";
 import CombatLogPage from "../pages/CombatLogPage.vue";
@@ -386,6 +387,16 @@ export const pageRegistry: PageDefinition[] = [
     refreshPolicy: "manual",
     nav: { section: "players", label: "小队名称分类器", icon: "🏷️", order: 100 },
     ...documentPage,
+  },
+  {
+    name: "squad-name-tracking",
+    path: "/debug/squad-name-tracking",
+    component: SquadNameTrackingPage,
+    title: "建队与违规队名追踪",
+    category: "debug",
+    refreshPolicy: "polling",
+    nav: { section: "players", label: "建队与违规追踪", icon: "TRACK", order: 92 },
+    ...workspacePage,
   },
   {
     name: "squad-name-policy",

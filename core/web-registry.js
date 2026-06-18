@@ -139,6 +139,19 @@ export class WebRegistry {
     });
 
     this.registerPage({
+      id: "web.squadNameTracking",
+      title: "建队与违规队名追踪",
+      group: "调试",
+      route: "/debug/squad-name-tracking",
+      source: "module.squadLifecycle",
+      description: "建队追踪看板。整合当前小队快照、日志建队确认、违规队名解散与警告记录，以及 RCON 巡逻识别结果。",
+      required: false,
+      enabled: true,
+      order: 123,
+      icon: "TRACK",
+    });
+
+    this.registerPage({
       id: "web.squadNameClassifierDebug",
       title: "小队名称分类器",
       group: "调试",

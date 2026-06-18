@@ -235,11 +235,7 @@ function normalizeSquadEvent(event = {}) {
 }
 
 function isPatrolViolation(evaluation) {
-  if (!Boolean(evaluation?.ok) || evaluation?.valid !== false || evaluation?.classification) {
-    return false;
-  }
-  const hasSuggestions = Array.isArray(evaluation?.suggestions) && evaluation.suggestions.length > 0;
-  return Boolean(evaluation?.suffixStripped || hasSuggestions);
+  return Boolean(evaluation?.ok) && evaluation?.valid === false;
 }
 
 function buildDedupeKey(event) {

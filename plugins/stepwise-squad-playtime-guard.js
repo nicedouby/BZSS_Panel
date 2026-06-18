@@ -738,7 +738,7 @@ function readConfig(config) {
   return {
     enabled: raw.enabled !== false,
     directory: normalizeText(raw.directory) || DEFAULT_DATA_DIR,
-    broadcastOnApproved: raw.broadcastOnApproved !== false,
+    broadcastOnApproved: raw.broadcastOnApproved === true,
     broadcastOnViolation: raw.broadcastOnViolation !== false,
     warnOnMissingPlaytime: raw.warnOnMissingPlaytime !== false,
     liveLookupWhenMissing: raw.liveLookupWhenMissing !== false,

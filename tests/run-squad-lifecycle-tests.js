@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 
 import { createSquadLifecycleModule } from "../modules/squad-lifecycle/index.js";
 import { parseSquadCreateEvent } from "../modules/squad-lifecycle/log-adapter.js";
+import { clearTeamFactionMappings } from "../core/team-faction-cache.js";
 
 function createHarness() {
+  clearTeamFactionMappings("BZSS_Main");
   const coreListeners = new Map();
   const moduleListeners = new Map();
   const webStatusState = {

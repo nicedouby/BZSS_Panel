@@ -197,11 +197,19 @@ const selectedBucketRangeShort = computed(() => {
 });
 
 function formatEventText(event: CombatEvent) {
-  if (event.type === "kill" || event.type === "wound" || event.type === "tk" || event.type === "teamkill") {
+  if (event.type === "kill" || event.type === "wound" || event.type === "tk" || event.type === "teamkill" || event.type === "damage") {
     const attackerName = formatPlayerRef(event.attacker);
     const victimName = formatPlayerRef(event.victim);
-    const verb = (event.type === "kill") ? "击杀" : (event.type === "wound" ? "击倒" : "TK");
     const weaponName = formatWeapon(event.weapon);
+    
+    if (event.type === "damage") {
+      const damageVal = event.damage != null && event.damage !== "" ? ` (${event.damage})` : "";
+      const isFf = isFriendly(event);
+      const verb = isFf ? "友伤" : "伤害";
+      return `${attackerName} ${verb} ${victimName} [${weaponName}]${damageVal}`;
+    }
+    
+    const verb = (event.type === "kill") ? "击杀" : (event.type === "wound" ? "击倒" : "TK");
     return `${attackerName} ${verb} ${victimName} [${weaponName}]`;
   }
   return event.displayText || "";
@@ -702,9 +710,8 @@ function emptyBucket(): CombatBucket {
 .event-desc {
   font-size: 11px;
   color: #cbd5e1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-all;
   display: block;
 }
 

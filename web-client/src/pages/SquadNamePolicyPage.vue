@@ -180,16 +180,16 @@
                 </div>
 
                 <!-- Step 3: Result Banner -->
-                <div class="pipeline-node" :class="testResult.valid ? 'node-success' : 'node-warning'">
-                  <div class="node-icon">{{ testResult.valid ? "✓" : "✕" }}</div>
+                <div class="pipeline-node" :class="decisionBannerValid ? 'node-success' : 'node-warning'">
+                  <div class="node-icon">{{ decisionBannerValid ? "✓" : "✕" }}</div>
                   <div class="node-content">
                     <div class="node-title">3. 规范判定判定</div>
-                    <div class="decision-banner" :data-valid="testResult.valid">
+                    <div class="decision-banner" :data-valid="decisionBannerValid">
                       <div class="decision-title">
-                        {{ testResult.valid ? "符合命名规范" : "判定违规命名" }}
+                        {{ decisionBannerValid ? "符合运行时规范" : "会触发运行时处置" }}
                       </div>
                       <div class="decision-desc">
-                        {{ testResult.reason }}
+                        {{ decisionBannerReason }}
                       </div>
                     </div>
                   </div>
@@ -812,10 +812,27 @@ function triggerPresetTest(name: string) {
 }
 
 const displayedWarningMessages = computed(() => {
+  if (guardPreview.value) {
+    if (!guardPreview.value.violation) return [];
+    return (guardPreview.value.warningMessages ?? []).filter((item) => String(item || "").trim());
+  }
   const messages = testResult.value?.warningMessages?.length
     ? testResult.value.warningMessages
     : (testResult.value?.warningMessage ? [testResult.value.warningMessage] : []);
   return messages.filter((item) => String(item || "").trim());
+});
+
+const decisionBannerValid = computed(() => {
+  if (guardPreview.value) return !guardPreview.value.violation;
+  return Boolean(testResult.value?.valid);
+});
+
+const decisionBannerReason = computed(() => {
+  if (guardPreview.value) {
+    return guardPreview.value.evaluation?.reason
+      || (guardPreview.value.violation ? "运行时会判定为违规并触发处置。" : "运行时不会触发处置。");
+  }
+  return testResult.value?.reason || "-";
 });
 
 function translateMatchedKind(kind?: string) {

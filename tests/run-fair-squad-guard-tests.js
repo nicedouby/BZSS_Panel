@@ -77,6 +77,10 @@ async function createHarness(options = {}) {
         getState() {
           return matchState;
         },
+        async requestRemoveFromSquad(request) {
+          actionSequence.push("remove");
+          return { ok: true, command: `AdminRemovePlayerFromSquad ${request.name || request.steamId}` };
+        },
         async requestDisband(request) {
           actionSequence.push("disband");
           disbands.push(request);
@@ -485,7 +489,7 @@ async function testViolationDisbandsBeforeBroadcastAndWarnOnFastLane() {
     }));
 
     assert.equal(result.violation, true);
-    assert.deepEqual(harness.actionSequence.slice(0, 3), ["disband", "broadcast", "warn"]);
+    assert.deepEqual(harness.actionSequence.slice(0, 4), ["remove", "disband", "broadcast", "warn"]);
     assert.equal(harness.disbands.length, 1);
     assert.equal(harness.disbands[0].allowRefresh, false);
     assert.equal(harness.disbands[0].allowUnverifiedTarget, true);

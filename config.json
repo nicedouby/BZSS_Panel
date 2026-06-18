@@ -724,7 +724,7 @@
     "stepwiseSquadPlaytimeGuard": {
       "enabled": true,
       "directory": "./data/stepwise-squad-playtime-guard",
-      "broadcastOnApproved": true,
+      "broadcastOnApproved": false,
       "warnOnMissingPlaytime": true,
       "liveLookupWhenMissing": true,
       "maxRecentRecords": 300,
@@ -829,11 +829,16 @@
             }
           ]
         }
+      },
+      "squad-creation-broadcast": {
+        "enabled": true,
+        "delaySeconds": 5,
+        "messageTemplate": "[建队播报] 玩家 ${creatorName} 创建了小队: ${squadName} (小队ID: ${squadId})"
       }
     }
   },
   "warmup": {
-    "enabled": false
+    "enabled": true
   },
   "bzssCore": {
     "modifyScriptPath": "D:\\BZSS_Panel\\ModifySaveGame.py",

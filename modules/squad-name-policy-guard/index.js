@@ -176,6 +176,11 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
 
     try {
       if (runtimeConfig.action === "disband_then_warn") {
+        const removeResult = await removeCreatorFromSquad(normalized, evaluation);
+        record.actions.push({
+          type: removeResult?.ok === false ? "remove_failed" : "removed",
+          result: summarizeResult(removeResult),
+        });
         const disbandResult = await disbandSquad(normalized, evaluation);
         record.actions.push({
           type: disbandResult?.ok === false ? "disband_failed" : "disbanded",
@@ -232,6 +237,37 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
     }
     if (typeof modules?.squadManagement?.executeAction === "function") {
       return await modules.squadManagement.executeAction({ ...request, type: "disband_squad" });
+    }
+    return { ok: false, error: "squad_management_unavailable" };
+  }
+
+  async function removeCreatorFromSquad(event, evaluation) {
+    if (!event.creatorName && !event.creatorSteamId && !event.creatorEosId) {
+      return { ok: false, skipped: true, skipReason: "target_missing" };
+    }
+
+    const request = {
+      serverId: event.serverId,
+      matchId: event.matchId,
+      name: event.creatorName,
+      steamId: event.creatorSteamId,
+      eosId: event.creatorEosId,
+      squadName: event.squadName,
+      teamId: event.teamId,
+      squadId: event.squadId,
+      reason: `squad_name_policy_pre_disband_remove: ${evaluation.reason}`,
+      source: MODULE_ID,
+      operatorName: MODULE_ID,
+      system: true,
+    };
+    if (typeof modules?.squadManagement?.requestRemoveFromSquad === "function") {
+      return await modules.squadManagement.requestRemoveFromSquad(request);
+    }
+    if (typeof modules?.squadManagement?.removeFromSquad === "function") {
+      return await modules.squadManagement.removeFromSquad(request);
+    }
+    if (typeof modules?.squadManagement?.executeAction === "function") {
+      return await modules.squadManagement.executeAction({ ...request, type: "remove_from_squad" });
     }
     return { ok: false, error: "squad_management_unavailable" };
   }
@@ -330,6 +366,7 @@ function normalizeSquadEvent(event = {}) {
     creatorEosId: text(event.creatorEosId ?? event.creatorEOSID ?? event.eosId ?? event.eosID ?? event.leaderEosId),
     source: text(event.source),
     time: text(event.time ?? event.createdAt ?? event.observedAt) || nowIso(),
+    generation: nullableNumber(event.generation ?? event.record?.generation) ?? 1,
   };
 }
 
@@ -341,17 +378,14 @@ function buildWarningMessages(evaluation) {
 }
 
 function isViolation(evaluation) {
-  if (!Boolean(evaluation?.ok) || evaluation?.valid !== false || evaluation?.classification) {
-    return false;
-  }
-  const hasSuggestions = Array.isArray(evaluation?.suggestions) && evaluation.suggestions.length > 0;
-  return Boolean(evaluation?.suffixStripped || hasSuggestions);
+  return Boolean(evaluation?.ok) && evaluation?.valid === false;
 }
 
 function buildDedupeKey(event) {
   const creationSignature = text(event.creationSignature);
+  const gen = event.generation ?? 1;
   if (creationSignature) {
-    return `creation:${creationSignature}`;
+    return `creation:${creationSignature}:${gen}`;
   }
   return [
     event.serverId,
@@ -359,6 +393,7 @@ function buildDedupeKey(event) {
     event.teamId,
     event.squadId,
     normalizeName(event.squadName),
+    gen,
   ].map((item) => String(item ?? "")).join("|");
 }
 

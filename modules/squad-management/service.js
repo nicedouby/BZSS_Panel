@@ -2,6 +2,10 @@
 
 import { getParam } from "../../core/event-normalizer.js";
 import { classifySquadName } from "../../domain/squad/squad_name_classifier.js";
+import {
+  getTeamIdByFactionName,
+  rememberTeamFactionMappings,
+} from "../../core/team-faction-cache.js";
 import { createSquadLifecycleReducer } from "../squad-lifecycle/reducer.js";
 import { buildSquadLifecycleKey, buildSquadLifecycleSlotKey } from "../squad-lifecycle/service.js";
 import { normalizeSquadName } from "../squad-lifecycle/log-adapter.js";
@@ -504,6 +508,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
     cache.squadsUpdatedAt = cache.rconUpdatedAt;
     cache.rawSquads = squads;
     cache.lastEventAt = cache.rconUpdatedAt;
+    rememberTeamFactionMappings(serverId, squads);
 
     lifecycle.setCurrentMatchId(serverId, resolvedMatchId);
     lifecycle.handleRconSquadSnapshot({
@@ -992,7 +997,8 @@ export function createSquadManagementService({ core, modules, config, logger, re
 
     const state = buildStateSnapshot(serverId);
     const target = resolvePlayerTarget(state, requestedPlayer);
-    if (!target) {
+    const resolvedTarget = target ?? (system ? buildLooseRemoveTarget(requestedPlayer) : null);
+    if (!resolvedTarget) {
       return recordFailedAction({
         kind: "remove",
         serverId,
@@ -1017,14 +1023,23 @@ export function createSquadManagementService({ core, modules, config, logger, re
         reason,
         error: "Forbidden",
         message: `Permission '${removePermission}' is required.`,
-        target,
+        target: resolvedTarget,
       });
     }
 
-    const targetId = target.playerId || target.name || requestedPlayer.playerKey;
-    const commandName = target.playerId ? "AdminRemovePlayerFromSquadById" : "AdminRemovePlayerFromSquad";
+    const targetId = resolvedTarget.playerId || resolvedTarget.name || requestedPlayer.playerKey;
+    const commandName = resolvedTarget.playerId ? "AdminRemovePlayerFromSquadById" : "AdminRemovePlayerFromSquad";
     const command = `${commandName} ${escapeCommandString(targetId)}`.trim();
-    const commandResult = await executeRemoveCommand({ command, serverId, target, reason, source, operatorName, system, actor });
+    const commandResult = await executeRemoveCommand({
+      command,
+      serverId,
+      target: resolvedTarget,
+      reason,
+      source,
+      operatorName,
+      system,
+      actor,
+    });
 
     const record = await persistActionRecord({
       kind: "remove",
@@ -1033,17 +1048,17 @@ export function createSquadManagementService({ core, modules, config, logger, re
       source,
       operatorName,
       system,
-      playerName: target.name,
-      playerKey: target.playerKey,
-      steamId: target.steamId,
-      eosId: target.eosId,
+      playerName: resolvedTarget.name,
+      playerKey: resolvedTarget.playerKey,
+      steamId: resolvedTarget.steamId,
+      eosId: resolvedTarget.eosId,
       reason,
       result: commandResult.ok ? "success" : "failed",
       error: commandResult.ok ? "" : commandResult.error,
       command,
       payload: {
         request,
-        target,
+        target: resolvedTarget,
         commandResult,
       },
       ok: commandResult.ok,
@@ -1054,10 +1069,10 @@ export function createSquadManagementService({ core, modules, config, logger, re
     core.eventBus?.emitModuleEvent?.(MODULE_ID, "playerRemovedFromSquad", {
       serverId,
       matchId: state.matchId,
-      playerId: target.playerId,
-      steamId: target.steamId,
-      eosId: target.eosId,
-      name: target.name,
+      playerId: resolvedTarget.playerId,
+      steamId: resolvedTarget.steamId,
+      eosId: resolvedTarget.eosId,
+      name: resolvedTarget.name,
       reason,
       source,
       operatorName,
@@ -1977,6 +1992,18 @@ export function createSquadManagementService({ core, modules, config, logger, re
     } : null;
   }
 
+  function buildLooseRemoveTarget(request = {}) {
+    const name = normalizeText(request.name ?? request.playerName);
+    if (!name) return null;
+    return {
+      name,
+      steamId: normalizeText(request.steamId ?? request.steamID),
+      eosId: normalizeText(request.eosId ?? request.eosID),
+      playerId: normalizeText(request.playerId ?? request.playerID),
+      playerKey: normalizeText(request.playerKey ?? request.anyId ?? name),
+    };
+  }
+
   function normalizeSquadCreatedEvent(event = {}) {
     const serverId = normalizeServerId(event.serverId ?? core.webStatus?.serverId ?? "");
     const teamId = normalizeNullableNumber(event.teamId ?? event.TeamID ?? getParam(event, "TeamID"));
@@ -2084,6 +2111,9 @@ export function createSquadManagementService({ core, modules, config, logger, re
       ),
     );
     if (byFaction?.teamId != null) return byFaction.teamId;
+
+    const sharedTeamId = getTeamIdByFactionName(serverId, parsed?.teamName);
+    if (sharedTeamId != null) return sharedTeamId;
 
     return null;
   }
