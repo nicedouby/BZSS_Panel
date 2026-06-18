@@ -206,12 +206,13 @@ async function handleDisbandSquad() {
     ui.pushToast({ title: "操作失败", message: "缺少 teamId 或 squadId，无法解散小队。", tone: "error" });
     return;
   }
-  const confirmed = await ui.openConfirm({
+  const reason = await ui.openDisbandPrompt({
     title: "确认解散小队？",
-    message: `确定要强制解散 ${squad.squadName} 吗？`,
-    tone: "error",
+    targetName: squad.squadName,
+    defaultMessage: "",
+    confirmText: "确认强制解散",
   });
-  if (!confirmed) return;
+  if (reason === null) return;
   if (actionBusy.value) return;
 
   actionBusy.value = true;
@@ -219,7 +220,7 @@ async function handleDisbandSquad() {
     const res = await disbandSquad({
       teamId: squad.teamId,
       squadId: squad.squadId,
-      reason: "manual_disband",
+      reason: reason.trim(),
       source: "web.squadAdmin",
     });
     if (!res.ok) throw new Error(res.message || "解散执行失败");

@@ -41,6 +41,17 @@ interface WarnPromptState extends Required<WarnPromptOptions> {
   visible: boolean;
 }
 
+export interface DisbandPromptOptions {
+  title: string;
+  targetName: string;
+  defaultMessage?: string;
+  confirmText?: string;
+}
+
+interface DisbandPromptState extends Required<DisbandPromptOptions> {
+  visible: boolean;
+}
+
 interface ConfirmState extends Required<Omit<ConfirmOptions, "tone">> {
   visible: boolean;
   tone: UiTone;
@@ -87,6 +98,13 @@ export const useUiStore = defineStore("ui", () => {
     defaultMessage: "",
     confirmText: "Send Warning",
   });
+  const disbandPrompt = ref<DisbandPromptState>({
+    visible: false,
+    title: "",
+    targetName: "",
+    defaultMessage: "",
+    confirmText: "解散小队",
+  });
   const theme = ref<UiTheme>(savedPrefs.theme);
   const visualMode = ref<UiVisualMode>(savedPrefs.visualMode);
   const globalDensity = ref<UiDensity>(savedPrefs.globalDensity);
@@ -108,6 +126,7 @@ export const useUiStore = defineStore("ui", () => {
   ]);
   let confirmResolver: ((value: boolean) => void) | null = null;
   let warnPromptResolver: ((value: string | null) => void) | null = null;
+  let disbandPromptResolver: ((value: string | null) => void) | null = null;
 
   watch(
     theme,
@@ -270,6 +289,26 @@ export const useUiStore = defineStore("ui", () => {
     warnPromptResolver = null;
   }
 
+  function openDisbandPrompt(options: DisbandPromptOptions) {
+    disbandPrompt.value = {
+      visible: true,
+      title: options.title,
+      targetName: options.targetName,
+      defaultMessage: options.defaultMessage ?? "",
+      confirmText: options.confirmText ?? "解散小队",
+    };
+
+    return new Promise<string | null>((resolve) => {
+      disbandPromptResolver = resolve;
+    });
+  }
+
+  function resolveDisbandPrompt(message: string | null) {
+    disbandPrompt.value.visible = false;
+    disbandPromptResolver?.(message);
+    disbandPromptResolver = null;
+  }
+
   return {
     sidebarCollapsed,
     mobileSidebarOpen,
@@ -277,6 +316,7 @@ export const useUiStore = defineStore("ui", () => {
     toasts,
     confirm,
     warnPrompt,
+    disbandPrompt,
     toggleSidebarCollapsed,
     setSidebarCollapsed,
     openMobileSidebar,
@@ -290,6 +330,8 @@ export const useUiStore = defineStore("ui", () => {
     confirmCancel,
     openWarnPrompt,
     resolveWarnPrompt,
+    openDisbandPrompt,
+    resolveDisbandPrompt,
     theme,
     visualMode,
     globalDensity,

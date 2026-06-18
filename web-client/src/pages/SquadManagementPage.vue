@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <AppPage full-bleed>
         <h1 class="sr-only">小队管理</h1>
 
@@ -50,6 +50,11 @@
                 <span>审计理由</span>
                 <input v-model="disbandReason" type="text" placeholder="为什么解散？" />
               </label>
+              <div class="quick-hints">
+                <span v-for="hint in disbandHints" :key="hint" class="hint-chip" @click="disbandReason = hint">
+                  {{ hint }}
+                </span>
+              </div>
 
               <AppDangerButton
                 class="command-button"
@@ -261,6 +266,14 @@ const disbandSquadId = ref("");
 const disbandSource = ref("manual");
 const disbandReason = ref("");
 
+const disbandHints = [
+  "无队长位 / 队长离开",
+  "小队名称违规",
+  "队长无麦或不建部署点",
+  "恶意锁队 / 人数不足",
+  "抢夺载具 / 非建队载具",
+];
+
 const kickTarget = ref("");
 const kickSource = ref("manual");
 const kickReason = ref("");
@@ -329,7 +342,7 @@ const recentCreations = computed(() => {
     .slice(0, 15);
 });
 
-const canSubmitDisband = computed(() => Boolean(disbandTeamId.value && disbandSquadId.value));
+const canSubmitDisband = computed(() => Boolean(disbandTeamId.value && disbandSquadId.value && disbandReason.value.trim()));
 const canSubmitKick = computed(() => Boolean(kickTarget.value.trim() && kickReason.value.trim()));
 const canSubmitRemove = computed(() => Boolean(removeTarget.value.trim()));
 
@@ -739,6 +752,31 @@ function timeValue(value: string) {
   .field-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+.quick-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+
+.hint-chip {
+  font-size: 11px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 999px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.hint-chip:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.28);
+  color: var(--color-status-error, #ef4444);
 }
 </style>
 

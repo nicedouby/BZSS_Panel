@@ -17,6 +17,7 @@
     </main>
     <AppConfirmDialog />
     <WarnPrompt />
+    <DisbandPrompt />
     <ToastHost />
     <SettingsDrawer />
     <PluginCenterDrawer
@@ -42,6 +43,7 @@ import Sidebar from "./Sidebar.vue";
 import SectionSubnav from "./SectionSubnav.vue";
 import AppConfirmDialog from "../common/AppConfirmDialog.vue";
 import WarnPrompt from "../common/WarnPrompt.vue";
+import DisbandPrompt from "../common/DisbandPrompt.vue";
 import ToastHost from "../common/ToastHost.vue";
 import SettingsDrawer from "../settings/SettingsDrawer.vue";
 import PluginCenterDrawer from "../../features/plugins/PluginCenterDrawer.vue";
