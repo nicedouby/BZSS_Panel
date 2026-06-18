@@ -17,6 +17,8 @@ export interface PlayerRowViewModel {
   eosId: string | null;
   ip: string | null;
   playtimeHours: number | null;
+  ping?: number | null;
+  packetLoss?: number | null;
   matchOnlineSeconds?: number | null;
   matchObservedOnlineSeconds?: number | null;
   matchEstimatedOnlineSeconds?: number | null;
@@ -108,6 +110,8 @@ export interface PlayerDetailViewModel {
   ipSource?: "current" | "last" | "none";
   ipLookupLoading?: boolean;
   playtimeHours: number | null;
+  ping?: number | null;
+  packetLoss?: number | null;
   matchOnlineSeconds?: number | null;
   matchObservedOnlineSeconds?: number | null;
   matchEstimatedOnlineSeconds?: number | null;

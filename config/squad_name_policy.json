@@ -7,7 +7,7 @@
     "sheetName": "Sheet1"
   },
   "importedAt": "2026-06-17T09:50:53.381Z",
-  "updatedAt": "2026-06-17T11:17:40.876Z",
+  "updatedAt": "2026-06-18T12:58:46.822Z",
   "suggestionLimit": 5,
   "entries": [
     {
@@ -5130,6 +5130,302 @@
         "WPMC",
         "BP",
         "Black"
+      ]
+    },
+    {
+      "id": "afu:uh:mi8:/game/vehicles/mi8/bp_mi8_vdv.bp_mi8_vdv",
+      "faction": "AFU",
+      "vehicleType": "UH",
+      "asset": "/Game/Vehicles/MI8/BP_MI8_VDV.BP_MI8_VDV",
+      "name": "Mi-8",
+      "aliases": [
+        "Mi8"
+      ],
+      "keywords": [
+        "UH",
+        "MI8",
+        "MI-8"
+      ]
+    },
+    {
+      "id": "adf:uh:mrh90:/game/vehicles/mrh90/bp_mrh90_mag58.bp_mrh90_mag58",
+      "faction": "ADF",
+      "vehicleType": "UH",
+      "asset": "/Game/Vehicles/MRH90/BP_MRH90_Mag58.BP_MRH90_Mag58",
+      "name": "MRH-90",
+      "aliases": [
+        "MRH90"
+      ],
+      "keywords": [
+        "UH",
+        "MRH90",
+        "MRH-90"
+      ]
+    },
+    {
+      "id": "adf:uh:uh60m:/game/vehicles/uh60/bp_uh60.bp_uh60",
+      "faction": "ADF",
+      "vehicleType": "UH",
+      "asset": "/Game/Vehicles/UH60/BP_UH60.BP_UH60",
+      "name": "UH-60M",
+      "aliases": [
+        "UH60M",
+        "Blackhawk"
+      ],
+      "keywords": [
+        "UH",
+        "UH60",
+        "UH-60M"
+      ]
+    },
+    {
+      "id": "baf:uh:sa330:/game/vehicles/sa330/bp_sa330.bp_sa330",
+      "faction": "BAF",
+      "vehicleType": "UH",
+      "asset": "/Game/Vehicles/SA330/BP_SA330.BP_SA330",
+      "name": "SA330",
+      "aliases": [
+        "Puma"
+      ],
+      "keywords": [
+        "UH",
+        "SA330",
+        "PUMA"
+      ]
+    },
+    {
+      "id": "caf:uh:ch146:/game/vehicles/ch146/bp_ch146.bp_ch146",
+      "faction": "CAF",
+      "vehicleType": "UH",
+      "asset": "/Game/Vehicles/CH146/BP_CH146.BP_CH146",
+      "name": "CH-146",
+      "aliases": [
+        "CH146",
+        "Griffon"
+      ],
+      "keywords": [
+        "UH",
+        "CH146",
+        "CH-146"
+      ]
+    },
+    {
+      "id": "caf:uh:ch178:/game/vehicles/ch178/bp_ch178.bp_ch178",
+      "faction": "CAF",
+      "vehicleType": "UH",
+      "asset": "/Game/Vehicles/CH178/BP_CH178.BP_CH178",
+      "name": "CH-178",
+      "aliases": [
+        "CH178"
+      ],
+      "keywords": [
+        "UH",
+        "CH178",
+        "CH-178"
+      ]
+    },
+    {
+      "id": "gfi:uh:uh1hmg3:/game/vehicles/uh1h_gfi/bp_uh1h_gfi.bp_uh1h_gfi",
+      "faction": "GFI",
+      "vehicleType": "UH",
+      "asset": "/Game/Vehicles/UH1H_GFI/BP_UH1H_GFI.BP_UH1H_GFI",
+      "name": "UH-1H MG3",
+      "aliases": [
+        "UH1H MG3",
+        "Huey"
+      ],
+      "keywords": [
+        "UH",
+        "UH1H",
+        "UH-1H"
+      ]
+    },
+    {
+      "id": "pla:uh:z8g:/game/vehicles/z8g/bp_z8g.bp_z8g",
+      "faction": "PLA",
+      "vehicleType": "UH",
+      "asset": "/Game/Vehicles/Z8G/BP_Z8G.BP_Z8G",
+      "name": "Z-8G",
+      "aliases": [
+        "Z8G"
+      ],
+      "keywords": [
+        "UH",
+        "Z8G",
+        "Z-8G"
+      ]
+    },
+    {
+      "id": "plaagf:uh:z8g:/game/vehicles/z8g/bp_z8g.bp_z8g",
+      "faction": "PLAAGF",
+      "vehicleType": "UH",
+      "asset": "/Game/Vehicles/Z8G/BP_Z8G.BP_Z8G",
+      "name": "Z-8G",
+      "aliases": [
+        "Z8G"
+      ],
+      "keywords": [
+        "UH",
+        "Z8G",
+        "Z-8G"
+      ]
+    },
+    {
+      "id": "planmc:uh:z8j:/game/vehicles/z8j/bp_z8j.bp_z8j",
+      "faction": "PLANMC",
+      "vehicleType": "UH",
+      "asset": "/Game/Vehicles/Z8J/BP_Z8J.BP_Z8J",
+      "name": "Z-8J",
+      "aliases": [
+        "Z8J"
+      ],
+      "keywords": [
+        "UH",
+        "Z8J",
+        "Z-8J"
+      ]
+    },
+    {
+      "id": "vdv:uh:mi8:/game/vehicles/mi8/bp_mi8_vdv.bp_mi8_vdv",
+      "faction": "VDV",
+      "vehicleType": "UH",
+      "asset": "/Game/Vehicles/MI8/BP_MI8_VDV.BP_MI8_VDV",
+      "name": "Mi-8",
+      "aliases": [
+        "Mi8"
+      ],
+      "keywords": [
+        "UH",
+        "MI8",
+        "MI-8"
+      ]
+    },
+    {
+      "id": "rgf:uh:mi8mtv5:/game/vehicles/mi8/bp_mi8.bp_mi8",
+      "faction": "RGF",
+      "vehicleType": "UH",
+      "asset": "/Game/Vehicles/MI8/BP_MI8.BP_MI8",
+      "name": "Mi-8MTV-5",
+      "aliases": [
+        "Mi8MTV5",
+        "Mi8"
+      ],
+      "keywords": [
+        "UH",
+        "MI8",
+        "MI-8MTV-5"
+      ]
+    },
+    {
+      "id": "tlf:uh:uh60pkm:/game/vehicles/uh60_tlf_pkm/bp_uh60_tlf_pkm.bp_uh60_tlf_pkm",
+      "faction": "TLF",
+      "vehicleType": "UH",
+      "asset": "/Game/Vehicles/UH60_TLF_PKM/BP_UH60_TLF_PKM.BP_UH60_TLF_PKM",
+      "name": "UH60 PKM",
+      "aliases": [
+        "UH60",
+        "UH-60 PKM"
+      ],
+      "keywords": [
+        "UH",
+        "UH60",
+        "PKM"
+      ]
+    },
+    {
+      "id": "usa:uh:mi8mtv5:/game/vehicles/mi8/bp_mi8.bp_mi8",
+      "faction": "USA",
+      "vehicleType": "UH",
+      "asset": "/Game/Vehicles/MI8/BP_MI8.BP_MI8",
+      "name": "Mi-8MTV-5",
+      "aliases": [
+        "Mi8MTV5",
+        "Mi8"
+      ],
+      "keywords": [
+        "UH",
+        "MI8",
+        "MI-8MTV-5"
+      ]
+    },
+    {
+      "id": "usa:uh:uh60m:/game/vehicles/uh60/bp_uh60.bp_uh60",
+      "faction": "USA",
+      "vehicleType": "UH",
+      "asset": "/Game/Vehicles/UH60/BP_UH60.BP_UH60",
+      "name": "UH-60M",
+      "aliases": [
+        "UH60M",
+        "Blackhawk"
+      ],
+      "keywords": [
+        "UH",
+        "UH60",
+        "UH-60M"
+      ]
+    },
+    {
+      "id": "usmc:uh:uh1y:/game/vehicles/uh1y/bp_uh1y.bp_uh1y",
+      "faction": "USMC",
+      "vehicleType": "UH",
+      "asset": "/Game/Vehicles/UH1Y/BP_UH1Y.BP_UH1Y",
+      "name": "UH-1Y",
+      "aliases": [
+        "UH1Y",
+        "Huey"
+      ],
+      "keywords": [
+        "UH",
+        "UH1Y",
+        "UH-1Y"
+      ]
+    },
+    {
+      "id": "usmc_coop:uh:uh1y:/game/vehicles/uh1y/bp_uh1y.bp_uh1y",
+      "faction": "USMC_Coop",
+      "vehicleType": "UH",
+      "asset": "/Game/Vehicles/UH1Y/BP_UH1Y.BP_UH1Y",
+      "name": "UH-1Y",
+      "aliases": [
+        "UH1Y",
+        "Huey"
+      ],
+      "keywords": [
+        "UH",
+        "UH1Y",
+        "UH-1Y"
+      ]
+    },
+    {
+      "id": "wpmc:uh:raventransport:/game/vehicles/ch146_raven/bp_ch146_raven.bp_ch146_raven",
+      "faction": "WPMC",
+      "vehicleType": "UH",
+      "asset": "/Game/Vehicles/CH146_Raven/BP_CH146_Raven.BP_CH146_Raven",
+      "name": "Raven Transport",
+      "aliases": [
+        "Raven",
+        "CH146 Raven"
+      ],
+      "keywords": [
+        "UH",
+        "RAVEN",
+        "RAVENTRANSPORT"
+      ]
+    },
+    {
+      "id": "wpmc_coop:uh:raventransport:/game/vehicles/ch146_raven/bp_ch146_raven.bp_ch146_raven",
+      "faction": "WPMC_CoOp",
+      "vehicleType": "UH",
+      "asset": "/Game/Vehicles/CH146_Raven/BP_CH146_Raven.BP_CH146_Raven",
+      "name": "Raven Transport",
+      "aliases": [
+        "Raven",
+        "CH146 Raven"
+      ],
+      "keywords": [
+        "UH",
+        "RAVEN",
+        "RAVENTRANSPORT"
       ]
     }
   ],

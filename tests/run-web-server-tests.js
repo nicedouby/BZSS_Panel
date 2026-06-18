@@ -1141,7 +1141,6 @@ async function testSquadNamePolicyGuardRoutesExposeStateSimulateAndProtectedClea
             enabled: true,
             detectLogCreated: true,
             action: "disband_then_warn",
-            rconPatrol: { enabled: false, intervalMs: 15000 },
             dedupeTtlMs: 300000,
             stats: {
               evaluated: 2,
@@ -1186,7 +1185,6 @@ async function testSquadNamePolicyGuardRoutesExposeStateSimulateAndProtectedClea
   const stateBody = JSON.parse(stateRecorder.state.body);
   assert.equal(stateBody.ok, true);
   assert.equal(stateBody.data.stats.violations, 1);
-  assert.equal(stateBody.data.rconPatrol.enabled, false);
 
   const simulateRecorder = createRecorder();
   const simulateReq = Readable.from([JSON.stringify({
@@ -1231,7 +1229,7 @@ async function testSquadNamePolicyGuardRoutesExposeStateSimulateAndProtectedClea
     modules: {
       squadNamePolicyGuard: {
         getState() {
-          return { enabled: true, stats: {}, recent: [], rconPatrol: { enabled: false, intervalMs: 15000 } };
+          return { enabled: true, stats: {}, recent: [] };
         },
         async simulate(payload) {
           simulateCalls.push(payload);
@@ -1256,6 +1254,137 @@ async function testSquadNamePolicyGuardRoutesExposeStateSimulateAndProtectedClea
   const clearBody = JSON.parse(clearRecorder.state.body);
   assert.equal(clearBody.ok, true);
   assert.equal(clearBody.data.cleared, 3);
+  assert.equal(clearCalls.length, 1);
+}
+
+async function testSquadNamePolicyPatrolRoutesExposeStateSimulateAndProtectedClear() {
+  const simulateCalls = [];
+  const clearCalls = [];
+  const viewerServer = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "viewer", role: "Operator" };
+        },
+        hasEverything() {
+          return false;
+        },
+      },
+    },
+    modules: {
+      squadNamePolicyPatrol: {
+        getState() {
+          return {
+            enabled: true,
+            intervalMs: 15000,
+            dedupeTtlMs: 60000,
+            stats: {
+              evaluated: 2,
+              violations: 1,
+              allowed: 1,
+              duplicatesSkipped: 0,
+              errors: 0,
+            },
+            recent: [],
+          };
+        },
+        async simulate(payload) {
+          simulateCalls.push(payload);
+          return {
+            violation: true,
+            disposition: "flag_only",
+            evaluation: { valid: false },
+          };
+        },
+        clearRecent() {
+          clearCalls.push(true);
+          return { ok: true, cleared: 2 };
+        },
+      },
+    },
+  });
+
+  const stateRecorder = createRecorder();
+  await viewerServer.handleRequest({
+    method: "GET",
+    url: "/api/modules/squad-name-policy-patrol/state",
+    headers: { host: "localhost" },
+    socket: {},
+  }, stateRecorder.res);
+  assert.equal(stateRecorder.state.status, 200);
+  const stateBody = JSON.parse(stateRecorder.state.body);
+  assert.equal(stateBody.ok, true);
+  assert.equal(stateBody.data.stats.violations, 1);
+  assert.equal(stateBody.data.intervalMs, 15000);
+
+  const simulateRecorder = createRecorder();
+  const simulateReq = Readable.from([JSON.stringify({
+    squadName: "BMP队",
+    creatorName: "Leader",
+    teamId: 1,
+    squadId: 3,
+  })]);
+  simulateReq.method = "POST";
+  simulateReq.url = "/api/modules/squad-name-policy-patrol/simulate";
+  simulateReq.headers = { host: "localhost", "content-type": "application/json" };
+  simulateReq.socket = {};
+  await viewerServer.handleRequest(simulateReq, simulateRecorder.res);
+  assert.equal(simulateRecorder.state.status, 200);
+  const simulateBody = JSON.parse(simulateRecorder.state.body);
+  assert.equal(simulateBody.ok, true);
+  assert.equal(simulateCalls.length, 1);
+  assert.equal(simulateCalls[0].squadName, "BMP队");
+  assert.equal(simulateBody.data.disposition, "flag_only");
+
+  const forbiddenRecorder = createRecorder();
+  await viewerServer.handleRequest({
+    method: "POST",
+    url: "/api/modules/squad-name-policy-patrol/clear",
+    headers: { host: "localhost" },
+    socket: {},
+  }, forbiddenRecorder.res);
+  assert.equal(forbiddenRecorder.state.status, 403);
+  assert.equal(clearCalls.length, 0);
+
+  const adminServer = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin", role: "SuperAdmin", isSuperAdmin: true };
+        },
+        hasEverything() {
+          return true;
+        },
+      },
+    },
+    modules: {
+      squadNamePolicyPatrol: {
+        getState() {
+          return { enabled: true, stats: {}, recent: [] };
+        },
+        async simulate(payload) {
+          simulateCalls.push(payload);
+          return { violation: false, disposition: "allow" };
+        },
+        clearRecent() {
+          clearCalls.push(true);
+          return { ok: true, cleared: 2 };
+        },
+      },
+    },
+  });
+
+  const clearRecorder = createRecorder();
+  await adminServer.handleRequest({
+    method: "POST",
+    url: "/api/modules/squad-name-policy-patrol/clear",
+    headers: { host: "localhost" },
+    socket: {},
+  }, clearRecorder.res);
+  assert.equal(clearRecorder.state.status, 200);
+  const clearBody = JSON.parse(clearRecorder.state.body);
+  assert.equal(clearBody.ok, true);
+  assert.equal(clearBody.data.cleared, 2);
   assert.equal(clearCalls.length, 1);
 }
 
@@ -2993,6 +3122,7 @@ await testSquadNameClassifierApiReturnsClassification();
 await testSquadNameRulesApiReadsAndWritesExactMappings();
 await testSquadNamePolicyRoutesExposeTestAndProtectedSave();
 await testSquadNamePolicyGuardRoutesExposeStateSimulateAndProtectedClear();
+await testSquadNamePolicyPatrolRoutesExposeStateSimulateAndProtectedClear();
 await testCombatCleanRoutesDoNotForceCurrentServerFilter();
 await testWeaponCollectorApiRequiresGet();
 await testGroupReportSnapshotRouteReturnsWrappedSnapshot();

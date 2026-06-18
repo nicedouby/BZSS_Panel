@@ -180,6 +180,15 @@
                   {{ props.player.isOnline ? t("common.online") : t("common.offline") }}
                 </strong>
               </div>
+              <div class="hud-ctx-item">
+                <span class="ctx-lbl">网络延迟</span>
+                <strong class="ctx-val" :class="pingStatusClass">
+                  {{ props.player.ping != null ? `${props.player.ping} ms` : "--" }}
+                  <small v-if="props.player.packetLoss != null && props.player.packetLoss > 0" class="packet-loss-sub">
+                    (丢包 {{ props.player.packetLoss }}%)
+                  </small>
+                </strong>
+              </div>
               <div class="hud-ctx-item hud-ctx-item-wide">
                 <span class="ctx-lbl">本局在服时长</span>
                 <strong class="ctx-val">{{ matchOnlineText }}</strong>
@@ -702,6 +711,15 @@ const teamColorClass = computed(() => {
   if (props.player.teamId === 1) return "team1";
   if (props.player.teamId === 2) return "team2";
   return "neutral";
+});
+
+const pingStatusClass = computed(() => {
+  if (props.player?.ping == null) return "";
+  const ping = props.player.ping;
+  const loss = props.player.packetLoss ?? 0;
+  if (ping > 120 || loss > 20) return "high";
+  if (ping > 60 || loss > 5) return "medium";
+  return "low";
 });
 
 // Color style overrides based on team
@@ -2451,7 +2469,7 @@ onUnmounted(() => {
 
 .hud-session-ctx-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(8, 1fr);
   gap: 1px;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -2508,6 +2526,26 @@ onUnmounted(() => {
 
 .ctx-val.online-status.online {
   color: #34d399;
+}
+
+.ctx-val.low {
+  color: #34d399;
+}
+
+.ctx-val.medium {
+  color: #fbbf24;
+}
+
+.ctx-val.high {
+  color: #f87171;
+}
+
+.packet-loss-sub {
+  display: block;
+  font-size: 10px;
+  color: #94a3b8;
+  font-weight: 500;
+  margin-top: 2px;
 }
 
 .ctx-sub {

@@ -8,7 +8,6 @@ import {
 const MODULE_ID = "module.squadNamePolicyGuard";
 const API_NAME = "squadNamePolicyGuard";
 const DEFAULT_DEDUPE_TTL_MS = 5 * 60 * 1000;
-const DEFAULT_RCON_PATROL_INTERVAL_MS = 15_000;
 const DEFAULT_RECENT_LIMIT = 200;
 const DEFAULT_WARNING_REPEAT_DELAY_MS = 2_000;
 const DEFAULT_WARNING_REPEAT_COUNT = 2;
@@ -35,7 +34,6 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
     errors: 0,
   };
   let serial = Promise.resolve();
-  let lastRconPatrolAt = 0;
 
   const api = {
     getState() {
@@ -43,7 +41,6 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
       return {
         enabled: runtimeConfig.enabled,
         detectLogCreated: runtimeConfig.detectLogCreated,
-        rconPatrol: { ...runtimeConfig.rconPatrol },
         action: runtimeConfig.action,
         dedupeTtlMs: runtimeConfig.dedupeTtlMs,
         warningRepeatDelayMs: runtimeConfig.warningRepeatDelayMs,
@@ -83,7 +80,7 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
       name: "Squad Name Policy Guard",
       kind: "module",
       version: "1.0.0",
-      description: "Enforce squad-name policy from lifecycle squad creation events with optional RCON snapshot patrol.",
+      description: "Enforce squad-name policy from lifecycle squad creation events.",
     },
     apiName: API_NAME,
     api,
@@ -101,17 +98,10 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
         }));
       }
 
-      if (runtimeConfig.rconPatrol.enabled) {
-        unsubscribers.push(core.eventBus.onModuleEvent("module.matchState", "squadsUpdated", (event) => {
-          void enqueue(() => handleRconSquadsUpdated(event));
-        }));
-      }
-
       moduleLogger?.info?.("SquadNamePolicyGuard module started.", {
         operation: "start",
         data: {
           detectLogCreated: runtimeConfig.detectLogCreated,
-          rconPatrolEnabled: runtimeConfig.rconPatrol.enabled,
           action: runtimeConfig.action,
         },
       });
@@ -131,25 +121,6 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
     const next = serial.then(task, task);
     serial = next.catch(() => {});
     return next;
-  }
-
-  async function handleRconSquadsUpdated(event = {}) {
-    runtimeConfig = readConfig(config);
-    if (!runtimeConfig.enabled || !runtimeConfig.rconPatrol.enabled) return;
-
-    const now = Date.now();
-    if (now - lastRconPatrolAt < runtimeConfig.rconPatrol.intervalMs) return;
-    lastRconPatrolAt = now;
-
-    const squads = Array.isArray(event.squads) ? event.squads : [];
-    for (const squad of squads) {
-      await handleSquadCandidate({
-        ...squad,
-        serverId: event.serverId,
-        matchId: event.matchId,
-        time: event.time,
-      }, "RCON_PATROL");
-    }
   }
 
   async function handleSquadCandidate(event = {}, source = "LOG") {
@@ -330,7 +301,6 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
 
 function readConfig(config) {
   const raw = config?.get?.("modules.squadNamePolicyGuard", {}) ?? {};
-  const rconPatrol = raw.rconPatrol ?? {};
   return {
     enabled: raw.enabled !== false,
     detectLogCreated: raw.detectLogCreated !== false,
@@ -342,16 +312,13 @@ function readConfig(config) {
       DEFAULT_WARNING_REPEAT_DELAY_MS,
     ),
     warningRepeatCount: positiveNumber(raw.warningRepeatCount, DEFAULT_WARNING_REPEAT_COUNT),
-    rconPatrol: {
-      enabled: Boolean(rconPatrol.enabled ?? false),
-      intervalMs: positiveNumber(rconPatrol.intervalMs, DEFAULT_RCON_PATROL_INTERVAL_MS),
-    },
   };
 }
 
 function normalizeSquadEvent(event = {}) {
   return {
     eventId: text(event.eventId ?? event.sourceEventId),
+    creationSignature: text(event.creationSignature),
     serverId: text(event.serverId),
     matchId: text(event.matchId ?? event.sessionId ?? event.sessionID),
     teamId: nullableNumber(event.teamId ?? event.teamID),
@@ -382,6 +349,10 @@ function isViolation(evaluation) {
 }
 
 function buildDedupeKey(event) {
+  const creationSignature = text(event.creationSignature);
+  if (creationSignature) {
+    return `creation:${creationSignature}`;
+  }
   return [
     event.serverId,
     event.matchId,

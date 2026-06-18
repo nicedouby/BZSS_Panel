@@ -68,6 +68,16 @@
           <span class="label">游离</span>
           <span class="value">{{ squadlessText }}</span>
         </span>
+        <span
+          v-if="player.ping != null"
+          class="stat-chip ping"
+          :class="pingClass(player.ping, player.packetLoss)"
+          :title="`延迟: ${player.ping}ms${player.packetLoss ? '，丢包: ' + player.packetLoss + '%' : ''}`"
+        >
+          <span class="label">网</span>
+          <span class="value">{{ player.ping }}ms</span>
+          <span v-if="player.packetLoss" class="loss-value">({{ player.packetLoss }}%)</span>
+        </span>
       </div>
     </div>
 
@@ -172,6 +182,13 @@ function normalizeStat(value: unknown) {
   const numeric = Number(value ?? 0);
   if (!Number.isFinite(numeric)) return 0;
   return Math.max(0, Math.floor(numeric));
+}
+
+function pingClass(ping: number, loss?: number | null) {
+  const lossRate = Number(loss ?? 0);
+  if (ping > 120 || lossRate > 20) return "high";
+  if (ping > 60 || lossRate > 5) return "medium";
+  return "low";
 }
 
 function formatPlaytime(hours?: number | null) {

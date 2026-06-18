@@ -17,8 +17,8 @@
           <AppStatusBadge :tone="guardState.detectLogCreated ? 'ok' : 'idle'">
             日志建队: {{ guardState.detectLogCreated ? "开启" : "关闭" }}
           </AppStatusBadge>
-          <AppStatusBadge :tone="guardState.rconPatrol.enabled ? 'warn' : 'idle'">
-            RCON 巡逻: {{ guardState.rconPatrol.enabled ? "开启" : "关闭" }}
+          <AppStatusBadge :tone="patrolState?.enabled ? 'warn' : 'idle'">
+            RCON 巡逻: {{ patrolState?.enabled ? "开启" : "关闭" }}
           </AppStatusBadge>
         </div>
       </div>
@@ -494,7 +494,7 @@
               <div class="meta-row">
                 <span class="lbl">RCON 巡逻</span>
                 <span class="val text-right font-semibold">
-                  {{ guardState.rconPatrol.enabled ? `开启 / ${guardState.rconPatrol.intervalMs}ms` : "默认关闭" }}
+                  {{ patrolState?.enabled ? `开启 / ${patrolState.intervalMs}ms` : "默认关闭" }}
                 </span>
               </div>
               <div class="meta-row">
@@ -690,10 +690,6 @@ type GuardState = {
   detectLogCreated: boolean;
   action: string;
   dedupeTtlMs: number;
-  rconPatrol: {
-    enabled: boolean;
-    intervalMs: number;
-  };
   stats: {
     evaluated: number;
     violations: number;
@@ -701,6 +697,20 @@ type GuardState = {
     disbandFailed: number;
     warningsSent: number;
     warningsSkipped: number;
+    duplicatesSkipped: number;
+    errors: number;
+  };
+  recent: Array<Record<string, unknown>>;
+};
+
+type PatrolState = {
+  enabled: boolean;
+  intervalMs: number;
+  dedupeTtlMs: number;
+  stats: {
+    evaluated: number;
+    violations: number;
+    allowed: number;
     duplicatesSkipped: number;
     errors: number;
   };
@@ -725,6 +735,7 @@ const clearingGuard = ref(false);
 const error = ref("");
 const state = ref<PolicyState | null>(null);
 const guardState = ref<GuardState | null>(null);
+const patrolState = ref<PatrolState | null>(null);
 const testName = ref("BMP队");
 const testResult = ref<PolicyTestResult | null>(null);
 const guardPreview = ref<GuardSimulation | null>(null);
@@ -744,12 +755,14 @@ async function loadState() {
   loading.value = true;
   error.value = "";
   try {
-    const [policyState, runtimeGuard] = await Promise.all([
+    const [policyState, runtimeGuard, runtimePatrol] = await Promise.all([
       apiGet<PolicyState>("/api/squad-name-policy/state"),
       apiGet<{ ok: boolean; data: GuardState }>("/api/modules/squad-name-policy-guard/state").catch(() => null),
+      apiGet<{ ok: boolean; data: PatrolState }>("/api/modules/squad-name-policy-patrol/state").catch(() => null),
     ]);
     state.value = policyState;
     guardState.value = runtimeGuard?.data ?? null;
+    patrolState.value = runtimePatrol?.data ?? null;
   } catch (err) {
     error.value = formatError(err);
   } finally {

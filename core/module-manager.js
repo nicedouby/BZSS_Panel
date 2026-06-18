@@ -27,6 +27,7 @@ import { createBattleLogModule } from "../modules/battle-log/index.js";
 import { createCombatLogModule } from "../modules/combat-log/index.js";
 import { createAdminWarnModule } from "../modules/admin-warn/index.js";
 import { createSquadNamePolicyGuardModule } from "../modules/squad-name-policy-guard/index.js";
+import { createSquadNamePolicyPatrolModule } from "../modules/squad-name-policy-patrol/index.js";
 import { createInfantryCombatEnhancerModule } from "../modules/infantry-combat-enhancer/index.js";
 import { createPlaytimeModule } from "../modules/playtime/index.js";
 import { createPluginSubscriptionsModule } from "../modules/plugin-subscriptions/index.js";
@@ -38,6 +39,7 @@ import { createReserveSlotsModule } from "../modules/reserve-slots/index.js";
 import { createBlackEdgePrivilegeModule } from "../modules/black-edge-privilege/index.js";
 
 import { createChatManagerModule } from "../modules/chat-manager/index.js";
+import { createNetworkStatsModule } from "../modules/network-stats/index.js";
 
 /**
  * Core: ModuleManager
@@ -83,6 +85,7 @@ export class ModuleManager {
       createCombatLogModule,
       createAdminWarnModule,
       createSquadNamePolicyGuardModule,
+      createSquadNamePolicyPatrolModule,
       createInfantryCombatEnhancerModule,
       createPlaytimeModule,
       createServerStatsModule,
@@ -91,6 +94,7 @@ export class ModuleManager {
       createPlayerSessionRecordsModule,
       createReserveSlotsModule,
       createBlackEdgePrivilegeModule,
+      createNetworkStatsModule,
     ];
 
     for (const factory of factories) {

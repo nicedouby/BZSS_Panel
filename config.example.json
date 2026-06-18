@@ -321,6 +321,53 @@
         "label": "Fair Squad Guard Broadcast Violation",
         "type": "boolean",
         "restartRequired": true
+      },
+      {
+        "path": "modules.networkStats.enabled",
+        "label": "Network Stats Enabled",
+        "type": "boolean",
+        "restartRequired": true
+      },
+      {
+        "path": "modules.networkStats.localPingIp",
+        "label": "Local Ping Bind IP (bypasses proxy/TUN)",
+        "type": "string",
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.networkStats.pingIntervalSeconds",
+        "label": "Ping Interval (seconds)",
+        "type": "number",
+        "min": 5,
+        "max": 300,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.networkStats.pingTimeoutMs",
+        "label": "Ping Timeout (ms)",
+        "type": "number",
+        "min": 200,
+        "max": 5000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.networkStats.historySize",
+        "label": "Loss Rate History Size",
+        "type": "number",
+        "min": 3,
+        "max": 50,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.networkStats.allowPrivateIps",
+        "label": "Allow Pinging Private IPs",
+        "type": "boolean",
+        "advanced": true,
+        "restartRequired": true
       }
     ]
   },
@@ -393,6 +440,14 @@
     "filename": "micepanel.db"
   },
   "modules": {
+    "networkStats": {
+      "enabled": true,
+      "localPingIp": "",
+      "pingIntervalSeconds": 15,
+      "pingTimeoutMs": 1500,
+      "historySize": 10,
+      "allowPrivateIps": true
+    },
     "pluginSubscriptions": { "enabled": true },
     "audit": { "enabled": true },
     "playerSessionRecords": {

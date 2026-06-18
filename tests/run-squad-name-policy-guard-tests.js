@@ -152,7 +152,7 @@ async function testNonChineseWeirdNameDoesNothing() {
 async function testDuplicateHandledOnce() {
   const harness = await createHarness();
   await harness.instance.start();
-  const event = createEvent({ squadName: "BMP队" });
+  const event = createEvent({ squadName: "BMP队", creationSignature: "create-1" });
   harness.emit("module.squadLifecycle", "squadCreated", event);
   harness.emit("module.squadLifecycle", "squadCreated", event);
   await waitForHandlers();
@@ -162,30 +162,36 @@ async function testDuplicateHandledOnce() {
   await harness.instance.stop();
 }
 
-async function testRconPatrolDefaultOffAndEnabled() {
-  const disabledHarness = await createHarness();
-  await disabledHarness.instance.start();
-  disabledHarness.emit("module.matchState", "squadsUpdated", {
-    serverId: "BZSS_Main",
-    matchId: "match-1",
-    squads: [createEvent({ squadName: "BMP队" })],
-  });
+async function testRapidRecreateWithNewCreationSignatureIsHandledAgain() {
+  const harness = await createHarness();
+  await harness.instance.start();
+  harness.emit("module.squadLifecycle", "squadCreated", createEvent({
+    squadName: "BMP队",
+    creationSignature: "create-1",
+  }));
+  harness.emit("module.squadLifecycle", "squadCreated", createEvent({
+    squadName: "BMP队",
+    creationSignature: "create-2",
+  }));
   await waitForHandlers();
-  assert.equal(disabledHarness.calls.length, 0);
-  await disabledHarness.instance.stop();
 
-  const enabledHarness = await createHarness({
-    rconPatrol: { enabled: true, intervalMs: 1 },
-  });
-  await enabledHarness.instance.start();
-  enabledHarness.emit("module.matchState", "squadsUpdated", {
+  assert.equal(harness.calls.length, 10);
+  assert.equal(harness.instance.api.getState().stats.duplicatesSkipped, 0);
+  assert.equal(harness.instance.api.getState().stats.violations, 2);
+  await harness.instance.stop();
+}
+
+async function testMatchStateEventsDoNotTriggerGuardDirectly() {
+  const harness = await createHarness();
+  await harness.instance.start();
+  harness.emit("module.matchState", "squadsUpdated", {
     serverId: "BZSS_Main",
     matchId: "match-1",
     squads: [createEvent({ squadName: "BMP队" })],
   });
   await waitForHandlers();
-  assert.equal(enabledHarness.calls.length, 5);
-  await enabledHarness.instance.stop();
+  assert.equal(harness.calls.length, 0);
+  await harness.instance.stop();
 }
 
 function createEvent(override = {}) {
@@ -226,13 +232,14 @@ function makeLogger() {
 async function waitForHandlers() {
   await new Promise((resolve) => setImmediate(resolve));
   await new Promise((resolve) => setImmediate(resolve));
-  await new Promise((resolve) => setTimeout(resolve, 12));
+  await new Promise((resolve) => setTimeout(resolve, 30));
 }
 
 await testLogViolationDisbandsThenWarns();
 await testAllowedNameDoesNothing();
 await testNonChineseWeirdNameDoesNothing();
 await testDuplicateHandledOnce();
-await testRconPatrolDefaultOffAndEnabled();
+await testRapidRecreateWithNewCreationSignatureIsHandledAgain();
+await testMatchStateEventsDoNotTriggerGuardDirectly();
 
 console.log("run-squad-name-policy-guard-tests.js passed");

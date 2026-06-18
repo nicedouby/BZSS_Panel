@@ -467,13 +467,21 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     const list = Array.isArray(players) ? players : [];
     const getPlayer = modules?.matchPlayerPresence?.getPlayer;
     const findPlayerState = modules?.playerState?.findPlayer;
-    if (typeof getPlayer !== "function" && typeof findPlayerState !== "function") return list;
+    const getPlayerStats = modules?.networkStats?.getPlayerStats;
+    if (
+      typeof getPlayer !== "function" &&
+      typeof findPlayerState !== "function" &&
+      typeof getPlayerStats !== "function"
+    ) {
+      return list;
+    }
 
     const serverKey = String(serverId ?? core.webStatus.serverId ?? "").trim();
     return list.map((player) => {
       const presence = typeof getPlayer === "function" ? getPlayer(player, serverKey) : null;
       const playerState = typeof findPlayerState === "function" ? findPlayerState(serverKey, player) : null;
-      if (!presence && !playerState) return player;
+      const netStats = typeof getPlayerStats === "function" && player.steamID ? getPlayerStats(player.steamID) : null;
+      if (!presence && !playerState && !netStats) return player;
 
       return {
         ...player,
@@ -494,6 +502,10 @@ export function createMatchStateModule({ core, modules, config, logger }) {
           matchFirstSeenAt: String(presence.matchFirstSeenAt ?? ""),
           matchLastSeenAt: String(presence.matchLastSeenAt ?? ""),
           matchJoinCount: Number(presence.matchJoinCount ?? 0),
+        } : {}),
+        ...(netStats ? {
+          ping: netStats.ping,
+          packetLoss: netStats.packetLoss,
         } : {}),
       };
     });

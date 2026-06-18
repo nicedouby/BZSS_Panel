@@ -423,6 +423,74 @@ export class WebServer {
       });
     }
 
+    if (url.pathname === "/api/modules/squad-name-policy-patrol/state") {
+      if (req.method !== "GET") {
+        return this.json(res, 405, {
+          error: "MethodNotAllowed",
+          message: "Only GET is supported.",
+        });
+      }
+
+      const api = this.modules.squadNamePolicyPatrol;
+      if (!api?.getState) {
+        return this.json(res, 404, {
+          error: "ModuleNotFound",
+          message: "squadNamePolicyPatrol module is not available.",
+        });
+      }
+
+      return this.json(res, 200, {
+        ok: true,
+        data: api.getState(),
+      });
+    }
+
+    if (url.pathname === "/api/modules/squad-name-policy-patrol/simulate") {
+      if (req.method !== "POST") {
+        return this.json(res, 405, {
+          error: "MethodNotAllowed",
+          message: "Only POST is supported.",
+        });
+      }
+
+      const api = this.modules.squadNamePolicyPatrol;
+      if (!api?.simulate) {
+        return this.json(res, 404, {
+          error: "ModuleNotFound",
+          message: "squadNamePolicyPatrol module is not available.",
+        });
+      }
+
+      const body = await this.readJsonBody(req);
+      return this.json(res, 200, {
+        ok: true,
+        data: await api.simulate(body ?? {}),
+      });
+    }
+
+    if (url.pathname === "/api/modules/squad-name-policy-patrol/clear") {
+      if (req.method !== "POST") {
+        return this.json(res, 405, {
+          error: "MethodNotAllowed",
+          message: "Only POST is supported.",
+        });
+      }
+      if (!this.requireSuperAdmin(user, res)) return;
+
+      const api = this.modules.squadNamePolicyPatrol;
+      if (!api?.clearRecent) {
+        return this.json(res, 404, {
+          error: "ModuleNotFound",
+          message: "squadNamePolicyPatrol module is not available.",
+        });
+      }
+
+      return this.json(res, 200, {
+        ok: true,
+        data: await api.clearRecent(),
+      });
+    }
+
     if (url.pathname === "/api/squad-name/rules") {
       if (req.method === "GET") {
         const result = await getSquadNameExactRuleConfig(this.core.config);

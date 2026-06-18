@@ -521,12 +521,16 @@ export class PlayerRepository {
 
     const placeholders = ids.map(() => "?").join(", ");
     const rows = await this.db.all(
-      `SELECT id, current_name, steam_id, eos_id, steam_game_seconds, game_seconds, game_seconds_override, steam_avatar, updated_at, assets_json
+      `SELECT id, current_name, steam_id, eos_id, current_ip, steam_game_seconds, game_seconds, game_seconds_override, steam_avatar, updated_at, assets_json
        FROM players
        WHERE steam_id IN (${placeholders})`,
       ...ids,
     );
-    return rows.map((row) => mapPlayerPlaytimeRow(row));
+    return rows.map((row) => {
+      const mapped = mapPlayerPlaytimeRow(row);
+      mapped.current_ip = row.current_ip;
+      return mapped;
+    });
   }
 
   async listPlayersByIdentities({ steamIDs = [], eosIDs = [] } = {}) {
