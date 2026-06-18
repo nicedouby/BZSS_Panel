@@ -2,6 +2,7 @@ import { computed, reactive, ref } from "vue";
 
 import { apiGet } from "../app/apiClient";
 import { renderApiError } from "../app/errors";
+import { canAutoRefreshNow } from "./useAutoRefreshGate";
 
 export type ServerMetricTone = "critical" | "warn" | "ok" | "idle";
 
@@ -153,7 +154,7 @@ export function useServerMetrics() {
       ]);
       if (isStopped) return;
       pollTimer = window.setInterval(() => {
-        void refreshCurrent();
+        if (canAutoRefreshNow()) void refreshCurrent();
       }, POLL_INTERVAL_MS);
     })().finally(() => {
       startPromise = null;

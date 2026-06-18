@@ -371,10 +371,10 @@ export const pageRegistry: PageDefinition[] = [
     name: "welcome-join-warning",
     path: "/debug/welcome-join-warning",
     component: WelcomeJoinWarningDebugPage,
-    title: "入服欢迎警告",
+    title: "进服警告",
     category: "debug",
     refreshPolicy: "manual",
-    nav: { section: "broadcast", label: "入服欢迎警告", icon: "👋", order: 40 },
+    nav: { section: "broadcast", label: "进服警告", icon: "WARN", order: 40 },
     ...documentPage,
   },
   {

@@ -107,6 +107,7 @@ import { RecycleScroller } from "vue-virtual-scroller";
 import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
 import StatusBadge from "../components/common/StatusBadge.vue";
 import { apiGet } from "../app/apiClient";
+import { canAutoRefreshNow } from "../composables/useAutoRefreshGate";
 import { scheduleIdleTask } from "../utils/idle";
 
 interface ChatMessage {
@@ -257,7 +258,7 @@ onMounted(() => {
     void fetchData();
   });
   timer = window.setInterval(() => {
-    void fetchData();
+    if (canAutoRefreshNow()) void fetchData();
   }, 2000);
   window.addEventListener("resize", resizeChart);
 });

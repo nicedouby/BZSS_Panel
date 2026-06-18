@@ -1,6 +1,7 @@
 import { computed, type Ref } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { apiGet } from "../app/apiClient";
+import { useAutoRefreshGate } from "./useAutoRefreshGate";
 
 export interface CombatQueryFilters {
   type: string;
@@ -10,6 +11,7 @@ export interface CombatQueryFilters {
 }
 
 export function useCombatEventsQuery(endpoint: Ref<string>, filters: CombatQueryFilters) {
+  const { canAutoRefresh } = useAutoRefreshGate();
   const queryKey = computed(() => [
     "combat-events",
     endpoint.value,
@@ -39,7 +41,7 @@ export function useCombatEventsQuery(endpoint: Ref<string>, filters: CombatQuery
       }>(`${endpoint.value}?${params.toString()}`);
     },
     placeholderData: (previousData) => previousData,
-    refetchInterval: 3000,
+    refetchInterval: computed(() => (canAutoRefresh.value ? 3000 : false)),
     refetchIntervalInBackground: false,
   });
 

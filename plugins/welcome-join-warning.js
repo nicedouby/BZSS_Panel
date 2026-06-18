@@ -2,10 +2,14 @@
 
 const PLUGIN_ID = "welcome-join-warning";
 const PAGE_ROUTE = "/debug/welcome-join-warning";
-const DEFAULT_DELAY_MS = 15_000;
-const DEFAULT_MESSAGE = "欢迎来到 步战鼠鼠";
+
+const DEFAULT_INITIAL_DELAY_MS = 15_000;
+const DEFAULT_INTERVAL_MS = 15_000;
 const DEFAULT_HISTORY_LIMIT = 100;
-const JOIN_EVENT_NAMES = ["On_PlayerJoined", "PLAYER_JOINED", "On_PlayerConnected", "PLAYER_CONNECTED"];
+const DEFAULT_MAX_WARNINGS_PER_JOIN = 5;
+const DEFAULT_MESSAGE = "欢迎来到 BZSS 服务器，请遵守服务器规则，祝你游戏愉快。";
+const DEFAULT_NEWBIE_MESSAGE = "BZSS 是一个注重萌新体验的游戏社区。\n欢迎加入社区群，萌新可以在群内提问，也可以找人带入门，群号就在服务器名称中。";
+const JOIN_EVENT_NAMES = ["On_PlayerJoined", "PLAYER_JOINED", "On_PlayerConnected", "PLAYER_CONNECTED", "PLAYER_POST_LOGIN"];
 const RAW_LOG_JOIN_EVENT_NAME = "On_RawLogLine";
 
 export function createPlugin({ core, modules, config, logger } = {}) {
@@ -22,17 +26,19 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   const runtimeConfig = readRuntimeConfig(config);
   const unsubscribers = [];
   const pendingTimers = new Map();
+  const pendingEvents = new Map();
+  const cooldowns = new Map();
   let serial = Promise.resolve();
+  let taskSerial = 0;
 
   const state = {
-    enabled: runtimeConfig.enabled,
-    delayMs: runtimeConfig.delayMs,
-    message: runtimeConfig.message,
-    historyLimit: runtimeConfig.historyLimit,
+    config: runtimeConfig,
     joinEventCount: 0,
     scheduledCount: 0,
     warnSuccessCount: 0,
     warnFailedCount: 0,
+    matchedRuleCount: 0,
+    suppressedCount: 0,
     lastJoinAt: "",
     lastWarnAt: "",
     lastError: "",
@@ -42,7 +48,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   };
 
   function enqueue(task) {
-    const next = Promise.resolve().then(task);
+    const next = serial.then(task, task);
     serial = next.catch(() => {});
     return next;
   }
@@ -54,7 +60,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   function isActive() {
-    return Boolean(state.enabled) && isPluginSubscribed();
+    return Boolean(state.config.enabled) && isPluginSubscribed();
   }
 
   function resolveWarnApi() {
@@ -65,16 +71,16 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     state.history.push({
       id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
       at: new Date().toISOString(),
-      ...entry,
+      ...cloneJsonSafe(entry),
     });
 
-    if (state.history.length > state.historyLimit) {
-      state.history.splice(0, state.history.length - state.historyLimit);
+    if (state.history.length > state.config.historyLimit) {
+      state.history.splice(0, state.history.length - state.config.historyLimit);
     }
   }
 
-  function recordRecentEvent(event = {}) {
-    const playerName = resolvePlayerName(event);
+  function recordRecentEvent(event = {}, context = null) {
+    const playerName = context?.playerName ?? resolvePlayerName(event);
     state.recentEvents.push({
       id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
       at: new Date().toISOString(),
@@ -82,6 +88,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       eventId: String(event?.eventId ?? "").trim(),
       serverId: String(event?.serverId ?? "").trim(),
       playerName,
+      steamID: context?.steamID ?? resolvePlayerSteamID(event),
+      eosID: context?.eosID ?? getEventValue(event, ["eosID", "EOSID", "eosId"]),
+      ip: context?.ip ?? getEventValue(event, ["ip", "IP", "PlayerIP"]),
       hasPayload: Boolean(event?.payload),
       hasParams: Array.isArray(event?.params) && event.params.length > 0,
       hasParamMap: Boolean(event?.paramMap),
@@ -92,118 +101,23 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     }
   }
 
-  function resolvePlayerName(event = {}) {
-    const payload = event?.payload ?? {};
-    const fromPayload = String(payload?.name ?? payload?.playerName ?? "").trim();
-    if (fromPayload) return fromPayload;
-
-    const fromParamMap = String(event?.paramMap?.PlayerName ?? "").trim();
-    if (fromParamMap) return fromParamMap;
-
-    const params = Array.isArray(event?.params) ? event.params : [];
-    for (const param of params) {
-      if (param?.name !== "PlayerName") continue;
-      const value = String(param?.value ?? "").trim();
-      if (value) return value;
-    }
-
-    const fromRawLog = parseJoinSucceededNameFromRawLog(event);
-    if (fromRawLog) return fromRawLog;
-
-    return "";
-  }
-
-  function resolvePlayerSteamID(event = {}) {
-    const payload = event?.payload ?? {};
-    const fromPayload = String(payload?.steamID ?? payload?.steam64 ?? payload?.steamId ?? payload?.steam64ID ?? "").trim();
-    if (fromPayload) return fromPayload;
-
-    const fromParamMap = String(event?.paramMap?.SteamID ?? event?.paramMap?.SteamId ?? event?.paramMap?.steamID ?? "").trim();
-    if (fromParamMap) return fromParamMap;
-
-    const params = Array.isArray(event?.params) ? event.params : [];
-    for (const param of params) {
-      if (param?.name === "SteamID" || param?.name === "steamID" || param?.name === "SteamId") {
-        const value = String(param?.value ?? "").trim();
-        if (value) return value;
-      }
-    }
-
-    const playerName = resolvePlayerName(event);
-    if (playerName && modules?.playerState?.getPlayerByName) {
-      const serverId = event?.serverId ?? core?.webStatus?.serverId ?? "";
-      const hit = modules.playerState.getPlayerByName(serverId, playerName);
-      if (hit?.steamID) return hit.steamID;
-    }
-
-    return "";
-  }
-
-  function parseJoinSucceededNameFromRawLog(event = {}) {
-    const raw = String(event?.rawLog ?? event?.rawEvent?.Raw ?? "").trim();
-    if (!raw) return "";
-
-    const match = raw.match(/\bLogNet:\s*Join succeeded:\s*(.+?)\s*(?:\|\s*\[raw_log_line\]\s*)?$/i);
-    if (!match) return "";
-
-    const candidate = String(match[1] ?? "").replace(/\s*\|\s*.*$/, "").trim();
-    return candidate;
-  }
-
-  function buildJoinEventFromRawLog(event = {}) {
-    if (String(event?.eventName ?? "").trim() !== RAW_LOG_JOIN_EVENT_NAME) {
-      return null;
-    }
-
-    const playerName = parseJoinSucceededNameFromRawLog(event);
-    if (!playerName) return null;
-
-    return {
-      eventId: String(event?.eventId ?? `raw-join:${Date.now()}`),
-      eventName: RAW_LOG_JOIN_EVENT_NAME,
-      serverId: String(event?.serverId ?? "").trim(),
-      time: String(event?.time ?? new Date().toISOString()),
-      rawLog: String(event?.rawLog ?? event?.rawEvent?.Raw ?? ""),
-      payload: {
-        name: playerName,
-        playerName,
-      },
-      paramMap: {
-        ...(event?.paramMap ?? {}),
-        PlayerName: playerName,
-      },
-      params: Array.isArray(event?.params) ? event.params : [],
-      sourceRawEventName: String(event?.eventName ?? ""),
-    };
-  }
-
-  function buildTimerKey(event = {}, playerName = "") {
-    const eventId = String(event?.eventId ?? "").trim();
-    if (eventId) return eventId;
-
-    const serverId = String(event?.serverId ?? "").trim();
-    const time = String(event?.time ?? Date.now());
-    return `${serverId}:${playerName}:${time}`;
-  }
-
-  function clearAllPendingTimers() {
-    for (const timer of pendingTimers.values()) {
-      clearTimeout(timer);
-    }
-    pendingTimers.clear();
-  }
-
   function getState() {
     return {
-      enabled: state.enabled,
+      enabled: state.config.enabled,
       subscribed: isPluginSubscribed(),
-      delayMs: state.delayMs,
-      message: state.message,
+      historyLimit: state.config.historyLimit,
+      maxWarningsPerJoin: state.config.maxWarningsPerJoin,
+      defaultIntervalMs: state.config.defaultIntervalMs,
+      config: cloneJsonSafe(state.config),
+      rules: cloneJsonSafe(state.config.rules),
       pendingCount: pendingTimers.size,
+      pendingTasks: getPendingTasks(),
       joinEventCount: state.joinEventCount,
       scheduledCount: state.scheduledCount,
       warnSuccessCount: state.warnSuccessCount,
       warnFailedCount: state.warnFailedCount,
+      matchedRuleCount: state.matchedRuleCount,
+      suppressedCount: state.suppressedCount,
       lastJoinAt: state.lastJoinAt,
       lastWarnAt: state.lastWarnAt,
       lastError: state.lastError,
@@ -212,18 +126,29 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     };
   }
 
+  function getPendingTasks() {
+    return [...pendingTimers.values()]
+      .map((entry) => ({
+        id: entry.id,
+        eventKey: entry.eventKey,
+        playerName: entry.playerName,
+        ruleId: entry.ruleId,
+        ruleName: entry.ruleName,
+        stepIndex: entry.stepIndex,
+        delayMs: entry.delayMs,
+        scheduledAt: entry.scheduledAt,
+        dueAt: entry.dueAt,
+      }))
+      .sort((a, b) => String(a.dueAt).localeCompare(String(b.dueAt)));
+  }
+
   async function handleJoinEvent(event = {}) {
-    recordRecentEvent(event);
+    const rules = state.config.rules;
+    const needsPlaytime = rulesNeedPlaytime(rules);
+    const context = await resolvePlayerContext(event, { resolvePlaytime: needsPlaytime });
+    recordRecentEvent(event, context);
 
-    const playerName = resolvePlayerName(event);
-    const eventSummary = {
-      eventId: String(event?.eventId ?? "").trim(),
-      eventName: String(event?.eventName ?? "").trim(),
-      serverId: String(event?.serverId ?? "").trim(),
-      playerName,
-      time: String(event?.time ?? "").trim(),
-    };
-
+    const eventSummary = buildEventSummary(event, context);
     state.joinEventCount += 1;
     state.lastJoinAt = new Date().toISOString();
 
@@ -232,13 +157,13 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         kind: "join",
         success: false,
         skipped: true,
-        reason: !state.enabled ? "plugin_disabled" : "plugin_unsubscribed",
+        reason: !state.config.enabled ? "plugin_disabled" : "plugin_unsubscribed",
         event: eventSummary,
       });
-      return;
+      return { event: eventSummary, scheduled: [], matchedRules: [], suppressed: [] };
     }
 
-    if (!playerName) {
+    if (!context.playerName) {
       state.lastError = "player_name_missing";
       recordHistory({
         kind: "join",
@@ -247,8 +172,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         reason: "player_name_missing",
         event: eventSummary,
       });
-      pluginLogger?.warn?.("[WelcomeJoinWarning] player name missing on join event, welcome warn skipped.");
-      return;
+      pluginLogger?.warn?.("[WelcomeJoinWarning] player name missing on join event, warning skipped.");
+      return { event: eventSummary, scheduled: [], matchedRules: [], suppressed: [{ reason: "player_name_missing" }] };
     }
 
     const warnApi = resolveWarnApi();
@@ -261,12 +186,12 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         reason: "admin_warn_api_unavailable",
         event: eventSummary,
       });
-      pluginLogger?.warn?.("[WelcomeJoinWarning] adminWarn API unavailable, welcome warn skipped.");
-      return;
+      pluginLogger?.warn?.("[WelcomeJoinWarning] adminWarn API unavailable, warning skipped.");
+      return { event: eventSummary, scheduled: [], matchedRules: [], suppressed: [{ reason: "admin_warn_api_unavailable" }] };
     }
 
-    const key = buildTimerKey(event, playerName);
-    if (pendingTimers.has(key)) {
+    const eventKey = buildTimerKey(event, context.playerName);
+    if (pendingEvents.has(eventKey)) {
       recordHistory({
         kind: "join",
         success: false,
@@ -274,32 +199,67 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         reason: "duplicate_event",
         event: eventSummary,
       });
-      return;
+      return { event: eventSummary, scheduled: [], matchedRules: [], suppressed: [{ reason: "duplicate_event" }] };
     }
 
-    state.scheduledCount += 1;
+    const plan = await buildWarningPlan(event, context, { ignoreCooldown: false });
+    state.matchedRuleCount += plan.matchedRules.length;
+    state.suppressedCount += plan.suppressed.length;
+
+    if (!plan.scheduled.length) {
+      recordHistory({
+        kind: "join",
+        success: false,
+        skipped: true,
+        reason: plan.matchedRules.length ? "all_warnings_suppressed" : "no_rule_matched",
+        event: eventSummary,
+        matchedRules: plan.matchedRules,
+        suppressed: plan.suppressed,
+      });
+      return plan;
+    }
+
+    state.scheduledCount += plan.scheduled.length;
     state.lastError = "";
+    applyCooldowns(plan, context);
     recordHistory({
       kind: "join",
       success: true,
       skipped: false,
       reason: "scheduled",
       event: eventSummary,
-      delayMs: state.delayMs,
-      message: state.message,
+      matchedRules: plan.matchedRules,
+      suppressed: plan.suppressed,
+      scheduledWarnings: plan.scheduled.length,
     });
 
+    pendingEvents.set(eventKey, plan.scheduled.length);
+    for (const item of plan.scheduled) {
+      scheduleWarning({ event, eventSummary, context, eventKey, item, warnApi });
+    }
+
+    return plan;
+  }
+
+  function scheduleWarning({ event, eventSummary, context, eventKey, item, warnApi }) {
+    const id = `joinWarn:${++taskSerial}:${Date.now()}`;
+    const scheduledAtMs = Date.now();
     const timer = setTimeout(async () => {
-      pendingTimers.delete(key);
+      pendingTimers.delete(id);
+      decrementPendingEvent(eventKey);
 
       if (!isActive()) {
         recordHistory({
           kind: "warn",
           success: false,
           skipped: true,
-          reason: !state.enabled ? "plugin_disabled" : "plugin_unsubscribed",
+          reason: !state.config.enabled ? "plugin_disabled" : "plugin_unsubscribed",
           event: eventSummary,
-          delayMs: state.delayMs,
+          ruleId: item.ruleId,
+          ruleName: item.ruleName,
+          stepIndex: item.stepIndex,
+          delayMs: item.delayMs,
+          message: item.message,
         });
         return;
       }
@@ -307,10 +267,12 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       try {
         const result = await warnApi({
           sourceModule: PLUGIN_ID,
-          reason: "player_join_welcome",
+          reason: `player_join_rule:${item.ruleId}`,
           relatedEventId: event?.eventId,
-          targetName: playerName,
-          message: state.message,
+          targetName: context.playerName,
+          targetSteamId: context.steamID || undefined,
+          targetEosId: context.eosID || undefined,
+          message: item.message,
           system: true,
         });
 
@@ -325,13 +287,14 @@ export function createPlugin({ core, modules, config, logger } = {}) {
             skipped: Boolean(result?.skipped),
             reason: "warn_failed",
             event: eventSummary,
-            delayMs: state.delayMs,
-            message: state.message,
+            ruleId: item.ruleId,
+            ruleName: item.ruleName,
+            stepIndex: item.stepIndex,
+            delayMs: item.delayMs,
+            message: item.message,
             result,
           });
-          pluginLogger?.warn?.(
-            `[WelcomeJoinWarning] failed for ${playerName}: ${String(result?.errorMessage ?? result?.skipReason ?? "unknown")}`,
-          );
+          pluginLogger?.warn?.(`[WelcomeJoinWarning] failed for ${context.playerName}: ${state.lastError}`);
           return;
         }
 
@@ -343,71 +306,13 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           skipped: false,
           reason: "warn_sent",
           event: eventSummary,
-          delayMs: state.delayMs,
-          message: state.message,
+          ruleId: item.ruleId,
+          ruleName: item.ruleName,
+          stepIndex: item.stepIndex,
+          delayMs: item.delayMs,
+          message: item.message,
           result,
         });
-
-        // Newbie Playtime Check & Additional Warning
-        const steamID = resolvePlayerSteamID(event);
-        if (steamID && modules?.playtime) {
-          try {
-            let gameSeconds = null;
-            const cached = await modules.playtime.getBySteamID?.(steamID);
-            const isUnknown = !cached || (cached.fetchedAt == null && cached.gameSecondsOverride == null);
-
-            if (isUnknown) {
-              const lookup = await modules.playtime.lookupSteamID?.(steamID, { lastSeenName: playerName });
-              if (lookup && lookup.gameSeconds != null) {
-                gameSeconds = Number(lookup.gameSeconds);
-              }
-            } else {
-              gameSeconds = Number(cached.gameSeconds ?? cached.game_seconds);
-            }
-
-            if (gameSeconds !== null) {
-              const gameHours = gameSeconds / 3600;
-              if (gameHours <= 200) {
-                const newbieMessage = "BZSS是一个注重萌新体验的游戏社区\n欢迎加入社区群，萌新可以在群内问各种各样的问题，也可以找人入门，群号就在服务器名称中。";
-                
-                const newbieResult = await warnApi({
-                  sourceModule: PLUGIN_ID,
-                  reason: "player_join_newbie_welcome",
-                  relatedEventId: event?.eventId,
-                  targetName: playerName,
-                  message: newbieMessage,
-                  system: true,
-                });
-
-                if (newbieResult?.success) {
-                  recordHistory({
-                    kind: "warn",
-                    success: true,
-                    skipped: false,
-                    reason: "newbie_warn_sent",
-                    event: eventSummary,
-                    delayMs: state.delayMs,
-                    message: newbieMessage,
-                    result: newbieResult,
-                  });
-                } else {
-                  recordHistory({
-                    kind: "warn",
-                    success: false,
-                    skipped: Boolean(newbieResult?.skipped),
-                    reason: "newbie_warn_failed",
-                    event: eventSummary,
-                    delayMs: state.delayMs,
-                    message: newbieMessage,
-                    result: newbieResult,
-                  });
-                }
-              }
-            }
-          } catch (ptError) {
-            pluginLogger?.warn?.(`[WelcomeJoinWarning] Playtime lookup / newbie warning failed for ${playerName}: ${ptError.message}`);
-          }
-        }
       } catch (error) {
         state.warnFailedCount += 1;
         state.lastWarnAt = new Date().toISOString();
@@ -418,24 +323,326 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           skipped: false,
           reason: "warn_exception",
           event: eventSummary,
-          delayMs: state.delayMs,
-          message: state.message,
+          ruleId: item.ruleId,
+          ruleName: item.ruleName,
+          stepIndex: item.stepIndex,
+          delayMs: item.delayMs,
+          message: item.message,
           errorMessage: state.lastError,
         });
-        pluginLogger?.warn?.(
-          `[WelcomeJoinWarning] failed for ${playerName}: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        pluginLogger?.warn?.(`[WelcomeJoinWarning] failed for ${context.playerName}: ${state.lastError}`);
       }
-    }, state.delayMs);
+    }, item.delayMs);
 
-    pendingTimers.set(key, timer);
+    pendingTimers.set(id, {
+      id,
+      timer,
+      eventKey,
+      playerName: context.playerName,
+      ruleId: item.ruleId,
+      ruleName: item.ruleName,
+      stepIndex: item.stepIndex,
+      delayMs: item.delayMs,
+      scheduledAt: new Date(scheduledAtMs).toISOString(),
+      dueAt: new Date(scheduledAtMs + item.delayMs).toISOString(),
+    });
+  }
+
+  function decrementPendingEvent(eventKey) {
+    const remaining = Number(pendingEvents.get(eventKey) ?? 0) - 1;
+    if (remaining > 0) {
+      pendingEvents.set(eventKey, remaining);
+    } else {
+      pendingEvents.delete(eventKey);
+    }
+  }
+
+  async function buildWarningPlan(event = {}, context = null, options = {}) {
+    const resolvedContext = context ?? await resolvePlayerContext(event, {
+      resolvePlaytime: rulesNeedPlaytime(state.config.rules),
+    });
+    const eventSummary = buildEventSummary(event, resolvedContext);
+    const matchedRules = [];
+    const scheduled = [];
+    const suppressed = [];
+    const playerKey = buildPlayerKey(resolvedContext);
+    let nextDelayMs = null;
+
+    const sortedRules = state.config.rules
+      .filter((rule) => rule.enabled !== false)
+      .slice()
+      .sort((a, b) => Number(a.priority ?? 0) - Number(b.priority ?? 0) || String(a.name).localeCompare(String(b.name), "zh-CN"));
+
+    for (const rule of sortedRules) {
+      const match = evaluateRule(rule, resolvedContext);
+      if (!match.matched) continue;
+
+      matchedRules.push({
+        id: rule.id,
+        name: rule.name,
+        priority: rule.priority,
+        conditionResults: match.conditionResults,
+      });
+
+      const cooldown = getCooldown(rule, playerKey);
+      if (!options.ignoreCooldown && cooldown.active) {
+        suppressed.push({
+          ruleId: rule.id,
+          ruleName: rule.name,
+          reason: "cooldown",
+          until: cooldown.until,
+        });
+        continue;
+      }
+
+      const steps = rule.steps.filter((step) => step.enabled !== false && step.message);
+      if (!steps.length) {
+        suppressed.push({
+          ruleId: rule.id,
+          ruleName: rule.name,
+          reason: "no_enabled_steps",
+        });
+        continue;
+      }
+
+      if (nextDelayMs == null) {
+        nextDelayMs = Math.max(0, Number(rule.initialDelayMs ?? DEFAULT_INITIAL_DELAY_MS) || 0);
+      }
+
+      for (let index = 0; index < steps.length; index += 1) {
+        const step = steps[index];
+        if (scheduled.length >= state.config.maxWarningsPerJoin) {
+          suppressed.push({
+            ruleId: rule.id,
+            ruleName: rule.name,
+            stepIndex: index + 1,
+            reason: "max_warnings_per_join",
+            limit: state.config.maxWarningsPerJoin,
+          });
+          continue;
+        }
+
+        scheduled.push({
+          ruleId: rule.id,
+          ruleName: rule.name,
+          stepId: step.id,
+          stepIndex: index + 1,
+          message: step.message,
+          delayMs: nextDelayMs,
+        });
+
+        const intervalMs = Math.max(0, Number(step.intervalOverrideMs ?? rule.intervalMs ?? state.config.defaultIntervalMs) || 0);
+        nextDelayMs += intervalMs;
+      }
+    }
+
+    return {
+      event: eventSummary,
+      player: cloneJsonSafe(resolvedContext),
+      matchedRules,
+      scheduled,
+      suppressed,
+    };
+  }
+
+  function evaluateRule(rule, context) {
+    const conditions = rule.conditions.length ? rule.conditions : [{ type: "always" }];
+    const conditionResults = conditions.map((condition) => evaluateCondition(condition, context));
+    const mode = rule.mode === "any" ? "any" : "all";
+    const matched = mode === "any"
+      ? conditionResults.some((item) => item.matched)
+      : conditionResults.every((item) => item.matched);
+    return { matched, conditionResults };
+  }
+
+  function evaluateCondition(condition, context) {
+    const type = normalizeConditionType(condition?.type);
+    let matched = false;
+    let detail = "";
+
+    try {
+      switch (type) {
+        case "always":
+          matched = true;
+          break;
+        case "playtimeHours": {
+          if (!context.playtimeKnown) {
+            matched = false;
+            detail = "playtime_unknown";
+            break;
+          }
+          const hours = Number(context.gameHours);
+          const min = numberOrNull(condition.minHours);
+          const max = numberOrNull(condition.maxHours);
+          matched = Number.isFinite(hours)
+            && (min == null || hours >= min)
+            && (max == null || hours <= max);
+          detail = `${hours}`;
+          break;
+        }
+        case "playtimeUnknown":
+          matched = !context.playtimeKnown;
+          break;
+        case "nameContains":
+          matched = includesText(context.playerName, condition.value);
+          break;
+        case "nameRegex":
+          matched = testRegex(context.playerName, condition.pattern ?? condition.value);
+          break;
+        case "steamIdIn":
+          matched = valueInList(context.steamID, condition.values ?? condition.value);
+          break;
+        case "eosIdIn":
+          matched = valueInList(context.eosID, condition.values ?? condition.value);
+          break;
+        case "ipContains":
+          matched = includesText(context.ip, condition.value);
+          break;
+        case "ipRegex":
+          matched = testRegex(context.ip, condition.pattern ?? condition.value);
+          break;
+        case "teamIdIn":
+          matched = valueInList(context.teamID, condition.values ?? condition.value);
+          break;
+        case "squadIdIn":
+          matched = valueInList(context.squadID, condition.values ?? condition.value);
+          break;
+        case "factionIn":
+          matched = valueInList(context.faction, condition.values ?? condition.value);
+          break;
+        case "fieldExists": {
+          const field = String(condition.field ?? "").trim();
+          matched = Boolean(field && String(context[field] ?? "").trim());
+          break;
+        }
+        case "fieldEquals": {
+          const field = String(condition.field ?? "").trim();
+          matched = Boolean(field) && String(context[field] ?? "").trim().toLowerCase() === String(condition.value ?? "").trim().toLowerCase();
+          break;
+        }
+        default:
+          detail = "unsupported_condition";
+          matched = false;
+      }
+    } catch (error) {
+      detail = error instanceof Error ? error.message : String(error);
+      matched = false;
+    }
+
+    return {
+      type,
+      label: condition.label || condition.type || type,
+      matched,
+      detail,
+    };
+  }
+
+  async function resolvePlayerContext(event = {}, options = {}) {
+    const playerName = resolvePlayerName(event);
+    const serverId = String(event?.serverId ?? core?.webStatus?.serverId ?? "").trim();
+    const playerStateHit = playerName && modules?.playerState?.getPlayerByName
+      ? modules.playerState.getPlayerByName(serverId, playerName)
+      : null;
+
+    const steamID = firstText(
+      getEventValue(event, ["steamID", "SteamID", "steamId", "SteamId", "steam64", "steam64ID"]),
+      playerStateHit?.steamID,
+      playerStateHit?.steam64ID,
+    );
+    const eosID = firstText(
+      getEventValue(event, ["eosID", "EOSID", "eosId", "EosID"]),
+      playerStateHit?.eosID,
+    );
+    const context = {
+      serverId,
+      playerName,
+      steamID,
+      eosID,
+      ip: firstText(getEventValue(event, ["ip", "IP", "PlayerIP", "playerIP"]), playerStateHit?.ip),
+      teamID: firstText(getEventValue(event, ["teamID", "TeamID", "teamId"]), playerStateHit?.teamID),
+      squadID: firstText(getEventValue(event, ["squadID", "SquadID", "squadId"]), playerStateHit?.squadID),
+      faction: firstText(getEventValue(event, ["faction", "Faction", "factionName"]), playerStateHit?.faction),
+      gameHours: numberOrNull(getEventValue(event, ["gameHours", "playtimeHours"])),
+      playtimeKnown: false,
+    };
+
+    if (context.gameHours != null) {
+      context.playtimeKnown = true;
+      return context;
+    }
+
+    if (options.resolvePlaytime && steamID && modules?.playtime) {
+      const resolved = await resolvePlaytimeHours(steamID, playerName);
+      if (resolved.known) {
+        context.gameHours = resolved.hours;
+        context.playtimeKnown = true;
+      }
+    }
+
+    return context;
+  }
+
+  async function resolvePlaytimeHours(steamID, playerName) {
+    try {
+      const cached = await modules.playtime.getBySteamID?.(steamID);
+      const cachedSeconds = numberOrNull(cached?.gameSecondsOverride)
+        ?? numberOrNull(cached?.game_seconds_override)
+        ?? numberOrNull(cached?.gameSeconds)
+        ?? numberOrNull(cached?.game_seconds);
+      if (cachedSeconds != null) {
+        return { known: true, hours: cachedSeconds / 3600, source: "cache" };
+      }
+
+      const lookup = await modules.playtime.lookupSteamID?.(steamID, { lastSeenName: playerName });
+      const lookupSeconds = numberOrNull(lookup?.gameSeconds) ?? numberOrNull(lookup?.game_seconds);
+      if (lookupSeconds != null) {
+        return { known: true, hours: lookupSeconds / 3600, source: "lookup" };
+      }
+    } catch (error) {
+      pluginLogger?.warn?.(`[WelcomeJoinWarning] playtime lookup failed for ${playerName || steamID}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return { known: false, hours: null, source: "unknown" };
+  }
+
+  function applyCooldowns(plan, context) {
+    const playerKey = buildPlayerKey(context);
+    const scheduledRuleIds = new Set(plan.scheduled.map((item) => item.ruleId));
+    for (const rule of state.config.rules) {
+      if (!scheduledRuleIds.has(rule.id)) continue;
+      const cooldownMs = Math.max(0, Number(rule.cooldownMs ?? 0) || 0);
+      if (cooldownMs <= 0) continue;
+      cooldowns.set(`${rule.id}:${playerKey}`, Date.now() + cooldownMs);
+    }
+    pruneCooldowns();
+  }
+
+  function getCooldown(rule, playerKey) {
+    pruneCooldowns();
+    const untilMs = Number(cooldowns.get(`${rule.id}:${playerKey}`) ?? 0);
+    if (!untilMs || untilMs <= Date.now()) return { active: false, until: "" };
+    return { active: true, until: new Date(untilMs).toISOString() };
+  }
+
+  function pruneCooldowns() {
+    const now = Date.now();
+    for (const [key, untilMs] of cooldowns.entries()) {
+      if (Number(untilMs) <= now) cooldowns.delete(key);
+    }
+  }
+
+  function clearAllPendingTimers() {
+    for (const entry of pendingTimers.values()) {
+      clearTimeout(entry.timer);
+    }
+    pendingTimers.clear();
+    pendingEvents.clear();
   }
 
   const api = {
     getState,
 
-    getHistory(limit = state.historyLimit) {
-      const count = Math.max(1, Number(limit) || state.historyLimit);
+    getHistory(limit = state.config.historyLimit) {
+      const count = Math.max(1, Number(limit) || state.config.historyLimit);
       return [...state.history].slice(-count).reverse();
     },
 
@@ -445,54 +652,26 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     },
 
     async simulateJoin(payload = {}) {
-      const playerName = String(payload?.playerName ?? payload?.name ?? "DebugPlayer").trim() || "DebugPlayer";
-      return enqueue(() => handleJoinEvent({
-        eventId: String(payload?.eventId ?? `manual:${Date.now()}`),
-        eventName: "On_PlayerJoined",
-        serverId: String(payload?.serverId ?? core?.webStatus?.serverId ?? ""),
-        time: new Date().toISOString(),
-        payload: {
-          name: playerName,
-          playerName,
-        },
-        paramMap: {
-          PlayerName: playerName,
-        },
-      }));
+      const event = buildSimulatedJoinEvent(payload);
+      return enqueue(() => handleJoinEvent(event));
     },
 
     async updateConfig(nextConfig = {}) {
       const currentRaw = config?.get?.("plugins.welcome-join-warning", null)
         ?? config?.get?.("plugins.welcomeJoinWarning", null)
         ?? {};
-
-      const previousConfig = { ...currentRaw };
-
-      const enabled = nextConfig.enabled !== false;
-      const delayMs = Math.max(0, Number(nextConfig.delayMs) ?? DEFAULT_DELAY_MS);
-      const message = String(nextConfig.message ?? DEFAULT_MESSAGE).trim() || DEFAULT_MESSAGE;
-      const historyLimit = Math.max(20, Number(nextConfig.historyLimit) ?? DEFAULT_HISTORY_LIMIT);
-
-      const normalized = {
-        enabled,
-        delayMs,
-        message,
-        historyLimit,
-      };
-
+      const previousConfig = cloneJsonSafe(currentRaw);
+      const normalized = normalizeRuntimeConfig(nextConfig, { legacy: false });
       const configKey = "plugins.welcome-join-warning";
 
       config?.set?.(configKey, normalized);
 
       try {
         await config?.save?.();
-        state.enabled = enabled;
-        state.delayMs = delayMs;
-        state.message = message;
-        state.historyLimit = historyLimit;
+        state.config = normalized;
 
-        if (state.history.length > state.historyLimit) {
-          state.history.splice(0, state.history.length - state.historyLimit);
+        if (state.history.length > state.config.historyLimit) {
+          state.history.splice(0, state.history.length - state.config.historyLimit);
         }
       } catch (error) {
         if (config?.set) {
@@ -519,36 +698,32 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   return {
     manifest: {
       id: PLUGIN_ID,
-      name: "玩家入服欢迎警告",
+      name: "玩家进服警告",
       kind: "plugin",
-      version: "1.0.0",
-      description: "玩家加入服务器后延迟发送欢迎警告消息。",
+      version: "2.0.0",
+      description: "玩家加入服务器后按规则组自动发送多段 AdminWarn，支持时长分流、名单匹配、冷却和模拟验证。",
     },
     apiName: "welcomeJoinWarning",
     api,
 
     async start() {
-      const freshConfig = readRuntimeConfig(config);
-      state.enabled = freshConfig.enabled;
-      state.delayMs = freshConfig.delayMs;
-      state.message = freshConfig.message;
-      state.historyLimit = freshConfig.historyLimit;
+      state.config = readRuntimeConfig(config);
 
       core?.webRegistry?.registerPage?.({
         id: "web.welcomeJoinWarning.debug",
-        title: "入服欢迎警告",
-        group: "调试",
+        title: "进服警告",
+        group: "通知广播",
         route: PAGE_ROUTE,
         pageModule: "/pages/welcome-join-warning-debug.js",
         source: PLUGIN_ID,
-        description: "跟踪玩家加入事件、15 秒延迟任务与警告发送结果。",
+        description: "配置玩家进服后的多组自动警告、条件命中和发送历史。",
         required: false,
         enabled: true,
         order: 130,
-        icon: "👋",
+        icon: "WARN",
       });
 
-      if (!state.enabled) {
+      if (!state.config.enabled) {
         pluginLogger?.info?.("[WelcomeJoinWarning] plugin disabled by config.");
         return;
       }
@@ -564,8 +739,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         }));
       }
 
-      // 兼容旧版本：如果核心层没有派生 PLAYER_CONNECTED，就从 RawLogLine 里兜底解析 Join succeeded。
-      // 新版本 core.rawLogDerivedEvents 会派生 PLAYER_CONNECTED，避免双重触发这里直接跳过。
       if (!core?.rawLogDerivedEvents) {
         unsubscribers.push(core.eventBus.onCoreEvent(RAW_LOG_JOIN_EVENT_NAME, (event) => {
           const joinEvent = buildJoinEventFromRawLog(event);
@@ -575,7 +748,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       }
 
       pluginLogger?.info?.(
-        `[WelcomeJoinWarning] started. delayMs=${state.delayMs} message=${JSON.stringify(state.message)}`,
+        `[WelcomeJoinWarning] started. rules=${state.config.rules.length} maxWarningsPerJoin=${state.config.maxWarningsPerJoin}`,
       );
     },
 
@@ -597,16 +770,334 @@ function readRuntimeConfig(config) {
     ?? config?.get?.("plugins.welcomeJoinWarning", null)
     ?? {};
 
-  const delayMs = Math.max(0, Number(cfg?.delayMs ?? DEFAULT_DELAY_MS) || DEFAULT_DELAY_MS);
-  const message = String(cfg?.message ?? DEFAULT_MESSAGE).trim() || DEFAULT_MESSAGE;
-  const historyLimit = Math.max(20, Number(cfg?.historyLimit ?? DEFAULT_HISTORY_LIMIT) || DEFAULT_HISTORY_LIMIT);
+  return normalizeRuntimeConfig(cfg, { legacy: !Array.isArray(cfg?.rules) });
+}
+
+function normalizeRuntimeConfig(raw = {}, { legacy = false } = {}) {
+  const enabled = raw?.enabled !== false;
+  const historyLimit = Math.max(20, Number(raw?.historyLimit ?? DEFAULT_HISTORY_LIMIT) || DEFAULT_HISTORY_LIMIT);
+  const maxWarningsPerJoin = Math.max(1, Math.min(20, Number(raw?.maxWarningsPerJoin ?? DEFAULT_MAX_WARNINGS_PER_JOIN) || DEFAULT_MAX_WARNINGS_PER_JOIN));
+  const defaultIntervalMs = Math.max(0, Number(raw?.defaultIntervalMs ?? (legacy ? 0 : DEFAULT_INTERVAL_MS)) || 0);
+  const legacyDelayMs = Math.max(0, Number(raw?.delayMs ?? DEFAULT_INITIAL_DELAY_MS) || DEFAULT_INITIAL_DELAY_MS);
+  const legacyMessage = String(raw?.message ?? DEFAULT_MESSAGE).trim() || DEFAULT_MESSAGE;
+
+  const rawRules = Array.isArray(raw?.rules) && raw.rules.length
+    ? raw.rules
+    : buildDefaultRules({ delayMs: legacyDelayMs, message: legacyMessage, intervalMs: defaultIntervalMs });
+
+  const rules = rawRules
+    .map((rule, index) => normalizeRule(rule, index, { defaultDelayMs: legacyDelayMs, defaultIntervalMs }))
+    .filter(Boolean);
 
   return {
-    enabled: cfg?.enabled !== false,
-    delayMs,
-    message,
+    enabled,
     historyLimit,
+    maxWarningsPerJoin,
+    defaultIntervalMs,
+    rules: rules.length ? rules : buildDefaultRules({ delayMs: legacyDelayMs, message: legacyMessage, intervalMs: defaultIntervalMs }),
   };
+}
+
+function buildDefaultRules({ delayMs, message, intervalMs }) {
+  return [
+    {
+      id: "default-welcome",
+      name: "默认欢迎",
+      enabled: true,
+      priority: 10,
+      cooldownMs: 0,
+      mode: "all",
+      initialDelayMs: delayMs,
+      intervalMs,
+      conditions: [{ type: "always" }],
+      steps: [{ id: "welcome", message }],
+    },
+    {
+      id: "newbie-playtime",
+      name: "萌新提示",
+      enabled: true,
+      priority: 20,
+      cooldownMs: 0,
+      mode: "all",
+      initialDelayMs: delayMs,
+      intervalMs,
+      conditions: [{ type: "playtimeHours", minHours: 0, maxHours: 200 }],
+      steps: [{ id: "newbie", message: DEFAULT_NEWBIE_MESSAGE }],
+    },
+  ];
+}
+
+function normalizeRule(rule, index, defaults = {}) {
+  if (!rule || typeof rule !== "object" || Array.isArray(rule)) return null;
+  const id = sanitizeId(rule.id, `rule-${index + 1}`);
+  const name = String(rule.name ?? `规则组 ${index + 1}`).trim() || `规则组 ${index + 1}`;
+  const conditions = Array.isArray(rule.conditions) ? rule.conditions.map(normalizeCondition).filter(Boolean) : [];
+  const steps = Array.isArray(rule.steps) ? rule.steps.map(normalizeStep).filter(Boolean) : [];
+
+  return {
+    id,
+    name,
+    enabled: rule.enabled !== false,
+    priority: Number.isFinite(Number(rule.priority)) ? Number(rule.priority) : (index + 1) * 10,
+    cooldownMs: Math.max(0, Number(rule.cooldownMs ?? 0) || 0),
+    mode: rule.mode === "any" ? "any" : "all",
+    initialDelayMs: Math.max(0, Number(rule.initialDelayMs ?? rule.delayMs ?? defaults.defaultDelayMs ?? DEFAULT_INITIAL_DELAY_MS) || 0),
+    intervalMs: Math.max(0, Number(rule.intervalMs ?? defaults.defaultIntervalMs ?? DEFAULT_INTERVAL_MS) || 0),
+    conditions: conditions.length ? conditions : [{ type: "always" }],
+    steps: steps.length ? steps : [{ id: "step-1", enabled: true, message: DEFAULT_MESSAGE }],
+  };
+}
+
+function normalizeCondition(condition) {
+  if (!condition || typeof condition !== "object" || Array.isArray(condition)) return null;
+  const type = normalizeConditionType(condition.type);
+  return {
+    ...cloneJsonSafe(condition),
+    type,
+    label: String(condition.label ?? "").trim(),
+  };
+}
+
+function normalizeStep(step, index) {
+  if (step == null) return null;
+  const raw = typeof step === "string" ? { message: step } : step;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const message = String(raw.message ?? "").replace(/\r\n?/g, "\n").trim().slice(0, 180);
+  if (!message) return null;
+  return {
+    id: sanitizeId(raw.id, `step-${index + 1}`),
+    enabled: raw.enabled !== false,
+    message,
+    intervalOverrideMs: raw.intervalOverrideMs == null ? undefined : Math.max(0, Number(raw.intervalOverrideMs) || 0),
+  };
+}
+
+function normalizeConditionType(type) {
+  const text = String(type ?? "always").trim();
+  const lowered = text.toLowerCase();
+  const aliases = {
+    always: "always",
+    all: "always",
+    playtime: "playtimeHours",
+    playtimehours: "playtimeHours",
+    playtimeunknown: "playtimeUnknown",
+    namecontains: "nameContains",
+    nameregex: "nameRegex",
+    steamidin: "steamIdIn",
+    steamidlist: "steamIdIn",
+    eosidin: "eosIdIn",
+    eosidlist: "eosIdIn",
+    ipcontains: "ipContains",
+    ipregex: "ipRegex",
+    teamidin: "teamIdIn",
+    squadidin: "squadIdIn",
+    factionin: "factionIn",
+    fieldexists: "fieldExists",
+    fieldequals: "fieldEquals",
+  };
+  return aliases[lowered] ?? text;
+}
+
+function buildSimulatedJoinEvent(payload = {}) {
+  const playerName = String(payload?.playerName ?? payload?.name ?? "DebugPlayer").trim() || "DebugPlayer";
+  const eventPayload = {
+    name: playerName,
+    playerName,
+  };
+  const paramMap = {
+    PlayerName: playerName,
+  };
+
+  const fields = [
+    ["steamID", "SteamID"],
+    ["eosID", "EOSID"],
+    ["ip", "PlayerIP"],
+    ["teamID", "TeamID"],
+    ["squadID", "SquadID"],
+    ["faction", "Faction"],
+    ["gameHours", "GameHours"],
+  ];
+  for (const [payloadKey, paramKey] of fields) {
+    const value = payload?.[payloadKey];
+    if (value == null || String(value).trim() === "") continue;
+    eventPayload[payloadKey] = value;
+    paramMap[paramKey] = value;
+  }
+
+  return {
+    eventId: String(payload?.eventId ?? `manual:${Date.now()}`),
+    eventName: "On_PlayerJoined",
+    serverId: String(payload?.serverId ?? "").trim(),
+    time: new Date().toISOString(),
+    payload: eventPayload,
+    paramMap,
+  };
+}
+
+function resolvePlayerName(event = {}) {
+  const fromEvent = firstText(
+    getEventValue(event, ["name", "playerName", "PlayerName"]),
+    parseJoinSucceededNameFromRawLog(event),
+  );
+  return fromEvent;
+}
+
+function resolvePlayerSteamID(event = {}) {
+  return getEventValue(event, ["steamID", "SteamID", "steamId", "SteamId", "steam64", "steam64ID"]);
+}
+
+function parseJoinSucceededNameFromRawLog(event = {}) {
+  const raw = String(event?.rawLog ?? event?.rawEvent?.Raw ?? "").trim();
+  if (!raw) return "";
+
+  const match = raw.match(/\bLogNet:\s*Join succeeded:\s*(.+?)\s*(?:\|\s*\[raw_log_line\]\s*)?$/i);
+  if (!match) return "";
+
+  return String(match[1] ?? "").replace(/\s*\|\s*.*$/, "").trim();
+}
+
+function buildJoinEventFromRawLog(event = {}) {
+  if (String(event?.eventName ?? "").trim() !== RAW_LOG_JOIN_EVENT_NAME) {
+    return null;
+  }
+
+  const playerName = parseJoinSucceededNameFromRawLog(event);
+  if (!playerName) return null;
+
+  return {
+    eventId: String(event?.eventId ?? `raw-join:${Date.now()}`),
+    eventName: RAW_LOG_JOIN_EVENT_NAME,
+    serverId: String(event?.serverId ?? "").trim(),
+    time: String(event?.time ?? new Date().toISOString()),
+    rawLog: String(event?.rawLog ?? event?.rawEvent?.Raw ?? ""),
+    payload: {
+      name: playerName,
+      playerName,
+    },
+    paramMap: {
+      ...(event?.paramMap ?? {}),
+      PlayerName: playerName,
+    },
+    params: Array.isArray(event?.params) ? event.params : [],
+    sourceRawEventName: String(event?.eventName ?? ""),
+  };
+}
+
+function getEventValue(event = {}, keys = []) {
+  const payload = event?.payload ?? {};
+  const paramMap = event?.paramMap ?? {};
+  for (const key of keys) {
+    const value = firstText(payload?.[key], paramMap?.[key]);
+    if (value) return value;
+  }
+
+  const params = Array.isArray(event?.params) ? event.params : [];
+  for (const param of params) {
+    if (!keys.includes(param?.name)) continue;
+    const value = firstText(param?.value);
+    if (value) return value;
+  }
+
+  for (const key of keys) {
+    const value = firstText(event?.[key]);
+    if (value) return value;
+  }
+
+  return "";
+}
+
+function buildEventSummary(event, context) {
+  return {
+    eventId: String(event?.eventId ?? "").trim(),
+    eventName: String(event?.eventName ?? "").trim(),
+    serverId: String(event?.serverId ?? context?.serverId ?? "").trim(),
+    playerName: context?.playerName ?? "",
+    steamID: context?.steamID ?? "",
+    eosID: context?.eosID ?? "",
+    ip: context?.ip ?? "",
+    time: String(event?.time ?? "").trim(),
+  };
+}
+
+function buildTimerKey(event = {}, playerName = "") {
+  const eventId = String(event?.eventId ?? "").trim();
+  if (eventId) return eventId;
+
+  const serverId = String(event?.serverId ?? "").trim();
+  const time = String(event?.time ?? Date.now());
+  return `${serverId}:${playerName}:${time}`;
+}
+
+function buildPlayerKey(context = {}) {
+  if (context.steamID) return `steam:${context.steamID}`;
+  if (context.eosID) return `eos:${context.eosID}`;
+  if (context.playerName) return `name:${String(context.playerName).toLowerCase()}`;
+  return "unknown";
+}
+
+function rulesNeedPlaytime(rules = []) {
+  return rules.some((rule) => (rule.conditions ?? []).some((condition) => {
+    const type = normalizeConditionType(condition?.type);
+    return type === "playtimeHours" || type === "playtimeUnknown";
+  }));
+}
+
+function includesText(value, wanted) {
+  const text = String(value ?? "").toLowerCase();
+  const needle = String(wanted ?? "").trim().toLowerCase();
+  return Boolean(text && needle && text.includes(needle));
+}
+
+function testRegex(value, pattern) {
+  const text = String(value ?? "");
+  const source = String(pattern ?? "").trim();
+  if (!text || !source) return false;
+  return new RegExp(source, "i").test(text);
+}
+
+function valueInList(value, rawList) {
+  const text = String(value ?? "").trim().toLowerCase();
+  if (!text) return false;
+  return normalizeList(rawList).some((item) => item.toLowerCase() === text);
+}
+
+function normalizeList(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item ?? "").trim()).filter(Boolean);
+  }
+  return String(value ?? "")
+    .split(/[\n,，;；\s]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function numberOrNull(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function firstText(...values) {
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function sanitizeId(value, fallback) {
+  const text = String(value ?? "").trim();
+  if (!text) return fallback;
+  return text.replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "") || fallback;
+}
+
+function cloneJsonSafe(value) {
+  if (value == null) return value;
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return value;
+  }
 }
 
 export default { createPlugin };

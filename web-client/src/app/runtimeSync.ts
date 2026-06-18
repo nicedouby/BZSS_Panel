@@ -1,6 +1,7 @@
 import { markRaw, reactive, shallowRef } from "vue";
 import { normalizeRefreshPolicy, resolveRefreshDelay, type RefreshPolicy } from "./refreshPolicy";
 import { applyMatchSnapshotResponse, applyRuntimeSnapshotResponse } from "./matchSnapshot";
+import { canAutoRefreshNow } from "../composables/useAutoRefreshGate";
 import { useAuthStore } from "../stores/auth.store";
 import { usePlayerStore } from "../stores/player.store";
 import { useServerStore } from "../stores/server.store";
@@ -86,7 +87,11 @@ function scheduleRuntimeSync() {
   const delay = resolveRuntimeSyncDelay();
   timer = window.setTimeout(() => {
     timer = null;
-    void fetchSnapshot({ scheduleNext: true, immediate: true });
+    if (canAutoRefreshNow()) {
+      void fetchSnapshot({ scheduleNext: true, immediate: true });
+      return;
+    }
+    scheduleRuntimeSync();
   }, delay);
 }
 

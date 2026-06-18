@@ -163,6 +163,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { apiGet } from "../app/apiClient";
 import { renderApiError } from "../app/errors";
+import { canAutoRefreshNow } from "../composables/useAutoRefreshGate";
 import AppPage from "../components/common/AppPage.vue";
 import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
 import AppPageToolbar from "../components/common/AppPageToolbar.vue";
@@ -229,7 +230,7 @@ const sourceSummary = computed(() => {
 onMounted(() => {
   void refreshAll();
   refreshTimer = window.setInterval(() => {
-    void refreshEvents({ silent: true });
+    if (canAutoRefreshNow()) void refreshEvents({ silent: true });
   }, 3000);
 });
 

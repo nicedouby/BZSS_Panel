@@ -57,6 +57,7 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import LogVirtualList from "../console/LogVirtualList.vue";
 import type { ConsoleLine } from "../../composables/useConsoleLines";
 import { apiGet } from "../../app/apiClient";
+import { canAutoRefreshNow } from "../../composables/useAutoRefreshGate";
 
 interface RuntimeLogTarget {
   id: string;
@@ -149,7 +150,7 @@ async function refreshLogs() {
 function startAutoRefresh() {
   stopAutoRefresh();
   refreshTimer = window.setInterval(() => {
-    void refreshLogs();
+    if (canAutoRefreshNow()) void refreshLogs();
   }, 2000);
 }
 

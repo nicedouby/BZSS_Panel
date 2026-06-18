@@ -285,6 +285,7 @@ import FloatingPlayerWindow from "../components/squad-admin/FloatingPlayerWindow
 import SquadDetailDrawer from "../components/squad-admin/SquadDetailDrawer.vue";
 import { t } from "../i18n";
 import { normalizeRefreshPolicy, resolveRefreshDelay } from "../app/refreshPolicy";
+import { useAutoRefreshGate } from "../composables/useAutoRefreshGate";
 import { cancelIdleTask, scheduleIdleTask } from "../utils/idle";
 import { resolvePlayerIdentityIp } from "../app/playerIdentityApi";
 import type {
@@ -368,6 +369,7 @@ const activePlayerWindow = ref<{
 const selectedSquadDetail = ref<SquadViewModel | null>(null);
 const pageHidden = ref(typeof document !== "undefined" ? document.hidden : false);
 const active = ref(true);
+const { canAutoRefresh } = useAutoRefreshGate(computed(() => active.value && !pageHidden.value));
 let battlePlayerRefreshToken = 0;
 let battleStatsRefreshIdleHandle: number | null = null;
 
@@ -416,7 +418,7 @@ const remoteTelemetryQuery = useQuery({
   queryKey: computed(() => ["remote-telemetry-state", auth.authenticated]),
   enabled: computed(() => auth.authenticated),
   queryFn: async () => apiGet<any>("/api/remote-telemetry/state"),
-  refetchInterval: computed(() => (auth.authenticated && active.value ? 2_000 : false)),
+  refetchInterval: computed(() => (auth.authenticated && canAutoRefresh.value ? 2_000 : false)),
   refetchIntervalInBackground: true,
   refetchOnWindowFocus: false,
 });
@@ -497,7 +499,7 @@ const combatCacheQuery = useQuery({
     }
   },
   staleTime: 5_000,
-  refetchInterval: computed(() => (active.value ? combatCacheRefetchInterval.value : false)),
+  refetchInterval: computed(() => (canAutoRefresh.value ? combatCacheRefetchInterval.value : false)),
   refetchIntervalInBackground: true,
   refetchOnWindowFocus: false,
 });
@@ -505,7 +507,7 @@ const squadLifecycleQuery = useQuery({
   queryKey: computed(() => ["squad-lifecycle-current", auth.authenticated]),
   enabled: computed(() => auth.authenticated),
   queryFn: async () => apiGet<any>("/api/squad-lifecycle/current"),
-  refetchInterval: computed(() => (active.value ? squadLifecycleRefetchInterval.value : false)),
+  refetchInterval: computed(() => (canAutoRefresh.value ? squadLifecycleRefetchInterval.value : false)),
   refetchIntervalInBackground: true,
   refetchOnWindowFocus: false,
 });
@@ -525,7 +527,7 @@ const battleLogOverviewQuery = useQuery({
     }
   },
   staleTime: 5_000,
-  refetchInterval: computed(() => (active.value ? combatCacheRefetchInterval.value : false)),
+  refetchInterval: computed(() => (canAutoRefresh.value ? combatCacheRefetchInterval.value : false)),
   refetchIntervalInBackground: true,
   refetchOnWindowFocus: false,
 });

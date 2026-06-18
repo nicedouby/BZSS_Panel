@@ -172,6 +172,7 @@ import {
 import { useUiStore } from "../stores/ui.store";
 import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
 import DataState from "../components/common/DataState.vue";
+import { useAutoRefreshGate } from "../composables/useAutoRefreshGate";
 
 type DraftItem = {
   message: string;
@@ -188,12 +189,13 @@ const dirtyDrafts = reactive<Record<string, boolean>>({});
 const REFRESH_INTERVAL_MS = 5000;
 const TIME_CACHE_MAX = 4000;
 const timeCache = new Map<number, string>();
+const { canAutoRefresh } = useAutoRefreshGate();
 
 const query = useQuery({
   queryKey: ["scheduled-broadcast-state"],
   queryFn: getScheduledBroadcastState,
   placeholderData: (previousData) => previousData,
-  refetchInterval: REFRESH_INTERVAL_MS,
+  refetchInterval: computed(() => (canAutoRefresh.value ? REFRESH_INTERVAL_MS : false)),
   refetchIntervalInBackground: false,
 });
 

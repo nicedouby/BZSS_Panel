@@ -32,7 +32,7 @@ export function useConsoleLines(filters: ConsoleFilterState) {
   const lines = shallowRef<ConsoleLine[]>([]);
   const lineSeqSet = new Set<number>();
   const lastSeq = ref(0);
-  const { isDocumentVisible, canPoll } = usePageActivity();
+  const { isDocumentVisible, canPoll, canAutoRefresh } = usePageActivity();
   const currentFilterKey = computed(() => JSON.stringify({
     stream: filters.stream,
     scope: filters.scope,
@@ -77,7 +77,7 @@ export function useConsoleLines(filters: ConsoleFilterState) {
       return apiGet<{ lines?: ConsoleLine[] }>(`/api/console/lines?${params.toString()}`);
     },
     refetchInterval: () => {
-      if (!canPoll.value || filters.paused) return false;
+      if (!canAutoRefresh.value || filters.paused) return false;
       return 1000;
     },
     refetchOnMount: true,

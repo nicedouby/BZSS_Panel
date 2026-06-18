@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { apiGet, apiPost } from "../app/apiClient";
 import { renderApiError } from "../app/errors";
 import { useUiStore } from "../stores/ui.store";
+import { useAutoRefreshGate } from "./useAutoRefreshGate";
 import {
   INFANTRY_COMBAT_DEFAULT_CONFIG,
   INFANTRY_COMBAT_DEFAULT_FILTERS,
@@ -17,6 +18,7 @@ export function useInfantryCombatEnhancer() {
   const route = useRoute();
   const router = useRouter();
   const ui = useUiStore();
+  const { canAutoRefresh } = useAutoRefreshGate();
 
   const filters = reactive<InfantryCombatFilters>(readFiltersFromQuery(route.query));
   const config = reactive<InfantryCombatConfig>({ ...INFANTRY_COMBAT_DEFAULT_CONFIG });
@@ -72,7 +74,7 @@ export function useInfantryCombatEnhancer() {
       overview: InfantryCombatOverview | null;
     }>(buildEventsEndpoint(filters)),
     placeholderData: (previousData) => previousData,
-    refetchInterval: () => (filters.autoRefresh ? 3000 : false),
+    refetchInterval: () => (filters.autoRefresh && canAutoRefresh.value ? 3000 : false),
     refetchIntervalInBackground: false,
   });
 

@@ -1,6 +1,7 @@
 import { defineComponent, h } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetAutoRefreshGateForTest } from "./useAutoRefreshGate";
 import { usePollingResource } from "./usePollingResource";
 
 describe("usePollingResource", () => {
@@ -13,6 +14,8 @@ describe("usePollingResource", () => {
   });
 
   afterEach(() => {
+    resetAutoRefreshGateForTest();
+    document.body.innerHTML = "";
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
@@ -111,5 +114,30 @@ describe("usePollingResource", () => {
     });
     await vi.advanceTimersByTimeAsync(3000);
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips automatic interval refresh while an input is being edited", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce("first")
+      .mockResolvedValueOnce("second");
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+
+    const wrapper = mountHarness(fetcher);
+    await flushPromises();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+
+    input.focus();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+
+    input.blur();
+    await vi.advanceTimersByTimeAsync(1500);
+    await vi.advanceTimersByTimeAsync(1000);
+    await flushPromises();
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(wrapper.text()).toBe("second");
+    wrapper.unmount();
   });
 });

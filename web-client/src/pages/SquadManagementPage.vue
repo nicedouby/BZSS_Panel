@@ -71,8 +71,8 @@
           <AppSection title="踢出玩家" description="支持名称、SteamID 或 EOS ID。">
             <div class="command-form">
               <label class="field">
-                <span>目标玩家</span>
-                <input v-model="kickTarget" type="text" placeholder="名称 / SteamID / EOS" />
+                <span>目标玩家 (支持模糊搜索 / 数据库检索)</span>
+                <PlayerSelect v-model="kickTarget" placeholder="输入玩家名 / SteamID / EOS" />
               </label>
 
               <label class="field">
@@ -95,8 +95,8 @@
           <AppSection title="移出小队" description="支持名称、SteamID 或 EOS ID。">
             <div class="command-form">
               <label class="field">
-                <span>目标玩家</span>
-                <input v-model="removeTarget" type="text" placeholder="名称 / SteamID / EOS" />
+                <span>目标玩家 (支持模糊搜索 / 数据库检索)</span>
+                <PlayerSelect v-model="removeTarget" placeholder="输入玩家名 / SteamID / EOS" />
               </label>
 
               <label class="field">
@@ -224,6 +224,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import PlayerSelect from "../components/common/PlayerSelect.vue";
 import { useQuery } from "@tanstack/vue-query";
 import { useRoute } from "vue-router";
 import { renderApiError } from "../app/errors";
@@ -293,7 +294,7 @@ const pollIntervalLabel = computed(() => `${Math.round(recordsRefetchInterval.va
 const query = useQuery<SquadManagementRecordsResponse>({
   queryKey: ["squad-management-records"],
   queryFn: async () => getSquadManagementRecords({ limit: 1000, offset: 0 }),
-  refetchInterval: computed(() => (pageActivity.canPoll.value ? recordsRefetchInterval.value : false)),
+  refetchInterval: computed(() => (pageActivity.canAutoRefresh.value ? recordsRefetchInterval.value : false)),
   refetchIntervalInBackground: false,
   refetchOnWindowFocus: false,
 });

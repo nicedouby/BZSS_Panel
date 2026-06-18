@@ -391,6 +391,7 @@ import { apiGet, apiPost } from "../app/apiClient";
 import { getScheduledBroadcastState, type ScheduledBroadcastItem } from "../app/scheduledBroadcastApi";
 import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
 import PageCard from "../components/common/PageCard.vue";
+import { canAutoRefreshNow } from "../composables/useAutoRefreshGate";
 
 interface FairTeamBalanceActor {
   playerKey: string;
@@ -555,12 +556,12 @@ onMounted(() => {
     nowMs.value = Date.now();
   }, 1000);
   autoRefreshTimer = window.setInterval(() => {
-    if (document.visibilityState === "visible") {
+    if (document.visibilityState === "visible" && canAutoRefreshNow()) {
       void refreshLiveData();
     }
   }, 2500);
   visibilityRefreshHandler = () => {
-    if (document.visibilityState === "visible") {
+    if (document.visibilityState === "visible" && canAutoRefreshNow()) {
       void refreshLiveData();
     }
   };

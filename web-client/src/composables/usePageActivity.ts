@@ -7,10 +7,13 @@ import {
   onScopeDispose,
   ref,
 } from "vue";
+import { useAutoRefreshGate } from "./useAutoRefreshGate";
 
 export function usePageActivity() {
   const isActivated = ref(false);
   const isDocumentVisible = ref(typeof document === "undefined" ? true : !document.hidden);
+  const canPoll = computed(() => isActivated.value && isDocumentVisible.value);
+  const autoRefreshGate = useAutoRefreshGate(canPoll);
 
   function syncVisibility() {
     isDocumentVisible.value = typeof document === "undefined" ? true : !document.hidden;
@@ -41,6 +44,8 @@ export function usePageActivity() {
   return {
     isActivated,
     isDocumentVisible,
-    canPoll: computed(() => isActivated.value && isDocumentVisible.value),
+    canPoll,
+    canAutoRefresh: autoRefreshGate.canAutoRefresh,
+    isEditingInput: autoRefreshGate.isEditingInput,
   };
 }

@@ -171,6 +171,7 @@ import AppStatusBadge from "../components/common/AppStatusBadge.vue";
 import AppPageToolbar from "../components/common/AppPageToolbar.vue";
 import AppCard from "../components/common/AppCard.vue";
 import DataState from "../components/common/DataState.vue";
+import { canAutoRefreshNow } from "../composables/useAutoRefreshGate";
 import { t } from "../i18n";
 import { scheduleIdleTask } from "../utils/idle";
 
@@ -310,7 +311,7 @@ onMounted(async () => {
     void bootstrap();
   });
   statusTimer = window.setInterval(() => {
-    if (!active.value) return;
+    if (!active.value || !canAutoRefreshNow()) return;
     void refreshStatusAndMaybeEntries();
   }, 5000);
 });

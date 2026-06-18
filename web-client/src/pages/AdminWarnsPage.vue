@@ -151,6 +151,7 @@ import { apiGet } from "../app/apiClient";
 import { broadcastMessage, warnPlayer } from "../app/squadManagementApi";
 import { useUiStore } from "../stores/ui.store";
 import DataState from "../components/common/DataState.vue";
+import { useAutoRefreshGate } from "../composables/useAutoRefreshGate";
 
 interface ModuleRecord {
   id: string;
@@ -196,17 +197,18 @@ const broadcastFilters = reactive({ sourceModule: "", reason: "", success: "", s
 
 const REFRESH_INTERVAL_MS = 8000;
 const timeCache = new Map<number, string>();
+const { canAutoRefresh } = useAutoRefreshGate();
 
 const warningQuery = useQuery({
   queryKey: computed(() => ["admin-warns", "warning", warningFilters.targetName, warningFilters.sourceModule, warningFilters.success]),
   queryFn: () => fetchRecords("warning", warningFilters),
-  refetchInterval: REFRESH_INTERVAL_MS,
+  refetchInterval: computed(() => (canAutoRefresh.value ? REFRESH_INTERVAL_MS : false)),
 });
 
 const broadcastQuery = useQuery({
   queryKey: computed(() => ["admin-warns", "broadcast", broadcastFilters.sourceModule, broadcastFilters.success]),
   queryFn: () => fetchRecords("broadcast", broadcastFilters),
-  refetchInterval: REFRESH_INTERVAL_MS,
+  refetchInterval: computed(() => (canAutoRefresh.value ? REFRESH_INTERVAL_MS : false)),
 });
 
 async function fetchRecords(kind: string, filters: any) {

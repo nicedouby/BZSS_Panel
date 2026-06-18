@@ -5,53 +5,27 @@
         <header class="tb-header">
           <div>
             <h1>跳边入口</h1>
-            <p>统一通过 TeamBalance 模块处理跳边执行和打乱方案记录�</p>
+            <p>统一通过 TeamBalance 模块处理跳边执行和打乱方案记录�</p>
           </div>
         </header>
 
         <form class="tb-form" @submit.prevent="submit">
           <label>
-            <span>SteamID</span>
-            <input v-model.trim="steamId" placeholder="7656119..." />
+            <span>选择玩家 (支持模糊搜索 / 数据库检索)</span>
+            <PlayerSelect
+              v-model:steamId="steamId"
+              v-model:playerName="playerName"
+              placeholder="输入玩家名 / SteamID / EOS ID"
+            />
           </label>
 
-          <label>
-            <span>玩家名，可�</span>
-            <div ref="playerPickerRoot" class="tb-player-picker">
-              <input
-                v-model.trim="playerName"
-                placeholder="PlayerName"
-                autocomplete="off"
-                @focus="openPlayerPicker"
-                @click="openPlayerPicker"
-                @keydown.escape.prevent="closePlayerPicker"
-              />
-
-              <div v-if="showPlayerPicker" class="tb-player-dropdown" role="listbox" aria-label="当前在线玩家">
-                <div v-if="loadingPlayers" class="tb-player-empty">加载�?..</div>
-                <div v-else-if="playersError" class="tb-player-empty">{{ playersError }}</div>
-                <button
-                  v-for="(player, index) in filteredPlayers"
-                  :key="playerKey(player, index)"
-                  type="button"
-                  class="tb-player-option"
-                  role="option"
-                  @mousedown.prevent
-                  @click="pickPlayer(player)"
-                >
-                  <span class="tb-player-option__name">{{ player.name || "未知玩家" }}</span>
-                  <span v-if="player.steamID" class="tb-player-option__meta">{{ player.steamID }}</span>
-                </button>
-
-                <div v-if="!filteredPlayers.length && !loadingPlayers && !playersError" class="tb-player-empty">
-                  暂无在线玩家
-                </div>
-              </div>
-            </div>
-          </label>
+          <div v-if="playerName || steamId" class="tb-selection-preview">
+            <div v-if="playerName">已选玩家: <strong>{{ playerName }}</strong></div>
+            <div v-if="steamId">SteamID: <strong class="mono">{{ steamId }}</strong></div>
+          </div>
 
           <button :disabled="submitting || !steamId">
-            {{ submitting ? "执行�?.." : "执行跳边" }}
+            {{ submitting ? "执行中..." : "执行跳边" }}
           </button>
         </form>
 
@@ -62,8 +36,8 @@
     <section class="tb-card tb-shuffle-card">
       <header class="tb-header">
         <div>
-          <h2>按时长打乱阵�</h2>
-          <p>只生成审核记录，不直接执行跳边。生成后可以直接看到 T1 / T2 的玩家分布�</p>
+          <h2>按时长打乱阵�</h2>
+          <p>只生成审核记录，不直接执行跳边。生成后可以直接看到 T1 / T2 的玩家分布�</p>
         </div>
         <button
           type="button"
@@ -71,7 +45,7 @@
           :disabled="creatingShufflePlan || !canCreateShufflePlan"
           @click="handleCreateShufflePlan"
         >
-          {{ creatingShufflePlan ? "生成�?.." : "生成打乱记录" }}
+          {{ creatingShufflePlan ? "生成�?.." : "生成打乱记录" }}
         </button>
       </header>
 
@@ -108,7 +82,7 @@
           </div>
           <div class="tb-group-card__meta">
             <span>锚定 {{ groupAnchorName(group) }}</span>
-            <span>{{ group.members.length }} �</span>
+            <span>{{ group.members.length }} �</span>
           </div>
         </article>
       </div>
@@ -119,7 +93,7 @@
             <h3>打乱结果</h3>
             <p>
               计划跳边 {{ latestShufflePlan.summary?.plannedMoveCount ?? 0 }} 人，
-              打乱后平均时长差 {{ formatHours(latestShufflePlan.summary?.averageDeltaHours) }}�?            </p>
+              打乱后平均时长差 {{ formatHours(latestShufflePlan.summary?.averageDeltaHours) }}�?            </p>
           </div>
           <span class="tb-shuffle-badge">{{ formatTime(latestShufflePlan.plan?.generatedAt ?? "") }}</span>
         </div>
@@ -128,7 +102,7 @@
           <article class="tb-shuffle-team">
             <div class="tb-shuffle-team__head">
               <strong>T1</strong>
-              <span>{{ formatHours(latestShufflePlan.summary?.after?.team1?.averagePlaytimeHours) }} / {{ latestShufflePlan.summary?.after?.team1?.playerCount ?? 0 }} �</span>
+              <span>{{ formatHours(latestShufflePlan.summary?.after?.team1?.averagePlaytimeHours) }} / {{ latestShufflePlan.summary?.after?.team1?.playerCount ?? 0 }} �</span>
             </div>
             <div class="tb-shuffle-player-list">
               <div
@@ -149,7 +123,7 @@
           <article class="tb-shuffle-team">
             <div class="tb-shuffle-team__head">
               <strong>T2</strong>
-              <span>{{ formatHours(latestShufflePlan.summary?.after?.team2?.averagePlaytimeHours) }} / {{ latestShufflePlan.summary?.after?.team2?.playerCount ?? 0 }} �</span>
+              <span>{{ formatHours(latestShufflePlan.summary?.after?.team2?.averagePlaytimeHours) }} / {{ latestShufflePlan.summary?.after?.team2?.playerCount ?? 0 }} �</span>
             </div>
             <div class="tb-shuffle-player-list">
               <div
@@ -170,7 +144,7 @@
       </div>
 
       <div class="tb-shuffle-note">
-        只会写入跳边入口记录，审核通过前不会触发任何实际跳边。当前的目标是让两边平均时长尽量接近�?      </div>
+        只会写入跳边入口记录，审核通过前不会触发任何实际跳边。当前的目标是让两边平均时长尽量接近�?      </div>
     </section>
     </div>
 
@@ -178,15 +152,15 @@
       <header class="tb-header">
         <div>
           <h2>跳边记录</h2>
-          <p>这里同时显示实际跳边和“按时长打乱阵营”的审核记录�</p>
+          <p>这里同时显示实际跳边和“按时长打乱阵营”的审核记录�</p>
         </div>
         <button type="button" class="tb-secondary-button" :disabled="loadingRecords" @click="loadRecords">
-          {{ loadingRecords ? "刷新�?.." : "刷新记录" }}
+          {{ loadingRecords ? "刷新�?.." : "刷新记录" }}
         </button>
       </header>
 
       <p v-if="recordsError" class="tb-error">{{ recordsError }}</p>
-      <p v-else-if="!records.length" class="tb-empty">暂无跳边记录�</p>
+      <p v-else-if="!records.length" class="tb-empty">暂无跳边记录�</p>
 
       <div v-else class="tb-record-list">
         <article v-for="record in records" :key="record.id" class="tb-record">
@@ -198,12 +172,12 @@
           <div class="tb-record-meta">
             <span>类型: {{ formatRecordType(record) }}</span>
             <span>来源: {{ record.source }}</span>
-            <span>执行�? {{ record.executor }}</span>
+            <span>执行�? {{ record.executor }}</span>
             <span>结果: {{ record.ok ? "成功" : "失败" }}</span>
           </div>
 
           <div class="tb-record-detail">
-            <span v-if="record.playerName">玩家�? {{ record.playerName }}</span>
+            <span v-if="record.playerName">玩家�? {{ record.playerName }}</span>
             <span v-if="record.reason">原因: {{ record.reason }}</span>
             <span v-if="record.message">{{ record.message }}</span>
             <span v-if="record.error">错误: {{ record.error }}</span>
@@ -211,13 +185,13 @@
 
           <div v-if="record.action === 'playtime_shuffle_plan' && record.summary" class="tb-record-plan">
             <div class="tb-record-plan-summary">
-              <span>计划跳边: {{ record.summary.plannedMoveCount ?? 0 }} �</span>
-              <span>总玩�? {{ record.summary.totalPlayers ?? 0 }} �</span>
+              <span>计划跳边: {{ record.summary.plannedMoveCount ?? 0 }} �</span>
+              <span>总玩�? {{ record.summary.totalPlayers ?? 0 }} �</span>
               <span>已知时长: {{ record.summary.knownPlaytimePlayers ?? 0 }}</span>
               <span>缺失时长: {{ record.summary.unknownPlaytimePlayers ?? 0 }}</span>
               <span>打乱后平均时长差: {{ formatHours(record.summary.averageDeltaHours) }}</span>
               <span>
-                打乱�?T1/T2 平均:
+                打乱�?T1/T2 平均:
                 {{ formatHours(record.summary.after?.team1?.averagePlaytimeHours) }}
                 /
                 {{ formatHours(record.summary.after?.team2?.averagePlaytimeHours) }}
@@ -255,7 +229,7 @@
             </div>
 
             <details v-if="record.plan?.moves?.length" class="tb-record-plan-moves">
-              <summary>查看计划跳边名单（{{ record.plan.moves.length }}�</summary>
+              <summary>查看计划跳边名单（{{ record.plan.moves.length }}�</summary>
               <div class="tb-record-plan-move-list">
                 <div v-for="(move, index) in record.plan.moves" :key="`${record.id}-move-${index}`" class="tb-record-plan-move">
                   <strong>{{ move.playerName || move.steamId || "Unknown" }}</strong>
@@ -280,6 +254,7 @@ import { usePlayerStore, type RuntimePlayer } from "../stores/player.store";
 import { createPlaytimeShufflePlan, type TeamShufflePlanResponse } from "../app/teamBalanceApi";
 import { groupReportApi, type GroupReportGroup } from "../features/group-report/groupReport.api";
 import { scheduleIdleTask } from "../utils/idle";
+import PlayerSelect from "../components/common/PlayerSelect.vue";
 
 interface TeamBalancePlanSummary {
   totalPlayers?: number;
@@ -359,8 +334,8 @@ const recordsError = ref("");
 const playerStore = usePlayerStore();
 const snapshot = useSnapshot();
 const stablePlaytimes = ref<Record<string, any>>({});
-const playerPickerRoot = ref<HTMLElement | null>(null);
-const showPlayerPicker = ref(false);
+
+
 const loadingPlayers = ref(false);
 const playersError = ref("");
 const lastPlayersFetchAt = ref(0);
@@ -369,16 +344,7 @@ const latestShufflePlan = ref<TeamShufflePlanResponse | null>(null);
 const shuffleGroups = ref<GroupReportGroup[]>([]);
 const active = ref(true);
 
-const filteredPlayers = computed(() => {
-  const query = String(playerName.value || "").trim().toLowerCase();
-  const list = Array.isArray(playerStore.active) ? playerStore.active : [];
-  const base = list.filter((player) => player && player.online !== false);
 
-  if (!query) return base.slice(0, 40);
-  return base
-    .filter((player) => String(player.name || "").toLowerCase().includes(query) || String(player.steamID || "").includes(query))
-    .slice(0, 40);
-});
 
 const shuffleRoster = computed(() => buildShuffleRoster());
 const shuffleTeam1Count = computed(() => shuffleRoster.value.filter((player) => player.teamId === 1).length);
@@ -396,9 +362,7 @@ onMounted(() => {
   });
 });
 
-onBeforeUnmount(() => {
-  detachOutsideListener();
-});
+
 
 onActivated(() => {
   active.value = true;
@@ -408,35 +372,15 @@ onDeactivated(() => {
   active.value = false;
 });
 
-function attachOutsideListener() {
-  document.addEventListener("pointerdown", onOutsidePointerDown, { capture: true });
-}
 
-function detachOutsideListener() {
-  document.removeEventListener("pointerdown", onOutsidePointerDown, true);
-}
 
-function onOutsidePointerDown(event: Event) {
-  if (!showPlayerPicker.value) return;
-  const target = event.target as Node | null;
-  if (!target) return;
-  const root = playerPickerRoot.value;
-  if (root && root.contains(target)) return;
-  closePlayerPicker();
-}
 
-async function openPlayerPicker() {
-  if (!showPlayerPicker.value) {
-    showPlayerPicker.value = true;
-    attachOutsideListener();
-  }
-  await refreshPlayersIfNeeded();
-}
 
-function closePlayerPicker() {
-  showPlayerPicker.value = false;
-  detachOutsideListener();
-}
+
+
+
+
+
 
 async function refreshPlayersIfNeeded() {
   if (!active.value) return;
@@ -536,7 +480,7 @@ async function handleCreateShufflePlan() {
   if (roster.length === 0 || !canCreateShufflePlan.value) return;
 
   const confirmed = window.confirm(
-    `将基于当�?${roster.length} 名在线玩家的时长生成阵营打乱方案。\n只会写入跳边入口记录，不会执行实际跳边。`,
+    `将基于当�?${roster.length} 名在线玩家的时长生成阵营打乱方案。\n只会写入跳边入口记录，不会执行实际跳边。`,
   );
   if (!confirmed) return;
 
@@ -610,19 +554,9 @@ function groupAnchorName(group: GroupReportGroup) {
   return group.members.find((member) => member.playerKey === group.anchorPlayerKey)?.name || "--";
 }
 
-function pickPlayer(player: RuntimePlayer) {
-  playerName.value = String(player?.name || "");
-  if (player?.steamID) steamId.value = String(player.steamID);
-  closePlayerPicker();
-}
 
-function playerKey(player: RuntimePlayer, index: number) {
-  const pid = player?.playerID != null ? `pid:${player.playerID}` : "pid:null";
-  const steam = player?.steamID ? `steam:${player.steamID}` : "steam:";
-  const eos = player?.eosID ? `eos:${player.eosID}` : "eos:";
-  const name = player?.name ? `name:${player.name}` : "name:";
-  return `${pid}|${steam}|${eos}|${name}|i:${index}`;
-}
+
+
 
 async function submit() {
   if (!steamId.value) return;
@@ -671,8 +605,8 @@ function formatTime(value: string) {
 }
 function formatRecordType(record: TeamBalanceRecord) {
 
-  if (record.action === "playtime_shuffle_plan") return "��ʱ�����Ҽ�¼";
-  return "�ֶ�����ִ��";
+  if (record.action === "playtime_shuffle_plan") return "��ʱ�����Ҽ�¼";
+  return "�ֶ�����ִ��";
 }
 
 function formatRecordTitle(record: TeamBalanceRecord) {

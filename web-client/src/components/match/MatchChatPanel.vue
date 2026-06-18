@@ -134,6 +134,7 @@
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { apiGet } from "../../app/apiClient";
+import { useAutoRefreshGate } from "../../composables/useAutoRefreshGate";
 import { useAuthStore } from "../../stores/auth.store";
 import StatusBadge from "../common/StatusBadge.vue";
 import type { ConsoleLine } from "../../composables/useConsoleLines";
@@ -174,6 +175,7 @@ const MAX_CHAT_MESSAGES = 300;
 const MAX_XM_MESSAGES = 120;
 
 const auth = useAuthStore();
+const { canAutoRefresh } = useAutoRefreshGate();
 const chatListRef = ref<any>(null);
 const socketRef = ref<WebSocket | null>(null);
 const autoScroll = ref(true);
@@ -305,7 +307,7 @@ const xmQuery = useQuery({
     return apiGet<{ lines?: ConsoleLine[] }>(`/api/console/lines?${params.toString()}`);
   },
   refetchInterval: () => {
-    if (!auth.checked || !auth.authenticated || !active.value) return false;
+    if (!auth.checked || !auth.authenticated || !active.value || !canAutoRefresh.value) return false;
     return 1200;
   },
   refetchOnWindowFocus: false,

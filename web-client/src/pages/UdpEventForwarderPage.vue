@@ -190,6 +190,7 @@ import PageHeader from "../components/common/PageHeader.vue";
 import PageCard from "../components/common/PageCard.vue";
 import DataState from "../components/common/DataState.vue";
 import StatusBadge from "../components/common/StatusBadge.vue";
+import { canAutoRefreshNow } from "../composables/useAutoRefreshGate";
 import { t } from "../i18n";
 
 type ForwarderLog = {
@@ -386,7 +387,7 @@ function nextPage() {
 function startAutoRefresh() {
   stopAutoRefresh();
   refreshTimer = window.setInterval(() => {
-    if (liveRefresh.value) {
+    if (liveRefresh.value && canAutoRefreshNow()) {
       void load();
     }
   }, 2000);

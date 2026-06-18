@@ -134,6 +134,7 @@ import { useAuthStore } from "../stores/auth.store";
 import { useUiStore } from "../stores/ui.store";
 import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
 import PageCard from "../components/common/PageCard.vue";
+import { canAutoRefreshNow } from "../composables/useAutoRefreshGate";
 import DataState from "../components/common/DataState.vue";
 import { t } from "../i18n";
 
@@ -225,7 +226,7 @@ const canManage = computed(() => Boolean(
 onMounted(() => {
   void refreshState(false);
   refreshTimer = window.setInterval(() => {
-    void refreshState(true);
+    if (canAutoRefreshNow()) void refreshState(true);
   }, 4000);
 });
 

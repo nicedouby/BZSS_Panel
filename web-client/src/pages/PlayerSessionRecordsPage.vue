@@ -135,6 +135,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { apiGet, apiPost } from "../app/apiClient";
+import { canAutoRefreshNow } from "../composables/useAutoRefreshGate";
 import { useAuthStore } from "../stores/auth.store";
 import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
 import PageCard from "../components/common/PageCard.vue";
@@ -227,7 +228,7 @@ function setupAutoRefresh() {
   if (!autoRefresh.value) return;
 
   autoRefreshTimer = window.setInterval(() => {
-    void loadState();
+    if (canAutoRefreshNow()) void loadState();
   }, 2500);
 }
 

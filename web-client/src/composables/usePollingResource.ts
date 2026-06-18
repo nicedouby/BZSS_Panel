@@ -6,6 +6,7 @@ import {
   ref,
   shallowRef,
 } from "vue";
+import { canAutoRefreshNow } from "./useAutoRefreshGate";
 
 export type UsePollingResourceOptions<T> = {
   fetcher: () => Promise<T>;
@@ -50,7 +51,7 @@ export function usePollingResource<T>(options: UsePollingResourceOptions<T>) {
     clearTimer();
     if (intervalMs > 0 && (!pauseWhenHidden || !isHidden())) {
       timer = window.setInterval(() => {
-        void refresh();
+        if (canAutoRefreshNow()) void refresh();
       }, intervalMs);
     }
   }
@@ -96,7 +97,7 @@ export function usePollingResource<T>(options: UsePollingResourceOptions<T>) {
     }
     if (active) {
       start();
-      void refresh();
+      if (canAutoRefreshNow()) void refresh();
     }
   }
 

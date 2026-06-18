@@ -114,6 +114,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } fr
 import { apiGet } from "../app/apiClient";
 import RuntimeLogModal from "../components/runtime/RuntimeLogModal.vue";
 import * as echarts from "echarts";
+import { canAutoRefreshNow } from "../composables/useAutoRefreshGate";
 import { readChartThemeTokens } from "../theme/chartTheme";
 import { useUiStore } from "../stores/ui.store";
 
@@ -438,7 +439,9 @@ function onWindowKeyDown(event: KeyboardEvent) {
 
 onMounted(() => {
   void fetchStatus();
-  timer = window.setInterval(fetchStatus, 5000);
+  timer = window.setInterval(() => {
+    if (canAutoRefreshNow()) void fetchStatus();
+  }, 5000);
   window.addEventListener("keydown", onWindowKeyDown);
 });
 

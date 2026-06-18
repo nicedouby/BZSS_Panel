@@ -185,29 +185,16 @@
                 </div>
               </div>
 
-              <label class="reserve-field">
-                <span>玩家搜索</span>
-                <div class="reserve-search-row">
-                  <input v-model.trim="playerKeyword" class="reserve-input" type="search" placeholder="玩家名或 Steam64">
-                  <button type="button" class="reserve-mini-btn" :disabled="searchingPlayers || !playerKeyword" @click="searchPlayerDatabase">
-                    {{ searchingPlayers ? "搜索中..." : "搜索" }}
-                  </button>
-                </div>
+                            <label class="reserve-field">
+                <span>玩家搜索与选择 (支持模糊搜索 / 数据库检索)</span>
+                <PlayerSelect
+                  v-model:steamId="form.steamId"
+                  v-model:playerName="form.name"
+                  placeholder="搜索在线玩家 / 数据库玩家..."
+                />
               </label>
 
-              <div v-if="playerResults.length" class="reserve-player-results">
-                <button
-                  v-for="player in playerResults"
-                  :key="player.steamId || player.eosId || player.name"
-                  type="button"
-                  class="reserve-player-result"
-                  :disabled="!player.steamId"
-                  @click="selectPlayer(player)"
-                >
-                  <strong>{{ player.name }}</strong>
-                  <span class="mono">{{ player.steamId || "无 Steam64" }}</span>
-                </button>
-              </div>
+              
 
               <div class="reserve-form-grid">
                 <label class="reserve-field">
@@ -774,6 +761,7 @@ import { searchPlayers, type SearchablePlayer } from "../../features/group-repor
 import { useUiStore } from "../../stores/ui.store";
 import { copyTextWithToast } from "../../utils/clipboard";
 import { goToPlayerDatabaseSearch } from "../../utils/player-database";
+import PlayerSelect from "../common/PlayerSelect.vue";
 
 type ActiveTab = "manual" | "batches" | "activations";
 type ExpireMode = "extend" | "exact";
@@ -809,7 +797,7 @@ const exporting = ref(false);
 const saving = ref(false);
 const deletingExpired = ref(false);
 const deletingSteamId = ref("");
-const searchingPlayers = ref(false);
+
 const batchCreating = ref(false);
 const batchActionLoadingId = ref("");
 const pendingExtendDays = ref<number | null>(null);
@@ -820,8 +808,8 @@ const cdkState = ref<ReserveSlotsCdkState | null>(null);
 const selectedSteamId = ref("");
 const filterText = ref("");
 const statusFilter = ref<"all" | "active" | "expired">("all");
-const playerKeyword = ref("");
-const playerResults = ref<SearchablePlayer[]>([]);
+
+
 const expireMode = ref<ExpireMode>("extend");
 const activeTab = ref<ActiveTab>("manual");
 const batchModalOpen = ref(false);
@@ -1154,20 +1142,7 @@ async function removeExpiredMembers() {
   }
 }
 
-async function searchPlayerDatabase() {
-  const query = playerKeyword.value.trim();
-  if (!query || searchingPlayers.value) return;
-  searchingPlayers.value = true;
-  error.value = null;
 
-  try {
-    playerResults.value = await searchPlayers(query);
-  } catch (err) {
-    error.value = renderError(err);
-  } finally {
-    searchingPlayers.value = false;
-  }
-}
 
 async function exportCsv() {
   exporting.value = true;
@@ -1222,22 +1197,14 @@ function applyState(next: ReserveSlotsState) {
   }
 }
 
-function selectPlayer(player: SearchablePlayer) {
-  if (!player.steamId) return;
-  form.steamId = player.steamId;
-  form.name = player.name;
-  playerKeyword.value = player.name || player.steamId;
-  if (currentMember.value?.group) {
-    form.group = currentMember.value.group;
-  }
-}
+
 
 function fillFromSelectedMember() {
   if (!selectedMember.value) return;
   form.steamId = selectedMember.value.steamId;
   form.group = selectedMember.value.group || groupOptions.value[0] || "BZSSVIP";
   form.name = selectedMember.value.name || "";
-  playerKeyword.value = selectedMember.value.name || selectedMember.value.steamId;
+  
   expireMode.value = "extend";
   form.durationDays = 30;
 }
