@@ -142,6 +142,7 @@
               :can-edit-tickets="canEditTickets"
               :playtimes="playtimes"
               :combat-stats-lookup="combatStatsLookup"
+              :health-lookup="healthLookup"
               :density-mode="pageState.densityMode"
               :multi-select-mode="multiSelectMode"
               :selected-player-ids="selectedPlayerIds"
@@ -288,7 +289,7 @@ import { normalizeRefreshPolicy, resolveRefreshDelay } from "../app/refreshPolic
 import { useAutoRefreshGate } from "../composables/useAutoRefreshGate";
 import { cancelIdleTask, scheduleIdleTask } from "../utils/idle";
 import { resolvePlayerIdentityIp } from "../app/playerIdentityApi";
-import { fetchBzssCorePlayerInfo } from "../app/bzssCoreApi";
+import { fetchBzssCorePlayerInfo, fetchBzssCorePlayerInfoList } from "../app/bzssCoreApi";
 import type {
   PageState,
   PlayerDetailViewModel,
@@ -433,6 +434,33 @@ const activePlayerBzssQuery = useQuery({
   refetchInterval: computed(() => (activePlayerWindow.value?.detail.name && canAutoRefresh.value ? 100 : false)),
   refetchIntervalInBackground: true,
   refetchOnWindowFocus: false,
+});
+const bzssCoreAllPlayersQuery = useQuery({
+  queryKey: computed(() => ["bzss-core-player-info-all", auth.authenticated]),
+  enabled: computed(() => auth.authenticated && canAutoRefresh.value),
+  queryFn: async () => {
+    try {
+      return await fetchBzssCorePlayerInfoList();
+    } catch {
+      return null;
+    }
+  },
+  refetchInterval: computed(() => (canAutoRefresh.value ? 200 : false)),
+  refetchIntervalInBackground: true,
+  refetchOnWindowFocus: false,
+  retry: false,
+});
+const healthLookup = computed<Record<string, number | null>>(() => {
+  const players = bzssCoreAllPlayersQuery.data.value?.players;
+  if (!Array.isArray(players) || players.length === 0) return {};
+  const map: Record<string, number | null> = {};
+  for (const p of players) {
+    const name = String(p.playerName ?? "").trim();
+    if (!name) continue;
+    const hp = p.soldierInfo?.health;
+    map[name] = hp != null && Number.isFinite(hp) ? hp : null;
+  }
+  return map;
 });
 const remoteTicketCounts = computed(() => {
   const latest = remoteTelemetryState.value?.currentSample ?? null;
