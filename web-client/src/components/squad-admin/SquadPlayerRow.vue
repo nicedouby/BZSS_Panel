@@ -11,8 +11,16 @@
       <div v-else class="player-avatar-container">
         <div
           class="player-avatar"
-          :title="displayRole(player.role)"
+          :title="`${displayRole(player.role)}${health != null ? '  HP: ' + health.toFixed(0) + '%' : ''}`"
         >
+          <!-- DNF-style liquid health fill -->
+          <div
+            v-if="health != null"
+            class="health-liquid"
+            :class="healthLiquidClass"
+            :style="{ height: `${Math.max(0, Math.min(100, health))}%` }"
+          />
+          <!-- Role icon on top -->
           <img
             v-if="isRoleIconImage"
             class="player-avatar-image"
@@ -21,9 +29,6 @@
           />
           <span v-else class="player-avatar-text" aria-hidden="true">{{ roleIcon.icon }}</span>
         </div>
-      </div>
-      <div class="playtime-chip" :title="playtimeTitle">
-        {{ playtimeText }}
       </div>
     </div>
 
@@ -37,6 +42,9 @@
         >
           {{ player.isLeader ? "队长" : "成员" }}
         </span>
+        <div v-if="playtimeText" class="playtime-chip" :title="playtimeTitle">
+          {{ playtimeText }}
+        </div>
       </div>
 
       <div v-if="secondaryIdentityText" class="player-sub-line" :title="secondaryIdentityText">
@@ -106,6 +114,7 @@ const props = defineProps<{
   player: PlayerRowViewModel;
   playtimeHours: number | null;
   combatStats: CombatStats;
+  health?: number | null;
   multiSelectMode?: boolean;
   checked?: boolean;
   steamAvatar?: string | null;
@@ -169,6 +178,14 @@ const downs = computed(() => normalizeStat(props.combatStats?.downs));
 const deaths = computed(() => normalizeStat(props.combatStats?.deaths));
 const tk = computed(() => normalizeStat(props.combatStats?.tk));
 const revives = computed(() => normalizeStat(props.combatStats?.revives));
+
+const healthLiquidClass = computed(() => {
+  const hp = props.health;
+  if (hp == null) return "";
+  if (hp > 70) return "hp-high";
+  if (hp > 35) return "hp-mid";
+  return "hp-low";
+});
 
 const squadlessText = computed(() => {
   if (props.player.squadId != null) return "";
@@ -249,3 +266,45 @@ function displayRole(role: string | null | undefined) {
   return key ? t(key, raw) : raw;
 }
 </script>
+
+<style scoped>
+/* ─── DNF liquid health fill inside avatar ───────────────────────────────── */
+.health-liquid {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  /* height is driven by inline style = HP% */
+  transition: height 0.45s cubic-bezier(0.25, 0.8, 0.25, 1), background-color 0.4s ease;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.health-liquid.hp-high {
+  background: linear-gradient(0deg, rgba(34,197,94,0.55) 0%, rgba(74,222,128,0.28) 100%);
+  box-shadow: 0 -2px 8px rgba(34, 197, 94, 0.4) inset;
+}
+
+.health-liquid.hp-mid {
+  background: linear-gradient(0deg, rgba(245,158,11,0.55) 0%, rgba(251,191,36,0.28) 100%);
+  box-shadow: 0 -2px 8px rgba(245, 158, 11, 0.4) inset;
+}
+
+.health-liquid.hp-low {
+  background: linear-gradient(0deg, rgba(239,68,68,0.65) 0%, rgba(248,113,113,0.32) 100%);
+  box-shadow: 0 -2px 10px rgba(239, 68, 68, 0.5) inset;
+  animation: hp-liquid-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes hp-liquid-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.55; }
+}
+
+/* Role icon and text sit above the fill */
+.player-avatar .player-avatar-image,
+.player-avatar .player-avatar-text {
+  position: relative;
+  z-index: 1;
+}
+</style>

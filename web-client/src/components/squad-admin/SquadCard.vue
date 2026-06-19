@@ -60,6 +60,7 @@
           :player="squad.leader"
           :playtime-hours="getPlayerPlaytime(squad.leader.steamId)"
           :combat-stats="getPlayerCombatStats(squad.leader)"
+          :health="getPlayerHealth(squad.leader)"
           :steam-avatar="getPlayerSteamAvatar(squad.leader.steamId)"
           :multi-select-mode="multiSelectMode"
           :checked="isPlayerChecked(squad.leader.playerId)"
@@ -77,6 +78,7 @@
           :player="member"
           :playtime-hours="getPlayerPlaytime(member.steamId)"
           :combat-stats="getPlayerCombatStats(member)"
+          :health="getPlayerHealth(member)"
           :steam-avatar="getPlayerSteamAvatar(member.steamId)"
           :multi-select-mode="multiSelectMode"
           :checked="isPlayerChecked(member.playerId)"
@@ -100,6 +102,7 @@ const props = defineProps<{
   squad: SquadViewModel;
   playtimes: Record<string, any>;
   combatStatsLookup: Record<string, CombatStats>;
+  healthLookup?: Record<string, number | null>;
   densityMode?: "comfortable" | "compact";
   multiSelectMode?: boolean;
   selectedPlayerIds?: Set<string | number>;
@@ -191,6 +194,14 @@ function getPlayerSteamAvatar(steamId: string | null | undefined): string | null
 
 function getPlayerCombatStats(player: PlayerRowViewModel): CombatStats {
   return resolveCombatStats(player.raw || player, props.combatStatsLookup);
+}
+
+function getPlayerHealth(player: PlayerRowViewModel): number | null {
+  if (!props.healthLookup) return null;
+  const name = String(player.name ?? "").trim();
+  if (!name) return null;
+  const hp = props.healthLookup[name];
+  return hp != null && Number.isFinite(hp) ? hp : null;
 }
 
 function warningTone(label: string): "warn" | "idle" {

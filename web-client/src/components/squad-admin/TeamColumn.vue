@@ -67,6 +67,7 @@
         :squad="squad"
         :playtimes="playtimes"
         :combat-stats-lookup="combatStatsLookup"
+        :health-lookup="healthLookup"
         :density-mode="densityMode"
         :multi-select-mode="multiSelectMode"
         :selected-player-ids="selectedPlayerIds"
@@ -89,6 +90,7 @@ const props = defineProps<{
   team: TeamViewModel;
   playtimes: Record<string, any>;
   combatStatsLookup: Record<string, CombatStats>;
+  healthLookup?: Record<string, number | null>;
   densityMode?: "comfortable" | "compact";
   multiSelectMode?: boolean;
   selectedPlayerIds?: Set<string | number>;

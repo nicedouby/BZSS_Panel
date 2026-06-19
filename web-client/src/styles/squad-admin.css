@@ -313,7 +313,7 @@
 
 .squad-player-row {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr);
+  grid-template-columns: 50px minmax(0, 1fr);
   gap: 8px;
   align-items: center;
   position: relative;
@@ -366,14 +366,15 @@
 }
 
 .player-avatar {
-  width: 26px;
-  height: 26px;
-  border-radius: var(--radius-full);
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
   border: 1px solid rgba(150, 170, 210, 0.22);
   background: rgba(255, 255, 255, 0.05);
   display: grid;
   place-items: center;
   overflow: hidden;
+  position: relative;
   transition: border-color 0.15s ease;
 }
 
@@ -387,8 +388,8 @@
 }
 
 .player-avatar-image {
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
   object-fit: contain;
   display: block;
 }
@@ -400,8 +401,8 @@
 
 .player-avatar-container {
   position: relative;
-  width: 26px;
-  height: 26px;
+  width: 42px;
+  height: 42px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -487,7 +488,7 @@
 }
 
 .player-avatar-text {
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 800;
   color: var(--color-text-secondary);
 }
@@ -747,14 +748,19 @@
 
 @media (max-width: 900px) {
   .squad-player-row {
-    grid-template-columns: 44px minmax(0, 1fr);
+    grid-template-columns: 46px minmax(0, 1fr);
     gap: 6px;
     padding: 6px 8px;
   }
 
   .player-avatar {
-    width: 22px;
-    height: 22px;
+    width: 34px;
+    height: 34px;
+  }
+
+  .player-avatar-container {
+    width: 34px;
+    height: 34px;
   }
 
   .playtime-chip {
@@ -775,14 +781,19 @@
 
 @media (max-width: 480px) {
   .squad-player-row {
-    grid-template-columns: 36px minmax(0, 1fr);
+    grid-template-columns: 40px minmax(0, 1fr);
     min-height: 50px;
     padding: 5px 6px;
   }
 
   .player-avatar {
-    width: 18px;
-    height: 18px;
+    width: 28px;
+    height: 28px;
+  }
+
+  .player-avatar-container {
+    width: 28px;
+    height: 28px;
   }
 
   .player-steam-bg,
