@@ -19,9 +19,11 @@
         class="map-transform-container"
         :style="{
           transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
-          cursor: isDragging ? 'grabbing' : 'grab'
+          cursor: measureMode ? 'crosshair' : isDragging ? 'grabbing' : 'grab'
         }"
         @mousemove="onMapMousemove"
+        @click="onMapClick"
+        @contextmenu.prevent="handleMapRightClick"
       >
         <!-- Dynamic Map Image -->
         <img
@@ -62,7 +64,7 @@
         </div>
 
         <!-- Player Markers Layer -->
-        <div class="player-markers-layer">
+        <div class="player-markers-layer" :style="{ pointerEvents: measureMode ? 'none' : 'auto' }">
           <button
             v-for="player in filteredPlayers"
             :key="player.playerGuid || player.playerName"
@@ -78,15 +80,26 @@
             :style="{
               left: `${player.mapX}%`,
               top: `${player.mapY}%`,
-              transform: `translate(-50%, -50%) scale(${markerScale})`
+              transform: `translate(-50%, -50%) scale(${dynamicMarkerScale})`
             }"
             type="button"
-            @click="showPlayerDetails(player)"
+            @click="showPlayerDetails(player, $event)"
             @mouseenter="hoveredPlayer = player"
             @mouseleave="hoveredPlayer = null"
           >
             <!-- Marker Aura/Pulse -->
             <div class="marker-pulse"></div>
+
+            <!-- Player Direction Pointer -->
+            <div
+              v-if="player.soldierInfo?.rotation?.y != null"
+              class="marker-direction"
+              :style="{
+                transform: `translate(-50%, -50%) rotate(${player.soldierInfo.rotation.y + 90}deg)`
+              }"
+            >
+              <div class="direction-arrow"></div>
+            </div>
 
             <!-- Squad Leader Star or Icon border -->
             <div class="marker-ring">
@@ -104,78 +117,118 @@
               {{ player.squadId }}
             </span>
 
-            <!-- Text Tag for Player Name & Coordinates -->
+            <!-- Text Tag for Player Name & Squad Number -->
             <span v-if="showPlayerNames" class="tag">
               <span class="player-name-tag">{{ player.playerName }}</span>
-              <span v-if="showPlayerCoords" class="coords-tag">
-                ({{ Math.round(player.soldierInfo?.position?.x ?? 0) }}, {{ Math.round(player.soldierInfo?.position?.y ?? 0) }})
+              <span v-if="player.squadId" class="player-squad-tag">#{{ player.squadId }}</span>
+              <span v-if="showPlayerCoords && player.soldierInfo?.position" class="player-coords-tag">
+                [{{ Math.round(player.soldierInfo.position.x ?? 0) }}, {{ Math.round(player.soldierInfo.position.y ?? 0) }}]
               </span>
             </span>
           </button>
         </div>
 
-        <!-- Floating Player Hover Tooltip -->
-        <div
-          v-if="hoveredMarker"
-          class="player-tooltip"
-          :class="{ 'team-1-border': normalizeTeam(hoveredMarker.teamId) === 1, 'team-2-border': normalizeTeam(hoveredMarker.teamId) === 2 }"
-          :style="{
-            left: `${hoveredMarker.mapX}%`,
-            top: `${hoveredMarker.mapY - 1.5}%`
-          }"
-        >
-          <!-- Tooltip Header -->
-          <div class="tooltip-header">
-            <span class="tooltip-name">{{ hoveredMarker.playerName }}</span>
-            <span
-              class="tooltip-health-badge"
-              :class="{ 'low-health': (hoveredMarker.soldierInfo?.health ?? 100) < 40, 'dead-health': (hoveredMarker.soldierInfo?.health ?? 100) <= 0 }"
-            >
-              {{ (hoveredMarker.soldierInfo?.health ?? 100) <= 0 ? 'DOWNED' : `${hoveredMarker.soldierInfo?.health ?? 100}% HP` }}
+        <!-- SVG Layer for Distance Measuring -->
+        <svg v-if="measureMode" class="map-measure-svg">
+          <path
+            v-if="measurePoints.length >= 2"
+            :d="measurePathD"
+            fill="none"
+            stroke="#ffcc00"
+            stroke-width="3"
+            stroke-dasharray="6,4"
+            class="measure-polyline"
+          />
+          <circle
+            v-for="(pt, idx) in measurePoints"
+            :key="'mpt-' + idx"
+            :cx="pt.mapX * 10"
+            :cy="pt.mapY * 10"
+            r="6"
+            fill="#ffcc00"
+            stroke="#0b1120"
+            stroke-width="2"
+            class="measure-point"
+          />
+        </svg>
+
+        <!-- Distance Labels -->
+        <div v-if="measureMode" class="measure-labels-layer">
+          <div
+            v-for="(label, idx) in measureLabels"
+            :key="'mlbl-' + idx"
+            class="measure-distance-label font-mono"
+            :style="{ left: label.mapX + '%', top: label.mapY + '%' }"
+          >
+            {{ label.text }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Floating Player Hover Tooltip (rendered outside map-transform-container) -->
+      <div
+        v-if="hoveredMarker"
+        class="player-tooltip"
+        :class="{ 'team-1-border': normalizeTeam(hoveredMarker.teamId) === 1, 'team-2-border': normalizeTeam(hoveredMarker.teamId) === 2 }"
+        :style="tooltipStyle"
+      >
+        <!-- Tooltip Header -->
+        <div class="tooltip-header">
+          <span class="tooltip-name">{{ hoveredMarker.playerName }}</span>
+          <span
+            class="tooltip-health-badge"
+            :class="{ 'low-health': (hoveredMarker.soldierInfo?.health ?? 100) < 40, 'dead-health': (hoveredMarker.soldierInfo?.health ?? 100) <= 0 }"
+          >
+            {{ (hoveredMarker.soldierInfo?.health ?? 100) <= 0 ? 'DOWNED' : `${hoveredMarker.soldierInfo?.health ?? 100}% HP` }}
+          </span>
+        </div>
+
+        <!-- Divider Line -->
+        <div class="tooltip-divider"></div>
+
+        <!-- Tooltip Details Grid -->
+        <div class="tooltip-details">
+          <div class="detail-row">
+            <span class="detail-label">角色职业</span>
+            <span class="detail-val">
+              <img :src="getPlayerKitIcon(hoveredMarker)" class="inline-kit-icon" />
+              {{ inferRole(hoveredMarker) }}
             </span>
           </div>
-
-          <!-- Divider Line -->
-          <div class="tooltip-divider"></div>
-
-          <!-- Tooltip Details Grid -->
-          <div class="tooltip-details">
-            <div class="detail-row">
-              <span class="detail-label">角色职业</span>
-              <span class="detail-val">
-                <img :src="getPlayerKitIcon(hoveredMarker)" class="inline-kit-icon" />
-                {{ inferRole(hoveredMarker) }}
-              </span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">战术小队</span>
-              <span class="detail-val">
-                <span class="squad-color-pill" :style="{ background: normalizeTeam(hoveredMarker.teamId) === 1 ? '#00e5ff' : '#ff3366' }"></span>
-                #{{ hoveredMarker.squadId || '-' }}
-              </span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">武器</span>
-              <span class="detail-val font-mono">{{ hoveredMarker.soldierInfo?.weaponClass || '-' }}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">坐标</span>
-              <span class="detail-val font-mono highlight-cyan">
-                {{ Math.round(hoveredMarker.soldierInfo?.position?.x ?? 0) }}, {{ Math.round(hoveredMarker.soldierInfo?.position?.y ?? 0) }}
-              </span>
-            </div>
+          <div class="detail-row">
+            <span class="detail-label">战术小队</span>
+            <span class="detail-val">
+              <span class="squad-color-pill" :style="{ background: normalizeTeam(hoveredMarker.teamId) === 1 ? '#00e5ff' : '#ff3366' }"></span>
+              #{{ hoveredMarker.squadId || '-' }}
+            </span>
           </div>
-
-          <!-- Health visual bar -->
-          <div class="tooltip-health-track">
-            <div
-              class="tooltip-health-bar"
-              :style="{
-                width: `${hoveredMarker.soldierInfo?.health ?? 100}%`,
-                background: (hoveredMarker.soldierInfo?.health ?? 100) <= 0 ? '#ef5350' : (hoveredMarker.soldierInfo?.health ?? 100) < 40 ? '#fdd835' : '#00e5ff'
-              }"
-            ></div>
+          <div class="detail-row">
+            <span class="detail-label">武器</span>
+            <span class="detail-val font-mono">{{ cleanWeaponName(hoveredMarker.soldierInfo?.weaponClass) }}</span>
           </div>
+          <div class="detail-row">
+            <span class="detail-label">坐标</span>
+            <span class="detail-val font-mono highlight-cyan">
+              {{ Math.round(hoveredMarker.soldierInfo?.position?.x ?? 0) }}, {{ Math.round(hoveredMarker.soldierInfo?.position?.y ?? 0) }}
+            </span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">速度</span>
+            <span class="detail-val font-mono highlight-cyan">
+              {{ getPlayerSpeedText(hoveredMarker) }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Health visual bar -->
+        <div class="tooltip-health-track">
+          <div
+            class="tooltip-health-bar"
+            :style="{
+              width: `${hoveredMarker.soldierInfo?.health ?? 100}%`,
+              background: (hoveredMarker.soldierInfo?.health ?? 100) <= 0 ? '#ef5350' : (hoveredMarker.soldierInfo?.health ?? 100) < 40 ? '#fdd835' : '#00e5ff'
+            }"
+          ></div>
         </div>
       </div>
 
@@ -260,6 +313,22 @@
         >
           穿透
         </button>
+        <button
+          class="ctrl-btn text-btn measure-btn"
+          :class="{ active: measureMode }"
+          @click="toggleMeasureMode"
+          title="多点测距 (点击放置测量点，右键撤销点)"
+        >
+          测距
+        </button>
+        <button
+          v-if="measurePoints.length"
+          class="ctrl-btn text-btn"
+          @click="clearMeasurePoints"
+          title="清空测距点"
+        >
+          清空
+        </button>
       </div>
 
       <!-- Coordinate Sector Display Box (Bottom Right) -->
@@ -332,6 +401,10 @@
             <label class="option-item-sidebar">
               <input type="checkbox" v-model="disableMarkerInteraction" />
               <span class="option-text">穿透玩家标记</span>
+            </label>
+            <label class="option-item-sidebar">
+              <input type="checkbox" v-model="measureMode" />
+              <span class="option-text">开启测距模式 (右键撤销)</span>
             </label>
             <div class="option-item-slider">
               <span class="option-text">地图选择:</span>
@@ -429,8 +502,11 @@
               v-for="player in filteredTeamPlayers"
               :key="player.playerGuid || player.playerName"
               class="sidebar-player-card-row"
-              :class="{ 'is-focused': hoveredPlayer?.playerGuid === player.playerGuid }"
-              @click="showPlayerDetails(player)"
+              :class="[
+                `team-${normalizeTeam(player.teamId)}`,
+                { 'is-focused': hoveredPlayer?.playerGuid === player.playerGuid }
+              ]"
+              @click="showPlayerDetails(player, $event)"
               @mouseenter="hoveredPlayer = player"
               @mouseleave="hoveredPlayer = null"
             >
@@ -464,18 +540,21 @@
       </div>
     </div>
 
-    <!-- Official Sliding Player Detail Drawer -->
-    <PlayerDetailDrawer
-      :open="detailDrawerOpen"
-      :player="detailDrawerPlayer"
+    <!-- Official Floating Player Detail Window -->
+    <FloatingPlayerWindow
+      :open="activePlayerWindow !== null"
+      :player="activePlayerWindow?.detail ?? null"
       :server-id="currentServerId"
-      @close="detailDrawerOpen = false"
+      :anchor-x="activePlayerWindow?.anchorX ?? null"
+      :anchor-y="activePlayerWindow?.anchorY ?? null"
+      :notice="activePlayerWindow?.notice ?? ''"
+      @close="activePlayerWindow = null"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, reactive, nextTick } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, reactive, nextTick, watch } from "vue";
 import {
   fetchBzssCorePlayerInfoList,
   type BzssCorePlayerInfoResponse,
@@ -485,7 +564,7 @@ import {
 import { useServerStore } from "../stores/server.store";
 import { usePlayerStore } from "../stores/player.store";
 import { adaptPlayerDetail } from "../utils/squad-admin-adapter";
-import PlayerDetailDrawer from "../components/squad-admin/PlayerDetailDrawer.vue";
+import FloatingPlayerWindow from "../components/squad-admin/FloatingPlayerWindow.vue";
 
 interface MapMarker extends BzssCoreTrackedPlayerInfo {
   mapX: number;
@@ -503,6 +582,7 @@ const playerStore = usePlayerStore();
 
 const snapshot = ref<BzssCorePlayerInfoResponse | null>(null);
 const players = ref<BzssCoreTrackedPlayerInfo[]>([]);
+const positionedPlayers = computed(() => players.value.filter(hasValidPosition));
 const hoveredPlayer = ref<BzssCoreTrackedPlayerInfo | null>(null);
 const errorText = ref("");
 const loading = ref(false);
@@ -580,6 +660,10 @@ const markerScale = ref(1.0);
 const showPlayerNames = ref(true);
 const showPlayerCoords = ref(true);
 
+const dynamicMarkerScale = computed(() => {
+  return markerScale.value / Math.pow(zoom.value, 0.65);
+});
+
 // Sidebar states
 const sidebarCollapsed = ref(false);
 const sidebarTab = ref<"squads" | "players">("squads");
@@ -587,9 +671,210 @@ const activeTeamTab = ref<number>(1);
 const focusedSquadId = ref<number | null>(null);
 const combatLogs = ref<CombatLog[]>([]);
 
-// Detail Drawer States
-const detailDrawerOpen = ref(false);
-const detailDrawerPlayer = ref<any>(null);
+const activePlayerWindow = ref<{
+  detail: any;
+  anchorX: number;
+  anchorY: number;
+  notice: string;
+} | null>(null);
+
+// Distance Measuring State
+const measureMode = ref(false);
+const measurePoints = ref<Array<{ mapX: number; mapY: number; gameX: number; gameY: number }>>([]);
+
+// Position Interpolation State
+const playerHistory = new Map<string, Array<{ x: number, y: number, time: number }>>();
+const interpolatedPositions = ref<Record<string, { mapX: number, mapY: number }>>({});
+let animationFrameId: number | null = null;
+const PLAYBACK_DELAY_MS = 1500; // 1.5s delay for smooth interpolation cache
+
+watch(
+  positionedPlayers,
+  (newList) => {
+    newList.forEach(player => {
+      const key = player.playerGuid || player.playerName;
+      if (!key) return;
+      const pos = player.soldierInfo?.position;
+      if (!pos) return;
+      
+      let history = playerHistory.get(key);
+      if (!history) {
+        history = [];
+        playerHistory.set(key, history);
+      }
+      
+      const last = history[history.length - 1];
+      if (!last || last.x !== pos.x || last.y !== pos.y) {
+        history.push({
+          x: pos.x ?? 0,
+          y: pos.y ?? 0,
+          time: Date.now()
+        });
+        if (history.length > 10) {
+          history.shift();
+        }
+      }
+    });
+
+    const currentKeys = new Set(newList.map(p => p.playerGuid || p.playerName).filter(Boolean));
+    for (const key of playerHistory.keys()) {
+      if (!currentKeys.has(key)) {
+        playerHistory.delete(key);
+      }
+    }
+  },
+  { immediate: true, deep: true }
+);
+
+function startInterpolationLoop() {
+  const tick = () => {
+    const renderTime = Date.now() - PLAYBACK_DELAY_MS;
+    const newPositions: Record<string, { mapX: number, mapY: number }> = {};
+    const bounds = activeMapConfig.value.bounds;
+    
+    positionedPlayers.value.forEach(player => {
+      const key = player.playerGuid || player.playerName;
+      if (!key) return;
+      
+      const history = playerHistory.get(key);
+      if (!history || history.length === 0) {
+        const pos = player.soldierInfo?.position;
+        if (pos) {
+          newPositions[key] = {
+            mapX: project(pos.x ?? 0, bounds.minX, bounds.maxX),
+            mapY: project(pos.y ?? 0, bounds.minY, bounds.maxY)
+          };
+        }
+        return;
+      }
+      
+      let prevSample = history[0];
+      let nextSample = history[0];
+      let found = false;
+      
+      for (let i = 0; i < history.length - 1; i++) {
+        if (history[i].time <= renderTime && history[i+1].time >= renderTime) {
+          prevSample = history[i];
+          nextSample = history[i+1];
+          found = true;
+          break;
+        }
+      }
+      
+      let interpX = 0;
+      let interpY = 0;
+      
+      if (found) {
+        const timeDiff = nextSample.time - prevSample.time;
+        const t = timeDiff > 0 ? (renderTime - prevSample.time) / timeDiff : 0;
+        interpX = prevSample.x + (nextSample.x - prevSample.x) * t;
+        interpY = prevSample.y + (nextSample.y - prevSample.y) * t;
+      } else {
+        if (renderTime > history[history.length - 1].time) {
+          interpX = history[history.length - 1].x;
+          interpY = history[history.length - 1].y;
+        } else {
+          interpX = history[0].x;
+          interpY = history[0].y;
+        }
+      }
+      
+      newPositions[key] = {
+        mapX: project(interpX, bounds.minX, bounds.maxX),
+        mapY: project(interpY, bounds.minY, bounds.maxY)
+      };
+    });
+    
+    interpolatedPositions.value = newPositions;
+    animationFrameId = requestAnimationFrame(tick);
+  };
+  animationFrameId = requestAnimationFrame(tick);
+}
+
+function toggleMeasureMode() {
+  measureMode.value = !measureMode.value;
+  if (!measureMode.value) {
+    measurePoints.value = [];
+  }
+}
+
+function clearMeasurePoints() {
+  measurePoints.value = [];
+}
+
+const measureLabels = computed(() => {
+  const pts = measurePoints.value;
+  if (pts.length === 0) return [];
+  
+  const labels: any[] = [];
+  let totalDistance = 0;
+  
+  pts.forEach((pt, idx) => {
+    if (idx === 0) {
+      labels.push({
+        mapX: pt.mapX,
+        mapY: pt.mapY,
+        text: "起点 (Start)"
+      });
+    } else {
+      const prev = pts[idx - 1];
+      const dx = pt.gameX - prev.gameX;
+      const dy = pt.gameY - prev.gameY;
+      const dist = Math.sqrt(dx * dx + dy * dy) / 100;
+      totalDistance += dist;
+      
+      labels.push({
+        mapX: pt.mapX,
+        mapY: pt.mapY,
+        text: `+${Math.round(dist)}米 (共${Math.round(totalDistance)}米)`
+      });
+    }
+  });
+  
+  return labels;
+});
+
+const measurePathD = computed(() => {
+  const pts = measurePoints.value;
+  if (pts.length < 2) return "";
+  return pts.map((pt, idx) => {
+    const pxX = pt.mapX * 10;
+    const pxY = pt.mapY * 10;
+    return `${idx === 0 ? 'M' : 'L'} ${pxX} ${pxY}`;
+  }).join(" ");
+});
+
+function onMapClick(e: MouseEvent) {
+  if (!measureMode.value) return;
+  // Ignore clicks inside UI controls
+  if ((e.target as HTMLElement).closest(".glass-panel") || (e.target as HTMLElement).closest(".tactical-sidebar")) return;
+
+  if (!mapRef.value) return;
+  const rect = mapRef.value.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  
+  const pctX = (x / rect.width);
+  const pctY = (y / rect.height);
+  
+  const bounds = activeMapConfig.value.bounds;
+  const gameX = bounds.minX + pctX * (bounds.maxX - bounds.minX);
+  const gameY = bounds.minY + pctY * (bounds.maxY - bounds.minY);
+
+  measurePoints.value.push({
+    mapX: pctX * 100,
+    mapY: pctY * 100,
+    gameX,
+    gameY
+  });
+}
+
+function handleMapRightClick() {
+  if (!measureMode.value) return;
+  if (measurePoints.value.length > 0) {
+    measurePoints.value.pop();
+  }
+}
 
 // Get real Server metrics
 const currentServerId = computed(() => String(serverStore.snapshot?.serverId ?? ""));
@@ -632,19 +917,19 @@ const tickets = computed(() => {
   };
 });
 
-const positionedPlayers = computed(() => players.value.filter(hasValidPosition));
-
 const markers = computed<MapMarker[]>(() => {
   const positioned = positionedPlayers.value;
   if (!positioned.length) return [];
 
   const bounds = activeMapConfig.value.bounds;
   return positioned.map((player) => {
+    const key = player.playerGuid || player.playerName;
+    const interp = interpolatedPositions.value[key];
     const pos = player.soldierInfo.position as BzssCoreTrackedVector;
     return {
       ...player,
-      mapX: project(pos.x ?? 0, bounds.minX, bounds.maxX),
-      mapY: project(pos.y ?? 0, bounds.minY, bounds.maxY),
+      mapX: interp ? interp.mapX : project(pos.x ?? 0, bounds.minX, bounds.maxX),
+      mapY: interp ? interp.mapY : project(pos.y ?? 0, bounds.minY, bounds.maxY),
     };
   });
 });
@@ -666,6 +951,44 @@ const hoveredMarker = computed(() => {
   return markers.value.find(
     (m) => m.playerGuid === hoveredPlayer.value?.playerGuid || m.playerName === hoveredPlayer.value?.playerName
   ) || null;
+});
+
+// Hover tooltip style with screen coordinate projection & boundary clamping
+const tooltipStyle = computed(() => {
+  if (!hoveredMarker.value || !containerRef.value) return { display: "none" };
+  const mapX = hoveredMarker.value.mapX;
+  const mapY = hoveredMarker.value.mapY;
+  
+  const pixelX = panX.value + (mapX * 10) * zoom.value;
+  const pixelY = panY.value + (mapY * 10) * zoom.value;
+  
+  const tooltipWidth = 170;
+  const halfWidth = tooltipWidth / 2;
+  const viewportWidth = containerRef.value.clientWidth;
+  
+  let adjustedX = pixelX;
+  if (pixelX - halfWidth < 12) {
+    adjustedX = halfWidth + 12;
+  } else if (pixelX + halfWidth > viewportWidth - 12) {
+    adjustedX = viewportWidth - halfWidth - 12;
+  }
+  
+  const tooltipHeight = 160; // approximate height
+  let adjustedY = pixelY - 12;
+  let transform = "translate(-50%, -100%)";
+  
+  if (pixelY - tooltipHeight < 12) {
+    adjustedY = pixelY + 12;
+    transform = "translate(-50%, 0)";
+  }
+  
+  return {
+    left: `${adjustedX}px`,
+    top: `${adjustedY}px`,
+    transform,
+    position: "absolute" as const,
+    zIndex: 100
+  };
 });
 
 // Filter players for active team list
@@ -821,19 +1144,19 @@ function toggleSquadFocus(squadId: number) {
   }
 }
 
-// Show player detail in sliding drawer
-function showPlayerDetails(player: BzssCoreTrackedPlayerInfo) {
+// Show player detail in floating window
+function showPlayerDetails(player: BzssCoreTrackedPlayerInfo, event?: MouseEvent) {
   const storePlayer = playerStore.active.find(
     (p) => p.name === player.playerName || p.steamID === player.playerGuid
   );
 
+  let detail: any;
   if (storePlayer) {
-    const detail = adaptPlayerDetail(storePlayer, null, {});
+    detail = adaptPlayerDetail(storePlayer, null, {});
     detail.bzssCorePlayerInfo = player;
     detail.bzssCoreStatus = "ready";
-    detailDrawerPlayer.value = detail;
   } else {
-    detailDrawerPlayer.value = {
+    detail = {
       playerId: null,
       name: player.playerName,
       teamId: normalizeTeam(player.teamId),
@@ -855,7 +1178,13 @@ function showPlayerDetails(player: BzssCoreTrackedPlayerInfo) {
       }
     };
   }
-  detailDrawerOpen.value = true;
+
+  activePlayerWindow.value = {
+    detail,
+    anchorX: event?.clientX ?? Math.floor(window.innerWidth / 2),
+    anchorY: event?.clientY ?? Math.floor(window.innerHeight / 2),
+    notice: ""
+  };
 }
 
 // Log Feed
@@ -974,6 +1303,60 @@ function inferRole(player: BzssCoreTrackedPlayerInfo) {
   return player.soldierInfo?.soldierClass || "Unknown";
 }
 
+function getRoleColor(player: BzssCoreTrackedPlayerInfo) {
+  if (isSquadLeader(player)) {
+    return "#fab005";
+  }
+  
+  const role = inferRole(player).toLowerCase();
+  if (role.includes("medic")) {
+    return "#2ec4b6";
+  }
+  if (role.includes("anti-tank") || role.includes("hat") || role.includes("lat") || role.includes("rocket")) {
+    return "#e71d36";
+  }
+  if (role.includes("marksman") || role.includes("sniper")) {
+    return "#bd93f9";
+  }
+  if (role.includes("machine") || role.includes("mg") || role.includes("grenadier")) {
+    return "#ff9f1c";
+  }
+  if (role.includes("crewman") || role.includes("pilot")) {
+    return "#868e96";
+  }
+  return "#ffffff";
+}
+
+function getPlayerSpeedText(player: any) {
+  const key = player.playerGuid || player.playerName;
+  if (!key) return "-";
+  const history = playerHistory.get(key);
+  if (!history || history.length < 2) return "0.0 m/s";
+  
+  const p1 = history[history.length - 2];
+  const p2 = history[history.length - 1];
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+  const dist = Math.sqrt(dx * dx + dy * dy) / 100;
+  const dt = (p2.time - p1.time) / 1000;
+  
+  if (dt <= 0) return "0.0 m/s";
+  const speedMS = dist / dt;
+  const speedKMH = speedMS * 3.6;
+  
+  if (speedMS < 0.1) return "0.0 m/s";
+  
+  return `${speedMS.toFixed(1)} m/s (${Math.round(speedKMH)} km/h)`;
+}
+
+function cleanWeaponName(weaponClass: string | null | undefined): string {
+  if (!weaponClass) return "-";
+  return weaponClass
+    .replace(/^(BP_|Weapon_)/i, "")
+    .replace(/(_\d+)?_C.*$/i, "")
+    .replace(/_\d+$/, "");
+}
+
 async function refreshTrackedPlayers() {
   loading.value = true;
   try {
@@ -989,6 +1372,7 @@ async function refreshTrackedPlayers() {
 }
 
 onMounted(() => {
+  startInterpolationLoop();
   void refreshTrackedPlayers();
   refreshTimer = window.setInterval(() => {
     void refreshTrackedPlayers();
@@ -1006,6 +1390,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  if (animationFrameId) cancelAnimationFrame(animationFrameId);
   if (refreshTimer) window.clearInterval(refreshTimer);
   if (simulatedCombatTimer) window.clearInterval(simulatedCombatTimer);
   window.removeEventListener("resize", fitToViewport);
@@ -1153,15 +1538,31 @@ onBeforeUnmount(() => {
   position: absolute;
   top: 50%;
   left: 50%;
-  border: 1px solid rgba(0, 240, 255, 0.06);
+  border: 1px solid rgba(0, 240, 255, 0.04);
   border-radius: 50%;
   transform: translate(-50%, -50%);
   pointer-events: none;
+  animation: radar-pulse 6s infinite ease-in-out;
 }
 
-.circle-1 { width: 30%; height: 30%; }
-.circle-2 { width: 60%; height: 60%; }
-.circle-3 { width: 90%; height: 90%; }
+.circle-1 { width: 30%; height: 30%; animation-delay: 0s; }
+.circle-2 { width: 60%; height: 60%; animation-delay: 2s; }
+.circle-3 { width: 90%; height: 90%; animation-delay: 4s; }
+
+@keyframes radar-pulse {
+  0% {
+    border-color: rgba(0, 240, 255, 0.03);
+    box-shadow: 0 0 0 rgba(0, 240, 255, 0);
+  }
+  50% {
+    border-color: rgba(0, 240, 255, 0.15);
+    box-shadow: 0 0 15px rgba(0, 240, 255, 0.06);
+  }
+  100% {
+    border-color: rgba(0, 240, 255, 0.03);
+    box-shadow: 0 0 0 rgba(0, 240, 255, 0);
+  }
+}
 
 /* Player markers styling */
 .player-markers-layer {
@@ -1229,8 +1630,8 @@ onBeforeUnmount(() => {
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background-color: #0b1120;
   display: flex;
@@ -1238,86 +1639,160 @@ onBeforeUnmount(() => {
   justify-content: center;
   z-index: 2;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
-  border: 2.5px solid;
+  border: 2px solid;
   transition: all 0.2s ease;
 }
 
-.team-1 .marker-ring { border-color: #00e5ff; }
-.team-2 .marker-ring { border-color: #ff3366; }
-.is-dead .marker-ring { border-color: #94a3b8; filter: grayscale(1) brightness(0.6); }
+.team-1 .marker-ring {
+  border-color: var(--color-team1-primary, #37c8ff);
+  background-color: #0b6fa3;
+  box-shadow: 0 0 8px rgba(55, 200, 255, 0.35);
+}
+.team-2 .marker-ring {
+  border-color: var(--color-team2-primary, #ff9b45);
+  background-color: #b55314;
+  box-shadow: 0 0 8px rgba(255, 155, 69, 0.35);
+}
+.is-dead .marker-ring {
+  filter: saturate(0.85) brightness(0.7);
+  opacity: 0.8;
+  box-shadow: none;
+}
 
-/* Leader special outline */
+/* Leader special outline — slightly larger scale only */
 .is-squadleader .marker-ring {
   transform: translate(-50%, -50%) scale(1.15);
 }
 
 .kit-icon-img {
-  width: 14px;
-  height: 14px;
+  width: 11px;
+  height: 11px;
   object-fit: contain;
   filter: invert(1);
 }
 
 .is-dead .kit-icon-img {
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
 }
 
 .squad-index-tag {
   position: absolute;
-  bottom: -7px;
+  bottom: -5px;
   right: -3px;
   background-color: #0f172a;
   color: #e2e8f0;
-  font-size: 8px;
+  font-size: 7.5px;
   line-height: 1;
-  padding: 2px 3.5px;
-  border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 1px 2.5px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
   font-family: monospace;
   font-weight: bold;
   z-index: 3;
 }
 
-.team-1 .squad-index-tag { color: #00e5ff; }
-.team-2 .squad-index-tag { color: #ff5252; }
+.team-1 .squad-index-tag { color: var(--color-team1-primary, #37c8ff); }
+.team-2 .squad-index-tag { color: var(--color-team2-primary, #ff9b45); }
 
-/* Text Tag for Player Name & Coordinates (absolute offset, doesn't shift the dot center) */
+/* Player direction indicators */
+.marker-direction {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 26px;
+  height: 26px;
+  transform-origin: center center;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.direction-arrow {
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-bottom: 5px solid #ffffff;
+}
+
+.team-1 .direction-arrow {
+  border-bottom-color: var(--color-team1-primary, #37c8ff);
+}
+
+.team-2 .direction-arrow {
+  border-bottom-color: var(--color-team2-primary, #ff9b45);
+}
+
+.is-dead .direction-arrow {
+  display: none;
+}
+
+/* Text Tag for Player Name & Squad Number (positioned below the icon) */
 .player-marker .tag {
   position: absolute;
-  left: 28px;
-  top: 50%;
-  transform: translateY(-50%);
+  left: 50%;
+  top: 100%;
+  transform: translate(-50%, 3px);
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: rgba(15, 23, 42, 0.88);
-  border: 1px solid rgba(226, 232, 240, 0.14);
-  font-size: 11px;
+  align-items: center;
+  gap: 3.5px;
+  padding: 1px 3.5px;
+  border-radius: 2.5px;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(226, 232, 240, 0.1);
+  font-size: 7.5px;
   white-space: nowrap;
-  line-height: 1.25;
+  line-height: 1.15;
   pointer-events: none;
-  color: #f8fafc;
+  color: #e2e8f0;
   z-index: 5;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
 .player-name-tag {
   font-weight: 500;
 }
 
-.coords-tag {
-  font-size: 9px;
-  color: #38bdf8;
+.player-squad-tag {
+  font-size: 7px;
   font-family: "Consolas", "SFMono-Regular", monospace;
-  margin-top: 1px;
+  font-weight: 700;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.15);
+  padding: 0px 2px;
+  border-radius: 2px;
+  line-height: 1;
+}
+
+.team-1 .player-squad-tag {
+  color: var(--color-team1-primary, #37c8ff);
+  background: rgba(55, 200, 255, 0.15);
+}
+
+.team-2 .player-squad-tag {
+  color: var(--color-team2-primary, #ff9b45);
+  background: rgba(255, 155, 69, 0.15);
+}
+
+.player-coords-tag {
+  font-size: 7px;
+  font-family: "Consolas", "SFMono-Regular", monospace;
+  font-weight: 700;
+  color: #a7f3d0;
+  background: rgba(16, 185, 129, 0.15);
+  padding: 0px 2px;
+  border-radius: 2px;
+  line-height: 1;
 }
 
 /* Interactive Hover/Active States with explicit translate centered fix */
 .player-marker.is-hovered .marker-ring,
 .player-marker:hover .marker-ring {
-  transform: translate(-50%, -50%) scale(1.35);
+  transform: translate(-50%, -50%) scale(1.3);
   z-index: 50;
   border-color: #ffffff !important;
   box-shadow: 0 0 15px rgba(255, 255, 255, 0.9);
@@ -1325,49 +1800,72 @@ onBeforeUnmount(() => {
 
 .player-marker.is-hovered.is-squadleader .marker-ring,
 .player-marker:hover.is-squadleader .marker-ring {
-  transform: translate(-50%, -50%) scale(1.45);
+  transform: translate(-50%, -50%) scale(1.4);
 }
 
 .player-marker.is-hovered .tag,
+.player-marker:hover .tag,
 .player-marker:active .tag {
-  border-color: rgba(0, 240, 255, 0.4);
-  background: rgba(8, 14, 36, 0.95);
+  border-color: rgba(55, 200, 255, 0.35);
+  background: rgba(8, 14, 36, 0.92);
 }
 
 /* Floating Player Hover Tooltip */
 .player-tooltip {
   position: absolute;
-  width: 220px;
-  background: rgba(8, 12, 28, 0.88);
-  border: 1.5px solid rgba(0, 240, 255, 0.4);
-  border-radius: 8px;
-  padding: 10px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.9), 0 0 15px rgba(0, 240, 255, 0.15);
+  width: 170px;
+  background: rgba(6, 9, 22, 0.85);
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  padding: 6px 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.8);
   backdrop-filter: blur(10px);
   z-index: 100;
-  transform: translate(-50%, -100%);
   pointer-events: none;
   animation: tooltip-fade-in 0.15s ease-out;
 }
 
 @keyframes tooltip-fade-in {
-  from { opacity: 0; transform: translate(-50%, -95%); }
-  to { opacity: 1; transform: translate(-50%, -100%); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-.team-1-border { border-color: rgba(0, 229, 255, 0.5) !important; }
-.team-2-border { border-color: rgba(255, 51, 102, 0.5) !important; }
+.team-1-border {
+  border-color: rgba(55, 200, 255, 0.6) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.85), 0 0 15px rgba(55, 200, 255, 0.25);
+}
+.team-1-border .tooltip-health-badge {
+  color: var(--color-team1-primary, #37c8ff);
+  background: rgba(55, 200, 255, 0.12);
+  border-color: rgba(55, 200, 255, 0.2);
+}
+.team-1-border .squad-color-pill {
+  background: var(--color-team1-primary, #37c8ff) !important;
+}
+
+.team-2-border {
+  border-color: rgba(255, 155, 69, 0.6) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.85), 0 0 15px rgba(255, 155, 69, 0.25);
+}
+.team-2-border .tooltip-health-badge {
+  color: var(--color-team2-primary, #ff9b45);
+  background: rgba(255, 155, 69, 0.12);
+  border-color: rgba(255, 155, 69, 0.2);
+}
+.team-2-border .squad-color-pill {
+  background: var(--color-team2-primary, #ff9b45) !important;
+}
 
 .tooltip-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
 
 .tooltip-name {
   font-weight: bold;
-  font-size: 13px;
+  font-size: 11px;
   color: #ffffff;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1376,14 +1874,11 @@ onBeforeUnmount(() => {
 }
 
 .tooltip-health-badge {
-  font-size: 9px;
+  font-size: 8px;
   font-family: monospace;
-  background: rgba(0, 240, 255, 0.12);
-  color: #00e5ff;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 1px 4px;
+  border-radius: 3px;
   font-weight: bold;
-  border: 1px solid rgba(0, 240, 255, 0.2);
 }
 
 .tooltip-health-badge.low-health {
@@ -1400,26 +1895,26 @@ onBeforeUnmount(() => {
 
 .tooltip-divider {
   height: 1px;
-  background: linear-gradient(90deg, rgba(0, 240, 255, 0.25), transparent);
-  margin-bottom: 8px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.15), transparent);
+  margin-bottom: 6px;
 }
 
 .tooltip-details {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 3px;
 }
 
 .detail-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 11px;
+  font-size: 10px;
   color: #94a3b8;
 }
 
 .detail-label {
-  font-size: 10px;
+  font-size: 8.5px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -1429,17 +1924,18 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 4px;
+  font-size: 10px;
 }
 
 .inline-kit-icon {
-  width: 11px;
-  height: 11px;
+  width: 9px;
+  height: 9px;
   filter: invert(1);
 }
 
 .squad-color-pill {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
 }
 
@@ -1449,16 +1945,16 @@ onBeforeUnmount(() => {
 
 .tooltip-health-track {
   width: 100%;
-  height: 3px;
+  height: 2px;
   background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
-  margin-top: 8px;
+  border-radius: 1px;
+  margin-top: 5px;
   overflow: hidden;
 }
 
 .tooltip-health-bar {
   height: 100%;
-  border-radius: 2px;
+  border-radius: 1px;
   transition: width 0.3s ease;
 }
 
@@ -1559,8 +2055,8 @@ onBeforeUnmount(() => {
   color: #ffffff;
 }
 
-.team-1 .ticket-number { color: #00e5ff; text-shadow: 0 0 10px rgba(0, 229, 255, 0.3); }
-.team-2 .ticket-number { color: #ff3366; text-shadow: 0 0 10px rgba(255, 51, 102, 0.3); }
+.team-1 .ticket-number { color: var(--color-team1-primary, #37c8ff); text-shadow: 0 0 10px rgba(55, 200, 255, 0.3); }
+.team-2 .ticket-number { color: var(--color-team2-primary, #ff9b45); text-shadow: 0 0 10px rgba(255, 155, 69, 0.3); }
 
 .ticket-progress-track {
   width: 100%;
@@ -1576,8 +2072,8 @@ onBeforeUnmount(() => {
   transition: width 0.5s ease;
 }
 
-.ticket-progress-fill.team-1 { background-color: #00e5ff; }
-.ticket-progress-fill.team-2 { background-color: #ff3366; }
+.ticket-progress-fill.team-1 { background-color: var(--color-team1-primary, #37c8ff); }
+.ticket-progress-fill.team-2 { background-color: var(--color-team2-primary, #ff9b45); }
 
 .ticket-vs-divider {
   font-family: monospace;
@@ -2189,5 +2685,58 @@ onBeforeUnmount(() => {
 .map-select option {
   background: #0f172a;
   color: #e2e8f0;
+}
+
+/* Distance Measuring tool classes */
+.map-measure-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1000px;
+  height: 1000px;
+  pointer-events: none;
+  z-index: 9;
+}
+
+.measure-polyline {
+  filter: drop-shadow(0 0 6px rgba(255, 204, 0, 0.7));
+}
+
+.measure-point {
+  filter: drop-shadow(0 0 4px rgba(255, 204, 0, 0.8));
+  transition: r 0.2s ease;
+}
+
+.measure-labels-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 12;
+}
+
+.measure-distance-label {
+  position: absolute;
+  transform: translate(-50%, -120%);
+  background: rgba(11, 17, 32, 0.92);
+  border: 1px solid rgba(255, 204, 0, 0.8);
+  color: #ffcc00;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 3px 7px;
+  border-radius: 5px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.7), 0 0 8px rgba(255, 204, 0, 0.15);
+  backdrop-filter: blur(4px);
+}
+
+.ctrl-btn.text-btn.measure-btn.active {
+  background: rgba(255, 204, 0, 0.2);
+  color: #ffcc00;
+  border-color: #ffcc00;
+  box-shadow: inset 0 0 6px rgba(255, 204, 0, 0.2), 0 0 10px rgba(255, 204, 0, 0.15);
 }
 </style>

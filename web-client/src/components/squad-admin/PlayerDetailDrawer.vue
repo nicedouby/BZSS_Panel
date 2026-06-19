@@ -431,7 +431,7 @@
                       </div>
                       <div class="bzss-core-item">
                         <span class="bzss-core-item__label">Weapon</span>
-                        <strong class="bzss-core-mono">{{ bzssCoreInfo.soldierInfo?.weaponClass || "--" }}</strong>
+                        <strong class="bzss-core-mono">{{ cleanWeaponName(bzssCoreInfo.soldierInfo?.weaponClass) }}</strong>
                       </div>
                       <div class="bzss-core-item">
                         <span class="bzss-core-item__label">Health</span>
@@ -1510,6 +1510,14 @@ function formatBzssAmmo(values: number[] | null | undefined) {
 function formatBzssScoreboard(values: Array<number | null> | null | undefined) {
   if (!Array.isArray(values) || values.length === 0) return "--";
   return values.filter((value) => value != null).join(" / ") || "--";
+}
+
+function cleanWeaponName(weaponClass: string | null | undefined): string {
+  if (!weaponClass) return "--";
+  return weaponClass
+    .replace(/^(BP_|Weapon_)/i, "")
+    .replace(/(_\d+)?_C.*$/i, "")
+    .replace(/_\d+$/, "");
 }
 
 function normalizeSteam64(value: unknown) {
@@ -2972,23 +2980,38 @@ onUnmounted(() => {
 /* Global Transitions */
 .drawer-enter-active,
 .drawer-leave-active {
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.drawer-enter-active .player-detail-drawer,
+.drawer-leave-active .player-detail-drawer {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .drawer-enter-from,
 .drawer-leave-to {
+  opacity: 0;
+}
+.drawer-enter-from .player-detail-drawer,
+.drawer-leave-to .player-detail-drawer {
   transform: translateX(100%);
 }
 
 .floating-player-enter-active,
 .floating-player-leave-active {
-  transition: opacity 0.24s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: opacity 0.24s ease-out;
+}
+.floating-player-enter-active .player-detail-floating,
+.floating-player-leave-active .player-detail-floating {
+  transition: transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .floating-player-enter-from,
 .floating-player-leave-to {
   opacity: 0;
-  transform: scale(0.92) translateY(12px);
+}
+.floating-player-enter-from .player-detail-floating,
+.floating-player-leave-to .player-detail-floating {
+  transform: scale(0.92) translateY(16px);
 }
 
 /* Responsive adjustment */
