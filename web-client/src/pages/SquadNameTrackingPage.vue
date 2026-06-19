@@ -98,6 +98,19 @@
                 {{ action }}
               </span>
             </div>
+            <div class="record-actions">
+              <button
+                v-if="item.squadName"
+                type="button"
+                class="btn ghost btn-sm"
+                @click="openWhitelistDialog(item)"
+              >
+                加入白名单
+              </button>
+              <span v-if="item.squadNatureLabel" class="action-hint">
+                当前性质：{{ item.squadNatureLabel }}
+              </span>
+            </div>
           </article>
         </div>
       </PageCard>
@@ -128,6 +141,19 @@
               <span>队长: {{ item.creatorName || "-" }}</span>
             </div>
             <p class="reason">{{ item.reason || "未提供原因" }}</p>
+            <div class="record-actions">
+              <button
+                v-if="item.squadName"
+                type="button"
+                class="btn ghost btn-sm"
+                @click="openWhitelistDialog(item)"
+              >
+                加入白名单
+              </button>
+              <span v-if="item.squadNatureLabel" class="action-hint">
+                当前性质：{{ item.squadNatureLabel }}
+              </span>
+            </div>
           </article>
         </div>
       </PageCard>
@@ -158,6 +184,16 @@
               <span>{{ record.createdDisplayText || formatTime(record.createdAt) }}</span>
               <span>队长: {{ record.creatorName || "-" }}</span>
               <span>性质: {{ record.squadNatureLabel || record.squadNature || "-" }}</span>
+            </div>
+            <div class="record-actions">
+              <button
+                v-if="record.squadName"
+                type="button"
+                class="btn ghost btn-sm"
+                @click="openWhitelistDialog(record)"
+              >
+                加入白名单
+              </button>
             </div>
           </article>
         </div>
@@ -194,15 +230,74 @@
         </div>
       </PageCard>
     </section>
+
+    <Teleport to="body">
+      <div
+        v-if="whitelistModalOpen"
+        class="whitelist-modal-backdrop"
+        @click="closeWhitelistDialog"
+        v-backdrop-close="closeWhitelistDialog"
+      >
+        <aside class="whitelist-modal" role="dialog" aria-modal="true" aria-label="加入白名单" @click.stop>
+          <header class="whitelist-modal-head">
+            <div>
+              <h2>加入白名单</h2>
+              <p>选择这个小队应该归入的性质，保存后会写入队名白名单规则。</p>
+            </div>
+            <button type="button" class="btn ghost btn-sm" @click="closeWhitelistDialog">关闭</button>
+          </header>
+
+          <div class="whitelist-modal-body">
+            <label class="modal-field">
+              <span>小队名称</span>
+              <input v-model.trim="whitelistDraft.squadName" type="text" class="modal-input" />
+            </label>
+
+            <label class="modal-field">
+              <span>队伍性质</span>
+              <select v-model="whitelistDraft.nature" class="modal-input">
+                <option v-for="option in whitelistNatureOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+            </label>
+
+            <div class="modal-summary">
+              <span>当前白名单状态</span>
+              <strong>{{ whitelistCurrentNatureLabel }}</strong>
+              <small>重复加入会自动去重，改选性质会把队名移到新的分类里。</small>
+            </div>
+
+            <div v-if="whitelistError" class="modal-error">{{ whitelistError }}</div>
+          </div>
+
+          <footer class="whitelist-modal-actions">
+            <button type="button" class="btn ghost" @click="closeWhitelistDialog">取消</button>
+            <button type="button" class="btn primary" :disabled="whitelistSaving" @click="saveWhitelistEntry">
+              {{ whitelistSaving ? "保存中.." : "确认加入" }}
+            </button>
+          </footer>
+        </aside>
+      </div>
+    </Teleport>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
-import { apiGet } from "../app/apiClient";
+import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
+import { apiGet, apiPost } from "../app/apiClient";
 import { canAutoRefreshNow } from "../composables/useAutoRefreshGate";
 import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
 import PageCard from "../components/common/PageCard.vue";
+import { useUiStore } from "../stores/ui.store";
+
+type SquadRuleNature = "infantry" | "vehicle" | "support";
+
+const whitelistNatureOptions: Array<{ value: SquadRuleNature; label: string }> = [
+  { value: "infantry", label: "普通步兵" },
+  { value: "vehicle", label: "载具" },
+  { value: "support", label: "支援" },
+];
 
 type LifecycleRecord = {
   key: string;
@@ -281,6 +376,8 @@ type ActiveViolation = {
   squadId?: number | null;
   squadName?: string;
   creatorName?: string;
+  squadNature?: string;
+  squadNatureLabel?: string;
   createdAt?: string | null;
   createdAtLabel?: string;
   creationSourceLabel: string;
@@ -294,6 +391,8 @@ type BuildDecisionRecord = {
   squadId?: number | null;
   squadName?: string;
   creatorName?: string;
+  squadNature?: string;
+  squadNatureLabel?: string;
   sourceLabel: string;
   decisionLabel: string;
   decisionTone: "ok" | "warning" | "danger" | "muted";
@@ -303,12 +402,32 @@ type BuildDecisionRecord = {
   actionLabels: string[];
 };
 
+type WhitelistRulesResponse = {
+  updatedAt?: string | null;
+  exactRules?: Record<SquadRuleNature, string[]>;
+};
+
+type WhitelistSource = {
+  squadName?: string;
+  squadNature?: string;
+  squadNatureLabel?: string;
+};
+
 const loading = ref(false);
 const error = ref("");
 const autoRefresh = ref(true);
 const lifecycle = ref<LifecycleState | null>(null);
 const guardState = ref<GuardState | null>(null);
 const patrolState = ref<PatrolState | null>(null);
+const whitelistRules = ref<Record<SquadRuleNature, string[]> | null>(null);
+const whitelistModalOpen = ref(false);
+const whitelistSaving = ref(false);
+const whitelistError = ref("");
+const whitelistDraft = reactive({
+  squadName: "",
+  nature: "infantry" as SquadRuleNature,
+});
+const ui = useUiStore();
 let autoRefreshTimer: number | null = null;
 
 const orderedLifecycle = computed(() => {
@@ -316,6 +435,16 @@ const orderedLifecycle = computed(() => {
   return list.slice().sort((left, right) => {
     return Number(right.createdAtMs ?? 0) - Number(left.createdAtMs ?? 0);
   });
+});
+
+const lifecycleBySlotKey = computed(() => {
+  const map = new Map<string, LifecycleRecord>();
+  for (const item of orderedLifecycle.value) {
+    const key = buildSlotKey(item.teamId, item.squadId);
+    if (!key) continue;
+    map.set(key, item);
+  }
+  return map;
 });
 
 const guardViolations = computed(() => {
@@ -329,12 +458,15 @@ const buildDecisionRecords = computed<BuildDecisionRecord[]>(() => {
     .filter((record) => !shouldHideDecisionRecord(record))
     .map((record) => {
       const status = String(record.status ?? "").trim();
+      const lifecycleRecord = lifecycleBySlotKey.value.get(buildSlotKey(record.event?.teamId, record.event?.squadId));
       return {
         id: record.id,
         teamId: record.event?.teamId,
         squadId: record.event?.squadId,
         squadName: record.event?.squadName,
         creatorName: record.event?.creatorName,
+        squadNature: lifecycleRecord?.squadNature,
+        squadNatureLabel: lifecycleRecord?.squadNatureLabel,
         sourceLabel: record.source || "-",
         decisionLabel: buildDecisionLabel(status),
         decisionTone: buildDecisionTone(status),
@@ -403,6 +535,8 @@ const activeViolations = computed<ActiveViolation[]>(() => {
         squadId: item.squadId,
         squadName: item.squadName,
         creatorName: item.creatorName,
+        squadNature: item.squadNature,
+        squadNatureLabel: item.squadNatureLabel,
         createdAt: item.createdAt,
         createdAtLabel: item.createdAtLabel,
         creationSourceLabel: item.sourceLabel || item.creationSource || "-",
@@ -453,14 +587,16 @@ async function loadAll(showSpinner = true) {
   error.value = "";
 
   try {
-    const [lifecycleResponse, guardResponse, patrolResponse] = await Promise.all([
+    const [lifecycleResponse, guardResponse, patrolResponse, whitelistResponse] = await Promise.all([
       apiGet<{ current: LifecycleState }>("/api/squad-lifecycle/current"),
       apiGet<{ ok: boolean; data: GuardState }>("/api/modules/squad-name-policy-guard/state"),
       apiGet<{ ok: boolean; data: PatrolState }>("/api/modules/squad-name-policy-patrol/state"),
+      apiGet<WhitelistRulesResponse>("/api/squad-name/rules").catch(() => null),
     ]);
     lifecycle.value = lifecycleResponse.current ?? { list: [] };
     guardState.value = guardResponse.data ?? { enabled: false, recent: [] };
     patrolState.value = patrolResponse.data ?? { enabled: false, recent: [] };
+    whitelistRules.value = normalizeWhitelistRules(whitelistResponse?.exactRules);
   } catch (err) {
     error.value = err instanceof Error ? err.message : "加载建队追踪失败。";
   } finally {
@@ -502,6 +638,143 @@ function shouldHideDecisionRecord(record: GuardRecord) {
   if (status !== "skipped") return false;
   return reason === "missing_required_fields" || reason === "duplicate";
 }
+
+async function openWhitelistDialog(source: WhitelistSource) {
+  const squadName = String(source.squadName ?? "").trim();
+  if (!squadName) {
+    ui.pushToast({ title: "无法加入白名单", message: "缺少小队名称。", tone: "warn" });
+    return;
+  }
+
+  whitelistError.value = "";
+  try {
+    await ensureWhitelistRulesLoaded();
+    whitelistDraft.squadName = squadName;
+    whitelistDraft.nature = getWhitelistNature(squadName)
+      ?? normalizeNature(source.squadNature)
+      ?? "infantry";
+    whitelistModalOpen.value = true;
+  } catch (err) {
+    whitelistError.value = err instanceof Error ? err.message : "加载白名单失败。";
+    ui.pushToast({ title: "加载失败", message: whitelistError.value, tone: "error" });
+  }
+}
+
+function closeWhitelistDialog() {
+  if (whitelistSaving.value) return;
+  whitelistModalOpen.value = false;
+  whitelistError.value = "";
+}
+
+async function ensureWhitelistRulesLoaded() {
+  if (whitelistRules.value) return whitelistRules.value;
+
+  const payload = await apiGet<WhitelistRulesResponse>("/api/squad-name/rules");
+  whitelistRules.value = normalizeWhitelistRules(payload.exactRules);
+  return whitelistRules.value;
+}
+
+async function saveWhitelistEntry() {
+  const squadName = String(whitelistDraft.squadName ?? "").trim();
+  if (!squadName) {
+    whitelistError.value = "请输入小队名称。";
+    return;
+  }
+
+  whitelistSaving.value = true;
+  whitelistError.value = "";
+
+  try {
+    const nextRules = normalizeWhitelistRules(whitelistRules.value ?? undefined);
+    removeWhitelistName(nextRules, squadName);
+    nextRules[whitelistDraft.nature].push(squadName);
+
+    const payload = await apiPost<WhitelistRulesResponse>("/api/squad-name/rules", {
+      exactRules: nextRules,
+    });
+
+    whitelistRules.value = normalizeWhitelistRules(payload.exactRules ?? nextRules);
+    whitelistModalOpen.value = false;
+    ui.pushToast({
+      title: "白名单已更新",
+      message: `${squadName} 已加入 ${getNatureLabel(whitelistDraft.nature)} 白名单。`,
+      tone: "ok",
+    });
+  } catch (err) {
+    whitelistError.value = err instanceof Error ? err.message : "保存白名单失败。";
+    ui.pushToast({
+      title: "保存失败",
+      message: whitelistError.value,
+      tone: "error",
+    });
+  } finally {
+    whitelistSaving.value = false;
+  }
+}
+
+function normalizeWhitelistRules(exactRules?: Partial<Record<SquadRuleNature, string[]>> | null) {
+  return {
+    infantry: normalizeWhitelistNames(exactRules?.infantry),
+    vehicle: normalizeWhitelistNames(exactRules?.vehicle),
+    support: normalizeWhitelistNames(exactRules?.support),
+  };
+}
+
+function normalizeWhitelistNames(values: unknown) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const item of Array.isArray(values) ? values : []) {
+    const name = String(item ?? "").trim();
+    if (!name) continue;
+    const key = normalizeSquadNameKey(name);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(name);
+  }
+  return result;
+}
+
+function removeWhitelistName(rules: Record<SquadRuleNature, string[]>, squadName: string) {
+  const target = normalizeSquadNameKey(squadName);
+  for (const nature of whitelistNatureOptions) {
+    rules[nature.value] = rules[nature.value].filter((item) => normalizeSquadNameKey(item) !== target);
+  }
+}
+
+function getWhitelistNature(squadName: string) {
+  const target = normalizeSquadNameKey(squadName);
+  if (!target || !whitelistRules.value) return null;
+
+  for (const nature of whitelistNatureOptions) {
+    if (whitelistRules.value[nature.value].some((item) => normalizeSquadNameKey(item) === target)) {
+      return nature.value;
+    }
+  }
+  return null;
+}
+
+function normalizeSquadNameKey(value: string) {
+  return String(value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function normalizeNature(value?: string) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "infantry" || normalized === "vehicle" || normalized === "support") return normalized;
+  return null;
+}
+
+function getNatureLabel(nature?: string) {
+  if (nature === "infantry") return "普通步兵";
+  if (nature === "vehicle") return "载具";
+  if (nature === "support") return "支援";
+  return "未知";
+}
+
+const whitelistCurrentNatureLabel = computed(() => {
+  const current = getWhitelistNature(whitelistDraft.squadName);
+  if (current) return `当前已在 ${getNatureLabel(current)} 白名单`;
+  return "当前未在白名单中";
+});
 </script>
 
 <style scoped>
@@ -548,6 +821,13 @@ function shouldHideDecisionRecord(record: GuardRecord) {
 
 .btn.ghost {
   background: rgba(255, 255, 255, 0.03);
+}
+
+.btn-sm {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12px;
 }
 
 .banner {
@@ -649,6 +929,18 @@ function shouldHideDecisionRecord(record: GuardRecord) {
   white-space: pre-line;
 }
 
+.record-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.action-hint {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
 .empty-state {
   display: grid;
   place-items: center;
@@ -696,6 +988,104 @@ function shouldHideDecisionRecord(record: GuardRecord) {
   color: var(--color-text-muted);
 }
 
+.whitelist-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(3, 7, 18, 0.72);
+  backdrop-filter: blur(12px);
+}
+
+.whitelist-modal {
+  width: min(560px, 100%);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(10, 15, 28, 0.98));
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.36);
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.whitelist-modal-head,
+.whitelist-modal-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.whitelist-modal-head h2 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--color-text-primary);
+}
+
+.whitelist-modal-head p {
+  margin: 6px 0 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.whitelist-modal-body {
+  display: grid;
+  gap: 12px;
+}
+
+.modal-field {
+  display: grid;
+  gap: 8px;
+}
+
+.modal-field span {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.modal-input {
+  width: 100%;
+  min-height: 40px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-primary);
+  padding: 0 12px;
+  outline: none;
+}
+
+.modal-summary {
+  display: grid;
+  gap: 4px;
+  border-radius: 12px;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.modal-summary span,
+.modal-summary small {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.modal-summary strong {
+  color: var(--color-text-primary);
+  font-size: 14px;
+}
+
+.modal-error {
+  border-radius: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 92, 92, 0.34);
+  background: rgba(255, 92, 92, 0.12);
+  color: #ffb3b3;
+  font-size: 12px;
+}
+
 @media (max-width: 1100px) {
   .content-grid {
     grid-template-columns: 1fr;
@@ -705,6 +1095,16 @@ function shouldHideDecisionRecord(record: GuardRecord) {
 @media (max-width: 720px) {
   .tracking-page {
     padding: 12px;
+  }
+
+  .whitelist-modal {
+    padding: 16px;
+  }
+
+  .whitelist-modal-head,
+  .whitelist-modal-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 </style>

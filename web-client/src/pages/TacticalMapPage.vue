@@ -71,6 +71,7 @@
             class="player-marker"
             :class="[
               `team-${normalizeTeam(player.teamId)}`,
+              getPerspectiveClass(player.teamId),
               { 'is-dead': (player.soldierInfo?.health ?? 100) <= 0 },
               { 'is-squadleader': isSquadLeader(player) },
               { 'is-focused': focusedSquadId === player.squadId },
@@ -80,7 +81,8 @@
             :style="{
               left: `${player.mapX}%`,
               top: `${player.mapY}%`,
-              transform: `translate(-50%, -50%) scale(${dynamicMarkerScale})`
+              transform: `translate(-50%, -50%) scale(${dynamicMarkerScale})`,
+              ...getPerspectiveStyle(player.teamId)
             }"
             type="button"
             @click="showPlayerDetails(player, $event)"
@@ -104,12 +106,14 @@
             <!-- Squad Leader Star or Icon border -->
             <div class="marker-ring">
               <!-- Kit Icon -->
-              <img
-                :src="getPlayerKitIcon(player)"
-                :alt="inferRole(player)"
-                class="kit-icon-img"
-                draggable="false"
-              />
+              <template v-if="isRoleIconImage(player.roleInfo.icon)">
+                <span
+                  class="kit-icon-mask"
+                  :style="getTeamRoleIconStyle(player.roleInfo.icon, player.teamId)"
+                  :aria-label="player.roleInfo.label"
+                ></span>
+              </template>
+              <span v-else class="kit-icon-fallback" :aria-label="player.roleInfo.label">{{ player.roleInfo.icon }}</span>
             </div>
             
             <!-- Small Squad Index Tag -->
@@ -169,8 +173,8 @@
       <div
         v-if="hoveredMarker"
         class="player-tooltip"
-        :class="{ 'team-1-border': normalizeTeam(hoveredMarker.teamId) === 1, 'team-2-border': normalizeTeam(hoveredMarker.teamId) === 2 }"
-        :style="tooltipStyle"
+        :class="getPerspectiveClass(hoveredMarker.teamId)"
+        :style="{ ...tooltipStyle, ...getPerspectiveStyle(hoveredMarker.teamId) }"
       >
         <!-- Tooltip Header -->
         <div class="tooltip-header">
@@ -191,14 +195,21 @@
           <div class="detail-row">
             <span class="detail-label">角色职业</span>
             <span class="detail-val">
-              <img :src="getPlayerKitIcon(hoveredMarker)" class="inline-kit-icon" />
-              {{ inferRole(hoveredMarker) }}
+              <template v-if="isRoleIconImage(hoveredMarker.roleInfo.icon)">
+                <span
+                  class="inline-kit-mask"
+                  :style="getTeamRoleIconStyle(hoveredMarker.roleInfo.icon, hoveredMarker.teamId)"
+                  :aria-label="hoveredMarker.roleInfo.label"
+                ></span>
+              </template>
+              <span v-else class="inline-kit-fallback" aria-hidden="true">{{ hoveredMarker.roleInfo.icon }}</span>
+              {{ hoveredMarker.roleInfo.label }}
             </span>
           </div>
           <div class="detail-row">
             <span class="detail-label">战术小队</span>
             <span class="detail-val">
-              <span class="squad-color-pill" :style="{ background: normalizeTeam(hoveredMarker.teamId) === 1 ? '#00e5ff' : '#ff3366' }"></span>
+              <span class="squad-color-pill"></span>
               #{{ hoveredMarker.squadId || '-' }}
             </span>
           </div>
@@ -246,13 +257,13 @@
         <!-- Faction Match Tickets -->
         <div class="tickets-overlay-card glass-panel">
           <!-- Team 1 US Army -->
-          <div class="team-ticket-block team-1">
+          <div class="team-ticket-block tone-friendly" :style="getPerspectiveStyle(1)">
             <div class="team-info-row">
-              <span class="team-label">T1 美军</span>
+              <span class="team-label">TEAM 1</span>
               <span class="ticket-number font-mono">{{ tickets.team1 }}</span>
             </div>
             <div class="ticket-progress-track">
-              <div class="ticket-progress-fill team-1" :style="{ width: `${(tickets.team1 / 400) * 100}%` }"></div>
+              <div class="ticket-progress-fill" :style="{ width: `${(tickets.team1 / 400) * 100}%` }"></div>
             </div>
           </div>
 
@@ -260,13 +271,13 @@
           <div class="ticket-vs-divider">VS</div>
 
           <!-- Team 2 PLA Forces -->
-          <div class="team-ticket-block team-2">
+          <div class="team-ticket-block tone-enemy" :style="getPerspectiveStyle(2)">
             <div class="team-info-row">
-              <span class="team-label">T2 解放军</span>
+              <span class="team-label">TEAM 2</span>
               <span class="ticket-number font-mono">{{ tickets.team2 }}</span>
             </div>
             <div class="ticket-progress-track">
-              <div class="ticket-progress-fill team-2" :style="{ width: `${(tickets.team2 / 400) * 100}%` }"></div>
+              <div class="ticket-progress-fill" :style="{ width: `${(tickets.team2 / 400) * 100}%` }"></div>
             </div>
           </div>
         </div>
@@ -414,6 +425,38 @@
                 <option value="chora">Chora</option>
               </select>
             </div>
+            <div class="option-item-slider option-item-slider--stacked">
+              <span class="option-text">敌我视角:</span>
+              <div class="perspective-switch">
+                <button
+                  type="button"
+                  class="perspective-btn"
+                  :class="{ active: viewerPerspectiveMode === 'auto' }"
+                  @click="viewerPerspectiveMode = 'auto'"
+                >
+                  自动
+                </button>
+                <button
+                  type="button"
+                  class="perspective-btn tone-friendly"
+                  :class="{ active: viewerPerspectiveMode === 'team1' }"
+                  :style="getPerspectiveStyle(1)"
+                  @click="viewerPerspectiveMode = 'team1'"
+                >
+                  TEAM 1
+                </button>
+                <button
+                  type="button"
+                  class="perspective-btn tone-enemy"
+                  :class="{ active: viewerPerspectiveMode === 'team2' }"
+                  :style="getPerspectiveStyle(2)"
+                  @click="viewerPerspectiveMode = 'team2'"
+                >
+                  TEAM 2
+                </button>
+              </div>
+            </div>
+            <div class="perspective-summary">{{ perspectiveSummaryText }}</div>
             <div class="option-item-slider">
               <span class="option-text">图标大小:</span>
               <input type="range" v-model.number="markerScale" min="0.05" max="2.0" step="0.05" class="scale-slider" />
@@ -446,17 +489,19 @@
           <div class="sidebar-tabs">
             <button
               class="tab-btn"
-              :class="{ active: activeTeamTab === 1 }"
+              :class="[getPerspectiveClass(1), { active: activeTeamTab === 1 }]"
+              :style="getPerspectiveStyle(1)"
               @click="activeTeamTab = 1"
             >
-              美军 (T1)
+              TEAM 1
             </button>
             <button
               class="tab-btn"
-              :class="{ active: activeTeamTab === 2 }"
+              :class="[getPerspectiveClass(2), { active: activeTeamTab === 2 }]"
+              :style="getPerspectiveStyle(2)"
               @click="activeTeamTab = 2"
             >
-              解放军 (T2)
+              TEAM 2
             </button>
           </div>
 
@@ -466,7 +511,8 @@
               v-for="squad in currentTeamSquads"
               :key="squad.id"
               class="sidebar-squad-card"
-              :class="{ 'is-focused': focusedSquadId === squad.id }"
+              :class="[getPerspectiveClass(squad.teamId), { 'is-focused': focusedSquadId === squad.id }]"
+              :style="getPerspectiveStyle(squad.teamId)"
               @click="toggleSquadFocus(squad.id)"
             >
               <div class="squad-card-header">
@@ -504,8 +550,10 @@
               class="sidebar-player-card-row"
               :class="[
                 `team-${normalizeTeam(player.teamId)}`,
+                getPerspectiveClass(player.teamId),
                 { 'is-focused': hoveredPlayer?.playerGuid === player.playerGuid }
               ]"
+              :style="getPerspectiveStyle(player.teamId)"
               @click="showPlayerDetails(player, $event)"
               @mouseenter="hoveredPlayer = player"
               @mouseleave="hoveredPlayer = null"
@@ -561,14 +609,17 @@ import {
   type BzssCoreTrackedPlayerInfo,
   type BzssCoreTrackedVector,
 } from "../app/bzssCoreApi";
+import { useAuthStore } from "../stores/auth.store";
 import { useServerStore } from "../stores/server.store";
 import { usePlayerStore } from "../stores/player.store";
 import { adaptPlayerDetail } from "../utils/squad-admin-adapter";
+import { resolveRoleIcon, type RoleIconInfo } from "../utils/role-icons";
 import FloatingPlayerWindow from "../components/squad-admin/FloatingPlayerWindow.vue";
 
 interface MapMarker extends BzssCoreTrackedPlayerInfo {
   mapX: number;
   mapY: number;
+  roleInfo: RoleIconInfo;
 }
 
 interface CombatLog {
@@ -577,8 +628,12 @@ interface CombatLog {
   type: "kill" | "revive" | "capture" | "system";
 }
 
+type ViewerPerspectiveMode = "auto" | "team1" | "team2";
+type PerspectiveTone = "friendly" | "enemy" | "neutral";
+
 const serverStore = useServerStore();
 const playerStore = usePlayerStore();
+const authStore = useAuthStore();
 
 const snapshot = ref<BzssCorePlayerInfoResponse | null>(null);
 const players = ref<BzssCoreTrackedPlayerInfo[]>([]);
@@ -661,7 +716,9 @@ const showPlayerNames = ref(true);
 const showPlayerCoords = ref(true);
 
 const dynamicMarkerScale = computed(() => {
-  return markerScale.value / Math.pow(zoom.value, 0.65);
+  // Keep markers visually stable on screen while the map zooms.
+  // The map container scales with `zoom`, so we apply the inverse here.
+  return markerScale.value / Math.max(zoom.value, 0.01);
 });
 
 // Sidebar states
@@ -670,6 +727,7 @@ const sidebarTab = ref<"squads" | "players">("squads");
 const activeTeamTab = ref<number>(1);
 const focusedSquadId = ref<number | null>(null);
 const combatLogs = ref<CombatLog[]>([]);
+const viewerPerspectiveMode = ref<ViewerPerspectiveMode>("auto");
 
 const activePlayerWindow = ref<{
   detail: any;
@@ -881,6 +939,26 @@ const currentServerId = computed(() => String(serverStore.snapshot?.serverId ?? 
 const serverPlayerCount = computed(() => serverStore.snapshot?.playerCount || players.value.length);
 const serverMapName = computed(() => serverStore.snapshot?.mapName || mapName);
 const matchPhase = computed(() => serverStore.snapshot?.webStatus?.isWarmup ? "WARMUP" : "MID MATCH");
+const matchStatePlayers = computed(() => {
+  const list = serverStore.snapshot?.matchState?.players?.list;
+  return Array.isArray(list) ? list : [];
+});
+const viewerSteam64 = computed(() => normalizeSteam64(authStore.user?.steam64));
+const autoViewerTeamId = computed(() => findAdminTeamId(matchStatePlayers.value, viewerSteam64.value));
+const resolvedViewerTeamId = computed<number | null>(() => {
+  if (viewerPerspectiveMode.value === "team1") return 1;
+  if (viewerPerspectiveMode.value === "team2") return 2;
+  if (autoViewerTeamId.value === 1 || autoViewerTeamId.value === 2) return autoViewerTeamId.value;
+  return 1;
+});
+const perspectiveSummaryText = computed(() => {
+  if (viewerPerspectiveMode.value === "team1") return "当前视角: TEAM 1";
+  if (viewerPerspectiveMode.value === "team2") return "当前视角: TEAM 2";
+  if (autoViewerTeamId.value === 1 || autoViewerTeamId.value === 2) {
+    return `当前视角: 自动识别 TEAM ${autoViewerTeamId.value}`;
+  }
+  return "当前视角: 自动识别失败，回退 TEAM 1";
+});
 
 // Grid lines calculation
 const verticalGridLines = computed(() => {
@@ -926,10 +1004,13 @@ const markers = computed<MapMarker[]>(() => {
     const key = player.playerGuid || player.playerName;
     const interp = interpolatedPositions.value[key];
     const pos = player.soldierInfo.position as BzssCoreTrackedVector;
+    const resolvedTeamId = resolvePlayerTeamId(player);
     return {
       ...player,
       mapX: interp ? interp.mapX : project(pos.x ?? 0, bounds.minX, bounds.maxX),
       mapY: interp ? interp.mapY : project(pos.y ?? 0, bounds.minY, bounds.maxY),
+      teamId: resolvedTeamId,
+      roleInfo: resolveMapRoleInfo(player),
     };
   });
 });
@@ -993,7 +1074,7 @@ const tooltipStyle = computed(() => {
 
 // Filter players for active team list
 const filteredTeamPlayers = computed(() => {
-  return players.value
+  return markers.value
     .filter((p) => normalizeTeam(p.teamId) === activeTeamTab.value)
     .sort((a, b) => (a.playerName || "").localeCompare(b.playerName || ""));
 });
@@ -1003,7 +1084,7 @@ const currentTeamSquads = computed(() => {
   const teamId = activeTeamTab.value;
   const squadMap = new Map<number, BzssCoreTrackedPlayerInfo[]>();
   
-  players.value.forEach((p) => {
+  markers.value.forEach((p) => {
     if (normalizeTeam(p.teamId) === teamId && p.squadId && p.squadId > 0) {
       if (!squadMap.has(p.squadId)) {
         squadMap.set(p.squadId, []);
@@ -1162,7 +1243,7 @@ function showPlayerDetails(player: BzssCoreTrackedPlayerInfo, event?: MouseEvent
       teamId: normalizeTeam(player.teamId),
       squadId: normalizeSquad(player.squadId),
       isLeader: isSquadLeader(player),
-      role: inferRole(player),
+      role: resolveMapRoleInfo(player).label,
       isOnline: true,
       ping: null,
       steamId: player.playerGuid?.length === 17 ? player.playerGuid : null,
@@ -1218,8 +1299,8 @@ function runCombatEventSimulation() {
       const weapons = ["M4A1", "QBZ191", "AK-74", "M249", "QJB201", "RPG-7", "M3E1 LAW", "PKP", "M110 Sniper"];
       const weapon = getRandomElement(weapons);
       
-      const killerName = `<span class="team-${normalizeTeam(killer.teamId)}-text">${killer.playerName}</span>`;
-      const victimName = `<span class="team-${normalizeTeam(victim.teamId)}-text">${victim.playerName}</span>`;
+      const killerName = `<span class="tone-${getPerspectiveTone(killer.teamId)}-text">${killer.playerName}</span>`;
+      const victimName = `<span class="tone-${getPerspectiveTone(victim.teamId)}-text">${victim.playerName}</span>`;
       
       logCombatEvent(`${killerName} 击倒了 ${victimName} (武器: ${weapon})`, "kill");
     }
@@ -1233,6 +1314,78 @@ function getRandomElement<T>(arr: T[]): T {
 
 function normalizeTeam(teamId: number | null | undefined) {
   return Number.isFinite(teamId as number) && Number(teamId) > 0 ? Number(teamId) : 0;
+}
+
+function normalizePlayerIdentity(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeSteam64(value: unknown): string {
+  const text = String(value ?? "").trim();
+  return /^\d{17}$/.test(text) ? text : "";
+}
+
+function findAdminTeamId(entries: any[], steam64: string): number | null {
+  if (!steam64) return null;
+
+  for (const entry of entries) {
+    const entryTeamId = normalizeTeam(entry?.teamId ?? entry?.teamID);
+    if (entryTeamId !== 1 && entryTeamId !== 2) continue;
+
+    const candidates = [
+      entry?.steam64,
+      entry?.steamID,
+      entry?.steamId,
+      entry?.playerGuid,
+    ]
+      .map(normalizeSteam64)
+      .filter(Boolean);
+
+    if (candidates.includes(steam64)) {
+      return entryTeamId;
+    }
+  }
+
+  return null;
+}
+
+function getMatchStateTeamId(player: BzssCoreTrackedPlayerInfo): number | null {
+  const candidates = new Set([
+    normalizePlayerIdentity(player.playerName),
+    normalizePlayerIdentity(player.playerGuid),
+  ].filter(Boolean));
+
+  if (candidates.size === 0) return null;
+
+  for (const entry of matchStatePlayers.value) {
+    const entryTeamId = normalizeTeam(entry?.teamId ?? entry?.teamID);
+    if (entryTeamId !== 1 && entryTeamId !== 2) continue;
+
+    const entryCandidates = [
+      entry?.playerName,
+      entry?.name,
+      entry?.displayName,
+      entry?.playerGuid,
+      entry?.steamID,
+      entry?.steamId,
+      entry?.eosID,
+      entry?.eosId,
+    ]
+      .map(normalizePlayerIdentity)
+      .filter(Boolean);
+
+    if (entryCandidates.some((candidate) => candidates.has(candidate))) {
+      return entryTeamId;
+    }
+  }
+
+  return null;
+}
+
+function resolvePlayerTeamId(player: BzssCoreTrackedPlayerInfo): number {
+  return getMatchStateTeamId(player) ?? normalizeTeam(player.teamId);
 }
 
 function normalizeSquad(squadId: number | null | undefined) {
@@ -1256,75 +1409,110 @@ function isSquadLeader(player: BzssCoreTrackedPlayerInfo) {
   return soldierClass.includes("squadleader") || soldierClass.includes("officer") || soldierClass.includes("sl");
 }
 
-function getPlayerKitIcon(player: BzssCoreTrackedPlayerInfo) {
+function resolveMapRoleInfo(player: BzssCoreTrackedPlayerInfo): RoleIconInfo {
   const health = player.soldierInfo?.health;
   if (health != null && health <= 0) {
-    return "/Icon/T_role_dead.PNG";
+    return resolveRoleIcon("dead");
   }
 
-  const soldierClass = String(player.soldierInfo?.soldierClass ?? "").toLowerCase();
-  const weaponClass = String(player.soldierInfo?.weaponClass ?? "").toLowerCase();
-  const text = `${soldierClass} ${weaponClass}`;
+  const roleSource = [player.soldierInfo?.soldierClass, player.soldierInfo?.weaponClass]
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean)
+    .join(" ");
 
-  if (soldierClass.includes("squadleader") || soldierClass.includes("officer")) {
-    if (soldierClass.includes("pilot")) return "/Icon/T_role_pilot_squadleader.PNG";
-    if (soldierClass.includes("crewman")) return "/Icon/T_role_crewman_squadleader.PNG";
-    return "/Icon/T_role_squadleader.PNG";
-  }
-  
-  if (text.includes("medic")) return "/Icon/T_role_medic.PNG";
-  if (text.includes("sniper")) return "/Icon/T_role_sniper.PNG";
-  if (text.includes("marksman")) return "/Icon/T_role_designatedmarksman.PNG";
-  if (text.includes("grenadier")) return "/Icon/T_role_grenadier.PNG";
-  if (text.includes("machine") || text.includes("mg")) return "/Icon/T_role_machinegunner.PNG";
-  if (text.includes("autorifle")) return "/Icon/T_role_automaticrifleman.PNG";
-  if (text.includes("hat") || text.includes("heavyantitank")) return "/Icon/T_role_heavyantitank.PNG";
-  if (text.includes("lat") || text.includes("lightantitank")) return "/Icon/T_role_lightantitank.PNG";
-  if (text.includes("crewman")) return "/Icon/T_role_crewman.PNG";
-  if (text.includes("pilot")) return "/Icon/T_role_pilot.PNG";
-  if (text.includes("sapper") || text.includes("engineer")) return "/Icon/T_role_engineer.PNG";
-  if (text.includes("recruit")) return "/Icon/T_role_recruit.PNG";
-  return "/Icon/T_role_rifleman.PNG";
+  return resolveRoleIcon(roleSource);
 }
 
-function inferRole(player: BzssCoreTrackedPlayerInfo) {
-  const soldierClass = String(player.soldierInfo?.soldierClass ?? "").toLowerCase();
-  const weaponClass = String(player.soldierInfo?.weaponClass ?? "").toLowerCase();
-  const text = `${soldierClass} ${weaponClass}`;
-
-  if (text.includes("medic")) return "Medic";
-  if (text.includes("sniper") || text.includes("marksman")) return "Marksman";
-  if (text.includes("grenadier")) return "Grenadier";
-  if (text.includes("machine") || text.includes("mg")) return "Machine Gunner";
-  if (text.includes("lat") || text.includes("hat") || text.includes("rocket")) return "Anti-Tank";
-  if (text.includes("crewman")) return "Crewman";
-  if (text.includes("pilot")) return "Pilot";
-  if (text.includes("rifle")) return "Rifleman";
-  return player.soldierInfo?.soldierClass || "Unknown";
+function isRoleIconImage(icon: string) {
+  return String(icon ?? "").startsWith("/");
 }
 
-function getRoleColor(player: BzssCoreTrackedPlayerInfo) {
-  if (isSquadLeader(player)) {
-    return "#fab005";
+function getTeamRoleIconStyle(icon: string, teamId: number | null | undefined) {
+  const iconUrl = String(icon ?? "");
+  const color = getTeamRoleIconColor(teamId);
+  return {
+    backgroundColor: color,
+    WebkitMaskImage: `url("${iconUrl}")`,
+    maskImage: `url("${iconUrl}")`,
+    WebkitMaskRepeat: "no-repeat",
+    maskRepeat: "no-repeat",
+    WebkitMaskPosition: "center",
+    maskPosition: "center",
+    WebkitMaskSize: "contain",
+    maskSize: "contain",
+  };
+}
+
+function getTeamRoleIconColor(teamId: number | null | undefined) {
+  const tone = getPerspectiveTone(teamId);
+  return getPerspectivePalette(tone).icon;
+}
+
+function getPerspectiveTone(teamId: number | null | undefined): PerspectiveTone {
+  const normalized = normalizeTeam(teamId);
+  if (normalized !== 1 && normalized !== 2) return "neutral";
+  const viewerTeamId = resolvedViewerTeamId.value;
+  if (viewerTeamId !== 1 && viewerTeamId !== 2) return "neutral";
+  return normalized === viewerTeamId ? "friendly" : "enemy";
+}
+
+function getPerspectiveClass(teamId: number | null | undefined) {
+  return `tone-${getPerspectiveTone(teamId)}`;
+}
+
+function getPerspectivePalette(tone: PerspectiveTone) {
+  if (tone === "friendly") {
+    return {
+      primary: "#37c8ff",
+      soft: "#7de6ff",
+      deep: "#0b6fa3",
+      glow: "rgba(55, 200, 255, 0.35)",
+      pulse: "#00c8ff",
+      tooltip: "rgba(55, 200, 255, 0.6)",
+      chip: "rgba(55, 200, 255, 0.15)",
+      textGlow: "rgba(55, 200, 255, 0.3)",
+      icon: "#7de6ff",
+    };
   }
-  
-  const role = inferRole(player).toLowerCase();
-  if (role.includes("medic")) {
-    return "#2ec4b6";
+  if (tone === "enemy") {
+    return {
+      primary: "#ff5b6e",
+      soft: "#ff97a3",
+      deep: "#a32032",
+      glow: "rgba(255, 91, 110, 0.35)",
+      pulse: "#ff3366",
+      tooltip: "rgba(255, 91, 110, 0.6)",
+      chip: "rgba(255, 91, 110, 0.15)",
+      textGlow: "rgba(255, 91, 110, 0.3)",
+      icon: "#ff97a3",
+    };
   }
-  if (role.includes("anti-tank") || role.includes("hat") || role.includes("lat") || role.includes("rocket")) {
-    return "#e71d36";
-  }
-  if (role.includes("marksman") || role.includes("sniper")) {
-    return "#bd93f9";
-  }
-  if (role.includes("machine") || role.includes("mg") || role.includes("grenadier")) {
-    return "#ff9f1c";
-  }
-  if (role.includes("crewman") || role.includes("pilot")) {
-    return "#868e96";
-  }
-  return "#ffffff";
+  return {
+    primary: "#94a3b8",
+    soft: "#cbd5e1",
+    deep: "#334155",
+    glow: "rgba(148, 163, 184, 0.25)",
+    pulse: "#94a3b8",
+    tooltip: "rgba(148, 163, 184, 0.45)",
+    chip: "rgba(148, 163, 184, 0.14)",
+    textGlow: "rgba(148, 163, 184, 0.2)",
+    icon: "#cbd5e1",
+  };
+}
+
+function getPerspectiveStyle(teamId: number | null | undefined) {
+  const palette = getPerspectivePalette(getPerspectiveTone(teamId));
+  return {
+    "--perspective-primary": palette.primary,
+    "--perspective-soft": palette.soft,
+    "--perspective-deep": palette.deep,
+    "--perspective-glow": palette.glow,
+    "--perspective-pulse": palette.pulse,
+    "--perspective-tooltip": palette.tooltip,
+    "--perspective-chip": palette.chip,
+    "--perspective-text-glow": palette.textGlow,
+    "--perspective-icon": palette.icon,
+  };
 }
 
 function getPlayerSpeedText(player: any) {
@@ -1602,14 +1790,11 @@ onBeforeUnmount(() => {
   transform: scale(1);
 }
 
-.team-1 .marker-pulse {
-  border: 2px solid #00c8ff;
+.tone-friendly .marker-pulse,
+.tone-enemy .marker-pulse,
+.tone-neutral .marker-pulse {
+  border: 2px solid var(--perspective-pulse, #00c8ff);
   animation: pulse-ring-blue 2.4s infinite;
-}
-
-.team-2 .marker-pulse {
-  border: 2px solid #ff3366;
-  animation: pulse-ring-red 2.4s infinite;
 }
 
 @keyframes pulse-ring-blue {
@@ -1643,15 +1828,12 @@ onBeforeUnmount(() => {
   transition: all 0.2s ease;
 }
 
-.team-1 .marker-ring {
-  border-color: var(--color-team1-primary, #37c8ff);
-  background-color: #0b6fa3;
-  box-shadow: 0 0 8px rgba(55, 200, 255, 0.35);
-}
-.team-2 .marker-ring {
-  border-color: var(--color-team2-primary, #ff9b45);
-  background-color: #b55314;
-  box-shadow: 0 0 8px rgba(255, 155, 69, 0.35);
+.tone-friendly .marker-ring,
+.tone-enemy .marker-ring,
+.tone-neutral .marker-ring {
+  border-color: var(--perspective-primary, #37c8ff);
+  background-color: var(--perspective-deep, #0b6fa3);
+  box-shadow: 0 0 8px var(--perspective-glow, rgba(55, 200, 255, 0.35));
 }
 .is-dead .marker-ring {
   filter: saturate(0.85) brightness(0.7);
@@ -1664,16 +1846,54 @@ onBeforeUnmount(() => {
   transform: translate(-50%, -50%) scale(1.15);
 }
 
-.kit-icon-img {
+.kit-icon-fallback {
   width: 11px;
   height: 11px;
-  object-fit: contain;
-  filter: invert(1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 1;
+  color: #e2e8f0;
+  font-weight: 700;
 }
 
-.is-dead .kit-icon-img {
+.kit-icon-mask {
+  width: 11px;
+  height: 11px;
+  display: inline-block;
+}
+
+.inline-kit-mask {
   width: 9px;
   height: 9px;
+  display: inline-block;
+}
+
+.kit-icon-mask,
+.inline-kit-mask {
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+.tone-friendly .kit-icon-mask,
+.tone-friendly .inline-kit-mask,
+.tone-enemy .kit-icon-mask,
+.tone-enemy .inline-kit-mask,
+.tone-neutral .kit-icon-mask,
+.tone-neutral .inline-kit-mask {
+  color: var(--perspective-icon, #7de6ff);
+}
+
+.is-dead .kit-icon-mask,
+.is-dead .inline-kit-mask {
+  opacity: 0.55;
+  filter: grayscale(1) brightness(0.9);
 }
 
 .squad-index-tag {
@@ -1692,8 +1912,11 @@ onBeforeUnmount(() => {
   z-index: 3;
 }
 
-.team-1 .squad-index-tag { color: var(--color-team1-primary, #37c8ff); }
-.team-2 .squad-index-tag { color: var(--color-team2-primary, #ff9b45); }
+.tone-friendly .squad-index-tag,
+.tone-enemy .squad-index-tag,
+.tone-neutral .squad-index-tag {
+  color: var(--perspective-primary, #37c8ff);
+}
 
 /* Player direction indicators */
 .marker-direction {
@@ -1719,12 +1942,10 @@ onBeforeUnmount(() => {
   border-bottom: 5px solid #ffffff;
 }
 
-.team-1 .direction-arrow {
-  border-bottom-color: var(--color-team1-primary, #37c8ff);
-}
-
-.team-2 .direction-arrow {
-  border-bottom-color: var(--color-team2-primary, #ff9b45);
+.tone-friendly .direction-arrow,
+.tone-enemy .direction-arrow,
+.tone-neutral .direction-arrow {
+  border-bottom-color: var(--perspective-primary, #37c8ff);
 }
 
 .is-dead .direction-arrow {
@@ -1768,14 +1989,11 @@ onBeforeUnmount(() => {
   line-height: 1;
 }
 
-.team-1 .player-squad-tag {
-  color: var(--color-team1-primary, #37c8ff);
-  background: rgba(55, 200, 255, 0.15);
-}
-
-.team-2 .player-squad-tag {
-  color: var(--color-team2-primary, #ff9b45);
-  background: rgba(255, 155, 69, 0.15);
+.tone-friendly .player-squad-tag,
+.tone-enemy .player-squad-tag,
+.tone-neutral .player-squad-tag {
+  color: var(--perspective-primary, #37c8ff);
+  background: var(--perspective-chip, rgba(55, 200, 255, 0.15));
 }
 
 .player-coords-tag {
@@ -1830,30 +2048,23 @@ onBeforeUnmount(() => {
   to { opacity: 1; }
 }
 
-.team-1-border {
-  border-color: rgba(55, 200, 255, 0.6) !important;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.85), 0 0 15px rgba(55, 200, 255, 0.25);
-}
-.team-1-border .tooltip-health-badge {
-  color: var(--color-team1-primary, #37c8ff);
-  background: rgba(55, 200, 255, 0.12);
-  border-color: rgba(55, 200, 255, 0.2);
-}
-.team-1-border .squad-color-pill {
-  background: var(--color-team1-primary, #37c8ff) !important;
+.player-tooltip.tone-friendly,
+.player-tooltip.tone-enemy,
+.player-tooltip.tone-neutral {
+  border-color: var(--perspective-tooltip, rgba(55, 200, 255, 0.6)) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.85), 0 0 15px var(--perspective-glow, rgba(55, 200, 255, 0.25));
 }
 
-.team-2-border {
-  border-color: rgba(255, 155, 69, 0.6) !important;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.85), 0 0 15px rgba(255, 155, 69, 0.25);
+.player-tooltip.tone-friendly .tooltip-health-badge,
+.player-tooltip.tone-enemy .tooltip-health-badge,
+.player-tooltip.tone-neutral .tooltip-health-badge {
+  color: var(--perspective-primary, #37c8ff);
+  background: var(--perspective-chip, rgba(55, 200, 255, 0.12));
+  border-color: color-mix(in srgb, var(--perspective-primary, #37c8ff) 30%, transparent);
 }
-.team-2-border .tooltip-health-badge {
-  color: var(--color-team2-primary, #ff9b45);
-  background: rgba(255, 155, 69, 0.12);
-  border-color: rgba(255, 155, 69, 0.2);
-}
-.team-2-border .squad-color-pill {
-  background: var(--color-team2-primary, #ff9b45) !important;
+
+.player-tooltip .squad-color-pill {
+  background: var(--perspective-primary, #37c8ff) !important;
 }
 
 .tooltip-header {
@@ -1927,10 +2138,16 @@ onBeforeUnmount(() => {
   font-size: 10px;
 }
 
-.inline-kit-icon {
+.inline-kit-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 9px;
   height: 9px;
-  filter: invert(1);
+  font-size: 8px;
+  line-height: 1;
+  color: #e2e8f0;
+  font-weight: 700;
 }
 
 .squad-color-pill {
@@ -2055,8 +2272,10 @@ onBeforeUnmount(() => {
   color: #ffffff;
 }
 
-.team-1 .ticket-number { color: var(--color-team1-primary, #37c8ff); text-shadow: 0 0 10px rgba(55, 200, 255, 0.3); }
-.team-2 .ticket-number { color: var(--color-team2-primary, #ff9b45); text-shadow: 0 0 10px rgba(255, 155, 69, 0.3); }
+.team-ticket-block .ticket-number {
+  color: var(--perspective-primary, #37c8ff);
+  text-shadow: 0 0 10px var(--perspective-text-glow, rgba(55, 200, 255, 0.3));
+}
 
 .ticket-progress-track {
   width: 100%;
@@ -2072,8 +2291,7 @@ onBeforeUnmount(() => {
   transition: width 0.5s ease;
 }
 
-.ticket-progress-fill.team-1 { background-color: var(--color-team1-primary, #37c8ff); }
-.ticket-progress-fill.team-2 { background-color: var(--color-team2-primary, #ff9b45); }
+.ticket-progress-fill { background-color: var(--perspective-primary, #37c8ff); }
 
 .ticket-vs-divider {
   font-family: monospace;
@@ -2358,6 +2576,11 @@ onBeforeUnmount(() => {
   margin-top: 4px;
 }
 
+.option-item-slider--stacked {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
 .scale-slider {
   flex: 1;
   accent-color: #38bdf8;
@@ -2372,6 +2595,45 @@ onBeforeUnmount(() => {
   color: #38bdf8;
   min-width: 28px;
   text-align: right;
+}
+
+.perspective-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+
+.perspective-btn {
+  min-width: 76px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.perspective-btn:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.perspective-btn.active {
+  border-color: var(--perspective-primary, #38bdf8);
+  color: var(--perspective-primary, #38bdf8);
+  background: var(--perspective-chip, rgba(56, 189, 248, 0.12));
+  box-shadow: inset 0 0 6px color-mix(in srgb, var(--perspective-primary, #38bdf8) 18%, transparent);
+}
+
+.perspective-summary {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #94a3b8;
+  margin-top: 2px;
 }
 
 /* Directory sub-tabs */
@@ -2426,9 +2688,9 @@ onBeforeUnmount(() => {
 }
 
 .tab-btn.active {
-  background: rgba(0, 240, 255, 0.1);
-  color: #00e5ff;
-  box-shadow: inset 0 0 5px rgba(0, 240, 255, 0.1);
+  background: var(--perspective-chip, rgba(0, 240, 255, 0.1));
+  color: var(--perspective-primary, #00e5ff);
+  box-shadow: inset 0 0 5px color-mix(in srgb, var(--perspective-primary, #00e5ff) 16%, transparent);
 }
 
 /* Squad cards scroll */
@@ -2462,15 +2724,15 @@ onBeforeUnmount(() => {
 }
 
 .sidebar-squad-card:hover {
-  background: rgba(0, 240, 255, 0.05);
-  border-color: rgba(0, 240, 255, 0.25);
-  box-shadow: 0 0 10px rgba(0, 240, 255, 0.05);
+  background: var(--perspective-chip, rgba(0, 240, 255, 0.05));
+  border-color: color-mix(in srgb, var(--perspective-primary, #00e5ff) 35%, transparent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--perspective-primary, #00e5ff) 18%, transparent);
 }
 
 .sidebar-squad-card.is-focused {
-  background: rgba(0, 240, 255, 0.08);
-  border-color: #00e5ff;
-  box-shadow: inset 0 0 6px rgba(0, 240, 255, 0.1), 0 0 12px rgba(0, 240, 255, 0.1);
+  background: var(--perspective-chip, rgba(0, 240, 255, 0.08));
+  border-color: var(--perspective-primary, #00e5ff);
+  box-shadow: inset 0 0 6px color-mix(in srgb, var(--perspective-primary, #00e5ff) 20%, transparent), 0 0 12px color-mix(in srgb, var(--perspective-primary, #00e5ff) 20%, transparent);
 }
 
 .squad-card-header {
@@ -2483,7 +2745,7 @@ onBeforeUnmount(() => {
 .squad-number {
   font-size: 11px;
   font-weight: 900;
-  color: #00e5ff;
+  color: var(--perspective-primary, #00e5ff);
   font-family: monospace;
 }
 
@@ -2565,16 +2827,14 @@ onBeforeUnmount(() => {
 
 .sidebar-player-card-row:hover,
 .sidebar-player-card-row.is-focused {
-  background: rgba(0, 240, 255, 0.06);
-  border-color: rgba(0, 240, 255, 0.3);
+  background: var(--perspective-chip, rgba(0, 240, 255, 0.06));
+  border-color: color-mix(in srgb, var(--perspective-primary, #00e5ff) 40%, transparent);
 }
 
-.sidebar-player-card-row.team-1 {
-  border-left: 3px solid #00e5ff;
-}
-
-.sidebar-player-card-row.team-2 {
-  border-left: 3px solid #ff3366;
+.sidebar-player-card-row.tone-friendly,
+.sidebar-player-card-row.tone-enemy,
+.sidebar-player-card-row.tone-neutral {
+  border-left: 3px solid var(--perspective-primary, #00e5ff);
 }
 
 .player-name-row {
@@ -2653,14 +2913,22 @@ onBeforeUnmount(() => {
 }
 
 /* Global color tags injected dynamically */
-:deep(.team-1-text) {
-  color: #00e5ff;
+:deep(.tone-friendly-text),
+:deep(.tone-enemy-text),
+:deep(.tone-neutral-text) {
   font-weight: bold;
 }
 
-:deep(.team-2-text) {
-  color: #ff5252;
-  font-weight: bold;
+:deep(.tone-friendly-text) {
+  color: #00e5ff;
+}
+
+:deep(.tone-enemy-text) {
+  color: #ff5b6e;
+}
+
+:deep(.tone-neutral-text) {
+  color: #cbd5e1;
 }
 
 .map-select {
