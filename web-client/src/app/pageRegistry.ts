@@ -38,6 +38,7 @@ import AdminUsersPage from "../pages/AdminUsersPage.vue";
 import AuditRecordsPage from "../pages/AuditRecordsPage.vue";
 import PluginSubscriptionsPage from "../pages/PluginSubscriptionsPage.vue";
 import TacticalMapPage from "../pages/TacticalMapPage.vue";
+import BzssCoreSnapshotsPage from "../pages/BzssCoreSnapshotsPage.vue";
 import {
   normalizePermissionList,
   resolveWebPagePermission,
@@ -328,6 +329,17 @@ export const pageRegistry: PageDefinition[] = [
     refreshPolicy: "manual",
     nav: { section: "system", label: "UDP 转发日志", icon: "📡", order: 60 },
     ...documentPage,
+  },
+  {
+    name: "bzss-core-snapshots",
+    path: "/debug/bzss-core-snapshots",
+    component: BzssCoreSnapshotsPage,
+    title: "BZSS-Core 玩家快照",
+    category: "debug",
+    refreshPolicy: "polling",
+    nav: { section: "players", label: "BZSS-Core 快照", icon: "BZSS", order: 91 },
+    requiredPermission: "bzss_core.use",
+    ...workspacePage,
   },
   {
     name: "server-info-statistics",

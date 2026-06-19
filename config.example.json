@@ -101,6 +101,36 @@
         "restartRequired": true
       },
       {
+        "path": "bzssCore.modifyScriptPath",
+        "label": "BZSS-Core Modify Script Path",
+        "type": "string",
+        "advanced": true,
+        "restartRequired": false
+      },
+      {
+        "path": "bzssCore.remoteSaveGamePath",
+        "label": "BZSS-Core Remote Save Path",
+        "type": "string",
+        "advanced": true,
+        "restartRequired": false
+      },
+      {
+        "path": "bzssCore.playerInfoSavePath",
+        "label": "BZSS-Core Player Info Save Path",
+        "type": "string",
+        "advanced": true,
+        "restartRequired": false
+      },
+      {
+        "path": "bzssCore.playerInfoPollIntervalMs",
+        "label": "BZSS-Core Player Info Poll Interval Ms",
+        "type": "number",
+        "min": 50,
+        "max": 5000,
+        "advanced": true,
+        "restartRequired": false
+      },
+      {
         "path": "modules.matchState.polling.dynamic.mediumPlayersIntervalMs",
         "label": "Medium Players Refresh Interval",
         "type": "number",
@@ -687,5 +717,11 @@
       "combat": 200
     },
     "includeEventsInAllSnapshot": false
+  },
+  "bzssCore": {
+    "modifyScriptPath": "",
+    "remoteSaveGamePath": "",
+    "playerInfoSavePath": "",
+    "playerInfoPollIntervalMs": 100
   }
 }

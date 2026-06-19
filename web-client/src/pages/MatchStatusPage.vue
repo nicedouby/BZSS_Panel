@@ -288,6 +288,7 @@ import { normalizeRefreshPolicy, resolveRefreshDelay } from "../app/refreshPolic
 import { useAutoRefreshGate } from "../composables/useAutoRefreshGate";
 import { cancelIdleTask, scheduleIdleTask } from "../utils/idle";
 import { resolvePlayerIdentityIp } from "../app/playerIdentityApi";
+import { fetchBzssCorePlayerInfo } from "../app/bzssCoreApi";
 import type {
   PageState,
   PlayerDetailViewModel,
@@ -423,6 +424,16 @@ const remoteTelemetryQuery = useQuery({
   refetchOnWindowFocus: false,
 });
 const remoteTelemetryState = computed(() => remoteTelemetryQuery.data.value?.remoteTelemetry ?? null);
+const activePlayerBzssQuery = useQuery({
+  queryKey: computed(() => ["bzss-core-player-info", activePlayerWindow.value?.detail.name ?? ""]),
+  enabled: computed(() => Boolean(auth.authenticated && canAutoRefresh.value && activePlayerWindow.value?.detail.name)),
+  queryFn: async () => fetchBzssCorePlayerInfo({
+    name: activePlayerWindow.value?.detail.name ?? "",
+  }),
+  refetchInterval: computed(() => (activePlayerWindow.value?.detail.name && canAutoRefresh.value ? 100 : false)),
+  refetchIntervalInBackground: true,
+  refetchOnWindowFocus: false,
+});
 const remoteTicketCounts = computed(() => {
   const latest = remoteTelemetryState.value?.currentSample ?? null;
   const latestTickets = latest?.tickets ?? {};
@@ -786,6 +797,31 @@ watch(
 );
 
 watch(
+  () => activePlayerBzssQuery.data.value,
+  (payload) => {
+    if (!payload || !activePlayerWindow.value) return;
+    const currentName = String(activePlayerWindow.value.detail.name ?? "").trim();
+    const responseName = String(payload.player?.playerName ?? "").trim();
+    if (responseName && currentName && responseName !== currentName) {
+      const currentSuffix = currentName.split(/\s+/).filter(Boolean).pop() ?? currentName;
+      const responseSuffix = responseName.split(/\s+/).filter(Boolean).pop() ?? responseName;
+      if (currentSuffix !== responseSuffix) return;
+    }
+
+    activePlayerWindow.value = {
+      ...activePlayerWindow.value,
+      detail: {
+        ...activePlayerWindow.value.detail,
+        bzssCoreStatus: payload.status,
+        bzssCoreLastCompletedAt: payload.state?.lastCompletedAt ?? null,
+        bzssCorePlayerInfo: payload.player ?? null,
+      },
+    };
+  },
+  { immediate: true },
+);
+
+watch(
   () => [
     currentServerId.value,
     activePlayerWindow.value?.detail.playerId,
@@ -1108,6 +1144,9 @@ async function handlePlayerPlaytimeUpdated() {
     const existingResolvedIp = String(activePlayerWindow.value.detail.resolvedIp ?? "").trim();
     const existingLastIp = String(activePlayerWindow.value.detail.lastIp ?? "").trim();
     const existingIpSource = activePlayerWindow.value.detail.ipSource ?? "none";
+    const existingBzssCoreStatus = activePlayerWindow.value.detail.bzssCoreStatus ?? "";
+    const existingBzssCoreLastCompletedAt = activePlayerWindow.value.detail.bzssCoreLastCompletedAt ?? null;
+    const existingBzssCorePlayerInfo = activePlayerWindow.value.detail.bzssCorePlayerInfo ?? null;
     const nextDetail = buildPlayerDetailViewModel(player);
     if (!String(nextDetail.resolvedIp ?? "").trim() && existingResolvedIp) {
       nextDetail.resolvedIp = existingResolvedIp;
@@ -1125,6 +1164,9 @@ async function handlePlayerPlaytimeUpdated() {
           battleStatsSource: existingBattleStatsSource,
           battleStatsLastUpdatedAt: existingBattleStatsLastUpdatedAt,
         } : {}),
+        bzssCoreStatus: existingBzssCoreStatus,
+        bzssCoreLastCompletedAt: existingBzssCoreLastCompletedAt,
+        bzssCorePlayerInfo: existingBzssCorePlayerInfo,
       },
       notice: "",
     };

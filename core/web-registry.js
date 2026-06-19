@@ -113,6 +113,20 @@ export class WebRegistry {
     });
 
     this.registerPage({
+      id: "web.bzssCoreSnapshots",
+      title: "BZSS-Core 玩家快照",
+      group: "调试",
+      route: "/debug/bzss-core-snapshots",
+      source: "module.bzssCoreMonitor",
+      description: "查看 BZSS-Core 监控到的玩家快照文件状态，以及当前一轮已完成写入并成功解析出的全部玩家信息。",
+      required: false,
+      enabled: true,
+      order: 105,
+      icon: "BZSS",
+      requiredPermission: "bzss_core.use",
+    });
+
+    this.registerPage({
       id: "web.udpForwarder",
       title: "UDP 转发日志",
       group: "调试",

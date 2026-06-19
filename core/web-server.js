@@ -1567,6 +1567,19 @@ export class WebServer {
       return this.json(res, result.ok ? 200 : 400, result);
     }
 
+    if (url.pathname === "/api/bzss-core/player-info" && req.method === "GET") {
+      if (!this.canUseBzssCoreTool(user)) {
+        return this.json(res, 403, {
+          error: "Forbidden",
+          message: "bzss_core.use permission is required.",
+        });
+      }
+      return this.json(res, 200, this.getBzssCorePlayerInfo({
+        name: url.searchParams.get("name") ?? "",
+        all: url.searchParams.get("all") ?? "",
+      }));
+    }
+
     if (url.pathname === "/api/logpost/raw-output" && req.method === "GET") {
       return this.json(res, 200, await this.getLogPostRawOutputConfig());
     }
@@ -3817,6 +3830,12 @@ export class WebServer {
     return {
       modifyScriptPath: String(config.modifyScriptPath ?? config.modifySaveGamePath ?? "").trim(),
       remoteSaveGamePath: String(config.remoteSaveGamePath ?? config.saveGamePath ?? "").trim(),
+      playerInfoSavePath: String(
+        config.playerInfoSavePath
+        ?? config.playerBaseInfoPath
+        ?? config.playerInfoPath
+        ?? "",
+      ).trim(),
     };
   }
 
@@ -3826,6 +3845,13 @@ export class WebServer {
       ...previous,
       modifyScriptPath: String(nextConfig.modifyScriptPath ?? nextConfig.modifySaveGamePath ?? "").trim(),
       remoteSaveGamePath: String(nextConfig.remoteSaveGamePath ?? nextConfig.saveGamePath ?? "").trim(),
+      playerInfoSavePath: String(
+        nextConfig.playerInfoSavePath
+        ?? nextConfig.playerBaseInfoPath
+        ?? nextConfig.playerInfoPath
+        ?? previous.playerInfoSavePath
+        ?? "",
+      ).trim(),
     };
 
     this.core.config?.set?.("bzssCore", normalized);
@@ -3998,6 +4024,34 @@ export class WebServer {
       directive: normalizedDirective,
       parameter: text,
       command: `${normalizedDirective}:${text}`,
+    };
+  }
+
+  getBzssCorePlayerInfo(query = {}) {
+    const monitor = this.modules.bzssCoreMonitor;
+    const state = monitor?.getState?.() ?? {
+      configuredPath: "",
+      resolvedPath: "",
+      exists: false,
+      status: "unavailable",
+      revision: 0,
+      updatedAt: "",
+      lastReadAt: "",
+      lastCompletedAt: "",
+      markerSeen: false,
+      fileSize: 0,
+      fileMtimeMs: 0,
+      playerCount: 0,
+      lastError: "",
+    };
+    const player = monitor?.findPlayer?.(query) ?? null;
+    const includeAll = query?.all === true || query?.all === "1" || query?.all === 1;
+    return {
+      ok: true,
+      state,
+      status: state.status,
+      player,
+      players: includeAll ? (monitor?.getPlayers?.() ?? []) : undefined,
     };
   }
 

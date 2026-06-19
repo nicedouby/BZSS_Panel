@@ -77,6 +77,22 @@
         "restartRequired": false
       },
       {
+        "path": "bzssCore.playerInfoSavePath",
+        "label": "BZSS-Core Player Info Save Path",
+        "type": "string",
+        "advanced": true,
+        "restartRequired": false
+      },
+      {
+        "path": "bzssCore.playerInfoPollIntervalMs",
+        "label": "BZSS-Core Player Info Poll Interval Ms",
+        "type": "number",
+        "min": 50,
+        "max": 5000,
+        "advanced": true,
+        "restartRequired": false
+      },
+      {
         "path": "rcon.enabled",
         "label": "RCON Enabled",
         "type": "boolean",
@@ -842,6 +858,8 @@
   },
   "bzssCore": {
     "modifyScriptPath": "D:\\BZSS_Panel\\ModifySaveGame.py",
-    "remoteSaveGamePath": "Z:\\Users\\Administrator\\Desktop\\bzss_sq_server\\SquadGame\\Saved\\SaveGames\\BZSS-Logger.sav"
+    "remoteSaveGamePath": "Z:\\Users\\Administrator\\Desktop\\bzss_sq_server\\SquadGame\\Saved\\SaveGames\\BZSS-Logger.sav",
+    "playerInfoSavePath": "Z:\\Users\\Administrator\\Desktop\\bzss_sq_server\\SquadGame\\Saved\\SaveGames\\PBI.sav",
+    "playerInfoPollIntervalMs": 100
   }
 }

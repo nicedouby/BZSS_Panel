@@ -126,6 +126,9 @@ export interface PlayerDetailViewModel {
   battleStatsLabel?: string;
   battleStatsSource?: string;
   battleStatsLastUpdatedAt?: string | null;
+  bzssCoreStatus?: string;
+  bzssCoreLastCompletedAt?: string | null;
+  bzssCorePlayerInfo?: BzssCoreTrackedPlayerInfo | null;
   source: string;
   controller: string;
   raw?: any;
@@ -164,6 +167,39 @@ export interface CombatStats {
   deaths: number;
   tk: number;
   revives: number;
+}
+
+export interface BzssCoreTrackedVector {
+  x: number | null;
+  y: number | null;
+  z: number | null;
+}
+
+export interface BzssCoreTrackedPlayerInfo {
+  playerName: string;
+  playerGuid: string;
+  teamId: number | null;
+  squadId: number | null;
+  playerBaseInfo: {
+    raw: string;
+    fields: string[];
+  };
+  soldierInfo: {
+    raw: string;
+    fields: string[];
+    soldierClass: string;
+    health: number | null;
+    weaponClass: string;
+    ammoValues: number[];
+    position: BzssCoreTrackedVector | null;
+    rotation: BzssCoreTrackedVector | null;
+  };
+  playerScoreboard: {
+    raw: string;
+    values: string[];
+    numericValues: Array<number | null>;
+  };
+  rawText: string;
 }
 
 export interface PageState {

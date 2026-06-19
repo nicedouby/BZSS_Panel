@@ -406,6 +406,60 @@
                   </div>
                 </div>
 
+                <div class="hud-pane-section">
+                  <div class="hud-section-header">
+                    <span class="hud-section-title">BZSS-Core / PLAYER SNAPSHOT</span>
+                    <span class="hud-section-subtitle">{{ bzssCoreStatusText }}</span>
+                  </div>
+                  <div class="bzss-core-card" :data-status="props.player?.bzssCoreStatus || 'idle'">
+                    <div class="bzss-core-card__status">
+                      <strong>{{ bzssCoreStatusText }}</strong>
+                      <span v-if="bzssCoreStatusDetail">{{ bzssCoreStatusDetail }}</span>
+                    </div>
+                    <div v-if="bzssCoreInfo" class="bzss-core-grid">
+                      <div class="bzss-core-item">
+                        <span class="bzss-core-item__label">Name</span>
+                        <strong>{{ bzssCoreInfo.playerName || "--" }}</strong>
+                      </div>
+                      <div class="bzss-core-item">
+                        <span class="bzss-core-item__label">GUID</span>
+                        <strong class="bzss-core-mono">{{ bzssCoreInfo.playerGuid || "--" }}</strong>
+                      </div>
+                      <div class="bzss-core-item">
+                        <span class="bzss-core-item__label">Soldier</span>
+                        <strong class="bzss-core-mono">{{ bzssCoreInfo.soldierInfo?.soldierClass || "--" }}</strong>
+                      </div>
+                      <div class="bzss-core-item">
+                        <span class="bzss-core-item__label">Weapon</span>
+                        <strong class="bzss-core-mono">{{ bzssCoreInfo.soldierInfo?.weaponClass || "--" }}</strong>
+                      </div>
+                      <div class="bzss-core-item">
+                        <span class="bzss-core-item__label">Health</span>
+                        <strong>{{ bzssCoreInfo.soldierInfo?.health ?? "--" }}</strong>
+                      </div>
+                      <div class="bzss-core-item">
+                        <span class="bzss-core-item__label">Ammo</span>
+                        <strong class="bzss-core-mono">{{ formatBzssAmmo(bzssCoreInfo.soldierInfo?.ammoValues) }}</strong>
+                      </div>
+                      <div class="bzss-core-item bzss-core-item--wide">
+                        <span class="bzss-core-item__label">Position</span>
+                        <strong class="bzss-core-mono">{{ formatBzssVector(bzssCoreInfo.soldierInfo?.position) }}</strong>
+                      </div>
+                      <div class="bzss-core-item bzss-core-item--wide">
+                        <span class="bzss-core-item__label">Rotation</span>
+                        <strong class="bzss-core-mono">{{ formatBzssVector(bzssCoreInfo.soldierInfo?.rotation) }}</strong>
+                      </div>
+                      <div class="bzss-core-item bzss-core-item--wide">
+                        <span class="bzss-core-item__label">Scoreboard</span>
+                        <strong class="bzss-core-mono">{{ formatBzssScoreboard(bzssCoreInfo.playerScoreboard?.numericValues) }}</strong>
+                      </div>
+                    </div>
+                    <div v-else class="bzss-core-card__empty">
+                      No completed BZSS-Core snapshot is matched to this player yet.
+                    </div>
+                  </div>
+                </div>
+
                 <!-- Steam Friends Section -->
                 <div class="hud-pane-section">
                   <div class="hud-section-header">
@@ -557,7 +611,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { useRouter } from "vue-router";
-import type { PlayerDetailViewModel } from "../../types/squad-admin.types";
+import type { BzssCoreTrackedVector, PlayerDetailViewModel } from "../../types/squad-admin.types";
 import { useUiStore } from "../../stores/ui.store";
 import { copyTextWithToast } from "../../utils/clipboard";
 import { goToPlayerDatabaseSearch } from "../../utils/player-database";
@@ -654,6 +708,23 @@ const loadToken = ref(0);
 const steamFriends = ref<any[]>([]);
 const friendsLoading = ref(false);
 const friendsError = ref("");
+const bzssCoreInfo = computed(() => props.player?.bzssCorePlayerInfo ?? null);
+const bzssCoreStatusText = computed(() => {
+  const status = String(props.player?.bzssCoreStatus ?? "").trim();
+  if (status === "ready") return "Ready";
+  if (status === "writing") return "Writing";
+  if (status === "waiting") return "Waiting for next file";
+  if (status === "missing") return "File missing";
+  if (status === "unconfigured") return "Path not configured";
+  if (status === "error") return "Read error";
+  return "Idle";
+});
+const bzssCoreStatusDetail = computed(() => {
+  if (props.player?.bzssCoreStatus === "ready" && props.player?.bzssCoreLastCompletedAt) {
+    return `Last complete: ${formatDateTime(props.player.bzssCoreLastCompletedAt)}`;
+  }
+  return "";
+});
 
 // Computed properties for UI design
 const playerInitials = computed(() => {
@@ -1421,6 +1492,24 @@ function displayRole(role: string | null | undefined) {
   };
   const key = keyMap[normalized];
   return key ? t(key, raw) : raw;
+}
+
+function formatBzssVector(value: BzssCoreTrackedVector | null | undefined) {
+  if (!value) return "--";
+  const x = value.x ?? "?";
+  const y = value.y ?? "?";
+  const z = value.z ?? "?";
+  return `X=${x}  Y=${y}  Z=${z}`;
+}
+
+function formatBzssAmmo(values: number[] | null | undefined) {
+  if (!Array.isArray(values) || values.length === 0) return "--";
+  return values.join(" / ");
+}
+
+function formatBzssScoreboard(values: Array<number | null> | null | undefined) {
+  if (!Array.isArray(values) || values.length === 0) return "--";
+  return values.filter((value) => value != null).join(" / ") || "--";
 }
 
 function normalizeSteam64(value: unknown) {
@@ -2598,6 +2687,83 @@ onUnmounted(() => {
 .raw-pre::-webkit-scrollbar-thumb {
   border-radius: 99px;
   background: rgba(255, 255, 255, 0.08);
+}
+
+/* BZSS-Core snapshot */
+.bzss-core-card {
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.92), rgba(2, 6, 23, 0.88));
+}
+
+.bzss-core-card[data-status="ready"] {
+  border-color: color-mix(in srgb, var(--glow-color, #38bdf8) 45%, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03), 0 12px 28px rgba(2, 6, 23, 0.22);
+}
+
+.bzss-core-card__status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.bzss-core-card__status strong {
+  font-size: 12px;
+  color: #e2e8f0;
+}
+
+.bzss-core-card__empty {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #94a3b8;
+}
+
+.bzss-core-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.bzss-core-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.bzss-core-item--wide {
+  grid-column: 1 / -1;
+}
+
+.bzss-core-item__label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.bzss-core-item strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  color: #f8fafc;
+}
+
+.bzss-core-mono {
+  font-family: "Consolas", "SFMono-Regular", monospace;
+  font-size: 11px;
 }
 
 /* Steam Friends Styles */
