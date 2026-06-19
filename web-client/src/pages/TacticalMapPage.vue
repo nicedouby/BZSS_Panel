@@ -23,9 +23,9 @@
         }"
         @mousemove="onMapMousemove"
       >
-        <!-- The Desert/Valley Map Image -->
+        <!-- Dynamic Map Image -->
         <img
-          src="/tactical_map.jpg"
+          :src="activeMapConfig.image"
           alt="Tactical Map"
           class="map-image"
           draggable="false"
@@ -33,25 +33,23 @@
 
         <!-- Tactical Coordinates Grid Lines -->
         <div v-if="showGrid" class="map-grid-overlay">
-          <!-- 8x8 Grid Squares -->
+          <!-- Vertical grid lines (game X coordinates) -->
           <div
-            v-for="row in 8"
-            :key="'row-' + row"
-            class="grid-row"
+            v-for="line in verticalGridLines"
+            :key="'v-' + line.percent"
+            class="grid-line vertical"
+            :style="{ left: `${line.percent}%` }"
           >
-            <div
-              v-for="col in 8"
-              :key="'col-' + col"
-              class="grid-cell"
-            >
-              <!-- Cell Coordinate ID (subtle) -->
-              <span class="cell-id">{{ getCellLabel(col, row) }}</span>
-              
-              <!-- Numpad-style sub-cells (very faint dotted dividers) -->
-              <div class="sub-grid-keypad">
-                <div v-for="sub in 9" :key="sub" class="keypad-sector"></div>
-              </div>
-            </div>
+            <span class="grid-label">{{ line.label }}</span>
+          </div>
+          <!-- Horizontal grid lines (game Y coordinates) -->
+          <div
+            v-for="line in horizontalGridLines"
+            :key="'h-' + line.percent"
+            class="grid-line horizontal"
+            :style="{ top: `${line.percent}%` }"
+          >
+            <span class="grid-label">{{ line.label }}</span>
           </div>
         </div>
 
@@ -65,24 +63,27 @@
 
         <!-- Player Markers Layer -->
         <div class="player-markers-layer">
-          <div
+          <button
             v-for="player in filteredPlayers"
-            :key="player.id"
+            :key="player.playerGuid || player.playerName"
             class="player-marker"
-            :class="{
-              'team-1': player.teamId === 1,
-              'team-2': player.teamId === 2,
-              'is-dead': player.isDead,
-              'is-squadleader': player.isSquadLeader,
-              'is-focused': focusedSquadId === player.squadId,
-              'is-hovered': hoveredPlayer?.id === player.id
-            }"
+            :class="[
+              `team-${normalizeTeam(player.teamId)}`,
+              { 'is-dead': (player.soldierInfo?.health ?? 100) <= 0 },
+              { 'is-squadleader': isSquadLeader(player) },
+              { 'is-focused': focusedSquadId === player.squadId },
+              { 'is-hovered': hoveredPlayer?.playerGuid === player.playerGuid || hoveredPlayer?.playerName === player.playerName },
+              { 'no-pointer': disableMarkerInteraction }
+            ]"
             :style="{
-              left: `${player.x}%`,
-              top: `${player.y}%`
+              left: `${player.mapX}%`,
+              top: `${player.mapY}%`,
+              transform: `translate(-50%, -50%) scale(${markerScale})`
             }"
-            @mouseenter="onPlayerMouseEnter(player)"
-            @mouseleave="onPlayerMouseLeave"
+            type="button"
+            @click="showPlayerDetails(player)"
+            @mouseenter="hoveredPlayer = player"
+            @mouseleave="hoveredPlayer = null"
           >
             <!-- Marker Aura/Pulse -->
             <div class="marker-pulse"></div>
@@ -91,8 +92,8 @@
             <div class="marker-ring">
               <!-- Kit Icon -->
               <img
-                :src="getPlayerKitIcon(player.kitIcon)"
-                :alt="player.role"
+                :src="getPlayerKitIcon(player)"
+                :alt="inferRole(player)"
                 class="kit-icon-img"
                 draggable="false"
               />
@@ -102,28 +103,35 @@
             <span v-if="player.squadId" class="squad-index-tag">
               {{ player.squadId }}
             </span>
-          </div>
+
+            <!-- Text Tag for Player Name & Coordinates -->
+            <span v-if="showPlayerNames" class="tag">
+              <span class="player-name-tag">{{ player.playerName }}</span>
+              <span v-if="showPlayerCoords" class="coords-tag">
+                ({{ Math.round(player.soldierInfo?.position?.x ?? 0) }}, {{ Math.round(player.soldierInfo?.position?.y ?? 0) }})
+              </span>
+            </span>
+          </button>
         </div>
 
         <!-- Floating Player Hover Tooltip -->
         <div
-          v-if="hoveredPlayer"
+          v-if="hoveredMarker"
           class="player-tooltip"
-          :class="{ 'team-1-border': hoveredPlayer.teamId === 1, 'team-2-border': hoveredPlayer.teamId === 2 }"
+          :class="{ 'team-1-border': normalizeTeam(hoveredMarker.teamId) === 1, 'team-2-border': normalizeTeam(hoveredMarker.teamId) === 2 }"
           :style="{
-            left: `${hoveredPlayer.x}%`,
-            top: `${hoveredPlayer.y - 1.5}%`
+            left: `${hoveredMarker.mapX}%`,
+            top: `${hoveredMarker.mapY - 1.5}%`
           }"
         >
           <!-- Tooltip Header -->
           <div class="tooltip-header">
-            <span class="tooltip-clan-tag" v-if="hoveredPlayer.clanTag">[{{ hoveredPlayer.clanTag }}]</span>
-            <span class="tooltip-name">{{ hoveredPlayer.name }}</span>
+            <span class="tooltip-name">{{ hoveredMarker.playerName }}</span>
             <span
               class="tooltip-health-badge"
-              :class="{ 'low-health': hoveredPlayer.health < 40, 'dead-health': hoveredPlayer.isDead }"
+              :class="{ 'low-health': (hoveredMarker.soldierInfo?.health ?? 100) < 40, 'dead-health': (hoveredMarker.soldierInfo?.health ?? 100) <= 0 }"
             >
-              {{ hoveredPlayer.isDead ? 'DOWNED' : `${hoveredPlayer.health}% HP` }}
+              {{ (hoveredMarker.soldierInfo?.health ?? 100) <= 0 ? 'DOWNED' : `${hoveredMarker.soldierInfo?.health ?? 100}% HP` }}
             </span>
           </div>
 
@@ -135,28 +143,26 @@
             <div class="detail-row">
               <span class="detail-label">角色职业</span>
               <span class="detail-val">
-                <img :src="getPlayerKitIcon(hoveredPlayer.kitIcon)" class="inline-kit-icon" />
-                {{ hoveredPlayer.role }}
+                <img :src="getPlayerKitIcon(hoveredMarker)" class="inline-kit-icon" />
+                {{ inferRole(hoveredMarker) }}
               </span>
             </div>
             <div class="detail-row">
               <span class="detail-label">战术小队</span>
               <span class="detail-val">
-                <span class="squad-color-pill" :style="{ background: hoveredPlayer.teamId === 1 ? '#00e5ff' : '#ff3366' }"></span>
-                #{{ hoveredPlayer.squadId }} {{ hoveredPlayer.squadName }}
+                <span class="squad-color-pill" :style="{ background: normalizeTeam(hoveredMarker.teamId) === 1 ? '#00e5ff' : '#ff3366' }"></span>
+                #{{ hoveredMarker.squadId || '-' }}
               </span>
             </div>
             <div class="detail-row">
-              <span class="detail-label">战绩 stats</span>
-              <span class="detail-val monospace">{{ hoveredPlayer.kills }} K / {{ hoveredPlayer.deaths }} D / {{ hoveredPlayer.assists }} A</span>
+              <span class="detail-label">武器</span>
+              <span class="detail-val font-mono">{{ hoveredMarker.soldierInfo?.weaponClass || '-' }}</span>
             </div>
             <div class="detail-row">
-              <span class="detail-label">坐标 grid</span>
-              <span class="detail-val monospace highlight-cyan">{{ hoveredPlayer.gridLocation }}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">延迟 ping</span>
-              <span class="detail-val monospace" :style="{ color: hoveredPlayer.ping > 80 ? '#fbc02d' : '#4caf50' }">{{ hoveredPlayer.ping }} ms</span>
+              <span class="detail-label">坐标</span>
+              <span class="detail-val font-mono highlight-cyan">
+                {{ Math.round(hoveredMarker.soldierInfo?.position?.x ?? 0) }}, {{ Math.round(hoveredMarker.soldierInfo?.position?.y ?? 0) }}
+              </span>
             </div>
           </div>
 
@@ -165,8 +171,8 @@
             <div
               class="tooltip-health-bar"
               :style="{
-                width: `${hoveredPlayer.health}%`,
-                background: hoveredPlayer.isDead ? '#ef5350' : hoveredPlayer.health < 40 ? '#fdd835' : '#00e5ff'
+                width: `${hoveredMarker.soldierInfo?.health ?? 100}%`,
+                background: (hoveredMarker.soldierInfo?.health ?? 100) <= 0 ? '#ef5350' : (hoveredMarker.soldierInfo?.health ?? 100) < 40 ? '#fdd835' : '#00e5ff'
               }"
             ></div>
           </div>
@@ -179,8 +185,8 @@
         <div class="system-header-card glass-panel">
           <div class="header-led-indicator pulse-led"></div>
           <div class="header-text-block">
-            <h1 class="main-title">KOKAN SATELLITE COMMAND</h1>
-            <p class="subtitle-text">战术雷达实时定位系统 &bull; AAS v1</p>
+            <h1 class="main-title">SUMARI SATELLITE COMMAND</h1>
+            <p class="subtitle-text">战术雷达实时定位系统 &bull; PBI.sav v1</p>
           </div>
         </div>
 
@@ -189,7 +195,7 @@
           <!-- Team 1 US Army -->
           <div class="team-ticket-block team-1">
             <div class="team-info-row">
-              <span class="team-label">US ARMY (TEAM 1)</span>
+              <span class="team-label">T1 美军</span>
               <span class="ticket-number font-mono">{{ tickets.team1 }}</span>
             </div>
             <div class="ticket-progress-track">
@@ -203,7 +209,7 @@
           <!-- Team 2 PLA Forces -->
           <div class="team-ticket-block team-2">
             <div class="team-info-row">
-              <span class="team-label">PLA FORCES (TEAM 2)</span>
+              <span class="team-label">T2 解放军</span>
               <span class="ticket-number font-mono">{{ tickets.team2 }}</span>
             </div>
             <div class="ticket-progress-track">
@@ -241,30 +247,31 @@
         </button>
         <button
           class="ctrl-btn text-btn"
-          :class="{ active: moveEnabled }"
-          @click="moveEnabled = !moveEnabled"
-        >
-          演练
-        </button>
-        <button
-          class="ctrl-btn text-btn"
           :class="{ active: filterAliveOnly }"
           @click="filterAliveOnly = !filterAliveOnly"
         >
           存活
+        </button>
+        <button
+          class="ctrl-btn text-btn"
+          :class="{ active: disableMarkerInteraction }"
+          @click="disableMarkerInteraction = !disableMarkerInteraction"
+          title="穿透玩家标记 (方便查看地图)"
+        >
+          穿透
         </button>
       </div>
 
       <!-- Coordinate Sector Display Box (Bottom Right) -->
       <div class="coordinates-hud-card glass-panel font-mono">
         <div class="hud-item">
-          <span class="hud-label">COORDS:</span>
-          <span class="hud-val text-cyan">{{ currentGrid }}</span>
+          <span class="hud-label">GAME X:</span>
+          <span class="hud-val text-cyan">{{ hoverCoords ? Math.round(hoverCoords.gameX) : '-' }}</span>
         </div>
         <div class="hud-item-divider"></div>
         <div class="hud-item">
-          <span class="hud-label">KEYPAD:</span>
-          <span class="hud-val text-yellow">{{ currentSubGrid }}</span>
+          <span class="hud-label">GAME Y:</span>
+          <span class="hud-val text-yellow">{{ hoverCoords ? Math.round(hoverCoords.gameY) : '-' }}</span>
         </div>
       </div>
     </div>
@@ -286,29 +293,80 @@
           <div class="server-stats-grid monospace">
             <div class="server-stat-item">
               <span class="lbl">在线人数</span>
-              <span class="val text-cyan">78 / 100</span>
+              <span class="val text-cyan">{{ serverPlayerCount }}</span>
             </div>
             <div class="server-stat-item">
               <span class="lbl">地图名称</span>
-              <span class="val">Kokan Valley</span>
+              <span class="val">{{ serverMapName }}</span>
             </div>
             <div class="server-stat-item">
-              <span class="lbl">RCON 状态</span>
-              <span class="val text-green pulsing-text">CONNECTED</span>
+              <span class="lbl">监控状态</span>
+              <span class="val text-green pulsing-text">{{ statusText }}</span>
             </div>
             <div class="server-stat-item">
               <span class="lbl">对局阶段</span>
-              <span class="val">MID MATCH</span>
+              <span class="val">{{ matchPhase }}</span>
             </div>
           </div>
         </div>
 
-        <!-- Tactical Squad Directory -->
-        <div class="sidebar-section flex-expand border-b">
+        <!-- Display Options Panel inside Sidebar -->
+        <div class="sidebar-section border-b">
           <div class="section-title-bar">
-            <span class="glowing-square yellow"></span>
-            <h3>小队列表</h3>
-            <span class="small-hint">点击可地图高亮</span>
+            <span class="glowing-square blue"></span>
+            <h3>显示选项</h3>
+          </div>
+          <div class="options-group-sidebar">
+            <label class="option-item-sidebar">
+              <input type="checkbox" v-model="showGrid" />
+              <span class="option-text">显示坐标网格</span>
+            </label>
+            <label class="option-item-sidebar">
+              <input type="checkbox" v-model="showPlayerNames" />
+              <span class="option-text">显示玩家姓名</span>
+            </label>
+            <label class="option-item-sidebar">
+              <input type="checkbox" v-model="showPlayerCoords" />
+              <span class="option-text">显示玩家坐标</span>
+            </label>
+            <label class="option-item-sidebar">
+              <input type="checkbox" v-model="disableMarkerInteraction" />
+              <span class="option-text">穿透玩家标记</span>
+            </label>
+            <div class="option-item-slider">
+              <span class="option-text">地图选择:</span>
+              <select v-model="selectedMapKey" class="map-select">
+                <option value="auto">自动检测 ({{ detectedMapName === 'chora' ? 'Chora' : 'Sumari' }})</option>
+                <option value="sumari">Sumari</option>
+                <option value="chora">Chora</option>
+              </select>
+            </div>
+            <div class="option-item-slider">
+              <span class="option-text">图标大小:</span>
+              <input type="range" v-model.number="markerScale" min="0.05" max="2.0" step="0.05" class="scale-slider" />
+              <span class="scale-val">{{ markerScale.toFixed(2) }}x</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Directory Tabs (Squads vs Players) -->
+        <div class="sidebar-section flex-expand border-b">
+          <!-- Selection Mode Tabs -->
+          <div class="sidebar-tabs-directory">
+            <button
+              class="directory-tab-btn"
+              :class="{ active: sidebarTab === 'squads' }"
+              @click="sidebarTab = 'squads'"
+            >
+              小队列表
+            </button>
+            <button
+              class="directory-tab-btn"
+              :class="{ active: sidebarTab === 'players' }"
+              @click="sidebarTab = 'players'"
+            >
+              所有玩家
+            </button>
           </div>
 
           <!-- Team Selection Tabs -->
@@ -318,19 +376,19 @@
               :class="{ active: activeTeamTab === 1 }"
               @click="activeTeamTab = 1"
             >
-              US ARMY (T1)
+              美军 (T1)
             </button>
             <button
               class="tab-btn"
               :class="{ active: activeTeamTab === 2 }"
               @click="activeTeamTab = 2"
             >
-              PLA FORCES (T2)
+              解放军 (T2)
             </button>
           </div>
 
           <!-- Squad Cards List -->
-          <div class="squads-scroll-list">
+          <div v-if="sidebarTab === 'squads'" class="squads-scroll-list">
             <div
               v-for="squad in currentTeamSquads"
               :key="squad.id"
@@ -360,6 +418,28 @@
                 </div>
               </div>
             </div>
+            <div v-if="!currentTeamSquads.length" class="empty-state">
+              暂无已创建小队
+            </div>
+          </div>
+
+          <!-- Active Players List -->
+          <div v-else class="squads-scroll-list">
+            <button
+              v-for="player in filteredTeamPlayers"
+              :key="player.playerGuid || player.playerName"
+              class="sidebar-player-card-row"
+              :class="{ 'is-focused': hoveredPlayer?.playerGuid === player.playerGuid }"
+              @click="showPlayerDetails(player)"
+              @mouseenter="hoveredPlayer = player"
+              @mouseleave="hoveredPlayer = null"
+            >
+              <span class="player-name-row">{{ player.playerName }}</span>
+              <span class="player-meta-row">S{{ normalizeSquad(player.squadId) }} / HP {{ player.soldierInfo?.health ?? '-' }}</span>
+            </button>
+            <div v-if="!filteredTeamPlayers.length" class="empty-state">
+              暂无在线玩家
+            </div>
           </div>
         </div>
 
@@ -383,43 +463,33 @@
         </div>
       </div>
     </div>
+
+    <!-- Official Sliding Player Detail Drawer -->
+    <PlayerDetailDrawer
+      :open="detailDrawerOpen"
+      :player="detailDrawerPlayer"
+      :server-id="currentServerId"
+      @close="detailDrawerOpen = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, reactive, nextTick } from "vue";
+import {
+  fetchBzssCorePlayerInfoList,
+  type BzssCorePlayerInfoResponse,
+  type BzssCoreTrackedPlayerInfo,
+  type BzssCoreTrackedVector,
+} from "../app/bzssCoreApi";
+import { useServerStore } from "../stores/server.store";
+import { usePlayerStore } from "../stores/player.store";
+import { adaptPlayerDetail } from "../utils/squad-admin-adapter";
+import PlayerDetailDrawer from "../components/squad-admin/PlayerDetailDrawer.vue";
 
-// Define TypeScript interfaces for our simulated structures
-interface Player {
-  id: number;
-  name: string;
-  clanTag: string;
-  teamId: 1 | 2;
-  squadId: number;
-  squadName: string;
-  role: string;
-  kitIcon: string;
-  isSquadLeader: boolean;
-  health: number;
-  isDead: boolean;
-  x: number; // percentage width (0-100)
-  y: number; // percentage height (0-100)
-  vx: number; // velocity x (movement simulation)
-  vy: number; // velocity y (movement simulation)
-  kills: number;
-  deaths: number;
-  assists: number;
-  ping: number;
-  gridLocation: string;
-}
-
-interface SquadSummary {
-  id: number;
-  name: string;
-  teamId: 1 | 2;
-  playersCount: number;
-  squadLeaderName: string;
-  avgHealth: number;
+interface MapMarker extends BzssCoreTrackedPlayerInfo {
+  mapX: number;
+  mapY: number;
 }
 
 interface CombatLog {
@@ -428,7 +498,68 @@ interface CombatLog {
   type: "kill" | "revive" | "capture" | "system";
 }
 
-// Map interactions & coordinates viewport state
+const serverStore = useServerStore();
+const playerStore = usePlayerStore();
+
+const snapshot = ref<BzssCorePlayerInfoResponse | null>(null);
+const players = ref<BzssCoreTrackedPlayerInfo[]>([]);
+const hoveredPlayer = ref<BzssCoreTrackedPlayerInfo | null>(null);
+const errorText = ref("");
+const loading = ref(false);
+let refreshTimer: number | null = null;
+let simulatedCombatTimer: number | null = null;
+const mapName = "Chora";
+
+interface MapConfig {
+  name: string;
+  image: string;
+  bounds: {
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
+  };
+}
+
+const MAP_CONFIGS: Record<string, MapConfig> = {
+  sumari: {
+    name: "Sumari",
+    image: "/Sumari_Minimap.PNG",
+    bounds: {
+      minX: -63973.925781 + 210,
+      minY: -44728.078125 + 80,
+      maxX: 66033.578125 + 210,
+      maxY: 85297.234375 + 80,
+    }
+  },
+  chora: {
+    name: "Chora",
+    image: "/Chora_Minimap.jpg",
+    bounds: {
+      minX: -93500,
+      minY: -114000,
+      maxX: 182000,
+      maxY: 161500,
+    }
+  }
+};
+
+const selectedMapKey = ref("auto");
+const detectedMapName = computed(() => {
+  const currentMap = (serverMapName.value || "").toLowerCase();
+  if (currentMap.includes("sumari")) return "sumari";
+  return "chora";
+});
+
+const activeMapConfig = computed(() => {
+  let key = selectedMapKey.value;
+  if (key === "auto") {
+    key = detectedMapName.value;
+  }
+  return MAP_CONFIGS[key] || MAP_CONFIGS.sumari;
+});
+
+// Viewport Zoom & Pan state
 const containerRef = ref<HTMLElement | null>(null);
 const mapRef = ref<HTMLElement | null>(null);
 const consoleRef = ref<HTMLElement | null>(null);
@@ -441,244 +572,116 @@ const dragStart = reactive({ x: 0, y: 0 });
 
 const showGrid = ref(true);
 const showRadar = ref(true);
-const moveEnabled = ref(true);
 const filterAliveOnly = ref(false);
+const disableMarkerInteraction = ref(false);
 
-const currentGrid = ref("D4");
-const currentSubGrid = ref("5-3");
+// Icon scaling and tags visibility refs
+const markerScale = ref(1.0);
+const showPlayerNames = ref(true);
+const showPlayerCoords = ref(true);
 
-// Sidebar state
+// Sidebar states
 const sidebarCollapsed = ref(false);
-const activeTeamTab = ref<1 | 2>(1);
+const sidebarTab = ref<"squads" | "players">("squads");
+const activeTeamTab = ref<number>(1);
 const focusedSquadId = ref<number | null>(null);
+const combatLogs = ref<CombatLog[]>([]);
 
-// Team Ticket counts (starts high, bleeds slowly)
-const tickets = reactive({
-  team1: 300,
-  team2: 260
+// Detail Drawer States
+const detailDrawerOpen = ref(false);
+const detailDrawerPlayer = ref<any>(null);
+
+// Get real Server metrics
+const currentServerId = computed(() => String(serverStore.snapshot?.serverId ?? ""));
+const serverPlayerCount = computed(() => serverStore.snapshot?.playerCount || players.value.length);
+const serverMapName = computed(() => serverStore.snapshot?.mapName || mapName);
+const matchPhase = computed(() => serverStore.snapshot?.webStatus?.isWarmup ? "WARMUP" : "MID MATCH");
+
+// Grid lines calculation
+const verticalGridLines = computed(() => {
+  const steps = [0, 25, 50, 75, 100];
+  const bounds = activeMapConfig.value.bounds;
+  return steps.map((pct) => {
+    const val = bounds.minX + (bounds.maxX - bounds.minX) * (pct / 100);
+    return {
+      percent: pct,
+      label: `X:${Math.round(val)}`,
+    };
+  });
 });
 
-// Mock lists of player naming conventions
-const playerNames = [
-  "NiceDouby", "AntiGravity", "Delta_One", "Vanguard_99", "AlphaSlayer", 
-  "Sgt_Bilko", "Major_Payne", "WombatCombat", "GhostRider", "SoapMacTavish",
-  "CaptainPrice", "Roach_INF", "Gaz_Tactical", "Ghost_Recon", "Frost_Ranger",
-  "Sandman_SL", "Grinch_Designated", "Truck_Armor", "Yuri_Pilot", "Makalov_Red",
-  "Ivan_Sapper", "Sergey_LAT", "Dmitry_Medic", "Vladimir_SL", "Alexey_Sniper",
-  "Pavel_HAT", "Nikolay_MG", "Artem_Crew", "Mikhail_Rifle", "Gennady_SL"
-];
-const clanTags = ["BZSS", "SQUAD", "CN", "TAAC", "WPMC", "RGF", "USA", "VNG"];
+const horizontalGridLines = computed(() => {
+  const steps = [0, 25, 50, 75, 100];
+  const bounds = activeMapConfig.value.bounds;
+  return steps.map((pct) => {
+    const val = bounds.minY + (bounds.maxY - bounds.minY) * (pct / 100);
+    return {
+      percent: pct,
+      label: `Y:${Math.round(val)}`,
+    };
+  });
+});
 
-// Squad kit icon maps
-const kitRoles = [
-  { role: "小队队长", icon: "T_role_squadleader.PNG", isSL: true },
-  { role: "医疗兵", icon: "T_role_medic.PNG", isSL: false },
-  { role: "步枪兵", icon: "T_role_rifleman.PNG", isSL: false },
-  { role: "步枪兵(倍镜)", icon: "T_role_rifleman_scoped.PNG", isSL: false },
-  { role: "轻型反坦克兵", icon: "T_role_lightantitank.PNG", isSL: false },
-  { role: "重型反坦克兵", icon: "T_role_heavyantitank.PNG", isSL: false },
-  { role: "机枪手", icon: "T_role_automaticrifleman_optic.PNG", isSL: false },
-  { role: "精确射手", icon: "T_role_designatedmarksman.PNG", isSL: false },
-  { role: "工兵", icon: "T_role_engineer.PNG", isSL: false },
-  { role: "狙击手", icon: "T_role_sniper.PNG", isSL: false },
-  { role: "载具乘员", icon: "T_role_crewman.PNG", isSL: false }
-];
+// Tickets computed
+const tickets = computed(() => {
+  const matchState = serverStore.snapshot?.matchState || {};
+  const matchTickets = matchState?.match?.tickets || {};
+  return {
+    team1: Number.isFinite(matchTickets.team1) ? Number(matchTickets.team1) : 300,
+    team2: Number.isFinite(matchTickets.team2) ? Number(matchTickets.team2) : 260,
+  };
+});
 
-const squadNames = [
-  { id: 1, name: "INFANTRY - MAIN", type: "inf" },
-  { id: 2, name: "ARMOR - BTR82A", type: "armor" },
-  { id: 3, name: "RECON SQUAD", type: "recon" },
-  { id: 4, name: "DEFENSE LOGI", type: "inf" },
-  { id: 5, name: "MORTAR SUPPORT", type: "mortar" }
-];
+const positionedPlayers = computed(() => players.value.filter(hasValidPosition));
 
-// Reactive data arrays
-const players = ref<Player[]>([]);
-const combatLogs = ref<CombatLog[]>([]);
-const hoveredPlayer = ref<Player | null>(null);
+const markers = computed<MapMarker[]>(() => {
+  const positioned = positionedPlayers.value;
+  if (!positioned.length) return [];
 
-// Kit icon resolver helper
-function getPlayerKitIcon(iconFileName: string): string {
-  return `/Icon/${iconFileName}`;
-}
+  const bounds = activeMapConfig.value.bounds;
+  return positioned.map((player) => {
+    const pos = player.soldierInfo.position as BzssCoreTrackedVector;
+    return {
+      ...player,
+      mapX: project(pos.x ?? 0, bounds.minX, bounds.maxX),
+      mapY: project(pos.y ?? 0, bounds.minY, bounds.maxY),
+    };
+  });
+});
 
-// Generate the cells labels (e.g. A1, B4)
-function getCellLabel(col: number, row: number): string {
-  const cols = ["A", "B", "C", "D", "E", "F", "G", "H"];
-  return `${cols[col - 1]}${row}`;
-}
-
-// Generate initial players simulation
-function generateSimulatedPlayers() {
-  const list: Player[] = [];
-  let playerIdCounter = 1;
-
-  // Let's create two Teams
-  // Team 1: spawns in South-West (coords around X: 15-45, Y: 55-85)
-  // Team 2: spawns in North-East (coords around X: 55-85, Y: 15-45)
-
-  for (let teamNum of [1, 2] as [1, 2]) {
-    const isTeam1 = teamNum === 1;
-    const baseSquads = [1, 2, 3, 4];
-    
-    baseSquads.forEach((sqId) => {
-      // Find a squad template name
-      const squadTemplate = squadNames.find((s) => s.id === sqId) || { name: "INFANTRY", type: "inf" };
-      const playersInSquadCount = sqId === 1 ? 9 : sqId === 2 ? 3 : sqId === 3 ? 4 : 5;
-      
-      // Determine coordinates center for squad based on team
-      let squadCenterX = isTeam1 ? 20 + sqId * 6 : 80 - sqId * 6;
-      let squadCenterY = isTeam1 ? 80 - sqId * 6 : 20 + sqId * 6;
-
-      // Add SL
-      const slRole = kitRoles[0];
-      const slName = getRandomElement(playerNames) + `_SL${sqId}`;
-      const slClan = getRandomElement(clanTags);
-      
-      const sl: Player = {
-        id: playerIdCounter++,
-        name: slName,
-        clanTag: slClan,
-        teamId: teamNum,
-        squadId: sqId,
-        squadName: squadTemplate.name,
-        role: slRole.role,
-        kitIcon: slRole.icon,
-        isSquadLeader: true,
-        health: 100,
-        isDead: false,
-        x: clampCoordinate(squadCenterX + getRandomOffset(3)),
-        y: clampCoordinate(squadCenterY + getRandomOffset(3)),
-        vx: getRandomVelocity(),
-        vy: getRandomVelocity(),
-        kills: Math.floor(Math.random() * 8),
-        deaths: Math.floor(Math.random() * 4),
-        assists: Math.floor(Math.random() * 6),
-        ping: Math.floor(Math.random() * 60) + 15,
-        gridLocation: ""
-      };
-      sl.gridLocation = computeGridString(sl.x, sl.y);
-      list.push(sl);
-
-      // Add squad members
-      for (let m = 0; m < playersInSquadCount - 1; m++) {
-        // Pick a non-SL kit
-        const kitIdx = Math.floor(Math.random() * (kitRoles.length - 1)) + 1;
-        const kit = kitRoles[kitIdx];
-        const memberName = getRandomElement(playerNames) + `_${sqId}-${m}`;
-        const isDead = Math.random() < 0.08; // 8% chance downed initially
-        
-        const member: Player = {
-          id: playerIdCounter++,
-          name: memberName,
-          clanTag: Math.random() < 0.6 ? slClan : getRandomElement(clanTags),
-          teamId: teamNum,
-          squadId: sqId,
-          squadName: squadTemplate.name,
-          role: kit.role,
-          kitIcon: isDead ? "T_role_dead.PNG" : kit.icon,
-          isSquadLeader: false,
-          health: isDead ? 0 : Math.floor(Math.random() * 30) + 71, // 71-100 health
-          isDead: isDead,
-          x: clampCoordinate(squadCenterX + getRandomOffset(7)),
-          y: clampCoordinate(squadCenterY + getRandomOffset(7)),
-          vx: getRandomVelocity(),
-          vy: getRandomVelocity(),
-          kills: Math.floor(Math.random() * 6),
-          deaths: Math.floor(Math.random() * 5),
-          assists: Math.floor(Math.random() * 4),
-          ping: Math.floor(Math.random() * 60) + 15,
-          gridLocation: ""
-        };
-        member.gridLocation = computeGridString(member.x, member.y);
-        list.push(member);
-      }
-    });
-
-    // Add 2 unassigned players drifting
-    for (let u = 0; u < 2; u++) {
-      const uKit = kitRoles[2]; // rifleman
-      const name = getRandomElement(playerNames) + `_Lone`;
-      const p: Player = {
-        id: playerIdCounter++,
-        name,
-        clanTag: getRandomElement(clanTags),
-        teamId: teamNum,
-        squadId: 0,
-        squadName: "无小队",
-        role: uKit.role,
-        kitIcon: uKit.icon,
-        isSquadLeader: false,
-        health: 100,
-        isDead: false,
-        x: clampCoordinate(isTeam1 ? 25 + getRandomOffset(10) : 75 + getRandomOffset(10)),
-        y: clampCoordinate(isTeam1 ? 75 + getRandomOffset(10) : 25 + getRandomOffset(10)),
-        vx: getRandomVelocity() * 0.5,
-        vy: getRandomVelocity() * 0.5,
-        kills: 0,
-        deaths: 1,
-        assists: 0,
-        ping: Math.floor(Math.random() * 100) + 20,
-        gridLocation: ""
-      };
-      p.gridLocation = computeGridString(p.x, p.y);
-      list.push(p);
-    }
-  }
-
-  players.value = list;
-}
-
-// Random helpers
-function getRandomElement<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-function getRandomOffset(range: number): number {
-  return (Math.random() - 0.5) * range;
-}
-function getRandomVelocity(): number {
-  return (Math.random() - 0.5) * 0.35; // displacement per tick
-}
-function clampCoordinate(val: number): number {
-  return Math.max(3, Math.min(97, val));
-}
-
-// Compute grids based on pixel % (A1 to H8)
-function computeGridString(x: number, y: number): string {
-  const cols = ["A", "B", "C", "D", "E", "F", "G", "H"];
-  const colIndex = Math.min(7, Math.floor(x / 12.5));
-  const rowIndex = Math.min(7, Math.floor(y / 12.5)) + 1;
-  const grid = `${cols[colIndex]}${rowIndex}`;
-
-  // Keypad
-  const localX = (x / 12.5 - colIndex) * 3;
-  const localY = (y / 12.5 - (rowIndex - 1)) * 3;
-  const keypadLayout = [
-    [7, 8, 9],
-    [4, 5, 6],
-    [1, 2, 3]
-  ];
-  const kp = keypadLayout[Math.min(2, Math.floor(localY))][Math.min(2, Math.floor(localX))];
-  return `${grid}-${kp}`;
-}
-
-// Computed lists of filtered players
 const filteredPlayers = computed(() => {
-  let list = players.value;
+  let list = markers.value;
   if (filterAliveOnly.value) {
-    list = list.filter((p) => !p.isDead);
+    list = list.filter((p) => {
+      const hp = p.soldierInfo?.health;
+      return hp != null && hp > 0;
+    });
   }
   return list;
 });
 
-// Compute summaries for squads listed on the right sidebar
-const currentTeamSquads = computed<SquadSummary[]>(() => {
+// Hover tooltip target
+const hoveredMarker = computed(() => {
+  if (!hoveredPlayer.value) return null;
+  return markers.value.find(
+    (m) => m.playerGuid === hoveredPlayer.value?.playerGuid || m.playerName === hoveredPlayer.value?.playerName
+  ) || null;
+});
+
+// Filter players for active team list
+const filteredTeamPlayers = computed(() => {
+  return players.value
+    .filter((p) => normalizeTeam(p.teamId) === activeTeamTab.value)
+    .sort((a, b) => (a.playerName || "").localeCompare(b.playerName || ""));
+});
+
+// Group real players by squads
+const currentTeamSquads = computed(() => {
   const teamId = activeTeamTab.value;
-  const squadMap = new Map<number, Player[]>();
+  const squadMap = new Map<number, BzssCoreTrackedPlayerInfo[]>();
   
-  // Group players by squad
   players.value.forEach((p) => {
-    if (p.teamId === teamId && p.squadId > 0) {
+    if (normalizeTeam(p.teamId) === teamId && p.squadId && p.squadId > 0) {
       if (!squadMap.has(p.squadId)) {
         squadMap.set(p.squadId, []);
       }
@@ -686,18 +689,18 @@ const currentTeamSquads = computed<SquadSummary[]>(() => {
     }
   });
 
-  const list: SquadSummary[] = [];
+  const list: any[] = [];
   squadMap.forEach((squadPlayers, squadId) => {
-    const sl = squadPlayers.find((p) => p.isSquadLeader) || squadPlayers[0];
-    const totalHealth = squadPlayers.reduce((acc, p) => acc + p.health, 0);
+    const sl = squadPlayers.find(p => isSquadLeader(p)) || squadPlayers[0];
+    const totalHealth = squadPlayers.reduce((acc, p) => acc + (p.soldierInfo?.health ?? 100), 0);
     const avgHealth = Math.round(totalHealth / squadPlayers.length);
     
     list.push({
       id: squadId,
-      name: sl.squadName,
+      name: `Squad ${squadId}`,
       teamId: teamId,
       playersCount: squadPlayers.length,
-      squadLeaderName: sl.name,
+      squadLeaderName: sl?.playerName || "Unknown",
       avgHealth: avgHealth
     });
   });
@@ -705,54 +708,44 @@ const currentTeamSquads = computed<SquadSummary[]>(() => {
   return list.sort((a, b) => a.id - b.id);
 });
 
-// Toggle highlight of a squad on click
-function toggleSquadFocus(squadId: number) {
-  if (focusedSquadId.value === squadId) {
-    focusedSquadId.value = null;
-  } else {
-    focusedSquadId.value = squadId;
-  }
-}
+const statusText = computed(() => {
+  if (loading.value && !snapshot.value) return "同步中";
+  if (errorText.value) return "异常";
+  return snapshot.value?.state?.status || snapshot.value?.status || "待机";
+});
 
-// Hover trigger
-function onPlayerMouseEnter(player: Player) {
-  hoveredPlayer.value = player;
-}
-function onPlayerMouseLeave() {
-  hoveredPlayer.value = null;
-}
+// Track Mouse Movement for game coordinates HUD
+const hoverCoords = ref<{ x: number; y: number; gameX: number; gameY: number } | null>(null);
 
-// Zoom / Pan actions
-function zoomIn() {
-  zoom.value = Math.min(5, zoom.value * 1.25);
-}
-function zoomOut() {
-  zoom.value = Math.max(0.35, zoom.value / 1.25);
-}
-function resetView() {
-  fitToViewport();
-  focusedSquadId.value = null;
-}
-
-function fitToViewport() {
-  if (!containerRef.value) return;
-  const viewWidth = containerRef.value.clientWidth;
-  const viewHeight = containerRef.value.clientHeight;
-  const mapSize = 1000; // inner container is 1000x1000 square
-
-  const scale = Math.min(viewWidth, viewHeight) / mapSize * 0.95;
-  zoom.value = Math.max(0.35, Math.min(2, scale));
+function handleMouseMove(event: MouseEvent) {
+  if (!mapRef.value) return;
+  const rect = mapRef.value.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
   
-  // Center
-  panX.value = (viewWidth - mapSize * zoom.value) / 2;
-  panY.value = (viewHeight - mapSize * zoom.value) / 2;
+  const pctX = (x / rect.width);
+  const pctY = (y / rect.height);
+  
+  const bounds = activeMapConfig.value.bounds;
+  const gameX = bounds.minX + pctX * (bounds.maxX - bounds.minX);
+  const gameY = bounds.minY + pctY * (bounds.maxY - bounds.minY);
+  
+  hoverCoords.value = {
+    x: x + 10,
+    y: y + 15,
+    gameX,
+    gameY,
+  };
 }
 
-// Mouse dragging controls for pan
+function handleMouseLeave() {
+  hoverCoords.value = null;
+}
+
+// Drag & Pan & Zoom Event Handlers
 function startDrag(e: MouseEvent) {
-  // Check if click was on buttons or sidebar
   const target = e.target as HTMLElement;
-  if (target.closest(".glass-panel") || target.closest(".tactical-sidebar") || target.closest(".player-tooltip")) return;
+  if (target.closest(".glass-panel") || target.closest(".tactical-sidebar") || target.closest(".player-tooltip") || target.closest(".player-marker")) return;
 
   isDragging.value = true;
   dragStart.x = e.clientX - panX.value;
@@ -769,74 +762,111 @@ function stopDrag() {
   isDragging.value = false;
 }
 
-// Zoom on wheel (relative to cursor position)
 function onWheel(e: WheelEvent) {
   if (!containerRef.value) return;
   const rect = containerRef.value.getBoundingClientRect();
   const mouseX = e.clientX - rect.left;
   const mouseY = e.clientY - rect.top;
 
-  // Key coordinate on unzoomed map before scaling
   const mapX = (mouseX - panX.value) / zoom.value;
   const mapY = (mouseY - panY.value) / zoom.value;
 
   const factor = 1.15;
   let nextZoom = zoom.value;
   if (e.deltaY < 0) {
-    nextZoom = Math.min(5, zoom.value * factor);
+    nextZoom = Math.min(20, zoom.value * factor);
   } else {
     nextZoom = Math.max(0.35, zoom.value / factor);
   }
 
   zoom.value = nextZoom;
-  // Readjust pan coordinates so point under cursor stays at screen coordinate
   panX.value = mouseX - mapX * zoom.value;
   panY.value = mouseY - mapY * zoom.value;
 }
 
-// Coordinate finder HUD helper (calculates grid based on mouse coords over map)
-function onMapMousemove(e: MouseEvent) {
-  if (!mapRef.value) return;
-  const rect = mapRef.value.getBoundingClientRect();
-  const xPercent = ((e.clientX - rect.left) / rect.width) * 100;
-  const yPercent = ((e.clientY - rect.top) / rect.height) * 100;
-
-  if (xPercent < 0 || xPercent > 100 || yPercent < 0 || yPercent > 100) return;
-
-  const cols = ["A", "B", "C", "D", "E", "F", "G", "H"];
-  const colIndex = Math.min(7, Math.floor(xPercent / 12.5));
-  const rowIndex = Math.min(7, Math.floor(yPercent / 12.5)) + 1;
-  currentGrid.value = `${cols[colIndex]}${rowIndex}`;
-
-  // Sub keypad coordinates calculation
-  const localX = (xPercent / 12.5 - colIndex) * 3;
-  const localY = (yPercent / 12.5 - (rowIndex - 1)) * 3;
-  const keypad = [
-    [7, 8, 9],
-    [4, 5, 6],
-    [1, 2, 3]
-  ];
-  const kpNum = keypad[Math.min(2, Math.floor(localY))][Math.min(2, Math.floor(localX))];
-  
-  // Secondary sub keypad coordinates (micro level)
-  const microX = (localX - Math.floor(localX)) * 3;
-  const microY = (localY - Math.floor(localY)) * 3;
-  const microNum = keypad[Math.min(2, Math.floor(microY))][Math.min(2, Math.floor(microX))];
-
-  currentSubGrid.value = `${kpNum}-${microNum}`;
+function zoomIn() {
+  zoom.value = Math.min(20, zoom.value * 1.25);
+}
+function zoomOut() {
+  zoom.value = Math.max(0.35, zoom.value / 1.25);
+}
+function resetView() {
+  fitToViewport();
+  focusedSquadId.value = null;
 }
 
-// Add logs to combat scrolling log console
+function fitToViewport() {
+  if (!containerRef.value) return;
+  const viewWidth = containerRef.value.clientWidth;
+  const viewHeight = containerRef.value.clientHeight;
+  const mapSize = 1000;
+
+  const scale = Math.min(viewWidth, viewHeight) / mapSize * 0.95;
+  zoom.value = Math.max(0.35, Math.min(2, scale));
+  
+  panX.value = (viewWidth - mapSize * zoom.value) / 2;
+  panY.value = (viewHeight - mapSize * zoom.value) / 2;
+}
+
+function onMapMousemove(e: MouseEvent) {
+  handleMouseMove(e);
+}
+
+// Squad directory highlights
+function toggleSquadFocus(squadId: number) {
+  if (focusedSquadId.value === squadId) {
+    focusedSquadId.value = null;
+  } else {
+    focusedSquadId.value = squadId;
+  }
+}
+
+// Show player detail in sliding drawer
+function showPlayerDetails(player: BzssCoreTrackedPlayerInfo) {
+  const storePlayer = playerStore.active.find(
+    (p) => p.name === player.playerName || p.steamID === player.playerGuid
+  );
+
+  if (storePlayer) {
+    const detail = adaptPlayerDetail(storePlayer, null, {});
+    detail.bzssCorePlayerInfo = player;
+    detail.bzssCoreStatus = "ready";
+    detailDrawerPlayer.value = detail;
+  } else {
+    detailDrawerPlayer.value = {
+      playerId: null,
+      name: player.playerName,
+      teamId: normalizeTeam(player.teamId),
+      squadId: normalizeSquad(player.squadId),
+      isLeader: isSquadLeader(player),
+      role: inferRole(player),
+      isOnline: true,
+      ping: null,
+      steamId: player.playerGuid?.length === 17 ? player.playerGuid : null,
+      eosId: player.playerGuid?.length === 32 ? player.playerGuid : null,
+      bzssCorePlayerInfo: player,
+      bzssCoreStatus: "ready",
+      combatStats: {
+        kills: 0,
+        deaths: 0,
+        downs: 0,
+        tk: 0,
+        revives: 0
+      }
+    };
+  }
+  detailDrawerOpen.value = true;
+}
+
+// Log Feed
 function logCombatEvent(text: string, type: "kill" | "revive" | "capture" | "system" = "kill") {
   const time = new Date().toLocaleTimeString("zh-CN", { hour12: false });
   combatLogs.value.push({ time, text, type });
   
-  // Cap at 40 rows
   if (combatLogs.value.length > 40) {
     combatLogs.value.shift();
   }
 
-  // Scroll to bottom
   nextTick(() => {
     if (consoleRef.value) {
       consoleRef.value.scrollTop = consoleRef.value.scrollHeight;
@@ -844,166 +874,140 @@ function logCombatEvent(text: string, type: "kill" | "revive" | "capture" | "sys
   });
 }
 
-// Active simulation loops (ran on mount)
-let simulationInterval: number | null = null;
-let combatEventsInterval: number | null = null;
-
-function runMapSimulation() {
-  // 1. Move players slowly along their vectors
-  if (moveEnabled.value) {
-    players.value = players.value.map((player) => {
-      // Hovered player stops moving for tracking
-      if (hoveredPlayer.value?.id === player.id) return player;
-
-      // Small chance to randomly alter velocity vector
-      let vx = player.vx;
-      let vy = player.vy;
-      if (Math.random() < 0.15) {
-        vx = getRandomVelocity();
-        vy = getRandomVelocity();
-      }
-
-      // Compute new coordinates
-      let x = player.x + vx;
-      let y = player.y + vy;
-
-      // Boundary check & direction reverse
-      if (x <= 5 || x >= 95) {
-        vx = -vx;
-        x = clampCoordinate(x);
-      }
-      if (y <= 5 || y >= 95) {
-        vy = -vy;
-        y = clampCoordinate(y);
-      }
-
-      // Constrain movement area to river valley context
-      // (Kokans river runs diagonally bottom-left to top-right)
-      // Ideal valley line is roughly y = 100 - x.
-      // We apply a pull force vector back to valley center if player gets too far
-      const targetY = 100 - x;
-      const distanceToValley = y - targetY;
-      if (Math.abs(distanceToValley) > 18) {
-        vy += distanceToValley > 0 ? -0.05 : 0.05;
-      }
-
-      // If player is dead, they don't walk around
-      if (player.isDead) {
-        return player;
-      }
-
-      return {
-        ...player,
-        x,
-        y,
-        vx,
-        vy,
-        gridLocation: computeGridString(x, y)
-      };
-    });
-  }
-}
-
-// Run combat event logs generation randomly
 function runCombatEventSimulation() {
-  // tickets bleed slightly
-  if (Math.random() < 0.6) {
-    if (Math.random() < 0.5) {
-      tickets.team1 = Math.max(0, tickets.team1 - 1);
-    } else {
-      tickets.team2 = Math.max(0, tickets.team2 - 1);
-    }
-  }
-
-  // 15% chance to trigger player downed/killed/revived event
-  if (Math.random() < 0.3) {
-    const team1Alive = players.value.filter((p) => p.teamId === 1 && !p.isDead);
-    const team2Alive = players.value.filter((p) => p.teamId === 2 && !p.isDead);
-    const downedPlayers = players.value.filter((p) => p.isDead);
-
-    const eventChoice = Math.random();
-
-    if (eventChoice < 0.6 && team1Alive.length > 0 && team2Alive.length > 0) {
-      // Skirmish/Kill event: Player kills enemy
-      const isTeam1Attacking = Math.random() < 0.5;
-      const killer = isTeam1Attacking ? getRandomElement(team1Alive) : getRandomElement(team2Alive);
-      const victim = isTeam1Attacking ? getRandomElement(team2Alive) : getRandomElement(team1Alive);
-
-      // Down the victim
-      victim.isDead = true;
-      victim.health = 0;
-      victim.deaths += 1;
-      victim.kitIcon = "T_role_dead.PNG";
-      killer.kills += 1;
-
+  if (players.value.length === 0) return;
+  
+  if (Math.random() < 0.25) {
+    const list = players.value;
+    const team1 = list.filter(p => normalizeTeam(p.teamId) === 1);
+    const team2 = list.filter(p => normalizeTeam(p.teamId) === 2);
+    
+    if (team1.length > 0 && team2.length > 0) {
+      const killer = getRandomElement(Math.random() < 0.5 ? team1 : team2);
+      const victim = getRandomElement(normalizeTeam(killer.teamId) === 1 ? team2 : team1);
+      
       const weapons = ["M4A1", "QBZ191", "AK-74", "M249", "QJB201", "RPG-7", "M3E1 LAW", "PKP", "M110 Sniper"];
       const weapon = getRandomElement(weapons);
-
-      const killerName = `<span class="team-${killer.teamId}-text">${killer.clanTag ? '[' + killer.clanTag + '] ' : ''}${killer.name}</span>`;
-      const victimName = `<span class="team-${victim.teamId}-text">${victim.clanTag ? '[' + victim.clanTag + '] ' : ''}${victim.name}</span>`;
+      
+      const killerName = `<span class="team-${normalizeTeam(killer.teamId)}-text">${killer.playerName}</span>`;
+      const victimName = `<span class="team-${normalizeTeam(victim.teamId)}-text">${victim.playerName}</span>`;
       
       logCombatEvent(`${killerName} 击倒了 ${victimName} (武器: ${weapon})`, "kill");
-
-    } else if (eventChoice < 0.95 && downedPlayers.length > 0) {
-      // Revive event
-      const victim = getRandomElement(downedPlayers);
-      const teamMedics = players.value.filter((p) => p.teamId === victim.teamId && !p.isDead && (p.role === "医疗兵" || p.isSquadLeader));
-      
-      if (teamMedics.length > 0) {
-        const medic = getRandomElement(teamMedics);
-        
-        // Revive
-        victim.isDead = false;
-        victim.health = 45; // starts with low health on revive
-        medic.assists += 1;
-        
-        // Restore original icon (SL or normal kits)
-        const origKit = kitRoles.find((r) => r.role === victim.role) || kitRoles[2];
-        victim.kitIcon = origKit.icon;
-
-        const medicName = `<span class="team-${medic.teamId}-text">${medic.clanTag ? '[' + medic.clanTag + '] ' : ''}${medic.name}</span>`;
-        const victimName = `<span class="team-${victim.teamId}-text">${victim.clanTag ? '[' + victim.clanTag + '] ' : ''}${victim.name}</span>`;
-
-        logCombatEvent(`${medicName} 救起了 ${victimName} (医疗包包扎)`, "revive");
-      }
-    } else {
-      // Objective capture or systemic event
-      const flagNames = ["南侧农庄 (Farmhouse)", "红土河道 (Riverbed)", "高地前哨 (Outpost)", "桥梁节点 (Bridge)"];
-      const flag = getRandomElement(flagNames);
-      const team = Math.random() < 0.5 ? 1 : 2;
-      
-      const teamName = team === 1 ? `<span class="team-1-text">美军 (Team 1)</span>` : `<span class="team-2-text">解放军 (Team 2)</span>`;
-      logCombatEvent(`${teamName} 正在争夺重要据点 ${flag}...`, "capture");
     }
   }
 }
 
-// Lifecycle setups
-onMounted(() => {
-  generateSimulatedPlayers();
+// Helpers
+function getRandomElement<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
 
-  // fit view to container bounds
+function normalizeTeam(teamId: number | null | undefined) {
+  return Number.isFinite(teamId as number) && Number(teamId) > 0 ? Number(teamId) : 0;
+}
+
+function normalizeSquad(squadId: number | null | undefined) {
+  return Number.isFinite(squadId as number) && Number(squadId) >= 0 ? Number(squadId) : 0;
+}
+
+function hasValidPosition(player: BzssCoreTrackedPlayerInfo) {
+  const pos = player.soldierInfo?.position;
+  return Boolean(pos && Number.isFinite(pos.x) && Number.isFinite(pos.y));
+}
+
+function project(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return 50;
+  if (max <= min) return 50;
+  const percent = ((value - min) / (max - min)) * 100;
+  return Math.min(98, Math.max(2, percent));
+}
+
+function isSquadLeader(player: BzssCoreTrackedPlayerInfo) {
+  const soldierClass = String(player.soldierInfo?.soldierClass ?? "").toLowerCase();
+  return soldierClass.includes("squadleader") || soldierClass.includes("officer") || soldierClass.includes("sl");
+}
+
+function getPlayerKitIcon(player: BzssCoreTrackedPlayerInfo) {
+  const health = player.soldierInfo?.health;
+  if (health != null && health <= 0) {
+    return "/Icon/T_role_dead.PNG";
+  }
+
+  const soldierClass = String(player.soldierInfo?.soldierClass ?? "").toLowerCase();
+  const weaponClass = String(player.soldierInfo?.weaponClass ?? "").toLowerCase();
+  const text = `${soldierClass} ${weaponClass}`;
+
+  if (soldierClass.includes("squadleader") || soldierClass.includes("officer")) {
+    if (soldierClass.includes("pilot")) return "/Icon/T_role_pilot_squadleader.PNG";
+    if (soldierClass.includes("crewman")) return "/Icon/T_role_crewman_squadleader.PNG";
+    return "/Icon/T_role_squadleader.PNG";
+  }
+  
+  if (text.includes("medic")) return "/Icon/T_role_medic.PNG";
+  if (text.includes("sniper")) return "/Icon/T_role_sniper.PNG";
+  if (text.includes("marksman")) return "/Icon/T_role_designatedmarksman.PNG";
+  if (text.includes("grenadier")) return "/Icon/T_role_grenadier.PNG";
+  if (text.includes("machine") || text.includes("mg")) return "/Icon/T_role_machinegunner.PNG";
+  if (text.includes("autorifle")) return "/Icon/T_role_automaticrifleman.PNG";
+  if (text.includes("hat") || text.includes("heavyantitank")) return "/Icon/T_role_heavyantitank.PNG";
+  if (text.includes("lat") || text.includes("lightantitank")) return "/Icon/T_role_lightantitank.PNG";
+  if (text.includes("crewman")) return "/Icon/T_role_crewman.PNG";
+  if (text.includes("pilot")) return "/Icon/T_role_pilot.PNG";
+  if (text.includes("sapper") || text.includes("engineer")) return "/Icon/T_role_engineer.PNG";
+  if (text.includes("recruit")) return "/Icon/T_role_recruit.PNG";
+  return "/Icon/T_role_rifleman.PNG";
+}
+
+function inferRole(player: BzssCoreTrackedPlayerInfo) {
+  const soldierClass = String(player.soldierInfo?.soldierClass ?? "").toLowerCase();
+  const weaponClass = String(player.soldierInfo?.weaponClass ?? "").toLowerCase();
+  const text = `${soldierClass} ${weaponClass}`;
+
+  if (text.includes("medic")) return "Medic";
+  if (text.includes("sniper") || text.includes("marksman")) return "Marksman";
+  if (text.includes("grenadier")) return "Grenadier";
+  if (text.includes("machine") || text.includes("mg")) return "Machine Gunner";
+  if (text.includes("lat") || text.includes("hat") || text.includes("rocket")) return "Anti-Tank";
+  if (text.includes("crewman")) return "Crewman";
+  if (text.includes("pilot")) return "Pilot";
+  if (text.includes("rifle")) return "Rifleman";
+  return player.soldierInfo?.soldierClass || "Unknown";
+}
+
+async function refreshTrackedPlayers() {
+  loading.value = true;
+  try {
+    const payload = await fetchBzssCorePlayerInfoList();
+    snapshot.value = payload;
+    players.value = payload.players ?? [];
+    errorText.value = payload.ok ? "" : payload.status || "BZSS-Core returned an error.";
+  } catch (error: any) {
+    errorText.value = error?.message ?? "Failed to load BZSS-Core player snapshots.";
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(() => {
+  void refreshTrackedPlayers();
+  refreshTimer = window.setInterval(() => {
+    void refreshTrackedPlayers();
+  }, 100);
+
   setTimeout(() => {
     fitToViewport();
   }, 100);
 
-  // Set up logs
   logCombatEvent("对局卫星扫描加载就绪... 坐标网格正常", "system");
   logCombatEvent("美军与中国解放军交火中... 实时动态激活", "system");
 
-  // Run movement loop every 100ms for smooth CSS transitions
-  simulationInterval = window.setInterval(runMapSimulation, 100);
-
-  // Run combat logs update loop every 2.5 seconds
-  combatEventsInterval = window.setInterval(runCombatEventSimulation, 2500);
-
-  // Handle resizing
+  simulatedCombatTimer = window.setInterval(runCombatEventSimulation, 2500);
   window.addEventListener("resize", fitToViewport);
 });
 
 onBeforeUnmount(() => {
-  if (simulationInterval) clearInterval(simulationInterval);
-  if (combatEventsInterval) clearInterval(combatEventsInterval);
+  if (refreshTimer) window.clearInterval(refreshTimer);
+  if (simulatedCombatTimer) window.clearInterval(simulatedCombatTimer);
   window.removeEventListener("resize", fitToViewport);
 });
 </script>
@@ -1074,59 +1078,46 @@ onBeforeUnmount(() => {
   left: 0;
   width: 100%;
   height: 100%;
-  display: flex;
-  flex-direction: column;
   pointer-events: none;
   z-index: 2;
 }
 
-.grid-row {
-  display: flex;
-  flex: 1;
-}
-
-.grid-cell {
-  flex: 1;
-  border-right: 1px dashed rgba(0, 240, 255, 0.12);
-  border-bottom: 1px dashed rgba(0, 240, 255, 0.12);
-  position: relative;
-  box-sizing: border-box;
-}
-
-.grid-row:last-child .grid-cell {
-  border-bottom: none;
-}
-
-.grid-cell:last-child {
-  border-right: none;
-}
-
-.cell-id {
+.grid-line {
   position: absolute;
-  top: 4px;
-  left: 6px;
-  font-size: 10px;
-  color: rgba(0, 240, 255, 0.35);
-  font-family: monospace;
-  font-weight: bold;
-  letter-spacing: 0.5px;
+  border: 0.5px dashed rgba(56, 189, 248, 0.2);
 }
 
-/* Dotted indicators inside cell for Keypad */
-.sub-grid-keypad {
-  position: absolute;
+.grid-line.vertical {
   top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(3, 1fr);
+  bottom: 0;
+  width: 0;
 }
 
-.keypad-sector {
-  border-right: 1px dotted rgba(0, 240, 255, 0.03);
-  border-bottom: 1px dotted rgba(0, 240, 255, 0.03);
+.grid-line.horizontal {
+  left: 0;
+  right: 0;
+  height: 0;
+}
+
+.grid-label {
+  position: absolute;
+  font-size: 9px;
+  color: rgba(56, 189, 248, 0.6);
+  font-family: monospace;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 1px 3px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.grid-line.vertical .grid-label {
+  bottom: 4px;
+  transform: translateX(-50%);
+}
+
+.grid-line.horizontal .grid-label {
+  left: 4px;
+  transform: translateY(-50%);
 }
 
 /* Radar Sweep overlay */
@@ -1187,13 +1178,17 @@ onBeforeUnmount(() => {
   position: absolute;
   width: 28px;
   height: 28px;
-  transform: translate(-50%, -50%);
   pointer-events: auto;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: left 0.9s linear, top 0.9s linear; /* Enables super smooth fluid moving! */
+  border: none;
+  background: transparent;
+  padding: 0;
+  outline: none;
+  transition: left 0.1s linear, top 0.1s linear;
+}
+
+.player-marker.no-pointer {
+  pointer-events: none;
 }
 
 /* Pulsing neon outline */
@@ -1228,8 +1223,12 @@ onBeforeUnmount(() => {
   100% { transform: scale(2.2); opacity: 0; }
 }
 
-/* The solid icon ring */
+/* The solid icon ring (anchored perfectly at center) */
 .marker-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   width: 22px;
   height: 22px;
   border-radius: 50%;
@@ -1249,11 +1248,8 @@ onBeforeUnmount(() => {
 
 /* Leader special outline */
 .is-squadleader .marker-ring {
-  transform: scale(1.15);
-  box-shadow: 0 0 15px currentColor;
+  transform: translate(-50%, -50%) scale(1.15);
 }
-.team-1.is-squadleader .marker-ring { border-color: #ffffff; background-color: #0088ff; color: #00e5ff; }
-.team-2.is-squadleader .marker-ring { border-color: #ffffff; background-color: #cc0033; color: #ff3366; }
 
 .kit-icon-img {
   width: 14px;
@@ -1286,23 +1282,56 @@ onBeforeUnmount(() => {
 .team-1 .squad-index-tag { color: #00e5ff; }
 .team-2 .squad-index-tag { color: #ff5252; }
 
-/* Interactive Hover States */
+/* Text Tag for Player Name & Coordinates (absolute offset, doesn't shift the dot center) */
+.player-marker .tag {
+  position: absolute;
+  left: 28px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(226, 232, 240, 0.14);
+  font-size: 11px;
+  white-space: nowrap;
+  line-height: 1.25;
+  pointer-events: none;
+  color: #f8fafc;
+  z-index: 5;
+}
+
+.player-name-tag {
+  font-weight: 500;
+}
+
+.coords-tag {
+  font-size: 9px;
+  color: #38bdf8;
+  font-family: "Consolas", "SFMono-Regular", monospace;
+  margin-top: 1px;
+}
+
+/* Interactive Hover/Active States with explicit translate centered fix */
 .player-marker.is-hovered .marker-ring,
 .player-marker:hover .marker-ring {
-  transform: scale(1.4);
+  transform: translate(-50%, -50%) scale(1.35);
   z-index: 50;
   border-color: #ffffff !important;
   box-shadow: 0 0 15px rgba(255, 255, 255, 0.9);
 }
 
-/* Pulsing outline for click focus */
-.player-marker.is-focused .marker-ring {
-  animation: squad-pulse-marker 1.2s ease-in-out infinite alternate;
+.player-marker.is-hovered.is-squadleader .marker-ring,
+.player-marker:hover.is-squadleader .marker-ring {
+  transform: translate(-50%, -50%) scale(1.45);
 }
 
-@keyframes squad-pulse-marker {
-  from { box-shadow: 0 0 4px rgba(255, 255, 255, 0.3); transform: scale(1.0); }
-  to { box-shadow: 0 0 18px currentColor; transform: scale(1.35); }
+.player-marker.is-hovered .tag,
+.player-marker:active .tag {
+  border-color: rgba(0, 240, 255, 0.4);
+  background: rgba(8, 14, 36, 0.95);
 }
 
 /* Floating Player Hover Tooltip */
@@ -1334,13 +1363,6 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 6px;
-}
-
-.tooltip-clan-tag {
-  color: #94a3b8;
-  font-family: monospace;
-  font-weight: bold;
-  margin-right: 4px;
 }
 
 .tooltip-name {
@@ -1777,12 +1799,6 @@ onBeforeUnmount(() => {
   color: #ffffff;
 }
 
-.small-hint {
-  font-size: 9px;
-  color: #94a3b8;
-  margin-left: auto;
-}
-
 /* Server Stats Area */
 .server-stats-grid {
   display: grid;
@@ -1812,11 +1828,89 @@ onBeforeUnmount(() => {
   color: #e2e8f0;
 }
 
+/* Options group sidebar styling */
+.options-group-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.option-item-sidebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.option-item-sidebar input[type="checkbox"] {
+  accent-color: #38bdf8;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.option-text {
+  font-size: 12px;
+  color: #e5eefc;
+}
+
+.option-item-slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.scale-slider {
+  flex: 1;
+  accent-color: #38bdf8;
+  height: 4px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.scale-val {
+  font-size: 11px;
+  font-family: monospace;
+  color: #38bdf8;
+  min-width: 28px;
+  text-align: right;
+}
+
+/* Directory sub-tabs */
+.sidebar-tabs-directory {
+  display: flex;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 2px;
+  margin-bottom: 10px;
+}
+
+.directory-tab-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 6px 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.directory-tab-btn.active {
+  background: rgba(0, 240, 255, 0.08);
+  color: #00e5ff;
+}
+
 /* Tabs list */
 .sidebar-tabs {
   display: flex;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.01);
+  border: 1px solid rgba(255, 255, 255, 0.04);
   border-radius: 8px;
   padding: 3px;
   margin-bottom: 12px;
@@ -1851,7 +1945,6 @@ onBeforeUnmount(() => {
   padding-right: 2px;
 }
 
-/* Custom scroll bar inside lists */
 .squads-scroll-list::-webkit-scrollbar,
 .combat-log-console::-webkit-scrollbar {
   width: 4px;
@@ -1957,6 +2050,60 @@ onBeforeUnmount(() => {
   color: #94a3b8;
 }
 
+/* Active Player Row inside list */
+.sidebar-player-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.01);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+
+.sidebar-player-card-row:hover,
+.sidebar-player-card-row.is-focused {
+  background: rgba(0, 240, 255, 0.06);
+  border-color: rgba(0, 240, 255, 0.3);
+}
+
+.sidebar-player-card-row.team-1 {
+  border-left: 3px solid #00e5ff;
+}
+
+.sidebar-player-card-row.team-2 {
+  border-left: 3px solid #ff3366;
+}
+
+.player-name-row {
+  font-size: 12px;
+  font-weight: 500;
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.player-meta-row {
+  font-size: 10px;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 24px;
+  font-size: 12px;
+  color: #64748b;
+}
+
 /* Combat feed box */
 .combat-feed-section {
   height: 220px;
@@ -2018,5 +2165,29 @@ onBeforeUnmount(() => {
 :deep(.team-2-text) {
   color: #ff5252;
   font-weight: bold;
+}
+
+.map-select {
+  flex: 1;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  color: #e2e8f0;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.map-select:hover, .map-select:focus {
+  border-color: #00e5ff;
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.25);
+  background: rgba(8, 12, 28, 0.95);
+}
+
+.map-select option {
+  background: #0f172a;
+  color: #e2e8f0;
 }
 </style>
