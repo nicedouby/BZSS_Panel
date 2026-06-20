@@ -358,6 +358,9 @@ export function createSquadLifecycleModule({ core, config, logger }) {
   }
 
   function emitSquadCreatedEvent(serverId, matchId, parsed, record) {
+    if (shouldSuppressModuleSquadCreatedEvent(record, parsed)) {
+      return;
+    }
     const createdAtMs = Number(record?.createdAtMs ?? parseTimestamp(parsed.eventTime));
     const createdAt = Number.isFinite(createdAtMs) && createdAtMs > 0
       ? new Date(createdAtMs).toISOString()
@@ -407,6 +410,13 @@ export function createSquadLifecycleModule({ core, config, logger }) {
       creationSignature,
       record: record ? { ...record } : null,
     });
+  }
+
+  function shouldSuppressModuleSquadCreatedEvent(record, parsed) {
+    if (!record) return false;
+    if (record.creationSource === "LOG") return false;
+    if (parsed?.parsedFromRawLogLine) return false;
+    return true;
   }
 
 }

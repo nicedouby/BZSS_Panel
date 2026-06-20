@@ -76,11 +76,10 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
       updatedAt: nowIso(),
       event,
       actions: [],
-      status: "handling",
     };
-    remember(recent, record, recentLimit());
 
     try {
+      record.status = "handling";
       if (event.removeLeaderBeforeDisband) {
         const removeResult = await removeLeader(event);
         record.actions.push({
@@ -126,6 +125,8 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
       record.updatedAt = nowIso();
       moduleLogger?.warn?.(`[SquadRuleChain] failed to handle violation: ${record.error}`);
     }
+
+    remember(recent, record, recentLimit());
   }
 
   async function removeLeader(event) {

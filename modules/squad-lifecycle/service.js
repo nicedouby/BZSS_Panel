@@ -73,13 +73,13 @@ export function formatLifecycleRecord(record) {
 export function formatTimeLabel(value) {
   const date = new Date(Number(value));
   if (Number.isNaN(date.getTime())) return "";
-
-  const parts = [
-    String(date.getHours()).padStart(2, "0"),
-    String(date.getMinutes()).padStart(2, "0"),
-    String(date.getSeconds()).padStart(2, "0"),
-  ];
-  return parts.join(":");
+  return new Intl.DateTimeFormat("zh-CN", {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    timeZone: "Asia/Shanghai",
+  }).format(date);
 }
 
 export function createCurrentSnapshot({ serverId, matchId, records, updatedAt }) {

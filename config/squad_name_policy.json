@@ -87,7 +87,7 @@
       "aliases": [
         "M1A1 Abrams",
         "Abrams",
-        "������ķ˹"
+        "艾布拉姆斯"
       ],
       "keywords": [
         "TANK",
@@ -842,7 +842,7 @@
       "asset": "/Game/Vehicles/Coyote/BP_LAV2_Coyote.BP_LAV2_Coyote",
       "name": "Coyote",
       "aliases": [
-        "���ǲ�ս��"
+        "郊狼"
       ],
       "keywords": [
         "COYOTE",
@@ -964,7 +964,7 @@
       "asset": "/Game/Vehicles/Coyote/BP_LAV2_Coyote_CRF.BP_LAV2_Coyote_CRF",
       "name": "Coyote",
       "aliases": [
-        "���ǲ�ս��"
+        "郊狼"
       ],
       "keywords": [
         "COYOTE",
@@ -1735,7 +1735,7 @@
       "name": "M1151 Technical DSHK",
       "aliases": [
         "M1151 DSHK",
-        "M11510���˿�"
+        "M1151重机枪技术车"
       ],
       "keywords": [
         "M1151"
@@ -2226,7 +2226,7 @@
       "asset": "/Game/Vehicles/ZSD89/BP_ZSD89.BP_ZSD89",
       "name": "ZSD89 QJZ89",
       "aliases": [
-        "89�b�� QJZ89"
+        "89式步战车 QJZ89"
       ],
       "keywords": [
         "ZSD",
@@ -2248,7 +2248,7 @@
       "asset": "/Game/Vehicles/ZSD89/BP_ZSD89_QLZ-87.BP_ZSD89_QLZ-87",
       "name": "ZSD89 QLZ87",
       "aliases": [
-        "89�b�� QLZ87"
+        "89式步战车 QLZ87"
       ],
       "keywords": [
         "ZSD",
@@ -2272,7 +2272,7 @@
       "asset": "/Game/Vehicles/ZBL08/BP_ZSL10_QJZ-89.BP_ZSL10_QJZ-89",
       "name": "ZSL10 QJZ89",
       "aliases": [
-        "10�b�� QJZ89"
+        "10式步战车 QJZ89"
       ],
       "keywords": [
         "ZSL",
@@ -2297,7 +2297,7 @@
       "asset": "/Game/Vehicles/ZBL08/BP_ZSL10_QLZ-87.BP_ZSL10_QLZ-87",
       "name": "ZSL10 QLZ87",
       "aliases": [
-        "10�b�� QLZ87"
+        "10式步战车 QLZ87"
       ],
       "keywords": [
         "ZSL",
@@ -2323,7 +2323,7 @@
       "name": "ZSL92A APC QJZ89",
       "aliases": [
         "ZSL92A QJZ89",
-        "92�b�� QJZ89"
+        "92式步战车 QJZ89"
       ],
       "keywords": [
         "ZSL",
@@ -2349,7 +2349,7 @@
       "name": "ZSL92A APC QLZ87",
       "aliases": [
         "ZSL92A QLZ87",
-        "92�b�� QLZ87"
+        "92式步战车 QLZ87"
       ],
       "keywords": [
         "ZSL",
@@ -2397,8 +2397,8 @@
       "asset": "/Game/Vehicles/ZBD04A/BP_ZBD04A.BP_ZBD04A",
       "name": "ZBD04A",
       "aliases": [
-        "04Aʽ����ս��",
-        "04A��"
+        "04A式步兵战车",
+        "04A步战"
       ],
       "keywords": [
         "ZBD",
@@ -2460,7 +2460,7 @@
       "name": "ZSL92 IFV",
       "aliases": [
         "ZSL92",
-        "92�ֲ�"
+        "92式步战车"
       ],
       "keywords": [
         "ZSL",
@@ -2485,7 +2485,7 @@
       "name": "ZTD05",
       "aliases": [
         "05ͻ",
-        "05ʽͻ����"
+        "05式突击炮"
       ],
       "keywords": [
         "ZTD",
@@ -2609,7 +2609,7 @@
       "asset": "/Game/Vehicles/ZBD05/BP_ZSD05_QJZ-89.BP_ZSD05_QJZ-89",
       "name": "ZSD05 QJZ89",
       "aliases": [
-        "05�b�� QJZ89"
+        "05式步战车 QJZ89"
       ],
       "keywords": [
         "ZSD",
@@ -2634,7 +2634,7 @@
       "asset": "/Game/Vehicles/ZSD89/BP_ZSD89.BP_ZSD89",
       "name": "ZSD89 QJZ89",
       "aliases": [
-        "89�b�� QJZ89"
+        "89式步战车 QJZ89"
       ],
       "keywords": [
         "ZSD",
@@ -2656,7 +2656,7 @@
       "asset": "/Game/Vehicles/ZSD89/BP_ZSD89_QLZ-87.BP_ZSD89_QLZ-87",
       "name": "ZSD89 QLZ87",
       "aliases": [
-        "89�b�� QLZ87"
+        "89式步战车 QLZ87"
       ],
       "keywords": [
         "ZSD",
@@ -2680,7 +2680,7 @@
       "asset": "/Game/Vehicles/ZBL08/BP_ZSL10_QJZ-89.BP_ZSL10_QJZ-89",
       "name": "ZSL10 QJZ89",
       "aliases": [
-        "10�b�� QJZ89"
+        "10式步战车 QJZ89"
       ],
       "keywords": [
         "ZSL",
@@ -2705,7 +2705,7 @@
       "asset": "/Game/Vehicles/ZBL08/BP_ZSL10_QLZ-87.BP_ZSL10_QLZ-87",
       "name": "ZSL10 QLZ87",
       "aliases": [
-        "10�b�� QLZ87"
+        "10式步战车 QLZ87"
       ],
       "keywords": [
         "ZSL",
@@ -2730,7 +2730,7 @@
       "asset": "/Game/Vehicles/WZ551/BP_WZ551A.BP_WZ551A",
       "name": "ZSL92A APC QJZ89",
       "aliases": [
-        "92�b�� QJZ89"
+        "92式步战车 QJZ89"
       ],
       "keywords": [
         "ZSL",
@@ -2755,7 +2755,7 @@
       "asset": "/Game/Vehicles/WZ551/BP_WZ551B_QLZ-87.BP_WZ551B_QLZ-87",
       "name": "ZSL92A APC QLZ87",
       "aliases": [
-        "92�b�� QLZ87"
+        "92式步战车 QLZ87"
       ],
       "keywords": [
         "ZSL",
@@ -2821,8 +2821,8 @@
       "asset": "/Game/Vehicles/ZBD05/BP_ZBD05.BP_ZBD05",
       "name": "ZBD05",
       "aliases": [
-        "05ʽ����ս��",
-        "05��"
+        "05式步兵战车",
+        "05步战"
       ],
       "keywords": [
         "ZBD",
@@ -2843,8 +2843,8 @@
       "asset": "/Game/Vehicles/ZBL08/BP_ZBL08.BP_ZBL08",
       "name": "ZBL08",
       "aliases": [
-        "08ʽ����ս��",
-        "08��"
+        "08式步兵战车",
+        "08步战"
       ],
       "keywords": [
         "ZBL",
@@ -3049,7 +3049,7 @@
       "asset": "/Game/Vehicles/ZBD05/BP_ZSD05_QJZ-89.BP_ZSD05_QJZ-89",
       "name": "ZSD05",
       "aliases": [
-        "05�b��"
+        "05式步战车"
       ],
       "keywords": [
         "ZSD",
@@ -3073,7 +3073,7 @@
       "asset": "/Game/Vehicles/ZBL08/BP_ZSL10_QJZ-89_Naval.BP_ZSL10_QJZ-89_Naval",
       "name": "ZSL10",
       "aliases": [
-        "10�b��"
+        "10式步战车"
       ],
       "keywords": [
         "ZSL",
@@ -3098,8 +3098,8 @@
       "asset": "/Game/Vehicles/ZBD05/BP_ZBD05.BP_ZBD05",
       "name": "ZBD05",
       "aliases": [
-        "05ʽ����ս��",
-        "05��"
+        "05式步兵战车",
+        "05步战"
       ],
       "keywords": [
         "ZBD",
@@ -3120,8 +3120,8 @@
       "asset": "/Game/Vehicles/ZBL08/BP_ZBL08_Naval.BP_ZBL08_Naval",
       "name": "ZBL08",
       "aliases": [
-        "08ʽ����ս��",
-        "08��"
+        "08式步兵战车",
+        "08步战"
       ],
       "keywords": [
         "ZBL",
@@ -3143,8 +3143,8 @@
       "asset": "/Game/Vehicles/ZTD05/BP_ZTD05.BP_ZTD05",
       "name": "ZTD05",
       "aliases": [
-        "05ͻ",
-        "05ʽͻ����"
+        "05突",
+        "05式突击炮"
       ],
       "keywords": [
         "ZTD",
