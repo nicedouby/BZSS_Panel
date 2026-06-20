@@ -256,8 +256,20 @@
                     <span class="hud-section-subtitle">实时对局数据统计 / REAL-TIME STATS</span>
                   </div>
 
+                  <div class="combat-scoreboard-grid">
+                    <div
+                      v-for="item in combatScoreboardItems"
+                      :key="item.key"
+                      class="combat-scoreboard-card"
+                      :class="item.tone"
+                    >
+                      <span class="combat-scoreboard-label" :title="item.label">{{ item.shortLabel }}</span>
+                      <strong class="combat-scoreboard-value">{{ item.value }}</strong>
+                    </div>
+                  </div>
+
                   <!-- KD Indicator Block -->
-                  <div class="kd-hero-block" :class="teamColorClass">
+                  <div v-if="false" class="kd-hero-block" :class="teamColorClass">
                     <div class="kd-metric">
                       <span class="kd-label">SESSION K/D</span>
                       <strong class="kd-value">{{ sessionKd }}</strong>
@@ -268,14 +280,14 @@
                         <div class="kd-bar-deaths" :style="{ width: sessionDeathsPercent + '%' }"></div>
                       </div>
                       <div class="kd-bar-labels">
-                        <span class="lbl-kills">击杀: {{ props.player.combatStats.kills }}</span>
-                        <span class="lbl-deaths">死亡: {{ props.player.combatStats.deaths }}</span>
+                        <span class="lbl-kills">击杀: {{ props.player?.combatStats.kills }}</span>
+                        <span class="lbl-deaths">死亡: {{ props.player?.combatStats.deaths }}</span>
                       </div>
                     </div>
                   </div>
 
                   <!-- Stats Card Matrix -->
-                  <div class="combat-hud-grid">
+                  <div v-if="false" class="combat-hud-grid">
                     <div class="combat-hud-card downs">
                       <div class="ch-icon-wrapper">
                         <svg viewBox="0 0 24 24" class="ch-icon" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -284,7 +296,7 @@
                       </div>
                       <div class="ch-info">
                         <span class="ch-lbl">击倒</span>
-                        <strong class="ch-val">{{ props.player.combatStats.downs }}</strong>
+                        <strong class="ch-val">{{ props.player?.combatStats.downs }}</strong>
                       </div>
                     </div>
                     <div class="combat-hud-card kills">
@@ -299,7 +311,7 @@
                       </div>
                       <div class="ch-info">
                         <span class="ch-lbl">击杀</span>
-                        <strong class="ch-val">{{ props.player.combatStats.kills }}</strong>
+                        <strong class="ch-val">{{ props.player?.combatStats.kills }}</strong>
                       </div>
                     </div>
                     <div class="combat-hud-card deaths">
@@ -310,7 +322,7 @@
                       </div>
                       <div class="ch-info">
                         <span class="ch-lbl">死亡</span>
-                        <strong class="ch-val">{{ props.player.combatStats.deaths }}</strong>
+                        <strong class="ch-val">{{ props.player?.combatStats.deaths }}</strong>
                       </div>
                     </div>
                     <div class="combat-hud-card tk">
@@ -321,8 +333,8 @@
                       </div>
                       <div class="ch-info">
                         <span class="ch-lbl">TK (团队伤害)</span>
-                        <strong class="ch-val" :class="{ danger: props.player.combatStats.tk > 0 }">
-                          {{ props.player.combatStats.tk }}
+                        <strong class="ch-val" :class="{ danger: (props.player?.combatStats.tk ?? 0) > 0 }">
+                          {{ props.player?.combatStats.tk }}
                         </strong>
                       </div>
                     </div>
@@ -334,7 +346,7 @@
                       </div>
                       <div class="ch-info">
                         <span class="ch-lbl">复苏</span>
-                        <strong class="ch-val">{{ props.player.combatStats.revives }}</strong>
+                        <strong class="ch-val">{{ props.player?.combatStats.revives }}</strong>
                       </div>
                     </div>
                   </div>
@@ -614,6 +626,7 @@ import { useRouter } from "vue-router";
 import type { BzssCoreTrackedVector, PlayerDetailViewModel } from "../../types/squad-admin.types";
 import { useUiStore } from "../../stores/ui.store";
 import { copyTextWithToast } from "../../utils/clipboard";
+import { buildCombatScoreboardItems } from "../../utils/combat-scoreboard";
 import { goToPlayerDatabaseSearch } from "../../utils/player-database";
 import { forceTeamChange } from "../../app/teamBalanceApi";
 import { warnPlayer, kickPlayer, removePlayerFromSquad } from "../../app/squadManagementApi";
@@ -820,6 +833,8 @@ const glowShadowStyle = computed(() => {
   }
   return { boxShadow: "0 0 16px rgba(255, 255, 255, 0.1)" };
 });
+
+const combatScoreboardItems = computed(() => buildCombatScoreboardItems(props.player?.combatStats));
 
 // KD Computations
 const sessionKd = computed(() => {
@@ -2092,6 +2107,75 @@ onUnmounted(() => {
 }
 
 /* Combat Stats Cards Grid */
+.combat-scoreboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 6px;
+}
+
+.combat-scoreboard-card {
+  min-width: 0;
+  min-height: 48px;
+  padding: 8px 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(15, 23, 42, 0.46);
+  display: grid;
+  align-content: space-between;
+  gap: 5px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.combat-scoreboard-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+  font-weight: 850;
+  color: #94a3b8;
+  letter-spacing: 0;
+}
+
+.combat-scoreboard-value {
+  font-family: Consolas, Monaco, monospace;
+  font-size: 20px;
+  font-weight: 950;
+  line-height: 1;
+  color: #f8fafc;
+  font-variant-numeric: tabular-nums;
+}
+
+.combat-scoreboard-card.kills,
+.combat-scoreboard-card.combat {
+  border-color: rgba(52, 211, 153, 0.22);
+  background: rgba(52, 211, 153, 0.08);
+}
+
+.combat-scoreboard-card.deaths,
+.combat-scoreboard-card.tk {
+  border-color: rgba(248, 113, 113, 0.24);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.combat-scoreboard-card.woundeds,
+.combat-scoreboard-card.wounds {
+  border-color: rgba(251, 191, 36, 0.24);
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.combat-scoreboard-card.heal,
+.combat-scoreboard-card.revived {
+  border-color: rgba(96, 165, 250, 0.24);
+  background: rgba(96, 165, 250, 0.08);
+}
+
+.combat-scoreboard-card.teamwork,
+.combat-scoreboard-card.objective {
+  border-color: rgba(192, 132, 252, 0.24);
+  background: rgba(192, 132, 252, 0.08);
+}
+
 .combat-hud-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));

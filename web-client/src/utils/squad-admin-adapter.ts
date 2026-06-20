@@ -19,6 +19,7 @@ const EMPTY_COMBAT_STATS: CombatStats = {
   deaths: 0,
   tk: 0,
   revives: 0,
+  source: "empty",
 };
 
 export function adaptPlayerRow(
@@ -374,6 +375,31 @@ export function buildCombatStatsLookup(events: any[] = []): Record<string, Comba
 
   for (const event of list) {
     applyCombatEventToLookup(lookup, event);
+  }
+
+  return lookup;
+}
+
+export function buildCombatStatsLookupFromBzssCorePlayers(players: any[] = []): Record<string, CombatStats> {
+  const lookup: Record<string, CombatStats> = {};
+  const list = Array.isArray(players) ? players : [];
+
+  for (const player of list) {
+    const stats = combatStatsFromScoreboardStats(player?.playerScoreboard?.stats);
+    if (!stats) continue;
+
+    const keys = collectCombatIdentityKeys({
+      eosID: player?.playerGuid,
+      eosId: player?.playerGuid,
+      playerID: player?.playerId,
+      playerId: player?.playerId,
+      playerName: player?.playerName,
+      name: player?.playerName,
+    });
+
+    for (const key of keys) {
+      lookup[key] = stats;
+    }
   }
 
   return lookup;
@@ -750,6 +776,9 @@ function normalizeSteam64(value: unknown): string {
 }
 
 export function resolveCombatStats(player: Record<string, any> = {}, lookup: Record<string, CombatStats> = {}): CombatStats {
+  const directStats = combatStatsFromScoreboardStats(player?.playerScoreboard?.stats ?? player?.bzssCorePlayerInfo?.playerScoreboard?.stats);
+  if (directStats) return directStats;
+
   const keys = collectCombatIdentityKeys(player);
   for (const key of keys) {
     const stats = lookup[key];
@@ -765,11 +794,50 @@ function cloneCombatStats(stats: CombatStats): CombatStats {
     deaths: Number(stats?.deaths ?? 0),
     tk: Number(stats?.tk ?? 0),
     revives: Number(stats?.revives ?? 0),
+    wounds: normalizeCombatStatNumber(stats?.wounds),
+    dataLives: normalizeNullableCombatStatNumber(stats?.dataLives),
+    healPoints: normalizeCombatStatNumber(stats?.healPoints),
+    revivedPoints: normalizeCombatStatNumber(stats?.revivedPoints),
+    teamworkScore: normalizeCombatStatNumber(stats?.teamworkScore),
+    objectiveScore: normalizeCombatStatNumber(stats?.objectiveScore),
+    combatScore: normalizeCombatStatNumber(stats?.combatScore),
+    source: stats?.source,
   };
 }
 
 function formatCombatStatsLabel(stats: CombatStats): string {
-  return `击倒 ${Number(stats?.downs ?? 0)} / 击杀 ${Number(stats?.kills ?? 0)} / 死亡 ${Number(stats?.deaths ?? 0)} / TK ${Number(stats?.tk ?? 0)} / 复苏 ${Number(stats?.revives ?? 0)}`;
+  const score = stats?.combatScore != null ? ` / 分数 ${Number(stats.combatScore)}` : "";
+  return `击倒 ${Number(stats?.downs ?? 0)} / 击杀 ${Number(stats?.kills ?? 0)} / 死亡 ${Number(stats?.deaths ?? 0)} / TK ${Number(stats?.tk ?? 0)} / 复苏 ${Number(stats?.revives ?? 0)}${score}`;
+}
+
+function combatStatsFromScoreboardStats(stats: Record<string, any> | null | undefined): CombatStats | null {
+  if (!stats || typeof stats !== "object") return null;
+  return {
+    kills: normalizeCombatStatNumber(stats.numKills),
+    downs: normalizeCombatStatNumber(stats.numWoundeds),
+    deaths: normalizeCombatStatNumber(stats.numDeaths),
+    tk: normalizeCombatStatNumber(stats.numTeamKills),
+    revives: normalizeCombatStatNumber(stats.revivedPoints),
+    wounds: normalizeCombatStatNumber(stats.numWounds),
+    dataLives: normalizeNullableCombatStatNumber(stats.dataLives),
+    healPoints: normalizeCombatStatNumber(stats.healPoints),
+    revivedPoints: normalizeCombatStatNumber(stats.revivedPoints),
+    teamworkScore: normalizeCombatStatNumber(stats.teamworkScore),
+    objectiveScore: normalizeCombatStatNumber(stats.objectiveScore),
+    combatScore: normalizeCombatStatNumber(stats.combatScore),
+    source: "bzss-core",
+  };
+}
+
+function normalizeCombatStatNumber(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizeNullableCombatStatNumber(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function applyCombatEventToLookup(lookup: Record<string, CombatStats>, event: Record<string, any>) {
@@ -820,6 +888,7 @@ function createEmptyCombatStats(): CombatStats {
     deaths: 0,
     tk: 0,
     revives: 0,
+    source: "empty",
   };
 }
 

@@ -23,17 +23,33 @@ export interface BzssCoreTrackedVector {
 }
 
 export interface BzssCoreTrackedPlayerInfo {
+  playerId?: number | null;
   playerName: string;
   playerGuid: string;
   teamId: number | null;
   squadId: number | null;
+  isAdmin?: boolean | null;
+  isCommander?: boolean | null;
+  ftIndex?: number | null;
+  ftPosition?: number | null;
+  claimedInfo?: string;
+  seatsPlayers?: string[];
+  vehicleInfo?: {
+    raw: string;
+    vehicleType: string;
+    healthText: string;
+    health: number | null;
+    maxHealth: number | null;
+  };
   playerBaseInfo: {
     raw: string;
     fields: string[];
+    values?: Record<string, string>;
   };
   soldierInfo: {
     raw: string;
     fields: string[];
+    values?: Record<string, string>;
     soldierClass: string;
     health: number | null;
     weaponClass: string;
@@ -45,6 +61,25 @@ export interface BzssCoreTrackedPlayerInfo {
     raw: string;
     values: string[];
     numericValues: Array<number | null>;
+    stats?: {
+      dataLives: number | null;
+      numKills: number | null;
+      numDeaths: number | null;
+      numWoundeds: number | null;
+      numWounds: number | null;
+      numTeamKills: number | null;
+      healPoints: number | null;
+      revivedPoints: number | null;
+      teamworkScore: number | null;
+      objectiveScore: number | null;
+      combatScore: number | null;
+    };
+    labeledValues?: Array<{
+      key: string;
+      label: string;
+      value: number | null;
+    }>;
+    extraValues?: Array<number | null>;
   };
   rawText: string;
 }

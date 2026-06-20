@@ -51,7 +51,20 @@
         {{ secondaryIdentityText }}
       </div>
 
-      <div class="player-stat-line">
+      <div class="player-stat-line scoreboard-line">
+        <span
+          v-for="item in scoreboardItems"
+          :key="item.key"
+          class="scoreboard-chip"
+          :class="item.tone"
+          :title="`${item.label}: ${item.value}`"
+        >
+          <span class="label">{{ item.shortLabel }}</span>
+          <span class="value">{{ item.value }}</span>
+        </span>
+      </div>
+
+      <div class="player-stat-line legacy-combat-line">
         <span class="stat-chip wound" :title="`击倒: ${downs}`">
           <span class="label">倒</span>
           <span class="value">{{ downs }}</span>
@@ -107,6 +120,7 @@
 <script setup lang="ts">
 import { computed, inject, ref } from "vue";
 import type { PlayerRowViewModel, CombatStats } from "../../types/squad-admin.types";
+import { buildCombatScoreboardItems } from "../../utils/combat-scoreboard";
 import { resolveRoleIcon } from "../../utils/role-icons";
 import { t } from "../../i18n";
 
@@ -173,6 +187,7 @@ const secondaryIdentityText = computed(() => {
   return "";
 });
 
+const scoreboardItems = computed(() => buildCombatScoreboardItems(props.combatStats));
 const kills = computed(() => normalizeStat(props.combatStats?.kills));
 const downs = computed(() => normalizeStat(props.combatStats?.downs));
 const deaths = computed(() => normalizeStat(props.combatStats?.deaths));

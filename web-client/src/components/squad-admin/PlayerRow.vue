@@ -31,7 +31,17 @@
         <div class="player-meta">
           <span class="player-role">{{ displayRole(player.role) }}</span>
         </div>
-        <div class="player-combat-stats">
+        <div class="player-combat-stats scoreboard-line-compact">
+          <span
+            v-for="item in scoreboardItems"
+            :key="item.key"
+            class="stat-chip stat-scoreboard"
+            :title="`${item.label}: ${item.value}`"
+          >
+            {{ item.shortLabel }} {{ item.value }}
+          </span>
+        </div>
+        <div class="player-combat-stats legacy-combat-line">
           <span class="stat-chip stat-down">击倒 {{ player.combatStats.downs }}</span>
           <span class="stat-chip stat-kill">击杀 {{ player.combatStats.kills }}</span>
           <span class="stat-chip stat-death">死亡 {{ player.combatStats.deaths }}</span>
@@ -46,6 +56,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { PlayerRowViewModel } from "../../types/squad-admin.types";
+import { buildCombatScoreboardItems } from "../../utils/combat-scoreboard";
 import { resolveRoleIcon } from "../../utils/role-icons";
 import { t } from "../../i18n";
 
@@ -61,6 +72,7 @@ const emit = defineEmits<{
 const isSelected = computed(() => props.selected ?? false);
 const roleIcon = computed(() => resolveRoleIcon(props.player.role));
 const isRoleIconImage = computed(() => roleIcon.value.icon.startsWith("/"));
+const scoreboardItems = computed(() => buildCombatScoreboardItems(props.player.combatStats));
 
 const playtimeText = computed(() => {
   if (props.player.playtimeHours == null) return "";
@@ -183,6 +195,24 @@ function displayRole(role: string | null | undefined) {
   flex-wrap: wrap;
   min-height: 18px;
   margin-top: 1px;
+}
+
+.player-combat-stats.legacy-combat-line {
+  display: none;
+}
+
+.scoreboard-line-compact {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(78px, 1fr));
+  width: 100%;
+}
+
+.stat-scoreboard {
+  justify-content: space-between;
+  gap: 6px;
+  border-color: rgba(140, 160, 185, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-secondary);
 }
 
 .stat-chip {

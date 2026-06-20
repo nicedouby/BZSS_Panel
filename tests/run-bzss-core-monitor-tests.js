@@ -63,28 +63,58 @@ function testParseBzssCorePlayerBlocksAcceptsNamedFieldsAndExtraBlocks() {
   const text = "PlayerBaseInfo{PlayerID:0,PlayerOnlineID:00026a0bbf67442f84777b964560fba4,PlayerName:Donald·DoubyBear,IsAdmin:1,IsCommander:0,FTIndex:0,FTPosition:0}"
     + "{NoExistingClaimedInfo}SeatsPlayers{Donald·DoubyBear,}{VehicleType:TruckTransportHealth:750.0/750.0}"
     + "PlayerScoreboard{-1,0,0,1,0,1,1,0,0,0,260,0}"
+    + "PlayerBaseInfo{PlayerID:1,PlayerOnlineID:0002633b5836480d9593507d5ea0d8c7,PlayerName:Braovo,IsAdmin:1,IsCommander:0,FTIndex:-1,FTPosition:-1}"
+    + "PlayerScoreboard{-1,0,0,0,0,0,0,0,0,0,0,0}"
     + "PlayerBaseInfo{PlayerID:2,PlayerOnlineID:00020d7f49c040b58c4aa9cb0fc7a466,PlayerName:小诗不郁,IsAdmin:0,IsCommander:0,FTIndex:0,FTPosition:0}"
     + "SoldierInfo{PawnClass:BP_Soldier_PLA_Medic_Arid_C_2147152878,Health:-300,Bleeding:0,Wounded:0,Dying:1,Crouched:0,Prone:0,Falling:0,WeaponInfo{NoWeapon}Position{X=14669 Y=-1546 Z=-12557}Rotation{X=64 Y=-74 Z=-64}}"
     + "PlayerScoreboard{-1,2,0,5,0,5,2,0,1,20,720,-15}"
     + "PlayerBaseInfo{PlayerID:3,PlayerOnlineID:000217e73c774f029f316ff3cdcbc81c,PlayerName:day,IsAdmin:0,IsCommander:0,FTIndex:-1,FTPosition:-1}"
     + "SoldierInfo{PawnClass:BP_Soldier_AFU_Marksman01_C_2147184874,Health:52,Bleeding:0,Wounded:0,Dying:0,Crouched:0,Prone:1,Falling:0,WeaponInfo{BP_UAR-10_Optic_C_2147184869,10,10,10,10,3}Position{X=143 Y=-4045 Z=-12915}Rotation{X=0 Y=0 Z=63}}"
     + "PlayerScoreboard{-1,34,0,7,9,0,0,0,0,0,550,0}"
+    + "PlayerBaseInfo{PlayerID:4,PlayerOnlineID:0002e5d6e53c4a31a53d5de8356d6d8c,PlayerName:篝鬻,IsAdmin:0,IsCommander:0,FTIndex:0,FTPosition:0}"
+    + "SoldierInfo{PawnClass:BP_Soldier_PLA_Marksman_Arid_C_2147110510,Health:100,Bleeding:0,Wounded:0,Dying:0,Crouched:0,Prone:1,Falling:0,WeaponInfo{BP_QBU-191_DMR_Optic_QMK-191_Suppressor_C_2147110505,14,30,30,30,30}Position{X=3705 Y=-3540 Z=-12883}Rotation{X=0 Y=0 Z=123}}"
+    + "PlayerScoreboard{-1,7,0,4,0,4,0,0,0,0,90,0}"
     + "{BZSS-Marked}";
 
   const players = parseBzssCorePlayerBlocks(text);
-  assert.equal(players.length, 3);
+  assert.equal(players.length, 5);
+  assert.equal(players[0].playerId, 0);
   assert.equal(players[0].playerName, "Donald·DoubyBear");
   assert.equal(players[0].playerGuid, "00026a0bbf67442f84777b964560fba4");
+  assert.equal(players[0].isAdmin, true);
+  assert.equal(players[0].isCommander, false);
+  assert.equal(players[0].ftIndex, 0);
+  assert.equal(players[0].ftPosition, 0);
+  assert.deepEqual(players[0].seatsPlayers, ["Donald·DoubyBear"]);
+  assert.equal(players[0].vehicleInfo.vehicleType, "TruckTransport");
+  assert.equal(players[0].vehicleInfo.health, 750);
+  assert.equal(players[0].vehicleInfo.maxHealth, 750);
   assert.equal(players[0].soldierInfo.soldierClass, "");
   assert.deepEqual(players[0].playerScoreboard.numericValues.slice(0, 4), [-1, 0, 0, 1]);
-  assert.equal(players[1].playerName, "小诗不郁");
-  assert.equal(players[1].soldierInfo.soldierClass, "BP_Soldier_PLA_Medic_Arid_C_2147152878");
-  assert.equal(players[1].soldierInfo.health, -300);
-  assert.equal(players[1].soldierInfo.weaponClass, "");
-  assert.deepEqual(players[1].soldierInfo.position, { x: 14669, y: -1546, z: -12557 });
-  assert.equal(players[2].soldierInfo.weaponClass, "BP_UAR-10_Optic_C_2147184869");
-  assert.deepEqual(players[2].soldierInfo.ammoValues, [10, 10, 10, 10, 3]);
-  assert.deepEqual(players[2].soldierInfo.rotation, { x: 0, y: 0, z: 63 });
+  assert.equal(players[0].playerScoreboard.stats.dataLives, -1);
+  assert.equal(players[0].playerScoreboard.stats.numKills, 0);
+  assert.equal(players[0].playerScoreboard.stats.numDeaths, 0);
+  assert.equal(players[0].playerScoreboard.stats.numWoundeds, 1);
+  assert.equal(players[0].playerScoreboard.stats.numWounds, 0);
+  assert.equal(players[0].playerScoreboard.stats.numTeamKills, 1);
+  assert.equal(players[0].playerScoreboard.stats.healPoints, 1);
+  assert.equal(players[0].playerScoreboard.stats.revivedPoints, 0);
+  assert.equal(players[0].playerScoreboard.stats.teamworkScore, 0);
+  assert.equal(players[0].playerScoreboard.stats.objectiveScore, 0);
+  assert.equal(players[0].playerScoreboard.stats.combatScore, 260);
+  assert.deepEqual(players[0].playerScoreboard.extraValues, [0]);
+  assert.equal(players[1].playerName, "Braovo");
+  assert.equal(players[1].ftIndex, -1);
+  assert.equal(players[2].playerName, "小诗不郁");
+  assert.equal(players[2].soldierInfo.soldierClass, "BP_Soldier_PLA_Medic_Arid_C_2147152878");
+  assert.equal(players[2].soldierInfo.health, -300);
+  assert.equal(players[2].soldierInfo.weaponClass, "");
+  assert.deepEqual(players[2].soldierInfo.position, { x: 14669, y: -1546, z: -12557 });
+  assert.equal(players[3].soldierInfo.weaponClass, "BP_UAR-10_Optic_C_2147184869");
+  assert.deepEqual(players[3].soldierInfo.ammoValues, [10, 10, 10, 10, 3]);
+  assert.deepEqual(players[3].soldierInfo.rotation, { x: 0, y: 0, z: 63 });
+  assert.equal(players[4].playerName, "篝鬻");
+  assert.equal(players[4].soldierInfo.weaponClass, "BP_QBU-191_DMR_Optic_QMK-191_Suppressor_C_2147110505");
 }
 
 async function testMonitorRefreshesFromFileWatcher() {

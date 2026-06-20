@@ -88,8 +88,12 @@
             <p class="mono">{{ player.playerGuid || "--" }}</p>
           </div>
           <div class="head-badges">
+            <span class="badge">ID {{ player.playerId ?? "--" }}</span>
             <span class="badge">T{{ player.teamId ?? "--" }}</span>
             <span class="badge">S{{ player.squadId ?? "--" }}</span>
+            <span class="badge">FT {{ player.ftIndex ?? "--" }} / {{ player.ftPosition ?? "--" }}</span>
+            <span v-if="player.isAdmin" class="badge admin">Admin</span>
+            <span v-if="player.isCommander" class="badge commander">CMD</span>
             <span class="badge health">HP {{ player.soldierInfo?.health ?? "--" }}</span>
           </div>
         </header>
@@ -109,7 +113,15 @@
           </div>
           <div class="field">
             <span>记分板</span>
-            <strong class="mono">{{ formatNumberList(compactScoreboard(player.playerScoreboard?.numericValues)) }}</strong>
+            <strong class="mono">{{ formatScoreboardSummary(player) }}</strong>
+          </div>
+          <div class="field">
+            <span>载具</span>
+            <strong class="mono">{{ formatVehicleInfo(player) }}</strong>
+          </div>
+          <div class="field">
+            <span>座位玩家</span>
+            <strong class="mono">{{ formatSeatsPlayers(player) }}</strong>
           </div>
           <div class="field field--wide">
             <span>坐标</span>
@@ -118,6 +130,17 @@
           <div class="field field--wide">
             <span>朝向</span>
             <strong class="mono">{{ formatVector(player.soldierInfo?.rotation) }}</strong>
+          </div>
+        </div>
+
+        <div class="scoreboard-grid">
+          <div
+            v-for="item in getScoreboardItems(player)"
+            :key="item.key"
+            class="scoreboard-item"
+          >
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value ?? "--" }}</strong>
           </div>
         </div>
 
@@ -346,12 +369,49 @@ function formatVector(vector: BzssCoreTrackedPlayerInfo["soldierInfo"]["position
   return `X=${vector.x ?? "?"}  Y=${vector.y ?? "?"}  Z=${vector.z ?? "?"}`;
 }
 
-function compactScoreboard(values: Array<number | null> | undefined) {
-  return (values ?? []).filter((value) => value != null) as number[];
-}
-
 function formatNumberList(values: number[]) {
   return values.length > 0 ? values.join(" / ") : "--";
+}
+
+function getScoreboardItems(player: BzssCoreTrackedPlayerInfo) {
+  const labeled = player.playerScoreboard?.labeledValues ?? [];
+  if (labeled.length > 0) return labeled;
+  const labels = [
+    ["dataLives", "Data lives"],
+    ["numKills", "Num kills"],
+    ["numDeaths", "Num death"],
+    ["numWoundeds", "Num woundeds"],
+    ["numWounds", "Num wounds"],
+    ["numTeamKills", "Num TK"],
+    ["healPoints", "Heal point"],
+    ["revivedPoints", "Revived points"],
+    ["teamworkScore", "Team work score"],
+    ["objectiveScore", "Objective score"],
+    ["combatScore", "Combat score"],
+  ];
+  const values = player.playerScoreboard?.numericValues ?? [];
+  return labels.map(([key, label], index) => ({
+    key,
+    label,
+    value: values[index] ?? null,
+  }));
+}
+
+function formatScoreboardSummary(player: BzssCoreTrackedPlayerInfo) {
+  const stats = player.playerScoreboard?.stats;
+  if (!stats) return formatNumberList((player.playerScoreboard?.numericValues ?? []).filter((value) => value != null) as number[]);
+  return `K ${stats.numKills ?? "--"} / D ${stats.numDeaths ?? "--"} / W ${stats.numWoundeds ?? "--"} / C ${stats.combatScore ?? "--"}`;
+}
+
+function formatVehicleInfo(player: BzssCoreTrackedPlayerInfo) {
+  const info = player.vehicleInfo;
+  if (!info?.vehicleType) return "--";
+  return info.healthText ? `${info.vehicleType} ${info.healthText}` : info.vehicleType;
+}
+
+function formatSeatsPlayers(player: BzssCoreTrackedPlayerInfo) {
+  const seats = player.seatsPlayers ?? [];
+  return seats.length > 0 ? seats.join(" / ") : "--";
 }
 
 onMounted(async () => {
@@ -385,7 +445,12 @@ onBeforeUnmount(() => {
 <style scoped>
 .bzss-page {
   position: relative;
+  height: 100%;
   min-height: 100%;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
   padding: 24px 24px 24px 284px;
   background:
     radial-gradient(circle at top left, rgba(34, 197, 94, 0.12), transparent 26%),
@@ -715,6 +780,36 @@ onBeforeUnmount(() => {
 
 .field strong {
   overflow-wrap: anywhere;
+}
+
+.scoreboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.scoreboard-item {
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.08);
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.scoreboard-item span {
+  display: block;
+  margin-bottom: 4px;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.scoreboard-item strong {
+  display: block;
+  color: #e2e8f0;
+  font-family: "Consolas", "SFMono-Regular", monospace;
+  font-size: 15px;
+  line-height: 1.1;
 }
 
 .raw-wrap {

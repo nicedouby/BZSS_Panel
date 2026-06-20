@@ -294,7 +294,7 @@ import { warnPlayer, kickPlayer } from "../app/squadManagementApi";
 import {
   adaptTeam,
   adaptPlayerDetail,
-  buildCombatStatsLookup,
+  buildCombatStatsLookupFromBzssCorePlayers,
   buildSquadLifecycleLookup,
   filterTeamsBySearch,
 } from "../utils/squad-admin-adapter";
@@ -618,21 +618,6 @@ const squadLifecycleRefetchInterval = computed(() => resolveRefreshDelay({
   hidden: pageHidden.value,
   surface: "pageSlow",
 }));
-const combatCacheQuery = useQuery({
-  queryKey: computed(() => ["combat-manager-cache", auth.authenticated, currentServerId.value]),
-  enabled: computed(() => auth.authenticated && Boolean(currentServerId.value)),
-  queryFn: async () => {
-    try {
-      return await apiGet<any>(`/api/combat-manager/cache?serverId=${encodeURIComponent(currentServerId.value)}`);
-    } catch {
-      return { snapshot: { events: [] } };
-    }
-  },
-  staleTime: 5_000,
-  refetchInterval: computed(() => combatCacheRefetchInterval.value),
-  refetchIntervalInBackground: true,
-  refetchOnWindowFocus: false,
-});
 const squadLifecycleQuery = useQuery({
   queryKey: computed(() => ["squad-lifecycle-current", auth.authenticated]),
   enabled: computed(() => auth.authenticated),
@@ -642,10 +627,7 @@ const squadLifecycleQuery = useQuery({
   refetchOnWindowFocus: false,
 });
 const squadLifecycleCurrent = computed(() => squadLifecycleQuery.data.value?.current ?? null);
-const combatCacheEvents = computed(() => Array.isArray(combatCacheQuery.data.value?.snapshot?.events)
-  ? combatCacheQuery.data.value.snapshot.events
-  : []);
-const combatStatsLookup = computed(() => buildCombatStatsLookup(combatCacheEvents.value));
+const combatStatsLookup = computed(() => buildCombatStatsLookupFromBzssCorePlayers(bzssCorePlayers.value));
 const battleLogOverviewQuery = useQuery({
   queryKey: computed(() => ["battle-log-overview", auth.authenticated, currentServerId.value]),
   enabled: computed(() => auth.authenticated && Boolean(currentServerId.value)),

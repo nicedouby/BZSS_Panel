@@ -9,6 +9,19 @@ const DEFAULT_WATCH_DEBOUNCE_MS = 0;
 const MARKER = "{BZSS-Marked}";
 const START_NEEDLE = Buffer.from("PlayerBaseInfo{", "utf16le");
 const MARKER_NEEDLE = Buffer.from(MARKER, "utf16le");
+const SCOREBOARD_FIELDS = [
+  ["dataLives", "Data lives"],
+  ["numKills", "Num kills"],
+  ["numDeaths", "Num death"],
+  ["numWoundeds", "Num woundeds"],
+  ["numWounds", "Num wounds"],
+  ["numTeamKills", "Num TK"],
+  ["healPoints", "Heal point"],
+  ["revivedPoints", "Revived points"],
+  ["teamworkScore", "Team work score"],
+  ["objectiveScore", "Objective score"],
+  ["combatScore", "Combat score"],
+];
 
 export function createBzssCoreMonitorModule({ core, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
@@ -487,13 +500,25 @@ export function parseBzssCorePlayerBlocks(text) {
     const scoreboardRaw = scoreboardBlock.content;
     const baseFields = splitTopLevelCsv(baseRaw);
     const baseMap = parseKeyValueFields(baseFields);
+    const seatsBlock = findNamedBlock(segment, "SeatsPlayers");
+    const vehicleInfo = parseVehicleInfo(segment);
     const scoreboardValues = splitTopLevelCsv(scoreboardRaw);
+    const scoreboardNumericValues = scoreboardValues.map(toFiniteNumber);
+    const scoreboardStats = parseScoreboardStats(scoreboardNumericValues);
     const soldierInfo = soldierRaw ? parseSoldierInfo(soldierRaw) : { summary: createEmptySoldierInfo() };
     players.push({
+      playerId: toFiniteNumber(baseMap.PlayerID ?? baseFields[0]),
       playerName: baseMap.PlayerName ?? baseFields[2] ?? "",
       playerGuid: baseMap.PlayerOnlineID ?? baseFields[1] ?? "",
       teamId: toFiniteNumber(baseMap.TeamID ?? baseMap.TeamId ?? baseFields[3]),
       squadId: toFiniteNumber(baseMap.SquadID ?? baseMap.SquadId ?? baseFields[4]),
+      isAdmin: toBooleanNumber(baseMap.IsAdmin),
+      isCommander: toBooleanNumber(baseMap.IsCommander),
+      ftIndex: toFiniteNumber(baseMap.FTIndex),
+      ftPosition: toFiniteNumber(baseMap.FTPosition),
+      claimedInfo: segment.includes("{NoExistingClaimedInfo}") ? "NoExistingClaimedInfo" : "",
+      seatsPlayers: seatsBlock ? splitTopLevelCsv(seatsBlock.content).filter(Boolean) : [],
+      vehicleInfo,
       playerBaseInfo: {
         raw: baseRaw,
         fields: baseFields,
@@ -503,7 +528,10 @@ export function parseBzssCorePlayerBlocks(text) {
       playerScoreboard: {
         raw: scoreboardRaw,
         values: scoreboardValues,
-        numericValues: scoreboardValues.map(toFiniteNumber),
+        numericValues: scoreboardNumericValues,
+        stats: scoreboardStats.stats,
+        labeledValues: scoreboardStats.labeledValues,
+        extraValues: scoreboardStats.extraValues,
       },
       rawText: source.slice(match.index, segmentEnd),
     });
@@ -620,6 +648,46 @@ function parseVectorBlock(text) {
   };
 }
 
+function parseVehicleInfo(text) {
+  const match = String(text ?? "").match(/\{VehicleType:([^{}]*?)Health:([^{}]*?)\}/);
+  if (!match) {
+    return {
+      raw: "",
+      vehicleType: "",
+      healthText: "",
+      health: null,
+      maxHealth: null,
+    };
+  }
+  const healthText = String(match[2] ?? "").trim();
+  const [health, maxHealth] = healthText.split("/").map(toFiniteNumber);
+  return {
+    raw: match[0],
+    vehicleType: String(match[1] ?? "").trim(),
+    healthText,
+    health: health ?? null,
+    maxHealth: maxHealth ?? null,
+  };
+}
+
+function parseScoreboardStats(values) {
+  const stats = {};
+  const labeledValues = SCOREBOARD_FIELDS.map(([key, label], index) => {
+    const value = values[index] ?? null;
+    stats[key] = value;
+    return {
+      key,
+      label,
+      value,
+    };
+  });
+  return {
+    stats,
+    labeledValues,
+    extraValues: values.slice(SCOREBOARD_FIELDS.length),
+  };
+}
+
 function buildPlayerIndex(players) {
   const index = {};
   for (const player of players) {
@@ -710,6 +778,14 @@ function toFiniteNumber(value) {
   if (value == null || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toBooleanNumber(value) {
+  if (value == null || value === "") return null;
+  const parsed = Number(value);
+  if (parsed === 1) return true;
+  if (parsed === 0) return false;
+  return null;
 }
 
 function normalizePositiveInteger(value, fallback) {
