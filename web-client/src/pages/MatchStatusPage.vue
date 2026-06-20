@@ -571,7 +571,10 @@ const ticketCommandTarget = computed(() => {
     port,
   };
 });
-const canEditTickets = computed(() => canRefresh.value && Boolean(ticketCommandTarget.value.host));
+const canEditTickets = computed(() => {
+  const hasPerm = auth.user?.isSuperAdmin || auth.user?.permissions?.includes("rcon.settickets");
+  return Boolean(hasPerm && ticketCommandTarget.value.host);
+});
 const ticketCommandTargetText = computed(() => {
   if (!ticketCommandTarget.value.host) return "未识别 sender 地址";
   return `${ticketCommandTarget.value.host}:${ticketCommandTarget.value.port}`;

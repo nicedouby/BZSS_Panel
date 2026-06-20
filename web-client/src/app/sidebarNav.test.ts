@@ -19,6 +19,7 @@ describe("sidebar navigation sections", () => {
       "/plugins/fair-team-balance",
       "/debug/fair-team-balance-lab",
     ]);
+    expect(sections.find((section) => section.key === "broadcast")?.items.map((item) => item.path)).toContain("/plugins/tactical-report");
     expect(sections.find((section) => section.key === "analytics")?.items.map((item) => item.path)).toContain("/plugins/server-info-statistics");
   });
 

@@ -29,6 +29,10 @@ describe("page registry", () => {
     expect(combatManager?.meta?.legacyRequiredPermissions).toEqual(["kill_manager.view"]);
     expect(combatManager?.meta?.layoutMode).toBe("workspace");
     expect(combatManager?.meta?.contentPadding).toBe("none");
+
+    const tacticalReport = buildPageRoutes().find((route) => route.name === "tactical-report");
+    expect(tacticalReport?.meta?.requiredPermission).toBe("plugin:tactical-report:view");
+    expect(tacticalReport?.meta?.legacyRequiredPermissions).toEqual([]);
   });
 
   it("shares the same static navigation source with the sidebar", () => {

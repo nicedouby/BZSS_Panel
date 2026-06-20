@@ -370,6 +370,7 @@ const rconPermissionOptions: PermissionOption[] = [
   { value: "rcon.kick", label: "踢出 Kick" },
   { value: "rcon.disband", label: "解散 Disband" },
   { value: "rcon.remove", label: "移出队伍 Remove" },
+  { value: "rcon.settickets", label: "修改票数 Tickets" },
 ];
 
 const pagePermissionLabels = new Map([
@@ -384,6 +385,10 @@ const pagePermissionLabels = new Map([
   ["squad_management.view", "小队管理 / 联办踢出"],
   ["infantry_combat_enhancer.view", "步战增强"],
   ["group_report.view", "抱团报备"],
+  ["plugin:tactical-report:view", "战术报点页面"],
+  ["plugin:tactical-report:update", "战术报点配置"],
+  ["plugin:tactical-report:logs", "战术报点日志"],
+  ["plugin:tactical-report:user-codes", "战术报点玩家自定义码"],
   ["server_stats.view", "服务器统计"],
   ["debug.udp_forwarder.view", "UDP 转发日志"],
   ["debug.match_snapshots.view", "快照录制"],

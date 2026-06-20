@@ -17,6 +17,8 @@ import FairTeamBalanceLabPage from "../pages/FairTeamBalanceLabPage.vue";
 import FairSquadGuardPage from "../pages/FairSquadGuardPage.vue";
 import StepwiseSquadPlaytimeGuardPage from "../pages/StepwiseSquadPlaytimeGuardPage.vue";
 import LianbanKickPage from "../pages/LianbanKickPage.vue";
+import TacticalReportPage from "../pages/TacticalReportPage.vue";
+import TacticalReportConfigPage from "../pages/TacticalReportConfigPage.vue";
 import SquadManagementPage from "../pages/SquadManagementPage.vue";
 import TeamBalancePage from "../pages/TeamBalancePage.vue";
 import TeamShufflePage from "../pages/TeamShufflePage.vue";
@@ -238,6 +240,28 @@ export const pageRegistry: PageDefinition[] = [
     category: "plugin",
     refreshPolicy: "polling",
     nav: { section: "players", label: "组队举报", icon: "🚩", order: 60 },
+    ...workspacePage,
+  },
+  {
+    name: "tactical-report",
+    path: "/plugins/tactical-report",
+    component: TacticalReportPage,
+    title: "战术报点",
+    category: "plugin",
+    refreshPolicy: "polling",
+    nav: { section: "broadcast", label: "战术报点", icon: "📻", order: 45 },
+    requiredPermission: "plugin:tactical-report:view",
+    ...workspacePage,
+  },
+  {
+    name: "tactical-report-config",
+    path: "/plugins/tactical-report/config",
+    component: TacticalReportConfigPage,
+    title: "战术报点配置",
+    category: "plugin",
+    refreshPolicy: "polling",
+    requiredPermission: "plugin:tactical-report:update",
+    nav: { section: "broadcast", label: "战术报点配置", icon: "📻", order: 46, hidden: true },
     ...workspacePage,
   },
   {

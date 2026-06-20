@@ -27,6 +27,7 @@ export const ALLOWED_MANUAL_RCON_PERMISSIONS = Object.freeze([
   "rcon.kick",
   "rcon.disband",
   "rcon.remove",
+  "rcon.settickets",
 ]);
 
 export function normalizeRconCommandName(commandText) {

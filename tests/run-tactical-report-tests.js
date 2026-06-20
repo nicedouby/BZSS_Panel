@@ -11,6 +11,7 @@ function createConfig(tempDir, overrides = {}) {
       if (pathText !== "plugins.tacticalReport") return fallback;
       return {
         enabled: true,
+        configFile: path.relative(process.cwd(), path.join(tempDir, "data", "tactical-report-config.json")),
         dataFile: path.relative(process.cwd(), path.join(tempDir, "data", "tactical-report-user-codes.json")),
         ...overrides,
       };
@@ -72,6 +73,25 @@ async function createHarness({ players = [], configOverrides = {} } = {}) {
       await fs.rm(dir, { recursive: true, force: true });
     },
   };
+}
+
+async function testConfigFileCreatedAndStateExposed() {
+  const harness = await createHarness();
+  try {
+    const configPath = path.join(harness.dir, "data", "tactical-report-config.json");
+    const stored = JSON.parse(await fs.readFile(configPath, "utf8"));
+    assert.equal(stored.triggerText, "ZSBD");
+    assert.equal(stored.rconPoolSize, 6);
+
+    const state = harness.plugin.api.getState();
+    assert.equal(state.config.rconPoolSize, 6);
+    assert.equal(Array.isArray(state.logs), true);
+    assert.equal(typeof harness.plugin.api.getLogs, "function");
+    assert.equal(typeof harness.plugin.api.getUserCodes, "function");
+    assert.equal(typeof harness.plugin.api.deleteUserCode, "function");
+  } finally {
+    await harness.stop();
+  }
 }
 
 async function testLowercaseTriggerAndSuccessNotice() {
@@ -192,9 +212,34 @@ async function testStateAndClearHistory() {
   }
 }
 
+async function testDeleteUserCode() {
+  const harness = await createHarness({
+    players: [{ name: "Alpha", steamID: "steam-1", teamID: 1 }],
+  });
+
+  try {
+    await harness.plugin.api.simulateChatMessage({
+      id: "evt-6",
+      message: "zsbd /set /10 敌方坦克",
+      steamID: "steam-1",
+      playerName: "Alpha",
+      channel: "all",
+    });
+
+    const result = harness.plugin.api.deleteUserCode("steam-1", "/10");
+    assert.equal(result.ok, true);
+    const state = harness.plugin.api.getState();
+    assert.equal(state.userCodes["steam-1"], undefined);
+  } finally {
+    await harness.stop();
+  }
+}
+
 await testLowercaseTriggerAndSuccessNotice();
 await testHelpBroadcastIncludesCodeList();
 await testSetAndReloadPersonalCode();
 await testStateAndClearHistory();
+await testConfigFileCreatedAndStateExposed();
+await testDeleteUserCode();
 
 console.log("tactical report tests passed");

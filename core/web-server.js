@@ -2326,6 +2326,34 @@ export class WebServer {
           data: pluginApi.getState?.()?.recentRecords?.slice(0, limit) ?? [],
         });
       }
+
+      if (url.pathname === "/api/plugins/tactical-report/logs" && req.method === "GET") {
+        const limit = Number(url.searchParams.get("limit") ?? "100") || 100;
+        const logs = pluginApi.getLogs?.() ?? pluginApi.getState?.()?.history ?? [];
+        return this.json(res, 200, {
+          ok: true,
+          data: logs.slice(0, limit),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/tactical-report/user-codes" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getUserCodes?.() ?? pluginApi.getState?.()?.userCodes ?? {},
+        });
+      }
+
+      const deleteUserCodeMatch = url.pathname.match(/^\/api\/plugins\/tactical-report\/user-codes\/([^/]+)\/([^/]+)$/);
+      if (deleteUserCodeMatch && req.method === "DELETE") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.deleteUserCode?.(
+            decodeURIComponent(deleteUserCodeMatch[1]),
+            decodeURIComponent(deleteUserCodeMatch[2]),
+          ) ?? { ok: false, error: "Unavailable" },
+        });
+      }
     }
 
     if (url.pathname.startsWith("/api/plugins/stepwise-squad-playtime-guard")) {
@@ -3001,7 +3029,12 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/remote-telemetry/write-tickets" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      const hasPerm = this.core.authManager?.hasPermission
+        ? this.core.authManager.hasPermission(user, "rcon.settickets")
+        : this.core.authManager?.hasEverything?.(user);
+      if (!hasPerm) {
+        return this.json(res, 403, { error: "Forbidden", message: "rcon.settickets permission is required." });
+      }
       const api = this.modules.remoteTelemetry;
       if (!api?.writeTickets) {
         return this.json(res, 404, {

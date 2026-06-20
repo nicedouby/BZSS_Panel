@@ -5,11 +5,13 @@ import path from "node:path";
 
 const PLUGIN_ID = "plugin.tacticalReport";
 const CONFIG_KEY = "plugins.tacticalReport";
+const DEFAULT_CONFIG_FILE = "data/tactical-report-config.json";
 const DEFAULT_DATA_FILE = "data/tactical-report-user-codes.json";
 const DEFAULT_TRIGGER = "ZSBD";
 const DEFAULT_PLAYER_COOLDOWN_SECONDS = 10;
 const DEFAULT_HELP_GLOBAL_COOLDOWN_SECONDS = 30;
 const DEFAULT_MAX_MESSAGE_LENGTH = 120;
+const DEFAULT_RCON_POOL_SIZE = 6;
 const DEFAULT_RECENT_LIMIT = 500;
 
 const DEFAULT_CODES = Object.freeze({
@@ -41,6 +43,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   const handledEventIds = new Set();
   const state = {
     enabled: runtimeConfig.enabled,
+    configFile: runtimeConfig.configFile,
     triggerText: runtimeConfig.triggerText,
     triggerCount: 0,
     reportCount: 0,
@@ -519,6 +522,22 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     await fs.writeFile(filePath, `${JSON.stringify(state.userCodes, null, 2)}\n`, "utf8");
   }
 
+  async function persistConfig() {
+    const filePath = path.resolve(process.cwd(), runtimeConfig.configFile);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    const payload = {
+      enabled: runtimeConfig.enabled,
+      triggerText: runtimeConfig.triggerText,
+      playerCooldownSeconds: runtimeConfig.playerCooldownSeconds,
+      helpGlobalCooldownSeconds: runtimeConfig.helpGlobalCooldownSeconds,
+      maxMessageLength: runtimeConfig.maxMessageLength,
+      rconPoolSize: runtimeConfig.rconPoolSize,
+      dataFile: runtimeConfig.dataFile,
+      defaultCodes: runtimeConfig.defaultCodes,
+    };
+    await fs.writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  }
+
   async function loadUserCodes() {
     const filePath = path.resolve(process.cwd(), runtimeConfig.dataFile);
     try {
@@ -529,6 +548,28 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         pluginLogger?.warn?.(`[TacticalReport] failed to load user codes: ${error?.message ?? error}`);
       }
       state.userCodes = {};
+    }
+  }
+
+  async function loadConfigFile() {
+    const filePath = path.resolve(process.cwd(), runtimeConfig.configFile);
+    try {
+      const text = await fs.readFile(filePath, "utf8");
+      const parsed = JSON.parse(text);
+      const next = normalizeRuntimeConfig({
+        ...runtimeConfig,
+        ...parsed,
+        configFile: runtimeConfig.configFile,
+        dataFile: normalizeText(parsed?.dataFile ?? runtimeConfig.dataFile) || runtimeConfig.dataFile,
+      });
+      runtimeConfig = next;
+      state.enabled = runtimeConfig.enabled;
+      state.triggerText = runtimeConfig.triggerText;
+    } catch (error) {
+      if (error?.code !== "ENOENT") {
+        pluginLogger?.warn?.(`[TacticalReport] failed to load config: ${error?.message ?? error}`);
+      }
+      await persistConfig();
     }
   }
 
@@ -571,7 +612,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       playerCooldownSeconds: Math.max(0, Number(raw.playerCooldownSeconds ?? DEFAULT_PLAYER_COOLDOWN_SECONDS) || DEFAULT_PLAYER_COOLDOWN_SECONDS),
       helpGlobalCooldownSeconds: Math.max(0, Number(raw.helpGlobalCooldownSeconds ?? DEFAULT_HELP_GLOBAL_COOLDOWN_SECONDS) || DEFAULT_HELP_GLOBAL_COOLDOWN_SECONDS),
       maxMessageLength: Math.max(20, Number(raw.maxMessageLength ?? DEFAULT_MAX_MESSAGE_LENGTH) || DEFAULT_MAX_MESSAGE_LENGTH),
+      rconPoolSize: Math.max(1, Number(raw.rconPoolSize ?? DEFAULT_RCON_POOL_SIZE) || DEFAULT_RCON_POOL_SIZE),
       dataFile: normalizeText(raw.dataFile ?? DEFAULT_DATA_FILE) || DEFAULT_DATA_FILE,
+      configFile: normalizeText(raw.configFile ?? DEFAULT_CONFIG_FILE) || DEFAULT_CONFIG_FILE,
       defaultCodes: normalizeDefaultCodes(raw.defaultCodes),
     };
   }
@@ -584,6 +627,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     };
     runtimeConfig = normalizeRuntimeConfig(merged);
     state.enabled = runtimeConfig.enabled;
+    state.triggerText = runtimeConfig.triggerText;
+    void persistConfig();
     return getState();
   }
 
@@ -607,6 +652,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       lastHelpAt: state.lastHelpAt,
       config: getConfig(),
       userCodes: cloneValue(state.userCodes),
+      logs: [...state.history].reverse(),
       history: [...state.history].reverse(),
       recentRecords: [...state.recentRecords].reverse(),
     };
@@ -623,7 +669,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       playerCooldownSeconds: Math.max(0, Number(raw.playerCooldownSeconds ?? DEFAULT_PLAYER_COOLDOWN_SECONDS) || DEFAULT_PLAYER_COOLDOWN_SECONDS),
       helpGlobalCooldownSeconds: Math.max(0, Number(raw.helpGlobalCooldownSeconds ?? DEFAULT_HELP_GLOBAL_COOLDOWN_SECONDS) || DEFAULT_HELP_GLOBAL_COOLDOWN_SECONDS),
       maxMessageLength: Math.max(20, Number(raw.maxMessageLength ?? DEFAULT_MAX_MESSAGE_LENGTH) || DEFAULT_MAX_MESSAGE_LENGTH),
+      rconPoolSize: Math.max(1, Number(raw.rconPoolSize ?? DEFAULT_RCON_POOL_SIZE) || DEFAULT_RCON_POOL_SIZE),
       dataFile: normalizeText(raw.dataFile ?? DEFAULT_DATA_FILE) || DEFAULT_DATA_FILE,
+      configFile: normalizeText(raw.configFile ?? DEFAULT_CONFIG_FILE) || DEFAULT_CONFIG_FILE,
       defaultCodes: normalizeDefaultCodes(raw.defaultCodes),
     };
   }
@@ -656,6 +704,33 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       getConfig,
       updateConfig,
       clearHistory,
+      getLogs() {
+        return [...state.history].reverse();
+      },
+      getUserCodes() {
+        return cloneValue(state.userCodes);
+      },
+      deleteUserCode(steamId, code) {
+        const sid = normalizeSteamId(steamId);
+        const normalizedCode = normalizeCodeKey(code);
+        if (!sid || !/^\/\d+$/.test(normalizedCode)) {
+          return { ok: false, error: "InvalidInput" };
+        }
+        if (!state.userCodes[sid]?.[normalizedCode]) {
+          return { ok: false, error: "NotFound" };
+        }
+        delete state.userCodes[sid][normalizedCode];
+        if (!Object.keys(state.userCodes[sid]).length) {
+          delete state.userCodes[sid];
+        }
+        void persistUserCodes();
+        pushHistory({
+          kind: "user_code_deleted",
+          steamId: sid,
+          code: normalizedCode,
+        });
+        return { ok: true };
+      },
       async reloadUserCodes() {
         await loadUserCodes();
         return getState();
@@ -669,6 +744,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     },
 
     async init() {
+      await loadConfigFile();
       await loadUserCodes();
     },
 

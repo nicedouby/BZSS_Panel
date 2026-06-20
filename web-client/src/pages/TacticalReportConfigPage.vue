@@ -20,29 +20,37 @@
       <StatGrid :items="summaryItems" :loading="loading && !state" />
     </template>
 
-    <div class="config-layout">
-      <PageCard title="基本配置" description="修改 zsbd /0-/9 的默认内容，以及个人快捷码规则。">
+    <div class="config-grid">
+      <PageCard title="基础设置" description="插件启用、触发词、冷却与长度控制。">
         <div class="field-grid">
+          <label class="field">
+            <span>启用</span>
+            <input v-model="draft.enabled" type="checkbox" />
+          </label>
           <label class="field">
             <span>触发词</span>
             <input v-model.trim="draft.triggerText" class="input" type="text" />
           </label>
           <label class="field">
-            <span>个人冷却(秒)</span>
+            <span>普通报点冷却(秒)</span>
             <input v-model.number="draft.playerCooldownSeconds" class="input" type="number" min="0" />
           </label>
           <label class="field">
-            <span>/help 冷却(秒)</span>
+            <span>/help 全局冷却(秒)</span>
             <input v-model.number="draft.helpGlobalCooldownSeconds" class="input" type="number" min="0" />
           </label>
           <label class="field">
-            <span>消息最大长度</span>
+            <span>最大消息长度</span>
             <input v-model.number="draft.maxMessageLength" class="input" type="number" min="20" />
+          </label>
+          <label class="field">
+            <span>RCON 并发数量</span>
+            <input v-model.number="draft.rconPoolSize" class="input" type="number" min="1" />
           </label>
         </div>
       </PageCard>
 
-      <PageCard title="预设内容" description="zsbd /0-/9 的对应内容。">
+      <PageCard title="默认快捷报点" description="/1 到 /9 的默认内容，可直接编辑。">
         <div class="codes-grid">
           <label v-for="code in codeKeys" :key="code" class="code-field">
             <span>{{ code }}</span>
@@ -52,14 +60,14 @@
       </PageCard>
     </div>
 
-    <PageCard title="帮助预览" description="这里展示最终 /help 会广播的内容。">
+    <PageCard title="帮助预览" description="当前 /help 会广播的完整内容。">
       <pre class="preview">{{ helpPreview }}</pre>
     </PageCard>
   </PluginPageShell>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 
 import { apiGet, apiPost } from "../app/apiClient";
 import PluginPageShell from "../components/domain/plugin/PluginPageShell.vue";
@@ -75,8 +83,12 @@ type TacticalReportConfig = {
   playerCooldownSeconds: number;
   helpGlobalCooldownSeconds: number;
   maxMessageLength: number;
+  rconPoolSize: number;
   defaultCodes: Record<string, string>;
 };
+
+const codeKeys = ["/1", "/2", "/3", "/4", "/5", "/6", "/7", "/8", "/9"];
+const saving = ref(false);
 
 const { data: state, loading, refreshing, error, stale, refresh } = usePollingResource<TacticalReportConfig | null>({
   fetcher: async () => {
@@ -96,20 +108,18 @@ const draft = reactive<TacticalReportConfig>({
   playerCooldownSeconds: 10,
   helpGlobalCooldownSeconds: 30,
   maxMessageLength: 120,
-  defaultCodes: {},
+  rconPoolSize: 6,
+  defaultCodes: Object.fromEntries(codeKeys.map((code) => [code, ""])),
 });
-
-const codeKeys = ["/0", "/1", "/2", "/3", "/4", "/5", "/6", "/7", "/8", "/9"];
-const saving = computed(() => false);
 
 const statusLabel = computed(() => (state.value?.enabled ? "运行中" : "已停用"));
 const statusTone = computed<StatusTone>(() => (state.value?.enabled ? "success" : "warning"));
 
 const summaryItems = computed<StatItem[]>(() => [
-  { key: "trigger", label: "触发词", value: draft.triggerText, description: "支持小写 zsbd", tone: "info" },
-  { key: "player", label: "个人冷却", value: `${draft.playerCooldownSeconds}s`, description: "发送者自己的报点冷却", tone: "neutral" },
-  { key: "help", label: "/help 冷却", value: `${draft.helpGlobalCooldownSeconds}s`, description: "全服帮助广播冷却", tone: "neutral" },
-  { key: "len", label: "消息长度", value: draft.maxMessageLength, description: "过长会自动分段", tone: "info" },
+  { key: "enabled", label: "启用状态", value: draft.enabled ? "启用" : "停用", description: "保存后立即生效", tone: draft.enabled ? "success" : "warning" },
+  { key: "trigger", label: "触发词", value: draft.triggerText, description: "默认 ZSBD", tone: "info" },
+  { key: "cooldown", label: "玩家冷却", value: `${draft.playerCooldownSeconds}s`, description: "/help 冷却独立计算", tone: "neutral" },
+  { key: "len", label: "消息长度", value: draft.maxMessageLength, description: "超长内容会自动截断", tone: "info" },
 ]);
 
 watch(state, (next) => {
@@ -119,7 +129,11 @@ watch(state, (next) => {
   draft.playerCooldownSeconds = next.playerCooldownSeconds ?? 10;
   draft.helpGlobalCooldownSeconds = next.helpGlobalCooldownSeconds ?? 30;
   draft.maxMessageLength = next.maxMessageLength ?? 120;
-  draft.defaultCodes = { ...next.defaultCodes };
+  draft.rconPoolSize = next.rconPoolSize ?? 6;
+  draft.defaultCodes = {
+    ...Object.fromEntries(codeKeys.map((code) => [code, ""])),
+    ...(next.defaultCodes ?? {}),
+  };
 }, { immediate: true });
 
 const helpPreview = computed(() => {
@@ -127,9 +141,9 @@ const helpPreview = computed(() => {
     "战术报点使用指南：",
     `触发词：${draft.triggerText}`,
     "zsbd 内容 发送战术报点。",
-    "zsbd /0-/9 使用预设快捷报点。",
+    "zsbd /0-/9 使用默认快捷报点。",
     "zsbd /set /10 内容 设置个人快捷报点。",
-    "预设快捷报点：",
+    "默认快捷报点：",
   ];
   for (const code of codeKeys) {
     lines.push(`${code} ${draft.defaultCodes[code] ?? ""}`.trim());
@@ -138,20 +152,26 @@ const helpPreview = computed(() => {
 });
 
 async function saveConfig() {
-  await apiPost("/api/plugins/tactical-report/config", {
-    enabled: draft.enabled,
-    triggerText: draft.triggerText,
-    playerCooldownSeconds: draft.playerCooldownSeconds,
-    helpGlobalCooldownSeconds: draft.helpGlobalCooldownSeconds,
-    maxMessageLength: draft.maxMessageLength,
-    defaultCodes: draft.defaultCodes,
-  });
-  await refresh();
+  saving.value = true;
+  try {
+    await apiPost("/api/plugins/tactical-report/config", {
+      enabled: draft.enabled,
+      triggerText: draft.triggerText,
+      playerCooldownSeconds: draft.playerCooldownSeconds,
+      helpGlobalCooldownSeconds: draft.helpGlobalCooldownSeconds,
+      maxMessageLength: draft.maxMessageLength,
+      rconPoolSize: draft.rconPoolSize,
+      defaultCodes: draft.defaultCodes,
+    });
+    await refresh();
+  } finally {
+    saving.value = false;
+  }
 }
 </script>
 
 <style scoped>
-.config-layout {
+.config-grid {
   display: grid;
   grid-template-columns: 1fr 1.1fr;
   gap: 16px;
@@ -170,5 +190,12 @@ async function saveConfig() {
 
 .preview {
   white-space: pre-wrap;
+}
+
+@media (max-width: 1100px) {
+  .config-grid,
+  .codes-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

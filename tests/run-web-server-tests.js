@@ -1973,6 +1973,74 @@ async function testRemoteTelemetryWriteTicketsRouteDelegatesToModule() {
   assert.equal(body.response.t2, 250);
 }
 
+async function testRemoteTelemetryWriteTicketsRouteEnforcesPermission() {
+  let receivedPayload = null;
+  const createTestServer = (permissions = [], isSuperAdmin = false) => {
+    return createServer({
+      core: {
+        authManager: {
+          getUserFromRequest() {
+            return { username: "operator", role: isSuperAdmin ? "SuperAdmin" : "Admin", permissions };
+          },
+          hasEverything(user) {
+            return Boolean(user?.role === "SuperAdmin");
+          },
+          hasPermission(user, permission) {
+            if (!user) return false;
+            if (user.role === "SuperAdmin") return true;
+            return (user.permissions || []).includes(permission);
+          },
+        },
+      },
+      modules: {
+        remoteTelemetry: {
+          async writeTickets(payload) {
+            receivedPayload = payload;
+            return {
+              ok: true,
+              target: { host: "127.0.0.1", port: 12765 },
+              request: { action: "set_tickets", t1: 300, t2: 250 },
+              response: { ok: true, type: "ticket_write", pid: 2952, t1: 300, t2: 250 },
+            };
+          },
+        },
+      },
+    });
+  };
+
+  // Case 1: user has rcon.settickets permission but not SuperAdmin -> 200
+  {
+    const server = createTestServer(["rcon.settickets"]);
+    const recorder = createRecorder();
+    const req = Readable.from([JSON.stringify({ t1: 300, t2: 250 })]);
+    req.method = "POST";
+    req.url = "/api/remote-telemetry/write-tickets";
+    req.headers = { host: "localhost" };
+    req.socket = {};
+    await server.handleRequest(req, recorder.res);
+
+    assert.equal(recorder.state.status, 200);
+    const body = JSON.parse(recorder.state.body);
+    assert.equal(body.ok, true);
+  }
+
+  // Case 2: user lacks rcon.settickets permission -> 403
+  {
+    const server = createTestServer(["rcon.kick"]);
+    const recorder = createRecorder();
+    const req = Readable.from([JSON.stringify({ t1: 300, t2: 250 })]);
+    req.method = "POST";
+    req.url = "/api/remote-telemetry/write-tickets";
+    req.headers = { host: "localhost" };
+    req.socket = {};
+    await server.handleRequest(req, recorder.res);
+
+    assert.equal(recorder.state.status, 403);
+    const body = JSON.parse(recorder.state.body);
+    assert.equal(body.error, "Forbidden");
+  }
+}
+
 async function testMatchRefreshRoutesDelegateToMatchState() {
   const refreshCalls = [];
   const matchState = {
@@ -3131,6 +3199,7 @@ await testSnapshotAllDoesNotTriggerSlowTasks();
 await testMatchSnapshotRouteReusesPrebuiltSnapshot();
 await testRemoteTelemetryStateRouteUsesModuleState();
 await testRemoteTelemetryWriteTicketsRouteDelegatesToModule();
+await testRemoteTelemetryWriteTicketsRouteEnforcesPermission();
 await testMatchRefreshRoutesDelegateToMatchState();
 await testSquadLifecycleRouteReturnsCurrentSnapshot();
 await testSquadManagementRoutesExposeStateAndMutations();

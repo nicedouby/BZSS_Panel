@@ -197,6 +197,7 @@ function resolveSection(route: string, page: RegisteredWebPage): NavSectionKey {
   if (route === "/tb" || route.includes("fair-team-balance") || id.includes("team-balance")) return "balance";
   if (route === "/player-database" || route === "/reserve-slots" || route === "/black-edge-privilege" || route === "/player-session-records" || route === "/squad-management") return "players";
   if (route.includes("group-report") || route.includes("fair-squad") || route.includes("stepwise-squad") || route.includes("lianban")) return "players";
+  if (route.includes("tactical-report")) return "broadcast";
   if (route.includes("squad-name-classifier") || id.includes("player") || id.includes("squad")) return "players";
   if (route === "/combat-manager" || route === "/battle-log" || route === "/combat-log" || route === "/combat-clean") return "combat";
   if (route.includes("infantry-combat") || route.includes("weapon") || route.includes("kill") || id.includes("combat") || id.includes("battle")) return "combat";
