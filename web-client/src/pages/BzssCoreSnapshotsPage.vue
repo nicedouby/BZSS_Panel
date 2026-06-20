@@ -1,5 +1,14 @@
 <template>
   <section class="bzss-page">
+    <aside class="sample-debug-window" aria-label="样本采样率调试窗口">
+      <span class="sample-debug-title">样本采样率</span>
+      <strong class="sample-debug-rate">{{ sampleRateLabel }}</strong>
+      <div class="sample-debug-meta">
+        <span>{{ streamLabel }}</span>
+        <span>{{ sampleCountLabel }}</span>
+        <span>{{ lastSampleLabel }}</span>
+      </div>
+    </aside>
     <header class="page-hero">
       <div>
         <h1>BZSS-Core 玩家快照</h1>
@@ -50,6 +59,25 @@
         <input v-model="showRaw" type="checkbox" />
         <span>显示原始块</span>
       </label>
+    </section>
+
+    <section class="raw-data-panel">
+      <header class="raw-data-head">
+        <div>
+          <h2>PBI.sav 原始数据</h2>
+          <p>{{ rawDataStatusLabel }}</p>
+        </div>
+        <button type="button" class="raw-refresh-btn" :disabled="rawLoading" @click="fetchRawData">
+          {{ rawLoading ? "读取中..." : "读取原始数据" }}
+        </button>
+      </header>
+      <div v-if="rawError" class="raw-error">{{ rawError }}</div>
+      <div class="raw-data-meta">
+        <span>路径：{{ rawData?.resolvedPath || payload?.state?.resolvedPath || "--" }}</span>
+        <span>字符：{{ rawData?.rawTextLength ?? payload?.state?.rawTextLength ?? 0 }}</span>
+        <span>标记：{{ rawData?.markerSeen ? "已看到 BZSS-Marked" : "未完成 / 未看到" }}</span>
+      </div>
+      <pre class="raw-data-block">{{ rawDataText }}</pre>
     </section>
 
     <section v-if="filteredPlayers.length > 0" class="player-list">
@@ -109,18 +137,61 @@
 
 <script setup lang="ts">
 import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from "vue";
-import { fetchBzssCorePlayerInfoList, type BzssCorePlayerInfoResponse, type BzssCoreTrackedPlayerInfo } from "../app/bzssCoreApi";
+import {
+  fetchBzssCoreRawData,
+  fetchBzssCorePlayerInfoList,
+  streamBzssCorePlayerInfoList,
+  type BzssCorePlayerInfoResponse,
+  type BzssCoreRawDataResponse,
+  type BzssCoreTrackedPlayerInfo,
+} from "../app/bzssCoreApi";
 import { canAutoRefreshNow } from "../composables/useAutoRefreshGate";
 
 const payload = ref<BzssCorePlayerInfoResponse | null>(null);
+const rawData = ref<BzssCoreRawDataResponse | null>(null);
 const loading = ref(false);
+const rawLoading = ref(false);
 const error = ref("");
+const rawError = ref("");
 const query = ref("");
 const showRaw = ref(false);
 const active = ref(true);
+const sampleClock = ref(Date.now());
+const sampleEvents = ref<number[]>([]);
+const isStreaming = ref(false);
 let timer: number | null = null;
+let closeStream: (() => void) | null = null;
+let sampleClockTimer: number | null = null;
 
 const players = computed(() => payload.value?.players ?? []);
+const rawDataText = computed(() => {
+  const text = rawData.value?.rawText ?? "";
+  if (text) return text;
+  if (rawLoading.value) return "正在读取 PBI.sav 原始数据...";
+  return "暂无可显示的 PBI.sav 原始数据。";
+});
+const rawDataStatusLabel = computed(() => {
+  const data = rawData.value;
+  if (!data) return "直接显示从 PBI.sav 中提取到的 PlayerBaseInfo / SoldierInfo / PlayerScoreboard 原始块。";
+  if (data.lastError) return data.lastError;
+  if (!data.exists) return "PBI.sav 文件不存在或当前路径无法访问。";
+  if (!data.rawText) return "已读取文件，但还没有找到可显示的 BZSS-Core 原始数据块。";
+  return `最后读取 ${formatDateTime(data.rawTextUpdatedAt || data.lastReadAt)}，共 ${data.playerCount} 名玩家。`;
+});
+const recentSampleEvents = computed(() => {
+  const now = sampleClock.value;
+  return sampleEvents.value.filter((timestamp) => now - timestamp <= 1000);
+});
+const sampleRateLabel = computed(() => `${formatDecimal(recentSampleEvents.value.length)} / s`);
+const sampleCountLabel = computed(() => `${recentSampleEvents.value.length} 次 / 1s`);
+const lastSampleLabel = computed(() => {
+  const last = sampleEvents.value[sampleEvents.value.length - 1];
+  if (!last) return "暂无样本";
+  const age = Math.max(0, sampleClock.value - last);
+  if (age < 1000) return `${age} ms 前`;
+  return `${formatDecimal(age / 1000)} s 前`;
+});
+const streamLabel = computed(() => (isStreaming.value ? "SSE 实时流" : "轮询兜底"));
 const filteredPlayers = computed(() => {
   const needle = query.value.trim().toLowerCase();
   if (!needle) return players.value;
@@ -159,7 +230,12 @@ async function fetchData() {
   loading.value = true;
   error.value = "";
   try {
-    payload.value = await fetchBzssCorePlayerInfoList();
+    const [nextPayload] = await Promise.all([
+      fetchBzssCorePlayerInfoList(),
+      fetchRawData(),
+    ]);
+    payload.value = nextPayload;
+    recordSample();
   } catch (err: any) {
     error.value = err?.message ?? "加载 BZSS-Core 玩家快照失败。";
   } finally {
@@ -167,14 +243,34 @@ async function fetchData() {
   }
 }
 
+async function fetchRawData() {
+  rawLoading.value = true;
+  rawError.value = "";
+  try {
+    rawData.value = await fetchBzssCoreRawData();
+  } catch (err: any) {
+    rawError.value = err?.message ?? "读取 PBI.sav 原始数据失败。";
+  } finally {
+    rawLoading.value = false;
+  }
+}
+
 function scheduleRefresh() {
   clearRefresh();
   timer = window.setTimeout(async () => {
-    if (active.value && canAutoRefreshNow()) {
+    if (active.value && canAutoRefreshNow() && !closeStream) {
       await fetchData();
     }
     scheduleRefresh();
-  }, 100);
+  }, closeStream ? 1000 : 100);
+}
+
+function recordSample() {
+  const now = Date.now();
+  sampleEvents.value = [...sampleEvents.value, now]
+    .filter((timestamp) => now - timestamp <= 5000)
+    .slice(-120);
+  sampleClock.value = now;
 }
 
 function clearRefresh() {
@@ -182,6 +278,35 @@ function clearRefresh() {
     window.clearTimeout(timer);
     timer = null;
   }
+}
+
+function startStream() {
+  if (closeStream || typeof EventSource === "undefined") return;
+  isStreaming.value = true;
+  closeStream = streamBzssCorePlayerInfoList(
+    (data) => {
+      if (!active.value) return;
+      payload.value = data;
+      recordSample();
+      error.value = "";
+      loading.value = false;
+    },
+    (_err, source) => {
+      if (!active.value) return;
+      if (source.readyState === EventSource.CLOSED) {
+        error.value = "BZSS-Core 实时连接中断，正在使用轮询兜底。";
+        stopStream();
+        scheduleRefresh();
+      }
+    },
+  );
+}
+
+function stopStream() {
+  if (!closeStream) return;
+  closeStream();
+  closeStream = null;
+  isStreaming.value = false;
 }
 
 function formatDateTime(value?: string | null) {
@@ -198,6 +323,24 @@ function formatBytes(value: number) {
   return `${(value / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+function formatDecimal(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function startSampleClock() {
+  if (sampleClockTimer != null) return;
+  sampleClockTimer = window.setInterval(() => {
+    sampleClock.value = Date.now();
+  }, 250);
+}
+
+function stopSampleClock() {
+  if (sampleClockTimer != null) {
+    window.clearInterval(sampleClockTimer);
+    sampleClockTimer = null;
+  }
+}
+
 function formatVector(vector: BzssCoreTrackedPlayerInfo["soldierInfo"]["position"]) {
   if (!vector) return "--";
   return `X=${vector.x ?? "?"}  Y=${vector.y ?? "?"}  Z=${vector.z ?? "?"}`;
@@ -212,35 +355,81 @@ function formatNumberList(values: number[]) {
 }
 
 onMounted(async () => {
+  startSampleClock();
   await fetchData();
+  startStream();
   scheduleRefresh();
 });
 
 onActivated(() => {
   active.value = true;
+  startStream();
   scheduleRefresh();
 });
 
 onDeactivated(() => {
   active.value = false;
+  stopStream();
   clearRefresh();
+  stopSampleClock();
 });
 
 onBeforeUnmount(() => {
   active.value = false;
+  stopStream();
   clearRefresh();
+  stopSampleClock();
 });
 </script>
 
 <style scoped>
 .bzss-page {
+  position: relative;
   min-height: 100%;
-  padding: 24px;
+  padding: 24px 24px 24px 284px;
   background:
     radial-gradient(circle at top left, rgba(34, 197, 94, 0.12), transparent 26%),
     radial-gradient(circle at top right, rgba(14, 165, 233, 0.14), transparent 28%),
     linear-gradient(180deg, #08111f 0%, #0f172a 100%);
   color: #e2e8f0;
+}
+
+.sample-debug-window {
+  position: fixed;
+  top: 18px;
+  left: 18px;
+  z-index: 40;
+  width: 232px;
+  padding: 12px 12px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.9);
+  box-shadow: 0 18px 36px rgba(2, 6, 23, 0.32);
+  backdrop-filter: blur(12px);
+}
+
+.sample-debug-title {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.sample-debug-rate {
+  display: block;
+  font-size: 28px;
+  line-height: 1;
+  color: #86efac;
+}
+
+.sample-debug-meta {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #cbd5e1;
 }
 
 .page-hero {
@@ -366,6 +555,87 @@ onBeforeUnmount(() => {
   color: #cbd5e1;
 }
 
+.raw-data-panel {
+  margin-bottom: 16px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  background: rgba(2, 6, 23, 0.72);
+}
+
+.raw-data-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.raw-data-head h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.raw-data-head p {
+  margin: 0;
+  color: #94a3b8;
+}
+
+.raw-refresh-btn {
+  flex: 0 0 auto;
+  border: 1px solid rgba(125, 211, 252, 0.28);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-weight: 700;
+  color: #dff6ff;
+  background: rgba(14, 165, 233, 0.16);
+  cursor: pointer;
+}
+
+.raw-refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.raw-error {
+  margin-bottom: 10px;
+  color: #fecaca;
+}
+
+.raw-data-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.raw-data-meta span {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.raw-data-block {
+  max-height: 460px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(2, 6, 23, 0.9);
+  color: #d1fae5;
+  font-family: "Consolas", "SFMono-Regular", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .player-list {
   display: grid;
   gap: 14px;
@@ -488,7 +758,14 @@ onBeforeUnmount(() => {
 
 @media (max-width: 780px) {
   .bzss-page {
-    padding: 16px;
+    padding: 232px 16px 16px;
+  }
+
+  .sample-debug-window {
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    width: auto;
   }
 
   .page-hero,

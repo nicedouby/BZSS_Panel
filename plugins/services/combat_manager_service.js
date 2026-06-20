@@ -240,6 +240,7 @@ export function createCombatManagerService({ core, modules, config, logger }) {
 
     return normalized;
   }
+  normalizeCombatEventRef = normalizeCombatEvent;
 
   function emitCombatManagerUpdate(payload = {}) {
     const snapshot = getCombatManagerSnapshot(payload.serverId ?? "");
@@ -612,7 +613,7 @@ function selectPrimaryEvents(filter = {}) {
 
   if (playerKeys.length) {
     events = events.filter((event) => {
-      const normalized = normalizeCombatEvent(event, detectSource(event));
+      const normalized = normalizeCombatEventRef(event, detectSource(event));
       return playerKeys.some((key) => {
         const attacker = normalized.attacker;
         const victim = normalized.victim;
@@ -706,6 +707,7 @@ function selectPrimaryEventsFromModules(filter = {}) {
 }
 
 var modulesRef = {};
+var normalizeCombatEventRef = (record) => record;
 
 export function bindCombatManagerModules(modules = {}) {
   modulesRef = modules ?? {};

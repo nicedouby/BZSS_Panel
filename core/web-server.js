@@ -1580,6 +1580,57 @@ export class WebServer {
       }));
     }
 
+    if (url.pathname === "/api/bzss-core/player-info/raw" && req.method === "GET") {
+      if (!this.canUseBzssCoreTool(user)) {
+        return this.json(res, 403, {
+          error: "Forbidden",
+          message: "bzss_core.use permission is required.",
+        });
+      }
+      return this.json(res, 200, this.getBzssCorePlayerInfoRaw());
+    }
+
+    if (url.pathname === "/api/bzss-core/player-info/stream" && req.method === "GET") {
+      if (!this.canUseBzssCoreTool(user)) {
+        return this.json(res, 403, {
+          error: "Forbidden",
+          message: "bzss_core.use permission is required.",
+        });
+      }
+
+      req.socket.setTimeout(0);
+      req.socket.setKeepAlive(true);
+
+      res.writeHead(200, {
+        ...BASE_SECURITY_HEADERS,
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive",
+      });
+
+      const sendUpdate = () => {
+        const payload = this.getBzssCorePlayerInfo({ all: 1 });
+        res.write(`data: ${JSON.stringify(payload)}\n\n`);
+      };
+
+      sendUpdate();
+
+      const monitor = this.modules.bzssCoreMonitor;
+      let unsubscribe = null;
+      if (monitor && typeof monitor.subscribe === "function") {
+        unsubscribe = monitor.subscribe(() => {
+          sendUpdate();
+        });
+      }
+
+      req.on("close", () => {
+        if (unsubscribe) {
+          unsubscribe();
+        }
+      });
+      return;
+    }
+
     if (url.pathname === "/api/logpost/raw-output" && req.method === "GET") {
       return this.json(res, 200, await this.getLogPostRawOutputConfig());
     }
@@ -4042,6 +4093,8 @@ export class WebServer {
       fileSize: 0,
       fileMtimeMs: 0,
       playerCount: 0,
+      rawTextLength: 0,
+      rawTextUpdatedAt: "",
       lastError: "",
     };
     const player = monitor?.findPlayer?.(query) ?? null;
@@ -4052,6 +4105,37 @@ export class WebServer {
       status: state.status,
       player,
       players: includeAll ? (monitor?.getPlayers?.() ?? []) : undefined,
+    };
+  }
+
+  getBzssCorePlayerInfoRaw() {
+    const monitor = this.modules.bzssCoreMonitor;
+    const snapshot = monitor?.getRawSnapshot?.();
+    if (snapshot) {
+      return {
+        ok: true,
+        ...snapshot,
+      };
+    }
+
+    return {
+      ok: true,
+      configuredPath: "",
+      resolvedPath: "",
+      exists: false,
+      status: "unavailable",
+      revision: 0,
+      updatedAt: "",
+      lastReadAt: "",
+      lastCompletedAt: "",
+      markerSeen: false,
+      fileSize: 0,
+      fileMtimeMs: 0,
+      playerCount: 0,
+      lastError: "",
+      rawText: "",
+      rawTextLength: 0,
+      rawTextUpdatedAt: "",
     };
   }
 

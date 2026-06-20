@@ -62,6 +62,8 @@ export interface BzssCorePlayerInfoState {
   fileSize: number;
   fileMtimeMs: number;
   playerCount: number;
+  rawTextLength?: number;
+  rawTextUpdatedAt?: string;
   lastError: string;
 }
 
@@ -71,6 +73,26 @@ export interface BzssCorePlayerInfoResponse {
   state: BzssCorePlayerInfoState;
   player: BzssCoreTrackedPlayerInfo | null;
   players?: BzssCoreTrackedPlayerInfo[];
+}
+
+export interface BzssCoreRawDataResponse {
+  ok: boolean;
+  configuredPath: string;
+  resolvedPath: string;
+  exists: boolean;
+  status: string;
+  revision: number;
+  updatedAt: string;
+  lastReadAt: string;
+  lastCompletedAt: string;
+  markerSeen: boolean;
+  fileSize: number;
+  fileMtimeMs: number;
+  playerCount: number;
+  lastError: string;
+  rawText: string;
+  rawTextLength: number;
+  rawTextUpdatedAt: string;
 }
 
 export async function fetchBzssCoreConfig() {
@@ -101,6 +123,35 @@ export async function fetchBzssCorePlayerInfo(input: { name?: string }) {
 
 export async function fetchBzssCorePlayerInfoList() {
   return apiGet<BzssCorePlayerInfoResponse>("/api/bzss-core/player-info?all=1");
+}
+
+export async function fetchBzssCoreRawData() {
+  return apiGet<BzssCoreRawDataResponse>("/api/bzss-core/player-info/raw");
+}
+
+export function streamBzssCorePlayerInfoList(
+  onMessage: (data: BzssCorePlayerInfoResponse) => void,
+  onError?: (error: any, source: EventSource) => void
+) {
+  const url = "/api/bzss-core/player-info/stream";
+  const eventSource = new EventSource(url);
+
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      onMessage(data);
+    } catch (err) {
+      if (onError) onError(err, eventSource);
+    }
+  };
+
+  eventSource.onerror = (err) => {
+    if (onError) onError(err, eventSource);
+  };
+
+  return () => {
+    eventSource.close();
+  };
 }
 
 function normalizeConfig(config: Partial<BzssCoreConfig> | null | undefined): BzssCoreConfig {

@@ -120,6 +120,7 @@ watchEffect(() => {
   display: grid;
   height: 100%;
   overflow: hidden;
+  grid-row: 2;
 }
 
 .state-block {

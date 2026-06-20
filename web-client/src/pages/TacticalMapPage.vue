@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="tactical-map-layout">
     <!-- Main Map Viewport -->
     <div
@@ -76,7 +76,8 @@
               { 'is-squadleader': isSquadLeader(player) },
               { 'is-focused': focusedSquadId === player.squadId },
               { 'is-hovered': hoveredPlayer?.playerGuid === player.playerGuid || hoveredPlayer?.playerName === player.playerName },
-              { 'no-pointer': disableMarkerInteraction }
+              { 'no-pointer': disableMarkerInteraction },
+              { 'is-disengaged': isPlayerDisengaged(player) }
             ]"
             :style="{
               left: `${player.mapX}%`,
@@ -123,6 +124,7 @@
 
             <!-- Text Tag for Player Name & Squad Number -->
             <span v-if="showPlayerNames" class="tag">
+              <span v-if="isPlayerDisengaged(player)" class="player-disengaged-tag">脱战</span>
               <span class="player-name-tag">{{ player.playerName }}</span>
               <span v-if="player.squadId" class="player-squad-tag">#{{ player.squadId }}</span>
               <span v-if="showPlayerCoords && player.soldierInfo?.position" class="player-coords-tag">
@@ -132,10 +134,10 @@
           </button>
         </div>
 
-        <!-- SVG Layer for Distance Measuring -->
-        <svg v-if="measureMode" class="map-measure-svg">
+        <!-- SVG Layer for Overlays (Distance Measuring & Hotspot Circle) -->
+        <svg v-if="measureMode || combatHotspot != null" class="map-measure-svg">
           <path
-            v-if="measurePoints.length >= 2"
+            v-if="measureMode && measurePoints.length >= 2"
             :d="measurePathD"
             fill="none"
             stroke="#ffcc00"
@@ -144,7 +146,7 @@
             class="measure-polyline"
           />
           <circle
-            v-for="(pt, idx) in measurePoints"
+            v-for="(pt, idx) in (measureMode ? measurePoints : [])"
             :key="'mpt-' + idx"
             :cx="pt.mapX * 10"
             :cy="pt.mapY * 10"
@@ -154,6 +156,48 @@
             stroke-width="2"
             class="measure-point"
           />
+
+          <!-- Combat Hotspot Overlay (1000m circle & center marker) -->
+          <g v-if="combatHotspot != null">
+            <!-- 1000m radius circle -->
+            <circle
+              :cx="combatHotspotMapPos.mapX * 10"
+              :cy="combatHotspotMapPos.mapY * 10"
+              :r="combatHotspotRadiusSvg"
+              fill="rgba(0, 229, 255, 0.04)"
+              stroke="#00e5ff"
+              stroke-width="2.5"
+              stroke-dasharray="8,5"
+              class="hotspot-circle"
+            />
+            <!-- Center crosshair circle -->
+            <circle
+              :cx="combatHotspotMapPos.mapX * 10"
+              :cy="combatHotspotMapPos.mapY * 10"
+              r="7"
+              fill="#ef5350"
+              stroke="#ffffff"
+              stroke-width="2"
+              class="hotspot-center"
+            />
+            <!-- Crosshair center lines -->
+            <line
+              :x1="combatHotspotMapPos.mapX * 10 - 15"
+              :y1="combatHotspotMapPos.mapY * 10"
+              :x2="combatHotspotMapPos.mapX * 10 + 15"
+              :y2="combatHotspotMapPos.mapY * 10"
+              stroke="#ffffff"
+              stroke-width="1.5"
+            />
+            <line
+              :x1="combatHotspotMapPos.mapX * 10"
+              :y1="combatHotspotMapPos.mapY * 10 - 15"
+              :x2="combatHotspotMapPos.mapX * 10"
+              :y2="combatHotspotMapPos.mapY * 10 + 15"
+              stroke="#ffffff"
+              stroke-width="1.5"
+            />
+          </g>
         </svg>
 
         <!-- Distance Labels -->
@@ -292,7 +336,7 @@
           <span class="icon-span">-</span>
         </button>
         <button class="ctrl-btn" title="适配视口" @click="resetView">
-          <span class="icon-span">⛶</span>
+          <span class="icon-span">↺</span>
         </button>
         <div class="ctrl-divider"></div>
         <button
@@ -316,7 +360,7 @@
         >
           存活
         </button>
-        <button
+                <button
           class="ctrl-btn text-btn"
           :class="{ active: disableMarkerInteraction }"
           @click="disableMarkerInteraction = !disableMarkerInteraction"
@@ -324,7 +368,7 @@
         >
           穿透
         </button>
-        <button
+                <button
           class="ctrl-btn text-btn measure-btn"
           :class="{ active: measureMode }"
           @click="toggleMeasureMode"
@@ -332,13 +376,29 @@
         >
           测距
         </button>
-        <button
+                <button
           v-if="measurePoints.length"
           class="ctrl-btn text-btn"
           @click="clearMeasurePoints"
           title="清空测距点"
         >
           清空
+        </button>
+                <button
+          class="ctrl-btn text-btn hotspot-ctrl-btn"
+          :class="{ active: combatHotspot != null }"
+          @click="calculateCombatHotspot"
+          title="计算并生成作战热点中心及1000m半径"
+        >
+          热点
+        </button>
+                <button
+          v-if="combatHotspot != null"
+          class="ctrl-btn text-btn"
+          @click="clearCombatHotspot"
+          title="清除作战热点"
+        >
+          清除热点
         </button>
       </div>
 
@@ -415,14 +475,15 @@
             </label>
             <label class="option-item-sidebar">
               <input type="checkbox" v-model="measureMode" />
-              <span class="option-text">开启测距模式 (右键撤销)</span>
+              <span class="option-text">开启测距模式(右键撤销)</span>
             </label>
             <div class="option-item-slider">
               <span class="option-text">地图选择:</span>
-              <select v-model="selectedMapKey" class="map-select">
-                <option value="auto">自动检测 ({{ detectedMapName === 'chora' ? 'Chora' : 'Sumari' }})</option>
-                <option value="sumari">Sumari</option>
-                <option value="chora">Chora</option>
+                            <select v-model="selectedMapKey" class="map-select">
+                <option value="auto">自动检测({{ detectedMapName }})</option>
+                <option v-for="map in mapOptions" :key="map.key" :value="map.key">
+                  {{ map.name }}
+                </option>
               </select>
             </div>
             <div class="option-item-slider option-item-slider--stacked">
@@ -481,8 +542,7 @@
               :class="{ active: sidebarTab === 'players' }"
               @click="sidebarTab = 'players'"
             >
-              所有玩家
-            </button>
+              所有玩�?            </button>
           </div>
 
           <!-- Team Selection Tabs -->
@@ -518,7 +578,7 @@
               <div class="squad-card-header">
                 <span class="squad-number">#{{ squad.id }}</span>
                 <span class="squad-name">{{ squad.name }}</span>
-                <span class="squad-members-count monospace">{{ squad.playersCount }}人</span>
+                <span class="squad-members-count monospace">{{ squad.playersCount }}</span>
               </div>
               <div class="squad-card-meta">
                 <span class="sl-name">SL: {{ squad.squadLeaderName }}</span>
@@ -538,8 +598,7 @@
               </div>
             </div>
             <div v-if="!currentTeamSquads.length" class="empty-state">
-              暂无已创建小队
-            </div>
+              暂无已创建小�?            </div>
           </div>
 
           <!-- Active Players List -->
@@ -551,14 +610,18 @@
               :class="[
                 `team-${normalizeTeam(player.teamId)}`,
                 getPerspectiveClass(player.teamId),
-                { 'is-focused': hoveredPlayer?.playerGuid === player.playerGuid }
+                { 'is-focused': hoveredPlayer?.playerGuid === player.playerGuid },
+                { 'is-disengaged': isPlayerDisengaged(player) }
               ]"
               :style="getPerspectiveStyle(player.teamId)"
               @click="showPlayerDetails(player, $event)"
               @mouseenter="hoveredPlayer = player"
               @mouseleave="hoveredPlayer = null"
             >
-              <span class="player-name-row">{{ player.playerName }}</span>
+              <span class="player-name-row">
+                {{ player.playerName }}
+                <span v-if="isPlayerDisengaged(player)" class="disengaged-sidebar-tag">脱战</span>
+              </span>
               <span class="player-meta-row">S{{ normalizeSquad(player.squadId) }} / HP {{ player.soldierInfo?.health ?? '-' }}</span>
             </button>
             <div v-if="!filteredTeamPlayers.length" class="empty-state">
@@ -588,23 +651,12 @@
       </div>
     </div>
 
-    <!-- Official Floating Player Detail Window -->
-    <FloatingPlayerWindow
-      :open="activePlayerWindow !== null"
-      :player="activePlayerWindow?.detail ?? null"
-      :server-id="currentServerId"
-      :anchor-x="activePlayerWindow?.anchorX ?? null"
-      :anchor-y="activePlayerWindow?.anchorY ?? null"
-      :notice="activePlayerWindow?.notice ?? ''"
-      @close="activePlayerWindow = null"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, reactive, nextTick, watch } from "vue";
 import {
-  fetchBzssCorePlayerInfoList,
   type BzssCorePlayerInfoResponse,
   type BzssCoreTrackedPlayerInfo,
   type BzssCoreTrackedVector,
@@ -614,7 +666,23 @@ import { useServerStore } from "../stores/server.store";
 import { usePlayerStore } from "../stores/player.store";
 import { adaptPlayerDetail } from "../utils/squad-admin-adapter";
 import { resolveRoleIcon, type RoleIconInfo } from "../utils/role-icons";
-import FloatingPlayerWindow from "../components/squad-admin/FloatingPlayerWindow.vue";
+import {
+  TACTICAL_MAP_CONFIGS,
+  TACTICAL_MAP_LIST,
+  resolveTacticalMapKey,
+  type TacticalMapConfig,
+} from "../shared/tactical-map-data";
+
+const props = defineProps<{
+  snapshot: BzssCorePlayerInfoResponse | null;
+  players: BzssCoreTrackedPlayerInfo[];
+  loading: boolean;
+  errorText: string;
+}>();
+
+const emit = defineEmits<{
+  (e: "select-player", payload: { detail: any; event: MouseEvent }): void;
+}>();
 
 interface MapMarker extends BzssCoreTrackedPlayerInfo {
   mapX: number;
@@ -635,64 +703,36 @@ const serverStore = useServerStore();
 const playerStore = usePlayerStore();
 const authStore = useAuthStore();
 
-const snapshot = ref<BzssCorePlayerInfoResponse | null>(null);
-const players = ref<BzssCoreTrackedPlayerInfo[]>([]);
-const positionedPlayers = computed(() => players.value.filter(hasValidPosition));
-const hoveredPlayer = ref<BzssCoreTrackedPlayerInfo | null>(null);
-const errorText = ref("");
-const loading = ref(false);
-let refreshTimer: number | null = null;
-let simulatedCombatTimer: number | null = null;
-const mapName = "Chora";
+const snapshot = computed(() => props.snapshot);
+const players = computed(() => props.players);
 
-interface MapConfig {
-  name: string;
-  image: string;
-  bounds: {
-    minX: number;
-    minY: number;
-    maxX: number;
-    maxY: number;
-  };
-}
-
-const MAP_CONFIGS: Record<string, MapConfig> = {
-  sumari: {
-    name: "Sumari",
-    image: "/Sumari_Minimap.PNG",
-    bounds: {
-      minX: -63973.925781 + 210,
-      minY: -44728.078125 + 80,
-      maxX: 66033.578125 + 210,
-      maxY: 85297.234375 + 80,
-    }
-  },
-  chora: {
-    name: "Chora",
-    image: "/Chora_Minimap.jpg",
-    bounds: {
-      minX: -93500,
-      minY: -114000,
-      maxX: 182000,
-      maxY: 161500,
-    }
-  }
-};
+const mapName = "Sumari";
+const serverMapName = computed(() => serverStore.snapshot?.mapName || mapName);
 
 const selectedMapKey = ref("auto");
-const detectedMapName = computed(() => {
-  const currentMap = (serverMapName.value || "").toLowerCase();
-  if (currentMap.includes("sumari")) return "sumari";
-  return "chora";
-});
+const detectedMapKey = computed(() => resolveTacticalMapKey(serverMapName.value) ?? "Sumari_RAAS_v1");
+const detectedMapName = computed(() => TACTICAL_MAP_CONFIGS[detectedMapKey.value]?.name ?? "Sumari");
 
 const activeMapConfig = computed(() => {
   let key = selectedMapKey.value;
   if (key === "auto") {
-    key = detectedMapName.value;
+    key = detectedMapKey.value;
   }
-  return MAP_CONFIGS[key] || MAP_CONFIGS.sumari;
+  return TACTICAL_MAP_CONFIGS[key] || TACTICAL_MAP_CONFIGS.Sumari_RAAS_v1;
 });
+
+const mapOptions = computed<TacticalMapConfig[]>(() => TACTICAL_MAP_LIST);
+
+// Cache to prevent players disappearing when data is missing temporarily
+const cachedPlayers = ref<Record<string, { player: BzssCoreTrackedPlayerInfo; lastSeen: number }>>({});
+const positionedPlayers = computed(() => {
+  return Object.values(cachedPlayers.value).map((entry) => entry.player);
+});
+
+const hoveredPlayer = ref<BzssCoreTrackedPlayerInfo | null>(null);
+const errorText = computed(() => props.errorText);
+const loading = computed(() => props.loading);
+let simulatedCombatTimer: number | null = null;
 
 // Viewport Zoom & Pan state
 const containerRef = ref<HTMLElement | null>(null);
@@ -729,22 +769,132 @@ const focusedSquadId = ref<number | null>(null);
 const combatLogs = ref<CombatLog[]>([]);
 const viewerPerspectiveMode = ref<ViewerPerspectiveMode>("auto");
 
-const activePlayerWindow = ref<{
-  detail: any;
-  anchorX: number;
-  anchorY: number;
-  notice: string;
-} | null>(null);
+// Shared activePlayerWindow managed by parent MatchStatusPage
 
 // Distance Measuring State
 const measureMode = ref(false);
 const measurePoints = ref<Array<{ mapX: number; mapY: number; gameX: number; gameY: number }>>([]);
 
+// Combat Hotspot State (Centroid of alive players)
+const combatHotspot = ref<{ gameX: number; gameY: number } | null>(null);
+
+const combatHotspotMapPos = computed(() => {
+  if (!combatHotspot.value) return { mapX: 0, mapY: 0 };
+  const bounds = activeMapConfig.value.bounds;
+  return {
+    mapX: project(combatHotspot.value.gameX, bounds.minX, bounds.maxX),
+    mapY: project(combatHotspot.value.gameY, bounds.minY, bounds.maxY)
+  };
+});
+
+const combatHotspotRadiusSvg = computed(() => {
+  const bounds = activeMapConfig.value.bounds;
+  const mapGameWidth = bounds.maxX - bounds.minX;
+  if (mapGameWidth <= 0) return 0;
+  // 1000m in game coordinates is 100,000 units (1m = 100 units)
+  return (100000 / mapGameWidth) * 1000;
+});
+
+function calculateCombatHotspot() {
+  const alivePlayers = positionedPlayers.value.filter(player => {
+    const hp = player.soldierInfo?.health;
+    return hp != null && hp > 0;
+  });
+  
+  if (alivePlayers.length === 0) {
+    logCombatEvent("无法计算作战热点: 暂无存活玩家", "system");
+    return;
+  }
+  
+  let sumX = 0;
+  let sumY = 0;
+  alivePlayers.forEach(player => {
+    const pos = player.soldierInfo?.position;
+    if (pos) {
+      sumX += pos.x ?? 0;
+      sumY += pos.y ?? 0;
+    }
+  });
+  
+  combatHotspot.value = {
+    gameX: sumX / alivePlayers.length,
+    gameY: sumY / alivePlayers.length
+  };
+  
+  logCombatEvent(`计算得到新一轮作战热点中�? [X:${Math.round(combatHotspot.value.gameX)}, Y:${Math.round(combatHotspot.value.gameY)}] (1000m 半径�?`, "system");
+}
+
+function clearCombatHotspot() {
+  combatHotspot.value = null;
+  logCombatEvent("Cleared combat hotspot marker", "system");
+}
+
+function isPlayerDisengaged(player: BzssCoreTrackedPlayerInfo) {
+  if (!combatHotspot.value) return false;
+  const pos = player.soldierInfo?.position;
+  if (!pos) return false;
+  
+  const dx = (pos.x ?? 0) - combatHotspot.value.gameX;
+  const dy = (pos.y ?? 0) - combatHotspot.value.gameY;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  // 1000 meters = 100,000 game units
+  return dist > 100000;
+}
+
 // Position Interpolation State
 const playerHistory = new Map<string, Array<{ x: number, y: number, time: number }>>();
+const playerClocks = new Map<string, {
+  currentRenderTime: number;
+  lastTickRealTime: number;
+  lastX: number;
+  lastY: number;
+}>();
 const interpolatedPositions = ref<Record<string, { mapX: number, mapY: number }>>({});
 let animationFrameId: number | null = null;
 const PLAYBACK_DELAY_MS = 1500; // 1.5s delay for smooth interpolation cache
+
+// Watch players prop to update the cache
+watch(
+  players,
+  (newPlayers) => {
+    if (!newPlayers || newPlayers.length === 0) {
+      // Keep cached players on temporary empty data
+      return;
+    }
+    const now = Date.now();
+    const nextCache = { ...cachedPlayers.value };
+    let changed = false;
+
+    newPlayers.forEach((player) => {
+      const key = player.playerGuid || player.playerName;
+      if (!key) return;
+      if (hasValidPosition(player)) {
+        nextCache[key] = {
+          player,
+          lastSeen: now
+        };
+        changed = true;
+      }
+    });
+
+    if (changed) {
+      cachedPlayers.value = nextCache;
+    }
+  },
+  { immediate: true, deep: true }
+);
+
+// Clear player cache if active map changes
+watch(
+  activeMapConfig,
+  () => {
+    cachedPlayers.value = {};
+    playerHistory.clear();
+    playerClocks.clear();
+    interpolatedPositions.value = {};
+    combatHotspot.value = null;
+  }
+);
 
 watch(
   positionedPlayers,
@@ -778,6 +928,7 @@ watch(
     for (const key of playerHistory.keys()) {
       if (!currentKeys.has(key)) {
         playerHistory.delete(key);
+        playerClocks.delete(key);
       }
     }
   },
@@ -786,7 +937,25 @@ watch(
 
 function startInterpolationLoop() {
   const tick = () => {
-    const renderTime = Date.now() - PLAYBACK_DELAY_MS;
+    const now = Date.now();
+    
+    // 1. Evict expired players from cache
+    const EXPIRE_LIMIT = 8000;
+    let cacheChanged = false;
+    const nextCache = { ...cachedPlayers.value };
+    
+    for (const key in nextCache) {
+      if (now - nextCache[key].lastSeen > EXPIRE_LIMIT) {
+        delete nextCache[key];
+        playerHistory.delete(key);
+        playerClocks.delete(key);
+        cacheChanged = true;
+      }
+    }
+    if (cacheChanged) {
+      cachedPlayers.value = nextCache;
+    }
+
     const newPositions: Record<string, { mapX: number, mapY: number }> = {};
     const bounds = activeMapConfig.value.bounds;
     
@@ -806,36 +975,106 @@ function startInterpolationLoop() {
         return;
       }
       
-      let prevSample = history[0];
-      let nextSample = history[0];
-      let found = false;
-      
-      for (let i = 0; i < history.length - 1; i++) {
-        if (history[i].time <= renderTime && history[i+1].time >= renderTime) {
-          prevSample = history[i];
-          nextSample = history[i+1];
-          found = true;
-          break;
+      // Initialize or get the clock for this player
+      let clock = playerClocks.get(key);
+      if (!clock) {
+        clock = {
+          currentRenderTime: history[0].time,
+          lastTickRealTime: now,
+          lastX: history[0].x,
+          lastY: history[0].y
+        };
+        playerClocks.set(key, clock);
+      } else {
+        // If the clock existed but was not ticked in the last 200ms, reset lastTickRealTime to prevent large dt
+        if (now - clock.lastTickRealTime > 200) {
+          clock.lastTickRealTime = now;
         }
+      }
+      
+      // Keep render time within the bounds of history
+      if (clock.currentRenderTime < history[0].time) {
+        clock.currentRenderTime = history[0].time;
       }
       
       let interpX = 0;
       let interpY = 0;
       
-      if (found) {
-        const timeDiff = nextSample.time - prevSample.time;
-        const t = timeDiff > 0 ? (renderTime - prevSample.time) / timeDiff : 0;
-        interpX = prevSample.x + (nextSample.x - prevSample.x) * t;
-        interpY = prevSample.y + (nextSample.y - prevSample.y) * t;
+      if (history.length < 2) {
+        interpX = history[0].x;
+        interpY = history[0].y;
+        clock.currentRenderTime = history[0].time;
       } else {
-        if (renderTime > history[history.length - 1].time) {
-          interpX = history[history.length - 1].x;
-          interpY = history[history.length - 1].y;
+        const dtReal = now - clock.lastTickRealTime;
+        clock.lastTickRealTime = now;
+        
+        const latestSampleTime = history[history.length - 1].time;
+        
+        // If the playback clock is excessively far behind (e.g. more than 3 seconds),
+        // or is ahead of the latest sample time, snap the clock to a default 1.5s delay.
+        if (latestSampleTime - clock.currentRenderTime > 3000 || clock.currentRenderTime > latestSampleTime) {
+          clock.currentRenderTime = Math.max(history[0].time, latestSampleTime - 1500);
+        }
+        
+        const bufferSize = latestSampleTime - clock.currentRenderTime;
+        
+        let speedFactor = 1.0;
+        if (bufferSize > 1500) {
+          speedFactor = 1.0 + Math.min(1.0, (bufferSize - 1500) / 1000);
+        } else if (bufferSize < 1200) {
+          speedFactor = Math.max(0.1, bufferSize / 1200);
+        }
+        
+        // Clamp frame dt to avoid extreme clock jumping (max 100ms)
+        const elapsed = Math.min(100, dtReal) * speedFactor;
+        clock.currentRenderTime += elapsed;
+        
+        if (clock.currentRenderTime > latestSampleTime) {
+          clock.currentRenderTime = latestSampleTime;
+        }
+        
+        let prevSample = history[0];
+        let nextSample = history[history.length - 1];
+        let found = false;
+        
+        for (let i = 0; i < history.length - 1; i++) {
+          if (history[i].time <= clock.currentRenderTime && history[i+1].time >= clock.currentRenderTime) {
+            prevSample = history[i];
+            nextSample = history[i+1];
+            found = true;
+            break;
+          }
+        }
+        
+        if (found) {
+          const dx = nextSample.x - prevSample.x;
+          const dy = nextSample.y - prevSample.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          
+          if (dist > 3000) { // 30 meters threshold
+            // Teleport: snap to the next sample and update playback clock to it
+            interpX = nextSample.x;
+            interpY = nextSample.y;
+            clock.currentRenderTime = nextSample.time;
+          } else {
+            const timeDiff = nextSample.time - prevSample.time;
+            const t = timeDiff > 0 ? (clock.currentRenderTime - prevSample.time) / timeDiff : 0;
+            interpX = prevSample.x + dx * t;
+            interpY = prevSample.y + dy * t;
+          }
         } else {
-          interpX = history[0].x;
-          interpY = history[0].y;
+          if (clock.currentRenderTime >= latestSampleTime) {
+            interpX = history[history.length - 1].x;
+            interpY = history[history.length - 1].y;
+          } else {
+            interpX = history[0].x;
+            interpY = history[0].y;
+          }
         }
       }
+      
+      clock.lastX = interpX;
+      clock.lastY = interpY;
       
       newPositions[key] = {
         mapX: project(interpX, bounds.minX, bounds.maxX),
@@ -884,7 +1123,7 @@ const measureLabels = computed(() => {
       labels.push({
         mapX: pt.mapX,
         mapY: pt.mapY,
-        text: `+${Math.round(dist)}米 (共${Math.round(totalDistance)}米)`
+        text: `+${Math.round(dist)}�?(�?{Math.round(totalDistance)}�?`
       });
     }
   });
@@ -937,7 +1176,6 @@ function handleMapRightClick() {
 // Get real Server metrics
 const currentServerId = computed(() => String(serverStore.snapshot?.serverId ?? ""));
 const serverPlayerCount = computed(() => serverStore.snapshot?.playerCount || players.value.length);
-const serverMapName = computed(() => serverStore.snapshot?.mapName || mapName);
 const matchPhase = computed(() => serverStore.snapshot?.webStatus?.isWarmup ? "WARMUP" : "MID MATCH");
 const matchStatePlayers = computed(() => {
   const list = serverStore.snapshot?.matchState?.players?.list;
@@ -1260,12 +1498,10 @@ function showPlayerDetails(player: BzssCoreTrackedPlayerInfo, event?: MouseEvent
     };
   }
 
-  activePlayerWindow.value = {
+  emit("select-player", {
     detail,
-    anchorX: event?.clientX ?? Math.floor(window.innerWidth / 2),
-    anchorY: event?.clientY ?? Math.floor(window.innerHeight / 2),
-    notice: ""
-  };
+    event: event ?? ({ clientX: Math.floor(window.innerWidth / 2), clientY: Math.floor(window.innerHeight / 2) } as MouseEvent)
+  });
 }
 
 // Log Feed
@@ -1545,33 +1781,15 @@ function cleanWeaponName(weaponClass: string | null | undefined): string {
     .replace(/_\d+$/, "");
 }
 
-async function refreshTrackedPlayers() {
-  loading.value = true;
-  try {
-    const payload = await fetchBzssCorePlayerInfoList();
-    snapshot.value = payload;
-    players.value = payload.players ?? [];
-    errorText.value = payload.ok ? "" : payload.status || "BZSS-Core returned an error.";
-  } catch (error: any) {
-    errorText.value = error?.message ?? "Failed to load BZSS-Core player snapshots.";
-  } finally {
-    loading.value = false;
-  }
-}
-
 onMounted(() => {
   startInterpolationLoop();
-  void refreshTrackedPlayers();
-  refreshTimer = window.setInterval(() => {
-    void refreshTrackedPlayers();
-  }, 100);
 
   setTimeout(() => {
     fitToViewport();
   }, 100);
 
-  logCombatEvent("对局卫星扫描加载就绪... 坐标网格正常", "system");
-  logCombatEvent("美军与中国解放军交火中... 实时动态激活", "system");
+  logCombatEvent("Tactical map scan initialized... coordinate grid ready", "system");
+  logCombatEvent("Live tactical tracking active", "system");
 
   simulatedCombatTimer = window.setInterval(runCombatEventSimulation, 2500);
   window.addEventListener("resize", fitToViewport);
@@ -1579,7 +1797,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (animationFrameId) cancelAnimationFrame(animationFrameId);
-  if (refreshTimer) window.clearInterval(refreshTimer);
   if (simulatedCombatTimer) window.clearInterval(simulatedCombatTimer);
   window.removeEventListener("resize", fitToViewport);
 });
@@ -1841,7 +2058,7 @@ onBeforeUnmount(() => {
   box-shadow: none;
 }
 
-/* Leader special outline — slightly larger scale only */
+/* Leader special outline �?slightly larger scale only */
 .is-squadleader .marker-ring {
   transform: translate(-50%, -50%) scale(1.15);
 }
@@ -3007,4 +3224,65 @@ onBeforeUnmount(() => {
   border-color: #ffcc00;
   box-shadow: inset 0 0 6px rgba(255, 204, 0, 0.2), 0 0 10px rgba(255, 204, 0, 0.15);
 }
+
+.ctrl-btn.text-btn.hotspot-ctrl-btn.active {
+  background: rgba(0, 229, 255, 0.2);
+  color: #00e5ff;
+  border-color: #00e5ff;
+  box-shadow: inset 0 0 6px rgba(0, 229, 255, 0.2), 0 0 10px rgba(0, 229, 255, 0.15);
+}
+
+.hotspot-circle {
+  filter: drop-shadow(0 0 8px rgba(0, 229, 255, 0.5));
+  animation: hotspot-pulse 4s infinite ease-in-out;
+}
+
+@keyframes hotspot-pulse {
+  0% { stroke-opacity: 0.5; fill-opacity: 0.03; }
+  50% { stroke-opacity: 0.9; fill-opacity: 0.07; }
+  100% { stroke-opacity: 0.5; fill-opacity: 0.03; }
+}
+
+.hotspot-center {
+  filter: drop-shadow(0 0 6px #ef5350);
+}
+
+.disengaged-sidebar-tag {
+  font-size: 8px;
+  font-weight: bold;
+  background: rgba(239, 83, 80, 0.18);
+  color: #ef5350;
+  padding: 1px 3px;
+  border-radius: 3px;
+  border: 1px solid rgba(239, 83, 80, 0.35);
+  margin-left: 6px;
+  display: inline-block;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+.player-disengaged-tag {
+  font-size: 7px;
+  font-weight: bold;
+  color: #ff5b6e;
+  background: rgba(255, 91, 110, 0.18);
+  border: 1px solid rgba(255, 91, 110, 0.35);
+  padding: 0px 2px;
+  border-radius: 2px;
+  line-height: 1;
+}
+
+.player-marker.is-disengaged {
+  opacity: 0.58;
+}
+
+.player-marker.is-disengaged:hover,
+.player-marker.is-disengaged.is-hovered {
+  opacity: 1;
+}
 </style>
+
+
+
+
+

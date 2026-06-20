@@ -1,5 +1,15 @@
 <template>
   <div class="squad-admin-layout">
+    <aside class="bzss-sample-window" aria-label="BZSS-Core 样本采样率调试窗口">
+      <span class="bzss-sample-window__title">BZSS-Core 样本</span>
+      <strong class="bzss-sample-window__rate">{{ bzssCoreSampleRateLabel }}</strong>
+      <div class="bzss-sample-window__meta">
+        <span>{{ bzssCoreStreamLabel }}</span>
+        <span>{{ bzssCoreSampleCountLabel }}</span>
+        <span>{{ bzssCoreLastSampleLabel }}</span>
+      </div>
+    </aside>
+
     <SquadPageToolbar
       :search-query="pageState.searchQuery"
       :filter-mode="pageState.filterMode"
@@ -12,12 +22,14 @@
       :players-updated-at="playersUpdatedAt"
       :squads-updated-at="squadsUpdatedAt"
       :multi-select-mode="multiSelectMode"
+      :view-mode="viewMode"
       @search="pageState.searchQuery = $event"
       @filter-change="pageState.filterMode = $event"
       @refresh="handleToolbarRefresh"
       @refresh-playtime="refreshOnlinePlaytime"
       @refresh-playtime-force="refreshOnlinePlaytime(true)"
       @toggle-multi-select="toggleMultiSelectMode"
+      @view-mode-change="handleViewModeChange"
     />
 
     <section v-if="showPlaytimePanel" class="playtime-refresh-card">
@@ -121,13 +133,14 @@
     </section>
 
     <DataState
+      class="match-status-data-state"
       mode="fill"
       :loading="showInitialLoading"
       :error="blockingRuntimeError"
       :stale="showStaleBanner"
       :stale-text="staleText"
     >
-      <div class="match-state-content">
+      <div v-if="viewMode === 'list'" class="match-state-content">
         <div class="match-state-main">
           <div v-if="refreshError || playtimeError" class="match-error-stack">
             <ErrorBlock v-if="refreshError" :message="refreshError" />
@@ -155,6 +168,15 @@
         </div>
 
         <MatchChatPanel class="match-chat-column" />
+      </div>
+      <div v-else-if="viewMode === 'map'" class="match-state-map-wrapper">
+        <TacticalMapPage
+          :snapshot="bzssCoreSnapshot"
+          :players="bzssCorePlayers"
+          :loading="bzssCoreLoading"
+          :errorText="bzssCoreError"
+          @select-player="handleMapSelectPlayer"
+        />
       </div>
     </DataState>
 
@@ -255,7 +277,7 @@
 <script setup lang="ts">
 import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch, provide } from "vue";
 import { useQuery } from "@tanstack/vue-query";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { apiGet, apiPost } from "../app/apiClient";
 import { renderApiError } from "../app/errors";
 import { getRuntimeSyncState, syncOnce, useSnapshot } from "../app/runtimeSync";
@@ -284,12 +306,14 @@ import TeamColumn from "../components/squad-admin/TeamColumn.vue";
 import MatchChatPanel from "../components/match/MatchChatPanel.vue";
 import FloatingPlayerWindow from "../components/squad-admin/FloatingPlayerWindow.vue";
 import SquadDetailDrawer from "../components/squad-admin/SquadDetailDrawer.vue";
+import TacticalMapPage from "./TacticalMapPage.vue";
 import { t } from "../i18n";
 import { normalizeRefreshPolicy, resolveRefreshDelay } from "../app/refreshPolicy";
 import { useAutoRefreshGate } from "../composables/useAutoRefreshGate";
 import { cancelIdleTask, scheduleIdleTask } from "../utils/idle";
 import { resolvePlayerIdentityIp } from "../app/playerIdentityApi";
-import { fetchBzssCorePlayerInfo, fetchBzssCorePlayerInfoList } from "../app/bzssCoreApi";
+import { fetchBzssCorePlayerInfo, fetchBzssCorePlayerInfoList, streamBzssCorePlayerInfoList } from "../app/bzssCoreApi";
+import type { BzssCorePlayerInfoResponse, BzssCoreTrackedPlayerInfo } from "../app/bzssCoreApi";
 import type {
   PageState,
   PlayerDetailViewModel,
@@ -345,6 +369,97 @@ const ui = useUiStore();
 const runtime = getRuntimeSyncState();
 const snapshot = useSnapshot();
 const route = useRoute();
+const router = useRouter();
+
+const viewMode = ref<"list" | "map">(route.path.includes("map") ? "map" : "list");
+
+watch(
+  () => route.path,
+  (path) => {
+    viewMode.value = path.includes("map") ? "map" : "list";
+  }
+);
+
+function handleViewModeChange(mode: "list" | "map") {
+  if (mode === "list") {
+    router.push("/match-status");
+  } else {
+    router.push("/tactical-map");
+  }
+}
+
+const bzssCoreSnapshot = ref<BzssCorePlayerInfoResponse | null>(null);
+const bzssCorePlayers = ref<BzssCoreTrackedPlayerInfo[]>([]);
+const bzssCoreLoading = ref(false);
+const bzssCoreError = ref("");
+const bzssCoreSampleClock = ref(Date.now());
+const bzssCoreSampleEvents = ref<number[]>([]);
+const bzssCoreStreamActive = ref(false);
+let unsubscribeBzssStream: (() => void) | null = null;
+let bzssCoreSampleClockTimer: number | null = null;
+
+const bzssCoreRecentSampleEvents = computed(() => {
+  const now = bzssCoreSampleClock.value;
+  return bzssCoreSampleEvents.value.filter((timestamp) => now - timestamp <= 1000);
+});
+const bzssCoreSampleRateLabel = computed(() => `${formatSampleDecimal(bzssCoreRecentSampleEvents.value.length)} / s`);
+const bzssCoreSampleCountLabel = computed(() => `${bzssCoreRecentSampleEvents.value.length} 次 / 1s`);
+const bzssCoreLastSampleLabel = computed(() => {
+  const last = bzssCoreSampleEvents.value[bzssCoreSampleEvents.value.length - 1];
+  if (!last) return "暂无样本";
+  const age = Math.max(0, bzssCoreSampleClock.value - last);
+  if (age < 1000) return `${age} ms 前`;
+  return `${formatSampleDecimal(age / 1000)} s 前`;
+});
+const bzssCoreStreamLabel = computed(() => (bzssCoreStreamActive.value ? "SSE 实时流" : "轮询兜底"));
+
+function startBzssStream() {
+  bzssCoreLoading.value = true;
+  if (unsubscribeBzssStream) unsubscribeBzssStream();
+  bzssCoreStreamActive.value = true;
+  unsubscribeBzssStream = streamBzssCorePlayerInfoList(
+    (payload) => {
+      bzssCoreLoading.value = false;
+      bzssCoreSnapshot.value = payload;
+      bzssCorePlayers.value = payload.players ?? [];
+      bzssCoreError.value = payload.ok ? "" : payload.status || "BZSS-Core returned an error.";
+      recordBzssCoreSample();
+    },
+    (err) => {
+      bzssCoreLoading.value = false;
+      if (typeof EventSource !== "undefined" && err?.target?.readyState === EventSource.CLOSED) {
+        bzssCoreError.value = "SSE Stream connection error.";
+        if (unsubscribeBzssStream) {
+          unsubscribeBzssStream();
+          unsubscribeBzssStream = null;
+        }
+        bzssCoreStreamActive.value = false;
+      }
+    }
+  );
+}
+
+function recordBzssCoreSample() {
+  const now = Date.now();
+  bzssCoreSampleEvents.value = [...bzssCoreSampleEvents.value, now]
+    .filter((timestamp) => now - timestamp <= 5000)
+    .slice(-120);
+  bzssCoreSampleClock.value = now;
+}
+
+function startBzssCoreSampleClock() {
+  if (bzssCoreSampleClockTimer != null) return;
+  bzssCoreSampleClockTimer = window.setInterval(() => {
+    bzssCoreSampleClock.value = Date.now();
+  }, 250);
+}
+
+function stopBzssCoreSampleClock() {
+  if (bzssCoreSampleClockTimer != null) {
+    window.clearInterval(bzssCoreSampleClockTimer);
+    bzssCoreSampleClockTimer = null;
+  }
+}
 
 const refreshingPlaytime = ref(false);
 const refreshingPlayers = ref(false);
@@ -420,38 +535,14 @@ const remoteTelemetryQuery = useQuery({
   queryKey: computed(() => ["remote-telemetry-state", auth.authenticated]),
   enabled: computed(() => auth.authenticated),
   queryFn: async () => apiGet<any>("/api/remote-telemetry/state"),
-  refetchInterval: computed(() => (auth.authenticated && canAutoRefresh.value ? 2_000 : false)),
+  refetchInterval: computed(() => (auth.authenticated ? 2_000 : false)),
   refetchIntervalInBackground: true,
   refetchOnWindowFocus: false,
 });
 const remoteTelemetryState = computed(() => remoteTelemetryQuery.data.value?.remoteTelemetry ?? null);
-const activePlayerBzssQuery = useQuery({
-  queryKey: computed(() => ["bzss-core-player-info", activePlayerWindow.value?.detail.name ?? ""]),
-  enabled: computed(() => Boolean(auth.authenticated && canAutoRefresh.value && activePlayerWindow.value?.detail.name)),
-  queryFn: async () => fetchBzssCorePlayerInfo({
-    name: activePlayerWindow.value?.detail.name ?? "",
-  }),
-  refetchInterval: computed(() => (activePlayerWindow.value?.detail.name && canAutoRefresh.value ? 100 : false)),
-  refetchIntervalInBackground: true,
-  refetchOnWindowFocus: false,
-});
-const bzssCoreAllPlayersQuery = useQuery({
-  queryKey: computed(() => ["bzss-core-player-info-all", auth.authenticated]),
-  enabled: computed(() => auth.authenticated && canAutoRefresh.value),
-  queryFn: async () => {
-    try {
-      return await fetchBzssCorePlayerInfoList();
-    } catch {
-      return null;
-    }
-  },
-  refetchInterval: computed(() => (canAutoRefresh.value ? 200 : false)),
-  refetchIntervalInBackground: true,
-  refetchOnWindowFocus: false,
-  retry: false,
-});
+
 const healthLookup = computed<Record<string, number | null>>(() => {
-  const players = bzssCoreAllPlayersQuery.data.value?.players;
+  const players = bzssCorePlayers.value;
   if (!Array.isArray(players) || players.length === 0) return {};
   const map: Record<string, number | null> = {};
   for (const p of players) {
@@ -538,7 +629,7 @@ const combatCacheQuery = useQuery({
     }
   },
   staleTime: 5_000,
-  refetchInterval: computed(() => (canAutoRefresh.value ? combatCacheRefetchInterval.value : false)),
+  refetchInterval: computed(() => combatCacheRefetchInterval.value),
   refetchIntervalInBackground: true,
   refetchOnWindowFocus: false,
 });
@@ -546,7 +637,7 @@ const squadLifecycleQuery = useQuery({
   queryKey: computed(() => ["squad-lifecycle-current", auth.authenticated]),
   enabled: computed(() => auth.authenticated),
   queryFn: async () => apiGet<any>("/api/squad-lifecycle/current"),
-  refetchInterval: computed(() => (canAutoRefresh.value ? squadLifecycleRefetchInterval.value : false)),
+  refetchInterval: computed(() => squadLifecycleRefetchInterval.value),
   refetchIntervalInBackground: true,
   refetchOnWindowFocus: false,
 });
@@ -566,7 +657,7 @@ const battleLogOverviewQuery = useQuery({
     }
   },
   staleTime: 5_000,
-  refetchInterval: computed(() => (canAutoRefresh.value ? combatCacheRefetchInterval.value : false)),
+  refetchInterval: computed(() => combatCacheRefetchInterval.value),
   refetchIntervalInBackground: true,
   refetchOnWindowFocus: false,
 });
@@ -681,23 +772,38 @@ function handleVisibilityChange() {
 onMounted(() => {
   pageHidden.value = typeof document !== "undefined" ? document.hidden : false;
   document.addEventListener("visibilitychange", handleVisibilityChange);
+  startBzssCoreSampleClock();
+  startBzssStream();
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("visibilitychange", handleVisibilityChange);
   cancelIdleTask(battleStatsRefreshIdleHandle);
+  if (unsubscribeBzssStream) {
+    unsubscribeBzssStream();
+    unsubscribeBzssStream = null;
+  }
+  bzssCoreStreamActive.value = false;
+  stopBzssCoreSampleClock();
 });
 
 onActivated(() => {
   active.value = true;
+  startBzssCoreSampleClock();
+  if (!unsubscribeBzssStream) startBzssStream();
 });
 
 onDeactivated(() => {
   active.value = false;
+  stopBzssCoreSampleClock();
 });
 
 function formatTicketDisplay(value: number | null | undefined) {
   return value == null ? "--" : String(value);
+}
+
+function formatSampleDecimal(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
 function resetTicketFormToCurrent() {
@@ -825,24 +931,42 @@ watch(
 );
 
 watch(
-  () => activePlayerBzssQuery.data.value,
-  (payload) => {
-    if (!payload || !activePlayerWindow.value) return;
-    const currentName = String(activePlayerWindow.value.detail.name ?? "").trim();
-    const responseName = String(payload.player?.playerName ?? "").trim();
-    if (responseName && currentName && responseName !== currentName) {
+  () => [bzssCorePlayers.value, activePlayerWindow.value?.detail.name, bzssCoreSnapshot.value] as const,
+  ([currentPlayers, activeName, snapshotVal]) => {
+    if (!activePlayerWindow.value) return;
+    const currentName = String(activeName ?? "").trim();
+    if (!currentName) return;
+
+    let matched = currentPlayers.find((p) => String(p.playerName ?? "").trim() === currentName);
+    if (!matched) {
       const currentSuffix = currentName.split(/\s+/).filter(Boolean).pop() ?? currentName;
-      const responseSuffix = responseName.split(/\s+/).filter(Boolean).pop() ?? responseName;
-      if (currentSuffix !== responseSuffix) return;
+      matched = currentPlayers.find((p) => {
+        const responseName = String(p.playerName ?? "").trim();
+        const responseSuffix = responseName.split(/\s+/).filter(Boolean).pop() ?? responseName;
+        return currentSuffix && responseSuffix && currentSuffix === responseSuffix;
+      });
+    }
+
+    const nextStatus = snapshotVal?.status || "";
+    const nextCompletedAt = snapshotVal?.state?.lastCompletedAt ?? null;
+    const nextPlayerInfo = matched ?? null;
+
+    const currentDetail = activePlayerWindow.value.detail;
+    if (
+      currentDetail.bzssCoreStatus === nextStatus &&
+      currentDetail.bzssCoreLastCompletedAt === nextCompletedAt &&
+      currentDetail.bzssCorePlayerInfo === nextPlayerInfo
+    ) {
+      return;
     }
 
     activePlayerWindow.value = {
       ...activePlayerWindow.value,
       detail: {
         ...activePlayerWindow.value.detail,
-        bzssCoreStatus: payload.status,
-        bzssCoreLastCompletedAt: payload.state?.lastCompletedAt ?? null,
-        bzssCorePlayerInfo: payload.player ?? null,
+        bzssCoreStatus: nextStatus,
+        bzssCoreLastCompletedAt: nextCompletedAt,
+        bzssCorePlayerInfo: nextPlayerInfo,
       },
     };
   },
@@ -884,6 +1008,20 @@ function selectPlayer(payload: { player: PlayerRowViewModel; event: MouseEvent }
   void hydrateActivePlayerWindowIp(detail);
 
   if (player.steamId) {
+    playtimeRequested.value = true;
+  }
+}
+
+function handleMapSelectPlayer(payload: { detail: any; event: MouseEvent }) {
+  activePlayerWindow.value = {
+    detail: payload.detail,
+    anchorX: payload.event.clientX,
+    anchorY: payload.event.clientY,
+    notice: "",
+  };
+  void hydrateActivePlayerWindowIp(payload.detail);
+
+  if (payload.detail.steamId) {
     playtimeRequested.value = true;
   }
 }
@@ -1835,6 +1973,44 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
   background: var(--app-background, var(--color-bg-page));
 }
 
+.bzss-sample-window {
+  position: fixed;
+  top: 124px;
+  right: 18px;
+  z-index: 70;
+  width: 218px;
+  padding: 12px 12px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.9);
+  box-shadow: 0 16px 34px rgba(2, 6, 23, 0.28);
+  backdrop-filter: blur(12px);
+}
+
+.bzss-sample-window__title {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.bzss-sample-window__rate {
+  display: block;
+  font-size: 28px;
+  line-height: 1;
+  color: #86efac;
+}
+
+.bzss-sample-window__meta {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
 .match-state-content {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
@@ -2476,6 +2652,12 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
   .battle-log-summary-grid {
     grid-template-columns: 1fr;
   }
+
+  .bzss-sample-window {
+    top: 12px;
+    right: 12px;
+    width: min(200px, calc(100vw - 24px));
+  }
 }
 
 /* ─── 批量操作悬浮条 ─────────────────────────────────────────────────────── */
@@ -2643,5 +2825,16 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 .t2-count {
   color: var(--color-team2-primary, #ff9b45);
   font-weight: 800;
+}
+
+.match-state-map-wrapper {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.match-status-data-state {
+  grid-row: 3;
 }
 </style>

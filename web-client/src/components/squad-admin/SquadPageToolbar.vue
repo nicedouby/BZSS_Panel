@@ -34,6 +34,26 @@
         {{ viewerPerspectiveText }}
       </div>
 
+      <!-- 视图切换 -->
+      <div class="view-mode-toggle">
+        <button
+          type="button"
+          class="toggle-btn"
+          :class="{ active: viewMode === 'list' }"
+          @click="$emit('view-mode-change', 'list')"
+        >
+          列表
+        </button>
+        <button
+          type="button"
+          class="toggle-btn"
+          :class="{ active: viewMode === 'map' }"
+          @click="$emit('view-mode-change', 'map')"
+        >
+          地图
+        </button>
+      </div>
+
       <!-- 弹性占位 -->
       <div class="toolbar-spacer" />
 
@@ -142,6 +162,7 @@ const props = defineProps<{
   playersUpdatedAt?: number;
   squadsUpdatedAt?: number;
   multiSelectMode?: boolean;
+  viewMode: "list" | "map";
 }>();
 
 const emit = defineEmits<{
@@ -151,6 +172,7 @@ const emit = defineEmits<{
   (event: "refresh-playtime"): void;
   (event: "refresh-playtime-force"): void;
   (event: "toggle-multi-select"): void;
+  (event: "view-mode-change", mode: "list" | "map"): void;
 }>();
 
 const filters = [
@@ -566,5 +588,43 @@ onBeforeUnmount(() => {
 .menu-fade-leave-to {
   opacity: 0;
   transform: translateY(-4px);
+}
+
+/* ─── 视图切换 ───────────────────────────────────────────────────────────── */
+.view-mode-toggle {
+  display: flex;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-full);
+  padding: 2px;
+  gap: 2px;
+  margin-left: 4px;
+}
+
+.toggle-btn {
+  height: 22px;
+  padding: 0 10px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toggle-btn:hover {
+  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.toggle-btn.active {
+  background: rgba(96, 165, 250, 0.15);
+  color: #93c5fd;
+  font-weight: 600;
 }
 </style>

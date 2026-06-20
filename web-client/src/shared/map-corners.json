@@ -1,0 +1,262 @@
+{
+  "Anvil_RAAS_v1": {
+    "corners": {
+      "min": {
+        "x": -204000,
+        "y": -204000
+      },
+      "max": {
+        "x": 102000,
+        "y": 102000
+      },
+      "bIsValid": true
+    }
+  },
+  "Belaya_RAAS_v1": {
+    "corners": {
+      "min": {
+        "x": -195400,
+        "y": -208000
+      },
+      "max": {
+        "x": 195000,
+        "y": 182500
+      },
+      "bIsValid": true
+    }
+  },
+  "Chora_RAAS_v1": {
+    "corners": {
+      "min": {
+        "x": -246400,
+        "y": -266400
+      },
+      "max": {
+        "x": 159990,
+        "y": 140000
+      },
+      "bIsValid": true
+    }
+  },
+  "Fallujah_RAAS_v1": {
+    "corners": {
+      "min": {
+        "x": -131500,
+        "y": -154500
+      },
+      "max": {
+        "x": 169000,
+        "y": 146000
+      },
+      "bIsValid": true
+    }
+  },
+  "FoolsRoad_RAAS_v1": {
+    "corners": {
+      "min": {
+        "x": -132576.921875,
+        "y": -132576.921875
+      },
+      "max": {
+        "x": 44805.078125,
+        "y": 44805.078125
+      },
+      "bIsValid": true
+    }
+  },
+  "GooseBay_RAAS_v1": {
+    "corners": {
+      "min": {
+        "x": -201657.890625,
+        "y": -201674.84375
+      },
+      "max": {
+        "x": 201523.078125,
+        "y": 201503.078125
+      },
+      "bIsValid": true
+    }
+  },
+  "Gorodok_RAAS_v1": {
+    "corners": {
+      "min": {
+        "x": -203199,
+        "y": -203200
+      },
+      "max": {
+        "x": 203201,
+        "y": 203200
+      },
+      "bIsValid": true
+    }
+  },
+  "Kamdesh_RAAS_v1": {
+    "corners": {
+      "min": {
+        "x": -201600,
+        "y": -201600
+      },
+      "max": {
+        "x": 201600,
+        "y": 201600
+      },
+      "bIsValid": true
+    }
+  },
+  "Kohat_RAAS_v1": {
+    "corners": {
+      "min": {
+        "x": -230000,
+        "y": -230000
+      },
+      "max": {
+        "x": 231700,
+        "y": 231700
+      },
+      "bIsValid": true
+    }
+  },
+  "Kokan_RAAS_v1": {
+    "corners": {
+      "min": {
+        "x": -107634.9375,
+        "y": -107566.75
+      },
+      "max": {
+        "x": 142013.671875,
+        "y": 142013.671875
+      },
+      "bIsValid": true
+    }
+  },
+  "Lashkar_RAAS_v1": {
+    "corners": {
+      "min": {
+        "x": -216700,
+        "y": -216700
+      },
+      "max": {
+        "x": 216700,
+        "y": 216700
+      },
+      "bIsValid": true
+    }
+  },
+  "Logar_RAAS_v1": {
+    "corners": {
+      "min": {
+        "x": -88145.140625,
+        "y": -113238.7578125
+      },
+      "max": {
+        "x": 87978.328125,
+        "y": 62921.7109375
+      },
+      "bIsValid": true
+    }
+  },
+  "Manicouagan_RAAS_v1": {
+    "corners": {
+      "min": {
+        "x": -201657.890625,
+        "y": -201674.84375
+      },
+      "max": {
+        "x": 201657.890625,
+        "y": 201674.84375
+      },
+      "bIsValid": true
+    }
+  },
+  "Mestia_RAAS_v1": {
+    "corners": {
+      "min": {
+        "x": -120000,
+        "y": -110000
+      },
+      "max": {
+        "x": 120000,
+        "y": 130000
+      },
+      "bIsValid": true
+    }
+  },
+  "Mutaha_RAAS_v1": {
+    "corners": {
+      "min": {
+        "x": -93500,
+        "y": -114000
+      },
+      "max": {
+        "x": 182000,
+        "y": 161500
+      },
+      "bIsValid": true
+    }
+  },
+  "Narva_RAAS_v1": {
+    "corners": {
+      "min": {
+        "x": -138970.6875,
+        "y": -140207.4375
+      },
+      "max": {
+        "x": 141029.375,
+        "y": 139792.515625
+      },
+      "bIsValid": true
+    }
+  },
+  "Skorpo_RAAS_v1": {
+    "corners": {
+      "min": {
+        "x": -360150,
+        "y": -329300
+      },
+      "max": {
+        "x": 324850,
+        "y": 357608
+      },
+      "bIsValid": true
+    }
+  },
+  "Sumari_RAAS_v1": {
+    "corners": {
+      "min": {
+        "x": -63973.92578125,
+        "y": -44728.078125
+      },
+      "max": {
+        "x": 66033.578125,
+        "y": 85297.234375
+      },
+      "bIsValid": true
+    }
+  },
+  "Tallil_RAAS_v1": {
+    "corners": {
+      "min": {
+        "x": -234000.015625,
+        "y": -234000
+      },
+      "max": {
+        "x": 234000,
+        "y": 234000
+      },
+      "bIsValid": true
+    }
+  },
+  "Yehorivka_RAAS_v1": {
+    "corners": {
+      "min": {
+        "x": -330197.40625,
+        "y": -330199.5
+      },
+      "max": {
+        "x": 304803,
+        "y": 304800
+      },
+      "bIsValid": true
+    }
+  }
+}

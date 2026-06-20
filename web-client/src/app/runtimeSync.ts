@@ -87,11 +87,7 @@ function scheduleRuntimeSync() {
   const delay = resolveRuntimeSyncDelay();
   timer = window.setTimeout(() => {
     timer = null;
-    if (canAutoRefreshNow()) {
-      void fetchSnapshot({ scheduleNext: true, immediate: true });
-      return;
-    }
-    scheduleRuntimeSync();
+    void fetchSnapshot({ scheduleNext: true, immediate: true });
   }, delay);
 }
 
@@ -99,7 +95,7 @@ function resolveRuntimeSyncDelay() {
   return resolveRefreshDelay({
     policy: runtimeSyncState.refreshPolicy,
     playerCount: getCurrentPlayerCount(),
-    hidden: typeof document !== "undefined" ? document.hidden : false,
+    hidden: false,
     surface: "auxiliary",
   });
 }

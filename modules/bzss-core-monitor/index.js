@@ -1,9 +1,11 @@
 // -*- coding: utf-8 -*-
 
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
 const DEFAULT_POLL_INTERVAL_MS = 100;
+const DEFAULT_WATCH_DEBOUNCE_MS = 0;
 const MARKER = "{BZSS-Marked}";
 const START_NEEDLE = Buffer.from("PlayerBaseInfo{", "utf16le");
 const MARKER_NEEDLE = Buffer.from(MARKER, "utf16le");
@@ -17,10 +19,15 @@ export function createBzssCoreMonitorModule({ core, logger }) {
 
   const state = createInitialState();
   let started = false;
-  let timer = null;
+  let pollTimer = null;
+  let watchTimer = null;
+  let tickRunning = false;
+  let tickAgain = false;
   let lastFingerprint = "";
   let lastExists = false;
   let lastResolvedPath = "";
+  let watcher = null;
+  let watcherPath = "";
 
   function readConfig() {
     const config = core.config?.get?.("bzssCore", {}) ?? {};
@@ -35,6 +42,18 @@ export function createBzssCoreMonitorModule({ core, logger }) {
         config.playerInfoPollIntervalMs,
         DEFAULT_POLL_INTERVAL_MS,
       ),
+      playerInfoWatchDebounceMs: normalizeNonNegativeInteger(
+        config.playerInfoWatchDebounceMs,
+        DEFAULT_WATCH_DEBOUNCE_MS,
+      ),
+    };
+  }
+
+  const listeners = new Set();
+  function subscribe(listener) {
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
     };
   }
 
@@ -54,6 +73,14 @@ export function createBzssCoreMonitorModule({ core, logger }) {
         },
       });
     }
+
+    for (const listener of listeners) {
+      try {
+        listener(state);
+      } catch (err) {
+        // ignore
+      }
+    }
   }
 
   function clearPublishedPlayers(nextStatus, nextError = "") {
@@ -72,6 +99,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
     const configuredPath = config.playerInfoSavePath;
 
     if (!configuredPath) {
+      closeFileWatcher();
       lastFingerprint = "";
       lastExists = false;
       lastResolvedPath = "";
@@ -85,6 +113,9 @@ export function createBzssCoreMonitorModule({ core, logger }) {
         draft.players = [];
         draft.indexByName = {};
         draft.markerSeen = false;
+        draft.rawText = "";
+        draft.rawTextLength = 0;
+        draft.rawTextUpdatedAt = "";
         draft.lastError = "";
       });
       return;
@@ -93,6 +124,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
     const resolvedPath = path.isAbsolute(configuredPath)
       ? configuredPath
       : path.resolve(process.cwd(), configuredPath);
+    ensureFileWatcher(configuredPath, resolvedPath, config.playerInfoWatchDebounceMs);
     const pathChanged = resolvedPath !== lastResolvedPath;
     if (pathChanged) {
       lastFingerprint = "";
@@ -107,6 +139,9 @@ export function createBzssCoreMonitorModule({ core, logger }) {
         draft.players = [];
         draft.indexByName = {};
         draft.markerSeen = false;
+        draft.rawText = "";
+        draft.rawTextLength = 0;
+        draft.rawTextUpdatedAt = "";
         draft.lastError = "";
         draft.status = "missing";
       });
@@ -129,6 +164,9 @@ export function createBzssCoreMonitorModule({ core, logger }) {
           draft.markerSeen = false;
           draft.players = [];
           draft.indexByName = {};
+          draft.rawText = "";
+          draft.rawTextLength = 0;
+          draft.rawTextUpdatedAt = "";
           draft.lastError = "";
           draft.status = missingAfterExisting ? "waiting" : "missing";
         });
@@ -144,7 +182,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
       return;
     }
 
-    const fingerprint = `${stat.size}:${Math.floor(stat.mtimeMs)}`;
+    const fingerprint = `${stat.size}:${stat.mtimeMs}`;
     if (!pathChanged && fingerprint === lastFingerprint) return;
     lastFingerprint = fingerprint;
     lastExists = true;
@@ -174,6 +212,9 @@ export function createBzssCoreMonitorModule({ core, logger }) {
       draft.fileMtimeMs = Number(stat?.mtimeMs ?? 0);
       draft.lastReadAt = new Date().toISOString();
       draft.markerSeen = extracted.markerSeen;
+      draft.rawText = extracted.text;
+      draft.rawTextLength = extracted.text.length;
+      draft.rawTextUpdatedAt = draft.lastReadAt;
       draft.lastError = extracted.error ?? "";
     });
 
@@ -201,14 +242,82 @@ export function createBzssCoreMonitorModule({ core, logger }) {
 
   function scheduleNextTick(delayMs = readConfig().playerInfoPollIntervalMs) {
     if (!started) return;
-    clearTimeout(timer);
-    timer = setTimeout(async () => {
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(async () => {
       try {
-        await tick();
+        await runTick();
       } finally {
         scheduleNextTick();
       }
-    }, Math.max(100, delayMs));
+    }, Math.max(25, delayMs));
+  }
+
+  function scheduleWatchTick(delayMs = DEFAULT_WATCH_DEBOUNCE_MS) {
+    if (!started) return;
+    if (watchTimer) return;
+    watchTimer = setTimeout(() => {
+      watchTimer = null;
+      runTick().catch((err) => {
+        moduleLogger.warn(`BZSS-Core monitor watch tick failed: ${err.message}`);
+      });
+    }, Math.max(0, delayMs));
+  }
+
+  async function runTick() {
+    if (tickRunning) {
+      tickAgain = true;
+      return;
+    }
+
+    tickRunning = true;
+    try {
+      do {
+        tickAgain = false;
+        await tick();
+      } while (started && tickAgain);
+    } finally {
+      tickRunning = false;
+    }
+  }
+
+  function ensureFileWatcher(configuredPath, resolvedPath, debounceMs) {
+    if (!started) return;
+    if (!configuredPath || !resolvedPath) {
+      closeFileWatcher();
+      return;
+    }
+    if (watcherPath === resolvedPath && watcher) return;
+
+    closeFileWatcher();
+    watcherPath = resolvedPath;
+    const directory = path.dirname(resolvedPath);
+    const targetName = path.basename(resolvedPath).toLowerCase();
+    try {
+      watcher = fsSync.watch(directory, { persistent: false }, (_eventType, fileName) => {
+        const changedName = fileName == null ? "" : String(fileName).toLowerCase();
+        if (changedName && changedName !== targetName) return;
+        scheduleWatchTick(debounceMs);
+      });
+      watcher.on?.("error", (error) => {
+        moduleLogger.warn(`BZSS-Core monitor file watcher failed: ${error.message}`);
+        closeFileWatcher();
+      });
+    } catch (error) {
+      watcher = null;
+      moduleLogger.warn(`BZSS-Core monitor file watcher unavailable: ${error.message}`);
+    }
+  }
+
+  function closeFileWatcher() {
+    if (watcher) {
+      try {
+        watcher.close();
+      } catch {
+        // ignore
+      }
+    }
+    watcher = null;
+    watcherPath = "";
   }
 
   function getState() {
@@ -225,7 +334,30 @@ export function createBzssCoreMonitorModule({ core, logger }) {
       fileSize: state.fileSize,
       fileMtimeMs: state.fileMtimeMs,
       playerCount: state.players.length,
+      rawTextLength: state.rawTextLength,
+      rawTextUpdatedAt: state.rawTextUpdatedAt,
       lastError: state.lastError,
+    };
+  }
+
+  function getRawSnapshot() {
+    return {
+      configuredPath: state.configuredPath,
+      resolvedPath: state.resolvedPath,
+      exists: state.exists,
+      status: state.status,
+      revision: state.revision,
+      updatedAt: state.updatedAt,
+      lastReadAt: state.lastReadAt,
+      lastCompletedAt: state.lastCompletedAt,
+      markerSeen: state.markerSeen,
+      fileSize: state.fileSize,
+      fileMtimeMs: state.fileMtimeMs,
+      playerCount: state.players.length,
+      lastError: state.lastError,
+      rawText: state.rawText,
+      rawTextLength: state.rawTextLength,
+      rawTextUpdatedAt: state.rawTextUpdatedAt,
     };
   }
 
@@ -254,14 +386,17 @@ export function createBzssCoreMonitorModule({ core, logger }) {
   async function start() {
     if (started) return;
     started = true;
-    await tick();
+    await runTick();
     scheduleNextTick();
   }
 
   async function stop() {
     started = false;
-    clearTimeout(timer);
-    timer = null;
+    clearTimeout(pollTimer);
+    clearTimeout(watchTimer);
+    pollTimer = null;
+    watchTimer = null;
+    closeFileWatcher();
   }
 
   return {
@@ -276,7 +411,9 @@ export function createBzssCoreMonitorModule({ core, logger }) {
     api: {
       getState,
       getPlayers,
+      getRawSnapshot,
       findPlayer,
+      subscribe,
     },
     start,
     stop,
@@ -298,6 +435,9 @@ function createInitialState() {
     fileMtimeMs: 0,
     players: [],
     indexByName: {},
+    rawText: "",
+    rawTextLength: 0,
+    rawTextUpdatedAt: "",
     lastError: "",
   };
 }
@@ -332,23 +472,32 @@ export function extractBzssCoreTrackedText(buffer) {
 export function parseBzssCorePlayerBlocks(text) {
   const source = String(text ?? "");
   const players = [];
-  const pattern = /PlayerBaseInfo\{([^}]*)\}(?:SoldierInfo\{([\s\S]*?)\})?PlayerScoreboard\{([^}]*)\}/g;
+  const pattern = /PlayerBaseInfo\{([^}]*)\}/g;
   let match = null;
   while ((match = pattern.exec(source)) !== null) {
     const baseRaw = String(match[1] ?? "");
-    const soldierRaw = String(match[2] ?? "");
-    const scoreboardRaw = String(match[3] ?? "");
+    const segmentStart = pattern.lastIndex;
+    const nextBaseIndex = source.indexOf("PlayerBaseInfo{", segmentStart);
+    const segmentEnd = nextBaseIndex >= 0 ? nextBaseIndex : source.length;
+    const segment = source.slice(segmentStart, segmentEnd);
+    const soldierBlock = findNamedBlock(segment, "SoldierInfo");
+    const scoreboardBlock = findNamedBlock(segment, "PlayerScoreboard");
+    if (!scoreboardBlock) continue;
+    const soldierRaw = soldierBlock?.content ?? "";
+    const scoreboardRaw = scoreboardBlock.content;
     const baseFields = splitTopLevelCsv(baseRaw);
+    const baseMap = parseKeyValueFields(baseFields);
     const scoreboardValues = splitTopLevelCsv(scoreboardRaw);
     const soldierInfo = soldierRaw ? parseSoldierInfo(soldierRaw) : { summary: createEmptySoldierInfo() };
     players.push({
-      playerName: baseFields[2] ?? "",
-      playerGuid: baseFields[1] ?? "",
-      teamId: toFiniteNumber(baseFields[3]),
-      squadId: toFiniteNumber(baseFields[4]),
+      playerName: baseMap.PlayerName ?? baseFields[2] ?? "",
+      playerGuid: baseMap.PlayerOnlineID ?? baseFields[1] ?? "",
+      teamId: toFiniteNumber(baseMap.TeamID ?? baseMap.TeamId ?? baseFields[3]),
+      squadId: toFiniteNumber(baseMap.SquadID ?? baseMap.SquadId ?? baseFields[4]),
       playerBaseInfo: {
         raw: baseRaw,
         fields: baseFields,
+        values: baseMap,
       },
       soldierInfo: soldierInfo.summary,
       playerScoreboard: {
@@ -356,7 +505,7 @@ export function parseBzssCorePlayerBlocks(text) {
         values: scoreboardValues,
         numericValues: scoreboardValues.map(toFiniteNumber),
       },
-      rawText: `PlayerBaseInfo{${baseRaw}}SoldierInfo{${soldierRaw}}PlayerScoreboard{${scoreboardRaw}}`,
+      rawText: source.slice(match.index, segmentEnd),
     });
   }
   return players;
@@ -366,6 +515,7 @@ function createEmptySoldierInfo() {
   return {
     raw: "",
     fields: [],
+    values: {},
     soldierClass: "",
     health: null,
     weaponClass: "",
@@ -376,30 +526,97 @@ function createEmptySoldierInfo() {
 }
 
 function parseSoldierInfo(rawText) {
-  const vectorMatches = [...String(rawText ?? "").matchAll(/\{X=([-0-9.]+)\s+Y=([-0-9.]+)\s+Z=([-0-9.]+)\}/g)];
-  const vectors = vectorMatches.map((match) => ({
-    x: toFiniteNumber(match[1]),
-    y: toFiniteNumber(match[2]),
-    z: toFiniteNumber(match[3]),
-  }));
-  const withoutVectors = String(rawText ?? "").replace(/\{X=[-0-9.]+\s+Y=[-0-9.]+\s+Z=[-0-9.]+\}/g, "");
-  const fields = splitTopLevelCsv(withoutVectors);
+  const source = String(rawText ?? "");
+  const positionBlock = findNamedBlock(source, "Position");
+  const rotationBlock = findNamedBlock(source, "Rotation");
+  const weaponBlock = findNamedBlock(source, "WeaponInfo");
+  const vectors = [
+    parseVectorBlock(positionBlock?.content ?? ""),
+    parseVectorBlock(rotationBlock?.content ?? ""),
+  ].filter(Boolean);
+  const withoutNestedBlocks = source
+    .replace(/WeaponInfo\{[\s\S]*?\}(?=Position\{|Rotation\{|$)/g, "")
+    .replace(/Position\{[\s\S]*?\}(?=Rotation\{|$)/g, "")
+    .replace(/Rotation\{[\s\S]*?\}/g, "");
+  const withoutLegacyVectors = withoutNestedBlocks.replace(/\{X=[-0-9.]+\s+Y=[-0-9.]+\s+Z=[-0-9.]+\}/g, "");
+  const legacyVectorMatches = [...source.matchAll(/\{X=([-0-9.]+)\s+Y=([-0-9.]+)\s+Z=([-0-9.]+)\}/g)];
+  for (const match of legacyVectorMatches) {
+    vectors.push({
+      x: toFiniteNumber(match[1]),
+      y: toFiniteNumber(match[2]),
+      z: toFiniteNumber(match[3]),
+    });
+  }
+  const fields = splitTopLevelCsv(withoutLegacyVectors);
+  const fieldMap = parseKeyValueFields(fields);
+  const weaponFields = weaponBlock ? splitTopLevelCsv(weaponBlock.content) : [];
+  const weaponClass = weaponFields[0] && weaponFields[0] !== "NoWeapon"
+    ? weaponFields[0]
+    : "";
   const weaponFieldIndex = fields.findIndex((value, index) => index > 0 && /^BP_/i.test(value));
-  const ammoValues = weaponFieldIndex >= 0
-    ? fields.slice(weaponFieldIndex + 1).map(toFiniteNumber).filter((value) => value != null)
-    : [];
+  const ammoValues = weaponFields.length > 1
+    ? weaponFields.slice(1).map(toFiniteNumber).filter((value) => value != null)
+    : weaponFieldIndex >= 0
+      ? fields.slice(weaponFieldIndex + 1).map(toFiniteNumber).filter((value) => value != null)
+      : [];
 
   return {
     summary: {
       raw: rawText,
       fields,
-      soldierClass: fields[0] ?? "",
-      health: toFiniteNumber(fields[1]),
-      weaponClass: weaponFieldIndex >= 0 ? fields[weaponFieldIndex] ?? "" : "",
+      values: fieldMap,
+      soldierClass: fieldMap.PawnClass ?? fields[0] ?? "",
+      health: toFiniteNumber(fieldMap.Health ?? fields[1]),
+      weaponClass: weaponClass || (weaponFieldIndex >= 0 ? fields[weaponFieldIndex] ?? "" : ""),
       ammoValues,
       position: vectors[0] ?? null,
       rotation: vectors[1] ?? null,
     },
+  };
+}
+
+function findNamedBlock(text, name) {
+  const source = String(text ?? "");
+  const startToken = `${name}{`;
+  const start = source.indexOf(startToken);
+  if (start < 0) return null;
+  const contentStart = start + startToken.length;
+  let depth = 1;
+  for (let index = contentStart; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "{") depth += 1;
+    if (char === "}") depth -= 1;
+    if (depth === 0) {
+      return {
+        start,
+        end: index + 1,
+        content: source.slice(contentStart, index),
+      };
+    }
+  }
+  return null;
+}
+
+function parseKeyValueFields(fields) {
+  const result = {};
+  for (const field of fields) {
+    const text = String(field ?? "").trim();
+    const separator = text.indexOf(":");
+    if (separator <= 0) continue;
+    const key = text.slice(0, separator).trim();
+    const value = text.slice(separator + 1).trim();
+    if (key) result[key] = value;
+  }
+  return result;
+}
+
+function parseVectorBlock(text) {
+  const match = String(text ?? "").match(/X=([-0-9.]+)\s+Y=([-0-9.]+)\s+Z=([-0-9.]+)/);
+  if (!match) return null;
+  return {
+    x: toFiniteNumber(match[1]),
+    y: toFiniteNumber(match[2]),
+    z: toFiniteNumber(match[3]),
   };
 }
 
@@ -498,6 +715,12 @@ function toFiniteNumber(value) {
 function normalizePositiveInteger(value, fallback) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.floor(parsed);
+}
+
+function normalizeNonNegativeInteger(value, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
   return Math.floor(parsed);
 }
 
