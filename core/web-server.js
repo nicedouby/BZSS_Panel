@@ -2279,6 +2279,55 @@ export class WebServer {
       }
     }
 
+    if (url.pathname.startsWith("/api/plugins/tactical-report")) {
+      const pluginApi = this.getPluginApi("plugin.tacticalReport");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "TacticalReportUnavailable",
+          message: "Tactical report plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/tactical-report/state" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getState?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/tactical-report/config" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getConfig?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/tactical-report/config" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.updateConfig?.(body ?? {}),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/tactical-report/clear" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.clearHistory?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/tactical-report/recent" && req.method === "GET") {
+        const limit = Number(url.searchParams.get("limit") ?? "100") || 100;
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getState?.()?.recentRecords?.slice(0, limit) ?? [],
+        });
+      }
+    }
+
     if (url.pathname.startsWith("/api/plugins/stepwise-squad-playtime-guard")) {
       const pluginApi = this.getPluginApi("plugin.stepwiseSquadPlaytimeGuard");
       if (!pluginApi) {

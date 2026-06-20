@@ -194,6 +194,35 @@ export class WebRegistry {
     });
 
     this.registerPage({
+      id: "web.tacticalReport",
+      title: "战术报点",
+      group: "插件",
+      route: "/plugins/tactical-report",
+      pageModule: "/pages/tactical-report.js",
+      source: "plugin.tacticalReport",
+      description: "查看战术报点触发记录、个人快捷指令，并进入配置页修改 zsbd /0-/9 的默认内容。",
+      required: false,
+      enabled: true,
+      order: 141,
+      icon: "TR",
+    });
+
+    this.registerPage({
+      id: "web.tacticalReportConfig",
+      title: "战术报点配置",
+      group: "插件",
+      route: "/plugins/tactical-report/config",
+      pageModule: "/pages/tactical-report-config.js",
+      source: "plugin.tacticalReport",
+      description: "编辑 zsbd /0-/9 预设内容与帮助输出格式。",
+      required: false,
+      enabled: true,
+      order: 142,
+      icon: "TR",
+      hiddenFromSidebar: true,
+    });
+
+    this.registerPage({
       id: "web.auditRecords",
       title: "操作记录",
       group: "系统",
