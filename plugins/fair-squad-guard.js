@@ -2,6 +2,12 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import {
+  SQUAD_RULE_CHAIN_MODULE_ID,
+  SQUAD_RULE_SOURCES,
+  TIERED_SQUAD_TIME_PASSED_EVENT,
+  emitSquadRuleViolation,
+} from "../modules/squad-rule-chain/events.js";
 
 const PLUGIN_ID = "plugin.fairSquadGuard";
 const PAGE_ROUTE = "/plugins/fair-squad-guard";
@@ -293,7 +299,12 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   function handleLifecycleSquadCreated(event = {}) {
     return enqueue(async () => {
       runtimeConfig = readConfig(config);
-      const normalized = normalizeCreationEvent(event, "LOG");
+      const normalized = normalizeCreationEvent({
+        ...event,
+        creatorName: event.leaderName ?? event.creatorName,
+        creatorSteamId: event.leaderSteamId ?? event.creatorSteamId,
+        creatorEosId: event.leaderEosId ?? event.creatorEosId,
+      }, "LOG");
       if (!normalized.serverId || normalized.squadId == null) return;
       if (normalized.teamId == null) {
         const pendingKey = buildPendingKey(normalized);
@@ -452,51 +463,35 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       record.actions.push({ type: "violation_recorded" });
     }
 
-    const alreadyDisbanded = record.actions.some((action) => action.type === "disbanded");
-    if (!alreadyDisbanded && record.teamId != null && record.squadId != null) {
-      const removeResult = await removeCreatorFromSquad(record);
-      record.actions.push({
-        type: removeResult?.ok === false ? "remove_failed" : "removed",
-        target: record.creatorName || record.creatorSteamId || record.creatorEosId,
-        result: summarizeActionResult(removeResult),
-      });
-      const disbandResult = await disbandSquad(record);
-      record.actions.push({
-        type: disbandResult?.ok === false ? "disband_failed" : "disbanded",
-        teamId: record.teamId,
-        squadId: record.squadId,
-        result: summarizeActionResult(disbandResult),
-      });
-      if (disbandResult?.ok !== false) {
-        record.active = false;
-        record.resolvedAt = nowIso();
-      }
-      state.summary.disbanded += disbandResult?.ok === false ? 0 : 1;
-    } else if (!alreadyDisbanded) {
-      record.actions.push({ type: "disband_skipped", reason: "team_or_squad_missing" });
-    }
-
-    if (shouldBroadcastViolation(record)) {
-      const broadcastResult = await broadcastViolation(record);
-      const ok = broadcastResult?.success !== false;
-      record.actions.push({
-        type: ok ? "broadcasted_violation" : "broadcast_violation_failed",
-        result: summarizeActionResult(broadcastResult),
-      });
-      if (ok) {
+    emitSquadRuleViolation(core, {
+      serverId: record.serverId,
+      matchId: record.matchId,
+      teamId: record.teamId,
+      squadId: record.squadId,
+      squadName: record.squadName,
+      squadType: "fair_squad_creation",
+      leaderSteamId: record.creatorSteamId,
+      leaderName: record.creatorName,
+      leaderEosId: record.creatorEosId,
+      source: SQUAD_RULE_SOURCES.fairSquadCreation,
+      reason: record.reasons.join(" ").trim(),
+      createdAt: record.createdAt,
+      createdAtMs: record.createdAtMs,
+      sourceEventId: record.id,
+      warningMessages: record.isLogConfirmed && hasCreatorIdentity(record) ? [`违规建队拦截：${record.reasons.join(" ")}`] : [],
+      broadcastMessage: shouldBroadcastViolation(record) ? buildViolationBroadcastMessage(record) : "",
+      disbandReason: `公平建队守护：${record.reasons.join(" ")}`.trim(),
+      removeLeaderBeforeDisband: true,
+    });
+    record.actions.push({ type: "violation_emitted" });
+    record.active = false;
+    record.resolvedAt = nowIso();
+    if (record.isLogConfirmed && hasCreatorIdentity(record)) {
+      state.summary.warned += 1;
+      state.summary.disbanded += 1;
+      if (shouldBroadcastViolation(record)) {
         state.summary.broadcasts = (state.summary.broadcasts || 0) + 1;
       }
-    }
-
-    const alreadyWarned = record.actions.some((action) => action.type === "warned" || action.type === "warn_failed");
-    if (!alreadyWarned && record.isLogConfirmed && hasCreatorIdentity(record)) {
-      const warnResult = await sendViolationWarning(record);
-      record.actions.push({
-        type: warnResult?.success === false ? "warn_failed" : "warned",
-        target: record.creatorName || record.creatorSteamId || record.creatorEosId,
-        result: summarizeActionResult(warnResult),
-      });
-      state.summary.warned += warnResult?.success === false ? 0 : 1;
     }
 
     const alreadyCounted = record.actions.some((action) => action.type === "violation_counted");
@@ -954,7 +949,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       ensureClockSafety();
 
       if (typeof core?.eventBus?.onModuleEvent === "function") {
-        unsubscribers.push(core.eventBus.onModuleEvent("module.squadLifecycle", "squadCreated", handleLifecycleSquadCreated));
+        unsubscribers.push(core.eventBus.onModuleEvent(SQUAD_RULE_CHAIN_MODULE_ID, TIERED_SQUAD_TIME_PASSED_EVENT, handleLifecycleSquadCreated));
         unsubscribers.push(core.eventBus.onModuleEvent("module.matchState", "squadsUpdated", handleSquadsUpdated));
       }
 

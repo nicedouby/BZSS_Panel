@@ -4,6 +4,13 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { classifySquadName } from "../domain/squad/squad_name_classifier.js";
+import {
+  SQUAD_NAME_RULE_PASSED_EVENT,
+  SQUAD_RULE_CHAIN_MODULE_ID,
+  SQUAD_RULE_SOURCES,
+  emitSquadRuleViolation,
+  emitTieredSquadTimePassed,
+} from "../modules/squad-rule-chain/events.js";
 
 const PLUGIN_ID = "plugin.stepwiseSquadPlaytimeGuard";
 const CONFIG_KEY = "plugins.stepwiseSquadPlaytimeGuard";
@@ -122,7 +129,12 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   async function handleLifecycleSquadCreated(event = {}) {
     return enqueue(async () => {
       runtimeConfig = readConfig(config);
-      const normalized = normalizeCreationEvent(event, "LOG");
+      const normalized = normalizeCreationEvent({
+        ...event,
+        creatorName: event.leaderName ?? event.creatorName,
+        creatorSteamId: event.leaderSteamId ?? event.creatorSteamId,
+        creatorEosId: event.leaderEosId ?? event.creatorEosId,
+      }, "LOG");
       const clockContext = getClockContext();
       const loggedEvent = {
         ...normalized,
@@ -367,31 +379,47 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       await broadcastCreation(record, decision);
     }
 
-    if (!decision.approved && shouldBroadcastViolation(record, decision)) {
-      await broadcastViolation(record, decision);
-    }
-
-    if (!decision.approved && !record.actions.some((action) => action.type === "disbanded")) {
-      const disbandResult = await disbandSquad(record, decision);
-      record.actions.push({
-        type: disbandResult?.ok === false ? "disband_failed" : "disbanded",
-        result: summarizeActionResult(disbandResult),
+    if (!decision.approved) {
+      emitSquadRuleViolation(core, {
+        serverId: record.serverId,
+        matchId: record.matchId,
+        teamId: record.teamId,
+        squadId: record.squadId,
+        squadName: record.squadName,
+        squadType: record.squadNature,
+        leaderSteamId: record.creatorSteamId || record.inferredLeader?.steamId,
+        leaderName: record.creatorName || record.inferredLeader?.name,
+        leaderEosId: record.creatorEosId || record.inferredLeader?.eosId,
+        source: SQUAD_RULE_SOURCES.tieredSquadTime,
+        reason: decision.reason,
+        createdAt: record.createdAt,
+        createdAtMs: record.createdAtMs,
+        sourceEventId: record.id,
+        warningMessages: shouldWarn(record, decision) ? [buildWarnMessage(record, decision)] : [],
+        broadcastMessage: shouldBroadcastViolation(record, decision) ? buildViolationBroadcastMessage(record, decision) : "",
+        disbandReason: buildDisbandReason(record, decision),
       });
-      if (disbandResult?.ok !== false) {
-        record.active = false;
-        record.resolvedAt = nowIso();
-      }
+      record.actions.push({ type: "violation_emitted" });
+      record.active = false;
+      record.resolvedAt = nowIso();
     }
 
-    if (!decision.approved && shouldWarn(record, decision)) {
-      const warned = record.actions.some((action) => action.type === "warned" || action.type === "warn_failed");
-      if (!warned) {
-        const warnResult = await warnCreator(record, decision);
-        record.actions.push({
-          type: warnResult?.success === false ? "warn_failed" : "warned",
-          result: summarizeActionResult(warnResult),
-        });
-      }
+    if (decision.approved) {
+      emitTieredSquadTimePassed(core, {
+        serverId: record.serverId,
+        matchId: record.matchId,
+        teamId: record.teamId,
+        squadId: record.squadId,
+        squadName: record.squadName,
+        squadType: record.squadNature,
+        leaderSteamId: record.creatorSteamId || record.inferredLeader?.steamId,
+        leaderName: record.creatorName || record.inferredLeader?.name,
+        leaderEosId: record.creatorEosId || record.inferredLeader?.eosId,
+        createdAt: record.createdAt,
+        createdAtMs: record.createdAtMs,
+        sourceEventId: record.id,
+      });
+      record.actions.push({ type: "tiered_pass_emitted" });
     }
 
     if ((!record.playtime?.known && runtimeConfig.liveLookupWhenMissing) || (record.isWarmup && !record.playtime?.known && runtimeConfig.liveLookupWhenMissing)) {
@@ -503,42 +531,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     if (result?.success !== false) {
       state.ruleReminderBroadcastKeys.add(matchKey);
     }
-  }
-
-  async function disbandSquad(record, decision) {
-    const request = {
-      serverId: record.serverId,
-      teamId: record.teamId,
-      squadId: record.squadId,
-      reason: buildDisbandReason(record, decision),
-      source: PLUGIN_ID,
-      system: true,
-      operatorName: PLUGIN_ID,
-    };
-    if (typeof modules?.squadManagement?.requestDisband === "function") return await modules.squadManagement.requestDisband(request);
-    if (typeof modules?.squadManagement?.disband === "function") return await modules.squadManagement.disband(request);
-    if (typeof modules?.squadManagement?.executeAction === "function") {
-      return await modules.squadManagement.executeAction({ ...request, type: "disband_squad" });
-    }
-    return { ok: false, error: "squad_management_unavailable" };
-  }
-
-  async function warnCreator(record, decision) {
-    const sender = modules?.adminWarn?.sendAdminWarn ?? modules?.adminWarn?.warnPlayer;
-    if (typeof sender !== "function") return { success: false, skipped: true, skipReason: "admin_warn_unavailable" };
-    const identity = resolveIdentity(record);
-    const targetName = identity.name;
-    if (!targetName) return { success: false, skipped: true, skipReason: "target_missing" };
-    return await sender.call(modules.adminWarn, {
-      targetName,
-      targetSteamId: identity.steamID || undefined,
-      targetEosId: identity.eosID || undefined,
-      message: buildWarnMessage(record, decision),
-      reason: "stepwise_squad_playtime_violation",
-      sourceModule: PLUGIN_ID,
-      relatedEventId: record.id,
-      system: true,
-    }).catch((error) => ({ success: false, error: error?.message ?? String(error) }));
   }
 
   async function triggerBackgroundLookup(record) {
@@ -704,7 +696,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         icon: "SSP",
       });
       if (typeof core?.eventBus?.onModuleEvent === "function") {
-        unsubscribers.push(core.eventBus.onModuleEvent("module.squadLifecycle", "squadCreated", (event) => {
+        unsubscribers.push(core.eventBus.onModuleEvent(SQUAD_RULE_CHAIN_MODULE_ID, SQUAD_NAME_RULE_PASSED_EVENT, (event) => {
           void handleLifecycleSquadCreated(event);
         }));
       }
@@ -780,6 +772,11 @@ function findRule(nature, seconds, runtimeConfig) {
 function normalizeCreationEvent(event = {}, fallbackSource = "LOG") {
   const creationSource = normalizeText(event.creationSource ?? fallbackSource) || fallbackSource;
   const classification = classifySquadName(normalizeText(event.squadName));
+  const passedSquadType = normalizeText(event.squadType);
+  const squadNature = passedSquadType || classification.nature;
+  const squadNatureLabel = squadNature === classification.nature
+    ? classification.label
+    : passedSquadType;
   return {
     id: normalizeText(event.id) || `sspg:${Date.now()}:${Math.random().toString(16).slice(2)}`,
     serverId: normalizeText(event.serverId),
@@ -801,8 +798,8 @@ function normalizeCreationEvent(event = {}, fallbackSource = "LOG") {
     creationSource,
     creationConfidence: normalizeText(event.creationConfidence ?? (creationSource === "LOG" ? "HIGH" : "MEDIUM")),
     isLogConfirmed: creationSource === "LOG" || creationSource === "RCON_PROMOTED_TO_LOG",
-    squadNature: classification.nature,
-    squadNatureLabel: classification.label,
+    squadNature,
+    squadNatureLabel,
     squadVehicleClass: classification.vehicleClass,
     squadVehicleClassLabel: classification.vehicleClassLabel,
     clockSeconds: positiveInt(event.clockSeconds, 0),

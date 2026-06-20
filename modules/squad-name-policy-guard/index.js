@@ -4,6 +4,12 @@ import {
   buildSquadNamePolicyWarningMessages,
   testSquadNamePolicy,
 } from "../../domain/squad-name-policy/index.js";
+import { classifySquadName } from "../../domain/squad/squad_name_classifier.js";
+import {
+  SQUAD_RULE_SOURCES,
+  emitSquadNameRulePassed,
+  emitSquadRuleViolation,
+} from "../squad-rule-chain/events.js";
 
 const MODULE_ID = "module.squadNamePolicyGuard";
 const API_NAME = "squadNamePolicyGuard";
@@ -153,13 +159,27 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
     stats.evaluated += 1;
     const evaluation = testSquadNamePolicy(normalized.squadName, config);
     if (!isViolation(evaluation)) {
-      return rememberRecord({
+      const allowedRecord = rememberRecord({
         event: normalized,
         source,
         status: "allowed",
         reason: evaluation.reason,
         evaluation,
       });
+      emitSquadNameRulePassed(core, {
+        serverId: normalized.serverId,
+        matchId: normalized.matchId,
+        teamId: normalized.teamId,
+        squadId: normalized.squadId,
+        squadName: normalized.squadName,
+        squadType: resolvePassedSquadType(normalized.squadName, evaluation),
+        leaderSteamId: normalized.creatorSteamId,
+        leaderName: normalized.creatorName,
+        leaderEosId: normalized.creatorEosId,
+        createdAt: normalized.time,
+        sourceEventId: normalized.eventId || buildDedupeKey(normalized),
+      });
+      return allowedRecord;
     }
 
     stats.violations += 1;
@@ -175,30 +195,24 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
     rememberRecord(record);
 
     try {
-      if (runtimeConfig.action === "disband_then_warn") {
-        const removeResult = await removeCreatorFromSquad(normalized, evaluation);
-        record.actions.push({
-          type: removeResult?.ok === false ? "remove_failed" : "removed",
-          result: summarizeResult(removeResult),
-        });
-        const disbandResult = await disbandSquad(normalized, evaluation);
-        record.actions.push({
-          type: disbandResult?.ok === false ? "disband_failed" : "disbanded",
-          result: summarizeResult(disbandResult),
-        });
-        if (disbandResult?.ok === false) stats.disbandFailed += 1;
-        else stats.disbanded += 1;
-      }
-
-      const warningResults = await warnCreator(normalized, record.warningMessages);
-      for (const warningResult of warningResults) {
-        record.actions.push({
-          type: warningResult?.success === false ? "warn_failed" : "warned",
-          result: summarizeResult(warningResult),
-        });
-        if (warningResult?.success === false || warningResult?.skipped) stats.warningsSkipped += 1;
-        else stats.warningsSent += 1;
-      }
+      emitSquadRuleViolation(core, {
+        serverId: normalized.serverId,
+        matchId: normalized.matchId,
+        teamId: normalized.teamId,
+        squadId: normalized.squadId,
+        squadName: normalized.squadName,
+        squadType: resolvePassedSquadType(normalized.squadName, evaluation),
+        leaderSteamId: normalized.creatorSteamId,
+        leaderName: normalized.creatorName,
+        leaderEosId: normalized.creatorEosId,
+        source: SQUAD_RULE_SOURCES.squadNameRule,
+        reason: evaluation.reason,
+        createdAt: normalized.time,
+        sourceEventId: normalized.eventId || buildDedupeKey(normalized),
+        warningMessages: expandWarningMessages(record.warningMessages, runtimeConfig),
+        removeLeaderBeforeDisband: runtimeConfig.action === "disband_then_warn",
+      });
+      record.actions.push({ type: "violation_emitted" });
       record.status = "handled";
       record.updatedAt = nowIso();
     } catch (error) {
@@ -211,107 +225,6 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
 
     return record;
   }
-
-  async function disbandSquad(event, evaluation) {
-    const request = {
-      serverId: event.serverId,
-      matchId: event.matchId,
-      teamId: event.teamId,
-      squadId: event.squadId,
-      squadName: event.squadName,
-      creatorName: event.creatorName,
-      creatorSteamId: event.creatorSteamId,
-      creatorEosId: event.creatorEosId,
-      reason: `squad_name_policy_violation: ${evaluation.reason}`,
-      source: MODULE_ID,
-      operatorName: MODULE_ID,
-      system: true,
-      allowUnverifiedTarget: true,
-      allowRefresh: false,
-    };
-    if (typeof modules?.squadManagement?.requestDisband === "function") {
-      return await modules.squadManagement.requestDisband(request);
-    }
-    if (typeof modules?.squadManagement?.disband === "function") {
-      return await modules.squadManagement.disband(request);
-    }
-    if (typeof modules?.squadManagement?.executeAction === "function") {
-      return await modules.squadManagement.executeAction({ ...request, type: "disband_squad" });
-    }
-    return { ok: false, error: "squad_management_unavailable" };
-  }
-
-  async function removeCreatorFromSquad(event, evaluation) {
-    if (!event.creatorName && !event.creatorSteamId && !event.creatorEosId) {
-      return { ok: false, skipped: true, skipReason: "target_missing" };
-    }
-
-    const request = {
-      serverId: event.serverId,
-      matchId: event.matchId,
-      name: event.creatorName,
-      steamId: event.creatorSteamId,
-      eosId: event.creatorEosId,
-      squadName: event.squadName,
-      teamId: event.teamId,
-      squadId: event.squadId,
-      reason: `squad_name_policy_pre_disband_remove: ${evaluation.reason}`,
-      source: MODULE_ID,
-      operatorName: MODULE_ID,
-      system: true,
-    };
-    if (typeof modules?.squadManagement?.requestRemoveFromSquad === "function") {
-      return await modules.squadManagement.requestRemoveFromSquad(request);
-    }
-    if (typeof modules?.squadManagement?.removeFromSquad === "function") {
-      return await modules.squadManagement.removeFromSquad(request);
-    }
-    if (typeof modules?.squadManagement?.executeAction === "function") {
-      return await modules.squadManagement.executeAction({ ...request, type: "remove_from_squad" });
-    }
-    return { ok: false, error: "squad_management_unavailable" };
-  }
-
-  async function warnCreator(event, messages) {
-    const sender = modules?.adminWarn?.warnPlayer ?? modules?.adminWarn?.sendAdminWarn;
-    if (typeof sender !== "function") {
-      return messages.map(() => ({ success: false, skipped: true, skipReason: "admin_warn_unavailable" }));
-    }
-    if (!event.creatorName) {
-      return messages.map(() => ({ success: false, skipped: true, skipReason: "target_missing" }));
-    }
-
-    const results = [];
-    const normalizedMessages = messages
-      .map((item) => String(item ?? "").trim())
-      .filter(Boolean);
-    if (normalizedMessages.length === 0) return results;
-
-    for (let round = 0; round < runtimeConfig.warningRepeatCount; round += 1) {
-      if (round > 0) {
-        await wait(runtimeConfig.warningRepeatDelayMs);
-      }
-      for (let index = 0; index < normalizedMessages.length; index += 1) {
-        const message = normalizedMessages[index];
-        const result = await sender.call(modules.adminWarn, {
-          targetName: event.creatorName,
-          targetSteamId: event.creatorSteamId || undefined,
-          targetEosId: event.creatorEosId || undefined,
-          message,
-          reason: index === 0 ? "squad_name_policy_violation" : "squad_name_policy_suggestion",
-          sourceModule: MODULE_ID,
-          relatedEventId: event.eventId || buildDedupeKey(event),
-          system: true,
-        }).catch((error) => ({
-          success: false,
-          error: error instanceof Error ? error.message : String(error),
-        }));
-        results.push(result);
-      }
-    }
-    return results;
-  }
-
   function rememberRecord(record) {
     const now = nowIso();
     const saved = {
@@ -377,6 +290,25 @@ function buildWarningMessages(evaluation) {
   return buildSquadNamePolicyWarningMessages(evaluation?.suggestions ?? []);
 }
 
+function resolvePassedSquadType(squadName, evaluation) {
+  const explicit = text(evaluation?.classification?.nature);
+  if (explicit) return explicit;
+  return text(classifySquadName(squadName, { includeDebug: false })?.nature);
+}
+
+function expandWarningMessages(messages = [], runtimeConfig = {}) {
+  const normalized = messages
+    .map((item) => String(item ?? "").trim())
+    .filter(Boolean);
+  if (normalized.length === 0) return [];
+  const count = Math.max(1, Number(runtimeConfig.warningRepeatCount ?? DEFAULT_WARNING_REPEAT_COUNT) || 1);
+  const results = [];
+  for (let round = 0; round < count; round += 1) {
+    for (const message of normalized) results.push(message);
+  }
+  return results;
+}
+
 function isViolation(evaluation) {
   return Boolean(evaluation?.ok) && evaluation?.valid === false;
 }
@@ -436,10 +368,6 @@ function text(value) {
 
 function nowIso() {
   return new Date().toISOString();
-}
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
 }
 
 export default createSquadNamePolicyGuardModule;
