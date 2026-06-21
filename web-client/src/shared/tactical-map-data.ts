@@ -10,7 +10,12 @@ export interface TacticalMapBounds {
 export interface TacticalMapConfig {
   key: string;
   name: string;
+  /** Original full-resolution image URL (fallback) */
   image: string;
+  /** Base path for tile pyramid, e.g. "/map-tiles/Sumari_RAAS_v1" */
+  tileBasePath: string;
+  /** Maximum tile zoom level available (0 = thumbnail only, 4 = full 4096px detail) */
+  maxZoomLevel: number;
   bounds: TacticalMapBounds;
   aliases: string[];
 }
@@ -112,6 +117,8 @@ function buildConfig(key: string, entry: TacticalMapCornerEntry): TacticalMapCon
     key,
     name,
     image: `/${imageName}`,
+    tileBasePath: `/map-tiles/${key}`,
+    maxZoomLevel: 4,
     bounds: { minX, minY, maxX, maxY },
     aliases: buildAliases(key, name),
   };

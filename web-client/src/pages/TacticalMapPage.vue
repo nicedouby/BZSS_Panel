@@ -25,13 +25,20 @@
         @click="onMapClick"
         @contextmenu.prevent="handleMapRightClick"
       >
-        <!-- Dynamic Map Image -->
-        <img
-          :src="activeMapConfig.image"
-          alt="Tactical Map"
-          class="map-image"
-          draggable="false"
-        />
+        <!-- Tiled Map Renderer (replaces single <img> for memory-efficient progressive loading) -->
+        <div class="tiled-map-wrapper">
+          <TiledMapRenderer
+            :tile-base-path="activeMapConfig.tileBasePath"
+            :max-zoom="activeMapConfig.maxZoomLevel"
+            :tiles-enabled="tilesEnabled"
+            :zoom="zoom"
+            :pan-x="panX"
+            :pan-y="panY"
+            :viewport-width="vpWidth"
+            :viewport-height="vpHeight"
+            :fallback-image="activeMapConfig.image"
+          />
+        </div>
 
         <!-- Tactical Coordinates Grid Lines -->
         <div v-if="showGrid" class="map-grid-overlay">
@@ -672,6 +679,7 @@ import {
   resolveTacticalMapKey,
   type TacticalMapConfig,
 } from "../shared/tactical-map-data";
+import TiledMapRenderer from "../components/tactical-map/TiledMapRenderer.vue";
 
 const props = defineProps<{
   snapshot: BzssCorePlayerInfoResponse | null;
@@ -754,6 +762,12 @@ const disableMarkerInteraction = ref(false);
 const markerScale = ref(1.0);
 const showPlayerNames = ref(true);
 const showPlayerCoords = ref(true);
+
+// Viewport dimension tracking for tile loader
+const vpWidth = ref(0);
+const vpHeight = ref(0);
+const tilesEnabled = ref(true);
+let resizeObserver: ResizeObserver | null = null;
 
 const dynamicMarkerScale = computed(() => {
   // Keep markers visually stable on screen while the map zooms.
@@ -1801,12 +1815,27 @@ onMounted(() => {
 
   simulatedCombatTimer = window.setInterval(runCombatEventSimulation, 2500);
   window.addEventListener("resize", fitToViewport);
+
+  // Track viewport dimensions for tile loader
+  if (containerRef.value) {
+    vpWidth.value = containerRef.value.clientWidth;
+    vpHeight.value = containerRef.value.clientHeight;
+    resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        vpWidth.value = entry.contentRect.width;
+        vpHeight.value = entry.contentRect.height;
+      }
+    });
+    resizeObserver.observe(containerRef.value);
+  }
 });
 
 onBeforeUnmount(() => {
   if (animationFrameId) cancelAnimationFrame(animationFrameId);
   if (simulatedCombatTimer) window.clearInterval(simulatedCombatTimer);
   window.removeEventListener("resize", fitToViewport);
+  resizeObserver?.disconnect();
+  resizeObserver = null;
 });
 </script>
 
@@ -1867,6 +1896,17 @@ onBeforeUnmount(() => {
   opacity: 0.88;
   filter: contrast(1.1) brightness(0.85) saturate(0.9);
   border: 2px solid rgba(0, 240, 255, 0.2);
+}
+
+/* Tiled map wrapper — applies same visual treatment as .map-image */
+.tiled-map-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  opacity: 0.88;
+  filter: contrast(1.1) brightness(0.85) saturate(0.9);
+  border: 2px solid rgba(0, 240, 255, 0.2);
+  overflow: hidden;
 }
 
 /* Dotted grid Coordinate Lines overlay */
