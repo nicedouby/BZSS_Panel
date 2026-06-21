@@ -4,13 +4,17 @@ import { usePlayerStore } from "../stores/player.store";
 import { useServerStore } from "../stores/server.store";
 import { useSquadStore } from "../stores/squad.store";
 
-export function applyMatchSnapshotResponse(response: any) {
+export function applyMatchSnapshotResponse(response: any, options: { skipPlayers?: boolean, skipSquads?: boolean } = {}) {
   const matchState = response?.matchState ?? null;
   if (!matchState) return false;
 
   useServerStore().applyStableSnapshot(buildServerSnapshot(matchState, response?.overview ?? null));
-  usePlayerStore().applySnapshot(buildPlayersSnapshot(matchState.players));
-  useSquadStore().applySnapshot(buildSquadsSnapshot(matchState.squads));
+  if (!options.skipPlayers) {
+    usePlayerStore().applySnapshot(buildPlayersSnapshot(matchState.players));
+  }
+  if (!options.skipSquads) {
+    useSquadStore().applySnapshot(buildSquadsSnapshot(matchState.squads));
+  }
   return true;
 }
 

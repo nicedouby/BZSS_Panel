@@ -3,7 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { classifySquadName } from "../domain/squad/squad_name_classifier.js";
+import { classifySquadName, SQUAD_NATURE, SQUAD_NATURE_LABEL } from "../domain/squad/squad_name_classifier.js";
 import {
   SQUAD_NAME_RULE_PASSED_EVENT,
   SQUAD_RULE_CHAIN_MODULE_ID,

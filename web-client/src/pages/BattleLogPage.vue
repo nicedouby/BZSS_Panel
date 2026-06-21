@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <AppPage full-bleed class="battle-log-page">
         <h1 class="sr-only">战绩订阅</h1>
 
@@ -160,7 +160,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, onActivated, onDeactivated, reactive, ref } from "vue";
 import { apiGet } from "../app/apiClient";
 import { renderApiError } from "../app/errors";
 import { canAutoRefreshNow } from "../composables/useAutoRefreshGate";
@@ -227,18 +227,40 @@ const sourceSummary = computed(() => {
   return `${logText} ${modText}`;
 });
 
-onMounted(() => {
-  void refreshAll();
-  refreshTimer = window.setInterval(() => {
-    if (canAutoRefreshNow()) void refreshEvents({ silent: true });
-  }, 3000);
-});
+const active = ref(true);
 
-onBeforeUnmount(() => {
+function startPolling() {
+  if (refreshTimer) return;
+  refreshTimer = window.setInterval(() => {
+    if (active.value && canAutoRefreshNow()) void refreshEvents({ silent: true });
+  }, 3000);
+}
+
+function stopPolling() {
   if (refreshTimer) {
     window.clearInterval(refreshTimer);
     refreshTimer = null;
   }
+}
+
+onMounted(() => {
+  void refreshAll();
+  startPolling();
+});
+
+onBeforeUnmount(() => {
+  stopPolling();
+});
+
+onActivated(() => {
+  active.value = true;
+  startPolling();
+  void refreshAll();
+});
+
+onDeactivated(() => {
+  active.value = false;
+  stopPolling();
 });
 
 async function refreshAll() {
@@ -255,7 +277,10 @@ async function refreshAll() {
   }
 }
 
+let eventsInFlight = false;
 async function refreshEvents({ silent = false } = {}) {
+  if (!active.value || eventsInFlight) return;
+  eventsInFlight = true;
   eventsLoading.value = true;
   eventsError.value = "";
   try {
@@ -274,6 +299,7 @@ async function refreshEvents({ silent = false } = {}) {
     events.value = [];
   } finally {
     eventsLoading.value = false;
+    eventsInFlight = false;
   }
 }
 

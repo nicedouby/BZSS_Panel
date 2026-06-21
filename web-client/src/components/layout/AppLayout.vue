@@ -9,7 +9,7 @@
       <SectionSubnav />
       <section class="content-shell" :class="contentShellClass">
         <RouterView v-slot="{ Component }">
-          <KeepAlive>
+          <KeepAlive :max="8">
             <component :is="Component" />
           </KeepAlive>
         </RouterView>

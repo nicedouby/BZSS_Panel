@@ -77,90 +77,7 @@
       </div>
     </section>
 
-    <section v-if="showTicketControlPanel" class="ticket-control-card">
-      <div class="ticket-control-header">
-        <div>
-          <div class="ticket-control-title">票数控制</div>
-          <div class="ticket-control-subtitle">
-            当前 sender: {{ ticketCommandTargetText }}
-          </div>
-        </div>
-        <div class="ticket-control-meta">
-          <span class="ticket-control-badge" :data-tone="ticketSourceTone">{{ ticketSourceText }}</span>
-          <button
-            v-if="canRefresh"
-            type="button"
-            class="ticket-control-toggle"
-            :disabled="ticketWriteLoading"
-            @click="toggleTicketEditor"
-          >
-            {{ ticketEditorOpen ? "收起编辑" : "修改票数" }}
-          </button>
-        </div>
-      </div>
 
-      <div class="ticket-control-grid">
-        <article class="ticket-side-card team1">
-          <span class="ticket-side-card__label">TEAM 1</span>
-          <strong class="ticket-side-card__value">{{ formatTicketDisplay(remoteTicketCounts.team1) }}</strong>
-        </article>
-        <article class="ticket-side-card team2">
-          <span class="ticket-side-card__label">TEAM 2</span>
-          <strong class="ticket-side-card__value">{{ formatTicketDisplay(remoteTicketCounts.team2) }}</strong>
-        </article>
-      </div>
-
-      <form v-if="ticketEditorOpen && canRefresh" class="ticket-editor-form" @submit.prevent="submitTicketWrite">
-        <label class="ticket-editor-field">
-          <span class="ticket-editor-field__label">TEAM 1</span>
-          <input v-model.trim="ticketForm.t1" type="text" inputmode="numeric" class="ticket-editor-input" placeholder="保持不变" />
-        </label>
-        <label class="ticket-editor-field">
-          <span class="ticket-editor-field__label">TEAM 2</span>
-          <input v-model.trim="ticketForm.t2" type="text" inputmode="numeric" class="ticket-editor-input" placeholder="保持不变" />
-        </label>
-        <div class="ticket-editor-actions">
-          <button type="submit" class="ticket-editor-submit" :disabled="ticketWriteLoading">
-            {{ ticketWriteLoading ? "提交中..." : "写入票数" }}
-          </button>
-          <button type="button" class="ticket-editor-reset" :disabled="ticketWriteLoading" @click="resetTicketFormToCurrent">
-            使用当前值
-          </button>
-        </div>
-      </form>
-
-      <form v-if="canRefresh" class="ticket-adjust-form" @submit.prevent>
-        <label class="ticket-adjust-field">
-          <span class="ticket-editor-field__label">队伍</span>
-          <select v-model="ticketAdjustForm.team" class="ticket-editor-input">
-            <option :value="1">T1</option>
-            <option :value="2">T2</option>
-          </select>
-        </label>
-        <label class="ticket-adjust-field">
-          <span class="ticket-editor-field__label">数值</span>
-          <input v-model.trim="ticketAdjustForm.deltaText" type="text" inputmode="numeric" class="ticket-editor-input" placeholder="例如 50 / -50" />
-        </label>
-        <div class="ticket-adjust-actions">
-          <button type="button" class="ticket-adjust-chip" @click="setTicketAdjustDelta(10)">+10</button>
-          <button type="button" class="ticket-adjust-chip" @click="setTicketAdjustDelta(50)">+50</button>
-          <button type="button" class="ticket-adjust-chip" @click="setTicketAdjustDelta(100)">+100</button>
-          <button type="button" class="ticket-adjust-chip" @click="setTicketAdjustDelta(-10)">-10</button>
-          <button type="button" class="ticket-adjust-chip" @click="setTicketAdjustDelta(-50)">-50</button>
-          <button type="button" class="ticket-adjust-chip" @click="setTicketAdjustDelta(-100)">-100</button>
-        </div>
-        <div class="ticket-adjust-actions">
-          <button type="button" class="ticket-editor-submit" :disabled="ticketAdjustLoading" @click="submitTicketAdjust(true)">
-            {{ ticketAdjustLoading ? "处理中..." : "加票" }}
-          </button>
-          <button type="button" class="ticket-editor-reset" :disabled="ticketAdjustLoading" @click="submitTicketAdjust(false)">
-            {{ ticketAdjustLoading ? "处理中..." : "减票" }}
-          </button>
-        </div>
-      </form>
-
-      <div v-if="ticketWriteError" class="ticket-control-error">{{ ticketWriteError }}</div>
-    </section>
 
     <DataState
       class="match-status-data-state"
@@ -228,7 +145,7 @@
     />
 
     <div v-if="ticketEditorOpen" class="ticket-modal-backdrop" v-backdrop-close="closeTicketEditor">
-      <form class="ticket-modal-panel" @submit.prevent="submitTicketWrite">
+      <div class="ticket-modal-panel">
         <header class="ticket-modal-header">
           <div>
             <h3>修改票数</h3>
@@ -241,38 +158,72 @@
         </header>
 
         <div class="ticket-modal-grid">
-          <article class="ticket-side-card team1" :class="{ active: ticketEditorTeamId === 1 }">
+          <article class="ticket-side-card team1" :class="{ active: ticketEditorTeamId === 1 }" @click="ticketEditorTeamId = 1; ticketAdjustForm.team = 1; resetTicketFormToCurrent();" style="cursor: pointer;">
             <span class="ticket-side-card__label">TEAM 1</span>
             <strong class="ticket-side-card__value">{{ formatTicketDisplay(remoteTicketCounts.team1) }}</strong>
           </article>
-          <article class="ticket-side-card team2" :class="{ active: ticketEditorTeamId === 2 }">
+          <article class="ticket-side-card team2" :class="{ active: ticketEditorTeamId === 2 }" @click="ticketEditorTeamId = 2; ticketAdjustForm.team = 2; resetTicketFormToCurrent();" style="cursor: pointer;">
             <span class="ticket-side-card__label">TEAM 2</span>
             <strong class="ticket-side-card__value">{{ formatTicketDisplay(remoteTicketCounts.team2) }}</strong>
           </article>
         </div>
 
-        <div class="ticket-editor-form">
-          <label v-if="ticketEditorTeamId === 1" class="ticket-editor-field">
-            <span class="ticket-editor-field__label">TEAM 1</span>
-            <input v-model.trim="ticketForm.t1" type="text" inputmode="numeric" class="ticket-editor-input" placeholder="输入新的 TEAM 1 票数" />
-          </label>
-          <label v-else-if="ticketEditorTeamId === 2" class="ticket-editor-field">
-            <span class="ticket-editor-field__label">TEAM 2</span>
-            <input v-model.trim="ticketForm.t2" type="text" inputmode="numeric" class="ticket-editor-input" placeholder="输入新的 TEAM 2 票数" />
-          </label>
-        </div>
+        <form class="ticket-adjust-form" style="margin-top: 12px; padding-top: 16px; border-top: 1px solid rgba(255, 255, 255, 0.05);" @submit.prevent>
+          <div class="ticket-editor-form" style="margin-bottom: 12px; grid-template-columns: 80px minmax(0, 1fr);">
+            <label class="ticket-editor-field">
+              <span class="ticket-editor-field__label">队伍</span>
+              <select v-model="ticketAdjustForm.team" class="ticket-editor-input">
+                <option :value="1">T1</option>
+                <option :value="2">T2</option>
+              </select>
+            </label>
+            <label class="ticket-editor-field">
+              <span class="ticket-editor-field__label">数值 (例如 50 / -50)</span>
+              <input v-model.trim="ticketAdjustForm.deltaText" type="text" inputmode="numeric" class="ticket-editor-input" placeholder="例如 50 / -50" />
+            </label>
+          </div>
+          <div class="ticket-adjust-actions" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
+            <button type="button" class="ticket-control-badge" @click="setTicketAdjustDelta(10)">+10</button>
+            <button type="button" class="ticket-control-badge" @click="setTicketAdjustDelta(50)">+50</button>
+            <button type="button" class="ticket-control-badge" @click="setTicketAdjustDelta(100)">+100</button>
+            <button type="button" class="ticket-control-badge" @click="setTicketAdjustDelta(-10)">-10</button>
+            <button type="button" class="ticket-control-badge" @click="setTicketAdjustDelta(-50)">-50</button>
+            <button type="button" class="ticket-control-badge" @click="setTicketAdjustDelta(-100)">-100</button>
+          </div>
+          <div class="ticket-modal-actions">
+            <button type="button" class="ticket-editor-submit" :disabled="ticketAdjustLoading" @click="submitTicketAdjust(true)">
+              {{ ticketAdjustLoading ? "处理中..." : "加票" }}
+            </button>
+            <button type="button" class="ticket-editor-reset" :disabled="ticketAdjustLoading" @click="submitTicketAdjust(false)">
+              {{ ticketAdjustLoading ? "处理中..." : "减票" }}
+            </button>
+          </div>
+        </form>
 
-        <div v-if="ticketWriteError" class="ticket-control-error">{{ ticketWriteError }}</div>
+        <form style="margin-top: 8px; padding-top: 16px; border-top: 1px solid rgba(255, 255, 255, 0.05);" @submit.prevent="submitTicketWrite">
+          <div class="ticket-editor-form">
+            <label v-if="ticketEditorTeamId === 1" class="ticket-editor-field">
+              <span class="ticket-editor-field__label">直接覆盖 TEAM 1 票数</span>
+              <input v-model.trim="ticketForm.t1" type="text" inputmode="numeric" class="ticket-editor-input" placeholder="输入新的 TEAM 1 票数" />
+            </label>
+            <label v-else-if="ticketEditorTeamId === 2" class="ticket-editor-field">
+              <span class="ticket-editor-field__label">直接覆盖 TEAM 2 票数</span>
+              <input v-model.trim="ticketForm.t2" type="text" inputmode="numeric" class="ticket-editor-input" placeholder="输入新的 TEAM 2 票数" />
+            </label>
+          </div>
 
-        <footer class="ticket-modal-actions">
-          <button type="button" class="ticket-editor-reset" :disabled="ticketWriteLoading" @click="resetTicketFormToCurrent">
-            使用当前值
-          </button>
-          <button type="submit" class="ticket-editor-submit" :disabled="ticketWriteLoading">
-            {{ ticketWriteLoading ? "提交中..." : "写入票数" }}
-          </button>
-        </footer>
-      </form>
+          <div v-if="ticketWriteError" class="ticket-control-error" style="margin-top: 12px;">{{ ticketWriteError }}</div>
+
+          <footer class="ticket-modal-actions" style="margin-top: 16px;">
+            <button type="button" class="ticket-editor-reset" :disabled="ticketWriteLoading" @click="resetTicketFormToCurrent">
+              使用当前值
+            </button>
+            <button type="submit" class="ticket-editor-submit" :disabled="ticketWriteLoading">
+              {{ ticketWriteLoading ? "提交中..." : "写入覆盖" }}
+            </button>
+          </footer>
+        </form>
+      </div>
     </div>
 
     <!-- 批量操作悬浮条 -->
@@ -853,6 +804,8 @@ function openTicketEditor(team: TeamViewModel) {
   }
   ticketEditorTeamId.value = Number(team?.teamId ?? 0) || null;
   ticketEditorOpen.value = true;
+  ticketAdjustForm.team = ticketEditorTeamId.value === 2 ? 2 : 1;
+  ticketAdjustForm.deltaText = "";
   resetTicketFormToCurrent();
 }
 

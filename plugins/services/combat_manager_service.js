@@ -274,8 +274,9 @@ export function createCombatManagerService({ core, modules, config, logger }) {
     return emitted;
   }
 
-  function getCombatManagerSnapshot(serverId = "") {
+  function getCombatManagerSnapshot(serverId = "", options = {}) {
     const target = String(serverId ?? "").trim();
+    const includeEvents = Boolean(options?.includeEvents);
     const rawState = modules?.combatState?.getState?.(target) ?? modules?.combatState?.getState?.() ?? null;
     const processedOverview = modules?.combatClean?.getOverview?.(target) ?? null;
     const processedEvents = modules?.combatClean?.getEvents?.({
@@ -300,7 +301,7 @@ export function createCombatManagerService({ core, modules, config, logger }) {
       processedStats,
       rejected,
       lastUpdatedAt: processedOverview?.lastUpdatedAt ?? rawState?.lastUpdatedAt ?? lastSnapshotAt,
-      events: cloneList(primaryEvents, (event) => normalizeCombatEvent(event, detectSource(event))),
+      events: includeEvents ? cloneList(primaryEvents, (event) => normalizeCombatEvent(event, detectSource(event))) : [],
       latest: cloneList(primaryEvents.slice(-20).reverse(), (event) => normalizeCombatEvent(event, detectSource(event))),
       rawLatest: cloneList(rawEvents.slice(-20).reverse(), (event) => normalizeCombatEvent(event, "raw")),
       processedLatest: cloneList(processedEvents.slice(-20).reverse(), (event) => normalizeCombatEvent(event, "processed")),

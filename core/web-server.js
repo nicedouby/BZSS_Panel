@@ -209,10 +209,29 @@ export class WebServer {
     const url = new URL(req.url, `http://${req.headers.host}`);
 
     if (url.pathname.startsWith("/api/")) {
-      return this.handleApi(url, req, res);
+      const startMs = Date.now();
+      try {
+        return await this.handleApi(url, req, res);
+      } finally {
+        const durationMs = Date.now() - startMs;
+        this.recordApiDuration(url.pathname, durationMs);
+      }
     }
 
     return this.serveStatic(url, res);
+  }
+
+  recordApiDuration(endpoint, durationMs) {
+    if (!this.slowApiRequests) this.slowApiRequests = [];
+    const now = Date.now();
+    this.slowApiRequests = this.slowApiRequests.filter(r => now - r.timestamp < 60000);
+    if (durationMs > 50) {
+      this.slowApiRequests.push({ endpoint, durationMs, timestamp: now });
+      this.slowApiRequests.sort((a, b) => b.durationMs - a.durationMs);
+      if (this.slowApiRequests.length > 10) {
+        this.slowApiRequests.pop();
+      }
+    }
   }
 
   async runTimedPlayerDatabaseQuery(endpoint, playerId, handler) {
@@ -677,6 +696,16 @@ export class WebServer {
           platform: process.platform,
           arch: process.arch,
           performance: this.core.performanceMonitor?.getSnapshot() ?? null,
+          diagnostics: {
+            snapshotSizeBytes: this.lastSnapshotSizeBytes ?? 0,
+            slowApiRequests: this.slowApiRequests ?? [],
+            eventsRawCount: this.core.runtimeState?.state?.events?.raw?.length ?? 0,
+            combatCleanCount: this.modules.combatClean?.api?.getOverview?.()?.count ?? 0,
+            combatCleanRejected: this.modules.combatClean?.api?.getOverview?.()?.rejected ?? 0,
+            battleLogCount: this.modules.battleLog?.api?.getOverview?.()?.count ?? 0,
+            consoleBufferCount: this.core.console?.getHistory?.()?.length ?? 0,
+            chatHistoryCount: this.modules.chatManager?.api?.getHistory?.()?.length ?? 0,
+          },
         },
       });
     }
@@ -3595,6 +3624,15 @@ export class WebServer {
     const data = pretty ? JSON.stringify(obj, null, 2) : JSON.stringify(obj);
     const durationMs = performance.now() - start;
     const sizeBytes = Buffer.byteLength(data);
+
+    let urlObj = null;
+    try {
+      urlObj = new URL(req?.url ?? "/", `http://${req?.headers?.host ?? "localhost"}`);
+    } catch {}
+
+    if (urlObj?.pathname === "/api/snapshot/all") {
+      this.lastSnapshotSizeBytes = sizeBytes;
+    }
 
     const performanceConfig = this.core?.config?.get?.("performance") ?? {};
     const largeJsonBytes = performanceConfig.largeJsonBytes ?? 262144;

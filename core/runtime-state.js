@@ -307,15 +307,40 @@ export class RuntimeState {
     const cached = this.cache.all;
     if (cached.key === key && cached.value) return cached.value;
 
+    const activeJobsMap = {};
+    for (const id of jobs.activeJobs) {
+      if (jobs.byId[id]) {
+        activeJobsMap[id] = jobs.byId[id];
+      }
+    }
+    const recentJobsList = Object.values(jobs.byId)
+      .sort((a, b) => Number(b.createdAt ?? 0) - Number(a.createdAt ?? 0))
+      .slice(0, 20);
+    const slimJobs = {
+      activeJobs: jobs.activeJobs,
+      byId: { ...activeJobsMap },
+      updatedAt: jobs.updatedAt,
+      revision: jobs.revision,
+    };
+    for (const job of recentJobsList) {
+      slimJobs.byId[job.id] = job;
+    }
+
     const value = {
       server,
-      players,
-      squads,
-      teams: cloneJsonSafe(this.state.teams),
-      match,
       rcon: cloneJsonSafe(this.state.rcon),
-      events,
-      jobs,
+      players: {
+        active: players.active,
+        recentlyDisconnected: players.recentlyDisconnected,
+        updatedAt: players.updatedAt,
+        stale: players.stale,
+      },
+      squads: {
+        list: squads.list,
+        updatedAt: squads.updatedAt,
+        stale: squads.stale,
+      },
+      teams: cloneJsonSafe(this.state.teams),
       updatedAt: Math.max(
         Number(this.state.server?.updatedAt ?? 0),
         Number(this.state.players?.updatedAt ?? 0),
@@ -324,7 +349,20 @@ export class RuntimeState {
         Number(this.state.jobs?.updatedAt ?? 0),
         Number(this.state.rcon?.updatedAt ?? 0),
       ),
+      revisions: {
+        server: this.state.server.revision,
+        players: this.state.players.revision,
+        squads: this.state.squads.revision,
+        rcon: this.state.rcon.revision,
+        jobs: this.state.jobs.revision,
+      },
+      jobs: slimJobs,
     };
+
+    if (this.includeEventsInAllSnapshot) {
+      value.events = events;
+    }
+
     cached.key = key;
     cached.value = value;
     return value;

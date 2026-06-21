@@ -37,6 +37,10 @@
             {{ mergedClockLabel }}
           </button>
           <span class="match-chip">{{ matchTpsLabel }}</span>
+          <span class="topbar-sys-divider"></span>
+          <span class="match-chip sys-metric" :title="`Uptime: ${sysUptimeLabel}`">↑ {{ sysUptimeLabel }}</span>
+          <span class="match-chip sys-metric" :title="`Memory RSS: ${sysMemLabel}`">{{ sysMemLabel }}</span>
+          <span class="match-chip sys-metric" :title="`Net ▼${sysNetInLabel} ▲${sysNetOutLabel}`">▼{{ sysNetInLabel }} ▲{{ sysNetOutLabel }}</span>
         </div>
       </div>
 
@@ -58,9 +62,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
-import { apiPost, ApiError } from "../../app/apiClient";
+import { apiGet, apiPost, ApiError } from "../../app/apiClient";
 import { useAuthStore } from "../../stores/auth.store";
 import { useServerStore } from "../../stores/server.store";
 import { usePlayerStore } from "../../stores/player.store";
@@ -222,8 +226,80 @@ const matchUpdatedLabel = computed(() => t("match.updated", "", {
   time: formatUpdateTime(matchUpdatedAt.value),
 }));
 
+/* ── System Metrics (subtle topbar display) ── */
+interface SysStatus {
+  system: {
+    uptime: number;
+    memory: { rss: number };
+    performance?: {
+      latest?: {
+        network?: {
+          bytesInPerSec: number | null;
+          bytesOutPerSec: number | null;
+          bytesTotalPerSec: number | null;
+        } | null;
+      } | null;
+    } | null;
+  };
+}
+
+const sysStatus = ref<SysStatus | null>(null);
+let sysTimer: number | null = null;
+
+async function fetchSysStatus() {
+  try {
+    sysStatus.value = await apiGet<SysStatus>("/api/system/status");
+  } catch {
+    // Silently ignore – the metrics will just show "--".
+  }
+}
+
+function fmtSysUptime(seconds: number | null | undefined) {
+  if (seconds == null || !Number.isFinite(seconds)) return "--";
+  const s = Math.floor(seconds);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const parts: string[] = [];
+  if (d > 0) parts.push(`${d}d`);
+  if (h > 0) parts.push(`${h}h`);
+  if (m > 0) parts.push(`${m}m`);
+  parts.push(`${sec}s`);
+  return parts.join(" ");
+}
+
+function fmtSysMem(bytes: number | null | undefined) {
+  if (bytes == null || !Number.isFinite(bytes)) return "--";
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function fmtSysRate(bytesPerSec?: number | null) {
+  if (!Number.isFinite(Number(bytesPerSec))) return "--";
+  const value = Number(bytesPerSec);
+  const units = ["B/s", "KB/s", "MB/s", "GB/s"];
+  let size = Math.max(0, value);
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+const sysUptimeLabel = computed(() => fmtSysUptime(sysStatus.value?.system?.uptime));
+const sysMemLabel = computed(() => fmtSysMem(sysStatus.value?.system?.memory?.rss));
+const sysNetInLabel = computed(() => fmtSysRate(sysStatus.value?.system?.performance?.latest?.network?.bytesInPerSec));
+const sysNetOutLabel = computed(() => fmtSysRate(sysStatus.value?.system?.performance?.latest?.network?.bytesOutPerSec));
+
 onMounted(() => {
   void loadWarmupState();
+  void fetchSysStatus();
+  sysTimer = window.setInterval(() => void fetchSysStatus(), 5000);
+});
+
+onUnmounted(() => {
+  if (sysTimer) { clearInterval(sysTimer); sysTimer = null; }
 });
 
 function briefRuntimeError(value: string) {
@@ -715,6 +791,28 @@ function toggleSidebar() {
 
 .updated-metric {
   color: var(--color-text-muted);
+}
+
+.topbar-sys-divider {
+  width: 1px;
+  height: 14px;
+  background: rgba(122, 162, 184, 0.18);
+  flex: 0 0 auto;
+}
+
+.sys-metric {
+  color: var(--color-text-muted) !important;
+  opacity: 0.6;
+  font-size: 9px !important;
+  font-weight: 600 !important;
+  border-color: rgba(122, 162, 184, 0.12) !important;
+  background: rgba(122, 162, 184, 0.04) !important;
+  box-shadow: none !important;
+  transition: opacity 0.2s ease;
+}
+
+.sys-metric:hover {
+  opacity: 1;
 }
 
 @media (max-width: 1180px) {

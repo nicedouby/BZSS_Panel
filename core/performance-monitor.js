@@ -1,7 +1,10 @@
 // -*- coding: utf-8 -*-
 
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { monitorEventLoopDelay } from "node:perf_hooks";
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Core: PerformanceMonitor
@@ -15,6 +18,7 @@ export class PerformanceMonitor {
     this.logger = logger;
     
     this.enabled = this.config?.get?.("performance.enabled", true) ?? true;
+    this.networkEnabled = this.config?.get?.("performance.network.enabled", false) ?? false;
     this.sampleIntervalMs = Number(this.config?.get?.("performance.sampleIntervalMs", 10000) ?? 10000);
     this.logIntervalMs = Number(this.config?.get?.("performance.logIntervalMs", 60000) ?? 60000);
     this.maxHistoryPoints = Number(this.config?.get?.("performance.maxHistoryPoints", 120) ?? 120);
@@ -25,6 +29,9 @@ export class PerformanceMonitor {
     this.histogram = null;
     this.lastNetworkTotals = null;
     this.lastNetworkSampleAt = null;
+    this.lastNetworkMetrics = null;
+    this.isNetworkSampling = false;
+    this.networkErrorLogged = false;
 
     if (this.enabled) {
       try {
@@ -81,8 +88,12 @@ export class PerformanceMonitor {
 
   sample() {
     try {
+      if (this.networkEnabled) {
+        this.#triggerNetworkSampling();
+      }
+
       const memory = process.memoryUsage();
-      const network = this.#sampleNetworkTraffic();
+      const network = this.lastNetworkMetrics || null;
       const eventLoopDelayMs = this.histogram
         ? {
             mean: this.histogram.mean / 1e6,
@@ -146,42 +157,55 @@ export class PerformanceMonitor {
     };
   }
 
-  #sampleNetworkTraffic() {
-    const current = this.#readNetworkCounters();
-    if (!current) return null;
+  #triggerNetworkSampling() {
+    if (this.isNetworkSampling) return;
+    this.isNetworkSampling = true;
+    this.#readNetworkCounters()
+      .then((current) => {
+        if (!current) return;
+        const now = Date.now();
+        const previous = this.lastNetworkTotals;
+        this.lastNetworkTotals = current;
+        this.lastNetworkSampleAt = now;
 
-    const now = Date.now();
-    const previous = this.lastNetworkTotals;
-    this.lastNetworkTotals = current;
-    this.lastNetworkSampleAt = now;
+        if (!previous || !Number.isFinite(this.lastNetworkSampleAt) || !current.timestamp) {
+          this.lastNetworkMetrics = {
+            bytesInTotal: current.bytesInTotal,
+            bytesOutTotal: current.bytesOutTotal,
+            bytesInPerSec: null,
+            bytesOutPerSec: null,
+            bytesTotalPerSec: null,
+            sampleIntervalMs: null,
+            source: current.source,
+          };
+          return;
+        }
 
-    if (!previous || !Number.isFinite(this.lastNetworkSampleAt) || !current.timestamp) {
-      return {
-        bytesInTotal: current.bytesInTotal,
-        bytesOutTotal: current.bytesOutTotal,
-        bytesInPerSec: null,
-        bytesOutPerSec: null,
-        bytesTotalPerSec: null,
-        sampleIntervalMs: null,
-        source: current.source,
-      };
-    }
-
-    const elapsedMs = Math.max(now - previous.timestamp, 1);
-    const inDelta = Math.max(0, current.bytesInTotal - previous.bytesInTotal);
-    const outDelta = Math.max(0, current.bytesOutTotal - previous.bytesOutTotal);
-    return {
-      bytesInTotal: current.bytesInTotal,
-      bytesOutTotal: current.bytesOutTotal,
-      bytesInPerSec: (inDelta * 1000) / elapsedMs,
-      bytesOutPerSec: (outDelta * 1000) / elapsedMs,
-      bytesTotalPerSec: ((inDelta + outDelta) * 1000) / elapsedMs,
-      sampleIntervalMs: elapsedMs,
-      source: current.source,
-    };
+        const elapsedMs = Math.max(now - previous.timestamp, 1);
+        const inDelta = Math.max(0, current.bytesInTotal - previous.bytesInTotal);
+        const outDelta = Math.max(0, current.bytesOutTotal - previous.bytesOutTotal);
+        this.lastNetworkMetrics = {
+          bytesInTotal: current.bytesInTotal,
+          bytesOutTotal: current.bytesOutTotal,
+          bytesInPerSec: (inDelta * 1000) / elapsedMs,
+          bytesOutPerSec: (outDelta * 1000) / elapsedMs,
+          bytesTotalPerSec: ((inDelta + outDelta) * 1000) / elapsedMs,
+          sampleIntervalMs: elapsedMs,
+          source: current.source,
+        };
+      })
+      .catch((error) => {
+        if (!this.networkErrorLogged) {
+          this.logger?.warn(`Failed to sample network traffic: ${error.message}. This warning will only be logged once.`);
+          this.networkErrorLogged = true;
+        }
+      })
+      .finally(() => {
+        this.isNetworkSampling = false;
+      });
   }
 
-  #readNetworkCounters() {
+  async #readNetworkCounters() {
     if (process.platform !== "win32") {
       return null;
     }
@@ -191,13 +215,14 @@ export class PerformanceMonitor {
         "$items = Get-NetAdapterStatistics | Select-Object ReceivedBytes,SentBytes;",
         "if ($items -is [array]) { $items | ConvertTo-Json -Compress } else { @($items) | ConvertTo-Json -Compress }",
       ].join(" ");
-      const output = execFileSync("powershell.exe", [
+      const { stdout } = await execFileAsync("powershell.exe", [
         "-NoProfile",
         "-NonInteractive",
         "-Command",
         script,
-      ], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+      ], { encoding: "utf8" });
 
+      const output = stdout.trim();
       if (!output) return null;
       const parsed = JSON.parse(output);
       const items = Array.isArray(parsed) ? parsed : [parsed];
@@ -217,8 +242,8 @@ export class PerformanceMonitor {
         timestamp: Date.now(),
         source: "Get-NetAdapterStatistics",
       };
-    } catch {
-      return null;
+    } catch (err) {
+      throw err;
     }
   }
 

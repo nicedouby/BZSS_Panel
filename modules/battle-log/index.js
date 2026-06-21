@@ -1,7 +1,7 @@
 // -*- coding: utf-8 -*-
 
 const MODULE_ID = "module.battleLog";
-const DEFAULT_MAX_EVENTS = 5000;
+const DEFAULT_MAX_EVENTS = 1500;
 const VALID_STAT_TYPES = new Set(["down", "kill", "death", "revive", "tk"]);
 let activePlayerApi = null;
 let activeBattleLogEvents = null;
@@ -705,9 +705,7 @@ function buildBattleRecord({
       sourceModule,
       sourceEventId: cleanText(sourceEventId),
       sourceEventName,
-      rawRecord: sanitizeRawRecord(sourceRecord),
     },
-    rawEvent: sanitizeRawRecord(sourceRecord),
   };
 }
 

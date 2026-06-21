@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <section class="page full-height">
         <h1 class="sr-only">聊天监控</h1>
 
@@ -169,8 +169,10 @@ const filteredHistory = computed(() => {
   });
 });
 
+let inFlight = false;
 async function fetchData() {
-  if (!active.value) return;
+  if (!active.value || inFlight) return;
+  inFlight = true;
   try {
     const [hRes, sRes] = await Promise.all([
       apiGet<{ history: ChatMessage[] }>("/api/chat/history"),
@@ -186,6 +188,8 @@ async function fetchData() {
     if (sRes.playerFrequencies) playerFrequencies.value = sRes.playerFrequencies;
   } catch (e) {
     console.error("Failed to fetch chat data", e);
+  } finally {
+    inFlight = false;
   }
 }
 
@@ -251,31 +255,45 @@ watch(
 let timer: number | null = null;
 const resizeChart = () => myChart?.resize();
 
+function startPolling() {
+  if (timer) return;
+  timer = window.setInterval(() => {
+    if (active.value && canAutoRefreshNow()) void fetchData();
+  }, 2000);
+}
+
+function stopPolling() {
+  if (timer) {
+    clearInterval(timer);
+    timer = null;
+  }
+}
+
 onMounted(() => {
   scheduleIdleTask(() => {
     if (!active.value) return;
     initChart();
     void fetchData();
   });
-  timer = window.setInterval(() => {
-    if (canAutoRefreshNow()) void fetchData();
-  }, 2000);
+  startPolling();
   window.addEventListener("resize", resizeChart);
 });
 
 onBeforeUnmount(() => {
-  if (timer) clearInterval(timer);
+  stopPolling();
   window.removeEventListener("resize", resizeChart);
   myChart?.dispose();
 });
 
 onActivated(() => {
   active.value = true;
+  startPolling();
   void fetchData();
 });
 
 onDeactivated(() => {
   active.value = false;
+  stopPolling();
 });
 </script>
 

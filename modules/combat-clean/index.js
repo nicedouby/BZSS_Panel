@@ -13,7 +13,7 @@ import {
 import { classifyWeaponType, weaponTypeLabelForKey } from "./weapon-type.js";
 
 const VALID_TYPES = new Set(["damage", "wound", "kill", "revive"]);
-const DEFAULT_MAX_EVENTS = 5000;
+const DEFAULT_MAX_EVENTS = 1200;
 const DEFAULT_WEAPON_HISTORY_WINDOW_MS = 300000;
 const SQUID_BOT_CONTROLLER_ID = "SquidBotAIController_C";
 const FALLBACK_REASON = "attacker_nullptr_use_victim";
@@ -164,13 +164,11 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       eventFlagLabels: eventFlags.map((flag) => String(flag?.label ?? "")).filter(Boolean),
       warningState,
       notify: warningState,
-      rawLog: String(rawRecord.rawLog ?? event?.rawLog ?? ""),
-      rawEvent: sanitizeRawEvent(event),
+      rawLog: String(rawRecord.rawLog ?? event?.rawLog ?? "").substring(0, 300),
       raw: {
         sourceModule: "module.combatState",
         sourceEventId,
-        rawLog: String(rawRecord.rawLog ?? event?.rawLog ?? ""),
-        rawRecord: sanitizeRawRecord(rawRecord),
+        rawLog: String(rawRecord.rawLog ?? event?.rawLog ?? "").substring(0, 300),
       },
       parse: {
         status: String(rawRecord.parseStatus ?? "Cleaned"),
@@ -246,12 +244,11 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
       raw: {
         sourceModule: "module.combatState",
         sourceEventId: String(rawRecord?.sourceEventId ?? event?.eventId ?? ""),
-        rawLog: String(rawRecord?.rawLog ?? event?.rawLog ?? ""),
-        rawRecord: sanitizeRawRecord(rawRecord),
+        rawLog: String(rawRecord?.rawLog ?? event?.rawLog ?? "").substring(0, 300),
       },
     };
     rejected.push(item);
-    if (rejected.length > maxEvents) rejected.splice(0, rejected.length - maxEvents);
+    if (rejected.length > 300) rejected.splice(0, rejected.length - 300);
     core.eventBus.emitModuleEvent("module.combatClean", "rejected", {
       eventId: `module.combatClean:${item.id}`,
       eventName: "module.combatClean.rejected",
