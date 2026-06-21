@@ -482,6 +482,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       broadcastMessage: shouldBroadcastViolation(record) ? buildViolationBroadcastMessage(record) : "",
       disbandReason: `公平建队守护：${record.reasons.join(" ")}`.trim(),
       removeLeaderBeforeDisband: true,
+      metadata: {
+        teamName: record.factionName,
+      },
     });
     record.actions.push({ type: "violation_emitted" });
     record.active = false;
@@ -1097,9 +1100,13 @@ function mergeCreation(existing, event, clock, population) {
 }
 
 function shouldStartNewRecordGeneration(existing, event) {
-  if (!existing || existing.active !== false) return false;
+  if (!existing) return false;
   const existingCreatedAtMs = Number(existing.createdAtMs ?? Date.parse(existing.createdAt ?? "")) || 0;
   const nextCreatedAtMs = Number(event.createdAtMs ?? Date.parse(event.createdAt ?? "")) || 0;
+  if (event.isLogConfirmed && nextCreatedAtMs > existingCreatedAtMs) {
+    return true;
+  }
+  if (existing.active !== false) return false;
   return nextCreatedAtMs > existingCreatedAtMs;
 }
 

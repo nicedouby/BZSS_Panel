@@ -859,9 +859,13 @@ function mergeCreation(existing, event, context) {
 }
 
 function shouldStartNewRecordGeneration(existing, event) {
-  if (!existing || existing.active) return false;
+  if (!existing) return false;
   const existingCreatedAtMs = Number(existing.createdAtMs ?? Date.parse(existing.createdAt ?? "")) || 0;
   const nextCreatedAtMs = Number(event.createdAtMs ?? Date.parse(event.createdAt ?? "")) || 0;
+  if (event.isLogConfirmed && nextCreatedAtMs > existingCreatedAtMs) {
+    return true;
+  }
+  if (existing.active) return false;
   return nextCreatedAtMs > existingCreatedAtMs;
 }
 

@@ -180,6 +180,7 @@ async function testRawLogLineCreatesPendingAndFlushesToLog() {
   harness.core.eventBus.emitCoreEvent("On_RawLogLine", {
     serverId: "BZSS_Main",
     sessionId: "session-raw-1",
+    eventId: "BZSS_Main:session-raw-1:100",
     time: "2026-05-14 14:29:22.169",
     rawLog: rawLogLine,
     rawEvent: { Raw: rawLogLine },
@@ -193,6 +194,7 @@ async function testRawLogLineCreatesPendingAndFlushesToLog() {
 
   harness.core.eventBus.emitCoreEvent("On_SquadCreated", squadEventBase({
     sessionId: "session-raw-1",
+    eventId: "BZSS_Main:session-raw-1:101",
     time: "2026-05-14 14:29:22.169",
     rawLog: rawLogLine,
     paramMap: {

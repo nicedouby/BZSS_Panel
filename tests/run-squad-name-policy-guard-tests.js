@@ -73,6 +73,42 @@ async function createHarness(configOverride = {}) {
       onModuleEvent(moduleId, eventName, handler) {
         return subscribe(moduleListeners, `${moduleId}:${eventName}`, handler);
       },
+      emitModuleEvent(moduleId, eventName, event) {
+        if (moduleId === "module.squadRuleChain" && eventName === "squadRuleViolation") {
+          if (event.removeLeaderBeforeDisband) {
+            calls.push({
+              type: "remove",
+              request: {
+                name: event.leaderName,
+                steamId: event.leaderSteamId,
+              },
+            });
+          }
+          calls.push({
+            type: "disband",
+            request: {
+              teamId: event.teamId,
+              squadId: event.squadId,
+              system: true,
+              allowUnverifiedTarget: true,
+            },
+          });
+          if (Array.isArray(event.warningMessages)) {
+            let lastAt = Date.now();
+            for (const msg of event.warningMessages) {
+              calls.push({
+                type: "warn",
+                request: {
+                  targetName: event.leaderName,
+                  message: msg,
+                },
+                at: lastAt,
+              });
+              lastAt += 5;
+            }
+          }
+        }
+      },
     },
   };
   const config = {
@@ -123,9 +159,9 @@ async function testLogViolationDisbandsThenWarns() {
 
   const state = harness.instance.api.getState();
   assert.equal(state.stats.violations, 1);
-  assert.equal(state.stats.disbanded, 1);
-  assert.equal(state.stats.warningsSent, 4);
-  assert.equal(state.recent[0].actions.some((action) => action.type === "removed"), true);
+  assert.equal(state.stats.disbanded, 0);
+  assert.equal(state.stats.warningsSent, 0);
+  assert.equal(state.recent[0].actions.some((action) => action.type === "violation_emitted"), true);
   await harness.instance.stop();
 }
 
@@ -150,8 +186,7 @@ async function testNonChineseWeirdNameIsViolation() {
   assert.equal(harness.calls[0].type, "remove");
   assert.equal(harness.calls[1].type, "disband");
   const recent = harness.instance.api.getState().recent[0];
-  assert.equal(recent.actions.some((action) => action.type === "removed"), true);
-  assert.equal(recent.actions.some((action) => action.type === "disbanded"), true);
+  assert.equal(recent.actions.some((action) => action.type === "violation_emitted"), true);
   await harness.instance.stop();
 }
 

@@ -3,6 +3,7 @@
 import { parseSquadCreateEvent, normalizeSquadName } from "./log-adapter.js";
 import { createSquadLifecycleReducer } from "./reducer.js";
 import { classifySquadName } from "../../domain/squad/squad_name_classifier.js";
+import crypto from "node:crypto";
 import {
   clearTeamFactionMappings,
   getTeamIdByFactionName,
@@ -123,28 +124,33 @@ export function createSquadLifecycleModule({ core, config, logger }) {
     const serverId = String(parsed.serverId ?? event.serverId ?? core.webStatus.serverId ?? "").trim();
     if (!serverId || parsed.squadId == null) return;
 
+    const matchId = resolveCurrentMatchId(serverId, parsed) || buildSyntheticMatchId(serverId, parsed);
+    if (!matchId) return;
+
+    reducer.setCurrentMatchId(serverId, matchId);
+    parsed.matchId = matchId;
+
     if (isDuplicateCreateEvent(serverId, parsed)) {
       if (debugEnabled) {
         logWithFallback(moduleLogger, "info", "[SquadLifecycle] duplicate squad create event ignored", {
           operation: "squadLifecycle.createDuplicateIgnored",
           data: {
             serverId,
-            matchId: String(parsed.matchId ?? event?.matchId ?? event?.sessionId ?? event?.sessionID ?? "").trim(),
+            matchId,
+            eventName: String(event?.eventName ?? event?.Event ?? event?.rawEvent?.Event ?? event?.rawEvent?.eventName ?? ""),
+            parsedFromRawLogLine: Boolean(parsed.parsedFromRawLogLine),
+            sourceEventId: String(parsed.sourceEventId ?? ""),
+            rawLogHash: buildRawLogHash(parsed.rawLog),
+            dedupeKey: buildCreateEventDedupeKey(serverId, parsed),
             squadId: parsed.squadId,
             squadName: parsed.squadName,
             creatorName: parsed.creatorName,
-            parsedFromRawLogLine: Boolean(parsed.parsedFromRawLogLine),
           },
         });
       }
       return;
     }
 
-    const matchId = resolveCurrentMatchId(serverId, parsed) || buildSyntheticMatchId(serverId, parsed);
-    if (!matchId) return;
-
-    reducer.setCurrentMatchId(serverId, matchId);
-    parsed.matchId = matchId;
     if (parsed.teamId == null) {
       const mappedTeamId = getTeamIdByFactionName(serverId, parsed.factionName);
       if (mappedTeamId != null) {
@@ -191,6 +197,33 @@ export function createSquadLifecycleModule({ core, config, logger }) {
     };
 
     const key = buildPendingKey(pending);
+    const existingPending = pendingCreateLogs.get(key);
+    if (existingPending) {
+      existingPending.matchId = pending.matchId;
+      existingPending.eventTime = pending.eventTime;
+      existingPending.factionName = pending.factionName;
+      existingPending.creatorName = pending.creatorName;
+      existingPending.creatorSteamId = pending.creatorSteamId;
+      existingPending.creatorEosId = pending.creatorEosId;
+      existingPending.rawLog = pending.rawLog;
+      existingPending.sourceEventId = pending.sourceEventId;
+      existingPending.teamId = pending.teamId;
+      existingPending.needsTeamId = pending.needsTeamId;
+      if (debugEnabled) {
+        logWithFallback(moduleLogger, "info", "[SquadLifecycle] merged duplicate pending squad create log", {
+          operation: "squadLifecycle.pendingCreateMerged",
+          data: {
+            serverId,
+            matchId,
+            dedupeKey: key,
+            squadId: pending.squadId,
+            squadName: pending.squadName,
+          },
+        });
+      }
+      return;
+    }
+
     pendingCreateLogs.set(key, pending);
     emitSquadCreatedEvent(serverId, matchId, parsed, null);
 
@@ -318,14 +351,30 @@ export function createSquadLifecycleModule({ core, config, logger }) {
   }
 
   function buildCreateEventDedupeKey(serverId, parsed) {
+    const rawLogHash = buildRawLogHash(parsed.rawLog);
+    if (rawLogHash) {
+      return [
+        String(serverId ?? "").trim(),
+        `rawLogHash:${rawLogHash}`,
+      ].join(":");
+    }
+
+    const sourceEventId = String(parsed.sourceEventId ?? "").trim();
+    if (sourceEventId) {
+      return [
+        String(serverId ?? "").trim(),
+        `sourceEventId:${sourceEventId}`,
+      ].join(":");
+    }
+
     return [
       String(serverId ?? "").trim(),
       String(parsed.matchId ?? "").trim(),
       String(parsed.squadId ?? "").trim(),
       normalizeSquadName(parsed.squadName),
-      normalizeSquadName(parsed.creatorName),
       String(parsed.creatorSteamId ?? "").trim(),
-      normalizeEventTimeToSeconds(parsed.eventTime),
+      String(parsed.creatorEosId ?? "").trim(),
+      normalizeSquadName(parsed.creatorName),
     ].join(":");
   }
 
@@ -412,6 +461,12 @@ export function createSquadLifecycleModule({ core, config, logger }) {
     });
   }
 
+  function buildRawLogHash(rawLog) {
+    const text = String(rawLog ?? "").trim();
+    if (!text) return "";
+    return crypto.createHash("sha1").update(text).digest("hex");
+  }
+
   function shouldSuppressModuleSquadCreatedEvent(record, parsed) {
     if (!record) return false;
     if (record.creationSource === "LOG") return false;
@@ -447,12 +502,6 @@ function exactMatchFilter(items, expected, getValue) {
   const target = String(expected ?? "").trim();
   if (!target) return [];
   return items.filter((item) => String(getValue(item) ?? "").trim() === target);
-}
-
-function normalizeEventTimeToSeconds(value) {
-  const parsed = Date.parse(String(value ?? ""));
-  if (!Number.isFinite(parsed)) return "";
-  return String(Math.floor(parsed / 1000));
 }
 
 function logWithFallback(logger, method, message, context) {

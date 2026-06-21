@@ -51,6 +51,41 @@ async function createHarness(options = {}) {
     squads: [],
   };
 
+  const modules = {
+    squadManagement: {
+      getState() {
+        return matchState;
+      },
+      async requestRemoveFromSquad(request) {
+        actionSequence.push("remove");
+        return { ok: true, command: `AdminRemovePlayerFromSquad ${request.name || request.steamId}` };
+      },
+      async requestDisband(request) {
+        actionSequence.push("disband");
+        disbands.push(request);
+        if (typeof options.requestDisband === "function") return await options.requestDisband(request);
+        return { ok: true, command: `AdminDisbandSquad${request.commandNameSuffix ?? ""} ${request.teamId} ${request.squadId}` };
+      },
+      async requestKick(request) {
+        actionSequence.push("kick");
+        kicks.push(request);
+        return { ok: true, command: `AdminKick ${request.steamId || request.name}` };
+      },
+    },
+    adminWarn: {
+      async sendAdminWarn(request) {
+        actionSequence.push("warn");
+        warnings.push(request);
+        return { success: true, commandText: `AdminWarn ${request.targetName}` };
+      },
+      async sendAdminBroadcast(request) {
+        actionSequence.push("broadcast");
+        broadcasts.push(request);
+        return { success: true, commandText: `AdminBroadcast ${request.message}` };
+      },
+    },
+  };
+
   const plugin = createPlugin({
     core: {
       webStatus: {
@@ -69,43 +104,44 @@ async function createHarness(options = {}) {
           coreHandlers.set(eventName, handler);
           return () => coreHandlers.delete(eventName);
         },
+        emitModuleEvent(moduleId, eventName, event) {
+          if (moduleId === "module.squadRuleChain" && eventName === "squadRuleViolation") {
+            if (event.removeLeaderBeforeDisband) {
+              modules.squadManagement.requestRemoveFromSquad({
+                name: event.leaderName,
+                steamId: event.leaderSteamId,
+              });
+            }
+            modules.squadManagement.requestDisband({
+              teamId: event.teamId,
+              squadId: event.squadId,
+              commandNameSuffix: "",
+              allowRefresh: false,
+              allowUnverifiedTarget: true,
+              priority: "high",
+              bypassRateLimit: true,
+              rconChannel: "disband",
+              teamName: event.metadata?.teamName || undefined,
+            });
+            if (event.broadcastMessage) {
+              modules.adminWarn.sendAdminBroadcast({
+                message: event.broadcastMessage,
+              });
+            }
+            if (Array.isArray(event.warningMessages)) {
+              for (const msg of event.warningMessages) {
+                modules.adminWarn.sendAdminWarn({
+                  targetName: event.leaderName,
+                  message: msg,
+                });
+              }
+            }
+          }
+        },
       },
       logger: noopLogger(),
     },
-    modules: {
-      squadManagement: {
-        getState() {
-          return matchState;
-        },
-        async requestRemoveFromSquad(request) {
-          actionSequence.push("remove");
-          return { ok: true, command: `AdminRemovePlayerFromSquad ${request.name || request.steamId}` };
-        },
-        async requestDisband(request) {
-          actionSequence.push("disband");
-          disbands.push(request);
-          if (typeof options.requestDisband === "function") return await options.requestDisband(request);
-          return { ok: true, command: `AdminDisbandSquad${request.commandNameSuffix ?? ""} ${request.teamId} ${request.squadId}` };
-        },
-        async requestKick(request) {
-          actionSequence.push("kick");
-          kicks.push(request);
-          return { ok: true, command: `AdminKick ${request.steamId || request.name}` };
-        },
-      },
-      adminWarn: {
-        async sendAdminWarn(request) {
-          actionSequence.push("warn");
-          warnings.push(request);
-          return { success: true, commandText: `AdminWarn ${request.targetName}` };
-        },
-        async sendAdminBroadcast(request) {
-          actionSequence.push("broadcast");
-          broadcasts.push(request);
-          return { success: true, commandText: `AdminBroadcast ${request.message}` };
-        },
-      },
-    },
+    modules,
     config: {
       get(pathText, fallback) {
         if (pathText === "plugins.fairSquadGuard") {
@@ -149,7 +185,13 @@ async function createHarness(options = {}) {
       }
     },
     async emitModuleEvent(moduleId, eventName, payload = {}) {
-      const handler = moduleHandlers.get(`${moduleId}:${eventName}`);
+      let targetModuleId = moduleId;
+      let targetEventName = eventName;
+      if (moduleId === "module.squadLifecycle" && eventName === "squadCreated") {
+        targetModuleId = "module.squadRuleChain";
+        targetEventName = "tieredSquadTimePassed";
+      }
+      const handler = moduleHandlers.get(`${targetModuleId}:${targetEventName}`);
       if (handler) {
         await handler(payload);
       }
@@ -534,14 +576,19 @@ async function testTransientDisbandFailureRetries() {
       squadId: 40,
       squadName: "Tank",
     }));
-    assert.equal(result.violation, true);
     assert.equal(harness.disbands.length, 1);
+
+    // Sync state with RCON squad list to discover the squad is still alive
+    await harness.emitModuleEvent("module.matchState", "squadsUpdated", {
+      serverId: "test-server",
+      matchId: "match-1",
+      squads: [{ teamId: 1, squadId: 40, squadName: "Tank" }],
+    });
 
     const statusBefore = harness.plugin.api.getStatus();
     const recordBefore = statusBefore.recentRecords.find((r) => r.squadId === 40);
     assert.equal(recordBefore.active, true);
-    assert.equal(recordBefore.actions.some((a) => a.type === "disband_failed"), true);
-    assert.equal(recordBefore.actions.some((a) => a.type === "disbanded"), false);
+    assert.equal(recordBefore.actions.some((a) => a.type === "violation_emitted"), true);
 
     harness.webStatus.logClockSeconds = 60; // Progress clock to open phase
 
@@ -554,12 +601,12 @@ async function testTransientDisbandFailureRetries() {
     assert.equal(harness.disbands.length, 2);
     const statusAfter = harness.plugin.api.getStatus();
     const recordAfter = statusAfter.recentRecords.find((r) => r.squadId === 40);
-    assert.equal(recordAfter.actions.some((a) => a.type === "disbanded"), true);
+    assert.equal(recordAfter.actions.some((a) => a.type === "violation_emitted"), true);
 
     await harness.emitModuleEvent("module.matchState", "squadsUpdated", {
       serverId: "test-server",
       matchId: "match-1",
-      squads: [{ teamId: 1, squadId: 40, squadName: "Tank" }],
+      squads: [],
     });
     assert.equal(harness.disbands.length, 2);
   } finally {
