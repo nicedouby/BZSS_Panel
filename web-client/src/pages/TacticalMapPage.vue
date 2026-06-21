@@ -863,9 +863,17 @@ const playerClocks = new Map<string, {
   lastX: number;
   lastY: number;
 }>();
+const playerRenderPositions = new Map<string, { x: number; y: number }>();
+const playerMotionState = new Map<string, {
+  health: number | null;
+  x: number;
+  y: number;
+}>();
 const interpolatedPositions = ref<Record<string, { mapX: number, mapY: number }>>({});
 let animationFrameId: number | null = null;
-const PLAYBACK_DELAY_MS = 1500; // 1.5s delay for smooth interpolation cache
+const PLAYBACK_DELAY_MS = 2400; // Larger delay keeps marker motion silky on sparse updates
+const TELEPORT_RESET_DISTANCE = 14000; // 140m in game units, used to reset obvious respawns/teleports
+const RENDER_SMOOTHING = 0.16;
 
 // Watch players prop to update the cache
 watch(
@@ -905,6 +913,8 @@ watch(
     cachedPlayers.value = {};
     playerHistory.clear();
     playerClocks.clear();
+    playerRenderPositions.clear();
+    playerMotionState.clear();
     interpolatedPositions.value = {};
     combatHotspot.value = null;
   }
@@ -918,24 +928,52 @@ watch(
       if (!key) return;
       const pos = player.soldierInfo?.position;
       if (!pos) return;
+      const health = player.soldierInfo?.health ?? null;
+      const nextX = pos.x ?? 0;
+      const nextY = pos.y ?? 0;
+      const motion = playerMotionState.get(key);
+      const isRespawned = Boolean(motion && motion.health != null && motion.health <= 0 && health != null && health > 0);
+      const dx = motion ? nextX - motion.x : 0;
+      const dy = motion ? nextY - motion.y : 0;
+      const dist = motion ? Math.sqrt(dx * dx + dy * dy) : 0;
+      const isTeleportLike = Boolean(
+        motion &&
+        motion.health != null &&
+        motion.health > 0 &&
+        health != null &&
+        health > 0 &&
+        dist > TELEPORT_RESET_DISTANCE
+      );
+      const shouldResetHistory = isRespawned || isTeleportLike;
       
       let history = playerHistory.get(key);
       if (!history) {
         history = [];
         playerHistory.set(key, history);
       }
+      if (shouldResetHistory) {
+        history.length = 0;
+        playerClocks.delete(key);
+        playerRenderPositions.set(key, { x: nextX, y: nextY });
+      }
       
       const last = history[history.length - 1];
-      if (!last || last.x !== pos.x || last.y !== pos.y) {
+      if (!last || last.x !== nextX || last.y !== nextY) {
         history.push({
-          x: pos.x ?? 0,
-          y: pos.y ?? 0,
+          x: nextX,
+          y: nextY,
           time: Date.now()
         });
         if (history.length > 10) {
           history.shift();
         }
       }
+
+      playerMotionState.set(key, {
+        health,
+        x: nextX,
+        y: nextY
+      });
     });
 
     const currentKeys = new Set(newList.map(p => p.playerGuid || p.playerName).filter(Boolean));
@@ -943,6 +981,8 @@ watch(
       if (!currentKeys.has(key)) {
         playerHistory.delete(key);
         playerClocks.delete(key);
+        playerRenderPositions.delete(key);
+        playerMotionState.delete(key);
       }
     }
   },
@@ -963,6 +1003,8 @@ function startInterpolationLoop() {
         delete nextCache[key];
         playerHistory.delete(key);
         playerClocks.delete(key);
+        playerRenderPositions.delete(key);
+        playerMotionState.delete(key);
         cacheChanged = true;
       }
     }
@@ -1023,20 +1065,21 @@ function startInterpolationLoop() {
         clock.lastTickRealTime = now;
         
         const latestSampleTime = history[history.length - 1].time;
+        const playbackDelay = PLAYBACK_DELAY_MS;
         
         // If the playback clock is excessively far behind (e.g. more than 3 seconds),
         // or is ahead of the latest sample time, snap the clock to a default 1.5s delay.
-        if (latestSampleTime - clock.currentRenderTime > 3000 || clock.currentRenderTime > latestSampleTime) {
-          clock.currentRenderTime = Math.max(history[0].time, latestSampleTime - 1500);
+        if (latestSampleTime - clock.currentRenderTime > 3500 || clock.currentRenderTime > latestSampleTime) {
+          clock.currentRenderTime = Math.max(history[0].time, latestSampleTime - playbackDelay);
         }
         
         const bufferSize = latestSampleTime - clock.currentRenderTime;
         
         let speedFactor = 1.0;
-        if (bufferSize > 1500) {
-          speedFactor = 1.0 + Math.min(1.0, (bufferSize - 1500) / 1000);
-        } else if (bufferSize < 1200) {
-          speedFactor = Math.max(0.1, bufferSize / 1200);
+        if (bufferSize > playbackDelay) {
+          speedFactor = 1.0 + Math.min(1.0, (bufferSize - playbackDelay) / 1000);
+        } else if (bufferSize < playbackDelay * 0.8) {
+          speedFactor = Math.max(0.08, bufferSize / (playbackDelay * 0.8));
         }
         
         // Clamp frame dt to avoid extreme clock jumping (max 100ms)
@@ -1065,7 +1108,7 @@ function startInterpolationLoop() {
           const dy = nextSample.y - prevSample.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
           
-          if (dist > 3000) { // 30 meters threshold
+          if (dist > TELEPORT_RESET_DISTANCE) {
             // Teleport: snap to the next sample and update playback clock to it
             interpX = nextSample.x;
             interpY = nextSample.y;
@@ -1087,12 +1130,31 @@ function startInterpolationLoop() {
         }
       }
       
-      clock.lastX = interpX;
-      clock.lastY = interpY;
+      const lastRender = playerRenderPositions.get(key);
+      let renderX = interpX;
+      let renderY = interpY;
+
+      const renderJump = lastRender
+        ? Math.sqrt((interpX - lastRender.x) * (interpX - lastRender.x) + (interpY - lastRender.y) * (interpY - lastRender.y))
+        : 0;
+
+      if (lastRender && renderJump <= TELEPORT_RESET_DISTANCE) {
+        renderX = lastRender.x + (interpX - lastRender.x) * RENDER_SMOOTHING;
+        renderY = lastRender.y + (interpY - lastRender.y) * RENDER_SMOOTHING;
+      }
+
+      if (!Number.isFinite(renderX) || !Number.isFinite(renderY)) {
+        renderX = interpX;
+        renderY = interpY;
+      }
+
+      playerRenderPositions.set(key, { x: renderX, y: renderY });
+      clock.lastX = renderX;
+      clock.lastY = renderY;
       
       newPositions[key] = {
-        mapX: project(interpX, bounds.minX, bounds.maxX),
-        mapY: project(interpY, bounds.minY, bounds.maxY)
+        mapX: project(renderX, bounds.minX, bounds.maxX),
+        mapY: project(renderY, bounds.minY, bounds.maxY)
       };
     });
     
@@ -2038,7 +2100,8 @@ onBeforeUnmount(() => {
   background: transparent;
   padding: 0;
   outline: none;
-  transition: left 0.1s linear, top 0.1s linear;
+  transition: left 0.35s cubic-bezier(0.22, 1, 0.36, 1), top 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: left, top, transform;
 }
 
 .player-marker.no-pointer {

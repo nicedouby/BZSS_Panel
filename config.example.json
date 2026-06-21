@@ -613,6 +613,7 @@
   "plugins": {
     "enabled": true,
     "paths": [
+      "./plugins/admin-camera-duration.js",
       "./plugins/group-report.js",
       "./plugins/weapon-collector.js",
       "./plugins/player_duration_slow_refresh.js",

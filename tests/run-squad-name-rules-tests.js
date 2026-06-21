@@ -38,6 +38,7 @@ async function main() {
   const rules = getSquadNameClassifierRules(configManager);
   assert.equal(classifySquadName("alpha squad", { rules }).category, "infantry");
   assert.equal(classifySquadName("bravo armor", { rules }).category, "vehicle");
+  assert.equal(classifySquadName("直升机", { rules }).category, "support");
 
   const updated = await updateSquadNameExactRuleConfig(configManager, {
     infantry: ["alpha squad", "green squad"],
@@ -57,6 +58,7 @@ async function main() {
   assert.equal(classifySquadName("green squad", { rules: savedRules }).category, "infantry");
   assert.equal(classifySquadName("alpha squad", { rules: savedRules }).category, "vehicle");
   assert.equal(classifySquadName("logi 1", { rules: savedRules }).category, "support");
+  assert.equal(classifySquadName("直升机", { rules: savedRules }).category, "support");
 
   console.log("run-squad-name-rules-tests: ok");
 }

@@ -1,0 +1,10 @@
+{
+  "name": "rcon-standalone",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone 24/7 RCON web console for BZSS",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

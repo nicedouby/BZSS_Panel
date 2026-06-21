@@ -2221,6 +2221,23 @@ export class WebServer {
       }
     }
 
+    if (url.pathname.startsWith("/api/plugins/admin-camera-duration")) {
+      const pluginApi = this.getPluginApi("plugin.adminCameraDuration");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "AdminCameraDurationUnavailable",
+          message: "Admin camera duration plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/admin-camera-duration/state" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getState?.() ?? null,
+        });
+      }
+    }
+
     if (url.pathname.startsWith("/api/plugins/draw-vote-guard")) {
       const pluginApi = this.getPluginApi("plugin.drawVoteGuard");
       if (!pluginApi) {
