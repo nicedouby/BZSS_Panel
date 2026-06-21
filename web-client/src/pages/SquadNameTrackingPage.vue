@@ -100,7 +100,7 @@
             </div>
             <div class="record-actions">
               <button
-                v-if="item.squadName"
+                v-if="item.canWhitelist"
                 type="button"
                 class="btn ghost btn-sm"
                 @click="openWhitelistDialog(item)"
@@ -143,7 +143,7 @@
             <p class="reason">{{ item.reason || "未提供原因" }}</p>
             <div class="record-actions">
               <button
-                v-if="item.squadName"
+                v-if="canWhitelistRecord(item)"
                 type="button"
                 class="btn ghost btn-sm"
                 @click="openWhitelistDialog(item)"
@@ -187,7 +187,7 @@
             </div>
             <div class="record-actions">
               <button
-                v-if="record.squadName"
+                v-if="canWhitelistRecord(record)"
                 type="button"
                 class="btn ghost btn-sm"
                 @click="openWhitelistDialog(record)"
@@ -383,6 +383,7 @@ type ActiveViolation = {
   creationSourceLabel: string;
   sourceLabel: string;
   reason: string;
+  canWhitelist?: boolean;
 };
 
 type BuildDecisionRecord = {
@@ -400,6 +401,7 @@ type BuildDecisionRecord = {
   createdAt?: string;
   updatedAt?: string;
   actionLabels: string[];
+  canWhitelist: boolean;
 };
 
 type TrackingRecord = {
@@ -422,6 +424,7 @@ type TrackingRecord = {
   squadNature: string;
   squadNatureLabel: string;
   actions: string[];
+  canWhitelist?: boolean;
 };
 
 type SquadNameTrackingState = {
@@ -520,6 +523,7 @@ const buildDecisionRecords = computed<BuildDecisionRecord[]>(() => {
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       actionLabels: Array.isArray(record.actions) ? record.actions : [],
+      canWhitelist: Boolean(record.canWhitelist),
     };
   });
 });
@@ -684,6 +688,17 @@ function buildDecisionTone(status: string): "ok" | "warning" | "danger" | "muted
   if (status === "handled" || status === "error") return "danger";
   if (status === "violation") return "warning";
   return "muted";
+}
+
+function canWhitelistRecord(item: BuildDecisionRecord | ActiveViolation | LifecycleRecord) {
+  const source = String((item as any).source ?? (item as any).sourceLabel ?? "").trim();
+  return Boolean((item as any).squadName)
+    && (
+      source === "squad_name_rule"
+      || source === "Patrol"
+      || source === "队名规范"
+      || source === "巡逻"
+    );
 }
 
 function shouldHideDecisionRecord(record: GuardRecord) {

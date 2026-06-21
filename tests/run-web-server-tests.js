@@ -9,6 +9,10 @@ import { WebServer } from "../core/web-server.js";
 import { classifySquadName } from "../core/squad-name-classifier.js";
 import { GroupReportService } from "../plugins/group-report.service.js";
 import { hasPermission as hasRconPermission } from "../web-client/src/shared/rcon-permissions.js";
+import { createSquadRuleChainModule } from "../modules/squad-rule-chain/index.js";
+import { createSquadNamePolicyGuardModule } from "../modules/squad-name-policy-guard/index.js";
+import { createPlugin as createStepwisePlugin } from "../plugins/stepwise-squad-playtime-guard.js";
+import { createPlugin as createFairPlugin } from "../plugins/fair-squad-guard.js";
 
 function createServer(overrides = {}) {
   return new WebServer({
@@ -185,6 +189,199 @@ async function testHealthEndpointDoesNotRequireAuth() {
   assert.equal(body.service, "BZSS Panel WebServer");
   assert.equal(body.runtimeState, true);
   assert.equal(body.auth.enabled, true);
+}
+
+async function testSquadNameTrackingStateRespectsChainAndWhitelistRules() {
+  const eventBus = {
+    handlers: new Map(),
+    onModuleEvent(moduleId, eventName, handler) {
+      const key = `${moduleId}:${eventName}`;
+      this.handlers.set(key, handler);
+      return () => this.handlers.delete(key);
+    },
+    emitModuleEvent(moduleId, eventName, event) {
+      this.handlers.get(`${moduleId}:${eventName}`)?.(event);
+    },
+  };
+
+  const core = {
+    eventBus,
+    webStatus: {
+      serverId: "server-1",
+      getSnapshot() {
+        return { serverId: "server-1", isWarmup: false, logClockSeconds: 10, logClockHasAnchor: true, playerCount: 60 };
+      },
+    },
+    webRegistry: { registerPage() {} },
+    logger: { info() {}, warn() {}, error() {} },
+    createLogger() { return { info() {}, warn() {}, error() {} }; },
+    pluginSubscriptions: { isSubscribed() { return true; } },
+  };
+
+  const modules = {
+    adminWarn: {
+      async sendAdminWarn() { return { success: true }; },
+      async broadcastMessage() { return { success: true }; },
+    },
+    squadManagement: {
+      async requestDisband() { return { ok: true }; },
+      async requestRemoveFromSquad() { return { ok: true }; },
+    },
+    playtime: {
+      async getBySteamID() { return { game_seconds: 1000 * 3600 }; },
+      async lookupSteamID() { return null; },
+    },
+    playerDatabase: {
+      async getCachedPlayer() { return null; },
+    },
+  };
+
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-squad-name-tracking-"));
+  const config = {
+    get(key, fallback) {
+      if (key === "modules.squadNamePolicyGuard") {
+        return { enabled: true, detectLogCreated: true, action: "disband_then_warn", warningRepeatCount: 1 };
+      }
+      if (key === "plugins.stepwiseSquadPlaytimeGuard") {
+        return {
+          enabled: true,
+          directory: path.join(tempDir, "stepwise"),
+          broadcastOnApproved: false,
+          warnOnMissingPlaytime: false,
+          liveLookupWhenMissing: false,
+          rules: [],
+        };
+      }
+      if (key === "plugins.fairSquadGuard") {
+        return {
+          enabled: true,
+          directory: path.join(tempDir, "fair"),
+          enforcementPlayerThreshold: 50,
+          noSquadCreationSeconds: 20,
+          infantryOnlyUntilSeconds: 50,
+          broadcastOnApproved: false,
+          broadcastOnViolation: false,
+        };
+      }
+      return fallback;
+    },
+  };
+
+  const ruleChain = createSquadRuleChainModule({ core, modules, config, logger: { info() {}, warn() {}, error() {} } });
+  const nameGuard = createSquadNamePolicyGuardModule({ core, modules, config, logger: { info() {}, warn() {}, error() {} } });
+  const stepwise = createStepwisePlugin({ core, modules, config, logger: { info() {}, warn() {}, error() {} } });
+  const fair = createFairPlugin({ core, modules, config, logger: { info() {}, warn() {}, error() {} } });
+
+  await ruleChain.start();
+  await nameGuard.start();
+  await stepwise.init();
+  await stepwise.start();
+  await fair.init();
+  await fair.start();
+
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin", role: "SuperAdmin", isSuperAdmin: true };
+        },
+      },
+      webStatus: core.webStatus,
+      webRegistry: core.webRegistry,
+      pluginManager: {
+        instances: [
+          {
+            manifest: { id: "plugin.stepwiseSquadPlaytimeGuard" },
+            api: stepwise.api,
+          },
+          {
+            manifest: { id: "plugin.fairSquadGuard" },
+            api: fair.api,
+          },
+        ],
+      },
+    },
+    modules: {
+      squadLifecycle: {
+        getCurrent() {
+          return {
+            serverId: "server-1",
+            matchId: "match-1",
+            updatedAt: new Date().toISOString(),
+            list: [
+              {
+                key: "k1",
+                serverId: "server-1",
+                matchId: "match-1",
+                teamId: 2,
+                squadId: 6,
+                squadName: "Squad 6",
+                creatorName: "Donald·DoubyBear",
+                createdAtMs: Date.now(),
+                creationSource: "LOG",
+                sourceLabel: "日志确认",
+                squadNature: "infantry",
+                squadNatureLabel: "普通步兵",
+              },
+            ],
+          };
+        },
+      },
+      squadNamePolicyGuard: nameGuard.api,
+      squadNamePolicyPatrol: {
+        getState() {
+          return { enabled: true, recent: [] };
+        },
+      },
+      squadRuleChain: ruleChain.api,
+    },
+  });
+
+  try {
+    eventBus.emitModuleEvent("module.squadLifecycle", "squadCreated", {
+      serverId: "server-1",
+      matchId: "match-1",
+      teamId: 2,
+      squadId: 6,
+      squadName: "Squad 6",
+      creatorName: "Donald·DoubyBear",
+      leaderName: "Donald·DoubyBear",
+      leaderSteamId: "steam-1",
+      createdAt: new Date().toISOString(),
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    const recorder = createRecorder();
+    await server.handleRequest({
+      method: "GET",
+      url: "/api/squad-name-tracking/state",
+      headers: { host: "localhost" },
+      socket: {},
+    }, recorder.res);
+
+    assert.equal(recorder.state.status, 200);
+    const body = JSON.parse(recorder.state.body);
+    assert.equal(body.data.records.length >= 1, true);
+    const nameRecord = body.data.records.find((item) => item.source === "squad_name_rule");
+    assert.equal(Boolean(nameRecord), true);
+    assert.equal(nameRecord.canWhitelist, true);
+
+    const stepwiseRecord = body.data.records.find((item) => item.source === "tiered_squad_time");
+    if (stepwiseRecord) {
+      assert.equal(stepwiseRecord.canWhitelist, false);
+    }
+    const fairRecord = body.data.records.find((item) => item.source === "fair_squad_creation");
+    if (fairRecord) {
+      assert.equal(fairRecord.canWhitelist, false);
+    }
+  } finally {
+    await fair.stop();
+    await stepwise.stop();
+    await nameGuard.stop();
+    await ruleChain.stop();
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
 }
 
 async function testAuthSessionAndLoginIncludeSteamAvatar() {

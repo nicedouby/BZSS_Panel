@@ -5052,13 +5052,20 @@ function buildTrackingKey(record = {}) {
 }
 
 function buildSquadNameTrackingRecords({ guard, stepwise, fair, ruleChain, lifecycle }) {
-  const records = [];
+  const grouped = new Map();
 
   for (const item of Array.isArray(guard?.recent) ? guard.recent : []) {
     const status = String(item.status ?? "").trim();
     if (status !== "violation" && status !== "handled" && status !== "error") continue;
-
-    records.push({
+    const key = buildTrackingKey({
+      serverId: item.serverId ?? item.event?.serverId ?? "",
+      matchId: item.matchId ?? item.event?.matchId ?? "",
+      teamId: item.event?.teamId ?? null,
+      squadId: item.event?.squadId ?? null,
+      squadName: item.event?.squadName ?? "",
+    });
+    if (!grouped.has(key)) grouped.set(key, { squadName: [], stepwise: [], fair: [] });
+    grouped.get(key).squadName.push({
       id: item.id,
       serverId: item.serverId ?? item.event?.serverId ?? "",
       matchId: item.matchId ?? item.event?.matchId ?? "",
@@ -5076,13 +5083,21 @@ function buildSquadNameTrackingRecords({ guard, stepwise, fair, ruleChain, lifec
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
       actions: Array.isArray(item.actions) ? item.actions.map((action) => action.type).filter(Boolean) : [],
+      canWhitelist: true,
     });
   }
 
   for (const item of Array.isArray(stepwise?.recentRecords) ? stepwise.recentRecords : []) {
     if (item?.violation !== true) continue;
-
-    records.push({
+    const key = buildTrackingKey({
+      serverId: item.serverId ?? "",
+      matchId: item.matchId ?? "",
+      teamId: item.teamId ?? null,
+      squadId: item.squadId ?? null,
+      squadName: item.squadName ?? "",
+    });
+    if (!grouped.has(key)) grouped.set(key, { squadName: [], stepwise: [], fair: [] });
+    grouped.get(key).stepwise.push({
       id: item.id,
       serverId: item.serverId ?? "",
       matchId: item.matchId ?? "",
@@ -5096,22 +5111,30 @@ function buildSquadNameTrackingRecords({ guard, stepwise, fair, ruleChain, lifec
       source: "tiered_squad_time",
       stage: "stepwise",
       status: "violation",
-      decisionLabel: "时长不足",
+      decisionLabel: "阶梯式时长拒绝",
       decisionTone: "danger",
       reason: item.decisionReason ?? item.reason ?? "",
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
       actions: Array.isArray(item.actions) ? item.actions.map((action) => action.type).filter(Boolean) : [],
+      canWhitelist: false,
     });
   }
 
   for (const item of Array.isArray(fair?.recentRecords) ? fair.recentRecords : []) {
     const violation = item?.violation === true;
     const approved = item?.approved === true && !violation;
-
     if (!violation && !approved) continue;
 
-    records.push({
+    const key = buildTrackingKey({
+      serverId: item.serverId ?? "",
+      matchId: item.matchId ?? "",
+      teamId: item.teamId ?? null,
+      squadId: item.squadId ?? null,
+      squadName: item.squadName ?? "",
+    });
+    if (!grouped.has(key)) grouped.set(key, { squadName: [], stepwise: [], fair: [] });
+    grouped.get(key).fair.push({
       id: item.id,
       serverId: item.serverId ?? "",
       matchId: item.matchId ?? "",
@@ -5129,44 +5152,42 @@ function buildSquadNameTrackingRecords({ guard, stepwise, fair, ruleChain, lifec
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
       actions: Array.isArray(item.actions) ? item.actions.map((action) => action.type).filter(Boolean) : [],
+      canWhitelist: false,
     });
   }
 
-  // Merge records using buildTrackingKey and priority rank
-  const STAGE_PRIORITY = {
-    "squad_name": 4, // Name Guard Violation
-    "stepwise": 3,   // Stepwise Violation
-    "fair": 2,       // Fair Guard Violation
-    "final": 1       // Final allowed
-  };
-
-  const grouped = new Map();
-  for (const record of records) {
-    if (record.teamId == null || record.squadId == null) continue;
-    const key = buildTrackingKey(record);
-    const existing = grouped.get(key);
-    if (!existing) {
-      grouped.set(key, record);
-    } else {
-      const existingRank = STAGE_PRIORITY[existing.stage] ?? 0;
-      const currentRank = STAGE_PRIORITY[record.stage] ?? 0;
-      if (currentRank > existingRank) {
-        grouped.set(key, record);
-      } else if (currentRank === existingRank) {
-        const existingMs = Date.parse(existing.updatedAt ?? existing.createdAt ?? "") || 0;
-        const currentMs = Date.parse(record.updatedAt ?? record.createdAt ?? "") || 0;
-        if (currentMs > existingMs) {
-          grouped.set(key, record);
-        }
-      }
-    }
-  }
-
   return Array.from(grouped.values())
+    .map((bucket) => selectTrackingRecord(bucket))
+    .filter(Boolean)
     .sort((left, right) => {
       const rightMs = Date.parse(right.updatedAt ?? right.createdAt ?? "") || 0;
       const leftMs = Date.parse(left.updatedAt ?? left.createdAt ?? "") || 0;
       return rightMs - leftMs;
     })
     .slice(0, 300);
+}
+
+function selectTrackingRecord(bucket) {
+  if (!bucket) return null;
+  const latestSquadName = pickLatestRecord(bucket.squadName);
+  if (latestSquadName) return latestSquadName;
+
+  const latestStepwise = pickLatestRecord(bucket.stepwise);
+  if (latestStepwise) return latestStepwise;
+
+  return pickLatestRecord(bucket.fair);
+}
+
+function pickLatestRecord(records) {
+  if (!Array.isArray(records) || records.length === 0) return null;
+  let latest = records[0];
+  let latestMs = Date.parse(latest.updatedAt ?? latest.createdAt ?? "") || 0;
+  for (const record of records.slice(1)) {
+    const currentMs = Date.parse(record.updatedAt ?? record.createdAt ?? "") || 0;
+    if (currentMs > latestMs) {
+      latest = record;
+      latestMs = currentMs;
+    }
+  }
+  return latest;
 }
