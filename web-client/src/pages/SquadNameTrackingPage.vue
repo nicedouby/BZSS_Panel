@@ -31,12 +31,12 @@
       <article class="summary-card">
         <span>建队判定总数</span>
         <strong>{{ buildDecisionRecords.length }}</strong>
-        <em>每条日志建队对应一条记录</em>
+        <em>通过规则链汇总后的建队判定</em>
       </article>
       <article class="summary-card">
         <span>合法建队</span>
         <strong>{{ allowedDecisionCount }}</strong>
-        <em>符合队名规范</em>
+        <em>最终通过建队规则链</em>
       </article>
       <article class="summary-card">
         <span>违规建队</span>
@@ -67,8 +67,8 @@
 
     <section class="content-grid">
       <PageCard
-        title="建队日志判定流水"
-        description="每出现一条建队日志，就在这里落一条判定记录，并给出是否合法与处置结果。"
+        title="建队规则链判定流水"
+        description="按队名规范、阶梯式时长、公平建队的最终链路结果生成记录。"
         compact
         body-mode="scroll"
       >
@@ -159,8 +159,8 @@
       </PageCard>
 
       <PageCard
-        title="当前建队快照"
-        description="按建队时间倒序，结合 Squad Lifecycle 当前快照。"
+        title="当前 RCON 小队快照"
+        description="结合 RCON 内存快照，仅展示最终通过建队规则链的在场小队。"
         compact
         body-mode="scroll"
       >
@@ -402,6 +402,47 @@ type BuildDecisionRecord = {
   actionLabels: string[];
 };
 
+type TrackingRecord = {
+  id: string;
+  serverId: string;
+  matchId: string;
+  teamId: number | null;
+  squadId: number | null;
+  squadName: string;
+  creatorName: string;
+  creatorSteamId: string;
+  createdAt: string;
+  updatedAt: string;
+  stage: "squad_name" | "stepwise" | "fair" | "final";
+  status: "allowed" | "violation" | "passed" | "skipped";
+  source: "squad_name_rule" | "tiered_squad_time" | "fair_squad_creation" | "final_allowed";
+  decisionLabel: string;
+  decisionTone: "ok" | "warning" | "danger" | "muted";
+  reason: string;
+  squadNature: string;
+  squadNatureLabel: string;
+  actions: string[];
+};
+
+type SquadNameTrackingState = {
+  lifecycle: LifecycleState;
+  guard: GuardState;
+  patrol: PatrolState;
+  ruleChain: {
+    recent: unknown[];
+    stats: Record<string, unknown>;
+  };
+  stepwise: {
+    recentRecords: unknown[];
+    summary?: Record<string, unknown>;
+  };
+  fair: {
+    recentRecords: unknown[];
+    summary?: Record<string, unknown>;
+  };
+  records: TrackingRecord[];
+};
+
 type WhitelistRulesResponse = {
   updatedAt?: string | null;
   exactRules?: Record<SquadRuleNature, string[]>;
@@ -419,6 +460,7 @@ const autoRefresh = ref(true);
 const lifecycle = ref<LifecycleState | null>(null);
 const guardState = ref<GuardState | null>(null);
 const patrolState = ref<PatrolState | null>(null);
+const trackingRecords = ref<TrackingRecord[]>([]);
 const whitelistRules = ref<Record<SquadRuleNature, string[]> | null>(null);
 const whitelistModalOpen = ref(false);
 const whitelistSaving = ref(false);
@@ -430,21 +472,24 @@ const whitelistDraft = reactive({
 const ui = useUiStore();
 let autoRefreshTimer: number | null = null;
 
-const orderedLifecycle = computed(() => {
-  const list = Array.isArray(lifecycle.value?.list) ? lifecycle.value!.list : [];
-  return list.slice().sort((left, right) => {
-    return Number(right.createdAtMs ?? 0) - Number(left.createdAtMs ?? 0);
-  });
+const finalAllowedKeys = computed(() => {
+  const keys = new Set<string>();
+  for (const record of trackingRecords.value) {
+    if (record.status !== "allowed") continue;
+    const key = buildSlotKey(record.teamId, record.squadId);
+    if (key) {
+      keys.add(key);
+    }
+  }
+  return keys;
 });
 
-const lifecycleBySlotKey = computed(() => {
-  const map = new Map<string, LifecycleRecord>();
-  for (const item of orderedLifecycle.value) {
-    const key = buildSlotKey(item.teamId, item.squadId);
-    if (!key) continue;
-    map.set(key, item);
-  }
-  return map;
+const orderedLifecycle = computed(() => {
+  const list = Array.isArray(lifecycle.value?.list) ? lifecycle.value!.list : [];
+  return list
+    .filter((item) => finalAllowedKeys.value.has(buildSlotKey(item.teamId, item.squadId)))
+    .slice()
+    .sort((left, right) => Number(right.createdAtMs ?? 0) - Number(left.createdAtMs ?? 0));
 });
 
 const guardViolations = computed(() => {
@@ -453,30 +498,30 @@ const guardViolations = computed(() => {
 });
 
 const buildDecisionRecords = computed<BuildDecisionRecord[]>(() => {
-  const list = Array.isArray(guardState.value?.recent) ? guardState.value!.recent : [];
-  return list
-    .filter((record) => !shouldHideDecisionRecord(record))
-    .map((record) => {
-      const status = String(record.status ?? "").trim();
-      const lifecycleRecord = lifecycleBySlotKey.value.get(buildSlotKey(record.event?.teamId, record.event?.squadId));
-      return {
-        id: record.id,
-        teamId: record.event?.teamId,
-        squadId: record.event?.squadId,
-        squadName: record.event?.squadName,
-        creatorName: record.event?.creatorName,
-        squadNature: lifecycleRecord?.squadNature,
-        squadNatureLabel: lifecycleRecord?.squadNatureLabel,
-        sourceLabel: record.source || "-",
-        decisionLabel: buildDecisionLabel(status),
-        decisionTone: buildDecisionTone(status),
-        reason: record.reason || "",
-        createdAt: record.createdAt,
-        updatedAt: record.updatedAt,
-        actionLabels: Array.isArray(record.actions) ? record.actions.map((item) => String(item?.type ?? "").trim()).filter(Boolean) : [],
-      };
-    })
-    .filter((item) => item.sourceLabel === "LOG" || item.sourceLabel === "simulate");
+  return trackingRecords.value.map((record) => {
+    let sourceLabel: string = record.source || "-";
+    if (record.source === "squad_name_rule") sourceLabel = "队名规范";
+    else if (record.source === "tiered_squad_time") sourceLabel = "阶梯时长";
+    else if (record.source === "fair_squad_creation") sourceLabel = "公平建队";
+    else if (record.source === "final_allowed") sourceLabel = "最终通过";
+
+    return {
+      id: record.id,
+      teamId: record.teamId,
+      squadId: record.squadId,
+      squadName: record.squadName,
+      creatorName: record.creatorName,
+      squadNature: record.squadNature,
+      squadNatureLabel: record.squadNatureLabel,
+      sourceLabel,
+      decisionLabel: record.decisionLabel,
+      decisionTone: record.decisionTone,
+      reason: record.reason || "",
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+      actionLabels: Array.isArray(record.actions) ? record.actions : [],
+    };
+  });
 });
 
 const patrolRecords = computed(() => {
@@ -587,15 +632,15 @@ async function loadAll(showSpinner = true) {
   error.value = "";
 
   try {
-    const [lifecycleResponse, guardResponse, patrolResponse, whitelistResponse] = await Promise.all([
-      apiGet<{ current: LifecycleState }>("/api/squad-lifecycle/current"),
-      apiGet<{ ok: boolean; data: GuardState }>("/api/modules/squad-name-policy-guard/state"),
-      apiGet<{ ok: boolean; data: PatrolState }>("/api/modules/squad-name-policy-patrol/state"),
+    const [trackingResponse, whitelistResponse] = await Promise.all([
+      apiGet<{ ok: boolean; data: SquadNameTrackingState }>("/api/squad-name-tracking/state"),
       apiGet<WhitelistRulesResponse>("/api/squad-name/rules").catch(() => null),
     ]);
-    lifecycle.value = lifecycleResponse.current ?? { list: [] };
-    guardState.value = guardResponse.data ?? { enabled: false, recent: [] };
-    patrolState.value = patrolResponse.data ?? { enabled: false, recent: [] };
+    const data = trackingResponse.data;
+    lifecycle.value = data.lifecycle ?? { list: [] };
+    guardState.value = data.guard ?? { enabled: false, recent: [] };
+    patrolState.value = data.patrol ?? { enabled: false, recent: [] };
+    trackingRecords.value = data.records ?? [];
     whitelistRules.value = normalizeWhitelistRules(whitelistResponse?.exactRules);
   } catch (err) {
     error.value = err instanceof Error ? err.message : "加载建队追踪失败。";

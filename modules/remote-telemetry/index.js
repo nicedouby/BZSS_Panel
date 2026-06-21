@@ -1,6 +1,8 @@
 // -*- coding: utf-8 -*-
 
 import net from "node:net";
+import path from "node:path";
+import { spawn } from "node:child_process";
 
 const DEFAULT_SAMPLE_INTERVAL_MS = 2_000;
 const DEFAULT_TIMEOUT_MULTIPLIER = 3;
@@ -27,6 +29,10 @@ export function createRemoteTelemetryModule({ core, config, logger }) {
   const commandHost = normalizeText(moduleConfig.commandHost);
   const commandPort = normalizePositiveInteger(moduleConfig.commandPort, DEFAULT_COMMAND_PORT);
   const commandTimeoutMs = normalizePositiveInteger(moduleConfig.commandTimeoutMs, DEFAULT_COMMAND_TIMEOUT_MS);
+  const pythonExecutable = normalizeText(moduleConfig.pythonExecutable) || "python";
+  const scriptPath = resolveTicketToolPath(moduleConfig.scriptPath);
+  const scriptWorkingDirectory = normalizeText(moduleConfig.workingDirectory)
+    || path.dirname(scriptPath);
 
   const sources = new Map();
   const recentSamples = [];
@@ -317,37 +323,38 @@ export function createRemoteTelemetryModule({ core, config, logger }) {
   }
 
   async function writeTickets(input = {}) {
-    const payload = {
-      action: "set_tickets",
-    };
-
-    if (input.t1 !== undefined && input.t1 !== null && input.t1 !== "") {
-      payload.t1 = requireInteger(input.t1, "t1");
-    }
-    if (input.t2 !== undefined && input.t2 !== null && input.t2 !== "") {
-      payload.t2 = requireInteger(input.t2, "t2");
-    }
-    if (payload.t1 === undefined && payload.t2 === undefined) {
-      throw new Error("At least one of t1 or t2 is required.");
-    }
-
-    const target = getCommandTarget(input);
-    if (!target.host) {
-      throw new Error("No command target host is available for the current sender.");
-    }
-
-    const response = await sendJsonLineCommand({
-      host: target.host,
-      port: target.port,
-      payload,
-      timeoutMs: target.timeoutMs,
+    return await runTicketTool({
+      pid: input.pid ?? getCurrentPid(),
+      args: buildAbsoluteTicketArgs(input),
     });
+  }
 
+  async function adjustTickets(input = {}) {
+    return await runTicketTool({
+      pid: input.pid ?? getCurrentPid(),
+      args: buildAdjustTicketArgs(input),
+    });
+  }
+
+  function getCurrentPid() {
+    return getCurrentSourceSummary()?.pid ?? null;
+  }
+
+  async function runTicketTool({ pid, args }) {
+    const resolvedPid = normalizeNullableInteger(pid);
+    if (!resolvedPid) {
+      throw new Error("No target pid is available for the current sender.");
+    }
+    const response = await runTicketToolCommand({
+      pythonExecutable,
+      scriptPath,
+      workingDirectory: scriptWorkingDirectory,
+      args: [String(resolvedPid), ...args],
+      timeoutMs: commandTimeoutMs,
+    });
     return {
-      ok: Boolean(response?.ok),
-      target,
-      request: payload,
-      response,
+      ...response,
+      pid: response?.pid ?? resolvedPid,
     };
   }
 
@@ -495,6 +502,7 @@ export function createRemoteTelemetryModule({ core, config, logger }) {
       normalizeMessage,
       getCommandTarget,
       writeTickets,
+      adjustTickets,
     },
     async start() {
       await startServer();
@@ -546,6 +554,95 @@ function normalizeCommandHost(value) {
   return text.startsWith("::ffff:") ? text.slice("::ffff:".length) : text;
 }
 
+function resolveTicketToolPath(value) {
+  const text = normalizeText(value);
+  if (text) return path.resolve(text);
+  return path.resolve(process.cwd(), "tools", "squad_ticket_tool.py");
+}
+
+function buildAbsoluteTicketArgs(input = {}) {
+  const args = [];
+  if (input.t1 !== undefined && input.t1 !== null && input.t1 !== "") {
+    args.push("--t1", String(requireInteger(input.t1, "t1")));
+  }
+  if (input.t2 !== undefined && input.t2 !== null && input.t2 !== "") {
+    args.push("--t2", String(requireInteger(input.t2, "t2")));
+  }
+  return args;
+}
+
+function buildAdjustTicketArgs(input = {}) {
+  const args = [];
+  if (input.addT1 !== undefined && input.addT1 !== null && input.addT1 !== "") {
+    args.push("--add-t1", String(requireInteger(input.addT1, "addT1")));
+  }
+  if (input.addT2 !== undefined && input.addT2 !== null && input.addT2 !== "") {
+    args.push("--add-t2", String(requireInteger(input.addT2, "addT2")));
+  }
+  if (input.noClamp) args.push("--no-clamp");
+  if (input.clampMax !== undefined && input.clampMax !== null && input.clampMax !== "") {
+    args.push("--clamp-max", String(requireInteger(input.clampMax, "clampMax")));
+  }
+  return args;
+}
+
+async function runTicketToolCommand({ pythonExecutable, scriptPath, workingDirectory, args, timeoutMs }) {
+  return await new Promise((resolve, reject) => {
+    const child = spawn(pythonExecutable, [scriptPath, ...args], {
+      cwd: workingDirectory,
+      shell: false,
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: "utf-8",
+      },
+    });
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try { child.kill(); } catch {}
+      reject(new Error(`Ticket tool timed out after ${timeoutMs} ms.`));
+    }, timeoutMs);
+
+    child.stdout.on("data", (chunk) => {
+      stdout += String(chunk ?? "");
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += String(chunk ?? "");
+    });
+    child.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on("close", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      const line = stdout.split(/\r?\n/).map((item) => item.trim()).find(Boolean);
+      if (!line) {
+        reject(new Error(stderr.trim() || `Ticket tool exited with code ${code} and no JSON output.`));
+        return;
+      }
+      try {
+        const parsed = JSON.parse(line);
+        if (code !== 0 && parsed?.ok !== true) {
+          reject(new Error(parsed?.error || stderr.trim() || `Ticket tool exited with code ${code}.`));
+          return;
+        }
+        resolve(parsed);
+      } catch (error) {
+        reject(new Error(`Ticket tool returned invalid JSON: ${String(error?.message ?? error)}`));
+      }
+    });
+  });
+}
+
 function clonePlainObject(value) {
   if (value == null) return value;
   try {
@@ -573,74 +670,6 @@ function requireInteger(value, fieldName) {
     throw new Error(`${fieldName} must be an integer.`);
   }
   return Number(text);
-}
-
-async function sendJsonLineCommand({ host, port, payload, timeoutMs }) {
-  return await new Promise((resolve, reject) => {
-    let settled = false;
-    let buffer = "";
-    const socket = net.createConnection({ host, port });
-    const timer = setTimeout(() => {
-      finishWithError(new Error(`Ticket command timed out after ${timeoutMs} ms.`));
-    }, timeoutMs);
-
-    function cleanup() {
-      clearTimeout(timer);
-      socket.removeAllListeners();
-      try {
-        socket.end();
-      } catch {
-        // ignore
-      }
-      try {
-        socket.destroy();
-      } catch {
-        // ignore
-      }
-    }
-
-    function finishWithError(error) {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(error);
-    }
-
-    function finishWithValue(value) {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      resolve(value);
-    }
-
-    socket.setEncoding("utf8");
-    socket.on("connect", () => {
-      socket.write(`${JSON.stringify(payload)}\n`);
-    });
-    socket.on("data", (chunk) => {
-      buffer += String(chunk ?? "");
-      const lineBreak = buffer.indexOf("\n");
-      if (lineBreak < 0) return;
-      const line = buffer.slice(0, lineBreak).replace(/\r$/, "");
-      if (!line.trim()) {
-        finishWithError(new Error("Ticket command returned an empty response."));
-        return;
-      }
-      try {
-        finishWithValue(JSON.parse(line));
-      } catch (error) {
-        finishWithError(new Error(`Ticket command returned invalid JSON: ${String(error?.message ?? error)}`));
-      }
-    });
-    socket.on("error", (error) => {
-      finishWithError(error);
-    });
-    socket.on("close", () => {
-      if (!settled) {
-        finishWithError(new Error("Ticket command connection closed before a response was received."));
-      }
-    });
-  });
 }
 
 export default createRemoteTelemetryModule;

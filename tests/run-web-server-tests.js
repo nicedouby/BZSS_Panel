@@ -2041,6 +2041,76 @@ async function testRemoteTelemetryWriteTicketsRouteEnforcesPermission() {
   }
 }
 
+async function testRemoteTelemetryAdjustTicketsRouteEnforcesPermission() {
+  let receivedPayload = null;
+  const createTestServer = (permissions = [], isSuperAdmin = false) => {
+    return createServer({
+      core: {
+        authManager: {
+          getUserFromRequest() {
+            return { username: "operator", role: isSuperAdmin ? "SuperAdmin" : "Admin", permissions };
+          },
+          hasEverything(user) {
+            return Boolean(user?.role === "SuperAdmin");
+          },
+          hasPermission(user, permission) {
+            if (!user) return false;
+            if (user.role === "SuperAdmin") return true;
+            return (user.permissions || []).includes(permission);
+          },
+        },
+      },
+      modules: {
+        remoteTelemetry: {
+          async adjustTickets(payload) {
+            receivedPayload = payload;
+            return {
+              ok: true,
+              pid: 2952,
+              mode: "adjust",
+              before: { t1: 20, t2: 30 },
+              delta: { t1: 50, t2: 0 },
+              after: { t1: 70, t2: 30 },
+            };
+          },
+        },
+      },
+    });
+  };
+
+  {
+    const server = createTestServer(["rcon.settickets"]);
+    const recorder = createRecorder();
+    const req = Readable.from([JSON.stringify({ addT1: 50 })]);
+    req.method = "POST";
+    req.url = "/api/remote-telemetry/adjust-tickets";
+    req.headers = { host: "localhost" };
+    req.socket = {};
+    await server.handleRequest(req, recorder.res);
+
+    assert.equal(recorder.state.status, 200);
+    const body = JSON.parse(recorder.state.body);
+    assert.deepEqual(receivedPayload, { addT1: 50 });
+    assert.equal(body.ok, true);
+    assert.equal(body.after.t1, 70);
+  }
+
+  {
+    const server = createTestServer(["rcon.kick"]);
+    const recorder = createRecorder();
+    const req = Readable.from([JSON.stringify({ addT1: 50 })]);
+    req.method = "POST";
+    req.url = "/api/remote-telemetry/adjust-tickets";
+    req.headers = { host: "localhost" };
+    req.socket = {};
+    await server.handleRequest(req, recorder.res);
+
+    assert.equal(recorder.state.status, 403);
+    const body = JSON.parse(recorder.state.body);
+    assert.equal(body.error, "Forbidden");
+  }
+}
+
 async function testMatchRefreshRoutesDelegateToMatchState() {
   const refreshCalls = [];
   const matchState = {

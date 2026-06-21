@@ -663,6 +663,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       await handleSquadsUpdated(event);
       return getStatus();
     },
+    _state: state,
   };
 
   return {

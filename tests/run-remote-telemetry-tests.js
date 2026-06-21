@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
 import net from "node:net";
+import os from "node:os";
+import path from "node:path";
 
 import { EventBus } from "../core/event-bus.js";
 import { createRemoteTelemetryModule } from "../modules/remote-telemetry/index.js";
@@ -37,6 +40,92 @@ function createModule(configValues = {}) {
     logger,
   });
   return { module, eventBus };
+}
+
+async function createFakeTicketToolSandbox(initialState = { pid: 2952, t1: 320, t2: 287 }) {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-ticket-tool-"));
+  const scriptPath = path.join(dir, "squad_ticket_tool.py");
+  const statePath = path.join(dir, "state.json");
+  await fs.writeFile(statePath, JSON.stringify(initialState), "utf8");
+  await fs.writeFile(scriptPath, String.raw`#!/usr/bin/env python3
+import argparse
+import json
+import os
+from pathlib import Path
+
+def load_state():
+    state_file = Path(os.environ["FAKE_TICKET_STATE_FILE"])
+    return json.loads(state_file.read_text(encoding="utf-8"))
+
+def save_state(state):
+    state_file = Path(os.environ["FAKE_TICKET_STATE_FILE"])
+    state_file.write_text(json.dumps(state), encoding="utf-8")
+
+def clamp_value(value, no_clamp, clamp_max):
+    if not no_clamp:
+        value = max(0, value)
+    if clamp_max is not None:
+        value = min(clamp_max, value)
+    return value
+
+parser = argparse.ArgumentParser()
+parser.add_argument("pid", type=int)
+parser.add_argument("--read", action="store_true")
+parser.add_argument("--watch", action="store_true")
+parser.add_argument("--interval", type=float, default=2.0)
+parser.add_argument("--t1")
+parser.add_argument("--t2")
+parser.add_argument("--add-t1")
+parser.add_argument("--add-t2")
+parser.add_argument("--no-clamp", action="store_true")
+parser.add_argument("--clamp-max", type=int)
+args = parser.parse_args()
+
+state = load_state()
+before = {"t1": state["t1"], "t2": state["t2"]}
+
+if args.watch:
+    print(json.dumps({"ok": True, "pid": args.pid, "t1": state["t1"], "t2": state["t2"]}))
+    raise SystemExit(0)
+
+if args.add_t1 is not None or args.add_t2 is not None:
+    delta_t1 = int(args.add_t1) if args.add_t1 is not None else 0
+    delta_t2 = int(args.add_t2) if args.add_t2 is not None else 0
+    state["t1"] = clamp_value(state["t1"] + delta_t1, args.no_clamp, args.clamp_max)
+    state["t2"] = clamp_value(state["t2"] + delta_t2, args.no_clamp, args.clamp_max)
+    save_state(state)
+    print(json.dumps({
+        "ok": True,
+        "pid": args.pid,
+        "mode": "adjust",
+        "before": before,
+        "delta": {"t1": delta_t1, "t2": delta_t2},
+        "after": {"t1": state["t1"], "t2": state["t2"]},
+    }))
+    raise SystemExit(0)
+
+if args.t1 is not None:
+    state["t1"] = int(args.t1)
+if args.t2 is not None:
+    state["t2"] = int(args.t2)
+save_state(state)
+print(json.dumps({"ok": True, "pid": args.pid, "t1": state["t1"], "t2": state["t2"]}))
+`, "utf8");
+  await fs.chmod(scriptPath, 0o755);
+  const previousStateFile = process.env.FAKE_TICKET_STATE_FILE;
+  process.env.FAKE_TICKET_STATE_FILE = statePath;
+  return {
+    dir,
+    scriptPath,
+    statePath,
+    restoreEnv() {
+      if (previousStateFile === undefined) delete process.env.FAKE_TICKET_STATE_FILE;
+      else process.env.FAKE_TICKET_STATE_FILE = previousStateFile;
+    },
+    async cleanup() {
+      await fs.rm(dir, { recursive: true, force: true });
+    },
+  };
 }
 
 async function testTracksLatestTicketSample() {
@@ -108,26 +197,10 @@ async function testFlagsTicketIncreaseAndAcquisitionFailure() {
 }
 
 async function testWriteTicketsUsesCommandPort() {
-  const responses = [];
-  const server = net.createServer((socket) => {
-    socket.setEncoding("utf8");
-    let buffer = "";
-    socket.on("data", (chunk) => {
-      buffer += chunk;
-      const lineBreak = buffer.indexOf("\n");
-      if (lineBreak < 0) return;
-      const line = buffer.slice(0, lineBreak);
-      responses.push(JSON.parse(line));
-      socket.write(`${JSON.stringify({ ok: true, type: "ticket_write", pid: 2952, t1: 300, t2: 250 })}\n`);
-    });
-  });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  const port = typeof address === "object" && address ? address.port : 0;
-
+  const sandbox = await createFakeTicketToolSandbox();
   const { module } = createModule({
-    commandPort: port,
-    commandTimeoutMs: 2000,
+    scriptPath: sandbox.scriptPath,
+    workingDirectory: sandbox.dir,
   });
   module.api.ingestSample(module.api.normalizeMessage({
     type: "ticket_sample",
@@ -138,40 +211,23 @@ async function testWriteTicketsUsesCommandPort() {
     ok: true,
     t1: 320,
     t2: 287,
-    command_host: "127.0.0.1",
-    command_port: port,
   }, { address: "127.0.0.1", port: 50125 }));
 
   const result = await module.api.writeTickets({ t1: 300, t2: 250 });
   assert.equal(result.ok, true);
-  assert.equal(result.response.t1, 300);
-  assert.equal(result.response.t2, 250);
-  assert.deepEqual(responses[0], { action: "set_tickets", t1: 300, t2: 250 });
+  assert.equal(result.t1, 300);
+  assert.equal(result.t2, 250);
+  assert.equal(result.pid, 2952);
 
-  await new Promise((resolve) => server.close(resolve));
+  await sandbox.cleanup();
+  sandbox.restoreEnv();
 }
 
 async function testWriteTicketsFallsBackToRemoteAddress() {
-  const responses = [];
-  const server = net.createServer((socket) => {
-    socket.setEncoding("utf8");
-    let buffer = "";
-    socket.on("data", (chunk) => {
-      buffer += chunk;
-      const lineBreak = buffer.indexOf("\n");
-      if (lineBreak < 0) return;
-      const line = buffer.slice(0, lineBreak);
-      responses.push(JSON.parse(line));
-      socket.write(`${JSON.stringify({ ok: true, type: "ticket_write", pid: 2952, t1: 260 })}\n`);
-    });
-  });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  const port = typeof address === "object" && address ? address.port : 0;
-
+  const sandbox = await createFakeTicketToolSandbox();
   const { module } = createModule({
-    commandPort: port,
-    commandTimeoutMs: 2000,
+    scriptPath: sandbox.scriptPath,
+    workingDirectory: sandbox.dir,
   });
   module.api.ingestSample(module.api.normalizeMessage({
     type: "ticket_sample",
@@ -186,35 +242,19 @@ async function testWriteTicketsFallsBackToRemoteAddress() {
 
   const result = await module.api.writeTickets({ t1: 260 });
   assert.equal(result.ok, true);
-  assert.equal(result.target.host, "127.0.0.1");
-  assert.equal(result.response.t1, 260);
-  assert.deepEqual(responses[0], { action: "set_tickets", t1: 260 });
+  assert.equal(result.t1, 260);
+  assert.equal(result.pid, 2952);
 
-  await new Promise((resolve) => server.close(resolve));
+  await sandbox.cleanup();
+  sandbox.restoreEnv();
 }
 
 async function testConfiguredCommandHostOverridesSenderAddress() {
-  const responses = [];
-  const server = net.createServer((socket) => {
-    socket.setEncoding("utf8");
-    let buffer = "";
-    socket.on("data", (chunk) => {
-      buffer += chunk;
-      const lineBreak = buffer.indexOf("\n");
-      if (lineBreak < 0) return;
-      const line = buffer.slice(0, lineBreak);
-      responses.push(JSON.parse(line));
-      socket.write(`${JSON.stringify({ ok: true, type: "ticket_write", pid: 2952, t2: 180 })}\n`);
-    });
-  });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  const port = typeof address === "object" && address ? address.port : 0;
-
+  const sandbox = await createFakeTicketToolSandbox();
   const { module } = createModule({
     commandHost: "127.0.0.1",
-    commandPort: port,
-    commandTimeoutMs: 2000,
+    scriptPath: sandbox.scriptPath,
+    workingDirectory: sandbox.dir,
   });
   module.api.ingestSample(module.api.normalizeMessage({
     type: "ticket_sample",
@@ -231,11 +271,41 @@ async function testConfiguredCommandHostOverridesSenderAddress() {
 
   const result = await module.api.writeTickets({ t2: 180 });
   assert.equal(result.ok, true);
-  assert.equal(result.target.host, "127.0.0.1");
-  assert.equal(result.response.t2, 180);
-  assert.deepEqual(responses[0], { action: "set_tickets", t2: 180 });
+  assert.equal(result.t2, 180);
+  assert.equal(result.pid, 2952);
 
-  await new Promise((resolve) => server.close(resolve));
+  await sandbox.cleanup();
+  sandbox.restoreEnv();
+}
+
+async function testAdjustTicketsSupportsClampAndDelta() {
+  const sandbox = await createFakeTicketToolSandbox({ pid: 2952, t1: 20, t2: 30 });
+  const { module } = createModule({
+    scriptPath: sandbox.scriptPath,
+    workingDirectory: sandbox.dir,
+  });
+  module.api.ingestSample(module.api.normalizeMessage({
+    type: "ticket_sample",
+    project_dir: "C:\\server",
+    exe: "SquadGameServer.exe",
+    pid: 2952,
+    timestamp: 1760000000,
+    ok: true,
+    t1: 20,
+    t2: 30,
+  }, { address: "127.0.0.1", port: 50128 }));
+
+  const result = await module.api.adjustTickets({ addT1: -50 });
+  assert.equal(result.ok, true);
+  assert.equal(result.before.t1, 20);
+  assert.equal(result.delta.t1, -50);
+  assert.equal(result.after.t1, 0);
+
+  const clamped = await module.api.adjustTickets({ addT2: 500, clampMax: 100 });
+  assert.equal(clamped.after.t2, 100);
+
+  await sandbox.cleanup();
+  sandbox.restoreEnv();
 }
 
 async function run() {
@@ -244,6 +314,7 @@ async function run() {
   await testWriteTicketsUsesCommandPort();
   await testWriteTicketsFallsBackToRemoteAddress();
   await testConfiguredCommandHostOverridesSenderAddress();
+  await testAdjustTicketsSupportsClampAndDelta();
   console.log("[run-remote-telemetry-tests] OK");
 }
 

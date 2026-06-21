@@ -77,7 +77,7 @@
       </div>
     </section>
 
-    <section v-if="false" class="ticket-control-card">
+    <section v-if="showTicketControlPanel" class="ticket-control-card">
       <div class="ticket-control-header">
         <div>
           <div class="ticket-control-title">票数控制</div>
@@ -125,6 +125,36 @@
           </button>
           <button type="button" class="ticket-editor-reset" :disabled="ticketWriteLoading" @click="resetTicketFormToCurrent">
             使用当前值
+          </button>
+        </div>
+      </form>
+
+      <form v-if="canRefresh" class="ticket-adjust-form" @submit.prevent="submitTicketAdjust">
+        <label class="ticket-adjust-field">
+          <span class="ticket-editor-field__label">队伍</span>
+          <select v-model="ticketAdjustForm.team" class="ticket-editor-input">
+            <option :value="1">T1</option>
+            <option :value="2">T2</option>
+          </select>
+        </label>
+        <label class="ticket-adjust-field">
+          <span class="ticket-editor-field__label">数值</span>
+          <input v-model.trim="ticketAdjustForm.deltaText" type="text" inputmode="numeric" class="ticket-editor-input" placeholder="例如 50 / -50" />
+        </label>
+        <div class="ticket-adjust-actions">
+          <button type="button" class="ticket-adjust-chip" @click="setTicketAdjustDelta(10)">+10</button>
+          <button type="button" class="ticket-adjust-chip" @click="setTicketAdjustDelta(50)">+50</button>
+          <button type="button" class="ticket-adjust-chip" @click="setTicketAdjustDelta(100)">+100</button>
+          <button type="button" class="ticket-adjust-chip" @click="setTicketAdjustDelta(-10)">-10</button>
+          <button type="button" class="ticket-adjust-chip" @click="setTicketAdjustDelta(-50)">-50</button>
+          <button type="button" class="ticket-adjust-chip" @click="setTicketAdjustDelta(-100)">-100</button>
+        </div>
+        <div class="ticket-adjust-actions">
+          <button type="button" class="ticket-editor-submit" :disabled="ticketAdjustLoading" @click="submitTicketAdjust(true)">
+            {{ ticketAdjustLoading ? "处理中..." : "加票" }}
+          </button>
+          <button type="button" class="ticket-editor-reset" :disabled="ticketAdjustLoading" @click="submitTicketAdjust(false)">
+            {{ ticketAdjustLoading ? "处理中..." : "减票" }}
           </button>
         </div>
       </form>
@@ -469,11 +499,16 @@ const refreshError = ref("");
 const playtimeError = ref("");
 const ticketWriteError = ref("");
 const ticketWriteLoading = ref(false);
+const ticketAdjustLoading = ref(false);
 const ticketEditorOpen = ref(false);
 const ticketEditorTeamId = ref<number | null>(null);
 const ticketForm = reactive({
   t1: "",
   t2: "",
+});
+const ticketAdjustForm = reactive({
+  team: 1 as 1 | 2,
+  deltaText: "",
 });
 const playtimeRequested = ref(true);
 const playtimeJob = ref<PlaytimeJobViewModel | null>(null);
@@ -575,6 +610,7 @@ const canEditTickets = computed(() => {
   const hasPerm = auth.user?.isSuperAdmin || auth.user?.permissions?.includes("rcon.settickets");
   return Boolean(hasPerm && ticketCommandTarget.value.host);
 });
+const showTicketControlPanel = computed(() => Boolean(currentServerId.value || remoteTelemetryState.value?.currentSource));
 const ticketCommandTargetText = computed(() => {
   if (!ticketCommandTarget.value.host) return "未识别 sender 地址";
   return `${ticketCommandTarget.value.host}:${ticketCommandTarget.value.port}`;
@@ -680,7 +716,6 @@ const battleLogLatestText = computed(() => {
 });
 const battleLogSummaryCards = computed(() => buildBattleLogSummaryCards(battleLogSummaryStats.value));
 const showBattleLogPanel = computed(() => Boolean(currentServerId.value));
-const showTicketControlPanel = computed(() => Boolean(currentServerId.value || remoteTelemetryState.value?.currentSource));
 const serverStatusUpdatedAt = computed(() => toMillis(matchSnapshot.value?.serverStatus?.lastUpdatedAt));
 const playersUpdatedAt = computed(() => toMillis(matchSnapshot.value?.players?.lastUpdatedAt));
 const squadsUpdatedAt = computed(() => toMillis(matchSnapshot.value?.squads?.lastUpdatedAt));
@@ -801,6 +836,10 @@ function resetTicketFormToCurrent() {
   ticketWriteError.value = "";
 }
 
+function setTicketAdjustDelta(delta: number) {
+  ticketAdjustForm.deltaText = String(delta);
+}
+
 function openTicketEditor(team: TeamViewModel) {
   if (!canEditTickets.value) {
     ui.pushToast({
@@ -878,6 +917,55 @@ async function submitTicketWrite() {
     });
   } finally {
     ticketWriteLoading.value = false;
+  }
+}
+
+async function submitTicketAdjust(isAdd = true) {
+  ticketWriteError.value = "";
+  ticketAdjustLoading.value = true;
+  try {
+    if (!ticketCommandTarget.value.host) {
+      throw new Error("褰撳墠 sender 娌℃湁鍙敤鐨勫懡浠ゅ湴鍧€銆?");
+    }
+
+    const team = Number(ticketAdjustForm.team) === 2 ? 2 : 1;
+    const inputDelta = requireIntegerInput(ticketAdjustForm.deltaText, "数值");
+    if (inputDelta === 0) {
+      throw new Error("票数变化不能为 0");
+    }
+    const delta = isAdd ? Math.abs(inputDelta) : -Math.abs(inputDelta);
+    if (Math.abs(delta) > 1000) {
+      throw new Error("单次改票不能超过 1000");
+    }
+
+    const before = team === 1 ? remoteTicketCounts.value.team1 : remoteTicketCounts.value.team2;
+    const result = await apiPost<any>("/api/remote-telemetry/adjust-tickets", team === 1 ? { addT1: delta } : { addT2: delta });
+    if (!result?.ok) {
+      throw new Error(String(result?.response?.error || result?.error || "票数调整失败"));
+    }
+
+    await Promise.all([
+      syncOnce(),
+      remoteTelemetryQuery.refetch(),
+    ]);
+
+    const after = team === 1
+      ? result?.response?.after?.t1 ?? result?.response?.t1 ?? null
+      : result?.response?.after?.t2 ?? result?.response?.t2 ?? null;
+    ui.pushToast({
+      title: "票数调整成功",
+      message: `T${team}: ${formatTicketDisplay(before)} -> ${formatTicketDisplay(after)} (${delta > 0 ? "+" : ""}${delta})`,
+      tone: "ok",
+    });
+  } catch (error) {
+    ticketWriteError.value = renderApiError(error, "票数调整失败");
+    ui.pushToast({
+      title: "票数调整失败",
+      message: ticketWriteError.value,
+      tone: "error",
+    });
+  } finally {
+    ticketAdjustLoading.value = false;
   }
 }
 

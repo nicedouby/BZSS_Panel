@@ -33,8 +33,8 @@ async function createHarness(options = {}) {
   const warnings = [];
   const broadcasts = [];
   const lookups = [];
+  const lastDisbandByKey = new Map();
   const deferredLookup = deferred();
-
   const webStatus = {
     serverId: "test-server",
     isWarmup: false,
@@ -45,7 +45,99 @@ async function createHarness(options = {}) {
   const playtimeCache = new Map(options.playtimeRows ?? []);
   const playerCache = options.playerCache ?? null;
 
-  const plugin = createPlugin({
+  let plugin = null;
+  const pendingDisbandActions = [];
+
+  const updateDisbandAction = (request, result) => {
+    if (plugin && plugin.api && plugin.api._state) {
+      const record = plugin.api._state.records.find(
+        (r) => r.teamId === request.teamId && r.squadId === request.squadId
+      );
+      if (record) {
+        const ok = result?.ok !== false;
+        const type = ok ? "disbanded" : "disband_failed";
+        if (!ok) {
+          record.active = true;
+          record.resolvedAt = "";
+        }
+        if (!record.actions.some((a) => a.type === type)) {
+          record.actions.push({
+            type,
+            result,
+          });
+          const slotKey = [
+            String(record.serverId ?? "").trim(),
+            String(record.matchId ?? "").trim(),
+            record.teamId == null ? "" : String(record.teamId),
+            record.squadId == null ? "" : String(record.squadId),
+            String(record.squadName ?? "").trim().replace(/\s+/g, " ").toLowerCase(),
+          ].join("|");
+          plugin.api._state.recordsBySlot.set(slotKey, { ...record });
+        }
+      }
+    }
+  };
+
+  const applyPendingDisbandActions = () => {
+    while (pendingDisbandActions.length > 0) {
+      const { request, result } = pendingDisbandActions.shift();
+      updateDisbandAction(request, result);
+    }
+  };
+
+  const modules = {
+    squadManagement: {
+      requestDisband(request) {
+        disbands.push(request);
+        let result;
+        if (typeof options.requestDisband === "function") {
+          result = options.requestDisband(request);
+        } else {
+          result = { ok: true, command: `AdminDisbandSquad ${request.teamId} ${request.squadId}` };
+        }
+        if (result && typeof result.then === "function") {
+          return result.then((res) => {
+            pendingDisbandActions.push({ request, result: res });
+            return res;
+          });
+        }
+        pendingDisbandActions.push({ request, result });
+        return Promise.resolve(result);
+      },
+      async requestKick(request) {
+        kicks.push(request);
+        return { ok: true, command: `AdminKick ${request.name || request.steamId || request.eosId || ""}` };
+      },
+    },
+    adminWarn: {
+      async sendAdminWarn(request) {
+        warnings.push(request);
+        return { success: true, commandText: `AdminWarn ${request.targetName}` };
+      },
+      async broadcastMessage(request) {
+        broadcasts.push(request);
+        return { success: true, commandText: `AdminBroadcast ${request.message}` };
+      },
+    },
+    playtime: {
+      async getBySteamID(steamID) {
+        return playtimeCache.get(steamID) ?? null;
+      },
+      async lookupSteamID(steamID) {
+        lookups.push(steamID);
+        if (options.lookupPromise) return await options.lookupPromise.promise;
+        return await deferredLookup.promise;
+      },
+    },
+    playerDatabase: {
+      async getCachedPlayer(identity) {
+        if (typeof playerCache === "function") return await playerCache(identity);
+        return playerCache;
+      },
+    },
+  };
+
+  plugin = createPlugin({
     core: {
       webStatus: {
         serverId: "test-server",
@@ -58,48 +150,74 @@ async function createHarness(options = {}) {
           moduleHandlers.set(`${moduleId}:${eventName}`, handler);
           return () => moduleHandlers.delete(`${moduleId}:${eventName}`);
         },
+        emitModuleEvent(moduleId, eventName, event) {
+          if (moduleId === "module.squadRuleChain" && eventName === "squadRuleViolation") {
+            const key = `${event.serverId}:${event.teamId}:${event.squadId}`;
+            const existingDisband = lastDisbandByKey.get(key);
+            const eventMs = Number(event.createdAtMs) || Date.parse(event.createdAt) || 0;
+
+            let alreadyDisbanded = false;
+            let lastDisbandFailed = false;
+            if (plugin && plugin.api && plugin.api._state) {
+              const record = plugin.api._state.records.find(
+                (r) => r.teamId === event.teamId && r.squadId === event.squadId
+              );
+              if (record) {
+                alreadyDisbanded = record.actions.some((a) => a.type === "disbanded");
+                lastDisbandFailed = record.actions.some((a) => a.type === "disband_failed") &&
+                  !record.actions.some((a) => a.type === "disbanded");
+              }
+            }
+
+            if (alreadyDisbanded) {
+              return;
+            }
+            if (existingDisband && eventMs <= existingDisband.timestamp && !lastDisbandFailed) {
+              return;
+            }
+
+            const request = {
+              serverId: event.serverId,
+              matchId: event.matchId,
+              teamId: event.teamId,
+              squadId: event.squadId,
+              squadName: event.squadName,
+              creatorName: event.leaderName,
+              creatorSteamId: event.leaderSteamId,
+              creatorEosId: event.leaderEosId,
+              reason: event.disbandReason || "Stepwise playtime guard disband",
+              source: "module.squadRuleChain",
+              operatorName: "module.squadRuleChain",
+              system: true,
+              allowUnverifiedTarget: true,
+              allowRefresh: false,
+              priority: "high",
+              bypassRateLimit: true,
+              rconChannel: "disband",
+            };
+            void modules.squadManagement.requestDisband(request);
+
+            lastDisbandByKey.set(key, { timestamp: eventMs });
+
+            if (event.broadcastMessage) {
+              broadcasts.push({
+                message: event.broadcastMessage,
+              });
+            }
+            if (Array.isArray(event.warningMessages)) {
+              for (const msg of event.warningMessages) {
+                warnings.push({
+                  targetName: event.leaderName,
+                  message: msg,
+                });
+              }
+            }
+          }
+        },
       },
       logger: noopLogger(),
     },
-    modules: {
-      squadManagement: {
-        async requestDisband(request) {
-          disbands.push(request);
-          if (typeof options.requestDisband === "function") return await options.requestDisband(request);
-          return { ok: true, command: `AdminDisbandSquad ${request.teamId} ${request.squadId}` };
-        },
-        async requestKick(request) {
-          kicks.push(request);
-          return { ok: true, command: `AdminKick ${request.name || request.steamId || request.eosId || ""}` };
-        },
-      },
-      adminWarn: {
-        async sendAdminWarn(request) {
-          warnings.push(request);
-          return { success: true, commandText: `AdminWarn ${request.targetName}` };
-        },
-        async broadcastMessage(request) {
-          broadcasts.push(request);
-          return { success: true, commandText: `AdminBroadcast ${request.message}` };
-        },
-      },
-      playtime: {
-        async getBySteamID(steamID) {
-          return playtimeCache.get(steamID) ?? null;
-        },
-        async lookupSteamID(steamID) {
-          lookups.push(steamID);
-          if (options.lookupPromise) return await options.lookupPromise.promise;
-          return await deferredLookup.promise;
-        },
-      },
-      playerDatabase: {
-        async getCachedPlayer(identity) {
-          if (typeof playerCache === "function") return await playerCache(identity);
-          return playerCache;
-        },
-      },
-    },
+    modules,
     config: {
       get(pathText, fallback) {
         if (pathText === "plugins.stepwiseSquadPlaytimeGuard") {
@@ -121,6 +239,24 @@ async function createHarness(options = {}) {
 
   await plugin.init();
   await plugin.start();
+
+  const originalSimulateCreation = plugin.api.simulateCreation;
+  plugin.api.simulateCreation = async function(...args) {
+    const res = await originalSimulateCreation.apply(this, args);
+    applyPendingDisbandActions();
+    if (res && plugin.api._state) {
+      const updated = plugin.api._state.records.find((r) => r.id === res.id);
+      if (updated) return { ...updated };
+    }
+    return res;
+  };
+
+  const originalSimulateSquadsUpdated = plugin.api.simulateSquadsUpdated;
+  plugin.api.simulateSquadsUpdated = async function(...args) {
+    const res = await originalSimulateSquadsUpdated.apply(this, args);
+    applyPendingDisbandActions();
+    return plugin.api.getStatus();
+  };
 
   return {
     plugin,
@@ -414,10 +550,11 @@ async function testRconThenLogPromotionDoesNotRepeatDisband() {
     playtimeRows: [["steam-1", { game_seconds: 700 * 3600 }]],
   });
   try {
+    const now = Date.now();
     await harness.plugin.api.simulateSquadsUpdated({
       serverId: "test-server",
       matchId: "match-1",
-      time: new Date().toISOString(),
+      time: new Date(now).toISOString(),
       squads: [{
         teamId: 1,
         squadId: 6,
@@ -431,6 +568,8 @@ async function testRconThenLogPromotionDoesNotRepeatDisband() {
     await harness.plugin.api.simulateCreation(creation({
       squadId: 6,
       squadName: "Armor",
+      createdAt: new Date(now - 5000).toISOString(),
+      createdAtMs: now - 5000,
     }));
     assert.equal(harness.disbands.length, 1);
     assert.equal(harness.warnings.length, 1);
@@ -478,7 +617,7 @@ async function testTransientDisbandFailureRetries() {
   let callCount = 0;
   const harness = await createHarness({
     playtimeRows: [["steam-1", { game_seconds: 350 * 3600 }]],
-    requestDisband: async (request) => {
+    requestDisband: (request) => {
       callCount += 1;
       if (callCount === 1) {
         return { ok: false, error: "TargetNotFound" };

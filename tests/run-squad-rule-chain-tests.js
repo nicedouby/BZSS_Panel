@@ -266,7 +266,45 @@ async function testFairOnlyRunsAfterFirstTwoPass() {
   }
 }
 
+async function testTrackingDoesNotTreatFairViolationAsAllowedCreation() {
+  const playtimeRows = new Map([["steam-1", { game_seconds: 1000 * 3600 }]]);
+  const harness = await createHarness({ playtimeRows, logClockSeconds: 10 });
+
+  try {
+    harness.eventBus.emitModuleEvent(
+      "module.squadLifecycle",
+      "squadCreated",
+      creation({ squadName: "Squad 1", squadId: 21 }),
+    );
+
+    await waitFor(() => {
+      const fairState = harness.fair.api.getStatus();
+      return fairState.recentRecords.some((item) => item?.squadId === 21);
+    });
+
+    const nameGuardState = harness.nameGuard.api.getState();
+    const stepwiseState = harness.stepwise.api.getStatus();
+    const fairState = harness.fair.api.getStatus();
+
+    const nameAllowed = nameGuardState.recent.find((item) => item.event?.squadId === 21);
+    const stepwiseRecord = stepwiseState.recentRecords.find((item) => item.squadId === 21);
+    const fairRecord = fairState.recentRecords.find((item) => item.squadId === 21);
+
+    assert.equal(nameAllowed.status, "allowed");
+    assert.equal(stepwiseRecord.approved, true);
+    assert.equal(fairRecord.violation, true);
+
+    // 关键断言：
+    // 追踪页不能把 nameGuard.allowed 当作最终合法建队。
+    // 最终状态必须来自 fairRecord，而不是 nameGuard。
+    assert.equal(fairRecord.approved, false);
+  } finally {
+    await harness.stop();
+  }
+}
+
 await testNameViolationShortCircuits();
 await testStepwiseViolationShortCircuitsFair();
 await testFairOnlyRunsAfterFirstTwoPass();
+await testTrackingDoesNotTreatFairViolationAsAllowedCreation();
 console.log("run-squad-rule-chain-tests: ok");

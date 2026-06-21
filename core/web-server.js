@@ -2682,6 +2682,41 @@ export class WebServer {
       });
     }
 
+    if (url.pathname === "/api/squad-name-tracking/state" && req.method === "GET") {
+      const serverId = url.searchParams.get("serverId") ?? this.getCurrentServerId?.("") ?? this.core.webStatus?.serverId ?? "";
+      const lifecycle = this.modules.squadLifecycle?.getCurrent?.(serverId) ?? { list: [] };
+      const guard = this.modules.squadNamePolicyGuard?.getState?.() ?? { enabled: false, recent: [] };
+      const patrol = this.modules.squadNamePolicyPatrol?.getState?.() ?? { enabled: false, recent: [] };
+      const ruleChain = this.modules.squadRuleChain?.getState?.() ?? { recent: [], stats: {} };
+
+      const stepwiseApi = this.getPluginApi("plugin.stepwiseSquadPlaytimeGuard");
+      const fairApi = this.getPluginApi("plugin.fairSquadGuard");
+
+      const stepwise = stepwiseApi?.getStatus?.() ?? stepwiseApi?.getState?.() ?? { recentRecords: [] };
+      const fair = fairApi?.getStatus?.() ?? fairApi?.getState?.() ?? { recentRecords: [] };
+
+      const records = buildSquadNameTrackingRecords({
+        guard,
+        stepwise,
+        fair,
+        ruleChain,
+        lifecycle,
+      });
+
+      return this.json(res, 200, {
+        ok: true,
+        data: {
+          lifecycle,
+          guard,
+          patrol,
+          ruleChain,
+          stepwise,
+          fair,
+          records,
+        },
+      });
+    }
+
     if (url.pathname === "/api/kills/recent") {
       const serverId = url.searchParams.get("serverId") ?? this.getCurrentServerId("");
       const records = this.modules.combatManager?.getEvents
@@ -3062,6 +3097,39 @@ export class WebServer {
           ok: false,
           source: "module.remoteTelemetry",
           error: error?.message || "Ticket write failed.",
+        });
+      }
+    }
+
+    if (url.pathname === "/api/remote-telemetry/adjust-tickets" && req.method === "POST") {
+      const hasPerm = this.core.authManager?.hasPermission
+        ? this.core.authManager.hasPermission(user, "rcon.settickets")
+        : this.core.authManager?.hasEverything?.(user);
+      if (!hasPerm) {
+        return this.json(res, 403, { error: "Forbidden", message: "rcon.settickets permission is required." });
+      }
+      const api = this.modules.remoteTelemetry;
+      if (!api?.adjustTickets) {
+        return this.json(res, 404, {
+          error: "RemoteTelemetryUnavailable",
+          message: "Remote telemetry module is not loaded.",
+        });
+      }
+
+      try {
+        const body = await this.readJsonBody(req);
+        const result = await api.adjustTickets(body);
+        return this.json(res, result?.ok ? 200 : 502, {
+          ok: Boolean(result?.ok),
+          source: "module.remoteTelemetry",
+          type: "ticket_adjust",
+          ...result,
+        });
+      } catch (error) {
+        return this.json(res, 400, {
+          ok: false,
+          source: "module.remoteTelemetry",
+          error: error?.message || "Ticket adjust failed.",
         });
       }
     }
@@ -4967,4 +5035,138 @@ function cleanBattleLogPlayerResponseForClient(data) {
     events: cleanBattleLogEventsForClient(data.events),
     latest: cleanBattleLogEventsForClient(data.latest),
   };
+}
+
+function normalizeSquadName(name) {
+  return String(name ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function buildTrackingKey(record = {}) {
+  return [
+    String(record.serverId ?? "").trim(),
+    String(record.matchId ?? "").trim(),
+    record.teamId == null ? "" : String(record.teamId),
+    record.squadId == null ? "" : String(record.squadId),
+    normalizeSquadName(record.squadName),
+  ].join("|");
+}
+
+function buildSquadNameTrackingRecords({ guard, stepwise, fair, ruleChain, lifecycle }) {
+  const records = [];
+
+  for (const item of Array.isArray(guard?.recent) ? guard.recent : []) {
+    const status = String(item.status ?? "").trim();
+    if (status !== "violation" && status !== "handled" && status !== "error") continue;
+
+    records.push({
+      id: item.id,
+      serverId: item.serverId ?? item.event?.serverId ?? "",
+      matchId: item.matchId ?? item.event?.matchId ?? "",
+      teamId: item.event?.teamId ?? null,
+      squadId: item.event?.squadId ?? null,
+      squadName: item.event?.squadName ?? "",
+      creatorName: item.event?.creatorName ?? "",
+      creatorSteamId: item.event?.creatorSteamId ?? item.event?.creatorSteamID ?? item.event?.steamId ?? item.event?.steamID ?? "",
+      source: "squad_name_rule",
+      stage: "squad_name",
+      status: "violation",
+      decisionLabel: "队名违规",
+      decisionTone: "danger",
+      reason: item.reason ?? "",
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      actions: Array.isArray(item.actions) ? item.actions.map((action) => action.type).filter(Boolean) : [],
+    });
+  }
+
+  for (const item of Array.isArray(stepwise?.recentRecords) ? stepwise.recentRecords : []) {
+    if (item?.violation !== true) continue;
+
+    records.push({
+      id: item.id,
+      serverId: item.serverId ?? "",
+      matchId: item.matchId ?? "",
+      teamId: item.teamId ?? null,
+      squadId: item.squadId ?? null,
+      squadName: item.squadName ?? "",
+      creatorName: item.creatorName ?? item.leaderName ?? "",
+      creatorSteamId: item.creatorSteamId ?? item.leaderSteamId ?? item.steamId ?? item.steamID ?? "",
+      squadNature: item.squadNature ?? item.squadType ?? "",
+      squadNatureLabel: item.squadNatureLabel ?? "",
+      source: "tiered_squad_time",
+      stage: "stepwise",
+      status: "violation",
+      decisionLabel: "时长不足",
+      decisionTone: "danger",
+      reason: item.decisionReason ?? item.reason ?? "",
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      actions: Array.isArray(item.actions) ? item.actions.map((action) => action.type).filter(Boolean) : [],
+    });
+  }
+
+  for (const item of Array.isArray(fair?.recentRecords) ? fair.recentRecords : []) {
+    const violation = item?.violation === true;
+    const approved = item?.approved === true && !violation;
+
+    if (!violation && !approved) continue;
+
+    records.push({
+      id: item.id,
+      serverId: item.serverId ?? "",
+      matchId: item.matchId ?? "",
+      teamId: item.teamId ?? null,
+      squadId: item.squadId ?? null,
+      squadName: item.squadName ?? "",
+      creatorName: item.creatorName ?? "",
+      creatorSteamId: item.creatorSteamId ?? item.steamId ?? item.steamID ?? "",
+      source: violation ? "fair_squad_creation" : "final_allowed",
+      stage: violation ? "fair" : "final",
+      status: violation ? "violation" : "allowed",
+      decisionLabel: violation ? "公平建队拒绝" : "最终通过",
+      decisionTone: violation ? "danger" : "ok",
+      reason: Array.isArray(item.reasons) ? item.reasons.join(" ") : item.reason ?? "",
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      actions: Array.isArray(item.actions) ? item.actions.map((action) => action.type).filter(Boolean) : [],
+    });
+  }
+
+  // Merge records using buildTrackingKey and priority rank
+  const STAGE_PRIORITY = {
+    "squad_name": 4, // Name Guard Violation
+    "stepwise": 3,   // Stepwise Violation
+    "fair": 2,       // Fair Guard Violation
+    "final": 1       // Final allowed
+  };
+
+  const grouped = new Map();
+  for (const record of records) {
+    if (record.teamId == null || record.squadId == null) continue;
+    const key = buildTrackingKey(record);
+    const existing = grouped.get(key);
+    if (!existing) {
+      grouped.set(key, record);
+    } else {
+      const existingRank = STAGE_PRIORITY[existing.stage] ?? 0;
+      const currentRank = STAGE_PRIORITY[record.stage] ?? 0;
+      if (currentRank > existingRank) {
+        grouped.set(key, record);
+      } else if (currentRank === existingRank) {
+        const existingMs = Date.parse(existing.updatedAt ?? existing.createdAt ?? "") || 0;
+        const currentMs = Date.parse(record.updatedAt ?? record.createdAt ?? "") || 0;
+        if (currentMs > existingMs) {
+          grouped.set(key, record);
+        }
+      }
+    }
+  }
+
+  return Array.from(grouped.values())
+    .sort((left, right) => {
+      const rightMs = Date.parse(right.updatedAt ?? right.createdAt ?? "") || 0;
+      const leftMs = Date.parse(left.updatedAt ?? left.createdAt ?? "") || 0;
+      return rightMs - leftMs;
+    })
+    .slice(0, 300);
 }
