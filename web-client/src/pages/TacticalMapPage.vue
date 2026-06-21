@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="tactical-map-layout">
     <!-- Main Map Viewport -->
     <div
@@ -95,10 +95,10 @@
 
             <!-- Player Direction Pointer -->
             <div
-              v-if="player.soldierInfo?.rotation?.y != null"
+              v-if="getPlayerYaw(player) !== null"
               class="marker-direction"
               :style="{
-                transform: `translate(-50%, -50%) rotate(${player.soldierInfo.rotation.y + 90}deg)`
+                transform: `translate(-50%, -50%) rotate(${(getPlayerYaw(player) ?? 0) + 90}deg)`
               }"
             >
               <div class="direction-arrow"></div>
@@ -1622,6 +1622,14 @@ function getMatchStateTeamId(player: BzssCoreTrackedPlayerInfo): number | null {
 
 function resolvePlayerTeamId(player: BzssCoreTrackedPlayerInfo): number {
   return getMatchStateTeamId(player) ?? normalizeTeam(player.teamId);
+}
+
+function getPlayerYaw(player: BzssCoreTrackedPlayerInfo): number | null {
+  const rotation = player.soldierInfo?.rotation;
+  if (!rotation) return null;
+  if (rotation.z != null) return rotation.z;
+  if (rotation.y != null) return rotation.y;
+  return null;
 }
 
 function normalizeSquad(squadId: number | null | undefined) {

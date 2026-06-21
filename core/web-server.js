@@ -767,7 +767,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/snapshot/all" && req.method === "GET") {
-      return this.json(res, 200, this.core.runtimeState.getAll());
+      return this.json(res, 200, cleanSnapshotAllForClient(this.core.runtimeState.getAll()));
     }
 
     if (url.pathname === "/api/snapshot/server" && req.method === "GET") {
@@ -775,15 +775,20 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/snapshot/players" && req.method === "GET") {
-      return this.json(res, 200, this.core.runtimeState.getPlayers());
+      return this.json(res, 200, cleanPlayersForClient(this.core.runtimeState.getPlayers()));
     }
 
     if (url.pathname === "/api/snapshot/squads" && req.method === "GET") {
-      return this.json(res, 200, this.core.runtimeState.getSquads());
+      return this.json(res, 200, cleanSquadsForClient(this.core.runtimeState.getSquads()));
     }
 
     if (url.pathname === "/api/snapshot/match" && req.method === "GET") {
-      return this.json(res, 200, this.core.runtimeState.getMatch());
+      const match = this.core.runtimeState.getMatch();
+      return this.json(res, 200, match ? {
+        ...match,
+        players: cleanPlayersForClient(match.players),
+        squads: cleanSquadsForClient(match.squads),
+      } : null);
     }
 
     if (url.pathname === "/api/log-clock/set" && req.method === "POST") {
@@ -1270,14 +1275,14 @@ export class WebServer {
         });
       }
       return this.json(res, 200, {
-        events: combatManager.getEvents?.({
+        events: cleanCombatEventsForClient(combatManager.getEvents?.({
           serverId,
           limit: url.searchParams.get("limit") ?? "100",
           offset: url.searchParams.get("offset") ?? "0",
           type: url.searchParams.get("type") ?? "all",
           search: url.searchParams.get("q") ?? "",
-        }) ?? [],
-        overview: combatManager.getOverview?.(serverId) ?? null,
+        }) ?? []),
+        overview: cleanCombatOverviewForClient(combatManager.getOverview?.(serverId) ?? null),
       });
     }
 
@@ -1753,7 +1758,7 @@ export class WebServer {
           message: "Combat manager module is not loaded.",
         });
       }
-      return this.json(res, 200, combatManager.getOverview(url.searchParams.get("serverId") ?? ""));
+      return this.json(res, 200, cleanCombatOverviewForClient(combatManager.getOverview(url.searchParams.get("serverId") ?? "")));
     }
 
     if (url.pathname === "/api/combat-manager/events") {
@@ -1765,7 +1770,7 @@ export class WebServer {
         });
       }
       return this.json(res, 200, {
-        events: combatManager.getEvents({
+        events: cleanCombatEventsForClient(combatManager.getEvents({
           type: url.searchParams.get("type") ?? "all",
           search: url.searchParams.get("search") ?? url.searchParams.get("q") ?? "",
           limit: url.searchParams.get("limit") ?? "300",
@@ -1773,8 +1778,8 @@ export class WebServer {
           serverId: url.searchParams.get("serverId") ?? "",
           mode: url.searchParams.get("mode") ?? "",
           playerKey: url.searchParams.get("playerKey") ?? "",
-        }),
-        overview: combatManager.getOverview(url.searchParams.get("serverId") ?? ""),
+        })),
+        overview: cleanCombatOverviewForClient(combatManager.getOverview(url.searchParams.get("serverId") ?? "")),
       });
     }
 
@@ -1800,7 +1805,7 @@ export class WebServer {
         });
       }
       return this.json(res, 200, {
-        events: combatManager.getPlayerEvents?.(url.searchParams.get("serverId") ?? "", {
+        events: cleanCombatEventsForClient(combatManager.getPlayerEvents?.(url.searchParams.get("serverId") ?? "", {
           steam64ID: url.searchParams.get("steam64ID") ?? url.searchParams.get("steamID") ?? "",
           eosID: url.searchParams.get("eosID") ?? "",
           controllerID: url.searchParams.get("controllerID") ?? "",
@@ -1809,8 +1814,8 @@ export class WebServer {
         }, {
           limit: url.searchParams.get("limit") ?? "20",
           offset: url.searchParams.get("offset") ?? "0",
-        }) ?? [],
-        overview: combatManager.getOverview?.(url.searchParams.get("serverId") ?? "") ?? null,
+        }) ?? []),
+        overview: cleanCombatOverviewForClient(combatManager.getOverview?.(url.searchParams.get("serverId") ?? "") ?? null),
       });
     }
 
@@ -1984,11 +1989,11 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/battle-log/overview" && req.method === "GET") {
-        return this.json(res, 200, battleLog.getOverview?.(battleServerId));
+        return this.json(res, 200, cleanBattleLogOverviewForClient(battleLog.getOverview?.(battleServerId)));
       }
 
       if (url.pathname === "/api/battle-log/events" && req.method === "GET") {
-        return this.json(res, 200, {
+        return this.json(res, 200, cleanBattleLogEventsResponseForClient({
           events: battleLog.getEvents?.({
             serverId: battleServerId,
             type: url.searchParams.get("type") ?? "all",
@@ -1998,18 +2003,18 @@ export class WebServer {
             playerKey: url.searchParams.get("playerKey") ?? url.searchParams.get("player") ?? "",
           }) ?? [],
           overview: battleLog.getOverview?.(battleServerId) ?? null,
-        });
+        }));
       }
 
       if (url.pathname === "/api/battle-log/player" && req.method === "GET") {
-        return this.json(res, 200, battleLog.getPlayerStats?.(battleServerId, {
+        return this.json(res, 200, cleanBattleLogPlayerResponseForClient(battleLog.getPlayerStats?.(battleServerId, {
           q: url.searchParams.get("q") ?? url.searchParams.get("search") ?? "",
           playerKey: url.searchParams.get("playerKey") ?? "",
           steam64ID: url.searchParams.get("steam64ID") ?? url.searchParams.get("steamID") ?? "",
           eosID: url.searchParams.get("eosID") ?? "",
           controllerID: url.searchParams.get("controllerID") ?? "",
           name: url.searchParams.get("name") ?? "",
-        }));
+        })));
       }
 
       if (url.pathname === "/api/battle-log/rates" && req.method === "GET") {
@@ -3509,7 +3514,17 @@ export class WebServer {
 
   json(res, status, obj, extraHeaders = {}) {
     const start = performance.now();
-    const data = JSON.stringify(obj, null, 2);
+    const store = requestStorage.getStore();
+    const req = store?.req;
+    let pretty = false;
+    if (req) {
+      try {
+        const host = req.headers.host || "localhost";
+        const url = new URL(req.url, `http://${host}`);
+        pretty = url.searchParams.has("pretty");
+      } catch {}
+    }
+    const data = pretty ? JSON.stringify(obj, null, 2) : JSON.stringify(obj);
     const durationMs = performance.now() - start;
     const sizeBytes = Buffer.byteLength(data);
 
@@ -3518,8 +3533,7 @@ export class WebServer {
     const slowJsonMs = performanceConfig.slowJsonMs ?? 50;
 
     if (sizeBytes > largeJsonBytes || durationMs > slowJsonMs) {
-      const store = requestStorage.getStore();
-      const urlStr = store?.req?.url ?? "unknown";
+      const urlStr = req?.url ?? "unknown";
       this.logger?.warn(`[large-slow-json] url=${urlStr} sizeBytes=${sizeBytes} durationMs=${durationMs.toFixed(2)}ms`);
     }
 
@@ -4820,5 +4834,137 @@ function normalizePlaytimeRow(row) {
     lastSeenName: row?.last_seen_name ?? row?.lastSeenName ?? null,
     steam_avatar: row?.steam_avatar ?? row?.steamAvatar ?? null,
     steamAvatar: row?.steam_avatar ?? row?.steamAvatar ?? null,
+  };
+}
+
+function cleanPlayerForClient(player) {
+  if (!player) return player;
+  const cleaned = { ...player };
+  delete cleaned.raw;
+  return cleaned;
+}
+
+function cleanPlayersForClient(players) {
+  if (!players) return players;
+  const cleaned = { ...players };
+  delete cleaned.bySteamID;
+  delete cleaned.byEOSID;
+  delete cleaned.byPlayerID;
+  delete cleaned.byName;
+  if (Array.isArray(cleaned.active)) {
+    cleaned.active = cleaned.active.map(cleanPlayerForClient);
+  }
+  if (Array.isArray(cleaned.recentlyDisconnected)) {
+    cleaned.recentlyDisconnected = cleaned.recentlyDisconnected.map(cleanPlayerForClient);
+  }
+  return cleaned;
+}
+
+function cleanSquadsForClient(squads) {
+  if (!squads) return squads;
+  const cleaned = { ...squads };
+  delete cleaned.byKey;
+  delete cleaned.byTeamID;
+  return cleaned;
+}
+
+function cleanSnapshotAllForClient(all) {
+  if (!all) return all;
+  return {
+    ...all,
+    players: cleanPlayersForClient(all.players),
+    squads: cleanSquadsForClient(all.squads),
+    match: all.match ? {
+      ...all.match,
+      players: cleanPlayersForClient(all.match.players),
+      squads: cleanSquadsForClient(all.match.squads),
+    } : all.match,
+  };
+}
+
+function cleanCombatEventForClient(event) {
+  if (!event) return event;
+  const cleaned = { ...event };
+  delete cleaned.raw;
+  delete cleaned.rawEvent;
+  if (cleaned.attacker) {
+    cleaned.attacker = { ...cleaned.attacker };
+    delete cleaned.attacker.raw;
+  }
+  if (cleaned.victim) {
+    cleaned.victim = { ...cleaned.victim };
+    delete cleaned.victim.raw;
+  }
+  return cleaned;
+}
+
+function cleanCombatEventsForClient(events) {
+  if (!Array.isArray(events)) return [];
+  return events.map(cleanCombatEventForClient);
+}
+
+function cleanCombatOverviewForClient(overview) {
+  if (!overview) return overview;
+  const cleaned = { ...overview };
+  delete cleaned.events;
+  delete cleaned.latest;
+  delete cleaned.rawLatest;
+  delete cleaned.processedLatest;
+  return cleaned;
+}
+
+function cleanBattleLogEventForClient(event) {
+  if (!event) return event;
+  const cleaned = { ...event };
+  delete cleaned.raw;
+  delete cleaned.rawEvent;
+  if (cleaned.player) {
+    cleaned.player = { ...cleaned.player };
+    delete cleaned.player.raw;
+  }
+  if (cleaned.counterparty) {
+    cleaned.counterparty = { ...cleaned.counterparty };
+    delete cleaned.counterparty.raw;
+  }
+  if (cleaned.attacker) {
+    cleaned.attacker = { ...cleaned.attacker };
+    delete cleaned.attacker.raw;
+  }
+  if (cleaned.victim) {
+    cleaned.victim = { ...cleaned.victim };
+    delete cleaned.victim.raw;
+  }
+  return cleaned;
+}
+
+function cleanBattleLogEventsForClient(events) {
+  if (!Array.isArray(events)) return [];
+  return events.map(cleanBattleLogEventForClient);
+}
+
+function cleanBattleLogOverviewForClient(overview) {
+  if (!overview) return overview;
+  const cleaned = { ...overview };
+  if (Array.isArray(cleaned.latest)) {
+    cleaned.latest = cleanBattleLogEventsForClient(cleaned.latest);
+  }
+  return cleaned;
+}
+
+function cleanBattleLogEventsResponseForClient(data) {
+  if (!data) return data;
+  return {
+    ...data,
+    events: cleanBattleLogEventsForClient(data.events),
+    overview: cleanBattleLogOverviewForClient(data.overview),
+  };
+}
+
+function cleanBattleLogPlayerResponseForClient(data) {
+  if (!data) return data;
+  return {
+    ...data,
+    events: cleanBattleLogEventsForClient(data.events),
+    latest: cleanBattleLogEventsForClient(data.latest),
   };
 }
