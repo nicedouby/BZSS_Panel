@@ -129,7 +129,7 @@
         </div>
       </form>
 
-      <form v-if="canRefresh" class="ticket-adjust-form" @submit.prevent="submitTicketAdjust">
+      <form v-if="canRefresh" class="ticket-adjust-form" @submit.prevent>
         <label class="ticket-adjust-field">
           <span class="ticket-editor-field__label">队伍</span>
           <select v-model="ticketAdjustForm.team" class="ticket-editor-input">
