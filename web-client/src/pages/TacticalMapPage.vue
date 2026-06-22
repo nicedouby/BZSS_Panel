@@ -811,6 +811,7 @@ import { useServerStore } from "../stores/server.store";
 import { usePlayerStore } from "../stores/player.store";
 import { adaptPlayerDetail } from "../utils/squad-admin-adapter";
 import { resolveRoleIcon, type RoleIconInfo } from "../utils/role-icons";
+import { resolveVehicleIcon } from "../utils/vehicle-icons";
 import {
   TACTICAL_MAP_CONFIGS,
   TACTICAL_MAP_LIST,
@@ -1938,7 +1939,8 @@ function resolveMapRoleInfo(player: BzssCoreTrackedPlayerInfo): RoleIconInfo {
 
   const vehicleInfo = player.vehicleInfo;
   if (vehicleInfo && vehicleInfo.vehicleType && vehicleInfo.vehicleType !== 'None') {
-    return { icon: '🚙', label: `乘车中 (${vehicleInfo.vehicleType})` };
+    const vehicleIcon = resolveVehicleIcon(vehicleInfo.vehicleType);
+    return { icon: vehicleIcon.icon, label: `${vehicleIcon.label} (${vehicleInfo.vehicleType})`, tone: vehicleIcon.tone };
   }
 
   const roleSource = [player.soldierInfo?.soldierClass, player.soldierInfo?.weaponClass]

@@ -210,12 +210,12 @@
 
               <!-- Batch Spawn Count -->
               <label class="bzss-core-field">
-                <span>Batch Spawn Count (1-5, with 0.25s delay)</span>
+                <span>Batch Spawn Count (1-10, with 0.1s delay)</span>
                 <input
                   v-model.number="batchSpawnCount"
                   type="number"
                   min="1"
-                  max="5"
+                  max="10"
                   placeholder="1"
                   :disabled="isBatchSpawning"
                 />
@@ -611,12 +611,13 @@ async function submitVehicleCommand() {
   if (!path || !player) return;
   const parameter = `${player},${path},${vehicleTeamId.value}`;
 
-  const count = Math.max(1, Math.min(5, Number(batchSpawnCount.value) || 1));
+  const count = Math.max(1, Math.min(10, Number(batchSpawnCount.value) || 1));
   
   if (count === 1) {
     await executeCommand({
       directive: "CreateVehicle",
       parameter,
+      keepOpen: true,
     });
     return;
   }
@@ -633,7 +634,7 @@ async function submitVehicleCommand() {
       batchSpawningProgress.value = i + 1;
       
       if (i > 0) {
-        await new Promise((resolve) => setTimeout(resolve, 250));
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
 
       const result = await executeBzssCoreCommand({
@@ -653,7 +654,6 @@ async function submitVehicleCommand() {
       message: `Completed sequential spawning of ${count} vehicles.`,
       tone: "ok",
     });
-    closeDialog();
   } catch (error: any) {
     ui.pushToast({
       title: "Batch Spawning Error",
@@ -675,7 +675,7 @@ async function submitRawCommand() {
   });
 }
 
-async function executeCommand(payload: { directive?: string; parameter?: string; command?: string; raw?: boolean }) {
+async function executeCommand(payload: { directive?: string; parameter?: string; command?: string; raw?: boolean; keepOpen?: boolean }) {
   if (busy.value) return;
   busy.value = true;
   try {
@@ -694,7 +694,7 @@ async function executeCommand(payload: { directive?: string; parameter?: string;
       durationMs: 4200,
     });
 
-    if (result.ok) closeDialog();
+    if (result.ok && !payload.keepOpen) closeDialog();
   } catch (error: any) {
     ui.pushToast({
       title: t("common.error"),

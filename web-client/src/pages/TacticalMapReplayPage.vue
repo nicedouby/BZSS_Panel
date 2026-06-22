@@ -375,6 +375,7 @@ import {
 } from "../app/tacticalMapReplayApi";
 import { TACTICAL_MAP_CONFIGS, type TacticalMapConfig } from "../shared/tactical-map-data";
 import { resolveRoleIcon, type RoleIconInfo } from "../utils/role-icons";
+import { resolveVehicleIcon } from "../utils/vehicle-icons";
 
 interface PreviewMarker {
   playerGuid: string;
@@ -458,7 +459,10 @@ const currentMarkers = computed<PreviewMarker[]>(() => {
 
       const inVehicle = player.vehicleInfo && player.vehicleInfo.vehicleType && player.vehicleInfo.vehicleType !== 'None';
       const roleInfo = inVehicle
-        ? { icon: '🚙', label: `乘车中 (${player.vehicleInfo.vehicleType})` }
+        ? (() => {
+            const vi = resolveVehicleIcon(player.vehicleInfo?.vehicleType);
+            return { icon: vi.icon, label: `${vi.label} (${player.vehicleInfo?.vehicleType})`, tone: vi.tone };
+          })()
         : resolveRoleIcon(player.soldierClass);
 
       return {
