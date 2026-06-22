@@ -3,7 +3,7 @@ import type { RoleIconInfo } from "./role-icons";
 /**
  * Vehicle icon mapping table.
  * Each entry maps vehicleType keyword patterns to an icon image from /Icon/.
- * Patterns are matched against the normalized (lowercased, stripped) vehicleType string.
+ * Patterns are matched against normalized vehicleType strings.
  * Order matters — first match wins, so more specific patterns must come first.
  */
 
@@ -82,14 +82,14 @@ const VEHICLE_ICON_MATCHES: VehicleIconMatch[] = [
 
   // --- MGS (Mobile Gun System) ---
   {
-    patterns: ["mgs", "mobile_gun"],
+    patterns: ["mgs", "mobile_gun", "mobilegunsystem"],
     icon: `${ICO_BASE}/T_map_mgs.PNG`,
     label: "MGS",
   },
 
   // --- Tracked IFV ---
   {
-    patterns: ["trackedifv", "tracked_ifv"],
+    patterns: ["trackedifv", "tracked_ifv", "ifvtracked", "ifv_tracked"],
     icon: `${ICO_BASE}/map_trackedifv.PNG`,
     label: "履带步兵战车",
   },
@@ -103,42 +103,42 @@ const VEHICLE_ICON_MATCHES: VehicleIconMatch[] = [
 
   // --- Anti-Air (truck-mounted) ---
   {
-    patterns: ["truck_antiair", "truckaa", "truck_aa"],
+    patterns: ["truck_antiair", "truckaa", "truck_aa", "truckantiair"],
     icon: `${ICO_BASE}/map_truck_antiair.PNG`,
     label: "防空卡车",
   },
 
   // --- Anti-Air (general) ---
   {
-    patterns: ["antiair", "anti_air", "anti-air", "aa_vehicle", "zptml"],
+    patterns: ["antiair", "anti_air", "anti-air", "aa_vehicle", "aavehicle", "zptml"],
     icon: `${ICO_BASE}/map_antiair.PNG`,
     label: "防空载具",
   },
 
   // --- Tracked APC Logistics ---
   {
-    patterns: ["trackedapc_logi", "tracked_apc_logi", "trackedapc_logistics"],
+    patterns: ["trackedapc_logi", "tracked_apc_logi", "trackedapc_logistics", "apctracked_logi", "apctrackedlogistics"],
     icon: `${ICO_BASE}/T_map_trackedapc_logistics.PNG`,
     label: "履带装甲后勤车",
   },
 
   // --- Tracked APC MSV ---
   {
-    patterns: ["trackedapc_msv", "tracked_apc_msv"],
+    patterns: ["trackedapc_msv", "tracked_apc_msv", "apctracked_msv"],
     icon: `${ICO_BASE}/T_map_trackedapc_msv.PNG`,
     label: "履带装甲运兵车(MSV)",
   },
 
   // --- Tracked APC No Turret ---
   {
-    patterns: ["trackedapc_noturret", "tracked_apc_noturret"],
+    patterns: ["trackedapc_noturret", "tracked_apc_noturret", "apctracked_noturret"],
     icon: `${ICO_BASE}/T_map_trackedapc_noturret.PNG`,
     label: "履带装甲运兵车",
   },
 
   // --- Tracked APC (general) ---
   {
-    patterns: ["trackedapc", "tracked_apc"],
+    patterns: ["trackedapc", "tracked_apc", "apctracked", "apc_tracked"],
     icon: `${ICO_BASE}/map_trackedapc.PNG`,
     label: "履带装甲运兵车",
   },
@@ -152,42 +152,42 @@ const VEHICLE_ICON_MATCHES: VehicleIconMatch[] = [
 
   // --- Tracked Jeep ---
   {
-    patterns: ["trackedjeep", "tracked_jeep"],
+    patterns: ["trackedjeep", "tracked_jeep", "jeeptracked", "jeep_tracked"],
     icon: `${ICO_BASE}/map_trackedjeep.PNG`,
     label: "履带吉普",
   },
 
   // --- Jeep Artillery ---
   {
-    patterns: ["jeep_artillery", "jeepart", "artillery_jeep", "artillery_truck", "technical_artillery", "mortar_truck"],
+    patterns: ["jeep_artillery", "jeepart", "artillery_jeep", "artillery_truck", "technical_artillery", "mortar_truck", "jeepartillery"],
     icon: `${ICO_BASE}/map_jeep_artillery.PNG`,
     label: "火炮车",
   },
 
   // --- Jeep Anti-Tank ---
   {
-    patterns: ["jeep_antitank", "jeepat", "at_jeep", "antitank_jeep", "technical_atgm", "technical_at", "technical_bgm", "kornet"],
+    patterns: ["jeep_antitank", "jeepat", "at_jeep", "antitank_jeep", "technical_atgm", "technical_at", "technical_bgm", "kornet", "jeepantitank"],
     icon: `${ICO_BASE}/map_jeep_antitank.PNG`,
     label: "反坦克吉普",
   },
 
   // --- Jeep Logistics ---
   {
-    patterns: ["jeep_logi", "jeep_logistics"],
+    patterns: ["jeep_logi", "jeep_logistics", "jeeplogi", "jeeplogistics"],
     icon: `${ICO_BASE}/map_jeep_logistics.PNG`,
     label: "后勤吉普",
   },
 
   // --- Jeep Transport ---
   {
-    patterns: ["jeep_transport"],
+    patterns: ["jeep_transport", "jeeptransport"],
     icon: `${ICO_BASE}/map_jeep_transport.PNG`,
     label: "运输吉普",
   },
 
   // --- Jeep Turret (armed technical) ---
   {
-    patterns: ["jeep_turret", "technical_dshk", "technical_spg", "technical_mg", "technical_ags", "technical_zu"],
+    patterns: ["jeep_turret", "technical_dshk", "technical_spg", "technical_mg", "technical_ags", "technical_zu", "jeepturret"],
     icon: `${ICO_BASE}/map_jeep_turret.PNG`,
     label: "武装吉普",
   },
@@ -208,21 +208,21 @@ const VEHICLE_ICON_MATCHES: VehicleIconMatch[] = [
 
   // --- Truck Logistics ---
   {
-    patterns: ["truck_logi", "truck_logistics", "logitruck", "logi_truck"],
+    patterns: ["truck_logi", "truck_logistics", "logitruck", "logi_truck", "trucklogi", "trucklogistics"],
     icon: `${ICO_BASE}/map_truck_logistics.PNG`,
     label: "后勤卡车",
   },
 
   // --- Truck Transport Armed ---
   {
-    patterns: ["truck_transport_armed", "armed_transport"],
+    patterns: ["truck_transport_armed", "armed_transport", "trucktransportarmed", "armedtransport"],
     icon: `${ICO_BASE}/map_truck_transport_armed.PNG`,
     label: "武装运输卡车",
   },
 
   // --- Truck Transport ---
   {
-    patterns: ["truck_transport", "transporttruck"],
+    patterns: ["truck_transport", "transporttruck", "trucktransport"],
     icon: `${ICO_BASE}/map_truck_transport.PNG`,
     label: "运输卡车",
   },
@@ -252,6 +252,10 @@ function normalizeVehicleType(vehicleType: unknown): string {
     .trim();
 }
 
+function compactVehicleType(value: string): string {
+  return value.replace(/_/g, "");
+}
+
 /**
  * Resolve vehicle icon from a vehicleType string.
  * Returns a RoleIconInfo-compatible object with the icon path, label, and tone.
@@ -262,10 +266,12 @@ export function resolveVehicleIcon(vehicleType: unknown): RoleIconInfo {
     return { icon: "🚙", label: "载具", tone: "crewman" };
   }
 
+  const compactNormalized = compactVehicleType(normalized);
   for (const entry of VEHICLE_ICON_MATCHES) {
     for (const pattern of entry.patterns) {
-      const normalizedPattern = pattern.toLowerCase().replace(/[_\-]+/g, "_");
-      if (normalized.includes(normalizedPattern)) {
+      const normalizedPattern = normalizeVehicleType(pattern);
+      const compactPattern = compactVehicleType(normalizedPattern);
+      if (normalized.includes(normalizedPattern) || compactNormalized.includes(compactPattern)) {
         return {
           icon: entry.icon,
           label: entry.label,
