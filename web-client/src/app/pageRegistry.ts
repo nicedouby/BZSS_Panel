@@ -41,6 +41,7 @@ import AuditRecordsPage from "../pages/AuditRecordsPage.vue";
 import PluginSubscriptionsPage from "../pages/PluginSubscriptionsPage.vue";
 import TacticalMapPage from "../pages/TacticalMapPage.vue";
 import BzssCoreSnapshotsPage from "../pages/BzssCoreSnapshotsPage.vue";
+import TacticalMapReplayPage from "../pages/TacticalMapReplayPage.vue";
 import {
   normalizePermissionList,
   resolveWebPagePermission,
@@ -373,6 +374,17 @@ export const pageRegistry: PageDefinition[] = [
     category: "plugin",
     refreshPolicy: "polling",
     nav: { section: "analytics", label: "服务器统计", icon: "📈", order: 10 },
+    ...workspacePage,
+  },
+  {
+    name: "tactical-map-replay",
+    path: "/analytics/tactical-map-replay",
+    component: TacticalMapReplayPage,
+    title: "战术地图回放",
+    category: "plugin",
+    refreshPolicy: "manual",
+    nav: { section: "analytics", label: "战术地图回放", icon: "REPLAY", order: 15 },
+    requiredPermission: "tactical_map_replay.view",
     ...workspacePage,
   },
   {

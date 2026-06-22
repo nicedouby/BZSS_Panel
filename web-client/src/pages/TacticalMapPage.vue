@@ -70,6 +70,24 @@
           <div class="radar-circle circle-3"></div>
         </div>
 
+        <!-- Capture Zone Overlay -->
+        <div v-if="showCaptureZones" class="capture-zone-layer">
+          <button
+            v-for="zone in captureZoneMarkers"
+            :key="zone.name"
+            class="capture-zone-marker"
+            type="button"
+            :style="{
+              left: `${zone.mapX}%`,
+              top: `${zone.mapY}%`,
+            }"
+            :title="zone.raw || zone.name"
+          >
+            <span class="capture-zone-dot"></span>
+            <span class="capture-zone-label">{{ zone.name }}</span>
+          </button>
+        </div>
+
         <!-- Player Markers Layer -->
         <div class="player-markers-layer" :style="{ pointerEvents: measureMode ? 'none' : 'auto' }">
           <button
@@ -477,6 +495,10 @@
               <span class="option-text">显示玩家坐标</span>
             </label>
             <label class="option-item-sidebar">
+              <input type="checkbox" v-model="showCaptureZones" />
+              <span class="option-text">显示 Capture Zone</span>
+            </label>
+            <label class="option-item-sidebar">
               <input type="checkbox" v-model="disableMarkerInteraction" />
               <span class="option-text">穿透玩家标记</span>
             </label>
@@ -665,6 +687,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, reactive, nextTick, watch } from "vue";
 import {
   type BzssCorePlayerInfoResponse,
+  type BzssCoreCaptureZoneInfo,
   type BzssCoreTrackedPlayerInfo,
   type BzssCoreTrackedVector,
 } from "../app/bzssCoreApi";
@@ -684,6 +707,7 @@ import TiledMapRenderer from "../components/tactical-map/TiledMapRenderer.vue";
 const props = defineProps<{
   snapshot: BzssCorePlayerInfoResponse | null;
   players: BzssCoreTrackedPlayerInfo[];
+  captureZones?: BzssCoreCaptureZoneInfo[];
   loading: boolean;
   errorText: string;
 }>();
@@ -696,6 +720,13 @@ interface MapMarker extends BzssCoreTrackedPlayerInfo {
   mapX: number;
   mapY: number;
   roleInfo: RoleIconInfo;
+}
+
+interface CaptureZoneMarker {
+  name: string;
+  mapX: number;
+  mapY: number;
+  raw?: string;
 }
 
 interface CombatLog {
@@ -713,6 +744,7 @@ const authStore = useAuthStore();
 
 const snapshot = computed(() => props.snapshot);
 const players = computed(() => props.players);
+const captureZones = computed(() => props.captureZones ?? snapshot.value?.captureZones ?? []);
 
 const mapName = "Sumari";
 const serverMapName = computed(() => serverStore.snapshot?.mapName || mapName);
@@ -755,6 +787,7 @@ const dragStart = reactive({ x: 0, y: 0 });
 
 const showGrid = ref(true);
 const showRadar = ref(true);
+const showCaptureZones = ref(true);
 const filterAliveOnly = ref(false);
 const disableMarkerInteraction = ref(false);
 
@@ -1327,6 +1360,29 @@ const markers = computed<MapMarker[]>(() => {
       roleInfo: resolveMapRoleInfo(player),
     };
   });
+});
+
+const captureZoneMarkers = computed<CaptureZoneMarker[]>(() => {
+  const zones = captureZones.value;
+  if (!Array.isArray(zones) || zones.length === 0) return [];
+  const bounds = activeMapConfig.value.bounds;
+  const markers: CaptureZoneMarker[] = [];
+  for (const zone of zones) {
+    const pos = zone?.position;
+    if (!pos) continue;
+    const x = Number(pos.x);
+    const y = Number(pos.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    const name = String(zone.name ?? "").trim();
+    if (!name) continue;
+    markers.push({
+      name,
+      mapX: project(x, bounds.minX, bounds.maxX),
+      mapY: project(y, bounds.minY, bounds.maxY),
+      raw: zone.raw,
+    });
+  }
+  return markers;
 });
 
 const filteredPlayers = computed(() => {

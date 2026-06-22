@@ -140,6 +140,91 @@ describe("runtimeSync", () => {
     expect(jobs.updatedAt).toBe(1);
   });
 
+  it("updates players even when the incoming revision is unchanged", async () => {
+    const players = usePlayerStore();
+
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        snapshot: {
+          matchState: {
+            players: {
+              list: [
+                {
+                  playerID: 1,
+                  name: "Alice",
+                  teamID: 1,
+                  squadID: 2,
+                  steamID: "76561198000000001",
+                  online: true,
+                },
+              ],
+              lastUpdatedAt: "2026-05-12T00:00:00.000Z",
+            },
+            squads: {
+              list: [],
+              lastUpdatedAt: "2026-05-12T00:00:00.000Z",
+            },
+          },
+          revisions: {
+            players: 1,
+            squads: 1,
+          },
+        },
+      }),
+    });
+
+    await syncOnce();
+    expect(players.active).toHaveLength(1);
+    expect(players.active[0].name).toBe("Alice");
+
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        snapshot: {
+          matchState: {
+            players: {
+              list: [
+                {
+                  playerID: 1,
+                  name: "Alice",
+                  teamID: 1,
+                  squadID: 2,
+                  steamID: "76561198000000001",
+                  online: true,
+                },
+                {
+                  playerID: 2,
+                  name: "Bob",
+                  teamID: 2,
+                  squadID: 3,
+                  steamID: "76561198000000002",
+                  online: true,
+                },
+              ],
+              lastUpdatedAt: "2026-05-12T00:01:00.000Z",
+            },
+            squads: {
+              list: [],
+              lastUpdatedAt: "2026-05-12T00:00:00.000Z",
+            },
+          },
+          revisions: {
+            players: 1,
+            squads: 1,
+          },
+        },
+      }),
+    });
+
+    await syncOnce();
+
+    expect(players.active).toHaveLength(2);
+    expect(players.active.map((player) => player.name)).toEqual(["Alice", "Bob"]);
+  });
+
   it("resolves route-aware cadences and hidden tab backoff", () => {
     setRuntimeSyncRefreshPolicy("realtime");
 

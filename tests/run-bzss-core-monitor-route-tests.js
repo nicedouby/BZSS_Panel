@@ -8,6 +8,12 @@ function createServer() {
     logger: { info() {}, warn() {}, error() {} },
     core: {
       pluginManager: { instances: [] },
+      authManager: {
+        hasEverything() { return false; },
+        hasPermission(_user, permission) {
+          return ["bzss_core.use", "tactical_map_replay.view", "tactical_map_replay.export"].includes(permission);
+        },
+      },
     },
     modules: {
       bzssCoreMonitor: {
@@ -55,6 +61,23 @@ function createServer() {
           return query?.name ? { playerName: query.name, playerGuid: "abc" } : null;
         },
       },
+      tacticalMapReplay: {
+        async listSegments() {
+          return { ok: true, items: [{ id: "seg-1", frameCount: 3 }] };
+        },
+        async getSegment() {
+          return { ok: true, segment: { id: "seg-1" }, frames: [{ frameId: "f1" }], frameCount: 1, query: {} };
+        },
+        async createExportTask() {
+          return { ok: true, task: { id: "task-1", status: "queued" } };
+        },
+        listExportTasks() {
+          return { ok: true, items: [{ id: "task-1", status: "completed" }] };
+        },
+        getExportFile() {
+          return null;
+        },
+      },
     },
   });
 }
@@ -74,6 +97,10 @@ function main() {
   assert.equal(raw.rawText.includes("PlayerBaseInfo"), true);
   assert.equal(raw.rawTextLength, 34);
   assert.equal(raw.status, "ready");
+
+  server.canViewTacticalMapReplay({ permissions: ["tactical_map_replay.view"] });
+  server.canExportTacticalMapReplay({ permissions: ["tactical_map_replay.export"] });
+  assert.equal(typeof server.modules.tacticalMapReplay.listExportTasks, "function");
   console.log("run-bzss-core-monitor-route-tests: ok");
 }
 

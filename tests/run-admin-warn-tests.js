@@ -86,14 +86,14 @@ async function testBroadcastSuccessAndKindFilter() {
 
   assert.equal(result.success, true);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].command, "AdminBroadcast line1 'quoted'");
+  assert.equal(calls[0].command, "AdminBroadcast line1\n'quoted'");
   assert.equal(calls[0].priority, "high");
   assert.equal(calls[0].bypassRateLimit, undefined);
 
   const records = module.api.getRecent({ kind: "broadcast", limit: 10 });
   assert.equal(records.length, 1);
   assert.equal(records[0].kind, "broadcast");
-  assert.equal(records[0].message, "line1 'quoted'");
+  assert.equal(records[0].message, "line1\n'quoted'");
   assert.equal(records[0].relatedEventId, "broadcast-1");
   await module.stop();
 }

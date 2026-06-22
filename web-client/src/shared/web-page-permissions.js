@@ -25,6 +25,7 @@ export const WEB_PAGE_PERMISSION_MATRIX = Object.freeze([
   { route: "/plugins/tactical-report/user-codes", requiredPermission: "plugin:tactical-report:user-codes" },
   { route: "/plugins/lianban-kick", requiredPermission: "squad_management.view" },
   { route: "/plugins/server-info-statistics", requiredPermission: "server_stats.view" },
+  { route: "/analytics/tactical-map-replay", requiredPermission: "tactical_map_replay.view" },
   { route: "/weapon-collector", requiredPermission: "combat_manager.view", legacyRequiredPermissions: ["kill_manager.view"] },
   { route: "/debug/udp-forwarder", requiredPermission: "debug.udp_forwarder.view" },
   { route: "/debug/match-snapshots", requiredPermission: "debug.match_snapshots.view" },

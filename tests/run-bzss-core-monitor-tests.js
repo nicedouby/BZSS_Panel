@@ -117,6 +117,35 @@ function testParseBzssCorePlayerBlocksAcceptsNamedFieldsAndExtraBlocks() {
   assert.equal(players[4].soldierInfo.weaponClass, "BP_QBU-191_DMR_Optic_QMK-191_Suppressor_C_2147110505");
 }
 
+function testParseBzssCorePlayerBlocksAcceptsCaptureZonesAndCompactScoreboard() {
+  const text = "PlayerBaseInfo{PlayerID:0,PlayerOnlineID:00026a0bbf67442f84777b964560fba4,PlayerName:Donald·DoubyBear,IsAdmin:1,IsCommander:0,FTIndex:0,FTPosition:0}"
+    + "SoldierInfo{PawnClass:BP_Soldier_USMC_Rifleman1_C_2147212519,Health:100,Bleeding:0,Wounded:0,Dying:0,Crouched:0,Prone:0,Falling:0,WeaponInfo{BP_M4_Carryhandle_Foregrip_C_2147212513,30,30,30,30,30,30,30}Position{X=-128858 Y=-142812 Z=320}Rotation{X=0 Y=0 Z=41}}"
+    + "PlayerScoreboard{Lives:-1,NumKills:0,VehicleKills:0,NumDeaths:1,Woundeds:0,Wounds:1,TKs:0,HealPoints:0,Revived:0,TeamWork:0,Objective:420,Combat:0Ping:21}"
+    + "}TeamID:2{}FOBs{}CaptureZones{CaptureZone{01-AlKhora,Position:X=-57095.684 Y=-126662.330 Z=904.580}CaptureZone{02-WestOutskirts,Position:X=-122747.449 Y=-49634.712 Z=592.186}}{BZSS-Marked}";
+
+  const players = parseBzssCorePlayerBlocks(text);
+  assert.equal(players.length, 1);
+  assert.equal(players[0].teamId, 2);
+  assert.deepEqual(players[0].playerScoreboard.numericValues.slice(0, 12), [-1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 420, 0]);
+  assert.equal(players[0].playerScoreboard.stats.combatScore, 0);
+  assert.equal(Number(players[0].playerScoreboard.valuesByKey.Ping), 21);
+  assert.ok(players[0].rawText.includes("CaptureZones{"));
+}
+
+function testParseBzssCorePlayerBlocksReadsNewSquadContext() {
+  const text = "[BZSS-Core-PBI]TeamID:1{}TeamID:2{SquadInfo{SquadStateInfo{No RPSquadBaseInfo{Team:2,ID:1,SQName:Squad 1,CreatorID:EOS: 00026a0bbf67442f84777b964560fba4 steam: 76561198194428818,CreationTimeStamp:4174.044434}SquadScoreBoard{Kills:0,VehicleKills:0,Woundeds:0,Wounds:0,Deaths:0,TKs:0,Score:0.0,HealPoints:0.0,RevivedPoints:0.0,TeamWorkScore:0.0,ObjectiveScore:0.0,CombatScore:0.0}}"
+    + "PlayerBaseInfo{PlayerID:0,PlayerOnlineID:00026a0bbf67442f84777b964560fba4,PlayerName:Donald·DoubyBear,IsAdmin:1,IsCommander:0,FTIndex:0,FTPosition:0}"
+    + "SoldierInfo{PawnClass:BP_Soldier_USMC_Rifleman1_C_2147212519,Health:0,Bleeding:0,Wounded:0,Dying:1,Crouched:0,Prone:0,Falling:0,WeaponInfo{BP_M16A4_1mag_C_2147149543,30}Position{X=-103515 Y=-118062 Z=453}Rotation{X=0 Y=0 Z=-31}}"
+    + "PlayerScoreboard{Lives:-1,NumKills:0,VehicleKills:0,NumDeaths:2,Woundeds:0,Wounds:2,TKs:0,HealPoints:0,Revived:0,TeamWork:0,Objective:420,Combat:0Ping:17}}}FOBs{}CaptureZones{CaptureZone{01-AlKhora,Position:X=-57095.684 Y=-126662.330 Z=904.580}}{BZSS-Marked}";
+
+  const players = parseBzssCorePlayerBlocks(text);
+  assert.equal(players.length, 1);
+  assert.equal(players[0].teamId, 2);
+  assert.equal(players[0].squadId, 1);
+  assert.equal(players[0].playerScoreboard.stats.numDeaths, 2);
+  assert.equal(players[0].playerScoreboard.stats.objectiveScore, 420);
+}
+
 async function testMonitorRefreshesFromFileWatcher() {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-core-watch-"));
   const savePath = path.join(tempDir, "PBI.sav");
@@ -172,6 +201,8 @@ async function main() {
   testParseBzssCorePlayerBlocksParsesPlayersAndVectors();
   testParseBzssCorePlayerBlocksAcceptsMissingSoldierInfo();
   testParseBzssCorePlayerBlocksAcceptsNamedFieldsAndExtraBlocks();
+  testParseBzssCorePlayerBlocksAcceptsCaptureZonesAndCompactScoreboard();
+  testParseBzssCorePlayerBlocksReadsNewSquadContext();
   await testMonitorRefreshesFromFileWatcher();
   console.log("run-bzss-core-monitor-tests: ok");
 }

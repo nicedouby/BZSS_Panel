@@ -14,6 +14,7 @@ vi.mock("../app/apiClient", async () => {
 
 vi.mock("vue-router", () => ({
   useRoute: () => ({
+    path: "/match-status",
     meta: {
       refreshPolicy: "realtime",
     },
@@ -70,6 +71,25 @@ class FakeWebSocket {
 
   emit(payload: unknown) {
     this.onmessage?.(new MessageEvent("message", { data: JSON.stringify(payload) }));
+  }
+}
+
+class FakeEventSource {
+  static instances: FakeEventSource[] = [];
+
+  url: string;
+  onmessage: ((event: MessageEvent<string>) => void) | null = null;
+  onopen: ((event: Event) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  readyState = 1;
+
+  constructor(url: string) {
+    this.url = url;
+    FakeEventSource.instances.push(this);
+  }
+
+  close() {
+    this.readyState = 2;
   }
 }
 
@@ -241,6 +261,7 @@ describe("MatchStatusPage", () => {
 
     FakeWebSocket.instances = [];
     vi.stubGlobal("WebSocket", FakeWebSocket as any);
+    vi.stubGlobal("EventSource", FakeEventSource as any);
   });
 
   afterEach(() => {

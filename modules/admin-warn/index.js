@@ -331,7 +331,7 @@ function sanitizeWarningMessage(message) {
 
 function sanitizeBroadcastMessage(message) {
   return String(message ?? "")
-    .replace(/[\r\n]+/g, " ")
+    .replace(/\r\n?/g, "\n")
     .replace(/"/g, "'")
     .trim()
     .slice(0, 180);
@@ -383,7 +383,10 @@ function cloneJsonSafe(value) {
 }
 
 function escapeCommandText(value) {
-  return String(value ?? "").replace(/"/g, "'").trim();
+  return String(value ?? "")
+    .replace(/"/g, "'")
+    .replace(/\r\n?/g, "\n")
+    .trim();
 }
 
 function makeRecordId(prefix) {

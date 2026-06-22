@@ -162,21 +162,9 @@ async function fetchSnapshot(options: { scheduleNext: boolean; immediate?: boole
   }
 }
 
-const lastAppliedRevisions = reactive({
-  players: -1,
-  squads: -1,
-});
-
 function applySnapshotToStores(data: any) {
-  const revisions = data?.revisions ?? {};
-  const skipPlayers = revisions.players !== undefined && revisions.players === lastAppliedRevisions.players;
-  const skipSquads = revisions.squads !== undefined && revisions.squads === lastAppliedRevisions.squads;
-
-  applyMatchSnapshotResponse(data, { skipPlayers, skipSquads });
+  applyMatchSnapshotResponse(data);
   applyRuntimeSnapshotResponse(data);
-
-  if (revisions.players !== undefined) lastAppliedRevisions.players = revisions.players;
-  if (revisions.squads !== undefined) lastAppliedRevisions.squads = revisions.squads;
 }
 
 function markRuntimeStoresStale() {

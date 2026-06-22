@@ -390,6 +390,8 @@ const pagePermissionLabels = new Map([
   ["plugin:tactical-report:logs", "战术报点日志"],
   ["plugin:tactical-report:user-codes", "战术报点玩家自定义码"],
   ["server_stats.view", "服务器统计"],
+  ["tactical_map_replay.view", "战术地图回放"],
+  ["tactical_map_replay.export", "战术地图回放导出"],
   ["debug.udp_forwarder.view", "UDP 转发日志"],
   ["debug.match_snapshots.view", "快照录制"],
   ["debug.pjsc_average_duration.view", "PJSC 平均时长"],
@@ -405,6 +407,8 @@ const systemPermissionOptions: PermissionOption[] = [
   { value: "settings.manage", label: "系统设置 / 插件订阅" },
   { value: "admin_users.manage", label: "管理员账号" },
   { value: "bzss_core.use", label: "BZSS-Core" },
+  { value: "tactical_map_replay.view", label: "战术地图回放" },
+  { value: "tactical_map_replay.export", label: "战术地图回放导出" },
 ];
 
 const permissionSections: PermissionSection[] = [

@@ -22,6 +22,12 @@ export interface BzssCoreTrackedVector {
   z: number | null;
 }
 
+export interface BzssCoreCaptureZoneInfo {
+  name: string;
+  position: BzssCoreTrackedVector | null;
+  raw?: string;
+}
+
 export interface BzssCoreTrackedPlayerInfo {
   playerId?: number | null;
   playerName: string;
@@ -97,6 +103,7 @@ export interface BzssCorePlayerInfoState {
   fileSize: number;
   fileMtimeMs: number;
   playerCount: number;
+  captureZoneCount?: number;
   rawTextLength?: number;
   rawTextUpdatedAt?: string;
   lastError: string;
@@ -108,6 +115,7 @@ export interface BzssCorePlayerInfoResponse {
   state: BzssCorePlayerInfoState;
   player: BzssCoreTrackedPlayerInfo | null;
   players?: BzssCoreTrackedPlayerInfo[];
+  captureZones?: BzssCoreCaptureZoneInfo[];
 }
 
 export interface BzssCoreRawDataResponse {
@@ -124,6 +132,7 @@ export interface BzssCoreRawDataResponse {
   fileSize: number;
   fileMtimeMs: number;
   playerCount: number;
+  captureZones?: BzssCoreCaptureZoneInfo[];
   lastError: string;
   rawText: string;
   rawTextLength: number;

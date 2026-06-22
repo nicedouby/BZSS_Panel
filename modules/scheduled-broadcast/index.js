@@ -463,7 +463,7 @@ function sanitizeTitle(value) {
 
 function sanitizeMessage(value) {
   return String(value ?? "")
-    .replace(/[\r\n]+/g, " ")
+    .replace(/\r\n?/g, "\n")
     .replace(/"/g, "'")
     .trim()
     .slice(0, MAX_MESSAGE_LENGTH);
@@ -499,6 +499,6 @@ function cloneJson(value) {
 function escapeCommandText(text) {
   return String(text ?? "")
     .replace(/"/g, "'")
-    .replace(/[\r\n]+/g, " ")
+    .replace(/\r\n?/g, "\n")
     .trim();
 }

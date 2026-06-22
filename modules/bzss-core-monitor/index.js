@@ -22,6 +22,19 @@ const SCOREBOARD_FIELDS = [
   ["objectiveScore", "Objective score"],
   ["combatScore", "Combat score"],
 ];
+const SCOREBOARD_FIELD_ALIASES = {
+  dataLives: ["Lives", "DataLives"],
+  numKills: ["NumKills"],
+  numDeaths: ["NumDeaths"],
+  numWoundeds: ["Woundeds"],
+  numWounds: ["Wounds"],
+  numTeamKills: ["TKs", "NumTK"],
+  healPoints: ["HealPoints"],
+  revivedPoints: ["Revived"],
+  teamworkScore: ["TeamWork"],
+  objectiveScore: ["Objective"],
+  combatScore: ["Combat"],
+};
 
 export function createBzssCoreMonitorModule({ core, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
@@ -124,6 +137,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
         draft.fileMtimeMs = 0;
         draft.status = "unconfigured";
         draft.players = [];
+        draft.captureZones = [];
         draft.indexByName = {};
         draft.markerSeen = false;
         draft.rawText = "";
@@ -150,6 +164,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
         draft.fileSize = 0;
         draft.fileMtimeMs = 0;
         draft.players = [];
+        draft.captureZones = [];
         draft.indexByName = {};
         draft.markerSeen = false;
         draft.rawText = "";
@@ -176,6 +191,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
           draft.fileMtimeMs = 0;
           draft.markerSeen = false;
           draft.players = [];
+          draft.captureZones = [];
           draft.indexByName = {};
           draft.rawText = "";
           draft.rawTextLength = 0;
@@ -217,6 +233,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
     }
 
     const extracted = extractBzssCoreTrackedText(fileBuffer);
+    const captureZones = parseCaptureZones(extracted.text);
     publish((draft) => {
       draft.configuredPath = configuredPath;
       draft.resolvedPath = resolvedPath;
@@ -228,6 +245,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
       draft.rawText = extracted.text;
       draft.rawTextLength = extracted.text.length;
       draft.rawTextUpdatedAt = draft.lastReadAt;
+      draft.captureZones = captureZones;
       draft.lastError = extracted.error ?? "";
     });
 
@@ -246,6 +264,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
     publish((draft) => {
       draft.status = "ready";
       draft.players = players;
+      draft.captureZones = captureZones;
       draft.indexByName = indexByName;
       draft.markerSeen = true;
       draft.lastCompletedAt = new Date().toISOString();
@@ -347,6 +366,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
       fileSize: state.fileSize,
       fileMtimeMs: state.fileMtimeMs,
       playerCount: state.players.length,
+      captureZoneCount: state.captureZones.length,
       rawTextLength: state.rawTextLength,
       rawTextUpdatedAt: state.rawTextUpdatedAt,
       lastError: state.lastError,
@@ -367,6 +387,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
       fileSize: state.fileSize,
       fileMtimeMs: state.fileMtimeMs,
       playerCount: state.players.length,
+      captureZones: state.captureZones.map(clonePlainObject),
       lastError: state.lastError,
       rawText: state.rawText,
       rawTextLength: state.rawTextLength,
@@ -447,6 +468,7 @@ function createInitialState() {
     fileSize: 0,
     fileMtimeMs: 0,
     players: [],
+    captureZones: [],
     indexByName: {},
     rawText: "",
     rawTextLength: 0,
@@ -468,9 +490,10 @@ export function extractBzssCoreTrackedText(buffer) {
     };
   }
 
+  const contextStart = findBzssCoreContextStart(data, startIndex);
   const markerIndex = data.lastIndexOf(MARKER_NEEDLE);
   const endIndex = markerIndex >= 0 ? markerIndex + MARKER_NEEDLE.length : data.length;
-  const text = data.subarray(startIndex, endIndex).toString("utf16le").replace(/\u0000+$/g, "");
+  const text = data.subarray(contextStart, endIndex).toString("utf16le").replace(/\u0000+$/g, "");
   if (!text.includes("SoldierInfo{") || !text.includes("PlayerScoreboard{")) {
     const fallbackText = extractRelevantUtf16Runs(data);
     if (fallbackText.text) return fallbackText;
@@ -493,6 +516,8 @@ export function parseBzssCorePlayerBlocks(text) {
     const nextBaseIndex = source.indexOf("PlayerBaseInfo{", segmentStart);
     const segmentEnd = nextBaseIndex >= 0 ? nextBaseIndex : source.length;
     const segment = source.slice(segmentStart, segmentEnd);
+    const contextStart = findPlayerContextStart(source, match.index);
+    const context = source.slice(contextStart, match.index);
     const soldierBlock = findNamedBlock(segment, "SoldierInfo");
     const scoreboardBlock = findNamedBlock(segment, "PlayerScoreboard");
     if (!scoreboardBlock) continue;
@@ -502,16 +527,15 @@ export function parseBzssCorePlayerBlocks(text) {
     const baseMap = parseKeyValueFields(baseFields);
     const seatsBlock = findNamedBlock(segment, "SeatsPlayers");
     const vehicleInfo = parseVehicleInfo(segment);
-    const scoreboardValues = splitTopLevelCsv(scoreboardRaw);
-    const scoreboardNumericValues = scoreboardValues.map(toFiniteNumber);
-    const scoreboardStats = parseScoreboardStats(scoreboardNumericValues);
+    const scoreboardInfo = parseScoreboardInfo(scoreboardRaw);
     const soldierInfo = soldierRaw ? parseSoldierInfo(soldierRaw) : { summary: createEmptySoldierInfo() };
+    const teamAndSquadInfo = parseTeamAndSquadInfo(context, segment, baseMap, baseFields);
     players.push({
       playerId: toFiniteNumber(baseMap.PlayerID ?? baseFields[0]),
       playerName: baseMap.PlayerName ?? baseFields[2] ?? "",
       playerGuid: baseMap.PlayerOnlineID ?? baseFields[1] ?? "",
-      teamId: toFiniteNumber(baseMap.TeamID ?? baseMap.TeamId ?? baseFields[3]),
-      squadId: toFiniteNumber(baseMap.SquadID ?? baseMap.SquadId ?? baseFields[4]),
+      teamId: teamAndSquadInfo.teamId,
+      squadId: teamAndSquadInfo.squadId,
       isAdmin: toBooleanNumber(baseMap.IsAdmin),
       isCommander: toBooleanNumber(baseMap.IsCommander),
       ftIndex: toFiniteNumber(baseMap.FTIndex),
@@ -526,17 +550,36 @@ export function parseBzssCorePlayerBlocks(text) {
       },
       soldierInfo: soldierInfo.summary,
       playerScoreboard: {
-        raw: scoreboardRaw,
-        values: scoreboardValues,
-        numericValues: scoreboardNumericValues,
-        stats: scoreboardStats.stats,
-        labeledValues: scoreboardStats.labeledValues,
-        extraValues: scoreboardStats.extraValues,
+        ...scoreboardInfo,
       },
       rawText: source.slice(match.index, segmentEnd),
     });
   }
   return players;
+}
+
+export function parseCaptureZones(text) {
+  const source = String(text ?? "");
+  const block = findNamedBlock(source, "CaptureZones");
+  if (!block) return [];
+  const zones = [];
+  const zonePattern = /CaptureZone\{([^}]*)\}/g;
+  let match = null;
+  while ((match = zonePattern.exec(block.content)) !== null) {
+    const raw = String(match[1] ?? "");
+    const name = raw.split(",")[0]?.trim() ?? "";
+    const positionMatch = raw.match(/Position:X=([-0-9.]+)\s+Y=([-0-9.]+)\s+Z=([-0-9.]+)/);
+    zones.push({
+      name,
+      position: positionMatch ? {
+        x: toFiniteNumber(positionMatch[1]),
+        y: toFiniteNumber(positionMatch[2]),
+        z: toFiniteNumber(positionMatch[3]),
+      } : null,
+      raw,
+    });
+  }
+  return zones.filter((zone) => zone.name);
 }
 
 function createEmptySoldierInfo() {
@@ -670,10 +713,89 @@ function parseVehicleInfo(text) {
   };
 }
 
-function parseScoreboardStats(values) {
+function parseTeamId(segment, baseMap, baseFields, context = "") {
+  const source = `${String(context ?? "")}${String(segment ?? "")}`;
+  const matches = [...source.matchAll(/TeamID:(-?\d+)/ig)];
+  if (matches.length > 0) {
+    return toFiniteNumber(matches[matches.length - 1][1]);
+  }
+  return toFiniteNumber(baseMap.TeamID ?? baseMap.TeamId ?? baseFields[3]);
+}
+
+function parseTeamAndSquadInfo(context, segment, baseMap, baseFields) {
+  const sourceContext = String(context ?? "");
+  const sourceSegment = String(segment ?? "");
+  const squadContextMatch = sourceContext.match(/SquadBaseInfo\{([^}]*)\}/i);
+  const squadSegmentMatch = sourceSegment.match(/SquadBaseInfo\{([^}]*)\}/i);
+  const squadRaw = squadSegmentMatch?.[1] ?? squadContextMatch?.[1] ?? "";
+  const squadMap = parseKeyValueFields(splitTopLevelCsv(squadRaw));
+  const teamId = parseTeamId(segment, baseMap, baseFields, context);
+  const squadId = toFiniteNumber(
+    squadMap.ID
+    ?? squadMap.SquadID
+    ?? squadMap.SquadId
+    ?? baseMap.SquadID
+    ?? baseMap.SquadId
+    ?? baseFields[4],
+  );
+  return { teamId, squadId };
+}
+
+function findPlayerContextStart(source, playerBaseIndex) {
+  const searchStart = Math.max(0, playerBaseIndex - 4096);
+  let contextStart = searchStart;
+  for (const needle of ["TeamID{", "TeamID:", "SquadInfo{", "SquadBaseInfo{"]) {
+    const found = source.lastIndexOf(needle, playerBaseIndex);
+    if (found >= searchStart && found >= 0) {
+      contextStart = Math.min(contextStart, found);
+    }
+  }
+  return contextStart;
+}
+
+function findBzssCoreContextStart(data, startIndex) {
+  const searchWindow = Math.max(0, startIndex - 8192);
+  let contextStart = startIndex;
+  for (const needle of ["[BZSS-Core-PBI]", "TeamID{", "TeamID:", "SquadInfo{", "SquadBaseInfo{"]) {
+    const found = data.lastIndexOf(Buffer.from(needle, "utf16le"), startIndex);
+    if (found >= searchWindow && found >= 0) {
+      contextStart = Math.min(contextStart, found);
+    }
+  }
+  return contextStart;
+}
+
+function parseScoreboardInfo(rawText) {
+  const raw = String(rawText ?? "");
+  const normalized = normalizeScoreboardText(raw);
+  const values = splitTopLevelCsv(normalized);
+  const valuesByKey = parseKeyValueFields(values);
+  const numericValues = values.map((value) => {
+    const text = String(value ?? "").trim();
+    const separator = text.indexOf(":");
+    const normalizedValue = separator > 0 ? text.slice(separator + 1).trim() : text;
+    return toFiniteNumber(normalizedValue);
+  });
+  const scoreStats = parseScoreboardStats(valuesByKey, numericValues);
+  return {
+    raw,
+    values,
+    numericValues,
+    stats: scoreStats.stats,
+    labeledValues: scoreStats.labeledValues,
+    extraValues: scoreStats.extraValues,
+    valuesByKey,
+  };
+}
+
+function parseScoreboardStats(valuesByKey, values) {
   const stats = {};
   const labeledValues = SCOREBOARD_FIELDS.map(([key, label], index) => {
-    const value = values[index] ?? null;
+    const aliases = SCOREBOARD_FIELD_ALIASES[key] ?? [];
+    const value = pickFirstFiniteNumber([
+      ...(aliases.map((alias) => valuesByKey?.[alias])),
+      values[index],
+    ]);
     stats[key] = value;
     return {
       key,
@@ -686,6 +808,18 @@ function parseScoreboardStats(values) {
     labeledValues,
     extraValues: values.slice(SCOREBOARD_FIELDS.length),
   };
+}
+
+function normalizeScoreboardText(text) {
+  return String(text ?? "").replace(/(\d)([A-Z][A-Za-z0-9_]*:)/g, "$1,$2");
+}
+
+function pickFirstFiniteNumber(values) {
+  for (const value of values) {
+    const number = toFiniteNumber(value);
+    if (number != null) return number;
+  }
+  return null;
 }
 
 function buildPlayerIndex(players) {

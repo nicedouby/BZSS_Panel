@@ -33,6 +33,10 @@ describe("page registry", () => {
     const tacticalReport = buildPageRoutes().find((route) => route.name === "tactical-report");
     expect(tacticalReport?.meta?.requiredPermission).toBe("plugin:tactical-report:view");
     expect(tacticalReport?.meta?.legacyRequiredPermissions).toEqual([]);
+
+    const tacticalReplay = buildPageRoutes().find((route) => route.name === "tactical-map-replay");
+    expect(tacticalReplay?.meta?.requiredPermission).toBe("tactical_map_replay.view");
+    expect(tacticalReplay?.meta?.layoutMode).toBe("workspace");
   });
 
   it("shares the same static navigation source with the sidebar", () => {

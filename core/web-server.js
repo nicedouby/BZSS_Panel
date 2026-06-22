@@ -1,6 +1,7 @@
 // -*- coding: utf-8 -*-
 
 import http from "node:http";
+import { createReadStream } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -3098,6 +3099,119 @@ export class WebServer {
       });
     }
 
+    if (url.pathname === "/api/tactical-map-replay/segments" && req.method === "GET") {
+      if (!this.canViewTacticalMapReplay(user)) {
+        return this.json(res, 403, {
+          error: "Forbidden",
+          message: "tactical_map_replay.view permission is required.",
+        });
+      }
+      const api = this.modules.tacticalMapReplay;
+      if (!api?.listSegments) {
+        return this.json(res, 404, {
+          error: "TacticalMapReplayUnavailable",
+          message: "Tactical map replay module is not loaded.",
+        });
+      }
+      return this.json(res, 200, await api.listSegments());
+    }
+
+    if (url.pathname === "/api/tactical-map-replay/segment" && req.method === "GET") {
+      if (!this.canViewTacticalMapReplay(user)) {
+        return this.json(res, 403, {
+          error: "Forbidden",
+          message: "tactical_map_replay.view permission is required.",
+        });
+      }
+      const api = this.modules.tacticalMapReplay;
+      if (!api?.getSegment) {
+        return this.json(res, 404, {
+          error: "TacticalMapReplayUnavailable",
+          message: "Tactical map replay module is not loaded.",
+        });
+      }
+      const result = await api.getSegment({
+        id: url.searchParams.get("id") ?? "",
+        from: url.searchParams.get("from") ?? "",
+        to: url.searchParams.get("to") ?? "",
+        players: url.searchParams.get("players") ?? "",
+        sampleEvery: url.searchParams.get("sampleEvery") ?? "",
+      });
+      return this.json(res, result?.ok === false ? 400 : 200, result);
+    }
+
+    if (url.pathname === "/api/tactical-map-replay/export" && req.method === "POST") {
+      if (!this.canExportTacticalMapReplay(user)) {
+        return this.json(res, 403, {
+          error: "Forbidden",
+          message: "tactical_map_replay.export permission is required.",
+        });
+      }
+      const api = this.modules.tacticalMapReplay;
+      if (!api?.createExportTask) {
+        return this.json(res, 404, {
+          error: "TacticalMapReplayUnavailable",
+          message: "Tactical map replay module is not loaded.",
+        });
+      }
+      const body = await this.readJsonBody(req);
+      const result = await api.createExportTask(body ?? {});
+      return this.json(res, result?.ok === false ? 400 : 200, result);
+    }
+
+    if (url.pathname === "/api/tactical-map-replay/export-tasks" && req.method === "GET") {
+      if (!this.canViewTacticalMapReplay(user)) {
+        return this.json(res, 403, {
+          error: "Forbidden",
+          message: "tactical_map_replay.view permission is required.",
+        });
+      }
+      const api = this.modules.tacticalMapReplay;
+      if (!api?.listExportTasks) {
+        return this.json(res, 404, {
+          error: "TacticalMapReplayUnavailable",
+          message: "Tactical map replay module is not loaded.",
+        });
+      }
+      return this.json(res, 200, api.listExportTasks({
+        id: url.searchParams.get("id") ?? "",
+        segmentId: url.searchParams.get("segmentId") ?? "",
+      }));
+    }
+
+    if (url.pathname === "/api/tactical-map-replay/export-file" && req.method === "GET") {
+      if (!this.canViewTacticalMapReplay(user)) {
+        return this.json(res, 403, {
+          error: "Forbidden",
+          message: "tactical_map_replay.view permission is required.",
+        });
+      }
+      const api = this.modules.tacticalMapReplay;
+      if (!api?.getExportFile) {
+        return this.json(res, 404, {
+          error: "TacticalMapReplayUnavailable",
+          message: "Tactical map replay module is not loaded.",
+        });
+      }
+      const file = api.getExportFile({
+        id: url.searchParams.get("id") ?? "",
+      });
+      if (!file?.filePath) {
+        return this.json(res, 404, {
+          error: "ReplayExportUnavailable",
+          message: "Replay export file is not ready.",
+        });
+      }
+      res.writeHead(200, {
+        ...BASE_SECURITY_HEADERS,
+        "Content-Type": file.contentType ?? "application/octet-stream",
+        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file.fileName ?? "tactical-map-replay.mp4")}`,
+        "Cache-Control": "no-store",
+      });
+      createReadStream(file.filePath).pipe(res);
+      return;
+    }
+
     if (url.pathname === "/api/remote-telemetry/state" && req.method === "GET") {
       const api = this.modules.remoteTelemetry;
       if (!api?.getState) {
@@ -4495,6 +4609,20 @@ export class WebServer {
     return Boolean(
       this.core.authManager?.hasEverything?.(user)
       || this.core.authManager?.hasPermission?.(user, "bzss_core.use"),
+    );
+  }
+
+  canViewTacticalMapReplay(user) {
+    return Boolean(
+      this.core.authManager?.hasEverything?.(user)
+      || this.core.authManager?.hasPermission?.(user, "tactical_map_replay.view"),
+    );
+  }
+
+  canExportTacticalMapReplay(user) {
+    return Boolean(
+      this.core.authManager?.hasEverything?.(user)
+      || this.core.authManager?.hasPermission?.(user, "tactical_map_replay.export"),
     );
   }
 
