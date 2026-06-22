@@ -1,15 +1,5 @@
 <template>
   <div class="squad-admin-layout">
-    <aside class="bzss-sample-window" aria-label="BZSS-Core 样本采样率调试窗口">
-      <span class="bzss-sample-window__title">BZSS-Core 样本</span>
-      <strong class="bzss-sample-window__rate">{{ bzssCoreSampleRateLabel }}</strong>
-      <div class="bzss-sample-window__meta">
-        <span>{{ bzssCoreStreamLabel }}</span>
-        <span>{{ bzssCoreSampleCountLabel }}</span>
-        <span>{{ bzssCoreLastSampleLabel }}</span>
-      </div>
-    </aside>
-
     <SquadPageToolbar
       :search-query="pageState.searchQuery"
       :filter-mode="pageState.filterMode"
@@ -120,6 +110,8 @@
         <TacticalMapPage
           :snapshot="bzssCoreSnapshot"
           :players="bzssCorePlayers"
+          :capture-zones="bzssCoreSnapshot?.captureZones"
+          :fobs="bzssCoreSnapshot?.fobs"
           :loading="bzssCoreLoading"
           :errorText="bzssCoreError"
           @select-player="handleMapSelectPlayer"
@@ -373,26 +365,8 @@ const bzssCoreSnapshot = ref<BzssCorePlayerInfoResponse | null>(null);
 const bzssCorePlayers = ref<BzssCoreTrackedPlayerInfo[]>([]);
 const bzssCoreLoading = ref(false);
 const bzssCoreError = ref("");
-const bzssCoreSampleClock = ref(Date.now());
-const bzssCoreSampleEvents = ref<number[]>([]);
 const bzssCoreStreamActive = ref(false);
 let unsubscribeBzssStream: (() => void) | null = null;
-let bzssCoreSampleClockTimer: number | null = null;
-
-const bzssCoreRecentSampleEvents = computed(() => {
-  const now = bzssCoreSampleClock.value;
-  return bzssCoreSampleEvents.value.filter((timestamp) => now - timestamp <= 1000);
-});
-const bzssCoreSampleRateLabel = computed(() => `${formatSampleDecimal(bzssCoreRecentSampleEvents.value.length)} / s`);
-const bzssCoreSampleCountLabel = computed(() => `${bzssCoreRecentSampleEvents.value.length} 次 / 1s`);
-const bzssCoreLastSampleLabel = computed(() => {
-  const last = bzssCoreSampleEvents.value[bzssCoreSampleEvents.value.length - 1];
-  if (!last) return "暂无样本";
-  const age = Math.max(0, bzssCoreSampleClock.value - last);
-  if (age < 1000) return `${age} ms 前`;
-  return `${formatSampleDecimal(age / 1000)} s 前`;
-});
-const bzssCoreStreamLabel = computed(() => (bzssCoreStreamActive.value ? "SSE 实时流" : "轮询兜底"));
 
 function startBzssStream() {
   bzssCoreLoading.value = true;
@@ -404,7 +378,6 @@ function startBzssStream() {
       bzssCoreSnapshot.value = payload;
       bzssCorePlayers.value = payload.players ?? [];
       bzssCoreError.value = payload.ok ? "" : payload.status || "BZSS-Core returned an error.";
-      recordBzssCoreSample();
     },
     (err) => {
       bzssCoreLoading.value = false;
@@ -418,28 +391,6 @@ function startBzssStream() {
       }
     }
   );
-}
-
-function recordBzssCoreSample() {
-  const now = Date.now();
-  bzssCoreSampleEvents.value = [...bzssCoreSampleEvents.value, now]
-    .filter((timestamp) => now - timestamp <= 5000)
-    .slice(-120);
-  bzssCoreSampleClock.value = now;
-}
-
-function startBzssCoreSampleClock() {
-  if (bzssCoreSampleClockTimer != null) return;
-  bzssCoreSampleClockTimer = window.setInterval(() => {
-    bzssCoreSampleClock.value = Date.now();
-  }, 250);
-}
-
-function stopBzssCoreSampleClock() {
-  if (bzssCoreSampleClockTimer != null) {
-    window.clearInterval(bzssCoreSampleClockTimer);
-    bzssCoreSampleClockTimer = null;
-  }
 }
 
 const refreshingPlaytime = ref(false);
@@ -743,7 +694,6 @@ function handleVisibilityChange() {
 onMounted(() => {
   pageHidden.value = typeof document !== "undefined" ? document.hidden : false;
   document.addEventListener("visibilitychange", handleVisibilityChange);
-  startBzssCoreSampleClock();
   startBzssStream();
 });
 
@@ -755,18 +705,15 @@ onBeforeUnmount(() => {
     unsubscribeBzssStream = null;
   }
   bzssCoreStreamActive.value = false;
-  stopBzssCoreSampleClock();
 });
 
 onActivated(() => {
   active.value = true;
-  startBzssCoreSampleClock();
   if (!unsubscribeBzssStream) startBzssStream();
 });
 
 onDeactivated(() => {
   active.value = false;
-  stopBzssCoreSampleClock();
 });
 
 function formatTicketDisplay(value: number | null | undefined) {
@@ -1999,44 +1946,6 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
   background: var(--app-background, var(--color-bg-page));
 }
 
-.bzss-sample-window {
-  position: fixed;
-  top: 124px;
-  right: 18px;
-  z-index: 70;
-  width: 218px;
-  padding: 12px 12px 10px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 12px;
-  background: rgba(2, 6, 23, 0.9);
-  box-shadow: 0 16px 34px rgba(2, 6, 23, 0.28);
-  backdrop-filter: blur(12px);
-}
-
-.bzss-sample-window__title {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-}
-
-.bzss-sample-window__rate {
-  display: block;
-  font-size: 28px;
-  line-height: 1;
-  color: #86efac;
-}
-
-.bzss-sample-window__meta {
-  display: grid;
-  gap: 4px;
-  margin-top: 10px;
-  font-size: 12px;
-  color: var(--color-text-secondary);
-}
-
 .match-state-content {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
@@ -2677,12 +2586,6 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 @media (max-width: 720px) {
   .battle-log-summary-grid {
     grid-template-columns: 1fr;
-  }
-
-  .bzss-sample-window {
-    top: 12px;
-    right: 12px;
-    width: min(200px, calc(100vw - 24px));
   }
 }
 

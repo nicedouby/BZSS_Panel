@@ -320,6 +320,10 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, render
   const matchState = overview?.matchState && typeof overview.matchState === "object" ? overview.matchState : {};
   const status = overview?.status && typeof overview.status === "object" ? overview.status : {};
   const serverStatus = matchState.serverStatus && typeof matchState.serverStatus === "object" ? matchState.serverStatus : {};
+  const bzssCoreApi = modules?.bzssCoreMonitor?.api ?? modules?.bzssCoreMonitor ?? null;
+  const bzssCoreRawSnapshot = typeof bzssCoreApi?.getRawSnapshot === "function"
+    ? bzssCoreApi.getRawSnapshot()
+    : null;
   const match = {
     ...(matchState.match && typeof matchState.match === "object" ? matchState.match : {}),
     ...(overview?.match && typeof overview.match === "object" ? overview.match : {}),
@@ -381,10 +385,17 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, render
     teams,
     players,
     squads,
+    captureZones: Array.isArray(bzssCoreRawSnapshot?.captureZones)
+      ? bzssCoreRawSnapshot.captureZones.map((zone) => cloneJsonSafe(zone))
+      : [],
+    fobs: Array.isArray(bzssCoreRawSnapshot?.fobs)
+      ? bzssCoreRawSnapshot.fobs.map((fob) => cloneJsonSafe(fob))
+      : [],
     source: {
       matchStateUpdatedAt: firstText(matchState.updatedAt, matchState.players?.lastUpdatedAt, matchState.squads?.lastUpdatedAt),
       playersUpdatedAt: firstText(matchState.players?.lastUpdatedAt),
       squadsUpdatedAt: firstText(matchState.squads?.lastUpdatedAt),
+      bzssCoreUpdatedAt: firstText(bzssCoreRawSnapshot?.updatedAt, bzssCoreRawSnapshot?.lastCompletedAt),
     },
     renderOptions: {
       includeSteamID: Boolean(renderOptions?.includeSteamID ?? true),

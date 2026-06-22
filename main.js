@@ -44,6 +44,7 @@ import { RuntimeState } from "./core/runtime-state.js";
 import { RawLogDerivedEvents } from "./core/raw-log-derived-events.js";
 import { PerformanceMonitor } from "./core/performance-monitor.js";
 import { AuditManager } from "./core/audit/audit-manager.js";
+import { LogPostMonitor } from "./core/logpost-monitor.js";
 
 async function main() {
   const configManager = new ConfigManager("./config.json");
@@ -92,6 +93,9 @@ async function main() {
   const consoleService = new ConsoleService({
     maxEntries: configManager.get("console.maxEntries", 5000),
   });
+  const logPostMonitor = new LogPostMonitor({
+    logger: logger.child({ moduleId: "core.logPostMonitor", source: "core.logPostMonitor" }),
+  });
   const auditManager = new AuditManager({
     config: configManager,
     logger: logger.child({ moduleId: "core.auditManager", source: "core.auditManager" }),
@@ -119,6 +123,7 @@ async function main() {
     eventBus,
     webStatus,
     eventPipeline,
+    logPostMonitor,
   });
   rconManager.onNativeLog((entry) => {
     runtimeState.recordEvent("console", entry);
@@ -149,6 +154,7 @@ async function main() {
     authManager,
     performanceMonitor,
     auditManager,
+    logPostMonitor,
   };
   auditManager.core = coreContext;
 

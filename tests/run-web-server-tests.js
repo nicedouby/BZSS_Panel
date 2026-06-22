@@ -2238,6 +2238,120 @@ async function testRemoteTelemetryWriteTicketsRouteEnforcesPermission() {
   }
 }
 
+async function testLogPostEndpointsExposeTailerStateAndQueries() {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-logpost-web-"));
+  const outputDir = path.join(tempDir, "LogPost");
+  await fs.mkdir(path.join(outputDir, ".state"), { recursive: true });
+  await fs.mkdir(path.join(outputDir, "Raw", "2026-06-22"), { recursive: true });
+  await fs.mkdir(path.join(outputDir, "2026-06-22"), { recursive: true });
+  await fs.writeFile(
+    path.join(outputDir, ".state", "tailer-state.json"),
+    JSON.stringify({ sourcePath: "SquadGame.log", fileId: "f1", offset: 128, seq: 7, updatedAt: "2026-06-22 10:00:00.000" }),
+  );
+  await fs.writeFile(
+    path.join(outputDir, "Raw", "2026-06-22", "all.jsonl"),
+    `${JSON.stringify({
+      seq: 7,
+      offset: 128,
+      readAt: "2026-06-22T10:00:00.000Z",
+      logTime: "2026.06.22-10.00.00:000",
+      rawLine: "[2026.06.22-10.00.00:000]LogTest: raw",
+      rawLineHash: "abc123",
+      sourcePath: "SquadGame.log",
+    })}\n`,
+  );
+  await fs.writeFile(
+    path.join(outputDir, "2026-06-22", "All.jsonl"),
+    `${JSON.stringify({
+      Version: "1",
+      Event: "On_TestEvent",
+      Time: "2026-06-22T10:00:01.000Z",
+      SourceSeq: "7",
+      SourceOffset: "128",
+      RawLineHash: "abc123",
+      Raw: "raw",
+    })}\n`,
+  );
+
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin", role: "SuperAdmin", isSuperAdmin: true };
+        },
+        hasEverything(user) {
+          return user?.isSuperAdmin === true;
+        },
+      },
+      config: {
+        get(key, fallback) {
+          if (key === "pythonLogParser") {
+            return {
+              workingDirectory: tempDir,
+            };
+          }
+          return fallback;
+        },
+      },
+      logPostMonitor: {
+        getState() {
+          return {
+            lastSourceSeq: 9,
+            lastEventId: "evt-9",
+            recentGaps: [
+              {
+                eventName: "LOGPOST_GAP_DETECTED",
+                time: "2026-06-22T10:05:00.000Z",
+                payload: { expectedSourceSeq: 8, actualSourceSeq: 9, previousEventId: "evt-7", currentEventId: "evt-9" },
+              },
+            ],
+          };
+        },
+      },
+    },
+  });
+
+  try {
+    const stateRecorder = createRecorder();
+    await server.handleRequest({
+      method: "GET",
+      url: "/api/logpost/state",
+      headers: { host: "localhost" },
+      socket: {},
+    }, stateRecorder.res);
+    assert.equal(stateRecorder.state.status, 200);
+    const stateBody = JSON.parse(stateRecorder.state.body);
+    assert.equal(stateBody.tailerState.seq, 7);
+    assert.equal(stateBody.gapState.lastSourceSeq, 9);
+
+    const rawRecorder = createRecorder();
+    await server.handleRequest({
+      method: "GET",
+      url: "/api/logpost/raw?date=2026-06-22&q=abc123",
+      headers: { host: "localhost" },
+      socket: {},
+    }, rawRecorder.res);
+    assert.equal(rawRecorder.state.status, 200);
+    const rawBody = JSON.parse(rawRecorder.state.body);
+    assert.equal(rawBody.items.length, 1);
+    assert.equal(rawBody.items[0].seq, 7);
+
+    const eventRecorder = createRecorder();
+    await server.handleRequest({
+      method: "GET",
+      url: "/api/logpost/events?date=2026-06-22&event=On_TestEvent",
+      headers: { host: "localhost" },
+      socket: {},
+    }, eventRecorder.res);
+    assert.equal(eventRecorder.state.status, 200);
+    const eventBody = JSON.parse(eventRecorder.state.body);
+    assert.equal(eventBody.items.length, 1);
+    assert.equal(eventBody.items[0].Event, "On_TestEvent");
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
 async function testRemoteTelemetryAdjustTicketsRouteEnforcesPermission() {
   let receivedPayload = null;
   const createTestServer = (permissions = [], isSuperAdmin = false) => {
@@ -3448,6 +3562,7 @@ await testAdminPermissionGroupsApiSupportsCrudAndInUseConflict();
 await testConsoleRecentEndpointUsesUnifiedConsoleBuffer();
 await testConsoleRconEndpointsUseLoggedInUser();
 await testConsoleRconForbiddenMapsTo403();
+await testLogPostEndpointsExposeTailerStateAndQueries();
 await testConsoleWebSocketRequiresSuperAdmin();
 await testPlaytimeCacheReturnsEffectiveDuration();
 await testPlayerPlaytimeOverrideRouteRequiresSuperAdmin();

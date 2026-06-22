@@ -36,6 +36,7 @@ import PlayerSessionRecordsPage from "../pages/PlayerSessionRecordsPage.vue";
 import CombatLogPage from "../pages/CombatLogPage.vue";
 import ChatMonitorPage from "../pages/ChatMonitorPage.vue";
 import RuntimeStatusPage from "../pages/RuntimeStatusPage.vue";
+import LogPostInspectPage from "../pages/LogPostInspectPage.vue";
 import AdminUsersPage from "../pages/AdminUsersPage.vue";
 import AuditRecordsPage from "../pages/AuditRecordsPage.vue";
 import PluginSubscriptionsPage from "../pages/PluginSubscriptionsPage.vue";
@@ -484,6 +485,17 @@ export const pageRegistry: PageDefinition[] = [
     category: "system",
     refreshPolicy: "polling",
     nav: { section: "system", label: "运行状态", icon: "📶", order: 10 },
+    ...documentPage,
+  },
+  {
+    name: "logpost-inspect",
+    path: "/system/logpost",
+    component: LogPostInspectPage,
+    title: "LogPost 审计面",
+    category: "system",
+    refreshPolicy: "manual",
+    nav: { section: "system", label: "LogPost 审计", icon: "LOG", order: 15 },
+    superAdminOnly: true,
     ...documentPage,
   },
   {

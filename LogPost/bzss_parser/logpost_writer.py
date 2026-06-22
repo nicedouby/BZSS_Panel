@@ -24,7 +24,7 @@ class LogPostWriter:
         self._append(date_dir / "All.jsonl", line)
         self._append(date_dir / f"{event_name}.jsonl", line)
 
-    def write_unknown(self, raw: str) -> None:
+    def write_unknown(self, raw: str, meta: Dict[str, str] | None = None) -> None:
         date_dir = self.output_dir / today_string()
         date_dir.mkdir(parents=True, exist_ok=True)
 
@@ -35,6 +35,8 @@ class LogPostWriter:
             "LogTime": extract_log_time(raw),
             "Raw": raw,
         }
+        if meta:
+            obj.update(meta)
 
         self._append(date_dir / "Unknown.jsonl", to_json_line(obj) + "\n")
 
@@ -53,7 +55,7 @@ class LogPostWriter:
 
         self._append(date_dir / self.preserved_file_name, to_json_line(obj) + "\n")
 
-    def write_parse_error(self, raw: str, error: str) -> None:
+    def write_parse_error(self, raw: str, error: str, meta: Dict[str, str] | None = None) -> None:
         date_dir = self.output_dir / today_string()
         date_dir.mkdir(parents=True, exist_ok=True)
 
@@ -65,8 +67,35 @@ class LogPostWriter:
             "Error": error,
             "Raw": raw,
         }
+        if meta:
+            obj.update(meta)
 
         self._append(date_dir / "ParseError.jsonl", to_json_line(obj) + "\n")
+
+    def write_rotate_event(
+        self,
+        *,
+        source_path: str,
+        file_id: str,
+        offset: int,
+        reason: str,
+    ) -> None:
+        date_dir = self.output_dir / today_string()
+        date_dir.mkdir(parents=True, exist_ok=True)
+
+        obj = {
+            "Version": "1",
+            "Event": "TailRotate",
+            "Time": now_time_string(),
+            "SourcePath": str(source_path or ""),
+            "FileId": str(file_id or ""),
+            "Offset": max(0, int(offset)),
+            "Reason": str(reason or "rotate"),
+        }
+
+        line = to_json_line(obj) + "\n"
+        self._append(date_dir / "All.jsonl", line)
+        self._append(date_dir / "TailRotate.jsonl", line)
 
     @staticmethod
     def _append(path: Path, text: str) -> None:

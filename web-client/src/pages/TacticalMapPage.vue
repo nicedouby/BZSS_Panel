@@ -80,12 +80,122 @@
             :style="{
               left: `${zone.mapX}%`,
               top: `${zone.mapY}%`,
+              transform: `translate(-50%, -50%) scale(${dynamicMarkerScale})`,
             }"
             :title="zone.raw || zone.name"
           >
-            <span class="capture-zone-dot"></span>
-            <span class="capture-zone-label">{{ zone.name }}</span>
+            <div class="tactical-flag-node">
+              <div class="node-radar-rings">
+                <span class="radar-pulse-ring ring-1"></span>
+                <span class="radar-pulse-ring ring-2"></span>
+              </div>
+              <div class="node-crosshair">
+                <span class="crosshair-bracket top-left"></span>
+                <span class="crosshair-bracket top-right"></span>
+                <span class="crosshair-bracket bottom-left"></span>
+                <span class="crosshair-bracket bottom-right"></span>
+              </div>
+              <div class="node-core-diamond">
+                <span class="node-letter">{{ getFlagLetter(zone.name) }}</span>
+              </div>
+              <div class="node-label-container">
+                <span class="node-index-label">OBJ {{ zone.name.includes('-') ? zone.name.split('-')[0] : '' }}</span>
+                <span class="node-name-text">{{ zone.name.includes('-') ? zone.name.split('-').slice(1).join('-') : zone.name }}</span>
+              </div>
+            </div>
           </button>
+        </div>
+
+        <!-- FOB Overlay -->
+        <div v-if="showFobs" class="fob-layer">
+          <div
+            v-for="fob in fobMarkers"
+            :key="fob.name"
+            class="fob-marker"
+            :class="[`team-${fob.teamId}`, { 'is-bleeding': fob.isBleeding }]"
+            :style="{
+              left: `${fob.mapX}%`,
+              top: `${fob.mapY}%`,
+              transform: `translate(-50%, -50%) scale(${dynamicMarkerScale})`,
+            }"
+            :title="fob.raw || fob.name"
+          >
+            <div class="tactical-fob-node">
+              <div class="fob-ring-outer">
+                <svg class="fob-status-ring" viewBox="0 0 36 36">
+                  <!-- Construction background circle -->
+                  <circle class="ring-bg" cx="18" cy="18" r="14" stroke="rgba(255, 255, 255, 0.05)" stroke-width="2" fill="none" />
+                  <!-- Construction circle track (orange) -->
+                  <circle class="ring-track const-track" cx="18" cy="18" r="14" stroke-width="2" :stroke-dasharray="getConstructionDashArray(fob)" />
+                  <!-- Ammo background circle -->
+                  <circle class="ring-bg" cx="18" cy="18" r="11" stroke="rgba(255, 255, 255, 0.05)" stroke-width="2" fill="none" />
+                  <!-- Ammo circle track (cyan) -->
+                  <circle class="ring-track ammo-track" cx="18" cy="18" r="11" stroke-width="2" :stroke-dasharray="getAmmoDashArray(fob)" />
+                </svg>
+                
+                <div class="fob-core-icon">
+                  <!-- Sleek communication satellite/radio tower SVG -->
+                  <svg class="fob-svg-icon" viewBox="0 0 24 24" width="12" height="12">
+                    <path fill="currentColor" d="M12 2A10 10 0 0 0 2 12a9.9 9.9 0 0 0 3.3 7.4l1.4-1.4A8 8 0 1 1 12 20a8 8 0 0 1-5.3-2l-1.4 1.4A9.9 9.9 0 0 0 12 22a10 10 0 0 0 10-10A10 10 0 0 0 12 2zm0 4a6 6 0 0 0-6 6c0 1.6.6 3.1 1.7 4.2l1.4-1.4A4 4 0 1 1 12 16a4 4 0 0 1-2.8-1.2l-1.4 1.4A5.9 5.9 0 0 0 12 18a6 6 0 0 0 6-6 6 6 0 0 0-6-6zm0 4a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/>
+                  </svg>
+                  <span class="fob-core-glow"></span>
+                </div>
+              </div>
+              
+              <!-- Quick Status HUD under the marker -->
+              <div class="fob-quick-hud">
+                <span class="hud-bar hp-bar" :style="{ width: `${Math.round((fob.health ?? 0) * 100)}%` }"></span>
+              </div>
+              
+              <span class="fob-node-name">FOB [T{{ fob.teamId }}]</span>
+            </div>
+            
+            <!-- FOB Tooltip -->
+            <div class="fob-tooltip">
+              <div class="fob-tooltip-title">{{ fob.name || 'FOB Radio' }}</div>
+              <div class="fob-tooltip-grid">
+                <!-- Health Bar -->
+                <div class="fob-tooltip-metric">
+                  <div class="metric-info">
+                    <span class="metric-label">RADIO HP</span>
+                    <span class="metric-value" :class="{ 'warning-text': fob.health < 1.0 }">
+                      {{ Math.round((fob.health ?? 0) * 100) }}%
+                    </span>
+                  </div>
+                  <div class="metric-bar-track">
+                    <div class="metric-bar-fill hp-fill" :style="{ width: `${Math.round((fob.health ?? 0) * 100)}%` }" :class="{ 'is-bleeding-fill': fob.isBleeding }"></div>
+                  </div>
+                </div>
+                
+                <!-- Ammo Bar -->
+                <div class="fob-tooltip-metric">
+                  <div class="metric-info">
+                    <span class="metric-label">AMMO</span>
+                    <span class="metric-value">{{ Math.round(fob.ammo ?? 0) }} / 10000</span>
+                  </div>
+                  <div class="metric-bar-track">
+                    <div class="metric-bar-fill ammo-fill" :style="{ width: `${Math.min(100, Math.round((fob.ammo ?? 0) / 100))}%` }"></div>
+                  </div>
+                </div>
+
+                <!-- Construction Bar -->
+                <div class="fob-tooltip-metric">
+                  <div class="metric-info">
+                    <span class="metric-label">CONSTRUCTION</span>
+                    <span class="metric-value">{{ Math.round(fob.construction ?? 0) }} / 2000</span>
+                  </div>
+                  <div class="metric-bar-track">
+                    <div class="metric-bar-fill const-fill" :style="{ width: `${Math.min(100, Math.round((fob.construction ?? 0) / 20))}%` }"></div>
+                  </div>
+                </div>
+
+                <!-- Bleeding Warning -->
+                <div class="fob-tooltip-item alert-item" v-if="fob.isBleeding">
+                  <span class="fob-tooltip-value bleeding-alert">⚠️ BLEEDING OUT!</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Player Markers Layer -->
@@ -499,6 +609,10 @@
               <span class="option-text">显示 Capture Zone</span>
             </label>
             <label class="option-item-sidebar">
+              <input type="checkbox" v-model="showFobs" />
+              <span class="option-text">显示 FOB Radio</span>
+            </label>
+            <label class="option-item-sidebar">
               <input type="checkbox" v-model="disableMarkerInteraction" />
               <span class="option-text">穿透玩家标记</span>
             </label>
@@ -688,6 +802,7 @@ import { computed, onBeforeUnmount, onMounted, ref, reactive, nextTick, watch } 
 import {
   type BzssCorePlayerInfoResponse,
   type BzssCoreCaptureZoneInfo,
+  type BzssCoreFobInfo,
   type BzssCoreTrackedPlayerInfo,
   type BzssCoreTrackedVector,
 } from "../app/bzssCoreApi";
@@ -708,6 +823,7 @@ const props = defineProps<{
   snapshot: BzssCorePlayerInfoResponse | null;
   players: BzssCoreTrackedPlayerInfo[];
   captureZones?: BzssCoreCaptureZoneInfo[];
+  fobs?: BzssCoreFobInfo[];
   loading: boolean;
   errorText: string;
 }>();
@@ -745,6 +861,7 @@ const authStore = useAuthStore();
 const snapshot = computed(() => props.snapshot);
 const players = computed(() => props.players);
 const captureZones = computed(() => props.captureZones ?? snapshot.value?.captureZones ?? []);
+const fobs = computed(() => props.fobs ?? snapshot.value?.fobs ?? []);
 
 const mapName = "Sumari";
 const serverMapName = computed(() => serverStore.snapshot?.mapName || mapName);
@@ -788,6 +905,7 @@ const dragStart = reactive({ x: 0, y: 0 });
 const showGrid = ref(true);
 const showRadar = ref(true);
 const showCaptureZones = ref(true);
+const showFobs = ref(true);
 const filterAliveOnly = ref(false);
 const disableMarkerInteraction = ref(false);
 
@@ -803,9 +921,10 @@ const tilesEnabled = ref(true);
 let resizeObserver: ResizeObserver | null = null;
 
 const dynamicMarkerScale = computed(() => {
-  // Keep markers visually stable on screen while the map zooms.
-  // The map container scales with `zoom`, so we apply the inverse here.
-  return markerScale.value / Math.max(zoom.value, 0.01);
+  // Rather than keeping marker screen size perfectly constant (1/zoom),
+  // we scale it by zoom^(-0.6) so that markers grow slightly when zoomed in
+  // and shrink slightly when zoomed out, creating a natural tactical map feel.
+  return markerScale.value / Math.pow(Math.max(zoom.value, 0.05), 0.6);
 });
 
 // Sidebar states
@@ -1385,6 +1504,32 @@ const captureZoneMarkers = computed<CaptureZoneMarker[]>(() => {
   return markers;
 });
 
+const fobMarkers = computed(() => {
+  const list = fobs.value;
+  if (!Array.isArray(list) || list.length === 0) return [];
+  const bounds = activeMapConfig.value.bounds;
+  const markers: any[] = [];
+  for (const fob of list) {
+    const pos = fob?.position;
+    if (!pos) continue;
+    const x = Number(pos.x);
+    const y = Number(pos.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    markers.push({
+      name: fob.name || "FOB Radio",
+      teamId: fob.teamId,
+      health: fob.health,
+      isBleeding: fob.isBleeding,
+      ammo: fob.ammo,
+      construction: fob.construction,
+      mapX: project(x, bounds.minX, bounds.maxX),
+      mapY: project(y, bounds.minY, bounds.maxY),
+      raw: fob.raw,
+    });
+  }
+  return markers;
+});
+
 const filteredPlayers = computed(() => {
   let list = markers.value;
   if (filterAliveOnly.value) {
@@ -1913,12 +2058,41 @@ function getPlayerSpeedText(player: any) {
   return `${speedMS.toFixed(1)} m/s (${Math.round(speedKMH)} km/h)`;
 }
 
+function getFlagLetter(name: string): string {
+  if (!name) return "★";
+  const parts = name.split("-");
+  const first = parts[0]?.trim();
+  if (/^\d+$/.test(first)) {
+    const num = parseInt(first, 10);
+    if (num >= 1 && num <= 26) {
+      return String.fromCharCode(64 + num); // 1 -> A, 2 -> B, etc.
+    }
+  }
+  return first || "★";
+}
+
 function cleanWeaponName(weaponClass: string | null | undefined): string {
   if (!weaponClass) return "-";
   return weaponClass
     .replace(/^(BP_|Weapon_)/i, "")
     .replace(/(_\d+)?_C.*$/i, "")
     .replace(/_\d+$/, "");
+}
+
+function getConstructionDashArray(fob: any) {
+  const construction = Number(fob.construction ?? 0);
+  const max = 2000;
+  const ratio = Math.min(1.0, Math.max(0.0, construction / max));
+  const perimeter = 2 * Math.PI * 14; // ~87.96
+  return `${ratio * perimeter} ${perimeter}`;
+}
+
+function getAmmoDashArray(fob: any) {
+  const ammo = Number(fob.ammo ?? 0);
+  const max = 10000;
+  const ratio = Math.min(1.0, Math.max(0.0, ammo / max));
+  const perimeter = 2 * Math.PI * 11; // ~69.1
+  return `${ratio * perimeter} ${perimeter}`;
 }
 
 onMounted(() => {
@@ -2133,6 +2307,519 @@ onBeforeUnmount(() => {
     border-color: rgba(0, 240, 255, 0.03);
     box-shadow: 0 0 0 rgba(0, 240, 255, 0);
   }
+}
+
+/* Capture point markers */
+.capture-zone-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+}
+
+.capture-zone-marker {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  transform: translate(-50%, -50%);
+  pointer-events: auto; /* Enable hovering */
+  cursor: pointer;
+}
+
+.tactical-flag-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+/* Radar pulse circles behind node */
+.node-radar-rings {
+  position: absolute;
+  top: 50%;
+  left: 10px; /* Center of diamond (which is 20px wide) */
+  transform: translate(-50%, -50%);
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.radar-pulse-ring {
+  position: absolute;
+  border: 1.5px solid rgba(245, 158, 11, 0.25);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  animation: node-radar-pulse 3s infinite cubic-bezier(0.2, 0.8, 0.2, 1);
+  pointer-events: none;
+}
+
+.radar-pulse-ring.ring-1 {
+  width: 50px;
+  height: 50px;
+  animation-delay: 0s;
+}
+
+.radar-pulse-ring.ring-2 {
+  width: 50px;
+  height: 50px;
+  animation-delay: 1.5s;
+}
+
+@keyframes node-radar-pulse {
+  0% { width: 10px; height: 10px; opacity: 0.9; border-color: rgba(245, 158, 11, 0.45); }
+  100% { width: 80px; height: 80px; opacity: 0; border-color: rgba(245, 158, 11, 0); }
+}
+
+/* Static Tech target crosshair */
+.node-crosshair {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  left: -6px;
+  top: -6px;
+  pointer-events: none;
+  transition: all 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.crosshair-bracket {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-color: rgba(245, 158, 11, 0.6);
+  border-style: solid;
+  border-width: 0;
+  transition: all 0.3s ease;
+}
+
+.crosshair-bracket.top-left { top: 0; left: 0; border-top-width: 1.5px; border-left-width: 1.5px; }
+.crosshair-bracket.top-right { top: 0; right: 0; border-top-width: 1.5px; border-right-width: 1.5px; }
+.crosshair-bracket.bottom-left { bottom: 0; left: 0; border-bottom-width: 1.5px; border-left-width: 1.5px; }
+.crosshair-bracket.bottom-right { bottom: 0; right: 0; border-bottom-width: 1.5px; border-right-width: 1.5px; }
+
+/* Glowing core diamond */
+.node-core-diamond {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  background: rgba(11, 15, 26, 0.95);
+  border: 1.5px solid #f59e0b;
+  transform: rotate(45deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.4), inset 0 0 4px rgba(245, 158, 11, 0.2);
+  z-index: 2;
+  flex: 0 0 auto;
+  transition: all 0.3s ease;
+}
+
+.node-letter {
+  display: inline-block;
+  transform: rotate(-45deg);
+  font-size: 9px;
+  font-weight: 900;
+  color: #ffffff;
+  font-family: 'Outfit', 'Inter', sans-serif;
+  text-shadow: 0 0 3px rgba(245, 158, 11, 0.8);
+}
+
+/* Integrated Label Container */
+.node-label-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 4px 10px;
+  background: rgba(9, 15, 30, 0.85);
+  backdrop-filter: blur(10px);
+  border: 1.5px solid rgba(245, 158, 11, 0.3);
+  border-radius: 5px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
+  z-index: 1;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translateX(4px);
+}
+
+.node-index-label {
+  font-size: 8px;
+  font-weight: 900;
+  color: #f59e0b;
+  letter-spacing: 1px;
+  font-family: monospace;
+}
+
+.node-name-text {
+  font-size: 10px;
+  font-weight: 700;
+  color: #e2e8f0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+/* Hover effects */
+.capture-zone-marker:hover .node-crosshair {
+  width: 38px;
+  height: 38px;
+  left: -9px;
+  top: -9px;
+  transform: rotate(90deg);
+}
+
+.capture-zone-marker:hover .crosshair-bracket {
+  border-color: #ffffff;
+}
+
+.capture-zone-marker:hover .node-core-diamond {
+  background: #f59e0b;
+  box-shadow: 0 0 18px #f59e0b;
+  border-color: #ffffff;
+}
+
+.capture-zone-marker:hover .node-letter {
+  color: #0b0f19;
+  text-shadow: none;
+}
+
+.capture-zone-marker:hover .node-label-container {
+  border-color: rgba(245, 158, 11, 0.95);
+  background: rgba(15, 22, 42, 0.96);
+  box-shadow: 0 8px 25px rgba(245, 158, 11, 0.2), 0 4px 15px rgba(0, 0, 0, 0.7);
+  transform: translateX(8px);
+}
+
+
+/* FOB Overlay and Markers */
+.fob-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  pointer-events: none;
+}
+
+.fob-marker {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -50%);
+  pointer-events: auto; /* Allow hovering */
+  cursor: pointer;
+}
+
+.tactical-fob-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+.fob-ring-outer {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(8, 12, 24, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  transition: all 0.3s ease;
+}
+
+.fob-status-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+
+.ring-track {
+  fill: none;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.35s ease;
+}
+
+.const-track {
+  stroke: #f97316; /* Construction Orange */
+  filter: drop-shadow(0 0 2px rgba(249, 115, 22, 0.7));
+}
+
+.ammo-track {
+  stroke: #06b6d4; /* Ammo Cyan */
+  filter: drop-shadow(0 0 2px rgba(6, 182, 212, 0.7));
+}
+
+/* Core transceiver styling */
+.fob-core-icon {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.6);
+  z-index: 2;
+  transition: all 0.3s ease;
+}
+
+/* Faction gradients */
+.team-1 .fob-core-icon {
+  background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+  border: 1px solid #3b82f6;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
+}
+
+.team-2 .fob-core-icon {
+  background: linear-gradient(135deg, #7f1d1d 0%, #ef4444 100%);
+  border: 1px solid #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+}
+
+.team-1 .fob-svg-icon {
+  color: #93c5fd;
+  filter: drop-shadow(0 0 2px rgba(59, 130, 246, 0.8));
+}
+
+.team-2 .fob-svg-icon {
+  color: #fca5a5;
+  filter: drop-shadow(0 0 2px rgba(239, 68, 68, 0.8));
+}
+
+.fob-core-glow {
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  animation: core-glow-pulse 2s infinite ease-in-out;
+}
+
+@keyframes core-glow-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.3; }
+  50% { transform: scale(1.15); opacity: 0.7; }
+}
+
+/* HUD under the marker */
+.fob-quick-hud {
+  width: 30px;
+  height: 4px;
+  background: rgba(15, 23, 42, 0.8);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-top: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.hp-bar {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #059669 0%, #10b981 100%);
+  border-radius: 99px;
+  transition: width 0.35s ease;
+}
+
+.fob-node-name {
+  font-size: 8px;
+  font-weight: 900;
+  color: #e2e8f0;
+  margin-top: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: rgba(9, 15, 30, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 1px 5px;
+  border-radius: 3px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+.team-1 .fob-node-name {
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #93c5fd;
+  text-shadow: 0 0 2px rgba(59, 130, 246, 0.5);
+}
+
+.team-2 .fob-node-name {
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  text-shadow: 0 0 2px rgba(239, 68, 68, 0.5);
+}
+
+/* Bleeding Critical Warning State */
+.fob-marker.is-bleeding {
+  animation: fob-bleeding-pulse 1.2s infinite ease-in-out;
+}
+
+@keyframes fob-bleeding-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 2px rgba(239, 68, 68, 0.4));
+  }
+  50% {
+    filter: drop-shadow(0 0 12px rgba(239, 68, 68, 0.9));
+  }
+}
+
+.fob-marker.is-bleeding .fob-ring-outer {
+  border-color: #ef4444;
+  background: rgba(24, 8, 8, 0.95);
+}
+
+.fob-marker.is-bleeding .hp-bar {
+  background: #ef4444;
+  animation: bleeding-bar-flash 0.5s infinite alternate;
+}
+
+@keyframes bleeding-bar-flash {
+  from { opacity: 0.5; }
+  to { opacity: 1; }
+}
+
+.fob-marker.is-bleeding .fob-node-name {
+  border-color: rgba(239, 68, 68, 0.7);
+  color: #f87171;
+  background: rgba(40, 10, 10, 0.92);
+}
+
+/* Hover Scale */
+.fob-marker:hover .fob-ring-outer {
+  transform: scale(1.1);
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+}
+
+/* FOB Hover details tooltip */
+.fob-tooltip {
+  display: none;
+  position: absolute;
+  bottom: 45px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 180px;
+  background: rgba(8, 12, 24, 0.95);
+  backdrop-filter: blur(12px);
+  border: 1.5px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.8), 0 0 15px rgba(255, 255, 255, 0.05);
+  z-index: 100;
+  transition: all 0.2s ease;
+  pointer-events: none;
+}
+
+.team-1 .fob-tooltip {
+  border-color: rgba(59, 130, 246, 0.45);
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.8), 0 0 15px rgba(59, 130, 246, 0.1);
+}
+
+.team-2 .fob-tooltip {
+  border-color: rgba(239, 68, 68, 0.45);
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.8), 0 0 15px rgba(239, 68, 68, 0.1);
+}
+
+.fob-marker:hover .fob-tooltip {
+  display: block;
+}
+
+.fob-tooltip-title {
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.75px;
+  text-transform: uppercase;
+  border-bottom: 1.5px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.team-1 .fob-tooltip-title {
+  color: #93c5fd;
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.team-2 .fob-tooltip-title {
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.fob-tooltip-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fob-tooltip-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.metric-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 8.5px;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: 0.5px;
+}
+
+.metric-label {
+  text-transform: uppercase;
+}
+
+.metric-value {
+  color: #ffffff;
+  font-family: monospace;
+}
+
+.metric-bar-track {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.metric-bar-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.3s ease;
+}
+
+.hp-fill { background: linear-gradient(90deg, #10b981 0%, #34d399 100%); }
+.hp-fill.is-bleeding-fill { background: #ef4444; }
+.ammo-fill { background: linear-gradient(90deg, #06b6d4 0%, #22d3ee 100%); }
+.const-fill { background: linear-gradient(90deg, #f97316 0%, #fb923c 100%); }
+
+.fob-tooltip-item.alert-item {
+  justify-content: center;
+  background: rgba(220, 38, 38, 0.15);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  padding: 4px;
+  border-radius: 4px;
+  margin-top: 2px;
+}
+
+.bleeding-alert {
+  color: #f87171;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  animation: pulse-alert 1s infinite alternate;
+}
+
+@keyframes pulse-alert {
+  from { opacity: 0.6; }
+  to { opacity: 1; }
 }
 
 /* Player markers styling */

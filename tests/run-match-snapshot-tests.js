@@ -90,6 +90,34 @@ function createHarness() {
           },
         },
       },
+      bzssCoreMonitor: {
+        api: {
+          getRawSnapshot() {
+            return {
+              updatedAt: "2026-06-22T00:00:00.000Z",
+              captureZones: [
+                {
+                  name: "CP1",
+                  position: { x: 1234, y: 5678, z: 90 },
+                  raw: "CP1,Position:X=1234 Y=5678 Z=90",
+                },
+              ],
+              fobs: [
+                {
+                  teamId: 1,
+                  health: 1.0,
+                  isBleeding: false,
+                  ammo: 1000,
+                  construction: 2000,
+                  name: "Team1PreplacedFOBRadio",
+                  position: { x: 15160, y: -2150, z: -12980 },
+                  raw: "TeamID:1,Health:1.0,IsBleeding:false,Ammo:1000.0,Construction:2000.0,Position:X=15160 Y=-2150 Z=-12980",
+                },
+              ],
+            };
+          },
+        },
+      },
     },
     logger: {
       info(message) {
@@ -149,6 +177,11 @@ async function testCaptureWritesImageAndFiles() {
     assert.equal(json.teams[0].squads[0].members[0].combatStats.wounds, 1);
     assert.equal(json.teams[0].squads[0].members[0].combatStats.deaths, 1);
     assert.equal(json.teams[0].squads[0].members[0].gameSeconds, 7200);
+    assert.equal(json.captureZones.length, 1);
+    assert.equal(json.captureZones[0].name, "CP1");
+    assert.equal(json.fobs.length, 1);
+    assert.equal(json.fobs[0].name, "Team1PreplacedFOBRadio");
+    assert.equal(json.source.bzssCoreUpdatedAt, "2026-06-22T00:00:00.000Z");
 
     const markdown = await plugin.api.readSnapshotArtifact(item.id, "markdown");
     const markdownText = markdown.content.toString("utf8");

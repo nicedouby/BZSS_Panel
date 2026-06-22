@@ -8,7 +8,7 @@ import dgram from "node:dgram";
  * 接收 Python LogParser 发来的 UDP JSON 事件，并发布为 Core Event。
  */
 export class UdpEventReceiver {
-  constructor({ config, logger, eventBus, webStatus, eventPipeline }) {
+  constructor({ config, logger, eventBus, webStatus, eventPipeline, logPostMonitor = null }) {
     this.host = config.host ?? "127.0.0.1";
     this.port = Number(config.port ?? 6666);
     this.maxMessageBytes = Number(config.maxMessageBytes ?? 65535);
@@ -17,6 +17,7 @@ export class UdpEventReceiver {
     this.eventBus = eventBus;
     this.webStatus = webStatus;
     this.eventPipeline = eventPipeline;
+    this.logPostMonitor = logPostMonitor;
     this.socket = dgram.createSocket("udp4");
     this.isStarting = false;
 
@@ -114,6 +115,10 @@ export class UdpEventReceiver {
       },
     });
 
+    const gapEvent = this.logPostMonitor?.inspectEvent?.(event) ?? null;
+    if (gapEvent) {
+      this.eventBus.emitCoreEvent(gapEvent.eventName, gapEvent);
+    }
     this.eventBus.emitCoreEvent(event.eventName, event);
   }
 }

@@ -27,9 +27,17 @@
             <span class="label">全局开始延迟</span>
             <span class="value">{{ globalDelaySeconds }} 秒</span>
           </div>
+          <div class="stat-pill">
+            <span class="label">当前轮播</span>
+            <span class="value">{{ currentItemLabel }}</span>
+          </div>
+          <div class="stat-pill">
+            <span class="label">下次全局执行</span>
+            <span class="value">{{ formatTime(scheduleNextRunAt) }}</span>
+          </div>
         </div>
         <div class="summary-actions">
-          <p class="hint-text">支持通过按钮调整执行顺序。首条广播的间隔会自动同步为全局开始延迟。</p>
+          <p class="hint-text">严格按列表顺序轮播，每次只执行一条。每条“循环间隔”表示该条作为下一条被执行前的等待时间。</p>
           <button type="button" class="bz-btn bz-btn-primary" :disabled="createBusy" @click="createItem">
             {{ createBusy ? "处理中..." : "添加新广播" }}
           </button>
@@ -50,9 +58,10 @@
                 <div class="item-title-row">
                   <h3 class="item-name">{{ index === 0 ? "首条广播" : "常规广播" }}</h3>
                   <span v-if="index === 0" class="sync-badge">同步全局延迟</span>
+                  <span v-if="item.isCurrent" class="current-badge">当前轮到</span>
                 </div>
                 <div class="status-row">
-                  <span class="bz-badge">下次运行: {{ formatTime(item.nextRunAt) }}</span>
+                  <span class="bz-badge">{{ item.isCurrent ? "当前排期" : "等待轮到" }}: {{ item.isCurrent ? formatTime(scheduleNextRunAt) : "-" }}</span>
                   <span class="bz-badge">上次运行: {{ formatTime(item.lastRunAt) }}</span>
                   <span class="bz-badge">累计成功: {{ item.runCount ?? 0 }}</span>
                   <span v-if="item.errorCount" class="bz-badge bz-badge-danger">累计失败: {{ item.errorCount }}</span>
@@ -113,7 +122,7 @@
           <footer class="item-footer">
             <div class="settings-group">
               <div class="input-field">
-                <span class="label">{{ index === 0 ? "首条间隔 / 全局延迟 (秒)" : "循环间隔 (秒)" }}</span>
+                <span class="label">{{ index === 0 ? "首条间隔 / 全局重置延迟 (秒)" : "循环间隔 (秒)" }}</span>
                 <input
                   class="interval-input"
                   type="number"
@@ -124,7 +133,7 @@
                 />
               </div>
               <div class="meta-info">
-                <div class="meta-item">开始延迟: <span>{{ index === 0 ? (drafts[item.id]?.intervalSeconds ?? item.intervalSeconds) : globalDelaySeconds }}s</span></div>
+                <div class="meta-item">重置延迟: <span>{{ index === 0 ? (drafts[item.id]?.intervalSeconds ?? item.intervalSeconds) : globalDelaySeconds }}s</span></div>
                 <div class="meta-item">更新于: <span>{{ formatTime(item.updatedAt) }}</span></div>
               </div>
             </div>
@@ -143,7 +152,7 @@
           <div class="bz-empty-icon">+</div>
           <div class="bz-empty-title">尚未配置定时广播</div>
           <div class="bz-empty-desc">
-            您可以添加多条广播消息。系统将按照列表顺序轮流发送，并根据设置的间隔进行等待。
+            您可以添加多条广播消息。系统会严格按列表顺序轮播，每次只执行一条广播。
           </div>
           <div class="bz-empty-actions">
             <button type="button" class="bz-btn bz-btn-primary" @click="createItem">添加首条广播</button>
@@ -201,6 +210,13 @@ const query = useQuery({
 
 const data = computed(() => query.data.value ?? null);
 const items = computed(() => (data.value?.items ?? []).slice().sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0)));
+const scheduleNextRunAt = computed(() => data.value?.status?.schedule?.nextRunAt ?? null);
+const currentItemId = computed(() => data.value?.status?.currentItemId ?? null);
+const currentItemLabel = computed(() => {
+  const index = items.value.findIndex((item) => item.id === currentItemId.value);
+  if (index < 0) return "-";
+  return `#${index + 1}`;
+});
 const globalDelaySeconds = computed(() => {
   const first = items.value[0];
   if (!first) return 10;
@@ -609,6 +625,15 @@ function formatTime(value: unknown) {
   color: #60a5fa;
   border-radius: 6px;
   font-weight: 600;
+}
+
+.current-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: rgba(74, 222, 128, 0.14);
+  color: #86efac;
+  border-radius: 6px;
+  font-weight: 700;
 }
 
 .status-row {

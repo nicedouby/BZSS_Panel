@@ -28,6 +28,17 @@ export interface BzssCoreCaptureZoneInfo {
   raw?: string;
 }
 
+export interface BzssCoreFobInfo {
+  teamId: number | null;
+  health: number | null;
+  isBleeding: boolean;
+  ammo: number | null;
+  construction: number | null;
+  name: string;
+  position: BzssCoreTrackedVector | null;
+  raw?: string;
+}
+
 export interface BzssCoreTrackedPlayerInfo {
   playerId?: number | null;
   playerName: string;
@@ -104,6 +115,7 @@ export interface BzssCorePlayerInfoState {
   fileMtimeMs: number;
   playerCount: number;
   captureZoneCount?: number;
+  fobCount?: number;
   rawTextLength?: number;
   rawTextUpdatedAt?: string;
   lastError: string;
@@ -116,6 +128,7 @@ export interface BzssCorePlayerInfoResponse {
   player: BzssCoreTrackedPlayerInfo | null;
   players?: BzssCoreTrackedPlayerInfo[];
   captureZones?: BzssCoreCaptureZoneInfo[];
+  fobs?: BzssCoreFobInfo[];
 }
 
 export interface BzssCoreRawDataResponse {
@@ -133,6 +146,7 @@ export interface BzssCoreRawDataResponse {
   fileMtimeMs: number;
   playerCount: number;
   captureZones?: BzssCoreCaptureZoneInfo[];
+  fobs?: BzssCoreFobInfo[];
   lastError: string;
   rawText: string;
   rawTextLength: number;

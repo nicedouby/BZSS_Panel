@@ -51,6 +51,7 @@ function createServer() {
             fileSize: 1024,
             fileMtimeMs: 1,
             playerCount: 1,
+            captureZones: [{ name: "CP1", position: { x: 100, y: 200, z: 0 } }],
             lastError: "",
             rawText: "PlayerBaseInfo{0,abc,Donald,1,0}",
             rawTextLength: 34,
@@ -91,6 +92,9 @@ function main() {
   const all = server.getBzssCorePlayerInfo({ all: true });
   assert.equal(Array.isArray(all.players), true);
   assert.equal(all.players.length, 1);
+  assert.equal(Array.isArray(all.captureZones), true);
+  assert.equal(all.captureZones.length, 1);
+  assert.equal(all.captureZones[0].name, "CP1");
   assert.equal(all.status, "ready");
 
   const raw = server.getBzssCorePlayerInfoRaw();

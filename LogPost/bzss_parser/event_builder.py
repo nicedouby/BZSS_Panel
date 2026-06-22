@@ -21,11 +21,15 @@ class EventBuilder:
         self.max_raw_chars = max_raw_chars
         self.seq = 0
 
+    def restore_seq(self, value: int) -> None:
+        self.seq = max(0, int(value or 0))
+
     def build(
         self,
         event_name: str,
         params: List[Tuple[str, Any]],
         raw: str,
+        source_meta: Dict[str, Any] | None = None,
     ) -> Dict[str, str]:
         self.seq += 1
 
@@ -46,18 +50,20 @@ class EventBuilder:
             event[f"Param{index}_{safe_param_name(param_name)}"] = clean_param_value(param_name, param_value)
 
         event["Raw"] = raw_value
+        self._apply_source_meta(event, source_meta)
         return event
 
     def build_raw_log_line(
         self,
         raw: str,
         source: str = "Squad.log",
+        source_meta: Dict[str, Any] | None = None,
     ) -> Dict[str, str]:
         self.seq += 1
 
         raw_value, raw_truncated = truncate_raw(raw, self.max_raw_chars)
 
-        return {
+        event = {
             "Version": "1",
             "ServerID": self.server_id,
             "SessionID": self.session_id,
@@ -70,6 +76,27 @@ class EventBuilder:
             "Param2_Channel": clean_value(extract_channel(raw)),
             "Raw": raw_value,
         }
+        self._apply_source_meta(event, source_meta)
+        return event
+
+    @staticmethod
+    def _apply_source_meta(event: Dict[str, str], source_meta: Dict[str, Any] | None) -> None:
+        if not source_meta:
+            return
+
+        source_seq = source_meta.get("source_seq")
+        source_offset = source_meta.get("source_offset")
+        raw_line_hash = source_meta.get("rawLineHash")
+
+        if source_seq is not None:
+            event["SourceSeq"] = clean_value(source_seq)
+            event["Param900_SourceSeq"] = clean_value(source_seq)
+        if source_offset is not None:
+            event["SourceOffset"] = clean_value(source_offset)
+            event["Param901_SourceOffset"] = clean_value(source_offset)
+        if raw_line_hash:
+            event["RawLineHash"] = clean_value(raw_line_hash)
+            event["Param902_RawLineHash"] = clean_value(raw_line_hash)
 
 
 def clean_param_value(param_name: str, param_value: Any) -> str:

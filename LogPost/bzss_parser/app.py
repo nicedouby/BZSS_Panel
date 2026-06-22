@@ -21,7 +21,9 @@ from bzss_parser.matchers.spawn_matcher import SpawnMatcher
 from bzss_parser.matchers.squad_matcher import SquadMatcher
 from bzss_parser.matchers.world_bring_up_matcher import WorldBringUpMatcher
 from bzss_parser.preserve_filter import PreserveFilter
+from bzss_parser.raw_archive_writer import RawArchiveWriter
 from bzss_parser.raw_input_writer import RawInputWriter
+from bzss_parser.source_state_store import SourceStateStore
 from bzss_parser.tail_reader import TailReader
 from bzss_parser.udp_sender import UdpSender
 
@@ -62,6 +64,9 @@ class BzssLogParserApp:
         self.writer = LogPostWriter(
             output_dir=str(self.config.get("output_dir", "./LogPost"))
         )
+        self.raw_archive_writer = RawArchiveWriter(
+            output_dir=str(self.config.get("output_dir", "./LogPost"))
+        )
         self.writer.preserved_file_name = str(
             preserve_config.get("file_name", "Preserved.jsonl")
         )
@@ -96,10 +101,19 @@ class BzssLogParserApp:
         )
 
         tail_config = self.config.get("tail", {})
+        state_store = SourceStateStore(
+            str(
+                tail_config.get(
+                    "state_path",
+                    str(self.writer.output_dir / ".state" / "tailer-state.json"),
+                )
+            )
+        )
         self.tail_reader = TailReader(
             log_file=str(self.config.get("log_file", "./Squad.log")),
             from_end=bool(tail_config.get("from_end", True)),
             reopen_on_truncate=bool(tail_config.get("reopen_on_truncate", True)),
+            state_store=state_store,
         )
 
         self.poll_interval = max(
@@ -121,6 +135,9 @@ class BzssLogParserApp:
             "lines_unknown": 0,
             "parse_errors": 0,
         }
+        restored_seq = int(self.tail_reader.state.get("seq", 0) or 0)
+        if restored_seq > 0:
+            self.builder.restore_seq(restored_seq)
 
     def run(self) -> None:
         self.console.info("BZSS Log Parser started.")
@@ -145,10 +162,15 @@ class BzssLogParserApp:
                 time.sleep(1.0)
 
     def tick(self) -> None:
+        rotate_reason = self.tail_reader.consume_rotate_reason()
+        if rotate_reason:
+            self.handle_rotate_event(rotate_reason)
+
         lines = self.tail_reader.read_new_lines()
 
-        for line in lines:
-            self.process_line(line)
+        for record in lines:
+            if not self.process_line(record):
+                break
 
         now = time.time()
 
@@ -160,32 +182,59 @@ class BzssLogParserApp:
             self.report_stats()
             self._last_stats_report = now
 
-    def process_line(self, line: str) -> None:
+    def process_line(self, record: Dict[str, Any]) -> bool:
+        line = str(record.get("line", "")).rstrip("\r\n")
         line = line.rstrip("\r\n")
 
         if not line:
-            return
+            return True
 
         self.stats["lines_read"] += 1
+
+        try:
+            raw_archive = self.raw_archive_writer.write(
+                seq=int(self.builder.seq) + 1,
+                offset=int(record.get("offset", 0) or 0),
+                raw_line=line,
+                source_path=str(record.get("sourcePath", "")),
+            )
+        except Exception as e:
+            self.tail_reader.rewind_to_offset(int(record.get("offset", 0) or 0))
+            self.console.warn(f"Raw archive write failed; rewinding: {e}")
+            return False
+
+        source_meta = {
+            "source_seq": raw_archive.get("seq"),
+            "source_offset": raw_archive.get("offset"),
+            "rawLineHash": raw_archive.get("rawLineHash"),
+        }
+        meta_for_files = {
+            "SourceSeq": str(raw_archive.get("seq", "")),
+            "SourceOffset": str(raw_archive.get("offset", "")),
+            "RawLineHash": str(raw_archive.get("rawLineHash", "")),
+            "SourcePath": str(raw_archive.get("sourcePath", "")),
+        }
+
+        self.tail_reader.persist_state(int(raw_archive.get("seq", 0) or 0))
 
         try:
             self.raw_input_writer.write(line)
         except Exception as e:
             self.console.warn(f"Raw input write failed: {e}")
-        self.forward_raw_log_line(line)
+        self.forward_raw_log_line(line, source_meta)
 
         try:
             self.auxiliary_identity_matcher.update(line)
 
-            matched = self.match_event(line)
+            matched = self.match_event(line, meta_for_files)
             if matched:
                 event_name, params = matched
-                event = self.builder.build(event_name, params, line)
+                event = self.builder.build(event_name, params, line, source_meta=source_meta)
                 self.writer.write_event(event)
                 self.udp_sender.send(event)
                 self.stats["events_matched"] += 1
                 self.console.event(event)
-                return
+                return True
 
             preserved_rule = ""
             if self.preserve_enabled:
@@ -194,30 +243,40 @@ class BzssLogParserApp:
                 if self.preserve_write_file:
                     self.writer.write_preserved(line, preserved_rule)
                 self.stats["lines_preserved"] += 1
-                return
+                return True
 
             if self.blacklist.is_blacklisted(line):
                 self.stats["lines_blacklisted"] += 1
-                return
+                return True
 
-            if self.write_unknown:
-                self.writer.write_unknown(line)
-                self.stats["lines_unknown"] += 1
+            self.writer.write_unknown(line, meta_for_files)
+            self.stats["lines_unknown"] += 1
 
         except Exception as e:
-            self.writer.write_parse_error(line, str(e))
+            self.writer.write_parse_error(line, str(e), meta_for_files)
             self.console.warn(f"Parse error: {e}")
             self.stats["parse_errors"] += 1
+        return True
 
-    def match_event(self, line: str) -> Optional[MatchedEvent]:
+    def match_event(self, line: str, meta_for_files: Dict[str, str]) -> Optional[MatchedEvent]:
         for matcher in self.matchers:
-            matched = matcher.match(line)
+            try:
+                matched = matcher.match(line)
+            except Exception as e:
+                self.writer.write_parse_error(
+                    line,
+                    f"{matcher.__class__.__name__}: {e}",
+                    meta_for_files,
+                )
+                self.console.warn(f"Matcher parse error [{matcher.__class__.__name__}]: {e}")
+                self.stats["parse_errors"] += 1
+                continue
             if matched:
                 return matched
 
         return None
 
-    def forward_raw_log_line(self, line: str) -> None:
+    def forward_raw_log_line(self, line: str, source_meta: Dict[str, Any]) -> None:
         if not self.raw_log_output_enabled:
             return
 
@@ -225,10 +284,28 @@ class BzssLogParserApp:
             event = self.builder.build_raw_log_line(
                 line,
                 source=self.raw_log_output_source,
+                source_meta=source_meta,
             )
             self.udp_sender.send(event)
         except Exception as e:
             self.console.warn(f"Raw log output failed: {e}")
+
+    def handle_rotate_event(self, reason: str) -> None:
+        try:
+            event = self.builder.build(
+                "LOGPOST_SOURCE_ROTATED",
+                [("Reason", reason), ("SourcePath", str(self.tail_reader.log_path))],
+                "",
+                source_meta={
+                    "source_seq": self.builder.seq,
+                    "source_offset": self.tail_reader.position,
+                    "rawLineHash": "",
+                },
+            )
+            self.writer.write_event(event)
+            self.udp_sender.send(event)
+        except Exception as e:
+            self.console.warn(f"Rotate event write failed: {e}")
 
     def report_stats(self) -> None:
         try:

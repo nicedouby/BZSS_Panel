@@ -17,6 +17,7 @@ export interface ScheduledBroadcastItem {
   lastResult: "idle" | "success" | "failed";
   runCount: number;
   errorCount: number;
+  isCurrent?: boolean;
 }
 
 export interface ScheduledBroadcastStateResponse {
@@ -30,6 +31,12 @@ export interface ScheduledBroadcastStateResponse {
     running: boolean;
     inTick: boolean;
     lastTickAt: number;
+    currentItemId: string | null;
+    schedule: {
+      nextItemId: string | null;
+      nextRunAt: number | null;
+      lastAdvancedAt: number | null;
+    };
   };
   items: ScheduledBroadcastItem[];
 }

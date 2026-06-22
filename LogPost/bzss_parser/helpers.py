@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import uuid
@@ -58,6 +59,11 @@ def truncate_raw(raw: str, max_chars: int) -> Tuple[str, str]:
 
 def to_json_line(obj: Dict[str, Any]) -> str:
     return json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
+
+
+def sha1_hex(value: Any) -> str:
+    text = str(value if value is not None else "")
+    return hashlib.sha1(text.encode("utf-8", errors="replace")).hexdigest()
 
 
 def regex_get(pattern: str, text: str, group: int | str = 1, flags: int = 0) -> str:

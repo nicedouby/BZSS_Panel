@@ -3099,6 +3099,41 @@ export class WebServer {
       });
     }
 
+    if (url.pathname === "/api/logpost/state" && req.method === "GET") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      return this.json(res, 200, await this.getLogPostState());
+    }
+
+    if (url.pathname === "/api/logpost/raw" && req.method === "GET") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      return this.json(res, 200, await this.queryLogPostRawArchive({
+        date: url.searchParams.get("date") ?? "",
+        start: url.searchParams.get("start") ?? "",
+        end: url.searchParams.get("end") ?? "",
+        q: url.searchParams.get("q") ?? "",
+        limit: url.searchParams.get("limit") ?? "200",
+        offset: url.searchParams.get("offset") ?? "0",
+      }));
+    }
+
+    if (url.pathname === "/api/logpost/events" && req.method === "GET") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      return this.json(res, 200, await this.queryLogPostStructuredEvents({
+        date: url.searchParams.get("date") ?? "",
+        event: url.searchParams.get("event") ?? "",
+        start: url.searchParams.get("start") ?? "",
+        end: url.searchParams.get("end") ?? "",
+        q: url.searchParams.get("q") ?? "",
+        limit: url.searchParams.get("limit") ?? "200",
+        offset: url.searchParams.get("offset") ?? "0",
+      }));
+    }
+
+    if (url.pathname === "/api/logpost/gaps" && req.method === "GET") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      return this.json(res, 200, this.getLogPostGapState());
+    }
+
     if (url.pathname === "/api/tactical-map-replay/segments" && req.method === "GET") {
       if (!this.canViewTacticalMapReplay(user)) {
         return this.json(res, 403, {
@@ -4438,6 +4473,8 @@ export class WebServer {
       status: state.status,
       player,
       players: includeAll ? (monitor?.getPlayers?.() ?? []) : undefined,
+      captureZones: includeAll ? (monitor?.getRawSnapshot?.()?.captureZones ?? []) : undefined,
+      fobs: includeAll ? (monitor?.getRawSnapshot?.()?.fobs ?? []) : undefined,
     };
   }
 
@@ -5010,6 +5047,95 @@ export class WebServer {
     return this.core.pluginManager?.instances
       ?.find((instance) => instance.manifest?.id === pluginId)?.api ?? null;
   }
+
+  getLogPostWorkingDirectory() {
+    const parserConfig = this.core.config?.get?.("pythonLogParser", {}) ?? {};
+    return path.resolve(process.cwd(), String(parserConfig.workingDirectory ?? "./LogPost").trim());
+  }
+
+  async getLogPostState() {
+    const workingDirectory = this.getLogPostWorkingDirectory();
+    const outputDir = path.resolve(workingDirectory, "LogPost");
+    const statePath = path.resolve(outputDir, ".state", "tailer-state.json");
+    const tailerState = await this.readJsonFileSafe(statePath, {});
+    const gapState = this.getLogPostGapState();
+
+    return {
+      workingDirectory,
+      outputDir,
+      tailerState,
+      gapState,
+    };
+  }
+
+  getLogPostGapState() {
+    return this.core.logPostMonitor?.getState?.() ?? {
+      lastSourceSeq: 0,
+      lastEventId: "",
+      recentGaps: [],
+    };
+  }
+
+  async queryLogPostRawArchive({ date, start, end, q, limit, offset }) {
+    const normalizedDate = normalizeLogPostDate(date);
+    const filePath = path.resolve(this.getLogPostWorkingDirectory(), "LogPost", "Raw", normalizedDate, "all.jsonl");
+    const items = await this.readJsonlFile(filePath);
+    const filtered = filterLogPostRows(items, {
+      start,
+      end,
+      q,
+      eventField: "",
+      timeField: "readAt",
+      messageFields: ["rawLine", "rawLineHash", "sourcePath"],
+    });
+    return paginateLogPostRows(filtered, limit, offset, { date: normalizedDate, filePath });
+  }
+
+  async queryLogPostStructuredEvents({ date, event, start, end, q, limit, offset }) {
+    const normalizedDate = normalizeLogPostDate(date);
+    const filePath = path.resolve(this.getLogPostWorkingDirectory(), "LogPost", normalizedDate, "All.jsonl");
+    const items = await this.readJsonlFile(filePath);
+    const filtered = filterLogPostRows(items, {
+      start,
+      end,
+      q,
+      eventField: "Event",
+      eventValue: event,
+      timeField: "Time",
+      messageFields: ["Raw", "Event", "RawLineHash", "SourceSeq", "SourceOffset"],
+    });
+    return paginateLogPostRows(filtered, limit, offset, { date: normalizedDate, filePath });
+  }
+
+  async readJsonlFile(filePath) {
+    try {
+      const text = await fs.readFile(filePath, "utf8");
+      return text
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => {
+          try {
+            return JSON.parse(line);
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean);
+    } catch (error) {
+      if (error?.code === "ENOENT") return [];
+      throw error;
+    }
+  }
+
+  async readJsonFileSafe(filePath, fallback) {
+    try {
+      const text = await fs.readFile(filePath, "utf8");
+      return JSON.parse(text);
+    } catch {
+      return fallback;
+    }
+  }
 }
 
 function contentType(filePath) {
@@ -5058,6 +5184,56 @@ function parseOptionalBoolean(value) {
   if (text === "true" || text === "1") return true;
   if (text === "false" || text === "0") return false;
   return null;
+}
+
+function normalizeLogPostDate(value) {
+  const text = String(value ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  return new Date().toISOString().slice(0, 10);
+}
+
+function filterLogPostRows(items, options = {}) {
+  const startMs = parseOptionalDateMs(options.start);
+  const endMs = parseOptionalDateMs(options.end);
+  const keyword = String(options.q ?? "").trim().toLowerCase();
+  const eventField = String(options.eventField ?? "").trim();
+  const eventValue = String(options.eventValue ?? "").trim();
+  const timeField = String(options.timeField ?? "Time").trim();
+  const messageFields = Array.isArray(options.messageFields) ? options.messageFields : [];
+
+  return (Array.isArray(items) ? items : []).filter((item) => {
+    if (!item || typeof item !== "object") return false;
+
+    if (eventField && eventValue) {
+      if (String(item[eventField] ?? "").trim() !== eventValue) return false;
+    }
+
+    const currentMs = parseOptionalDateMs(item[timeField]);
+    if (startMs != null && (currentMs == null || currentMs < startMs)) return false;
+    if (endMs != null && (currentMs == null || currentMs > endMs)) return false;
+
+    if (!keyword) return true;
+    return messageFields.some((field) => String(item[field] ?? "").toLowerCase().includes(keyword));
+  });
+}
+
+function paginateLogPostRows(items, limit, offset, extra = {}) {
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 200, 2000));
+  const safeOffset = Math.max(0, Number(offset) || 0);
+  return {
+    ...extra,
+    total: items.length,
+    limit: safeLimit,
+    offset: safeOffset,
+    items: items.slice(safeOffset, safeOffset + safeLimit),
+  };
+}
+
+function parseOptionalDateMs(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const parsed = Date.parse(text);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function normalizePlaytimeRow(row) {

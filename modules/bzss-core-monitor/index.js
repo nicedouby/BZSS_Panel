@@ -138,6 +138,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
         draft.status = "unconfigured";
         draft.players = [];
         draft.captureZones = [];
+        draft.fobs = [];
         draft.indexByName = {};
         draft.markerSeen = false;
         draft.rawText = "";
@@ -165,6 +166,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
         draft.fileMtimeMs = 0;
         draft.players = [];
         draft.captureZones = [];
+        draft.fobs = [];
         draft.indexByName = {};
         draft.markerSeen = false;
         draft.rawText = "";
@@ -192,6 +194,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
           draft.markerSeen = false;
           draft.players = [];
           draft.captureZones = [];
+          draft.fobs = [];
           draft.indexByName = {};
           draft.rawText = "";
           draft.rawTextLength = 0;
@@ -234,6 +237,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
 
     const extracted = extractBzssCoreTrackedText(fileBuffer);
     const captureZones = parseCaptureZones(extracted.text);
+    const fobs = parseFobs(extracted.text);
     publish((draft) => {
       draft.configuredPath = configuredPath;
       draft.resolvedPath = resolvedPath;
@@ -246,6 +250,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
       draft.rawTextLength = extracted.text.length;
       draft.rawTextUpdatedAt = draft.lastReadAt;
       draft.captureZones = captureZones;
+      draft.fobs = fobs;
       draft.lastError = extracted.error ?? "";
     });
 
@@ -265,6 +270,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
       draft.status = "ready";
       draft.players = players;
       draft.captureZones = captureZones;
+      draft.fobs = fobs;
       draft.indexByName = indexByName;
       draft.markerSeen = true;
       draft.lastCompletedAt = new Date().toISOString();
@@ -367,6 +373,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
       fileMtimeMs: state.fileMtimeMs,
       playerCount: state.players.length,
       captureZoneCount: state.captureZones.length,
+      fobCount: state.fobs.length,
       rawTextLength: state.rawTextLength,
       rawTextUpdatedAt: state.rawTextUpdatedAt,
       lastError: state.lastError,
@@ -388,6 +395,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
       fileMtimeMs: state.fileMtimeMs,
       playerCount: state.players.length,
       captureZones: state.captureZones.map(clonePlainObject),
+      fobs: state.fobs.map(clonePlainObject),
       lastError: state.lastError,
       rawText: state.rawText,
       rawTextLength: state.rawTextLength,
@@ -469,6 +477,7 @@ function createInitialState() {
     fileMtimeMs: 0,
     players: [],
     captureZones: [],
+    fobs: [],
     indexByName: {},
     rawText: "",
     rawTextLength: 0,
@@ -580,6 +589,43 @@ export function parseCaptureZones(text) {
     });
   }
   return zones.filter((zone) => zone.name);
+}
+
+export function parseFobs(text) {
+  const source = String(text ?? "");
+  const block = findNamedBlock(source, "FOBs");
+  if (!block) return [];
+  const fobs = [];
+  const fobPattern = /FobInfo\{([^}]*)\}/g;
+  let match = null;
+  while ((match = fobPattern.exec(block.content)) !== null) {
+    const raw = String(match[1] ?? "");
+    const fields = splitTopLevelCsv(raw);
+    const map = parseKeyValueFields(fields);
+    const posVal = map.Position;
+    let position = null;
+    if (posVal) {
+      const positionMatch = posVal.match(/X=([-0-9.]+)\s+Y=([-0-9.]+)\s+Z=([-0-9.]+)/);
+      if (positionMatch) {
+        position = {
+          x: toFiniteNumber(positionMatch[1]),
+          y: toFiniteNumber(positionMatch[2]),
+          z: toFiniteNumber(positionMatch[3]),
+        };
+      }
+    }
+    fobs.push({
+      teamId: toFiniteNumber(map.TeamID),
+      health: toFiniteNumber(map.Health),
+      isBleeding: map.IsBleeding === "true",
+      ammo: toFiniteNumber(map.Ammo),
+      construction: toFiniteNumber(map.Construction),
+      name: map.Name ?? "",
+      position,
+      raw,
+    });
+  }
+  return fobs;
 }
 
 function createEmptySoldierInfo() {

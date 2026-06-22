@@ -55,6 +55,9 @@ export function normalizeRawGameEvent(rawEvent) {
     serverId,
     sessionId,
     seq,
+    sourceSeq: String(rawEvent.SourceSeq ?? ""),
+    sourceOffset: String(rawEvent.SourceOffset ?? ""),
+    rawLineHash: String(rawEvent.RawLineHash ?? ""),
 
     time: String(rawEvent.Time ?? new Date().toISOString()),
     logTime: String(rawEvent.LogTime ?? ""),

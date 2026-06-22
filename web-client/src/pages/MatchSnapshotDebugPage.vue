@@ -2,7 +2,7 @@
   <AppPage full-bleed>
     <AppPageHeader
       title="快照录制"
-      subtitle="录制对局状态玩家列表，并输出图片、JSON、CSV 和 Markdown 文件。"
+      subtitle="录制对局快照，并查看导出的图片、JSON、CSV、Markdown 以及 Capture Point。"
       :status-items="headerStatusItems"
     >
       <template #actions>
@@ -19,24 +19,24 @@
       <div class="toolbar-options">
         <label class="option-toggle">
           <input v-model="includeSteamID" type="checkbox">
-          <span>输出 SteamID</span>
+          <span>导出 SteamID</span>
         </label>
       </div>
     </AppPageToolbar>
 
     <AppSplitLayout class="snapshot-split">
       <template #left>
-        <AppCard compact title="历史快照记录" description="查看自动或手动生成的对局状态快照，提供图片预览和文件下载。">
+        <AppCard compact title="历史快照记录" description="查看自动或手动生成的对局快照，并下载对应工件。">
           <div v-if="loading" class="empty-state">正在加载快照列表...</div>
           <div v-else-if="snapshots.length === 0" class="empty-state">暂无录制记录</div>
-          <div class="snapshot-list" v-else>
+          <div v-else class="snapshot-list">
             <AppTable compact>
               <thead>
                 <tr>
-                  <th><input type="checkbox" :checked="selectedIds.length === snapshotsView.length && snapshotsView.length > 0" @change="toggleSelectAll($event)" /></th>
+                  <th><input type="checkbox" :checked="selectedIds.length === snapshotsView.length && snapshotsView.length > 0" @change="toggleSelectAll($event)"></th>
                   <th>名称</th>
                   <th>录制时间</th>
-                  <th>文件</th>
+                  <th>工件</th>
                   <th>操作</th>
                 </tr>
               </thead>
@@ -47,7 +47,7 @@
                   :class="{ selected: selectedId === snapshot.id }"
                   @click="selectSnapshot(snapshot.id)"
                 >
-                  <td><input type="checkbox" :value="snapshot.id" v-model="selectedIds" @click.stop /></td>
+                  <td><input type="checkbox" :value="snapshot.id" v-model="selectedIds" @click.stop></td>
                   <td class="col-name">
                     <strong class="snapshot-name">{{ snapshot.name }}</strong>
                     <div class="snapshot-file">{{ snapshot.id }}</div>
@@ -82,10 +82,22 @@
       </template>
 
       <template #right>
-        <AppCard compact title="图片预览" :description="selectedSnapshot?.name || '未选择'" class="preview-card">
+        <AppCard compact title="预览" :description="selectedSnapshot?.name || '未选择'" class="preview-card">
           <div class="preview-toolbar">
+            <button type="button" class="action-btn sm" :class="{ active: previewMode === 'image' }" @click="previewMode = 'image'">
+              图片
+            </button>
             <button
-              v-if="selectedImageUrl"
+              type="button"
+              class="action-btn sm"
+              :class="{ active: previewMode === 'map' }"
+              :disabled="!selectedSnapshotCaptureZones.length"
+              @click="previewMode = 'map'"
+            >
+              Capture Point
+            </button>
+            <button
+              v-if="selectedImageUrl && previewMode === 'image'"
               type="button"
               class="action-btn sm"
               @click="zoomMode = zoomMode === 'fit' ? 'raw' : 'fit'"
@@ -96,9 +108,9 @@
               type="button"
               class="action-btn sm"
               :disabled="!selectedSnapshot"
-              @click="selectedSnapshot && openArtifact(selectedSnapshot.id, 'image')"
+              @click="selectedSnapshot && openArtifact(selectedSnapshot.id, previewMode === 'map' ? 'json' : 'image')"
             >
-              在新标签页打开
+              新标签打开
             </button>
             <button
               type="button"
@@ -110,11 +122,51 @@
             </button>
           </div>
 
-          <div v-if="selectedImageUrl" class="preview-shell" :class="zoomMode">
-            <img
-              :src="selectedImageUrl"
-              alt="对局状态玩家列表快照图片"
-            >
+          <div v-if="previewMode === 'map'" class="map-preview-shell">
+            <div v-if="selectedSnapshotCaptureZones.length" class="map-preview-meta">
+              <span>{{ selectedSnapshotMapTitle }}</span>
+              <span>{{ selectedSnapshotCaptureZones.length }} 个 Capture Point</span>
+            </div>
+
+            <div v-if="selectedSnapshotMapConfig && selectedSnapshotCaptureZones.length" class="map-preview-stage">
+              <img :src="selectedSnapshotMapConfig.image" :alt="selectedSnapshotMapTitle" class="map-preview-image">
+              <div class="map-preview-layer">
+                <button
+                  v-for="zone in selectedSnapshotCaptureMarkers"
+                  :key="`${zone.name}-${zone.mapX}-${zone.mapY}`"
+                  type="button"
+                  class="map-preview-marker"
+                  :style="{ left: `${zone.mapX}%`, top: `${zone.mapY}%` }"
+                  :title="zone.raw || zone.name"
+                >
+                  <span class="map-preview-marker-dot"></span>
+                  <span class="map-preview-marker-label">{{ zone.name }}</span>
+                </button>
+              </div>
+            </div>
+
+            <div v-if="selectedSnapshotCaptureZones.length" class="capture-zone-list-card">
+              <div class="capture-zone-list-title">Capture Point 列表</div>
+              <div class="capture-zone-list">
+                <div
+                  v-for="zone in selectedSnapshotCaptureZones"
+                  :key="`${zone.name}-${zone.position?.x}-${zone.position?.y}`"
+                  class="capture-zone-list-item"
+                >
+                  <strong>{{ zone.name }}</strong>
+                  <span class="capture-zone-coords">
+                    X={{ formatCoord(zone.position?.x) }}, Y={{ formatCoord(zone.position?.y) }}, Z={{ formatCoord(zone.position?.z) }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div v-else-if="selectedSnapshotJsonLoading" class="empty-state">正在加载 Capture Point 数据...</div>
+            <div v-else class="empty-state">该快照没有 Capture Point。</div>
+          </div>
+
+          <div v-else-if="selectedImageUrl" class="preview-shell" :class="zoomMode">
+            <img :src="selectedImageUrl" alt="snapshot preview">
           </div>
           <div v-else class="empty-state">选择一条快照后预览图片。</div>
         </AppCard>
@@ -124,15 +176,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { apiDelete, apiGet, apiPost } from "../app/apiClient";
-import { useUiStore } from "../stores/ui.store";
+import type { BzssCoreCaptureZoneInfo } from "../app/bzssCoreApi";
+import AppCard from "../components/common/AppCard.vue";
 import AppPage from "../components/common/AppPage.vue";
 import AppPageHeader from "../components/common/AppPageHeader.vue";
 import AppPageToolbar from "../components/common/AppPageToolbar.vue";
-import AppCard from "../components/common/AppCard.vue";
-import AppTable from "../components/common/AppTable.vue";
 import AppSplitLayout from "../components/common/AppSplitLayout.vue";
+import AppTable from "../components/common/AppTable.vue";
+import { TACTICAL_MAP_CONFIGS, resolveTacticalMapKey, type TacticalMapConfig } from "../shared/tactical-map-data";
+import { useUiStore } from "../stores/ui.store";
 
 interface MatchSnapshotArtifact {
   format: "json" | "image" | "csv" | "markdown" | string;
@@ -153,6 +207,14 @@ interface MatchSnapshotItem {
   artifacts?: MatchSnapshotArtifact[];
 }
 
+interface MatchSnapshotJsonPayload {
+  match?: {
+    map?: string;
+    layer?: string;
+  };
+  captureZones?: BzssCoreCaptureZoneInfo[];
+}
+
 const ui = useUiStore();
 const snapshots = ref<MatchSnapshotItem[]>([]);
 const loading = ref(true);
@@ -162,7 +224,9 @@ const lastLoadedAt = ref("");
 const selectedId = ref("");
 const includeSteamID = ref(true);
 const zoomMode = ref<"fit" | "raw">("fit");
-// Batch selection IDs
+const previewMode = ref<"image" | "map">("image");
+const selectedSnapshotJson = ref<MatchSnapshotJsonPayload | null>(null);
+const selectedSnapshotJsonLoading = ref(false);
 const selectedIds = ref<string[]>([]);
 
 const sortedSnapshots = computed(() => [...snapshots.value].sort((a, b) => Number(new Date(b.createdAt)) - Number(new Date(a.createdAt))));
@@ -170,28 +234,55 @@ const snapshotsView = computed(() => sortedSnapshots.value.map(normalizeSnapshot
 const latestSnapshot = computed(() => snapshotsView.value[0] ?? null);
 const selectedSnapshot = computed(() => snapshotsView.value.find((item) => item.id === selectedId.value) ?? latestSnapshot.value ?? null);
 const selectedImageUrl = computed(() => selectedSnapshot.value ? artifactUrl(selectedSnapshot.value.id, "image") : "");
+const selectedSnapshotCaptureZones = computed(() => Array.isArray(selectedSnapshotJson.value?.captureZones) ? selectedSnapshotJson.value?.captureZones : []);
+const selectedSnapshotMapKey = computed(() => {
+  const payload = selectedSnapshotJson.value;
+  return resolveTacticalMapKey(payload?.match?.layer ?? payload?.match?.map ?? "");
+});
+const selectedSnapshotMapConfig = computed<TacticalMapConfig | null>(() => {
+  const key = selectedSnapshotMapKey.value;
+  return key ? TACTICAL_MAP_CONFIGS[key] ?? null : null;
+});
+const selectedSnapshotMapTitle = computed(() => {
+  const payload = selectedSnapshotJson.value;
+  if (payload?.match?.layer) return payload.match.layer;
+  if (payload?.match?.map) return payload.match.map;
+  if (selectedSnapshotMapConfig.value?.name) return selectedSnapshotMapConfig.value.name;
+  return "Unrecognized map";
+});
+const selectedSnapshotCaptureMarkers = computed(() => {
+  const config = selectedSnapshotMapConfig.value;
+  if (!config) return [];
+  return selectedSnapshotCaptureZones.value
+    .map((zone) => {
+      const x = Number(zone?.position?.x);
+      const y = Number(zone?.position?.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+      return {
+        name: String(zone?.name ?? "").trim(),
+        raw: zone?.raw ?? "",
+        mapX: projectToPercent(x, config.bounds.minX, config.bounds.maxX),
+        mapY: projectToPercent(y, config.bounds.minY, config.bounds.maxY),
+      };
+    })
+    .filter((marker): marker is { name: string; raw: string; mapX: number; mapY: number } => {
+      if (!marker) return false;
+      return Boolean(marker.name) && Number.isFinite(marker.mapX) && Number.isFinite(marker.mapY);
+    });
+});
 
 const headerStatusItems = computed(() => {
   const items: Array<{ label: string; tone?: "ok" | "warn" | "error" | "idle" }> = [
-    { label: `记录数: ${snapshots.value.length}`, tone: "idle" },
+    { label: `记录数 ${snapshots.value.length}`, tone: "idle" },
   ];
   if (latestSnapshot.value) {
-    items.push({
-      label: `最新快照: ${formatDate(latestSnapshot.value.createdAt)}`,
-      tone: "ok",
-    });
+    items.push({ label: `最新快照 ${formatDate(latestSnapshot.value.createdAt)}`, tone: "ok" });
   }
   if (lastLoadedAt.value) {
-    items.push({
-      label: `刷新于: ${lastLoadedAt.value}`,
-      tone: "idle",
-    });
+    items.push({ label: `刷新于 ${lastLoadedAt.value}`, tone: "idle" });
   }
   if (errorMessage.value) {
-    items.push({
-      label: errorMessage.value,
-      tone: "error",
-    });
+    items.push({ label: errorMessage.value, tone: "error" });
   }
   return items;
 });
@@ -221,6 +312,17 @@ async function loadList() {
   }
 }
 
+async function loadSelectedSnapshotJson(id: string) {
+  selectedSnapshotJsonLoading.value = true;
+  try {
+    selectedSnapshotJson.value = await apiGet<MatchSnapshotJsonPayload>(artifactUrl(id, "json"));
+  } catch {
+    selectedSnapshotJson.value = null;
+  } finally {
+    selectedSnapshotJsonLoading.value = false;
+  }
+}
+
 async function handleManualSnapshot() {
   busy.value = true;
   errorMessage.value = "";
@@ -230,7 +332,7 @@ async function handleManualSnapshot() {
       includeEOSID: false,
     });
     const nextId = response?.snapshot ? normalizeSnapshotItem(response.snapshot).id : "";
-    ui.pushToast({ title: "已录制", message: "快照已输出为图片和文件。", tone: "ok" });
+    ui.pushToast({ title: "已录制", message: "快照已导出为图片和文件。", tone: "ok" });
     await loadList();
     if (nextId) selectedId.value = nextId;
   } catch (error) {
@@ -243,10 +345,9 @@ async function handleManualSnapshot() {
 
 async function handleDeleteSnapshot(snapshot: MatchSnapshotItem) {
   const normalized = normalizeSnapshotItem(snapshot);
-
   const confirmed = await ui.openConfirm({
     title: "确认删除快照",
-    message: `确认删除快照 ${normalized.id} 吗？该操作会删除对应的图片和导出文件。`,
+    message: `确认删除快照 ${normalized.id} 吗？该操作会删除对应图片和导出文件。`,
     confirmText: "确认删除",
     cancelText: "取消",
     tone: "warn",
@@ -258,8 +359,7 @@ async function handleDeleteSnapshot(snapshot: MatchSnapshotItem) {
   try {
     await apiDelete<{ ok: boolean; snapshot?: { id?: string } }>(`/api/match-snapshot/delete?id=${encodeURIComponent(normalized.id)}`);
     ui.pushToast({ title: "已删除", message: `快照 ${normalized.id} 已删除。`, tone: "ok" });
-    // also remove from batch selection if present
-    selectedIds.value = selectedIds.value.filter(id => id !== normalized.id);
+    selectedIds.value = selectedIds.value.filter((id) => id !== normalized.id);
     if (selectedId.value === normalized.id) selectedId.value = "";
     await loadList();
   } catch (error) {
@@ -284,7 +384,6 @@ async function batchDelete() {
   busy.value = true;
   errorMessage.value = "";
   try {
-    // Delete sequentially to simplify error handling
     for (const id of selectedIds.value) {
       await apiDelete<{ ok: boolean }>(`/api/match-snapshot/delete?id=${encodeURIComponent(id)}`);
     }
@@ -302,11 +401,7 @@ async function batchDelete() {
 
 function toggleSelectAll(event: Event) {
   const checked = (event.target as HTMLInputElement).checked;
-  if (checked) {
-    selectedIds.value = snapshotsView.value.map(s => s.id);
-  } else {
-    selectedIds.value = [];
-  }
+  selectedIds.value = checked ? snapshotsView.value.map((snapshot) => snapshot.id) : [];
 }
 
 function selectSnapshot(id: string) {
@@ -332,7 +427,7 @@ function normalizeSnapshotItem(item: MatchSnapshotItem): MatchSnapshotItem & { a
     ? item.artifacts
     : [{
         format: "json",
-        label: "JSON 数据",
+        label: "JSON",
         id: item.file || `${id}.json`,
         fileName: item.file || `${id}.json`,
         size: Number(item.size ?? 0),
@@ -359,6 +454,30 @@ function formatSize(value: number) {
   return `${(size / 1024).toFixed(1)} KB`;
 }
 
+function formatCoord(value: number | null | undefined) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "-";
+  return Math.round(num);
+}
+
+function projectToPercent(value: number, min: number, max: number) {
+  if (!Number.isFinite(value) || !Number.isFinite(min) || !Number.isFinite(max) || max === min) return 0;
+  const ratio = ((value - min) / (max - min)) * 100;
+  return Math.max(0, Math.min(100, ratio));
+}
+
+watch(
+  () => selectedSnapshot.value?.id ?? "",
+  (id) => {
+    if (!id) {
+      selectedSnapshotJson.value = null;
+      return;
+    }
+    loadSelectedSnapshotJson(id);
+  },
+  { immediate: true },
+);
+
 onMounted(loadList);
 </script>
 
@@ -373,7 +492,6 @@ onMounted(loadList);
   gap: 12px;
 }
 
-/* make left list scrollable */
 .snapshot-list {
   height: 420px;
   overflow-y: auto;
@@ -496,6 +614,7 @@ onMounted(loadList);
   align-items: center;
   gap: 8px;
   margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .preview-shell {
@@ -520,16 +639,121 @@ onMounted(loadList);
   object-fit: contain;
 }
 
-.preview-shell img.zoom-fit {
+.preview-shell.fit img {
   width: auto;
   height: auto;
 }
 
-.preview-shell img.zoom-raw {
+.preview-shell.raw img {
   width: auto;
   height: auto;
   min-width: inherit;
   max-width: none;
+}
+
+.map-preview-shell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 350px;
+}
+
+.map-preview-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.map-preview-stage {
+  position: relative;
+  flex: 1;
+  min-height: 350px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0b1220;
+}
+
+.map-preview-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.map-preview-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.map-preview-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border: 0;
+  background: transparent;
+  color: #f8fafc;
+  cursor: default;
+  padding: 0;
+}
+
+.map-preview-marker-dot {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #f97316;
+  border: 2px solid rgba(15, 23, 42, 0.95);
+  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.22);
+}
+
+.map-preview-marker-label {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(249, 115, 22, 0.3);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.capture-zone-list-card {
+  border: 1px solid var(--color-border-soft);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.capture-zone-list-title {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+}
+
+.capture-zone-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.capture-zone-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--color-text-primary);
+}
+
+.capture-zone-coords {
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .action-btn {
@@ -584,6 +808,12 @@ onMounted(loadList);
   padding: 4px 8px;
   font-size: 11px;
   border-radius: 6px;
+}
+
+.action-btn.active {
+  border-color: rgba(56, 189, 248, 0.4);
+  background: rgba(56, 189, 248, 0.1);
+  color: #e0f2fe;
 }
 
 .action-btn:disabled {

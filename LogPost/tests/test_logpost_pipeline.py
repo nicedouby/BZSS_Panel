@@ -115,19 +115,31 @@ class LogPostPipelineTests(unittest.TestCase):
         app = self.make_app()
         line = "[2026.06.09-12.00.00:000]LogNet: Join succeeded: TestPlayer"
 
-        app.process_line(line)
+        app.process_line({
+            "line": line,
+            "offset": 12,
+            "sourcePath": "SquadGame.log",
+            "fileId": "file-1",
+        })
 
         today = today_string()
         received_path = pathlib.Path(app.raw_input_writer.output_dir) / today / "Received.log"
         preserved_path = pathlib.Path(app.writer.output_dir) / today / "Preserved.jsonl"
         unknown_path = pathlib.Path(app.writer.output_dir) / today / "Unknown.jsonl"
+        raw_archive_path = pathlib.Path(app.writer.output_dir) / "Raw" / today / "all.jsonl"
+        state_path = pathlib.Path(app.writer.output_dir) / ".state" / "tailer-state.json"
 
         self.assertIn(line, received_path.read_text(encoding="utf-8"))
+        raw_archive = self.read_jsonl(raw_archive_path)
+        self.assertEqual(raw_archive[0]["seq"], 1)
+        self.assertEqual(raw_archive[0]["offset"], 12)
         self.assertTrue(preserved_path.exists())
         preserved = self.read_jsonl(preserved_path)
         self.assertEqual(preserved[0]["MatchedRule"], "LogNet: Join succeeded:")
+        self.assertEqual(json.loads(state_path.read_text(encoding="utf-8"))["seq"], 1)
         self.assertEqual(len(app.udp_sender.sent), 1)
         self.assertEqual(app.udp_sender.sent[0]["Event"], "On_RawLogLine")
+        self.assertEqual(app.udp_sender.sent[0]["SourceSeq"], "1")
         self.assertFalse(unknown_path.exists())
         self.assertEqual(app.stats["lines_preserved"], 1)
         self.assertEqual(app.stats["lines_blacklisted"], 0)
@@ -139,7 +151,7 @@ class LogPostPipelineTests(unittest.TestCase):
             "(IP: 127.0.0.1| Online IDs: EOS:1234567890abcdef)"
         )
 
-        app.process_line(line)
+        app.process_line({"line": line, "offset": 0, "sourcePath": "SquadGame.log", "fileId": "file-1"})
 
         preserved_path = pathlib.Path(app.writer.output_dir) / today_string() / "Preserved.jsonl"
         preserved = self.read_jsonl(preserved_path)
@@ -153,7 +165,7 @@ class LogPostPipelineTests(unittest.TestCase):
             "(IP: 127.0.0.1 | Online IDs: EOS: 1234567890abcdef steam: 76561198000000000)"
         )
 
-        app.process_line(line)
+        app.process_line({"line": line, "offset": 0, "sourcePath": "SquadGame.log", "fileId": "file-1"})
 
         preserved_path = pathlib.Path(app.writer.output_dir) / today_string() / "Preserved.jsonl"
         preserved = self.read_jsonl(preserved_path)
@@ -164,7 +176,7 @@ class LogPostPipelineTests(unittest.TestCase):
         app = self.make_app()
         line = "LogNet: UNetConnection::Close: RemoteAddr: 127.0.0.1:12345"
 
-        app.process_line(line)
+        app.process_line({"line": line, "offset": 0, "sourcePath": "SquadGame.log", "fileId": "file-1"})
 
         preserved_path = pathlib.Path(app.writer.output_dir) / today_string() / "Preserved.jsonl"
         preserved = self.read_jsonl(preserved_path)
@@ -174,7 +186,7 @@ class LogPostPipelineTests(unittest.TestCase):
         app = self.make_app()
         line = "LogGameMode: FindPlayerStart_Implementation()"
 
-        app.process_line(line)
+        app.process_line({"line": line, "offset": 0, "sourcePath": "SquadGame.log", "fileId": "file-1"})
 
         preserved_path = pathlib.Path(app.writer.output_dir) / today_string() / "Preserved.jsonl"
         unknown_path = pathlib.Path(app.writer.output_dir) / today_string() / "Unknown.jsonl"
@@ -192,7 +204,7 @@ class LogPostPipelineTests(unittest.TestCase):
             "FindPlayerStart_Implementation()"
         )
 
-        app.process_line(line)
+        app.process_line({"line": line, "offset": 0, "sourcePath": "SquadGame.log", "fileId": "file-1"})
 
         preserved_path = pathlib.Path(app.writer.output_dir) / today_string() / "Preserved.jsonl"
         self.assertTrue(preserved_path.exists())
@@ -204,7 +216,7 @@ class LogPostPipelineTests(unittest.TestCase):
         app.matchers = [StubMatcher("LogNet: Join succeeded:")]
         line = "[2026.06.09-12.00.00:000]LogNet: Join succeeded: TestPlayer"
 
-        app.process_line(line)
+        app.process_line({"line": line, "offset": 0, "sourcePath": "SquadGame.log", "fileId": "file-1"})
 
         event_path = pathlib.Path(app.writer.output_dir) / today_string() / "On_TestEvent.jsonl"
         preserved_path = pathlib.Path(app.writer.output_dir) / today_string() / "Preserved.jsonl"
@@ -215,6 +227,34 @@ class LogPostPipelineTests(unittest.TestCase):
         self.assertEqual(app.udp_sender.sent[1]["Event"], "On_TestEvent")
         self.assertEqual(app.stats["events_matched"], 1)
         self.assertEqual(app.stats["lines_preserved"], 0)
+
+    def test_unmatched_line_is_written_to_unknown_with_source_meta(self) -> None:
+        app = self.make_app(unknown={"write_unknown": True})
+        line = "[2026.06.09-12.00.00:000]LogSomething: no matcher hit"
+
+        app.process_line({"line": line, "offset": 33, "sourcePath": "SquadGame.log", "fileId": "file-1"})
+
+        unknown_path = pathlib.Path(app.writer.output_dir) / today_string() / "Unknown.jsonl"
+        unknown = self.read_jsonl(unknown_path)
+        self.assertEqual(unknown[0]["SourceSeq"], "1")
+        self.assertEqual(unknown[0]["SourceOffset"], "33")
+        self.assertTrue(unknown[0]["RawLineHash"])
+
+    def test_matcher_exception_goes_to_parse_error_and_next_matcher_still_runs(self) -> None:
+        class BrokenMatcher:
+            def match(self, line: str):
+                raise RuntimeError("boom")
+
+        app = self.make_app()
+        app.matchers = [BrokenMatcher(), StubMatcher("matched", "On_AfterBroken")]
+
+        app.process_line({"line": "matched", "offset": 1, "sourcePath": "SquadGame.log", "fileId": "file-1"})
+
+        parse_error_path = pathlib.Path(app.writer.output_dir) / today_string() / "ParseError.jsonl"
+        parse_errors = self.read_jsonl(parse_error_path)
+        self.assertIn("BrokenMatcher", parse_errors[0]["Error"])
+        event_path = pathlib.Path(app.writer.output_dir) / today_string() / "On_AfterBroken.jsonl"
+        self.assertTrue(event_path.exists())
 
     def test_broad_channel_blacklist_rule_is_rejected(self) -> None:
         app = self.make_app(blacklist_contains=["LogNet:"])

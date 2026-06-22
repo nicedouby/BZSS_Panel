@@ -28,10 +28,16 @@ export function createScheduledBroadcastModule({ core, modules, config, logger }
     inTick: false,
     saveChain: Promise.resolve(),
     lastTickAt: 0,
+    schedule: {
+      nextItemId: null,
+      nextRunAt: null,
+      lastAdvancedAt: null,
+    },
   };
 
   const api = {
     getState() {
+      const currentId = resolveScheduledItem()?.id ?? null;
       return {
         config: {
           enabled,
@@ -42,15 +48,27 @@ export function createScheduledBroadcastModule({ core, modules, config, logger }
           running: store.running,
           inTick: store.inTick,
           lastTickAt: store.lastTickAt,
+          schedule: cloneJson(store.schedule),
+          currentItemId: currentId,
         },
-        items: listItems(),
+        items: listItems(currentId),
       };
     },
 
     async addItem(payload = {}) {
       const now = Date.now();
-      const item = normalizeNewItem(payload, now, listItems().length);
+      const item = normalizeNewItem(payload, now, getOrderedItems().length);
       store.items.push(item);
+      reindexOrder(store.items);
+
+      if (item.enabled) {
+        reconcileSchedule({
+          now,
+          resetTiming: !resolveScheduledItem(),
+          preferredItemId: !resolveScheduledItem() ? item.id : null,
+        });
+      }
+
       await persist();
       return cloneJson(item);
     },
@@ -63,33 +81,44 @@ export function createScheduledBroadcastModule({ core, modules, config, logger }
         throw error;
       }
 
-      const beforeEnabled = Boolean(item.enabled);
+      const now = Date.now();
+      const wasCurrent = store.schedule.nextItemId === item.id;
       applyPatch(item, patch);
-      item.updatedAt = Date.now();
+      item.updatedAt = now;
 
       const shouldReset = Boolean(patch.resetSchedule ?? true);
-      if (shouldReset && ("delaySeconds" in patch || "intervalSeconds" in patch || ("enabled" in patch && !beforeEnabled && item.enabled))) {
-        item.nextRunAt = item.enabled ? Date.now() + item.delaySeconds * 1000 : null;
-      }
-
-      if (!item.enabled) {
-        item.nextRunAt = null;
-      }
+      const preferredItemId = item.enabled && wasCurrent ? item.id : null;
+      reconcileSchedule({
+        now,
+        resetTiming: shouldReset || (wasCurrent && !item.enabled),
+        preferredItemId,
+      });
 
       await persist();
       return cloneJson(item);
     },
 
     async removeItem(id) {
-      const index = store.items.findIndex((item) => item.id === String(id));
-      if (index < 0) {
+      const itemId = String(id);
+      const orderedBefore = getEnabledItemsOrdered();
+      const removedIndex = store.items.findIndex((item) => item.id === itemId);
+      if (removedIndex < 0) {
         const error = new Error("Scheduled broadcast item not found.");
         error.code = "ItemNotFound";
         throw error;
       }
 
-      const [removed] = store.items.splice(index, 1);
+      const removedWasCurrent = store.schedule.nextItemId === itemId;
+      const preferredNextId = removedWasCurrent ? getNextEnabledItemIdFromList(orderedBefore, itemId) : null;
+      const [removed] = store.items.splice(removedIndex, 1);
       reindexOrder(store.items);
+
+      reconcileSchedule({
+        now: Date.now(),
+        resetTiming: removedWasCurrent,
+        preferredItemId: preferredNextId,
+      });
+
       await persist();
       return cloneJson(removed);
     },
@@ -97,9 +126,10 @@ export function createScheduledBroadcastModule({ core, modules, config, logger }
     async reorder(ids = []) {
       const nextIds = Array.isArray(ids) ? ids.map((id) => String(id)) : [];
       if (!nextIds.length) {
-        return { ok: true, items: listItems() };
+        return { ok: true, items: listItems(resolveScheduledItem()?.id ?? null) };
       }
 
+      const currentItemId = resolveScheduledItem()?.id ?? null;
       const byId = new Map(store.items.map((item) => [item.id, item]));
       const ordered = [];
       for (const id of nextIds) {
@@ -112,8 +142,13 @@ export function createScheduledBroadcastModule({ core, modules, config, logger }
 
       store.items = ordered;
       reindexOrder(store.items);
-      await persist();
-      return { ok: true, items: listItems() };
+      reconcileSchedule({
+        now: Date.now(),
+        resetTiming: !currentItemId || !findEnabledItem(currentItemId),
+        preferredItemId: currentItemId,
+      });
+
+      return { ok: true, items: listItems(resolveScheduledItem()?.id ?? null) };
     },
 
     async runNow(id, reasonOrOptions = "manual_run") {
@@ -135,15 +170,19 @@ export function createScheduledBroadcastModule({ core, modules, config, logger }
         system: Boolean(options.system),
       });
     },
+
+    async tick(now = Date.now()) {
+      await tick(now);
+    },
   };
 
   return {
     manifest: {
       id: "module.scheduledBroadcast",
-      name: "定时广播",
+      name: "Scheduled Broadcast",
       kind: "module",
-      version: "1.0.0",
-      description: "管理定时广播列表，支持配置间隔、初始延迟、启停和手动触发。",
+      version: "1.1.0",
+      description: "Manage scheduled broadcasts with strict ordered rotation and manual trigger support.",
     },
     apiName: "scheduledBroadcast",
     api,
@@ -155,15 +194,15 @@ export function createScheduledBroadcastModule({ core, modules, config, logger }
     async start() {
       core.webRegistry?.registerPage?.({
         id: "web.scheduledBroadcast",
-        title: "定时广播",
-        group: "管理",
+        title: "Scheduled Broadcast",
+        group: "Management",
         route: "/scheduled-broadcasts",
         pageModule: "/pages/scheduled-broadcasts.js",
         source: "module.scheduledBroadcast",
         required: false,
         enabled: true,
         order: 116,
-        icon: "⏱",
+        icon: "B",
       });
 
       if (enabled) {
@@ -180,17 +219,91 @@ export function createScheduledBroadcastModule({ core, modules, config, logger }
     },
   };
 
-  function listItems() {
+  function getOrderedItems() {
     return store.items
       .slice()
-      .sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0))
-      .map(cloneJson);
+      .sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0));
+  }
+
+  function getEnabledItemsOrdered() {
+    return getOrderedItems().filter((item) => item.enabled);
+  }
+
+  function listItems(currentId = null) {
+    return getOrderedItems().map((item) => ({
+      ...cloneJson(item),
+      nextRunAt: item.id === currentId ? toFinite(store.schedule.nextRunAt) : null,
+      isCurrent: item.id === currentId,
+    }));
   }
 
   function findItem(id) {
     const itemId = String(id ?? "").trim();
     if (!itemId) return null;
     return store.items.find((item) => item.id === itemId) ?? null;
+  }
+
+  function findEnabledItem(id) {
+    const item = findItem(id);
+    return item?.enabled ? item : null;
+  }
+
+  function resolveScheduledItem() {
+    return findEnabledItem(store.schedule.nextItemId);
+  }
+
+  function getNextEnabledItemIdFromList(enabledItems, itemId) {
+    if (!enabledItems.length) return null;
+    const index = enabledItems.findIndex((item) => item.id === itemId);
+    if (index < 0) {
+      return enabledItems[0]?.id ?? null;
+    }
+    return enabledItems[(index + 1) % enabledItems.length]?.id ?? null;
+  }
+
+  function clearSchedule() {
+    store.schedule.nextItemId = null;
+    store.schedule.nextRunAt = null;
+    store.schedule.lastAdvancedAt = null;
+  }
+
+  function reconcileSchedule({ now = Date.now(), resetTiming = false, preferredItemId = null } = {}) {
+    const enabledItems = getEnabledItemsOrdered();
+    if (!enabledItems.length) {
+      clearSchedule();
+      return;
+    }
+
+    let current = preferredItemId ? enabledItems.find((item) => item.id === preferredItemId) ?? null : null;
+    if (!current) {
+      current = resolveScheduledItem();
+    }
+    if (!current) {
+      current = enabledItems[0];
+      resetTiming = true;
+    }
+
+    store.schedule.nextItemId = current.id;
+    if (resetTiming || !Number.isFinite(store.schedule.nextRunAt)) {
+      store.schedule.nextRunAt = now + current.delaySeconds * 1000;
+    }
+    if (!Number.isFinite(store.schedule.lastAdvancedAt)) {
+      store.schedule.lastAdvancedAt = null;
+    }
+  }
+
+  function advanceScheduleAfterRun(item, now) {
+    const enabledItems = getEnabledItemsOrdered();
+    if (!enabledItems.length) {
+      clearSchedule();
+      return;
+    }
+
+    const nextItemId = getNextEnabledItemIdFromList(enabledItems, item.id) ?? enabledItems[0].id;
+    const nextItem = enabledItems.find((entry) => entry.id === nextItemId) ?? enabledItems[0];
+    store.schedule.nextItemId = nextItem.id;
+    store.schedule.nextRunAt = now + nextItem.intervalSeconds * 1000;
+    store.schedule.lastAdvancedAt = now;
   }
 
   function startTicker() {
@@ -214,27 +327,23 @@ export function createScheduledBroadcastModule({ core, modules, config, logger }
     store.running = false;
   }
 
-  async function tick() {
+  async function tick(now = Date.now()) {
     if (store.inTick) return;
     store.inTick = true;
-    store.lastTickAt = Date.now();
+    store.lastTickAt = now;
 
     try {
-      const now = Date.now();
-      for (const item of store.items) {
-        if (!item.enabled) continue;
-        if (!Number.isFinite(item.nextRunAt)) {
-          item.nextRunAt = now + item.delaySeconds * 1000;
-        }
-        if (Number(item.nextRunAt) > now) continue;
+      reconcileSchedule({ now, resetTiming: false });
+      const item = resolveScheduledItem();
+      if (!item) return;
+      if (Number(store.schedule.nextRunAt) > now) return;
 
-        await runItem(item, {
-          reason: "scheduled_tick",
-          manual: false,
-          now,
-          system: true,
-        });
-      }
+      await runItem(item, {
+        reason: "scheduled_tick",
+        manual: false,
+        now,
+        system: true,
+      });
     } finally {
       store.inTick = false;
     }
@@ -242,13 +351,16 @@ export function createScheduledBroadcastModule({ core, modules, config, logger }
 
   async function runItem(item, { reason = "scheduled_tick", manual = false, now = Date.now(), actor = null, system = false } = {}) {
     const message = sanitizeMessage(item.message);
+    const shouldAdvance = !manual && item.enabled;
+
+    let response;
     if (!message) {
       item.lastError = "Message is empty.";
       item.lastRunAt = now;
       item.lastResult = "failed";
       item.errorCount = Number(item.errorCount ?? 0) + 1;
-      if (item.enabled) item.nextRunAt = now + item.intervalSeconds * 1000;
       item.updatedAt = now;
+      if (shouldAdvance) advanceScheduleAfterRun(item, now);
       await persist();
       return {
         success: false,
@@ -271,8 +383,8 @@ export function createScheduledBroadcastModule({ core, modules, config, logger }
         item.lastResult = "failed";
         item.errorCount = Number(item.errorCount ?? 0) + 1;
         item.lastRunAt = now;
-        if (item.enabled || manual) item.nextRunAt = now + item.intervalSeconds * 1000;
         item.updatedAt = now;
+        if (shouldAdvance) advanceScheduleAfterRun(item, now);
         await persist();
         return {
           success: false,
@@ -286,11 +398,11 @@ export function createScheduledBroadcastModule({ core, modules, config, logger }
       item.lastRunAt = now;
       item.lastSuccessAt = now;
       item.runCount = Number(item.runCount ?? 0) + 1;
-      if (item.enabled || manual) item.nextRunAt = now + item.intervalSeconds * 1000;
       item.updatedAt = now;
+      if (shouldAdvance) advanceScheduleAfterRun(item, now);
       await persist();
 
-      return {
+      response = {
         success: true,
         result,
       };
@@ -300,14 +412,16 @@ export function createScheduledBroadcastModule({ core, modules, config, logger }
       item.lastResult = "failed";
       item.errorCount = Number(item.errorCount ?? 0) + 1;
       item.lastRunAt = now;
-      if (item.enabled || manual) item.nextRunAt = now + item.intervalSeconds * 1000;
       item.updatedAt = now;
+      if (shouldAdvance) advanceScheduleAfterRun(item, now);
       await persist();
-      return {
+      response = {
         success: false,
         errorMessage,
       };
     }
+
+    return response;
   }
 
   async function dispatchBroadcast({ message, sourceModule, reason, actor = null, system = false }) {
@@ -344,22 +458,27 @@ export function createScheduledBroadcastModule({ core, modules, config, logger }
         .filter(Boolean);
 
       reindexOrder(store.items);
+      store.schedule = normalizeStoredSchedule(parsed?.schedule);
+      reconcileSchedule({
+        now,
+        resetTiming: !Number.isFinite(store.schedule.nextRunAt),
+        preferredItemId: store.schedule.nextItemId,
+      });
     } catch (error) {
       if (error?.code !== "ENOENT") {
         moduleLogger?.warn?.(`[ScheduledBroadcast] load failed: ${error?.message ?? String(error)}`);
       }
       store.items = [];
+      clearSchedule();
     }
   }
 
   async function persist() {
     const payload = {
-      version: 1,
+      version: 2,
       updatedAt: Date.now(),
-      items: store.items
-        .slice()
-        .sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0))
-        .map((item) => cloneJson(item)),
+      schedule: cloneJson(store.schedule),
+      items: getOrderedItems().map((item) => cloneJson(item)),
     };
 
     store.saveChain = store.saveChain
@@ -404,14 +523,6 @@ function normalizeStoredItem(item, now, index) {
   const intervalSeconds = clampNumber(item.intervalSeconds, DEFAULT_INTERVAL_SECONDS, 5, 86400);
   const delaySeconds = clampNumber(item.delaySeconds, DEFAULT_DELAY_SECONDS, 0, 86400);
 
-  let nextRunAt = toFinite(item.nextRunAt);
-  if (enabled && !Number.isFinite(nextRunAt)) {
-    nextRunAt = now + delaySeconds * 1000;
-  }
-  if (!enabled) {
-    nextRunAt = null;
-  }
-
   return {
     id: String(item.id ?? makeItemId(now)).trim() || makeItemId(now),
     title: sanitizeTitle(item.title),
@@ -422,13 +533,21 @@ function normalizeStoredItem(item, now, index) {
     order: clampNumber(item.order, Number(index ?? 0), 0, 100000),
     createdAt: toFinite(item.createdAt) ?? now,
     updatedAt: toFinite(item.updatedAt) ?? now,
-    nextRunAt,
+    nextRunAt: null,
     lastRunAt: toFinite(item.lastRunAt),
     lastSuccessAt: toFinite(item.lastSuccessAt),
     lastError: String(item.lastError ?? "").trim(),
     lastResult: normalizeResult(item.lastResult),
     runCount: clampNumber(item.runCount, 0, 0, Number.MAX_SAFE_INTEGER),
     errorCount: clampNumber(item.errorCount, 0, 0, Number.MAX_SAFE_INTEGER),
+  };
+}
+
+function normalizeStoredSchedule(value) {
+  return {
+    nextItemId: optionalText(value?.nextItemId),
+    nextRunAt: toFinite(value?.nextRunAt),
+    lastAdvancedAt: toFinite(value?.lastAdvancedAt),
   };
 }
 
@@ -484,6 +603,11 @@ function clampNumber(value, fallback, min, max) {
 function toFinite(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function optionalText(value) {
+  const text = String(value ?? "").trim();
+  return text ? text : null;
 }
 
 function reindexOrder(items) {
