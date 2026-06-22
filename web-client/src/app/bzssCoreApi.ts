@@ -57,6 +57,8 @@ export interface BzssCoreTrackedPlayerInfo {
     healthText: string;
     health: number | null;
     maxHealth: number | null;
+    position: BzssCoreTrackedVector | null;
+    rotation: BzssCoreTrackedVector | null;
   };
   playerBaseInfo: {
     raw: string;
