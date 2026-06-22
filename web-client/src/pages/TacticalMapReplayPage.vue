@@ -161,6 +161,7 @@
                       :class="[
                         `team-${player.teamId || 0}`,
                         { 'is-dead': (player.health ?? 100) <= 0 },
+                        { 'is-vehicle': player.vehicleInfo && player.vehicleInfo.vehicleType && player.vehicleInfo.vehicleType !== 'None' },
                         { 'is-hovered': hoveredPlayer?.playerGuid === player.playerGuid || hoveredPlayer?.playerName === player.playerName }
                       ]"
                       :style="{
@@ -454,7 +455,12 @@ const currentMarkers = computed<PreviewMarker[]>(() => {
     .map((player) => {
       const position = player.position;
       if (!position) return null;
-      const roleInfo = resolveRoleIcon(player.soldierClass);
+
+      const inVehicle = player.vehicleInfo && player.vehicleInfo.vehicleType && player.vehicleInfo.vehicleType !== 'None';
+      const roleInfo = inVehicle
+        ? { icon: '🚙', label: `乘车中 (${player.vehicleInfo.vehicleType})` }
+        : resolveRoleIcon(player.soldierClass);
+
       return {
         playerGuid: player.playerGuid,
         playerName: player.playerName,
@@ -1271,6 +1277,16 @@ onBeforeUnmount(() => {
   transform: scale(1.3);
   box-shadow: 0 0 12px rgba(255, 255, 255, 0.9);
   z-index: 30;
+}
+
+.preview-marker.is-vehicle .preview-dot {
+  border-radius: 2px;
+  transform: rotate(45deg);
+}
+
+.preview-marker.is-vehicle:hover .preview-dot,
+.preview-marker.is-vehicle.is-hovered .preview-dot {
+  transform: rotate(45deg) scale(1.3);
 }
 
 .preview-label {

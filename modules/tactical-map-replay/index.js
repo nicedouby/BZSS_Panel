@@ -588,6 +588,7 @@ async function renderReplayFrame(frame, options = {}) {
   for (const player of frame.players ?? []) {
     const position = projectReplayPlayer(player, mapConfig.bounds, width, height);
     if (!position) continue;
+    const isVehicle = player.vehicleInfo && player.vehicleInfo.vehicleType && player.vehicleInfo.vehicleType !== "None";
     overlays.push({
       input: await createMarkerSvgBuffer({
         width,
@@ -596,6 +597,7 @@ async function renderReplayFrame(frame, options = {}) {
         y: position.y,
         color: resolveTeamColor(player.teamId),
         label: player.playerName,
+        isVehicle,
       }),
       left: 0,
       top: 0,
@@ -627,11 +629,14 @@ function createFrameHeaderSvg({ width, frame, segment }) {
 </svg>`;
 }
 
-async function createMarkerSvgBuffer({ width, height, x, y, color, label }) {
+async function createMarkerSvgBuffer({ width, height, x, y, color, label, isVehicle }) {
   const safeLabel = escapeXml(label);
+  const markerShape = isVehicle
+    ? `<rect x="${x - 7}" y="${y - 7}" width="14" height="14" fill="${color}" stroke="#ffffff" stroke-width="2" transform="rotate(45, ${x}, ${y})" />`
+    : `<circle cx="${x}" cy="${y}" r="8" fill="${color}" stroke="#ffffff" stroke-width="2" />`;
   const svg = `
 <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="${x}" cy="${y}" r="8" fill="${color}" stroke="#ffffff" stroke-width="2" />
+  ${markerShape}
   <rect x="${x + 12}" y="${y - 16}" rx="6" ry="6" width="${Math.max(90, safeLabel.length * 10)}" height="28" fill="rgba(7,16,31,0.88)" />
   <text x="${x + 20}" y="${y + 3}" fill="#f8fafc" font-size="16" font-family="Segoe UI, Arial, sans-serif">${safeLabel}</text>
 </svg>`;

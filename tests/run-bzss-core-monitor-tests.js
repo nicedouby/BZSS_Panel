@@ -64,6 +64,7 @@ function testParseBzssCorePlayerBlocksAcceptsNamedFieldsAndExtraBlocks() {
     + "{NoExistingClaimedInfo}SeatsPlayers{Donald·DoubyBear,}{VehicleType:TruckTransportHealth:750.0/750.0}"
     + "PlayerScoreboard{-1,0,0,1,0,1,1,0,0,0,260,0}"
     + "PlayerBaseInfo{PlayerID:1,PlayerOnlineID:0002633b5836480d9593507d5ea0d8c7,PlayerName:Braovo,IsAdmin:1,IsCommander:0,FTIndex:-1,FTPosition:-1}"
+    + "{NoExistingClaimedInfo}SeatsPlayers{Braovo,}{VehicleType:TruckTransport,Health:750.0/750.0Position:X=56779.162 Y=-55024.001 Z=1299.911,Rotation:P=-11.190256 Y=-30.877444 R=-2.920260,Velocity:13.482235}"
     + "PlayerScoreboard{-1,0,0,0,0,0,0,0,0,0,0,0}"
     + "PlayerBaseInfo{PlayerID:2,PlayerOnlineID:00020d7f49c040b58c4aa9cb0fc7a466,PlayerName:小诗不郁,IsAdmin:0,IsCommander:0,FTIndex:0,FTPosition:0}"
     + "SoldierInfo{PawnClass:BP_Soldier_PLA_Medic_Arid_C_2147152878,Health:-300,Bleeding:0,Wounded:0,Dying:1,Crouched:0,Prone:0,Falling:0,WeaponInfo{NoWeapon}Position{X=14669 Y=-1546 Z=-12557}Rotation{X=64 Y=-74 Z=-64}}"
@@ -105,6 +106,12 @@ function testParseBzssCorePlayerBlocksAcceptsNamedFieldsAndExtraBlocks() {
   assert.deepEqual(players[0].playerScoreboard.extraValues, [0]);
   assert.equal(players[1].playerName, "Braovo");
   assert.equal(players[1].ftIndex, -1);
+  assert.equal(players[1].vehicleInfo.vehicleType, "TruckTransport");
+  assert.equal(players[1].vehicleInfo.health, 750);
+  assert.equal(players[1].vehicleInfo.maxHealth, 750);
+  assert.equal(players[1].vehicleInfo.healthText, "750.0/750.0");
+  assert.deepEqual(players[1].soldierInfo.position, { x: 56779.162, y: -55024.001, z: 1299.911 });
+  assert.deepEqual(players[1].soldierInfo.rotation, { x: -11.190256, y: -2.92026, z: -30.877444 });
   assert.equal(players[2].playerName, "小诗不郁");
   assert.equal(players[2].soldierInfo.soldierClass, "BP_Soldier_PLA_Medic_Arid_C_2147152878");
   assert.equal(players[2].soldierInfo.health, -300);

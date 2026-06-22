@@ -538,6 +538,10 @@ export function parseBzssCorePlayerBlocks(text) {
     const vehicleInfo = parseVehicleInfo(segment);
     const scoreboardInfo = parseScoreboardInfo(scoreboardRaw);
     const soldierInfo = soldierRaw ? parseSoldierInfo(soldierRaw) : { summary: createEmptySoldierInfo() };
+    if (!soldierInfo.summary.position && vehicleInfo.position) {
+      soldierInfo.summary.position = vehicleInfo.position;
+      soldierInfo.summary.rotation = vehicleInfo.rotation;
+    }
     const teamAndSquadInfo = parseTeamAndSquadInfo(context, segment, baseMap, baseFields);
     players.push({
       playerId: toFiniteNumber(baseMap.PlayerID ?? baseFields[0]),
@@ -738,7 +742,7 @@ function parseVectorBlock(text) {
 }
 
 function parseVehicleInfo(text) {
-  const match = String(text ?? "").match(/\{VehicleType:([^{}]*?)Health:([^{}]*?)\}/);
+  const match = String(text ?? "").match(/\{VehicleType:([^{},]+?)(?:,\s*|\s*)Health:([0-9./]+)(?:[^{}]*?)\}/);
   if (!match) {
     return {
       raw: "",
@@ -746,16 +750,41 @@ function parseVehicleInfo(text) {
       healthText: "",
       health: null,
       maxHealth: null,
+      position: null,
+      rotation: null,
     };
   }
   const healthText = String(match[2] ?? "").trim();
   const [health, maxHealth] = healthText.split("/").map(toFiniteNumber);
+
+  let position = null;
+  const posMatch = match[0].match(/Position:X=([-0-9.]+)\s+Y=([-0-9.]+)\s+Z=([-0-9.]+)/);
+  if (posMatch) {
+    position = {
+      x: toFiniteNumber(posMatch[1]),
+      y: toFiniteNumber(posMatch[2]),
+      z: toFiniteNumber(posMatch[3]),
+    };
+  }
+
+  let rotation = null;
+  const rotMatch = match[0].match(/Rotation:P=([-0-9.]+)\s+Y=([-0-9.]+)\s+R=([-0-9.]+)/);
+  if (rotMatch) {
+    rotation = {
+      x: toFiniteNumber(rotMatch[1]),
+      y: toFiniteNumber(rotMatch[3]),
+      z: toFiniteNumber(rotMatch[2]),
+    };
+  }
+
   return {
     raw: match[0],
     vehicleType: String(match[1] ?? "").trim(),
     healthText,
     health: health ?? null,
     maxHealth: maxHealth ?? null,
+    position,
+    rotation,
   };
 }
 

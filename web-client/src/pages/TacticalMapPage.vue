@@ -1936,6 +1936,11 @@ function resolveMapRoleInfo(player: BzssCoreTrackedPlayerInfo): RoleIconInfo {
     return resolveRoleIcon("dead");
   }
 
+  const vehicleInfo = player.vehicleInfo;
+  if (vehicleInfo && vehicleInfo.vehicleType && vehicleInfo.vehicleType !== 'None') {
+    return { icon: '🚙', label: `乘车中 (${vehicleInfo.vehicleType})` };
+  }
+
   const roleSource = [player.soldierInfo?.soldierClass, player.soldierInfo?.weaponClass]
     .map((value) => String(value ?? "").trim())
     .filter(Boolean)
