@@ -43,6 +43,7 @@ import { createTacticalMapReplayModule } from "../modules/tactical-map-replay/in
 
 import { createChatManagerModule } from "../modules/chat-manager/index.js";
 import { createNetworkStatsModule } from "../modules/network-stats/index.js";
+import { createPublicInterfaceModule } from "../modules/public-interface/index.js";
 
 /**
  * Core: ModuleManager
@@ -101,6 +102,7 @@ export class ModuleManager {
       createBzssCoreMonitorModule,
       createTacticalMapReplayModule,
       createNetworkStatsModule,
+      createPublicInterfaceModule,
     ];
 
     for (const factory of factories) {

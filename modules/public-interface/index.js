@@ -1,6 +1,21 @@
 import crypto from "node:crypto";
 
-export default class PublicInterface {
+export function createPublicInterfaceModule({ config, logger, core, modules }) {
+  const instance = new PublicInterface({ config, logger, core, modules });
+  return {
+    manifest: instance.manifest,
+    apiName: instance.apiName,
+    api: instance.api,
+    async start() {
+      return instance.start();
+    },
+    async stop() {
+      return instance.stop();
+    }
+  };
+}
+
+class PublicInterface {
   constructor({ config, logger, core, modules }) {
     this.manifest = {
       id: "module.publicInterface",
@@ -54,7 +69,7 @@ export default class PublicInterface {
   }
 
   getConfig() {
-    return this.config?.get?.("publicInterface") ?? {
+    return this.config?.get?.("modules.publicInterface") ?? {
       enabled: false,
       pathPrefix: "/api/public/v1",
       wsPath: "/ws/public/v1",
@@ -446,3 +461,5 @@ export default class PublicInterface {
     );
   }
 }
+
+export default createPublicInterfaceModule;
