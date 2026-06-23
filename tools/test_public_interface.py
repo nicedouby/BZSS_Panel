@@ -88,6 +88,44 @@ def print_result(path: str, result: dict, verbose: bool):
         if isinstance(data, dict):
             keys = ", ".join(list(data.keys())[:12])
             print(f"  data.keys={keys}")
+            summary = data.get("summary")
+            if isinstance(summary, dict):
+                print(
+                    "  summary.serverId={serverId} serverName={serverName} playerCount={playerCount} "
+                    "queueCount={queueCount} currentMap={currentMap} currentLayer={currentLayer} "
+                    "tps={tps} tpsStatus={tpsStatus} rconTime={rconTime} updatedAt={updatedAt}".format(
+                        serverId=summary.get("serverId"),
+                        serverName=summary.get("serverName"),
+                        playerCount=summary.get("playerCount"),
+                        queueCount=summary.get("queueCount"),
+                        currentMap=summary.get("currentMap"),
+                        currentLayer=summary.get("currentLayer"),
+                        tps=summary.get("tps"),
+                        tpsStatus=summary.get("tpsStatus"),
+                        rconTime=summary.get("rconTime"),
+                        updatedAt=summary.get("updatedAt"),
+                    )
+                )
+            server = data.get("server")
+            if isinstance(server, dict):
+                summary = server.get("summary")
+                if isinstance(summary, dict):
+                    print(
+                        "  server.summary.serverId={serverId} serverName={serverName} playerCount={playerCount} "
+                        "queueCount={queueCount} currentMap={currentMap} currentLayer={currentLayer} "
+                        "tps={tps} tpsStatus={tpsStatus} rconTime={rconTime} updatedAt={updatedAt}".format(
+                            serverId=summary.get("serverId"),
+                            serverName=summary.get("serverName"),
+                            playerCount=summary.get("playerCount"),
+                            queueCount=summary.get("queueCount"),
+                            currentMap=summary.get("currentMap"),
+                            currentLayer=summary.get("currentLayer"),
+                            tps=summary.get("tps"),
+                            tpsStatus=summary.get("tpsStatus"),
+                            rconTime=summary.get("rconTime"),
+                            updatedAt=summary.get("updatedAt"),
+                        )
+                    )
         elif isinstance(data, list):
             print(f"  data.count={len(data)}")
     elif verbose:

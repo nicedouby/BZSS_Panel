@@ -408,6 +408,15 @@ export function createBzssCoreMonitorModule({ core, logger }) {
   }
 
   function findPlayer(query = {}) {
+    const guid = String(query?.guid ?? query?.eosID ?? query?.eosId ?? "").trim();
+    if (guid) {
+      for (const player of state.players) {
+        if (player.playerGuid === guid) {
+          return clonePlainObject(player);
+        }
+      }
+    }
+
     const name = String(query?.name ?? "").trim();
     if (!name) return null;
     const directKey = normalizeComparableName(name);
@@ -554,6 +563,7 @@ export function parseBzssCorePlayerBlocks(text) {
       ftIndex: toFiniteNumber(baseMap.FTIndex),
       ftPosition: toFiniteNumber(baseMap.FTPosition),
       claimedInfo: segment.includes("{NoExistingClaimedInfo}") ? "NoExistingClaimedInfo" : "",
+      ping: toFiniteNumber(scoreboardInfo.valuesByKey?.Ping ?? scoreboardInfo.valuesByKey?.ping ?? baseMap.Ping ?? baseMap.ping),
       seatsPlayers: seatsBlock ? splitTopLevelCsv(seatsBlock.content).filter(Boolean) : [],
       vehicleInfo,
       playerBaseInfo: {

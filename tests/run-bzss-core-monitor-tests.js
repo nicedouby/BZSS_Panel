@@ -136,6 +136,7 @@ function testParseBzssCorePlayerBlocksAcceptsCaptureZonesAndCompactScoreboard() 
   assert.deepEqual(players[0].playerScoreboard.numericValues.slice(0, 12), [-1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 420, 0]);
   assert.equal(players[0].playerScoreboard.stats.combatScore, 0);
   assert.equal(Number(players[0].playerScoreboard.valuesByKey.Ping), 21);
+  assert.equal(players[0].ping, 21);
   assert.ok(players[0].rawText.includes("CaptureZones{"));
 }
 

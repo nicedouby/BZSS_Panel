@@ -36,6 +36,7 @@ class PublicInterface {
       handleHttp: (ctx) => this.handleHttp(ctx),
       handleUpgrade: (ctx) => this.handleUpgrade(ctx),
       getPublicServerSnapshot: () => this.getPublicServerSnapshot(),
+      getPublicServerSummary: () => this.getPublicServerSummary(),
       getPublicPlayersSnapshot: () => this.getPublicPlayersSnapshot(),
       getPublicSquadsSnapshot: () => this.getPublicSquadsSnapshot(),
       getPublicMatchSnapshot: () => this.getPublicMatchSnapshot(),
@@ -175,8 +176,76 @@ class PublicInterface {
     };
   }
 
+  getPublicServerSummary() {
+    const webStatus = this.core.webStatus?.getSnapshot?.() ?? {};
+    const matchState = this.modules.matchState?.getState?.() ?? this.modules.matchState?.getOverview?.()?.matchState ?? {};
+    const rconStatus = this.core.rconManager?.getStatus?.() ?? {};
+    const serverStatus = matchState.serverStatus ?? {};
+    const match = matchState.match ?? {};
+    const players = Array.isArray(matchState.players?.list) ? matchState.players.list : [];
+
+    const playerCount = firstFiniteNumber([
+      webStatus.playerCount,
+      serverStatus.playerCount,
+      matchState.players?.count,
+      players.length,
+    ]);
+
+    const queueCount = firstFiniteNumber([
+      webStatus.queueCount,
+      serverStatus.queueCount,
+    ]);
+
+    const tps = firstFiniteNumber([
+      webStatus.tps,
+      serverStatus.tps,
+    ]);
+
+    const rconTime = firstFiniteNumber([
+      webStatus.playtime,
+      serverStatus.playtime,
+      match.playtime,
+    ]);
+
+    const currentMap = firstText([
+      serverStatus.map,
+      match.map,
+      webStatus.map,
+      webStatus.currentMap,
+    ]);
+
+    const currentLayer = firstText([
+      serverStatus.layer,
+      match.layer,
+      webStatus.layer,
+      webStatus.currentLayer,
+    ]);
+
+    const updatedAt = latestTimestamp([
+      webStatus.updatedAt,
+      matchState.updatedAt,
+      rconStatus.lastPlayersRefresh,
+      rconStatus.lastSquadsRefresh,
+    ]);
+
+    return {
+      serverId: firstText([webStatus.serverId, this.core.webStatus?.serverId]),
+      serverName: firstText([webStatus.serverName, this.core.webStatus?.serverName]),
+      playerCount,
+      queueCount,
+      currentMap,
+      currentLayer,
+      tps,
+      tpsStatus: firstKnownStatus([webStatus.tpsStatus, serverStatus.tpsStatus, "unknown"]),
+      rconTime,
+      updatedAt,
+    };
+  }
+
   getPublicServerSnapshot() {
-    return this.core.webStatus?.getSnapshot?.() ?? {};
+    const snapshot = { ...(this.core.webStatus?.getSnapshot?.() ?? {}) };
+    snapshot.summary = this.getPublicServerSummary();
+    return snapshot;
   }
 
   maskPlayer(player) {
@@ -460,6 +529,57 @@ class PublicInterface {
       ])
     );
   }
+}
+
+function firstText(values) {
+  for (const value of values) {
+    if (value == null) continue;
+    const text = String(value).trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function firstKnownStatus(values) {
+  let fallback = "unknown";
+  for (const value of values) {
+    if (value == null) continue;
+    const text = String(value).trim();
+    if (!text) continue;
+    if (text.toLowerCase() === "unknown") {
+      fallback = text;
+      continue;
+    }
+    return text;
+  }
+  return fallback;
+}
+
+function firstFiniteNumber(values) {
+  for (const value of values) {
+    if (value == null || value === "") continue;
+    const number = Number(value);
+    if (Number.isFinite(number)) return number;
+  }
+  return null;
+}
+
+function latestTimestamp(values) {
+  let latestMs = Number.NEGATIVE_INFINITY;
+  let latestText = "";
+
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (!text) continue;
+    const ms = Date.parse(text);
+    if (!Number.isFinite(ms)) continue;
+    if (ms > latestMs) {
+      latestMs = ms;
+      latestText = new Date(ms).toISOString();
+    }
+  }
+
+  return latestText || new Date().toISOString();
 }
 
 export default createPublicInterfaceModule;
