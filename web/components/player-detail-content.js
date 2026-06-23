@@ -45,6 +45,24 @@ export function renderPlayerDetailContent(viewModel = {}) {
       <section class="floating-player-window__section">
         <div class="floating-player-window__section-head">
           <div>
+            <div class="floating-player-window__eyebrow">战场状态</div>
+            <div class="floating-player-window__subtitle">位置、朝向、生命值、武器、弹匣和延迟</div>
+          </div>
+        </div>
+
+        <div class="floating-player-window__grid">
+          ${renderField("当前位置", viewModel.positionLabel)}
+          ${renderField("朝向", viewModel.rotationLabel)}
+          ${renderField("生命值", viewModel.healthLabel)}
+          ${renderField("当前武器", viewModel.weaponLabel)}
+          ${renderField("弹匣数组", viewModel.ammoLabel)}
+          ${renderField("延迟", viewModel.pingLabel)}
+        </div>
+      </section>
+
+      <section class="floating-player-window__section">
+        <div class="floating-player-window__section-head">
+          <div>
             <div class="floating-player-window__eyebrow">管理操作</div>
             <div class="floating-player-window__subtitle">复制、警告、踢出、移出小队、跳边、跳转数据库</div>
           </div>

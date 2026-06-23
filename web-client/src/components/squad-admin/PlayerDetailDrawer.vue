@@ -235,6 +235,41 @@
             </div>
           </header>
 
+          <div class="hud-pane-section">
+            <div class="hud-section-header">
+              <span class="hud-section-title">战场状态 / BATTLE STATE</span>
+              <span class="hud-section-subtitle">位置、朝向、生命值、武器、弹匣与延迟</span>
+            </div>
+            <div class="bzss-core-card">
+              <div class="bzss-core-grid">
+                <div class="bzss-core-item bzss-core-item--wide">
+                  <span class="bzss-core-item__label">Position</span>
+                  <strong class="bzss-core-mono">{{ formatBzssVector(props.player?.position ?? props.player?.bzssCorePlayerInfo?.soldierInfo?.position) }}</strong>
+                </div>
+                <div class="bzss-core-item bzss-core-item--wide">
+                  <span class="bzss-core-item__label">Rotation</span>
+                  <strong class="bzss-core-mono">{{ formatBzssVector(props.player?.rotation ?? props.player?.bzssCorePlayerInfo?.soldierInfo?.rotation) }}</strong>
+                </div>
+                <div class="bzss-core-item">
+                  <span class="bzss-core-item__label">Health</span>
+                  <strong>{{ props.player?.health != null ? (props.player?.maxHealth != null ? `${props.player.health}/${props.player.maxHealth}` : props.player.health) : "--" }}</strong>
+                </div>
+                <div class="bzss-core-item">
+                  <span class="bzss-core-item__label">Weapon</span>
+                  <strong class="bzss-core-mono">{{ cleanWeaponName(props.player?.weaponClass ?? props.player?.bzssCorePlayerInfo?.soldierInfo?.weaponClass) }}</strong>
+                </div>
+                <div class="bzss-core-item">
+                  <span class="bzss-core-item__label">Ammo</span>
+                  <strong class="bzss-core-mono">{{ formatBzssAmmo(props.player?.ammoValues ?? props.player?.bzssCorePlayerInfo?.soldierInfo?.ammoValues) }}</strong>
+                </div>
+                <div class="bzss-core-item">
+                  <span class="bzss-core-item__label">Ping</span>
+                  <strong>{{ props.player?.ping != null ? `${props.player.ping} ms` : "--" }}</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- System Message Banner -->
           <div v-if="props.notice" class="detail-notice-hud">
             <svg viewBox="0 0 24 24" width="16" height="16" class="notice-icon">
@@ -1514,12 +1549,12 @@ function formatBzssVector(value: BzssCoreTrackedVector | null | undefined) {
   const x = value.x ?? "?";
   const y = value.y ?? "?";
   const z = value.z ?? "?";
-  return `X=${x}  Y=${y}  Z=${z}`;
+  return `(${x}, ${y}, ${z})`;
 }
 
-function formatBzssAmmo(values: number[] | null | undefined) {
+function formatBzssAmmo(values: Array<number | null> | null | undefined) {
   if (!Array.isArray(values) || values.length === 0) return "--";
-  return values.join(" / ");
+  return values.map((value) => (value == null ? "--" : String(value))).join(" / ");
 }
 
 function formatBzssScoreboard(values: Array<number | null> | null | undefined) {

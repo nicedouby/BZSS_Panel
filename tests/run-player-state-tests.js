@@ -2,11 +2,18 @@ import assert from "node:assert/strict";
 
 import { createPlayerStateModule } from "../modules/player-state/index.js";
 
-function createHarness({ modulesOverride = null } = {}) {
+function createHarness({ modulesOverride = null, configOverrides = {} } = {}) {
   const listeners = new Map();
+  const moduleListeners = new Map();
   const moduleEvents = [];
+  const configValues = new Map(Object.entries(configOverrides));
   const core = {
     logger: { info() {}, debug() {}, warn() {}, module() {} },
+    config: {
+      get(key, defaultValue) {
+        return configValues.has(key) ? configValues.get(key) : defaultValue;
+      },
+    },
     webStatus: { set() {} },
     eventBus: {
       onCoreEvent(eventName, handler) {
@@ -14,8 +21,18 @@ function createHarness({ modulesOverride = null } = {}) {
         listeners.get(eventName).add(handler);
         return () => listeners.get(eventName)?.delete(handler);
       },
+      onModuleEvent(moduleId, eventName, handler) {
+        const key = `${moduleId}:${eventName}`;
+        if (!moduleListeners.has(key)) moduleListeners.set(key, new Set());
+        moduleListeners.get(key).add(handler);
+        return () => moduleListeners.get(key)?.delete(handler);
+      },
       emitModuleEvent(moduleId, eventName, event) {
         moduleEvents.push({ moduleId, eventName, event });
+        const exactKey = `${moduleId}:${eventName}`;
+        const wildcardKey = `${moduleId}:*`;
+        for (const handler of moduleListeners.get(exactKey) ?? []) handler(event);
+        for (const handler of moduleListeners.get(wildcardKey) ?? []) handler(event);
       },
     },
   };
@@ -24,6 +41,7 @@ function createHarness({ modulesOverride = null } = {}) {
 
   return {
     listeners,
+    moduleListeners,
     moduleEvents,
     module: createPlayerStateModule({ core, modules }),
   };
@@ -31,6 +49,11 @@ function createHarness({ modulesOverride = null } = {}) {
 
 function emit(listeners, eventName, payload) {
   for (const handler of listeners.get(eventName) ?? []) handler(payload);
+}
+
+function emitModule(moduleListeners, moduleId, eventName, payload) {
+  const exactKey = `${moduleId}:${eventName}`;
+  for (const handler of moduleListeners.get(exactKey) ?? []) handler(payload);
 }
 
 function getModuleEvents(moduleEvents, eventName) {
@@ -88,6 +111,14 @@ async function testBuildsCanonicalPlayerListFromRcon() {
   assert.equal(list.length, 1);
   assert.equal(list[0].teamID, "2");
   assert.equal(list[0].squadID, "5");
+  assert.equal(list[0].position, null);
+  assert.equal(list[0].rotation, null);
+  assert.equal(list[0].health, null);
+  assert.equal(list[0].weaponClass, "");
+  assert.deepEqual(list[0].ammoValues, []);
+  assert.equal(list[0].ping, null);
+  assert.ok(list[0].soldierInfo);
+  assert.ok(list[0].networkInfo);
   assert.equal(harness.module.api.getPlayerBySteamID("BZSS_Main", "111")?.name, "Alpha");
   assert.equal(harness.module.api.findPlayer("BZSS_Main", { name: " alpha " })?.steamID, "111");
 
@@ -135,6 +166,78 @@ async function testMergesEventUpdatesIntoGlobalPlayerList() {
   const attacker = harness.module.api.findPlayer("BZSS_Main", { controllerID: "c-333" });
   assert.equal(attacker?.name, "Attacker");
   assert.equal(attacker?.state, "playing");
+
+  await harness.module.stop();
+}
+
+async function testMergesBzssDerivedPlayerStateFields() {
+  const harness = createHarness();
+  await harness.module.start();
+
+  emit(harness.listeners, "RCON_LIST_PLAYERS_UPDATED", {
+    serverId: "BZSS_Main",
+    players: [
+      {
+        playerID: 7,
+        name: "Charlie",
+        steamID: "444",
+        eosID: "eos-444",
+        teamID: 1,
+        squadID: 4,
+        isLeader: false,
+        role: "Rifleman",
+      },
+    ],
+  });
+
+  emitModule(harness.moduleListeners, "module.bzssCoreMonitor", "snapshotUpdated", {
+    serverId: "BZSS_Main",
+    status: "ready",
+    players: [
+      {
+        playerGuid: "guid-444",
+        playerName: "Charlie",
+        teamId: 1,
+        squadId: 4,
+        ping: 37,
+        playerScoreboard: {
+          valuesByKey: { Ping: 37 },
+        },
+        soldierInfo: {
+          raw: "SoldierInfo{}",
+          fields: [],
+          values: {},
+          soldierClass: "BP_Soldier_Test",
+          health: 88,
+          weaponClass: "BP_Rifle_Test",
+          ammoValues: [30, 29, 28],
+          position: { x: 10, y: 20, z: 30 },
+          rotation: { x: 1, y: 2, z: 3 },
+        },
+        vehicleInfo: {
+          raw: "",
+          vehicleType: "",
+          healthText: "",
+          health: null,
+          maxHealth: null,
+          position: null,
+          rotation: null,
+        },
+      },
+    ],
+  });
+
+  const player = harness.module.api.getPlayerBySteamID("BZSS_Main", "444");
+  assert.equal(player?.position?.x, 10);
+  assert.equal(player?.rotation?.z, 3);
+  assert.equal(player?.health, 88);
+  assert.equal(player?.weaponClass, "BP_Rifle_Test");
+  assert.deepEqual(player?.ammoValues, [30, 29, 28]);
+  assert.equal(player?.ping, 37);
+  assert.equal(player?.soldierInfo?.soldierClass, "BP_Soldier_Test");
+  assert.equal(player?.soldierInfo?.weaponClass, "BP_Rifle_Test");
+  assert.equal(player?.soldierInfo?.health, 88);
+  assert.equal(player?.networkInfo?.ping, 37);
 
   await harness.module.stop();
 }
@@ -504,8 +607,204 @@ async function testTracksSquadlessTimingUntilJoin() {
   await harness.module.stop();
 }
 
+async function testBzssPriorityUsesBzssTeamAndSquadWhenAvailable() {
+  const harness = createHarness({
+    configOverrides: {
+      "modules.playerState.teamSquadSourcePriority": "bzssCore",
+    },
+  });
+  await harness.module.start();
+
+  emit(harness.listeners, "RCON_LIST_PLAYERS_UPDATED", {
+    serverId: "BZSS_Main",
+    players: [
+      {
+        playerID: 1,
+        name: "Alpha",
+        steamID: "111",
+        teamID: "1",
+        squadID: "3",
+      },
+    ],
+  });
+
+  emitModule(harness.moduleListeners, "module.bzssCoreMonitor", "snapshotUpdated", {
+    serverId: "BZSS_Main",
+    status: "ready",
+    revision: 1,
+    players: [
+      {
+        playerGuid: "abc",
+        playerName: "Alpha",
+        teamId: 4,
+        squadId: 9,
+      },
+    ],
+  });
+
+  const player = harness.module.api.getPlayerBySteamID("BZSS_Main", "111");
+  assert.equal(player?.teamID, "4");
+  assert.equal(player?.squadID, "9");
+
+  await harness.module.stop();
+}
+
+async function testBzssPriorityFallsBackToRconWhenBzssMissingValues() {
+  const harness = createHarness({
+    configOverrides: {
+      "modules.playerState.teamSquadSourcePriority": "bzssCore",
+    },
+  });
+  await harness.module.start();
+
+  emit(harness.listeners, "RCON_LIST_PLAYERS_UPDATED", {
+    serverId: "BZSS_Main",
+    players: [
+      {
+        playerID: 1,
+        name: "Bravo",
+        steamID: "222",
+        teamID: "1",
+        squadID: "3",
+      },
+    ],
+  });
+
+  emitModule(harness.moduleListeners, "module.bzssCoreMonitor", "snapshotUpdated", {
+    serverId: "BZSS_Main",
+    status: "ready",
+    revision: 2,
+    players: [
+      {
+        playerGuid: "def",
+        playerName: "Bravo",
+        teamId: "",
+        squadId: "",
+      },
+    ],
+  });
+
+  const player = harness.module.api.getPlayerBySteamID("BZSS_Main", "222");
+  assert.equal(player?.teamID, "1");
+  assert.equal(player?.squadID, "3");
+
+  await harness.module.stop();
+}
+
+async function testRconPriorityFallsBackToBzssWhenRconMissingValues() {
+  const harness = createHarness({
+    configOverrides: {
+      "modules.playerState.teamSquadSourcePriority": "rcon",
+    },
+  });
+  await harness.module.start();
+
+  emit(harness.listeners, "RCON_LIST_PLAYERS_UPDATED", {
+    serverId: "BZSS_Main",
+    players: [
+      {
+        playerID: 1,
+        name: "Charlie",
+        steamID: "333",
+        teamID: "",
+        squadID: "",
+      },
+    ],
+  });
+
+  emitModule(harness.moduleListeners, "module.bzssCoreMonitor", "snapshotUpdated", {
+    serverId: "BZSS_Main",
+    status: "ready",
+    revision: 3,
+    players: [
+      {
+        playerGuid: "ghi",
+        playerName: "Charlie",
+        teamId: 2,
+        squadId: 7,
+      },
+    ],
+  });
+
+  const player = harness.module.api.getPlayerBySteamID("BZSS_Main", "333");
+  assert.equal(player?.teamID, "2");
+  assert.equal(player?.squadID, "7");
+
+  await harness.module.stop();
+}
+
+async function testEffectiveSquadChangesOnlyEmitWhenMergedValueChanges() {
+  const harness = createHarness({
+    configOverrides: {
+      "modules.playerState.teamSquadSourcePriority": "bzssCore",
+    },
+  });
+  await harness.module.start();
+
+  emit(harness.listeners, "RCON_LIST_PLAYERS_UPDATED", {
+    serverId: "BZSS_Main",
+    players: [
+      {
+        playerID: 1,
+        name: "Delta",
+        steamID: "444",
+        teamID: "",
+        squadID: "",
+      },
+    ],
+  });
+
+  emitModule(harness.moduleListeners, "module.bzssCoreMonitor", "snapshotUpdated", {
+    serverId: "BZSS_Main",
+    status: "ready",
+    revision: 4,
+    players: [
+      {
+        playerGuid: "jkl",
+        playerName: "Delta",
+        teamId: 2,
+        squadId: 6,
+      },
+    ],
+  });
+
+  emit(harness.listeners, "RCON_LIST_PLAYERS_UPDATED", {
+    serverId: "BZSS_Main",
+    players: [
+      {
+        playerID: 1,
+        name: "Delta",
+        steamID: "444",
+        teamID: "",
+        squadID: "",
+      },
+    ],
+  });
+
+  emitModule(harness.moduleListeners, "module.bzssCoreMonitor", "snapshotUpdated", {
+    serverId: "BZSS_Main",
+    status: "ready",
+    revision: 5,
+    players: [
+      {
+        playerGuid: "jkl",
+        playerName: "Delta",
+        teamId: 2,
+        squadId: 6,
+      },
+    ],
+  });
+
+  const joinedEvents = getModuleEvents(harness.moduleEvents, "playerJoinedSquad");
+  assert.equal(joinedEvents.length, 1);
+  assert.equal(joinedEvents[0].event.current.squadID, "6");
+
+  await harness.module.stop();
+}
+
 await testBuildsCanonicalPlayerListFromRcon();
 await testMergesEventUpdatesIntoGlobalPlayerList();
+await testMergesBzssDerivedPlayerStateFields();
 await testFirstSnapshotDoesNotEmitSquadMembershipEvents();
 await testEmitsPlayerJoinedSquadFromSnapshotDiff();
 await testLeaderJoinDoesNotEmitPlayerJoinedSquad();
@@ -515,5 +814,9 @@ await testOfflinePlayerDoesNotEmitLeftSquad();
 await testEmitsCommanderAuthorizedWhenCommandSquadCommanderPresent();
 await testResolvesCommandSquadFromSquadManagementName();
 await testTracksSquadlessTimingUntilJoin();
+await testBzssPriorityUsesBzssTeamAndSquadWhenAvailable();
+await testBzssPriorityFallsBackToRconWhenBzssMissingValues();
+await testRconPriorityFallsBackToBzssWhenRconMissingValues();
+await testEffectiveSquadChangesOnlyEmitWhenMergedValueChanges();
 
 console.log("player state tests passed");

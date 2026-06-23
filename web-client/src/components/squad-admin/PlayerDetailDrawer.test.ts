@@ -30,6 +30,13 @@ function buildPlayer() {
     eosId: "EOS-1",
     ip: null,
     playtimeHours: 12.5,
+    position: { x: 10, y: 20, z: 30 },
+    rotation: { x: 1, y: 2, z: 3 },
+    health: 88,
+    maxHealth: 100,
+    weaponClass: "BP_Rifle_Test",
+    ammoValues: [30, 29, 28],
+    ping: 42,
     combatStats: { kills: 3, downs: 1, deaths: 2, tk: 0, revives: 4 },
     statsLabel: "K 3 / D 2",
     source: "match",
@@ -130,6 +137,35 @@ describe("PlayerDetailDrawer", () => {
     });
 
     expect(document.body.textContent || "").toContain("IP: 203.0.113.10");
+    wrapper.unmount();
+  });
+
+  it("renders BZSS battle state fields in the floating window", async () => {
+    const wrapper = mount(PlayerDetailDrawer, {
+      props: {
+        open: true,
+        player: buildPlayer(),
+        mode: "floating",
+        anchorX: 200,
+        anchorY: 240,
+      },
+      global: {
+        stubs: {
+          PlayerCombatTimeline: true,
+          StatusBadge: true,
+          CopyableValue: true,
+        },
+      },
+    });
+
+    const text = document.body.textContent || "";
+    expect(text).toContain("战场状态 / BATTLE STATE");
+    expect(text).toContain("(10, 20, 30)");
+    expect(text).toContain("88/100");
+    expect(text).toContain("Rifle_Test");
+    expect(text).toContain("30 / 29 / 28");
+    expect(text).toContain("42 ms");
+
     wrapper.unmount();
   });
 });

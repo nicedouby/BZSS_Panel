@@ -107,6 +107,10 @@ export function createBzssCoreMonitorModule({ core, logger }) {
         // ignore
       }
     }
+
+    if (typeof core.eventBus?.emitModuleEvent === "function") {
+      core.eventBus.emitModuleEvent("module.bzssCoreMonitor", "snapshotUpdated", buildSnapshotEvent());
+    }
   }
 
   function clearPublishedPlayers(nextStatus, nextError = "") {
@@ -377,6 +381,31 @@ export function createBzssCoreMonitorModule({ core, logger }) {
       rawTextLength: state.rawTextLength,
       rawTextUpdatedAt: state.rawTextUpdatedAt,
       lastError: state.lastError,
+    };
+  }
+
+  function buildSnapshotEvent() {
+    const serverId = String(core.webStatus?.serverId ?? core.config?.get?.("server.id", "") ?? "").trim();
+    return {
+      eventId: `module.bzssCoreMonitor:snapshotUpdated:${state.revision}`,
+      eventName: "module.bzssCoreMonitor.snapshotUpdated",
+      layer: "module",
+      source: "module.bzssCoreMonitor",
+      serverId,
+      status: state.status,
+      revision: state.revision,
+      updatedAt: state.updatedAt,
+      lastReadAt: state.lastReadAt,
+      lastCompletedAt: state.lastCompletedAt,
+      configuredPath: state.configuredPath,
+      resolvedPath: state.resolvedPath,
+      exists: state.exists,
+      markerSeen: state.markerSeen,
+      fileSize: state.fileSize,
+      fileMtimeMs: state.fileMtimeMs,
+      lastError: state.lastError,
+      playerCount: state.players.length,
+      players: state.players.map(clonePlainObject),
     };
   }
 

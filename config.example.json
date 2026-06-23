@@ -131,6 +131,23 @@
         "restartRequired": false
       },
       {
+        "path": "modules.playerState.teamSquadSourcePriority",
+        "label": "Player Team/Squad Source Priority",
+        "type": "select",
+        "options": [
+          {
+            "label": "RCON",
+            "value": "rcon"
+          },
+          {
+            "label": "BZSS-Core",
+            "value": "bzssCore"
+          }
+        ],
+        "advanced": true,
+        "restartRequired": false
+      },
+      {
         "path": "modules.matchState.polling.dynamic.mediumPlayersIntervalMs",
         "label": "Medium Players Refresh Interval",
         "type": "number",
@@ -484,7 +501,10 @@
       "enabled": true,
       "maxRecords": 2000
     },
-    "playerState": { "enabled": true },
+    "playerState": {
+      "enabled": true,
+      "teamSquadSourcePriority": "rcon"
+    },
     "squadLifecycle": {
       "enabled": true,
       "rconPollIntervalMs": 1000,

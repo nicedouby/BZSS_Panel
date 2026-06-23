@@ -122,6 +122,12 @@ export interface PlayerDetailViewModel {
   factionFlagUrl?: string | null;
   combatStats: CombatStats;
   statsLabel: string;
+  position?: BzssCoreTrackedVector | null;
+  rotation?: BzssCoreTrackedVector | null;
+  health?: number | null;
+  maxHealth?: number | null;
+  weaponClass?: string | null;
+  ammoValues?: Array<number | null> | null;
   battleStats?: CombatStats;
   battleStatsLabel?: string;
   battleStatsSource?: string;
@@ -213,11 +219,13 @@ export interface BzssCoreTrackedPlayerInfo {
     values?: Record<string, string>;
     soldierClass: string;
     health: number | null;
+    maxHealth?: number | null;
     weaponClass: string;
     ammoValues: number[];
     position: BzssCoreTrackedVector | null;
     rotation: BzssCoreTrackedVector | null;
   };
+  ping?: number | null;
   playerScoreboard: {
     raw: string;
     values: string[];

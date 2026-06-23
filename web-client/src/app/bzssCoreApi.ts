@@ -71,11 +71,13 @@ export interface BzssCoreTrackedPlayerInfo {
     values?: Record<string, string>;
     soldierClass: string;
     health: number | null;
+    maxHealth?: number | null;
     weaponClass: string;
     ammoValues: number[];
     position: BzssCoreTrackedVector | null;
     rotation: BzssCoreTrackedVector | null;
   };
+  ping?: number | null;
   playerScoreboard: {
     raw: string;
     values: string[];

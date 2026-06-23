@@ -923,12 +923,27 @@ watch(
     const nextStatus = snapshotVal?.status || "";
     const nextCompletedAt = snapshotVal?.state?.lastCompletedAt ?? null;
     const nextPlayerInfo = matched ?? null;
+    const nextSoldierInfo = nextPlayerInfo?.soldierInfo ?? null;
+    const nextPosition = nextSoldierInfo?.position ?? null;
+    const nextRotation = nextSoldierInfo?.rotation ?? null;
+    const nextHealth = nextSoldierInfo?.health ?? null;
+    const nextMaxHealth = nextSoldierInfo?.maxHealth ?? null;
+    const nextWeaponClass = nextSoldierInfo?.weaponClass ?? "";
+    const nextAmmoValues = Array.isArray(nextSoldierInfo?.ammoValues) ? [...nextSoldierInfo.ammoValues] : null;
+    const nextPing = nextPlayerInfo?.ping ?? null;
 
     const currentDetail = activePlayerWindow.value.detail;
     if (
       currentDetail.bzssCoreStatus === nextStatus &&
       currentDetail.bzssCoreLastCompletedAt === nextCompletedAt &&
-      currentDetail.bzssCorePlayerInfo === nextPlayerInfo
+      currentDetail.bzssCorePlayerInfo === nextPlayerInfo &&
+      currentDetail.position === nextPosition &&
+      currentDetail.rotation === nextRotation &&
+      currentDetail.health === nextHealth &&
+      currentDetail.maxHealth === nextMaxHealth &&
+      currentDetail.weaponClass === nextWeaponClass &&
+      JSON.stringify(currentDetail.ammoValues ?? null) === JSON.stringify(nextAmmoValues ?? null) &&
+      currentDetail.ping === nextPing
     ) {
       return;
     }
@@ -937,6 +952,13 @@ watch(
       ...activePlayerWindow.value,
       detail: {
         ...activePlayerWindow.value.detail,
+        position: nextPosition,
+        rotation: nextRotation,
+        health: nextHealth,
+        maxHealth: nextMaxHealth,
+        weaponClass: nextWeaponClass,
+        ammoValues: nextAmmoValues,
+        ping: nextPing,
         bzssCoreStatus: nextStatus,
         bzssCoreLastCompletedAt: nextCompletedAt,
         bzssCorePlayerInfo: nextPlayerInfo,
@@ -1334,6 +1356,13 @@ function buildPlayerDetailViewModel(player: PlayerRowViewModel): PlayerDetailVie
     role: player.role,
     online: player.isOnline,
     current_ip: player.ip ?? (rawBase as any).current_ip ?? (rawBase as any).ip ?? undefined,
+    position: (rawBase as any).position ?? (rawBase as any).soldierInfo?.position ?? undefined,
+    rotation: (rawBase as any).rotation ?? (rawBase as any).soldierInfo?.rotation ?? undefined,
+    health: (rawBase as any).health ?? (rawBase as any).soldierInfo?.health ?? undefined,
+    maxHealth: (rawBase as any).maxHealth ?? (rawBase as any).soldierInfo?.maxHealth ?? undefined,
+    weaponClass: (rawBase as any).weaponClass ?? (rawBase as any).soldierInfo?.weaponClass ?? undefined,
+    ammoValues: (rawBase as any).ammoValues ?? (rawBase as any).soldierInfo?.ammoValues ?? undefined,
+    bzssCorePlayerInfo: (rawBase as any).bzssCorePlayerInfo ?? null,
     matchOnlineSeconds: player.matchOnlineSeconds ?? (rawBase as any).matchOnlineSeconds ?? undefined,
     matchObservedOnlineSeconds: player.matchObservedOnlineSeconds ?? (rawBase as any).matchObservedOnlineSeconds ?? undefined,
     matchEstimatedOnlineSeconds: player.matchEstimatedOnlineSeconds ?? (rawBase as any).matchEstimatedOnlineSeconds ?? undefined,

@@ -157,6 +157,7 @@ function testParseBzssCorePlayerBlocksReadsNewSquadContext() {
 async function testMonitorRefreshesFromFileWatcher() {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-core-watch-"));
   const savePath = path.join(tempDir, "PBI.sav");
+  const moduleEvents = [];
   const module = createBzssCoreMonitorModule({
     core: {
       config: {
@@ -170,6 +171,11 @@ async function testMonitorRefreshesFromFileWatcher() {
         },
       },
       logger: { info() {}, warn() {}, error() {} },
+      eventBus: {
+        emitModuleEvent(moduleId, eventName, event) {
+          moduleEvents.push({ moduleId, eventName, event });
+        },
+      },
     },
   });
 
@@ -188,6 +194,7 @@ async function testMonitorRefreshesFromFileWatcher() {
     const rawSnapshot = module.api.getRawSnapshot();
     assert.equal(rawSnapshot.rawText.includes("PlayerBaseInfo{0,abc123"), true);
     assert.equal(rawSnapshot.rawTextLength, rawSnapshot.rawText.length);
+    assert.ok(moduleEvents.some((item) => item.moduleId === "module.bzssCoreMonitor" && item.eventName === "snapshotUpdated" && item.event.status === "ready"));
   } finally {
     await module.stop();
     await fs.rm(tempDir, { recursive: true, force: true });

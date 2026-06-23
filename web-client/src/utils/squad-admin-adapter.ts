@@ -315,6 +315,14 @@ export function adaptPlayerDetail(
   const currentIp = (player as any).current_ip || (player as any).ip || null;
   const steam64 = normalizeSteam64(player.steamID ?? (player as any).steamId ?? (player as any).steam64 ?? (player as any).steam64ID);
   const combatStats = cloneCombatStats(resolveCombatStats(player, combatStatsLookup));
+  const bzssCorePlayerInfo = (player as any).bzssCorePlayerInfo ?? null;
+  const soldierInfo = (player as any).soldierInfo ?? bzssCorePlayerInfo?.soldierInfo ?? null;
+  const position = normalizeBzssVector((player as any).position ?? soldierInfo?.position ?? null);
+  const rotation = normalizeBzssVector((player as any).rotation ?? soldierInfo?.rotation ?? null);
+  const health = normalizeOptionalNumber((player as any).health ?? soldierInfo?.health);
+  const maxHealth = normalizeOptionalNumber((player as any).maxHealth ?? soldierInfo?.maxHealth);
+  const weaponClass = normalizeOptionalString((player as any).weaponClass ?? soldierInfo?.weaponClass);
+  const ammoValues = normalizeAmmoValues((player as any).ammoValues ?? soldierInfo?.ammoValues ?? null);
   return {
     playerId: player.playerID ?? null,
     name: player.name || "Unknown",
@@ -342,6 +350,12 @@ export function adaptPlayerDetail(
     matchJoinCount: normalizeOptionalNumber((player as any).matchJoinCount),
     combatStats,
     statsLabel: formatCombatStatsLabel(combatStats),
+    position,
+    rotation,
+    health,
+    maxHealth,
+    weaponClass,
+    ammoValues,
     source: (player as any).source || "unknown",
     controller: (player as any).controllerID || (player as any).controller || "",
     raw: player,
@@ -358,6 +372,20 @@ function normalizeOptionalString(value: any): string | null {
   if (value == null) return null;
   const text = String(value).trim();
   return text ? text : null;
+}
+
+function normalizeBzssVector(value: any): { x: number | null; y: number | null; z: number | null } | null {
+  if (!value || typeof value !== "object") return null;
+  const x = normalizeOptionalNumber((value as any).x);
+  const y = normalizeOptionalNumber((value as any).y);
+  const z = normalizeOptionalNumber((value as any).z);
+  if (x == null && y == null && z == null) return null;
+  return { x, y, z };
+}
+
+function normalizeAmmoValues(value: any): Array<number | null> | null {
+  if (!Array.isArray(value)) return null;
+  return value.map((item) => normalizeOptionalNumber(item));
 }
 
 function resolvePlayerTeamName(player: RuntimePlayer): string | null {

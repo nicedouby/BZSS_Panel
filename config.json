@@ -93,6 +93,23 @@
         "restartRequired": false
       },
       {
+        "path": "modules.playerState.teamSquadSourcePriority",
+        "label": "Player Team/Squad Source Priority",
+        "type": "select",
+        "options": [
+          {
+            "label": "RCON",
+            "value": "rcon"
+          },
+          {
+            "label": "BZSS-Core",
+            "value": "bzssCore"
+          }
+        ],
+        "advanced": true,
+        "restartRequired": false
+      },
+      {
         "path": "rcon.enabled",
         "label": "RCON Enabled",
         "type": "boolean",
@@ -600,7 +617,8 @@
       "enabled": true
     },
     "playerState": {
-      "enabled": true
+      "enabled": true,
+      "teamSquadSourcePriority": "rcon"
     },
     "matchState": {
       "enabled": true,

@@ -1214,6 +1214,12 @@ function createFloatingPlayerWindowState(player, { squad = null, team = null, an
     steamID: steamID || "—",
     eosID: eosID || "—",
     playerID: player?.playerID ?? "—",
+    positionLabel: formatVector(player?.position),
+    rotationLabel: formatVector(player?.rotation),
+    healthLabel: formatHealth(player?.health, player?.maxHealth),
+    weaponLabel: String(player?.weaponClass || player?.currentWeapon || "—"),
+    ammoLabel: formatAmmoValues(player?.ammoValues),
+    pingLabel: formatPing(player?.ping),
     currentIp: String(player?.ip || player?.currentIp || player?.current_ip || player?.network?.ip || "—"),
     permissionGroup: String(player?.permission_group || player?.permissionGroup || player?.permission || "default"),
     teamSquadLabel: buildTeamSquadLabel(player, squad, team),
@@ -1475,6 +1481,36 @@ function formatPlaytime(player) {
   return `Steam ${formatSecondsAsHours(seconds)}`;
 }
 
+function formatVector(value) {
+  if (!value || typeof value !== "object") return "—";
+  const x = formatDecimal(value.x);
+  const y = formatDecimal(value.y);
+  const z = formatDecimal(value.z);
+  if (x === "—" && y === "—" && z === "—") return "—";
+  return `(${x}, ${y}, ${z})`;
+}
+
+function formatHealth(health, maxHealth = null) {
+  const current = Number(health);
+  const max = Number(maxHealth);
+  if (!Number.isFinite(current)) return "—";
+  if (Number.isFinite(max) && max > 0) {
+    return `${formatDecimal(current)}/${formatDecimal(max)}`;
+  }
+  return formatDecimal(current);
+}
+
+function formatAmmoValues(values) {
+  if (!Array.isArray(values) || values.length === 0) return "—";
+  return `[${values.map((value) => formatDecimal(value)).join(", ")}]`;
+}
+
+function formatPing(value) {
+  const ping = Number(value);
+  if (!Number.isFinite(ping) || ping < 0) return "—";
+  return `${formatDecimal(ping)} ms`;
+}
+
 function formatSquadlessSeconds(value) {
   const seconds = Number(value ?? 0);
   if (!Number.isFinite(seconds) || seconds <= 0) return "";
@@ -1491,6 +1527,14 @@ function formatSquadlessSeconds(value) {
 
 function formatSecondsAsHours(seconds) {
   return `${(Number(seconds || 0) / 3600).toFixed(1)}h`;
+}
+
+function formatDecimal(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "—";
+  if (Number.isInteger(num)) return String(num);
+  const trimmed = num.toFixed(3).replace(/\.?0+$/, "");
+  return trimmed;
 }
 
 function displayName(value, fallback = "未知") {
