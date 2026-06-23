@@ -89,7 +89,8 @@ export function createBzssCoreMonitorModule({ core, logger }) {
     state.revision += 1;
     state.updatedAt = new Date().toISOString();
     if (state.status !== previousStatus) {
-      moduleLogger.info(`BZSS-Core monitor status -> ${state.status}`, {
+      // Keep monitor churn out of normal console output; it is still available at debug level.
+      moduleLogger.debug(`BZSS-Core monitor status -> ${state.status}`, {
         operation: "bzssCoreMonitor.status",
         data: {
           status: state.status,
