@@ -28,8 +28,7 @@ function makePlayerKey(player = {}) {
   return normalizeComparableId(player?.steamID)
     || normalizeComparableId(player?.eosID)
     || normalizeComparableId(player?.controllerID)
-    || normalizeComparableName(player?.name)
-    || normalizeComparableName(player?.playerName);
+    || normalizeComparableName(player?.name);
 }
 
 function readRuntimeConfig(config) {
@@ -169,6 +168,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     rules: createEmptyRuleSet(),
     rulesLoadedAt: 0,
     actedPlayers: new Set(),
+    failureCooldowns: new Map(),
   };
 
   function enqueue(task) {
@@ -261,6 +261,21 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     }
   }
 
+  function releaseOfflinePlayers(players = []) {
+    const onlineKeys = new Set(players.map((player) => makePlayerKey(player)).filter(Boolean));
+
+    for (const key of [...runtime.actedPlayers]) {
+      if (!onlineKeys.has(key)) runtime.actedPlayers.delete(key);
+    }
+
+    const now = Date.now();
+    for (const [key, expireAt] of runtime.failureCooldowns.entries()) {
+      if (expireAt <= now || !onlineKeys.has(key)) {
+        runtime.failureCooldowns.delete(key);
+      }
+    }
+  }
+
   async function kickMatchedPlayer(serverId, player, match) {
     const squadManagement = modules?.squadManagement;
     if (typeof squadManagement?.requestKick !== "function"
@@ -278,7 +293,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       serverId,
       steamId: normalizeText(player?.steamID),
       eosId: normalizeText(player?.eosID),
-      name: normalizeText(player?.name ?? player?.playerName),
+      name: normalizeText(player?.name),
       reason: MATCH_REASON,
       source: `plugin.${PLUGIN_ID}`,
       system: true,
@@ -309,6 +324,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         : await squadManagement.executeAction({ ...request, type: "kick_player" });
 
     if (result?.ok) {
+      const key = makePlayerKey(player);
+      if (key) runtime.actedPlayers.add(key);
       state.kickSuccess += 1;
       state.lastKickAt = new Date().toISOString();
       state.lastError = "";
@@ -323,6 +340,10 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       return;
     }
 
+    const failureKey = makePlayerKey(player);
+    if (failureKey) {
+      runtime.failureCooldowns.set(failureKey, Date.now() + state.retryCooldownMs);
+    }
     state.kickFailed += 1;
     state.lastError = String(result?.error ?? result?.message ?? "kick failed");
     pushRecentEvent("kick_failed", {
@@ -336,86 +357,40 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     pluginLogger?.warn?.(`[LianbanKick] failed to kick ${request.name || request.steamId || request.eosId}: ${state.lastError}`);
   }
 
-  function resolveJoinPlayer(event = {}) {
-    const payload = event?.payload ?? {};
-    const paramMap = event?.paramMap ?? {};
-
-    const playerName = normalizeText(
-      payload.playerName
-        ?? payload.name
-        ?? paramMap.PlayerName
-        ?? event?.playerName
-        ?? event?.name,
-    );
-
-    const steamID = normalizeText(
-      payload.steamID
-        ?? payload.steamId
-        ?? payload.Steam64ID
-        ?? payload.SteamID
-        ?? paramMap.Steam64ID
-        ?? paramMap.SteamID
-        ?? event?.steamID
-        ?? event?.steamId,
-    );
-
-    const eosID = normalizeText(
-      payload.eosID
-        ?? payload.eosId
-        ?? payload.EOSID
-        ?? paramMap.EOSID
-        ?? event?.eosID
-        ?? event?.eosId,
-    );
-
-    const controllerID = normalizeText(
-      payload.controllerID
-        ?? payload.ControllerID
-        ?? paramMap.ControllerID
-        ?? event?.controllerID
-        ?? event?.controllerId,
-    );
-
-    return {
-      playerName,
-      steamID,
-      eosID,
-      controllerID,
-    };
-  }
-
-  async function handlePlayerConnected(event = {}) {
+  async function processPlayersSnapshot(event = {}) {
     if (!isActive()) return;
 
     const serverId = normalizeText(event?.serverId, core?.webStatus?.serverId ?? "");
     if (!serverId) return;
 
-    const player = resolveJoinPlayer(event);
-    const playerKey = makePlayerKey(player);
-    if (!playerKey) {
-      state.lastError = "player_identity_missing";
-      pushRecentEvent("join_skipped", {
-        serverId,
-        error: state.lastError,
-      });
-      pluginLogger?.warn?.("[LianbanKick] player identity missing on join event, kick skipped.");
-      return;
-    }
+    const players = Array.isArray(event?.players)
+      ? event.players
+      : modules?.playerState?.getPlayerList?.(serverId) ?? [];
 
     state.lastScanAt = new Date().toISOString();
-    state.playersScanned += 1;
-    pushRecentEvent("join", {
+    state.playersScanned = players.length;
+    pushRecentEvent("scan", {
       serverId,
-      playerName: player.playerName,
-      steamID: player.steamID,
-      eosID: player.eosID,
+      playersScanned: players.length,
     });
 
-    await kickMatchedPlayer(serverId, player, {
-      matched: true,
-      matchType: "join_event",
-      matchValue: player.playerName || player.steamID || player.eosID || player.controllerID || "",
-    });
+    releaseOfflinePlayers(players);
+    const rules = await loadRules(false);
+    if (!rules.entries) return;
+
+    for (const player of players) {
+      const playerKey = makePlayerKey(player);
+      if (!playerKey) continue;
+      if (runtime.actedPlayers.has(playerKey)) continue;
+
+      const cooldownUntil = Number(runtime.failureCooldowns.get(playerKey) || 0) || 0;
+      if (cooldownUntil > Date.now()) continue;
+
+      const match = matchPlayer(rules, player);
+      if (!match.matched) continue;
+
+      await kickMatchedPlayer(serverId, player, match);
+    }
   }
 
   const api = {
@@ -436,6 +411,10 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     async rescan(serverId = core?.webStatus?.serverId ?? "") {
       await loadRules(true);
+      await processPlayersSnapshot({
+        serverId,
+        players: modules?.playerState?.getPlayerList?.(serverId) ?? [],
+      });
       return api.getState();
     },
   };
@@ -506,19 +485,25 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         icon: "LB",
       });
 
-      if (typeof core?.eventBus?.onCoreEvent !== "function") {
-        state.lastError = "eventBus.onCoreEvent unavailable";
+      if (typeof core?.eventBus?.onModuleEvent !== "function") {
+        state.lastError = "eventBus.onModuleEvent unavailable";
         pushRecentEvent("plugin_error", {
           error: state.lastError,
         });
-        pluginLogger?.warn?.("[LianbanKick] eventBus.onCoreEvent unavailable.");
+        pluginLogger?.warn?.("[LianbanKick] eventBus.onModuleEvent unavailable.");
         return;
       }
 
-      unsubscribers.push(core.eventBus.onCoreEvent(
-        "On_PlayerConnected",
-        (event) => enqueue(() => handlePlayerConnected(event)),
+      unsubscribers.push(core.eventBus.onModuleEvent(
+        "module.playerState",
+        "playersSnapshotUpdated",
+        (event) => enqueue(() => processPlayersSnapshot(event)),
       ));
+
+      await enqueue(() => processPlayersSnapshot({
+        serverId: core?.webStatus?.serverId ?? "",
+        players: modules?.playerState?.getPlayerList?.(core?.webStatus?.serverId ?? "") ?? [],
+      }));
 
       pushRecentEvent("plugin_started", {
         serverId: core?.webStatus?.serverId ?? "",
@@ -528,6 +513,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     async stop() {
       for (const unsubscribe of unsubscribers.splice(0)) unsubscribe();
+      runtime.actedPlayers.clear();
+      runtime.failureCooldowns.clear();
       pushRecentEvent("plugin_stopped");
       pluginLogger?.info?.("[LianbanKick] plugin stopped.");
     },
