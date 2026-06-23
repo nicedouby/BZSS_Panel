@@ -14,6 +14,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
   const runtimeConfig = readConfig(config);
   const stateByServerId = new Map();
+  const timersByProcessId = new Map();
   const unsubscribers = [];
   let serial = Promise.resolve();
 
@@ -127,16 +128,45 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     if (typeof sender !== "function") {
       return { success: false, skipped: true, skipReason: "rcon_unavailable" };
     }
+
+    const commandText = normalizeText(command);
+    pluginLogger?.info?.(`[CommanderImpeachment] Executing raw RCON command: ${commandText}`, {
+      operation: "commanderImpeachment.demoteCommander",
+      data: {
+        command: commandText,
+        reason: normalizeText(meta?.reason) || "commander_impeachment",
+      },
+    });
+
     try {
-      return await sender.call(core.rconManager, {
-        command,
+      const result = await sender.call(core.rconManager, {
+        command: commandText,
         system: true,
         priority: "high",
         requestedBy: PLUGIN_ID,
         reason: normalizeText(meta?.reason) || "commander_impeachment",
       });
+
+      pluginLogger?.info?.(`[CommanderImpeachment] RCON command finished: ${commandText}`, {
+        operation: "commanderImpeachment.demoteCommander",
+        data: {
+          command: commandText,
+          reason: normalizeText(meta?.reason) || "commander_impeachment",
+          success: Boolean(result?.success),
+          rconExecuted: Boolean(result?.rconExecuted),
+          message: normalizeText(result?.message),
+        },
+      });
+
+      return result;
     } catch (error) {
-      pluginLogger?.warn?.(`[CommanderImpeachment] demote failed: ${error?.message ?? error}`);
+      pluginLogger?.warn?.(`[CommanderImpeachment] demote failed: ${error?.message ?? error}`, {
+        operation: "commanderImpeachment.demoteCommander",
+        data: {
+          command: commandText,
+          reason: normalizeText(meta?.reason) || "commander_impeachment",
+        },
+      });
       return { success: false, error: error?.message ?? String(error) };
     }
   }
@@ -161,12 +191,17 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     }) ?? null;
   }
 
+  function isLeaderRole(roleText) {
+    const clean = String(roleText ?? "").toLowerCase();
+    return clean.includes("squadleader") || clean.includes("officer") || clean.includes("sl") || clean.includes("leader") || clean.includes("lead_");
+  }
+
   function findCommander(state, teamId) {
     const teamPlayers = Array.isArray(state?.players) ? state.players.filter((player) => sameTeam(player, { teamId })) : [];
     const commandSquads = Array.isArray(state?.squads) ? state.squads.filter((squad) => sameTeam(squad, { teamId }) && isCommandSquad(squad)) : [];
 
     for (const squad of commandSquads) {
-      const leader = teamPlayers.find((player) => sameSquad(player, squad) && Boolean(player.isLeader) && !isCommandSquadPlayer(player, state));
+      const leader = teamPlayers.find((player) => sameSquad(player, squad) && Boolean(player.isLeader));
       if (leader) {
         return {
           player: leader,
@@ -194,6 +229,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     return null;
   }
+
 
   function findCurrentLeader(state, teamId, squadId) {
     const players = Array.isArray(state?.players) ? state.players : [];
@@ -258,9 +294,13 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     const playersSnapshot = buildPlayersSnapshot(state, teamId);
     const snapshotByKey = new Map();
     const snapshotSquadsById = new Map();
+    const playerVotes = {};
     for (const player of playersSnapshot) {
       const playerKey = resolvePlayerKey(player);
-      if (playerKey) snapshotByKey.set(playerKey, player);
+      if (playerKey) {
+        snapshotByKey.set(playerKey, player);
+        playerVotes[playerKey] = { vote: null, squadId: null };
+      }
       const squadId = Number(player.squadId ?? player.squadID ?? -1);
       if (!snapshotSquadsById.has(squadId)) snapshotSquadsById.set(squadId, []);
       snapshotSquadsById.get(squadId).push(player);
@@ -279,6 +319,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       playersSnapshot,
       snapshotByKey,
       snapshotSquadsById,
+      playerVotes,
       votesBySquadId: new Map(),
       votedPlayerKeys: new Set(),
       logs: [],
@@ -302,79 +343,87 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     return "";
   }
 
-  function countYesVotes(process) {
-    let total = 0;
-    for (const vote of process.votesBySquadId.values()) {
-      if (vote.vote === "yes") total += Number(vote.weight ?? 0);
+  async function executeEvaluation(process) {
+    if (process.status !== "active") return;
+
+    const timers = timersByProcessId.get(process.id);
+    if (timers) {
+      if (timers.timer) clearInterval(timers.timer);
+      if (timers.timeout) clearTimeout(timers.timeout);
+      timersByProcessId.delete(process.id);
+    }    let yesCount = 0;
+    let noCount = 0;
+    for (const pKey in process.playerVotes) {
+      const record = process.playerVotes[pKey];
+      if (record.vote === "yes") yesCount++;
+      else if (record.vote === "no") noCount++;
     }
-    return total;
-  }
+    process.yesCount = yesCount;
 
-  function getRemainingPotential(process) {
-    return Math.max(0, Number(process.totalCount ?? 0) - Number(process.votedPlayerKeys.size ?? 0));
-  }
+    const threshold = Math.ceil(process.totalCount * 0.5);
+    const passed = yesCount >= threshold;
 
-  function hasOutcome(process) {
-    const yesCount = countYesVotes(process);
-    const totalCount = Number(process.totalCount ?? 0);
-    const threshold = Math.ceil(totalCount * 0.5);
-    const remaining = getRemainingPotential(process);
-    return {
-      yesCount,
-      totalCount,
-      threshold,
-      remaining,
-      passed: yesCount >= threshold,
-      impossible: yesCount + remaining < threshold,
-      complete: yesCount >= threshold || yesCount + remaining < threshold || process.votedPlayerKeys.size >= totalCount,
-    };
-  }
+    const runtime = getRuntime(process.serverId);
 
-  async function finalizeProcess(process, { triggeredBy = null } = {}) {
-    const outcome = hasOutcome(process);
-    process.yesCount = outcome.yesCount;
+    const yesPercent = process.totalCount > 0 ? Math.round((yesCount / process.totalCount) * 100) : 0;
 
-    if (outcome.passed) {
-      const commandResult = await demoteCommander("AdminDemoteCommander", {
+    if (passed) {
+      const commanderPlayerId = normalizeText(process.commander.playerId ?? process.commander.playerID);
+      const commanderSteamId = normalizeText(process.commander.steamId ?? process.commander.steamID);
+      const commanderName = normalizeText(process.commander.name);
+      const command = commanderPlayerId
+        ? `AdminDemoteCommanderById ${commanderPlayerId}`
+        : commanderSteamId
+          ? `AdminDemoteCommander ${commanderSteamId}`
+          : `AdminDemoteCommander ${commanderName}`;
+      const commandResult = await demoteCommander(command, {
         reason: "commander_impeachment_success",
       });
-      if (commandResult?.success === false || commandResult?.ok === false) {
-        await broadcast(`${process.factionName} 阵营未能完成罢免指挥官流程。`, "commander_impeachment_failed_broadcast", {
-          relatedEventId: process.id,
-        });
-        process.status = "failed";
-        process.outcome = "failed";
-        process.finishedAt = nowIso();
-        process.finishedAtMs = Date.now();
-        return { success: false, reason: "demote_failed", outcome };
-      }
 
       const gameHours = formatHours((Number(getSquadState(process.serverId)?.match?.logClockSeconds ?? 0) || Number(core?.webStatus?.getSnapshot?.()?.logClockSeconds ?? 0) || 0) / 3600);
-      await broadcast(`${process.commander.name} 已被罢免，游戏时长 ${gameHours} 小时。`, "commander_impeachment_success_broadcast", {
-        relatedEventId: process.id,
-      });
+      const successMessage = `指挥官 ${process.commander.name} 被罢免，游戏时长 ${gameHours} 小时。`;
+
       await warnPlayer(process.commander, "你已被罢免。", "commander_impeachment_commander_removed", {
         relatedEventId: process.id,
       });
+
+      const currentState = getSquadState(process.serverId);
+      const factionPlayers = currentState && Array.isArray(currentState.players)
+        ? currentState.players.filter(p => Number(p.teamId ?? p.teamID ?? -1) === process.teamId)
+        : [];
+      
+      for (const player of factionPlayers) {
+        if (resolvePlayerKey(player) !== resolvePlayerKey(process.commander)) {
+          await warnPlayer(player, successMessage, "commander_impeachment_success_broadcast", {
+            relatedEventId: process.id,
+          });
+        }
+      }
+
       process.status = "succeeded";
       process.outcome = "succeeded";
-      process.finishedAt = nowIso();
-      process.finishedAtMs = Date.now();
-      return { success: true, outcome };
-    }
+      runtime.stats.succeeded += 1;
+    } else {
+      const failMessage = `${process.factionName} 阵营未能完成罢免指挥官流程。最终赞成率 ${yesPercent}%。`;
+      const currentState = getSquadState(process.serverId);
+      const factionPlayers = currentState && Array.isArray(currentState.players)
+        ? currentState.players.filter(p => Number(p.teamId ?? p.teamID ?? -1) === process.teamId)
+        : [];
+      
+      for (const player of factionPlayers) {
+        await warnPlayer(player, failMessage, "commander_impeachment_failed_broadcast", {
+          relatedEventId: process.id,
+        });
+      }
 
-    if (outcome.impossible || outcome.complete) {
-      await broadcast(`${process.factionName} 阵营未能完成罢免指挥官流程。`, "commander_impeachment_failed_broadcast", {
-        relatedEventId: process.id,
-      });
       process.status = "failed";
       process.outcome = "failed";
-      process.finishedAt = nowIso();
-      process.finishedAtMs = Date.now();
-      return { success: false, outcome };
+      runtime.stats.failed += 1;
     }
 
-    return { success: false, pending: true, outcome };
+    process.finishedAt = nowIso();
+    process.finishedAtMs = Date.now();
+    runtime.activeProcesses = runtime.processes.filter((item) => item.status === "active");
   }
 
   async function startImpeachment(event = {}) {
@@ -422,28 +471,83 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       serverId: getServerId(event.serverId),
     });
 
+    // Automatically vote "yes" for initiator's squad
+    const initiatorSquadId = Number(initiator.squadId ?? initiator.squadID ?? -1);
+    const initiatorSquadMembers = Array.isArray(state.players)
+      ? state.players.filter(p => Number(p.teamId ?? p.teamID ?? -1) === teamId && Number(p.squadId ?? p.squadID ?? -1) === initiatorSquadId)
+      : [];
+    for (const member of initiatorSquadMembers) {
+      const memberKey = resolvePlayerKey(member);
+      if (memberKey && process.playerVotes[memberKey]) {
+        process.playerVotes[memberKey].vote = "yes";
+        process.playerVotes[memberKey].squadId = initiatorSquadId;
+      }
+    }
+
     runtime.processes.push(process);
     runtime.activeProcesses = runtime.processes.filter((item) => item.status === "active");
     runtime.stats.started += 1;
 
-    await broadcast(`${factionName} 阵营正在进行罢免指挥官流程。`, "commander_impeachment_started_broadcast", {
-      relatedEventId: process.id,
-    });
-    await warnPlayer(process.commander, "你正在被罢免。请等待投票结果。", "commander_impeachment_commander_warned", {
-      relatedEventId: process.id,
-    });
-
-    const leaders = process.playersSnapshot.filter((player) =>
-      Number(player.teamId ?? player.teamID ?? -1) === Number(teamId)
-      && Boolean(player.isLeader)
-      && !isCommandSquadPlayer(player, state),
-    );
-
-    for (const leader of leaders) {
-      await warnPlayer(leader, "罢免指挥官投票正在进行。输入 1 赞成罢免，输入 0 反对罢免。你的投票将代表本小队所有成员。", "commander_impeachment_vote_prompt", {
-        relatedEventId: process.id,
-      });
+    for (const player of process.playersSnapshot) {
+      const pKey = resolvePlayerKey(player);
+      if (pKey === resolvePlayerKey(process.commander)) {
+        await warnPlayer(player, "你正在被罢免。请等待投票结果。", "commander_impeachment_commander_warned", {
+          relatedEventId: process.id,
+        });
+      } else if (pKey === resolvePlayerKey(process.initiator)) {
+        await warnPlayer(player, "你已发起罢免并代表本小队默认投票：赞成罢免。", "commander_impeachment_initiator_warned", {
+          relatedEventId: process.id,
+        });
+      } else if (Number(player.squadId ?? player.squadID ?? -1) === initiatorSquadId) {
+        await warnPlayer(player, "你所在小队已由队长代表投票：赞成罢免。", "commander_impeachment_squad_member_notified", {
+          relatedEventId: process.id,
+        });
+      } else if (Boolean(player.isLeader) && !isCommandSquadPlayer(player, state)) {
+        await warnPlayer(player, "罢免指挥官投票正在进行。输入 1 赞成罢免，输入 0 否决罢免。你的投票将代表本小队所有成员。", "commander_impeachment_vote_prompt", {
+          relatedEventId: process.id,
+        });
+      } else {
+        await warnPlayer(player, "罢免指挥官进程正在进行。", "commander_impeachment_member_warned", {
+          relatedEventId: process.id,
+        });
+      }
     }
+
+    const duration = runtimeConfig.durationMs ?? 60000;
+    const interval = runtimeConfig.intervalMs ?? 15000;
+
+    const timer = setInterval(async () => {
+      const currentState = getSquadState(event.serverId);
+      if (!currentState) return;
+      
+      const factionPlayers = Array.isArray(currentState.players)
+        ? currentState.players.filter(p => Number(p.teamId ?? p.teamID ?? -1) === teamId)
+        : [];
+      
+      let currentYesCount = 0;
+      let currentNoCount = 0;
+      for (const pKey in process.playerVotes) {
+        const record = process.playerVotes[pKey];
+        if (record.vote === "yes") currentYesCount++;
+        else if (record.vote === "no") currentNoCount++;
+      }
+      process.yesCount = currentYesCount;
+
+      const yesPercent = process.totalCount > 0 ? Math.round((currentYesCount / process.totalCount) * 100) : 0;
+      const progressMsg = `罢免指挥官投票进行中：当前赞成率 ${yesPercent}% (通过需要达到 50%)。`;
+
+      for (const player of factionPlayers) {
+        await warnPlayer(player, progressMsg, "commander_impeachment_progress_broadcast", {
+          relatedEventId: process.id,
+        });
+      }
+    }, interval);
+
+    const timeout = setTimeout(async () => {
+      await executeEvaluation(process);
+    }, duration);
+
+    timersByProcessId.set(process.id, { timer, timeout });
 
     return { matched: true, success: true, process: clone(process) };
   }
@@ -476,7 +580,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       return { matched: true, success: false, reason: "initiator_not_leader" };
     }
 
-    const currentLeader = findCurrentLeader(state, teamId, Number(initiator.squadId ?? initiator.squadID ?? -1));
+    const squadId = Number(initiator.squadId ?? initiator.squadID ?? -1);
+    const currentLeader = findCurrentLeader(state, teamId, squadId);
     if (!currentLeader) {
       await warnPlayer(initiator, "只有小队长可以参与本次罢免投票。", "commander_impeachment_vote_denied", {
         relatedEventId: process.id,
@@ -485,52 +590,63 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     }
 
     const voterKey = resolvePlayerKey(currentLeader);
-    const squadId = Number(currentLeader.squadId ?? currentLeader.squadID ?? -1);
-    const squadMembers = buildSnapshotSquadMembers(process.playersSnapshot, currentLeader);
-    const voteRecord = {
-      squadId,
-      vote,
-      leaderName: normalizeText(currentLeader.name),
-      leaderKey: voterKey,
-      weight: squadMembers.length,
-      memberKeys: squadMembers.map((player) => resolvePlayerKey(player)).filter(Boolean),
-      votedAt: nowIso(),
-    };
+    const squadMembers = Array.isArray(state?.players)
+      ? state.players.filter((player) => Number(player.teamId ?? player.teamID ?? -1) === teamId && Number(player.squadId ?? player.squadID ?? -1) === squadId)
+      : [];
 
-    process.votesBySquadId.set(squadId, voteRecord);
+    let updatedCount = 0;
     for (const member of squadMembers) {
       const memberKey = resolvePlayerKey(member);
-      if (memberKey) process.votedPlayerKeys.add(memberKey);
+      if (!memberKey) continue;
+      const record = process.playerVotes[memberKey];
+      if (record) {
+        if (record.vote === null) {
+          record.vote = vote;
+          record.squadId = squadId;
+          updatedCount++;
+        } else if (record.squadId === squadId) {
+          record.vote = vote;
+          updatedCount++;
+        }
+      }
     }
 
     runtime.stats.votesCast += 1;
 
-    const voteText = vote === "yes" ? "赞成罢免" : "反对罢免";
+    const voteText = vote === "yes" ? "赞成罢免" : "否决罢免";
     await warnPlayer(currentLeader, `你已代表本小队投票：${voteText}。`, vote === "yes" ? "commander_impeachment_vote_yes" : "commander_impeachment_vote_no", {
       relatedEventId: process.id,
     });
 
     for (const member of squadMembers) {
-      if (resolvePlayerKey(member) === voterKey) continue;
-      await warnPlayer(member, `你所在小队已由队长代表投票：${voteText}。`, "commander_impeachment_squad_member_notified", {
-        relatedEventId: process.id,
-      });
+      const pKey = resolvePlayerKey(member);
+      if (pKey === voterKey) continue;
+      const record = process.playerVotes[pKey];
+      if (record && record.squadId === squadId) {
+        await warnPlayer(member, `你所在小队已由队长代表投票：${voteText}。`, "commander_impeachment_squad_member_notified", {
+          relatedEventId: process.id,
+        });
+      }
     }
 
-    const outcome = await finalizeProcess(process, { triggeredBy: currentLeader });
-    runtime.activeProcesses = runtime.processes.filter((item) => item.status === "active");
-    if (outcome?.success) {
-      runtime.stats.succeeded += 1;
-    } else if (process.status === "failed") {
-      runtime.stats.failed += 1;
+    let yesCount = 0;
+    let noCount = 0;
+    for (const pKey in process.playerVotes) {
+      const record = process.playerVotes[pKey];
+      if (record.vote === "yes") yesCount++;
+      else if (record.vote === "no") noCount++;
+    }
+    process.yesCount = yesCount;
+
+    const threshold = Math.ceil(process.totalCount * 0.5);
+    if (yesCount >= threshold) {
+      await executeEvaluation(process);
     }
 
     return {
       matched: true,
-      success: Boolean(outcome?.success),
-      voteRecord,
+      success: true,
       process: clone(process),
-      outcome,
     };
   }
 
@@ -639,6 +755,18 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           unsubscribe();
         } catch {}
       }
+      for (const state of stateByServerId.values()) {
+        for (const process of state.processes) {
+          if (process.timer) {
+            clearInterval(process.timer);
+            process.timer = null;
+          }
+          if (process.timeout) {
+            clearTimeout(process.timeout);
+            process.timeout = null;
+          }
+        }
+      }
     },
   };
 }
@@ -647,5 +775,7 @@ function readConfig(config) {
   const raw = config?.get?.("plugins.commanderImpeachment", {});
   return {
     enabled: raw.enabled !== false,
+    durationMs: raw.durationMs ?? 60000,
+    intervalMs: raw.intervalMs ?? 15000,
   };
 }
