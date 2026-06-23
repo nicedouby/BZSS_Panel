@@ -57,9 +57,9 @@
         <span class="combat-badge kd-capsule">
           <span class="stat-pill kills" title="击杀 (Kills)">{{ kills }}</span>
           <span class="separator">/</span>
-          <span class="stat-pill deaths" title="死亡 (Deaths)">{{ deaths }}</span>
-          <span class="separator">/</span>
           <span class="stat-pill downs" title="击倒 (Downs)">{{ downs }}</span>
+          <span class="separator">/</span>
+          <span class="stat-pill deaths" title="死亡 (Deaths)">{{ deaths }}</span>
         </span>
 
         <!-- TK Warning Badge (only shown if tk > 0) -->
@@ -68,22 +68,32 @@
           <span class="val">{{ tk }}</span>
         </span>
 
-        <!-- Support Badge (shown if revives > 0 or healPoints > 0) -->
-        <span v-if="revives > 0 || healPoints > 0" class="combat-badge support-badge">
-          <span v-if="revives > 0" class="stat-sub-pill revives" title="复苏人数 (Revives)">
-            <span class="lbl">苏</span>
+        <!-- Support Badge -->
+        <span class="combat-badge support-badge">
+          <span class="stat-sub-pill revives" title="复苏人数 (Revived Point)">
+            <span class="lbl">Rev</span>
             <span class="val">{{ revives }}</span>
           </span>
-          <span v-if="healPoints > 0" class="stat-sub-pill heals" title="治疗点数 (Heal Points)">
-            <span class="lbl">疗</span>
+          <span class="stat-sub-pill heals" title="治疗点数 (Heal Point)">
+            <span class="lbl">Heal</span>
             <span class="val">{{ healPoints }}</span>
           </span>
         </span>
 
         <!-- Score Badge -->
-        <span class="combat-badge score-badge" :title="`战斗分数: ${combatScore}\n团队分数: ${teamworkScore}\n目标分数: ${objectiveScore}`">
-          <span class="lbl">分</span>
-          <span class="val">{{ combatScore }}</span>
+        <span class="combat-badge score-badge">
+          <span class="stat-sub-pill teamwork" title="团队分数 (Teamwork Point)">
+            <span class="lbl">T</span>
+            <span class="val">{{ teamworkScore }}</span>
+          </span>
+          <span class="stat-sub-pill objective" title="目标分数 (Objective Point)">
+            <span class="lbl">O</span>
+            <span class="val">{{ objectiveScore }}</span>
+          </span>
+          <span class="stat-sub-pill combat" title="战斗分数 (Combat Score)">
+            <span class="lbl">C</span>
+            <span class="val">{{ combatScore }}</span>
+          </span>
         </span>
 
         <!-- Squadless duration (if any) -->
