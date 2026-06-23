@@ -397,36 +397,24 @@ async function confirmDangerAction(
 
 async function handleDisband() {
   if (!viewerCanDisband.value || actionBusy.value || !canSubmitDisband.value) return;
-  // Directly perform disband without confirmation
-  actionBusy.value = true;
-  try {
-    const res = await disbandSquad({
+
+  await confirmDangerAction(
+    "确认解散小队",
+    `TEAM ${disbandTeamId.value} / SQUAD ${disbandSquadId.value}`,
+    () => disbandSquad({
       teamId: Number(disbandTeamId.value),
       squadId: Number(disbandSquadId.value),
       source: disbandSource.value,
       reason: disbandReason.value.trim(),
-    });
-    if (!res.ok) throw new Error(res.message || "解散指令执行失败");
-    ui.pushToast({
-      title: "解散请求已送达",
-      message: "小队解散请求已提交。",
-      tone: "ok",
-    });
-    // Reset fields
-    disbandTeamId.value = "";
-    disbandSquadId.value = "";
-    disbandReason.value = "";
-    // reload data
-    void reload();
-  } catch (error) {
-    ui.pushToast({
-      title: "操作失败",
-      message: error instanceof Error ? error.message : String(error),
-      tone: "error",
-    });
-  } finally {
-    actionBusy.value = false;
-  }
+    }),
+    () => {
+      disbandTeamId.value = "";
+      disbandSquadId.value = "";
+      disbandReason.value = "";
+    },
+    "解散请求已送达",
+    "小队解散请求已提交。",
+  );
 }
 
 async function handleKick() {
