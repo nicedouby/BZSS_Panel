@@ -54,6 +54,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
   let lastResolvedPath = "";
   let watcher = null;
   let watcherPath = "";
+  let missingTicks = 0;
 
   function readConfig() {
     const config = core.config?.get?.("bzssCore", {}) ?? {};
@@ -164,6 +165,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
       lastFingerprint = "";
       lastExists = false;
       lastResolvedPath = resolvedPath;
+      missingTicks = 0;
       publish((draft) => {
         draft.configuredPath = configuredPath;
         draft.resolvedPath = resolvedPath;
@@ -188,6 +190,8 @@ export function createBzssCoreMonitorModule({ core, logger }) {
       stat = await fs.stat(resolvedPath);
     } catch (error) {
       if (error?.code === "ENOENT") {
+        missingTicks += 1;
+        if (missingTicks < 15) return;
         lastFingerprint = "";
         const missingAfterExisting = lastExists;
         lastExists = false;
@@ -220,10 +224,15 @@ export function createBzssCoreMonitorModule({ core, logger }) {
       return;
     }
 
+    if (stat.size === 0) {
+      return;
+    }
+
     const fingerprint = `${stat.size}:${stat.mtimeMs}`;
     if (!pathChanged && fingerprint === lastFingerprint) return;
     lastFingerprint = fingerprint;
     lastExists = true;
+    missingTicks = 0;
 
     let fileBuffer = null;
     try {
@@ -242,8 +251,15 @@ export function createBzssCoreMonitorModule({ core, logger }) {
     }
 
     const extracted = extractBzssCoreTrackedText(fileBuffer);
+    if (!extracted.text || !extracted.markerSeen) {
+      return;
+    }
+
     const captureZones = parseCaptureZones(extracted.text);
     const fobs = parseFobs(extracted.text);
+    const players = parseBzssCorePlayerBlocks(extracted.text);
+    const indexByName = buildPlayerIndex(players);
+
     publish((draft) => {
       draft.configuredPath = configuredPath;
       draft.resolvedPath = resolvedPath;
@@ -251,36 +267,17 @@ export function createBzssCoreMonitorModule({ core, logger }) {
       draft.fileSize = Number(stat?.size ?? 0);
       draft.fileMtimeMs = Number(stat?.mtimeMs ?? 0);
       draft.lastReadAt = new Date().toISOString();
-      draft.markerSeen = extracted.markerSeen;
+      draft.markerSeen = true;
       draft.rawText = extracted.text;
       draft.rawTextLength = extracted.text.length;
       draft.rawTextUpdatedAt = draft.lastReadAt;
       draft.captureZones = captureZones;
       draft.fobs = fobs;
       draft.lastError = extracted.error ?? "";
-    });
-
-    if (!extracted.text) {
-      clearPublishedPlayers("writing", extracted.error ?? "");
-      return;
-    }
-
-    if (!extracted.markerSeen) {
-      clearPublishedPlayers("writing");
-      return;
-    }
-
-    const players = parseBzssCorePlayerBlocks(extracted.text);
-    const indexByName = buildPlayerIndex(players);
-    publish((draft) => {
       draft.status = "ready";
       draft.players = players;
-      draft.captureZones = captureZones;
-      draft.fobs = fobs;
       draft.indexByName = indexByName;
-      draft.markerSeen = true;
       draft.lastCompletedAt = new Date().toISOString();
-      draft.lastError = "";
     });
   }
 
