@@ -1,7 +1,6 @@
 // -*- coding: utf-8 -*-
 
 const PLUGIN_ID = "plugin.commander-impeachment";
-const IMPEACHMENT_TIMEOUT_MS = 60_000;
 export function createPlugin({ core, modules, config, logger } = {}) {
   const pluginLogger =
     logger
@@ -15,7 +14,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
   const runtimeConfig = readConfig(config);
   const stateByServerId = new Map();
-  const timeoutHandlesByProcessId = new Map();
   const unsubscribers = [];
   let serial = Promise.resolve();
 
@@ -67,36 +65,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       stateByServerId.set(resolvedServerId, createEmptyState(resolvedServerId));
     }
     return stateByServerId.get(resolvedServerId);
-  }
-
-  function setProcessTimeout(process) {
-    clearProcessTimeout(process);
-    const handle = setTimeout(() => {
-      void enqueue(async () => {
-        if (process.status !== "active") return;
-        await finalizeProcess(process, { triggeredBy: "timeout", timedOut: true });
-      });
-    }, IMPEACHMENT_TIMEOUT_MS);
-    if (typeof handle?.unref === "function") {
-      handle.unref();
-    }
-    timeoutHandlesByProcessId.set(process.id, handle);
-    return handle;
-  }
-
-  function clearProcessTimeout(process) {
-    const handle = timeoutHandlesByProcessId.get(process?.id);
-    if (handle) {
-      clearTimeout(handle);
-      timeoutHandlesByProcessId.delete(process.id);
-    }
-  }
-
-  function clearAllProcessTimeouts() {
-    for (const handle of timeoutHandlesByProcessId.values()) {
-      clearTimeout(handle);
-    }
-    timeoutHandlesByProcessId.clear();
   }
 
   function createEmptyState(serverId) {
@@ -307,7 +275,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       initiator: clone(initiator),
       startedAt: nowIso(),
       startedAtMs: Date.now(),
-      timeoutAtMs: Date.now() + IMPEACHMENT_TIMEOUT_MS,
       status: "active",
       playersSnapshot,
       snapshotByKey,
@@ -363,15 +330,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     };
   }
 
-  async function finalizeProcess(process, { triggeredBy = null, timedOut = false } = {}) {
-    if (!process || process.status !== "active") {
-      return { success: false, skipped: true, reason: "process_inactive", outcome: hasOutcome(process ?? {}) };
-    }
-
-    clearProcessTimeout(process);
+  async function finalizeProcess(process, { triggeredBy = null } = {}) {
     const outcome = hasOutcome(process);
     process.yesCount = outcome.yesCount;
-    const runtime = getRuntime(process.serverId);
 
     if (outcome.passed) {
       const commandResult = await demoteCommander("AdminDemoteCommander", {
@@ -385,8 +346,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         process.outcome = "failed";
         process.finishedAt = nowIso();
         process.finishedAtMs = Date.now();
-        runtime.stats.failed += 1;
-        runtime.activeProcesses = runtime.processes.filter((item) => item.status === "active");
         return { success: false, reason: "demote_failed", outcome };
       }
 
@@ -401,12 +360,10 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       process.outcome = "succeeded";
       process.finishedAt = nowIso();
       process.finishedAtMs = Date.now();
-      runtime.stats.succeeded += 1;
-      runtime.activeProcesses = runtime.processes.filter((item) => item.status === "active");
       return { success: true, outcome };
     }
 
-    if (outcome.impossible || outcome.complete || timedOut) {
+    if (outcome.impossible || outcome.complete) {
       await broadcast(`${process.factionName} 阵营未能完成罢免指挥官流程。`, "commander_impeachment_failed_broadcast", {
         relatedEventId: process.id,
       });
@@ -414,8 +371,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       process.outcome = "failed";
       process.finishedAt = nowIso();
       process.finishedAtMs = Date.now();
-      runtime.stats.failed += 1;
-      runtime.activeProcesses = runtime.processes.filter((item) => item.status === "active");
       return { success: false, outcome };
     }
 
@@ -470,7 +425,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     runtime.processes.push(process);
     runtime.activeProcesses = runtime.processes.filter((item) => item.status === "active");
     runtime.stats.started += 1;
-    setProcessTimeout(process);
 
     await broadcast(`${factionName} 阵营正在进行罢免指挥官流程。`, "commander_impeachment_started_broadcast", {
       relatedEventId: process.id,
@@ -565,6 +519,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     const outcome = await finalizeProcess(process, { triggeredBy: currentLeader });
     runtime.activeProcesses = runtime.processes.filter((item) => item.status === "active");
+    if (outcome?.success) {
+      runtime.stats.succeeded += 1;
+    } else if (process.status === "failed") {
+      runtime.stats.failed += 1;
+    }
 
     return {
       matched: true,
@@ -675,7 +634,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     },
 
     async stop() {
-      clearAllProcessTimeouts();
       for (const unsubscribe of unsubscribers.splice(0)) {
         try {
           unsubscribe();

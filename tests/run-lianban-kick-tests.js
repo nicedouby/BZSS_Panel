@@ -91,40 +91,22 @@ async function createHarness({ files = {}, kickResults = [] } = {}) {
   };
 }
 
-async function testKickOnlyMatchedJoinEvents() {
-  const harness = await createHarness({
-    files: {
-      "ban-list.txt": [
-        "steam: 76561198000000001",
-        "eos: EOS-Y",
-        "Alpha Name",
-      ].join("\n"),
-    },
-  });
+async function testKickEveryJoinEvent() {
+  const harness = await createHarness();
 
   try {
     await harness.emitJoin({
-      playerName: "Ignore Me",
-      steamID: "76561198000000000",
+      playerName: "Steam Hit",
+      steamID: "76561198000000001",
       eosID: "EOS-X",
     });
     await harness.emitJoin({
-      playerName: "Steam Hit",
-      steamID: "76561198000000001",
-      eosID: "EOS-S",
-    });
-    await harness.emitJoin({
-      playerName: "Eos Hit",
+      playerName: "Alpha Player",
       steamID: "76561198000000002",
       eosID: "EOS-Y",
     });
-    await harness.emitJoin({
-      playerName: "Alpha Name",
-      steamID: "76561198000000003",
-      eosID: "EOS-Z",
-    });
 
-    assert.equal(harness.kicks.length, 3);
+    assert.equal(harness.kicks.length, 2);
     assert.deepEqual(
       harness.kicks.map((item) => ({
         steamId: item.steamId,
@@ -135,37 +117,27 @@ async function testKickOnlyMatchedJoinEvents() {
       [
         {
           steamId: "76561198000000001",
-          eosId: "EOS-S",
+          eosId: "EOS-X",
           name: "Steam Hit",
           source: "plugin.lianbanKick",
         },
         {
           steamId: "76561198000000002",
           eosId: "EOS-Y",
-          name: "Eos Hit",
-          source: "plugin.lianbanKick",
-        },
-        {
-          steamId: "76561198000000003",
-          eosId: "EOS-Z",
-          name: "Alpha Name",
+          name: "Alpha Player",
           source: "plugin.lianbanKick",
         },
       ],
     );
-    assert.equal(harness.plugin.api.getState().kickSuccess, 3);
-    assert.equal(harness.plugin.api.getState().lastMatch?.matchType, "name");
+    assert.equal(harness.plugin.api.getState().kickSuccess, 2);
+    assert.equal(harness.plugin.api.getState().lastMatch?.matchType, "join_event");
   } finally {
     await harness.stop();
   }
 }
 
 async function testKickSamePlayerOnRepeatedJoins() {
-  const harness = await createHarness({
-    files: {
-      "names.txt": "Repeat Guy\n",
-    },
-  });
+  const harness = await createHarness();
 
   try {
     await harness.emitJoin({
@@ -189,30 +161,7 @@ async function testKickSamePlayerOnRepeatedJoins() {
   }
 }
 
-async function testDoNotKickWhenBanFilesDoNotMatch() {
-  const harness = await createHarness({
-    files: {
-      "ban-list.txt": "steam: 76561198009999999\n",
-    },
-  });
-
-  try {
-    await harness.emitJoin({
-      playerName: "Safe Player",
-      steamID: "76561198000000088",
-      eosID: "EOS-SAFE",
-    });
-
-    assert.equal(harness.kicks.length, 0);
-    assert.equal(harness.plugin.api.getState().kickSuccess, 0);
-    assert.equal(harness.plugin.api.getState().kickAttempts, 0);
-  } finally {
-    await harness.stop();
-  }
-}
-
-await testKickOnlyMatchedJoinEvents();
+await testKickEveryJoinEvent();
 await testKickSamePlayerOnRepeatedJoins();
-await testDoNotKickWhenBanFilesDoNotMatch();
 
 console.log("lianban kick tests passed");

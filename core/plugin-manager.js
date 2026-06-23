@@ -70,7 +70,7 @@ export class PluginManager {
       // 临时初始化一个实例来获取 manifest
       // 注意：这可能会导致一些副作用，但目前插件的 createPlugin 通常只是定义 api/manifest
       const tempInstance = mod.createPlugin({
-        core: { ...this.core, logger: this.logger.child({ moduleId: "temp" }), rconManager: this.core.rconManager },
+        core: { ...this.core, logger: this.logger.child({ moduleId: "temp" }) },
         modules: this.modules,
         config: this.config,
         logger: this.logger,
@@ -159,7 +159,6 @@ export class PluginManager {
           webRegistry: this.core.webRegistry,
           pluginManager: this,
           webStatus: this.core.webStatus,
-          rconManager: this.core.rconManager,
         },
         modules: this.modules,
         playerRepository: this.modules.playerDatabase ?? null,
