@@ -678,6 +678,7 @@
       "./plugins/match-snapshot.js",
       "./plugins/fair-squad-guard.js",
       "./plugins/stepwise-squad-playtime-guard.js",
+      "./plugins/commander-impeachment.js",
       "./plugins/squad-creation-broadcast.js"
     ],
     "squad-creation-broadcast": {
