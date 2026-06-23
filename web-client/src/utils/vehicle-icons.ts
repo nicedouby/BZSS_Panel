@@ -284,3 +284,7 @@ export function resolveVehicleIcon(vehicleType: unknown): RoleIconInfo {
   // Fallback: unrecognized vehicle type
   return { icon: "🚙", label: "载具", tone: "crewman" };
 }
+
+export function isVehicleIconImage(icon: unknown) {
+  return String(icon ?? "").startsWith("/");
+}

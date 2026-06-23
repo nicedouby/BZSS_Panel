@@ -241,15 +241,25 @@
 
             <!-- Squad Leader Star or Icon border -->
             <div class="marker-ring">
-              <!-- Kit Icon -->
-              <template v-if="isRoleIconImage(player.roleInfo.icon)">
+              <template v-if="player.vehicleInfo && player.vehicleInfo.vehicleType && player.vehicleInfo.vehicleType !== 'None'">
                 <span
-                  class="kit-icon-mask"
-                  :style="getTeamRoleIconStyle(player.roleInfo.icon, player.teamId)"
+                  v-if="isVehicleIconImage(player.roleInfo.icon)"
+                  class="vehicle-icon-mask"
+                  :style="getVehicleIconStyle(player.roleInfo.icon, player.teamId, getVehicleRotationAngle(player.vehicleInfo?.rotation))"
                   :aria-label="player.roleInfo.label"
                 ></span>
+                <span v-else class="kit-icon-fallback" :aria-label="player.roleInfo.label">{{ player.roleInfo.icon }}</span>
               </template>
-              <span v-else class="kit-icon-fallback" :aria-label="player.roleInfo.label">{{ player.roleInfo.icon }}</span>
+              <template v-else>
+                <template v-if="isRoleIconImage(player.roleInfo.icon)">
+                  <span
+                    class="kit-icon-mask"
+                    :style="getTeamRoleIconStyle(player.roleInfo.icon, player.teamId)"
+                    :aria-label="player.roleInfo.label"
+                  ></span>
+                </template>
+                <span v-else class="kit-icon-fallback" :aria-label="player.roleInfo.label">{{ player.roleInfo.icon }}</span>
+              </template>
             </div>
             
             <!-- Small Squad Index Tag -->
@@ -395,6 +405,20 @@
           <div class="detail-row">
             <span class="detail-label">武器</span>
             <span class="detail-val font-mono">{{ cleanWeaponName(hoveredMarker.soldierInfo?.weaponClass) }}</span>
+          </div>
+          <div v-if="hoveredMarker.vehicleInfo" class="detail-row">
+            <span class="detail-label">载具</span>
+            <span class="detail-val font-mono">
+              <template v-if="isVehicleIconImage(hoveredMarker.roleInfo.icon)">
+                <span
+                  class="inline-kit-mask"
+                  :style="getVehicleIconStyle(hoveredMarker.roleInfo.icon, hoveredMarker.teamId, getVehicleRotationAngle(hoveredMarker.vehicleInfo?.rotation))"
+                  :aria-label="hoveredMarker.roleInfo.label"
+                ></span>
+              </template>
+              <span v-else class="inline-kit-fallback" aria-hidden="true">{{ hoveredMarker.roleInfo.icon }}</span>
+              {{ hoveredMarker.vehicleInfo.vehicleType }} ({{ hoveredMarker.vehicleInfo.health }} HP)
+            </span>
           </div>
           <div class="detail-row">
             <span class="detail-label">坐标</span>
@@ -1955,6 +1979,10 @@ function isRoleIconImage(icon: string) {
   return String(icon ?? "").startsWith("/");
 }
 
+function isVehicleIconImage(icon: string) {
+  return String(icon ?? "").startsWith("/");
+}
+
 function getTeamRoleIconStyle(icon: string, teamId: number | null | undefined) {
   const iconUrl = String(icon ?? "");
   const color = getTeamRoleIconColor(teamId);
@@ -1969,6 +1997,30 @@ function getTeamRoleIconStyle(icon: string, teamId: number | null | undefined) {
     WebkitMaskSize: "contain",
     maskSize: "contain",
   };
+}
+
+function getVehicleIconStyle(
+  icon: string,
+  teamId: number | null | undefined,
+  rotation: number | null | undefined,
+) {
+  const style = getTeamRoleIconStyle(icon, teamId);
+  const angle = rotation ?? 0;
+  return {
+    ...style,
+    transform: `rotate(${Number.isFinite(angle) ? angle : 0}deg)`,
+  };
+}
+
+function getVehicleRotationAngle(
+  rotation: { x: number | null; y: number | null; z: number | null } | number | null | undefined,
+) {
+  if (typeof rotation === "number") return rotation;
+  if (rotation && typeof rotation === "object") {
+    if (rotation.z != null) return rotation.z;
+    if (rotation.y != null) return rotation.y;
+  }
+  return null;
 }
 
 function getTeamRoleIconColor(teamId: number | null | undefined) {
@@ -2970,6 +3022,24 @@ onBeforeUnmount(() => {
 
 .is-dead .kit-icon-mask,
 .is-dead .inline-kit-mask {
+  opacity: 0.55;
+  filter: grayscale(1) brightness(0.9);
+}
+
+.vehicle-icon-mask {
+  width: 12px;
+  height: 12px;
+  display: inline-block;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+.is-dead .vehicle-icon-mask {
   opacity: 0.55;
   filter: grayscale(1) brightness(0.9);
 }

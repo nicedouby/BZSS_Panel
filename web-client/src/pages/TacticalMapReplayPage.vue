@@ -232,6 +232,20 @@
                           {{ hoveredMarker.roleInfo.label }}
                         </span>
                       </div>
+                      <div class="detail-row" v-if="hoveredMarker.vehicleInfo">
+                        <span class="detail-label">载具</span>
+                        <span class="detail-val font-mono">
+                          <template v-if="isVehicleIconImage(hoveredMarker.roleInfo.icon)">
+                            <span
+                              class="inline-kit-mask"
+                              :style="getVehicleIconStyle(hoveredMarker.roleInfo.icon, hoveredMarker.teamId, hoveredMarker.vehicleInfo.rotation)"
+                              :aria-label="hoveredMarker.roleInfo.label"
+                            ></span>
+                          </template>
+                          <span v-else class="inline-kit-fallback" aria-hidden="true">{{ hoveredMarker.roleInfo.icon }}</span>
+                          {{ hoveredMarker.vehicleInfo.vehicleType }} ({{ hoveredMarker.vehicleInfo.health }} HP)
+                        </span>
+                      </div>
                       <div class="detail-row">
                         <span class="detail-label">战术小队</span>
                         <span class="detail-val">
@@ -391,6 +405,7 @@ interface PreviewMarker {
     vehicleType: string;
     health: number | null;
     maxHealth: number | null;
+    rotation?: number | null;
   } | null;
   roleInfo: RoleIconInfo;
   rawPlayer: any;
@@ -637,6 +652,10 @@ function isRoleIconImage(icon: string) {
   return String(icon ?? "").startsWith("/");
 }
 
+function isVehicleIconImage(icon: string) {
+  return String(icon ?? "").startsWith("/");
+}
+
 function getTeamRoleIconStyle(icon: string, teamId: number | null | undefined) {
   const iconUrl = String(icon ?? "");
   const color = getTeamRoleIconColor(teamId);
@@ -650,6 +669,19 @@ function getTeamRoleIconStyle(icon: string, teamId: number | null | undefined) {
     maskPosition: "center",
     WebkitMaskSize: "contain",
     maskSize: "contain",
+  };
+}
+
+function getVehicleIconStyle(
+  icon: string,
+  teamId: number | null | undefined,
+  rotation: number | null | undefined,
+) {
+  const style = getTeamRoleIconStyle(icon, teamId);
+  const angle = rotation ?? 0;
+  return {
+    ...style,
+    transform: `rotate(${Number.isFinite(angle) ? angle : 0}deg)`,
   };
 }
 
@@ -1464,6 +1496,19 @@ onBeforeUnmount(() => {
   display: inline-block;
   width: 12px;
   height: 12px;
+}
+
+.vehicle-icon-mask {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
 }
 
 .inline-kit-fallback {

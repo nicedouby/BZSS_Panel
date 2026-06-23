@@ -117,7 +117,18 @@
           </div>
           <div class="field">
             <span>载具</span>
-            <strong class="mono">{{ formatVehicleInfo(player) }}</strong>
+            <strong v-if="getVehicleIconInfo(player)" class="mono vehicle-summary">
+              <template v-if="isVehicleIconImage(getVehicleIconInfo(player)?.icon)">
+                <img
+                  class="vehicle-summary-icon"
+                  :src="getVehicleIconInfo(player)?.icon || ''"
+                  :alt="formatVehicleInfo(player)"
+                >
+              </template>
+              <span v-else class="vehicle-summary-fallback" aria-hidden="true">{{ getVehicleIconInfo(player)?.icon }}</span>
+              <span>{{ formatVehicleInfo(player) }}</span>
+            </strong>
+            <strong v-else class="mono">--</strong>
           </div>
           <div class="field">
             <span>座位玩家</span>
@@ -169,6 +180,7 @@ import {
   type BzssCoreTrackedPlayerInfo,
 } from "../app/bzssCoreApi";
 import { canAutoRefreshNow } from "../composables/useAutoRefreshGate";
+import { isVehicleIconImage, resolveVehicleIcon } from "../utils/vehicle-icons";
 
 const payload = ref<BzssCorePlayerInfoResponse | null>(null);
 const rawData = ref<BzssCoreRawDataResponse | null>(null);
@@ -409,6 +421,12 @@ function formatVehicleInfo(player: BzssCoreTrackedPlayerInfo) {
   return info.healthText ? `${info.vehicleType} ${info.healthText}` : info.vehicleType;
 }
 
+function getVehicleIconInfo(player: BzssCoreTrackedPlayerInfo) {
+  const info = player.vehicleInfo;
+  if (!info?.vehicleType || info.vehicleType === "None") return null;
+  return resolveVehicleIcon(info.vehicleType);
+}
+
 function formatSeatsPlayers(player: BzssCoreTrackedPlayerInfo) {
   const seats = player.seatsPlayers ?? [];
   return seats.length > 0 ? seats.join(" / ") : "--";
@@ -515,6 +533,30 @@ onBeforeUnmount(() => {
   margin: 0;
   max-width: 820px;
   color: #94a3b8;
+}
+
+.vehicle-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.vehicle-summary-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.vehicle-summary-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 14px;
+  line-height: 1;
 }
 
 .refresh-btn {
