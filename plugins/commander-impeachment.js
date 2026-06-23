@@ -198,7 +198,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     const commandSquads = Array.isArray(state?.squads) ? state.squads.filter((squad) => sameTeam(squad, { teamId }) && isCommandSquad(squad)) : [];
 
     for (const squad of commandSquads) {
-      const leader = teamPlayers.find((player) => sameSquad(player, squad) && Boolean(player.isLeader));
+      const leader = teamPlayers.find((player) => sameSquad(player, squad) && Boolean(player.isLeader) && !isCommandSquadPlayer(player, state));
       if (leader) {
         return {
           player: leader,
@@ -260,14 +260,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         && Number(item.squadId ?? item.squadID ?? -1) === Number(player.squadId ?? player.squadID ?? -2))
       : null;
     return isCommandSquad(squad ?? playerSquad);
-  }
-
-  function hasLeaderRole(player = {}) {
-    const role = normalizeText(player.role).toLowerCase();
-    return role === "squadleader"
-      || role === "squad leader"
-      || role === "sl"
-      || role === "leader";
   }
 
   function sameTeam(left = {}, right = {}) {
@@ -440,7 +432,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     if (!initiator) {
       return { matched: true, success: false, reason: "initiator_not_found" };
     }
-    if (!Boolean(initiator.isLeader) || !hasLeaderRole(initiator)) {
+    if (!Boolean(initiator.isLeader) || isCommandSquadPlayer(initiator, state)) {
       await warnPlayer(initiator, "只有当前小队长可以发起罢免指挥官流程。", "commander_impeachment_start_denied", {
         relatedEventId: event?.id,
       });
@@ -523,7 +515,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       return { matched: true, success: false, reason: "no_active_process" };
     }
 
-    if (!Boolean(initiator.isLeader) || !hasLeaderRole(initiator)) {
+    if (!Boolean(initiator.isLeader) || isCommandSquadPlayer(initiator, state)) {
       await warnPlayer(initiator, "只有小队长可以参与本次罢免投票。", "commander_impeachment_vote_denied", {
         relatedEventId: process.id,
       });

@@ -777,18 +777,6 @@
   },
   "plugins": {
     "enabled": true,
-    "paths": [
-      "./plugins/admin-camera-duration.js",
-      "./plugins/group-report.js",
-      "./plugins/weapon-collector.js",
-      "./plugins/player_duration_slow_refresh.js",
-      "./plugins/udp_event_forwarder.js",
-      "./plugins/match-snapshot.js",
-      "./plugins/fair-squad-guard.js",
-      "./plugins/stepwise-squad-playtime-guard.js",
-      "./plugins/commander-impeachment.js",
-      "./plugins/squad-creation-broadcast.js"
-    ],
     "fairSquadGuard": {
       "enabled": true,
       "directory": "./data/fair-squad-guard",
