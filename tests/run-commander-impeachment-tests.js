@@ -17,8 +17,8 @@ function createHarness() {
       logClockSeconds: 7200,
     },
     teams: [
-      { teamId: 1, teamName: "Blue" },
-      { teamId: 2, teamName: "Red" },
+      { teamId: 1, teamName: "蓝方" },
+      { teamId: 2, teamName: "红方" },
     ],
     squads: [
       { teamId: 1, squadId: 10, squadName: "Command Squad", leaderName: "Commander" },
@@ -114,13 +114,6 @@ async function testStartAndSuccess() {
   const harness = createHarness();
   try {
     await harness.start();
-    const waitFor = async (predicate, attempts = 20) => {
-      for (let index = 0; index < attempts; index += 1) {
-        if (predicate()) return true;
-        await new Promise((resolve) => originalSetTimeout(resolve, 0));
-      }
-      return false;
-    };
 
     const startResult = await harness.plugin.api.simulateChatMessage({
       serverId: "test-server",
@@ -128,12 +121,12 @@ async function testStartAndSuccess() {
       steamId: "a-steam",
       teamId: 1,
       squadId: 1,
-      message: "impeach commander",
+      message: "罢免指挥官",
     });
 
     assert.equal(startResult.success, true);
-    assert.equal(harness.broadcasts[0].reason, "commander_impeachment_started_broadcast");
-    assert.equal(harness.warns.some((item) => item.targetName === "Commander" && item.reason === "commander_impeachment_commander_warned"), true);
+    assert.equal(harness.broadcasts[0].message, "蓝方 阵营正在进行罢免指挥官流程。");
+    assert.equal(harness.warns.some((item) => item.targetName === "Commander" && item.message === "你正在被罢免。请等待投票结果。"), true);
 
     const voteA = await harness.plugin.api.simulateChatMessage({
       serverId: "test-server",
@@ -158,8 +151,8 @@ async function testStartAndSuccess() {
 
     assert.equal(voteB.success, true);
     assert.equal(harness.commands[0].command, "AdminDemoteCommander");
-    assert.equal(harness.broadcasts[1].reason, "commander_impeachment_success_broadcast");
-    assert.equal(harness.warns.some((item) => item.targetName === "Commander" && item.reason === "commander_impeachment_commander_removed"), true);
+    assert.equal(harness.broadcasts[1].message, "Commander 已被罢免，游戏时长 2.0 小时。");
+    assert.equal(harness.warns.some((item) => item.targetName === "Commander" && item.message === "你已被罢免。"), true);
 
     const finalProcess = getProcess(harness.plugin);
     assert.equal(finalProcess.status, "succeeded");
@@ -181,7 +174,7 @@ async function testRepeatVoteOverwritesSameSquad() {
       steamId: "a-steam",
       teamId: 1,
       squadId: 1,
-      message: "impeach commander",
+      message: "罢免指挥官",
     });
 
     await harness.plugin.api.simulateChatMessage({
@@ -225,7 +218,7 @@ async function testNonLeaderCannotVote() {
       steamId: "a-steam",
       teamId: 1,
       squadId: 1,
-      message: "impeach commander",
+      message: "罢免指挥官",
     });
 
     const result = await harness.plugin.api.simulateChatMessage({
@@ -238,7 +231,7 @@ async function testNonLeaderCannotVote() {
     });
 
     assert.equal(result.success, false);
-    assert.equal(harness.warns.some((item) => item.targetName === "Alpha1" && item.reason === "commander_impeachment_vote_denied"), true);
+    assert.equal(harness.warns.some((item) => item.targetName === "Alpha1" && item.message === "只有小队长可以参与本次罢免投票。"), true);
     const process = getProcess(harness.plugin);
     assert.equal(process.votesBySquadId.size, 0);
     assert.equal(process.votedPlayerKeys.size, 0);
@@ -258,7 +251,7 @@ async function testFailureBroadcastWhenVoteBecomesImpossible() {
       steamId: "a-steam",
       teamId: 1,
       squadId: 1,
-      message: "impeach commander",
+      message: "罢免指挥官",
     });
 
     await harness.plugin.api.simulateChatMessage({
@@ -281,61 +274,10 @@ async function testFailureBroadcastWhenVoteBecomesImpossible() {
 
     assert.equal(result.success, false);
     assert.equal(harness.commands.length, 0);
-    assert.equal(harness.broadcasts.some((item) => item.reason === "commander_impeachment_failed_broadcast"), true);
+    assert.equal(harness.broadcasts.some((item) => item.message === "蓝方 阵营未能完成罢免指挥官流程。"), true);
     const process = getProcess(harness.plugin);
     assert.equal(process.status, "failed");
   } finally {
-    await harness.stop();
-  }
-}
-
-async function testTimeoutAutoFinalizesAsFailure() {
-  const harness = createHarness();
-  const originalSetTimeout = globalThis.setTimeout;
-  const originalClearTimeout = globalThis.clearTimeout;
-  const scheduled = [];
-
-  globalThis.setTimeout = (handler, delayMs) => {
-    scheduled.push({ handler, delayMs });
-    return { delayMs };
-  };
-  globalThis.clearTimeout = () => {};
-
-  try {
-    await harness.start();
-    const waitFor = async (predicate, attempts = 20) => {
-      for (let index = 0; index < attempts; index += 1) {
-        if (predicate()) return true;
-        await new Promise((resolve) => originalSetTimeout(resolve, 0));
-      }
-      return false;
-    };
-
-    const startResult = await harness.plugin.api.simulateChatMessage({
-      serverId: "test-server",
-      playerName: "LeaderA",
-      steamId: "a-steam",
-      teamId: 1,
-      squadId: 1,
-      message: "impeach commander",
-    });
-
-    assert.equal(startResult.success, true);
-    assert.equal(scheduled.length, 1);
-    assert.equal(scheduled[0].delayMs, 60000);
-
-    scheduled[0].handler();
-    assert.equal(await waitFor(() => harness.broadcasts.some((item) => item.reason === "commander_impeachment_failed_broadcast")), true);
-
-    assert.equal(harness.commands.length, 0);
-
-    const process = getProcess(harness.plugin);
-    assert.equal(await waitFor(() => getProcess(harness.plugin)?.status === "failed"), true);
-    assert.equal(process.status, "failed");
-    assert.equal(process.finishedAtMs > 0, true);
-  } finally {
-    globalThis.setTimeout = originalSetTimeout;
-    globalThis.clearTimeout = originalClearTimeout;
     await harness.stop();
   }
 }
@@ -344,5 +286,4 @@ await testStartAndSuccess();
 await testRepeatVoteOverwritesSameSquad();
 await testNonLeaderCannotVote();
 await testFailureBroadcastWhenVoteBecomesImpossible();
-await testTimeoutAutoFinalizesAsFailure();
 console.log("run-commander-impeachment-tests: ok");

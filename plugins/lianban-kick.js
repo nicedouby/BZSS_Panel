@@ -123,7 +123,7 @@ function matchPlayer(ruleSet, player = {}) {
     return { matched: true, matchType: "eosID", matchValue: eosID };
   }
 
-  const name = normalizeComparableName(player?.name ?? player?.playerName);
+  const name = normalizeComparableName(player?.name);
   if (name && ruleSet.names.has(name)) {
     return { matched: true, matchType: "name", matchValue: name };
   }
@@ -411,31 +411,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       eosID: player.eosID,
     });
 
-    const rules = await loadRules(false);
-    if (!rules.entries) {
-      pushRecentEvent("join_unmatched", {
-        serverId,
-        playerName: player.playerName,
-        steamID: player.steamID,
-        eosID: player.eosID,
-        reason: "rules_empty",
-      });
-      return;
-    }
-
-    const match = matchPlayer(rules, player);
-    if (!match.matched) {
-      pushRecentEvent("join_unmatched", {
-        serverId,
-        playerName: player.playerName,
-        steamID: player.steamID,
-        eosID: player.eosID,
-        reason: "not_in_ban_files",
-      });
-      return;
-    }
-
-    await kickMatchedPlayer(serverId, player, match);
+    await kickMatchedPlayer(serverId, player, {
+      matched: true,
+      matchType: "join_event",
+      matchValue: player.playerName || player.steamID || player.eosID || player.controllerID || "",
+    });
   }
 
   const api = {
