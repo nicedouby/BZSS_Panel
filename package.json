@@ -13,6 +13,7 @@
     "auth:user:reset-password": "node scripts/auth-users.js reset-password",
     "auth:user:delete": "node scripts/auth-users.js delete",
     "maintenance:clear-log-events": "node scripts/maintenance/clear_log_events.js",
+    "test:public-interface-ws": "node tools/test_public_interface_ws.js",
     "client:install": "cd web-client && npm install",
     "client:dev": "npm run dev --prefix web-client",
     "client:build": "npm run build --prefix web-client",

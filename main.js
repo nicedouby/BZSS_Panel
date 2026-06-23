@@ -26,6 +26,7 @@
  * 13. PythonLogParserManager
  */
 
+import { execSync } from "child_process";
 import { ConfigManager } from "./core/config-manager.js";
 import { Logger } from "./core/logger.js";
 import { EventBus } from "./core/event-bus.js";
@@ -46,6 +47,69 @@ import { PerformanceMonitor } from "./core/performance-monitor.js";
 import { AuditManager } from "./core/audit/audit-manager.js";
 import { LogPostMonitor } from "./core/logpost-monitor.js";
 
+function checkAndKillOtherInstances(logger) {
+  try {
+    const currentPid = process.pid;
+    // Query other node.exe processes
+    const cmd = "powershell -Command \"Get-CimInstance Win32_Process -Filter 'Name = ''node.exe''' | Select-Object CommandLine, ProcessId | ConvertTo-Json\"";
+    const stdout = execSync(cmd, { encoding: "utf8" }).trim();
+    if (!stdout) return;
+
+    let processes = [];
+    try {
+      const parsed = JSON.parse(stdout);
+      processes = Array.isArray(parsed) ? parsed : [parsed];
+    } catch (e) {
+      return;
+    }
+
+    for (const proc of processes) {
+      if (!proc || !proc.CommandLine || !proc.ProcessId) continue;
+      
+      const cmdLine = proc.CommandLine;
+      const pid = Number(proc.ProcessId);
+
+      // Skip the current process
+      if (pid === currentPid) continue;
+
+      // Check if this process runs main.js of BZSS Panel
+      if (cmdLine.includes("main.js")) {
+        logger.warn(`Found duplicate BZSS Panel process (PID: ${pid}). Terminating...`, {
+          scope: "app",
+          source: "app.main",
+          commandLine: cmdLine
+        });
+        
+        try {
+          process.kill(pid, "SIGKILL");
+          logger.info(`Terminated duplicate process (PID: ${pid}) successfully.`, {
+            scope: "app",
+            source: "app.main",
+          });
+        } catch (killError) {
+          try {
+            execSync(`powershell -Command "Stop-Process -Id ${pid} -Force"`);
+            logger.info(`Terminated duplicate process (PID: ${pid}) via Stop-Process.`, {
+              scope: "app",
+              source: "app.main",
+            });
+          } catch (psKillError) {
+            logger.error(`Failed to terminate duplicate process (PID: ${pid}): ${psKillError.message}`, {
+              scope: "app",
+              source: "app.main",
+            });
+          }
+        }
+      }
+    }
+  } catch (err) {
+    logger.error(`Error checking duplicate instances: ${err.message}`, {
+      scope: "app",
+      source: "app.main",
+    });
+  }
+}
+
 async function main() {
   const configManager = new ConfigManager("./config.json");
   await configManager.load();
@@ -55,6 +119,9 @@ async function main() {
     scope: "app",
     source: "app.main",
   });
+
+  // Check and terminate other running instances of main.js
+  checkAndKillOtherInstances(logger);
 
   const eventBus = new EventBus({
     logger: logger.child({

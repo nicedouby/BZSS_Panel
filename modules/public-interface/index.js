@@ -38,6 +38,7 @@ class PublicInterface {
       getPublicServerSnapshot: () => this.getPublicServerSnapshot(),
       getPublicServerSummary: () => this.getPublicServerSummary(),
       getPublicPlayersSnapshot: () => this.getPublicPlayersSnapshot(),
+      getPublicPlayerSnapshot: (query) => this.getPublicPlayerSnapshot(query),
       getPublicSquadsSnapshot: () => this.getPublicSquadsSnapshot(),
       getPublicMatchSnapshot: () => this.getPublicMatchSnapshot(),
       getPublicTacticalSnapshot: () => this.getPublicTacticalSnapshot(),
@@ -248,32 +249,260 @@ class PublicInterface {
     return snapshot;
   }
 
-  maskPlayer(player) {
-    const cfg = this.getConfig();
-    const privacy = cfg.privacy ?? {};
+  getCurrentServerId() {
+    return firstText([this.core.webStatus?.serverId, this.core.webStatus?.getSnapshot?.()?.serverId, "BZSS_Main"]);
+  }
+
+  getPlayerStateSnapshot(serverId = this.getCurrentServerId()) {
+    const playerState = this.modules.playerState;
+    if (!playerState) return null;
+
+    if (typeof playerState.getState === "function") {
+      const snapshot = playerState.getState(serverId);
+      if (snapshot && Array.isArray(snapshot.players)) {
+        return snapshot;
+      }
+    }
+
+    const players = typeof playerState.getPlayerList === "function" ? playerState.getPlayerList(serverId) ?? [] : [];
+    return { serverId, players, updatedAt: "" };
+  }
+
+  getMatchStateSnapshot(serverId = this.getCurrentServerId()) {
+    const matchStateApi = this.modules.matchState;
+    if (!matchStateApi) return null;
+
+    if (typeof matchStateApi.getState === "function") {
+      const snapshot = matchStateApi.getState(serverId);
+      if (snapshot) return snapshot;
+    }
+
+    return typeof matchStateApi.getOverview === "function"
+      ? matchStateApi.getOverview()?.matchState ?? null
+      : null;
+  }
+
+  getCurrentPlayers(serverId = this.getCurrentServerId()) {
+    const playerStateSnapshot = this.getPlayerStateSnapshot(serverId);
+    const playerStatePlayers = Array.isArray(playerStateSnapshot?.players)
+      ? playerStateSnapshot.players.filter((player) => player && typeof player === "object")
+      : [];
+    if (playerStatePlayers.length > 0) {
+      return playerStatePlayers.map((player) => ({ ...player }));
+    }
+
+    const matchStateSnapshot = this.getMatchStateSnapshot(serverId);
+    const matchStatePlayers = Array.isArray(matchStateSnapshot?.players?.list)
+      ? matchStateSnapshot.players.list.filter((player) => player && typeof player === "object")
+      : [];
+    return matchStatePlayers.map((player) => ({ ...player }));
+  }
+
+  async getCurrentPlayerDatabaseRows(players = []) {
+    const playerDatabase = this.modules.playerDatabase;
+    if (!playerDatabase) return [];
+
+    const steamIDs = [];
+    const eosIDs = [];
+    for (const player of Array.isArray(players) ? players : []) {
+      const steamID = cleanIdentityValue(player?.steamID ?? player?.steam64ID ?? player?.steamId);
+      const eosID = cleanIdentityValue(player?.eosID ?? player?.eosId);
+      if (steamID) steamIDs.push(steamID);
+      if (eosID) eosIDs.push(eosID);
+    }
+
+    if (!steamIDs.length && !eosIDs.length) return [];
+
+    if (typeof playerDatabase.listPlayersByIdentities === "function") {
+      return await playerDatabase.listPlayersByIdentities({ steamIDs, eosIDs }) ?? [];
+    }
+
+    if (typeof playerDatabase.listPlayersBySteamIDs === "function" && steamIDs.length) {
+      return await playerDatabase.listPlayersBySteamIDs(steamIDs) ?? [];
+    }
+
+    return [];
+  }
+
+  getCurrentPlayerDatabaseIndex(rows = []) {
+    const bySteamID = new Map();
+    const byEOSID = new Map();
+
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const steamID = cleanIdentityValue(row?.steam_id ?? row?.steamID ?? row?.steam64ID);
+      const eosID = cleanIdentityValue(row?.eos_id ?? row?.eosID);
+      const ip = cleanIdentityValue(row?.current_ip ?? row?.ip);
+      if (steamID && ip) bySteamID.set(steamID, ip);
+      if (eosID && ip) byEOSID.set(eosID, ip);
+    }
+
+    return { bySteamID, byEOSID };
+  }
+
+  getBzssPlayerIndex() {
+    const players = this.modules.bzssCoreMonitor?.getPlayers?.() ?? [];
+    return Array.isArray(players) ? players.map((player) => ({ ...player })) : [];
+  }
+
+  getBzssPlayerMatch(player, bzssPlayers = []) {
+    if (!Array.isArray(bzssPlayers) || !bzssPlayers.length || !player) return null;
+
+    const eosID = cleanIdentityValue(player?.eosID ?? player?.eosId);
+    if (eosID) {
+      const hit = bzssPlayers.find((item) => cleanIdentityValue(item?.playerGuid) === eosID);
+      if (hit) return hit;
+    }
+
+    const name = normalizeName(player?.name ?? player?.playerName);
+    if (name) {
+      const direct = bzssPlayers.find((item) => normalizeName(item?.playerName) === name);
+      if (direct) return direct;
+      const partial = bzssPlayers.find((item) => normalizeName(item?.playerName).includes(name));
+      if (partial) return partial;
+    }
+
+    return null;
+  }
+
+  serializePlayer(player, { bzssPlayer = null, ipIndex = null } = {}) {
+    const current = player && typeof player === "object" ? player : {};
+    const bzss = bzssPlayer && typeof bzssPlayer === "object" ? bzssPlayer : null;
+    const name = firstText([current.name, current.playerName, bzss?.playerName]);
+    const playerID = normalizePlayerId(current.playerID ?? current.playerId ?? bzss?.playerId);
+    const steam64ID = firstText([current.steamID, current.steam64ID, current.steam64, current.steam_id]);
+    const eosID = firstText([current.eosID, current.eosId, current.eos_id]);
+    const ip = firstText([
+      current.ip,
+      current.current_ip,
+      current.networkInfo?.ip,
+      steam64ID ? ipIndex?.bySteamID?.get(steam64ID) : "",
+      eosID ? ipIndex?.byEOSID?.get(eosID) : "",
+    ]);
+    const latency = firstFiniteNumber([current.latency, current.ping, current.networkInfo?.ping, bzss?.ping]);
+    const ftIndex = firstFiniteNumber([current.ftIndex, bzss?.ftIndex]);
+    const ftPosition = firstFiniteNumber([current.ftPosition, bzss?.ftPosition]);
+    const health = firstFiniteNumber([current.health, current.soldierInfo?.health, bzss?.soldierInfo?.health]);
+    const currentWeapon = firstText([
+      current.currentWeapon,
+      current.weaponClass,
+      current.soldierInfo?.weaponClass,
+      bzss?.soldierInfo?.weaponClass,
+    ]);
+    const ammoValues = Array.isArray(current.ammoValues) && current.ammoValues.length
+      ? current.ammoValues.slice()
+      : Array.isArray(current.soldierInfo?.ammoValues) && current.soldierInfo.ammoValues.length
+        ? current.soldierInfo.ammoValues.slice()
+        : Array.isArray(bzss?.soldierInfo?.ammoValues)
+          ? bzss.soldierInfo.ammoValues.slice()
+          : [];
+    const position = normalizeVector(current.position ?? current.soldierInfo?.position ?? bzss?.soldierInfo?.position ?? current.vehicleInfo?.position);
+    const rotation = normalizeVector(current.rotation ?? current.soldierInfo?.rotation ?? bzss?.soldierInfo?.rotation ?? current.vehicleInfo?.rotation);
 
     return {
-      playerID: player.playerID,
-      name: player.name,
-      steamID: privacy.includeSteamId ? player.steamID : undefined,
-      eosID: privacy.includeEosId ? player.eosID : undefined,
-      teamID: player.teamID,
-      squadID: player.squadID,
-      role: player.role,
-      isLeader: player.isLeader,
-      state: player.state,
-      lastSeenTime: player.lastSeenTime,
+      name,
+      playerID,
+      playerIdLabel: playerID ? `# ${playerID}` : "",
+      steam64ID,
+      eosID,
+      ip,
+      latency,
+      isLeader: Boolean(current.isLeader),
+      role: firstText([current.role, bzss?.soldierInfo?.soldierClass]),
+      teamID: normalizePlayerId(current.teamID ?? current.teamId),
+      squadID: normalizePlayerId(current.squadID ?? current.squadId),
+      ftIndex,
+      ftPosition,
+      health,
+      currentWeapon,
+      ammoValues,
+      position,
+      rotation,
     };
   }
 
-  getPublicPlayersSnapshot() {
-    const matchState = this.modules.matchState?.getState?.() ?? {};
-    const players = matchState.players?.list ?? [];
-    return players.map(p => this.maskPlayer(p));
+  normalizePlayerQuery(query = {}) {
+    if (query == null) return null;
+    if (typeof query === "string" || typeof query === "number") {
+      const raw = String(query ?? "").trim();
+      return raw ? { raw } : null;
+    }
+    if (typeof query !== "object") return null;
+
+    const normalized = {
+      raw: String(query.raw ?? query.query ?? query.player ?? query.name ?? query.playerID ?? query.playerId ?? query.steam64ID ?? query.steamID ?? query.eosID ?? "").trim(),
+      playerID: normalizePlayerId(query.playerID ?? query.playerId),
+      steam64ID: cleanIdentityValue(query.steam64ID ?? query.steamID ?? query.steamId),
+      eosID: cleanIdentityValue(query.eosID ?? query.eosId),
+      name: String(query.name ?? query.playerName ?? "").trim(),
+    };
+
+    if (!normalized.raw && !normalized.playerID && !normalized.steam64ID && !normalized.eosID && !normalized.name) {
+      return null;
+    }
+
+    return normalized;
+  }
+
+  playerMatchesQuery(player, query) {
+    if (!query) return false;
+    const candidate = player && typeof player === "object" ? player : {};
+
+    if (query.playerID && normalizePlayerId(candidate.playerID ?? candidate.playerId) !== query.playerID) return false;
+    if (query.steam64ID && cleanIdentityValue(candidate.steamID ?? candidate.steam64ID ?? candidate.steamId) !== query.steam64ID) return false;
+    if (query.eosID && cleanIdentityValue(candidate.eosID ?? candidate.eosId) !== query.eosID) return false;
+
+    const candidateName = normalizeName(candidate.name ?? candidate.playerName);
+    if (query.name) {
+      const needle = normalizeName(query.name);
+      if (!needle) return false;
+      if (candidateName !== needle && !candidateName.includes(needle)) return false;
+    } else if (query.raw && !query.playerID && !query.steam64ID && !query.eosID) {
+      const needle = normalizeName(query.raw);
+      if (!needle) return false;
+      if (candidateName !== needle && !candidateName.includes(needle)) return false;
+    }
+
+    return true;
+  }
+
+  async getPublicPlayerSnapshot(query = null) {
+    const serverId = this.getCurrentServerId();
+    const normalizedQuery = this.normalizePlayerQuery(query);
+    const players = this.getCurrentPlayers(serverId);
+    const bzssPlayers = this.getBzssPlayerIndex();
+    const databaseRows = await this.getCurrentPlayerDatabaseRows(players);
+    const ipIndex = this.getCurrentPlayerDatabaseIndex(databaseRows);
+    const selectedPlayers = normalizedQuery
+      ? players.filter((player) => this.playerMatchesQuery(player, normalizedQuery))
+      : players;
+    const data = selectedPlayers.map((player) => this.serializePlayer(player, {
+      bzssPlayer: this.getBzssPlayerMatch(player, bzssPlayers),
+      ipIndex,
+    }));
+    const updatedAt = latestTimestamp([
+      this.getPlayerStateSnapshot(serverId)?.updatedAt,
+      this.getMatchStateSnapshot(serverId)?.updatedAt,
+      this.modules.bzssCoreMonitor?.getState?.()?.updatedAt,
+    ]);
+
+    return {
+      ok: true,
+      serverId,
+      revision: Number(Date.parse(updatedAt)) || Date.now(),
+      updatedAt,
+      query: normalizedQuery,
+      matchedCount: data.length,
+      players: data,
+    };
+  }
+
+  async getPublicPlayersSnapshot(query = null) {
+    const snapshot = await this.getPublicPlayerSnapshot(query);
+    return snapshot.players;
   }
 
   getPublicSquadsSnapshot() {
-    const matchState = this.modules.matchState?.getState?.() ?? {};
+    const matchState = this.getMatchStateSnapshot() ?? {};
     return matchState.squads?.list ?? [];
   }
 
@@ -354,7 +583,8 @@ class PublicInterface {
         return json(403, this.createError("Forbidden", `Scope ${route.scope} required.`));
       }
 
-      return json(200, this.createResponse(route.fetch()));
+      const data = await route.fetch();
+      return json(200, this.createResponse(data));
     }
 
     if (normalizedEndpoint === "/all") {
@@ -370,7 +600,7 @@ class PublicInterface {
       const data = {};
       
       if (this.authorizeRequest(req, "server:read")) data.server = this.getPublicServerSnapshot();
-      if (this.authorizeRequest(req, "players:read")) data.players = this.getPublicPlayersSnapshot();
+      if (this.authorizeRequest(req, "players:read")) data.players = await this.getPublicPlayersSnapshot();
       if (this.authorizeRequest(req, "squads:read")) data.squads = this.getPublicSquadsSnapshot();
       if (this.authorizeRequest(req, "match:read")) data.match = this.getPublicMatchSnapshot();
       if (this.authorizeRequest(req, "tactical:read")) data.tactical = this.getPublicTacticalSnapshot();
@@ -430,64 +660,176 @@ class PublicInterface {
       ].join("\r\n")
     );
 
-    // Minimum implementation for WS connecting and parsing subscribe
-    let buffer = Buffer.alloc(0);
+    const client = {
+      socket,
+      buffer: Buffer.alloc(0),
+    };
+
     socket.on("data", (chunk) => {
-      buffer = Buffer.concat([buffer, chunk]);
-      // Simplified frame parsing for demonstration (in production use proper ws lib or same implementation as web-server)
-      while (buffer.length >= 2) {
-        const payloadLength = buffer[1] & 0x7f;
-        let offset = 2;
-        if (payloadLength === 126) offset += 2;
-        else if (payloadLength === 127) offset += 8;
-        
-        const masked = (buffer[1] & 0x80) !== 0;
-        if (masked) offset += 4;
-        
-        let actualPayloadLength = payloadLength;
-        if (payloadLength === 126) actualPayloadLength = buffer.readUInt16BE(2);
-        // We skip 127 for simplicity in this stub
-        
-        if (buffer.length < offset + actualPayloadLength) return;
-
-        const payload = buffer.subarray(offset, offset + actualPayloadLength);
-        let mask;
-        if (masked) mask = buffer.subarray(offset - 4, offset);
-        
-        if (masked && mask) {
-          for (let i = 0; i < payload.length; i++) payload[i] ^= mask[i % 4];
-        }
-
-        try {
-          const msg = JSON.parse(payload.toString("utf8"));
-          if (msg.type === "subscribe") {
-            const topics = msg.topics ?? [];
-            if (topics.includes("players")) {
-              const res = {
-                type: "snapshot",
-                topic: "players",
-                revision: 1,
-                data: this.getPublicPlayersSnapshot()
-              };
-              this.sendWsFrame(socket, JSON.stringify(res));
-            }
-            if (topics.includes("server")) {
-              const res = {
-                type: "snapshot",
-                topic: "server",
-                revision: 1,
-                data: this.getPublicServerSnapshot()
-              };
-              this.sendWsFrame(socket, JSON.stringify(res));
-            }
-          }
-        } catch {}
-
-        buffer = buffer.subarray(offset + actualPayloadLength);
+      try {
+        this.handleWsData(client, chunk);
+      } catch (error) {
+        this.logger?.warn?.(`Public WS data handling failed: ${error?.message ?? error}`);
       }
     });
 
+    socket.on("close", () => {
+      client.buffer = Buffer.alloc(0);
+    });
+
+    if (head && head.length) {
+      try {
+        this.handleWsData(client, head);
+      } catch (error) {
+        this.logger?.warn?.(`Public WS head handling failed: ${error?.message ?? error}`);
+      }
+    }
+
     return true;
+  }
+
+  handleWsData(client, chunk) {
+    client.buffer = Buffer.concat([client.buffer, chunk]);
+
+    while (client.buffer.length >= 2) {
+      const firstByte = client.buffer[0];
+      const secondByte = client.buffer[1];
+      const opcode = firstByte & 0x0f;
+      const masked = (secondByte & 0x80) !== 0;
+      let payloadLength = secondByte & 0x7f;
+      let offset = 2;
+
+      if (payloadLength === 126) {
+        if (client.buffer.length < offset + 2) return;
+        payloadLength = client.buffer.readUInt16BE(offset);
+        offset += 2;
+      } else if (payloadLength === 127) {
+        if (client.buffer.length < offset + 8) return;
+        const lengthBig = client.buffer.readBigUInt64BE(offset);
+        if (lengthBig > BigInt(Number.MAX_SAFE_INTEGER)) {
+          this.closeWebSocketClient(client);
+          return;
+        }
+        payloadLength = Number(lengthBig);
+        offset += 8;
+      }
+
+      let mask = null;
+      if (masked) {
+        if (client.buffer.length < offset + 4) return;
+        mask = client.buffer.subarray(offset, offset + 4);
+        offset += 4;
+      }
+
+      if (client.buffer.length < offset + payloadLength) {
+        return;
+      }
+
+      const payload = Buffer.from(client.buffer.subarray(offset, offset + payloadLength));
+      client.buffer = client.buffer.subarray(offset + payloadLength);
+
+      if (masked && mask) {
+        for (let i = 0; i < payload.length; i += 1) {
+          payload[i] ^= mask[i % 4];
+        }
+      }
+
+      if (opcode === 0x8) {
+        this.closeWebSocketClient(client);
+        return;
+      }
+
+      if (opcode === 0x9) {
+        this.sendWsFrame(client.socket, Buffer.alloc(0), 0xA);
+        continue;
+      }
+
+      if (opcode !== 0x1) {
+        continue;
+      }
+
+      let msg = null;
+      try {
+        msg = JSON.parse(payload.toString("utf8"));
+      } catch {
+        continue;
+      }
+
+      void this.handleWsMessage(client, msg).catch((error) => {
+        this.logger?.warn?.(`Public WS message handling failed: ${error?.message ?? error}`);
+      });
+    }
+  }
+
+  async handleWsMessage(client, msg = {}) {
+    if (!msg || typeof msg !== "object") return;
+
+    if (msg.type === "subscribe") {
+      const topics = Array.isArray(msg.topics) ? msg.topics : [];
+      if (topics.includes("players")) {
+        const snapshot = await this.getPublicPlayerSnapshot();
+        this.sendWsFrame(client.socket, JSON.stringify({
+          type: "snapshot",
+          topic: "players",
+          revision: snapshot.revision,
+          updatedAt: snapshot.updatedAt,
+          data: snapshot.players,
+        }));
+      }
+      if (topics.includes("server")) {
+        const snapshot = this.getPublicServerSnapshot();
+        this.sendWsFrame(client.socket, JSON.stringify({
+          type: "snapshot",
+          topic: "server",
+          revision: Date.now(),
+          updatedAt: new Date().toISOString(),
+          data: snapshot,
+        }));
+      }
+      return;
+    }
+
+    if (msg.type === "players:list") {
+      const snapshot = await this.getPublicPlayerSnapshot();
+      this.sendWsFrame(client.socket, JSON.stringify({
+        type: "players:list",
+        ok: true,
+        serverId: snapshot.serverId,
+        revision: snapshot.revision,
+        updatedAt: snapshot.updatedAt,
+        matchedCount: snapshot.matchedCount,
+        players: snapshot.players,
+      }));
+      return;
+    }
+
+    if (msg.type === "players:detail") {
+      const query = this.normalizePlayerQuery(msg.query ?? msg.player ?? msg.identity ?? msg);
+      if (!query) {
+        this.sendWsFrame(client.socket, JSON.stringify({
+          type: "players:detail",
+          ok: false,
+          error: "InvalidQuery",
+          message: "Missing player query.",
+          matchedCount: 0,
+          players: [],
+        }));
+        return;
+      }
+
+      const snapshot = await this.getPublicPlayerSnapshot(query);
+      this.sendWsFrame(client.socket, JSON.stringify({
+        type: "players:detail",
+        ok: true,
+        serverId: snapshot.serverId,
+        revision: snapshot.revision,
+        updatedAt: snapshot.updatedAt,
+        query: snapshot.query,
+        matchedCount: snapshot.matchedCount,
+        players: snapshot.players,
+      }));
+      return;
+    }
   }
 
   sendWsFrame(socket, text) {
@@ -553,6 +895,30 @@ function firstKnownStatus(values) {
     return text;
   }
   return fallback;
+}
+
+function normalizeName(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function cleanIdentityValue(value) {
+  const text = String(value ?? "").trim();
+  return text && text.toLowerCase() !== "invalid" && text !== "0" ? text : "";
+}
+
+function normalizePlayerId(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  return text.replace(/^#\s*/, "").trim();
+}
+
+function normalizeVector(value) {
+  if (!value || typeof value !== "object") return null;
+  const x = firstFiniteNumber([value.x]);
+  const y = firstFiniteNumber([value.y]);
+  const z = firstFiniteNumber([value.z]);
+  if (x == null && y == null && z == null) return null;
+  return { x, y, z };
 }
 
 function firstFiniteNumber(values) {

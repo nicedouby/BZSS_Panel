@@ -517,7 +517,6 @@
 }
 
 /* ─── Player main column ──────────────────────────────────────────────────── */
-
 .player-main {
   min-width: 0;
   display: grid;
@@ -579,6 +578,201 @@
 }
 
 /* ─── Combat stats chips ──────────────────────────────────────────────────── */
+
+.combat-stats-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs, 6px);
+  min-width: 0;
+  margin-top: 2px;
+}
+
+/* Base Badge Style */
+.combat-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: var(--radius-sm, 6px);
+  border: 1px solid var(--color-border-soft, rgba(255, 255, 255, 0.08));
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--color-text-secondary);
+  transition: all 0.15s ease;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.combat-badge:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* KD Capsule Badge */
+.kd-capsule {
+  padding: 0 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(148, 163, 184, 0.18);
+  font-family: var(--mono, Consolas, monospace);
+  font-variant-numeric: tabular-nums;
+  gap: 3px;
+}
+
+.kd-capsule .stat-pill {
+  transition: color 0.15s ease;
+}
+
+.kd-capsule .stat-pill.kills {
+  color: #34d399; /* Emerald 400 */
+}
+
+.kd-capsule .stat-pill.deaths {
+  color: #f87171; /* Red 400 */
+}
+
+.kd-capsule .stat-pill.downs {
+  color: #fbbf24; /* Amber 400 */
+}
+
+.kd-capsule .separator {
+  color: var(--color-text-muted, rgba(255, 255, 255, 0.3));
+  font-size: 9px;
+  font-weight: 300;
+  margin: 0 1px;
+}
+
+/* TK Warning Badge */
+.tk-warning {
+  padding: 0 6px;
+  gap: 4px;
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+.tk-warning .lbl {
+  font-size: 8px;
+  font-weight: 800;
+  opacity: 0.85;
+}
+
+.tk-warning .val {
+  font-family: var(--mono, Consolas, monospace);
+  font-weight: 900;
+}
+
+/* Support Badge (Heals + Revives) */
+.support-badge {
+  padding: 0;
+  border-color: rgba(96, 165, 250, 0.25);
+  background: rgba(96, 165, 250, 0.04);
+  gap: 0;
+}
+
+.stat-sub-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 6px;
+  gap: 3px;
+  transition: background-color 0.15s ease;
+}
+
+.stat-sub-pill:not(:first-child) {
+  border-left: 1px solid rgba(96, 165, 250, 0.15);
+}
+
+.stat-sub-pill.revives {
+  color: #60a5fa; /* Blue 400 */
+}
+
+.stat-sub-pill.heals {
+  color: #38bdf8; /* Sky 400 */
+}
+
+.stat-sub-pill .lbl {
+  font-size: 8px;
+  opacity: 0.75;
+}
+
+.stat-sub-pill .val {
+  font-family: var(--mono, Consolas, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Score Badge */
+.score-badge {
+  padding: 0 6px;
+  gap: 4px;
+  border-color: rgba(192, 132, 252, 0.25);
+  background: rgba(192, 132, 252, 0.06);
+  color: #c084fc; /* Purple 400 */
+}
+
+.score-badge .lbl {
+  font-size: 8px;
+  opacity: 0.75;
+}
+
+.score-badge .val {
+  font-family: var(--mono, Consolas, monospace);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+/* Squadless duration Badge */
+.squadless-badge {
+  padding: 0 6px;
+  gap: 4px;
+  border-color: rgba(251, 191, 36, 0.25);
+  background: rgba(251, 191, 36, 0.06);
+  color: #fbbf24;
+}
+
+.squadless-badge .lbl {
+  font-size: 8px;
+  opacity: 0.75;
+}
+
+.squadless-badge .val {
+  font-family: var(--mono, Consolas, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Ping & Network Badge */
+.ping-badge {
+  padding: 0 6px;
+  font-family: var(--mono, Consolas, monospace);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  gap: 2px;
+}
+
+.ping-badge.low {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.22);
+  background: rgba(52, 211, 153, 0.05);
+}
+
+.ping-badge.medium {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.22);
+  background: rgba(251, 191, 36, 0.05);
+}
+
+.ping-badge.high {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.22);
+  background: rgba(248, 113, 113, 0.05);
+}
+
+.ping-badge .loss-value {
+  font-size: 8px;
+  opacity: 0.75;
+  font-weight: normal;
+  margin-left: 1px;
+}
 
 .player-stat-line {
   min-width: 0;

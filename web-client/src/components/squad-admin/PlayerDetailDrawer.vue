@@ -66,6 +66,8 @@
                     <span class="role-icon-wrap" v-html="roleIconSvg"></span>
                     <span class="role-text-lbl">{{ props.player.role }}</span>
                   </div>
+                </div>
+                <div class="hud-meta-actions-row">
                   <button
                     type="button"
                     class="hud-header-db-btn"
@@ -235,41 +237,6 @@
             </div>
           </header>
 
-          <div class="hud-pane-section">
-            <div class="hud-section-header">
-              <span class="hud-section-title">战场状态 / BATTLE STATE</span>
-              <span class="hud-section-subtitle">位置、朝向、生命值、武器、弹匣与延迟</span>
-            </div>
-            <div class="bzss-core-card">
-              <div class="bzss-core-grid">
-                <div class="bzss-core-item bzss-core-item--wide">
-                  <span class="bzss-core-item__label">Position</span>
-                  <strong class="bzss-core-mono">{{ formatBzssVector(props.player?.position ?? props.player?.bzssCorePlayerInfo?.soldierInfo?.position) }}</strong>
-                </div>
-                <div class="bzss-core-item bzss-core-item--wide">
-                  <span class="bzss-core-item__label">Rotation</span>
-                  <strong class="bzss-core-mono">{{ formatBzssVector(props.player?.rotation ?? props.player?.bzssCorePlayerInfo?.soldierInfo?.rotation) }}</strong>
-                </div>
-                <div class="bzss-core-item">
-                  <span class="bzss-core-item__label">Health</span>
-                  <strong>{{ props.player?.health != null ? (props.player?.maxHealth != null ? `${props.player.health}/${props.player.maxHealth}` : props.player.health) : "--" }}</strong>
-                </div>
-                <div class="bzss-core-item">
-                  <span class="bzss-core-item__label">Weapon</span>
-                  <strong class="bzss-core-mono">{{ cleanWeaponName(props.player?.weaponClass ?? props.player?.bzssCorePlayerInfo?.soldierInfo?.weaponClass) }}</strong>
-                </div>
-                <div class="bzss-core-item">
-                  <span class="bzss-core-item__label">Ammo</span>
-                  <strong class="bzss-core-mono">{{ formatBzssAmmo(props.player?.ammoValues ?? props.player?.bzssCorePlayerInfo?.soldierInfo?.ammoValues) }}</strong>
-                </div>
-                <div class="bzss-core-item">
-                  <span class="bzss-core-item__label">Ping</span>
-                  <strong>{{ props.player?.ping != null ? `${props.player.ping} ms` : "--" }}</strong>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <!-- System Message Banner -->
           <div v-if="props.notice" class="detail-notice-hud">
             <svg viewBox="0 0 24 24" width="16" height="16" class="notice-icon">
@@ -279,11 +246,103 @@
           </div>
 
           <!-- SCROLLABLE BODY (Unified Dashboard View) -->
-          <div class="drawer-body-hud">
-            <div class="hud-dashboard-grid">
+          <div class="drawer-body-hud" :class="{ 'is-narrow': isNarrowLayout }">
+            <!-- Rcon Command console -->
+            <div class="hud-pane-section admin-console-section">
+              <div class="hud-section-header">
+                <span class="hud-section-title">管理指令面板 / ADMIN CONSOLE</span>
+              </div>
+              <div class="actions-grid-hud">
+                <button
+                  type="button"
+                  class="hud-action-btn-styled warn-btn"
+                  @click="handleWarn"
+                  :disabled="actionBusy || !canWarnPlayer"
+                >
+                  <div class="btn-inner">
+                    <span class="btn-icon">⚠️</span>
+                    <span class="btn-text">{{ t("player.warn") }}</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  class="hud-action-btn-styled kick-btn"
+                  @click="handleKick"
+                  :disabled="actionBusy || !canKickPlayer"
+                >
+                  <div class="btn-inner">
+                    <span class="btn-icon">🛑</span>
+                    <span class="btn-text">{{ t("player.kick") }}</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  class="hud-action-btn-styled remove-btn"
+                  @click="handleRemove"
+                  :disabled="actionBusy || !canRemovePlayer"
+                >
+                  <div class="btn-inner">
+                    <span class="btn-icon">❌</span>
+                    <span class="btn-text">{{ t("player.removeFromSquad") }}</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  class="hud-action-btn-styled balance-btn"
+                  @click="handleForceTeamChange"
+                  :disabled="actionBusy || !canSwitchTeam"
+                >
+                  <div class="btn-inner">
+                    <span class="btn-icon">🔄</span>
+                    <span class="btn-text">强制跳边</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <div class="hud-dashboard-grid" :class="{ 'is-narrow': isNarrowLayout }">
               
               <!-- LEFT COLUMN: Combat Statistics and Timeline Graph -->
               <div class="hud-column left">
+                <!-- 战场状态 / BATTLE STATE -->
+                <div class="hud-pane-section">
+                  <div class="hud-section-header">
+                    <span class="hud-section-title">战场状态 / BATTLE STATE</span>
+                    <span class="hud-section-subtitle">位置、朝向、生命值、武器、弹匣与延迟</span>
+                  </div>
+                  <div class="bzss-core-card">
+                    <div class="bzss-core-grid">
+                      <div class="bzss-core-item bzss-core-item--wide">
+                        <span class="bzss-core-item__label">Position</span>
+                        <strong class="bzss-core-mono">{{ formatBzssVector(props.player?.position ?? props.player?.bzssCorePlayerInfo?.soldierInfo?.position) }}</strong>
+                      </div>
+                      <div class="bzss-core-item bzss-core-item--wide">
+                        <span class="bzss-core-item__label">Rotation</span>
+                        <strong class="bzss-core-mono">{{ formatBzssVector(props.player?.rotation ?? props.player?.bzssCorePlayerInfo?.soldierInfo?.rotation) }}</strong>
+                      </div>
+                      <div class="bzss-core-item">
+                        <span class="bzss-core-item__label">Health</span>
+                        <strong>{{ props.player?.health != null ? (props.player?.maxHealth != null ? `${props.player.health}/${props.player.maxHealth}` : props.player.health) : "--" }}</strong>
+                      </div>
+                      <div class="bzss-core-item">
+                        <span class="bzss-core-item__label">Weapon</span>
+                        <strong class="bzss-core-mono">{{ cleanWeaponName(props.player?.weaponClass ?? props.player?.bzssCorePlayerInfo?.soldierInfo?.weaponClass) }}</strong>
+                      </div>
+                      <div class="bzss-core-item">
+                        <span class="bzss-core-item__label">Ammo</span>
+                        <strong class="bzss-core-mono">{{ formatBzssAmmo(props.player?.ammoValues ?? props.player?.bzssCorePlayerInfo?.soldierInfo?.ammoValues) }}</strong>
+                      </div>
+                      <div class="bzss-core-item">
+                        <span class="bzss-core-item__label">Ping</span>
+                        <strong>{{ props.player?.ping != null ? `${props.player.ping} ms` : "--" }}</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <!-- Session performance overview -->
                 <div class="hud-pane-section">
                   <div class="hud-section-header">
@@ -396,62 +455,6 @@
 
               <!-- RIGHT COLUMN: Action Controls and Session Context -->
               <div class="hud-column right">
-                
-                <!-- Rcon Command console -->
-                <div class="hud-pane-section">
-                  <div class="hud-section-header">
-                    <span class="hud-section-title">管理指令面板 / ADMIN CONSOLE</span>
-                  </div>
-                  <div class="actions-grid-hud">
-                    <button
-                      type="button"
-                      class="hud-action-btn-styled warn-btn"
-                      @click="handleWarn"
-                      :disabled="actionBusy || !canWarnPlayer"
-                    >
-                      <div class="btn-inner">
-                        <span class="btn-icon">⚠️</span>
-                        <span class="btn-text">{{ t("player.warn") }}</span>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      class="hud-action-btn-styled kick-btn"
-                      @click="handleKick"
-                      :disabled="actionBusy || !canKickPlayer"
-                    >
-                      <div class="btn-inner">
-                        <span class="btn-icon">🛑</span>
-                        <span class="btn-text">{{ t("player.kick") }}</span>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      class="hud-action-btn-styled remove-btn"
-                      @click="handleRemove"
-                      :disabled="actionBusy || !canRemovePlayer"
-                    >
-                      <div class="btn-inner">
-                        <span class="btn-icon">❌</span>
-                        <span class="btn-text">{{ t("player.removeFromSquad") }}</span>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      class="hud-action-btn-styled balance-btn"
-                      @click="handleForceTeamChange"
-                      :disabled="actionBusy || !canSwitchTeam"
-                    >
-                      <div class="btn-inner">
-                        <span class="btn-icon">🔄</span>
-                        <span class="btn-text">强制跳边</span>
-                      </div>
-                    </button>
-                  </div>
-                </div>
 
                 <div class="hud-pane-section">
                   <div class="hud-section-header">
@@ -706,6 +709,13 @@ const viewport = ref({
 });
 
 const isFloating = computed(() => props.mode === "floating");
+const isNarrowLayout = computed(() => {
+  if (!isFloating.value) return true;
+  const compactViewport = viewport.value.width < 920 || viewport.value.height < 700;
+  if (compactViewport) return true;
+  if (viewport.value.width === 1400) return true;
+  return false;
+});
 const transitionName = computed(() => (isFloating.value ? "floating-player" : "drawer"));
 const rootClass = computed(() => (isFloating.value ? "floating-window-layer" : "drawer-root"));
 const panelClass = computed(() => ({
@@ -1818,6 +1828,14 @@ onUnmounted(() => {
   min-width: 0;
 }
 
+.hud-meta-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
 .hud-header-db-btn {
   display: inline-flex;
   align-items: center;
@@ -1994,6 +2012,11 @@ onUnmounted(() => {
   grid-template-columns: 1.15fr 0.85fr;
   gap: 16px;
   align-items: start;
+  margin-top: 16px;
+}
+
+.drawer-body-hud.is-narrow .hud-dashboard-grid {
+  grid-template-columns: 1fr;
 }
 
 .hud-column {
@@ -2422,6 +2445,11 @@ onUnmounted(() => {
 /* Actions Commands Grid */
 .actions-grid-hud {
   display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.drawer-body-hud.is-narrow .actions-grid-hud {
   grid-template-columns: repeat(2, 1fr);
   gap: 8px;
 }
@@ -2702,6 +2730,10 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+}
+
+.hud-ctx-item-wide {
+  grid-column: span 2;
 }
 
 .hud-ctx-item.is-leader {
@@ -3157,7 +3189,7 @@ onUnmounted(() => {
     grid-template-columns: repeat(3, 1fr);
   }
   .hud-ctx-item-wide {
-    grid-column: span 1;
+    grid-column: span 3;
   }
 }
 
@@ -3166,7 +3198,7 @@ onUnmounted(() => {
     grid-template-columns: repeat(2, 1fr);
   }
   .hud-ctx-item-wide {
-    grid-column: span 1;
+    grid-column: span 2;
   }
   .hud-header-career-bar {
     flex-wrap: wrap;

@@ -115,3 +115,79 @@ python tools/test_public_interface.py --base-url http://127.0.0.1:12864 --token 
 - 如果你只需要面板概览，优先读 `server.summary`。
 - 如果你需要更细的数据，再结合 `players`、`squads`、`match` 和 `tactical`。
 - 如果某个字段为空，通常表示对应 RCON 刷新还没成功或当前模块未提供该数据。
+
+## WS 玩家消息
+
+现有 `GET /ws/public/v1` 保持不变，新增两类请求消息：
+
+### 全量玩家快照
+
+```json
+{ "type": "players:list" }
+```
+
+返回示例：
+
+```json
+{
+  "type": "players:list",
+  "ok": true,
+  "serverId": "BZSS_Main",
+  "revision": 1719110000000,
+  "updatedAt": "2026-06-23T06:12:00.000Z",
+  "matchedCount": 48,
+  "players": [
+    {
+      "name": "Alpha",
+      "playerID": "1",
+      "playerIdLabel": "# 1",
+      "steam64ID": "7656119...",
+      "eosID": "eos-...",
+      "ip": "10.0.0.1",
+      "latency": 35,
+      "isLeader": true,
+      "role": "Squad Leader",
+      "teamID": "1",
+      "squadID": "2",
+      "ftIndex": 11,
+      "ftPosition": 21,
+      "health": 92,
+      "currentWeapon": "M4",
+      "ammoValues": [30, 90],
+      "position": { "x": 1, "y": 2, "z": 3 },
+      "rotation": { "x": 0, "y": 90, "z": 0 }
+    }
+  ]
+}
+```
+
+### 特定玩家查询
+
+```json
+{ "type": "players:detail", "query": { "playerID": "# 1" } }
+```
+
+可用的查询键：
+- `playerID`
+- `steam64ID`
+- `eosID`
+- `name`
+
+当 `name` 命中多个玩家时，返回多个结果，不会截断。
+
+返回示例：
+
+```json
+{
+  "type": "players:detail",
+  "ok": true,
+  "serverId": "BZSS_Main",
+  "revision": 1719110000000,
+  "updatedAt": "2026-06-23T06:12:00.000Z",
+  "query": { "playerID": "1" },
+  "matchedCount": 1,
+  "players": [ { "...": "..." } ]
+}
+```
+
+如果没有匹配玩家，`matchedCount` 为 `0`，`players` 返回空数组。

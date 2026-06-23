@@ -41,6 +41,7 @@
         </button>
       </div>
 
+      <!-- 手动预留位 TAB -->
       <section v-if="activeTab === 'manual'" class="reserve-tab-panel">
         <div class="reserve-summary-grid">
           <div class="reserve-summary-card">
@@ -61,251 +62,246 @@
           </div>
         </div>
 
-        <div class="reserve-workspace">
-          <section class="reserve-list-panel">
-            <div class="reserve-section-head">
-              <div>
-                <h4>预留位名单</h4>
-                <p>左侧筛选，右侧查看详情并直接续期。</p>
-              </div>
-              <span class="reserve-section-stat">{{ filteredMemberRows.length }} / {{ memberRows.length }}</span>
-            </div>
-
-            <div class="reserve-filter-row">
-              <input v-model.trim="filterText" class="reserve-input" type="search" placeholder="搜索玩家 / Steam64 / 预留位组">
-              <select v-model="statusFilter" class="reserve-select">
-                <option value="all">全部状态</option>
-                <option value="active">仅有效</option>
-                <option value="expired">仅过期</option>
-              </select>
-            </div>
-
-            <div class="reserve-meta-strip">
-              <span>本地文件：{{ state?.localReserveFileExists ? "已存在" : "不存在" }}</span>
-              <span>上次同步：{{ formatDate(state?.lastImportedAt) }}</span>
-            </div>
-
-            <div v-if="!filteredMemberRows.length" class="reserve-empty">暂无匹配的预留位数据。</div>
-            <div v-else class="reserve-list-scroll">
-              <div class="reserve-list-grid reserve-list-grid-head">
-                <span>玩家</span>
-                <span>Steam64</span>
-                <span>预留位组</span>
-                <span>到期时间</span>
-                <span>状态</span>
-              </div>
-
-              <article
-                v-for="member in filteredMemberRows"
-                :key="member.rawLine || member.steamId"
-                class="reserve-row"
-                :class="{ active: selectedMember?.steamId === member.steamId, expired: member.isExpired }"
-                @click="selectedSteamId = member.steamId"
-              >
-                <div class="reserve-list-grid">
-                  <div class="reserve-cell reserve-player-cell">
-                    <strong class="selectable">{{ member.name || "未命名玩家" }}</strong>
-                  </div>
-                  <div class="reserve-cell mono selectable">{{ member.steamId }}</div>
-                  <div class="reserve-cell selectable">{{ member.group }}</div>
-                  <div class="reserve-cell selectable">{{ member.expireAt ?? "未设置" }}</div>
-                  <div class="reserve-cell reserve-state-cell">
-                    <span class="reserve-pill" :class="member.isExpired ? 'expired' : 'active'">
-                      {{ member.isExpired ? "已过期" : "有效" }}
-                    </span>
-                    <small>{{ getRemainingText(member) }}</small>
-                  </div>
-                </div>
-              </article>
-            </div>
-          </section>
-
-          <aside class="reserve-side">
-            <section class="reserve-ops-panel">
-              <div class="reserve-section-head">
-                <div>
-                  <h4>批量操作</h4>
-                  <p>仅删除已过期预留位，不影响仍有效的记录。</p>
-                </div>
-              </div>
-              <button type="button" class="reserve-btn danger full" :disabled="!canEdit || deletingExpired" @click="confirmRemoveExpiredMembers">
-                {{ deletingExpired ? "删除中..." : "一键删除过期" }}
-              </button>
-            </section>
-
-            <section class="reserve-edit-panel quick-renew-panel">
-              <div class="reserve-section-head">
-                <div>
-                  <h4>快捷续期</h4>
-                  <p>选中左侧玩家后，直接点击天数即可续期，不需要重复填写表单。</p>
-                </div>
-              </div>
-
-              <template v-if="selectedMember">
-                <div class="reserve-save-preview">
-                  <span>当前到期</span>
-                  <strong>{{ selectedMember.expireAt ?? "未设置 / 已过期从现在算" }}</strong>
-                </div>
-
-                <div class="quick-renew-grid">
+        <AppSplitLayout class="reserve-workspace" right-fixed>
+          <template #left>
+            <AppCard padding="sm" title="预留位名单" body-mode="scroll" overflow="auto">
+              <template #actions>
+                <div class="list-header-actions-row">
+                  <span class="reserve-section-stat">{{ filteredMemberRows.length }} / {{ memberRows.length }}</span>
                   <button
-                    v-for="days in quickDays"
-                    :key="`selected-${days}`"
+                    v-if="canEdit"
                     type="button"
-                    class="reserve-btn primary"
-                    :disabled="!canEdit || saving"
-                    @click="extendSelectedMember(days)"
+                    class="reserve-btn danger-btn sm"
+                    :disabled="deletingExpired || !state?.summary?.expiredCount"
+                    @click="confirmRemoveExpiredMembers"
                   >
-                    {{ saving && pendingExtendDays === days ? `续期中...` : `+${days} 天` }}
-                  </button>
-                </div>
-
-                <div class="reserve-search-row">
-                  <label class="reserve-field reserve-field-compact">
-                    <span>自定义天数</span>
-                    <input v-model.number="selectedCustomDays" class="reserve-input" type="number" min="1" step="1">
-                  </label>
-                  <button type="button" class="reserve-btn" :disabled="!canEdit || saving || !selectedCustomDaysValid" @click="extendSelectedMember(selectedCustomDays)">
-                    自定义续期
+                    🗑️ {{ deletingExpired ? "删除中..." : "清理过期预留位" }}
                   </button>
                 </div>
               </template>
 
-              <div v-else class="reserve-detail-empty">
-                <strong>先选中一个玩家</strong>
-                <p>高频操作建议直接在这里续期，避免重复填写。</p>
-              </div>
-            </section>
+              <div class="reserve-list-header-sticky">
+                <div class="reserve-filter-row">
+                  <input v-model.trim="filterText" class="reserve-input search-input" type="search" placeholder="搜索玩家 / Steam64 / 预留位组">
+                  <select v-model="statusFilter" class="reserve-select filter-select">
+                    <option value="all">全部状态</option>
+                    <option value="active">仅有效</option>
+                    <option value="expired">仅过期</option>
+                  </select>
+                </div>
 
-            <form class="reserve-edit-panel manual-form-panel" @submit.prevent="saveMember">
-              <div class="reserve-section-head">
-                <div>
-                  <h4>新增玩家 / 手动指定</h4>
-                  <p>这里只用于新增预留位，或需要精确覆盖到期时间时使用。</p>
+                <div class="reserve-meta-strip">
+                  <span>本地文件：{{ state?.localReserveFileExists ? "已存在" : "不存在" }}</span>
+                  <span>上次同步：{{ formatDate(state?.lastImportedAt) }}</span>
                 </div>
               </div>
 
-                            <label class="reserve-field">
-                <span>玩家搜索与选择 (支持模糊搜索 / 数据库检索)</span>
-                <PlayerSelect
-                  v-model:steamId="form.steamId"
-                  v-model:playerName="form.name"
-                  placeholder="搜索在线玩家 / 数据库玩家..."
-                />
-              </label>
-
-              
-
-              <div class="reserve-form-grid">
-                <label class="reserve-field">
+              <div v-if="!filteredMemberRows.length" class="reserve-empty">暂无匹配的预留位数据。</div>
+              <div v-else class="reserve-list-scroll">
+                <div class="reserve-list-grid reserve-list-grid-head">
+                  <span>玩家</span>
                   <span>Steam64</span>
-                  <input v-model.trim="form.steamId" class="reserve-input mono" type="text" placeholder="7656119..." required>
-                </label>
+                  <span>预留位组</span>
+                  <span>到期时间</span>
+                  <span>状态</span>
+                </div>
 
-                <label class="reserve-field">
-                  <span>玩家名</span>
-                  <input v-model.trim="form.name" class="reserve-input" type="text" placeholder="建议填写，便于识别">
-                </label>
-              </div>
-
-              <label class="reserve-field">
-                <span>预留位组</span>
-                <select v-model="form.group" class="reserve-select" required>
-                  <option v-for="group in groupOptions" :key="group" :value="group">{{ group }}</option>
-                </select>
-              </label>
-
-              <div class="reserve-expire-tabs">
-                <button type="button" :class="{ active: expireMode === 'extend' }" @click="expireMode = 'extend'">续期天数</button>
-                <button type="button" :class="{ active: expireMode === 'exact' }" @click="expireMode = 'exact'">精确到期时间</button>
-              </div>
-
-              <div v-if="expireMode === 'extend'" class="reserve-duration-row">
-                <button v-for="days in quickDays" :key="days" type="button" class="reserve-duration-btn" :class="{ active: form.durationDays === days }" @click="setDurationDays(days)">
-                  +{{ days }} 天
-                </button>
-                <label class="reserve-field reserve-field-compact">
-                  <span>自定义天数</span>
-                  <input v-model.number="form.durationDays" class="reserve-input" type="number" min="1" step="1">
-                </label>
-              </div>
-
-              <label v-else class="reserve-field">
-                <span>到期时间</span>
-                <input v-model="form.exactExpireAt" class="reserve-input" type="datetime-local" required>
-              </label>
-
-              <label class="reserve-field">
-                <span>原因</span>
-                <input v-model.trim="form.reason" class="reserve-input" type="text" placeholder="可选，例如活动补偿 / 手动续期">
-              </label>
-
-              <div class="reserve-save-preview">
-                <span>当前到期</span>
-                <strong>{{ currentExpireText }}</strong>
-              </div>
-              <div class="reserve-save-preview">
-                <span>{{ expireMode === "extend" ? "续期后到期" : "将覆盖为" }}</span>
-                <strong>{{ computedExpireAt || "请选择有效时间" }}</strong>
-              </div>
-
-              <button type="submit" class="reserve-btn primary full" :disabled="!canEdit || saving || !canSubmit">
-                {{ saving ? "提交中..." : (expireMode === "extend" ? "添加 / 续期预留位时间" : "保存精确到期时间") }}
-              </button>
-            </form>
-
-            <section class="reserve-detail-panel">
-              <template v-if="selectedMember">
-                <div class="reserve-section-head">
-                  <div>
-                    <h4>{{ selectedMember.name || "未命名玩家" }}</h4>
-                    <p>当前选中的预留位详情。</p>
+                <article
+                  v-for="member in filteredMemberRows"
+                  :key="member.rawLine || member.steamId"
+                  class="reserve-row"
+                  :class="{ active: selectedMember?.steamId === member.steamId, expired: member.isExpired }"
+                  @click="selectedSteamId = member.steamId"
+                >
+                  <div class="reserve-list-grid">
+                    <div class="reserve-cell reserve-player-cell">
+                      <strong class="selectable">{{ member.name || "未命名玩家" }}</strong>
+                    </div>
+                    <div class="reserve-cell mono selectable">{{ member.steamId }}</div>
+                    <div class="reserve-cell selectable">{{ member.group }}</div>
+                    <div class="reserve-cell expiry-cell selectable">{{ member.expireAt ?? "未设置" }}</div>
+                    <div class="reserve-cell reserve-state-cell">
+                      <span class="reserve-pill" :class="member.isExpired ? 'expired' : 'active'">
+                        {{ member.isExpired ? "已过期" : "有效" }}
+                      </span>
+                      <small class="remaining-text">{{ getRemainingText(member) }}</small>
+                    </div>
                   </div>
-                  <div class="reserve-detail-actions">
-                    <button type="button" class="reserve-mini-btn" @click="openPlayerDatabase(selectedMember.name || selectedMember.steamId)">玩家库</button>
-                    <button type="button" class="reserve-mini-btn" :disabled="!canEdit" @click="fillFromSelectedMember">带入下方表单</button>
+                </article>
+              </div>
+            </AppCard>
+          </template>
+
+          <template #right>
+            <div class="reserve-side-scroller">
+              <!-- 合并后的详情与快捷续期 -->
+              <AppCard title="预留位详情与快捷续期" class="selected-detail-card">
+                <template #actions>
+                  <div class="detail-header-actions" v-if="selectedMember">
+                    <button type="button" class="reserve-mini-btn" @click="openPlayerDatabase(selectedMember.name || selectedMember.steamId)">🔍 玩家库</button>
+                    <button type="button" class="reserve-mini-btn" :disabled="!canEdit" @click="fillFromSelectedMember">📥 带入表单</button>
+                  </div>
+                </template>
+
+                <div v-if="selectedMember">
+                  <div class="member-detail-header-status">
+                    <span class="status-indicator-badge" :class="selectedMember.isExpired ? 'expired' : 'active'">
+                      {{ selectedMember.isExpired ? "已过期" : "有效" }}
+                    </span>
+                    <span class="time-remaining-large" :class="{ 'expired-time': selectedMember.isExpired }">
+                      {{ getRemainingText(selectedMember) }}
+                    </span>
+                  </div>
+
+                  <div class="member-detail-grid">
+                    <div class="detail-item">
+                      <span class="detail-label">玩家名</span>
+                      <strong class="detail-val selectable">{{ selectedMember.name || "未命名玩家" }}</strong>
+                    </div>
+                    <div class="detail-item">
+                      <span class="detail-label">Steam64</span>
+                      <div class="mono-copy-wrapper">
+                        <strong class="detail-val mono selectable">{{ selectedMember.steamId }}</strong>
+                        <button type="button" class="copy-id-btn" title="复制 Steam64" @click="copySteamId(selectedMember.steamId)">📋</button>
+                      </div>
+                    </div>
+                    <div class="detail-item">
+                      <span class="detail-label">预留位组</span>
+                      <strong class="detail-val">{{ selectedMember.group }}</strong>
+                    </div>
+                    <div class="detail-item">
+                      <span class="detail-label">到期时间</span>
+                      <strong class="detail-val">{{ selectedMember.expireAt ?? "未设置" }}</strong>
+                    </div>
+                  </div>
+
+                  <div class="divider-line"></div>
+
+                  <div class="quick-renew-section">
+                    <div class="sub-section-title">快捷续期 (直接点击天数续期)</div>
+                    <p class="sub-section-desc">选中玩家后，直接点击天数即可快捷续期，无需重复填写表单。</p>
+                    <div class="quick-renew-grid">
+                      <button
+                        v-for="days in quickDays"
+                        :key="`selected-${days}`"
+                        type="button"
+                        class="renew-pill-btn"
+                        :disabled="!canEdit || saving"
+                        @click="extendSelectedMember(days)"
+                      >
+                        {{ saving && pendingExtendDays === days ? `续期中...` : `+${days} 天` }}
+                      </button>
+                    </div>
+
+                    <div class="custom-renew-row">
+                      <div class="custom-input-group">
+                        <input v-model.number="selectedCustomDays" class="reserve-input custom-days-input" type="number" min="1" step="1">
+                        <span class="unit-span">天</span>
+                      </div>
+                      <button type="button" class="reserve-btn primary-like" :disabled="!canEdit || saving || !selectedCustomDaysValid" @click="extendSelectedMember(selectedCustomDays)">
+                        自定义续期
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="divider-line"></div>
+
+                  <div class="card-footer-danger">
+                    <button type="button" class="danger-outline-btn" :disabled="!canEdit || deletingSteamId === selectedMember.steamId" @click="confirmRemoveMember(selectedMember)">
+                      {{ deletingSteamId === selectedMember.steamId ? "删除中..." : "🗑️ 删除该玩家预留位" }}
+                    </button>
                   </div>
                 </div>
 
-                <div class="reserve-detail-sheet">
-                  <div class="reserve-detail-row">
-                    <span>玩家名</span>
-                    <strong class="selectable">{{ selectedMember.name || "未命名玩家" }}</strong>
-                  </div>
-                  <div class="reserve-detail-row">
-                    <span>Steam64</span>
-                    <strong class="mono selectable">{{ selectedMember.steamId }}</strong>
-                  </div>
-                  <div class="reserve-detail-row">
-                    <span>预留位组</span>
-                    <strong class="selectable">{{ selectedMember.group }}</strong>
-                  </div>
-                  <div class="reserve-detail-row">
-                    <span>到期时间</span>
-                    <strong class="selectable">{{ selectedMember.expireAt ?? "未设置" }}</strong>
-                  </div>
-                  <div class="reserve-detail-row">
-                    <span>剩余时间</span>
-                    <strong>{{ getRemainingText(selectedMember) }}</strong>
-                  </div>
+                <div v-else class="reserve-detail-empty">
+                  <strong>先选择一个玩家</strong>
+                  <p>从左侧名单选择一个玩家后，这里会显示详情和续期快捷入口。</p>
                 </div>
+              </AppCard>
 
-                <div class="reserve-detail-actions">
-                  <button type="button" class="reserve-mini-btn danger" :disabled="!canEdit || deletingSteamId === selectedMember.steamId" @click="confirmRemoveMember(selectedMember)">
-                    {{ deletingSteamId === selectedMember.steamId ? "删除中..." : "删除该玩家预留位" }}
+              <!-- 新增玩家 / 手动指定表单 -->
+              <AppCard title="新增玩家 / 手动指定">
+                <form class="manual-form" @submit.prevent="saveMember">
+                  <p class="form-intro-desc">这里只用于新增预留位，或需要精确覆盖到期时间时使用。</p>
+
+                  <label class="reserve-field">
+                    <span class="field-title">玩家搜索与选择 (支持模糊搜索 / 数据库检索)</span>
+                    <PlayerSelect
+                      v-model:steamId="form.steamId"
+                      v-model:playerName="form.name"
+                      placeholder="搜索在线玩家 / 数据库玩家..."
+                    />
+                  </label>
+
+                  <div class="reserve-form-grid">
+                    <label class="reserve-field">
+                      <span class="field-title">Steam64</span>
+                      <input v-model.trim="form.steamId" class="reserve-input mono" type="text" placeholder="7656119..." required>
+                    </label>
+
+                    <label class="reserve-field">
+                      <span class="field-title">玩家名</span>
+                      <input v-model.trim="form.name" class="reserve-input" type="text" placeholder="建议填写，便于识别">
+                    </label>
+                  </div>
+
+                  <label class="reserve-field">
+                    <span class="field-title">预留位组</span>
+                    <select v-model="form.group" class="reserve-select" required>
+                      <option v-for="group in groupOptions" :key="group" :value="group">{{ group }}</option>
+                    </select>
+                  </label>
+
+                  <div class="reserve-expire-tabs">
+                    <button type="button" :class="{ active: expireMode === 'extend' }" @click="expireMode = 'extend'">续期天数</button>
+                    <button type="button" :class="{ active: expireMode === 'exact' }" @click="expireMode = 'exact'">精确到期时间</button>
+                  </div>
+
+                  <div v-if="expireMode === 'extend'" class="reserve-duration-row">
+                    <div class="preset-duration-grid">
+                      <button v-for="days in quickDays" :key="days" type="button" class="reserve-duration-btn" :class="{ active: form.durationDays === days }" @click="setDurationDays(days)">
+                        +{{ days }} 天
+                      </button>
+                    </div>
+                    <label class="reserve-field reserve-field-compact">
+                      <span class="field-title">自定义天数</span>
+                      <input v-model.number="form.durationDays" class="reserve-input" type="number" min="1" step="1">
+                    </label>
+                  </div>
+
+                  <label v-else class="reserve-field">
+                    <span class="field-title">到期时间</span>
+                    <input v-model="form.exactExpireAt" class="reserve-input" type="datetime-local" required>
+                  </label>
+
+                  <label class="reserve-field">
+                    <span class="field-title">原因</span>
+                    <input v-model.trim="form.reason" class="reserve-input" type="text" placeholder="可选，例如活动补偿 / 手动续期">
+                  </label>
+
+                  <div class="expiry-comparison-preview">
+                    <div class="preview-box">
+                      <span class="preview-title">当前到期</span>
+                      <strong class="preview-value">{{ currentExpireText }}</strong>
+                    </div>
+                    <div class="preview-arrow">➔</div>
+                    <div class="preview-box highlight">
+                      <span class="preview-title">{{ expireMode === "extend" ? "续期后到期" : "将覆盖为" }}</span>
+                      <strong class="preview-value">{{ computedExpireAt || "请选择有效时间" }}</strong>
+                    </div>
+                  </div>
+
+                  <button type="submit" class="submit-btn" :disabled="!canEdit || saving || !canSubmit">
+                    {{ saving ? "提交中..." : (expireMode === "extend" ? "确认添加 / 续期预留位" : "保存精确到期时间") }}
                   </button>
-                </div>
-              </template>
-
-              <div v-else class="reserve-detail-empty">
-                <strong>未选择条目</strong>
-                <p>从左侧名单选择一个玩家后，这里会显示详情和续期入口。</p>
-              </div>
-            </section>
-          </aside>
-        </div>
+                </form>
+              </AppCard>
+            </div>
+          </template>
+        </AppSplitLayout>
       </section>
 
+      <!-- CDK批次 TAB -->
       <section v-else-if="activeTab === 'batches'" class="reserve-tab-panel reserve-tab-panel-fixed">
         <div class="reserve-summary-grid">
           <div class="reserve-summary-card">
@@ -326,122 +322,111 @@
           </div>
         </div>
 
-        <div class="cdk-toolbar">
-          <div>
-            <h4>CDK 批次列表</h4>
-            <p class="subtitle">左侧直接展示每批次 CDK，右侧固定用于新增预留位 CDK 批次。</p>
-          </div>
-        </div>
+        <AppSplitLayout class="batch-workspace" right-fixed>
+          <template #left>
+            <AppCard compact title="CDK 批次列表">
+              <template #actions>
+                <span class="reserve-section-stat">共 {{ cdkBatches.length }} 个批次</span>
+              </template>
 
-        <div class="batch-workspace batch-workspace-split">
-          <section class="batch-list-panel">
-            <div class="reserve-section-head">
-              <div>
-                <h4>已有批次</h4>
-                <p>每个批次直接展开可复制的 CDK。</p>
-              </div>
-              <span class="reserve-section-stat">{{ cdkBatches.length }}</span>
-            </div>
-
-            <div v-if="!cdkBatches.length" class="reserve-empty card-empty batch-empty">暂无有效 CDK 批次。</div>
-            <div v-else class="cdk-batch-grid">
-              <article
-                v-for="batch in cdkBatches"
-                :key="batch.id"
-                class="cdk-batch-card compact"
-                :class="{ active: selectedBatchId === batch.id }"
-                @click="selectedBatchId = batch.id"
-              >
-                <div class="cdk-batch-head">
-                  <div>
-                    <div class="cdk-batch-title-row">
-                      <strong>{{ batch.codeType }}</strong>
-                      <span class="reserve-pill active">有效</span>
+              <div v-if="!cdkBatches.length" class="reserve-empty">暂无有效 CDK 批次。</div>
+              <div v-else class="cdk-batch-grid">
+                <article
+                  v-for="batch in cdkBatches"
+                  :key="batch.id"
+                  class="cdk-batch-card compact"
+                  :class="{ active: selectedBatchId === batch.id }"
+                  @click="selectedBatchId = batch.id"
+                >
+                  <div class="cdk-batch-head">
+                    <div>
+                      <div class="cdk-batch-title-row">
+                        <strong>{{ batch.codeType }}</strong>
+                        <span class="reserve-pill active">有效</span>
+                      </div>
+                      <p class="cdk-batch-meta mono">{{ batch.id }}</p>
                     </div>
-                    <p class="cdk-batch-meta mono">{{ batch.id }}</p>
+                    <div class="cdk-batch-actions">
+                      <button type="button" class="reserve-mini-btn" @click.stop="copyBatchCodes(batch)">复制 CDK</button>
+                      <button type="button" class="reserve-mini-btn" @click.stop="openBatchRecords(batch)">激活记录</button>
+                      <button type="button" class="reserve-mini-btn danger" :disabled="!canEdit || batchActionLoadingId === batch.id" @click.stop="confirmDeactivateBatch(batch)">
+                        {{ batchActionLoadingId === batch.id ? "处理中..." : "报销" }}
+                      </button>
+                    </div>
                   </div>
-                  <div class="cdk-batch-actions">
-                    <button type="button" class="reserve-mini-btn" @click.stop="copyBatchCodes(batch)">复制 CDK</button>
-                    <button type="button" class="reserve-mini-btn" @click.stop="openBatchRecords(batch)">激活记录</button>
-                    <button type="button" class="reserve-mini-btn danger" :disabled="!canEdit || batchActionLoadingId === batch.id" @click.stop="confirmDeactivateBatch(batch)">
-                      {{ batchActionLoadingId === batch.id ? "处理中..." : "报销" }}
-                    </button>
-                  </div>
-                </div>
 
-                <div class="cdk-batch-metrics compact-metrics">
-                  <div class="cdk-metric">
-                    <span>数量</span>
-                    <strong>{{ batch.quantity }}</strong>
+                  <div class="cdk-batch-metrics compact-metrics">
+                    <div class="cdk-metric">
+                      <span>数量</span>
+                      <strong>{{ batch.quantity }}</strong>
+                    </div>
+                    <div class="cdk-metric">
+                      <span>已用</span>
+                      <strong>{{ batch.usedCount }}</strong>
+                    </div>
+                    <div class="cdk-metric">
+                      <span>剩余</span>
+                      <strong>{{ batch.remainingCount }}</strong>
+                    </div>
+                    <div class="cdk-metric">
+                      <span>天数</span>
+                      <strong>{{ batch.durationDays }}</strong>
+                    </div>
+                    <div class="cdk-metric">
+                      <span>记录</span>
+                      <strong>{{ batch.activationCount ?? 0 }}</strong>
+                    </div>
                   </div>
-                  <div class="cdk-metric">
-                    <span>已用</span>
-                    <strong>{{ batch.usedCount }}</strong>
-                  </div>
-                  <div class="cdk-metric">
-                    <span>剩余</span>
-                    <strong>{{ batch.remainingCount }}</strong>
-                  </div>
-                  <div class="cdk-metric">
-                    <span>天数</span>
-                    <strong>{{ batch.durationDays }}</strong>
-                  </div>
-                  <div class="cdk-metric">
-                    <span>记录</span>
-                    <strong>{{ batch.activationCount ?? 0 }}</strong>
-                  </div>
-                </div>
 
-                <div class="cdk-batch-details compact-details">
-                  <span>同玩家：{{ batch.allowMultiActivation ? "允许多次" : "单次使用" }}</span>
-                  <span>创建时间：{{ formatDate(batch.createdAt) }}</span>
-                  <span>创建人：{{ batch.createdBy || "system" }}</span>
-                </div>
+                  <div class="cdk-batch-details compact-details">
+                    <span>同玩家：{{ batch.allowMultiActivation ? "允许多次" : "单次使用" }}</span>
+                    <span>创建时间：{{ formatDate(batch.createdAt) }}</span>
+                    <span>创建人：{{ batch.createdBy || "system" }}</span>
+                  </div>
 
-                <div v-if="batch.codes?.length" class="created-code-list inline-code-list">
-                  <code v-for="code in batch.codes" :key="code">{{ code }}</code>
-                </div>
-              </article>
-            </div>
-          </section>
-
-          <form class="reserve-edit-panel batch-create-panel" @submit.prevent="submitBatchCreate">
-            <div class="reserve-section-head">
-              <div>
-                <h4>新增预留位 CDK 批次</h4>
-                <p>右侧固定窗口专门用于创建批次。</p>
+                  <div v-if="batch.codes?.length" class="created-code-list inline-code-list">
+                    <code v-for="code in batch.codes" :key="code">{{ code }}</code>
+                  </div>
+                </article>
               </div>
-            </div>
+            </AppCard>
+          </template>
 
-            <label class="reserve-field">
-              <span>CDK 类型</span>
-              <input v-model.trim="batchForm.codeType" class="reserve-input" type="text" placeholder="例如 VIP" required>
-            </label>
-            <label class="reserve-field">
-              <span>该批次数量</span>
-              <input v-model.number="batchForm.quantity" class="reserve-input" type="number" min="1" step="1" required>
-            </label>
-            <label class="reserve-field">
-              <span>激活天数</span>
-              <input v-model.number="batchForm.durationDays" class="reserve-input" type="number" min="1" step="1" required>
-            </label>
-            <label class="checkbox-row">
-              <input v-model="batchForm.allowMultiActivation" type="checkbox">
-              <span>允许同一玩家多次使用该批次中的不同 CDK</span>
-            </label>
+          <template #right>
+            <AppCard compact title="新增预留位 CDK 批次" description="右侧窗口专门用于创建批次。">
+              <form class="batch-create-form" @submit.prevent="submitBatchCreate">
+                <label class="reserve-field">
+                  <span class="field-title">CDK 类型</span>
+                  <input v-model.trim="batchForm.codeType" class="reserve-input" type="text" placeholder="例如 VIP" required>
+                </label>
+                <label class="reserve-field">
+                  <span class="field-title">该批次数量</span>
+                  <input v-model.number="batchForm.quantity" class="reserve-input" type="number" min="1" step="1" required>
+                </label>
+                <label class="reserve-field">
+                  <span class="field-title">激活天数</span>
+                  <input v-model.number="batchForm.durationDays" class="reserve-input" type="number" min="1" step="1" required>
+                </label>
+                <label class="checkbox-row">
+                  <input v-model="batchForm.allowMultiActivation" type="checkbox">
+                  <span>允许同一玩家多次使用该批次中的不同 CDK</span>
+                </label>
 
-            <div class="reserve-save-preview">
-              <span>批次预览</span>
-              <strong>{{ batchForm.codeType || "CDK" }} / {{ Number(batchForm.quantity) || 0 }} 个 / {{ Number(batchForm.durationDays) || 0 }} 天</strong>
-            </div>
+                <div class="reserve-save-preview">
+                  <span>批次预览</span>
+                  <strong>{{ batchForm.codeType || "CDK" }} / {{ Number(batchForm.quantity) || 0 }} 个 / {{ Number(batchForm.durationDays) || 0 }} 天</strong>
+                </div>
 
-            <button type="submit" class="reserve-btn primary full" :disabled="!canEdit || batchCreating">
-              {{ batchCreating ? "创建中..." : "创建批次" }}
-            </button>
-          </form>
-        </div>
+                <button type="submit" class="submit-btn" :disabled="!canEdit || batchCreating">
+                  {{ batchCreating ? "创建中..." : "创建批次" }}
+                </button>
+              </form>
+            </AppCard>
+          </template>
+        </AppSplitLayout>
       </section>
 
+      <!-- 激活记录 TAB -->
       <section v-else class="reserve-tab-panel reserve-tab-panel-fixed">
         <div class="reserve-summary-grid">
           <div class="reserve-summary-card">
@@ -462,23 +447,25 @@
           </div>
         </div>
 
-        <div class="reserve-filter-row activation-filters">
-          <select v-model="activationFilters.batchId" class="reserve-select">
-            <option value="">全部批次</option>
-            <option v-for="batch in cdkBatches" :key="batch.id" :value="batch.id">
-              {{ batch.codeType }} / {{ batch.id }}
-            </option>
-          </select>
-          <input v-model.trim="activationFilters.steamId" class="reserve-input mono" type="search" placeholder="按 Steam64 筛选">
-          <select v-model="activationFilters.result" class="reserve-select">
-            <option value="">全部结果</option>
-            <option v-for="item in activationResultOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
-          </select>
-        </div>
+        <AppCard compact title="激活记录" body-mode="fill" class="activation-card">
+          <template #actions>
+            <div class="activation-filters-row">
+              <select v-model="activationFilters.batchId" class="reserve-select">
+                <option value="">全部批次</option>
+                <option v-for="batch in cdkBatches" :key="batch.id" :value="batch.id">
+                  {{ batch.codeType }} / {{ batch.id }}
+                </option>
+              </select>
+              <input v-model.trim="activationFilters.steamId" class="reserve-input mono" type="search" placeholder="按 Steam64 筛选">
+              <select v-model="activationFilters.result" class="reserve-select">
+                <option value="">全部结果</option>
+                <option v-for="item in activationResultOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+              </select>
+            </div>
+          </template>
 
-        <div v-if="!filteredActivations.length" class="reserve-empty card-empty">暂无匹配的激活记录。</div>
-        <div v-else class="activation-table-wrap">
-          <table class="activation-table">
+          <div v-if="!filteredActivations.length" class="reserve-empty">暂无匹配的激活记录。</div>
+          <AppTable v-else compact>
             <thead>
               <tr>
                 <th>时间</th>
@@ -507,8 +494,8 @@
                 <td>{{ record.failureReason || "-" }}</td>
               </tr>
             </tbody>
-          </table>
-        </div>
+          </AppTable>
+        </AppCard>
       </section>
     </template>
 
@@ -566,34 +553,32 @@
           </select>
         </div>
 
-        <div v-if="recordsModal.loading" class="reserve-empty card-empty">正在加载激活记录...</div>
-        <div v-else-if="!recordsModal.records.length" class="reserve-empty card-empty">该批次暂无激活记录。</div>
-        <div v-else class="activation-table-wrap">
-          <table class="activation-table">
-            <thead>
-              <tr>
-                <th>时间</th>
-                <th>玩家</th>
-                <th>Steam64</th>
-                <th>CDK</th>
-                <th>结果</th>
-                <th>到期时间</th>
-                <th>失败原因</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="record in recordsModal.records" :key="record.id">
-                <td>{{ formatDate(record.createdAt) }}</td>
-                <td>{{ record.playerName || "未知玩家" }}</td>
-                <td class="mono">{{ record.steamId || "-" }}</td>
-                <td class="mono">{{ record.code || "-" }}</td>
-                <td>{{ activationResultLabel(record.result) }}</td>
-                <td>{{ record.grantedExpireAt || "-" }}</td>
-                <td>{{ record.failureReason || "-" }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <div v-if="recordsModal.loading" class="reserve-empty">正在加载激活记录...</div>
+        <div v-else-if="!recordsModal.records.length" class="reserve-empty">该批次暂无激活记录。</div>
+        <AppTable v-else compact>
+          <thead>
+            <tr>
+              <th>时间</th>
+              <th>玩家</th>
+              <th>Steam64</th>
+              <th>CDK</th>
+              <th>结果</th>
+              <th>到期时间</th>
+              <th>失败原因</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="record in recordsModal.records" :key="record.id">
+              <td>{{ formatDate(record.createdAt) }}</td>
+              <td>{{ record.playerName || "未知玩家" }}</td>
+              <td class="mono">{{ record.steamId || "-" }}</td>
+              <td class="mono">{{ record.code || "-" }}</td>
+              <td>{{ activationResultLabel(record.result) }}</td>
+              <td>{{ record.grantedExpireAt || "-" }}</td>
+              <td>{{ record.failureReason || "-" }}</td>
+            </tr>
+          </tbody>
+        </AppTable>
       </section>
     </div>
 
@@ -604,7 +589,7 @@
             <h2>CDK 批次概览</h2>
             <p class="subtitle">{{ detailModal.batch?.codeType }} / {{ detailModal.batch?.id }}</p>
           </div>
-          <button class="icon-button" type="button" @click="closeBatchDetail">脳</button>
+          <button class="icon-button" type="button" @click="closeBatchDetail">×</button>
         </header>
 
         <div v-if="detailModal.batch" class="reserve-summary-grid compact-grid">
@@ -629,7 +614,7 @@
         <div v-if="detailModal.batch?.codes?.length" class="created-code-list">
           <code v-for="code in detailModal.batch.codes" :key="code">{{ code }}</code>
         </div>
-        <div v-else class="reserve-empty card-empty">该批次没有可展示的 CDK。</div>
+        <div v-else class="reserve-empty">该批次没有可展示的 CDK。</div>
       </section>
     </div>
 
@@ -640,7 +625,7 @@
             <h2>CDK 批次窗口</h2>
             <p class="subtitle">专门查看、创建、复制和报销 CDK 批次。</p>
           </div>
-          <button class="icon-button" type="button" @click="closeBatchWindow">脳</button>
+          <button class="icon-button" type="button" @click="closeBatchWindow">×</button>
         </header>
 
         <div class="reserve-summary-grid compact-grid">
@@ -672,7 +657,7 @@
           </button>
         </div>
 
-        <div v-if="!cdkBatches.length" class="reserve-empty card-empty">暂无有效 CDK 批次。</div>
+        <div v-if="!cdkBatches.length" class="reserve-empty">暂无有效 CDK 批次。</div>
         <div v-else class="cdk-batch-grid batch-window-grid">
           <article
             v-for="batch in cdkBatches"
@@ -763,6 +748,11 @@ import { copyTextWithToast } from "../../utils/clipboard";
 import { goToPlayerDatabaseSearch } from "../../utils/player-database";
 import PlayerSelect from "../common/PlayerSelect.vue";
 
+// Common UI Components
+import AppCard from "../common/AppCard.vue";
+import AppSplitLayout from "../common/AppSplitLayout.vue";
+import AppTable from "../common/AppTable.vue";
+
 type ActiveTab = "manual" | "batches" | "activations";
 type ExpireMode = "extend" | "exact";
 
@@ -808,7 +798,6 @@ const cdkState = ref<ReserveSlotsCdkState | null>(null);
 const selectedSteamId = ref("");
 const filterText = ref("");
 const statusFilter = ref<"all" | "active" | "expired">("all");
-
 
 const expireMode = ref<ExpireMode>("extend");
 const activeTab = ref<ActiveTab>("manual");
@@ -1142,8 +1131,6 @@ async function removeExpiredMembers() {
   }
 }
 
-
-
 async function exportCsv() {
   exporting.value = true;
   error.value = null;
@@ -1196,8 +1183,6 @@ function applyState(next: ReserveSlotsState) {
     selectedSteamId.value = next.members[0].steamId;
   }
 }
-
-
 
 function fillFromSelectedMember() {
   if (!selectedMember.value) return;
@@ -1338,6 +1323,15 @@ async function copyBatchCodes(batch: ReserveSlotCdkBatch) {
   });
   if (copied) notice.value = `Copied all CDK codes for batch ${batch.codeType} / ${batch.id}.`;
 }
+
+async function copySteamId(steamId: string) {
+  await copyTextWithToast(steamId, ui, {
+    label: "Steam64",
+    successMessage: `Steam64 ${steamId} 已成功复制到剪贴板。`,
+    errorMessage: "复制失败，请手动选择复制。",
+  });
+}
+
 function resolveBatchLabel(batchId: string | null, codeType: string | null) {
   if (!batchId) return codeType || "-";
   const batch = cdkBatches.value.find((item) => item.id === batchId);
@@ -1424,210 +1418,213 @@ function fromDatetimeLocal(value: string) {
 
 <style scoped>
 .reserve-slots-section {
-  display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
-  gap: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   height: 100%;
   min-height: 0;
   overflow: hidden;
 }
 
-.reserve-head,
-.reserve-section-head,
-.reserve-actions,
-.reserve-filter-row,
-.reserve-search-row,
-.reserve-duration-row,
-.reserve-detail-actions,
-.cdk-toolbar,
-.cdk-batch-actions {
+.reserve-head {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.reserve-head,
-.reserve-section-head,
-.cdk-toolbar {
   justify-content: space-between;
   align-items: flex-start;
+  gap: 16px;
+  padding: 8px 0;
 }
 
-.reserve-head-copy,
-.reserve-section-head > div:first-child {
-  display: grid;
-  gap: 4px;
-}
-
-.reserve-head h3,
-.reserve-section-head h4,
-.modal-panel h2 {
+.reserve-head-copy h3 {
   margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, var(--color-text-primary) 30%, var(--color-text-secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
-.reserve-head p,
-.reserve-section-head p,
-.reserve-meta-strip,
-.reserve-section-stat,
-.cdk-batch-meta,
-.cdk-batch-details,
-.subtitle {
-  margin: 0;
+.reserve-head-copy p {
+  margin: 4px 0 0;
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
-.reserve-tabs {
+.reserve-actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
-}
-
-.reserve-tab {
-  border: 1px solid var(--color-border-soft);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--color-text-secondary);
-  border-radius: 999px;
-  padding: 9px 14px;
-  cursor: pointer;
-}
-
-.reserve-tab.active {
-  border-color: rgba(96, 165, 250, 0.42);
-  background: #1d4ed830;
-  color: var(--color-text-primary);
-}
-
-.reserve-tab-panel {
-  display: grid;
-  gap: 14px;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.reserve-tab-panel-fixed {
-  grid-template-rows: auto auto minmax(0, 1fr);
 }
 
 .reserve-btn,
 .reserve-mini-btn,
 .reserve-duration-btn,
-.ghost-button,
-.primary-button,
-.icon-button {
+.danger-outline-btn,
+.submit-btn,
+.renew-pill-btn {
   border: 1px solid var(--color-border-soft);
-  background: #ffffff08;
+  background: rgba(255, 255, 255, 0.04);
   color: var(--color-text-primary);
   border-radius: 8px;
-  padding: 8px 12px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.reserve-btn:hover,
+.reserve-mini-btn:hover,
+.reserve-duration-btn:hover,
+.renew-pill-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--color-border-hover);
+  transform: translateY(-1px);
+}
+
+.reserve-btn:active,
+.reserve-mini-btn:active,
+.reserve-duration-btn:active,
+.renew-pill-btn:active {
+  transform: translateY(0);
 }
 
 .reserve-btn.primary,
-.reserve-duration-btn.active,
-.primary-button,
-.primary-like {
-  border-color: rgba(96, 165, 250, 0.42);
-  background: #1d4ed830;
+.submit-btn,
+.reserve-btn.primary-like {
+  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
 }
 
-.reserve-btn.danger,
-.reserve-mini-btn.danger {
-  border-color: rgba(248, 113, 113, 0.34);
-  background: #7f1d1d24;
+.reserve-btn.primary:hover,
+.submit-btn:hover,
+.reserve-btn.primary-like:hover {
+  background: rgba(59, 130, 246, 0.25);
+  border-color: #60a5fa;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.25);
 }
 
-.reserve-btn.full {
+.danger-btn {
+  border-color: rgba(239, 68, 68, 0.4) !important;
+  background: rgba(239, 68, 68, 0.12) !important;
+  color: #f87171 !important;
+}
+
+.danger-btn:hover {
+  background: rgba(239, 68, 68, 0.22) !important;
+  border-color: #f87171 !important;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.2) !important;
+}
+
+.danger-outline-btn {
+  border-color: rgba(239, 68, 68, 0.25);
+  background: transparent;
+  color: #f87171;
   width: 100%;
+  padding: 10px;
+}
+
+.danger-outline-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: #f87171;
 }
 
 .reserve-btn:disabled,
 .reserve-mini-btn:disabled,
 .reserve-duration-btn:disabled,
-.primary-button:disabled,
-.ghost-button:disabled {
+.danger-outline-btn:disabled,
+.submit-btn:disabled,
+.renew-pill-btn:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: 0.45;
+  transform: none !important;
+  box-shadow: none !important;
 }
 
-.reserve-mini-btn,
-.icon-button {
-  padding: 7px 10px;
-}
-
-.hidden-input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.reserve-state-box,
-.reserve-notice,
-.reserve-summary-card,
-.reserve-list-panel,
-.reserve-ops-panel,
-.reserve-edit-panel,
-.reserve-detail-panel,
-.cdk-batch-card,
-.card-empty,
-.modal-panel {
-  border: 1px solid var(--color-border-soft);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02)),
-    rgba(255, 255, 255, 0.03);
-  border-radius: 10px;
-}
-
-.reserve-state-box,
-.reserve-notice,
-.reserve-list-panel,
-.reserve-ops-panel,
-.reserve-edit-panel,
-.reserve-detail-panel,
-.cdk-batch-card,
-.card-empty,
-.modal-panel {
-  padding: 12px;
-}
-
-.reserve-state-box.error {
+.reserve-tabs {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  color: #ffc4c4;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border-soft);
+  padding: 4px;
+  border-radius: 999px;
+  align-self: flex-start;
+}
+
+.reserve-tab {
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-radius: 999px;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.reserve-tab:hover {
+  color: var(--color-text-primary);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.reserve-tab.active {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.reserve-tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  flex: 1;
 }
 
 .reserve-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: 12px;
 }
 
 .reserve-summary-card {
-  display: grid;
-  gap: 4px;
-  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border-soft);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
 }
 
 .reserve-summary-card span {
   color: var(--color-text-muted);
   font-size: 12px;
+  font-weight: 500;
 }
 
 .reserve-summary-card strong {
-  font-size: 22px;
-  line-height: 1;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--color-text-primary);
 }
 
 .reserve-summary-card.active strong {
-  color: #b7f1c9;
+  color: #4ade80;
+  text-shadow: 0 0 10px rgba(74, 222, 128, 0.15);
 }
 
 .reserve-summary-card.expired strong {
-  color: #ffb5ae;
+  color: #f87171;
+  text-shadow: 0 0 10px rgba(248, 113, 113, 0.15);
 }
 
 .reserve-summary-card.subtle strong {
@@ -1635,582 +1632,836 @@ function fromDatetimeLocal(value: string) {
 }
 
 .reserve-workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.95fr);
-  gap: 14px;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.batch-workspace,
-.activation-workspace {
-  min-height: 0;
-  overflow: hidden;
-}
-
-.batch-workspace {
-  display: grid;
-}
-
-.batch-workspace-split {
-  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr);
-  gap: 14px;
-  height: 100%;
-}
-
-.batch-list-panel,
-.batch-create-panel {
+  flex: 1;
   min-height: 0;
 }
 
-.batch-list-panel {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 12px;
-}
-
-.activation-workspace {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr);
-}
-
-.reserve-list-panel,
-.reserve-side,
-.reserve-ops-panel,
-.reserve-edit-panel,
-.reserve-detail-panel {
-  display: grid;
-  gap: 12px;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.reserve-list-panel {
-  grid-template-rows: auto auto auto minmax(0, 1fr);
-}
-
-.reserve-side {
-  grid-template-rows: auto minmax(0, 0.9fr) minmax(0, 1.15fr) minmax(0, 0.95fr);
-}
-
-.quick-renew-panel {
-  align-content: start;
-}
-
-.manual-form-panel {
-  align-content: start;
-}
-
-.reserve-edit-panel,
-.reserve-detail-panel {
-  align-content: start;
-  overflow: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-}
-
-.reserve-meta-strip {
+/* Left list layout styling */
+.list-header-actions-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px 16px;
-  padding-bottom: 2px;
+  align-items: center;
+  gap: 12px;
+}
+
+.reserve-section-stat {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-soft);
+}
+
+.reserve-list-header-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--color-bg-card);
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border-soft);
+  margin-bottom: 12px;
+}
+
+.reserve-filter-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .reserve-input,
 .reserve-select {
+  flex: 1;
   min-width: 0;
   border: 1px solid var(--color-border-soft);
-  background: #05081066;
+  background: rgba(0, 0, 0, 0.2);
   color: var(--color-text-primary);
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  transition: all 0.2s ease;
 }
 
-.reserve-filter-row .reserve-input,
-.reserve-search-row .reserve-input {
-  flex: 1 1 220px;
+.reserve-input:focus,
+.reserve-select:focus {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+  outline: none;
+}
+
+.filter-select {
+  flex: 0 0 120px;
+}
+
+.reserve-meta-strip {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--color-text-muted);
 }
 
 .reserve-list-scroll {
-  height: 100%;
-  min-height: 0;
-  overflow: auto;
-  display: grid;
-  gap: 6px;
-  padding-right: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .reserve-list-grid {
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(180px, 1.15fr) minmax(96px, 0.7fr) minmax(170px, 1fr) minmax(110px, 0.8fr);
+  grid-template-columns: 1.2fr 1.2fr 0.8fr 1.3fr 1.1fr;
   gap: 12px;
   align-items: center;
 }
 
 .reserve-list-grid-head {
-  padding: 0 6px 6px;
+  padding: 4px 12px;
   color: var(--color-text-muted);
   font-size: 11px;
+  font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .reserve-row {
   border: 1px solid var(--color-border-soft);
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.01)),
-    rgba(255,255,255,0.02);
-  border-radius: 8px;
-  padding: 12px;
+  background: rgba(255, 255, 255, 0.015);
+  border-radius: 10px;
+  padding: 12px 14px;
   cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .reserve-row:hover {
-  border-color: #60a5fa5c;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(96, 165, 250, 0.3);
+  transform: translateX(2px);
 }
 
 .reserve-row.active {
-  border-color: #60a5fa9a;
-  background:
-    linear-gradient(180deg, rgba(37, 99, 235, 0.18), rgba(37, 99, 235, 0.08)),
-    rgba(255,255,255,0.02);
+  border-color: rgba(96, 165, 250, 0.6);
+  background: linear-gradient(90deg, rgba(37, 99, 235, 0.1) 0%, rgba(37, 99, 235, 0.02) 100%);
+  box-shadow: inset 3px 0 0 #3b82f6;
 }
 
-.reserve-row.expired,
-.cdk-batch-card.deactivated {
-  opacity: 0.88;
+.reserve-row.expired {
+  opacity: 0.75;
 }
 
 .reserve-cell {
   min-width: 0;
-  color: var(--color-text-secondary);
   font-size: 12px;
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .reserve-player-cell strong {
-  display: block;
+  font-size: 13px;
   color: var(--color-text-primary);
-  font-size: 14px;
-  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.mono {
+  font-family: var(--font-mono, SFMono-Regular, Consolas, monospace);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
 .reserve-state-cell {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
 }
 
-.reserve-state-cell small {
+.remaining-text {
+  font-size: 10px;
   color: var(--color-text-muted);
-  font-size: 11px;
 }
 
 .reserve-pill {
   display: inline-flex;
   align-items: center;
-  min-height: 20px;
-  padding: 0 8px;
+  padding: 1px 8px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
+  line-height: 1.2;
 }
 
 .reserve-pill.active {
-  border: 1px solid rgba(74, 222, 128, 0.28);
-  background: #4ade801a;
-  color: #b9f5cc;
+  background: rgba(74, 222, 128, 0.12);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.2);
 }
 
 .reserve-pill.expired {
-  border: 1px solid rgba(248, 113, 113, 0.28);
-  background: #f871711a;
-  color: #ffc7c2;
+  background: rgba(248, 113, 113, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.2);
 }
 
-.reserve-player-results {
-  display: grid;
+/* Right-side scroller panel */
+.reserve-side-scroller {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  height: 100%;
+  scrollbar-gutter: stable;
+  padding-right: 4px;
+}
+
+.selected-detail-card {
+  border-left: 3px solid #60a5fa;
+}
+
+.detail-header-actions {
+  display: flex;
   gap: 6px;
-  max-height: 168px;
-  overflow: auto;
 }
 
-.reserve-player-result {
+.member-detail-header-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.02);
   border: 1px solid var(--color-border-soft);
-  background: rgba(255, 255, 255, 0.04);
-  color: inherit;
-  border-radius: 8px;
-  padding: 8px 10px;
-  display: grid;
-  gap: 4px;
-  text-align: left;
+  border-radius: 10px;
+  margin-bottom: 16px;
 }
 
-.reserve-player-result span {
+.status-indicator-badge {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.status-indicator-badge.active {
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.25);
+}
+
+.status-indicator-badge.expired {
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.25);
+}
+
+.time-remaining-large {
+  font-size: 15px;
+  font-weight: 800;
+  color: #4ade80;
+}
+
+.time-remaining-large.expired-time {
+  color: #f87171;
+}
+
+.member-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-label {
+  font-size: 11px;
   color: var(--color-text-muted);
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.detail-val {
+  font-size: 13px;
+  color: var(--color-text-primary);
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.mono-copy-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.copy-id-btn {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+  padding: 2px;
+}
+
+.copy-id-btn:hover {
+  opacity: 1;
+}
+
+.divider-line {
+  height: 1px;
+  background: var(--color-border-soft);
+  margin: 16px 0;
+}
+
+.quick-renew-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sub-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.sub-section-desc {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin: 0 0 4px;
+}
+
+.quick-renew-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.renew-pill-btn {
+  padding: 8px 6px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+.custom-renew-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.custom-input-group {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--color-border-soft);
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  padding-right: 12px;
+  flex: 1;
+}
+
+.custom-days-input {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding-right: 4px;
+}
+
+.unit-span {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.card-footer-danger {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.reserve-detail-empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--color-text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.reserve-detail-empty strong {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+
+.reserve-detail-empty p {
+  margin: 0;
   font-size: 12px;
 }
 
-.reserve-player-result:disabled {
-  opacity: 0.55;
+/* Manual Form */
+.manual-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.form-intro-desc {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin: 0 0 4px;
+}
+
+.field-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.reserve-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .reserve-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.reserve-field {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-
-.reserve-field span,
-.reserve-save-preview span {
-  color: var(--color-text-muted);
-  font-size: 12px;
-}
-
-.reserve-field-compact {
-  flex: 1 1 140px;
+  gap: 12px;
 }
 
 .reserve-expire-tabs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   border: 1px solid var(--color-border-soft);
+  background: rgba(0, 0, 0, 0.15);
   border-radius: 8px;
   overflow: hidden;
+  padding: 2px;
 }
 
 .reserve-expire-tabs button {
   border: 0;
   background: transparent;
   color: var(--color-text-secondary);
-  padding: 8px 10px;
+  padding: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s;
 }
 
 .reserve-expire-tabs button.active {
-  background: #2563eb2b;
+  background: rgba(255, 255, 255, 0.08);
   color: var(--color-text-primary);
 }
 
-.reserve-save-preview {
+.reserve-duration-row {
   display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  border: 1px dashed var(--color-border-soft);
-  border-radius: 8px;
-  padding: 10px;
+  gap: 12px;
+  align-items: flex-end;
 }
 
-.quick-renew-grid {
+.preset-duration-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 6px;
+  flex: 1;
 }
 
-.reserve-detail-sheet {
-  display: grid;
-  gap: 10px;
-}
-
-.reserve-detail-row {
-  display: grid;
-  grid-template-columns: 96px minmax(0, 1fr);
-  gap: 14px;
-  align-items: center;
-  padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 8px;
-}
-
-.reserve-detail-row span {
-  color: var(--color-text-muted);
-  font-size: 11px;
-  text-transform: uppercase;
-}
-
-.reserve-detail-row strong {
-  color: var(--color-text-primary);
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.reserve-detail-empty,
-.reserve-empty {
-  color: var(--color-text-muted);
+.reserve-duration-btn {
+  padding: 8px;
   font-size: 12px;
+  background: rgba(255, 255, 255, 0.02);
 }
 
-.reserve-detail-empty,
-.card-empty {
+.reserve-duration-btn.active {
+  border-color: #60a5fa;
+  background: rgba(59, 130, 246, 0.1);
+  color: #60a5fa;
+}
+
+.expiry-comparison-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.015);
   border: 1px dashed var(--color-border-soft);
-  border-radius: 8px;
-  padding: 16px;
-  display: grid;
-  gap: 6px;
+  border-radius: 10px;
+  margin-top: 4px;
 }
 
-.selectable {
-  user-select: text;
-  cursor: text;
+.preview-box {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
 }
 
-.mono,
-.created-code-list code,
-.activation-table .mono,
-.cdk-batch-meta {
-  font-family: ui-monospace, SFMono-Regular, Consolas, Liberation Mono, monospace;
+.preview-title {
+  font-size: 10px;
+  color: var(--color-text-muted);
 }
 
-.cdk-batch-grid {
-  display: grid;
-  gap: 6px;
-  grid-template-columns: minmax(0, 1fr);
+.preview-value {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-box.highlight .preview-value {
+  color: #60a5fa;
+  font-weight: 700;
+}
+
+.preview-arrow {
+  color: var(--color-text-muted);
+  font-size: 16px;
+}
+
+.submit-btn {
+  width: 100%;
+  padding: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+}
+
+.submit-btn:hover {
+  background: rgba(59, 130, 246, 0.25);
+  border-color: #60a5fa;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.2);
+}
+
+.submit-btn:active {
+  transform: none;
+}
+
+/* CDK tab styling */
+.batch-workspace {
+  flex: 1;
   min-height: 0;
-  overflow: auto;
-  padding-right: 2px;
-  align-content: start;
 }
 
-.cdk-batch-card {
-  display: grid;
-  gap: 6px;
+.batch-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
   cursor: pointer;
 }
 
-.cdk-batch-card.compact {
-  gap: 8px;
+.checkbox-row input {
+  margin-top: 2px;
+}
+
+.cdk-batch-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  max-height: 100%;
+}
+
+.cdk-batch-card {
+  border: 1px solid var(--color-border-soft);
+  background: rgba(255, 255, 255, 0.015);
+  border-radius: 10px;
+  padding: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cdk-batch-card:hover {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(96, 165, 250, 0.35);
 }
 
 .cdk-batch-card.active {
-  border-color: #60a5fa9a;
-  background:
-    linear-gradient(180deg, rgba(37, 99, 235, 0.18), rgba(37, 99, 235, 0.08)),
-    rgba(255,255,255,0.02);
-}
-
-.batch-create-card {
-  align-content: start;
+  border-color: rgba(96, 165, 250, 0.6);
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%);
 }
 
 .cdk-batch-head {
   display: flex;
   justify-content: space-between;
-  gap: 6px;
   align-items: flex-start;
+  gap: 10px;
 }
 
 .cdk-batch-title-row {
   display: flex;
-  gap: 4px;
   align-items: center;
-  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cdk-batch-title-row strong {
+  font-size: 15px;
+  color: var(--color-text-primary);
+}
+
+.cdk-batch-meta {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.cdk-batch-actions {
+  display: flex;
+  gap: 6px;
 }
 
 .cdk-batch-metrics {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 4px;
-}
-
-.compact-metrics {
-  grid-template-columns: repeat(5, minmax(72px, 1fr));
+  gap: 6px;
 }
 
 .cdk-metric {
-  display: grid;
-  gap: 1px;
-  padding: 5px 6px;
-  border-radius: 5px;
-  border: 1px solid rgba(255,255,255,0.06);
-  background: rgba(255,255,255,0.03);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 6px;
 }
 
 .cdk-metric span {
+  font-size: 9px;
   color: var(--color-text-muted);
-  font-size: 10px;
+  text-transform: uppercase;
 }
 
 .cdk-metric strong {
-  font-size: 15px;
-  line-height: 1.1;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  margin-top: 2px;
 }
 
 .cdk-batch-details {
-  display: grid;
-  gap: 1px;
-  font-size: 10px;
-  line-height: 1.35;
-}
-
-.compact-details {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px 10px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  border-top: 1px solid var(--color-border-soft);
+  padding-top: 8px;
 }
 
 .created-code-list {
-  display: grid;
-  gap: 4px;
-  max-height: 220px;
-  overflow: auto;
-}
-
-.inline-code-list {
-  max-height: 136px;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 120px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 6px;
+  padding: 8px;
 }
 
 .created-code-list code {
-  display: block;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.06);
-  font-size: 12px;
-  line-height: 1.25;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--color-border-soft);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #60a5fa;
 }
 
-.activation-table-wrap {
-  height: 100%;
-  min-height: 0;
-  overflow: auto;
-  border: 1px solid var(--color-border-soft);
+/* Activations tab */
+.activation-filters-row {
+  display: flex;
+  gap: 8px;
+}
+
+.reserve-empty {
+  padding: 32px;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  border: 1px dashed var(--color-border-soft);
   border-radius: 10px;
 }
 
-.batch-empty,
-.activation-empty {
-  align-content: start;
-}
-
-.activation-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 980px;
-}
-
-.activation-table th,
-.activation-table td {
-  text-align: left;
-  padding: 10px 12px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-  vertical-align: top;
-}
-
-.activation-table thead th {
-  position: sticky;
-  top: 0;
-  background: rgba(17, 24, 39, 0.94);
-  z-index: 1;
-  color: var(--color-text-muted);
-  font-size: 12px;
-}
-
+/* Modals */
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: var(--z-confirm-dialog);
-  display: grid;
-  place-items: center;
+  background: rgba(2, 6, 12, 0.8);
+  backdrop-filter: blur(8px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 24px;
-  background: rgba(4, 10, 18, 0.7);
-  backdrop-filter: blur(4px);
 }
 
 .modal-panel {
-  width: min(720px, 100%);
-  display: grid;
-  gap: 12px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border-default);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 500px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+  animation: modalEnter 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.modal-panel.compact {
-  width: min(520px, 100%);
+@keyframes modalEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
-.modal-panel header,
-.modal-panel footer {
+.modal-panel header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border-soft);
   display: flex;
   justify-content: space-between;
-  gap: 10px;
-  align-items: center;
+  align-items: flex-start;
 }
 
-.modal-actions-row {
+.modal-panel header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.modal-panel .subtitle {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.icon-button {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--color-text-muted);
+  padding: 4px;
+  transition: color 0.2s;
+}
+
+.icon-button:hover {
+  color: var(--color-text-primary);
+}
+
+.modal-panel .reserve-field {
+  padding: 12px 20px;
+}
+
+.modal-panel .checkbox-row {
+  padding: 8px 20px;
+}
+
+.modal-panel footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--color-border-soft);
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 10px;
 }
 
-.compact-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.detail-stack {
-  gap: 3px;
-}
-
-.cdk-batch-actions .reserve-mini-btn {
-  padding: 6px 8px;
-  font-size: 12px;
-}
-
-.cdk-batch-meta {
-  font-size: 11px;
-  line-height: 1.2;
-}
-
-.records-modal {
-  max-height: min(80vh, 900px);
-}
-
-.checkbox-row {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
+.ghost-button {
+  background: transparent;
+  border: 1px solid var(--color-border-soft);
   color: var(--color-text-secondary);
 }
 
-@media (max-width: 1100px) {
-  .reserve-workspace {
-    grid-template-columns: 1fr;
-  }
-
-  .batch-workspace-split {
-    grid-template-columns: 1fr;
-  }
-
-  .reserve-side {
-    grid-template-rows: auto auto auto auto;
-  }
+.ghost-button:hover {
+  background: rgba(255, 255, 255, 0.04);
 }
 
-@media (max-width: 800px) {
-  .reserve-summary-grid,
-  .cdk-batch-metrics,
-  .reserve-form-grid,
-  .quick-renew-grid {
-    grid-template-columns: 1fr 1fr;
-  }
+.primary-button {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #fff;
+}
 
+.primary-button:hover {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+/* Scrollbar styling */
+.reserve-side-scroller::-webkit-scrollbar,
+.reserve-list-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.reserve-side-scroller::-webkit-scrollbar-track,
+.reserve-list-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.reserve-side-scroller::-webkit-scrollbar-thumb,
+.reserve-list-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+
+.reserve-side-scroller::-webkit-scrollbar-thumb:hover,
+.reserve-list-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Responsiveness */
+@media (max-width: 1200px) {
   .reserve-list-grid {
-    grid-template-columns: 1fr;
-    gap: 6px;
+    grid-template-columns: 1.2fr 1fr 0.8fr 1.2fr;
   }
-
-  .reserve-list-grid-head {
+  .expiry-cell {
     display: none;
   }
 }
 
-@media (max-width: 560px) {
-  .reserve-summary-grid,
-  .cdk-batch-metrics,
-  .reserve-form-grid,
-  .quick-renew-grid {
-    grid-template-columns: 1fr;
+@media (max-width: 768px) {
+  .reserve-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+.activation-card {
+  flex: 1;
+  min-height: 0;
+}
+
+.records-modal,
+.batch-window-modal {
+  max-width: 960px !important;
 }
 </style>

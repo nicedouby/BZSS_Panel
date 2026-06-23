@@ -706,7 +706,7 @@
       "tokens": [
         {
           "name": "test-client",
-          "token": "change-me-long-random-token",
+          "token": "731b004f6d2ad4e39d302c3baa9dcc623953beef0d150c3b2d948f16c3bcca64",
           "scopes": [
             "server:read",
             "players:read",

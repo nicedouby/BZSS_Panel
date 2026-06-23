@@ -51,52 +51,55 @@
         {{ secondaryIdentityText }}
       </div>
 
-      <div class="player-stat-line scoreboard-line">
-        <span
-          v-for="item in scoreboardItems"
-          :key="item.key"
-          class="scoreboard-chip"
-          :class="item.tone"
-          :title="`${item.label}: ${item.value}`"
-        >
-          <span class="label">{{ item.shortLabel }}</span>
-          <span class="value">{{ item.value }}</span>
+      <!-- Optimized inline combat stats row -->
+      <div class="combat-stats-row" :title="statsTooltip">
+        <!-- KD Block -->
+        <span class="combat-badge kd-capsule">
+          <span class="stat-pill kills" title="击杀 (Kills)">{{ kills }}</span>
+          <span class="separator">/</span>
+          <span class="stat-pill deaths" title="死亡 (Deaths)">{{ deaths }}</span>
+          <span class="separator">/</span>
+          <span class="stat-pill downs" title="击倒 (Downs)">{{ downs }}</span>
         </span>
-      </div>
 
-      <div class="player-stat-line legacy-combat-line">
-        <span class="stat-chip wound" :title="`击倒: ${downs}`">
-          <span class="label">倒</span>
-          <span class="value">{{ downs }}</span>
+        <!-- TK Warning Badge (only shown if tk > 0) -->
+        <span v-if="tk > 0" class="combat-badge tk-warning" :title="`队友击杀 (Team Kills): ${tk}`">
+          <span class="lbl">TK</span>
+          <span class="val">{{ tk }}</span>
         </span>
-        <span class="stat-chip kill" :title="`击杀: ${kills}`">
-          <span class="label">杀</span>
-          <span class="value">{{ kills }}</span>
+
+        <!-- Support Badge (shown if revives > 0 or healPoints > 0) -->
+        <span v-if="revives > 0 || healPoints > 0" class="combat-badge support-badge">
+          <span v-if="revives > 0" class="stat-sub-pill revives" title="复苏人数 (Revives)">
+            <span class="lbl">苏</span>
+            <span class="val">{{ revives }}</span>
+          </span>
+          <span v-if="healPoints > 0" class="stat-sub-pill heals" title="治疗点数 (Heal Points)">
+            <span class="lbl">疗</span>
+            <span class="val">{{ healPoints }}</span>
+          </span>
         </span>
-        <span class="stat-chip death" :title="`死亡: ${deaths}`">
-          <span class="label">亡</span>
-          <span class="value">{{ deaths }}</span>
+
+        <!-- Score Badge -->
+        <span class="combat-badge score-badge" :title="`战斗分数: ${combatScore}\n团队分数: ${teamworkScore}\n目标分数: ${objectiveScore}`">
+          <span class="lbl">分</span>
+          <span class="val">{{ combatScore }}</span>
         </span>
-        <span class="stat-chip tk" :title="`TK: ${tk}`">
-          <span class="label">TK</span>
-          <span class="value">{{ tk }}</span>
+
+        <!-- Squadless duration (if any) -->
+        <span v-if="squadlessText" class="combat-badge squadless-badge" :title="`游离时长: ${squadlessText}`">
+          <span class="lbl">游离</span>
+          <span class="val">{{ squadlessText }}</span>
         </span>
-        <span class="stat-chip revive" :title="`复苏: ${revives}`">
-          <span class="label">苏</span>
-          <span class="value">{{ revives }}</span>
-        </span>
-        <span v-if="squadlessText" class="stat-chip" :title="`游离时长: ${squadlessText}`">
-          <span class="label">游离</span>
-          <span class="value">{{ squadlessText }}</span>
-        </span>
+
+        <!-- Ping & loss badge -->
         <span
           v-if="player.ping != null"
-          class="stat-chip ping"
+          class="combat-badge ping-badge"
           :class="pingClass(player.ping, player.packetLoss)"
           :title="`延迟: ${player.ping}ms${player.packetLoss ? '，丢包: ' + player.packetLoss + '%' : ''}`"
         >
-          <span class="label">网</span>
-          <span class="value">{{ player.ping }}ms</span>
+          <span class="val">{{ player.ping }}ms</span>
           <span v-if="player.packetLoss" class="loss-value">({{ player.packetLoss }}%)</span>
         </span>
       </div>
@@ -193,6 +196,25 @@ const downs = computed(() => normalizeStat(props.combatStats?.downs));
 const deaths = computed(() => normalizeStat(props.combatStats?.deaths));
 const tk = computed(() => normalizeStat(props.combatStats?.tk));
 const revives = computed(() => normalizeStat(props.combatStats?.revives));
+const healPoints = computed(() => normalizeStat(props.combatStats?.healPoints));
+const combatScore = computed(() => normalizeStat(props.combatStats?.combatScore));
+const teamworkScore = computed(() => normalizeStat(props.combatStats?.teamworkScore));
+const objectiveScore = computed(() => normalizeStat(props.combatStats?.objectiveScore));
+
+const statsTooltip = computed(() => {
+  return [
+    `击杀 (Kills): ${kills.value}`,
+    `死亡 (Deaths): ${deaths.value}`,
+    `击倒 (Woundeds): ${downs.value}`,
+    `被击倒次数 (Wounds): ${normalizeStat(props.combatStats?.wounds)}`,
+    `TK (Team Kills): ${tk.value}`,
+    `复苏 (Revives): ${revives.value}`,
+    `治疗点数 (Heal Points): ${healPoints.value}`,
+    `团队分数 (Teamwork): ${teamworkScore.value}`,
+    `目标分数 (Objective): ${objectiveScore.value}`,
+    `战斗分数 (Combat): ${combatScore.value}`
+  ].join("\n");
+});
 
 const healthLiquidClass = computed(() => {
   const hp = props.health;

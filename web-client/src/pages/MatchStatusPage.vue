@@ -645,7 +645,7 @@ const viewerAutoSwapEnabled = computed(() => auth.user?.viewerTeamAutoSwapEnable
 const rawTeams = computed(() => {
   return match.teams.map((team) => {
     const ticketCount = team.teamID === 1 ? remoteTicketCounts.value.team1 : remoteTicketCounts.value.team2;
-    return adaptTeam(team, {}, squadLifecycleLookup.value, {}, ticketCount);
+    return adaptTeam(team, playtimes.value, squadLifecycleLookup.value, combatStatsLookup.value, ticketCount);
   });
 });
 

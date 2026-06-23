@@ -804,7 +804,14 @@ function normalizeSteam64(value: unknown): string {
 }
 
 export function resolveCombatStats(player: Record<string, any> = {}, lookup: Record<string, CombatStats> = {}): CombatStats {
-  const directStats = combatStatsFromScoreboardStats(player?.playerScoreboard?.stats ?? player?.bzssCorePlayerInfo?.playerScoreboard?.stats);
+  const directStats = combatStatsFromScoreboardStats(
+    player?.playerScoreboard?.stats
+    ?? player?.bzssCorePlayerInfo?.playerScoreboard?.stats
+    ?? player?.networkInfo?.playerScoreboard?.stats
+    ?? player?.raw?.playerScoreboard?.stats
+    ?? player?.raw?.bzssCorePlayerInfo?.playerScoreboard?.stats
+    ?? player?.raw?.networkInfo?.playerScoreboard?.stats
+  );
   if (directStats) return directStats;
 
   const keys = collectCombatIdentityKeys(player);
