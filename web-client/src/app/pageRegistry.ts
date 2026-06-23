@@ -16,9 +16,9 @@ import FairTeamBalancePage from "../pages/FairTeamBalancePage.vue";
 import FairTeamBalanceLabPage from "../pages/FairTeamBalanceLabPage.vue";
 import FairSquadGuardPage from "../pages/FairSquadGuardPage.vue";
 import StepwiseSquadPlaytimeGuardPage from "../pages/StepwiseSquadPlaytimeGuardPage.vue";
-import LianbanKickPage from "../pages/LianbanKickPage.vue";
 import TacticalReportPage from "../pages/TacticalReportPage.vue";
 import TacticalReportConfigPage from "../pages/TacticalReportConfigPage.vue";
+import LianbanKickPage from "../pages/LianbanKickPage.vue";
 import SquadManagementPage from "../pages/SquadManagementPage.vue";
 import TeamBalancePage from "../pages/TeamBalancePage.vue";
 import TeamShufflePage from "../pages/TeamShufflePage.vue";
@@ -256,6 +256,17 @@ export const pageRegistry: PageDefinition[] = [
     ...workspacePage,
   },
   {
+    name: "lianban-kick",
+    path: "/plugins/lianban-kick",
+    component: LianbanKickPage,
+    title: "联办文模块",
+    category: "plugin",
+    refreshPolicy: "polling",
+    nav: { section: "players", label: "联办文模块", icon: "BAN", order: 65 },
+    requiredPermission: "plugin:lianban-kick:view",
+    ...workspacePage,
+  },
+  {
     name: "tactical-report-config",
     path: "/plugins/tactical-report/config",
     component: TacticalReportConfigPage,
@@ -294,16 +305,6 @@ export const pageRegistry: PageDefinition[] = [
     category: "plugin",
     refreshPolicy: "polling",
     nav: { section: "players", label: "阶梯式建队时长", icon: "⏳", order: 80 },
-    ...workspacePage,
-  },
-  {
-    name: "lianban-kick",
-    path: "/plugins/lianban-kick",
-    component: LianbanKickPage,
-    title: "联办踢出",
-    category: "plugin",
-    refreshPolicy: "polling",
-    nav: { section: "players", label: "联办踢出", icon: "🚫", order: 90 },
     ...workspacePage,
   },
   {

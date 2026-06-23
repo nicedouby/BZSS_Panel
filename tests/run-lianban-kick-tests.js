@@ -5,178 +5,163 @@ import path from "node:path";
 
 import { createPlugin } from "../plugins/lianban-kick.js";
 
-function createLogger() {
+function createConfig(tempDir, overrides = {}) {
   return {
-    info() {},
-    warn() {},
-    error() {},
-    debug() {},
+    get(pathText, fallback) {
+      if (pathText !== "plugins.lianbanKick" && pathText !== "plugins.lianban-kick") return fallback;
+      return {
+        enabled: true,
+        banDir: path.relative(process.cwd(), path.join(tempDir, "Ban")),
+        historyLimit: 100,
+        ...overrides,
+      };
+    },
+    set() {},
+    save() {},
   };
 }
 
-async function createHarness({ files = {}, players = [], kickResults = [] } = {}) {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-lianban-kick-"));
-  const ruleDir = path.join(tempDir, "联办");
-  await fs.mkdir(ruleDir, { recursive: true });
-
-  for (const [fileName, content] of Object.entries(files)) {
-    await fs.writeFile(path.join(ruleDir, fileName), content, "utf8");
-  }
-
-  const moduleHandlers = new Map();
-  const kicks = [];
-  let kickIndex = 0;
-
+async function createHarness({ configOverrides = {}, playerStatePlayers = [] } = {}) {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-lianban-kick-"));
+  await fs.mkdir(path.join(dir, "Ban"), { recursive: true });
   const plugin = createPlugin({
     core: {
-      webStatus: {
-        serverId: "BZSS_Main",
-      },
-      webRegistry: {
-        registerPage() {},
-      },
-      eventBus: {
-        onModuleEvent(moduleId, eventName, handler) {
-          moduleHandlers.set(`${moduleId}:${eventName}`, handler);
-          return () => moduleHandlers.delete(`${moduleId}:${eventName}`);
-        },
-      },
+      logger: { info() {}, warn() {}, error() {}, debug() {} },
+      webStatus: { serverId: "test-server" },
+      webRegistry: { registerPage() {} },
+      pluginSubscriptions: { isSubscribed() { return true; } },
+      eventBus: { onCoreEvent() { return () => {}; } },
     },
     modules: {
       playerState: {
-        getPlayerList() {
-          return players;
+        getPlayerByName(serverId, name) {
+          return playerStatePlayers.find((player) => serverId === "test-server" && player.name === name) ?? null;
         },
-      },
-      squadManagement: {
-        async requestKick(request) {
-          kicks.push(request);
-          const result = kickResults[kickIndex] ?? { ok: true };
-          kickIndex += 1;
-          return result;
+        getPlayerBySteamID(serverId, steamID) {
+          return playerStatePlayers.find((player) => serverId === "test-server" && player.steamID === steamID) ?? null;
+        },
+        getPlayerByEOSID(serverId, eosID) {
+          return playerStatePlayers.find((player) => serverId === "test-server" && player.eosID === eosID) ?? null;
+        },
+        findPlayer(serverId, query) {
+          return playerStatePlayers.find((player) => serverId === "test-server" && (
+            player.steamID === query?.steamId ||
+            player.eosID === query?.eosId ||
+            player.name === query?.name
+          )) ?? null;
         },
       },
     },
-    config: {
-      get(pathText, fallback) {
-        if (pathText === "plugins.lianbanKick") {
-          return {
-            enabled: true,
-            directory: ruleDir,
-            cacheMs: 0,
-            retryCooldownMs: 60_000,
-          };
-        }
-        return fallback;
-      },
-    },
-    logger: createLogger(),
+    config: createConfig(dir, configOverrides),
   });
 
-  await plugin.start();
-
   return {
+    dir,
     plugin,
-    kicks,
-    async emitPlayersSnapshot(nextPlayers = players) {
-      players.splice(0, players.length, ...nextPlayers);
-      const handler = moduleHandlers.get("module.playerState:playersSnapshotUpdated");
-      if (handler) {
-        await handler({
-          serverId: "BZSS_Main",
-          players: nextPlayers,
-        });
+    async writeBanFiles(files) {
+      for (const [name, content] of Object.entries(files)) {
+        await fs.writeFile(path.join(dir, "Ban", name), content, "utf8");
       }
+    },
+    async start() {
+      await plugin.start();
     },
     async stop() {
       await plugin.stop();
-      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.rm(dir, { recursive: true, force: true });
     },
   };
 }
 
-async function testMatchBySteamEosAndName() {
-  const harness = await createHarness({
-    files: {
-      "a.txt": "# comment\nsteam: 76561198000000001\n",
-      "b.txt": "eos: EOS-ABC-123\nAlpha Player\n",
-    },
-    players: [
-      { name: "Other", steamID: "76561198000000000", eosID: "EOS-OTHER" },
-      { name: "Steam Hit", steamID: "76561198000000001", eosID: "EOS-X" },
-      { name: "Eos Hit", steamID: "76561198000000002", eosID: "eos-abc-123" },
-      { name: "Alpha Player", steamID: "76561198000000003", eosID: "EOS-Y" },
-    ],
-  });
-
+async function testBanParsingAndMatchBySteamID() {
+  const harness = await createHarness();
   try {
-    assert.equal(harness.kicks.length, 3);
-    assert.deepEqual(
-      harness.kicks.map((item) => ({ steamId: item.steamId, eosId: item.eosId, name: item.name, reason: item.reason })),
-      [
-        { steamId: "76561198000000001", eosId: "EOS-X", name: "Steam Hit", reason: "被联办" },
-        { steamId: "76561198000000002", eosId: "eos-abc-123", name: "Eos Hit", reason: "被联办" },
-        { steamId: "76561198000000003", eosId: "EOS-Y", name: "Alpha Player", reason: "被联办" },
-      ],
-    );
+    await harness.writeBanFiles({
+      "bans.cfg": [
+        "76561111111111111:0//联办测试 A",
+        "00000000000000000000000000000000//EOS 仅测试",
+      ].join("\n"),
+      "bans2.cfg": "76561112222222222:0//联办测试 B",
+    });
+
+    await harness.start();
+    const state = harness.plugin.api.getState();
+    assert.equal(state.totalFiles, 2);
+    assert.equal(state.totalRecords, 3);
+
+    const result = await harness.plugin.api.simulateJoin({
+      playerName: "SteamHit",
+      steamID: "76561111111111111",
+    });
+
+    assert.ok(result);
+    assert.equal(result.matchKey, "steamID");
+    assert.equal(result.fileName, "bans.cfg");
+    assert.equal(harness.plugin.api.getState().matchedCount, 1);
   } finally {
     await harness.stop();
   }
 }
 
-async function testSupportCurrentBansCfgSteamFormat() {
+async function testMatchByEOSIDAndPlayerStateFallback() {
   const harness = await createHarness({
-    files: {
-      "bans.cfg": "76561199361849321:0\n76561199350480500:0\n",
-    },
-    players: [
-      { name: "Hit One", steamID: "76561199361849321", eosID: "EOS-1" },
-      { name: "Hit Two", steamID: "76561199350480500", eosID: "EOS-2" },
-      { name: "Miss", steamID: "76561199300000000", eosID: "EOS-3" },
+    playerStatePlayers: [
+      { name: "EosOnly", steamID: "76561113333333333", eosID: "00000000000000000000000000000001" },
     ],
   });
-
   try {
-    assert.equal(harness.kicks.length, 2);
-    assert.deepEqual(
-      harness.kicks.map((item) => item.steamId),
-      ["76561199361849321", "76561199350480500"],
-    );
+    await harness.writeBanFiles({
+      "bans.cfg": "00000000000000000000000000000001//联办 EOS 命中",
+    });
+    await harness.start();
+
+    const result = await harness.plugin.api.simulateJoin({
+      playerName: "EosOnly",
+    });
+    assert.ok(result);
+    assert.equal(result.matchKey, "eosID");
+
+    const state = harness.plugin.api.getState();
+    assert.equal(state.recentMatches.length, 1);
+    assert.equal(state.recentMatches[0].eosID, "00000000000000000000000000000001");
   } finally {
     await harness.stop();
   }
 }
 
-async function testDeduplicateWhileOnlineAndRetryAfterLeave() {
-  const harness = await createHarness({
-    files: {
-      "names.txt": "Repeat Guy\n",
-    },
-    players: [
-      { name: "Repeat Guy", steamID: "76561198000000009", eosID: "EOS-9" },
-    ],
-  });
-
+async function testNoMatchAndMissingIdentity() {
+  const harness = await createHarness();
   try {
-    assert.equal(harness.kicks.length, 1);
+    await harness.writeBanFiles({
+      "bans.cfg": "76561114444444444:0//联办测试",
+    });
+    await harness.start();
 
-    await harness.emitPlayersSnapshot([
-      { name: "Repeat Guy", steamID: "76561198000000009", eosID: "EOS-9" },
-    ]);
-    assert.equal(harness.kicks.length, 1);
+    const result = await harness.plugin.api.simulateJoin({
+      playerName: "Unknown",
+      steamID: "76561119999999999",
+      eosID: "00000000000000000000000000000002",
+    });
+    assert.equal(result, null);
 
-    await harness.emitPlayersSnapshot([]);
-    await harness.emitPlayersSnapshot([
-      { name: "Repeat Guy", steamID: "76561198000000009", eosID: "EOS-9" },
-    ]);
-    assert.equal(harness.kicks.length, 2);
+    const missing = await harness.plugin.api.simulateJoin({
+      playerName: "NoId",
+    });
+    assert.equal(missing, null);
+    assert.equal(harness.plugin.api.getState().matchedCount, 0);
   } finally {
     await harness.stop();
   }
 }
 
-await testMatchBySteamEosAndName();
-await testSupportCurrentBansCfgSteamFormat();
-await testDeduplicateWhileOnlineAndRetryAfterLeave();
+async function run() {
+  await testBanParsingAndMatchBySteamID();
+  await testMatchByEOSIDAndPlayerStateFallback();
+  await testNoMatchAndMissingIdentity();
+  console.log("lianban-kick tests passed");
+}
 
-console.log("lianban kick tests passed");
+run().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

@@ -106,7 +106,11 @@
                     <td class="time-col">{{ formatTime(item.at || item.time) }}</td>
                     <td class="player-col">
                       <strong class="player-name">{{ item.playerName || "-" }}</strong>
+                      <span v-if="item.lianban?.matched" class="lianban-badge">被联办</span>
                       <div class="event-desc" v-if="item.eventName">{{ item.eventName }}</div>
+                      <div v-if="item.lianban?.matched" class="lianban-desc">
+                        命中 {{ item.lianban.matchKey }}: {{ item.lianban.matchedValue }}
+                      </div>
                     </td>
                     <td class="server-col">
                       <span class="server-badge">{{ item.serverId || "未知" }}</span>
@@ -151,7 +155,11 @@
                     <td class="time-col">{{ formatTime(item.at || item.time) }}</td>
                     <td class="player-col">
                       <strong class="player-name">{{ item.playerName || "-" }}</strong>
+                      <span v-if="item.lianban?.matched" class="lianban-badge">被联办</span>
                       <div class="event-desc" v-if="item.eventName">{{ item.eventName }}</div>
+                      <div v-if="item.lianban?.matched" class="lianban-desc">
+                        命中 {{ item.lianban.matchKey }}: {{ item.lianban.matchedValue }}
+                      </div>
                     </td>
                     <td class="server-col">
                       <span class="server-badge">{{ item.serverId || "未知" }}</span>
@@ -203,6 +211,15 @@ type SessionRecord = {
   eosId?: string;
   steam64Id?: string;
   ip?: string;
+  lianban?: {
+    matched: boolean;
+    label: string;
+    matchKey?: string;
+    matchedValue?: string;
+    fileName?: string;
+    lineNumber?: number;
+    lineText?: string;
+  } | null;
   hasPayload?: boolean;
   hasParams?: boolean;
   hasParamMap?: boolean;
@@ -629,6 +646,24 @@ async function resolvePlayerNameFromApi(item: SessionRecord) {
   font-size: 11px;
   color: var(--color-text-muted);
   margin-top: 2px;
+}
+
+.lianban-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(220, 38, 38, 0.16);
+  color: #fca5a5;
+  font-size: 11px;
+  border: 1px solid rgba(248, 113, 113, 0.28);
+}
+
+.lianban-desc {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #fda4af;
 }
 
 .server-badge {

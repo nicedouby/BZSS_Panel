@@ -208,6 +208,20 @@ export class WebRegistry {
     });
 
     this.registerPage({
+      id: "web.lianbanKick",
+      title: "联办文模块",
+      group: "插件",
+      route: "/plugins/lianban-kick",
+      pageModule: "/pages/lianban-kick.js",
+      source: "plugin.lianbanKick",
+      description: "读取 Ban 目录联办名单，玩家加入后按 SteamID / EOSID 命中并展示最近记录。",
+      required: false,
+      enabled: true,
+      order: 145,
+      icon: "BAN",
+    });
+
+    this.registerPage({
       id: "web.tacticalReportConfig",
       title: "战术报点配置",
       group: "插件",

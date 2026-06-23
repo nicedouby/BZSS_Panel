@@ -89,15 +89,17 @@ export function createBzssCoreMonitorModule({ core, logger }) {
     state.revision += 1;
     state.updatedAt = new Date().toISOString();
     if (state.status !== previousStatus) {
-      moduleLogger.info(`BZSS-Core monitor status -> ${state.status}`, {
-        operation: "bzssCoreMonitor.status",
-        data: {
-          status: state.status,
-          resolvedPath: state.resolvedPath,
-          playerCount: state.players.length,
-          lastError: state.lastError,
-        },
-      });
+      if (state.status === "error") {
+        moduleLogger.error(`BZSS-Core monitor error -> ${state.status}`, {
+          operation: "bzssCoreMonitor.status",
+          data: {
+            status: state.status,
+            resolvedPath: state.resolvedPath,
+            playerCount: state.players.length,
+            lastError: state.lastError,
+          },
+        });
+      }
     }
 
     for (const listener of listeners) {

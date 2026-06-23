@@ -2342,6 +2342,55 @@ export class WebServer {
       }
     }
 
+    if (url.pathname.startsWith("/api/plugins/lianban-kick")) {
+      const pluginApi = this.getPluginApi("plugin.lianbanKick");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "LianbanKickUnavailable",
+          message: "Lianban kick plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/lianban-kick/state" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getState?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/lianban-kick/config" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getConfig?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/lianban-kick/reload" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.reloadBanFiles?.(),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/lianban-kick/simulate" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.simulateJoin?.(body ?? {}),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/lianban-kick/clear" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.clearHistory?.() ?? null,
+        });
+      }
+    }
+
     if (url.pathname.startsWith("/api/plugins/tactical-report")) {
       const pluginApi = this.getPluginApi("plugin.tacticalReport");
       if (!pluginApi) {
@@ -2441,23 +2490,6 @@ export class WebServer {
         return this.json(res, 200, {
           ok: true,
           data: await pluginApi.simulateCreation?.(body ?? {}),
-        });
-      }
-    }
-
-    if (url.pathname.startsWith("/api/plugins/lianban-kick")) {
-      const pluginApi = this.getPluginApi("plugin.lianbanKick");
-      if (!pluginApi) {
-        return this.json(res, 404, {
-          error: "LianbanKickUnavailable",
-          message: "Lianban kick plugin is not loaded.",
-        });
-      }
-
-      if (url.pathname === "/api/plugins/lianban-kick/state" && req.method === "GET") {
-        return this.json(res, 200, {
-          ok: true,
-          data: pluginApi.getState?.() ?? null,
         });
       }
     }

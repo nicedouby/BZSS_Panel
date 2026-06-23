@@ -382,7 +382,7 @@ const pagePermissionLabels = new Map([
   ["combat_manager.view", "战斗管理 / 战斗日志"],
   ["admin_warn.view", "警告记录"],
   ["scheduled_broadcast.view", "定时广播"],
-  ["squad_management.view", "小队管理 / 联办踢出"],
+  ["squad_management.view", "小队管理"],
   ["infantry_combat_enhancer.view", "步战增强"],
   ["group_report.view", "抱团报备"],
   ["plugin:tactical-report:view", "战术报点页面"],

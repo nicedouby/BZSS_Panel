@@ -697,7 +697,9 @@
       "freezeSampleThreshold": 15,
       "recentSampleLimit": 50
     },
-    "playtime": { "enabled": true },
+    "playtime": {
+      "enabled": true
+    },
     "publicInterface": {
       "enabled": true,
       "pathPrefix": "/api/public/v1",
@@ -907,7 +909,7 @@
     }
   },
   "warmup": {
-    "enabled": true
+    "enabled": false
   },
   "bzssCore": {
     "modifyScriptPath": "D:\\BZSS_Panel\\ModifySaveGame.py",

@@ -42,6 +42,21 @@ function createModule() {
       },
     },
     modules: {
+      lianbanKick: {
+        findMatchByIdentity(identity = {}) {
+          if (identity?.steamID === "76561199666599667" || identity?.eosID === "0002633b5836480d9593507d5ea0d8c8") {
+            return {
+              matched: true,
+              matchKey: identity?.steamID ? "steamID" : "eosID",
+              matchedValue: identity?.steamID || identity?.eosID,
+              fileName: "bans.cfg",
+              lineNumber: 12,
+              lineText: "76561199666599667:0//联办测试",
+            };
+          }
+          return null;
+        },
+      },
       playerState: {
         getPlayerBySteamID(serverId, steamID) {
           return players.get(`${serverId}::steam::${steamID}`) ?? null;
@@ -111,13 +126,17 @@ async function testOnlyAnchoredJoinEventsAreRecorded() {
     time: "2026-06-13T10:00:02.000Z",
     rawLog: "[2026.06.13-10.00.02:000]LogNet: PostLogin: NewPlayer: BP_PlayerController_C_1 (IP: 1.2.3.4|7777) Online IDs: EOS:abc steam:76561198000000000",
     payload: {
-      name: "Alice",
-      playerName: "Alice",
+      name: "Delta",
+      playerName: "Delta",
       ip: "1.2.3.4",
+      eosId: "0002633b5836480d9593507d5ea0d8c8",
+      steam64Id: "76561199666599667",
     },
     paramMap: {
-      PlayerName: "Alice",
+      PlayerName: "Delta",
       PlayerIP: "1.2.3.4",
+      PlayerEOSID: "0002633b5836480d9593507d5ea0d8c8",
+      PlayerSteam64ID: "76561199666599667",
     },
   });
 
@@ -126,6 +145,8 @@ async function testOnlyAnchoredJoinEventsAreRecorded() {
   assert.equal(state.records.length, 1);
   assert.equal(state.records[0].eventName, "PLAYER_POST_LOGIN");
   assert.equal(state.records[0].ip, "1.2.3.4");
+  assert.equal(state.records[0].lianban?.matched, true);
+  assert.equal(state.records[0].lianban?.label, "被联办");
 
   await module.stop();
 }

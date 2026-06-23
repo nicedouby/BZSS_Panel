@@ -63,7 +63,7 @@ describe("shared UI components", () => {
     const grid = mount(StatGrid, {
       props: {
         items: [
-          { key: "entries", label: "联办条目", value: 12, tone: "info" },
+          { key: "entries", label: "条目", value: 12, tone: "info" },
         ],
       },
     });

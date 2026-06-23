@@ -213,6 +213,13 @@ export function createPlayerSessionRecordsModule({ core, modules, config, logger
     const playerName = resolvedPlayer.name;
     const steam64Id = resolvedPlayer.steam64Id;
     const eosId = resolvedPlayer.eosId;
+    const lianbanMatch = resolveLianbanMatch({
+      serverId,
+      playerName,
+      steam64Id,
+      eosId,
+      event,
+    });
 
     if (kind === "join" && anchorKey) {
       const previous = recentJoinIndexes.get(anchorKey);
@@ -259,6 +266,15 @@ export function createPlayerSessionRecordsModule({ core, modules, config, logger
       ip,
       eosId,
       steam64Id,
+      lianban: lianbanMatch ? {
+        matched: true,
+        label: "被联办",
+        matchKey: lianbanMatch.matchKey,
+        matchedValue: lianbanMatch.matchedValue,
+        fileName: lianbanMatch.fileName,
+        lineNumber: lianbanMatch.lineNumber,
+        lineText: lianbanMatch.lineText,
+      } : null,
       hasPayload: Boolean(event?.payload),
       hasParams: Array.isArray(event?.params) && event.params.length > 0,
       hasParamMap: Boolean(event?.paramMap),
@@ -380,6 +396,21 @@ export function createPlayerSessionRecordsModule({ core, modules, config, logger
       leftAt: timeMs,
       source: record.eventName || "leave",
     });
+  }
+
+  function resolveLianbanMatch({ serverId, playerName, steam64Id, eosId } = {}) {
+    const lianbanApi = modules?.lianbanKick?.findMatchByIdentity;
+    if (typeof lianbanApi === "function") {
+      const match = lianbanApi({
+        serverId,
+        playerName,
+        steamID: steam64Id,
+        eosID: eosId,
+      });
+      if (match) return match;
+    }
+
+    return null;
   }
 
   function queryRecords(filter = {}) {
