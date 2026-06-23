@@ -255,6 +255,17 @@ export class WebServer {
   }
 
   async handleApi(url, req, res) {
+    const publicInterface = this.modules.publicInterface;
+    if (publicInterface?.handleHttp && url.pathname.startsWith(publicInterface.getPathPrefix?.() ?? "/api/public/v1")) {
+      return publicInterface.handleHttp({
+        url,
+        req,
+        res,
+        json: (status, payload, headers = {}) => this.json(res, status, payload, headers),
+        ip: this.getRequestIp(req),
+      });
+    }
+
     if (url.pathname === "/api/health" && req.method === "GET") {
       return this.json(res, 200, {
         ok: true,
@@ -3831,6 +3842,10 @@ export class WebServer {
   }
 
   async handleUpgrade(req, socket, head) {
+    if (this.modules.publicInterface?.handleUpgrade?.({ req, socket, head })) {
+      return;
+    }
+
     const url = new URL(req.url, `http://${req.headers.host}`);
     const connectionKind = url.pathname === "/ws/console"
       ? "console"

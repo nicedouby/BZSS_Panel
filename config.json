@@ -679,8 +679,43 @@
       "freezeSampleThreshold": 15,
       "recentSampleLimit": 50
     },
-    "playtime": {
-      "enabled": true
+    "playtime": { "enabled": true },
+    "publicInterface": {
+      "enabled": true,
+      "pathPrefix": "/api/public/v1",
+      "wsPath": "/ws/public/v1",
+      "allowAnonymous": false,
+      "tokens": [
+        {
+          "name": "test-client",
+          "token": "change-me-long-random-token",
+          "scopes": [
+            "server:read",
+            "players:read",
+            "squads:read",
+            "match:read",
+            "tactical:read",
+            "ws:read"
+          ]
+        }
+      ],
+      "rateLimit": {
+        "windowMs": 60000,
+        "maxRequests": 120
+      },
+      "limits": {
+        "maxPlayers": 120,
+        "maxSquads": 60
+      },
+      "privacy": {
+        "includeSteamId": true,
+        "includeEosId": false,
+        "includeRawText": false
+      },
+      "ws": {
+        "heartbeatMs": 25000,
+        "minPushIntervalMs": 500
+      }
     },
     "squadManagement": {
       "enabled": true,
