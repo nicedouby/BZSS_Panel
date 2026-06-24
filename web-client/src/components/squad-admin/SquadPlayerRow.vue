@@ -132,9 +132,10 @@
 
 <script setup lang="ts">
 import { computed, inject, ref } from "vue";
-import type { PlayerRowViewModel, CombatStats } from "../../types/squad-admin.types";
+import type { PlayerRowViewModel, CombatStats, RawPlayerPayload } from "../../types/squad-admin.types";
 import { buildCombatScoreboardItems } from "../../utils/combat-scoreboard";
 import { resolveRoleIcon } from "../../utils/role-icons";
+import { normalizeStat, pingClass, formatPlaytime, formatDurationShort, displayRole } from "../../utils/squad-formatters";
 import { t } from "../../i18n";
 
 const props = defineProps<{
@@ -174,7 +175,7 @@ const playtimeTitle = computed(() => {
 });
 
 const secondaryIdentityText = computed(() => {
-  const raw: any = props.player.raw ?? {};
+  const raw: RawPlayerPayload = props.player.raw ?? {};
 
   const candidates: unknown[] = [
     raw.steamName,
@@ -236,40 +237,11 @@ const healthLiquidClass = computed(() => {
 
 const squadlessText = computed(() => {
   if (props.player.squadId != null) return "";
-  const raw: any = props.player.raw ?? {};
+  const raw: RawPlayerPayload = props.player.raw ?? {};
   const seconds = Number(raw.squadlessSeconds ?? 0);
   if (!Number.isFinite(seconds) || seconds <= 0) return "";
   return formatDurationShort(seconds);
 });
-
-function normalizeStat(value: unknown) {
-  const numeric = Number(value ?? 0);
-  if (!Number.isFinite(numeric)) return 0;
-  return Math.max(0, Math.floor(numeric));
-}
-
-function pingClass(ping: number, loss?: number | null) {
-  const lossRate = Number(loss ?? 0);
-  if (ping > 120 || lossRate > 20) return "high";
-  if (ping > 60 || lossRate > 5) return "medium";
-  return "low";
-}
-
-function formatPlaytime(hours?: number | null) {
-  if (typeof hours !== "number" || !Number.isFinite(hours)) {
-    return "未公开";
-  }
-
-  if (hours === 0) {
-    return "未公开";
-  }
-
-  if (hours >= 1000) {
-    return `${Math.round(hours)}h`;
-  }
-
-  return `${hours.toFixed(1)}h`;
-}
 
 function handleSelect(event: MouseEvent) {
   if (props.multiSelectMode) {
@@ -277,40 +249,6 @@ function handleSelect(event: MouseEvent) {
   } else {
     emit("select", { player: props.player, event });
   }
-}
-
-function formatDurationShort(secondsValue: number) {
-  const total = Math.max(0, Math.floor(Number(secondsValue ?? 0)));
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  if (h > 0) return `${h}h${String(m).padStart(2, "0")}m`;
-  if (m > 0) return `${m}m${String(s).padStart(2, "0")}s`;
-  return `${s}s`;
-}
-
-function displayRole(role: string | null | undefined) {
-  const raw = String(role ?? "").trim();
-  if (!raw) return t("role.unknownRole");
-  const normalized = raw.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const keyMap: Record<string, string> = {
-    squadleader: "role.squadLeader",
-    medic: "role.medic",
-    heavyantitank: "role.heavyAntiTank",
-    lightantitank: "role.lightAntiTank",
-    machinegunner: "role.machineGunner",
-    automaticrifleman: "role.automaticRifleman",
-    engineer: "role.engineer",
-    sapper: "role.sapper",
-    marksman: "role.marksman",
-    sniper: "role.sniper",
-    grenadier: "role.grenadier",
-    crewman: "role.crewman",
-    pilot: "role.pilot",
-    rifleman: "role.rifleman",
-  };
-  const key = keyMap[normalized];
-  return key ? t(key, raw) : raw;
 }
 </script>
 

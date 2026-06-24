@@ -144,6 +144,7 @@ export class PlayerRepository {
     this.byEOSID = new Map();
     this.byName = new Map();
     this._writeQueue = Promise.resolve();
+    this._writeQueueSize = 0;
 
     const writeMethods = [
       "upsertFromPresence",
@@ -172,7 +173,13 @@ export class PlayerRepository {
   }
 
   async _enqueueWrite(task) {
-    const next = this._writeQueue.then(task);
+    if (this._writeQueueSize >= 5000) {
+      throw new Error("Write queue capacity exceeded (5000). Backpressure triggered.");
+    }
+    this._writeQueueSize += 1;
+    const next = this._writeQueue.then(task).finally(() => {
+      this._writeQueueSize -= 1;
+    });
     this._writeQueue = next.catch(() => {});
     return next;
   }

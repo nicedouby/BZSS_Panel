@@ -3,6 +3,21 @@
  * 为 MatchStatusPage 提供类型化的数据结构
  */
 
+export interface RawPlayerPayload {
+  steamName?: string;
+  steam_name?: string;
+  platformName?: string;
+  platform_name?: string;
+  rgfName?: string;
+  rgf_name?: string;
+  rawName?: string;
+  raw_name?: string;
+  name?: string;
+  playerName?: string;
+  squadlessSeconds?: number;
+  [key: string]: any;
+}
+
 export interface PlayerRowViewModel {
   playerId: number | string | null;
   name: string;
@@ -29,7 +44,7 @@ export interface PlayerRowViewModel {
   factionFlagUrl?: string | null;
   combatStats: CombatStats;
   statsLabel: string;
-  raw?: any;
+  raw?: RawPlayerPayload;
 }
 
 export interface SquadLeaderRowViewModel extends PlayerRowViewModel {
@@ -137,7 +152,7 @@ export interface PlayerDetailViewModel {
   bzssCorePlayerInfo?: BzssCoreTrackedPlayerInfo | null;
   source: string;
   controller: string;
-  raw?: any;
+  raw?: RawPlayerPayload;
 }
 
 export interface MatchHeaderData {

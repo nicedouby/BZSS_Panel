@@ -257,7 +257,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
 
     const captureZones = parseCaptureZones(extracted.text);
     const fobs = parseFobs(extracted.text);
-    const players = parseBzssCorePlayerBlocks(extracted.text);
+    const players = await parseBzssCorePlayerBlocks(extracted.text);
     const indexByName = buildPlayerIndex(players);
 
     publish((draft) => {
@@ -551,12 +551,16 @@ export function extractBzssCoreTrackedText(buffer) {
   };
 }
 
-export function parseBzssCorePlayerBlocks(text) {
+export async function parseBzssCorePlayerBlocks(text) {
   const source = String(text ?? "");
   const players = [];
   const pattern = /PlayerBaseInfo\{([^}]*)\}/g;
   let match = null;
+  let iterations = 0;
   while ((match = pattern.exec(source)) !== null) {
+    if (++iterations % 10 === 0) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
     const baseRaw = String(match[1] ?? "");
     const segmentStart = pattern.lastIndex;
     const nextBaseIndex = source.indexOf("PlayerBaseInfo{", segmentStart);
