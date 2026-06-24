@@ -1,14 +1,12 @@
-// -*- coding: utf-8 -*-
+﻿// -*- coding: utf-8 -*-
 
 import { createDatabase } from "../../core/database.js";
 
 const MODULE_ID = "module.warmupReserveExchange";
 const DEFAULT_TICK_INTERVAL_MS = 60_000;
 const DEFAULT_REQUIRED_SECONDS = 3600;
-const DEFAULT_NOTIFY_INTERVAL_SECONDS = 600;
+const DEFAULT_NOTIFY_INTERVAL_SECONDS = 60;
 const DEFAULT_REWARD_DAYS = 1;
-const DEFAULT_MAX_PLAYERS = 40;
-const DEFAULT_MIN_PLAYERS = 1;
 
 export function createWarmupReserveExchangeModule({ core, modules, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
@@ -37,7 +35,7 @@ export function createWarmupReserveExchangeModule({ core, modules, config, logge
     async resetProgress() {
       await ensureDb();
       await db.run("DELETE FROM warmup_reserve_progress");
-      return buildState({ message: "已清空所有未兑换进度�? });
+      return buildState({ message: "Cleared all unredeemed warmup progress." });
     },
     async resetAllStatistics() {
       await ensureDb();
@@ -51,18 +49,16 @@ export function createWarmupReserveExchangeModule({ core, modules, config, logge
         try { await db.exec("ROLLBACK"); } catch {}
         throw error;
       }
-      return buildState({ message: "已清空全部暖服统计�? });
+      return buildState({ message: "Cleared all warmup statistics." });
     },
     async resetLegacyWarmupPoints() {
       if (!modules?.playerDatabase?.listPlayers || !modules?.playerDatabase?.setAssetAmount) {
-        return { ok: false, error: "PlayerDatabaseUnavailable", message: "playerDatabase 不可用�? };
+        return { ok: false, error: "PlayerDatabaseUnavailable", message: "playerDatabase is unavailable." };
       }
       const rows = await modules.playerDatabase.listPlayers({ limit: 5000 });
       const items = Array.isArray(rows?.items) ? rows.items : [];
       let updated = 0;
       for (const player of items) {
-        const steamID = String(player?.steamID ?? player?.steam64 ?? player?.steam_id ?? "").trim();
-        if (!steamID) continue;
         const current = Number(player?.warmupPoints ?? player?.assets?.warmupPoints ?? 0);
         if (!Number.isFinite(current) || current <= 0) continue;
         await modules.playerDatabase.setAssetAmount(player.id, "warmupPoints", 0);
@@ -95,8 +91,8 @@ export function createWarmupReserveExchangeModule({ core, modules, config, logge
       running = true;
       core.webRegistry?.registerPage?.({
         id: "web.warmupReserveExchange",
-        title: "暖服自动兑换预留�?,
-        group: "基础",
+        title: "Warmup Reserve Exchange",
+        group: "Base",
         route: "/warmup-reserve-exchange",
         pageModule: "/pages/warmup-reserve-exchange.js",
         source: MODULE_ID,
@@ -177,14 +173,6 @@ export function createWarmupReserveExchangeModule({ core, modules, config, logge
     return Math.max(1, Number(moduleConfig.rewardReserveDays ?? DEFAULT_REWARD_DAYS) || DEFAULT_REWARD_DAYS);
   }
 
-  function getMaxPlayers() {
-    return Math.max(1, Number(moduleConfig.maxPlayers ?? DEFAULT_MAX_PLAYERS) || DEFAULT_MAX_PLAYERS);
-  }
-
-  function getMinPlayers() {
-    return Math.max(0, Number(moduleConfig.minPlayers ?? DEFAULT_MIN_PLAYERS) || DEFAULT_MIN_PLAYERS);
-  }
-
   function resolveWarmupGate() {
     return modules?.warmupModeGate?.evaluate?.() ?? {
       active: false,
@@ -223,10 +211,8 @@ export function createWarmupReserveExchangeModule({ core, modules, config, logge
           current.total_seconds += deltaSeconds;
           current.lifetime_seconds += deltaSeconds;
           current.last_tick_at = now;
-          current.last_seen_at = now;
-        } else {
-          current.last_seen_at = now;
         }
+        current.last_seen_at = now;
 
         let rewardCount = 0;
         while (current.total_seconds >= getRequiredSeconds()) {
@@ -304,7 +290,7 @@ export function createWarmupReserveExchangeModule({ core, modules, config, logge
   async function grantReserveDay(player, progressRow, now) {
     const steamID = String(player?.steamID ?? "").trim();
     const playerName = String(player?.name ?? player?.current_name ?? progressRow.player_name ?? "").trim();
-      const existing = (await modules.playerDatabase?.getCachedPlayer?.({ steamID })) ?? null;
+    const existing = (await modules.playerDatabase?.getCachedPlayer?.({ steamID })) ?? null;
     const before = existing?.expireAt ?? existing?.expire_at ?? null;
     const currentExpire = parseExpire(before);
     const base = currentExpire && currentExpire > now ? currentExpire : now;
@@ -346,8 +332,8 @@ export function createWarmupReserveExchangeModule({ core, modules, config, logge
     const minutes = Math.floor(bucketSeconds / 60);
     const remainingMinutes = Math.max(0, Math.ceil((getRequiredSeconds() - bucketSeconds) / 60));
     const message = isReward
-      ? `感谢暖服！你已累计暖�?${minutes} 分钟，系统已为你自动激�?${getRewardDays()} 天预留位。`
-      : `你已经暖�?${minutes} 分钟，还�?${remainingMinutes} 分钟即可自动激�?${getRewardDays()} 天预留位。`;
+      ? `Thanks for warmup. You have accumulated ${minutes} minutes and the system has activated ${getRewardDays()} day(s) of reserve.`
+      : `You have warmed up for ${minutes} minutes, and need ${remainingMinutes} more minutes to auto-activate ${getRewardDays()} day(s) of reserve.`;
     await warn.call(adminWarn, {
       targetName: playerName || steamID,
       targetSteamId: steamID || null,
@@ -437,8 +423,6 @@ export function createWarmupReserveExchangeModule({ core, modules, config, logge
         rewardReserveDays: getRewardDays(),
         notifyIntervalSeconds: getNotifyIntervalSeconds(),
         tickIntervalSeconds: Math.round(getTickIntervalMs() / 1000),
-        maxPlayers: getMaxPlayers(),
-        minPlayers: getMinPlayers(),
       },
       lastTickAtMs,
       running,
@@ -453,4 +437,3 @@ function parseExpire(value) {
   const date = new Date(text.replace(" ", "T"));
   return Number.isFinite(date.getTime()) ? date.getTime() : null;
 }
-

@@ -22,7 +22,7 @@
         <ul>
           <li>玩家数：{{ state?.gate.playerCount ?? 0 }}</li>
           <li>累计阈值：{{ formatSeconds(state?.settings.requiredSeconds ?? 3600) }}</li>
-          <li>提醒间隔：{{ formatSeconds(state?.settings.notifyIntervalSeconds ?? 600) }}</li>
+          <li>提醒间隔：{{ formatSeconds(state?.settings.notifyIntervalSeconds ?? 60) }}</li>
           <li>兑换天数：{{ state?.settings.rewardReserveDays ?? 1 }} 天</li>
           <li>tick 间隔：{{ state?.settings.tickIntervalSeconds ?? 30 }} 秒</li>
         </ul>
