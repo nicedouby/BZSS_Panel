@@ -5,7 +5,7 @@ import { createDatabase } from "../../core/database.js";
 const MODULE_ID = "module.warmupReserveExchange";
 const DEFAULT_TICK_INTERVAL_MS = 60_000;
 const DEFAULT_REQUIRED_SECONDS = 3600;
-const DEFAULT_NOTIFY_INTERVAL_SECONDS = 60;
+const DEFAULT_NOTIFY_INTERVAL_SECONDS = 180;
 const DEFAULT_REWARD_DAYS = 1;
 
 export function createWarmupReserveExchangeModule({ core, modules, config, logger }) {
@@ -35,7 +35,7 @@ export function createWarmupReserveExchangeModule({ core, modules, config, logge
     async resetProgress() {
       await ensureDb();
       await db.run("DELETE FROM warmup_reserve_progress");
-      return buildState({ message: "Cleared all unredeemed warmup progress." });
+      return buildState({ message: "已清空所有未兑换的暖服进度。" });
     },
     async resetAllStatistics() {
       await ensureDb();
@@ -49,7 +49,7 @@ export function createWarmupReserveExchangeModule({ core, modules, config, logge
         try { await db.exec("ROLLBACK"); } catch {}
         throw error;
       }
-      return buildState({ message: "Cleared all warmup statistics." });
+      return buildState({ message: "已清空全部暖服统计。" });
     },
     async resetLegacyWarmupPoints() {
       if (!modules?.playerDatabase?.listPlayers || !modules?.playerDatabase?.setAssetAmount) {
@@ -74,10 +74,10 @@ export function createWarmupReserveExchangeModule({ core, modules, config, logge
   return {
     manifest: {
       id: MODULE_ID,
-      name: "Warmup Reserve Exchange Module",
+      name: "暖服自动兑换预留位模块",
       kind: "module",
       version: "0.1.0",
-      description: "Accumulates warmup time and auto-exchanges reserve days for eligible online players.",
+      description: "统计暖服时长并为符合条件的在线玩家自动兑换预留位天数。",
     },
     apiName: "warmupReserveExchange",
     api,
@@ -91,7 +91,7 @@ export function createWarmupReserveExchangeModule({ core, modules, config, logge
       running = true;
       core.webRegistry?.registerPage?.({
         id: "web.warmupReserveExchange",
-        title: "Warmup Reserve Exchange",
+        title: "暖服自动兑换预留位",
         group: "Base",
         route: "/warmup-reserve-exchange",
         pageModule: "/pages/warmup-reserve-exchange.js",
@@ -332,8 +332,8 @@ export function createWarmupReserveExchangeModule({ core, modules, config, logge
     const minutes = Math.floor(bucketSeconds / 60);
     const remainingMinutes = Math.max(0, Math.ceil((getRequiredSeconds() - bucketSeconds) / 60));
     const message = isReward
-      ? `Thanks for warmup. You have accumulated ${minutes} minutes and the system has activated ${getRewardDays()} day(s) of reserve.`
-      : `You have warmed up for ${minutes} minutes, and need ${remainingMinutes} more minutes to auto-activate ${getRewardDays()} day(s) of reserve.`;
+      ? `感谢暖服！你已累计暖服 ${minutes} 分钟，系统已为你自动激活 ${getRewardDays()} 天预留位。`
+      : `你已累计暖服 ${minutes} 分钟，还需要 ${remainingMinutes} 分钟即可自动激活 ${getRewardDays()} 天预留位。`;
     await warn.call(adminWarn, {
       targetName: playerName || steamID,
       targetSteamId: steamID || null,

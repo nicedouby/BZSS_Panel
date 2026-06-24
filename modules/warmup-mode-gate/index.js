@@ -15,7 +15,12 @@ export function createWarmupModeGateModule({ core, config, logger }) {
     core.logger;
 
   function readSettings() {
-    const source = config?.get?.("warmupMode", {}) ?? config?.get?.("warmup", {}) ?? {};
+    const warmupMode = config?.get?.("warmupMode", null);
+    const warmup = config?.get?.("warmup", null);
+    const source =
+      (warmupMode && typeof warmupMode === "object" ? warmupMode : null) ??
+      (warmup && typeof warmup === "object" ? warmup : null) ??
+      {};
     return {
       enabled: Boolean(source.enabled ?? false),
       source: String(source.source ?? "auto"),
@@ -32,7 +37,8 @@ export function createWarmupModeGateModule({ core, config, logger }) {
     const settings = readSettings();
     const snapshot = core.webStatus?.getSnapshot?.() ?? core.webStatus?.state ?? {};
     const playerCount = Number(snapshot.playerCount ?? 0) || 0;
-    if (!settings.enabled) {
+    const globalWarmupEnabled = Boolean(snapshot.isWarmup);
+    if (!settings.enabled && !globalWarmupEnabled) {
       return { active: false, reason: "plugin_disabled", playerCount, settings };
     }
     if (playerCount > settings.maxPlayers) {

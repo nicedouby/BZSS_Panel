@@ -2,15 +2,15 @@
   <section class="bz-page warmup-reserve-page">
     <header class="hero">
       <div>
-        <p class="eyebrow">WarmupReserveExchangePlugin</p>
+        <p class="eyebrow">暖服自动兑换预留位</p>
         <h1>暖服自动兑换预留位</h1>
         <p class="subtle">
-          当前状态：<strong>{{ gateLabel }}</strong>，{{ gateReasonLabel }}。
+          当前状态：<strong>{{ gateLabel }}</strong>，原因：{{ gateReasonLabel }}
         </p>
       </div>
       <div class="actions">
         <button type="button" @click="refresh">刷新</button>
-        <button type="button" @click="tick">立即 tick</button>
+        <button type="button" @click="tick">立即执行一次</button>
         <button type="button" class="danger" @click="resetProgress">清空未兑换进度</button>
         <button type="button" class="danger" @click="resetAll">清空全部统计</button>
       </div>
@@ -18,13 +18,13 @@
 
     <div class="grid">
       <article class="card">
-        <h2>状态</h2>
+        <h2>当前设置</h2>
         <ul>
-          <li>玩家数：{{ state?.gate.playerCount ?? 0 }}</li>
+          <li>在线玩家数：{{ state?.gate.playerCount ?? 0 }}</li>
           <li>累计阈值：{{ formatSeconds(state?.settings.requiredSeconds ?? 3600) }}</li>
-          <li>提醒间隔：{{ formatSeconds(state?.settings.notifyIntervalSeconds ?? 60) }}</li>
+          <li>提醒间隔：{{ formatSeconds(state?.settings.notifyIntervalSeconds ?? 180) }}</li>
           <li>兑换天数：{{ state?.settings.rewardReserveDays ?? 1 }} 天</li>
-          <li>tick 间隔：{{ state?.settings.tickIntervalSeconds ?? 30 }} 秒</li>
+          <li>tick 间隔：{{ state?.settings.tickIntervalSeconds ?? 60 }} 秒</li>
         </ul>
       </article>
 
@@ -35,6 +35,7 @@
             <strong>{{ reward.playerName || reward.steamId }}</strong>
             <span>{{ formatDays(reward.rewardDays) }} / {{ formatDateTime(reward.createdAt) }}</span>
           </li>
+          <li v-if="!rewards.length" class="empty-inline">暂无记录</li>
         </ul>
       </article>
     </div>
@@ -72,7 +73,6 @@
 import { computed, onMounted, ref } from "vue";
 import {
   fetchWarmupReserveExchangeState,
-  resetLegacyWarmupPoints,
   resetWarmupReserveAll,
   resetWarmupReserveProgress,
   tickWarmupReserveExchange,
@@ -109,11 +109,6 @@ async function resetProgress() {
 async function resetAll() {
   if (!window.confirm("确认清空全部暖服统计？")) return;
   await resetWarmupReserveAll();
-  await refresh();
-}
-
-async function resetLegacyPoints() {
-  await resetLegacyWarmupPoints();
   await refresh();
 }
 
@@ -228,6 +223,11 @@ th, td {
   text-align: left;
 }
 
+ul {
+  margin: 12px 0 0;
+  padding-left: 18px;
+}
+
 .compact-list {
   list-style: none;
   margin: 0;
@@ -242,7 +242,8 @@ th, td {
   gap: 12px;
 }
 
-.empty {
+.empty,
+.empty-inline {
   text-align: center;
   color: #94a3b8;
 }
