@@ -324,6 +324,42 @@ CREATE TABLE IF NOT EXISTS steam_friends (
 );
 CREATE INDEX IF NOT EXISTS idx_steam_friends_player ON steam_friends(player_id);
 
+CREATE TABLE IF NOT EXISTS warmup_reserve_progress (
+    steam_id TEXT PRIMARY KEY,
+    player_name TEXT NOT NULL DEFAULT '',
+    total_seconds INTEGER NOT NULL DEFAULT 0,
+    lifetime_seconds INTEGER NOT NULL DEFAULT 0,
+    last_seen_at INTEGER NOT NULL DEFAULT 0,
+    last_tick_at INTEGER NOT NULL DEFAULT 0,
+    last_notify_bucket INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_warmup_reserve_progress_last_seen ON warmup_reserve_progress(last_seen_at);
+CREATE INDEX IF NOT EXISTS idx_warmup_reserve_progress_updated ON warmup_reserve_progress(updated_at);
+
+CREATE TABLE IF NOT EXISTS warmup_reserve_rewards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    steam_id TEXT NOT NULL,
+    player_name TEXT NOT NULL DEFAULT '',
+    reward_days INTEGER NOT NULL DEFAULT 1,
+    cost_seconds INTEGER NOT NULL DEFAULT 3600,
+    reserve_before TEXT,
+    reserve_after TEXT,
+    created_at INTEGER NOT NULL,
+    round_id TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_warmup_reserve_rewards_steam_created ON warmup_reserve_rewards(steam_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_warmup_reserve_rewards_created ON warmup_reserve_rewards(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS warmup_mode_windows (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    reason TEXT NOT NULL DEFAULT '',
+    end_reason TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_warmup_mode_windows_started ON warmup_mode_windows(started_at DESC);
+
 CREATE TABLE IF NOT EXISTS schema_migrations (
     version INTEGER PRIMARY KEY,
     applied_at INTEGER NOT NULL
@@ -482,6 +518,47 @@ DROP TABLE IF EXISTS kill_stats;
       CREATE INDEX IF NOT EXISTS idx_steam_friends_player ON steam_friends(player_id);
     `);
     await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 8, Date.now());
+  }
+
+  if (!appliedSet.has(9)) {
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS warmup_reserve_progress (
+          steam_id TEXT PRIMARY KEY,
+          player_name TEXT NOT NULL DEFAULT '',
+          total_seconds INTEGER NOT NULL DEFAULT 0,
+          lifetime_seconds INTEGER NOT NULL DEFAULT 0,
+          last_seen_at INTEGER NOT NULL DEFAULT 0,
+          last_tick_at INTEGER NOT NULL DEFAULT 0,
+          last_notify_bucket INTEGER NOT NULL DEFAULT 0,
+          updated_at INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_warmup_reserve_progress_last_seen ON warmup_reserve_progress(last_seen_at);
+      CREATE INDEX IF NOT EXISTS idx_warmup_reserve_progress_updated ON warmup_reserve_progress(updated_at);
+
+      CREATE TABLE IF NOT EXISTS warmup_reserve_rewards (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          steam_id TEXT NOT NULL,
+          player_name TEXT NOT NULL DEFAULT '',
+          reward_days INTEGER NOT NULL DEFAULT 1,
+          cost_seconds INTEGER NOT NULL DEFAULT 3600,
+          reserve_before TEXT,
+          reserve_after TEXT,
+          created_at INTEGER NOT NULL,
+          round_id TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_warmup_reserve_rewards_steam_created ON warmup_reserve_rewards(steam_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_warmup_reserve_rewards_created ON warmup_reserve_rewards(created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS warmup_mode_windows (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          started_at INTEGER NOT NULL,
+          ended_at INTEGER,
+          reason TEXT NOT NULL DEFAULT '',
+          end_reason TEXT NOT NULL DEFAULT ''
+      );
+      CREATE INDEX IF NOT EXISTS idx_warmup_mode_windows_started ON warmup_mode_windows(started_at DESC);
+    `);
+    await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 9, Date.now());
   }
 }
 

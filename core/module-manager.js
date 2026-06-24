@@ -19,6 +19,7 @@ import { createCombatStateModule } from "../modules/combat-state/index.js";
 import { createPlayerDatabaseModule } from "../modules/player-database/index.js";
 import { createPlayerDbSyncModule } from "../modules/player-db-sync/index.js";
 import { createPlayerTimeStatsModule } from "../modules/player-time-stats/index.js";
+import { createWarmupModeGateModule } from "../modules/warmup-mode-gate/index.js";
 import { createIpLookupModule } from "../modules/ip-lookup/index.js";
 import { createKillManageModule } from "../modules/kill-manage/index.js";
 import { createCombatCleanModule } from "../modules/combat-clean/index.js";
@@ -37,6 +38,7 @@ import { createRemoteTelemetryModule } from "../modules/remote-telemetry/index.j
 import { createScheduledBroadcastModule } from "../modules/scheduled-broadcast/index.js";
 import { createPlayerSessionRecordsModule } from "../modules/player-session-records/index.js";
 import { createReserveSlotsModule } from "../modules/reserve-slots/index.js";
+import { createWarmupReserveExchangeModule } from "../modules/warmup-reserve-exchange/index.js";
 import { createBlackEdgePrivilegeModule } from "../modules/black-edge-privilege/index.js";
 import { createBzssCoreMonitorModule } from "../modules/bzss-core-monitor/index.js";
 import { createTacticalMapReplayModule } from "../modules/tactical-map-replay/index.js";
@@ -82,6 +84,7 @@ export class ModuleManager {
       createPlayerDatabaseModule,
       createPlayerDbSyncModule,
       createPlayerTimeStatsModule,
+      createWarmupModeGateModule,
       createIpLookupModule,
       createCombatCleanModule,
       createCombatManagerModule,
@@ -98,6 +101,7 @@ export class ModuleManager {
       createScheduledBroadcastModule,
       createPlayerSessionRecordsModule,
       createReserveSlotsModule,
+      createWarmupReserveExchangeModule,
       createBlackEdgePrivilegeModule,
       createBzssCoreMonitorModule,
       createTacticalMapReplayModule,

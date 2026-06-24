@@ -100,6 +100,22 @@ export class WebRegistry {
     });
 
     this.registerPage({
+      id: "web.warmupReserveExchange",
+      title: "暖服自动兑换预留位",
+      group: "基础",
+      route: "/warmup-reserve-exchange",
+      pageModule: "/pages/warmup-reserve-exchange.js",
+      source: "module.warmupReserveExchange",
+      description:
+        "暖服自动兑换预留位页面。展示暖服判定、玩家累计进度、兑换记录和系统设置，并提供清空未兑换进度与全部统计的操作入口。",
+      required: false,
+      enabled: true,
+      order: 36,
+      icon: "⏱️",
+      requiredPermission: "player_database.view",
+    });
+
+    this.registerPage({
       id: "web.chatMonitor",
       title: "聊天监控",
       group: "调试",

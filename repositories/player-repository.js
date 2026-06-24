@@ -143,6 +143,38 @@ export class PlayerRepository {
     this.bySteamID = new Map();
     this.byEOSID = new Map();
     this.byName = new Map();
+    this._writeQueue = Promise.resolve();
+
+    const writeMethods = [
+      "upsertFromPresence",
+      "addLogEvent",
+      "incrementFields",
+      "addTimeStats",
+      "addAssetAmount",
+      "setAssetAmount",
+      "consumeAssetAmount",
+      "updateGameDuration",
+      "setGameDurationOverride",
+      "updateSteamAvatarBySteamID",
+      "addSessionHistory",
+      "closeOpenSessionHistory",
+      "setPermissionGroup",
+      "deletePlayer",
+      "upsertSteamFriends"
+    ];
+
+    for (const method of writeMethods) {
+      if (typeof this[method] === "function") {
+        const original = this[method].bind(this);
+        this[method] = (...args) => this._enqueueWrite(() => original(...args));
+      }
+    }
+  }
+
+  async _enqueueWrite(task) {
+    const next = this._writeQueue.then(task);
+    this._writeQueue = next.catch(() => {});
+    return next;
   }
 
   async hydrateCache() {
@@ -364,6 +396,34 @@ export class PlayerRepository {
     const assets = parseAssets(existing.assets_json);
     const currentAmount = normalizeAssetAmount(assets[key]);
     assets[key] = Math.max(0, currentAmount + delta);
+
+    await this.db.run(
+      `UPDATE players
+       SET assets_json = ?,
+           updated_at = ?
+       WHERE id = ?`,
+      JSON.stringify(assets),
+      now(),
+      id,
+    );
+
+    const updated = mapPlayerPlaytimeRow(await this.getPlayerById(id));
+    this.cache(updated, existing);
+    return updated;
+  }
+
+  async setAssetAmount(playerId, assetKey, amount = 0) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return null;
+
+    const key = cleanText(assetKey);
+    if (!key) return null;
+
+    const existing = await this.getPlayerById(id);
+    if (!existing) return null;
+
+    const assets = parseAssets(existing.assets_json);
+    assets[key] = Math.max(0, Math.floor(Number(amount) || 0));
 
     await this.db.run(
       `UPDATE players

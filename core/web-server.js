@@ -2532,6 +2532,69 @@ export class WebServer {
       }
     }
 
+    if (url.pathname.startsWith("/api/modules/warmup-reserve-exchange")) {
+      const moduleApi = this.modules.warmupReserveExchange;
+      if (!moduleApi) {
+        return this.json(res, 404, {
+          error: "WarmupReserveExchangeUnavailable",
+          message: "Warmup reserve exchange module is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/modules/warmup-reserve-exchange/state" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: await moduleApi.getState?.(),
+        });
+      }
+
+      if (url.pathname === "/api/modules/warmup-reserve-exchange/players" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: await moduleApi.getPlayers?.(),
+        });
+      }
+
+      if (url.pathname === "/api/modules/warmup-reserve-exchange/rewards" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: await moduleApi.getRewards?.(Number(url.searchParams.get("limit") ?? "200") || 200),
+        });
+      }
+
+      if (url.pathname === "/api/modules/warmup-reserve-exchange/tick" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: await moduleApi.tick?.(Date.now()),
+        });
+      }
+
+      if (url.pathname === "/api/modules/warmup-reserve-exchange/reset-progress" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: await moduleApi.resetProgress?.(),
+        });
+      }
+
+      if (url.pathname === "/api/modules/warmup-reserve-exchange/reset-all" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: await moduleApi.resetAllStatistics?.(),
+        });
+      }
+
+      if (url.pathname === "/api/modules/warmup-reserve-exchange/reset-legacy-warmup-points" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: await moduleApi.resetLegacyWarmupPoints?.(),
+        });
+      }
+    }
+
     if (url.pathname.startsWith("/api/plugins/infantry-combat-enhancer")) {
       const infantryCombatEnhancer = this.modules.infantryCombatEnhancer;
       if (!infantryCombatEnhancer) {
