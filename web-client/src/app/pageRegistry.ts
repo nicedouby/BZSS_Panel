@@ -43,6 +43,7 @@ import PluginSubscriptionsPage from "../pages/PluginSubscriptionsPage.vue";
 import TacticalMapPage from "../pages/TacticalMapPage.vue";
 import BzssCoreSnapshotsPage from "../pages/BzssCoreSnapshotsPage.vue";
 import TacticalMapReplayPage from "../pages/TacticalMapReplayPage.vue";
+import RandomShufflePage from "../pages/RandomShufflePage.vue";
 import {
   normalizePermissionList,
   resolveWebPagePermission,
@@ -519,6 +520,16 @@ export const pageRegistry: PageDefinition[] = [
     refreshPolicy: "polling",
     nav: { section: "system", label: "操作记录", icon: "📋", order: 40 },
     requiredPermission: "audit.view",
+    ...workspacePage,
+  },
+  {
+    name: "random-shuffle",
+    path: "/plugins/random-shuffle",
+    component: RandomShufflePage,
+    title: "随机打乱",
+    category: "plugin",
+    refreshPolicy: "manual",
+    nav: { section: "balance", label: "随机打乱", icon: "🔀", order: 50 },
     ...workspacePage,
   },
 ];

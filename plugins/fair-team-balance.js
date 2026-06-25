@@ -1057,11 +1057,13 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
     const steamId = normalizeText(player?.steamId ?? player?.steamID ?? fallback?.steamId);
     const eosId = normalizeText(player?.eosId ?? player?.eosID ?? fallback?.eosId);
     const playerName = normalizeText(player?.name ?? player?.playerName ?? fallback?.playerName);
+    const playerId = normalizeNullableNumber(player?.playerID ?? player?.playerId ?? fallback?.playerId);
     return {
       playerKey: buildPlayerKey({ steamId, eosId, playerName }),
       playerName,
       steamId,
       eosId,
+      playerId,
       teamId: normalizeNullableNumber(player?.teamId ?? player?.teamID ?? fallback?.teamId),
       squadId: normalizeNullableNumber(player?.squadId ?? player?.squadID ?? fallback?.squadId),
     };
@@ -1294,6 +1296,7 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
     }
 
     const switchResult = await modules?.teamBalance?.forceTeamChange?.({
+      playerId: actor.playerId,
       steamId: actor.steamId,
       playerName,
       source: `${PLUGIN_ID}.${action}`,
@@ -1504,6 +1507,7 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
     }
 
     const switchResult = await modules?.teamBalance?.forceTeamChange?.({
+      playerId: actor.playerId,
       steamId: actor.steamId,
       playerName,
       source: `${PLUGIN_ID}.black_edge`,

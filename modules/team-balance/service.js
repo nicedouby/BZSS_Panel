@@ -83,10 +83,11 @@ export function createTeamBalanceService({ core, config, logger }) {
     );
     const source = normalizeText(request.source) || DEFAULT_SOURCE;
     const reason = normalizeText(request.reason) || DEFAULT_REASON;
+    const playerId = normalizePlayerId(request.playerId ?? request.playerID ?? request.playerid);
     const steamId = normalizeText(request.steamId ?? request.steamID ?? request.anyId ?? request.playerKey ?? request.playerId ?? "");
     const playerName = normalizeText(request.playerName ?? request.name ?? "");
     const system = Boolean(request.system);
-    const command = buildForceTeamChangeCommand(steamId);
+    const command = buildForceTeamChangeCommand({ playerId, steamId, playerName });
 
     if (!enabled) {
       const result = buildResult({
@@ -95,6 +96,7 @@ export function createTeamBalanceService({ core, config, logger }) {
         message: "TeamBalance module is disabled.",
         command,
         steamId,
+        playerId,
         playerName,
         source,
         reason,
@@ -105,13 +107,14 @@ export function createTeamBalanceService({ core, config, logger }) {
       return result;
     }
 
-    if (!steamId) {
+    if (playerId == null && !steamId) {
       const result = buildResult({
         ok: false,
         error: "MissingSteamId",
         message: "steamId is required.",
         command,
         steamId,
+        playerId,
         playerName,
         source,
         reason,
@@ -129,6 +132,7 @@ export function createTeamBalanceService({ core, config, logger }) {
         message: `Permission '${switchPermission}' is required.`,
         command,
         steamId,
+        playerId,
         playerName,
         source,
         reason,
@@ -150,12 +154,13 @@ export function createTeamBalanceService({ core, config, logger }) {
 
       const result = buildResult({
         ok: response.ok,
-        error: response.ok ? "" : response.error,
-        message: response.ok ? "Team switch requested." : (response.error || "RCON command failed."),
+        error: response.ok ? "" : (response.error || "RCON_FAILED"),
+        message: response.ok ? "Team switch requested." : (response.message || response.error || "RCON command failed."),
         command,
         rconExecuted: response.executed,
         rconResponse: response.response,
         steamId,
+        playerId,
         playerName,
         source,
         reason,
@@ -173,6 +178,7 @@ export function createTeamBalanceService({ core, config, logger }) {
         message: errorMessage,
         command,
         steamId,
+        playerId,
         playerName,
         source,
         reason,
@@ -207,14 +213,10 @@ export function createTeamBalanceService({ core, config, logger }) {
         source,
         reason,
         operator,
+        system,
       });
 
-      return {
-        ok: Boolean(response?.success ?? response?.ok),
-        executed: Boolean(response?.rconExecuted ?? response?.executed ?? response?.success ?? response?.ok),
-        response: String(response?.rconResponse ?? response?.response ?? response?.message ?? ""),
-        error: response?.error ? String(response.error) : "",
-      };
+      return normalizeRconExecutionResponse(response);
     }
 
     if (typeof core?.rcon?.execute === "function") {
@@ -225,12 +227,7 @@ export function createTeamBalanceService({ core, config, logger }) {
         operator,
       });
 
-      return {
-        ok: Boolean(response?.success ?? response?.ok),
-        executed: Boolean(response?.rconExecuted ?? response?.executed ?? response?.success ?? response?.ok),
-        response: String(response?.rconResponse ?? response?.response ?? response?.message ?? ""),
-        error: response?.error ? String(response.error) : "",
-      };
+      return normalizeRconExecutionResponse(response);
     }
 
     return {
@@ -256,8 +253,46 @@ export function createTeamBalanceService({ core, config, logger }) {
   }
 }
 
-function buildForceTeamChangeCommand(steamId) {
-  return `TB ${steamId}`;
+function normalizeRconExecutionResponse(response) {
+  if (typeof response === "string") {
+    return {
+      ok: true,
+      executed: true,
+      response,
+      error: "",
+    };
+  }
+
+  return {
+    ok: Boolean(response?.success ?? response?.ok),
+    executed: Boolean(response?.rconExecuted ?? response?.executed ?? response?.success ?? response?.ok),
+    response: String(response?.rconResponse ?? response?.response ?? response?.message ?? ""),
+    error: response?.error
+      ? String(response.error)
+      : response?.code
+        ? String(response.code)
+        : "",
+    message: String(response?.message ?? response?.error ?? response?.code ?? ""),
+  };
+}
+
+function buildForceTeamChangeCommand({ playerId = null, steamId = "", playerName = "" } = {}) {
+  const normalizedPlayerId = normalizePlayerId(playerId);
+  if (normalizedPlayerId != null) {
+    return `AdminForceTeamChangeById ${normalizedPlayerId}`;
+  }
+
+  const normalizedSteamId = normalizeText(steamId);
+  if (normalizedSteamId) {
+    return `AdminForceTeamChange "${normalizedSteamId}"`;
+  }
+
+  const normalizedPlayerName = normalizeText(playerName);
+  if (normalizedPlayerName) {
+    return `AdminForceTeamChange "${normalizedPlayerName}"`;
+  }
+
+  return "AdminForceTeamChange";
 }
 
 function buildResult({
@@ -267,6 +302,7 @@ function buildResult({
   command = "",
   rconExecuted = false,
   rconResponse = "",
+  playerId = null,
   steamId = "",
   playerName = "",
   source = DEFAULT_SOURCE,
@@ -278,6 +314,7 @@ function buildResult({
     ok: Boolean(ok),
     type: "force_team_change",
     action: "force_team_change",
+    playerId,
     steamId,
     playerName,
     source,
@@ -319,6 +356,12 @@ function canSwitch(operator, command, { switchPermission }) {
 
 function normalizeText(value) {
   return String(value ?? "").trim();
+}
+
+function normalizePlayerId(value) {
+  if (value == null || value === "") return null;
+  const parsed = Number.parseInt(String(value), 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function clampInteger(value, min, max) {

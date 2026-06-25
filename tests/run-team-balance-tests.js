@@ -67,6 +67,7 @@ async function testForceTeamChangeSuccess() {
   assert.equal(result.rconExecuted, true);
   assert.equal(result.rconResponse, "OK");
   assert.equal(result.command, commands[0].command);
+  assert.equal(result.command, 'AdminForceTeamChange "76561198377609640"');
   assert.equal(commands[0].requiredPermission, "rcon.tb");
   assert.match(result.command, /76561198377609640/);
 
@@ -113,6 +114,86 @@ async function testForceTeamChangeAcceptsRconPermissionAlias() {
   assert.equal(result.ok, true);
   assert.equal(commands.length, 1);
   assert.equal(commands[0].requiredPermission, "rcon.tb");
+}
+
+async function testForceTeamChangeUsesPlayerIdWhenAvailable() {
+  const commands = [];
+  const service = createService({
+    core: {
+      logger: createNoopLogger(),
+      rconManager: {
+        async dispatchCommand(payload) {
+          commands.push(payload);
+          return {
+            success: true,
+            rconExecuted: true,
+            rconResponse: "OK",
+            message: "OK",
+          };
+        },
+      },
+    },
+  });
+
+  const result = await service.api.forceTeamChange({
+    playerId: 42,
+    steamId: "76561198377609641",
+    playerName: "OperatorTarget",
+    source: "match_state",
+    reason: "match_state_button",
+    operator: {
+      id: "operator-1",
+      name: "Operator",
+      username: "Operator",
+      isSuperAdmin: true,
+      permissions: ["*"],
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(commands[0].command, "AdminForceTeamChangeById 42");
+}
+
+async function testForceTeamChangePropagatesRconFailureMessage() {
+  const commands = [];
+  const service = createService({
+    core: {
+      logger: createNoopLogger(),
+      rconManager: {
+        async dispatchCommand(payload) {
+          commands.push(payload);
+          return {
+            success: false,
+            code: "RCON_FAILED",
+            message: "Unknown command: AdminForceTeamChangeById",
+            rconExecuted: false,
+            rconResponse: "",
+          };
+        },
+      },
+    },
+  });
+
+  const result = await service.api.forceTeamChange({
+    playerId: 42,
+    steamId: "76561198377609641",
+    playerName: "OperatorTarget",
+    source: "fair_tb",
+    reason: "fair_tb_chat",
+    system: true,
+    operator: {
+      id: "system",
+      name: "System",
+      username: "System",
+      isSuperAdmin: true,
+      permissions: ["*"],
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "RCON_FAILED");
+  assert.equal(result.message, "Unknown command: AdminForceTeamChangeById");
+  assert.equal(commands[0].system, true);
 }
 
 async function testForceTeamChangeRejectsMissingSteamId() {
@@ -294,6 +375,8 @@ function createRecorder() {
 
 await testForceTeamChangeSuccess();
 await testForceTeamChangeAcceptsRconPermissionAlias();
+await testForceTeamChangeUsesPlayerIdWhenAvailable();
+await testForceTeamChangePropagatesRconFailureMessage();
 await testForceTeamChangeRejectsMissingSteamId();
 await testHandleTbRoutesSupportsNewAndLegacyPaths();
 await testHandleTbRoutesReturnsRecords();
