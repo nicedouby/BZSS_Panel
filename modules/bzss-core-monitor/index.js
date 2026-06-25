@@ -3,6 +3,7 @@
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import chokidar from "chokidar";
 
 const DEFAULT_POLL_INTERVAL_MS = 100;
 const DEFAULT_WATCH_DEBOUNCE_MS = 0;
@@ -36,6 +37,12 @@ const SCOREBOARD_FIELD_ALIASES = {
   combatScore: ["Combat"],
 };
 
+/**
+ * Creates the BZSS Core Monitor module.
+ * @param {Object} context
+ * @param {any} context.core
+ * @param {any} [context.logger]
+ */
 export function createBzssCoreMonitorModule({ core, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
     moduleId: "module.bzssCoreMonitor",
@@ -331,15 +338,20 @@ export function createBzssCoreMonitorModule({ core, logger }) {
 
     closeFileWatcher();
     watcherPath = resolvedPath;
-    const directory = path.dirname(resolvedPath);
-    const targetName = path.basename(resolvedPath).toLowerCase();
     try {
-      watcher = fsSync.watch(directory, { persistent: false }, (_eventType, fileName) => {
-        const changedName = fileName == null ? "" : String(fileName).toLowerCase();
-        if (changedName && changedName !== targetName) return;
+      watcher = chokidar.watch(resolvedPath, {
+        persistent: false,
+        ignoreInitial: true,
+        usePolling: false,
+        awaitWriteFinish: {
+          stabilityThreshold: Math.max(50, debounceMs),
+          pollInterval: 50
+        }
+      });
+      watcher.on("all", () => {
         scheduleWatchTick(debounceMs);
       });
-      watcher.on?.("error", (error) => {
+      watcher.on("error", (error) => {
         moduleLogger.warn(`BZSS-Core monitor file watcher failed: ${error.message}`);
         closeFileWatcher();
       });
@@ -554,20 +566,32 @@ export function extractBzssCoreTrackedText(buffer) {
 export async function parseBzssCorePlayerBlocks(text) {
   const source = String(text ?? "");
   const players = [];
-  const pattern = /PlayerBaseInfo\{([^}]*)\}/g;
-  let match = null;
+  let searchIndex = 0;
   let iterations = 0;
-  while ((match = pattern.exec(source)) !== null) {
+  
+  while (true) {
+    const matchIndex = source.indexOf("PlayerBaseInfo{", searchIndex);
+    if (matchIndex === -1) break;
+    
     if (++iterations % 10 === 0) {
       await new Promise((resolve) => setImmediate(resolve));
     }
-    const baseRaw = String(match[1] ?? "");
-    const segmentStart = pattern.lastIndex;
+    
+    const contentStart = matchIndex + 15;
+    const contentEnd = source.indexOf("}", contentStart);
+    if (contentEnd === -1) {
+      searchIndex = contentStart;
+      continue;
+    }
+    
+    const baseRaw = source.slice(contentStart, contentEnd);
+    const segmentStart = contentEnd + 1;
     const nextBaseIndex = source.indexOf("PlayerBaseInfo{", segmentStart);
     const segmentEnd = nextBaseIndex >= 0 ? nextBaseIndex : source.length;
     const segment = source.slice(segmentStart, segmentEnd);
-    const contextStart = findPlayerContextStart(source, match.index);
-    const context = source.slice(contextStart, match.index);
+    const contextStart = findPlayerContextStart(source, matchIndex);
+    const context = source.slice(contextStart, matchIndex);
+    searchIndex = segmentStart;
     const soldierBlock = findNamedBlock(segment, "SoldierInfo");
     const scoreboardBlock = findNamedBlock(segment, "PlayerScoreboard");
     if (!scoreboardBlock) continue;
@@ -607,7 +631,7 @@ export async function parseBzssCorePlayerBlocks(text) {
       playerScoreboard: {
         ...scoreboardInfo,
       },
-      rawText: source.slice(match.index, segmentEnd),
+      rawText: source.slice(matchIndex, segmentEnd),
     });
   }
   return players;

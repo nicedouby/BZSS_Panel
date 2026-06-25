@@ -119,6 +119,19 @@
                     </svg>
                     Untrack
                   </button>
+                  <button
+                    type="button"
+                    class="hud-header-db-btn"
+                    style="color: #ff4545;"
+                    @click="handleKillPlayer"
+                    :disabled="actionBusy || !canUseBzssCore || props.player?.playerId == null"
+                    title="调用 BZSS-Core 的 KillSomeone 指令击杀这名玩家"
+                  >
+                    <svg viewBox="0 0 24 24" width="12" height="12" class="btn-icon">
+                      <text x="0" y="20" font-size="20">💀</text>
+                    </svg>
+                    击杀这名玩家
+                  </button>
                 </div>
                 <div class="hud-header-identities">
                   <span
@@ -1423,6 +1436,49 @@ async function handleForceTeamChange() {
     ui.pushToast({ title: "指令已送达", message: `跳边请求已提交：${props.player.name}`, tone: "ok" });
   } catch (e) {
     ui.pushToast({ title: "跳边失败", message: String(e), tone: "error" });
+  } finally {
+    actionBusy.value = false;
+  }
+}
+
+async function handleKillPlayer() {
+  const player = props.player;
+  if (!player || actionBusy.value) return;
+  if (player.playerId == null) {
+    ui.pushToast({
+      title: "无法执行",
+      message: "该玩家缺少 PlayerID 数据，无法执行击杀。",
+      tone: "error",
+    });
+    return;
+  }
+
+  const confirmed = await ui.openConfirm({
+    title: "确认击杀？",
+    message: `确定要击杀玩家 ${player.name} (PlayerID: ${player.playerId}) 吗？`,
+    tone: "warn",
+  });
+  if (!confirmed) return;
+
+  if (actionBusy.value) return;
+  actionBusy.value = true;
+
+  try {
+    const result = await executeBzssCoreCommand({
+      command: `KillSomeone:${player.playerId}`
+    });
+    if (!result.ok) throw new Error(result.message || "KillSomeone 执行失败");
+    ui.pushToast({
+      title: "指令已执行",
+      message: `已发送击杀指令: ${player.name}`,
+      tone: "ok",
+    });
+  } catch (error) {
+    ui.pushToast({
+      title: "击杀失败",
+      message: error instanceof Error ? error.message : String(error),
+      tone: "error",
+    });
   } finally {
     actionBusy.value = false;
   }

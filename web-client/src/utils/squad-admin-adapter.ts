@@ -11,6 +11,7 @@ import type {
   PlayerDetailViewModel,
   MatchHeaderData,
   SquadWarning,
+  RawPlayerPayload,
 } from "../types/squad-admin.types";
 
 const EMPTY_COMBAT_STATS: CombatStats = {
@@ -21,6 +22,19 @@ const EMPTY_COMBAT_STATS: CombatStats = {
   revives: 0,
   source: "empty",
 };
+
+export function normalizeRawPlayer(raw: any): RawPlayerPayload {
+  if (!raw) return {};
+  return {
+    steamName: String(raw.steamName ?? raw.steam_name ?? ""),
+    platformName: String(raw.platformName ?? raw.platform_name ?? ""),
+    rgfName: String(raw.rgfName ?? raw.rgf_name ?? ""),
+    rawName: String(raw.rawName ?? raw.raw_name ?? ""),
+    name: String(raw.name ?? raw.playerName ?? ""),
+    playerName: String(raw.playerName ?? raw.name ?? ""),
+    squadlessSeconds: raw.squadlessSeconds != null ? Number(raw.squadlessSeconds) : undefined,
+  };
+}
 
 export function adaptPlayerRow(
   player: RuntimePlayer,
@@ -57,7 +71,7 @@ export function adaptPlayerRow(
     factionFlagUrl: teamName ? getFlagUrlByTeamName(teamName) : null,
     combatStats,
     statsLabel: formatCombatStatsLabel(combatStats),
-    raw: player,
+    raw: normalizeRawPlayer(player),
   };
 }
 

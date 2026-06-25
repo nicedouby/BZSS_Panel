@@ -617,10 +617,21 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
       const channel = normalizeChatChannel(event?.chatChannel ?? event?.channel);
       if (channel !== "all") return;
       const rawMessage = String(event?.message ?? "").trim();
-      if (!rawMessage || !CDK_INPUT_RE.test(rawMessage)) return;
+      if (!rawMessage) return;
 
       const playerName = String(event?.playerName ?? event?.name ?? "").trim();
       const steamId = String(event?.steamId ?? event?.steamID ?? "").trim();
+      if (isReserveSlotQueryMessage(rawMessage)) {
+        const queryResult = await buildReserveSlotQueryResult({
+          playerName,
+          steamId,
+        });
+        await sendReserveSlotQueryNotice(queryResult);
+        return;
+      }
+
+      if (!CDK_INPUT_RE.test(rawMessage)) return;
+
       if (!playerName || !STEAM64_RE.test(steamId)) {
         await logActivation({
           playerName,
@@ -645,6 +656,82 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
       await sendActivationNotice(activation);
     } catch (error) {
       moduleLogger?.warn?.(`[ReserveSlots] failed to process chat CDK activation: ${error?.message ?? error}`);
+    }
+  }
+
+  function isReserveSlotQueryMessage(message) {
+    const normalized = String(message ?? "").trim().toLowerCase();
+    return normalized === "ylw" || normalized === "预留位";
+  }
+
+  async function buildReserveSlotQueryResult({ playerName, steamId }) {
+    const normalizedSteamId = String(steamId ?? "").trim();
+    const member = (runtime.store.members ?? []).find((item) => item.steamId === normalizedSteamId) ?? null;
+    if (!member) {
+      return {
+        playerName,
+        steamId: normalizedSteamId,
+        found: false,
+        active: false,
+        expired: false,
+        permanent: false,
+        message: "未查询到预留位。",
+      };
+    }
+
+    const expireAt = String(member.expireAt ?? "").trim();
+    if (!expireAt) {
+      return {
+        playerName,
+        steamId: normalizedSteamId,
+        found: true,
+        active: true,
+        expired: false,
+        permanent: true,
+        expireAt: null,
+        remainingDays: null,
+        message: "你的预留位为永久预留位。",
+      };
+    }
+
+    const parsedExpireAt = parseReserveDate(expireAt);
+    const expired = Boolean(parsedExpireAt && parsedExpireAt.getTime() < Date.now());
+    const remainingDays = expired ? 0 : formatRemainingReserveDays(expireAt);
+
+    return {
+      playerName,
+      steamId: normalizedSteamId,
+      found: true,
+      active: !expired,
+      expired,
+      permanent: false,
+      expireAt,
+      remainingDays,
+      message: expired
+        ? `你的预留位已过期，到期时间 ${expireAt}。`
+        : `你的预留位还剩 ${remainingDays ?? 0} 天，到期时间 ${expireAt}。`,
+    };
+  }
+
+  async function sendReserveSlotQueryNotice(result) {
+    const targetName = String(result?.playerName ?? "").trim();
+    const targetSteamId = String(result?.steamId ?? "").trim();
+    const message = String(result?.message ?? "").trim();
+    if (!targetName || !targetSteamId || !message || typeof modules?.adminWarn?.warnPlayer !== "function") {
+      return;
+    }
+
+    try {
+      await modules.adminWarn.warnPlayer({
+        targetName,
+        targetSteamId,
+        message,
+        reason: "reserve_slots_query",
+        sourceModule: MODULE_ID,
+        system: true,
+      });
+    } catch (error) {
+      moduleLogger?.warn?.(`[ReserveSlots] failed to send reserve slot query notice: ${error?.message ?? error}`);
     }
   }
 

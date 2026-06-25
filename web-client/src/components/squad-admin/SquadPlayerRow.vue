@@ -2,7 +2,10 @@
   <div
     class="squad-player-row player-row"
     :class="{ selected: isSelected, 'is-leader': player.isLeader, 'is-checked': multiSelectMode && checked, 'has-steam-avatar': !!avatarUrl }"
+    role="button"
+    tabindex="0"
     @click="handleSelect"
+    @keydown.enter="handleSelect"
   >
     <div class="player-side">
       <div v-if="multiSelectMode" class="player-checkbox-container">
@@ -40,7 +43,7 @@
           :class="{ leader: player.isLeader }"
           :title="player.isLeader ? t('match.squadLeader') : t('match.squadMember')"
         >
-          {{ player.isLeader ? "队长" : "成员" }}
+          {{ player.isLeader ? t('match.squadLeader') : t('match.squadMember') }}
         </span>
         <div v-if="playtimeText" class="playtime-chip" :title="playtimeTitle">
           {{ playtimeText }}
@@ -55,26 +58,26 @@
       <div class="combat-stats-row" :title="statsTooltip">
         <!-- KD Block -->
         <span class="combat-badge kd-capsule">
-          <span class="stat-pill kills" title="击杀 (Kills)">{{ kills }}</span>
+          <span class="stat-pill kills" :title="t('match.stats.kills')">{{ kills }}</span>
           <span class="separator">/</span>
-          <span class="stat-pill downs" title="击倒 (Downs)">{{ downs }}</span>
+          <span class="stat-pill downs" :title="t('match.stats.downs')">{{ downs }}</span>
           <span class="separator">/</span>
-          <span class="stat-pill deaths" title="死亡 (Deaths)">{{ deaths }}</span>
+          <span class="stat-pill deaths" :title="t('match.stats.deaths')">{{ deaths }}</span>
         </span>
 
         <!-- TK Warning Badge (only shown if tk > 0) -->
-        <span v-if="tk > 0" class="combat-badge tk-warning" :title="`队友击杀 (Team Kills): ${tk}`">
+        <span v-if="tk > 0" class="combat-badge tk-warning" :title="t('match.stats.tkTooltip', '', { tk })">
           <span class="lbl">TK</span>
           <span class="val">{{ tk }}</span>
         </span>
 
         <!-- Support Badge -->
         <span class="combat-badge support-badge">
-          <span class="stat-sub-pill revives" title="复苏人数 (Revived Point)">
+          <span class="stat-sub-pill revives" :title="t('match.stats.revives')">
             <span class="lbl">Rev</span>
             <span class="val">{{ revives }}</span>
           </span>
-          <span class="stat-sub-pill heals" title="治疗点数 (Heal Point)">
+          <span class="stat-sub-pill heals" :title="t('match.stats.heals')">
             <span class="lbl">Heal</span>
             <span class="val">{{ healPoints }}</span>
           </span>
@@ -82,23 +85,23 @@
 
         <!-- Score Badge -->
         <span class="combat-badge score-badge">
-          <span class="stat-sub-pill teamwork" title="团队分数 (Teamwork Point)">
+          <span class="stat-sub-pill teamwork" :title="t('match.stats.teamwork')">
             <span class="lbl">T</span>
             <span class="val">{{ teamworkScore }}</span>
           </span>
-          <span class="stat-sub-pill objective" title="目标分数 (Objective Point)">
+          <span class="stat-sub-pill objective" :title="t('match.stats.objective')">
             <span class="lbl">O</span>
             <span class="val">{{ objectiveScore }}</span>
           </span>
-          <span class="stat-sub-pill combat" title="战斗分数 (Combat Score)">
+          <span class="stat-sub-pill combat" :title="t('match.stats.combat')">
             <span class="lbl">C</span>
             <span class="val">{{ combatScore }}</span>
           </span>
         </span>
 
         <!-- Squadless duration (if any) -->
-        <span v-if="squadlessText" class="combat-badge squadless-badge" :title="`游离时长: ${squadlessText}`">
-          <span class="lbl">游离</span>
+        <span v-if="squadlessText" class="combat-badge squadless-badge" :title="t('match.stats.squadlessTooltip', '', { time: squadlessText })">
+          <span class="lbl">{{ t('match.stats.squadlessLabel') }}</span>
           <span class="val">{{ squadlessText }}</span>
         </span>
 
@@ -122,7 +125,7 @@
       :href="`https://steamcommunity.com/profiles/${player.steamId}`"
       target="_blank"
       rel="noopener noreferrer"
-      :title="`查看 ${displayName} 的 Steam 个人资料`"
+      :title="t('match.viewSteamProfile', '', { name: displayName })"
       @click.stop
     >
       <img class="player-steam-bg-img" :src="avatarUrl" alt="" />
@@ -131,7 +134,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, ref } from "vue";
+import { computed, inject, ref, type Ref } from "vue";
 import type { PlayerRowViewModel, CombatStats, RawPlayerPayload } from "../../types/squad-admin.types";
 import { buildCombatScoreboardItems } from "../../utils/combat-scoreboard";
 import { resolveRoleIcon } from "../../utils/role-icons";
@@ -153,7 +156,7 @@ const emit = defineEmits<{
   (event: "toggle-check", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
 }>();
 
-const selectedPlayerId = inject<any>("selectedPlayerId", ref(null));
+const selectedPlayerId = inject<Ref<string | number | null>>("selectedPlayerId", ref(null));
 const isSelected = computed(() => {
   if (selectedPlayerId.value == null || props.player.playerId == null) return false;
   return String(selectedPlayerId.value) === String(props.player.playerId);
@@ -164,14 +167,14 @@ const avatarUrl = computed(() => props.steamAvatar || props.player.steamAvatar |
 
 const displayName = computed(() => {
   const raw = String(props.player.name ?? "").trim();
-  return raw || "未知玩家";
+  return raw || t('match.unknownPlayer');
 });
 
 const playtimeText = computed(() => formatPlaytime(props.playtimeHours));
 const playtimeTitle = computed(() => {
   const hours = props.playtimeHours;
-  if (typeof hours !== "number" || !Number.isFinite(hours) || hours === 0) return "Steam 时长未公开";
-  return `Steam 游戏时长: ${hours.toFixed(1)}h`;
+  if (typeof hours !== "number" || !Number.isFinite(hours) || hours === 0) return t('match.steamPlaytimePrivate');
+  return t('match.steamPlaytime', '', { hours: hours.toFixed(1) });
 });
 
 const secondaryIdentityText = computed(() => {
@@ -214,16 +217,16 @@ const objectiveScore = computed(() => normalizeStat(props.combatStats?.objective
 
 const statsTooltip = computed(() => {
   return [
-    `击杀 (Kills): ${kills.value}`,
-    `死亡 (Deaths): ${deaths.value}`,
-    `击倒 (Woundeds): ${downs.value}`,
-    `被击倒次数 (Wounds): ${normalizeStat(props.combatStats?.wounds)}`,
-    `TK (Team Kills): ${tk.value}`,
-    `复苏 (Revives): ${revives.value}`,
-    `治疗点数 (Heal Points): ${healPoints.value}`,
-    `团队分数 (Teamwork): ${teamworkScore.value}`,
-    `目标分数 (Objective): ${objectiveScore.value}`,
-    `战斗分数 (Combat): ${combatScore.value}`
+    `${t('match.stats.kills')}: ${kills.value}`,
+    `${t('match.stats.deaths')}: ${deaths.value}`,
+    `${t('match.stats.downs')}: ${downs.value}`,
+    `${t('match.stats.wounds')}: ${normalizeStat(props.combatStats?.wounds)}`,
+    `${t('match.stats.tk')}: ${tk.value}`,
+    `${t('match.stats.revives')}: ${revives.value}`,
+    `${t('match.stats.heals')}: ${healPoints.value}`,
+    `${t('match.stats.teamwork')}: ${teamworkScore.value}`,
+    `${t('match.stats.objective')}: ${objectiveScore.value}`,
+    `${t('match.stats.combat')}: ${combatScore.value}`
   ].join("\n");
 });
 
@@ -243,11 +246,11 @@ const squadlessText = computed(() => {
   return formatDurationShort(seconds);
 });
 
-function handleSelect(event: MouseEvent) {
+function handleSelect(event: MouseEvent | KeyboardEvent) {
   if (props.multiSelectMode) {
-    emit("toggle-check", { player: props.player, event });
+    emit("toggle-check", { player: props.player, event: event as MouseEvent });
   } else {
-    emit("select", { player: props.player, event });
+    emit("select", { player: props.player, event: event as MouseEvent });
   }
 }
 </script>

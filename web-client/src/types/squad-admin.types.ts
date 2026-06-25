@@ -15,10 +15,9 @@ export interface RawPlayerPayload {
   name?: string;
   playerName?: string;
   squadlessSeconds?: number;
-  [key: string]: any;
 }
 
-export interface PlayerRowViewModel {
+export interface BasePlayerViewModel {
   playerId: number | string | null;
   name: string;
   role: string;
@@ -45,6 +44,9 @@ export interface PlayerRowViewModel {
   combatStats: CombatStats;
   statsLabel: string;
   raw?: RawPlayerPayload;
+}
+
+export interface PlayerRowViewModel extends BasePlayerViewModel {
 }
 
 export interface SquadLeaderRowViewModel extends PlayerRowViewModel {
@@ -107,36 +109,11 @@ export interface TeamViewModel {
   squads: SquadViewModel[];
 }
 
-export interface PlayerDetailViewModel {
-  playerId: number | string | null;
-  name: string;
-  role: string;
-  isLeader: boolean;
-  isOnline: boolean;
-  teamId: number | null;
-  teamName?: string | null;
-  squadId: number | null;
-  steamId: string | null;
-  steam64?: string | null;
-  eosId: string | null;
-  ip: string | null;
+export interface PlayerDetailViewModel extends BasePlayerViewModel {
   lastIp?: string | null;
   resolvedIp?: string | null;
   ipSource?: "current" | "last" | "none";
   ipLookupLoading?: boolean;
-  playtimeHours: number | null;
-  ping?: number | null;
-  packetLoss?: number | null;
-  matchOnlineSeconds?: number | null;
-  matchObservedOnlineSeconds?: number | null;
-  matchEstimatedOnlineSeconds?: number | null;
-  matchFirstSeenAt?: string | null;
-  matchLastSeenAt?: string | null;
-  matchJoinCount?: number | null;
-  steamAvatar?: string | null;
-  factionFlagUrl?: string | null;
-  combatStats: CombatStats;
-  statsLabel: string;
   position?: BzssCoreTrackedVector | null;
   rotation?: BzssCoreTrackedVector | null;
   health?: number | null;
@@ -152,7 +129,6 @@ export interface PlayerDetailViewModel {
   bzssCorePlayerInfo?: BzssCoreTrackedPlayerInfo | null;
   source: string;
   controller: string;
-  raw?: RawPlayerPayload;
 }
 
 export interface MatchHeaderData {

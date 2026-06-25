@@ -499,6 +499,88 @@ async function testManualExtendAddsFromExistingExpiry() {
   await fs.rm(tempDir, { recursive: true, force: true });
 }
 
+async function testReserveSlotQueryChatFlow() {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "reserve-slots-query-"));
+  const adminFilePath = path.join(tempDir, "Admins.cfg");
+  const localReservePath = path.join(tempDir, "data", "reserve-slots.json");
+
+  await fs.writeFile(adminFilePath, [
+    "header",
+    "// 预留位",
+    "Group=BZSSVIP:reserve",
+    "Admin=76561198377609640:BZSSVIP //2099-06-02 21:26:59",
+    "Admin=76561198377609641:BZSSVIP //预留位",
+  ].join("\n"), "utf8");
+
+  const config = createConfig({
+    reserveSystem: {
+      enabled: true,
+      adminFilePath,
+      localReserveFilePath: path.relative(process.cwd(), localReservePath),
+    },
+  });
+
+  const harness = createTestHarness();
+  const reserveModule = createReserveSlotsModule({
+    core: harness.core,
+    modules: harness.modules,
+    config,
+    logger: harness.logger,
+  });
+
+  await reserveModule.init();
+  await reserveModule.start();
+  await reserveModule.api.importFromAdminFile();
+
+  harness.warns.length = 0;
+  harness.chatManager.api.emit("message", {
+    chatChannel: "all",
+    playerName: "Alpha",
+    steamId: "76561198377609640",
+    message: "ylw",
+  });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(harness.warns.length, 1);
+  assert.equal(harness.warns[0].targetSteamId, "76561198377609640");
+  assert.match(String(harness.warns[0].message), /你的预留位还剩 \d+ 天，到期时间 2099-06-02 21:26:59。/);
+
+  harness.warns.length = 0;
+  harness.chatManager.api.emit("message", {
+    chatChannel: "all",
+    playerName: "Bravo",
+    steamId: "76561198377609641",
+    message: "预留位",
+  });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(harness.warns.length, 1);
+  assert.equal(harness.warns[0].targetSteamId, "76561198377609641");
+  assert.match(String(harness.warns[0].message), /永久预留位/);
+
+  harness.warns.length = 0;
+  harness.chatManager.api.emit("message", {
+    chatChannel: "all",
+    playerName: "Charlie",
+    steamId: "76561198377609642",
+    message: "ylw",
+  });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(harness.warns.length, 1);
+  assert.match(String(harness.warns[0].message), /未查询到预留位/);
+
+  harness.warns.length = 0;
+  harness.chatManager.api.emit("message", {
+    chatChannel: "team",
+    playerName: "Alpha",
+    steamId: "76561198377609640",
+    message: "ylw",
+  });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(harness.warns.length, 0);
+
+  await reserveModule.stop();
+  await fs.rm(tempDir, { recursive: true, force: true });
+}
+
 async function testModuleAndRoutesWorkEndToEnd() {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "reserve-slots-web-"));
   const adminFilePath = path.join(tempDir, "Admins.cfg");
@@ -671,6 +753,7 @@ await testReserveSlotUniquenessDedupesExistingEntries();
 await testSyncReserveMemberNamesInAdminFileContentFillsMissingNames();
 await testCdkBatchAndChatActivationFlow();
 await testManualExtendAddsFromExistingExpiry();
+await testReserveSlotQueryChatFlow();
 await testModuleAndRoutesWorkEndToEnd();
 
 console.log("reserve slots tests passed");
