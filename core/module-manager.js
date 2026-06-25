@@ -11,6 +11,7 @@ import { createSquadManagementModule } from "../modules/squad-management/index.j
 import { createTeamBalanceModule } from "../modules/team-balance/index.js";
 import { createSquadDisbandModule } from "../modules/squad-disband/index.js";
 import { createSquadKickModule } from "../modules/squad-kick/index.js";
+import { createSquadBanModule } from "../modules/squad-ban/index.js";
 import { createSquadRemoveModule } from "../modules/squad-remove/index.js";
 import { createConsoleModule } from "../modules/console/index.js";
 import { createLogClockModule } from "../modules/log-clock/index.js";
@@ -79,6 +80,7 @@ export class ModuleManager {
       createTeamBalanceModule,
       createSquadDisbandModule,
       createSquadKickModule,
+      createSquadBanModule,
       createSquadRemoveModule,
       createCombatStateModule,
       createPlayerDatabaseModule,

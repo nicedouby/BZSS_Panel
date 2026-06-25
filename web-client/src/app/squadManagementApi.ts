@@ -6,6 +6,7 @@ export interface SquadManagementViewer {
   isSuperAdmin: boolean;
   canDisband: boolean;
   canKick: boolean;
+  canBan: boolean;
   canRemove: boolean;
   canSwitch: boolean;
   permissions: string[];
@@ -105,6 +106,7 @@ export interface SquadManagementState {
   enforcementEnabled: boolean;
   disbandPermission: string;
   kickPermission: string;
+  banPermission: string;
   switchPermission: string;
   kickThreshold: number;
   noBuildUntilSeconds: number;
@@ -154,6 +156,7 @@ export interface SquadManagementActionResponse extends SquadManagementActionResu
 export type SquadManagementActionType =
   | "disband_squad"
   | "kick_player"
+  | "ban_player"
   | "remove_from_squad";
 
 export interface SquadManagementRecord {
@@ -186,6 +189,7 @@ export interface SquadManagementRecordSummary {
   disbanded: number;
   kicked: number;
   removed: number;
+  banned: number;
   switched: number;
   actions: number;
   success: number;
@@ -206,6 +210,7 @@ export interface SquadManagementRecordsResponse {
     enforcementEnabled: boolean;
     disbandPermission: string;
     kickPermission: string;
+    banPermission: string;
     kickThreshold: number;
   };
 }
@@ -226,6 +231,7 @@ export function executeSquadManagementAction(payload: {
   name?: string;
   anyId?: string;
   reason?: string;
+  banLength?: string;
   source?: string;
   system?: boolean;
 }) {
@@ -255,6 +261,22 @@ export function kickPlayer(payload: {
 }) {
   return executeSquadManagementAction({
     type: "kick_player",
+    ...payload,
+  });
+}
+
+export function banPlayer(payload: {
+  playerId?: string | number | null;
+  anyId?: string;
+  reason?: string;
+  banLength?: string;
+  source?: string;
+  steamId?: string;
+  eosId?: string;
+  name?: string;
+}) {
+  return executeSquadManagementAction({
+    type: "ban_player",
     ...payload,
   });
 }

@@ -368,6 +368,7 @@ const rconPermissionOptions: PermissionOption[] = [
   { value: "rcon.warn", label: "警告 Warn" },
   { value: "rcon.broadcast", label: "广播 Broadcast" },
   { value: "rcon.kick", label: "踢出 Kick" },
+  { value: "rcon.ban", label: "BAN" },
   { value: "rcon.disband", label: "解散 Disband" },
   { value: "rcon.remove", label: "移出队伍 Remove" },
   { value: "rcon.settickets", label: "修改票数 Tickets" },

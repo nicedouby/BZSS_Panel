@@ -115,6 +115,40 @@
               </AppDangerButton>
             </div>
           </AppSection>
+          <AppSection title="BAN Player" description="Use name, SteamID, or EOS ID. Ban length supports 0 / 1d / 1M.">
+            <div class="command-form">
+              <label class="field">
+                <span>Target Player</span>
+                <PlayerSelect v-model="banTarget" placeholder="Player / SteamID / EOS" />
+              </label>
+
+              <div class="field-grid">
+                <label class="field">
+                  <span>Ban Length</span>
+                  <input v-model="banLength" type="text" placeholder="0 / 1d / 1M" />
+                </label>
+                <label class="field">
+                  <span>Source</span>
+                  <input v-model="banSource" type="text" placeholder="manual / discord" />
+                </label>
+              </div>
+
+              <label class="field">
+                <span>Reason</span>
+                <input v-model="banReason" type="text" placeholder="Ban reason" />
+              </label>
+
+              <AppDangerButton
+                class="command-button"
+                :disabled="!viewerCanBan || actionBusy || !canSubmitBan"
+                tone="danger"
+                variant="solid"
+                @click="handleBan"
+              >
+                Ban Player
+              </AppDangerButton>
+            </div>
+          </AppSection>
         </AppCard>
       </template>
 
@@ -156,7 +190,7 @@
             <AppCard title="系统操作审计" description="按指令类型查看执行结果。">
               <div class="audit-filter-bar">
                 <AppStatusBadge
-                  v-for="item in kindOptions"
+                  v-for="item in allKindOptions"
                   :key="item.value"
                   interactive
                   :active="selectedKind === item.value"
@@ -232,6 +266,7 @@ import { normalizeRefreshPolicy, resolveRefreshDelay } from "../app/refreshPolic
 import {
   disbandSquad,
   kickPlayer,
+  banPlayer,
   removePlayerFromSquad,
   getSquadManagementRecords,
   type SquadManagementRecord,
@@ -278,6 +313,10 @@ const disbandHints = [
 const kickTarget = ref("");
 const kickSource = ref("manual");
 const kickReason = ref("");
+const banTarget = ref("");
+const banSource = ref("manual");
+const banLength = ref("1d");
+const banReason = ref("");
 
 const removeTarget = ref("");
 const removeSource = ref("manual");
@@ -321,6 +360,7 @@ const staleErrorText = computed(() => {
 
 const viewerCanDisband = computed(() => Boolean(viewer.value?.canDisband || auth.user?.isSuperAdmin));
 const viewerCanKick = computed(() => Boolean(viewer.value?.canKick || auth.user?.isSuperAdmin));
+const viewerCanBan = computed(() => Boolean(viewer.value?.canBan || auth.user?.isSuperAdmin));
 const viewerCanRemove = computed(() => Boolean(viewer.value?.canRemove || auth.user?.isSuperAdmin));
 
 const kindOptions = computed(() => [
@@ -337,6 +377,11 @@ const filteredRecords = computed(() => {
   return records.value.filter((record) => record.kind === selectedKind.value);
 });
 
+const allKindOptions = computed(() => [
+  ...kindOptions.value,
+  { value: "ban", label: "Ban", count: summary.value?.banned ?? 0, tone: "error" as const },
+]);
+
 const recentCreations = computed(() => {
   return records.value
     .filter((record) => record.kind === "squad_created")
@@ -345,6 +390,7 @@ const recentCreations = computed(() => {
 
 const canSubmitDisband = computed(() => Boolean(disbandTeamId.value && disbandSquadId.value && disbandReason.value.trim()));
 const canSubmitKick = computed(() => Boolean(kickTarget.value.trim() && kickReason.value.trim()));
+const canSubmitBan = computed(() => Boolean(banTarget.value.trim() && banLength.value.trim() && banReason.value.trim()));
 const canSubmitRemove = computed(() => Boolean(removeTarget.value.trim()));
 
 const headerStatusItems = computed<Array<{ label: string; tone?: "ok" | "warn" | "error" | "idle" }>>(() => [
@@ -434,6 +480,28 @@ async function handleKick() {
     },
     "踢出请求已送达",
     "玩家踢出请求已提交。",
+  );
+}
+
+async function handleBan() {
+  if (!viewerCanBan.value || actionBusy.value || !canSubmitBan.value) return;
+
+  await confirmDangerAction(
+    "Confirm ban player",
+    `${banTarget.value.trim()} / ${banLength.value.trim()}`,
+    () => banPlayer({
+      anyId: banTarget.value.trim(),
+      source: banSource.value,
+      banLength: banLength.value.trim(),
+      reason: banReason.value.trim(),
+    }),
+    () => {
+      banTarget.value = "";
+      banLength.value = "1d";
+      banReason.value = "";
+    },
+    "Ban request queued",
+    "Player ban request submitted.",
   );
 }
 

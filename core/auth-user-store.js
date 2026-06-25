@@ -461,6 +461,7 @@ export const ALLOWED_ADMIN_PERMISSIONS = Object.freeze([
   "rcon.warn",
   "rcon.broadcast",
   "rcon.kick",
+  "rcon.ban",
   "rcon.disband",
   "rcon.remove",
   "settings.manage",

@@ -293,6 +293,18 @@
                 <button
                   type="button"
                   class="hud-action-btn-styled remove-btn"
+                  @click="handleBan"
+                  :disabled="actionBusy || !canBanPlayer"
+                >
+                  <div class="btn-inner">
+                    <span class="btn-icon">BAN</span>
+                    <span class="btn-text">Ban</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  class="hud-action-btn-styled remove-btn"
                   @click="handleRemove"
                   :disabled="actionBusy || !canRemovePlayer"
                 >
@@ -680,7 +692,7 @@ import { copyTextWithToast } from "../../utils/clipboard";
 import { buildCombatScoreboardItems } from "../../utils/combat-scoreboard";
 import { goToPlayerDatabaseSearch } from "../../utils/player-database";
 import { forceTeamChange } from "../../app/teamBalanceApi";
-import { warnPlayer, kickPlayer, removePlayerFromSquad } from "../../app/squadManagementApi";
+import { warnPlayer, kickPlayer, banPlayer, removePlayerFromSquad } from "../../app/squadManagementApi";
 import { executeBzssCoreCommand } from "../../app/bzssCoreApi";
 import { apiGet, apiPatch, apiPost } from "../../app/apiClient";
 import StatusBadge from "../common/StatusBadge.vue";
@@ -948,6 +960,7 @@ const userPermissions = computed(() => {
 const canSwitchTeam = computed(() => Boolean(auth.user?.isSuperAdmin || hasPermission(userPermissions.value, "squad.switch")));
 const canWarnPlayer = computed(() => Boolean(auth.user?.isSuperAdmin || hasPermission(userPermissions.value, "warning.send")));
 const canKickPlayer = computed(() => Boolean(auth.user?.isSuperAdmin || hasPermission(userPermissions.value, "squad.kick")));
+const canBanPlayer = computed(() => Boolean(auth.user?.isSuperAdmin || hasPermission(userPermissions.value, "squad.ban")));
 const canRemovePlayer = computed(() => Boolean(auth.user?.isSuperAdmin || hasPermission(userPermissions.value, "squad.remove")));
 const canEditPlaytime = computed(() => Boolean(auth.user?.isSuperAdmin));
 const viewerSteam64 = computed(() => normalizeSteam64(auth.user?.steam64));
@@ -1371,6 +1384,59 @@ async function handleKick() {
     ui.pushToast({ title: "指令已送达", message: "踢出玩家请求已处理", tone: "ok" });
   } catch (e) {
     ui.pushToast({ title: "踢出失败", message: String(e), tone: "error" });
+  } finally {
+    actionBusy.value = false;
+  }
+}
+
+async function handleBan() {
+  const player = props.player;
+  if (!player || actionBusy.value) return;
+
+  const banLength = window.prompt("Ban length: 0 / 1d / 1M", "1d")?.trim();
+  if (!banLength) {
+    ui.pushToast({
+      title: "Ban canceled",
+      message: "Ban length is required.",
+      tone: "warn",
+    });
+    return;
+  }
+
+  const reason = window.prompt("Ban reason", "")?.trim();
+  if (!reason) {
+    ui.pushToast({
+      title: "Ban canceled",
+      message: "Ban reason is required.",
+      tone: "warn",
+    });
+    return;
+  }
+
+  const confirmed = await ui.openConfirm({
+    title: "Confirm ban player?",
+    message: `${player.name} / ${banLength}\n${reason}`,
+    tone: "error",
+  });
+  if (!confirmed) return;
+  if (actionBusy.value || !props.player) return;
+
+  actionBusy.value = true;
+  try {
+    const res = await banPlayer({
+      playerId: player.playerId ?? undefined,
+      anyId: player.steamId || player.eosId || player.name || String(player.playerId ?? ""),
+      steamId: player.steamId ?? undefined,
+      eosId: player.eosId ?? undefined,
+      name: player.name,
+      banLength,
+      reason,
+      source: "web.squadAdmin",
+    });
+    if (!res.ok) throw new Error(res.message || "Ban failed");
+    ui.pushToast({ title: "Ban request sent", message: `${player.name} / ${banLength}`, tone: "ok" });
+  } catch (e) {
+    ui.pushToast({ title: "Ban failed", message: String(e), tone: "error" });
   } finally {
     actionBusy.value = false;
   }

@@ -5,6 +5,7 @@ import path from "node:path";
 import { createSquadManagementModule } from "../modules/squad-management/index.js";
 import { createSquadDisbandModule } from "../modules/squad-disband/index.js";
 import { createSquadKickModule } from "../modules/squad-kick/index.js";
+import { createSquadBanModule } from "../modules/squad-ban/index.js";
 import { createSquadRemoveModule } from "../modules/squad-remove/index.js";
 
 const SERVER_ID = "BZSS_Main";
@@ -15,6 +16,7 @@ function createHarness(overrides = {}) {
   const commandCalls = {
     disband: [],
     kick: [],
+    ban: [],
     remove: [],
     dispatch: [],
     refresh: [],
@@ -87,6 +89,10 @@ function createHarness(overrides = {}) {
       },
       async kick(target, reason) {
         commandCalls.kick.push({ target, reason });
+        return "OK";
+      },
+      async ban(target, banLength, reason) {
+        commandCalls.ban.push({ target, banLength, reason });
         return "OK";
       },
       async removePlayerFromSquad(target, reason) {
@@ -166,6 +172,7 @@ function createHarness(overrides = {}) {
           enforcementEnabled: true,
           disbandPermission: "squad.disband",
           kickPermission: "squad.kick",
+          banPermission: "squad.ban",
           removePermission: "squad.remove",
           kickThreshold: overrides.kickThreshold ?? 10,
           noBuildUntilSeconds: overrides.noBuildUntilSeconds ?? 0,
@@ -183,6 +190,7 @@ function createHarness(overrides = {}) {
     squadManagement: module.api,
     squadDisband: createSquadDisbandModule({ core, modules: { squadManagement: module.api }, config, logger }),
     squadKick: createSquadKickModule({ core, modules: { squadManagement: module.api }, config, logger }),
+    squadBan: createSquadBanModule({ core, modules: { squadManagement: module.api }, config, logger }),
     squadRemove: createSquadRemoveModule({ core, modules: { squadManagement: module.api }, config, logger }),
   };
 
@@ -285,11 +293,11 @@ async function testExecuteActionKick() {
   assert.equal(result.ok, true);
   assert.equal(result.type, "kick_player");
   assert.equal(result.action, "kick");
-  assert.equal(result.command, 'AdminKick "76561198000000011" test');
+  assert.equal(result.command, 'AdminKick "76561198000000011" 你已被管理员踢出，原因:test，执行者：system。');
   assert.equal(harness.commandCalls.kick.length, 1);
   assert.deepEqual(harness.commandCalls.kick[0], {
     target: "76561198000000011",
-    reason: "test",
+    reason: "你已被管理员踢出，原因:test，执行者：system。",
   });
   assert.equal(Boolean(latestModuleEvent(harness, "playerKicked")), true);
 
@@ -322,7 +330,7 @@ async function testExecuteActionKickAcceptsRconPermissionAlias() {
   assert.equal(result.ok, true);
   assert.equal(result.type, "kick_player");
   assert.equal(result.action, "kick");
-  assert.equal(result.command, 'AdminKick "76561198000000013" alias-test');
+  assert.equal(result.command, 'AdminKick "76561198000000013" 你已被管理员踢出，原因:alias-test，执行者：Operator。');
   assert.equal(harness.commandCalls.kick.length, 1);
 
   await harness.module.stop();
@@ -349,6 +357,41 @@ async function testExecuteActionKickRequiresReason() {
   assert.equal(result.error, "InvalidReason");
   assert.equal(result.message, "A kick reason is required.");
   assert.equal(harness.commandCalls.kick.length, 0);
+
+  await harness.module.stop();
+  fs.rmSync(harness.tempDbDir, { recursive: true, force: true });
+}
+
+async function testExecuteActionBan() {
+  const harness = createHarness();
+  await harness.module.init();
+  await harness.module.start();
+  await seedPlayers(harness, [
+    { name: "BanTarget", steamId: "76561198000000041", eosId: "eos-41" },
+  ]);
+
+  const result = await harness.module.api.executeAction({
+    type: "ban_player",
+    serverId: SERVER_ID,
+    steamId: "76561198000000041",
+    banLength: "1M",
+    reason: "Attacking main base",
+    system: true,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.type, "ban_player");
+  assert.equal(result.action, "ban");
+  assert.match(result.command, /^AdminBan "76561198000000041" 1M 添加原因，Attacking main base，执行者:system，封禁时间1M，解封时间:\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}。$/);
+  assert.equal(harness.commandCalls.ban.length, 1);
+  assert.equal(harness.commandCalls.ban[0].target, "76561198000000041");
+  assert.equal(harness.commandCalls.ban[0].banLength, "1M");
+  assert.match(harness.commandCalls.ban[0].reason, /^添加原因，Attacking main base，执行者:system，封禁时间1M，解封时间:\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}。$/);
+  assert.equal(Boolean(latestModuleEvent(harness, "playerBanned")), true);
+
+  const records = await harness.module.api.getRecords({ kind: "ban", limit: 10 });
+  assert.equal(records.records.some((record) => record.kind === "ban"), true);
+  assert.equal(records.summary.banned >= 1, true);
 
   await harness.module.stop();
   fs.rmSync(harness.tempDbDir, { recursive: true, force: true });
@@ -425,6 +468,20 @@ async function testLegacyCompatibility() {
     reason: "legacy wrapper",
     system: true,
   });
+  const ban = await harness.module.api.ban({
+    serverId: SERVER_ID,
+    steamId: "76561198000000021",
+    banLength: "1d",
+    reason: "legacy ban",
+    system: true,
+  });
+  const legacyBan = await harness.legacyModules.squadBan.api.banPlayer({
+    serverId: SERVER_ID,
+    steamId: "76561198000000021",
+    banLength: "1d",
+    reason: "legacy wrapper",
+    system: true,
+  });
   const remove = await harness.module.api.requestRemoveFromSquad({
     serverId: SERVER_ID,
     steamId: "76561198000000022",
@@ -442,10 +499,13 @@ async function testLegacyCompatibility() {
   assert.equal(legacyDisband.ok, true);
   assert.equal(kick.ok, true);
   assert.equal(legacyKick.ok, true);
+  assert.equal(ban.ok, true);
+  assert.equal(legacyBan.ok, true);
   assert.equal(remove.ok, true);
   assert.equal(legacyRemove.ok, true);
   assert.equal(harness.commandCalls.disband.length >= 2, true);
   assert.equal(harness.commandCalls.kick.length >= 2, true);
+  assert.equal(harness.commandCalls.ban.length >= 2, true);
   assert.equal(harness.commandCalls.remove.length >= 2, true);
 
   await harness.module.stop();
@@ -488,6 +548,7 @@ async function main() {
   await testExecuteActionKick();
   await testExecuteActionKickAcceptsRconPermissionAlias();
   await testExecuteActionKickRequiresReason();
+  await testExecuteActionBan();
   await testExecuteActionRemoveFromSquad();
   await testLegacyCompatibility();
   await testDisbandRefreshRetry();

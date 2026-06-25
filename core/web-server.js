@@ -2978,6 +2978,24 @@ export class WebServer {
       }
     }
 
+    if (url.pathname === "/api/squad-ban/execute" && req.method === "POST") {
+      const body = await this.readJsonBody(req);
+      const api = this.modules.squadManagement;
+      if (!api?.executeAction) return this.json(res, 404, { error: "SquadManagementUnavailable" });
+      try {
+        const result = await api.executeAction({
+          ...body,
+          actor: user,
+          type: "ban_player",
+          source: body.source ?? "web.squadBan",
+          system: Boolean(body.system ?? false),
+        });
+        return this.json(res, result.ok ? 200 : 400, result);
+      } catch (err) {
+        return this.json(res, 500, { error: "InternalError", message: err.message });
+      }
+    }
+
     if (url.pathname === "/api/squad-remove/execute" && req.method === "POST") {
       const body = await this.readJsonBody(req);
       const api = this.modules.squadManagement;

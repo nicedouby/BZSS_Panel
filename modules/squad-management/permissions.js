@@ -25,3 +25,11 @@ export function canRemove(viewer, config = {}) {
     || hasPermission(permissions, config.removePermission || "squad.remove")
   );
 }
+
+export function canBan(viewer, config = {}) {
+  const permissions = viewer?.permissions ?? viewer?.permission;
+  return Boolean(
+    viewer?.isSuperAdmin
+    || hasPermission(permissions, config.banPermission || "squad.ban")
+  );
+}

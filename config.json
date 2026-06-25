@@ -909,7 +909,7 @@
     }
   },
   "warmup": {
-    "enabled": false
+    "enabled": true
   },
   "bzssCore": {
     "modifyScriptPath": "D:\\BZSS_Panel\\ModifySaveGame.py",

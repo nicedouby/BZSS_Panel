@@ -52,6 +52,7 @@ export async function handleSquadManagementRoutes({
         enforcementEnabled: Boolean(state.enforcementEnabled),
         disbandPermission: state.disbandPermission || "squad.disband",
         kickPermission: state.kickPermission || "squad.kick",
+        banPermission: state.banPermission || "squad.ban",
         kickThreshold: Number(state.kickThreshold ?? 10),
       },
     });
@@ -158,6 +159,38 @@ export async function handleSquadManagementRoutes({
     return true;
   }
 
+  if (url.pathname === "/api/squad-management/ban" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    const serverId = body.serverId ?? body.serverID ?? core.webStatus?.serverId ?? "";
+    if (!squadManagement?.executeAction) {
+      json(404, { error: "SquadManagementUnavailable" });
+      return true;
+    }
+    const result = await executeAudited(core, buildRemoveAuditContext(core, req, user, { ...body, type: "ban_player" }, serverId, "player"), ({ requestId }) => squadManagement.executeAction({
+      actor: user,
+      type: "ban_player",
+      serverId,
+      playerId: body.playerId ?? body.playerID ?? "",
+      playerKey: body.playerKey ?? body.anyId ?? body.playerId ?? body.playerID ?? "",
+      steamId: body.steamId ?? body.steamID ?? "",
+      eosId: body.eosId ?? body.eosID ?? "",
+      name: body.name ?? body.playerName ?? body.creatorName ?? "",
+      reason: body.reason ?? "",
+      banLength: body.banLength ?? body.length ?? body.duration ?? body.banTime ?? "",
+      source: body.source ?? "manual",
+      system: false,
+      operatorName: user?.username ?? "",
+      requestId,
+    }));
+
+    json(result.ok ? 200 : (result.error === "Forbidden" ? 403 : 400), {
+      ok: result.ok,
+      result,
+      state: result.state ?? squadManagement.getState(serverId),
+    });
+    return true;
+  }
+
   if (url.pathname === "/api/squad-management/remove" && req.method === "POST") {
     const body = await readJsonBody(req);
     const serverId = body.serverId ?? body.serverID ?? core.webStatus?.serverId ?? "";
@@ -196,6 +229,7 @@ function resolveActionPermission(body = {}, state = {}) {
   const type = String(body.type ?? body.action ?? body.kind ?? "").trim().toLowerCase();
   if (type === "disband_squad" || type === "disband") return state.disbandPermission || "squad.disband";
   if (type === "kick_player" || type === "kick") return state.kickPermission || "squad.kick";
+  if (type === "ban_player" || type === "ban") return state.banPermission || "squad.ban";
   if (type === "remove_from_squad" || type === "remove") return state.removePermission || "squad.remove";
   return "";
 }
@@ -209,7 +243,7 @@ async function executeAudited(core, context, executor) {
 
 function buildActionAuditContext(core, req, user, body = {}) {
   const type = String(body?.type ?? body?.kind ?? "").trim();
-  if (type === "remove_from_squad" || type === "kick_player") {
+  if (type === "remove_from_squad" || type === "kick_player" || type === "ban_player") {
     return buildRemoveAuditContext(core, req, user, body, body.serverId ?? body.serverID ?? core.webStatus?.serverId ?? "", "player");
   }
   if (type === "switch_team") {
@@ -243,7 +277,11 @@ function buildActionAuditContext(core, req, user, body = {}) {
 function buildRemoveAuditContext(core, req, user, body = {}, serverId = "", targetKind = "player") {
   const type = String(body?.type ?? "").trim();
   return {
-    action: type === "switch_team" ? "player.switch_team" : "player.remove_from_squad",
+    action: type === "switch_team"
+      ? "player.switch_team"
+      : type === "ban_player"
+        ? "player.ban"
+        : "player.remove_from_squad",
     category: "player_management",
     actor: user,
     request: req,
@@ -269,7 +307,7 @@ function buildRemoveAuditContext(core, req, user, body = {}, serverId = "", targ
 function squadResultResolver(payload) {
   if (payload?.ok) return "success";
   if (payload?.error === "Forbidden") return "forbidden";
-  if (payload?.error === "InvalidRequest" || payload?.error === "MissingTarget") return "invalid";
+  if (payload?.error === "InvalidRequest" || payload?.error === "MissingTarget" || payload?.error === "InvalidBanLength") return "invalid";
   return "failed";
 }
 
@@ -281,6 +319,7 @@ function buildViewer(core, user, state) {
     isSuperAdmin,
     canDisband: core.authManager?.hasPermission?.(user, state.disbandPermission || "squad.disband") ?? isSuperAdmin,
     canKick: core.authManager?.hasPermission?.(user, state.kickPermission || "squad.kick") ?? isSuperAdmin,
+    canBan: core.authManager?.hasPermission?.(user, state.banPermission || "squad.ban") ?? isSuperAdmin,
     canRemove: core.authManager?.hasPermission?.(user, state.removePermission || "squad.remove") ?? isSuperAdmin,
     canSwitch: core.authManager?.hasPermission?.(user, state.switchPermission ?? "squad.switch") ?? isSuperAdmin,
     permissions: user.permissions ?? [],

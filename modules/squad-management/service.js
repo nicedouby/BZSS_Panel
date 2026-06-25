@@ -13,7 +13,7 @@ import {
   canSendRconCommand,
   resolveRconPermission,
 } from "../../web-client/src/shared/rcon-permissions.js";
-import { canDisband, canKick, canRemove } from "./permissions.js";
+import { canBan, canDisband, canKick, canRemove } from "./permissions.js";
 
 const MODULE_ID = "module.squadManagement";
 const API_NAME = "squadManagement";
@@ -22,23 +22,27 @@ const SQUAD_ACTION_TYPES = {
   DISBAND_SQUAD: "disband_squad",
   KICK_PLAYER: "kick_player",
   REMOVE_FROM_SQUAD: "remove_from_squad",
+  BAN_PLAYER: "ban_player",
 };
 
 const ACTION_TYPE_TO_KIND = {
   [SQUAD_ACTION_TYPES.DISBAND_SQUAD]: "disband",
   [SQUAD_ACTION_TYPES.KICK_PLAYER]: "kick",
   [SQUAD_ACTION_TYPES.REMOVE_FROM_SQUAD]: "remove",
+  [SQUAD_ACTION_TYPES.BAN_PLAYER]: "ban",
 };
 
 const ACTION_KIND_TO_TYPE = {
   disband: SQUAD_ACTION_TYPES.DISBAND_SQUAD,
   kick: SQUAD_ACTION_TYPES.KICK_PLAYER,
   remove: SQUAD_ACTION_TYPES.REMOVE_FROM_SQUAD,
+  ban: SQUAD_ACTION_TYPES.BAN_PLAYER,
 };
 
 const DEFAULT_DISBAND_PERMISSION = "squad.disband";
 const DEFAULT_KICK_PERMISSION = "squad.kick";
 const DEFAULT_REMOVE_PERMISSION = "squad.remove";
+const DEFAULT_BAN_PERMISSION = "squad.ban";
 const DEFAULT_KICK_THRESHOLD = 10;
 const DEFAULT_MATCH_ID_PREFIX = "match";
 const MAX_RECENT_ACTIONS = 100;
@@ -56,6 +60,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
   const disbandPermission = String(moduleConfig.disbandPermission ?? DEFAULT_DISBAND_PERMISSION).trim() || DEFAULT_DISBAND_PERMISSION;
   const kickPermission = String(moduleConfig.kickPermission ?? DEFAULT_KICK_PERMISSION).trim() || DEFAULT_KICK_PERMISSION;
   const removePermission = String(moduleConfig.removePermission ?? DEFAULT_REMOVE_PERMISSION).trim() || DEFAULT_REMOVE_PERMISSION;
+  const banPermission = String(moduleConfig.banPermission ?? DEFAULT_BAN_PERMISSION).trim() || DEFAULT_BAN_PERMISSION;
   const switchPermission = String(moduleConfig.switchPermission ?? "squad.switch").trim() || "squad.switch";
   const kickThreshold = normalizePositiveInteger(moduleConfig.kickThreshold, DEFAULT_KICK_THRESHOLD);
   const allowedInfantryNames = Array.isArray(moduleConfig.allowedInfantryNames) ? moduleConfig.allowedInfantryNames : [];
@@ -88,6 +93,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
         disbandPermission: state.disbandPermission,
         kickPermission: state.kickPermission,
         removePermission: state.removePermission,
+        banPermission: state.banPermission,
         switchPermission,
         kickThreshold: state.kickThreshold,
         noBuildUntilSeconds: state.noBuildUntilSeconds,
@@ -182,6 +188,9 @@ export function createSquadManagementService({ core, modules, config, logger, re
         case SQUAD_ACTION_TYPES.REMOVE_FROM_SQUAD:
           result = await executeRemoveFromSquad(normalizedRequest);
           break;
+        case SQUAD_ACTION_TYPES.BAN_PLAYER:
+          result = await executeBan(normalizedRequest);
+          break;
         default:
           result = buildInvalidActionResult("action", "UnsupportedActionType", `Unsupported action type: ${type}`, {
             serverId,
@@ -250,6 +259,13 @@ export function createSquadManagementService({ core, modules, config, logger, re
       });
     },
 
+    async requestBan(request = {}) {
+      return api.executeAction({
+        ...request,
+        type: SQUAD_ACTION_TYPES.BAN_PLAYER,
+      });
+    },
+
     async recordAction(entry = {}) {
       return persistActionRecord(entry);
     },
@@ -264,6 +280,10 @@ export function createSquadManagementService({ core, modules, config, logger, re
 
     async removeFromSquad(request = {}) {
       return api.requestRemoveFromSquad(request);
+    },
+
+    async ban(request = {}) {
+      return api.requestBan(request);
     },
 
     async refresh(serverId = getDefaultServerId()) {
@@ -913,8 +933,19 @@ export function createSquadManagementService({ core, modules, config, logger, re
     }
 
     const targetId = target.steamId || target.eosId || target.name || target.playerId || requestedPlayer.playerKey;
-    const command = `AdminKick "${escapeCommandString(targetId)}" ${escapeCommandString(reason)}`.trim();
-    const commandResult = await executeKickCommand({ command, serverId, target, reason, source, operatorName, system, actor });
+    const visibleReason = buildKickVisibleReason({ reason, operatorName });
+    const command = `AdminKick "${escapeCommandString(targetId)}" ${escapeCommandString(visibleReason)}`.trim();
+    const commandResult = await executeKickCommand({
+      command,
+      serverId,
+      target,
+      reason,
+      visibleReason,
+      source,
+      operatorName,
+      system,
+      actor,
+    });
 
     const record = await persistActionRecord({
       kind: "kick",
@@ -1089,6 +1120,143 @@ export function createSquadManagementService({ core, modules, config, logger, re
       rconResponse: commandResult.response,
       error: commandResult.error,
       message: commandResult.ok ? "Player removed from squad." : commandResult.error,
+      record,
+      state: buildStateSnapshot(serverId),
+    };
+  }
+
+  async function executeBan(request = {}) {
+    const serverId = normalizeServerId(request.serverId);
+    const reason = normalizeText(request.reason);
+    const source = normalizeText(request.source) || "manual";
+    const operatorName = normalizeText(request.operatorName ?? request.actor?.username ?? request.actor?.name);
+    const system = Boolean(request.system);
+    const actor = request.actor ?? request.viewer ?? null;
+    const requestedPlayer = resolveRequestedPlayer(request);
+    const banLength = normalizeBanLength(request.banLength ?? request.length ?? request.duration ?? request.banTime ?? "");
+
+    if (!serverId) {
+      return buildInvalidActionResult("ban", "InvalidServerId", "serverId is required.", { serverId, reason, source, system });
+    }
+    if (!banLength) {
+      return recordFailedAction({
+        kind: "ban",
+        serverId,
+        matchId: getCurrentMatchId(serverId),
+        source,
+        operatorName,
+        system,
+        reason,
+        error: "InvalidBanLength",
+        message: "A ban length is required.",
+      });
+    }
+    if (!requestedPlayer.playerKey && !requestedPlayer.playerId && !requestedPlayer.steamId && !requestedPlayer.eosId && !requestedPlayer.name) {
+      return recordFailedAction({
+        kind: "ban",
+        serverId,
+        matchId: getCurrentMatchId(serverId),
+        source,
+        operatorName,
+        system,
+        reason,
+        error: "InvalidTarget",
+        message: "A ban target is required.",
+      });
+    }
+
+    const state = buildStateSnapshot(serverId);
+    const target = resolvePlayerTarget(state, requestedPlayer) ?? {
+      playerId: requestedPlayer.playerId ?? null,
+      name: requestedPlayer.name ?? "",
+      steamId: requestedPlayer.steamId ?? "",
+      eosId: requestedPlayer.eosId ?? "",
+      playerKey: requestedPlayer.playerKey ?? "",
+    };
+    const resolvedTarget = target;
+
+    if (!system && !canBan(actor, { banPermission })) {
+      return recordFailedAction({
+        kind: "ban",
+        serverId,
+        matchId: state.matchId,
+        source,
+        operatorName,
+        system,
+        reason,
+        error: "Forbidden",
+        message: `Permission '${banPermission}' is required.`,
+        target: resolvedTarget,
+      });
+    }
+
+    const targetId = resolvedTarget.steamId || resolvedTarget.eosId || resolvedTarget.name || resolvedTarget.playerId || requestedPlayer.playerKey;
+    const visibleReason = buildBanVisibleReason({ reason, operatorName, banLength });
+    const command = `AdminBan "${escapeCommandString(targetId)}" ${escapeCommandString(banLength)} ${escapeCommandString(visibleReason)}`.trim();
+    const commandResult = await executeBanCommand({
+      command,
+      serverId,
+      target: resolvedTarget,
+      reason,
+      visibleReason,
+      source,
+      operatorName,
+      system,
+      actor,
+      banLength,
+    });
+
+    const record = await persistActionRecord({
+      kind: "ban",
+      serverId,
+      matchId: state.matchId,
+      source,
+      operatorName,
+      system,
+      playerName: resolvedTarget.name,
+      playerKey: resolvedTarget.playerKey,
+      steamId: resolvedTarget.steamId,
+      eosId: resolvedTarget.eosId,
+      reason: `${banLength}${reason ? ` ${reason}` : ""}`,
+      result: commandResult.ok ? "success" : "failed",
+      error: commandResult.ok ? "" : commandResult.error,
+      command,
+      payload: {
+        request,
+        target: resolvedTarget,
+        banLength,
+        commandResult,
+        visibleReason,
+      },
+      ok: commandResult.ok,
+      response: commandResult.response,
+      action: "ban",
+    });
+
+    core.eventBus?.emitModuleEvent?.(MODULE_ID, "playerBanned", {
+      serverId,
+      matchId: state.matchId,
+      playerId: resolvedTarget.playerId,
+      steamId: resolvedTarget.steamId,
+      eosId: resolvedTarget.eosId,
+      name: resolvedTarget.name,
+      reason,
+      banLength,
+      source,
+      operatorName,
+      system,
+    });
+
+    return {
+      ok: commandResult.ok,
+      type: SQUAD_ACTION_TYPES.BAN_PLAYER,
+      action: "ban",
+      serverId,
+      command,
+      rconExecuted: commandResult.executed,
+      rconResponse: commandResult.response,
+      error: commandResult.error,
+      message: commandResult.ok ? "Player banned." : commandResult.error,
       record,
       state: buildStateSnapshot(serverId),
     };
@@ -1349,6 +1517,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
       disbandPermission,
       kickPermission,
       removePermission,
+      banPermission,
       switchPermission,
       kickThreshold,
       noBuildUntilSeconds: normalizePositiveInteger(moduleConfig.noBuildUntilSeconds, 0),
@@ -1416,13 +1585,13 @@ export function createSquadManagementService({ core, modules, config, logger, re
     }
   }
 
-  async function executeKickCommand({ command, serverId, target, reason, source, operatorName, system, actor }) {
+  async function executeKickCommand({ command, serverId, target, reason, visibleReason, source, operatorName, system, actor }) {
     try {
       const response = await runRconCommand({
         command,
         serverId,
         target,
-        reason,
+        reason: visibleReason ?? reason,
         source,
         operatorName,
         system,
@@ -1470,6 +1639,36 @@ export function createSquadManagementService({ core, modules, config, logger, re
     }
   }
 
+  async function executeBanCommand({ command, serverId, target, reason, visibleReason, source, operatorName, system, actor, banLength }) {
+    try {
+      const response = await runRconCommand({
+        command,
+        serverId,
+        target: {
+          ...(target ?? {}),
+          banLength,
+        },
+        reason: visibleReason ?? reason,
+        source,
+        operatorName,
+        system,
+        actor,
+      }, "ban");
+      return {
+        ok: true,
+        executed: true,
+        response,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        executed: false,
+        response: "",
+        error: String(error?.message ?? error),
+      };
+    }
+  }
+
   async function runRconCommand(meta, action) {
     const requiredPermission = resolveRconPermission(meta.command, meta);
     if (!meta.system && !canSendRconCommand(meta.actor, meta.command, { requiredPermission })) {
@@ -1482,11 +1681,17 @@ export function createSquadManagementService({ core, modules, config, logger, re
       }
     }
 
-    if (action === "kick" || action === "remove") {
+    if (action === "kick" || action === "remove" || action === "ban") {
       if (action === "kick") {
         const target = resolveRconPlayerTarget(meta.target);
         if (typeof core.squadRcon?.kick === "function") {
           return await core.squadRcon.kick(target, meta.reason ?? "");
+        }
+      } else if (action === "ban") {
+        const target = resolveRconPlayerTarget(meta.target);
+        const banLength = normalizeBanLength(meta.target?.banLength ?? "");
+        if (typeof core.squadRcon?.ban === "function") {
+          return await core.squadRcon.ban(target, banLength || "0", meta.reason ?? "");
         }
       } else {
         const target = resolveRconRemoveTarget(meta.target);
@@ -1583,8 +1788,9 @@ export function createSquadManagementService({ core, modules, config, logger, re
     if (record.kind === "disband") cache.recordsSummary.disbanded += 1;
     if (record.kind === "kick") cache.recordsSummary.kicked += 1;
     if (record.kind === "remove") cache.recordsSummary.removed += 1;
+    if (record.kind === "ban") cache.recordsSummary.banned += 1;
     if (record.kind === "switch_team") cache.recordsSummary.switched += 1;
-    if (record.kind === "disband" || record.kind === "kick" || record.kind === "remove" || record.kind === "switch_team") cache.recordsSummary.actions += 1;
+    if (record.kind === "disband" || record.kind === "kick" || record.kind === "remove" || record.kind === "ban" || record.kind === "switch_team") cache.recordsSummary.actions += 1;
     if (record.result === "success") cache.recordsSummary.success += 1;
     if (record.result && record.result !== "success") cache.recordsSummary.failed += 1;
     cache.recordsSummary.lastEventAt = record.time || cache.recordsSummary.lastEventAt || "";
@@ -1630,6 +1836,8 @@ export function createSquadManagementService({ core, modules, config, logger, re
       created: 0,
       disbanded: 0,
       kicked: 0,
+      removed: 0,
+      banned: 0,
       switched: 0,
       actions: 0,
       success: 0,
@@ -2192,6 +2400,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
     const kind = normalizeText(value).toLowerCase();
     if (kind === "created" || kind === "squad_created") return "squad_created";
     if (kind === "remove") return "remove";
+    if (kind === "ban") return "ban";
     if (kind === "switch" || kind === "switch_team" || kind === "team_balance") return "switch_team";
     if (kind === "disband" || kind === "kick" || kind === "action" || kind === "all") return kind;
     return "all";
@@ -2202,6 +2411,88 @@ export function createSquadManagementService({ core, modules, config, logger, re
     if (type in ACTION_TYPE_TO_KIND) return type;
     if (type in ACTION_KIND_TO_TYPE) return ACTION_KIND_TO_TYPE[type];
     return "";
+  }
+
+  function normalizeBanLength(value) {
+    const text = normalizeText(value);
+    if (!text) return "";
+    if (/^\d+$/.test(text)) return text;
+    if (/^\d+[dwmy]$/i.test(text)) return text;
+    return text;
+  }
+
+  function buildKickVisibleReason({ reason, operatorName } = {}) {
+    const safeReason = normalizeText(reason) || "未填写";
+    return `你已被管理员踢出，原因:${safeReason}，执行者：${normalizeOperatorName(operatorName)}。`;
+  }
+
+  function buildBanVisibleReason({ reason, operatorName, banLength } = {}) {
+    const safeReason = normalizeText(reason) || "Banned by admin";
+    const banWindow = describeBanWindow(banLength);
+    const parts = [
+      `添加原因，${safeReason}`,
+      `执行者:${normalizeOperatorName(operatorName)}`,
+      `封禁时间${banWindow.durationLabel}`,
+      `解封时间:${banWindow.unbanLabel}`,
+    ];
+    return `${parts.join("，")}。`;
+  }
+
+  function normalizeOperatorName(operatorName) {
+    return normalizeText(operatorName) || "system";
+  }
+
+  function describeBanWindow(banLength, nowMs = Date.now()) {
+    const text = normalizeBanLength(banLength);
+    const durationMs = parseBanLengthToMs(text);
+    if (durationMs === 0) {
+      return {
+        durationLabel: "永久",
+        unbanLabel: "永久",
+      };
+    }
+    if (!Number.isFinite(durationMs) || durationMs < 0) {
+      return {
+        durationLabel: text || "未知",
+        unbanLabel: "未知",
+      };
+    }
+    return {
+      durationLabel: text,
+      unbanLabel: formatLocalDateTime(nowMs + durationMs),
+    };
+  }
+
+  function parseBanLengthToMs(value) {
+    const text = normalizeText(value);
+    if (!text) return null;
+    const match = text.match(/^(\d+)([dwmy]?)$/i);
+    if (!match) return null;
+    const amount = Number(match[1]);
+    if (!Number.isFinite(amount)) return null;
+    const unit = match[2].toLowerCase();
+    if (amount === 0) return 0;
+    if (!unit) return amount * 60 * 1000;
+    if (unit === "d") return amount * 24 * 60 * 60 * 1000;
+    if (unit === "w") return amount * 7 * 24 * 60 * 60 * 1000;
+    if (unit === "m") return amount * 30 * 24 * 60 * 60 * 1000;
+    if (unit === "y") return amount * 365 * 24 * 60 * 60 * 1000;
+    return null;
+  }
+
+  function formatLocalDateTime(valueMs) {
+    const date = new Date(valueMs);
+    if (!Number.isFinite(date.getTime())) return "未知";
+    const pad = (value) => String(value).padStart(2, "0");
+    return [
+      date.getFullYear(),
+      pad(date.getMonth() + 1),
+      pad(date.getDate()),
+    ].join("-") + " " + [
+      pad(date.getHours()),
+      pad(date.getMinutes()),
+      pad(date.getSeconds()),
+    ].join(":");
   }
 
   function buildInvalidActionResult(action, error, message, details = {}) {

@@ -5,6 +5,7 @@ const COMMAND_PERMISSION_ALIASES = new Map([
   ["adminbroadcast", "rcon.broadcast"],
   ["adminwarn", "rcon.warn"],
   ["adminkick", "rcon.kick"],
+  ["adminban", "rcon.ban"],
   ["adminforceteamchange", "rcon.tb"],
   ["admindisbandsquad", "rcon.disband"],
   ["adminkickfromsquad", "rcon.remove"],
@@ -14,6 +15,7 @@ const COMMAND_PERMISSION_ALIASES = new Map([
 const PERMISSION_ALIASES = new Map([
   ["squad.switch", ["rcon.tb"]],
   ["squad.kick", ["rcon.kick"]],
+  ["squad.ban", ["rcon.ban"]],
   ["squad.remove", ["rcon.remove"]],
   ["squad.disband", ["rcon.disband"]],
   ["warning.send", ["rcon.warn"]],
@@ -25,6 +27,7 @@ export const ALLOWED_MANUAL_RCON_PERMISSIONS = Object.freeze([
   "rcon.warn",
   "rcon.broadcast",
   "rcon.kick",
+  "rcon.ban",
   "rcon.disband",
   "rcon.remove",
   "rcon.settickets",
