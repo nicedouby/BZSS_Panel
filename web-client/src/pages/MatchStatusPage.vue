@@ -2360,7 +2360,6 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 @media (max-width: 980px) {
   .ticket-control-grid,
   .ticket-editor-form,
-  .shuffle-plan-stats,
   .battle-log-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

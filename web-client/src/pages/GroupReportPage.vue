@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <section class="group-report-page">
         <h1 class="sr-only">报告</h1>
 
@@ -49,7 +49,6 @@
                 <button type="button" @click.stop="renameGroup(group)">改名</button>
                 <button type="button" @click.stop="editGroupNote(group)">备注</button>
                 <button type="button" @click.stop="editGroupColor(group)">颜色</button>
-                <button type="button" @click.stop="chooseAnchor(group)">锚定人</button>
                 <button type="button" @click.stop="clearMembers(group)">清空成员</button>
                 <button type="button" class="danger" @click.stop="deleteGroup(group)">删除</button>
               </div>
@@ -137,6 +136,30 @@
         </div>
       </aside>
     </div>
+
+    <!-- Local Prompt Modal -->
+    <Teleport to="body">
+      <div v-if="promptState.visible" class="dialog-root" @click.self="cancelPrompt">
+        <section class="dialog-panel">
+          <header class="dialog-head">
+            <h3>{{ promptState.title }}</h3>
+          </header>
+          <div class="dialog-body" style="margin-top: 16px;">
+            <input 
+              v-model="promptState.value" 
+              :type="promptState.type || 'text'" 
+              class="search-input" 
+              style="width: 100%; box-sizing: border-box;" 
+              @keydown.enter="confirmPrompt"
+            >
+          </div>
+          <footer class="dialog-actions" style="margin-top: 16px;">
+            <button type="button" @click="cancelPrompt">取消</button>
+            <button type="button" class="primary" @click="confirmPrompt">确定</button>
+          </footer>
+        </section>
+      </div>
+    </Teleport>
   </section>
 </template>
 
@@ -146,6 +169,41 @@ import { apiGet } from "../app/apiClient";
 import { groupReportApi, type GroupReportGroup, type GroupReportMember, type GroupReportSnapshot } from "../features/group-report/groupReport.api";
 import { searchPlayers, type SearchablePlayer } from "../features/group-report/playerSearch";
 import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
+import { useUiStore } from "../stores/ui.store";
+
+const ui = useUiStore();
+
+const promptState = ref({
+  visible: false,
+  title: "",
+  value: "",
+  type: "text",
+  resolve: null as ((val: string | null) => void) | null,
+});
+
+function openLocalPrompt(title: string, defaultValue: string = "", type: "text" | "color" = "text") {
+  promptState.value.title = title;
+  promptState.value.value = defaultValue;
+  promptState.value.type = type;
+  promptState.value.visible = true;
+  return new Promise<string | null>((resolve) => {
+    promptState.value.resolve = resolve;
+  });
+}
+
+function confirmPrompt() {
+  const { resolve, value } = promptState.value;
+  promptState.value.visible = false;
+  promptState.value.resolve = null;
+  if (resolve) resolve(value);
+}
+
+function cancelPrompt() {
+  const { resolve } = promptState.value;
+  promptState.value.visible = false;
+  promptState.value.resolve = null;
+  if (resolve) resolve(null);
+}
 
 const groups = ref<GroupReportGroup[]>([]);
 const players = ref<SearchablePlayer[]>([]);
@@ -265,7 +323,7 @@ async function createGroup() {
 }
 
 async function renameGroup(group: GroupReportGroup) {
-  const nextName = window.prompt("新的抱团名称：", group.name);
+  const nextName = await openLocalPrompt("新的抱团名称：", group.name);
   if (nextName === null) return;
 
   try {
@@ -280,7 +338,7 @@ async function renameGroup(group: GroupReportGroup) {
 }
 
 async function editGroupNote(group: GroupReportGroup) {
-  const nextNote = window.prompt("抱团备注：", group.note ?? "");
+  const nextNote = await openLocalPrompt("抱团备注：", group.note ?? "");
   if (nextNote === null) return;
 
   try {
@@ -295,7 +353,7 @@ async function editGroupNote(group: GroupReportGroup) {
 }
 
 async function editGroupColor(group: GroupReportGroup) {
-  const nextColor = window.prompt("抱团颜色（#RRGGBB）：", group.color ?? "#60A5FA");
+  const nextColor = await openLocalPrompt("抱团颜色：", group.color ?? "#60A5FA", "color");
   if (nextColor === null) return;
   try {
     const updated = await groupReportApi.updateGroup(group.id, {
@@ -308,17 +366,6 @@ async function editGroupColor(group: GroupReportGroup) {
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   }
-}
-
-async function chooseAnchor(group: GroupReportGroup) {
-  if (!group.members.length) return;
-  const candidates = group.members.map((member, index) => `${index + 1}. ${member.name}`).join("\n");
-  const picked = window.prompt(`输入锚定人成员序号：\n${candidates}`, "1");
-  if (picked === null) return;
-  const index = Number.parseInt(String(picked), 10) - 1;
-  const member = group.members[index];
-  if (!member) return;
-  await setAnchor(group, member);
 }
 
 async function setAnchor(group: GroupReportGroup, member: GroupReportMember) {
@@ -336,7 +383,13 @@ async function setAnchor(group: GroupReportGroup, member: GroupReportMember) {
 }
 
 async function deleteGroup(group: GroupReportGroup) {
-  if (!window.confirm(`确定删除抱团「${group.name}」吗？`)) return;
+  const confirmed = await ui.openConfirm({
+    title: "删除抱团",
+    message: `确定删除抱团「${group.name}」吗？`,
+    confirmText: "删除",
+    tone: "error",
+  });
+  if (!confirmed) return;
 
   try {
     await groupReportApi.deleteGroup(group.id);
@@ -350,7 +403,13 @@ async function deleteGroup(group: GroupReportGroup) {
 }
 
 async function clearMembers(group: GroupReportGroup) {
-  if (!window.confirm(`确定清空抱团「${group.name}」的全部成员吗？`)) return;
+  const confirmed = await ui.openConfirm({
+    title: "清空成员",
+    message: `确定清空抱团「${group.name}」的全部成员吗？`,
+    confirmText: "清空",
+    tone: "warn",
+  });
+  if (!confirmed) return;
 
   try {
     const updated = await groupReportApi.clearGroupMembers(group.id);
@@ -361,7 +420,13 @@ async function clearMembers(group: GroupReportGroup) {
 }
 
 async function clearAllGroups() {
-  if (!window.confirm("确定一键删除全部抱团容器吗？此操作无法撤销。")) return;
+  const confirmed = await ui.openConfirm({
+    title: "一键删除全部抱团",
+    message: "确定一键删除全部抱团容器吗？此操作无法撤销。",
+    confirmText: "全部删除",
+    tone: "error",
+  });
+  if (!confirmed) return;
 
   try {
     await groupReportApi.deleteAllGroups();
@@ -392,7 +457,7 @@ async function addPlayer(player: SearchablePlayer) {
 }
 
 async function editMemberNote(group: GroupReportGroup, member: GroupReportMember) {
-  const nextNote = window.prompt("成员备注：", member.note ?? "");
+  const nextNote = await openLocalPrompt("成员备注：", member.note ?? "");
   if (nextNote === null) return;
 
   try {
@@ -927,6 +992,44 @@ button.danger:hover:not(:disabled) {
   .group-list {
     grid-template-columns: 1fr;
   }
+}
+
+/* Prompt Modal Styles */
+.dialog-root {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-confirm-dialog, 100);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--theme-overlay-scrim);
+  backdrop-filter: blur(4px);
+}
+
+.dialog-panel {
+  width: min(400px, 100%);
+  border: 1px solid var(--color-border-default);
+  border-radius: 14px;
+  background: var(--theme-panel-highlight), var(--color-bg-card);
+  padding: 20px;
+  box-shadow: var(--shadow-lg), var(--theme-panel-glow);
+}
+
+.dialog-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.dialog-actions button.primary {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border-color: rgba(59, 130, 246, 0.4);
 }
 </style>
 

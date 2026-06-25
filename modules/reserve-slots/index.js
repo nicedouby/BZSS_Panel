@@ -717,21 +717,19 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
     const targetName = String(result?.playerName ?? "").trim();
     const targetSteamId = String(result?.steamId ?? "").trim();
     const message = String(result?.message ?? "").trim();
-    if (!targetName || !targetSteamId || !message || typeof modules?.adminWarn?.warnPlayer !== "function") {
+    if (!targetName || !targetSteamId || !message || typeof modules?.adminWarn?.broadcastMessage !== "function") {
       return;
     }
 
     try {
-      await modules.adminWarn.warnPlayer({
-        targetName,
-        targetSteamId,
-        message,
-        reason: "reserve_slots_query",
+      await modules.adminWarn.broadcastMessage({
+        message: `[预留位查询] 玩家 ${targetName} (${targetSteamId})：${message}`,
+        reason: "reserve_slots_query_broadcast",
         sourceModule: MODULE_ID,
         system: true,
       });
     } catch (error) {
-      moduleLogger?.warn?.(`[ReserveSlots] failed to send reserve slot query notice: ${error?.message ?? error}`);
+      moduleLogger?.warn?.(`[ReserveSlots] failed to broadcast reserve slot query notice: ${error?.message ?? error}`);
     }
   }
 
