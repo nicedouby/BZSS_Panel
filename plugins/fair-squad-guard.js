@@ -6,6 +6,7 @@ import {
   SQUAD_RULE_CHAIN_MODULE_ID,
   SQUAD_RULE_SOURCES,
   TIERED_SQUAD_TIME_PASSED_EVENT,
+  emitFinalSquadRulePassed,
   emitSquadRuleViolation,
 } from "../modules/squad-rule-chain/events.js";
 
@@ -411,17 +412,21 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     if (!decision.approved) {
       await applyViolationActions(record);
     } else {
-      if (shouldBroadcastApproved(record)) {
-        const broadcastResult = await broadcastApproved(record);
-        const ok = broadcastResult?.success !== false;
-        record.actions.push({
-          type: ok ? "broadcasted" : "broadcast_failed",
-          result: summarizeActionResult(broadcastResult),
-        });
-        if (ok) {
-          state.summary.broadcasts = (state.summary.broadcasts || 0) + 1;
-        }
-      }
+      emitFinalSquadRulePassed(core, {
+        serverId: record.serverId,
+        matchId: record.matchId,
+        teamId: record.teamId,
+        squadId: record.squadId,
+        squadName: record.squadName,
+        squadType: "fair_squad_creation",
+        leaderSteamId: record.creatorSteamId,
+        leaderName: record.creatorName,
+        leaderEosId: record.creatorEosId,
+        createdAt: record.createdAt,
+        createdAtMs: record.createdAtMs,
+        sourceEventId: record.id,
+      });
+      record.actions.push({ type: "final_pass_emitted" });
     }
 
     rememberRecord(record);
@@ -554,26 +559,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     }).catch((error) => ({ success: false, error: error?.message ?? String(error) }));
   }
 
-  function shouldBroadcastApproved(record) {
-    if (!runtimeConfig.broadcastOnApproved) return false;
-    return !record.actions.some((action) => action.type === "broadcasted" || action.type === "broadcast_failed");
-  }
-
   function shouldBroadcastViolation(record) {
     if (!runtimeConfig.broadcastOnViolation) return false;
     return !record.actions.some((action) => action.type === "broadcasted_violation" || action.type === "broadcast_violation_failed");
-  }
-
-  function buildApprovedBroadcastMessage(record) {
-    const creator = record.creatorName || "未知玩家";
-    const squadName = record.squadName || `Squad ${record.squadId ?? "?"}`;
-    const phase = record.phase;
-    if (phase === "infantry_only") {
-      return `${creator} 建立小队 ${squadName}，判定通过（在开局仅步兵队阶段）。`;
-    } else if (phase === "open") {
-      return `${creator} 建立小队 ${squadName}，判定通过（在开放建队阶段）。`;
-    }
-    return `${creator} 建立小队 ${squadName}，判定通过（在公平建队阶段）。`;
   }
 
   function buildViolationBroadcastMessage(record) {
@@ -586,22 +574,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       return `违规建队已拦截：${creator} 创建的 ${squadName} 处于开局仅步兵队阶段，已按规则解散。`;
     }
     return `违规建队已拦截：${creator} 创建的 ${squadName} 违反公平建队规则，已按规则解散。`;
-  }
-
-  async function broadcastApproved(record) {
-    const sender = getBroadcastSender();
-    if (typeof sender !== "function") {
-      return { success: false, skipped: true, skipReason: "admin_warn_unavailable" };
-    }
-
-    const message = buildApprovedBroadcastMessage(record);
-    return await sender.call(modules.adminWarn, {
-      message,
-      reason: "fair_squad_guard_approved_broadcast",
-      sourceModule: PLUGIN_ID,
-      relatedEventId: record.id,
-      system: true,
-    }).catch((error) => ({ success: false, error: error?.message ?? String(error) }));
   }
 
   async function broadcastViolation(record) {
@@ -998,7 +970,7 @@ function readConfig(config) {
     disbandCommandNameSuffix: normalizeText(raw.disbandCommandNameSuffix ?? DEFAULT_DISBAND_COMMAND_NAME_SUFFIX),
     allowedInfantryNames: parseListText(raw.allowedInfantryNamesText ?? raw.allowedInfantryNames),
     allowedInfantryPatterns: parseListText(raw.allowedInfantryPatternsText ?? raw.allowedInfantryNamePatterns),
-    broadcastOnApproved: raw.broadcastOnApproved !== false,
+    broadcastOnApproved: raw.broadcastOnApproved === true,
     broadcastOnViolation: raw.broadcastOnViolation !== false,
   };
 }

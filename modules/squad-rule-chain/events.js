@@ -4,6 +4,7 @@ export const SQUAD_RULE_CHAIN_MODULE_ID = "module.squadRuleChain";
 
 export const SQUAD_NAME_RULE_PASSED_EVENT = "squadNameRulePassed";
 export const TIERED_SQUAD_TIME_PASSED_EVENT = "tieredSquadTimePassed";
+export const FINAL_SQUAD_RULE_PASSED_EVENT = "finalSquadRulePassed";
 export const SQUAD_RULE_VIOLATION_EVENT = "squadRuleViolation";
 
 export const SQUAD_RULE_SOURCES = Object.freeze({
@@ -24,6 +25,14 @@ export function emitTieredSquadTimePassed(core, event = {}) {
   core?.eventBus?.emitModuleEvent?.(
     SQUAD_RULE_CHAIN_MODULE_ID,
     TIERED_SQUAD_TIME_PASSED_EVENT,
+    normalizeRuleChainPassEvent(event),
+  );
+}
+
+export function emitFinalSquadRulePassed(core, event = {}) {
+  core?.eventBus?.emitModuleEvent?.(
+    SQUAD_RULE_CHAIN_MODULE_ID,
+    FINAL_SQUAD_RULE_PASSED_EVENT,
     normalizeRuleChainPassEvent(event),
   );
 }

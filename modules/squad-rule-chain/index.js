@@ -1,14 +1,23 @@
 // -*- coding: utf-8 -*-
 
+import fs from "node:fs/promises";
+import path from "node:path";
+
 import {
+  FINAL_SQUAD_RULE_PASSED_EVENT,
   SQUAD_RULE_CHAIN_MODULE_ID,
   SQUAD_RULE_SOURCES,
+  TIERED_SQUAD_TIME_PASSED_EVENT,
   SQUAD_RULE_VIOLATION_EVENT,
+  normalizeRuleChainPassEvent,
   normalizeSquadRuleViolationEvent,
 } from "./events.js";
 
 const API_NAME = "squadRuleChain";
 const DEFAULT_RECENT_LIMIT = 200;
+const DEFAULT_FINAL_PASS_FALLBACK_DELAY_MS = 1500;
+const DEFAULT_DATA_DIR = "./data/squad-rule-chain";
+const FINAL_PASS_CACHE_FILE = "final-pass-cache.json";
 
 export function createSquadRuleChainModule({ core, modules, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
@@ -19,6 +28,16 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
 
   const unsubscribers = [];
   const recent = [];
+  const finalPassRecords = [];
+  const finalPassByPlayer = new Map();
+  const finalPassSeenKeys = new Set();
+  const pendingFinalPassTimers = new Map();
+  const dataDir = path.resolve(process.cwd(), readRuntimeConfig().directory);
+  let loadedFinalPassCache = null;
+  let activeFinalPassCacheKey = "";
+  let activeFinalPassMatchAliases = [];
+  let finalPassCacheWrite = Promise.resolve();
+  let nextCreationOrderCode = 1;
   const stats = {
     handled: 0,
     warned: 0,
@@ -30,8 +49,16 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
 
   const api = {
     getState() {
+      maybeRestoreFinalPassCacheForCurrentMatch();
       return {
         recent: recent.slice().reverse(),
+        finalPassRecords: finalPassRecords.slice().reverse(),
+        finalPassCache: {
+          cacheKey: activeFinalPassCacheKey,
+          matchAliases: activeFinalPassMatchAliases.slice(),
+          loaded: Boolean(activeFinalPassCacheKey),
+          filePath: finalPassCachePath(),
+        },
         stats: { ...stats },
       };
     },
@@ -49,6 +76,11 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
     apiName: API_NAME,
     api,
 
+    async init() {
+      await loadFinalPassCache();
+      maybeRestoreFinalPassCacheForCurrentMatch();
+    },
+
     async start() {
       if (typeof core?.eventBus?.onModuleEvent === "function") {
         unsubscribers.push(
@@ -58,18 +90,38 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
             (event) => void handleViolation(event),
           ),
         );
+        unsubscribers.push(
+          core.eventBus.onModuleEvent(
+            SQUAD_RULE_CHAIN_MODULE_ID,
+            FINAL_SQUAD_RULE_PASSED_EVENT,
+            (event) => void handleFinalPass(event),
+          ),
+        );
+        unsubscribers.push(
+          core.eventBus.onModuleEvent(
+            SQUAD_RULE_CHAIN_MODULE_ID,
+            TIERED_SQUAD_TIME_PASSED_EVENT,
+            (event) => scheduleFinalPassFallback(event),
+          ),
+        );
       }
     },
 
     async stop() {
+      for (const timer of pendingFinalPassTimers.values()) {
+        clearTimeout(timer);
+      }
+      pendingFinalPassTimers.clear();
       for (const unsubscribe of unsubscribers.splice(0)) {
         try { unsubscribe(); } catch {}
       }
+      await finalPassCacheWrite.catch(() => {});
     },
   };
 
   async function handleViolation(input = {}) {
     const event = normalizeSquadRuleViolationEvent(input);
+    cancelFinalPassFallback(event);
     const record = {
       id: `${SQUAD_RULE_CHAIN_MODULE_ID}:${Date.now()}:${Math.random().toString(16).slice(2)}`,
       createdAt: nowIso(),
@@ -127,6 +179,199 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
     }
 
     remember(recent, record, recentLimit());
+  }
+
+  async function handleFinalPass(input = {}) {
+    const event = normalizeRuleChainPassEvent(input);
+    ensureFinalPassCacheForEvent(event);
+    cancelFinalPassFallback(event);
+    const seenKey = buildFinalPassEventKey(event);
+    if (seenKey && finalPassSeenKeys.has(seenKey)) return;
+    if (seenKey) finalPassSeenKeys.add(seenKey);
+
+    const record = {
+      id: `${SQUAD_RULE_CHAIN_MODULE_ID}:final:${Date.now()}:${Math.random().toString(16).slice(2)}`,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+      event,
+      creationOrderCode: takeNextCreationOrderCode(),
+      actions: [],
+      status: "handling",
+    };
+
+    const playerKey = buildPlayerKey(event);
+    if (playerKey) {
+      const previousId = finalPassByPlayer.get(playerKey);
+      if (previousId) {
+        removeFinalPassRecord(previousId);
+        record.replacedRecordId = previousId;
+      }
+      finalPassByPlayer.set(playerKey, record.id);
+    }
+
+    try {
+      const broadcastResult = await broadcastFinalPass(record);
+      record.actions.push({
+        type: broadcastResult?.success === false ? "broadcast_failed" : "broadcasted",
+        result: summarizeActionResult(broadcastResult),
+      });
+      if (broadcastResult?.success !== false) stats.broadcasts += 1;
+      record.status = broadcastResult?.success === false ? "broadcast_failed" : "handled";
+      record.updatedAt = nowIso();
+    } catch (error) {
+      stats.errors += 1;
+      record.status = "error";
+      record.error = error instanceof Error ? error.message : String(error);
+      record.updatedAt = nowIso();
+      moduleLogger?.warn?.(`[SquadRuleChain] failed to handle final pass: ${record.error}`);
+    }
+
+    remember(finalPassRecords, record, recentLimit());
+    persistFinalPassCacheLater();
+  }
+
+  function scheduleFinalPassFallback(input = {}) {
+    const event = normalizeRuleChainPassEvent(input);
+    const key = buildFinalPassEventKey(event);
+    if (!key || finalPassSeenKeys.has(key) || pendingFinalPassTimers.has(key)) return;
+    const timer = setTimeout(() => {
+      pendingFinalPassTimers.delete(key);
+      void handleFinalPass({
+        ...event,
+        sourceEventId: event.sourceEventId || key,
+      });
+    }, finalPassFallbackDelayMs());
+    pendingFinalPassTimers.set(key, timer);
+  }
+
+  function cancelFinalPassFallback(input = {}) {
+    const event = normalizeRuleChainPassEvent(input);
+    const key = buildFinalPassEventKey(event);
+    if (!key) return;
+    const timer = pendingFinalPassTimers.get(key);
+    if (!timer) return;
+    clearTimeout(timer);
+    pendingFinalPassTimers.delete(key);
+  }
+
+  function finalPassFallbackDelayMs() {
+    const raw = config?.get?.("modules.squadRuleChain", {}) ?? {};
+    const value = Number(raw.finalPassFallbackDelayMs);
+    if (Number.isFinite(value) && value >= 0) return Math.floor(value);
+    return DEFAULT_FINAL_PASS_FALLBACK_DELAY_MS;
+  }
+
+  function removeFinalPassRecord(recordId) {
+    const index = finalPassRecords.findIndex((item) => item?.id === recordId);
+    if (index >= 0) finalPassRecords.splice(index, 1);
+  }
+
+  function readRuntimeConfig() {
+    const raw = config?.get?.("modules.squadRuleChain", {}) ?? {};
+    return {
+      directory: normalizeText(raw.directory) || DEFAULT_DATA_DIR,
+    };
+  }
+
+  function finalPassCachePath() {
+    return path.join(dataDir, FINAL_PASS_CACHE_FILE);
+  }
+
+  async function loadFinalPassCache() {
+    try {
+      const text = await fs.readFile(finalPassCachePath(), "utf8");
+      const parsed = JSON.parse(text);
+      loadedFinalPassCache = parsed && typeof parsed === "object" ? parsed : null;
+    } catch (error) {
+      if (error?.code !== "ENOENT") {
+        moduleLogger?.warn?.(`[SquadRuleChain] failed to load final pass cache: ${error?.message ?? error}`);
+      }
+      loadedFinalPassCache = null;
+    }
+  }
+
+  function maybeRestoreFinalPassCacheForCurrentMatch() {
+    const currentAliases = buildCurrentMatchCacheAliases(core, modules);
+    const currentKey = currentAliases[0] ?? "";
+    if (currentAliases.length > 0 && activeFinalPassCacheKey && !hasAnyMatchAlias(activeFinalPassMatchAliases, currentAliases)) {
+      finalPassRecords.splice(0, finalPassRecords.length);
+      finalPassByPlayer.clear();
+      finalPassSeenKeys.clear();
+      nextCreationOrderCode = 1;
+      activeFinalPassCacheKey = "";
+      activeFinalPassMatchAliases = [];
+    }
+    if (finalPassRecords.length > 0 || !loadedFinalPassCache) return;
+    if (!cacheMatchesCurrentMatch(loadedFinalPassCache, currentAliases, core, modules)) return;
+    restoreFinalPassCache(loadedFinalPassCache, currentAliases);
+  }
+
+  function ensureFinalPassCacheForEvent(event) {
+    const nextAliases = buildEventMatchCacheAliases(event, core, modules);
+    const nextKey = nextAliases[0] ?? buildMatchCacheKey(event);
+    if (!nextKey) return;
+    if (!activeFinalPassCacheKey) {
+      maybeRestoreFinalPassCacheForCurrentMatch();
+    }
+    if (activeFinalPassCacheKey && !hasAnyMatchAlias(activeFinalPassMatchAliases, nextAliases)) {
+      finalPassRecords.splice(0, finalPassRecords.length);
+      finalPassByPlayer.clear();
+      finalPassSeenKeys.clear();
+      nextCreationOrderCode = 1;
+    }
+    activeFinalPassCacheKey = nextKey;
+    activeFinalPassMatchAliases = nextAliases;
+  }
+
+  function restoreFinalPassCache(cache, currentAliases = []) {
+    const records = Array.isArray(cache?.finalPassRecords) ? cache.finalPassRecords : [];
+    finalPassRecords.splice(0, finalPassRecords.length, ...records.map(cloneJsonSafe));
+    const normalized = normalizeCreationOrderCodes(finalPassRecords);
+    finalPassByPlayer.clear();
+    finalPassSeenKeys.clear();
+    for (const record of finalPassRecords) {
+      const playerKey = buildPlayerKey(record.event);
+      if (playerKey) finalPassByPlayer.set(playerKey, record.id);
+      const eventKey = buildFinalPassEventKey(record.event);
+      if (eventKey) finalPassSeenKeys.add(eventKey);
+    }
+    const maxCode = finalPassRecords.reduce((max, record) => Math.max(max, Number(record.creationOrderCode ?? 0) || 0), 0);
+    nextCreationOrderCode = Math.max(maxCode + 1, Number(cache?.nextCreationOrderCode ?? 1) || 1);
+    activeFinalPassCacheKey = normalizeText(cache?.cacheKey);
+    const previousAliases = normalizeMatchAliases(cache?.matchAliases, activeFinalPassCacheKey);
+    activeFinalPassMatchAliases = normalizeMatchAliases([
+      ...previousAliases,
+      ...normalizeMatchAliases(currentAliases),
+    ]);
+    if (normalized || activeFinalPassMatchAliases.length !== previousAliases.length) {
+      persistFinalPassCacheLater();
+    }
+  }
+
+  function takeNextCreationOrderCode() {
+    const maxCode = finalPassRecords.reduce((max, record) => Math.max(max, Number(record.creationOrderCode ?? 0) || 0), 0);
+    nextCreationOrderCode = Math.max(nextCreationOrderCode, maxCode + 1);
+    return nextCreationOrderCode++;
+  }
+
+  function persistFinalPassCacheLater() {
+    const payload = {
+      version: 1,
+      cacheKey: activeFinalPassCacheKey,
+      matchAliases: activeFinalPassMatchAliases.slice(),
+      updatedAt: nowIso(),
+      nextCreationOrderCode,
+      finalPassRecords: finalPassRecords.map(cloneJsonSafe),
+    };
+    loadedFinalPassCache = payload;
+    finalPassCacheWrite = (async () => {
+      try {
+        await fs.mkdir(dataDir, { recursive: true });
+        await fs.writeFile(finalPassCachePath(), `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+      } catch (error) {
+        moduleLogger?.warn?.(`[SquadRuleChain] failed to persist final pass cache: ${error?.message ?? error}`);
+      }
+    })();
   }
 
   async function removeLeader(event) {
@@ -208,6 +453,203 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
       system: true,
     }).catch((error) => ({ success: false, error: error?.message ?? String(error) }));
   }
+
+  async function broadcastFinalPass(record) {
+    const sender = modules?.adminWarn?.broadcastMessage ?? modules?.adminWarn?.sendAdminBroadcast;
+    if (typeof sender !== "function") return { success: false, skipped: true, skipReason: "admin_warn_unavailable" };
+    return await sender.call(modules.adminWarn, {
+      message: buildFinalPassBroadcastMessage(record),
+      reason: "squad_rule_chain_final_pass_broadcast",
+      sourceModule: SQUAD_RULE_CHAIN_MODULE_ID,
+      relatedEventId: record.event.sourceEventId,
+      system: true,
+    }).catch((error) => ({ success: false, error: error?.message ?? String(error) }));
+  }
+}
+
+function buildFinalPassBroadcastMessage(record) {
+  const event = record?.event ?? {};
+  const creator = event.leaderName || "未知玩家";
+  const squadName = event.squadName || `Squad ${event.squadId ?? "?"}`;
+  return `${creator} 建立了${squadName}，建队顺序码 ${record.creationOrderCode}`;
+}
+
+function buildPlayerKey(event = {}) {
+  if (event.leaderSteamId) return `steam:${event.leaderSteamId}`;
+  if (event.leaderEosId) return `eos:${event.leaderEosId}`;
+  if (event.leaderName) return `name:${event.leaderName.toLowerCase()}`;
+  return "";
+}
+
+function buildMatchCacheKey(event = {}) {
+  const serverId = normalizeText(event.serverId);
+  if (!serverId) return "";
+  const matchId = normalizeText(event.matchId);
+  if (matchId) return `${serverId}|match:${matchId}`;
+  const anchor = normalizeText(event.clockAnchorLogTime ?? event.roundAnchor);
+  if (anchor) return `${serverId}|anchor:${anchor}`;
+  return "";
+}
+
+function buildCurrentMatchCacheKey(core, modules = {}) {
+  return buildCurrentMatchCacheAliases(core, modules)[0] ?? "";
+}
+
+function buildEventMatchCacheAliases(event = {}, core, modules = {}) {
+  const aliases = [];
+  pushMatchAlias(aliases, buildMatchCacheKey(event));
+  const serverId = normalizeText(event.serverId);
+  for (const alias of buildCurrentMatchCacheAliases(core, modules, serverId)) {
+    pushMatchAlias(aliases, alias);
+  }
+  return aliases;
+}
+
+function buildCurrentMatchCacheAliases(core, modules = {}, serverIdOverride = "") {
+  const snapshot = core?.webStatus?.getSnapshot?.() ?? {};
+  const serverId = normalizeText(serverIdOverride || snapshot.serverId || core?.webStatus?.serverId);
+  const lifecycle = modules?.squadLifecycle?.getCurrent?.(serverId) ?? null;
+  const aliases = [];
+  pushMatchAlias(aliases, buildMatchCacheKey({
+    serverId,
+    matchId: snapshot.matchId ?? snapshot.currentMatchId ?? lifecycle?.matchId,
+    clockAnchorLogTime: snapshot.logClockAnchorLogTime ?? snapshot.logClockLastResetAt,
+  }));
+
+  const status = modules?.matchCache?.getStatus?.(serverId) ?? null;
+  appendMatchIdentityAliases(aliases, serverId, status?.currentMatch);
+  appendMatchIdentityAliases(aliases, serverId, status?.cachedMatch);
+  return aliases;
+}
+
+function appendMatchIdentityAliases(aliases, serverId, match = null) {
+  const normalizedServerId = normalizeText(serverId);
+  if (!normalizedServerId || !match || typeof match !== "object") return;
+  pushMatchAlias(aliases, match.sessionId ? `${normalizedServerId}|session:${normalizeText(match.sessionId)}` : "");
+  pushMatchAlias(aliases, match.fingerprint ? `${normalizedServerId}|fingerprint:${normalizeText(match.fingerprint)}` : "");
+  pushMatchAlias(aliases, match.fullKey ? `${normalizedServerId}|full:${normalizeText(match.fullKey)}` : "");
+  pushMatchAlias(aliases, match.baseKey ? `${normalizedServerId}|base:${normalizeText(match.baseKey)}` : "");
+  pushMatchAlias(aliases, match.roundAnchor?.logLineTime ? `${normalizedServerId}|anchor:${normalizeText(match.roundAnchor.logLineTime)}` : "");
+}
+
+function pushMatchAlias(aliases, alias) {
+  const text = normalizeText(alias);
+  if (text && !aliases.includes(text)) aliases.push(text);
+}
+
+function normalizeMatchAliases(value, fallbackKey = "") {
+  const aliases = [];
+  if (Array.isArray(value)) {
+    for (const item of value) pushMatchAlias(aliases, item);
+  }
+  pushMatchAlias(aliases, fallbackKey);
+  return aliases;
+}
+
+function hasAnyMatchAlias(left = [], right = []) {
+  const leftSet = new Set(normalizeMatchAliases(left));
+  return normalizeMatchAliases(right).some((alias) => leftSet.has(alias));
+}
+
+function cacheMatchesCurrentMatch(cache, currentAliases, core, modules = {}) {
+  const cacheAliases = normalizeMatchAliases(cache?.matchAliases, cache?.cacheKey);
+  if (currentAliases.length > 0 && hasAnyMatchAlias(cacheAliases, currentAliases)) return true;
+  return legacyCacheProbablyMatchesCurrentMatch(cache, core, modules);
+}
+
+function legacyCacheProbablyMatchesCurrentMatch(cache, core, modules = {}) {
+  const cacheKey = normalizeText(cache?.cacheKey);
+  const [cacheServerId = ""] = cacheKey.split("|");
+  const snapshot = core?.webStatus?.getSnapshot?.() ?? {};
+  const serverId = normalizeText(snapshot.serverId || core?.webStatus?.serverId);
+  if (!cacheServerId || !serverId || cacheServerId !== serverId) return false;
+
+  const matchIdTimes = parseBzssMatchIdTimes(cacheKey);
+  if (matchIdTimes.length === 0) return false;
+
+  const status = modules?.matchCache?.getStatus?.(serverId) ?? null;
+  const candidates = [
+    extractTimestampFromSessionId(status?.currentMatch?.sessionId),
+    extractTimestampFromSessionId(status?.cachedMatch?.sessionId),
+  ].filter(Number.isFinite);
+
+  return candidates.some((time) => matchIdTimes.some((matchIdTime) => Math.abs(time - matchIdTime) <= 10 * 60 * 1000));
+}
+
+function parseBzssMatchIdTimes(value) {
+  const match = normalizeText(value).match(/(\d{8})_(\d{6})/);
+  if (!match) return [];
+  const [, date, time] = match;
+  const year = Number(date.slice(0, 4));
+  const month = Number(date.slice(4, 6));
+  const day = Number(date.slice(6, 8));
+  const hour = Number(time.slice(0, 2));
+  const minute = Number(time.slice(2, 4));
+  const second = Number(time.slice(4, 6));
+  const localTime = new Date(year, month - 1, day, hour, minute, second).getTime();
+  const utcTime = Date.UTC(year, month - 1, day, hour, minute, second);
+  return [localTime, utcTime].filter(Number.isFinite);
+}
+
+function extractTimestampFromSessionId(value) {
+  const match = normalizeText(value).match(/:(\d{11,})$/);
+  if (!match) return Number.NaN;
+  const time = Number(match[1]);
+  return Number.isFinite(time) ? time : Number.NaN;
+}
+
+function buildFinalPassEventKey(event = {}) {
+  return [
+    String(event.serverId ?? "").trim(),
+    String(event.matchId ?? "").trim(),
+    event.teamId == null ? "" : String(event.teamId),
+    event.squadId == null ? "" : String(event.squadId),
+    String(event.squadName ?? "").trim().replace(/\s+/g, " ").toLowerCase(),
+    String(event.createdAtMs ?? ""),
+  ].join("|");
+}
+
+function normalizeCreationOrderCodes(records = []) {
+  if (!Array.isArray(records) || records.length === 0) return false;
+  const ordered = records
+    .map((record, index) => ({ record, index }))
+    .sort((left, right) => {
+      const timeDelta = recordSortTime(left.record) - recordSortTime(right.record);
+      if (timeDelta !== 0) return timeDelta;
+      return left.index - right.index;
+    });
+  let changed = false;
+  for (let index = 0; index < ordered.length; index += 1) {
+    const nextCode = index + 1;
+    if (Number(ordered[index].record.creationOrderCode ?? 0) !== nextCode) {
+      ordered[index].record.creationOrderCode = nextCode;
+      ordered[index].record.updatedAt = ordered[index].record.updatedAt || nowIso();
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function recordSortTime(record = {}) {
+  const candidates = [
+    record.event?.createdAtMs,
+    Date.parse(record.event?.createdAt ?? ""),
+    Date.parse(record.createdAt ?? ""),
+    Date.parse(record.updatedAt ?? ""),
+  ];
+  for (const value of candidates) {
+    const time = Number(value);
+    if (Number.isFinite(time) && time > 0) return time;
+  }
+  return Number.MAX_SAFE_INTEGER;
+}
+
+function normalizeText(value) {
+  return String(value ?? "").trim();
+}
+
+function cloneJsonSafe(value) {
+  return JSON.parse(JSON.stringify(value));
 }
 
 function buildWarningMessages(event) {

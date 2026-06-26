@@ -375,10 +375,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   async function applyDecision(record, decision) {
-    if (decision.approved && shouldBroadcast(record, decision)) {
-      await broadcastCreation(record, decision);
-    }
-
     if (!decision.approved) {
       emitSquadRuleViolation(core, {
         serverId: record.serverId,
@@ -427,12 +423,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     }
   }
 
-  function shouldBroadcast(record, decision) {
-    if (!runtimeConfig.broadcastOnApproved) return false;
-    if (decision.status === "skipped_other_nature") return false;
-    return !record.actions.some((action) => action.type === "broadcasted" || action.type === "broadcast_failed");
-  }
-
   function shouldBroadcastViolation(record, decision) {
     if (!runtimeConfig.broadcastOnViolation) return false;
     if (decision.approved) return false;
@@ -443,30 +433,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   function shouldWarn(record, decision) {
     if (decision.status === "missing_playtime") return Boolean(runtimeConfig.warnOnMissingPlaytime);
     return true;
-  }
-
-  async function broadcastCreation(record) {
-    const sender = modules?.adminWarn?.broadcastMessage ?? modules?.adminWarn?.sendAdminBroadcast;
-    if (typeof sender !== "function") {
-      record.actions.push({
-        type: "broadcast_failed",
-        result: { error: "admin_warn_unavailable" },
-      });
-      return;
-    }
-
-    const result = await sender.call(modules.adminWarn, {
-      message: `${record.creatorName || record.identityName || "未知玩家"} 建立小队 ${record.squadName || "未知小队"}，队伍性质为 ${record.squadNatureLabel || "未知"}，游戏时长 ${record.playtime?.hoursText || "未知h"}`,
-      reason: "stepwise_squad_playtime_broadcast",
-      sourceModule: PLUGIN_ID,
-      relatedEventId: record.id,
-      system: true,
-    }).catch((error) => ({ success: false, error: error?.message ?? String(error) }));
-
-    record.actions.push({
-      type: result?.success === false ? "broadcast_failed" : "broadcasted",
-      result: summarizeActionResult(result),
-    });
   }
 
   async function broadcastViolation(record, decision) {

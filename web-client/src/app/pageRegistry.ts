@@ -28,6 +28,7 @@ import DrawVoteGuardDebugPage from "../pages/DrawVoteGuardDebugPage.vue";
 import SquadNameClassifierDebugPage from "../pages/SquadNameClassifierDebugPage.vue";
 import SquadNameRulesPage from "../pages/SquadNameRulesPage.vue";
 import SquadNameTrackingPage from "../pages/SquadNameTrackingPage.vue";
+import SquadCreationOrderPage from "../pages/SquadCreationOrderPage.vue";
 import WelcomeJoinWarningDebugPage from "../pages/WelcomeJoinWarningDebugPage.vue";
 import PlayerSessionRecordsPage from "../pages/PlayerSessionRecordsPage.vue";
 import CombatLogPage from "../pages/CombatLogPage.vue";
@@ -125,6 +126,17 @@ export const pageRegistry: PageDefinition[] = [
     category: "core",
     refreshPolicy: "realtime",
     nav: { section: "opsLive", label: "聊天监控", icon: "💬", order: 20 },
+    ...workspacePage,
+  },
+  {
+    name: "squad-creation-order",
+    path: "/match/squad-creation-order",
+    component: SquadCreationOrderPage,
+    title: "建队顺序",
+    category: "core",
+    refreshPolicy: "polling",
+    nav: { section: "opsLive", label: "建队顺序", icon: "SEQ", order: 25 },
+    requiredPermission: "squad_management.view",
     ...workspacePage,
   },
   {

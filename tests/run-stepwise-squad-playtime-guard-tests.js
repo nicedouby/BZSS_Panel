@@ -324,8 +324,8 @@ async function testInfantryPassBroadcasts() {
     const result = await harness.plugin.api.simulateCreation(creation());
     assert.equal(result.approved, true);
     assert.equal(harness.disbands.length, 0);
-    assert.equal(harness.broadcasts.length, 1);
-    assert.equal(harness.broadcasts[0].message.length > 0, true);
+    assert.equal(harness.broadcasts.length, 0);
+    assert.equal(result.actions.some((action) => action.type === "tiered_pass_emitted"), true);
   } finally {
     await harness.stop();
   }
@@ -381,7 +381,7 @@ async function testInfantrySecondWindowAndOpenWindow() {
       squadName: "INF 21",
     }));
     assert.equal(passed.approved, true);
-    assert.equal(harness.broadcasts.length, 1);
+    assert.equal(harness.broadcasts.length, 0);
 
     harness.webStatus.logClockSeconds = 30;
     const failed = await harness.plugin.api.simulateCreation(creation({
@@ -399,7 +399,7 @@ async function testInfantrySecondWindowAndOpenWindow() {
       creatorSteamId: "steam-open",
     }));
     assert.equal(open.approved, true);
-    assert.equal(harness.broadcasts.length, 3);
+    assert.equal(harness.broadcasts.length, 1);
   } finally {
     await harness.stop();
   }
@@ -443,7 +443,7 @@ async function testVehicleSecondThirdAndOpenWindows() {
       creatorSteamId: "steam-open-vehicle",
     }));
     assert.equal(open.approved, true);
-    assert.equal(harness.broadcasts.length, 4);
+    assert.equal(harness.broadcasts.length, 1);
     assert.equal(harness.disbands.length, 1);
   } finally {
     await harness.stop();
@@ -467,7 +467,7 @@ async function testPlayerDatabaseFallbackProvidesPlaytime() {
     }));
     assert.equal(result.approved, true);
     assert.equal(result.playtime.source, "module.playerDatabase");
-    assert.equal(harness.broadcasts.length, 1);
+    assert.equal(harness.broadcasts.length, 0);
   } finally {
     await harness.stop();
   }
@@ -484,8 +484,7 @@ async function testWarmupSkipsRuleAndBroadcastsUnknownHours() {
     }));
     assert.equal(result.approved, true);
     assert.equal(harness.disbands.length, 0);
-    assert.equal(harness.broadcasts.length, 1);
-    assert.equal(typeof harness.broadcasts[0].message, "string");
+    assert.equal(harness.broadcasts.length, 0);
     assert.deepEqual(harness.lookups, ["steam-missing"]);
   } finally {
     await harness.stop();
@@ -537,7 +536,7 @@ async function testLogThenRconOnlyProcessesOnce() {
       }],
     });
     assert.equal(status.summary.total, 1);
-    assert.equal(harness.broadcasts.length, 1);
+    assert.equal(harness.broadcasts.length, 0);
     assert.equal(harness.disbands.length, 0);
   } finally {
     await harness.stop();

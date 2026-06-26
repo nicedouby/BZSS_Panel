@@ -5,6 +5,7 @@ export const WEB_PAGE_PERMISSION_MATRIX = Object.freeze([
   { route: "/match-state", requiredPermission: "match_state.view" },
   { route: "/console", requiredPermission: "console.view", superAdminOnly: true },
   { route: "/chat-monitor", requiredPermission: "chat_monitor.view" },
+  { route: "/match/squad-creation-order", requiredPermission: "squad_management.view" },
   { route: "/player-session-records", requiredPermission: "player_session_records.view" },
   { route: "/player-database", requiredPermission: "player_database.view" },
   { route: "/reserve-slots", requiredPermission: "player_database.view" },

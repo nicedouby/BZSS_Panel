@@ -63,7 +63,8 @@ function creation(overrides = {}) {
 }
 
 async function createHarness(options = {}) {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-rule-chain-"));
+  const createdTempDir = !options.tempDir;
+  const tempDir = options.tempDir ?? await fs.mkdtemp(path.join(os.tmpdir(), "bzss-rule-chain-"));
   const eventBus = createEventBus();
   const warnings = [];
   const broadcasts = [];
@@ -76,8 +77,10 @@ async function createHarness(options = {}) {
     webStatus: {
       serverId: "test-server",
       getSnapshot() {
+        const hasMatchId = Object.prototype.hasOwnProperty.call(options, "matchId");
         return {
           serverId: "test-server",
+          matchId: hasMatchId ? options.matchId : "match-1",
           isWarmup: false,
           logClockSeconds: options.logClockSeconds ?? 10,
           logClockHasAnchor: true,
@@ -142,6 +145,14 @@ async function createHarness(options = {}) {
         return null;
       },
     },
+    matchCache: {
+      getStatus() {
+        return {
+          currentMatch: options.matchCacheCurrentMatch ?? null,
+          cachedMatch: options.matchCacheCachedMatch ?? options.matchCacheCurrentMatch ?? null,
+        };
+      },
+    },
     pluginSubscriptions: {
       isSubscribed() { return true; },
       registerRuntimeItem() {},
@@ -159,6 +170,12 @@ async function createHarness(options = {}) {
           warningRepeatCount: 1,
         };
       }
+      if (key === "modules.squadRuleChain") {
+        return {
+          directory: path.join(tempDir, "rule-chain"),
+          finalPassFallbackDelayMs: options.finalPassFallbackDelayMs,
+        };
+      }
       if (key === "plugins.stepwiseSquadPlaytimeGuard") {
         return {
           enabled: true,
@@ -172,7 +189,7 @@ async function createHarness(options = {}) {
       }
       if (key === "plugins.fairSquadGuard") {
         return {
-          enabled: true,
+          enabled: options.fairEnabled !== false,
           directory: path.join(tempDir, "fair"),
           enforcementPlayerThreshold: 50,
           noSquadCreationSeconds: 20,
@@ -190,6 +207,7 @@ async function createHarness(options = {}) {
   const stepwise = createStepwisePlugin({ core, modules, config, logger: noopLogger() });
   const fair = createFairPlugin({ core, modules, config, logger: noopLogger() });
 
+  await ruleChain.init?.();
   await ruleChain.start();
   await nameGuard.start();
   await stepwise.init?.();
@@ -199,6 +217,7 @@ async function createHarness(options = {}) {
 
   return {
     eventBus,
+    ruleChain,
     nameGuard,
     stepwise,
     fair,
@@ -212,7 +231,9 @@ async function createHarness(options = {}) {
       await stepwise.stop();
       await nameGuard.stop();
       await ruleChain.stop();
-      await fs.rm(tempDir, { recursive: true, force: true });
+      if (createdTempDir) {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      }
     },
   };
 }
@@ -303,8 +324,263 @@ async function testTrackingDoesNotTreatFairViolationAsAllowedCreation() {
   }
 }
 
+async function testFinalPassBroadcastAssignsOrderAndReplacesPlayerRecord() {
+  const playtimeRows = new Map([["steam-1", { game_seconds: 1000 * 3600 }]]);
+  const harness = await createHarness({ playtimeRows, logClockSeconds: 60 });
+
+  try {
+    harness.broadcasts.length = 0;
+    harness.eventBus.emitModuleEvent(
+      "module.squadLifecycle",
+      "squadCreated",
+      creation({ squadName: "Squad 1", squadId: 31 }),
+    );
+
+    await waitFor(() => harness.broadcasts.some((item) => item.reason === "squad_rule_chain_final_pass_broadcast"));
+
+    let state = harness.ruleChain.api.getState();
+    assert.equal(state.finalPassRecords.length, 1);
+    assert.equal(state.finalPassRecords[0].creationOrderCode, 1);
+    assert.equal(state.finalPassRecords[0].event.squadId, 31);
+    assert.equal(
+      harness.broadcasts.find((item) => item.reason === "squad_rule_chain_final_pass_broadcast").message,
+      "Leader 建立了Squad 1，建队顺序码 1",
+    );
+
+    harness.eventBus.emitModuleEvent(
+      "module.squadLifecycle",
+      "squadCreated",
+      creation({ squadName: "Squad 2", squadId: 32, createdAt: new Date(Date.now() + 1000).toISOString() }),
+    );
+
+    await waitFor(() => harness.broadcasts.filter((item) => item.reason === "squad_rule_chain_final_pass_broadcast").length === 2);
+
+    state = harness.ruleChain.api.getState();
+    assert.equal(state.finalPassRecords.length, 1);
+    assert.equal(state.finalPassRecords[0].creationOrderCode, 2);
+    assert.equal(state.finalPassRecords[0].event.squadId, 32);
+    assert.equal(Boolean(state.finalPassRecords[0].replacedRecordId), true);
+  } finally {
+    await harness.stop();
+  }
+}
+
+async function testTieredPassFallbackBroadcastsWhenFairSkips() {
+  const harness = await createHarness({
+    fairEnabled: false,
+    finalPassFallbackDelayMs: 10,
+  });
+
+  try {
+    harness.broadcasts.length = 0;
+    harness.eventBus.emitModuleEvent(
+      "module.squadRuleChain",
+      "tieredSquadTimePassed",
+      creation({ squadName: "Fallback", squadId: 41 }),
+    );
+
+    await waitFor(() => harness.broadcasts.some((item) => item.reason === "squad_rule_chain_final_pass_broadcast"));
+    const state = harness.ruleChain.api.getState();
+    assert.equal(state.finalPassRecords.length, 1);
+    assert.equal(state.finalPassRecords[0].event.squadId, 41);
+    assert.equal(harness.broadcasts[0].message, "Leader 建立了Fallback，建队顺序码 1");
+  } finally {
+    await harness.stop();
+  }
+}
+
+async function testFinalPassCacheRestoresSameMatch() {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-rule-chain-cache-"));
+  try {
+    const first = await createHarness({ tempDir });
+    try {
+      first.eventBus.emitModuleEvent(
+        "module.squadRuleChain",
+        "finalSquadRulePassed",
+        creation({ squadName: "Cached", squadId: 51 }),
+      );
+      await waitFor(() => first.ruleChain.api.getState().finalPassRecords.length === 1);
+    } finally {
+      await first.stop();
+    }
+
+    const second = await createHarness({ tempDir });
+    try {
+      const restored = second.ruleChain.api.getState();
+      assert.equal(restored.finalPassRecords.length, 1);
+      assert.equal(restored.finalPassRecords[0].event.squadId, 51);
+      assert.equal(restored.finalPassRecords[0].creationOrderCode, 1);
+
+      second.eventBus.emitModuleEvent(
+        "module.squadRuleChain",
+        "finalSquadRulePassed",
+        creation({ squadName: "Cached 2", squadId: 52, creatorSteamId: "steam-2", leaderSteamId: "steam-2" }),
+      );
+      await waitFor(() => second.ruleChain.api.getState().finalPassRecords.length === 2);
+      const next = second.ruleChain.api.getState().finalPassRecords.find((record) => record.event.squadId === 52);
+      assert.equal(next.creationOrderCode, 2);
+    } finally {
+      await second.stop();
+    }
+
+    const third = await createHarness({ tempDir, matchId: "match-2" });
+    try {
+      const differentMatch = third.ruleChain.api.getState();
+      assert.equal(differentMatch.finalPassRecords.length, 0);
+    } finally {
+      await third.stop();
+    }
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+async function testFinalPassCacheRestoresByMatchCacheAlias() {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-rule-chain-cache-alias-"));
+  const matchCacheCurrentMatch = {
+    sessionId: "match-cache:test-server:map|layer|raas:1782478202657",
+    fingerprint: "map|layer|raas|team-a|team-b",
+    baseKey: "map|layer|raas",
+    fullKey: "map|layer|raas|team-a|team-b",
+  };
+
+  try {
+    const first = await createHarness({ tempDir, matchCacheCurrentMatch });
+    try {
+      first.eventBus.emitModuleEvent(
+        "module.squadRuleChain",
+        "finalSquadRulePassed",
+        creation({ squadName: "Alias Cached", squadId: 61 }),
+      );
+      await waitFor(() => first.ruleChain.api.getState().finalPassRecords.length === 1);
+    } finally {
+      await first.stop();
+    }
+
+    const second = await createHarness({
+      tempDir,
+      matchId: "",
+      matchCacheCurrentMatch: {
+        ...matchCacheCurrentMatch,
+        sessionId: "match-cache:test-server:map|layer|raas:1782478210000",
+      },
+    });
+    try {
+      const restored = second.ruleChain.api.getState();
+      assert.equal(restored.finalPassRecords.length, 1);
+      assert.equal(restored.finalPassRecords[0].event.squadId, 61);
+    } finally {
+      await second.stop();
+    }
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+async function testLegacyFinalPassCacheRestoresBySessionTimestamp() {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-rule-chain-cache-legacy-"));
+  try {
+    const cacheDir = path.join(tempDir, "rule-chain");
+    await fs.mkdir(cacheDir, { recursive: true });
+    await fs.writeFile(path.join(cacheDir, "final-pass-cache.json"), JSON.stringify({
+      version: 1,
+      cacheKey: "test-server|match:20260626_204850_abc",
+      updatedAt: "2026-06-26T12:49:14.842Z",
+      nextCreationOrderCode: 2,
+      finalPassRecords: [{
+        id: "legacy-final-pass",
+        createdAt: "2026-06-26T12:49:14.778Z",
+        updatedAt: "2026-06-26T12:49:14.842Z",
+        event: creation({ squadName: "Legacy Cached", squadId: 71, matchId: "20260626_204850_abc" }),
+        creationOrderCode: 1,
+        actions: [],
+        status: "handled",
+      }],
+    }, null, 2));
+
+    const restoredHarness = await createHarness({
+      tempDir,
+      matchId: "",
+      matchCacheCurrentMatch: {
+        sessionId: "match-cache:test-server:map|layer|raas:1782478202657",
+        fingerprint: "map|layer|raas",
+        baseKey: "map|layer|raas",
+      },
+    });
+    try {
+      const restored = restoredHarness.ruleChain.api.getState();
+      assert.equal(restored.finalPassRecords.length, 1);
+      assert.equal(restored.finalPassRecords[0].event.squadId, 71);
+    } finally {
+      await restoredHarness.stop();
+    }
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+async function testFinalPassCacheNormalizesDuplicateOrderCodes() {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-rule-chain-cache-duplicates-"));
+  try {
+    const cacheDir = path.join(tempDir, "rule-chain");
+    await fs.mkdir(cacheDir, { recursive: true });
+    await fs.writeFile(path.join(cacheDir, "final-pass-cache.json"), JSON.stringify({
+      version: 1,
+      cacheKey: "test-server|match:match-1",
+      updatedAt: "2026-06-26T12:55:22.454Z",
+      nextCreationOrderCode: 3,
+      finalPassRecords: [
+        {
+          id: "order-1",
+          createdAt: "2026-06-26T12:50:43.267Z",
+          event: creation({ squadName: "First", squadId: 81, createdAtMs: 1782478241755 }),
+          creationOrderCode: 1,
+        },
+        {
+          id: "order-2",
+          createdAt: "2026-06-26T12:53:06.561Z",
+          event: creation({ squadName: "Second", squadId: 82, createdAtMs: 1782478385051 }),
+          creationOrderCode: 2,
+        },
+        {
+          id: "order-duplicate",
+          createdAt: "2026-06-26T12:55:22.345Z",
+          event: creation({ squadName: "Third", squadId: 83, createdAtMs: 1782478520823 }),
+          creationOrderCode: 1,
+        },
+      ],
+    }, null, 2));
+
+    const harness = await createHarness({ tempDir });
+    try {
+      const restored = harness.ruleChain.api.getState();
+      const ordered = restored.finalPassRecords.slice().sort((left, right) => left.event.squadId - right.event.squadId);
+      assert.deepEqual(ordered.map((record) => record.creationOrderCode), [1, 2, 3]);
+
+      harness.eventBus.emitModuleEvent(
+        "module.squadRuleChain",
+        "finalSquadRulePassed",
+        creation({ squadName: "Fourth", squadId: 84, creatorSteamId: "steam-4", leaderSteamId: "steam-4" }),
+      );
+      await waitFor(() => harness.ruleChain.api.getState().finalPassRecords.length === 4);
+      const next = harness.ruleChain.api.getState().finalPassRecords.find((record) => record.event.squadId === 84);
+      assert.equal(next.creationOrderCode, 4);
+    } finally {
+      await harness.stop();
+    }
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
 await testNameViolationShortCircuits();
 await testStepwiseViolationShortCircuitsFair();
 await testFairOnlyRunsAfterFirstTwoPass();
 await testTrackingDoesNotTreatFairViolationAsAllowedCreation();
+await testFinalPassBroadcastAssignsOrderAndReplacesPlayerRecord();
+await testTieredPassFallbackBroadcastsWhenFairSkips();
+await testFinalPassCacheRestoresSameMatch();
+await testFinalPassCacheRestoresByMatchCacheAlias();
+await testLegacyFinalPassCacheRestoresBySessionTimestamp();
+await testFinalPassCacheNormalizesDuplicateOrderCodes();
 console.log("run-squad-rule-chain-tests: ok");

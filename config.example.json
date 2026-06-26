@@ -624,7 +624,7 @@
       "./plugins/squad-creation-broadcast.js"
     ],
     "squad-creation-broadcast": {
-      "enabled": true,
+      "enabled": false,
       "delaySeconds": 5,
       "messageTemplate": "[建队播报] 玩家 ${creatorName} 创建了小队: ${squadName} (小队ID: ${squadId})"
     },

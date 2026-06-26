@@ -7,7 +7,7 @@ function readRuntimeConfig(config) {
     ?? config?.get?.(`plugins.plugin.squad-creation-broadcast`, {})
     ?? {};
   return {
-    enabled: Boolean(cfg.enabled ?? true),
+    enabled: Boolean(cfg.enabled ?? false),
     delaySeconds: Number(cfg.delaySeconds ?? 5),
     messageTemplate: String(cfg.messageTemplate ?? "[建队播报] 玩家 ${creatorName} 创建了小队: ${squadName} (小队ID: ${squadId})"),
   };

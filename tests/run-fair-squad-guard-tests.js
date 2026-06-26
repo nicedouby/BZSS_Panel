@@ -496,9 +496,8 @@ async function testBroadcastOnApprovedAndViolation() {
       creatorName: "Approved Creator",
     }));
 
-    // Check that we got an approved broadcast
-    assert.equal(harness.broadcasts.length >= 1, true);
-    assert.match(harness.broadcasts[harness.broadcasts.length - 1].message, /判定通过/);
+    // Approved creation broadcasts are now emitted by squad rule chain after all checks pass.
+    assert.equal(harness.broadcasts.length, 0);
 
     // 2. violating creation
     harness.webStatus.logClockSeconds = 10; // locked phase
@@ -509,11 +508,11 @@ async function testBroadcastOnApprovedAndViolation() {
     }));
 
     // Check that we got a violation broadcast
-    assert.equal(harness.broadcasts.length >= 2, true);
+    assert.equal(harness.broadcasts.length >= 1, true);
     assert.match(harness.broadcasts[harness.broadcasts.length - 1].message, /违规建队已拦截/);
 
     const status = harness.plugin.api.getStatus();
-    assert.equal(status.summary.broadcasts, 2);
+    assert.equal(status.summary.broadcasts, 1);
   } finally {
     await harness.stop();
   }
