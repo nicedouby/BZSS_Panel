@@ -471,6 +471,10 @@ export const ALLOWED_ADMIN_PERMISSIONS = Object.freeze([
   ...WEB_PAGE_PERMISSION_MATRIX.map((entry) => String(entry.requiredPermission ?? "").trim()).filter(Boolean),
 ]);
 
+const PERMISSION_ALIASES = Object.freeze({
+  "plugin:lianban-kick:view": "squad_management.view",
+});
+
 function normalizePermissionGroup(input) {
   const name = String(input?.name ?? "").trim();
   if (!name) {
@@ -518,18 +522,24 @@ function normalizeSteam64(value) {
 function normalizePermissions(value) {
   if (!value) return [];
   if (Array.isArray(value)) {
-    return value.map((item) => String(item ?? "").trim()).filter(Boolean);
+    return value.map((item) => normalizePermissionName(item)).filter(Boolean);
   }
   if (typeof value === "string") {
-    return value.split(",").map((item) => item.trim()).filter(Boolean);
+    return value.split(",").map((item) => normalizePermissionName(item)).filter(Boolean);
   }
   if (typeof value === "object") {
     return Object.entries(value)
       .filter(([, enabled]) => Boolean(enabled))
-      .map(([key]) => String(key).trim())
+      .map(([key]) => normalizePermissionName(key))
       .filter(Boolean);
   }
   return [];
+}
+
+function normalizePermissionName(value) {
+  const permission = String(value ?? "").trim();
+  if (!permission) return "";
+  return PERMISSION_ALIASES[permission] ?? permission;
 }
 
 function cloneUser(user) {
