@@ -62,6 +62,17 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
         stats: { ...stats },
       };
     },
+
+    clearCurrent() {
+      const currentAliases = buildCurrentMatchCacheAliases(core, modules);
+      clearFinalPassState(currentAliases);
+      persistFinalPassCacheLater();
+      return {
+        cacheKey: activeFinalPassCacheKey,
+        matchAliases: activeFinalPassMatchAliases.slice(),
+        cleared: true,
+      };
+    },
   };
 
   return {
@@ -321,6 +332,16 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
     }
     activeFinalPassCacheKey = nextKey;
     activeFinalPassMatchAliases = nextAliases;
+  }
+
+  function clearFinalPassState(currentAliases = []) {
+    finalPassRecords.splice(0, finalPassRecords.length);
+    finalPassByPlayer.clear();
+    finalPassSeenKeys.clear();
+    nextCreationOrderCode = 1;
+    const normalizedAliases = normalizeMatchAliases(currentAliases);
+    activeFinalPassMatchAliases = normalizedAliases;
+    activeFinalPassCacheKey = normalizedAliases[0] ?? "";
   }
 
   function restoreFinalPassCache(cache, currentAliases = []) {

@@ -1,6 +1,5 @@
 <template>
   <AppPage class="creation-order-page" mode="workspace">
-    <!-- Header/Toolbar -->
     <WorkspaceToolbar>
       <div class="toolbar-title-section">
         <h1 class="page-title-text">建队顺序</h1>
@@ -8,7 +7,7 @@
       </div>
 
       <div class="toolbar-status">
-        <AppStatusBadge tone="idle" v-if="pollIntervalLabel">
+        <AppStatusBadge v-if="pollIntervalLabel" tone="idle">
           自动刷新: {{ pollIntervalLabel }}
         </AppStatusBadge>
         <AppStatusBadge :tone="cacheLoaded ? 'ok' : 'warn'">
@@ -20,18 +19,25 @@
         <button
           type="button"
           class="bz-btn bz-btn-ghost"
-          :disabled="loading"
+          :disabled="loading || clearing"
           @click="() => refetch()"
         >
           {{ loading ? "刷新中..." : "手动刷新" }}
         </button>
+        <button
+          v-if="canClear"
+          type="button"
+          class="bz-btn bz-btn-danger"
+          :disabled="clearing"
+          @click="clearCurrentRound"
+        >
+          {{ clearing ? "清理中..." : "一键清理" }}
+        </button>
       </template>
     </WorkspaceToolbar>
 
-    <!-- Error Banner -->
     <div v-if="error" class="banner error">{{ error }}</div>
 
-    <!-- Summary Metrics -->
     <section class="summary-grid">
       <StatCard
         label="总通过建队数"
@@ -59,7 +65,6 @@
       />
     </section>
 
-    <!-- Filters region -->
     <section class="filter-bar" aria-label="筛选与搜索">
       <div class="filter-group">
         <label class="filter-item">
@@ -71,7 +76,7 @@
             class="filter-input"
           />
         </label>
-        
+
         <label class="filter-item">
           <span class="filter-label">阵营</span>
           <select v-model="selectedTeam" class="filter-select">
@@ -80,17 +85,15 @@
             <option :value="2">TEAM 2 (红军)</option>
           </select>
         </label>
-
       </div>
     </section>
 
-    <!-- Content Panel -->
     <section class="order-panel scrollable-container">
       <EmptyState
         v-if="!filteredRecords.length"
         title="无建队记录"
         :description="allRecords.length ? '没有符合当前筛选条件的建队记录。' : '当前对局暂无最终通过的建队记录。'"
-        icon="🔍"
+        icon="📳"
       />
       <div v-else class="order-list">
         <article
@@ -98,16 +101,14 @@
           :key="item.id"
           class="order-row"
           :class="[
-            item.teamId === 1 ? 'team-1-card' : item.teamId === 2 ? 'team-2-card' : 'team-neutral-card'
+            item.teamId === 1 ? 'team-1-card' : item.teamId === 2 ? 'team-2-card' : 'team-neutral-card',
           ]"
         >
-          <!-- Order Badge -->
           <div class="order-code-badge">
             <span class="order-hash">#</span>
             <span class="order-num">{{ item.creationOrderCode }}</span>
           </div>
 
-          <!-- Squad & Leader Info -->
           <div class="order-main">
             <div class="squad-title">
               <strong>{{ item.squadName || `Squad ${item.squadId ?? "?"}` }}</strong>
@@ -120,22 +121,20 @@
               </AppStatusBadge>
             </div>
             <div class="leader-info">
-              <span class="leader-icon">👤</span>
+              <span class="leader-icon">👑</span>
               <span class="leader-name">{{ item.leaderName || "未知玩家" }}</span>
             </div>
           </div>
 
-          <!-- Team and ID Info -->
           <div class="order-meta">
             <span class="meta-badge team-badge">
-              {{ item.teamId === 1 ? 'TEAM 1' : item.teamId === 2 ? 'TEAM 2' : `TEAM ${item.teamId ?? '?'}` }}
+              {{ item.teamId === 1 ? "TEAM 1" : item.teamId === 2 ? "TEAM 2" : `TEAM ${item.teamId ?? "?"}` }}
             </span>
             <span class="meta-badge squad-id-badge">
               小队 ID: {{ item.squadId ?? "?" }}
             </span>
           </div>
 
-          <!-- Time Info -->
           <div class="order-time">
             <span class="time-icon">🕒</span>
             <span class="time-text">{{ formatTime(item.createdAt) }}</span>
@@ -150,9 +149,11 @@
 import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useQuery } from "@tanstack/vue-query";
-import { apiGet } from "../app/apiClient";
+import { apiGet, apiPost } from "../app/apiClient";
 import { normalizeRefreshPolicy, resolveRefreshDelay } from "../app/refreshPolicy";
 import { usePageActivity } from "../composables/usePageActivity";
+import { useAuthStore } from "../stores/auth.store";
+import { useUiStore } from "../stores/ui.store";
 
 import AppPage from "../components/common/AppPage.vue";
 import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
@@ -201,10 +202,12 @@ type OrderRecord = {
 
 const route = useRoute();
 const pageActivity = usePageActivity();
+const auth = useAuthStore();
+const ui = useUiStore();
 
-// Search and filters criteria
 const searchQuery = ref("");
 const selectedTeam = ref<number | string>("all");
+const clearing = ref(false);
 
 const routeRefreshPolicy = computed(() => normalizeRefreshPolicy(route.meta.refreshPolicy));
 const recordsRefetchInterval = computed(() => resolveRefreshDelay({
@@ -233,8 +236,8 @@ const rawRecords = computed<FinalPassRecord[]>(() => stateData.value?.data?.rule
 const cacheLoaded = computed(() => Boolean(stateData.value?.data?.ruleChain?.finalPassCache?.loaded));
 const cacheKey = computed(() => String(stateData.value?.data?.ruleChain?.finalPassCache?.cacheKey ?? ""));
 const matchId = computed(() => String(stateData.value?.data?.lifecycle?.matchId ?? ""));
-
 const matchLabel = computed(() => matchId.value || cacheKey.value || "-");
+const canClear = computed(() => auth.user?.isSuperAdmin === true);
 
 const allRecords = computed<OrderRecord[]>(() => rawRecords.value
   .map((record, index) => ({
@@ -250,30 +253,25 @@ const allRecords = computed<OrderRecord[]>(() => rawRecords.value
   }))
   .sort((left, right) => left.creationOrderCode - right.creationOrderCode));
 
-// Filtered records list for display
-const filteredRecords = computed<OrderRecord[]>(() => {
-  return allRecords.value.filter((record) => {
-    // 1. Filter by search query (case-insensitive search in squadName and leaderName)
-    if (searchQuery.value) {
-      const q = searchQuery.value.toLowerCase();
-      const sName = (record.squadName ?? "").toLowerCase();
-      const lName = (record.leaderName ?? "").toLowerCase();
-      if (!sName.includes(q) && !lName.includes(q)) {
-        return false;
-      }
+const filteredRecords = computed<OrderRecord[]>(() => allRecords.value.filter((record) => {
+  if (searchQuery.value) {
+    const q = searchQuery.value.toLowerCase();
+    const sName = (record.squadName ?? "").toLowerCase();
+    const lName = (record.leaderName ?? "").toLowerCase();
+    if (!sName.includes(q) && !lName.includes(q)) {
+      return false;
     }
+  }
 
-    // 3. Filter by team
-    if (selectedTeam.value !== "all") {
-      const tId = Number(selectedTeam.value);
-      if (record.teamId !== tId) {
-        return false;
-      }
+  if (selectedTeam.value !== "all") {
+    const tId = Number(selectedTeam.value);
+    if (record.teamId !== tId) {
+      return false;
     }
+  }
 
-    return true;
-  });
-});
+  return true;
+}));
 
 const maxOrderCode = computed(() => allRecords.value.reduce((max, item) => Math.max(max, item.creationOrderCode), 0));
 
@@ -283,6 +281,38 @@ function formatTime(value: unknown) {
   const date = new Date(text);
   if (Number.isNaN(date.getTime())) return text;
   return date.toLocaleTimeString("zh-CN", { hour12: false });
+}
+
+async function clearCurrentRound() {
+  if (!canClear.value || clearing.value) return;
+
+  const confirmed = await ui.openConfirm({
+    title: "清空建队顺序",
+    message: "将清空当前局建队顺序记录，包括建队周期和最终通过记录。",
+    confirmText: "立即清空",
+    cancelText: "取消",
+    tone: "warn",
+  });
+  if (!confirmed) return;
+
+  clearing.value = true;
+  try {
+    await apiPost("/api/squad-creation-order/clear", {});
+    ui.pushToast({
+      title: "已清空",
+      message: "当前对局建队顺序记录已清空。",
+      tone: "ok",
+    });
+    await refetch();
+  } catch (err) {
+    ui.pushToast({
+      title: "清空失败",
+      message: err instanceof Error ? err.message : String(err),
+      tone: "error",
+    });
+  } finally {
+    clearing.value = false;
+  }
 }
 </script>
 
@@ -330,7 +360,6 @@ function formatTime(value: unknown) {
   gap: 12px;
 }
 
-/* Filters styling */
 .filter-bar {
   padding: 12px;
   border: 1px solid var(--color-border-soft);
@@ -392,7 +421,6 @@ function formatTime(value: unknown) {
   font-size: 13px;
 }
 
-/* Order List / Cards */
 .order-panel {
   flex: 1;
   min-height: 0;
@@ -427,63 +455,66 @@ function formatTime(value: unknown) {
   box-shadow: var(--shadow-md), 0 0 12px rgba(255, 255, 255, 0.03);
 }
 
-/* Team 1 Blue Card */
 .team-1-card {
   border-color: rgba(55, 200, 255, 0.16);
   background: linear-gradient(90deg, rgba(55, 200, 255, 0.03) 0%, rgba(15, 23, 34, 0.94) 100%);
 }
+
 .team-1-card:hover {
   border-color: rgba(55, 200, 255, 0.4);
   box-shadow: var(--shadow-md), 0 0 15px rgba(55, 200, 255, 0.08);
 }
+
 .team-1-card .order-code-badge {
   border-color: rgba(55, 200, 255, 0.35);
   background: rgba(55, 200, 255, 0.1);
   color: var(--color-team1-primary, #37c8ff);
 }
+
 .team-1-card .team-badge {
   background: rgba(55, 200, 255, 0.12);
   border: 1px solid rgba(55, 200, 255, 0.25);
   color: var(--color-team1-primary, #37c8ff);
 }
 
-/* Team 2 Orange Card */
 .team-2-card {
   border-color: rgba(255, 155, 69, 0.16);
   background: linear-gradient(90deg, rgba(255, 155, 69, 0.03) 0%, rgba(15, 23, 34, 0.94) 100%);
 }
+
 .team-2-card:hover {
   border-color: rgba(255, 155, 69, 0.4);
   box-shadow: var(--shadow-md), 0 0 15px rgba(255, 155, 69, 0.08);
 }
+
 .team-2-card .order-code-badge {
   border-color: rgba(255, 155, 69, 0.35);
   background: rgba(255, 155, 69, 0.1);
   color: var(--color-team2-primary, #ff9b45);
 }
+
 .team-2-card .team-badge {
   background: rgba(255, 155, 69, 0.12);
   border: 1px solid rgba(255, 155, 69, 0.25);
   color: var(--color-team2-primary, #ff9b45);
 }
 
-/* Neutral Card */
 .team-neutral-card {
   border-color: var(--color-border-default);
 }
+
 .team-neutral-card .order-code-badge {
   border-color: var(--color-border-highlight);
   background: rgba(255, 255, 255, 0.05);
   color: var(--color-text-primary);
 }
+
 .team-neutral-card .team-badge {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--color-border-default);
   color: var(--color-text-secondary);
 }
 
-
-/* Badges and internal card elements */
 .order-code-badge {
   width: 54px;
   height: 38px;
@@ -587,7 +618,6 @@ function formatTime(value: unknown) {
   font-family: monospace;
 }
 
-/* Responsive adjustments */
 @media (max-width: 1000px) {
   .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -600,12 +630,12 @@ function formatTime(value: unknown) {
     gap: 12px;
     padding: 10px 12px;
   }
-  
+
   .order-meta {
     grid-column: 2;
     margin-top: 2px;
   }
-  
+
   .order-time {
     grid-column: 2;
     justify-content: flex-start;

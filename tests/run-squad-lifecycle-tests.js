@@ -648,6 +648,39 @@ async function testMatchEndClearsPendingAndCurrent() {
   await harness.module.stop();
 }
 
+async function testMatchSwitchClearsPreviousRoundRecords() {
+  const harness = createHarness();
+  await harness.module.start();
+
+  harness.core.eventBus.emitCoreEvent("On_SquadCreated", squadEventBase({
+    sessionId: "session-1",
+    paramMap: {
+      SquadID: "4",
+      SquadName: "Delta",
+      FactionName: "USA",
+      TeamID: "1",
+      PlayerName: "Leader",
+      Steam64ID: "76561198000000004",
+      EOSID: "eos-4",
+    },
+  }));
+
+  assert.equal(harness.module.api.getCurrent("BZSS_Main").list.length, 1);
+
+  harness.core.eventBus.emitModuleEvent("module.matchState", "squadsUpdated", {
+    serverId: "BZSS_Main",
+    sessionId: "session-2",
+    time: "2026-05-13 20:40:00",
+    squads: [],
+  });
+
+  const current = harness.module.api.getCurrent("BZSS_Main");
+  assert.equal(current.matchId, "session-2");
+  assert.equal(current.list.length, 0);
+  assert.equal(harness.module.api.getPendingCount(), 0);
+  await harness.module.stop();
+}
+
 await testLogCreateWithTeamId();
 await testPendingCreateFlushesFromSnapshot();
 await testRawLogLineCreatesPendingAndFlushesToLog();
@@ -662,5 +695,6 @@ await testRconOnlySnapshotCreatesFallbackLifecycle();
 testParseSquadCreateEventRecognizesEventNameVariants();
 testParseSquadCreateEventRecognizesRawLogLine();
 await testMatchEndClearsPendingAndCurrent();
+await testMatchSwitchClearsPreviousRoundRecords();
 
 console.log("squad lifecycle tests passed");

@@ -573,6 +573,27 @@ async function testFinalPassCacheNormalizesDuplicateOrderCodes() {
   }
 }
 
+async function testManualClearCurrentRemovesFinalPassRecords() {
+  const harness = await createHarness();
+  try {
+    harness.eventBus.emitModuleEvent(
+      "module.squadRuleChain",
+      "finalSquadRulePassed",
+      creation({ squadName: "Clear Me", squadId: 91 }),
+    );
+    await waitFor(() => harness.ruleChain.api.getState().finalPassRecords.length === 1);
+
+    const cleared = harness.ruleChain.api.clearCurrent();
+    assert.equal(cleared.cleared, true);
+
+    const state = harness.ruleChain.api.getState();
+    assert.equal(state.finalPassRecords.length, 0);
+    assert.equal(state.finalPassCache.cacheKey, "test-server|match:match-1");
+  } finally {
+    await harness.stop();
+  }
+}
+
 await testNameViolationShortCircuits();
 await testStepwiseViolationShortCircuitsFair();
 await testFairOnlyRunsAfterFirstTwoPass();
@@ -583,4 +604,5 @@ await testFinalPassCacheRestoresSameMatch();
 await testFinalPassCacheRestoresByMatchCacheAlias();
 await testLegacyFinalPassCacheRestoresBySessionTimestamp();
 await testFinalPassCacheNormalizesDuplicateOrderCodes();
+await testManualClearCurrentRemovesFinalPassRecords();
 console.log("run-squad-rule-chain-tests: ok");

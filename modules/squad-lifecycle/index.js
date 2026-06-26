@@ -43,6 +43,13 @@ export function createSquadLifecycleModule({ core, config, logger }) {
     getCurrentMatchId(serverId = core.webStatus.serverId) {
       return reducer.getCurrentMatchId(serverId);
     },
+
+    clearCurrent(serverId = core.webStatus.serverId) {
+      const normalizedServerId = String(serverId ?? core.webStatus.serverId ?? "").trim();
+      if (!normalizedServerId) return;
+      cleanupExpiredPending();
+      clearPendingForServer(normalizedServerId);
+    },
   };
 
   return {
@@ -76,6 +83,11 @@ export function createSquadLifecycleModule({ core, config, logger }) {
         cleanupExpiredPending();
         const matchId = resolveCurrentMatchId(serverId, event) || buildSyntheticMatchId(serverId, event);
         if (!matchId) return;
+
+        const previousMatchId = reducer.getCurrentMatchId(serverId);
+        if (previousMatchId && previousMatchId !== matchId) {
+          clearPendingForServer(serverId);
+        }
 
         reducer.setCurrentMatchId(serverId, matchId);
         flushPendingForSnapshot(serverId, matchId, Array.isArray(event.squads) ? event.squads : []);
