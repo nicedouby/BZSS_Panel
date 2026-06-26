@@ -20,21 +20,25 @@ export function createPlugin({ core, modules, logger } = {}) {
       const playtimeMap = new Map();
       await Promise.all(
         activePlayers.map(async (p) => {
+          const steamId = resolveSteamId(p);
           try {
-            const pt = await modules?.playtime?.getBySteamID?.(p.steamID);
+            const pt = await modules?.playtime?.getBySteamID?.(steamId);
             const s = pt?.gameSeconds ?? pt?.game_seconds;
-            playtimeMap.set(p.steamID, s != null ? Math.max(0, Math.floor(Number(s) || 0)) : 0);
+            playtimeMap.set(steamId, s != null ? Math.max(0, Math.floor(Number(s) || 0)) : 0);
           } catch {
-            playtimeMap.set(p.steamID, 0);
+            playtimeMap.set(steamId, 0);
           }
         })
       );
 
-      const groupsSnapshot = core?.groupReport?.getSnapshot?.()?.groups || [];
+      const groupReportApi = resolveGroupReportApi({ core, modules });
+      const groupsSnapshot = groupReportApi?.getSnapshot?.()?.groups ?? groupReportApi?.getGroups?.() ?? [];
       const groupMap = new Map();
       for (const group of groupsSnapshot) {
-        for (const member of group.members) {
-          if (member.steamId) groupMap.set(member.steamId, group.id);
+        const members = Array.isArray(group?.members) ? group.members : [];
+        for (const member of members) {
+          const steamId = resolveSteamId(member);
+          if (steamId) groupMap.set(steamId, group.id);
         }
       }
 
@@ -42,29 +46,30 @@ export function createPlugin({ core, modules, logger } = {}) {
       const processedSteamIds = new Set();
 
       for (const player of activePlayers) {
-        if (processedSteamIds.has(player.steamID)) continue;
+        const steamId = resolveSteamId(player);
+        if (!steamId || processedSteamIds.has(steamId)) continue;
 
-        const groupId = groupMap.get(player.steamID);
+        const groupId = groupMap.get(steamId);
         if (groupId) {
-          const members = activePlayers.filter((p) => groupMap.get(p.steamID) === groupId);
-          members.forEach((m) => processedSteamIds.add(m.steamID));
+          const members = activePlayers.filter((p) => groupMap.get(resolveSteamId(p)) === groupId);
+          members.forEach((m) => processedSteamIds.add(resolveSteamId(m)));
 
           units.push({
             id: groupId,
             type: "group",
             players: members,
             size: members.length,
-            totalPlaytime: members.reduce((sum, m) => sum + (playtimeMap.get(m.steamID) || 0), 0),
-            currentTeam: members[0].teamID,
+            totalPlaytime: members.reduce((sum, m) => sum + (playtimeMap.get(resolveSteamId(m)) || 0), 0),
+            currentTeam: members[0]?.teamID,
           });
         } else {
-          processedSteamIds.add(player.steamID);
+          processedSteamIds.add(steamId);
           units.push({
-            id: player.steamID,
+            id: steamId,
             type: "solo",
             players: [player],
             size: 1,
-            totalPlaytime: playtimeMap.get(player.steamID) || 0,
+            totalPlaytime: playtimeMap.get(steamId) || 0,
             currentTeam: player.teamID,
           });
         }
@@ -118,19 +123,21 @@ export function createPlugin({ core, modules, logger } = {}) {
         team2: { players: [], count: team2.count, playtimeHours: team2.playtime / 3600 },
         switches: [],
         timestamp: Date.now(),
+        groupReportAvailable: Boolean(groupReportApi),
       };
 
       function processTeam(teamUnits, targetTeamID, planTeam) {
         for (const unit of teamUnits) {
           for (const player of unit.players) {
+            const steamId = resolveSteamId(player);
             const willSwitch = String(player.teamID) !== String(targetTeamID);
             const playerInfo = {
               name: player.name,
-              steamId: player.steamID,
+              steamId,
               currentTeam: player.teamID,
               targetTeam: String(targetTeamID),
               willSwitch,
-              playtimeHours: (playtimeMap.get(player.steamID) || 0) / 3600,
+              playtimeHours: (playtimeMap.get(steamId) || 0) / 3600,
               unitType: unit.type,
             };
             planTeam.players.push(playerInfo);
@@ -225,4 +232,23 @@ export function createPlugin({ core, modules, logger } = {}) {
       pluginLogger?.info?.("[RandomShuffle] Plugin stopped.");
     },
   };
+}
+
+function resolveGroupReportApi({ core, modules } = {}) {
+  return modules?.groupReport
+    ?? core?.getPluginApi?.("group-report")
+    ?? core?.getPluginApi?.("groupReport")
+    ?? core?.groupReport
+    ?? null;
+}
+
+function resolveSteamId(value = {}) {
+  return String(
+    value?.steamId
+    ?? value?.steamID
+    ?? value?.steam64
+    ?? value?.steam64ID
+    ?? value?.steam_id
+    ?? "",
+  ).trim();
 }
