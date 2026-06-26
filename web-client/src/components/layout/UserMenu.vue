@@ -88,6 +88,38 @@
               </button>
             </div>
 
+            <div class="tank-battle-slomo">
+              <div class="tank-battle-slomo-header">
+                <div>
+                  <strong>管理员时间倍率</strong>
+                  <span>松开滑块后将先确认，再执行 {{ adminSlomoCommand }}</span>
+                </div>
+                <span class="tank-battle-slomo-value">{{ formatAdminSlomoValue(adminSlomoValue) }}x</span>
+              </div>
+
+              <input
+                v-model.number="adminSlomoValue"
+                type="range"
+                class="tank-battle-slomo-slider"
+                :min="ADMIN_SLOMO_MIN"
+                :max="ADMIN_SLOMO_MAX"
+                :step="ADMIN_SLOMO_STEP"
+                :disabled="tankBattleBusy || !canManageTankBattle"
+                aria-label="管理员时间倍率"
+                @change="applyAdminSlomo"
+              />
+
+              <div class="tank-battle-slomo-ticks" aria-hidden="true">
+                <span
+                  v-for="tick in adminSlomoTicks"
+                  :key="tick"
+                  class="tank-battle-slomo-tick"
+                >
+                  {{ formatAdminSlomoTick(tick) }}
+                </span>
+              </div>
+            </div>
+
             <div class="tank-battle-custom">
               <div class="tank-battle-custom-header">
                 <strong>自定义指令</strong>
@@ -156,6 +188,12 @@ const rootEl = ref<HTMLElement | null>(null);
 const tankBattleDialogOpen = ref(false);
 const tankBattleBusy = ref(false);
 const deployableAvailability = ref<boolean | null>(null);
+const ADMIN_SLOMO_MIN = 0.25;
+const ADMIN_SLOMO_MAX = 15;
+const ADMIN_SLOMO_STEP = 0.25;
+const adminSlomoValue = ref(1);
+const adminSlomoAppliedValue = ref(1);
+const adminSlomoTicks = Object.freeze([0.25, 0.5, 1, 2, 3, 5, 8, 10, 12, 15]);
 
 const tankBattleOptions = [
   {
@@ -217,6 +255,7 @@ const avatarLabel = computed(() => {
     .slice(0, 2)
     .toUpperCase();
 });
+const adminSlomoCommand = computed(() => `adminslomo ${formatAdminSlomoValue(adminSlomoValue.value)}`);
 
 function toggleMenu() {
   menuOpen.value = !menuOpen.value;
@@ -311,6 +350,51 @@ async function refreshDeployableAvailability() {
     deployableAvailability.value = commands.some((command) => String(command || "").trim() === "AdminForceAllDeployableAvailability 1");
   } catch {
     deployableAvailability.value = null;
+  }
+}
+
+function normalizeAdminSlomoValue(value: number) {
+  const clamped = Math.min(ADMIN_SLOMO_MAX, Math.max(ADMIN_SLOMO_MIN, value));
+  const snapped = Math.round(clamped / ADMIN_SLOMO_STEP) * ADMIN_SLOMO_STEP;
+  return Number(snapped.toFixed(2));
+}
+
+function formatAdminSlomoValue(value: number) {
+  return normalizeAdminSlomoValue(value).toString();
+}
+
+function formatAdminSlomoTick(value: number) {
+  return formatAdminSlomoValue(value);
+}
+
+async function applyAdminSlomo() {
+  if (tankBattleBusy.value) return;
+
+  const value = normalizeAdminSlomoValue(adminSlomoValue.value);
+  adminSlomoValue.value = value;
+
+  const confirmed = window.confirm(
+    `确认执行 ${formatAdminSlomoValue(value)}x 的 adminslomo 吗？\n\n将发送命令：adminslomo ${formatAdminSlomoValue(value)}`,
+  );
+  if (!confirmed) {
+    adminSlomoValue.value = adminSlomoAppliedValue.value;
+    return;
+  }
+
+  tankBattleBusy.value = true;
+  try {
+    await apiPost("/api/tank-battle/execute", {
+      preset: `adminslomo_${formatAdminSlomoValue(value)}`,
+      commands: [`adminslomo ${formatAdminSlomoValue(value)}`],
+      sourcePage: "tank_battle_dialog",
+    });
+    adminSlomoAppliedValue.value = value;
+    ui.pushToast({ title: "已执行", message: `adminslomo ${formatAdminSlomoValue(value)} 已发送。`, tone: "ok" });
+  } catch (error: any) {
+    ui.pushToast({ title: t("common.error"), message: error?.message || "adminslomo 执行失败。", tone: "error" });
+    adminSlomoValue.value = adminSlomoAppliedValue.value;
+  } finally {
+    tankBattleBusy.value = false;
   }
 }
 
@@ -739,6 +823,77 @@ onBeforeUnmount(() => {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
 }
 
+.tank-battle-slomo {
+  display: grid;
+  gap: 12px;
+  padding: 15px;
+  border-radius: 18px;
+  border: 1px solid rgba(99, 179, 237, 0.18);
+  background:
+    linear-gradient(180deg, rgba(56, 189, 248, 0.09), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.02);
+}
+
+.tank-battle-slomo-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tank-battle-slomo-header strong {
+  display: block;
+  font-size: 14px;
+  color: #f4f8ff;
+}
+
+.tank-battle-slomo-header span {
+  display: block;
+  margin-top: 4px;
+  color: rgba(230, 240, 255, 0.72);
+  font-size: 13px;
+}
+
+.tank-battle-slomo-value {
+  flex: 0 0 auto;
+  min-width: 64px;
+  text-align: right;
+  font-size: 18px;
+  font-weight: 800;
+  color: #7dd3fc;
+  font-variant-numeric: tabular-nums;
+}
+
+.tank-battle-slomo-slider {
+  width: 100%;
+  height: 8px;
+  margin: 2px 0 0;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, rgba(56, 189, 248, 0.72), rgba(96, 165, 250, 0.3)),
+    rgba(255, 255, 255, 0.08);
+  accent-color: #38bdf8;
+  cursor: pointer;
+}
+
+.tank-battle-slomo-slider:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.tank-battle-slomo-ticks {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 6px;
+  color: rgba(230, 240, 255, 0.72);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tank-battle-slomo-tick {
+  text-align: center;
+}
+
 .tank-battle-custom {
   display: grid;
   gap: 12px;
@@ -813,6 +968,19 @@ onBeforeUnmount(() => {
 
   .tank-battle-toggle-row {
     grid-template-columns: 1fr;
+  }
+
+  .tank-battle-slomo-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tank-battle-slomo-value {
+    text-align: left;
+  }
+
+  .tank-battle-slomo-ticks {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
   .tank-battle-option-row {
