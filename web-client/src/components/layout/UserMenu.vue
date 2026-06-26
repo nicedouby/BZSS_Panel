@@ -37,6 +37,9 @@
         </section>
 
         <button type="button" class="menu-item" role="menuitem" @click="openSettings">设置</button>
+        <button type="button" class="menu-item" role="menuitem" @click="openChangePasswordDialog">
+          修改密码
+        </button>
         <button v-if="canUseArbitraryRcon" type="button" class="menu-item" role="menuitem" @click="openRconModal">
           执行命令
         </button>
@@ -127,6 +130,107 @@
       </div>
     </transition>
   </teleport>
+
+  <teleport to="body">
+    <transition name="menu-fade">
+      <div v-if="changePasswordDialogOpen" class="change-password-overlay" v-backdrop-close="closeChangePasswordDialog">
+        <section class="change-password-dialog" role="dialog" aria-modal="true" aria-labelledby="change-password-title">
+          <header class="change-password-header">
+            <div>
+              <p class="change-password-kicker">安全设置</p>
+              <h2 id="change-password-title">修改密码</h2>
+              <p class="change-password-subtitle">请定期修改密码以保障账号安全</p>
+            </div>
+            <button type="button" class="change-password-close" @click="closeChangePasswordDialog">×</button>
+          </header>
+
+          <form @submit.prevent="submitChangePassword" class="change-password-form">
+            <div class="form-field">
+              <label for="old-password" class="field-label">当前密码</label>
+              <div class="password-wrapper">
+                <input
+                  id="old-password"
+                  v-model="changePasswordForm.oldPassword"
+                  :type="showOldPassword ? 'text' : 'password'"
+                  required
+                  class="form-input"
+                  placeholder="请输入当前密码"
+                />
+                <button
+                  type="button"
+                  class="password-toggle"
+                  @click="showOldPassword = !showOldPassword"
+                  aria-label="Toggle password visibility"
+                >
+                  <svg v-if="showOldPassword" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="toggle-icon"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="toggle-icon"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="form-field">
+              <label for="new-password" class="field-label">新密码</label>
+              <div class="password-wrapper">
+                <input
+                  id="new-password"
+                  v-model="changePasswordForm.newPassword"
+                  :type="showNewPassword ? 'text' : 'password'"
+                  required
+                  minlength="8"
+                  class="form-input"
+                  placeholder="请输入新密码（至少 8 位）"
+                />
+                <button
+                  type="button"
+                  class="password-toggle"
+                  @click="showNewPassword = !showNewPassword"
+                  aria-label="Toggle password visibility"
+                >
+                  <svg v-if="showNewPassword" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="toggle-icon"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="toggle-icon"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="form-field">
+              <label for="confirm-password" class="field-label">确认新密码</label>
+              <div class="password-wrapper">
+                <input
+                  id="confirm-password"
+                  v-model="changePasswordForm.confirmPassword"
+                  :type="showConfirmPassword ? 'text' : 'password'"
+                  required
+                  minlength="8"
+                  class="form-input"
+                  placeholder="请再次输入新密码"
+                />
+                <button
+                  type="button"
+                  class="password-toggle"
+                  @click="showConfirmPassword = !showConfirmPassword"
+                  aria-label="Toggle password visibility"
+                >
+                  <svg v-if="showConfirmPassword" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="toggle-icon"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="toggle-icon"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                </button>
+              </div>
+            </div>
+
+            <div v-if="changePasswordError" class="dialog-error">
+              {{ changePasswordError }}
+            </div>
+
+            <footer class="change-password-footer">
+              <button type="button" class="bz-btn bz-btn-ghost" @click="closeChangePasswordDialog">取消</button>
+              <button type="submit" class="bz-btn bz-btn-primary" :disabled="changePasswordBusy">
+                {{ changePasswordBusy ? '保存中...' : '确认修改' }}
+              </button>
+            </footer>
+          </form>
+        </section>
+      </div>
+    </transition>
+  </teleport>
 </template>
 
 <script setup lang="ts">
@@ -156,6 +260,73 @@ const rootEl = ref<HTMLElement | null>(null);
 const tankBattleDialogOpen = ref(false);
 const tankBattleBusy = ref(false);
 const deployableAvailability = ref<boolean | null>(null);
+
+const changePasswordDialogOpen = ref(false);
+const changePasswordBusy = ref(false);
+const changePasswordError = ref("");
+const showOldPassword = ref(false);
+const showNewPassword = ref(false);
+const showConfirmPassword = ref(false);
+
+const changePasswordForm = ref({
+  oldPassword: "",
+  newPassword: "",
+  confirmPassword: "",
+});
+
+function openChangePasswordDialog() {
+  changePasswordForm.value = {
+    oldPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  };
+  changePasswordError.value = "";
+  showOldPassword.value = false;
+  showNewPassword.value = false;
+  showConfirmPassword.value = false;
+  changePasswordDialogOpen.value = true;
+  menuOpen.value = false;
+}
+
+function closeChangePasswordDialog() {
+  changePasswordDialogOpen.value = false;
+}
+
+async function submitChangePassword() {
+  const { oldPassword, newPassword, confirmPassword } = changePasswordForm.value;
+  if (!oldPassword || !newPassword || !confirmPassword) {
+    changePasswordError.value = "请填写所有密码字段。";
+    return;
+  }
+  if (newPassword.length < 8) {
+    changePasswordError.value = "新密码长度至少为 8 位。";
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    changePasswordError.value = "新密码与确认新密码不一致。";
+    return;
+  }
+
+  changePasswordBusy.value = true;
+  changePasswordError.value = "";
+
+  try {
+    const response = await apiPost<{ ok: boolean; message?: string }>("/api/auth/change-password", {
+      oldPassword,
+      newPassword,
+    });
+    if (response.ok) {
+      ui.pushToast({ title: "修改成功", message: "您的密码已成功修改。", tone: "ok" });
+      closeChangePasswordDialog();
+    } else {
+      changePasswordError.value = response.message || "修改密码失败。";
+    }
+  } catch (error: any) {
+    changePasswordError.value = error?.message || "服务器发生错误。";
+  } finally {
+    changePasswordBusy.value = false;
+  }
+}
 
 const tankBattleOptions = [
   {
@@ -852,5 +1023,160 @@ onBeforeUnmount(() => {
   .theme-switch-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.change-password-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-user-dropdown) + 20);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background:
+    radial-gradient(circle at top, color-mix(in srgb, var(--color-brand-primary) 22%, transparent), transparent 34%),
+    color-mix(in srgb, var(--color-bg-page) 82%, transparent);
+  backdrop-filter: blur(14px) saturate(1.08);
+}
+
+.change-password-dialog {
+  width: min(440px, calc(100vw - 32px));
+  border-radius: 28px;
+  border: 1px solid rgba(96, 165, 250, 0.24);
+  background:
+    radial-gradient(circle at top left, rgba(96, 165, 250, 0.18), transparent 30%),
+    radial-gradient(circle at top right, rgba(244, 114, 182, 0.08), transparent 28%),
+    linear-gradient(180deg, rgba(18, 24, 34, 0.98), rgba(9, 13, 19, 0.99));
+  box-shadow: 0 36px 110px rgba(0, 0, 0, 0.58);
+  overflow: hidden;
+}
+
+.change-password-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.change-password-kicker {
+  margin: 0 0 6px;
+  color: #8fbaff;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.change-password-header h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+.change-password-subtitle {
+  margin: 8px 0 0;
+  color: rgba(230, 240, 255, 0.74);
+  font-size: 12px;
+}
+
+.change-password-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: #f2f7ff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.change-password-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 24px 24px;
+}
+
+.change-password-form .form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.change-password-form .field-label {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.change-password-form .form-input {
+  width: 100%;
+  height: 38px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(3, 7, 18, 0.6);
+  color: var(--color-text-primary);
+  padding: 0 12px;
+  font-size: 16px;
+}
+
+.change-password-form .form-input:focus {
+  border-color: var(--color-brand-primary, #37c8ff);
+  background: rgba(3, 7, 18, 0.8);
+  outline: none;
+}
+
+.change-password-form .password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.change-password-form .password-toggle {
+  position: absolute;
+  right: 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  box-shadow: none;
+  width: 24px;
+  height: 24px;
+}
+
+.change-password-form .password-toggle:hover:not(:disabled) {
+  color: var(--color-text-primary);
+  transform: none;
+  box-shadow: none;
+}
+
+.change-password-form .toggle-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.change-password-form .dialog-error {
+  color: #ff8080;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(255, 0, 0, 0.1);
+  border: 1px solid rgba(255, 0, 0, 0.2);
+}
+
+.change-password-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 10px;
 }
 </style>

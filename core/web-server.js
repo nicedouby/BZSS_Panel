@@ -31,6 +31,7 @@ import {
 } from "./plugins/plugin.service.js";
 import { AUDIT_ACTIONS, AUDIT_CATEGORIES, AUDIT_RESULTS, AUDIT_SOURCE_PAGES } from "./audit/audit-actions.js";
 import { sanitizeRconCommand } from "./audit/audit-sanitizer.js";
+import { verifyPassword, hashPassword } from "./auth-crypto.js";
 
 const MAX_JSON_BODY_BYTES = 1024 * 1024;
 const MAX_WS_FRAME_BYTES = 1024 * 1024; // WebSocket 单帧最大 1MB
@@ -323,6 +324,31 @@ export class WebServer {
     }
 
     const user = this.core.authManager?.getUserFromRequest(req);
+
+    if (user && url.pathname === "/api/auth/change-password" && req.method === "POST") {
+      const body = await this.readJsonBody(req);
+      const oldPassword = String(body?.oldPassword ?? "");
+      const newPassword = String(body?.newPassword ?? "");
+
+      if (newPassword.length < 8) {
+        return this.json(res, 400, { error: "InvalidPassword", message: "Password must be at least 8 characters." });
+      }
+
+      // Verify the old password is correct first!
+      const verifyOk = await verifyPassword(oldPassword, user.passwordHash);
+      if (!verifyOk) {
+        return this.json(res, 400, { error: "InvalidOldPassword", message: "Incorrect old password." });
+      }
+
+      const store = this.core.authManager.userStore;
+      const newPasswordHash = await hashPassword(newPassword);
+      const updated = await store.updatePassword(user.id, newPasswordHash);
+
+      return this.json(res, 200, {
+        ok: true,
+        user: this.serializeAdminUser(updated, await this.getAdminSteamAvatarMap([updated]), store.listPermissionGroups()),
+      });
+    }
     if (!user) {
       return this.json(res, 401, {
         error: "Unauthorized",
