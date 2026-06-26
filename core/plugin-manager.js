@@ -18,6 +18,7 @@ export class PluginManager {
     this.config = config;
     this.instances = [];
     this.catalog = [];
+    this.pluginApiBindings = new Map();
   }
 
   /**
@@ -153,12 +154,15 @@ export class PluginManager {
       const instance = mod.createPlugin({
         core: {
           logger: pluginLogger,
+          createLogger: this.core.createLogger?.bind?.(this.core),
           eventBus: this.core.eventBus,
           config: this.config,
           pluginSubscriptions: this.core.pluginSubscriptions,
           webRegistry: this.core.webRegistry,
           pluginManager: this,
           webStatus: this.core.webStatus,
+          getPluginApi: (name) => this.getPluginApi(name),
+          getPluginInstances: () => this.getInstances(),
         },
         modules: this.modules,
         playerRepository: this.modules.playerDatabase ?? null,
@@ -167,8 +171,15 @@ export class PluginManager {
         logger: pluginLogger,
       });
 
-      if (instance.init) await instance.init();
-      if (instance.start) await instance.start();
+      this.registerPluginApi(instance, pluginId);
+
+      try {
+        if (instance.init) await instance.init();
+        if (instance.start) await instance.start();
+      } catch (error) {
+        this.unregisterPluginApi(instance);
+        throw error;
+      }
 
       this.instances.push(instance);
       this.modules.pluginSubscriptions?.registerRuntimeItem?.({
@@ -190,6 +201,67 @@ export class PluginManager {
     }
   }
 
+  registerPluginApi(instance, fallbackPluginId = "plugin.unknown") {
+    const apiName = String(instance?.apiName ?? "").trim();
+    if (!apiName || !instance?.api || !this.modules) return;
+
+    const hadPrevious = Object.prototype.hasOwnProperty.call(this.modules, apiName);
+    const previous = this.modules[apiName];
+    if (hadPrevious && previous !== instance.api) {
+      this.logger.warn(`Plugin API '${apiName}' is overwriting an existing module/plugin API.`, {
+        operation: "registerPluginApi",
+        data: {
+          pluginId: instance?.manifest?.id ?? fallbackPluginId,
+          apiName,
+        },
+      });
+    }
+
+    this.modules[apiName] = instance.api;
+    this.pluginApiBindings.set(instance, {
+      apiName,
+      api: instance.api,
+      hadPrevious,
+      previous,
+    });
+  }
+
+  unregisterPluginApi(instance) {
+    const binding = this.pluginApiBindings.get(instance);
+    if (!binding || !this.modules) return;
+
+    if (binding.hadPrevious) {
+      this.modules[binding.apiName] = binding.previous;
+    } else if (this.modules[binding.apiName] === binding.api) {
+      delete this.modules[binding.apiName];
+    }
+
+    this.pluginApiBindings.delete(instance);
+  }
+
+  getPluginApi(name) {
+    const lookup = normalizePluginLookupKey(name);
+    if (!lookup) return null;
+
+    const direct = this.modules?.[String(name ?? "").trim()];
+    if (direct) return direct;
+
+    for (const [key, value] of Object.entries(this.modules ?? {})) {
+      if (normalizePluginLookupKey(key) === lookup) return value;
+    }
+
+    for (const instance of this.instances) {
+      if (
+        normalizePluginLookupKey(instance?.apiName) === lookup
+        || normalizePluginLookupKey(instance?.manifest?.id) === lookup
+      ) {
+        return instance?.api ?? null;
+      }
+    }
+
+    return null;
+  }
+
   async stopAll() {
     for (const instance of [...this.instances].reverse()) {
       const pluginId = instance?.manifest?.id ?? "plugin.unknown";
@@ -201,7 +273,11 @@ export class PluginManager {
       pluginLogger.debug(`Stopping ${pluginId}`, {
         operation: "stop",
       });
-      if (instance.stop) await instance.stop();
+      try {
+        if (instance.stop) await instance.stop();
+      } finally {
+        this.unregisterPluginApi(instance);
+      }
     }
     this.instances = [];
   }
@@ -215,4 +291,12 @@ function inferPluginId(pluginPath) {
   const name = path.basename(String(pluginPath || ""), path.extname(String(pluginPath || "")));
   if (!name) return "plugin.unknown";
   return name.startsWith("plugin.") ? name : `plugin.${name}`;
+}
+
+function normalizePluginLookupKey(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/^plugin\./i, "")
+    .replace(/[._-]/g, "")
+    .toLowerCase();
 }
