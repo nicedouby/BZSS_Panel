@@ -937,16 +937,17 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
       core?.webRegistry?.registerPage?.({
         id: "web.fairSquadGuard",
-        title: "公平建队",
+        title: "公平建队（已合并至建队规则链）",
         group: "插件",
         route: PAGE_ROUTE,
         pageModule: "/pages/fair-squad-guard.js",
         source: PLUGIN_ID,
-        description: "开局建队窗口、违规解散与建队违规排行榜。",
+        description: "兼容旧地址；主入口已合并至 /squad-rule-chain 建队规则链。",
         required: false,
         enabled: true,
         order: 132,
         icon: "FSG",
+        hiddenFromSidebar: true,
       });
 
       ensureClockSafety();

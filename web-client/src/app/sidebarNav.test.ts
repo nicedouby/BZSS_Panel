@@ -12,10 +12,11 @@ describe("sidebar navigation sections", () => {
 
     expect(sections.map((section) => section.key)).toContain("players");
     expect(sections.find((section) => section.key === "players")?.defaultPath).toBe("/player-database");
-    expect(sections.find((section) => section.key === "players")?.items.map((item) => item.path)).toContain("/plugins/fair-squad-guard");
+    expect(sections.find((section) => section.key === "players")?.items.map((item) => item.path)).toContain("/squad-rule-chain");
     expect(sections.find((section) => section.key === "players")?.items.map((item) => item.path)).toContain("/black-edge-privilege");
     expect(sections.find((section) => section.key === "balance")?.items.map((item) => item.path)).toEqual([
       "/tb",
+      "/team-shuffle",
       "/plugins/fair-team-balance",
       "/debug/fair-team-balance-lab",
     ]);
@@ -86,6 +87,7 @@ describe("sidebar navigation sections", () => {
 
     expect(findSectionForRoute(sections, "/combat-clean")?.key).toBe("combat");
     expect(findSectionForRoute(sections, "/plugins/fair-squad-guard/detail")?.key).toBe("players");
+    expect(findSectionForRoute(sections, "/debug/squad-name-policy/rules")?.key).toBe("players");
     expect(findSectionForRoute(sections, "/system/audit-records")?.key).toBe("system");
   });
 });

@@ -393,11 +393,16 @@ function resolveGroup(path: string) {
     };
   }
 
-  if (path.startsWith("plugins.fairSquadGuard.")) {
+  if (
+    path.startsWith("modules.squadNamePolicyGuard.")
+    || path.startsWith("modules.squadNamePolicyPatrol.")
+    || path.startsWith("plugins.stepwiseSquadPlaytimeGuard.")
+    || path.startsWith("plugins.fairSquadGuard.")
+  ) {
     return {
-      id: "fair-squad-guard",
-      title: "Fair Squad Guard",
-      description: "Guard thresholds, windows, and broadcast behavior.",
+      id: "squad-rule-chain",
+      title: "Squad Rule Chain",
+      description: "Squad name, playtime, and fair creation rule settings.",
     };
   }
 

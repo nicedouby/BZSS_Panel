@@ -153,16 +153,16 @@ export class WebRegistry {
     });
 
     this.registerPage({
-      id: "web.squadNameTracking",
-      title: "建队与违规队名追踪",
-      group: "调试",
-      route: "/debug/squad-name-tracking",
-      source: "module.squadLifecycle",
-      description: "建队追踪看板。整合当前小队快照、日志建队确认、违规队名解散与警告记录，以及 RCON 巡逻识别结果。",
+      id: "web.squadRuleChain",
+      title: "建队规则链",
+      group: "基础",
+      route: "/squad-rule-chain",
+      source: "module.squadRuleChain",
+      description: "建队规则链工作台。按队名规范、阶梯式建队、公平建队的前后关系整合判定状态、违规处置记录与当前小队快照。",
       required: false,
       enabled: true,
       order: 123,
-      icon: "TRACK",
+      icon: "CHAIN",
     });
 
     this.registerPage({

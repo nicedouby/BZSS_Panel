@@ -686,15 +686,16 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       runtimeConfig = readConfig(config);
       core?.webRegistry?.registerPage?.({
         id: "web.stepwiseSquadPlaytimeGuard",
-        title: "阶梯式建队时长",
+        title: "阶梯式建队时长（已合并至建队规则链）",
         group: "插件",
         route: "/plugins/stepwise-squad-playtime-guard",
         source: PLUGIN_ID,
-        description: "阶梯式建队时长检测页面。查看当前规则、广播开关、最近判定记录，并可手动模拟一次建队判定。",
+        description: "兼容旧地址；主入口已合并至 /squad-rule-chain 建队规则链。",
         required: false,
         enabled: true,
         order: 136,
         icon: "SSP",
+        hiddenFromSidebar: true,
       });
       if (typeof core?.eventBus?.onModuleEvent === "function") {
         unsubscribers.push(core.eventBus.onModuleEvent(SQUAD_RULE_CHAIN_MODULE_ID, SQUAD_NAME_RULE_PASSED_EVENT, (event) => {

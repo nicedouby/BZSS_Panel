@@ -3,7 +3,7 @@
     <WorkspaceToolbar>
       <div class="toolbar-left-block">
         <button class="toolbar-button back-btn" type="button" @click="goBack">
-          ← 返回队名规范
+          ← 返回建队规则链
         </button>
         <span class="page-title">规则维护 (Excel 表格)</span>
       </div>
@@ -418,7 +418,7 @@ onMounted(() => {
 });
 
 function goBack() {
-  router.push("/debug/squad-name-policy");
+  router.push("/squad-rule-chain");
 }
 
 async function loadState() {

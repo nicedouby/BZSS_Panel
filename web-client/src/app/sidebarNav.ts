@@ -130,6 +130,8 @@ export function isRouteActive(currentRoute: unknown, itemRoute: unknown): boolea
   if (current === item) return true;
   if (item === "/match-status" && current === "/match-state") return true;
   if (item === "/combat-manager" && current === "/combat-clean") return true;
+  const definition = pageRegistry.find((page) => page.path === item);
+  if (definition?.aliases?.some((alias) => current === alias || current.startsWith(`${alias}/`))) return true;
   return item !== "/" && current.startsWith(`${item}/`);
 }
 
@@ -196,7 +198,7 @@ function resolveSection(route: string, page: RegisteredWebPage): NavSectionKey {
   if (route === "/match-status" || route === "/match-state" || route === "/chat-monitor") return "opsLive";
   if (route === "/tb" || route.includes("fair-team-balance") || id.includes("team-balance")) return "balance";
   if (route === "/player-database" || route === "/reserve-slots" || route === "/black-edge-privilege" || route === "/player-session-records" || route === "/squad-management") return "players";
-  if (route.includes("group-report") || route.includes("fair-squad") || route.includes("stepwise-squad") || route.includes("lianban")) return "players";
+  if (route.includes("group-report") || route.includes("squad-rule-chain") || route.includes("fair-squad") || route.includes("stepwise-squad") || route.includes("lianban")) return "players";
   if (route.includes("tactical-report")) return "broadcast";
   if (route.includes("squad-name-classifier") || id.includes("player") || id.includes("squad")) return "players";
   if (route === "/combat-manager" || route === "/battle-log" || route === "/combat-log" || route === "/combat-clean") return "combat";

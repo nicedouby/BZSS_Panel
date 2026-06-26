@@ -14,8 +14,6 @@ import InfantryCombatEnhancerPage from "../pages/InfantryCombatEnhancerPage.vue"
 import GroupReportPage from "../pages/GroupReportPage.vue";
 import FairTeamBalancePage from "../pages/FairTeamBalancePage.vue";
 import FairTeamBalanceLabPage from "../pages/FairTeamBalanceLabPage.vue";
-import FairSquadGuardPage from "../pages/FairSquadGuardPage.vue";
-import StepwiseSquadPlaytimeGuardPage from "../pages/StepwiseSquadPlaytimeGuardPage.vue";
 import LianbanKickPage from "../pages/LianbanKickPage.vue";
 import TacticalReportPage from "../pages/TacticalReportPage.vue";
 import TacticalReportConfigPage from "../pages/TacticalReportConfigPage.vue";
@@ -28,7 +26,6 @@ import MatchSnapshotDebugPage from "../pages/MatchSnapshotDebugPage.vue";
 import PjscAverageDurationPage from "../pages/PjscAverageDurationPage.vue";
 import DrawVoteGuardDebugPage from "../pages/DrawVoteGuardDebugPage.vue";
 import SquadNameClassifierDebugPage from "../pages/SquadNameClassifierDebugPage.vue";
-import SquadNamePolicyPage from "../pages/SquadNamePolicyPage.vue";
 import SquadNameRulesPage from "../pages/SquadNameRulesPage.vue";
 import SquadNameTrackingPage from "../pages/SquadNameTrackingPage.vue";
 import WelcomeJoinWarningDebugPage from "../pages/WelcomeJoinWarningDebugPage.vue";
@@ -277,23 +274,49 @@ export const pageRegistry: PageDefinition[] = [
     ...workspacePage,
   },
   {
-    name: "fair-squad-guard",
-    path: "/plugins/fair-squad-guard",
-    component: FairSquadGuardPage,
-    titleKey: "routeTitle.fairSquadGuard",
+    name: "squad-rule-chain",
+    path: "/squad-rule-chain",
+    aliases: [
+      "/debug/squad-name-tracking",
+      "/debug/squad-name-policy",
+      "/plugins/stepwise-squad-playtime-guard",
+      "/plugins/fair-squad-guard",
+    ],
+    component: SquadNameTrackingPage,
+    title: "建队规则链",
     category: "plugin",
     refreshPolicy: "polling",
-    nav: { section: "players", label: "公平建队", icon: "🛡️", order: 70 },
+    nav: { section: "players", label: "建队规则链", icon: "CHAIN", order: 70 },
     ...workspacePage,
   },
   {
-    name: "stepwise-squad-playtime-guard",
-    path: "/plugins/stepwise-squad-playtime-guard",
-    component: StepwiseSquadPlaytimeGuardPage,
-    title: "阶梯式建队时长",
+    name: "squad-rule-chain-squad-name",
+    path: "/squad-rule-chain/squad-name",
+    component: SquadNameTrackingPage,
+    title: "队名规范流程",
     category: "plugin",
     refreshPolicy: "polling",
-    nav: { section: "players", label: "阶梯式建队时长", icon: "⏳", order: 80 },
+    nav: { section: "players", label: "队名规范流程", icon: "CHAIN", order: 71, hidden: true },
+    ...workspacePage,
+  },
+  {
+    name: "squad-rule-chain-stepwise",
+    path: "/squad-rule-chain/stepwise",
+    component: SquadNameTrackingPage,
+    title: "阶梯式建队流程",
+    category: "plugin",
+    refreshPolicy: "polling",
+    nav: { section: "players", label: "阶梯式建队流程", icon: "CHAIN", order: 72, hidden: true },
+    ...workspacePage,
+  },
+  {
+    name: "squad-rule-chain-fair",
+    path: "/squad-rule-chain/fair",
+    component: SquadNameTrackingPage,
+    title: "公平建队流程",
+    category: "plugin",
+    refreshPolicy: "polling",
+    nav: { section: "players", label: "公平建队流程", icon: "CHAIN", order: 73, hidden: true },
     ...workspacePage,
   },
   {
@@ -447,26 +470,6 @@ export const pageRegistry: PageDefinition[] = [
     refreshPolicy: "manual",
     nav: { section: "players", label: "小队名称分类器", icon: "🏷️", order: 100 },
     ...documentPage,
-  },
-  {
-    name: "squad-name-tracking",
-    path: "/debug/squad-name-tracking",
-    component: SquadNameTrackingPage,
-    title: "建队与违规队名追踪",
-    category: "debug",
-    refreshPolicy: "polling",
-    nav: { section: "players", label: "建队与违规追踪", icon: "TRACK", order: 92 },
-    ...workspacePage,
-  },
-  {
-    name: "squad-name-policy",
-    path: "/debug/squad-name-policy",
-    component: SquadNamePolicyPage,
-    title: "队名规范",
-    category: "debug",
-    refreshPolicy: "manual",
-    nav: { section: "players", label: "队名规范", icon: "NAME", order: 95 },
-    ...workspacePage,
   },
   {
     name: "squad-name-rules",
