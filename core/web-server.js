@@ -1086,6 +1086,30 @@ export class WebServer {
           data: pluginApi.resetSession?.(body?.reason ?? "manual_reset") ?? null,
         });
       }
+
+      if (url.pathname === "/api/plugins/fair-squad-guard/enabled" && req.method === "PATCH") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        if (typeof body?.enabled !== "boolean") {
+          return this.json(res, 400, { error: "InvalidBody", message: "enabled must be boolean" });
+        }
+        const current = this.core.config?.get?.("plugins.fairSquadGuard", {}) ?? {};
+        this.core.config?.set?.("plugins.fairSquadGuard", { ...current, enabled: body.enabled });
+        await this.core.config?.save?.().catch(() => {});
+        return this.json(res, 200, { ok: true, enabled: body.enabled });
+      }
+
+      if (url.pathname === "/api/plugins/fair-squad-guard/config" && req.method === "PATCH") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        if (!body || typeof body !== "object" || Array.isArray(body)) {
+          return this.json(res, 400, { error: "InvalidBody", message: "body must be object" });
+        }
+        const current = this.core.config?.get?.("plugins.fairSquadGuard", {}) ?? {};
+        this.core.config?.set?.("plugins.fairSquadGuard", { ...current, ...body });
+        await this.core.config?.save?.().catch(() => {});
+        return this.json(res, 200, { ok: true, data: pluginApi.getStatus?.() ?? null });
+      }
     }
 
     const pluginMatch = url.pathname.match(/^\/api\/plugins\/([^/]+)\/(enabled|config)$/);
@@ -2431,6 +2455,30 @@ export class WebServer {
           ok: true,
           data: await pluginApi.simulateCreation?.(body ?? {}),
         });
+      }
+
+      if (url.pathname === "/api/plugins/stepwise-squad-playtime-guard/enabled" && req.method === "PATCH") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        if (typeof body?.enabled !== "boolean") {
+          return this.json(res, 400, { error: "InvalidBody", message: "enabled must be boolean" });
+        }
+        const current = this.core.config?.get?.("plugins.stepwiseSquadPlaytimeGuard", {}) ?? {};
+        this.core.config?.set?.("plugins.stepwiseSquadPlaytimeGuard", { ...current, enabled: body.enabled });
+        await this.core.config?.save?.().catch(() => {});
+        return this.json(res, 200, { ok: true, enabled: body.enabled });
+      }
+
+      if (url.pathname === "/api/plugins/stepwise-squad-playtime-guard/config" && req.method === "PATCH") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        if (!body || typeof body !== "object" || Array.isArray(body)) {
+          return this.json(res, 400, { error: "InvalidBody", message: "body must be object" });
+        }
+        const current = this.core.config?.get?.("plugins.stepwiseSquadPlaytimeGuard", {}) ?? {};
+        this.core.config?.set?.("plugins.stepwiseSquadPlaytimeGuard", { ...current, ...body });
+        await this.core.config?.save?.().catch(() => {});
+        return this.json(res, 200, { ok: true, data: pluginApi.getState?.() ?? null });
       }
     }
 

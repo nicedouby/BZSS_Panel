@@ -801,7 +801,13 @@
     },
     "plugin": {
       "fairSquadGuard": {
-        "enabled": true
+        "enabled": true,
+        "enforcementPlayerThreshold": 0,
+        "noSquadCreationSeconds": 20,
+        "infantryOnlyUntilSeconds": 50,
+        "maxViolationCountBeforeKick": 15,
+        "broadcastOnApproved": false,
+        "broadcastOnViolation": false
       },
       "fairTeamBalance": {
         "enabled": true,
