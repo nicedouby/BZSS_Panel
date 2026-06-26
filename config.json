@@ -780,7 +780,7 @@
   "plugins": {
     "enabled": true,
     "fairSquadGuard": {
-      "enabled": true,
+      "enabled": false,
       "directory": "./data/fair-squad-guard",
       "enforcementPlayerThreshold": 0,
       "noSquadCreationSeconds": 20,
@@ -790,12 +790,13 @@
       "allowedInfantryNamesText": "",
       "allowedInfantryPatternsText": "",
       "broadcastOnApproved": false,
-      "broadcastOnViolation": true
+      "broadcastOnViolation": false
     },
     "stepwiseSquadPlaytimeGuard": {
-      "enabled": true,
+      "enabled": false,
       "directory": "./data/stepwise-squad-playtime-guard",
       "broadcastOnApproved": false,
+      "broadcastOnViolation": false,
       "warnOnMissingPlaytime": true,
       "liveLookupWhenMissing": true,
       "maxRecentRecords": 300,
@@ -856,7 +857,7 @@
     },
     "plugin": {
       "fairSquadGuard": {
-        "enabled": true
+        "enabled": false
       },
       "fairTeamBalance": {
         "enabled": true,
