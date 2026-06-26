@@ -1,4 +1,4 @@
-﻿// -*- coding: utf-8 -*-
+// -*- coding: utf-8 -*-
 
 import { createDatabase } from "../../core/database.js";
 
@@ -112,6 +112,7 @@ export function createWarmupReserveExchangeModule({ core, modules, config, logge
       running = false;
       if (timer) clearInterval(timer);
       timer = null;
+      lastTickAtMs = null;
       moduleLogger?.info?.("[WarmupReserveExchange] stopped.");
     },
   };
@@ -190,12 +191,13 @@ export function createWarmupReserveExchangeModule({ core, modules, config, logge
       const snapshot = core.webStatus?.getSnapshot?.() ?? core.webStatus?.state ?? {};
       const serverId = String(snapshot.serverId ?? core.webStatus?.serverId ?? "").trim();
       const players = (modules.playerState?.getOnlinePlayers?.(serverId) ?? [])
-        .filter((player) => String(player?.steamID ?? player?.steam64 ?? player?.steam_id ?? "").trim());
+        .filter((player) => resolvePlayerSteamId(player));
       const now = Number(nowMs) || Date.now();
 
       if (!gate.active) {
+        lastTickAtMs = null;
         await recordWarmupWindow(false, gate.reason, now);
-        return buildState({ gate, playerCount: players.length });
+        return buildState({ gate, playerCount: players.length, deltaSeconds: 0 });
       }
 
       await recordWarmupWindow(true, gate.reason, now);
@@ -203,7 +205,7 @@ export function createWarmupReserveExchangeModule({ core, modules, config, logge
       lastTickAtMs = now;
 
       for (const player of players) {
-        const steamID = String(player?.steamID ?? player?.steam64 ?? player?.steam_id ?? "").trim();
+        const steamID = resolvePlayerSteamId(player);
         if (!steamID) continue;
         const playerName = String(player?.name ?? player?.current_name ?? "").trim();
         const current = await ensureProgressRow(steamID, playerName, now);
@@ -288,8 +290,13 @@ export function createWarmupReserveExchangeModule({ core, modules, config, logge
   }
 
   async function grantReserveDay(player, progressRow, now) {
-    const steamID = String(player?.steamID ?? "").trim();
+    const steamID = resolvePlayerSteamId(player) || String(progressRow?.steam_id ?? "").trim();
     const playerName = String(player?.name ?? player?.current_name ?? progressRow.player_name ?? "").trim();
+    if (!steamID) {
+      moduleLogger?.warn?.("[WarmupReserveExchange] skip reserve reward because steam id is missing.");
+      return;
+    }
+
     const existing = (await modules.playerDatabase?.getCachedPlayer?.({ steamID })) ?? null;
     const before = existing?.expireAt ?? existing?.expire_at ?? null;
     const currentExpire = parseExpire(before);
@@ -327,7 +334,7 @@ export function createWarmupReserveExchangeModule({ core, modules, config, logge
     const adminWarn = modules?.adminWarn;
     const warn = adminWarn?.warnPlayer ?? adminWarn?.sendAdminWarn;
     if (typeof warn !== "function") return;
-    const steamID = String(player?.steamID ?? "").trim();
+    const steamID = resolvePlayerSteamId(player) || String(progressRow?.steam_id ?? "").trim();
     const playerName = String(player?.name ?? player?.current_name ?? progressRow.player_name ?? "").trim();
     const minutes = Math.floor(bucketSeconds / 60);
     const remainingMinutes = Math.max(0, Math.ceil((getRequiredSeconds() - bucketSeconds) / 60));
@@ -429,6 +436,17 @@ export function createWarmupReserveExchangeModule({ core, modules, config, logge
       ...extra,
     };
   }
+}
+
+function resolvePlayerSteamId(player = {}) {
+  return String(
+    player?.steamID
+    ?? player?.steamId
+    ?? player?.steam64
+    ?? player?.steam64ID
+    ?? player?.steam_id
+    ?? "",
+  ).trim();
 }
 
 function parseExpire(value) {
