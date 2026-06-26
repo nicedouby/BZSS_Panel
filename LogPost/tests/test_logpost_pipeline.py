@@ -118,6 +118,7 @@ class LogPostPipelineTests(unittest.TestCase):
         app.process_line({
             "line": line,
             "offset": 12,
+            "next_offset": 77,
             "sourcePath": "SquadGame.log",
             "fileId": "file-1",
         })
@@ -137,6 +138,7 @@ class LogPostPipelineTests(unittest.TestCase):
         preserved = self.read_jsonl(preserved_path)
         self.assertEqual(preserved[0]["MatchedRule"], "LogNet: Join succeeded:")
         self.assertEqual(json.loads(state_path.read_text(encoding="utf-8"))["seq"], 1)
+        self.assertEqual(json.loads(state_path.read_text(encoding="utf-8"))["offset"], 77)
         self.assertEqual(len(app.udp_sender.sent), 1)
         self.assertEqual(app.udp_sender.sent[0]["Event"], "On_RawLogLine")
         self.assertEqual(app.udp_sender.sent[0]["SourceSeq"], "1")
@@ -151,7 +153,7 @@ class LogPostPipelineTests(unittest.TestCase):
             "(IP: 127.0.0.1| Online IDs: EOS:1234567890abcdef)"
         )
 
-        app.process_line({"line": line, "offset": 0, "sourcePath": "SquadGame.log", "fileId": "file-1"})
+        app.process_line({"line": line, "offset": 0, "next_offset": len(line) + 1, "sourcePath": "SquadGame.log", "fileId": "file-1"})
 
         preserved_path = pathlib.Path(app.writer.output_dir) / today_string() / "Preserved.jsonl"
         preserved = self.read_jsonl(preserved_path)
@@ -165,7 +167,7 @@ class LogPostPipelineTests(unittest.TestCase):
             "(IP: 127.0.0.1 | Online IDs: EOS: 1234567890abcdef steam: 76561198000000000)"
         )
 
-        app.process_line({"line": line, "offset": 0, "sourcePath": "SquadGame.log", "fileId": "file-1"})
+        app.process_line({"line": line, "offset": 0, "next_offset": len(line) + 1, "sourcePath": "SquadGame.log", "fileId": "file-1"})
 
         preserved_path = pathlib.Path(app.writer.output_dir) / today_string() / "Preserved.jsonl"
         preserved = self.read_jsonl(preserved_path)
@@ -176,7 +178,7 @@ class LogPostPipelineTests(unittest.TestCase):
         app = self.make_app()
         line = "LogNet: UNetConnection::Close: RemoteAddr: 127.0.0.1:12345"
 
-        app.process_line({"line": line, "offset": 0, "sourcePath": "SquadGame.log", "fileId": "file-1"})
+        app.process_line({"line": line, "offset": 0, "next_offset": len(line) + 1, "sourcePath": "SquadGame.log", "fileId": "file-1"})
 
         preserved_path = pathlib.Path(app.writer.output_dir) / today_string() / "Preserved.jsonl"
         preserved = self.read_jsonl(preserved_path)
@@ -186,7 +188,7 @@ class LogPostPipelineTests(unittest.TestCase):
         app = self.make_app()
         line = "LogGameMode: FindPlayerStart_Implementation()"
 
-        app.process_line({"line": line, "offset": 0, "sourcePath": "SquadGame.log", "fileId": "file-1"})
+        app.process_line({"line": line, "offset": 0, "next_offset": len(line) + 1, "sourcePath": "SquadGame.log", "fileId": "file-1"})
 
         preserved_path = pathlib.Path(app.writer.output_dir) / today_string() / "Preserved.jsonl"
         unknown_path = pathlib.Path(app.writer.output_dir) / today_string() / "Unknown.jsonl"
@@ -204,7 +206,7 @@ class LogPostPipelineTests(unittest.TestCase):
             "FindPlayerStart_Implementation()"
         )
 
-        app.process_line({"line": line, "offset": 0, "sourcePath": "SquadGame.log", "fileId": "file-1"})
+        app.process_line({"line": line, "offset": 0, "next_offset": len(line) + 1, "sourcePath": "SquadGame.log", "fileId": "file-1"})
 
         preserved_path = pathlib.Path(app.writer.output_dir) / today_string() / "Preserved.jsonl"
         self.assertTrue(preserved_path.exists())
@@ -216,7 +218,7 @@ class LogPostPipelineTests(unittest.TestCase):
         app.matchers = [StubMatcher("LogNet: Join succeeded:")]
         line = "[2026.06.09-12.00.00:000]LogNet: Join succeeded: TestPlayer"
 
-        app.process_line({"line": line, "offset": 0, "sourcePath": "SquadGame.log", "fileId": "file-1"})
+        app.process_line({"line": line, "offset": 0, "next_offset": len(line) + 1, "sourcePath": "SquadGame.log", "fileId": "file-1"})
 
         event_path = pathlib.Path(app.writer.output_dir) / today_string() / "On_TestEvent.jsonl"
         preserved_path = pathlib.Path(app.writer.output_dir) / today_string() / "Preserved.jsonl"
@@ -232,7 +234,7 @@ class LogPostPipelineTests(unittest.TestCase):
         app = self.make_app(unknown={"write_unknown": True})
         line = "[2026.06.09-12.00.00:000]LogSomething: no matcher hit"
 
-        app.process_line({"line": line, "offset": 33, "sourcePath": "SquadGame.log", "fileId": "file-1"})
+        app.process_line({"line": line, "offset": 33, "next_offset": 33 + len(line) + 1, "sourcePath": "SquadGame.log", "fileId": "file-1"})
 
         unknown_path = pathlib.Path(app.writer.output_dir) / today_string() / "Unknown.jsonl"
         unknown = self.read_jsonl(unknown_path)
@@ -248,7 +250,7 @@ class LogPostPipelineTests(unittest.TestCase):
         app = self.make_app()
         app.matchers = [BrokenMatcher(), StubMatcher("matched", "On_AfterBroken")]
 
-        app.process_line({"line": "matched", "offset": 1, "sourcePath": "SquadGame.log", "fileId": "file-1"})
+        app.process_line({"line": "matched", "offset": 1, "next_offset": 9, "sourcePath": "SquadGame.log", "fileId": "file-1"})
 
         parse_error_path = pathlib.Path(app.writer.output_dir) / today_string() / "ParseError.jsonl"
         parse_errors = self.read_jsonl(parse_error_path)
@@ -269,6 +271,38 @@ class LogPostPipelineTests(unittest.TestCase):
             "Broad log-channel blacklist rule rejected: LogNet:",
             app.console.warns,
         )
+
+    def test_restart_resumes_from_processed_line_boundary_not_batch_eof(self) -> None:
+        app = self.make_app(tail={"from_end": False, "reopen_on_truncate": True})
+        log_path = pathlib.Path(app.config["log_file"])
+        first_line = "first important line"
+        second_line = "second important line"
+        log_bytes = f"{first_line}\n{second_line}\n".encode("utf-8")
+        log_path.write_bytes(log_bytes)
+        first_boundary = len(f"{first_line}\n".encode("utf-8"))
+
+        records = app.tail_reader.read_new_lines()
+        self.assertEqual(len(records), 2)
+        self.assertEqual(records[0]["offset"], 0)
+        self.assertEqual(records[0]["next_offset"], first_boundary)
+        self.assertEqual(records[1]["offset"], first_boundary)
+
+        app.process_line(records[0])
+
+        state_path = pathlib.Path(app.writer.output_dir) / ".state" / "tailer-state.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        self.assertEqual(state["offset"], first_boundary)
+        app.tail_reader.close()
+
+        restarted = BzssLogParserApp(app.config)
+        restarted.udp_sender.sock.close()
+        restarted.matchers = []
+        restarted.udp_sender = StubUdpSender()
+        restarted.console = StubConsole()
+
+        resumed_records = restarted.tail_reader.read_new_lines()
+        self.assertEqual([record["line"] for record in resumed_records], [second_line])
+        restarted.tail_reader.close()
 
 
 if __name__ == "__main__":

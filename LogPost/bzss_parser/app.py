@@ -215,7 +215,13 @@ class BzssLogParserApp:
             "SourcePath": str(raw_archive.get("sourcePath", "")),
         }
 
-        self.tail_reader.persist_state(int(raw_archive.get("seq", 0) or 0))
+        commit_offset = record.get("next_offset")
+        if commit_offset is None:
+            commit_offset = record.get("offset", 0)
+        self.tail_reader.persist_state(
+            int(raw_archive.get("seq", 0) or 0),
+            int(commit_offset or 0),
+        )
 
         try:
             self.raw_input_writer.write(line)

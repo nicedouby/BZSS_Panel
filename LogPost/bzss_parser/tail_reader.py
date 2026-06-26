@@ -143,6 +143,7 @@ class TailReader:
             records.append({
                 "line": line,
                 "offset": line_offset,
+                "next_offset": blob_start + cursor,
                 "sourcePath": str(self.log_path),
                 "fileId": self.file_id,
             })
@@ -156,14 +157,15 @@ class TailReader:
 
         return records
 
-    def persist_state(self, seq: int) -> Dict[str, Any]:
+    def persist_state(self, seq: int, offset: Optional[int] = None) -> Dict[str, Any]:
         if not self.state_store:
             return {}
 
+        commit_offset = self.position if offset is None else max(0, int(offset))
         self.state = self.state_store.save(
             source_path=str(self.log_path),
             file_id=self.file_id,
-            offset=self.position,
+            offset=commit_offset,
             seq=seq,
         )
         return self.state
