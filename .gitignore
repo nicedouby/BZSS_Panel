@@ -49,3 +49,4 @@ maps/Game/Maps/Anvil/Minimap/Anvil_Minimap.PNG
 /._ue4parse_src
 /.tmp_uasset
 *.cfg
+*.gz

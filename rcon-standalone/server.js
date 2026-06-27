@@ -775,7 +775,10 @@ const appPage = `<!doctype html>
     async function sendCommand() {
       const command = commandEl.value.trim();
       if (!command) return;
+      const previousLabel = sendEl.textContent;
       sendEl.disabled = true;
+      sendEl.textContent = "发送中...";
+      appendLog("发送中: " + command);
       try {
         const res = await fetch("/api/command", {
           method: "POST",
@@ -787,12 +790,20 @@ const appPage = `<!doctype html>
           appendLog("失败: " + (data.error || "未知错误"));
           return;
         }
-        appendLog("命令: " + command + "\\n结果: " + (data.response || "(empty)"));
+        const response = String(data.response ?? "");
+        const responseLength = Number(data.responseLength ?? response.length);
+        if (response.trim()) {
+          appendLog("命令: " + command + "\\n结果: " + response);
+        } else {
+          appendLog("命令: " + command + "\\n结果: (空响应)\\n说明: RCON 已执行，但没有返回文本。\\n返回长度: " + responseLength);
+        }
         commandEl.value = "";
+        commandEl.focus();
       } catch (err) {
         appendLog("失败: " + err.message);
       } finally {
         sendEl.disabled = false;
+        sendEl.textContent = previousLabel;
       }
     }
 
@@ -801,6 +812,17 @@ const appPage = `<!doctype html>
       if (event.key === "Enter") {
         event.preventDefault();
         sendCommand();
+        return;
+      }
+      if (event.key === "ArrowUp" && !commandEl.value.trim() && logEl.value) {
+        const lastLine = logEl.value.split("\n").find((line) => line.includes("命令: "));
+        if (lastLine) {
+          const match = lastLine.match(/命令:\s*(.*)$/);
+          if (match && match[1]) {
+            commandEl.value = match[1];
+            commandEl.setSelectionRange(commandEl.value.length, commandEl.value.length);
+          }
+        }
       }
     });
 
@@ -889,7 +911,11 @@ const server = http.createServer(async (req, res) => {
     try {
       await ensureRconReady();
       const response = await rconClient.execute(command);
-      return json(res, 200, { ok: true, response });
+      return json(res, 200, {
+        ok: true,
+        response,
+        responseLength: String(response ?? "").length,
+      });
     } catch (err) {
       rconState.lastError = err.message;
       return json(res, 500, { ok: false, error: err.message });
