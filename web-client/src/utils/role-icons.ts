@@ -21,7 +21,7 @@ type RoleIconMatch = {
   tone: RoleIconInfo["tone"];
 };
 
-const ICON_BASE = "/Icon";
+const ICON_BASE = "/assets/icons";
 
 const ROLE_ICON_MATCHES: RoleIconMatch[] = [
   {

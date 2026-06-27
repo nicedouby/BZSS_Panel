@@ -16,21 +16,21 @@ const SHARP_BUNDLE_ROOT = "C:/Users/12703/.cache/codex-runtimes/codex-primary-ru
 const sharpRequire = createRequire(import.meta.url);
 
 const ROLE_ICON_MATCHES = [
-  { patterns: ["squadleader", "sl", "leader"], icon: "/Icon/T_role_squadleader.PNG", label: "SL", tone: "#f59e0b" },
-  { patterns: ["medic"], icon: "/Icon/T_role_medic.PNG", label: "Medic", tone: "#22c55e" },
-  { patterns: ["heavyantitank", "heavy anti tank", "heavy anti-tank", "hat"], icon: "/Icon/T_role_heavyantitank.PNG", label: "HAT", tone: "#ef4444" },
-  { patterns: ["lightantitank", "light anti tank", "light anti-tank", "antitank", "anti tank", "lat"], icon: "/Icon/T_role_lightantitank.PNG", label: "LAT", tone: "#f97316" },
-  { patterns: ["machinegunner", "machine gunner", "mg"], icon: "/Icon/T_role_machinegunner.PNG", label: "MG", tone: "#8b5cf6" },
-  { patterns: ["automaticrifleman", "automatic rifleman", "ar"], icon: "/Icon/T_role_automaticrifleman.PNG", label: "AR", tone: "#8b5cf6" },
-  { patterns: ["combatengineer", "combat engineer", "engineer"], icon: "/Icon/T_role_engineer.PNG", label: "ENG", tone: "#eab308" },
-  { patterns: ["designatedmarksman", "designated marksman", "marksman"], icon: "/Icon/T_role_designatedmarksman.PNG", label: "DMR", tone: "#06b6d4" },
-  { patterns: ["sniper"], icon: "/Icon/T_role_sniper.PNG", label: "Sniper", tone: "#06b6d4" },
-  { patterns: ["scout"], icon: "/Icon/T_role_scout.PNG", label: "Scout", tone: "#38bdf8" },
-  { patterns: ["grenadier"], icon: "/Icon/T_role_grenadier.PNG", label: "Gren", tone: "#38bdf8" },
-  { patterns: ["crewman", "crew"], icon: "/Icon/T_role_crewman.PNG", label: "Crew", tone: "#94a3b8" },
-  { patterns: ["pilot"], icon: "/Icon/T_role_pilot.PNG", label: "Pilot", tone: "#38bdf8" },
-  { patterns: ["rifleman scoped", "riflemanscoped"], icon: "/Icon/T_role_rifleman_scoped.PNG", label: "Rifle", tone: "#38bdf8" },
-  { patterns: ["rifleman"], icon: "/Icon/T_role_rifleman.PNG", label: "Rifle", tone: "#38bdf8" },
+  { patterns: ["squadleader", "sl", "leader"], icon: "/assets/icons/T_role_squadleader.PNG", label: "SL", tone: "#f59e0b" },
+  { patterns: ["medic"], icon: "/assets/icons/T_role_medic.PNG", label: "Medic", tone: "#22c55e" },
+  { patterns: ["heavyantitank", "heavy anti tank", "heavy anti-tank", "hat"], icon: "/assets/icons/T_role_heavyantitank.PNG", label: "HAT", tone: "#ef4444" },
+  { patterns: ["lightantitank", "light anti tank", "light anti-tank", "antitank", "anti tank", "lat"], icon: "/assets/icons/T_role_lightantitank.PNG", label: "LAT", tone: "#f97316" },
+  { patterns: ["machinegunner", "machine gunner", "mg"], icon: "/assets/icons/T_role_machinegunner.PNG", label: "MG", tone: "#8b5cf6" },
+  { patterns: ["automaticrifleman", "automatic rifleman", "ar"], icon: "/assets/icons/T_role_automaticrifleman.PNG", label: "AR", tone: "#8b5cf6" },
+  { patterns: ["combatengineer", "combat engineer", "engineer"], icon: "/assets/icons/T_role_engineer.PNG", label: "ENG", tone: "#eab308" },
+  { patterns: ["designatedmarksman", "designated marksman", "marksman"], icon: "/assets/icons/T_role_designatedmarksman.PNG", label: "DMR", tone: "#06b6d4" },
+  { patterns: ["sniper"], icon: "/assets/icons/T_role_sniper.PNG", label: "Sniper", tone: "#06b6d4" },
+  { patterns: ["scout"], icon: "/assets/icons/T_role_scout.PNG", label: "Scout", tone: "#38bdf8" },
+  { patterns: ["grenadier"], icon: "/assets/icons/T_role_grenadier.PNG", label: "Gren", tone: "#38bdf8" },
+  { patterns: ["crewman", "crew"], icon: "/assets/icons/T_role_crewman.PNG", label: "Crew", tone: "#94a3b8" },
+  { patterns: ["pilot"], icon: "/assets/icons/T_role_pilot.PNG", label: "Pilot", tone: "#38bdf8" },
+  { patterns: ["rifleman scoped", "riflemanscoped"], icon: "/assets/icons/T_role_rifleman_scoped.PNG", label: "Rifle", tone: "#38bdf8" },
+  { patterns: ["rifleman"], icon: "/assets/icons/T_role_rifleman.PNG", label: "Rifle", tone: "#38bdf8" },
 ];
 
 export function createPlugin({ core, modules, config, logger } = {}) {

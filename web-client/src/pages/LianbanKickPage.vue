@@ -29,12 +29,12 @@
 import { computed } from "vue";
 
 import { apiGet } from "../app/apiClient";
-import PluginPageShell from "../components/domain/plugin/PluginPageShell.vue";
-import LianbanEventList from "../components/domain/lianban-kick/LianbanEventList.vue";
-import LianbanFileList from "../components/domain/lianban-kick/LianbanFileList.vue";
-import LianbanLastMatch from "../components/domain/lianban-kick/LianbanLastMatch.vue";
-import LianbanRuntimeDetails from "../components/domain/lianban-kick/LianbanRuntimeDetails.vue";
-import type { LianbanState } from "../components/domain/lianban-kick/types";
+import PluginPageShell from "../features/plugins/PluginPageShell.vue";
+import LianbanEventList from "../features/lianban-kick/LianbanEventList.vue";
+import LianbanFileList from "../features/lianban-kick/LianbanFileList.vue";
+import LianbanLastMatch from "../features/lianban-kick/LianbanLastMatch.vue";
+import LianbanRuntimeDetails from "../features/lianban-kick/LianbanRuntimeDetails.vue";
+import type { LianbanState } from "../features/lianban-kick/types";
 import StatGrid from "../components/ui/StatGrid.vue";
 import type { StatItem } from "../components/ui/StatGrid.vue";
 import type { StatusTone } from "../components/ui/StatusBadge.vue";

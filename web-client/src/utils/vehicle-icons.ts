@@ -2,7 +2,7 @@ import type { RoleIconInfo } from "./role-icons";
 
 /**
  * Vehicle icon mapping table.
- * Each entry maps vehicleType keyword patterns to an icon image from /Icon/.
+ * Each entry maps vehicleType keyword patterns to an icon image from /assets/icons/.
  * Patterns are matched against normalized vehicleType strings.
  * Order matters — first match wins, so more specific patterns must come first.
  */
@@ -13,7 +13,7 @@ type VehicleIconMatch = {
   label: string;
 };
 
-const ICO_BASE = "/Icon";
+const ICO_BASE = "/assets/icons";
 
 const VEHICLE_ICON_MATCHES: VehicleIconMatch[] = [
   // --- Jets ---

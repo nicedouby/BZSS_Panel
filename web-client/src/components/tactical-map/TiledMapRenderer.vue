@@ -40,7 +40,7 @@ import { computed, toRef, ref, watch } from "vue";
 import { useTileLoader, type TileInfo } from "../../composables/useTileLoader";
 
 const props = defineProps<{
-  /** Base path to tiles directory, e.g. "/map-tiles/Sumari_RAAS_v1" */
+  /** Base path to tiles directory, e.g. "/assets/map-tiles/Sumari_RAAS_v1" */
   tileBasePath: string;
   /** Maximum tile zoom level (typically 4) */
   maxZoom: number;

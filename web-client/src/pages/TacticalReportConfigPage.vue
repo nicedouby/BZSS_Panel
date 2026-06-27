@@ -70,7 +70,7 @@
 import { computed, reactive, ref, watch } from "vue";
 
 import { apiGet, apiPost } from "../app/apiClient";
-import PluginPageShell from "../components/domain/plugin/PluginPageShell.vue";
+import PluginPageShell from "../features/plugins/PluginPageShell.vue";
 import PageCard from "../components/common/PageCard.vue";
 import StatGrid from "../components/ui/StatGrid.vue";
 import type { StatItem } from "../components/ui/StatGrid.vue";

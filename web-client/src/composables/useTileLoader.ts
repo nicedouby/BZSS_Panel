@@ -26,7 +26,7 @@ export interface TileInfo {
 }
 
 export interface UseTileLoaderOptions {
-  /** Base path for tiles, e.g. "/map-tiles/Sumari_RAAS_v1" */
+  /** Base path for tiles, e.g. "/assets/map-tiles/Sumari_RAAS_v1" */
   tileBasePath: Ref<string>;
   /** Maximum zoom level available (typically 4) */
   maxZoom: Ref<number>;

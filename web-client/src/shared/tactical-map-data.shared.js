@@ -88,7 +88,7 @@ function buildConfig(key, entry) {
     key,
     name,
     image: `/${imageName}`,
-    tileBasePath: `/map-tiles/${key}`,
+    tileBasePath: `/assets/map-tiles/${key}`,
     maxZoomLevel: 4,
     bounds: { minX, minY, maxX, maxY },
     aliases: buildAliases(key, name),
