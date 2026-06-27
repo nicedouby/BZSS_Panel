@@ -24,35 +24,58 @@ export class PluginManager {
    * 扫描 plugins 目录，收集所有插件的 manifest。
    */
   async scanPlugins() {
-    const pluginsDir = path.resolve(process.cwd(), "plugins");
-    this.logger.debug(`Scanning plugins directory: ${pluginsDir}`, {
-      operation: "scanPlugins",
-    });
+    const scanRoots = [
+      path.resolve(process.cwd(), "app/plugins"),
+      path.resolve(process.cwd(), "plugins"),
+    ];
+    const results = [];
 
-    try {
-      const files = await fs.readdir(pluginsDir);
-      const jsFiles = files.filter((f) => f.endsWith(".js") && !f.endsWith(".service.js") && !f.endsWith(".store.js"));
-
-      const results = [];
-      for (const file of jsFiles) {
-        const filePath = path.join("plugins", file);
-        const metadata = await this.getPluginMetadata(filePath);
-        if (metadata) {
-          results.push({
-            ...metadata,
-            path: filePath,
-          });
-        }
+    for (const pluginsDir of scanRoots) {
+      let stats;
+      try {
+        stats = await fs.stat(pluginsDir);
+      } catch {
+        this.logger.debug(`Skipping missing plugins directory: ${pluginsDir}`, {
+          operation: "scanPlugins",
+        });
+        continue;
       }
 
-      this.catalog = results;
-      return results;
-    } catch (error) {
-      this.logger.error(`Failed to scan plugins: ${error.message}`, {
+      if (!stats.isDirectory()) {
+        this.logger.debug(`Skipping non-directory plugins path: ${pluginsDir}`, {
+          operation: "scanPlugins",
+        });
+        continue;
+      }
+
+      this.logger.debug(`Scanning plugins directory: ${pluginsDir}`, {
         operation: "scanPlugins",
       });
-      return [];
+
+      try {
+        const files = await fs.readdir(pluginsDir);
+        const jsFiles = files.filter((f) => f.endsWith(".js") && !f.endsWith(".service.js") && !f.endsWith(".store.js"));
+
+        const relativeRoot = path.relative(process.cwd(), pluginsDir).replaceAll("\\", "/");
+        for (const file of jsFiles) {
+          const filePath = path.posix.join(relativeRoot, file);
+          const metadata = await this.getPluginMetadata(filePath);
+          if (metadata) {
+            results.push({
+              ...metadata,
+              path: filePath,
+            });
+          }
+        }
+      } catch (error) {
+        this.logger.error(`Failed to scan plugins directory ${pluginsDir}: ${error.message}`, {
+          operation: "scanPlugins",
+        });
+      }
     }
+
+    this.catalog = results;
+    return results;
   }
 
   /**

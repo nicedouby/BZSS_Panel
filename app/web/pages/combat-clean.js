@@ -178,7 +178,7 @@ export async function renderPage({ root, api, apiFetch }) {
 
   root.querySelector("#combat-clean-refresh").addEventListener("click", () => loadEvents());
   root.querySelector("#combat-clean-clear").addEventListener("click", async () => {
-    if (!window.confirm("鍙竻绌哄綋鍓嶅唴瀛樹腑鐨?clean combat 浜嬩欢锛屼笉浼氬啓鍏ユ垨鍒犻櫎鏁版嵁搴撱€傜户缁紵")) return;
+    if (!window.confirm("只清空当前内存中的 clean combat 事件，不会写入或删除数据库。继续吗？")) return;
     await apiFetch("/api/combat-manager/clear", { method: "POST" });
     await loadEvents();
   });

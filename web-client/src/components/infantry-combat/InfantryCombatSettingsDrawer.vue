@@ -43,7 +43,7 @@
           </label>
 
           <label class="field">
-            <span>鎴樻枟鎻愰啋缂撳瓨(ms)</span>
+            <span>战斗提醒缓存(ms)</span>
             <input v-model.number="draft.damageDebounceMs" type="number" min="0" step="1">
           </label>
         </section>

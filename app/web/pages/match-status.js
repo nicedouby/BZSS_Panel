@@ -1768,9 +1768,9 @@ async function waitForPlaytimeJob(apiFetch, jobId, waitMs = 30_000, onUpdate = n
   while (Date.now() - startedAt < waitMs) {
     const response = await apiFetch(`/api/playtime/jobs/${encodeURIComponent(jobId)}?waitMs=3000`);
     const job = await readJsonSafe(response);
-    if (!response.ok) throw new Error(job?.error || `Steam 浠诲姟鏌ヨ澶辫触 (${response.status})`);
+    if (!response.ok) throw new Error(job?.error || `Steam 任务查询失败 (${response.status})`);
     if (typeof onUpdate === "function") onUpdate(job);
     if (job?.status === "completed" || job?.status === "failed") return job;
   }
-  throw new Error("绛夊緟 Steam 鏃堕暱浠诲姟瓒呮椂");
+  throw new Error("等待 Steam 时长任务超时");
 }

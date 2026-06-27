@@ -852,7 +852,7 @@ async function submitTicketAdjust(isAdd = true) {
   ticketAdjustLoading.value = true;
   try {
     if (!ticketCommandTarget.value.host) {
-      throw new Error("褰撳墠 sender 娌℃湁鍙敤鐨勫懡浠ゅ湴鍧€銆?");
+      throw new Error("当前 sender 没有可用的命令地址。");
     }
 
     const team = Number(ticketAdjustForm.team) === 2 ? 2 : 1;

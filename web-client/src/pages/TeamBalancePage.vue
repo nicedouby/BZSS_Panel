@@ -5,7 +5,7 @@
         <header class="tb-header">
           <div>
             <h1>跳边入口</h1>
-            <p>统一通过 TeamBalance 模块处理跳边执行和打乱方案记录�</p>
+            <p>统一通过 TeamBalance 模块处理跳边执行和打乱方案记录。</p>
           </div>
         </header>
 
@@ -36,8 +36,8 @@
     <section class="tb-card tb-shuffle-card">
       <header class="tb-header">
         <div>
-          <h2>按时长打乱阵�</h2>
-          <p>只生成审核记录，不直接执行跳边。生成后可以直接看到 T1 / T2 的玩家分布�</p>
+          <h2>按时长打乱阵营</h2>
+          <p>只生成审核记录，不直接执行跳边。生成后可以直接看到 T1 / T2 的玩家分布。</p>
         </div>
         <button
           type="button"
@@ -45,7 +45,7 @@
           :disabled="creatingShufflePlan || !canCreateShufflePlan"
           @click="handleCreateShufflePlan"
         >
-          {{ creatingShufflePlan ? "生成�?.." : "生成打乱记录" }}
+          {{ creatingShufflePlan ? "生成中..." : "生成打乱记录" }}
         </button>
       </header>
 
@@ -82,7 +82,7 @@
           </div>
           <div class="tb-group-card__meta">
             <span>锚定 {{ groupAnchorName(group) }}</span>
-            <span>{{ group.members.length }} �</span>
+            <span>{{ group.members.length }} 人</span>
           </div>
         </article>
       </div>
@@ -93,7 +93,8 @@
             <h3>打乱结果</h3>
             <p>
               计划跳边 {{ latestShufflePlan.summary?.plannedMoveCount ?? 0 }} 人，
-              打乱后平均时长差 {{ formatHours(latestShufflePlan.summary?.averageDeltaHours) }}�?            </p>
+              打乱后平均时长差 {{ formatHours(latestShufflePlan.summary?.averageDeltaHours) }} 小时
+            </p>
           </div>
           <span class="tb-shuffle-badge">{{ formatTime(latestShufflePlan.plan?.generatedAt ?? "") }}</span>
         </div>
@@ -102,7 +103,7 @@
           <article class="tb-shuffle-team">
             <div class="tb-shuffle-team__head">
               <strong>T1</strong>
-              <span>{{ formatHours(latestShufflePlan.summary?.after?.team1?.averagePlaytimeHours) }} / {{ latestShufflePlan.summary?.after?.team1?.playerCount ?? 0 }} �</span>
+              <span>{{ formatHours(latestShufflePlan.summary?.after?.team1?.averagePlaytimeHours) }} / {{ latestShufflePlan.summary?.after?.team1?.playerCount ?? 0 }} 小时</span>
             </div>
             <div class="tb-shuffle-player-list">
               <div
@@ -123,7 +124,7 @@
           <article class="tb-shuffle-team">
             <div class="tb-shuffle-team__head">
               <strong>T2</strong>
-              <span>{{ formatHours(latestShufflePlan.summary?.after?.team2?.averagePlaytimeHours) }} / {{ latestShufflePlan.summary?.after?.team2?.playerCount ?? 0 }} �</span>
+              <span>{{ formatHours(latestShufflePlan.summary?.after?.team2?.averagePlaytimeHours) }} / {{ latestShufflePlan.summary?.after?.team2?.playerCount ?? 0 }} 小时</span>
             </div>
             <div class="tb-shuffle-player-list">
               <div
@@ -144,7 +145,8 @@
       </div>
 
       <div class="tb-shuffle-note">
-        只会写入跳边入口记录，审核通过前不会触发任何实际跳边。当前的目标是让两边平均时长尽量接近�?      </div>
+        只会写入跳边入口记录，审核通过前不会触发任何实际跳边。当前的目标是让两边平均时长尽量接近。
+      </div>
     </section>
     </div>
 
@@ -152,15 +154,15 @@
       <header class="tb-header">
         <div>
           <h2>跳边记录</h2>
-          <p>这里同时显示实际跳边和“按时长打乱阵营”的审核记录�</p>
+          <p>这里同时显示实际跳边和“按时长打乱阵营”的审核记录。</p>
         </div>
         <button type="button" class="tb-secondary-button" :disabled="loadingRecords" @click="loadRecords">
-          {{ loadingRecords ? "刷新�?.." : "刷新记录" }}
+          {{ loadingRecords ? "刷新中..." : "刷新记录" }}
         </button>
       </header>
 
       <p v-if="recordsError" class="tb-error">{{ recordsError }}</p>
-      <p v-else-if="!records.length" class="tb-empty">暂无跳边记录�</p>
+      <p v-else-if="!records.length" class="tb-empty">暂无跳边记录。</p>
 
       <div v-else class="tb-record-list">
         <article v-for="record in records" :key="record.id" class="tb-record">
@@ -172,12 +174,12 @@
           <div class="tb-record-meta">
             <span>类型: {{ formatRecordType(record) }}</span>
             <span>来源: {{ record.source }}</span>
-            <span>执行�? {{ record.executor }}</span>
+            <span>执行者: {{ record.executor }}</span>
             <span>结果: {{ record.ok ? "成功" : "失败" }}</span>
           </div>
 
           <div class="tb-record-detail">
-            <span v-if="record.playerName">玩家�? {{ record.playerName }}</span>
+            <span v-if="record.playerName">玩家: {{ record.playerName }}</span>
             <span v-if="record.reason">原因: {{ record.reason }}</span>
             <span v-if="record.message">{{ record.message }}</span>
             <span v-if="record.error">错误: {{ record.error }}</span>
@@ -185,13 +187,13 @@
 
           <div v-if="record.action === 'playtime_shuffle_plan' && record.summary" class="tb-record-plan">
             <div class="tb-record-plan-summary">
-              <span>计划跳边: {{ record.summary.plannedMoveCount ?? 0 }} �</span>
-              <span>总玩�? {{ record.summary.totalPlayers ?? 0 }} �</span>
+              <span>计划跳边: {{ record.summary.plannedMoveCount ?? 0 }} 人</span>
+              <span>总玩家: {{ record.summary.totalPlayers ?? 0 }} 人</span>
               <span>已知时长: {{ record.summary.knownPlaytimePlayers ?? 0 }}</span>
               <span>缺失时长: {{ record.summary.unknownPlaytimePlayers ?? 0 }}</span>
               <span>打乱后平均时长差: {{ formatHours(record.summary.averageDeltaHours) }}</span>
               <span>
-                打乱�?T1/T2 平均:
+                打乱后 T1/T2 平均:
                 {{ formatHours(record.summary.after?.team1?.averagePlaytimeHours) }}
                 /
                 {{ formatHours(record.summary.after?.team2?.averagePlaytimeHours) }}
@@ -229,7 +231,7 @@
             </div>
 
             <details v-if="record.plan?.moves?.length" class="tb-record-plan-moves">
-              <summary>查看计划跳边名单（{{ record.plan.moves.length }}�</summary>
+              <summary>查看计划跳边名单（{{ record.plan.moves.length }}人）</summary>
               <div class="tb-record-plan-move-list">
                 <div v-for="(move, index) in record.plan.moves" :key="`${record.id}-move-${index}`" class="tb-record-plan-move">
                   <strong>{{ move.playerName || move.steamId || "Unknown" }}</strong>
@@ -480,7 +482,7 @@ async function handleCreateShufflePlan() {
   if (roster.length === 0 || !canCreateShufflePlan.value) return;
 
   const confirmed = window.confirm(
-    `将基于当�?${roster.length} 名在线玩家的时长生成阵营打乱方案。\n只会写入跳边入口记录，不会执行实际跳边。`,
+    `将基于当前 ${roster.length} 名在线玩家的时长生成阵营打乱方案。\n只会写入跳边入口记录，不会执行实际跳边。`,
   );
   if (!confirmed) return;
 
@@ -605,8 +607,8 @@ function formatTime(value: string) {
 }
 function formatRecordType(record: TeamBalanceRecord) {
 
-  if (record.action === "playtime_shuffle_plan") return "��ʱ�����Ҽ�¼";
-  return "�ֶ�����ִ��";
+  if (record.action === "playtime_shuffle_plan") return "按时长打乱审核记录";
+  return "手动跳边执行";
 }
 
 function formatRecordTitle(record: TeamBalanceRecord) {

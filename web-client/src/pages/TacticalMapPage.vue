@@ -685,7 +685,8 @@
               :class="{ active: sidebarTab === 'players' }"
               @click="sidebarTab = 'players'"
             >
-              所有玩�?            </button>
+              所有玩家
+            </button>
           </div>
 
           <!-- Team Selection Tabs -->
@@ -741,7 +742,8 @@
               </div>
             </div>
             <div v-if="!currentTeamSquads.length" class="empty-state">
-              暂无已创建小�?            </div>
+              暂无已创建小队
+            </div>
           </div>
 
           <!-- Active Players List -->
@@ -988,7 +990,7 @@ function calculateCombatHotspot() {
     gameY: sumY / alivePlayers.length
   };
   
-  logCombatEvent(`计算得到新一轮作战热点中�? [X:${Math.round(combatHotspot.value.gameX)}, Y:${Math.round(combatHotspot.value.gameY)}] (1000m 半径�?`, "system");
+  logCombatEvent(`计算得到新一轮作战热点中心 [X:${Math.round(combatHotspot.value.gameX)}, Y:${Math.round(combatHotspot.value.gameY)}] (1000m 半径)`, "system");
 }
 
 function clearCombatHotspot() {
@@ -1352,7 +1354,7 @@ const measureLabels = computed(() => {
       labels.push({
         mapX: pt.mapX,
         mapY: pt.mapY,
-        text: `+${Math.round(dist)}�?(�?{Math.round(totalDistance)}�?`
+        text: `+${Math.round(dist)}m (${Math.round(totalDistance)}m)`
       });
     }
   });
@@ -2919,7 +2921,7 @@ onBeforeUnmount(() => {
   box-shadow: none;
 }
 
-/* Leader special outline �?slightly larger scale only */
+/* Leader special outline slightly larger scale only */
 .is-squadleader .marker-ring {
   transform: translate(-50%, -50%) scale(1.15);
 }
