@@ -166,5 +166,5 @@ async function promptPassword(rl, message) {
 }
 
 function printUsage() {
-  console.log("Usage: node scripts/auth-users.js <add|list|disable|enable|reset-password|delete> [username]");
+  console.log("Usage: node app/scripts/auth-users.js <add|list|disable|enable|reset-password|delete> [username]");
 }

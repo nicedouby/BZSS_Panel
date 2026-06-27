@@ -3,7 +3,7 @@
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { WEB_PAGE_PERMISSION_MATRIX } from "../web-client/src/shared/web-page-permissions.js";
+import { WEB_PAGE_PERMISSION_MATRIX } from "../../web-client/src/shared/web-page-permissions.js";
 
 export class AuthUserStore {
   constructor({ config = {}, logger } = {}) {

@@ -12,7 +12,7 @@ import { normalizeSquadName } from "../squad-lifecycle/log-adapter.js";
 import {
   canSendRconCommand,
   resolveRconPermission,
-} from "../../web-client/src/shared/rcon-permissions.js";
+} from "../../../web-client/src/shared/rcon-permissions.js";
 import { canDisband, canKick, canRemove } from "./permissions.js";
 
 const MODULE_ID = "module.squadManagement";

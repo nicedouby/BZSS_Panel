@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 
 import { hashPassword, hashToken, INVALID_PASSWORD_HASH, verifyPassword } from "./auth-crypto.js";
 import { AuthUserStore, normalizeRole } from "./auth-user-store.js";
-import { hasPermission as hasSharedPermission } from "../web-client/src/shared/rcon-permissions.js";
+import { hasPermission as hasSharedPermission } from "../../web-client/src/shared/rcon-permissions.js";
 
 const DEFAULT_USERNAME = "DoubyBear";
 const DEFAULT_ROLE = "SuperAdmin";

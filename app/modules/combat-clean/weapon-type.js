@@ -562,7 +562,7 @@ function normalizeWeaponTypeText(value) {
 
 function loadMicePanelLightWeaponHints() {
   const blueprintFile = ["kill", "manager", "blueprint_types.json"].join("_");
-  const blueprintPath = fileURLToPath(new URL(`../../MicePanel/config/${blueprintFile}`, import.meta.url));
+  const blueprintPath = fileURLToPath(new URL(`../../../MicePanel/config/${blueprintFile}`, import.meta.url));
 
   try {
     const parsed = JSON.parse(readFileSync(blueprintPath, "utf8"));

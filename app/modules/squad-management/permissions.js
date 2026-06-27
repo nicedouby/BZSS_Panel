@@ -1,6 +1,6 @@
 // -*- coding: utf-8 -*-
 
-import { hasPermission } from "../../web-client/src/shared/rcon-permissions.js";
+import { hasPermission } from "../../../web-client/src/shared/rcon-permissions.js";
 
 export function canDisband(viewer, config = {}) {
   const permissions = viewer?.permissions ?? viewer?.permission;

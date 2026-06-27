@@ -8,7 +8,7 @@ import { WebRegistry } from "../core/web-registry.js";
 import { WebServer } from "../core/web-server.js";
 import { classifySquadName } from "../core/squad-name-classifier.js";
 import { GroupReportService } from "../plugins/group-report.service.js";
-import { hasPermission as hasRconPermission } from "../web-client/src/shared/rcon-permissions.js";
+import { hasPermission as hasRconPermission } from "../../web-client/src/shared/rcon-permissions.js";
 import { createSquadRuleChainModule } from "../modules/squad-rule-chain/index.js";
 import { createSquadNamePolicyGuardModule } from "../modules/squad-name-policy-guard/index.js";
 import { createPlugin as createStepwisePlugin } from "../plugins/stepwise-squad-playtime-guard.js";

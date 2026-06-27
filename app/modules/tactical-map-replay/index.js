@@ -6,7 +6,7 @@ import os from "node:os";
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import sharp from "sharp";
-import { resolveTacticalMapKey, TACTICAL_MAP_CONFIGS } from "../../web-client/src/shared/tactical-map-data.shared.js";
+import { resolveTacticalMapKey, TACTICAL_MAP_CONFIGS } from "../../../web-client/src/shared/tactical-map-data.shared.js";
 
 const DEFAULT_DATA_DIR = "data/tactical-map-replay";
 const DEFAULT_EXPORT_TEMP_DIR = path.join(os.tmpdir(), "bzss-tactical-map-replay");

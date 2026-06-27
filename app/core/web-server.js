@@ -69,7 +69,7 @@ export class WebServer {
     this.useVueClient = Boolean(config.useVueClient);
     this.staticDirectory = path.resolve(
       process.cwd(),
-      this.useVueClient ? "./web-client/dist" : (config.staticDirectory ?? "./web"),
+      this.useVueClient ? "./web-client/dist" : (config.staticDirectory ?? "./app/web"),
     );
 
     this.logger = logger;

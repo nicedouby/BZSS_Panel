@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import { RconManager } from "../core/rcon-manager.js";
 import { createTeamBalanceService } from "../modules/team-balance/service.js";
-import { resolveRconPermission } from "../web-client/src/shared/rcon-permissions.js";
+import { resolveRconPermission } from "../../web-client/src/shared/rcon-permissions.js";
 
 function createFakeClient({ id = "default", executedCommands, response = "OK", delayMs = 0, failCommands = new Set(), blockCommands = new Set() } = {}) {
   return {

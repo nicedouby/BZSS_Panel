@@ -4,7 +4,7 @@ import {
   canSendRconCommand,
   hasPermission,
   resolveRconPermission,
-} from "../../web-client/src/shared/rcon-permissions.js";
+} from "../../../web-client/src/shared/rcon-permissions.js";
 
 const MODULE_ID = "module.teamBalance";
 const DEFAULT_SOURCE = "manual";

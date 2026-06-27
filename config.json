@@ -863,7 +863,7 @@
     "enabled": true
   },
   "bzssCore": {
-    "modifyScriptPath": "D:\\BZSS_Panel\\ModifySaveGame.py",
+    "modifyScriptPath": "./support/runtime-assets/bzss-core/ModifySaveGame.py",
     "remoteSaveGamePath": "Z:\\Users\\Administrator\\Desktop\\bzss_sq_server\\SquadGame\\Saved\\SaveGames\\BZSS-Logger.sav",
     "playerInfoSavePath": "Z:\\Users\\Administrator\\Desktop\\bzss_sq_server\\SquadGame\\Saved\\SaveGames\\PBI.sav",
     "playerInfoPollIntervalMs": 100

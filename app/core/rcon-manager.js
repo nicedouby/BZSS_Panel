@@ -10,7 +10,7 @@ import { resolveRconRefreshPolicy } from "./rcon-refresh-policy.js";
 import {
   canSendRconCommand,
   resolveRconPermission,
-} from "../web-client/src/shared/rcon-permissions.js";
+} from "../../web-client/src/shared/rcon-permissions.js";
 
 export function resolveRconPassword(config, logger) {
   const passwordFromEnv = String(config?.passwordFromEnv ?? "").trim();

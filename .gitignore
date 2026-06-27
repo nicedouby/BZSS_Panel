@@ -20,10 +20,13 @@ config.json.bak
 SquadGame.log
 *.log
 *.zip
-/联办
+/鑱斿姙
 *.xlsx
 /tmp_test_output
-/BZSS-Hack
+/support/adjacent-projects/BZSS-Hack
+/support/vendor
+/support/reference-data
+/release
 maps/Game/Maps/Yehorivka/Minimap/Yehorivka_Minimap.PNG
 maps/Game/Maps/Tallil_Outskirts/Minimap/Tallil_Outskirts_Minimap.PNG
 maps/Game/Maps/Sumari/Minimap/Sumari_Minimap.PNG
@@ -50,3 +53,4 @@ maps/Game/Maps/Anvil/Minimap/Anvil_Minimap.PNG
 /.tmp_uasset
 *.cfg
 *.gz
+sqlite3-part0.bin

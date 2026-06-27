@@ -10,7 +10,7 @@ import {
   canAccessPage,
   normalizePermissionList,
   resolveWebPagePermission,
-} from "../web-client/src/shared/web-page-permissions.js";
+} from "../../web-client/src/shared/web-page-permissions.js";
 
 export class WebRegistry {
   constructor({ config, logger }) {

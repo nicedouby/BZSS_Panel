@@ -6,7 +6,7 @@ import path from "node:path";
 
 import { normalizePolicyDocument } from "../domain/squad-name-policy/index.js";
 
-const DEFAULT_INPUT = path.resolve(process.cwd(), "载具队队名规范.xlsx");
+const DEFAULT_INPUT = path.resolve(process.cwd(), "support", "reference-data", "载具队队名规范.xlsx");
 const DEFAULT_OUTPUT = path.resolve(process.cwd(), "config", "squad_name_policy.json");
 const inputPath = path.resolve(process.cwd(), process.argv[2] ?? DEFAULT_INPUT);
 const outputPath = path.resolve(process.cwd(), process.argv[3] ?? DEFAULT_OUTPUT);
