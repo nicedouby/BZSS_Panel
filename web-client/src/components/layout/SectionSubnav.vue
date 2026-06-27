@@ -59,6 +59,9 @@ onMounted(fetchPages);
 <style scoped>
 .section-subnav {
   --section-accent: var(--color-brand-primary);
+  position: sticky;
+  top: 0;
+  z-index: var(--z-subnav);
   min-width: 0;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -202,6 +205,51 @@ onMounted(fetchPages);
   .subnav-head {
     border-right: 0;
     padding-right: 0;
+  }
+
+  .subnav-list {
+    padding-bottom: 2px;
+  }
+}
+
+@media (max-width: 780px) {
+  .section-subnav {
+    top: calc(var(--safe-top) + 72px);
+  }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .section-subnav {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 6px;
+    padding: 4px 8px;
+    top: 0;
+  }
+
+  .subnav-head {
+    min-height: 24px;
+    padding-right: 6px;
+  }
+
+  .subnav-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .subnav-title,
+  .item-label {
+    font-size: 11px;
+  }
+
+  .subnav-link {
+    height: 24px;
+    gap: 4px;
+    padding: 0 7px 0 5px;
+  }
+
+  .item-icon {
+    width: 16px;
+    height: 16px;
   }
 }
 </style>

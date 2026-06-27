@@ -2,19 +2,25 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const root = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:\/)/, "$1");
-const pagesDir = join(root, "src", "pages");
+const scanDirs = [
+  join(root, "src", "pages"),
+  join(root, "src", "components"),
+];
 
 const blockedPatterns = [
   /\b100vh\b/,
   /\b100dvh\b/,
   /calc\(100vh/i,
   /calc\(100dvh/i,
-  /height:\s*(400|600|700|760)px/i,
+  /(^|[;\s{])height:\s*(400|600|700|760)px/i,
   /max-height:\s*60vh/i,
 ];
 
 const allowedFiles = new Set([
   "src/pages/LoginPage.vue",
+  "src/components/layout/AppLayout.vue",
+  "src/components/layout/Sidebar.vue",
+  "src/components/tactical-map/TiledMapRenderer.vue",
 ]);
 
 function listVueFiles(dir) {
@@ -29,7 +35,8 @@ function listVueFiles(dir) {
 }
 
 const hits = [];
-for (const file of listVueFiles(pagesDir)) {
+for (const scanDir of scanDirs) {
+for (const file of listVueFiles(scanDir)) {
   const rel = relative(root, file).replaceAll("\\", "/");
   if (allowedFiles.has(rel)) continue;
 
@@ -42,11 +49,12 @@ for (const file of listVueFiles(pagesDir)) {
     }
   });
 }
+}
 
 if (hits.length) {
-  console.log("Layout contract scan found viewport or fixed-height page rules:");
+  console.log("Layout contract scan found viewport or fixed-height layout rules:");
   for (const hit of hits) console.log(`- ${hit}`);
   process.exitCode = 1;
 } else {
-  console.log("Layout contract scan passed for web-client/src/pages.");
+  console.log("Layout contract scan passed for web-client/src/pages and src/components.");
 }

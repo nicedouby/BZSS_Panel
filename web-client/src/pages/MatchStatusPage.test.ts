@@ -93,10 +93,33 @@ class FakeEventSource {
   }
 }
 
+function installMatchMedia() {
+  vi.stubGlobal("matchMedia", (query: string) => {
+    const maxWidth = /max-width:\s*(\d+)px/.exec(query);
+    const maxHeight = /max-height:\s*(\d+)px/.exec(query);
+    const orientationLandscape = query.includes("orientation: landscape");
+    const matches = (!maxWidth || window.innerWidth <= Number(maxWidth[1]))
+      && (!maxHeight || window.innerHeight <= Number(maxHeight[1]))
+      && (!orientationLandscape || window.innerWidth >= window.innerHeight);
+
+    return {
+      matches,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    } as unknown as MediaQueryList;
+  });
+}
+
 describe("MatchStatusPage", () => {
   beforeEach(() => {
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 1400 });
     Object.defineProperty(window, "innerHeight", { configurable: true, value: 900 });
+    installMatchMedia();
     setActivePinia(createPinia());
     stopRuntimeSync();
     Object.assign(getRuntimeSyncState(), {
@@ -184,7 +207,11 @@ describe("MatchStatusPage", () => {
       }
 
       if (path.startsWith("/api/query/playtime-cache")) {
-        return { items: {} };
+        return {
+          items: {
+            "76561198000000001": { gameSeconds: 7200 },
+          },
+        };
       }
 
       if (path.startsWith("/api/query/player-database")) {
@@ -282,7 +309,7 @@ describe("MatchStatusPage", () => {
     });
 
     expect(wrapper.findComponent({ name: "MatchChatPanel" }).exists()).toBe(true);
-    expect(wrapper.text()).toContain("战绩概览");
+    expect(wrapper.text()).toContain("Live feed");
     expect(wrapper.text()).not.toContain("Loading");
     wrapper.unmount();
   });
@@ -417,6 +444,30 @@ describe("MatchStatusPage", () => {
       throw new Error(`Unexpected path: ${path}`);
     });
 
+    usePlayerStore().applySnapshot({
+      active: [
+        {
+          playerID: 1,
+          name: "Alice",
+          teamID: 1,
+          squadID: null,
+          steamID: "76561198000000001",
+          eosID: "EOS-1",
+          role: "Rifleman",
+          isLeader: false,
+          online: true,
+          squadlessSeconds: 95,
+          matchOnlineSeconds: 3661,
+          matchObservedOnlineSeconds: 3600,
+          matchEstimatedOnlineSeconds: 61,
+          matchFirstSeenAt: "2026-05-12T00:00:00.000Z",
+          matchLastSeenAt: "2026-05-12T00:10:00.000Z",
+          matchJoinCount: 2,
+        },
+      ],
+      updatedAt: Date.now(),
+    });
+
     const wrapper = mount(MatchStatusPage, {
       global: {
         plugins: [[VueQueryPlugin, { queryClient: new QueryClient() }]],
@@ -443,10 +494,10 @@ describe("MatchStatusPage", () => {
     expect(panel?.textContent).toContain("本局在服时长");
     expect(panel?.textContent).toContain("1.0h");
     expect(panel?.textContent).toContain("进服 2 次");
-    expect(panel?.textContent).toContain("战绩（battleLog）");
-    expect(panel?.textContent).toContain("击倒 2 / 击杀 4 / 死亡 3 / TK 1 / 复苏 1");
-    expect(panel?.getAttribute("style") || "").toContain("left: 12px");
-    expect(panel?.getAttribute("style") || "").toContain("top: 12px");
+    expect(panel?.textContent).toContain("K/D");
+    expect(panel?.textContent).toContain("击杀4");
+    expect(panel?.textContent).toContain("死亡3");
+    expect(panel?.getAttribute("style") || "").toContain("width: 476px");
 
     expect((wrapper.vm as any).activePlayerWindow?.detail?.raw?.squadlessSeconds).toBe(95);
     wrapper.unmount();
@@ -454,6 +505,19 @@ describe("MatchStatusPage", () => {
 
   it("does not refetch playtime for already cached steamIDs", async () => {
     const playersStore = usePlayerStore();
+    playersStore.applySnapshot({
+      active: [
+        {
+          playerID: 1,
+          name: "Alice",
+          teamID: 1,
+          squadID: 2,
+          steamID: "76561198000000001",
+          online: true,
+        },
+      ],
+      updatedAt: Date.now(),
+    });
 
     const wrapper = mount(MatchStatusPage, {
       global: {
@@ -466,6 +530,11 @@ describe("MatchStatusPage", () => {
       },
     });
 
+    await flushPromises();
+    await vi.waitFor(() => {
+      const initialPlaytimeCacheCalls = vi.mocked(apiGet).mock.calls.filter(call => call[0].includes("playtime-cache"));
+      expect(initialPlaytimeCacheCalls.length).toBeGreaterThan(0);
+    });
     await flushPromises();
 
     // Clear call history on apiGet mock

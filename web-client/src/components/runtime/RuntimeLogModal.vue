@@ -182,7 +182,7 @@ function onWindowKeyDown(event: KeyboardEvent) {
 
 .dialog-panel {
   width: min(1100px, calc(100vw - 48px));
-  height: min(78vh, calc(100vh - 48px));
+  height: min(78vh, calc(var(--app-viewport-height) - 48px));
   display: flex;
   flex-direction: column;
   gap: 12px;

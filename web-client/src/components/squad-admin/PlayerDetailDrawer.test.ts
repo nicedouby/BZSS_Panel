@@ -96,7 +96,7 @@ describe("PlayerDetailDrawer", () => {
     const panel = document.body.querySelector(".player-detail-floating") as HTMLElement | null;
     expect(panel).toBeTruthy();
     expect(panel?.getAttribute("style") || "").toContain("width: calc(100vw - 24px)");
-    expect(panel?.getAttribute("style") || "").toContain("max-height: calc(100vh - 24px)");
+    expect(panel?.getAttribute("style") || "").toContain("max-height: calc(var(--app-viewport-height) - 24px)");
 
     const backdrop = document.body.querySelector(".floating-window-layer") as HTMLElement | null;
     expect(backdrop).toBeTruthy();

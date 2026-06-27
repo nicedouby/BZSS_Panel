@@ -1069,7 +1069,7 @@ function clamp(value: number, min: number, max: number) {
 
 .dialog-panel {
   width: min(760px, 100%);
-  max-height: calc(100vh - 48px);
+  max-height: calc(var(--app-viewport-height) - 48px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 14px;

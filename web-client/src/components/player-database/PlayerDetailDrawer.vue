@@ -133,7 +133,7 @@ function save() {
 .drawer-panel {
   margin-left: auto;
   width: min(560px, 100vw);
-  height: 100vh;
+  height: var(--app-viewport-height);
   overflow: auto;
   background: #10161c;
   border-left: 1px solid #26303a;

@@ -544,19 +544,110 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 900px) {
+  .squad-page-toolbar {
+    padding: 8px 12px;
+  }
+
   .toolbar-row {
+    gap: 8px;
+    row-gap: 8px;
+  }
+
+  /* 搜索框：独占第一行并加大触控高度 */
+  .search-wrapper {
+    order: -1;
+    flex: 1 0 100%;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .squad-search-input {
+    height: 40px;
+    font-size: 14px;
+    padding: 6px 12px 6px 32px;
+  }
+
+  .search-icon {
+    font-size: 17px;
+  }
+
+  /* 筛选 + 视图切换：放大芯片便于点按 */
+  .filter-chips {
+    flex: 1 1 auto;
     gap: 6px;
   }
 
-  .refresh-button.danger {
+  .filter-chip {
+    height: 34px;
+    padding: 0 14px;
+    font-size: 12px;
+  }
+
+  .view-mode-toggle {
+    margin-left: 0;
+  }
+
+  .toggle-btn {
+    height: 30px;
+    padding: 0 16px;
+    font-size: 12px;
+  }
+
+  .toolbar-spacer {
     display: none;
   }
 
-  .search-wrapper {
-    width: 100%;
-    min-width: 0;
-    order: -1;
+  /* 操作按钮：占满整行并均分宽度，避免拥挤难点 */
+  .refresh-controls {
+    flex: 1 0 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .refresh-button {
     flex: 1 1 auto;
+    justify-content: center;
+    min-height: 42px;
+    height: auto;
+    padding: 9px 12px;
+    font-size: 12px;
+  }
+
+  .refresh-button.primary {
+    min-width: 0;
+  }
+
+  /* 保留强制刷新入口，移动端也可触达 */
+  .refresh-button.danger {
+    display: inline-flex;
+  }
+
+  .refresh-dropdown {
+    flex: 1 1 auto;
+    display: flex;
+  }
+
+  .refresh-menu-trigger {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .refresh-menu {
+    left: 0;
+    right: 0;
+    min-width: 0;
+  }
+
+  .refresh-menu .menu-item {
+    min-height: 42px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 480px) {
+  .filter-chip {
+    flex: 1 1 auto;
+    text-align: center;
   }
 }
 

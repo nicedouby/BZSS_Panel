@@ -77,6 +77,12 @@
       :stale="showStaleBanner"
       :stale-text="staleText"
     >
+      <MobileSegmentTabs
+        v-if="isMobile"
+        v-model="mobileTab"
+        aria-label="Match Status Sections"
+        :items="mobileTabItems"
+      />
       <div v-if="viewMode === 'list'" class="match-state-content">
         <div class="match-state-main">
           <div v-if="refreshError || playtimeError" class="match-error-stack">
@@ -84,7 +90,7 @@
             <ErrorBlock v-if="playtimeError" :message="playtimeError" />
           </div>
 
-          <div class="squad-main-content" :class="pageState.densityMode">
+          <div v-if="!isMobile || mobileTab === 'teams'" class="squad-main-content" :class="pageState.densityMode">
             <TeamColumn
               v-for="team in viewModels.teams"
               :key="team.teamId"
@@ -102,11 +108,15 @@
               @select-squad="handleSquadClick"
             />
           </div>
+          <MatchChatPanel v-else-if="mobileTab === 'chat'" class="match-chat-column match-chat-column--mobile" />
+          <div v-else-if="mobileTab === 'batch'" class="match-batch-mobile-card">
+            <p class="match-batch-mobile-text">批量操作已收到底部操作栏。先进入批量模式，再勾选玩家。</p>
+          </div>
         </div>
 
-        <MatchChatPanel class="match-chat-column" />
+        <MatchChatPanel v-if="!isMobile" class="match-chat-column" />
       </div>
-      <div v-else-if="viewMode === 'map'" class="match-state-map-wrapper">
+      <div v-else-if="viewMode === 'map' || (isMobile && mobileTab === 'map')" class="match-state-map-wrapper">
         <TacticalMapPage
           :snapshot="bzssCoreSnapshot"
           :players="bzssCorePlayers"
@@ -220,7 +230,7 @@
 
     <!-- 批量操作悬浮条 -->
     <transition name="bar-slide">
-      <div v-if="multiSelectMode && selectedPlayers.length > 0" class="batch-action-bar">
+      <StickyActionBar v-if="multiSelectMode && selectedPlayers.length > 0" class="batch-action-bar">
         <div class="batch-bar-left">
           <span class="batch-count-badge">{{ selectedPlayers.length }}</span>
           <span class="batch-count-text">
@@ -242,7 +252,7 @@
             取消选择
           </button>
         </div>
-      </div>
+      </StickyActionBar>
     </transition>
   </div>
 </template>
@@ -279,6 +289,9 @@ import TeamColumn from "../components/squad-admin/TeamColumn.vue";
 import MatchChatPanel from "../components/match/MatchChatPanel.vue";
 import FloatingPlayerWindow from "../components/squad-admin/FloatingPlayerWindow.vue";
 import SquadDetailDrawer from "../components/squad-admin/SquadDetailDrawer.vue";
+import MobileSegmentTabs from "../components/mobile/MobileSegmentTabs.vue";
+import StickyActionBar from "../components/mobile/StickyActionBar.vue";
+import { useIsMobile } from "../composables/useMediaQuery";
 import TacticalMapPage from "./TacticalMapPage.vue";
 import { t } from "../i18n";
 import { normalizeRefreshPolicy, resolveRefreshDelay } from "../app/refreshPolicy";
@@ -343,13 +356,20 @@ const runtime = getRuntimeSyncState();
 const snapshot = useSnapshot();
 const route = useRoute();
 const router = useRouter();
+const isMobile = useIsMobile(1024);
 
 const viewMode = ref<"list" | "map">(route.path.includes("map") ? "map" : "list");
+const mobileTab = ref<"teams" | "chat" | "map" | "batch">("teams");
 
 watch(
   () => route.path,
   (path) => {
     viewMode.value = path.includes("map") ? "map" : "list";
+    if (path.includes("map")) {
+      mobileTab.value = "map";
+    } else if (mobileTab.value === "map") {
+      mobileTab.value = "teams";
+    }
   }
 );
 
@@ -448,6 +468,13 @@ const selectedT1Count = computed(() => {
 const selectedT2Count = computed(() => {
   return selectedPlayers.value.filter((p) => Number(p.teamId) === 2).length;
 });
+
+const mobileTabItems = computed(() => [
+  { value: "teams" as const, label: "队伍" },
+  { value: "chat" as const, label: "聊天" },
+  { value: "map" as const, label: "地图" },
+  { value: "batch" as const, label: "批量", badge: multiSelectMode.value ? selectedPlayers.value.length : null },
+]);
 
 const pageState = reactive<PageState>({
   searchQuery: "",
@@ -2167,6 +2194,9 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 
 .ticket-modal-panel {
   width: min(560px, 100%);
+  max-height: calc(var(--app-viewport-height) - 48px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   display: grid;
   gap: 14px;
   padding: 16px;
@@ -2589,19 +2619,93 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
   }
 }
 
+/* ─── 移动端（≤780px）：单列分段视图，确保队伍内容可滚动可触达 ───────────── */
+@media (max-width: 1024px) {
+  /* DataState fill 容器内同时有分段标签和内容，改为弹性纵向布局 */
+  .match-status-data-state :deep(.bz-data-state--fill .state-content) {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    gap: 8px;
+  }
+
+  /* 段落标签下面只有一个激活的内容块，去掉为聊天预留的空行 */
+  .match-state-content {
+    flex: 1 1 auto;
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  /* 改为弹性纵向布局，无论是否存在错误条都能让队伍区占满剩余空间 */
+  .match-state-main {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  /* 队伍列表：两队纵向堆叠，本容器作为滚动区，避免第二队被裁切 */
+  .squad-main-content {
+    display: block;
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 8px 8px calc(16px + var(--safe-bottom));
+    gap: 10px;
+  }
+
+  /* 让每个队伍卡按内容自然展开，由外层统一滚动 */
+  .squad-main-content :deep(.team-column) {
+    height: auto;
+    overflow: visible;
+    margin-bottom: 10px;
+  }
+
+  .squad-main-content :deep(.team-column:last-child) {
+    margin-bottom: 0;
+  }
+
+  .squad-main-content :deep(.squad-list) {
+    overflow: visible;
+    min-height: 0;
+  }
+
+  /* 聊天 / 地图分页：占满可用高度并各自内部滚动 */
+  .match-chat-column--mobile {
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .match-state-map-wrapper {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .match-batch-mobile-card {
+    margin: 12px;
+    padding: 16px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--color-border-default);
+    background: var(--color-bg-card);
+  }
+
+  /* 票数弹窗：缩小四周留白以获得更大可用宽度 */
+  .ticket-modal-backdrop {
+    padding: 12px;
+  }
+}
+
 /* ─── 批量操作悬浮条 ─────────────────────────────────────────────────────── */
 .batch-action-bar {
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 12px 24px;
-  border-radius: var(--radius-xl);
+  gap: 10px;
   border: 1px solid rgba(140, 160, 200, 0.28);
+  border-left: 0;
+  border-right: 0;
   background:
     linear-gradient(135deg, rgba(55, 200, 255, 0.08), rgba(168, 85, 247, 0.06)),
     linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)),
@@ -2611,9 +2715,6 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
     0 8px 20px rgba(0, 0, 0, 0.36),
     0 0 0 1px rgba(255, 255, 255, 0.03) inset;
   backdrop-filter: blur(20px) saturate(1.3);
-  width: min(720px, calc(100vw - 24px));
-  max-width: calc(100vw - 24px);
-  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   animation: bar-slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
@@ -2728,11 +2829,11 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 /* ─── 动画 ───────────────────────────────────────────────────────────────── */
 @keyframes bar-slide-in {
   from {
-    transform: translate(-50%, 40px);
+    transform: translateY(40px);
     opacity: 0;
   }
   to {
-    transform: translate(-50%, 0);
+    transform: translateY(0);
     opacity: 1;
   }
 }
@@ -2742,7 +2843,7 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 }
 
 .bar-slide-leave-to {
-  transform: translate(-50%, 40px);
+  transform: translateY(40px);
   opacity: 0;
 }
 

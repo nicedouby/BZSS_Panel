@@ -104,12 +104,15 @@ import {
 import { t } from "../../i18n";
 import { useAuthStore } from "../../stores/auth.store";
 import { useUiStore } from "../../stores/ui.store";
+import { useIsMobile } from "../../composables/useMediaQuery";
 import { useExpandableTransition } from "./useExpandableTransition";
 import { useRegisteredWebPagesQuery } from "./useRegisteredWebPagesQuery";
 
 const ui = useUiStore();
 const auth = useAuthStore();
 const route = useRoute();
+// 导航抽屉断点（≤1024，含平板）与内容断点（≤780）解耦
+const isNavDrawer = useIsMobile(1024);
 const pagesQuery = useRegisteredWebPagesQuery();
 const transition = useExpandableTransition();
 const registeredPages = computed(() => Array.isArray(pagesQuery.data.value) ? pagesQuery.data.value : []);
@@ -124,7 +127,7 @@ const activeSectionKey = computed(() => findSectionForRoute(sections.value, rout
 const sidebarButtonLabel = computed(() => ui.sidebarCollapsed ? t("topbar.expand") : t("topbar.collapse"));
 
 function toggleSidebar() {
-  if (window.matchMedia("(max-width: 780px)").matches) {
+  if (isNavDrawer.value) {
     ui.toggleMobileSidebar();
     return;
   }
@@ -143,7 +146,7 @@ function toggleSidebar() {
 
 .sidebar {
   position: relative;
-  height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--color-border-default);
@@ -156,6 +159,12 @@ function toggleSidebar() {
   transition: width 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
   overflow: hidden;
   box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.025), 12px 0 34px rgba(0, 0, 0, 0.12);
+}
+
+@supports not (height: 100dvh) {
+  .sidebar {
+    height: 100vh;
+  }
 }
 
 .sidebar.collapsed {
@@ -530,16 +539,19 @@ nav::-webkit-scrollbar-thumb {
   }
 }
 
-@media (max-width: 780px) {
+/* sm/平板 ≤1024px：抽屉浮层，带标签的完整导航 */
+@media (max-width: 1024px) {
   .sidebar {
     position: fixed;
     inset: 0 auto 0 0;
-    width: min(308px, calc(100vw - 52px));
+    width: min(86vw, 340px);
     transform: translateX(-100%);
-    z-index: var(--z-sidebar);
+    z-index: var(--z-sidebar-drawer);
     box-shadow: 12px 0 24px rgba(0, 0, 0, 0.35);
     border-right: 1px solid var(--color-border-default);
     border-radius: 0 20px 20px 0;
+    padding-top: var(--safe-top);
+    padding-bottom: var(--safe-bottom);
   }
 
   .sidebar.mobileOpen {
@@ -547,7 +559,7 @@ nav::-webkit-scrollbar-thumb {
   }
 
   .sidebar.collapsed {
-    width: min(308px, calc(100vw - 52px));
+    width: min(86vw, 340px);
   }
 
   .sidebar.collapsed .section-copy,
@@ -556,13 +568,87 @@ nav::-webkit-scrollbar-thumb {
     display: grid;
   }
 
+  .sidebar.collapsed .brand {
+    padding: 22px 20px 18px;
+    text-align: left;
+  }
+
+  .sidebar.collapsed .brand strong {
+    font-size: 18px;
+    letter-spacing: 0;
+    margin: 0;
+    padding: 7px 9px;
+  }
+
   .collapse-button {
     display: none !important;
   }
 }
 
-/* ─── md 断点（781–1100px）：侧边栏被 AppLayout 压缩为 84px，强制应用折叠视觉 ─ */
-@media (min-width: 781px) and (max-width: 1100px) {
+/* ─── md 断点（1025–1100px）：侧边栏被 AppLayout 压缩为 84px，强制应用折叠视觉 ─ */
+@media (orientation: landscape) and (max-height: 520px) {
+  .sidebar {
+    width: min(78vw, 300px);
+    border-radius: 0 14px 14px 0;
+  }
+
+  .sidebar.collapsed {
+    width: min(78vw, 300px);
+  }
+
+  .brand,
+  .sidebar.collapsed .brand {
+    padding: 10px 14px;
+    gap: 8px;
+  }
+
+  .brand strong,
+  .sidebar.collapsed .brand strong {
+    font-size: 14px;
+    padding: 5px 7px;
+  }
+
+  .brand span {
+    font-size: 10px;
+    padding: 3px 6px;
+  }
+
+  nav {
+    gap: 5px;
+    padding: 8px 8px calc(10px + var(--safe-bottom));
+  }
+
+  .nav-section.open {
+    padding: 3px;
+    border-radius: 10px;
+  }
+
+  .section-link {
+    min-height: 36px;
+    padding: 6px 8px;
+  }
+
+  .section-icon {
+    width: 24px;
+    height: 24px;
+  }
+
+  .section-label {
+    font-size: 12px;
+  }
+
+  .section-description,
+  .child-label {
+    font-size: 10px;
+  }
+
+  .child-link {
+    min-height: 30px;
+    padding: 5px 7px;
+  }
+}
+
+@media (min-width: 1025px) and (max-width: 1100px) {
   .sidebar {
     width: 84px;
   }

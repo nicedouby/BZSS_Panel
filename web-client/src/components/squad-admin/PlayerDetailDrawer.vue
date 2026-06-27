@@ -686,7 +686,7 @@ const panelStyle = computed(() => {
   if (compactViewport) {
     return {
       width: "calc(100vw - 24px)",
-      maxHeight: "calc(100vh - 24px)",
+      maxHeight: "calc(var(--app-viewport-height) - 24px)",
     };
   }
 
@@ -1602,7 +1602,7 @@ onUnmounted(() => {
   position: absolute;
   top: 0;
   right: 0;
-  height: 100dvh;
+  height: var(--app-viewport-height);
   width: 420px;
   border-left: 1px solid rgba(255, 255, 255, 0.1);
 }
@@ -3112,7 +3112,7 @@ onUnmounted(() => {
 
   .player-detail-floating {
     width: calc(100vw - 24px);
-    max-height: calc(100vh - 24px);
+    max-height: calc(var(--app-viewport-height) - 24px);
     border-radius: 16px;
   }
 }

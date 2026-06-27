@@ -447,7 +447,7 @@ async function save() {
 
 .settings-dialog {
   width: min(1080px, calc(100vw - 32px));
-  max-height: calc(100vh - 32px);
+  max-height: calc(var(--app-viewport-height) - 32px);
   overflow: hidden;
   border-radius: 28px;
   border: 1px solid var(--color-border-default);
@@ -778,7 +778,7 @@ async function save() {
 
   .settings-dialog {
     width: 100vw;
-    max-height: 100vh;
+    max-height: var(--app-viewport-height);
     border-radius: 0;
   }
 

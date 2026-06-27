@@ -125,7 +125,7 @@ const panelStyle = computed(() => {
   if (compactViewport) {
     return {
       width: "calc(100vw - 24px)",
-      maxHeight: "calc(100vh - 24px)",
+      maxHeight: "calc(var(--app-viewport-height) - 24px)",
     };
   }
 
@@ -263,7 +263,7 @@ onUnmounted(() => {
 .squad-detail-drawer {
   position: relative;
   width: min(480px, calc(100vw - 24px));
-  max-height: calc(100vh - 24px);
+  max-height: calc(var(--app-viewport-height) - 24px);
   overflow: hidden;
   border-radius: 22px;
   background:
@@ -534,7 +534,7 @@ onUnmounted(() => {
 @media (max-width: 900px), (max-height: 760px) {
   .squad-detail-drawer {
     width: calc(100vw - 24px);
-    max-height: calc(100vh - 24px);
+    max-height: calc(var(--app-viewport-height) - 24px);
   }
 }
 </style>

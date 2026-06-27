@@ -9,7 +9,7 @@
     />
 
     <div class="db-main">
-      <aside class="db-sidebar">
+      <aside v-if="!isMobile || selectedId === null" class="db-sidebar">
         <PlayerDatabaseList
           :rows="rows"
           :selected-id="selectedId"
@@ -19,7 +19,11 @@
         />
       </aside>
 
-      <section class="db-content">
+      <section v-if="!isMobile || selectedId !== null" class="db-content">
+        <div v-if="isMobile && selectedId !== null" class="db-mobile-backbar">
+          <button type="button" class="db-back-btn" @click="closePlayerDetail">Back</button>
+          <strong>Player Detail</strong>
+        </div>
         <PlayerDatabaseDetail
           :id="selectedId"
           :detail="detail"
@@ -54,6 +58,7 @@ import { ApiError, apiGet } from "../app/apiClient";
 import { queryClient } from "../app/queryClient";
 import { renderApiError } from "../app/errors";
 import { useServerStore } from "../stores/server.store";
+import { useIsMobile } from "../composables/useMediaQuery";
 import { usePlayerDatabaseQuery } from "../composables/usePlayerDatabaseQuery";
 import PlayerDatabaseStats from "../components/player-database/PlayerDatabaseStats.vue";
 import PlayerDatabaseToolbar from "../components/player-database/PlayerDatabaseToolbar.vue";
@@ -77,6 +82,7 @@ const statsError = ref("");
 const stats = ref<any | null>(null);
 const route = useRoute();
 const server = useServerStore();
+const isMobile = useIsMobile(1024);
 
 const statsSubtitle = computed(() => {
   const generatedAt = stats.value?.generatedAt ? formatTime(stats.value.generatedAt) : t("common.notLoaded");
@@ -297,8 +303,28 @@ function getSortTime(row: any) {
 }
 
 .db-content {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   overflow: hidden;
+}
+
+.db-mobile-backbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border-default);
+  background: color-mix(in srgb, var(--color-bg-card) 92%, transparent);
+}
+
+.db-back-btn {
+  min-height: var(--touch-target-min);
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
 }
 
 @media (max-width: 1000px) {
@@ -309,6 +335,42 @@ function getSortTime(row: any) {
   
   .db-sidebar {
     min-height: 0;
+  }
+}
+
+@media (max-width: 1024px) {
+  .db-page {
+    padding: 10px 10px calc(12px + var(--safe-bottom));
+  }
+
+  .db-main {
+    grid-template-rows: minmax(0, 1fr);
+  }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .db-page {
+    gap: 8px;
+    padding: 8px 10px calc(8px + var(--safe-bottom));
+  }
+
+  .db-main {
+    gap: 8px;
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .db-sidebar,
+  .db-content {
+    border-radius: 12px;
+  }
+
+  .db-mobile-backbar {
+    padding: 6px 8px;
+  }
+
+  .db-back-btn {
+    border-radius: 9px;
+    padding: 0 10px;
   }
 }
 </style>

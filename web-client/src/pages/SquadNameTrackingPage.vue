@@ -2355,7 +2355,7 @@ const whitelistCurrentNatureLabel = computed(() => {
   backdrop-filter: blur(16px);
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 200px);
+  max-height: calc(var(--app-viewport-height) - 200px);
   overflow: hidden;
   align-self: flex-start;
   position: sticky;
@@ -2938,7 +2938,7 @@ const whitelistCurrentNatureLabel = computed(() => {
   }
 
   .whitelist-modal {
-    max-height: calc(100vh - 24px);
+    max-height: calc(var(--app-viewport-height) - 24px);
     overflow: auto;
   }
 }

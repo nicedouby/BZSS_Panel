@@ -159,7 +159,7 @@ function save() {
 .drawer {
   margin-left: auto;
   width: min(560px, 100vw);
-  height: 100vh;
+  height: var(--app-viewport-height);
   overflow: auto;
   padding: 18px;
   display: grid;

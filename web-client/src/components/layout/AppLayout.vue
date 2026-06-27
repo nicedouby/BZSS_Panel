@@ -38,6 +38,7 @@ import { RouterView } from "vue-router";
 import { useRoute } from "vue-router";
 import { useAuthStore } from "../../stores/auth.store";
 import { useUiStore } from "../../stores/ui.store";
+import { useIsCompactLandscape, useIsMobile } from "../../composables/useMediaQuery";
 import Topbar from "./Topbar.vue";
 import Sidebar from "./Sidebar.vue";
 import SectionSubnav from "./SectionSubnav.vue";
@@ -54,6 +55,8 @@ const auth = useAuthStore();
 const route = useRoute();
 const pluginCenterOpen = ref(false);
 const rconModalOpen = ref(false);
+const isMobile = useIsMobile(1024);
+const isCompactLandscape = useIsCompactLandscape();
 
 const contentShellClass = computed(() => {
   const legacyFullBleed = Boolean(route.meta.fullBleed);
@@ -65,10 +68,13 @@ const contentShellClass = computed(() => {
     : legacyFullBleed ? "none" : "default";
 
   return {
+    "is-mobile": isMobile.value,
+    "is-compact-landscape": isCompactLandscape.value,
     "content-shell--document": layoutMode === "document",
     "content-shell--workspace": layoutMode === "workspace",
     "content-shell--padded": contentPadding === "default",
     "content-shell--flush": contentPadding === "none",
+    "content-shell--mobile": isMobile.value,
     "full-bleed": legacyFullBleed,
   };
 });
@@ -84,6 +90,8 @@ const contentShellClass = computed(() => {
   display: grid;
   grid-template-columns: 248px minmax(0, 1fr);
   background: var(--app-background, var(--color-bg-page));
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
 }
 
 @supports not (height: 100dvh) {
@@ -136,6 +144,10 @@ const contentShellClass = computed(() => {
   padding: 0;
 }
 
+.content-shell--mobile {
+  scrollbar-gutter: auto;
+}
+
 .content-shell--workspace > * {
   width: 100%;
   min-width: 0;
@@ -158,7 +170,8 @@ const contentShellClass = computed(() => {
   }
 }
 
-@media (max-width: 780px) {
+/* sm/平板 ≤1024px：侧边栏改为抽屉浮层（在 Sidebar.vue 内定位），主区占满整行 */
+@media (max-width: 1024px) {
   .app-shell {
     grid-template-columns: 1fr;
   }
@@ -168,11 +181,27 @@ const contentShellClass = computed(() => {
   }
 
   .content-shell--padded {
-    padding: 12px;
+    padding: 12px 12px calc(16px + var(--safe-bottom));
   }
 
   .content-shell--flush {
     padding: 0;
+  }
+}
+
+@media (max-width: 780px) {
+  .content-shell--padded {
+    padding: 10px 10px calc(14px + var(--safe-bottom));
+  }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .main-shell {
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+
+  .content-shell--padded {
+    padding: 8px 10px calc(8px + var(--safe-bottom));
   }
 }
 

@@ -228,7 +228,7 @@ function searchPlayer(value: string) {
 
 .dialog-panel {
   width: min(900px, 100%);
-  max-height: calc(100vh - 48px);
+  max-height: calc(var(--app-viewport-height) - 48px);
   overflow: auto;
   border-radius: 8px;
 }

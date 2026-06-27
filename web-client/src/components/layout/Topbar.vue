@@ -2,8 +2,18 @@
   <header class="topbar">
     <div class="topbar-grid">
       <div class="topbar-brand">
-        <button type="button" class="menu-button" @click="toggleSidebar">
-          {{ sidebarButtonLabel }}
+        <button
+          type="button"
+          class="menu-button"
+          :aria-label="sidebarButtonLabel"
+          :title="sidebarButtonLabel"
+          @click="toggleSidebar"
+        >
+          <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
         </button>
         <div class="topbar-copy">
           <strong v-if="showPageTitle">{{ pageTitle }}</strong>
@@ -51,6 +61,9 @@
           <span class="health-chip" :class="rconHealthTone">R</span>
           <span class="health-chip" :class="logHealthTone">L</span>
         </div>
+        <button v-if="isMobile" type="button" class="metric more-status-button" @click="mobileStatusOpen = true">
+          More
+        </button>
         <UserMenu
           @open-plugin-center="emit('open-plugin-center')"
           @open-rcon-modal="emit('open-rcon-modal')"
@@ -58,6 +71,27 @@
         <span class="metric updated-metric">{{ matchUpdatedLabel }}</span>
       </div>
     </div>
+    <MobileBottomSheet
+      :open="mobileStatusOpen"
+      title="More Status"
+      description="Secondary runtime and system metrics"
+      @close="mobileStatusOpen = false"
+    >
+      <div class="mobile-status-grid">
+        <button type="button" class="mobile-status-item" :disabled="!canEditLogClock || logClockSaving" @click="editLogClock">
+          <span class="mobile-status-label">Clock</span>
+          <strong>{{ mergedClockLabel }}</strong>
+        </button>
+        <div class="mobile-status-item"><span class="mobile-status-label">TPS</span><strong>{{ matchTpsLabel }}</strong></div>
+        <div class="mobile-status-item"><span class="mobile-status-label">Uptime</span><strong>{{ sysUptimeLabel }}</strong></div>
+        <div class="mobile-status-item"><span class="mobile-status-label">Memory</span><strong>{{ sysMemLabel }}</strong></div>
+        <div class="mobile-status-item"><span class="mobile-status-label">Network In</span><strong>{{ sysNetInLabel }}</strong></div>
+        <div class="mobile-status-item"><span class="mobile-status-label">Network Out</span><strong>{{ sysNetOutLabel }}</strong></div>
+        <div class="mobile-status-item"><span class="mobile-status-label">Updated</span><strong>{{ matchUpdatedLabel }}</strong></div>
+        <div class="mobile-status-item"><span class="mobile-status-label">Queue</span><strong>{{ matchQueueLabel }}</strong></div>
+        <div class="mobile-status-item"><span class="mobile-status-label">Time</span><strong>{{ matchTimeLabel }}</strong></div>
+      </div>
+    </MobileBottomSheet>
   </header>
 </template>
 
@@ -73,6 +107,8 @@ import { useMatchStore } from "../../stores/match.store";
 import { getRuntimeSyncState } from "../../app/runtimeSync";
 import { useUiStore } from "../../stores/ui.store";
 import { fetchWarmupState, updateWarmupState } from "../../app/warmupApi";
+import { useIsMobile } from "../../composables/useMediaQuery";
+import MobileBottomSheet from "../mobile/MobileBottomSheet.vue";
 import UserMenu from "./UserMenu.vue";
 import BzssCoreMenu from "./BzssCoreMenu.vue";
 import { t } from "../../i18n";
@@ -90,10 +126,14 @@ const auth = useAuthStore();
 const runtime = getRuntimeSyncState();
 const route = useRoute();
 const ui = useUiStore();
+const isMobile = useIsMobile(1024);
+// 导航抽屉断点（≤1024，含平板），独立于内容断点
+const isNavDrawer = useIsMobile(1024);
 const warmupLoaded = ref(false);
 const warmupLoading = ref(false);
 const warmupSaving = ref(false);
 const logClockSaving = ref(false);
+const mobileStatusOpen = ref(false);
 
 const webStatus = computed(() => server.snapshot.webStatus ?? server.snapshot ?? {});
 const currentLayer = computed(() => stableDisplayValue(
@@ -513,7 +553,7 @@ function toMillis(value: string | number | null | undefined): number {
 }
 
 function toggleSidebar() {
-  if (window.matchMedia("(max-width: 780px)").matches) {
+  if (isNavDrawer.value) {
     ui.toggleMobileSidebar();
     return;
   }
@@ -524,7 +564,7 @@ function toggleSidebar() {
 <style scoped>
 .topbar {
   position: relative;
-  z-index: var(--z-user-dropdown);
+  z-index: var(--z-topbar);
   overflow: visible;
   padding: 6px 14px 7px;
   border-bottom: 1px solid var(--color-border-default);
@@ -533,6 +573,7 @@ function toggleSidebar() {
     var(--color-bg-panel);
   backdrop-filter: blur(12px);
   box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.02);
+  padding-top: calc(6px + var(--safe-top));
 }
 
 .topbar-grid {
@@ -624,13 +665,24 @@ function toggleSidebar() {
   display: none;
 }
 
-@media (max-width: 780px) {
+@media (max-width: 1024px) {
   .menu-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 72px;
+    flex: 0 0 auto;
+    min-width: var(--touch-target-min);
+    min-height: var(--touch-target-min);
+    padding: 0;
+    border-radius: 10px;
+    border: 1px solid var(--color-border-default);
+    background: var(--color-bg-elevated);
+    color: var(--color-text-primary);
     box-shadow: var(--shadow-sm);
+  }
+
+  .menu-button:active {
+    background: var(--color-bg-hover);
   }
 }
 
@@ -793,6 +845,35 @@ function toggleSidebar() {
   color: var(--color-text-muted);
 }
 
+.more-status-button {
+  min-height: var(--touch-target-min);
+}
+
+.mobile-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mobile-status-item {
+  min-height: 76px;
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+  text-align: left;
+  border-radius: 14px;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+}
+
+.mobile-status-label {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 .topbar-sys-divider {
   width: 1px;
   height: 14px;
@@ -839,35 +920,117 @@ function toggleSidebar() {
 
 @media (max-width: 780px) {
   .topbar {
-    padding: 6px 10px 7px;
+    padding: calc(6px + var(--safe-top)) 10px 7px;
   }
 
   .topbar-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
     grid-template-areas:
-      "brand"
-      "actions"
-      "center";
+      "brand actions"
+      "center center";
   }
 
   .topbar-brand {
-    align-items: flex-start;
-    flex-wrap: wrap;
+    align-items: center;
   }
 
   .topbar-actions {
-    justify-content: space-between;
+    justify-content: flex-end;
   }
 
   .topbar-center {
     justify-content: flex-start;
+  }
+
+  .topbar-subtitle {
+    max-width: 42vw;
+  }
+
+  .match-summary {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 2px;
+  }
+
+  .match-summary > :nth-child(n + 4) {
+    display: none;
+  }
+
+  .updated-metric {
+    display: none;
   }
 }
 
 @media (max-width: 1100px) {
   .metric.optional {
     display: none;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .topbar {
+    padding: calc(4px + var(--safe-top)) 8px 5px;
+  }
+
+  .topbar-grid {
+    gap: 6px;
+  }
+
+  .topbar-brand {
+    gap: 7px;
+  }
+
+  .topbar-copy strong {
+    font-size: 13px;
+  }
+
+  .topbar-subtitle,
+  .warmup-chip,
+  .metric {
+    font-size: 10px;
+  }
+
+  .warmup-chip,
+  .metric {
+    min-height: 18px;
+    padding: 0 6px;
+  }
+
+  .menu-button {
+    border-radius: 8px;
+  }
+
+  .match-summary {
+    gap: 4px;
+  }
+
+  .match-chip {
+    min-height: 18px;
+    padding: 0 6px;
+    font-size: 9px;
+  }
+
+  .topbar-actions {
+    gap: 4px;
+  }
+
+  .topbar-health {
+    display: none;
+  }
+
+  .more-status-button {
+    min-height: var(--touch-target-min);
+  }
+
+  .mobile-status-grid {
+    gap: 8px;
+  }
+
+  .mobile-status-item {
+    min-height: 56px;
+    padding: 9px;
+    border-radius: 10px;
   }
 }
 </style>
