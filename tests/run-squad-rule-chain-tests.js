@@ -10,7 +10,18 @@ import { createPlugin as createFairPlugin } from "../plugins/fair-squad-guard.js
 
 function createEventBus() {
   const moduleListeners = new Map();
+  const coreListeners = new Map();
   return {
+    onCoreEvent(eventName, handler) {
+      if (!coreListeners.has(eventName)) coreListeners.set(eventName, new Set());
+      coreListeners.get(eventName).add(handler);
+      return () => coreListeners.get(eventName)?.delete(handler);
+    },
+    emitCoreEvent(eventName, event) {
+      for (const handler of coreListeners.get(eventName) ?? []) {
+        handler(event);
+      }
+    },
     onModuleEvent(moduleId, eventName, handler) {
       const key = `${moduleId}:${eventName}`;
       if (!moduleListeners.has(key)) moduleListeners.set(key, new Set());
@@ -594,6 +605,49 @@ async function testManualClearCurrentRemovesFinalPassRecords() {
   }
 }
 
+async function testWorldBringUpClearsPreviousFinalPassRecords() {
+  const harness = await createHarness();
+  try {
+    harness.eventBus.emitModuleEvent(
+      "module.squadRuleChain",
+      "finalSquadRulePassed",
+      creation({ squadName: "Old Squad", squadId: 101 }),
+    );
+    await waitFor(() => harness.ruleChain.api.getState().finalPassRecords.length === 1);
+
+    harness.eventBus.emitCoreEvent("round.world_bring_up", {
+      eventName: "round.world_bring_up",
+      serverId: "test-server",
+      normalized: {
+        roundWorldBringUp: {
+          logLineTime: "2026.06.27-03.38.21:866",
+          layerName: "Mutaha_RAAS_v2",
+          mapName: "Mutaha",
+          gameMode: "RAAS",
+        },
+      },
+      logLineTime: "2026.06.27-03.38.21:866",
+    });
+
+    const state = harness.ruleChain.api.getState();
+    assert.equal(state.finalPassRecords.length, 0);
+    assert.equal(state.finalPassCache.cacheKey, "test-server|anchor:2026.06.27-03.38.21:866");
+
+    harness.eventBus.emitModuleEvent(
+      "module.squadRuleChain",
+      "finalSquadRulePassed",
+      creation({ squadName: "New Squad", squadId: 102, createdAt: new Date(Date.now() + 1000).toISOString() }),
+    );
+    await waitFor(() => harness.ruleChain.api.getState().finalPassRecords.length === 1);
+
+    const nextState = harness.ruleChain.api.getState();
+    assert.equal(nextState.finalPassRecords[0].creationOrderCode, 1);
+    assert.equal(nextState.finalPassRecords[0].event.squadId, 102);
+  } finally {
+    await harness.stop();
+  }
+}
+
 await testNameViolationShortCircuits();
 await testStepwiseViolationShortCircuitsFair();
 await testFairOnlyRunsAfterFirstTwoPass();
@@ -605,4 +659,5 @@ await testFinalPassCacheRestoresByMatchCacheAlias();
 await testLegacyFinalPassCacheRestoresBySessionTimestamp();
 await testFinalPassCacheNormalizesDuplicateOrderCodes();
 await testManualClearCurrentRemovesFinalPassRecords();
+await testWorldBringUpClearsPreviousFinalPassRecords();
 console.log("run-squad-rule-chain-tests: ok");

@@ -63,9 +63,9 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
       };
     },
 
-    clearCurrent() {
-      const currentAliases = buildCurrentMatchCacheAliases(core, modules);
-      clearFinalPassState(currentAliases);
+    clearCurrent(input = {}) {
+      const aliases = resolveClearMatchAliases(input, core, modules);
+      clearFinalPassState(aliases);
       persistFinalPassCacheLater();
       return {
         cacheKey: activeFinalPassCacheKey,
@@ -114,6 +114,11 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
             TIERED_SQUAD_TIME_PASSED_EVENT,
             (event) => scheduleFinalPassFallback(event),
           ),
+        );
+        unsubscribers.push(
+          core.eventBus.onCoreEvent?.("round.world_bring_up", (event) => {
+            void handleRoundWorldBringUp(event);
+          }) ?? (() => {}),
         );
       }
     },
@@ -241,6 +246,25 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
     persistFinalPassCacheLater();
   }
 
+  async function handleRoundWorldBringUp(input = {}) {
+    const event = input && typeof input === "object" ? input : {};
+    const cleared = api.clearCurrent(event);
+    if (cleared?.cleared) {
+      moduleLogger?.info?.(
+        `[SquadRuleChain] cleared previous creation order for new round. cacheKey=${cleared.cacheKey || "unknown"} aliases=${cleared.matchAliases.join(",") || "none"}`,
+        {
+          operation: "roundWorldBringUpClear",
+          data: {
+            serverId: normalizeText(event.serverId),
+            logLineTime: normalizeText(event?.normalized?.roundWorldBringUp?.logLineTime || event.logLineTime),
+            layerName: normalizeText(event?.normalized?.roundWorldBringUp?.layerName || event.layerName),
+            mapName: normalizeText(event?.normalized?.roundWorldBringUp?.mapName || event.mapName),
+          },
+        },
+      );
+    }
+  }
+
   function scheduleFinalPassFallback(input = {}) {
     const event = normalizeRuleChainPassEvent(input);
     const key = buildFinalPassEventKey(event);
@@ -342,6 +366,18 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
     const normalizedAliases = normalizeMatchAliases(currentAliases);
     activeFinalPassMatchAliases = normalizedAliases;
     activeFinalPassCacheKey = normalizedAliases[0] ?? "";
+  }
+
+  function resolveClearMatchAliases(input = {}, core, modules = {}) {
+    const event = input && typeof input === "object" ? input : {};
+    const eventAliases = buildClearEventAliases(event);
+    if (eventAliases.length > 0) {
+      return normalizeMatchAliases([
+        ...eventAliases,
+        ...buildCurrentMatchCacheAliases(core, modules),
+      ]);
+    }
+    return buildCurrentMatchCacheAliases(core, modules);
   }
 
   function restoreFinalPassCache(cache, currentAliases = []) {
@@ -524,6 +560,20 @@ function buildEventMatchCacheAliases(event = {}, core, modules = {}) {
     pushMatchAlias(aliases, alias);
   }
   return aliases;
+}
+
+function buildClearEventAliases(event = {}) {
+  const serverId = normalizeText(event.serverId);
+  if (!serverId) return [];
+  const round = event?.normalized?.roundWorldBringUp && typeof event.normalized.roundWorldBringUp === "object"
+    ? event.normalized.roundWorldBringUp
+    : {};
+  const matchKey = buildMatchCacheKey({
+    serverId,
+    matchId: normalizeText(event.matchId || event.currentMatchId || round.matchId),
+    clockAnchorLogTime: normalizeText(round.logLineTime || event.logLineTime || event.clockAnchorLogTime || event.anchorLogTime),
+  });
+  return matchKey ? [matchKey] : [];
 }
 
 function buildCurrentMatchCacheAliases(core, modules = {}, serverIdOverride = "") {
