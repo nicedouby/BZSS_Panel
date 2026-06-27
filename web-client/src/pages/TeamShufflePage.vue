@@ -282,6 +282,7 @@ const creating = ref(false);
 const executing = ref(false);
 const error = ref("");
 const executeResult = ref<TeamShuffleExecuteResponse | null>(null);
+const autoPlanAttempted = ref(false);
 
 // Interactive UI elements
 const searchQuery = ref("");
@@ -398,7 +399,10 @@ async function refreshData() {
   error.value = "";
   try {
     await Promise.all([refreshPlaytimeCache(), loadGroups()]);
-    if (!planPlayers.value.length && canPlan.value) await createPlan(false);
+    if (!autoPlanAttempted.value && !planPlayers.value.length && canPlan.value) {
+      autoPlanAttempted.value = true;
+      await createPlan(false);
+    }
   } catch (err: any) {
     error.value = String(err?.message || err || "刷新失败");
   } finally {
