@@ -3,7 +3,8 @@ import path from "node:path";
 
 const MODULE_ID = "module.blackEdgePrivilege";
 const ASSET_KEY = "blackEdgeSwitchCount";
-const DEFAULT_STORE_FILE = "data/black-edge-privilege.json";
+const DEFAULT_STORE_FILE = "data/black-edge-privilege/state.json";
+const LEGACY_STORE_FILE = "data/black-edge-privilege.json";
 const DEFAULT_STORE_VERSION = 1;
 const DEFAULT_CDK_CODE_LENGTH = 14;
 const DEFAULT_CDK_PREFIX = "CDK";
@@ -78,6 +79,7 @@ export function createBlackEdgePrivilegeModule({ core, modules, config, logger }
     api,
 
     async init() {
+      await migrateLegacyStoreFileIfNeeded(runtime.resolvedStoreFilePath);
       await loadStoreFromDisk({ repair: true });
     },
 
@@ -674,8 +676,40 @@ async function persistStore(filePath, store) {
   }
   await fs.mkdir(path.dirname(normalizedPath), { recursive: true });
   const tempPath = `${normalizedPath}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(tempPath, `${JSON.stringify(normalizeStore(store), null, 2)}\n`, "utf8");
-  await fs.rename(tempPath, normalizedPath);
+  try {
+    await fs.writeFile(tempPath, `${JSON.stringify(normalizeStore(store), null, 2)}\n`, "utf8");
+    await fs.rename(tempPath, normalizedPath);
+  } finally {
+    await fs.rm(tempPath, { force: true }).catch(() => {});
+  }
+}
+
+async function migrateLegacyStoreFileIfNeeded(targetFilePath) {
+  const normalizedTarget = path.resolve(String(targetFilePath ?? "").trim() || DEFAULT_STORE_FILE);
+  const defaultTarget = path.resolve(process.cwd(), DEFAULT_STORE_FILE);
+  if (normalizedTarget !== defaultTarget) return;
+
+  const legacyFile = path.resolve(process.cwd(), LEGACY_STORE_FILE);
+  if (legacyFile === normalizedTarget) return;
+  if (await pathExists(normalizedTarget)) return;
+  if (!await pathExists(legacyFile)) return;
+
+  await fs.mkdir(path.dirname(normalizedTarget), { recursive: true });
+  try {
+    await fs.rename(legacyFile, normalizedTarget);
+  } catch {
+    await fs.copyFile(legacyFile, normalizedTarget);
+    await fs.rm(legacyFile, { force: true }).catch(() => {});
+  }
+}
+
+async function pathExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function createModuleError(statusCode, code, message) {

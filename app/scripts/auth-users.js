@@ -12,7 +12,7 @@ const firstArg = String(process.argv[3] ?? "").trim();
 
 const store = new AuthUserStore({
   config: {
-    usersFilePath: "./data/auth/users.json",
+    usersFilePath: "./config/auth/users.json",
   },
   logger: console,
 });

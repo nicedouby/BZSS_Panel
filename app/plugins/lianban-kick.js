@@ -10,6 +10,8 @@ const DEFAULT_CACHE_MS = 5_000;
 const DEFAULT_RETRY_COOLDOWN_MS = 30_000;
 const PAGE_ROUTE = "/plugins/lianban-kick";
 const MAX_RECENT_EVENTS = 30;
+const CANONICAL_DIRECTORY = "./config/lianban-kick";
+const LEGACY_DIRECTORIES = ["./联办", "./鑱斿姙"];
 
 function normalizeText(value, fallback = "") {
   const text = String(value ?? "").trim();
@@ -35,7 +37,7 @@ function readRuntimeConfig(config) {
   const raw = config?.get?.(`plugins.${PLUGIN_ID}`, {}) ?? {};
   return {
     enabled: raw.enabled !== false,
-    directory: normalizeText(raw.directory, DEFAULT_DIRECTORY),
+    directory: normalizeText(raw.directory, CANONICAL_DIRECTORY),
     cacheMs: Math.max(0, Number(raw.cacheMs ?? DEFAULT_CACHE_MS) || DEFAULT_CACHE_MS),
     retryCooldownMs: Math.max(1_000, Number(raw.retryCooldownMs ?? DEFAULT_RETRY_COOLDOWN_MS) || DEFAULT_RETRY_COOLDOWN_MS),
   };
@@ -147,7 +149,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   const state = {
     enabled: true,
     subscribed: true,
-    directory: DEFAULT_DIRECTORY,
+    directory: CANONICAL_DIRECTORY,
     cacheMs: DEFAULT_CACHE_MS,
     retryCooldownMs: DEFAULT_RETRY_COOLDOWN_MS,
     lastLoadedAt: "",
@@ -436,7 +438,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         {
           key: `plugins.${PLUGIN_ID}.directory`,
           type: "string",
-          default: DEFAULT_DIRECTORY,
+          default: CANONICAL_DIRECTORY,
           description: "联办名单目录",
         },
         {
@@ -457,6 +459,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     api,
 
     async start() {
+      await migrateLegacyDirectoryIfNeeded(config);
       const runtimeConfig = readRuntimeConfig(config);
       state.enabled = runtimeConfig.enabled;
       state.directory = runtimeConfig.directory;
@@ -522,3 +525,34 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 }
 
 export default { createPlugin };
+
+async function migrateLegacyDirectoryIfNeeded(config) {
+  const raw = config?.get?.("plugins.lianbanKick", {}) ?? {};
+  const configuredDirectory = normalizeText(raw.directory);
+  if (configuredDirectory) return;
+
+  const targetDir = path.resolve(process.cwd(), CANONICAL_DIRECTORY);
+  if (await pathExists(targetDir)) return;
+
+  for (const legacyDir of LEGACY_DIRECTORIES) {
+    const resolvedLegacyDir = path.resolve(process.cwd(), legacyDir);
+    if (!await pathExists(resolvedLegacyDir)) continue;
+    await fs.mkdir(path.dirname(targetDir), { recursive: true });
+    try {
+      await fs.rename(resolvedLegacyDir, targetDir);
+    } catch {
+      await fs.cp(resolvedLegacyDir, targetDir, { recursive: true });
+      await fs.rm(resolvedLegacyDir, { recursive: true, force: true }).catch(() => {});
+    }
+    return;
+  }
+}
+
+async function pathExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}

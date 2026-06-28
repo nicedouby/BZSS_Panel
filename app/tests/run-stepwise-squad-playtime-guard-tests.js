@@ -349,6 +349,48 @@ async function testLogTime10BroadcastsRuleReminder() {
   }
 }
 
+async function testMissingAnchorSkipsEnforcement() {
+  const harness = await createHarness({
+    webStatus: {
+      logClockSeconds: 0,
+      logClockHasAnchor: false,
+      logClockManual: false,
+    },
+    playtimeRows: [["steam-1", { game_seconds: 10 * 3600 }]],
+  });
+  try {
+    const result = await harness.plugin.api.simulateCreation(creation());
+    assert.equal(result, null);
+    assert.equal(harness.disbands.length, 0);
+    const status = harness.plugin.api.getStatus();
+    assert.equal(status.summary.total, 0);
+    assert.equal(status.recentLogs[0]?.dropReason, "untrusted_log_clock_without_anchor");
+  } finally {
+    await harness.stop();
+  }
+}
+
+async function testManualClockSkipsEnforcement() {
+  const harness = await createHarness({
+    webStatus: {
+      logClockSeconds: 0,
+      logClockHasAnchor: false,
+      logClockManual: true,
+    },
+    playtimeRows: [["steam-1", { game_seconds: 10 * 3600 }]],
+  });
+  try {
+    const result = await harness.plugin.api.simulateCreation(creation());
+    assert.equal(result, null);
+    assert.equal(harness.disbands.length, 0);
+    const status = harness.plugin.api.getStatus();
+    assert.equal(status.summary.total, 0);
+    assert.equal(status.recentLogs[0]?.dropReason, "untrusted_manual_log_clock");
+  } finally {
+    await harness.stop();
+  }
+}
+
 async function testVehicleWindowUsesConfiguredThreshold() {
   const harness = await createHarness({
     webStatus: { logClockSeconds: 55 },
@@ -599,9 +641,11 @@ async function testLookupCompletionUpdatesRecordWithoutRollback() {
 }
 
 await testInfantryLowHoursDisbands();
-await testInfantryPassBroadcasts();
-await testLogTime10BroadcastsRuleReminder();
-await testVehicleWindowUsesConfiguredThreshold();
+  await testInfantryPassBroadcasts();
+  await testLogTime10BroadcastsRuleReminder();
+  await testMissingAnchorSkipsEnforcement();
+  await testManualClockSkipsEnforcement();
+  await testVehicleWindowUsesConfiguredThreshold();
 await testInfantrySecondWindowAndOpenWindow();
 await testVehicleSecondThirdAndOpenWindows();
 await testPlayerDatabaseFallbackProvidesPlaytime();

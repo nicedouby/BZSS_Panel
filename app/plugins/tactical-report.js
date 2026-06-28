@@ -5,8 +5,10 @@ import path from "node:path";
 
 const PLUGIN_ID = "plugin.tacticalReport";
 const CONFIG_KEY = "plugins.tacticalReport";
-const DEFAULT_CONFIG_FILE = "data/tactical-report-config.json";
-const DEFAULT_DATA_FILE = "data/tactical-report-user-codes.json";
+const DEFAULT_CONFIG_FILE = "config/tactical-report.json";
+const LEGACY_CONFIG_FILE = "data/tactical-report-config.json";
+const DEFAULT_DATA_FILE = "data/tactical-report/user-codes.json";
+const LEGACY_DATA_FILE = "data/tactical-report-user-codes.json";
 const DEFAULT_TRIGGER = "ZSBD";
 const DEFAULT_PLAYER_COOLDOWN_SECONDS = 10;
 const DEFAULT_HELP_GLOBAL_COOLDOWN_SECONDS = 30;
@@ -604,6 +606,54 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     return output;
   }
 
+  async function migrateLegacyConfigFileIfNeeded(currentConfig) {
+    const configuredPath = normalizeText(currentConfig?.configFile);
+    if (!configuredPath) return;
+
+    const normalizedTarget = path.resolve(process.cwd(), configuredPath);
+    const defaultTarget = path.resolve(process.cwd(), DEFAULT_CONFIG_FILE);
+    if (normalizedTarget !== defaultTarget) return;
+
+    const legacyPath = path.resolve(process.cwd(), LEGACY_CONFIG_FILE);
+    if (legacyPath === normalizedTarget) return;
+    if (await fileExists(normalizedTarget)) return;
+    if (!await fileExists(legacyPath)) return;
+
+    await fs.mkdir(path.dirname(normalizedTarget), { recursive: true });
+    try {
+      await fs.rename(legacyPath, normalizedTarget);
+    } catch {
+      await fs.copyFile(legacyPath, normalizedTarget);
+      await fs.rm(legacyPath, { force: true }).catch(() => {});
+    }
+
+    pluginLogger?.warn?.(`[TacticalReport] migrated legacy config file from ${legacyPath} to ${normalizedTarget}`);
+  }
+
+  async function migrateLegacyUserCodesFileIfNeeded(currentConfig) {
+    const configuredPath = normalizeText(currentConfig?.dataFile);
+    if (!configuredPath) return;
+
+    const normalizedTarget = path.resolve(process.cwd(), configuredPath);
+    const defaultTarget = path.resolve(process.cwd(), DEFAULT_DATA_FILE);
+    if (normalizedTarget !== defaultTarget) return;
+
+    const legacyPath = path.resolve(process.cwd(), LEGACY_DATA_FILE);
+    if (legacyPath === normalizedTarget) return;
+    if (await fileExists(normalizedTarget)) return;
+    if (!await fileExists(legacyPath)) return;
+
+    await fs.mkdir(path.dirname(normalizedTarget), { recursive: true });
+    try {
+      await fs.rename(legacyPath, normalizedTarget);
+    } catch {
+      await fs.copyFile(legacyPath, normalizedTarget);
+      await fs.rm(legacyPath, { force: true }).catch(() => {});
+    }
+
+    pluginLogger?.warn?.(`[TacticalReport] migrated legacy user codes file from ${legacyPath} to ${normalizedTarget}`);
+  }
+
   function readConfig(configRef) {
     const raw = configRef?.get?.(CONFIG_KEY, {}) ?? {};
     return {
@@ -689,6 +739,15 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     return output;
   }
 
+  async function fileExists(filePath) {
+    try {
+      await fs.access(filePath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   return {
     manifest: {
       id: PLUGIN_ID,
@@ -744,6 +803,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     },
 
     async init() {
+      await migrateLegacyConfigFileIfNeeded(runtimeConfig);
+      await migrateLegacyUserCodesFileIfNeeded(runtimeConfig);
       await loadConfigFile();
       await loadUserCodes();
     },

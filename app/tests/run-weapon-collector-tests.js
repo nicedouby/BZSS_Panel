@@ -114,7 +114,7 @@ async function testWeaponCollectorMergesAliases() {
     assert.equal(typeMap.Projectile_30mm_HE_Green, "Projectile_30mm_HE");
 
     await stopPlugin();
-    const persisted = JSON.parse(await fs.readFile(path.join(process.cwd(), "data", "weapon-stats.json"), "utf8"));
+    const persisted = JSON.parse(await fs.readFile(path.join(process.cwd(), "data", "weapon-collector", "stats.json"), "utf8"));
     assert.equal(persisted.servers.BZSS_Main.C7A2.died, 1);
     assert.equal(persisted.weaponTypeMap.C7A2_ET552_Foregrip, "C7A2");
   });
@@ -187,7 +187,7 @@ async function testWeaponCollectorHandlesInvalidEventTime() {
     });
 
     await stopPlugin();
-    const persisted = JSON.parse(await fs.readFile(path.join(tempDir, "data", "weapon-stats.json"), "utf8"));
+    const persisted = JSON.parse(await fs.readFile(path.join(tempDir, "data", "weapon-collector", "stats.json"), "utf8"));
     const saved = persisted.servers.BZSS_Main.C7A2;
     assert.equal(Number.isNaN(Date.parse(saved.firstSeen)), false);
     assert.equal(Number.isNaN(Date.parse(saved.lastSeen)), false);

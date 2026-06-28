@@ -2,7 +2,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 const MODULE_ID = "module.reserveSlots";
-const DEFAULT_LOCAL_RESERVE_FILE = "data/reserve-slots.json";
+const DEFAULT_LOCAL_RESERVE_FILE = "data/reserve-slots/store.json";
+const LEGACY_LOCAL_RESERVE_FILE = "data/reserve-slots.json";
 const DEFAULT_STORE_VERSION = 2;
 const DEFAULT_RESERVE_GROUP = "BZSSVIP";
 const DEFAULT_RESERVE_PERMISSION = "reserve";
@@ -122,6 +123,7 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
     api,
 
     async init() {
+      await migrateLegacyReserveStoreFileIfNeeded(runtime.resolvedLocalReserveFilePath);
       await loadStoreFromDisk({ repair: true });
     },
 
@@ -1917,6 +1919,25 @@ async function pathExists(filePath) {
     return true;
   } catch {
     return false;
+  }
+}
+
+async function migrateLegacyReserveStoreFileIfNeeded(targetFilePath) {
+  const normalizedTarget = path.resolve(String(targetFilePath ?? "").trim() || DEFAULT_LOCAL_RESERVE_FILE);
+  const defaultTarget = path.resolve(process.cwd(), DEFAULT_LOCAL_RESERVE_FILE);
+  if (normalizedTarget !== defaultTarget) return;
+
+  const legacyFile = path.resolve(process.cwd(), LEGACY_LOCAL_RESERVE_FILE);
+  if (legacyFile === normalizedTarget) return;
+  if (await pathExists(normalizedTarget)) return;
+  if (!await pathExists(legacyFile)) return;
+
+  await fs.mkdir(path.dirname(normalizedTarget), { recursive: true });
+  try {
+    await fs.rename(legacyFile, normalizedTarget);
+  } catch {
+    await fs.copyFile(legacyFile, normalizedTarget);
+    await fs.rm(legacyFile, { force: true }).catch(() => {});
   }
 }
 

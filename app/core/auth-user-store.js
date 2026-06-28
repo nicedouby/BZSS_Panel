@@ -5,10 +5,13 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { WEB_PAGE_PERMISSION_MATRIX } from "../../web-client/src/shared/web-page-permissions.js";
 
+const DEFAULT_USERS_FILE = "./config/auth/users.json";
+const LEGACY_USERS_FILE = "./data/auth/users.json";
+
 export class AuthUserStore {
   constructor({ config = {}, logger } = {}) {
     this.logger = logger;
-    this.filePath = path.resolve(process.cwd(), String(config.usersFilePath ?? "./data/auth/users.json"));
+    this.filePath = resolveUsersFilePath(config);
     this.version = 1;
     this.users = [];
     this.usersById = new Map();
@@ -20,6 +23,7 @@ export class AuthUserStore {
   }
 
   async start() {
+    await migrateLegacyUsersFileIfNeeded(this.filePath, this.logger);
     await this.load();
   }
 
@@ -534,6 +538,46 @@ function normalizePermissions(value) {
       .filter(Boolean);
   }
   return [];
+}
+
+function resolveUsersFilePath(config) {
+  const configured = String(config?.usersFilePath ?? "").trim();
+  const target = configured || DEFAULT_USERS_FILE;
+  return path.resolve(process.cwd(), target);
+}
+
+async function migrateLegacyUsersFileIfNeeded(filePath, logger) {
+  const normalizedTarget = path.resolve(filePath);
+  const defaultTarget = path.resolve(process.cwd(), DEFAULT_USERS_FILE);
+  if (normalizedTarget !== defaultTarget) return;
+
+  const legacyPath = path.resolve(process.cwd(), LEGACY_USERS_FILE);
+  if (legacyPath === normalizedTarget) return;
+
+  const targetExists = await pathExists(normalizedTarget);
+  if (targetExists) return;
+
+  const legacyExists = await pathExists(legacyPath);
+  if (!legacyExists) return;
+
+  await fs.mkdir(path.dirname(normalizedTarget), { recursive: true });
+  try {
+    await fs.rename(legacyPath, normalizedTarget);
+  } catch {
+    await fs.copyFile(legacyPath, normalizedTarget);
+    await fs.rm(legacyPath, { force: true }).catch(() => {});
+  }
+
+  logger?.warn?.(`[AuthUserStore] migrated legacy users file from ${legacyPath} to ${normalizedTarget}.`);
+}
+
+async function pathExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function normalizePermissionName(value) {

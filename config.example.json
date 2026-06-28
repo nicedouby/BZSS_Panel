@@ -404,7 +404,7 @@
   "reserveSystem": {
     "enabled": true,
     "adminFilePath": "",
-    "localReserveFilePath": "data/reserve-slots.json"
+    "localReserveFilePath": "data/reserve-slots/store.json"
   },
   "pythonLogParser": {
     "enabled": true,

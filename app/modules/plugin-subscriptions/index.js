@@ -3,7 +3,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-const DEFAULT_STATE_FILE = "./data/plugin-subscriptions.json";
+const DEFAULT_STATE_FILE = "./config/plugin-subscriptions.json";
+const LEGACY_STATE_FILE = "./data/plugin-subscriptions.json";
 
 /**
  * 类型归类覆盖表
@@ -32,7 +33,8 @@ const HIDDEN_RUNTIME_ITEM_IDS = new Set([
 export function createPluginSubscriptionsModule({ core, modules, config }) {
   const moduleConfig = config.get("modules.pluginSubscriptions", {});
   const enabled = Boolean(moduleConfig.enabled ?? true);
-  const stateFile = path.resolve(process.cwd(), moduleConfig.stateFile ?? DEFAULT_STATE_FILE);
+  const configuredStateFile = String(moduleConfig.stateFile ?? "").trim();
+  const stateFile = path.resolve(process.cwd(), configuredStateFile || DEFAULT_STATE_FILE);
 
   // subscriptions: 只保存被管理员显式改动过的订阅值。
   // runtimeItems: 保存运行时发现的模块、插件、页面信息，供订阅页展示。
@@ -313,6 +315,11 @@ export function createPluginSubscriptionsModule({ core, modules, config }) {
     api,
 
     async init() {
+      await migrateLegacyStateFileIfNeeded({
+        stateFile,
+        configuredStateFile,
+        logger: core?.logger ?? console,
+      });
       await loadState();
 
       registerRuntimeItem(this.manifest);
@@ -345,6 +352,36 @@ export function createPluginSubscriptionsModule({ core, modules, config }) {
       core.logger.module("module.pluginSubscriptions started.");
     },
   };
+}
+
+async function migrateLegacyStateFileIfNeeded({ stateFile, configuredStateFile, logger }) {
+  if (configuredStateFile) return;
+
+  const normalizedTarget = path.resolve(stateFile);
+  const legacyPath = path.resolve(process.cwd(), LEGACY_STATE_FILE);
+  if (normalizedTarget === legacyPath) return;
+
+  if (await pathExists(normalizedTarget)) return;
+  if (!await pathExists(legacyPath)) return;
+
+  await fs.mkdir(path.dirname(normalizedTarget), { recursive: true });
+  try {
+    await fs.rename(legacyPath, normalizedTarget);
+  } catch {
+    await fs.copyFile(legacyPath, normalizedTarget);
+    await fs.rm(legacyPath, { force: true }).catch(() => {});
+  }
+
+  logger?.warn?.(`pluginSubscriptions migrated legacy state file from ${legacyPath} to ${normalizedTarget}`);
+}
+
+async function pathExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**

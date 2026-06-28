@@ -522,7 +522,7 @@
   "reserveSystem": {
     "enabled": true,
     "adminFilePath": "Z:\\Users\\Administrator\\Desktop\\bzss_sq_server\\SquadGame\\ServerConfig\\Admins.cfg",
-    "localReserveFilePath": "data/reserve-slots.json"
+    "localReserveFilePath": "data/reserve-slots/store.json"
   },
   "pythonLogParser": {
     "enabled": true,
@@ -860,7 +860,7 @@
     }
   },
   "warmup": {
-    "enabled": true
+    "enabled": false
   },
   "bzssCore": {
     "modifyScriptPath": "./support/runtime-assets/bzss-core/ModifySaveGame.py",

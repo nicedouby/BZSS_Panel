@@ -1,0 +1,21 @@
+{
+  "enabled": true,
+  "triggerText": "ZSBD",
+  "playerCooldownSeconds": 10,
+  "helpGlobalCooldownSeconds": 30,
+  "maxMessageLength": 120,
+  "rconPoolSize": 12,
+  "dataFile": "data/tactical-report-user-codes.json",
+  "defaultCodes": {
+    "/0": "请注意地图标点",
+    "/1": "发现敌方步兵",
+    "/2": "发现敌方轻型载具",
+    "/3": "发现敌方重型载具",
+    "/4": "发现敌方坦克",
+    "/5": "发现敌方 FOB / HAB",
+    "/6": "我方需要支援",
+    "/7": "敌方正在绕后",
+    "/8": "敌方正在进攻我方点位",
+    "/9": "请注意地图标点"
+  }
+}

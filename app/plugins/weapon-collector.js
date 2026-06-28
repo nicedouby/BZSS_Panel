@@ -3,6 +3,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+const DEFAULT_DATA_FILE = "data/weapon-collector/stats.json";
+const LEGACY_DATA_FILE = "data/weapon-stats.json";
+
 const DIRECT_WEAPON_TYPE_MAP = new Map([
   ["Soldiers_WPMC_Crewman_01", "Soldiers_WPMC_Crewman"],
   ["Soldiers_WPMC_HAT_02", "Soldiers_WPMC_HAT"],
@@ -91,7 +94,7 @@ export function createPlugin({ core, modules }) {
   const weaponTypeMap = new Map(); // Map<rawCategory, canonicalCategory>
   const classificationCache = new Map(); // Map<rawCategory, classification>
   const unsubscribers = [];
-  const dataFile = path.resolve(process.cwd(), "data/weapon-stats.json");
+  const dataFile = path.resolve(process.cwd(), DEFAULT_DATA_FILE);
   let persistTimer = null;
 
   function schedulePersist() {
@@ -126,8 +129,12 @@ export function createPlugin({ core, modules }) {
 
     await fs.mkdir(path.dirname(dataFile), { recursive: true });
     const tmp = `${dataFile}.${process.pid}.${Date.now()}.tmp`;
-    await fs.writeFile(tmp, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-    await fs.rename(tmp, dataFile);
+    try {
+      await fs.writeFile(tmp, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+      await fs.rename(tmp, dataFile);
+    } finally {
+      await fs.rm(tmp, { force: true }).catch(() => {});
+    }
   }
 
   async function loadState() {
@@ -202,6 +209,21 @@ export function createPlugin({ core, modules }) {
         core.logger.warn(`[WeaponCollector] load state failed: ${err.message}`);
       }
       return false;
+    }
+  }
+
+  async function migrateLegacyDataFileIfNeeded() {
+    const legacyFile = path.resolve(process.cwd(), LEGACY_DATA_FILE);
+    if (legacyFile === dataFile) return;
+    if (await pathExists(dataFile)) return;
+    if (!await pathExists(legacyFile)) return;
+
+    await fs.mkdir(path.dirname(dataFile), { recursive: true });
+    try {
+      await fs.rename(legacyFile, dataFile);
+    } catch {
+      await fs.copyFile(legacyFile, dataFile);
+      await fs.rm(legacyFile, { force: true }).catch(() => {});
     }
   }
 
@@ -583,6 +605,7 @@ export function createPlugin({ core, modules }) {
     api,
 
     async start() {
+      await migrateLegacyDataFileIfNeeded();
       const migrated = await loadState();
       if (migrated) {
         await persistState();
@@ -627,4 +650,13 @@ export function createPlugin({ core, modules }) {
       core.logger.info("[WeaponCollector] Plugin stopped");
     },
   };
+}
+
+async function pathExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }

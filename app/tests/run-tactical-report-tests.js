@@ -11,8 +11,8 @@ function createConfig(tempDir, overrides = {}) {
       if (pathText !== "plugins.tacticalReport") return fallback;
       return {
         enabled: true,
-        configFile: path.relative(process.cwd(), path.join(tempDir, "data", "tactical-report-config.json")),
-        dataFile: path.relative(process.cwd(), path.join(tempDir, "data", "tactical-report-user-codes.json")),
+        configFile: path.relative(process.cwd(), path.join(tempDir, "config", "tactical-report.json")),
+        dataFile: path.relative(process.cwd(), path.join(tempDir, "data", "tactical-report", "user-codes.json")),
         ...overrides,
       };
     },
@@ -78,7 +78,7 @@ async function createHarness({ players = [], configOverrides = {} } = {}) {
 async function testConfigFileCreatedAndStateExposed() {
   const harness = await createHarness();
   try {
-    const configPath = path.join(harness.dir, "data", "tactical-report-config.json");
+    const configPath = path.join(harness.dir, "config", "tactical-report.json");
     const stored = JSON.parse(await fs.readFile(configPath, "utf8"));
     assert.equal(stored.triggerText, "ZSBD");
     assert.equal(stored.rconPoolSize, 6);
@@ -164,7 +164,7 @@ async function testSetAndReloadPersonalCode() {
     });
     assert.equal(setResult.ok, true);
 
-    const filePath = path.join(harness.dir, "data", "tactical-report-user-codes.json");
+    const filePath = path.join(harness.dir, "data", "tactical-report", "user-codes.json");
     const stored = JSON.parse(await fs.readFile(filePath, "utf8"));
     assert.equal(stored["steam-1"]["/10"], "敌方坦克在我标点附近");
 

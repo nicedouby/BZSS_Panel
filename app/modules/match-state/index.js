@@ -40,7 +40,8 @@ export function createMatchStateModule({ core, modules, config, logger }) {
 
   const MAX_ROUND_HISTORY = 200;
   const DEFAULT_DEDUPE_TTL_MS = 10 * 60 * 1000;
-  const DEFAULT_SESSION_STATE_FILE = "./data/match-state-session.json";
+  const DEFAULT_SESSION_STATE_FILE = "./data/match-state/session.json";
+  const LEGACY_SESSION_STATE_FILE = "./data/match-state-session.json";
   const SESSION_STATE_VERSION = 1;
   const roundDedupeTtlMs = normalizePositiveNumber(moduleConfig.roundDedupeTtlMs, DEFAULT_DEDUPE_TTL_MS);
   const roundMaxHistory = normalizePositiveNumber(moduleConfig.roundMaxHistory ?? moduleConfig.maxEvents, MAX_ROUND_HISTORY);
@@ -978,8 +979,12 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     try {
       await fs.mkdir(path.dirname(sessionState.filePath), { recursive: true });
       const tempFile = `${sessionState.filePath}.${process.pid}.${Date.now()}.tmp`;
-      await fs.writeFile(tempFile, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-      await fs.rename(tempFile, sessionState.filePath);
+      try {
+        await fs.writeFile(tempFile, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+        await fs.rename(tempFile, sessionState.filePath);
+      } finally {
+        await fs.rm(tempFile, { force: true }).catch(() => {});
+      }
     } catch (error) {
       logWithFallback(moduleLogger, "warn", "[MatchState] session state write failed", {
         operation: "matchState.sessionStateWriteFailed",
@@ -1373,8 +1378,12 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     try {
       await fs.mkdir(path.dirname(sessionState.filePath), { recursive: true });
       const tempFile = `${sessionState.filePath}.${process.pid}.${Date.now()}.tmp`;
-      await fs.writeFile(tempFile, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-      await fs.rename(tempFile, sessionState.filePath);
+      try {
+        await fs.writeFile(tempFile, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+        await fs.rename(tempFile, sessionState.filePath);
+      } finally {
+        await fs.rm(tempFile, { force: true }).catch(() => {});
+      }
     } catch (error) {
       logWithFallback(moduleLogger, "warn", "[MatchState] session state write failed", {
         operation: "matchState.sessionStateWriteFailed",
@@ -1442,6 +1451,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
 
       if (!enabled) return;
       started = true;
+      await migrateLegacySessionStateFileIfNeeded(sessionState.filePath);
       await loadMatchSessionState();
       sessionState.announcedSameMatchByServerId.clear();
       sessionState.announcedComparisonByServerId.clear();
@@ -1550,6 +1560,36 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     },
   };
 
+}
+
+async function migrateLegacySessionStateFileIfNeeded(targetFilePath) {
+  const defaultRelativePath = "./data/match-state/session.json";
+  const legacyRelativePath = "./data/match-state-session.json";
+  const normalizedTarget = path.resolve(String(targetFilePath ?? "").trim() || defaultRelativePath);
+  const defaultTarget = path.resolve(process.cwd(), defaultRelativePath);
+  if (normalizedTarget !== defaultTarget) return;
+
+  const legacyFile = path.resolve(process.cwd(), legacyRelativePath);
+  if (legacyFile === normalizedTarget) return;
+  if (await pathExists(legacyFile) === false) return;
+  if (await pathExists(normalizedTarget)) return;
+
+  await fs.mkdir(path.dirname(normalizedTarget), { recursive: true });
+  try {
+    await fs.rename(legacyFile, normalizedTarget);
+  } catch {
+    await fs.copyFile(legacyFile, normalizedTarget);
+    await fs.rm(legacyFile, { force: true }).catch(() => {});
+  }
+}
+
+async function pathExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function getStableIdentityKey(player = {}) {

@@ -94,7 +94,7 @@
             <div class="tank-battle-custom">
               <div class="tank-battle-custom-header">
                 <strong>自定义指令</strong>
-                <span>下面 6 个选项可单独打开或者关闭</span>
+                <span>下面 7 个选项可单独打开或者关闭</span>
               </div>
 
               <div class="tank-battle-option-list">
@@ -360,6 +360,12 @@ const tankBattleOptions = [
     closeCommand: "AdminDisableVehicleClaiming 0",
   },
   {
+    label: "禁用载具队伍要求",
+    description: "AdminDisableVehicleTeamRequirement",
+    openCommand: "AdminDisableVehicleTeamRequirement 1",
+    closeCommand: "AdminDisableVehicleTeamRequirement 0",
+  },
+  {
     label: "无限工事",
     description: "AdminForceAllDeployableAvailability",
     openCommand: "AdminForceAllDeployableAvailability 1",
@@ -495,6 +501,7 @@ async function runTankBattlePreset(open: boolean) {
         "AdminForceAllRoleAvailability 1",
         "AdminDisableVehicleKitRequirement 1",
         "AdminDisableVehicleClaiming 1",
+        "AdminDisableVehicleTeamRequirement 1",
       ]
     : [
         "AdminNoRespawnTimer 0",
@@ -502,6 +509,7 @@ async function runTankBattlePreset(open: boolean) {
         "AdminForceAllRoleAvailability 0",
         "AdminDisableVehicleKitRequirement 0",
         "AdminDisableVehicleClaiming 0",
+        "AdminDisableVehicleTeamRequirement 0",
       ];
 
   const confirmed = window.confirm(

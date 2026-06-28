@@ -101,6 +101,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       clockSeconds: Math.max(0, Math.floor(Number(snapshot.logClockSeconds ?? 0) || 0)),
       anchorLogTime: normalizeText(snapshot.logClockAnchorLogTime ?? snapshot.logClockLastResetAt ?? ""),
       hasAnchor: Boolean(snapshot.logClockHasAnchor),
+      manual: Boolean(snapshot.logClockManual),
+      trusted: Boolean(snapshot.logClockHasAnchor) && !Boolean(snapshot.logClockManual),
     };
   }
 
@@ -224,11 +226,27 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     const candidate = state.recordsBySlot.get(slotKey) ?? findRecordForLog(normalizedEvent) ?? null;
     const existing = shouldStartNewRecordGeneration(candidate, normalizedEvent) ? null : candidate;
     const clockContext = getClockContext();
+    if (!getWarmupState() && !clockContext.trusted && clockContext.clockSeconds <= 0) {
+      rememberCreationLog(state, buildCreationLogEntry({
+        ...normalizedEvent,
+        clockSeconds: clockContext.clockSeconds,
+        clockAnchorLogTime: clockContext.anchorLogTime,
+        clockHasAnchor: clockContext.hasAnchor,
+        clockManual: clockContext.manual,
+      }, {
+        stage: "dropped",
+        message: "Creation ignored because the current log clock is not trusted yet.",
+        dropReason: clockContext.manual ? "untrusted_manual_log_clock" : "untrusted_log_clock_without_anchor",
+      }));
+      return null;
+    }
     const merged = mergeCreation(existing, normalizedEvent, {
       warmup: getWarmupState(),
       clockSeconds: clockContext.clockSeconds,
       clockAnchorLogTime: clockContext.anchorLogTime,
       clockHasAnchor: clockContext.hasAnchor,
+      clockManual: clockContext.manual,
+      clockTrusted: clockContext.trusted,
     });
 
     const playtime = await resolvePlaytime(merged);
@@ -817,6 +835,8 @@ function mergeCreation(existing, event, context) {
     clockSeconds: existing ? existing.clockSeconds : Math.max(0, Math.floor(Number(context.clockSeconds ?? 0) || 0)),
     clockAnchorLogTime: existing ? existing.clockAnchorLogTime : context.clockAnchorLogTime,
     clockHasAnchor: existing ? existing.clockHasAnchor : Boolean(context.clockHasAnchor),
+    clockManual: existing ? existing.clockManual : Boolean(context.clockManual),
+    clockTrusted: existing ? existing.clockTrusted : Boolean(context.clockTrusted),
     actions: Array.isArray(existing?.actions) ? existing.actions.map((action) => ({ ...action })) : [],
     playtime: cloneValue(existing?.playtime) ?? null,
     lookupStartedAt: normalizeText(existing?.lookupStartedAt),
