@@ -4,7 +4,6 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { execFile } from "node:child_process";
-import { pathToFileURL } from "node:url";
 
 import { handleAstrbotBridgeRoutes } from "./routes.js";
 
@@ -83,7 +82,6 @@ const FACTION_GLOW_BY_CODE = {
 };
 const sharpRequire = createRequire(import.meta.url);
 let sharpLoaderPromise = null;
-let playwrightLoaderPromise = null;
 
 export function createAstrbotBridgeModule({ core, modules, config, logger }) {
   const moduleLogger =
@@ -130,6 +128,10 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
 
     async queryServerInfoSnapshot(input = {}) {
       return queryServerInfoSnapshot(input);
+    },
+
+    async readLatestServerInfoSnapshot() {
+      return readLatestServerInfoSnapshot();
     },
 
     async unbindMe(input = {}) {
@@ -640,10 +642,41 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
   }
 
   async function queryServerInfoSnapshot(input = {}) {
-    const serverInfo = buildServerInfo(input);
-    const fileName = `server-info-${sanitizeFileToken(serverInfo?.server?.serverId ?? serverInfo?.server?.serverName ?? "snapshot")}.png`;
     try {
-      const png = await captureServerInfoSnapshotPng(serverInfo, input);
+      const matchSnapshot = resolveMatchSnapshotApi();
+      if (!matchSnapshot?.takeManualSnapshot || !matchSnapshot?.readSnapshotArtifact) {
+        return {
+          ok: false,
+          error: "MATCH_SNAPSHOT_UNAVAILABLE",
+          statusCode: 503,
+          message: "match-snapshot plugin is not loaded.",
+        };
+      }
+
+      const snapshotItem = await matchSnapshot.takeManualSnapshot({
+        includeSteamID: true,
+      });
+      if (!snapshotItem?.id) {
+        return {
+          ok: false,
+          error: "MATCH_SNAPSHOT_GENERATION_FAILED",
+          statusCode: 500,
+          message: "match-snapshot did not return a snapshot item.",
+        };
+      }
+
+      const artifact = await matchSnapshot.readSnapshotArtifact(snapshotItem.id, "image");
+      if (!artifact?.content?.length) {
+        return {
+          ok: false,
+          error: "MATCH_SNAPSHOT_GENERATION_FAILED",
+          statusCode: 500,
+          message: "match-snapshot image artifact is empty.",
+        };
+      }
+
+      const fileName = String(artifact.fileName ?? `${snapshotItem.id}.png`).trim() || `${snapshotItem.id}.png`;
+      const png = Buffer.isBuffer(artifact.content) ? artifact.content : Buffer.from(artifact.content);
       const filePath = await persistServerInfoSnapshot(png, fileName);
       return {
         ok: true,
@@ -651,17 +684,79 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
         fileName,
         file_path: filePath,
         filePath,
-        serverInfo,
+        snapshotItem,
+        artifact: {
+          ...artifact,
+          fileName,
+          content: png,
+        },
         png,
       };
     } catch (error) {
+      const statusCode = Number(error?.statusCode ?? 500) || 500;
       return {
         ok: false,
-        error: "SERVER_INFO_SNAPSHOT_FAILED",
-        message: String(error?.message ?? error ?? "Failed to render server info snapshot."),
-        serverInfo,
+        error: error?.code === "MATCH_SNAPSHOT_UNAVAILABLE"
+          ? "MATCH_SNAPSHOT_UNAVAILABLE"
+          : "MATCH_SNAPSHOT_GENERATION_FAILED",
+        statusCode,
+        message: String(error?.message ?? error ?? "Failed to render match snapshot."),
+        stack: String(error?.stack ?? ""),
       };
     }
+  }
+
+  function resolveMatchSnapshotApi() {
+    const moduleCandidate = modules?.matchSnapshot;
+    const directApi = moduleCandidate?.api ?? moduleCandidate ?? null;
+    if (directApi?.takeManualSnapshot && directApi?.readSnapshotArtifact) {
+      return directApi;
+    }
+
+    const pluginManager = core?.pluginManager;
+    const pluginInstance = Array.isArray(pluginManager?.instances)
+      ? pluginManager.instances.find((instance) => instance?.manifest?.id === "match-snapshot")
+      : null;
+    const pluginApi = pluginInstance?.api ?? pluginInstance ?? null;
+    if (pluginApi?.takeManualSnapshot && pluginApi?.readSnapshotArtifact) {
+      return pluginApi;
+    }
+
+    return null;
+  }
+
+  async function readLatestServerInfoSnapshot() {
+    await fs.mkdir(SERVER_INFO_SNAPSHOT_CACHE_DIR, { recursive: true });
+    const entries = await fs.readdir(SERVER_INFO_SNAPSHOT_CACHE_DIR, { withFileTypes: true });
+    const pngEntries = [];
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      if (!/^(Match-|server-info-).+\.png$/i.test(entry.name)) continue;
+      const filePath = path.join(SERVER_INFO_SNAPSHOT_CACHE_DIR, entry.name);
+      try {
+        const stat = await fs.stat(filePath);
+        pngEntries.push({ filePath, name: entry.name, stat });
+      } catch {
+        // Skip files that disappear between readdir and stat.
+      }
+    }
+
+    if (!pngEntries.length) {
+      return null;
+    }
+
+    pngEntries.sort((left, right) => {
+      const timeDiff = Number(right.stat.mtimeMs ?? 0) - Number(left.stat.mtimeMs ?? 0);
+      if (timeDiff) return timeDiff;
+      return String(right.name).localeCompare(String(left.name));
+    });
+
+    const latest = pngEntries[0];
+    return {
+      filePath: latest.filePath,
+      fileName: latest.name,
+      png: await fs.readFile(latest.filePath),
+    };
   }
 
   async function unbindMe(input = {}) {
@@ -710,88 +805,6 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
     await fs.rm(finalFilePath, { force: true });
     await fs.rename(tempFilePath, finalFilePath);
     return finalFilePath;
-  }
-
-  async function captureServerInfoSnapshotPng(serverInfo, input = {}) {
-    const executablePath = await resolveChromiumExecutablePath();
-    if (!executablePath) {
-      throw new Error("Chrome or Edge executable was not found.");
-    }
-
-    const { chromium } = await loadPlaywright();
-    const browser = await chromium.launch({
-      executablePath,
-      headless: true,
-      args: ["--disable-gpu"],
-    });
-    const page = await browser.newPage({
-      viewport: { width: 1600, height: 900 },
-      deviceScaleFactor: 1,
-    });
-
-    try {
-      const pageUrl = buildServerInfoSnapshotPageUrl(input);
-      await page.goto(pageUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
-      await page.waitForFunction(() => Boolean(window.__BZSS_SNAPSHOT_READY__), null, { timeout: 30_000 });
-      await page.waitForTimeout(500);
-      return await page.screenshot({
-        type: "png",
-        fullPage: true,
-      });
-    } finally {
-      await page.close().catch(() => {});
-      await browser.close().catch(() => {});
-    }
-  }
-
-  async function resolveChromiumExecutablePath() {
-    const candidates = [
-      "C:/Program Files/Google/Chrome/Application/chrome.exe",
-      "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
-      "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
-      "C:/Program Files/Microsoft/Edge/Application/msedge.exe",
-    ];
-    for (const candidate of candidates) {
-      try {
-        await fs.access(candidate);
-        return candidate;
-      } catch {}
-    }
-    return undefined;
-  }
-
-  async function loadPlaywright() {
-    if (!playwrightLoaderPromise) {
-      playwrightLoaderPromise = resolvePlaywrightModuleUrl().then((moduleUrl) => import(moduleUrl));
-    }
-    return playwrightLoaderPromise;
-  }
-
-  async function resolvePlaywrightModuleUrl() {
-    const pnpmRoot = path.resolve(SHARP_BUNDLE_ROOT, ".pnpm");
-    const entries = await fs.readdir(pnpmRoot, { withFileTypes: true });
-    const playwrightEntry = entries.find((entry) => entry.isDirectory() && entry.name.startsWith("playwright@"));
-    if (!playwrightEntry) {
-      throw new Error("Playwright package was not found in the bundled runtime.");
-    }
-    return pathToFileURL(path.join(pnpmRoot, playwrightEntry.name, "node_modules", "playwright", "index.mjs")).href;
-  }
-
-  function buildServerInfoSnapshotPageUrl(input = {}) {
-    const webConfig = core?.config?.get?.("web", {}) ?? {};
-    const host = normalizeSnapshotHost(webConfig.host);
-    const port = Number(webConfig.port ?? 8899) || 8899;
-    const url = new URL(`http://${host}:${port}/astrbot/server-info-card`);
-    if (input.includePlayers || input.players) {
-      url.searchParams.set("includePlayers", "1");
-    }
-    return url.toString();
-  }
-
-  function normalizeSnapshotHost(host) {
-    const text = String(host ?? "").trim();
-    if (!text || text === "0.0.0.0" || text === "::" || text === "[::]") return "127.0.0.1";
-    return text;
   }
 
   async function writeSnapshotHtml(serverInfo, input = {}) {

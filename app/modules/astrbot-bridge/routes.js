@@ -209,7 +209,9 @@ export async function handleAstrbotBridgeRoutes({
     });
     if (!result?.ok || !Buffer.isBuffer(result?.png) || !result.png.length) {
       const statusCode = Number(result?.statusCode ?? 500);
-      bridgeLogger?.warn?.(`[AstrBotBridge] server-info-snapshot-failed status=${statusCode} error=${result?.error ?? "DOWNLOAD_FAILED"} message=${String(result?.message ?? "failed to render server info snapshot").slice(0, 300)}`);
+      bridgeLogger?.error?.(
+        `[AstrBotBridge] server-info-snapshot-failed status=${statusCode} error=${result?.error ?? "DOWNLOAD_FAILED"} message=${String(result?.message ?? "failed to render server info snapshot").slice(0, 300)}\n${String(result?.stack ?? "").trim() || "(no stack)"}`
+      );
       json(statusCode >= 400 ? statusCode : 500, {
         ok: false,
         error: result?.error ?? "DOWNLOAD_FAILED",
@@ -226,6 +228,30 @@ export async function handleAstrbotBridgeRoutes({
       "Cache-Control": "no-store",
     });
     res.end(result.png);
+    return true;
+  }
+
+  if (url.pathname === "/api/astrbot/server-info/snapshot/latest" && req.method === "GET") {
+    bridgeLogger?.info?.(`[AstrBotBridge] server-info-snapshot-latest-request ip=${getRequestIp(req)}`);
+    const latest = await bridge.readLatestServerInfoSnapshot?.();
+    if (!latest?.png || !latest.png.length) {
+      bridgeLogger?.warn?.(`[AstrBotBridge] server-info-snapshot-latest-miss ip=${getRequestIp(req)}`);
+      json(404, {
+        ok: false,
+        error: "SnapshotNotFound",
+        message: "No cached server info snapshot was found.",
+      });
+      return true;
+    }
+
+    bridgeLogger?.info?.(`[AstrBotBridge] server-info-snapshot-latest-success bytes=${latest.png.length} filePath=${String(latest.filePath ?? "").trim() || "-"}`);
+    res.writeHead(200, {
+      "Content-Type": "image/png",
+      "Content-Length": String(latest.png.length),
+      "Content-Disposition": `inline; filename="${String(latest.fileName ?? "server-info.png").replaceAll("\"", "")}"`,
+      "Cache-Control": "no-store",
+    });
+    res.end(latest.png);
     return true;
   }
 
