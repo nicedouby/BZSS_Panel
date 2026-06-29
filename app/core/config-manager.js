@@ -17,7 +17,7 @@ export class ConfigManager {
 
   async load() {
     const text = await fs.readFile(this.configPath, "utf8");
-    this.config = JSON.parse(text);
+    this.config = JSON.parse(text.replace(/^\uFEFF/, ""));
   }
 
   get(pathText, defaultValue = undefined) {

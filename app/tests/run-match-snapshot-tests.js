@@ -40,14 +40,14 @@ function createHarness() {
                 teamID: 2,
                 squadID: 1,
                 role: "Crewman",
-                isLeader: false,
+                isLeader: true,
                 steamID: "76561198000000003",
                 eosID: "eos-charlie",
               },
             ];
             const squads = [
-              { teamID: 1, squadID: 2, squadName: "INF", teamName: "Team 1", size: 1 },
-              { teamID: 2, squadID: 1, squadName: "Armor", teamName: "Team 2", size: 1 },
+              { teamID: 1, squadID: 2, squadName: "Command Squad", teamName: "49th Combined Arms Army", size: 1 },
+              { teamID: 2, squadID: 1, squadName: "Command Squad", teamName: "1st Marines Regiment", size: 1 },
             ];
             return {
               status: {
@@ -75,6 +75,7 @@ function createHarness() {
             return players.map((player) => ({
               ...player,
               gameSeconds: player.name === "Alpha" ? 7200 : player.name === "Bravo" ? 1800 : 5400,
+              steamAvatar: player.name === "Charlie" ? "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=" : "",
             }));
           },
         },
@@ -173,6 +174,13 @@ async function testCaptureWritesImageAndFiles() {
     assert.equal(json.teams[0].unassignedPlayers[0].name, "Bravo");
     assert.equal(json.renderOptions.includeSteamID, false);
     assert.equal(json.renderOptions.includeEOSID, false);
+    assert.equal(json.teams[0].factionCode, "RGF");
+    assert.equal(json.teams[0].flagAssetPath, "/assets/faction-assets/RGF.PNG");
+    assert.equal(json.teams[1].factionCode, "USMC");
+    assert.equal(json.teams[1].flagAssetPath, "/assets/faction-assets/USMC.PNG");
+    assert.equal(json.teams[1].commanderName, "Charlie");
+    assert.equal(json.teams[1].commanderPlayer.gameSeconds, 5400);
+    assert.equal(json.teams[1].commanderPlayer.steamAvatar, "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=");
     assert.equal(json.teams[0].squads[0].members[0].combatStats.kills, 1);
     assert.equal(json.teams[0].squads[0].members[0].combatStats.wounds, 1);
     assert.equal(json.teams[0].squads[0].members[0].combatStats.deaths, 1);

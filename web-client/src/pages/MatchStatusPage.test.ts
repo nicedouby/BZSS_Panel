@@ -27,7 +27,7 @@ vi.mock("vue-router", () => ({
 }));
 
 import MatchStatusPage from "./MatchStatusPage.vue";
-import { apiGet } from "../app/apiClient";
+import { apiGet, apiPost } from "../app/apiClient";
 import { getRuntimeSyncState, stopRuntimeSync } from "../app/runtimeSync";
 import { useAuthStore } from "../stores/auth.store";
 import { usePlayerStore } from "../stores/player.store";
@@ -153,6 +153,13 @@ describe("MatchStatusPage", () => {
     });
 
     vi.mocked(apiGet).mockReset();
+    vi.mocked(apiPost).mockReset();
+    vi.mocked(apiPost).mockResolvedValue({
+      ok: true,
+      snapshot: {
+        id: "snapshot-temp",
+      },
+    } as any);
     vi.mocked(apiGet).mockImplementation(async (path: string) => {
       if (path === "/api/match/snapshot") {
         return {
@@ -311,6 +318,48 @@ describe("MatchStatusPage", () => {
     expect(wrapper.findComponent({ name: "MatchChatPanel" }).exists()).toBe(true);
     expect(wrapper.text()).toContain("Live feed");
     expect(wrapper.text()).not.toContain("Loading");
+    wrapper.unmount();
+  });
+
+  it("exposes a temporary match snapshot button for super admins", async () => {
+    const auth = useAuthStore();
+    auth.user = {
+      id: "1",
+      username: "admin",
+      role: "admin",
+      isSuperAdmin: true,
+      permissions: [],
+    };
+
+    const wrapper = mount(MatchStatusPage, {
+      global: {
+        plugins: [[VueQueryPlugin, { queryClient: new QueryClient() }]],
+        stubs: {
+          PlayerCombatTimeline: true,
+          StatusBadge: true,
+          CopyableValue: true,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    const button = wrapper.find('[data-testid="match-snapshot-temp-generate"]');
+    expect(button.exists()).toBe(true);
+    await button.trigger("click");
+    await flushPromises();
+
+    const captureCall = vi.mocked(apiPost).mock.calls.find((call) => call[0] === "/api/match-snapshot/capture");
+    expect(captureCall).toBeTruthy();
+    expect(captureCall?.[1]).toMatchObject({
+      includeSteamID: false,
+      includeEOSID: false,
+      overview: {
+        status: expect.any(Object),
+        matchState: expect.any(Object),
+      },
+    });
+
     wrapper.unmount();
   });
 

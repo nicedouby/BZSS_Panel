@@ -6,6 +6,7 @@
       :can-refresh="canRefresh"
       :refreshing-type="refreshingType"
       :refreshing-playtime="refreshingPlaytime"
+      :refreshing-snapshot="capturingSnapshot"
       :viewer-perspective-text="viewerPerspectiveText"
       :show-viewer-perspective="ui.showTeamPerspectiveHint"
       :server-status-updated-at="serverStatusUpdatedAt"
@@ -18,6 +19,7 @@
       @refresh="handleToolbarRefresh"
       @refresh-playtime="refreshOnlinePlaytime"
       @refresh-playtime-force="refreshOnlinePlaytime(true)"
+      @capture-snapshot="handleTemporarySnapshot"
       @toggle-multi-select="toggleMultiSelectMode"
       @view-mode-change="handleViewModeChange"
     />
@@ -65,6 +67,24 @@
           </div>
         </article>
       </div>
+    </section>
+
+    <section class="match-snapshot-cta">
+      <div class="match-snapshot-cta__copy">
+        <div class="match-snapshot-cta__title">临时生成对局快照</div>
+        <div class="match-snapshot-cta__subtitle">
+          生成带地图、双方阵营旗帜、玩家数、指挥官、服务器人数、排队人数和 RCON 时长的快照图。
+        </div>
+      </div>
+      <button
+        type="button"
+        class="match-snapshot-cta__button"
+        data-testid="match-snapshot-temp-generate"
+        :disabled="capturingSnapshot || !canRefresh"
+        @click="handleTemporarySnapshot"
+      >
+        {{ capturingSnapshot ? "正在生成..." : "临时生成快照" }}
+      </button>
     </section>
 
 
@@ -417,6 +437,7 @@ const refreshingPlaytime = ref(false);
 const refreshingPlayers = ref(false);
 const refreshingSquads = ref(false);
 const refreshingAll = ref(false);
+const capturingSnapshot = ref(false);
 const refreshError = ref("");
 const playtimeError = ref("");
 const ticketWriteError = ref("");
@@ -1717,6 +1738,71 @@ function handleToolbarRefresh(type: "players" | "squads" | "all") {
   void refreshAll();
 }
 
+async function handleTemporarySnapshot() {
+  if (capturingSnapshot.value) return;
+
+  capturingSnapshot.value = true;
+
+  try {
+    await apiPost("/api/match-snapshot/capture", buildTemporarySnapshotPayload());
+    ui.pushToast({
+      title: t("common.updated"),
+      message: "已临时生成对局快照",
+      tone: "ok",
+    });
+  } catch (error) {
+    const message = renderApiError(error, "临时生成失败");
+    ui.pushToast({
+      title: t("common.error"),
+      message,
+      tone: "error",
+    });
+  } finally {
+    capturingSnapshot.value = false;
+  }
+}
+
+function buildTemporarySnapshotPayload() {
+  const currentMatchState = matchSnapshot.value ? {
+    ...matchSnapshot.value,
+    serverStatus: {
+      ...(matchSnapshot.value.serverStatus ?? {}),
+      ...runtimeWebStatus.value,
+      serverId: currentServerId.value || String(matchSnapshot.value.serverStatus?.serverId ?? runtimeWebStatus.value.serverId ?? ""),
+      playerCount: currentPlayerCount.value,
+      queueCount: runtimeWebStatus.value.queueCount ?? matchSnapshot.value.serverStatus?.queueCount,
+    },
+    match: {
+      ...(matchSnapshot.value.match ?? {}),
+    },
+    players: {
+      ...(matchSnapshot.value.players ?? {}),
+      list: Array.isArray(matchSnapshot.value.players?.list) ? matchSnapshot.value.players.list : [],
+    },
+    squads: {
+      ...(matchSnapshot.value.squads ?? {}),
+      list: Array.isArray(matchSnapshot.value.squads?.list) ? matchSnapshot.value.squads.list : [],
+    },
+  } : null;
+
+  return {
+    includeSteamID: false,
+    includeEOSID: false,
+    overview: {
+      status: {
+        ...runtimeWebStatus.value,
+        serverId: currentServerId.value || runtimeWebStatus.value.serverId || "",
+        playerCount: currentPlayerCount.value,
+      },
+      matchState: currentMatchState,
+      match: currentMatchState?.match ?? {},
+      players: currentMatchState?.players?.list ?? [],
+      squads: currentMatchState?.squads?.list ?? [],
+      serverId: currentServerId.value || runtimeWebStatus.value.serverId || "",
+    },
+  };
+}
+
 async function refreshMatchState(type: "players" | "squads" | "all") {
   const loadingState = type === "players"
     ? refreshingPlayers
@@ -2275,6 +2361,82 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
     var(--color-bg-card);
   box-shadow: var(--shadow-md);
   min-width: 0;
+}
+
+.match-snapshot-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 8px var(--spacing-lg) 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(96, 165, 250, 0.16), transparent 34%),
+    radial-gradient(circle at 0% 0%, rgba(34, 197, 94, 0.08), transparent 32%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    rgba(8, 12, 18, 0.92);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(18px);
+  min-width: 0;
+}
+
+.match-snapshot-cta__copy {
+  min-width: 0;
+}
+
+.match-snapshot-cta__title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--color-text-primary);
+  letter-spacing: 0.01em;
+}
+
+.match-snapshot-cta__subtitle {
+  margin-top: 4px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.match-snapshot-cta__button {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid rgba(96, 165, 250, 0.42);
+  border-radius: var(--radius-full);
+  background: linear-gradient(180deg, rgba(96, 165, 250, 0.24), rgba(96, 165, 250, 0.14));
+  color: #dbeafe;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgba(59, 130, 246, 0.2);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.match-snapshot-cta__button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(96, 165, 250, 0.66);
+  background: linear-gradient(180deg, rgba(96, 165, 250, 0.32), rgba(96, 165, 250, 0.18));
+  box-shadow: 0 16px 32px rgba(59, 130, 246, 0.28);
+}
+
+.match-snapshot-cta__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 720px) {
+  .match-snapshot-cta {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .match-snapshot-cta__button {
+    width: 100%;
+  }
 }
 
 .battle-log-summary-card {

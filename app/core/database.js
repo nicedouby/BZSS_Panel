@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS players (
     current_name TEXT,
     steam_id TEXT,
     eos_id TEXT,
+    qq_number TEXT,
+    qq_name TEXT,
+    qq_bound_at INTEGER,
     current_ip TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
@@ -58,7 +61,8 @@ CREATE TABLE IF NOT EXISTS players (
     total_cmd_wins INTEGER NOT NULL DEFAULT 0,
     steam_avatar TEXT,
     UNIQUE(steam_id),
-    UNIQUE(eos_id)
+    UNIQUE(eos_id),
+    UNIQUE(qq_number)
 );
 CREATE INDEX IF NOT EXISTS idx_players_updated_at ON players(updated_at);
 
@@ -483,6 +487,24 @@ DROP TABLE IF EXISTS kill_stats;
     `);
     await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 8, Date.now());
   }
+
+  if (!appliedSet.has(9)) {
+    const tableInfo = await db.all("PRAGMA table_info(players)");
+    const cols = new Set(tableInfo.map((column) => column.name));
+
+    if (!cols.has("qq_number")) {
+      await db.run("ALTER TABLE players ADD COLUMN qq_number TEXT");
+    }
+    if (!cols.has("qq_name")) {
+      await db.run("ALTER TABLE players ADD COLUMN qq_name TEXT");
+    }
+    if (!cols.has("qq_bound_at")) {
+      await db.run("ALTER TABLE players ADD COLUMN qq_bound_at INTEGER");
+    }
+
+    await db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_players_qq_number ON players(qq_number)");
+    await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 9, Date.now());
+  }
 }
 
 async function ensureCompatibleColumns(db) {
@@ -490,6 +512,9 @@ async function ensureCompatibleColumns(db) {
     current_name: "TEXT",
     steam_id: "TEXT",
     eos_id: "TEXT",
+    qq_number: "TEXT",
+    qq_name: "TEXT",
+    qq_bound_at: "INTEGER",
     current_ip: "TEXT",
     created_at: "INTEGER NOT NULL DEFAULT 0",
     updated_at: "INTEGER NOT NULL DEFAULT 0",

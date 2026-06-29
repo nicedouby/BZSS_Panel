@@ -1,4 +1,4 @@
-// -*- coding: utf-8 -*-
+﻿// -*- coding: utf-8 -*-
 
 import { createAuditModule } from "../modules/audit/index.js";
 import { createServerStatusModule } from "../modules/server-status/index.js";
@@ -38,6 +38,7 @@ import { createScheduledBroadcastModule } from "../modules/scheduled-broadcast/i
 import { createPlayerSessionRecordsModule } from "../modules/player-session-records/index.js";
 import { createReserveSlotsModule } from "../modules/reserve-slots/index.js";
 import { createBlackEdgePrivilegeModule } from "../modules/black-edge-privilege/index.js";
+import { createAstrbotBridgeModule } from "../modules/astrbot-bridge/index.js";
 import { createBzssCoreMonitorModule } from "../modules/bzss-core-monitor/index.js";
 import { createTacticalMapReplayModule } from "../modules/tactical-map-replay/index.js";
 
@@ -47,7 +48,7 @@ import { createNetworkStatsModule } from "../modules/network-stats/index.js";
 /**
  * Core: ModuleManager
  *
- * 加载看不见的业务能力层。
+ * 鍔犺浇鐪嬩笉瑙佺殑涓氬姟鑳藉姏灞傘€?
  */
 export class ModuleManager {
   constructor({ core, logger, config }) {
@@ -98,6 +99,7 @@ export class ModuleManager {
       createPlayerSessionRecordsModule,
       createReserveSlotsModule,
       createBlackEdgePrivilegeModule,
+      createAstrbotBridgeModule,
       createBzssCoreMonitorModule,
       createTacticalMapReplayModule,
       createNetworkStatsModule,
@@ -191,3 +193,7 @@ function inferModuleId(factoryName) {
   const normalized = name.charAt(0).toLowerCase() + name.slice(1);
   return `module.${normalized}`;
 }
+
+
+
+

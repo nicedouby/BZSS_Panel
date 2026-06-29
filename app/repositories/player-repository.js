@@ -154,10 +154,11 @@ export class PlayerRepository {
     for (const row of rows) this.cache(row);
   }
 
-  async findByIdentity({ name, steamID, eosID }) {
+  async findByIdentity({ name, steamID, eosID, qqNumber }) {
     const steam = cleanId(steamID);
     const eos = cleanId(eosID);
     const playerName = cleanText(name);
+    const qq = cleanText(qqNumber);
 
     if (eos) {
       const row = await this.db.get("SELECT * FROM players WHERE eos_id = ?", eos);
@@ -182,25 +183,35 @@ export class PlayerRepository {
       );
     }
 
+    if (qq) {
+      const row = await this.db.get("SELECT * FROM players WHERE qq_number = ?", qq);
+      if (row) return row;
+    }
+
     return null;
   }
 
-  async upsertFromPresence({ name, steamID, eosID, ip } = {}) {
+  async upsertFromPresence({ name, steamID, eosID, ip, qqNumber, qqName } = {}) {
     const ts = now();
     const playerName = cleanText(name);
     const steam = cleanId(steamID);
     const eos = cleanId(eosID);
     const currentIp = cleanText(ip);
-    let existing = await this.findByIdentity({ name: playerName, steamID: steam, eosID: eos });
+    const qq = cleanText(qqNumber);
+    const qqDisplayName = cleanText(qqName);
+    let existing = await this.findByIdentity({ name: playerName, steamID: steam, eosID: eos, qqNumber: qq });
 
     if (!existing) {
       try {
         const result = await this.db.run(
-          `INSERT INTO players (current_name, steam_id, eos_id, current_ip, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO players (current_name, steam_id, eos_id, qq_number, qq_name, qq_bound_at, current_ip, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           playerName,
           steam,
           eos,
+          qq,
+          qqDisplayName,
+          qq ? ts : null,
           currentIp,
           ts,
           ts,
@@ -212,7 +223,7 @@ export class PlayerRepository {
         return created;
       } catch (error) {
         if (!isPlayerIdentityConflict(error)) throw error;
-        existing = await this.findByIdentity({ name: playerName, steamID: steam, eosID: eos });
+        existing = await this.findByIdentity({ name: playerName, steamID: steam, eosID: eos, qqNumber: qq });
         if (!existing) throw error;
       }
     }
@@ -221,24 +232,30 @@ export class PlayerRepository {
       current_name: playerName ?? existing.current_name,
       steam_id: existing.steam_id ?? steam,
       eos_id: existing.eos_id ?? eos,
+      qq_number: qq ?? existing.qq_number,
+      qq_name: qqDisplayName ?? existing.qq_name,
+      qq_bound_at: qq ? (existing.qq_bound_at ?? ts) : existing.qq_bound_at,
       current_ip: currentIp ?? existing.current_ip,
     };
 
     try {
       await this.db.run(
         `UPDATE players
-         SET current_name = ?, steam_id = ?, eos_id = ?, current_ip = ?, updated_at = ?
+         SET current_name = ?, steam_id = ?, eos_id = ?, qq_number = ?, qq_name = ?, qq_bound_at = ?, current_ip = ?, updated_at = ?
          WHERE id = ?`,
         next.current_name,
         next.steam_id,
         next.eos_id,
+        next.qq_number,
+        next.qq_name,
+        next.qq_bound_at,
         next.current_ip,
         ts,
         existing.id,
       );
     } catch (error) {
       if (!isPlayerIdentityConflict(error)) throw error;
-      const conflicted = await this.findByIdentity({ name: playerName, steamID: steam, eosID: eos });
+      const conflicted = await this.findByIdentity({ name: playerName, steamID: steam, eosID: eos, qqNumber: qq });
       if (!conflicted) throw error;
       existing = conflicted;
     }
@@ -771,6 +788,59 @@ export class PlayerRepository {
       now(),
       Number(playerId),
     );
+  }
+
+  async bindQQToPlayer(playerId, { qqNumber, qqName } = {}) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return null;
+
+    const qq = cleanText(qqNumber);
+    if (!qq) {
+      throw new Error("QQ number is required.");
+    }
+
+    const existing = await this.getPlayerById(id);
+    if (!existing) return null;
+
+    const ts = now();
+    await this.db.run(
+      `UPDATE players
+       SET qq_number = ?, qq_name = ?, qq_bound_at = ?, updated_at = ?
+       WHERE id = ?`,
+      qq,
+      cleanText(qqName),
+      ts,
+      ts,
+      id,
+    );
+
+    const updated = await this.getPlayerById(id);
+    this.cache(updated, existing);
+    return updated;
+  }
+
+  async unbindQQFromPlayer(playerId) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return null;
+
+    const existing = await this.getPlayerById(id);
+    if (!existing) return null;
+
+    const ts = now();
+    await this.db.run(
+      `UPDATE players
+       SET qq_number = NULL,
+           qq_name = NULL,
+           qq_bound_at = NULL,
+           updated_at = ?
+       WHERE id = ?`,
+      ts,
+      id,
+    );
+
+    const updated = await this.getPlayerById(id);
+    this.cache(updated, existing);
+    return updated;
   }
 
   async deletePlayer(playerId) {

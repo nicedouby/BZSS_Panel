@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 
@@ -33,6 +34,171 @@ const ROLE_ICON_MATCHES = [
   { patterns: ["rifleman"], icon: "/assets/icons/T_role_rifleman.PNG", label: "Rifle", tone: "#38bdf8" },
 ];
 
+const MAP_SCENE_THEMES = {
+  desert: { hud: "#d8c08a", hud2: "#8f6f3a", line: "#f2dfad", alert: "#f2b84b", team1: "#2dd4bf", team2: "#f59e0b" },
+  forest: { hud: "#a7d7a5", hud2: "#42683d", line: "#d5f5cf", alert: "#facc15", team1: "#22c55e", team2: "#38bdf8" },
+  snow: { hud: "#d7efff", hud2: "#6aa5c8", line: "#eff9ff", alert: "#f97316", team1: "#67e8f9", team2: "#60a5fa" },
+  urban: { hud: "#d2d7df", hud2: "#65717f", line: "#eef2f7", alert: "#ef4444", team1: "#14b8a6", team2: "#a78bfa" },
+  coast: { hud: "#b5e6ea", hud2: "#287682", line: "#defcff", alert: "#facc15", team1: "#06b6d4", team2: "#818cf8" },
+};
+
+const MAP_SCENE_STYLE_BY_KEY = {
+  AlBasrah: "desert",
+  Fallujah: "desert",
+  Kohat: "desert",
+  Kokan: "desert",
+  Lashkar: "desert",
+  Mutaha: "desert",
+  Sumari: "desert",
+  Tallil: "desert",
+  Belaya_Pass: "snow",
+  GooseBay: "snow",
+  Manicouagan: "snow",
+  Mestia: "snow",
+  BlackCoast: "coast",
+  Harju: "coast",
+  PacificProvingGrounds: "coast",
+  Sanxian: "coast",
+  Skorpo: "coast",
+  Chora: "forest",
+  FoolsRoad: "forest",
+  Gorodok: "forest",
+  Kamdesh: "forest",
+  Yehorivka: "forest",
+  Anvil: "urban",
+  JensensRange: "urban",
+  Narva: "urban",
+};
+
+const MAP_SCENE_MINIMAP_PLACEMENT = {
+  AlBasrah: { x: 1110, y: 226, size: 300 },
+  Anvil: { x: 1056, y: 210, size: 304 },
+  Belaya_Pass: { x: 1096, y: 218, size: 304 },
+  BlackCoast: { x: 1048, y: 212, size: 310 },
+  Chora: { x: 1114, y: 214, size: 300 },
+  Fallujah: { x: 1100, y: 222, size: 304 },
+  FoolsRoad: { x: 1088, y: 214, size: 304 },
+  GooseBay: { x: 1086, y: 218, size: 304 },
+  Gorodok: { x: 1104, y: 216, size: 300 },
+  Harju: { x: 1084, y: 208, size: 306 },
+  Kamdesh: { x: 1072, y: 220, size: 304 },
+  Kohat: { x: 1098, y: 224, size: 300 },
+  Kokan: { x: 1102, y: 224, size: 300 },
+  Lashkar: { x: 1096, y: 220, size: 304 },
+  Manicouagan: { x: 1076, y: 214, size: 306 },
+  Mestia: { x: 1088, y: 218, size: 304 },
+  Mutaha: { x: 1104, y: 220, size: 302 },
+  Narva: { x: 1110, y: 210, size: 302 },
+  PacificProvingGrounds: { x: 1060, y: 212, size: 306 },
+  Sanxian: { x: 1090, y: 212, size: 304 },
+  Skorpo: { x: 1068, y: 210, size: 306 },
+  Sumari: { x: 1114, y: 224, size: 300 },
+  Tallil: { x: 1084, y: 214, size: 306 },
+  Yehorivka: { x: 1092, y: 216, size: 304 },
+};
+
+const TACTICAL_MINIMAP_BY_KEY = {
+  Anvil_RAAS_v1: "Anvil_Minimap.PNG",
+  Belaya_RAAS_v1: "Belaya_Minimap.PNG",
+  Chora_RAAS_v1: "Chora_Minimap.PNG",
+  Fallujah_RAAS_v1: "T_Fallujah_Minimap.PNG",
+  FoolsRoad_RAAS_v1: "Fools_Road_Minimap.PNG",
+  GooseBay_RAAS_v1: "GooseBay_Minimap.PNG",
+  Gorodok_RAAS_v1: "gorodok_minimap.PNG",
+  Kamdesh_RAAS_v1: "Kamdesh_Minimap.PNG",
+  Kohat_RAAS_v1: "kohat_minimap.PNG",
+  Kokan_RAAS_v1: "T_Kokan_Minimap.PNG",
+  Lashkar_RAAS_v1: "T_Lashkar_Minimap.PNG",
+  Logar_RAAS_v1: "Logar_Valley_Minimap.PNG",
+  Manicouagan_RAAS_v1: "T_Manicouagan_Minimap.PNG",
+  Mestia_RAAS_v1: "T_Mestia_Minimap.PNG",
+  Mutaha_RAAS_v1: "Mutaha_Minimap.PNG",
+  Narva_RAAS_v1: "Narva_Minimap.PNG",
+  Skorpo_RAAS_v1: "Skorpo_Minimap.PNG",
+  Sumari_RAAS_v1: "Sumari_Minimap.PNG",
+  Tallil_RAAS_v1: "Tallil_Outskirts_Minimap.PNG",
+  Yehorivka_RAAS_v1: "Yehorivka_Minimap.PNG",
+};
+
+const FACTION_GLOW_BY_CODE = {
+  ADF: ["#012169", "#e4002b"],
+  AFU: ["#0057b7", "#ffd700"],
+  BAF: ["#012169", "#c8102e"],
+  CAF: ["#ff0000", "#ffffff"],
+  CRF: ["#1f2937", "#f97316"],
+  GFI: ["#0f766e", "#fde047"],
+  IMF: ["#166534", "#dc2626"],
+  MEA: ["#b45309", "#111827"],
+  MEI: ["#166534", "#eab308"],
+  PLA: ["#de2910", "#ffde00"],
+  PLAAGF: ["#de2910", "#ffde00"],
+  PLANMC: ["#de2910", "#2563eb"],
+  RGF: ["#ffffff", "#0039a6", "#d52b1e"],
+  TLF: ["#e30a17", "#ffffff"],
+  USA: ["#3c3b6e", "#b22234"],
+  USMC: ["#b31942", "#facc15"],
+  VDV: ["#2563eb", "#22d3ee"],
+  WPMC: ["#111827", "#facc15"],
+};
+
+const MAP_SCENE_TEMPLATE_ENTRIES = [
+  ["AlBasrah", "LoadingScreen_AlBasrah_DQHD.PNG"],
+  ["Anvil", "LoadingScreen_Anvil_DQHD.PNG"],
+  ["Belaya_Pass", "LoadingScreen_Belaya_Pass_DQHD.PNG"],
+  ["BlackCoast", "LoadingScreen_BlackCoast_DQHD.PNG"],
+  ["Chora", "LoadingScreen_Chora_DQHD.PNG"],
+  ["Fallujah", "LoadingScreen_Fallujah_DQHD.PNG"],
+  ["FoolsRoad", "LoadingScreen_FoolsRoad_DQHD.PNG"],
+  ["GooseBay", "LoadingScreen_GooseBay_DQHD.PNG"],
+  ["Gorodok", "LoadingScreen_Gorodok_DQHD.PNG"],
+  ["Harju", "LoadingScreen_Harju_DQHD.PNG"],
+  ["JensensRange", "LoadingScreen_JensensRange_DQHD.PNG"],
+  ["Kamdesh", "LoadingScreen_Kamdesh_DQHD.PNG"],
+  ["Kohat", "LoadingScreen_Kohat_DQHD.PNG"],
+  ["Kokan", "LoadingScreen_Kokan_DQHD.PNG"],
+  ["Lashkar", "LoadingScreen_Lashkar_DQHD.PNG"],
+  ["Manicouagan", "LoadingScreen_Manicouagan_DQHD.PNG"],
+  ["Mestia", "LoadingScreen_Mestia_DQHD.PNG"],
+  ["Mutaha", "LoadingScreen_Mutaha_DQHD.PNG"],
+  ["Narva", "LoadingScreen_Narva_DQHD.PNG"],
+  ["PacificProvingGrounds", "LoadingScreen_PacificProvingGrounds_DQHD.PNG"],
+  ["Sanxian", "LoadingScreen_Sanxian_DQHD.PNG"],
+  ["Skorpo", "LoadingScreen_Skorpo_DQHD.PNG"],
+  ["Sumari", "LoadingScreen_Sumari_DQHD.PNG"],
+  ["Tallil", "LoadingScreen_Tallil_DQHD.PNG"],
+  ["Yehorivka", "LoadingScreen_Yehorivka_DQHD.PNG"],
+];
+
+const MAP_SCENE_TEMPLATE_LIST = MAP_SCENE_TEMPLATE_ENTRIES.map(([key, fileName], index) => createMapSceneTemplate(key, fileName, index));
+const MINIMAP_PLACEMENT_CACHE = new Map();
+
+const MAP_SCENE_TEMPLATE_BY_KEY = Object.fromEntries(
+  MAP_SCENE_TEMPLATE_LIST.map((template) => [template.key, template]),
+);
+
+const FACTION_FLAG_BY_CODE = {
+  ADF: "ADF.PNG",
+  AFU: "AFU.PNG",
+  BAF: "BAF.PNG",
+  CAF: "CAF.PNG",
+  CRF: "CRF.PNG",
+  GFI: "GFI.PNG",
+  IMF: "IMF.PNG",
+  MEA: "MEA.PNG",
+  MEI: "MEI.PNG",
+  PLA: "PLA.PNG",
+  PLAAGF: "PLAAGF.PNG",
+  PLANMC: "PLANMC.png",
+  RGF: "RGF.PNG",
+  TLF: "TLF.PNG",
+  USA: "USA.PNG",
+  USMC: "USMC.PNG",
+  VDV: "VDV.png",
+  WPMC: "WPMC.PNG",
+};
+
+const FACTION_ASSET_DATA_PATH = path.resolve(process.cwd(), "web-client", "src", "shared", "faction-assets", "faction-data.ts");
+
 export function createPlugin({ core, modules, config, logger } = {}) {
   const pluginLogger =
     logger ??
@@ -50,7 +216,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     await ensureSnapshotDir();
 
-    const overview = getCurrentOverview();
+    const overview = inputOptions?.overview && typeof inputOptions.overview === "object"
+      ? inputOptions.overview
+      : getCurrentOverview();
     if (!overview) {
       pluginLogger.warn?.("[MatchSnapshot] match-state overview is unavailable.");
       return null;
@@ -189,7 +357,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       name: "对局快照",
       kind: "plugin",
       version: "1.4.0",
-      description: "录制对局状态玩家列表，并输出 PNG、JSON、CSV、Markdown 文件。",
+      description: "Capture match-state player snapshots as PNG, JSON, CSV, and Markdown files.",
     },
     apiName: "matchSnapshot",
     api,
@@ -213,7 +381,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           route: "/debug/match-snapshots",
           pageModule: "/pages/match-snapshot-debug.js",
           source: PLUGIN_ID,
-          description: "查看和管理已录制的对局状态玩家列表快照。",
+          description: "View and manage recorded match-state player snapshot records.",
           required: false,
           enabled: true,
           order: 999,
@@ -349,9 +517,21 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, render
     serverId: stringifyValue(matchState.serverId ?? overview?.serverId ?? status.serverId ?? ""),
   });
   const teams = buildTeams(players, squads);
+  const serverId = stringifyValue(matchState.serverId ?? overview?.serverId ?? status.serverId ?? "");
+  const enrichedTeams = teams.map((team) => {
+    const factionCode = resolveFactionCodeFromTeamName(team.teamName);
+    const commanderPlayer = resolveTeamCommander({ team, players, squads, modules, serverId });
+    return {
+      ...team,
+      factionCode,
+      flagAssetPath: resolveFactionFlagAssetPath(team.teamName) ?? "",
+      commanderName: commanderPlayer?.name ?? "",
+      commanderPlayer: commanderPlayer ? cloneJsonSafe(commanderPlayer) : null,
+    };
+  });
 
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     capturedAt,
     generatedBy: PLUGIN_ID,
     trigger: {
@@ -363,6 +543,7 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, render
       serverId: stringifyValue(matchState.serverId ?? overview?.serverId ?? status.serverId ?? ""),
       serverName: firstText(status.serverName, status.name, serverStatus.serverName, serverStatus.name),
       rcon: firstText(matchState.rconStatus?.status, status.rcon, serverStatus.rcon),
+      queueCount: firstFiniteNumber(status.queueCount, serverStatus.queueCount, matchState.serverStatus?.queueCount) ?? 0,
       capturedFrom: "match-state",
     },
     match: {
@@ -374,6 +555,7 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, render
       tps: firstFiniteNumber(status.tps, serverStatus.tps),
       playerCount: players.length,
       maxPlayers: firstFiniteNumber(status.maxPlayers, serverStatus.maxPlayers),
+      rconTime: firstFiniteNumber(status.playtime, serverStatus.playtime, match.playtime, status.matchTimeSeconds, serverStatus.matchTimeSeconds),
     },
     summary: {
       playerCount: players.length,
@@ -382,7 +564,7 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, render
       leaderCount: players.filter((player) => player.isLeader).length,
       unassignedCount: teams.reduce((sum, team) => sum + team.unassignedPlayers.length, 0),
     },
-    teams,
+    teams: enrichedTeams,
     players,
     squads,
     captureZones: Array.isArray(bzssCoreRawSnapshot?.captureZones)
@@ -427,6 +609,13 @@ async function enrichPlayersWithPlaytime(byIdentity, modules) {
       gameSeconds: normalizeNumber(player?.gameSeconds),
       gameHours: normalizeNumber(player?.gameHours),
       steamPlaytime: cloneJsonSafe(player?.steamPlaytime ?? null),
+      steamAvatar: firstText(
+        player?.steamAvatar,
+        player?.steam_avatar,
+        player?.avatar,
+        player?.steamPlaytime?.steamAvatar,
+        player?.steamPlaytime?.steam_avatar,
+      ),
     });
   }
 }
@@ -494,6 +683,7 @@ function normalizePlayers(players) {
     teamID: nullableNumber(player?.teamID ?? player?.teamId),
     squadID: nullableNumber(player?.squadID ?? player?.squadId),
     isLeader: Boolean(player?.isLeader ?? player?.leader),
+    isCommander: Boolean(player?.isCommander ?? player?.commander),
     role: firstText(player?.role, player?.roleName, ""),
     steamID: firstText(player?.steamID, player?.steamId, player?.steam64ID, player?.steam64, ""),
     eosID: firstText(player?.eosID, player?.eosId, player?.EOSID, ""),
@@ -501,6 +691,13 @@ function normalizePlayers(players) {
     online: player?.online !== false,
     gameSeconds: normalizeNumber(player?.gameSeconds),
     gameHours: normalizeNumber(player?.gameHours),
+    steamAvatar: firstText(
+      player?.steamAvatar,
+      player?.steam_avatar,
+      player?.avatar,
+      player?.steamPlaytime?.steamAvatar,
+      player?.steamPlaytime?.steam_avatar,
+    ),
     combatStats: cloneJsonSafe(player?.combatStats ?? emptyCombatStats()),
     raw: cloneJsonSafe(player ?? {}),
   }));
@@ -542,7 +739,7 @@ function buildTeams(players, squads) {
     teamID,
     {
       teamID,
-      teamName: firstText(squads.find((squad) => squad.teamID === teamID)?.teamName, `Team ${teamID}`),
+      teamName: resolveTeamDisplayNameFromSquads(squads, teamID),
       squads: squads
         .filter((squad) => squad.teamID === teamID)
         .map((squad) => squadMap.get(buildSquadKey(squad.teamID, squad.squadID))),
@@ -583,6 +780,27 @@ function buildTeams(players, squads) {
     .sort((left, right) => compareNumbers(left.teamID, right.teamID));
 }
 
+function resolveTeamDisplayNameFromSquads(squads, teamID) {
+  const teamSquads = (Array.isArray(squads) ? squads : []).filter((squad) => Number(squad?.teamID) === Number(teamID));
+  const direct = firstText(
+    teamSquads.find((squad) => firstText(squad?.teamName, ""))?.teamName,
+    ...teamSquads.map((squad) => firstText(
+      squad?.raw?.teamName,
+      squad?.raw?.team,
+      squad?.raw?.faction,
+      squad?.raw?.factionName,
+      squad?.raw?.battlegroup,
+      squad?.raw?.battleGroup,
+    )),
+  );
+  if (direct) return direct;
+
+  const squadNameFaction = teamSquads
+    .map((squad) => firstText(squad?.squadName, squad?.raw?.squadName, squad?.raw?.name, ""))
+    .find((name) => resolveFactionCodeFromTeamName(name));
+  return squadNameFaction || `Team ${teamID}`;
+}
+
 function generatePlayerCsv(snapshot, options = {}) {
   const columns = getExportColumns(options);
   const rows = [columns.map((column) => column.header)];
@@ -613,29 +831,32 @@ function generatePlayerCsv(snapshot, options = {}) {
 function generateMarkdownReport(snapshot, options = {}) {
   const includeSteamID = Boolean(options.includeSteamID);
   const lines = [];
-  lines.push("# 对局状态玩家列表快照", "");
-  lines.push(`- 录制时间: ${formatDateTimeLocal(snapshot.capturedAt)}`);
-  lines.push(`- 地图: ${snapshot.match.map || "-"}`);
-  lines.push(`- 图层: ${snapshot.match.layer || "-"}`);
-  lines.push(`- 模式: ${snapshot.match.mode || "-"}`);
-  lines.push(`- 战绩: 玩家 ${snapshot.summary.playerCount} / 小队 ${snapshot.summary.squadCount} / SL ${snapshot.summary.leaderCount} / 未分队 ${snapshot.summary.unassignedCount}`);
-  lines.push(`- 触发: ${snapshot.trigger.eventName}${snapshot.trigger.winner ? ` / ${snapshot.trigger.winner}` : ""}`, "");
+  lines.push("# 对局状态玩家列表快照");
+  lines.push('');
+  lines.push('- Captured: ' + formatDateTimeLocal(snapshot.capturedAt));
+  lines.push('- Map: ' + (snapshot.match.map || '-'));
+  lines.push('- Layer: ' + (snapshot.match.layer || '-'));
+  lines.push('- Mode: ' + (snapshot.match.mode || '-'));
+  lines.push('- Summary: players ' + snapshot.summary.playerCount + ' / squads ' + snapshot.summary.squadCount + ' / SL ' + snapshot.summary.leaderCount + ' / unassigned ' + snapshot.summary.unassignedCount);
+  lines.push('- Trigger: ' + (snapshot.trigger?.eventName || '-') + (snapshot.trigger?.winner ? ' / ' + snapshot.trigger.winner : ''));
+  lines.push('');
 
   for (const team of snapshot.teams) {
-    lines.push(`## ${team.teamName} (${team.playerCount})`, "");
+    lines.push('## ' + team.teamName + ' (' + team.playerCount + ')');
+    lines.push('');
     for (const squad of team.squads) {
-      lines.push(`### ${buildSquadDisplayName(squad) || "未命名小队"} (${squad.members.length})`);
+      lines.push('### ' + (buildSquadDisplayName(squad) || 'Unnamed Squad') + ' (' + squad.members.length + ')');
       appendMarkdownPlayers(lines, squad.members, { includeSteamID });
     }
     if (team.unassignedPlayers.length) {
-      lines.push("### 未进小队");
+      lines.push('### Unassigned');
       appendMarkdownPlayers(lines, team.unassignedPlayers, { includeSteamID });
     }
   }
 
-  lines.push("---", "Generated by BZSS Match Snapshot Plugin");
-  return lines.join("\n");
+  return lines.join('\n');
 }
+
 
 function appendMarkdownPlayers(lines, players, options = {}) {
   const headers = ["名称", "角色", "KWD", "TK", "时长"];
@@ -660,10 +881,454 @@ function appendMarkdownPlayers(lines, players, options = {}) {
 }
 
 async function generatePlayerListPng(snapshot, options = {}) {
-  const layout = await buildPlayerListPngLayout(snapshot, options);
-  const svg = renderPlayerListSvg(layout);
   const sharp = await loadSharp();
-  return sharp(Buffer.from(svg, "utf8"), { density: 144 }).png().toBuffer();
+  return renderMatchScenePng(sharp, snapshot, options);
+}
+
+async function renderMatchScenePng(sharp, snapshot, options = {}) {
+  const layout = await buildMatchSceneLayout(snapshot, options);
+  const bg = await buildMatchSceneBackground(sharp, layout);
+  const minimapLayer = await buildMinimapLayer(sharp, layout);
+  const overlay = Buffer.from(renderMatchSceneSvg(layout), "utf8");
+  const composites = [];
+  if (minimapLayer) composites.push(minimapLayer);
+  composites.push({ input: overlay });
+  return sharp(bg)
+    .composite(composites)
+    .png()
+    .toBuffer();
+}
+
+async function buildMinimapLayer(sharp, layout) {
+  const minimap = layout.minimap;
+  if (!minimap?.assetPath) return null;
+
+  try {
+    const size = Number(minimap.size ?? 300) || 300;
+    const placement = await resolveMinimapPlacement(sharp, layout, size);
+    const theme = layout.template?.theme ?? MAP_SCENE_THEMES.forest;
+    const map = await sharp(minimap.assetPath)
+      .resize(size, size, { fit: "cover", position: "centre" })
+      .modulate({ brightness: 0.78, saturation: 0.76 })
+      .png()
+      .toBuffer();
+    const frame = Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><defs><filter id="soft"><feGaussianBlur stdDeviation="9"/></filter><linearGradient id="scan" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${theme.line}" stop-opacity="0.12"/><stop offset="100%" stop-color="#020617" stop-opacity="0.08"/></linearGradient></defs><rect x="8" y="8" width="${size - 16}" height="${size - 16}" fill="${theme.hud}" opacity="0.16" filter="url(#soft)"/><path d="M 0 22 L 22 0 H ${size} V ${size - 22} L ${size - 22} ${size} H 0 Z" fill="rgba(2,6,23,0.08)" stroke="${theme.line}" stroke-opacity="0.58" stroke-width="2"/><path d="M 12 12 H 88 M ${size - 88} 12 H ${size - 12} M 12 ${size - 12} H 88 M ${size - 88} ${size - 12} H ${size - 12}" stroke="${theme.alert}" stroke-width="2.5"/><path d="M 20 46 H ${size - 20} M 20 92 H ${size - 20} M 20 138 H ${size - 20} M 20 184 H ${size - 20} M 20 230 H ${size - 20}" stroke="url(#scan)" stroke-width="1"/><text x="22" y="${size - 22}" font-family="Cascadia Mono,Consolas,monospace" font-size="13" font-weight="800" fill="${theme.line}" opacity="0.88">TACTICAL GRID</text></svg>`,
+      "utf8",
+    );
+    const mask = Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><path d="M 0 22 L 22 0 H ${size} V ${size - 22} L ${size - 22} ${size} H 0 Z" fill="white"/></svg>`,
+      "utf8",
+    );
+    const layer = await sharp({
+      create: {
+        width: size,
+        height: size,
+        channels: 4,
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      },
+    })
+      .composite([
+        { input: map, left: 0, top: 0 },
+        { input: mask, blend: "dest-in" },
+        { input: frame, left: 0, top: 0 },
+      ])
+      .png()
+      .toBuffer();
+    return {
+      input: layer,
+      left: placement.x,
+      top: placement.y,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function resolveMinimapPlacement(sharp, layout, size) {
+  const fallback = layout.minimap ?? MAP_SCENE_MINIMAP_PLACEMENT.Sumari;
+  const mapImage = getMapSceneAssetPath(layout);
+  if (!mapImage) {
+    return {
+      x: Number(fallback.x ?? 0) || 0,
+      y: Number(fallback.y ?? 0) || 0,
+    };
+  }
+
+  const cacheKey = `${layout.template?.key ?? "unknown"}:${mapImage}:${size}`;
+  const cached = MINIMAP_PLACEMENT_CACHE.get(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const thumbWidth = 160;
+    const thumbHeight = 90;
+    const { data, info } = await sharp(mapImage)
+      .resize(thumbWidth, thumbHeight, { fit: "cover", position: "centre" })
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const candidates = buildMinimapPlacementCandidates(layout.width, layout.height, size);
+    let best = null;
+    for (const candidate of candidates) {
+      const score = scoreMinimapPlacementCandidate(data, info, candidate, layout.width, layout.height);
+      if (!best || score < best.score) best = { ...candidate, score };
+    }
+    const placement = best
+      ? { x: best.x, y: best.y }
+      : { x: Number(fallback.x ?? 0) || 0, y: Number(fallback.y ?? 0) || 0 };
+    MINIMAP_PLACEMENT_CACHE.set(cacheKey, placement);
+    return placement;
+  } catch {
+    return {
+      x: Number(fallback.x ?? 0) || 0,
+      y: Number(fallback.y ?? 0) || 0,
+    };
+  }
+}
+
+function buildMinimapPlacementCandidates(width, height, size) {
+  const candidates = [];
+  const left = 72;
+  const right = width - size - 72;
+  const top = 188;
+  const bottom = Math.min(486, height - size - 98);
+  const stepX = 64;
+  const stepY = 46;
+  for (let y = top; y <= bottom; y += stepY) {
+    for (let x = left; x <= right; x += stepX) {
+      if (overlapsRect(x, y, size, size, 48, 44, 1504, 126)) continue;
+      if (overlapsRect(x, y, size, size, 48, 520, 1504, 330)) continue;
+      candidates.push({ x, y, size });
+    }
+  }
+  const fallback = MAP_SCENE_MINIMAP_PLACEMENT.Sumari;
+  candidates.push({ x: fallback.x, y: fallback.y, size });
+  return candidates;
+}
+
+function scoreMinimapPlacementCandidate(data, info, candidate, imageWidth, imageHeight) {
+  const channels = info.channels || 3;
+  const scaleX = info.width / imageWidth;
+  const scaleY = info.height / imageHeight;
+  const startX = Math.max(0, Math.floor(candidate.x * scaleX));
+  const startY = Math.max(0, Math.floor(candidate.y * scaleY));
+  const endX = Math.min(info.width - 1, Math.ceil((candidate.x + candidate.size) * scaleX));
+  const endY = Math.min(info.height - 1, Math.ceil((candidate.y + candidate.size) * scaleY));
+  let count = 0;
+  let sum = 0;
+  let sumSq = 0;
+  let edge = 0;
+  for (let y = startY; y <= endY; y += 1) {
+    for (let x = startX; x <= endX; x += 1) {
+      const idx = (y * info.width + x) * channels;
+      const lum = luminance(data[idx], data[idx + 1], data[idx + 2]);
+      sum += lum;
+      sumSq += lum * lum;
+      count += 1;
+      if (x > startX) {
+        const prev = (y * info.width + x - 1) * channels;
+        edge += Math.abs(lum - luminance(data[prev], data[prev + 1], data[prev + 2]));
+      }
+      if (y > startY) {
+        const prev = ((y - 1) * info.width + x) * channels;
+        edge += Math.abs(lum - luminance(data[prev], data[prev + 1], data[prev + 2]));
+      }
+    }
+  }
+  if (!count) return Number.POSITIVE_INFINITY;
+  const avg = sum / count;
+  const variance = Math.max(0, sumSq / count - avg * avg);
+  const edgeDensity = edge / count;
+  const brightnessPenalty = avg < 38 ? (38 - avg) * 0.9 : avg > 218 ? (avg - 218) * 0.35 : 0;
+  const centerPenalty = Math.abs(candidate.x + candidate.size / 2 - imageWidth / 2) * 0.015;
+  return edgeDensity * 2.2 + Math.sqrt(variance) * 1.4 + brightnessPenalty + centerPenalty;
+}
+
+function luminance(r = 0, g = 0, b = 0) {
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function overlapsRect(x, y, width, height, rx, ry, rw, rh) {
+  return x < rx + rw && x + width > rx && y < ry + rh && y + height > ry;
+}
+
+async function buildMatchSceneBackground(sharp, layout) {
+  const mapImage = getMapSceneAssetPath(layout);
+  try {
+    if (!mapImage) throw new Error("missing map image");
+
+    const base = await sharp(mapImage)
+      .resize(layout.width, layout.height, { fit: "cover", position: "centre" })
+      .png()
+      .toBuffer();
+
+    return sharp(base)
+      .composite([
+        {
+          input: Buffer.from(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="' + layout.width + '" height="' + layout.height + '"><defs><linearGradient id="topFade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#020617" stop-opacity="0.28"/><stop offset="28%" stop-color="#020617" stop-opacity="0.06"/><stop offset="100%" stop-color="#020617" stop-opacity="0.34"/></linearGradient><radialGradient id="vignette" cx="50%" cy="42%" r="74%"><stop offset="0%" stop-color="#ffffff" stop-opacity="0"/><stop offset="100%" stop-color="#020617" stop-opacity="0.26"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#topFade)"/><rect width="100%" height="100%" fill="url(#vignette)"/></svg>',
+            'utf8',
+          ),
+        },
+      ])
+      .png()
+      .toBuffer();
+  } catch {
+    return sharp({
+      create: {
+        width: layout.width,
+        height: layout.height,
+        channels: 4,
+        background: '#08111f',
+      },
+    }).png().toBuffer();
+  }
+}
+
+function getMapSceneAssetPath(layout) {
+  return layout.template?.assetPath
+    ? path.resolve(process.cwd(), layout.template.assetPath)
+    : layout.template?.fileName
+      ? path.resolve(process.cwd(), "MapScene", layout.template.fileName)
+      : null;
+}
+
+async function buildMatchSceneLayout(snapshot, options = {}) {
+  const width = 1600;
+  const height = 900;
+  const sortedTeams = [...(snapshot.teams ?? [])].sort((left, right) => compareNumbers(left.teamID, right.teamID));
+  const team1 = sortedTeams.find((team) => Number(team.teamID) === 1) ?? sortedTeams[0] ?? emptyTeam(1);
+  const team2 = sortedTeams.find((team) => Number(team.teamID) === 2) ?? sortedTeams[1] ?? emptyTeam(2);
+  const mapKey = resolveMapSceneKey(snapshot.match.map, snapshot.match.layer);
+  const template = MAP_SCENE_TEMPLATE_BY_KEY[mapKey] ?? MAP_SCENE_TEMPLATE_BY_KEY.Sumari;
+  const minimap = resolveMatchMinimap(snapshot.match.map, snapshot.match.layer, template);
+  const commander1 = resolveCommanderName(team1) || findTeamCommanderName(snapshot.players, team1.teamID);
+  const commander2 = resolveCommanderName(team2) || findTeamCommanderName(snapshot.players, team2.teamID);
+  const maxPlayers = Number(snapshot.match.maxPlayers ?? 0) || 0;
+  const currentPlayers = Number(snapshot.match.playerCount ?? snapshot.summary?.playerCount ?? 0) || 0;
+  const queueCount = Number(snapshot.server?.queueCount ?? 0) || 0;
+  const rconTime = Number(snapshot.match.rconTime ?? snapshot.match.playtime ?? 0) || 0;
+
+  return {
+    width,
+    height,
+    template,
+    minimap,
+    mapTitle: snapshot.match.map || snapshot.match.layer || 'Unknown Map',
+    layerTitle: snapshot.match.layer || '-',
+    modeTitle: snapshot.match.mode || '-',
+    serverName: snapshot.server.serverName || snapshot.server.serverId || 'BZSS Panel',
+    capturedAt: snapshot.capturedAt,
+    totalPlayersText: maxPlayers ? currentPlayers + '/' + maxPlayers : String(currentPlayers),
+    queueText: String(queueCount),
+    rconTimeText: formatDurationClock(rconTime),
+    serverTag: snapshot.server.rcon || 'unknown',
+    teamPanels: [
+      await buildMatchTeamPanel(team1, 64, 540, 720, 268, template.theme.team1, commander1, options),
+      await buildMatchTeamPanel(team2, 816, 540, 720, 268, template.theme.team2, commander2, options),
+    ],
+    statCards: [
+      { x: 1034, label: 'RCON TIME', value: formatDurationClock(rconTime), tone: '#22c55e' },
+      { x: 1238, label: 'PLAYERS', value: maxPlayers ? currentPlayers + '/' + maxPlayers : String(currentPlayers), tone: template.theme.accent },
+      { x: 1402, label: 'QUEUE', value: String(queueCount), tone: template.theme.accent2 },
+    ],
+  };
+}
+
+async function buildMatchTeamPanel(team, x, y, width, height, accent, commanderName, options = {}) {
+  const resolvedFlag = team.flagAssetPath || resolveFactionFlagAssetPath(team.teamName);
+  const commanderPlayer = team.commanderPlayer ?? null;
+  const commanderAvatar = firstText(
+    commanderPlayer?.steamAvatar,
+    commanderPlayer?.steam_avatar,
+    commanderPlayer?.avatar,
+    commanderPlayer?.steamPlaytime?.steamAvatar,
+    commanderPlayer?.steamPlaytime?.steam_avatar,
+  );
+  return {
+    x,
+    y,
+    width,
+    height,
+    accent,
+    teamName: team.teamName || 'Team ' + team.teamID,
+    teamId: team.teamID,
+    factionCode: team.factionCode || resolveFactionCodeFromTeamName(team.teamName),
+    playerCount: Number(team.playerCount ?? 0) || 0,
+    squadCount: Array.isArray(team.squads) ? team.squads.length : 0,
+    commanderName: commanderName || 'Pending',
+    commanderLabel: commanderName || 'Pending',
+    commanderPlaytimeText: formatDurationLong(resolvePlayerGameSeconds(commanderPlayer)),
+    commanderAvatarDataUri: commanderAvatar ? await readImageDataUri(commanderAvatar) : '',
+    flagDataUri: resolvedFlag ? await readAssetDataUri(resolvedFlag) : '',
+    commanderPlayer,
+    includeSteamID: Boolean(options.includeSteamID ?? true),
+  };
+}
+
+function renderMatchSceneSvg(layout) {
+  const svg = [];
+  const theme = layout.template?.theme ?? MAP_SCENE_THEMES.forest;
+  svg.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + layout.width + '" height="' + layout.height + '" viewBox="0 0 ' + layout.width + ' ' + layout.height + '">');
+  svg.push('<defs>');
+  svg.push(`<linearGradient id="topPlate" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#020617" stop-opacity="0.74"/><stop offset="50%" stop-color="${theme.hud2}" stop-opacity="0.24"/><stop offset="100%" stop-color="#020617" stop-opacity="0.68"/></linearGradient>`);
+  svg.push('<linearGradient id="teamShade" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#020617" stop-opacity="0.62"/><stop offset="58%" stop-color="#020617" stop-opacity="0.34"/><stop offset="100%" stop-color="#020617" stop-opacity="0.04"/></linearGradient>');
+  svg.push('<filter id="flagGlow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="32"/></filter>');
+  svg.push('<style><![CDATA[');
+  svg.push("text{font-family:'Bahnschrift SemiCondensed','Bahnschrift','Agency FB','Arial Narrow','Microsoft YaHei',sans-serif;fill:#eef4ff;letter-spacing:.2px}.mono{font-family:'Cascadia Mono','Consolas',monospace}.eyebrow{font-size:13px;fill:#b8c7d8;font-weight:800}.title{font-size:48px;font-weight:900;fill:#ffffff}.sub{font-size:17px;fill:#d7e2ee}.meta{font-size:12px;fill:#a8b8c8}.chip-label{font-size:10px;fill:#b7c4d2;font-weight:900}.chip-value{font-size:23px;fill:#ffffff;font-weight:900}.team-tag{font-size:12px;fill:#0b1220;font-weight:900}.team-name{font-size:24px;font-weight:900;fill:#ffffff;letter-spacing:.5px}.team-meta{font-size:13px;fill:#dce7f3}.team-row{font-size:11px;fill:#aebdca;font-weight:900;letter-spacing:1.1px}.team-stat{font-size:11px;fill:#c2cfdb;font-weight:800}.strong{font-size:20px;font-weight:900;fill:#ffffff}.avatar-initial{font-size:21px;font-weight:900;fill:#0b1220}]]></style>");
+  svg.push('</defs>');
+  svg.push('<rect x="0" y="0" width="1600" height="900" fill="rgba(2,6,23,0.12)"/>');
+  svg.push('<path d="M48 44 H1118 L1168 94 H1552 V162 H48 Z" fill="url(#topPlate)"/>');
+  svg.push(`<path d="M48 44 H1118 L1168 94 H1552" fill="none" stroke="${theme.line}" stroke-opacity="0.24" stroke-width="1.5"/>`);
+  svg.push(`<path d="M68 160 H642" stroke="${theme.line}" stroke-opacity="0.28" stroke-width="1"/>`);
+  svg.push(`<path d="M68 44 V76 M48 64 H86 M1532 162 V130 M1552 142 H1514" stroke="${theme.hud}" stroke-opacity="0.7" stroke-width="2"/>`);
+  svg.push('<text x="76" y="72" class="eyebrow">LIVE MATCH / RCON SNAPSHOT</text>');
+  svg.push('<text x="76" y="124" class="title">' + xmlEscape(layout.mapTitle) + '</text>');
+  svg.push('<text x="78" y="151" class="sub">' + xmlEscape(layout.layerTitle) + ' | ' + xmlEscape(layout.modeTitle) + ' | ' + xmlEscape(layout.serverName) + '</text>');
+  svg.push('<text x="1192" y="148" class="meta mono">CAPTURED ' + xmlEscape(formatDateTimeLocal(layout.capturedAt)) + '</text>');
+
+  const topStats = [
+    { x: 1068, label: 'RCON TIME', value: layout.rconTimeText, tone: theme.hud },
+    { x: 1238, label: 'SERVER', value: layout.totalPlayersText, tone: theme.line },
+    { x: 1408, label: 'QUEUE', value: layout.queueText, tone: theme.alert },
+  ];
+  for (const stat of topStats) {
+    svg.push(renderHeroStatCard(stat.x, 64, 132, 58, stat.label, stat.value, stat.tone));
+  }
+
+  svg.push(`<path d="M72 520 H1528" stroke="${theme.line}" stroke-opacity="0.24" stroke-width="1"/>`);
+  svg.push(`<path d="M72 838 H1528" stroke="${theme.line}" stroke-opacity="0.18" stroke-width="1"/>`);
+  svg.push(`<path d="M800 548 V820" stroke="${theme.line}" stroke-opacity="0.16" stroke-width="1"/>`);
+  for (const team of layout.teamPanels) {
+    svg.push(renderTeamPanel(team));
+  }
+
+  svg.push('</svg>');
+  return svg.join('\n');
+}
+
+function renderHeroStatCard(x, y, width, height, label, value, tone) {
+  return [
+    `<path d="M ${x} ${y} H ${x + width - 12} L ${x + width} ${y + 12} V ${y + height} H ${x} Z" fill="rgba(2,6,23,0.48)" stroke="${tone}" stroke-opacity="0.55" stroke-width="1.5"/>`,
+    `<path d="M ${x + 10} ${y + 8} H ${x + 48}" stroke="${tone}" stroke-width="2"/>`,
+    `<text x="${x + 12}" y="${y + 25}" class="chip-label">${xmlEscape(label)}</text>`,
+    `<text x="${x + 12}" y="${y + 51}" class="chip-value mono">${xmlEscape(value)}</text>`,
+  ].join("");
+}
+
+function renderTeamPanel(team) {
+  const flagDataUri = team.flagDataUri || '';
+  const commanderText = team.commanderName || 'Pending';
+  const commanderAvatarDataUri = team.commanderAvatarDataUri || '';
+  const commanderPlaytimeText = team.commanderName ? (team.commanderPlaytimeText || '0m') : '-';
+  const squadCountText = team.squadCount + ' squads';
+  const panelX = team.x;
+  const panelY = team.y;
+  const width = team.width;
+  const height = team.height;
+  const flagSize = 166;
+  const isRight = Number(team.teamId) === 2;
+  const tagX = isRight ? panelX + width - 104 : panelX + 28;
+  const textX = isRight ? panelX + 42 : panelX + 222;
+  const flagX = isRight ? panelX + width - 206 : panelX + 34;
+  const textMaxWidth = isRight ? width - 292 : width - 270;
+  const avatarX = textX;
+  const avatarY = panelY + 160;
+  const avatarSize = 58;
+  const glowColors = FACTION_GLOW_BY_CODE[team.factionCode] ?? [team.accent, "#ffffff"];
+  const glowCenterX = flagX + flagSize / 2;
+  const glowCenterY = panelY + 64 + flagSize / 2;
+  const shadePath = isRight
+    ? `M ${panelX} ${panelY + 22} H ${panelX + width - 42} L ${panelX + width} ${panelY + 72} V ${panelY + height - 22} H ${panelX + 54} L ${panelX} ${panelY + height - 74} Z`
+    : `M ${panelX + 42} ${panelY + 22} H ${panelX + width} V ${panelY + height - 74} L ${panelX + width - 54} ${panelY + height - 22} H ${panelX} V ${panelY + 72} Z`;
+  return [
+    `<path d="${shadePath}" fill="url(#teamShade)" stroke="${team.accent}" stroke-opacity="0.3" stroke-width="1.5"/>`,
+    `<ellipse cx="${glowCenterX}" cy="${glowCenterY}" rx="174" ry="88" fill="${glowColors[0]}" opacity="0.42" filter="url(#flagGlow)"/>`,
+    `<ellipse cx="${glowCenterX + (isRight ? 34 : -34)}" cy="${glowCenterY + 18}" rx="132" ry="68" fill="${glowColors[1] ?? glowColors[0]}" opacity="0.34" filter="url(#flagGlow)"/>`,
+    glowColors[2]
+      ? `<ellipse cx="${glowCenterX}" cy="${glowCenterY - 28}" rx="110" ry="48" fill="${glowColors[2]}" opacity="0.26" filter="url(#flagGlow)"/>`
+      : "",
+    `<path d="M ${panelX + 18} ${panelY + 48} H ${panelX + 92} M ${panelX + width - 92} ${panelY + height - 46} H ${panelX + width - 18}" stroke="${team.accent}" stroke-opacity="0.9" stroke-width="3"/>`,
+    `<path d="M ${panelX + 18} ${panelY + height - 46} H ${panelX + 68} M ${panelX + width - 68} ${panelY + 48} H ${panelX + width - 18}" stroke="#d6e4f2" stroke-opacity="0.28" stroke-width="1.5"/>`,
+    `<rect x="${tagX}" y="${panelY + 36}" width="76" height="26" fill="${team.accent}"/>`,
+    `<text x="${tagX + 38}" y="${panelY + 55}" text-anchor="middle" class="team-tag">TEAM ${xmlEscape(String(team.teamId ?? '?'))}</text>`,
+    flagDataUri
+      ? `<image href="${flagDataUri}" x="${flagX}" y="${panelY + 64}" width="${flagSize}" height="${flagSize}" preserveAspectRatio="xMidYMid meet"/>`
+      : `<path d="M ${flagX} ${panelY + 64} H ${flagX + flagSize} V ${panelY + 64 + flagSize} H ${flagX} Z" fill="${team.accent}" fill-opacity="0.28" stroke="${team.accent}" stroke-opacity="0.74"/>`,
+    renderFitText({ x: textX, y: panelY + 92, className: "team-name", maxWidth: textMaxWidth, charWidth: 13.8 }, truncateText(team.teamName, isRight ? 26 : 29)),
+    `<text x="${textX}" y="${panelY + 124}" class="team-meta mono">${xmlEscape(team.factionCode || 'UNKNOWN')} / ${xmlEscape(String(team.playerCount))} PAX / ${xmlEscape(squadCountText)}</text>`,
+    `<path d="M ${textX} ${panelY + 148} H ${isRight ? panelX + width - 236 : panelX + width - 44}" stroke="#d6e4f2" stroke-opacity="0.24" stroke-width="1"/>`,
+    `<path d="M ${avatarX} ${avatarY} H ${avatarX + avatarSize - 10} L ${avatarX + avatarSize} ${avatarY + 10} V ${avatarY + avatarSize} H ${avatarX} Z" fill="rgba(226,238,250,0.92)" stroke="${team.accent}" stroke-opacity="0.9" stroke-width="2"/>`,
+    commanderAvatarDataUri
+      ? `<image href="${commanderAvatarDataUri}" x="${avatarX + 4}" y="${avatarY + 4}" width="${avatarSize - 8}" height="${avatarSize - 8}" preserveAspectRatio="xMidYMid slice"/>`
+      : `<text x="${avatarX + avatarSize / 2}" y="${avatarY + 38}" text-anchor="middle" class="avatar-initial">${xmlEscape(getPlayerInitials(commanderText))}</text>`,
+    `<text x="${textX + 76}" y="${panelY + 174}" class="team-row">COMMANDER</text>`,
+    renderFitText({ x: textX + 76, y: panelY + 204, className: "strong", maxWidth: textMaxWidth - 82, charWidth: 12.8 }, truncateText(commanderText, isRight ? 22 : 24)),
+    `<text x="${textX + 76}" y="${panelY + 228}" class="team-stat mono">GAME TIME ${xmlEscape(commanderPlaytimeText)}</text>`,
+    `<text x="${textX}" y="${panelY + 240}" class="team-stat mono">READY ${xmlEscape(String(team.playerCount).padStart(2, '0'))} | SQUADS ${xmlEscape(String(team.squadCount).padStart(2, '0'))}</text>`,
+  ].join("");
+}
+
+function renderFitText({ x, y, className, maxWidth, charWidth }, value) {
+  const text = String(value ?? "");
+  const attrs = [`x="${x}"`, `y="${y}"`, `class="${className}"`];
+  if (estimateDisplayWidth(text, charWidth) > maxWidth) {
+    attrs.push(`textLength="${Math.max(80, Math.floor(maxWidth))}"`, 'lengthAdjust="spacingAndGlyphs"');
+  }
+  return `<text ${attrs.join(" ")}>${xmlEscape(text)}</text>`;
+}
+
+function estimateDisplayWidth(text, charWidth = 12) {
+  return [...String(text ?? "")].reduce((total, char) => total + (/[\u4e00-\u9fff]/.test(char) ? charWidth * 1.35 : charWidth), 0);
+}
+async function readAssetDataUri(assetPath) {
+  const cleanPath = String(assetPath ?? "").replace(/^\//, "");
+  const candidates = [
+    path.join(ICON_BASE_DIR, cleanPath.replace(/\//g, path.sep)),
+    path.resolve(process.cwd(), cleanPath.replace(/\//g, path.sep)),
+    path.resolve(process.cwd(), "MapScene", path.basename(cleanPath)),
+    path.join(process.cwd(), "web-client", "src", "shared", "faction-assets", path.basename(cleanPath)),
+  ];
+
+  for (const filePath of candidates) {
+    try {
+      const content = await fs.readFile(filePath);
+      const ext = path.extname(filePath).toLowerCase();
+      const mime = ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" : "image/png";
+      return `data:${mime};base64,${content.toString("base64")}`;
+    } catch {
+      // Try next candidate.
+    }
+  }
+
+  return "";
+}
+
+async function readImageDataUri(source) {
+  const value = String(source ?? "").trim();
+  if (!value) return "";
+  if (value.startsWith("data:image/")) return value;
+  if (/^https?:\/\//i.test(value)) {
+    return readRemoteImageDataUri(value);
+  }
+  return readAssetDataUri(value);
+}
+
+async function readRemoteImageDataUri(url) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 2200);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) return "";
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.toLowerCase().startsWith("image/")) return "";
+    const arrayBuffer = await response.arrayBuffer();
+    return `data:${contentType.split(";")[0]};base64,${Buffer.from(arrayBuffer).toString("base64")}`;
+  } catch {
+    return "";
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function buildPlayerListPngLayout(snapshot, options = {}) {
@@ -718,7 +1383,7 @@ function buildPlayerPanelLayout(team, options, x, y, width, iconCache) {
   for (const squad of team.squads) {
     rows.push({
       type: "squad",
-      label: buildSquadDisplayName(squad) || "未命名小队",
+      label: buildSquadDisplayName(squad) || "Unnamed Squad",
       count: squad.members.length,
       height: 34,
     });
@@ -728,7 +1393,7 @@ function buildPlayerPanelLayout(team, options, x, y, width, iconCache) {
   if (team.unassignedPlayers.length) {
     rows.push({
       type: "squad",
-      label: "未进小队",
+      label: "Unassigned",
       count: team.unassignedPlayers.length,
       height: 34,
     });
@@ -740,7 +1405,7 @@ function buildPlayerPanelLayout(team, options, x, y, width, iconCache) {
   return {
     teamID: team.teamID,
     teamName: team.teamName || `Team ${team.teamID}`,
-    statsLine: `玩家 ${team.playerCount} · 小队 ${team.squads.length} · SL ${leaderCount} · 未分队 ${team.unassignedPlayers.length}`,
+    statsLine: `Players ${team.playerCount} | Squads ${team.squads.length} | SL ${leaderCount} | Unassigned ${team.unassignedPlayers.length}`,
     x,
     y,
     width,
@@ -811,11 +1476,11 @@ function renderPlayerListSvg(layout) {
   svg.push(`<text x="48" y="62" class="title">${xmlEscape(layout.title)}</text>`);
   svg.push(`<text x="48" y="90" class="subtitle">${xmlEscape(layout.subtitle)}</text>`);
   svg.push(`<text x="48" y="116" class="meta">${xmlEscape(layout.infoLine)}</text>`);
-  svg.push(renderSummaryMetric(648, 34, "玩家", layout.summary.playerCount, "#38bdf8"));
-  svg.push(renderSummaryMetric(792, 34, "小队", layout.summary.squadCount, "#a78bfa"));
+  svg.push(renderSummaryMetric(648, 34, "Players", layout.summary.playerCount, "#38bdf8"));
+  svg.push(renderSummaryMetric(792, 34, "Squads", layout.summary.squadCount, "#a78bfa"));
   svg.push(renderSummaryMetric(936, 34, "SL", layout.summary.leaderCount, "#f59e0b"));
-  svg.push(renderSummaryMetric(1080, 34, "未分队", layout.summary.unassignedCount, "#ef4444"));
-  svg.push(renderSummaryMetric(1224, 34, "对局时长", layout.summary.matchDuration || "-", "#22c55e"));
+  svg.push(renderSummaryMetric(1080, 34, "Unassigned", layout.summary.unassignedCount, "#ef4444"));
+  svg.push(renderSummaryMetric(1224, 34, "Match Duration", layout.summary.matchDuration || "-", "#22c55e"));
 
   for (const panel of layout.panels) {
     const gradientId = Number(panel.teamID) === 1 ? "teamGradient1" : (Number(panel.teamID) === 2 ? "teamGradient2" : "panelGradient");
@@ -1132,7 +1797,7 @@ function clipTextByWidth(text, maxVisualWidth) {
     const charWidth = (code >= 0x3000 && code <= 0x9FFF) || (code >= 0xFF00 && code <= 0xFFEF) ? 2 : 1;
 
     if (visualWidth + charWidth > maxVisualWidth) {
-      return `${result}…`;
+      return `${result}...`;
     }
     result += char;
     visualWidth += charWidth;
@@ -1163,6 +1828,335 @@ function formatDurationLong(seconds) {
   if (hours > 0) return `${hours}h ${minutes}m`;
   if (minutes > 0) return `${minutes}m ${secs}s`;
   return `${secs}s`;
+}
+
+function formatDurationClock(seconds) {
+  const total = Math.max(0, Math.floor(Number(seconds ?? 0) || 0));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+}
+
+function resolveCommanderName(team) {
+  return String(team?.commanderName ?? team?.commanderPlayer?.name ?? "").trim();
+}
+
+function findTeamCommanderName(players = [], teamID) {
+  const commander = resolveTeamCommander({
+    team: { teamID, squads: [] },
+    players,
+    squads: [],
+    modules: null,
+    serverId: "",
+  });
+  return commander?.name ?? "";
+}
+
+function resolveTeamCommander({ team, players = [], squads = [], modules = null, serverId = "" }) {
+  const teamID = Number(team?.teamID);
+  if (!Number.isFinite(teamID)) return null;
+
+  const commandSquadIds = resolveCommandSquadIds({ teamID, squads: team?.squads?.length ? team.squads : squads, modules, serverId });
+  const teamPlayers = (Array.isArray(players) ? players : []).filter((player) => Number(player?.teamID) === teamID);
+
+  if (commandSquadIds.length > 0) {
+    const commandPlayers = teamPlayers.filter((player) =>
+      commandSquadIds.some((squadID) => normalizeCommandId(squadID) === normalizeCommandId(player?.squadID)),
+    );
+    return commandPlayers.find((player) => Boolean(player?.isLeader) && hasPlayerName(player))
+      ?? commandPlayers.find((player) => isCommanderRole(player) && hasPlayerName(player))
+      ?? commandPlayers.find(hasPlayerName)
+      ?? null;
+  }
+
+  return teamPlayers.find((player) => Boolean(player?.isCommander) && hasPlayerName(player))
+    ?? teamPlayers.find((player) => isCommanderRole(player) && hasPlayerName(player))
+    ?? null;
+}
+
+function resolveCommandSquadIds({ teamID, squads = [], modules = null, serverId = "" }) {
+  const ids = [];
+  const pushId = (value) => {
+    const id = normalizeCommandId(value);
+    if (id && !ids.includes(id)) ids.push(id);
+  };
+
+  for (const squad of Array.isArray(squads) ? squads : []) {
+    if (Number(squad?.teamID ?? squad?.teamId) !== Number(teamID)) continue;
+    const squadName = firstText(squad?.squadName, squad?.name, "");
+    const squadID = squad?.squadID ?? squad?.squadId;
+    if (isCommandSquadName(squadName) || isCommandSquadId(squadID)) pushId(squadID);
+  }
+
+  const squadApi = modules?.squadManagement?.api ?? modules?.squadManagement ?? null;
+  if (typeof squadApi?.getSquads === "function") {
+    const list = squadApi.getSquads(serverId) ?? [];
+    for (const squad of Array.isArray(list) ? list : []) {
+      if (Number(squad?.teamID ?? squad?.teamId) !== Number(teamID)) continue;
+      const squadName = firstText(squad?.squadName, squad?.name, "");
+      if (isCommandSquadName(squadName)) pushId(squad?.squadID ?? squad?.squadId);
+    }
+  }
+
+  return ids;
+}
+
+function isCommanderRole(player) {
+  const role = String(player?.role ?? "").trim().toLowerCase();
+  return role.includes("commander") || role === "cmd" || role.includes(" cmd");
+}
+
+function hasPlayerName(player) {
+  return Boolean(String(player?.name ?? "").trim());
+}
+
+function isCommandSquadName(value) {
+  const name = String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  if (!name) return false;
+  return name === "command squad" || name === "cmd" || name === "command" || /\bcommand\s*squad\b/i.test(name);
+}
+
+function isCommandSquadId(value) {
+  const id = normalizeCommandId(value);
+  return id === "10" || id === "cmd" || id === "command";
+}
+
+function normalizeCommandId(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function resolvePlayerGameSeconds(player) {
+  if (!player) return 0;
+  const direct = firstFiniteNumber(
+    player.gameSeconds,
+    player.playtimeSeconds,
+    player.steamPlaytime?.gameSeconds,
+    player.steamPlaytime?.game_seconds,
+  );
+  if (direct != null) return direct;
+  const hours = firstFiniteNumber(player.gameHours, player.playtimeHours);
+  return hours != null ? hours * 3600 : 0;
+}
+
+function getPlayerInitials(name) {
+  const parts = String(name ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!parts.length) return "--";
+  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("");
+}
+
+function truncateText(value, maxLength = 28) {
+  const text = String(value ?? "");
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+
+function resolveMapSceneKey(mapName, layerName) {
+  const candidates = [String(layerName ?? ""), String(mapName ?? "")];
+  for (const candidate of candidates) {
+    const candidateTokens = tokenizeSceneName(candidate);
+    const candidateCompact = compactTokens(candidateTokens);
+    if (!candidateTokens.length && !candidateCompact) continue;
+
+    for (const template of MAP_SCENE_TEMPLATE_LIST) {
+      const templateTokens = tokenizeSceneName(template.key);
+      const templateCompact = compactTokens(templateTokens);
+      if (tokensMatch(candidateTokens, templateTokens, candidateCompact, templateCompact)) {
+        return template.key;
+      }
+    }
+  }
+
+  return "Sumari";
+}
+
+function resolveMatchMinimap(mapName, layerName, template) {
+  const minimapFile = resolveTacticalMinimapFile(mapName, layerName, template?.key);
+  if (!minimapFile) return null;
+  const assetPath = resolveMinimapAssetPath(minimapFile);
+  if (!assetPath) return null;
+  const placement = MAP_SCENE_MINIMAP_PLACEMENT[template?.key] ?? MAP_SCENE_MINIMAP_PLACEMENT.Sumari;
+  return {
+    ...placement,
+    fileName: minimapFile,
+    assetPath,
+  };
+}
+
+function resolveTacticalMinimapFile(mapName, layerName, sceneKey) {
+  const normalizedLayer = normalizeTacticalMapKey(layerName);
+  if (TACTICAL_MINIMAP_BY_KEY[normalizedLayer]) return TACTICAL_MINIMAP_BY_KEY[normalizedLayer];
+
+  const normalizedMap = normalizeTacticalMapKey(mapName);
+  if (TACTICAL_MINIMAP_BY_KEY[normalizedMap]) return TACTICAL_MINIMAP_BY_KEY[normalizedMap];
+
+  const sceneTokens = tokenizeSceneName(sceneKey);
+  const candidates = Object.entries(TACTICAL_MINIMAP_BY_KEY);
+  for (const [key, fileName] of candidates) {
+    const keyTokens = tokenizeSceneName(key);
+    if (tokensMatch(sceneTokens, keyTokens, compactTokens(sceneTokens), compactTokens(keyTokens))) return fileName;
+  }
+
+  return null;
+}
+
+function normalizeTacticalMapKey(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  if (TACTICAL_MINIMAP_BY_KEY[text]) return text;
+  const withoutLayerSuffix = text.replace(/_v\d+$/i, "_v1");
+  if (TACTICAL_MINIMAP_BY_KEY[withoutLayerSuffix]) return withoutLayerSuffix;
+  const mapKey = resolveMapSceneKey(text, text);
+  const raasKey = `${mapKey}_RAAS_v1`;
+  return TACTICAL_MINIMAP_BY_KEY[raasKey] ? raasKey : text;
+}
+
+function resolveMinimapAssetPath(fileName) {
+  const candidates = [
+    path.resolve(process.cwd(), "web-client", "public", fileName),
+    path.resolve(process.cwd(), "public", fileName),
+    path.resolve(process.cwd(), "MapScene", fileName),
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return "";
+}
+
+function createMapSceneTemplate(key, fileName, index = 0) {
+  const styleKey = MAP_SCENE_STYLE_BY_KEY[key] ?? "forest";
+  const theme = MAP_SCENE_THEMES[styleKey] ?? MAP_SCENE_THEMES.forest;
+  return {
+    key,
+    fileName,
+    assetPath: path.join("MapScene", fileName),
+    displayName: prettifySceneKey(key),
+    styleKey,
+    theme,
+  };
+}
+
+function prettifySceneKey(key) {
+  return String(key ?? "")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenizeSceneName(value) {
+  return String(value ?? "")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_\-]+/g, " ")
+    .split(/[^A-Za-z0-9]+/)
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean)
+    .filter((part) => !["raas", "aas", "v1", "v2", "v3", "seed", "map", "layer", "loading", "screen", "dqhd"].includes(part));
+}
+
+function compactTokens(tokens) {
+  return tokens.join("");
+}
+
+function tokensMatch(candidateTokens, templateTokens, candidateCompact, templateCompact) {
+  if (!candidateTokens.length || !templateTokens.length) return false;
+  if (candidateTokens.some((token) => templateTokens.includes(token))) return true;
+  if (candidateCompact && templateTokens.some((token) => candidateCompact.includes(token))) return true;
+  if (templateCompact && candidateTokens.some((token) => templateCompact.includes(token))) return true;
+  return false;
+}
+
+function resolveFactionFlagAssetPath(teamName) {
+  const code = resolveFactionCodeFromTeamName(teamName);
+  if (!code) return null;
+  const fileName = FACTION_FLAG_BY_CODE[code];
+  if (!fileName) return null;
+  return `/assets/faction-assets/${fileName}`;
+}
+
+function resolveFactionCodeFromTeamName(teamName) {
+  const normalized = normalizeFactionLookupName(teamName);
+  if (!normalized) return null;
+
+  const visualCode = getBattlegroupFactionLookup().get(normalized);
+  if (visualCode) return visualCode;
+
+  const rules = [
+    ["ADF", ["adf", "australian", "royal australian"]],
+    ["AFU", ["afu", "ukraine", "ukrainian"]],
+    ["BAF", ["baf", "british", "uk armed forces", "british armed"]],
+    ["CAF", ["caf", "canadian", "canada"]],
+    ["CRF", ["crf"]],
+    ["GFI", ["gfi", "ger", "german", "federal"]],
+    ["IMF", ["imf", "insurgent mil", "militia"]],
+    ["MEA", ["mea", "middle east", "arab", "insurgent"]],
+    ["MEI", ["mei", "irregular", "militia"]],
+    ["PLA", ["pla", "people's liberation", "people liberation", "chinese", "china"]],
+    ["PLAAGF", ["plaagf", "agf", "army group"]],
+    ["PLANMC", ["planmc", "marine corps", "naval infantry"]],
+    ["RGF", ["rgf", "russian ground", "russian"]],
+    ["TLF", ["tlf", "turkish", "turkey"]],
+    ["USA", ["usa", "us army", "american", "united states", "u.s."]],
+    ["USMC", ["usmc", "marine", "marines"]],
+    ["VDV", ["vdv", "airborne", "guards airborne"]],
+    ["WPMC", ["wpmc", "manticore", "private military", "pmc"]],
+  ];
+
+  for (const [code, terms] of rules) {
+    if (terms.some((term) => normalized.includes(term))) return code;
+  }
+
+  return null;
+}
+
+let battlegroupFactionLookup = null;
+
+function getBattlegroupFactionLookup() {
+  if (battlegroupFactionLookup) return battlegroupFactionLookup;
+
+  const lookup = new Map();
+  for (const code of Object.keys(FACTION_FLAG_BY_CODE)) {
+    lookup.set(normalizeFactionLookupName(code), code);
+  }
+
+  try {
+    const source = readFileSync(FACTION_ASSET_DATA_PATH, "utf8");
+    const visualBlocks = source.match(/\{\s*name:\s*"[^"]+"[\s\S]*?unitIconBasename:\s*"[^"]*"[\s\S]*?\}/g) ?? [];
+    for (const block of visualBlocks) {
+      const faction = block.match(/faction:\s*"([A-Z]+)"/)?.[1];
+      if (!faction || !FACTION_FLAG_BY_CODE[faction]) continue;
+
+      const names = [];
+      const primaryName = block.match(/name:\s*"([^"]+)"/)?.[1];
+      if (primaryName) names.push(primaryName);
+
+      const aliasesText = block.match(/aliases:\s*\[([\s\S]*?)\]/)?.[1] ?? "";
+      for (const aliasMatch of aliasesText.matchAll(/"([^"]+)"/g)) {
+        names.push(aliasMatch[1]);
+      }
+
+      for (const name of names) {
+        const key = normalizeFactionLookupName(name);
+        if (key) lookup.set(key, faction);
+      }
+    }
+  } catch {
+    // Keep the built-in fallback rules when the Vue asset manifest is not available.
+  }
+
+  battlegroupFactionLookup = lookup;
+  return battlegroupFactionLookup;
+}
+
+function normalizeFactionLookupName(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
 }
 
 let sharpLoaderPromise = null;

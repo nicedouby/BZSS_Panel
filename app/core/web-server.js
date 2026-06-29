@@ -1,4 +1,4 @@
-// -*- coding: utf-8 -*-
+﻿// -*- coding: utf-8 -*-
 
 import http from "node:http";
 import { createReadStream } from "node:fs";
@@ -13,6 +13,7 @@ import { handleSquadManagementRoutes } from "../modules/squad-management/routes.
 import { handleTeamBalanceRoutes } from "../modules/team-balance/routes.js";
 import { handleReserveSlotsRoutes } from "../modules/reserve-slots/routes.js";
 import { handleBlackEdgePrivilegeRoutes } from "../modules/black-edge-privilege/routes.js";
+import { handleAstrbotBridgeRoutes } from "../modules/astrbot-bridge/routes.js";
 import {
   classifySquadName,
   getSquadNameClassifierRules,
@@ -34,17 +35,17 @@ import { sanitizeRconCommand } from "./audit/audit-sanitizer.js";
 import { verifyPassword, hashPassword } from "./auth-crypto.js";
 
 const MAX_JSON_BODY_BYTES = 1024 * 1024;
-const MAX_WS_FRAME_BYTES = 1024 * 1024; // WebSocket 单帧最大 1MB
+const MAX_WS_FRAME_BYTES = 1024 * 1024; // WebSocket 鍗曞抚鏈€澶?1MB
 
 /**
- * 所有响应都注入的基础安全头。
- * 不包含 Cache-Control（由各路由自行控制）。
+ * 鎵€鏈夊搷搴旈兘娉ㄥ叆鐨勫熀纭€瀹夊叏澶淬€?
+ * 涓嶅寘鍚?Cache-Control锛堢敱鍚勮矾鐢辫嚜琛屾帶鍒讹級銆?
  */
 const BASE_SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "strict-origin-when-cross-origin",
-  "X-XSS-Protection": "0", // 现代浏览器已内置 XSS 防护，就不启用这个旧头了
+  "X-XSS-Protection": "0", // 鐜颁唬娴忚鍣ㄥ凡鍐呯疆 XSS 闃叉姢锛屽氨涓嶅惎鐢ㄨ繖涓棫澶翠簡
   "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' wss: ws:",
 };
 
@@ -83,8 +84,8 @@ export class WebServer {
     this.consoleSubscription = null;
     this.chatSubscription = null;
 
-    // 可信代理 IP 列表，只有来自这些 IP 的请求才信任 X-Forwarded-For。
-    // 空列表表示不信任任何转发头（直接对外场景）。
+    // 鍙俊浠ｇ悊 IP 鍒楄〃锛屽彧鏈夋潵鑷繖浜?IP 鐨勮姹傛墠淇′换 X-Forwarded-For銆?
+    // 绌哄垪琛ㄨ〃绀轰笉淇′换浠讳綍杞彂澶达紙鐩存帴瀵瑰鍦烘櫙锛夈€?
     const trustedProxies = config.trustedProxies ?? [];
     this.trustedProxies = new Set(Array.isArray(trustedProxies) ? trustedProxies : [trustedProxies]);
 
@@ -321,6 +322,20 @@ export class WebServer {
       }, {
         "Set-Cookie": expiredCookie,
       });
+    }
+
+    const astrbotBridgeHandled = await handleAstrbotBridgeRoutes({
+      core: this.core,
+      modules: this.modules,
+      url,
+      req,
+      res,
+      readJsonBody: (request) => this.readJsonBody(request),
+      json: (status, obj, extraHeaders = {}) => this.json(res, status, obj, extraHeaders),
+      logger: this.logger,
+    });
+    if (astrbotBridgeHandled) {
+      return;
     }
 
     const user = this.core.authManager?.getUserFromRequest(req);
@@ -3090,6 +3105,7 @@ export class WebServer {
       const snapshot = await pluginApi.takeManualSnapshot({
         includeSteamID: body?.includeSteamID ?? body?.options?.includeSteamID,
         includeEOSID: body?.includeEOSID ?? body?.options?.includeEOSID,
+        overview: body?.overview ?? body?.matchState ?? body?.snapshot ?? null,
       });
       return this.json(res, 200, { ok: true, snapshot });
     }
@@ -3912,7 +3928,7 @@ export class WebServer {
 
   getRequestIp(req) {
     const remoteAddress = req.socket?.remoteAddress ?? "";
-    // 只有连接来源属于可信代理时，才信任 X-Forwarded-For，防止客户端伪造 IP
+    // 鍙湁杩炴帴鏉ユ簮灞炰簬鍙俊浠ｇ悊鏃讹紝鎵嶄俊浠?X-Forwarded-For锛岄槻姝㈠鎴风浼€?IP
     if (this.trustedProxies.size > 0 && this.trustedProxies.has(remoteAddress)) {
       const forwarded = req.headers["x-forwarded-for"];
       if (typeof forwarded === "string" && forwarded.trim()) {
@@ -4043,7 +4059,7 @@ export class WebServer {
         offset += 8;
       }
 
-      // 防止客户端发送超大帧耗尽服务器内存（DoS 防护）
+      // 闃叉瀹㈡埛绔彂閫佽秴澶у抚鑰楀敖鏈嶅姟鍣ㄥ唴瀛橈紙DoS 闃叉姢锛?
       if (payloadLength > MAX_WS_FRAME_BYTES) {
         this.logger?.warn?.(`WebSocket: oversized frame (${payloadLength} bytes) from ${client.user?.username ?? "unknown"}, closing connection.`);
         this.closeWebSocketClient(client);
@@ -5528,7 +5544,7 @@ function buildSquadNameTrackingRecords({ guard, stepwise, fair, ruleChain, lifec
       source: "squad_name_rule",
       stage: "squad_name",
       status: "violation",
-      decisionLabel: "队名违规",
+      decisionLabel: "闃熷悕杩濊",
       decisionTone: "danger",
       reason: item.reason ?? "",
       createdAt: item.createdAt,
@@ -5562,7 +5578,7 @@ function buildSquadNameTrackingRecords({ guard, stepwise, fair, ruleChain, lifec
       source: "tiered_squad_time",
       stage: "stepwise",
       status: "violation",
-      decisionLabel: "阶梯式时长拒绝",
+      decisionLabel: "闃舵寮忔椂闀挎嫆缁?",
       decisionTone: "danger",
       reason: item.decisionReason ?? item.reason ?? "",
       createdAt: item.createdAt,
@@ -5597,7 +5613,7 @@ function buildSquadNameTrackingRecords({ guard, stepwise, fair, ruleChain, lifec
       source: violation ? "fair_squad_creation" : "final_allowed",
       stage: violation ? "fair" : "final",
       status: violation ? "violation" : "allowed",
-      decisionLabel: violation ? "公平建队拒绝" : "最终通过",
+      decisionLabel: violation ? "鍏钩寤洪槦鎷掔粷" : "鏈€缁堥€氳繃",
       decisionTone: violation ? "danger" : "ok",
       reason: Array.isArray(item.reasons) ? item.reasons.join(" ") : item.reason ?? "",
       createdAt: item.createdAt,
@@ -5642,3 +5658,9 @@ function pickLatestRecord(records) {
   }
   return latest;
 }
+
+
+
+
+
+

@@ -542,6 +542,8 @@
     "retryCount": 4,
     "retryDelayMs": 3000,
     "usePythonScript": true,
+    "pythonScript": "./support/runtime-assets/steam-playtime/FetchGameDuration.py",
+    "pythonConfigPath": "./support/runtime-assets/steam-playtime/config.json",
     "scriptTimeoutMs": 12000,
     "scriptFallbackToApi": false,
     "onlineRefreshFreshnessWindowMinutes": 240,
@@ -632,6 +634,16 @@
     "playerDatabase": {
       "enabled": true
     },
+    "astrbotBridge": {
+      "enabled": true,
+      "apiToken": "awfasdaw",
+      "trustedIps": [],
+      "allowedActions": [
+        "bindProfile",
+        "setWarmup",
+        "toggleWarmup"
+      ]
+    },
     "playerTimeStats": {
       "enabled": true,
       "tickMs": 10000,
@@ -693,8 +705,8 @@
       "infantryOnlyUntilSeconds": 50,
       "sweepIntervalMs": 15000,
       "allowedInfantryNames": [
-        "萌新队",
-        "填线队"
+        "钀屾柊闃?",
+        "濉嚎闃?"
       ],
       "defaultSquadNamePattern": "^Squad\\s*\\d+$"
     },
@@ -855,7 +867,7 @@
       "squad-creation-broadcast": {
         "enabled": false,
         "delaySeconds": 5,
-        "messageTemplate": "[建队播报] 玩家 ${creatorName} 创建了小队: ${squadName} (小队ID: ${squadId})"
+        "messageTemplate": "[寤洪槦鎾姤] 鐜╁ ${creatorName} 鍒涘缓浜嗗皬闃? ${squadName} (灏忛槦ID: ${squadId})"
       }
     }
   },

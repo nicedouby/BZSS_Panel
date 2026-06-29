@@ -168,8 +168,8 @@ class SteamGameDurationService {
     this.apiBaseUrl = String(apiBaseUrl || "https://api.steampowered.com").trim().replace(/\/+$/, "");
     this.usePythonScript = usePythonScript !== false;
     this.pythonBin = String(pythonBin || "python").trim() || "python";
-    this.pythonScriptPath = path.resolve(process.cwd(), String(pythonScript || "./MicePanel/FetchGameDuration.py"));
-    this.pythonConfigPath = path.resolve(process.cwd(), String(pythonConfigPath || "./MicePanel/config.json"));
+    this.pythonScriptPath = path.resolve(process.cwd(), String(pythonScript || "./support/runtime-assets/steam-playtime/FetchGameDuration.py"));
+    this.pythonConfigPath = path.resolve(process.cwd(), String(pythonConfigPath || "./support/runtime-assets/steam-playtime/config.json"));
     this.scriptTimeoutMs = Math.max(1000, Number(scriptTimeoutMs) || DEFAULT_SCRIPT_TIMEOUT_MS);
     this.scriptFallbackToApi = Boolean(scriptFallbackToApi);
     this.onlineRefreshFreshnessWindowMinutes = Math.max(0, Number(onlineRefreshFreshnessWindowMinutes) || DEFAULT_ONLINE_REFRESH_FRESHNESS_WINDOW_MINUTES);
@@ -1708,7 +1708,7 @@ export function createPlaytimeModule({ core, modules, config, logger }) {
 function resolveSteamConfig(config, moduleConfig = {}) {
   const legacyConfigPath = path.resolve(
     process.cwd(),
-    moduleConfig.legacyConfigPath || moduleConfig.steam?.legacyConfigPath || "./MicePanel/config.json",
+    moduleConfig.legacyConfigPath || moduleConfig.steam?.legacyConfigPath || "./support/runtime-assets/steam-playtime/config.json",
   );
   const legacy = readLegacySteamConfig(legacyConfigPath);
   const explicit = config.get("steam", {});

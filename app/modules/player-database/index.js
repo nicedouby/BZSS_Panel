@@ -136,6 +136,18 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       return repo.upsertFromPresence(identity);
     },
 
+    async bindQQToPlayer(playerId, binding = {}) {
+      return repo.bindQQToPlayer(playerId, binding);
+    },
+
+    async unbindQQFromPlayer(playerId) {
+      return repo.unbindQQFromPlayer(playerId);
+    },
+
+    async findByIdentity(identity = {}) {
+      return repo.findByIdentity(identity);
+    },
+
     async updateGameDuration(playerId, gameSeconds) {
       return repo.updateGameDuration(playerId, gameSeconds);
     },

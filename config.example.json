@@ -424,6 +424,8 @@
     "retryCount": 2,
     "retryDelayMs": 1200,
     "usePythonScript": true,
+    "pythonScript": "./support/runtime-assets/steam-playtime/FetchGameDuration.py",
+    "pythonConfigPath": "./support/runtime-assets/steam-playtime/config.json",
     "scriptTimeoutMs": 12000,
     "scriptFallbackToApi": false,
     "onlineRefreshFreshnessWindowMinutes": 120
@@ -478,13 +480,19 @@
       "historySize": 10,
       "allowPrivateIps": true
     },
-    "pluginSubscriptions": { "enabled": true },
-    "audit": { "enabled": true },
+    "pluginSubscriptions": {
+      "enabled": true
+    },
+    "audit": {
+      "enabled": true
+    },
     "playerSessionRecords": {
       "enabled": true,
       "maxRecords": 2000
     },
-    "playerState": { "enabled": true },
+    "playerState": {
+      "enabled": true
+    },
     "squadLifecycle": {
       "enabled": true,
       "rconPollIntervalMs": 1000,
@@ -508,8 +516,8 @@
       "infantryOnlyUntilSeconds": 50,
       "sweepIntervalMs": 15000,
       "allowedInfantryNames": [
-        "萌新队",
-        "填线队"
+        "钀屾柊闃?",
+        "濉嚎闃?"
       ],
       "defaultSquadNamePattern": "^Squad\\s*\\d+$"
     },
@@ -544,42 +552,62 @@
         "nextMapIntervalMs": 30000
       }
     },
-    "console": { "enabled": true, "maxLines": 500 },
-    "combatState": { "enabled": true, "maxEvents": 5000 },
-    "playerDatabase": { "enabled": true },
+    "console": {
+      "enabled": true,
+      "maxLines": 500
+    },
+    "combatState": {
+      "enabled": true,
+      "maxEvents": 5000
+    },
+    "playerDatabase": {
+      "enabled": true
+    },
+    "astrbotBridge": {
+      "enabled": true,
+      "apiToken": "",
+      "trustedIps": [],
+      "allowedActions": [
+        "bindProfile",
+        "setWarmup",
+        "toggleWarmup"
+      ]
+    },
     "playerTimeStats": {
       "enabled": true,
       "tickMs": 10000,
       "maxDeltaSeconds": 60,
       "warmupPointsMultiplier": 1
     },
-    "killManage": { "enabled": true },
-      "combatClean": {
+    "killManage": {
+      "enabled": true
+    },
+    "combatClean": {
+      "enabled": true,
+      "maxEvents": 5000,
+      "weaponHistoryBackfill": {
         "enabled": true,
-        "maxEvents": 5000,
-        "weaponHistoryBackfill": {
-          "enabled": true,
-          "windowMs": 300000
-        }
-      },
-      "infantryCombatEnhancer": {
-        "enabled": true,
-        "forceAttackerDamageDisplay": false,
-        "minAttackerDamage": 15,
-        "damageDebounceMs": 150,
-        "showKillDisplay": false,
-        "showOnlyLightWeaponDamage": true,
-        "showVictimDamage": true,
-        "showVictimWound": true,
-        "showVictimKill": true,
-        "showAttackerDamage": true,
-        "storeRecentEventLimit": 300
-      },
-      "adminWarn": {
-        "enabled": true,
-        "maxRecords": 3000,
-        "ttlMs": 1800000
-      },
+        "windowMs": 300000
+      }
+    },
+    "infantryCombatEnhancer": {
+      "enabled": true,
+      "forceAttackerDamageDisplay": false,
+      "minAttackerDamage": 15,
+      "damageDebounceMs": 150,
+      "showKillDisplay": false,
+      "showOnlyLightWeaponDamage": true,
+      "showVictimDamage": true,
+      "showVictimWound": true,
+      "showVictimKill": true,
+      "showAttackerDamage": true,
+      "storeRecentEventLimit": 300
+    },
+    "adminWarn": {
+      "enabled": true,
+      "maxRecords": 3000,
+      "ttlMs": 1800000
+    },
     "remoteTelemetry": {
       "enabled": true,
       "host": "0.0.0.0",
@@ -597,7 +625,9 @@
       "tickMs": 1000,
       "dataFile": "./data/scheduled-broadcast/list.json"
     },
-    "playtime": { "enabled": true }
+    "playtime": {
+      "enabled": true
+    }
   },
   "webModules": {
     "required": [
@@ -626,7 +656,7 @@
     "squad-creation-broadcast": {
       "enabled": false,
       "delaySeconds": 5,
-      "messageTemplate": "[建队播报] 玩家 ${creatorName} 创建了小队: ${squadName} (小队ID: ${squadId})"
+      "messageTemplate": "[寤洪槦鎾姤] 鐜╁ ${creatorName} 鍒涘缓浜嗗皬闃? ${squadName} (灏忛槦ID: ${squadId})"
     },
     "fairSquadGuard": {
       "enabled": true,

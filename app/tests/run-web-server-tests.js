@@ -3515,7 +3515,23 @@ async function testMatchSnapshotRoutesExposeArtifacts() {
   assert.equal(JSON.parse(listRecorder.state.body)[0].id, "Match-Test");
 
   const captureRecorder = createRecorder();
-  const captureReq = Readable.from([JSON.stringify({ includeSteamID: false, includeEOSID: true })]);
+  const captureReq = Readable.from([JSON.stringify({
+    includeSteamID: false,
+    includeEOSID: true,
+    overview: {
+      status: { serverId: "server-1", queueCount: 4 },
+      matchState: {
+        serverStatus: { serverId: "server-1", playerCount: 12, queueCount: 4 },
+        match: { map: "Test", layer: "Test_RAAS_v1" },
+        players: { list: [] },
+        squads: { list: [] },
+      },
+      match: { map: "Test", layer: "Test_RAAS_v1" },
+      players: [],
+      squads: [],
+      serverId: "server-1",
+    },
+  })]);
   captureReq.method = "POST";
   captureReq.url = "/api/match-snapshot/capture";
   captureReq.headers = { host: "localhost", "content-type": "application/json" };
@@ -3523,7 +3539,9 @@ async function testMatchSnapshotRoutesExposeArtifacts() {
   await server.handleRequest(captureReq, captureRecorder.res);
   assert.equal(captureRecorder.state.status, 200);
   assert.equal(JSON.parse(captureRecorder.state.body).snapshot.id, "Match-Test");
-  assert.ok(calls.includes('capture:{"includeSteamID":false,"includeEOSID":true}'));
+  const captureCall = calls.find((item) => item.startsWith("capture:"));
+  assert.ok(captureCall?.includes('"overview"'));
+  assert.ok(captureCall?.includes('"includeSteamID":false'));
 
   const imageRecorder = createRecorder();
   await server.handleRequest({

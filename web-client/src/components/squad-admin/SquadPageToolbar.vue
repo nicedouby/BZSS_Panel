@@ -102,6 +102,15 @@
         >
           强制刷新
         </button>
+        <button
+          type="button"
+          class="refresh-button primary"
+          :disabled="!canRefresh || isRefreshing || refreshingPlaytime || refreshingSnapshot"
+          :title="'涓存椂鐢熸垚瀵瑰眬蹇収'"
+          @click="$emit('capture-snapshot')"
+        >
+          {{ refreshingSnapshot ? '鐢熸垚涓?..' : '涓存椂鐢熸垚' }}
+        </button>
         <div ref="refreshMenuRoot" class="refresh-dropdown">
           <button
             type="button"
@@ -156,6 +165,7 @@ const props = defineProps<{
   canRefresh: boolean;
   refreshingType: RefreshType | "";
   refreshingPlaytime?: boolean;
+  refreshingSnapshot?: boolean;
   viewerPerspectiveText?: string;
   showViewerPerspective?: boolean;
   serverStatusUpdatedAt?: number;
@@ -171,6 +181,7 @@ const emit = defineEmits<{
   (event: "refresh", type: RefreshType): void;
   (event: "refresh-playtime"): void;
   (event: "refresh-playtime-force"): void;
+  (event: "capture-snapshot"): void;
   (event: "toggle-multi-select"): void;
   (event: "view-mode-change", mode: "list" | "map"): void;
 }>();
@@ -183,8 +194,9 @@ const filters = [
 ] as const;
 
 const searchQuery = ref(props.searchQuery);
-const isRefreshing = computed(() => Boolean(props.refreshingType));
+const isRefreshing = computed(() => Boolean(props.refreshingType) || Boolean(props.refreshingSnapshot));
 const refreshingPlaytime = computed(() => Boolean(props.refreshingPlaytime));
+const refreshingSnapshot = computed(() => Boolean(props.refreshingSnapshot));
 const showViewerPerspective = computed(() => Boolean(props.showViewerPerspective));
 const viewerPerspectiveText = computed(() => props.viewerPerspectiveText ?? "");
 const filterMode = computed(() => props.filterMode);
@@ -199,9 +211,9 @@ watch(
 );
 
 watch(
-  () => [props.refreshingType, props.refreshingPlaytime],
+  () => [props.refreshingType, props.refreshingPlaytime, props.refreshingSnapshot],
   () => {
-    if (isRefreshing.value || refreshingPlaytime.value) {
+    if (isRefreshing.value || refreshingPlaytime.value || refreshingSnapshot.value) {
       closeRefreshMenu();
     }
   },

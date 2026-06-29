@@ -1,0 +1,1448 @@
+// -*- coding: utf-8 -*-
+
+import fs from "node:fs/promises";
+import path from "node:path";
+import { createRequire } from "node:module";
+
+import { handleAstrbotBridgeRoutes } from "./routes.js";
+
+const MODULE_ID = "module.astrbotBridge";
+const DEFAULT_ALLOWED_ACTIONS = ["bindProfile", "setWarmup", "toggleWarmup"];
+const SHARP_BUNDLE_ROOT = "C:/Users/12703/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules";
+const SERVER_INFO_SNAPSHOT_CACHE_DIR = path.resolve(process.cwd(), "data", "astrbot-bridge", "cache");
+const ICON_BASE_DIR = path.resolve(process.cwd(), "web-client/public");
+const FACTION_ASSET_DATA_PATH = path.resolve(process.cwd(), "web-client", "src", "shared", "faction-assets", "faction-data.ts");
+const MAP_SCENE_FILE_BY_KEY = {
+  AlBasrah: "LoadingScreen_AlBasrah_DQHD.PNG",
+  Anvil: "LoadingScreen_Anvil_DQHD.PNG",
+  Belaya_Pass: "LoadingScreen_Belaya_Pass_DQHD.PNG",
+  BlackCoast: "LoadingScreen_BlackCoast_DQHD.PNG",
+  Chora: "LoadingScreen_Chora_DQHD.PNG",
+  Fallujah: "LoadingScreen_Fallujah_DQHD.PNG",
+  FoolsRoad: "LoadingScreen_FoolsRoad_DQHD.PNG",
+  GooseBay: "LoadingScreen_GooseBay_DQHD.PNG",
+  Gorodok: "LoadingScreen_Gorodok_DQHD.PNG",
+  Harju: "LoadingScreen_Harju_DQHD.PNG",
+  JensensRange: "LoadingScreen_JensensRange_DQHD.PNG",
+  Kamdesh: "LoadingScreen_Kamdesh_DQHD.PNG",
+  Kohat: "LoadingScreen_Kohat_DQHD.PNG",
+  Kokan: "LoadingScreen_Kokan_DQHD.PNG",
+  Lashkar: "LoadingScreen_Lashkar_DQHD.PNG",
+  Manicouagan: "LoadingScreen_Manicouagan_DQHD.PNG",
+  Mestia: "LoadingScreen_Mestia_DQHD.PNG",
+  Mutaha: "LoadingScreen_Mutaha_DQHD.PNG",
+  Narva: "LoadingScreen_Narva_DQHD.PNG",
+  PacificProvingGrounds: "LoadingScreen_PacificProvingGrounds_DQHD.PNG",
+  Sanxian: "LoadingScreen_Sanxian_DQHD.PNG",
+  Skorpo: "LoadingScreen_Skorpo_DQHD.PNG",
+  Sumari: "LoadingScreen_Sumari_DQHD.PNG",
+  Tallil: "LoadingScreen_Tallil_DQHD.PNG",
+  Yehorivka: "LoadingScreen_Yehorivka_DQHD.PNG",
+};
+const FACTION_FLAG_BY_CODE = {
+  ADF: "ADF.PNG",
+  AFU: "AFU.PNG",
+  BAF: "BAF.PNG",
+  CAF: "CAF.PNG",
+  CRF: "CRF.PNG",
+  GFI: "GFI.PNG",
+  IMF: "IMF.PNG",
+  MEA: "MEA.PNG",
+  MEI: "MEI.PNG",
+  PLA: "PLA.PNG",
+  PLAAGF: "PLAAGF.PNG",
+  PLANMC: "PLANMC.png",
+  RGF: "RGF.PNG",
+  TLF: "TLF.PNG",
+  USA: "USA.PNG",
+  USMC: "USMC.PNG",
+  VDV: "VDV.png",
+  WPMC: "WPMC.PNG",
+};
+const FACTION_GLOW_BY_CODE = {
+  ADF: ["#012169", "#e4002b"],
+  AFU: ["#0057b7", "#ffd700"],
+  BAF: ["#012169", "#c8102e"],
+  CAF: ["#ff0000", "#ffffff"],
+  CRF: ["#1f2937", "#f97316"],
+  GFI: ["#0f766e", "#fde047"],
+  IMF: ["#166534", "#dc2626"],
+  MEA: ["#b45309", "#111827"],
+  MEI: ["#166534", "#eab308"],
+  PLA: ["#de2910", "#ffde00"],
+  PLAAGF: ["#de2910", "#ffde00"],
+  PLANMC: ["#de2910", "#2563eb"],
+  RGF: ["#ffffff", "#0039a6", "#d52b1e"],
+  TLF: ["#e30a17", "#ffffff"],
+  USA: ["#3c3b6e", "#b22234"],
+  USMC: ["#b31942", "#facc15"],
+  VDV: ["#2563eb", "#22d3ee"],
+  WPMC: ["#111827", "#facc15"],
+};
+const sharpRequire = createRequire(import.meta.url);
+let sharpLoaderPromise = null;
+
+export function createAstrbotBridgeModule({ core, modules, config, logger }) {
+  const moduleLogger =
+    logger ??
+    core?.createLogger?.({
+      moduleId: MODULE_ID,
+      source: MODULE_ID,
+      channel: "module",
+    }) ??
+    core?.logger ??
+    console;
+
+  let runtimeConfig = readModuleConfig(config);
+
+  const api = {
+    getState() {
+      return buildState();
+    },
+
+    refreshConfig() {
+      runtimeConfig = readModuleConfig(config);
+      return buildState();
+    },
+
+    async query(input = {}) {
+      return buildQueryResult(input);
+    },
+
+    async action(input = {}) {
+      return performAction(input);
+    },
+
+    async resolveProfile(input = {}) {
+      return resolveOrBindProfile(input);
+    },
+
+    async queryMe(input = {}) {
+      return queryMe(input);
+    },
+
+    async queryMeSnapshot(input = {}) {
+      return queryMeSnapshot(input);
+    },
+
+    async queryServerInfoSnapshot(input = {}) {
+      return queryServerInfoSnapshot(input);
+    },
+
+    async unbindMe(input = {}) {
+      return unbindMe(input);
+    },
+  };
+
+  return {
+    manifest: {
+      id: MODULE_ID,
+      name: "AstrBot Bridge",
+      kind: "module",
+      version: "1.0.0",
+      description: "Machine-to-machine bridge for AstrBot clients.",
+    },
+    apiName: "astrbotBridge",
+    api,
+
+    async init() {
+      runtimeConfig = readModuleConfig(config);
+    },
+
+    async start() {
+      moduleLogger?.info?.(`[AstrBotBridge] started. enabled=${Boolean(runtimeConfig.enabled)} tokenConfigured=${Boolean(runtimeConfig.apiToken)}`);
+    },
+
+    async stop() {
+      moduleLogger?.info?.("[AstrBotBridge] stopped.");
+    },
+  };
+
+  function readModuleConfig(configManager) {
+    const current = configManager?.get?.("modules.astrbotBridge", {}) ?? {};
+    const allowedActions = Array.isArray(current.allowedActions) && current.allowedActions.length > 0
+      ? current.allowedActions.map((item) => String(item ?? "").trim()).filter(Boolean)
+      : [...DEFAULT_ALLOWED_ACTIONS];
+
+    return {
+      enabled: Boolean(current.enabled ?? false),
+      apiToken: String(current.apiToken ?? "").trim(),
+      trustedIps: normalizeList(current.trustedIps),
+      allowedActions,
+    };
+  }
+
+  function normalizeList(values) {
+    if (!Array.isArray(values)) return [];
+    return values.map((value) => String(value ?? "").trim()).filter(Boolean);
+  }
+
+  function buildState(extra = {}) {
+    return {
+      ok: true,
+      enabled: Boolean(runtimeConfig.enabled),
+      tokenConfigured: Boolean(runtimeConfig.apiToken),
+      trustedIps: [...runtimeConfig.trustedIps],
+      allowedActions: [...runtimeConfig.allowedActions],
+      ...extra,
+    };
+  }
+
+  function buildQueryResult(input = {}) {
+    const kind = String(input.kind ?? input.query ?? "snapshot").trim();
+    if (kind === "health") {
+      return {
+        ...buildState(),
+        data: {
+          status: "ok",
+          service: "BZSS Panel AstrBot Bridge",
+          time: new Date().toISOString(),
+          web: core?.webStatus?.getSnapshot?.() ?? null,
+        },
+      };
+    }
+
+    if (kind === "modules") {
+      return {
+        ...buildState(),
+        data: {
+          modules: buildModuleSummary(),
+        },
+      };
+    }
+
+    if (kind === "warmup") {
+      return {
+        ...buildState(),
+        data: {
+          warmup: core?.webStatus?.getWarmupState?.() ?? null,
+        },
+      };
+    }
+
+    if (isServerInfoQuery(kind)) {
+      return {
+        ...buildState(),
+        data: {
+          serverInfo: buildServerInfo(input),
+        },
+      };
+    }
+
+    if (kind === "me") {
+      return queryMe(input);
+    }
+
+    if (kind === "unbindMe") {
+      return unbindMe(input);
+    }
+
+    return {
+      ...buildState(),
+      data: {
+        snapshot: core?.webStatus?.getSnapshot?.() ?? null,
+        warmup: core?.webStatus?.getWarmupState?.() ?? null,
+      },
+    };
+  }
+
+  function buildModuleSummary() {
+    const summary = [];
+    for (const [name, moduleApi] of Object.entries(modules ?? {})) {
+      if (!moduleApi) continue;
+      summary.push({
+        name,
+        hasState: typeof moduleApi.getState === "function",
+        hasApi: typeof moduleApi === "object",
+      });
+    }
+    return summary.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function buildServerInfo(input = {}) {
+    const runtimeSnapshot = core?.runtimeState?.getAll?.() ?? null;
+    const runtimeServer = runtimeSnapshot?.server ?? null;
+    const runtimeMatch = core?.runtimeState?.getMatch?.() ?? null;
+    const runtimePlayers = core?.runtimeState?.getPlayers?.() ?? null;
+    const runtimeSquads = core?.runtimeState?.getSquads?.() ?? null;
+    const overview = getMatchOverview();
+    const webStatus = core?.webStatus?.getSnapshot?.() ?? {};
+    const matchState = overview?.matchState && typeof overview.matchState === "object" ? overview.matchState : {};
+    const status = overview?.status && typeof overview.status === "object" ? overview.status : webStatus;
+    const serverStatus = matchState.serverStatus && typeof matchState.serverStatus === "object" ? matchState.serverStatus : {};
+    const match = runtimeMatch?.match && typeof runtimeMatch.match === "object"
+      ? runtimeMatch.match
+      : {
+          ...(matchState.match && typeof matchState.match === "object" ? matchState.match : {}),
+          ...(overview?.match && typeof overview.match === "object" ? overview.match : {}),
+        };
+    const players = normalizeMatchPlayers(
+      Array.isArray(runtimePlayers?.active)
+        ? runtimePlayers.active
+        : Array.isArray(overview?.players)
+          ? overview.players
+          : Array.isArray(matchState.players?.list)
+            ? matchState.players.list
+            : Array.isArray(matchState.players)
+              ? matchState.players
+              : [],
+    );
+    const squads = normalizeMatchSquads(
+      Array.isArray(runtimeSquads?.list)
+        ? runtimeSquads.list
+        : Array.isArray(overview?.squads)
+          ? overview.squads
+          : Array.isArray(matchState.squads?.list)
+            ? matchState.squads.list
+            : Array.isArray(matchState.squads)
+              ? matchState.squads
+              : [],
+    );
+    const teams = buildServerInfoTeams(players, squads);
+    const currentPlayers = firstFiniteNumber(
+      players.length || null,
+      status.playerCount,
+      serverStatus.playerCount,
+      webStatus.playerCount,
+      matchState.playerCount,
+    ) ?? 0;
+    const maxPlayers = firstFiniteNumber(status.maxPlayers, serverStatus.maxPlayers, webStatus.maxPlayers, match.maxPlayers) ?? null;
+    const queueCount = firstFiniteNumber(status.queueCount, serverStatus.queueCount, webStatus.queueCount, matchState.queueCount) ?? 0;
+    const rconTimeSeconds = firstFiniteNumber(
+      status.rconTime,
+      status.playtime,
+      status.matchTimeSeconds,
+      serverStatus.rconTime,
+      serverStatus.playtime,
+      serverStatus.matchTimeSeconds,
+      match.rconTime,
+      match.playtime,
+    ) ?? 0;
+
+    return {
+      generatedAt: new Date().toISOString(),
+      source: runtimeSnapshot ? "runtimeState" : overview ? "matchState" : "webStatus",
+      server: {
+        serverId: firstText(runtimeServer?.serverId, runtimeMatch?.serverId, matchState.serverId, overview?.serverId, status.serverId, webStatus.serverId),
+        serverName: firstText(runtimeServer?.serverName, status.serverName, status.name, serverStatus.serverName, serverStatus.name, webStatus.serverName),
+        rcon: firstText(runtimeServer?.rconStatus?.status, runtimeMatch?.rconStatus?.status, matchState.rconStatus?.status, status.rcon, serverStatus.rcon, webStatus.rcon),
+      },
+      match: {
+        map: firstText(runtimeMatch?.server?.map, runtimeServer?.map, match.map, status.map, serverStatus.map, status.currentLayer, webStatus.map),
+        layer: firstText(runtimeMatch?.server?.layer, runtimeServer?.layer, match.layer, status.layer, status.currentLayer, serverStatus.layer, webStatus.layer),
+        mode: firstText(runtimeMatch?.server?.mode, runtimeServer?.mode, match.mode, match.gameMode, status.gameMode, status.mode, serverStatus.gameMode, webStatus.mode),
+        nextLayer: firstText(runtimeMatch?.server?.nextLayer, runtimeServer?.nextLayer, match.nextLayer, status.nextLayer, serverStatus.nextLayer, webStatus.nextLayer),
+        rconTimeSeconds,
+        rconTime: formatDurationClock(rconTimeSeconds),
+      },
+      population: {
+        players: firstFiniteNumber(runtimeServer?.playerCount, runtimeMatch?.server?.playerCount, currentPlayers) ?? currentPlayers,
+        maxPlayers: firstFiniteNumber(runtimeServer?.maxPlayers, runtimeMatch?.server?.maxPlayers, maxPlayers) ?? maxPlayers,
+        queue: firstFiniteNumber(runtimeServer?.queueCount, runtimeMatch?.server?.queueCount, queueCount) ?? queueCount,
+        text: maxPlayers ? `${currentPlayers}/${maxPlayers}` : String(currentPlayers),
+      },
+      teams,
+      commanders: Object.fromEntries(teams.map((team) => [String(team.teamId), team.commander])),
+      warmup: runtimeServer?.isWarmup != null
+        ? { isWarmup: Boolean(runtimeServer.isWarmup) }
+        : core?.webStatus?.getWarmupState?.() ?? null,
+      includePlayers: Boolean(input.includePlayers ?? input.players ?? false),
+      players: input.includePlayers || input.players ? players : undefined,
+    };
+  }
+
+  function getMatchOverview() {
+    const api = modules?.matchState?.api ?? modules?.matchState;
+    const overview = api?.getOverview?.();
+    if (overview) return overview;
+    const state = api?.getState?.();
+    if (!state) return null;
+    return {
+      status: core?.webStatus?.getSnapshot?.() ?? {},
+      matchState: state,
+      serverStatus: state.serverStatus,
+      match: state.match,
+      players: Array.isArray(state.players?.list) ? state.players.list : [],
+      squads: Array.isArray(state.squads?.list) ? state.squads.list : [],
+    };
+  }
+
+  function normalizeMatchPlayers(players = []) {
+    return (Array.isArray(players) ? players : []).map((player) => ({
+      playerId: player?.playerID ?? player?.playerId ?? player?.id ?? null,
+      name: firstText(player?.name, player?.playerName, "Unknown"),
+      teamId: nullableNumber(player?.teamID ?? player?.teamId),
+      squadId: nullableNumber(player?.squadID ?? player?.squadId),
+      role: firstText(player?.role, player?.roleName, ""),
+      isLeader: Boolean(player?.isLeader ?? player?.leader),
+      isCommander: Boolean(player?.isCommander ?? player?.commander),
+      steam64: firstText(player?.steamID, player?.steamId, player?.steam64ID, player?.steam64, ""),
+      eosID: firstText(player?.eosID, player?.eosId, player?.EOSID, ""),
+      steamAvatar: firstText(player?.steamAvatar, player?.steam_avatar, player?.avatar, player?.steamPlaytime?.steamAvatar, player?.steamPlaytime?.steam_avatar),
+      gameSeconds: firstFiniteNumber(player?.gameSeconds, player?.playtimeSeconds, player?.steamPlaytime?.gameSeconds, player?.steamPlaytime?.game_seconds) ?? 0,
+    }));
+  }
+
+  function normalizeMatchSquads(squads = []) {
+    return (Array.isArray(squads) ? squads : []).map((squad) => ({
+      teamId: nullableNumber(squad?.teamID ?? squad?.teamId),
+      squadId: nullableNumber(squad?.squadID ?? squad?.squadId),
+      teamName: firstText(squad?.teamName, squad?.raw?.teamName, squad?.raw?.faction, squad?.raw?.factionName, squad?.raw?.battlegroup, squad?.raw?.battleGroup, ""),
+      squadName: firstText(squad?.squadName, squad?.name, squad?.raw?.squadName, squad?.raw?.name, ""),
+      size: nullableNumber(squad?.size ?? squad?.memberCount),
+    }));
+  }
+
+  function buildServerInfoTeams(players, squads) {
+    const teamIds = new Set();
+    for (const player of players) if (player.teamId != null) teamIds.add(player.teamId);
+    for (const squad of squads) if (squad.teamId != null) teamIds.add(squad.teamId);
+    if (!teamIds.size) {
+      teamIds.add(1);
+      teamIds.add(2);
+    }
+
+    return [...teamIds].sort((a, b) => Number(a) - Number(b)).map((teamId) => {
+      const teamPlayers = players.filter((player) => Number(player.teamId) === Number(teamId));
+      const teamSquads = squads.filter((squad) => Number(squad.teamId) === Number(teamId));
+      const teamName = resolveTeamName(teamSquads, teamId);
+      const commander = resolveCommander(teamPlayers, teamSquads);
+      return {
+        teamId,
+        teamName,
+        factionCode: resolveFactionCode(teamName),
+        playerCount: teamPlayers.length,
+        squadCount: teamSquads.length,
+        commander,
+      };
+    });
+  }
+
+  function resolveTeamName(teamSquads, teamId) {
+    const direct = teamSquads.map((squad) => squad.teamName).find(Boolean);
+    if (direct) return direct;
+    const squadNameFaction = teamSquads.map((squad) => squad.squadName).find((name) => resolveFactionCode(name));
+    return squadNameFaction || `Team ${teamId}`;
+  }
+
+  function resolveCommander(teamPlayers, teamSquads) {
+    const commandSquadIds = teamSquads
+      .filter((squad) => isCommandSquadName(squad.squadName) || isCommandSquadId(squad.squadId))
+      .map((squad) => String(squad.squadId ?? "").trim().toLowerCase())
+      .filter(Boolean);
+    const commandPlayers = commandSquadIds.length
+      ? teamPlayers.filter((player) => commandSquadIds.includes(String(player.squadId ?? "").trim().toLowerCase()))
+      : [];
+    const commander = commandPlayers.find((player) => player.isLeader && player.name)
+      ?? commandPlayers.find((player) => isCommanderRole(player) && player.name)
+      ?? commandPlayers.find((player) => player.name)
+      ?? teamPlayers.find((player) => player.isCommander && player.name)
+      ?? teamPlayers.find((player) => isCommanderRole(player) && player.name)
+      ?? null;
+    return commander
+      ? {
+          name: commander.name,
+          steam64: commander.steam64,
+          eosID: commander.eosID,
+          role: commander.role,
+          gameSeconds: commander.gameSeconds,
+          gameTime: formatDurationLong(commander.gameSeconds),
+          steamAvatar: commander.steamAvatar,
+        }
+      : null;
+  }
+
+  async function performAction(input = {}) {
+    const name = String(input.name ?? input.action ?? "").trim();
+    if (!name) {
+      return createActionError(400, "MissingAction", "Action name is required.");
+    }
+
+    if (!runtimeConfig.allowedActions.includes(name)) {
+      return createActionError(403, "ActionNotAllowed", `Action is not allowed: ${name}`);
+    }
+
+    if (name === "toggleWarmup") {
+      if (!core?.webStatus?.setWarmup) {
+        return createActionError(503, "WarmupUnavailable", "Warmup control is unavailable.");
+      }
+
+      const current = Boolean(core.webStatus.getWarmupState?.().isWarmup);
+      const result = await core.webStatus.setWarmup(!current, {
+        updatedBy: "astrbot-bridge",
+      });
+
+      return {
+        ok: true,
+        data: {
+          action: name,
+          warmup: result,
+        },
+      };
+    }
+
+    if (name === "bindProfile") {
+      return bindProfile(input);
+    }
+
+    if (name === "setWarmup") {
+      if (!core?.webStatus?.setWarmup) {
+        return createActionError(503, "WarmupUnavailable", "Warmup control is unavailable.");
+      }
+
+      const enabled = Boolean(input.enabled ?? input.value ?? input.warmup);
+      const result = await core.webStatus.setWarmup(enabled, {
+        updatedBy: "astrbot-bridge",
+      });
+
+      return {
+        ok: true,
+        data: {
+          action: name,
+          warmup: result,
+        },
+      };
+    }
+
+    return createActionError(400, "UnsupportedAction", `Unsupported action: ${name}`);
+  }
+
+  async function bindProfile(input = {}) {
+    const qqNumber = String(input.qqNumber ?? input.qq ?? input.qq_number ?? "").trim();
+    const qqName = String(input.qqName ?? input.qq_name ?? input.qqNick ?? "").trim();
+    const steam64 = normalizeSteam64(input.steam64 ?? input.steamID ?? input.steamId ?? input.steam64ID);
+
+    if (!qqNumber) return createActionError(400, "MissingQQNumber", "QQ number is required.");
+    if (!qqName) return createActionError(400, "MissingQQName", "QQ name is required.");
+    if (!steam64) return createActionError(400, "MissingSteam64", "Steam64 is required.");
+
+    const playerDatabase = modules?.playerDatabase ?? null;
+    if (!playerDatabase?.findByIdentity || !playerDatabase?.bindQQToPlayer) {
+      return createActionError(503, "PlayerDatabaseUnavailable", "Player database is unavailable.");
+    }
+
+    const player = await playerDatabase.findByIdentity({ steamID: steam64 });
+    if (!player?.id) return createActionError(404, "PlayerNotFound", "Player not found.");
+    if (player.qq_number && player.qq_number !== qqNumber) {
+      return createActionError(409, "QQAlreadyBound", "This player already has another QQ binding.");
+    }
+
+    const updated = await playerDatabase.bindQQToPlayer(player.id, { qqNumber, qqName });
+    const playerInfo = serializePlayer(updated);
+    return {
+      ok: true,
+      data: {
+        action: "bindProfile",
+        message: buildBindMessage(playerInfo, qqName, qqNumber),
+        player: playerInfo,
+        bound: true,
+      },
+    };
+  }
+
+  async function resolveOrBindProfile(input = {}) {
+    const qqNumber = String(input.qqNumber ?? input.qq ?? input.qq_number ?? "").trim();
+    const qqName = String(input.qqName ?? input.qq_name ?? input.qqNick ?? "").trim();
+    const steam64 = normalizeSteam64(input.steam64 ?? input.steamID ?? input.steamId ?? input.steam64ID);
+
+    if (!qqNumber) return createActionError(400, "MissingQQNumber", "QQ number is required.");
+    if (!qqName) return createActionError(400, "MissingQQName", "QQ name is required.");
+
+    const playerDatabase = modules?.playerDatabase ?? null;
+    if (!playerDatabase?.findByIdentity || !playerDatabase?.bindQQToPlayer) {
+      return createActionError(503, "PlayerDatabaseUnavailable", "Player database is unavailable.");
+    }
+
+    let player = await playerDatabase.findByIdentity({ qqNumber });
+    if (!player && steam64) {
+      player = await playerDatabase.findByIdentity({ steamID: steam64 });
+    }
+
+    if (!player?.id) return createActionError(404, "PlayerNotFound", "Player not found.");
+    if (player.qq_number && player.qq_number !== qqNumber) {
+      return createActionError(409, "QQAlreadyBound", "This player already has another QQ binding.");
+    }
+
+    const updated = await playerDatabase.bindQQToPlayer(player.id, { qqNumber, qqName });
+    const playerInfo = serializePlayer(updated);
+    return {
+      message: buildBindMessage(playerInfo, qqName, qqNumber),
+      player: playerInfo,
+      bound: true,
+    };
+  }
+
+  async function queryMe(input = {}) {
+    const qqNumber = String(input.qqNumber ?? input.qq ?? input.qq_number ?? "").trim();
+    const qqName = String(input.qqName ?? input.qq_name ?? input.qqNick ?? "").trim();
+    if (!qqNumber) return createActionError(400, "MissingQQNumber", "QQ number is required.");
+    if (!qqName) return createActionError(400, "MissingQQName", "QQ name is required.");
+
+    const playerDatabase = modules?.playerDatabase ?? null;
+    if (!playerDatabase?.findByIdentity || !playerDatabase?.getPlayerDetail) {
+      return createActionError(503, "PlayerDatabaseUnavailable", "Player database is unavailable.");
+    }
+
+    const player = await playerDatabase.findByIdentity({ qqNumber });
+    if (!player?.id) return createActionError(404, "PlayerNotFound", "QQ is not bound to any player.");
+
+    const updated = await playerDatabase.bindQQToPlayer(player.id, { qqNumber, qqName });
+    const detail = await playerDatabase.getPlayerDetail(player.id);
+    const playerInfo = serializePlayer(updated);
+    const sessionSeconds = Number(detail?.summary?.gameSeconds ?? detail?.summary?.steamGameSeconds ?? playerInfo?.gameSeconds ?? 0);
+
+    return {
+      ok: true,
+      data: {
+        action: "queryMe",
+        player: {
+          ...playerInfo,
+          qqNumber,
+          qqName,
+          gameSeconds: sessionSeconds,
+          gameHours: Number((sessionSeconds / 3600).toFixed(2)),
+        },
+        detail,
+        message: buildMyInfoMessage(playerInfo, sessionSeconds),
+      },
+    };
+  }
+
+  async function queryMeSnapshot(input = {}) {
+    const result = await queryMe(input);
+    const player = result?.data?.player ?? null;
+    if (!player) return createActionError(404, "PlayerNotFound", "QQ is not bound to any player.");
+
+    const detail = result?.data?.detail ?? null;
+    const sessionSeconds = Number(player.gameSeconds ?? detail?.summary?.gameSeconds ?? 0);
+    const png = await renderPlayerSnapshotPng({
+      qqNumber: player.qqNumber,
+      qqName: player.qqName,
+      gameName: player.gameName ?? player.name,
+      steam64: player.steam64,
+      eosID: player.eosID,
+      steamAvatar: player.steamAvatar ?? detail?.player?.steam_avatar ?? detail?.player?.steamAvatar ?? null,
+      gameSeconds: sessionSeconds,
+      gameHours: Number((sessionSeconds / 3600).toFixed(2)),
+      updatedAt: player.updatedAt,
+    });
+
+    return {
+      ok: true,
+      contentType: "image/png",
+      fileName: `player-snapshot-${sanitizeFileToken(player.qqNumber ?? player.steam64 ?? player.id ?? "unknown")}.png`,
+      player,
+      png,
+    };
+  }
+
+  async function queryServerInfoSnapshot(input = {}) {
+    const serverInfo = buildServerInfo(input);
+    let png = null;
+    if (!Buffer.isBuffer(png) || !png.length) {
+      try {
+        png = await renderServerInfoPng(serverInfo);
+      } catch (error) {
+        return {
+          ok: false,
+          error: "SERVER_INFO_SNAPSHOT_FAILED",
+          message: String(error?.message ?? error ?? "Failed to render server info snapshot."),
+          serverInfo,
+        };
+      }
+    }
+
+    const contentType = "image/png";
+    const fileName = `server-info-${sanitizeFileToken(serverInfo?.server?.serverId ?? serverInfo?.server?.serverName ?? "snapshot")}.png`;
+    const filePath = await persistServerInfoSnapshot(png, fileName);
+    return {
+      ok: true,
+      contentType,
+      fileName,
+      file_path: filePath,
+      filePath,
+      serverInfo,
+      png,
+    };
+  }
+
+  async function unbindMe(input = {}) {
+    const qqNumber = String(input.qqNumber ?? input.qq ?? input.qq_number ?? "").trim();
+    const qqName = String(input.qqName ?? input.qq_name ?? input.qqNick ?? "").trim();
+    if (!qqNumber) return createActionError(400, "MissingQQNumber", "QQ number is required.");
+    if (!qqName) return createActionError(400, "MissingQQName", "QQ name is required.");
+
+    const playerDatabase = modules?.playerDatabase ?? null;
+    if (!playerDatabase?.findByIdentity || !playerDatabase?.unbindQQFromPlayer) {
+      return createActionError(503, "PlayerDatabaseUnavailable", "Player database is unavailable.");
+    }
+
+    const player = await playerDatabase.findByIdentity({ qqNumber });
+    if (!player?.id) return createActionError(404, "PlayerNotFound", "QQ is not bound to any player.");
+
+    const updated = await playerDatabase.unbindQQFromPlayer(player.id);
+    const playerInfo = serializePlayer(updated);
+    return {
+      ok: true,
+      data: {
+        action: "unbindMe",
+        message: buildUnbindMessage(playerInfo, qqName, qqNumber),
+        player: playerInfo,
+        unbound: true,
+      },
+    };
+  }
+
+  function createActionError(statusCode, code, message) {
+    const error = new Error(message);
+    error.statusCode = statusCode;
+    error.code = code;
+    throw error;
+  }
+
+  async function persistServerInfoSnapshot(buffer, fileName) {
+    const safeFileName = String(fileName ?? "server-info.png").trim() || "server-info.png";
+    await fs.mkdir(SERVER_INFO_SNAPSHOT_CACHE_DIR, { recursive: true });
+    const tempFilePath = path.join(
+      SERVER_INFO_SNAPSHOT_CACHE_DIR,
+      `${safeFileName}.${process.pid}.${Date.now()}.tmp`,
+    );
+    const finalFilePath = path.join(SERVER_INFO_SNAPSHOT_CACHE_DIR, safeFileName);
+    await fs.writeFile(tempFilePath, buffer);
+    await fs.rm(finalFilePath, { force: true });
+    await fs.rename(tempFilePath, finalFilePath);
+    return finalFilePath;
+  }
+
+  function normalizeSteam64(value) {
+    const text = String(value ?? "").trim();
+    return /^\d{17}$/.test(text) ? text : "";
+  }
+
+  function isServerInfoQuery(kind) {
+    const text = String(kind ?? "").trim().toLowerCase();
+    return text === "serverinfo" || text === "server_info" || text === "server-info" || text === "server";
+  }
+
+  function firstText(...values) {
+    for (const value of values) {
+      const text = value === null || value === undefined ? "" : String(value).trim();
+      if (text) return text;
+    }
+    return "";
+  }
+
+  function firstFiniteNumber(...values) {
+    for (const value of values) {
+      const number = Number(value);
+      if (Number.isFinite(number)) return number;
+    }
+    return null;
+  }
+
+  function nullableNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  }
+
+  function formatDurationClock(seconds) {
+    const total = Math.max(0, Math.floor(Number(seconds ?? 0) || 0));
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const secs = total % 60;
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  }
+
+  function formatDurationLong(seconds) {
+    const total = Math.max(0, Math.floor(Number(seconds ?? 0) || 0));
+    if (!total) return "0m";
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const secs = total % 60;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    if (minutes > 0) return `${minutes}m ${secs}s`;
+    return `${secs}s`;
+  }
+
+  function isCommandSquadName(value) {
+    const name = String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+    return name === "command squad" || name === "cmd" || name === "command" || /\bcommand\s*squad\b/i.test(name);
+  }
+
+  function isCommandSquadId(value) {
+    const id = String(value ?? "").trim().toLowerCase();
+    return id === "10" || id === "cmd" || id === "command";
+  }
+
+  function isCommanderRole(player) {
+    const role = String(player?.role ?? "").trim().toLowerCase();
+    return role.includes("commander") || role === "cmd" || role.includes(" cmd");
+  }
+
+  function resolveFactionCode(teamName) {
+    const normalized = String(teamName ?? "").trim().toLowerCase();
+    if (!normalized) return null;
+    const rules = [
+      ["ADF", ["adf", "australian"]],
+      ["AFU", ["afu", "ukraine", "ukrainian"]],
+      ["BAF", ["baf", "british", "uk armed forces"]],
+      ["CAF", ["caf", "canadian", "canada"]],
+      ["CRF", ["crf"]],
+      ["GFI", ["gfi", "german", "federal"]],
+      ["IMF", ["imf", "militia"]],
+      ["MEA", ["mea", "middle east", "arab", "insurgent"]],
+      ["MEI", ["mei", "irregular"]],
+      ["PLA", ["pla", "people's liberation", "chinese", "china"]],
+      ["PLAAGF", ["plaagf", "army group"]],
+      ["PLANMC", ["planmc", "marine corps", "naval infantry"]],
+      ["RGF", ["rgf", "russian ground", "russian", "combined arms army"]],
+      ["TLF", ["tlf", "turkish", "turkey"]],
+      ["USA", ["usa", "us army", "american", "united states", "u.s."]],
+      ["USMC", ["usmc", "marines", "marine regiment", "marine"]],
+      ["VDV", ["vdv", "airborne"]],
+      ["WPMC", ["wpmc", "private military", "pmc"]],
+    ];
+    for (const [code, terms] of rules) {
+      if (terms.some((term) => normalized.includes(term))) return code;
+    }
+    return null;
+  }
+
+  function serializePlayer(player) {
+    if (!player) return null;
+    return {
+      id: player.id,
+      name: player.current_name ?? null,
+      gameName: player.current_name ?? null,
+      steam64: player.steam_id ?? null,
+      eosID: player.eos_id ?? null,
+      steamAvatar: player.steam_avatar ?? player.steamAvatar ?? null,
+      qqNumber: player.qq_number ?? null,
+      qqName: player.qq_name ?? null,
+      qqBoundAt: player.qq_bound_at ?? null,
+      updatedAt: player.updated_at ?? null,
+    };
+  }
+
+  function buildBindMessage(player, qqName, qqNumber) {
+    const gameName = String(player?.gameName ?? player?.name ?? player?.steam64 ?? "未知玩家").trim();
+    return `已成功为 ${qqName}（${qqNumber}）绑定至 ${gameName}（${player?.steam64 ?? "未知Steam64"}）`;
+  }
+
+  function buildMyInfoMessage(player, gameSeconds) {
+    const gameName = String(player?.gameName ?? player?.name ?? "未知玩家").trim();
+    const steam64 = String(player?.steam64 ?? "未知Steam64").trim();
+    const eosID = String(player?.eosID ?? "未知EOSID").trim();
+    const hours = Number(gameSeconds || 0) / 3600;
+    return `玩家信息：${gameName} | Steam64: ${steam64} | EOS ID: ${eosID} | 游戏时长: ${hours.toFixed(2)} 小时`;
+  }
+
+  function buildUnbindMessage(player, qqName, qqNumber) {
+    const gameName = String(player?.gameName ?? player?.name ?? "未知玩家").trim();
+    return `已成功解除 ${qqName}（${qqNumber}）与 ${gameName} 的绑定`;
+  }
+}
+
+export { handleAstrbotBridgeRoutes };
+
+function sanitizeFileToken(value) {
+  return String(value ?? "unknown").replace(/[^a-zA-Z0-9._-]+/g, "_");
+}
+
+function formatSnapshotHours(gameSeconds, gameHours) {
+  const numericHours = Number.isFinite(Number(gameHours)) ? Number(gameHours) : Number(gameSeconds || 0) / 3600;
+  return `${numericHours.toFixed(2)} 小时`;
+}
+
+function formatSnapshotTime(value) {
+  if (!value) return "未知";
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return "未知";
+  return new Date(numeric).toLocaleString("zh-CN", { hour12: false });
+}
+
+function escapeXml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+async function renderPlayerSnapshotPng(payload) {
+  const avatarDataUrl = await resolveAvatarDataUrl(payload.steamAvatar);
+  const sharp = await loadSharp();
+  const svg = renderPlayerSnapshotSvg({
+    ...payload,
+    avatarDataUrl,
+  });
+  return sharp(Buffer.from(svg, "utf8"), { density: 144 }).png().toBuffer();
+}
+
+async function renderServerInfoPng(serverInfo) {
+  const sharp = await loadSharp();
+  const width = 1600;
+  const height = 900;
+  const backgroundPath = resolveServerInfoBackgroundAssetPath(serverInfo?.match?.map, serverInfo?.match?.layer);
+  const backgroundBuffer = backgroundPath ? await readBinaryAsset(backgroundPath) : null;
+  const overlaySvg = await renderServerInfoP2Svg(serverInfo);
+  let image = sharp({
+    create: {
+      width,
+      height,
+      channels: 4,
+      background: "#020617",
+    },
+  });
+  if (backgroundBuffer?.length) {
+    const background = await sharp(backgroundBuffer)
+      .resize(width, height, { fit: "cover", position: "centre" })
+      .modulate({ brightness: 0.9, saturation: 0.9 })
+      .toBuffer();
+    image = image.composite([{ input: background, blend: "over" }]);
+  }
+  return image
+    .composite([{ input: Buffer.from(overlaySvg, "utf8") }])
+    .png()
+    .toBuffer();
+}
+
+function renderPlayerSnapshotSvg(payload) {
+  const width = 1120;
+  const height = 620;
+  const rows = [
+    ["玩家名字", payload.gameName ?? "未知玩家"],
+    ["Steam64", payload.steam64 ?? "未绑定"],
+    ["EOS ID", payload.eosID ?? "未记录"],
+    ["游戏时长", formatSnapshotHours(payload.gameSeconds, payload.gameHours)],
+    ["QQ 名", payload.qqName ?? "未知"],
+    ["QQ 号", payload.qqNumber ?? "未知"],
+    ["更新时间", formatSnapshotTime(payload.updatedAt)],
+  ];
+  const rowY = [230, 292, 354, 416, 478, 540, 584];
+
+  const rowSvg = rows.map(([label, value], index) => `
+    <text x="76" y="${rowY[index]}" font-size="26" font-weight="600" fill="#94a3b8">${escapeXml(label)}</text>
+    <text x="290" y="${rowY[index]}" font-size="28" font-weight="700" fill="#e2e8f0">${escapeXml(value)}</text>
+  `).join("");
+
+  const avatarSvg = payload.avatarDataUrl
+    ? `
+      <defs>
+        <clipPath id="avatarClip">
+          <circle cx="888" cy="324" r="92" />
+        </clipPath>
+      </defs>
+      <circle cx="888" cy="324" r="104" fill="#0f172a" stroke="#7dd3fc" stroke-width="6" filter="url(#shadow)"/>
+      <image x="796" y="232" width="184" height="184" href="${payload.avatarDataUrl}" clip-path="url(#avatarClip)" preserveAspectRatio="xMidYMid slice"/>
+    `
+    : `
+      <circle cx="888" cy="324" r="104" fill="#0f172a" stroke="#7dd3fc" stroke-width="6" filter="url(#shadow)"/>
+      <text x="888" y="340" text-anchor="middle" font-size="76" font-weight="800" fill="#e0f2fe">${escapeXml(String(payload.gameName ?? "?").trim().slice(0, 1) || "?")}</text>
+    `;
+
+  return `
+  <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <defs>
+      <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#0f172a" />
+        <stop offset="55%" stop-color="#111827" />
+        <stop offset="100%" stop-color="#1d4ed8" />
+      </linearGradient>
+      <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#22d3ee" />
+        <stop offset="100%" stop-color="#38bdf8" />
+      </linearGradient>
+      <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+        <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#020617" flood-opacity="0.45"/>
+      </filter>
+    </defs>
+    <rect width="${width}" height="${height}" rx="36" fill="url(#bg)"/>
+    <circle cx="980" cy="110" r="170" fill="#38bdf8" opacity="0.12"/>
+    <circle cx="130" cy="560" r="220" fill="#06b6d4" opacity="0.08"/>
+    <rect x="34" y="34" width="${width - 68}" height="${height - 68}" rx="28" fill="#0b1120" fill-opacity="0.56" stroke="#334155" stroke-opacity="0.85"/>
+    <rect x="58" y="56" width="280" height="10" rx="5" fill="url(#accent)"/>
+    <text x="72" y="120" font-size="52" font-weight="800" fill="#f8fafc">BZSS 玩家快照</text>
+    <text x="74" y="168" font-size="26" font-weight="500" fill="#93c5fd">AstrBot Bridge / 玩家信息图片回执</text>
+    <rect x="700" y="82" width="320" height="72" rx="18" fill="#082f49" fill-opacity="0.75" stroke="#38bdf8" stroke-opacity="0.35"/>
+    <text x="728" y="128" font-size="24" font-weight="700" fill="#bae6fd">已绑定玩家信息</text>
+    ${avatarSvg}
+    ${rowSvg}
+  </svg>`;
+}
+
+function renderServerInfoSvg(serverInfo) {
+  return renderServerInfoP2Svg(serverInfo);
+  const width = 1280;
+  const height = 760;
+  const serverName = String(serverInfo?.server?.serverName ?? serverInfo?.server?.serverId ?? "BZSS Server").trim();
+  const serverId = String(serverInfo?.server?.serverId ?? "unknown").trim();
+  const map = String(serverInfo?.match?.map ?? "未知地图").trim();
+  const layer = String(serverInfo?.match?.layer ?? "未知层级").trim();
+  const mode = String(serverInfo?.match?.mode ?? "未知模式").trim();
+  const rconTime = String(serverInfo?.match?.rconTime ?? "00:00:00").trim();
+  const population = serverInfo?.population ?? {};
+  const teams = Array.isArray(serverInfo?.teams) ? serverInfo.teams : [];
+  const warmup = Boolean(serverInfo?.warmup?.isWarmup);
+  const generatedAt = String(serverInfo?.generatedAt ?? "").trim();
+
+  const teamCards = teams.slice(0, 2).map((team, index) => {
+    const teamX = 72 + index * 566;
+    const teamY = 500;
+    const commander = team.commander?.name ?? "Unknown";
+    return `
+      <rect x="${teamX}" y="${teamY}" width="526" height="168" rx="24" fill="#0b1120" fill-opacity="0.70" stroke="#334155" stroke-opacity="0.9"/>
+      <rect x="${teamX + 20}" y="${teamY + 20}" width="84" height="84" rx="18" fill="${index === 0 ? "#1e3a8a" : "#9a3412"}" fill-opacity="0.9"/>
+      <text x="${teamX + 62}" y="${teamY + 74}" text-anchor="middle" font-size="34" font-weight="900" fill="#f8fafc">${escapeXml(team.factionCode || "UNK")}</text>
+      <text x="${teamX + 128}" y="${teamY + 52}" font-size="20" font-weight="800" fill="#e2e8f0">${escapeXml(team.teamName || `Team ${team.teamId ?? index + 1}`)}</text>
+      <text x="${teamX + 128}" y="${teamY + 84}" font-size="18" font-weight="700" fill="#93c5fd">Players ${escapeXml(team.playerCount ?? 0)} / Squads ${escapeXml(team.squadCount ?? 0)}</text>
+      <text x="${teamX + 128}" y="${teamY + 118}" font-size="16" font-weight="600" fill="#94a3b8">Commander: ${escapeXml(commander)}</text>
+    `;
+  }).join("");
+
+  const metrics = [
+    { label: "玩家", value: `${population.players ?? 0}` },
+    { label: "上限", value: `${population.maxPlayers ?? "?"}` },
+    { label: "队列", value: `${population.queue ?? 0}` },
+    { label: "阵营", value: `${teams.length}` },
+  ];
+  const metricCards = metrics.map((metric, index) => {
+    const mx = 72 + index * 286;
+    return `
+      <rect x="${mx}" y="288" width="262" height="108" rx="20" fill="#07111f" fill-opacity="0.75" stroke="#1f2937" stroke-opacity="0.9"/>
+      <text x="${mx + 20}" y="320" font-size="16" font-weight="700" fill="#94a3b8">${escapeXml(metric.label)}</text>
+      <text x="${mx + 20}" y="364" font-size="40" font-weight="900" fill="#f8fafc">${escapeXml(metric.value)}</text>
+    `;
+  }).join("");
+
+  return `
+  <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <defs>
+      <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#07111f" />
+        <stop offset="55%" stop-color="#111827" />
+        <stop offset="100%" stop-color="#14532d" />
+      </linearGradient>
+      <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#22c55e" />
+        <stop offset="100%" stop-color="#38bdf8" />
+      </linearGradient>
+      <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+        <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#020617" flood-opacity="0.45"/>
+      </filter>
+    </defs>
+    <rect width="${width}" height="${height}" rx="36" fill="url(#bg)"/>
+    <circle cx="1080" cy="120" r="180" fill="#22c55e" opacity="0.12"/>
+    <circle cx="150" cy="640" r="250" fill="#38bdf8" opacity="0.08"/>
+    <rect x="34" y="34" width="${width - 68}" height="${height - 68}" rx="28" fill="#0b1120" fill-opacity="0.56" stroke="#334155" stroke-opacity="0.85"/>
+    <rect x="58" y="56" width="320" height="10" rx="5" fill="url(#accent)"/>
+    <text x="72" y="118" font-size="52" font-weight="800" fill="#f8fafc">BZSS 服务器信息</text>
+    <text x="74" y="166" font-size="24" font-weight="500" fill="#93c5fd">${escapeXml(serverName)} / ${escapeXml(serverId)}</text>
+    <rect x="72" y="196" width="1136" height="78" rx="18" fill="#082f49" fill-opacity="0.72" stroke="#38bdf8" stroke-opacity="0.35"/>
+    <text x="96" y="230" font-size="22" font-weight="700" fill="#bae6fd">Map: ${escapeXml(map)}</text>
+    <text x="96" y="258" font-size="18" font-weight="600" fill="#dbeafe">Layer: ${escapeXml(layer)}   Mode: ${escapeXml(mode)}   RCON: ${escapeXml(rconTime)}   Warmup: ${warmup ? "ON" : "OFF"}</text>
+    ${metricCards}
+    <rect x="72" y="424" width="1136" height="58" rx="18" fill="#052e16" fill-opacity="0.72" stroke="#22c55e" stroke-opacity="0.35"/>
+    <text x="96" y="461" font-size="18" font-weight="700" fill="#bbf7d0">Generated ${escapeXml(generatedAt || new Date().toISOString())}   Source ${escapeXml(serverInfo?.source ?? "unknown")}</text>
+    ${teamCards}
+  </svg>`;
+}
+
+async function renderServerInfoP2Svg(serverInfo) {
+  const width = 1600;
+  const height = 900;
+  const serverName = String(serverInfo?.server?.serverName ?? serverInfo?.server?.serverId ?? "BZSS Server").trim();
+  const serverId = String(serverInfo?.server?.serverId ?? "unknown").trim();
+  const map = String(serverInfo?.match?.map ?? "Unknown Map").trim();
+  const layer = String(serverInfo?.match?.layer ?? "Unknown Layer").trim();
+  const mode = String(serverInfo?.match?.mode ?? "Unknown Mode").trim();
+  const rconTime = String(serverInfo?.match?.rconTime ?? "00:00:00").trim();
+  const population = serverInfo?.population ?? {};
+  const warmup = Boolean(serverInfo?.warmup?.isWarmup);
+  const generatedAt = String(serverInfo?.generatedAt ?? "").trim();
+  const teams = normalizeServerInfoTeams(Array.isArray(serverInfo?.teams) ? serverInfo.teams : []);
+  const orderedTeams = teams.slice(0, 2).sort((left, right) => Number(left.teamId ?? 0) - Number(right.teamId ?? 0));
+  const teamPanels = await Promise.all(orderedTeams.map(async (team, index) => ({
+    ...team,
+    factionCode: team.factionCode || await resolveFactionCodeFromTeamName(team.teamName) || "",
+    flagDataUri: await resolveImageDataUri(await resolveFactionFlagAssetPath(team.teamName)),
+    panelIndex: index,
+  })));
+
+  const topStats = [
+    { x: 1104, label: "RCON TIME", value: rconTime, tone: "#8dd5ff" },
+    { x: 1288, label: "SERVER", value: population.text ?? `${population.players ?? 0}/${population.maxPlayers ?? "?"}`, tone: "#cbd5e1" },
+    { x: 1472, label: "QUEUE", value: String(population.queue ?? 0), tone: "#facc15" },
+  ];
+  const metricCards = topStats.map((stat) => `
+    <path d="M ${stat.x} 64 H ${stat.x + 132} L ${stat.x + 148} 80 V 120 H ${stat.x} Z" fill="rgba(2,6,23,0.48)" stroke="${stat.tone}" stroke-opacity="0.55" stroke-width="1.5"/>
+    <path d="M ${stat.x + 10} 72 H ${stat.x + 50}" stroke="${stat.tone}" stroke-width="2"/>
+    <text x="${stat.x + 12}" y="93" class="chip-label">${escapeXml(stat.label)}</text>
+    <text x="${stat.x + 12}" y="119" class="chip-value mono">${escapeXml(stat.value)}</text>
+  `).join("");
+  const teamSvg = teamPanels.map((team, index) => renderServerInfoTeamPanel(team, index)).join("");
+  return `
+  <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <defs>
+      <linearGradient id="bgFallback" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#09111f" />
+        <stop offset="55%" stop-color="#111827" />
+        <stop offset="100%" stop-color="#14532d" />
+      </linearGradient>
+      <linearGradient id="topPlate" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#020617" stop-opacity="0.86" />
+        <stop offset="50%" stop-color="#0f172a" stop-opacity="0.58" />
+        <stop offset="100%" stop-color="#020617" stop-opacity="0.82" />
+      </linearGradient>
+      <linearGradient id="teamShade" x1="0%" y1="0%" x2="1" y2="0">
+        <stop offset="0%" stop-color="#020617" stop-opacity="0.58" />
+        <stop offset="58%" stop-color="#020617" stop-opacity="0.32" />
+        <stop offset="100%" stop-color="#020617" stop-opacity="0.06" />
+      </linearGradient>
+      <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+        <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#020617" flood-opacity="0.45"/>
+      </filter>
+      <style><![CDATA[
+        text{font-family:'Bahnschrift SemiCondensed','Bahnschrift','Agency FB','Arial Narrow','Microsoft YaHei',sans-serif;fill:#eef4ff;letter-spacing:.2px}
+        .mono{font-family:'Cascadia Mono','Consolas',monospace}
+        .eyebrow{font-size:13px;fill:#b8c7d8;font-weight:800}
+        .title{font-size:48px;font-weight:900;fill:#ffffff}
+        .sub{font-size:17px;fill:#d7e2ee}
+        .meta{font-size:12px;fill:#a8b8c8}
+        .chip-label{font-size:10px;fill:#b7c4d2;font-weight:900}
+        .chip-value{font-size:23px;fill:#ffffff;font-weight:900}
+      ]]></style>
+    </defs>
+    <rect width="${width}" height="${height}" fill="#020617" fill-opacity="0.42"/>
+    <circle cx="1370" cy="180" r="280" fill="#22c55e" opacity="0.08"/>
+    <circle cx="210" cy="782" r="300" fill="#38bdf8" opacity="0.08"/>
+    <path d="M48 44 H1362 L1412 94 H1552 V162 H48 Z" fill="url(#topPlate)" filter="url(#softShadow)"/>
+    <path d="M48 44 H1362 L1412 94 H1552" fill="none" stroke="#c9d8ea" stroke-opacity="0.24" stroke-width="1.5"/>
+    <path d="M68 160 H642" stroke="#c9d8ea" stroke-opacity="0.24" stroke-width="1"/>
+    <path d="M68 44 V76 M48 64 H86 M1532 162 V130 M1552 142 H1514" stroke="#76d7ff" stroke-opacity="0.7" stroke-width="2"/>
+    <text x="76" y="72" class="eyebrow">LIVE MATCH / RCON SNAPSHOT</text>
+    <text x="76" y="124" class="title">${escapeXml(map)}</text>
+    <text x="78" y="151" class="sub">${escapeXml(layer)} | ${escapeXml(mode)} | ${escapeXml(serverName)} / ${escapeXml(serverId)}</text>
+    <text x="1192" y="148" class="meta mono">CAPTURED ${escapeXml(formatSnapshotDateTime(generatedAt || new Date().toISOString()))}</text>
+    <g filter="url(#softShadow)">
+      ${metricCards}
+    </g>
+    <rect x="72" y="512" width="1456" height="64" rx="18" fill="#052e16" fill-opacity="0.66" stroke="#22c55e" stroke-opacity="0.32"/>
+    <text x="96" y="551" font-size="18" font-weight="700" fill="#bbf7d0">Generated ${escapeXml(generatedAt || new Date().toISOString())}   Source ${escapeXml(serverInfo?.source ?? "unknown")}</text>
+    ${teamSvg}
+    <text x="1266" y="166" class="meta mono">WARMUP ${warmup ? "ON" : "OFF"}</text>
+  </svg>`;
+}
+
+function renderServerInfoTeamPanel(team, index) {
+  const panelX = index === 1 ? 816 : 64;
+  const panelY = 540;
+  const width = 720;
+  const height = 268;
+  const isRight = index === 1;
+  const flagSize = 166;
+  const flagX = isRight ? panelX + width - 206 : panelX + 34;
+  const tagX = isRight ? panelX + width - 104 : panelX + 28;
+  const textX = isRight ? panelX + 42 : panelX + 222;
+  const textMaxWidth = isRight ? width - 292 : width - 270;
+  const teamColor = isRight ? "#8b5cf6" : "#22d3ee";
+  const glowColors = FACTION_GLOW_BY_CODE[team.factionCode] ?? [teamColor, "#ffffff"];
+  const commanderName = team.commander?.name ?? "";
+  const commanderLabel = commanderName || "Pending";
+  const commanderAvatar = `
+    <path d="M ${textX} ${panelY + 160} H ${textX + 48} L ${textX + 58} ${panelY + 170} V ${panelY + 218} H ${textX} Z" fill="rgba(226,238,250,0.92)" stroke="${teamColor}" stroke-opacity="0.9" stroke-width="2"/>
+    <text x="${textX + 29}" y="${panelY + 198}" text-anchor="middle" class="avatar-initial">${escapeXml(commanderName ? getPlayerInitials(commanderName) : "?")}</text>
+  `;
+  const flagOrFallback = team.flagDataUri
+    ? `<image href="${team.flagDataUri}" x="${flagX}" y="${panelY + 64}" width="${flagSize}" height="${flagSize}" preserveAspectRatio="xMidYMid meet"/>`
+    : `<path d="M ${flagX} ${panelY + 64} H ${flagX + flagSize} V ${panelY + 64 + flagSize} H ${flagX} Z" fill="${teamColor}" fill-opacity="0.28" stroke="${teamColor}" stroke-opacity="0.74"/>`;
+
+  return `
+    <defs>
+      <filter id="flagGlow${index}" x="-80%" y="-80%" width="260%" height="260%">
+        <feGaussianBlur stdDeviation="32"/>
+      </filter>
+    </defs>
+    <path d="${isRight
+      ? `M ${panelX} ${panelY + 22} H ${panelX + width - 42} L ${panelX + width} ${panelY + 72} V ${panelY + height - 22} H ${panelX + 54} L ${panelX} ${panelY + height - 74} Z`
+      : `M ${panelX + 42} ${panelY + 22} H ${panelX + width} V ${panelY + height - 74} L ${panelX + width - 54} ${panelY + height - 22} H ${panelX} V ${panelY + 72} Z`}" fill="url(#teamShade)" stroke="${teamColor}" stroke-opacity="0.3" stroke-width="1.5"/>
+    <ellipse cx="${flagX + flagSize / 2}" cy="${panelY + 64 + flagSize / 2}" rx="174" ry="88" fill="${glowColors[0]}" opacity="0.34" filter="url(#flagGlow${index})"/>
+    <ellipse cx="${flagX + flagSize / 2 + (isRight ? 34 : -34)}" cy="${panelY + 64 + flagSize / 2 + 18}" rx="132" ry="68" fill="${glowColors[1] ?? glowColors[0]}" opacity="0.28" filter="url(#flagGlow${index})"/>
+    ${glowColors[2] ? `<ellipse cx="${flagX + flagSize / 2}" cy="${panelY + 64 + flagSize / 2 - 28}" rx="110" ry="48" fill="${glowColors[2]}" opacity="0.22" filter="url(#flagGlow${index})"/>` : ""}
+    <path d="M ${panelX + 18} ${panelY + 48} H ${panelX + 92} M ${panelX + width - 92} ${panelY + height - 46} H ${panelX + width - 18}" stroke="${teamColor}" stroke-opacity="0.9" stroke-width="3"/>
+    <path d="M ${panelX + 18} ${panelY + height - 46} H ${panelX + 68} M ${panelX + width - 68} ${panelY + 48} H ${panelX + width - 18}" stroke="#d6e4f2" stroke-opacity="0.28" stroke-width="1.5"/>
+    <rect x="${tagX}" y="${panelY + 36}" width="76" height="26" fill="${teamColor}"/>
+    <text x="${tagX + 38}" y="${panelY + 55}" text-anchor="middle" class="team-tag">TEAM ${escapeXml(String(team.teamId ?? index + 1))}</text>
+    ${flagOrFallback}
+    ${renderFitText({ x: textX, y: panelY + 92, className: "team-name", maxWidth: textMaxWidth, charWidth: 13.8 }, truncateText(team.teamName || `Team ${team.teamId ?? index + 1}`, isRight ? 26 : 29))}
+    <text x="${textX}" y="${panelY + 124}" class="team-meta mono">${escapeXml(team.factionCode || "UNKNOWN")} / ${escapeXml(String(team.playerCount ?? 0))} PAX / ${escapeXml(String(team.squadCount ?? 0))} squads</text>
+    <path d="M ${textX} ${panelY + 148} H ${isRight ? panelX + width - 236 : panelX + width - 44}" stroke="#d6e4f2" stroke-opacity="0.24" stroke-width="1"/>
+    ${commanderAvatar}
+    <text x="${textX + 76}" y="${panelY + 174}" class="team-row">COMMANDER</text>
+    ${renderFitText({ x: textX + 76, y: panelY + 204, className: "strong", maxWidth: textMaxWidth - 82, charWidth: 12.8 }, truncateText(commanderLabel, isRight ? 22 : 24))}
+    <text x="${textX + 76}" y="${panelY + 228}" class="team-stat mono">GAME TIME ${escapeXml(team.commander?.gameTime || "0m")}</text>
+    <text x="${textX}" y="${panelY + 240}" class="team-stat mono">READY ${escapeXml(String(team.playerCount ?? 0).padStart(2, "0"))} | SQUADS ${escapeXml(String(team.squadCount ?? 0).padStart(2, "0"))}</text>
+  `;
+}
+
+function normalizeServerInfoTeams(teams) {
+  return (Array.isArray(teams) ? teams : []).map((team) => ({
+    teamId: Number(team?.teamId ?? team?.teamID ?? 0) || null,
+    teamName: String(team?.teamName ?? "").trim(),
+    factionCode: String(team?.factionCode ?? "").trim().toUpperCase(),
+    playerCount: Number(team?.playerCount ?? 0) || 0,
+    squadCount: Number(team?.squadCount ?? 0) || 0,
+    commander: team?.commander && typeof team.commander === "object" ? {
+      ...team.commander,
+      name: String(team.commander.name ?? "Pending").trim(),
+      steamAvatar: String(team.commander.steamAvatar ?? "").trim(),
+      gameTime: String(team.commander.gameTime ?? "").trim(),
+    } : null,
+  }));
+}
+
+function formatSnapshotDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value ?? "");
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function truncateText(value, limit) {
+  const text = String(value ?? "");
+  if ([...text].length <= limit) return text;
+  return `${[...text].slice(0, Math.max(0, limit - 1)).join("")}...`;
+}
+
+function getPlayerInitials(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return "?";
+  const parts = text.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase();
+}
+function renderFitText({ x, y, className, maxWidth, charWidth }, value) {
+  const text = String(value ?? "");
+  const attrs = [`x="${x}"`, `y="${y}"`, `class="${className}"`];
+  if (estimateDisplayWidth(text, charWidth) > maxWidth) {
+    attrs.push(`textLength="${Math.max(80, Math.floor(maxWidth))}"`, 'lengthAdjust="spacingAndGlyphs"');
+  }
+  return `<text ${attrs.join(" ")}>${escapeXml(text)}</text>`;
+}
+
+function estimateDisplayWidth(text, charWidth = 12) {
+  return [...String(text ?? "")].reduce((total, char) => total + (/[\u4e00-\u9fff]/.test(char) ? charWidth * 1.35 : charWidth), 0);
+}
+
+async function resolveImageDataUri(source) {
+  const value = String(source ?? "").trim();
+  if (!value) return "";
+  if (value.startsWith("data:image/")) return value;
+  if (/^https?:\/\//i.test(value)) return readRemoteImageDataUri(value);
+  return readAssetDataUri(value);
+}
+
+async function readAssetDataUri(assetPath) {
+  const cleanPath = String(assetPath ?? "").replace(/^\//, "");
+  const candidates = [
+    path.join(ICON_BASE_DIR, cleanPath.replace(/\//g, path.sep)),
+    path.resolve(process.cwd(), cleanPath.replace(/\//g, path.sep)),
+    path.resolve(process.cwd(), "MapScene", path.basename(cleanPath)),
+    path.join(process.cwd(), "web-client", "src", "shared", "faction-assets", path.basename(cleanPath)),
+  ];
+
+  for (const filePath of candidates) {
+    try {
+      const content = await fs.readFile(filePath);
+      const ext = path.extname(filePath).toLowerCase();
+      const mime = ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" : "image/png";
+      return `data:${mime};base64,${content.toString("base64")}`;
+    } catch {
+      // Keep trying.
+    }
+  }
+
+  return "";
+}
+
+async function readBinaryAsset(assetPath) {
+  const cleanPath = String(assetPath ?? "").replace(/^\//, "");
+  const candidates = [
+    path.join(ICON_BASE_DIR, cleanPath.replace(/\//g, path.sep)),
+    path.resolve(process.cwd(), cleanPath.replace(/\//g, path.sep)),
+    path.resolve(process.cwd(), "MapScene", path.basename(cleanPath)),
+    path.join(process.cwd(), "web-client", "src", "shared", "faction-assets", path.basename(cleanPath)),
+  ];
+
+  for (const filePath of candidates) {
+    try {
+      return await fs.readFile(filePath);
+    } catch {
+      // Keep trying.
+    }
+  }
+
+  return null;
+}
+
+async function readRemoteImageDataUri(url) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 2200);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) return "";
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.toLowerCase().startsWith("image/")) return "";
+    const arrayBuffer = await response.arrayBuffer();
+    return `data:${contentType.split(";")[0]};base64,${Buffer.from(arrayBuffer).toString("base64")}`;
+  } catch {
+    return "";
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function resolveServerInfoBackgroundAssetPath(mapName, layerName) {
+  const mapKey = resolveMapSceneKey(mapName, layerName);
+  if (!mapKey) return null;
+  return `MapScene/${MAP_SCENE_FILE_BY_KEY[mapKey] ?? `LoadingScreen_${mapKey}_DQHD.PNG`}`;
+}
+
+function resolveMapSceneKey(mapName, layerName) {
+  const candidate = String(mapName ?? layerName ?? "").trim();
+  if (!candidate) return null;
+  const head = candidate.split(/[_\s-]/)[0];
+  if (MAP_SCENE_FILE_BY_KEY[head]) return head;
+  const compact = candidate.replace(/[^a-z0-9]/gi, "").toLowerCase();
+  for (const key of Object.keys(MAP_SCENE_FILE_BY_KEY)) {
+    if (key.replace(/[^a-z0-9]/gi, "").toLowerCase() === compact || compact.startsWith(key.toLowerCase())) {
+      return key;
+    }
+  }
+  return head;
+}
+
+async function resolveFactionFlagAssetPath(teamName) {
+  const code = await resolveFactionCodeFromTeamName(teamName);
+  if (!code) return null;
+  const fileName = FACTION_FLAG_BY_CODE[code];
+  return fileName ? `/assets/faction-assets/${fileName}` : null;
+}
+
+async function resolveFactionCodeFromTeamName(teamName) {
+  const normalized = normalizeFactionLookupName(teamName);
+  if (!normalized) return null;
+
+  const visualCode = await getBattlegroupFactionLookup().then((lookup) => lookup.get(normalized) ?? null);
+  if (visualCode) return visualCode;
+
+  const rules = [
+    ["ADF", ["adf", "australian", "royal australian"]],
+    ["AFU", ["afu", "ukraine", "ukrainian"]],
+    ["BAF", ["baf", "british", "uk armed forces", "british armed"]],
+    ["CAF", ["caf", "canadian", "canada"]],
+    ["CRF", ["crf"]],
+    ["GFI", ["gfi", "ger", "german", "federal"]],
+    ["IMF", ["imf", "insurgent mil", "militia"]],
+    ["MEA", ["mea", "middle east", "arab", "insurgent"]],
+    ["MEI", ["mei", "irregular", "militia"]],
+    ["PLA", ["pla", "people's liberation", "people liberation", "chinese", "china"]],
+    ["PLAAGF", ["plaagf", "agf", "army group"]],
+    ["PLANMC", ["planmc", "marine corps", "naval infantry"]],
+    ["RGF", ["rgf", "russian ground", "russian"]],
+    ["TLF", ["tlf", "turkish", "turkey"]],
+    ["USA", ["usa", "us army", "american", "united states", "u.s."]],
+    ["USMC", ["usmc", "marine", "marines"]],
+    ["VDV", ["vdv", "airborne", "guards airborne"]],
+    ["WPMC", ["wpmc", "manticore", "private military", "pmc"]],
+  ];
+
+  for (const [code, terms] of rules) {
+    if (terms.some((term) => normalized.includes(term))) return code;
+  }
+
+  return null;
+}
+
+let battlegroupFactionLookup = null;
+let battlegroupFactionLookupPromise = null;
+
+async function getBattlegroupFactionLookup() {
+  if (battlegroupFactionLookup) return battlegroupFactionLookup;
+  if (battlegroupFactionLookupPromise) return battlegroupFactionLookupPromise;
+
+  battlegroupFactionLookupPromise = (async () => {
+    const lookup = new Map();
+    for (const code of Object.keys(FACTION_FLAG_BY_CODE)) {
+      lookup.set(normalizeFactionLookupName(code), code);
+    }
+
+    try {
+      const source = await fs.readFile(FACTION_ASSET_DATA_PATH, "utf8");
+      const visualBlocks = source.match(/\{\s*name:\s*"[^"]+"[\s\S]*?unitIconBasename:\s*"[^"]*"[\s\S]*?\}/g) ?? [];
+      for (const block of visualBlocks) {
+        const faction = block.match(/faction:\s*"([A-Z]+)"/)?.[1];
+        if (!faction || !FACTION_FLAG_BY_CODE[faction]) continue;
+
+        const names = [];
+        const primaryName = block.match(/name:\s*"([^"]+)"/)?.[1];
+        if (primaryName) names.push(primaryName);
+
+        const aliasesText = block.match(/aliases:\s*\[([\s\S]*?)\]/)?.[1] ?? "";
+        for (const aliasMatch of aliasesText.matchAll(/"([^"]+)"/g)) {
+          names.push(aliasMatch[1]);
+        }
+
+        for (const name of names) {
+          const key = normalizeFactionLookupName(name);
+          if (key) lookup.set(key, faction);
+        }
+      }
+    } catch {
+      // Keep built-in fallback rules when the asset manifest is unavailable.
+    }
+
+    battlegroupFactionLookup = lookup;
+    battlegroupFactionLookupPromise = null;
+    return lookup;
+  })();
+
+  return battlegroupFactionLookupPromise;
+}
+
+function normalizeFactionLookupName(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+async function resolveAvatarDataUrl(url) {
+  const avatarUrl = String(url ?? "").trim();
+  if (!avatarUrl) return null;
+
+  try {
+    const response = await fetch(avatarUrl);
+    if (!response.ok) return null;
+    const contentType = String(response.headers.get("content-type") ?? "").trim() || "image/jpeg";
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (!buffer.length) return null;
+    return `data:${contentType};base64,${buffer.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+
+async function loadSharp() {
+  if (!sharpLoaderPromise) {
+    const bundlePnpmNodeModules = `${SHARP_BUNDLE_ROOT}/.pnpm/node_modules`;
+    process.env.NODE_PATH = [SHARP_BUNDLE_ROOT, bundlePnpmNodeModules, process.env.NODE_PATH || ""]
+      .filter(Boolean)
+      .join(";");
+    sharpRequire("module")._initPaths();
+    sharpLoaderPromise = Promise.resolve().then(() => sharpRequire("sharp"));
+  }
+  return sharpLoaderPromise;
+}
