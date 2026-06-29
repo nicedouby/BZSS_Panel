@@ -7,6 +7,7 @@ import { WEB_PAGE_PERMISSION_MATRIX } from "../../web-client/src/shared/web-page
 
 const DEFAULT_USERS_FILE = "./config/auth/users.json";
 const LEGACY_USERS_FILE = "./data/auth/users.json";
+const PERMISSION_ALIASES = Object.freeze({});
 
 export class AuthUserStore {
   constructor({ config = {}, logger } = {}) {
@@ -474,10 +475,6 @@ export const ALLOWED_ADMIN_PERMISSIONS = Object.freeze([
   "tactical_map_replay.export",
   ...WEB_PAGE_PERMISSION_MATRIX.map((entry) => String(entry.requiredPermission ?? "").trim()).filter(Boolean),
 ]);
-
-const PERMISSION_ALIASES = Object.freeze({
-  "plugin:lianban-kick:view": "squad_management.view",
-});
 
 function normalizePermissionGroup(input) {
   const name = String(input?.name ?? "").trim();

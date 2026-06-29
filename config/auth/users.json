@@ -277,7 +277,7 @@
         "plugin:tactical-report:update",
         "plugin:tactical-report:logs",
         "plugin:tactical-report:user-codes",
-        "plugin:lianban-kick:view",
+        "plugin:panel-ban:view",
         "server_stats.view",
         "tactical_map_replay.view",
         "debug.udp_forwarder.view",

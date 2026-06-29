@@ -3125,6 +3125,129 @@ async function testPjscAverageDurationRouteReturnsPluginState() {
   assert.equal(body.data.triggerCount, 1);
 }
 
+async function testPanelBanRoutesReturnPluginStateAndCrud() {
+  const calls = [];
+  const statePayload = {
+    enabled: true,
+    entries: [{ id: "ban-1", steamID: "76561198000000001" }],
+    recentHits: [],
+    recentEvents: [],
+    totalEntries: 1,
+    activeEntries: 1,
+    disabledEntries: 0,
+    expiredEntries: 0,
+    kickAttempts: 0,
+    kickSuccess: 0,
+    kickFailed: 0,
+  };
+  const server = createServer({
+    core: {
+      webStatus: { serverId: "BZSS_Main" },
+      authManager: {
+        getUserFromRequest() {
+          return {
+            username: "admin",
+            name: "Admin",
+            role: "SuperAdmin",
+            isSuperAdmin: true,
+          };
+        },
+        hasEverything() {
+          return true;
+        },
+      },
+      pluginManager: {
+        instances: [
+          {
+            manifest: { id: "plugin.panelBan" },
+            api: {
+              getState() {
+                calls.push("getState");
+                return statePayload;
+              },
+              listEntries(filter) {
+                calls.push(`listEntries:${JSON.stringify(filter)}`);
+                return statePayload.entries;
+              },
+              async createEntry(payload) {
+                calls.push(`createEntry:${JSON.stringify(payload)}`);
+                return { id: "ban-2", ...payload };
+              },
+              async updateEntry(id, payload) {
+                calls.push(`updateEntry:${id}:${JSON.stringify(payload)}`);
+                return { id, ...payload };
+              },
+              async deleteEntry(id, payload) {
+                calls.push(`deleteEntry:${id}:${JSON.stringify(payload)}`);
+                return { id, deleted: true, ...payload };
+              },
+            },
+          },
+        ],
+      },
+    },
+  });
+
+  const stateRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/plugins/panel-ban/state",
+    headers: { host: "localhost" },
+    socket: {},
+  }, stateRecorder.res);
+  assert.equal(stateRecorder.state.status, 200);
+  assert.equal(JSON.parse(stateRecorder.state.body).data.totalEntries, 1);
+
+  const listRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/plugins/panel-ban/entries?status=active&search=steam",
+    headers: { host: "localhost" },
+    socket: {},
+  }, listRecorder.res);
+  assert.equal(listRecorder.state.status, 200);
+  assert.equal(JSON.parse(listRecorder.state.body).data[0].id, "ban-1");
+  assert.ok(calls.some((value) => value.includes("\"status\":\"active\"")));
+
+  const createRecorderRef = createRecorder();
+  const createReq = Readable.from([JSON.stringify({
+    steamID: "76561198000000002",
+    reason: "test reason",
+    expiresAt: "2026-07-01T00:00:00.000Z",
+  })]);
+  createReq.method = "POST";
+  createReq.url = "/api/plugins/panel-ban/entries";
+  createReq.headers = { host: "localhost", "content-type": "application/json" };
+  createReq.socket = {};
+  await server.handleRequest(createReq, createRecorderRef.res);
+  assert.equal(createRecorderRef.state.status, 200);
+  assert.ok(calls.some((value) => value.includes("createEntry:")));
+  assert.ok(calls.some((value) => value.includes("\"createdBy\":\"admin\"")));
+
+  const patchRecorder = createRecorder();
+  const patchReq = Readable.from([JSON.stringify({
+    status: "disabled",
+    expiresAt: "2026-07-01T00:00:00.000Z",
+  })]);
+  patchReq.method = "PATCH";
+  patchReq.url = "/api/plugins/panel-ban/entries/ban-1";
+  patchReq.headers = { host: "localhost", "content-type": "application/json" };
+  patchReq.socket = {};
+  await server.handleRequest(patchReq, patchRecorder.res);
+  assert.equal(patchRecorder.state.status, 200);
+  assert.ok(calls.some((value) => value.startsWith("updateEntry:ban-1:")));
+
+  const deleteRecorderRef = createRecorder();
+  await server.handleRequest({
+    method: "DELETE",
+    url: "/api/plugins/panel-ban/entries/ban-1",
+    headers: { host: "localhost" },
+    socket: {},
+  }, deleteRecorderRef.res);
+  assert.equal(deleteRecorderRef.state.status, 200);
+  assert.ok(calls.some((value) => value.startsWith("deleteEntry:ban-1:")));
+}
+
 async function testFairTeamBalanceRoutesReturnPluginStateAndRequests() {
   const approveCalls = [];
   const rejectCalls = [];
@@ -3608,6 +3731,7 @@ await testWarmupRoutesExposeStateAndValidateInput();
 await testAdminWarnRecentRouteReturnsMemoryRecords();
 await testAdminWarnBroadcastRouteReturnsMemoryRecords();
 await testCombatLogRoutesExposeLogsAndMetadata();
+await testPanelBanRoutesReturnPluginStateAndCrud();
 await testFairTeamBalanceRoutesReturnPluginStateAndRequests();
 await testStepwiseSquadPlaytimeGuardRoutesReturnPluginStateAndSimulate();
 await testFairSquadGuardRoutesReturnPluginStateAndActions();

@@ -2536,20 +2536,102 @@ export class WebServer {
 
     }
 
-    if (url.pathname.startsWith("/api/plugins/lianban-kick")) {
-      const pluginApi = this.getPluginApi("plugin.lianbanKick");
+    if (url.pathname.startsWith("/api/plugins/panel-ban")) {
+      const pluginApi = this.getPluginApi("plugin.panelBan");
       if (!pluginApi) {
         return this.json(res, 404, {
-          error: "LianbanKickUnavailable",
-          message: "Lianban kick plugin is not loaded.",
+          error: "PanelBanUnavailable",
+          message: "Panel ban plugin is not loaded.",
         });
       }
 
-      if (url.pathname === "/api/plugins/lianban-kick/state" && req.method === "GET") {
+      if (url.pathname === "/api/plugins/panel-ban/state" && req.method === "GET") {
         return this.json(res, 200, {
           ok: true,
           data: pluginApi.getState?.() ?? null,
         });
+      }
+
+      if (url.pathname === "/api/plugins/panel-ban/entries" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.listEntries?.({
+            status: url.searchParams.get("status") ?? "all",
+            search: url.searchParams.get("search") ?? "",
+            includeExpired: url.searchParams.get("includeExpired") !== "false",
+          }) ?? [],
+        });
+      }
+
+      if (url.pathname === "/api/plugins/panel-ban/load" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.load?.(),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/panel-ban/reload" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.reload?.(),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/panel-ban/rescan" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.rescan?.(body?.serverId ?? core.webStatus?.serverId ?? ""),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/panel-ban/entries" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.createEntry?.({
+            ...body,
+            actor: user,
+            createdBy: user?.username ?? "",
+          }),
+        });
+      }
+
+      if (url.pathname.startsWith("/api/plugins/panel-ban/entries/")) {
+        const entryId = decodeURIComponent(url.pathname.slice("/api/plugins/panel-ban/entries/".length));
+        if (!entryId) {
+          return this.json(res, 400, {
+            error: "InvalidBanEntryId",
+            message: "Ban entry id is required.",
+          });
+        }
+
+        if (req.method === "PATCH") {
+          if (!this.requireSuperAdmin(user, res)) return;
+          const body = await this.readJsonBody(req);
+          return this.json(res, 200, {
+            ok: true,
+            data: await pluginApi.updateEntry?.(entryId, {
+              ...body,
+              actor: user,
+              updatedBy: user?.username ?? "",
+            }),
+          });
+        }
+
+        if (req.method === "DELETE") {
+          if (!this.requireSuperAdmin(user, res)) return;
+          return this.json(res, 200, {
+            ok: true,
+            data: await pluginApi.deleteEntry?.(entryId, {
+              actor: user,
+            }),
+          });
+        }
       }
     }
 

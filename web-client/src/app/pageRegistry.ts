@@ -14,7 +14,7 @@ import InfantryCombatEnhancerPage from "../pages/InfantryCombatEnhancerPage.vue"
 import GroupReportPage from "../pages/GroupReportPage.vue";
 import FairTeamBalancePage from "../pages/FairTeamBalancePage.vue";
 import FairTeamBalanceLabPage from "../pages/FairTeamBalanceLabPage.vue";
-import LianbanKickPage from "../pages/LianbanKickPage.vue";
+import PanelBanPage from "../pages/PanelBanPage.vue";
 import TacticalReportPage from "../pages/TacticalReportPage.vue";
 import TacticalReportConfigPage from "../pages/TacticalReportConfigPage.vue";
 import SquadManagementPage from "../pages/SquadManagementPage.vue";
@@ -342,13 +342,13 @@ export const pageRegistry: PageDefinition[] = [
     ...workspacePage,
   },
   {
-    name: "lianban-kick",
-    path: "/plugins/lianban-kick",
-    component: LianbanKickPage,
-    title: "联办踢出",
+    name: "panel-ban",
+    path: "/plugins/panel-ban",
+    component: PanelBanPage,
+    title: "面板封禁",
     category: "plugin",
     refreshPolicy: "polling",
-    nav: { section: "players", label: "联办踢出", icon: "🚫", order: 90 },
+    nav: { section: "players", label: "面板封禁", icon: "BAN", order: 90 },
     ...workspacePage,
   },
   {

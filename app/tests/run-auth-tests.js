@@ -361,7 +361,7 @@ async function testPermissionGroupsPersistAndResolveForAdminUser() {
   }
 }
 
-async function testUserStoreNormalizesLegacyLianbanKickPermissionAlias() {
+async function testUserStorePersistsPanelBanPermission() {
   const originalCwd = process.cwd();
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-auth-lianban-alias-"));
   process.chdir(tempDir);
@@ -375,7 +375,7 @@ async function testUserStoreNormalizesLegacyLianbanKickPermissionAlias() {
     await store.start();
     const group = await store.createPermissionGroup({
       name: "Legacy Alias Group",
-      permissions: ["plugin:lianban-kick:view", "rcon.warn"],
+      permissions: ["plugin:panel-ban:view", "rcon.warn"],
     });
 
     const reloaded = new AuthUserStore({
@@ -386,7 +386,7 @@ async function testUserStoreNormalizesLegacyLianbanKickPermissionAlias() {
     await reloaded.start();
 
     const savedGroup = reloaded.getPermissionGroupById(group.id);
-    assert.deepEqual(savedGroup.permissions, ["squad_management.view", "rcon.warn"]);
+    assert.deepEqual(savedGroup.permissions, ["plugin:panel-ban:view", "rcon.warn"]);
   } finally {
     process.chdir(originalCwd);
     await fs.rm(tempDir, { recursive: true, force: true });
@@ -439,7 +439,7 @@ await testAuthManagerInvalidatesSessionOnDisableAndPasswordReset();
 await testUserStorePersistsAdminProfileFieldsAndSteamBinding();
 await testUserStoreProtectsLastSuperAdminDowngrade();
 await testPermissionGroupsPersistAndResolveForAdminUser();
-await testUserStoreNormalizesLegacyLianbanKickPermissionAlias();
+await testUserStorePersistsPanelBanPermission();
 await testPermissionGroupDeleteRejectsAssignedUsers();
 
 console.log("auth tests passed");
