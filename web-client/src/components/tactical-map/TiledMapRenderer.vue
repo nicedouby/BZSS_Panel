@@ -31,6 +31,7 @@
       alt="Tactical Map"
       class="map-image-fallback"
       draggable="false"
+      @load="onFallbackLoad"
     />
   </div>
 </template>
@@ -71,23 +72,52 @@ const { visibleTiles, fallbackTiles, currentTileZoom } = useTileLoader({
   enabled: toRef(props, "tilesEnabled"),
 });
 
+const emit = defineEmits<{
+  (e: "ready"): void;
+}>();
+
 // Track which tiles have finished loading via native <img> @load event
 const loadedSet = ref(new Set<string>());
+const fallbackLoaded = ref(false);
 
 function onTileLoad(key: string) {
   const next = new Set(loadedSet.value);
   next.add(key);
   loadedSet.value = next;
+  syncReadyState();
 }
 
 function isTileLoaded(key: string) {
   return loadedSet.value.has(key);
 }
 
+function onFallbackLoad() {
+  fallbackLoaded.value = true;
+  syncReadyState();
+}
+
 // Clear loaded state when map changes
 watch(() => props.tileBasePath, () => {
   loadedSet.value = new Set();
+  fallbackLoaded.value = false;
+  syncReadyState();
 });
+
+watch(
+  () => [visibleTiles.value.length, fallbackTiles.value.length, props.tilesEnabled] as const,
+  () => {
+    syncReadyState();
+  },
+  { immediate: true }
+);
+
+function syncReadyState() {
+  const expectedTiles = visibleTiles.value.length;
+  const tilesReady = expectedTiles > 0 ? loadedSet.value.size >= expectedTiles : fallbackLoaded.value || !props.tilesEnabled;
+  if (tilesReady) {
+    emit("ready");
+  }
+}
 
 function tileStyle(tile: TileInfo) {
   return {

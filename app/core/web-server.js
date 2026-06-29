@@ -1692,6 +1692,15 @@ export class WebServer {
       return this.json(res, 200, this.getBzssCorePlayerInfoRaw());
     }
 
+    if (url.pathname === "/api/server-info/snapshot-state" && req.method === "GET") {
+      return this.json(res, 200, {
+        ok: true,
+        snapshot: this.getServerInfoSnapshotState({
+          includeAll: true,
+        }),
+      });
+    }
+
     if (url.pathname === "/api/bzss-core/player-info/stream" && req.method === "GET") {
       if (!this.canUseBzssCoreTool(user)) {
         return this.json(res, 403, {
@@ -4614,6 +4623,65 @@ export class WebServer {
       rawText: "",
       rawTextLength: 0,
       rawTextUpdatedAt: "",
+    };
+  }
+
+  getServerInfoSnapshotState(options = {}) {
+    const text = (...values) => {
+      for (const value of values) {
+        const str = value == null ? "" : String(value).trim();
+        if (str) return str;
+      }
+      return "";
+    };
+    const number = (...values) => {
+      for (const value of values) {
+        const num = Number(value);
+        if (Number.isFinite(num)) return num;
+      }
+      return null;
+    };
+
+    const runtime = this.core.runtimeState?.getAll?.() ?? null;
+    const runtimeServer = runtime?.server ?? {};
+    const runtimeMatch = runtime?.match ?? {};
+    const runtimePlayers = Array.isArray(runtime?.players?.active) ? runtime.players.active : [];
+    const runtimeSquads = Array.isArray(runtime?.squads?.list) ? runtime.squads.list : [];
+    const overview = this.getMatchOverview();
+    const bzssCore = this.getBzssCorePlayerInfo({ all: Boolean(options.includeAll ?? true) ? 1 : 0 });
+    const bzssState = bzssCore?.state ?? null;
+    const playerInfo = Array.isArray(bzssCore?.players) ? bzssCore.players : [];
+    const captureZones = Array.isArray(bzssCore?.captureZones) ? bzssCore.captureZones : [];
+    const fobs = Array.isArray(bzssCore?.fobs) ? bzssCore.fobs : [];
+
+    return {
+      generatedAt: new Date().toISOString(),
+      source: runtime ? "runtimeState" : "matchState",
+      server: {
+        serverId: text(runtimeServer?.serverId, runtimeMatch?.serverId, overview?.serverId, this.core.webStatus?.serverId, ""),
+        serverName: text(runtimeServer?.serverName, runtimeServer?.name, overview?.serverName, this.core.webStatus?.serverName, ""),
+        playerCount: number(runtimeServer?.playerCount, runtimeMatch?.players?.active?.length, overview?.status?.playerCount, this.core.webStatus?.playerCount, runtimePlayers.length) ?? 0,
+        queueCount: number(runtimeServer?.queueCount, overview?.status?.queueCount, this.core.webStatus?.queueCount) ?? 0,
+        tps: number(runtimeServer?.tps, overview?.status?.tps, this.core.webStatus?.tps),
+        isWarmup: runtimeServer?.isWarmup ?? overview?.status?.isWarmup ?? this.core.webStatus?.isWarmup ?? false,
+      },
+      match: {
+        map: text(runtimeMatch?.server?.map, runtimeServer?.map, overview?.status?.map, this.core.webStatus?.map, ""),
+        layer: text(runtimeMatch?.server?.layer, runtimeServer?.layer, overview?.status?.layer, this.core.webStatus?.layer, ""),
+        mode: text(runtimeMatch?.server?.mode, runtimeServer?.mode, overview?.status?.gameMode, this.core.webStatus?.gameMode, ""),
+        nextLayer: text(runtimeMatch?.server?.nextLayer, runtimeServer?.nextLayer, overview?.status?.nextLayer, this.core.webStatus?.nextLayer, ""),
+      },
+      overview,
+      runtime: {
+        players: runtimePlayers,
+        squads: runtimeSquads,
+      },
+      bzssCore: {
+        state: bzssState,
+        players: playerInfo,
+        captureZones,
+        fobs,
+      },
     };
   }
 

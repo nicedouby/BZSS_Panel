@@ -39,6 +39,7 @@ import AdminUsersPage from "../pages/AdminUsersPage.vue";
 import AuditRecordsPage from "../pages/AuditRecordsPage.vue";
 import PluginSubscriptionsPage from "../pages/PluginSubscriptionsPage.vue";
 import TacticalMapPage from "../pages/TacticalMapPage.vue";
+import ServerInfoSnapshotPage from "../pages/ServerInfoSnapshotPage.vue";
 import BzssCoreSnapshotsPage from "../pages/BzssCoreSnapshotsPage.vue";
 import TacticalMapReplayPage from "../pages/TacticalMapReplayPage.vue";
 import {
@@ -106,6 +107,15 @@ export const pageRegistry: PageDefinition[] = [
     refreshPolicy: "realtime",
     nav: { section: "opsLive", label: "战术地图", icon: "🛰️", order: 15 },
     ...workspacePage,
+  },
+  {
+    name: "astrbot-server-info-card",
+    path: "/astrbot/server-info-card",
+    component: ServerInfoSnapshotPage,
+    title: "AstrBot Server Info Card",
+    category: "plugin",
+    refreshPolicy: "manual",
+    ...documentPage,
   },
   {
     name: "console",

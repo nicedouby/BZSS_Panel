@@ -3,6 +3,7 @@
     <div v-if="!auth.checked" class="boot-screen">
       <div class="boot-card">{{ t("app.checkingAuth") }}</div>
     </div>
+    <RouterView v-else-if="isPublicSnapshotRoute" />
     <LoginPage v-else-if="!auth.authenticated" />
     <AppLayout v-else />
   </div>
@@ -10,7 +11,7 @@
 
 <script setup lang="ts">
 import { watch } from "vue";
-import { useRoute } from "vue-router";
+import { RouterView, useRoute } from "vue-router";
 import AppLayout from "./components/layout/AppLayout.vue";
 import LoginPage from "./pages/LoginPage.vue";
 import { setRuntimeSyncRefreshPolicy, startRuntimeSync, stopRuntimeSync } from "./app/runtimeSync";
@@ -21,6 +22,7 @@ import { useUiStore } from "./stores/ui.store";
 const auth = useAuthStore();
 const ui = useUiStore();
 const route = useRoute();
+const isPublicSnapshotRoute = route.path === "/astrbot/server-info-card";
 
 watch(
   () => [auth.authenticated, route.meta.refreshPolicy] as const,

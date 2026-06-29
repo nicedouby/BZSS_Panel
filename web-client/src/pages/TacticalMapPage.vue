@@ -37,6 +37,7 @@
             :viewport-width="vpWidth"
             :viewport-height="vpHeight"
             :fallback-image="activeMapConfig.image"
+            @ready="handleTilesReady"
           />
         </div>
 
@@ -833,6 +834,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "select-player", payload: { detail: any; event: MouseEvent }): void;
+  (e: "snapshot-ready", payload: { ready: boolean; reason?: string }): void;
 }>();
 
 interface MapMarker extends BzssCoreTrackedPlayerInfo {
@@ -922,6 +924,7 @@ const vpWidth = ref(0);
 const vpHeight = ref(0);
 const tilesEnabled = ref(true);
 let resizeObserver: ResizeObserver | null = null;
+const tilesReady = ref(false);
 
 const dynamicMarkerScale = computed(() => {
   // Rather than keeping marker screen size perfectly constant (1/zoom),
@@ -1072,6 +1075,26 @@ watch(
     playerMotionState.clear();
     interpolatedPositions.value = {};
     combatHotspot.value = null;
+    tilesReady.value = false;
+  }
+);
+
+watch(
+  () => [loading.value, errorText.value, positionedPlayers.value.length, captureZoneMarkers.value.length, fobMarkers.value.length, tilesReady.value] as const,
+  () => {
+    const ready = Boolean(!loading.value && !errorText.value && props.snapshot && tilesReady.value);
+    emit("snapshot-ready", {
+      ready,
+      reason: ready ? "rendered" : loading.value ? "loading" : errorText.value ? "error" : "pending-tiles",
+    });
+  },
+  { immediate: true }
+);
+
+watch(
+  () => props.snapshot,
+  () => {
+    tilesReady.value = false;
   }
 );
 
@@ -1662,6 +1685,10 @@ function handleMouseMove(event: MouseEvent) {
 
 function handleMouseLeave() {
   hoverCoords.value = null;
+}
+
+function handleTilesReady() {
+  tilesReady.value = true;
 }
 
 // Drag & Pan & Zoom Event Handlers

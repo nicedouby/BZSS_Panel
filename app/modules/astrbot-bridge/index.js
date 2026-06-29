@@ -3,6 +3,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { execFile } from "node:child_process";
+import { pathToFileURL } from "node:url";
 
 import { handleAstrbotBridgeRoutes } from "./routes.js";
 
@@ -81,6 +83,7 @@ const FACTION_GLOW_BY_CODE = {
 };
 const sharpRequire = createRequire(import.meta.url);
 let sharpLoaderPromise = null;
+let playwrightLoaderPromise = null;
 
 export function createAstrbotBridgeModule({ core, modules, config, logger }) {
   const moduleLogger =
@@ -638,32 +641,27 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
 
   async function queryServerInfoSnapshot(input = {}) {
     const serverInfo = buildServerInfo(input);
-    let png = null;
-    if (!Buffer.isBuffer(png) || !png.length) {
-      try {
-        png = await renderServerInfoPng(serverInfo);
-      } catch (error) {
-        return {
-          ok: false,
-          error: "SERVER_INFO_SNAPSHOT_FAILED",
-          message: String(error?.message ?? error ?? "Failed to render server info snapshot."),
-          serverInfo,
-        };
-      }
-    }
-
-    const contentType = "image/png";
     const fileName = `server-info-${sanitizeFileToken(serverInfo?.server?.serverId ?? serverInfo?.server?.serverName ?? "snapshot")}.png`;
-    const filePath = await persistServerInfoSnapshot(png, fileName);
-    return {
-      ok: true,
-      contentType,
-      fileName,
-      file_path: filePath,
-      filePath,
-      serverInfo,
-      png,
-    };
+    try {
+      const png = await captureServerInfoSnapshotPng(serverInfo, input);
+      const filePath = await persistServerInfoSnapshot(png, fileName);
+      return {
+        ok: true,
+        contentType: "image/png",
+        fileName,
+        file_path: filePath,
+        filePath,
+        serverInfo,
+        png,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: "SERVER_INFO_SNAPSHOT_FAILED",
+        message: String(error?.message ?? error ?? "Failed to render server info snapshot."),
+        serverInfo,
+      };
+    }
   }
 
   async function unbindMe(input = {}) {
@@ -712,6 +710,229 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
     await fs.rm(finalFilePath, { force: true });
     await fs.rename(tempFilePath, finalFilePath);
     return finalFilePath;
+  }
+
+  async function captureServerInfoSnapshotPng(serverInfo, input = {}) {
+    const executablePath = await resolveChromiumExecutablePath();
+    if (!executablePath) {
+      throw new Error("Chrome or Edge executable was not found.");
+    }
+
+    const { chromium } = await loadPlaywright();
+    const browser = await chromium.launch({
+      executablePath,
+      headless: true,
+      args: ["--disable-gpu"],
+    });
+    const page = await browser.newPage({
+      viewport: { width: 1600, height: 900 },
+      deviceScaleFactor: 1,
+    });
+
+    try {
+      const pageUrl = buildServerInfoSnapshotPageUrl(input);
+      await page.goto(pageUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
+      await page.waitForFunction(() => Boolean(window.__BZSS_SNAPSHOT_READY__), null, { timeout: 30_000 });
+      await page.waitForTimeout(500);
+      return await page.screenshot({
+        type: "png",
+        fullPage: true,
+      });
+    } finally {
+      await page.close().catch(() => {});
+      await browser.close().catch(() => {});
+    }
+  }
+
+  async function resolveChromiumExecutablePath() {
+    const candidates = [
+      "C:/Program Files/Google/Chrome/Application/chrome.exe",
+      "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
+      "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
+      "C:/Program Files/Microsoft/Edge/Application/msedge.exe",
+    ];
+    for (const candidate of candidates) {
+      try {
+        await fs.access(candidate);
+        return candidate;
+      } catch {}
+    }
+    return undefined;
+  }
+
+  async function loadPlaywright() {
+    if (!playwrightLoaderPromise) {
+      playwrightLoaderPromise = resolvePlaywrightModuleUrl().then((moduleUrl) => import(moduleUrl));
+    }
+    return playwrightLoaderPromise;
+  }
+
+  async function resolvePlaywrightModuleUrl() {
+    const pnpmRoot = path.resolve(SHARP_BUNDLE_ROOT, ".pnpm");
+    const entries = await fs.readdir(pnpmRoot, { withFileTypes: true });
+    const playwrightEntry = entries.find((entry) => entry.isDirectory() && entry.name.startsWith("playwright@"));
+    if (!playwrightEntry) {
+      throw new Error("Playwright package was not found in the bundled runtime.");
+    }
+    return pathToFileURL(path.join(pnpmRoot, playwrightEntry.name, "node_modules", "playwright", "index.mjs")).href;
+  }
+
+  function buildServerInfoSnapshotPageUrl(input = {}) {
+    const webConfig = core?.config?.get?.("web", {}) ?? {};
+    const host = normalizeSnapshotHost(webConfig.host);
+    const port = Number(webConfig.port ?? 8899) || 8899;
+    const url = new URL(`http://${host}:${port}/astrbot/server-info-card`);
+    if (input.includePlayers || input.players) {
+      url.searchParams.set("includePlayers", "1");
+    }
+    return url.toString();
+  }
+
+  function normalizeSnapshotHost(host) {
+    const text = String(host ?? "").trim();
+    if (!text || text === "0.0.0.0" || text === "::" || text === "[::]") return "127.0.0.1";
+    return text;
+  }
+
+  async function writeSnapshotHtml(serverInfo, input = {}) {
+    const htmlPath = path.join(SERVER_INFO_SNAPSHOT_CACHE_DIR, `server-info-${process.pid}-${Date.now()}.html`);
+    const content = renderServerInfoFallbackHtml(serverInfo, input);
+    await fs.mkdir(path.dirname(htmlPath), { recursive: true });
+    await fs.writeFile(htmlPath, content, "utf8");
+    return htmlPath;
+  }
+
+  async function runChromeHeadlessScreenshot(htmlPath, screenshotPath) {
+    const executablePath = await resolveChromiumExecutablePath();
+    if (!executablePath) {
+      throw new Error("Chrome or Edge executable was not found.");
+    }
+    await fs.rm(screenshotPath, { force: true });
+    const args = [
+      "--headless=new",
+      "--disable-gpu",
+      "--hide-scrollbars",
+      "--force-device-scale-factor=1",
+      "--window-size=1600,900",
+      `--screenshot=${screenshotPath}`,
+      `file:///${htmlPath.replace(/\\/g, "/")}`,
+    ];
+    await new Promise((resolve, reject) => {
+      const child = execFile(executablePath, args, { windowsHide: true }, (error, stdout, stderr) => {
+        if (error) {
+          const message = `${error.message || error}${stderr ? ` ${stderr}` : ""}`.trim();
+          reject(new Error(message));
+          return;
+        }
+        resolve({ stdout, stderr });
+      });
+      child.on("error", reject);
+    });
+  }
+
+  function renderServerInfoFallbackHtml(serverInfo, input = {}) {
+    const map = String(serverInfo?.match?.map ?? "Unknown Map").trim();
+    const layer = String(serverInfo?.match?.layer ?? "Unknown Layer").trim();
+    const serverName = String(serverInfo?.server?.serverName ?? serverInfo?.server?.serverId ?? "BZSS Server").trim();
+    const players = Array.isArray(serverInfo?.bzssCore?.players) ? serverInfo.bzssCore.players : [];
+    const captureZones = Array.isArray(serverInfo?.bzssCore?.captureZones) ? serverInfo.bzssCore.captureZones : [];
+    const fobs = Array.isArray(serverInfo?.bzssCore?.fobs) ? serverInfo.bzssCore.fobs : [];
+    const playerDots = players.slice(0, 48).map((player, index) => {
+      const top = 20 + ((index * 17) % 68);
+      const left = 16 + ((index * 23) % 68);
+      const team = Number(player.teamId) === 2 ? "team-2" : Number(player.teamId) === 1 ? "team-1" : "team-0";
+      return `<span class="dot ${team}" style="top:${top}%;left:${left}%"></span>`;
+    }).join("");
+    const zoneTags = captureZones.slice(0, 8).map((zone) => `<span class="zone-tag">${escapeHtml(zone?.name ?? "OBJ")}</span>`).join("");
+    const fobTags = fobs.slice(0, 8).map((fob) => `<span class="fob-tag">${escapeHtml(fob?.name ?? "FOB")} T${escapeHtml(fob?.teamId ?? "")}</span>`).join("");
+
+    return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { margin: 0; background: #020617; color: #e2e8f0; font-family: Arial, sans-serif; }
+    .frame { width: 1600px; height: 900px; padding: 18px; box-sizing: border-box; background: linear-gradient(180deg, #07101c, #02050c); }
+    .hero { height: 214px; display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 16px; }
+    .card { border: 1px solid rgba(148,163,184,.16); background: rgba(4,10,18,.72); border-radius: 18px; box-shadow: 0 24px 80px rgba(0,0,0,.4); }
+    .copy { padding: 18px; }
+    .eyebrow { font-size: 11px; letter-spacing: .24em; text-transform: uppercase; color: #67e8f9; }
+    h1 { margin: 8px 0 0; font-size: 28px; }
+    .badges { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+    .badge { padding:7px 11px; border-radius:999px; border:1px solid rgba(148,163,184,.16); background: rgba(15,23,42,.86); font-size:13px; }
+    .grid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px; margin-top:14px; }
+    .grid div { padding:10px 12px; border-radius:14px; background: rgba(15,23,42,.56); border:1px solid rgba(148,163,184,.12); }
+    .grid .k { display:block; font-size:11px; color:#94a3b8; text-transform:uppercase; letter-spacing:.18em; margin-bottom:4px; }
+    .loading { border-radius:18px; background: linear-gradient(135deg, rgba(8,15,27,.8), rgba(15,23,42,.6)); overflow:hidden; display:grid; place-items:center; }
+    .loading::before { content:"${escapeHtml(map)}"; font-size:32px; font-weight:800; color:rgba(226,232,240,.75); }
+    .map { height: 648px; margin-top: 14px; position: relative; overflow:hidden; border-radius:18px; }
+    .map-bg { position:absolute; inset:0; background:
+      radial-gradient(circle at 30% 35%, rgba(34,197,94,.25), transparent 28%),
+      radial-gradient(circle at 70% 60%, rgba(56,189,248,.25), transparent 30%),
+      linear-gradient(135deg, #0f172a, #111827 55%, #0b3b2e); }
+    .overlay { position:absolute; inset:0; }
+    .dot { position:absolute; width:14px; height:14px; border-radius:50%; border:2px solid #fff; box-shadow: 0 0 18px rgba(255,255,255,.28); }
+    .team-1 { background:#22c55e; }
+    .team-2 { background:#f97316; }
+    .team-0 { background:#38bdf8; }
+    .zone-tag, .fob-tag { position:absolute; left:20px; padding:6px 10px; border-radius:999px; background: rgba(15,23,42,.82); border:1px solid rgba(148,163,184,.16); font-size:12px; }
+    .zone-tag { top: 20px; display: inline-block; margin-right: 8px; position: relative; }
+    .fob-tag { bottom: 20px; display: inline-block; margin-right: 8px; position: relative; }
+    .meta { position:absolute; left:18px; bottom:18px; right:18px; display:flex; gap:8px; flex-wrap:wrap; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <section class="hero">
+      <div class="card copy">
+        <div class="eyebrow">BZSS / AstrBot Server Snapshot</div>
+        <h1>${escapeHtml(serverName)}</h1>
+        <div class="badges">
+          <span class="badge">Players ${Number(serverInfo?.server?.playerCount ?? 0)}</span>
+          <span class="badge">Queue ${Number(serverInfo?.server?.queueCount ?? 0)}</span>
+          <span class="badge">TPS ${escapeHtml(formatTpsValue(serverInfo?.server?.tps))}</span>
+          <span class="badge">${serverInfo?.server?.isWarmup ? "Warmup ON" : "Warmup OFF"}</span>
+          <span class="badge">${escapeHtml(String(serverInfo?.source ?? "unknown"))}</span>
+        </div>
+        <div class="grid">
+          <div><span class="k">Map</span><strong>${escapeHtml(map)}</strong></div>
+          <div><span class="k">Layer</span><strong>${escapeHtml(layer)}</strong></div>
+          <div><span class="k">Updated</span><strong>${escapeHtml(String(serverInfo?.generatedAt ?? ""))}</strong></div>
+          <div><span class="k">Status</span><strong>ok</strong></div>
+        </div>
+      </div>
+      <div class="card loading"></div>
+    </section>
+    <section class="card map">
+        <div class="map-bg"></div>
+        <div class="map-loading-screen">${escapeHtml(map)} / ${escapeHtml(layer)}</div>
+        <div class="overlay">
+          ${playerDots}
+          <div class="meta">
+            ${zoneTags}
+            ${fobTags}
+        </div>
+      </div>
+    </section>
+  </div>
+</body>
+</html>`;
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll("\"", "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+
+  function formatTpsValue(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric <= 0) return "n/a";
+    return numeric.toFixed(1);
   }
 
   function normalizeSteam64(value) {
