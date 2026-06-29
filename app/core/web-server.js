@@ -4588,24 +4588,24 @@ export class WebServer {
       revision: 0,
       updatedAt: "",
       markerSeen: false,
-      playerCount: 0,
-      rawTextLength: 0,
-      sourceMode: "",
-      lastRawLineHash: "",
-      lastRawFields: [],
+      runtimePlayerCount: 0,
+      scoreboardPlayerCount: 0,
+      mainZoneCount: 0,
+      rawLineHash: "",
+      rawFields: [],
       lastError: "",
     };
-    const player = monitor?.findPlayer?.(query) ?? null;
     const includeAll = query?.all === true || query?.all === "1" || query?.all === 1;
+    const snapshot = monitor?.getRawSnapshot?.() ?? null;
     return {
       ok: true,
       state,
       status: state.status,
-      player,
-      players: includeAll ? (monitor?.getPlayers?.() ?? []) : undefined,
-      captureZones: includeAll ? (monitor?.getRawSnapshot?.()?.captureZones ?? []) : undefined,
-      fobs: includeAll ? (monitor?.getRawSnapshot?.()?.fobs ?? []) : undefined,
-      mainZones: includeAll ? (monitor?.getRawSnapshot?.()?.mainZones ?? []) : undefined,
+      runtimePlayers: includeAll ? (snapshot?.runtimePlayers ?? []) : undefined,
+      scoreboardPlayers: includeAll ? (snapshot?.scoreboardPlayers ?? []) : undefined,
+      captureZones: includeAll ? (snapshot?.captureZones ?? []) : undefined,
+      fobs: includeAll ? (snapshot?.fobs ?? []) : undefined,
+      mainZones: includeAll ? (snapshot?.mainZones ?? []) : undefined,
     };
   }
 
@@ -4625,13 +4625,12 @@ export class WebServer {
       revision: 0,
       updatedAt: "",
       markerSeen: false,
-      playerCount: 0,
+      runtimePlayerCount: 0,
+      scoreboardPlayerCount: 0,
+      mainZoneCount: 0,
+      rawLineHash: "",
+      rawFields: [],
       lastError: "",
-      rawText: "",
-      rawTextLength: 0,
-      sourceMode: "",
-      lastRawLineHash: "",
-      lastRawFields: [],
     };
   }
 
@@ -4659,9 +4658,22 @@ export class WebServer {
     const overview = this.getMatchOverview();
     const bzssCore = this.getBzssCorePlayerInfo({ all: Boolean(options.includeAll ?? true) ? 1 : 0 });
     const bzssState = bzssCore?.state ?? null;
-    const playerInfo = Array.isArray(bzssCore?.players) ? bzssCore.players : [];
+    const bzssRuntimePlayers = Array.isArray(bzssCore?.runtimePlayers) ? bzssCore.runtimePlayers : [];
+    const bzssScoreboardPlayers = Array.isArray(bzssCore?.scoreboardPlayers) ? bzssCore.scoreboardPlayers : [];
     const captureZones = Array.isArray(bzssCore?.captureZones) ? bzssCore.captureZones : [];
     const fobs = Array.isArray(bzssCore?.fobs) ? bzssCore.fobs : [];
+    const mergedPlayers = new Map();
+    for (const player of bzssRuntimePlayers) {
+      const key = player?.playerIndex ?? player?.playerId;
+      if (key == null) continue;
+      mergedPlayers.set(key, { ...player });
+    }
+    for (const player of bzssScoreboardPlayers) {
+      const key = player?.playerIndex ?? player?.playerId;
+      if (key == null) continue;
+      const existing = mergedPlayers.get(key);
+      mergedPlayers.set(key, existing ? { ...existing, ...player } : { ...player });
+    }
 
     return {
       generatedAt: new Date().toISOString(),
@@ -4687,7 +4699,9 @@ export class WebServer {
       },
       bzssCore: {
         state: bzssState,
-        players: playerInfo,
+        runtimePlayers: bzssRuntimePlayers,
+        scoreboardPlayers: bzssScoreboardPlayers,
+        players: [...mergedPlayers.values()],
         captureZones,
         fobs,
       },

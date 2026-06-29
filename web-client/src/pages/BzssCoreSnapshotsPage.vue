@@ -2,8 +2,8 @@
   <section class="bzss-page">
     <header class="page-hero">
       <div>
-        <h1>BZSS-Core 玩家快照</h1>
-        <p>这里展示日志驱动的实时解析结果。`playerIndex` 是对准玩家的唯一标准，页面优先显示它。</p>
+        <h1>BZSS-Core Snapshots</h1>
+        <p>页面只看 runtimePlayers、scoreboardPlayers 和 scene 原始块，并以 playerIndex 关联。</p>
       </div>
       <div class="hero-actions">
         <button type="button" class="refresh-btn" :disabled="loading" @click="fetchData">
@@ -21,19 +21,19 @@
         <small>{{ statusDetail }}</small>
       </article>
       <article class="status-card">
-        <span class="status-label">玩家数</span>
-        <strong class="status-value">{{ players.length }}</strong>
-        <small>{{ payload?.state?.sourceMode || "log" }}</small>
+        <span class="status-label">Runtime</span>
+        <strong class="status-value">{{ runtimePlayers.length }}</strong>
+        <small>playerIndex {{ payload?.state?.runtimePlayerCount ?? 0 }}</small>
       </article>
       <article class="status-card">
-        <span class="status-label">最新更新</span>
-        <strong class="status-value">{{ formatDateTime(payload?.state?.updatedAt) }}</strong>
-        <small>{{ payload?.state?.lastRawLineHash ? `hash ${payload.state.lastRawLineHash.slice(0, 8)}` : "--" }}</small>
+        <span class="status-label">Scoreboard</span>
+        <strong class="status-value">{{ scoreboardPlayers.length }}</strong>
+        <small>playerIndex {{ payload?.state?.scoreboardPlayerCount ?? 0 }}</small>
       </article>
       <article class="status-card">
-        <span class="status-label">原始长度</span>
-        <strong class="status-value">{{ payload?.state?.rawTextLength ?? 0 }}</strong>
-        <small>{{ payload?.state?.markerSeen ? "已见 BZSS-Marked" : "未见标记" }}</small>
+        <span class="status-label">Scene</span>
+        <strong class="status-value">{{ (payload?.captureZones?.length ?? 0) + (payload?.fobs?.length ?? 0) + (payload?.mainZones?.length ?? 0) }}</strong>
+        <small>{{ payload?.state?.mainZoneCount ?? 0 }} MainZone</small>
       </article>
     </section>
 
@@ -42,104 +42,91 @@
         v-model.trim="query"
         class="search-input"
         type="text"
-        placeholder="搜索玩家名 / GUID / 武器 / 兵种"
+        placeholder="搜索 playerIndex / playerId / combatInfo"
       />
       <label class="toggle">
         <input v-model="showRaw" type="checkbox" />
-        <span>显示原始块</span>
+        <span>显示 JSON</span>
       </label>
     </section>
 
     <section class="raw-data-panel">
       <header class="raw-data-head">
         <div>
-          <h2>日志原始数据</h2>
+          <h2>原始块</h2>
           <p>{{ rawDataStatusLabel }}</p>
         </div>
         <button type="button" class="raw-refresh-btn" :disabled="rawLoading" @click="fetchRawData">
-          {{ rawLoading ? "读取中..." : "读取原始数据" }}
+          {{ rawLoading ? "读取中..." : "读取原始块" }}
         </button>
       </header>
       <div v-if="rawError" class="raw-error">{{ rawError }}</div>
       <div class="raw-data-meta">
-        <span>来源：{{ rawData?.sourceMode || payload?.state?.sourceMode || "log" }}</span>
-        <span>长度：{{ rawData?.rawTextLength ?? payload?.state?.rawTextLength ?? 0 }}</span>
-        <span>标记：{{ rawData?.markerSeen ? "已见 BZSS-Marked" : "未见标记" }}</span>
+        <span>Runtime: {{ rawData?.runtimePlayerCount ?? 0 }}</span>
+        <span>Scoreboard: {{ rawData?.scoreboardPlayerCount ?? 0 }}</span>
+        <span>Scene: {{ rawData?.mainZoneCount ?? 0 }}</span>
       </div>
-      <pre class="raw-data-block">{{ rawDataText }}</pre>
+      <div class="raw-blocks">
+        <pre class="raw-data-block">{{ runtimeRawBlock }}</pre>
+        <pre class="raw-data-block">{{ scoreboardRawBlock }}</pre>
+        <pre class="raw-data-block">{{ sceneRawBlock }}</pre>
+      </div>
     </section>
 
-    <section v-if="filteredPlayers.length > 0" class="player-list">
-      <article v-for="player in filteredPlayers" :key="player.playerGuid || `${player.playerIndex ?? player.playerId ?? player.playerName}`" class="player-card">
+    <section v-if="filteredPairs.length > 0" class="player-list">
+      <article v-for="pair in filteredPairs" :key="pair.playerIndex" class="player-card">
         <header class="player-head">
           <div>
-            <h2>{{ player.playerName || "Unknown" }}</h2>
-            <p class="mono">{{ player.playerGuid || "--" }}</p>
+            <h2>Player {{ pair.playerIndex }}</h2>
+            <p class="mono">playerId {{ pair.runtime?.playerId ?? pair.scoreboard?.playerId ?? "--" }}</p>
           </div>
           <div class="head-badges">
-            <span class="badge badge--primary">IDX {{ player.playerIndex ?? "--" }}</span>
-            <span class="badge">ID {{ player.playerId ?? "--" }}</span>
-            <span class="badge">T{{ player.teamId ?? "--" }}</span>
-            <span class="badge">S{{ player.squadId ?? "--" }}</span>
-            <span class="badge">FT {{ player.ftIndex ?? "--" }} / {{ player.ftPosition ?? "--" }}</span>
-            <span v-if="player.isAdmin" class="badge admin">Admin</span>
-            <span v-if="player.isCommander" class="badge commander">CMD</span>
-            <span class="badge health">HP {{ player.soldierInfo?.health ?? "--" }}</span>
+            <span class="badge badge--primary">IDX {{ pair.playerIndex }}</span>
+            <span class="badge">Yaw {{ pair.runtime?.yaw ?? "--" }}</span>
+            <span class="badge">T{{ pair.scoreboard?.teamId ?? "--" }}</span>
+            <span class="badge">S{{ pair.scoreboard?.squadId ?? "--" }}</span>
+            <span class="badge" :data-tone="pair.runtime?.stale ? 'warning' : 'success'">
+              {{ pair.runtime?.stale ? "stale" : "live" }}
+            </span>
           </div>
         </header>
 
         <div class="player-grid">
           <div class="field">
-            <span>兵种</span>
-            <strong class="mono">{{ player.soldierInfo?.soldierClass || "--" }}</strong>
+            <span>Position</span>
+            <strong class="mono">{{ formatVector(pair.runtime?.position) }}</strong>
           </div>
           <div class="field">
-            <span>武器</span>
-            <strong class="mono">{{ player.soldierInfo?.weaponClass || "--" }}</strong>
+            <span>Combat</span>
+            <strong class="mono">{{ pair.runtime?.combatInfo || "--" }}</strong>
           </div>
           <div class="field">
-            <span>弹药</span>
-            <strong class="mono">{{ formatNumberList(player.soldierInfo?.ammoValues ?? []) }}</strong>
-          </div>
-          <div class="field">
-            <span>战绩</span>
-            <strong class="mono">{{ formatScoreboardSummary(player) }}</strong>
-          </div>
-          <div class="field">
-            <span>载具</span>
-            <strong class="mono">{{ formatVehicleInfo(player) }}</strong>
-          </div>
-          <div class="field">
-            <span>坐席</span>
-            <strong class="mono">{{ formatSeatsPlayers(player) }}</strong>
+            <span>ObservedAt</span>
+            <strong class="mono">{{ formatDateTime(pair.runtime?.observedAt) }}</strong>
           </div>
           <div class="field field--wide">
-            <span>坐标</span>
-            <strong class="mono">{{ formatVector(player.soldierInfo?.position) }}</strong>
-          </div>
-          <div class="field field--wide">
-            <span>朝向</span>
-            <strong class="mono">{{ formatVector(player.soldierInfo?.rotation) }}</strong>
+            <span>playerIndex</span>
+            <strong class="mono">{{ pair.playerIndex }}</strong>
           </div>
         </div>
 
         <div class="scoreboard-grid">
-          <div v-for="item in getScoreboardItems(player)" :key="item.key" class="scoreboard-item">
+          <div v-for="item in getScoreboardItems(pair.scoreboard)" :key="item.key" class="scoreboard-item">
             <span>{{ item.label }}</span>
             <strong>{{ item.value ?? "--" }}</strong>
           </div>
         </div>
 
         <details v-if="showRaw" class="raw-wrap">
-          <summary>查看原始块</summary>
-          <pre>{{ player.rawText }}</pre>
+          <summary>查看 JSON</summary>
+          <pre>{{ pair.runtime ?? pair.scoreboard ?? {} }}</pre>
         </details>
       </article>
     </section>
 
     <section v-else class="empty-state">
       <strong>当前没有可显示的玩家数据。</strong>
-      <p>页面依赖 BZSS-Core 日志流；收到 `PlayerBaseInfo` 或 `PlayerScoreboard` 后会自动更新。</p>
+      <p>页面只消费 runtime / scoreboard 原始块，并以 playerIndex 关联。</p>
     </section>
   </section>
 </template>
@@ -152,9 +139,16 @@ import {
   streamBzssCorePlayerInfoList,
   type BzssCorePlayerInfoResponse,
   type BzssCoreRawDataResponse,
-  type BzssCoreTrackedPlayerInfo,
+  type BzssCoreRuntimePlayerInfo,
+  type BzssCoreScoreboardPlayerInfo,
 } from "../app/bzssCoreApi";
 import { canAutoRefreshNow } from "../composables/useAutoRefreshGate";
+
+type PlayerPair = {
+  playerIndex: number | string;
+  runtime: BzssCoreRuntimePlayerInfo | null;
+  scoreboard: BzssCoreScoreboardPlayerInfo | null;
+};
 
 const payload = ref<BzssCorePlayerInfoResponse | null>(null);
 const rawData = ref<BzssCoreRawDataResponse | null>(null);
@@ -165,39 +159,58 @@ const rawError = ref("");
 const query = ref("");
 const showRaw = ref(false);
 const active = ref(true);
-const isStreaming = ref(false);
 
 let refreshTimer: number | null = null;
 let closeStream: (() => void) | null = null;
 
-const players = computed(() => payload.value?.players ?? []);
-const filteredPlayers = computed(() => {
+const runtimePlayers = computed(() => payload.value?.runtimePlayers ?? []);
+const scoreboardPlayers = computed(() => payload.value?.scoreboardPlayers ?? []);
+
+const playerPairs = computed<PlayerPair[]>(() => {
+  const map = new Map<string, PlayerPair>();
+  const addPlayer = (player: BzssCoreRuntimePlayerInfo | BzssCoreScoreboardPlayerInfo | undefined, side: "runtime" | "scoreboard") => {
+    if (!player) return;
+    const key = String(player.playerIndex ?? player.playerId ?? "");
+    if (!key) return;
+    const current = map.get(key) ?? { playerIndex: player.playerIndex ?? player.playerId ?? key, runtime: null, scoreboard: null };
+    if (side === "runtime") current.runtime = player as BzssCoreRuntimePlayerInfo;
+    if (side === "scoreboard") current.scoreboard = player as BzssCoreScoreboardPlayerInfo;
+    map.set(key, current);
+  };
+  runtimePlayers.value.forEach((player) => addPlayer(player, "runtime"));
+  scoreboardPlayers.value.forEach((player) => addPlayer(player, "scoreboard"));
+  return [...map.values()].sort((a, b) => Number(a.playerIndex) - Number(b.playerIndex));
+});
+
+const filteredPairs = computed(() => {
   const needle = query.value.trim().toLowerCase();
-  if (!needle) return players.value;
-  return players.value.filter((player) => {
-    return [
-      player.playerName,
-      player.playerGuid,
-      player.soldierInfo?.soldierClass,
-      player.soldierInfo?.weaponClass,
-      String(player.playerIndex ?? ""),
-    ].some((value) => String(value ?? "").toLowerCase().includes(needle));
+  if (!needle) return playerPairs.value;
+  return playerPairs.value.filter((pair) => {
+    const values = [
+      pair.playerIndex,
+      pair.runtime?.playerId,
+      pair.runtime?.combatInfo,
+      pair.scoreboard?.playerId,
+      pair.scoreboard?.teamId,
+      pair.scoreboard?.squadId,
+    ];
+    return values.some((value) => String(value ?? "").toLowerCase().includes(needle));
   });
 });
 
-const rawDataText = computed(() => {
-  const text = rawData.value?.rawText ?? "";
-  if (text) return text;
-  if (rawLoading.value) return "正在读取日志原始数据...";
-  return "暂无可显示的日志原始数据。";
-});
+const runtimeRawBlock = computed(() => JSON.stringify(runtimePlayers.value, null, 2));
+const scoreboardRawBlock = computed(() => JSON.stringify(scoreboardPlayers.value, null, 2));
+const sceneRawBlock = computed(() => JSON.stringify({
+  captureZones: payload.value?.captureZones ?? [],
+  fobs: payload.value?.fobs ?? [],
+  mainZones: payload.value?.mainZones ?? [],
+}, null, 2));
 
 const rawDataStatusLabel = computed(() => {
   const data = rawData.value;
-  if (!data) return "直接显示日志解析到的 PlayerBaseInfo / SoldierInfo / PlayerScoreboard 原始块。";
+  if (!data) return "直接显示 runtime / scoreboard / scene 原始块。";
   if (data.lastError) return data.lastError;
-  if (!data.rawText) return "日志里还没有可展示的原始块。";
-  return `最后更新 ${formatDateTime(data.updatedAt)}，共 ${data.playerCount} 名玩家。`;
+  return `更新于 ${formatDateTime(data.updatedAt)}，runtime ${data.runtimePlayerCount} / scoreboard ${data.scoreboardPlayerCount}`;
 });
 
 const statusLabel = computed(() => {
@@ -222,9 +235,8 @@ async function fetchData() {
   error.value = "";
   try {
     payload.value = await fetchBzssCorePlayerInfoList();
-    recordStreamTick();
   } catch (err: any) {
-    error.value = err?.message ?? "加载 BZSS-Core 玩家快照失败。";
+    error.value = err?.message ?? "加载 BZSS-Core 快照失败。";
   } finally {
     loading.value = false;
   }
@@ -236,7 +248,7 @@ async function fetchRawData() {
   try {
     rawData.value = await fetchBzssCoreRawData();
   } catch (err: any) {
-    rawError.value = err?.message ?? "读取日志原始数据失败。";
+    rawError.value = err?.message ?? "读取原始块失败。";
   } finally {
     rawLoading.value = false;
   }
@@ -261,14 +273,12 @@ function clearRefresh() {
 
 function startStream() {
   if (closeStream || typeof EventSource === "undefined") return;
-  isStreaming.value = true;
   closeStream = streamBzssCorePlayerInfoList(
     (data) => {
       if (!active.value) return;
       payload.value = data;
       error.value = "";
       loading.value = false;
-      recordStreamTick();
     },
     (_err, source) => {
       if (!active.value) return;
@@ -284,12 +294,6 @@ function stopStream() {
   if (!closeStream) return;
   closeStream();
   closeStream = null;
-  isStreaming.value = false;
-}
-
-function recordStreamTick() {
-  // 只需要保留一个轻量的流状态信号，避免引入额外的历史数据结构。
-  void isStreaming.value;
 }
 
 function formatDateTime(value?: string | null) {
@@ -299,60 +303,35 @@ function formatDateTime(value?: string | null) {
   return date.toLocaleString();
 }
 
-function formatNumberList(values: number[]) {
-  return values.length > 0 ? values.join(" / ") : "--";
+function formatVector(value?: BzssCoreRuntimePlayerInfo["position"]) {
+  if (!value) return "--";
+  const x = value.x ?? "--";
+  const y = value.y ?? "--";
+  const z = value.z ?? "--";
+  return `X=${x} Y=${y} Z=${z}`;
 }
 
-function getScoreboardItems(player: BzssCoreTrackedPlayerInfo) {
-  const labeled = player.playerScoreboard?.labeledValues ?? [];
-  if (labeled.length > 0) return labeled;
-  const labels = [
-    ["dataLives", "Data lives"],
-    ["numKills", "Num kills"],
-    ["numDeaths", "Num death"],
-    ["numWoundeds", "Num woundeds"],
-    ["numWounds", "Num wounds"],
-    ["numTeamKills", "Num TK"],
-    ["healPoints", "Heal point"],
-    ["revivedPoints", "Revived points"],
-    ["teamworkScore", "Team work score"],
-    ["objectiveScore", "Objective score"],
-    ["combatScore", "Combat score"],
+function getScoreboardItems(player?: BzssCoreScoreboardPlayerInfo | null) {
+  const values: Array<[string, string, number | null | undefined]> = [
+    ["lives", "Lives", player?.lives],
+    ["kills", "Kills", player?.kills],
+    ["vehicleKills", "Vehicle kills", player?.vehicleKills],
+    ["deaths", "Deaths", player?.deaths],
+    ["woundeds", "Woundeds", player?.woundeds],
+    ["wounds", "Wounds", player?.wounds],
+    ["teamKills", "Team kills", player?.teamKills],
+    ["healPoints", "Heal points", player?.healPoints],
+    ["revivedPoints", "Revived points", player?.revivedPoints],
+    ["teamworkScore", "Teamwork", player?.teamworkScore],
+    ["objectiveScore", "Objective", player?.objectiveScore],
+    ["combatScore", "Combat", player?.combatScore],
   ];
-  const values = player.playerScoreboard?.numericValues ?? [];
-  return labels.map(([key, label], index) => ({
-    key,
-    label,
-    value: values[index] ?? null,
-  }));
-}
-
-function formatScoreboardSummary(player: BzssCoreTrackedPlayerInfo) {
-  const stats = player.playerScoreboard?.stats;
-  if (!stats) {
-    return formatNumberList((player.playerScoreboard?.numericValues ?? []).filter((value): value is number => value != null));
-  }
-  return `K ${stats.numKills ?? "--"} / D ${stats.numDeaths ?? "--"} / W ${stats.numWoundeds ?? "--"} / C ${stats.combatScore ?? "--"}`;
-}
-
-function formatVehicleInfo(player: BzssCoreTrackedPlayerInfo) {
-  const info = player.vehicleInfo;
-  if (!info?.vehicleType) return "--";
-  return info.healthText ? `${info.vehicleType} ${info.healthText}` : info.vehicleType;
-}
-
-function formatSeatsPlayers(player: BzssCoreTrackedPlayerInfo) {
-  const seats = player.seatsPlayers ?? [];
-  return seats.length > 0 ? seats.join(" / ") : "--";
-}
-
-function formatVector(vector: BzssCoreTrackedPlayerInfo["soldierInfo"]["position"]) {
-  if (!vector) return "--";
-  return `X=${vector.x ?? "?"}  Y=${vector.y ?? "?"}  Z=${vector.z ?? "?"}`;
+  return values.map(([key, label, value]) => ({ key, label, value }));
 }
 
 onMounted(async () => {
   await fetchData();
+  await fetchRawData();
   startStream();
   scheduleRefresh();
 });
@@ -382,368 +361,184 @@ onBeforeUnmount(() => {
   height: 100%;
   min-height: 100%;
   min-width: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-gutter: stable;
-  padding: 24px 24px 24px 284px;
-  background:
-    radial-gradient(circle at top left, rgba(34, 197, 94, 0.12), transparent 26%),
-    radial-gradient(circle at top right, rgba(14, 165, 233, 0.14), transparent 28%),
-    linear-gradient(180deg, #08111f 0%, #0f172a 100%);
-  color: #e2e8f0;
-}
-
-.page-hero {
   display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.page-hero,
+.status-grid,
+.toolbar,
+.raw-data-panel,
+.player-list,
+.empty-state {
+  min-width: 0;
+}
+
+.page-hero,
+.raw-data-head,
+.player-head,
+.toolbar {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  align-items: flex-start;
-  margin-bottom: 18px;
-}
-
-.page-hero h1 {
-  margin: 0 0 6px;
-  font-size: 30px;
-  line-height: 1.1;
-}
-
-.page-hero p {
-  margin: 0;
-  max-width: 820px;
-  color: #94a3b8;
-}
-
-.refresh-btn,
-.raw-refresh-btn {
-  border: 0;
-  border-radius: 999px;
-  padding: 10px 16px;
-  font-weight: 700;
-  color: #08111f;
-  background: linear-gradient(135deg, #38bdf8, #86efac);
-  cursor: pointer;
-}
-
-.refresh-btn:disabled,
-.raw-refresh-btn:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.error-banner {
-  margin-bottom: 14px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid rgba(248, 113, 113, 0.35);
-  background: rgba(127, 29, 29, 0.28);
-  color: #fecaca;
+  gap: 12px;
 }
 
 .status-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
-  margin-bottom: 16px;
+}
+
+.status-card,
+.player-card,
+.raw-data-panel,
+.empty-state {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(12, 16, 24, 0.88);
 }
 
 .status-card {
-  padding: 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  background: rgba(15, 23, 42, 0.78);
-  backdrop-filter: blur(10px);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.status-label {
-  display: block;
-  margin-bottom: 8px;
+.status-label,
+.field span,
+.scoreboard-item span {
   font-size: 12px;
-  color: #94a3b8;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .status-value {
-  display: block;
-  margin-bottom: 6px;
   font-size: 20px;
-  color: #f8fafc;
-}
-
-.status-value[data-status="ready"] {
-  color: #86efac;
-}
-
-.status-value[data-status="error"] {
-  color: #fca5a5;
-}
-
-.status-card small {
-  color: #94a3b8;
-}
-
-.toolbar {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.search-input {
-  flex: 1;
-  min-width: 0;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 12px;
-  padding: 12px 14px;
-  background: rgba(15, 23, 42, 0.72);
-  color: #e2e8f0;
-}
-
-.toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: #cbd5e1;
-}
-
-.raw-data-panel {
-  margin-bottom: 16px;
-  padding: 16px;
-  border-radius: 16px;
-  border: 1px solid rgba(125, 211, 252, 0.18);
-  background: rgba(2, 6, 23, 0.72);
-}
-
-.raw-data-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: flex-start;
-  margin-bottom: 12px;
-}
-
-.raw-data-head h2 {
-  margin: 0 0 4px;
-  font-size: 18px;
-}
-
-.raw-data-head p {
-  margin: 0;
-  color: #94a3b8;
-}
-
-.raw-error {
-  margin-bottom: 10px;
-  color: #fecaca;
-}
-
-.raw-data-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 10px;
-  color: #cbd5e1;
-  font-size: 12px;
-}
-
-.raw-data-meta span {
-  min-width: 0;
-  max-width: 100%;
-  overflow-wrap: anywhere;
-  padding: 5px 8px;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.08);
-}
-
-.raw-data-block {
-  max-height: 460px;
-  margin: 0;
-  padding: 12px;
-  overflow: auto;
-  border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  background: rgba(2, 6, 23, 0.9);
-  color: #d1fae5;
-  font-family: "Consolas", "SFMono-Regular", monospace;
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.player-list {
-  display: grid;
-  gap: 14px;
-}
-
-.player-card {
-  padding: 16px;
-  border-radius: 18px;
-  border: 1px solid rgba(56, 189, 248, 0.14);
-  background:
-    linear-gradient(180deg, rgba(15, 23, 42, 0.92), rgba(2, 6, 23, 0.92));
-  box-shadow: 0 18px 36px rgba(2, 6, 23, 0.22);
-}
-
-.player-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: flex-start;
-  margin-bottom: 14px;
-}
-
-.player-head h2 {
-  margin: 0 0 4px;
-  font-size: 22px;
-}
-
-.mono {
-  font-family: "Consolas", "SFMono-Regular", monospace;
-}
-
-.head-badges {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.12);
-  color: #dbeafe;
-  font-size: 12px;
   font-weight: 700;
 }
 
-.badge--primary {
-  background: rgba(34, 197, 94, 0.18);
-  color: #bbf7d0;
+.toolbar {
+  flex-wrap: wrap;
 }
 
-.badge.admin {
-  background: rgba(249, 115, 22, 0.16);
-  color: #fed7aa;
+.search-input {
+  flex: 1 1 280px;
+  min-width: 240px;
 }
 
-.badge.commander {
-  background: rgba(168, 85, 247, 0.16);
-  color: #e9d5ff;
+.raw-data-panel {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.badge.health {
-  background: rgba(244, 114, 182, 0.16);
-  color: #fbcfe8;
+.raw-data-meta,
+.head-badges,
+.scoreboard-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.raw-blocks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.raw-data-block {
+  margin: 0;
+  padding: 12px;
+  min-height: 180px;
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.22);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.player-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.player-card {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .player-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 
-.field,
-.scoreboard-item {
-  min-width: 0;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  background: rgba(15, 23, 42, 0.56);
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .field--wide {
-  grid-column: span 2;
+  grid-column: 1 / -1;
 }
 
-.field span,
-.scoreboard-item span {
-  display: block;
-  margin-bottom: 4px;
-  color: #94a3b8;
+.scoreboard-item {
+  min-width: 120px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.badge {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
   font-size: 12px;
 }
 
-.field strong,
-.scoreboard-item strong {
-  display: block;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  color: #f8fafc;
-}
-
-.scoreboard-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.raw-wrap {
-  margin-top: 12px;
+.badge--primary {
+  background: rgba(88, 161, 255, 0.2);
 }
 
 .raw-wrap summary {
   cursor: pointer;
-  color: #cbd5e1;
 }
 
 .raw-wrap pre {
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   padding: 12px;
   overflow: auto;
-  border-radius: 12px;
-  background: rgba(2, 6, 23, 0.9);
-  color: #cbd5e1;
-  white-space: pre-wrap;
-  word-break: break-word;
+  background: rgba(0, 0, 0, 0.22);
+  border-radius: 8px;
 }
 
 .empty-state {
   padding: 20px;
-  border-radius: 16px;
-  border: 1px dashed rgba(148, 163, 184, 0.22);
-  color: #cbd5e1;
-  background: rgba(15, 23, 42, 0.4);
-}
-
-.empty-state strong {
-  display: block;
-  margin-bottom: 6px;
-  color: #f8fafc;
-}
-
-.empty-state p {
-  margin: 0;
-  color: #94a3b8;
 }
 
 @media (max-width: 1200px) {
-  .status-grid {
+  .status-grid,
+  .raw-blocks,
+  .player-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 900px) {
-  .bzss-page {
-    padding: 18px;
-  }
-
-  .page-hero,
-  .raw-data-head,
-  .player-head,
-  .toolbar {
-    flex-direction: column;
-  }
-
-  .player-grid,
-  .scoreboard-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .field--wide {
-    grid-column: auto;
+@media (max-width: 720px) {
+  .status-grid,
+  .raw-blocks,
+  .player-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

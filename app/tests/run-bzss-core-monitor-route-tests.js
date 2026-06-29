@@ -23,16 +23,19 @@ function createServer() {
             revision: 3,
             updatedAt: "2026-06-19T00:00:00.000Z",
             markerSeen: true,
-            playerCount: 1,
-            rawTextLength: 512,
-            sourceMode: "log",
-            lastRawLineHash: "abc123",
-            lastRawFields: ["PlayerBaseInfo", "PlayerScoreboard"],
+            runtimePlayerCount: 1,
+            scoreboardPlayerCount: 1,
+            mainZoneCount: 1,
+            rawLineHash: "abc123",
+            rawFields: ["PlayerBaseInfo", "PlayerScoreboard"],
             lastError: "",
           };
         },
-        getPlayers() {
-          return [{ playerName: "Donald", playerGuid: "abc", playerIndex: 0 }];
+        getRuntimePlayers() {
+          return [{ playerName: "Donald", playerGuid: "abc", playerIndex: 0, yaw: 90 }];
+        },
+        getScoreboardPlayers() {
+          return [{ playerIndex: 0, playerId: 0, teamId: 1, squadId: -1, playerScoreboard: { stats: { combatScore: 1 }, numericValues: [] } }];
         },
         getRawSnapshot() {
           return {
@@ -40,20 +43,18 @@ function createServer() {
             revision: 3,
             updatedAt: "2026-06-19T00:00:00.000Z",
             markerSeen: true,
-            playerCount: 1,
-            rawTextLength: 512,
-            sourceMode: "log",
-            lastRawLineHash: "abc123",
-            lastRawFields: ["PlayerBaseInfo", "PlayerScoreboard"],
+            runtimePlayerCount: 1,
+            scoreboardPlayerCount: 1,
+            mainZoneCount: 1,
+            rawLineHash: "abc123",
+            rawFields: ["PlayerBaseInfo", "PlayerScoreboard"],
             lastError: "",
-            rawText: "PlayerBaseInfo{0,abc,Donald,1,0}",
+            runtimePlayers: [{ playerName: "Donald", playerGuid: "abc", playerIndex: 0, playerId: 0, yaw: 90 }],
+            scoreboardPlayers: [{ playerIndex: 0, playerId: 0, teamId: 1, squadId: -1, playerScoreboard: { stats: { combatScore: 1 }, numericValues: [] } }],
             captureZones: [{ name: "CP1", position: { x: 100, y: 200, z: 0 } }],
             fobs: [],
             mainZones: [],
           };
-        },
-        findPlayer(query) {
-          return query?.name ? { playerName: query.name, playerGuid: "abc", playerIndex: 0 } : null;
         },
       },
       tacticalMapReplay: {
@@ -79,25 +80,27 @@ function createServer() {
 
 function main() {
   const server = createServer();
-  const one = server.getBzssCorePlayerInfo({ name: "Donald" });
-  assert.equal(one.player?.playerName, "Donald");
-  assert.equal(one.player?.playerIndex, 0);
-  assert.equal(one.players, undefined);
+  const one = server.getBzssCorePlayerInfo({ all: 0 });
+  assert.equal(one.runtimePlayers, undefined);
+  assert.equal(one.scoreboardPlayers, undefined);
 
   const all = server.getBzssCorePlayerInfo({ all: true });
-  assert.equal(Array.isArray(all.players), true);
-  assert.equal(all.players.length, 1);
+  assert.equal(Array.isArray(all.runtimePlayers), true);
+  assert.equal(all.runtimePlayers.length, 1);
+  assert.equal(Array.isArray(all.scoreboardPlayers), true);
+  assert.equal(all.scoreboardPlayers.length, 1);
   assert.equal(Array.isArray(all.captureZones), true);
   assert.equal(all.captureZones.length, 1);
   assert.equal(all.captureZones[0].name, "CP1");
   assert.equal(all.status, "ready");
-  assert.equal(all.state.sourceMode, "log");
+  assert.equal(all.state.runtimePlayerCount, 1);
+  assert.equal(all.state.scoreboardPlayerCount, 1);
 
   const raw = server.getBzssCorePlayerInfoRaw();
-  assert.equal(raw.rawText.includes("PlayerBaseInfo"), true);
-  assert.equal(raw.rawTextLength, 512);
+  assert.equal(raw.runtimePlayers.length, 1);
+  assert.equal(raw.scoreboardPlayers.length, 1);
   assert.equal(raw.status, "ready");
-  assert.equal(raw.sourceMode, "log");
+  assert.equal(raw.rawLineHash, "abc123");
 
   server.canViewTacticalMapReplay({ permissions: ["tactical_map_replay.view"] });
   server.canExportTacticalMapReplay({ permissions: ["tactical_map_replay.export"] });

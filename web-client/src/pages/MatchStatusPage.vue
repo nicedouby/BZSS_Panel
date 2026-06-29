@@ -319,7 +319,7 @@ import { useAutoRefreshGate } from "../composables/useAutoRefreshGate";
 import { cancelIdleTask, scheduleIdleTask } from "../utils/idle";
 import { resolvePlayerIdentityIp } from "../app/playerIdentityApi";
 import { fetchBzssCorePlayerInfo, fetchBzssCorePlayerInfoList, streamBzssCorePlayerInfoList } from "../app/bzssCoreApi";
-import type { BzssCorePlayerInfoResponse, BzssCoreTrackedPlayerInfo } from "../app/bzssCoreApi";
+import type { BzssCorePlayerInfoResponse } from "../app/bzssCoreApi";
 import type {
   PageState,
   PlayerDetailViewModel,
@@ -402,7 +402,7 @@ function handleViewModeChange(mode: "list" | "map") {
 }
 
 const bzssCoreSnapshot = ref<BzssCorePlayerInfoResponse | null>(null);
-const bzssCorePlayers = ref<BzssCoreTrackedPlayerInfo[]>([]);
+const bzssCorePlayers = ref<any[]>([]);
 const bzssCoreLoading = ref(false);
 const bzssCoreError = ref("");
 const bzssCoreStreamActive = ref(false);
@@ -416,7 +416,21 @@ function startBzssStream() {
     (payload) => {
       bzssCoreLoading.value = false;
       bzssCoreSnapshot.value = payload;
-      bzssCorePlayers.value = payload.players ?? [];
+      const runtimePlayers = payload.runtimePlayers ?? [];
+      const scoreboardPlayers = payload.scoreboardPlayers ?? [];
+      const byIndex = new Map<number | string, any>();
+      for (const player of runtimePlayers) {
+        if (player.playerIndex == null && player.playerId == null) continue;
+        const key = player.playerIndex ?? player.playerId ?? "";
+        byIndex.set(key, { ...player });
+      }
+      for (const player of scoreboardPlayers) {
+        if (player.playerIndex == null && player.playerId == null) continue;
+        const key = player.playerIndex ?? player.playerId ?? "";
+        const existing = byIndex.get(key);
+        byIndex.set(key, existing ? { ...existing, ...player } : { ...player });
+      }
+      bzssCorePlayers.value = [...byIndex.values()];
       bzssCoreError.value = payload.ok ? "" : payload.status || "BZSS-Core returned an error.";
     },
     (err) => {

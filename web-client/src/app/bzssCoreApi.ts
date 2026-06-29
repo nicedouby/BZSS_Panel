@@ -39,9 +39,47 @@ export interface BzssCoreMainZoneInfo {
   raw?: string;
 }
 
+export interface BzssCoreRuntimePlayerInfo {
+  playerId: number | null;
+  playerIndex: number | null;
+  position: BzssCoreTrackedVector | null;
+  yaw: number | null;
+  combatInfo: string;
+  observedAt: string;
+  stale: boolean;
+}
+
+export interface BzssCoreScoreboardPlayerInfo {
+  playerId: number | null;
+  playerIndex: number | null;
+  teamId: number | null;
+  squadId: number | null;
+  lives: number | null;
+  kills: number | null;
+  vehicleKills: number | null;
+  deaths: number | null;
+  woundeds: number | null;
+  wounds: number | null;
+  teamKills: number | null;
+  healPoints: number | null;
+  revivedPoints: number | null;
+  teamworkScore: number | null;
+  objectiveScore: number | null;
+  combatScore: number | null;
+  isAdmin: boolean | null;
+  isCommander: boolean | null;
+  fireTeamIndex: number | null;
+  fireTeamPosition: number | null;
+}
+
 export interface BzssCoreTrackedPlayerInfo {
   playerId?: number | null;
   playerIndex?: number | null;
+  position?: BzssCoreTrackedVector | null;
+  yaw?: number | null;
+  combatInfo?: string;
+  observedAt?: string;
+  stale?: boolean;
   playerName: string;
   playerGuid: string;
   teamId: number | null;
@@ -109,14 +147,11 @@ export interface BzssCorePlayerInfoState {
   revision: number;
   updatedAt: string;
   markerSeen: boolean;
-  playerCount: number;
-  captureZoneCount?: number;
-  fobCount?: number;
   mainZoneCount?: number;
-  rawTextLength?: number;
-  sourceMode?: string;
-  lastRawLineHash?: string;
-  lastRawFields?: string[];
+  runtimePlayerCount?: number;
+  scoreboardPlayerCount?: number;
+  rawLineHash?: string;
+  rawFields?: string[];
   lastError: string;
 }
 
@@ -124,8 +159,8 @@ export interface BzssCorePlayerInfoResponse {
   ok: boolean;
   status: string;
   state: BzssCorePlayerInfoState;
-  player: BzssCoreTrackedPlayerInfo | null;
-  players?: BzssCoreTrackedPlayerInfo[];
+  runtimePlayers?: BzssCoreRuntimePlayerInfo[];
+  scoreboardPlayers?: BzssCoreScoreboardPlayerInfo[];
   captureZones?: BzssCoreCaptureZoneInfo[];
   fobs?: BzssCoreFobInfo[];
   mainZones?: BzssCoreMainZoneInfo[];
@@ -137,16 +172,15 @@ export interface BzssCoreRawDataResponse {
   revision: number;
   updatedAt: string;
   markerSeen: boolean;
-  playerCount: number;
-  sourceMode?: string;
-  lastRawLineHash?: string;
-  lastRawFields?: string[];
+  runtimePlayerCount: number;
+  scoreboardPlayerCount: number;
+  mainZoneCount: number;
+  rawLineHash: string;
+  rawFields: string[];
   captureZones?: BzssCoreCaptureZoneInfo[];
   fobs?: BzssCoreFobInfo[];
   mainZones?: BzssCoreMainZoneInfo[];
   lastError: string;
-  rawText: string;
-  rawTextLength: number;
 }
 
 export async function executeBzssCoreCommand(input: {

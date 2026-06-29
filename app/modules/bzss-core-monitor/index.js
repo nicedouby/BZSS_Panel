@@ -61,8 +61,8 @@ export function createBzssCoreMonitorModule({ core, logger }) {
         operation: "bzssCoreMonitor.status",
         data: {
           status: state.status,
-          sourceMode: state.sourceMode,
-          playerCount: state.players.length,
+          runtimePlayerCount: state.runtimePlayers.length,
+          scoreboardPlayerCount: state.scoreboardPlayers.length,
           lastError: state.lastError,
         },
       });
@@ -81,10 +81,8 @@ export function createBzssCoreMonitorModule({ core, logger }) {
   function clearPublishedPlayers(nextStatus, nextError = "") {
     publish((draft) => {
       draft.status = nextStatus;
-      draft.players = [];
       draft.runtimePlayers = [];
       draft.scoreboardPlayers = [];
-      draft.indexByName = {};
       draft.markerSeen = false;
       draft.lastError = nextError;
     });
@@ -100,12 +98,9 @@ export function createBzssCoreMonitorModule({ core, logger }) {
     try {
       publish((draft) => {
         draft.status = "ready";
-        draft.sourceMode = "log";
         draft.markerSeen = true;
-        draft.rawText = line;
-        draft.rawTextLength = line.length;
-        draft.lastRawLineHash = hashText(line);
-        draft.lastRawFields = parsed.rawFields ?? [];
+        draft.rawLineHash = hashText(line);
+        draft.rawFields = parsed.rawFields ?? [];
         draft.lastError = "";
 
         if (parsed.type === "playerRuntime") {
@@ -117,16 +112,13 @@ export function createBzssCoreMonitorModule({ core, logger }) {
           draft.fobs = parsed.fobs;
           draft.mainZones = parsed.mainZones;
         }
-
-        draft.players = mergeLogPlayers(draft.runtimePlayers, draft.scoreboardPlayers);
-        draft.indexByName = buildPlayerIndex(draft.players);
       });
       return { ok: true, ignored: false, type: parsed.type };
     } catch (error) {
       publish((draft) => {
         draft.status = "error";
         draft.lastError = error?.message ?? "Failed to parse BZSS-Core log line.";
-        draft.lastRawLineHash = hashText(line);
+        draft.rawLineHash = hashText(line);
       });
       return { ok: false, ignored: false, error: error?.message ?? "Failed to parse BZSS-Core log line." };
     }
@@ -135,7 +127,8 @@ export function createBzssCoreMonitorModule({ core, logger }) {
   function getSnapshotEvent() {
     return {
       state: getState(),
-      players: getPlayers(),
+      runtimePlayers: getRuntimePlayers(),
+      scoreboardPlayers: getScoreboardPlayers(),
       captureZones: state.captureZones.map(clonePlainObject),
       fobs: state.fobs.map(clonePlainObject),
       mainZones: state.mainZones.map(clonePlainObject),
@@ -152,12 +145,12 @@ export function createBzssCoreMonitorModule({ core, logger }) {
       revision: state.revision,
       updatedAt: state.updatedAt,
       markerSeen: state.markerSeen,
-      playerCount: state.players.length,
+      runtimePlayerCount: state.runtimePlayers.length,
+      scoreboardPlayerCount: state.scoreboardPlayers.length,
+      playerCount: state.runtimePlayers.length + state.scoreboardPlayers.length,
       mainZoneCount: state.mainZones.length,
-      rawTextLength: state.rawTextLength,
-      sourceMode: state.sourceMode,
-      lastRawLineHash: state.lastRawLineHash,
-      lastRawFields: [...state.lastRawFields],
+      rawLineHash: state.rawLineHash,
+      rawFields: [...state.rawFields],
       lastError: state.lastError,
     };
   }
@@ -168,41 +161,26 @@ export function createBzssCoreMonitorModule({ core, logger }) {
       revision: state.revision,
       updatedAt: state.updatedAt,
       markerSeen: state.markerSeen,
-      playerCount: state.players.length,
+      runtimePlayerCount: state.runtimePlayers.length,
+      scoreboardPlayerCount: state.scoreboardPlayers.length,
+      playerCount: state.runtimePlayers.length + state.scoreboardPlayers.length,
       captureZones: state.captureZones.map(clonePlainObject),
       fobs: state.fobs.map(clonePlainObject),
       mainZones: state.mainZones.map(clonePlainObject),
       runtimePlayers: state.runtimePlayers.map(clonePlainObject),
       scoreboardPlayers: state.scoreboardPlayers.map(clonePlainObject),
-      sourceMode: state.sourceMode,
-      lastRawLineHash: state.lastRawLineHash,
-      lastRawFields: [...state.lastRawFields],
+      rawLineHash: state.rawLineHash,
+      rawFields: [...state.rawFields],
       lastError: state.lastError,
-      rawText: state.rawText,
-      rawTextLength: state.rawTextLength,
     };
   }
 
-  function getPlayers() {
-    return state.players.map(clonePlainObject);
+  function getRuntimePlayers() {
+    return state.runtimePlayers.map(clonePlainObject);
   }
 
-  function findPlayer(query = {}) {
-    const name = String(query?.name ?? "").trim();
-    if (!name) return null;
-    const directKey = normalizeComparableName(name);
-    const directMatch = state.indexByName[directKey];
-    if (directMatch) return clonePlainObject(directMatch);
-
-    const querySuffix = normalizeSuffixName(name);
-    if (!querySuffix) return null;
-
-    for (const player of state.players) {
-      if (normalizeSuffixName(player.playerName) === querySuffix) {
-        return clonePlainObject(player);
-      }
-    }
-    return null;
+  function getScoreboardPlayers() {
+    return state.scoreboardPlayers.map(clonePlainObject);
   }
 
   async function start() {
@@ -235,9 +213,9 @@ export function createBzssCoreMonitorModule({ core, logger }) {
     apiName: "bzssCoreMonitor",
     api: {
       getState,
-      getPlayers,
+      getRuntimePlayers,
+      getScoreboardPlayers,
       getRawSnapshot,
-      findPlayer,
       subscribe,
       ingestLogLine,
     },
@@ -252,18 +230,13 @@ function createInitialState() {
     revision: 0,
     updatedAt: "",
     markerSeen: false,
-    players: [],
     runtimePlayers: [],
     scoreboardPlayers: [],
     captureZones: [],
     fobs: [],
     mainZones: [],
-    indexByName: {},
-    sourceMode: "",
-    lastRawLineHash: "",
-    lastRawFields: [],
-    rawText: "",
-    rawTextLength: 0,
+    rawLineHash: "",
+    rawFields: [],
     lastError: "",
   };
 }
@@ -391,16 +364,14 @@ function parseRuntimePlayerLine(text) {
         combatInfo: fields.slice(5).join(","),
         observedAt,
         stale: false,
-        raw,
-        rawFields: fields,
       };
     })
-    .filter((player) => player.playerId != null || player.rawFields.some(Boolean));
+    .filter((player) => player.playerId != null);
 
   return {
     type: "playerRuntime",
     runtimePlayers,
-    rawFields: runtimePlayers.flatMap((player) => player.rawFields),
+    rawFields: [],
   };
 }
 
@@ -659,79 +630,6 @@ function extractBraceItems(text) {
   return items;
 }
 
-function mergeLogPlayers(runtimePlayers = [], scoreboardPlayers = []) {
-  const byId = new Map();
-  for (const player of scoreboardPlayers) {
-    const key = player.playerId ?? `scoreboard:${byId.size}`;
-    const stats = {
-      dataLives: player.lives,
-      numKills: player.kills,
-      numDeaths: player.deaths,
-      numWoundeds: player.woundeds,
-      numWounds: player.wounds,
-      numTeamKills: player.teamKills,
-      healPoints: player.healPoints,
-      revivedPoints: player.revivedPoints,
-      teamworkScore: player.teamworkScore,
-      objectiveScore: player.objectiveScore,
-      combatScore: player.combatScore,
-    };
-    byId.set(key, {
-      playerId: player.playerId,
-      playerIndex: player.playerIndex ?? player.playerId ?? null,
-      playerName: "",
-      playerGuid: "",
-      teamId: player.teamId,
-      squadId: player.squadId,
-      isAdmin: player.isAdmin,
-      isCommander: player.isCommander,
-      ftIndex: player.fireTeamIndex,
-      ftPosition: player.fireTeamPosition,
-      playerBaseInfo: { raw: "", fields: [], values: {} },
-      soldierInfo: createEmptySoldierInfo(),
-      playerScoreboard: {
-        raw: player.raw,
-        values: player.rawFields,
-        numericValues: player.rawFields.map(toFiniteNumber),
-        stats,
-        labeledValues: SCOREBOARD_FIELDS.map(([statKey, label]) => ({ key: statKey, label, value: stats[statKey] ?? null })),
-        extraValues: [],
-      },
-      runtimeInfo: null,
-      rawText: player.raw,
-    });
-  }
-
-  for (const runtimePlayer of runtimePlayers) {
-    const key = runtimePlayer.playerId ?? `runtime:${byId.size}`;
-    const existing = byId.get(key) ?? {
-      playerId: runtimePlayer.playerId,
-      playerIndex: runtimePlayer.playerIndex ?? runtimePlayer.playerId ?? null,
-      playerName: "",
-      playerGuid: "",
-      teamId: null,
-      squadId: null,
-      playerBaseInfo: { raw: "", fields: [], values: {} },
-      soldierInfo: createEmptySoldierInfo(),
-      playerScoreboard: {
-        raw: "",
-        values: [],
-        numericValues: [],
-        stats: {},
-        labeledValues: [],
-        extraValues: [],
-      },
-      rawText: runtimePlayer.raw,
-    };
-    existing.runtimeInfo = clonePlainObject(runtimePlayer);
-    existing.soldierInfo.position = runtimePlayer.position;
-    existing.soldierInfo.rotation = { x: null, y: null, z: runtimePlayer.yaw };
-    byId.set(key, existing);
-  }
-
-  return [...byId.values()];
-}
-
 function extractRawLogLine(input) {
   if (typeof input === "string") return input;
   return String(input?.rawLog ?? input?.rawEvent?.Raw ?? input?.sourceRaw ?? input?.raw ?? input?.message ?? "").trim();
@@ -954,7 +852,7 @@ function findPlayerContextStart(source, playerBaseIndex) {
 function findBzssCoreContextStart(data, startIndex) {
   const searchWindow = Math.max(0, startIndex - 8192);
   let contextStart = startIndex;
-  for (const needle of ["[BZSS-Core-PBI]", "TeamID{", "TeamID:", "SquadInfo{", "SquadBaseInfo{"]) {
+  for (const needle of ["TeamID{", "TeamID:", "SquadInfo{", "SquadBaseInfo{"]) {
     const found = data.lastIndexOf(Buffer.from(needle, "utf16le"), startIndex);
     if (found >= searchWindow && found >= 0) {
       contextStart = Math.min(contextStart, found);
@@ -1018,15 +916,6 @@ function pickFirstFiniteNumber(values) {
     if (number != null) return number;
   }
   return null;
-}
-
-function buildPlayerIndex(players) {
-  const index = {};
-  for (const player of players) {
-    const comparable = normalizeComparableName(player.playerName);
-    if (comparable && !index[comparable]) index[comparable] = player;
-  }
-  return index;
 }
 
 function splitTopLevelCsv(text) {
@@ -1093,17 +982,6 @@ function isLikelyPrintableUtf16CodeUnit(value) {
   if (value === 0 || value === 0xffff) return false;
   if (value === 0x0009 || value === 0x000a || value === 0x000d) return true;
   return value >= 0x0020 && value <= 0xfffd;
-}
-
-function normalizeComparableName(value) {
-  return String(value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
-}
-
-function normalizeSuffixName(value) {
-  const normalized = normalizeComparableName(value);
-  if (!normalized) return "";
-  const tokens = normalized.split(" ").filter(Boolean);
-  return tokens[tokens.length - 1] ?? normalized;
 }
 
 function toFiniteNumber(value) {
