@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 
 import {
   createBzssCoreMonitorModule,
   extractBzssCoreTrackedText,
   parseBzssCorePlayerBlocks,
+  parseBzssCoreLogLine,
 } from "../modules/bzss-core-monitor/index.js";
 
 function testExtractBzssCoreTrackedTextReadsUtf16Block() {
@@ -80,6 +78,7 @@ function testParseBzssCorePlayerBlocksAcceptsNamedFieldsAndExtraBlocks() {
   const players = parseBzssCorePlayerBlocks(text);
   assert.equal(players.length, 5);
   assert.equal(players[0].playerId, 0);
+  assert.equal(players[0].playerIndex, 0);
   assert.equal(players[0].playerName, "Donald·DoubyBear");
   assert.equal(players[0].playerGuid, "00026a0bbf67442f84777b964560fba4");
   assert.equal(players[0].isAdmin, true);
@@ -153,54 +152,55 @@ function testParseBzssCorePlayerBlocksReadsNewSquadContext() {
   assert.equal(players[0].playerScoreboard.stats.objectiveScore, 420);
 }
 
-async function testMonitorRefreshesFromFileWatcher() {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-core-watch-"));
-  const savePath = path.join(tempDir, "PBI.sav");
+function testParseBzssCoreLogLineAcceptsDocumentSamples() {
+  const runtime = parseBzssCoreLogLine("PIE: Error: PlayerBaseInfo{}");
+  assert.equal(runtime.type, "playerRuntime");
+  assert.equal(runtime.runtimePlayers.length, 0);
+
+  const scoreboard = parseBzssCoreLogLine("PIE: PlayerScoreboard{0,1,-1,0,0,0,0,0,0,0,0,0,0,0,1,0-1,-1,19}}");
+  assert.equal(scoreboard.type, "playerScoreboard");
+  assert.equal(scoreboard.scoreboardPlayers.length, 1);
+  assert.equal(scoreboard.scoreboardPlayers[0].playerId, 0);
+  assert.equal(scoreboard.scoreboardPlayers[0].combatScore, 1);
+  assert.equal(scoreboard.scoreboardPlayers[0].isAdmin, false);
+  assert.equal(scoreboard.scoreboardPlayers[0].isCommander, false);
+  assert.equal(scoreboard.scoreboardPlayers[0].fireTeamIndex, -1);
+  assert.equal(scoreboard.scoreboardPlayers[0].fireTeamPosition, 19);
+
+  const scene = parseBzssCoreLogLine("PIE: CPZ:{01-TriCommons,true,1.0,1}{02-AbdelsFarm,true,1.0,1}{03-WalledCourts,false,0.0,0}{04-Market,true,1.0,2}{05-GasStation,true,1.0,2},FOBI:{,1,Very_Small,300.0,10000.0,2000.0,}{,2,Very_Small,300.0,10000.0,2000.0,},MainZone:{1,X=56820.773 Y=7170.025 Z=-13376.360}{2,X=-52025.859 Y=29755.896 Z=-13039.805}");
+  assert.equal(scene.type, "scene");
+  assert.equal(scene.captureZones.length, 5);
+  assert.equal(scene.fobs.length, 2);
+  assert.equal(scene.fobs[0].name, "");
+  assert.equal(scene.fobs[0].instigator, "");
+  assert.equal(scene.mainZones.length, 2);
+  assert.equal(scene.mainZones[0].position.x, 56820.773);
+}
+
+function testMonitorIngestsLogLinesIntoApiState() {
   const module = createBzssCoreMonitorModule({
     core: {
-      config: {
-        get(key) {
-          if (key !== "bzssCore") return {};
-          return {
-            playerInfoSavePath: savePath,
-            playerInfoPollIntervalMs: 5000,
-            playerInfoWatchDebounceMs: 0,
-          };
-        },
-      },
-      logger: { info() {}, warn() {}, error() {} },
+      config: { get() { return {}; } },
+      eventBus: { onCoreEvent() { return () => {}; }, emitModuleEvent() {} },
+      logger: { info() {}, warn() {}, error() {}, debug() {} },
     },
   });
 
-  try {
-    await module.start();
-    await fs.writeFile(savePath, Buffer.from(
-      "PlayerBaseInfo{0,abc123,Watcher Player,1,0,-1,-1}"
-      + "PlayerScoreboard{-1,0,0,0}"
-      + "{BZSS-Marked}",
-      "utf16le",
-    ));
-
-    const readyState = await waitForState(module, "ready", 1000);
-    assert.equal(readyState.playerCount, 1);
-    assert.equal(module.api.findPlayer({ name: "Watcher Player" })?.playerGuid, "abc123");
-    const rawSnapshot = module.api.getRawSnapshot();
-    assert.equal(rawSnapshot.rawText.includes("PlayerBaseInfo{0,abc123"), true);
-    assert.equal(rawSnapshot.rawTextLength, rawSnapshot.rawText.length);
-  } finally {
-    await module.stop();
-    await fs.rm(tempDir, { recursive: true, force: true });
-  }
-}
-
-async function waitForState(module, status, timeoutMs) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    const state = module.api.getState();
-    if (state.status === status) return state;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  assert.fail(`Timed out waiting for BZSS-Core monitor status ${status}.`);
+  assert.equal(module.api.ingestLogLine("PIE: Error: PlayerBaseInfo{}").ok, true);
+  assert.equal(module.api.getRawSnapshot().runtimePlayers.length, 0);
+  assert.equal(module.api.ingestLogLine("PIE: PlayerScoreboard{0,1,-1,0,0,0,0,0,0,0,0,0,0,0,1,0-1,-1,19}}").ok, true);
+  assert.equal(module.api.getPlayers().length, 1);
+  assert.equal(module.api.getPlayers()[0].playerIndex, 0);
+  assert.equal(module.api.getPlayers()[0].playerScoreboard.stats.combatScore, 1);
+  assert.equal(module.api.ingestLogLine("PIE: CPZ:{01-TriCommons,true,1.0,1},FOBI:{,1,Very_Small,300.0,10000.0,2000.0,},MainZone:{1,X=56820.773 Y=7170.025 Z=-13376.360}").ok, true);
+  const raw = module.api.getRawSnapshot();
+  assert.equal(raw.sourceMode, "log");
+  assert.equal(raw.captureZones.length, 1);
+  assert.equal(raw.fobs.length, 1);
+  assert.equal(raw.mainZones.length, 1);
+  assert.ok(raw.lastRawLineHash);
+  assert.equal(raw.sourceMode, "log");
+  assert.equal(raw.rawText.includes("CPZ:{01-TriCommons"), true);
 }
 
 async function main() {
@@ -210,7 +210,8 @@ async function main() {
   testParseBzssCorePlayerBlocksAcceptsNamedFieldsAndExtraBlocks();
   testParseBzssCorePlayerBlocksAcceptsCaptureZonesAndCompactScoreboard();
   testParseBzssCorePlayerBlocksReadsNewSquadContext();
-  await testMonitorRefreshesFromFileWatcher();
+  testParseBzssCoreLogLineAcceptsDocumentSamples();
+  testMonitorIngestsLogLinesIntoApiState();
   console.log("run-bzss-core-monitor-tests: ok");
 }
 

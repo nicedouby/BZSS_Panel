@@ -115,13 +115,6 @@
         "restartRequired": false
       },
       {
-        "path": "bzssCore.playerInfoSavePath",
-        "label": "BZSS-Core Player Info Save Path",
-        "type": "string",
-        "advanced": true,
-        "restartRequired": false
-      },
-      {
         "path": "bzssCore.playerInfoPollIntervalMs",
         "label": "BZSS-Core Player Info Poll Interval Ms",
         "type": "number",
@@ -752,7 +745,6 @@
   "bzssCore": {
     "modifyScriptPath": "",
     "remoteSaveGamePath": "",
-    "playerInfoSavePath": "",
     "playerInfoPollIntervalMs": 100
   }
 }

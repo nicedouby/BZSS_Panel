@@ -969,7 +969,7 @@ watch(
     }
 
     const nextStatus = snapshotVal?.status || "";
-    const nextCompletedAt = snapshotVal?.state?.lastCompletedAt ?? null;
+    const nextCompletedAt = snapshotVal?.state?.updatedAt ?? null;
     const nextPlayerInfo = matched ?? null;
 
     const currentDetail = activePlayerWindow.value.detail;

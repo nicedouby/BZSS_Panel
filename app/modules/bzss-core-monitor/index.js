@@ -1,11 +1,7 @@
 // -*- coding: utf-8 -*-
 
-import fsSync from "node:fs";
-import fs from "node:fs/promises";
-import path from "node:path";
+import { createHash } from "node:crypto";
 
-const DEFAULT_POLL_INTERVAL_MS = 100;
-const DEFAULT_WATCH_DEBOUNCE_MS = 0;
 const MARKER = "{BZSS-Marked}";
 const START_NEEDLE = Buffer.from("PlayerBaseInfo{", "utf16le");
 const MARKER_NEEDLE = Buffer.from(MARKER, "utf16le");
@@ -45,35 +41,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
 
   const state = createInitialState();
   let started = false;
-  let pollTimer = null;
-  let watchTimer = null;
-  let tickRunning = false;
-  let tickAgain = false;
-  let lastFingerprint = "";
-  let lastExists = false;
-  let lastResolvedPath = "";
-  let watcher = null;
-  let watcherPath = "";
-
-  function readConfig() {
-    const config = core.config?.get?.("bzssCore", {}) ?? {};
-    return {
-      playerInfoSavePath: String(
-        config.playerInfoSavePath
-        ?? config.playerBaseInfoPath
-        ?? config.playerInfoPath
-        ?? "",
-      ).trim(),
-      playerInfoPollIntervalMs: normalizePositiveInteger(
-        config.playerInfoPollIntervalMs,
-        DEFAULT_POLL_INTERVAL_MS,
-      ),
-      playerInfoWatchDebounceMs: normalizeNonNegativeInteger(
-        config.playerInfoWatchDebounceMs,
-        DEFAULT_WATCH_DEBOUNCE_MS,
-      ),
-    };
-  }
+  const unsubscribers = [];
 
   const listeners = new Set();
   function subscribe(listener) {
@@ -93,7 +61,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
         operation: "bzssCoreMonitor.status",
         data: {
           status: state.status,
-          resolvedPath: state.resolvedPath,
+          sourceMode: state.sourceMode,
           playerCount: state.players.length,
           lastError: state.lastError,
         },
@@ -107,299 +75,111 @@ export function createBzssCoreMonitorModule({ core, logger }) {
         // ignore
       }
     }
+    core.eventBus?.emitModuleEvent?.("module.bzssCoreMonitor", "snapshotUpdated", getSnapshotEvent());
   }
 
   function clearPublishedPlayers(nextStatus, nextError = "") {
     publish((draft) => {
       draft.status = nextStatus;
       draft.players = [];
+      draft.runtimePlayers = [];
+      draft.scoreboardPlayers = [];
       draft.indexByName = {};
       draft.markerSeen = false;
       draft.lastError = nextError;
-      draft.lastCompletedAt = nextStatus === "ready" ? draft.lastCompletedAt : "";
     });
   }
 
-  async function tick() {
-    const config = readConfig();
-    const configuredPath = config.playerInfoSavePath;
+  function ingestLogLine(input = {}) {
+    const line = extractRawLogLine(input);
+    if (!line) return { ok: false, ignored: true, reason: "empty" };
 
-    if (!configuredPath) {
-      closeFileWatcher();
-      lastFingerprint = "";
-      lastExists = false;
-      lastResolvedPath = "";
+    const parsed = parseBzssCoreLogLine(line);
+    if (!parsed) return { ok: true, ignored: true, reason: "not_bzss_core" };
+
+    try {
       publish((draft) => {
-        draft.configuredPath = "";
-        draft.resolvedPath = "";
-        draft.exists = false;
-        draft.fileSize = 0;
-        draft.fileMtimeMs = 0;
-        draft.status = "unconfigured";
-        draft.players = [];
-        draft.captureZones = [];
-        draft.fobs = [];
-        draft.indexByName = {};
-        draft.markerSeen = false;
-        draft.rawText = "";
-        draft.rawTextLength = 0;
-        draft.rawTextUpdatedAt = "";
+        draft.status = "ready";
+        draft.sourceMode = "log";
+        draft.markerSeen = true;
+        draft.rawText = line;
+        draft.rawTextLength = line.length;
+        draft.lastRawLineHash = hashText(line);
+        draft.lastRawFields = parsed.rawFields ?? [];
         draft.lastError = "";
-      });
-      return;
-    }
 
-    const resolvedPath = path.isAbsolute(configuredPath)
-      ? configuredPath
-      : path.resolve(process.cwd(), configuredPath);
-    ensureFileWatcher(configuredPath, resolvedPath, config.playerInfoWatchDebounceMs);
-    const pathChanged = resolvedPath !== lastResolvedPath;
-    if (pathChanged) {
-      lastFingerprint = "";
-      lastExists = false;
-      lastResolvedPath = resolvedPath;
-      publish((draft) => {
-        draft.configuredPath = configuredPath;
-        draft.resolvedPath = resolvedPath;
-        draft.exists = false;
-        draft.fileSize = 0;
-        draft.fileMtimeMs = 0;
-        draft.players = [];
-        draft.captureZones = [];
-        draft.fobs = [];
-        draft.indexByName = {};
-        draft.markerSeen = false;
-        draft.rawText = "";
-        draft.rawTextLength = 0;
-        draft.rawTextUpdatedAt = "";
-        draft.lastError = "";
-        draft.status = "missing";
-      });
-    }
+        if (parsed.type === "playerRuntime") {
+          draft.runtimePlayers = parsed.runtimePlayers;
+        } else if (parsed.type === "playerScoreboard") {
+          draft.scoreboardPlayers = parsed.scoreboardPlayers;
+        } else if (parsed.type === "scene") {
+          draft.captureZones = parsed.captureZones;
+          draft.fobs = parsed.fobs;
+          draft.mainZones = parsed.mainZones;
+        }
 
-    let stat = null;
-    try {
-      stat = await fs.stat(resolvedPath);
+        draft.players = mergeLogPlayers(draft.runtimePlayers, draft.scoreboardPlayers);
+        draft.indexByName = buildPlayerIndex(draft.players);
+      });
+      return { ok: true, ignored: false, type: parsed.type };
     } catch (error) {
-      if (error?.code === "ENOENT") {
-        lastFingerprint = "";
-        const missingAfterExisting = lastExists;
-        lastExists = false;
-        publish((draft) => {
-          draft.configuredPath = configuredPath;
-          draft.resolvedPath = resolvedPath;
-          draft.exists = false;
-          draft.fileSize = 0;
-          draft.fileMtimeMs = 0;
-          draft.markerSeen = false;
-          draft.players = [];
-          draft.captureZones = [];
-          draft.fobs = [];
-          draft.indexByName = {};
-          draft.rawText = "";
-          draft.rawTextLength = 0;
-          draft.rawTextUpdatedAt = "";
-          draft.lastError = "";
-          draft.status = missingAfterExisting ? "waiting" : "missing";
-        });
-        return;
-      }
       publish((draft) => {
-        draft.configuredPath = configuredPath;
-        draft.resolvedPath = resolvedPath;
-        draft.exists = false;
-        draft.lastError = error?.message ?? "Failed to stat player info file.";
         draft.status = "error";
+        draft.lastError = error?.message ?? "Failed to parse BZSS-Core log line.";
+        draft.lastRawLineHash = hashText(line);
       });
-      return;
-    }
-
-    const fingerprint = `${stat.size}:${stat.mtimeMs}`;
-    if (!pathChanged && fingerprint === lastFingerprint) return;
-    lastFingerprint = fingerprint;
-    lastExists = true;
-
-    let fileBuffer = null;
-    try {
-      fileBuffer = await fs.readFile(resolvedPath);
-    } catch (error) {
-      publish((draft) => {
-        draft.configuredPath = configuredPath;
-        draft.resolvedPath = resolvedPath;
-        draft.exists = true;
-        draft.fileSize = Number(stat?.size ?? 0);
-        draft.fileMtimeMs = Number(stat?.mtimeMs ?? 0);
-        draft.lastError = error?.message ?? "Failed to read player info file.";
-        draft.status = "error";
-      });
-      return;
-    }
-
-    const extracted = extractBzssCoreTrackedText(fileBuffer);
-    const captureZones = parseCaptureZones(extracted.text);
-    const fobs = parseFobs(extracted.text);
-    publish((draft) => {
-      draft.configuredPath = configuredPath;
-      draft.resolvedPath = resolvedPath;
-      draft.exists = true;
-      draft.fileSize = Number(stat?.size ?? 0);
-      draft.fileMtimeMs = Number(stat?.mtimeMs ?? 0);
-      draft.lastReadAt = new Date().toISOString();
-      draft.markerSeen = extracted.markerSeen;
-      draft.rawText = extracted.text;
-      draft.rawTextLength = extracted.text.length;
-      draft.rawTextUpdatedAt = draft.lastReadAt;
-      draft.captureZones = captureZones;
-      draft.fobs = fobs;
-      draft.lastError = extracted.error ?? "";
-    });
-
-    if (!extracted.text) {
-      clearPublishedPlayers("writing", extracted.error ?? "");
-      return;
-    }
-
-    if (!extracted.markerSeen) {
-      clearPublishedPlayers("writing");
-      return;
-    }
-
-    const players = parseBzssCorePlayerBlocks(extracted.text);
-    const indexByName = buildPlayerIndex(players);
-    publish((draft) => {
-      draft.status = "ready";
-      draft.players = players;
-      draft.captureZones = captureZones;
-      draft.fobs = fobs;
-      draft.indexByName = indexByName;
-      draft.markerSeen = true;
-      draft.lastCompletedAt = new Date().toISOString();
-      draft.lastError = "";
-    });
-  }
-
-  function scheduleNextTick(delayMs = readConfig().playerInfoPollIntervalMs) {
-    if (!started) return;
-    clearTimeout(pollTimer);
-    pollTimer = setTimeout(async () => {
-      try {
-        await runTick();
-      } finally {
-        scheduleNextTick();
-      }
-    }, Math.max(25, delayMs));
-  }
-
-  function scheduleWatchTick(delayMs = DEFAULT_WATCH_DEBOUNCE_MS) {
-    if (!started) return;
-    if (watchTimer) return;
-    watchTimer = setTimeout(() => {
-      watchTimer = null;
-      runTick().catch((err) => {
-        moduleLogger.warn(`BZSS-Core monitor watch tick failed: ${err.message}`);
-      });
-    }, Math.max(0, delayMs));
-  }
-
-  async function runTick() {
-    if (tickRunning) {
-      tickAgain = true;
-      return;
-    }
-
-    tickRunning = true;
-    try {
-      do {
-        tickAgain = false;
-        await tick();
-      } while (started && tickAgain);
-    } finally {
-      tickRunning = false;
+      return { ok: false, ignored: false, error: error?.message ?? "Failed to parse BZSS-Core log line." };
     }
   }
 
-  function ensureFileWatcher(configuredPath, resolvedPath, debounceMs) {
-    if (!started) return;
-    if (!configuredPath || !resolvedPath) {
-      closeFileWatcher();
-      return;
-    }
-    if (watcherPath === resolvedPath && watcher) return;
-
-    closeFileWatcher();
-    watcherPath = resolvedPath;
-    const directory = path.dirname(resolvedPath);
-    const targetName = path.basename(resolvedPath).toLowerCase();
-    try {
-      watcher = fsSync.watch(directory, { persistent: false }, (_eventType, fileName) => {
-        const changedName = fileName == null ? "" : String(fileName).toLowerCase();
-        if (changedName && changedName !== targetName) return;
-        scheduleWatchTick(debounceMs);
-      });
-      watcher.on?.("error", (error) => {
-        moduleLogger.warn(`BZSS-Core monitor file watcher failed: ${error.message}`);
-        closeFileWatcher();
-      });
-    } catch (error) {
-      watcher = null;
-      moduleLogger.warn(`BZSS-Core monitor file watcher unavailable: ${error.message}`);
-    }
+  function getSnapshotEvent() {
+    return {
+      state: getState(),
+      players: getPlayers(),
+      captureZones: state.captureZones.map(clonePlainObject),
+      fobs: state.fobs.map(clonePlainObject),
+      mainZones: state.mainZones.map(clonePlainObject),
+    };
   }
 
-  function closeFileWatcher() {
-    if (watcher) {
-      try {
-        watcher.close();
-      } catch {
-        // ignore
-      }
-    }
-    watcher = null;
-    watcherPath = "";
+  function handleRawLogLine(event) {
+    ingestLogLine(event);
   }
 
   function getState() {
     return {
-      configuredPath: state.configuredPath,
-      resolvedPath: state.resolvedPath,
-      exists: state.exists,
       status: state.status,
       revision: state.revision,
       updatedAt: state.updatedAt,
-      lastReadAt: state.lastReadAt,
-      lastCompletedAt: state.lastCompletedAt,
       markerSeen: state.markerSeen,
-      fileSize: state.fileSize,
-      fileMtimeMs: state.fileMtimeMs,
       playerCount: state.players.length,
-      captureZoneCount: state.captureZones.length,
-      fobCount: state.fobs.length,
+      mainZoneCount: state.mainZones.length,
       rawTextLength: state.rawTextLength,
-      rawTextUpdatedAt: state.rawTextUpdatedAt,
+      sourceMode: state.sourceMode,
+      lastRawLineHash: state.lastRawLineHash,
+      lastRawFields: [...state.lastRawFields],
       lastError: state.lastError,
     };
   }
 
   function getRawSnapshot() {
     return {
-      configuredPath: state.configuredPath,
-      resolvedPath: state.resolvedPath,
-      exists: state.exists,
       status: state.status,
       revision: state.revision,
       updatedAt: state.updatedAt,
-      lastReadAt: state.lastReadAt,
-      lastCompletedAt: state.lastCompletedAt,
       markerSeen: state.markerSeen,
-      fileSize: state.fileSize,
-      fileMtimeMs: state.fileMtimeMs,
       playerCount: state.players.length,
       captureZones: state.captureZones.map(clonePlainObject),
       fobs: state.fobs.map(clonePlainObject),
+      mainZones: state.mainZones.map(clonePlainObject),
+      runtimePlayers: state.runtimePlayers.map(clonePlainObject),
+      scoreboardPlayers: state.scoreboardPlayers.map(clonePlainObject),
+      sourceMode: state.sourceMode,
+      lastRawLineHash: state.lastRawLineHash,
+      lastRawFields: [...state.lastRawFields],
       lastError: state.lastError,
       rawText: state.rawText,
       rawTextLength: state.rawTextLength,
-      rawTextUpdatedAt: state.rawTextUpdatedAt,
     };
   }
 
@@ -428,17 +208,20 @@ export function createBzssCoreMonitorModule({ core, logger }) {
   async function start() {
     if (started) return;
     started = true;
-    await runTick();
-    scheduleNextTick();
+    if (core.eventBus?.onCoreEvent) {
+      unsubscribers.push(core.eventBus.onCoreEvent("On_RawLogLine", handleRawLogLine));
+    }
   }
 
   async function stop() {
     started = false;
-    clearTimeout(pollTimer);
-    clearTimeout(watchTimer);
-    pollTimer = null;
-    watchTimer = null;
-    closeFileWatcher();
+    for (const unsubscribe of unsubscribers.splice(0)) {
+      try {
+        unsubscribe();
+      } catch {
+        // ignore
+      }
+    }
   }
 
   return {
@@ -447,7 +230,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
       name: "BZSS-Core Monitor",
       kind: "module",
       version: "0.1.0",
-      description: "Monitor BZSS-Core player info save files and expose parsed player snapshots.",
+      description: "Monitor BZSS-Core log lines and expose parsed player snapshots.",
     },
     apiName: "bzssCoreMonitor",
     api: {
@@ -456,6 +239,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
       getRawSnapshot,
       findPlayer,
       subscribe,
+      ingestLogLine,
     },
     start,
     stop,
@@ -464,24 +248,22 @@ export function createBzssCoreMonitorModule({ core, logger }) {
 
 function createInitialState() {
   return {
-    configuredPath: "",
-    resolvedPath: "",
-    exists: false,
     status: "idle",
     revision: 0,
     updatedAt: "",
-    lastReadAt: "",
-    lastCompletedAt: "",
     markerSeen: false,
-    fileSize: 0,
-    fileMtimeMs: 0,
     players: [],
+    runtimePlayers: [],
+    scoreboardPlayers: [],
     captureZones: [],
     fobs: [],
+    mainZones: [],
     indexByName: {},
+    sourceMode: "",
+    lastRawLineHash: "",
+    lastRawFields: [],
     rawText: "",
     rawTextLength: 0,
-    rawTextUpdatedAt: "",
     lastError: "",
   };
 }
@@ -545,6 +327,7 @@ export function parseBzssCorePlayerBlocks(text) {
     const teamAndSquadInfo = parseTeamAndSquadInfo(context, segment, baseMap, baseFields);
     players.push({
       playerId: toFiniteNumber(baseMap.PlayerID ?? baseFields[0]),
+      playerIndex: toFiniteNumber(baseMap.PlayerID ?? baseFields[0]),
       playerName: baseMap.PlayerName ?? baseFields[2] ?? "",
       playerGuid: baseMap.PlayerOnlineID ?? baseFields[1] ?? "",
       teamId: teamAndSquadInfo.teamId,
@@ -569,6 +352,136 @@ export function parseBzssCorePlayerBlocks(text) {
     });
   }
   return players;
+}
+
+export function parseBzssCoreLogLine(line) {
+  const text = String(line ?? "");
+  if (text.includes("PlayerBaseInfo{")) return parseRuntimePlayerLine(text);
+  if (text.includes("PlayerScoreboard{")) return parseScoreboardPlayerLine(text);
+  if (text.includes("CPZ:") && text.includes(",FOBI:") && text.includes(",MainZone:")) return parseSceneInfoLine(text);
+  return null;
+}
+
+function parseRuntimePlayerLine(text) {
+  const block = extractLineBlock(text, "PlayerBaseInfo");
+  const raw = block?.content ?? "";
+  if (!raw.trim()) {
+    return {
+      type: "playerRuntime",
+      runtimePlayers: [],
+      rawFields: [],
+    };
+  }
+
+  const items = extractBraceItems(raw);
+  const rows = items.length > 0 ? items : [raw];
+  const observedAt = new Date().toISOString();
+  const runtimePlayers = rows
+    .map((row) => {
+      const fields = splitTopLevelCsv(row);
+      return {
+        playerId: toFiniteNumber(fields[0]),
+        playerIndex: toFiniteNumber(fields[0]),
+        position: {
+          x: toFiniteNumber(fields[1]),
+          y: toFiniteNumber(fields[2]),
+          z: toFiniteNumber(fields[3]),
+        },
+        yaw: toFiniteNumber(fields[4]),
+        combatInfo: fields.slice(5).join(","),
+        observedAt,
+        stale: false,
+        raw,
+        rawFields: fields,
+      };
+    })
+    .filter((player) => player.playerId != null || player.rawFields.some(Boolean));
+
+  return {
+    type: "playerRuntime",
+    runtimePlayers,
+    rawFields: runtimePlayers.flatMap((player) => player.rawFields),
+  };
+}
+
+function parseScoreboardPlayerLine(text) {
+  const block = extractLineBlock(text, "PlayerScoreboard");
+  const raw = block?.content ?? "";
+  if (!raw.trim()) {
+    return {
+      type: "playerScoreboard",
+      scoreboardPlayers: [],
+      rawFields: [],
+    };
+  }
+
+  const rows = extractBraceItems(raw);
+  const rowTexts = rows.length > 0 ? rows : [raw];
+  const scoreboardPlayers = rowTexts
+    .map((row) => parseLogScoreboardRow(row))
+    .filter(Boolean);
+
+  return {
+    type: "playerScoreboard",
+    scoreboardPlayers,
+    rawFields: scoreboardPlayers.flatMap((player) => player.rawFields ?? []),
+  };
+}
+
+function parseLogScoreboardRow(row) {
+  const raw = String(row ?? "").trim().replace(/}+$/g, "");
+  if (!raw) return null;
+  const rawFields = repairScoreboardFields(splitTopLevelCsv(raw));
+  const numericValues = rawFields.map(toFiniteNumber);
+  const player = {
+    playerId: numericValues[0] ?? null,
+    playerIndex: numericValues[0] ?? null,
+    teamId: numericValues[1] ?? null,
+    squadId: numericValues[2] ?? null,
+    lives: numericValues[3] ?? null,
+    kills: numericValues[4] ?? null,
+    vehicleKills: numericValues[5] ?? null,
+    deaths: numericValues[6] ?? null,
+    woundeds: numericValues[7] ?? null,
+    wounds: numericValues[8] ?? null,
+    teamKills: numericValues[9] ?? null,
+    healPoints: numericValues[10] ?? null,
+    revivedPoints: numericValues[11] ?? null,
+    teamworkScore: numericValues[12] ?? null,
+    objectiveScore: numericValues[13] ?? null,
+    combatScore: numericValues[14] ?? null,
+    isAdmin: toScoreboardBoolean(numericValues[15]),
+    isCommander: toScoreboardBoolean(numericValues[16]),
+    fireTeamIndex: numericValues[17] ?? null,
+    fireTeamPosition: numericValues[18] ?? null,
+    raw,
+    rawFields,
+  };
+  return player;
+}
+
+function repairScoreboardFields(rawFields) {
+  const out = [];
+  for (const field of rawFields) {
+    const text = String(field ?? "").trim();
+    const glued = text.match(/^(-?\d+)(-\d+)$/);
+    if (glued) {
+      out.push(glued[1], glued[2]);
+      continue;
+    }
+    out.push(text);
+  }
+  return out;
+}
+
+function parseSceneInfoLine(text) {
+  return {
+    type: "scene",
+    captureZones: parseCompactCaptureZones(text),
+    fobs: parseCompactFobs(text),
+    mainZones: parseMainZones(text),
+    rawFields: [],
+  };
 }
 
 export function parseCaptureZones(text) {
@@ -630,6 +543,216 @@ export function parseFobs(text) {
     });
   }
   return fobs;
+}
+
+function parseCompactCaptureZones(text) {
+  const section = extractDelimitedSceneSection(text, "CPZ:", ",FOBI:");
+  if (!section) return [];
+  return extractBraceItems(section).map((raw) => {
+    const fields = splitTopLevelCsv(raw);
+    return {
+      name: fields[0] ?? "",
+      isLocked: parseBooleanText(fields[1]),
+      capturePercent: toFiniteNumber(fields[2]),
+      captureDirection: toFiniteNumber(fields[3]),
+      position: null,
+      raw,
+    };
+  }).filter((zone) => zone.name);
+}
+
+function parseCompactFobs(text) {
+  const section = extractDelimitedSceneSection(text, "FOBI:", ",MainZone:");
+  if (!section) return [];
+  return extractBraceItems(section).map((raw, index) => {
+    const fields = splitTopLevelCsv(raw);
+    const teamId = toFiniteNumber(fields[1]);
+    return {
+      fobId: fields[0] ? fields[0] : `team:${teamId ?? "unknown"}:index:${index}`,
+      name: fields[0] ?? "",
+      teamId,
+      size: fields[2] ?? "",
+      health: toFiniteNumber(fields[3]),
+      ammo: toFiniteNumber(fields[4]),
+      constructionPoints: toFiniteNumber(fields[5]),
+      construction: toFiniteNumber(fields[5]),
+      instigator: fields[6] ?? "",
+      isBleeding: false,
+      position: null,
+      raw,
+    };
+  });
+}
+
+function parseMainZones(text) {
+  const section = extractDelimitedSceneSection(text, "MainZone:", "");
+  if (!section) return [];
+  return extractBraceItems(section).map((raw) => {
+    const commaIndex = raw.indexOf(",");
+    const teamText = commaIndex >= 0 ? raw.slice(0, commaIndex) : raw;
+    const vectorText = commaIndex >= 0 ? raw.slice(commaIndex + 1) : "";
+    return {
+      teamId: toFiniteNumber(teamText),
+      position: parseVectorBlock(vectorText),
+      raw,
+    };
+  }).filter((zone) => zone.teamId != null || zone.position);
+}
+
+function extractDelimitedSceneSection(text, startToken, endToken) {
+  const source = String(text ?? "");
+  const start = source.indexOf(startToken);
+  if (start < 0) return "";
+  const contentStart = start + startToken.length;
+  const end = endToken ? source.indexOf(endToken, contentStart) : -1;
+  return source.slice(contentStart, end >= 0 ? end : source.length).trim();
+}
+
+function extractLineBlock(text, name) {
+  const source = String(text ?? "");
+  const startToken = `${name}{`;
+  const start = source.indexOf(startToken);
+  if (start < 0) return null;
+  const contentStart = start + startToken.length;
+  let depth = 1;
+  for (let index = contentStart; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "{") depth += 1;
+    if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return {
+          start,
+          end: index + 1,
+          content: source.slice(contentStart, index),
+        };
+      }
+    }
+  }
+  return {
+    start,
+    end: source.length,
+    content: source.slice(contentStart).replace(/}+$/g, ""),
+  };
+}
+
+function extractBraceItems(text) {
+  const items = [];
+  const source = String(text ?? "");
+  let depth = 0;
+  let itemStart = -1;
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "{") {
+      if (depth === 0) itemStart = index + 1;
+      depth += 1;
+      continue;
+    }
+    if (char === "}") {
+      if (depth > 0) depth -= 1;
+      if (depth === 0 && itemStart >= 0) {
+        items.push(source.slice(itemStart, index));
+        itemStart = -1;
+      }
+    }
+  }
+  return items;
+}
+
+function mergeLogPlayers(runtimePlayers = [], scoreboardPlayers = []) {
+  const byId = new Map();
+  for (const player of scoreboardPlayers) {
+    const key = player.playerId ?? `scoreboard:${byId.size}`;
+    const stats = {
+      dataLives: player.lives,
+      numKills: player.kills,
+      numDeaths: player.deaths,
+      numWoundeds: player.woundeds,
+      numWounds: player.wounds,
+      numTeamKills: player.teamKills,
+      healPoints: player.healPoints,
+      revivedPoints: player.revivedPoints,
+      teamworkScore: player.teamworkScore,
+      objectiveScore: player.objectiveScore,
+      combatScore: player.combatScore,
+    };
+    byId.set(key, {
+      playerId: player.playerId,
+      playerIndex: player.playerIndex ?? player.playerId ?? null,
+      playerName: "",
+      playerGuid: "",
+      teamId: player.teamId,
+      squadId: player.squadId,
+      isAdmin: player.isAdmin,
+      isCommander: player.isCommander,
+      ftIndex: player.fireTeamIndex,
+      ftPosition: player.fireTeamPosition,
+      playerBaseInfo: { raw: "", fields: [], values: {} },
+      soldierInfo: createEmptySoldierInfo(),
+      playerScoreboard: {
+        raw: player.raw,
+        values: player.rawFields,
+        numericValues: player.rawFields.map(toFiniteNumber),
+        stats,
+        labeledValues: SCOREBOARD_FIELDS.map(([statKey, label]) => ({ key: statKey, label, value: stats[statKey] ?? null })),
+        extraValues: [],
+      },
+      runtimeInfo: null,
+      rawText: player.raw,
+    });
+  }
+
+  for (const runtimePlayer of runtimePlayers) {
+    const key = runtimePlayer.playerId ?? `runtime:${byId.size}`;
+    const existing = byId.get(key) ?? {
+      playerId: runtimePlayer.playerId,
+      playerIndex: runtimePlayer.playerIndex ?? runtimePlayer.playerId ?? null,
+      playerName: "",
+      playerGuid: "",
+      teamId: null,
+      squadId: null,
+      playerBaseInfo: { raw: "", fields: [], values: {} },
+      soldierInfo: createEmptySoldierInfo(),
+      playerScoreboard: {
+        raw: "",
+        values: [],
+        numericValues: [],
+        stats: {},
+        labeledValues: [],
+        extraValues: [],
+      },
+      rawText: runtimePlayer.raw,
+    };
+    existing.runtimeInfo = clonePlainObject(runtimePlayer);
+    existing.soldierInfo.position = runtimePlayer.position;
+    existing.soldierInfo.rotation = { x: null, y: null, z: runtimePlayer.yaw };
+    byId.set(key, existing);
+  }
+
+  return [...byId.values()];
+}
+
+function extractRawLogLine(input) {
+  if (typeof input === "string") return input;
+  return String(input?.rawLog ?? input?.rawEvent?.Raw ?? input?.sourceRaw ?? input?.raw ?? input?.message ?? "").trim();
+}
+
+function hashText(text) {
+  return createHash("sha1").update(String(text ?? "")).digest("hex");
+}
+
+function parseBooleanText(value) {
+  const text = String(value ?? "").trim().toLowerCase();
+  if (text === "true" || text === "1") return true;
+  if (text === "false" || text === "0") return false;
+  return null;
+}
+
+function toScoreboardBoolean(value) {
+  if (value == null || value === "") return null;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  return number === 1;
 }
 
 function createEmptySoldierInfo() {

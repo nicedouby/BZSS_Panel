@@ -430,7 +430,7 @@
           <div class="header-led-indicator pulse-led"></div>
           <div class="header-text-block">
             <h1 class="main-title">SUMARI SATELLITE COMMAND</h1>
-            <p class="subtitle-text">战术雷达实时定位系统 &bull; PBI.sav v1</p>
+            <p class="subtitle-text">战术雷达实时定位系统 &bull; 日志驱动实时定位</p>
           </div>
         </div>
 

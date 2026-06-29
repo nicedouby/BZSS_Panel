@@ -1624,36 +1624,6 @@ export class WebServer {
       });
     }
 
-    if (url.pathname === "/api/bzss-core/config") {
-      if (!this.canManageSettingsTools(user)) {
-        return this.json(res, 403, {
-          error: "Forbidden",
-          message: "settings.manage permission is required.",
-        });
-      }
-
-      if (req.method === "GET") {
-        return this.json(res, 200, {
-          ok: true,
-          config: this.getBzssCoreConfig(),
-        });
-      }
-
-      if (req.method === "PATCH" || req.method === "POST") {
-        const body = await this.readJsonBody(req);
-        const config = await this.updateBzssCoreConfig(body?.config ?? body ?? {});
-        return this.json(res, 200, {
-          ok: true,
-          config,
-        });
-      }
-
-      return this.json(res, 405, {
-        error: "MethodNotAllowed",
-        message: "Only GET, PATCH and POST are supported.",
-      });
-    }
-
     if (url.pathname === "/api/bzss-core/execute" && req.method === "POST") {
       if (!this.canUseBzssCoreTool(user)) {
         return this.json(res, 403, {
@@ -4443,44 +4413,10 @@ export class WebServer {
     };
   }
 
-  getBzssCoreConfig() {
-    const config = this.core.config?.get?.("bzssCore", {}) ?? {};
-    return {
-      modifyScriptPath: String(config.modifyScriptPath ?? config.modifySaveGamePath ?? "").trim(),
-      remoteSaveGamePath: String(config.remoteSaveGamePath ?? config.saveGamePath ?? "").trim(),
-      playerInfoSavePath: String(
-        config.playerInfoSavePath
-        ?? config.playerBaseInfoPath
-        ?? config.playerInfoPath
-        ?? "",
-      ).trim(),
-    };
-  }
-
-  async updateBzssCoreConfig(nextConfig = {}) {
-    const previous = this.core.config?.get?.("bzssCore", {}) ?? {};
-    const normalized = {
-      ...previous,
-      modifyScriptPath: String(nextConfig.modifyScriptPath ?? nextConfig.modifySaveGamePath ?? "").trim(),
-      remoteSaveGamePath: String(nextConfig.remoteSaveGamePath ?? nextConfig.saveGamePath ?? "").trim(),
-      playerInfoSavePath: String(
-        nextConfig.playerInfoSavePath
-        ?? nextConfig.playerBaseInfoPath
-        ?? nextConfig.playerInfoPath
-        ?? previous.playerInfoSavePath
-        ?? "",
-      ).trim(),
-    };
-
-    this.core.config?.set?.("bzssCore", normalized);
-    await this.core.config?.save?.();
-    return this.getBzssCoreConfig();
-  }
-
   async executeBzssCoreCommand(body = {}) {
-    const config = this.getBzssCoreConfig();
-    const scriptPath = String(config.modifyScriptPath ?? "").trim();
-    const saveGamePath = String(config.remoteSaveGamePath ?? "").trim();
+    const config = this.core.config?.get?.("bzssCore", {}) ?? {};
+    const scriptPath = String(config.modifyScriptPath ?? config.modifySaveGamePath ?? "").trim();
+    const saveGamePath = String(config.remoteSaveGamePath ?? config.saveGamePath ?? "").trim();
     const command = this.normalizeBzssCoreCommand(body);
 
     if (!scriptPath) {
@@ -4648,20 +4584,15 @@ export class WebServer {
   getBzssCorePlayerInfo(query = {}) {
     const monitor = this.modules.bzssCoreMonitor;
     const state = monitor?.getState?.() ?? {
-      configuredPath: "",
-      resolvedPath: "",
-      exists: false,
       status: "unavailable",
       revision: 0,
       updatedAt: "",
-      lastReadAt: "",
-      lastCompletedAt: "",
       markerSeen: false,
-      fileSize: 0,
-      fileMtimeMs: 0,
       playerCount: 0,
       rawTextLength: 0,
-      rawTextUpdatedAt: "",
+      sourceMode: "",
+      lastRawLineHash: "",
+      lastRawFields: [],
       lastError: "",
     };
     const player = monitor?.findPlayer?.(query) ?? null;
@@ -4674,6 +4605,7 @@ export class WebServer {
       players: includeAll ? (monitor?.getPlayers?.() ?? []) : undefined,
       captureZones: includeAll ? (monitor?.getRawSnapshot?.()?.captureZones ?? []) : undefined,
       fobs: includeAll ? (monitor?.getRawSnapshot?.()?.fobs ?? []) : undefined,
+      mainZones: includeAll ? (monitor?.getRawSnapshot?.()?.mainZones ?? []) : undefined,
     };
   }
 
@@ -4689,22 +4621,17 @@ export class WebServer {
 
     return {
       ok: true,
-      configuredPath: "",
-      resolvedPath: "",
-      exists: false,
       status: "unavailable",
       revision: 0,
       updatedAt: "",
-      lastReadAt: "",
-      lastCompletedAt: "",
       markerSeen: false,
-      fileSize: 0,
-      fileMtimeMs: 0,
       playerCount: 0,
       lastError: "",
       rawText: "",
       rawTextLength: 0,
-      rawTextUpdatedAt: "",
+      sourceMode: "",
+      lastRawLineHash: "",
+      lastRawFields: [],
     };
   }
 

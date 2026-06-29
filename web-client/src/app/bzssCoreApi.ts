@@ -1,10 +1,4 @@
-import { apiGet, apiPatch, apiPost } from "./apiClient";
-
-export interface BzssCoreConfig {
-  modifyScriptPath: string;
-  remoteSaveGamePath: string;
-  playerInfoSavePath: string;
-}
+import { apiGet, apiPost } from "./apiClient";
 
 export interface BzssCoreExecuteResult {
   ok: boolean;
@@ -39,8 +33,15 @@ export interface BzssCoreFobInfo {
   raw?: string;
 }
 
+export interface BzssCoreMainZoneInfo {
+  teamId: number | null;
+  position: BzssCoreTrackedVector | null;
+  raw?: string;
+}
+
 export interface BzssCoreTrackedPlayerInfo {
   playerId?: number | null;
+  playerIndex?: number | null;
   playerName: string;
   playerGuid: string;
   teamId: number | null;
@@ -104,22 +105,18 @@ export interface BzssCoreTrackedPlayerInfo {
 }
 
 export interface BzssCorePlayerInfoState {
-  configuredPath: string;
-  resolvedPath: string;
-  exists: boolean;
   status: string;
   revision: number;
   updatedAt: string;
-  lastReadAt: string;
-  lastCompletedAt: string;
   markerSeen: boolean;
-  fileSize: number;
-  fileMtimeMs: number;
   playerCount: number;
   captureZoneCount?: number;
   fobCount?: number;
+  mainZoneCount?: number;
   rawTextLength?: number;
-  rawTextUpdatedAt?: string;
+  sourceMode?: string;
+  lastRawLineHash?: string;
+  lastRawFields?: string[];
   lastError: string;
 }
 
@@ -131,38 +128,25 @@ export interface BzssCorePlayerInfoResponse {
   players?: BzssCoreTrackedPlayerInfo[];
   captureZones?: BzssCoreCaptureZoneInfo[];
   fobs?: BzssCoreFobInfo[];
+  mainZones?: BzssCoreMainZoneInfo[];
 }
 
 export interface BzssCoreRawDataResponse {
   ok: boolean;
-  configuredPath: string;
-  resolvedPath: string;
-  exists: boolean;
   status: string;
   revision: number;
   updatedAt: string;
-  lastReadAt: string;
-  lastCompletedAt: string;
   markerSeen: boolean;
-  fileSize: number;
-  fileMtimeMs: number;
   playerCount: number;
+  sourceMode?: string;
+  lastRawLineHash?: string;
+  lastRawFields?: string[];
   captureZones?: BzssCoreCaptureZoneInfo[];
   fobs?: BzssCoreFobInfo[];
+  mainZones?: BzssCoreMainZoneInfo[];
   lastError: string;
   rawText: string;
   rawTextLength: number;
-  rawTextUpdatedAt: string;
-}
-
-export async function fetchBzssCoreConfig() {
-  const payload = await apiGet<{ ok?: boolean; config: BzssCoreConfig }>("/api/bzss-core/config");
-  return normalizeConfig(payload.config);
-}
-
-export async function saveBzssCoreConfig(config: BzssCoreConfig) {
-  const payload = await apiPatch<{ ok?: boolean; config: BzssCoreConfig }>("/api/bzss-core/config", { config });
-  return normalizeConfig(payload.config);
 }
 
 export async function executeBzssCoreCommand(input: {
@@ -214,10 +198,3 @@ export function streamBzssCorePlayerInfoList(
   };
 }
 
-function normalizeConfig(config: Partial<BzssCoreConfig> | null | undefined): BzssCoreConfig {
-  return {
-    modifyScriptPath: String(config?.modifyScriptPath ?? "").trim(),
-    remoteSaveGamePath: String(config?.remoteSaveGamePath ?? "").trim(),
-    playerInfoSavePath: String(config?.playerInfoSavePath ?? "").trim(),
-  };
-}
