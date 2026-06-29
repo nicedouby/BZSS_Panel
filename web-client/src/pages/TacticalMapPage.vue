@@ -203,15 +203,15 @@
         <div class="player-markers-layer" :style="{ pointerEvents: measureMode ? 'none' : 'auto' }">
           <button
             v-for="player in filteredPlayers"
-            :key="player.playerGuid || player.playerName"
+            :key="getPlayerKey(player)"
             class="player-marker"
             :class="[
               `team-${normalizeTeam(player.teamId)}`,
               getPerspectiveClass(player.teamId),
-              { 'is-dead': (player.soldierInfo?.health ?? 100) <= 0 },
+              { 'is-dead': (getPlayerHealth(player) ?? 100) <= 0 },
               { 'is-squadleader': isSquadLeader(player) },
               { 'is-focused': focusedSquadId === player.squadId },
-              { 'is-hovered': hoveredPlayer?.playerGuid === player.playerGuid || hoveredPlayer?.playerName === player.playerName },
+              { 'is-hovered': getPlayerKey(hoveredPlayer) === getPlayerKey(player) },
               { 'no-pointer': disableMarkerInteraction },
               { 'is-disengaged': isPlayerDisengaged(player) }
             ]"
@@ -261,10 +261,10 @@
             <!-- Text Tag for Player Name & Squad Number -->
             <span v-if="showPlayerNames" class="tag">
               <span v-if="isPlayerDisengaged(player)" class="player-disengaged-tag">脱战</span>
-              <span class="player-name-tag">{{ player.playerName }}</span>
+              <span class="player-name-tag">{{ getPlayerLabel(player) }}</span>
               <span v-if="player.squadId" class="player-squad-tag">#{{ player.squadId }}</span>
-              <span v-if="showPlayerCoords && player.soldierInfo?.position" class="player-coords-tag">
-                [{{ Math.round(player.soldierInfo.position.x ?? 0) }}, {{ Math.round(player.soldierInfo.position.y ?? 0) }}]
+              <span v-if="showPlayerCoords && getPlayerPosition(player)" class="player-coords-tag">
+                [{{ Math.round(getPlayerPosition(player)?.x ?? 0) }}, {{ Math.round(getPlayerPosition(player)?.y ?? 0) }}]
               </span>
             </span>
           </button>
@@ -358,12 +358,12 @@
       >
         <!-- Tooltip Header -->
         <div class="tooltip-header">
-          <span class="tooltip-name">{{ hoveredMarker.playerName }}</span>
+          <span class="tooltip-name">{{ getPlayerLabel(hoveredMarker) }}</span>
           <span
             class="tooltip-health-badge"
-            :class="{ 'low-health': (hoveredMarker.soldierInfo?.health ?? 100) < 40, 'dead-health': (hoveredMarker.soldierInfo?.health ?? 100) <= 0 }"
+            :class="{ 'low-health': (getPlayerHealth(hoveredMarker) ?? 100) < 40, 'dead-health': (getPlayerHealth(hoveredMarker) ?? 100) <= 0 }"
           >
-            {{ (hoveredMarker.soldierInfo?.health ?? 100) <= 0 ? 'DOWNED' : `${hoveredMarker.soldierInfo?.health ?? 100}% HP` }}
+            {{ (getPlayerHealth(hoveredMarker) ?? 100) <= 0 ? 'DOWNED' : `${getPlayerHealth(hoveredMarker) ?? 100}% HP` }}
           </span>
         </div>
 
@@ -400,7 +400,7 @@
           <div class="detail-row">
             <span class="detail-label">坐标</span>
             <span class="detail-val font-mono highlight-cyan">
-              {{ Math.round(hoveredMarker.soldierInfo?.position?.x ?? 0) }}, {{ Math.round(hoveredMarker.soldierInfo?.position?.y ?? 0) }}
+              {{ Math.round(getPlayerPosition(hoveredMarker)?.x ?? 0) }}, {{ Math.round(getPlayerPosition(hoveredMarker)?.y ?? 0) }}
             </span>
           </div>
           <div class="detail-row">
@@ -416,8 +416,8 @@
           <div
             class="tooltip-health-bar"
             :style="{
-              width: `${hoveredMarker.soldierInfo?.health ?? 100}%`,
-              background: (hoveredMarker.soldierInfo?.health ?? 100) <= 0 ? '#ef5350' : (hoveredMarker.soldierInfo?.health ?? 100) < 40 ? '#fdd835' : '#00e5ff'
+              width: `${getPlayerHealth(hoveredMarker) ?? 100}%`,
+              background: (getPlayerHealth(hoveredMarker) ?? 100) <= 0 ? '#ef5350' : (getPlayerHealth(hoveredMarker) ?? 100) < 40 ? '#fdd835' : '#00e5ff'
             }"
           ></div>
         </div>
@@ -751,12 +751,12 @@
           <div v-else class="squads-scroll-list">
             <button
               v-for="player in filteredTeamPlayers"
-              :key="player.playerGuid || player.playerName"
+              :key="getPlayerKey(player)"
               class="sidebar-player-card-row"
               :class="[
                 `team-${normalizeTeam(player.teamId)}`,
                 getPerspectiveClass(player.teamId),
-                { 'is-focused': hoveredPlayer?.playerGuid === player.playerGuid },
+                { 'is-focused': getPlayerKey(hoveredPlayer) === getPlayerKey(player) },
                 { 'is-disengaged': isPlayerDisengaged(player) }
               ]"
               :style="getPerspectiveStyle(player.teamId)"
@@ -765,10 +765,10 @@
               @mouseleave="hoveredPlayer = null"
             >
               <span class="player-name-row">
-                {{ player.playerName }}
+                {{ getPlayerLabel(player) }}
                 <span v-if="isPlayerDisengaged(player)" class="disengaged-sidebar-tag">脱战</span>
               </span>
-              <span class="player-meta-row">S{{ normalizeSquad(player.squadId) }} / HP {{ player.soldierInfo?.health ?? '-' }}</span>
+              <span class="player-meta-row">S{{ normalizeSquad(player.squadId) }} / HP {{ getPlayerHealth(player) ?? '-' }}</span>
             </button>
             <div v-if="!filteredTeamPlayers.length" class="empty-state">
               暂无在线玩家
@@ -1046,7 +1046,7 @@ watch(
     let changed = false;
 
     newPlayers.forEach((player) => {
-      const key = player.playerGuid || player.playerName;
+      const key = getPlayerKey(player);
       if (!key) return;
       if (hasValidPosition(player)) {
         nextCache[key] = {
@@ -1102,11 +1102,11 @@ watch(
   positionedPlayers,
   (newList) => {
     newList.forEach(player => {
-      const key = player.playerGuid || player.playerName;
+      const key = getPlayerKey(player);
       if (!key) return;
-      const pos = player.soldierInfo?.position;
+      const pos = getPlayerPosition(player);
       if (!pos) return;
-      const health = player.soldierInfo?.health ?? null;
+      const health = getPlayerHealth(player);
       const nextX = pos.x ?? 0;
       const nextY = pos.y ?? 0;
       const motion = playerMotionState.get(key);
@@ -1154,7 +1154,7 @@ watch(
       });
     });
 
-    const currentKeys = new Set(newList.map(p => p.playerGuid || p.playerName).filter(Boolean));
+    const currentKeys = new Set(newList.map((p) => getPlayerKey(p)).filter(Boolean));
     for (const key of playerHistory.keys()) {
       if (!currentKeys.has(key)) {
         playerHistory.delete(key);
@@ -1194,12 +1194,12 @@ function startInterpolationLoop() {
     const bounds = activeMapConfig.value.bounds;
     
     positionedPlayers.value.forEach(player => {
-      const key = player.playerGuid || player.playerName;
+      const key = getPlayerKey(player);
       if (!key) return;
       
       const history = playerHistory.get(key);
       if (!history || history.length === 0) {
-        const pos = player.soldierInfo?.position;
+        const pos = getPlayerPosition(player);
         if (pos) {
           newPositions[key] = {
             mapX: project(pos.x ?? 0, bounds.minX, bounds.maxX),
@@ -1493,9 +1493,9 @@ const markers = computed<MapMarker[]>(() => {
 
   const bounds = activeMapConfig.value.bounds;
   return positioned.map((player) => {
-    const key = player.playerGuid || player.playerName;
+    const key = getPlayerKey(player);
     const interp = interpolatedPositions.value[key];
-    const pos = player.soldierInfo.position as BzssCoreTrackedVector;
+    const pos = getPlayerPosition(player) as BzssCoreTrackedVector;
     const resolvedTeamId = resolvePlayerTeamId(player);
     return {
       ...player,
@@ -1560,7 +1560,7 @@ const filteredPlayers = computed(() => {
   let list = markers.value;
   if (filterAliveOnly.value) {
     list = list.filter((p) => {
-      const hp = p.soldierInfo?.health;
+      const hp = getPlayerHealth(p);
       return hp != null && hp > 0;
     });
   }
@@ -1571,7 +1571,7 @@ const filteredPlayers = computed(() => {
 const hoveredMarker = computed(() => {
   if (!hoveredPlayer.value) return null;
   return markers.value.find(
-    (m) => m.playerGuid === hoveredPlayer.value?.playerGuid || m.playerName === hoveredPlayer.value?.playerName
+    (m) => getPlayerKey(m) === getPlayerKey(hoveredPlayer.value)
   ) || null;
 });
 
@@ -1617,7 +1617,7 @@ const tooltipStyle = computed(() => {
 const filteredTeamPlayers = computed(() => {
   return markers.value
     .filter((p) => normalizeTeam(p.teamId) === activeTeamTab.value)
-    .sort((a, b) => (a.playerName || "").localeCompare(b.playerName || ""));
+    .sort((a, b) => getPlayerLabel(a).localeCompare(getPlayerLabel(b)));
 });
 
 // Group real players by squads
@@ -1637,7 +1637,7 @@ const currentTeamSquads = computed(() => {
   const list: any[] = [];
   squadMap.forEach((squadPlayers, squadId) => {
     const sl = squadPlayers.find(p => isSquadLeader(p)) || squadPlayers[0];
-    const totalHealth = squadPlayers.reduce((acc, p) => acc + (p.soldierInfo?.health ?? 100), 0);
+    const totalHealth = squadPlayers.reduce((acc, p) => acc + (getPlayerHealth(p) ?? 100), 0);
     const avgHealth = Math.round(totalHealth / squadPlayers.length);
     
     list.push({
@@ -1645,7 +1645,7 @@ const currentTeamSquads = computed(() => {
       name: `Squad ${squadId}`,
       teamId: teamId,
       playersCount: squadPlayers.length,
-      squadLeaderName: sl?.playerName || "Unknown",
+      squadLeaderName: getPlayerLabel(sl),
       avgHealth: avgHealth
     });
   });
@@ -1784,7 +1784,7 @@ function showPlayerDetails(player: BzssCoreTrackedPlayerInfo, event?: MouseEvent
   } else {
     detail = {
       playerId: null,
-      name: player.playerName,
+      name: getPlayerLabel(player),
       teamId: normalizeTeam(player.teamId),
       squadId: normalizeSquad(player.squadId),
       isLeader: isSquadLeader(player),
@@ -1896,6 +1896,7 @@ function findAdminTeamId(entries: any[], steam64: string): number | null {
 
 function getMatchStateTeamId(player: BzssCoreTrackedPlayerInfo): number | null {
   const candidates = new Set([
+    normalizePlayerIdentity(getPlayerKey(player)),
     normalizePlayerIdentity(player.playerName),
     normalizePlayerIdentity(player.playerGuid),
   ].filter(Boolean));
@@ -1932,6 +1933,7 @@ function resolvePlayerTeamId(player: BzssCoreTrackedPlayerInfo): number {
 }
 
 function getPlayerYaw(player: BzssCoreTrackedPlayerInfo): number | null {
+  if (player.yaw != null) return player.yaw;
   const rotation = player.soldierInfo?.rotation;
   if (!rotation) return null;
   if (rotation.z != null) return rotation.z;
@@ -1939,12 +1941,43 @@ function getPlayerYaw(player: BzssCoreTrackedPlayerInfo): number | null {
   return null;
 }
 
+function getPlayerKey(player: BzssCoreTrackedPlayerInfo | null | undefined): string {
+  if (!player) return "";
+  const playerIndex = player.playerIndex ?? player.playerId;
+  if (playerIndex != null && Number.isFinite(Number(playerIndex))) {
+    return `idx:${Number(playerIndex)}`;
+  }
+  const playerGuid = String(player.playerGuid ?? "").trim();
+  if (playerGuid) return `guid:${playerGuid}`;
+  const playerName = String(player.playerName ?? "").trim();
+  if (playerName) return `name:${playerName}`;
+  return "";
+}
+
+function getPlayerLabel(player: BzssCoreTrackedPlayerInfo | null | undefined): string {
+  if (!player) return "Unknown";
+  const playerName = String(player.playerName ?? "").trim();
+  if (playerName) return playerName;
+  const playerIndex = player.playerIndex ?? player.playerId;
+  if (playerIndex != null) return `Player ${playerIndex}`;
+  return "Unknown";
+}
+
+function getPlayerPosition(player: BzssCoreTrackedPlayerInfo | null | undefined) {
+  return player?.soldierInfo?.position ?? player?.position ?? null;
+}
+
+function getPlayerHealth(player: BzssCoreTrackedPlayerInfo | null | undefined): number | null {
+  const value = player?.soldierInfo?.health;
+  return value != null && Number.isFinite(value) ? value : null;
+}
+
 function normalizeSquad(squadId: number | null | undefined) {
   return Number.isFinite(squadId as number) && Number(squadId) >= 0 ? Number(squadId) : 0;
 }
 
 function hasValidPosition(player: BzssCoreTrackedPlayerInfo) {
-  const pos = player.soldierInfo?.position;
+  const pos = getPlayerPosition(player);
   return Boolean(pos && Number.isFinite(pos.x) && Number.isFinite(pos.y));
 }
 
@@ -1961,7 +1994,7 @@ function isSquadLeader(player: BzssCoreTrackedPlayerInfo) {
 }
 
 function resolveMapRoleInfo(player: BzssCoreTrackedPlayerInfo): RoleIconInfo {
-  const health = player.soldierInfo?.health;
+  const health = getPlayerHealth(player);
   if (health != null && health <= 0) {
     return resolveRoleIcon("dead");
   }

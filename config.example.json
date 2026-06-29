@@ -662,13 +662,13 @@
       "allowedInfantryNamesText": "",
       "allowedInfantryPatternsText": "",
       "broadcastOnApproved": false,
-      "broadcastOnViolation": true
+      "broadcastOnViolation": false
     },
     "stepwiseSquadPlaytimeGuard": {
       "enabled": true,
       "directory": "./data/stepwise-squad-playtime-guard",
       "broadcastOnApproved": false,
-      "broadcastOnViolation": true,
+      "broadcastOnViolation": false,
       "warnOnMissingPlaytime": true,
       "liveLookupWhenMissing": true,
       "maxRecentRecords": 300,

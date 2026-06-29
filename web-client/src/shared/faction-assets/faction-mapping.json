@@ -1,0 +1,28 @@
+{
+  "factions": {
+    "ADF": "澳",
+    "AFU": "乌军",
+    "BAF": "英",
+    "CAF": "加",
+    "CRF": "魁北克民兵",
+    "GFI": "德军",
+    "IMF": "民兵（IMF）",
+    "MEA": "伊军",
+    "MEI": "老乡(MEI)",
+    "PLA": "人民陆军",
+    "PLAAGF": "人民陆军",
+    "PLANMC": "人民马润",
+    "RGF": "俄陆",
+    "TLF": "土军",
+    "USA": "美军",
+    "USMC": "马润",
+    "VDV": "俄空降军",
+    "WPMC": "军事承包商"
+  },
+  "battlegroups": {
+    "14th Amphibious Combined Arms Brigade": "陆军两栖部队",
+    "14th Brigade": "陆军两栖部队",
+    "1st Cavalry Regiment": "美军",
+    "1st Cav": "美军"
+  }
+}

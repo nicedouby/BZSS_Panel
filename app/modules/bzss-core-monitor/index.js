@@ -376,8 +376,7 @@ function parseRuntimePlayerLine(text) {
 }
 
 function parseScoreboardPlayerLine(text) {
-  const block = extractLineBlock(text, "PlayerScoreboard");
-  const raw = block?.content ?? "";
+  const raw = extractCompactLineTail(text, "PlayerScoreboard");
   if (!raw.trim()) {
     return {
       type: "playerScoreboard",
@@ -386,8 +385,7 @@ function parseScoreboardPlayerLine(text) {
     };
   }
 
-  const rows = extractBraceItems(raw);
-  const rowTexts = rows.length > 0 ? rows : [raw];
+  const rowTexts = extractScoreboardRows(raw);
   const scoreboardPlayers = rowTexts
     .map((row) => parseLogScoreboardRow(row))
     .filter(Boolean);
@@ -429,6 +427,25 @@ function parseLogScoreboardRow(row) {
     rawFields,
   };
   return player;
+}
+
+function extractScoreboardRows(raw) {
+  const source = String(raw ?? "").trim();
+  if (!source) return [];
+  if (!source.startsWith("{") && source.includes("}{")) {
+    return source.replace(/}+$/g, "").split("}{");
+  }
+  const rows = extractBraceItems(source);
+  if (rows.length > 0) return rows;
+  const repairedFields = repairScoreboardFields(splitTopLevelCsv(source.replace(/}+$/g, "")));
+  if (repairedFields.length > 19 && repairedFields.length % 19 === 0) {
+    const chunkedRows = [];
+    for (let index = 0; index < repairedFields.length; index += 19) {
+      chunkedRows.push(repairedFields.slice(index, index + 19).join(","));
+    }
+    return chunkedRows;
+  }
+  return [source];
 }
 
 function repairScoreboardFields(rawFields) {
@@ -605,6 +622,14 @@ function extractLineBlock(text, name) {
     end: source.length,
     content: source.slice(contentStart).replace(/}+$/g, ""),
   };
+}
+
+function extractCompactLineTail(text, name) {
+  const source = String(text ?? "");
+  const startToken = `${name}{`;
+  const start = source.indexOf(startToken);
+  if (start < 0) return "";
+  return source.slice(start + startToken.length).trim();
 }
 
 function extractBraceItems(text) {

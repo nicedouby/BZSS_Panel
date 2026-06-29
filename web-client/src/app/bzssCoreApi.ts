@@ -10,6 +10,17 @@ export interface BzssCoreExecuteResult {
   durationMs?: number;
 }
 
+
+export interface BzssCoreExecuteResult {
+  ok: boolean;
+  command?: string;
+  directive?: string;
+  message?: string;
+  stdout?: string;
+  stderr?: string;
+  durationMs?: number;
+}
+
 export interface BzssCoreTrackedVector {
   x: number | null;
   y: number | null;
@@ -20,6 +31,9 @@ export interface BzssCoreCaptureZoneInfo {
   name: string;
   position: BzssCoreTrackedVector | null;
   raw?: string;
+  isLocked?: boolean | null;
+  capturePercent?: number | null;
+  captureDirection?: number | null;
 }
 
 export interface BzssCoreFobInfo {
@@ -31,6 +45,10 @@ export interface BzssCoreFobInfo {
   name: string;
   position: BzssCoreTrackedVector | null;
   raw?: string;
+  fobId?: string;
+  constructionPoints?: number | null;
+  size?: string;
+  instigator?: string;
 }
 
 export interface BzssCoreMainZoneInfo {

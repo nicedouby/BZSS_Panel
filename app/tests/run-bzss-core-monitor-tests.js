@@ -36,6 +36,30 @@ function testParseLogLine() {
   assert.equal(scoreboard.scoreboardPlayers[0].fireTeamIndex, -1);
   assert.equal(scoreboard.scoreboardPlayers[0].fireTeamPosition, 19);
 
+  const compactMultiScoreboard = parseBzssCoreLogLine(
+    "PIE: PlayerScoreboard{0,1,3,0,1,0,0,0,0,0,0,0,0,0,5,0,0,-1,19}{1,1,3,0,2,0,0,0,0,0,0,0,0,0,6,0,0,-1,19}{2,1,3,0,3,0,0,0,0,0,0,0,0,0,7,0,0,-1,19}}"
+  );
+  assert.equal(compactMultiScoreboard.type, "playerScoreboard");
+  assert.equal(compactMultiScoreboard.scoreboardPlayers.length, 3);
+  assert.deepEqual(
+    compactMultiScoreboard.scoreboardPlayers.map((player) => player.playerIndex),
+    [0, 1, 2],
+  );
+  assert.deepEqual(
+    compactMultiScoreboard.scoreboardPlayers.map((player) => player.squadId),
+    [3, 3, 3],
+  );
+
+  const flatMultiScoreboard = parseBzssCoreLogLine(
+    "PIE: PlayerScoreboard{22,1,3,0,1,0,0,0,0,0,0,0,0,0,5,0,0,-1,19,23,1,3,0,2,0,0,0,0,0,0,0,0,0,6,0,0,-1,19,24,1,3,0,3,0,0,0,0,0,0,0,0,0,7,0,0,-1,19}}"
+  );
+  assert.equal(flatMultiScoreboard.type, "playerScoreboard");
+  assert.equal(flatMultiScoreboard.scoreboardPlayers.length, 3);
+  assert.deepEqual(
+    flatMultiScoreboard.scoreboardPlayers.map((player) => player.playerIndex),
+    [22, 23, 24],
+  );
+
   const scene = parseBzssCoreLogLine("PIE: CPZ:{01-TriCommons,true,1.0,1}{02-AbdelsFarm,true,1.0,1},FOBI:{,1,Very_Small,300.0,10000.0,2000.0,},MainZone:{1,X=56820.773 Y=7170.025 Z=-13376.360}");
   assert.equal(scene.type, "scene");
   assert.equal(scene.captureZones.length, 2);

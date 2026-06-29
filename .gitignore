@@ -54,3 +54,5 @@ maps/Game/Maps/Anvil/Minimap/Anvil_Minimap.PNG
 *.cfg
 *.gz
 sqlite3-part0.bin
+/鼠鼠姬形象
+/MapScene

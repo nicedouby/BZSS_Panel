@@ -1,3 +1,5 @@
+import factionMapping from "./faction-mapping.json";
+
 type FactionCode =
   | "ADF"
   | "AFU"
@@ -503,4 +505,39 @@ export function getFlagUrlByTeamName(teamName: string): string | null {
 
 export function getUnitIconUrlByTeamName(teamName: string): string | null {
   return getAssetUrlByBasename(resolveBattlegroupVisual(teamName)?.unitIconBasename ?? null);
+}
+
+export function getChineseNameFromTeamName(teamName: string): string {
+  if (!teamName) return "";
+  const normalized = normalizeLookupName(teamName);
+  const bgMapping = factionMapping.battlegroups as Record<string, string>;
+  
+  for (const [bgName, chName] of Object.entries(bgMapping)) {
+    if (normalizeLookupName(bgName) === normalized) {
+      return chName;
+    }
+  }
+  
+  const visual = resolveBattlegroupVisual(teamName);
+  if (visual) {
+    const primaryNormalized = normalizeLookupName(visual.name);
+    for (const [bgName, chName] of Object.entries(bgMapping)) {
+      if (normalizeLookupName(bgName) === primaryNormalized) {
+        return chName;
+      }
+    }
+  }
+  
+  const factionCode = visual?.faction ?? getFactionFromTeamName(teamName);
+  if (factionCode) {
+    return getChineseNameByFaction(factionCode);
+  }
+  
+  return teamName;
+}
+
+export function getChineseNameByFaction(factionCode: string): string {
+  const code = String(factionCode ?? "").trim().toUpperCase();
+  const factionMap = factionMapping.factions as Record<string, string>;
+  return factionMap[code] ?? factionCode;
 }

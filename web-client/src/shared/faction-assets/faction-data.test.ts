@@ -5,6 +5,7 @@ import {
   getFactionFromTeamName,
   getFlagUrlByTeamName,
   getUnitIconUrlByTeamName,
+  getChineseNameFromTeamName,
 } from "./faction-data";
 
 describe("faction-data", () => {
@@ -28,6 +29,15 @@ describe("faction-data", () => {
     expect(getFactionFromTeamName("Unknown Battlegroup")).toBeNull();
     expect(getFlagUrlByTeamName("95th Air Assault")).toBeNull();
     expect(getUnitIconUrlByTeamName("95th Air Assault")).toBeNull();
+  });
+
+  it("resolves Chinese military/faction names from team names", () => {
+    expect(getChineseNameFromTeamName("1st Cavalry Regiment")).toBe("美军");
+    expect(getChineseNameFromTeamName("1st Cav")).toBe("美军");
+    expect(getChineseNameFromTeamName("14th Amphibious Combined Arms Brigade")).toBe("陆军两栖部队");
+    expect(getChineseNameFromTeamName("95th Air Assault Brigade")).toBe("乌军");
+    expect(getChineseNameFromTeamName("Manticore Security Task Force")).toBe("军事承包商");
+    expect(getChineseNameFromTeamName("Unknown Battlegroup")).toBe("Unknown Battlegroup");
   });
 
   it("keeps the manifest aligned with the checked-in asset files", () => {
