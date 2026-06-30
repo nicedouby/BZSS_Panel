@@ -22,6 +22,19 @@ function testParsePlayerBlocks() {
   assert.equal(players[0].soldierInfo.weaponClass, "BP_QBZ191_IronSights_C_2147477184");
   assert.deepEqual(players[0].soldierInfo.position, { x: 15014, y: -1672, z: -12490 });
   assert.equal(players[1].playerIndex, 0);
+
+  const shiftedTailText = "PlayerBaseInfo{1,eos-1,Tail Shift,1,1,-1,-1}"
+    + "SoldierInfo{BP_Soldier_US_Rifleman_C,100,0,0,0,0,0,0,BP_M4_C,30,120{X=1 Y=2 Z=3}{X=4 Y=5 Z=6}}"
+    + "PlayerScoreboard{9,8,7,6,5,4,3,2,1,99}";
+  const shiftedPlayers = parseBzssCorePlayerBlocks(shiftedTailText);
+  assert.equal(shiftedPlayers.length, 1);
+  assert.equal(shiftedPlayers[0].playerScoreboard.stats.vehicleKills, 7);
+  assert.equal(shiftedPlayers[0].playerScoreboard.stats.numTeamKills, 3);
+  assert.equal(shiftedPlayers[0].playerScoreboard.stats.healPoints, 2);
+  assert.equal(shiftedPlayers[0].playerScoreboard.stats.revivedPoints, 1);
+  assert.equal(shiftedPlayers[0].playerScoreboard.stats.teamworkScore, 99);
+  assert.equal(shiftedPlayers[0].playerScoreboard.stats.objectiveScore, null);
+  assert.equal(shiftedPlayers[0].playerScoreboard.stats.combatScore, null);
 }
 
 function testParseLogLine() {
@@ -34,7 +47,50 @@ function testParseLogLine() {
   assert.equal(scoreboard.scoreboardPlayers.length, 1);
   assert.equal(scoreboard.scoreboardPlayers[0].playerIndex, 0);
   assert.equal(scoreboard.scoreboardPlayers[0].fireTeamIndex, -1);
-  assert.equal(scoreboard.scoreboardPlayers[0].fireTeamPosition, 19);
+  assert.equal(scoreboard.scoreboardPlayers[0].fireTeamPosition, -1);
+  assert.equal(scoreboard.scoreboardPlayers[0].playerScoreboard.stats.teamworkScore, 0);
+  assert.equal(scoreboard.scoreboardPlayers[0].playerScoreboard.stats.combatScore, 0);
+
+  const gluedBooleanScoreboard = parseBzssCoreLogLine(
+    "PIE: PlayerScoreboard{0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,47,88}}"
+  );
+  assert.equal(gluedBooleanScoreboard.type, "playerScoreboard");
+  assert.equal(gluedBooleanScoreboard.scoreboardPlayers.length, 1);
+  assert.equal(gluedBooleanScoreboard.scoreboardPlayers[0].isAdmin, false);
+  assert.equal(gluedBooleanScoreboard.scoreboardPlayers[0].isCommander, true);
+  assert.equal(gluedBooleanScoreboard.scoreboardPlayers[0].fireTeamIndex, 0);
+  assert.equal(gluedBooleanScoreboard.scoreboardPlayers[0].fireTeamPosition, 47);
+  assert.equal(gluedBooleanScoreboard.scoreboardPlayers[0].playerScoreboard.stats.teamworkScore, 0);
+  assert.equal(gluedBooleanScoreboard.scoreboardPlayers[0].playerScoreboard.stats.combatScore, 0);
+
+  const observedScoreboard = parseBzssCoreLogLine(
+    "PIE: PlayerScoreboard{42,2,1,1,1,4,0,0,0,0,0,0,80,15,0,0,1,99,55}}"
+  );
+  assert.equal(observedScoreboard.type, "playerScoreboard");
+  assert.equal(observedScoreboard.scoreboardPlayers.length, 1);
+  assert.equal(observedScoreboard.scoreboardPlayers[0].playerIndex, 42);
+  assert.equal(observedScoreboard.scoreboardPlayers[0].kills, 1);
+  assert.equal(observedScoreboard.scoreboardPlayers[0].vehicleKills, 1);
+  assert.equal(observedScoreboard.scoreboardPlayers[0].woundeds, 0);
+  assert.equal(observedScoreboard.scoreboardPlayers[0].deaths, 4);
+  assert.equal(observedScoreboard.scoreboardPlayers[0].teamworkScore, 0);
+  assert.equal(observedScoreboard.scoreboardPlayers[0].objectiveScore, 80);
+  assert.equal(observedScoreboard.scoreboardPlayers[0].combatScore, 15);
+  assert.equal(observedScoreboard.scoreboardPlayers[0].isCommander, false);
+  assert.deepEqual(observedScoreboard.scoreboardPlayers[0].playerScoreboard.stats, {
+    dataLives: null,
+    numKills: 1,
+    vehicleKills: 1,
+    numDeaths: 4,
+    numWoundeds: 0,
+    numWounds: 0,
+    numTeamKills: 0,
+    healPoints: 0,
+    revivedPoints: 0,
+    teamworkScore: 0,
+    objectiveScore: 80,
+    combatScore: 15,
+  });
 
   const compactMultiScoreboard = parseBzssCoreLogLine(
     "PIE: PlayerScoreboard{0,1,3,0,1,0,0,0,0,0,0,0,0,0,5,0,0,-1,19}{1,1,3,0,2,0,0,0,0,0,0,0,0,0,6,0,0,-1,19}{2,1,3,0,3,0,0,0,0,0,0,0,0,0,7,0,0,-1,19}}"
@@ -88,6 +144,39 @@ function testMonitorState() {
   assert.equal(raw.fobs.length, 1);
   assert.equal(raw.mainZones.length, 1);
   assert.ok(raw.rawLineHash);
+
+  // 测试 getPlayers() 合并与规范化输出
+  const runtimeLog = "PlayerBaseInfo{7,100,200,300,45}";
+  assert.equal(module.api.ingestLogLine(runtimeLog).ok, true);
+  const scoreboardLog = "PlayerScoreboard{7,1,3,0,1,2,0,3,4,0,0,10,20,30,0,0,-1,19,55}";
+  assert.equal(module.api.ingestLogLine(scoreboardLog).ok, true);
+
+  const playersBeforeFull = module.api.getPlayers();
+  const p7 = playersBeforeFull.find(p => p.playerIndex === 7);
+  assert.ok(p7);
+  assert.equal(p7.teamId, 1);
+  assert.equal(p7.squadId, 3);
+  assert.deepEqual(p7.position, { x: 100, y: 200, z: 300 });
+  assert.equal(p7.soldierInfo.health, 100); // 默认填充 100
+  assert.equal(p7.playerScoreboard.stats.combatScore, 30);
+  assert.equal(p7.playerScoreboard.stats.vehicleKills, 1);
+  assert.equal(p7.playerScoreboard.stats.teamworkScore, 10);
+
+  // 测试单行内含完整块的日志解析 (playerFullBlocks)
+  const fullBlockText = "PlayerBaseInfo{42,eos-42,Test Player,2,3,-1,-1}"
+    + "SoldierInfo{BP_Soldier_US_Rifleman_C,88,0,0,0,0,0,0,BP_M4_C,30,120{X=1000 Y=2000 Z=0}{X=0 Y=90 Z=0}}"
+    + "PlayerScoreboard{0,0,0,0,0,0,0,0,0,0,0,99}";
+  assert.equal(module.api.ingestLogLine(fullBlockText).ok, true);
+
+  const players = module.api.getPlayers();
+  const p42 = players.find(p => p.playerIndex === 42);
+  assert.ok(p42);
+  assert.equal(p42.playerName, "Test Player");
+  assert.equal(p42.teamId, 2);
+  assert.equal(p42.squadId, 3);
+  assert.equal(p42.soldierInfo.health, 88);
+  assert.deepEqual(p42.soldierInfo.position, { x: 1000, y: 2000, z: 0 });
+  assert.equal(p42.playerScoreboard.stats.combatScore, 99);
 }
 
 function main() {

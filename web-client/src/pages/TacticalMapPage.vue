@@ -1079,17 +1079,7 @@ watch(
   }
 );
 
-watch(
-  () => [loading.value, errorText.value, positionedPlayers.value.length, captureZoneMarkers.value.length, fobMarkers.value.length, tilesReady.value] as const,
-  () => {
-    const ready = Boolean(!loading.value && !errorText.value && props.snapshot && tilesReady.value);
-    emit("snapshot-ready", {
-      ready,
-      reason: ready ? "rendered" : loading.value ? "loading" : errorText.value ? "error" : "pending-tiles",
-    });
-  },
-  { immediate: true }
-);
+
 
 watch(
   () => props.snapshot,
@@ -1555,6 +1545,18 @@ const fobMarkers = computed(() => {
   }
   return markers;
 });
+
+watch(
+  () => [loading.value, errorText.value, positionedPlayers.value.length, captureZoneMarkers.value.length, fobMarkers.value.length, tilesReady.value] as const,
+  () => {
+    const ready = Boolean(!loading.value && !errorText.value && props.snapshot && tilesReady.value);
+    emit("snapshot-ready", {
+      ready,
+      reason: ready ? "rendered" : loading.value ? "loading" : errorText.value ? "error" : "pending-tiles",
+    });
+  },
+  { immediate: true }
+);
 
 const filteredPlayers = computed(() => {
   let list = markers.value;

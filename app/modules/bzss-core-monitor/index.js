@@ -8,6 +8,7 @@ const MARKER_NEEDLE = Buffer.from(MARKER, "utf16le");
 const SCOREBOARD_FIELDS = [
   ["dataLives", "Data lives"],
   ["numKills", "Num kills"],
+  ["vehicleKills", "Num vehicle kills"],
   ["numDeaths", "Num death"],
   ["numWoundeds", "Num woundeds"],
   ["numWounds", "Num wounds"],
@@ -21,6 +22,7 @@ const SCOREBOARD_FIELDS = [
 const SCOREBOARD_FIELD_ALIASES = {
   dataLives: ["Lives", "DataLives"],
   numKills: ["NumKills"],
+  vehicleKills: ["VehicleKills", "NumVehicleKills"],
   numDeaths: ["NumDeaths"],
   numWoundeds: ["Woundeds"],
   numWounds: ["Wounds"],
@@ -107,6 +109,44 @@ export function createBzssCoreMonitorModule({ core, logger }) {
           draft.runtimePlayers = parsed.runtimePlayers;
         } else if (parsed.type === "playerScoreboard") {
           draft.scoreboardPlayers = parsed.scoreboardPlayers;
+        } else if (parsed.type === "playerFullBlocks") {
+          const observedAt = new Date().toISOString();
+          draft.runtimePlayers = parsed.players.map((p) => ({
+            playerId: p.playerId,
+            playerIndex: p.playerIndex,
+            position: p.soldierInfo?.position ?? p.position ?? null,
+            yaw: p.yaw,
+            combatInfo: p.claimedInfo || p.soldierInfo?.weaponClass || "",
+            observedAt,
+            stale: false,
+            playerName: p.playerName,
+            playerGuid: p.playerGuid,
+            soldierInfo: p.soldierInfo,
+            vehicleInfo: p.vehicleInfo,
+          }));
+          draft.scoreboardPlayers = parsed.players.map((p) => ({
+            playerId: p.playerId,
+            playerIndex: p.playerIndex,
+            teamId: p.teamId,
+            squadId: p.squadId,
+            lives: p.playerScoreboard?.stats?.dataLives ?? null,
+            kills: p.playerScoreboard?.stats?.numKills ?? null,
+            vehicleKills: p.playerScoreboard?.stats?.vehicleKills ?? null,
+            deaths: p.playerScoreboard?.stats?.numDeaths ?? null,
+            woundeds: p.playerScoreboard?.stats?.numWoundeds ?? null,
+            wounds: p.playerScoreboard?.stats?.numWounds ?? null,
+            teamKills: p.playerScoreboard?.stats?.numTeamKills ?? null,
+            healPoints: p.playerScoreboard?.stats?.healPoints ?? null,
+            revivedPoints: p.playerScoreboard?.stats?.revivedPoints ?? null,
+            teamworkScore: p.playerScoreboard?.stats?.teamworkScore ?? null,
+            objectiveScore: p.playerScoreboard?.stats?.objectiveScore ?? null,
+            combatScore: p.playerScoreboard?.stats?.combatScore ?? null,
+            isAdmin: p.isAdmin,
+            isCommander: p.isCommander,
+            fireTeamIndex: p.ftIndex,
+            fireTeamPosition: p.ftPosition,
+            playerScoreboard: p.playerScoreboard,
+          }));
         } else if (parsed.type === "scene") {
           draft.captureZones = parsed.captureZones;
           draft.fobs = parsed.fobs;
@@ -183,6 +223,141 @@ export function createBzssCoreMonitorModule({ core, logger }) {
     return state.scoreboardPlayers.map(clonePlainObject);
   }
 
+  /**
+   * 获取合并且规范化后的在线玩家列表。
+   * 深度融合了运行时状态 (runtimePlayers) 与记分板指标 (scoreboardPlayers)，
+   * 确保提供一致的 JSDoc/TypeScript 契约结构，供战术地图及战术回放进行无差别访问。
+   *
+   * @returns {Array<Object>} 规范化的玩家数组
+   */
+  function getPlayers() {
+    const byIndex = new Map();
+
+    // 1. 写入运行时玩家数据
+    for (const player of state.runtimePlayers) {
+      if (player.playerIndex == null && player.playerId == null) continue;
+      const key = player.playerIndex ?? player.playerId;
+
+      const position = player.position ? { ...player.position } : null;
+      const soldierInfo = player.soldierInfo ? clonePlainObject(player.soldierInfo) : {
+        raw: "",
+        fields: [],
+        values: {},
+        soldierClass: "",
+        health: 100, // 默认填充 100 生命值
+        weaponClass: "",
+        ammoValues: [],
+        position: position ? { ...position } : null,
+        rotation: { x: 0, y: 0, z: player.yaw ?? 0 },
+      };
+
+      byIndex.set(key, {
+        playerId: player.playerId,
+        playerIndex: player.playerIndex,
+        playerName: player.playerName ?? "",
+        playerGuid: player.playerGuid ?? "",
+        teamId: player.teamId ?? null,
+        squadId: player.squadId ?? null,
+        isAdmin: player.isAdmin ?? null,
+        isCommander: player.isCommander ?? null,
+        position,
+        yaw: player.yaw,
+        combatInfo: player.combatInfo ?? "",
+        observedAt: player.observedAt,
+        stale: player.stale ?? false,
+        soldierInfo,
+        vehicleInfo: player.vehicleInfo ? clonePlainObject(player.vehicleInfo) : null,
+        playerScoreboard: player.playerScoreboard ? clonePlainObject(player.playerScoreboard) : {
+          raw: "",
+          values: [],
+          numericValues: [],
+          stats: {
+            dataLives: null,
+            numKills: 0,
+            vehicleKills: 0,
+            numDeaths: 0,
+            numWoundeds: 0,
+            numWounds: 0,
+            numTeamKills: 0,
+            healPoints: 0,
+            revivedPoints: 0,
+            teamworkScore: 0,
+            objectiveScore: 0,
+            combatScore: 0,
+          },
+        },
+        rawText: player.rawText ?? "",
+      });
+    }
+
+    // 2. 合并/更新记分板数据
+    for (const player of state.scoreboardPlayers) {
+      if (player.playerIndex == null && player.playerId == null) continue;
+      const key = player.playerIndex ?? player.playerId;
+
+      const existing = byIndex.get(key);
+      const scoreboardInfo = player.playerScoreboard ? clonePlainObject(player.playerScoreboard) : {
+        raw: player.raw ?? "",
+        values: player.rawFields ?? [],
+        numericValues: [],
+        stats: {
+          dataLives: player.lives,
+          numKills: player.kills,
+          vehicleKills: player.vehicleKills,
+          numDeaths: player.deaths,
+          numWoundeds: player.woundeds,
+          numWounds: player.wounds,
+          numTeamKills: player.teamKills,
+          healPoints: player.healPoints,
+          revivedPoints: player.revivedPoints,
+          teamworkScore: player.teamworkScore,
+          objectiveScore: player.objectiveScore,
+          combatScore: player.combatScore,
+        },
+      };
+
+      if (existing) {
+        existing.teamId = player.teamId ?? existing.teamId;
+        existing.squadId = player.squadId ?? existing.squadId;
+        existing.isAdmin = player.isAdmin ?? existing.isAdmin;
+        existing.isCommander = player.isCommander ?? existing.isCommander;
+        existing.playerScoreboard = scoreboardInfo;
+      } else {
+        byIndex.set(key, {
+          playerId: player.playerId,
+          playerIndex: player.playerIndex,
+          playerName: player.playerName ?? "",
+          playerGuid: player.playerGuid ?? "",
+          teamId: player.teamId,
+          squadId: player.squadId,
+          isAdmin: player.isAdmin,
+          isCommander: player.isCommander,
+          position: null,
+          yaw: null,
+          combatInfo: "",
+          observedAt: new Date().toISOString(),
+          stale: true,
+          soldierInfo: {
+            raw: "",
+            fields: [],
+            values: {},
+            soldierClass: "",
+            health: null,
+            weaponClass: "",
+            ammoValues: [],
+            position: null,
+            rotation: null,
+          },
+          vehicleInfo: null,
+          playerScoreboard: scoreboardInfo,
+          rawText: player.raw ?? "",
+        });
+      }
+    }
+
+    return [...byIndex.values()];
+  }
+
   async function start() {
     if (started) return;
     started = true;
@@ -215,6 +390,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
       getState,
       getRuntimePlayers,
       getScoreboardPlayers,
+      getPlayers,
       getRawSnapshot,
       subscribe,
       ingestLogLine,
@@ -329,6 +505,14 @@ export function parseBzssCorePlayerBlocks(text) {
 
 export function parseBzssCoreLogLine(line) {
   const text = String(line ?? "");
+  if (text.includes("PlayerBaseInfo{") && text.includes("SoldierInfo{") && text.includes("PlayerScoreboard{")) {
+    const players = parseBzssCorePlayerBlocks(text);
+    return {
+      type: "playerFullBlocks",
+      players,
+      rawFields: [],
+    };
+  }
   if (text.includes("PlayerBaseInfo{")) return parseRuntimePlayerLine(text);
   if (text.includes("PlayerScoreboard{")) return parseScoreboardPlayerLine(text);
   if (text.includes("CPZ:") && text.includes(",FOBI:") && text.includes(",MainZone:")) return parseSceneInfoLine(text);
@@ -400,31 +584,37 @@ function parseScoreboardPlayerLine(text) {
 function parseLogScoreboardRow(row) {
   const raw = String(row ?? "").trim().replace(/}+$/g, "");
   if (!raw) return null;
-  const rawFields = repairScoreboardFields(splitTopLevelCsv(raw));
+  const originalFields = splitTopLevelCsv(raw);
+  const rawFields = repairScoreboardFields(originalFields);
   const numericValues = rawFields.map(toFiniteNumber);
+  const scoreboardInfo = buildScoreboardInfoFromCompactRow(raw, rawFields, numericValues);
+  const hasGluedBooleanField = originalFields.length === 18;
+  const statIndex = COMPACT_SCOREBOARD_STAT_INDEX;
   const player = {
     playerId: numericValues[0] ?? null,
     playerIndex: numericValues[0] ?? null,
     teamId: numericValues[1] ?? null,
     squadId: numericValues[2] ?? null,
-    lives: numericValues[3] ?? null,
-    kills: numericValues[4] ?? null,
-    vehicleKills: numericValues[5] ?? null,
-    deaths: numericValues[6] ?? null,
-    woundeds: numericValues[7] ?? null,
-    wounds: numericValues[8] ?? null,
-    teamKills: numericValues[9] ?? null,
-    healPoints: numericValues[10] ?? null,
-    revivedPoints: numericValues[11] ?? null,
-    teamworkScore: numericValues[12] ?? null,
-    objectiveScore: numericValues[13] ?? null,
-    combatScore: numericValues[14] ?? null,
-    isAdmin: toScoreboardBoolean(numericValues[15]),
-    isCommander: toScoreboardBoolean(numericValues[16]),
-    fireTeamIndex: numericValues[17] ?? null,
-    fireTeamPosition: numericValues[18] ?? null,
+    lives: statIndex.dataLives != null ? (numericValues[statIndex.dataLives] ?? null) : null,
+    kills: numericValues[statIndex.numKills] ?? null,
+    vehicleKills: numericValues[statIndex.vehicleKills] ?? null,
+    deaths: numericValues[statIndex.numDeaths] ?? null,
+    woundeds: numericValues[statIndex.numWoundeds] ?? null,
+    wounds: numericValues[statIndex.numWounds] ?? null,
+    teamKills: numericValues[statIndex.numTeamKills] ?? null,
+    healPoints: numericValues[statIndex.healPoints] ?? null,
+    revivedPoints: numericValues[statIndex.revivedPoints] ?? null,
+    teamworkScore: numericValues[statIndex.teamworkScore] ?? null,
+    objectiveScore: numericValues[statIndex.objectiveScore] ?? null,
+    combatScore: numericValues[statIndex.combatScore] ?? null,
+    isAdmin: toScoreboardBoolean(numericValues[14]),
+    // Compact rows with a glued 00/01/02 tail are not stable enough to trust for commander detection.
+    isCommander: hasGluedBooleanField ? null : toScoreboardBoolean(numericValues[15]),
+    fireTeamIndex: numericValues[16] ?? null,
+    fireTeamPosition: numericValues[17] ?? null,
     raw,
     rawFields,
+    playerScoreboard: scoreboardInfo,
   };
   return player;
 }
@@ -459,7 +649,49 @@ function repairScoreboardFields(rawFields) {
     }
     out.push(text);
   }
+  if (
+    out.length === 18
+    && /^[01]{2}$/.test(String(out[15] ?? ""))
+    && /^-?\d+$/.test(String(out[16] ?? ""))
+    && /^-?\d+$/.test(String(out[17] ?? ""))
+  ) {
+    const pair = String(out[15]);
+    out.splice(15, 1, pair[0], pair[1]);
+  }
   return out;
+}
+
+const COMPACT_SCOREBOARD_STAT_INDEX = {
+  dataLives: null,
+  numKills: 3,
+  vehicleKills: 4,
+  numDeaths: 5,
+  numWoundeds: 6,
+  numWounds: 7,
+  numTeamKills: 8,
+  healPoints: 9,
+  revivedPoints: 10,
+  teamworkScore: 11,
+  objectiveScore: 12,
+  combatScore: 13,
+};
+
+function buildScoreboardInfoFromCompactRow(raw, values, numericValues) {
+  const stats = {};
+  const labeledValues = SCOREBOARD_FIELDS.map(([key, label]) => {
+    const value = numericValues[COMPACT_SCOREBOARD_STAT_INDEX[key]] ?? null;
+    stats[key] = value;
+    return { key, label, value };
+  });
+
+  return {
+    raw,
+    values,
+    numericValues,
+    stats,
+    labeledValues,
+    extraValues: numericValues.slice(15),
+  };
 }
 
 function parseSceneInfoLine(text) {
@@ -910,12 +1142,41 @@ function parseScoreboardInfo(rawText) {
 }
 
 function parseScoreboardStats(valuesByKey, values) {
+  const hasExplicitTailKeys = [
+    "numTeamKills",
+    "healPoints",
+    "revivedPoints",
+    "teamworkScore",
+    "objectiveScore",
+    "combatScore",
+  ].some((key) => {
+    const aliases = SCOREBOARD_FIELD_ALIASES[key] ?? [];
+    return aliases.some((alias) => valuesByKey?.[alias] != null);
+  });
+  const isMissingTeamKillLayout = !hasExplicitTailKeys && values.length === SCOREBOARD_FIELDS.length - 1;
+  const fallbackIndexByKey = isMissingTeamKillLayout
+    ? {
+        dataLives: 0,
+        numKills: 1,
+        vehicleKills: null,
+        numDeaths: 2,
+        numWoundeds: 3,
+        numWounds: 4,
+        numTeamKills: null,
+        healPoints: 5,
+        revivedPoints: 6,
+        teamworkScore: 7,
+        objectiveScore: 8,
+        combatScore: 9,
+      }
+    : null;
   const stats = {};
   const labeledValues = SCOREBOARD_FIELDS.map(([key, label], index) => {
     const aliases = SCOREBOARD_FIELD_ALIASES[key] ?? [];
+    const fallbackIndex = fallbackIndexByKey ? fallbackIndexByKey[key] : index;
     const value = pickFirstFiniteNumber([
       ...(aliases.map((alias) => valuesByKey?.[alias])),
-      values[index],
+      fallbackIndex != null ? values[fallbackIndex] : null,
     ]);
     stats[key] = value;
     return {

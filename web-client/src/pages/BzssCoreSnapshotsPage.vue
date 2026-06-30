@@ -237,7 +237,7 @@
                             <span class="score-badge">目标: {{ pair.scoreboard?.objectiveScore ?? 0 }}</span>
                             <span class="score-badge">战斗: {{ pair.scoreboard?.combatScore ?? 0 }}</span>
                             <span class="score-badge">治疗: {{ pair.scoreboard?.healPoints ?? 0 }}</span>
-                            <span class="score-badge">拉人: {{ pair.scoreboard?.revivedPoints ?? 0 }}</span>
+                            <span class="score-badge">拉人: {{ pair.scoreboard?.lives ?? pair.scoreboard?.revivedPoints ?? 0 }}</span>
                             <span class="score-badge text-danger" v-if="pair.scoreboard?.teamKills">TK: {{ pair.scoreboard.teamKills }}</span>
                           </div>
 
@@ -386,7 +386,7 @@
                                 <h5>📈 评分明细</h5>
                                 <div class="scores-inline">
                                   <span>治疗分: <strong>{{ pair.scoreboard?.healPoints ?? 0 }}</strong></span>
-                                  <span>拉人分: <strong>{{ pair.scoreboard?.revivedPoints ?? 0 }}</strong></span>
+                                  <span>拉人分: <strong>{{ pair.scoreboard?.lives ?? pair.scoreboard?.revivedPoints ?? 0 }}</strong></span>
                                   <span>队友伤害/TK: <strong class="text-danger">{{ pair.scoreboard?.teamKills ?? 0 }}</strong></span>
                                   <span>受伤数: <strong>{{ pair.scoreboard?.wounds ?? 0 }}</strong></span>
                                   <span>载具击杀: <strong>{{ pair.scoreboard?.vehicleKills ?? 0 }}</strong></span>
@@ -1123,7 +1123,7 @@ function getScoreboardItems(player?: BzssCoreScoreboardPlayerInfo | null) {
     ["wounds", "受伤", player?.wounds],
     ["teamKills", "队友击杀 (TK)", player?.teamKills],
     ["healPoints", "治疗分", player?.healPoints],
-    ["revivedPoints", "复苏分", player?.revivedPoints],
+    ["revivedPoints", "复苏分", player?.lives ?? player?.revivedPoints],
     ["teamworkScore", "团队得分", player?.teamworkScore],
     ["objectiveScore", "目标得分", player?.objectiveScore],
     ["combatScore", "战斗得分", player?.combatScore],
