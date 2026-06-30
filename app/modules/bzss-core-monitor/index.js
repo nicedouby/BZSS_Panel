@@ -44,6 +44,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
   const state = createInitialState();
   let started = false;
   const unsubscribers = [];
+  const activeTimeouts = new Set();
 
   const listeners = new Set();
   function subscribe(listener) {
@@ -151,6 +152,21 @@ export function createBzssCoreMonitorModule({ core, logger }) {
           draft.captureZones = parsed.captureZones;
           draft.fobs = parsed.fobs;
           draft.mainZones = parsed.mainZones;
+        } else if (parsed.type === "explosiveDamage") {
+          if (!draft.explosions) {
+            draft.explosions = [];
+          }
+          draft.explosions.push(parsed.explosion);
+
+          const timeoutId = setTimeout(() => {
+            activeTimeouts.delete(timeoutId);
+            publish((d) => {
+              if (d.explosions) {
+                d.explosions = d.explosions.filter((e) => e.id !== parsed.explosion.id);
+              }
+            });
+          }, 3000);
+          activeTimeouts.add(timeoutId);
         }
       });
       return { ok: true, ignored: false, type: parsed.type };
@@ -172,6 +188,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
       captureZones: state.captureZones.map(clonePlainObject),
       fobs: state.fobs.map(clonePlainObject),
       mainZones: state.mainZones.map(clonePlainObject),
+      explosions: (state.explosions ?? []).map(clonePlainObject),
     };
   }
 
@@ -209,6 +226,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
       mainZones: state.mainZones.map(clonePlainObject),
       runtimePlayers: state.runtimePlayers.map(clonePlainObject),
       scoreboardPlayers: state.scoreboardPlayers.map(clonePlainObject),
+      explosions: (state.explosions ?? []).map(clonePlainObject),
       rawLineHash: state.rawLineHash,
       rawFields: [...state.rawFields],
       lastError: state.lastError,
@@ -375,6 +393,10 @@ export function createBzssCoreMonitorModule({ core, logger }) {
         // ignore
       }
     }
+    for (const timeoutId of activeTimeouts) {
+      clearTimeout(timeoutId);
+    }
+    activeTimeouts.clear();
   }
 
   return {
@@ -411,6 +433,7 @@ function createInitialState() {
     captureZones: [],
     fobs: [],
     mainZones: [],
+    explosions: [],
     rawLineHash: "",
     rawFields: [],
     lastError: "",
@@ -516,7 +539,31 @@ export function parseBzssCoreLogLine(line) {
   if (text.includes("PlayerBaseInfo{")) return parseRuntimePlayerLine(text);
   if (text.includes("PlayerScoreboard{")) return parseScoreboardPlayerLine(text);
   if (text.includes("CPZ:") && text.includes(",FOBI:") && text.includes(",MainZone:")) return parseSceneInfoLine(text);
+  if (text.includes("ApplyExplosiveDamage():")) {
+    return parseExplosiveDamageLine(text);
+  }
   return null;
+}
+
+function parseExplosiveDamageLine(text) {
+  const locMatch = text.match(/ExplosionLocation=V\(X=([-0-9.]+),\s*Y=([-0-9.]+),\s*Z=([-0-9.]+)\)/);
+  const causerMatch = text.match(/DamageCauser=([^ ]+)/);
+  const instigatorMatch = text.match(/DamageInstigator=([^ ]+)/);
+  if (!locMatch) return null;
+
+  return {
+    type: "explosiveDamage",
+    explosion: {
+      id: "exp-" + Math.random().toString(36).slice(2, 11),
+      x: parseFloat(locMatch[1]),
+      y: parseFloat(locMatch[2]),
+      z: parseFloat(locMatch[3]),
+      damageCauser: causerMatch ? causerMatch[1] : "",
+      damageInstigator: instigatorMatch ? instigatorMatch[1] : "",
+      at: new Date().toISOString(),
+    },
+    rawFields: [],
+  };
 }
 
 function parseRuntimePlayerLine(text) {

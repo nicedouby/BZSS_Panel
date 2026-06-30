@@ -179,10 +179,52 @@ function testMonitorState() {
   assert.equal(p42.playerScoreboard.stats.combatScore, 99);
 }
 
-function main() {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function testParseExplosionDamage() {
+  const line = "[2026.06.30-08.00.41:404][702]LogSquadTrace: [DedicatedServer]ApplyExplosiveDamage(): HitActor=nullptr DamageCauser=BP_M67Frag_C_2147006951 DamageInstigator=BP_PlayerController_C_2147480791 ExplosionLocation=V(X=-7008.21, Y=11835.69, Z=-13475.49)";
+  const parsed = parseBzssCoreLogLine(line);
+  assert.ok(parsed);
+  assert.equal(parsed.type, "explosiveDamage");
+  assert.ok(parsed.explosion);
+  assert.ok(parsed.explosion.id.startsWith("exp-"));
+  assert.equal(parsed.explosion.x, -7008.21);
+  assert.equal(parsed.explosion.y, 11835.69);
+  assert.equal(parsed.explosion.z, -13475.49);
+  assert.equal(parsed.explosion.damageCauser, "BP_M67Frag_C_2147006951");
+  assert.equal(parsed.explosion.damageInstigator, "BP_PlayerController_C_2147480791");
+
+  const module = createBzssCoreMonitorModule({
+    core: {
+      eventBus: { onCoreEvent() { return () => {}; }, emitModuleEvent() {} },
+      logger: { info() {}, warn() {}, error() {}, debug() {} },
+    },
+  });
+
+  const res = module.api.ingestLogLine(line);
+  assert.equal(res.ok, true);
+  assert.equal(res.type, "explosiveDamage");
+
+  const snapshot = module.api.getRawSnapshot();
+  assert.equal(snapshot.explosions.length, 1);
+  assert.equal(snapshot.explosions[0].x, -7008.21);
+  assert.equal(snapshot.explosions[0].damageCauser, "BP_M67Frag_C_2147006951");
+
+  await sleep(3100);
+  const snapshotAfter = module.api.getRawSnapshot();
+  assert.equal(snapshotAfter.explosions.length, 0);
+  
+  // Cleanup
+  await module.stop();
+}
+
+async function main() {
   testParsePlayerBlocks();
   testParseLogLine();
   testMonitorState();
+  await testParseExplosionDamage();
   console.log("run-bzss-core-monitor-tests: ok");
 }
 

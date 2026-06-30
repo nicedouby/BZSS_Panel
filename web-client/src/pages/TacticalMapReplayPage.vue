@@ -154,38 +154,29 @@
                     <div class="map-grid-pattern"></div>
 
                     <!-- Player Markers -->
-                    <div
+                    <PlayerMarker
                       v-for="player in currentMarkers"
                       :key="`${player.playerGuid || player.playerName}-${player.playerName}`"
-                      class="preview-marker"
-                      :class="[
-                        `team-${player.teamId || 0}`,
-                        { 'is-dead': (player.health ?? 100) <= 0 },
-                        { 'is-vehicle': player.vehicleInfo && player.vehicleInfo.vehicleType && player.vehicleInfo.vehicleType !== 'None' },
-                        { 'is-hovered': hoveredPlayer?.playerGuid === player.playerGuid || hoveredPlayer?.playerName === player.playerName }
-                      ]"
-                      :style="{
-                        left: `${player.mapX}%`,
-                        top: `${player.mapY}%`,
-                        transform: `translate(-50%, -50%) scale(${dynamicMarkerScale})`
-                      }"
+                      mode="minimal"
+                      :player-name="player.playerName"
+                      :team-id="player.teamId"
+                      :map-x="player.mapX"
+                      :map-y="player.mapY"
+                      :yaw="getPlayerYaw(player)"
+                      :health="player.health"
+                      :squad-id="player.squadId"
+                      :is-squad-leader="false"
+                      :role-icon="player.roleInfo?.icon"
+                      :role-label="player.roleInfo?.label"
+                      :vehicle-type="player.vehicleInfo?.vehicleType"
+                      :is-hovered="hoveredPlayer?.playerGuid === player.playerGuid || hoveredPlayer?.playerName === player.playerName"
+                      :show-name="true"
+                      :show-coords="false"
+                      :scale="dynamicMarkerScale"
+                      :tone="getPerspectiveTone(player.teamId)"
                       @mouseenter="hoveredPlayer = player.rawPlayer"
                       @mouseleave="hoveredPlayer = null"
-                    >
-                      <!-- Player Direction Pointer -->
-                      <div
-                        v-if="getPlayerYaw(player) !== null"
-                        class="marker-direction"
-                        :style="{
-                          transform: `translate(-50%, -50%) rotate(${(getPlayerYaw(player) ?? 0) + 90}deg)`
-                        }"
-                      >
-                        <div class="direction-arrow"></div>
-                      </div>
-
-                      <span class="preview-dot"></span>
-                      <span class="preview-label">{{ player.playerName }}</span>
-                    </div>
+                    />
                   </div>
 
                   <!-- Floating Canvas Zoom Utility controls (Bottom Left) -->
@@ -376,6 +367,7 @@ import {
 import { TACTICAL_MAP_CONFIGS, type TacticalMapConfig } from "../shared/tactical-map-data";
 import { resolveRoleIcon, type RoleIconInfo } from "../utils/role-icons";
 import { resolveVehicleIcon } from "../utils/vehicle-icons";
+import PlayerMarker from "../components/tactical-map/PlayerMarker.vue";
 
 interface PreviewMarker {
   playerGuid: string;
@@ -630,6 +622,13 @@ function getTaskStatusLabel(status: string) {
   if (status === "running") return "导出中";
   if (status === "queued") return "排队中";
   return status;
+}
+
+function getPerspectiveTone(teamId: number | null | undefined): "friendly" | "enemy" | "neutral" {
+  const normalized = Number(teamId);
+  if (normalized === 1) return "friendly";
+  if (normalized === 2) return "enemy";
+  return "neutral";
 }
 
 // Inline role icon rendering helpers
@@ -1238,122 +1237,7 @@ onBeforeUnmount(() => {
   transform: translateY(0);
 }
 
-/* Map Markers */
-.preview-marker {
-  position: absolute;
-  transform-origin: center center;
-  pointer-events: auto;
-  cursor: pointer;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-}
 
-.preview-dot {
-  display: block;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 2px solid #ffffff;
-  box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
-  transition: transform 0.2s ease;
-}
-
-.preview-marker.team-1 .preview-dot {
-  background: #3b82f6;
-}
-
-.preview-marker.team-2 .preview-dot {
-  background: #ef4444;
-}
-
-.preview-marker.team-0 .preview-dot {
-  background: #f59e0b;
-}
-
-.preview-marker.is-dead .preview-dot {
-  background: #475569;
-  border-color: #94a3b8;
-}
-
-.preview-marker:hover .preview-dot,
-.preview-marker.is-hovered .preview-dot {
-  transform: scale(1.3);
-  box-shadow: 0 0 12px rgba(255, 255, 255, 0.9);
-  z-index: 30;
-}
-
-.preview-marker.is-vehicle .preview-dot {
-  border-radius: 2px;
-  transform: rotate(45deg);
-}
-
-.preview-marker.is-vehicle:hover .preview-dot,
-.preview-marker.is-vehicle.is-hovered .preview-dot {
-  transform: rotate(45deg) scale(1.3);
-}
-
-.preview-label {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 2px 6px;
-  border-radius: 99px;
-  background: rgba(15, 23, 42, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #f8fafc;
-  font-size: 10px;
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 0.85;
-  transition: all 0.2s ease;
-}
-
-.preview-marker:hover .preview-label,
-.preview-marker.is-hovered .preview-label {
-  opacity: 1;
-  background: rgba(15, 23, 42, 0.95);
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
-/* Player direction indicators */
-.marker-direction {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 24px;
-  height: 24px;
-  transform-origin: center center;
-  pointer-events: none;
-  z-index: 1;
-}
-
-.direction-arrow {
-  position: absolute;
-  top: -6px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 0;
-  height: 0;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-bottom: 6px solid #ffffff;
-}
-
-.team-1 .direction-arrow {
-  border-bottom-color: #3b82f6;
-}
-
-.team-2 .direction-arrow {
-  border-bottom-color: #ef4444;
-}
-
-.team-0 .direction-arrow {
-  border-bottom-color: #f59e0b;
-}
-
-.is-dead .direction-arrow {
-  display: none;
-}
 
 /* Tooltip style */
 .player-tooltip {

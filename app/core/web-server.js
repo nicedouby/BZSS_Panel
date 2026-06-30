@@ -1,4 +1,4 @@
-﻿// -*- coding: utf-8 -*-
+// -*- coding: utf-8 -*-
 
 import http from "node:http";
 import { createReadStream } from "node:fs";
@@ -4606,6 +4606,7 @@ export class WebServer {
       captureZones: includeAll ? (snapshot?.captureZones ?? []) : undefined,
       fobs: includeAll ? (snapshot?.fobs ?? []) : undefined,
       mainZones: includeAll ? (snapshot?.mainZones ?? []) : undefined,
+      explosions: includeAll ? (snapshot?.explosions ?? []) : undefined,
     };
   }
 

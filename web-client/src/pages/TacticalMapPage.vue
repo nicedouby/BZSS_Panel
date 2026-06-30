@@ -201,73 +201,81 @@
 
         <!-- Player Markers Layer -->
         <div class="player-markers-layer" :style="{ pointerEvents: measureMode ? 'none' : 'auto' }">
-          <button
+          <PlayerMarker
             v-for="player in filteredPlayers"
             :key="getPlayerKey(player)"
-            class="player-marker"
-            :class="[
-              `team-${normalizeTeam(player.teamId)}`,
-              getPerspectiveClass(player.teamId),
-              { 'is-dead': (getPlayerHealth(player) ?? 100) <= 0 },
-              { 'is-squadleader': isSquadLeader(player) },
-              { 'is-focused': focusedSquadId === player.squadId },
-              { 'is-hovered': getPlayerKey(hoveredPlayer) === getPlayerKey(player) },
-              { 'no-pointer': disableMarkerInteraction },
-              { 'is-disengaged': isPlayerDisengaged(player) }
-            ]"
-            :style="{
-              left: `${player.mapX}%`,
-              top: `${player.mapY}%`,
-              transform: `translate(-50%, -50%) scale(${dynamicMarkerScale})`,
-              ...getPerspectiveStyle(player.teamId)
-            }"
-            type="button"
+            mode="tactical"
+            :player-name="getPlayerLabel(player)"
+            :team-id="player.teamId"
+            :map-x="player.mapX"
+            :map-y="player.mapY"
+            :yaw="player.yaw"
+            :health="getPlayerHealth(player)"
+            :squad-id="player.squadId"
+            :is-squad-leader="isSquadLeader(player)"
+            :role-icon="player.roleInfo.icon"
+            :role-label="player.roleInfo.label"
+            :vehicle-type="player.vehicleInfo?.vehicleType"
+            :is-focused="focusedSquadId === player.squadId"
+            :is-hovered="getPlayerKey(hoveredPlayer) === getPlayerKey(player)"
+            :is-disengaged="isPlayerDisengaged(player)"
+            :show-name="showPlayerNames"
+            :show-coords="showPlayerCoords"
+            :game-x="getPlayerPosition(player)?.x"
+            :game-y="getPlayerPosition(player)?.y"
+            :scale="dynamicMarkerScale"
+            :tone="getPerspectiveTone(player.teamId)"
+            :disable-interaction="disableMarkerInteraction"
             @click="showPlayerDetails(player, $event)"
             @mouseenter="hoveredPlayer = player"
             @mouseleave="hoveredPlayer = null"
+          />
+        </div>
+
+        <!-- Explosion Overlay -->
+        <div class="explosion-layer">
+          <div
+            v-for="exp in explosionMarkers"
+            :key="exp.id"
+            class="explosion-marker"
+            :style="{
+              left: `${exp.mapX}%`,
+              top: `${exp.mapY}%`,
+              width: `${2 * blastRadiusPx}px`,
+              height: `${2 * blastRadiusPx}px`,
+              '--blast-radius': `${blastRadiusPx}px`,
+              '--exp-intensity': exp.intensity,
+              '--exp-chaos': exp.chaos,
+              '--exp-spin': exp.spin,
+              '--exp-stretch-x': exp.stretchX,
+              '--exp-stretch-y': exp.stretchY,
+              '--exp-flash-hue': exp.flashHue,
+              '--exp-flash-alpha': exp.flashAlpha,
+            }"
           >
-            <!-- Marker Aura/Pulse -->
-            <div class="marker-pulse"></div>
-
-            <!-- Player Direction Pointer -->
-            <div
-              v-if="getPlayerYaw(player) !== null"
-              class="marker-direction"
-              :style="{
-                transform: `translate(-50%, -50%) rotate(${(getPlayerYaw(player) ?? 0) + 90}deg)`
-              }"
-            >
-              <div class="direction-arrow"></div>
+            <!-- Background refraction/distortion wave (lens blur) -->
+            <div class="explosion-refraction-wave"></div>
+            <!-- Main thin circular expanding/retracting ring -->
+            <div class="explosion-pulse-ring"></div>
+            <!-- Radial particle dots flying outward and drifting dynamically -->
+            <div class="explosion-particles">
+              <span
+                v-for="p in staticExplosionParticles"
+                :key="p.id"
+                class="particle"
+                :style="{
+                  '--angle': `${p.angle}deg`,
+                  '--speed': p.speed,
+                  '--delay': `${p.delay}s`,
+                  '--start-offset': `calc(${p.startOffset} * var(--exp-chaos))`,
+                  '--spread': `calc(${p.spread} * var(--exp-intensity))`,
+                  '--particle-size': `calc(${p.size}px * (0.92 + (var(--exp-intensity) - 1) * 0.55))`,
+                }"
+              ></span>
             </div>
-
-            <!-- Squad Leader Star or Icon border -->
-            <div class="marker-ring">
-              <!-- Kit Icon -->
-              <template v-if="isRoleIconImage(player.roleInfo.icon)">
-                <span
-                  class="kit-icon-mask"
-                  :style="getTeamRoleIconStyle(player.roleInfo.icon, player.teamId)"
-                  :aria-label="player.roleInfo.label"
-                ></span>
-              </template>
-              <span v-else class="kit-icon-fallback" :aria-label="player.roleInfo.label">{{ player.roleInfo.icon }}</span>
-            </div>
-            
-            <!-- Small Squad Index Tag -->
-            <span v-if="player.squadId" class="squad-index-tag">
-              {{ player.squadId }}
-            </span>
-
-            <!-- Text Tag for Player Name & Squad Number -->
-            <span v-if="showPlayerNames" class="tag">
-              <span v-if="isPlayerDisengaged(player)" class="player-disengaged-tag">脱战</span>
-              <span class="player-name-tag">{{ getPlayerLabel(player) }}</span>
-              <span v-if="player.squadId" class="player-squad-tag">#{{ player.squadId }}</span>
-              <span v-if="showPlayerCoords && getPlayerPosition(player)" class="player-coords-tag">
-                [{{ Math.round(getPlayerPosition(player)?.x ?? 0) }}, {{ Math.round(getPlayerPosition(player)?.y ?? 0) }}]
-              </span>
-            </span>
-          </button>
+            <!-- Core flash -->
+            <div class="explosion-core"></div>
+          </div>
         </div>
 
         <!-- SVG Layer for Overlays (Distance Measuring & Hotspot Circle) -->
@@ -822,6 +830,7 @@ import {
   type TacticalMapConfig,
 } from "../shared/tactical-map-data";
 import TiledMapRenderer from "../components/tactical-map/TiledMapRenderer.vue";
+import PlayerMarker from "../components/tactical-map/PlayerMarker.vue";
 
 const props = defineProps<{
   snapshot: BzssCorePlayerInfoResponse | null;
@@ -947,6 +956,89 @@ const viewerPerspectiveMode = ref<ViewerPerspectiveMode>("auto");
 const measureMode = ref(false);
 const measurePoints = ref<Array<{ mapX: number; mapY: number; gameX: number; gameY: number }>>([]);
 
+// Pre-generated static random values for denser grenade blast debris
+const staticExplosionParticles = Array.from({ length: 60 }, (_, idx) => {
+  const angle = Math.floor(Math.random() * 360);
+  const speed = +(1.15 + Math.random() * 1.55).toFixed(2);
+  const delay = +(Math.random() * 0.08).toFixed(2);
+  const startOffset = +(0.22 + Math.random() * 0.22).toFixed(2);
+  const spread = +(1.2 + Math.random() * 1.45).toFixed(2);
+  const size = +(0.8 + Math.random() * 1).toFixed(2);
+  return { id: idx, angle, speed, delay, startOffset, spread, size };
+});
+
+function createSeededRandom(seedText: string) {
+  let seed = 0;
+  for (let i = 0; i < seedText.length; i += 1) {
+    seed = (seed * 31 + seedText.charCodeAt(i)) >>> 0;
+  }
+  return () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+}
+
+const blastRadiusPx = computed(() => {
+  const bounds = activeMapConfig.value.bounds;
+  const mapGameWidth = bounds.maxX - bounds.minX;
+  if (mapGameWidth <= 0) return 30;
+  // 30 meters = 3000 game units. Px on a 1000px map = (3000 / mapGameWidth) * 1000
+  return (3000 / mapGameWidth) * 1000;
+});
+
+const explosionMarkers = computed(() => {
+  const list = snapshot.value?.explosions;
+  if (!Array.isArray(list) || list.length === 0) return [];
+  const bounds = activeMapConfig.value.bounds;
+  const markers: any[] = [];
+  for (const exp of list) {
+    const x = Number(exp.x);
+    const y = Number(exp.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    const rand = createSeededRandom(String(exp.id ?? `${x}:${y}:${exp.at ?? ""}`));
+    const intensity = +(1.02 + rand() * 0.46).toFixed(2);
+    const chaos = +(0.8 + rand() * 0.95).toFixed(2);
+    const spin = `${Math.round(-30 + rand() * 60)}deg`;
+    const stretchX = +(0.9 + rand() * 0.38).toFixed(2);
+    const stretchY = +(0.88 + rand() * 0.44).toFixed(2);
+    const flashHue = `${Math.round(28 + rand() * 18)}deg`;
+    const flashAlpha = +(0.9 + rand() * 0.35).toFixed(2);
+    markers.push({
+      id: exp.id,
+      mapX: project(x, bounds.minX, bounds.maxX),
+      mapY: project(y, bounds.minY, bounds.maxY),
+      damageCauser: exp.damageCauser,
+      damageInstigator: exp.damageInstigator,
+      at: exp.at,
+      intensity,
+      chaos,
+      spin,
+      stretchX,
+      stretchY,
+      flashHue,
+      flashAlpha,
+    });
+  }
+  return markers;
+});
+
+watch(
+  () => explosionMarkers.value,
+  (newVal, oldVal) => {
+    const oldIds = new Set((oldVal || []).map((e: any) => e.id));
+    for (const exp of newVal) {
+      if (!oldIds.has(exp.id)) {
+        const cleanCauser = cleanWeaponName(exp.damageCauser);
+        logCombatEvent(
+          `<span style="color: #94a3b8">检测到官方爆炸物爆炸 (武器: ${cleanCauser}, 坐标: ${Math.round(exp.mapX)}%, ${Math.round(exp.mapY)}%)</span>`,
+          "system"
+        );
+      }
+    }
+  },
+  { deep: true }
+);
+
 // Combat Hotspot State (Centroid of alive players)
 const combatHotspot = ref<{ gameX: number; gameY: number } | null>(null);
 
@@ -1013,25 +1105,27 @@ function isPlayerDisengaged(player: BzssCoreTrackedPlayerInfo) {
   return dist > 100000;
 }
 
-// Position Interpolation State
-const playerHistory = new Map<string, Array<{ x: number, y: number, time: number }>>();
-const playerClocks = new Map<string, {
-  currentRenderTime: number;
-  lastTickRealTime: number;
-  lastX: number;
-  lastY: number;
-}>();
-const playerRenderPositions = new Map<string, { x: number; y: number }>();
-const playerMotionState = new Map<string, {
-  health: number | null;
+// Position and Rotation Spring-Damper State
+interface PlayerTarget {
   x: number;
   y: number;
-}>();
-const interpolatedPositions = ref<Record<string, { mapX: number, mapY: number }>>({});
+  yaw: number | null;
+  vx: number;
+  vy: number;
+  lastSeen: number;
+}
+
+interface PlayerRenderState {
+  yaw: number;
+  vyaw: number;
+}
+
+const playerTargets = new Map<string, PlayerTarget>();
+const playerRenderStates = new Map<string, PlayerRenderState>();
+const interpolatedPositions = ref<Record<string, { mapX: number, mapY: number, yaw: number | null }>>({});
 let animationFrameId: number | null = null;
-const PLAYBACK_DELAY_MS = 2400; // Larger delay keeps marker motion silky on sparse updates
-const TELEPORT_RESET_DISTANCE = 14000; // 140m in game units, used to reset obvious respawns/teleports
-const RENDER_SMOOTHING = 0.16;
+let lastFrameTime = Date.now();
+const TELEPORT_RESET_DISTANCE = 14000; // 140m in game units, snaps instantly to prevent sliding on respawn
 
 // Watch players prop to update the cache
 watch(
@@ -1069,10 +1163,8 @@ watch(
   activeMapConfig,
   () => {
     cachedPlayers.value = {};
-    playerHistory.clear();
-    playerClocks.clear();
-    playerRenderPositions.clear();
-    playerMotionState.clear();
+    playerTargets.clear();
+    playerRenderStates.clear();
     interpolatedPositions.value = {};
     combatHotspot.value = null;
     tilesReady.value = false;
@@ -1091,66 +1183,47 @@ watch(
 watch(
   positionedPlayers,
   (newList) => {
+    const now = Date.now();
     newList.forEach(player => {
       const key = getPlayerKey(player);
       if (!key) return;
       const pos = getPlayerPosition(player);
       if (!pos) return;
-      const health = getPlayerHealth(player);
+      
       const nextX = pos.x ?? 0;
       const nextY = pos.y ?? 0;
-      const motion = playerMotionState.get(key);
-      const isRespawned = Boolean(motion && motion.health != null && motion.health <= 0 && health != null && health > 0);
-      const dx = motion ? nextX - motion.x : 0;
-      const dy = motion ? nextY - motion.y : 0;
-      const dist = motion ? Math.sqrt(dx * dx + dy * dy) : 0;
-      const isTeleportLike = Boolean(
-        motion &&
-        motion.health != null &&
-        motion.health > 0 &&
-        health != null &&
-        health > 0 &&
-        dist > TELEPORT_RESET_DISTANCE
-      );
-      const shouldResetHistory = isRespawned || isTeleportLike;
-      
-      let history = playerHistory.get(key);
-      if (!history) {
-        history = [];
-        playerHistory.set(key, history);
-      }
-      if (shouldResetHistory) {
-        history.length = 0;
-        playerClocks.delete(key);
-        playerRenderPositions.set(key, { x: nextX, y: nextY });
-      }
-      
-      const last = history[history.length - 1];
-      if (!last || last.x !== nextX || last.y !== nextY) {
-        history.push({
-          x: nextX,
-          y: nextY,
-          time: Date.now()
-        });
-        if (history.length > 10) {
-          history.shift();
+      const nextYaw = getPlayerYaw(player);
+
+      const lastTarget = playerTargets.get(key);
+      let vx = 0;
+      let vy = 0;
+      if (lastTarget) {
+        const dt = (now - lastTarget.lastSeen) / 1000;
+        if (dt > 0.05) {
+          vx = (nextX - lastTarget.x) / dt;
+          vy = (nextY - lastTarget.y) / dt;
+        } else {
+          vx = lastTarget.vx;
+          vy = lastTarget.vy;
         }
       }
 
-      playerMotionState.set(key, {
-        health,
+      playerTargets.set(key, {
         x: nextX,
-        y: nextY
+        y: nextY,
+        yaw: nextYaw,
+        vx,
+        vy,
+        lastSeen: now
       });
     });
 
+    // Cleanup states for disconnected/evicted players
     const currentKeys = new Set(newList.map((p) => getPlayerKey(p)).filter(Boolean));
-    for (const key of playerHistory.keys()) {
+    for (const key of playerTargets.keys()) {
       if (!currentKeys.has(key)) {
-        playerHistory.delete(key);
-        playerClocks.delete(key);
-        playerRenderPositions.delete(key);
-        playerMotionState.delete(key);
+        playerTargets.delete(key);
+        playerRenderStates.delete(key);
       }
     }
   },
@@ -1160,6 +1233,8 @@ watch(
 function startInterpolationLoop() {
   const tick = () => {
     const now = Date.now();
+    const dt = Math.min(0.1, (now - lastFrameTime) / 1000); // cap at 100ms
+    lastFrameTime = now;
     
     // 1. Evict expired players from cache
     const EXPIRE_LIMIT = 8000;
@@ -1169,10 +1244,8 @@ function startInterpolationLoop() {
     for (const key in nextCache) {
       if (now - nextCache[key].lastSeen > EXPIRE_LIMIT) {
         delete nextCache[key];
-        playerHistory.delete(key);
-        playerClocks.delete(key);
-        playerRenderPositions.delete(key);
-        playerMotionState.delete(key);
+        playerTargets.delete(key);
+        playerRenderStates.delete(key);
         cacheChanged = true;
       }
     }
@@ -1180,149 +1253,50 @@ function startInterpolationLoop() {
       cachedPlayers.value = nextCache;
     }
 
-    const newPositions: Record<string, { mapX: number, mapY: number }> = {};
+    const newPositions: Record<string, { mapX: number, mapY: number, yaw: number | null }> = {};
     const bounds = activeMapConfig.value.bounds;
     
     positionedPlayers.value.forEach(player => {
       const key = getPlayerKey(player);
       if (!key) return;
       
-      const history = playerHistory.get(key);
-      if (!history || history.length === 0) {
+      const target = playerTargets.get(key);
+      if (!target) {
         const pos = getPlayerPosition(player);
         if (pos) {
           newPositions[key] = {
             mapX: project(pos.x ?? 0, bounds.minX, bounds.maxX),
-            mapY: project(pos.y ?? 0, bounds.minY, bounds.maxY)
+            mapY: project(pos.y ?? 0, bounds.minY, bounds.maxY),
+            yaw: getPlayerYaw(player)
           };
         }
         return;
       }
       
-      // Initialize or get the clock for this player
-      let clock = playerClocks.get(key);
-      if (!clock) {
-        clock = {
-          currentRenderTime: history[0].time,
-          lastTickRealTime: now,
-          lastX: history[0].x,
-          lastY: history[0].y
+      // Get or initialize render state for the yaw spring
+      let state = playerRenderStates.get(key);
+      if (!state) {
+        state = {
+          yaw: target.yaw ?? 0,
+          vyaw: 0
         };
-        playerClocks.set(key, clock);
+        playerRenderStates.set(key, state);
+      }
+
+      // Smooth target yaw using SmoothDamp Angle filter (fast 0.2s smoothTime)
+      if (target.yaw !== null) {
+        const velYaw = { val: state.vyaw };
+        const rotSmoothTime = 0.2;
+        state.yaw = smoothDampAngle(state.yaw, target.yaw, velYaw, rotSmoothTime, dt);
+        state.vyaw = velYaw.val;
       } else {
-        // If the clock existed but was not ticked in the last 200ms, reset lastTickRealTime to prevent large dt
-        if (now - clock.lastTickRealTime > 200) {
-          clock.lastTickRealTime = now;
-        }
-      }
-      
-      // Keep render time within the bounds of history
-      if (clock.currentRenderTime < history[0].time) {
-        clock.currentRenderTime = history[0].time;
-      }
-      
-      let interpX = 0;
-      let interpY = 0;
-      
-      if (history.length < 2) {
-        interpX = history[0].x;
-        interpY = history[0].y;
-        clock.currentRenderTime = history[0].time;
-      } else {
-        const dtReal = now - clock.lastTickRealTime;
-        clock.lastTickRealTime = now;
-        
-        const latestSampleTime = history[history.length - 1].time;
-        const playbackDelay = PLAYBACK_DELAY_MS;
-        
-        // If the playback clock is excessively far behind (e.g. more than 3 seconds),
-        // or is ahead of the latest sample time, snap the clock to a default 1.5s delay.
-        if (latestSampleTime - clock.currentRenderTime > 3500 || clock.currentRenderTime > latestSampleTime) {
-          clock.currentRenderTime = Math.max(history[0].time, latestSampleTime - playbackDelay);
-        }
-        
-        const bufferSize = latestSampleTime - clock.currentRenderTime;
-        
-        let speedFactor = 1.0;
-        if (bufferSize > playbackDelay) {
-          speedFactor = 1.0 + Math.min(1.0, (bufferSize - playbackDelay) / 1000);
-        } else if (bufferSize < playbackDelay * 0.8) {
-          speedFactor = Math.max(0.08, bufferSize / (playbackDelay * 0.8));
-        }
-        
-        // Clamp frame dt to avoid extreme clock jumping (max 100ms)
-        const elapsed = Math.min(100, dtReal) * speedFactor;
-        clock.currentRenderTime += elapsed;
-        
-        if (clock.currentRenderTime > latestSampleTime) {
-          clock.currentRenderTime = latestSampleTime;
-        }
-        
-        let prevSample = history[0];
-        let nextSample = history[history.length - 1];
-        let found = false;
-        
-        for (let i = 0; i < history.length - 1; i++) {
-          if (history[i].time <= clock.currentRenderTime && history[i+1].time >= clock.currentRenderTime) {
-            prevSample = history[i];
-            nextSample = history[i+1];
-            found = true;
-            break;
-          }
-        }
-        
-        if (found) {
-          const dx = nextSample.x - prevSample.x;
-          const dy = nextSample.y - prevSample.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          
-          if (dist > TELEPORT_RESET_DISTANCE) {
-            // Teleport: snap to the next sample and update playback clock to it
-            interpX = nextSample.x;
-            interpY = nextSample.y;
-            clock.currentRenderTime = nextSample.time;
-          } else {
-            const timeDiff = nextSample.time - prevSample.time;
-            const t = timeDiff > 0 ? (clock.currentRenderTime - prevSample.time) / timeDiff : 0;
-            interpX = prevSample.x + dx * t;
-            interpY = prevSample.y + dy * t;
-          }
-        } else {
-          if (clock.currentRenderTime >= latestSampleTime) {
-            interpX = history[history.length - 1].x;
-            interpY = history[history.length - 1].y;
-          } else {
-            interpX = history[0].x;
-            interpY = history[0].y;
-          }
-        }
-      }
-      
-      const lastRender = playerRenderPositions.get(key);
-      let renderX = interpX;
-      let renderY = interpY;
-
-      const renderJump = lastRender
-        ? Math.sqrt((interpX - lastRender.x) * (interpX - lastRender.x) + (interpY - lastRender.y) * (interpY - lastRender.y))
-        : 0;
-
-      if (lastRender && renderJump <= TELEPORT_RESET_DISTANCE) {
-        renderX = lastRender.x + (interpX - lastRender.x) * RENDER_SMOOTHING;
-        renderY = lastRender.y + (interpY - lastRender.y) * RENDER_SMOOTHING;
+        state.yaw = 0;
       }
 
-      if (!Number.isFinite(renderX) || !Number.isFinite(renderY)) {
-        renderX = interpX;
-        renderY = interpY;
-      }
-
-      playerRenderPositions.set(key, { x: renderX, y: renderY });
-      clock.lastX = renderX;
-      clock.lastY = renderY;
-      
       newPositions[key] = {
-        mapX: project(renderX, bounds.minX, bounds.maxX),
-        mapY: project(renderY, bounds.minY, bounds.maxY)
+        mapX: project(target.x, bounds.minX, bounds.maxX),
+        mapY: project(target.y, bounds.minY, bounds.maxY),
+        yaw: target.yaw !== null ? state.yaw : null
       };
     });
     
@@ -1330,6 +1304,47 @@ function startInterpolationLoop() {
     animationFrameId = requestAnimationFrame(tick);
   };
   animationFrameId = requestAnimationFrame(tick);
+}
+
+// Critically damped spring-damper function (Unity-style SmoothDamp)
+function smoothDamp(
+  current: number,
+  target: number,
+  currentVelocity: { val: number },
+  smoothTime: number,
+  dt: number
+): number {
+  smoothTime = Math.max(0.0001, smoothTime);
+  const num = 2 / smoothTime;
+  const num2 = num * dt;
+  const num3 = 1 / (1 + num2 + 0.48 * num2 * num2 + 0.235 * num2 * num2 * num2);
+  const num4 = current - target;
+  const num5 = target;
+  const num6 = num * num4;
+  const num7 = (currentVelocity.val + num6) * dt;
+  currentVelocity.val = (currentVelocity.val - num * num7) * num3;
+  let num8 = num5 + (num4 + num7) * num3;
+  
+  if ((num5 - current > 0) === (num8 > num5)) {
+    num8 = num5;
+    currentVelocity.val = (num8 - num5) / dt;
+  }
+  return num8;
+}
+
+// Angle SmoothDamp with modular wrap-around at 360 degrees
+function smoothDampAngle(
+  current: number,
+  target: number,
+  currentVelocity: { val: number },
+  smoothTime: number,
+  dt: number
+): number {
+  let diff = (target - current) % 360;
+  if (diff < -180) diff += 360;
+  if (diff > 180) diff -= 360;
+  const targetAdjusted = current + diff;
+  return smoothDamp(current, targetAdjusted, currentVelocity, smoothTime, dt);
 }
 
 function toggleMeasureMode() {
@@ -1491,6 +1506,7 @@ const markers = computed<MapMarker[]>(() => {
       ...player,
       mapX: interp ? interp.mapX : project(pos.x ?? 0, bounds.minX, bounds.maxX),
       mapY: interp ? interp.mapY : project(pos.y ?? 0, bounds.minY, bounds.maxY),
+      yaw: interp && interp.yaw !== null ? interp.yaw : getPlayerYaw(player),
       teamId: resolvedTeamId,
       roleInfo: resolveMapRoleInfo(player),
     };
@@ -2108,20 +2124,12 @@ function getPerspectiveStyle(teamId: number | null | undefined) {
 }
 
 function getPlayerSpeedText(player: any) {
-  const key = player.playerGuid || player.playerName;
+  const key = getPlayerKey(player);
   if (!key) return "-";
-  const history = playerHistory.get(key);
-  if (!history || history.length < 2) return "0.0 m/s";
+  const target = playerTargets.get(key);
+  if (!target) return "0.0 m/s";
   
-  const p1 = history[history.length - 2];
-  const p2 = history[history.length - 1];
-  const dx = p2.x - p1.x;
-  const dy = p2.y - p1.y;
-  const dist = Math.sqrt(dx * dx + dy * dy) / 100;
-  const dt = (p2.time - p1.time) / 1000;
-  
-  if (dt <= 0) return "0.0 m/s";
-  const speedMS = dist / dt;
+  const speedMS = Math.sqrt(target.vx * target.vx + target.vy * target.vy) / 100;
   const speedKMH = speedMS * 3.6;
   
   if (speedMS < 0.1) return "0.0 m/s";
@@ -2167,6 +2175,7 @@ function getAmmoDashArray(fob: any) {
 }
 
 onMounted(() => {
+  lastFrameTime = Date.now();
   startInterpolationLoop();
 
   setTimeout(() => {
@@ -2563,6 +2572,143 @@ onBeforeUnmount(() => {
   transform: translateX(8px);
 }
 
+/* Explosion Layer */
+.explosion-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.explosion-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+  filter: saturate(calc(1 + (var(--exp-intensity) - 1) * 0.22));
+}
+
+/* Background refraction/distortion wave */
+.explosion-refraction-wave {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 44% 56% 52% 48% / 40% 58% 42% 60%;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.18) 0%, rgba(255, 248, 220, 0.1) 12%, rgba(255, 255, 255, 0.025) 26%, transparent 56%),
+    repeating-conic-gradient(
+      from 0deg,
+      rgba(255, 255, 255, 0.055) 0deg 14deg,
+      rgba(255, 236, 179, 0.022) 14deg 32deg,
+      transparent 32deg 54deg
+    );
+  mix-blend-mode: screen;
+  -webkit-backdrop-filter: blur(9px) saturate(1.16) brightness(1.22) contrast(1.12) hue-rotate(var(--exp-flash-hue));
+  backdrop-filter: blur(9px) saturate(1.16) brightness(1.22) contrast(1.12) hue-rotate(var(--exp-flash-hue));
+  filter: blur(1.3px);
+  animation: exp-refract-anim 1.55s cubic-bezier(0.12, 0.8, 0.24, 1) forwards;
+  will-change: transform, opacity, filter;
+  transform: translateZ(0);
+  opacity: var(--exp-flash-alpha);
+}
+
+/* Main soft shockwave haze, intentionally vague instead of a readable blast radius */
+.explosion-pulse-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(255, 244, 214, 0.18) 0%, rgba(255, 232, 170, 0.09) 14%, rgba(226, 232, 240, 0.04) 34%, transparent 70%),
+    radial-gradient(circle at 38% 42%, rgba(255, 255, 255, 0.14) 0%, transparent 24%),
+    radial-gradient(circle at 62% 56%, rgba(255, 214, 102, 0.08) 0%, transparent 22%);
+  filter: blur(12px);
+  animation: exp-pulse-ring-anim 1.45s cubic-bezier(0.12, 0.8, 0.24, 1) forwards;
+  opacity: calc(0.88 * var(--exp-flash-alpha));
+}
+
+/* Particle dots flying outward */
+.explosion-particles {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+}
+
+.particle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--particle-size);
+  height: var(--particle-size);
+  background:
+    radial-gradient(circle, rgba(255, 252, 244, 1) 0%, rgba(255, 236, 179, 0.92) 35%, rgba(255, 196, 110, 0.48) 68%, rgba(255, 255, 255, 0.08) 100%);
+  border-radius: 50%;
+  margin-top: calc(-0.5 * var(--particle-size));
+  margin-left: calc(-0.5 * var(--particle-size));
+  transform-origin: center center;
+  box-shadow:
+    0 0 5px rgba(255, 244, 214, 0.42),
+    0 0 10px rgba(255, 196, 110, 0.16);
+  animation: particle-fade-drift 0.92s cubic-bezier(0.08, 0.72, 0.18, 1) forwards;
+  animation-delay: var(--delay);
+}
+
+/* Extremely soft center core */
+.explosion-core {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, 1) 0%, rgba(255, 244, 214, 0.95) 35%, rgba(255, 196, 110, 0.48) 60%, rgba(255, 255, 255, 0) 100%);
+  border-radius: 50%;
+  box-shadow:
+    0 0 12px rgba(255, 244, 214, 0.4),
+    0 0 24px rgba(255, 196, 110, 0.15);
+  filter: blur(1px);
+  animation: exp-core-anim 0.95s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+}
+
+/* Keyframe Animations */
+@keyframes exp-refract-anim {
+  0% { transform: scale(0.16) rotate(0deg) scaleX(0.92) scaleY(1.08); opacity: 0; }
+  12% { opacity: calc(0.92 * var(--exp-flash-alpha)); }
+  42% { opacity: calc(0.58 * var(--exp-flash-alpha)); }
+  100% { transform: scale(1.36) rotate(var(--exp-spin)) scaleX(var(--exp-stretch-x)) scaleY(var(--exp-stretch-y)); opacity: 0; }
+}
+
+@keyframes exp-pulse-ring-anim {
+  0% { transform: scale(0.18) scaleX(0.96) scaleY(1.04); opacity: 0; }
+  10% { opacity: calc(0.82 * var(--exp-flash-alpha)); }
+  55% { opacity: calc(0.32 * var(--exp-flash-alpha)); }
+  100% { transform: scale(1.22) scaleX(var(--exp-stretch-x)) scaleY(var(--exp-stretch-y)); opacity: 0; }
+}
+
+@keyframes exp-core-anim {
+  0% { transform: scale(0.3); opacity: 0; }
+  14% { transform: scale(calc(2.1 * var(--exp-intensity))); opacity: 1; }
+  100% { transform: scale(0.08); opacity: 0; }
+}
+
+/* Particles start beyond the core and outrun the soft haze quickly */
+@keyframes particle-fade-drift {
+  0% {
+    transform: rotate(var(--angle)) translateY(calc(-0.35 * var(--start-offset) * var(--blast-radius))) scale(0.7);
+    opacity: 0;
+  }
+  12% {
+    transform: rotate(var(--angle)) translateY(calc(-1 * var(--start-offset) * var(--blast-radius))) scale(1);
+    opacity: 0.95;
+  }
+  46% {
+    opacity: 0.92;
+  }
+  100% {
+    transform: rotate(calc(var(--angle) + (var(--exp-spin) * 0.28))) translateY(calc(-1 * (var(--start-offset) + (var(--spread) * var(--speed))) * var(--blast-radius))) scale(0.72);
+    opacity: 0;
+  }
+}
 
 /* FOB Overlay and Markers */
 .fob-layer {

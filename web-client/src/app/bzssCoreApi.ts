@@ -173,6 +173,16 @@ export interface BzssCorePlayerInfoState {
   lastError: string;
 }
 
+export interface BzssCoreExplosionInfo {
+  id: string;
+  x: number;
+  y: number;
+  z: number;
+  damageCauser: string;
+  damageInstigator: string;
+  at: string;
+}
+
 export interface BzssCorePlayerInfoResponse {
   ok: boolean;
   status: string;
@@ -182,6 +192,7 @@ export interface BzssCorePlayerInfoResponse {
   captureZones?: BzssCoreCaptureZoneInfo[];
   fobs?: BzssCoreFobInfo[];
   mainZones?: BzssCoreMainZoneInfo[];
+  explosions?: BzssCoreExplosionInfo[];
 }
 
 export interface BzssCoreRawDataResponse {
@@ -198,6 +209,7 @@ export interface BzssCoreRawDataResponse {
   captureZones?: BzssCoreCaptureZoneInfo[];
   fobs?: BzssCoreFobInfo[];
   mainZones?: BzssCoreMainZoneInfo[];
+  explosions?: BzssCoreExplosionInfo[];
   lastError: string;
 }
 
