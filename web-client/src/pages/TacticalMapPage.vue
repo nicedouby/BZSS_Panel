@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="tactical-map-layout">
     <!-- Main Map Viewport -->
     <div
@@ -504,21 +504,45 @@
         >
           存活
         </button>
-                <button
+        <button
           class="ctrl-btn text-btn"
           :class="{ active: disableMarkerInteraction }"
           @click="disableMarkerInteraction = !disableMarkerInteraction"
-          title="穿透玩家标记 (方便查看地图)"
+          title="穿透玩家标记(方便查看地图)"
         >
           穿透
         </button>
-                <button
+        <button
           class="ctrl-btn text-btn measure-btn"
           :class="{ active: measureMode }"
           @click="toggleMeasureMode"
-          title="多点测距 (点击放置测量点，右键撤销点)"
+          title="多点测距 (点击放置测量点，右键撤销)"
         >
           测距
+        </button>
+        <button
+          v-if="measurePoints.length"
+          class="ctrl-btn text-btn"
+          @click="clearMeasurePoints"
+          title="清空测距点"
+        >
+          清空
+        </button>
+        <button
+          class="ctrl-btn text-btn hotspot-ctrl-btn"
+          :class="{ active: combatHotspot != null }"
+          @click="calculateCombatHotspot"
+          title="计算并生成作战热点中心及1000m半径"
+        >
+          热点
+        </button>
+        <button
+          v-if="combatHotspot != null"
+          class="ctrl-btn text-btn"
+          @click="clearCombatHotspot"
+          title="清除作战热点"
+        >
+          清除热点
         </button>
                 <button
           v-if="measurePoints.length"
@@ -559,398 +583,82 @@
         </div>
       </div>
     </div>
-
-    <!-- Right Collapsible Tactical Sidebar -->
-    <div class="tactical-sidebar" :class="{ 'is-collapsed': sidebarCollapsed }">
-      <!-- Toggle button tab -->
-      <button class="sidebar-toggle-tab" @click="sidebarCollapsed = !sidebarCollapsed">
-        <span class="tab-arrow">{{ sidebarCollapsed ? '◀' : '▶' }}</span>
-      </button>
-
-      <div class="sidebar-content-wrapper">
-        <!-- Live Server Status Area -->
-        <div class="sidebar-section border-b">
-          <div class="section-title-bar">
-            <span class="glowing-square blue"></span>
-            <h3>服务器实时状态</h3>
-          </div>
-          <div class="server-stats-grid monospace">
-            <div class="server-stat-item">
-              <span class="lbl">在线人数</span>
-              <span class="val text-cyan">{{ serverPlayerCount }}</span>
-            </div>
-            <div class="server-stat-item">
-              <span class="lbl">地图名称</span>
-              <span class="val">{{ serverMapName }}</span>
-            </div>
-            <div class="server-stat-item">
-              <span class="lbl">监控状态</span>
-              <span class="val text-green pulsing-text">{{ statusText }}</span>
-            </div>
-            <div class="server-stat-item">
-              <span class="lbl">对局阶段</span>
-              <span class="val">{{ matchPhase }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Display Options Panel inside Sidebar -->
-        <div class="sidebar-section border-b">
-          <div class="section-title-bar">
-            <span class="glowing-square blue"></span>
-            <h3>显示选项</h3>
-          </div>
-          <div class="options-group-sidebar">
-            <label class="option-item-sidebar">
-              <input type="checkbox" v-model="showGrid" />
-              <span class="option-text">显示坐标网格</span>
-            </label>
-            <label class="option-item-sidebar">
-              <input type="checkbox" v-model="showPlayerNames" />
-              <span class="option-text">显示玩家姓名</span>
-            </label>
-            <label class="option-item-sidebar">
-              <input type="checkbox" v-model="showPlayerCoords" />
-              <span class="option-text">显示玩家坐标</span>
-            </label>
-            <label class="option-item-sidebar">
-              <input type="checkbox" v-model="showCaptureZones" />
-              <span class="option-text">显示 Capture Zone</span>
-            </label>
-            <label class="option-item-sidebar">
-              <input type="checkbox" v-model="showFobs" />
-              <span class="option-text">显示 FOB Radio</span>
-            </label>
-            <label class="option-item-sidebar">
-              <input type="checkbox" v-model="disableMarkerInteraction" />
-              <span class="option-text">穿透玩家标记</span>
-            </label>
-            <label class="option-item-sidebar">
-              <input type="checkbox" v-model="measureMode" />
-              <span class="option-text">开启测距模式(右键撤销)</span>
-            </label>
-            <div class="option-item-slider">
-              <span class="option-text">地图选择:</span>
-                            <select v-model="selectedMapKey" class="map-select">
-                <option value="auto">自动检测({{ detectedMapName }})</option>
-                <option v-for="map in mapOptions" :key="map.key" :value="map.key">
-                  {{ map.name }}
-                </option>
-              </select>
-            </div>
-            <div class="option-item-slider option-item-slider--stacked">
-              <span class="option-text">敌我视角:</span>
-              <div class="perspective-switch">
-                <button
-                  type="button"
-                  class="perspective-btn"
-                  :class="{ active: viewerPerspectiveMode === 'auto' }"
-                  @click="viewerPerspectiveMode = 'auto'"
-                >
-                  自动
-                </button>
-                <button
-                  type="button"
-                  class="perspective-btn tone-friendly"
-                  :class="{ active: viewerPerspectiveMode === 'team1' }"
-                  :style="getPerspectiveStyle(1)"
-                  @click="viewerPerspectiveMode = 'team1'"
-                >
-                  TEAM 1
-                </button>
-                <button
-                  type="button"
-                  class="perspective-btn tone-enemy"
-                  :class="{ active: viewerPerspectiveMode === 'team2' }"
-                  :style="getPerspectiveStyle(2)"
-                  @click="viewerPerspectiveMode = 'team2'"
-                >
-                  TEAM 2
-                </button>
-              </div>
-            </div>
-            <div class="perspective-summary">{{ perspectiveSummaryText }}</div>
-            <div class="option-item-slider">
-              <span class="option-text">图标大小:</span>
-              <input type="range" v-model.number="markerScale" min="0.05" max="2.0" step="0.05" class="scale-slider" />
-              <span class="scale-val">{{ markerScale.toFixed(2) }}x</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Directory Tabs (Squads vs Players vs BZSS-Core) -->
-        <div class="sidebar-section flex-expand border-b">
-          <!-- Selection Mode Tabs -->
-          <div class="sidebar-tabs-directory">
-            <button
-              class="directory-tab-btn"
-              :class="{ active: sidebarTab === 'squads' }"
-              @click="sidebarTab = 'squads'"
-            >
-              小队列表
-            </button>
-            <button
-              class="directory-tab-btn"
-              :class="{ active: sidebarTab === 'players' }"
-              @click="sidebarTab = 'players'"
-            >
-              所有玩家
-            </button>
-            <button
-              class="directory-tab-btn bzss-core-tab-btn"
-              :class="{ active: sidebarTab === 'bzss-core' }"
-              @click="sidebarTab = 'bzss-core'"
-            >
-              BZSS-Core
-            </button>
-          </div>
-
-          <!-- Team Selection Tabs (hidden when BZSS-Core tab is active) -->
-          <div v-if="sidebarTab !== 'bzss-core'" class="sidebar-tabs">
-            <button
-              class="tab-btn"
-              :class="[getPerspectiveClass(1), { active: activeTeamTab === 1 }]"
-              :style="getPerspectiveStyle(1)"
-              @click="activeTeamTab = 1"
-            >
-              TEAM 1
-            </button>
-            <button
-              class="tab-btn"
-              :class="[getPerspectiveClass(2), { active: activeTeamTab === 2 }]"
-              :style="getPerspectiveStyle(2)"
-              @click="activeTeamTab = 2"
-            >
-              TEAM 2
-            </button>
-          </div>
-
-          <!-- Squad Cards List -->
-          <div v-if="sidebarTab === 'squads'" class="squads-scroll-list">
-            <div
-              v-for="squad in currentTeamSquads"
-              :key="squad.id"
-              class="sidebar-squad-card"
-              :class="[getPerspectiveClass(squad.teamId), { 'is-focused': focusedSquadId === squad.id }]"
-              :style="getPerspectiveStyle(squad.teamId)"
-              @click="toggleSquadFocus(squad.id)"
-            >
-              <div class="squad-card-header">
-                <span class="squad-number">#{{ squad.id }}</span>
-                <span class="squad-name">{{ squad.name }}</span>
-                <span class="squad-members-count monospace">{{ squad.playersCount }}</span>
-              </div>
-              <div class="squad-card-meta">
-                <span class="sl-name">SL: {{ squad.squadLeaderName }}</span>
-                <div class="squad-health-summary">
-                  <span class="health-label">均血:</span>
-                  <div class="mini-bar-track">
-                    <div
-                      class="mini-bar-fill"
-                      :style="{
-                        width: `${squad.avgHealth}%`,
-                        backgroundColor: squad.avgHealth < 50 ? '#ef5350' : '#00e5ff'
-                      }"
-                    ></div>
-                  </div>
-                  <span class="health-num font-mono">{{ squad.avgHealth }}%</span>
-                </div>
-              </div>
-            </div>
-            <div v-if="!currentTeamSquads.length" class="empty-state">
-              暂无已创建小队
-            </div>
-          </div>
-
-          <!-- Active Players List -->
-          <div v-else-if="sidebarTab === 'players'" class="squads-scroll-list">
-            <button
-              v-for="player in filteredTeamPlayers"
-              :key="getPlayerKey(player)"
-              class="sidebar-player-card-row"
-              :class="[
-                `team-${normalizeTeam(player.teamId)}`,
-                getPerspectiveClass(player.teamId),
-                { 'is-focused': getPlayerKey(hoveredPlayer) === getPlayerKey(player) },
-                { 'is-disengaged': isPlayerDisengaged(player) }
-              ]"
-              :style="getPerspectiveStyle(player.teamId)"
-              @click="showPlayerDetails(player, $event)"
-              @mouseenter="hoveredPlayer = player"
-              @mouseleave="hoveredPlayer = null"
-            >
-              <span class="player-name-row">
-                {{ getPlayerLabel(player) }}
-                <span v-if="isPlayerDisengaged(player)" class="disengaged-sidebar-tag">脱战</span>
-              </span>
-              <span class="player-meta-row">S{{ normalizeSquad(player.squadId) }} / HP {{ getPlayerHealth(player) ?? '-' }}</span>
-            </button>
-            <div v-if="!filteredTeamPlayers.length" class="empty-state">
-              暂无在线玩家
-            </div>
-          </div>
-
-          <!-- BZSS-Core Info Panel -->
-          <div v-else-if="sidebarTab === 'bzss-core'" class="squads-scroll-list bzss-core-scroll">
-            <!-- Core Status Card -->
-            <div class="bzss-info-card">
-              <div class="bzss-card-title">
-                <span class="bzss-status-dot" :class="bzssCoreStatusClass"></span>
-                核心状态
-              </div>
-              <div class="bzss-stats-grid">
-                <div class="bzss-stat-row">
-                  <span class="bzss-stat-label">状态</span>
-                  <span class="bzss-stat-value" :class="bzssCoreStatusClass">{{ bzssCoreStatusLabel }}</span>
-                </div>
-                <div class="bzss-stat-row">
-                  <span class="bzss-stat-label">数据版本</span>
-                  <span class="bzss-stat-value font-mono">Rev {{ snapshot?.state?.revision ?? '--' }}</span>
-                </div>
-                <div class="bzss-stat-row">
-                  <span class="bzss-stat-label">最后更新</span>
-                  <span class="bzss-stat-value font-mono">{{ bzssCoreUpdatedAtText }}</span>
-                </div>
-                <div class="bzss-stat-row">
-                  <span class="bzss-stat-label">Marker 信号</span>
-                  <span class="bzss-stat-value">
-                    <span v-if="snapshot?.state?.markerSeen" class="bzss-badge bzss-badge--ok">已检测</span>
-                    <span v-else class="bzss-badge bzss-badge--warn">未检测</span>
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Player Counts Card -->
-            <div class="bzss-info-card">
-              <div class="bzss-card-title">
-                <span class="glowing-square blue"></span>
-                玩家数据统计
-              </div>
-              <div class="bzss-stats-grid">
-                <div class="bzss-stat-row">
-                  <span class="bzss-stat-label">Runtime 玩家</span>
-                  <span class="bzss-stat-value text-cyan font-mono">{{ snapshot?.state?.runtimePlayerCount ?? 0 }}</span>
-                </div>
-                <div class="bzss-stat-row">
-                  <span class="bzss-stat-label">Scoreboard 玩家</span>
-                  <span class="bzss-stat-value text-yellow font-mono">{{ snapshot?.state?.scoreboardPlayerCount ?? 0 }}</span>
-                </div>
-                <div class="bzss-stat-row">
-                  <span class="bzss-stat-label">地图上已定位</span>
-                  <span class="bzss-stat-value text-cyan font-mono">{{ positionedPlayers.length }}</span>
-                </div>
-                <div class="bzss-stat-row">
-                  <span class="bzss-stat-label">存活玩家</span>
-                  <span class="bzss-stat-value text-green font-mono">{{ bzssCoreAliveCount }}</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Capture Zones Card -->
-            <div class="bzss-info-card">
-              <div class="bzss-card-title">
-                <span class="glowing-square orange"></span>
-                据点 (Capture Zones)
-                <span class="bzss-count-badge">{{ captureZones.length }}</span>
-              </div>
-              <div v-if="captureZones.length" class="bzss-entity-list">
-                <div v-for="(zone, idx) in captureZones" :key="'cz-' + idx" class="bzss-entity-row">
-                  <span class="bzss-entity-name">{{ zone.name || '未知据点' }}</span>
-                  <span class="bzss-entity-meta font-mono">
-                    {{ zone.position ? `${Math.round(zone.position.x ?? 0)}, ${Math.round(zone.position.y ?? 0)}` : '--' }}
-                  </span>
-                </div>
-              </div>
-              <div v-else class="empty-state">暂无据点数据</div>
-            </div>
-
-            <!-- FOBs Card -->
-            <div class="bzss-info-card">
-              <div class="bzss-card-title">
-                <span class="glowing-square green"></span>
-                FOB 电台
-                <span class="bzss-count-badge">{{ fobs.length }}</span>
-              </div>
-              <div v-if="fobs.length" class="bzss-entity-list">
-                <div v-for="(fob, idx) in fobs" :key="'fob-' + idx" class="bzss-entity-row bzss-fob-row">
-                  <div class="bzss-fob-header">
-                    <span class="bzss-entity-name">
-                      <span class="bzss-team-indicator" :class="`team-ind-${fob.teamId}`">T{{ fob.teamId }}</span>
-                      {{ fob.name || 'FOB Radio' }}
-                    </span>
-                    <span v-if="fob.isBleeding" class="bzss-badge bzss-badge--danger">BLEEDING</span>
-                  </div>
-                  <div class="bzss-fob-bars">
-                    <div class="bzss-mini-metric">
-                      <span class="bzss-mini-label">HP</span>
-                      <div class="bzss-mini-bar-track">
-                        <div class="bzss-mini-bar-fill bzss-fill-hp" :style="{ width: `${Math.round((fob.health ?? 0) * 100)}%` }"></div>
-                      </div>
-                      <span class="bzss-mini-val font-mono">{{ Math.round((fob.health ?? 0) * 100) }}%</span>
-                    </div>
-                    <div class="bzss-mini-metric">
-                      <span class="bzss-mini-label">弹药</span>
-                      <div class="bzss-mini-bar-track">
-                        <div class="bzss-mini-bar-fill bzss-fill-ammo" :style="{ width: `${Math.min(100, Math.round((fob.ammo ?? 0) / 100))}%` }"></div>
-                      </div>
-                      <span class="bzss-mini-val font-mono">{{ Math.round(fob.ammo ?? 0) }}</span>
-                    </div>
-                    <div class="bzss-mini-metric">
-                      <span class="bzss-mini-label">建造</span>
-                      <div class="bzss-mini-bar-track">
-                        <div class="bzss-mini-bar-fill bzss-fill-const" :style="{ width: `${Math.min(100, Math.round((fob.construction ?? 0) / 20))}%` }"></div>
-                      </div>
-                      <span class="bzss-mini-val font-mono">{{ Math.round(fob.construction ?? 0) }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div v-else class="empty-state">暂无 FOB 数据</div>
-            </div>
-
-            <!-- Raw Fields Card -->
-            <div v-if="snapshot?.state?.rawFields?.length" class="bzss-info-card">
-              <div class="bzss-card-title">
-                <span class="glowing-square blue"></span>
-                Raw Fields
-              </div>
-              <div class="bzss-raw-fields">
-                <code v-for="(field, idx) in snapshot.state.rawFields" :key="'rf-' + idx" class="bzss-raw-field-tag">{{ field }}</code>
-              </div>
-            </div>
-
-            <!-- Error Info -->
-            <div v-if="snapshot?.state?.lastError" class="bzss-info-card bzss-info-card--error">
-              <div class="bzss-card-title">
-                <span class="glowing-square red"></span>
-                最近错误
-              </div>
-              <div class="bzss-error-text font-mono">{{ snapshot.state.lastError }}</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Real-Time Combat Live Feed Log -->
-        <div class="sidebar-section combat-feed-section">
-          <div class="section-title-bar">
-            <span class="glowing-square red"></span>
-            <h3>实时战术广播</h3>
-          </div>
-          <div class="combat-log-console" ref="consoleRef">
-            <div
-              v-for="(log, idx) in combatLogs"
-              :key="'log-' + idx"
-              class="console-log-line monospace"
-              :class="log.type"
-            >
-              <span class="log-time">[{{ log.time }}]</span>
-              <span class="log-body" v-html="log.text"></span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <TacticalMapSidebar
+      :sidebar-mode="sidebarMode"
+      :sidebar-tab="sidebarTab"
+      :sidebar-unit-mode="sidebarUnitMode"
+      :active-team-tab="activeTeamTab"
+      :sidebar-search="sidebarSearch"
+      :sidebar-sort-mode="sidebarSortMode"
+      :sidebar-only-alive="sidebarOnlyAlive"
+      :sidebar-only-vehicle="sidebarOnlyVehicle"
+      :show-grid="showGrid"
+      :show-player-names="showPlayerNames"
+      :show-player-coords="showPlayerCoords"
+      :show-capture-zones="showCaptureZones"
+      :show-fobs="showFobs"
+      :disable-marker-interaction="disableMarkerInteraction"
+      :measure-mode="measureMode"
+      :selected-map-key="selectedMapKey"
+      :marker-scale="markerScale"
+      :viewer-perspective-mode="viewerPerspectiveMode"
+      :detected-map-name="detectedMapName"
+      :map-options="mapOptions"
+      :server-player-count="serverPlayerCount"
+      :server-map-name="serverMapName"
+      :status-text="statusText"
+      :match-phase="matchPhase"
+      :tickets="tickets"
+      :perspective-summary-text="perspectiveSummaryText"
+      :snapshot="snapshot"
+      :current-team-squads="currentTeamSquads"
+      :filtered-team-players="filteredTeamPlayers"
+      :capture-zone-markers="captureZoneMarkers"
+      :fob-markers="fobMarkers"
+      :vehicle-groups="vehicleGroups"
+      :combat-logs="combatLogs"
+      :positioned-player-count="positionedPlayers.length"
+      :bzss-core-status-label="bzssCoreStatusLabel"
+      :bzss-core-status-class="bzssCoreStatusClass"
+      :bzss-core-updated-at-text="bzssCoreUpdatedAtText"
+      :bzss-core-alive-count="bzssCoreAliveCount"
+      :raw-fields="snapshot?.state?.rawFields ?? []"
+      :last-error="snapshot?.state?.lastError ?? ''"
+      :marker-focus-key="focusedPlayerKey"
+      :focused-squad-id="focusedSquadId"
+      :get-perspective-style="getPerspectiveStyle"
+      :get-perspective-class="getPerspectiveClass"
+      :get-player-key="getPlayerKey"
+      :get-player-label="getPlayerLabel"
+      :get-player-health="getPlayerHealth"
+      :normalize-team="normalizeTeam"
+      :normalize-squad="normalizeSquad"
+      :is-player-disengaged="isPlayerDisengaged"
+      @update:sidebar-mode="sidebarMode = $event"
+      @update:sidebar-tab="sidebarTab = $event"
+      @update:sidebar-unit-mode="sidebarUnitMode = $event"
+      @update:active-team-tab="activeTeamTab = $event"
+      @update:sidebar-search="sidebarSearch = $event"
+      @update:sidebar-sort-mode="sidebarSortMode = $event"
+      @update:sidebar-only-alive="sidebarOnlyAlive = $event"
+      @update:sidebar-only-vehicle="sidebarOnlyVehicle = $event"
+      @update:show-grid="showGrid = $event"
+      @update:show-player-names="showPlayerNames = $event"
+      @update:show-player-coords="showPlayerCoords = $event"
+      @update:show-capture-zones="showCaptureZones = $event"
+      @update:show-fobs="showFobs = $event"
+      @update:disable-marker-interaction="disableMarkerInteraction = $event"
+      @update:measure-mode="measureMode = $event"
+      @update:selected-map-key="selectedMapKey = $event"
+      @update:marker-scale="markerScale = $event"
+      @update:viewer-perspective-mode="viewerPerspectiveMode = $event"
+      @focus-player="focusPlayerOnMap"
+      @focus-squad="focusSquadOnMap"
+      @focus-fob="focusFobOnMap"
+      @focus-zone="focusZoneOnMap"
+      @focus-vehicle="focusVehicleOnMap"
+      @open-player="showPlayerDetails"
+    />
 
   </div>
 </template>
@@ -978,6 +686,7 @@ import {
 } from "../shared/tactical-map-data";
 import TiledMapRenderer from "../components/tactical-map/TiledMapRenderer.vue";
 import PlayerMarker from "../components/tactical-map/PlayerMarker.vue";
+import TacticalMapSidebar from "../components/tactical-map/TacticalMapSidebar.vue";
 
 const props = defineProps<{
   snapshot: BzssCorePlayerInfoResponse | null;
@@ -1090,12 +799,24 @@ const dynamicMarkerScale = computed(() => {
 });
 
 // Sidebar states
+type SidebarMode = "expanded" | "compact" | "hidden";
+type SidebarTab = "overview" | "units" | "assets" | "core" | "feed";
+type SidebarUnitMode = "squads" | "players";
+type SidebarSortMode = "name" | "squad" | "health" | "distance" | "vehicle";
+
+const sidebarMode = ref<SidebarMode>(window.innerWidth <= 900 ? "compact" : "expanded");
+const sidebarTab = ref<SidebarTab>("overview");
+const sidebarUnitMode = ref<SidebarUnitMode>("squads");
+const sidebarSearch = ref("");
+const sidebarSortMode = ref<SidebarSortMode>("squad");
+const sidebarOnlyAlive = ref(false);
+const sidebarOnlyVehicle = ref(false);
 const sidebarCollapsed = ref(false);
-const sidebarTab = ref<"squads" | "players" | "bzss-core">("squads");
 const activeTeamTab = ref<number>(1);
 const focusedSquadId = ref<number | null>(null);
 const combatLogs = ref<CombatLog[]>([]);
 const viewerPerspectiveMode = ref<ViewerPerspectiveMode>("auto");
+const focusedPlayerKey = ref("");
 
 // Shared activePlayerWindow managed by parent MatchStatusPage
 
@@ -1177,7 +898,7 @@ watch(
       if (!oldIds.has(exp.id)) {
         const cleanCauser = cleanWeaponName(exp.damageCauser);
         logCombatEvent(
-          `<span style="color: #94a3b8">检测到官方爆炸物爆炸 (武器: ${cleanCauser}, 坐标: ${Math.round(exp.mapX)}%, ${Math.round(exp.mapY)}%)</span>`,
+          `<span style="color: #94a3b8">检测到官方爆炸物爆�?(武器: ${cleanCauser}, 坐标: ${Math.round(exp.mapX)}%, ${Math.round(exp.mapY)}%)</span>`,
           "system"
         );
       }
@@ -1232,7 +953,7 @@ function calculateCombatHotspot() {
     gameY: sumY / alivePlayers.length
   };
   
-  logCombatEvent(`计算得到新一轮作战热点中心 [X:${Math.round(combatHotspot.value.gameX)}, Y:${Math.round(combatHotspot.value.gameY)}] (1000m 半径)`, "system");
+  logCombatEvent(`计算得到新一轮作战热点中�?[X:${Math.round(combatHotspot.value.gameX)}, Y:${Math.round(combatHotspot.value.gameY)}] (1000m 半径)`, "system");
 }
 
 function clearCombatHotspot() {
@@ -1709,6 +1430,22 @@ const fobMarkers = computed(() => {
   return markers;
 });
 
+const vehicleGroups = computed(() => {
+  const buckets = new Map<string, { teamId: number; vehicleType: string; count: number; mapX: number; mapY: number }>();
+  for (const player of markers.value) {
+    const vehicleType = String(player.vehicleInfo?.vehicleType ?? "").trim();
+    if (!vehicleType || vehicleType === "None") continue;
+    const teamId = normalizeTeam(player.teamId);
+    const key = `${teamId}:${vehicleType}`;
+    const current = buckets.get(key) ?? { teamId, vehicleType, count: 0, mapX: player.mapX, mapY: player.mapY };
+    current.count += 1;
+    current.mapX = (current.mapX + player.mapX) / 2;
+    current.mapY = (current.mapY + player.mapY) / 2;
+    buckets.set(key, current);
+  }
+  return [...buckets.values()].sort((a, b) => a.vehicleType.localeCompare(b.vehicleType));
+});
+
 watch(
   () => [loading.value, errorText.value, positionedPlayers.value.length, captureZoneMarkers.value.length, fobMarkers.value.length, tilesReady.value] as const,
   () => {
@@ -1967,6 +1704,15 @@ function onMapMousemove(e: MouseEvent) {
   handleMouseMove(e);
 }
 
+watch(
+  () => sidebarMode.value,
+  (mode) => {
+    if (mode === "hidden") {
+      sidebarCollapsed.value = true;
+    }
+  }
+);
+
 // Squad directory highlights
 function toggleSquadFocus(squadId: number) {
   if (focusedSquadId.value === squadId) {
@@ -1974,6 +1720,50 @@ function toggleSquadFocus(squadId: number) {
   } else {
     focusedSquadId.value = squadId;
   }
+}
+
+function panToMapPercent(mapX: number, mapY: number, targetZoom?: number) {
+  const zoomTarget = targetZoom ?? zoom.value;
+  const clampedZoom = Math.max(0.35, Math.min(20, zoomTarget));
+  zoom.value = clampedZoom;
+  if (!containerRef.value) return;
+  const viewWidth = containerRef.value.clientWidth;
+  const viewHeight = containerRef.value.clientHeight;
+  panX.value = viewWidth / 2 - (mapX * 10) * clampedZoom;
+  panY.value = viewHeight / 2 - (mapY * 10) * clampedZoom;
+}
+
+function focusPlayerOnMap(player: BzssCoreTrackedPlayerInfo) {
+  const key = getPlayerKey(player);
+  focusedPlayerKey.value = key;
+  const marker = markers.value.find((m) => getPlayerKey(m) === key);
+  if (marker) {
+    panToMapPercent(marker.mapX, marker.mapY, Math.max(zoom.value, 1.2));
+  }
+  hoveredPlayer.value = player;
+}
+
+function focusSquadOnMap(payload: { teamId: number; squadId: number }) {
+  const squadPlayers = markers.value.filter(
+    (player) => normalizeTeam(player.teamId) === payload.teamId && normalizeSquad(player.squadId) === payload.squadId
+  );
+  if (!squadPlayers.length) return;
+  const avgX = squadPlayers.reduce((sum, p) => sum + p.mapX, 0) / squadPlayers.length;
+  const avgY = squadPlayers.reduce((sum, p) => sum + p.mapY, 0) / squadPlayers.length;
+  focusedSquadId.value = payload.squadId;
+  panToMapPercent(avgX, avgY, Math.max(zoom.value, 1.1));
+}
+
+function focusFobOnMap(marker: { mapX: number; mapY: number }) {
+  panToMapPercent(marker.mapX, marker.mapY, Math.max(zoom.value, 1.15));
+}
+
+function focusZoneOnMap(marker: { mapX: number; mapY: number }) {
+  panToMapPercent(marker.mapX, marker.mapY, Math.max(zoom.value, 1.15));
+}
+
+function focusVehicleOnMap(marker: { mapX: number; mapY: number }) {
+  panToMapPercent(marker.mapX, marker.mapY, Math.max(zoom.value, 1.15));
 }
 
 // Show player detail in floating window
@@ -2326,7 +2116,7 @@ function getPlayerSpeedText(player: any) {
 }
 
 function getFlagLetter(name: string): string {
-  if (!name) return "★";
+  if (!name) return "●";
   const parts = name.split("-");
   const first = parts[0]?.trim();
   if (/^\d+$/.test(first)) {
@@ -2335,7 +2125,7 @@ function getFlagLetter(name: string): string {
       return String.fromCharCode(64 + num); // 1 -> A, 2 -> B, etc.
     }
   }
-  return first || "★";
+  return first || "●";
 }
 
 function cleanWeaponName(weaponClass: string | null | undefined): string {
@@ -2373,7 +2163,9 @@ onMounted(() => {
   logCombatEvent("Tactical map scan initialized... coordinate grid ready", "system");
   logCombatEvent("Live tactical tracking active", "system");
 
-  simulatedCombatTimer = window.setInterval(runCombatEventSimulation, 2500);
+  if (import.meta.env.DEV) {
+    simulatedCombatTimer = window.setInterval(runCombatEventSimulation, 2500);
+  }
   window.addEventListener("resize", fitToViewport);
 
   // Track viewport dimensions for tile loader
@@ -2458,7 +2250,7 @@ onBeforeUnmount(() => {
   border: 2px solid rgba(0, 240, 255, 0.2);
 }
 
-/* Tiled map wrapper — applies same visual treatment as .map-image */
+/* Tiled map wrapper �?applies same visual treatment as .map-image */
 .tiled-map-wrapper {
   position: relative;
   width: 100%;

@@ -866,7 +866,7 @@
     }
   },
   "warmup": {
-    "enabled": true
+    "enabled": false
   },
   "bzssCore": {
     "modifyScriptPath": "./support/runtime-assets/bzss-core/ModifySaveGame.py",
