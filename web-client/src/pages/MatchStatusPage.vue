@@ -6,7 +6,6 @@
       :can-refresh="canRefresh"
       :refreshing-type="refreshingType"
       :refreshing-playtime="refreshingPlaytime"
-      :refreshing-snapshot="capturingSnapshot"
       :viewer-perspective-text="viewerPerspectiveText"
       :show-viewer-perspective="ui.showTeamPerspectiveHint"
       :server-status-updated-at="serverStatusUpdatedAt"
@@ -19,12 +18,11 @@
       @refresh="handleToolbarRefresh"
       @refresh-playtime="refreshOnlinePlaytime"
       @refresh-playtime-force="refreshOnlinePlaytime(true)"
-      @capture-snapshot="handleTemporarySnapshot"
       @toggle-multi-select="toggleMultiSelectMode"
       @view-mode-change="handleViewModeChange"
     />
 
-    <section v-if="showPlaytimePanel" class="playtime-refresh-card">
+    <section v-if="showPlaytimePanel" class="playtime-refresh-card playtime-refresh-card--compact">
       <div class="playtime-refresh-header">
         <div>
           <div class="playtime-refresh-title">Steam 时长刷新</div>
@@ -48,7 +46,7 @@
       </div>
 
       <div class="playtime-refresh-events">
-        <div v-if="playtimeEvents.length === 0" class="playtime-refresh-empty">最近没有刷新事件</div>
+        <div v-if="playtimeEvents.length === 0" class="playtime-refresh-empty">最近没有刷新事件。</div>
         <article
           v-for="event in playtimeEvents"
           :key="`${event.at}-${event.phase}-${event.steamID || event.playerName || event.message}`"
@@ -68,26 +66,6 @@
         </article>
       </div>
     </section>
-
-    <section class="match-snapshot-cta">
-      <div class="match-snapshot-cta__copy">
-        <div class="match-snapshot-cta__title">临时生成对局快照</div>
-        <div class="match-snapshot-cta__subtitle">
-          生成带地图、双方阵营旗帜、玩家数、指挥官、服务器人数、排队人数和 RCON 时长的快照图。
-        </div>
-      </div>
-      <button
-        type="button"
-        class="match-snapshot-cta__button"
-        data-testid="match-snapshot-temp-generate"
-        :disabled="capturingSnapshot || !canRefresh"
-        @click="handleTemporarySnapshot"
-      >
-        {{ capturingSnapshot ? "正在生成..." : "临时生成快照" }}
-      </button>
-    </section>
-
-
 
     <DataState
       class="match-status-data-state"
@@ -200,7 +178,7 @@
               </select>
             </label>
             <label class="ticket-editor-field">
-              <span class="ticket-editor-field__label">数值 (例如 50 / -50)</span>
+              <span class="ticket-editor-field__label">数�?(例如 50 / -50)</span>
               <input v-model.trim="ticketAdjustForm.deltaText" type="text" inputmode="numeric" class="ticket-editor-input" placeholder="例如 50 / -50" />
             </label>
           </div>
@@ -214,10 +192,10 @@
           </div>
           <div class="ticket-modal-actions">
             <button type="button" class="ticket-editor-submit" :disabled="ticketAdjustLoading" @click="submitTicketAdjust(true)">
-              {{ ticketAdjustLoading ? "处理中..." : "加票" }}
+              {{ ticketAdjustLoading ? "处理�?.." : "加票" }}
             </button>
             <button type="button" class="ticket-editor-reset" :disabled="ticketAdjustLoading" @click="submitTicketAdjust(false)">
-              {{ ticketAdjustLoading ? "处理中..." : "减票" }}
+              {{ ticketAdjustLoading ? "处理�?.." : "减票" }}
             </button>
           </div>
         </form>
@@ -238,7 +216,7 @@
 
           <footer class="ticket-modal-actions" style="margin-top: 16px;">
             <button type="button" class="ticket-editor-reset" :disabled="ticketWriteLoading" @click="resetTicketFormToCurrent">
-              使用当前值
+              使用当前�?
             </button>
             <button type="submit" class="ticket-editor-submit" :disabled="ticketWriteLoading">
               {{ ticketWriteLoading ? "提交中..." : "写入覆盖" }}
@@ -250,11 +228,11 @@
 
     <!-- 批量操作悬浮条 -->
     <transition name="bar-slide">
-      <StickyActionBar v-if="multiSelectMode && selectedPlayers.length > 0" class="batch-action-bar">
+      <StickyActionBar v-if="multiSelectMode && selectedPlayers.length > 0" class="batch-action-bar batch-action-bar--compact">
         <div class="batch-bar-left">
           <span class="batch-count-badge">{{ selectedPlayers.length }}</span>
           <span class="batch-count-text">
-            已选择 (T1: <strong class="t1-count">{{ selectedT1Count }}</strong> 人, T2: <strong class="t2-count">{{ selectedT2Count }}</strong> 人)
+            已选择 (T1: <strong class="t1-count">{{ selectedT1Count }}</strong> / T2: <strong class="t2-count">{{ selectedT2Count }}</strong>)
           </span>
         </div>
         <div class="batch-bar-actions">
@@ -413,7 +391,6 @@ const refreshingPlaytime = ref(false);
 const refreshingPlayers = ref(false);
 const refreshingSquads = ref(false);
 const refreshingAll = ref(false);
-const capturingSnapshot = ref(false);
 const refreshError = ref("");
 const playtimeError = ref("");
 const ticketWriteError = ref("");
@@ -538,7 +515,7 @@ const canEditTickets = computed(() => {
 });
 const showTicketControlPanel = computed(() => Boolean(currentServerId.value || remoteTelemetryState.value?.currentSource));
 const ticketCommandTargetText = computed(() => {
-  if (!ticketCommandTarget.value.host) return "未识别 sender 地址";
+  if (!ticketCommandTarget.value.host) return "未识�?sender 地址";
   return `${ticketCommandTarget.value.host}:${ticketCommandTarget.value.port}`;
 });
 const ticketSourceTone = computed(() => {
@@ -619,20 +596,20 @@ const battleLogSummaryTone = computed(() => {
   return "success";
 });
 const battleLogSummaryStatusText = computed(() => {
-  if (!battleLogOverview.value.enabled) return "战绩模块未启用";
+  if (!battleLogOverview.value.enabled) return "???????";
   const logStatus = battleLogOverview.value.sourceStatus?.log;
-  if (logStatus?.enabled === false) return "战绩模块已关闭";
-  if (logStatus?.subscribed === false) return "战绩订阅未连接";
-  return "战绩订阅正常";
+  if (logStatus?.enabled === false) return "???????";
+  if (logStatus?.subscribed === false) return "???????";
+  return "??????";
 });
 const battleLogSummarySubtitle = computed(() => {
   const total = Number(battleLogOverview.value.count ?? battleLogSummaryStats.value.total ?? 0);
-  return `总计 ${total} 条`;
+  return `?? ${total} ?`;
 });
 const battleLogSummaryUpdatedText = computed(() => {
   const updatedAt = battleLogOverview.value.lastUpdatedAt;
-  if (!updatedAt) return "暂无更新时间";
-  return `更新于 ${formatBattleLogTimestamp(updatedAt)}`;
+  if (!updatedAt) return "??????";
+  return `??? ${formatBattleLogTimestamp(updatedAt)}`;
 });
 const battleLogLatestText = computed(() => {
   const latest = Array.isArray(battleLogOverview.value.latest) ? battleLogOverview.value.latest : [];
@@ -691,7 +668,7 @@ const playtimeProgress = computed(() => playtimeJob.value?.progress ?? null);
 const playtimeSelectedCount = computed(() => Number(playtimeProgress.value?.selected ?? 0));
 const playtimeTotalCount = computed(() => Number(playtimeProgress.value?.total ?? 0));
 const playtimeProgressPercent = computed(() => clampPercent(playtimeProgress.value?.percent ?? 0));
-const playtimeProgressLabel = computed(() => playtimeProgress.value?.message || (refreshingPlaytime.value ? "正在处理" : "等待开始"));
+const playtimeProgressLabel = computed(() => playtimeProgress.value?.message || (refreshingPlaytime.value ? "????" : "????"));
 const playtimeSummaryText = computed(() => `updated ${Number(playtimeJob.value?.result?.updated ?? playtimeProgress.value?.updated ?? 0)} / skipped ${Number(playtimeJob.value?.result?.skipped ?? playtimeProgress.value?.skipped ?? 0)} / failed ${Number(playtimeJob.value?.result?.failed ?? playtimeProgress.value?.failed ?? 0)}`);
 const playtimeStatusTone = computed(() => {
   if (refreshingPlaytime.value) return "pending";
@@ -700,16 +677,24 @@ const playtimeStatusTone = computed(() => {
   return "idle";
 });
 const playtimeStatusText = computed(() => {
-  if (refreshingPlaytime.value) return "正在刷新 Steam 时长";
-  if (playtimeJob.value?.status === "failed") return playtimeJob.value.error?.message || "Steam 时长刷新失败";
-  if (playtimeJob.value?.status === "completed") return "Steam 时长刷新完成";
-  return "Steam 时长待刷新";
+  if (refreshingPlaytime.value) return "???? Steam ??";
+  if (playtimeJob.value?.status === "failed") return playtimeJob.value.error?.message || "Steam ??????";
+  if (playtimeJob.value?.status === "completed") return "Steam ??????";
+  return "Steam ?????";
 });
 const playtimeEvents = computed(() => {
   const events = playtimeProgress.value?.events ?? [];
   return [...events].slice(-10).reverse();
 });
 const showPlaytimePanel = computed(() => Boolean(refreshingPlaytime.value || playtimeJob.value || playtimeError.value));
+
+function eventTone(event: PlaytimeJobProgressEvent) {
+  const phase = String(event.phase ?? event.status ?? "").trim().toLowerCase();
+  if (phase.includes("fail") || phase.includes("error")) return "danger";
+  if (phase.includes("skip")) return "warning";
+  if (phase.includes("done") || phase.includes("complete") || phase.includes("success")) return "success";
+  return "neutral";
+}
 
 function handleVisibilityChange() {
   pageHidden.value = typeof document !== "undefined" ? document.hidden : false;
@@ -764,8 +749,8 @@ function openTicketEditor(team: TeamViewModel) {
     ui.pushToast({
       title: "当前无法修改票数",
       message: ticketCommandTarget.value.host
-        ? "请先等待 sender 恢复在线。"
-        : "当前 sender 没有可用的命令地址，无法下发票数修改。",
+        ? "???? sender ?????"
+        : "?? sender ???????????????????",
       tone: "warn",
     });
     return;
@@ -796,19 +781,19 @@ async function submitTicketWrite() {
   ticketWriteLoading.value = true;
   try {
     if (!ticketCommandTarget.value.host) {
-      throw new Error("当前 sender 没有可用的命令地址。");
+      throw new Error("?? sender ??????????");
     }
     const payload: Record<string, number> = {};
     if (ticketEditorTeamId.value === 1 && ticketForm.t1) payload.t1 = requireIntegerInput(ticketForm.t1, "TEAM 1");
     if (ticketEditorTeamId.value === 2 && ticketForm.t2) payload.t2 = requireIntegerInput(ticketForm.t2, "TEAM 2");
     if (payload.t1 == null && payload.t2 == null) {
       if (ticketEditorTeamId.value === 1) {
-        throw new Error("请填写 TEAM 1 的票数。");
+        throw new Error("??? TEAM 1 ????");
       }
       if (ticketEditorTeamId.value === 2) {
-        throw new Error("请填写 TEAM 2 的票数。");
+        throw new Error("??? TEAM 2 ????");
       }
-      throw new Error("至少填写一个队伍票数。");
+      throw new Error("???????????");
     }
 
     const result = await apiPost<any>("/api/remote-telemetry/write-tickets", payload);
@@ -827,14 +812,14 @@ async function submitTicketWrite() {
     ui.pushToast({
       title: "票数写入成功",
       message: `${updatedTeamLabel}: ${formatTicketDisplay(updatedValue)}`,
-      tone: "ok",
+
     });
   } catch (error) {
     ticketWriteError.value = renderApiError(error, "票数写入失败");
     ui.pushToast({
       title: "票数写入失败",
       message: ticketWriteError.value,
-      tone: "error",
+
     });
   } finally {
     ticketWriteLoading.value = false;
@@ -846,13 +831,13 @@ async function submitTicketAdjust(isAdd = true) {
   ticketAdjustLoading.value = true;
   try {
     if (!ticketCommandTarget.value.host) {
-      throw new Error("当前 sender 没有可用的命令地址。");
+      throw new Error("?? sender ??????????");
     }
 
     const team = Number(ticketAdjustForm.team) === 2 ? 2 : 1;
-    const inputDelta = requireIntegerInput(ticketAdjustForm.deltaText, "数值");
+    const inputDelta = requireIntegerInput(ticketAdjustForm.deltaText, "??");
     if (inputDelta === 0) {
-      throw new Error("票数变化不能为 0");
+      throw new Error("??????? 0");
     }
     const delta = isAdd ? Math.abs(inputDelta) : -Math.abs(inputDelta);
     if (Math.abs(delta) > 1000) {
@@ -876,14 +861,14 @@ async function submitTicketAdjust(isAdd = true) {
     ui.pushToast({
       title: "票数调整成功",
       message: `T${team}: ${formatTicketDisplay(before)} -> ${formatTicketDisplay(after)} (${delta > 0 ? "+" : ""}${delta})`,
-      tone: "ok",
+
     });
   } catch (error) {
     ticketWriteError.value = renderApiError(error, "票数调整失败");
     ui.pushToast({
       title: "票数调整失败",
       message: ticketWriteError.value,
-      tone: "error",
+
     });
   } finally {
     ticketAdjustLoading.value = false;
@@ -1110,8 +1095,8 @@ function closePlayerDetail() {
 async function handleBatchWarn() {
   if (selectedPlayers.value.length === 0) return;
   const message = await ui.openWarnPrompt({
-    title: "批量发送玩家警告",
-    targetName: `${selectedPlayers.value.length} 名所选玩家`,
+    title: "????????",
+    targetName: `${selectedPlayers.value.length} ?????`,
     defaultMessage: "请遵守服务器规则",
   });
   if (message === null) return;
@@ -1121,8 +1106,8 @@ async function handleBatchWarn() {
   let failCount = 0;
   
   ui.pushToast({
-    title: "批量操作中",
-    message: `正在发送警告给 ${targets.length} 名玩家...`,
+    title: "?????",
+    message: `??????? ${targets.length} ???...`,
     tone: "idle",
   });
 
@@ -1149,8 +1134,8 @@ async function handleBatchWarn() {
   );
 
   ui.pushToast({
-    title: "批量警告完成",
-    message: `成功: ${successCount}，失败: ${failCount}`,
+    title: "??????",
+    message: `??: ${successCount}???: ${failCount}`,
     tone: failCount > 0 ? "warn" : "ok",
   });
 
@@ -1160,19 +1145,19 @@ async function handleBatchWarn() {
 async function handleBatchKick() {
   if (selectedPlayers.value.length === 0) return;
   
-  const reason = window.prompt(`请输入批量踢出原因 (将作用于 ${selectedPlayers.value.length} 名玩家):`, "")?.trim();
+  const reason = window.prompt(`请输入批量踢出原因(将作用于 ${selectedPlayers.value.length} 名玩家):`, "")?.trim();
   if (!reason) {
     ui.pushToast({
-      title: "踢出已取消",
-      message: "请先填写踢出原因。",
+      title: "?????",
+      message: "?????????",
       tone: "warn",
     });
     return;
   }
 
   const confirmed = await ui.openConfirm({
-    title: "确认批量踢出玩家？",
-    message: `确定要将已选的 ${selectedPlayers.value.length} 名玩家踢出服务器吗？\n原因：${reason}`,
+    title: "?????????",
+    message: `??????? ${selectedPlayers.value.length} ??????????\n???${reason}`,
     tone: "error",
   });
   if (!confirmed) return;
@@ -1182,8 +1167,8 @@ async function handleBatchKick() {
   let failCount = 0;
 
   ui.pushToast({
-    title: "批量操作中",
-    message: `正在踢出 ${targets.length} 名玩家...`,
+    title: "?????",
+    message: `???? ${targets.length} ???...`,
     tone: "idle",
   });
 
@@ -1211,8 +1196,8 @@ async function handleBatchKick() {
   );
 
   ui.pushToast({
-    title: "批量踢出完成",
-    message: `成功: ${successCount}，失败: ${failCount}`,
+    title: "??????",
+    message: `??: ${successCount}???: ${failCount}`,
     tone: failCount > 0 ? "warn" : "ok",
   });
 
@@ -1223,8 +1208,8 @@ async function handleBatchForceTeamChange() {
   if (selectedPlayers.value.length === 0) return;
 
   const confirmed = await ui.openConfirm({
-    title: "确认批量跳边？",
-    message: `确定要将已选的 ${selectedPlayers.value.length} 名玩家执行跳边操作吗？`,
+    title: "???????",
+    message: `??????? ${selectedPlayers.value.length} ???????????`,
     tone: "warn",
   });
   if (!confirmed) return;
@@ -1234,8 +1219,8 @@ async function handleBatchForceTeamChange() {
   let failCount = 0;
 
   ui.pushToast({
-    title: "批量操作中",
-    message: `正在为 ${targets.length} 名玩家执行跳边...`,
+    title: "?????",
+    message: `??? ${targets.length} ???????...`,
     tone: "idle",
   });
 
@@ -1245,7 +1230,7 @@ async function handleBatchForceTeamChange() {
         const res = await forceTeamChange({
           steamId: player.steamId ?? undefined,
           playerName: player.name,
-          source: "对局状态手动操作",
+          source: "manual_team_balance",
           reason: "manual_team_balance",
           operator: {
             id: auth.user?.id ?? auth.user?.username ?? "",
@@ -1269,7 +1254,7 @@ async function handleBatchForceTeamChange() {
 
   ui.pushToast({
     title: "批量跳边完成",
-    message: `成功: ${successCount}，失败: ${failCount}`,
+    message: `成功: ${successCount}，失�? ${failCount}`,
     tone: failCount > 0 ? "warn" : "ok",
   });
 
@@ -1333,9 +1318,9 @@ async function handlePlayerPlaytimeUpdated() {
     void hydrateActivePlayerWindowIp(nextDetail);
   } catch (error) {
     ui.pushToast({
-      title: t("common.error"),
+
       message: renderApiError(error, t("common.error")),
-      tone: "error",
+
     });
   }
 }
@@ -1433,7 +1418,7 @@ async function refreshActivePlayerBattleStats() {
       detail: {
         ...activePlayerWindow.value.detail,
         battleStats,
-        battleStatsLabel: `击倒 ${battleStats.downs} / 击杀 ${battleStats.kills} / 死亡 ${battleStats.deaths} / TK ${battleStats.tk} / 复苏 ${battleStats.revives}`,
+        battleStatsLabel: `击�?${battleStats.downs} / 击杀 ${battleStats.kills} / 死亡 ${battleStats.deaths} / TK ${battleStats.tk} / 复苏 ${battleStats.revives}`,
         battleStatsSource: String(response?.source ?? "battleLog"),
         battleStatsLastUpdatedAt: response?.lastUpdatedAt ? String(response.lastUpdatedAt) : null,
       },
@@ -1558,7 +1543,7 @@ function createEmptyBattleLogOverview(serverId = "") {
 
 function buildBattleLogSummaryCards(stats: ReturnType<typeof normalizeBattleLogStats>) {
   return [
-    { key: "down", label: "击倒", value: stats.down, tone: "down" },
+    { key: "down", label: "??", value: stats.down, tone: "down" },
     { key: "kill", label: "击杀", value: stats.kill, tone: "kill" },
     { key: "death", label: "死亡", value: stats.death, tone: "death" },
     { key: "revive", label: "复苏", value: stats.revive, tone: "revive" },
@@ -1567,7 +1552,7 @@ function buildBattleLogSummaryCards(stats: ReturnType<typeof normalizeBattleLogS
 }
 
 function battleLogSummaryCardLabel(key: string) {
-  if (key === "down") return "击倒";
+  if (key === "down") return "??";
   if (key === "kill") return "击杀";
   if (key === "death") return "死亡";
   if (key === "revive") return "复苏";
@@ -1576,7 +1561,7 @@ function battleLogSummaryCardLabel(key: string) {
 }
 
 function formatBattleStatsLabel(stats: ReturnType<typeof normalizeBattleLogStats>) {
-  return `击倒 ${stats.down} / 击杀 ${stats.kill} / 死亡 ${stats.death} / TK ${stats.tk} / 复苏 ${stats.revive}`;
+  return `?? ${stats.down} / ?? ${stats.kill} / ?? ${stats.death} / TK ${stats.tk} / ?? ${stats.revive}`;
 }
 
 function formatBattleLogTimestamp(value: string | number | null | undefined) {
@@ -1654,8 +1639,8 @@ async function refreshOnlinePlaytime(force = false) {
       };
     }
     ui.pushToast({
-      title: t("common.updated"),
-      message: `成功 ${Number(finalJob.result?.updated ?? 0)}，跳过 ${Number(finalJob.result?.skipped ?? 0)}，失败 ${Number(finalJob.result?.failed ?? 0)}`,
+      title: "????????",
+      message: `?? ${Number(finalJob.result?.updated ?? 0)}??? ${Number(finalJob.result?.skipped ?? 0)}??? ${Number(finalJob.result?.failed ?? 0)}`,
       tone: "ok",
     });
   } catch (error) {
@@ -1678,12 +1663,66 @@ async function refreshOnlinePlaytime(force = false) {
       },
     };
     ui.pushToast({
-      title: t("common.error"),
+      title: "????????",
       message: playtimeError.value,
       tone: "error",
     });
   } finally {
     refreshingPlaytime.value = false;
+  }
+}
+
+function applyPlaytimeJob(job: PlaytimeJobViewModel | null | undefined) {
+  if (!job) return;
+  playtimeJob.value = {
+    ...playtimeJob.value,
+    ...job,
+    progress: {
+      ...playtimeJob.value?.progress,
+      ...job.progress,
+      events: Array.isArray(job.progress?.events) ? job.progress.events : playtimeJob.value?.progress?.events,
+    },
+  };
+}
+
+async function waitForPlaytimeJob(
+  jobId: string,
+  waitMs = 3_000,
+  onUpdate?: (job: PlaytimeJobViewModel) => void,
+) {
+  const startedAt = Date.now();
+  let finalJob = playtimeJob.value;
+
+  while (jobId && Date.now() - startedAt < waitMs) {
+    const job = await apiGet<PlaytimeJobViewModel>(`/api/playtime/jobs/${encodeURIComponent(jobId)}?waitMs=3000`);
+    if (!job) break;
+    finalJob = job;
+    onUpdate?.(job);
+    if (job.status === "completed" || job.status === "failed") break;
+  }
+
+  return finalJob ?? { status: "failed", error: { message: "Playtime job not found" } };
+}
+
+async function refreshMatchState(scope: "players" | "squads" | "all") {
+  refreshError.value = "";
+  refreshingPlayers.value = scope === "players" || scope === "all";
+  refreshingSquads.value = scope === "squads" || scope === "all";
+  refreshingAll.value = scope === "all";
+
+  try {
+    await syncOnce();
+    await Promise.all([
+      remoteTelemetryQuery.refetch(),
+      battleLogOverviewQuery.refetch(),
+    ]);
+  } catch (error) {
+    refreshError.value = renderApiError(error, "刷新失败");
+    throw error;
+  } finally {
+    refreshingPlayers.value = false;
+    refreshingSquads.value = false;
+    refreshingAll.value = false;
   }
 }
 
@@ -1709,198 +1748,6 @@ function handleToolbarRefresh(type: "players" | "squads" | "all") {
     return;
   }
   void refreshAll();
-}
-
-async function handleTemporarySnapshot() {
-  if (capturingSnapshot.value) return;
-
-  capturingSnapshot.value = true;
-
-  try {
-    await apiPost("/api/match-snapshot/capture", buildTemporarySnapshotPayload());
-    ui.pushToast({
-      title: t("common.updated"),
-      message: "已临时生成对局快照",
-      tone: "ok",
-    });
-  } catch (error) {
-    const message = renderApiError(error, "临时生成失败");
-    ui.pushToast({
-      title: t("common.error"),
-      message,
-      tone: "error",
-    });
-  } finally {
-    capturingSnapshot.value = false;
-  }
-}
-
-function buildTemporarySnapshotPayload() {
-  const currentMatchState = matchSnapshot.value ? {
-    ...matchSnapshot.value,
-    serverStatus: {
-      ...(matchSnapshot.value.serverStatus ?? {}),
-      ...runtimeWebStatus.value,
-      serverId: currentServerId.value || String(matchSnapshot.value.serverStatus?.serverId ?? runtimeWebStatus.value.serverId ?? ""),
-      playerCount: currentPlayerCount.value,
-      queueCount: runtimeWebStatus.value.queueCount ?? matchSnapshot.value.serverStatus?.queueCount,
-    },
-    match: {
-      ...(matchSnapshot.value.match ?? {}),
-    },
-    players: {
-      ...(matchSnapshot.value.players ?? {}),
-      list: Array.isArray(matchSnapshot.value.players?.list) ? matchSnapshot.value.players.list : [],
-    },
-    squads: {
-      ...(matchSnapshot.value.squads ?? {}),
-      list: Array.isArray(matchSnapshot.value.squads?.list) ? matchSnapshot.value.squads.list : [],
-    },
-  } : null;
-
-  return {
-    includeSteamID: false,
-    includeEOSID: false,
-    overview: {
-      status: {
-        ...runtimeWebStatus.value,
-        serverId: currentServerId.value || runtimeWebStatus.value.serverId || "",
-        playerCount: currentPlayerCount.value,
-      },
-      matchState: currentMatchState,
-      match: currentMatchState?.match ?? {},
-      players: currentMatchState?.players?.list ?? [],
-      squads: currentMatchState?.squads?.list ?? [],
-      serverId: currentServerId.value || runtimeWebStatus.value.serverId || "",
-    },
-  };
-}
-
-async function refreshMatchState(type: "players" | "squads" | "all") {
-  const loadingState = type === "players"
-    ? refreshingPlayers
-    : type === "squads"
-      ? refreshingSquads
-      : refreshingAll;
-
-  loadingState.value = true;
-  refreshError.value = "";
-
-  try {
-    const endpoint = type === "players"
-      ? "/api/match/refresh/players"
-      : type === "squads"
-        ? "/api/match/refresh/squads"
-        : "/api/match/refresh/all";
-    const result = await apiPost<any>(endpoint, {});
-    applyMatchRefreshResult(result);
-    if (!result?.ok) {
-      refreshError.value = result?.errors?.[0]?.message ?? t("common.error");
-      server.markStale();
-      players.markStale();
-      squads.markStale();
-      ui.pushToast({
-        title: t("common.error"),
-        message: refreshError.value,
-        tone: "error",
-      });
-      return;
-    }
-    ui.pushToast({
-      title: t("common.updated"),
-      message: type === "all" ? t("match.refreshAll") : type === "players" ? t("match.refreshPlayers") : t("match.refreshSquads"),
-      tone: "ok",
-    });
-  } catch (error) {
-    refreshError.value = renderApiError(error, t("common.error"));
-    ui.pushToast({
-      title: t("common.error"),
-      message: refreshError.value,
-      tone: "error",
-    });
-  } finally {
-    loadingState.value = false;
-  }
-}
-
-function applyMatchRefreshResult(result: any) {
-  if (!result) return;
-
-  if (!result.ok) return;
-
-  applyMatchSnapshotResponse(result);
-}
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function waitForPlaytimeJob(
-  jobId: string,
-  timeoutMs: number,
-  onUpdate?: (job: PlaytimeJobViewModel) => void,
-) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    const job = await apiGet<PlaytimeJobViewModel>(`/api/playtime/jobs/${encodeURIComponent(jobId)}?waitMs=3000`);
-    jobs.upsert(job);
-    applyPlaytimeJob(job);
-    onUpdate?.(job);
-    if (job.status === "completed" || job.status === "failed") return job;
-    await sleep(2000);
-  }
-  throw new Error("Timed out while waiting for the playtime refresh job.");
-}
-
-function applyPlaytimeJob(job: PlaytimeJobViewModel | null | undefined) {
-  if (!job) return;
-  playtimeJob.value = normalizePlaytimeJob(job);
-  const progress = playtimeJob.value.progress;
-  if (progress?.message && !refreshingPlaytime.value) {
-    playtimeError.value = "";
-  }
-}
-
-function normalizePlaytimeJob(job: PlaytimeJobViewModel): PlaytimeJobViewModel {
-  const progress = job.progress ?? {};
-  return {
-    ...job,
-    progress: {
-      phase: progress.phase ?? "queued",
-      message: progress.message ?? "",
-      total: Number(progress.total ?? 0),
-      selected: Number(progress.selected ?? 0),
-      skipped: Number(progress.skipped ?? 0),
-      queued: Number(progress.queued ?? 0),
-      running: Number(progress.running ?? 0),
-      updated: Number(progress.updated ?? 0),
-      failed: Number(progress.failed ?? 0),
-      percent: clampPercent(progress.percent ?? 0),
-      events: Array.isArray(progress.events) ? progress.events.map(normalizePlaytimeEvent) : [],
-    },
-    result: job.result ?? null,
-    error: job.error ?? null,
-  };
-}
-
-function normalizePlaytimeEvent(event: PlaytimeJobProgressEvent): PlaytimeJobProgressEvent {
-  return {
-    at: typeof event.at === "string" ? Date.parse(event.at) || Date.now() : Number(event.at ?? Date.now()),
-    phase: String(event.phase ?? "lookup"),
-    status: String(event.status ?? "success"),
-    steamID: event.steamID ?? null,
-    playerName: event.playerName ?? null,
-    playerId: event.playerId ?? null,
-    message: String(event.message ?? ""),
-    gameSeconds: event.gameSeconds ?? null,
-    reason: event.reason ?? null,
-    fetchedAt: event.fetchedAt ?? null,
-    ageMinutes: event.ageMinutes ?? null,
-  };
-}
-
-function eventTone(event: PlaytimeJobProgressEvent): "success" | "skipped" | "failed" {
-  if (event.status === "skipped") return "skipped";
-  if (event.status === "failed") return "failed";
-  return "success";
 }
 
 function formatEventTime(value: number | string | null | undefined): string {
@@ -2336,6 +2183,47 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
   min-width: 0;
 }
 
+.playtime-refresh-card--compact {
+  padding: 8px 12px;
+  gap: 8px;
+}
+
+.playtime-refresh-card--compact .playtime-refresh-title {
+  font-size: 14px;
+}
+
+.playtime-refresh-card--compact .playtime-refresh-subtitle,
+.playtime-refresh-card--compact .playtime-refresh-counter,
+.playtime-refresh-card--compact .playtime-refresh-progress-meta,
+.playtime-refresh-card--compact .playtime-refresh-empty,
+.playtime-refresh-card--compact .playtime-refresh-event-message {
+  font-size: 12px;
+}
+
+.playtime-refresh-card--compact .playtime-refresh-progress-track {
+  height: 8px;
+}
+
+.batch-action-bar--compact {
+  gap: 6px;
+  padding-top: 8px;
+  padding-bottom: calc(8px + var(--safe-bottom));
+}
+
+.batch-action-bar--compact .batch-bar-left {
+  gap: 6px;
+}
+
+.batch-action-bar--compact .batch-count-text {
+  font-size: 12px;
+}
+
+.batch-action-bar--compact .batch-btn {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
 .match-snapshot-cta {
   display: flex;
   align-items: center;
@@ -2754,7 +2642,7 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
   }
 }
 
-/* ─── 移动端（≤780px）：单列分段视图，确保队伍内容可滚动可触达 ───────────── */
+/* ─── 移动端（�?80px）：单列分段视图，确保队伍内容可滚动可触�?───────────── */
 @media (max-width: 1024px) {
   /* DataState fill 容器内同时有分段标签和内容，改为弹性纵向布局 */
   .match-status-data-state :deep(.bz-data-state--fill .state-content) {
@@ -2781,7 +2669,7 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
     overflow: hidden;
   }
 
-  /* 队伍列表：两队纵向堆叠，本容器作为滚动区，避免第二队被裁切 */
+  /* 队伍列表：两队纵向堆叠，本容器作为滚动区，避免第二队被裁�?*/
   .squad-main-content {
     display: block;
     flex: 1 1 auto;
@@ -2835,7 +2723,7 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
   }
 }
 
-/* ─── 批量操作悬浮条 ─────────────────────────────────────────────────────── */
+/* ─── 批量操作悬浮�?─────────────────────────────────────────────────────── */
 .batch-action-bar {
   gap: 10px;
   border: 1px solid rgba(140, 160, 200, 0.28);

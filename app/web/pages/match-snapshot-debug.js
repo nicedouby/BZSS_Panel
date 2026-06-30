@@ -1,14 +1,14 @@
 // -*- coding: utf-8 -*-
 
-export async function renderPage({ root, api, apiFetch, openDrawer, onNavigate }) {
+export async function renderPage({ root, api }) {
   root.innerHTML = `
     <section class="page-header">
       <div class="header-main">
         <h1 class="page-title">快照录制</h1>
-        <p class="page-subtitle">对局结束时自动记录的所有快照文件 (调试模式开启)</p>
+        <p class="page-subtitle">查看对局结束后自动生成的所有快照文件。</p>
       </div>
       <div class="header-actions">
-        <button type="button" id="manual-snapshot-btn" class="bzss-btn primary">手动捕获快照</button>
+        <button type="button" id="refresh-btn" class="bzss-btn">刷新列表</button>
       </div>
     </section>
 
@@ -34,7 +34,7 @@ export async function renderPage({ root, api, apiFetch, openDrawer, onNavigate }
   `;
 
   const listEl = root.querySelector("#snapshot-list");
-  const manualBtn = root.querySelector("#manual-snapshot-btn");
+  const refreshBtn = root.querySelector("#refresh-btn");
 
   async function loadList() {
     try {
@@ -44,32 +44,24 @@ export async function renderPage({ root, api, apiFetch, openDrawer, onNavigate }
         return;
       }
 
-      listEl.innerHTML = snapshots.map(s => `
+      listEl.innerHTML = snapshots.map((s) => `
         <tr>
-          <td><strong>${s.name}</strong></td>
+          <td><strong>${s.name}</strong><div class="muted">${s.id}</div></td>
           <td>${new Date(s.createdAt).toLocaleString()}</td>
           <td>${(s.size / 1024).toFixed(2)} KB</td>
           <td>
-            <button type="button" class="bzss-btn sm" onclick="window.open('/api/match-snapshot/view?id=${encodeURIComponent(s.id)}')">查看 JSON</button>
+            <button type="button" class="bzss-btn sm" onclick="window.open('/api/match-snapshot/view?id=${encodeURIComponent(s.id)}&format=image')">图片</button>
+            <button type="button" class="bzss-btn sm" onclick="window.open('/api/match-snapshot/view?id=${encodeURIComponent(s.id)}&format=json')">JSON</button>
+            <button type="button" class="bzss-btn sm" onclick="window.open('/api/match-snapshot/view?id=${encodeURIComponent(s.id)}&format=csv')">CSV</button>
+            <button type="button" class="bzss-btn sm" onclick="window.open('/api/match-snapshot/view?id=${encodeURIComponent(s.id)}&format=markdown')">MD</button>
           </td>
         </tr>
       `).join("");
-    } catch (e) {
-      listEl.innerHTML = `<tr><td colspan="4" class="text-center text-danger">加载失败: ${e.message}</td></tr>`;
+    } catch (error) {
+      listEl.innerHTML = `<tr><td colspan="4" class="text-center text-danger">加载失败: ${error.message}</td></tr>`;
     }
   }
 
-  manualBtn.addEventListener("click", async () => {
-    manualBtn.disabled = true;
-    manualBtn.textContent = "捕获中...";
-    try {
-      await api.matchSnapshot.takeManualSnapshot();
-      await loadList();
-    } finally {
-      manualBtn.disabled = false;
-      manualBtn.textContent = "手动捕获快照";
-    }
-  });
-
+  refreshBtn.addEventListener("click", loadList);
   await loadList();
 }

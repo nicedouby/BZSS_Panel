@@ -320,50 +320,7 @@ describe("MatchStatusPage", () => {
     expect(wrapper.text()).not.toContain("Loading");
     wrapper.unmount();
   });
-
-  it("exposes a temporary match snapshot button for super admins", async () => {
-    const auth = useAuthStore();
-    auth.user = {
-      id: "1",
-      username: "admin",
-      role: "admin",
-      isSuperAdmin: true,
-      permissions: [],
-    };
-
-    const wrapper = mount(MatchStatusPage, {
-      global: {
-        plugins: [[VueQueryPlugin, { queryClient: new QueryClient() }]],
-        stubs: {
-          PlayerCombatTimeline: true,
-          StatusBadge: true,
-          CopyableValue: true,
-        },
-      },
-    });
-
-    await flushPromises();
-
-    const button = wrapper.find('[data-testid="match-snapshot-temp-generate"]');
-    expect(button.exists()).toBe(true);
-    await button.trigger("click");
-    await flushPromises();
-
-    const captureCall = vi.mocked(apiPost).mock.calls.find((call) => call[0] === "/api/match-snapshot/capture");
-    expect(captureCall).toBeTruthy();
-    expect(captureCall?.[1]).toMatchObject({
-      includeSteamID: false,
-      includeEOSID: false,
-      overview: {
-        status: expect.any(Object),
-        matchState: expect.any(Object),
-      },
-    });
-
-    wrapper.unmount();
-  });
-
-  it("opens the floating player window from a player row", async () => {
+  it('opens the floating player window from a player row', async () => {
     const auth = useAuthStore();
     auth.user = {
       id: "1",
@@ -540,9 +497,9 @@ describe("MatchStatusPage", () => {
     const panel = document.body.querySelector(".player-detail-floating");
     expect(panel).toBeTruthy();
     expect(panel?.textContent).toContain("Alice");
-    expect(panel?.textContent).toContain("本局在服时长");
+    expect(panel?.textContent).toContain("??????");
     expect(panel?.textContent).toContain("1.0h");
-    expect(panel?.textContent).toContain("进服 2 次");
+    expect(panel?.textContent).toContain("?? 2 ?");
     expect(panel?.textContent).toContain("K/D");
     expect(panel?.textContent).toContain("击杀4");
     expect(panel?.textContent).toContain("死亡3");
@@ -621,3 +578,4 @@ describe("MatchStatusPage", () => {
     wrapper.unmount();
   });
 });
+

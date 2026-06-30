@@ -1119,7 +1119,8 @@ async function buildMatchSceneLayout(snapshot, options = {}) {
     modeTitle: snapshot.match.mode || '-',
     serverName: snapshot.server.serverName || snapshot.server.serverId || 'BZSS Panel',
     capturedAt: snapshot.capturedAt,
-    totalPlayersText: maxPlayers ? currentPlayers + '/' + maxPlayers : String(currentPlayers),
+    serverPlayersText: String(currentPlayers),
+    serverCapacityText: maxPlayers ? `${currentPlayers}/${maxPlayers}` : String(currentPlayers),
     queueText: String(queueCount),
     rconTimeText: formatDurationClock(rconTime),
     serverTag: snapshot.server.rcon || 'unknown',
@@ -1128,9 +1129,10 @@ async function buildMatchSceneLayout(snapshot, options = {}) {
       await buildMatchTeamPanel(team2, 816, 540, 720, 268, template.theme.team2, commander2, options),
     ],
     statCards: [
-      { x: 1034, label: 'RCON TIME', value: formatDurationClock(rconTime), tone: '#22c55e' },
-      { x: 1238, label: 'PLAYERS', value: maxPlayers ? currentPlayers + '/' + maxPlayers : String(currentPlayers), tone: template.theme.accent },
+      { x: 956, label: 'SERVER PLAYERS', value: String(currentPlayers), tone: template.theme.hud },
+      { x: 1162, label: 'CAPACITY', value: maxPlayers ? `${currentPlayers}/${maxPlayers}` : String(currentPlayers), tone: template.theme.accent },
       { x: 1402, label: 'QUEUE', value: String(queueCount), tone: template.theme.accent2 },
+      { x: 1226, label: 'RCON TIME', value: formatDurationClock(rconTime), tone: '#22c55e' },
     ],
   };
 }
@@ -1188,9 +1190,10 @@ function renderMatchSceneSvg(layout) {
   svg.push('<text x="1192" y="148" class="meta mono">CAPTURED ' + xmlEscape(formatDateTimeLocal(layout.capturedAt)) + '</text>');
 
   const topStats = [
-    { x: 1068, label: 'RCON TIME', value: layout.rconTimeText, tone: theme.hud },
-    { x: 1238, label: 'SERVER', value: layout.totalPlayersText, tone: theme.line },
-    { x: 1408, label: 'QUEUE', value: layout.queueText, tone: theme.alert },
+    { x: 932, label: 'SERVER PLAYERS', value: layout.serverPlayersText, tone: theme.hud },
+    { x: 1096, label: 'CAPACITY', value: layout.serverCapacityText, tone: theme.line },
+    { x: 1260, label: 'RCON TIME', value: layout.rconTimeText, tone: '#22c55e' },
+    { x: 1424, label: 'QUEUE', value: layout.queueText, tone: theme.alert },
   ];
   for (const stat of topStats) {
     svg.push(renderHeroStatCard(stat.x, 64, 132, 58, stat.label, stat.value, stat.tone));
@@ -2083,6 +2086,18 @@ function resolveFactionCodeFromTeamName(teamName) {
 
   const visualCode = getBattlegroupFactionLookup().get(normalized);
   if (visualCode) return visualCode;
+
+  const fallbackRules = [
+    ["RGF", ["combined arms army", "russian ground", "russian", "motor rifle", "guards rifle"]],
+    ["USMC", ["marine corps", "marines", "expeditionary", "amphibious"]],
+    ["USA", ["air assault", "infantry division", "army", "us army", "united states", "american"]],
+    ["PLANMC", ["naval infantry", "marine corps"]],
+    ["VDV", ["airborne", "air assault", "guards airborne"]],
+    ["PLAAGF", ["army group", "group army"]],
+  ];
+  for (const [code, terms] of fallbackRules) {
+    if (terms.some((term) => normalized.includes(term))) return code;
+  }
 
   const rules = [
     ["ADF", ["adf", "australian", "royal australian"]],

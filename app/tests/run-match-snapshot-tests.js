@@ -171,6 +171,10 @@ async function testCaptureWritesImageAndFiles() {
     const json = JSON.parse((await plugin.api.readSnapshotArtifact(item.id, "json")).content.toString("utf8"));
     assert.equal(json.summary.playerCount, 3);
     assert.equal(json.summary.squadCount, 2);
+    assert.equal(json.server.queueCount, 0);
+    assert.equal(json.match.playerCount, 3);
+    assert.equal(json.match.maxPlayers, 100);
+    assert.equal(json.match.rconTime, null);
     assert.equal(json.teams[0].unassignedPlayers[0].name, "Bravo");
     assert.equal(json.renderOptions.includeSteamID, false);
     assert.equal(json.renderOptions.includeEOSID, false);
@@ -190,6 +194,10 @@ async function testCaptureWritesImageAndFiles() {
     assert.equal(json.fobs.length, 1);
     assert.equal(json.fobs[0].name, "Team1PreplacedFOBRadio");
     assert.equal(json.source.bzssCoreUpdatedAt, "2026-06-22T00:00:00.000Z");
+
+    const imageBuffer = (await plugin.api.readSnapshotArtifact(item.id, "image")).content;
+    assert.equal(imageBuffer[0], 0x89);
+    assert.equal(imageBuffer.subarray(1, 4).toString("ascii"), "PNG");
 
     const markdown = await plugin.api.readSnapshotArtifact(item.id, "markdown");
     const markdownText = markdown.content.toString("utf8");

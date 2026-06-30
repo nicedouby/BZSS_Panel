@@ -2,31 +2,19 @@
   <AppPage full-bleed>
     <AppPageHeader
       title="快照录制"
-      subtitle="录制对局快照，并查看导出的图片、JSON、CSV、Markdown 以及 Capture Point。"
+      subtitle="查看对局结束后自动生成的快照文件，并预览图片、JSON、CSV、Markdown 和捕获点信息。"
       :status-items="headerStatusItems"
     >
       <template #actions>
         <button type="button" class="action-btn ghost" @click="loadList" :disabled="loading">
           {{ loading ? "刷新中..." : "刷新列表" }}
         </button>
-        <button type="button" class="action-btn primary" @click="handleManualSnapshot" :disabled="busy">
-          {{ busy ? "录制中..." : "手动录制" }}
-        </button>
       </template>
     </AppPageHeader>
 
-    <AppPageToolbar>
-      <div class="toolbar-options">
-        <label class="option-toggle">
-          <input v-model="includeSteamID" type="checkbox">
-          <span>导出 SteamID</span>
-        </label>
-      </div>
-    </AppPageToolbar>
-
     <AppSplitLayout class="snapshot-split">
       <template #left>
-        <AppCard compact title="历史快照记录" description="查看自动或手动生成的对局快照，并下载对应工件。">
+        <AppCard compact title="历史快照记录" description="查看自动生成的对局快照，并下载对应工件。">
           <div v-if="loading" class="empty-state">正在加载快照列表...</div>
           <div v-else-if="snapshots.length === 0" class="empty-state">暂无录制记录</div>
           <div v-else class="snapshot-list">
@@ -177,12 +165,11 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { apiDelete, apiGet, apiPost } from "../app/apiClient";
+import { apiDelete, apiGet } from "../app/apiClient";
 import type { BzssCoreCaptureZoneInfo } from "../app/bzssCoreApi";
 import AppCard from "../components/common/AppCard.vue";
 import AppPage from "../components/common/AppPage.vue";
 import AppPageHeader from "../components/common/AppPageHeader.vue";
-import AppPageToolbar from "../components/common/AppPageToolbar.vue";
 import AppSplitLayout from "../components/common/AppSplitLayout.vue";
 import AppTable from "../components/common/AppTable.vue";
 import { TACTICAL_MAP_CONFIGS, resolveTacticalMapKey, type TacticalMapConfig } from "../shared/tactical-map-data";
@@ -222,7 +209,6 @@ const busy = ref(false);
 const errorMessage = ref("");
 const lastLoadedAt = ref("");
 const selectedId = ref("");
-const includeSteamID = ref(true);
 const zoomMode = ref<"fit" | "raw">("fit");
 const previewMode = ref<"image" | "map">("image");
 const selectedSnapshotJson = ref<MatchSnapshotJsonPayload | null>(null);
@@ -320,26 +306,6 @@ async function loadSelectedSnapshotJson(id: string) {
     selectedSnapshotJson.value = null;
   } finally {
     selectedSnapshotJsonLoading.value = false;
-  }
-}
-
-async function handleManualSnapshot() {
-  busy.value = true;
-  errorMessage.value = "";
-  try {
-    const response = await apiPost<{ snapshot?: MatchSnapshotItem }>("/api/match-snapshot/capture", {
-      includeSteamID: includeSteamID.value,
-      includeEOSID: false,
-    });
-    const nextId = response?.snapshot ? normalizeSnapshotItem(response.snapshot).id : "";
-    ui.pushToast({ title: "已录制", message: "快照已导出为图片和文件。", tone: "ok" });
-    await loadList();
-    if (nextId) selectedId.value = nextId;
-  } catch (error) {
-    errorMessage.value = String(error instanceof Error ? error.message : error);
-    ui.pushToast({ title: "录制失败", message: errorMessage.value, tone: "error" });
-  } finally {
-    busy.value = false;
   }
 }
 
@@ -486,45 +452,10 @@ onMounted(loadList);
   grid-template-columns: minmax(0, 1.25fr) minmax(400px, 1fr) !important;
 }
 
-.toolbar-options {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
 .snapshot-list {
   height: 420px;
   overflow-y: auto;
   flex-shrink: 0;
-}
-
-.option-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 8px;
-  border: 1px solid var(--color-border-default);
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--color-text-secondary);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  user-select: none;
-}
-
-.option-toggle:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: var(--color-border-hover);
-  color: var(--color-text-primary);
-}
-
-.option-toggle input[type="checkbox"] {
-  margin: 0;
-  accent-color: var(--color-status-info);
-  cursor: pointer;
 }
 
 .empty-state {

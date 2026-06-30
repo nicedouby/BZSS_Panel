@@ -678,7 +678,7 @@
           </div>
         </div>
 
-        <!-- Directory Tabs (Squads vs Players) -->
+        <!-- Directory Tabs (Squads vs Players vs BZSS-Core) -->
         <div class="sidebar-section flex-expand border-b">
           <!-- Selection Mode Tabs -->
           <div class="sidebar-tabs-directory">
@@ -696,10 +696,17 @@
             >
               所有玩家
             </button>
+            <button
+              class="directory-tab-btn bzss-core-tab-btn"
+              :class="{ active: sidebarTab === 'bzss-core' }"
+              @click="sidebarTab = 'bzss-core'"
+            >
+              BZSS-Core
+            </button>
           </div>
 
-          <!-- Team Selection Tabs -->
-          <div class="sidebar-tabs">
+          <!-- Team Selection Tabs (hidden when BZSS-Core tab is active) -->
+          <div v-if="sidebarTab !== 'bzss-core'" class="sidebar-tabs">
             <button
               class="tab-btn"
               :class="[getPerspectiveClass(1), { active: activeTeamTab === 1 }]"
@@ -756,7 +763,7 @@
           </div>
 
           <!-- Active Players List -->
-          <div v-else class="squads-scroll-list">
+          <div v-else-if="sidebarTab === 'players'" class="squads-scroll-list">
             <button
               v-for="player in filteredTeamPlayers"
               :key="getPlayerKey(player)"
@@ -780,6 +787,146 @@
             </button>
             <div v-if="!filteredTeamPlayers.length" class="empty-state">
               暂无在线玩家
+            </div>
+          </div>
+
+          <!-- BZSS-Core Info Panel -->
+          <div v-else-if="sidebarTab === 'bzss-core'" class="squads-scroll-list bzss-core-scroll">
+            <!-- Core Status Card -->
+            <div class="bzss-info-card">
+              <div class="bzss-card-title">
+                <span class="bzss-status-dot" :class="bzssCoreStatusClass"></span>
+                核心状态
+              </div>
+              <div class="bzss-stats-grid">
+                <div class="bzss-stat-row">
+                  <span class="bzss-stat-label">状态</span>
+                  <span class="bzss-stat-value" :class="bzssCoreStatusClass">{{ bzssCoreStatusLabel }}</span>
+                </div>
+                <div class="bzss-stat-row">
+                  <span class="bzss-stat-label">数据版本</span>
+                  <span class="bzss-stat-value font-mono">Rev {{ snapshot?.state?.revision ?? '--' }}</span>
+                </div>
+                <div class="bzss-stat-row">
+                  <span class="bzss-stat-label">最后更新</span>
+                  <span class="bzss-stat-value font-mono">{{ bzssCoreUpdatedAtText }}</span>
+                </div>
+                <div class="bzss-stat-row">
+                  <span class="bzss-stat-label">Marker 信号</span>
+                  <span class="bzss-stat-value">
+                    <span v-if="snapshot?.state?.markerSeen" class="bzss-badge bzss-badge--ok">已检测</span>
+                    <span v-else class="bzss-badge bzss-badge--warn">未检测</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Player Counts Card -->
+            <div class="bzss-info-card">
+              <div class="bzss-card-title">
+                <span class="glowing-square blue"></span>
+                玩家数据统计
+              </div>
+              <div class="bzss-stats-grid">
+                <div class="bzss-stat-row">
+                  <span class="bzss-stat-label">Runtime 玩家</span>
+                  <span class="bzss-stat-value text-cyan font-mono">{{ snapshot?.state?.runtimePlayerCount ?? 0 }}</span>
+                </div>
+                <div class="bzss-stat-row">
+                  <span class="bzss-stat-label">Scoreboard 玩家</span>
+                  <span class="bzss-stat-value text-yellow font-mono">{{ snapshot?.state?.scoreboardPlayerCount ?? 0 }}</span>
+                </div>
+                <div class="bzss-stat-row">
+                  <span class="bzss-stat-label">地图上已定位</span>
+                  <span class="bzss-stat-value text-cyan font-mono">{{ positionedPlayers.length }}</span>
+                </div>
+                <div class="bzss-stat-row">
+                  <span class="bzss-stat-label">存活玩家</span>
+                  <span class="bzss-stat-value text-green font-mono">{{ bzssCoreAliveCount }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Capture Zones Card -->
+            <div class="bzss-info-card">
+              <div class="bzss-card-title">
+                <span class="glowing-square orange"></span>
+                据点 (Capture Zones)
+                <span class="bzss-count-badge">{{ captureZones.length }}</span>
+              </div>
+              <div v-if="captureZones.length" class="bzss-entity-list">
+                <div v-for="(zone, idx) in captureZones" :key="'cz-' + idx" class="bzss-entity-row">
+                  <span class="bzss-entity-name">{{ zone.name || '未知据点' }}</span>
+                  <span class="bzss-entity-meta font-mono">
+                    {{ zone.position ? `${Math.round(zone.position.x ?? 0)}, ${Math.round(zone.position.y ?? 0)}` : '--' }}
+                  </span>
+                </div>
+              </div>
+              <div v-else class="empty-state">暂无据点数据</div>
+            </div>
+
+            <!-- FOBs Card -->
+            <div class="bzss-info-card">
+              <div class="bzss-card-title">
+                <span class="glowing-square green"></span>
+                FOB 电台
+                <span class="bzss-count-badge">{{ fobs.length }}</span>
+              </div>
+              <div v-if="fobs.length" class="bzss-entity-list">
+                <div v-for="(fob, idx) in fobs" :key="'fob-' + idx" class="bzss-entity-row bzss-fob-row">
+                  <div class="bzss-fob-header">
+                    <span class="bzss-entity-name">
+                      <span class="bzss-team-indicator" :class="`team-ind-${fob.teamId}`">T{{ fob.teamId }}</span>
+                      {{ fob.name || 'FOB Radio' }}
+                    </span>
+                    <span v-if="fob.isBleeding" class="bzss-badge bzss-badge--danger">BLEEDING</span>
+                  </div>
+                  <div class="bzss-fob-bars">
+                    <div class="bzss-mini-metric">
+                      <span class="bzss-mini-label">HP</span>
+                      <div class="bzss-mini-bar-track">
+                        <div class="bzss-mini-bar-fill bzss-fill-hp" :style="{ width: `${Math.round((fob.health ?? 0) * 100)}%` }"></div>
+                      </div>
+                      <span class="bzss-mini-val font-mono">{{ Math.round((fob.health ?? 0) * 100) }}%</span>
+                    </div>
+                    <div class="bzss-mini-metric">
+                      <span class="bzss-mini-label">弹药</span>
+                      <div class="bzss-mini-bar-track">
+                        <div class="bzss-mini-bar-fill bzss-fill-ammo" :style="{ width: `${Math.min(100, Math.round((fob.ammo ?? 0) / 100))}%` }"></div>
+                      </div>
+                      <span class="bzss-mini-val font-mono">{{ Math.round(fob.ammo ?? 0) }}</span>
+                    </div>
+                    <div class="bzss-mini-metric">
+                      <span class="bzss-mini-label">建造</span>
+                      <div class="bzss-mini-bar-track">
+                        <div class="bzss-mini-bar-fill bzss-fill-const" :style="{ width: `${Math.min(100, Math.round((fob.construction ?? 0) / 20))}%` }"></div>
+                      </div>
+                      <span class="bzss-mini-val font-mono">{{ Math.round(fob.construction ?? 0) }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="empty-state">暂无 FOB 数据</div>
+            </div>
+
+            <!-- Raw Fields Card -->
+            <div v-if="snapshot?.state?.rawFields?.length" class="bzss-info-card">
+              <div class="bzss-card-title">
+                <span class="glowing-square blue"></span>
+                Raw Fields
+              </div>
+              <div class="bzss-raw-fields">
+                <code v-for="(field, idx) in snapshot.state.rawFields" :key="'rf-' + idx" class="bzss-raw-field-tag">{{ field }}</code>
+              </div>
+            </div>
+
+            <!-- Error Info -->
+            <div v-if="snapshot?.state?.lastError" class="bzss-info-card bzss-info-card--error">
+              <div class="bzss-card-title">
+                <span class="glowing-square red"></span>
+                最近错误
+              </div>
+              <div class="bzss-error-text font-mono">{{ snapshot.state.lastError }}</div>
             </div>
           </div>
         </div>
@@ -944,7 +1091,7 @@ const dynamicMarkerScale = computed(() => {
 
 // Sidebar states
 const sidebarCollapsed = ref(false);
-const sidebarTab = ref<"squads" | "players">("squads");
+const sidebarTab = ref<"squads" | "players" | "bzss-core">("squads");
 const activeTeamTab = ref<number>(1);
 const focusedSquadId = ref<number | null>(null);
 const combatLogs = ref<CombatLog[]>([]);
@@ -1675,6 +1822,47 @@ const statusText = computed(() => {
   if (loading.value && !snapshot.value) return "同步中";
   if (errorText.value) return "异常";
   return snapshot.value?.state?.status || snapshot.value?.status || "待机";
+});
+
+// BZSS-Core Info Panel Computed Properties
+const bzssCoreStatusLabel = computed(() => {
+  const status = snapshot.value?.state?.status;
+  if (!status) return '未连接';
+  const map: Record<string, string> = {
+    ok: '正常运行',
+    active: '活跃',
+    idle: '待机',
+    error: '异常',
+    starting: '启动中',
+    stopped: '已停止',
+  };
+  return map[status.toLowerCase()] ?? status;
+});
+
+const bzssCoreStatusClass = computed(() => {
+  const status = (snapshot.value?.state?.status ?? '').toLowerCase();
+  if (status === 'ok' || status === 'active') return 'status-ok';
+  if (status === 'idle' || status === 'starting') return 'status-idle';
+  if (status === 'error' || status === 'stopped') return 'status-error';
+  return 'status-idle';
+});
+
+const bzssCoreUpdatedAtText = computed(() => {
+  const raw = snapshot.value?.state?.updatedAt;
+  if (!raw) return '--';
+  try {
+    const d = new Date(raw);
+    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
+  } catch {
+    return raw;
+  }
+});
+
+const bzssCoreAliveCount = computed(() => {
+  return positionedPlayers.value.filter(p => {
+    const hp = p.soldierInfo?.health;
+    return hp != null && hp > 0;
+  }).length;
 });
 
 // Track Mouse Movement for game coordinates HUD
@@ -4350,6 +4538,310 @@ onBeforeUnmount(() => {
 .player-marker.is-disengaged:hover,
 .player-marker.is-disengaged.is-hovered {
   opacity: 1;
+}
+
+/* ─── BZSS-Core Info Panel Styles ─── */
+
+.bzss-core-tab-btn.active {
+  background: rgba(168, 85, 247, 0.12) !important;
+  color: #c084fc !important;
+}
+
+.bzss-core-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 2px;
+}
+
+.bzss-info-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 10px 12px;
+  transition: border-color 0.25s ease;
+}
+
+.bzss-info-card:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.bzss-info-card--error {
+  border-color: rgba(239, 83, 80, 0.3);
+  background: rgba(239, 83, 80, 0.04);
+}
+
+.bzss-card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #e2e8f0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.bzss-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.bzss-status-dot.status-ok {
+  background: #4ade80;
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.5);
+  animation: bzss-pulse-dot 2s infinite;
+}
+
+.bzss-status-dot.status-idle {
+  background: #facc15;
+  box-shadow: 0 0 6px rgba(250, 204, 21, 0.4);
+}
+
+.bzss-status-dot.status-error {
+  background: #ef5350;
+  box-shadow: 0 0 6px rgba(239, 83, 80, 0.5);
+}
+
+@keyframes bzss-pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.bzss-stats-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bzss-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+}
+
+.bzss-stat-label {
+  font-size: 10px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.bzss-stat-value {
+  font-size: 10px;
+  color: #e2e8f0;
+  font-weight: 600;
+}
+
+.bzss-stat-value.status-ok {
+  color: #4ade80;
+}
+
+.bzss-stat-value.status-idle {
+  color: #facc15;
+}
+
+.bzss-stat-value.status-error {
+  color: #ef5350;
+}
+
+.bzss-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  line-height: 1.4;
+  letter-spacing: 0.3px;
+}
+
+.bzss-badge--ok {
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.3);
+}
+
+.bzss-badge--warn {
+  background: rgba(250, 204, 21, 0.12);
+  color: #facc15;
+  border: 1px solid rgba(250, 204, 21, 0.3);
+}
+
+.bzss-badge--danger {
+  background: rgba(239, 83, 80, 0.15);
+  color: #ef5350;
+  border: 1px solid rgba(239, 83, 80, 0.3);
+  animation: bzss-blink 1.2s infinite;
+}
+
+@keyframes bzss-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.bzss-count-badge {
+  margin-left: auto;
+  font-size: 9px;
+  background: rgba(0, 229, 255, 0.1);
+  color: #00e5ff;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-family: monospace;
+}
+
+.bzss-entity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.bzss-entity-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 6px;
+  background: rgba(255, 255, 255, 0.015);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  transition: background 0.2s;
+}
+
+.bzss-entity-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.bzss-entity-name {
+  font-size: 10px;
+  color: #cbd5e1;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 55%;
+}
+
+.bzss-entity-meta {
+  font-size: 9px;
+  color: #64748b;
+}
+
+.bzss-fob-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  padding: 6px 8px;
+}
+
+.bzss-fob-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.bzss-team-indicator {
+  font-size: 8px;
+  font-weight: 700;
+  padding: 1px 3px;
+  border-radius: 3px;
+  margin-right: 4px;
+}
+
+.bzss-team-indicator.team-ind-1 {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.bzss-team-indicator.team-ind-2 {
+  background: rgba(239, 83, 80, 0.2);
+  color: #ef5350;
+  border: 1px solid rgba(239, 83, 80, 0.3);
+}
+
+.bzss-fob-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.bzss-mini-metric {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.bzss-mini-label {
+  font-size: 8px;
+  color: #64748b;
+  width: 24px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.bzss-mini-bar-track {
+  flex: 1;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.bzss-mini-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+
+.bzss-fill-hp { background: linear-gradient(90deg, #ef5350, #4ade80); }
+.bzss-fill-ammo { background: #00e5ff; }
+.bzss-fill-const { background: #f59e0b; }
+
+.bzss-mini-val {
+  font-size: 8px;
+  color: #94a3b8;
+  width: 32px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.bzss-raw-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.bzss-raw-field-tag {
+  font-size: 8px;
+  font-family: monospace;
+  background: rgba(255, 255, 255, 0.04);
+  color: #94a3b8;
+  padding: 2px 5px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.bzss-error-text {
+  font-size: 10px;
+  color: #ef5350;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+.glowing-square.orange {
+  background: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+}
+
+.glowing-square.green {
+  background: #4ade80;
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
 }
 </style>
 
