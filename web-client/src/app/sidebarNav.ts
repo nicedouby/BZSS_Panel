@@ -195,7 +195,7 @@ function resolveSection(route: string, page: RegisteredWebPage): NavSectionKey {
   const source = normalizeLabel(page.source);
   const title = normalizeLabel(page.title);
 
-  if (route === "/match-status" || route === "/match-state" || route === "/chat-monitor") return "opsLive";
+  if (route === "/match-status" || route === "/match-state" || route === "/chat-monitor" || route === "/bzss-core-snapshots") return "opsLive";
   if (route === "/tb" || route.includes("fair-team-balance") || id.includes("team-balance")) return "balance";
   if (route === "/player-database" || route === "/reserve-slots" || route === "/black-edge-privilege" || route === "/player-session-records" || route === "/squad-management") return "players";
   if (route.includes("group-report") || route.includes("squad-rule-chain") || route.includes("fair-squad") || route.includes("stepwise-squad") || route.includes("lianban")) return "players";

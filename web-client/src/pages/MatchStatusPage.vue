@@ -320,6 +320,7 @@ import { cancelIdleTask, scheduleIdleTask } from "../utils/idle";
 import { resolvePlayerIdentityIp } from "../app/playerIdentityApi";
 import { fetchBzssCorePlayerInfo, fetchBzssCorePlayerInfoList, streamBzssCorePlayerInfoList } from "../app/bzssCoreApi";
 import type { BzssCorePlayerInfoResponse } from "../app/bzssCoreApi";
+import { useBzssCoreStore } from "../stores/bzss-core.store";
 import type {
   PageState,
   PlayerDetailViewModel,
@@ -401,51 +402,12 @@ function handleViewModeChange(mode: "list" | "map") {
   }
 }
 
-const bzssCoreSnapshot = ref<BzssCorePlayerInfoResponse | null>(null);
-const bzssCorePlayers = ref<any[]>([]);
-const bzssCoreLoading = ref(false);
-const bzssCoreError = ref("");
-const bzssCoreStreamActive = ref(false);
-let unsubscribeBzssStream: (() => void) | null = null;
-
-function startBzssStream() {
-  bzssCoreLoading.value = true;
-  if (unsubscribeBzssStream) unsubscribeBzssStream();
-  bzssCoreStreamActive.value = true;
-  unsubscribeBzssStream = streamBzssCorePlayerInfoList(
-    (payload) => {
-      bzssCoreLoading.value = false;
-      bzssCoreSnapshot.value = payload;
-      const runtimePlayers = payload.runtimePlayers ?? [];
-      const scoreboardPlayers = payload.scoreboardPlayers ?? [];
-      const byIndex = new Map<number | string, any>();
-      for (const player of runtimePlayers) {
-        if (player.playerIndex == null && player.playerId == null) continue;
-        const key = player.playerIndex ?? player.playerId ?? "";
-        byIndex.set(key, { ...player });
-      }
-      for (const player of scoreboardPlayers) {
-        if (player.playerIndex == null && player.playerId == null) continue;
-        const key = player.playerIndex ?? player.playerId ?? "";
-        const existing = byIndex.get(key);
-        byIndex.set(key, existing ? { ...existing, ...player } : { ...player });
-      }
-      bzssCorePlayers.value = [...byIndex.values()];
-      bzssCoreError.value = payload.ok ? "" : payload.status || "BZSS-Core returned an error.";
-    },
-    (err) => {
-      bzssCoreLoading.value = false;
-      if (typeof EventSource !== "undefined" && err?.target?.readyState === EventSource.CLOSED) {
-        bzssCoreError.value = "SSE Stream connection error.";
-        if (unsubscribeBzssStream) {
-          unsubscribeBzssStream();
-          unsubscribeBzssStream = null;
-        }
-        bzssCoreStreamActive.value = false;
-      }
-    }
-  );
-}
+const bzssCoreStore = useBzssCoreStore();
+const bzssCoreSnapshot = computed(() => bzssCoreStore.snapshot);
+const bzssCorePlayers = computed(() => bzssCoreStore.players);
+const bzssCoreLoading = computed(() => bzssCoreStore.loading);
+const bzssCoreError = computed(() => bzssCoreStore.error);
+const bzssCoreStreamActive = computed(() => bzssCoreStore.streamActive);
 
 const refreshingPlaytime = ref(false);
 const refreshingPlayers = ref(false);
@@ -756,26 +718,23 @@ function handleVisibilityChange() {
 onMounted(() => {
   pageHidden.value = typeof document !== "undefined" ? document.hidden : false;
   document.addEventListener("visibilitychange", handleVisibilityChange);
-  startBzssStream();
+  bzssCoreStore.startStream();
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("visibilitychange", handleVisibilityChange);
   cancelIdleTask(battleStatsRefreshIdleHandle);
-  if (unsubscribeBzssStream) {
-    unsubscribeBzssStream();
-    unsubscribeBzssStream = null;
-  }
-  bzssCoreStreamActive.value = false;
+  bzssCoreStore.stopStream();
 });
 
 onActivated(() => {
   active.value = true;
-  if (!unsubscribeBzssStream) startBzssStream();
+  bzssCoreStore.startStream();
 });
 
 onDeactivated(() => {
   active.value = false;
+  bzssCoreStore.stopStream();
 });
 
 function formatTicketDisplay(value: number | null | undefined) {

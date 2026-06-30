@@ -5,9 +5,9 @@
       <div class="hero-left">
         <div class="title-row">
           <h1>BZSS-Core 玩家与战局快照</h1>
-          <span class="stream-badge" :class="{ 'stream-badge--active': closeStream }">
+          <span class="stream-badge" :class="{ 'stream-badge--active': bzssCoreStore.streamActive }">
             <span class="pulse-dot"></span>
-            {{ closeStream ? "SSE 监听中" : "轮询更新" }}
+            {{ bzssCoreStore.streamActive ? "SSE 监听中" : "轮询更新" }}
           </span>
         </div>
       </div>
@@ -684,9 +684,6 @@
 <script setup lang="ts">
 import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from "vue";
 import {
-  fetchBzssCorePlayerInfoList,
-  fetchBzssCoreRawData,
-  streamBzssCorePlayerInfoList,
   type BzssCorePlayerInfoResponse,
   type BzssCoreRawDataResponse,
   type BzssCoreRuntimePlayerInfo,
@@ -696,6 +693,7 @@ import { canAutoRefreshNow } from "../composables/useAutoRefreshGate";
 import { useSquadStore } from "../stores/squad.store";
 import { useServerStore } from "../stores/server.store";
 import { usePlayerStore } from "../stores/player.store";
+import { useBzssCoreStore } from "../stores/bzss-core.store";
 import { getChineseNameFromTeamName } from "../shared/faction-assets/faction-data";
 
 type PlayerPair = {
@@ -704,13 +702,15 @@ type PlayerPair = {
   scoreboard: BzssCoreScoreboardPlayerInfo | null;
 };
 
+const bzssCoreStore = useBzssCoreStore();
+
 // Core reactive states
-const payload = ref<BzssCorePlayerInfoResponse | null>(null);
-const rawData = ref<BzssCoreRawDataResponse | null>(null);
-const loading = ref(false);
-const rawLoading = ref(false);
-const error = ref("");
-const rawError = ref("");
+const payload = computed(() => bzssCoreStore.snapshot);
+const rawData = computed(() => bzssCoreStore.rawData);
+const loading = computed(() => bzssCoreStore.loading);
+const rawLoading = computed(() => bzssCoreStore.rawLoading);
+const error = computed(() => bzssCoreStore.error);
+const rawError = computed(() => bzssCoreStore.rawError);
 const query = ref("");
 const showRaw = ref(false);
 const active = ref(true);
@@ -789,8 +789,7 @@ function handleSort(key: string) {
 
 
 
-let refreshTimer: number | null = null;
-let closeStream: (() => void) | null = null;
+let refreshTimer: any = null;
 
 const runtimePlayers = computed(() => payload.value?.runtimePlayers ?? []);
 const scoreboardPlayers = computed(() => payload.value?.scoreboardPlayers ?? []);
@@ -1034,37 +1033,21 @@ const statusDetail = computed(() => {
 // Data fetches
 async function fetchData() {
   if (!active.value) return;
-  loading.value = true;
-  error.value = "";
-  try {
-    payload.value = await fetchBzssCorePlayerInfoList();
-  } catch (err: any) {
-    error.value = err?.message ?? "加载 BZSS-Core 玩家快照列表失败。";
-  } finally {
-    loading.value = false;
-  }
+  await bzssCoreStore.fetchSnapshot();
 }
 
 async function fetchRawData() {
-  rawLoading.value = true;
-  rawError.value = "";
-  try {
-    rawData.value = await fetchBzssCoreRawData();
-  } catch (err: any) {
-    rawError.value = err?.message ?? "读取原始日志数据分块失败。";
-  } finally {
-    rawLoading.value = false;
-  }
+  await bzssCoreStore.fetchRaw();
 }
 
 function scheduleRefresh() {
   clearRefresh();
   refreshTimer = window.setTimeout(async () => {
-    if (active.value && canAutoRefreshNow() && !closeStream) {
+    if (active.value && canAutoRefreshNow() && !bzssCoreStore.streamActive) {
       await fetchData();
     }
     scheduleRefresh();
-  }, closeStream ? 1500 : 1000);
+  }, bzssCoreStore.streamActive ? 1500 : 1000);
 }
 
 function clearRefresh() {
@@ -1075,28 +1058,11 @@ function clearRefresh() {
 }
 
 function startStream() {
-  if (closeStream || typeof EventSource === "undefined") return;
-  closeStream = streamBzssCorePlayerInfoList(
-    (data) => {
-      if (!active.value) return;
-      payload.value = data;
-      error.value = "";
-      loading.value = false;
-    },
-    (_err, source) => {
-      if (!active.value) return;
-      if (source.readyState === EventSource.CLOSED) {
-        stopStream();
-        scheduleRefresh();
-      }
-    },
-  );
+  bzssCoreStore.startStream();
 }
 
 function stopStream() {
-  if (!closeStream) return;
-  closeStream();
-  closeStream = null;
+  bzssCoreStore.stopStream();
 }
 
 function formatDateTime(value?: string | null) {
