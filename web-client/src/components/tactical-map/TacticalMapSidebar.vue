@@ -4,7 +4,36 @@
       <span class="tab-arrow">{{ sidebarMode === 'hidden' ? '◀' : '⮜' }}</span>
     </button>
 
-    <div v-if="sidebarMode !== 'hidden'" class="sidebar-content-wrapper">
+    <div v-if="sidebarMode === 'compact'" class="sidebar-compact-wrapper">
+      <!-- Mini Header with LED indicator -->
+      <div class="compact-header">
+        <div class="header-led-indicator pulse-led" title="System Online"></div>
+      </div>
+      
+      <!-- Mini Tickets visual stacked -->
+      <div class="compact-tickets-indicator">
+        <div class="mini-ticket-dot friendly" :style="{ ...getPerspectiveStyle(1), backgroundColor: 'var(--perspective-primary)' }" :title="`Team 1: ${tickets.team1}`"></div>
+        <div class="mini-ticket-dot enemy" :style="{ ...getPerspectiveStyle(2), backgroundColor: 'var(--perspective-primary)' }" :title="`Team 2: ${tickets.team2}`"></div>
+      </div>
+      
+      <div class="compact-divider"></div>
+
+      <!-- Vertical Tabs with icons and names in tooltips -->
+      <div class="compact-tab-buttons">
+        <button class="compact-tab-btn" :class="{ active: sidebarTab === 'overview' }" title="Overview" @click="sidebarTabModel = 'overview'">📊</button>
+        <button class="compact-tab-btn" :class="{ active: sidebarTab === 'units' }" title="Units" @click="sidebarTabModel = 'units'">👥</button>
+        <button class="compact-tab-btn" :class="{ active: sidebarTab === 'assets' }" title="Assets" @click="sidebarTabModel = 'assets'">📡</button>
+        <button class="compact-tab-btn" :class="{ active: sidebarTab === 'core' }" title="Core" @click="sidebarTabModel = 'core'">⚙️</button>
+        <button class="compact-tab-btn" :class="{ active: sidebarTab === 'feed' }" title="Feed" @click="sidebarTabModel = 'feed'">📰</button>
+      </div>
+
+      <div class="compact-divider"></div>
+
+      <!-- Quick Expand Mode Button -->
+      <button type="button" class="compact-expand-btn" title="Expand Sidebar" @click="setSidebarMode('expanded')">⮞</button>
+    </div>
+
+    <div v-else-if="sidebarMode === 'expanded'" class="sidebar-content-wrapper">
       <header class="sidebar-header glass-panel">
         <div class="sidebar-title-block">
           <div class="header-led-indicator pulse-led"></div>
@@ -14,8 +43,8 @@
           </div>
         </div>
         <div class="sidebar-mode-switch">
-          <button type="button" class="mode-btn" :class="{ active: sidebarMode === 'compact' }" @click="setSidebarMode('compact')">Compact</button>
-          <button type="button" class="mode-btn" :class="{ active: sidebarMode === 'expanded' }" @click="setSidebarMode('expanded')">Expanded</button>
+          <button type="button" class="mode-btn" :class="{ active: props.sidebarMode === 'compact' }" @click="setSidebarMode('compact')">Compact</button>
+          <button type="button" class="mode-btn" :class="{ active: props.sidebarMode === 'expanded' }" @click="setSidebarMode('expanded')">Expanded</button>
         </div>
       </header>
 
@@ -42,9 +71,16 @@
             <span class="val">{{ matchPhase }}</span>
           </div>
         </div>
-        <div class="tickets-row">
-          <div class="ticket-pill tone-friendly" :style="getPerspectiveStyle(1)">T1 {{ tickets.team1 }}</div>
-          <div class="ticket-pill tone-enemy" :style="getPerspectiveStyle(2)">T2 {{ tickets.team2 }}</div>
+        <div class="tickets-row-visual">
+          <div class="visual-ticket-info">
+            <span class="t1-tickets" :style="getPerspectiveStyle(1)">T1: {{ tickets.team1 }}</span>
+            <span class="ticket-vs">VS</span>
+            <span class="t2-tickets" :style="getPerspectiveStyle(2)">T2: {{ tickets.team2 }}</span>
+          </div>
+          <div class="visual-ticket-bar">
+            <div class="ticket-bar-fill t1-fill" :style="{ ...getPerspectiveStyle(1), width: getTicketBarWidth(1) }"></div>
+            <div class="ticket-bar-fill t2-fill" :style="{ ...getPerspectiveStyle(2), width: getTicketBarWidth(2) }"></div>
+          </div>
         </div>
       </section>
 
@@ -54,13 +90,13 @@
           <h3>Layers</h3>
         </div>
         <div class="options-group-sidebar layers-grid">
-          <label class="option-item-sidebar"><input v-model="showGridModel" type="checkbox" /><span class="option-text">Grid</span></label>
-          <label class="option-item-sidebar"><input v-model="showPlayerNamesModel" type="checkbox" /><span class="option-text">Names</span></label>
-          <label class="option-item-sidebar"><input v-model="showPlayerCoordsModel" type="checkbox" /><span class="option-text">Coords</span></label>
-          <label class="option-item-sidebar"><input v-model="showCaptureZonesModel" type="checkbox" /><span class="option-text">Zones</span></label>
-          <label class="option-item-sidebar"><input v-model="showFobsModel" type="checkbox" /><span class="option-text">FOBs</span></label>
-          <label class="option-item-sidebar"><input v-model="disableMarkerInteractionModel" type="checkbox" /><span class="option-text">Pass-through</span></label>
-          <label class="option-item-sidebar"><input v-model="measureModeModel" type="checkbox" /><span class="option-text">Measure</span></label>
+          <label class="option-item-sidebar" :class="{ checked: showGridModel }"><input v-model="showGridModel" type="checkbox" /><span class="option-text">Grid</span></label>
+          <label class="option-item-sidebar" :class="{ checked: showPlayerNamesModel }"><input v-model="showPlayerNamesModel" type="checkbox" /><span class="option-text">Names</span></label>
+          <label class="option-item-sidebar" :class="{ checked: showPlayerCoordsModel }"><input v-model="showPlayerCoordsModel" type="checkbox" /><span class="option-text">Coords</span></label>
+          <label class="option-item-sidebar" :class="{ checked: showCaptureZonesModel }"><input v-model="showCaptureZonesModel" type="checkbox" /><span class="option-text">Zones</span></label>
+          <label class="option-item-sidebar" :class="{ checked: showFobsModel }"><input v-model="showFobsModel" type="checkbox" /><span class="option-text">FOBs</span></label>
+          <label class="option-item-sidebar" :class="{ checked: disableMarkerInteractionModel }"><input v-model="disableMarkerInteractionModel" type="checkbox" /><span class="option-text">Pass-through</span></label>
+          <label class="option-item-sidebar" :class="{ checked: measureModeModel }"><input v-model="measureModeModel" type="checkbox" /><span class="option-text">Measure</span></label>
           <div class="option-item-slider">
             <span class="option-text">Map</span>
             <select v-model="selectedMapKeyModel" class="map-select">
@@ -169,7 +205,7 @@
 
           <div v-else class="sidebar-list">
             <button
-              v-for="player in filteredTeamPlayers"
+              v-for="player in filteredPlayers"
               :key="getPlayerKey(player)"
               type="button"
               class="sidebar-player-card-row"
@@ -182,16 +218,29 @@
               :style="getPerspectiveStyle(player.teamId)"
               @click="onPlayerClick(player)"
             >
-              <span class="player-name-row">
-                {{ getPlayerLabel(player) }}
-                <span v-if="isPlayerDisengaged(player)" class="disengaged-sidebar-tag">Disengaged</span>
-              </span>
-              <span class="player-meta-row">
-                S{{ normalizeSquad(player.squadId) }} / HP {{ getPlayerHealth(player) ?? '-' }}
-                <template v-if="player.vehicleInfo?.vehicleType"> / {{ player.vehicleInfo.vehicleType }}</template>
-              </span>
+              <div class="player-card-header">
+                <span class="player-name">
+                  {{ getPlayerLabel(player) }}
+                  <span v-if="isSquadLeader(player)" class="sl-badge-pill">SL</span>
+                </span>
+                <span class="player-squad-tag">S{{ normalizeSquad(player.squadId) }}</span>
+              </div>
+              <div class="player-card-body">
+                <div class="player-health-bar-container">
+                  <div class="player-health-bar-fill" :style="{ width: `${getPlayerHealth(player) ?? 0}%`, backgroundColor: getPlayerHealthColor(player) }"></div>
+                </div>
+                <div class="player-status-row">
+                  <span class="player-hp-value font-mono">{{ getPlayerHealth(player) ?? '0' }}% HP</span>
+                  <span v-if="player.soldierInfo?.soldierClass" class="player-kit">{{ player.soldierInfo.soldierClass }}</span>
+                  <span v-if="player.vehicleInfo?.vehicleType && player.vehicleInfo.vehicleType !== 'None'" class="player-vehicle-badge">
+                    <span class="vehicle-icon-mini">⚡</span>
+                    {{ player.vehicleInfo.vehicleType }}
+                  </span>
+                  <span v-if="isPlayerDisengaged(player)" class="disengaged-sidebar-tag glowing-tag">Disengaged</span>
+                </div>
+              </div>
             </button>
-            <div v-if="!filteredTeamPlayers.length" class="empty-state">No players</div>
+            <div v-if="!filteredPlayers.length" class="empty-state">No players</div>
           </div>
         </div>
 
@@ -526,6 +575,28 @@ function toggleExpanded() {
   setSidebarMode(props.sidebarMode === "hidden" ? "expanded" : "expanded");
 }
 
+function getTicketBarWidth(teamId: number) {
+  const t1 = props.tickets?.team1 ?? 0;
+  const t2 = props.tickets?.team2 ?? 0;
+  const total = t1 + t2;
+  if (total <= 0) return '50%';
+  const percent = teamId === 1 ? (t1 / total) * 100 : (t2 / total) * 100;
+  return `${percent}%`;
+}
+
+function isSquadLeader(player: BzssCoreTrackedPlayerInfo) {
+  const soldierClass = String(player.soldierInfo?.soldierClass ?? "").toLowerCase();
+  return soldierClass.includes("squadleader") || soldierClass.includes("officer") || soldierClass.includes("sl");
+}
+
+function getPlayerHealthColor(player: BzssCoreTrackedPlayerInfo) {
+  const hp = props.getPlayerHealth(player);
+  if (hp == null) return 'var(--perspective-primary, #00e5ff)';
+  if (hp <= 0) return '#ef5350';
+  if (hp < 40) return '#ffea00';
+  return 'var(--perspective-primary, #00e5ff)';
+}
+
 function onPlayerClick(player: BzssCoreTrackedPlayerInfo) {
   emit("focus-player", player);
   emit("open-player", player);
@@ -548,7 +619,7 @@ const filteredPlayers = computed(() => {
   const query = normalizeText(props.sidebarSearch);
   const list = props.filteredTeamPlayers.filter((player) => {
     if (props.normalizeTeam(player.teamId) !== teamId) return false;
-    if (props.sidebarOnlyAlive && !(props.getPlayerHealth(player) ?? 0 > 0)) return false;
+    if (props.sidebarOnlyAlive && (props.getPlayerHealth(player) ?? 0) <= 0) return false;
     if (props.sidebarOnlyVehicle && !player.vehicleInfo?.vehicleType) return false;
     if (!query) return true;
     const squad = getSquadForPlayer(player);
@@ -645,12 +716,12 @@ function getPerspectiveStyle(teamId: number | null | undefined) {
   width: 360px;
   display: flex;
   flex-direction: column;
-  background: rgba(4, 7, 18, 0.93);
-  border-left: 1px solid rgba(0, 240, 255, 0.15);
-  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(16px);
+  background: radial-gradient(circle at 100% 0%, rgba(10, 18, 42, 0.96), rgba(4, 7, 18, 0.99));
+  border-left: 1px solid rgba(0, 240, 255, 0.22);
+  box-shadow: -10px 0 45px rgba(0, 0, 0, 0.85), inset 1px 0 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px) saturate(180%);
   z-index: 30;
-  transition: width 0.28s ease, transform 0.28s ease;
+  transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1), transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .tactical-sidebar[data-mode="compact"] {
@@ -670,12 +741,21 @@ function getPerspectiveStyle(teamId: number | null | undefined) {
   transform: translateY(-50%);
   width: 24px;
   height: 80px;
-  border: 1px solid rgba(0, 240, 255, 0.15);
+  border: 1px solid rgba(0, 240, 255, 0.2);
   border-right: none;
   border-radius: 8px 0 0 8px;
-  background: rgba(4, 7, 18, 0.93);
+  background: rgba(6, 11, 28, 0.95);
   color: #00e5ff;
+  text-shadow: 0 0 8px #00e5ff;
+  cursor: pointer;
   z-index: 2;
+  transition: all 0.3s ease;
+}
+
+.sidebar-toggle-tab:hover {
+  background: rgba(0, 240, 255, 0.15);
+  color: #ffffff;
+  box-shadow: -4px 0 12px rgba(0, 240, 255, 0.3);
 }
 
 .sidebar-toggle-tab--hidden {
@@ -691,7 +771,7 @@ function getPerspectiveStyle(teamId: number | null | undefined) {
 }
 
 .glass-panel {
-  background: rgba(6, 11, 28, 0.75);
+  background: rgba(6, 11, 28, 0.45);
   border: 1px solid rgba(0, 240, 255, 0.15);
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), inset 0 0 10px rgba(0, 240, 255, 0.05);
@@ -704,6 +784,7 @@ function getPerspectiveStyle(teamId: number | null | undefined) {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  background: rgba(6, 11, 28, 0.55);
 }
 
 .sidebar-title-block {
@@ -721,17 +802,24 @@ function getPerspectiveStyle(teamId: number | null | undefined) {
 .pulse-led {
   background-color: #00ff66;
   box-shadow: 0 0 10px #00ff66, 0 0 18px #00ff66;
+  animation: led-glow 2s infinite alternate;
+}
+
+@keyframes led-glow {
+  from { filter: brightness(0.7); }
+  to { filter: brightness(1.2); }
 }
 
 .sidebar-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 900;
   letter-spacing: 1px;
+  color: #f1f5f9;
 }
 
 .sidebar-subtitle {
-  font-size: 11px;
-  color: rgba(0, 240, 255, 0.7);
+  font-size: 10px;
+  color: rgba(0, 240, 255, 0.75);
 }
 
 .sidebar-mode-switch,
@@ -754,6 +842,17 @@ function getPerspectiveStyle(teamId: number | null | undefined) {
   border-radius: 8px;
   padding: 6px 10px;
   font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mode-btn:hover,
+.filter-pill:hover,
+.mode-chip:hover,
+.quick-action-btn:hover {
+  background: rgba(0, 240, 255, 0.08);
+  border-color: rgba(0, 240, 255, 0.35);
+  color: #ffffff;
 }
 
 .mode-btn.active,
@@ -762,6 +861,7 @@ function getPerspectiveStyle(teamId: number | null | undefined) {
   color: #00e5ff;
   border-color: #00e5ff;
   background: rgba(0, 240, 255, 0.12);
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
 }
 
 .sidebar-section {
@@ -809,10 +909,19 @@ function getPerspectiveStyle(teamId: number | null | undefined) {
 }
 
 .server-stat-item {
-  padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 8px 12px;
+  background: linear-gradient(135deg, rgba(6, 11, 28, 0.45) 0%, rgba(3, 6, 16, 0.6) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.04);
   border-radius: 10px;
+  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.server-stat-item:hover {
+  border-color: rgba(0, 240, 255, 0.35);
+  background: linear-gradient(135deg, rgba(6, 11, 28, 0.6) 0%, rgba(3, 6, 16, 0.8) 100%);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transform: translateY(-1px);
 }
 
 .lbl,
@@ -844,16 +953,53 @@ function getPerspectiveStyle(teamId: number | null | undefined) {
   to { opacity: 1; }
 }
 
-.tickets-row {
-  margin-top: 10px;
+/* Ticket visual bar */
+.tickets-row-visual {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.ticket-pill {
-  flex: 1;
-  text-align: center;
-  border-radius: 999px;
-  padding: 8px 10px;
+.visual-ticket-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
   font-weight: 800;
+}
+
+.t1-tickets {
+  color: var(--perspective-primary, #00e5ff);
+  text-shadow: 0 0 8px var(--perspective-glow);
+}
+
+.t2-tickets {
+  color: var(--perspective-primary, #ff5a00);
+  text-shadow: 0 0 8px var(--perspective-glow);
+}
+
+.ticket-vs {
+  font-size: 9px;
+  color: rgba(148, 163, 184, 0.6);
+  letter-spacing: 1px;
+}
+
+.visual-ticket-bar {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ticket-bar-fill {
+  height: 100%;
+  transition: width 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+  background-color: var(--perspective-primary);
+  box-shadow: 0 0 10px var(--perspective-glow);
 }
 
 .sidebar-tabs-directory,
@@ -865,19 +1011,33 @@ function getPerspectiveStyle(teamId: number | null | undefined) {
 
 .directory-tab-btn,
 .tab-btn {
-  border: 1px solid rgba(0, 240, 255, 0.12);
-  background: rgba(255, 255, 255, 0.03);
-  color: #cbd5e1;
+  border: 1px solid rgba(0, 240, 255, 0.15);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%);
+  color: #94a3b8;
   border-radius: 10px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.directory-tab-btn:hover,
+.tab-btn:hover {
+  background: linear-gradient(180deg, rgba(0, 240, 255, 0.1) 0%, rgba(0, 240, 255, 0.02) 100%);
+  border-color: rgba(0, 240, 255, 0.4);
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .directory-tab-btn.active,
 .tab-btn.active {
   color: #ffffff;
-  border-color: rgba(0, 240, 255, 0.4);
-  background: rgba(0, 240, 255, 0.12);
+  border-color: #00e5ff;
+  background: linear-gradient(180deg, rgba(0, 240, 255, 0.25) 0%, rgba(0, 240, 255, 0.05) 100%);
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
 }
 
 .sidebar-search-row {
@@ -889,12 +1049,22 @@ function getPerspectiveStyle(teamId: number | null | undefined) {
 .sidebar-search-input,
 .map-select {
   width: 100%;
-  border: 1px solid rgba(0, 240, 255, 0.12);
-  background: rgba(255, 255, 255, 0.03);
-  color: #e2e8f0;
+  border: 1px solid rgba(0, 240, 255, 0.15);
+  background: rgba(0, 0, 0, 0.4);
+  color: #cbd5e1;
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   font-size: 12px;
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.sidebar-search-input:focus,
+.map-select:focus {
+  outline: none;
+  border-color: #00e5ff;
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.35), inset 0 1px 2px rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.55);
 }
 
 .layers-grid {
@@ -903,11 +1073,61 @@ function getPerspectiveStyle(teamId: number | null | undefined) {
   gap: 8px;
 }
 
+/* Custom Checklist items */
 .option-item-sidebar {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 12px;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.option-item-sidebar:hover {
+  background: rgba(0, 240, 255, 0.06);
+  border-color: rgba(0, 240, 255, 0.3);
+  color: #ffffff;
+}
+
+.option-item-sidebar.checked {
+  background: rgba(0, 240, 255, 0.1);
+  border-color: rgba(0, 240, 255, 0.45);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  color: #00e5ff;
+}
+
+.option-item-sidebar input[type="checkbox"] {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid rgba(0, 240, 255, 0.45);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.4);
+  position: relative;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.option-item-sidebar input[type="checkbox"]:checked {
+  background: #00e5ff;
+  border-color: #00e5ff;
+  box-shadow: 0 0 8px #00e5ff;
+}
+
+.option-item-sidebar input[type="checkbox"]:checked::after {
+  content: "✓";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #040712;
+  font-size: 9px;
+  font-weight: 900;
 }
 
 .option-item-slider {
@@ -939,6 +1159,20 @@ function getPerspectiveStyle(teamId: number | null | undefined) {
   color: #cbd5e1;
   border-radius: 8px;
   padding: 8px 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.perspective-btn:hover {
+  background: rgba(0, 240, 255, 0.08);
+  color: #ffffff;
+}
+
+.perspective-btn.active {
+  border-color: #00e5ff;
+  background: rgba(0, 240, 255, 0.15);
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.15);
 }
 
 .perspective-summary {
@@ -948,6 +1182,26 @@ function getPerspectiveStyle(teamId: number | null | undefined) {
 
 .scale-slider {
   flex: 1;
+  -webkit-appearance: none;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  outline: none;
+}
+
+.scale-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #00e5ff;
+  box-shadow: 0 0 8px #00e5ff;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.scale-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
 }
 
 .scale-val {
@@ -964,6 +1218,24 @@ function getPerspectiveStyle(teamId: number | null | undefined) {
   gap: 12px;
 }
 
+/* Futuristic Scrollbar */
+.sidebar-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 240, 255, 0.2);
+  border-radius: 2px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 240, 255, 0.4);
+}
+
 .sidebar-list {
   display: flex;
   flex-direction: column;
@@ -971,15 +1243,25 @@ function getPerspectiveStyle(teamId: number | null | undefined) {
 }
 
 .sidebar-squad-card,
-.sidebar-player-card-row,
 .asset-row {
   text-align: left;
   width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(6, 11, 28, 0.45);
   color: inherit;
   border-radius: 12px;
-  padding: 10px;
+  padding: 12px;
+  box-sizing: border-box;
+  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  cursor: pointer;
+}
+
+.sidebar-squad-card:hover,
+.asset-row:hover {
+  border-color: rgba(0, 240, 255, 0.35);
+  background: rgba(6, 11, 28, 0.75);
+  box-shadow: 0 4px 15px rgba(0, 240, 255, 0.15);
+  transform: translateY(-2px);
 }
 
 .squad-card-header,
@@ -1018,22 +1300,125 @@ function getPerspectiveStyle(teamId: number | null | undefined) {
   border-radius: inherit;
 }
 
-.sidebar-player-card-row.is-focused,
-.sidebar-squad-card.is-focused,
-.asset-row:hover {
-  border-color: rgba(0, 240, 255, 0.35);
-  box-shadow: 0 0 0 1px rgba(0, 240, 255, 0.15) inset;
+.sidebar-squad-card.is-focused {
+  border-color: rgba(0, 240, 255, 0.6);
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.25);
+  background: rgba(0, 240, 255, 0.08);
 }
 
-.player-name-row,
-.player-meta-row {
-  display: block;
+/* Sleek Player Cards */
+.sidebar-player-card-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(6, 11, 28, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-left: 3px solid var(--perspective-primary, rgba(0, 240, 255, 0.4));
+  border-radius: 10px;
+  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-sizing: border-box;
+  text-align: left;
+  cursor: pointer;
 }
 
-.player-meta-row {
-  margin-top: 4px;
-  color: rgba(148, 163, 184, 0.9);
+.sidebar-player-card-row:hover {
+  background: rgba(6, 11, 28, 0.75);
+  border-color: var(--perspective-primary, #00e5ff);
+  box-shadow: 0 4px 15px rgba(0, 240, 255, 0.15);
+  transform: translateY(-2px);
+}
+
+.sidebar-player-card-row.is-focused {
+  background: rgba(0, 240, 255, 0.08);
+  border-color: var(--perspective-primary, #00e5ff);
+  box-shadow: 0 4px 20px rgba(0, 240, 255, 0.25), inset 0 0 8px rgba(0, 240, 255, 0.1);
+}
+
+.player-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.player-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #f1f5f9;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sl-badge-pill {
+  font-size: 9px;
+  font-weight: 900;
+  padding: 1px 4px;
+  background: #f59e0b;
+  color: #0f172a;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.player-squad-tag {
   font-size: 11px;
+  font-weight: 800;
+  color: var(--perspective-primary, #00e5ff);
+  font-family: monospace;
+}
+
+.player-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.player-health-bar-container {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.player-health-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  transition: width 0.3s ease;
+}
+
+.player-status-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 11px;
+  color: #94a3b8;
+  flex-wrap: wrap;
+}
+
+.player-hp-value {
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.player-kit {
+  color: rgba(226, 232, 240, 0.85);
+}
+
+.player-vehicle-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  background: rgba(0, 240, 255, 0.12);
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  color: #00e5ff;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.vehicle-icon-mini {
+  font-size: 8px;
 }
 
 .disengaged-sidebar-tag,
@@ -1043,6 +1428,12 @@ function getPerspectiveStyle(teamId: number | null | undefined) {
   border-radius: 999px;
   font-size: 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glowing-tag {
+  background: rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.3);
+  color: #fbbf24;
 }
 
 .asset-group {
@@ -1191,6 +1582,95 @@ function getPerspectiveStyle(teamId: number | null | undefined) {
   padding: 12px;
   color: rgba(148, 163, 184, 0.9);
   text-align: center;
+}
+
+/* Compact mode UI */
+.sidebar-compact-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 0;
+  gap: 16px;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.compact-header {
+  margin-bottom: 8px;
+}
+
+.compact-tickets-indicator {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mini-ticket-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(--perspective-primary);
+  box-shadow: 0 0 8px var(--perspective-glow);
+  transition: all 0.3s ease;
+}
+
+.compact-divider {
+  width: 32px;
+  height: 1px;
+  background: rgba(0, 240, 255, 0.15);
+}
+
+.compact-tab-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.compact-tab-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(0, 240, 255, 0.15);
+  color: #cbd5e1;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.compact-tab-btn:hover,
+.compact-tab-btn.active {
+  color: #ffffff;
+  border-color: #00e5ff;
+  background: rgba(0, 240, 255, 0.15);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.3);
+  transform: scale(1.05);
+}
+
+.compact-expand-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 240, 255, 0.1);
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  color: #00e5ff;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.compact-expand-btn:hover {
+  background: rgba(0, 240, 255, 0.25);
+  border-color: #00e5ff;
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.5);
+  transform: scale(1.1);
 }
 
 @media (max-width: 900px) {

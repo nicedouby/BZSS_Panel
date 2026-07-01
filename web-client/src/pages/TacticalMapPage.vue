@@ -1,9 +1,10 @@
-﻿<template>
+<template>
   <div class="tactical-map-layout">
     <!-- Main Map Viewport -->
     <div
       ref="containerRef"
       class="map-viewport"
+      :class="{ 'has-explosion-shake': isShaking }"
       @mousedown="startDrag"
       @mousemove="onDrag"
       @mouseup="stopDrag"
@@ -63,13 +64,7 @@
           </div>
         </div>
 
-        <!-- Radar Sweep Scan Overlay -->
-        <div v-if="showRadar" class="radar-scan-overlay">
-          <div class="radar-sweep-beam"></div>
-          <div class="radar-circle circle-1"></div>
-          <div class="radar-circle circle-2"></div>
-          <div class="radar-circle circle-3"></div>
-        </div>
+
 
         <!-- Capture Zone Overlay -->
         <div v-if="showCaptureZones" class="capture-zone-layer">
@@ -86,10 +81,7 @@
             :title="zone.raw || zone.name"
           >
             <div class="tactical-flag-node">
-              <div class="node-radar-rings">
-                <span class="radar-pulse-ring ring-1"></span>
-                <span class="radar-pulse-ring ring-2"></span>
-              </div>
+
               <div class="node-crosshair">
                 <span class="crosshair-bracket top-left"></span>
                 <span class="crosshair-bracket top-right"></span>
@@ -257,12 +249,17 @@
             <div class="explosion-refraction-wave"></div>
             <!-- Main thin circular expanding/retracting ring -->
             <div class="explosion-pulse-ring"></div>
+            <!-- Dynamic secondary expanding plasma shockwave -->
+            <div class="explosion-plasma-wave"></div>
+            <!-- Sharp expanding pressure wave -->
+            <div class="explosion-pressure-ring"></div>
             <!-- Radial particle dots flying outward and drifting dynamically -->
             <div class="explosion-particles">
               <span
                 v-for="p in staticExplosionParticles"
                 :key="p.id"
                 class="particle"
+                :class="p.type"
                 :style="{
                   '--angle': `${p.angle}deg`,
                   '--speed': p.speed,
@@ -438,7 +435,7 @@
           <div class="header-led-indicator pulse-led"></div>
           <div class="header-text-block">
             <h1 class="main-title">SUMARI SATELLITE COMMAND</h1>
-            <p class="subtitle-text">战术雷达实时定位系统 &bull; 日志驱动实时定位</p>
+            <p class="subtitle-text">战术地图实时定位系统 &bull; 日志驱动实时定位</p>
           </div>
         </div>
 
@@ -490,13 +487,7 @@
         >
           网格
         </button>
-        <button
-          class="ctrl-btn text-btn"
-          :class="{ active: showRadar }"
-          @click="showRadar = !showRadar"
-        >
-          雷达
-        </button>
+
         <button
           class="ctrl-btn text-btn"
           :class="{ active: filterAliveOnly }"
@@ -773,7 +764,6 @@ const isDragging = ref(false);
 const dragStart = reactive({ x: 0, y: 0 });
 
 const showGrid = ref(true);
-const showRadar = ref(true);
 const showCaptureZones = ref(true);
 const showFobs = ref(true);
 const filterAliveOnly = ref(false);
@@ -825,14 +815,15 @@ const measureMode = ref(false);
 const measurePoints = ref<Array<{ mapX: number; mapY: number; gameX: number; gameY: number }>>([]);
 
 // Pre-generated static random values for denser grenade blast debris
-const staticExplosionParticles = Array.from({ length: 60 }, (_, idx) => {
+const staticExplosionParticles = Array.from({ length: 90 }, (_, idx) => {
   const angle = Math.floor(Math.random() * 360);
-  const speed = +(1.15 + Math.random() * 1.55).toFixed(2);
-  const delay = +(Math.random() * 0.08).toFixed(2);
-  const startOffset = +(0.22 + Math.random() * 0.22).toFixed(2);
-  const spread = +(1.2 + Math.random() * 1.45).toFixed(2);
-  const size = +(0.8 + Math.random() * 1).toFixed(2);
-  return { id: idx, angle, speed, delay, startOffset, spread, size };
+  const speed = +(1.2 + Math.random() * 1.8).toFixed(2);
+  const delay = +(Math.random() * 0.12).toFixed(2);
+  const startOffset = +(0.1 + Math.random() * 0.3).toFixed(2);
+  const spread = +(1.3 + Math.random() * 1.7).toFixed(2);
+  const size = +(0.8 + Math.random() * 1.2).toFixed(2);
+  const type = idx % 2 === 0 ? "spark" : "ember";
+  return { id: idx, angle, speed, delay, startOffset, spread, size, type };
 });
 
 function createSeededRandom(seedText: string) {
@@ -890,18 +881,38 @@ const explosionMarkers = computed(() => {
   return markers;
 });
 
+const isShaking = ref(false);
+let shakeTimeoutId: any = null;
+
+function triggerShake() {
+  if (isShaking.value) {
+    isShaking.value = false;
+    void nextTick();
+  }
+  isShaking.value = true;
+  clearTimeout(shakeTimeoutId);
+  shakeTimeoutId = setTimeout(() => {
+    isShaking.value = false;
+  }, 350);
+}
+
 watch(
   () => explosionMarkers.value,
   (newVal, oldVal) => {
     const oldIds = new Set((oldVal || []).map((e: any) => e.id));
+    let hasNewExplosion = false;
     for (const exp of newVal) {
       if (!oldIds.has(exp.id)) {
+        hasNewExplosion = true;
         const cleanCauser = cleanWeaponName(exp.damageCauser);
         logCombatEvent(
-          `<span style="color: #94a3b8">检测到官方爆炸物爆�?(武器: ${cleanCauser}, 坐标: ${Math.round(exp.mapX)}%, ${Math.round(exp.mapY)}%)</span>`,
+          `<span style="color: #94a3b8">检测到官方爆炸物爆炸 (武器: ${cleanCauser}, 坐标: ${Math.round(exp.mapX)}%, ${Math.round(exp.mapY)}%)</span>`,
           "system"
         );
       }
+    }
+    if (hasNewExplosion) {
+      triggerShake();
     }
   },
   { deep: true }
@@ -953,7 +964,7 @@ function calculateCombatHotspot() {
     gameY: sumY / alivePlayers.length
   };
   
-  logCombatEvent(`计算得到新一轮作战热点中�?[X:${Math.round(combatHotspot.value.gameX)}, Y:${Math.round(combatHotspot.value.gameY)}] (1000m 半径)`, "system");
+  logCombatEvent(`计算得到新一轮作战热点中心 [X:${Math.round(combatHotspot.value.gameX)}, Y:${Math.round(combatHotspot.value.gameY)}] (1000m 半径)`, "system");
 }
 
 function clearCombatHotspot() {
@@ -983,17 +994,8 @@ interface PlayerTarget {
   lastSeen: number;
 }
 
-interface PlayerRenderState {
-  yaw: number;
-  vyaw: number;
-}
-
 const playerTargets = new Map<string, PlayerTarget>();
-const playerRenderStates = new Map<string, PlayerRenderState>();
 const interpolatedPositions = ref<Record<string, { mapX: number, mapY: number, yaw: number | null }>>({});
-let animationFrameId: number | null = null;
-let lastFrameTime = Date.now();
-const TELEPORT_RESET_DISTANCE = 14000; // 140m in game units, snaps instantly to prevent sliding on respawn
 
 // Watch players prop to update the cache
 watch(
@@ -1032,7 +1034,6 @@ watch(
   () => {
     cachedPlayers.value = {};
     playerTargets.clear();
-    playerRenderStates.clear();
     interpolatedPositions.value = {};
     combatHotspot.value = null;
     tilesReady.value = false;
@@ -1091,129 +1092,31 @@ watch(
     for (const key of playerTargets.keys()) {
       if (!currentKeys.has(key)) {
         playerTargets.delete(key);
-        playerRenderStates.delete(key);
       }
     }
+
+    if (!newList.length) {
+      interpolatedPositions.value = {};
+      return;
+    }
+
+    const bounds = activeMapConfig.value.bounds;
+    const nextPositions: Record<string, { mapX: number, mapY: number, yaw: number | null }> = {};
+    for (const player of newList) {
+      const key = getPlayerKey(player);
+      if (!key) continue;
+      const pos = getPlayerPosition(player);
+      if (!pos) continue;
+      nextPositions[key] = {
+        mapX: project(pos.x ?? 0, bounds.minX, bounds.maxX),
+        mapY: project(pos.y ?? 0, bounds.minY, bounds.maxY),
+        yaw: getPlayerYaw(player)
+      };
+    }
+    interpolatedPositions.value = nextPositions;
   },
   { immediate: true, deep: true }
 );
-
-function startInterpolationLoop() {
-  const tick = () => {
-    const now = Date.now();
-    const dt = Math.min(0.1, (now - lastFrameTime) / 1000); // cap at 100ms
-    lastFrameTime = now;
-    
-    // 1. Evict expired players from cache
-    const EXPIRE_LIMIT = 8000;
-    let cacheChanged = false;
-    const nextCache = { ...cachedPlayers.value };
-    
-    for (const key in nextCache) {
-      if (now - nextCache[key].lastSeen > EXPIRE_LIMIT) {
-        delete nextCache[key];
-        playerTargets.delete(key);
-        playerRenderStates.delete(key);
-        cacheChanged = true;
-      }
-    }
-    if (cacheChanged) {
-      cachedPlayers.value = nextCache;
-    }
-
-    const newPositions: Record<string, { mapX: number, mapY: number, yaw: number | null }> = {};
-    const bounds = activeMapConfig.value.bounds;
-    
-    positionedPlayers.value.forEach(player => {
-      const key = getPlayerKey(player);
-      if (!key) return;
-      
-      const target = playerTargets.get(key);
-      if (!target) {
-        const pos = getPlayerPosition(player);
-        if (pos) {
-          newPositions[key] = {
-            mapX: project(pos.x ?? 0, bounds.minX, bounds.maxX),
-            mapY: project(pos.y ?? 0, bounds.minY, bounds.maxY),
-            yaw: getPlayerYaw(player)
-          };
-        }
-        return;
-      }
-      
-      // Get or initialize render state for the yaw spring
-      let state = playerRenderStates.get(key);
-      if (!state) {
-        state = {
-          yaw: target.yaw ?? 0,
-          vyaw: 0
-        };
-        playerRenderStates.set(key, state);
-      }
-
-      // Smooth target yaw using SmoothDamp Angle filter (fast 0.2s smoothTime)
-      if (target.yaw !== null) {
-        const velYaw = { val: state.vyaw };
-        const rotSmoothTime = 0.2;
-        state.yaw = smoothDampAngle(state.yaw, target.yaw, velYaw, rotSmoothTime, dt);
-        state.vyaw = velYaw.val;
-      } else {
-        state.yaw = 0;
-      }
-
-      newPositions[key] = {
-        mapX: project(target.x, bounds.minX, bounds.maxX),
-        mapY: project(target.y, bounds.minY, bounds.maxY),
-        yaw: target.yaw !== null ? state.yaw : null
-      };
-    });
-    
-    interpolatedPositions.value = newPositions;
-    animationFrameId = requestAnimationFrame(tick);
-  };
-  animationFrameId = requestAnimationFrame(tick);
-}
-
-// Critically damped spring-damper function (Unity-style SmoothDamp)
-function smoothDamp(
-  current: number,
-  target: number,
-  currentVelocity: { val: number },
-  smoothTime: number,
-  dt: number
-): number {
-  smoothTime = Math.max(0.0001, smoothTime);
-  const num = 2 / smoothTime;
-  const num2 = num * dt;
-  const num3 = 1 / (1 + num2 + 0.48 * num2 * num2 + 0.235 * num2 * num2 * num2);
-  const num4 = current - target;
-  const num5 = target;
-  const num6 = num * num4;
-  const num7 = (currentVelocity.val + num6) * dt;
-  currentVelocity.val = (currentVelocity.val - num * num7) * num3;
-  let num8 = num5 + (num4 + num7) * num3;
-  
-  if ((num5 - current > 0) === (num8 > num5)) {
-    num8 = num5;
-    currentVelocity.val = (num8 - num5) / dt;
-  }
-  return num8;
-}
-
-// Angle SmoothDamp with modular wrap-around at 360 degrees
-function smoothDampAngle(
-  current: number,
-  target: number,
-  currentVelocity: { val: number },
-  smoothTime: number,
-  dt: number
-): number {
-  let diff = (target - current) % 360;
-  if (diff < -180) diff += 360;
-  if (diff > 180) diff -= 360;
-  const targetAdjusted = current + diff;
-  return smoothDamp(current, targetAdjusted, currentVelocity, smoothTime, dt);
-}
 
 function toggleMeasureMode() {
   measureMode.value = !measureMode.value;
@@ -2153,9 +2056,6 @@ function getAmmoDashArray(fob: any) {
 }
 
 onMounted(() => {
-  lastFrameTime = Date.now();
-  startInterpolationLoop();
-
   setTimeout(() => {
     fitToViewport();
   }, 100);
@@ -2183,7 +2083,6 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  if (animationFrameId) cancelAnimationFrame(animationFrameId);
   if (simulatedCombatTimer) window.clearInterval(simulatedCombatTimer);
   window.removeEventListener("resize", fitToViewport);
   resizeObserver?.disconnect();
@@ -2250,7 +2149,7 @@ onBeforeUnmount(() => {
   border: 2px solid rgba(0, 240, 255, 0.2);
 }
 
-/* Tiled map wrapper �?applies same visual treatment as .map-image */
+/* Tiled map wrapper - applies same visual treatment as .map-image */
 .tiled-map-wrapper {
   position: relative;
   width: 100%;
@@ -2310,64 +2209,7 @@ onBeforeUnmount(() => {
   transform: translateY(-50%);
 }
 
-/* Radar Sweep overlay */
-.radar-scan-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 3;
-  overflow: hidden;
-}
 
-.radar-sweep-beam {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 120%;
-  height: 120%;
-  transform: translate(-50%, -50%);
-  background: conic-gradient(from 0deg, rgba(0, 229, 255, 0.14) 0deg, rgba(0, 229, 255, 0) 100deg);
-  border-radius: 50%;
-  animation: sweep-beam-rotation 12s linear infinite;
-}
-
-@keyframes sweep-beam-rotation {
-  from { transform: translate(-50%, -50%) rotate(0deg); }
-  to { transform: translate(-50%, -50%) rotate(360deg); }
-}
-
-.radar-circle {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  border: 1px solid rgba(0, 240, 255, 0.04);
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  animation: radar-pulse 6s infinite ease-in-out;
-}
-
-.circle-1 { width: 30%; height: 30%; animation-delay: 0s; }
-.circle-2 { width: 60%; height: 60%; animation-delay: 2s; }
-.circle-3 { width: 90%; height: 90%; animation-delay: 4s; }
-
-@keyframes radar-pulse {
-  0% {
-    border-color: rgba(0, 240, 255, 0.03);
-    box-shadow: 0 0 0 rgba(0, 240, 255, 0);
-  }
-  50% {
-    border-color: rgba(0, 240, 255, 0.15);
-    box-shadow: 0 0 15px rgba(0, 240, 255, 0.06);
-  }
-  100% {
-    border-color: rgba(0, 240, 255, 0.03);
-    box-shadow: 0 0 0 rgba(0, 240, 255, 0);
-  }
-}
 
 /* Capture point markers */
 .capture-zone-layer {
@@ -2397,42 +2239,7 @@ onBeforeUnmount(() => {
   position: relative;
 }
 
-/* Radar pulse circles behind node */
-.node-radar-rings {
-  position: absolute;
-  top: 50%;
-  left: 10px; /* Center of diamond (which is 20px wide) */
-  transform: translate(-50%, -50%);
-  width: 0;
-  height: 0;
-  pointer-events: none;
-}
 
-.radar-pulse-ring {
-  position: absolute;
-  border: 1.5px solid rgba(245, 158, 11, 0.25);
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  animation: node-radar-pulse 3s infinite cubic-bezier(0.2, 0.8, 0.2, 1);
-  pointer-events: none;
-}
-
-.radar-pulse-ring.ring-1 {
-  width: 50px;
-  height: 50px;
-  animation-delay: 0s;
-}
-
-.radar-pulse-ring.ring-2 {
-  width: 50px;
-  height: 50px;
-  animation-delay: 1.5s;
-}
-
-@keyframes node-radar-pulse {
-  0% { width: 10px; height: 10px; opacity: 0.9; border-color: rgba(245, 158, 11, 0.45); }
-  100% { width: 80px; height: 80px; opacity: 0; border-color: rgba(245, 158, 11, 0); }
-}
 
 /* Static Tech target crosshair */
 .node-crosshair {
@@ -2577,39 +2384,63 @@ onBeforeUnmount(() => {
   height: 100%;
   border-radius: 44% 56% 52% 48% / 40% 58% 42% 60%;
   background:
-    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.18) 0%, rgba(255, 248, 220, 0.1) 12%, rgba(255, 255, 255, 0.025) 26%, transparent 56%),
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 248, 220, 0.15) 12%, rgba(255, 255, 255, 0.04) 26%, transparent 56%),
     repeating-conic-gradient(
       from 0deg,
-      rgba(255, 255, 255, 0.055) 0deg 14deg,
-      rgba(255, 236, 179, 0.022) 14deg 32deg,
+      rgba(255, 255, 255, 0.07) 0deg 14deg,
+      rgba(255, 236, 179, 0.03) 14deg 32deg,
       transparent 32deg 54deg
     );
   mix-blend-mode: screen;
-  -webkit-backdrop-filter: blur(9px) saturate(1.16) brightness(1.22) contrast(1.12) hue-rotate(var(--exp-flash-hue));
-  backdrop-filter: blur(9px) saturate(1.16) brightness(1.22) contrast(1.12) hue-rotate(var(--exp-flash-hue));
-  filter: blur(1.3px);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2) brightness(1.3) contrast(1.15) hue-rotate(var(--exp-flash-hue));
+  backdrop-filter: blur(12px) saturate(1.2) brightness(1.3) contrast(1.15) hue-rotate(var(--exp-flash-hue));
+  filter: blur(1px);
   animation: exp-refract-anim 1.55s cubic-bezier(0.12, 0.8, 0.24, 1) forwards;
   will-change: transform, opacity, filter;
   transform: translateZ(0);
   opacity: var(--exp-flash-alpha);
 }
 
-/* Main soft shockwave haze, intentionally vague instead of a readable blast radius */
+/* Main soft shockwave haze */
 .explosion-pulse-ring {
   position: absolute;
   width: 100%;
   height: 100%;
   border-radius: 50%;
   background:
-    radial-gradient(circle, rgba(255, 244, 214, 0.18) 0%, rgba(255, 232, 170, 0.09) 14%, rgba(226, 232, 240, 0.04) 34%, transparent 70%),
-    radial-gradient(circle at 38% 42%, rgba(255, 255, 255, 0.14) 0%, transparent 24%),
-    radial-gradient(circle at 62% 56%, rgba(255, 214, 102, 0.08) 0%, transparent 22%);
-  filter: blur(12px);
+    radial-gradient(circle, rgba(255, 244, 214, 0.25) 0%, rgba(255, 200, 100, 0.12) 15%, rgba(226, 232, 240, 0.05) 35%, transparent 70%),
+    radial-gradient(circle at 38% 42%, rgba(255, 255, 255, 0.2) 0%, transparent 25%),
+    radial-gradient(circle at 62% 56%, rgba(255, 200, 80, 0.12) 0%, transparent 25%);
+  filter: blur(14px);
   animation: exp-pulse-ring-anim 1.45s cubic-bezier(0.12, 0.8, 0.24, 1) forwards;
-  opacity: calc(0.88 * var(--exp-flash-alpha));
+  opacity: calc(0.92 * var(--exp-flash-alpha));
 }
 
-/* Particle dots flying outward */
+/* Secondary plasma shockwave: fiery colored glow expanding and dissipating */
+.explosion-plasma-wave {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: radial-gradient(circle, transparent 35%, rgba(255, 90, 0, 0.25) 55%, rgba(255, 200, 50, 0.15) 65%, transparent 75%);
+  filter: blur(4px);
+  animation: exp-plasma-wave-anim 1.2s cubic-bezier(0.1, 0.8, 0.15, 1) forwards;
+  opacity: var(--exp-flash-alpha);
+}
+
+/* Sharp expanding pressure ring (Mach cone shockwave) */
+.explosion-pressure-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 2.5px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.6), inset 0 0 10px rgba(0, 240, 255, 0.25);
+  filter: blur(0.5px);
+  animation: exp-pressure-ring-anim 0.85s cubic-bezier(0.05, 0.75, 0.1, 1) forwards;
+}
+
+/* Particle dots and streaks flying outward */
 .explosion-particles {
   position: absolute;
   width: 100%;
@@ -2620,37 +2451,59 @@ onBeforeUnmount(() => {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: var(--particle-size);
-  height: var(--particle-size);
-  background:
-    radial-gradient(circle, rgba(255, 252, 244, 1) 0%, rgba(255, 236, 179, 0.92) 35%, rgba(255, 196, 110, 0.48) 68%, rgba(255, 255, 255, 0.08) 100%);
-  border-radius: 50%;
-  margin-top: calc(-0.5 * var(--particle-size));
-  margin-left: calc(-0.5 * var(--particle-size));
   transform-origin: center center;
-  box-shadow:
-    0 0 5px rgba(255, 244, 214, 0.42),
-    0 0 10px rgba(255, 196, 110, 0.16);
   animation: particle-fade-drift 0.92s cubic-bezier(0.08, 0.72, 0.18, 1) forwards;
   animation-delay: var(--delay);
 }
 
-/* Extremely soft center core */
+.particle.spark {
+  width: calc(var(--particle-size) * 0.7);
+  height: calc(var(--particle-size) * 6.5);
+  background: linear-gradient(to top, rgba(255, 235, 120, 1) 0%, rgba(255, 110, 0, 0.85) 80%, rgba(255, 50, 0, 0) 100%);
+  border-radius: 999px;
+  box-shadow: 0 0 8px rgba(255, 160, 50, 0.85);
+  margin-top: calc(-3.25 * var(--particle-size));
+  margin-left: calc(-0.35 * var(--particle-size));
+}
+
+.particle.ember {
+  width: calc(var(--particle-size) * 2.6);
+  height: calc(var(--particle-size) * 2.6);
+  background: radial-gradient(circle, rgba(255, 255, 255, 1) 0%, rgba(255, 160, 0, 0.95) 30%, rgba(255, 70, 0, 0.45) 60%, rgba(0, 0, 0, 0) 100%);
+  border-radius: 50%;
+  box-shadow: 0 0 12px rgba(255, 110, 0, 0.65);
+  margin-top: calc(-1.3 * var(--particle-size));
+  margin-left: calc(-1.3 * var(--particle-size));
+}
+
+/* Extremely soft center core but with vibrant plasma fire glow */
 .explosion-core {
   position: absolute;
-  width: 7px;
-  height: 7px;
-  background:
-    radial-gradient(circle, rgba(255, 255, 255, 1) 0%, rgba(255, 244, 214, 0.95) 35%, rgba(255, 196, 110, 0.48) 60%, rgba(255, 255, 255, 0) 100%);
+  width: 12px;
+  height: 12px;
+  background: radial-gradient(circle, #ffffff 0%, #ffeaa7 30%, #ff7675 60%, #d63031 90%, transparent 100%);
   border-radius: 50%;
   box-shadow:
-    0 0 12px rgba(255, 244, 214, 0.4),
-    0 0 24px rgba(255, 196, 110, 0.15);
-  filter: blur(1px);
-  animation: exp-core-anim 0.95s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+    0 0 20px #ff7675,
+    0 0 45px #ff7675,
+    0 0 90px #ff3f34;
+  filter: blur(0.5px);
+  animation: exp-core-anim 0.85s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+}
+
+/* Map Screen Shake */
+.map-viewport.has-explosion-shake {
+  animation: map-shake-anim 0.35s cubic-bezier(.36,.07,.19,.97) both;
 }
 
 /* Keyframe Animations */
+@keyframes map-shake-anim {
+  10%, 90% { transform: translate3d(-1px, 1px, 0); }
+  20%, 80% { transform: translate3d(2.5px, -2.5px, 0); }
+  30%, 50%, 70% { transform: translate3d(-4.5px, 4.5px, 0); }
+  40%, 60% { transform: translate3d(4.5px, -4.5px, 0); }
+}
+
 @keyframes exp-refract-anim {
   0% { transform: scale(0.16) rotate(0deg) scaleX(0.92) scaleY(1.08); opacity: 0; }
   12% { opacity: calc(0.92 * var(--exp-flash-alpha)); }
@@ -2663,6 +2516,18 @@ onBeforeUnmount(() => {
   10% { opacity: calc(0.82 * var(--exp-flash-alpha)); }
   55% { opacity: calc(0.32 * var(--exp-flash-alpha)); }
   100% { transform: scale(1.22) scaleX(var(--exp-stretch-x)) scaleY(var(--exp-stretch-y)); opacity: 0; }
+}
+
+@keyframes exp-plasma-wave-anim {
+  0% { transform: scale(0.1); opacity: 0; }
+  15% { opacity: 0.95; }
+  100% { transform: scale(1.6) rotate(30deg); opacity: 0; }
+}
+
+@keyframes exp-pressure-ring-anim {
+  0% { transform: scale(0.05); opacity: 0; border-width: 4px; }
+  8% { opacity: 1; }
+  100% { transform: scale(1.4); opacity: 0; border-width: 0.5px; }
 }
 
 @keyframes exp-core-anim {
@@ -3040,7 +2905,7 @@ onBeforeUnmount(() => {
   background: transparent;
   padding: 0;
   outline: none;
-  transition: left 0.35s cubic-bezier(0.22, 1, 0.36, 1), top 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: none;
   will-change: left, top, transform;
 }
 
@@ -3220,60 +3085,7 @@ onBeforeUnmount(() => {
   display: none;
 }
 
-/* Text Tag for Player Name & Squad Number (positioned below the icon) */
-.player-marker .tag {
-  position: absolute;
-  left: 50%;
-  top: 100%;
-  transform: translate(-50%, 3px);
-  display: flex;
-  align-items: center;
-  gap: 3.5px;
-  padding: 1px 3.5px;
-  border-radius: 2.5px;
-  background: rgba(15, 23, 42, 0.8);
-  border: 1px solid rgba(226, 232, 240, 0.1);
-  font-size: 7.5px;
-  white-space: nowrap;
-  line-height: 1.15;
-  pointer-events: none;
-  color: #e2e8f0;
-  z-index: 5;
-  transition: border-color 0.2s ease, background-color 0.2s ease;
-}
 
-.player-name-tag {
-  font-weight: 500;
-}
-
-.player-squad-tag {
-  font-size: 7px;
-  font-family: "Consolas", "SFMono-Regular", monospace;
-  font-weight: 700;
-  color: #38bdf8;
-  background: rgba(56, 189, 248, 0.15);
-  padding: 0px 2px;
-  border-radius: 2px;
-  line-height: 1;
-}
-
-.tone-friendly .player-squad-tag,
-.tone-enemy .player-squad-tag,
-.tone-neutral .player-squad-tag {
-  color: var(--perspective-primary, #37c8ff);
-  background: var(--perspective-chip, rgba(55, 200, 255, 0.15));
-}
-
-.player-coords-tag {
-  font-size: 7px;
-  font-family: "Consolas", "SFMono-Regular", monospace;
-  font-weight: 700;
-  color: #a7f3d0;
-  background: rgba(16, 185, 129, 0.15);
-  padding: 0px 2px;
-  border-radius: 2px;
-  line-height: 1;
-}
 
 /* Interactive Hover/Active States with explicit translate centered fix */
 .player-marker.is-hovered .marker-ring,
@@ -3289,12 +3101,7 @@ onBeforeUnmount(() => {
   transform: translate(-50%, -50%) scale(1.4);
 }
 
-.player-marker.is-hovered .tag,
-.player-marker:hover .tag,
-.player-marker:active .tag {
-  border-color: rgba(55, 200, 255, 0.35);
-  background: rgba(8, 14, 36, 0.92);
-}
+
 
 /* Floating Player Hover Tooltip */
 .player-tooltip {

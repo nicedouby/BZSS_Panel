@@ -18,8 +18,7 @@
     @mouseenter="$emit('mouseenter', $event)"
     @mouseleave="$emit('mouseleave', $event)"
   >
-    <!-- Marker Aura/Pulse -->
-    <div class="marker-pulse"></div>
+
 
     <!-- Player Direction Pointer -->
     <div
@@ -172,11 +171,32 @@ const palette = computed(() => {
   };
 });
 
+const zIndex = computed(() => {
+  let z = 20; // Default base for alive player
+  if (isDead.value) {
+    z = 10;
+  } else if (props.isSquadLeader) {
+    z = 40;
+  }
+  
+  if (hasVehicle.value) {
+    z += 5;
+  }
+  if (props.isFocused) {
+    z += 100;
+  }
+  if (props.isHovered) {
+    z += 200;
+  }
+  return z;
+});
+
 const markerStyle = computed(() => {
   return {
     left: `${props.mapX}%`,
     top: `${props.mapY}%`,
     transform: `translate(-50%, -50%) scale(${props.scale})`,
+    zIndex: zIndex.value,
     "--perspective-primary": palette.value.primary,
     "--perspective-soft": palette.value.soft,
     "--perspective-deep": palette.value.deep,
@@ -217,37 +237,24 @@ function isRoleIconImage(icon: string | undefined) {
   pointer-events: auto;
   cursor: pointer;
   border: none;
+  border-radius: 0;
   background: transparent;
   padding: 0;
   outline: none;
-  /* Hardware accelerated transforms for buttery-smooth movements */
+  appearance: none;
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
   will-change: left, top, transform;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+  box-shadow: none;
+  /* Smoothly transitions marker movement on coordinates update, ignoring scale transitions during zoom */
+  transition: left 0.35s cubic-bezier(0.16, 1, 0.3, 1), top 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .player-marker.no-pointer {
   pointer-events: none;
-}
-
-/* Pulsing aura */
-.marker-pulse {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  opacity: 0;
-  transform: scale(1);
-  border: 2px solid var(--perspective-pulse);
-  animation: pulse-ring 2.4s infinite cubic-bezier(0.215, 0.610, 0.355, 1);
-}
-
-@keyframes pulse-ring {
-  0% { transform: scale(0.9); opacity: 0.8; }
-  80% { transform: scale(2.2); opacity: 0; }
-  100% { transform: scale(2.2); opacity: 0; }
 }
 
 /* Outer ring centered */
@@ -266,13 +273,19 @@ function isRoleIconImage(icon: string | undefined) {
   border: 2px solid var(--perspective-primary);
   background-color: var(--perspective-deep);
   box-shadow: 0 0 8px var(--perspective-glow);
-  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+  /* Tactile bounce spring-like transition for hover pop */
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* Vehicle custom shape (rotated square/diamond in minimal mode) */
-.is-vehicle.mode-minimal .marker-ring {
-  border-radius: 2px;
+/* Vehicle custom shape (rotated square/diamond in tactical and minimal modes) */
+.is-vehicle .marker-ring {
+  border-radius: 4px;
   transform: translate(-50%, -50%) rotate(45deg);
+}
+
+/* Counter-rotate inner elements in vehicle so role icon remains upright */
+.is-vehicle .marker-ring > * {
+  transform: rotate(-45deg);
 }
 
 /* Dead marker styling */
@@ -282,14 +295,22 @@ function isRoleIconImage(icon: string | undefined) {
   box-shadow: none;
   background-color: #334155;
   border-color: #64748b;
+  border-radius: 50% !important; /* Force circle on dead players regardless of vehicle */
+  transform: translate(-50%, -50%) rotate(0deg) !important;
 }
 
-/* Squad Leader star indicator size adjustment */
+.is-dead .marker-ring > * {
+  transform: rotate(0deg) !important;
+}
+
+/* Squad Leader amber/gold indicator styling */
 .is-squadleader .marker-ring {
+  border-color: #fbbf24;
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.45);
   transform: translate(-50%, -50%) scale(1.15);
 }
 
-.is-vehicle.mode-minimal.is-squadleader .marker-ring {
+.is-vehicle.is-squadleader .marker-ring {
   transform: translate(-50%, -50%) rotate(45deg) scale(1.15);
 }
 
@@ -304,12 +325,14 @@ function isRoleIconImage(icon: string | undefined) {
   line-height: 1;
   color: #cbd5e1;
   font-weight: 700;
+  transition: transform 0.2s ease;
 }
 
 .kit-icon-mask {
   width: 11px;
   height: 11px;
   display: inline-block;
+  transition: transform 0.2s ease;
 }
 
 .is-dead .kit-icon-mask {
@@ -345,19 +368,21 @@ function isRoleIconImage(icon: string | undefined) {
   transform-origin: center center;
   pointer-events: none;
   z-index: 1;
-  transition: transform 0.16s linear; /* Smooth micro-rotation */
+  /* Smooth rotation updates */
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .direction-arrow {
   position: absolute;
-  top: -5px;
+  top: -6px;
   left: 50%;
   transform: translateX(-50%);
   width: 0;
   height: 0;
-  border-left: 3px solid transparent;
-  border-right: 3px solid transparent;
-  border-bottom: 5px solid var(--perspective-primary);
+  border-left: 3.5px solid transparent;
+  border-right: 3.5px solid transparent;
+  border-bottom: 6px solid var(--perspective-primary);
+  filter: drop-shadow(0 0 3px var(--perspective-primary));
 }
 
 /* Text tag underneath */
@@ -369,32 +394,40 @@ function isRoleIconImage(icon: string | undefined) {
   display: flex;
   align-items: center;
   gap: 3.5px;
-  padding: 1.5px 4px;
-  border-radius: 3px;
-  background: rgba(15, 23, 42, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
   font-size: 8px;
   white-space: nowrap;
   line-height: 1.15;
   pointer-events: none;
-  color: #cbd5e1;
   z-index: 5;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
-  transition: border-color 0.2s ease, background-color 0.2s ease;
+  box-shadow: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 3px rgba(0, 0, 0, 0.9);
+  transition: color 0.2s ease, transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* Perspective/Team soft colors */
+.tone-friendly .tag {
+  color: #c0f0ff;
+}
+.tone-enemy .tag {
+  color: #ffd0d5;
+}
+.tone-neutral .tag {
+  color: #cbd5e1;
 }
 
 .player-name-tag {
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .player-squad-tag {
   font-size: 7.5px;
   font-family: monospace;
   font-weight: 700;
-  color: var(--perspective-primary);
-  background: var(--perspective-chip);
-  padding: 0px 2.5px;
-  border-radius: 2px;
+  color: var(--perspective-soft);
   line-height: 1;
 }
 
@@ -403,20 +436,19 @@ function isRoleIconImage(icon: string | undefined) {
   font-family: monospace;
   font-weight: 700;
   color: #a7f3d0;
-  background: rgba(16, 185, 129, 0.15);
-  padding: 0px 2.5px;
-  border-radius: 2px;
   line-height: 1;
+  opacity: 0.85;
 }
 
 .player-disengaged-tag {
   font-size: 7px;
   font-weight: 800;
   color: #fb923c;
-  background: rgba(249, 115, 22, 0.15);
-  padding: 0px 2px;
-  border-radius: 2.5px;
   line-height: 1;
+  border: 1px solid rgba(251, 146, 60, 0.4);
+  padding: 0 2.5px;
+  border-radius: 2px;
+  background: rgba(251, 146, 60, 0.1);
 }
 
 /* Minimalist rendering (Mode Replay) styles */
@@ -465,25 +497,33 @@ function isRoleIconImage(icon: string | undefined) {
   box-shadow: 0 0 12px rgba(255, 255, 255, 0.95);
 }
 
-.is-vehicle.mode-minimal.is-hovered .marker-ring,
-.is-vehicle.mode-minimal:hover .marker-ring {
+.is-vehicle.is-hovered .marker-ring,
+.is-vehicle:hover .marker-ring {
   transform: translate(-50%, -50%) rotate(45deg) scale(1.3);
 }
 
 .player-marker.is-hovered.is-squadleader .marker-ring,
 .player-marker:hover.is-squadleader .marker-ring {
   transform: translate(-50%, -50%) scale(1.4);
+  border-color: #ffffff !important;
+  box-shadow: 0 0 14px rgba(251, 191, 36, 0.85);
 }
 
-.is-vehicle.mode-minimal.is-hovered.is-squadleader .marker-ring,
-.is-vehicle.mode-minimal:hover.is-squadleader .marker-ring {
+.is-vehicle.is-hovered.is-squadleader .marker-ring,
+.is-vehicle:hover.is-squadleader .marker-ring {
   transform: translate(-50%, -50%) rotate(45deg) scale(1.4);
+  border-color: #ffffff !important;
+  box-shadow: 0 0 14px rgba(251, 191, 36, 0.85);
 }
 
 .player-marker.is-hovered .tag,
 .player-marker:hover .tag {
-  border-color: var(--perspective-primary);
-  background: rgba(8, 14, 36, 0.95);
   color: #ffffff;
+  transform: translate(-50%, 5px) scale(1.05);
+}
+
+.player-marker.is-hovered .tag .player-name-tag,
+.player-marker:hover .tag .player-name-tag {
+  text-shadow: 0 0 4px var(--perspective-primary), 0 1px 2px rgba(0, 0, 0, 0.95);
 }
 </style>
