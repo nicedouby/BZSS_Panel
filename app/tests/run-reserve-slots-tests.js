@@ -499,6 +499,58 @@ async function testManualExtendAddsFromExistingExpiry() {
   await fs.rm(tempDir, { recursive: true, force: true });
 }
 
+async function testManualShortenUsesExistingExpiryAsBase() {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "reserve-slots-manual-shorten-"));
+  const adminFilePath = path.join(tempDir, "Admins.cfg");
+  const localReservePath = path.join(tempDir, "data", "reserve-slots.json");
+  const firstExpireAt = "2099-07-02 21:26:59";
+
+  const seededContent = upsertReserveSlotInAdminFileContent(["header", "footer"].join("\n"), {
+    steamId: "76561198377609640",
+    group: "BZSSVIP",
+    expireAt: firstExpireAt,
+    name: "Alpha",
+  });
+  await fs.writeFile(adminFilePath, seededContent, "utf8");
+
+  const config = createConfig({
+    reserveSystem: {
+      enabled: true,
+      adminFilePath,
+      localReserveFilePath: path.relative(process.cwd(), localReservePath),
+    },
+  });
+
+  const harness = createTestHarness();
+  const reserveModule = createReserveSlotsModule({
+    core: harness.core,
+    modules: harness.modules,
+    config,
+    logger: harness.logger,
+  });
+
+  await reserveModule.init();
+  await reserveModule.api.importFromAdminFile();
+
+  const updated = await reserveModule.api.upsertMember({
+    steamId: "76561198377609640",
+    group: "BZSSVIP",
+    durationDays: -10,
+    name: "Alpha",
+    reason: "manual_shorten_test",
+  });
+
+  const member = updated.members.find((item) => item.steamId === "76561198377609640");
+  assert.ok(member);
+  assert.equal(member.expireAt, "2099-06-22 21:26:59");
+
+  const adminContent = await fs.readFile(adminFilePath, "utf8");
+  assert.match(adminContent, /Admin=76561198377609640:BZSSVIP \/\/2099-06-22 21:26:59 名称:Alpha manual_shorten_test/);
+
+  await reserveModule.stop?.();
+  await fs.rm(tempDir, { recursive: true, force: true });
+}
+
 async function testModuleAndRoutesWorkEndToEnd() {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "reserve-slots-web-"));
   const adminFilePath = path.join(tempDir, "Admins.cfg");
@@ -671,6 +723,7 @@ await testReserveSlotUniquenessDedupesExistingEntries();
 await testSyncReserveMemberNamesInAdminFileContentFillsMissingNames();
 await testCdkBatchAndChatActivationFlow();
 await testManualExtendAddsFromExistingExpiry();
+await testManualShortenUsesExistingExpiryAsBase();
 await testModuleAndRoutesWorkEndToEnd();
 
 console.log("reserve slots tests passed");

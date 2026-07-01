@@ -25,7 +25,12 @@
 
         <!-- 元信息行：均时 + 创建者 + 时间 -->
         <div class="squad-meta-row">
-          <span class="squad-meta-playtime">{{ squadAveragePlaytimeText }}</span>
+          <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+            <span class="squad-meta-playtime">{{ squadAveragePlaytimeText }}</span>
+            <span v-if="squadAveragePingText !== '--'" class="squad-meta-ping" style="font-size: 10px; color: var(--color-text-secondary); white-space: nowrap;">
+              · Ping {{ squadAveragePingText }}
+            </span>
+          </div>
           <span v-if="squad.creatorName || squad.createdAtLabel" class="squad-meta-right">
             <span v-if="squad.creatorName" class="squad-meta-creator">{{ squad.creatorName }}</span>
             <span v-if="squad.createdAtLabel" class="squad-created-time">
@@ -168,6 +173,17 @@ const squadAveragePlaytimeText = computed(() => {
   }
 
   return `Avg ${summary.averagePlaytimeHours}h · ${publicText}${privateText ? ` · ${privateText}` : ""}`;
+});
+
+const squadAveragePingText = computed(() => {
+  const playersList = squadPlayers.value;
+  const pings = playersList
+    .map(p => p.bzssCorePing ?? p.ping)
+    .filter((ping): ping is number => ping != null && Number.isFinite(ping) && ping >= 0);
+
+  if (pings.length === 0) return "--";
+  const sum = pings.reduce((acc, val) => acc + val, 0);
+  return `${Math.round(sum / pings.length)}ms`;
 });
 
 const squadWarnings = computed(() => {

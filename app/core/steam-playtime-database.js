@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import sqlite3 from "sqlite3";
 import { open } from "sqlite";
+import { wrapDatabaseWithRetries } from "./database.js";
 
 export async function createSteamPlaytimeDatabase(config = {}) {
   const dbDir = path.resolve(process.cwd(), config.dir ?? "./data");
@@ -14,6 +15,8 @@ export async function createSteamPlaytimeDatabase(config = {}) {
     filename: dbFile,
     driver: sqlite3.Database,
   });
+
+  wrapDatabaseWithRetries(db);
 
   await db.exec("PRAGMA journal_mode = WAL;");
   await db.exec("PRAGMA foreign_keys = ON;");

@@ -15,6 +15,8 @@ export async function createDatabase(config = {}) {
     driver: sqlite3.Database,
   });
 
+  wrapDatabaseWithRetries(db);
+
   await db.exec("PRAGMA journal_mode = WAL;");
   await db.exec("PRAGMA foreign_keys = ON;");
   await db.exec("PRAGMA busy_timeout = 5000;");
@@ -653,4 +655,60 @@ async function addColumnIfMissing(db, table, column, definition) {
 async function tableExists(db, table) {
   const row = await db.get("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", table);
   return Boolean(row);
+}
+
+export function wrapDatabaseWithRetries(db) {
+  const originalRun = db.run.bind(db);
+  const originalGet = db.get.bind(db);
+  const originalAll = db.all.bind(db);
+  const originalExec = db.exec.bind(db);
+  const originalPrepare = db.prepare.bind(db);
+
+  async function executeWithRetry(fn, ...args) {
+    let attempt = 0;
+    const maxRetries = 10;
+    const delay = 50;
+    while (true) {
+      try {
+        return await fn(...args);
+      } catch (error) {
+        const isBusy = error?.code === "SQLITE_BUSY" || 
+                       String(error?.message ?? "").includes("SQLITE_BUSY") || 
+                       String(error ?? "").includes("SQLITE_BUSY");
+        if (isBusy) {
+          attempt++;
+          if (attempt > maxRetries) {
+            throw error;
+          }
+          const backoff = delay * Math.pow(1.5, attempt - 1) + Math.random() * 50;
+          await new Promise((resolve) => setTimeout(resolve, backoff));
+          continue;
+        }
+        throw error;
+      }
+    }
+  }
+
+  function wrapStatement(stmt) {
+    const originalStmtRun = stmt.run.bind(stmt);
+    const originalStmtGet = stmt.get.bind(stmt);
+    const originalStmtAll = stmt.all.bind(stmt);
+
+    stmt.run = (...args) => executeWithRetry(originalStmtRun, ...args);
+    stmt.get = (...args) => executeWithRetry(originalStmtGet, ...args);
+    stmt.all = (...args) => executeWithRetry(originalStmtAll, ...args);
+
+    return stmt;
+  }
+
+  db.run = (...args) => executeWithRetry(originalRun, ...args);
+  db.get = (...args) => executeWithRetry(originalGet, ...args);
+  db.all = (...args) => executeWithRetry(originalAll, ...args);
+  db.exec = (...args) => executeWithRetry(originalExec, ...args);
+  db.prepare = async (...args) => {
+    const stmt = await executeWithRetry(originalPrepare, ...args);
+    return wrapStatement(stmt);
+  };
+
+  return db;
 }

@@ -1357,8 +1357,10 @@ function normalizeReserveMemberInput(input = {}, context = {}) {
 
 function resolveReserveExpireAtInput(input = {}, context = {}) {
   const durationDays = Number(input.durationDays ?? 0);
-  if (Number.isFinite(durationDays) && durationDays > 0) {
-    const baseDate = pickGrantBaseDate(context.existingMember?.expireAt ?? null);
+  if (Number.isFinite(durationDays) && durationDays !== 0) {
+    const baseDate = durationDays > 0
+      ? pickGrantBaseDate(context.existingMember?.expireAt ?? null)
+      : pickAdjustBaseDate(context.existingMember?.expireAt ?? null);
     return formatLocalDateTime(addDays(baseDate, durationDays));
   }
   return normalizeReserveExpireAt(input.expireAt);
@@ -1977,6 +1979,10 @@ function pickGrantBaseDate(currentExpireAt) {
   const now = new Date();
   if (!currentExpire) return now;
   return currentExpire.getTime() > now.getTime() ? currentExpire : now;
+}
+
+function pickAdjustBaseDate(currentExpireAt) {
+  return parseReserveDate(currentExpireAt) ?? new Date();
 }
 
 function optionalText(value) {

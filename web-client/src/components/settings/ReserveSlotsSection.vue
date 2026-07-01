@@ -160,15 +160,29 @@
                   </button>
                 </div>
 
+                <div class="quick-renew-grid quick-renew-grid-minus">
+                  <button
+                    v-for="days in reduceDays"
+                    :key="`selected-${days}`"
+                    type="button"
+                    class="reserve-btn"
+                    :disabled="!canEdit || saving"
+                    @click="extendSelectedMember(days)"
+                  >
+                    {{ saving && pendingExtendDays === days ? `调整中...` : `-${Math.abs(days)} 天` }}
+                  </button>
+                </div>
+
                 <div class="reserve-search-row">
                   <label class="reserve-field reserve-field-compact">
                     <span>自定义天数</span>
-                    <input v-model.number="selectedCustomDays" class="reserve-input" type="number" min="1" step="1">
+                    <input v-model.number="selectedCustomDays" class="reserve-input" type="number" min="-3650" step="1">
                   </label>
                   <button type="button" class="reserve-btn" :disabled="!canEdit || saving || !selectedCustomDaysValid" @click="extendSelectedMember(selectedCustomDays)">
-                    自定义续期
+                    自定义调整
                   </button>
                 </div>
+                <p class="reserve-helper">输入负数可以直接减少到期时间。</p>
               </template>
 
               <div v-else class="reserve-detail-empty">
@@ -226,11 +240,12 @@
                 </button>
                 <label class="reserve-field reserve-field-compact">
                   <span>自定义天数</span>
-                  <input v-model.number="form.durationDays" class="reserve-input" type="number" min="1" step="1">
+                  <input v-model.number="form.durationDays" class="reserve-input" type="number" min="-3650" step="1">
                 </label>
               </div>
+              <p class="reserve-helper">输入负数可以减少当前预留位到期时间。</p>
 
-              <label v-else class="reserve-field">
+              <label v-if="expireMode !== 'extend'" class="reserve-field">
                 <span>到期时间</span>
                 <input v-model="form.exactExpireAt" class="reserve-input" type="datetime-local" required>
               </label>
@@ -774,6 +789,7 @@ const router = useRouter();
 const ui = useUiStore();
 
 const quickDays = [7, 30, 90, 180];
+const reduceDays = [-7, -30];
 const tabs = [
   { key: "manual", label: "手动预留位" },
   { key: "batches", label: "CDK批次" },
@@ -920,8 +936,10 @@ const computedExpireAt = computed(() => {
   }
 
   const days = Number(form.durationDays);
-  if (!Number.isFinite(days) || days <= 0) return "";
-  const baseDate = pickGrantBaseDate(currentMember.value?.expireAt ?? null);
+  if (!Number.isFinite(days) || days === 0) return "";
+  const baseDate = days > 0
+    ? pickGrantBaseDate(currentMember.value?.expireAt ?? null)
+    : pickAdjustBaseDate(currentMember.value?.expireAt ?? null);
   return formatLocalDateTime(addDays(baseDate, days));
 });
 
@@ -929,12 +947,12 @@ const canSubmit = computed(() => {
   if (!/^7656119\d{10}$/.test(form.steamId.trim())) return false;
   if (!form.group.trim()) return false;
   if (expireMode.value === "extend") {
-    return Number.isFinite(Number(form.durationDays)) && Number(form.durationDays) > 0;
+    return Number.isFinite(Number(form.durationDays)) && Number(form.durationDays) !== 0;
   }
   return Boolean(computedExpireAt.value);
 });
 
-const selectedCustomDaysValid = computed(() => Number.isFinite(Number(selectedCustomDays.value)) && Number(selectedCustomDays.value) > 0);
+const selectedCustomDaysValid = computed(() => Number.isFinite(Number(selectedCustomDays.value)) && Number(selectedCustomDays.value) !== 0);
 
 const filteredActivations = computed(() => {
   const batchId = activationFilters.batchId.trim();
@@ -1394,6 +1412,10 @@ function pickGrantBaseDate(currentExpireAt: string | null) {
   return currentExpire.getTime() > now.getTime() ? currentExpire : now;
 }
 
+function pickAdjustBaseDate(currentExpireAt: string | null) {
+  return parseReserveDate(currentExpireAt) ?? new Date();
+}
+
 function parseReserveDate(value: string | null | undefined) {
   const text = String(value ?? "").trim();
   if (!text) return null;
@@ -1730,6 +1752,17 @@ function fromDatetimeLocal(value: string) {
 .reserve-filter-row .reserve-input,
 .reserve-search-row .reserve-input {
   flex: 1 1 220px;
+}
+
+.reserve-helper {
+  margin: -2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(232, 236, 255, 0.7);
+}
+
+.quick-renew-grid-minus .reserve-btn {
+  border-style: dashed;
 }
 
 .reserve-list-scroll {
