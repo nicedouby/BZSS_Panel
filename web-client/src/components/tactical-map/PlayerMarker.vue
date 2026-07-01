@@ -59,6 +59,8 @@
       {{ squadId }}
     </span>
 
+    <span v-if="isDisengaged && mode === 'tactical'" class="disengaged-warning-icon" title="脱离队长">!</span>
+
     <!-- Text Tag for Player Name & Coords -->
     <span v-if="showName" class="tag">
       <span v-if="isDisengaged && mode === 'tactical'" class="player-disengaged-tag">脱战</span>
@@ -360,6 +362,33 @@ function isRoleIconImage(icon: string | undefined) {
   font-weight: bold;
   z-index: 3;
   box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+
+.disengaged-warning-icon {
+  position: absolute;
+  top: -9px;
+  right: -7px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #fb923c;
+  color: #111827;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 13px;
+  text-align: center;
+  z-index: 6;
+  box-shadow: 0 0 8px rgba(251, 146, 60, 0.8);
+}
+
+.player-marker.is-disengaged .marker-ring {
+  border-color: #fb923c !important;
+  box-shadow: 0 0 12px rgba(251, 146, 60, 0.75);
+}
+
+.player-marker.is-disengaged .marker-direction .direction-arrow {
+  border-bottom-color: #fb923c;
+  filter: drop-shadow(0 0 4px rgba(251, 146, 60, 0.9));
 }
 
 /* Direction indicators */

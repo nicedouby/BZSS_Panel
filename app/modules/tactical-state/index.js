@@ -179,6 +179,7 @@ export function createTacticalStateModule({ core, modules, logger }) {
       match: clonePlainObject(matchState?.match ?? {}),
       teams,
       players: linked.players,
+      squadFollow: linked.squadFollow ?? null,
       assets: {
         captureZones: cloneArray(bzssRaw?.captureZones),
         fobs: cloneArray(bzssRaw?.fobs),
@@ -354,8 +355,15 @@ export function createTacticalStateModule({ core, modules, logger }) {
       return leftKey.localeCompare(rightKey);
     });
 
+    const squadFollow = modules.squadFollowState?.composeFromPlayers?.({
+      serverId,
+      generatedAt,
+      players,
+    }) ?? null;
+
     return {
       players,
+      squadFollow,
       diagnostics,
       sourceInfo: {
         playerDatabaseUpdatedAt: profileMap.updatedAt ?? "",
@@ -809,6 +817,7 @@ export function createTacticalStateModule({ core, modules, logger }) {
       match: {},
       teams: [],
       players: [],
+      squadFollow: null,
       assets: { captureZones: [], fobs: [], mainZones: [], explosions: [] },
       diagnostics: {
         unlinkedRconPlayers: [],

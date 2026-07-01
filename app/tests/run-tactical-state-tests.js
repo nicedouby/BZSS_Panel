@@ -141,6 +141,21 @@ function makeModule() {
           return null;
         },
       },
+      squadFollowState: {
+        composeFromPlayers({ serverId, generatedAt, players }) {
+          return {
+            enabled: true,
+            serverId,
+            generatedAt,
+            radiusMeters: 200,
+            radiusGameUnits: 20000,
+            markerMode: "disengaged",
+            squads: [],
+            playerIndex: Object.fromEntries(players.map((player) => [player.identity?.key ?? "", { teamId: player.match?.teamId ?? null, squadId: player.match?.squadId ?? null, leaderKey: "", distanceMeters: null, inside: false, disengaged: false, reason: "" }])),
+            diagnostics: { squadsWithoutLeader: [], playersWithoutPosition: [] },
+          };
+        },
+      },
     },
     logger: console,
   });
@@ -171,6 +186,8 @@ async function main() {
 
   assert.equal(snapshot.assets.captureZones.length, 1);
   assert.equal(snapshot.diagnostics.unlinkedBzssPlayers.length, 1);
+  assert.equal(snapshot.squadFollow?.radiusGameUnits, 20000);
+  assert.equal(snapshot.squadFollow?.squads.length, 0);
 
   await tacticalModule.stop();
   console.log("run-tactical-state-tests: ok");

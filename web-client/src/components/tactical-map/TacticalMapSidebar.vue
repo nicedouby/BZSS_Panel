@@ -162,6 +162,24 @@
           </div>
         </div>
 
+          <div v-if="sidebarTab === 'overview' && squadFollowRows.length" class="overview-card">
+            <div class="overview-card-title">跟队状态</div>
+            <div class="squad-follow-summary">
+              <button
+                v-for="squad in squadFollowRows"
+                :key="squad.key"
+                type="button"
+                class="squad-follow-row"
+                :class="{ warning: squad.outsideCount > 0 }"
+                @click="$emit('focus-squad', { teamId: squad.teamId, squadId: squad.squadId })"
+              >
+                <span class="squad-follow-row__name">S{{ squad.squadId }}</span>
+                <span class="squad-follow-row__ratio">{{ squad.insideCount }}/{{ squad.aliveMembers }}</span>
+                <span v-if="squad.outsideCount > 0" class="squad-follow-row__warning">脱离 {{ squad.outsideCount }}</span>
+              </button>
+            </div>
+          </div>
+
         <!-- Units Tab -->
         <div v-else-if="sidebarTab === 'units'" class="sidebar-scroll">
           <div class="sidebar-search-row">
@@ -201,6 +219,10 @@
                 <span class="squad-number">#{{ squad.id }}</span>
                 <span class="squad-name">{{ squad.name }}</span>
                 <span class="squad-members-count monospace">{{ squad.playersCount }}</span>
+              </div>
+              <div v-if="getSquadFollowStats(squad.teamId, squad.id)" class="squad-follow-inline">
+                <span class="squad-follow-inline__ratio">{{ getSquadFollowStats(squad.teamId, squad.id)?.insideCount }}/{{ getSquadFollowStats(squad.teamId, squad.id)?.aliveMembers }}</span>
+                <span v-if="getSquadFollowStats(squad.teamId, squad.id)?.outsideCount > 0" class="squad-follow-inline__warning">脱离 {{ getSquadFollowStats(squad.teamId, squad.id)?.outsideCount }}</span>
               </div>
               <div class="squad-card-meta">
                 <span class="sl-name">SL: {{ squad.squadLeaderName }}</span>
@@ -446,6 +468,7 @@ const props = defineProps<{
   matchPhase: string;
   tickets: { team1: number; team2: number };
   perspectiveSummaryText: string;
+  squadFollow?: any | null;
   snapshot: BzssCorePlayerInfoResponse | null;
   currentTeamSquads: TacticalTeamSquad[];
   filteredTeamPlayers: TacticalLinkedPlayer[];
@@ -575,6 +598,15 @@ const viewerPerspectiveModeModel = computed({
   set: (value: ViewerPerspectiveMode) => emit("update:viewer-perspective-mode", value),
 });
 
+const squadFollowRows = computed(() => {
+  const list = Array.isArray(props.squadFollow?.squads) ? [...props.squadFollow.squads] : [];
+  return list
+    .sort((a: any, b: any) => {
+      if ((b?.outsideCount ?? 0) !== (a?.outsideCount ?? 0)) return (b?.outsideCount ?? 0) - (a?.outsideCount ?? 0);
+      return (a?.squadId ?? 0) - (b?.squadId ?? 0);
+    });
+});
+
 function getTicketBarWidth(teamId: number) {
   const t1 = props.tickets?.team1 ?? 0;
   const t2 = props.tickets?.team2 ?? 0;
@@ -585,8 +617,20 @@ function getTicketBarWidth(teamId: number) {
 }
 
 function isSquadLeader(player: TacticalLinkedPlayer) {
-  const soldierClass = String(player.soldierInfo?.soldierClass ?? "").toLowerCase();
-  return soldierClass.includes("squadleader") || soldierClass.includes("officer") || soldierClass.includes("sl");
+  const source = player as any;
+  if (source?.match?.isLeader === true) return true;
+  if (source?.isLeader === true) return true;
+  if (source?.raw?.rcon?.isLeader === true) return true;
+  if (source?.raw?.bzss?.isLeader === true) return true;
+
+  const role = [
+    source?.match?.role,
+    source?.role,
+    source?.soldierInfo?.soldierClass,
+    source?.telemetry?.soldierClass,
+  ].map((value) => String(value ?? "").toLowerCase()).join(" ");
+
+  return role.includes("squadleader") || role.includes("officer") || /\bsl\b/.test(role);
 }
 
 function getPlayerHealthColor(player: TacticalLinkedPlayer) {
@@ -612,6 +656,11 @@ function getPlayerPosition(player: TacticalLinkedPlayer) {
 
 function getSquadForPlayer(player: TacticalLinkedPlayer) {
   return props.currentTeamSquads.find((squad) => squad.id === props.normalizeSquad(player.squadId));
+}
+
+function getSquadFollowStats(teamId: number, squadId: number) {
+  const list = Array.isArray(props.squadFollow?.squads) ? props.squadFollow.squads : [];
+  return list.find((squad: any) => Number(squad?.teamId ?? 0) === Number(teamId) && Number(squad?.squadId ?? 0) === Number(squadId)) ?? null;
 }
 
 const filteredPlayers = computed(() => {
@@ -1353,6 +1402,65 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
   flex-direction: column;
   gap: 4px;
 }
+
+.squad-follow-inline,
+.squad-follow-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.squad-follow-inline {
+  justify-content: space-between;
+  margin-top: 4px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.16);
+  font-size: 10px;
+}
+
+.squad-follow-inline__ratio,
+.squad-follow-row__ratio {
+  color: #fbbf24;
+  font-weight: 800;
+  font-family: monospace;
+}
+
+.squad-follow-inline__warning,
+.squad-follow-row__warning {
+  color: #fb923c;
+  font-weight: 800;
+}
+
+.squad-follow-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.squad-follow-row {
+  width: 100%;
+  justify-content: space-between;
+  padding: 7px 9px;
+  border-radius: 7px;
+  border: 1px solid rgba(251, 191, 36, 0.14);
+  background: rgba(6, 11, 28, 0.35);
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.squad-follow-row.warning {
+  border-color: rgba(251, 146, 60, 0.3);
+  background: rgba(251, 146, 60, 0.08);
+}
+
+.squad-follow-row__name {
+  font-weight: 800;
+  color: #fbbf24;
+  font-family: monospace;
+}
+
 .squad-health-summary {
   display: flex;
   align-items: center;

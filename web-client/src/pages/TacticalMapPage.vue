@@ -285,7 +285,7 @@
         </div>
 
         <!-- SVG Layer for Overlays (Distance Measuring & Hotspot Circle) -->
-        <svg v-if="measureMode || combatHotspot != null" class="map-measure-svg">
+        <svg v-if="measureMode || combatHotspot != null || showSquadFollow" class="map-measure-svg">
           <path
             v-if="measureMode && measurePoints.length >= 2"
             :d="measurePathD"
@@ -348,6 +348,32 @@
               stroke-width="1.5"
             />
           </g>
+
+          <g v-if="showSquadFollow">
+            <g
+              v-for="circle in squadFollowCircles"
+              :key="circle.key"
+              class="squad-follow-circle"
+            >
+              <circle
+                :cx="circle.mapX * 10"
+                :cy="circle.mapY * 10"
+                :r="circle.radiusSvg"
+                fill="rgba(251, 191, 36, 0.035)"
+                stroke="rgba(251, 191, 36, 0.75)"
+                stroke-width="2"
+                stroke-dasharray="7,5"
+              />
+              <text
+                :x="circle.mapX * 10"
+                :y="circle.mapY * 10 - circle.radiusSvg - 8"
+                text-anchor="middle"
+                class="squad-follow-label"
+              >
+                S{{ circle.squadId }} 跟队 {{ circle.insideCount }}/{{ circle.aliveMembers }}
+              </text>
+            </g>
+          </g>
         </svg>
 
         <!-- Distance Labels -->
@@ -388,6 +414,7 @@
         :tone="getPerspectiveTone(playerInfoPanel.player.teamId)"
         :speed-text="getPlayerSpeedText(playerInfoPanel.player)"
         :rcon-detail="getPlayerRconDetail(playerInfoPanel.player)"
+        :follow-status="getPlayerFollowStatus(playerInfoPanel.player)"
         @close="playerInfoPanel = null; selectedPlayerKey = ''"
       />
 
@@ -605,6 +632,15 @@
         </button>
       </div>
 
+        <button
+          class="ctrl-btn text-btn"
+          :class="{ active: showSquadFollow }"
+          @click="showSquadFollow = !showSquadFollow"
+          title="闃熼暱璺熼殢鍦?200m"
+        >
+          璺熼槦
+        </button>
+
       <!-- Coordinate Sector Display Box (Bottom Right) -->
       <div class="coordinates-hud-card glass-panel font-mono">
         <div class="hud-item">
@@ -643,6 +679,7 @@
       :server-map-name="serverMapName"
       :status-text="statusText"
       :match-phase="matchPhase"
+      :squad-follow="squadFollow"
       :tickets="tickets"
       :perspective-summary-text="perspectiveSummaryText"
       :snapshot="snapshot"
@@ -1053,6 +1090,14 @@ watch(
 
 // Combat Hotspot State (Centroid of alive players)
 const combatHotspot = ref<{ gameX: number; gameY: number } | null>(null);
+const showSquadFollow = ref(true);
+const squadFollow = computed(() => (props.snapshot as any)?.squadFollow ?? null);
+const squadFollowPlayerIndex = computed<Record<string, any>>(() => {
+  return squadFollow.value?.playerIndex ?? {};
+});
+const squadFollowSquads = computed<any[]>(() => {
+  return Array.isArray(squadFollow.value?.squads) ? squadFollow.value.squads : [];
+});
 
 const combatHotspotMapPos = computed(() => {
   if (!combatHotspot.value) return { mapX: 0, mapY: 0 };
@@ -1069,6 +1114,30 @@ const combatHotspotRadiusSvg = computed(() => {
   if (mapGameWidth <= 0) return 0;
   // 1000m in game coordinates is 100,000 units (1m = 100 units)
   return (100000 / mapGameWidth) * 1000;
+});
+
+const squadFollowCircles = computed(() => {
+  const bounds = activeMapConfig.value.bounds;
+  const mapGameWidth = bounds.maxX - bounds.minX;
+  if (mapGameWidth <= 0) return [];
+
+  const radiusGameUnits = Number(squadFollow.value?.radiusGameUnits ?? 20000);
+  const radiusSvg = (radiusGameUnits / mapGameWidth) * 1000;
+
+  return squadFollowSquads.value
+    .filter((squad) => squad?.leader?.position)
+    .map((squad) => ({
+      key: squad.key,
+      teamId: squad.teamId,
+      squadId: squad.squadId,
+      leaderName: squad.leader.name,
+      insideCount: squad.insideCount,
+      aliveMembers: squad.aliveMembers ?? squad.totalMembers,
+      outsideCount: squad.outsideCount,
+      mapX: project(Number(squad.leader.position.x ?? 0), bounds.minX, bounds.maxX),
+      mapY: project(Number(squad.leader.position.y ?? 0), bounds.minY, bounds.maxY),
+      radiusSvg,
+    }));
 });
 
 function calculateCombatHotspot() {
@@ -1106,6 +1175,10 @@ function clearCombatHotspot() {
 }
 
 function isPlayerDisengaged(player: BzssCoreTrackedPlayerInfo) {
+  const key = getPlayerKey(player);
+  const followState = squadFollowPlayerIndex.value[key];
+  if (followState) return Boolean(followState.disengaged);
+
   if (!combatHotspot.value) return false;
   const pos = player.soldierInfo?.position;
   if (!pos) return false;
@@ -1115,6 +1188,10 @@ function isPlayerDisengaged(player: BzssCoreTrackedPlayerInfo) {
   const dist = Math.sqrt(dx * dx + dy * dy);
   // 1000 meters = 100,000 game units
   return dist > 100000;
+}
+
+function getPlayerFollowStatus(player: BzssCoreTrackedPlayerInfo) {
+  return squadFollowPlayerIndex.value[getPlayerKey(player)] ?? null;
 }
 
 // Position and Rotation Spring-Damper State
@@ -2331,8 +2408,20 @@ function project(value: number, min: number, max: number) {
 }
 
 function isSquadLeader(player: BzssCoreTrackedPlayerInfo) {
-  const soldierClass = String(player.soldierInfo?.soldierClass ?? "").toLowerCase();
-  return soldierClass.includes("squadleader") || soldierClass.includes("officer") || soldierClass.includes("sl");
+  const source = player as any;
+  if (source?.match?.isLeader === true) return true;
+  if (source?.isLeader === true) return true;
+  if (source?.raw?.rcon?.isLeader === true) return true;
+  if (source?.raw?.bzss?.isLeader === true) return true;
+
+  const role = [
+    source?.match?.role,
+    source?.role,
+    source?.soldierInfo?.soldierClass,
+    source?.telemetry?.soldierClass,
+  ].map((value) => String(value ?? "").toLowerCase()).join(" ");
+
+  return role.includes("squadleader") || role.includes("officer") || /\bsl\b/.test(role);
 }
 
 function resolveMapRoleInfo(player: BzssCoreTrackedPlayerInfo): RoleIconInfo {

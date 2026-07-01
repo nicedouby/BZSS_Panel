@@ -24,6 +24,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   const state = {
     dispatchCount: 0,
     failedCount: 0,
+    lastRecipientCount: 0,
     lastDispatchAt: "",
     lastError: "",
     nextDispatchAt: "",
@@ -47,8 +48,48 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     state.nextDelayMs = 0;
   }
 
-  function getBroadcaster() {
-    return modules?.adminWarn?.sendAdminBroadcast ?? modules?.adminWarn?.broadcastMessage ?? null;
+  function getWarner() {
+    return modules?.adminWarn?.warnPlayer ?? modules?.adminWarn?.sendAdminWarn ?? null;
+  }
+
+  function normalizeText(value) {
+    return String(value ?? "").trim();
+  }
+
+  function resolveOnlinePlayers() {
+    const overview = modules?.matchState?.getOverview?.() ?? null;
+    const serverId = normalizeText(core?.webStatus?.serverId ?? overview?.serverId ?? "");
+
+    const playersFromOverview = Array.isArray(overview?.players)
+      ? overview.players
+      : Array.isArray(overview?.matchState?.players?.list)
+        ? overview.matchState.players.list
+        : [];
+
+    const playersFromState = serverId
+      ? (modules?.playerState?.getOnlinePlayers?.(serverId) ?? modules?.playerState?.getPlayerList?.(serverId) ?? [])
+      : [];
+
+    const merged = [...playersFromOverview, ...playersFromState];
+    const deduped = new Map();
+
+    for (const player of merged) {
+      const targetName = normalizeText(player?.name ?? player?.playerName);
+      const targetSteamId = normalizeText(player?.steamID ?? player?.steamId ?? player?.steam64ID);
+      const targetEosId = normalizeText(player?.eosID ?? player?.eosId);
+
+      if (!targetName) continue;
+      const key = targetSteamId || targetEosId || targetName;
+      if (!key) continue;
+
+      deduped.set(key, {
+        targetName,
+        targetSteamId,
+        targetEosId,
+      });
+    }
+
+    return [...deduped.values()];
   }
 
   function scheduleNext(reason = "interval") {
@@ -75,37 +116,60 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       return;
     }
 
-    const broadcaster = getBroadcaster();
-    if (typeof broadcaster !== "function") {
+    const warner = getWarner();
+    if (typeof warner !== "function") {
       state.failedCount += 1;
-      state.lastError = "adminWarn broadcast API unavailable";
-      pluginLogger?.warn?.("[PeriodicTeamworkWarning] adminWarn broadcast API unavailable.");
+      state.lastError = "adminWarn warn API unavailable";
+      pluginLogger?.warn?.("[PeriodicTeamworkWarning] adminWarn warn API unavailable.");
+      scheduleNext("retry");
+      return;
+    }
+
+    const targets = resolveOnlinePlayers();
+    state.lastRecipientCount = targets.length;
+    if (!targets.length) {
+      state.failedCount += 1;
+      state.lastError = "no_online_players";
       scheduleNext("retry");
       return;
     }
 
     try {
-      const result = await broadcaster({
-        message: runtimeConfig.message,
-        sourceModule: PLUGIN_ID,
-        reason: `periodic_teamwork_warning_${reason}`,
-        relatedEventId: `periodic_teamwork_warning_${Date.now()}`,
-        system: true,
-      });
+      let successCount = 0;
+      let failedCount = 0;
 
-      if (result?.success) {
-        state.dispatchCount += 1;
+      for (const target of targets) {
+        const result = await warner({
+          targetName: target.targetName,
+          targetSteamId: target.targetSteamId || undefined,
+          targetEosId: target.targetEosId || undefined,
+          message: runtimeConfig.message,
+          sourceModule: PLUGIN_ID,
+          reason: `periodic_teamwork_warning_${reason}`,
+          relatedEventId: `periodic_teamwork_warning_${Date.now()}`,
+          system: true,
+        });
+
+        if (result?.success) successCount += 1;
+        else failedCount += 1;
+      }
+
+      if (successCount > 0) {
+        state.dispatchCount += successCount;
         state.lastDispatchAt = new Date().toISOString();
-        state.lastError = "";
+      }
+
+      if (failedCount > 0) {
+        state.failedCount += failedCount;
+        state.lastError = `warn_failed_${failedCount}`;
+        pluginLogger?.warn?.(`[PeriodicTeamworkWarning] partial warn failure: ${failedCount}/${targets.length}`);
       } else {
-        state.failedCount += 1;
-        state.lastError = String(result?.errorMessage ?? result?.skipReason ?? "broadcast_failed");
-        pluginLogger?.warn?.(`[PeriodicTeamworkWarning] broadcast failed: ${state.lastError}`);
+        state.lastError = "";
       }
     } catch (error) {
       state.failedCount += 1;
-      state.lastError = error instanceof Error ? error.message : String(error ?? "broadcast_failed");
-      pluginLogger?.warn?.(`[PeriodicTeamworkWarning] broadcast exception: ${state.lastError}`);
+      state.lastError = error instanceof Error ? error.message : String(error ?? "warn_failed");
+      pluginLogger?.warn?.(`[PeriodicTeamworkWarning] warn exception: ${state.lastError}`);
     }
 
     scheduleNext("interval");
