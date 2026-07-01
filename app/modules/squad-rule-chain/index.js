@@ -12,6 +12,7 @@ import {
   normalizeRuleChainPassEvent,
   normalizeSquadRuleViolationEvent,
 } from "./events.js";
+import { classifySquadName, SQUAD_NATURE, SQUAD_NATURE_LABEL } from "../../domain/squad/squad_name_classifier.js";
 
 const API_NAME = "squadRuleChain";
 const DEFAULT_RECENT_LIMIT = 200;
@@ -232,6 +233,17 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
         result: summarizeActionResult(broadcastResult),
       });
       if (broadcastResult?.success !== false) stats.broadcasts += 1;
+
+      const warningMessages = buildFinalPassWarningMessages(record.event);
+      for (const message of warningMessages) {
+        const warnResult = await warnLeader(record.event, message);
+        record.actions.push({
+          type: warnResult?.success === false ? "warn_failed" : "warned",
+          result: summarizeActionResult(warnResult),
+        });
+        if (warnResult?.success !== false) stats.warned += 1;
+      }
+
       record.status = broadcastResult?.success === false ? "broadcast_failed" : "handled";
       record.updatedAt = nowIso();
     } catch (error) {
@@ -515,7 +527,7 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
     const sender = modules?.adminWarn?.broadcastMessage ?? modules?.adminWarn?.sendAdminBroadcast;
     if (typeof sender !== "function") return { success: false, skipped: true, skipReason: "admin_warn_unavailable" };
     return await sender.call(modules.adminWarn, {
-      message: buildFinalPassBroadcastMessage(record),
+      message: buildFinalPassBroadcastMessageV2(record),
       reason: "squad_rule_chain_final_pass_broadcast",
       sourceModule: SQUAD_RULE_CHAIN_MODULE_ID,
       relatedEventId: record.event.sourceEventId,
@@ -524,13 +536,40 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
   }
 }
 
-function buildFinalPassBroadcastMessage(record) {
+function buildFinalPassBroadcastMessageV2(record) {
   const event = record?.event ?? {};
   const creator = event.leaderName || "未知玩家";
   const squadName = event.squadName || `Squad ${event.squadId ?? "?"}`;
-  return `${creator} 建立了${squadName}，建队顺序码 ${record.creationOrderCode}`;
+  const squadNatureLabel = resolveSquadNatureLabel(event);
+  return `${creator} 建立了${squadName}，队伍性质：${squadNatureLabel}，建队顺序码 ${record.creationOrderCode}`;
 }
 
+function buildFinalPassWarningMessages(event = {}) {
+  const nature = resolveSquadNature(event);
+  if (nature === SQUAD_NATURE.VEHICLE) {
+    return ["本服绝大部分载具严禁单载，包括 ZCC ，请遵守服规。"];
+  }
+  if (nature === SQUAD_NATURE.SUPPORT) {
+    return ["攻守模式禁止迫击炮单独建队。"];
+  }
+  return [];
+}
+
+function resolveSquadNature(event = {}) {
+  const explicitNature = normalizeText(event.squadType);
+  if (explicitNature && Object.values(SQUAD_NATURE).includes(explicitNature)) {
+    return explicitNature;
+  }
+  return classifySquadName(event.squadName, { includeDebug: false })?.nature || SQUAD_NATURE.OTHER;
+}
+
+function resolveSquadNatureLabel(event = {}) {
+  const nature = resolveSquadNature(event);
+  return SQUAD_NATURE_LABEL[nature] || SQUAD_NATURE_LABEL[SQUAD_NATURE.OTHER];
+}
+function buildFinalPassBroadcastMessage(record) {
+  return buildFinalPassBroadcastMessageV2(record);
+}
 function buildPlayerKey(event = {}) {
   if (event.leaderSteamId) return `steam:${event.leaderSteamId}`;
   if (event.leaderEosId) return `eos:${event.leaderEosId}`;

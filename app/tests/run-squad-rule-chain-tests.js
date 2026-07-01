@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import { classifySquadName } from "../domain/squad/squad_name_classifier.js";
 import { createSquadNamePolicyGuardModule } from "../modules/squad-name-policy-guard/index.js";
 import { createSquadRuleChainModule } from "../modules/squad-rule-chain/index.js";
 import { createPlugin as createStepwisePlugin } from "../plugins/stepwise-squad-playtime-guard.js";
@@ -353,10 +354,10 @@ async function testFinalPassBroadcastAssignsOrderAndReplacesPlayerRecord() {
     assert.equal(state.finalPassRecords.length, 1);
     assert.equal(state.finalPassRecords[0].creationOrderCode, 1);
     assert.equal(state.finalPassRecords[0].event.squadId, 31);
-    assert.equal(
-      harness.broadcasts.find((item) => item.reason === "squad_rule_chain_final_pass_broadcast").message,
-      "Leader 建立了Squad 1，建队顺序码 1",
-    );
+    const squad1Nature = classifySquadName("Squad 1").label;
+    const squad1Broadcast = harness.broadcasts.find((item) => item.reason === "squad_rule_chain_final_pass_broadcast").message;
+    assert.equal(squad1Broadcast.includes("\u961F\u4F0D\u6027\u8D28"), true);
+    assert.equal(squad1Broadcast.includes(squad1Nature), true);
 
     harness.eventBus.emitModuleEvent(
       "module.squadLifecycle",
@@ -394,12 +395,51 @@ async function testTieredPassFallbackBroadcastsWhenFairSkips() {
     const state = harness.ruleChain.api.getState();
     assert.equal(state.finalPassRecords.length, 1);
     assert.equal(state.finalPassRecords[0].event.squadId, 41);
-    assert.equal(harness.broadcasts[0].message, "Leader 建立了Fallback，建队顺序码 1");
+    const fallbackNature = classifySquadName("Fallback").label;
+    const fallbackBroadcast = harness.broadcasts[0].message;
+    assert.equal(fallbackBroadcast.includes("\u961F\u4F0D\u6027\u8D28"), true);
+    assert.equal(fallbackBroadcast.includes(fallbackNature), true);
   } finally {
     await harness.stop();
   }
 }
 
+async function testFinalPassWarningMatchesSquadNature() {
+  const harness = await createHarness();
+
+  try {
+    harness.broadcasts.length = 0;
+    harness.warnings.length = 0;
+
+    harness.eventBus.emitModuleEvent(
+      "module.squadRuleChain",
+      "finalSquadRulePassed",
+      creation({ squadName: "zcc 1", squadId: 61, creatorSteamId: "steam-1", leaderSteamId: "steam-1" }),
+    );
+
+    await waitFor(() => harness.broadcasts.some((item) => item.reason === "squad_rule_chain_final_pass_broadcast"));
+    await waitFor(() => harness.warnings.length === 1);
+
+    assert.equal(harness.warnings[0].message.includes("ZCC"), true);
+    assert.equal(harness.warnings[0].message.includes("\u5355\u8F7D"), true);
+
+    harness.broadcasts.length = 0;
+    harness.warnings.length = 0;
+
+    harness.eventBus.emitModuleEvent(
+      "module.squadRuleChain",
+      "finalSquadRulePassed",
+      creation({ squadName: "mortar 1", squadId: 62, creatorSteamId: "steam-2", leaderSteamId: "steam-2" }),
+    );
+
+    await waitFor(() => harness.broadcasts.some((item) => item.reason === "squad_rule_chain_final_pass_broadcast"));
+    await waitFor(() => harness.warnings.length === 1);
+
+    assert.equal(harness.warnings[0].message.includes("\u8FEB\u51FB\u70AE"), true);
+  } finally {
+    await harness.stop();
+  }
+}
 async function testFinalPassCacheRestoresSameMatch() {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-rule-chain-cache-"));
   try {
@@ -654,6 +694,7 @@ await testFairOnlyRunsAfterFirstTwoPass();
 await testTrackingDoesNotTreatFairViolationAsAllowedCreation();
 await testFinalPassBroadcastAssignsOrderAndReplacesPlayerRecord();
 await testTieredPassFallbackBroadcastsWhenFairSkips();
+await testFinalPassWarningMatchesSquadNature();
 await testFinalPassCacheRestoresSameMatch();
 await testFinalPassCacheRestoresByMatchCacheAlias();
 await testLegacyFinalPassCacheRestoresBySessionTimestamp();

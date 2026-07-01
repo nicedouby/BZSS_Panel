@@ -63,6 +63,17 @@ function testParseLogLine() {
   assert.equal(gluedBooleanScoreboard.scoreboardPlayers[0].playerScoreboard.stats.teamworkScore, 0);
   assert.equal(gluedBooleanScoreboard.scoreboardPlayers[0].playerScoreboard.stats.combatScore, 0);
 
+  const gluedPositiveFtScoreboard = parseBzssCoreLogLine(
+    "PIE: PlayerScoreboard{7,2,1,5,0,4,0,1,0,0,0,0,0,0,1,02,0,78}}"
+  );
+  assert.equal(gluedPositiveFtScoreboard.type, "playerScoreboard");
+  assert.equal(gluedPositiveFtScoreboard.scoreboardPlayers.length, 1);
+  assert.equal(gluedPositiveFtScoreboard.scoreboardPlayers[0].playerIndex, 7);
+  assert.equal(gluedPositiveFtScoreboard.scoreboardPlayers[0].isCommander, null);
+  assert.equal(gluedPositiveFtScoreboard.scoreboardPlayers[0].fireTeamIndex, 2);
+  assert.equal(gluedPositiveFtScoreboard.scoreboardPlayers[0].fireTeamPosition, 0);
+  assert.equal(gluedPositiveFtScoreboard.scoreboardPlayers[0].ping, 78);
+
   const observedScoreboard = parseBzssCoreLogLine(
     "PIE: PlayerScoreboard{42,2,1,1,1,4,0,0,0,0,0,0,80,15,0,0,1,99,55}}"
   );

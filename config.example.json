@@ -644,12 +644,19 @@
       "./plugins/match-snapshot.js",
       "./plugins/fair-squad-guard.js",
       "./plugins/stepwise-squad-playtime-guard.js",
-      "./plugins/squad-creation-broadcast.js"
+      "./plugins/squad-creation-broadcast.js",
+      "./plugins/periodic-teamwork-warning.js"
     ],
     "squad-creation-broadcast": {
       "enabled": false,
       "delaySeconds": 5,
       "messageTemplate": "[寤洪槦鎾姤] 鐜╁ ${creatorName} 鍒涘缓浜嗗皬闃? ${squadName} (灏忛槦ID: ${squadId})"
+    },
+    "periodic-teamwork-warning": {
+      "enabled": true,
+      "minIntervalMinutes": 10,
+      "maxIntervalMinutes": 15,
+      "message": "听从队长指挥是战术小队的核心，团队合作才能带来最终的共赢。"
     },
     "fairSquadGuard": {
       "enabled": true,

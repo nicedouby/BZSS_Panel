@@ -700,12 +700,14 @@ function repairScoreboardFields(rawFields) {
   }
   if (
     out.length === 18
-    && /^[01]{2}$/.test(String(out[15] ?? ""))
+    && /^[01]-?\d+$/.test(String(out[15] ?? ""))
     && /^-?\d+$/.test(String(out[16] ?? ""))
     && /^-?\d+$/.test(String(out[17] ?? ""))
   ) {
-    const pair = String(out[15]);
-    out.splice(15, 1, pair[0], pair[1]);
+    const text = String(out[15]);
+    const cmdr = text[0];
+    const ftIdx = text.slice(1);
+    out.splice(15, 1, cmdr, ftIdx);
   }
   return out;
 }
