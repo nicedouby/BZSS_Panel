@@ -13,8 +13,8 @@ export function createSquadFollowWarningModule({ core, modules, config, logger }
   const moduleConfig = config?.get?.("modules.squadFollowWarning", {}) ?? {};
   const enabled = Boolean(moduleConfig.enabled ?? true);
   const recentLimit = Math.max(1, Number(moduleConfig.recentLimit ?? DEFAULT_RECENT_LIMIT));
-  const exitMessage = String(moduleConfig.exitMessage ?? "[BZSS]你脱离了你的队长。").trim();
-  const enterMessage = String(moduleConfig.enterMessage ?? "[BZSS]团队合作才能胜利。").trim();
+  const exitMessage = String(moduleConfig.exitMessage ?? "已为你关闭伤害显示。\n 你脱离了你的队长。请立即回到队长身边").trim();
+  const enterMessage = String(moduleConfig.enterMessage ?? "已为你打开伤害显示。\n 团队合作才能胜利。保持在你的队长身边").trim();
 
   const unsubscribers = [];
   const recentWarnings = [];
@@ -72,7 +72,7 @@ export function createSquadFollowWarningModule({ core, modules, config, logger }
       for (const unsubscribe of unsubscribers.splice(0)) {
         try {
           unsubscribe();
-        } catch {}
+        } catch { }
       }
 
       moduleLogger?.info?.("Squad follow warning module stopped.");

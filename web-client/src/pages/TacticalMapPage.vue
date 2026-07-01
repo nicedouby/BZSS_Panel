@@ -1174,14 +1174,20 @@ function clearCombatHotspot() {
   logCombatEvent("Cleared combat hotspot marker", "system");
 }
 
-function isPlayerDisengaged(player: BzssCoreTrackedPlayerInfo) {
+function isPlayerDisengaged(player: BzssCoreTrackedPlayerInfo): boolean | null {
   const key = getPlayerKey(player);
   const followState = squadFollowPlayerIndex.value[key];
-  if (followState) return Boolean(followState.disengaged);
+  if (followState) {
+    const reason = String(followState.reason ?? "").trim();
+    if (reason === "" || reason === "outside_leader_radius") {
+      return followState.disengaged == null ? null : Boolean(followState.disengaged);
+    }
+    return null;
+  }
 
-  if (!combatHotspot.value) return false;
+  if (!combatHotspot.value) return null;
   const pos = player.soldierInfo?.position;
-  if (!pos) return false;
+  if (!pos) return null;
   
   const dx = (pos.x ?? 0) - combatHotspot.value.gameX;
   const dy = (pos.y ?? 0) - combatHotspot.value.gameY;

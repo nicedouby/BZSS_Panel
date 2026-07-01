@@ -3,6 +3,7 @@
 export function createSquadFollowStateModule({ core, config, logger }) {
   const previousPlayerStates = new Map();
   const recentEvents = [];
+  let lastSnapshot = null;
   const EVENT_HISTORY_LIMIT = 200;
 
   const moduleLogger = logger ?? core.createLogger?.({
@@ -33,7 +34,10 @@ export function createSquadFollowStateModule({ core, config, logger }) {
       markerMode: String(options.markerMode ?? defaultOptions.markerMode),
     };
 
-    if (!settings.enabled) return null;
+    if (!settings.enabled) {
+      lastSnapshot = null;
+      return null;
+    }
 
     const list = Array.isArray(players) ? players : [];
     const squadMap = new Map();
@@ -96,6 +100,9 @@ export function createSquadFollowStateModule({ core, config, logger }) {
 
       for (const member of allMembers) {
         const playerKey = resolvePlayerKey(member);
+        const steam64ID = resolveSteamID(member);
+        const eosID = resolveEOSID(member);
+        const controllerID = resolveControllerID(member);
         const position = resolvePosition(member);
         const health = resolveHealth(member);
         const vehicleType = resolveVehicleType(member);
@@ -133,7 +140,10 @@ export function createSquadFollowStateModule({ core, config, logger }) {
         const memberRecord = {
           key: playerKey,
           name: resolvePlayerName(member),
-          steamID: resolveSteamID(member),
+          steam64ID,
+          steamID: steam64ID,
+          eosID,
+          controllerID,
           position: clonePlainObject(position),
           distanceMeters,
           inside,
@@ -144,9 +154,18 @@ export function createSquadFollowStateModule({ core, config, logger }) {
         evaluatedMembers.push(memberRecord);
         if (playerKey) {
           playerIndex[playerKey] = {
+            key: playerKey,
+            playerKey,
+            name: resolvePlayerName(member),
+            steam64ID,
+            steamID: steam64ID,
+            eosID,
+            controllerID,
             teamId: squad.teamId,
             squadId: squad.squadId,
             leaderKey: resolvePlayerKey(leaderCandidate),
+            leaderName: resolvePlayerName(leaderCandidate),
+            squadName: squad.squadName,
             distanceMeters,
             inside,
             disengaged,
@@ -197,6 +216,8 @@ export function createSquadFollowStateModule({ core, config, logger }) {
       diagnostics,
     };
 
+    lastSnapshot = clonePlainObject(result);
+
     detectAndEmitTransitions({
       serverId,
       generatedAt,
@@ -220,6 +241,9 @@ export function createSquadFollowStateModule({ core, config, logger }) {
     apiName: "squadFollowState",
     api: {
       composeFromPlayers,
+      getCurrentSnapshot,
+      getPlayerFollowState,
+      isPlayerInsideLeaderRadius,
       getState,
     },
   };
@@ -230,7 +254,48 @@ export function createSquadFollowStateModule({ core, config, logger }) {
       radiusMeters: defaultOptions.radiusMeters,
       recentEvents: [...recentEvents].reverse(),
       trackedPlayers: previousPlayerStates.size,
+      currentSnapshot: getCurrentSnapshot(),
     };
+  }
+
+  function getCurrentSnapshot() {
+    return clonePlainObject(lastSnapshot);
+  }
+
+  function getPlayerFollowState(identity = {}) {
+    const snapshot = lastSnapshot;
+    if (!snapshot || !snapshot.playerIndex) return null;
+
+    const match = resolvePlayerFollowEntry(snapshot, identity);
+    if (!match) return null;
+
+    return clonePlainObject({
+      serverId: snapshot.serverId ?? "",
+      generatedAt: snapshot.generatedAt ?? "",
+      radiusMeters: snapshot.radiusMeters ?? null,
+      playerKey: match.playerKey ?? match.key ?? "",
+      key: match.playerKey ?? match.key ?? "",
+      name: match.name ?? "",
+      steam64ID: match.steam64ID ?? match.steamID ?? "",
+      steamID: match.steamID ?? match.steam64ID ?? "",
+      eosID: match.eosID ?? "",
+      controllerID: match.controllerID ?? "",
+      teamId: match.teamId ?? null,
+      squadId: match.squadId ?? null,
+      leaderKey: match.leaderKey ?? "",
+      leaderName: match.leaderName ?? "",
+      inside: Boolean(match.inside),
+      disengaged: Boolean(match.disengaged),
+      distanceMeters: match.distanceMeters ?? null,
+      reason: match.reason ?? "",
+      squadName: match.squadName ?? "",
+    });
+  }
+
+  function isPlayerInsideLeaderRadius(identity = {}) {
+    const state = getPlayerFollowState(identity);
+    if (!state) return null;
+    return Boolean(state.inside);
   }
 
   function detectAndEmitTransitions({ serverId, generatedAt, radiusMeters, squads, playerIndex }) {
@@ -437,6 +502,20 @@ function resolveSteamID(player) {
   return String(player?.identity?.steamID ?? player?.steamID ?? player?.playerGuid ?? "").trim();
 }
 
+function resolveEOSID(player) {
+  return String(
+    player?.identity?.eosID ??
+    player?.eosID ??
+    player?.playerEOSID ??
+    player?.playerEosID ??
+    "",
+  ).trim();
+}
+
+function resolveControllerID(player) {
+  return String(player?.identity?.controllerID ?? player?.controllerID ?? player?.playerControllerID ?? "").trim();
+}
+
 function resolveTeamId(player) {
   return numberOrNull(player?.match?.teamId, player?.teamId, player?.teamID, null) ?? NaN;
 }
@@ -492,4 +571,80 @@ function numberOrNull(...values) {
     if (Number.isFinite(number)) return number;
   }
   return null;
+}
+
+function resolvePlayerFollowEntry(snapshot, identity = {}) {
+  const index = snapshot?.playerIndex && typeof snapshot.playerIndex === "object" ? snapshot.playerIndex : {};
+  const entries = Object.entries(index).map(([key, value]) => ({
+    key,
+    ...value,
+  }));
+  if (!entries.length) return null;
+
+  const lookup = normalizeFollowIdentity(identity);
+  if (!lookup.hasAny) return null;
+
+  const matched = findMatchingPlayerFollowEntry(entries, lookup);
+  return matched ? matched.entry : null;
+}
+
+function findMatchingPlayerFollowEntry(entries, lookup) {
+  const checks = [
+    (entry) => lookup.steamIDs.some((value) => matchText(entry.steam64ID, value) || matchText(entry.steamID, value)),
+    (entry) => lookup.eosIDs.some((value) => matchText(entry.eosID, value)),
+    (entry) => lookup.controllerIDs.some((value) => matchText(entry.controllerID, value)),
+    (entry) => lookup.names.some((value) => matchText(entry.name, value)),
+    (entry) => lookup.playerKeys.some((value) => matchText(entry.playerKey ?? entry.key, value)),
+  ];
+
+  for (const check of checks) {
+    const found = entries.find((entry) => check(entry));
+    if (found) return { entry: found };
+  }
+
+  return null;
+}
+
+function normalizeFollowIdentity(identity = {}) {
+  const directText = typeof identity === "string" || typeof identity === "number"
+    ? String(identity).trim()
+    : "";
+  const steamIDs = uniqueTexts([identity.steam64ID, identity.steamID]);
+  const eosIDs = uniqueTexts([identity.eosID]);
+  const controllerIDs = uniqueTexts([identity.controllerID]);
+  const names = uniqueTexts([identity.name]);
+  const playerKeys = uniqueTexts([
+    directText,
+    identity.key,
+    identity.playerKey,
+    identity.playerIndex,
+    identity.playerId,
+  ]);
+
+  return {
+    steamIDs,
+    eosIDs,
+    controllerIDs,
+    names,
+    playerKeys,
+    hasAny: steamIDs.length > 0 || eosIDs.length > 0 || controllerIDs.length > 0 || names.length > 0 || playerKeys.length > 0,
+  };
+}
+
+function uniqueTexts(values) {
+  const seen = new Set();
+  const output = [];
+  for (const value of Array.isArray(values) ? values : []) {
+    const text = String(value ?? "").trim();
+    if (!text) continue;
+    const normalized = text.toLowerCase();
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    output.push(text);
+  }
+  return output;
+}
+
+function matchText(left, right) {
+  return String(left ?? "").trim().toLowerCase() === String(right ?? "").trim().toLowerCase();
 }

@@ -14,6 +14,14 @@ const DEFAULT_CONFIG = Object.freeze({
   storeRecentEventLimit: 300,
 });
 
+const DEFAULT_ATTACKER_DAMAGE_DISPLAY_GATE = Object.freeze({
+  enabled: true,
+  mode: "inside_leader_radius",
+  fallbackWhenUnknown: "deny",
+  applyToTypes: ["damage"],
+  onlyLightWeapon: true,
+});
+
 const VALID_TYPES = new Set(["damage", "wound", "kill", "revive"]);
 const COMBAT_CLEAN_SUBSCRIPTION_ID = "module.combatClean";
 
@@ -124,6 +132,13 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
       eventFlags: Array.isArray(record.eventFlags) ? cloneJsonSafe(record.eventFlags) : [],
       eventFlagLabels: Array.isArray(record.eventFlagLabels) ? cloneJsonSafe(record.eventFlagLabels) : [],
       tags: Array.isArray(record.tags) ? cloneJsonSafe(record.tags) : [],
+      attackerCircleState: {
+        status: "unknown",
+        leaderName: "",
+        distanceMeters: null,
+        radiusMeters: null,
+        reason: "",
+      },
       warnings: [],
       victimWarning: null,
       attackerWarning: null,
@@ -266,6 +281,7 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
   }
 
   async function processEntryNow(entry) {
+    entry.attackerCircleState = resolveAttackerCircleState(entry);
     const victimDecision = buildVictimDecision(entry);
     const attackerDecision = buildAttackerDecision(entry);
 
@@ -342,6 +358,10 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
     ) {
       return makeSkipDecision(entry, "attacker", "non_light_weapon_hidden");
     }
+    const circleGateDecision = evaluateAttackerDamageDisplayGate(entry);
+    if (circleGateDecision?.skipped) {
+      return circleGateDecision;
+    }
     if (entry.type === "kill" && !moduleConfig.showKillDisplay) {
       return makeSkipDecision(entry, "attacker", "kill_display_disabled");
     }
@@ -353,6 +373,124 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
       message: buildAttackerMessage(entry),
       reason: `infantry_${entry.type}_attacker`,
     });
+  }
+
+  function evaluateAttackerDamageDisplayGate(entry) {
+    const gate = moduleConfig.attackerDamageDisplayGate ?? DEFAULT_ATTACKER_DAMAGE_DISPLAY_GATE;
+    if (!gate?.enabled) {
+      return null;
+    }
+
+    const type = normalizeType(entry?.type);
+    const applyToTypes = Array.isArray(gate.applyToTypes) && gate.applyToTypes.length > 0
+      ? gate.applyToTypes.map((value) => normalizeType(value)).filter(Boolean)
+      : DEFAULT_ATTACKER_DAMAGE_DISPLAY_GATE.applyToTypes;
+
+    if (!applyToTypes.includes(type)) {
+      return null;
+    }
+
+    if (type !== "damage") {
+      return null;
+    }
+
+    if (gate.onlyLightWeapon && !isLightWeaponEntry(entry)) {
+      return null;
+    }
+
+    const circleState = resolveAttackerCircleState(entry);
+    entry.attackerCircleState = circleState;
+
+    if (circleState.status === "inside") {
+      return null;
+    }
+
+    if (circleState.status === "outside") {
+      return makeSkipDecision(entry, "attacker", "attacker_outside_leader_radius");
+    }
+
+    if (circleState.status === "unknown") {
+      const fallbackWhenUnknown = normalizeGateFallback(gate.fallbackWhenUnknown);
+      if (fallbackWhenUnknown === "allow") {
+        return null;
+      }
+      return makeSkipDecision(entry, "attacker", "attacker_leader_radius_unknown");
+    }
+
+    return null;
+  }
+
+  function resolveAttackerCircleState(entry) {
+    const base = {
+      status: "unknown",
+      leaderName: "",
+      distanceMeters: null,
+      radiusMeters: null,
+      reason: "",
+    };
+
+    if (normalizeType(entry?.type) !== "damage") {
+      return {
+        ...base,
+        status: "not_applicable",
+        reason: "type_not_applicable",
+      };
+    }
+
+    const squadFollowState = modules?.squadFollowState;
+    if (!squadFollowState) {
+      return {
+        ...base,
+        reason: "state_unavailable",
+      };
+    }
+
+    const state = typeof squadFollowState.getPlayerFollowState === "function"
+      ? squadFollowState.getPlayerFollowState(entry.attacker)
+      : null;
+
+    if (!state) {
+      return {
+        ...base,
+        reason: "state_unknown",
+      };
+    }
+
+    const reason = String(state.reason ?? "").trim();
+    const inside = Boolean(state.inside);
+
+    if (inside) {
+      return {
+        status: "inside",
+        leaderName: String(state.leaderName ?? "").trim(),
+        distanceMeters: Number.isFinite(Number(state.distanceMeters)) ? Number(state.distanceMeters) : null,
+        radiusMeters: Number.isFinite(Number(state.radiusMeters)) ? Number(state.radiusMeters) : null,
+        reason: reason || "inside_leader_radius",
+      };
+    }
+
+    if (reason === "outside_leader_radius") {
+      return {
+        status: "outside",
+        leaderName: String(state.leaderName ?? "").trim(),
+        distanceMeters: Number.isFinite(Number(state.distanceMeters)) ? Number(state.distanceMeters) : null,
+        radiusMeters: Number.isFinite(Number(state.radiusMeters)) ? Number(state.radiusMeters) : null,
+        reason,
+      };
+    }
+
+    return {
+      ...base,
+      leaderName: String(state.leaderName ?? "").trim(),
+      distanceMeters: Number.isFinite(Number(state.distanceMeters)) ? Number(state.distanceMeters) : null,
+      radiusMeters: Number.isFinite(Number(state.radiusMeters)) ? Number(state.radiusMeters) : null,
+      reason: reason || "state_unknown",
+    };
+  }
+
+  function normalizeGateFallback(value) {
+    const text = String(value ?? "").trim().toLowerCase();
+    return text === "allow" ? "allow" : "deny";
   }
 
   async function executeDecision(decision) {
@@ -790,6 +928,22 @@ function normalizeModuleConfig(source = {}) {
     showVictimKill: source.showVictimKill !== false,
     showAttackerDamage: source.showAttackerDamage !== false,
     storeRecentEventLimit: Math.max(1, Number(source.storeRecentEventLimit ?? source.maxRecords ?? DEFAULT_CONFIG.storeRecentEventLimit)),
+    attackerDamageDisplayGate: normalizeAttackerDamageDisplayGate(source.attackerDamageDisplayGate),
+  };
+}
+
+function normalizeAttackerDamageDisplayGate(source = {}) {
+  const fallbackWhenUnknown = String(source?.fallbackWhenUnknown ?? DEFAULT_ATTACKER_DAMAGE_DISPLAY_GATE.fallbackWhenUnknown).trim().toLowerCase();
+  const applyToTypes = Array.isArray(source?.applyToTypes) && source.applyToTypes.length > 0
+    ? source.applyToTypes.map((value) => normalizeType(value)).filter((value) => value && value !== "all")
+    : [...DEFAULT_ATTACKER_DAMAGE_DISPLAY_GATE.applyToTypes];
+
+  return {
+    enabled: source?.enabled !== false,
+    mode: String(source?.mode ?? DEFAULT_ATTACKER_DAMAGE_DISPLAY_GATE.mode).trim() || DEFAULT_ATTACKER_DAMAGE_DISPLAY_GATE.mode,
+    fallbackWhenUnknown: fallbackWhenUnknown === "allow" ? "allow" : "deny",
+    applyToTypes: applyToTypes.length > 0 ? applyToTypes : [...DEFAULT_ATTACKER_DAMAGE_DISPLAY_GATE.applyToTypes],
+    onlyLightWeapon: source?.onlyLightWeapon !== false,
   };
 }
 
@@ -934,6 +1088,9 @@ function recordMatchesSearch(record, search) {
     record?.attackerWarning?.errorMessage,
     record?.victimWarning?.commandText,
     record?.attackerWarning?.commandText,
+    record?.attackerCircleState?.status,
+    record?.attackerCircleState?.reason,
+    record?.attackerCircleState?.leaderName,
   ].filter(Boolean).map((value) => normalizeText(value));
 
   const needle = normalizeText(search);

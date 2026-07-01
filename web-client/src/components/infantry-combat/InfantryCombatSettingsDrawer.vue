@@ -49,6 +49,42 @@
         </section>
 
         <section class="drawer-section">
+          <h3>攻击者显示门禁</h3>
+          <label class="toggle-row">
+            <span>
+              <strong>启用队长圈门禁</strong>
+              <small>只控制攻击者 damage 提示，受害者提示不受影响</small>
+            </span>
+            <input v-model="draft.attackerDamageDisplayGate.enabled" type="checkbox">
+          </label>
+
+          <label class="field">
+            <span>判定模式</span>
+            <input :value="draft.attackerDamageDisplayGate.mode" type="text" readonly>
+          </label>
+
+          <label class="field">
+            <span>未知时策略</span>
+            <select v-model="draft.attackerDamageDisplayGate.fallbackWhenUnknown">
+              <option value="deny">不显示</option>
+              <option value="allow">允许显示</option>
+            </select>
+          </label>
+
+          <label class="toggle-row">
+            <span>
+              <strong>仅轻武器提示</strong>
+              <small>非轻武器的攻击者提示继续隐藏</small>
+            </span>
+            <input v-model="draft.attackerDamageDisplayGate.onlyLightWeapon" type="checkbox">
+          </label>
+
+          <div class="note">
+            适用类型固定为 <code>damage</code>。当前配置不会改变受害者提示，也不会改动击倒、击杀和复苏流程。
+          </div>
+        </section>
+
+        <section class="drawer-section">
           <h3>提醒内容</h3>
           <label class="toggle-row">
             <span>
@@ -135,6 +171,13 @@ function cloneConfig(config: InfantryCombatConfig | null | undefined): InfantryC
     showVictimKill: config?.showVictimKill ?? true,
     showAttackerDamage: config?.showAttackerDamage ?? true,
     storeRecentEventLimit: config?.storeRecentEventLimit ?? 300,
+    attackerDamageDisplayGate: {
+      enabled: config?.attackerDamageDisplayGate?.enabled ?? true,
+      mode: config?.attackerDamageDisplayGate?.mode ?? "inside_leader_radius",
+      fallbackWhenUnknown: config?.attackerDamageDisplayGate?.fallbackWhenUnknown ?? "deny",
+      applyToTypes: [...(config?.attackerDamageDisplayGate?.applyToTypes ?? ["damage"])],
+      onlyLightWeapon: config?.attackerDamageDisplayGate?.onlyLightWeapon ?? true,
+    },
   };
 }
 
@@ -244,7 +287,8 @@ function save() {
   font-size: 12px;
 }
 
-.field input {
+.field input,
+.field select {
   width: 100%;
   border: 1px solid #31404d;
   background: #0f151b;

@@ -492,7 +492,7 @@ const props = defineProps<{
   getPlayerHealth: (player: TacticalLinkedPlayer | null | undefined) => number | null;
   normalizeTeam: (teamId: number | null | undefined) => number;
   normalizeSquad: (squadId: number | null | undefined) => number;
-  isPlayerDisengaged: (player: TacticalLinkedPlayer) => boolean;
+    isPlayerDisengaged: (player: TacticalLinkedPlayer) => boolean | null;
 }>()
 
 const emit = defineEmits<{

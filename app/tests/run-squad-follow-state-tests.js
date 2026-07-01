@@ -159,6 +159,10 @@ function testTransitionCacheAndEvents() {
   assert.equal(events[0].eventName, "playerExitedLeaderRadius");
   assert.equal(events[1].eventName, "playerRadiusStateChanged");
   assert.equal(mod.api.getState().recentEvents[0].type, "exit");
+  assert.equal(mod.api.getState().currentSnapshot?.playerIndex?.["idx:21"]?.inside, false);
+  assert.equal(mod.api.getCurrentSnapshot()?.generatedAt, "2026-07-01T11:01:00.000Z");
+  assert.equal(mod.api.isPlayerInsideLeaderRadius({ playerKey: "idx:21" }), false);
+  assert.equal(mod.api.getPlayerFollowState({ name: "Member" })?.leaderName, "SL");
 
   const third = mod.api.composeFromPlayers({
     serverId: "server-2",
@@ -173,10 +177,56 @@ function testTransitionCacheAndEvents() {
   assert.equal(events.length, 2);
 }
 
+function testIdentityPriorityLookup() {
+  const mod = makeModule();
+  const snapshot = mod.api.composeFromPlayers({
+    serverId: "server-3",
+    generatedAt: "2026-07-01T12:00:00.000Z",
+    options: {
+      minSquadSize: 1,
+    },
+    players: [
+      {
+        identity: {
+          key: "player:99",
+          name: "Priority",
+          playerId: 99,
+          steamID: "76561198000000999",
+          eosID: "0123456789abcdef0123456789abcdef",
+          controllerID: "controller-999",
+        },
+        match: {
+          teamId: 1,
+          squadId: 8,
+          isLeader: true,
+          role: "SL",
+          squadName: "Squad 8",
+        },
+        telemetry: {
+          position: { x: 0, y: 0, z: 0 },
+          health: 100,
+        },
+        vehicle: {
+          vehicleType: "None",
+        },
+      },
+    ],
+  });
+
+  assert.ok(snapshot);
+  assert.equal(mod.api.getPlayerFollowState({ steam64ID: "76561198000000999" })?.playerKey, "idx:99");
+  assert.equal(mod.api.getPlayerFollowState({ steamID: "76561198000000999" })?.playerKey, "idx:99");
+  assert.equal(mod.api.getPlayerFollowState({ eosID: "0123456789abcdef0123456789abcdef" })?.playerKey, "idx:99");
+  assert.equal(mod.api.getPlayerFollowState({ controllerID: "controller-999" })?.playerKey, "idx:99");
+  assert.equal(mod.api.getPlayerFollowState({ name: "Priority" })?.playerKey, "idx:99");
+  assert.equal(mod.api.isPlayerInsideLeaderRadius({ playerKey: "idx:99" }), true);
+}
+
 function main() {
   testInsideOutsideAndDiagnostics();
   testVehicleCrewAndDisable();
   testTransitionCacheAndEvents();
+  testIdentityPriorityLookup();
   console.log("run-squad-follow-state-tests: ok");
 }
 

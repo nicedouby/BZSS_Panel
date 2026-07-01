@@ -62,10 +62,10 @@
     <span
       v-if="mode === 'tactical'"
       class="follow-status-badge"
-      :class="isDisengaged ? 'disengaged' : 'inside'"
-      :title="isDisengaged ? '脱离队长圈' : '队长圈内'"
+      :class="followBadgeTone"
+      :title="followBadgeTitle"
     >
-      {{ isDisengaged ? "脱圈" : "圈内" }}
+      {{ followBadgeText }}
     </span>
 
     <!-- Text Tag for Player Name & Coords -->
@@ -99,7 +99,7 @@ const props = withDefaults(
     vehicleType?: string | null;
     isFocused?: boolean;
     isHovered?: boolean;
-    isDisengaged?: boolean;
+    isDisengaged?: boolean | null;
     showName?: boolean;
     showCoords?: boolean;
     gameX?: number | null;
@@ -141,6 +141,21 @@ defineEmits<{
 const isDead = computed(() => props.health !== null && props.health <= 0);
 const hasVehicle = computed(() => props.vehicleType && props.vehicleType !== "None");
 const hasCoords = computed(() => props.gameX !== null && props.gameY !== null);
+const followBadgeTone = computed(() => {
+  if (props.isDisengaged === true) return "disengaged";
+  if (props.isDisengaged === false) return "inside";
+  return "unknown";
+});
+const followBadgeText = computed(() => {
+  if (props.isDisengaged === true) return "脱圈";
+  if (props.isDisengaged === false) return "圈内";
+  return "未知";
+});
+const followBadgeTitle = computed(() => {
+  if (props.isDisengaged === true) return "脱离队长圈";
+  if (props.isDisengaged === false) return "队长圈内";
+  return "队长圈状态未知";
+});
 
 // Perspective colors palette definitions based on tone
 const palette = computed(() => {
@@ -391,6 +406,11 @@ function isRoleIconImage(icon: string | undefined) {
 .follow-status-badge.inside {
   background: rgba(74, 222, 128, 0.95);
   box-shadow: 0 0 8px rgba(74, 222, 128, 0.45);
+}
+
+.follow-status-badge.unknown {
+  background: rgba(148, 163, 184, 0.9);
+  box-shadow: 0 0 8px rgba(148, 163, 184, 0.35);
 }
 
 .follow-status-badge.disengaged {
