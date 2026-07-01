@@ -10,6 +10,7 @@
     <div class="menu-header font-mono">
       <div class="header-title">PLAYER COMMANDS</div>
       <div class="player-label">{{ player.playerName || 'Unknown Player' }}</div>
+      <div v-if="linkConfidence" class="player-link-meta" :title="linkReason">关联 {{ linkConfidenceText }}</div>
     </div>
 
     <div class="menu-divider"></div>
@@ -89,6 +90,8 @@ const props = defineProps<{
   tone: "friendly" | "enemy" | "neutral";
   canManage?: boolean;
   rconPlayer?: any;
+  linkConfidence?: "exact" | "strong" | "weak" | "none";
+  linkReason?: string;
 }>();
 
 const emit = defineEmits<{
@@ -146,6 +149,14 @@ function handleAction(event: "open-profile" | "focus" | "copy-coords" | "start-m
   else if (event === "force-team" && props.canManage && props.rconPlayer) emit("force-team");
   emit("close");
 }
+
+const linkConfidenceText = computed(() => {
+  const confidence = props.linkConfidence ?? "none";
+  if (confidence === "exact") return "Exact";
+  if (confidence === "strong") return "Strong";
+  if (confidence === "weak") return "Weak";
+  return "Unlinked";
+});
 </script>
 
 <style scoped>
@@ -196,6 +207,12 @@ function handleAction(event: "open-profile" | "focus" | "copy-coords" | "start-m
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.player-link-meta {
+  margin-top: 4px;
+  font-size: 10px;
+  color: rgba(148, 163, 184, 0.9);
 }
 
 .menu-divider {

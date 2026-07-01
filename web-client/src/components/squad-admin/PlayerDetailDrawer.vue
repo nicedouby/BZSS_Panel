@@ -117,6 +117,17 @@
                     </svg>
                     Untrack
                   </button>
+                  <button
+                    type="button"
+                    class="hud-header-db-btn"
+                    @click="showAdvanced = true"
+                    title="查看开发调试原始数据"
+                  >
+                    <svg viewBox="0 0 24 24" width="12" height="12" class="btn-icon">
+                      <path fill="currentColor" d="M20 8h-2.81c-.45-.78-1.07-1.45-1.82-1.96L17 4.41 15.59 3 15.59 3l-2.17 2.17C12.96 5.06 12.49 5 12 5c-.49 0-.96.06-1.41.17L8.41 3 7 4.41l1.62 1.63C7.88 6.55 7.26 7.22 6.81 8H4v2h2.09c-.05.33-.09.66-.09 1v1H4v2h2v1c0 .34.04.67.09 1H4v2h2.81c1.04 1.79 2.97 3 5.19 3s4.15-1.21 5.19-3H20v-2h-2.09c.05-.33.09-.66.09-1v-1h2v-2h-2v-1c0-.34-.04-.67-.09-1H20V8zm-6 8h-4v-2h4v2zm0-4h-4v-2h4v2z"/>
+                    </svg>
+                    调试
+                  </button>
                 </div>
                 <div class="hud-header-identities">
                   <span
@@ -139,6 +150,13 @@
                     :title="displayIp ? '点击复制 IP: ' + displayIp : '无 IP'"
                   >
                     IP: {{ displayIp || '--' }}
+                  </span>
+                  <span
+                    class="hud-header-ident"
+                    @click="showPlaytimeOverride = true"
+                    title="点击修改/覆盖该玩家的游戏时长"
+                  >
+                    时长: {{ playtimeEffectiveText }}
                   </span>
                 </div>
               </div>
@@ -418,195 +436,60 @@
                   </div>
                 </div>
 
+                <!-- Steam Friends Section (Collapsible Accordion) -->
                 <div class="hud-pane-section">
-                  <div class="hud-section-header">
-                    <span class="hud-section-title">BZSS-Core / PLAYER SNAPSHOT</span>
-                    <span class="hud-section-subtitle">{{ bzssCoreStatusText }}</span>
-                  </div>
-                  <div class="bzss-core-card" :data-status="props.player?.bzssCoreStatus || 'idle'">
-                    <div class="bzss-core-card__status">
-                      <strong>{{ bzssCoreStatusText }}</strong>
-                      <span v-if="bzssCoreStatusDetail">{{ bzssCoreStatusDetail }}</span>
-                    </div>
-                    <div v-if="bzssCoreInfo" class="bzss-core-grid">
-                      <div class="bzss-core-item">
-                        <span class="bzss-core-item__label">Name</span>
-                        <strong>{{ bzssCoreInfo.playerName || "--" }}</strong>
-                      </div>
-                      <div class="bzss-core-item">
-                        <span class="bzss-core-item__label">GUID</span>
-                        <strong class="bzss-core-mono">{{ bzssCoreInfo.playerGuid || "--" }}</strong>
-                      </div>
-                      <div class="bzss-core-item">
-                        <span class="bzss-core-item__label">Soldier</span>
-                        <strong class="bzss-core-mono">{{ bzssCoreInfo.soldierInfo?.soldierClass || "--" }}</strong>
-                      </div>
-                      <div class="bzss-core-item">
-                        <span class="bzss-core-item__label">Weapon</span>
-                        <strong class="bzss-core-mono">{{ cleanWeaponName(bzssCoreInfo.soldierInfo?.weaponClass) }}</strong>
-                      </div>
-                      <div class="bzss-core-item">
-                        <span class="bzss-core-item__label">Health</span>
-                        <strong>{{ bzssCoreInfo.soldierInfo?.health ?? "--" }}</strong>
-                      </div>
-                      <div class="bzss-core-item">
-                        <span class="bzss-core-item__label">Ammo</span>
-                        <strong class="bzss-core-mono">{{ formatBzssAmmo(bzssCoreInfo.soldierInfo?.ammoValues) }}</strong>
-                      </div>
-                      <div class="bzss-core-item bzss-core-item--wide">
-                        <span class="bzss-core-item__label">Position</span>
-                        <strong class="bzss-core-mono">{{ formatBzssVector(bzssCoreInfo.soldierInfo?.position) }}</strong>
-                      </div>
-                      <div class="bzss-core-item bzss-core-item--wide">
-                        <span class="bzss-core-item__label">Rotation</span>
-                        <strong class="bzss-core-mono">{{ formatBzssVector(bzssCoreInfo.soldierInfo?.rotation) }}</strong>
-                      </div>
-                      <div class="bzss-core-item bzss-core-item--wide">
-                        <span class="bzss-core-item__label">Scoreboard</span>
-                        <strong class="bzss-core-mono">{{ formatBzssScoreboard(bzssCoreInfo.playerScoreboard?.numericValues) }}</strong>
-                      </div>
-                    </div>
-                    <div v-else class="bzss-core-card__empty">
-                      No completed BZSS-Core snapshot is matched to this player yet.
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Steam Friends Section -->
-                <div class="hud-pane-section">
-                  <div class="hud-section-header">
-                    <span class="hud-section-title">Steam 好友列表 / STEAM FRIENDS</span>
+                  <button type="button" class="hud-accordion-btn" @click="showFriendsCollapsed = !showFriendsCollapsed">
+                    <span class="title-with-icon">
+                      <svg viewBox="0 0 24 24" width="14" height="14" class="acc-arrow" :class="{ open: !showFriendsCollapsed }">
+                        <path fill="currentColor" d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/>
+                      </svg>
+                      Steam 好友列表 / STEAM FRIENDS
+                    </span>
                     <span class="hud-section-subtitle" v-if="steamFriends.length > 0">共 {{ steamFriends.length }} 位好友</span>
-                  </div>
-                  <div class="friends-list-hud">
-                    <div v-if="friendsLoading" class="friends-status loading">
-                      <span class="loader-dot"></span>
-                      正在加载好友列表…
-                    </div>
-                    <div v-else-if="friendsError" class="friends-status error">
-                      {{ friendsError }}
-                    </div>
-                    <div v-else-if="steamFriends.length === 0" class="friends-status empty">
-                      暂无好友信息（可能未公开好友列表）
-                    </div>
-                    <div v-else class="friends-scroll-container">
-                      <div
-                        v-for="friend in steamFriends"
-                        :key="friend.steamID"
-                        class="friend-item"
-                      >
-                        <img
-                          v-if="friend.avatar"
-                          class="friend-avatar"
-                          :src="friend.avatar"
-                          alt=""
-                        />
-                        <div v-else class="friend-avatar-placeholder">
-                          {{ friend.name.slice(0, 1).toUpperCase() }}
-                        </div>
-                        <div class="friend-info">
-                          <div class="friend-name-row">
-                            <span class="friend-name" :title="friend.name">{{ friend.name }}</span>
-                            <span v-if="friend.dbPlayerId" class="friend-badge" title="该好友曾在此服务器游玩">
-                              在本服游玩
-                            </span>
-                          </div>
-                          <div class="friend-meta">
-                            <span>SteamID: {{ friend.steamID }}</span>
-                            <span v-if="friend.dbPlayerId && friend.serverSeconds">
-                              本服时长: {{ formatHours(friend.serverSeconds) }}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Playtime Override Configuration (Advanced) -->
-                <div class="hud-pane-section advanced-section">
-                  <button type="button" class="hud-accordion-btn" @click="showPlaytimeOverride = !showPlaytimeOverride">
-                    <span class="title-with-icon">
-                      <svg viewBox="0 0 24 24" width="14" height="14" class="acc-arrow" :class="{ open: showPlaytimeOverride }">
-                        <path fill="currentColor" d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/>
-                      </svg>
-                      游戏时长修正覆盖 / PLAYTIME OVERRIDE
-                    </span>
                   </button>
                   <Transition name="accordion-slide">
-                    <div v-if="showPlaytimeOverride" class="hud-accordion-content playtime-control-hud">
-                      <div class="playtime-stats-rail">
-                        <div class="playtime-stat-box highlight">
-                          <span class="lbl">当前有效时长</span>
-                          <strong class="val">{{ playtimeEffectiveText }}</strong>
-                        </div>
-                        <div class="playtime-stat-box">
-                          <span class="lbl">Steam 原始时长</span>
-                          <strong class="val">{{ playtimeSteamText }}</strong>
-                        </div>
-                        <div class="playtime-stat-box">
-                          <span class="lbl">覆盖状态</span>
-                          <strong class="val" :class="{ overridden: playtimeOverrideSeconds != null }">
-                            {{ playtimeOverrideSeconds == null ? "未覆盖" : "已覆盖" }}
-                          </strong>
-                        </div>
-                      </div>
-
-                      <div class="playtime-editor-hud">
-                        <div class="editor-input-wrapper">
-                          <input
-                            v-model="playtimeOverrideHours"
-                            type="number"
-                            min="0"
-                            step="0.1"
-                            :disabled="!canEditPlaytime || playtimeSaving || databaseLoading || !playerDatabaseRecord"
-                            placeholder="输入时长(小时)"
-                            class="hud-playtime-input"
-                          >
-                        </div>
-                        <button
-                          type="button"
-                          class="hud-mini-btn save-btn"
-                          :disabled="!canEditPlaytime || playtimeSaving || databaseLoading || !playerDatabaseRecord"
-                          @click="savePlaytimeOverride(false)"
-                        >
-                          保存覆盖
-                        </button>
-                        <button
-                          type="button"
-                          class="hud-mini-btn reset-btn"
-                          :disabled="!canEditPlaytime || playtimeSaving || databaseLoading || !playerDatabaseRecord"
-                          @click="savePlaytimeOverride(true)"
-                        >
-                          恢复默认
-                        </button>
-                      </div>
-
-                      <div v-if="databaseError" class="playtime-status-note error">{{ databaseError }}</div>
-                      <div v-else-if="databaseLoading" class="playtime-status-note loading">
+                    <div v-if="!showFriendsCollapsed" class="hud-accordion-content friends-list-hud" style="margin-top: 0; border-top: 0;">
+                      <div v-if="friendsLoading" class="friends-status loading">
                         <span class="loader-dot"></span>
-                        正在同步数据库玩家详情…
+                        正在加载好友列表…
                       </div>
-                      <div v-else class="playtime-status-note">
-                        留空将恢复为默认时长，输入 0 则代表强制覆盖为 0 小时。
+                      <div v-else-if="friendsError" class="friends-status error">
+                        {{ friendsError }}
                       </div>
-                    </div>
-                  </Transition>
-                </div>
-
-                <!-- Raw Debug Block -->
-                <div class="hud-pane-section advanced-section">
-                  <button type="button" class="hud-accordion-btn" @click="showAdvanced = !showAdvanced">
-                    <span class="title-with-icon">
-                      <svg viewBox="0 0 24 24" width="14" height="14" class="acc-arrow" :class="{ open: showAdvanced }">
-                        <path fill="currentColor" d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/>
-                      </svg>
-                      开发调试原始数据 (Raw JSON)
-                    </span>
-                  </button>
-                  <Transition name="accordion-slide">
-                    <div v-if="showAdvanced" class="hud-accordion-content raw-data-hud">
-                      <pre class="raw-pre"><code>{{ rawDataText }}</code></pre>
+                      <div v-else-if="steamFriends.length === 0" class="friends-status empty">
+                        暂无好友信息（可能未公开好友列表）
+                      </div>
+                      <div v-else class="friends-scroll-container">
+                        <div
+                          v-for="friend in steamFriends"
+                          :key="friend.steamID"
+                          class="friend-item"
+                        >
+                          <img
+                            v-if="friend.avatar"
+                            class="friend-avatar"
+                            :src="friend.avatar"
+                            alt=""
+                          />
+                          <div v-else class="friend-avatar-placeholder">
+                            {{ friend.name.slice(0, 1).toUpperCase() }}
+                          </div>
+                          <div class="friend-info">
+                            <div class="friend-name-row">
+                              <span class="friend-name" :title="friend.name">{{ friend.name }}</span>
+                              <span v-if="friend.dbPlayerId" class="friend-badge" title="该好友曾在此服务器游玩">
+                                在本服游玩
+                              </span>
+                            </div>
+                            <div class="friend-meta">
+                              <span>SteamID: {{ friend.steamID }}</span>
+                              <span v-if="friend.dbPlayerId && friend.serverSeconds">
+                                本服时长: {{ formatHours(friend.serverSeconds) }}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </Transition>
                 </div>
@@ -615,6 +498,98 @@
             </div>
           </div>
         </aside>
+      </div>
+    </Transition>
+
+    <!-- HUD Playtime Override Popup Modal -->
+    <Transition name="fade">
+      <div v-if="showPlaytimeOverride" class="hud-modal-overlay" @click="showPlaytimeOverride = false">
+        <div class="hud-modal-panel" :style="glowColorStyle" @click.stop>
+          <div class="hud-modal-header">
+            <h3 class="hud-modal-title">游戏时长修正覆盖 / PLAYTIME OVERRIDE</h3>
+            <button type="button" class="hud-modal-close-btn" @click="showPlaytimeOverride = false" title="关闭">
+              <svg viewBox="0 0 24 24" width="14" height="14">
+                <path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+          <div class="playtime-control-hud">
+            <div class="playtime-stats-rail">
+              <div class="playtime-stat-box highlight">
+                <span class="lbl">当前有效时长</span>
+                <strong class="val">{{ playtimeEffectiveText }}</strong>
+              </div>
+              <div class="playtime-stat-box">
+                <span class="lbl">Steam 原始时长</span>
+                <strong class="val">{{ playtimeSteamText }}</strong>
+              </div>
+              <div class="playtime-stat-box">
+                <span class="lbl">覆盖状态</span>
+                <strong class="val" :class="{ overridden: playtimeOverrideSeconds != null }">
+                  {{ playtimeOverrideSeconds == null ? "未覆盖" : "已覆盖" }}
+                </strong>
+              </div>
+            </div>
+
+            <div class="playtime-editor-hud">
+              <div class="editor-input-wrapper">
+                <input
+                  v-model="playtimeOverrideHours"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  :disabled="!canEditPlaytime || playtimeSaving || databaseLoading || !playerDatabaseRecord"
+                  placeholder="输入时长(小时)"
+                  class="hud-playtime-input"
+                >
+              </div>
+              <button
+                type="button"
+                class="hud-mini-btn save-btn"
+                :disabled="!canEditPlaytime || playtimeSaving || databaseLoading || !playerDatabaseRecord"
+                @click="savePlaytimeOverride(false)"
+              >
+                保存覆盖
+              </button>
+              <button
+                type="button"
+                class="hud-mini-btn reset-btn"
+                :disabled="!canEditPlaytime || playtimeSaving || databaseLoading || !playerDatabaseRecord"
+                @click="savePlaytimeOverride(true)"
+              >
+                恢复默认
+              </button>
+            </div>
+
+            <div v-if="databaseError" class="playtime-status-note error">{{ databaseError }}</div>
+            <div v-else-if="databaseLoading" class="playtime-status-note loading">
+              <span class="loader-dot"></span>
+              正在同步数据库玩家详情…
+            </div>
+            <div v-else class="playtime-status-note">
+              留空将恢复为默认时长，输入 0 则代表强制覆盖为 0 小时。
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- HUD Dev Debug Popup Modal -->
+    <Transition name="fade">
+      <div v-if="showAdvanced" class="hud-modal-overlay" @click="showAdvanced = false">
+        <div class="hud-modal-panel raw-data-modal" :style="glowColorStyle" @click.stop>
+          <div class="hud-modal-header">
+            <h3 class="hud-modal-title">开发调试原始数据 (Raw JSON)</h3>
+            <button type="button" class="hud-modal-close-btn" @click="showAdvanced = false" title="关闭">
+              <svg viewBox="0 0 24 24" width="14" height="14">
+                <path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+          <div class="raw-data-hud">
+            <pre class="raw-pre"><code>{{ rawDataText }}</code></pre>
+          </div>
+        </div>
       </div>
     </Transition>
   </Teleport>
@@ -710,6 +685,7 @@ const panelStyle = computed(() => {
 const showAdvanced = ref(false);
 const showPlaytimeOverride = ref(false);
 const showCombatTimeline = ref(false);
+const showFriendsCollapsed = ref(true);
 const actionBusy = ref(false);
 const steamProfileRefreshing = ref(false);
 const databaseDetail = ref<any | null>(null);
@@ -3145,5 +3121,73 @@ onUnmounted(() => {
   .cb-divider {
     display: none;
   }
+}
+
+/* Playtime Override and Raw Debug Dialog Styling (HUD Theme) */
+.hud-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(6, 9, 15, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.hud-modal-panel {
+  width: min(560px, 100%);
+  background:
+    linear-gradient(135deg, rgba(20, 28, 42, 0.96), rgba(12, 18, 28, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.75),
+    0 0 20px var(--glow-color-soft, rgba(148, 163, 184, 0.15));
+  backdrop-filter: blur(12px) saturate(1.4);
+  position: relative;
+}
+
+.hud-modal-panel.raw-data-modal {
+  width: min(720px, 100%);
+}
+
+.hud-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 12px;
+  margin-bottom: 18px;
+}
+
+.hud-modal-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: #fff;
+  text-transform: uppercase;
+}
+
+.hud-modal-close-btn {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.hud-modal-close-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #f87171;
 }
 </style>

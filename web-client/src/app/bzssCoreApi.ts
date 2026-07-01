@@ -88,11 +88,13 @@ export interface BzssCoreScoreboardPlayerInfo {
   isCommander: boolean | null;
   fireTeamIndex: number | null;
   fireTeamPosition: number | null;
+  ping?: number | null;
 }
 
 export interface BzssCoreTrackedPlayerInfo {
   playerId?: number | null;
   playerIndex?: number | null;
+  ping?: number | null;
   position?: BzssCoreTrackedVector | null;
   yaw?: number | null;
   combatInfo?: string;
@@ -137,6 +139,7 @@ export interface BzssCoreTrackedPlayerInfo {
     raw: string;
     values: string[];
     numericValues: Array<number | null>;
+    ping?: number | null;
     stats?: {
       dataLives: number | null;
       numKills: number | null;

@@ -27,6 +27,14 @@
       <div class="leader-row-content">
         <div class="leader-identity">
           <span class="leader-name">{{ player.name }}</span>
+          <span
+            v-if="bzssCoreFtBadge"
+            class="bzss-core-ft-badge"
+            :class="bzssCoreFtBadge.tone"
+            :title="bzssCoreFtBadge.title"
+          >
+            {{ bzssCoreFtBadge.label }}
+          </span>
           <StatusBadge tone="ok">{{ t("match.squadLeader") }}</StatusBadge>
         </div>
         <div class="leader-meta">
@@ -75,6 +83,7 @@ const isSelected = computed(() => props.selected ?? false);
 const roleIcon = computed(() => resolveRoleIcon(props.player.role));
 const isRoleIconImage = computed(() => roleIcon.value.icon.startsWith("/"));
 const scoreboardItems = computed(() => buildCombatScoreboardItems(props.player.combatStats));
+const bzssCoreFtBadge = computed(() => resolveBzssCoreFtBadge(props.player.bzssCoreFtIndex));
 
 const playtimeText = computed(() => {
   if (props.player.playtimeHours == null) return "";
@@ -108,6 +117,28 @@ function displayRole(role: string | null | undefined) {
   };
   const key = keyMap[normalized];
   return key ? t(key, raw) : raw;
+}
+
+function resolveBzssCoreFtBadge(ftIndex: number | null | undefined) {
+  if (ftIndex == null || !Number.isFinite(Number(ftIndex))) return null;
+  const index = Math.trunc(Number(ftIndex));
+  const badgeMap: Record<number, { label: string; tone: string }> = {
+    0: { label: "A组", tone: "ft-green" },
+    1: { label: "B组", tone: "ft-purple" },
+    2: { label: "C组", tone: "ft-blue" },
+  };
+  const badge = badgeMap[index];
+  if (!badge) {
+    return {
+      label: `FT ${index}`,
+      tone: "ft-neutral",
+      title: `BZSS-Core ftIndex: ${index}`,
+    };
+  }
+  return {
+    ...badge,
+    title: `BZSS-Core ftIndex: ${index}`,
+  };
 }
 </script>
 
@@ -162,6 +193,45 @@ function displayRole(role: string | null | undefined) {
   min-width: 0;
   min-height: 22px;
   flex-wrap: nowrap;
+}
+
+.bzss-core-ft-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.bzss-core-ft-badge.ft-green {
+  color: #d7ffe4;
+  background: rgba(34, 197, 94, 0.2);
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.bzss-core-ft-badge.ft-purple {
+  color: #efe3ff;
+  background: rgba(168, 85, 247, 0.2);
+  border-color: rgba(168, 85, 247, 0.35);
+}
+
+.bzss-core-ft-badge.ft-blue {
+  color: #d7ecff;
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.35);
+}
+
+.bzss-core-ft-badge.ft-neutral {
+  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .leader-role-stack {

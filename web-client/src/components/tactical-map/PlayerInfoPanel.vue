@@ -13,6 +13,14 @@
         <div class="player-title-row">
           <img v-if="rconDetail?.steamAvatar" :src="rconDetail.steamAvatar" class="steam-avatar-mini" alt="avatar" />
           <span class="player-name" :title="player.playerName">{{ player.playerName || 'Unknown Player' }}</span>
+          <span
+            v-if="player.ping != null"
+            class="player-ping-badge"
+            :class="pingToneClass"
+            :title="`BZSS-Core 延迟: ${player.ping}ms`"
+          >
+            {{ player.ping }}ms
+          </span>
         </div>
         <button class="close-btn" @click="$emit('close')" title="关闭">×</button>
       </div>
@@ -104,6 +112,33 @@
         </span>
       </div>
 
+      <div class="grid-row" v-if="rconDetail?.steamId">
+        <span class="label">STEAM64</span>
+        <span class="val guid-text" :title="rconDetail.steamId">{{ rconDetail.steamId }}</span>
+      </div>
+
+      <div class="grid-row" v-if="rconDetail?.eosId">
+        <span class="label">EOSID</span>
+        <span class="val guid-text" :title="rconDetail.eosId">{{ rconDetail.eosId }}</span>
+      </div>
+
+      <div class="grid-row" v-if="rconDetail">
+        <span class="label">TEAM / SQUAD</span>
+        <span class="val">{{ rconDetail.teamId ?? '--' }} / {{ rconDetail.squadId ?? '--' }}</span>
+      </div>
+
+      <div class="grid-row" v-if="rconDetail">
+        <span class="label">ONLINE</span>
+        <span class="val" :class="{ 'text-green': rconDetail.isOnline, 'text-orange': !rconDetail.isOnline }">
+          {{ rconDetail.isOnline ? 'ONLINE' : 'OFFLINE' }}
+        </span>
+      </div>
+
+      <div v-if="linkConfidence" class="grid-row">
+        <span class="label">LINK</span>
+        <span class="val" :title="linkReason">{{ linkConfidenceText }}</span>
+      </div>
+
       <div class="grid-row player-id-row" v-if="player.playerGuid">
         <span class="label">GUID</span>
         <span class="val guid-text" :title="player.playerGuid">{{ player.playerGuid }}</span>
@@ -131,6 +166,8 @@ const props = defineProps<{
   speedText: string;
   coreStatusText?: string;
   rconDetail?: any;
+  linkConfidence?: "exact" | "strong" | "weak" | "none";
+  linkReason?: string;
 }>();
 
 const emit = defineEmits<{
@@ -198,6 +235,21 @@ const roleIconStyle = computed(() => {
     WebkitMaskSize: "contain",
     maskSize: "contain",
   };
+});
+
+const pingToneClass = computed(() => {
+  const ping = Number(props.player?.ping ?? 0);
+  if (ping > 120) return "high";
+  if (ping > 60) return "medium";
+  return "low";
+});
+
+const linkConfidenceText = computed(() => {
+  const confidence = props.linkConfidence ?? "none";
+  if (confidence === "exact") return "Exact";
+  if (confidence === "strong") return "Strong";
+  if (confidence === "weak") return "Weak";
+  return "Unlinked";
 });
 
 const weaponName = computed(() => {
@@ -312,6 +364,39 @@ onMounted(() => {
   border: 1px solid rgba(255, 255, 255, 0.15);
   object-fit: cover;
   flex-shrink: 0;
+}
+
+.player-ping-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 9px;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
+}
+
+.player-ping-badge.low {
+  color: #d7ffe4;
+  background: rgba(34, 197, 94, 0.85);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.player-ping-badge.medium {
+  color: #fff4d6;
+  background: rgba(245, 158, 11, 0.88);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.player-ping-badge.high {
+  color: #ffe1e1;
+  background: rgba(239, 68, 68, 0.9);
+  border-color: rgba(239, 68, 68, 0.35);
 }
 
 .text-green {
@@ -487,6 +572,14 @@ onMounted(() => {
 .sync-status {
   color: #34d399;
   font-weight: bold;
+}
+
+.grid-row .label {
+  color: rgba(148, 163, 184, 0.9);
+}
+
+.grid-row .val {
+  color: #e2e8f0;
 }
 
 .status-dot {

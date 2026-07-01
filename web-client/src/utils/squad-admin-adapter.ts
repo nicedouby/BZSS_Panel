@@ -29,6 +29,10 @@ export function adaptPlayerRow(
   steamAvatar: string | null = null,
 ): PlayerRowViewModel {
   const steam64 = normalizeSteam64(player.steamID ?? (player as any).steamId ?? (player as any).steam64 ?? (player as any).steam64ID);
+  const bzssCoreInfo = (player as any).bzssCorePlayerInfo ?? null;
+  const bzssCorePing = normalizeOptionalNumber(bzssCoreInfo?.playerScoreboard?.ping ?? (player as any).bzssCorePing);
+  const bzssCoreFtIndex = normalizeOptionalNumber(bzssCoreInfo?.ftIndex ?? (player as any).bzssCoreFtIndex ?? (player as any).ftIndex);
+  const bzssCoreFtPosition = normalizeOptionalNumber(bzssCoreInfo?.ftPosition ?? (player as any).bzssCoreFtPosition ?? (player as any).ftPosition);
   const combatStats = cloneCombatStats(resolveCombatStats(player, combatStatsLookup));
   const teamName = resolvePlayerTeamName(player);
   return {
@@ -55,6 +59,9 @@ export function adaptPlayerRow(
     matchJoinCount: normalizeOptionalNumber((player as any).matchJoinCount),
     steamAvatar,
     factionFlagUrl: teamName ? getFlagUrlByTeamName(teamName) : null,
+    bzssCorePing,
+    bzssCoreFtIndex,
+    bzssCoreFtPosition,
     combatStats,
     statsLabel: formatCombatStatsLabel(combatStats),
     raw: player,
@@ -314,6 +321,10 @@ export function adaptPlayerDetail(
 ): PlayerDetailViewModel {
   const currentIp = (player as any).current_ip || (player as any).ip || null;
   const steam64 = normalizeSteam64(player.steamID ?? (player as any).steamId ?? (player as any).steam64 ?? (player as any).steam64ID);
+  const bzssCoreInfo = (player as any).bzssCorePlayerInfo ?? null;
+  const bzssCorePing = normalizeOptionalNumber(bzssCoreInfo?.playerScoreboard?.ping ?? (player as any).bzssCorePing);
+  const bzssCoreFtIndex = normalizeOptionalNumber(bzssCoreInfo?.ftIndex ?? (player as any).bzssCoreFtIndex ?? (player as any).ftIndex);
+  const bzssCoreFtPosition = normalizeOptionalNumber(bzssCoreInfo?.ftPosition ?? (player as any).bzssCoreFtPosition ?? (player as any).ftPosition);
   const combatStats = cloneCombatStats(resolveCombatStats(player, combatStatsLookup));
   return {
     playerId: player.playerID ?? null,
@@ -342,6 +353,10 @@ export function adaptPlayerDetail(
     matchJoinCount: normalizeOptionalNumber((player as any).matchJoinCount),
     combatStats,
     statsLabel: formatCombatStatsLabel(combatStats),
+    bzssCorePing,
+    bzssCoreFtIndex,
+    bzssCoreFtPosition,
+    bzssCorePlayerInfo: bzssCoreInfo,
     source: (player as any).source || "unknown",
     controller: (player as any).controllerID || (player as any).controller || "",
     raw: player,

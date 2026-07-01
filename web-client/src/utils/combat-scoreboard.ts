@@ -4,15 +4,16 @@ export interface CombatScoreboardItem {
   key: string;
   label: string;
   shortLabel: string;
-  value: number;
+  value: number | string;
   tone: string;
 }
 
 export function buildCombatScoreboardItems(
   stats: CombatStats | null | undefined,
-  includeAll = false
+  includeAll = false,
+  latencyMs: number | null | undefined = null
 ): CombatScoreboardItem[] {
-  const items = [
+  const items: CombatScoreboardItem[] = [
     { key: "numKills", label: "Num kills", shortLabel: "Kills", value: statNumber(stats?.kills), tone: "kills" },
     { key: "numDeaths", label: "Num death", shortLabel: "Death", value: statNumber(stats?.deaths), tone: "deaths" },
     { key: "numWoundeds", label: "Num woundeds", shortLabel: "Wounded", value: statNumber(stats?.downs), tone: "woundeds" },
@@ -30,6 +31,16 @@ export function buildCombatScoreboardItems(
     );
   }
 
+  if (includeAll) {
+    items.push({
+      key: "latency",
+      label: "延迟 / Ping",
+      shortLabel: "延迟",
+      value: formatLatency(latencyMs),
+      tone: "latency",
+    });
+  }
+
   return items;
 }
 
@@ -37,4 +48,10 @@ function statNumber(value: unknown) {
   const numeric = Number(value ?? 0);
   if (!Number.isFinite(numeric)) return 0;
   return Math.trunc(numeric);
+}
+
+function formatLatency(value: number | null | undefined) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) return "--";
+  return `${Math.round(numeric)} ms`;
 }

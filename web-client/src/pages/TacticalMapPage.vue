@@ -255,6 +255,13 @@
             <div class="explosion-plasma-wave"></div>
             <!-- Sharp expanding pressure wave -->
             <div class="explosion-pressure-ring"></div>
+            <!-- Black smoke clouds -->
+            <div class="explosion-smoke-group">
+              <div class="smoke-puff puff-1"></div>
+              <div class="smoke-puff puff-2"></div>
+              <div class="smoke-puff puff-3"></div>
+              <div class="smoke-puff puff-4"></div>
+            </div>
             <!-- Radial particle dots flying outward and drifting dynamically -->
             <div class="explosion-particles">
               <span
@@ -363,8 +370,14 @@
         :class="getPerspectiveClass(hoveredMarker.teamId)"
         :style="{ ...tooltipStyle, ...getPerspectiveStyle(hoveredMarker.teamId) }"
       >
-        <span class="player-name-simple">{{ getPlayerLabel(hoveredMarker) }}</span>
-        <span class="squad-simple" v-if="hoveredMarker.squadId">#{{ hoveredMarker.squadId }}</span>
+        <div class="tooltip-main-row">
+          <span class="player-name-simple">{{ getPlayerLabel(hoveredMarker) }}</span>
+          <span class="squad-simple" v-if="hoveredMarker.squadId">#{{ hoveredMarker.squadId }}</span>
+        </div>
+        <div class="tooltip-meta-row">
+          <span class="role-simple">{{ hoveredMarker.role }}</span>
+          <span class="confidence-simple">关联 {{ getLinkConfidenceLabel(hoveredMarker.linkConfidence) }}</span>
+        </div>
       </div>
 
       <!-- New Map Interaction Floating Elements -->
@@ -699,8 +712,10 @@ import { useAuthStore } from "../stores/auth.store";
 import { useServerStore } from "../stores/server.store";
 import { usePlayerStore } from "../stores/player.store";
 import { adaptPlayerDetail } from "../utils/squad-admin-adapter";
+import { type TacticalLinkedPlayer } from "../utils/tactical-map-linker";
 import { resolveRoleIcon, type RoleIconInfo } from "../utils/role-icons";
 import { resolveVehicleIcon } from "../utils/vehicle-icons";
+import type { PlayerDetailViewModel } from "../types/squad-admin.types";
 import {
   TACTICAL_MAP_CONFIGS,
   TACTICAL_MAP_LIST,
@@ -716,7 +731,7 @@ import PlayerActionMenu from "../components/tactical-map/PlayerActionMenu.vue";
 
 const props = defineProps<{
   snapshot: BzssCorePlayerInfoResponse | null;
-  players: BzssCoreTrackedPlayerInfo[];
+  players: TacticalLinkedPlayer[];
   captureZones?: BzssCoreCaptureZoneInfo[];
   fobs?: BzssCoreFobInfo[];
   loading: boolean;
@@ -733,10 +748,11 @@ const emit = defineEmits<{
   (e: "force-team-player", player: any): void;
 }>();
 
-interface MapMarker extends BzssCoreTrackedPlayerInfo {
+interface MapMarker extends TacticalLinkedPlayer {
   mapX: number;
   mapY: number;
   roleInfo: RoleIconInfo;
+  rconDetail: PlayerDetailViewModel | null;
 }
 
 interface CaptureZoneMarker {
@@ -820,12 +836,12 @@ const activeMapConfig = computed(() => {
 const mapOptions = computed<TacticalMapConfig[]>(() => TACTICAL_MAP_LIST);
 
 // Cache to prevent players disappearing when data is missing temporarily
-const cachedPlayers = ref<Record<string, { player: BzssCoreTrackedPlayerInfo; lastSeen: number }>>({});
-const positionedPlayers = computed(() => {
+const cachedPlayers = ref<Record<string, { player: TacticalLinkedPlayer; lastSeen: number }>>({});
+const positionedPlayers = computed<TacticalLinkedPlayer[]>(() => {
   return Object.values(cachedPlayers.value).map((entry) => entry.player);
 });
 
-const hoveredPlayer = ref<BzssCoreTrackedPlayerInfo | null>(null);
+const hoveredPlayer = ref<TacticalLinkedPlayer | null>(null);
 const errorText = computed(() => props.errorText);
 const loading = computed(() => props.loading);
 let simulatedCombatTimer: number | null = null;
@@ -894,12 +910,12 @@ const measurePoints = ref<Array<{ mapX: number; mapY: number; gameX: number; gam
 // Map Interaction States Layer
 const selectedPlayerKey = ref<string>("");
 const playerInfoPanel = ref<{
-  player: BzssCoreTrackedPlayerInfo;
+  player: TacticalLinkedPlayer;
   x: number;
   y: number;
 } | null>(null);
 const playerActionMenu = ref<{
-  player: BzssCoreTrackedPlayerInfo;
+  player: TacticalLinkedPlayer;
   x: number;
   y: number;
 } | null>(null);
@@ -1096,13 +1112,20 @@ interface PlayerTarget {
   x: number;
   y: number;
   yaw: number | null;
+  smoothYaw: number | null;
   vx: number;
   vy: number;
+  speedMs: number;
+  speedSampleMs: number;
   lastSeen: number;
 }
 
 const playerTargets = new Map<string, PlayerTarget>();
 const interpolatedPositions = ref<Record<string, { mapX: number, mapY: number, yaw: number | null }>>({});
+const mapSmoothingTick = ref(0);
+let mapSmoothingTimer: number | null = null;
+let mapAnimationFrameId: number | null = null;
+let lastMapAnimationFrameAt = 0;
 
 // Watch players prop to update the cache
 watch(
@@ -1142,6 +1165,7 @@ watch(
     cachedPlayers.value = {};
     playerTargets.clear();
     interpolatedPositions.value = {};
+    lastMapAnimationFrameAt = 0;
     combatHotspot.value = null;
     tilesReady.value = false;
   }
@@ -1173,25 +1197,54 @@ watch(
       const lastTarget = playerTargets.get(key);
       let vx = 0;
       let vy = 0;
+      let speedMs = 0;
+      let speedSampleMs = 0;
+      let smoothYaw = nextYaw;
       if (lastTarget) {
         const dt = (now - lastTarget.lastSeen) / 1000;
         if (dt > 0.05) {
           vx = (nextX - lastTarget.x) / dt;
           vy = (nextY - lastTarget.y) / dt;
+          const sampleSpeedMs = Math.sqrt(vx * vx + vy * vy) / 100;
+          speedSampleMs = sampleSpeedMs;
+          const speedAlpha = sampleSpeedMs < 0.3
+            ? clamp01(Math.max(0.08, Math.min(0.16, dt * 0.15)))
+            : clamp01(Math.max(0.22, Math.min(0.38, dt * 0.42)));
+          speedMs = lastTarget.speedMs > 0
+            ? lerp(lastTarget.speedMs, sampleSpeedMs, speedAlpha)
+            : sampleSpeedMs;
         } else {
           vx = lastTarget.vx;
           vy = lastTarget.vy;
+          speedMs = lastTarget.speedMs;
         }
+        smoothYaw = smoothAngleDegrees(
+          lastTarget.smoothYaw ?? lastTarget.yaw ?? nextYaw ?? 0,
+          nextYaw ?? 0,
+          clamp01(Math.max(0.88, Math.min(0.98, dt * 2.15))),
+        );
       }
 
       playerTargets.set(key, {
         x: nextX,
         y: nextY,
         yaw: nextYaw,
+        smoothYaw,
         vx,
         vy,
+        speedMs,
+        speedSampleMs,
         lastSeen: now
       });
+
+      if (!interpolatedPositions.value[key]) {
+        const bounds = activeMapConfig.value.bounds;
+        interpolatedPositions.value[key] = {
+          mapX: project(nextX, bounds.minX, bounds.maxX),
+          mapY: project(nextY, bounds.minY, bounds.maxY),
+          yaw: nextYaw,
+        };
+      }
     });
 
     // Cleanup states for disconnected/evicted players
@@ -1204,26 +1257,71 @@ watch(
 
     if (!newList.length) {
       interpolatedPositions.value = {};
-      return;
     }
-
-    const bounds = activeMapConfig.value.bounds;
-    const nextPositions: Record<string, { mapX: number, mapY: number, yaw: number | null }> = {};
-    for (const player of newList) {
-      const key = getPlayerKey(player);
-      if (!key) continue;
-      const pos = getPlayerPosition(player);
-      if (!pos) continue;
-      nextPositions[key] = {
-        mapX: project(pos.x ?? 0, bounds.minX, bounds.maxX),
-        mapY: project(pos.y ?? 0, bounds.minY, bounds.maxY),
-        yaw: getPlayerYaw(player)
-      };
-    }
-    interpolatedPositions.value = nextPositions;
   },
   { immediate: true, deep: true }
 );
+
+function advanceMapInterpolation(now: number) {
+  const playersList = positionedPlayers.value;
+  if (!playersList.length) {
+    if (Object.keys(interpolatedPositions.value).length) {
+      interpolatedPositions.value = {};
+    }
+    lastMapAnimationFrameAt = now;
+    return;
+  }
+
+  const bounds = activeMapConfig.value.bounds;
+  const prevPositions = interpolatedPositions.value;
+  const nextPositions: Record<string, { mapX: number; mapY: number; yaw: number | null }> = {};
+  const elapsedSec = lastMapAnimationFrameAt > 0
+    ? Math.min(0.05, Math.max(0.008, (now - lastMapAnimationFrameAt) / 1000))
+    : 0.016;
+  const positionFollow = 1 - Math.exp(-elapsedSec / 0.11);
+  const yawFollow = 1 - Math.exp(-elapsedSec / 0.08);
+  const positionPredictionWindow = 0.7;
+
+  for (const player of playersList) {
+    const key = getPlayerKey(player);
+    if (!key) continue;
+    const pos = getPlayerPosition(player);
+    if (!pos) continue;
+
+    const target = playerTargets.get(key);
+    const current = prevPositions[key];
+    const targetX = target
+      ? target.x + target.vx * Math.min(positionPredictionWindow, Math.max(0, (now - target.lastSeen) / 1000))
+      : (pos.x ?? 0);
+    const targetY = target
+      ? target.y + target.vy * Math.min(positionPredictionWindow, Math.max(0, (now - target.lastSeen) / 1000))
+      : (pos.y ?? 0);
+    const desiredMapX = project(targetX, bounds.minX, bounds.maxX);
+    const desiredMapY = project(targetY, bounds.minY, bounds.maxY);
+    const desiredYaw = target?.smoothYaw ?? getPlayerYaw(player);
+
+    if (!current) {
+      nextPositions[key] = {
+        mapX: desiredMapX,
+        mapY: desiredMapY,
+        yaw: desiredYaw,
+      };
+      continue;
+    }
+
+    nextPositions[key] = {
+      mapX: lerp(current.mapX, desiredMapX, positionFollow),
+      mapY: lerp(current.mapY, desiredMapY, positionFollow),
+      yaw:
+        current.yaw === null || desiredYaw === null
+          ? desiredYaw
+          : smoothAngleDegrees(current.yaw, desiredYaw, yawFollow),
+    };
+  }
+
+  interpolatedPositions.value = nextPositions;
+  lastMapAnimationFrameAt = now;
+}
 
 function toggleMeasureMode() {
   measureMode.value = !measureMode.value;
@@ -1363,7 +1461,7 @@ function handleMapRightClick(e: MouseEvent) {
 }
 
 // Player Click / DblClick / RightClick Differentiators
-function handlePlayerSingleClick(player: BzssCoreTrackedPlayerInfo, event: MouseEvent) {
+function handlePlayerSingleClick(player: TacticalLinkedPlayer, event: MouseEvent) {
   if (singleClickTimer.value) {
     clearTimeout(singleClickTimer.value);
   }
@@ -1389,7 +1487,7 @@ function handlePlayerSingleClick(player: BzssCoreTrackedPlayerInfo, event: Mouse
   }, 180);
 }
 
-function handlePlayerDoubleClick(player: BzssCoreTrackedPlayerInfo, event: MouseEvent) {
+function handlePlayerDoubleClick(player: TacticalLinkedPlayer, event: MouseEvent) {
   if (singleClickTimer.value) {
     clearTimeout(singleClickTimer.value);
     singleClickTimer.value = null;
@@ -1402,7 +1500,7 @@ function handlePlayerDoubleClick(player: BzssCoreTrackedPlayerInfo, event: Mouse
   showPlayerDetails(player, event);
 }
 
-function handlePlayerRightClick(player: BzssCoreTrackedPlayerInfo, event: MouseEvent) {
+function handlePlayerRightClick(player: TacticalLinkedPlayer, event: MouseEvent) {
   if (singleClickTimer.value) {
     clearTimeout(singleClickTimer.value);
     singleClickTimer.value = null;
@@ -1478,15 +1576,15 @@ function onFocusHere(menu: any) {
 }
 
 // Player Context Menu Event Handlers
-function onOpenPlayerProfile(player: BzssCoreTrackedPlayerInfo) {
+function onOpenPlayerProfile(player: TacticalLinkedPlayer) {
   showPlayerDetails(player);
 }
 
-function onFocusPlayer(player: BzssCoreTrackedPlayerInfo) {
+function onFocusPlayer(player: TacticalLinkedPlayer) {
   focusPlayerOnMap(player);
 }
 
-async function onCopyPlayerCoords(player: BzssCoreTrackedPlayerInfo) {
+async function onCopyPlayerCoords(player: TacticalLinkedPlayer) {
   const pos = getPlayerPosition(player);
   if (!pos) return;
   const text = `${Math.round(pos.x ?? 0)}, ${Math.round(pos.y ?? 0)}`;
@@ -1498,7 +1596,7 @@ async function onCopyPlayerCoords(player: BzssCoreTrackedPlayerInfo) {
   }
 }
 
-function onStartMeasureFromPlayer(player: BzssCoreTrackedPlayerInfo) {
+function onStartMeasureFromPlayer(player: TacticalLinkedPlayer) {
   const marker = markers.value.find((m) => getPlayerKey(m) === getPlayerKey(player));
   const pos = getPlayerPosition(player);
   if (!marker || !pos) return;
@@ -1595,7 +1693,7 @@ const markers = computed<MapMarker[]>(() => {
       teamId: resolvedTeamId,
       roleInfo: resolveMapRoleInfo(player),
       rconDetail,
-    };
+    } as any as MapMarker;
   });
 });
 
@@ -1971,7 +2069,7 @@ function panToMapPercent(mapX: number, mapY: number, targetZoom?: number) {
   panY.value = viewHeight / 2 - (mapY * 10) * clampedZoom;
 }
 
-function focusPlayerOnMap(player: BzssCoreTrackedPlayerInfo) {
+function focusPlayerOnMap(player: TacticalLinkedPlayer) {
   const key = getPlayerKey(player);
   focusedPlayerKey.value = key;
   const marker = markers.value.find((m) => getPlayerKey(m) === key);
@@ -2005,7 +2103,7 @@ function focusVehicleOnMap(marker: { mapX: number; mapY: number }) {
 }
 
 // Show player detail in floating window
-function showPlayerDetails(player: BzssCoreTrackedPlayerInfo, event?: MouseEvent) {
+function showPlayerDetails(player: TacticalLinkedPlayer, event?: MouseEvent) {
   const storePlayer = playerStore.active.find(
     (p) => p.name === player.playerName || p.steamID === player.playerGuid
   );
@@ -2272,6 +2370,28 @@ function getTeamRoleIconColor(teamId: number | null | undefined) {
   return getPerspectivePalette(tone).icon;
 }
 
+function lerp(from: number, to: number, alpha: number) {
+  return from + (to - from) * alpha;
+}
+
+function clamp01(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
+}
+
+function normalizeAngleDegrees(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  let angle = value % 360;
+  if (angle < -180) angle += 360;
+  if (angle > 180) angle -= 360;
+  return angle;
+}
+
+function smoothAngleDegrees(from: number, to: number, alpha: number) {
+  const delta = normalizeAngleDegrees(to - from);
+  return normalizeAngleDegrees(from + delta * alpha);
+}
+
 function getPerspectiveTone(teamId: number | null | undefined): PerspectiveTone {
   const normalized = normalizeTeam(teamId);
   if (normalized !== 1 && normalized !== 2) return "neutral";
@@ -2339,18 +2459,37 @@ function getPerspectiveStyle(teamId: number | null | undefined) {
   };
 }
 
-function getPlayerSpeedText(player: any) {
+function getPlayerSpeedText(player: TacticalLinkedPlayer) {
   const key = getPlayerKey(player);
   if (!key) return "-";
   const target = playerTargets.get(key);
-  if (!target) return "0.0 m/s";
-  
-  const speedMS = Math.sqrt(target.vx * target.vx + target.vy * target.vy) / 100;
+  if (!target) return "--";
+
+  void mapSmoothingTick.value;
+
+  const ageMs = Math.max(0, Date.now() - target.lastSeen);
+  const decayAfterMs = 350;
+  const decayFactor = ageMs <= decayAfterMs
+    ? 1
+    : Math.pow(0.9, (ageMs - decayAfterMs) / 200);
+  const speedMS = Number.isFinite(target.speedMs) ? target.speedMs * decayFactor : 0;
   const speedKMH = speedMS * 3.6;
-  
-  if (speedMS < 0.1) return "0.0 m/s";
+  if (speedMS < 0.05) return "0.0 m/s";
   
   return `${speedMS.toFixed(1)} m/s (${Math.round(speedKMH)} km/h)`;
+}
+
+function getLinkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"]) {
+  switch (confidence) {
+    case "exact":
+      return "精准";
+    case "strong":
+      return "强";
+    case "weak":
+      return "弱";
+    default:
+      return "未关联";
+  }
 }
 
 function getFlagLetter(name: string): string {
@@ -2426,6 +2565,14 @@ onMounted(() => {
   if (import.meta.env.DEV) {
     simulatedCombatTimer = window.setInterval(runCombatEventSimulation, 2500);
   }
+  mapSmoothingTimer = window.setInterval(() => {
+    mapSmoothingTick.value = (mapSmoothingTick.value + 1) % 1000000;
+  }, 200);
+  const animateMap = (now: number) => {
+    advanceMapInterpolation(now);
+    mapAnimationFrameId = window.requestAnimationFrame(animateMap);
+  };
+  mapAnimationFrameId = window.requestAnimationFrame(animateMap);
   window.addEventListener("resize", fitToViewport);
   window.addEventListener("keydown", handleWindowKeyDown);
 
@@ -2445,6 +2592,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (simulatedCombatTimer) window.clearInterval(simulatedCombatTimer);
+  if (mapSmoothingTimer) window.clearInterval(mapSmoothingTimer);
+  if (mapAnimationFrameId != null) window.cancelAnimationFrame(mapAnimationFrameId);
   window.removeEventListener("resize", fitToViewport);
   window.removeEventListener("keydown", handleWindowKeyDown);
   resizeObserver?.disconnect();
@@ -2731,7 +2880,7 @@ onBeforeUnmount(() => {
 
 .explosion-marker {
   position: absolute;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) scale(0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2851,6 +3000,76 @@ onBeforeUnmount(() => {
     0 0 90px #ff3f34;
   filter: blur(0.5px);
   animation: exp-core-anim 0.85s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+}
+
+/* Black Smoke Group & Puffs */
+.explosion-smoke-group {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  mix-blend-mode: normal;
+  z-index: 2;
+}
+
+.smoke-puff {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  left: 0;
+  top: 0;
+  border-radius: 45% 55% 50% 50% / 50% 45% 55% 50%;
+  background: radial-gradient(circle, rgba(15, 15, 15, 0.85) 0%, rgba(30, 30, 30, 0.5) 45%, rgba(0, 0, 0, 0) 70%);
+  filter: blur(5px);
+  will-change: transform, opacity, filter;
+}
+
+.smoke-puff.puff-1 {
+  animation: smoke-expand-1 1.7s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+  animation-delay: 0.04s;
+}
+
+.smoke-puff.puff-2 {
+  animation: smoke-expand-2 1.9s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+  animation-delay: 0.08s;
+}
+
+.smoke-puff.puff-3 {
+  animation: smoke-expand-3 1.6s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+  animation-delay: 0.12s;
+}
+
+.smoke-puff.puff-4 {
+  animation: smoke-expand-4 1.8s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+  animation-delay: 0.16s;
+}
+
+@keyframes smoke-expand-1 {
+  0% { transform: translate(0, 0) scale(0.1) rotate(0deg); opacity: 0; }
+  15% { opacity: 0.9; }
+  50% { opacity: 0.65; }
+  100% { transform: translate(-30px, -30px) scale(1.1) rotate(45deg); opacity: 0; filter: blur(16px); }
+}
+
+@keyframes smoke-expand-2 {
+  0% { transform: translate(0, 0) scale(0.12) rotate(0deg); opacity: 0; }
+  20% { opacity: 0.85; }
+  55% { opacity: 0.6; }
+  100% { transform: translate(40px, -20px) scale(1.25) rotate(-60deg); opacity: 0; filter: blur(18px); }
+}
+
+@keyframes smoke-expand-3 {
+  0% { transform: translate(0, 0) scale(0.08) rotate(0deg); opacity: 0; }
+  10% { opacity: 0.95; }
+  45% { opacity: 0.55; }
+  100% { transform: translate(-20px, 40px) scale(1.0) rotate(90deg); opacity: 0; filter: blur(14px); }
+}
+
+@keyframes smoke-expand-4 {
+  0% { transform: translate(0, 0) scale(0.1) rotate(0deg); opacity: 0; }
+  18% { opacity: 0.9; }
+  50% { opacity: 0.65; }
+  100% { transform: translate(30px, 30px) scale(1.15) rotate(-30deg); opacity: 0; filter: blur(16px); }
 }
 
 /* Map Screen Shake */
@@ -4819,8 +5038,9 @@ onBeforeUnmount(() => {
   pointer-events: none;
   white-space: nowrap;
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6), 0 0 6px var(--perspective-glow);
   z-index: 150;
   animation: tooltipAppear 0.15s ease-out;
@@ -4838,6 +5058,26 @@ onBeforeUnmount(() => {
 .squad-simple {
   color: var(--perspective-soft);
   opacity: 0.85;
+}
+
+.tooltip-main-row,
+.tooltip-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tooltip-meta-row {
+  color: var(--perspective-soft);
+  opacity: 0.9;
+}
+
+.role-simple {
+  color: #f8fafc;
+}
+
+.confidence-simple {
+  color: var(--perspective-soft);
 }
 
 /* Command Hotkey Hints Layout */

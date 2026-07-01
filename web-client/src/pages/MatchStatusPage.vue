@@ -117,7 +117,7 @@
       <div v-else-if="viewMode === 'map' || (isMobile && mobileTab === 'map')" class="match-state-map-wrapper">
         <TacticalMapPage
           :snapshot="bzssCoreSnapshot"
-          :players="bzssCorePlayers"
+          :players="tacticalLinkedPlayers"
           :capture-zones="bzssCoreSnapshot?.captureZones"
           :fobs="bzssCoreSnapshot?.fobs"
           :loading="bzssCoreLoading"
@@ -302,12 +302,14 @@ import { useAutoRefreshGate } from "../composables/useAutoRefreshGate";
 import { cancelIdleTask, scheduleIdleTask } from "../utils/idle";
 import { resolvePlayerIdentityIp } from "../app/playerIdentityApi";
 import { fetchBzssCorePlayerInfo, fetchBzssCorePlayerInfoList, streamBzssCorePlayerInfoList } from "../app/bzssCoreApi";
-import type { BzssCorePlayerInfoResponse } from "../app/bzssCoreApi";
+import type { BzssCorePlayerInfoResponse, BzssCoreTrackedPlayerInfo } from "../app/bzssCoreApi";
 import { useBzssCoreStore } from "../stores/bzss-core.store";
+import { linkTacticalPlayers, type TacticalLinkedPlayer } from "../utils/tactical-map-linker";
 import type {
   PageState,
   PlayerDetailViewModel,
   PlayerRowViewModel,
+  SquadLeaderRowViewModel,
   TeamViewModel,
   SquadViewModel,
 } from "../types/squad-admin.types";
@@ -388,6 +390,15 @@ function handleViewModeChange(mode: "list" | "map") {
 const bzssCoreStore = useBzssCoreStore();
 const bzssCoreSnapshot = computed(() => bzssCoreStore.snapshot);
 const bzssCorePlayers = computed(() => bzssCoreStore.players);
+const bzssCorePlayerLookup = computed(() => buildBzssCorePlayerLookup(bzssCorePlayers.value));
+const tacticalLinkedPlayers = computed<TacticalLinkedPlayer[]>(() => linkTacticalPlayers({
+  bzssPlayers: bzssCorePlayers.value,
+  runtimePlayers: players.active,
+  bySteamID: players.bySteamID,
+  byEOSID: players.byEOSID,
+  byPlayerID: players.byPlayerID,
+  byName: players.byName,
+}));
 const bzssCoreLoading = computed(() => bzssCoreStore.loading);
 const bzssCoreError = computed(() => bzssCoreStore.error);
 const bzssCoreStreamActive = computed(() => bzssCoreStore.streamActive);
@@ -660,7 +671,7 @@ const viewModels = computed(() => {
   const filteredTeams = filterTeamsByMode(searchedTeams, pageState.filterMode);
   const viewerTeamId = viewerAutoSwapEnabled.value ? findAdminTeamId(rawTeams.value, viewerSteam64.value) : null;
   return {
-    teams: sortTeamsForAdminPerspective(filteredTeams, viewerTeamId),
+    teams: sortTeamsForAdminPerspective(filteredTeams, viewerTeamId).map((team) => attachBzssCoreInfoToTeam(team, bzssCorePlayerLookup.value)),
     viewerTeamId,
     viewerSteam64: viewerSteam64.value,
     viewerPerspectiveText: buildViewerPerspectiveTextEnglish(viewerTeamId, viewerAutoSwapEnabled.value),
@@ -699,6 +710,90 @@ function eventTone(event: PlaytimeJobProgressEvent) {
   if (phase.includes("skip")) return "warning";
   if (phase.includes("done") || phase.includes("complete") || phase.includes("success")) return "success";
   return "neutral";
+}
+
+function buildBzssCorePlayerLookup(players: BzssCoreTrackedPlayerInfo[] = []) {
+  const map = new Map<string, BzssCoreTrackedPlayerInfo>();
+  for (const player of Array.isArray(players) ? players : []) {
+    if (!player) continue;
+    const keys = [
+      player.playerIndex != null ? `idx:${player.playerIndex}` : "",
+      player.playerId != null ? `id:${player.playerId}` : "",
+      player.playerGuid ? `guid:${String(player.playerGuid).trim().toLowerCase()}` : "",
+      player.playerName ? `name:${String(player.playerName).trim().toLowerCase()}` : "",
+    ].filter(Boolean);
+    for (const key of keys) {
+      map.set(key, player);
+    }
+  }
+  return map;
+}
+
+function resolveBzssCorePlayerInfo(player: PlayerRowViewModel, lookup: Map<string, BzssCoreTrackedPlayerInfo>) {
+  const normalizedName = String(player.name ?? "").trim().toLowerCase();
+  const normalizedSuffix = normalizedName.split(/\s+/).filter(Boolean).pop() ?? "";
+  const keys = [
+    player.playerId != null ? `id:${player.playerId}` : "",
+    player.playerId != null ? `idx:${player.playerId}` : "",
+    normalizedName ? `name:${normalizedName}` : "",
+    player.raw && typeof player.raw === "object" && (player.raw as any).playerGuid
+      ? `guid:${String((player.raw as any).playerGuid).trim().toLowerCase()}`
+      : "",
+  ].filter(Boolean);
+
+  for (const key of keys) {
+    const matched = lookup.get(key);
+    if (matched) return matched;
+  }
+
+  if (normalizedSuffix) {
+    for (const matched of lookup.values()) {
+      const candidateName = String(matched?.playerName ?? "").trim().toLowerCase();
+      const candidateSuffix = candidateName.split(/\s+/).filter(Boolean).pop() ?? "";
+      if (candidateSuffix && candidateSuffix === normalizedSuffix) return matched;
+    }
+  }
+  return null;
+}
+
+function attachBzssCoreInfoToPlayer(
+  player: PlayerRowViewModel,
+  lookup: Map<string, BzssCoreTrackedPlayerInfo>,
+): PlayerRowViewModel {
+  const matched = resolveBzssCorePlayerInfo(player, lookup);
+  if (!matched) return player;
+  const rawPlayer = player.raw && typeof player.raw === "object" ? { ...(player.raw as Record<string, any>) } : player.raw;
+  if (rawPlayer && typeof rawPlayer === "object") {
+    (rawPlayer as Record<string, any>).bzssCorePlayerInfo = matched;
+  }
+  return {
+    ...player,
+    bzssCorePing: matched.playerScoreboard?.ping ?? player.bzssCorePing ?? null,
+    bzssCoreFtIndex: matched.ftIndex ?? player.bzssCoreFtIndex ?? null,
+    bzssCoreFtPosition: matched.ftPosition ?? player.bzssCoreFtPosition ?? null,
+    raw: rawPlayer,
+  };
+}
+
+function attachBzssCoreInfoToSquad(
+  squad: SquadViewModel,
+  lookup: Map<string, BzssCoreTrackedPlayerInfo>,
+): SquadViewModel {
+  return {
+    ...squad,
+    leader: squad.leader ? attachBzssCoreInfoToPlayer(squad.leader, lookup) as SquadLeaderRowViewModel : null,
+    members: squad.members.map((member) => attachBzssCoreInfoToPlayer(member, lookup)),
+  };
+}
+
+function attachBzssCoreInfoToTeam(
+  team: TeamViewModel,
+  lookup: Map<string, BzssCoreTrackedPlayerInfo>,
+): TeamViewModel {
+  return {
+    ...team,
+    squads: team.squads.map((squad) => attachBzssCoreInfoToSquad(squad, lookup)),
+  };
 }
 
 function handleVisibilityChange() {
@@ -1462,6 +1557,10 @@ function buildPlayerDetailViewModel(player: PlayerRowViewModel): PlayerDetailVie
   detail.factionFlagUrl = resolvedTeamName
     ? getFlagUrlByTeamName(resolvedTeamName)
     : (player.factionFlagUrl ?? null);
+  detail.bzssCorePing = player.bzssCorePing ?? player.raw?.bzssCorePlayerInfo?.playerScoreboard?.ping ?? null;
+  detail.bzssCoreFtIndex = player.bzssCoreFtIndex ?? player.raw?.bzssCorePlayerInfo?.ftIndex ?? null;
+  detail.bzssCoreFtPosition = player.bzssCoreFtPosition ?? player.raw?.bzssCorePlayerInfo?.ftPosition ?? null;
+  detail.bzssCorePlayerInfo = player.raw?.bzssCorePlayerInfo ?? detail.bzssCorePlayerInfo ?? null;
   const cacheRecord = player.steamId ? stablePlaytimes.value[player.steamId] : null;
   detail.steamAvatar = cacheRecord?.steam_avatar || cacheRecord?.steamAvatar || player.steamAvatar || null;
   return detail;

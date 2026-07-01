@@ -59,6 +59,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import TacticalMapPage from "./TacticalMapPage.vue";
 import { apiGet } from "../app/apiClient";
 import { applyMatchSnapshotResponse } from "../app/matchSnapshot";
+import { linkTacticalPlayers } from "../utils/tactical-map-linker";
 
 declare global {
   interface Window {
@@ -116,7 +117,10 @@ const statusText = computed(() => errorText.value ? errorText.value : "ok");
 const loadingScreenUrl = computed(() => resolveLoadingScreenUrl(mapName.value, layerName.value));
 
 const tacticalSnapshot = computed(() => snapshotState.value?.bzssCore.state ?? null);
-const tacticalPlayers = computed(() => snapshotState.value?.bzssCore.players ?? []);
+const tacticalPlayers = computed(() => linkTacticalPlayers({
+  bzssPlayers: snapshotState.value?.bzssCore.players ?? [],
+  runtimePlayers: [],
+}));
 const tacticalCaptureZones = computed(() => snapshotState.value?.bzssCore.captureZones ?? []);
 const tacticalFobs = computed(() => snapshotState.value?.bzssCore.fobs ?? []);
 

@@ -27,6 +27,9 @@ export interface PlayerRowViewModel {
   matchJoinCount?: number | null;
   steamAvatar?: string | null;
   factionFlagUrl?: string | null;
+  bzssCorePing?: number | null;
+  bzssCoreFtIndex?: number | null;
+  bzssCoreFtPosition?: number | null;
   combatStats: CombatStats;
   statsLabel: string;
   raw?: any;
@@ -120,6 +123,9 @@ export interface PlayerDetailViewModel {
   matchJoinCount?: number | null;
   steamAvatar?: string | null;
   factionFlagUrl?: string | null;
+  bzssCorePing?: number | null;
+  bzssCoreFtIndex?: number | null;
+  bzssCoreFtPosition?: number | null;
   combatStats: CombatStats;
   statsLabel: string;
   battleStats?: CombatStats;
@@ -129,6 +135,10 @@ export interface PlayerDetailViewModel {
   bzssCoreStatus?: string;
   bzssCoreLastCompletedAt?: string | null;
   bzssCorePlayerInfo?: BzssCoreTrackedPlayerInfo | null;
+  tacticalLink?: {
+    confidence: "exact" | "strong" | "weak" | "none";
+    reason: string;
+  };
   source: string;
   controller: string;
   raw?: any;
@@ -222,6 +232,7 @@ export interface BzssCoreTrackedPlayerInfo {
     raw: string;
     values: string[];
     numericValues: Array<number | null>;
+    ping?: number | null;
     stats?: {
       dataLives: number | null;
       numKills: number | null;

@@ -229,6 +229,7 @@
                 { 'is-disengaged': isPlayerDisengaged(player) }
               ]"
               :style="getPerspectiveStyle(player.teamId)"
+              :title="player.linkReason"
               @click="onPlayerClick(player)"
             >
               <div class="player-card-header">
@@ -237,6 +238,7 @@
                   <span v-if="isSquadLeader(player)" class="sl-badge-pill">SL</span>
                 </span>
                 <span class="player-squad-tag">S{{ normalizeSquad(player.squadId) }}</span>
+                <span class="player-link-pill" :data-confidence="player.linkConfidence">{{ linkConfidenceLabel(player.linkConfidence) }}</span>
               </div>
               <div class="player-card-body">
                 <div class="player-health-bar-container">
@@ -369,7 +371,8 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import type { BzssCoreCaptureZoneInfo, BzssCoreFobInfo, BzssCorePlayerInfoResponse, BzssCoreTrackedPlayerInfo } from "../../app/bzssCoreApi";
+import type { BzssCoreCaptureZoneInfo, BzssCoreFobInfo, BzssCorePlayerInfoResponse } from "../../app/bzssCoreApi";
+import type { TacticalLinkedPlayer } from "../../utils/tactical-map-linker";
 
 type SidebarMode = "expanded" | "compact" | "hidden";
 type SidebarTab = "overview" | "units" | "assets" | "core";
@@ -445,7 +448,7 @@ const props = defineProps<{
   perspectiveSummaryText: string;
   snapshot: BzssCorePlayerInfoResponse | null;
   currentTeamSquads: TacticalTeamSquad[];
-  filteredTeamPlayers: BzssCoreTrackedPlayerInfo[];
+  filteredTeamPlayers: TacticalLinkedPlayer[];
   captureZoneMarkers: TacticalCaptureZoneMarker[];
   fobMarkers: TacticalFobMarker[];
   vehicleGroups: TacticalVehicleGroup[];
@@ -461,12 +464,12 @@ const props = defineProps<{
   focusedSquadId: number | null;
   getPerspectiveStyle: (teamId: number | null | undefined) => Record<string, string>;
   getPerspectiveClass: (teamId: number | null | undefined) => string;
-  getPlayerKey: (player: BzssCoreTrackedPlayerInfo | null | undefined) => string;
-  getPlayerLabel: (player: BzssCoreTrackedPlayerInfo | null | undefined) => string;
-  getPlayerHealth: (player: BzssCoreTrackedPlayerInfo | null | undefined) => number | null;
+  getPlayerKey: (player: TacticalLinkedPlayer | null | undefined) => string;
+  getPlayerLabel: (player: TacticalLinkedPlayer | null | undefined) => string;
+  getPlayerHealth: (player: TacticalLinkedPlayer | null | undefined) => number | null;
   normalizeTeam: (teamId: number | null | undefined) => number;
   normalizeSquad: (squadId: number | null | undefined) => number;
-  isPlayerDisengaged: (player: BzssCoreTrackedPlayerInfo) => boolean;
+  isPlayerDisengaged: (player: TacticalLinkedPlayer) => boolean;
 }>()
 
 const emit = defineEmits<{
@@ -488,12 +491,12 @@ const emit = defineEmits<{
   (e: "update:selected-map-key", value: string): void;
   (e: "update:marker-scale", value: number): void;
   (e: "update:viewer-perspective-mode", value: ViewerPerspectiveMode): void;
-  (e: "focus-player", player: BzssCoreTrackedPlayerInfo): void;
+  (e: "focus-player", player: TacticalLinkedPlayer): void;
   (e: "focus-squad", payload: { teamId: number; squadId: number }): void;
   (e: "focus-fob", payload: TacticalFobMarker): void;
   (e: "focus-zone", payload: TacticalCaptureZoneMarker): void;
   (e: "focus-vehicle", payload: TacticalVehicleGroup): void;
-  (e: "open-player", player: BzssCoreTrackedPlayerInfo): void;
+  (e: "open-player", player: TacticalLinkedPlayer): void;
 }>();
 
 // Local UI state
@@ -581,12 +584,12 @@ function getTicketBarWidth(teamId: number) {
   return `${percent}%`;
 }
 
-function isSquadLeader(player: BzssCoreTrackedPlayerInfo) {
+function isSquadLeader(player: TacticalLinkedPlayer) {
   const soldierClass = String(player.soldierInfo?.soldierClass ?? "").toLowerCase();
   return soldierClass.includes("squadleader") || soldierClass.includes("officer") || soldierClass.includes("sl");
 }
 
-function getPlayerHealthColor(player: BzssCoreTrackedPlayerInfo) {
+function getPlayerHealthColor(player: TacticalLinkedPlayer) {
   const hp = props.getPlayerHealth(player);
   if (hp == null) return 'var(--perspective-primary, #00e5ff)';
   if (hp <= 0) return '#ef5350';
@@ -594,7 +597,7 @@ function getPlayerHealthColor(player: BzssCoreTrackedPlayerInfo) {
   return 'var(--perspective-primary, #00e5ff)';
 }
 
-function onPlayerClick(player: BzssCoreTrackedPlayerInfo) {
+function onPlayerClick(player: TacticalLinkedPlayer) {
   emit("focus-player", player);
   emit("open-player", player);
 }
@@ -603,11 +606,11 @@ function normalizeText(value: unknown) {
   return String(value ?? "").trim().toLowerCase();
 }
 
-function getPlayerPosition(player: BzssCoreTrackedPlayerInfo) {
+function getPlayerPosition(player: TacticalLinkedPlayer) {
   return player.soldierInfo?.position ?? player.position ?? null;
 }
 
-function getSquadForPlayer(player: BzssCoreTrackedPlayerInfo) {
+function getSquadForPlayer(player: TacticalLinkedPlayer) {
   return props.currentTeamSquads.find((squad) => squad.id === props.normalizeSquad(player.squadId));
 }
 
@@ -667,13 +670,13 @@ const teamVehicleGroups = computed(() => {
 
 const vehicleGroups = computed(() => props.vehicleGroups?.length ? props.vehicleGroups : teamVehicleGroups.value);
 
-function getPlayerKey(player: BzssCoreTrackedPlayerInfo | null | undefined) {
+function getPlayerKey(player: TacticalLinkedPlayer | null | undefined) {
   return props.getPlayerKey(player);
 }
-function getPlayerLabel(player: BzssCoreTrackedPlayerInfo | null | undefined) {
+function getPlayerLabel(player: TacticalLinkedPlayer | null | undefined) {
   return props.getPlayerLabel(player);
 }
-function getPlayerHealth(player: BzssCoreTrackedPlayerInfo | null | undefined) {
+function getPlayerHealth(player: TacticalLinkedPlayer | null | undefined) {
   return props.getPlayerHealth(player);
 }
 function normalizeTeam(teamId: number | null | undefined) {
@@ -682,7 +685,7 @@ function normalizeTeam(teamId: number | null | undefined) {
 function normalizeSquad(squadId: number | null | undefined) {
   return props.normalizeSquad(squadId);
 }
-function isPlayerDisengaged(player: BzssCoreTrackedPlayerInfo) {
+function isPlayerDisengaged(player: TacticalLinkedPlayer) {
   return props.isPlayerDisengaged(player);
 }
 function getPerspectiveClass(teamId: number | null | undefined) {
@@ -690,6 +693,13 @@ function getPerspectiveClass(teamId: number | null | undefined) {
 }
 function getPerspectiveStyle(teamId: number | null | undefined) {
   return props.getPerspectiveStyle(teamId);
+}
+
+function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"]) {
+  if (confidence === "exact") return "精确";
+  if (confidence === "strong") return "强";
+  if (confidence === "weak") return "弱";
+  return "未关联";
 }
 </script>
 
@@ -1392,6 +1402,8 @@ function getPerspectiveStyle(teamId: number | null | undefined) {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .player-name {
   font-size: 12px;
@@ -1414,6 +1426,35 @@ function getPerspectiveStyle(teamId: number | null | undefined) {
   font-weight: 800;
   color: var(--perspective-primary, #00e5ff);
   font-family: monospace;
+}
+
+.player-link-pill {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.12);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  margin-left: auto;
+}
+
+.player-link-pill[data-confidence="exact"] {
+  background: rgba(55, 200, 255, 0.12);
+  color: #7de6ff;
+  border-color: rgba(55, 200, 255, 0.2);
+}
+
+.player-link-pill[data-confidence="strong"] {
+  background: rgba(74, 222, 128, 0.12);
+  color: #86efac;
+  border-color: rgba(74, 222, 128, 0.2);
+}
+
+.player-link-pill[data-confidence="weak"] {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.2);
 }
 .player-card-body {
   display: flex;

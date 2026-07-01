@@ -28,6 +28,14 @@
             :alt="roleIcon.label"
           />
           <span v-else class="player-avatar-text" aria-hidden="true">{{ roleIcon.icon }}</span>
+          <span
+            v-if="bzssCorePing != null"
+            class="player-avatar-ping-badge"
+            :class="pingBadgeClass"
+            :title="`BZSS-Core 延迟: ${bzssCorePing}ms`"
+          >
+            {{ bzssCorePing }}ms
+          </span>
         </div>
       </div>
     </div>
@@ -89,16 +97,6 @@
           <span class="label">游离</span>
           <span class="value">{{ squadlessText }}</span>
         </span>
-        <span
-          v-if="player.ping != null"
-          class="stat-chip ping"
-          :class="pingClass(player.ping, player.packetLoss)"
-          :title="`延迟: ${player.ping}ms${player.packetLoss ? '，丢包: ' + player.packetLoss + '%' : ''}`"
-        >
-          <span class="label">网</span>
-          <span class="value">{{ player.ping }}ms</span>
-          <span v-if="player.packetLoss" class="loss-value">({{ player.packetLoss }}%)</span>
-        </span>
       </div>
     </div>
 
@@ -147,6 +145,13 @@ const isSelected = computed(() => {
 const roleIcon = computed(() => resolveRoleIcon(props.player.role));
 const isRoleIconImage = computed(() => roleIcon.value.icon.startsWith("/"));
 const avatarUrl = computed(() => props.steamAvatar || props.player.steamAvatar || null);
+const bzssCorePing = computed(() => props.player.bzssCorePing ?? null);
+const pingBadgeClass = computed(() => {
+  const ping = Number(bzssCorePing.value ?? 0);
+  if (ping > 120) return "high";
+  if (ping > 60) return "medium";
+  return "low";
+});
 
 const displayName = computed(() => {
   const raw = String(props.player.name ?? "").trim();
@@ -321,5 +326,49 @@ function displayRole(role: string | null | undefined) {
 .player-avatar .player-avatar-text {
   position: relative;
   z-index: 1;
+}
+
+.player-avatar-container {
+  position: relative;
+}
+
+.player-avatar {
+  position: relative;
+  overflow: visible;
+}
+
+.player-avatar-ping-badge {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  z-index: 3;
+  min-width: 34px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 9px;
+  line-height: 1.2;
+  font-weight: 800;
+  text-align: center;
+  letter-spacing: 0.02em;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.35);
+}
+
+.player-avatar-ping-badge.low {
+  color: #d7ffe4;
+  background: rgba(34, 197, 94, 0.85);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.player-avatar-ping-badge.medium {
+  color: #fff4d6;
+  background: rgba(245, 158, 11, 0.88);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.player-avatar-ping-badge.high {
+  color: #ffe1e1;
+  background: rgba(239, 68, 68, 0.9);
+  border-color: rgba(239, 68, 68, 0.35);
 }
 </style>
