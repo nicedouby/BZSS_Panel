@@ -10,7 +10,10 @@
     <!-- Panel Header -->
     <div class="panel-header">
       <div class="header-main">
-        <span class="player-name">{{ player.playerName || 'Unknown Player' }}</span>
+        <div class="player-title-row">
+          <img v-if="rconDetail?.steamAvatar" :src="rconDetail.steamAvatar" class="steam-avatar-mini" alt="avatar" />
+          <span class="player-name" :title="player.playerName">{{ player.playerName || 'Unknown Player' }}</span>
+        </div>
         <button class="close-btn" @click="$emit('close')" title="关闭">×</button>
       </div>
       <div class="header-sub font-mono">
@@ -74,6 +77,25 @@
         <span class="val">{{ speedText }}</span>
       </div>
 
+      <div class="grid-row" v-if="rconDetail">
+        <span class="label">延迟/PING</span>
+        <span class="val text-green" :class="{ 'high-ping': rconDetail.ping > 150 }">
+          {{ rconDetail.ping != null ? `${rconDetail.ping} ms` : '--' }}
+        </span>
+      </div>
+
+      <div class="grid-row" v-if="rconDetail && rconDetail.playtimeHours !== null">
+        <span class="label">时长/PLAYTIME</span>
+        <span class="val text-yellow">{{ Math.round(rconDetail.playtimeHours) }}h</span>
+      </div>
+
+      <div class="grid-row" v-if="rconDetail && rconDetail.combatStats">
+        <span class="label">战绩/KDA</span>
+        <span class="val text-cyan">
+          {{ rconDetail.combatStats.kills }} / {{ rconDetail.combatStats.downs }} / {{ rconDetail.combatStats.deaths }}
+        </span>
+      </div>
+
       <div class="grid-row">
         <span class="label">BZSS CORE</span>
         <span class="val sync-status">
@@ -108,6 +130,7 @@ const props = defineProps<{
   tone: "friendly" | "enemy" | "neutral";
   speedText: string;
   coreStatusText?: string;
+  rconDetail?: any;
 }>();
 
 const emit = defineEmits<{
@@ -272,6 +295,35 @@ onMounted(() => {
   white-space: nowrap;
   max-width: 190px;
   text-shadow: 0 0 6px rgba(255, 255, 255, 0.25);
+}
+
+.player-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 200px;
+}
+
+.steam-avatar-mini {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.text-green {
+  color: #10b981;
+}
+
+.text-yellow {
+  color: #fbbf24;
+}
+
+.high-ping {
+  color: #ef5350 !important;
 }
 
 .close-btn {

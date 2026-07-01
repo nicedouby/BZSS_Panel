@@ -187,13 +187,13 @@ function displayRole(role: string | null | undefined) {
 }
 
 .player-combat-stats {
-  font-size: 11px;
-  line-height: 1.3;
+  font-size: 10px;
+  line-height: 1;
   display: flex;
   align-items: center;
   gap: 4px;
   flex-wrap: wrap;
-  min-height: 18px;
+  min-height: 16px;
   margin-top: 1px;
 }
 
@@ -202,25 +202,25 @@ function displayRole(role: string | null | undefined) {
 }
 
 .scoreboard-line-compact {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(78px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
   width: 100%;
 }
 
 .stat-scoreboard {
-  justify-content: space-between;
-  gap: 6px;
-  border-color: rgba(140, 160, 185, 0.2);
-  background: rgba(255, 255, 255, 0.04);
+  gap: 3px;
+  border-color: rgba(140, 160, 185, 0.15);
+  background: rgba(255, 255, 255, 0.02);
   color: var(--color-text-secondary);
 }
 
 .stat-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 18px;
-  padding: 1px 6px;
-  border-radius: 999px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 3px;
   border: 1px solid transparent;
   white-space: nowrap;
 }

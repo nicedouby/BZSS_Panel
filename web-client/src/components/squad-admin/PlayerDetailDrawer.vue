@@ -834,7 +834,7 @@ const glowShadowStyle = computed(() => {
   return { boxShadow: "0 0 16px rgba(255, 255, 255, 0.1)" };
 });
 
-const combatScoreboardItems = computed(() => buildCombatScoreboardItems(props.player?.combatStats));
+const combatScoreboardItems = computed(() => buildCombatScoreboardItems(props.player?.combatStats, true));
 
 // KD Computations
 const sessionKd = computed(() => {

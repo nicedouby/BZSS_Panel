@@ -350,6 +350,45 @@ async function testOnlyLightWeaponDamageSkipsNonLightWeapons() {
   await module.stop();
 }
 
+async function testForceAttackerDamageDisplayOverridesLightWeaponFilter() {
+  const { module, eventBus, calls } = createHarness({
+    moduleConfig: {
+      forceAttackerDamageDisplay: true,
+      showOnlyLightWeaponDamage: true,
+    },
+  });
+  await module.start();
+
+  await eventBus.emitModuleEvent("module.combatClean", "combat.record.processed", {
+    record: {
+      id: "combat-force-attacker-damage",
+      serverId: "S1",
+      type: "damage",
+      time: "2026-05-30T12:11:30.000Z",
+      attackerName: "Attacker",
+      attackerSteam64ID: "111",
+      victimName: "Victim",
+      victimSteam64ID: "222",
+      damage: 60,
+      weaponName: "Grenade",
+      tags: ["combat.damage", "weapon.explosive", "damage.splash"],
+    },
+  });
+
+  await sleep(500);
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].targetName, "Victim");
+  assert.equal(calls[1].targetName, "Attacker");
+
+  const events = module.api.getEvents({ limit: 10 });
+  assert.equal(events.length, 1);
+  assert.equal(events[0].victimWarning.success, true);
+  assert.equal(events[0].attackerWarning.success, true);
+
+  await module.stop();
+}
+
 async function testOnlyLightWeaponDamageSkipsHeavyKillAttacker() {
   const { module, eventBus, calls } = createHarness({
     moduleConfig: {
@@ -631,6 +670,7 @@ await testDamageDebounceConfigAndDelay();
 await testReviveResolvedWarnings();
 await testTagDrivenMessages();
 await testOnlyLightWeaponDamageSkipsNonLightWeapons();
+await testForceAttackerDamageDisplayOverridesLightWeaponFilter();
 await testOnlyLightWeaponDamageSkipsHeavyKillAttacker();
 await testSamePlayerStillDisplays();
 await testKillDisplayIsDisabledByDefault();

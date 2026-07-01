@@ -375,6 +375,7 @@
         :y="playerInfoPanel.y"
         :tone="getPerspectiveTone(playerInfoPanel.player.teamId)"
         :speed-text="getPlayerSpeedText(playerInfoPanel.player)"
+        :rcon-detail="getPlayerRconDetail(playerInfoPanel.player)"
         @close="playerInfoPanel = null; selectedPlayerKey = ''"
       />
 
@@ -384,11 +385,16 @@
         :x="playerActionMenu.x"
         :y="playerActionMenu.y"
         :tone="getPerspectiveTone(playerActionMenu.player.teamId)"
+        :can-manage="canManageRcon"
+        :rcon-player="getPlayerRconDetail(playerActionMenu.player)"
         @close="playerActionMenu = null"
         @open-profile="onOpenPlayerProfile(playerActionMenu.player)"
         @focus="onFocusPlayer(playerActionMenu.player)"
         @copy-coords="onCopyPlayerCoords(playerActionMenu.player)"
         @start-measure="onStartMeasureFromPlayer(playerActionMenu.player)"
+        @warn="emit('warn-player', getPlayerRconDetail(playerActionMenu.player))"
+        @kick="emit('kick-player', getPlayerRconDetail(playerActionMenu.player))"
+        @force-team="emit('force-team-player', getPlayerRconDetail(playerActionMenu.player))"
       />
 
       <MapContextMenu
@@ -715,11 +721,16 @@ const props = defineProps<{
   fobs?: BzssCoreFobInfo[];
   loading: boolean;
   errorText: string;
+  playtimes?: Record<string, any> | null;
+  combatStatsLookup?: Record<string, any> | null;
 }>();
 
 const emit = defineEmits<{
   (e: "select-player", payload: { detail: any; event: MouseEvent }): void;
   (e: "snapshot-ready", payload: { ready: boolean; reason?: string }): void;
+  (e: "warn-player", player: any): void;
+  (e: "kick-player", player: any): void;
+  (e: "force-team-player", player: any): void;
 }>();
 
 interface MapMarker extends BzssCoreTrackedPlayerInfo {
@@ -747,6 +758,44 @@ type PerspectiveTone = "friendly" | "enemy" | "neutral";
 const serverStore = useServerStore();
 const playerStore = usePlayerStore();
 const authStore = useAuthStore();
+
+function findRconPlayer(player: BzssCoreTrackedPlayerInfo) {
+  if (player.playerGuid) {
+    const p = playerStore.bySteamID[player.playerGuid] || playerStore.byEOSID[player.playerGuid];
+    if (p) return p;
+  }
+  if (player.playerId != null) {
+    const p = playerStore.byPlayerID[String(player.playerId)] || playerStore.byPlayerID[Number(player.playerId)];
+    if (p) return p;
+  }
+  if (player.playerName) {
+    const p = playerStore.byName[player.playerName] || playerStore.byName[player.playerName.trim()];
+    if (p) return p;
+  }
+  return null;
+}
+
+function getPlayerRconDetail(player: BzssCoreTrackedPlayerInfo) {
+  const rcon = findRconPlayer(player);
+  if (!rcon) return null;
+  const steamId = (rcon.steamID as string | undefined) || (rcon.steam64 as string | undefined) || null;
+  if (!steamId) {
+    return adaptPlayerDetail(rcon, null, props.combatStatsLookup ?? {});
+  }
+  const playtime = playerStore.bySteamID[steamId]?.playtimeHours || props.playtimes?.[steamId]?.playtimeHours || null;
+  return adaptPlayerDetail(rcon, playtime, props.combatStatsLookup ?? {});
+}
+
+const canManageRcon = computed(() => {
+  return Boolean(
+    authStore.user?.isSuperAdmin ||
+    authStore.user?.permissions?.includes("rcon.warn") ||
+    authStore.user?.permissions?.includes("rcon.kick") ||
+    authStore.user?.permissions?.includes("rcon.forceteamchange") ||
+    authStore.user?.permissions?.includes("rcon.balance") ||
+    authStore.user?.permissions?.some(p => p.startsWith("rcon."))
+  );
+});
 
 const snapshot = computed(() => props.snapshot);
 const players = computed(() => props.players);
@@ -1534,6 +1583,10 @@ const markers = computed<MapMarker[]>(() => {
     const interp = interpolatedPositions.value[key];
     const pos = getPlayerPosition(player) as BzssCoreTrackedVector;
     const resolvedTeamId = resolvePlayerTeamId(player);
+    
+    // Associate RCON detail
+    const rconDetail = getPlayerRconDetail(player);
+
     return {
       ...player,
       mapX: interp ? interp.mapX : project(pos.x ?? 0, bounds.minX, bounds.maxX),
@@ -1541,6 +1594,7 @@ const markers = computed<MapMarker[]>(() => {
       yaw: interp && interp.yaw !== null ? interp.yaw : getPlayerYaw(player),
       teamId: resolvedTeamId,
       roleInfo: resolveMapRoleInfo(player),
+      rconDetail,
     };
   });
 });

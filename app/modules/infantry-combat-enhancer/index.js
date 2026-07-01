@@ -335,7 +335,11 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
     ) {
       return makeSkipDecision(entry, "attacker", "below_min_attacker_damage");
     }
-    if (moduleConfig.showOnlyLightWeaponDamage && !isLightWeaponEntry(entry)) {
+    if (
+      moduleConfig.showOnlyLightWeaponDamage
+      && !moduleConfig.forceAttackerDamageDisplay
+      && !isLightWeaponEntry(entry)
+    ) {
       return makeSkipDecision(entry, "attacker", "non_light_weapon_hidden");
     }
     if (entry.type === "kill" && !moduleConfig.showKillDisplay) {

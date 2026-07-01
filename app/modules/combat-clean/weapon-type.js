@@ -562,28 +562,36 @@ function normalizeWeaponTypeText(value) {
 
 function loadMicePanelLightWeaponHints() {
   const blueprintFile = ["kill", "manager", "blueprint_types.json"].join("_");
-  const blueprintPath = fileURLToPath(new URL(`../../../MicePanel/config/${blueprintFile}`, import.meta.url));
+  const candidatePaths = [
+    fileURLToPath(new URL(`../../../MicePanel/config/${blueprintFile}`, import.meta.url)),
+    fileURLToPath(new URL(`file:///D:/MicePanel/config/${blueprintFile}`)),
+  ];
 
-  try {
-    const parsed = JSON.parse(readFileSync(blueprintPath, "utf8"));
-    const lightWeapons = parsed?.types?.lightWeapon;
-    if (!Array.isArray(lightWeapons) || !lightWeapons.length) return [];
+  for (const blueprintPath of candidatePaths) {
+    try {
+      const parsed = JSON.parse(readFileSync(blueprintPath, "utf8"));
+      const lightWeapons = parsed?.types?.lightWeapon;
+      if (!Array.isArray(lightWeapons) || !lightWeapons.length) continue;
 
-    const hints = new Set();
-    for (const entry of lightWeapons) {
-      const normalized = normalizeWeaponTypeText(entry);
-      if (!normalized) continue;
+      const hints = new Set();
+      for (const entry of lightWeapons) {
+        const normalized = normalizeWeaponTypeText(entry);
+        if (!normalized) continue;
 
-      hints.add(normalized);
+        hints.add(normalized);
 
-      const firstToken = normalized.split(/\s+/)[0]?.trim();
-      if (firstToken) {
-        hints.add(firstToken);
+        const firstToken = normalized.split(/\s+/)[0]?.trim();
+        if (firstToken) {
+          hints.add(firstToken);
+        }
       }
-    }
 
-    return normalizeTerms([...hints]);
-  } catch {
-    return [];
+      const result = normalizeTerms([...hints]);
+      if (result.length) return result;
+    } catch {
+      // Try the next candidate path.
+    }
   }
+
+  return [];
 }

@@ -122,7 +122,12 @@
           :fobs="bzssCoreSnapshot?.fobs"
           :loading="bzssCoreLoading"
           :errorText="bzssCoreError"
+          :playtimes="playtimes"
+          :combat-stats-lookup="combatStatsLookup"
           @select-player="handleMapSelectPlayer"
+          @warn-player="handleMapWarnPlayer"
+          @kick-player="handleMapKickPlayer"
+          @force-team-player="handleMapForceTeamChange"
         />
       </div>
     </DataState>
@@ -1002,6 +1007,101 @@ function handleMapSelectPlayer(payload: { detail: any; event: MouseEvent }) {
 
   if (payload.detail.steamId) {
     playtimeRequested.value = true;
+  }
+}
+
+async function handleMapWarnPlayer(detail: PlayerDetailViewModel) {
+  const message = await ui.openWarnPrompt({
+    title: "警告玩家",
+    targetName: detail.name,
+    defaultMessage: "请遵守服务器规则",
+  });
+  if (message === null) return;
+
+  try {
+    const res = await warnPlayer({
+      targetName: detail.name,
+      targetSteamId: detail.steamId || undefined,
+      targetEosId: detail.eosId || undefined,
+      message: message.trim() || "Admin Warning",
+      reason: "manual_warn",
+      sourceModule: "web.squadAdmin",
+    });
+    if (res.success) {
+      ui.pushToast({ title: "警告发送成功", message: `已成功向玩家 ${detail.name} 发送警告。`, tone: "ok" });
+    } else {
+      ui.pushToast({ title: "警告发送失败", message: res.error || "未知错误", tone: "error" });
+    }
+  } catch (err) {
+    ui.pushToast({ title: "警告发送失败", message: String(err), tone: "error" });
+  }
+}
+
+async function handleMapKickPlayer(detail: PlayerDetailViewModel) {
+  const reason = window.prompt(`请输入踢出原因(玩家: ${detail.name}):`, "")?.trim();
+  if (reason === undefined) return;
+  if (!reason) {
+    ui.pushToast({ title: "踢出失败", message: "踢出原因不能为空", tone: "warn" });
+    return;
+  }
+
+  const confirmed = await ui.openConfirm({
+    title: "确认踢出玩家",
+    message: `确定要踢出玩家 ${detail.name} 吗？\n原因: ${reason}`,
+    tone: "error",
+  });
+  if (!confirmed) return;
+
+  try {
+    const res = await kickPlayer({
+      playerId: detail.playerId ?? undefined,
+      anyId: detail.steamId || detail.eosId || detail.name || String(detail.playerId ?? ""),
+      steamId: detail.steamId || undefined,
+      eosId: detail.eosId || undefined,
+      name: detail.name,
+      reason,
+      source: "web.squadAdmin",
+    });
+    if (res.ok) {
+      ui.pushToast({ title: "踢出成功", message: `已成功踢出玩家 ${detail.name}。`, tone: "ok" });
+    } else {
+      ui.pushToast({ title: "踢出失败", message: res.error || "未知错误", tone: "error" });
+    }
+  } catch (err) {
+    ui.pushToast({ title: "踢出失败", message: String(err), tone: "error" });
+  }
+}
+
+async function handleMapForceTeamChange(detail: PlayerDetailViewModel) {
+  const confirmed = await ui.openConfirm({
+    title: "确认强制换队",
+    message: `确定要强制玩家 ${detail.name} 换队吗？`,
+    tone: "warn",
+  });
+  if (!confirmed) return;
+
+  try {
+    const res = await forceTeamChange({
+      steamId: detail.steamId || undefined,
+      playerName: detail.name,
+      source: "manual_team_balance",
+      reason: "manual_team_balance",
+      operator: {
+        id: auth.user?.id ?? auth.user?.username ?? "",
+        name: auth.user?.username ?? "",
+        username: auth.user?.username ?? "",
+        role: auth.user?.role ?? "",
+        isSuperAdmin: Boolean(auth.user?.isSuperAdmin),
+        permissions: Array.isArray(auth.user?.permissions) ? auth.user.permissions : [],
+      },
+    });
+    if (res.ok) {
+      ui.pushToast({ title: "强制换队成功", message: `已成功将玩家 ${detail.name} 强制换队。`, tone: "ok" });
+    } else {
+      ui.pushToast({ title: "强制换队失败", message: res.error || "未知错误", tone: "error" });
+    }
+  } catch (err) {
+    ui.pushToast({ title: "强制换队失败", message: String(err), tone: "error" });
   }
 }
 

@@ -38,17 +38,41 @@
         <span class="menu-icon">⚙️</span>
         <span class="menu-label">查看 Core 信息 <span class="badge">Coming Soon</span></span>
       </li>
-      <li class="menu-item disabled">
+      <li
+        class="menu-item"
+        :class="{ disabled: !canManage || !rconPlayer }"
+        @click="handleAction('warn')"
+      >
         <span class="menu-icon">⚠️</span>
-        <span class="menu-label">警告玩家 (Warn) <span class="badge">暂未支持</span></span>
+        <span class="menu-label">
+          警告玩家 (Warn)
+          <span v-if="!rconPlayer" class="badge">未关联对局</span>
+          <span v-else-if="!canManage" class="badge">无权限</span>
+        </span>
       </li>
-      <li class="menu-item disabled">
+      <li
+        class="menu-item"
+        :class="{ disabled: !canManage || !rconPlayer }"
+        @click="handleAction('kick')"
+      >
         <span class="menu-icon">❌</span>
-        <span class="menu-label">踢出玩家 (Kick) <span class="badge">暂未支持</span></span>
+        <span class="menu-label">
+          踢出玩家 (Kick)
+          <span v-if="!rconPlayer" class="badge">未关联对局</span>
+          <span v-else-if="!canManage" class="badge">无权限</span>
+        </span>
       </li>
-      <li class="menu-item disabled">
+      <li
+        class="menu-item"
+        :class="{ disabled: !canManage || !rconPlayer }"
+        @click="handleAction('force-team')"
+      >
         <span class="menu-icon">🔁</span>
-        <span class="menu-label">强制换队 <span class="badge">暂未支持</span></span>
+        <span class="menu-label">
+          强制换队
+          <span v-if="!rconPlayer" class="badge">未关联对局</span>
+          <span v-else-if="!canManage" class="badge">无权限</span>
+        </span>
       </li>
     </ul>
   </div>
@@ -63,6 +87,8 @@ const props = defineProps<{
   x: number;
   y: number;
   tone: "friendly" | "enemy" | "neutral";
+  canManage?: boolean;
+  rconPlayer?: any;
 }>();
 
 const emit = defineEmits<{
@@ -71,6 +97,9 @@ const emit = defineEmits<{
   (e: "focus"): void;
   (e: "copy-coords"): void;
   (e: "start-measure"): void;
+  (e: "warn"): void;
+  (e: "kick"): void;
+  (e: "force-team"): void;
 }>();
 
 const menuRef = ref<HTMLElement | null>(null);
@@ -107,11 +136,14 @@ onMounted(() => {
   }
 });
 
-function handleAction(event: "open-profile" | "focus" | "copy-coords" | "start-measure") {
+function handleAction(event: "open-profile" | "focus" | "copy-coords" | "start-measure" | "warn" | "kick" | "force-team") {
   if (event === "open-profile") emit("open-profile");
   else if (event === "focus") emit("focus");
   else if (event === "copy-coords") emit("copy-coords");
   else if (event === "start-measure") emit("start-measure");
+  else if (event === "warn" && props.canManage && props.rconPlayer) emit("warn");
+  else if (event === "kick" && props.canManage && props.rconPlayer) emit("kick");
+  else if (event === "force-team" && props.canManage && props.rconPlayer) emit("force-team");
   emit("close");
 }
 </script>
