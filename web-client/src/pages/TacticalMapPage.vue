@@ -208,7 +208,7 @@
             :role-icon="player.roleInfo.icon"
             :role-label="player.roleInfo.label"
             :vehicle-type="player.vehicleInfo?.vehicleType"
-            :is-focused="focusedSquadId === player.squadId"
+            :is-focused="selectedPlayerKey === getPlayerKey(player) || focusedSquadId === player.squadId"
             :is-hovered="getPlayerKey(hoveredPlayer) === getPlayerKey(player)"
             :is-disengaged="isPlayerDisengaged(player)"
             :show-name="showPlayerNames"
@@ -218,7 +218,9 @@
             :scale="dynamicMarkerScale"
             :tone="getPerspectiveTone(player.teamId)"
             :disable-interaction="disableMarkerInteraction"
-            @click="showPlayerDetails(player, $event)"
+            @click.stop="handlePlayerSingleClick(player, $event)"
+            @dblclick.stop="handlePlayerDoubleClick(player, $event)"
+            @contextmenu.prevent.stop="handlePlayerRightClick(player, $event)"
             @mouseenter="hoveredPlayer = player"
             @mouseleave="hoveredPlayer = null"
           />
@@ -356,76 +358,67 @@
 
       <!-- Floating Player Hover Tooltip (rendered outside map-transform-container) -->
       <div
-        v-if="hoveredMarker"
-        class="player-tooltip"
+        v-if="hoveredMarker && getPlayerKey(hoveredMarker) !== selectedPlayerKey"
+        class="player-tooltip-simple font-mono"
         :class="getPerspectiveClass(hoveredMarker.teamId)"
         :style="{ ...tooltipStyle, ...getPerspectiveStyle(hoveredMarker.teamId) }"
       >
-        <!-- Tooltip Header -->
-        <div class="tooltip-header">
-          <span class="tooltip-name">{{ getPlayerLabel(hoveredMarker) }}</span>
-          <span
-            class="tooltip-health-badge"
-            :class="{ 'low-health': (getPlayerHealth(hoveredMarker) ?? 100) < 40, 'dead-health': (getPlayerHealth(hoveredMarker) ?? 100) <= 0 }"
-          >
-            {{ (getPlayerHealth(hoveredMarker) ?? 100) <= 0 ? 'DOWNED' : `${getPlayerHealth(hoveredMarker) ?? 100}% HP` }}
-          </span>
-        </div>
+        <span class="player-name-simple">{{ getPlayerLabel(hoveredMarker) }}</span>
+        <span class="squad-simple" v-if="hoveredMarker.squadId">#{{ hoveredMarker.squadId }}</span>
+      </div>
 
-        <!-- Divider Line -->
-        <div class="tooltip-divider"></div>
+      <!-- New Map Interaction Floating Elements -->
+      <PlayerInfoPanel
+        v-if="playerInfoPanel"
+        :player="playerInfoPanel.player"
+        :x="playerInfoPanel.x"
+        :y="playerInfoPanel.y"
+        :tone="getPerspectiveTone(playerInfoPanel.player.teamId)"
+        :speed-text="getPlayerSpeedText(playerInfoPanel.player)"
+        @close="playerInfoPanel = null; selectedPlayerKey = ''"
+      />
 
-        <!-- Tooltip Details Grid -->
-        <div class="tooltip-details">
-          <div class="detail-row">
-            <span class="detail-label">角色职业</span>
-            <span class="detail-val">
-              <template v-if="isRoleIconImage(hoveredMarker.roleInfo.icon)">
-                <span
-                  class="inline-kit-mask"
-                  :style="getTeamRoleIconStyle(hoveredMarker.roleInfo.icon, hoveredMarker.teamId)"
-                  :aria-label="hoveredMarker.roleInfo.label"
-                ></span>
-              </template>
-              <span v-else class="inline-kit-fallback" aria-hidden="true">{{ hoveredMarker.roleInfo.icon }}</span>
-              {{ hoveredMarker.roleInfo.label }}
-            </span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">战术小队</span>
-            <span class="detail-val">
-              <span class="squad-color-pill"></span>
-              #{{ hoveredMarker.squadId || '-' }}
-            </span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">武器</span>
-            <span class="detail-val font-mono">{{ cleanWeaponName(hoveredMarker.soldierInfo?.weaponClass) }}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">坐标</span>
-            <span class="detail-val font-mono highlight-cyan">
-              {{ Math.round(getPlayerPosition(hoveredMarker)?.x ?? 0) }}, {{ Math.round(getPlayerPosition(hoveredMarker)?.y ?? 0) }}
-            </span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">速度</span>
-            <span class="detail-val font-mono highlight-cyan">
-              {{ getPlayerSpeedText(hoveredMarker) }}
-            </span>
-          </div>
-        </div>
+      <PlayerActionMenu
+        v-if="playerActionMenu"
+        :player="playerActionMenu.player"
+        :x="playerActionMenu.x"
+        :y="playerActionMenu.y"
+        :tone="getPerspectiveTone(playerActionMenu.player.teamId)"
+        @close="playerActionMenu = null"
+        @open-profile="onOpenPlayerProfile(playerActionMenu.player)"
+        @focus="onFocusPlayer(playerActionMenu.player)"
+        @copy-coords="onCopyPlayerCoords(playerActionMenu.player)"
+        @start-measure="onStartMeasureFromPlayer(playerActionMenu.player)"
+      />
 
-        <!-- Health visual bar -->
-        <div class="tooltip-health-track">
-          <div
-            class="tooltip-health-bar"
-            :style="{
-              width: `${getPlayerHealth(hoveredMarker) ?? 100}%`,
-              background: (getPlayerHealth(hoveredMarker) ?? 100) <= 0 ? '#ef5350' : (getPlayerHealth(hoveredMarker) ?? 100) < 40 ? '#fdd835' : '#00e5ff'
-            }"
-          ></div>
-        </div>
+      <MapContextMenu
+        v-if="mapCommandMenu"
+        :x="mapCommandMenu.x"
+        :y="mapCommandMenu.y"
+        :game-x="mapCommandMenu.gameX"
+        :game-y="mapCommandMenu.gameY"
+        :map-x="mapCommandMenu.mapX"
+        :map-y="mapCommandMenu.mapY"
+        :has-points="measurePoints.length > 0"
+        @close="mapCommandMenu = null"
+        @start-measure="onStartMeasure(mapCommandMenu)"
+        @add-point="onAddPoint(mapCommandMenu)"
+        @undo-point="onUndoPoint"
+        @clear-measure="onClearMeasure"
+        @copy-coords="onCopyCoords(mapCommandMenu)"
+        @focus-here="onFocusHere(mapCommandMenu)"
+      />
+
+      <!-- Shortcut Key Hints Overlay -->
+      <div class="map-command-hint glass-panel font-mono">
+        <span class="hint-item"><span class="key">右键</span> 指令</span>
+        <span class="hint-item"><span class="key">双击</span> 资料</span>
+        <span class="hint-item"><span class="key">滚轮</span> 缩放</span>
+        <span class="hint-item"><span class="key">拖拽</span> 移动</span>
+        <span class="hint-item"><span class="key">ESC</span> 关闭</span>
+        <span class="hint-item"><span class="key">M</span> 测距</span>
+        <span class="hint-item"><span class="key">G</span> 网格</span>
+        <span class="hint-item"><span class="key">F</span> 复位</span>
       </div>
 
       <!-- Top Overlay Panels (Header & Tickets) -->
@@ -476,7 +469,7 @@
         <button class="ctrl-btn" title="缩小" @click="zoomOut">
           <span class="icon-span">-</span>
         </button>
-        <button class="ctrl-btn" title="适配视口" @click="resetView">
+        <button class="ctrl-btn" title="适配视口 (F)" @click="resetView">
           <span class="icon-span">↺</span>
         </button>
         <div class="ctrl-divider"></div>
@@ -484,14 +477,47 @@
           class="ctrl-btn text-btn"
           :class="{ active: showGrid }"
           @click="showGrid = !showGrid"
+          title="网格开关 (G)"
         >
           网格
         </button>
-
+        <button
+          class="ctrl-btn text-btn"
+          :class="{ active: showCaptureZones }"
+          @click="showCaptureZones = !showCaptureZones"
+          title="地标区域图层"
+        >
+          地标
+        </button>
+        <button
+          class="ctrl-btn text-btn"
+          :class="{ active: showFobs }"
+          @click="showFobs = !showFobs"
+          title="FOB图层"
+        >
+          FOB
+        </button>
+        <button
+          class="ctrl-btn text-btn"
+          :class="{ active: showPlayerNames }"
+          @click="showPlayerNames = !showPlayerNames"
+          title="玩家姓名图层"
+        >
+          姓名
+        </button>
+        <button
+          class="ctrl-btn text-btn"
+          :class="{ active: showPlayerCoords }"
+          @click="showPlayerCoords = !showPlayerCoords"
+          title="玩家坐标图层"
+        >
+          坐标
+        </button>
         <button
           class="ctrl-btn text-btn"
           :class="{ active: filterAliveOnly }"
           @click="filterAliveOnly = !filterAliveOnly"
+          title="只显示存活玩家"
         >
           存活
         </button>
@@ -507,7 +533,7 @@
           class="ctrl-btn text-btn measure-btn"
           :class="{ active: measureMode }"
           @click="toggleMeasureMode"
-          title="多点测距 (点击放置测量点，右键撤销)"
+          title="多点测距 (M)"
         >
           测距
         </button>
@@ -678,6 +704,9 @@ import {
 import TiledMapRenderer from "../components/tactical-map/TiledMapRenderer.vue";
 import PlayerMarker from "../components/tactical-map/PlayerMarker.vue";
 import TacticalMapSidebar from "../components/tactical-map/TacticalMapSidebar.vue";
+import MapContextMenu from "../components/tactical-map/MapContextMenu.vue";
+import PlayerInfoPanel from "../components/tactical-map/PlayerInfoPanel.vue";
+import PlayerActionMenu from "../components/tactical-map/PlayerActionMenu.vue";
 
 const props = defineProps<{
   snapshot: BzssCorePlayerInfoResponse | null;
@@ -790,7 +819,7 @@ const dynamicMarkerScale = computed(() => {
 
 // Sidebar states
 type SidebarMode = "expanded" | "compact" | "hidden";
-type SidebarTab = "overview" | "units" | "assets" | "core" | "feed";
+type SidebarTab = "overview" | "units" | "assets" | "core";
 type SidebarUnitMode = "squads" | "players";
 type SidebarSortMode = "name" | "squad" | "health" | "distance" | "vehicle";
 
@@ -811,8 +840,37 @@ const focusedPlayerKey = ref("");
 // Shared activePlayerWindow managed by parent MatchStatusPage
 
 // Distance Measuring State
-const measureMode = ref(false);
 const measurePoints = ref<Array<{ mapX: number; mapY: number; gameX: number; gameY: number }>>([]);
+
+// Map Interaction States Layer
+const selectedPlayerKey = ref<string>("");
+const playerInfoPanel = ref<{
+  player: BzssCoreTrackedPlayerInfo;
+  x: number;
+  y: number;
+} | null>(null);
+const playerActionMenu = ref<{
+  player: BzssCoreTrackedPlayerInfo;
+  x: number;
+  y: number;
+} | null>(null);
+const mapCommandMenu = ref<{
+  x: number;
+  y: number;
+  mapX: number;
+  mapY: number;
+  gameX: number;
+  gameY: number;
+} | null>(null);
+const activeTool = ref<"none" | "measure" | "future">("none");
+const singleClickTimer = ref<any>(null);
+
+const measureMode = computed({
+  get: () => activeTool.value === "measure",
+  set: (val: boolean) => {
+    activeTool.value = val ? "measure" : "none";
+  }
+});
 
 // Pre-generated static random values for denser grenade blast debris
 const staticExplosionParticles = Array.from({ length: 90 }, (_, idx) => {
@@ -1172,9 +1230,26 @@ const measurePathD = computed(() => {
 });
 
 function onMapClick(e: MouseEvent) {
+  if (dragMoved) {
+    dragMoved = false;
+    return;
+  }
+
+  // Clicking on blank space closes info panels and menus
+  playerInfoPanel.value = null;
+  playerActionMenu.value = null;
+  mapCommandMenu.value = null;
+  selectedPlayerKey.value = "";
+
   if (!measureMode.value) return;
   // Ignore clicks inside UI controls
-  if ((e.target as HTMLElement).closest(".glass-panel") || (e.target as HTMLElement).closest(".tactical-sidebar")) return;
+  if (
+    (e.target as HTMLElement).closest(".glass-panel") ||
+    (e.target as HTMLElement).closest(".tactical-sidebar") ||
+    (e.target as HTMLElement).closest(".map-floating-panel")
+  ) {
+    return;
+  }
 
   if (!mapRef.value) return;
   const rect = mapRef.value.getBoundingClientRect();
@@ -1196,11 +1271,197 @@ function onMapClick(e: MouseEvent) {
   });
 }
 
-function handleMapRightClick() {
-  if (!measureMode.value) return;
-  if (measurePoints.value.length > 0) {
-    measurePoints.value.pop();
+function handleMapRightClick(e: MouseEvent) {
+  // Ignore if right click was inside controls
+  const target = e.target as HTMLElement;
+  if (
+    target.closest(".glass-panel") ||
+    target.closest(".tactical-sidebar") ||
+    target.closest(".map-floating-panel")
+  ) {
+    return;
   }
+
+  if (!mapRef.value || !containerRef.value) return;
+  const rect = mapRef.value.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  
+  const pctX = x / rect.width;
+  const pctY = y / rect.height;
+  
+  const bounds = activeMapConfig.value.bounds;
+  const gameX = bounds.minX + pctX * (bounds.maxX - bounds.minX);
+  const gameY = bounds.minY + pctY * (bounds.maxY - bounds.minY);
+
+  // Position relative to viewport container
+  const vpRect = containerRef.value.getBoundingClientRect();
+  const menuX = e.clientX - vpRect.left;
+  const menuY = e.clientY - vpRect.top;
+
+  mapCommandMenu.value = {
+    x: menuX,
+    y: menuY,
+    mapX: pctX * 100,
+    mapY: pctY * 100,
+    gameX,
+    gameY
+  };
+
+  // Close player panels/menus
+  playerInfoPanel.value = null;
+  playerActionMenu.value = null;
+}
+
+// Player Click / DblClick / RightClick Differentiators
+function handlePlayerSingleClick(player: BzssCoreTrackedPlayerInfo, event: MouseEvent) {
+  if (singleClickTimer.value) {
+    clearTimeout(singleClickTimer.value);
+  }
+
+  singleClickTimer.value = setTimeout(() => {
+    selectedPlayerKey.value = getPlayerKey(player);
+    
+    if (containerRef.value) {
+      const rect = containerRef.value.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+
+      playerInfoPanel.value = {
+        player,
+        x,
+        y
+      };
+    }
+    
+    playerActionMenu.value = null;
+    mapCommandMenu.value = null;
+    singleClickTimer.value = null;
+  }, 180);
+}
+
+function handlePlayerDoubleClick(player: BzssCoreTrackedPlayerInfo, event: MouseEvent) {
+  if (singleClickTimer.value) {
+    clearTimeout(singleClickTimer.value);
+    singleClickTimer.value = null;
+  }
+
+  playerInfoPanel.value = null;
+  playerActionMenu.value = null;
+  mapCommandMenu.value = null;
+
+  showPlayerDetails(player, event);
+}
+
+function handlePlayerRightClick(player: BzssCoreTrackedPlayerInfo, event: MouseEvent) {
+  if (singleClickTimer.value) {
+    clearTimeout(singleClickTimer.value);
+    singleClickTimer.value = null;
+  }
+
+  if (containerRef.value) {
+    const rect = containerRef.value.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    playerActionMenu.value = {
+      player,
+      x,
+      y
+    };
+  }
+
+  playerInfoPanel.value = null;
+  mapCommandMenu.value = null;
+}
+
+// Map Context Menu Event Handlers
+function onStartMeasure(menu: any) {
+  activeTool.value = "measure";
+  measurePoints.value = [{
+    mapX: menu.mapX,
+    mapY: menu.mapY,
+    gameX: menu.gameX,
+    gameY: menu.gameY
+  }];
+  logCombatEvent(`开始测距。起点: [X:${Math.round(menu.gameX)}, Y:${Math.round(menu.gameY)}]`, "system");
+}
+
+function onAddPoint(menu: any) {
+  if (activeTool.value !== "measure") {
+    activeTool.value = "measure";
+  }
+  measurePoints.value.push({
+    mapX: menu.mapX,
+    mapY: menu.mapY,
+    gameX: menu.gameX,
+    gameY: menu.gameY
+  });
+  logCombatEvent(`添加测距点: [X:${Math.round(menu.gameX)}, Y:${Math.round(menu.gameY)}]`, "system");
+}
+
+function onUndoPoint() {
+  if (measurePoints.value.length > 0) {
+    const popped = measurePoints.value.pop();
+    if (popped) {
+      logCombatEvent(`撤销测距点: [X:${Math.round(popped.gameX)}, Y:${Math.round(popped.gameY)}]`, "system");
+    }
+  }
+}
+
+function onClearMeasure() {
+  measurePoints.value = [];
+  logCombatEvent("清空测距点", "system");
+}
+
+async function onCopyCoords(coords: { gameX: number; gameY: number }) {
+  const text = `${Math.round(coords.gameX)}, ${Math.round(coords.gameY)}`;
+  try {
+    await navigator.clipboard.writeText(text);
+    logCombatEvent(`已复制地图坐标: ${text}`, "system");
+  } catch (err) {
+    console.error("Failed to copy coordinates:", err);
+  }
+}
+
+function onFocusHere(menu: any) {
+  panToMapPercent(menu.mapX, menu.mapY, Math.max(zoom.value, 1.25));
+}
+
+// Player Context Menu Event Handlers
+function onOpenPlayerProfile(player: BzssCoreTrackedPlayerInfo) {
+  showPlayerDetails(player);
+}
+
+function onFocusPlayer(player: BzssCoreTrackedPlayerInfo) {
+  focusPlayerOnMap(player);
+}
+
+async function onCopyPlayerCoords(player: BzssCoreTrackedPlayerInfo) {
+  const pos = getPlayerPosition(player);
+  if (!pos) return;
+  const text = `${Math.round(pos.x ?? 0)}, ${Math.round(pos.y ?? 0)}`;
+  try {
+    await navigator.clipboard.writeText(text);
+    logCombatEvent(`已复制玩家 ${player.playerName} 的坐标: ${text}`, "system");
+  } catch (err) {
+    console.error("Failed to copy player coords:", err);
+  }
+}
+
+function onStartMeasureFromPlayer(player: BzssCoreTrackedPlayerInfo) {
+  const marker = markers.value.find((m) => getPlayerKey(m) === getPlayerKey(player));
+  const pos = getPlayerPosition(player);
+  if (!marker || !pos) return;
+  
+  activeTool.value = "measure";
+  measurePoints.value = [{
+    mapX: marker.mapX,
+    mapY: marker.mapY,
+    gameX: pos.x ?? 0,
+    gameY: pos.y ?? 0
+  }];
+  logCombatEvent(`开始从玩家 ${player.playerName} 处测距。`, "system");
 }
 
 // Get real Server metrics
@@ -1538,17 +1799,37 @@ function handleTilesReady() {
 }
 
 // Drag & Pan & Zoom Event Handlers
+let dragMoved = false;
+const dragStartCoords = { x: 0, y: 0 };
+
 function startDrag(e: MouseEvent) {
   const target = e.target as HTMLElement;
-  if (target.closest(".glass-panel") || target.closest(".tactical-sidebar") || target.closest(".player-tooltip") || target.closest(".player-marker")) return;
+  if (
+    target.closest(".glass-panel") ||
+    target.closest(".tactical-sidebar") ||
+    target.closest(".player-tooltip") ||
+    target.closest(".player-tooltip-simple") ||
+    target.closest(".player-marker") ||
+    target.closest(".map-floating-panel")
+  ) {
+    return;
+  }
 
   isDragging.value = true;
   dragStart.x = e.clientX - panX.value;
   dragStart.y = e.clientY - panY.value;
+  dragStartCoords.x = e.clientX;
+  dragStartCoords.y = e.clientY;
+  dragMoved = false;
 }
 
 function onDrag(e: MouseEvent) {
   if (!isDragging.value) return;
+  const dx = Math.abs(e.clientX - dragStartCoords.x);
+  const dy = Math.abs(e.clientY - dragStartCoords.y);
+  if (dx > 4 || dy > 4) {
+    dragMoved = true;
+  }
   panX.value = e.clientX - dragStart.x;
   panY.value = e.clientY - dragStart.y;
 }
@@ -2055,6 +2336,31 @@ function getAmmoDashArray(fob: any) {
   return `${ratio * perimeter} ${perimeter}`;
 }
 
+function handleWindowKeyDown(e: KeyboardEvent) {
+  const target = e.target as HTMLElement;
+  if (
+    target.tagName === "INPUT" ||
+    target.tagName === "TEXTAREA" ||
+    target.isContentEditable
+  ) {
+    return;
+  }
+
+  const key = e.key.toUpperCase();
+  if (key === "ESCAPE") {
+    playerInfoPanel.value = null;
+    playerActionMenu.value = null;
+    mapCommandMenu.value = null;
+    selectedPlayerKey.value = "";
+  } else if (key === "M") {
+    measureMode.value = !measureMode.value;
+  } else if (key === "G") {
+    showGrid.value = !showGrid.value;
+  } else if (key === "F") {
+    resetView();
+  }
+}
+
 onMounted(() => {
   setTimeout(() => {
     fitToViewport();
@@ -2067,6 +2373,7 @@ onMounted(() => {
     simulatedCombatTimer = window.setInterval(runCombatEventSimulation, 2500);
   }
   window.addEventListener("resize", fitToViewport);
+  window.addEventListener("keydown", handleWindowKeyDown);
 
   // Track viewport dimensions for tile loader
   if (containerRef.value) {
@@ -2085,6 +2392,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (simulatedCombatTimer) window.clearInterval(simulatedCombatTimer);
   window.removeEventListener("resize", fitToViewport);
+  window.removeEventListener("keydown", handleWindowKeyDown);
   resizeObserver?.disconnect();
   resizeObserver = null;
 });
@@ -4441,6 +4749,75 @@ onBeforeUnmount(() => {
 .glowing-square.green {
   background: #4ade80;
   box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
+}
+
+/* Simple Tooltip Styling */
+.player-tooltip-simple {
+  position: absolute;
+  background: rgba(10, 15, 30, 0.9);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid var(--perspective-primary);
+  border-radius: 3px;
+  padding: 4px 8px;
+  font-size: 10px;
+  color: #ffffff;
+  pointer-events: none;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6), 0 0 6px var(--perspective-glow);
+  z-index: 150;
+  animation: tooltipAppear 0.15s ease-out;
+}
+
+@keyframes tooltipAppear {
+  from { opacity: 0; transform: translate(-50%, -100%) scale(0.95); }
+  to { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+}
+
+.player-name-simple {
+  font-weight: 700;
+}
+
+.squad-simple {
+  color: var(--perspective-soft);
+  opacity: 0.85;
+}
+
+/* Command Hotkey Hints Layout */
+.map-command-hint {
+  position: absolute;
+  left: 20px;
+  bottom: 80px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 6px 12px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.65);
+  z-index: 10;
+  pointer-events: none;
+  background: rgba(8, 12, 24, 0.75);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 229, 255, 0.15);
+  border-radius: 4px;
+}
+
+.map-command-hint .hint-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.map-command-hint .key {
+  background: rgba(0, 229, 255, 0.12);
+  color: #00e5ff;
+  padding: 1px 4px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 229, 255, 0.25);
+  font-weight: bold;
 }
 </style>
 

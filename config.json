@@ -863,6 +863,83 @@
         "delaySeconds": 5,
         "messageTemplate": "[寤洪槦鎾姤] 鐜╁ ${creatorName} 鍒涘缓浜嗗皬闃? ${squadName} (灏忛槦ID: ${squadId})"
       }
+    },
+    "welcome-join-warning": {
+      "enabled": true,
+      "historyLimit": 100,
+      "maxWarningsPerJoin": 5,
+      "defaultIntervalMs": 0,
+      "rules": [
+        {
+          "id": "default-welcome",
+          "name": "默认欢迎",
+          "enabled": true,
+          "priority": 10,
+          "cooldownMs": 0,
+          "mode": "all",
+          "initialDelayMs": 15000,
+          "intervalMs": 0,
+          "conditions": [
+            {
+              "type": "always",
+              "label": ""
+            }
+          ],
+          "steps": [
+            {
+              "id": "welcome",
+              "enabled": true,
+              "message": "欢迎来到 BZSS 服务器，本服服规相较其他服务器较为不同，\n请完整阅读并遵守服务器规则，祝你游戏愉快。"
+            }
+          ]
+        },
+        {
+          "id": "rule-mr1dnzp8",
+          "name": "新规则组",
+          "enabled": true,
+          "priority": 30,
+          "cooldownMs": 0,
+          "mode": "all",
+          "initialDelayMs": 15000,
+          "intervalMs": 0,
+          "conditions": [
+            {
+              "type": "always",
+              "label": ""
+            }
+          ],
+          "steps": [
+            {
+              "id": "step-1",
+              "enabled": true,
+              "message": "我们调整了部分游戏内容优化步兵玩家的体验，望周知。"
+            }
+          ]
+        },
+        {
+          "id": "rule-mr1dowy4",
+          "name": "新规则组",
+          "enabled": true,
+          "priority": 30,
+          "cooldownMs": 0,
+          "mode": "all",
+          "initialDelayMs": 15000,
+          "intervalMs": 0,
+          "conditions": [
+            {
+              "type": "always",
+              "label": ""
+            }
+          ],
+          "steps": [
+            {
+              "id": "step-1",
+              "enabled": true,
+              "message": "步战鼠鼠是一个对步战，萌新玩家友好的服务器社区。欢迎加入我们的社区群聊。长按Tab键，下方就有QQ群聊号码"
+            }
+          ]
+        }
+      ]
     }
   },
   "warmup": {
