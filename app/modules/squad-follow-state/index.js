@@ -1,6 +1,10 @@
 // -*- coding: utf-8 -*-
 
 export function createSquadFollowStateModule({ core, config, logger }) {
+  const previousPlayerStates = new Map();
+  const recentEvents = [];
+  const EVENT_HISTORY_LIMIT = 200;
+
   const moduleLogger = logger ?? core.createLogger?.({
     moduleId: "module.squadFollowState",
     source: "module.squadFollowState",
@@ -181,7 +185,7 @@ export function createSquadFollowStateModule({ core, config, logger }) {
       return left.squadId - right.squadId;
     });
 
-    return {
+    const result = {
       enabled: true,
       serverId: String(serverId ?? ""),
       radiusMeters: settings.radiusMeters,
@@ -192,6 +196,16 @@ export function createSquadFollowStateModule({ core, config, logger }) {
       playerIndex,
       diagnostics,
     };
+
+    detectAndEmitTransitions({
+      serverId,
+      generatedAt,
+      radiusMeters: settings.radiusMeters,
+      squads,
+      playerIndex,
+    });
+
+    return result;
   }
 
   return {
@@ -206,8 +220,170 @@ export function createSquadFollowStateModule({ core, config, logger }) {
     apiName: "squadFollowState",
     api: {
       composeFromPlayers,
+      getState,
     },
   };
+
+  function getState() {
+    return {
+      enabled: defaultOptions.enabled,
+      radiusMeters: defaultOptions.radiusMeters,
+      recentEvents: [...recentEvents].reverse(),
+      trackedPlayers: previousPlayerStates.size,
+    };
+  }
+
+  function detectAndEmitTransitions({ serverId, generatedAt, radiusMeters, squads, playerIndex }) {
+    const currentKeys = new Set();
+    const squadLookup = buildSquadLookup(squads);
+
+    for (const [playerKey, current] of Object.entries(playerIndex ?? {})) {
+      currentKeys.add(playerKey);
+
+      const trackable =
+        current.reason === "" ||
+        current.reason === "outside_leader_radius";
+
+      if (!trackable) {
+        previousPlayerStates.delete(playerKey);
+        continue;
+      }
+
+      const squad = squadLookup.get(`${current.teamId}:${current.squadId}`);
+      const member = squad?.members?.find?.((item) => item.key === playerKey) ?? null;
+
+      const nextState = {
+        serverId,
+        key: playerKey,
+        name: member?.name ?? "",
+        steamID: member?.steamID ?? "",
+        teamId: current.teamId,
+        squadId: current.squadId,
+        leaderKey: current.leaderKey ?? "",
+        inside: Boolean(current.inside),
+        disengaged: Boolean(current.disengaged),
+        distanceMeters: current.distanceMeters,
+        reason: current.reason ?? "",
+        seenAt: generatedAt,
+      };
+
+      const previous = previousPlayerStates.get(playerKey);
+
+      if (previous) {
+        const sameSquad =
+          previous.teamId === nextState.teamId &&
+          previous.squadId === nextState.squadId;
+
+        const sameLeader =
+          String(previous.leaderKey ?? "") === String(nextState.leaderKey ?? "");
+
+        if (sameSquad && sameLeader) {
+          if (previous.inside === true && nextState.disengaged === true) {
+            emitFollowTransition({
+              type: "exit",
+              serverId,
+              generatedAt,
+              radiusMeters,
+              previous,
+              current: nextState,
+              squad,
+            });
+          }
+
+          if (previous.disengaged === true && nextState.inside === true) {
+            emitFollowTransition({
+              type: "enter",
+              serverId,
+              generatedAt,
+              radiusMeters,
+              previous,
+              current: nextState,
+              squad,
+            });
+          }
+        }
+      }
+
+      previousPlayerStates.set(playerKey, nextState);
+    }
+
+    for (const key of previousPlayerStates.keys()) {
+      if (!currentKeys.has(key)) {
+        previousPlayerStates.delete(key);
+      }
+    }
+  }
+
+  function emitFollowTransition({ type, serverId, generatedAt, radiusMeters, previous, current, squad }) {
+    const eventName =
+      type === "exit"
+        ? "playerExitedLeaderRadius"
+        : "playerEnteredLeaderRadius";
+
+    const payload = {
+      eventId: `module.squadFollowState:${eventName}:${serverId}:${current.key}:${Date.now()}`,
+      eventName: `module.squadFollowState.${eventName}`,
+      layer: "module",
+      source: "module.squadFollowState",
+      serverId,
+      time: generatedAt,
+      type,
+      radiusMeters,
+      player: {
+        key: current.key,
+        name: current.name,
+        steamID: current.steamID,
+        teamId: current.teamId,
+        squadId: current.squadId,
+      },
+      leader: squad?.leader ?? null,
+      squad: {
+        key: squad?.key ?? `${current.teamId}:${current.squadId}`,
+        teamId: current.teamId,
+        squadId: current.squadId,
+        squadName: squad?.squadName ?? `Squad ${current.squadId}`,
+        insideCount: squad?.insideCount ?? 0,
+        outsideCount: squad?.outsideCount ?? 0,
+        aliveMembers: squad?.aliveMembers ?? 0,
+        totalMembers: squad?.totalMembers ?? 0,
+      },
+      previous: {
+        inside: previous.inside,
+        disengaged: previous.disengaged,
+        distanceMeters: previous.distanceMeters,
+        reason: previous.reason,
+      },
+      current: {
+        inside: current.inside,
+        disengaged: current.disengaged,
+        distanceMeters: current.distanceMeters,
+        reason: current.reason,
+      },
+    };
+
+    recentEvents.push(payload);
+    if (recentEvents.length > EVENT_HISTORY_LIMIT) {
+      recentEvents.splice(0, recentEvents.length - EVENT_HISTORY_LIMIT);
+    }
+
+    moduleLogger?.debug?.("squad-follow-state transition", {
+      eventName,
+      serverId,
+      playerKey: current.key,
+      type,
+    });
+
+    core.eventBus?.emitModuleEvent?.("module.squadFollowState", eventName, payload);
+    core.eventBus?.emitModuleEvent?.("module.squadFollowState", "playerRadiusStateChanged", payload);
+  }
+
+  function buildSquadLookup(squads) {
+    const map = new Map();
+    for (const squad of Array.isArray(squads) ? squads : []) {
+      map.set(`${squad.teamId}:${squad.squadId}`, squad);
+    }
+    return map;
+  }
 }
 
 function isSquadLeader(player) {
@@ -227,11 +403,30 @@ function isSquadLeader(player) {
 }
 
 function resolvePlayerKey(player) {
-  return String(player?.identity?.key ?? player?.key ?? player?.playerKey ?? player?.playerId ?? player?.playerID ?? "").trim();
+  const playerId = resolvePlayerId(player);
+  if (playerId != null) {
+    return `idx:${playerId}`;
+  }
+
+  return String(
+    player?.identity?.key ??
+    player?.key ??
+    player?.playerKey ??
+    player?.playerId ??
+    player?.playerID ??
+    ""
+  ).trim();
 }
 
 function resolvePlayerId(player) {
-  return numberOrNull(player?.identity?.playerId, player?.identity?.playerID, player?.playerId, player?.playerID, null);
+  return numberOrNull(
+    player?.identity?.playerId,
+    player?.identity?.playerID,
+    player?.playerIndex,
+    player?.playerId,
+    player?.playerID,
+    null,
+  );
 }
 
 function resolvePlayerName(player) {

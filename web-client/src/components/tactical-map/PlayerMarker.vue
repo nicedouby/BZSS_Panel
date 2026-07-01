@@ -59,7 +59,14 @@
       {{ squadId }}
     </span>
 
-    <span v-if="isDisengaged && mode === 'tactical'" class="disengaged-warning-icon" title="脱离队长">!</span>
+    <span
+      v-if="mode === 'tactical'"
+      class="follow-status-badge"
+      :class="isDisengaged ? 'disengaged' : 'inside'"
+      :title="isDisengaged ? '脱离队长圈' : '队长圈内'"
+    >
+      {{ isDisengaged ? "脱圈" : "圈内" }}
+    </span>
 
     <!-- Text Tag for Player Name & Coords -->
     <span v-if="showName" class="tag">
@@ -364,20 +371,30 @@ function isRoleIconImage(icon: string | undefined) {
   box-shadow: 0 1px 3px rgba(0,0,0,0.5);
 }
 
-.disengaged-warning-icon {
+.follow-status-badge {
   position: absolute;
-  top: -9px;
-  right: -7px;
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  background: #fb923c;
+  top: -10px;
+  right: -10px;
+  min-width: 18px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
   color: #111827;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 900;
-  line-height: 13px;
+  line-height: 14px;
   text-align: center;
   z-index: 6;
+  letter-spacing: 0.02em;
+}
+
+.follow-status-badge.inside {
+  background: rgba(74, 222, 128, 0.95);
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.45);
+}
+
+.follow-status-badge.disengaged {
+  background: #fb923c;
   box-shadow: 0 0 8px rgba(251, 146, 60, 0.8);
 }
 

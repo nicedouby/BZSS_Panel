@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import { createSquadFollowStateModule } from "../modules/squad-follow-state/index.js";
 
-function makeModule(configValue = {}) {
+function makeModule(configValue = {}, extras = {}) {
   return createSquadFollowStateModule({
     core: {
       createLogger() {
         return console;
       },
       logger: console,
+      eventBus: extras.eventBus ?? {
+        emitModuleEvent() {},
+      },
     },
     config: {
       get(key, fallback) {
@@ -90,13 +93,13 @@ function testInsideOutsideAndDiagnostics() {
   assert.equal(squad.aliveMembers, 3);
   assert.equal(squad.insideCount, 2);
   assert.equal(squad.outsideCount, 1);
-  assert.deepEqual(squad.insidePlayerKeys, ["player:1", "player:2"]);
-  assert.deepEqual(squad.outsidePlayerKeys, ["player:3"]);
-  assert.equal(squad.members.find((member) => member.key === "player:3")?.reason, "outside_leader_radius");
-  assert.equal(squad.members.find((member) => member.key === "player:4")?.reason, "dead_ignored");
-  assert.equal(snapshot.playerIndex["player:3"].disengaged, true);
-  assert.equal(snapshot.playerIndex["player:2"].inside, true);
-  assert.equal(snapshot.playerIndex["player:4"].reason, "dead_ignored");
+  assert.deepEqual(squad.insidePlayerKeys, ["idx:1", "idx:2"]);
+  assert.deepEqual(squad.outsidePlayerKeys, ["idx:3"]);
+  assert.equal(squad.members.find((member) => member.key === "idx:3")?.reason, "outside_leader_radius");
+  assert.equal(squad.members.find((member) => member.key === "idx:4")?.reason, "dead_ignored");
+  assert.equal(snapshot.playerIndex["idx:3"].disengaged, true);
+  assert.equal(snapshot.playerIndex["idx:2"].inside, true);
+  assert.equal(snapshot.playerIndex["idx:4"].reason, "dead_ignored");
   assert.equal(snapshot.diagnostics.playersWithoutPosition.length, 1);
   assert.equal(snapshot.diagnostics.squadsWithoutLeader.length, 1);
 }
@@ -113,15 +116,67 @@ function testVehicleCrewAndDisable() {
   assert.ok(snapshot);
   assert.equal(snapshot.squads[0].aliveMembers, 1);
   assert.equal(snapshot.squads[0].outsideCount, 0);
-  assert.equal(snapshot.playerIndex["player:11"].reason, "vehicle_ignored");
+  assert.equal(snapshot.playerIndex["idx:11"].reason, "vehicle_ignored");
 
   const disabled = makeModule({ enabled: false });
   assert.equal(disabled.api.composeFromPlayers({ players: [] }), null);
 }
 
+function testTransitionCacheAndEvents() {
+  const events = [];
+  const mod = makeModule({}, {
+    eventBus: {
+      emitModuleEvent(moduleName, eventName, payload) {
+        events.push({ moduleName, eventName, payload });
+      },
+    },
+  });
+
+  const first = mod.api.composeFromPlayers({
+    serverId: "server-2",
+    generatedAt: "2026-07-01T11:00:00.000Z",
+    players: [
+      makePlayer({ key: "player:20", teamId: 1, squadId: 4, name: "SL", x: 0, y: 0, isLeader: true, role: "SquadLeader" }),
+      makePlayer({ key: "player:21", teamId: 1, squadId: 4, name: "Member", x: 10000, y: 0 }),
+    ],
+  });
+
+  assert.ok(first);
+  assert.equal(events.length, 0);
+  assert.equal(mod.api.getState().recentEvents.length, 0);
+
+  const second = mod.api.composeFromPlayers({
+    serverId: "server-2",
+    generatedAt: "2026-07-01T11:01:00.000Z",
+    players: [
+      makePlayer({ key: "player:20", teamId: 1, squadId: 4, name: "SL", x: 0, y: 0, isLeader: true, role: "SquadLeader" }),
+      makePlayer({ key: "player:21", teamId: 1, squadId: 4, name: "Member", x: 20100, y: 0 }),
+    ],
+  });
+
+  assert.ok(second);
+  assert.equal(events.length, 2);
+  assert.equal(events[0].eventName, "playerExitedLeaderRadius");
+  assert.equal(events[1].eventName, "playerRadiusStateChanged");
+  assert.equal(mod.api.getState().recentEvents[0].type, "exit");
+
+  const third = mod.api.composeFromPlayers({
+    serverId: "server-2",
+    generatedAt: "2026-07-01T11:02:00.000Z",
+    players: [
+      makePlayer({ key: "player:20", teamId: 1, squadId: 4, name: "SL", x: 0, y: 0, isLeader: true, role: "SquadLeader" }),
+      makePlayer({ key: "player:21", teamId: 1, squadId: 4, name: "Member", x: 20200, y: 0 }),
+    ],
+  });
+
+  assert.ok(third);
+  assert.equal(events.length, 2);
+}
+
 function main() {
   testInsideOutsideAndDiagnostics();
   testVehicleCrewAndDisable();
+  testTransitionCacheAndEvents();
   console.log("run-squad-follow-state-tests: ok");
 }
 
