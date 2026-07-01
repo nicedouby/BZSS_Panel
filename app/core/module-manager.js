@@ -40,6 +40,7 @@ import { createReserveSlotsModule } from "../modules/reserve-slots/index.js";
 import { createBlackEdgePrivilegeModule } from "../modules/black-edge-privilege/index.js";
 import { createAstrbotBridgeModule } from "../modules/astrbot-bridge/index.js";
 import { createBzssCoreMonitorModule } from "../modules/bzss-core-monitor/index.js";
+import { createTacticalStateModule } from "../modules/tactical-state/index.js";
 import { createTacticalMapReplayModule } from "../modules/tactical-map-replay/index.js";
 
 import { createChatManagerModule } from "../modules/chat-manager/index.js";
@@ -101,6 +102,7 @@ export class ModuleManager {
       createBlackEdgePrivilegeModule,
       createAstrbotBridgeModule,
       createBzssCoreMonitorModule,
+      createTacticalStateModule,
       createTacticalMapReplayModule,
       createNetworkStatsModule,
     ];

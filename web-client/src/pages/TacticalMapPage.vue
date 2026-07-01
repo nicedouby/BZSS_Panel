@@ -710,7 +710,6 @@ import {
 } from "../app/bzssCoreApi";
 import { useAuthStore } from "../stores/auth.store";
 import { useServerStore } from "../stores/server.store";
-import { usePlayerStore } from "../stores/player.store";
 import { adaptPlayerDetail } from "../utils/squad-admin-adapter";
 import { type TacticalLinkedPlayer } from "../utils/tactical-map-linker";
 import { resolveRoleIcon, type RoleIconInfo } from "../utils/role-icons";
@@ -772,33 +771,20 @@ type ViewerPerspectiveMode = "auto" | "team1" | "team2";
 type PerspectiveTone = "friendly" | "enemy" | "neutral";
 
 const serverStore = useServerStore();
-const playerStore = usePlayerStore();
 const authStore = useAuthStore();
 
-function findRconPlayer(player: BzssCoreTrackedPlayerInfo) {
-  if (player.playerGuid) {
-    const p = playerStore.bySteamID[player.playerGuid] || playerStore.byEOSID[player.playerGuid];
-    if (p) return p;
+function getPlayerRconDetail(player: any) {
+  if (player?.rconDetail) {
+    return player.rconDetail;
   }
-  if (player.playerId != null) {
-    const p = playerStore.byPlayerID[String(player.playerId)] || playerStore.byPlayerID[Number(player.playerId)];
-    if (p) return p;
-  }
-  if (player.playerName) {
-    const p = playerStore.byName[player.playerName] || playerStore.byName[player.playerName.trim()];
-    if (p) return p;
-  }
-  return null;
-}
 
-function getPlayerRconDetail(player: BzssCoreTrackedPlayerInfo) {
-  const rcon = findRconPlayer(player);
+  const rcon = player?.raw?.rcon ?? player?.runtime ?? null;
   if (!rcon) return null;
+
   const steamId = (rcon.steamID as string | undefined) || (rcon.steam64 as string | undefined) || null;
-  if (!steamId) {
-    return adaptPlayerDetail(rcon, null, props.combatStatsLookup ?? {});
-  }
-  const playtime = playerStore.bySteamID[steamId]?.playtimeHours || props.playtimes?.[steamId]?.playtimeHours || null;
+  const playtime = steamId
+    ? (props.playtimes?.[steamId]?.playtimeHours ?? player?.profile?.playtimeHours ?? null)
+    : (player?.profile?.playtimeHours ?? null);
   return adaptPlayerDetail(rcon, playtime, props.combatStatsLookup ?? {});
 }
 
@@ -2104,13 +2090,13 @@ function focusVehicleOnMap(marker: { mapX: number; mapY: number }) {
 
 // Show player detail in floating window
 function showPlayerDetails(player: TacticalLinkedPlayer, event?: MouseEvent) {
-  const storePlayer = playerStore.active.find(
-    (p) => p.name === player.playerName || p.steamID === player.playerGuid
-  );
-
   let detail: any;
-  if (storePlayer) {
-    detail = adaptPlayerDetail(storePlayer, null, {});
+  const rconDetail = getPlayerRconDetail(player);
+  if (rconDetail) {
+    detail = {
+      ...rconDetail,
+      raw: rconDetail.raw ?? (player as any)?.raw?.rcon ?? rconDetail.raw,
+    };
     detail.bzssCorePlayerInfo = player;
     detail.bzssCoreStatus = "ready";
   } else {

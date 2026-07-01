@@ -14,6 +14,7 @@ import { handleTeamBalanceRoutes } from "../modules/team-balance/routes.js";
 import { handleReserveSlotsRoutes } from "../modules/reserve-slots/routes.js";
 import { handleBlackEdgePrivilegeRoutes } from "../modules/black-edge-privilege/routes.js";
 import { handleAstrbotBridgeRoutes } from "../modules/astrbot-bridge/routes.js";
+import { handleTacticalStateRoutes } from "../modules/tactical-state/routes.js";
 import {
   classifySquadName,
   getSquadNameClassifierRules,
@@ -656,6 +657,19 @@ export class WebServer {
       json: (status, obj, extraHeaders = {}) => this.json(res, status, obj, extraHeaders),
     });
     if (blackEdgePrivilegeHandled) {
+      return;
+    }
+
+    const tacticalStateHandled = await handleTacticalStateRoutes({
+      core: this.core,
+      modules: this.modules,
+      url,
+      req,
+      res,
+      user,
+      json: (status, obj, extraHeaders = {}) => this.json(res, status, obj, extraHeaders),
+    });
+    if (tacticalStateHandled) {
       return;
     }
 

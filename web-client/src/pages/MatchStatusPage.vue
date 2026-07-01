@@ -116,12 +116,12 @@
       </div>
       <div v-else-if="viewMode === 'map' || (isMobile && mobileTab === 'map')" class="match-state-map-wrapper">
         <TacticalMapPage
-          :snapshot="bzssCoreSnapshot"
-          :players="tacticalLinkedPlayers"
-          :capture-zones="bzssCoreSnapshot?.captureZones"
-          :fobs="bzssCoreSnapshot?.fobs"
-          :loading="bzssCoreLoading"
-          :errorText="bzssCoreError"
+          :snapshot="tacticalMapSnapshot"
+          :players="tacticalMapPlayers"
+          :capture-zones="tacticalMapCaptureZones"
+          :fobs="tacticalMapFobs"
+          :loading="tacticalMapLoading"
+          :errorText="tacticalMapError"
           :playtimes="playtimes"
           :combat-stats-lookup="combatStatsLookup"
           @select-player="handleMapSelectPlayer"
@@ -304,7 +304,7 @@ import { resolvePlayerIdentityIp } from "../app/playerIdentityApi";
 import { fetchBzssCorePlayerInfo, fetchBzssCorePlayerInfoList, streamBzssCorePlayerInfoList } from "../app/bzssCoreApi";
 import type { BzssCorePlayerInfoResponse, BzssCoreTrackedPlayerInfo } from "../app/bzssCoreApi";
 import { useBzssCoreStore } from "../stores/bzss-core.store";
-import { linkTacticalPlayers, type TacticalLinkedPlayer } from "../utils/tactical-map-linker";
+import { useTacticalStateStore } from "../stores/tactical-state.store";
 import type {
   PageState,
   PlayerDetailViewModel,
@@ -388,20 +388,29 @@ function handleViewModeChange(mode: "list" | "map") {
 }
 
 const bzssCoreStore = useBzssCoreStore();
+const tacticalStateStore = useTacticalStateStore();
 const bzssCoreSnapshot = computed(() => bzssCoreStore.snapshot);
 const bzssCorePlayers = computed(() => bzssCoreStore.players);
 const bzssCorePlayerLookup = computed(() => buildBzssCorePlayerLookup(bzssCorePlayers.value));
-const tacticalLinkedPlayers = computed<TacticalLinkedPlayer[]>(() => linkTacticalPlayers({
-  bzssPlayers: bzssCorePlayers.value,
-  runtimePlayers: players.active,
-  bySteamID: players.bySteamID,
-  byEOSID: players.byEOSID,
-  byPlayerID: players.byPlayerID,
-  byName: players.byName,
-}));
 const bzssCoreLoading = computed(() => bzssCoreStore.loading);
 const bzssCoreError = computed(() => bzssCoreStore.error);
 const bzssCoreStreamActive = computed(() => bzssCoreStore.streamActive);
+const tacticalMapSnapshot = computed(() => {
+  const snapshot = tacticalStateStore.snapshot;
+  if (!snapshot) return null;
+  return {
+    ...snapshot,
+    captureZones: snapshot.assets?.captureZones ?? [],
+    fobs: snapshot.assets?.fobs ?? [],
+    mainZones: snapshot.assets?.mainZones ?? [],
+    explosions: snapshot.assets?.explosions ?? [],
+  };
+});
+const tacticalMapPlayers = computed(() => adaptTacticalStatePlayersForMap(tacticalStateStore.players, combatStatsLookup.value));
+const tacticalMapCaptureZones = computed(() => tacticalStateStore.assets?.captureZones ?? []);
+const tacticalMapFobs = computed(() => tacticalStateStore.assets?.fobs ?? []);
+const tacticalMapLoading = computed(() => tacticalStateStore.loading);
+const tacticalMapError = computed(() => tacticalStateStore.error);
 
 const refreshingPlaytime = ref(false);
 const refreshingPlayers = ref(false);
@@ -729,6 +738,91 @@ function buildBzssCorePlayerLookup(players: BzssCoreTrackedPlayerInfo[] = []) {
   return map;
 }
 
+function adaptTacticalStatePlayersForMap(playersList: any[] = [], combatLookup: Record<string, any> = {}) {
+  return (Array.isArray(playersList) ? playersList : []).map((player) => {
+    const steamId = player?.identity?.steamID ?? null;
+    const eosId = player?.identity?.eosID ?? null;
+    const rawRcon = player?.raw?.rcon ?? null;
+    const rconDetail = rawRcon
+      ? adaptPlayerDetail(rawRcon, player?.profile?.playtimeHours ?? null, combatLookup)
+      : null;
+
+    return {
+      key: player?.identity?.key ?? "",
+      playerId: player?.identity?.playerID ?? null,
+      playerIndex: player?.identity?.playerID ?? null,
+      playerName: player?.identity?.name ?? "Unknown",
+      playerGuid: steamId || eosId || "",
+      steamId: steamId || null,
+      eosId: eosId || null,
+      teamId: player?.match?.teamId ?? null,
+      squadId: player?.match?.squadId ?? null,
+      isLeader: Boolean(player?.match?.isLeader),
+      role: player?.match?.role ?? "",
+      health: player?.telemetry?.health ?? null,
+      ping: player?.network?.gamePing ?? null,
+      ftIndex: player?.telemetry?.fireTeamIndex ?? null,
+      ftPosition: player?.telemetry?.fireTeamPosition ?? null,
+      position: player?.telemetry?.position ?? null,
+      yaw: player?.telemetry?.yaw ?? null,
+      playerBaseInfo: {
+        raw: "",
+        fields: [],
+        values: {},
+      },
+      soldierInfo: {
+        raw: "",
+        fields: [],
+        values: {},
+        soldierClass: player?.telemetry?.soldierClass ?? "",
+        health: player?.telemetry?.health ?? null,
+        weaponClass: player?.telemetry?.weaponClass ?? "",
+        ammoValues: [],
+        position: player?.telemetry?.position ?? null,
+        rotation: player?.telemetry?.rotation ?? null,
+      },
+      vehicleInfo: {
+        raw: player?.vehicle?.raw ?? "",
+        vehicleType: player?.vehicle?.vehicleType ?? "",
+        healthText: "",
+        health: player?.vehicle?.health ?? null,
+        maxHealth: player?.vehicle?.maxHealth ?? null,
+        position: player?.telemetry?.position ?? null,
+        rotation: player?.telemetry?.rotation ?? null,
+      },
+      playerScoreboard: {
+        raw: "",
+        values: [],
+        numericValues: [],
+        ping: player?.network?.gamePing ?? null,
+        stats: {
+          dataLives: null,
+          numKills: player?.combat?.kills ?? null,
+          numDeaths: player?.combat?.deaths ?? null,
+          numWoundeds: player?.combat?.woundeds ?? null,
+          numWounds: player?.combat?.wounds ?? null,
+          numTeamKills: player?.combat?.teamKills ?? null,
+          healPoints: player?.combat?.healPoints ?? null,
+          revivedPoints: player?.combat?.revives ?? null,
+          teamworkScore: player?.combat?.teamworkScore ?? null,
+          objectiveScore: player?.combat?.objectiveScore ?? null,
+          combatScore: player?.combat?.combatScore ?? null,
+        },
+      },
+      observedAt: player?.freshness?.bzssCoreUpdatedAt ?? player?.freshness?.generatedAt ?? "",
+      stale: !player?.freshness?.bzssCoreUpdatedAt,
+      rawText: "",
+      runtime: rawRcon,
+      raw: player?.raw ?? {},
+      profile: player?.profile ?? {},
+      rconDetail,
+      linkConfidence: player?.link?.confidence ?? "none",
+      linkReason: player?.link?.method ?? "unlinked",
+      bzss: player,
+    };
+  });
+}
+
 function resolveBzssCorePlayerInfo(player: PlayerRowViewModel, lookup: Map<string, BzssCoreTrackedPlayerInfo>) {
   const normalizedName = String(player.name ?? "").trim().toLowerCase();
   const normalizedSuffix = normalizedName.split(/\s+/).filter(Boolean).pop() ?? "";
@@ -804,22 +898,26 @@ onMounted(() => {
   pageHidden.value = typeof document !== "undefined" ? document.hidden : false;
   document.addEventListener("visibilitychange", handleVisibilityChange);
   bzssCoreStore.startStream();
+  tacticalStateStore.startStream();
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("visibilitychange", handleVisibilityChange);
   cancelIdleTask(battleStatsRefreshIdleHandle);
   bzssCoreStore.stopStream();
+  tacticalStateStore.stopStream();
 });
 
 onActivated(() => {
   active.value = true;
   bzssCoreStore.startStream();
+  tacticalStateStore.startStream();
 });
 
 onDeactivated(() => {
   active.value = false;
   bzssCoreStore.stopStream();
+  tacticalStateStore.stopStream();
 });
 
 function formatTicketDisplay(value: number | null | undefined) {

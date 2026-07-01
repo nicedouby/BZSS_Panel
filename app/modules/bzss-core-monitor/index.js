@@ -368,6 +368,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
           },
           vehicleInfo: null,
           playerScoreboard: scoreboardInfo,
+          ping: scoreboardInfo.ping ?? null,
           rawText: player.raw ?? "",
         });
       }
