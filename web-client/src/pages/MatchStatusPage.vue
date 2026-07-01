@@ -183,7 +183,7 @@
               </select>
             </label>
             <label class="ticket-editor-field">
-              <span class="ticket-editor-field__label">数�?(例如 50 / -50)</span>
+              <span class="ticket-editor-field__label">数值(例如 50 / -50)</span>
               <input v-model.trim="ticketAdjustForm.deltaText" type="text" inputmode="numeric" class="ticket-editor-input" placeholder="例如 50 / -50" />
             </label>
           </div>
@@ -197,10 +197,10 @@
           </div>
           <div class="ticket-modal-actions">
             <button type="button" class="ticket-editor-submit" :disabled="ticketAdjustLoading" @click="submitTicketAdjust(true)">
-              {{ ticketAdjustLoading ? "处理�?.." : "加票" }}
+              {{ ticketAdjustLoading ? "处理中..." : "加票" }}
             </button>
             <button type="button" class="ticket-editor-reset" :disabled="ticketAdjustLoading" @click="submitTicketAdjust(false)">
-              {{ ticketAdjustLoading ? "处理�?.." : "减票" }}
+              {{ ticketAdjustLoading ? "处理中..." : "减票" }}
             </button>
           </div>
         </form>
@@ -221,7 +221,7 @@
 
           <footer class="ticket-modal-actions" style="margin-top: 16px;">
             <button type="button" class="ticket-editor-reset" :disabled="ticketWriteLoading" @click="resetTicketFormToCurrent">
-              使用当前�?
+              使用当前值
             </button>
             <button type="submit" class="ticket-editor-submit" :disabled="ticketWriteLoading">
               {{ ticketWriteLoading ? "提交中..." : "写入覆盖" }}
@@ -283,6 +283,7 @@ import {
   buildCombatStatsLookupFromBzssCorePlayers,
   buildSquadLifecycleLookup,
   filterTeamsBySearch,
+  compareSquadMembers,
 } from "../utils/squad-admin-adapter";
 import { getFlagUrlByTeamName } from "../shared/faction-assets/faction-data";
 import DataState from "../components/common/DataState.vue";
@@ -540,7 +541,7 @@ const canEditTickets = computed(() => {
 });
 const showTicketControlPanel = computed(() => Boolean(currentServerId.value || remoteTelemetryState.value?.currentSource));
 const ticketCommandTargetText = computed(() => {
-  if (!ticketCommandTarget.value.host) return "未识�?sender 地址";
+  if (!ticketCommandTarget.value.host) return "未识别 sender 地址";
   return `${ticketCommandTarget.value.host}:${ticketCommandTarget.value.port}`;
 });
 const ticketSourceTone = computed(() => {
@@ -862,9 +863,9 @@ function attachBzssCoreInfoToPlayer(
   }
   return {
     ...player,
-    bzssCorePing: matched.playerScoreboard?.ping ?? player.bzssCorePing ?? null,
-    bzssCoreFtIndex: matched.ftIndex ?? player.bzssCoreFtIndex ?? null,
-    bzssCoreFtPosition: matched.ftPosition ?? player.bzssCoreFtPosition ?? null,
+    bzssCorePing: matched.playerScoreboard?.ping ?? matched.ping ?? player.bzssCorePing ?? null,
+    bzssCoreFtIndex: (matched as any).fireTeamIndex ?? matched.ftIndex ?? player.bzssCoreFtIndex ?? null,
+    bzssCoreFtPosition: (matched as any).fireTeamPosition ?? matched.ftPosition ?? player.bzssCoreFtPosition ?? null,
     raw: rawPlayer,
   };
 }
@@ -873,10 +874,13 @@ function attachBzssCoreInfoToSquad(
   squad: SquadViewModel,
   lookup: Map<string, BzssCoreTrackedPlayerInfo>,
 ): SquadViewModel {
+  const leader = squad.leader ? attachBzssCoreInfoToPlayer(squad.leader, lookup) as SquadLeaderRowViewModel : null;
+  const members = squad.members.map((member) => attachBzssCoreInfoToPlayer(member, lookup));
+  members.sort(compareSquadMembers);
   return {
     ...squad,
-    leader: squad.leader ? attachBzssCoreInfoToPlayer(squad.leader, lookup) as SquadLeaderRowViewModel : null,
-    members: squad.members.map((member) => attachBzssCoreInfoToPlayer(member, lookup)),
+    leader,
+    members,
   };
 }
 
@@ -1547,7 +1551,7 @@ async function handleBatchForceTeamChange() {
 
   ui.pushToast({
     title: "批量跳边完成",
-    message: `成功: ${successCount}，失�? ${failCount}`,
+    message: `成功: ${successCount}，失败: ${failCount}`,
     tone: failCount > 0 ? "warn" : "ok",
   });
 
@@ -1715,7 +1719,7 @@ async function refreshActivePlayerBattleStats() {
       detail: {
         ...activePlayerWindow.value.detail,
         battleStats,
-        battleStatsLabel: `击�?${battleStats.downs} / 击杀 ${battleStats.kills} / 死亡 ${battleStats.deaths} / TK ${battleStats.tk} / 复苏 ${battleStats.revives}`,
+        battleStatsLabel: `击倒 ${battleStats.downs} / 击杀 ${battleStats.kills} / 死亡 ${battleStats.deaths} / TK ${battleStats.tk} / 复苏 ${battleStats.revives}`,
         battleStatsSource: String(response?.source ?? "battleLog"),
         battleStatsLastUpdatedAt: response?.lastUpdatedAt ? String(response.lastUpdatedAt) : null,
       },
@@ -2939,7 +2943,7 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
   }
 }
 
-/* ─── 移动端（�?80px）：单列分段视图，确保队伍内容可滚动可触�?───────────── */
+/* ─── 移动端（≤1024px）：单列分段视图，确保队伍内容可滚动可触控 ───────────── */
 @media (max-width: 1024px) {
   /* DataState fill 容器内同时有分段标签和内容，改为弹性纵向布局 */
   .match-status-data-state :deep(.bz-data-state--fill .state-content) {
@@ -2966,7 +2970,7 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
     overflow: hidden;
   }
 
-  /* 队伍列表：两队纵向堆叠，本容器作为滚动区，避免第二队被裁�?*/
+  /* 队伍列表：两队纵向堆叠，本容器作为滚动区，避免第二队被裁剪 */
   .squad-main-content {
     display: block;
     flex: 1 1 auto;
@@ -3020,7 +3024,7 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
   }
 }
 
-/* ─── 批量操作悬浮�?─────────────────────────────────────────────────────── */
+/* ─── 批量操作悬浮条 ─────────────────────────────────────────────────────── */
 .batch-action-bar {
   gap: 10px;
   border: 1px solid rgba(140, 160, 200, 0.28);

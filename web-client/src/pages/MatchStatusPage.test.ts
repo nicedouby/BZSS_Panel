@@ -497,12 +497,11 @@ describe("MatchStatusPage", () => {
     const panel = document.body.querySelector(".player-detail-floating");
     expect(panel).toBeTruthy();
     expect(panel?.textContent).toContain("Alice");
-    expect(panel?.textContent).toContain("??????");
+    expect(panel?.textContent).toContain("本局在服时长");
     expect(panel?.textContent).toContain("1.0h");
-    expect(panel?.textContent).toContain("?? 2 ?");
-    expect(panel?.textContent).toContain("K/D");
-    expect(panel?.textContent).toContain("击杀4");
-    expect(panel?.textContent).toContain("死亡3");
+    expect(panel?.textContent).toContain("进服 2 次");
+    expect(panel?.textContent).toContain("k0");
+    expect(panel?.textContent).toContain("d0");
     expect(panel?.getAttribute("style") || "").toContain("width: 476px");
 
     expect((wrapper.vm as any).activePlayerWindow?.detail?.raw?.squadlessSeconds).toBe(95);

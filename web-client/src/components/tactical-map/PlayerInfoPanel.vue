@@ -28,6 +28,14 @@
         <span class="team-badge" :class="`team-${player.teamId}`">TEAM {{ player.teamId }}</span>
         <span class="squad-badge" v-if="player.squadId">SQUAD #{{ player.squadId }}</span>
         <span class="leader-badge" v-if="isSL">LEADER</span>
+        <span
+          v-if="bzssCoreFtBadge"
+          class="bzss-core-ft-badge"
+          :class="bzssCoreFtBadge.tone"
+          :title="bzssCoreFtBadge.title"
+        >
+          {{ bzssCoreFtBadge.label }}
+        </span>
       </div>
     </div>
 
@@ -200,6 +208,29 @@ const health = computed(() => {
 const isSL = computed(() => {
   const soldierClass = String(props.player.soldierInfo?.soldierClass ?? "").toLowerCase();
   return soldierClass.includes("squadleader") || soldierClass.includes("officer") || soldierClass.includes("sl");
+});
+
+const bzssCoreFtBadge = computed(() => {
+  const ftIndex = props.player.ftIndex;
+  if (ftIndex == null || !Number.isFinite(Number(ftIndex))) return null;
+  const index = Math.trunc(Number(ftIndex));
+  const badgeMap: Record<number, { label: string; tone: string }> = {
+    0: { label: "A组", tone: "ft-green" },
+    1: { label: "B组", tone: "ft-purple" },
+    2: { label: "C组", tone: "ft-blue" },
+  };
+  const badge = badgeMap[index];
+  if (!badge) {
+    return {
+      label: `FT ${index}`,
+      tone: "ft-neutral",
+      title: `BZSS-Core ftIndex: ${index}`,
+    };
+  }
+  return {
+    ...badge,
+    title: `BZSS-Core ftIndex: ${index}`,
+  };
 });
 
 const roleInfo = computed(() => {
@@ -649,5 +680,44 @@ onMounted(() => {
 .tone-enemy {
   border-color: rgba(255, 91, 110, 0.35);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7), 0 0 15px rgba(255, 91, 110, 0.08);
+}
+
+.bzss-core-ft-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.bzss-core-ft-badge.ft-green {
+  color: #d7ffe4;
+  background: rgba(34, 197, 94, 0.2);
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.bzss-core-ft-badge.ft-purple {
+  color: #efe3ff;
+  background: rgba(168, 85, 247, 0.2);
+  border-color: rgba(168, 85, 247, 0.35);
+}
+
+.bzss-core-ft-badge.ft-blue {
+  color: #d7ecff;
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.35);
+}
+
+.bzss-core-ft-badge.ft-neutral {
+  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 </style>

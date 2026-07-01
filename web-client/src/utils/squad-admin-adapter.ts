@@ -31,8 +31,8 @@ export function adaptPlayerRow(
   const steam64 = normalizeSteam64(player.steamID ?? (player as any).steamId ?? (player as any).steam64 ?? (player as any).steam64ID);
   const bzssCoreInfo = (player as any).bzssCorePlayerInfo ?? null;
   const bzssCorePing = normalizeOptionalNumber(bzssCoreInfo?.playerScoreboard?.ping ?? (player as any).bzssCorePing);
-  const bzssCoreFtIndex = normalizeOptionalNumber(bzssCoreInfo?.ftIndex ?? (player as any).bzssCoreFtIndex ?? (player as any).ftIndex);
-  const bzssCoreFtPosition = normalizeOptionalNumber(bzssCoreInfo?.ftPosition ?? (player as any).bzssCoreFtPosition ?? (player as any).ftPosition);
+  const bzssCoreFtIndex = normalizeOptionalNumber(bzssCoreInfo?.fireTeamIndex ?? bzssCoreInfo?.ftIndex ?? (player as any).bzssCoreFtIndex ?? (player as any).ftIndex ?? (player as any).fireTeamIndex);
+  const bzssCoreFtPosition = normalizeOptionalNumber(bzssCoreInfo?.fireTeamPosition ?? bzssCoreInfo?.ftPosition ?? (player as any).bzssCoreFtPosition ?? (player as any).ftPosition ?? (player as any).fireTeamPosition);
   const combatStats = cloneCombatStats(resolveCombatStats(player, combatStatsLookup));
   const teamName = resolvePlayerTeamName(player);
   return {
@@ -182,7 +182,7 @@ export function adaptSquad(
     squadVehicleClassRule: squad.squadVehicleClassRule ?? null,
     squadVehicleClassConfidence: squad.squadVehicleClassConfidence ?? "low",
     leader,
-    members: otherMembers,
+    members: otherMembers.sort(compareSquadMembers),
     warnings,
     state,
   };
@@ -323,8 +323,8 @@ export function adaptPlayerDetail(
   const steam64 = normalizeSteam64(player.steamID ?? (player as any).steamId ?? (player as any).steam64 ?? (player as any).steam64ID);
   const bzssCoreInfo = (player as any).bzssCorePlayerInfo ?? null;
   const bzssCorePing = normalizeOptionalNumber(bzssCoreInfo?.playerScoreboard?.ping ?? (player as any).bzssCorePing);
-  const bzssCoreFtIndex = normalizeOptionalNumber(bzssCoreInfo?.ftIndex ?? (player as any).bzssCoreFtIndex ?? (player as any).ftIndex);
-  const bzssCoreFtPosition = normalizeOptionalNumber(bzssCoreInfo?.ftPosition ?? (player as any).bzssCoreFtPosition ?? (player as any).ftPosition);
+  const bzssCoreFtIndex = normalizeOptionalNumber(bzssCoreInfo?.fireTeamIndex ?? bzssCoreInfo?.ftIndex ?? (player as any).bzssCoreFtIndex ?? (player as any).ftIndex ?? (player as any).fireTeamIndex);
+  const bzssCoreFtPosition = normalizeOptionalNumber(bzssCoreInfo?.fireTeamPosition ?? bzssCoreInfo?.ftPosition ?? (player as any).bzssCoreFtPosition ?? (player as any).ftPosition ?? (player as any).fireTeamPosition);
   const combatStats = cloneCombatStats(resolveCombatStats(player, combatStatsLookup));
   return {
     playerId: player.playerID ?? null,
@@ -978,4 +978,25 @@ function deriveModeFromLayer(layer: string): string {
 
   const mode = String(modeToken).trim();
   return isKnownModeLabel(mode) ? mode.toUpperCase() : (/^[A-Za-z]+$/.test(mode) ? mode.toUpperCase() : "");
+}
+
+export function compareSquadMembers(
+  a: { bzssCoreFtIndex?: number | null; bzssCoreFtPosition?: number | null; raw?: any },
+  b: { bzssCoreFtIndex?: number | null; bzssCoreFtPosition?: number | null; raw?: any }
+): number {
+  const indexA = a.bzssCoreFtIndex ?? a.raw?.bzssCorePlayerInfo?.ftIndex;
+  const indexB = b.bzssCoreFtIndex ?? b.raw?.bzssCorePlayerInfo?.ftIndex;
+  const ftA = indexA != null && Number.isFinite(Number(indexA)) ? Math.trunc(Number(indexA)) : 999;
+  const ftB = indexB != null && Number.isFinite(Number(indexB)) ? Math.trunc(Number(indexB)) : 999;
+  
+  if (ftA !== ftB) {
+    return ftA - ftB;
+  }
+  
+  const posValA = a.bzssCoreFtPosition ?? a.raw?.bzssCorePlayerInfo?.ftPosition;
+  const posValB = b.bzssCoreFtPosition ?? b.raw?.bzssCorePlayerInfo?.ftPosition;
+  const posA = posValA != null && Number.isFinite(Number(posValA)) ? Math.trunc(Number(posValA)) : 999;
+  const posB = posValB != null && Number.isFinite(Number(posValB)) ? Math.trunc(Number(posValB)) : 999;
+  
+  return posA - posB;
 }

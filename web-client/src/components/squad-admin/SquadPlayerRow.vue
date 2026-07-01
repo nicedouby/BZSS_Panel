@@ -44,6 +44,15 @@
       <div class="player-title-line">
         <span class="player-name" :title="displayName">{{ displayName }}</span>
         <span
+          v-if="bzssCoreFtBadge"
+          class="bzss-core-ft-badge"
+          :class="bzssCoreFtBadge.tone"
+          :title="bzssCoreFtBadge.title"
+          style="margin-left: 6px;"
+        >
+          {{ bzssCoreFtBadge.label }}
+        </span>
+        <span
           class="role-chip"
           :class="{ leader: player.isLeader }"
           :title="player.isLeader ? t('match.squadLeader') : t('match.squadMember')"
@@ -146,6 +155,28 @@ const roleIcon = computed(() => resolveRoleIcon(props.player.role));
 const isRoleIconImage = computed(() => roleIcon.value.icon.startsWith("/"));
 const avatarUrl = computed(() => props.steamAvatar || props.player.steamAvatar || null);
 const bzssCorePing = computed(() => props.player.bzssCorePing ?? null);
+const bzssCoreFtBadge = computed(() => {
+  const ftIndex = props.player.bzssCoreFtIndex;
+  if (ftIndex == null || !Number.isFinite(Number(ftIndex))) return null;
+  const index = Math.trunc(Number(ftIndex));
+  const badgeMap: Record<number, { label: string; tone: string }> = {
+    0: { label: "A组", tone: "ft-green" },
+    1: { label: "B组", tone: "ft-purple" },
+    2: { label: "C组", tone: "ft-blue" },
+  };
+  const badge = badgeMap[index];
+  if (!badge) {
+    return {
+      label: `FT ${index}`,
+      tone: "ft-neutral",
+      title: `BZSS-Core ftIndex: ${index}`,
+    };
+  }
+  return {
+    ...badge,
+    title: `BZSS-Core ftIndex: ${index}`,
+  };
+});
 const pingBadgeClass = computed(() => {
   const ping = Number(bzssCorePing.value ?? 0);
   if (ping > 120) return "high";
@@ -370,5 +401,44 @@ function displayRole(role: string | null | undefined) {
   color: #ffe1e1;
   background: rgba(239, 68, 68, 0.9);
   border-color: rgba(239, 68, 68, 0.35);
+}
+
+.bzss-core-ft-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.bzss-core-ft-badge.ft-green {
+  color: #d7ffe4;
+  background: rgba(34, 197, 94, 0.2);
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.bzss-core-ft-badge.ft-purple {
+  color: #efe3ff;
+  background: rgba(168, 85, 247, 0.2);
+  border-color: rgba(168, 85, 247, 0.35);
+}
+
+.bzss-core-ft-badge.ft-blue {
+  color: #d7ecff;
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.35);
+}
+
+.bzss-core-ft-badge.ft-neutral {
+  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 </style>

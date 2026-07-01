@@ -61,6 +61,16 @@
               <div class="hud-title-block">
                 <div class="hud-name-row">
                   <h2 class="drawer-player-name" :title="props.player.name">{{ props.player.name }}</h2>
+                  <!-- Fireteam Badge next to name -->
+                  <div
+                    v-if="bzssCoreFtBadge"
+                    class="bzss-core-ft-badge"
+                    :class="bzssCoreFtBadge.tone"
+                    :title="bzssCoreFtBadge.title"
+                    style="margin-left: 6px;"
+                  >
+                    {{ bzssCoreFtBadge.label }}
+                  </div>
                   <!-- Combat Role Badge behind name -->
                   <div v-if="props.player.role" class="hud-role-badge" :title="displayRole(props.player.role)">
                     <span class="role-icon-wrap" v-html="roleIconSvg"></span>
@@ -184,6 +194,20 @@
                 <strong class="ctx-val">
                   <span v-if="props.player.squadId != null && props.player.squadId !== 0" class="hud-squad-tag">#{{ props.player.squadId }}</span>
                   {{ props.player.squadId ? `Squad ${props.player.squadId}` : t("match.unassigned") }}
+                </strong>
+              </div>
+              <div class="hud-ctx-item">
+                <span class="ctx-lbl">火力组</span>
+                <strong class="ctx-val">
+                  <span
+                    v-if="bzssCoreFtBadge"
+                    class="bzss-core-ft-badge"
+                    :class="bzssCoreFtBadge.tone"
+                    :title="bzssCoreFtBadge.title"
+                  >
+                    {{ bzssCoreFtBadge.label }}
+                  </span>
+                  <span v-else>--</span>
                 </strong>
               </div>
               <div class="hud-ctx-item" :class="{ 'is-leader': props.player.isLeader }">
@@ -586,6 +610,29 @@ const bzssCoreStatusDetail = computed(() => {
     return `Last complete: ${formatDateTime(props.player.bzssCoreLastCompletedAt)}`;
   }
   return "";
+});
+
+const bzssCoreFtBadge = computed(() => {
+  const ftIndex = props.player?.bzssCoreFtIndex ?? (props.player?.bzssCorePlayerInfo as any)?.ftIndex ?? (props.player?.bzssCorePlayerInfo as any)?.fireTeamIndex;
+  if (ftIndex == null || !Number.isFinite(Number(ftIndex))) return null;
+  const index = Math.trunc(Number(ftIndex));
+  const badgeMap: Record<number, { label: string; tone: string }> = {
+    0: { label: "A组", tone: "ft-green" },
+    1: { label: "B组", tone: "ft-purple" },
+    2: { label: "C组", tone: "ft-blue" },
+  };
+  const badge = badgeMap[index];
+  if (!badge) {
+    return {
+      label: `FT ${index}`,
+      tone: "ft-neutral",
+      title: `BZSS-Core ftIndex: ${index}`,
+    };
+  }
+  return {
+    ...badge,
+    title: `BZSS-Core ftIndex: ${index}`,
+  };
 });
 
 // Computed properties for UI design
@@ -3062,5 +3109,44 @@ onUnmounted(() => {
   background: rgba(239, 68, 68, 0.15);
   border-color: rgba(239, 68, 68, 0.4);
   color: #f87171;
+}
+
+.bzss-core-ft-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.bzss-core-ft-badge.ft-green {
+  color: #d7ffe4;
+  background: rgba(34, 197, 94, 0.2);
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.bzss-core-ft-badge.ft-purple {
+  color: #efe3ff;
+  background: rgba(168, 85, 247, 0.2);
+  border-color: rgba(168, 85, 247, 0.35);
+}
+
+.bzss-core-ft-badge.ft-blue {
+  color: #d7ecff;
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.35);
+}
+
+.bzss-core-ft-badge.ft-neutral {
+  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 </style>
