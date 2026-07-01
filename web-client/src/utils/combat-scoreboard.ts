@@ -14,28 +14,28 @@ export function buildCombatScoreboardItems(
   latencyMs: number | null | undefined = null
 ): CombatScoreboardItem[] {
   const items: CombatScoreboardItem[] = [
-    { key: "numKills", label: "Num kills", shortLabel: "Kills", value: statNumber(stats?.kills), tone: "kills" },
-    { key: "numDeaths", label: "Num death", shortLabel: "Death", value: statNumber(stats?.deaths), tone: "deaths" },
-    { key: "numWoundeds", label: "Num woundeds", shortLabel: "Wounded", value: statNumber(stats?.downs), tone: "woundeds" },
-    { key: "numTeamKills", label: "Num TK", shortLabel: "TK", value: statNumber(stats?.tk), tone: "tk" },
-    { key: "revivedPoints", label: "Revived points", shortLabel: "Revive", value: statNumber(stats?.revivedPoints ?? stats?.revives), tone: "revived" },
+    { key: "numKills", label: "击杀 / Kills", shortLabel: "k", value: statNumber(stats?.kills), tone: "kills" },
+    { key: "numDeaths", label: "死亡 / Deaths", shortLabel: "d", value: statNumber(stats?.deaths), tone: "deaths" },
+    { key: "numWoundeds", label: "击倒 / Downs", shortLabel: "w", value: statNumber(stats?.downs), tone: "woundeds" },
+    { key: "numTeamKills", label: "队友击杀 / TeamKills (TK)", value: statNumber(stats?.tk), shortLabel: "tk", tone: "tk" },
+    { key: "revivedPoints", label: "复苏数 / Revives", shortLabel: "r", value: statNumber(stats?.revivedPoints ?? stats?.revives), tone: "revived" },
   ];
 
   if (includeAll) {
     items.push(
-      { key: "numWounds", label: "Num wounds", shortLabel: "Wounds", value: statNumber(stats?.wounds), tone: "wounds" },
-      { key: "healPoints", label: "Heal point", shortLabel: "Heal", value: statNumber(stats?.healPoints), tone: "heal" },
-      { key: "teamworkScore", label: "Team work score", shortLabel: "Team", value: statNumber(stats?.teamworkScore), tone: "teamwork" },
-      { key: "objectiveScore", label: "Objective score", shortLabel: "Obj", value: statNumber(stats?.objectiveScore), tone: "objective" },
-      { key: "combatScore", label: "Combat score", shortLabel: "Combat", value: statNumber(stats?.combatScore), tone: "combat" }
+      { key: "numWounds", label: "受伤次数 / Wounds", shortLabel: "wd", value: statNumber(stats?.wounds), tone: "wounds" },
+      { key: "healPoints", label: "治疗量 / Heal Points", shortLabel: "h", value: statNumber(stats?.healPoints), tone: "heal" },
+      { key: "teamworkScore", label: "团队合作分 / Teamwork Score", shortLabel: "t", value: statNumber(stats?.teamworkScore), tone: "teamwork" },
+      { key: "objectiveScore", label: "目标分数 / Objective Score", shortLabel: "o", value: statNumber(stats?.objectiveScore), tone: "objective" },
+      { key: "combatScore", label: "战斗分数 / Combat Score", shortLabel: "c", value: statNumber(stats?.combatScore), tone: "combat" }
     );
   }
 
   if (includeAll) {
     items.push({
       key: "latency",
-      label: "延迟 / Ping",
-      shortLabel: "延迟",
+      label: "网络延迟 / Ping",
+      shortLabel: "p",
       value: formatLatency(latencyMs),
       tone: "latency",
     });

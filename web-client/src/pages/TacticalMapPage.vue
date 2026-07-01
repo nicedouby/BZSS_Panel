@@ -375,8 +375,7 @@
           <span class="squad-simple" v-if="hoveredMarker.squadId">#{{ hoveredMarker.squadId }}</span>
         </div>
         <div class="tooltip-meta-row">
-          <span class="role-simple">{{ hoveredMarker.role }}</span>
-          <span class="confidence-simple">关联 {{ getLinkConfidenceLabel(hoveredMarker.linkConfidence) }}</span>
+          <span class="role-simple">{{ displayRole(hoveredMarker.roleInfo?.label || hoveredMarker.role) }}</span>
         </div>
       </div>
 
@@ -701,6 +700,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, reactive, nextTick, watch } from "vue";
+import { t } from "../i18n";
 import {
   type BzssCorePlayerInfoResponse,
   type BzssCoreCaptureZoneInfo,
@@ -772,6 +772,30 @@ type PerspectiveTone = "friendly" | "enemy" | "neutral";
 
 const serverStore = useServerStore();
 const authStore = useAuthStore();
+
+function displayRole(role: string | null | undefined) {
+  const raw = String(role ?? "").trim();
+  if (!raw || raw === "Unknown Role") return t("role.unknownRole");
+  const normalized = raw.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const keyMap: Record<string, string> = {
+    squadleader: "role.squadLeader",
+    medic: "role.medic",
+    heavyantitank: "role.heavyAntiTank",
+    lightantitank: "role.lightAntiTank",
+    machinegunner: "role.machineGunner",
+    automaticrifleman: "role.automaticRifleman",
+    engineer: "role.engineer",
+    sapper: "role.sapper",
+    marksman: "role.marksman",
+    sniper: "role.sniper",
+    grenadier: "role.grenadier",
+    crewman: "role.crewman",
+    pilot: "role.pilot",
+    rifleman: "role.rifleman",
+  };
+  const key = keyMap[normalized];
+  return key ? t(key, raw) : raw;
+}
 
 function getPlayerRconDetail(player: any) {
   if (player?.rconDetail) {
@@ -2323,10 +2347,18 @@ function resolveMapRoleInfo(player: BzssCoreTrackedPlayerInfo): RoleIconInfo {
     return { icon: vehicleIcon.icon, label: `${vehicleIcon.label} (${vehicleInfo.vehicleType})`, tone: vehicleIcon.tone };
   }
 
-  const roleSource = [player.soldierInfo?.soldierClass, player.soldierInfo?.weaponClass]
-    .map((value) => String(value ?? "").trim())
-    .filter(Boolean)
-    .join(" ");
+  const rconDetail = getPlayerRconDetail(player);
+  let roleSource = "";
+  if (rconDetail?.role && rconDetail.role !== "Unknown Role") {
+    roleSource = rconDetail.role;
+  } else if ((player as any).role && (player as any).role !== "Unknown Role") {
+    roleSource = (player as any).role;
+  } else {
+    roleSource = [player.soldierInfo?.soldierClass, player.soldierInfo?.weaponClass]
+      .map((value) => String(value ?? "").trim())
+      .filter(Boolean)
+      .join(" ");
+  }
 
   return resolveRoleIcon(roleSource);
 }

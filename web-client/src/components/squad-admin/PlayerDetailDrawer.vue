@@ -213,44 +213,6 @@
                 <small v-if="matchOnlineSubText" class="ctx-sub">{{ matchOnlineSubText }}</small>
               </div>
             </div>
-
-            <!-- CAREER CTX: Career Stats Bar -->
-            <div v-if="props.player.battleStats" class="hud-header-career-bar">
-              <span class="career-bar-title">CAREER</span>
-              <div class="career-bar-items">
-                <div class="cb-item highlight">
-                  <span class="cb-lbl">K/D</span>
-                  <strong class="cb-val">{{ battleKd }}</strong>
-                </div>
-                <div class="cb-divider"></div>
-                <div class="cb-item">
-                  <span class="cb-lbl">击杀</span>
-                  <strong class="cb-val kills">{{ props.player.battleStats.kills }}</strong>
-                </div>
-                <div class="cb-divider"></div>
-                <div class="cb-item">
-                  <span class="cb-lbl">死亡</span>
-                  <strong class="cb-val deaths">{{ props.player.battleStats.deaths }}</strong>
-                </div>
-                <div class="cb-divider"></div>
-                <div class="cb-item">
-                  <span class="cb-lbl">击倒</span>
-                  <strong class="cb-val downs">{{ props.player.battleStats.downs }}</strong>
-                </div>
-                <div class="cb-divider"></div>
-                <div class="cb-item">
-                  <span class="cb-lbl">TK</span>
-                  <strong class="cb-val tk" :class="{ danger: props.player.battleStats.tk > 0 }">
-                    {{ props.player.battleStats.tk }}
-                  </strong>
-                </div>
-                <div class="cb-divider"></div>
-                <div class="cb-item">
-                  <span class="cb-lbl">复苏</span>
-                  <strong class="cb-val revives">{{ props.player.battleStats.revives }}</strong>
-                </div>
-              </div>
-            </div>
           </header>
 
           <!-- System Message Banner -->
@@ -274,106 +236,18 @@
                     <span class="hud-section-subtitle">实时对局数据统计 / REAL-TIME STATS</span>
                   </div>
 
-                  <div class="combat-scoreboard-grid">
-                    <div
+                  <div class="player-stat-line scoreboard-line" style="display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0;">
+                    <span
                       v-for="item in combatScoreboardItems"
                       :key="item.key"
-                      class="combat-scoreboard-card"
+                      class="scoreboard-chip"
                       :class="item.tone"
+                      :title="`${item.label}: ${item.value}`"
                     >
-                      <span class="combat-scoreboard-label" :title="item.label">{{ item.shortLabel }}</span>
-                      <strong class="combat-scoreboard-value">{{ item.value }}</strong>
-                    </div>
+                      <span class="label">{{ item.shortLabel }}</span>
+                      <span class="value">{{ item.value }}</span>
+                    </span>
                   </div>
-
-                  <!-- KD Indicator Block -->
-                  <div v-if="false" class="kd-hero-block" :class="teamColorClass">
-                    <div class="kd-metric">
-                      <span class="kd-label">SESSION K/D</span>
-                      <strong class="kd-value">{{ sessionKd }}</strong>
-                    </div>
-                    <div class="kd-breakdown">
-                      <div class="kd-bar">
-                        <div class="kd-bar-kills" :style="{ width: sessionKillsPercent + '%' }"></div>
-                        <div class="kd-bar-deaths" :style="{ width: sessionDeathsPercent + '%' }"></div>
-                      </div>
-                      <div class="kd-bar-labels">
-                        <span class="lbl-kills">击杀: {{ props.player?.combatStats.kills }}</span>
-                        <span class="lbl-deaths">死亡: {{ props.player?.combatStats.deaths }}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Stats Card Matrix -->
-                  <div v-if="false" class="combat-hud-grid">
-                    <div class="combat-hud-card downs">
-                      <div class="ch-icon-wrapper">
-                        <svg viewBox="0 0 24 24" class="ch-icon" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M12 5v14M19 12l-7 7-7-7" />
-                        </svg>
-                      </div>
-                      <div class="ch-info">
-                        <span class="ch-lbl">击倒</span>
-                        <strong class="ch-val">{{ props.player?.combatStats.downs }}</strong>
-                      </div>
-                    </div>
-                    <div class="combat-hud-card kills">
-                      <div class="ch-icon-wrapper">
-                        <svg viewBox="0 0 24 24" class="ch-icon" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                          <circle cx="12" cy="12" r="8"></circle>
-                          <line x1="12" y1="1" x2="12" y2="3"></line>
-                          <line x1="12" y1="21" x2="12" y2="23"></line>
-                          <line x1="1" y1="12" x2="3" y2="12"></line>
-                          <line x1="21" y1="12" x2="23" y2="12"></line>
-                        </svg>
-                      </div>
-                      <div class="ch-info">
-                        <span class="ch-lbl">击杀</span>
-                        <strong class="ch-val">{{ props.player?.combatStats.kills }}</strong>
-                      </div>
-                    </div>
-                    <div class="combat-hud-card deaths">
-                      <div class="ch-icon-wrapper">
-                        <svg viewBox="0 0 24 24" class="ch-icon" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M9 10h.01M15 10h.01M12 2a8 8 0 0 0-8 8v12h16V10a8 8 0 0 0-8-8zM12 18v-2" />
-                        </svg>
-                      </div>
-                      <div class="ch-info">
-                        <span class="ch-lbl">死亡</span>
-                        <strong class="ch-val">{{ props.player?.combatStats.deaths }}</strong>
-                      </div>
-                    </div>
-                    <div class="combat-hud-card tk">
-                      <div class="ch-icon-wrapper">
-                        <svg viewBox="0 0 24 24" class="ch-icon" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01" />
-                        </svg>
-                      </div>
-                      <div class="ch-info">
-                        <span class="ch-lbl">TK (团队伤害)</span>
-                        <strong class="ch-val" :class="{ danger: (props.player?.combatStats.tk ?? 0) > 0 }">
-                          {{ props.player?.combatStats.tk }}
-                        </strong>
-                      </div>
-                    </div>
-                    <div class="combat-hud-card revives">
-                      <div class="ch-icon-wrapper">
-                        <svg viewBox="0 0 24 24" class="ch-icon" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-                        </svg>
-                      </div>
-                      <div class="ch-info">
-                        <span class="ch-lbl">复苏</span>
-                        <strong class="ch-val">{{ props.player?.combatStats.revives }}</strong>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Subtle Divider -->
-                  <div class="hud-divider"></div>
-
-                  <!-- Integrated Combat Timeline -->
-                  <PlayerCombatTimeline :player="props.player" :server-id="props.serverId" />
                 </div>
               </div>
 
@@ -609,7 +483,6 @@ import { executeBzssCoreCommand } from "../../app/bzssCoreApi";
 import { apiGet, apiPatch, apiPost } from "../../app/apiClient";
 import StatusBadge from "../common/StatusBadge.vue";
 import CopyableValue from "./CopyableValue.vue";
-import PlayerCombatTimeline from "./PlayerCombatTimeline.vue";
 import { useAuthStore } from "../../stores/auth.store";
 import { usePlayerStore } from "../../stores/player.store";
 import { t } from "../../i18n";
@@ -810,7 +683,7 @@ const glowShadowStyle = computed(() => {
   return { boxShadow: "0 0 16px rgba(255, 255, 255, 0.1)" };
 });
 
-const combatScoreboardItems = computed(() => buildCombatScoreboardItems(props.player?.combatStats, true));
+const combatScoreboardItems = computed(() => buildCombatScoreboardItems(props.player?.combatStats, true).filter(item => item.key !== "latency"));
 
 // KD Computations
 const sessionKd = computed(() => {

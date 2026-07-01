@@ -14,12 +14,12 @@
           <img v-if="rconDetail?.steamAvatar" :src="rconDetail.steamAvatar" class="steam-avatar-mini" alt="avatar" />
           <span class="player-name" :title="player.playerName">{{ player.playerName || 'Unknown Player' }}</span>
           <span
-            v-if="player.ping != null"
+            v-if="player.ping != null || (rconDetail && rconDetail.ping != null)"
             class="player-ping-badge"
             :class="pingToneClass"
-            :title="`BZSS-Core 延迟: ${player.ping}ms`"
+            :title="player.ping != null ? `BZSS-Core 延迟: ${player.ping}ms` : `RCON 延迟: ${rconDetail.ping}ms`"
           >
-            {{ player.ping }}ms
+            {{ player.ping != null ? player.ping : rconDetail.ping }}ms
           </span>
         </div>
         <button class="close-btn" @click="$emit('close')" title="关闭">×</button>
@@ -52,96 +52,77 @@
 
     <!-- Grid Details -->
     <div class="panel-grid font-mono">
-      <div class="grid-row">
-        <span class="label">职业/ROLE</span>
-        <span class="val">
-          <span
-            v-if="roleIconImage"
-            class="role-mask-icon"
-            :style="roleIconStyle"
-          ></span>
+      <!-- Role & Weapon/Vehicle -->
+      <div class="grid-row-header">
+        <div class="role-block">
+          <span v-if="roleIconImage" class="role-mask-icon" :style="roleIconStyle"></span>
           <span v-else class="role-fallback-icon">{{ roleInfo.icon || '?' }}</span>
-          {{ roleInfo.label }}
-        </span>
+          <span class="role-name">{{ displayRole(roleInfo.label) }}</span>
+        </div>
+        <div class="weapon-block" v-if="vehicleName || (weaponName && weaponName !== '-')">
+          <span class="weapon-val" :class="vehicleName ? 'text-orange' : 'text-highlight'">
+            {{ vehicleName ? vehicleName : weaponName }}
+          </span>
+        </div>
       </div>
 
-      <div class="grid-row" v-if="weaponName && weaponName !== '-'">
-        <span class="label">武器/WEAPON</span>
-        <span class="val text-highlight">{{ weaponName }}</span>
+      <div class="grid-divider"></div>
+
+      <!-- 2-Column Info Grid -->
+      <div class="info-columns-grid">
+        <div class="info-cell">
+          <span class="cell-label">坐标 POS</span>
+          <span class="cell-val text-cyan">{{ Math.round(gameX) }}, {{ Math.round(gameY) }}</span>
+        </div>
+        <div class="info-cell">
+          <span class="cell-label">速度 VEL</span>
+          <span class="cell-val">{{ speedText }}</span>
+        </div>
+        
+        <div class="info-cell">
+          <span class="cell-label">延迟 PNG</span>
+          <span class="cell-val text-green" :class="{ 'high-ping': (rconDetail?.ping ?? player.ping ?? 0) > 150 }">
+            {{ rconDetail?.ping != null ? `${rconDetail.ping} ms` : (player.ping != null ? `${player.ping} ms` : '--') }}
+          </span>
+        </div>
+        <div class="info-cell" v-if="rconDetail && rconDetail.playtimeHours !== null">
+          <span class="cell-label">时长 HRS</span>
+          <span class="cell-val text-yellow">{{ Math.round(rconDetail.playtimeHours) }}h</span>
+        </div>
       </div>
 
-      <div class="grid-row" v-if="vehicleName">
-        <span class="label">载具/VEHICLE</span>
-        <span class="val text-orange">{{ vehicleName }}</span>
-      </div>
+      <div class="grid-divider" v-if="rconDetail?.combatStats || rconDetail?.steamId || rconDetail?.eosId || player.playerGuid"></div>
 
-      <div class="grid-row">
-        <span class="label">坐标/POSITION</span>
-        <span class="val text-cyan">{{ Math.round(gameX) }}, {{ Math.round(gameY) }}</span>
-      </div>
-
-      <div class="grid-row">
-        <span class="label">速度/VELOCITY</span>
-        <span class="val">{{ speedText }}</span>
-      </div>
-
-      <div class="grid-row" v-if="rconDetail">
-        <span class="label">延迟/PING</span>
-        <span class="val text-green" :class="{ 'high-ping': rconDetail.ping > 150 }">
-          {{ rconDetail.ping != null ? `${rconDetail.ping} ms` : '--' }}
-        </span>
-      </div>
-
-      <div class="grid-row" v-if="rconDetail && rconDetail.playtimeHours !== null">
-        <span class="label">时长/PLAYTIME</span>
-        <span class="val text-yellow">{{ Math.round(rconDetail.playtimeHours) }}h</span>
-      </div>
-
-      <div class="grid-row" v-if="rconDetail && rconDetail.combatStats">
-        <span class="label">战绩/KDA</span>
+      <!-- KDW & Core Status Row -->
+      <div class="grid-row compact-row" v-if="rconDetail?.combatStats">
+        <span class="label">战绩 KDW</span>
         <span class="val text-cyan">
-          {{ rconDetail.combatStats.kills }} / {{ rconDetail.combatStats.downs }} / {{ rconDetail.combatStats.deaths }}
+          {{ rconDetail.combatStats.kills }} / {{ rconDetail.combatStats.deaths }} / {{ rconDetail.combatStats.downs }}
         </span>
       </div>
 
-      <div class="grid-row">
+      <div class="grid-row compact-row">
         <span class="label">BZSS CORE</span>
         <span class="val sync-status">
           <span class="status-dot animate-pulse"></span>
-          {{ coreStatusText || '已定位 (ONLINE)' }}
+          {{ coreStatusText || 'ONLINE' }}
         </span>
       </div>
 
-      <div class="grid-row" v-if="rconDetail?.steamId">
-        <span class="label">STEAM64</span>
-        <span class="val guid-text" :title="rconDetail.steamId">{{ rconDetail.steamId }}</span>
-      </div>
-
-      <div class="grid-row" v-if="rconDetail?.eosId">
-        <span class="label">EOSID</span>
-        <span class="val guid-text" :title="rconDetail.eosId">{{ rconDetail.eosId }}</span>
-      </div>
-
-      <div class="grid-row" v-if="rconDetail">
-        <span class="label">TEAM / SQUAD</span>
-        <span class="val">{{ rconDetail.teamId ?? '--' }} / {{ rconDetail.squadId ?? '--' }}</span>
-      </div>
-
-      <div class="grid-row" v-if="rconDetail">
-        <span class="label">ONLINE</span>
-        <span class="val" :class="{ 'text-green': rconDetail.isOnline, 'text-orange': !rconDetail.isOnline }">
-          {{ rconDetail.isOnline ? 'ONLINE' : 'OFFLINE' }}
-        </span>
-      </div>
-
-      <div v-if="linkConfidence" class="grid-row">
-        <span class="label">LINK</span>
-        <span class="val" :title="linkReason">{{ linkConfidenceText }}</span>
-      </div>
-
-      <div class="grid-row player-id-row" v-if="player.playerGuid">
-        <span class="label">GUID</span>
-        <span class="val guid-text" :title="player.playerGuid">{{ player.playerGuid }}</span>
+      <!-- Tiny copyable / debugging IDs -->
+      <div class="ids-section" v-if="rconDetail?.steamId || rconDetail?.eosId || player.playerGuid">
+        <div class="id-item" v-if="rconDetail?.steamId" :title="`Steam64: ${rconDetail.steamId}`">
+          <span class="id-lbl">STM</span>
+          <span class="id-val">{{ rconDetail.steamId }}</span>
+        </div>
+        <div class="id-item" v-if="rconDetail?.eosId" :title="`EOSID: ${rconDetail.eosId}`">
+          <span class="id-lbl">EOS</span>
+          <span class="id-val">{{ rconDetail.eosId }}</span>
+        </div>
+        <div class="id-item" v-if="player.playerGuid" :title="`GUID: ${player.playerGuid}`">
+          <span class="id-lbl">GID</span>
+          <span class="id-val">{{ player.playerGuid }}</span>
+        </div>
       </div>
     </div>
 
@@ -154,9 +135,34 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from "vue";
+import { t } from "../../i18n";
 import type { BzssCoreTrackedPlayerInfo } from "../../app/bzssCoreApi";
 import { resolveRoleIcon } from "../../utils/role-icons";
 import { resolveVehicleIcon } from "../../utils/vehicle-icons";
+
+function displayRole(role: string | null | undefined) {
+  const raw = String(role ?? "").trim();
+  if (!raw || raw === "Unknown Role") return t("role.unknownRole");
+  const normalized = raw.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const keyMap: Record<string, string> = {
+    squadleader: "role.squadLeader",
+    medic: "role.medic",
+    heavyantitank: "role.heavyAntiTank",
+    lightantitank: "role.lightAntiTank",
+    machinegunner: "role.machineGunner",
+    automaticrifleman: "role.automaticRifleman",
+    engineer: "role.engineer",
+    sapper: "role.sapper",
+    marksman: "role.marksman",
+    sniper: "role.sniper",
+    grenadier: "role.grenadier",
+    crewman: "role.crewman",
+    pilot: "role.pilot",
+    rifleman: "role.rifleman",
+  };
+  const key = keyMap[normalized];
+  return key ? t(key, raw) : raw;
+}
 
 const props = defineProps<{
   player: BzssCoreTrackedPlayerInfo;
@@ -205,10 +211,18 @@ const roleInfo = computed(() => {
     const vehicleIcon = resolveVehicleIcon(vehicleInfo.vehicleType);
     return { icon: vehicleIcon.icon, label: `${vehicleIcon.label} (${vehicleInfo.vehicleType})`, tone: vehicleIcon.tone };
   }
-  const roleSource = [props.player.soldierInfo?.soldierClass, props.player.soldierInfo?.weaponClass]
-    .map((value) => String(value ?? "").trim())
-    .filter(Boolean)
-    .join(" ");
+  
+  let roleSource = "";
+  if (props.rconDetail?.role && props.rconDetail.role !== "Unknown Role") {
+    roleSource = props.rconDetail.role;
+  } else if ((props.player as any).role && (props.player as any).role !== "Unknown Role") {
+    roleSource = (props.player as any).role;
+  } else {
+    roleSource = [props.player.soldierInfo?.soldierClass, props.player.soldierInfo?.weaponClass]
+      .map((value) => String(value ?? "").trim())
+      .filter(Boolean)
+      .join(" ");
+  }
 
   return resolveRoleIcon(roleSource);
 });
@@ -238,7 +252,7 @@ const roleIconStyle = computed(() => {
 });
 
 const pingToneClass = computed(() => {
-  const ping = Number(props.player?.ping ?? 0);
+  const ping = Number(props.player?.ping ?? props.rconDetail?.ping ?? 0);
   if (ping > 120) return "high";
   if (ping > 60) return "medium";
   return "low";
@@ -510,15 +524,103 @@ onMounted(() => {
   transition: width 0.3s ease;
 }
 
+
+
 /* Grid layout details */
 .panel-grid {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   background: rgba(0, 0, 0, 0.2);
   padding: 8px;
   border-radius: 3px;
   border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.grid-row-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 2px;
+}
+
+.role-block {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.weapon-block {
+  font-size: 11px;
+  font-weight: 700;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grid-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  margin: 4px 0;
+}
+
+.info-columns-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px 8px;
+}
+
+.info-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.cell-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+  font-weight: 700;
+}
+
+.cell-val {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.compact-row {
+  margin: 1px 0;
+}
+
+.ids-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.06);
+  padding-top: 4px;
+}
+
+.id-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+}
+
+.id-lbl {
+  color: rgba(255, 255, 255, 0.3);
+  font-weight: 700;
+}
+
+.id-val {
+  color: rgba(255, 255, 255, 0.5);
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .grid-row {
@@ -527,78 +629,6 @@ onMounted(() => {
   align-items: center;
   font-size: 11px;
   line-height: 1.4;
-}
-
-.label {
-  color: rgba(255, 255, 255, 0.4);
-  font-size: 10px;
-}
-
-.val {
-  color: #cbd5e1;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.text-highlight {
-  color: #f1f5f9;
-  font-weight: bold;
-}
-
-.text-cyan {
-  color: #38bdf8;
-}
-
-.text-orange {
-  color: #fb923c;
-}
-
-.guid-text {
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 10px;
-  opacity: 0.7;
-}
-
-.player-id-row {
-  border-top: 1px dashed rgba(255, 255, 255, 0.06);
-  padding-top: 4px;
-  margin-top: 2px;
-}
-
-.sync-status {
-  color: #34d399;
-  font-weight: bold;
-}
-
-.grid-row .label {
-  color: rgba(148, 163, 184, 0.9);
-}
-
-.grid-row .val {
-  color: #e2e8f0;
-}
-
-.status-dot {
-  width: 5px;
-  height: 5px;
-  background-color: #34d399;
-  border-radius: 50%;
-  box-shadow: 0 0 6px #34d399;
-}
-
-.role-mask-icon {
-  width: 12px;
-  height: 12px;
-  display: inline-block;
-}
-
-.role-fallback-icon {
-  font-weight: bold;
-  font-size: 11px;
 }
 
 .panel-footer {

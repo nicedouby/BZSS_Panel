@@ -612,11 +612,11 @@
 
 .scoreboard-chip {
   min-width: 0;
-  height: 16px;
-  padding: 1px 4px;
+  height: 18px;
+  padding: 1px 5px;
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 3.5px;
   border-radius: 3px;
   border: 1px solid rgba(140, 160, 185, 0.15);
   background: rgba(255, 255, 255, 0.026);
@@ -629,7 +629,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 700;
   color: var(--color-text-muted);
 }
