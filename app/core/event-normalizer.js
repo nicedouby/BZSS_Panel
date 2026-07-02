@@ -47,7 +47,7 @@ export function normalizeRawGameEvent(rawEvent) {
   const paramMap = Object.fromEntries(params.map((param) => [param.name, param.value]));
 
   const event = {
-    eventId: `${serverId}:${sessionId}:${seq}`,
+    eventId: String(rawEvent.EventId ?? `${serverId}:${sessionId}:${seq}`),
     eventName,
     layer: "core",
     source: "python-log-parser",

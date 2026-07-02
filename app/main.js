@@ -136,6 +136,7 @@ async function main() {
     eventBus,
     webStatus,
     eventPipeline,
+    logPostMonitor,
   });
 
   const coreContext = {

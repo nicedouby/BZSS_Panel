@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import time
+from collections import deque
 from typing import Any, Dict, List, Optional, Tuple
 
 from bzss_parser.blacklist import BlacklistFilter
@@ -39,9 +40,10 @@ class BzssLogParserApp:
         self.identity_cache = IdentityCache()
 
         self.auxiliary_identity_matcher = AuxiliaryIdentityMatcher(self.identity_cache)
+        self.combat_matcher = CombatMatcher(self.identity_cache)
         self.matchers = [
             LoginMatcher(),
-            CombatMatcher(self.identity_cache),
+            self.combat_matcher,
             ServerTickRateMatcher(self.config.get("server_tick_rate", {})),
             WorldBringUpMatcher(),
             RoundEndMatcher(),
@@ -81,6 +83,18 @@ class BzssLogParserApp:
         raw_log_output_config = self.config.get("raw_log_output", {})
         self.raw_log_output_enabled = bool(raw_log_output_config.get("enabled", False))
         self.raw_log_output_source = str(raw_log_output_config.get("source", "Squad.log"))
+        self.raw_log_output_only_preserved = bool(raw_log_output_config.get("only_preserved", False))
+        self.raw_log_output_drop_blacklisted = bool(raw_log_output_config.get("drop_blacklisted", True))
+        self.raw_log_output_contains = [
+            str(token)
+            for token in raw_log_output_config.get("contains", [])
+            if str(token)
+        ]
+        self.raw_log_output_max_per_second = max(
+            1,
+            int(raw_log_output_config.get("max_per_second", 20) or 20),
+        )
+        self._raw_log_forward_times: deque[float] = deque()
 
         console_config = self.config.get("console", {})
         self.console = ConsolePrinter(
@@ -124,6 +138,22 @@ class BzssLogParserApp:
         self.write_unknown = bool(
             self.config.get("unknown", {}).get("write_unknown", False)
         )
+        checkpoint_config = self.config.get("checkpoint", {})
+        self.checkpoint_flush_every_lines = max(
+            1,
+            int(checkpoint_config.get("flush_every_lines", 500) or 500),
+        )
+        self.checkpoint_flush_every_ms = max(
+            1,
+            int(checkpoint_config.get("flush_every_ms", 500) or 500),
+        )
+        self.checkpoint_force_on_event = bool(
+            checkpoint_config.get("force_on_event", True)
+        )
+        self._checkpoint_dirty_lines = 0
+        self._last_checkpoint_flush = time.time()
+        self._last_checkpoint_record: Optional[Dict[str, Any]] = None
+        self._last_checkpoint_mode = "live"
 
         self._last_cleanup = time.time()
         self._last_stats_report = time.time()
@@ -135,9 +165,7 @@ class BzssLogParserApp:
             "lines_unknown": 0,
             "parse_errors": 0,
         }
-        restored_seq = int(self.tail_reader.state.get("seq", 0) or 0)
-        if restored_seq > 0:
-            self.builder.restore_seq(restored_seq)
+        self.source_seq = int(self.tail_reader.state.get("seq", 0) or 0)
 
     def run(self) -> None:
         self.console.info("BZSS Log Parser started.")
@@ -154,6 +182,7 @@ class BzssLogParserApp:
             except KeyboardInterrupt:
                 print("")
                 self.console.info("Stopped by user.")
+                self.flush_pending_checkpoint(force=True)
                 self.tail_reader.close()
                 break
 
@@ -182,6 +211,8 @@ class BzssLogParserApp:
             self.report_stats()
             self._last_stats_report = now
 
+        self.flush_pending_checkpoint()
+
     def process_line(self, record: Dict[str, Any]) -> bool:
         line = str(record.get("line", "")).rstrip("\r\n")
         line = line.rstrip("\r\n")
@@ -189,22 +220,32 @@ class BzssLogParserApp:
         if not line:
             return True
 
+        source_mode = str(record.get("sourceMode", "live") or "live")
+        self.source_seq += 1
         self.stats["lines_read"] += 1
+
+        early_preserved_rule = ""
+        if self.preserve_enabled:
+            early_preserved_rule = self.preserve_filter.match(line)
+
+        if self.blacklist.is_blacklisted(line) and not early_preserved_rule:
+            self.stats["lines_blacklisted"] += 1
+            self.persist_checkpoint_only(record, source_mode)
+            return True
 
         try:
             raw_archive = self.raw_archive_writer.write(
-                seq=int(self.builder.seq) + 1,
+                seq=self.source_seq,
                 offset=int(record.get("offset", 0) or 0),
                 raw_line=line,
                 source_path=str(record.get("sourcePath", "")),
-                source_mode=str(record.get("sourceMode", "live") or "live"),
+                source_mode=source_mode,
             )
         except Exception as e:
             self.tail_reader.rewind_to_offset(int(record.get("offset", 0) or 0))
             self.console.warn(f"Raw archive write failed; rewinding: {e}")
             return False
 
-        source_mode = str(record.get("sourceMode", "live") or "live")
         source_meta = {
             "source_seq": raw_archive.get("seq"),
             "source_offset": raw_archive.get("offset"),
@@ -219,70 +260,44 @@ class BzssLogParserApp:
             "SourcePath": str(raw_archive.get("sourcePath", "")),
         }
 
-        commit_offset = record.get("next_offset")
-        if commit_offset is None:
-            commit_offset = record.get("offset", 0)
-        file_stat = None
-        file_size = None
-        file_mtime_ms = None
-        try:
-            file_stat = self.tail_reader.log_path.stat()
-            file_size = int(getattr(file_stat, "st_size", 0) or 0)
-            file_mtime_ms = int(getattr(file_stat, "st_mtime_ns", int(file_stat.st_mtime * 1_000_000_000)) / 1_000_000)
-        except Exception:
-            pass
-        self.tail_reader.persist_state(
-            int(raw_archive.get("seq", 0) or 0),
-            int(commit_offset or 0),
+        self.persist_checkpoint(
+            record,
+            source_mode,
             last_raw_line_hash=str(raw_archive.get("rawLineHash", "")),
             last_log_time=str(raw_archive.get("logTime", "")),
-            file_size=file_size,
-            file_mtime_ms=file_mtime_ms,
-            mode=source_mode,
+            force=False,
         )
-        self.writer.write_raw_archive(raw_archive)
-        self.writer.write_audit("checkpoint", {
-            "sourcePath": str(record.get("sourcePath", "")),
-            "offset": int(commit_offset or 0),
-            "seq": int(raw_archive.get("seq", 0) or 0),
-            "sourceMode": source_mode,
-            "lastRawLineHash": str(raw_archive.get("rawLineHash", "")),
-            "lastLogTime": str(raw_archive.get("logTime", "")),
-        })
 
         try:
             self.raw_input_writer.write(line)
         except Exception as e:
             self.console.warn(f"Raw input write failed: {e}")
-        self.forward_raw_log_line(line, source_meta)
 
         try:
             self.auxiliary_identity_matcher.update(line)
 
+            if looks_like_combat_line(line):
+                matched = self.combat_matcher.match(line)
+                if matched:
+                    self.emit_matched_event(matched, line, source_meta, record, source_mode)
+                    return True
+
             matched = self.match_event(line, meta_for_files)
             if matched:
-                event_name, params = matched
-                event = self.builder.build(event_name, params, line, source_meta=source_meta)
-                self.writer.write_event(event)
-                self.writer.write_outbox("pending", event)
-                self.udp_sender.send(event)
-                self.writer.write_outbox("sent", event)
-                self.stats["events_matched"] += 1
-                self.console.event(event)
+                self.emit_matched_event(matched, line, source_meta, record, source_mode)
                 return True
 
             preserved_rule = ""
             if self.preserve_enabled:
-                preserved_rule = self.preserve_filter.match(line)
+                preserved_rule = early_preserved_rule or self.preserve_filter.match(line)
             if preserved_rule:
                 if self.preserve_write_file:
                     self.writer.write_preserved(line, preserved_rule)
                 self.stats["lines_preserved"] += 1
+                self.forward_raw_log_line(line, source_meta, preserved_rule=preserved_rule)
                 return True
 
-            if self.blacklist.is_blacklisted(line):
-                self.stats["lines_blacklisted"] += 1
-                return True
+            self.forward_raw_log_line(line, source_meta, preserved_rule="")
 
             self.writer.write_unknown(line, meta_for_files)
             self.stats["lines_unknown"] += 1
@@ -311,8 +326,63 @@ class BzssLogParserApp:
 
         return None
 
-    def forward_raw_log_line(self, line: str, source_meta: Dict[str, Any]) -> None:
+    def emit_matched_event(
+        self,
+        matched: MatchedEvent,
+        line: str,
+        source_meta: Dict[str, Any],
+        record: Dict[str, Any],
+        source_mode: str,
+    ) -> None:
+        event_name, params = matched
+        event = self.builder.build(event_name, params, line, source_meta=source_meta)
+        self.writer.write_event(event)
+        self.writer.write_outbox("pending", event)
+        try:
+            self.udp_sender.send(event)
+            self.writer.write_outbox("send_attempted", event)
+        except Exception as e:
+            self.writer.write_outbox("send_failed", event, str(e))
+        self.stats["events_matched"] += 1
+        if event_name in {"On_PlayerDamaged", "On_PlayerWounded", "On_PlayerDied", "On_PlayerRevived"}:
+            self.stats["combat_events"] = int(self.stats.get("combat_events", 0)) + 1
+        if self.checkpoint_force_on_event:
+            self.persist_checkpoint(record, source_mode, force=True)
+        self.console.event(event)
+
+    def should_forward_raw_log_line(self, line: str, preserved_rule: str = "") -> bool:
         if not self.raw_log_output_enabled:
+            return False
+
+        if self.raw_log_output_drop_blacklisted and self.blacklist.is_blacklisted(line):
+            return False
+
+        if self.raw_log_output_only_preserved:
+            return bool(preserved_rule or self.preserve_filter.match(line))
+
+        if self.raw_log_output_contains:
+            if not any(token in line for token in self.raw_log_output_contains):
+                return False
+
+        return self.raw_log_rate_limiter_allow()
+
+    def raw_log_rate_limiter_allow(self) -> bool:
+        now = time.time()
+        while self._raw_log_forward_times and now - self._raw_log_forward_times[0] >= 1.0:
+            self._raw_log_forward_times.popleft()
+        if len(self._raw_log_forward_times) >= self.raw_log_output_max_per_second:
+            return False
+        self._raw_log_forward_times.append(now)
+        return True
+
+    def forward_raw_log_line(
+        self,
+        line: str,
+        source_meta: Dict[str, Any],
+        *,
+        preserved_rule: str = "",
+    ) -> None:
+        if not self.should_forward_raw_log_line(line, preserved_rule=preserved_rule):
             return
 
         try:
@@ -323,11 +393,91 @@ class BzssLogParserApp:
             )
             self.writer.write_event(event)
             self.writer.write_outbox("pending", event)
-            self.udp_sender.send(event)
-            self.writer.write_outbox("sent", event)
+            try:
+                self.udp_sender.send(event)
+                self.writer.write_outbox("send_attempted", event)
+            except Exception as e:
+                self.writer.write_outbox("send_failed", event, str(e))
+            self.stats["rawlog_forwarded"] = int(self.stats.get("rawlog_forwarded", 0)) + 1
         except Exception as e:
-            self.writer.write_outbox("failed", {"EventId": "", "Event": "On_RawLogLine", "SourceSeq": str(source_meta.get("source_seq", "")), "SourceMode": str(source_meta.get("source_mode", "live"))}, str(e))
+            self.writer.write_outbox("send_failed", {"EventId": "", "Event": "On_RawLogLine", "SourceSeq": str(source_meta.get("source_seq", "")), "SourceMode": str(source_meta.get("source_mode", "live"))}, str(e))
             self.console.warn(f"Raw log output failed: {e}")
+
+    def persist_checkpoint_only(self, record: Dict[str, Any], source_mode: str) -> None:
+        self.persist_checkpoint(record, source_mode, force=False)
+
+    def persist_checkpoint(
+        self,
+        record: Dict[str, Any],
+        source_mode: str,
+        *,
+        last_raw_line_hash: str = "",
+        last_log_time: str = "",
+        force: bool = False,
+    ) -> None:
+        self._last_checkpoint_record = {
+            "record": record,
+            "source_mode": source_mode,
+            "last_raw_line_hash": last_raw_line_hash,
+            "last_log_time": last_log_time,
+        }
+        self._last_checkpoint_mode = source_mode
+        self._checkpoint_dirty_lines += 1
+        self.flush_pending_checkpoint(force=force)
+
+    def flush_pending_checkpoint(self, force: bool = False) -> None:
+        if not self._last_checkpoint_record:
+            return
+
+        now = time.time()
+        elapsed_ms = (now - self._last_checkpoint_flush) * 1000.0
+        if (
+            not force
+            and self._checkpoint_dirty_lines < self.checkpoint_flush_every_lines
+            and elapsed_ms < self.checkpoint_flush_every_ms
+        ):
+            return
+
+        payload = self._last_checkpoint_record
+        record = payload["record"]
+        commit_offset = record.get("next_offset")
+        if commit_offset is None:
+            commit_offset = record.get("offset", 0)
+
+        file_size = None
+        file_mtime_ms = None
+        try:
+            file_stat = self.tail_reader.log_path.stat()
+            file_size = int(getattr(file_stat, "st_size", 0) or 0)
+            file_mtime_ms = int(
+                getattr(
+                    file_stat,
+                    "st_mtime_ns",
+                    int(file_stat.st_mtime * 1_000_000_000),
+                ) / 1_000_000
+            )
+        except Exception:
+            pass
+
+        self.tail_reader.persist_state(
+            self.source_seq,
+            int(commit_offset or 0),
+            last_raw_line_hash=str(payload.get("last_raw_line_hash", "")),
+            last_log_time=str(payload.get("last_log_time", "")),
+            file_size=file_size,
+            file_mtime_ms=file_mtime_ms,
+            mode=str(payload.get("source_mode", self._last_checkpoint_mode)),
+        )
+        self.writer.write_audit("checkpoint", {
+            "sourcePath": str(record.get("sourcePath", "")),
+            "offset": int(commit_offset or 0),
+            "seq": self.source_seq,
+            "sourceMode": str(payload.get("source_mode", self._last_checkpoint_mode)),
+            "lastRawLineHash": str(payload.get("last_raw_line_hash", "")),
+            "lastLogTime": str(payload.get("last_log_time", "")),
+        })
+        self._checkpoint_dirty_lines = 0
+        self._last_checkpoint_flush = now
 
     def handle_rotate_event(self, reason: str) -> None:
         try:
@@ -336,7 +486,7 @@ class BzssLogParserApp:
                 [("Reason", reason), ("SourcePath", str(self.tail_reader.log_path))],
                 "",
                 source_meta={
-                    "source_seq": self.builder.seq,
+                    "source_seq": self.source_seq,
                     "source_offset": self.tail_reader.position,
                     "rawLineHash": "",
                     "source_mode": self.tail_reader.current_mode,
@@ -365,3 +515,11 @@ class BzssLogParserApp:
             )
         except Exception:
             pass
+
+
+def looks_like_combat_line(line: str) -> bool:
+    return (
+        ("ActualDamage=" in line and "Player:" in line and "caused by" in line)
+        or ("KillingDamage=" in line and "Player:" in line and "caused by" in line)
+        or ("has revived" in line and "Online IDs:" in line)
+    )

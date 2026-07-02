@@ -24,9 +24,13 @@ export function createCombatStateModule({ core, modules, config, logger }) {
   const moduleConfig = config.get("modules.combatState", {});
   const enabled = Boolean(moduleConfig.enabled ?? true);
   const maxEvents = Math.max(1, Number(moduleConfig.maxEvents ?? 5000));
+  const updateDebounceMs = Math.max(0, Number(moduleConfig.updateDebounceMs ?? 250));
   const events = [];
   const unsubscribers = [];
+  const stats = createEmptyStats();
   let lastUpdatedAt = "";
+  let updateTimer = null;
+  let pendingUpdate = null;
 
   function ingest(event) {
     if (!isSubscribed()) return null;
@@ -37,9 +41,12 @@ export function createCombatStateModule({ core, modules, config, logger }) {
     const params = normalizeParams(event);
     const record = addTeamKillMetadata(normalizeCombatEvent({ event, params, type }));
 
-    events.push(applyCombatEventFlags(record));
+    const storedRecord = applyCombatEventFlags(record);
+    events.push(storedRecord);
+    updateStats(storedRecord, 1);
     if (events.length > maxEvents) {
-      events.splice(0, events.length - maxEvents);
+      const removed = events.splice(0, events.length - maxEvents);
+      for (const item of removed) updateStats(item, -1);
     }
 
     lastUpdatedAt = record.time || new Date().toISOString();
@@ -53,7 +60,7 @@ export function createCombatStateModule({ core, modules, config, logger }) {
       },
     });
 
-    core.eventBus.emitModuleEvent("module.combatState", "updated", {
+    scheduleUpdated({
       eventName: "module.combatState.updated",
       layer: "module",
       source: "module.combatState",
@@ -111,11 +118,13 @@ export function createCombatStateModule({ core, modules, config, logger }) {
     };
 
     events.push(record);
+    updateStats(record, 1);
     if (events.length > maxEvents) {
-      events.splice(0, events.length - maxEvents);
+      const removed = events.splice(0, events.length - maxEvents);
+      for (const item of removed) updateStats(item, -1);
     }
     lastUpdatedAt = record.time || new Date().toISOString();
-    core.eventBus.emitModuleEvent("module.combatState", "updated", {
+    scheduleUpdated({
       eventName: "module.combatState.updated",
       layer: "module",
       source: "module.combatState",
@@ -136,8 +145,8 @@ export function createCombatStateModule({ core, modules, config, logger }) {
     };
   }
 
-  function buildStats() {
-    const stats = {
+  function createEmptyStats() {
+    return {
       total: events.length,
       damage: 0,
       wound: 0,
@@ -147,16 +156,54 @@ export function createCombatStateModule({ core, modules, config, logger }) {
       teamWound: 0,
       teamKill: 0,
     };
+  }
 
-    for (const raw of events) {
-      const event = enrichEvent(raw);
-      if (event.type in stats) stats[event.type] += 1;
-      if (event.friendlyFireType === "team_damage") stats.teamDamage += 1;
-      if (event.friendlyFireType === "team_wound" || event.isTeamKillDown) stats.teamWound += 1;
-      if (event.friendlyFireType === "team_kill" || event.isTeamKill) stats.teamKill += 1;
+  function updateStats(record, direction) {
+    const delta = direction >= 0 ? 1 : -1;
+    stats.total = Math.max(0, stats.total + delta);
+    if (record.type === "damage") stats.damage = Math.max(0, stats.damage + delta);
+    if (record.type === "wound") stats.wound = Math.max(0, stats.wound + delta);
+    if (record.type === "death") stats.death = Math.max(0, stats.death + delta);
+    if (record.type === "revive") stats.revive = Math.max(0, stats.revive + delta);
+    if (record.friendlyFireType === "team_damage") stats.teamDamage = Math.max(0, stats.teamDamage + delta);
+    if (record.friendlyFireType === "team_wound" || record.isTeamKillDown) stats.teamWound = Math.max(0, stats.teamWound + delta);
+    if (record.friendlyFireType === "team_kill" || record.isTeamKill) stats.teamKill = Math.max(0, stats.teamKill + delta);
+  }
+
+  function buildStats() {
+    return { ...stats };
+  }
+
+  function scheduleUpdated(event) {
+    pendingUpdate = event;
+    if (updateDebounceMs <= 0) {
+      flushUpdated();
+      return;
     }
+    if (updateTimer) return;
+    updateTimer = setTimeout(flushUpdated, updateDebounceMs);
+  }
 
-    return stats;
+  function flushUpdated() {
+    if (updateTimer) {
+      clearTimeout(updateTimer);
+      updateTimer = null;
+    }
+    if (!pendingUpdate) return;
+    const event = pendingUpdate;
+    pendingUpdate = null;
+    core.eventBus.emitModuleEvent("module.combatState", "updated", {
+      ...event,
+      stats: buildStats(),
+    });
+  }
+
+  function cancelPendingUpdated() {
+    if (updateTimer) {
+      clearTimeout(updateTimer);
+      updateTimer = null;
+    }
+    pendingUpdate = null;
   }
 
   const api = {
@@ -204,6 +251,8 @@ export function createCombatStateModule({ core, modules, config, logger }) {
     clear() {
       const cleared = events.length;
       events.splice(0);
+      Object.assign(stats, createEmptyStats());
+      cancelPendingUpdated();
       lastUpdatedAt = new Date().toISOString();
       logWithFallback(moduleLogger, "info", `Cleared combat events (${cleared})`, {
         label: "MODULE",
@@ -499,6 +548,8 @@ export function createCombatStateModule({ core, modules, config, logger }) {
     async stop() {
       for (const unsubscribe of unsubscribers.splice(0)) unsubscribe();
       events.splice(0);
+      Object.assign(stats, createEmptyStats());
+      cancelPendingUpdated();
       lastUpdatedAt = "";
       logWithFallback(moduleLogger, "info", "CombatState stopped.", {
         label: "MODULE",

@@ -86,6 +86,11 @@ class LogPostPipelineTests(unittest.TestCase):
                 "format": "raw",
             },
             "raw_log_output": {"enabled": True, "source": "Squad.log"},
+            "checkpoint": {
+                "flush_every_lines": 1,
+                "flush_every_ms": 1,
+                "force_on_event": True,
+            },
             "blacklist_contains": [
                 "FindPlayerStart_Implementation()",
                 "VehicleMovementComponent",
@@ -192,10 +197,42 @@ class LogPostPipelineTests(unittest.TestCase):
 
         preserved_path = pathlib.Path(app.writer.output_dir) / today_string() / "Preserved.jsonl"
         unknown_path = pathlib.Path(app.writer.output_dir) / today_string() / "Unknown.jsonl"
+        raw_archive_path = pathlib.Path(app.writer.output_dir) / "Raw" / today_string() / "all.jsonl"
         self.assertFalse(preserved_path.exists())
         self.assertFalse(unknown_path.exists())
-        self.assertEqual(len(app.udp_sender.sent), 1)
+        self.assertFalse(raw_archive_path.exists())
+        self.assertEqual(len(app.udp_sender.sent), 0)
         self.assertEqual(app.stats["lines_blacklisted"], 1)
+
+    def test_source_seq_advances_across_blacklisted_lines_without_event_seq(self) -> None:
+        app = self.make_app()
+        app.matchers = [StubMatcher("important", "On_Important")]
+
+        app.process_line({
+            "line": "LogGameMode: FindPlayerStart_Implementation()",
+            "offset": 0,
+            "next_offset": 44,
+            "sourcePath": "SquadGame.log",
+            "fileId": "file-1",
+        })
+        app.process_line({
+            "line": "important structured event",
+            "offset": 44,
+            "next_offset": 71,
+            "sourcePath": "SquadGame.log",
+            "fileId": "file-1",
+        })
+
+        today = today_string()
+        event_path = pathlib.Path(app.writer.output_dir) / today / "On_Important.jsonl"
+        event = self.read_jsonl(event_path)[0]
+        state_path = pathlib.Path(app.writer.output_dir) / ".state" / "tailer-state.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(event["Seq"], "1")
+        self.assertEqual(event["SourceSeq"], "2")
+        self.assertEqual(state["seq"], 2)
+        self.assertEqual(state["offset"], 71)
 
     def test_preserve_wins_when_line_also_contains_blacklist_noise(self) -> None:
         app = self.make_app(
@@ -224,9 +261,8 @@ class LogPostPipelineTests(unittest.TestCase):
         preserved_path = pathlib.Path(app.writer.output_dir) / today_string() / "Preserved.jsonl"
         self.assertTrue(event_path.exists())
         self.assertFalse(preserved_path.exists())
-        self.assertEqual(len(app.udp_sender.sent), 2)
-        self.assertEqual(app.udp_sender.sent[0]["Event"], "On_RawLogLine")
-        self.assertEqual(app.udp_sender.sent[1]["Event"], "On_TestEvent")
+        self.assertEqual(len(app.udp_sender.sent), 1)
+        self.assertEqual(app.udp_sender.sent[0]["Event"], "On_TestEvent")
         self.assertEqual(app.stats["events_matched"], 1)
         self.assertEqual(app.stats["lines_preserved"], 0)
 
@@ -241,6 +277,17 @@ class LogPostPipelineTests(unittest.TestCase):
         self.assertEqual(unknown[0]["SourceSeq"], "1")
         self.assertEqual(unknown[0]["SourceOffset"], "33")
         self.assertTrue(unknown[0]["RawLineHash"])
+
+    def test_raw_archive_is_not_written_twice(self) -> None:
+        app = self.make_app(unknown={"write_unknown": True})
+        line = "[2026.06.09-12.00.00:000]LogSomething: no matcher hit"
+
+        app.process_line({"line": line, "offset": 0, "next_offset": len(line) + 1, "sourcePath": "SquadGame.log", "fileId": "file-1"})
+
+        raw_archive_path = pathlib.Path(app.writer.output_dir) / "Raw" / today_string() / "all.jsonl"
+        raw_segment_path = pathlib.Path(app.writer.output_dir) / "raw" / today_string() / "segment-000001.jsonl"
+        self.assertEqual(len(raw_archive_path.read_text(encoding="utf-8").splitlines()), 1)
+        self.assertEqual(len(raw_segment_path.read_text(encoding="utf-8").splitlines()), 1)
 
     def test_matcher_exception_goes_to_parse_error_and_next_matcher_still_runs(self) -> None:
         class BrokenMatcher:

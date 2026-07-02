@@ -37,14 +37,29 @@
     "stale_after_seconds": 10
   },
   "raw_input_log": {
-    "enabled": true,
+    "enabled": false,
     "output_dir": "./ReceivedLogs",
     "file_name": "Received.log",
     "format": "raw"
   },
   "raw_log_output": {
-    "enabled": true,
-    "source": "Squad.log"
+    "enabled": false,
+    "source": "Squad.log",
+    "mode": "sampled",
+    "max_per_second": 20,
+    "only_preserved": true,
+    "drop_blacklisted": true,
+    "contains": [
+      "LogWorld: SeamlessTravel to:",
+      "LogSquad: PostLogin:",
+      "LogNet: UNetConnection::Close:",
+      "LogSquadTrace:"
+    ]
+  },
+  "checkpoint": {
+    "flush_every_lines": 500,
+    "flush_every_ms": 500,
+    "force_on_event": true
   },
   "blacklist_contains": [
     "GetDefaultPawnClassForController_Implementation()",
@@ -60,9 +75,9 @@
     "VehicleMovementComponent"
   ],
   "console": {
-    "enabled": true,
+    "enabled": false,
     "use_color": true,
-    "show_params": true,
+    "show_params": false,
     "max_params": 8,
     "max_param_chars": 36,
     "show_log_time": true
