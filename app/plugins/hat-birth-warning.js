@@ -250,7 +250,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     const durationText = formatHoursShort(seconds);
     const playerName = normalizeText(player?.name, "未知玩家");
-    const message = `${playerName} 被委任为重型反坦克射手 游戏时长 ${durationText}`;
+    const message = `[BZSS]重型反坦克射手委任通知 \n ${playerName} 被委任为重型反坦克射手 游戏时长 ${durationText}`;
 
     const recipients = listSquadLeaders(serverId, teamID);
     if (!recipients.length) return;
