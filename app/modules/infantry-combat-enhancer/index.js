@@ -12,12 +12,16 @@ const DEFAULT_CONFIG = Object.freeze({
   showVictimKill: true,
   showAttackerDamage: true,
   storeRecentEventLimit: 300,
+  damageAggregation: {
+    enabled: false,
+    debounceMs: 150,
+  },
 });
 
 const DEFAULT_ATTACKER_DAMAGE_DISPLAY_GATE = Object.freeze({
-  enabled: true,
+  enabled: false,
   mode: "inside_leader_radius",
-  fallbackWhenUnknown: "deny",
+  fallbackWhenUnknown: "allow",
   applyToTypes: ["damage"],
   onlyLightWeapon: true,
 });
@@ -145,8 +149,12 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
     };
 
     if (baseEntry.type === "damage") {
-      bufferDamageEntry(baseEntry);
-      return null;
+      if (moduleConfig.damageAggregation?.enabled === true) {
+        bufferDamageEntry(baseEntry);
+        return null;
+      }
+
+      return processEntryNow(baseEntry);
     }
 
     if (baseEntry.type === "wound") {
@@ -207,7 +215,14 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
   function bufferDamageEntry(entry) {
     const key = makeAggregationKey(entry);
     const nextDamage = Number.isFinite(entry.damage) ? entry.damage : 0;
-    const debounceMs = Math.max(0, Number(moduleConfig.damageDebounceMs ?? DEFAULT_CONFIG.damageDebounceMs));
+    const debounceMs = Math.max(
+      0,
+      Number(
+        moduleConfig.damageAggregation?.debounceMs
+        ?? moduleConfig.damageDebounceMs
+        ?? DEFAULT_CONFIG.damageDebounceMs,
+      ),
+    );
     const existing = damageAggregation.get(key);
 
     const merged = existing ?? {
@@ -938,6 +953,15 @@ function normalizeModuleConfig(source = {}) {
     showAttackerDamage: source.showAttackerDamage !== false,
     storeRecentEventLimit: Math.max(1, Number(source.storeRecentEventLimit ?? source.maxRecords ?? DEFAULT_CONFIG.storeRecentEventLimit)),
     attackerDamageDisplayGate: normalizeAttackerDamageDisplayGate(source.attackerDamageDisplayGate),
+    damageAggregation: normalizeDamageAggregationConfig(source.damageAggregation, source),
+  };
+}
+
+function normalizeDamageAggregationConfig(source = {}, root = {}) {
+  const legacyDebounceMs = Math.max(0, Number(root.damageDebounceMs ?? DEFAULT_CONFIG.damageDebounceMs));
+  return {
+    enabled: source?.enabled === true,
+    debounceMs: Math.max(0, Number(source?.debounceMs ?? legacyDebounceMs)),
   };
 }
 

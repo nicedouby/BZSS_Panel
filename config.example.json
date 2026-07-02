@@ -587,7 +587,11 @@
       "enabled": true,
       "forceAttackerDamageDisplay": false,
       "minAttackerDamage": 15,
-      "damageDebounceMs": 150,
+      "damageDebounceMs": 0,
+      "damageAggregation": {
+        "enabled": false,
+        "debounceMs": 0
+      },
       "showKillDisplay": false,
       "showOnlyLightWeaponDamage": true,
       "showVictimDamage": true,
@@ -596,9 +600,9 @@
       "showAttackerDamage": true,
       "storeRecentEventLimit": 300,
       "attackerDamageDisplayGate": {
-        "enabled": true,
+        "enabled": false,
         "mode": "inside_leader_radius",
-        "fallbackWhenUnknown": "deny",
+        "fallbackWhenUnknown": "allow",
         "applyToTypes": ["damage"],
         "onlyLightWeapon": true
       }

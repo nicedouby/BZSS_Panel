@@ -137,16 +137,26 @@ function createHarness({ moduleConfig = {}, adminWarn, squadFollowState, subscri
 }
 
 async function testDamageDebounceConfigAndDelay() {
-  const { module, eventBus, calls } = createHarness();
+  const { module, eventBus, calls } = createHarness({
+    moduleConfig: {
+      damageAggregation: {
+        enabled: true,
+      },
+    },
+  });
   await module.start();
 
   assert.equal(module.api.getConfig().damageDebounceMs, 150);
 
   const updated = module.api.updateConfig({
+    damageAggregation: {
+      enabled: true,
+    },
     damageDebounceMs: 25,
   });
   assert.equal(updated.damageDebounceMs, 25);
   assert.equal(module.api.getState().config.damageDebounceMs, 25);
+  assert.equal(updated.damageAggregation.enabled, true);
 
   const originalSetTimeout = globalThis.setTimeout;
   const delays = [];
@@ -180,6 +190,61 @@ async function testDamageDebounceConfigAndDelay() {
     globalThis.setTimeout = originalSetTimeout;
     await module.stop();
   }
+}
+
+async function testDamageAggregationDisabledProcessesEachHit() {
+  const { module, eventBus, calls } = createHarness({
+    moduleConfig: {
+      damageAggregation: {
+        enabled: false,
+        debounceMs: 0,
+      },
+      attackerDamageDisplayGate: {
+        enabled: false,
+      },
+      showOnlyLightWeaponDamage: false,
+    },
+  });
+
+  await module.start();
+
+  const recordBase = {
+    serverId: "S1",
+    type: "damage",
+    attackerName: "Alpha",
+    attackerSteam64ID: "123",
+    victimName: "Bravo",
+    victimSteam64ID: "456",
+    weaponName: "M4A1",
+    tags: ["weapon.small_arm", "damage.direct"],
+  };
+
+  await eventBus.emitModuleEvent("module.combatClean", "combat.record.processed", {
+    record: {
+      ...recordBase,
+      id: "damage-no-agg-1",
+      time: "2026-05-30T13:30:00.000Z",
+      damage: 30,
+    },
+  });
+
+  await eventBus.emitModuleEvent("module.combatClean", "combat.record.processed", {
+    record: {
+      ...recordBase,
+      id: "damage-no-agg-2",
+      time: "2026-05-30T13:30:00.200Z",
+      damage: 40,
+    },
+  });
+
+  assert.equal(calls.length, 4);
+
+  const events = module.api.getEvents({ limit: 10 });
+  assert.equal(events.length, 2);
+  assert.equal(events[0].damage, 40);
+  assert.equal(events[1].damage, 30);
+
+  await module.stop();
 }
 
 async function testProcessingAndWarnings() {
@@ -610,6 +675,9 @@ async function testCombatCleanDependencyGate() {
 async function testAttackerCircleGateInsideAllowsDamage() {
   const { module, eventBus, calls } = createHarness({
     moduleConfig: {
+      attackerDamageDisplayGate: {
+        enabled: true,
+      },
       showOnlyLightWeaponDamage: false,
     },
     squadFollowState: {
@@ -665,6 +733,9 @@ async function testAttackerCircleGateInsideAllowsDamage() {
 async function testAttackerCircleGateOutsideSkipsDamage() {
   const { module, eventBus, calls } = createHarness({
     moduleConfig: {
+      attackerDamageDisplayGate: {
+        enabled: true,
+      },
       showOnlyLightWeaponDamage: false,
     },
     squadFollowState: {
@@ -715,9 +786,69 @@ async function testAttackerCircleGateOutsideSkipsDamage() {
   await module.stop();
 }
 
+async function testAttackerCircleGateDisabledAllowsOutsideDamage() {
+  const { module, eventBus, calls } = createHarness({
+    moduleConfig: {
+      attackerDamageDisplayGate: {
+        enabled: false,
+      },
+      showOnlyLightWeaponDamage: false,
+    },
+    squadFollowState: {
+      getPlayerFollowState() {
+        return {
+          status: "outside",
+          leaderName: "SL",
+          distanceMeters: 24000,
+          radiusMeters: 20000,
+          reason: "outside_leader_radius",
+          inside: false,
+          disengaged: true,
+          teamId: 1,
+          squadId: 4,
+        };
+      },
+      isPlayerInsideLeaderRadius() {
+        return false;
+      },
+    },
+  });
+  await module.start();
+
+  await eventBus.emitModuleEvent("module.combatClean", "combat.record.processed", {
+    record: {
+      id: "combat-circle-gate-disabled",
+      serverId: "S1",
+      type: "damage",
+      time: "2026-05-30T13:21:30.000Z",
+      attackerName: "Alpha",
+      attackerSteam64ID: "123",
+      victimName: "Bravo",
+      victimSteam64ID: "456",
+      damage: 36,
+      weaponName: "M4A1",
+      tags: ["weapon.small_arm", "damage.direct"],
+    },
+  });
+
+  await sleep(500);
+
+  assert.equal(calls.length, 2);
+  const events = module.api.getEvents({ limit: 10 });
+  assert.equal(events[0].attackerCircleState.status, "outside");
+  assert.equal(events[0].attackerWarning.success, true);
+  assert.notEqual(events[0].attackerWarning.skipReason, "attacker_outside_leader_radius");
+
+  await module.stop();
+}
+
 async function testAttackerCircleGateUnknownFallbacks() {
   const denyHarness = createHarness({
     moduleConfig: {
+      attackerDamageDisplayGate: {
+        enabled: true,
+        fallbackWhenUnknown: "deny",
+      },
       showOnlyLightWeaponDamage: false,
     },
     squadFollowState: {
@@ -799,6 +930,9 @@ async function testAttackerCircleGateUnknownFallbacks() {
 async function testDamageDebounceAggregatesTwoHits() {
   const { module, eventBus, calls } = createHarness({
     moduleConfig: {
+      damageAggregation: {
+        enabled: true,
+      },
       showOnlyLightWeaponDamage: false,
     },
   });
@@ -852,6 +986,9 @@ async function testDamageDebounceAggregatesTwoHits() {
 async function testWoundMergesPendingDamageExcludingLastHit() {
   const { module, eventBus, calls } = createHarness({
     moduleConfig: {
+      damageAggregation: {
+        enabled: true,
+      },
       showOnlyLightWeaponDamage: false,
     },
   });
@@ -914,6 +1051,7 @@ async function testWoundMergesPendingDamageExcludingLastHit() {
 
 await testProcessingAndWarnings();
 await testDamageDebounceConfigAndDelay();
+await testDamageAggregationDisabledProcessesEachHit();
 await testReviveResolvedWarnings();
 await testTagDrivenMessages();
 await testOnlyLightWeaponDamageSkipsNonLightWeapons();
@@ -925,6 +1063,7 @@ await testFractionalDamageRoundsToInteger();
 await testCombatCleanDependencyGate();
 await testAttackerCircleGateInsideAllowsDamage();
 await testAttackerCircleGateOutsideSkipsDamage();
+await testAttackerCircleGateDisabledAllowsOutsideDamage();
 await testAttackerCircleGateUnknownFallbacks();
 await testDamageDebounceAggregatesTwoHits();
 await testWoundMergesPendingDamageExcludingLastHit();

@@ -658,14 +658,25 @@
       "enabled": true,
       "forceAttackerDamageDisplay": false,
       "minAttackerDamage": 15,
-      "damageDebounceMs": 150,
+      "damageDebounceMs": 0,
+      "damageAggregation": {
+        "enabled": false,
+        "debounceMs": 0
+      },
       "showKillDisplay": false,
       "showOnlyLightWeaponDamage": true,
       "showVictimDamage": true,
       "showVictimWound": true,
       "showVictimKill": true,
       "showAttackerDamage": true,
-      "storeRecentEventLimit": 300
+      "storeRecentEventLimit": 300,
+      "attackerDamageDisplayGate": {
+        "enabled": false,
+        "mode": "inside_leader_radius",
+        "fallbackWhenUnknown": "allow",
+        "applyToTypes": ["damage"],
+        "onlyLightWeapon": true
+      }
     },
     "adminWarn": {
       "enabled": true,
