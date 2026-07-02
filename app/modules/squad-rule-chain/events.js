@@ -49,6 +49,8 @@ export function normalizeRuleChainPassEvent(event = {}) {
   return {
     serverId: text(event.serverId),
     matchId: text(event.matchId),
+    sourceMode: normalizeSourceMode(event.sourceMode ?? event.SourceMode ?? event.rawEvent?.SourceMode),
+    canTriggerActions: normalizeBoolean(event.canTriggerActions ?? event.CanTriggerActions ?? event.rawEvent?.CanTriggerActions, true),
     teamId: nullableNumber(event.teamId ?? event.teamID),
     squadId: nullableNumber(event.squadId ?? event.squadID),
     squadName: text(event.squadName),
@@ -66,6 +68,8 @@ export function normalizeSquadRuleViolationEvent(event = {}) {
   return {
     serverId: text(event.serverId),
     matchId: text(event.matchId),
+    sourceMode: normalizeSourceMode(event.sourceMode ?? event.SourceMode ?? event.rawEvent?.SourceMode),
+    canTriggerActions: normalizeBoolean(event.canTriggerActions ?? event.CanTriggerActions ?? event.rawEvent?.CanTriggerActions, true),
     teamId: nullableNumber(event.teamId ?? event.teamID),
     squadId: nullableNumber(event.squadId ?? event.squadID),
     squadName: text(event.squadName),
@@ -101,6 +105,22 @@ function nullableNumber(value) {
 function numberOrNull(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function normalizeSourceMode(value) {
+  const textValue = text(value).toLowerCase();
+  if (textValue === "live" || textValue === "recovery" || textValue === "replay" || textValue === "backfill") {
+    return textValue;
+  }
+  return "live";
+}
+
+function normalizeBoolean(value, fallback = false) {
+  if (value === true || value === false) return value;
+  const textValue = text(value).toLowerCase();
+  if (textValue === "true" || textValue === "1" || textValue === "yes") return true;
+  if (textValue === "false" || textValue === "0" || textValue === "no") return false;
+  return fallback;
 }
 
 function nowIso() {

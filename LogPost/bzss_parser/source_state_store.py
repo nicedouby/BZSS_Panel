@@ -36,12 +36,22 @@ class SourceStateStore:
         file_id: str,
         offset: int,
         seq: int,
+        mode: str = "live",
+        file_size: int | None = None,
+        file_mtime_ms: int | None = None,
+        last_raw_line_hash: str = "",
+        last_log_time: str = "",
     ) -> Dict[str, Any]:
         payload = {
             "sourcePath": str(source_path or ""),
             "fileId": str(file_id or ""),
             "offset": max(0, int(offset)),
             "seq": max(0, int(seq)),
+            "mode": str(mode or "live"),
+            "fileSize": None if file_size is None else max(0, int(file_size)),
+            "fileMtimeMs": None if file_mtime_ms is None else max(0, int(file_mtime_ms)),
+            "lastRawLineHash": str(last_raw_line_hash or ""),
+            "lastLogTime": str(last_log_time or ""),
             "updatedAt": now_time_string(),
         }
 

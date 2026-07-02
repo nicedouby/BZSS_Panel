@@ -197,16 +197,20 @@ class BzssLogParserApp:
                 offset=int(record.get("offset", 0) or 0),
                 raw_line=line,
                 source_path=str(record.get("sourcePath", "")),
+                source_mode=str(record.get("sourceMode", "live") or "live"),
             )
         except Exception as e:
             self.tail_reader.rewind_to_offset(int(record.get("offset", 0) or 0))
             self.console.warn(f"Raw archive write failed; rewinding: {e}")
             return False
 
+        source_mode = str(record.get("sourceMode", "live") or "live")
         source_meta = {
             "source_seq": raw_archive.get("seq"),
             "source_offset": raw_archive.get("offset"),
             "rawLineHash": raw_archive.get("rawLineHash"),
+            "source_mode": source_mode,
+            "can_trigger_actions": source_mode == "live",
         }
         meta_for_files = {
             "SourceSeq": str(raw_archive.get("seq", "")),
@@ -218,10 +222,33 @@ class BzssLogParserApp:
         commit_offset = record.get("next_offset")
         if commit_offset is None:
             commit_offset = record.get("offset", 0)
+        file_stat = None
+        file_size = None
+        file_mtime_ms = None
+        try:
+            file_stat = self.tail_reader.log_path.stat()
+            file_size = int(getattr(file_stat, "st_size", 0) or 0)
+            file_mtime_ms = int(getattr(file_stat, "st_mtime_ns", int(file_stat.st_mtime * 1_000_000_000)) / 1_000_000)
+        except Exception:
+            pass
         self.tail_reader.persist_state(
             int(raw_archive.get("seq", 0) or 0),
             int(commit_offset or 0),
+            last_raw_line_hash=str(raw_archive.get("rawLineHash", "")),
+            last_log_time=str(raw_archive.get("logTime", "")),
+            file_size=file_size,
+            file_mtime_ms=file_mtime_ms,
+            mode=source_mode,
         )
+        self.writer.write_raw_archive(raw_archive)
+        self.writer.write_audit("checkpoint", {
+            "sourcePath": str(record.get("sourcePath", "")),
+            "offset": int(commit_offset or 0),
+            "seq": int(raw_archive.get("seq", 0) or 0),
+            "sourceMode": source_mode,
+            "lastRawLineHash": str(raw_archive.get("rawLineHash", "")),
+            "lastLogTime": str(raw_archive.get("logTime", "")),
+        })
 
         try:
             self.raw_input_writer.write(line)
@@ -237,7 +264,9 @@ class BzssLogParserApp:
                 event_name, params = matched
                 event = self.builder.build(event_name, params, line, source_meta=source_meta)
                 self.writer.write_event(event)
+                self.writer.write_outbox("pending", event)
                 self.udp_sender.send(event)
+                self.writer.write_outbox("sent", event)
                 self.stats["events_matched"] += 1
                 self.console.event(event)
                 return True
@@ -292,8 +321,12 @@ class BzssLogParserApp:
                 source=self.raw_log_output_source,
                 source_meta=source_meta,
             )
+            self.writer.write_event(event)
+            self.writer.write_outbox("pending", event)
             self.udp_sender.send(event)
+            self.writer.write_outbox("sent", event)
         except Exception as e:
+            self.writer.write_outbox("failed", {"EventId": "", "Event": "On_RawLogLine", "SourceSeq": str(source_meta.get("source_seq", "")), "SourceMode": str(source_meta.get("source_mode", "live"))}, str(e))
             self.console.warn(f"Raw log output failed: {e}")
 
     def handle_rotate_event(self, reason: str) -> None:
@@ -306,10 +339,16 @@ class BzssLogParserApp:
                     "source_seq": self.builder.seq,
                     "source_offset": self.tail_reader.position,
                     "rawLineHash": "",
+                    "source_mode": self.tail_reader.current_mode,
                 },
             )
             self.writer.write_event(event)
             self.udp_sender.send(event)
+            self.writer.write_audit("recovery-mode", {
+                "reason": reason,
+                "sourceMode": self.tail_reader.current_mode,
+                "sourcePath": str(self.tail_reader.log_path),
+            })
         except Exception as e:
             self.console.warn(f"Rotate event write failed: {e}")
 

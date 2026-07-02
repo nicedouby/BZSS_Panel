@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict
+from typing import Any, Dict, Iterable, List, Tuple
 
 from bzss_parser.helpers import extract_log_time, now_time_string, today_string, to_json_line
 
@@ -13,21 +13,13 @@ class LogPostWriter:
     def __init__(self, output_dir: str) -> None:
         self.output_dir = Path(output_dir)
         self.preserved_file_name = "Preserved.jsonl"
+        self._raw_segment_name = "segment-000001.jsonl"
 
     def write_event(self, event: Dict[str, str]) -> None:
-        date_dir = self.output_dir / today_string()
-        date_dir.mkdir(parents=True, exist_ok=True)
-
-        event_name = event.get("Event", "Unknown")
         line = to_json_line(event) + "\n"
-
-        self._append(date_dir / "All.jsonl", line)
-        self._append(date_dir / f"{event_name}.jsonl", line)
+        self._write_event_line(line, event)
 
     def write_unknown(self, raw: str, meta: Dict[str, str] | None = None) -> None:
-        date_dir = self.output_dir / today_string()
-        date_dir.mkdir(parents=True, exist_ok=True)
-
         obj = {
             "Version": "1",
             "Event": "Unknown",
@@ -38,11 +30,13 @@ class LogPostWriter:
         if meta:
             obj.update(meta)
 
-        self._append(date_dir / "Unknown.jsonl", to_json_line(obj) + "\n")
+        self._write_event_line(to_json_line(obj) + "\n", obj)
 
     def write_preserved(self, raw: str, matched_rule: str = "") -> None:
         date_dir = self.output_dir / today_string()
         date_dir.mkdir(parents=True, exist_ok=True)
+        v2_dir = self.output_dir / "events" / today_string()
+        v2_dir.mkdir(parents=True, exist_ok=True)
 
         obj = {
             "Version": "1",
@@ -53,12 +47,14 @@ class LogPostWriter:
             "Raw": raw,
         }
 
-        self._append(date_dir / self.preserved_file_name, to_json_line(obj) + "\n")
+        line = to_json_line(obj) + "\n"
+        self._append(date_dir / self.preserved_file_name, line)
+        self._append(v2_dir / "preserved.jsonl", line)
+        self._append(date_dir / "All.jsonl", line)
+        self._append(date_dir / "PreservedRawLog.jsonl", line)
+        self._append(v2_dir / "all.jsonl", line)
 
     def write_parse_error(self, raw: str, error: str, meta: Dict[str, str] | None = None) -> None:
-        date_dir = self.output_dir / today_string()
-        date_dir.mkdir(parents=True, exist_ok=True)
-
         obj = {
             "Version": "1",
             "Event": "ParseError",
@@ -70,7 +66,7 @@ class LogPostWriter:
         if meta:
             obj.update(meta)
 
-        self._append(date_dir / "ParseError.jsonl", to_json_line(obj) + "\n")
+        self._write_event_line(to_json_line(obj) + "\n", obj)
 
     def write_rotate_event(
         self,
@@ -94,11 +90,70 @@ class LogPostWriter:
         }
 
         line = to_json_line(obj) + "\n"
-        self._append(date_dir / "All.jsonl", line)
-        self._append(date_dir / "TailRotate.jsonl", line)
+        self._write_event_line(line, obj)
+
+    def write_raw_archive(self, entry: Dict[str, Any]) -> None:
+        v2_dir = self.output_dir / "raw" / today_string()
+        v2_dir.mkdir(parents=True, exist_ok=True)
+        line = to_json_line(entry) + "\n"
+        self._append(v2_dir / self._raw_segment_name, line)
+        self._append(v2_dir / "index.json", to_json_line({
+            "schema": "logpost.raw.index.v2",
+            "updatedAt": now_time_string(),
+            "segments": [
+                {
+                    "fileName": self._raw_segment_name,
+                    "countHint": None,
+                }
+            ],
+        }) + "\n")
+
+    def write_outbox(self, status: str, event: Dict[str, Any], error: str = "") -> None:
+        date_dir = self.output_dir / "outbox" / today_string()
+        date_dir.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "schema": "logpost.outbox.v2",
+            "status": str(status or "pending"),
+            "eventId": str(event.get("EventId", "")),
+            "eventName": str(event.get("Event", "")),
+            "sourceSeq": str(event.get("SourceSeq", "")),
+            "sourceMode": str(event.get("SourceMode", "live")),
+            "canTriggerActions": str(event.get("CanTriggerActions", "false")),
+            "time": str(event.get("Time", now_time_string())),
+            "error": str(error or ""),
+        }
+        self._append(date_dir / f"{payload['status']}.jsonl", to_json_line(payload) + "\n")
+
+    def write_audit(self, kind: str, payload: Dict[str, Any]) -> None:
+        date_dir = self.output_dir / "audit" / today_string()
+        date_dir.mkdir(parents=True, exist_ok=True)
+        record = {
+            "schema": "logpost.audit.v2",
+            "kind": str(kind or "unknown"),
+            "time": now_time_string(),
+            **payload,
+        }
+        self._append(date_dir / f"{record['kind']}.jsonl", to_json_line(record) + "\n")
 
     @staticmethod
     def _append(path: Path, text: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8", newline="") as f:
             f.write(text)
             f.flush()
+
+    def _write_event_line(self, line: str, event: Dict[str, Any]) -> None:
+        date_dir = self.output_dir / today_string()
+        date_dir.mkdir(parents=True, exist_ok=True)
+        v2_dir = self.output_dir / "events" / today_string()
+        v2_dir.mkdir(parents=True, exist_ok=True)
+
+        event_name = str(event.get("Event", "Unknown"))
+        self._append(date_dir / "All.jsonl", line)
+        self._append(date_dir / f"{event_name}.jsonl", line)
+        self._append(v2_dir / "all.jsonl", line)
+        self._append(v2_dir / "unknown.jsonl" if event_name == "Unknown" else v2_dir / f"{event_name}.jsonl", line)
+        if event_name == "PreservedRawLog":
+            self._append(v2_dir / "preserved.jsonl", line)
+        if event_name == "ParseError":
+            self._append(v2_dir / "parse-error.jsonl", line)

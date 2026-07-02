@@ -10,6 +10,11 @@ export class LogPostMonitor {
   }
 
   inspectEvent(event = {}) {
+    const sourceMode = String(event?.sourceMode ?? event?.rawEvent?.SourceMode ?? "").trim().toLowerCase();
+    const canTriggerActions = event?.canTriggerActions ?? event?.rawEvent?.CanTriggerActions;
+    if (sourceMode && sourceMode !== "live") return null;
+    if (canTriggerActions === false || String(canTriggerActions).toLowerCase() === "false") return null;
+
     const currentSeq = Number(
       event?.sourceSeq
       ?? event?.rawEvent?.SourceSeq
@@ -35,6 +40,7 @@ export class LogPostMonitor {
           lastSourceSeq: this.lastSourceSeq,
           currentEventId: String(event?.eventId ?? ""),
           previousEventId: this.lastEventId,
+          sourceMode,
         },
       };
       this.recentGaps.unshift(gapEvent);

@@ -129,6 +129,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   async function handleLifecycleSquadCreated(event = {}) {
+    if (!isLiveActionEvent(event)) {
+      return;
+    }
     return enqueue(async () => {
       runtimeConfig = readConfig(config);
       const normalized = normalizeCreationEvent({
@@ -404,6 +407,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         leaderSteamId: record.creatorSteamId || record.inferredLeader?.steamId,
         leaderName: record.creatorName || record.inferredLeader?.name,
         leaderEosId: record.creatorEosId || record.inferredLeader?.eosId,
+        sourceMode: record.sourceMode,
         source: SQUAD_RULE_SOURCES.tieredSquadTime,
         reason: decision.reason,
         createdAt: record.createdAt,
@@ -429,6 +433,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         leaderSteamId: record.creatorSteamId || record.inferredLeader?.steamId,
         leaderName: record.creatorName || record.inferredLeader?.name,
         leaderEosId: record.creatorEosId || record.inferredLeader?.eosId,
+        sourceMode: record.sourceMode,
         createdAt: record.createdAt,
         createdAtMs: record.createdAtMs,
         sourceEventId: record.id,
@@ -783,6 +788,7 @@ function normalizeCreationEvent(event = {}, fallbackSource = "LOG") {
     createdAtMs: Number(event.createdAtMs ?? event.timeMs ?? Date.parse(event.createdAt ?? event.time)) || Date.now(),
     creationSource,
     creationConfidence: normalizeText(event.creationConfidence ?? (creationSource === "LOG" ? "HIGH" : "MEDIUM")),
+    sourceMode: normalizeSourceMode(event.sourceMode ?? (creationSource === "LOG" ? "live" : creationSource === "RCON_SNAPSHOT" ? "backfill" : "recovery")),
     isLogConfirmed: creationSource === "LOG" || creationSource === "RCON_PROMOTED_TO_LOG",
     squadNature,
     squadNatureLabel,
@@ -875,6 +881,14 @@ function normalizeIdentity(value = {}) {
     steamID: normalizeText(value?.steamId ?? value?.steamID),
     eosID: normalizeText(value?.eosId ?? value?.eosID),
   };
+}
+
+function normalizeSourceMode(value) {
+  const textValue = normalizeText(value).toLowerCase();
+  if (textValue === "live" || textValue === "recovery" || textValue === "replay" || textValue === "backfill") {
+    return textValue;
+  }
+  return "live";
 }
 
 function buildDisbandReason(record, decision) {
@@ -1075,6 +1089,13 @@ function nullableNumber(value) {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function isLiveActionEvent(event = {}) {
+  const sourceMode = normalizeSourceMode(event.sourceMode ?? event.SourceMode ?? event.rawEvent?.SourceMode);
+  const canTriggerActions = event.canTriggerActions ?? event.CanTriggerActions ?? event.rawEvent?.CanTriggerActions;
+  const triggerAllowed = canTriggerActions == null || canTriggerActions === true || String(canTriggerActions).toLowerCase() === "true";
+  return sourceMode === "live" && triggerAllowed;
 }
 
 function buildRuleReminderKey(record) {

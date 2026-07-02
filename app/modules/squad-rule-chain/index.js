@@ -138,6 +138,17 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
 
   async function handleViolation(input = {}) {
     const event = normalizeSquadRuleViolationEvent(input);
+    if (!isLiveActionEvent(event)) {
+      remember(recent, {
+        id: `${SQUAD_RULE_CHAIN_MODULE_ID}:audit:${Date.now()}:${Math.random().toString(16).slice(2)}`,
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+        event,
+        actions: [{ type: "audit_only" }],
+        status: "audit_only",
+      }, recentLimit());
+      return;
+    }
     cancelFinalPassFallback(event);
     const record = {
       id: `${SQUAD_RULE_CHAIN_MODULE_ID}:${Date.now()}:${Math.random().toString(16).slice(2)}`,
@@ -200,6 +211,9 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
 
   async function handleFinalPass(input = {}) {
     const event = normalizeRuleChainPassEvent(input);
+    if (!isLiveActionEvent(event)) {
+      return;
+    }
     ensureFinalPassCacheForEvent(event);
     cancelFinalPassFallback(event);
     const seenKey = buildFinalPassEventKey(event);
@@ -260,6 +274,7 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
 
   async function handleRoundWorldBringUp(input = {}) {
     const event = input && typeof input === "object" ? input : {};
+    if (!isLiveActionEvent(event)) return;
     const cleared = api.clearCurrent(event);
     if (cleared?.cleared) {
       moduleLogger?.info?.(
@@ -809,10 +824,25 @@ function remember(bucket, record, limit) {
   }
 }
 
-function recentLimit() {
-  return DEFAULT_RECENT_LIMIT;
-}
+  function recentLimit() {
+    return DEFAULT_RECENT_LIMIT;
+  }
+
+  function isLiveActionEvent(event = {}) {
+    const sourceMode = normalizeText(event.sourceMode ?? event.SourceMode ?? event.rawEvent?.SourceMode).toLowerCase();
+    const canTriggerActions = normalizeBoolean(event.canTriggerActions ?? event.CanTriggerActions ?? event.rawEvent?.CanTriggerActions, true);
+    if (sourceMode && sourceMode !== "live") return false;
+    return canTriggerActions !== false;
+  }
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function normalizeBoolean(value, fallback = false) {
+  if (value === true || value === false) return value;
+  const text = normalizeText(value).toLowerCase();
+  if (text === "true" || text === "1" || text === "yes") return true;
+  if (text === "false" || text === "0" || text === "no") return false;
+  return fallback;
 }

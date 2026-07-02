@@ -478,6 +478,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       leaderSteamId: record.creatorSteamId,
       leaderName: record.creatorName,
       leaderEosId: record.creatorEosId,
+      sourceMode: record.sourceMode,
       source: SQUAD_RULE_SOURCES.fairSquadCreation,
       reason: record.reasons.join(" ").trim(),
       createdAt: record.createdAt,
@@ -1016,6 +1017,7 @@ function createEmptySummary() {
 }
 
 function normalizeCreationEvent(event = {}) {
+  const creationSource = normalizeText(event.creationSource ?? "LOG") || "LOG";
   return {
     serverId: normalizeText(event.serverId),
     matchId: normalizeText(event.matchId),
@@ -1030,7 +1032,8 @@ function normalizeCreationEvent(event = {}) {
     createdAt: normalizeText(event.createdAt ?? event.time) || nowIso(),
     createdAtMs: Number(event.createdAtMs ?? event.timeMs ?? Date.parse(event.createdAt ?? event.time)) || Date.now(),
     sourceEventId: normalizeText(event.sourceEventId ?? event.eventId),
-    creationSource: "LOG",
+    creationSource,
+    sourceMode: normalizeSourceMode(event.sourceMode ?? (creationSource === "LOG" ? "live" : "backfill")),
     creationConfidence: "HIGH",
     isLogConfirmed: true,
   };
@@ -1253,6 +1256,14 @@ function positiveInt(value, fallback) {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function normalizeSourceMode(value) {
+  const textValue = normalizeText(value).toLowerCase();
+  if (textValue === "live" || textValue === "recovery" || textValue === "replay" || textValue === "backfill") {
+    return textValue;
+  }
+  return "live";
 }
 
 function makeRecordId() {

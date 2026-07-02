@@ -58,6 +58,9 @@ export function normalizeRawGameEvent(rawEvent) {
     sourceSeq: String(rawEvent.SourceSeq ?? ""),
     sourceOffset: String(rawEvent.SourceOffset ?? ""),
     rawLineHash: String(rawEvent.RawLineHash ?? ""),
+    sourceMode: String(rawEvent.SourceMode ?? rawEvent.sourceMode ?? "live"),
+    canTriggerActions: parseBoolean(rawEvent.CanTriggerActions ?? rawEvent.canTriggerActions ?? true),
+    isReplay: parseBoolean(rawEvent.IsReplay ?? rawEvent.isReplay ?? false),
 
     time: String(rawEvent.Time ?? new Date().toISOString()),
     logTime: String(rawEvent.LogTime ?? ""),
@@ -72,6 +75,14 @@ export function normalizeRawGameEvent(rawEvent) {
 
   event.normalized = buildNormalizedPayload(event);
   return event;
+}
+
+function parseBoolean(value) {
+  if (value === true || value === false) return value;
+  const text = String(value ?? "").trim().toLowerCase();
+  if (text === "true" || text === "1" || text === "yes") return true;
+  if (text === "false" || text === "0" || text === "no") return false;
+  return Boolean(value);
 }
 
 function extractParams(rawEvent) {

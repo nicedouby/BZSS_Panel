@@ -181,6 +181,8 @@ export class RawLogDerivedEvents {
       serverId: String(sourceEvent?.serverId ?? "").trim(),
       sessionId: String(sourceEvent?.sessionId ?? "").trim(),
       seq: String(sourceEvent?.seq ?? "").trim(),
+      sourceMode: String(sourceEvent?.sourceMode ?? sourceEvent?.rawEvent?.SourceMode ?? "live"),
+      canTriggerActions: sourceEvent?.canTriggerActions ?? sourceEvent?.rawEvent?.CanTriggerActions ?? true,
 
       time: String(sourceEvent?.time ?? new Date().toISOString()),
       logTime: String(sourceEvent?.logTime ?? ""),

@@ -3301,7 +3301,24 @@ export class WebServer {
       return this.json(res, 200, await this.getLogPostState());
     }
 
+    if (url.pathname === "/api/logpost/v2/state" && req.method === "GET") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      return this.json(res, 200, await this.getLogPostState());
+    }
+
     if (url.pathname === "/api/logpost/raw" && req.method === "GET") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      return this.json(res, 200, await this.queryLogPostRawArchive({
+        date: url.searchParams.get("date") ?? "",
+        start: url.searchParams.get("start") ?? "",
+        end: url.searchParams.get("end") ?? "",
+        q: url.searchParams.get("q") ?? "",
+        limit: url.searchParams.get("limit") ?? "200",
+        offset: url.searchParams.get("offset") ?? "0",
+      }));
+    }
+
+    if (url.pathname === "/api/logpost/v2/raw" && req.method === "GET") {
       if (!this.requireSuperAdmin(user, res)) return;
       return this.json(res, 200, await this.queryLogPostRawArchive({
         date: url.searchParams.get("date") ?? "",
@@ -3326,9 +3343,77 @@ export class WebServer {
       }));
     }
 
+    if (url.pathname === "/api/logpost/v2/events" && req.method === "GET") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      return this.json(res, 200, await this.queryLogPostStructuredEvents({
+        date: url.searchParams.get("date") ?? "",
+        event: url.searchParams.get("event") ?? "",
+        start: url.searchParams.get("start") ?? "",
+        end: url.searchParams.get("end") ?? "",
+        q: url.searchParams.get("q") ?? "",
+        limit: url.searchParams.get("limit") ?? "200",
+        offset: url.searchParams.get("offset") ?? "0",
+      }));
+    }
+
     if (url.pathname === "/api/logpost/gaps" && req.method === "GET") {
       if (!this.requireSuperAdmin(user, res)) return;
       return this.json(res, 200, this.getLogPostGapState());
+    }
+
+    if (url.pathname === "/api/logpost/v2/gaps" && req.method === "GET") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      return this.json(res, 200, this.getLogPostGapState());
+    }
+
+    if (url.pathname === "/api/logpost/v2/outbox" && req.method === "GET") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      return this.json(res, 200, await this.queryLogPostOutbox({
+        date: url.searchParams.get("date") ?? "",
+        kind: url.searchParams.get("kind") ?? "",
+        q: url.searchParams.get("q") ?? "",
+        limit: url.searchParams.get("limit") ?? "200",
+        offset: url.searchParams.get("offset") ?? "0",
+      }));
+    }
+
+    if (url.pathname === "/api/logpost/v2/safety" && req.method === "GET") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      return this.json(res, 200, await this.queryLogPostSafety({
+        date: url.searchParams.get("date") ?? "",
+        kind: url.searchParams.get("kind") ?? "",
+        q: url.searchParams.get("q") ?? "",
+        limit: url.searchParams.get("limit") ?? "200",
+        offset: url.searchParams.get("offset") ?? "0",
+      }));
+    }
+
+    if (url.pathname === "/api/logpost/v2/replay" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const body = await this.readJsonBody(req);
+      await this.writeLogPostAuditRecord("replay-requested", {
+        requestedAt: new Date().toISOString(),
+        body: body ?? {},
+      });
+      return this.json(res, 200, {
+        ok: true,
+        auditOnly: true,
+        message: "Replay requests are audit-only in LogPost v2.",
+      });
+    }
+
+    if (url.pathname === "/api/logpost/v2/checkpoint/repair" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const body = await this.readJsonBody(req);
+      await this.writeLogPostAuditRecord("checkpoint-repair-requested", {
+        requestedAt: new Date().toISOString(),
+        body: body ?? {},
+      });
+      return this.json(res, 200, {
+        ok: true,
+        auditOnly: true,
+        message: "Checkpoint repair requests are audit-only in LogPost v2.",
+      });
     }
 
     if (url.pathname === "/api/tactical-map-replay/segments" && req.method === "GET") {
@@ -5284,14 +5369,18 @@ export class WebServer {
   async getLogPostState() {
     const workingDirectory = this.getLogPostWorkingDirectory();
     const outputDir = path.resolve(workingDirectory, "LogPost");
-    const statePath = path.resolve(outputDir, ".state", "tailer-state.json");
-    const tailerState = await this.readJsonFileSafe(statePath, {});
+    const legacyStatePath = path.resolve(outputDir, ".state", "tailer-state.json");
+    const v2StatePath = path.resolve(outputDir, "state", "source-state.json");
+    const legacyState = await this.readJsonFileSafe(legacyStatePath, {});
+    const sourceState = await this.readJsonFileSafe(v2StatePath, legacyState);
+    const tailerState = sourceState;
     const gapState = this.getLogPostGapState();
 
     return {
       workingDirectory,
       outputDir,
       tailerState,
+      sourceState,
       gapState,
     };
   }
@@ -5306,7 +5395,10 @@ export class WebServer {
 
   async queryLogPostRawArchive({ date, start, end, q, limit, offset }) {
     const normalizedDate = normalizeLogPostDate(date);
-    const filePath = path.resolve(this.getLogPostWorkingDirectory(), "LogPost", "Raw", normalizedDate, "all.jsonl");
+    const workingDir = path.resolve(this.getLogPostWorkingDirectory(), "LogPost");
+    const v2FilePath = path.resolve(workingDir, "raw", normalizedDate, "segment-000001.jsonl");
+    const legacyFilePath = path.resolve(workingDir, "Raw", normalizedDate, "all.jsonl");
+    const filePath = await this.resolveFirstExistingPath([v2FilePath, legacyFilePath]);
     const items = await this.readJsonlFile(filePath);
     const filtered = filterLogPostRows(items, {
       start,
@@ -5316,12 +5408,18 @@ export class WebServer {
       timeField: "readAt",
       messageFields: ["rawLine", "rawLineHash", "sourcePath"],
     });
-    return paginateLogPostRows(filtered, limit, offset, { date: normalizedDate, filePath });
+    return paginateLogPostRows(filtered, limit, offset, {
+      date: normalizedDate,
+      filePath,
+    });
   }
 
   async queryLogPostStructuredEvents({ date, event, start, end, q, limit, offset }) {
     const normalizedDate = normalizeLogPostDate(date);
-    const filePath = path.resolve(this.getLogPostWorkingDirectory(), "LogPost", normalizedDate, "All.jsonl");
+    const workingDir = path.resolve(this.getLogPostWorkingDirectory(), "LogPost");
+    const v2FilePath = path.resolve(workingDir, "events", normalizedDate, "all.jsonl");
+    const legacyFilePath = path.resolve(workingDir, normalizedDate, "All.jsonl");
+    const filePath = await this.resolveFirstExistingPath([v2FilePath, legacyFilePath]);
     const items = await this.readJsonlFile(filePath);
     const filtered = filterLogPostRows(items, {
       start,
@@ -5330,9 +5428,60 @@ export class WebServer {
       eventField: "Event",
       eventValue: event,
       timeField: "Time",
-      messageFields: ["Raw", "Event", "RawLineHash", "SourceSeq", "SourceOffset"],
+      messageFields: ["Raw", "Event", "EventId", "RawLineHash", "SourceSeq", "SourceOffset", "SourceMode"],
     });
-    return paginateLogPostRows(filtered, limit, offset, { date: normalizedDate, filePath });
+    return paginateLogPostRows(filtered, limit, offset, {
+      date: normalizedDate,
+      filePath,
+    });
+  }
+
+  async queryLogPostOutbox({ date, kind, q, limit, offset }) {
+    const normalizedDate = normalizeLogPostDate(date);
+    const dir = path.resolve(this.getLogPostWorkingDirectory(), "LogPost", "outbox", normalizedDate);
+    const items = await this.readJsonlDirectory(dir);
+    const filtered = filterLogPostRows(items, {
+      q,
+      eventField: "status",
+      eventValue: kind,
+      timeField: "time",
+      messageFields: ["eventName", "eventId", "sourceSeq", "sourceMode", "error"],
+    });
+    return paginateLogPostRows(filtered, limit, offset, {
+      date: normalizedDate,
+      filePath: dir,
+    });
+  }
+
+  async queryLogPostSafety({ date, kind, q, limit, offset }) {
+    const normalizedDate = normalizeLogPostDate(date);
+    const dir = path.resolve(this.getLogPostWorkingDirectory(), "LogPost", "audit", normalizedDate);
+    const items = await this.readJsonlDirectory(dir);
+    const filtered = filterLogPostRows(items, {
+      q,
+      eventField: "kind",
+      eventValue: kind,
+      timeField: "time",
+      messageFields: ["kind", "reason", "sourceMode", "message", "eventName", "eventId"],
+    });
+    return paginateLogPostRows(filtered, limit, offset, {
+      date: normalizedDate,
+      filePath: dir,
+    });
+  }
+
+  async writeLogPostAuditRecord(kind, payload = {}) {
+    const outputDir = path.resolve(this.getLogPostWorkingDirectory(), "LogPost");
+    const dir = path.resolve(outputDir, "audit", new Date().toISOString().slice(0, 10));
+    await fs.mkdir(dir, { recursive: true });
+    const filePath = path.resolve(dir, `${kind}.jsonl`);
+    const record = {
+      schema: "logpost.audit.v2",
+      kind: String(kind ?? "unknown"),
+      time: new Date().toISOString(),
+      ...payload,
+    };
+    await fs.appendFile(filePath, `${JSON.stringify(record)}\n`, "utf8");
   }
 
   async readJsonlFile(filePath) {
@@ -5354,6 +5503,34 @@ export class WebServer {
       if (error?.code === "ENOENT") return [];
       throw error;
     }
+  }
+
+  async readJsonlDirectory(dirPath) {
+    try {
+      const entries = await fs.readdir(dirPath, { withFileTypes: true });
+      const files = entries
+        .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".jsonl"))
+        .map((entry) => path.join(dirPath, entry.name))
+        .sort((left, right) => left.localeCompare(right));
+      const rows = [];
+      for (const filePath of files) {
+        rows.push(...await this.readJsonlFile(filePath));
+      }
+      return rows;
+    } catch (error) {
+      if (error?.code === "ENOENT") return [];
+      throw error;
+    }
+  }
+
+  async resolveFirstExistingPath(paths) {
+    for (const filePath of paths) {
+      try {
+        await fs.access(filePath);
+        return filePath;
+      } catch {}
+    }
+    return paths[0] ?? "";
   }
 
   async readJsonFileSafe(filePath, fallback) {

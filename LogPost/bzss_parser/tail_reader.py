@@ -31,6 +31,7 @@ class TailReader:
         self._last_missing_warn = 0.0
         self.file_id = ""
         self.last_rotate_reason = ""
+        self.current_mode = "live"
         self.state: Dict[str, Any] = self.state_store.load() if self.state_store else {}
 
     def open(self) -> bool:
@@ -48,6 +49,7 @@ class TailReader:
         current_size = stat.st_size
         self.file_id = self._make_file_id(stat)
         restored = False
+        self.current_mode = "live"
 
         saved_offset = int(self.state.get("offset", 0) or 0)
         saved_source = str(self.state.get("sourcePath", "") or "")
@@ -56,22 +58,18 @@ class TailReader:
         if saved_source == str(self.log_path) and saved_offset > 0:
             if current_size < saved_offset:
                 self.last_rotate_reason = "truncated_or_rotated"
+                self.current_mode = "recovery"
                 self.file.seek(0, os.SEEK_SET)
-            elif saved_file_id and saved_file_id == self.file_id:
-                self.file.seek(saved_offset, os.SEEK_SET)
-                restored = True
-            elif saved_file_id:
-                self.last_rotate_reason = "file_replaced"
-                self.file.seek(0, os.SEEK_SET)
-            elif self.from_end:
-                self.file.seek(0, os.SEEK_END)
             else:
+                if saved_file_id and saved_file_id != self.file_id:
+                    self.last_rotate_reason = "file_replaced"
                 self.file.seek(saved_offset, os.SEEK_SET)
                 restored = True
         elif self.from_end:
             self.file.seek(0, os.SEEK_END)
         else:
             self.file.seek(0, os.SEEK_SET)
+            restored = True
 
         self.position = self.file.tell()
         self.partial = b""
@@ -146,6 +144,7 @@ class TailReader:
                 "next_offset": blob_start + cursor,
                 "sourcePath": str(self.log_path),
                 "fileId": self.file_id,
+                "sourceMode": self.current_mode,
             })
 
         if cursor >= len(blob):
@@ -157,7 +156,17 @@ class TailReader:
 
         return records
 
-    def persist_state(self, seq: int, offset: Optional[int] = None) -> Dict[str, Any]:
+    def persist_state(
+        self,
+        seq: int,
+        offset: Optional[int] = None,
+        *,
+        last_raw_line_hash: str = "",
+        last_log_time: str = "",
+        file_size: Optional[int] = None,
+        file_mtime_ms: Optional[int] = None,
+        mode: Optional[str] = None,
+    ) -> Dict[str, Any]:
         if not self.state_store:
             return {}
 
@@ -167,6 +176,11 @@ class TailReader:
             file_id=self.file_id,
             offset=commit_offset,
             seq=seq,
+            mode=str(mode or self.current_mode or "live"),
+            file_size=file_size,
+            file_mtime_ms=file_mtime_ms,
+            last_raw_line_hash=last_raw_line_hash,
+            last_log_time=last_log_time,
         )
         return self.state
 

@@ -38,6 +38,8 @@ export function parseSquadCreateEvent(event) {
     return {
       serverId,
       matchId: matchId || null,
+      sourceMode: String(event.sourceMode ?? event.SourceMode ?? event.rawEvent?.SourceMode ?? "live"),
+      canTriggerActions: normalizeBoolean(event.canTriggerActions ?? event.CanTriggerActions ?? event.rawEvent?.CanTriggerActions, true),
       eventTime: parseRawLogTimestamp(rawLog) ?? String(
         event.eventTime
           ?? event.time
@@ -113,12 +115,14 @@ export function parseSquadCreateEvent(event) {
       ?? getParam(event, "teamId"),
   );
 
-  return {
-    serverId,
-    matchId: matchId || null,
-    eventTime,
-    squadId,
-    squadName,
+    return {
+      serverId,
+      matchId: matchId || null,
+      sourceMode: String(event.sourceMode ?? event.SourceMode ?? event.rawEvent?.SourceMode ?? "live"),
+      canTriggerActions: normalizeBoolean(event.canTriggerActions ?? event.CanTriggerActions ?? event.rawEvent?.CanTriggerActions, true),
+      eventTime,
+      squadId,
+      squadName,
     factionName,
     creatorName,
     creatorSteamId,
@@ -143,6 +147,14 @@ function toNumber(value) {
   if (value == null || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function normalizeBoolean(value, fallback = false) {
+  if (value === true || value === false) return value;
+  const text = String(value ?? "").trim().toLowerCase();
+  if (text === "true" || text === "1" || text === "yes") return true;
+  if (text === "false" || text === "0" || text === "no") return false;
+  return fallback;
 }
 
 function parseRawSquadCreateLog(rawLog) {
