@@ -20,9 +20,37 @@ function createEventBus() {
     },
     async emitModuleEvent(moduleId, eventName, event) {
       const matches = listeners.filter((listener) => listener.moduleId === moduleId && listener.eventName === eventName);
-      const results = matches.map((listener) => listener.handler(event));
+      const normalizedEvent = injectSyntheticPlayerIds(event);
+      const results = matches.map((listener) => listener.handler(normalizedEvent));
       await Promise.all(results.filter((result) => result && typeof result.then === "function"));
       return results;
+    },
+  };
+}
+
+function injectSyntheticPlayerIds(event) {
+  if (!event || typeof event !== "object" || !event.record || typeof event.record !== "object") {
+    return event;
+  }
+
+  return {
+    ...event,
+    record: {
+      ...event.record,
+      attackerPlayerID: event.record.attackerPlayerID
+        ?? event.record.attackerPlayerId
+        ?? event.record.attacker?.playerID
+        ?? event.record.attacker?.playerId
+        ?? event.record.attackerSteam64ID
+        ?? event.record.attackerSteamId
+        ?? "",
+      victimPlayerID: event.record.victimPlayerID
+        ?? event.record.victimPlayerId
+        ?? event.record.victim?.playerID
+        ?? event.record.victim?.playerId
+        ?? event.record.victimSteam64ID
+        ?? event.record.victimSteamId
+        ?? "",
     },
   };
 }
@@ -55,7 +83,10 @@ function createHarness({ moduleConfig = {}, adminWarn, squadFollowState, subscri
       adminWarn: adminWarn ?? {
         async sendAdminWarn(request) {
           calls.push(request);
-          return { success: true, skipped: false, commandText: `AdminWarn "${request.targetName}"` };
+          const commandText = request.targetPlayerId
+            ? `AdminWarnById ${request.targetPlayerId} "${request.message}"`
+            : `AdminWarn "${request.targetName}" "${request.message}"`;
+          return { success: true, skipped: false, commandText };
         },
       },
       squadFollowState: squadFollowState ?? {
@@ -181,12 +212,18 @@ async function testProcessingAndWarnings() {
   assert.equal(calls.length, 2);
   assert.equal(calls[0].sourceModule, "module.infantryCombatEnhancer");
   assert.equal(calls[0].targetName, "Bravo");
+  assert.equal(calls[0].targetPlayerId, "456");
+  assert.equal(calls[0].requireTargetPlayerId, true);
   assert.equal(calls[1].targetName, "Alpha");
+  assert.equal(calls[1].targetPlayerId, "123");
+  assert.equal(calls[1].requireTargetPlayerId, true);
 
   const events = module.api.getEvents({ limit: 10 });
   assert.equal(events.length, 1);
   assert.equal(events[0].victimWarning.success, true);
   assert.equal(events[0].attackerWarning.success, true);
+  assert.equal(events[0].victim.playerId, "456");
+  assert.equal(events[0].attacker.playerId, "123");
   assert.equal(events[0].eventFlags[0].key, "self_damage");
   assert.equal(events[0].eventFlagLabels[0], "自伤");
   assert.ok(events[0].tags.includes("weapon.small_arm"));

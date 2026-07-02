@@ -544,6 +544,7 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
 
     return sender.call(adminWarn, {
       targetName: target.name,
+      targetPlayerId: target.playerId,
       targetEosId: target.eosID,
       targetSteamId: target.steam64ID,
       message,
@@ -551,6 +552,7 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
       sourceModule: "module.infantryCombatEnhancer",
       relatedEventId: entry.combatEventId || entry.sourceEventId,
       system: true,
+      requireTargetPlayerId: true,
     });
   }
 
@@ -663,6 +665,13 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
         source.displayName,
         source.playerName,
         source.nickname,
+      ),
+      playerId: pickText(
+        record?.[`${prefix}PlayerID`],
+        record?.[`${prefix}PlayerId`],
+        source.playerID,
+        source.playerId,
+        source.id,
       ),
       steam64ID: pickText(
         record?.[`${prefix}Steam64ID`],

@@ -67,9 +67,19 @@ export function createAdminWarnModule({ core, config, logger }) {
       : sanitizeWarningMessage(req?.message);
 
     const targetName = normalizedKind === "warning" ? String(req?.targetName ?? "").trim() : "";
+    const targetPlayerId = normalizedKind === "warning"
+      ? sanitizeTargetPlayerId(optionalText(req?.targetPlayerId ?? req?.targetPlayerID ?? req?.playerId ?? req?.playerID))
+      : undefined;
+    const requireTargetPlayerId = normalizedKind === "warning"
+      ? Boolean(req?.requireTargetPlayerId)
+      : false;
     const targetEosId = normalizedKind === "warning" ? optionalText(req?.targetEosId) : undefined;
     const targetSteamId = normalizedKind === "warning" ? optionalText(req?.targetSteamId) : undefined;
-    const commandText = buildCommandText(normalizedKind, targetName, message);
+    const commandText = buildCommandText(normalizedKind, {
+      targetName,
+      targetPlayerId,
+      message,
+    });
 
     if (!enabled) {
       memoryStore.push({
@@ -79,6 +89,7 @@ export function createAdminWarnModule({ core, config, logger }) {
         sourceModule,
         reason,
         targetName,
+        targetPlayerId,
         targetEosId,
         targetSteamId,
         message,
@@ -95,21 +106,25 @@ export function createAdminWarnModule({ core, config, logger }) {
       };
     }
 
-    if (!message || (normalizedKind === "warning" && !targetName)) {
+    if (!message || (normalizedKind === "warning" && !targetPlayerId && (!targetName || requireTargetPlayerId))) {
+      const skipReason = normalizedKind === "warning" && !targetPlayerId && requireTargetPlayerId
+        ? "missing_target_player_id"
+        : "invalid_request";
       const record = memoryStore.push({
         id: makeRecordId("invalid"),
         kind: normalizedKind,
         createdAt: Date.now(),
         sourceModule,
-        reason: "invalid_request",
+        reason: skipReason,
         targetName,
+        targetPlayerId,
         targetEosId,
         targetSteamId,
         message,
         commandText,
         success: false,
         skipped: true,
-        skipReason: "invalid_request",
+        skipReason,
         relatedEventId,
       });
       return {
@@ -139,6 +154,7 @@ export function createAdminWarnModule({ core, config, logger }) {
           sourceModule,
           reason: `${reason}_failed`,
           targetName,
+          targetPlayerId,
           targetEosId,
           targetSteamId,
           message,
@@ -163,6 +179,7 @@ export function createAdminWarnModule({ core, config, logger }) {
         sourceModule,
         reason,
         targetName,
+        targetPlayerId,
         targetEosId,
         targetSteamId,
         message,
@@ -186,6 +203,7 @@ export function createAdminWarnModule({ core, config, logger }) {
         sourceModule,
         reason: `${reason}_exception`,
         targetName,
+        targetPlayerId,
         targetEosId,
         targetSteamId,
         message,
@@ -253,7 +271,8 @@ class AdminWarnMemoryStore {
     this.records.push({
       ...record,
       kind: normalizeKind(record?.kind),
-      targetName: String(record?.targetName ?? "").trim(),
+    targetName: String(record?.targetName ?? "").trim(),
+      targetPlayerId: optionalText(record?.targetPlayerId),
       targetEosId: optionalText(record?.targetEosId),
       targetSteamId: optionalText(record?.targetSteamId),
       commandText: optionalText(record?.commandText),
@@ -274,6 +293,7 @@ class AdminWarnMemoryStore {
     const limit = clampLimit(filter.limit, 200, this.maxRecords);
     const kind = normalizeKind(filter.kind);
     const targetName = normalizeSearch(filter.targetName);
+    const targetPlayerId = normalizeSearch(filter.targetPlayerId);
     const targetEosId = normalizeSearch(filter.targetEosId);
     const sourceModule = normalizeSearch(filter.sourceModule);
     const reason = normalizeSearch(filter.reason);
@@ -286,6 +306,7 @@ class AdminWarnMemoryStore {
       .filter((item) => {
         if (kind && normalizeKind(item.kind) !== kind) return false;
         if (targetName && !normalizeSearch(item.targetName).includes(targetName)) return false;
+        if (targetPlayerId && normalizeSearch(item.targetPlayerId) !== targetPlayerId) return false;
         if (targetEosId && normalizeSearch(item.targetEosId) !== targetEosId) return false;
         if (sourceModule && normalizeSearch(item.sourceModule) !== sourceModule) return false;
         if (reason && normalizeSearch(item.reason) !== reason) return false;
@@ -314,9 +335,13 @@ class AdminWarnMemoryStore {
   }
 }
 
-function buildCommandText(kind, targetName, message) {
+function buildCommandText(kind, { targetName = "", targetPlayerId = "", message = "" } = {}) {
   if (kind === "broadcast") {
     return `AdminBroadcast ${escapeCommandText(message)}`;
+  }
+  const id = sanitizeTargetPlayerId(targetPlayerId);
+  if (id) {
+    return `AdminWarnById ${id} "${escapeCommandText(message)}"`;
   }
   return `AdminWarn "${escapeCommandText(targetName)}" "${escapeCommandText(message)}"`;
 }
@@ -352,6 +377,12 @@ function normalizeKind(value) {
 function optionalText(value) {
   const text = String(value ?? "").trim();
   return text || undefined;
+}
+
+function sanitizeTargetPlayerId(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  return /^\d+$/.test(text) ? text : "";
 }
 
 function normalizeSearch(value) {

@@ -67,6 +67,86 @@ async function testWarnSuccessAndSanitize() {
   await module.stop();
 }
 
+async function testWarnByPlayerIdPreferred() {
+  const calls = [];
+  const { module } = createHarness({
+    async dispatchCommand(request) {
+      calls.push(request);
+      return { success: true, message: "ok", rconExecuted: true, rconResponse: "" };
+    },
+  });
+
+  await module.start();
+  const result = await module.api.warnPlayer({
+    targetName: "don",
+    targetPlayerId: "123",
+    message: "test message",
+    sourceModule: "module.infantryCombatEnhancer",
+    reason: "infantry_damage_victim",
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].command, `AdminWarnById 123 "test message"`);
+
+  const records = module.api.getRecent({ targetPlayerId: "123" });
+  assert.equal(records.length, 1);
+  assert.equal(records[0].targetName, "don");
+  assert.equal(records[0].targetPlayerId, "123");
+
+  await module.stop();
+}
+
+async function testWarnByNameFallbackForLegacyCallers() {
+  const calls = [];
+  const { module } = createHarness({
+    async dispatchCommand(request) {
+      calls.push(request);
+      return { success: true, message: "ok", rconExecuted: true, rconResponse: "" };
+    },
+  });
+
+  await module.start();
+
+  await module.api.warnPlayer({
+    targetName: "LegacyPlayer",
+    message: "legacy warn",
+    sourceModule: "legacy.plugin",
+    reason: "legacy_warn",
+  });
+
+  assert.equal(calls[0].command, `AdminWarn "LegacyPlayer" "legacy warn"`);
+
+  await module.stop();
+}
+
+async function testRequirePlayerIdSkipsNameFallback() {
+  const calls = [];
+  const { module } = createHarness({
+    async dispatchCommand(request) {
+      calls.push(request);
+      return { success: true, message: "ok", rconExecuted: true, rconResponse: "" };
+    },
+  });
+
+  await module.start();
+
+  const result = await module.api.warnPlayer({
+    targetName: "don",
+    message: "should not send by name",
+    sourceModule: "module.infantryCombatEnhancer",
+    reason: "infantry_damage_victim",
+    requireTargetPlayerId: true,
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.skipped, true);
+  assert.equal(result.skipReason, "missing_target_player_id");
+  assert.equal(calls.length, 0);
+
+  await module.stop();
+}
+
 async function testBroadcastSuccessAndKindFilter() {
   const calls = [];
   const { module } = createHarness({
@@ -150,6 +230,9 @@ async function testWarnFailureIsRecorded() {
 }
 
 await testWarnSuccessAndSanitize();
+await testWarnByPlayerIdPreferred();
+await testWarnByNameFallbackForLegacyCallers();
+await testRequirePlayerIdSkipsNameFallback();
 await testBroadcastSuccessAndKindFilter();
 await testWarnBackToBackStillSends();
 await testWarnFailureIsRecorded();

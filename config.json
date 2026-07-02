@@ -944,29 +944,6 @@
               "message": "步战鼠鼠是一个对步战，萌新玩家友好的服务器社区。欢迎加入我们的社区群聊。长按Tab键，下方就有QQ群聊号码"
             }
           ]
-        },
-        {
-          "id": "rule-mr1xedop",
-          "name": "新规则组",
-          "enabled": true,
-          "priority": 40,
-          "cooldownMs": 0,
-          "mode": "all",
-          "initialDelayMs": 45000,
-          "intervalMs": 0,
-          "conditions": [
-            {
-              "type": "always",
-              "label": ""
-            }
-          ],
-          "steps": [
-            {
-              "id": "step-1",
-              "enabled": true,
-              "message": "为庆祝中国共产党成立105周年。\n7月1日18时30分后，加入步战鼠鼠群聊的都可以\n获取15天预留位！"
-            }
-          ]
         }
       ]
     }
