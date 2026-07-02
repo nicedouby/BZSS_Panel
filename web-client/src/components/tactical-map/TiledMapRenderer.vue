@@ -39,6 +39,7 @@
 <script setup lang="ts">
 import { computed, toRef, ref, watch } from "vue";
 import { useTileLoader, type TileInfo } from "../../composables/useTileLoader";
+import { useTacticalMapViewport } from "../../composables/tacticalMapViewport";
 
 const props = defineProps<{
   /** Base path to tiles directory, e.g. "/assets/map-tiles/Sumari_RAAS_v1" */
@@ -47,12 +48,6 @@ const props = defineProps<{
   maxZoom: number;
   /** Whether tiled rendering is enabled */
   tilesEnabled: boolean;
-  /** Current map zoom factor */
-  zoom: number;
-  /** Pan X offset in pixels */
-  panX: number;
-  /** Pan Y offset in pixels */
-  panY: number;
   /** Viewport width in pixels */
   viewportWidth: number;
   /** Viewport height in pixels */
@@ -61,12 +56,14 @@ const props = defineProps<{
   fallbackImage?: string;
 }>();
 
+const { zoom, panX, panY } = useTacticalMapViewport();
+
 const { visibleTiles, fallbackTiles, currentTileZoom } = useTileLoader({
   tileBasePath: toRef(props, "tileBasePath"),
   maxZoom: toRef(props, "maxZoom"),
-  zoom: toRef(props, "zoom"),
-  panX: toRef(props, "panX"),
-  panY: toRef(props, "panY"),
+  zoom,
+  panX,
+  panY,
   viewportWidth: toRef(props, "viewportWidth"),
   viewportHeight: toRef(props, "viewportHeight"),
   enabled: toRef(props, "tilesEnabled"),

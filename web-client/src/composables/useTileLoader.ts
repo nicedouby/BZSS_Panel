@@ -230,8 +230,20 @@ export function useTileLoader(options: UseTileLoaderOptions) {
   }
 
   function refreshTiles() {
-    visibleTiles.value = computeVisibleTiles();
-    fallbackTiles.value = computeFallbackTiles();
+    const nextVisible = computeVisibleTiles();
+    const nextFallback = computeFallbackTiles();
+
+    const currentSrcs = visibleTiles.value.map(t => t.src).join(",");
+    const nextSrcs = nextVisible.map(t => t.src).join(",");
+    if (currentSrcs !== nextSrcs) {
+      visibleTiles.value = nextVisible;
+    }
+
+    const currentFbSrcs = fallbackTiles.value.map(t => t.src).join(",");
+    const nextFbSrcs = nextFallback.map(t => t.src).join(",");
+    if (currentFbSrcs !== nextFbSrcs) {
+      fallbackTiles.value = nextFallback;
+    }
   }
 
   // Current tile zoom level (exposed for debug / display)

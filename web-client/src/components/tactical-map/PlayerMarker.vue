@@ -272,13 +272,11 @@ function isRoleIconImage(icon: string | undefined) {
   appearance: none;
   -webkit-appearance: none;
   -webkit-tap-highlight-color: transparent;
-  will-change: left, top, transform;
+  will-change: transform;
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow: none;
-  /* Smoothly transitions marker movement on coordinates update, ignoring scale transitions during zoom */
-  transition: left 0.35s cubic-bezier(0.16, 1, 0.3, 1), top 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .player-marker.no-pointer {

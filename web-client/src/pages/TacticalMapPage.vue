@@ -15,26 +15,23 @@
       <div class="viewport-bg-grid"></div>
 
       <!-- Centered Transform Container -->
-      <div
-        ref="mapRef"
-        class="map-transform-container"
-        :style="{
-          transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
-          cursor: measureMode ? 'crosshair' : isDragging ? 'grabbing' : 'grab'
-        }"
-        @mousemove="onMapMousemove"
-        @click="onMapClick"
-        @contextmenu.prevent="handleMapRightClick"
-      >
+        <div
+          ref="mapRef"
+          class="map-transform-container"
+          :class="{ 'is-dragging': isDragging }"
+          :style="{
+            cursor: measureMode ? 'crosshair' : isDragging ? 'grabbing' : 'grab'
+          }"
+          @mousemove="onMapMousemove"
+          @click="onMapClick"
+          @contextmenu.prevent="handleMapRightClick"
+        >
         <!-- Tiled Map Renderer (replaces single <img> for memory-efficient progressive loading) -->
         <div class="tiled-map-wrapper">
           <TiledMapRenderer
             :tile-base-path="activeMapConfig.tileBasePath"
             :max-zoom="activeMapConfig.maxZoomLevel"
             :tiles-enabled="tilesEnabled"
-            :zoom="zoom"
-            :pan-x="panX"
-            :pan-y="panY"
             :viewport-width="vpWidth"
             :viewport-height="vpHeight"
             :fallback-image="activeMapConfig.image"
@@ -192,7 +189,7 @@
         </div>
 
         <!-- Player Markers Layer -->
-        <div class="player-markers-layer" :style="{ pointerEvents: measureMode ? 'none' : 'auto' }">
+  <div class="player-markers-layer" :style="{ pointerEvents: measureMode || isDragging ? 'none' : 'auto' }">
           <PlayerMarker
             v-for="player in filteredPlayers"
             :key="getPlayerKey(player)"
@@ -764,6 +761,7 @@ import TacticalMapSidebar from "../components/tactical-map/TacticalMapSidebar.vu
 import MapContextMenu from "../components/tactical-map/MapContextMenu.vue";
 import PlayerInfoPanel from "../components/tactical-map/PlayerInfoPanel.vue";
 import PlayerActionMenu from "../components/tactical-map/PlayerActionMenu.vue";
+import { provideTacticalMapViewport } from "../composables/tacticalMapViewport";
 
 const props = defineProps<{
   snapshot: BzssCorePlayerInfoResponse | null;
@@ -903,6 +901,15 @@ const panX = ref(0);
 const panY = ref(0);
 const isDragging = ref(false);
 const dragStart = reactive({ x: 0, y: 0 });
+
+provideTacticalMapViewport({ zoom, panX, panY });
+
+function syncMapTransform() {
+  if (!mapRef.value) return;
+  mapRef.value.style.transform = `translate(${panX.value}px, ${panY.value}px) scale(${zoom.value})`;
+}
+
+watch([panX, panY, zoom], syncMapTransform, { immediate: true, flush: "post" });
 
 const showGrid = ref(true);
 const showCaptureZones = ref(true);
@@ -1205,7 +1212,6 @@ interface PlayerTarget {
   x: number;
   y: number;
   yaw: number | null;
-  smoothYaw: number | null;
   vx: number;
   vy: number;
   speedMs: number;
@@ -1214,11 +1220,6 @@ interface PlayerTarget {
 }
 
 const playerTargets = new Map<string, PlayerTarget>();
-const interpolatedPositions = ref<Record<string, { mapX: number, mapY: number, yaw: number | null }>>({});
-const mapSmoothingTick = ref(0);
-let mapSmoothingTimer: number | null = null;
-let mapAnimationFrameId: number | null = null;
-let lastMapAnimationFrameAt = 0;
 
 // Watch players prop to update the cache
 watch(
@@ -1248,7 +1249,7 @@ watch(
       cachedPlayers.value = nextCache;
     }
   },
-  { immediate: true, deep: true }
+  { immediate: true }
 );
 
 // Clear player cache if active map changes
@@ -1257,8 +1258,6 @@ watch(
   () => {
     cachedPlayers.value = {};
     playerTargets.clear();
-    interpolatedPositions.value = {};
-    lastMapAnimationFrameAt = 0;
     combatHotspot.value = null;
     tilesReady.value = false;
   }
@@ -1292,7 +1291,6 @@ watch(
       let vy = 0;
       let speedMs = 0;
       let speedSampleMs = 0;
-      let smoothYaw = nextYaw;
       if (lastTarget) {
         const dt = (now - lastTarget.lastSeen) / 1000;
         if (dt > 0.05) {
@@ -1311,33 +1309,18 @@ watch(
           vy = lastTarget.vy;
           speedMs = lastTarget.speedMs;
         }
-        smoothYaw = smoothAngleDegrees(
-          lastTarget.smoothYaw ?? lastTarget.yaw ?? nextYaw ?? 0,
-          nextYaw ?? 0,
-          clamp01(Math.max(0.88, Math.min(0.98, dt * 2.15))),
-        );
       }
 
       playerTargets.set(key, {
         x: nextX,
         y: nextY,
         yaw: nextYaw,
-        smoothYaw,
         vx,
         vy,
         speedMs,
         speedSampleMs,
         lastSeen: now
       });
-
-      if (!interpolatedPositions.value[key]) {
-        const bounds = activeMapConfig.value.bounds;
-        interpolatedPositions.value[key] = {
-          mapX: project(nextX, bounds.minX, bounds.maxX),
-          mapY: project(nextY, bounds.minY, bounds.maxY),
-          yaw: nextYaw,
-        };
-      }
     });
 
     // Cleanup states for disconnected/evicted players
@@ -1347,74 +1330,9 @@ watch(
         playerTargets.delete(key);
       }
     }
-
-    if (!newList.length) {
-      interpolatedPositions.value = {};
-    }
   },
-  { immediate: true, deep: true }
+  { immediate: true }
 );
-
-function advanceMapInterpolation(now: number) {
-  const playersList = positionedPlayers.value;
-  if (!playersList.length) {
-    if (Object.keys(interpolatedPositions.value).length) {
-      interpolatedPositions.value = {};
-    }
-    lastMapAnimationFrameAt = now;
-    return;
-  }
-
-  const bounds = activeMapConfig.value.bounds;
-  const prevPositions = interpolatedPositions.value;
-  const nextPositions: Record<string, { mapX: number; mapY: number; yaw: number | null }> = {};
-  const elapsedSec = lastMapAnimationFrameAt > 0
-    ? Math.min(0.05, Math.max(0.008, (now - lastMapAnimationFrameAt) / 1000))
-    : 0.016;
-  const positionFollow = 1 - Math.exp(-elapsedSec / 0.11);
-  const yawFollow = 1 - Math.exp(-elapsedSec / 0.08);
-  const positionPredictionWindow = 0.7;
-
-  for (const player of playersList) {
-    const key = getPlayerKey(player);
-    if (!key) continue;
-    const pos = getPlayerPosition(player);
-    if (!pos) continue;
-
-    const target = playerTargets.get(key);
-    const current = prevPositions[key];
-    const targetX = target
-      ? target.x + target.vx * Math.min(positionPredictionWindow, Math.max(0, (now - target.lastSeen) / 1000))
-      : (pos.x ?? 0);
-    const targetY = target
-      ? target.y + target.vy * Math.min(positionPredictionWindow, Math.max(0, (now - target.lastSeen) / 1000))
-      : (pos.y ?? 0);
-    const desiredMapX = project(targetX, bounds.minX, bounds.maxX);
-    const desiredMapY = project(targetY, bounds.minY, bounds.maxY);
-    const desiredYaw = target?.smoothYaw ?? getPlayerYaw(player);
-
-    if (!current) {
-      nextPositions[key] = {
-        mapX: desiredMapX,
-        mapY: desiredMapY,
-        yaw: desiredYaw,
-      };
-      continue;
-    }
-
-    nextPositions[key] = {
-      mapX: lerp(current.mapX, desiredMapX, positionFollow),
-      mapY: lerp(current.mapY, desiredMapY, positionFollow),
-      yaw:
-        current.yaw === null || desiredYaw === null
-          ? desiredYaw
-          : smoothAngleDegrees(current.yaw, desiredYaw, yawFollow),
-    };
-  }
-
-  interpolatedPositions.value = nextPositions;
-  lastMapAnimationFrameAt = now;
-}
 
 function toggleMeasureMode() {
   measureMode.value = !measureMode.value;
@@ -1770,8 +1688,6 @@ const markers = computed<MapMarker[]>(() => {
 
   const bounds = activeMapConfig.value.bounds;
   return positioned.map((player) => {
-    const key = getPlayerKey(player);
-    const interp = interpolatedPositions.value[key];
     const pos = getPlayerPosition(player) as BzssCoreTrackedVector;
     const resolvedTeamId = resolvePlayerTeamId(player);
     
@@ -1780,9 +1696,9 @@ const markers = computed<MapMarker[]>(() => {
 
     return {
       ...player,
-      mapX: interp ? interp.mapX : project(pos.x ?? 0, bounds.minX, bounds.maxX),
-      mapY: interp ? interp.mapY : project(pos.y ?? 0, bounds.minY, bounds.maxY),
-      yaw: interp && interp.yaw !== null ? interp.yaw : getPlayerYaw(player),
+      mapX: project(pos.x ?? 0, bounds.minX, bounds.maxX),
+      mapY: project(pos.y ?? 0, bounds.minY, bounds.maxY),
+      yaw: getPlayerYaw(player),
       teamId: resolvedTeamId,
       roleInfo: resolveMapRoleInfo(player),
       rconDetail,
@@ -2015,6 +1931,7 @@ const bzssCoreAliveCount = computed(() => {
 const hoverCoords = ref<{ x: number; y: number; gameX: number; gameY: number } | null>(null);
 
 function handleMouseMove(event: MouseEvent) {
+  if (isDragging.value) return;
   if (!mapRef.value) return;
   const rect = mapRef.value.getBoundingClientRect();
   const x = event.clientX - rect.left;
@@ -2046,6 +1963,25 @@ function handleTilesReady() {
 // Drag & Pan & Zoom Event Handlers
 let dragMoved = false;
 const dragStartCoords = { x: 0, y: 0 };
+let dragFrameId: number | null = null;
+let pendingDragPanX = 0;
+let pendingDragPanY = 0;
+
+function applyMapPan(nextX: number, nextY: number) {
+  panX.value = nextX;
+  panY.value = nextY;
+}
+
+function scheduleMapPanUpdate(nextX: number, nextY: number) {
+  pendingDragPanX = nextX;
+  pendingDragPanY = nextY;
+
+  if (dragFrameId != null) return;
+  dragFrameId = window.requestAnimationFrame(() => {
+    dragFrameId = null;
+    applyMapPan(pendingDragPanX, pendingDragPanY);
+  });
+}
 
 function startDrag(e: MouseEvent) {
   const target = e.target as HTMLElement;
@@ -2065,7 +2001,11 @@ function startDrag(e: MouseEvent) {
   dragStart.y = e.clientY - panY.value;
   dragStartCoords.x = e.clientX;
   dragStartCoords.y = e.clientY;
+  pendingDragPanX = panX.value;
+  pendingDragPanY = panY.value;
   dragMoved = false;
+  hoveredPlayer.value = null;
+  hoverCoords.value = null;
 }
 
 function onDrag(e: MouseEvent) {
@@ -2075,12 +2015,17 @@ function onDrag(e: MouseEvent) {
   if (dx > 4 || dy > 4) {
     dragMoved = true;
   }
-  panX.value = e.clientX - dragStart.x;
-  panY.value = e.clientY - dragStart.y;
+  scheduleMapPanUpdate(e.clientX - dragStart.x, e.clientY - dragStart.y);
 }
 
+// Re-sync final dragging state (handles cleanup if dragging ends outside viewport)
 function stopDrag() {
   isDragging.value = false;
+  if (dragFrameId != null) {
+    window.cancelAnimationFrame(dragFrameId);
+    dragFrameId = null;
+  }
+  applyMapPan(pendingDragPanX, pendingDragPanY);
 }
 
 function onWheel(e: WheelEvent) {
@@ -2492,19 +2437,6 @@ function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
 }
 
-function normalizeAngleDegrees(value: number) {
-  if (!Number.isFinite(value)) return 0;
-  let angle = value % 360;
-  if (angle < -180) angle += 360;
-  if (angle > 180) angle -= 360;
-  return angle;
-}
-
-function smoothAngleDegrees(from: number, to: number, alpha: number) {
-  const delta = normalizeAngleDegrees(to - from);
-  return normalizeAngleDegrees(from + delta * alpha);
-}
-
 function getPerspectiveTone(teamId: number | null | undefined): PerspectiveTone {
   const normalized = normalizeTeam(teamId);
   if (normalized !== 1 && normalized !== 2) return "neutral";
@@ -2577,8 +2509,6 @@ function getPlayerSpeedText(player: TacticalLinkedPlayer) {
   if (!key) return "-";
   const target = playerTargets.get(key);
   if (!target) return "--";
-
-  void mapSmoothingTick.value;
 
   const ageMs = Math.max(0, Date.now() - target.lastSeen);
   const decayAfterMs = 350;
@@ -2678,14 +2608,6 @@ onMounted(() => {
   if (import.meta.env.DEV) {
     simulatedCombatTimer = window.setInterval(runCombatEventSimulation, 2500);
   }
-  mapSmoothingTimer = window.setInterval(() => {
-    mapSmoothingTick.value = (mapSmoothingTick.value + 1) % 1000000;
-  }, 200);
-  const animateMap = (now: number) => {
-    advanceMapInterpolation(now);
-    mapAnimationFrameId = window.requestAnimationFrame(animateMap);
-  };
-  mapAnimationFrameId = window.requestAnimationFrame(animateMap);
   window.addEventListener("resize", fitToViewport);
   window.addEventListener("keydown", handleWindowKeyDown);
 
@@ -2705,8 +2627,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (simulatedCombatTimer) window.clearInterval(simulatedCombatTimer);
-  if (mapSmoothingTimer) window.clearInterval(mapSmoothingTimer);
-  if (mapAnimationFrameId != null) window.cancelAnimationFrame(mapAnimationFrameId);
   window.removeEventListener("resize", fitToViewport);
   window.removeEventListener("keydown", handleWindowKeyDown);
   resizeObserver?.disconnect();
