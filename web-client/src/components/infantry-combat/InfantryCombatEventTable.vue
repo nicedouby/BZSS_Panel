@@ -23,6 +23,7 @@
     </div>
 
     <DataState
+      mode="fill"
       :loading="loading"
       :error="error"
       :empty="!loading && !error && !events.length"

@@ -61,7 +61,7 @@
             <input v-model="warningFilters.targetName" placeholder="筛选..." />
           </div>
           <div class="log-viewport">
-            <DataState :loading="warningQuery.isLoading.value && !warningRecords.length" :empty="!warningRecords.length">
+            <DataState :loading="warningQuery.isLoading.value && !warningRecords.length" :empty="!warningRecords.length" mode="fill">
               <div class="log-scroll">
                 <div v-for="item in warningRecords" :key="item.id" class="log-line" :data-status="item.success ? (item.skipped ? 'skipped' : 'success') : 'error'">
                   <div class="line-status"></div>
@@ -125,7 +125,7 @@
             <input v-model="broadcastFilters.sourceModule" placeholder="筛选..." />
           </div>
           <div class="log-viewport">
-            <DataState :loading="broadcastQuery.isLoading.value && !broadcastRecords.length" :empty="!broadcastRecords.length">
+            <DataState :loading="broadcastQuery.isLoading.value && !broadcastRecords.length" :empty="!broadcastRecords.length" mode="fill">
               <div class="log-scroll">
                 <div v-for="item in broadcastRecords" :key="item.id" class="log-line" :data-status="item.success ? (item.skipped ? 'skipped' : 'success') : 'error'">
                   <div class="line-status"></div>
@@ -145,7 +145,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { apiGet } from "../app/apiClient";
 import { broadcastMessage, warnPlayer } from "../app/squadManagementApi";
@@ -199,16 +199,42 @@ const REFRESH_INTERVAL_MS = 8000;
 const timeCache = new Map<number, string>();
 const { canAutoRefresh } = useAutoRefreshGate();
 
+const debouncedWarningTargetName = ref(warningFilters.targetName);
+let warningTimer: number | null = null;
+watch(
+  () => warningFilters.targetName,
+  (value) => {
+    if (warningTimer != null) window.clearTimeout(warningTimer);
+    warningTimer = window.setTimeout(() => {
+      debouncedWarningTargetName.value = value;
+    }, 300);
+  }
+);
+
+const debouncedBroadcastSourceModule = ref(broadcastFilters.sourceModule);
+let broadcastTimer: number | null = null;
+watch(
+  () => broadcastFilters.sourceModule,
+  (value) => {
+    if (broadcastTimer != null) window.clearTimeout(broadcastTimer);
+    broadcastTimer = window.setTimeout(() => {
+      debouncedBroadcastSourceModule.value = value;
+    }, 300);
+  }
+);
+
 const warningQuery = useQuery({
-  queryKey: computed(() => ["admin-warns", "warning", warningFilters.targetName, warningFilters.sourceModule, warningFilters.success]),
-  queryFn: () => fetchRecords("warning", warningFilters),
+  queryKey: computed(() => ["admin-warns", "warning", debouncedWarningTargetName.value, warningFilters.sourceModule, warningFilters.success]),
+  queryFn: () => fetchRecords("warning", { ...warningFilters, targetName: debouncedWarningTargetName.value }),
   refetchInterval: computed(() => (canAutoRefresh.value ? REFRESH_INTERVAL_MS : false)),
+  placeholderData: (previousData) => previousData,
 });
 
 const broadcastQuery = useQuery({
-  queryKey: computed(() => ["admin-warns", "broadcast", broadcastFilters.sourceModule, broadcastFilters.success]),
-  queryFn: () => fetchRecords("broadcast", broadcastFilters),
+  queryKey: computed(() => ["admin-warns", "broadcast", debouncedBroadcastSourceModule.value, broadcastFilters.success]),
+  queryFn: () => fetchRecords("broadcast", { ...broadcastFilters, sourceModule: debouncedBroadcastSourceModule.value }),
   refetchInterval: computed(() => (canAutoRefresh.value ? REFRESH_INTERVAL_MS : false)),
+  placeholderData: (previousData) => previousData,
 });
 
 async function fetchRecords(kind: string, filters: any) {
@@ -374,20 +400,20 @@ function formatTimeOnly(v: any) {
 .log-scroll::-webkit-scrollbar { width: 3px; }
 .log-scroll::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
 
-.log-line { display: flex; border-bottom: 1px solid rgba(255, 255, 255, 0.02); align-items: stretch; min-height: 34px; transition: background 0.2s; }
+.log-line { display: flex; border-bottom: 1px solid rgba(255, 255, 255, 0.02); align-items: stretch; min-height: 44px; transition: background 0.2s; }
 .log-line:hover { background: rgba(255, 255, 255, 0.02); }
 .line-status { width: 2px; }
 .log-line[data-status="success"] .line-status { background: #10b981; box-shadow: 0 0 5px #10b981; }
 .log-line[data-status="error"] .line-status { background: #ef4444; box-shadow: 0 0 5px #ef4444; }
 .log-line[data-status="skipped"] .line-status { background: #f59e0b; box-shadow: 0 0 5px #f59e0b; }
 
-.line-time { width: 44px; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #475569; display: flex; align-items: center; justify-content: center; border-right: 1px solid rgba(255, 255, 255, 0.02); }
+.line-time { width: 54px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #475569; display: flex; align-items: center; justify-content: center; border-right: 1px solid rgba(255, 255, 255, 0.02); }
 .line-body { flex: 1; padding: 4px 10px; display: flex; flex-direction: column; justify-content: center; gap: 1px; }
-.line-id { font-size: 9px; line-height: 1; margin-bottom: 2px; }
+.line-id { font-size: 12px; line-height: 1; margin-bottom: 2px; }
 .line-id strong { color: #94a3b8; font-weight: 800; }
 .line-id .src { color: #38bdf8; font-weight: 900; }
 .line-id span { color: #334155; margin-left: 6px; font-weight: 800; }
-.line-msg { font-size: 11px; color: #cbd5e1; white-space: pre-wrap; line-height: 1.4; }
+.line-msg { font-size: 14px; color: #cbd5e1; white-space: pre-wrap; line-height: 1.4; }
 
 @media (max-width: 1000px) {
   .dashboard-grid { grid-template-columns: 1fr; overflow-y: auto; }

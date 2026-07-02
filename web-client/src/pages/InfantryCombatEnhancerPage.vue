@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <section class="bz-page infantry-combat-page">
         <h1 class="sr-only">{{ t('routeTitle.infantryCombatEnhancer') }}</h1>
 
@@ -14,7 +14,7 @@
 
         <InfantryCombatToolbar
           :filters="filters"
-          :loading="isEventsFetching || isConfigLoading"
+          :loading="isEventsLoading || isConfigLoading"
           @update:filters="updateFilters"
         />
       </div>

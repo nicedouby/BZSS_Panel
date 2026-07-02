@@ -11,7 +11,7 @@
     "enabled": true,
     "host": "127.0.0.1",
     "port": 12345,
-    "max_payload_bytes": 8192
+    "max_payload_bytes": 2048
   },
   "unknown": {
     "write_unknown": false

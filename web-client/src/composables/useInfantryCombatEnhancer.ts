@@ -57,6 +57,19 @@ export function useInfantryCombatEnhancer() {
     },
   });
 
+  const debouncedQ = ref(filters.q);
+  let qTimer: number | null = null;
+  watch(
+    () => filters.q,
+    (value) => {
+      if (qTimer != null) window.clearTimeout(qTimer);
+      qTimer = window.setTimeout(() => {
+        debouncedQ.value = value;
+      }, 300);
+    },
+    { immediate: true },
+  );
+
   const eventsQuery = useQuery({
     queryKey: computed(() => [
       "infantry-combat-enhancer",
@@ -64,7 +77,7 @@ export function useInfantryCombatEnhancer() {
       filters.warning,
       filters.relation,
       filters.weapon,
-      filters.q,
+      debouncedQ.value,
       filters.limit,
       filters.offset,
       filters.autoRefresh,
@@ -72,7 +85,7 @@ export function useInfantryCombatEnhancer() {
     queryFn: async () => apiGet<{
       events: Array<InfantryCombatEventRecord>;
       overview: InfantryCombatOverview | null;
-    }>(buildEventsEndpoint(filters)),
+    }>(buildEventsEndpoint({ ...filters, q: debouncedQ.value })),
     placeholderData: (previousData) => previousData,
     refetchInterval: () => (filters.autoRefresh && canAutoRefresh.value ? 3000 : false),
     refetchIntervalInBackground: false,
