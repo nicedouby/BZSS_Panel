@@ -37,8 +37,25 @@
     "format": "raw"
   },
   "raw_log_output": {
-    "enabled": false,
-    "source": "Squad.log"
+    "enabled": true,
+    "source": "Squad.log",
+    "mode": "sampled",
+    "max_per_second": 20,
+    "only_preserved": false,
+    "drop_blacklisted": true,
+    "contains": [
+      "LogWorld: SeamlessTravel to:",
+      "LogSquad: PostLogin:",
+      "LogNet: UNetConnection::Close:",
+      "LogSquadTrace:",
+      "PlayerBaseInfo{",
+      "PRI{{",
+      "PlayerScoreboard{",
+      "CPZ:",
+      "FOBI:",
+      "MainZone:{",
+      "ApplyExplosiveDamage():"
+    ]
   },
   "blacklist_contains": [
     "GetDefaultPawnClassForController_Implementation()",

@@ -1,4 +1,5 @@
 import {
+  getDefaultTacticalMapKey as getDefaultTacticalMapKeyShared,
   resolveTacticalMapKey as resolveTacticalMapKeyShared,
   TACTICAL_MAP_CONFIGS as TACTICAL_MAP_CONFIGS_SHARED,
   TACTICAL_MAP_LIST as TACTICAL_MAP_LIST_SHARED,
@@ -26,4 +27,8 @@ export const TACTICAL_MAP_LIST = TACTICAL_MAP_LIST_SHARED as TacticalMapConfig[]
 
 export function resolveTacticalMapKey(mapName: string | null | undefined): string | null {
   return resolveTacticalMapKeyShared(mapName);
+}
+
+export function getDefaultTacticalMapKey(): string | null {
+  return getDefaultTacticalMapKeyShared();
 }

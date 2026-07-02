@@ -637,6 +637,35 @@ function normalizeCoreEvent(event = {}) {
     return makeEventEntry("player_joined", `玩家加入：${name}`, event, payload, "info");
   }
 
+  if (eventName === "On_PlayerConnected" || eventName === "PLAYER_CONNECTED") {
+    const payload = cloneJsonSafe(event.payload ?? {});
+    const name = String(payload?.name ?? payload?.playerName ?? getEventParam(event, "PlayerName") ?? "Unknown");
+    const controllerId = String(payload?.controllerId ?? payload?.playerControllerId ?? getEventParam(event, "ControllerID") ?? getEventParam(event, "PlayerControllerID") ?? "");
+    const message = controllerId ? `玩家连接：${name} (${controllerId})` : `玩家连接：${name}`;
+    return makeEventEntry("player_connected", message, event, payload, "info");
+  }
+
+  if (eventName === "PLAYER_POST_LOGIN") {
+    const payload = cloneJsonSafe(event.payload ?? {});
+    const name = String(payload?.name ?? payload?.playerName ?? getEventParam(event, "PlayerName") ?? "Unknown");
+    const ip = String(payload?.ip ?? getEventParam(event, "PlayerIP") ?? getEventParam(event, "IP") ?? "");
+    const controllerId = String(payload?.playerControllerId ?? payload?.controllerId ?? getEventParam(event, "PlayerControllerID") ?? getEventParam(event, "ControllerID") ?? "");
+    const messageParts = [name];
+    if (ip) messageParts.push(ip);
+    if (controllerId) messageParts.push(controllerId);
+    return makeEventEntry("player_post_login", `玩家登录：${messageParts.join(" / ")}`, event, payload, "info");
+  }
+
+  if (eventName === "On_PlayerDisconnected" || eventName === "PLAYER_DISCONNECTED") {
+    const payload = cloneJsonSafe(event.payload ?? {});
+    const name = String(payload?.name ?? payload?.playerName ?? getEventParam(event, "PlayerName") ?? "Unknown");
+    const ip = String(payload?.ip ?? getEventParam(event, "PlayerIP") ?? getEventParam(event, "IP") ?? "");
+    const remoteAddr = String(payload?.remoteAddr ?? getEventParam(event, "RemoteAddr") ?? "");
+    const location = ip || remoteAddr;
+    const message = location ? `玩家离开：${name} (${location})` : `玩家离开：${name}`;
+    return makeEventEntry("player_disconnected", message, event, payload, "info");
+  }
+
   if (eventName === "On_PlayerLeft" || eventName === "PLAYER_LEFT") {
     const payload = cloneJsonSafe(event.payload ?? {});
     const name = String(payload?.name ?? payload?.playerName ?? getEventParam(event, "PlayerName") ?? "Unknown");

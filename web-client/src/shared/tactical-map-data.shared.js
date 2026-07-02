@@ -106,6 +106,10 @@ export const TACTICAL_MAP_LIST = Object.values(TACTICAL_MAP_CONFIGS).sort((a, b)
   a.name.localeCompare(b.name, "en"),
 );
 
+export function getDefaultTacticalMapKey() {
+  return TACTICAL_MAP_LIST[0]?.key ?? null;
+}
+
 export function resolveTacticalMapKey(mapName) {
   const normalizedName = normalizeMapToken(String(mapName ?? ""));
   if (!normalizedName) return null;

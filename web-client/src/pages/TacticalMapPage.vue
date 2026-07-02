@@ -750,6 +750,7 @@ import { resolveRoleIcon, type RoleIconInfo } from "../utils/role-icons";
 import { resolveVehicleIcon } from "../utils/vehicle-icons";
 import type { PlayerDetailViewModel } from "../types/squad-admin.types";
 import {
+  getDefaultTacticalMapKey,
   TACTICAL_MAP_CONFIGS,
   TACTICAL_MAP_LIST,
   resolveTacticalMapKey,
@@ -863,19 +864,18 @@ const players = computed(() => props.players);
 const captureZones = computed(() => props.captureZones ?? snapshot.value?.captureZones ?? []);
 const fobs = computed(() => props.fobs ?? snapshot.value?.fobs ?? []);
 
-const mapName = "Sumari";
-const serverMapName = computed(() => serverStore.snapshot?.mapName || mapName);
+const serverMapName = computed(() => serverStore.snapshot?.mapName || "");
 
 const selectedMapKey = ref("auto");
-const detectedMapKey = computed(() => resolveTacticalMapKey(serverMapName.value) ?? "Sumari_RAAS_v1");
-const detectedMapName = computed(() => TACTICAL_MAP_CONFIGS[detectedMapKey.value]?.name ?? "Sumari");
+const detectedMapKey = computed(() => resolveTacticalMapKey(serverMapName.value) ?? getDefaultTacticalMapKey() ?? "");
+const detectedMapName = computed(() => TACTICAL_MAP_CONFIGS[detectedMapKey.value]?.name ?? "Unknown");
 
 const activeMapConfig = computed(() => {
   let key = selectedMapKey.value;
   if (key === "auto") {
     key = detectedMapKey.value;
   }
-  return TACTICAL_MAP_CONFIGS[key] || TACTICAL_MAP_CONFIGS.Sumari_RAAS_v1;
+  return TACTICAL_MAP_CONFIGS[key] || TACTICAL_MAP_LIST[0] || null;
 });
 
 const mapOptions = computed<TacticalMapConfig[]>(() => TACTICAL_MAP_LIST);

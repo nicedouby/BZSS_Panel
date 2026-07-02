@@ -992,7 +992,17 @@ function extractBraceItems(text) {
 
 function extractRawLogLine(input) {
   if (typeof input === "string") return input;
-  return String(input?.rawLog ?? input?.rawEvent?.Raw ?? input?.sourceRaw ?? input?.raw ?? input?.message ?? "").trim();
+  return String(
+    input?.rawLog
+    ?? input?.rawEvent?.Raw
+    ?? input?.payload?.rawLog
+    ?? input?.payload?.raw
+    ?? input?.payload?.line
+    ?? input?.sourceRaw
+    ?? input?.raw
+    ?? input?.message
+    ?? "",
+  ).trim();
 }
 
 function hashText(text) {
