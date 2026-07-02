@@ -42,6 +42,13 @@ function testParseLogLine() {
   assert.equal(runtime.type, "playerRuntime");
   assert.equal(runtime.runtimePlayers.length, 0);
 
+  const priRuntime = parseBzssCoreLogLine("PIE: PRI{{0,994,715,3,90,{0,150.0,false,BP_M4A1_M150_Foregrip_C_2147459836,false,}}}");
+  assert.equal(priRuntime.type, "playerRuntime");
+  assert.equal(priRuntime.runtimePlayers.length, 1);
+  assert.equal(priRuntime.runtimePlayers[0].playerIndex, 0);
+  assert.deepEqual(priRuntime.runtimePlayers[0].position, { x: 99400, y: 71500, z: 300 });
+  assert.equal(priRuntime.runtimePlayers[0].yaw, 90);
+
   const scoreboard = parseBzssCoreLogLine("PIE: PlayerScoreboard{0,1,-1,0,0,0,0,0,0,0,0,0,0,0,1,0-1,-1,19}}");
   assert.equal(scoreboard.type, "playerScoreboard");
   assert.equal(scoreboard.scoreboardPlayers.length, 1);
@@ -174,6 +181,13 @@ function testMonitorState() {
   assert.equal(p7.playerScoreboard.stats.teamworkScore, 10);
 
   // 测试单行内含完整块的日志解析 (playerFullBlocks)
+  const priMultiLog = "PIE: PRI{{21,111,222,3,180,{0,100.0,false,BP_M4A1_C,false,}}}PRI{{22,333,444,5,270,{0,100.0,false,BP_M4A1_C,false,}}}";
+  assert.equal(module.api.ingestLogLine(priMultiLog).ok, true);
+  const priPlayers = module.api.getRuntimePlayers().filter((player) => player.playerIndex === 21 || player.playerIndex === 22);
+  assert.equal(priPlayers.length, 2);
+  assert.deepEqual(priPlayers.find((player) => player.playerIndex === 21)?.position, { x: 11100, y: 22200, z: 300 });
+  assert.deepEqual(priPlayers.find((player) => player.playerIndex === 22)?.position, { x: 33300, y: 44400, z: 500 });
+
   const fullBlockText = "PlayerBaseInfo{42,eos-42,Test Player,2,3,-1,-1}"
     + "SoldierInfo{BP_Soldier_US_Rifleman_C,88,0,0,0,0,0,0,BP_M4_C,30,120{X=1000 Y=2000 Z=0}{X=0 Y=90 Z=0}}"
     + "PlayerScoreboard{0,0,0,0,0,0,0,0,0,0,0,99}";

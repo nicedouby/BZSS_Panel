@@ -9,7 +9,7 @@
   >
     <div class="menu-header font-mono">
       <div class="header-title">PLAYER COMMANDS</div>
-      <div class="player-label">{{ player.playerName || 'Unknown Player' }}</div>
+      <div class="player-label">{{ displayPlayerName }}</div>
       <div v-if="linkConfidence" class="player-link-meta" :title="linkReason">关联 {{ linkConfidenceText }}</div>
     </div>
 
@@ -114,6 +114,15 @@ const menuStyle = computed(() => {
     left: `${offsetLeft.value}px`,
     top: `${offsetTop.value}px`,
   };
+});
+
+const displayPlayerName = computed(() => {
+  return String(
+    props.player?.playerName
+    || (props.player as any)?.identity?.name
+    || (props.player as any)?.name
+    || "Unknown Player",
+  ).trim() || "Unknown Player";
 });
 
 onMounted(() => {

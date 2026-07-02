@@ -12,7 +12,7 @@
       <div class="header-main">
         <div class="player-title-row">
           <img v-if="rconDetail?.steamAvatar" :src="rconDetail.steamAvatar" class="steam-avatar-mini" alt="avatar" />
-          <span class="player-name" :title="player.playerName">{{ player.playerName || 'Unknown Player' }}</span>
+          <span class="player-name" :title="displayPlayerName">{{ displayPlayerName }}</span>
           <span
             v-if="player.ping != null || (rconDetail && rconDetail.ping != null)"
             class="player-ping-badge"
@@ -303,6 +303,16 @@ const roleIconStyle = computed(() => {
     WebkitMaskSize: "contain",
     maskSize: "contain",
   };
+});
+
+const displayPlayerName = computed(() => {
+  return String(
+    props.player?.playerName
+    || props.rconDetail?.name
+    || (props.player as any)?.identity?.name
+    || (props.player as any)?.name
+    || "Unknown Player",
+  ).trim() || "Unknown Player";
 });
 
 const pingToneClass = computed(() => {

@@ -2144,9 +2144,12 @@ function focusVehicleOnMap(marker: { mapX: number; mapY: number }) {
 function showPlayerDetails(player: TacticalLinkedPlayer, event?: MouseEvent) {
   let detail: any;
   const rconDetail = getPlayerRconDetail(player);
+  const displayName = getPlayerLabel(player);
   if (rconDetail) {
     detail = {
       ...rconDetail,
+      name: String(rconDetail.name ?? displayName).trim() || displayName,
+      playerName: String(rconDetail.playerName ?? rconDetail.name ?? displayName).trim() || displayName,
       raw: rconDetail.raw ?? (player as any)?.raw?.rcon ?? rconDetail.raw,
     };
     detail.bzssCorePlayerInfo = player;
@@ -2154,7 +2157,8 @@ function showPlayerDetails(player: TacticalLinkedPlayer, event?: MouseEvent) {
   } else {
     detail = {
       playerId: null,
-      name: getPlayerLabel(player),
+      name: displayName,
+      playerName: displayName,
       teamId: normalizeTeam(player.teamId),
       squadId: normalizeSquad(player.squadId),
       isLeader: isSquadLeader(player),
@@ -2319,7 +2323,7 @@ function getPlayerKey(player: BzssCoreTrackedPlayerInfo | null | undefined): str
   }
   const playerGuid = String(player.playerGuid ?? "").trim();
   if (playerGuid) return `guid:${playerGuid}`;
-  const playerName = String(player.playerName ?? "").trim();
+  const playerName = String((player as any)?.identity?.name ?? player.playerName ?? (player as any)?.name ?? "").trim();
   if (playerName) return `name:${playerName}`;
   return "";
 }

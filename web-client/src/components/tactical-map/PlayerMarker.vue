@@ -27,7 +27,7 @@
       v-if="yaw !== null && !isDead"
       class="marker-direction"
       :style="{
-        transform: `translate(-50%, -50%) rotate(${yaw + 90}deg)`
+        transform: `translate(-50%, -50%) rotate(${yaw - 90}deg)`
       }"
     >
       <div class="direction-arrow"></div>

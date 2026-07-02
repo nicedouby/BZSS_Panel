@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 
 const MARKER = "{BZSS-Marked}";
 const START_NEEDLE = Buffer.from("PlayerBaseInfo{", "utf16le");
+const PRI_START_NEEDLE = Buffer.from("PRI{{", "utf16le");
 const MARKER_NEEDLE = Buffer.from(MARKER, "utf16le");
 const SCOREBOARD_FIELDS = [
   ["dataLives", "Data lives"],
@@ -443,14 +444,14 @@ function createInitialState() {
 
 export function extractBzssCoreTrackedText(buffer) {
   const data = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer ?? []);
-  const startIndex = data.indexOf(START_NEEDLE);
+  const startIndex = findFirstBufferIndex(data, [START_NEEDLE, PRI_START_NEEDLE]);
   if (startIndex < 0) {
     const fallbackText = extractRelevantUtf16Runs(data);
     if (fallbackText.text) return fallbackText;
     return {
       text: "",
       markerSeen: false,
-      error: "PlayerBaseInfo block was not found.",
+      error: "PlayerBaseInfo or PRI block was not found.",
     };
   }
 
@@ -529,6 +530,7 @@ export function parseBzssCorePlayerBlocks(text) {
 
 export function parseBzssCoreLogLine(line) {
   const text = String(line ?? "");
+  if (text.includes("PRI{{")) return parsePriRuntimePlayerLine(text);
   if (text.includes("PlayerBaseInfo{") && text.includes("SoldierInfo{") && text.includes("PlayerScoreboard{")) {
     const players = parseBzssCorePlayerBlocks(text);
     return {
@@ -584,13 +586,16 @@ function parseRuntimePlayerLine(text) {
   const runtimePlayers = rows
     .map((row) => {
       const fields = splitTopLevelCsv(row);
+      const x = toFiniteNumber(fields[1]);
+      const y = toFiniteNumber(fields[2]);
+      const z = toFiniteNumber(fields[3]);
       return {
         playerId: toFiniteNumber(fields[0]),
         playerIndex: toFiniteNumber(fields[0]),
-        position: {
-          x: toFiniteNumber(fields[1]) * 100,
-          y: toFiniteNumber(fields[2]) * 100,
-          z: toFiniteNumber(fields[3]) * 100,
+        position: x == null || y == null || z == null ? null : {
+          x: x * 100,
+          y: y * 100,
+          z: z * 100,
         },
         yaw: toFiniteNumber(fields[4]),
         combatInfo: fields.slice(5).join(","),
@@ -599,6 +604,52 @@ function parseRuntimePlayerLine(text) {
       };
     })
     .filter((player) => player.playerId != null);
+
+  return {
+    type: "playerRuntime",
+    runtimePlayers,
+    rawFields: [],
+  };
+}
+
+function parsePriRuntimePlayerLine(text) {
+  const source = String(text ?? "");
+  const observedAt = new Date().toISOString();
+  const runtimePlayers = [];
+  const start = source.indexOf("PRI{{");
+  if (start < 0) {
+    return {
+      type: "playerRuntime",
+      runtimePlayers: [],
+      rawFields: [],
+    };
+  }
+
+  const rows = extractBraceItems(`{${source.slice(start + 5)}`);
+  for (const row of rows) {
+    const raw = String(row ?? "").trim().replace(/^\{+/, "").replace(/}+$/g, "");
+    const fields = splitTopLevelCsv(raw);
+    const playerId = toFiniteNumber(fields[0]);
+    if (playerId == null) continue;
+    const x = toFiniteNumber(fields[1]);
+    const y = toFiniteNumber(fields[2]);
+    const z = toFiniteNumber(fields[3]);
+
+    runtimePlayers.push({
+      playerId,
+      playerIndex: playerId,
+      position: x == null || y == null || z == null ? null : {
+        x: x * 100,
+        y: y * 100,
+        z: z * 100,
+      },
+      yaw: toFiniteNumber(fields[4]),
+      combatInfo: fields.slice(5).join(","),
+      observedAt,
+      stale: false,
+      rawText: `PRI{{${raw}}}`,
+    });
+  }
 
   return {
     type: "playerRuntime",
@@ -1180,6 +1231,18 @@ function findBzssCoreContextStart(data, startIndex) {
   return contextStart;
 }
 
+function findFirstBufferIndex(data, needles) {
+  let bestIndex = -1;
+  for (const needle of needles) {
+    const index = data.indexOf(needle);
+    if (index < 0) continue;
+    if (bestIndex < 0 || index < bestIndex) {
+      bestIndex = index;
+    }
+  }
+  return bestIndex;
+}
+
 function parseScoreboardInfo(rawText) {
   const raw = String(rawText ?? "");
   const normalized = normalizeScoreboardText(raw);
@@ -1287,6 +1350,7 @@ function splitTopLevelCsv(text) {
 function extractRelevantUtf16Runs(data) {
   const runs = extractUtf16LeTextRuns(data).filter((run) => (
     run.includes("PlayerBaseInfo{")
+    || run.includes("PRI{{")
     || run.includes("SoldierInfo{")
     || run.includes("PlayerScoreboard{")
     || run.includes(MARKER)
