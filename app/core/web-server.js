@@ -15,6 +15,7 @@ import { handleReserveSlotsRoutes } from "../modules/reserve-slots/routes.js";
 import { handleBlackEdgePrivilegeRoutes } from "../modules/black-edge-privilege/routes.js";
 import { handleAstrbotBridgeRoutes } from "../modules/astrbot-bridge/routes.js";
 import { handleTacticalStateRoutes } from "../modules/tactical-state/routes.js";
+import { handleTacticalStateV2Routes } from "../modules/tactical-state-v2/routes.js";
 import {
   classifySquadName,
   getSquadNameClassifierRules,
@@ -36,17 +37,17 @@ import { sanitizeRconCommand } from "./audit/audit-sanitizer.js";
 import { verifyPassword, hashPassword } from "./auth-crypto.js";
 
 const MAX_JSON_BODY_BYTES = 1024 * 1024;
-const MAX_WS_FRAME_BYTES = 1024 * 1024; // WebSocket 鍗曞抚鏈€澶?1MB
+const MAX_WS_FRAME_BYTES = 1024 * 1024; // WebSocket max frame size 1MB
 
 /**
- * 鎵€鏈夊搷搴旈兘娉ㄥ叆鐨勫熀纭€瀹夊叏澶淬€?
- * 涓嶅寘鍚?Cache-Control锛堢敱鍚勮矾鐢辫嚜琛屾帶鍒讹級銆?
+ * Base security headers
+ * Cache-Control is not included
  */
 const BASE_SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "strict-origin-when-cross-origin",
-  "X-XSS-Protection": "0", // 鐜颁唬娴忚鍣ㄥ凡鍐呯疆 XSS 闃叉姢锛屽氨涓嶅惎鐢ㄨ繖涓棫澶翠簡
+  "X-XSS-Protection": "0", // Modern browsers have built-in XSS protection
   "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' wss: ws:",
 };
 
@@ -85,8 +86,8 @@ export class WebServer {
     this.consoleSubscription = null;
     this.chatSubscription = null;
 
-    // 鍙俊浠ｇ悊 IP 鍒楄〃锛屽彧鏈夋潵鑷繖浜?IP 鐨勮姹傛墠淇′换 X-Forwarded-For銆?
-    // 绌哄垪琛ㄨ〃绀轰笉淇′换浠讳綍杞彂澶达紙鐩存帴瀵瑰鍦烘櫙锛夈€?
+    // Trusted proxy IPs list. Only requests from these IPs will trust X-Forwarded-For.
+    // Empty list means do not trust any forwarded headers (direct access scenario).
     const trustedProxies = config.trustedProxies ?? [];
     this.trustedProxies = new Set(Array.isArray(trustedProxies) ? trustedProxies : [trustedProxies]);
 
@@ -670,6 +671,19 @@ export class WebServer {
       json: (status, obj, extraHeaders = {}) => this.json(res, status, obj, extraHeaders),
     });
     if (tacticalStateHandled) {
+      return;
+    }
+
+    const tacticalStateV2Handled = await handleTacticalStateV2Routes({
+      core: this.core,
+      modules: this.modules,
+      url,
+      req,
+      res,
+      user,
+      json: (status, obj, extraHeaders = {}) => this.json(res, status, obj, extraHeaders),
+    });
+    if (tacticalStateV2Handled) {
       return;
     }
 
@@ -4003,7 +4017,7 @@ export class WebServer {
 
   getRequestIp(req) {
     const remoteAddress = req.socket?.remoteAddress ?? "";
-    // 鍙湁杩炴帴鏉ユ簮灞炰簬鍙俊浠ｇ悊鏃讹紝鎵嶄俊浠?X-Forwarded-For锛岄槻姝㈠鎴风浼€?IP
+    // Only trust X-Forwarded-For when the connection source is a trusted proxy to prevent client IP spoofing
     if (this.trustedProxies.size > 0 && this.trustedProxies.has(remoteAddress)) {
       const forwarded = req.headers["x-forwarded-for"];
       if (typeof forwarded === "string" && forwarded.trim()) {
@@ -4134,7 +4148,7 @@ export class WebServer {
         offset += 8;
       }
 
-      // 闃叉瀹㈡埛绔彂閫佽秴澶у抚鑰楀敖鏈嶅姟鍣ㄥ唴瀛橈紙DoS 闃叉姢锛?
+      // Prevent client from sending oversized frames to exhaust server memory (DoS protection)
       if (payloadLength > MAX_WS_FRAME_BYTES) {
         this.logger?.warn?.(`WebSocket: oversized frame (${payloadLength} bytes) from ${client.user?.username ?? "unknown"}, closing connection.`);
         this.closeWebSocketClient(client);
@@ -5650,7 +5664,7 @@ function buildSquadNameTrackingRecords({ guard, stepwise, fair, ruleChain, lifec
       source: "squad_name_rule",
       stage: "squad_name",
       status: "violation",
-      decisionLabel: "闃熷悕杩濊",
+      decisionLabel: "队名违规",
       decisionTone: "danger",
       reason: item.reason ?? "",
       createdAt: item.createdAt,
@@ -5684,7 +5698,7 @@ function buildSquadNameTrackingRecords({ guard, stepwise, fair, ruleChain, lifec
       source: "tiered_squad_time",
       stage: "stepwise",
       status: "violation",
-      decisionLabel: "闃舵寮忔椂闀挎嫆缁?",
+      decisionLabel: "阶梯式时长拒绝",
       decisionTone: "danger",
       reason: item.decisionReason ?? item.reason ?? "",
       createdAt: item.createdAt,
@@ -5719,7 +5733,7 @@ function buildSquadNameTrackingRecords({ guard, stepwise, fair, ruleChain, lifec
       source: violation ? "fair_squad_creation" : "final_allowed",
       stage: violation ? "fair" : "final",
       status: violation ? "violation" : "allowed",
-      decisionLabel: violation ? "鍏钩寤洪槦鎷掔粷" : "鏈€缁堥€氳繃",
+      decisionLabel: violation ? "公平建队拒绝" : "最终通过",
       decisionTone: violation ? "danger" : "ok",
       reason: Array.isArray(item.reasons) ? item.reasons.join(" ") : item.reason ?? "",
       createdAt: item.createdAt,

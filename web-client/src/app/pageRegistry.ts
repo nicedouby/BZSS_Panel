@@ -39,6 +39,7 @@ import AdminUsersPage from "../pages/AdminUsersPage.vue";
 import AuditRecordsPage from "../pages/AuditRecordsPage.vue";
 import PluginSubscriptionsPage from "../pages/PluginSubscriptionsPage.vue";
 import TacticalMapPage from "../pages/TacticalMapPage.vue";
+import TacticalMapV2Page from "../pages/TacticalMapV2Page.vue";
 import ServerInfoSnapshotPage from "../pages/ServerInfoSnapshotPage.vue";
 import BzssCoreSnapshotsPage from "../pages/BzssCoreSnapshotsPage.vue";
 import TacticalMapReplayPage from "../pages/TacticalMapReplayPage.vue";
@@ -106,6 +107,16 @@ export const pageRegistry: PageDefinition[] = [
     category: "core",
     refreshPolicy: "realtime",
     nav: { section: "opsLive", label: "战术地图", icon: "🛰️", order: 15 },
+    ...workspacePage,
+  },
+  {
+    name: "tactical-map-v2",
+    path: "/tactical-map-v2",
+    component: TacticalMapV2Page,
+    title: "战术地图 V2",
+    category: "core",
+    refreshPolicy: "realtime",
+    nav: { section: "opsLive", label: "战术地图 V2", icon: "🛰️", order: 16 },
     ...workspacePage,
   },
   {

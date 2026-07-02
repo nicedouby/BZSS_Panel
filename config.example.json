@@ -509,8 +509,8 @@
       "infantryOnlyUntilSeconds": 50,
       "sweepIntervalMs": 15000,
       "allowedInfantryNames": [
-        "钀屾柊闃?",
-        "濉嚎闃?"
+        "萌新队",
+        "填线队"
       ],
       "defaultSquadNamePattern": "^Squad\\s*\\d+$"
     },
@@ -657,7 +657,7 @@
     "squad-creation-broadcast": {
       "enabled": false,
       "delaySeconds": 5,
-      "messageTemplate": "[寤洪槦鎾姤] 鐜╁ ${creatorName} 鍒涘缓浜嗗皬闃? ${squadName} (灏忛槦ID: ${squadId})"
+      "messageTemplate": "[建队播报] 玩家 ${creatorName} 创建了小队: ${squadName} (小队ID: ${squadId})"
     },
     "periodic-teamwork-warning": {
       "enabled": true,

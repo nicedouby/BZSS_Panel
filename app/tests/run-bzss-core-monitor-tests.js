@@ -20,7 +20,7 @@ function testParsePlayerBlocks() {
   assert.equal(players[0].playerIndex, 0);
   assert.equal(players[0].playerName, "Donald DoubyBear");
   assert.equal(players[0].soldierInfo.weaponClass, "BP_QBZ191_IronSights_C_2147477184");
-  assert.deepEqual(players[0].soldierInfo.position, { x: 15014, y: -1672, z: -12490 });
+  assert.deepEqual(players[0].soldierInfo.position, { x: 1501400, y: -167200, z: -1249000 });
   assert.equal(players[1].playerIndex, 0);
 
   const shiftedTailText = "PlayerBaseInfo{1,eos-1,Tail Shift,1,1,-1,-1}"
@@ -167,7 +167,7 @@ function testMonitorState() {
   assert.ok(p7);
   assert.equal(p7.teamId, 1);
   assert.equal(p7.squadId, 3);
-  assert.deepEqual(p7.position, { x: 100, y: 200, z: 300 });
+  assert.deepEqual(p7.position, { x: 10000, y: 20000, z: 30000 });
   assert.equal(p7.soldierInfo.health, 100); // 默认填充 100
   assert.equal(p7.playerScoreboard.stats.combatScore, 30);
   assert.equal(p7.playerScoreboard.stats.vehicleKills, 1);
@@ -186,7 +186,7 @@ function testMonitorState() {
   assert.equal(p42.teamId, 2);
   assert.equal(p42.squadId, 3);
   assert.equal(p42.soldierInfo.health, 88);
-  assert.deepEqual(p42.soldierInfo.position, { x: 1000, y: 2000, z: 0 });
+  assert.deepEqual(p42.soldierInfo.position, { x: 100000, y: 200000, z: 0 });
   assert.equal(p42.playerScoreboard.stats.combatScore, 99);
 }
 
@@ -201,9 +201,9 @@ async function testParseExplosionDamage() {
   assert.equal(parsed.type, "explosiveDamage");
   assert.ok(parsed.explosion);
   assert.ok(parsed.explosion.id.startsWith("exp-"));
-  assert.equal(parsed.explosion.x, -7008.21);
-  assert.equal(parsed.explosion.y, 11835.69);
-  assert.equal(parsed.explosion.z, -13475.49);
+  assert.equal(parsed.explosion.x, -700821);
+  assert.equal(parsed.explosion.y, 1183569);
+  assert.equal(parsed.explosion.z, -1347549);
   assert.equal(parsed.explosion.damageCauser, "BP_M67Frag_C_2147006951");
   assert.equal(parsed.explosion.damageInstigator, "BP_PlayerController_C_2147480791");
 
@@ -220,7 +220,7 @@ async function testParseExplosionDamage() {
 
   const snapshot = module.api.getRawSnapshot();
   assert.equal(snapshot.explosions.length, 1);
-  assert.equal(snapshot.explosions[0].x, -7008.21);
+  assert.equal(snapshot.explosions[0].x, -700821);
   assert.equal(snapshot.explosions[0].damageCauser, "BP_M67Frag_C_2147006951");
 
   await sleep(3100);

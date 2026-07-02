@@ -1,4 +1,4 @@
-﻿// -*- coding: utf-8 -*-
+// -*- coding: utf-8 -*-
 
 import { createAuditModule } from "../modules/audit/index.js";
 import { createServerStatusModule } from "../modules/server-status/index.js";
@@ -43,6 +43,7 @@ import { createBzssCoreMonitorModule } from "../modules/bzss-core-monitor/index.
 import { createSquadFollowStateModule } from "../modules/squad-follow-state/index.js";
 import { createSquadFollowWarningModule } from "../modules/squad-follow-warning/index.js";
 import { createTacticalStateModule } from "../modules/tactical-state/index.js";
+import { createTacticalStateV2Module } from "../modules/tactical-state-v2/index.js";
 import { createTacticalMapReplayModule } from "../modules/tactical-map-replay/index.js";
 
 import { createChatManagerModule } from "../modules/chat-manager/index.js";
@@ -107,6 +108,7 @@ export class ModuleManager {
       createSquadFollowStateModule,
       createSquadFollowWarningModule,
       createTacticalStateModule,
+      createTacticalStateV2Module,
       createTacticalMapReplayModule,
       createNetworkStatsModule,
     ];

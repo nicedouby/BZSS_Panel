@@ -556,9 +556,9 @@ function parseExplosiveDamageLine(text) {
     type: "explosiveDamage",
     explosion: {
       id: "exp-" + Math.random().toString(36).slice(2, 11),
-      x: parseFloat(locMatch[1]),
-      y: parseFloat(locMatch[2]),
-      z: parseFloat(locMatch[3]),
+      x: parseFloat(locMatch[1]) * 100,
+      y: parseFloat(locMatch[2]) * 100,
+      z: parseFloat(locMatch[3]) * 100,
       damageCauser: causerMatch ? causerMatch[1] : "",
       damageInstigator: instigatorMatch ? instigatorMatch[1] : "",
       at: new Date().toISOString(),
@@ -588,9 +588,9 @@ function parseRuntimePlayerLine(text) {
         playerId: toFiniteNumber(fields[0]),
         playerIndex: toFiniteNumber(fields[0]),
         position: {
-          x: toFiniteNumber(fields[1]),
-          y: toFiniteNumber(fields[2]),
-          z: toFiniteNumber(fields[3]),
+          x: toFiniteNumber(fields[1]) * 100,
+          y: toFiniteNumber(fields[2]) * 100,
+          z: toFiniteNumber(fields[3]) * 100,
         },
         yaw: toFiniteNumber(fields[4]),
         combatInfo: fields.slice(5).join(","),
@@ -770,9 +770,9 @@ export function parseCaptureZones(text) {
     zones.push({
       name,
       position: positionMatch ? {
-        x: toFiniteNumber(positionMatch[1]),
-        y: toFiniteNumber(positionMatch[2]),
-        z: toFiniteNumber(positionMatch[3]),
+        x: toFiniteNumber(positionMatch[1]) * 100,
+        y: toFiniteNumber(positionMatch[2]) * 100,
+        z: toFiniteNumber(positionMatch[3]) * 100,
       } : null,
       raw,
     });
@@ -797,9 +797,9 @@ export function parseFobs(text) {
       const positionMatch = posVal.match(/X=([-0-9.]+)\s+Y=([-0-9.]+)\s+Z=([-0-9.]+)/);
       if (positionMatch) {
         position = {
-          x: toFiniteNumber(positionMatch[1]),
-          y: toFiniteNumber(positionMatch[2]),
-          z: toFiniteNumber(positionMatch[3]),
+          x: toFiniteNumber(positionMatch[1]) * 100,
+          y: toFiniteNumber(positionMatch[2]) * 100,
+          z: toFiniteNumber(positionMatch[3]) * 100,
         };
       }
     }
@@ -865,7 +865,7 @@ function parseMainZones(text) {
     const vectorText = commaIndex >= 0 ? raw.slice(commaIndex + 1) : "";
     return {
       teamId: toFiniteNumber(teamText),
-      position: parseVectorBlock(vectorText),
+      position: scalePosition(parseVectorBlock(vectorText)),
       raw,
     };
   }).filter((zone) => zone.teamId != null || zone.position);
@@ -1020,7 +1020,7 @@ function parseSoldierInfo(rawText) {
       health: toFiniteNumber(fieldMap.Health ?? fields[1]),
       weaponClass: weaponClass || (weaponFieldIndex >= 0 ? fields[weaponFieldIndex] ?? "" : ""),
       ammoValues,
-      position: vectors[0] ?? null,
+      position: scalePosition(vectors[0]) ?? null,
       rotation: vectors[1] ?? null,
     },
   };
@@ -1061,6 +1061,16 @@ function parseKeyValueFields(fields) {
   return result;
 }
 
+
+function scalePosition(pos) {
+  if (!pos) return null;
+  return {
+    x: pos.x * 100,
+    y: pos.y * 100,
+    z: pos.z * 100,
+  };
+}
+
 function parseVectorBlock(text) {
   const match = String(text ?? "").match(/X=([-0-9.]+)\s+Y=([-0-9.]+)\s+Z=([-0-9.]+)/);
   if (!match) return null;
@@ -1091,9 +1101,9 @@ function parseVehicleInfo(text) {
   const posMatch = match[0].match(/Position:X=([-0-9.]+)\s+Y=([-0-9.]+)\s+Z=([-0-9.]+)/);
   if (posMatch) {
     position = {
-      x: toFiniteNumber(posMatch[1]),
-      y: toFiniteNumber(posMatch[2]),
-      z: toFiniteNumber(posMatch[3]),
+      x: toFiniteNumber(posMatch[1]) * 100,
+      y: toFiniteNumber(posMatch[2]) * 100,
+      z: toFiniteNumber(posMatch[3]) * 100,
     };
   }
 
