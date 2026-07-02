@@ -44,7 +44,7 @@ export function createPlugin(context = {}) {
 
   function enqueue(task) {
     const next = Promise.resolve().then(task);
-    serial = next.catch(() => {});
+    serial = next.catch(() => { });
     return next;
   }
 
@@ -125,21 +125,21 @@ export function createPlugin(context = {}) {
     );
     const steamID = normalizeSteamID(
       record?.[`${prefix}Steam64ID`]
-        ?? record?.[`${prefix}SteamId`]
-        ?? record?.[`${prefix}SteamID`]
-        ?? source.steam64ID
-        ?? source.steamID
-        ?? source.steamId
-        ?? source.steam_id
-        ?? "",
+      ?? record?.[`${prefix}SteamId`]
+      ?? record?.[`${prefix}SteamID`]
+      ?? source.steam64ID
+      ?? source.steamID
+      ?? source.steamId
+      ?? source.steam_id
+      ?? "",
     );
     const eosID = normalizeText(
       record?.[`${prefix}EOSID`]
-        ?? record?.[`${prefix}EosID`]
-        ?? source.eosID
-        ?? source.eosId
-        ?? source.eos_id
-        ?? "",
+      ?? record?.[`${prefix}EosID`]
+      ?? source.eosID
+      ?? source.eosId
+      ?? source.eos_id
+      ?? "",
     );
 
     return { name, steamID, eosID };
@@ -150,14 +150,96 @@ export function createPlugin(context = {}) {
   }
 
   function isTeamKill(event = {}, record = {}) {
-    if (record?.isTeamKill || record?.friendlyFireType === "team_kill" || record?.tk || record?.teamKillReason) {
+    if (event?.eventName === "teamKillResolved") {
       return true;
     }
-    if (event?.eventName === "teamKillResolved") return true;
-    if (event?.eventName === "KILL_MANAGER_EVENT") {
-      return Boolean(record?.isFriendlyFire || record?.relation?.isFriendlyFire || record?.eventFlags?.some?.((flag) => String(flag?.key ?? "").toLowerCase() === "friendly_fire"));
+
+    const type = normalizeCombatType(record?.type ?? record?.eventType ?? record?.eventName ?? "");
+    const friendlyFireType = String(record?.friendlyFireType ?? "").trim().toLowerCase();
+
+    // 明确的击杀 / 击倒标记直接允许。
+    if (
+      record?.isTeamKill
+      || record?.tk
+      || record?.teamKillReason
+      || friendlyFireType === "team_kill"
+      || friendlyFireType === "team_wound"
+      || friendlyFireType === "tk_down"
+    ) {
+      return true;
     }
+
+    // damage / team_damage 只代表受伤，不允许显示游戏时长。
+    if (
+      type === "damage"
+      || friendlyFireType === "team_damage"
+      || friendlyFireType === "friendly_damage"
+    ) {
+      return false;
+    }
+
+    // KILL_MANAGER_EVENT 是兼容事件名，不能只靠 friendly_fire 判断。
+    // 必须同时满足：友军事件 + 类型是 wound/kill/death/tk。
+    if (event?.eventName === "KILL_MANAGER_EVENT") {
+      const isFriendly = isFriendlyFireRecord(record);
+      const isDownOrKill = type === "wound" || type === "kill" || type === "death" || type === "tk";
+      return Boolean(isFriendly && isDownOrKill);
+    }
+
     return false;
+  }
+
+  function normalizeCombatType(value) {
+    const text = String(value ?? "").trim().toLowerCase();
+    if (text === "wounded" || text === "down" || text === "downed" || text === "tk_down") return "wound";
+    if (text === "died" || text === "dead" || text === "death") return "death";
+    if (text === "teamkill" || text === "team_kill") return "tk";
+    if (text === "damage" || text === "wound" || text === "kill" || text === "death" || text === "tk") return text;
+    return text;
+  }
+
+  function isFriendlyFireRecord(record = {}) {
+    if (record?.isFriendlyFire || record?.relation?.isFriendlyFire) return true;
+
+    const friendlyFireType = String(record?.friendlyFireType ?? "").trim().toLowerCase();
+    if (
+      friendlyFireType === "team_damage"
+      || friendlyFireType === "team_wound"
+      || friendlyFireType === "team_kill"
+      || friendlyFireType === "tk_down"
+      || friendlyFireType === "friendly_fire"
+    ) {
+      return true;
+    }
+
+    const tags = Array.isArray(record?.tags)
+      ? record.tags.map((tag) => String(tag ?? "").trim().toLowerCase())
+      : [];
+
+    if (
+      tags.includes("friendly_fire")
+      || tags.includes("combat.team_damage")
+      || tags.includes("combat.team_wound")
+      || tags.includes("combat.team_kill")
+    ) {
+      return true;
+    }
+
+    const flags = Array.isArray(record?.eventFlags) ? record.eventFlags : [];
+    return flags.some((flag) => {
+      const key = String(flag?.key ?? "").trim().toLowerCase();
+      const label = String(flag?.label ?? "").trim();
+      return (
+        key === "friendly_fire"
+        || key === "team_damage"
+        || key === "team_wound"
+        || key === "team_kill"
+        || key === "tk_down"
+        || label === "友伤"
+        || label === "TK击倒"
+        || label === "友军击杀"
+      );
+    });
   }
 
   function getServerId(event = {}, record = {}) {
@@ -405,7 +487,7 @@ export function createPlugin(context = {}) {
       for (const unsubscribe of unsubscribers.splice(0)) {
         try {
           unsubscribe?.();
-        } catch {}
+        } catch { }
       }
       handledEventKeys.clear();
       pluginLogger?.info?.("[TeamKillDurationWarning] plugin stopped.", {
