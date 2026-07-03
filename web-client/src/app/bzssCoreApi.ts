@@ -192,6 +192,7 @@ export interface BzssCorePlayerInfoResponse {
   state: BzssCorePlayerInfoState;
   runtimePlayers?: BzssCoreRuntimePlayerInfo[];
   scoreboardPlayers?: BzssCoreScoreboardPlayerInfo[];
+  players?: any[];
   captureZones?: BzssCoreCaptureZoneInfo[];
   fobs?: BzssCoreFobInfo[];
   mainZones?: BzssCoreMainZoneInfo[];
@@ -209,6 +210,7 @@ export interface BzssCoreRawDataResponse {
   mainZoneCount: number;
   rawLineHash: string;
   rawFields: string[];
+  players?: any[];
   captureZones?: BzssCoreCaptureZoneInfo[];
   fobs?: BzssCoreFobInfo[];
   mainZones?: BzssCoreMainZoneInfo[];

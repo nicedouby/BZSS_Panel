@@ -37,6 +37,17 @@ function createServer() {
         getScoreboardPlayers() {
           return [{ playerIndex: 0, playerId: 0, teamId: 1, squadId: -1, playerScoreboard: { stats: { combatScore: 1 }, numericValues: [] } }];
         },
+        getPlayers() {
+          return [{
+            playerIndex: 0,
+            playerId: 0,
+            playerName: "Donald",
+            playerGuid: "abc",
+            telemetry: { position: { x: 1, y: 2, z: 3 }, yaw: 90, combatInfo: "" },
+            presence: { state: "active" },
+            playerScoreboard: { stats: { combatScore: 1 }, numericValues: [] },
+          }];
+        },
         getRawSnapshot() {
           return {
             status: "ready",
@@ -51,6 +62,7 @@ function createServer() {
             lastError: "",
             runtimePlayers: [{ playerName: "Donald", playerGuid: "abc", playerIndex: 0, playerId: 0, yaw: 90 }],
             scoreboardPlayers: [{ playerIndex: 0, playerId: 0, teamId: 1, squadId: -1, playerScoreboard: { stats: { combatScore: 1 }, numericValues: [] } }],
+            players: [{ playerIndex: 0, playerId: 0, playerName: "Donald" }],
             captureZones: [{ name: "CP1", position: { x: 100, y: 200, z: 0 } }],
             fobs: [],
             mainZones: [],
@@ -89,6 +101,8 @@ function main() {
   assert.equal(all.runtimePlayers.length, 1);
   assert.equal(Array.isArray(all.scoreboardPlayers), true);
   assert.equal(all.scoreboardPlayers.length, 1);
+  assert.equal(Array.isArray(all.players), true);
+  assert.equal(all.players.length, 1);
   assert.equal(Array.isArray(all.captureZones), true);
   assert.equal(all.captureZones.length, 1);
   assert.equal(all.captureZones[0].name, "CP1");
@@ -99,6 +113,7 @@ function main() {
   const raw = server.getBzssCorePlayerInfoRaw();
   assert.equal(raw.runtimePlayers.length, 1);
   assert.equal(raw.scoreboardPlayers.length, 1);
+  assert.equal(raw.players.length, 1);
   assert.equal(raw.status, "ready");
   assert.equal(raw.rawLineHash, "abc123");
 

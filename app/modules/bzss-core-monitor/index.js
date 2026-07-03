@@ -35,7 +35,7 @@ const SCOREBOARD_FIELD_ALIASES = {
   combatScore: ["Combat"],
 };
 
-export function createBzssCoreMonitorModule({ core, logger }) {
+export function createBzssCoreMonitorModule({ core, modules, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
     moduleId: "module.bzssCoreMonitor",
     source: "module.bzssCoreMonitor",
@@ -58,6 +58,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
   function publish(mutator) {
     const previousStatus = state.status;
     mutator(state);
+    pruneExpiredPlayers(state, { core, modules });
     state.revision += 1;
     state.updatedAt = new Date().toISOString();
     if (state.status !== previousStatus) {
@@ -65,8 +66,8 @@ export function createBzssCoreMonitorModule({ core, logger }) {
         operation: "bzssCoreMonitor.status",
         data: {
           status: state.status,
-          runtimePlayerCount: state.runtimePlayers.length,
-          scoreboardPlayerCount: state.scoreboardPlayers.length,
+          runtimePlayerCount: state.runtimePlayersByKey.size,
+          scoreboardPlayerCount: state.scoreboardPlayersByKey.size,
           lastError: state.lastError,
         },
       });
@@ -85,92 +86,111 @@ export function createBzssCoreMonitorModule({ core, logger }) {
   function clearPublishedPlayers(nextStatus, nextError = "") {
     publish((draft) => {
       draft.status = nextStatus;
-      draft.runtimePlayers = [];
-      draft.scoreboardPlayers = [];
+      draft.runtimePlayersByKey.clear();
+      draft.scoreboardPlayersByKey.clear();
+      draft.playersByKey.clear();
+      draft.playerIdentityIndex.clear();
       draft.markerSeen = false;
+      draft.captureZones = [];
+      draft.fobs = [];
+      draft.mainZones = [];
+      draft.explosions = [];
+      draft.rawLineHash = "";
+      draft.rawFields = [];
       draft.lastError = nextError;
+      draft.diagnostics = [];
     });
   }
 
   function ingestLogLine(input = {}) {
     const line = extractRawLogLine(input);
     if (!line) return { ok: false, ignored: true, reason: "empty" };
-
-    const parsed = parseBzssCoreLogLine(line);
-    if (!parsed) return { ok: true, ignored: true, reason: "not_bzss_core" };
+    const segments = splitConcatenatedRawLogSegments(line);
+    const parsedSegments = segments
+      .map((segment) => ({ segment, parsed: parseBzssCoreLogLine(segment) }))
+      .filter(({ parsed }) => Boolean(parsed));
+    if (parsedSegments.length === 0) return { ok: true, ignored: true, reason: "not_bzss_core" };
 
     try {
       publish((draft) => {
         draft.status = "ready";
         draft.markerSeen = true;
         draft.rawLineHash = hashText(line);
-        draft.rawFields = parsed.rawFields ?? [];
         draft.lastError = "";
 
-        if (parsed.type === "playerRuntime") {
-          draft.runtimePlayers = parsed.runtimePlayers;
-        } else if (parsed.type === "playerScoreboard") {
-          draft.scoreboardPlayers = parsed.scoreboardPlayers;
-        } else if (parsed.type === "playerFullBlocks") {
-          const observedAt = new Date().toISOString();
-          draft.runtimePlayers = parsed.players.map((p) => ({
-            playerId: p.playerId,
-            playerIndex: p.playerIndex,
-            position: p.soldierInfo?.position ?? p.position ?? null,
-            yaw: p.yaw,
-            combatInfo: p.claimedInfo || p.soldierInfo?.weaponClass || "",
-            observedAt,
-            stale: false,
-            playerName: p.playerName,
-            playerGuid: p.playerGuid,
-            soldierInfo: p.soldierInfo,
-            vehicleInfo: p.vehicleInfo,
-          }));
-          draft.scoreboardPlayers = parsed.players.map((p) => ({
-            playerId: p.playerId,
-            playerIndex: p.playerIndex,
-            teamId: p.teamId,
-            squadId: p.squadId,
-            lives: p.playerScoreboard?.stats?.dataLives ?? null,
-            kills: p.playerScoreboard?.stats?.numKills ?? null,
-            vehicleKills: p.playerScoreboard?.stats?.vehicleKills ?? null,
-            deaths: p.playerScoreboard?.stats?.numDeaths ?? null,
-            woundeds: p.playerScoreboard?.stats?.numWoundeds ?? null,
-            wounds: p.playerScoreboard?.stats?.numWounds ?? null,
-            teamKills: p.playerScoreboard?.stats?.numTeamKills ?? null,
-            healPoints: p.playerScoreboard?.stats?.healPoints ?? null,
-            revivedPoints: p.playerScoreboard?.stats?.revivedPoints ?? null,
-            teamworkScore: p.playerScoreboard?.stats?.teamworkScore ?? null,
-            objectiveScore: p.playerScoreboard?.stats?.objectiveScore ?? null,
-            combatScore: p.playerScoreboard?.stats?.combatScore ?? null,
-            isAdmin: p.isAdmin,
-            isCommander: p.isCommander,
-            fireTeamIndex: p.ftIndex,
-            fireTeamPosition: p.ftPosition,
-            playerScoreboard: p.playerScoreboard,
-          }));
-        } else if (parsed.type === "scene") {
-          draft.captureZones = parsed.captureZones;
-          draft.fobs = parsed.fobs;
-          draft.mainZones = parsed.mainZones;
-        } else if (parsed.type === "explosiveDamage") {
-          if (!draft.explosions) {
-            draft.explosions = [];
+        for (const { segment, parsed } of parsedSegments) {
+          if (parsed.rawFields && parsed.rawFields.length > 0) {
+            draft.rawFields = parsed.rawFields;
           }
-          draft.explosions.push(parsed.explosion);
 
-          const timeoutId = setTimeout(() => {
-            activeTimeouts.delete(timeoutId);
-            publish((d) => {
-              if (d.explosions) {
-                d.explosions = d.explosions.filter((e) => e.id !== parsed.explosion.id);
-              }
-            });
-          }, 3000);
-          activeTimeouts.add(timeoutId);
+          if (parsed.type === "playerRuntime") {
+            if (parsed.runtimePlayers.length > 0) {
+              mergeRuntimePlayers(draft, parsed.runtimePlayers, { sourceType: "runtime" });
+            } else {
+              appendDiagnostic(draft, {
+                type: "playerRuntime",
+                reason: "empty_payload",
+                rawLineHash: hashText(segment),
+                observedAt: new Date().toISOString(),
+              });
+            }
+            continue;
+          }
+
+          if (parsed.type === "playerScoreboard") {
+            if (parsed.scoreboardPlayers.length > 0) {
+              mergeScoreboardPlayers(draft, parsed.scoreboardPlayers, { sourceType: "scoreboard" });
+            } else {
+              appendDiagnostic(draft, {
+                type: "playerScoreboard",
+                reason: "empty_payload",
+                rawLineHash: hashText(segment),
+                observedAt: new Date().toISOString(),
+              });
+            }
+            continue;
+          }
+
+          if (parsed.type === "playerFullBlocks") {
+            if (parsed.players.length > 0) {
+              mergePlayerFullBlocks(draft, parsed.players);
+            } else {
+              appendDiagnostic(draft, {
+                type: "playerFullBlocks",
+                reason: "empty_payload",
+                rawLineHash: hashText(segment),
+                observedAt: new Date().toISOString(),
+              });
+            }
+            continue;
+          }
+
+          if (parsed.type === "scene") {
+            draft.captureZones = parsed.captureZones;
+            draft.fobs = parsed.fobs;
+            draft.mainZones = parsed.mainZones;
+            continue;
+          }
+
+          if (parsed.type === "explosiveDamage") {
+            if (!draft.explosions) {
+              draft.explosions = [];
+            }
+            draft.explosions.push(parsed.explosion);
+
+            const timeoutId = setTimeout(() => {
+              activeTimeouts.delete(timeoutId);
+              publish((d) => {
+                if (d.explosions) {
+                  d.explosions = d.explosions.filter((e) => e.id !== parsed.explosion.id);
+                }
+              });
+            }, 3000);
+            activeTimeouts.add(timeoutId);
+          }
         }
       });
-      return { ok: true, ignored: false, type: parsed.type };
+      return { ok: true, ignored: false, type: parsedSegments[parsedSegments.length - 1]?.parsed?.type };
     } catch (error) {
       publish((draft) => {
         draft.status = "error";
@@ -198,48 +218,54 @@ export function createBzssCoreMonitorModule({ core, logger }) {
   }
 
   function getState() {
+    pruneExpiredPlayers(state, { core, modules });
     return {
       status: state.status,
       revision: state.revision,
       updatedAt: state.updatedAt,
       markerSeen: state.markerSeen,
-      runtimePlayerCount: state.runtimePlayers.length,
-      scoreboardPlayerCount: state.scoreboardPlayers.length,
-      playerCount: state.runtimePlayers.length + state.scoreboardPlayers.length,
+      runtimePlayerCount: state.runtimePlayersByKey.size,
+      scoreboardPlayerCount: state.scoreboardPlayersByKey.size,
+      playerCount: state.playersByKey.size,
       mainZoneCount: state.mainZones.length,
       rawLineHash: state.rawLineHash,
       rawFields: [...state.rawFields],
       lastError: state.lastError,
+      diagnostics: state.diagnostics.map(clonePlainObject),
     };
   }
 
   function getRawSnapshot() {
+    pruneExpiredPlayers(state, { core, modules });
     return {
       status: state.status,
       revision: state.revision,
       updatedAt: state.updatedAt,
       markerSeen: state.markerSeen,
-      runtimePlayerCount: state.runtimePlayers.length,
-      scoreboardPlayerCount: state.scoreboardPlayers.length,
-      playerCount: state.runtimePlayers.length + state.scoreboardPlayers.length,
+      runtimePlayerCount: state.runtimePlayersByKey.size,
+      scoreboardPlayerCount: state.scoreboardPlayersByKey.size,
+      playerCount: state.playersByKey.size,
       captureZones: state.captureZones.map(clonePlainObject),
       fobs: state.fobs.map(clonePlainObject),
       mainZones: state.mainZones.map(clonePlainObject),
-      runtimePlayers: state.runtimePlayers.map(clonePlainObject),
-      scoreboardPlayers: state.scoreboardPlayers.map(clonePlainObject),
+      runtimePlayers: [...state.runtimePlayersByKey.values()].map(clonePlainObject),
+      scoreboardPlayers: [...state.scoreboardPlayersByKey.values()].map(clonePlainObject),
       explosions: (state.explosions ?? []).map(clonePlainObject),
       rawLineHash: state.rawLineHash,
       rawFields: [...state.rawFields],
       lastError: state.lastError,
+      diagnostics: state.diagnostics.map(clonePlainObject),
     };
   }
 
   function getRuntimePlayers() {
-    return state.runtimePlayers.map(clonePlainObject);
+    pruneExpiredPlayers(state, { core, modules });
+    return [...state.runtimePlayersByKey.values()].map(clonePlainObject);
   }
 
   function getScoreboardPlayers() {
-    return state.scoreboardPlayers.map(clonePlainObject);
+    pruneExpiredPlayers(state, { core, modules });
+    return [...state.scoreboardPlayersByKey.values()].map(clonePlainObject);
   }
 
   /**
@@ -249,7 +275,7 @@ export function createBzssCoreMonitorModule({ core, logger }) {
    *
    * @returns {Array<Object>} 规范化的玩家数组
    */
-  function getPlayers() {
+  function _legacyGetPlayers() {
     const byIndex = new Map();
 
     // 1. 写入运行时玩家数据
@@ -378,11 +404,47 @@ export function createBzssCoreMonitorModule({ core, logger }) {
     return [...byIndex.values()];
   }
 
+  function getPlayers() {
+    pruneExpiredPlayers(state, { core, modules });
+    const mergedByKey = new Map();
+
+    for (const player of state.scoreboardPlayersByKey.values()) {
+      const key = getCanonicalPlayerKey(player);
+      if (!key) continue;
+      mergedByKey.set(key, clonePlayerView(player));
+    }
+
+    for (const player of state.runtimePlayersByKey.values()) {
+      const key = getCanonicalPlayerKey(player);
+      if (!key) continue;
+      const runtimeView = clonePlayerView(player);
+      const existing = mergedByKey.get(key);
+      if (existing) {
+        mergedByKey.set(key, mergePlayerViews(existing, runtimeView));
+      } else {
+        mergedByKey.set(key, runtimeView);
+      }
+    }
+
+    for (const player of state.playersByKey.values()) {
+      const key = getCanonicalPlayerKey(player);
+      if (!key || mergedByKey.has(key)) continue;
+      mergedByKey.set(key, clonePlayerView(player));
+    }
+
+    return [...mergedByKey.values()];
+  }
+
   async function start() {
     if (started) return;
     started = true;
     if (core.eventBus?.onCoreEvent) {
       unsubscribers.push(core.eventBus.onCoreEvent("On_RawLogLine", handleRawLogLine));
+      unsubscribers.push(core.eventBus.onCoreEvent("round.world_bring_up", () => {
+        publish((draft) => {
+          resetPlayerCaches(draft, { keepStatus: "ready" });
+        });
+      }));
     }
   }
 
@@ -430,8 +492,10 @@ function createInitialState() {
     revision: 0,
     updatedAt: "",
     markerSeen: false,
-    runtimePlayers: [],
-    scoreboardPlayers: [],
+    runtimePlayersByKey: new Map(),
+    scoreboardPlayersByKey: new Map(),
+    playersByKey: new Map(),
+    playerIdentityIndex: new Map(),
     captureZones: [],
     fobs: [],
     mainZones: [],
@@ -439,7 +503,520 @@ function createInitialState() {
     rawLineHash: "",
     rawFields: [],
     lastError: "",
+    diagnostics: [],
   };
+}
+
+function mergeRuntimePlayers(draft, runtimePlayers, options = {}) {
+  const observedAt = options.observedAt ?? new Date().toISOString();
+  for (const player of runtimePlayers ?? []) {
+    const record = upsertMergedPlayer(draft, {
+      ...player,
+      sourceType: options.sourceType ?? "runtime",
+      observedAt,
+    });
+    if (!record) continue;
+    const key = getCanonicalPlayerKey(record);
+    if (!key) continue;
+    syncSourceCacheEntry(draft.runtimePlayersByKey, record, key);
+  }
+}
+
+function mergeScoreboardPlayers(draft, scoreboardPlayers, options = {}) {
+  const observedAt = options.observedAt ?? new Date().toISOString();
+  for (const player of scoreboardPlayers ?? []) {
+    const record = upsertMergedPlayer(draft, {
+      ...player,
+      sourceType: options.sourceType ?? "scoreboard",
+      observedAt,
+    });
+    if (!record) continue;
+    const key = getCanonicalPlayerKey(record);
+    if (!key) continue;
+    syncSourceCacheEntry(draft.scoreboardPlayersByKey, record, key);
+  }
+}
+
+function mergePlayerFullBlocks(draft, players, options = {}) {
+  const observedAt = options.observedAt ?? new Date().toISOString();
+  for (const player of players ?? []) {
+    const runtimePatch = {
+      playerId: player.playerId,
+      playerIndex: player.playerIndex,
+      playerName: player.playerName,
+      playerGuid: player.playerGuid,
+      playerIdText: player.playerIdText,
+      position: player.soldierInfo?.position ?? player.position ?? null,
+      yaw: player.yaw ?? player.soldierInfo?.rotation?.z ?? null,
+      combatInfo: player.claimedInfo || player.soldierInfo?.weaponClass || "",
+      soldierInfo: player.soldierInfo,
+      vehicleInfo: player.vehicleInfo,
+      rawText: player.rawText ?? "",
+      sourceType: "fullBlocks",
+      observedAt,
+    };
+    const scoreboardPatch = {
+      playerId: player.playerId,
+      playerIndex: player.playerIndex,
+      playerName: player.playerName,
+      playerGuid: player.playerGuid,
+      teamId: player.teamId,
+      squadId: player.squadId,
+      isAdmin: player.isAdmin,
+      isCommander: player.isCommander,
+      fireTeamIndex: player.ftIndex,
+      fireTeamPosition: player.ftPosition,
+      playerScoreboard: player.playerScoreboard,
+      rawText: player.rawText ?? "",
+      sourceType: "fullBlocks",
+      observedAt,
+    };
+    const record = upsertMergedPlayer(draft, {
+      ...runtimePatch,
+      ...scoreboardPatch,
+    });
+    if (!record) continue;
+    const key = getCanonicalPlayerKey(record);
+    if (key) {
+      syncSourceCacheEntry(draft.runtimePlayersByKey, record, key);
+      syncSourceCacheEntry(draft.scoreboardPlayersByKey, record, key);
+    }
+  }
+}
+
+function upsertMergedPlayer(draft, patch) {
+  const observedAt = String(patch?.observedAt ?? new Date().toISOString());
+  const lookupKeyInfo = getPlayerIdentityInfo(patch);
+  if (!lookupKeyInfo.key) return null;
+
+  const existingKey = resolvePlayerCanonicalKey(draft, lookupKeyInfo.candidateKeys);
+  let record = existingKey ? draft.playersByKey.get(existingKey) ?? null : null;
+  if (!record) {
+    record = createPlayerRecord(patch, observedAt);
+  }
+
+  const previousIdentityKeys = Array.isArray(record.identityKeys) ? [...record.identityKeys] : [];
+  const previousCanonicalKey = getCanonicalPlayerKey(record) ?? null;
+
+  applyPlayerPatch(record, patch, observedAt);
+
+  const nextKeyInfo = getPlayerIdentityInfo(record);
+  const nextCanonicalKey = nextKeyInfo.key;
+  if (!nextCanonicalKey) return null;
+
+  record.identityKeys = nextKeyInfo.candidateKeys;
+  record.sourceTypes = mergeUniqueStrings(record.sourceTypes, [patch.sourceType ?? "unknown"]);
+
+  if (previousCanonicalKey && previousCanonicalKey !== nextCanonicalKey) {
+    draft.playersByKey.delete(previousCanonicalKey);
+  }
+  draft.playersByKey.set(nextCanonicalKey, record);
+  syncPlayerIdentityIndex(draft, record, previousIdentityKeys, previousCanonicalKey);
+  return record;
+}
+
+function applyPlayerPatch(record, patch, observedAt) {
+  if (record.firstSeenAt == null || record.firstSeenAt === "") {
+    record.firstSeenAt = observedAt;
+  }
+  record.lastSeenAt = observedAt;
+  record.stale = false;
+  record.playerId = firstDefinedNumber(patch.playerId, patch.playerIndex, record.playerId);
+  record.playerIndex = firstDefinedNumber(patch.playerIndex, patch.playerId, record.playerIndex);
+  record.playerName = firstText(patch.playerName, record.playerName, "");
+  record.playerGuid = firstText(patch.playerGuid ?? patch.steamID ?? patch.eosID, record.playerGuid, "");
+  record.steamID = firstText(patch.steamID, record.steamID, "");
+  record.eosID = firstText(patch.eosID, record.eosID, "");
+  record.teamId = firstDefinedNumber(patch.teamId, record.teamId, null);
+  record.squadId = firstDefinedNumber(patch.squadId, record.squadId, null);
+  record.isAdmin = firstDefinedBoolean(patch.isAdmin, record.isAdmin);
+  record.isCommander = firstDefinedBoolean(patch.isCommander, record.isCommander);
+  record.position = cloneVector(patch.position ?? record.position);
+  record.yaw = firstDefinedNumber(patch.yaw, record.yaw, null);
+  record.combatInfo = firstText(patch.combatInfo, record.combatInfo, "");
+  record.runtimeObservedAt = patch.position != null || patch.yaw != null || patch.combatInfo != null || patch.sourceType === "runtime" || patch.sourceType === "fullBlocks"
+    ? observedAt
+    : record.runtimeObservedAt ?? "";
+  record.scoreboardObservedAt = patch.playerScoreboard || patch.teamId != null || patch.squadId != null || patch.isAdmin != null || patch.isCommander != null || patch.sourceType === "scoreboard" || patch.sourceType === "fullBlocks"
+    ? observedAt
+    : record.scoreboardObservedAt ?? "";
+  record.soldierInfo = patch.soldierInfo ? clonePlainObject(patch.soldierInfo) : (record.soldierInfo ? clonePlainObject(record.soldierInfo) : createEmptySoldierInfo());
+  record.vehicleInfo = patch.vehicleInfo ? clonePlainObject(patch.vehicleInfo) : (record.vehicleInfo ? clonePlainObject(record.vehicleInfo) : null);
+  record.playerScoreboard = patch.playerScoreboard ? clonePlainObject(patch.playerScoreboard) : (record.playerScoreboard ? clonePlainObject(record.playerScoreboard) : createEmptyScoreboardInfo());
+  record.ftIndex = firstDefinedNumber(patch.fireTeamIndex ?? patch.ftIndex, record.ftIndex, null);
+  record.ftPosition = firstDefinedNumber(patch.fireTeamPosition ?? patch.ftPosition, record.ftPosition, null);
+  record.ping = firstDefinedNumber(patch.ping, record.ping, null);
+  record.rawText = firstText(patch.rawText, record.rawText, "");
+  record.playerBaseInfo = patch.playerBaseInfo ? clonePlainObject(patch.playerBaseInfo) : record.playerBaseInfo ?? null;
+  record.sourceTypes = mergeUniqueStrings(record.sourceTypes, [patch.sourceType ?? "unknown"]);
+}
+
+function createPlayerRecord(patch, observedAt) {
+  return {
+    playerId: firstDefinedNumber(patch.playerId, patch.playerIndex, null),
+    playerIndex: firstDefinedNumber(patch.playerIndex, patch.playerId, null),
+    playerName: firstText(patch.playerName, ""),
+    playerGuid: firstText(patch.playerGuid ?? patch.steamID ?? patch.eosID, ""),
+    steamID: firstText(patch.steamID, ""),
+    eosID: firstText(patch.eosID, ""),
+    teamId: firstDefinedNumber(patch.teamId, null),
+    squadId: firstDefinedNumber(patch.squadId, null),
+    isAdmin: firstDefinedBoolean(patch.isAdmin, null),
+    isCommander: firstDefinedBoolean(patch.isCommander, null),
+    position: cloneVector(patch.position),
+    yaw: firstDefinedNumber(patch.yaw, null),
+    combatInfo: firstText(patch.combatInfo, ""),
+    firstSeenAt: observedAt,
+    lastSeenAt: observedAt,
+    runtimeObservedAt: patch.sourceType === "runtime" || patch.sourceType === "fullBlocks" ? observedAt : "",
+    scoreboardObservedAt: patch.sourceType === "scoreboard" || patch.sourceType === "fullBlocks" ? observedAt : "",
+    stale: false,
+    sourceTypes: [patch.sourceType ?? "unknown"],
+    soldierInfo: patch.soldierInfo ? clonePlainObject(patch.soldierInfo) : createEmptySoldierInfo(),
+    vehicleInfo: patch.vehicleInfo ? clonePlainObject(patch.vehicleInfo) : null,
+    playerScoreboard: patch.playerScoreboard ? clonePlainObject(patch.playerScoreboard) : createEmptyScoreboardInfo(),
+    ftIndex: firstDefinedNumber(patch.fireTeamIndex ?? patch.ftIndex, null),
+    ftPosition: firstDefinedNumber(patch.fireTeamPosition ?? patch.ftPosition, null),
+    ping: firstDefinedNumber(patch.ping, null),
+    rawText: firstText(patch.rawText, ""),
+    playerBaseInfo: patch.playerBaseInfo ? clonePlainObject(patch.playerBaseInfo) : null,
+    identityKeys: getPlayerIdentityInfo(patch).candidateKeys,
+  };
+}
+
+function createPlaceholderPlayerRecord(patch, observedAt) {
+  return createPlayerRecord(patch, observedAt);
+}
+
+function syncSourceCacheEntry(map, record, key) {
+  for (const [existingKey, existingRecord] of [...map.entries()]) {
+    if (existingRecord !== record) continue;
+    if (existingKey === key) continue;
+    map.delete(existingKey);
+  }
+  map.set(key, record);
+}
+
+function syncPlayerIdentityIndex(draft, record, previousIdentityKeys = [], previousCanonicalKey = "") {
+  const previous = new Set(previousIdentityKeys.map(String));
+  const next = new Set((record.identityKeys ?? []).map(String));
+  for (const key of previous) {
+    if (next.has(key)) continue;
+    const current = draft.playerIdentityIndex.get(key);
+    if (current === previousCanonicalKey || current === getCanonicalPlayerKey(record)) {
+      draft.playerIdentityIndex.delete(key);
+    }
+  }
+  for (const key of next) {
+    draft.playerIdentityIndex.set(key, getCanonicalPlayerKey(record));
+  }
+}
+
+function resolvePlayerCanonicalKey(state, candidateKeys = []) {
+  for (const key of candidateKeys) {
+    const canonical = state.playerIdentityIndex.get(key);
+    if (canonical && state.playersByKey.has(canonical)) return canonical;
+  }
+  return null;
+}
+
+function getCanonicalPlayerKey(player) {
+  const info = getPlayerIdentityInfo(player);
+  return info.key;
+}
+
+function getPlayerIdentityInfo(player) {
+  const candidateKeys = [];
+  const seen = new Set();
+  const push = (value) => {
+    if (!value) return;
+    const key = String(value);
+    if (seen.has(key)) return;
+    seen.add(key);
+    candidateKeys.push(key);
+  };
+
+  const guidValues = [player?.playerGuid, player?.steamID, player?.eosID].map(normalizeIdentityValue).filter(Boolean);
+  for (const guid of guidValues) push(`guid:${guid}`);
+
+  const idValues = [player?.playerIndex, player?.playerId].map(normalizeIdentityValue).filter(Boolean);
+  for (const id of idValues) push(`id:${id}`);
+
+  const name = normalizePlayerName(player?.playerName);
+  if (name) push(`name:${name}`);
+
+  return {
+    key: candidateKeys[0] ?? "",
+    candidateKeys,
+  };
+}
+
+function pruneExpiredPlayers(state, { core, modules } = {}) {
+  const nowIso = new Date().toISOString();
+  const nowMs = Date.parse(nowIso);
+  const onlinePlayerKeys = getOnlinePlayerIdentityKeySet(core, modules);
+  const onlineListAvailable = onlinePlayerKeys instanceof Set;
+  const staleThresholdMs = 15000;
+  const onlineDeleteThresholdMs = 60000;
+  const hardDeleteThresholdMs = 120000;
+
+  for (const [key, record] of [...state.playersByKey.entries()]) {
+    const runtimeObservedMs = parseDateMs(record.runtimeObservedAt || record.lastSeenAt || record.firstSeenAt);
+    const lastSeenMs = parseDateMs(record.lastSeenAt || record.firstSeenAt);
+    const stale = runtimeObservedMs != null ? nowMs - runtimeObservedMs > staleThresholdMs : nowMs - lastSeenMs > staleThresholdMs;
+    record.stale = stale;
+
+    const shouldDeleteByAge = onlineListAvailable
+      ? nowMs - lastSeenMs > onlineDeleteThresholdMs
+      : nowMs - lastSeenMs > hardDeleteThresholdMs;
+    if (!shouldDeleteByAge) continue;
+
+    if (onlineListAvailable && isPlayerOnline(record, onlinePlayerKeys)) {
+      continue;
+    }
+
+    state.playersByKey.delete(key);
+    if (state.runtimePlayersByKey.get(key) === record) state.runtimePlayersByKey.delete(key);
+    if (state.scoreboardPlayersByKey.get(key) === record) state.scoreboardPlayersByKey.delete(key);
+    for (const identityKey of record.identityKeys ?? []) {
+      if (state.playerIdentityIndex.get(identityKey) === key) {
+        state.playerIdentityIndex.delete(identityKey);
+      }
+    }
+  }
+  return state;
+}
+
+function resetPlayerCaches(draft, { keepStatus = "ready" } = {}) {
+  draft.status = keepStatus;
+  draft.markerSeen = false;
+  draft.runtimePlayersByKey.clear();
+  draft.scoreboardPlayersByKey.clear();
+  draft.playersByKey.clear();
+  draft.playerIdentityIndex.clear();
+  draft.captureZones = [];
+  draft.fobs = [];
+  draft.mainZones = [];
+  draft.explosions = [];
+  draft.rawLineHash = "";
+  draft.rawFields = [];
+  draft.lastError = "";
+  draft.diagnostics = [];
+}
+
+function getOnlinePlayerIdentityKeySet(core, modules) {
+  const serverId = String(core?.webStatus?.serverId ?? "").trim();
+  if (!serverId) return null;
+  const getOnlinePlayers = modules?.playerState?.getOnlinePlayers;
+  if (typeof getOnlinePlayers !== "function") return null;
+  let players = null;
+  try {
+    players = getOnlinePlayers(serverId);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(players)) return null;
+  const keys = new Set();
+  for (const player of players) {
+    const info = getPlayerIdentityInfo(player);
+    for (const key of info.candidateKeys) {
+      keys.add(key);
+    }
+  }
+  return keys;
+}
+
+function isPlayerOnline(record, onlinePlayerKeys) {
+  const info = getPlayerIdentityInfo(record);
+  return info.candidateKeys.some((key) => onlinePlayerKeys.has(key));
+}
+
+function appendDiagnostic(draft, diagnostic) {
+  const entry = {
+    ...diagnostic,
+    observedAt: diagnostic.observedAt ?? new Date().toISOString(),
+  };
+  draft.diagnostics.push(entry);
+  if (draft.diagnostics.length > 50) {
+    draft.diagnostics.splice(0, draft.diagnostics.length - 50);
+  }
+}
+
+function clonePlayerView(player) {
+  const cloned = clonePlainObject(player) ?? {};
+  const position = cloned.position ? { ...cloned.position } : null;
+  const soldierInfo = cloned.soldierInfo ? clonePlainObject(cloned.soldierInfo) : createEmptySoldierInfo();
+  if (position && !soldierInfo.position) {
+    soldierInfo.position = { ...position };
+  }
+  if (!soldierInfo.rotation) {
+    soldierInfo.rotation = { x: 0, y: 0, z: cloned.yaw ?? 0 };
+  }
+  const playerScoreboard = cloned.playerScoreboard ? clonePlainObject(cloned.playerScoreboard) : createEmptyScoreboardInfo();
+  const hasRuntime = Boolean(cloned.runtimeObservedAt);
+  const hasScoreboard = Boolean(cloned.scoreboardObservedAt);
+  const presenceState = hasRuntime ? "active" : (hasScoreboard ? "scoreboardOnly" : "notSpawned");
+  const stale = hasRuntime ? Boolean(cloned.stale) : true;
+  return {
+    playerId: cloned.playerId ?? null,
+    playerIndex: cloned.playerIndex ?? null,
+    playerName: cloned.playerName ?? "",
+    playerGuid: cloned.playerGuid ?? "",
+    steamID: cloned.steamID ?? "",
+    eosID: cloned.eosID ?? "",
+    teamId: cloned.teamId ?? null,
+    squadId: cloned.squadId ?? null,
+    isAdmin: cloned.isAdmin ?? null,
+    isCommander: cloned.isCommander ?? null,
+    position,
+    yaw: cloned.yaw ?? null,
+    combatInfo: cloned.combatInfo ?? "",
+    observedAt: cloned.lastSeenAt ?? cloned.observedAt ?? "",
+    firstSeenAt: cloned.firstSeenAt ?? "",
+    lastSeenAt: cloned.lastSeenAt ?? "",
+    runtimeObservedAt: cloned.runtimeObservedAt ?? "",
+    scoreboardObservedAt: cloned.scoreboardObservedAt ?? "",
+    stale,
+    sourceTypes: Array.isArray(cloned.sourceTypes) ? [...cloned.sourceTypes] : [],
+    soldierInfo,
+    vehicleInfo: cloned.vehicleInfo ? clonePlainObject(cloned.vehicleInfo) : null,
+    playerScoreboard,
+    ftIndex: cloned.ftIndex ?? null,
+    ftPosition: cloned.ftPosition ?? null,
+    ping: cloned.ping ?? playerScoreboard?.ping ?? null,
+    rawText: cloned.rawText ?? "",
+    playerBaseInfo: cloned.playerBaseInfo ? clonePlainObject(cloned.playerBaseInfo) : null,
+    identityKeys: Array.isArray(cloned.identityKeys) ? [...cloned.identityKeys] : [],
+    telemetry: {
+      position: position ? { ...position } : null,
+      yaw: cloned.yaw ?? null,
+      combatInfo: cloned.combatInfo ?? "",
+      vehicleInfo: cloned.vehicleInfo ? clonePlainObject(cloned.vehicleInfo) : null,
+    },
+    presence: {
+      state: presenceState,
+      runtimeObservedAt: cloned.runtimeObservedAt ?? "",
+      scoreboardObservedAt: cloned.scoreboardObservedAt ?? "",
+    },
+  };
+}
+
+function mergePlayerViews(base, runtimeView) {
+  const merged = clonePlainObject(base) ?? {};
+  const runtimeTelemetry = runtimeView?.telemetry ?? {};
+  const baseTelemetry = merged.telemetry ?? {};
+  const runtimePresence = runtimeView?.presence ?? {};
+  const basePresence = merged.presence ?? {};
+  merged.telemetry = {
+    position: runtimeTelemetry.position ?? baseTelemetry.position ?? null,
+    yaw: runtimeTelemetry.yaw ?? baseTelemetry.yaw ?? null,
+    combatInfo: firstText(runtimeTelemetry.combatInfo, baseTelemetry.combatInfo, ""),
+    vehicleInfo: runtimeTelemetry.vehicleInfo ?? baseTelemetry.vehicleInfo ?? null,
+  };
+  merged.position = merged.telemetry.position ? { ...merged.telemetry.position } : merged.position ?? null;
+  merged.yaw = merged.telemetry.yaw ?? merged.yaw ?? null;
+  merged.combatInfo = merged.telemetry.combatInfo ?? merged.combatInfo ?? "";
+  if (runtimeView?.vehicleInfo) {
+    merged.vehicleInfo = clonePlainObject(runtimeView.vehicleInfo);
+  }
+  merged.soldierInfo = runtimeView?.soldierInfo ? clonePlainObject(runtimeView.soldierInfo) : merged.soldierInfo ?? createEmptySoldierInfo();
+  merged.ping = runtimeView?.ping ?? merged.ping ?? null;
+  merged.runtimeObservedAt = runtimeView?.runtimeObservedAt ?? merged.runtimeObservedAt ?? "";
+  merged.firstSeenAt = merged.firstSeenAt ?? runtimeView?.firstSeenAt ?? "";
+  merged.lastSeenAt = runtimeView?.lastSeenAt ?? merged.lastSeenAt ?? "";
+  merged.stale = runtimePresence.state === "active"
+    ? Boolean(runtimeView?.stale ?? false)
+    : true;
+  merged.presence = {
+    state: runtimePresence.state === "active" ? "active" : (basePresence.state ?? "scoreboardOnly"),
+    runtimeObservedAt: runtimeView?.runtimeObservedAt ?? merged.presence?.runtimeObservedAt ?? "",
+    scoreboardObservedAt: merged.presence?.scoreboardObservedAt ?? basePresence.scoreboardObservedAt ?? "",
+  };
+  return merged;
+}
+
+function createEmptyScoreboardInfo() {
+  return {
+    raw: "",
+    values: [],
+    numericValues: [],
+    stats: {
+      dataLives: null,
+      numKills: 0,
+      vehicleKills: 0,
+      numDeaths: 0,
+      numWoundeds: 0,
+      numWounds: 0,
+      numTeamKills: 0,
+      healPoints: 0,
+      revivedPoints: 0,
+      teamworkScore: 0,
+      objectiveScore: 0,
+      combatScore: 0,
+    },
+  };
+}
+
+function mergeUniqueStrings(current = [], values = []) {
+  const out = [];
+  const seen = new Set();
+  for (const value of [...current, ...values]) {
+    const text = String(value ?? "").trim();
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    out.push(text);
+  }
+  return out;
+}
+
+function firstText(...values) {
+  for (const value of values) {
+    const text = normalizeIdentityValue(value);
+    if (text) return text;
+  }
+  return "";
+}
+
+function firstDefinedNumber(...values) {
+  for (const value of values) {
+    const number = toFiniteNumber(value);
+    if (number != null) return number;
+  }
+  return null;
+}
+
+function firstDefinedBoolean(...values) {
+  for (const value of values) {
+    if (value === true || value === false) return value;
+    const number = toBooleanNumber(value);
+    if (number != null) return number;
+  }
+  return null;
+}
+
+function cloneVector(value) {
+  if (!value) return null;
+  return {
+    x: toFiniteNumber(value.x),
+    y: toFiniteNumber(value.y),
+    z: toFiniteNumber(value.z),
+  };
+}
+
+function normalizeIdentityValue(value) {
+  if (value == null) return "";
+  return String(value).trim();
+}
+
+function normalizePlayerName(value) {
+  const text = normalizeIdentityValue(value);
+  if (!text) return "";
+  return text.replace(/\s+/g, " ").toLowerCase();
+}
+
+function parseDateMs(value) {
+  const ms = Date.parse(String(value ?? ""));
+  return Number.isFinite(ms) ? ms : null;
 }
 
 export function extractBzssCoreTrackedText(buffer) {
@@ -1003,6 +1580,23 @@ function extractRawLogLine(input) {
     ?? input?.message
     ?? "",
   ).trim();
+}
+
+function splitConcatenatedRawLogSegments(text) {
+  const source = String(text ?? "").trim();
+  if (!source) return [];
+  const headerPattern = /\[\d{4}\.\d{2}\.\d{2}-\d{2}\.\d{2}\.\d{2}:\d+\]\[\d+\]/g;
+  const matches = [...source.matchAll(headerPattern)];
+  if (matches.length <= 1) return [source];
+
+  const segments = [];
+  for (let index = 0; index < matches.length; index += 1) {
+    const start = matches[index].index ?? 0;
+    const end = index + 1 < matches.length ? (matches[index + 1].index ?? source.length) : source.length;
+    const segment = source.slice(start, end).trim();
+    if (segment) segments.push(segment);
+  }
+  return segments.length > 0 ? segments : [source];
 }
 
 function hashText(text) {

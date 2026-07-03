@@ -6,6 +6,34 @@ import {
   parseBzssCoreLogLine,
 } from "../modules/bzss-core-monitor/index.js";
 
+function withMockedDate(iso, fn) {
+  const RealDate = globalThis.Date;
+  const fixedTime = new RealDate(iso).getTime();
+
+  class MockDate extends RealDate {
+    constructor(...args) {
+      if (args.length === 0) {
+        super(fixedTime);
+        return;
+      }
+      super(...args);
+    }
+
+    static now() {
+      return fixedTime;
+    }
+  }
+
+  MockDate.parse = RealDate.parse;
+  MockDate.UTC = RealDate.UTC;
+  globalThis.Date = MockDate;
+  try {
+    return fn();
+  } finally {
+    globalThis.Date = RealDate;
+  }
+}
+
 function testParsePlayerBlocks() {
   const text = "PlayerBaseInfo{0,abc123,Donald DoubyBear,1,0,-1,-1}"
     + "SoldierInfo{BP_Soldier_PLA_Rifleman1_Arid_C_2147477191,100,0,0,0,0,0,0,"
@@ -151,42 +179,45 @@ function testMonitorState() {
 
   assert.equal(module.api.ingestLogLine("PIE: Error: PlayerBaseInfo{}").ok, true);
   assert.equal(module.api.getRuntimePlayers().length, 0);
-  assert.equal(module.api.ingestLogLine("PIE: PlayerScoreboard{0,1,-1,0,0,0,0,0,0,0,0,0,0,0,1,0-1,-1,19}}").ok, true);
-  assert.equal(module.api.getScoreboardPlayers().length, 1);
-  assert.equal(module.api.getScoreboardPlayers()[0].playerIndex, 0);
+
+  assert.equal(module.api.ingestLogLine("PIE: PlayerBaseInfo{7,100,200,300,45}").ok, true);
+  assert.equal(module.api.ingestLogLine("PIE: PlayerBaseInfo{21,400,500,600,90}").ok, true);
+  assert.equal(module.api.ingestLogLine("PIE: PlayerBaseInfo{22,700,800,900,135}").ok, true);
+  assert.deepEqual(
+    module.api.getRuntimePlayers().map((player) => player.playerIndex).sort((a, b) => a - b),
+    [7, 21, 22],
+  );
+
+  assert.equal(module.api.ingestLogLine("PIE: PlayerScoreboard{7,1,3,0,1,2,0,3,4,0,0,10,20,30,0,0,-1,19,55}").ok, true);
+  assert.equal(module.api.ingestLogLine("PIE: PlayerScoreboard{21,2,5,0,2,1,0,4,5,0,0,11,21,31,0,0,-1,19,56}").ok, true);
+  assert.equal(module.api.ingestLogLine("PIE: PlayerScoreboard{22,3,6,0,3,0,0,5,6,0,0,12,22,32,0,0,-1,19,57}").ok, true);
+  assert.deepEqual(
+    module.api.getScoreboardPlayers().map((player) => player.playerIndex).sort((a, b) => a - b),
+    [7, 21, 22],
+  );
+
+  const beforeEmptyRuntime = module.api.getRuntimePlayers().map((player) => player.playerIndex).sort((a, b) => a - b);
+  assert.equal(module.api.ingestLogLine("PIE: PlayerBaseInfo{}").ok, true);
+  assert.deepEqual(
+    module.api.getRuntimePlayers().map((player) => player.playerIndex).sort((a, b) => a - b),
+    beforeEmptyRuntime,
+  );
+
+  const beforeEmptyScoreboard = module.api.getScoreboardPlayers().map((player) => player.playerIndex).sort((a, b) => a - b);
+  assert.equal(module.api.ingestLogLine("PIE: PlayerScoreboard{}").ok, true);
+  assert.deepEqual(
+    module.api.getScoreboardPlayers().map((player) => player.playerIndex).sort((a, b) => a - b),
+    beforeEmptyScoreboard,
+  );
+
   assert.equal(module.api.ingestLogLine("PIE: CPZ:{01-TriCommons,true,1.0,1},FOBI:{,1,Very_Small,300.0,10000.0,2000.0,},MainZone:{1,X=56820.773 Y=7170.025 Z=-13376.360}").ok, true);
   const raw = module.api.getRawSnapshot();
-  assert.equal(raw.runtimePlayers.length, 0);
-  assert.equal(raw.scoreboardPlayers.length, 1);
+  assert.equal(raw.runtimePlayers.length, 3);
+  assert.equal(raw.scoreboardPlayers.length, 3);
   assert.equal(raw.captureZones.length, 1);
   assert.equal(raw.fobs.length, 1);
   assert.equal(raw.mainZones.length, 1);
   assert.ok(raw.rawLineHash);
-
-  // 测试 getPlayers() 合并与规范化输出
-  const runtimeLog = "PlayerBaseInfo{7,100,200,300,45}";
-  assert.equal(module.api.ingestLogLine(runtimeLog).ok, true);
-  const scoreboardLog = "PlayerScoreboard{7,1,3,0,1,2,0,3,4,0,0,10,20,30,0,0,-1,19,55}";
-  assert.equal(module.api.ingestLogLine(scoreboardLog).ok, true);
-
-  const playersBeforeFull = module.api.getPlayers();
-  const p7 = playersBeforeFull.find(p => p.playerIndex === 7);
-  assert.ok(p7);
-  assert.equal(p7.teamId, 1);
-  assert.equal(p7.squadId, 3);
-  assert.deepEqual(p7.position, { x: 10000, y: 20000, z: 30000 });
-  assert.equal(p7.soldierInfo.health, 100); // 默认填充 100
-  assert.equal(p7.playerScoreboard.stats.combatScore, 30);
-  assert.equal(p7.playerScoreboard.stats.vehicleKills, 1);
-  assert.equal(p7.playerScoreboard.stats.teamworkScore, 10);
-
-  // 测试单行内含完整块的日志解析 (playerFullBlocks)
-  const priMultiLog = "PIE: PRI{{21,111,222,3,180,{0,100.0,false,BP_M4A1_C,false,}}}PRI{{22,333,444,5,270,{0,100.0,false,BP_M4A1_C,false,}}}";
-  assert.equal(module.api.ingestLogLine(priMultiLog).ok, true);
-  const priPlayers = module.api.getRuntimePlayers().filter((player) => player.playerIndex === 21 || player.playerIndex === 22);
-  assert.equal(priPlayers.length, 2);
-  assert.deepEqual(priPlayers.find((player) => player.playerIndex === 21)?.position, { x: 11100, y: 22200, z: 300 });
-  assert.deepEqual(priPlayers.find((player) => player.playerIndex === 22)?.position, { x: 33300, y: 44400, z: 500 });
 
   const fullBlockText = "PlayerBaseInfo{42,eos-42,Test Player,2,3,-1,-1}"
     + "SoldierInfo{BP_Soldier_US_Rifleman_C,88,0,0,0,0,0,0,BP_M4_C,30,120{X=1000 Y=2000 Z=0}{X=0 Y=90 Z=0}}"
@@ -194,7 +225,7 @@ function testMonitorState() {
   assert.equal(module.api.ingestLogLine(fullBlockText).ok, true);
 
   const players = module.api.getPlayers();
-  const p42 = players.find(p => p.playerIndex === 42);
+  const p42 = players.find((p) => p.playerIndex === 42);
   assert.ok(p42);
   assert.equal(p42.playerName, "Test Player");
   assert.equal(p42.teamId, 2);
@@ -202,6 +233,125 @@ function testMonitorState() {
   assert.equal(p42.soldierInfo.health, 88);
   assert.deepEqual(p42.soldierInfo.position, { x: 100000, y: 200000, z: 0 });
   assert.equal(p42.playerScoreboard.stats.combatScore, 99);
+
+  const runtimeMergeModule = createBzssCoreMonitorModule({
+    core: {
+      eventBus: { onCoreEvent() { return () => {}; }, emitModuleEvent() {} },
+      logger: { info() {}, warn() {}, error() {}, debug() {} },
+    },
+  });
+  const priBatch = (start, count) => {
+    const rows = [];
+    for (let index = 0; index < count; index += 1) {
+      const playerId = start + index;
+      rows.push(`PRI{{${playerId},${playerId * 10},${playerId * 10 + 1},${playerId * 10 + 2},${playerId % 360}}}`);
+    }
+    return `PIE: ${rows.join("")}`;
+  };
+  assert.equal(runtimeMergeModule.api.ingestLogLine(priBatch(1, 25)).ok, true);
+  assert.equal(runtimeMergeModule.api.ingestLogLine(priBatch(26, 25)).ok, true);
+  assert.equal(runtimeMergeModule.api.ingestLogLine(priBatch(51, 25)).ok, true);
+  assert.equal(runtimeMergeModule.api.ingestLogLine(priBatch(76, 17)).ok, true);
+  assert.equal(runtimeMergeModule.api.getRuntimePlayers().length, 92);
+  assert.deepEqual(
+    [1, 25, 26, 50, 51, 75, 76, 92].every((playerId) => runtimeMergeModule.api.getRuntimePlayers().some((player) => player.playerIndex === playerId)),
+    true,
+  );
+
+  const scoreboardOnlyModule = createBzssCoreMonitorModule({
+    core: {
+      eventBus: { onCoreEvent() { return () => {}; }, emitModuleEvent() {} },
+      logger: { info() {}, warn() {}, error() {}, debug() {} },
+    },
+  });
+  const scoreboardRows = [];
+  for (let playerId = 1; playerId <= 99; playerId += 1) {
+    const squadId = playerId <= 92 ? 3 : 7;
+    scoreboardRows.push(`${[
+      playerId,
+      1,
+      squadId,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      -1,
+      -1,
+      19,
+    ].join(",")}`);
+  }
+  assert.equal(scoreboardOnlyModule.api.ingestLogLine(`PIE: PlayerScoreboard{${scoreboardRows.map((row) => `{${row}}`).join("")}}`).ok, true);
+  const scoreboardOnlyPlayers = scoreboardOnlyModule.api.getPlayers();
+  assert.equal(scoreboardOnlyPlayers.length, 99);
+  assert.equal(scoreboardOnlyPlayers.filter((player) => player.telemetry?.position == null).length, 99);
+  assert.equal(scoreboardOnlyPlayers.every((player) => player.presence?.state === "scoreboardOnly"), true);
+
+  const mergedModule = createBzssCoreMonitorModule({
+    core: {
+      eventBus: { onCoreEvent() { return () => {}; }, emitModuleEvent() {} },
+      logger: { info() {}, warn() {}, error() {}, debug() {} },
+    },
+  });
+  assert.equal(mergedModule.api.ingestLogLine(priBatch(1, 25)).ok, true);
+  assert.equal(mergedModule.api.ingestLogLine(priBatch(26, 25)).ok, true);
+  assert.equal(mergedModule.api.ingestLogLine(priBatch(51, 25)).ok, true);
+  assert.equal(mergedModule.api.ingestLogLine(priBatch(76, 17)).ok, true);
+  assert.equal(mergedModule.api.ingestLogLine(`PIE: PlayerScoreboard{${scoreboardRows.map((row) => `{${row}}`).join("")}}`).ok, true);
+  const mergedPlayers = mergedModule.api.getPlayers();
+  assert.equal(mergedPlayers.length, 99);
+  assert.equal(mergedModule.api.getState().playerCount, 99);
+  assert.ok(mergedPlayers.every((player) => player.playerScoreboard));
+  assert.equal(mergedPlayers.filter((player) => player.playerIndex <= 92).every((player) => player.telemetry?.position != null), true);
+  assert.equal(mergedPlayers.filter((player) => player.playerIndex >= 93).every((player) => player.telemetry?.position == null), true);
+  assert.equal(mergedPlayers.filter((player) => player.playerIndex >= 93).every((player) => player.presence?.state === "scoreboardOnly"), true);
+
+  const hardTtlModule = createBzssCoreMonitorModule({
+    core: {
+      eventBus: { onCoreEvent() { return () => {}; }, emitModuleEvent() {} },
+      logger: { info() {}, warn() {}, error() {}, debug() {} },
+    },
+  });
+  withMockedDate("2026-07-02T00:00:00.000Z", () => {
+    assert.equal(hardTtlModule.api.ingestLogLine("PIE: PlayerBaseInfo{99,10,20,30,40}").ok, true);
+  });
+  withMockedDate("2026-07-02T00:00:16.000Z", () => {
+    const players16 = hardTtlModule.api.getRuntimePlayers();
+    assert.equal(players16.length, 1);
+    assert.equal(players16[0].stale, true);
+  });
+  withMockedDate("2026-07-02T00:02:01.000Z", () => {
+    assert.equal(hardTtlModule.api.getRuntimePlayers().length, 0);
+  });
+
+  const onlineAwareModule = createBzssCoreMonitorModule({
+    core: {
+      eventBus: { onCoreEvent() { return () => {}; }, emitModuleEvent() {} },
+      webStatus: { serverId: "server-1" },
+      logger: { info() {}, warn() {}, error() {}, debug() {} },
+    },
+    modules: {
+      playerState: {
+        getOnlinePlayers() {
+          return [];
+        },
+      },
+    },
+  });
+  withMockedDate("2026-07-02T00:00:00.000Z", () => {
+    assert.equal(onlineAwareModule.api.ingestLogLine("PIE: PlayerBaseInfo{77,10,20,30,40}").ok, true);
+  });
+  withMockedDate("2026-07-02T00:01:01.000Z", () => {
+    assert.equal(onlineAwareModule.api.getRuntimePlayers().length, 0);
+  });
 }
 
 function sleep(ms) {
@@ -240,8 +390,7 @@ async function testParseExplosionDamage() {
   await sleep(3100);
   const snapshotAfter = module.api.getRawSnapshot();
   assert.equal(snapshotAfter.explosions.length, 0);
-  
-  // Cleanup
+
   await module.stop();
 }
 

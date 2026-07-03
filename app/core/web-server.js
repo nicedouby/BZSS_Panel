@@ -4710,12 +4710,14 @@ export class WebServer {
     };
     const includeAll = query?.all === true || query?.all === "1" || query?.all === 1;
     const snapshot = monitor?.getRawSnapshot?.() ?? null;
+    const players = includeAll ? (monitor?.getPlayers?.() ?? []) : undefined;
     return {
       ok: true,
       state,
       status: state.status,
       runtimePlayers: includeAll ? (snapshot?.runtimePlayers ?? []) : undefined,
       scoreboardPlayers: includeAll ? (snapshot?.scoreboardPlayers ?? []) : undefined,
+      players,
       captureZones: includeAll ? (snapshot?.captureZones ?? []) : undefined,
       fobs: includeAll ? (snapshot?.fobs ?? []) : undefined,
       mainZones: includeAll ? (snapshot?.mainZones ?? []) : undefined,
@@ -4730,6 +4732,7 @@ export class WebServer {
       return {
         ok: true,
         ...snapshot,
+        players: monitor?.getPlayers?.() ?? [],
       };
     }
 

@@ -349,6 +349,43 @@ type PlayerPair = {
   scoreboard: BzssCoreScoreboardPlayerInfo | null;
 };
 
+type BzssCoreMergedPlayer = {
+  playerId?: number | null;
+  playerIndex?: number | null;
+  playerName?: string;
+  playerGuid?: string;
+  teamId?: number | null;
+  squadId?: number | null;
+  isAdmin?: boolean | null;
+  isCommander?: boolean | null;
+  stale?: boolean;
+  runtimeObservedAt?: string;
+  scoreboardObservedAt?: string;
+  firstSeenAt?: string;
+  lastSeenAt?: string;
+  telemetry?: {
+    position?: BzssCoreRuntimePlayerInfo["position"] | null;
+    yaw?: number | null;
+    combatInfo?: string;
+    vehicleInfo?: any;
+  };
+  presence?: {
+    state?: string;
+    runtimeObservedAt?: string;
+    scoreboardObservedAt?: string;
+  };
+  playerScoreboard?: {
+    ping?: number | null;
+    stats?: Record<string, any>;
+    raw?: string;
+    values?: string[];
+    numericValues?: Array<number | null>;
+  };
+  ftIndex?: number | null;
+  ftPosition?: number | null;
+  ping?: number | null;
+};
+
 const bzssCoreStore = useBzssCoreStore();
 const squadStore = useSquadStore();
 const serverStore = useServerStore();
@@ -369,6 +406,9 @@ const sortOrder = ref<"asc" | "desc">("asc");
 const expandedPlayers = ref<Record<string | number, boolean>>({});
 
 function getPlayerName(pair: PlayerPair) {
+  const mergedName = (pair.runtime as unknown as { playerName?: string })?.playerName ?? (pair.scoreboard as unknown as { playerName?: string })?.playerName;
+  if (mergedName) return mergedName;
+
   const playerId = pair.runtime?.playerId ?? pair.scoreboard?.playerId;
   if (playerId != null) {
     const player = playerStore.byPlayerID[playerId];
@@ -427,12 +467,19 @@ function handleSort(key: "playerIndex" | "playerId" | keyof BzssCoreScoreboardPl
 
 const runtimePlayers = computed(() => payload.value?.runtimePlayers ?? []);
 const scoreboardPlayers = computed(() => payload.value?.scoreboardPlayers ?? []);
+const mergedPlayers = computed<BzssCoreMergedPlayer[]>(() => Array.isArray(payload.value?.players) ? (payload.value?.players as BzssCoreMergedPlayer[]) : []);
 
 const totalSceneCount = computed(() => {
   return (payload.value?.captureZones?.length ?? 0) + (payload.value?.fobs?.length ?? 0) + (payload.value?.mainZones?.length ?? 0);
 });
 
 const playerPairs = computed<PlayerPair[]>(() => {
+  if (mergedPlayers.value.length > 0) {
+    return mergedPlayers.value
+      .map((player) => buildPlayerPairFromMergedPlayer(player))
+      .sort((a, b) => Number(a.playerIndex) - Number(b.playerIndex));
+  }
+
   const map = new Map<string, PlayerPair>();
   const addPlayer = (player: BzssCoreRuntimePlayerInfo | BzssCoreScoreboardPlayerInfo | undefined, side: "runtime" | "scoreboard") => {
     if (!player) return;
@@ -452,6 +499,56 @@ const playerPairs = computed<PlayerPair[]>(() => {
   scoreboardPlayers.value.forEach((player) => addPlayer(player, "scoreboard"));
   return [...map.values()].sort((a, b) => Number(a.playerIndex) - Number(b.playerIndex));
 });
+
+function buildPlayerPairFromMergedPlayer(player: BzssCoreMergedPlayer): PlayerPair {
+  const telemetry = player.telemetry ?? {};
+  const scoreboardStats = player.playerScoreboard?.stats ?? {};
+  const runtime: BzssCoreRuntimePlayerInfo & { playerGuid?: string; playerName?: string } = {
+    playerId: player.playerId ?? null,
+    playerIndex: player.playerIndex ?? null,
+    position: telemetry.position ?? null,
+    yaw: telemetry.yaw ?? null,
+    combatInfo: telemetry.combatInfo ?? "",
+    observedAt: player.runtimeObservedAt ?? player.lastSeenAt ?? player.firstSeenAt ?? "",
+    stale: player.presence?.state === "scoreboardOnly" || player.presence?.state === "notSpawned"
+      ? true
+      : Boolean(player.stale),
+    playerGuid: player.playerGuid ?? "",
+    playerName: player.playerName ?? "",
+  };
+
+  const scoreboard: BzssCoreScoreboardPlayerInfo & { playerGuid?: string; playerName?: string } = {
+    playerId: player.playerId ?? null,
+    playerIndex: player.playerIndex ?? null,
+    teamId: player.teamId ?? null,
+    squadId: player.squadId ?? null,
+    lives: scoreboardStats.dataLives ?? null,
+    kills: scoreboardStats.numKills ?? null,
+    vehicleKills: scoreboardStats.vehicleKills ?? null,
+    deaths: scoreboardStats.numDeaths ?? null,
+    woundeds: scoreboardStats.numWoundeds ?? null,
+    wounds: scoreboardStats.numWounds ?? null,
+    teamKills: scoreboardStats.numTeamKills ?? null,
+    healPoints: scoreboardStats.healPoints ?? null,
+    revivedPoints: scoreboardStats.revivedPoints ?? null,
+    teamworkScore: scoreboardStats.teamworkScore ?? null,
+    objectiveScore: scoreboardStats.objectiveScore ?? null,
+    combatScore: scoreboardStats.combatScore ?? null,
+    isAdmin: player.isAdmin ?? null,
+    isCommander: player.isCommander ?? null,
+    fireTeamIndex: player.ftIndex ?? null,
+    fireTeamPosition: player.ftPosition ?? null,
+    ping: player.ping ?? player.playerScoreboard?.ping ?? null,
+    playerGuid: player.playerGuid ?? "",
+    playerName: player.playerName ?? "",
+  };
+
+  return {
+    playerIndex: player.playerIndex ?? player.playerId ?? "",
+    runtime,
+    scoreboard,
+  };
+}
 
 const filteredPairs = computed(() => {
   const needle = query.value.trim().toLowerCase();
