@@ -280,7 +280,7 @@ import { warnPlayer, kickPlayer } from "../app/squadManagementApi";
 import {
   adaptTeam,
   adaptPlayerDetail,
-  buildCombatStatsLookupFromBzssCorePlayers,
+  buildCombatStatsLookupFromTacticalPlayers,
   buildSquadLifecycleLookup,
   filterTeamsBySearch,
   compareSquadMembers,
@@ -302,9 +302,6 @@ import { normalizeRefreshPolicy, resolveRefreshDelay } from "../app/refreshPolic
 import { useAutoRefreshGate } from "../composables/useAutoRefreshGate";
 import { cancelIdleTask, scheduleIdleTask } from "../utils/idle";
 import { resolvePlayerIdentityIp } from "../app/playerIdentityApi";
-import { fetchBzssCorePlayerInfo, fetchBzssCorePlayerInfoList, streamBzssCorePlayerInfoList } from "../app/bzssCoreApi";
-import type { BzssCorePlayerInfoResponse, BzssCoreTrackedPlayerInfo } from "../app/bzssCoreApi";
-import { useBzssCoreStore } from "../stores/bzss-core.store";
 import { useTacticalStateStore } from "../stores/tactical-state.store";
 import type {
   PageState,
@@ -388,14 +385,10 @@ function handleViewModeChange(mode: "list" | "map") {
   }
 }
 
-const bzssCoreStore = useBzssCoreStore();
 const tacticalStateStore = useTacticalStateStore();
-const bzssCoreSnapshot = computed(() => bzssCoreStore.snapshot);
-const bzssCorePlayers = computed(() => bzssCoreStore.players);
-const bzssCorePlayerLookup = computed(() => buildBzssCorePlayerLookup(bzssCorePlayers.value));
-const bzssCoreLoading = computed(() => bzssCoreStore.loading);
-const bzssCoreError = computed(() => bzssCoreStore.error);
-const bzssCoreStreamActive = computed(() => bzssCoreStore.streamActive);
+const tacticalStateSnapshot = computed(() => tacticalStateStore.snapshot);
+const tacticalPlayers = computed(() => tacticalStateStore.players);
+const tacticalPlayerLookup = computed(() => buildTacticalPlayerLookup(tacticalPlayers.value));
 const tacticalMapSnapshot = computed(() => {
   const snapshot = tacticalStateStore.snapshot;
   if (!snapshot) return null;
@@ -407,7 +400,7 @@ const tacticalMapSnapshot = computed(() => {
     explosions: snapshot.assets?.explosions ?? [],
   };
 });
-const tacticalMapPlayers = computed(() => adaptTacticalStatePlayersForMap(tacticalStateStore.players, combatStatsLookup.value));
+const tacticalMapPlayers = computed(() => adaptTacticalStatePlayersForMap(tacticalPlayers.value, combatStatsLookup.value));
 const tacticalMapCaptureZones = computed(() => tacticalStateStore.assets?.captureZones ?? []);
 const tacticalMapFobs = computed(() => tacticalStateStore.assets?.fobs ?? []);
 const tacticalMapLoading = computed(() => tacticalStateStore.loading);
@@ -506,13 +499,13 @@ const remoteTelemetryQuery = useQuery({
 const remoteTelemetryState = computed(() => remoteTelemetryQuery.data.value?.remoteTelemetry ?? null);
 
 const healthLookup = computed<Record<string, number | null>>(() => {
-  const players = bzssCorePlayers.value;
+  const players = tacticalPlayers.value;
   if (!Array.isArray(players) || players.length === 0) return {};
   const map: Record<string, number | null> = {};
   for (const p of players) {
-    const name = String(p.playerName ?? "").trim();
+    const name = String(p?.identity?.name ?? "").trim() || String(p?.name ?? "").trim();
     if (!name) continue;
-    const hp = p.soldierInfo?.health;
+    const hp = p?.telemetry?.health ?? p?.raw?.bzss?.soldierInfo?.health ?? null;
     map[name] = hp != null && Number.isFinite(hp) ? hp : null;
   }
   return map;
@@ -595,7 +588,7 @@ const squadLifecycleQuery = useQuery({
   refetchOnWindowFocus: false,
 });
 const squadLifecycleCurrent = computed(() => squadLifecycleQuery.data.value?.current ?? null);
-const combatStatsLookup = computed(() => buildCombatStatsLookupFromBzssCorePlayers(bzssCorePlayers.value));
+const combatStatsLookup = computed(() => buildCombatStatsLookupFromTacticalPlayers(tacticalPlayers.value));
 const battleLogOverviewQuery = useQuery({
   queryKey: computed(() => ["battle-log-overview", auth.authenticated, currentServerId.value]),
   enabled: computed(() => auth.authenticated && Boolean(currentServerId.value)),
@@ -681,7 +674,7 @@ const viewModels = computed(() => {
   const filteredTeams = filterTeamsByMode(searchedTeams, pageState.filterMode);
   const viewerTeamId = viewerAutoSwapEnabled.value ? findAdminTeamId(rawTeams.value, viewerSteam64.value) : null;
   return {
-    teams: sortTeamsForAdminPerspective(filteredTeams, viewerTeamId).map((team) => attachBzssCoreInfoToTeam(team, bzssCorePlayerLookup.value)),
+    teams: sortTeamsForAdminPerspective(filteredTeams, viewerTeamId).map((team) => attachTacticalStateInfoToTeam(team, tacticalPlayerLookup.value)),
     viewerTeamId,
     viewerSteam64: viewerSteam64.value,
     viewerPerspectiveText: buildViewerPerspectiveTextEnglish(viewerTeamId, viewerAutoSwapEnabled.value),
@@ -722,15 +715,19 @@ function eventTone(event: PlaytimeJobProgressEvent) {
   return "neutral";
 }
 
-function buildBzssCorePlayerLookup(players: BzssCoreTrackedPlayerInfo[] = []) {
-  const map = new Map<string, BzssCoreTrackedPlayerInfo>();
+function buildTacticalPlayerLookup(players: any[] = []) {
+  const map = new Map<string, any>();
   for (const player of Array.isArray(players) ? players : []) {
     if (!player) continue;
+    const identity = player?.identity ?? {};
     const keys = [
-      player.playerIndex != null ? `idx:${player.playerIndex}` : "",
-      player.playerId != null ? `id:${player.playerId}` : "",
-      player.playerGuid ? `guid:${String(player.playerGuid).trim().toLowerCase()}` : "",
-      player.playerName ? `name:${String(player.playerName).trim().toLowerCase()}` : "",
+      identity.playerID != null ? `idx:${identity.playerID}` : "",
+      identity.playerID != null ? `id:${identity.playerID}` : "",
+      identity.steamID ? `steam:${String(identity.steamID).trim().toLowerCase()}` : "",
+      identity.eosID ? `eos:${String(identity.eosID).trim().toLowerCase()}` : "",
+      identity.controllerID ? `controller:${String(identity.controllerID).trim().toLowerCase()}` : "",
+      identity.name ? `name:${String(identity.name).trim().toLowerCase()}` : "",
+      player?.raw?.bzss?.playerGuid ? `guid:${String(player.raw.bzss.playerGuid).trim().toLowerCase()}` : "",
     ].filter(Boolean);
     for (const key of keys) {
       map.set(key, player);
@@ -744,9 +741,15 @@ function adaptTacticalStatePlayersForMap(playersList: any[] = [], combatLookup: 
     const steamId = player?.identity?.steamID ?? null;
     const eosId = player?.identity?.eosID ?? null;
     const rawRcon = player?.raw?.rcon ?? null;
+    const presenceState = String(player?.presence?.state ?? "");
+    const presenceHint = String(player?.telemetry?.presenceHint ?? "");
+    const isNoPawn = presenceHint === "noPawn" || presenceState === "noPawn";
     const rconDetail = rawRcon
       ? adaptPlayerDetail(rawRcon, player?.profile?.playtimeHours ?? null, combatLookup)
       : null;
+    const position = isNoPawn ? null : (player?.telemetry?.position ?? null);
+    const yaw = isNoPawn ? null : (player?.telemetry?.yaw ?? null);
+    const rotation = isNoPawn ? null : (player?.telemetry?.rotation ?? null);
 
     return {
       key: player?.identity?.key ?? "",
@@ -764,8 +767,15 @@ function adaptTacticalStatePlayersForMap(playersList: any[] = [], combatLookup: 
       ping: player?.network?.gamePing ?? null,
       ftIndex: player?.telemetry?.fireTeamIndex ?? null,
       ftPosition: player?.telemetry?.fireTeamPosition ?? null,
-      position: player?.telemetry?.position ?? null,
-      yaw: player?.telemetry?.yaw ?? null,
+      position,
+      yaw,
+      presenceHint: isNoPawn ? "noPawn" : presenceHint,
+      presence: {
+        ...(player?.presence ?? {}),
+        state: isNoPawn ? "noPawn" : presenceState,
+      },
+      hasTelemetry: Boolean(player?.telemetry?.hasTelemetry),
+      hasPosition: Boolean(player?.telemetry?.hasPosition && !isNoPawn),
       playerBaseInfo: {
         raw: "",
         fields: [],
@@ -779,8 +789,8 @@ function adaptTacticalStatePlayersForMap(playersList: any[] = [], combatLookup: 
         health: player?.telemetry?.health ?? null,
         weaponClass: player?.telemetry?.weaponClass ?? "",
         ammoValues: [],
-        position: player?.telemetry?.position ?? null,
-        rotation: player?.telemetry?.rotation ?? null,
+        position,
+        rotation,
       },
       vehicleInfo: {
         raw: player?.vehicle?.raw ?? "",
@@ -788,8 +798,8 @@ function adaptTacticalStatePlayersForMap(playersList: any[] = [], combatLookup: 
         healthText: "",
         health: player?.vehicle?.health ?? null,
         maxHealth: player?.vehicle?.maxHealth ?? null,
-        position: player?.telemetry?.position ?? null,
-        rotation: player?.telemetry?.rotation ?? null,
+        position,
+        rotation,
       },
       playerScoreboard: {
         raw: "",
@@ -824,12 +834,16 @@ function adaptTacticalStatePlayersForMap(playersList: any[] = [], combatLookup: 
   });
 }
 
-function resolveBzssCorePlayerInfo(player: PlayerRowViewModel, lookup: Map<string, BzssCoreTrackedPlayerInfo>) {
+function resolveTacticalStatePlayerInfo(player: PlayerRowViewModel, lookup: Map<string, any>) {
   const normalizedName = String(player.name ?? "").trim().toLowerCase();
   const normalizedSuffix = normalizedName.split(/\s+/).filter(Boolean).pop() ?? "";
+  const controllerID = String((player as any).controller ?? (player.raw as any)?.controllerID ?? "").trim().toLowerCase();
   const keys = [
     player.playerId != null ? `id:${player.playerId}` : "",
     player.playerId != null ? `idx:${player.playerId}` : "",
+    player.steamId ? `steam:${String(player.steamId).trim().toLowerCase()}` : "",
+    player.eosId ? `eos:${String(player.eosId).trim().toLowerCase()}` : "",
+    controllerID ? `controller:${controllerID}` : "",
     normalizedName ? `name:${normalizedName}` : "",
     player.raw && typeof player.raw === "object" && (player.raw as any).playerGuid
       ? `guid:${String((player.raw as any).playerGuid).trim().toLowerCase()}`
@@ -843,7 +857,7 @@ function resolveBzssCorePlayerInfo(player: PlayerRowViewModel, lookup: Map<strin
 
   if (normalizedSuffix) {
     for (const matched of lookup.values()) {
-      const candidateName = String(matched?.playerName ?? "").trim().toLowerCase();
+      const candidateName = String(matched?.identity?.name ?? matched?.playerName ?? "").trim().toLowerCase();
       const candidateSuffix = candidateName.split(/\s+/).filter(Boolean).pop() ?? "";
       if (candidateSuffix && candidateSuffix === normalizedSuffix) return matched;
     }
@@ -851,31 +865,32 @@ function resolveBzssCorePlayerInfo(player: PlayerRowViewModel, lookup: Map<strin
   return null;
 }
 
-function attachBzssCoreInfoToPlayer(
+function attachTacticalStateInfoToPlayer(
   player: PlayerRowViewModel,
-  lookup: Map<string, BzssCoreTrackedPlayerInfo>,
+  lookup: Map<string, any>,
 ): PlayerRowViewModel {
-  const matched = resolveBzssCorePlayerInfo(player, lookup);
+  const matched = resolveTacticalStatePlayerInfo(player, lookup);
   if (!matched) return player;
   const rawPlayer = player.raw && typeof player.raw === "object" ? { ...(player.raw as Record<string, any>) } : player.raw;
   if (rawPlayer && typeof rawPlayer === "object") {
-    (rawPlayer as Record<string, any>).bzssCorePlayerInfo = matched;
+    (rawPlayer as Record<string, any>).tacticalStatePlayer = matched;
+    (rawPlayer as Record<string, any>).bzssCorePlayerInfo = matched.raw?.bzss ?? null;
   }
   return {
     ...player,
-    bzssCorePing: matched.playerScoreboard?.ping ?? matched.ping ?? player.bzssCorePing ?? null,
-    bzssCoreFtIndex: (matched as any).fireTeamIndex ?? matched.ftIndex ?? player.bzssCoreFtIndex ?? null,
-    bzssCoreFtPosition: (matched as any).fireTeamPosition ?? matched.ftPosition ?? player.bzssCoreFtPosition ?? null,
+    bzssCorePing: matched.network?.gamePing ?? matched.playerScoreboard?.ping ?? matched.ping ?? player.bzssCorePing ?? null,
+    bzssCoreFtIndex: matched.telemetry?.fireTeamIndex ?? (matched as any).fireTeamIndex ?? matched.ftIndex ?? player.bzssCoreFtIndex ?? null,
+    bzssCoreFtPosition: matched.telemetry?.fireTeamPosition ?? (matched as any).fireTeamPosition ?? matched.ftPosition ?? player.bzssCoreFtPosition ?? null,
     raw: rawPlayer,
   };
 }
 
-function attachBzssCoreInfoToSquad(
+function attachTacticalStateInfoToSquad(
   squad: SquadViewModel,
-  lookup: Map<string, BzssCoreTrackedPlayerInfo>,
+  lookup: Map<string, any>,
 ): SquadViewModel {
-  const leader = squad.leader ? attachBzssCoreInfoToPlayer(squad.leader, lookup) as SquadLeaderRowViewModel : null;
-  const members = squad.members.map((member) => attachBzssCoreInfoToPlayer(member, lookup));
+  const leader = squad.leader ? attachTacticalStateInfoToPlayer(squad.leader, lookup) as SquadLeaderRowViewModel : null;
+  const members = squad.members.map((member) => attachTacticalStateInfoToPlayer(member, lookup));
   members.sort(compareSquadMembers);
   return {
     ...squad,
@@ -884,13 +899,13 @@ function attachBzssCoreInfoToSquad(
   };
 }
 
-function attachBzssCoreInfoToTeam(
+function attachTacticalStateInfoToTeam(
   team: TeamViewModel,
-  lookup: Map<string, BzssCoreTrackedPlayerInfo>,
+  lookup: Map<string, any>,
 ): TeamViewModel {
   return {
     ...team,
-    squads: team.squads.map((squad) => attachBzssCoreInfoToSquad(squad, lookup)),
+    squads: team.squads.map((squad) => attachTacticalStateInfoToSquad(squad, lookup)),
   };
 }
 
@@ -901,26 +916,22 @@ function handleVisibilityChange() {
 onMounted(() => {
   pageHidden.value = typeof document !== "undefined" ? document.hidden : false;
   document.addEventListener("visibilitychange", handleVisibilityChange);
-  bzssCoreStore.startStream();
   tacticalStateStore.startStream();
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("visibilitychange", handleVisibilityChange);
   cancelIdleTask(battleStatsRefreshIdleHandle);
-  bzssCoreStore.stopStream();
   tacticalStateStore.stopStream();
 });
 
 onActivated(() => {
   active.value = true;
-  bzssCoreStore.startStream();
   tacticalStateStore.startStream();
 });
 
 onDeactivated(() => {
   active.value = false;
-  bzssCoreStore.stopStream();
   tacticalStateStore.stopStream();
 });
 
@@ -1112,24 +1123,12 @@ watch(
 );
 
 watch(
-  () => [bzssCorePlayers.value, activePlayerWindow.value?.detail.name, bzssCoreSnapshot.value] as const,
-  ([currentPlayers, activeName, snapshotVal]) => {
+  () => [tacticalPlayers.value, activePlayerWindow.value?.detail, tacticalStateSnapshot.value] as const,
+  ([, currentPlayerDetail, snapshotVal]) => {
     if (!activePlayerWindow.value) return;
-    const currentName = String(activeName ?? "").trim();
-    if (!currentName) return;
-
-    let matched = currentPlayers.find((p) => String(p.playerName ?? "").trim() === currentName);
-    if (!matched) {
-      const currentSuffix = currentName.split(/\s+/).filter(Boolean).pop() ?? currentName;
-      matched = currentPlayers.find((p) => {
-        const responseName = String(p.playerName ?? "").trim();
-        const responseSuffix = responseName.split(/\s+/).filter(Boolean).pop() ?? responseName;
-        return currentSuffix && responseSuffix && currentSuffix === responseSuffix;
-      });
-    }
-
-    const nextStatus = snapshotVal?.status || "";
-    const nextCompletedAt = snapshotVal?.state?.updatedAt ?? null;
+    const matched = resolveTacticalStatePlayerInfo(currentPlayerDetail ?? activePlayerWindow.value.detail, tacticalPlayerLookup.value);
+    const nextStatus = String(snapshotVal?.meta?.revision ?? snapshotVal?.meta?.generatedAt ?? "");
+    const nextCompletedAt = snapshotVal?.meta?.generatedAt ?? null;
     const nextPlayerInfo = matched ?? null;
 
     const currentDetail = activePlayerWindow.value.detail;
@@ -1624,6 +1623,8 @@ async function handlePlayerPlaytimeUpdated() {
 
 function buildPlayerDetailViewModel(player: PlayerRowViewModel): PlayerDetailViewModel {
   const rawBase = player.raw && typeof player.raw === "object" ? player.raw : {};
+  const tacticalStatePlayer = (rawBase as any).tacticalStatePlayer ?? null;
+  const bzssCoreInfo = (rawBase as any).bzssCorePlayerInfo ?? tacticalStatePlayer?.raw?.bzss ?? null;
   const rawPlayer: RuntimePlayer = {
     ...rawBase,
     playerID: normalizePlayerId(player.playerId),
@@ -1659,10 +1660,10 @@ function buildPlayerDetailViewModel(player: PlayerRowViewModel): PlayerDetailVie
   detail.factionFlagUrl = resolvedTeamName
     ? getFlagUrlByTeamName(resolvedTeamName)
     : (player.factionFlagUrl ?? null);
-  detail.bzssCorePing = player.bzssCorePing ?? player.raw?.bzssCorePlayerInfo?.playerScoreboard?.ping ?? null;
-  detail.bzssCoreFtIndex = player.bzssCoreFtIndex ?? player.raw?.bzssCorePlayerInfo?.ftIndex ?? null;
-  detail.bzssCoreFtPosition = player.bzssCoreFtPosition ?? player.raw?.bzssCorePlayerInfo?.ftPosition ?? null;
-  detail.bzssCorePlayerInfo = player.raw?.bzssCorePlayerInfo ?? detail.bzssCorePlayerInfo ?? null;
+  detail.bzssCorePing = player.bzssCorePing ?? tacticalStatePlayer?.network?.gamePing ?? bzssCoreInfo?.playerScoreboard?.ping ?? null;
+  detail.bzssCoreFtIndex = player.bzssCoreFtIndex ?? tacticalStatePlayer?.telemetry?.fireTeamIndex ?? bzssCoreInfo?.ftIndex ?? null;
+  detail.bzssCoreFtPosition = player.bzssCoreFtPosition ?? tacticalStatePlayer?.telemetry?.fireTeamPosition ?? bzssCoreInfo?.ftPosition ?? null;
+  detail.bzssCorePlayerInfo = bzssCoreInfo ?? detail.bzssCorePlayerInfo ?? null;
   const cacheRecord = player.steamId ? stablePlaytimes.value[player.steamId] : null;
   detail.steamAvatar = cacheRecord?.steam_avatar || cacheRecord?.steamAvatar || player.steamAvatar || null;
   return detail;

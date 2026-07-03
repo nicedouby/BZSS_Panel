@@ -435,6 +435,10 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
     return [...mergedByKey.values()];
   }
 
+  function getTelemetryPlayers() {
+    return getPlayers();
+  }
+
   async function start() {
     if (started) return;
     started = true;
@@ -477,6 +481,7 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
       getRuntimePlayers,
       getScoreboardPlayers,
       getPlayers,
+      getTelemetryPlayers,
       getRawSnapshot,
       subscribe,
       ingestLogLine,

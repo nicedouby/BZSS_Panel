@@ -395,21 +395,42 @@ export function buildCombatStatsLookup(events: any[] = []): Record<string, Comba
   return lookup;
 }
 
-export function buildCombatStatsLookupFromBzssCorePlayers(players: any[] = []): Record<string, CombatStats> {
+export function buildCombatStatsLookupFromTacticalPlayers(players: any[] = []): Record<string, CombatStats> {
   const lookup: Record<string, CombatStats> = {};
   const list = Array.isArray(players) ? players : [];
 
   for (const player of list) {
-    const stats = combatStatsFromScoreboardStats(player?.playerScoreboard?.stats);
+    const combat = player?.combat && typeof player.combat === "object" ? player.combat : null;
+    const stats = combatStatsFromScoreboardStats(
+      combat ? {
+        numKills: combat.kills,
+        numWoundeds: combat.woundeds,
+        numDeaths: combat.deaths,
+        numTeamKills: combat.teamKills,
+        revivedPoints: combat.revives,
+        numWounds: combat.wounds,
+        dataLives: combat.dataLives,
+        healPoints: combat.healPoints,
+        teamworkScore: combat.teamworkScore,
+        objectiveScore: combat.objectiveScore,
+        combatScore: combat.combatScore,
+      } : null,
+    ) ?? combatStatsFromScoreboardStats(
+      player?.playerScoreboard?.stats
+      ?? player?.raw?.bzss?.playerScoreboard?.stats
+      ?? player?.raw?.bzssCorePlayerInfo?.playerScoreboard?.stats,
+    );
     if (!stats) continue;
 
     const keys = collectCombatIdentityKeys({
-      eosID: player?.playerGuid,
-      eosId: player?.playerGuid,
-      playerID: player?.playerId,
-      playerId: player?.playerId,
-      playerName: player?.playerName,
-      name: player?.playerName,
+      eosID: player?.identity?.eosID ?? player?.eosId ?? player?.raw?.bzss?.playerGuid ?? player?.raw?.bzssCorePlayerInfo?.playerGuid,
+      eosId: player?.identity?.eosID ?? player?.eosId ?? player?.raw?.bzss?.playerGuid ?? player?.raw?.bzssCorePlayerInfo?.playerGuid,
+      steamID: player?.identity?.steamID ?? player?.steamId ?? player?.raw?.bzss?.playerGuid ?? player?.raw?.bzssCorePlayerInfo?.playerGuid,
+      playerID: player?.identity?.playerID ?? player?.playerId ?? player?.playerID,
+      playerId: player?.identity?.playerID ?? player?.playerId ?? player?.playerID,
+      playerName: player?.identity?.name ?? player?.name ?? player?.raw?.bzss?.playerName ?? player?.raw?.bzssCorePlayerInfo?.playerName,
+      name: player?.identity?.name ?? player?.name ?? player?.raw?.bzss?.playerName ?? player?.raw?.bzssCorePlayerInfo?.playerName,
+      controllerID: player?.identity?.controllerID ?? player?.controllerId ?? player?.controller,
     });
 
     for (const key of keys) {
@@ -418,6 +439,10 @@ export function buildCombatStatsLookupFromBzssCorePlayers(players: any[] = []): 
   }
 
   return lookup;
+}
+
+export function buildCombatStatsLookupFromBzssCorePlayers(players: any[] = []): Record<string, CombatStats> {
+  return buildCombatStatsLookupFromTacticalPlayers(players);
 }
 
 export function adaptMatchHeader(

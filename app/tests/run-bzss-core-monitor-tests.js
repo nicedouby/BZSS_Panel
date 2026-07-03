@@ -187,6 +187,7 @@ function testMonitorState() {
 
   assert.equal(module.api.ingestLogLine("PIE: Error: PlayerBaseInfo{}").ok, true);
   assert.equal(module.api.getRuntimePlayers().length, 0);
+  assert.equal(typeof module.api.getTelemetryPlayers, "function");
 
   assert.equal(module.api.ingestLogLine("PIE: PlayerBaseInfo{7,100,200,300,45}").ok, true);
   assert.equal(module.api.ingestLogLine("PIE: PlayerBaseInfo{21,400,500,600,90}").ok, true);
@@ -203,6 +204,7 @@ function testMonitorState() {
     module.api.getScoreboardPlayers().map((player) => player.playerIndex).sort((a, b) => a - b),
     [7, 21, 22],
   );
+  assert.deepEqual(module.api.getTelemetryPlayers().map((player) => player.playerIndex).sort((a, b) => a - b), module.api.getPlayers().map((player) => player.playerIndex).sort((a, b) => a - b));
 
   const beforeEmptyRuntime = module.api.getRuntimePlayers().map((player) => player.playerIndex).sort((a, b) => a - b);
   assert.equal(module.api.ingestLogLine("PIE: PlayerBaseInfo{}").ok, true);

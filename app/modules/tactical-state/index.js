@@ -49,9 +49,11 @@ export function createTacticalStateModule({ core, modules, logger }) {
           : Array.isArray(playerState?.players)
             ? playerState.players
             : [];
-        const bzssPlayers = Array.isArray(modules.bzssCoreMonitor?.getPlayers?.())
-          ? modules.bzssCoreMonitor.getPlayers()
-          : [];
+        const bzssPlayers = Array.isArray(modules.bzssCoreMonitor?.getTelemetryPlayers?.())
+          ? modules.bzssCoreMonitor.getTelemetryPlayers()
+          : Array.isArray(modules.bzssCoreMonitor?.getPlayers?.())
+            ? modules.bzssCoreMonitor.getPlayers()
+            : [];
         const bzssRaw = modules.bzssCoreMonitor?.getRawSnapshot?.() ?? null;
 
         const linked = await linkPlayers({
@@ -325,28 +327,34 @@ export function createTacticalStateModule({ core, modules, logger }) {
     }
 
     for (const bzssPlayer of bzssPlayers) {
-      const bzssKey = buildIdentityKey({
-        playerID: numberOrNull(bzssPlayer?.playerId, bzssPlayer?.playerIndex, null),
-        steamID: normalizeSteamID(bzssPlayer?.playerGuid ?? ""),
-        eosID: normalizeEosID(bzssPlayer?.playerGuid ?? ""),
-        controllerID: "",
-        name: normalizeText(bzssPlayer?.playerName ?? ""),
-      });
+      const bzssKey = buildBzssIdentityKey(bzssPlayer);
       if (matchedBzssKeys.has(bzssKey)) continue;
-      const linked = buildBzssOnlyPlayer({
-        bzssPlayer: {
-          ...bzssPlayer,
-          key: bzssKey,
-        },
-        profileLookup,
-        networkMap,
-        generatedAt,
-      });
       diagnostics.unlinkedBzssPlayers.push({
-        identity: linked.identity,
+        identity: {
+          key: bzssKey,
+          playerID: numberOrNull(bzssPlayer?.playerId, bzssPlayer?.playerIndex, null),
+          playerId: numberOrNull(bzssPlayer?.playerId, bzssPlayer?.playerIndex, null),
+          name: normalizeText(bzssPlayer?.playerName ?? bzssPlayer?.name ?? ""),
+          steamID: normalizeSteamID(bzssPlayer?.playerGuid ?? bzssPlayer?.steamID ?? bzssPlayer?.steam64ID ?? ""),
+          eosID: normalizeEosID(bzssPlayer?.eosID ?? bzssPlayer?.playerGuid ?? ""),
+          controllerID: normalizeText(
+            bzssPlayer?.controllerID
+              ?? bzssPlayer?.controllerId
+              ?? bzssPlayer?.playerControllerID
+              ?? bzssPlayer?.playerControllerId
+              ?? bzssPlayer?.playerId
+              ?? bzssPlayer?.playerIndex
+              ?? "",
+          ),
+        },
         reason: "missing-rcon-player",
+        telemetry: {
+          position: clonePlainObject(bzssPlayer?.position ?? bzssPlayer?.soldierInfo?.position ?? null),
+          yaw: numberOrNull(bzssPlayer?.yaw, bzssPlayer?.soldierInfo?.rotation?.z, null),
+          observedAt: bzssPlayer?.observedAt ?? "",
+          presenceHint: firstText(bzssPlayer?.presenceHint, ""),
+        },
       });
-      players.push(linked.player);
     }
 
     players.sort((left, right) => {
@@ -456,6 +464,13 @@ export function createTacticalStateModule({ core, modules, logger }) {
     const squadId = numberOrNull(rconPlayer?.squadID ?? bzssPlayer?.squadId);
     const squadName = firstText(rconPlayer?.squadName, bzssPlayer?.squadName, squadId == null ? "" : `Squad ${squadId}`);
     const teamName = firstText(rconPlayer?.teamName, bzssPlayer?.teamName, teamId == null ? "" : `Team ${teamId}`);
+    const presenceHint = firstText(bzssPlayer?.presenceHint, "");
+    const noPawn = presenceHint === "noPawn";
+    const telemetryPosition = noPawn ? null : clonePlainObject(bzssPlayer?.position ?? bzssPlayer?.soldierInfo?.position ?? null);
+    const telemetryRotation = noPawn ? null : clonePlainObject(bzssPlayer?.soldierInfo?.rotation ?? null);
+    const telemetryYaw = noPawn ? null : numberOrNull(bzssPlayer?.yaw, bzssPlayer?.soldierInfo?.rotation?.z, null);
+    const hasTelemetry = Boolean(bzssPlayer);
+    const hasPosition = Boolean(telemetryPosition);
 
     const player = {
       identity: {
@@ -468,8 +483,10 @@ export function createTacticalStateModule({ core, modules, logger }) {
         controllerID: controllerID || null,
       },
       presence: {
-        online: Boolean(rconPlayer || bzssPlayer),
-        state: firstText(rconPlayer?.state, missingBzssTelemetry ? "unknown" : "online"),
+        online: Boolean(rconPlayer),
+        state: noPawn
+          ? "noPawn"
+          : firstText(rconPlayer?.state, missingBzssTelemetry ? "onlineNoTelemetry" : "online"),
         firstSeenAt: firstText(rconPlayer?.firstSeenAt, ""),
         lastSeenAt: firstText(rconPlayer?.lastSeenAt, generatedAt),
         squadlessSince: firstText(rconPlayer?.squadlessSince, ""),
@@ -484,14 +501,17 @@ export function createTacticalStateModule({ core, modules, logger }) {
         role: firstText(rconPlayer?.role, bzssPlayer?.role, ""),
       },
       telemetry: {
-        position: clonePlainObject(bzssPlayer?.position ?? bzssPlayer?.soldierInfo?.position ?? null),
-        rotation: clonePlainObject(bzssPlayer?.soldierInfo?.rotation ?? null),
-        yaw: numberOrNull(bzssPlayer?.yaw, bzssPlayer?.soldierInfo?.rotation?.z, null),
-        health: numberOrNull(bzssPlayer?.soldierInfo?.health, null),
-        soldierClass: firstText(bzssPlayer?.soldierInfo?.soldierClass, ""),
-        weaponClass: firstText(bzssPlayer?.soldierInfo?.weaponClass, ""),
+        position: telemetryPosition,
+        rotation: telemetryRotation,
+        yaw: telemetryYaw,
+        health: noPawn ? null : numberOrNull(bzssPlayer?.soldierInfo?.health, null),
+        soldierClass: noPawn ? "" : firstText(bzssPlayer?.soldierInfo?.soldierClass, ""),
+        weaponClass: noPawn ? "" : firstText(bzssPlayer?.soldierInfo?.weaponClass, ""),
         fireTeamIndex: numberOrNull(bzssPlayer?.ftIndex, null),
         fireTeamPosition: numberOrNull(bzssPlayer?.ftPosition, null),
+        presenceHint,
+        hasTelemetry,
+        hasPosition,
       },
       combat: {
         kills: numberOrNull(bzssPlayer?.playerScoreboard?.stats?.numKills, bzssPlayer?.kills, null),
@@ -542,12 +562,20 @@ export function createTacticalStateModule({ core, modules, logger }) {
   function resolveBzssMatch(rconPlayer, bzssIndex) {
     const candidates = [];
     const playerID = numberOrNull(rconPlayer?.playerID, rconPlayer?.playerId, null);
+    const controllerID = normalizeText(
+      rconPlayer?.controllerID
+        ?? rconPlayer?.controllerId
+        ?? rconPlayer?.playerControllerID
+        ?? rconPlayer?.playerControllerId
+        ?? "",
+    );
     const steamID = normalizeSteamID(rconPlayer?.steamID ?? rconPlayer?.steam64ID ?? rconPlayer?.steam64 ?? "");
     const eosID = normalizeEosID(rconPlayer?.eosID ?? "");
     const name = normalizeText(rconPlayer?.name ?? "");
     const normalizedName = normalizeName(name);
 
     pushCandidates(candidates, bzssIndex.byPlayerID.get(playerID), "playerID", "high");
+    pushCandidates(candidates, bzssIndex.byControllerID?.get(controllerID), "controllerID", "high");
     pushCandidates(candidates, bzssIndex.bySteamID.get(steamID), "steamID", "high");
     pushCandidates(candidates, bzssIndex.byEOSID.get(eosID), "eosID", "high");
     pushCandidates(candidates, bzssIndex.byExactName.get(name), "name", "medium");
@@ -594,7 +622,13 @@ export function createTacticalStateModule({ core, modules, logger }) {
         playerID: numberOrNull(rconPlayer?.playerID, rconPlayer?.playerId, null),
         steamID: normalizeSteamID(rconPlayer?.steamID ?? rconPlayer?.steam64ID ?? rconPlayer?.steam64 ?? ""),
         eosID: normalizeEosID(rconPlayer?.eosID ?? ""),
-        controllerID: normalizeText(rconPlayer?.controllerID ?? ""),
+        controllerID: normalizeText(
+          rconPlayer?.controllerID
+            ?? rconPlayer?.controllerId
+            ?? rconPlayer?.playerControllerID
+            ?? rconPlayer?.playerControllerId
+            ?? "",
+        ),
         name: normalizeText(rconPlayer?.name ?? ""),
       }),
       playerID: numberOrNull(rconPlayer?.playerID, rconPlayer?.playerId, null),
@@ -602,13 +636,20 @@ export function createTacticalStateModule({ core, modules, logger }) {
       name: normalizeText(rconPlayer?.name ?? ""),
       steamID: normalizeSteamID(rconPlayer?.steamID ?? rconPlayer?.steam64ID ?? rconPlayer?.steam64 ?? ""),
       eosID: normalizeEosID(rconPlayer?.eosID ?? ""),
-      controllerID: normalizeText(rconPlayer?.controllerID ?? ""),
+      controllerID: normalizeText(
+        rconPlayer?.controllerID
+          ?? rconPlayer?.controllerId
+          ?? rconPlayer?.playerControllerID
+          ?? rconPlayer?.playerControllerId
+          ?? "",
+      ),
     };
   }
 
   function buildRconIndex(players) {
     const index = {
       byPlayerID: new Map(),
+      byControllerID: new Map(),
       bySteamID: new Map(),
       byEOSID: new Map(),
       byExactName: new Map(),
@@ -622,17 +663,31 @@ export function createTacticalStateModule({ core, modules, logger }) {
           playerID: numberOrNull(player?.playerID, player?.playerId, null),
           steamID: normalizeSteamID(player?.steamID ?? player?.steam64ID ?? player?.steam64 ?? ""),
           eosID: normalizeEosID(player?.eosID ?? ""),
-          controllerID: normalizeText(player?.controllerID ?? ""),
+          controllerID: normalizeText(
+            player?.controllerID
+              ?? player?.controllerId
+              ?? player?.playerControllerID
+              ?? player?.playerControllerId
+              ?? "",
+          ),
           name: normalizeText(player?.name ?? ""),
         }),
       };
       const playerID = numberOrNull(item.playerID, item.playerId, null);
+      const controllerID = normalizeText(
+        item.controllerID
+          ?? item.controllerId
+          ?? item.playerControllerID
+          ?? item.playerControllerId
+          ?? "",
+      );
       const steamID = normalizeSteamID(item.steamID ?? "");
       const eosID = normalizeEosID(item.eosID ?? "");
       const name = normalizeText(item.name ?? "");
       const normalizedName = normalizeName(name);
 
       if (playerID != null) pushMapValue(index.byPlayerID, playerID, item);
+      if (controllerID) pushMapValue(index.byControllerID, controllerID, item);
       if (steamID) pushMapValue(index.bySteamID, steamID, item);
       if (eosID) pushMapValue(index.byEOSID, eosID, item);
       if (name) pushMapValue(index.byExactName, name, item);
@@ -645,6 +700,7 @@ export function createTacticalStateModule({ core, modules, logger }) {
   function buildBzssIndex(players) {
     const index = {
       byPlayerID: new Map(),
+      byControllerID: new Map(),
       bySteamID: new Map(),
       byEOSID: new Map(),
       byExactName: new Map(),
@@ -654,6 +710,15 @@ export function createTacticalStateModule({ core, modules, logger }) {
     for (const player of players) {
       const item = clonePlainObject(player);
       const playerID = numberOrNull(item.playerId, item.playerIndex, null);
+      const controllerID = normalizeText(
+        item.controllerID
+          ?? item.controllerId
+          ?? item.playerControllerID
+          ?? item.playerControllerId
+          ?? item.playerId
+          ?? item.playerIndex
+          ?? "",
+      );
       const steamID = normalizeSteamID(item.playerGuid ?? "");
       const eosID = normalizeEosID(item.playerGuid ?? "");
       const name = normalizeText(item.playerName ?? "");
@@ -662,10 +727,11 @@ export function createTacticalStateModule({ core, modules, logger }) {
         playerID,
         steamID,
         eosID,
-        controllerID: "",
+        controllerID,
         name,
       });
       if (playerID != null) pushMapValue(index.byPlayerID, playerID, item);
+      if (controllerID) pushMapValue(index.byControllerID, controllerID, item);
       if (steamID) pushMapValue(index.bySteamID, steamID, item);
       if (eosID) pushMapValue(index.byEOSID, eosID, item);
       if (name) pushMapValue(index.byExactName, name, item);
@@ -743,12 +809,31 @@ export function createTacticalStateModule({ core, modules, logger }) {
   function identityPriority(method) {
     switch (method) {
       case "playerID": return 1;
-      case "steamID": return 2;
-      case "eosID": return 3;
-      case "name": return 4;
-      case "normalizedName": return 5;
+      case "controllerID": return 2;
+      case "steamID": return 3;
+      case "eosID": return 4;
+      case "name": return 5;
+      case "normalizedName": return 6;
       default: return 99;
     }
+  }
+
+  function buildBzssIdentityKey(bzssPlayer = {}) {
+    return bzssPlayer?.key || buildIdentityKey({
+      playerID: numberOrNull(bzssPlayer?.playerId, bzssPlayer?.playerIndex, null),
+      steamID: normalizeSteamID(bzssPlayer?.steamID ?? bzssPlayer?.steam64ID ?? bzssPlayer?.playerGuid ?? ""),
+      eosID: normalizeEosID(bzssPlayer?.eosID ?? bzssPlayer?.playerGuid ?? ""),
+      controllerID: normalizeText(
+        bzssPlayer?.controllerID
+          ?? bzssPlayer?.controllerId
+          ?? bzssPlayer?.playerControllerID
+          ?? bzssPlayer?.playerControllerId
+          ?? bzssPlayer?.playerId
+          ?? bzssPlayer?.playerIndex
+          ?? "",
+      ),
+      name: normalizeText(bzssPlayer?.playerName ?? bzssPlayer?.name ?? ""),
+    });
   }
 
   function normalizeTickets(tickets) {
