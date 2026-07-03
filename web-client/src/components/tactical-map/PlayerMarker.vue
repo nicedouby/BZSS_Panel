@@ -27,7 +27,8 @@
       v-if="yaw !== null && !isDead"
       class="marker-direction"
       :style="{
-        transform: `translate(-50%, -50%) rotate(${yaw - 90}deg)`
+        // Yaw comes in on the game convention used by BZSS Core; the map arrow uses the opposite screen-space turn.
+        transform: `translate(-50%, -50%) rotate(${yaw + 90}deg)`
       }"
     >
       <div class="direction-arrow"></div>

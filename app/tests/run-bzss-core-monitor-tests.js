@@ -412,9 +412,9 @@ async function testParseExplosionDamage() {
   assert.equal(parsed.type, "explosiveDamage");
   assert.ok(parsed.explosion);
   assert.ok(parsed.explosion.id.startsWith("exp-"));
-  assert.equal(parsed.explosion.x, -700821);
-  assert.equal(parsed.explosion.y, 1183569);
-  assert.equal(parsed.explosion.z, -1347549);
+  assert.equal(parsed.explosion.x, -7008.21);
+  assert.equal(parsed.explosion.y, 11835.69);
+  assert.equal(parsed.explosion.z, -13475.49);
   assert.equal(parsed.explosion.damageCauser, "BP_M67Frag_C_2147006951");
   assert.equal(parsed.explosion.damageInstigator, "BP_PlayerController_C_2147480791");
 
@@ -431,7 +431,7 @@ async function testParseExplosionDamage() {
 
   const snapshot = module.api.getRawSnapshot();
   assert.equal(snapshot.explosions.length, 1);
-  assert.equal(snapshot.explosions[0].x, -700821);
+  assert.equal(snapshot.explosions[0].x, -7008.21);
   assert.equal(snapshot.explosions[0].damageCauser, "BP_M67Frag_C_2147006951");
 
   await sleep(3100);

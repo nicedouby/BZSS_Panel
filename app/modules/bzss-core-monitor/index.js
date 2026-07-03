@@ -1187,9 +1187,9 @@ function parseExplosiveDamageLine(text) {
     type: "explosiveDamage",
     explosion: {
       id: "exp-" + Math.random().toString(36).slice(2, 11),
-      x: parseFloat(locMatch[1]) * 100,
-      y: parseFloat(locMatch[2]) * 100,
-      z: parseFloat(locMatch[3]) * 100,
+      x: parseFloat(locMatch[1]),
+      y: parseFloat(locMatch[2]),
+      z: parseFloat(locMatch[3]),
       damageCauser: causerMatch ? causerMatch[1] : "",
       damageInstigator: instigatorMatch ? instigatorMatch[1] : "",
       at: new Date().toISOString(),
