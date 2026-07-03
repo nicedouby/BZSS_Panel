@@ -25,6 +25,15 @@
     "defaultSteam64": "76561198194428818",
     "viewerTeamAutoSwapEnabled": true
   },
+  "reserveExchange": {
+    "enabled": true,
+    "host": "127.0.0.1",
+    "port": 12865,
+    "sessionTtlMs": 43200000,
+    "databaseFilePath": "./data/reserve-exchange/store.sqlite3",
+    "claimEnabled": true,
+    "claimLockMinutes": 10
+  },
   "settingsEditor": {
     "enabled": true,
     "exposed": [

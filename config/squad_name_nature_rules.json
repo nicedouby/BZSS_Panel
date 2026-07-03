@@ -198,6 +198,28 @@
         "医疗"
       ]
     },
+    "logistics": {
+      "exact": [
+        "后勤",
+        "logi",
+        "logistics",
+        "fob",
+        "hab",
+        "transport",
+        "运输",
+        "补给"
+      ],
+      "contains": [
+        "后勤",
+        "logi",
+        "logistics",
+        "fob",
+        "hab",
+        "transport",
+        "运输",
+        "补给"
+      ]
+    },
     "defaultInfantryPatterns": [
       "^Squad\\s*\\d+$",
       "^灏忛槦\\s*\\d+$",

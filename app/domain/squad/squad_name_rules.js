@@ -9,6 +9,7 @@ export const squadNameRules = Object.freeze({
     "^team\\s*\\d+$",
   ]),
   priority: Object.freeze([
+    "logistics",
     "support",
     "vehicle",
     "infantry",
@@ -284,6 +285,35 @@ export const squadNameRules = Object.freeze({
       "直升机",
       "heli",
       "运输直升机",
+    ]),
+    blacklist: Object.freeze([]),
+    regex: Object.freeze([]),
+  }),
+  logistics: Object.freeze({
+    exactWhitelist: Object.freeze([
+      "后勤",
+      "logi",
+      "logistics",
+      "fob",
+      "hab",
+      "transport",
+      "运输",
+      "补给",
+    ]),
+    aliases: Object.freeze({
+      exactWhitelist: Object.freeze([
+        "logi team",
+      ]),
+    }),
+    contains: Object.freeze([
+      "后勤",
+      "logi",
+      "logistics",
+      "fob",
+      "hab",
+      "transport",
+      "运输",
+      "补给",
     ]),
     blacklist: Object.freeze([]),
     regex: Object.freeze([]),

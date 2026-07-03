@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <section class="tracking-page">
     <h1 class="sr-only">建队规则链</h1>
 
@@ -863,10 +863,11 @@ async function patchPluginConfig(urlSlug: string, config: Record<string, unknown
 }
 import type { FairSquadGuardStatus } from "../app/fairSquadGuardApi";
 
-type SquadRuleNature = "infantry" | "vehicle" | "support";
+type SquadRuleNature = "infantry" | "vehicle" | "support" | "logistics";
 type FlowMode = "overview" | "squad-name" | "stepwise" | "fair";
 
 const whitelistNatureOptions: Array<{ value: SquadRuleNature; label: string }> = [
+  { value: "logistics", label: "后勤" },
   { value: "infantry", label: "普通步兵" },
   { value: "vehicle", label: "载具" },
   { value: "support", label: "支援" },
@@ -1775,6 +1776,7 @@ function normalizeWhitelistRules(exactRules?: Partial<Record<SquadRuleNature, st
     infantry: normalizeWhitelistNames(exactRules?.infantry),
     vehicle: normalizeWhitelistNames(exactRules?.vehicle),
     support: normalizeWhitelistNames(exactRules?.support),
+    logistics: normalizeWhitelistNames(exactRules?.logistics),
   };
 }
 
@@ -1817,7 +1819,7 @@ function normalizeSquadNameKey(value: string) {
 
 function normalizeNature(value?: string) {
   const normalized = String(value ?? "").trim().toLowerCase();
-  if (normalized === "infantry" || normalized === "vehicle" || normalized === "support") return normalized;
+  if (normalized === "infantry" || normalized === "vehicle" || normalized === "support" || normalized === "logistics") return normalized;
   return null;
 }
 
@@ -1825,6 +1827,7 @@ function getNatureLabel(nature?: string) {
   if (nature === "infantry") return "普通步兵";
   if (nature === "vehicle") return "载具";
   if (nature === "support") return "支援";
+  if (nature === "logistics") return "后勤";
   return "未知";
 }
 

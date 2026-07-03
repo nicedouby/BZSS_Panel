@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -1089,7 +1089,8 @@ async function testSquadNameClassifierHelperCoversCoreRules() {
   assert.equal(classifySquadName("Squad 7").category, "infantry");
   assert.equal(classifySquadName("步兵队").category, "infantry");
   assert.equal(classifySquadName("装甲队").category, "vehicle");
-  assert.equal(classifySquadName("后勤支援").category, "support");
+  assert.equal(classifySquadName("后勤支援").category, "logistics");
+  assert.equal(classifySquadName("后勤队").category, "logistics");
   assert.equal(classifySquadName("Alpha").category, "other");
 }
 
@@ -1131,6 +1132,7 @@ async function testSquadNameRulesApiReadsAndWritesExactMappings() {
       infantry: { exact: ["alpha"] },
       vehicle: { exact: ["bravo"] },
       support: { exact: ["logi"] },
+      logistics: { exact: ["logi-one"] },
     },
   }), "utf8");
 
@@ -1165,6 +1167,7 @@ async function testSquadNameRulesApiReadsAndWritesExactMappings() {
     infantry: ["alpha"],
     vehicle: ["bravo"],
     support: ["logi"],
+    logistics: ["logi-one"],
   });
 
   const postRecorder = createRecorder();
@@ -1173,6 +1176,7 @@ async function testSquadNameRulesApiReadsAndWritesExactMappings() {
       infantry: ["alpha", "green"],
       vehicle: ["armor", "alpha"],
       support: ["logi"],
+      logistics: ["logi-one"],
     },
   })]);
   postReq.method = "POST";
@@ -1186,12 +1190,14 @@ async function testSquadNameRulesApiReadsAndWritesExactMappings() {
     infantry: ["green"],
     vehicle: ["alpha", "armor"],
     support: ["logi"],
+    logistics: ["logi-one"],
   });
 
   const savedRaw = JSON.parse(await fs.readFile(rulesPath, "utf8"));
   assert.deepEqual(savedRaw.rules.infantry.exact, ["green"]);
   assert.deepEqual(savedRaw.rules.vehicle.exact, ["alpha", "armor"]);
   assert.deepEqual(savedRaw.rules.support.exact, ["logi"]);
+  assert.deepEqual(savedRaw.rules.logistics.exact, ["logi-one"]);
 }
 
 async function testSquadNamePolicyRoutesExposeTestAndProtectedSave() {

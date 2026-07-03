@@ -63,7 +63,7 @@ export async function updateSquadNameExactRuleConfig(configManager = null, nextC
     ? document.rules
     : {};
 
-  for (const nature of ["infantry", "vehicle", "support"]) {
+  for (const nature of ["infantry", "vehicle", "support", "logistics"]) {
     const currentBucket = document.rules[nature];
     const nextBucket = currentBucket && typeof currentBucket === "object" && !Array.isArray(currentBucket)
       ? { ...currentBucket }
@@ -151,6 +151,7 @@ function buildExactRulesMap(rawRules = {}) {
     infantry: rawRules?.infantry?.exact ?? rawRules?.infantry?.exactWhitelist ?? [],
     vehicle: rawRules?.vehicle?.exact ?? rawRules?.vehicle?.exactWhitelist ?? [],
     support: rawRules?.support?.exact ?? rawRules?.support?.exactWhitelist ?? [],
+    logistics: rawRules?.logistics?.exact ?? rawRules?.logistics?.exactWhitelist ?? [],
   });
 }
 
@@ -160,6 +161,7 @@ function normalizeExactRulesInput(nextConfig = {}) {
     infantry: asStringArray(source.infantry),
     vehicle: asStringArray(source.vehicle),
     support: asStringArray(source.support),
+    logistics: asStringArray(source.logistics),
   };
 }
 
@@ -168,10 +170,11 @@ function sanitizeExactRules(exactRules = {}) {
     infantry: [],
     vehicle: [],
     support: [],
+    logistics: [],
   };
   const ownerByName = new Map();
 
-  for (const nature of ["infantry", "vehicle", "support"]) {
+  for (const nature of ["infantry", "vehicle", "support", "logistics"]) {
     for (const rawName of asStringArray(exactRules[nature])) {
       const normalizedKey = normalizeSquadName(rawName);
       if (!normalizedKey) continue;
@@ -190,11 +193,12 @@ function sanitizeExactRules(exactRules = {}) {
     infantry: dedupeStrings(result.infantry),
     vehicle: dedupeStrings(result.vehicle),
     support: dedupeStrings(result.support),
+    logistics: dedupeStrings(result.logistics),
   };
 }
 
 function flattenExactRuleEntries(exactRules) {
-  return ["infantry", "vehicle", "support"].flatMap((nature) =>
+  return ["infantry", "vehicle", "support", "logistics"].flatMap((nature) =>
     (exactRules?.[nature] ?? []).map((name) => ({
       name,
       nature,

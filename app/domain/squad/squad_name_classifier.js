@@ -10,10 +10,12 @@ export const SQUAD_NATURE = Object.freeze({
   INFANTRY: "infantry",
   VEHICLE: "vehicle",
   SUPPORT: "support",
+  LOGISTICS: "logistics",
   OTHER: "other",
 });
 
 export const SQUAD_NATURE_LABEL = Object.freeze({
+  logistics: "后勤队",
   infantry: "步兵队",
   vehicle: "载具队",
   support: "支援队",
@@ -37,6 +39,7 @@ export const SQUAD_VEHICLE_CLASS_LABEL = Object.freeze({
 });
 
 const NATURE_PRIORITY = Object.freeze([
+  SQUAD_NATURE.LOGISTICS,
   SQUAD_NATURE.SUPPORT,
   SQUAD_NATURE.VEHICLE,
   SQUAD_NATURE.INFANTRY,
@@ -213,7 +216,7 @@ export function classifySquadName(squadName, options = {}) {
 
 function collectCandidates(normalizedName, rules, debug) {
   const result = [];
-  for (const nature of [SQUAD_NATURE.SUPPORT, SQUAD_NATURE.VEHICLE, SQUAD_NATURE.INFANTRY]) {
+  for (const nature of [SQUAD_NATURE.LOGISTICS, SQUAD_NATURE.SUPPORT, SQUAD_NATURE.VEHICLE, SQUAD_NATURE.INFANTRY]) {
     const bucket = rules[nature] ?? {};
     const exactHits = matchList(normalizedName, bucket.exactWhitelist, "exact");
     const aliasHits = matchAliasList(normalizedName, bucket.aliases?.exactWhitelist ?? []);
@@ -515,6 +518,8 @@ function makeResult({
     nature,
     category,
     label,
+    subNature: vehicleClass,
+    subNatureLabel: vehicleClassLabel,
     confidence,
     normalizedName,
     matchedRule,
@@ -576,6 +581,7 @@ function mergeRules(baseRules, overrideRules) {
     infantry: mergeCategoryRules(normalizedBase.infantry, normalizedOverride.infantry),
     vehicle: mergeCategoryRules(normalizedBase.vehicle, normalizedOverride.vehicle),
     support: mergeCategoryRules(normalizedBase.support, normalizedOverride.support),
+    logistics: mergeCategoryRules(normalizedBase.logistics, normalizedOverride.logistics),
     vehicleClasses: mergeVehicleClassRules(normalizedBase.vehicleClasses, normalizedOverride.vehicleClasses),
   };
 }
@@ -600,6 +606,7 @@ function normalizeRulesInput(rules) {
     infantry: normalizeCategoryInput(rules?.infantry),
     vehicle: normalizeCategoryInput(rules?.vehicle),
     support: normalizeCategoryInput(rules?.support),
+    logistics: normalizeCategoryInput(rules?.logistics),
     vehicleClasses: normalizeVehicleClassInput(rules?.vehicleClasses),
   };
 }
@@ -625,6 +632,7 @@ function cloneRules(rules) {
     infantry: cloneCategoryRules(rules?.infantry),
     vehicle: cloneCategoryRules(rules?.vehicle),
     support: cloneCategoryRules(rules?.support),
+    logistics: cloneCategoryRules(rules?.logistics),
     vehicleClasses: cloneVehicleClassRules(rules?.vehicleClasses),
   };
 }

@@ -145,6 +145,22 @@
           <span v-if="!canEditExactRules">当前账号只能查看，保存需要超级管理员。</span>
         </p>
 
+        <div class="quick-add-bar">
+          <label class="field">
+            <span>快速添加队名</span>
+            <input v-model.trim="quickAddName" type="text" placeholder="输入队名后选择性质" />
+          </label>
+          <label class="field">
+            <span>队伍性质</span>
+            <select v-model="quickAddNature">
+              <option v-for="option in quickAddNatureOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+            </select>
+          </label>
+          <button type="button" class="action-btn primary" :disabled="!quickAddName.trim()" @click="appendQuickRule">
+            加入规则
+          </button>
+        </div>
+
         <div class="rules-grid">
           <label class="field">
             <span>步兵队</span>
@@ -166,6 +182,14 @@
             <span>支援队</span>
             <textarea
               v-model="exactRuleForm.supportText"
+              rows="8"
+              :disabled="exactRulesLoading || exactRulesSaving || !canEditExactRules"
+            />
+          </label>
+          <label class="field">
+            <span>后勤队</span>
+            <textarea
+              v-model="exactRuleForm.logisticsText"
               rows="8"
               :disabled="exactRulesLoading || exactRulesSaving || !canEditExactRules"
             />
@@ -287,7 +311,7 @@ import { apiGet, apiPost, ApiError } from "../app/apiClient";
 import { useAuthStore } from "../stores/auth.store";
 import { useUiStore } from "../stores/ui.store";
 
-type SquadNature = "infantry" | "vehicle" | "support" | "other";
+type SquadNature = "infantry" | "vehicle" | "support" | "logistics" | "other";
 type SquadRuleNature = Exclude<SquadNature, "other">;
 
 type SquadClassifierResponse = {
@@ -301,6 +325,8 @@ type SquadClassifierResponse = {
   reason: string;
   vehicleClass: "ifv" | "light_vehicle" | "tank" | "spg" | "other";
   vehicleClassLabel: string;
+  subNature?: string;
+  subNatureLabel?: string;
   vehicleClassRule: string | null;
   vehicleClassValue: string | null;
   vehicleClassReason: string | null;
@@ -346,7 +372,17 @@ const exactRuleForm = reactive({
   infantryText: "",
   vehicleText: "",
   supportText: "",
+  logisticsText: "",
 });
+
+const quickAddName = ref("");
+const quickAddNature = ref<SquadRuleNature>("infantry");
+const quickAddNatureOptions: Array<{ value: SquadRuleNature; label: string }> = [
+  { value: "infantry", label: "步兵队" },
+  { value: "vehicle", label: "载具队" },
+  { value: "support", label: "支援队" },
+  { value: "logistics", label: "后勤队" },
+];
 
 const canEditExactRules = computed(() => Boolean(auth.user?.isSuperAdmin));
 
@@ -509,6 +545,7 @@ async function saveExactRules() {
         infantry: parseRuleTextarea(exactRuleForm.infantryText),
         vehicle: parseRuleTextarea(exactRuleForm.vehicleText),
         support: parseRuleTextarea(exactRuleForm.supportText),
+        logistics: parseRuleTextarea(exactRuleForm.logisticsText),
       },
     });
     applyExactRules(payload);
@@ -534,6 +571,29 @@ function applyExactRules(payload: SquadNameRulesResponse) {
   exactRuleForm.infantryText = (payload.exactRules?.infantry ?? []).join("\n");
   exactRuleForm.vehicleText = (payload.exactRules?.vehicle ?? []).join("\n");
   exactRuleForm.supportText = (payload.exactRules?.support ?? []).join("\n");
+  exactRuleForm.logisticsText = (payload.exactRules?.logistics ?? []).join("\n");
+}
+
+function appendQuickRule() {
+  const name = quickAddName.value.trim();
+  if (!name) return;
+
+  const field = getRuleTextField(quickAddNature.value);
+  const current = parseRuleTextarea(exactRuleForm[field]);
+  if (!current.some((item) => item.toLowerCase() === name.toLowerCase())) {
+    current.push(name);
+    exactRuleForm[field] = current.join("\n");
+    const label = quickAddNatureOptions.find((item) => item.value === quickAddNature.value)?.label ?? quickAddNature.value;
+    exactRuleEntries.value = [...exactRuleEntries.value, { name, nature: quickAddNature.value, label }];
+  }
+  quickAddName.value = "";
+}
+
+function getRuleTextField(nature: SquadRuleNature) {
+  if (nature === "vehicle") return "vehicleText";
+  if (nature === "support") return "supportText";
+  if (nature === "logistics") return "logisticsText";
+  return "infantryText";
 }
 
 function parseRuleTextarea(text: string) {
@@ -585,6 +645,13 @@ function formatError(err: unknown) {
   gap: 14px;
 }
 
+.quick-add-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
 .inline-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -593,7 +660,7 @@ function formatError(err: unknown) {
 
 .rules-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 

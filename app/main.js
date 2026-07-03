@@ -45,6 +45,7 @@ import { RawLogDerivedEvents } from "./core/raw-log-derived-events.js";
 import { PerformanceMonitor } from "./core/performance-monitor.js";
 import { AuditManager } from "./core/audit/audit-manager.js";
 import { LogPostMonitor } from "./core/logpost-monitor.js";
+import { NewbieReserveExchangeService } from "./services/newbie-reserve-exchange-service.js";
 
 async function main() {
   const configManager = new ConfigManager("./config.json");
@@ -210,6 +211,12 @@ async function main() {
     core: coreContext,
     modules: moduleManager.registry,
   });
+  const reserveExchangeService = new NewbieReserveExchangeService({
+    core: coreContext,
+    modules: moduleManager.registry,
+    config: configManager,
+    logger: logger.child({ moduleId: "core.reserveExchange", source: "core.reserveExchange", channel: "web" }),
+  });
 
   const pythonLogParserManager = new PythonLogParserManager({
     config: configManager.get("pythonLogParser", {}),
@@ -246,6 +253,7 @@ async function main() {
   await rconManager.start();
   await udpReceiver.start();
   await pluginManager.loadPlugins();
+  await reserveExchangeService.start();
   await webServer.start();
 
   // 放在最后启动 Python，确保 UDP 和 Web 都已经准备好。
@@ -256,6 +264,10 @@ async function main() {
     source: "app.main",
   });
   logger.info(`Web: http://${webServer.host}:${webServer.port}`, {
+    scope: "app",
+    source: "app.main",
+  });
+  logger.info(`Reserve exchange: ${reserveExchangeService.baseUrl || `http://${reserveExchangeService.host}:${reserveExchangeService.port}`}`, {
     scope: "app",
     source: "app.main",
   });
@@ -275,6 +287,7 @@ async function main() {
     });
 
     await pythonLogParserManager.stop();
+    await reserveExchangeService.stop();
     await webServer.stop();
     await pluginManager.stopAll();
     await moduleManager.stopAll();

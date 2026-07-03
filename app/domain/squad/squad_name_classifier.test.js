@@ -42,6 +42,14 @@ const SUPPORT_CASES = [
   "HAB",
 ];
 
+const LOGISTICS_CASES = [
+  "后勤队",
+  "logistics",
+  "fob",
+  "hab",
+  "运输队",
+];
+
 function expectNature(name, nature, label = null) {
   const result = classifySquadName(name);
   assert.equal(result.nature, nature, name);
@@ -66,6 +74,10 @@ for (const name of VEHICLE_CASES) {
 
 for (const name of SUPPORT_CASES) {
   expectNature(name, SQUAD_NATURE.SUPPORT, SQUAD_NATURE_LABEL.support);
+}
+
+for (const name of LOGISTICS_CASES) {
+  expectNature(name, SQUAD_NATURE.LOGISTICS, SQUAD_NATURE_LABEL.logistics);
 }
 
 assert.equal(classifySquadName("hello").nature, SQUAD_NATURE.OTHER);
