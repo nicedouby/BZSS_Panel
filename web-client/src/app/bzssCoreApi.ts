@@ -10,17 +10,6 @@ export interface BzssCoreExecuteResult {
   durationMs?: number;
 }
 
-
-export interface BzssCoreExecuteResult {
-  ok: boolean;
-  command?: string;
-  directive?: string;
-  message?: string;
-  stdout?: string;
-  stderr?: string;
-  durationMs?: number;
-}
-
 export interface BzssCoreTrackedVector {
   x: number | null;
   y: number | null;

@@ -877,11 +877,13 @@ function clonePlayerView(player) {
   if (isNoPawn) {
     soldierInfo.position = null;
     soldierInfo.rotation = null;
-  } else if (position && !soldierInfo.position) {
-    soldierInfo.position = { ...position };
-  }
-  if (!soldierInfo.rotation) {
-    soldierInfo.rotation = { x: 0, y: 0, z: cloned.yaw ?? 0 };
+  } else {
+    if (position && !soldierInfo.position) {
+      soldierInfo.position = { ...position };
+    }
+    if (!soldierInfo.rotation) {
+      soldierInfo.rotation = { x: 0, y: 0, z: cloned.yaw ?? 0 };
+    }
   }
   const playerScoreboard = cloned.playerScoreboard ? clonePlainObject(cloned.playerScoreboard) : createEmptyScoreboardInfo();
   const hasRuntime = Boolean(cloned.runtimeObservedAt);
