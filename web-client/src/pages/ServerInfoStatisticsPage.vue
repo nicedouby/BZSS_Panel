@@ -126,6 +126,7 @@
               :samples="samples"
               :channels="channels"
               :enabled-channels="enabledChannels"
+              :tooltip-stats-by-timestamp="tooltipStatsByTimestamp"
               class="chart-component"
             />
           </div>
@@ -170,6 +171,7 @@ const {
   lastUpdatedLabel,
   enabledChannels,
   currentMetrics,
+  tooltipStatsByTimestamp,
   hasData,
   hasCustomSelection,
   activeRangeLabel,
@@ -195,7 +197,7 @@ function isChannelEnabled(key: string): boolean {
 // 衍生统计
 const peakPlayers = computed(() => {
   if (!samples.value.length) return 0;
-  return Math.max(...samples.value.map((s) => s.metrics.playerCount ?? 0));
+  return Math.max(...samples.value.map((s) => s.metrics.players ?? 0));
 });
 
 const avgTps = computed(() => {
@@ -205,7 +207,7 @@ const avgTps = computed(() => {
   return tpsSamples.reduce((a, b) => a + b, 0) / tpsSamples.length;
 });
 
-const playerCount = computed(() => currentMetrics.value.playerCount ?? 0);
+const playerCount = computed(() => currentMetrics.value.players ?? 0);
 const maxPlayers = 100;
 
 const kpiMetrics = computed(() => [
@@ -227,13 +229,13 @@ const kpiMetrics = computed(() => [
   },
   {
     label: "QUEUE",
-    value: (currentMetrics.value.publicQueue ?? 0) + (currentMetrics.value.reserveQueue ?? 0),
+    value: currentMetrics.value.queue ?? 0,
     suffix: "",
     color: "#f59e0b",
     tone: "warn",
     pct: Math.min(
       100,
-      (((currentMetrics.value.publicQueue ?? 0) + (currentMetrics.value.reserveQueue ?? 0)) / 50) * 100,
+      ((currentMetrics.value.queue ?? 0) / 50) * 100,
     ),
   },
 ]);

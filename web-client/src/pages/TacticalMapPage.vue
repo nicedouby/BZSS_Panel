@@ -6,9 +6,6 @@
       class="map-viewport"
       :class="{ 'has-explosion-shake': isShaking }"
       @mousedown="startDrag"
-      @mousemove="onDrag"
-      @mouseup="stopDrag"
-      @mouseleave="stopDrag"
       @wheel.prevent="onWheel"
     >
       <!-- Tech Grid Overlay Behind Map -->
@@ -442,6 +439,8 @@
         :map-x="mapCommandMenu.mapX"
         :map-y="mapCommandMenu.mapY"
         :has-points="measurePoints.length > 0"
+        :measure-active="measureMode"
+        :measure-count="measurePoints.length"
         @close="mapCommandMenu = null"
         @start-measure="onStartMeasure(mapCommandMenu)"
         @add-point="onAddPoint(mapCommandMenu)"
@@ -959,7 +958,14 @@ const focusedPlayerKey = ref("");
 // Shared activePlayerWindow managed by parent MatchStatusPage
 
 // Distance Measuring State
-const measurePoints = ref<Array<{ mapX: number; mapY: number; gameX: number; gameY: number }>>([]);
+type MeasurePoint = {
+  mapX: number;
+  mapY: number;
+  gameX: number;
+  gameY: number;
+};
+
+const measurePoints = ref<MeasurePoint[]>([]);
 
 // Map Interaction States Layer
 const selectedPlayerKey = ref<string>("");
@@ -1231,11 +1237,13 @@ watch(
     }
     const now = Date.now();
     const nextCache = { ...cachedPlayers.value };
+    const currentKeys = new Set<string>();
     let changed = false;
 
     newPlayers.forEach((player) => {
       const key = getPlayerKey(player);
       if (!key) return;
+      currentKeys.add(key);
       if (hasValidPosition(player)) {
         nextCache[key] = {
           player,
@@ -1244,6 +1252,13 @@ watch(
         changed = true;
       }
     });
+
+    for (const key of Object.keys(nextCache)) {
+      if (!currentKeys.has(key)) {
+        delete nextCache[key];
+        changed = true;
+      }
+    }
 
     if (changed) {
       cachedPlayers.value = nextCache;
@@ -1388,8 +1403,7 @@ const measurePathD = computed(() => {
 });
 
 function onMapClick(e: MouseEvent) {
-  if (dragMoved) {
-    dragMoved = false;
+  if (isDragging.value || dragPending) {
     return;
   }
 
@@ -1534,27 +1548,24 @@ function handlePlayerRightClick(player: TacticalLinkedPlayer, event: MouseEvent)
 }
 
 // Map Context Menu Event Handlers
-function onStartMeasure(menu: any) {
+function setMeasurePoint(menu: { mapX: number; mapY: number; gameX: number; gameY: number }, reset = false) {
   activeTool.value = "measure";
-  measurePoints.value = [{
+  const point = {
     mapX: menu.mapX,
     mapY: menu.mapY,
     gameX: menu.gameX,
     gameY: menu.gameY
-  }];
+  };
+  measurePoints.value = reset ? [point] : [...measurePoints.value, point];
+}
+
+function onStartMeasure(menu: any) {
+  setMeasurePoint(menu, true);
   logCombatEvent(`开始测距。起点: [X:${Math.round(menu.gameX)}, Y:${Math.round(menu.gameY)}]`, "system");
 }
 
 function onAddPoint(menu: any) {
-  if (activeTool.value !== "measure") {
-    activeTool.value = "measure";
-  }
-  measurePoints.value.push({
-    mapX: menu.mapX,
-    mapY: menu.mapY,
-    gameX: menu.gameX,
-    gameY: menu.gameY
-  });
+  setMeasurePoint(menu, false);
   logCombatEvent(`添加测距点: [X:${Math.round(menu.gameX)}, Y:${Math.round(menu.gameY)}]`, "system");
 }
 
@@ -1611,14 +1622,13 @@ function onStartMeasureFromPlayer(player: TacticalLinkedPlayer) {
   const marker = markers.value.find((m) => getPlayerKey(m) === getPlayerKey(player));
   const pos = getPlayerPosition(player);
   if (!marker || !pos) return;
-  
-  activeTool.value = "measure";
-  measurePoints.value = [{
+
+  setMeasurePoint({
     mapX: marker.mapX,
     mapY: marker.mapY,
     gameX: pos.x ?? 0,
     gameY: pos.y ?? 0
-  }];
+  }, true);
   logCombatEvent(`开始从玩家 ${player.playerName} 处测距。`, "system");
 }
 
@@ -1808,8 +1818,9 @@ const tooltipStyle = computed(() => {
   const mapX = hoveredMarker.value.mapX;
   const mapY = hoveredMarker.value.mapY;
   
-  const pixelX = panX.value + (mapX * 10) * zoom.value;
-  const pixelY = panY.value + (mapY * 10) * zoom.value;
+  const mapSize = 1000;
+  const pixelX = panX.value + (mapX / 100) * mapSize * zoom.value;
+  const pixelY = panY.value + (mapY / 100) * mapSize * zoom.value;
   
   const tooltipWidth = 170;
   const halfWidth = tooltipWidth / 2;
@@ -1961,15 +1972,36 @@ function handleTilesReady() {
 }
 
 // Drag & Pan & Zoom Event Handlers
-let dragMoved = false;
 const dragStartCoords = { x: 0, y: 0 };
+const dragStartPan = { x: 0, y: 0 };
+let dragPending = false;
 let dragFrameId: number | null = null;
 let pendingDragPanX = 0;
 let pendingDragPanY = 0;
 
+function clampMapPan(nextX: number, nextY: number, currentZoom = zoom.value) {
+  if (!containerRef.value) return { x: nextX, y: nextY };
+
+  const viewWidth = containerRef.value.clientWidth;
+  const viewHeight = containerRef.value.clientHeight;
+  const mapSize = 1000;
+  const mapWidth = mapSize * currentZoom;
+  const mapHeight = mapSize * currentZoom;
+
+  const clampedX = mapWidth <= viewWidth
+    ? Math.min(viewWidth - mapWidth, Math.max(-(viewWidth - mapWidth), nextX))
+    : Math.min(0, Math.max(viewWidth - mapWidth, nextX));
+  const clampedY = mapHeight <= viewHeight
+    ? Math.min(viewHeight - mapHeight, Math.max(-(viewHeight - mapHeight), nextY))
+    : Math.min(0, Math.max(viewHeight - mapHeight, nextY));
+
+  return { x: clampedX, y: clampedY };
+}
+
 function applyMapPan(nextX: number, nextY: number) {
-  panX.value = nextX;
-  panY.value = nextY;
+  const clamped = clampMapPan(nextX, nextY);
+  panX.value = clamped.x;
+  panY.value = clamped.y;
 }
 
 function scheduleMapPanUpdate(nextX: number, nextY: number) {
@@ -1984,48 +2016,59 @@ function scheduleMapPanUpdate(nextX: number, nextY: number) {
 }
 
 function startDrag(e: MouseEvent) {
-  const target = e.target as HTMLElement;
-  if (
-    target.closest(".glass-panel") ||
-    target.closest(".tactical-sidebar") ||
-    target.closest(".player-tooltip") ||
-    target.closest(".player-tooltip-simple") ||
-    target.closest(".player-marker") ||
-    target.closest(".map-floating-panel")
-  ) {
-    return;
-  }
+  if (e.button !== 0 || isDragging.value || dragPending) return;
 
-  isDragging.value = true;
+  e.preventDefault();
+  dragPending = true;
+  isDragging.value = false;
   dragStart.x = e.clientX - panX.value;
   dragStart.y = e.clientY - panY.value;
   dragStartCoords.x = e.clientX;
   dragStartCoords.y = e.clientY;
+  dragStartPan.x = panX.value;
+  dragStartPan.y = panY.value;
   pendingDragPanX = panX.value;
   pendingDragPanY = panY.value;
-  dragMoved = false;
   hoveredPlayer.value = null;
   hoverCoords.value = null;
+
+  window.addEventListener("mousemove", onDrag);
+  window.addEventListener("mouseup", stopDrag);
+  window.addEventListener("blur", stopDrag);
 }
 
 function onDrag(e: MouseEvent) {
-  if (!isDragging.value) return;
+  if (!dragPending && !isDragging.value) return;
+  e.preventDefault();
   const dx = Math.abs(e.clientX - dragStartCoords.x);
   const dy = Math.abs(e.clientY - dragStartCoords.y);
-  if (dx > 4 || dy > 4) {
-    dragMoved = true;
+  if (!isDragging.value && (dx > 5 || dy > 5)) {
+    isDragging.value = true;
+    dragPending = false;
+  }
+  if (!isDragging.value) {
+    pendingDragPanX = dragStartPan.x;
+    pendingDragPanY = dragStartPan.y;
+    return;
   }
   scheduleMapPanUpdate(e.clientX - dragStart.x, e.clientY - dragStart.y);
 }
 
 // Re-sync final dragging state (handles cleanup if dragging ends outside viewport)
 function stopDrag() {
+  window.removeEventListener("mousemove", onDrag);
+  window.removeEventListener("mouseup", stopDrag);
+  window.removeEventListener("blur", stopDrag);
+  const hadDrag = isDragging.value || dragPending;
+  dragPending = false;
   isDragging.value = false;
   if (dragFrameId != null) {
     window.cancelAnimationFrame(dragFrameId);
     dragFrameId = null;
   }
-  applyMapPan(pendingDragPanX, pendingDragPanY);
+  if (hadDrag) {
+    applyMapPan(pendingDragPanX, pendingDragPanY);
+  }
 }
 
 function onWheel(e: WheelEvent) {
@@ -2046,8 +2089,9 @@ function onWheel(e: WheelEvent) {
   }
 
   zoom.value = nextZoom;
-  panX.value = mouseX - mapX * zoom.value;
-  panY.value = mouseY - mapY * zoom.value;
+  const clamped = clampMapPan(mouseX - mapX * zoom.value, mouseY - mapY * zoom.value, zoom.value);
+  panX.value = clamped.x;
+  panY.value = clamped.y;
 }
 
 function zoomIn() {
@@ -2070,8 +2114,9 @@ function fitToViewport() {
   const scale = Math.min(viewWidth, viewHeight) / mapSize * 0.95;
   zoom.value = Math.max(0.35, Math.min(2, scale));
   
-  panX.value = (viewWidth - mapSize * zoom.value) / 2;
-  panY.value = (viewHeight - mapSize * zoom.value) / 2;
+  const clamped = clampMapPan((viewWidth - mapSize * zoom.value) / 2, (viewHeight - mapSize * zoom.value) / 2, zoom.value);
+  panX.value = clamped.x;
+  panY.value = clamped.y;
 }
 
 function onMapMousemove(e: MouseEvent) {
@@ -2101,10 +2146,14 @@ function panToMapPercent(mapX: number, mapY: number, targetZoom?: number) {
   const clampedZoom = Math.max(0.35, Math.min(20, zoomTarget));
   zoom.value = clampedZoom;
   if (!containerRef.value) return;
+  const mapSize = 1000;
   const viewWidth = containerRef.value.clientWidth;
   const viewHeight = containerRef.value.clientHeight;
-  panX.value = viewWidth / 2 - (mapX * 10) * clampedZoom;
-  panY.value = viewHeight / 2 - (mapY * 10) * clampedZoom;
+  const nextX = viewWidth / 2 - (mapX / 100) * mapSize * clampedZoom;
+  const nextY = viewHeight / 2 - (mapY / 100) * mapSize * clampedZoom;
+  const clamped = clampMapPan(nextX, nextY, clampedZoom);
+  panX.value = clamped.x;
+  panY.value = clamped.y;
 }
 
 function focusPlayerOnMap(player: TacticalLinkedPlayer) {
@@ -2631,6 +2680,9 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (simulatedCombatTimer) window.clearInterval(simulatedCombatTimer);
+  window.removeEventListener("mousemove", onDrag);
+  window.removeEventListener("mouseup", stopDrag);
+  window.removeEventListener("blur", stopDrag);
   window.removeEventListener("resize", fitToViewport);
   window.removeEventListener("keydown", handleWindowKeyDown);
   resizeObserver?.disconnect();

@@ -560,7 +560,7 @@ function isRoleIconImage(icon: string | undefined) {
 /* Interactive Hover / Focus Zoom effects */
 .player-marker.is-hovered .marker-ring,
 .player-marker:hover .marker-ring {
-  transform: translate(-50%, -50%) scale(1.3);
+  transform: translate(-50%, -50%) scale(1.08);
   z-index: 50;
   border-color: #ffffff !important;
   box-shadow: 0 0 12px rgba(255, 255, 255, 0.95);
@@ -568,19 +568,19 @@ function isRoleIconImage(icon: string | undefined) {
 
 .is-vehicle.is-hovered .marker-ring,
 .is-vehicle:hover .marker-ring {
-  transform: translate(-50%, -50%) rotate(45deg) scale(1.3);
+  transform: translate(-50%, -50%) rotate(45deg) scale(1.08);
 }
 
 .player-marker.is-hovered.is-squadleader .marker-ring,
 .player-marker:hover.is-squadleader .marker-ring {
-  transform: translate(-50%, -50%) scale(1.4);
+  transform: translate(-50%, -50%) scale(1.12);
   border-color: #ffffff !important;
   box-shadow: 0 0 14px rgba(251, 191, 36, 0.85);
 }
 
 .is-vehicle.is-hovered.is-squadleader .marker-ring,
 .is-vehicle:hover.is-squadleader .marker-ring {
-  transform: translate(-50%, -50%) rotate(45deg) scale(1.4);
+  transform: translate(-50%, -50%) rotate(45deg) scale(1.12);
   border-color: #ffffff !important;
   box-shadow: 0 0 14px rgba(251, 191, 36, 0.85);
 }
@@ -588,7 +588,7 @@ function isRoleIconImage(icon: string | undefined) {
 .player-marker.is-hovered .tag,
 .player-marker:hover .tag {
   color: #ffffff;
-  transform: translate(-50%, 5px) scale(1.05);
+  transform: translate(-50%, 3px);
 }
 
 .player-marker.is-hovered .tag .player-name-tag,

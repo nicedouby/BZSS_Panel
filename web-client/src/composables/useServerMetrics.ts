@@ -3,6 +3,7 @@ import { computed, reactive, ref } from "vue";
 import { apiGet } from "../app/apiClient";
 import { renderApiError } from "../app/errors";
 import { canAutoRefreshNow } from "./useAutoRefreshGate";
+import { buildPlayerTooltipStats, type PlayerTooltipStats } from "./serverMetricsAnalytics";
 
 export type ServerMetricTone = "critical" | "warn" | "ok" | "idle";
 
@@ -59,6 +60,7 @@ interface RoundOverviewResponse {
 const POLL_INTERVAL_MS = 2000;
 const MATCH_OVERVIEW_TTL_MS = 15_000;
 const MAX_SAMPLES = 8000;
+const TOOLTIP_ANALYTICS_WINDOW_MS = 15 * 24 * 60 * 60 * 1000;
 
 export const SERVER_METRIC_RANGES = [
   { key: "10m", label: "10 分钟", spanMs: 10 * 60 * 1000, kind: "fixed" },
@@ -74,6 +76,7 @@ export function useServerMetrics() {
   const availableDates = ref<string[]>([]);
   const samples = ref<ServerMetricSample[]>([]);
   const channels = ref<ServerMetricChannel[]>([]);
+  const tooltipStatsByTimestamp = ref<Record<string, PlayerTooltipStats>>({});
   const selectedRange = ref<ServerMetricRangeKey>("24h");
   const selectedDates = ref<string[]>([]);
   const showDateDialog = ref(false);
@@ -257,19 +260,29 @@ export function useServerMetrics() {
     loading.value = true;
     try {
       const { fromMs, toMs } = await resolveWindow();
-      const params = new URLSearchParams({
-        include_current: "1",
-        from_ms: String(fromMs),
-        to_ms: String(toMs),
-      });
-      const payload = await apiGet<ServerMetricHistoryResponse>(`/api/server-stats/history?${params.toString()}`);
+      const visiblePromise = loadHistoryWindow(fromMs, toMs, true);
+      const analyticsPromise = loadHistoryWindow(Math.max(0, fromMs - TOOLTIP_ANALYTICS_WINDOW_MS), toMs, false)
+        .catch((error) => {
+          console.warn("[ServerStats] Failed to load tooltip analytics window:", error);
+          return { samples: [] as ServerMetricSample[] };
+        });
+      const [visiblePayload, analyticsPayload] = await Promise.all([
+        visiblePromise,
+        analyticsPromise,
+      ]);
 
-      samples.value = Array.isArray(payload.samples) ? payload.samples.map((sample) => ({
+      samples.value = Array.isArray(visiblePayload.samples) ? visiblePayload.samples.map((sample) => ({
         ...sample,
         metrics: { ...sample.metrics },
       })) : [];
 
-      const nextChannels = Array.isArray(payload.channels) ? payload.channels.map((channel) => ({ ...channel })) : [];
+      const visibleTimestamps = new Set(samples.value.map((sample) => sample.timestamp_ms));
+      tooltipStatsByTimestamp.value = buildPlayerTooltipStats(
+        Array.isArray(analyticsPayload.samples) ? analyticsPayload.samples : [],
+        visibleTimestamps,
+      );
+
+      const nextChannels = Array.isArray(visiblePayload.channels) ? visiblePayload.channels.map((channel) => ({ ...channel })) : [];
       if (nextChannels.length > 0) {
         channels.value = nextChannels;
       }
@@ -367,6 +380,7 @@ export function useServerMetrics() {
     historyError,
     availableDates,
     samples,
+    tooltipStatsByTimestamp,
     channels,
     selectedRange,
     selectedDates,
@@ -395,6 +409,15 @@ export function useServerMetrics() {
     loadAvailableDates,
     loadRoundOverview,
   };
+}
+
+async function loadHistoryWindow(fromMs: number, toMs: number, includeCurrent: boolean) {
+  const params = new URLSearchParams({
+    include_current: includeCurrent ? "1" : "0",
+    from_ms: String(fromMs),
+    to_ms: String(toMs),
+  });
+  return apiGet<ServerMetricHistoryResponse>(`/api/server-stats/history?${params.toString()}`);
 }
 
 function parseTimestampLike(value: unknown) {

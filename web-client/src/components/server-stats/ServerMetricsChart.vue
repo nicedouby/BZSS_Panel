@@ -12,6 +12,7 @@ import { onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
 import * as echarts from "echarts";
 
 import type { ServerMetricChannel, ServerMetricSample } from "../../composables/useServerMetrics";
+import type { PlayerExtremaStats, PlayerTooltipStats } from "../../composables/serverMetricsAnalytics";
 import { readChartThemeTokens } from "../../theme/chartTheme";
 import { useUiStore } from "../../stores/ui.store";
 
@@ -19,6 +20,7 @@ const props = defineProps<{
   samples: ServerMetricSample[];
   channels: ServerMetricChannel[];
   enabledChannels: Record<string, boolean>;
+  tooltipStatsByTimestamp?: Record<string, PlayerTooltipStats>;
 }>();
 
 const chartRef = ref<HTMLElement | null>(null);
@@ -186,7 +188,10 @@ function buildTooltip(params: any[]) {
   const accent = tokens.series[0];
 
   const first = params[0];
-  const time = formatTooltipTime(Number(first.axisValue ?? first.value?.[0] ?? Date.now()));
+  const timestamp = Number(first.axisValue ?? first.value?.[0] ?? Date.now());
+  const time = formatTooltipTime(timestamp);
+  const playerStats = props.tooltipStatsByTimestamp?.[String(timestamp)] ?? null;
+
   const rows = params.map((item) => {
     const value = Array.isArray(item.data) ? item.data[1] : item.data;
     const unit = getUnit(item.seriesName);
@@ -199,10 +204,20 @@ function buildTooltip(params: any[]) {
     `;
   }).join("");
 
+  const summaryRows = playerStats ? `
+    <div style="margin-top:10px;padding:8px 13px 12px;border-top:1px solid ${alphaColor(tokens.grid, 0.8)};">
+      <div style="margin-bottom:7px;font-size:10px;font-weight:800;letter-spacing:0.08em;color:${tokens.axis};text-transform:uppercase;">玩家统计</div>
+      ${buildSummaryRow("往期此刻", playerStats.sameMoment, tokens.tooltipText)}
+      ${buildSummaryRow("最近 7 天", playerStats.recent7d, tokens.tooltipText)}
+      ${buildSummaryRow("最近 15 天", playerStats.recent15d, tokens.tooltipText)}
+    </div>
+  ` : "";
+
   return `
-    <div style="min-width:200px;">
+    <div style="min-width:240px;">
       <div style="padding:9px 13px 7px;background:${alphaColor(accent, 0.08)};border-bottom:1px solid ${alphaColor(accent, 0.16)};font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:${accent};letter-spacing:0.04em;">${escapeHtml(time)}</div>
-      <div style="padding:6px 13px 10px;">${rows}</div>
+      <div style="padding:6px 13px 0;">${rows}</div>
+      ${summaryRows}
     </div>
   `;
 }
@@ -214,10 +229,9 @@ function updateChart() {
     const visibleSeries = props.channels
       .filter((channel) => props.enabledChannels[channel.key] !== false)
       .map((channel) => {
-        const isPlayerCount = channel.key === "playerCount";
+        const isPlayerCount = channel.key === "players";
         const seriesData = props.samples.map((sample) => [sample.timestamp_ms, sample.metrics[channel.key] ?? null]);
 
-        // 为每条线生成对应的面积渐变
         const hexToRgb = (hex: string) => {
           const r = parseInt(hex.slice(1, 3), 16);
           const g = parseInt(hex.slice(3, 5), 16);
@@ -226,7 +240,11 @@ function updateChart() {
         };
 
         let rgb = "148,163,184";
-        try { rgb = hexToRgb(channel.color); } catch { /* ignore */ }
+        try {
+          rgb = hexToRgb(channel.color);
+        } catch {
+          // ignore
+        }
 
         const series: any = {
           name: channel.label,
@@ -300,7 +318,7 @@ function calculateSingularities(samples: ServerMetricSample[]) {
   const reachedByDay = new Map<string, Set<number>>();
 
   for (const sample of samples) {
-    const val = sample.metrics.playerCount;
+    const val = sample.metrics.players;
     if (val == null) continue;
 
     const date = new Date(sample.timestamp_ms);
@@ -357,8 +375,18 @@ function getUnit(seriesName: string) {
   const channel = props.channels.find((item) => item.label === seriesName || item.key === seriesName);
   if (!channel) return "";
   if (channel.axis === "tps") return "TPS";
-  if (channel.key === "queue") return "queue";
-  return "pax";
+  if (channel.key === "queue") return "队列";
+  return "人数";
+}
+
+function buildSummaryRow(label: string, stats: PlayerExtremaStats | null, valueColor: string) {
+  const value = stats ? `最少 ${formatTooltipValue(stats.min)} / 最多 ${formatTooltipValue(stats.max)}` : "--";
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 0;">
+      <span style="font-size:11px;font-weight:600;color:${readChartThemeTokens().axis};">${escapeHtml(label)}</span>
+      <strong style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:800;color:${valueColor};">${escapeHtml(value)}</strong>
+    </div>
+  `;
 }
 
 function escapeHtml(value: string) {
@@ -389,6 +417,7 @@ watch(
     () => props.samples,
     () => props.channels,
     () => ({ ...props.enabledChannels }),
+    () => props.tooltipStatsByTimestamp,
   ],
   () => {
     updateChart();

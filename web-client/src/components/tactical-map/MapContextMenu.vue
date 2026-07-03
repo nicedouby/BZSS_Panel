@@ -12,6 +12,7 @@
         <span class="coord-tag">GX:</span> <span class="coord-val">{{ Math.round(gameX) }}</span>
         <span class="coord-tag spacer">GY:</span> <span class="coord-val text-yellow">{{ Math.round(gameY) }}</span>
       </div>
+      <div v-if="measureActive" class="measure-state">{{ measureCount === 0 ? "测距未开始" : `测距中 · ${measureCount} 点` }}</div>
     </div>
 
     <div class="menu-divider"></div>
@@ -19,11 +20,11 @@
     <ul class="menu-list">
       <li class="menu-item" @click="handleAction('start-measure')">
         <span class="menu-icon">📏</span>
-        <span class="menu-label">从此处开始测距</span>
+        <span class="menu-label">{{ measurePrimaryLabel }}</span>
       </li>
       <li class="menu-item" @click="handleAction('add-point')">
         <span class="menu-icon">📍</span>
-        <span class="menu-label">添加测距点</span>
+        <span class="menu-label">{{ measureAppendLabel }}</span>
       </li>
       <li
         class="menu-item"
@@ -79,6 +80,8 @@ const props = defineProps<{
   mapX: number;
   mapY: number;
   hasPoints: boolean;
+  measureActive: boolean;
+  measureCount: number;
 }>();
 
 const emit = defineEmits<{
@@ -101,6 +104,9 @@ const menuStyle = computed(() => {
     top: `${offsetTop.value}px`,
   };
 });
+
+const measurePrimaryLabel = computed(() => props.measureActive ? "重新从此处测距" : "从此处开始测距");
+const measureAppendLabel = computed(() => props.measureActive ? `继续添加测距点 (${props.measureCount})` : "添加测距点");
 
 onMounted(() => {
   if (menuRef.value) {
@@ -182,6 +188,13 @@ function handleAction(event: "start-measure" | "add-point" | "undo-point" | "cle
   color: #cbd5e1;
   display: flex;
   align-items: center;
+}
+
+.measure-state {
+  margin-top: 4px;
+  font-size: 10px;
+  color: rgba(56, 189, 248, 0.9);
+  letter-spacing: 0.5px;
 }
 
 .coord-tag {
