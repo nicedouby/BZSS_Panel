@@ -2002,10 +2002,10 @@ function clampMapPan(nextX: number, nextY: number, currentZoom = zoom.value) {
   const mapHeight = mapSize * currentZoom;
 
   const clampedX = mapWidth <= viewWidth
-    ? Math.min(viewWidth - mapWidth, Math.max(-(viewWidth - mapWidth), nextX))
+    ? (viewWidth - mapWidth) / 2
     : Math.min(0, Math.max(viewWidth - mapWidth, nextX));
   const clampedY = mapHeight <= viewHeight
-    ? Math.min(viewHeight - mapHeight, Math.max(-(viewHeight - mapHeight), nextY))
+    ? (viewHeight - mapHeight) / 2
     : Math.min(0, Math.max(viewHeight - mapHeight, nextY));
 
   return { x: clampedX, y: clampedY };

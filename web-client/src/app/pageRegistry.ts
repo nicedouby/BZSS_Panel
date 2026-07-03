@@ -101,7 +101,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "tactical-map",
     path: "/tactical-map",
-    component: MatchStatusPage,
+    component: TacticalMapPage,
     title: "战术地图",
     category: "core",
     refreshPolicy: "realtime",
