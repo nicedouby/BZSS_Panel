@@ -63,6 +63,7 @@ export interface BzssCoreRuntimePlayerInfo {
   position: BzssCoreTrackedVector | null;
   yaw: number | null;
   combatInfo: string;
+  presenceHint?: string;
   observedAt: string;
   stale: boolean;
 }
@@ -102,6 +103,7 @@ export interface BzssCoreTrackedPlayerInfo {
   stale?: boolean;
   playerName: string;
   playerGuid: string;
+  presenceHint?: string;
   teamId: number | null;
   squadId: number | null;
   isAdmin?: boolean | null;

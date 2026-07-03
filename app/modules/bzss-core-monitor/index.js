@@ -549,6 +549,7 @@ function mergePlayerFullBlocks(draft, players, options = {}) {
       position: player.soldierInfo?.position ?? player.position ?? null,
       yaw: player.yaw ?? player.soldierInfo?.rotation?.z ?? null,
       combatInfo: player.claimedInfo || player.soldierInfo?.weaponClass || "",
+      presenceHint: player.presenceHint ?? "",
       soldierInfo: player.soldierInfo,
       vehicleInfo: player.vehicleInfo,
       rawText: player.rawText ?? "",
@@ -566,6 +567,7 @@ function mergePlayerFullBlocks(draft, players, options = {}) {
       isCommander: player.isCommander,
       fireTeamIndex: player.ftIndex,
       fireTeamPosition: player.ftPosition,
+      presenceHint: player.presenceHint ?? "",
       playerScoreboard: player.playerScoreboard,
       rawText: player.rawText ?? "",
       sourceType: "fullBlocks",
@@ -634,6 +636,7 @@ function applyPlayerPatch(record, patch, observedAt) {
   record.position = cloneVector(patch.position ?? record.position);
   record.yaw = firstDefinedNumber(patch.yaw, record.yaw, null);
   record.combatInfo = firstText(patch.combatInfo, record.combatInfo, "");
+  record.presenceHint = firstText(patch.presenceHint, record.presenceHint, "");
   record.runtimeObservedAt = patch.position != null || patch.yaw != null || patch.combatInfo != null || patch.sourceType === "runtime" || patch.sourceType === "fullBlocks"
     ? observedAt
     : record.runtimeObservedAt ?? "";
@@ -666,6 +669,7 @@ function createPlayerRecord(patch, observedAt) {
     position: cloneVector(patch.position),
     yaw: firstDefinedNumber(patch.yaw, null),
     combatInfo: firstText(patch.combatInfo, ""),
+    presenceHint: firstText(patch.presenceHint, ""),
     firstSeenAt: observedAt,
     lastSeenAt: observedAt,
     runtimeObservedAt: patch.sourceType === "runtime" || patch.sourceType === "fullBlocks" ? observedAt : "",
@@ -739,10 +743,26 @@ function getPlayerIdentityInfo(player) {
   const guidValues = [player?.playerGuid, player?.steamID, player?.eosID].map(normalizeIdentityValue).filter(Boolean);
   for (const guid of guidValues) push(`guid:${guid}`);
 
-  const idValues = [player?.playerIndex, player?.playerId].map(normalizeIdentityValue).filter(Boolean);
-  for (const id of idValues) push(`id:${id}`);
+  const controllerValues = [
+    player?.controllerID,
+    player?.controllerId,
+    player?.playerControllerID,
+    player?.playerControllerId,
+  ].map(normalizeIdentityValue).filter(Boolean);
+  for (const controllerID of controllerValues) push(`controller:${controllerID}`);
 
-  const name = normalizePlayerName(player?.playerName);
+  const idValues = [player?.playerIndex, player?.playerId].map(normalizeIdentityValue).filter(Boolean);
+  for (const id of idValues) {
+    push(`controller:${id}`);
+    push(`id:${id}`);
+  }
+
+  const name = normalizePlayerName(
+    player?.playerName
+    ?? player?.name
+    ?? player?.currentName
+    ?? player?.displayName
+  );
   if (name) push(`name:${name}`);
 
   return {
@@ -757,8 +777,8 @@ function pruneExpiredPlayers(state, { core, modules } = {}) {
   const onlinePlayerKeys = getOnlinePlayerIdentityKeySet(core, modules);
   const onlineListAvailable = onlinePlayerKeys instanceof Set;
   const staleThresholdMs = 15000;
-  const onlineDeleteThresholdMs = 60000;
-  const hardDeleteThresholdMs = 120000;
+  const onlineDeleteThresholdMs = 5 * 60 * 1000;
+  const hardDeleteThresholdMs = 10 * 60 * 1000;
 
   for (const [key, record] of [...state.playersByKey.entries()]) {
     const runtimeObservedMs = parseDateMs(record.runtimeObservedAt || record.lastSeenAt || record.firstSeenAt);
@@ -766,14 +786,14 @@ function pruneExpiredPlayers(state, { core, modules } = {}) {
     const stale = runtimeObservedMs != null ? nowMs - runtimeObservedMs > staleThresholdMs : nowMs - lastSeenMs > staleThresholdMs;
     record.stale = stale;
 
+    if (onlineListAvailable && isPlayerOnline(record, onlinePlayerKeys)) {
+      continue;
+    }
+
     const shouldDeleteByAge = onlineListAvailable
       ? nowMs - lastSeenMs > onlineDeleteThresholdMs
       : nowMs - lastSeenMs > hardDeleteThresholdMs;
     if (!shouldDeleteByAge) continue;
-
-    if (onlineListAvailable && isPlayerOnline(record, onlinePlayerKeys)) {
-      continue;
-    }
 
     state.playersByKey.delete(key);
     if (state.runtimePlayersByKey.get(key) === record) state.runtimePlayersByKey.delete(key);
@@ -871,6 +891,7 @@ function clonePlayerView(player) {
     position,
     yaw: cloned.yaw ?? null,
     combatInfo: cloned.combatInfo ?? "",
+    presenceHint: cloned.presenceHint ?? "",
     observedAt: cloned.lastSeenAt ?? cloned.observedAt ?? "",
     firstSeenAt: cloned.firstSeenAt ?? "",
     lastSeenAt: cloned.lastSeenAt ?? "",
@@ -1012,6 +1033,14 @@ function normalizePlayerName(value) {
   const text = normalizeIdentityValue(value);
   if (!text) return "";
   return text.replace(/\s+/g, " ").toLowerCase();
+}
+
+function detectRuntimePresenceHint({ combatInfo = "", x = null, y = null, z = null } = {}) {
+  const hintText = normalizeIdentityValue(combatInfo).toLowerCase();
+  if (hintText.includes("nopawn") && (x == null || y == null || z == null)) {
+    return "noPawn";
+  }
+  return "";
 }
 
 function parseDateMs(value) {
@@ -1166,6 +1195,7 @@ function parseRuntimePlayerLine(text) {
       const x = toFiniteNumber(fields[1]);
       const y = toFiniteNumber(fields[2]);
       const z = toFiniteNumber(fields[3]);
+      const combatInfo = fields.slice(5).join(",");
       return {
         playerId: toFiniteNumber(fields[0]),
         playerIndex: toFiniteNumber(fields[0]),
@@ -1175,7 +1205,8 @@ function parseRuntimePlayerLine(text) {
           z: z * 100,
         },
         yaw: toFiniteNumber(fields[4]),
-        combatInfo: fields.slice(5).join(","),
+        combatInfo,
+        presenceHint: detectRuntimePresenceHint({ combatInfo, x, y, z }),
         observedAt,
         stale: false,
       };
@@ -1211,6 +1242,7 @@ function parsePriRuntimePlayerLine(text) {
     const x = toFiniteNumber(fields[1]);
     const y = toFiniteNumber(fields[2]);
     const z = toFiniteNumber(fields[3]);
+    const combatInfo = fields.slice(5).join(",");
 
     runtimePlayers.push({
       playerId,
@@ -1221,7 +1253,8 @@ function parsePriRuntimePlayerLine(text) {
         z: z * 100,
       },
       yaw: toFiniteNumber(fields[4]),
-      combatInfo: fields.slice(5).join(","),
+      combatInfo,
+      presenceHint: detectRuntimePresenceHint({ combatInfo, x, y, z }),
       observedAt,
       stale: false,
       rawText: `PRI{{${raw}}}`,

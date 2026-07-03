@@ -8,6 +8,44 @@ import {
   type BzssCoreRawDataResponse,
 } from "../app/bzssCoreApi";
 
+export function buildBzssCorePlayers(data: BzssCorePlayerInfoResponse) {
+  if (Array.isArray(data.players)) {
+    return data.players;
+  }
+
+  const runtimePlayers = data.runtimePlayers ?? [];
+  const scoreboardPlayers = data.scoreboardPlayers ?? [];
+  const byIndex = new Map<number | string, any>();
+
+  for (const player of scoreboardPlayers) {
+    if (player.playerIndex == null && player.playerId == null) continue;
+    const key = player.playerIndex ?? player.playerId ?? "";
+    byIndex.set(key, {
+      ...player,
+      position: null,
+      yaw: null,
+      stale: true,
+      presence: {
+        state: "scoreboardOnly",
+      },
+      telemetry: {
+        position: null,
+        yaw: null,
+        combatInfo: "",
+      },
+    });
+  }
+
+  for (const player of runtimePlayers) {
+    if (player.playerIndex == null && player.playerId == null) continue;
+    const key = player.playerIndex ?? player.playerId ?? "";
+    const existing = byIndex.get(key);
+    byIndex.set(key, existing ? { ...existing, ...player } : { ...player });
+  }
+
+  return [...byIndex.values()];
+}
+
 export const useBzssCoreStore = defineStore("bzssCore", () => {
   const snapshot = ref<BzssCorePlayerInfoResponse | null>(null);
   const players = ref<any[]>([]);
@@ -22,21 +60,7 @@ export const useBzssCoreStore = defineStore("bzssCore", () => {
   const activeSubscribers = ref(0);
 
   function updatePlayers(data: BzssCorePlayerInfoResponse) {
-    const runtimePlayers = data.runtimePlayers ?? [];
-    const scoreboardPlayers = data.scoreboardPlayers ?? [];
-    const byIndex = new Map<number | string, any>();
-    for (const player of runtimePlayers) {
-      if (player.playerIndex == null && player.playerId == null) continue;
-      const key = player.playerIndex ?? player.playerId ?? "";
-      byIndex.set(key, { ...player });
-    }
-    for (const player of scoreboardPlayers) {
-      if (player.playerIndex == null && player.playerId == null) continue;
-      const key = player.playerIndex ?? player.playerId ?? "";
-      const existing = byIndex.get(key);
-      byIndex.set(key, existing ? { ...existing, ...player } : { ...player });
-    }
-    players.value = [...byIndex.values()];
+    players.value = buildBzssCorePlayers(data);
   }
 
   async function fetchSnapshot() {

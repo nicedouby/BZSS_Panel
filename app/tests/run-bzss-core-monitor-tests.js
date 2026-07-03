@@ -77,6 +77,14 @@ function testParseLogLine() {
   assert.deepEqual(priRuntime.runtimePlayers[0].position, { x: 99400, y: 71500, z: 300 });
   assert.equal(priRuntime.runtimePlayers[0].yaw, 90);
 
+  const noPawnRuntime = parseBzssCoreLogLine("PIE: PRI{{77,,,,,NoPawn}}");
+  assert.equal(noPawnRuntime.type, "playerRuntime");
+  assert.equal(noPawnRuntime.runtimePlayers.length, 1);
+  assert.equal(noPawnRuntime.runtimePlayers[0].playerIndex, 77);
+  assert.equal(noPawnRuntime.runtimePlayers[0].position, null);
+  assert.equal(noPawnRuntime.runtimePlayers[0].combatInfo, "NoPawn");
+  assert.equal(noPawnRuntime.runtimePlayers[0].presenceHint, "noPawn");
+
   const scoreboard = parseBzssCoreLogLine("PIE: PlayerScoreboard{0,1,-1,0,0,0,0,0,0,0,0,0,0,0,1,0-1,-1,19}}");
   assert.equal(scoreboard.type, "playerScoreboard");
   assert.equal(scoreboard.scoreboardPlayers.length, 1);
@@ -328,7 +336,7 @@ function testMonitorState() {
     assert.equal(players16.length, 1);
     assert.equal(players16[0].stale, true);
   });
-  withMockedDate("2026-07-02T00:02:01.000Z", () => {
+  withMockedDate("2026-07-02T00:10:01.000Z", () => {
     assert.equal(hardTtlModule.api.getRuntimePlayers().length, 0);
   });
 
@@ -349,8 +357,32 @@ function testMonitorState() {
   withMockedDate("2026-07-02T00:00:00.000Z", () => {
     assert.equal(onlineAwareModule.api.ingestLogLine("PIE: PlayerBaseInfo{77,10,20,30,40}").ok, true);
   });
-  withMockedDate("2026-07-02T00:01:01.000Z", () => {
+  withMockedDate("2026-07-02T00:05:01.000Z", () => {
     assert.equal(onlineAwareModule.api.getRuntimePlayers().length, 0);
+  });
+
+  const onlineControllerAwareModule = createBzssCoreMonitorModule({
+    core: {
+      eventBus: { onCoreEvent() { return () => {}; }, emitModuleEvent() {} },
+      webStatus: { serverId: "server-1" },
+      logger: { info() {}, warn() {}, error() {}, debug() {} },
+    },
+    modules: {
+      playerState: {
+        getOnlinePlayers() {
+          return [{ controllerID: "77", name: "Still Online" }];
+        },
+      },
+    },
+  });
+  withMockedDate("2026-07-02T00:00:00.000Z", () => {
+    assert.equal(onlineControllerAwareModule.api.ingestLogLine("PIE: PlayerBaseInfo{77,10,20,30,40}").ok, true);
+  });
+  withMockedDate("2026-07-02T00:06:01.000Z", () => {
+    const players = onlineControllerAwareModule.api.getRuntimePlayers();
+    assert.equal(players.length, 1);
+    assert.equal(players[0].stale, true);
+    assert.equal(onlineControllerAwareModule.api.getPlayers().length, 1);
   });
 }
 
