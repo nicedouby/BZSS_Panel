@@ -24,6 +24,13 @@ export async function handleReserveSlotsRoutes({
   }
 
   if (url.pathname === "/api/reserve-slots" && req.method === "GET") {
+    if (!core.authManager?.hasEverything?.(user)) {
+      json(403, {
+        error: "Forbidden",
+        message: "SuperAdmin permission is required.",
+      });
+      return true;
+    }
     json(200, await reserveSlots.getState());
     return true;
   }
@@ -87,6 +94,8 @@ export async function handleReserveSlotsRoutes({
         quantity: body?.quantity ?? 0,
         durationDays: body?.durationDays ?? 0,
         allowMultiActivation: Boolean(body?.allowMultiActivation),
+        minCurrentSessionSeconds: body?.minCurrentSessionSeconds ?? 0,
+        minServerSeconds: body?.minServerSeconds ?? 0,
       },
     };
 
@@ -270,6 +279,13 @@ export async function handleReserveSlotsRoutes({
   }
 
   if (url.pathname === "/api/reserve-slots/export-csv" && req.method === "GET") {
+    if (!core.authManager?.hasEverything?.(user)) {
+      json(403, {
+        error: "Forbidden",
+        message: "SuperAdmin permission is required.",
+      });
+      return true;
+    }
     const csv = await reserveSlots.exportCsv();
     json(200, {
       ok: true,

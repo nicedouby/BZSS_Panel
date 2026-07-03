@@ -132,6 +132,8 @@ export interface CreateReserveSlotCdkBatchPayload {
   quantity: number;
   durationDays: number;
   allowMultiActivation: boolean;
+  minCurrentSessionSeconds?: number;
+  minServerSeconds?: number;
   sourcePage?: string;
 }
 

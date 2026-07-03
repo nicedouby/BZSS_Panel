@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -49,6 +50,8 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
     resolvedLocalReserveFilePath: "",
     loadedAt: null,
     unsubscribeChatMessage: null,
+    cleanupTimer: null,
+    writeQueue: Promise.resolve(),
   };
 
   runtime.resolvedLocalReserveFilePath = resolveConfigPath(
@@ -70,19 +73,19 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
     },
 
     async createCdkBatch(input = {}, context = {}) {
-      return createReserveCdkBatch(input, context);
+      return withReserveWriteLock(() => createReserveCdkBatch(input, context));
     },
 
     async deactivateCdkBatch(batchId, context = {}) {
-      return deactivateReserveCdkBatch(batchId, context);
+      return withReserveWriteLock(() => deactivateReserveCdkBatch(batchId, context));
     },
 
     async updateConfig(nextConfig = {}) {
-      return updateReserveSystemConfig(nextConfig);
+      return withReserveWriteLock(() => updateReserveSystemConfig(nextConfig));
     },
 
     async importFromAdminFile() {
-      return importReserveSlotsFromAdminFile();
+      return withReserveWriteLock(() => importReserveSlotsFromAdminFile());
     },
 
     async exportCsv() {
@@ -90,23 +93,23 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
     },
 
     async importFromCsv(csvText = "") {
-      return importReserveSlotsFromCsv(csvText);
+      return withReserveWriteLock(() => importReserveSlotsFromCsv(csvText));
     },
 
     async upsertMember(input = {}) {
-      return upsertReserveSlotMember(input);
+      return withReserveWriteLock(() => upsertReserveSlotMember(input));
     },
 
     async deleteMember(input = {}) {
-      return deleteReserveSlotMember(input);
+      return withReserveWriteLock(() => deleteReserveSlotMember(input));
     },
 
     async deleteExpiredMembers() {
-      return deleteExpiredReserveSlotMembers();
+      return withReserveWriteLock(() => deleteExpiredReserveSlotMembers());
     },
 
     async reload() {
-      await loadStoreFromDisk({ repair: true });
+      await withReserveWriteLock(() => loadStoreFromDisk({ repair: true }));
       return buildState();
     },
   };
@@ -129,15 +132,23 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
 
     async start() {
       subscribeChatMessages();
+      scheduleExpiredCleanup();
+      if (runtime.config.adminFilePath) {
+        void withReserveWriteLock(() => deleteExpiredReserveSlotMembers()).catch(() => {});
+      }
       moduleLogger?.info?.(`[ReserveSlots] started. enabled=${Boolean(runtime.config.enabled)} local=${runtime.resolvedLocalReserveFilePath}`);
     },
 
     async stop() {
       if (typeof runtime.unsubscribeChatMessage === "function") {
         try {
-          runtime.unsubscribeChatMessage();
-        } catch {}
+        runtime.unsubscribeChatMessage();
+      } catch {}
         runtime.unsubscribeChatMessage = null;
+      }
+      if (runtime.cleanupTimer) {
+        clearInterval(runtime.cleanupTimer);
+        runtime.cleanupTimer = null;
       }
       moduleLogger?.info?.("[ReserveSlots] stopped.");
     },
@@ -166,6 +177,30 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
     runtime.unsubscribeChatMessage = modules.chatManager.on("message", (event) => {
       void handleChatMessage(event);
     });
+  }
+
+  function scheduleExpiredCleanup() {
+    if (runtime.cleanupTimer) return;
+    runtime.cleanupTimer = setInterval(() => {
+      if (!runtime.config.adminFilePath) return;
+      void withReserveWriteLock(() => deleteExpiredReserveSlotMembers()).catch(() => {});
+    }, 5 * 60 * 1000);
+    runtime.cleanupTimer.unref?.();
+  }
+
+  async function withReserveWriteLock(task) {
+    const previous = runtime.writeQueue ?? Promise.resolve();
+    let release;
+    const current = new Promise((resolve) => {
+      release = resolve;
+    });
+    runtime.writeQueue = current;
+    await previous;
+    try {
+      return await task();
+    } finally {
+      release?.();
+    }
   }
 
   async function loadStoreFromDisk({ repair = false } = {}) {
@@ -297,9 +332,28 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
       playerDatabase: modules?.playerDatabase,
       runtimeState: core?.runtimeState,
     });
+    parsed.groups = mergeReserveGroups(currentLocalStore.groups ?? [], parsed.groups ?? []);
+    if (!parsed.groups.length) {
+      parsed.groups = deriveReserveGroupsFromMembers(parsed.members);
+    }
 
     const nextStore = mergeStoreWithCdkData(runtime.store, parsed);
     await persistStore(runtime.resolvedLocalReserveFilePath, nextStore);
+    if (runtime.config.adminFilePath) {
+      const resolvedAdminFilePath = resolveConfigPath(runtime.config.adminFilePath, "");
+      let adminContent = "";
+      try {
+        adminContent = await fs.readFile(resolvedAdminFilePath, "utf8");
+      } catch (error) {
+        if (error?.code === "ENOENT") {
+          throw createReserveSlotError(404, "AdminFileNotFound", "绠＄悊鍛橀厤缃枃浠朵笉瀛樺湪銆?");
+        }
+        throw error;
+      }
+
+      const nextAdminContent = replaceReserveBlockInAdminFileContent(adminContent, nextStore);
+      await writeTextFileAtomic(resolvedAdminFilePath, nextAdminContent);
+    }
     runtime.store = nextStore;
     runtime.loadedAt = importedAt;
     return buildState({
@@ -472,8 +526,8 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
       deactivated: false,
       deactivatedAt: null,
       deactivatedBy: null,
-      minCurrentSessionSeconds: 0,
-      minServerSeconds: 0,
+      minCurrentSessionSeconds: payload.minCurrentSessionSeconds,
+      minServerSeconds: payload.minServerSeconds,
       createdAt,
       createdBy: normalizeActorName(context.actor),
     };
@@ -616,6 +670,7 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
 
   async function handleChatMessage(event = {}) {
     try {
+      if (!runtime.config.enabled) return;
       const channel = normalizeChatChannel(event?.chatChannel ?? event?.channel);
       if (channel !== "all") return;
       const rawMessage = String(event?.message ?? "").trim();
@@ -639,11 +694,11 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
         return;
       }
 
-      const activation = await activateCdkFromChat({
+      const activation = await withReserveWriteLock(() => activateCdkFromChat({
         playerName,
         steamId,
         message: rawMessage,
-      });
+      }));
       await sendActivationNotice(activation);
     } catch (error) {
       moduleLogger?.warn?.(`[ReserveSlots] failed to process chat CDK activation: ${error?.message ?? error}`);
@@ -652,7 +707,8 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
 
   async function activateCdkFromChat({ playerName, steamId, message }) {
     const body = String(message ?? "").trim().slice(DEFAULT_CDK_PREFIX.length);
-    const knownTypes = [...new Set((runtime.store.cdkBatches ?? []).map((item) => String(item.codeType ?? "").trim()).filter(Boolean))];
+    const knownTypes = [...new Set((runtime.store.cdkBatches ?? []).map((item) => String(item.codeType ?? "").trim()).filter(Boolean))]
+      .sort((a, b) => b.length - a.length);
     const matchedType = knownTypes.find((codeType) => body.startsWith(codeType)) ?? null;
 
     if (!matchedType) {
@@ -687,6 +743,7 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
       });
     }
 
+    const resolvedCodeType = String(codeRecord.codeType ?? matchedType ?? "").trim() || matchedType;
     const batch = (runtime.store.cdkBatches ?? []).find((item) => item.id === codeRecord.batchId);
     if (!batch) {
       return logActivation({
@@ -695,7 +752,7 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
         message,
         batchId: codeRecord.batchId,
         code,
-        codeType: matchedType,
+        codeType: resolvedCodeType,
         result: ACTIVATION_RESULTS.CODE_NOT_FOUND,
         failureReason: "CDK 批次不存在。",
         grantedExpireAt: null,
@@ -710,7 +767,7 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
         message,
         batchId: batch.id,
         code,
-        codeType: matchedType,
+        codeType: resolvedCodeType,
         result: ACTIVATION_RESULTS.BATCH_DEACTIVATED,
         failureReason: "该批次已停用，无法继续激活。",
         grantedExpireAt: null,
@@ -725,7 +782,7 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
         message,
         batchId: batch.id,
         code,
-        codeType: matchedType,
+        codeType: resolvedCodeType,
         result: ACTIVATION_RESULTS.CODE_USED,
         failureReason: "该 CDK 已被使用。",
         grantedExpireAt: codeRecord.grantedExpireAt ?? null,
@@ -745,7 +802,7 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
         message,
         batchId: batch.id,
         code,
-        codeType: matchedType,
+        codeType: resolvedCodeType,
         result: ACTIVATION_RESULTS.DUPLICATE_PLAYER_RESTRICTED,
         failureReason: "该批次不允许同一玩家重复激活。",
         grantedExpireAt: null,
@@ -761,7 +818,7 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
         message,
         batchId: batch.id,
         code,
-        codeType: matchedType,
+        codeType: resolvedCodeType,
         result: ACTIVATION_RESULTS.FUTURE_REQUIREMENT_NOT_MET,
         failureReason: requirement.reason || "未满足激活条件。",
         grantedExpireAt: null,
@@ -793,7 +850,7 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
       message,
       batchId: batch.id,
       code,
-      codeType: matchedType,
+      codeType: resolvedCodeType,
       result: ACTIVATION_RESULTS.SUCCESS,
       failureReason: "",
       grantedExpireAt: expireAt,
@@ -825,6 +882,14 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
       return { matched: true, reason: "" };
     }
 
+    const currentSessionSeconds = await resolvePlayerCurrentSessionSeconds(player);
+    if (minCurrentSessionSeconds > 0 && currentSessionSeconds < minCurrentSessionSeconds) {
+      return {
+        matched: false,
+        reason: `当前局在线时长不足 ${minCurrentSessionSeconds} 秒。`,
+      };
+    }
+
     const serverSeconds = await resolvePlayerServerSeconds(player);
     if (minServerSeconds > 0 && serverSeconds < minServerSeconds) {
       return {
@@ -841,6 +906,48 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
     const rows = await modules.playerDatabase.listPlayersBySteamIDs([player.steamId]);
     const row = Array.isArray(rows) ? rows[0] : null;
     return Math.max(0, Number(row?.server_seconds ?? row?.serverSeconds ?? 0) || 0);
+  }
+
+  async function resolvePlayerCurrentSessionSeconds(player) {
+    const snapshot = core?.runtimeState?.getPlayers?.();
+    if (!snapshot || typeof snapshot !== "object") return 0;
+
+    const candidates = [];
+    if (Array.isArray(snapshot.active)) candidates.push(...snapshot.active);
+    if (snapshot.bySteamID && typeof snapshot.bySteamID === "object") {
+      candidates.push(snapshot.bySteamID[player.steamId]);
+    }
+    if (snapshot.bySteam64ID && typeof snapshot.bySteam64ID === "object") {
+      candidates.push(snapshot.bySteam64ID[player.steamId]);
+    }
+
+    const target = candidates.find((item) => {
+      if (!item || typeof item !== "object") return false;
+      const steamId = String(item.steamID ?? item.steamId ?? item.steam64ID ?? item.steam64Id ?? "").trim();
+      return steamId === String(player.steamId ?? "").trim();
+    }) ?? null;
+
+    const directSeconds = Number(target?.currentSessionSeconds ?? target?.sessionSeconds ?? target?.session_seconds ?? 0);
+    if (Number.isFinite(directSeconds) && directSeconds > 0) {
+      return Math.max(0, directSeconds);
+    }
+
+    const joinedAtMs = resolveJoinedAtMs(target);
+    if (!joinedAtMs) return 0;
+    return Math.max(0, Math.floor((Date.now() - joinedAtMs) / 1000));
+  }
+
+  function resolveJoinedAtMs(player) {
+    if (!player || typeof player !== "object") return 0;
+    const raw = player.joinedAtMs ?? player.joinedAt ?? player.joined_at ?? player.joinedAtTimestamp ?? player.connectedAt ?? player.connected_at;
+    if (raw == null || raw === "") return 0;
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      return raw > 1e12 ? Math.floor(raw) : Math.floor(raw * 1000);
+    }
+    const text = String(raw).trim();
+    if (!text) return 0;
+    const parsed = Date.parse(text);
+    return Number.isNaN(parsed) ? 0 : parsed;
   }
 
   async function sendActivationNotice(activation) {
@@ -1193,6 +1300,99 @@ export function syncReserveMemberNamesInAdminFileContent(content, members = []) 
   };
 }
 
+function mergeReserveGroups(baseGroups = [], parsedGroups = []) {
+  const merged = [];
+  const seen = new Set();
+  for (const group of [...(Array.isArray(baseGroups) ? baseGroups : []), ...(Array.isArray(parsedGroups) ? parsedGroups : [])]) {
+    const normalized = normalizeGroup(group);
+    if (!normalized) continue;
+    const key = normalized.name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(normalized);
+  }
+  return merged;
+}
+
+function deriveReserveGroupsFromMembers(members = []) {
+  const derived = [];
+  const seen = new Set();
+  for (const member of Array.isArray(members) ? members : []) {
+    const groupName = String(member?.group ?? "").trim();
+    if (!groupName) continue;
+    const key = groupName.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    derived.push({
+      name: groupName,
+      permission: DEFAULT_RESERVE_PERMISSION,
+      rawLine: formatReserveGroupLine(groupName),
+    });
+  }
+  return derived;
+}
+
+function replaceReserveBlockInAdminFileContent(content, store = {}) {
+  const text = String(content ?? "");
+  const newline = text.includes("\r\n") ? "\r\n" : "\n";
+  const hadTrailingNewline = /\r?\n$/.test(text);
+  const lines = text.split(/\r?\n/);
+  if (lines.length && lines[lines.length - 1] === "" && hadTrailingNewline) {
+    lines.pop();
+  }
+
+  const markerIndex = lines.findIndex((line) => RESERVE_MARKER_RE.test(line));
+  const reserveBlockLines = buildReserveBlockLines(store);
+  if (markerIndex < 0) {
+    if (lines.length && String(lines[lines.length - 1] ?? "").trim() !== "") {
+      lines.push("");
+    }
+    lines.push(...reserveBlockLines);
+    return `${lines.join(newline)}${newline}`;
+  }
+
+  const reserveRange = findReserveBlockRange(lines, markerIndex);
+  const nextLines = [
+    ...lines.slice(0, markerIndex),
+    ...reserveBlockLines,
+    ...lines.slice(reserveRange.end),
+  ];
+
+  return `${nextLines.join(newline)}${hadTrailingNewline ? newline : ""}`;
+}
+
+function buildReserveBlockLines(store = {}) {
+  const groups = [];
+  const seenGroups = new Set();
+  for (const group of Array.isArray(store.groups) ? store.groups : []) {
+    const normalized = normalizeGroup(group);
+    if (!normalized) continue;
+    const key = normalized.name.toLowerCase();
+    if (seenGroups.has(key)) continue;
+    seenGroups.add(key);
+    groups.push(formatReserveGroupLine(normalized.name));
+  }
+  if (!groups.length) {
+    for (const member of Array.isArray(store.members) ? store.members : []) {
+      const groupName = String(member?.group ?? "").trim();
+      if (!groupName) continue;
+      const key = groupName.toLowerCase();
+      if (seenGroups.has(key)) continue;
+      seenGroups.add(key);
+      groups.push(formatReserveGroupLine(groupName));
+    }
+  }
+
+  const memberLines = [];
+  for (const member of Array.isArray(store.members) ? store.members : []) {
+    const normalized = normalizeMember(member);
+    if (!normalized) continue;
+    memberLines.push(formatReserveMemberLine(normalized));
+  }
+
+  return ["// 预留位", ...groups, ...memberLines];
+}
+
 function findReserveBlockRange(lines, markerIndex) {
   let end = lines.length;
   for (let index = markerIndex + 1; index < lines.length; index += 1) {
@@ -1387,6 +1587,8 @@ function normalizeCreateCdkBatchInput(input = {}) {
     quantity,
     durationDays,
     allowMultiActivation: Boolean(input.allowMultiActivation),
+    minCurrentSessionSeconds: Math.max(0, Number(input.minCurrentSessionSeconds ?? 0) || 0),
+    minServerSeconds: Math.max(0, Number(input.minServerSeconds ?? 0) || 0),
   };
 }
 
@@ -1963,7 +2165,7 @@ function randomToken(length) {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let output = "";
   while (output.length < length) {
-    output += alphabet[Math.floor(Math.random() * alphabet.length)];
+    output += alphabet[crypto.randomInt(alphabet.length)];
   }
   return output;
 }

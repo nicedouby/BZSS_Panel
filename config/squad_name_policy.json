@@ -7,8 +7,51 @@
     "sheetName": "Sheet1"
   },
   "importedAt": "2026-06-17T09:50:53.381Z",
-  "updatedAt": "2026-06-18T12:58:46.822Z",
+  "updatedAt": "2026-07-03T06:59:51.268Z",
   "suggestionLimit": 5,
+  "defaultNamePatterns": [
+    "^squad\\s*\\d+$",
+    "^小队\\s*\\d+$",
+    "^队伍\\s*\\d+$",
+    "^team\\s*\\d+$"
+  ],
+  "infantryNames": [
+    "哕哒曼牌全能战场救火队",
+    "机械化步兵队",
+    "拉点队",
+    "空突步兵队",
+    "空突利刃",
+    "萌新队",
+    "萌新小队",
+    "填线步兵队",
+    "91会员队",
+    "腐竹近卫掷弹皇家队",
+    "SAS特种步兵队",
+    "正面抗线队",
+    "保安大队",
+    "78大队",
+    "虎虎虎",
+    "关注asoul谢谢喵队",
+    "弱智小学生步兵队",
+    "摸鱼大队",
+    "情报支援侦查队",
+    "突击队",
+    "尖刀队",
+    "聊天小组",
+    "银河队"
+  ],
+  "specialInfantryNames": [
+    "龟壳",
+    "GUIKE",
+    "指挥小队",
+    "迫击炮小队",
+    "后勤队",
+    "后勤",
+    "货拉拉",
+    "创伤小组",
+    "萨尼铁塔",
+    "zsj"
+  ],
   "entries": [
     {
       "id": "adf:mrap:pmvmag58:/game/vehicles/pmv/bppmvmag58.bppmvmag58",
@@ -5144,7 +5187,15 @@
       "keywords": [
         "UH",
         "MI8",
-        "MI-8"
+        "MI"
+      ],
+      "searchTokens": [
+        "Mi",
+        "Mi8",
+        "Game",
+        "Vehicles",
+        "BP",
+        "VDV"
       ]
     },
     {
@@ -5159,7 +5210,16 @@
       "keywords": [
         "UH",
         "MRH90",
-        "MRH-90"
+        "MRH"
+      ],
+      "searchTokens": [
+        "MRH",
+        "90",
+        "MRH90",
+        "Game",
+        "Vehicles",
+        "BP",
+        "Mag58"
       ]
     },
     {
@@ -5175,7 +5235,18 @@
       "keywords": [
         "UH",
         "UH60",
-        "UH-60M"
+        "UH-60M",
+        "BLACKHAWK"
+      ],
+      "searchTokens": [
+        "UH",
+        "60M",
+        "UH60M",
+        "Blackhawk",
+        "Game",
+        "Vehicles",
+        "UH60",
+        "BP"
       ]
     },
     {
@@ -5190,7 +5261,15 @@
       "keywords": [
         "UH",
         "SA330",
-        "PUMA"
+        "PUMA",
+        "SA"
+      ],
+      "searchTokens": [
+        "SA330",
+        "Puma",
+        "Game",
+        "Vehicles",
+        "BP"
       ]
     },
     {
@@ -5206,7 +5285,17 @@
       "keywords": [
         "UH",
         "CH146",
-        "CH-146"
+        "CH",
+        "GRIFFON"
+      ],
+      "searchTokens": [
+        "CH",
+        "146",
+        "CH146",
+        "Griffon",
+        "Game",
+        "Vehicles",
+        "BP"
       ]
     },
     {
@@ -5221,7 +5310,15 @@
       "keywords": [
         "UH",
         "CH178",
-        "CH-178"
+        "CH"
+      ],
+      "searchTokens": [
+        "CH",
+        "178",
+        "CH178",
+        "Game",
+        "Vehicles",
+        "BP"
       ]
     },
     {
@@ -5237,7 +5334,18 @@
       "keywords": [
         "UH",
         "UH1H",
-        "UH-1H"
+        "HUEY"
+      ],
+      "searchTokens": [
+        "UH",
+        "1H",
+        "MG3",
+        "UH1H",
+        "Huey",
+        "Game",
+        "Vehicles",
+        "GFI",
+        "BP"
       ]
     },
     {
@@ -5251,8 +5359,14 @@
       ],
       "keywords": [
         "UH",
+        "Z8G"
+      ],
+      "searchTokens": [
+        "8G",
         "Z8G",
-        "Z-8G"
+        "Game",
+        "Vehicles",
+        "BP"
       ]
     },
     {
@@ -5266,8 +5380,14 @@
       ],
       "keywords": [
         "UH",
+        "Z8G"
+      ],
+      "searchTokens": [
+        "8G",
         "Z8G",
-        "Z-8G"
+        "Game",
+        "Vehicles",
+        "BP"
       ]
     },
     {
@@ -5281,8 +5401,14 @@
       ],
       "keywords": [
         "UH",
+        "Z8J"
+      ],
+      "searchTokens": [
+        "8J",
         "Z8J",
-        "Z-8J"
+        "Game",
+        "Vehicles",
+        "BP"
       ]
     },
     {
@@ -5297,7 +5423,15 @@
       "keywords": [
         "UH",
         "MI8",
-        "MI-8"
+        "MI"
+      ],
+      "searchTokens": [
+        "Mi",
+        "Mi8",
+        "Game",
+        "Vehicles",
+        "BP",
+        "VDV"
       ]
     },
     {
@@ -5313,7 +5447,17 @@
       "keywords": [
         "UH",
         "MI8",
-        "MI-8MTV-5"
+        "MI-8MTV-5",
+        "MI"
+      ],
+      "searchTokens": [
+        "Mi",
+        "8MTV",
+        "Mi8MTV5",
+        "Mi8",
+        "Game",
+        "Vehicles",
+        "BP"
       ]
     },
     {
@@ -5330,6 +5474,16 @@
         "UH",
         "UH60",
         "PKM"
+      ],
+      "searchTokens": [
+        "UH60",
+        "PKM",
+        "UH",
+        "60",
+        "Game",
+        "Vehicles",
+        "TLF",
+        "BP"
       ]
     },
     {
@@ -5345,7 +5499,17 @@
       "keywords": [
         "UH",
         "MI8",
-        "MI-8MTV-5"
+        "MI-8MTV-5",
+        "MI"
+      ],
+      "searchTokens": [
+        "Mi",
+        "8MTV",
+        "Mi8MTV5",
+        "Mi8",
+        "Game",
+        "Vehicles",
+        "BP"
       ]
     },
     {
@@ -5361,7 +5525,18 @@
       "keywords": [
         "UH",
         "UH60",
-        "UH-60M"
+        "UH-60M",
+        "BLACKHAWK"
+      ],
+      "searchTokens": [
+        "UH",
+        "60M",
+        "UH60M",
+        "Blackhawk",
+        "Game",
+        "Vehicles",
+        "UH60",
+        "BP"
       ]
     },
     {
@@ -5377,7 +5552,16 @@
       "keywords": [
         "UH",
         "UH1Y",
-        "UH-1Y"
+        "HUEY"
+      ],
+      "searchTokens": [
+        "UH",
+        "1Y",
+        "UH1Y",
+        "Huey",
+        "Game",
+        "Vehicles",
+        "BP"
       ]
     },
     {
@@ -5393,7 +5577,16 @@
       "keywords": [
         "UH",
         "UH1Y",
-        "UH-1Y"
+        "HUEY"
+      ],
+      "searchTokens": [
+        "UH",
+        "1Y",
+        "UH1Y",
+        "Huey",
+        "Game",
+        "Vehicles",
+        "BP"
       ]
     },
     {
@@ -5409,7 +5602,17 @@
       "keywords": [
         "UH",
         "RAVEN",
-        "RAVENTRANSPORT"
+        "RAVENTRANSPORT",
+        "CH",
+        "CH146"
+      ],
+      "searchTokens": [
+        "Raven",
+        "Transport",
+        "CH146",
+        "Game",
+        "Vehicles",
+        "BP"
       ]
     },
     {
@@ -5425,49 +5628,18 @@
       "keywords": [
         "UH",
         "RAVEN",
-        "RAVENTRANSPORT"
+        "RAVENTRANSPORT",
+        "CH",
+        "CH146"
+      ],
+      "searchTokens": [
+        "Raven",
+        "Transport",
+        "CH146",
+        "Game",
+        "Vehicles",
+        "BP"
       ]
     }
-  ],
-  "defaultNamePatterns": [
-    "^squad\\s*\\d+$",
-    "^小队\\s*\\d+$",
-    "^队伍\\s*\\d+$",
-    "^team\\s*\\d+$"
-  ],
-  "infantryNames": [
-    "哕哒曼牌全能战场救火队",
-    "机械化步兵队",
-    "拉点队",
-    "空突步兵队",
-    "空突利刃",
-    "萌新队",
-    "萌新小队",
-    "填线步兵队",
-    "91会员队",
-    "腐竹近卫掷弹皇家队",
-    "SAS特种步兵队",
-    "正面抗线队",
-    "保安大队",
-    "78大队",
-    "虎虎虎",
-    "关注asoul谢谢喵队",
-    "弱智小学生步兵队",
-    "摸鱼大队",
-    "情报支援侦查队",
-    "突击队",
-    "尖刀队",
-    "聊天小组"
-  ],
-  "specialInfantryNames": [
-    "龟壳",
-    "GUIKE",
-    "指挥小队",
-    "迫击炮小队",
-    "后勤队",
-    "后勤",
-    "货拉拉",
-    "创伤小组",
-    "萨尼铁塔"
   ]
 }

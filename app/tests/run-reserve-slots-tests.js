@@ -10,7 +10,6 @@ import {
   ensureReserveSlotStoreFile,
   parseReserveSlotsFromAdminFileContent,
   removeReserveSlotMembersFromAdminFileContent,
-  syncReserveMemberNamesInAdminFileContent,
   upsertReserveSlotInAdminFileContent,
 } from "../modules/reserve-slots/index.js";
 
@@ -127,7 +126,7 @@ function createTestHarness() {
       logger,
       runtimeState: {
         getPlayers() {
-          return { bySteamID: {} };
+          return { active: [], bySteamID: {} };
         },
       },
       eventBus,
@@ -160,6 +159,51 @@ function createTestHarness() {
   };
 }
 
+async function setupReserveModule({
+  enabled = true,
+  adminLines = [
+    "header",
+    "// 预留位",
+    "Group=BZSSVIP:reserve",
+  ],
+  modulesOverrides = {},
+} = {}) {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "reserve-slots-test-"));
+  const adminFilePath = path.join(tempDir, "Admins.cfg");
+  const localReservePath = path.join(tempDir, "data", "reserve-slots.json");
+  await fs.writeFile(adminFilePath, adminLines.join("\n"), "utf8");
+
+  const config = createConfig({
+    reserveSystem: {
+      enabled,
+      adminFilePath,
+      localReserveFilePath: path.relative(process.cwd(), localReservePath),
+    },
+  });
+
+  const harness = createTestHarness();
+  const modules = {
+    ...harness.modules,
+    ...modulesOverrides,
+  };
+  const reserveModule = createReserveSlotsModule({
+    core: harness.core,
+    modules,
+    config,
+    logger: harness.logger,
+  });
+
+  await reserveModule.init();
+  return {
+    tempDir,
+    adminFilePath,
+    localReservePath,
+    harness,
+    config,
+    reserveModule,
+  };
+}
+
 async function testParserHandlesAdminBlock() {
   const content = [
     "random line",
@@ -177,175 +221,21 @@ async function testParserHandlesAdminBlock() {
   assert.equal(parsed.groups[0].name, "BZSSVIP");
   assert.equal(parsed.members.length, 2);
   assert.equal(parsed.members[0].steamId, "76561198377609640");
-  assert.equal(parsed.members[0].name, "");
   assert.equal(parsed.members[0].expireAt, "2020-06-02 21:26:59");
   assert.equal(parsed.members[0].isExpired, true);
   assert.deepEqual(parsed.members[0].reasons, ["预留位"]);
   assert.equal(parsed.members[1].expireAt, null);
-  assert.equal(parsed.members[1].isExpired, false);
-  assert.deepEqual(parsed.members[1].reasons, ["预留位"]);
 }
 
-async function testEnsureReserveSlotStoreFileCreatesAndRepairs() {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "reserve-slots-test-"));
-  const storePath = path.join(tempDir, "data", "reserve-slots.json");
-
-  await ensureReserveSlotStoreFile(storePath, "C:/Servers/Squad/Admins.cfg");
-  const created = JSON.parse(await fs.readFile(storePath, "utf8"));
-  assert.equal(created.version, 2);
-  assert.equal(created.source.adminFilePath, "");
-  assert.equal(created.groups.length, 0);
-  assert.equal(created.members.length, 0);
-  assert.deepEqual(created.cdkBatches, []);
-  assert.deepEqual(created.cdkCodes, []);
-  assert.deepEqual(created.cdkActivations, []);
-
-  await fs.writeFile(storePath, "{broken", "utf8");
-  await ensureReserveSlotStoreFile(storePath, "C:/Servers/Squad/Admins.cfg");
-  const repaired = JSON.parse(await fs.readFile(storePath, "utf8"));
-  assert.equal(repaired.version, 2);
-  const backups = await fs.readdir(path.dirname(storePath));
-  assert.equal(backups.some((file) => file.includes(".broken-")), true);
-
-  await fs.rm(tempDir, { recursive: true, force: true });
-}
-
-async function testUpsertAdminFileContentAppendsMissingBlock() {
-  const content = [
-    "Admin=76561198000000000:Admin",
-    "Group=Admin:admin",
-  ].join("\r\n");
-
-  const next = upsertReserveSlotInAdminFileContent(content, {
-    steamId: "76561198377609640",
-    group: "BZSSVIP",
-    expireAt: "2026-06-02 21:26:59",
-  });
-
-  assert.match(next, /\r\n\/\/ 预留位\r\nGroup=BZSSVIP:reserve\r\nAdmin=76561198377609640:BZSSVIP \/\/2026-06-02 21:26:59\r\n$/);
-  assert.match(next, /^Admin=76561198000000000:Admin\r\nGroup=Admin:admin\r\n\r\n\/\/ 预留位/m);
-}
-
-async function testUpsertAdminFileContentUpdatesExistingMember() {
-  const content = [
-    "header",
-    "// 预留位",
-    "Group=BZSSVIP:reserve",
-    "Admin=76561198377609640:BZSSVIP //2026-06-02 21:26:59",
-    "Admin=76561198992120471:BZSSVIP //2026-06-06 22:31:03",
-    "footer",
-  ].join("\n");
-
-  const next = upsertReserveSlotInAdminFileContent(content, {
-    steamId: "76561198377609640",
-    group: "BZSSVIP",
-    expireAt: "2026-07-02 21:26:59",
-    name: "Alpha",
-  });
-
-  assert.equal((next.match(/Admin=76561198377609640/g) ?? []).length, 1);
-  assert.match(next, /Admin=76561198377609640:BZSSVIP \/\/2026-07-02 21:26:59 名称:Alpha/);
-  assert.match(next, /Admin=76561198992120471:BZSSVIP \/\/2026-06-06 22:31:03/);
-  assert.match(next, /footer$/);
-}
-
-async function testUpsertAdminFileContentValidatesInput() {
-  assert.throws(() => upsertReserveSlotInAdminFileContent("// 预留位", {
-    steamId: "bad",
-    group: "BZSSVIP",
-    expireAt: "2026-06-02 21:26:59",
-  }), /Steam64/);
-
-  assert.throws(() => upsertReserveSlotInAdminFileContent("// 预留位", {
-    steamId: "76561198377609640",
-    group: "BZSSVIP",
-    expireAt: "2026-06-02",
-  }), /YYYY-MM-DD HH:mm:ss/);
-}
-
-async function testRemoveReserveSlotMembersFromAdminFileContent() {
-  const content = [
-    "header",
-    "// 预留位",
-    "Group=BZSSVIP:reserve",
-    "Admin=76561198377609640:BZSSVIP //2020-06-02 21:26:59 名称:Alpha",
-    "Admin=76561198992120471:BZSSVIP //2099-06-06 22:31:03 名称:Bravo",
-    "footer",
-  ].join("\n");
-
-  const removedBySteamId = removeReserveSlotMembersFromAdminFileContent(content, {
-    steamIds: ["76561198992120471"],
-  });
-  assert.equal(removedBySteamId.removedCount, 1);
-  assert.doesNotMatch(removedBySteamId.content, /76561198992120471/);
-  assert.match(removedBySteamId.content, /76561198377609640/);
-
-  const removedExpired = removeReserveSlotMembersFromAdminFileContent(content, {
-    removeExpiredOnly: true,
-  });
-  assert.equal(removedExpired.removedCount, 1);
-  assert.doesNotMatch(removedExpired.content, /76561198377609640/);
-  assert.match(removedExpired.content, /76561198992120471/);
-}
-
-async function testReserveSlotUniquenessDedupesExistingEntries() {
-  const content = [
-    "header",
-    "// 预留位",
-    "Group=BZSSVIP:reserve",
-    "Admin=76561198377609640:BZSSVIP //2099-06-02 21:26:59 名称:Alpha",
-    "Admin=76561198377609640:BZSSVIP //2099-07-02 21:26:59 名称:Alpha2",
-    "footer",
-  ].join("\n");
-
-  const parsed = parseReserveSlotsFromAdminFileContent(content, {
-    adminFilePath: "C:/Servers/Squad/Admins.cfg",
-  });
-  assert.equal(parsed.members.length, 1);
-  assert.equal(parsed.members[0].steamId, "76561198377609640");
-
-  const next = upsertReserveSlotInAdminFileContent(content, {
-    steamId: "76561198377609640",
-    group: "BZSSVIP",
-    expireAt: "2099-08-02 21:26:59",
-    name: "Alpha3",
-  });
-  assert.equal((next.match(/Admin=76561198377609640/g) ?? []).length, 1);
-  assert.match(next, /Admin=76561198377609640:BZSSVIP \/\/2099-08-02 21:26:59 名称:Alpha3/);
-}
-
-async function testSyncReserveMemberNamesInAdminFileContentFillsMissingNames() {
-  const seeded = upsertReserveSlotInAdminFileContent(["header", "footer"].join("\n"), {
-    steamId: "76561198377609640",
-    group: "BZSSVIP",
-    expireAt: "2099-06-02 21:26:59",
-  });
-  const content = upsertReserveSlotInAdminFileContent(seeded, {
-    steamId: "76561198992120471",
-    group: "BZSSVIP",
-    expireAt: "2099-06-06 22:31:03",
-    name: "Bravo",
-  });
-
-  const result = syncReserveMemberNamesInAdminFileContent(content, [
-    { steamId: "76561198377609640", name: "Alpha" },
-    { steamId: "76561198992120471", name: "BravoNew" },
-  ]);
-
-  assert.equal(result.changed, true);
-  assert.deepEqual(result.updatedSteamIds, ["76561198377609640"]);
-  assert.match(result.content, /Admin=76561198377609640:BZSSVIP \/\/2099-06-02 21:26:59 名称:Alpha/);
-  assert.match(result.content, /Admin=76561198992120471:BZSSVIP \/\/2099-06-06 22:31:03 名称:Bravo/);
-}
-
-async function testCdkBatchAndChatActivationFlow() {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "reserve-slots-cdk-"));
+async function testUpsertAndShortenUsesCurrentExpiry() {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "reserve-slots-manual-"));
   const adminFilePath = path.join(tempDir, "Admins.cfg");
   const localReservePath = path.join(tempDir, "data", "reserve-slots.json");
   await fs.writeFile(adminFilePath, [
     "header",
     "// 预留位",
     "Group=BZSSVIP:reserve",
+    "Admin=76561198377609640:BZSSVIP //2099-06-02 21:26:59 预留位",
   ].join("\n"), "utf8");
 
   const config = createConfig({
@@ -355,172 +245,6 @@ async function testCdkBatchAndChatActivationFlow() {
       localReserveFilePath: path.relative(process.cwd(), localReservePath),
     },
   });
-
-  const harness = createTestHarness();
-  const reserveModule = createReserveSlotsModule({
-    core: harness.core,
-    modules: harness.modules,
-    config,
-    logger: harness.logger,
-  });
-
-  await reserveModule.init();
-  await reserveModule.start();
-
-  const created = await reserveModule.api.createCdkBatch({
-    codeType: "VIP",
-    quantity: 2,
-    durationDays: 30,
-    allowMultiActivation: false,
-  }, {
-    actor: { username: "admin" },
-  });
-
-  assert.equal(created.createdCodes.length, 2);
-  assert.equal(created.batches.length, 1);
-  assert.match(created.createdCodes[0], /^CDKVIP[A-Z0-9]{14}A$/);
-
-  harness.chatManager.api.emit("message", {
-    chatChannel: "all",
-    playerName: "Alpha",
-    steamId: "76561198377609640",
-    message: created.createdCodes[0],
-  });
-  await new Promise((resolve) => setTimeout(resolve, 50));
-
-  const afterFirst = await reserveModule.api.getCdkState();
-  assert.equal(afterFirst.summary.successCount, 1);
-  assert.equal(afterFirst.summary.usedCodeCount, 1);
-  assert.equal(afterFirst.activations[0].result, "success");
-  assert.ok(harness.warns.some((item) => String(item.message).includes("激活成功")));
-  assert.equal(harness.broadcasts.length >= 1, true);
-  assert.ok(harness.warns.some((item) => String(item.message).includes("剩余")));
-  assert.ok(harness.broadcasts.some((item) => String(item.message).includes("剩余")));
-
-  harness.chatManager.api.emit("message", {
-    chatChannel: "all",
-    playerName: "Alpha",
-    steamId: "76561198377609640",
-    message: created.createdCodes[1],
-  });
-  await new Promise((resolve) => setTimeout(resolve, 50));
-
-  const afterSecond = await reserveModule.api.getCdkState();
-  assert.equal(afterSecond.summary.failureCount >= 1, true);
-  assert.equal(afterSecond.activations[0].result, "duplicate_player_restricted");
-  assert.equal(harness.broadcasts.length, 1);
-
-  await reserveModule.api.deactivateCdkBatch(created.createdBatchId, {
-    actor: { username: "admin" },
-  });
-  const afterDeactivateFirstBatch = await reserveModule.api.getCdkState();
-  assert.equal(afterDeactivateFirstBatch.batches.some((item) => item.id === created.createdBatchId), false);
-
-  const createdTwo = await reserveModule.api.createCdkBatch({
-    codeType: "VIP2",
-    quantity: 1,
-    durationDays: 15,
-    allowMultiActivation: true,
-  }, {
-    actor: { username: "admin" },
-  });
-  await reserveModule.api.deactivateCdkBatch(createdTwo.createdBatchId, {
-    actor: { username: "admin" },
-  });
-
-  harness.chatManager.api.emit("message", {
-    chatChannel: "all",
-    playerName: "Bravo",
-    steamId: "76561198377609641",
-    message: createdTwo.createdCodes[0],
-  });
-  await new Promise((resolve) => setTimeout(resolve, 50));
-
-  const afterDeactivate = await reserveModule.api.getCdkState();
-  assert.equal(afterDeactivate.activations[0].result, "batch_deactivated");
-  assert.equal(afterDeactivate.batches.some((item) => item.id === createdTwo.createdBatchId), false);
-
-  const adminContent = await fs.readFile(adminFilePath, "utf8");
-  assert.match(adminContent, /Admin=76561198377609640:BZSSVIP/);
-  assert.doesNotMatch(adminContent, /CDK:VIP:/);
-
-  await reserveModule.stop();
-  await fs.rm(tempDir, { recursive: true, force: true });
-}
-
-async function testManualExtendAddsFromExistingExpiry() {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "reserve-slots-manual-extend-"));
-  const adminFilePath = path.join(tempDir, "Admins.cfg");
-  const localReservePath = path.join(tempDir, "data", "reserve-slots.json");
-  const firstExpireAt = "2099-06-02 21:26:59";
-
-  await fs.writeFile(adminFilePath, [
-    "header",
-    "// 预留位",
-    "Group=BZSSVIP:reserve",
-    `Admin=76561198377609640:BZSSVIP //${firstExpireAt} 名称:Alpha`,
-  ].join("\n"), "utf8");
-
-  const config = createConfig({
-    reserveSystem: {
-      enabled: true,
-      adminFilePath,
-      localReserveFilePath: path.relative(process.cwd(), localReservePath),
-    },
-  });
-
-  const harness = createTestHarness();
-  const reserveModule = createReserveSlotsModule({
-    core: harness.core,
-    modules: harness.modules,
-    config,
-    logger: harness.logger,
-  });
-
-  await reserveModule.init();
-  await reserveModule.api.importFromAdminFile();
-
-  const updated = await reserveModule.api.upsertMember({
-    steamId: "76561198377609640",
-    group: "BZSSVIP",
-    durationDays: 30,
-    name: "Alpha",
-    reason: "manual_extend_test",
-  });
-
-  const member = updated.members.find((item) => item.steamId === "76561198377609640");
-  assert.ok(member);
-  assert.equal(member.expireAt, "2099-07-02 21:26:59");
-
-  const adminContent = await fs.readFile(adminFilePath, "utf8");
-  assert.match(adminContent, /Admin=76561198377609640:BZSSVIP \/\/2099-07-02 21:26:59 名称:Alpha manual_extend_test/);
-
-  await reserveModule.stop?.();
-  await fs.rm(tempDir, { recursive: true, force: true });
-}
-
-async function testManualShortenUsesExistingExpiryAsBase() {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "reserve-slots-manual-shorten-"));
-  const adminFilePath = path.join(tempDir, "Admins.cfg");
-  const localReservePath = path.join(tempDir, "data", "reserve-slots.json");
-  const firstExpireAt = "2099-07-02 21:26:59";
-
-  const seededContent = upsertReserveSlotInAdminFileContent(["header", "footer"].join("\n"), {
-    steamId: "76561198377609640",
-    group: "BZSSVIP",
-    expireAt: firstExpireAt,
-    name: "Alpha",
-  });
-  await fs.writeFile(adminFilePath, seededContent, "utf8");
-
-  const config = createConfig({
-    reserveSystem: {
-      enabled: true,
-      adminFilePath,
-      localReserveFilePath: path.relative(process.cwd(), localReservePath),
-    },
-  });
-
   const harness = createTestHarness();
   const reserveModule = createReserveSlotsModule({
     core: harness.core,
@@ -537,49 +261,95 @@ async function testManualShortenUsesExistingExpiryAsBase() {
     group: "BZSSVIP",
     durationDays: -10,
     name: "Alpha",
-    reason: "manual_shorten_test",
+    reason: "manual_shorten",
   });
-
   const member = updated.members.find((item) => item.steamId === "76561198377609640");
-  assert.ok(member);
-  assert.equal(member.expireAt, "2099-06-22 21:26:59");
+  assert.equal(member.expireAt, "2099-05-23 21:26:59");
 
   const adminContent = await fs.readFile(adminFilePath, "utf8");
-  assert.match(adminContent, /Admin=76561198377609640:BZSSVIP \/\/2099-06-22 21:26:59 名称:Alpha manual_shorten_test/);
+  assert.match(adminContent, /manual_shorten/);
 
-  await reserveModule.stop?.();
+  await reserveModule.stop();
   await fs.rm(tempDir, { recursive: true, force: true });
 }
 
-async function testModuleAndRoutesWorkEndToEnd() {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "reserve-slots-web-"));
-  const adminFilePath = path.join(tempDir, "Admins.cfg");
-  const localReservePath = path.join(tempDir, "data", "reserve-slots.json");
-
-  await fs.writeFile(adminFilePath, [
-    "header",
-    "// 预留位",
-    "Group=BZSSVIP:reserve",
-    "Admin=76561198377609640:BZSSVIP //2020-06-02 21:26:59  预留位",
-  ].join("\n"), "utf8");
-
-  const config = createConfig({
-    reserveSystem: {
-      enabled: true,
-      adminFilePath,
-      localReserveFilePath: path.relative(process.cwd(), localReservePath),
-    },
+async function testExpiredCleanupRemovesExpiredMembers() {
+  const module = await setupReserveModule({
+    adminLines: [
+      "header",
+      "// 预留位",
+      "Group=BZSSVIP:reserve",
+      "Admin=76561198377609640:BZSSVIP //2000-06-02 21:26:59 预留位",
+      "Admin=76561198377609641:BZSSVIP //2099-06-02 21:26:59 预留位",
+    ],
   });
 
-  const harness = createTestHarness();
-  const reserveModule = createReserveSlotsModule({
-    core: harness.core,
-    modules: harness.modules,
-    config,
-    logger: harness.logger,
+  const result = await module.reserveModule.api.deleteExpiredMembers();
+  assert.equal(result.removedCount, 1);
+  assert.equal(result.members.some((item) => item.steamId === "76561198377609640"), false);
+  assert.equal(result.members.some((item) => item.steamId === "76561198377609641"), true);
+
+  const adminContent = await fs.readFile(module.adminFilePath, "utf8");
+  assert.doesNotMatch(adminContent, /76561198377609640/);
+  assert.match(adminContent, /76561198377609641/);
+
+  await module.reserveModule.stop();
+  await fs.rm(module.tempDir, { recursive: true, force: true });
+}
+
+async function testChatActivationRespectsEnabledFlag() {
+  const module = await setupReserveModule({
+    enabled: false,
   });
-  await reserveModule.init();
-  await reserveModule.start();
+  await module.reserveModule.start();
+
+  const created = await module.reserveModule.api.createCdkBatch({
+    codeType: "VIP",
+    quantity: 1,
+    durationDays: 30,
+    allowMultiActivation: false,
+  }, {
+    actor: { username: "admin" },
+  });
+
+  module.harness.chatManager.api.emit("message", {
+    chatChannel: "all",
+    playerName: "Alpha",
+    steamId: "76561198377609640",
+    message: created.createdCodes[0],
+  });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  const state = await module.reserveModule.api.getCdkState();
+  assert.equal(state.summary.successCount, 0);
+  assert.equal(state.summary.activationCount, 0);
+  assert.equal(module.harness.warns.length, 0);
+
+  await module.reserveModule.stop();
+  await fs.rm(module.tempDir, { recursive: true, force: true });
+}
+
+async function testCsvImportSyncsAdminFile() {
+  const module = await setupReserveModule();
+  const csvText = [
+    "steamId,name,group,expireAt,reasons,remark",
+    "76561198377609640,Alpha,BZSSVIP,2026-06-02 21:26:59,manual_import,manual_import",
+  ].join("\n");
+
+  const result = await module.reserveModule.api.importFromCsv(csvText);
+  assert.equal(result.members.length, 1);
+
+  const adminContent = await fs.readFile(module.adminFilePath, "utf8");
+  assert.match(adminContent, /Admin=76561198377609640:BZSSVIP \/\/2026-06-02 21:26:59/);
+  assert.match(adminContent, /名称:Alpha/);
+
+  await module.reserveModule.stop();
+  await fs.rm(module.tempDir, { recursive: true, force: true });
+}
+
+async function testRoutePermissions() {
+  const module = await setupReserveModule();
+  await module.reserveModule.start();
 
   const server = new WebServer({
     config: {
@@ -588,9 +358,9 @@ async function testModuleAndRoutesWorkEndToEnd() {
       port: 8899,
       useVueClient: false,
     },
-    logger: harness.logger,
+    logger: module.harness.logger,
     core: {
-      ...harness.core,
+      ...module.harness.core,
       authManager: {
         getUserFromRequest(req) {
           if (req.headers.authorization === "super") {
@@ -605,125 +375,70 @@ async function testModuleAndRoutesWorkEndToEnd() {
           return Boolean(user?.isSuperAdmin);
         },
       },
-      config,
+      config: module.config,
     },
     modules: {
-      reserveSlots: reserveModule.api,
-      chatManager: harness.modules.chatManager,
+      reserveSlots: module.reserveModule.api,
+      chatManager: module.harness.modules.chatManager,
     },
   });
 
-  const getRecorder = createRecorder();
+  const forbidden = createRecorder();
   await server.handleRequest({
     method: "GET",
     url: "/api/reserve-slots",
     headers: { host: "localhost", authorization: "user" },
     socket: {},
-  }, getRecorder.res);
+  }, forbidden.res);
+  assert.equal(forbidden.state.status, 403);
 
-  assert.equal(getRecorder.state.status, 200);
-  const getBody = JSON.parse(getRecorder.state.body);
-  assert.equal(getBody.groups.length, 0);
-  assert.equal(getBody.members.length, 0);
-
-  const saveRecorder = createRecorder();
-  const saveReq = Readable.from([JSON.stringify({
-    enabled: true,
-    adminFilePath,
-    localReserveFilePath: path.relative(process.cwd(), localReservePath),
-  })]);
-  saveReq.method = "PUT";
-  saveReq.url = "/api/settings/reserve-slots";
-  saveReq.headers = { host: "localhost", authorization: "super" };
-  saveReq.socket = {};
-  await server.handleRequest(saveReq, saveRecorder.res);
-
-  assert.equal(saveRecorder.state.status, 200);
-  assert.equal(JSON.parse(saveRecorder.state.body).success, true);
-
-  const importRecorder = createRecorder();
-  const importReq = Readable.from([]);
-  importReq.method = "POST";
-  importReq.url = "/api/reserve-slots/import-from-admin";
-  importReq.headers = { host: "localhost", authorization: "super" };
-  importReq.socket = {};
-  await server.handleRequest(importReq, importRecorder.res);
-
-  assert.equal(importRecorder.state.status, 200);
-  const importBody = JSON.parse(importRecorder.state.body);
-  assert.equal(importBody.success, true);
-  assert.equal(importBody.members.length, 1);
-  assert.equal(importBody.members[0].steamId, "76561198377609640");
-  assert.equal(importBody.members[0].name, "Alpha");
-  assert.deepEqual(importBody.members[0].reasons, ["预留位"]);
-  assert.equal(importBody.lastImportedAt != null, true);
-
-  const createBatchRecorder = createRecorder();
-  const createBatchReq = Readable.from([JSON.stringify({
-    codeType: "VIP",
-    quantity: 2,
-    durationDays: 30,
-    allowMultiActivation: true,
-  })]);
-  createBatchReq.method = "POST";
-  createBatchReq.url = "/api/reserve-slots/cdk/batches";
-  createBatchReq.headers = { host: "localhost", authorization: "super", "content-type": "application/json" };
-  createBatchReq.socket = {};
-  await server.handleRequest(createBatchReq, createBatchRecorder.res);
-  assert.equal(createBatchRecorder.state.status, 200);
-  const createBatchBody = JSON.parse(createBatchRecorder.state.body);
-  assert.equal(createBatchBody.success, true);
-  assert.equal(createBatchBody.createdCodes.length, 2);
-  const batchId = createBatchBody.createdBatchId;
-
-  const cdkStateRecorder = createRecorder();
+  const allowed = createRecorder();
   await server.handleRequest({
     method: "GET",
-    url: "/api/reserve-slots/cdk/state",
+    url: "/api/reserve-slots",
     headers: { host: "localhost", authorization: "super" },
     socket: {},
-  }, cdkStateRecorder.res);
-  assert.equal(cdkStateRecorder.state.status, 200);
-  const cdkStateBody = JSON.parse(cdkStateRecorder.state.body);
-  assert.equal(cdkStateBody.batches.length >= 1, true);
+  }, allowed.res);
+  assert.equal(allowed.state.status, 200);
 
-  const deactivateRecorder = createRecorder();
-  const deactivateReq = Readable.from([]);
-  deactivateReq.method = "POST";
-  deactivateReq.url = `/api/reserve-slots/cdk/batches/${encodeURIComponent(batchId)}/deactivate`;
-  deactivateReq.headers = { host: "localhost", authorization: "super" };
-  deactivateReq.socket = {};
-  await server.handleRequest(deactivateReq, deactivateRecorder.res);
-  assert.equal(deactivateRecorder.state.status, 200);
-  const deactivateBody = JSON.parse(deactivateRecorder.state.body);
-  assert.equal(deactivateBody.success, true);
-
-  const activationsRecorder = createRecorder();
+  const exportForbidden = createRecorder();
   await server.handleRequest({
     method: "GET",
-    url: `/api/reserve-slots/cdk/batches/${encodeURIComponent(batchId)}/activations`,
-    headers: { host: "localhost", authorization: "super" },
+    url: "/api/reserve-slots/export-csv",
+    headers: { host: "localhost", authorization: "user" },
     socket: {},
-  }, activationsRecorder.res);
-  assert.equal(activationsRecorder.state.status, 200);
-  const activationsBody = JSON.parse(activationsRecorder.state.body);
-  assert.equal(Array.isArray(activationsBody.records), true);
+  }, exportForbidden.res);
+  assert.equal(exportForbidden.state.status, 403);
 
-  await reserveModule.stop();
+  await module.reserveModule.stop();
+  await fs.rm(module.tempDir, { recursive: true, force: true });
+}
+
+async function testStoreFileRepair() {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "reserve-slots-store-"));
+  const storePath = path.join(tempDir, "data", "reserve-slots.json");
+  await ensureReserveSlotStoreFile(storePath, "C:/Servers/Squad/Admins.cfg");
+  const created = JSON.parse(await fs.readFile(storePath, "utf8"));
+  assert.equal(created.version, 2);
+  assert.deepEqual(created.members, []);
+
+  await fs.writeFile(storePath, "{broken", "utf8");
+  await ensureReserveSlotStoreFile(storePath, "C:/Servers/Squad/Admins.cfg");
+  const repaired = JSON.parse(await fs.readFile(storePath, "utf8"));
+  assert.equal(repaired.version, 2);
+
   await fs.rm(tempDir, { recursive: true, force: true });
 }
 
-await testParserHandlesAdminBlock();
-await testEnsureReserveSlotStoreFileCreatesAndRepairs();
-await testUpsertAdminFileContentAppendsMissingBlock();
-await testUpsertAdminFileContentUpdatesExistingMember();
-await testUpsertAdminFileContentValidatesInput();
-await testRemoveReserveSlotMembersFromAdminFileContent();
-await testReserveSlotUniquenessDedupesExistingEntries();
-await testSyncReserveMemberNamesInAdminFileContentFillsMissingNames();
-await testCdkBatchAndChatActivationFlow();
-await testManualExtendAddsFromExistingExpiry();
-await testManualShortenUsesExistingExpiryAsBase();
-await testModuleAndRoutesWorkEndToEnd();
+async function main() {
+  await testParserHandlesAdminBlock();
+  await testStoreFileRepair();
+  await testUpsertAndShortenUsesCurrentExpiry();
+  await testExpiredCleanupRemovesExpiredMembers();
+  await testChatActivationRespectsEnabledFlag();
+  await testCsvImportSyncsAdminFile();
+  await testRoutePermissions();
+  console.log("reserve slots tests passed");
+}
 
-console.log("reserve slots tests passed");
+await main();

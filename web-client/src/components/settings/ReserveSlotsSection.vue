@@ -440,6 +440,14 @@
               <span>激活天数</span>
               <input v-model.number="batchForm.durationDays" class="reserve-input" type="number" min="1" step="1" required>
             </label>
+            <label class="reserve-field">
+              <span>当前局门槛（秒）</span>
+              <input v-model.number="batchForm.minCurrentSessionSeconds" class="reserve-input" type="number" min="0" step="1">
+            </label>
+            <label class="reserve-field">
+              <span>服务器累计时长门槛（秒）</span>
+              <input v-model.number="batchForm.minServerSeconds" class="reserve-input" type="number" min="0" step="1">
+            </label>
             <label class="checkbox-row">
               <input v-model="batchForm.allowMultiActivation" type="checkbox">
               <span>允许同一玩家多次使用该批次中的不同 CDK</span>
@@ -548,6 +556,14 @@
         <label class="reserve-field">
           <span>激活天数</span>
           <input v-model.number="batchForm.durationDays" class="reserve-input" type="number" min="1" step="1" required>
+        </label>
+        <label class="reserve-field">
+          <span>当前局门槛（秒）</span>
+          <input v-model.number="batchForm.minCurrentSessionSeconds" class="reserve-input" type="number" min="0" step="1">
+        </label>
+        <label class="reserve-field">
+          <span>服务器累计时长门槛（秒）</span>
+          <input v-model.number="batchForm.minServerSeconds" class="reserve-input" type="number" min="0" step="1">
         </label>
         <label class="checkbox-row">
           <input v-model="batchForm.allowMultiActivation" type="checkbox">
@@ -882,6 +898,8 @@ const batchForm = reactive<CreateReserveSlotCdkBatchPayload>({
   quantity: 10,
   durationDays: 30,
   allowMultiActivation: false,
+  minCurrentSessionSeconds: 0,
+  minServerSeconds: 0,
 });
 
 const canEdit = computed(() => Boolean(props.canEdit));
@@ -1073,7 +1091,7 @@ async function saveMember() {
 async function extendSelectedMember(days: number) {
   if (!selectedMember.value || !canEdit.value || saving.value) return;
   const normalizedDays = Number(days);
-  if (!Number.isFinite(normalizedDays) || normalizedDays <= 0) return;
+  if (!Number.isFinite(normalizedDays) || normalizedDays === 0) return;
 
   saving.value = true;
   pendingExtendDays.value = normalizedDays;
