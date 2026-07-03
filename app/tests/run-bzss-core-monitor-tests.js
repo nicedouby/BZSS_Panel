@@ -242,6 +242,19 @@ function testMonitorState() {
   assert.deepEqual(p42.soldierInfo.position, { x: 100000, y: 200000, z: 0 });
   assert.equal(p42.playerScoreboard.stats.combatScore, 99);
 
+  assert.equal(module.api.ingestLogLine("PIE: PRI{{42,,,,,NoPawn}}").ok, true);
+  const afterNoPawn = module.api.getPlayers().find((p) => p.playerIndex === 42);
+  assert.ok(afterNoPawn);
+  assert.equal(afterNoPawn.position, null);
+  assert.equal(afterNoPawn.yaw, null);
+  assert.equal(afterNoPawn.telemetry?.position, null);
+  assert.equal(afterNoPawn.telemetry?.yaw, null);
+  assert.equal(afterNoPawn.soldierInfo.position, null);
+  assert.equal(afterNoPawn.soldierInfo.rotation, null);
+  assert.equal(afterNoPawn.presenceHint, "noPawn");
+  assert.equal(afterNoPawn.presence?.state, "noPawn");
+  assert.equal(afterNoPawn.stale, false);
+
   const runtimeMergeModule = createBzssCoreMonitorModule({
     core: {
       eventBus: { onCoreEvent() { return () => {}; }, emitModuleEvent() {} },

@@ -621,6 +621,7 @@ function applyPlayerPatch(record, patch, observedAt) {
   if (record.firstSeenAt == null || record.firstSeenAt === "") {
     record.firstSeenAt = observedAt;
   }
+  const isNoPawn = patch.presenceHint === "noPawn";
   record.lastSeenAt = observedAt;
   record.stale = false;
   record.playerId = firstDefinedNumber(patch.playerId, patch.playerIndex, record.playerId);
@@ -633,8 +634,8 @@ function applyPlayerPatch(record, patch, observedAt) {
   record.squadId = firstDefinedNumber(patch.squadId, record.squadId, null);
   record.isAdmin = firstDefinedBoolean(patch.isAdmin, record.isAdmin);
   record.isCommander = firstDefinedBoolean(patch.isCommander, record.isCommander);
-  record.position = cloneVector(patch.position ?? record.position);
-  record.yaw = firstDefinedNumber(patch.yaw, record.yaw, null);
+  record.position = isNoPawn ? null : cloneVector(patch.position ?? record.position);
+  record.yaw = isNoPawn ? null : firstDefinedNumber(patch.yaw, record.yaw, null);
   record.combatInfo = firstText(patch.combatInfo, record.combatInfo, "");
   record.presenceHint = firstText(patch.presenceHint, record.presenceHint, "");
   record.runtimeObservedAt = patch.position != null || patch.yaw != null || patch.combatInfo != null || patch.sourceType === "runtime" || patch.sourceType === "fullBlocks"
@@ -644,7 +645,13 @@ function applyPlayerPatch(record, patch, observedAt) {
     ? observedAt
     : record.scoreboardObservedAt ?? "";
   record.soldierInfo = patch.soldierInfo ? clonePlainObject(patch.soldierInfo) : (record.soldierInfo ? clonePlainObject(record.soldierInfo) : createEmptySoldierInfo());
-  record.vehicleInfo = patch.vehicleInfo ? clonePlainObject(patch.vehicleInfo) : (record.vehicleInfo ? clonePlainObject(record.vehicleInfo) : null);
+  if (isNoPawn) {
+    record.soldierInfo.position = null;
+    record.soldierInfo.rotation = null;
+  }
+  record.vehicleInfo = isNoPawn
+    ? null
+    : (patch.vehicleInfo ? clonePlainObject(patch.vehicleInfo) : (record.vehicleInfo ? clonePlainObject(record.vehicleInfo) : null));
   record.playerScoreboard = patch.playerScoreboard ? clonePlainObject(patch.playerScoreboard) : (record.playerScoreboard ? clonePlainObject(record.playerScoreboard) : createEmptyScoreboardInfo());
   record.ftIndex = firstDefinedNumber(patch.fireTeamIndex ?? patch.ftIndex, record.ftIndex, null);
   record.ftPosition = firstDefinedNumber(patch.fireTeamPosition ?? patch.ftPosition, record.ftPosition, null);
@@ -866,7 +873,11 @@ function clonePlayerView(player) {
   const cloned = clonePlainObject(player) ?? {};
   const position = cloned.position ? { ...cloned.position } : null;
   const soldierInfo = cloned.soldierInfo ? clonePlainObject(cloned.soldierInfo) : createEmptySoldierInfo();
-  if (position && !soldierInfo.position) {
+  const isNoPawn = cloned.presenceHint === "noPawn";
+  if (isNoPawn) {
+    soldierInfo.position = null;
+    soldierInfo.rotation = null;
+  } else if (position && !soldierInfo.position) {
     soldierInfo.position = { ...position };
   }
   if (!soldierInfo.rotation) {
@@ -875,8 +886,8 @@ function clonePlayerView(player) {
   const playerScoreboard = cloned.playerScoreboard ? clonePlainObject(cloned.playerScoreboard) : createEmptyScoreboardInfo();
   const hasRuntime = Boolean(cloned.runtimeObservedAt);
   const hasScoreboard = Boolean(cloned.scoreboardObservedAt);
-  const presenceState = hasRuntime ? "active" : (hasScoreboard ? "scoreboardOnly" : "notSpawned");
-  const stale = hasRuntime ? Boolean(cloned.stale) : true;
+  const presenceState = isNoPawn ? "noPawn" : (hasRuntime ? "active" : (hasScoreboard ? "scoreboardOnly" : "notSpawned"));
+  const stale = isNoPawn ? false : (hasRuntime ? Boolean(cloned.stale) : true);
   return {
     playerId: cloned.playerId ?? null,
     playerIndex: cloned.playerIndex ?? null,
@@ -909,10 +920,10 @@ function clonePlayerView(player) {
     playerBaseInfo: cloned.playerBaseInfo ? clonePlainObject(cloned.playerBaseInfo) : null,
     identityKeys: Array.isArray(cloned.identityKeys) ? [...cloned.identityKeys] : [],
     telemetry: {
-      position: position ? { ...position } : null,
-      yaw: cloned.yaw ?? null,
+      position: isNoPawn ? null : (position ? { ...position } : null),
+      yaw: isNoPawn ? null : (cloned.yaw ?? null),
       combatInfo: cloned.combatInfo ?? "",
-      vehicleInfo: cloned.vehicleInfo ? clonePlainObject(cloned.vehicleInfo) : null,
+      vehicleInfo: isNoPawn ? null : (cloned.vehicleInfo ? clonePlainObject(cloned.vehicleInfo) : null),
     },
     presence: {
       state: presenceState,
@@ -928,28 +939,33 @@ function mergePlayerViews(base, runtimeView) {
   const baseTelemetry = merged.telemetry ?? {};
   const runtimePresence = runtimeView?.presence ?? {};
   const basePresence = merged.presence ?? {};
+  const runtimeIsNoPawn = runtimeView?.presenceHint === "noPawn" || runtimePresence.state === "noPawn";
   merged.telemetry = {
-    position: runtimeTelemetry.position ?? baseTelemetry.position ?? null,
-    yaw: runtimeTelemetry.yaw ?? baseTelemetry.yaw ?? null,
+    position: runtimeIsNoPawn ? null : (runtimeTelemetry.position ?? baseTelemetry.position ?? null),
+    yaw: runtimeIsNoPawn ? null : (runtimeTelemetry.yaw ?? baseTelemetry.yaw ?? null),
     combatInfo: firstText(runtimeTelemetry.combatInfo, baseTelemetry.combatInfo, ""),
-    vehicleInfo: runtimeTelemetry.vehicleInfo ?? baseTelemetry.vehicleInfo ?? null,
+    vehicleInfo: runtimeIsNoPawn ? null : (runtimeTelemetry.vehicleInfo ?? baseTelemetry.vehicleInfo ?? null),
   };
-  merged.position = merged.telemetry.position ? { ...merged.telemetry.position } : merged.position ?? null;
-  merged.yaw = merged.telemetry.yaw ?? merged.yaw ?? null;
+  merged.position = runtimeIsNoPawn ? null : (merged.telemetry.position ? { ...merged.telemetry.position } : merged.position ?? null);
+  merged.yaw = runtimeIsNoPawn ? null : (merged.telemetry.yaw ?? merged.yaw ?? null);
   merged.combatInfo = merged.telemetry.combatInfo ?? merged.combatInfo ?? "";
   if (runtimeView?.vehicleInfo) {
-    merged.vehicleInfo = clonePlainObject(runtimeView.vehicleInfo);
+    merged.vehicleInfo = runtimeIsNoPawn ? null : clonePlainObject(runtimeView.vehicleInfo);
   }
   merged.soldierInfo = runtimeView?.soldierInfo ? clonePlainObject(runtimeView.soldierInfo) : merged.soldierInfo ?? createEmptySoldierInfo();
+  if (runtimeIsNoPawn) {
+    merged.soldierInfo.position = null;
+    merged.soldierInfo.rotation = null;
+  }
   merged.ping = runtimeView?.ping ?? merged.ping ?? null;
   merged.runtimeObservedAt = runtimeView?.runtimeObservedAt ?? merged.runtimeObservedAt ?? "";
   merged.firstSeenAt = merged.firstSeenAt ?? runtimeView?.firstSeenAt ?? "";
   merged.lastSeenAt = runtimeView?.lastSeenAt ?? merged.lastSeenAt ?? "";
-  merged.stale = runtimePresence.state === "active"
+  merged.stale = runtimeIsNoPawn ? false : (runtimePresence.state === "active"
     ? Boolean(runtimeView?.stale ?? false)
-    : true;
+    : true);
   merged.presence = {
-    state: runtimePresence.state === "active" ? "active" : (basePresence.state ?? "scoreboardOnly"),
+    state: runtimeIsNoPawn ? "noPawn" : (runtimePresence.state === "active" ? "active" : (basePresence.state ?? "scoreboardOnly")),
     runtimeObservedAt: runtimeView?.runtimeObservedAt ?? merged.presence?.runtimeObservedAt ?? "",
     scoreboardObservedAt: merged.presence?.scoreboardObservedAt ?? basePresence.scoreboardObservedAt ?? "",
   };
