@@ -518,7 +518,7 @@
     "localReserveFilePath": "data/reserve-slots/store.json"
   },
   "pythonLogParser": {
-    "enabled": true,
+    "enabled": false,
     "pythonExecutable": "python",
     "workingDirectory": "./LogPost",
     "scriptPath": "./main.py",
@@ -674,7 +674,9 @@
         "enabled": false,
         "mode": "inside_leader_radius",
         "fallbackWhenUnknown": "allow",
-        "applyToTypes": ["damage"],
+        "applyToTypes": [
+          "damage"
+        ],
         "onlyLightWeapon": true
       }
     },
