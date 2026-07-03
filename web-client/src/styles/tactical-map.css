@@ -19,9 +19,15 @@
   overflow: hidden;
   outline: none;
   user-select: none;
+  touch-action: none;
   background-color: #060913;
+  cursor: grab;
   contain: layout paint;
   isolation: isolate;
+}
+
+.map-viewport.is-dragging {
+  cursor: grabbing;
 }
 
 /* Tech grid background pattern */

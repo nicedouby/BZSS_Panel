@@ -4,8 +4,8 @@
     <div
       ref="containerRef"
       class="map-viewport"
-      :class="{ 'has-explosion-shake': isShaking }"
-      @mousedown="startDrag"
+      :class="{ 'has-explosion-shake': isShaking, 'is-dragging': isDragging }"
+      @pointerdown="startDrag"
       @wheel.prevent="onWheel"
     >
       <!-- Tech Grid Overlay Behind Map -->
@@ -1403,7 +1403,8 @@ const measurePathD = computed(() => {
 });
 
 function onMapClick(e: MouseEvent) {
-  if (isDragging.value || dragPending) {
+  if (isDragging.value || dragMoved) {
+    dragMoved = false;
     return;
   }
 
@@ -1973,11 +1974,23 @@ function handleTilesReady() {
 
 // Drag & Pan & Zoom Event Handlers
 const dragStartCoords = { x: 0, y: 0 };
-const dragStartPan = { x: 0, y: 0 };
-let dragPending = false;
+let dragMoved = false;
 let dragFrameId: number | null = null;
 let pendingDragPanX = 0;
 let pendingDragPanY = 0;
+let activeDragPointerId: number | null = null;
+
+function isDragBlockedTarget(target: HTMLElement | null) {
+  if (!target) return false;
+  return Boolean(
+    target.closest(".glass-panel") ||
+    target.closest(".tactical-sidebar") ||
+    target.closest(".player-tooltip") ||
+    target.closest(".player-tooltip-simple") ||
+    target.closest(".player-marker") ||
+    target.closest(".map-floating-panel")
+  );
+}
 
 function clampMapPan(nextX: number, nextY: number, currentZoom = zoom.value) {
   if (!containerRef.value) return { x: nextX, y: nextY };
@@ -2015,60 +2028,66 @@ function scheduleMapPanUpdate(nextX: number, nextY: number) {
   });
 }
 
-function startDrag(e: MouseEvent) {
-  if (e.button !== 0 || isDragging.value || dragPending) return;
+function startDrag(e: PointerEvent) {
+  if (e.button !== 0 || isDragging.value) return;
+
+  const target = e.target as HTMLElement | null;
+  if (isDragBlockedTarget(target)) return;
 
   e.preventDefault();
-  dragPending = true;
-  isDragging.value = false;
+  activeDragPointerId = e.pointerId;
+  isDragging.value = true;
   dragStart.x = e.clientX - panX.value;
   dragStart.y = e.clientY - panY.value;
   dragStartCoords.x = e.clientX;
   dragStartCoords.y = e.clientY;
-  dragStartPan.x = panX.value;
-  dragStartPan.y = panY.value;
   pendingDragPanX = panX.value;
   pendingDragPanY = panY.value;
+  dragMoved = false;
   hoveredPlayer.value = null;
   hoverCoords.value = null;
 
-  window.addEventListener("mousemove", onDrag);
-  window.addEventListener("mouseup", stopDrag);
-  window.addEventListener("blur", stopDrag);
+  containerRef.value?.setPointerCapture?.(e.pointerId);
+
+  window.addEventListener("pointermove", onDrag, { passive: false });
+  window.addEventListener("pointerup", stopDrag);
+  window.addEventListener("pointercancel", stopDrag);
 }
 
-function onDrag(e: MouseEvent) {
-  if (!dragPending && !isDragging.value) return;
+function onDrag(e: PointerEvent) {
+  if (!isDragging.value) return;
+  if (activeDragPointerId !== null && e.pointerId !== activeDragPointerId) return;
+
   e.preventDefault();
+
   const dx = Math.abs(e.clientX - dragStartCoords.x);
   const dy = Math.abs(e.clientY - dragStartCoords.y);
-  if (!isDragging.value && (dx > 5 || dy > 5)) {
-    isDragging.value = true;
-    dragPending = false;
+  if (dx > 4 || dy > 4) {
+    dragMoved = true;
   }
-  if (!isDragging.value) {
-    pendingDragPanX = dragStartPan.x;
-    pendingDragPanY = dragStartPan.y;
-    return;
-  }
+
   scheduleMapPanUpdate(e.clientX - dragStart.x, e.clientY - dragStart.y);
 }
 
 // Re-sync final dragging state (handles cleanup if dragging ends outside viewport)
-function stopDrag() {
-  window.removeEventListener("mousemove", onDrag);
-  window.removeEventListener("mouseup", stopDrag);
-  window.removeEventListener("blur", stopDrag);
-  const hadDrag = isDragging.value || dragPending;
-  dragPending = false;
+function stopDrag(e?: PointerEvent) {
+  if (activeDragPointerId !== null) {
+    containerRef.value?.releasePointerCapture?.(activeDragPointerId);
+  }
+
+  activeDragPointerId = null;
   isDragging.value = false;
+
+  window.removeEventListener("pointermove", onDrag);
+  window.removeEventListener("pointerup", stopDrag);
+  window.removeEventListener("pointercancel", stopDrag);
+
   if (dragFrameId != null) {
     window.cancelAnimationFrame(dragFrameId);
     dragFrameId = null;
   }
-  if (hadDrag) {
-    applyMapPan(pendingDragPanX, pendingDragPanY);
-  }
+
+  applyMapPan(pendingDragPanX, pendingDragPanY);
 }
 
 function onWheel(e: WheelEvent) {
@@ -2679,10 +2698,8 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  stopDrag();
   if (simulatedCombatTimer) window.clearInterval(simulatedCombatTimer);
-  window.removeEventListener("mousemove", onDrag);
-  window.removeEventListener("mouseup", stopDrag);
-  window.removeEventListener("blur", stopDrag);
   window.removeEventListener("resize", fitToViewport);
   window.removeEventListener("keydown", handleWindowKeyDown);
   resizeObserver?.disconnect();

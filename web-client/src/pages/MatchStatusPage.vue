@@ -3183,10 +3183,20 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 }
 
 .match-state-map-wrapper {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
   width: 100%;
   height: 100%;
   min-height: 0;
   overflow: hidden;
+}
+
+.match-state-map-wrapper > * {
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .match-status-data-state {
