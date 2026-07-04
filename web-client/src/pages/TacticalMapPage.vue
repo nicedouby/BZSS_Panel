@@ -832,7 +832,6 @@ const tacticalStateStore = useTacticalStateStore();
 const isStandaloneMapRoute = computed(() => route.path === "/tactical-map" || route.name === "tactical-map");
 
 const storeSnapshot = computed(() => tacticalStateStore.snapshot ?? null);
-const storePlayers = computed(() => Array.isArray(tacticalStateStore.players) ? tacticalStateStore.players : []);
 const storeCaptureZones = computed(() => Array.isArray(tacticalStateStore.assets?.captureZones) ? tacticalStateStore.assets.captureZones : []);
 const storeFobs = computed(() => Array.isArray(tacticalStateStore.assets?.fobs) ? tacticalStateStore.assets.fobs : []);
 
@@ -859,6 +858,109 @@ function displayRole(role: string | null | undefined) {
   const key = keyMap[normalized];
   return key ? t(key, raw) : raw;
 }
+
+function adaptTacticalStatePlayersForMap(playersList: any[] = [], combatLookup: Record<string, any> = {}) {
+  return (Array.isArray(playersList) ? playersList : []).map((player) => {
+    const steamId = player?.identity?.steamID ?? null;
+    const eosId = player?.identity?.eosID ?? null;
+    const rawRcon = player?.raw?.rcon ?? null;
+    const presenceState = String(player?.presence?.state ?? "");
+    const presenceHint = String(player?.telemetry?.presenceHint ?? "");
+    const isNoPawn = presenceHint === "noPawn" || presenceState === "noPawn";
+    const rconDetail = rawRcon
+      ? adaptPlayerDetail(rawRcon, player?.profile?.playtimeHours ?? null, combatLookup)
+      : null;
+    const position = player?.telemetry?.position ?? player?.position ?? null;
+    const yaw = player?.telemetry?.yaw ?? player?.yaw ?? null;
+    const rotation = player?.telemetry?.rotation ?? player?.soldierInfo?.rotation ?? null;
+
+    return {
+      key: player?.identity?.key ?? "",
+      playerId: player?.identity?.playerID ?? null,
+      playerIndex: player?.identity?.playerID ?? null,
+      playerName: player?.identity?.name ?? rawRcon?.name ?? "Unknown",
+      playerGuid: steamId || eosId || "",
+      steamId: steamId || null,
+      eosId: eosId || null,
+      teamId: player?.match?.teamId ?? null,
+      squadId: player?.match?.squadId ?? null,
+      isLeader: Boolean(player?.match?.isLeader),
+      role: player?.match?.role ?? "",
+      health: player?.telemetry?.health ?? null,
+      ping: player?.network?.gamePing ?? null,
+      ftIndex: player?.telemetry?.fireTeamIndex ?? null,
+      ftPosition: player?.telemetry?.fireTeamPosition ?? null,
+      position,
+      yaw,
+      presenceHint: isNoPawn ? "noPawn" : presenceHint,
+      presence: {
+        ...(player?.presence ?? {}),
+        state: isNoPawn ? "noPawn" : presenceState,
+      },
+      hasTelemetry: Boolean(player?.telemetry?.hasTelemetry),
+      hasPosition: Boolean(player?.telemetry?.hasPosition || position),
+      playerBaseInfo: {
+        raw: "",
+        fields: [],
+        values: {},
+      },
+      soldierInfo: {
+        raw: "",
+        fields: [],
+        values: {},
+        soldierClass: player?.telemetry?.soldierClass ?? "",
+        health: player?.telemetry?.health ?? null,
+        weaponClass: player?.telemetry?.weaponClass ?? "",
+        ammoValues: [],
+        position,
+        rotation,
+      },
+      vehicleInfo: {
+        raw: player?.vehicle?.raw ?? "",
+        vehicleType: player?.vehicle?.vehicleType ?? "",
+        healthText: "",
+        health: player?.vehicle?.health ?? null,
+        maxHealth: player?.vehicle?.maxHealth ?? null,
+        position,
+        rotation,
+      },
+      playerScoreboard: {
+        raw: "",
+        values: [],
+        numericValues: [],
+        ping: player?.network?.gamePing ?? null,
+        stats: {
+          dataLives: null,
+          numKills: player?.combat?.kills ?? null,
+          numDeaths: player?.combat?.deaths ?? null,
+          numWoundeds: player?.combat?.woundeds ?? null,
+          numWounds: player?.combat?.wounds ?? null,
+          numTeamKills: player?.combat?.teamKills ?? null,
+          healPoints: player?.combat?.healPoints ?? null,
+          revivedPoints: player?.combat?.revives ?? null,
+          teamworkScore: player?.combat?.teamworkScore ?? null,
+          objectiveScore: player?.combat?.objectiveScore ?? null,
+          combatScore: player?.combat?.combatScore ?? null,
+        },
+      },
+      observedAt: player?.freshness?.bzssCoreUpdatedAt ?? player?.freshness?.generatedAt ?? "",
+      stale: !player?.freshness?.bzssCoreUpdatedAt,
+      rawText: "",
+      runtime: rawRcon,
+      raw: player?.raw ?? {},
+      profile: player?.profile ?? {},
+      rconDetail,
+      linkConfidence: player?.link?.confidence ?? "none",
+      linkReason: player?.link?.method ?? "unlinked",
+      bzss: player,
+    };
+  });
+}
+
+const storePlayers = computed(() => adaptTacticalStatePlayersForMap(
+  Array.isArray(tacticalStateStore.players) ? tacticalStateStore.players : [],
+  props.combatStatsLookup ?? {},
+));
 
 function getPlayerRconDetail(player: any) {
   if (player?.rconDetail) {
@@ -2444,7 +2546,14 @@ function getPlayerKey(player: BzssCoreTrackedPlayerInfo | null | undefined): str
 
 function getPlayerLabel(player: BzssCoreTrackedPlayerInfo | null | undefined): string {
   if (!player) return "Unknown";
-  const playerName = String(player.playerName ?? "").trim();
+  const playerName = String(
+    player.playerName
+    ?? (player as any)?.identity?.name
+    ?? (player as any)?.rconDetail?.name
+    ?? (player as any)?.runtime?.name
+    ?? (player as any)?.name
+    ?? "",
+  ).trim();
   if (playerName) return playerName;
   const playerIndex = player.playerIndex ?? player.playerId;
   if (playerIndex != null) return `Player ${playerIndex}`;
