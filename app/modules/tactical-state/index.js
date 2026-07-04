@@ -355,6 +355,17 @@ export function createTacticalStateModule({ core, modules, logger }) {
           presenceHint: firstText(bzssPlayer?.presenceHint, ""),
         },
       });
+
+      const bzssOnly = buildBzssOnlyPlayer({
+        bzssPlayer: {
+          ...bzssPlayer,
+          key: bzssKey,
+        },
+        profileLookup,
+        networkMap,
+        generatedAt,
+      });
+      players.push(bzssOnly.player);
     }
 
     players.sort((left, right) => {
@@ -466,9 +477,9 @@ export function createTacticalStateModule({ core, modules, logger }) {
     const teamName = firstText(rconPlayer?.teamName, bzssPlayer?.teamName, teamId == null ? "" : `Team ${teamId}`);
     const presenceHint = firstText(bzssPlayer?.presenceHint, "");
     const noPawn = presenceHint === "noPawn";
-    const telemetryPosition = noPawn ? null : clonePlainObject(bzssPlayer?.position ?? bzssPlayer?.soldierInfo?.position ?? null);
-    const telemetryRotation = noPawn ? null : clonePlainObject(bzssPlayer?.soldierInfo?.rotation ?? null);
-    const telemetryYaw = noPawn ? null : numberOrNull(bzssPlayer?.yaw, bzssPlayer?.soldierInfo?.rotation?.z, null);
+    const telemetryPosition = clonePlainObject(bzssPlayer?.position ?? bzssPlayer?.soldierInfo?.position ?? null);
+    const telemetryRotation = clonePlainObject(bzssPlayer?.soldierInfo?.rotation ?? null);
+    const telemetryYaw = numberOrNull(bzssPlayer?.yaw, bzssPlayer?.soldierInfo?.rotation?.z, null);
     const hasTelemetry = Boolean(bzssPlayer);
     const hasPosition = Boolean(telemetryPosition);
 

@@ -741,6 +741,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, nextTick, watch } from "vue";
+import { useRoute } from "vue-router";
 import { t } from "../i18n";
 import {
   type BzssCorePlayerInfoResponse,
@@ -771,6 +772,7 @@ import PlayerInfoPanel from "../components/tactical-map/PlayerInfoPanel.vue";
 import PlayerActionMenu from "../components/tactical-map/PlayerActionMenu.vue";
 import { useMapCamera } from "../composables/useMapCamera";
 import { provideTacticalMapViewport } from "../composables/tacticalMapViewport";
+import { useTacticalStateStore } from "../stores/tactical-state.store";
 
 const props = withDefaults(defineProps<{
   snapshot: BzssCorePlayerInfoResponse | null;
@@ -825,6 +827,14 @@ type PerspectiveTone = "friendly" | "enemy" | "neutral";
 
 const serverStore = useServerStore();
 const authStore = useAuthStore();
+const route = useRoute();
+const tacticalStateStore = useTacticalStateStore();
+const isStandaloneMapRoute = computed(() => route.path === "/tactical-map" || route.name === "tactical-map");
+
+const storeSnapshot = computed(() => tacticalStateStore.snapshot ?? null);
+const storePlayers = computed(() => Array.isArray(tacticalStateStore.players) ? tacticalStateStore.players : []);
+const storeCaptureZones = computed(() => Array.isArray(tacticalStateStore.assets?.captureZones) ? tacticalStateStore.assets.captureZones : []);
+const storeFobs = computed(() => Array.isArray(tacticalStateStore.assets?.fobs) ? tacticalStateStore.assets.fobs : []);
 
 function displayRole(role: string | null | undefined) {
   const raw = String(role ?? "").trim();
@@ -876,10 +886,26 @@ const canManageRcon = computed(() => {
   );
 });
 
-const snapshot = computed(() => props.snapshot);
-const players = computed(() => Array.isArray(props.players) ? props.players : []);
-const captureZones = computed(() => Array.isArray(props.captureZones) ? props.captureZones : snapshot.value?.captureZones ?? []);
-const fobs = computed(() => Array.isArray(props.fobs) ? props.fobs : snapshot.value?.fobs ?? []);
+const snapshot = computed(() => {
+  if (props.snapshot) return props.snapshot;
+  if (isStandaloneMapRoute.value) return storeSnapshot.value;
+  return null;
+});
+const players = computed(() => {
+  const propPlayers = Array.isArray(props.players) ? props.players : [];
+  if (propPlayers.length > 0 || !isStandaloneMapRoute.value) return propPlayers;
+  return storePlayers.value;
+});
+const captureZones = computed(() => {
+  const propZones = Array.isArray(props.captureZones) ? props.captureZones : [];
+  if (propZones.length > 0 || !isStandaloneMapRoute.value) return propZones;
+  return storeCaptureZones.value;
+});
+const fobs = computed(() => {
+  const propFobs = Array.isArray(props.fobs) ? props.fobs : [];
+  if (propFobs.length > 0 || !isStandaloneMapRoute.value) return propFobs;
+  return storeFobs.value;
+});
 const emptyMapConfig: TacticalMapConfig = {
   key: "",
   name: "Unknown",
@@ -890,7 +916,14 @@ const emptyMapConfig: TacticalMapConfig = {
   aliases: [],
 };
 
-const serverMapName = computed(() => serverStore.snapshot?.mapName || "");
+const serverMapName = computed(() => {
+  const serverMap = String(serverStore.snapshot?.mapName ?? "").trim();
+  if (serverMap) return serverMap;
+  if (isStandaloneMapRoute.value) {
+    return String(tacticalStateStore.server?.map ?? tacticalStateStore.snapshot?.match?.map ?? "").trim();
+  }
+  return "";
+});
 
 const selectedMapKey = ref("auto");
 const detectedMapKey = computed(() => resolveTacticalMapKey(serverMapName.value) ?? getDefaultTacticalMapKey() ?? "");
@@ -914,8 +947,15 @@ const positionedPlayers = computed<TacticalLinkedPlayer[]>(() => {
 });
 
 const hoveredPlayer = ref<TacticalLinkedPlayer | null>(null);
-const errorText = computed(() => props.errorText);
-const loading = computed(() => props.loading);
+const errorText = computed(() => {
+  if (props.errorText) return props.errorText;
+  if (isStandaloneMapRoute.value) return tacticalStateStore.error;
+  return "";
+});
+const loading = computed(() => {
+  if (isStandaloneMapRoute.value) return tacticalStateStore.loading;
+  return props.loading;
+});
 let simulatedCombatTimer: number | null = null;
 
 // Viewport Zoom & Pan state
@@ -1663,7 +1703,15 @@ function onStartMeasureFromPlayer(player: TacticalLinkedPlayer) {
 
 // Get real Server metrics
 const currentServerId = computed(() => String(serverStore.snapshot?.serverId ?? ""));
-const serverPlayerCount = computed(() => serverStore.snapshot?.playerCount || players.value.length);
+const serverPlayerCount = computed(() => {
+  const serverCount = Number(serverStore.snapshot?.playerCount ?? 0);
+  if (Number.isFinite(serverCount) && serverCount > 0) return serverCount;
+  if (isStandaloneMapRoute.value) {
+    const storeCount = Number(tacticalStateStore.server?.playerCount ?? 0);
+    if (Number.isFinite(storeCount) && storeCount > 0) return storeCount;
+  }
+  return players.value.length;
+});
 const matchPhase = computed(() => serverStore.snapshot?.webStatus?.isWarmup ? "WARMUP" : "MID MATCH");
 const matchStatePlayers = computed(() => {
   const list = serverStore.snapshot?.matchState?.players?.list;
@@ -2370,8 +2418,10 @@ function resolvePlayerTeamId(player: BzssCoreTrackedPlayerInfo): number {
 }
 
 function getPlayerYaw(player: BzssCoreTrackedPlayerInfo): number | null {
-  if (player.yaw != null) return player.yaw;
-  const rotation = player.soldierInfo?.rotation;
+  const source = player as any;
+  if (source?.yaw != null) return source.yaw;
+  if (source?.telemetry?.yaw != null) return source.telemetry.yaw;
+  const rotation = source?.telemetry?.rotation ?? player.soldierInfo?.rotation ?? source?.raw?.bzss?.soldierInfo?.rotation;
   if (!rotation) return null;
   if (rotation.z != null) return rotation.z;
   if (rotation.y != null) return rotation.y;
@@ -2401,11 +2451,13 @@ function getPlayerLabel(player: BzssCoreTrackedPlayerInfo | null | undefined): s
 }
 
 function getPlayerPosition(player: BzssCoreTrackedPlayerInfo | null | undefined) {
-  return player?.soldierInfo?.position ?? player?.position ?? null;
+  const source = player as any;
+  return source?.telemetry?.position ?? player?.soldierInfo?.position ?? player?.position ?? source?.raw?.bzss?.position ?? source?.raw?.bzss?.soldierInfo?.position ?? null;
 }
 
 function getPlayerHealth(player: BzssCoreTrackedPlayerInfo | null | undefined): number | null {
-  const value = player?.soldierInfo?.health;
+  const source = player as any;
+  const value = source?.telemetry?.health ?? player?.soldierInfo?.health ?? source?.raw?.bzss?.soldierInfo?.health;
   return value != null && Number.isFinite(value) ? value : null;
 }
 
@@ -2665,6 +2717,11 @@ function handleWindowKeyDown(e: KeyboardEvent) {
 }
 
 onMounted(() => {
+  if (isStandaloneMapRoute.value) {
+    void tacticalStateStore.fetchSnapshot();
+    tacticalStateStore.startStream();
+  }
+
   setTimeout(() => {
     fitToViewport();
   }, 100);
@@ -2694,6 +2751,9 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   stopDrag();
+  if (isStandaloneMapRoute.value) {
+    tacticalStateStore.stopStream();
+  }
   if (simulatedCombatTimer) window.clearInterval(simulatedCombatTimer);
   window.removeEventListener("resize", fitToViewport);
   window.removeEventListener("keydown", handleWindowKeyDown);

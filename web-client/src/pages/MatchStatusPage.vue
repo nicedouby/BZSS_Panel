@@ -747,9 +747,9 @@ function adaptTacticalStatePlayersForMap(playersList: any[] = [], combatLookup: 
     const rconDetail = rawRcon
       ? adaptPlayerDetail(rawRcon, player?.profile?.playtimeHours ?? null, combatLookup)
       : null;
-    const position = isNoPawn ? null : (player?.telemetry?.position ?? null);
-    const yaw = isNoPawn ? null : (player?.telemetry?.yaw ?? null);
-    const rotation = isNoPawn ? null : (player?.telemetry?.rotation ?? null);
+    const position = player?.telemetry?.position ?? player?.position ?? null;
+    const yaw = player?.telemetry?.yaw ?? player?.yaw ?? null;
+    const rotation = player?.telemetry?.rotation ?? player?.soldierInfo?.rotation ?? null;
 
     return {
       key: player?.identity?.key ?? "",
@@ -775,7 +775,7 @@ function adaptTacticalStatePlayersForMap(playersList: any[] = [], combatLookup: 
         state: isNoPawn ? "noPawn" : presenceState,
       },
       hasTelemetry: Boolean(player?.telemetry?.hasTelemetry),
-      hasPosition: Boolean(player?.telemetry?.hasPosition && !isNoPawn),
+      hasPosition: Boolean(player?.telemetry?.hasPosition || position),
       playerBaseInfo: {
         raw: "",
         fields: [],

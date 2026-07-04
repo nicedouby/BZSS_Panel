@@ -190,14 +190,15 @@ async function main() {
 
   assert.equal(snapshot.server.serverId, "server-1");
   assert.equal(snapshot.server.map, "Jensens Range");
-  assert.equal(snapshot.players.length, 2);
+  assert.equal(snapshot.players.length, 3);
 
   const alpha = snapshot.players.find((player) => player.identity.name === "Alpha");
   assert.ok(alpha);
   assert.equal(alpha.presence.state, "noPawn");
-  assert.equal(alpha.telemetry.position, null);
-  assert.equal(alpha.telemetry.yaw, null);
-  assert.equal(alpha.telemetry.rotation, null);
+  assert.equal(alpha.telemetry.position?.x, 1);
+  assert.equal(alpha.telemetry.position?.y, 2);
+  assert.equal(alpha.telemetry.yaw, 90);
+  assert.equal(alpha.telemetry.rotation?.z, 90);
   assert.equal(alpha.network.gamePing, 42);
   assert.equal(alpha.network.icmpPing, 55);
   assert.equal(alpha.profile.playtimeHours, 2);
@@ -207,6 +208,15 @@ async function main() {
   assert.ok(bravo);
   assert.equal(bravo.link.method, "controllerID");
   assert.equal(bravo.network.gamePing, null);
+
+  const ghost = snapshot.players.find((player) => player.identity.name === "Ghost BZSS");
+  assert.ok(ghost);
+  assert.equal(ghost.presence.online, false);
+  assert.equal(ghost.telemetry.position?.x, 5);
+  assert.equal(ghost.telemetry.position?.y, 6);
+  assert.equal(ghost.telemetry.yaw, 45);
+  assert.equal(ghost.telemetry.health, 100);
+  assert.equal(ghost.match.teamId, 1);
 
   assert.equal(snapshot.assets.captureZones.length, 1);
   assert.equal(snapshot.diagnostics.unlinkedBzssPlayers.length, 1);
