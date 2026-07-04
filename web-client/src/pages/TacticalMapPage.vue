@@ -34,16 +34,6 @@
           />
         </div>
 
-        <div class="map-debug-hud">
-          players={{ players.length }}
-          cached={{ positionedPlayers.length }}
-          markers={{ markers.length }}
-          filtered={{ filteredPlayers.length }}
-          zones={{ captureZoneMarkers.length }}
-          fobs={{ fobMarkers.length }}
-          zoom={{ camera.zoom.value.toFixed(2) }}
-        </div>
-
         <!-- Tactical Coordinates Grid Lines -->
         <div v-if="showGrid" class="map-grid-overlay">
           <!-- Vertical grid lines (game X coordinates) -->
@@ -194,7 +184,7 @@
         </div>
 
         <!-- Player Markers Layer -->
-        <div class="player-markers-layer" :style="{ pointerEvents: measureMode || isDragging ? 'none' : 'auto', outline: import.meta.env.DEV ? '2px solid red' : 'none' }">
+        <div class="player-markers-layer" :style="{ pointerEvents: measureMode || isDragging ? 'none' : 'auto', outline: isDev ? '2px solid red' : 'none' }">
           <PlayerMarker
             v-for="player in filteredPlayers"
             :key="getPlayerKey(player)"
@@ -389,6 +379,16 @@
             {{ label.text }}
           </div>
         </div>
+      </div>
+
+      <div class="map-debug-hud">
+        players={{ players.length }}
+        cached={{ positionedPlayers.length }}
+        markers={{ markers.length }}
+        filtered={{ filteredPlayers.length }}
+        zones={{ captureZoneMarkers.length }}
+        fobs={{ fobMarkers.length }}
+        zoom={{ camera.zoom.value.toFixed(2) }}
       </div>
 
       <!-- Floating Player Hover Tooltip (rendered outside map-transform-container) -->
@@ -925,6 +925,7 @@ const consoleRef = ref<HTMLElement | null>(null);
 
 const camera = useMapCamera();
 const isDragging = camera.isDragging;
+const isDev = import.meta.env.DEV;
 const mapTransformStyle = computed(() => camera.getTransform());
 
 provideTacticalMapViewport({ zoom: camera.zoom, panX: camera.x, panY: camera.y });
@@ -1819,6 +1820,21 @@ watch(
     });
   },
   { immediate: true }
+);
+
+watch(
+  () => ({
+    players: players.value.length,
+    cached: positionedPlayers.value.length,
+    markers: markers.value.length,
+    filtered: filteredPlayers.value.length,
+  }),
+  (stats) => {
+    if (isDev) {
+      console.debug("[TacticalMap] marker stats", stats);
+    }
+  },
+  { immediate: true, deep: true }
 );
 
 const filteredPlayers = computed(() => {
