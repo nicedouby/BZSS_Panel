@@ -1822,6 +1822,17 @@ watch(
   { immediate: true }
 );
 
+const filteredPlayers = computed(() => {
+  let list = markers.value;
+  if (filterAliveOnly.value) {
+    list = list.filter((p) => {
+      const hp = getPlayerHealth(p);
+      return hp != null && hp > 0;
+    });
+  }
+  return list;
+});
+
 watch(
   () => ({
     players: players.value.length,
@@ -1834,19 +1845,8 @@ watch(
       console.debug("[TacticalMap] marker stats", stats);
     }
   },
-  { immediate: true, deep: true }
+  { immediate: true }
 );
-
-const filteredPlayers = computed(() => {
-  let list = markers.value;
-  if (filterAliveOnly.value) {
-    list = list.filter((p) => {
-      const hp = getPlayerHealth(p);
-      return hp != null && hp > 0;
-    });
-  }
-  return list;
-});
 
 // Hover tooltip target
 const hoveredMarker = computed(() => {
