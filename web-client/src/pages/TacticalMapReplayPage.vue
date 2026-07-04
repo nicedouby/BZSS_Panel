@@ -509,7 +509,7 @@ const tooltipStyle = computed(() => {
 
 const dynamicMarkerScale = computed(() => {
   const currentZoom = Math.max(zoom.value, 0.05);
-  const exponent = currentZoom < 1 ? 0.3 : 0.7;
+  const exponent = currentZoom < 1 ? 0.3 : 1.3;
   return 1 / Math.pow(currentZoom, exponent);
 });
 

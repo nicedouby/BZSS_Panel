@@ -1060,7 +1060,7 @@ const tilesReady = ref(false);
 
 const dynamicMarkerScale = computed(() => {
   const zoom = Math.max(camera.zoom.value, 0.05);
-  const exponent = zoom < 1 ? 0.3 : 0.7;
+  const exponent = zoom < 1 ? 0.3 : 1.3;
   return markerScale.value / Math.pow(zoom, exponent);
 });
 
