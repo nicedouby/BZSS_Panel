@@ -1366,9 +1366,8 @@ watch(
       
       const nextX = pos.x ?? 0;
       const nextY = pos.y ?? 0;
-      const nextYaw = getPlayerYaw(player);
-
       const lastTarget = playerTargets.get(key);
+      const nextYaw = unwrapAngleDegrees(lastTarget?.yaw ?? null, getPlayerYaw(player));
       let vx = 0;
       let vy = 0;
       let speedMs = 0;
@@ -1777,6 +1776,8 @@ const markers = computed<MapMarker[]>(() => {
   return positioned.map((player) => {
     const pos = getPlayerPosition(player) as BzssCoreTrackedVector;
     const resolvedTeamId = resolvePlayerTeamId(player);
+    const key = getPlayerKey(player);
+    const trackedYaw = key ? playerTargets.get(key)?.yaw ?? null : null;
     
     // Associate RCON detail
     const rconDetail = getPlayerRconDetail(player);
@@ -1785,7 +1786,7 @@ const markers = computed<MapMarker[]>(() => {
       ...player,
       mapX: project(pos.x ?? 0, bounds.minX, bounds.maxX),
       mapY: project(pos.y ?? 0, bounds.minY, bounds.maxY),
-      yaw: getPlayerYaw(player),
+      yaw: trackedYaw ?? getPlayerYaw(player),
       teamId: resolvedTeamId,
       roleInfo: resolveMapRoleInfo(player),
       rconDetail,
@@ -2549,6 +2550,23 @@ function getTeamRoleIconColor(teamId: number | null | undefined) {
 
 function lerp(from: number, to: number, alpha: number) {
   return from + (to - from) * alpha;
+}
+
+function normalizeAngleDegrees(value: number) {
+  const normalized = value % 360;
+  return normalized < 0 ? normalized + 360 : normalized;
+}
+
+function unwrapAngleDegrees(previous: number | null, next: number | null) {
+  if (next == null || !Number.isFinite(next)) return null;
+  const normalizedNext = normalizeAngleDegrees(next);
+  if (previous == null || !Number.isFinite(previous)) return normalizedNext;
+
+  const normalizedPrevious = normalizeAngleDegrees(previous);
+  let delta = normalizedNext - normalizedPrevious;
+  if (delta > 180) delta -= 360;
+  if (delta < -180) delta += 360;
+  return previous + delta;
 }
 
 function clamp01(value: number) {
