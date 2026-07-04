@@ -1,7 +1,7 @@
 <template>
   <div class="tactical-map-layout">
-    <!-- Main Map Viewport -->
-    <div
+      <!-- Main Map Viewport -->
+      <div
       ref="containerRef"
       class="map-viewport"
       :class="{ 'has-explosion-shake': isShaking, 'is-dragging': isDragging }"
@@ -32,6 +32,16 @@
             :fallback-image="activeMapConfig.image"
             @ready="handleTilesReady"
           />
+        </div>
+
+        <div class="map-debug-hud">
+          players={{ players.length }}
+          cached={{ positionedPlayers.length }}
+          markers={{ markers.length }}
+          filtered={{ filteredPlayers.length }}
+          zones={{ captureZoneMarkers.length }}
+          fobs={{ fobMarkers.length }}
+          zoom={{ camera.zoom.value.toFixed(2) }}
         </div>
 
         <!-- Tactical Coordinates Grid Lines -->
@@ -184,7 +194,7 @@
         </div>
 
         <!-- Player Markers Layer -->
-  <div class="player-markers-layer" :style="{ pointerEvents: measureMode || isDragging ? 'none' : 'auto' }">
+        <div class="player-markers-layer" :style="{ pointerEvents: measureMode || isDragging ? 'none' : 'auto', outline: import.meta.env.DEV ? '2px solid red' : 'none' }">
           <PlayerMarker
             v-for="player in filteredPlayers"
             :key="getPlayerKey(player)"
@@ -870,6 +880,15 @@ const snapshot = computed(() => props.snapshot);
 const players = computed(() => Array.isArray(props.players) ? props.players : []);
 const captureZones = computed(() => Array.isArray(props.captureZones) ? props.captureZones : snapshot.value?.captureZones ?? []);
 const fobs = computed(() => Array.isArray(props.fobs) ? props.fobs : snapshot.value?.fobs ?? []);
+const emptyMapConfig: TacticalMapConfig = {
+  key: "",
+  name: "Unknown",
+  image: "",
+  tileBasePath: "",
+  maxZoomLevel: 1,
+  bounds: { minX: 0, minY: 0, maxX: 1000, maxY: 1000 },
+  aliases: [],
+};
 
 const serverMapName = computed(() => serverStore.snapshot?.mapName || "");
 
@@ -877,12 +896,13 @@ const selectedMapKey = ref("auto");
 const detectedMapKey = computed(() => resolveTacticalMapKey(serverMapName.value) ?? getDefaultTacticalMapKey() ?? "");
 const detectedMapName = computed(() => TACTICAL_MAP_CONFIGS[detectedMapKey.value]?.name ?? "Unknown");
 
-const activeMapConfig = computed(() => {
+const activeMapConfig = computed<TacticalMapConfig>(() => {
   let key = selectedMapKey.value;
   if (key === "auto") {
     key = detectedMapKey.value;
   }
-  return TACTICAL_MAP_CONFIGS[key] || TACTICAL_MAP_LIST[0] || null;
+  const fallbackKey = getDefaultTacticalMapKey() ?? TACTICAL_MAP_LIST[0]?.key ?? "";
+  return TACTICAL_MAP_CONFIGS[key] || TACTICAL_MAP_CONFIGS[fallbackKey] || TACTICAL_MAP_LIST[0] || emptyMapConfig;
 });
 
 const mapOptions = computed<TacticalMapConfig[]>(() => TACTICAL_MAP_LIST);
@@ -1249,6 +1269,13 @@ watch(
           lastSeen: now
         };
         changed = true;
+      } else if (import.meta.env.DEV) {
+        console.debug("[TacticalMap] player skipped: invalid position", {
+          key,
+          name: player.playerName,
+          position: player.soldierInfo?.position,
+          raw: player,
+        });
       }
     });
 
