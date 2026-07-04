@@ -22,11 +22,12 @@
       draggable="false"
       decoding="async"
       @load="onTileLoad(tile.key)"
+      @error="onTileError(tile.key, tile.src)"
     />
 
-    <!-- Fallback: original full image when tiles unavailable -->
+    <!-- Fallback: original full image stays visible under tiles -->
     <img
-      v-if="!tilesEnabled && fallbackImage"
+      v-if="fallbackImage"
       :src="fallbackImage"
       alt="Tactical Map"
       class="map-image-fallback"
@@ -93,6 +94,15 @@ function onFallbackLoad() {
   syncReadyState();
 }
 
+function onTileError(key: string, src: string) {
+  if (import.meta.env.DEV) {
+    console.warn("[TiledMapRenderer] tile failed", { key, src });
+  }
+
+  // Failed tiles should not block the base image from serving as the visible fallback.
+  syncReadyState();
+}
+
 // Clear loaded state when map changes
 watch(() => props.tileBasePath, () => {
   loadedSet.value = new Set();
@@ -110,7 +120,11 @@ watch(
 
 function syncReadyState() {
   const expectedTiles = visibleTiles.value.length;
-  const tilesReady = expectedTiles > 0 ? loadedSet.value.size >= expectedTiles : fallbackLoaded.value || !props.tilesEnabled;
+  const tilesReady =
+    fallbackLoaded.value ||
+    !props.tilesEnabled ||
+    (expectedTiles > 0 && loadedSet.value.size >= expectedTiles);
+
   if (tilesReady) {
     emit("ready");
   }
@@ -136,7 +150,19 @@ defineExpose({ currentTileZoom });
   overflow: hidden;
 }
 
+.map-image-fallback {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  z-index: 0;
+}
+
 .map-tile {
+  position: absolute;
   display: block;
   image-rendering: auto;
   opacity: 0;
@@ -144,6 +170,7 @@ defineExpose({ currentTileZoom });
   pointer-events: none;
   /* Prevents sub-pixel gaps between tiles */
   backface-visibility: hidden;
+  z-index: 1;
 }
 
 .map-tile--loaded {
@@ -153,14 +180,6 @@ defineExpose({ currentTileZoom });
 .map-tile--fallback {
   opacity: 0.6;
   filter: blur(1px);
-  z-index: 0;
-}
-
-.map-image-fallback {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: fill;
-  pointer-events: none;
+  z-index: 1;
 }
 </style>
