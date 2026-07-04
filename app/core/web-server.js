@@ -4821,6 +4821,7 @@ export class WebServer {
         players: [...mergedPlayers.values()],
         captureZones,
         fobs,
+        explosions: Array.isArray(bzssCore?.explosions) ? bzssCore.explosions : [],
       },
     };
   }

@@ -94,6 +94,7 @@ type SnapshotState = {
     players: any[];
     captureZones: any[];
     fobs: any[];
+    explosions: any[];
   };
 };
 
@@ -116,7 +117,21 @@ const updatedAtText = computed(() => formatDate(snapshotState.value?.generatedAt
 const statusText = computed(() => errorText.value ? errorText.value : "ok");
 const loadingScreenUrl = computed(() => resolveLoadingScreenUrl(mapName.value, layerName.value));
 
-const tacticalSnapshot = computed(() => snapshotState.value?.bzssCore.state ?? null);
+const tacticalSnapshot = computed(() => {
+  const bzssCore = snapshotState.value?.bzssCore ?? null;
+  if (!bzssCore?.state) return null;
+  const explosions = Array.isArray(bzssCore.explosions) ? bzssCore.explosions : [];
+  return {
+    ...bzssCore.state,
+    explosions,
+    assets: {
+      ...(bzssCore.state.assets ?? {}),
+      captureZones: bzssCore.captureZones ?? [],
+      fobs: bzssCore.fobs ?? [],
+      explosions,
+    },
+  };
+});
 const tacticalPlayers = computed(() => linkTacticalPlayers({
   bzssPlayers: snapshotState.value?.bzssCore.players ?? [],
   runtimePlayers: [],

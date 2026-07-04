@@ -993,6 +993,13 @@ const snapshot = computed(() => {
   if (isStandaloneMapRoute.value) return storeSnapshot.value;
   return null;
 });
+const snapshotExplosions = computed(() => {
+  const direct = Array.isArray((snapshot.value as any)?.explosions) ? (snapshot.value as any).explosions : [];
+  if (direct.length > 0) return direct;
+  const assetsExplosions = Array.isArray((snapshot.value as any)?.assets?.explosions) ? (snapshot.value as any).assets.explosions : [];
+  if (assetsExplosions.length > 0) return assetsExplosions;
+  return Array.isArray(tacticalStateStore.assets?.explosions) ? tacticalStateStore.assets.explosions : [];
+});
 const players = computed(() => {
   const propPlayers = Array.isArray(props.players) ? props.players : [];
   if (propPlayers.length > 0 || !isStandaloneMapRoute.value) return propPlayers;
@@ -1191,7 +1198,7 @@ const blastRadiusPx = computed(() => {
 });
 
 const explosionMarkers = computed(() => {
-  const list = snapshot.value?.explosions;
+  const list = snapshotExplosions.value;
   if (!Array.isArray(list) || list.length === 0) return [];
   const bounds = activeMapConfig.value.bounds;
   const markers: any[] = [];

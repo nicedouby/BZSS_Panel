@@ -296,8 +296,10 @@
 .explosion-layer {
   position: absolute;
   inset: 0;
-  z-index: 10;
+  z-index: 120;
   pointer-events: none;
+  overflow: visible;
+  isolation: isolate;
 }
 
 .explosion-marker {

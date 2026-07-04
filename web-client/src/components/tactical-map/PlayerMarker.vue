@@ -39,14 +39,22 @@
       <template v-if="mode === 'tactical'">
         <!-- Role/Kit Mask Image -->
         <template v-if="isRoleIconImage(roleIcon)">
-          <span
-            class="kit-icon-mask"
-            :style="roleIconStyle"
-            :aria-label="roleLabel"
-          ></span>
+          <span class="kit-icon-stack" :aria-label="roleLabel" role="img">
+            <span class="kit-icon-mask kit-icon-ao" :style="roleIconAoStyle"></span>
+            <span class="kit-icon-mask kit-icon-outline" :style="roleIconOutlineStyle"></span>
+            <span class="kit-icon-mask kit-icon-fill" :style="roleIconStyle"></span>
+          </span>
         </template>
-        <span v-else class="kit-icon-fallback" :aria-label="roleLabel">
-          {{ roleIcon || '?' }}
+        <span v-else class="kit-icon-stack" :aria-label="roleLabel" role="img">
+          <span class="kit-icon-fallback kit-icon-ao" aria-hidden="true">
+            {{ roleIcon || "?" }}
+          </span>
+          <span class="kit-icon-fallback kit-icon-outline" aria-hidden="true">
+            {{ roleIcon || "?" }}
+          </span>
+          <span class="kit-icon-fallback kit-icon-fill" aria-hidden="true">
+            {{ roleIcon || "?" }}
+          </span>
         </span>
       </template>
       <template v-else>
@@ -162,28 +170,28 @@ const followBadgeTitle = computed(() => {
 const palette = computed(() => {
   if (props.tone === "friendly") {
     return {
-      primary: "#37c8ff",
-      soft: "#7de6ff",
-      deep: "#0b6fa3",
-      glow: "rgba(55, 200, 255, 0.35)",
-      pulse: "#00c8ff",
-      tooltip: "rgba(55, 200, 255, 0.6)",
-      chip: "rgba(55, 200, 255, 0.15)",
-      textGlow: "rgba(55, 200, 255, 0.3)",
-      icon: "#7de6ff"
+      primary: "#0000ff",
+      soft: "#5d7cff",
+      deep: "#00008a",
+      glow: "rgba(0, 0, 255, 0.18)",
+      pulse: "#0000ff",
+      tooltip: "rgba(0, 0, 255, 0.45)",
+      chip: "rgba(0, 0, 255, 0.12)",
+      textGlow: "rgba(0, 0, 255, 0.16)",
+      icon: "#0000ff"
     };
   }
   if (props.tone === "enemy") {
     return {
-      primary: "#ff5b6e",
-      soft: "#ff97a3",
-      deep: "#a32032",
-      glow: "rgba(255, 91, 110, 0.35)",
-      pulse: "#ff3366",
-      tooltip: "rgba(255, 91, 110, 0.6)",
-      chip: "rgba(255, 91, 110, 0.15)",
-      textGlow: "rgba(255, 91, 110, 0.3)",
-      icon: "#ff97a3"
+      primary: "#ff0000",
+      soft: "#ff6666",
+      deep: "#8a0000",
+      glow: "rgba(255, 0, 0, 0.18)",
+      pulse: "#ff0000",
+      tooltip: "rgba(255, 0, 0, 0.45)",
+      chip: "rgba(255, 0, 0, 0.12)",
+      textGlow: "rgba(255, 0, 0, 0.16)",
+      icon: "#ff0000"
     };
   }
   // Neutral
@@ -253,6 +261,37 @@ const roleIconStyle = computed(() => {
   };
 });
 
+const roleIconOutlineStyle = computed(() => {
+  if (!props.roleIcon) return {};
+  return {
+    backgroundColor: "#000000",
+    WebkitMaskImage: `url("${props.roleIcon}")`,
+    maskImage: `url("${props.roleIcon}")`,
+    WebkitMaskRepeat: "no-repeat",
+    maskRepeat: "no-repeat",
+    WebkitMaskPosition: "center",
+    maskPosition: "center",
+    WebkitMaskSize: "contain",
+    maskSize: "contain"
+  };
+});
+
+const roleIconAoStyle = computed(() => {
+  if (!props.roleIcon) return {};
+  return {
+    backgroundColor: "#000000",
+    opacity: 0.2,
+    WebkitMaskImage: `url("${props.roleIcon}")`,
+    maskImage: `url("${props.roleIcon}")`,
+    WebkitMaskRepeat: "no-repeat",
+    maskRepeat: "no-repeat",
+    WebkitMaskPosition: "center",
+    maskPosition: "center",
+    WebkitMaskSize: "contain",
+    maskSize: "contain"
+  };
+});
+
 function isRoleIconImage(icon: string | undefined) {
   return String(icon ?? "").startsWith("/");
 }
@@ -290,13 +329,13 @@ function isRoleIconImage(icon: string | undefined) {
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: 18px;
-  height: 18px;
+  width: 21px;
+  height: 21px;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 2;
-  filter: drop-shadow(0 0 5px var(--perspective-glow));
+  filter: none;
   transition: transform 0.16s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.16s ease, opacity 0.16s ease;
 }
 
@@ -308,30 +347,63 @@ function isRoleIconImage(icon: string | undefined) {
 
 /* Squad Leader amber/gold indicator styling */
 .is-squadleader .marker-icon {
-  filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.7)) drop-shadow(0 0 10px rgba(251, 191, 36, 0.28));
   transform: translate(-50%, -50%) scale(1.15);
 }
 
 /* Inner elements */
+.kit-icon-stack {
+  position: relative;
+  width: 19px;
+  height: 19px;
+  display: inline-block;
+}
+
 .kit-icon-fallback {
-  width: 16px;
-  height: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1;
   color: var(--perspective-icon);
   font-weight: 700;
-  text-shadow: 0 0 6px var(--perspective-glow), 0 1px 2px rgba(0, 0, 0, 0.8);
+  text-shadow: none;
   transition: transform 0.16s ease, filter 0.16s ease, opacity 0.16s ease;
 }
 
 .kit-icon-mask {
-  width: 16px;
-  height: 16px;
+  position: absolute;
+  inset: 0;
   display: inline-block;
   transition: transform 0.16s ease, filter 0.16s ease, opacity 0.16s ease;
+}
+
+.kit-icon-ao {
+  transform: scale(1.34);
+}
+
+.kit-icon-outline {
+  transform: scale(1.14);
+}
+
+.kit-icon-fill {
+  transform: scale(0.88);
+}
+
+.kit-icon-ao.kit-icon-mask {
+  background-color: #000000 !important;
+}
+
+.kit-icon-outline.kit-icon-mask {
+  background-color: #000000 !important;
+}
+
+.kit-icon-ao.kit-icon-fallback {
+  color: #000000;
+  opacity: 0.18;
+}
+
+.kit-icon-outline.kit-icon-fallback {
+  color: #000000;
 }
 
 .is-dead .kit-icon-mask {
@@ -390,7 +462,7 @@ function isRoleIconImage(icon: string | undefined) {
 }
 
 .player-marker.is-disengaged .marker-icon {
-  filter: drop-shadow(0 0 7px rgba(251, 146, 60, 0.9));
+  filter: brightness(0.95);
 }
 
 .player-marker.is-disengaged .marker-direction .direction-arrow {
@@ -403,8 +475,8 @@ function isRoleIconImage(icon: string | undefined) {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   transform-origin: center center;
   pointer-events: none;
   z-index: 1;
@@ -414,14 +486,14 @@ function isRoleIconImage(icon: string | undefined) {
 
 .direction-arrow {
   position: absolute;
-  top: -7px;
+  top: -6px;
   left: 50%;
   transform: translateX(-50%);
   width: 0;
   height: 0;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-bottom: 7px solid var(--perspective-primary);
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-bottom: 5px solid var(--perspective-primary);
   filter: drop-shadow(0 0 3px var(--perspective-primary));
 }
 
@@ -498,8 +570,8 @@ function isRoleIconImage(icon: string | undefined) {
 }
 
 .mode-minimal .marker-icon {
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
 }
 
 .preview-dot {
@@ -517,9 +589,9 @@ function isRoleIconImage(icon: string | undefined) {
 
 .mode-minimal .direction-arrow {
   top: -4px;
-  border-left-width: 2.5px;
-  border-right-width: 2.5px;
-  border-bottom-width: 4px;
+  border-left-width: 2px;
+  border-right-width: 2px;
+  border-bottom-width: 3px;
 }
 
 /* Interactive Hover / Focus Zoom effects */
@@ -527,13 +599,11 @@ function isRoleIconImage(icon: string | undefined) {
 .player-marker:hover .marker-icon {
   transform: translate(-50%, -50%) scale(1.08);
   z-index: 50;
-  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.85)) drop-shadow(0 0 12px var(--perspective-glow));
 }
 
 .player-marker.is-hovered.is-squadleader .marker-icon,
 .player-marker:hover.is-squadleader .marker-icon {
   transform: translate(-50%, -50%) scale(1.12);
-  filter: drop-shadow(0 0 10px rgba(251, 191, 36, 0.9)) drop-shadow(0 0 14px rgba(255, 255, 255, 0.4));
 }
 
 .player-marker.is-hovered .tag,
