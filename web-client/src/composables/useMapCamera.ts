@@ -37,6 +37,11 @@ export function useMapCamera() {
     isDragging.value = false;
   }
 
+  function setPosition(nextX: number, nextY: number) {
+    x.value = nextX;
+    y.value = nextY;
+  }
+
   function setZoom(nextZoom: number, centerX: number, centerY: number) {
     const scale = nextZoom / zoom.value;
 
@@ -61,6 +66,7 @@ export function useMapCamera() {
     startDrag,
     onDrag,
     endDrag,
+    setPosition,
     setZoom,
     getTransform,
   };

@@ -2091,9 +2091,8 @@ function fitToViewport() {
 
   const scale = Math.min(viewWidth, viewHeight) / mapSize * 0.95;
   const nextZoom = Math.max(0.35, Math.min(2, scale));
-  zoom.value = nextZoom;
-  panX.value = (viewWidth - mapSize * nextZoom) / 2;
-  panY.value = (viewHeight - mapSize * nextZoom) / 2;
+  camera.setZoom(nextZoom, viewWidth / 2, viewHeight / 2);
+  camera.setPosition((viewWidth - mapSize * nextZoom) / 2, (viewHeight - mapSize * nextZoom) / 2);
 }
 
 function onMapMousemove(e: MouseEvent) {
@@ -2127,9 +2126,8 @@ function panToMapPercent(mapX: number, mapY: number, targetZoom?: number) {
   const viewHeight = containerRef.value.clientHeight;
   const nextX = viewWidth / 2 - (mapX / 100) * mapSize * clampedZoom;
   const nextY = viewHeight / 2 - (mapY / 100) * mapSize * clampedZoom;
-  zoom.value = clampedZoom;
-  panX.value = nextX;
-  panY.value = nextY;
+  camera.setZoom(clampedZoom, viewWidth / 2, viewHeight / 2);
+  camera.setPosition(nextX, nextY);
 }
 
 function focusPlayerOnMap(player: TacticalLinkedPlayer) {
