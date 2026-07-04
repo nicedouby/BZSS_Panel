@@ -170,28 +170,28 @@ const followBadgeTitle = computed(() => {
 const palette = computed(() => {
   if (props.tone === "friendly") {
     return {
-      primary: "#0000ff",
-      soft: "#5d7cff",
-      deep: "#00008a",
-      glow: "rgba(0, 0, 255, 0.18)",
-      pulse: "#0000ff",
-      tooltip: "rgba(0, 0, 255, 0.45)",
-      chip: "rgba(0, 0, 255, 0.12)",
-      textGlow: "rgba(0, 0, 255, 0.16)",
-      icon: "#0000ff"
+      primary: "#2563eb",
+      soft: "#60a5fa",
+      deep: "#1e40af",
+      glow: "rgba(37, 99, 235, 0.25)",
+      pulse: "#2563eb",
+      tooltip: "rgba(37, 99, 235, 0.5)",
+      chip: "rgba(37, 99, 235, 0.12)",
+      textGlow: "rgba(37, 99, 235, 0.18)",
+      icon: "#3b82f6"
     };
   }
   if (props.tone === "enemy") {
     return {
-      primary: "#ff0000",
-      soft: "#ff6666",
-      deep: "#8a0000",
-      glow: "rgba(255, 0, 0, 0.18)",
-      pulse: "#ff0000",
-      tooltip: "rgba(255, 0, 0, 0.45)",
-      chip: "rgba(255, 0, 0, 0.12)",
-      textGlow: "rgba(255, 0, 0, 0.16)",
-      icon: "#ff0000"
+      primary: "#dc2626",
+      soft: "#f87171",
+      deep: "#991b1b",
+      glow: "rgba(220, 38, 38, 0.25)",
+      pulse: "#dc2626",
+      tooltip: "rgba(220, 38, 38, 0.5)",
+      chip: "rgba(220, 38, 38, 0.12)",
+      textGlow: "rgba(220, 38, 38, 0.18)",
+      icon: "#ef4444"
     };
   }
   // Neutral

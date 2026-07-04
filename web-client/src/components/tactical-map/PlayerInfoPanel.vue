@@ -39,14 +39,6 @@
       </div>
     </div>
 
-    <div v-if="followStatus" class="follow-status-row font-mono">
-      <span class="follow-status-label">FOLLOW</span>
-      <strong>{{ followDistanceText }}</strong>
-      <span v-if="followStatus.disengaged" class="follow-status-badge warning">脱离队长 200m</span>
-      <span v-else-if="followStatus.reason" class="follow-status-badge muted">{{ followStatus.reason }}</span>
-      <span v-else class="follow-status-badge ok">跟随队长</span>
-    </div>
-
     <!-- Health Tracker -->
     <div class="panel-health-tracker">
       <div class="tracker-info font-mono">
@@ -190,11 +182,6 @@ const props = defineProps<{
   rconDetail?: any;
   linkConfidence?: "exact" | "strong" | "weak" | "none";
   linkReason?: string;
-  followStatus?: {
-    distanceMeters?: number | null;
-    disengaged?: boolean;
-    reason?: string;
-  } | null;
 }>();
 
 const emit = defineEmits<{
@@ -342,12 +329,6 @@ const weaponName = computed(() => {
 const vehicleName = computed(() => {
   const vehicleType = props.player.vehicleInfo?.vehicleType;
   return vehicleType && vehicleType !== "None" ? vehicleType : null;
-});
-
-const followDistanceText = computed(() => {
-  const distance = props.followStatus?.distanceMeters;
-  if (distance == null || !Number.isFinite(Number(distance))) return "--";
-  return `${Math.round(Number(distance))}m`;
 });
 
 const gamePosition = computed(() => {
@@ -557,47 +538,6 @@ onMounted(() => {
 /* Health Tracker styles */
 .panel-health-tracker {
   margin-bottom: 12px;
-}
-
-.follow-status-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 10px;
-  padding: 7px 8px;
-  border-radius: 4px;
-  background: rgba(251, 191, 36, 0.08);
-  border: 1px solid rgba(251, 191, 36, 0.2);
-}
-
-.follow-status-label {
-  font-size: 8px;
-  font-weight: 800;
-  color: #fbbf24;
-  letter-spacing: 0.08em;
-}
-
-.follow-status-badge {
-  font-size: 8px;
-  font-weight: 800;
-  padding: 1px 4px;
-  border-radius: 999px;
-}
-
-.follow-status-badge.ok {
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-}
-
-.follow-status-badge.warning {
-  background: rgba(251, 146, 60, 0.16);
-  color: #fb923c;
-}
-
-.follow-status-badge.muted {
-  background: rgba(148, 163, 184, 0.16);
-  color: #cbd5e1;
 }
 
 .tracker-info {

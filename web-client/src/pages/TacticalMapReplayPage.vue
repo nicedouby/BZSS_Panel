@@ -508,10 +508,9 @@ const tooltipStyle = computed(() => {
 });
 
 const dynamicMarkerScale = computed(() => {
-  // Rather than keeping marker screen size perfectly constant (1/zoom),
-  // we scale it by zoom^(-0.6) so that markers grow slightly when zoomed in
-  // and shrink slightly when zoomed out, creating a natural tactical map feel.
-  return 1 / Math.pow(Math.max(zoom.value, 0.05), 0.6);
+  const currentZoom = Math.max(zoom.value, 0.05);
+  const exponent = currentZoom < 1 ? 0.3 : 0.7;
+  return 1 / Math.pow(currentZoom, exponent);
 });
 
 // Map Viewport Zoom / Panning controls
