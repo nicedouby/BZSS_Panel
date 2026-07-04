@@ -16,10 +16,7 @@
           ref="mapRef"
           class="map-transform-container"
           :class="{ 'is-dragging': isDragging }"
-          :style="{
-            transform: mapTransformStyle.transform,
-            cursor: measureMode ? 'crosshair' : isDragging ? 'grabbing' : 'grab'
-          }"
+          :style="[mapTransformStyle, { cursor: measureMode ? 'crosshair' : isDragging ? 'grabbing' : 'grab' }]"
           @mousemove="onMapMousemove"
           @click="onMapClick"
           @contextmenu.prevent="handleMapRightClick"
@@ -907,13 +904,10 @@ const mapRef = ref<HTMLElement | null>(null);
 const consoleRef = ref<HTMLElement | null>(null);
 
 const camera = useMapCamera();
-const panX = camera.x;
-const panY = camera.y;
-const zoom = camera.zoom;
 const isDragging = camera.isDragging;
 const mapTransformStyle = computed(() => camera.getTransform());
 
-provideTacticalMapViewport({ zoom, panX, panY });
+provideTacticalMapViewport({ zoom: camera.zoom, panX: camera.x, panY: camera.y });
 
 const showGrid = ref(true);
 const showCaptureZones = ref(true);
@@ -937,7 +931,7 @@ const dynamicMarkerScale = computed(() => {
   // Rather than keeping marker screen size perfectly constant (1/zoom),
   // we scale it by zoom^(-0.6) so that markers grow slightly when zoomed in
   // and shrink slightly when zoomed out, creating a natural tactical map feel.
-  return markerScale.value / Math.pow(Math.max(zoom.value, 0.05), 0.6);
+  return markerScale.value / Math.pow(Math.max(camera.zoom.value, 0.05), 0.6);
 });
 
 // Sidebar states
@@ -1433,9 +1427,10 @@ function onMapClick(e: MouseEvent) {
   const rect = mapRef.value.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
-  
-  const pctX = (x / rect.width);
-  const pctY = (y / rect.height);
+  const world = camera.screenToWorld(x, y);
+  const mapSize = 1000;
+  const pctX = world.x / mapSize;
+  const pctY = world.y / mapSize;
   
   const bounds = activeMapConfig.value.bounds;
   const gameX = bounds.minX + pctX * (bounds.maxX - bounds.minX);
@@ -1600,7 +1595,7 @@ async function onCopyCoords(coords: { gameX: number; gameY: number }) {
 }
 
 function onFocusHere(menu: any) {
-  panToMapPercent(menu.mapX, menu.mapY, Math.max(zoom.value, 1.25));
+  panToMapPercent(menu.mapX, menu.mapY, Math.max(camera.zoom.value, 1.25));
 }
 
 // Player Context Menu Event Handlers
@@ -1825,8 +1820,7 @@ const tooltipStyle = computed(() => {
   const mapY = hoveredMarker.value.mapY;
   
   const mapSize = 1000;
-  const pixelX = panX.value + (mapX / 100) * mapSize * zoom.value;
-  const pixelY = panY.value + (mapY / 100) * mapSize * zoom.value;
+  const { x: pixelX, y: pixelY } = camera.worldToScreen((mapX / 100) * mapSize, (mapY / 100) * mapSize);
   
   const tooltipWidth = 170;
   const halfWidth = tooltipWidth / 2;
@@ -1953,9 +1947,10 @@ function handleMouseMove(event: MouseEvent) {
   const rect = mapRef.value.getBoundingClientRect();
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
-  
-  const pctX = (x / rect.width);
-  const pctY = (y / rect.height);
+  const world = camera.screenToWorld(x, y);
+  const mapSize = 1000;
+  const pctX = world.x / mapSize;
+  const pctY = world.y / mapSize;
   
   const bounds = activeMapConfig.value.bounds;
   const gameX = bounds.minX + pctX * (bounds.maxX - bounds.minX);
@@ -2052,11 +2047,11 @@ function onWheel(e: WheelEvent) {
   const mouseY = e.clientY - rect.top;
 
   const factor = 1.15;
-  let nextZoom = zoom.value;
+  let nextZoom = camera.zoom.value;
   if (e.deltaY < 0) {
-    nextZoom = Math.min(20, zoom.value * factor);
+    nextZoom = Math.min(20, camera.zoom.value * factor);
   } else {
-    nextZoom = Math.max(0.35, zoom.value / factor);
+    nextZoom = Math.max(0.35, camera.zoom.value / factor);
   }
 
   camera.setZoom(nextZoom, mouseX, mouseY);
@@ -2064,19 +2059,19 @@ function onWheel(e: WheelEvent) {
 
 function zoomIn() {
   if (!containerRef.value) {
-    camera.setZoom(Math.min(20, zoom.value * 1.25), 0, 0);
+    camera.setZoom(Math.min(20, camera.zoom.value * 1.25), 0, 0);
     return;
   }
   const rect = containerRef.value.getBoundingClientRect();
-  camera.setZoom(Math.min(20, zoom.value * 1.25), rect.width / 2, rect.height / 2);
+  camera.setZoom(Math.min(20, camera.zoom.value * 1.25), rect.width / 2, rect.height / 2);
 }
 function zoomOut() {
   if (!containerRef.value) {
-    camera.setZoom(Math.max(0.35, zoom.value / 1.25), 0, 0);
+    camera.setZoom(Math.max(0.35, camera.zoom.value / 1.25), 0, 0);
     return;
   }
   const rect = containerRef.value.getBoundingClientRect();
-  camera.setZoom(Math.max(0.35, zoom.value / 1.25), rect.width / 2, rect.height / 2);
+  camera.setZoom(Math.max(0.35, camera.zoom.value / 1.25), rect.width / 2, rect.height / 2);
 }
 function resetView() {
   fitToViewport();
@@ -2092,7 +2087,8 @@ function fitToViewport() {
   const scale = Math.min(viewWidth, viewHeight) / mapSize * 0.95;
   const nextZoom = Math.max(0.35, Math.min(2, scale));
   camera.setZoom(nextZoom, viewWidth / 2, viewHeight / 2);
-  camera.setPosition((viewWidth - mapSize * nextZoom) / 2, (viewHeight - mapSize * nextZoom) / 2);
+  camera.x.value = (viewWidth - mapSize * nextZoom) / 2;
+  camera.y.value = (viewHeight - mapSize * nextZoom) / 2;
 }
 
 function onMapMousemove(e: MouseEvent) {
@@ -2118,7 +2114,7 @@ function toggleSquadFocus(squadId: number) {
 }
 
 function panToMapPercent(mapX: number, mapY: number, targetZoom?: number) {
-  const zoomTarget = targetZoom ?? zoom.value;
+  const zoomTarget = targetZoom ?? camera.zoom.value;
   const clampedZoom = Math.max(0.35, Math.min(20, zoomTarget));
   if (!containerRef.value) return;
   const mapSize = 1000;
@@ -2127,7 +2123,8 @@ function panToMapPercent(mapX: number, mapY: number, targetZoom?: number) {
   const nextX = viewWidth / 2 - (mapX / 100) * mapSize * clampedZoom;
   const nextY = viewHeight / 2 - (mapY / 100) * mapSize * clampedZoom;
   camera.setZoom(clampedZoom, viewWidth / 2, viewHeight / 2);
-  camera.setPosition(nextX, nextY);
+  camera.x.value = nextX;
+  camera.y.value = nextY;
 }
 
 function focusPlayerOnMap(player: TacticalLinkedPlayer) {
@@ -2135,7 +2132,7 @@ function focusPlayerOnMap(player: TacticalLinkedPlayer) {
   focusedPlayerKey.value = key;
   const marker = markers.value.find((m) => getPlayerKey(m) === key);
   if (marker) {
-    panToMapPercent(marker.mapX, marker.mapY, Math.max(zoom.value, 1.2));
+    panToMapPercent(marker.mapX, marker.mapY, Math.max(camera.zoom.value, 1.2));
   }
   hoveredPlayer.value = player;
 }
@@ -2148,19 +2145,19 @@ function focusSquadOnMap(payload: { teamId: number; squadId: number }) {
   const avgX = squadPlayers.reduce((sum, p) => sum + p.mapX, 0) / squadPlayers.length;
   const avgY = squadPlayers.reduce((sum, p) => sum + p.mapY, 0) / squadPlayers.length;
   focusedSquadId.value = payload.squadId;
-  panToMapPercent(avgX, avgY, Math.max(zoom.value, 1.1));
+  panToMapPercent(avgX, avgY, Math.max(camera.zoom.value, 1.1));
 }
 
 function focusFobOnMap(marker: { mapX: number; mapY: number }) {
-  panToMapPercent(marker.mapX, marker.mapY, Math.max(zoom.value, 1.15));
+  panToMapPercent(marker.mapX, marker.mapY, Math.max(camera.zoom.value, 1.15));
 }
 
 function focusZoneOnMap(marker: { mapX: number; mapY: number }) {
-  panToMapPercent(marker.mapX, marker.mapY, Math.max(zoom.value, 1.15));
+  panToMapPercent(marker.mapX, marker.mapY, Math.max(camera.zoom.value, 1.15));
 }
 
 function focusVehicleOnMap(marker: { mapX: number; mapY: number }) {
-  panToMapPercent(marker.mapX, marker.mapY, Math.max(zoom.value, 1.15));
+  panToMapPercent(marker.mapX, marker.mapY, Math.max(camera.zoom.value, 1.15));
 }
 
 // Show player detail in floating window

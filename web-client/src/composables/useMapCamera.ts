@@ -37,11 +37,6 @@ export function useMapCamera() {
     isDragging.value = false;
   }
 
-  function setPosition(nextX: number, nextY: number) {
-    x.value = nextX;
-    y.value = nextY;
-  }
-
   function setZoom(nextZoom: number, centerX: number, centerY: number) {
     const scale = nextZoom / zoom.value;
 
@@ -50,6 +45,20 @@ export function useMapCamera() {
     y.value = centerY - (centerY - y.value) * scale;
 
     zoom.value = nextZoom;
+  }
+
+  function worldToScreen(wx: number, wy: number) {
+    return {
+      x: wx * zoom.value + x.value,
+      y: wy * zoom.value + y.value,
+    };
+  }
+
+  function screenToWorld(sx: number, sy: number) {
+    return {
+      x: (sx - x.value) / zoom.value,
+      y: (sy - y.value) / zoom.value,
+    };
   }
 
   function getTransform() {
@@ -66,8 +75,9 @@ export function useMapCamera() {
     startDrag,
     onDrag,
     endDrag,
-    setPosition,
     setZoom,
+    worldToScreen,
+    screenToWorld,
     getTransform,
   };
 }
