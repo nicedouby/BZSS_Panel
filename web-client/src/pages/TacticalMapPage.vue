@@ -17,6 +17,7 @@
           class="map-transform-container"
           :class="{ 'is-dragging': isDragging }"
           :style="{
+            transform: mapTransformStyle.transform,
             cursor: measureMode ? 'crosshair' : isDragging ? 'grabbing' : 'grab'
           }"
           @mousemove="onMapMousemove"
@@ -732,7 +733,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, reactive, nextTick, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, nextTick, watch } from "vue";
 import { t } from "../i18n";
 import {
   type BzssCorePlayerInfoResponse,
@@ -761,9 +762,10 @@ import TacticalMapSidebar from "../components/tactical-map/TacticalMapSidebar.vu
 import MapContextMenu from "../components/tactical-map/MapContextMenu.vue";
 import PlayerInfoPanel from "../components/tactical-map/PlayerInfoPanel.vue";
 import PlayerActionMenu from "../components/tactical-map/PlayerActionMenu.vue";
+import { useMapCamera } from "../composables/useMapCamera";
 import { provideTacticalMapViewport } from "../composables/tacticalMapViewport";
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   snapshot: BzssCorePlayerInfoResponse | null;
   players: TacticalLinkedPlayer[];
   captureZones?: BzssCoreCaptureZoneInfo[];
@@ -772,7 +774,16 @@ const props = defineProps<{
   errorText: string;
   playtimes?: Record<string, any> | null;
   combatStatsLookup?: Record<string, any> | null;
-}>();
+}>(), {
+  snapshot: null,
+  players: () => [],
+  captureZones: () => [],
+  fobs: () => [],
+  loading: false,
+  errorText: "",
+  playtimes: () => ({}),
+  combatStatsLookup: () => ({}),
+});
 
 const emit = defineEmits<{
   (e: "select-player", payload: { detail: any; event: MouseEvent }): void;
@@ -859,9 +870,9 @@ const canManageRcon = computed(() => {
 });
 
 const snapshot = computed(() => props.snapshot);
-const players = computed(() => props.players);
-const captureZones = computed(() => props.captureZones ?? snapshot.value?.captureZones ?? []);
-const fobs = computed(() => props.fobs ?? snapshot.value?.fobs ?? []);
+const players = computed(() => Array.isArray(props.players) ? props.players : []);
+const captureZones = computed(() => Array.isArray(props.captureZones) ? props.captureZones : snapshot.value?.captureZones ?? []);
+const fobs = computed(() => Array.isArray(props.fobs) ? props.fobs : snapshot.value?.fobs ?? []);
 
 const serverMapName = computed(() => serverStore.snapshot?.mapName || "");
 
@@ -895,20 +906,14 @@ const containerRef = ref<HTMLElement | null>(null);
 const mapRef = ref<HTMLElement | null>(null);
 const consoleRef = ref<HTMLElement | null>(null);
 
-const zoom = ref(0.7);
-const panX = ref(0);
-const panY = ref(0);
-const isDragging = ref(false);
-const dragStart = reactive({ x: 0, y: 0 });
+const camera = useMapCamera();
+const panX = camera.x;
+const panY = camera.y;
+const zoom = camera.zoom;
+const isDragging = camera.isDragging;
+const mapTransformStyle = computed(() => camera.getTransform());
 
 provideTacticalMapViewport({ zoom, panX, panY });
-
-function syncMapTransform() {
-  if (!mapRef.value) return;
-  mapRef.value.style.transform = `translate(${panX.value}px, ${panY.value}px) scale(${zoom.value})`;
-}
-
-watch([panX, panY, zoom], syncMapTransform, { immediate: true, flush: "post" });
 
 const showGrid = ref(true);
 const showCaptureZones = ref(true);
@@ -1975,9 +1980,6 @@ function handleTilesReady() {
 // Drag & Pan & Zoom Event Handlers
 const dragStartCoords = { x: 0, y: 0 };
 let dragMoved = false;
-let dragFrameId: number | null = null;
-let pendingDragPanX = 0;
-let pendingDragPanY = 0;
 let activeDragPointerId: number | null = null;
 
 function isDragBlockedTarget(target: HTMLElement | null) {
@@ -1992,42 +1994,6 @@ function isDragBlockedTarget(target: HTMLElement | null) {
   );
 }
 
-function clampMapPan(nextX: number, nextY: number, currentZoom = zoom.value) {
-  if (!containerRef.value) return { x: nextX, y: nextY };
-
-  const viewWidth = containerRef.value.clientWidth;
-  const viewHeight = containerRef.value.clientHeight;
-  const mapSize = 1000;
-  const mapWidth = mapSize * currentZoom;
-  const mapHeight = mapSize * currentZoom;
-
-  const clampedX = mapWidth <= viewWidth
-    ? (viewWidth - mapWidth) / 2
-    : Math.min(0, Math.max(viewWidth - mapWidth, nextX));
-  const clampedY = mapHeight <= viewHeight
-    ? (viewHeight - mapHeight) / 2
-    : Math.min(0, Math.max(viewHeight - mapHeight, nextY));
-
-  return { x: clampedX, y: clampedY };
-}
-
-function applyMapPan(nextX: number, nextY: number) {
-  const clamped = clampMapPan(nextX, nextY);
-  panX.value = clamped.x;
-  panY.value = clamped.y;
-}
-
-function scheduleMapPanUpdate(nextX: number, nextY: number) {
-  pendingDragPanX = nextX;
-  pendingDragPanY = nextY;
-
-  if (dragFrameId != null) return;
-  dragFrameId = window.requestAnimationFrame(() => {
-    dragFrameId = null;
-    applyMapPan(pendingDragPanX, pendingDragPanY);
-  });
-}
-
 function startDrag(e: PointerEvent) {
   if (e.button !== 0 || isDragging.value) return;
 
@@ -2036,13 +2002,9 @@ function startDrag(e: PointerEvent) {
 
   e.preventDefault();
   activeDragPointerId = e.pointerId;
-  isDragging.value = true;
-  dragStart.x = e.clientX - panX.value;
-  dragStart.y = e.clientY - panY.value;
+  camera.startDrag(e.clientX, e.clientY);
   dragStartCoords.x = e.clientX;
   dragStartCoords.y = e.clientY;
-  pendingDragPanX = panX.value;
-  pendingDragPanY = panY.value;
   dragMoved = false;
   hoveredPlayer.value = null;
   hoverCoords.value = null;
@@ -2066,7 +2028,7 @@ function onDrag(e: PointerEvent) {
     dragMoved = true;
   }
 
-  scheduleMapPanUpdate(e.clientX - dragStart.x, e.clientY - dragStart.y);
+  camera.onDrag(e.clientX, e.clientY);
 }
 
 // Re-sync final dragging state (handles cleanup if dragging ends outside viewport)
@@ -2076,18 +2038,11 @@ function stopDrag(e?: PointerEvent) {
   }
 
   activeDragPointerId = null;
-  isDragging.value = false;
+  camera.endDrag();
 
   window.removeEventListener("pointermove", onDrag);
   window.removeEventListener("pointerup", stopDrag);
   window.removeEventListener("pointercancel", stopDrag);
-
-  if (dragFrameId != null) {
-    window.cancelAnimationFrame(dragFrameId);
-    dragFrameId = null;
-  }
-
-  applyMapPan(pendingDragPanX, pendingDragPanY);
 }
 
 function onWheel(e: WheelEvent) {
@@ -2095,9 +2050,6 @@ function onWheel(e: WheelEvent) {
   const rect = containerRef.value.getBoundingClientRect();
   const mouseX = e.clientX - rect.left;
   const mouseY = e.clientY - rect.top;
-
-  const mapX = (mouseX - panX.value) / zoom.value;
-  const mapY = (mouseY - panY.value) / zoom.value;
 
   const factor = 1.15;
   let nextZoom = zoom.value;
@@ -2107,17 +2059,24 @@ function onWheel(e: WheelEvent) {
     nextZoom = Math.max(0.35, zoom.value / factor);
   }
 
-  zoom.value = nextZoom;
-  const clamped = clampMapPan(mouseX - mapX * zoom.value, mouseY - mapY * zoom.value, zoom.value);
-  panX.value = clamped.x;
-  panY.value = clamped.y;
+  camera.setZoom(nextZoom, mouseX, mouseY);
 }
 
 function zoomIn() {
-  zoom.value = Math.min(20, zoom.value * 1.25);
+  if (!containerRef.value) {
+    camera.setZoom(Math.min(20, zoom.value * 1.25), 0, 0);
+    return;
+  }
+  const rect = containerRef.value.getBoundingClientRect();
+  camera.setZoom(Math.min(20, zoom.value * 1.25), rect.width / 2, rect.height / 2);
 }
 function zoomOut() {
-  zoom.value = Math.max(0.35, zoom.value / 1.25);
+  if (!containerRef.value) {
+    camera.setZoom(Math.max(0.35, zoom.value / 1.25), 0, 0);
+    return;
+  }
+  const rect = containerRef.value.getBoundingClientRect();
+  camera.setZoom(Math.max(0.35, zoom.value / 1.25), rect.width / 2, rect.height / 2);
 }
 function resetView() {
   fitToViewport();
@@ -2131,11 +2090,10 @@ function fitToViewport() {
   const mapSize = 1000;
 
   const scale = Math.min(viewWidth, viewHeight) / mapSize * 0.95;
-  zoom.value = Math.max(0.35, Math.min(2, scale));
-  
-  const clamped = clampMapPan((viewWidth - mapSize * zoom.value) / 2, (viewHeight - mapSize * zoom.value) / 2, zoom.value);
-  panX.value = clamped.x;
-  panY.value = clamped.y;
+  const nextZoom = Math.max(0.35, Math.min(2, scale));
+  zoom.value = nextZoom;
+  panX.value = (viewWidth - mapSize * nextZoom) / 2;
+  panY.value = (viewHeight - mapSize * nextZoom) / 2;
 }
 
 function onMapMousemove(e: MouseEvent) {
@@ -2163,16 +2121,15 @@ function toggleSquadFocus(squadId: number) {
 function panToMapPercent(mapX: number, mapY: number, targetZoom?: number) {
   const zoomTarget = targetZoom ?? zoom.value;
   const clampedZoom = Math.max(0.35, Math.min(20, zoomTarget));
-  zoom.value = clampedZoom;
   if (!containerRef.value) return;
   const mapSize = 1000;
   const viewWidth = containerRef.value.clientWidth;
   const viewHeight = containerRef.value.clientHeight;
   const nextX = viewWidth / 2 - (mapX / 100) * mapSize * clampedZoom;
   const nextY = viewHeight / 2 - (mapY / 100) * mapSize * clampedZoom;
-  const clamped = clampMapPan(nextX, nextY, clampedZoom);
-  panX.value = clamped.x;
-  panY.value = clamped.y;
+  zoom.value = clampedZoom;
+  panX.value = nextX;
+  panY.value = nextY;
 }
 
 function focusPlayerOnMap(player: TacticalLinkedPlayer) {

@@ -873,8 +873,11 @@ function attachTacticalStateInfoToPlayer(
   if (!matched) return player;
   const rawPlayer = player.raw && typeof player.raw === "object" ? { ...(player.raw as Record<string, any>) } : player.raw;
   if (rawPlayer && typeof rawPlayer === "object") {
+    const existingBzssCoreInfo = (rawPlayer as Record<string, any>).bzssCorePlayerInfo ?? null;
     (rawPlayer as Record<string, any>).tacticalStatePlayer = matched;
-    (rawPlayer as Record<string, any>).bzssCorePlayerInfo = matched.raw?.bzss ?? null;
+    if (!existingBzssCoreInfo) {
+      (rawPlayer as Record<string, any>).bzssCorePlayerInfo = matched.raw?.bzss ?? null;
+    }
   }
   return {
     ...player,
