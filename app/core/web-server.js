@@ -12,6 +12,7 @@ const requestStorage = new AsyncLocalStorage();
 import { handleSquadManagementRoutes } from "../modules/squad-management/routes.js";
 import { handleTeamBalanceRoutes } from "../modules/team-balance/routes.js";
 import { handleReserveSlotsRoutes } from "../modules/reserve-slots/routes.js";
+import { handleWarmupReserveGrantRoutes } from "../modules/warmup-reserve-grant/routes.js";
 import { handleBlackEdgePrivilegeRoutes } from "../modules/black-edge-privilege/routes.js";
 import { handleAstrbotBridgeRoutes } from "../modules/astrbot-bridge/routes.js";
 import { handleTacticalStateRoutes } from "../modules/tactical-state/routes.js";
@@ -645,6 +646,19 @@ export class WebServer {
       json: (status, obj, extraHeaders = {}) => this.json(res, status, obj, extraHeaders),
     });
     if (reserveSlotsHandled) {
+      return;
+    }
+
+    const warmupReserveGrantHandled = await handleWarmupReserveGrantRoutes({
+      core: this.core,
+      modules: this.modules,
+      url,
+      req,
+      user,
+      readJsonBody: (request) => this.readJsonBody(request),
+      json: (status, obj, extraHeaders = {}) => this.json(res, status, obj, extraHeaders),
+    });
+    if (warmupReserveGrantHandled) {
       return;
     }
 

@@ -37,6 +37,7 @@ import { createRemoteTelemetryModule } from "../modules/remote-telemetry/index.j
 import { createScheduledBroadcastModule } from "../modules/scheduled-broadcast/index.js";
 import { createPlayerSessionRecordsModule } from "../modules/player-session-records/index.js";
 import { createReserveSlotsModule } from "../modules/reserve-slots/index.js";
+import { createWarmupReserveGrantModule } from "../modules/warmup-reserve-grant/index.js";
 import { createBlackEdgePrivilegeModule } from "../modules/black-edge-privilege/index.js";
 import { createAstrbotBridgeModule } from "../modules/astrbot-bridge/index.js";
 import { createBzssCoreMonitorModule } from "../modules/bzss-core-monitor/index.js";
@@ -102,6 +103,7 @@ export class ModuleManager {
       createScheduledBroadcastModule,
       createPlayerSessionRecordsModule,
       createReserveSlotsModule,
+      createWarmupReserveGrantModule,
       createBlackEdgePrivilegeModule,
       createAstrbotBridgeModule,
       createBzssCoreMonitorModule,

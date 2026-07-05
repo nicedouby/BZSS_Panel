@@ -5,6 +5,7 @@ import MatchStatusPage from "../pages/MatchStatusPage.vue";
 import ConsolePage from "../pages/ConsolePage.vue";
 import PlayerDatabasePage from "../pages/PlayerDatabasePage.vue";
 import ReserveSlotsPage from "../pages/ReserveSlotsPage.vue";
+import WarmupReserveGrantPage from "../pages/WarmupReserveGrantPage.vue";
 import BlackEdgePrivilegePage from "../pages/BlackEdgePrivilegePage.vue";
 import CombatManagerPage from "../pages/CombatManagerPage.vue";
 import BattleLogPage from "../pages/BattleLogPage.vue";
@@ -177,6 +178,17 @@ export const pageRegistry: PageDefinition[] = [
     category: "core",
     refreshPolicy: "manual",
     nav: { section: "players", label: "预留位管理", icon: "🎫", order: 20 },
+    ...workspacePage,
+  },
+  {
+    name: "warmup-reserve-grant",
+    path: "/warmup-reserve-grant",
+    component: WarmupReserveGrantPage,
+    title: "暖服赠送预留位",
+    category: "core",
+    refreshPolicy: "polling",
+    nav: { section: "players", label: "暖服赠送预留位", icon: "🔥", order: 25 },
+    superAdminOnly: true,
     ...workspacePage,
   },
   {
