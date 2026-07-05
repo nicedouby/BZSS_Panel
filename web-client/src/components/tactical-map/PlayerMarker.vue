@@ -90,7 +90,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, watchEffect } from "vue";
 
 const props = withDefaults(
   defineProps<{
@@ -292,6 +292,24 @@ const roleIconAoStyle = computed(() => {
   };
 });
 
+const preloadedRoleIcons = new Set<string>();
+
+function preloadRoleIcon(icon: string | undefined) {
+  const src = String(icon ?? "");
+  if (!isRoleIconImage(src) || preloadedRoleIcons.has(src)) return;
+  preloadedRoleIcons.add(src);
+
+  const image = new Image();
+  image.decoding = "sync";
+  image.loading = "eager";
+  (image as HTMLImageElement & { fetchPriority?: "high" }).fetchPriority = "high";
+  image.src = src;
+}
+
+watchEffect(() => {
+  preloadRoleIcon(props.roleIcon);
+});
+
 function isRoleIconImage(icon: string | undefined) {
   return String(icon ?? "").startsWith("/");
 }
@@ -300,8 +318,8 @@ function isRoleIconImage(icon: string | undefined) {
 <style scoped>
 .player-marker {
   position: absolute;
-  width: 32px;
-  height: 32px;
+  width: 38px;
+  height: 38px;
   pointer-events: auto;
   cursor: pointer;
   border: none;
@@ -329,8 +347,8 @@ function isRoleIconImage(icon: string | undefined) {
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: 25px;
-  height: 25px;
+  width: 31px;
+  height: 31px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -353,16 +371,18 @@ function isRoleIconImage(icon: string | undefined) {
 /* Inner elements */
 .kit-icon-stack {
   position: relative;
-  width: 19px;
-  height: 19px;
+  width: 24px;
+  height: 24px;
   display: inline-block;
+  overflow: visible;
+  --kit-icon-source-size: 64px;
 }
 
 .kit-icon-fallback {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: 20px;
   line-height: 1;
   color: var(--perspective-icon);
   font-weight: 700;
@@ -372,21 +392,26 @@ function isRoleIconImage(icon: string | undefined) {
 
 .kit-icon-mask {
   position: absolute;
-  inset: 0;
+  left: 50%;
+  top: 50%;
+  width: var(--kit-icon-source-size);
+  height: var(--kit-icon-source-size);
   display: inline-block;
+  image-rendering: auto;
+  shape-rendering: geometricPrecision;
   transition: transform 0.16s ease, filter 0.16s ease, opacity 0.16s ease;
 }
 
 .kit-icon-ao {
-  transform: scale(1.34);
+  transform: translate(-50%, -50%) scale(0.484375);
 }
 
 .kit-icon-outline {
-  transform: scale(1.14);
+  transform: translate(-50%, -50%) scale(0.40625);
 }
 
 .kit-icon-fill {
-  transform: scale(0.88);
+  transform: translate(-50%, -50%) scale(0.34375);
 }
 
 .kit-icon-ao.kit-icon-mask {
@@ -475,8 +500,8 @@ function isRoleIconImage(icon: string | undefined) {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   transform-origin: center center;
   pointer-events: none;
   z-index: 1;
@@ -486,15 +511,15 @@ function isRoleIconImage(icon: string | undefined) {
 
 .direction-arrow {
   position: absolute;
-  top: -6px;
+  top: -7px;
   left: 50%;
   transform: translateX(-50%);
   width: 0;
   height: 0;
-  border-left: 3px solid transparent;
-  border-right: 3px solid transparent;
-  border-bottom: 5px solid var(--perspective-primary);
-  filter: drop-shadow(0 0 3px var(--perspective-primary));
+  border-left: 3.5px solid transparent;
+  border-right: 3.5px solid transparent;
+  border-bottom: 6px solid var(--perspective-primary);
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.9)) drop-shadow(0 0 3px var(--perspective-primary));
 }
 
 /* Text tag underneath */
@@ -505,19 +530,22 @@ function isRoleIconImage(icon: string | undefined) {
   transform: translate(-50%, 3px);
   display: flex;
   align-items: center;
-  gap: 3.5px;
-  padding: 0;
-  border-radius: 0;
-  background: transparent;
-  border: none;
-  font-size: 8px;
+  gap: 4px;
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: rgba(2, 6, 23, 0.78);
+  border: 1px solid rgba(226, 232, 240, 0.18);
+  font-size: 10px;
   white-space: nowrap;
-  line-height: 1.15;
+  line-height: 1.05;
   pointer-events: none;
   z-index: 5;
-  box-shadow: none;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 3px rgba(0, 0, 0, 0.9);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 1);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
   transition: color 0.2s ease, transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+  backdrop-filter: blur(2px);
 }
 
 /* Perspective/Team soft colors */
@@ -532,24 +560,26 @@ function isRoleIconImage(icon: string | undefined) {
 }
 
 .player-name-tag {
-  font-weight: 600;
+  font-weight: 800;
+  letter-spacing: 0;
+  -webkit-text-stroke: 0.2px rgba(0, 0, 0, 0.85);
 }
 
 .player-squad-tag {
-  font-size: 7.5px;
+  font-size: 9px;
   font-family: monospace;
-  font-weight: 700;
+  font-weight: 800;
   color: var(--perspective-soft);
   line-height: 1;
 }
 
 .player-coords-tag {
-  font-size: 7.5px;
+  font-size: 9px;
   font-family: monospace;
-  font-weight: 700;
-  color: #a7f3d0;
+  font-weight: 800;
+  color: #bbf7d0;
   line-height: 1;
-  opacity: 0.85;
+  opacity: 1;
 }
 
 .player-disengaged-tag {

@@ -1047,7 +1047,7 @@ const filterAliveOnly = ref(false);
 const disableMarkerInteraction = ref(false);
 
 // Icon scaling and tags visibility refs
-const markerScale = ref(1.025);
+const markerScale = ref(1.15);
 const showPlayerNames = ref(true);
 const showPlayerCoords = ref(true);
 
