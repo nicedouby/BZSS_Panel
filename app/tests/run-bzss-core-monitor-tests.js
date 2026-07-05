@@ -337,6 +337,53 @@ function testMonitorState() {
   assert.equal(mergedPlayers.filter((player) => player.playerIndex >= 93).every((player) => player.telemetry?.position == null), true);
   assert.equal(mergedPlayers.filter((player) => player.playerIndex >= 93).every((player) => player.presence?.state === "scoreboardOnly"), true);
 
+  const rconOnlinePlayers = Array.from({ length: 100 }, (_, index) => {
+    const playerID = index + 1;
+    return {
+      playerID,
+      name: `RCON Player ${playerID}`,
+      steamID: `7656119800000${String(playerID).padStart(3, "0")}`,
+      eosID: `eos-${playerID}`,
+      controllerID: String(playerID),
+      teamID: playerID % 2 === 0 ? 2 : 1,
+      squadID: (playerID % 9) + 1,
+      role: "BP_SoldierRole_Rifleman",
+      online: true,
+    };
+  });
+  const rconTemplateModule = createBzssCoreMonitorModule({
+    core: {
+      eventBus: { onCoreEvent() { return () => {}; }, emitModuleEvent() {} },
+      webStatus: { serverId: "server-rcon" },
+      logger: { info() {}, warn() {}, error() {}, debug() {} },
+    },
+    modules: {
+      playerState: {
+        getOnlinePlayers(serverId) {
+          assert.equal(serverId, "server-rcon");
+          return rconOnlinePlayers;
+        },
+      },
+    },
+  });
+  assert.equal(rconTemplateModule.api.ingestLogLine(priBatch(1, 12)).ok, true);
+  const rconTemplatePlayers = rconTemplateModule.api.getPlayers();
+  assert.equal(rconTemplatePlayers.length, 100);
+  assert.equal(rconTemplateModule.api.getState().playerCount, 100);
+  assert.equal(rconTemplatePlayers.every((player) => player.playerName && player.steamID && player.eosID && player.teamId != null && player.squadId != null), true);
+  const rconRuntimeHits = rconTemplatePlayers.filter((player) => player.playerIndex <= 12);
+  assert.equal(rconRuntimeHits.length, 12);
+  assert.equal(rconRuntimeHits.every((player) => player.position && player.yaw != null && player.soldierInfo?.position), true);
+  const rconOnlyPlayers = rconTemplatePlayers.filter((player) => player.playerIndex > 12);
+  assert.equal(rconOnlyPlayers.length, 88);
+  assert.equal(rconOnlyPlayers.every((player) => ["rconOnly", "scoreboardOnly"].includes(player.presence?.state)), true);
+  assert.equal(rconTemplatePlayers.find((player) => player.playerIndex === 1)?.playerName, "RCON Player 1");
+  assert.equal(rconTemplatePlayers.find((player) => player.playerIndex === 1)?.role, "BP_SoldierRole_Rifleman");
+  assert.equal(rconTemplatePlayers.find((player) => player.playerIndex === 1)?.rcon?.online, true);
+  const rconRaw = rconTemplateModule.api.getRawSnapshot();
+  assert.equal(rconRaw.runtimePlayers.length, 12);
+  assert.equal(rconRaw.scoreboardPlayers.length, 0);
+
   const hardTtlModule = createBzssCoreMonitorModule({
     core: {
       eventBus: { onCoreEvent() { return () => {}; }, emitModuleEvent() {} },

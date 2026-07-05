@@ -1047,7 +1047,7 @@ const filterAliveOnly = ref(false);
 const disableMarkerInteraction = ref(false);
 
 // Icon scaling and tags visibility refs
-const markerScale = ref(1.0);
+const markerScale = ref(1.025);
 const showPlayerNames = ref(true);
 const showPlayerCoords = ref(true);
 
@@ -1060,8 +1060,12 @@ const tilesReady = ref(false);
 
 const dynamicMarkerScale = computed(() => {
   const zoom = Math.max(camera.zoom.value, 0.05);
-  const exponent = zoom < 1 ? 0.3 : 1.3;
-  return markerScale.value / Math.pow(zoom, exponent);
+  // Below 1.0x, markers shrink with the map. Above 1.0x, compensate map zoom
+  // so the on-screen marker size stays fixed instead of growing endlessly.
+  if (zoom >= 1) {
+    return markerScale.value / zoom;
+  }
+  return markerScale.value;
 });
 
 // Sidebar states

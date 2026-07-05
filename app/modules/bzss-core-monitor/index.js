@@ -219,6 +219,7 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
 
   function getState() {
     pruneExpiredPlayers(state, { core, modules });
+    const players = getPlayers();
     return {
       status: state.status,
       revision: state.revision,
@@ -226,7 +227,7 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
       markerSeen: state.markerSeen,
       runtimePlayerCount: state.runtimePlayersByKey.size,
       scoreboardPlayerCount: state.scoreboardPlayersByKey.size,
-      playerCount: state.playersByKey.size,
+      playerCount: players.length,
       mainZoneCount: state.mainZones.length,
       rawLineHash: state.rawLineHash,
       rawFields: [...state.rawFields],
@@ -406,6 +407,15 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
 
   function getPlayers() {
     pruneExpiredPlayers(state, { core, modules });
+    const templatePlayers = getRconTemplatePlayers(core, modules);
+    if (templatePlayers.length > 0) {
+      return buildPlayersFromRconTemplate(templatePlayers);
+    }
+
+    return getPlayersFromBzssOnly();
+  }
+
+  function getPlayersFromBzssOnly() {
     const mergedByKey = new Map();
 
     for (const player of state.scoreboardPlayersByKey.values()) {
@@ -430,6 +440,62 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
       const key = getCanonicalPlayerKey(player);
       if (!key || mergedByKey.has(key)) continue;
       mergedByKey.set(key, clonePlayerView(player));
+    }
+
+    return [...mergedByKey.values()];
+  }
+
+  function buildPlayersFromRconTemplate(templatePlayers) {
+    const mergedByKey = new Map();
+    const index = new Map();
+
+    const addIndexKeys = (player, canonicalKey) => {
+      const info = getPlayerIdentityInfo(player);
+      for (const key of info.candidateKeys) {
+        index.set(key, canonicalKey);
+      }
+    };
+
+    for (const template of templatePlayers) {
+      const view = clonePlayerView(template);
+      const key = getCanonicalPlayerKey(view);
+      if (!key) continue;
+      mergedByKey.set(key, view);
+      addIndexKeys(view, key);
+    }
+
+    const overlaySources = [
+      ...state.scoreboardPlayersByKey.values(),
+      ...state.runtimePlayersByKey.values(),
+      ...state.playersByKey.values(),
+    ];
+
+    for (const overlay of overlaySources) {
+      const overlayView = clonePlayerView(overlay);
+      const overlayInfo = getPlayerIdentityInfo(overlayView);
+
+      let targetKey = "";
+      for (const candidateKey of overlayInfo.candidateKeys) {
+        if (index.has(candidateKey)) {
+          targetKey = index.get(candidateKey);
+          break;
+        }
+      }
+
+      if (!targetKey) {
+        targetKey = getCanonicalPlayerKey(overlayView);
+      }
+      if (!targetKey) continue;
+
+      const existing = mergedByKey.get(targetKey);
+      if (existing) {
+        const merged = mergePlayerViews(existing, overlayView);
+        mergedByKey.set(targetKey, merged);
+        addIndexKeys(merged, targetKey);
+      } else {
+        mergedByKey.set(targetKey, overlayView);
+        addIndexKeys(overlayView, targetKey);
+      }
     }
 
     return [...mergedByKey.values()];
@@ -858,6 +924,79 @@ function getOnlinePlayerIdentityKeySet(core, modules) {
   return keys;
 }
 
+function getRconTemplatePlayers(core, modules) {
+  const serverId = String(core?.webStatus?.serverId ?? "").trim();
+  if (!serverId) return [];
+  const getOnlinePlayers = modules?.playerState?.getOnlinePlayers;
+  if (typeof getOnlinePlayers !== "function") return [];
+
+  try {
+    const players = getOnlinePlayers(serverId);
+    if (!Array.isArray(players)) return [];
+    return players.map(createTemplatePlayerFromRcon).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function createTemplatePlayerFromRcon(player) {
+  if (!player) return null;
+
+  const playerId = toFiniteNumber(player.playerID ?? player.playerId ?? player.controllerID);
+  const squadId = toFiniteNumber(player.squadID ?? player.squadId);
+  const name = firstText(player.name, player.playerName, player.currentName, player.displayName);
+  const steamID = firstText(player.steamID, player.steam64ID);
+  const eosID = firstText(player.eosID);
+  const controllerID = firstText(player.controllerID, player.playerID, player.playerId);
+  const nowIso = new Date().toISOString();
+
+  return {
+    playerId,
+    playerIndex: playerId,
+    controllerID,
+    playerName: name,
+    playerGuid: firstText(eosID, steamID),
+    steamID,
+    eosID,
+    teamId: toFiniteNumber(player.teamID ?? player.teamId),
+    squadId,
+    isAdmin: null,
+    isCommander: Boolean(player.isLeader && isCommandSquadId(squadId)),
+    position: null,
+    yaw: null,
+    combatInfo: "",
+    presenceHint: "rconOnly",
+    firstSeenAt: firstText(player.firstSeenAt),
+    lastSeenAt: firstText(player.lastSeenTime, player.lastSeenAt, nowIso),
+    runtimeObservedAt: "",
+    scoreboardObservedAt: "",
+    stale: true,
+    sourceTypes: ["rconTemplate"],
+    soldierInfo: createEmptySoldierInfo(),
+    vehicleInfo: null,
+    playerScoreboard: createEmptyScoreboardInfo(),
+    ftIndex: null,
+    ftPosition: null,
+    ping: null,
+    rawText: player.raw ?? "",
+    playerBaseInfo: null,
+    identityKeys: [],
+    role: firstText(player.role),
+    rcon: {
+      playerID: player.playerID ?? player.playerId ?? null,
+      name,
+      steamID,
+      eosID,
+      controllerID,
+      teamID: player.teamID ?? player.teamId ?? null,
+      squadID: player.squadID ?? player.squadId ?? null,
+      isLeader: Boolean(player.isLeader),
+      role: firstText(player.role),
+      online: player.online !== false,
+    },
+  };
+}
+
 function isPlayerOnline(record, onlinePlayerKeys) {
   const info = getPlayerIdentityInfo(record);
   return info.candidateKeys.some((key) => onlinePlayerKeys.has(key));
@@ -893,11 +1032,12 @@ function clonePlayerView(player) {
   const playerScoreboard = cloned.playerScoreboard ? clonePlainObject(cloned.playerScoreboard) : createEmptyScoreboardInfo();
   const hasRuntime = Boolean(cloned.runtimeObservedAt);
   const hasScoreboard = Boolean(cloned.scoreboardObservedAt);
-  const presenceState = isNoPawn ? "noPawn" : (hasRuntime ? "active" : (hasScoreboard ? "scoreboardOnly" : "notSpawned"));
+  const presenceState = isNoPawn ? "noPawn" : (hasRuntime ? "active" : (hasScoreboard ? "scoreboardOnly" : (cloned.presenceHint === "rconOnly" ? "rconOnly" : "notSpawned")));
   const stale = isNoPawn ? false : (hasRuntime ? Boolean(cloned.stale) : true);
   return {
     playerId: cloned.playerId ?? null,
     playerIndex: cloned.playerIndex ?? null,
+    controllerID: cloned.controllerID ?? "",
     playerName: cloned.playerName ?? "",
     playerGuid: cloned.playerGuid ?? "",
     steamID: cloned.steamID ?? "",
@@ -926,6 +1066,8 @@ function clonePlayerView(player) {
     rawText: cloned.rawText ?? "",
     playerBaseInfo: cloned.playerBaseInfo ? clonePlainObject(cloned.playerBaseInfo) : null,
     identityKeys: Array.isArray(cloned.identityKeys) ? [...cloned.identityKeys] : [],
+    role: cloned.role ?? "",
+    rcon: cloned.rcon ? clonePlainObject(cloned.rcon) : null,
     telemetry: {
       position: isNoPawn ? null : (position ? { ...position } : null),
       yaw: isNoPawn ? null : (cloned.yaw ?? null),
@@ -947,6 +1089,18 @@ function mergePlayerViews(base, runtimeView) {
   const runtimePresence = runtimeView?.presence ?? {};
   const basePresence = merged.presence ?? {};
   const runtimeIsNoPawn = runtimeView?.presenceHint === "noPawn" || runtimePresence.state === "noPawn";
+  merged.playerId = firstDefinedNumber(merged.playerId, runtimeView?.playerId);
+  merged.playerIndex = firstDefinedNumber(merged.playerIndex, runtimeView?.playerIndex);
+  merged.playerName = firstText(merged.playerName, runtimeView?.playerName);
+  merged.playerGuid = firstText(merged.playerGuid, runtimeView?.playerGuid);
+  merged.steamID = firstText(merged.steamID, runtimeView?.steamID);
+  merged.eosID = firstText(merged.eosID, runtimeView?.eosID);
+  merged.controllerID = firstText(merged.controllerID, runtimeView?.controllerID);
+  merged.role = firstText(merged.role, runtimeView?.role);
+  merged.teamId = firstDefinedNumber(runtimeView?.teamId, merged.teamId);
+  merged.squadId = firstDefinedNumber(runtimeView?.squadId, merged.squadId);
+  merged.isAdmin = firstDefinedBoolean(runtimeView?.isAdmin, merged.isAdmin);
+  merged.isCommander = firstDefinedBoolean(runtimeView?.isCommander, merged.isCommander);
   merged.telemetry = {
     position: runtimeIsNoPawn ? null : (runtimeTelemetry.position ?? baseTelemetry.position ?? null),
     yaw: runtimeIsNoPawn ? null : (runtimeTelemetry.yaw ?? baseTelemetry.yaw ?? null),
@@ -960,21 +1114,30 @@ function mergePlayerViews(base, runtimeView) {
     merged.vehicleInfo = runtimeIsNoPawn ? null : clonePlainObject(runtimeView.vehicleInfo);
   }
   merged.soldierInfo = runtimeView?.soldierInfo ? clonePlainObject(runtimeView.soldierInfo) : merged.soldierInfo ?? createEmptySoldierInfo();
+  merged.playerScoreboard = runtimeView?.playerScoreboard ? clonePlainObject(runtimeView.playerScoreboard) : (merged.playerScoreboard ?? createEmptyScoreboardInfo());
   if (runtimeIsNoPawn) {
     merged.soldierInfo.position = null;
     merged.soldierInfo.rotation = null;
   }
-  merged.ping = runtimeView?.ping ?? merged.ping ?? null;
+  merged.ftIndex = runtimeView?.ftIndex ?? merged.ftIndex ?? null;
+  merged.ftPosition = runtimeView?.ftPosition ?? merged.ftPosition ?? null;
+  merged.ping = runtimeView?.ping ?? merged.ping ?? merged.playerScoreboard?.ping ?? null;
+  merged.sourceTypes = mergeUniqueStrings(merged.sourceTypes, runtimeView?.sourceTypes);
+  merged.identityKeys = mergeUniqueStrings(merged.identityKeys, runtimeView?.identityKeys);
+  merged.rcon = merged.rcon ? clonePlainObject(merged.rcon) : (runtimeView?.rcon ? clonePlainObject(runtimeView.rcon) : null);
+  merged.playerBaseInfo = runtimeView?.playerBaseInfo ? clonePlainObject(runtimeView.playerBaseInfo) : (merged.playerBaseInfo ?? null);
+  merged.rawText = firstText(runtimeView?.rawText, merged.rawText, "");
   merged.runtimeObservedAt = runtimeView?.runtimeObservedAt ?? merged.runtimeObservedAt ?? "";
+  merged.scoreboardObservedAt = runtimeView?.scoreboardObservedAt ?? merged.scoreboardObservedAt ?? "";
   merged.firstSeenAt = merged.firstSeenAt ?? runtimeView?.firstSeenAt ?? "";
   merged.lastSeenAt = runtimeView?.lastSeenAt ?? merged.lastSeenAt ?? "";
   merged.stale = runtimeIsNoPawn ? false : (runtimePresence.state === "active"
     ? Boolean(runtimeView?.stale ?? false)
     : true);
   merged.presence = {
-    state: runtimeIsNoPawn ? "noPawn" : (runtimePresence.state === "active" ? "active" : (basePresence.state ?? "scoreboardOnly")),
+    state: runtimeIsNoPawn ? "noPawn" : (runtimePresence.state === "active" ? "active" : (runtimePresence.state === "scoreboardOnly" ? "scoreboardOnly" : (basePresence.state ?? "scoreboardOnly"))),
     runtimeObservedAt: runtimeView?.runtimeObservedAt ?? merged.presence?.runtimeObservedAt ?? "",
-    scoreboardObservedAt: merged.presence?.scoreboardObservedAt ?? basePresence.scoreboardObservedAt ?? "",
+    scoreboardObservedAt: runtimeView?.scoreboardObservedAt ?? merged.presence?.scoreboardObservedAt ?? basePresence.scoreboardObservedAt ?? "",
   };
   return merged;
 }
@@ -1036,6 +1199,11 @@ function firstDefinedBoolean(...values) {
     if (number != null) return number;
   }
   return null;
+}
+
+function isCommandSquadId(value) {
+  const text = String(value ?? "").trim().toLowerCase();
+  return text === "10" || text === "cmd" || text === "command";
 }
 
 function cloneVector(value) {

@@ -300,8 +300,8 @@ function isRoleIconImage(icon: string | undefined) {
 <style scoped>
 .player-marker {
   position: absolute;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   pointer-events: auto;
   cursor: pointer;
   border: none;
@@ -329,8 +329,8 @@ function isRoleIconImage(icon: string | undefined) {
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: 21px;
-  height: 21px;
+  width: 25px;
+  height: 25px;
   display: flex;
   align-items: center;
   justify-content: center;
