@@ -93,6 +93,17 @@ async function testGrantUsesDurationDaysForRenewal() {
           };
         },
       },
+      playerDatabase: {
+        async listPlayersBySteamIDs(steamIDs) {
+          assert.deepEqual(steamIDs, ["76561198000000000"]);
+          return [
+            {
+              steamID: "76561198000000000",
+              current_name: "DbWarmupPlayer",
+            },
+          ];
+        },
+      },
       adminWarn: {
         async warnPlayer(payload) {
           warnings.push(payload);
@@ -108,12 +119,14 @@ async function testGrantUsesDurationDaysForRenewal() {
 
   assert.equal(upserts.length, 1);
   assert.equal(upserts[0].steamId, "76561198000000000");
+  assert.equal(upserts[0].name, "DbWarmupPlayer");
   assert.equal(upserts[0].durationDays, 1);
   assert.equal("expireAt" in upserts[0], false);
   assert.match(upserts[0].reason, /暖服自动赠送/);
   assert.ok(warnings.some((item) => String(item.reason).includes("success")));
 
   const state = module.api.getState();
+  assert.equal(state.progress[0].name, "DbWarmupPlayer");
   assert.equal(state.progress[0].grantCount, 1);
   assert.equal(state.progress[0].totalGrantedDays, 1);
   assert.equal(state.progress[0].eligibleSeconds, 0);

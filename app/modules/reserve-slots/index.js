@@ -1233,7 +1233,7 @@ function formatReserveGroupLine(groupName) {
 function formatReserveMemberLine(member) {
   const commentParts = [member.expireAt];
   if (member.name) {
-    commentParts.push(`名称:${member.name}`);
+    commentParts.push(member.reason ? `名称:${member.name};` : `名称:${member.name}`);
   }
   if (member.reason) {
     commentParts.push(member.reason);
@@ -2069,12 +2069,25 @@ function parseReserveNamedComment(text) {
   const reasonParts = parts.filter((item) => !/^(name|显示|名称)\s*[:=]/i.test(item));
   if (!namePart && !reasonParts.length) return null;
 
-  const name = namePart ? String(namePart.split(/[:=]/, 2)[1] ?? "").trim() : "";
+  const rawName = namePart ? String(namePart.split(/[:=]/, 2)[1] ?? "").trim() : "";
+  const { name, reason } = splitLegacyReasonFromReserveName(rawName);
+  const reasons = reason ? [reason, ...reasonParts] : reasonParts;
   return {
     expireAt: null,
     name,
-    reasons: reasonParts.length ? reasonParts : (name ? [] : parts),
+    reasons: reasons.length ? reasons : (name ? [] : parts),
     remark: text,
+  };
+}
+
+function splitLegacyReasonFromReserveName(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return { name: "", reason: "" };
+  const match = text.match(/^(.*?)\s+((?:暖服自动赠送|暖服手动赠送)：.*)$/);
+  if (!match) return { name: text, reason: "" };
+  return {
+    name: String(match[1] ?? "").trim(),
+    reason: String(match[2] ?? "").trim(),
   };
 }
 

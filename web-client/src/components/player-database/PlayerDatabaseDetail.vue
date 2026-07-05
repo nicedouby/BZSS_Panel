@@ -19,6 +19,8 @@
             <span>Steam64: {{ detail.player?.steam_id || "--" }}</span>
             <span class="separator">·</span>
             <span>EOS: {{ detail.player?.eos_id || "--" }}</span>
+            <span class="separator">·</span>
+            <span>QQ: {{ detail.player?.qq_number || detail.player?.qqNumber || "--" }}</span>
           </div>
         </div>
         <button type="button" class="close-btn" @click="$emit('close')">{{ t("database.closeDetail") }}</button>
@@ -71,6 +73,10 @@
               <div class="info-item">
                 <span class="info-label">当前 IP</span>
                 <strong class="info-value">{{ detail.player?.current_ip || "--" }}</strong>
+              </div>
+              <div class="info-item">
+                <span class="info-label">QQ 号</span>
+                <strong class="info-value">{{ detail.player?.qq_number || detail.player?.qqNumber || "--" }}</strong>
               </div>
             </div>
           </div>

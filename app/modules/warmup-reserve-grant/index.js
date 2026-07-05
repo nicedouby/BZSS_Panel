@@ -306,6 +306,8 @@ export function createWarmupReserveGrantModule({ core, modules, config, logger }
       throw error;
     }
     const grantedDays = Math.max(1, Number(durationDays ?? runtime.settings.grantDays) || 1);
+    const resolvedName = await resolveGrantPlayerName(record);
+    if (resolvedName) record.name = resolvedName;
     const result = await modules.reserveSlots.upsertMember({
       steamId: record.steamId,
       name: record.name,
@@ -332,6 +334,29 @@ export function createWarmupReserveGrantModule({ core, modules, config, logger }
     };
     await appendAuditRecord(grantRecord);
     return grantRecord;
+  }
+
+  async function resolveGrantPlayerName(record) {
+    const steamId = String(record?.steamId ?? "").trim();
+    if (!steamId) return String(record?.name ?? "").trim();
+
+    if (typeof modules?.playerDatabase?.listPlayersBySteamIDs === "function") {
+      try {
+        const rows = await modules.playerDatabase.listPlayersBySteamIDs([steamId]);
+        const row = Array.isArray(rows) ? rows.find((item) => {
+          const rowSteamId = String(item?.steam_id ?? item?.steamID ?? item?.steam64 ?? "").trim();
+          return rowSteamId === steamId;
+        }) : null;
+        const dbName = String(row?.current_name ?? row?.currentName ?? row?.name ?? "").trim();
+        if (dbName) return dbName;
+      } catch (error) {
+        moduleLogger?.warn?.(`[WarmupReserveGrant] failed to resolve player name from database: ${error?.message ?? error}`);
+      }
+    }
+
+    const runtimePlayer = core?.runtimeState?.getPlayers?.()?.bySteamID?.[steamId] ?? null;
+    const runtimeName = String(runtimePlayer?.name ?? "").trim();
+    return runtimeName || String(record?.name ?? "").trim();
   }
 
   async function warnPlayer(record, message, reason) {

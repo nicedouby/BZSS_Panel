@@ -5,7 +5,7 @@
       "id": "user:superadmin",
       "username": "DoubyBear",
       "usernameNormalized": "doubybear",
-      "passwordHash": "scrypt$4EuwI35dTd4Pb2oXVbY2zw$ooDOjh_n0Td-K6GTFqEo0wdx_Go2EYnbPm4OO2EusL6EMt4IdK2yQSpweqrzjTQIjgn6Hv60_Od9RwkKPGL2nw",
+      "passwordHash": "scrypt$IN75hv2PzOrdwlYbcdv_PA$yAGc2BxWRfP4a8-vv0xJgjBzdqaXA5eqwuxSw8-a6LVhZ2mv8YuoWmamvqYzCq5er5JOSffDH5_fBJBWWRZ4zQ",
       "role": "SuperAdmin",
       "displayName": "",
       "steam64": "76561198194428818",

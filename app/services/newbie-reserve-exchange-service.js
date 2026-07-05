@@ -1,4 +1,4 @@
-import http from "node:http";
+﻿import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -37,7 +37,8 @@ export class NewbieReserveExchangeService {
 
     this.enabled = reserveConfig.enabled !== false;
     this.host = String(reserveConfig.host ?? DEFAULT_HOST).trim() || DEFAULT_HOST;
-    this.port = Number(reserveConfig.port ?? DEFAULT_PORT) || DEFAULT_PORT;
+    const configuredPort = Number(reserveConfig.port ?? DEFAULT_PORT);
+    this.port = Number.isFinite(configuredPort) ? configuredPort : DEFAULT_PORT;
     this.sessionTtlMs = Math.max(60_000, Number(reserveConfig.sessionTtlMs ?? DEFAULT_SESSION_TTL_MS) || DEFAULT_SESSION_TTL_MS);
     this.databaseFilePath = resolveConfigPath(reserveConfig.databaseFilePath ?? DEFAULT_DB_FILE);
     this.claimLockMinutes = Math.max(1, Number(reserveConfig.claimLockMinutes ?? DEFAULT_CLAIM_LOCK_MINUTES) || DEFAULT_CLAIM_LOCK_MINUTES);
@@ -106,6 +107,7 @@ export class NewbieReserveExchangeService {
     }
 
     if (this.db) {
+      await this.db.exec("PRAGMA wal_checkpoint(TRUNCATE);").catch(() => {});
       await this.db.close().catch(() => {});
       this.db = null;
     }
@@ -119,7 +121,13 @@ export class NewbieReserveExchangeService {
     }
 
     if (url.pathname === "/admin") {
-      return this.serveHtml(res, renderAdminPage());
+      const user = await this.getSessionUser(req);
+      const loginFailed = url.searchParams.get("login") === "failed";
+      return this.serveHtml(res, renderAdminPage(user ? await this.buildAdminState(user) : null, { loginFailed }));
+    }
+
+    if (url.pathname === "/admin/client.js" && req.method === "GET") {
+      return this.serveJavaScript(res, await this.getAdminClientScript());
     }
 
     if (url.pathname === "/health" || url.pathname === "/api/health") {
@@ -147,7 +155,8 @@ export class NewbieReserveExchangeService {
     }
 
     if (url.pathname === "/api/auth/login" && req.method === "POST") {
-      const body = await this.readJsonBody(req);
+      const body = await this.readRequestBody(req);
+      const isFormPost = String(req.headers["content-type"] ?? "").includes("application/x-www-form-urlencoded");
       const result = await this.login({
         username: body?.username,
         password: body?.password,
@@ -155,7 +164,29 @@ export class NewbieReserveExchangeService {
       });
 
       if (!result.ok) {
+        if (isFormPost) {
+          res.writeHead(303, {
+            "Location": "/admin?login=failed",
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+            "X-Frame-Options": "DENY",
+            "Referrer-Policy": "strict-origin-when-cross-origin",
+          });
+          return res.end();
+        }
         return this.sendJson(res, 401, result.body);
+      }
+
+      if (isFormPost) {
+        res.writeHead(303, {
+          "Location": "/admin",
+          "Set-Cookie": result.cookie,
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+          "X-Frame-Options": "DENY",
+          "Referrer-Policy": "strict-origin-when-cross-origin",
+        });
+        return res.end();
       }
 
       return this.sendJson(res, 200, result.body, {
@@ -209,6 +240,42 @@ export class NewbieReserveExchangeService {
           limit: Number(url.searchParams.get("limit") ?? 50) || 50,
         }),
         user,
+      });
+    }
+
+    if (url.pathname === "/api/admin/random-preview" && req.method === "GET") {
+      const user = await this.requireSessionUser(req);
+      const count = clampNumber(Number(url.searchParams.get("count") ?? 10), 1, 100);
+      const settings = await this.readSettings();
+      const samples = Array.from({ length: count }, (_, index) => {
+        const plan = pickGrantPlan(settings);
+        return {
+          index: index + 1,
+          mode: plan.mode,
+          days: plan.days,
+        };
+      });
+      const defaultCount = samples.filter((item) => item.mode === "default").length;
+      const randomCount = samples.length - defaultCount;
+      const minDays = samples.length > 0 ? Math.min(...samples.map((item) => item.days)) : null;
+      const maxDays = samples.length > 0 ? Math.max(...samples.map((item) => item.days)) : null;
+      const averageDays = samples.length > 0
+        ? Number((samples.reduce((sum, item) => sum + item.days, 0) / samples.length).toFixed(2))
+        : null;
+
+      return this.sendJson(res, 200, {
+        ok: true,
+        user,
+        count,
+        settings,
+        summary: {
+          defaultCount,
+          randomCount,
+          minDays,
+          maxDays,
+          averageDays,
+        },
+        samples,
       });
     }
 
@@ -298,6 +365,13 @@ export class NewbieReserveExchangeService {
     `);
   }
 
+  async getAdminClientScript() {
+    if (!this.adminClientScript) {
+      this.adminClientScript = await fs.readFile(new URL("./newbie-reserve-exchange-admin-client.js", import.meta.url), "utf8");
+    }
+    return this.adminClientScript;
+  }
+
   async ensureSettingsRow() {
     const row = await this.db.get("SELECT id FROM exchange_settings WHERE id = 1");
     if (row) return;
@@ -348,7 +422,16 @@ export class NewbieReserveExchangeService {
       now,
     );
 
-    this.logger?.info?.(`[ReserveExchange] settings updated by ${actor?.username ?? "system"}`);
+    this.logReserveEvent("info", `settings updated by ${actor?.username ?? "system"}`, {
+      actor: actor?.username ?? "system",
+      enabled: next.enabled,
+      claimEnabled: next.claimEnabled,
+      defaultDays: next.defaultDays,
+      randomMinDays: next.randomMinDays,
+      randomMaxDays: next.randomMaxDays,
+      defaultWeight: next.defaultWeight,
+      randomWeight: next.randomWeight,
+    }, "settings");
     return {
       ok: true,
       settings: next,
@@ -457,7 +540,11 @@ export class NewbieReserveExchangeService {
     const passwordOk = await verifyPassword(rawPassword, passwordHash);
 
     if (!user || !user.enabled || !passwordOk) {
-      this.logger?.warn?.(`[ReserveExchange] login failed username=${normalizedUsername || "<empty>"} ip=${ip}`);
+      this.logReserveEvent("warn", `login failed username=${normalizedUsername || "<empty>"} ip=${ip}`, {
+        username: normalizedUsername || null,
+        ip,
+        result: "invalid_credentials",
+      }, "auth");
       return {
         ok: false,
         body: {
@@ -467,6 +554,13 @@ export class NewbieReserveExchangeService {
         },
       };
     }
+
+    this.logReserveEvent("info", `login success username=${normalizedUsername} ip=${ip}`, {
+      username: normalizedUsername,
+      ip,
+      userId: user.id,
+      role: user.role,
+    }, "auth");
 
     const token = crypto.randomBytes(32).toString("base64url");
     const tokenHash = hashToken(token);
@@ -593,8 +687,23 @@ export class NewbieReserveExchangeService {
     const steam64 = normalizeSteam64(rawSteam64);
     const ip = this.getRequestIp(request);
     const userAgent = String(request?.headers?.["user-agent"] ?? "").trim();
+    const requestSummary = {
+      source,
+      ip,
+      qqNumber: qqNumber || null,
+      steam64: steam64 || null,
+      rawQQ,
+      rawSteam64,
+      userAgent: userAgent || null,
+    };
+
+    this.logReserveEvent("info", "claim request received", requestSummary);
 
     if (!qqNumber || !steam64) {
+      this.logReserveEvent("warn", "claim request rejected: invalid input", {
+        ...requestSummary,
+        reason: "validation_failed",
+      });
       const auditId = await this.insertAudit({
         claimId: null,
         qqNumber: qqNumber ?? null,
@@ -619,7 +728,7 @@ export class NewbieReserveExchangeService {
         body: {
           ok: false,
           error: "InvalidInput",
-          message: "QQ 号或 Steam64 格式不正确。",
+          message: "Invalid QQ number or Steam64 format.",
           auditId,
         },
       };
@@ -629,6 +738,14 @@ export class NewbieReserveExchangeService {
 
     const activeClaim = await this.findActiveClaimByKey({ qqNumber, steam64 });
     if (activeClaim) {
+      this.logReserveEvent("warn", `claim request rejected: already redeemed claimId=${activeClaim.id}`, {
+        ...requestSummary,
+        claimId: activeClaim.id,
+        status: activeClaim.status,
+        selectedMode: activeClaim.selected_mode ?? null,
+        selectedDays: activeClaim.selected_days ?? null,
+        expireAt: activeClaim.expire_at ?? null,
+      });
       const auditId = await this.insertAudit({
         claimId: activeClaim.id,
         qqNumber,
@@ -654,7 +771,7 @@ export class NewbieReserveExchangeService {
         body: {
           ok: false,
           error: "AlreadyRedeemed",
-          message: "该 QQ 或 Steam64 已经兑换过新人预留位。",
+          message: "This QQ number or Steam64 has already been redeemed.",
           alreadyRedeemed: true,
           claim: normalizeClaimRow(activeClaim),
           auditId,
@@ -664,39 +781,20 @@ export class NewbieReserveExchangeService {
 
     const currentReserveMember = await this.findActiveReserveMember(steam64);
     if (currentReserveMember) {
-      const auditId = await this.insertAudit({
-        claimId: null,
-        qqNumber,
-        steam64,
-        rawQQ,
-        rawSteam64,
-        status: "failed",
-        resultCode: "steam64_already_bound",
-        resultMessage: "Steam64 already has an active reserve slot.",
-        source,
-        selectedMode: null,
-        selectedDays: null,
+      this.logReserveEvent("info", `claim request found existing reserve slot steam64=${steam64}`, {
+        ...requestSummary,
+        reserveName: currentReserveMember.name ?? "",
+        reserveGroup: currentReserveMember.group ?? "",
         expireAt: currentReserveMember.expireAt ?? null,
-        metadata: {
-          reserveName: currentReserveMember.name ?? "",
-          reserveGroup: currentReserveMember.group ?? "",
-        },
-        request,
       });
-
-      return {
-        statusCode: 409,
-        body: {
-          ok: false,
-          error: "AlreadyBound",
-          message: "该 Steam64 已经有有效预留位，不能再次兑换。",
-          alreadyRedeemed: true,
-          auditId,
-        },
-      };
     }
 
     const grantPlan = pickGrantPlan(settings);
+    this.logReserveEvent("info", `claim queued claimMode=${grantPlan.mode} days=${grantPlan.days}`, {
+      ...requestSummary,
+      selectedMode: grantPlan.mode,
+      requestedDays: grantPlan.days,
+    });
     let attempt;
     try {
       attempt = await this.insertClaim({
@@ -732,13 +830,13 @@ export class NewbieReserveExchangeService {
 
         return {
           statusCode: 409,
-          body: {
-            ok: false,
-            error: "AlreadyRedeemed",
-            message: "该 QQ 或 Steam64 已经兑换过新人预留位。",
-            alreadyRedeemed: true,
-            claim: raceClaim ? normalizeClaimRow(raceClaim) : null,
-            auditId,
+        body: {
+          ok: false,
+          error: "AlreadyRedeemed",
+          message: "This QQ number or Steam64 has already been redeemed.",
+          alreadyRedeemed: true,
+          claim: raceClaim ? normalizeClaimRow(raceClaim) : null,
+          auditId,
           },
         };
       }
@@ -763,20 +861,42 @@ export class NewbieReserveExchangeService {
       },
       request,
     });
+    this.logReserveEvent("info", `claim processing started claimId=${attempt.id}`, {
+      ...requestSummary,
+      claimId: attempt.id,
+      auditId,
+      selectedMode: grantPlan.mode,
+      selectedDays: grantPlan.days,
+    });
 
+    const reserveName = await this.resolveReserveName(steam64, qqNumber);
     try {
       const reserveSlots = this.modules?.reserveSlots;
       if (!reserveSlots?.upsertMember) {
+        this.logReserveEvent("error", `claim grant failed: reserveSlots unavailable claimId=${attempt.id}`, {
+          ...requestSummary,
+          claimId: attempt.id,
+          auditId,
+        });
         throw createHttpError(503, "ReserveSlotsUnavailable", "Reserve slots module is unavailable.");
       }
 
+      this.logReserveEvent("info", `claim grant dispatch claimId=${attempt.id} group=${DEFAULT_GROUP} days=${grantPlan.days}`, {
+        ...requestSummary,
+        claimId: attempt.id,
+        auditId,
+        group: DEFAULT_GROUP,
+        days: grantPlan.days,
+      });
       const reserveResult = await reserveSlots.upsertMember({
         steamId: steam64,
         group: DEFAULT_GROUP,
         durationDays: grantPlan.days,
-        name: `QQ:${qqNumber}`,
+        name: reserveName,
         reason: "newbie_reserve_exchange",
       });
+
+      await this.bindReserveQQToPlayer(steam64, qqNumber, reserveName);
 
       const expireAt = String(reserveResult?.savedMember?.expireAt ?? reserveResult?.members?.find?.((item) => item.steamId === steam64)?.expireAt ?? "").trim() || null;
       await this.updateClaim(attempt.id, {
@@ -785,9 +905,18 @@ export class NewbieReserveExchangeService {
         expireAt,
         failureReason: "",
         reserveGroup: DEFAULT_GROUP,
-        reserveName: `QQ:${qqNumber}`,
+        reserveName,
         reserveResult: reserveResult ?? {},
         grantedAt: Date.now(),
+      });
+      this.logReserveEvent("info", `claim granted claimId=${attempt.id} expireAt=${expireAt || "<unknown>"}`, {
+        ...requestSummary,
+        claimId: attempt.id,
+        auditId,
+        selectedMode: grantPlan.mode,
+        selectedDays: grantPlan.days,
+        expireAt,
+        reserveGroup: DEFAULT_GROUP,
       });
       await this.updateAudit(auditId, {
         status: "granted",
@@ -798,6 +927,7 @@ export class NewbieReserveExchangeService {
         metadata: {
           claimId: attempt.id,
           reserveGroup: DEFAULT_GROUP,
+          reserveName,
         },
       });
 
@@ -818,13 +948,21 @@ export class NewbieReserveExchangeService {
       };
     } catch (error) {
       const failureReason = error?.message ?? "Failed to grant reserve slot.";
+      this.logReserveEvent("error", `claim grant failed claimId=${attempt.id} reason=${failureReason}`, {
+        ...requestSummary,
+        claimId: attempt.id,
+        auditId,
+        errorCode: error?.code ?? null,
+        selectedMode: grantPlan.mode,
+        selectedDays: grantPlan.days,
+      });
       await this.updateClaim(attempt.id, {
         status: "failed",
         selectedDays: grantPlan.days,
         expireAt: null,
         failureReason,
         reserveGroup: DEFAULT_GROUP,
-        reserveName: `QQ:${qqNumber}`,
+        reserveName,
         reserveResult: {
           error: error?.code ?? "GrantFailed",
           message: failureReason,
@@ -854,6 +992,71 @@ export class NewbieReserveExchangeService {
         },
       };
     }
+  }
+
+  async resolveReserveName(steam64, fallbackQQ = "") {
+    const trimmedSteam64 = String(steam64 ?? "").trim();
+    const playerDatabase = this.modules?.playerDatabase;
+    if (trimmedSteam64 && playerDatabase?.findByIdentity) {
+      try {
+        const player = await playerDatabase.findByIdentity({ steamID: trimmedSteam64 });
+        const candidate = String(player?.name ?? player?.displayName ?? player?.nickname ?? "").trim();
+        if (candidate) {
+          return candidate;
+        }
+      } catch (error) {
+        this.logReserveEvent("warn", `resolve reserve name from player database failed steam64=${trimmedSteam64}`, {
+          steam64: trimmedSteam64,
+          error: error?.message ?? String(error),
+        }, "claim");
+      }
+    }
+
+    return trimmedSteam64 || `QQ:${String(fallbackQQ ?? "").trim()}`;
+  }
+
+  async bindReserveQQToPlayer(steam64, qqNumber, qqName) {
+    const playerDatabase = this.modules?.playerDatabase;
+    if (!playerDatabase?.findByIdentity || !playerDatabase?.bindQQToPlayer) {
+      this.logReserveEvent("warn", `player database unavailable for QQ bind steam64=${steam64}`, {
+        steam64,
+        qqNumber,
+        qqName,
+      }, "claim");
+      return null;
+    }
+
+    const player = await playerDatabase.findByIdentity({ steamID: steam64 });
+    if (!player?.id) {
+      this.logReserveEvent("warn", `player not found for QQ bind steam64=${steam64}`, {
+        steam64,
+        qqNumber,
+        qqName,
+      }, "claim");
+      return null;
+    }
+
+    if (player.qq_number && String(player.qq_number).trim() !== String(qqNumber).trim()) {
+      this.logReserveEvent("warn", `player already bound to another QQ steam64=${steam64}`, {
+        steam64,
+        playerId: player.id,
+        existingQQ: String(player.qq_number).trim(),
+        incomingQQ: String(qqNumber).trim(),
+      }, "claim");
+      return null;
+    }
+
+    const updated = await playerDatabase.bindQQToPlayer(player.id, {
+      qqNumber,
+      qqName,
+    });
+    this.logReserveEvent("info", `player QQ bound by reserve exchange steam64=${steam64}`, {
+      steam64,
+      playerId: player.id,
+      qqNumber,
+      qqName,
+    }, "claim");
+    return updated;
   }
 
   async insertClaim({
@@ -1062,6 +1265,10 @@ export class NewbieReserveExchangeService {
     );
 
     if (!rows.length) return;
+    this.logReserveEvent("info", `reconcile stale claims count=${rows.length}`, {
+      count: rows.length,
+      staleThreshold,
+    });
 
     const reserveSlots = this.modules?.reserveSlots;
     const reserveState = reserveSlots?.getState ? await reserveSlots.getState() : null;
@@ -1070,6 +1277,13 @@ export class NewbieReserveExchangeService {
     for (const row of rows) {
       const existing = members.find((member) => String(member?.steamId ?? "").trim() === String(row.steam64 ?? "").trim() && member?.isExpired !== true) ?? null;
       if (existing) {
+        this.logReserveEvent("warn", `reconcile stale claim recovered as granted claimId=${row.id} steam64=${row.steam64}`, {
+          claimId: row.id,
+          steam64: row.steam64,
+          selectedDays: row.selected_days ?? null,
+          reserveGroup: existing.group ?? DEFAULT_GROUP,
+          expireAt: existing.expireAt ?? null,
+        });
         await this.updateClaim(row.id, {
           status: "granted",
           expireAt: existing.expireAt ?? null,
@@ -1082,6 +1296,12 @@ export class NewbieReserveExchangeService {
         continue;
       }
 
+      this.logReserveEvent("warn", `reconcile stale claim timed out claimId=${row.id} steam64=${row.steam64}`, {
+        claimId: row.id,
+        steam64: row.steam64,
+        selectedDays: row.selected_days ?? null,
+        reserveGroup: row.reserve_group ?? null,
+      });
       await this.updateClaim(row.id, {
         status: "failed",
         failureReason: "processing_timeout",
@@ -1093,6 +1313,19 @@ export class NewbieReserveExchangeService {
         failedAt: Date.now(),
       });
     }
+  }
+
+  logReserveEvent(level, message, data = {}, operation = "claim") {
+    const fn = this.logger?.[level];
+    if (typeof fn !== "function") return;
+
+    fn.call(this.logger, `[ReserveExchange] ${message}`, {
+      moduleId: "core.reserveExchange",
+      source: "core.reserveExchange",
+      channel: "service",
+      operation,
+      data,
+    });
   }
 
   getRequestIp(req) {
@@ -1127,6 +1360,31 @@ export class NewbieReserveExchangeService {
     }
   }
 
+  async readRequestBody(req) {
+    const contentType = String(req.headers["content-type"] ?? "").toLowerCase();
+    const text = await this.readTextBody(req);
+    if (!text) return {};
+
+    if (contentType.includes("application/json")) {
+      try {
+        return JSON.parse(text);
+      } catch {
+        throw createHttpError(400, "InvalidJson", "Request body must be valid JSON.");
+      }
+    }
+
+    if (contentType.includes("application/x-www-form-urlencoded")) {
+      const params = new URLSearchParams(text);
+      const body = {};
+      for (const [key, value] of params.entries()) {
+        body[key] = value;
+      }
+      return body;
+    }
+
+    return {};
+  }
+
   async readTextBody(req) {
     const chunks = [];
     let total = 0;
@@ -1153,6 +1411,17 @@ export class NewbieReserveExchangeService {
       ...extraHeaders,
     });
     res.end(payload);
+  }
+
+  serveJavaScript(res, script) {
+    res.writeHead(200, {
+      "Content-Type": "application/javascript; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
+    });
+    res.end(script);
   }
 
   serveHtml(res, html) {
@@ -1337,6 +1606,16 @@ function createHttpError(statusCode, code, message) {
   return error;
 }
 
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[ch]);
+}
+
 function renderPublicPage() {
   return `<!doctype html>
 <html lang="zh-CN">
@@ -1382,10 +1661,7 @@ function renderPublicPage() {
       box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
       backdrop-filter: blur(12px);
     }
-    .hero {
-      padding: 28px;
-      margin-bottom: 18px;
-    }
+    .hero { padding: 28px; margin-bottom: 18px; }
     .eyebrow {
       color: var(--accent);
       text-transform: uppercase;
@@ -1393,34 +1669,13 @@ function renderPublicPage() {
       font-size: 12px;
       margin-bottom: 10px;
     }
-    h1 {
-      margin: 0;
-      font-size: clamp(30px, 4vw, 52px);
-      line-height: 1.06;
-    }
-    .lead {
-      margin: 14px 0 0;
-      color: var(--muted);
-      max-width: 58ch;
-      line-height: 1.7;
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-      gap: 18px;
-    }
-    .card {
-      padding: 22px;
-    }
-    .field {
-      display: grid;
-      gap: 8px;
-      margin-bottom: 16px;
-    }
-    label {
-      font-size: 14px;
-      color: #cbd5e1;
-    }
+    h1 { margin: 0; font-size: clamp(30px, 4vw, 52px); line-height: 1.06; }
+    .lead { margin: 14px 0 0; color: var(--muted); max-width: 58ch; line-height: 1.7; }
+    .grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: 18px; }
+    .grid > .card:last-child { display: none; }
+    .card { padding: 22px; }
+    .field { display: grid; gap: 8px; margin-bottom: 16px; }
+    label { font-size: 14px; color: #cbd5e1; }
     input {
       width: 100%;
       border: 1px solid rgba(148, 163, 184, 0.2);
@@ -1431,16 +1686,8 @@ function renderPublicPage() {
       font-size: 16px;
       outline: none;
     }
-    input:focus {
-      border-color: rgba(125, 211, 252, 0.65);
-      box-shadow: 0 0 0 4px rgba(125, 211, 252, 0.12);
-    }
-    .actions {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-      margin-top: 18px;
-    }
+    input:focus { border-color: rgba(125, 211, 252, 0.65); box-shadow: 0 0 0 4px rgba(125, 211, 252, 0.12); }
+    .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 18px; }
     button {
       border: 0;
       border-radius: 14px;
@@ -1466,22 +1713,11 @@ function renderPublicPage() {
       white-space: pre-wrap;
       line-height: 1.7;
     }
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-    }
-    .stat {
-      padding: 14px;
-      border-radius: 16px;
-      background: rgba(15, 23, 42, 0.72);
-      border: 1px solid rgba(148, 163, 184, 0.18);
-    }
+    .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .stat { padding: 14px; border-radius: 16px; background: rgba(15, 23, 42, 0.72); border: 1px solid rgba(148, 163, 184, 0.18); }
     .stat .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
     .stat .v { font-size: 18px; font-weight: 700; margin-top: 6px; }
-    @media (max-width: 860px) {
-      .grid { grid-template-columns: 1fr; }
-    }
+    @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -1489,7 +1725,7 @@ function renderPublicPage() {
     <section class="hero">
       <div class="eyebrow">Reserve Exchange</div>
       <h1>新人预留位兑换</h1>
-      <p class="lead">输入 Steam64 和 QQ 号即可兑换。兑换成功后会同时写入兑换记录和现有预留位数据源。</p>
+      <p class="lead">输入 Steam64 和 QQ 号即可兑换。兑换成功后会同时写入兑换记录和当前预留位数据源。</p>
     </section>
     <div class="grid">
       <section class="card">
@@ -1516,106 +1752,122 @@ function renderPublicPage() {
     </div>
   </main>
   <script>
-    const resultEl = document.getElementById("result");
-    const statsEl = document.getElementById("stats");
-    const rulesEl = document.getElementById("rules");
-    const form = document.getElementById("claim-form");
-    const refreshBtn = document.getElementById("refresh-state");
-
-    function renderStats(summary = {}) {
-      statsEl.innerHTML = [
-        ["状态", summary.enabled ? "启用" : "关闭"],
-        ["当前记录", summary.claimCount ?? 0],
-        ["有效兑换", summary.grantedCount ?? 0],
-        ["失败记录", summary.failedCount ?? 0],
-      ].map(([k, v]) => \`<div class="stat"><div class="k">\${k}</div><div class="v">\${v}</div></div>\`).join("");
+    function pick(value, fallback) {
+      return value === null || value === undefined ? fallback : value;
     }
 
-    function renderRules(state = {}) {
-      const settings = state.settings || {};
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"]/g, function (ch) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch];
+      });
+    }
+
+    var claimForm = document.getElementById("claim-form");
+    var qqInput = document.getElementById("qq_number");
+    var steamInput = document.getElementById("steam64");
+    var refreshBtn = document.getElementById("refresh-state");
+    var resultEl = document.getElementById("result");
+    var statsEl = document.getElementById("stats");
+    var rulesEl = document.getElementById("rules");
+
+    function request(path, options) {
+      var reqOptions = options || {};
+      return fetch(path, {
+        cache: "no-store",
+        credentials: "include",
+        headers: Object.assign({ "Content-Type": "application/json" }, reqOptions.headers || {}),
+        method: reqOptions.method || "GET",
+        body: reqOptions.body,
+      }).then(function (response) {
+        return response.json().catch(function () { return {}; }).then(function (body) {
+          if (!response.ok) {
+            var err = new Error(body.message || body.error || ("Request failed (" + response.status + ")"));
+            err.body = body;
+            err.response = response;
+            throw err;
+          }
+          return body;
+        });
+      });
+    }
+
+    function fmtTime(ms) {
+      if (!ms) return "-";
+      var date = new Date(Number(ms));
+      return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString();
+    }
+
+    function renderStats(summary) {
+      var data = summary || {};
+      statsEl.innerHTML = [
+        ["服务", pick(data.enabled ? "启用" : "停用", "-")],
+        ["当前记录", pick(data.claimCount, 0)],
+        ["有效兑换", pick(data.grantedCount, 0)],
+        ["失败记录", pick(data.failedCount, 0)]
+      ].map(function (item) {
+        return '<div class="stat"><div class="k">' + escapeHtml(item[0]) + '</div><div class="v">' + escapeHtml(item[1]) + '</div></div>';
+      }).join("");
+    }
+
+    function renderRules(state) {
+      var settings = state.settings || {};
       rulesEl.textContent = [
-        \`兑换开关: \${settings.claimEnabled ? "开启" : "关闭"}\`,
-        \`默认天数: \${settings.defaultDays ?? "-"}\`,
-        \`随机范围: \${settings.randomMinDays ?? "-"} - \${settings.randomMaxDays ?? "-"} 天\`,
-        \`权重: 默认 \${settings.defaultWeight ?? 0} / 随机 \${settings.randomWeight ?? 0}\`,
+        "兑换开关: " + (settings.claimEnabled ? "开启" : "关闭"),
+        "默认天数: " + pick(settings.defaultDays, 7),
+        "随机范围: " + pick(settings.randomMinDays, 3) + " - " + pick(settings.randomMaxDays, 60) + " 天",
+        "权重: 默认 " + pick(settings.defaultWeight, 50) + " / 随机 " + pick(settings.randomWeight, 50)
       ].join("\\n");
     }
 
-    async function request(path, options = {}) {
-      const response = await fetch(path, {
-        cache: "no-store",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          ...(options.headers || {}),
-        },
-        ...options,
-      });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const err = new Error(body.message || body.error || \`Request failed (\${response.status})\`);
-        err.response = response;
-        err.body = body;
-        throw err;
-      }
-      return body;
-    }
-
-    async function refreshState() {
-      const state = await request("/api/public/state");
+    async function loadState() {
+      var state = await request("/api/public/state");
       renderStats(state.summary || {});
       renderRules(state);
+      return state;
     }
 
-    form.addEventListener("submit", async (event) => {
+    claimForm.addEventListener("submit", async function (event) {
       event.preventDefault();
-      const payload = {
-        qq_number: form.qq_number.value.trim(),
-        steam64: form.steam64.value.trim(),
-      };
       resultEl.textContent = "提交中...";
       try {
-        const result = await request("/api/public/claim", {
+        var body = await request("/api/public/claim", {
           method: "POST",
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            qq_number: qqInput.value.trim(),
+            steam64: steamInput.value.trim(),
+          }),
         });
-        resultEl.textContent = [
-          "兑换成功",
-          \`Steam64: \${result.steam64}\`,
-          \`QQ: \${result.qqNumber}\`,
-          \`发放天数: \${result.grantedDays}\`,
-          \`到期时间: \${result.expireAt || "-"}\`,
-        ].join("\\n");
-        await refreshState();
+        resultEl.textContent = body.message || "兑换成功。";
+        await loadState();
       } catch (error) {
-        const body = error.body || {};
-        resultEl.textContent = [
-          "兑换失败",
-          body.message || error.message || "未知错误",
-          body.alreadyRedeemed ? "该 QQ 或 Steam64 已被占用。" : "",
-        ].filter(Boolean).join("\\n");
+        resultEl.textContent = error.message || "兑换失败";
       }
     });
 
-    refreshBtn.addEventListener("click", () => refreshState().catch((error) => {
-      resultEl.textContent = error.message || "刷新失败";
-    }));
+    refreshBtn.addEventListener("click", async function () {
+      try {
+        await loadState();
+        resultEl.textContent = "规则已刷新。";
+      } catch (error) {
+        resultEl.textContent = error.message || "刷新失败";
+      }
+    });
 
-    refreshState().catch((error) => {
-      resultEl.textContent = error.message || "初始化失败";
+    loadState().catch(function (error) {
+      resultEl.textContent = error.message || "加载失败";
     });
   </script>
 </body>
 </html>`;
 }
 
-function renderAdminPage() {
+function renderAdminPage(initialState = null, { loginFailed = false } = {}) {
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>新人预留位后台</title>
+  <title>新人预留位兑换后台</title>
   <style>
     :root {
       color-scheme: dark;
@@ -1640,11 +1892,7 @@ function renderAdminPage() {
         radial-gradient(circle at bottom right, rgba(167, 139, 250, 0.10), transparent 30%),
         linear-gradient(160deg, #050814 0%, #0a0f18 58%, #111827 100%);
     }
-    .wrap {
-      width: min(1180px, calc(100vw - 28px));
-      margin: 0 auto;
-      padding: 28px 0 56px;
-    }
+    .wrap { width: min(1180px, calc(100vw - 28px)); margin: 0 auto; padding: 28px 0 56px; }
     .hero, .card {
       background: var(--panel);
       border: 1px solid var(--line);
@@ -1653,13 +1901,7 @@ function renderAdminPage() {
       backdrop-filter: blur(12px);
     }
     .hero { padding: 26px; margin-bottom: 18px; }
-    .eyebrow {
-      color: var(--accent);
-      letter-spacing: 0.16em;
-      font-size: 12px;
-      text-transform: uppercase;
-      margin-bottom: 10px;
-    }
+    .eyebrow { color: var(--accent); letter-spacing: 0.16em; font-size: 12px; text-transform: uppercase; margin-bottom: 10px; }
     h1 { margin: 0; font-size: clamp(28px, 4vw, 46px); line-height: 1.06; }
     .lead { margin: 12px 0 0; color: var(--muted); line-height: 1.7; max-width: 64ch; }
     .grid { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 18px; }
@@ -1676,10 +1918,7 @@ function renderAdminPage() {
       font-size: 15px;
       outline: none;
     }
-    input:focus {
-      border-color: rgba(56, 189, 248, 0.65);
-      box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.12);
-    }
+    input:focus { border-color: rgba(56, 189, 248, 0.65); box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.12); }
     .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
     button {
       border: 0;
@@ -1690,11 +1929,7 @@ function renderAdminPage() {
       background: linear-gradient(135deg, var(--accent), var(--accent-2));
       color: #08111b;
     }
-    button.secondary {
-      background: transparent;
-      color: var(--text);
-      border: 1px solid rgba(148, 163, 184, 0.22);
-    }
+    button.secondary { background: transparent; color: var(--text); border: 1px solid rgba(148, 163, 184, 0.22); }
     .panel {
       margin-top: 14px;
       padding: 14px;
@@ -1704,6 +1939,15 @@ function renderAdminPage() {
       min-height: 92px;
       white-space: pre-wrap;
       line-height: 1.7;
+    }
+    .notice {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(251, 113, 133, 0.28);
+      background: rgba(127, 29, 29, 0.2);
+      color: #fecdd3;
+      line-height: 1.6;
     }
     .muted { color: var(--muted); }
     .hidden { display: none !important; }
@@ -1722,6 +1966,20 @@ function renderAdminPage() {
     .stat .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
     .stat .v { font-size: 18px; font-weight: 700; margin-top: 6px; }
     .table-wrap { overflow: auto; border-radius: 16px; border: 1px solid rgba(148, 163, 184, 0.16); }
+    .test-grid { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; margin-top: 6px; }
+    .sample-list { display: grid; gap: 8px; margin-top: 12px; }
+    .sample-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(15, 23, 42, 0.72);
+      border: 1px solid rgba(148, 163, 184, 0.14);
+      font-size: 14px;
+    }
+    .sample-item strong { font-weight: 700; }
+    .mini { color: var(--muted); font-size: 12px; }
     table { width: 100%; border-collapse: collapse; min-width: 980px; }
     th, td {
       padding: 12px 14px;
@@ -1744,7 +2002,6 @@ function renderAdminPage() {
     .tag.good { color: var(--good); }
     .tag.bad { color: var(--bad); }
     .tag.warn { color: #fbbf24; }
-    .actions-row { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
     @media (max-width: 1040px) {
       .grid { grid-template-columns: 1fr; }
       .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1755,12 +2012,11 @@ function renderAdminPage() {
   <main class="wrap">
     <section class="hero">
       <div class="eyebrow">Reserve Exchange Admin</div>
-      <h1>新人预留位后台</h1>
+      <h1>新人预留位兑换后台</h1>
       <p class="lead">使用现有面板账号密码登录后，可查看兑换状态、调整默认天数和随机权重，并检查最近兑换记录。</p>
     </section>
-
-    <section class="card" id="login-card">
-      <form id="login-form">
+    <section class="card${initialState ? ' hidden' : ''}" id="login-card">
+      <form id="login-form" action="/api/auth/login" method="POST">
         <div class="field">
           <label for="username">账号</label>
           <input id="username" name="username" type="text" autocomplete="username" placeholder="面板账号">
@@ -1773,47 +2029,43 @@ function renderAdminPage() {
           <button type="submit">登录</button>
         </div>
       </form>
+      ${loginFailed ? '<div class="notice" id="login-notice">登录失败，请检查账号或密码后重试。</div>' : ""}
+      <noscript>
+        <div class="panel">当前浏览器不支持页面脚本，登录表单会直接提交。</div>
+      </noscript>
       <div class="panel" id="login-message">未登录。</div>
     </section>
-
-    <section class="card hidden" id="admin-card">
+    <section class="card${initialState ? '' : ' hidden'}" id="admin-card">
       <div class="stats" id="stats"></div>
-
       <form id="settings-form">
-        <div class="field">
-          <label><input type="checkbox" name="enabled"> 服务启用</label>
-        </div>
-        <div class="field">
-          <label><input type="checkbox" name="claimEnabled"> 兑换启用</label>
-        </div>
-        <div class="field">
-          <label for="defaultDays">默认天数</label>
-          <input id="defaultDays" name="defaultDays" type="number" min="1" max="3650">
-        </div>
-        <div class="field">
-          <label for="randomMinDays">随机范围最小天数</label>
-          <input id="randomMinDays" name="randomMinDays" type="number" min="1" max="3650">
-        </div>
-        <div class="field">
-          <label for="randomMaxDays">随机范围最大天数</label>
-          <input id="randomMaxDays" name="randomMaxDays" type="number" min="1" max="3650">
-        </div>
-        <div class="field">
-          <label for="defaultWeight">默认权重</label>
-          <input id="defaultWeight" name="defaultWeight" type="number" min="0" max="100000">
-        </div>
-        <div class="field">
-          <label for="randomWeight">随机权重</label>
-          <input id="randomWeight" name="randomWeight" type="number" min="0" max="100000">
-        </div>
+        <div class="field"><label><input type="checkbox" name="enabled"> 服务启用</label></div>
+        <div class="field"><label><input type="checkbox" name="claimEnabled"> 兑换启用</label></div>
+        <div class="field"><label for="defaultDays">默认天数</label><input id="defaultDays" name="defaultDays" type="number" min="1" max="3650"></div>
+        <div class="field"><label for="randomMinDays">随机范围最小天数</label><input id="randomMinDays" name="randomMinDays" type="number" min="1" max="3650"></div>
+        <div class="field"><label for="randomMaxDays">随机范围最大天数</label><input id="randomMaxDays" name="randomMaxDays" type="number" min="1" max="3650"></div>
+        <div class="field"><label for="defaultWeight">默认权重</label><input id="defaultWeight" name="defaultWeight" type="number" min="0" max="100000"></div>
+        <div class="field"><label for="randomWeight">随机权重</label><input id="randomWeight" name="randomWeight" type="number" min="0" max="100000"></div>
         <div class="actions">
           <button type="submit">保存设置</button>
           <button type="button" class="secondary" id="reload-btn">刷新</button>
           <button type="button" class="secondary" id="logout-btn">退出</button>
         </div>
       </form>
-
       <div class="panel" id="admin-message">等待加载。</div>
+      <section style="margin-top: 18px;">
+        <div class="muted" style="margin-bottom: 10px;">随机测试窗口</div>
+        <div class="test-grid">
+          <div class="field" style="margin-bottom: 0;">
+            <label for="previewCount">测试次数</label>
+            <input id="previewCount" name="previewCount" type="number" min="1" max="100" value="10">
+          </div>
+          <div class="actions" style="margin-top: 0;">
+            <button type="button" class="secondary" id="preview-btn">生成随机预览</button>
+          </div>
+        </div>
+        <div class="panel" id="preview-message">点击生成后查看随机分布。</div>
+        <div class="sample-list" id="preview-samples"></div>
+      </section>
       <div style="margin-top: 18px;">
         <div class="muted" style="margin-bottom: 10px;">最近兑换记录</div>
         <div class="table-wrap">
@@ -1836,167 +2088,9 @@ function renderAdminPage() {
       </div>
     </section>
   </main>
-  <script>
-    const loginCard = document.getElementById("login-card");
-    const adminCard = document.getElementById("admin-card");
-    const loginForm = document.getElementById("login-form");
-    const loginMessage = document.getElementById("login-message");
-    const adminMessage = document.getElementById("admin-message");
-    const claimsBody = document.getElementById("claims-body");
-    const statsEl = document.getElementById("stats");
-    const settingsForm = document.getElementById("settings-form");
-    const logoutBtn = document.getElementById("logout-btn");
-    const reloadBtn = document.getElementById("reload-btn");
-
-    function fmtTime(ms) {
-      if (!ms) return "-";
-      const date = new Date(Number(ms));
-      return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString();
-    }
-
-    function request(path, options = {}) {
-      return fetch(path, {
-        cache: "no-store",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          ...(options.headers || {}),
-        },
-        ...options,
-      }).then(async (response) => {
-        const body = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          const err = new Error(body.message || body.error || \`Request failed (\${response.status})\`);
-          err.body = body;
-          err.response = response;
-          throw err;
-        }
-        return body;
-      });
-    }
-
-    function renderStats(summary = {}) {
-      statsEl.innerHTML = [
-        ["总记录", summary.claimCount ?? 0],
-        ["有效兑换", summary.grantedCount ?? 0],
-        ["失败记录", summary.failedCount ?? 0],
-        ["审计条数", summary.auditCount ?? 0],
-      ].map(([label, value]) => \`<div class="stat"><div class="k">\${label}</div><div class="v">\${value}</div></div>\`).join("");
-    }
-
-    function renderClaims(claims = []) {
-      claimsBody.innerHTML = claims.map((item) => {
-        const statusTag = item.status === "granted" ? "good" : (item.status === "processing" ? "warn" : "bad");
-        return \`
-          <tr>
-            <td>\${fmtTime(item.createdAt)}</td>
-            <td>\${item.qqNumber || "-"}</td>
-            <td>\${item.steam64 || "-"}</td>
-            <td><span class="tag \${statusTag}">\${item.status}</span></td>
-            <td>\${item.selectedMode || "-"}</td>
-            <td>\${item.selectedDays ?? "-"}</td>
-            <td>\${item.expireAt || "-"}</td>
-            <td>\${item.failureReason || "-"}</td>
-          </tr>
-        \`;
-      }).join("") || '<tr><td colspan="8">暂无记录</td></tr>';
-    }
-
-    function fillSettings(settings = {}) {
-      settingsForm.enabled.checked = Boolean(settings.enabled);
-      settingsForm.claimEnabled.checked = Boolean(settings.claimEnabled);
-      settingsForm.defaultDays.value = settings.defaultDays ?? 7;
-      settingsForm.randomMinDays.value = settings.randomMinDays ?? 3;
-      settingsForm.randomMaxDays.value = settings.randomMaxDays ?? 60;
-      settingsForm.defaultWeight.value = settings.defaultWeight ?? 50;
-      settingsForm.randomWeight.value = settings.randomWeight ?? 50;
-    }
-
-    async function loadAdminState() {
-      const state = await request("/api/admin/state");
-      if (!state.authenticated && !state.user) {
-        throw new Error("未登录");
-      }
-      if (!state.canManage) {
-        adminMessage.textContent = "当前账号可登录，但没有修改权限。";
-      } else {
-        adminMessage.textContent = "已登录，可管理兑换设置。";
-      }
-      renderStats(state.summary || {});
-      renderClaims(state.claims || []);
-      fillSettings(state.settings || {});
-      loginCard.classList.add("hidden");
-      adminCard.classList.remove("hidden");
-      return state;
-    }
-
-    loginForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      loginMessage.textContent = "登录中...";
-      try {
-        await request("/api/auth/login", {
-          method: "POST",
-          body: JSON.stringify({
-            username: loginForm.username.value.trim(),
-            password: loginForm.password.value,
-          }),
-        });
-        loginMessage.textContent = "登录成功。";
-        await loadAdminState();
-      } catch (error) {
-        loginMessage.textContent = error.message || "登录失败";
-      }
-    });
-
-    settingsForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      adminMessage.textContent = "保存中...";
-      try {
-        const result = await request("/api/admin/settings", {
-          method: "PUT",
-          body: JSON.stringify({
-            enabled: settingsForm.enabled.checked,
-            claimEnabled: settingsForm.claimEnabled.checked,
-            defaultDays: Number(settingsForm.defaultDays.value),
-            randomMinDays: Number(settingsForm.randomMinDays.value),
-            randomMaxDays: Number(settingsForm.randomMaxDays.value),
-            defaultWeight: Number(settingsForm.defaultWeight.value),
-            randomWeight: Number(settingsForm.randomWeight.value),
-          }),
-        });
-        adminMessage.textContent = "设置已保存。";
-        fillSettings(result.settings || {});
-        await loadAdminState();
-      } catch (error) {
-        adminMessage.textContent = error.message || "保存失败";
-      }
-    });
-
-    logoutBtn.addEventListener("click", async () => {
-      await request("/api/auth/logout", { method: "POST" }).catch(() => {});
-      adminCard.classList.add("hidden");
-      loginCard.classList.remove("hidden");
-      loginMessage.textContent = "已退出。";
-    });
-
-    reloadBtn.addEventListener("click", async () => {
-      try {
-        await loadAdminState();
-      } catch (error) {
-        loginCard.classList.remove("hidden");
-        adminCard.classList.add("hidden");
-        loginMessage.textContent = error.message || "需要重新登录";
-      }
-    });
-
-    request("/api/auth/session")
-      .then(async (session) => {
-        if (session.authenticated) {
-          return loadAdminState();
-        }
-      })
-      .catch(() => {});
-  </script>
+  <script id="initial-admin-state" type="application/json">${escapeHtml(JSON.stringify(initialState ?? null))}</script>
+  <script src="/admin/client.js"></script>
 </body>
 </html>`;
 }
+

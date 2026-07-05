@@ -265,12 +265,47 @@ async function testUpsertAndShortenUsesCurrentExpiry() {
   });
   const member = updated.members.find((item) => item.steamId === "76561198377609640");
   assert.equal(member.expireAt, "2099-05-23 21:26:59");
+  assert.equal(member.name, "Alpha");
 
   const adminContent = await fs.readFile(adminFilePath, "utf8");
   assert.match(adminContent, /manual_shorten/);
 
   await reserveModule.stop();
   await fs.rm(tempDir, { recursive: true, force: true });
+}
+
+async function testWarmupReasonDoesNotPolluteMemberName() {
+  const module = await setupReserveModule({
+    adminLines: [
+      "header",
+      "// 预留位",
+      "Group=BZSSVIP:reserve",
+      "Admin=76561198377609640:BZSSVIP //2027-02-11 00:00:00 名称:萌新 陌尘 暖服自动赠送：累计暖服 120 分钟",
+    ],
+  });
+
+  await module.reserveModule.api.importFromAdminFile();
+  const imported = await module.reserveModule.api.getState();
+  const legacyMember = imported.members.find((item) => item.steamId === "76561198377609640");
+  assert.equal(legacyMember.name, "萌新 陌尘");
+  assert.deepEqual(legacyMember.reasons, ["暖服自动赠送：累计暖服 120 分钟"]);
+
+  const updated = await module.reserveModule.api.upsertMember({
+    steamId: "76561198377609640",
+    group: "BZSSVIP",
+    durationDays: 1,
+    name: "萌新 陌尘",
+    reason: "暖服自动赠送：累计暖服 120 分钟",
+  });
+  const member = updated.members.find((item) => item.steamId === "76561198377609640");
+  assert.equal(member.name, "萌新 陌尘");
+  assert.deepEqual(member.reasons, ["暖服自动赠送：累计暖服 120 分钟"]);
+
+  const adminContent = await fs.readFile(module.adminFilePath, "utf8");
+  assert.match(adminContent, /名称:萌新 陌尘; 暖服自动赠送：累计暖服 120 分钟/);
+
+  await module.reserveModule.stop();
+  await fs.rm(module.tempDir, { recursive: true, force: true });
 }
 
 async function testExpiredCleanupRemovesExpiredMembers() {
@@ -434,6 +469,7 @@ async function main() {
   await testParserHandlesAdminBlock();
   await testStoreFileRepair();
   await testUpsertAndShortenUsesCurrentExpiry();
+  await testWarmupReasonDoesNotPolluteMemberName();
   await testExpiredCleanupRemovesExpiredMembers();
   await testChatActivationRespectsEnabledFlag();
   await testCsvImportSyncsAdminFile();

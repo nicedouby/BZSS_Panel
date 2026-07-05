@@ -15,6 +15,9 @@
           <span class="player-name">{{ player.current_name || player.name || t("common.unknown") }}</span>
           <span class="player-group">{{ player.permission_group || "default" }}</span>
         </div>
+        <div v-if="player.qq_number || player.qqNumber" class="item-qq">
+          QQ: {{ player.qq_number || player.qqNumber }}
+        </div>
         <div class="item-meta">
           <span>{{ formatTime(player.updated_at) }}</span>
           <span v-if="player.current_ip || player.ip" class="player-ip">{{ player.current_ip || player.ip }}</span>
@@ -91,6 +94,12 @@ function formatTime(value: unknown) {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.item-qq {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .player-name {
