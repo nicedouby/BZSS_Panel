@@ -67,6 +67,12 @@ class LogPostPipelineTests(unittest.TestCase):
             "tail": {"from_end": True, "reopen_on_truncate": True},
             "udp": {"enabled": True, "host": "127.0.0.1", "port": 7788, "max_payload_bytes": 8192},
             "unknown": {"write_unknown": False},
+            "storage": {
+                "write_v2_events": True,
+                "write_legacy_events": True,
+                "write_v2_raw_archive": True,
+                "write_legacy_raw_archive": True,
+            },
             "preserve": {
                 "enabled": True,
                 "write_file": True,
@@ -288,6 +294,35 @@ class LogPostPipelineTests(unittest.TestCase):
         raw_segment_path = pathlib.Path(app.writer.output_dir) / "raw" / today_string() / "segment-000001.jsonl"
         self.assertEqual(len(raw_archive_path.read_text(encoding="utf-8").splitlines()), 1)
         self.assertEqual(len(raw_segment_path.read_text(encoding="utf-8").splitlines()), 1)
+
+    def test_compact_storage_writes_only_v2_and_respects_unknown_toggle(self) -> None:
+        app = self.make_app(
+            storage={
+                "write_v2_events": True,
+                "write_legacy_events": False,
+                "write_v2_raw_archive": True,
+                "write_legacy_raw_archive": False,
+            },
+            unknown={"write_unknown": False},
+        )
+        line = "[2026.06.09-12.00.00:000]LogSomething: no matcher hit"
+
+        app.process_line({"line": line, "offset": 0, "next_offset": len(line) + 1, "sourcePath": "SquadGame.log", "fileId": "file-1"})
+
+        today = today_string()
+        legacy_unknown = pathlib.Path(app.writer.output_dir) / today / "Unknown.jsonl"
+        legacy_all = pathlib.Path(app.writer.output_dir) / today / "All.jsonl"
+        legacy_raw = pathlib.Path(app.writer.output_dir) / "Raw" / today / "all.jsonl"
+        v2_unknown = pathlib.Path(app.writer.output_dir) / "events" / today / "unknown.jsonl"
+        v2_all = pathlib.Path(app.writer.output_dir) / "events" / today / "all.jsonl"
+        v2_raw = pathlib.Path(app.writer.output_dir) / "raw" / today / "segment-000001.jsonl"
+
+        self.assertFalse(legacy_unknown.exists())
+        self.assertFalse(legacy_all.exists())
+        self.assertFalse(legacy_raw.exists())
+        self.assertFalse(v2_unknown.exists())
+        self.assertTrue(v2_all.exists())
+        self.assertTrue(v2_raw.exists())
 
     def test_matcher_exception_goes_to_parse_error_and_next_matcher_still_runs(self) -> None:
         class BrokenMatcher:

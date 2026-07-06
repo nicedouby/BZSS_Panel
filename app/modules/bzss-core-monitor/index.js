@@ -1,6 +1,8 @@
 // -*- coding: utf-8 -*-
 
 import { createHash } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 
 const MARKER = "{BZSS-Marked}";
 const START_NEEDLE = Buffer.from("PlayerBaseInfo{", "utf16le");
@@ -8,6 +10,7 @@ const PRI_START_NEEDLE = Buffer.from("PRI{{", "utf16le");
 const MARKER_NEEDLE = Buffer.from(MARKER, "utf16le");
 const PRI_FRAME_TIMEOUT_MS = 500;
 const COMPACT_RUNTIME_POSITION_SCALE = 100;
+const RAW_CAPTURE_RELATIVE_PATH = path.join("data", "bzss-core-monitor", "received-lines.jsonl");
 const SCOREBOARD_FIELDS = [
   ["dataLives", "Data lives"],
   ["numKills", "Num kills"],
@@ -48,6 +51,40 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
   let started = false;
   const unsubscribers = [];
   const activeTimeouts = new Set();
+  const rawCapturePath = path.resolve(process.cwd(), RAW_CAPTURE_RELATIVE_PATH);
+
+  function resetRawCaptureFile() {
+    try {
+      fs.mkdirSync(path.dirname(rawCapturePath), { recursive: true });
+      fs.rmSync(rawCapturePath, { force: true });
+    } catch (error) {
+      moduleLogger.warn?.("Failed to reset BZSS-Core raw capture file.", {
+        operation: "bzssCoreMonitor.rawCapture.resetFailed",
+        data: {
+          filePath: rawCapturePath,
+          error: error?.message ?? String(error),
+        },
+      });
+    }
+  }
+
+  function appendRawCapture(line) {
+    try {
+      fs.mkdirSync(path.dirname(rawCapturePath), { recursive: true });
+      fs.appendFileSync(rawCapturePath, `${JSON.stringify({
+        observedAt: new Date().toISOString(),
+        rawLine: String(line ?? ""),
+      })}\n`, "utf8");
+    } catch (error) {
+      moduleLogger.warn?.("Failed to append BZSS-Core raw capture.", {
+        operation: "bzssCoreMonitor.rawCapture.appendFailed",
+        data: {
+          filePath: rawCapturePath,
+          error: error?.message ?? String(error),
+        },
+      });
+    }
+  }
 
   const listeners = new Set();
   function subscribe(listener) {
@@ -116,6 +153,7 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
       .map((segment) => ({ segment, parsed: parseBzssCoreLogLine(segment) }))
       .filter(({ parsed }) => Boolean(parsed));
     if (parsedSegments.length === 0) return { ok: true, ignored: true, reason: "not_bzss_core" };
+    appendRawCapture(line);
 
     try {
       publish((draft) => {
@@ -539,6 +577,7 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
   async function start() {
     if (started) return;
     started = true;
+    resetRawCaptureFile();
     if (core.eventBus?.onCoreEvent) {
       unsubscribers.push(core.eventBus.onCoreEvent("On_RawLogLine", handleRawLogLine));
       unsubscribers.push(core.eventBus.onCoreEvent("round.world_bring_up", () => {
@@ -586,6 +625,7 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
       getRawSnapshot,
       subscribe,
       ingestLogLine,
+      getRawCapturePath: () => rawCapturePath,
     },
     start,
     stop,
@@ -1663,41 +1703,62 @@ function parseCompactRuntimeSoldierInfo(rawText) {
   };
 }
 
-function parseCompactRuntimeRows(rows, observedAt) {
-  const runtimePlayers = [];
-  for (const row of rows) {
-    const normalized = String(row ?? "").trim();
-    if (!normalized) continue;
+function parseCompactRuntimeRow(row) {
+  const normalized = String(row ?? "").trim();
+  if (!normalized) return null;
 
-    const raw = normalized.startsWith("{") ? normalized.slice(1) : normalized;
-    const rowText = raw.endsWith("}") ? raw.slice(0, -1) : raw;
-    const fields = splitTopLevelCsv(rowText);
-    const fieldMap = parseKeyValueFields(fields);
-    const playerId = toFiniteNumber(fieldMap.ID ?? fields[0]);
-    if (playerId == null) continue;
+  const raw = normalized.startsWith("{") ? normalized.slice(1) : normalized;
+  const rowText = raw.endsWith("}") ? raw.slice(0, -1) : raw;
+  const playerId = toFiniteNumber(rowText.match(/(?:^|,)ID:([-0-9.]+)/i)?.[1]);
+  if (playerId == null) return null;
 
-    const x = toFiniteNumber(fieldMap.Pos ?? fields[1]);
-    const y = toFiniteNumber(fields[2]);
-    const z = toFiniteNumber(fields[3]);
-    const combatInfo = fields.slice(5).join(",");
-    const soldierInfo = parseCompactRuntimeSoldierInfo(combatInfo);
-    const rawCombatInfo = soldierInfo.raw || combatInfo;
+  const combatInfoBlock = findNamedBlock(rowText, "CI");
+  const combatInfo = combatInfoBlock ? `CI{${combatInfoBlock.content}}` : "";
+  const soldierInfo = parseCompactRuntimeSoldierInfo(combatInfo);
+  const posMatch = rowText.match(/(?:^|,)Pos:(.*?)(?=,CI\{|$)/i);
+  const posValue = String(posMatch?.[1] ?? "").trim();
+  const invalidPawn = posValue.toLowerCase() === "invalidpawn";
 
-    runtimePlayers.push({
-      playerId,
-      playerIndex: playerId,
-      position: x == null || y == null || z == null ? null : {
+  let position = null;
+  let yaw = null;
+  if (!invalidPawn) {
+    const posFields = splitTopLevelCsv(posValue);
+    const x = toFiniteNumber(posFields[0]);
+    const y = toFiniteNumber(posFields[1]);
+    const z = toFiniteNumber(posFields[2]);
+    const nextYaw = toFiniteNumber(posFields[3]);
+    if (x != null && y != null && z != null) {
+      position = {
         x: x * COMPACT_RUNTIME_POSITION_SCALE,
         y: y * COMPACT_RUNTIME_POSITION_SCALE,
         z: z * COMPACT_RUNTIME_POSITION_SCALE,
-      },
-      yaw: toFiniteNumber(fields[4]),
-      combatInfo: rawCombatInfo,
-      presenceHint: detectRuntimePresenceHint({ combatInfo: rawCombatInfo, x, y, z }),
-      soldierInfo,
+      };
+      yaw = nextYaw;
+    }
+  }
+
+  return {
+    playerId,
+    playerIndex: playerId,
+    position,
+    yaw,
+    combatInfo,
+    presenceHint: invalidPawn ? "noPawn" : "",
+    soldierInfo,
+    rawText: normalized,
+  };
+}
+
+function parseCompactRuntimeRows(rows, observedAt) {
+  const runtimePlayers = [];
+  for (const row of rows) {
+    const parsedRow = parseCompactRuntimeRow(row);
+    if (!parsedRow) continue;
+
+    runtimePlayers.push({
+      ...parsedRow,
       observedAt,
       stale: false,
-      rawText: normalized,
     });
   }
   return runtimePlayers;

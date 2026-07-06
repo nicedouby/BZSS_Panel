@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 import {
   createBzssCoreMonitorModule,
@@ -31,6 +34,18 @@ function withMockedDate(iso, fn) {
     return fn();
   } finally {
     globalThis.Date = RealDate;
+  }
+}
+
+async function withTempCwd(fn) {
+  const previous = process.cwd();
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bzss-core-monitor-"));
+  process.chdir(tempDir);
+  try {
+    return await fn(tempDir);
+  } finally {
+    process.chdir(previous);
+    fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }
 
@@ -109,6 +124,18 @@ function testParseLogLine() {
   assert.equal(compactRuntime.runtimePlayers[0].soldierInfo.health, 125);
   assert.equal(compactRuntime.runtimePlayers[0].soldierInfo.weaponClass, "QBZ191");
 
+  const invalidPawnRuntime = parseBzssCoreLogLine("PIE: Error: {ID:2,Pos:InvalidPawn,CI{0,125,M16A4,}}/n/");
+  assert.equal(invalidPawnRuntime.type, "playerRuntime");
+  assert.equal(invalidPawnRuntime.runtimePlayers.length, 1);
+  assert.equal(invalidPawnRuntime.runtimePlayers[0].playerIndex, 2);
+  assert.equal(invalidPawnRuntime.runtimePlayers[0].position, null);
+  assert.equal(invalidPawnRuntime.runtimePlayers[0].yaw, null);
+  assert.equal(invalidPawnRuntime.runtimePlayers[0].presenceHint, "noPawn");
+  assert.equal(invalidPawnRuntime.runtimePlayers[0].combatInfo, "CI{0,125,M16A4,}");
+  assert.equal(invalidPawnRuntime.runtimePlayers[0].soldierInfo.raw, "CI{0,125,M16A4,}");
+  assert.equal(invalidPawnRuntime.runtimePlayers[0].soldierInfo.health, 125);
+  assert.equal(invalidPawnRuntime.runtimePlayers[0].soldierInfo.weaponClass, "M16A4");
+
   const compactMultiRuntime = parseBzssCoreLogLine(
     "PIE: Error: {ID:0,Pos:-1295,-1465,3,8,CI{0,125,QBZ191,}}/n/\n{ID:1,Pos:10,20,3,90,CI{0,100,M4,}}/n/"
   );
@@ -119,6 +146,22 @@ function testParseLogLine() {
     [0, 1],
   );
   assert.equal(compactMultiRuntime.runtimePlayers[1].soldierInfo.weaponClass, "M4");
+
+  const compactMixedRuntime = parseBzssCoreLogLine(
+    "PIE: Error: {ID:3,Pos:-168,193,-133,98,CI{0,125,M16A4,}}/n/{ID:2,Pos:InvalidPawn,CI{0,125,M16A4,}}/n/{ID:7,Pos:InvalidPawn,CI{0,125,M16A4,}}/n/{ID:4,Pos:43,64,-130,-90,CI{0,-300,QBU-191,}}/n/{ID:6,Pos:27,124,-134,49,CI{0,125,M249,}}/n/"
+  );
+  assert.equal(compactMixedRuntime.type, "playerRuntime");
+  assert.equal(compactMixedRuntime.runtimePlayers.length, 5);
+  assert.deepEqual(
+    compactMixedRuntime.runtimePlayers.map((player) => player.playerIndex),
+    [3, 2, 7, 4, 6],
+  );
+  assert.equal(compactMixedRuntime.runtimePlayers[1].presenceHint, "noPawn");
+  assert.equal(compactMixedRuntime.runtimePlayers[1].combatInfo, "CI{0,125,M16A4,}");
+  assert.equal(compactMixedRuntime.runtimePlayers[2].presenceHint, "noPawn");
+  assert.equal(compactMixedRuntime.runtimePlayers[2].combatInfo, "CI{0,125,M16A4,}");
+  assert.deepEqual(compactMixedRuntime.runtimePlayers[3].position, { x: 4300, y: 6400, z: -13000 });
+  assert.equal(compactMixedRuntime.runtimePlayers[4].soldierInfo.weaponClass, "M249");
 
   const scoreboard = parseBzssCoreLogLine("PIE: PlayerScoreboard{0,1,-1,0,0,0,0,0,0,0,0,0,0,0,1,0-1,-1,19}}");
   assert.equal(scoreboard.type, "playerScoreboard");
@@ -272,16 +315,25 @@ function testMonitorState() {
   });
   assert.equal(
     compactRuntimeModule.api.ingestLogLine(
-      "PIE: Error: {ID:0,Pos:-1295,-1465,3,8,CI{0,125,QBZ191,}}/n/{ID:1,Pos:10,20,3,90,CI{0,100,M4,}}/n/"
+      "PIE: Error: {ID:0,Pos:-1295,-1465,3,8,CI{0,125,QBZ191,}}/n/{ID:1,Pos:InvalidPawn,CI{0,100,M4,}}/n/{ID:2,Pos:10,20,3,90,CI{0,100,M4,}}/n/"
     ).ok,
     true,
   );
-  assert.equal(compactRuntimeModule.api.getRuntimePlayers().length, 2);
+  assert.equal(compactRuntimeModule.api.getRuntimePlayers().length, 3);
   assert.deepEqual(
     compactRuntimeModule.api.getRuntimePlayers().map((player) => player.playerIndex),
-    [0, 1],
+    [0, 1, 2],
   );
   assert.equal(compactRuntimeModule.api.getRuntimePlayers()[0].soldierInfo.weaponClass, "QBZ191");
+  assert.equal(compactRuntimeModule.api.getRuntimePlayers()[1].presenceHint, "noPawn");
+  assert.equal(compactRuntimeModule.api.getRuntimePlayers()[1].position, null);
+  assert.equal(compactRuntimeModule.api.getRuntimePlayers()[1].soldierInfo.health, 100);
+  assert.equal(compactRuntimeModule.api.getRuntimePlayers()[1].soldierInfo.weaponClass, "M4");
+  const compactInvalidPawnMerged = compactRuntimeModule.api.getPlayers().find((player) => player.playerIndex === 1);
+  assert.ok(compactInvalidPawnMerged);
+  assert.equal(compactInvalidPawnMerged.presenceHint, "noPawn");
+  assert.equal(compactInvalidPawnMerged.presence?.state, "noPawn");
+  assert.equal(compactInvalidPawnMerged.telemetry?.position, null);
 
   const fullBlockText = "PlayerBaseInfo{42,eos-42,Test Player,2,3,-1,-1}"
     + "SoldierInfo{BP_Soldier_US_Rifleman_C,88,0,0,0,0,0,0,BP_M4_C,30,120{X=1000 Y=2000 Z=0}{X=0 Y=90 Z=0}}"
@@ -610,12 +662,47 @@ async function testParseExplosionDamage() {
   await module.stop();
 }
 
+async function testRawCaptureFileLifecycle() {
+  await withTempCwd(async (tempDir) => {
+    const module = createBzssCoreMonitorModule({
+      core: {
+        eventBus: { onCoreEvent() { return () => {}; }, emitModuleEvent() {} },
+        logger: { info() {}, warn() {}, error() {}, debug() {} },
+      },
+    });
+
+    const capturePath = module.api.getRawCapturePath();
+    fs.mkdirSync(path.dirname(capturePath), { recursive: true });
+    fs.writeFileSync(capturePath, "stale\n", "utf8");
+
+    await module.start();
+    assert.equal(fs.existsSync(capturePath), false);
+
+    const line = "PIE: Error: {ID:3,Pos:-168,193,-133,98,CI{0,125,M16A4,}}/n/";
+    assert.equal(module.api.ingestLogLine(line).ok, true);
+    assert.equal(fs.existsSync(capturePath), true);
+
+    const entries = fs.readFileSync(capturePath, "utf8")
+      .trim()
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((row) => JSON.parse(row));
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].rawLine, line);
+    assert.ok(typeof entries[0].observedAt === "string" && entries[0].observedAt.length > 0);
+    assert.ok(capturePath.startsWith(tempDir));
+
+    await module.stop();
+  });
+}
+
 async function main() {
   testParsePlayerBlocks();
   testParseLogLine();
   testMonitorState();
   await testPriFrameAssembler();
   await testParseExplosionDamage();
+  await testRawCaptureFileLifecycle();
   console.log("run-bzss-core-monitor-tests: ok");
 }
 

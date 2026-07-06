@@ -16,6 +16,12 @@
   "unknown": {
     "write_unknown": false
   },
+  "storage": {
+    "write_v2_events": true,
+    "write_legacy_events": false,
+    "write_v2_raw_archive": true,
+    "write_legacy_raw_archive": false
+  },
   "preserve": {
     "enabled": true,
     "write_file": true,
@@ -48,6 +54,9 @@
       "LogSquad: PostLogin:",
       "LogNet: UNetConnection::Close:",
       "LogSquadTrace:",
+      "PIE: Error: {ID:",
+      "Pos:",
+      "CI{",
       "PlayerBaseInfo{",
       "PRI{{",
       "PlayerScoreboard{",

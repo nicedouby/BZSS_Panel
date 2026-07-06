@@ -418,6 +418,14 @@
     "restartOnExit": false,
     "pipeOutput": true
   },
+  "logPostFileBridge": {
+    "enabled": false,
+    "workingDirectory": "./LogPost",
+    "eventName": "On_RawLogLine",
+    "pollIntervalMs": 250,
+    "replayRecentLines": 120,
+    "fromEnd": true
+  },
   "steam": {
     "appId": 393380,
     "maxConcurrent": 3,

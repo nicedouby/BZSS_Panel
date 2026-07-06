@@ -62,12 +62,17 @@ class BzssLogParserApp:
             session_id=self.session_id,
             max_raw_chars=int(self.config.get("raw", {}).get("max_raw_chars", 4096)),
         )
+        storage_config = self.config.get("storage", {})
 
         self.writer = LogPostWriter(
-            output_dir=str(self.config.get("output_dir", "./LogPost"))
+            output_dir=str(self.config.get("output_dir", "./LogPost")),
+            write_v2_events=bool(storage_config.get("write_v2_events", True)),
+            write_legacy_events=bool(storage_config.get("write_legacy_events", False)),
         )
         self.raw_archive_writer = RawArchiveWriter(
-            output_dir=str(self.config.get("output_dir", "./LogPost"))
+            output_dir=str(self.config.get("output_dir", "./LogPost")),
+            write_v2_raw_archive=bool(storage_config.get("write_v2_raw_archive", True)),
+            write_legacy_raw_archive=bool(storage_config.get("write_legacy_raw_archive", False)),
         )
         self.writer.preserved_file_name = str(
             preserve_config.get("file_name", "Preserved.jsonl")
@@ -299,8 +304,9 @@ class BzssLogParserApp:
 
             self.forward_raw_log_line(line, source_meta, preserved_rule="")
 
-            self.writer.write_unknown(line, meta_for_files)
-            self.stats["lines_unknown"] += 1
+            if self.write_unknown:
+                self.writer.write_unknown(line, meta_for_files)
+                self.stats["lines_unknown"] += 1
 
         except Exception as e:
             self.writer.write_parse_error(line, str(e), meta_for_files)

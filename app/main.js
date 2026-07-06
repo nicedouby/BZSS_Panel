@@ -45,6 +45,7 @@ import { RawLogDerivedEvents } from "./core/raw-log-derived-events.js";
 import { PerformanceMonitor } from "./core/performance-monitor.js";
 import { AuditManager } from "./core/audit/audit-manager.js";
 import { LogPostMonitor } from "./core/logpost-monitor.js";
+import { LogPostFileBridge } from "./core/logpost-file-bridge.js";
 import { NewbieReserveExchangeService } from "./services/newbie-reserve-exchange-service.js";
 
 async function main() {
@@ -139,6 +140,14 @@ async function main() {
     eventPipeline,
     logPostMonitor,
   });
+  const logPostFileBridge = new LogPostFileBridge({
+    config: configManager.get("logPostFileBridge", {}),
+    logger: logger.child({ moduleId: "core.logPostFileBridge", source: "core.logPostFileBridge" }),
+    eventBus,
+    eventPipeline,
+    webStatus,
+    logPostMonitor,
+  });
 
   const coreContext = {
     config: configManager,
@@ -157,6 +166,7 @@ async function main() {
     performanceMonitor,
     auditManager,
     logPostMonitor,
+    logPostFileBridge,
   };
   auditManager.core = coreContext;
 
@@ -252,6 +262,7 @@ async function main() {
   });
   await rconManager.start();
   await udpReceiver.start();
+  await logPostFileBridge.start();
   await pluginManager.loadPlugins();
   await reserveExchangeService.start();
   await webServer.start();
@@ -292,6 +303,7 @@ async function main() {
     await pluginManager.stopAll();
     await moduleManager.stopAll();
     rawLogDerivedEvents?.stop?.();
+    await logPostFileBridge.stop();
     await udpReceiver.stop();
     await rconManager.stop();
     runtimeState.stop();

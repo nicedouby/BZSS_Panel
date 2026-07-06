@@ -529,12 +529,20 @@
   "pythonLogParser": {
     "enabled": false,
     "pythonExecutable": "python",
-    "workingDirectory": "./LogPost",
+    "workingDirectory": "Z:\\Users\\Administrator\\Desktop\\bzss_sq_server\\LogPost",
     "scriptPath": "./main.py",
     "configPath": "./config.json",
     "autoStart": true,
     "restartOnExit": false,
     "pipeOutput": true
+  },
+  "logPostFileBridge": {
+    "enabled": true,
+    "workingDirectory": "Z:\\Users\\Administrator\\Desktop\\bzss_sq_server\\LogPost",
+    "eventName": "On_RawLogLine",
+    "pollIntervalMs": 250,
+    "replayRecentLines": 120,
+    "fromEnd": true
   },
   "steam": {
     "appId": 393380,

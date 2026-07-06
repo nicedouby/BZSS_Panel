@@ -30,6 +30,13 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "write_unknown": False,
     },
 
+    "storage": {
+        "write_v2_events": True,
+        "write_legacy_events": False,
+        "write_v2_raw_archive": True,
+        "write_legacy_raw_archive": False,
+    },
+
     "preserve": {
         "enabled": True,
         "write_file": True,

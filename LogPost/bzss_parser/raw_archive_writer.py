@@ -10,8 +10,16 @@ from bzss_parser.helpers import extract_log_time, now_time_string, sha1_hex, tod
 
 
 class RawArchiveWriter:
-    def __init__(self, output_dir: str) -> None:
+    def __init__(
+        self,
+        output_dir: str,
+        *,
+        write_v2_raw_archive: bool = True,
+        write_legacy_raw_archive: bool = False,
+    ) -> None:
         self.output_dir = Path(output_dir)
+        self.write_v2_raw_archive = bool(write_v2_raw_archive)
+        self.write_legacy_raw_archive = bool(write_legacy_raw_archive)
 
     def write(
         self,
@@ -35,28 +43,30 @@ class RawArchiveWriter:
             "sourceMode": str(source_mode or "live"),
         }
 
-        date_dir = self.output_dir / "Raw" / today_string()
-        date_dir.mkdir(parents=True, exist_ok=True)
-        v2_dir = self.output_dir / "raw" / today_string()
-        v2_dir.mkdir(parents=True, exist_ok=True)
-
         line = to_json_line(entry) + "\n"
-        with (date_dir / "all.jsonl").open("a", encoding="utf-8", newline="") as f:
-            f.write(line)
-            f.flush()
-        with (v2_dir / "segment-000001.jsonl").open("a", encoding="utf-8", newline="") as f:
-            f.write(line)
-            f.flush()
-        with (v2_dir / "index.json").open("w", encoding="utf-8", newline="") as f:
-            f.write(to_json_line({
-                "schema": "logpost.raw.index.v2",
-                "updatedAt": read_at,
-                "segments": [
-                    {
-                        "fileName": "segment-000001.jsonl",
-                        "countHint": None,
-                    }
-                ],
-            }) + "\n")
+        if self.write_legacy_raw_archive:
+            date_dir = self.output_dir / "Raw" / today_string()
+            date_dir.mkdir(parents=True, exist_ok=True)
+            with (date_dir / "all.jsonl").open("a", encoding="utf-8", newline="") as f:
+                f.write(line)
+                f.flush()
+
+        if self.write_v2_raw_archive:
+            v2_dir = self.output_dir / "raw" / today_string()
+            v2_dir.mkdir(parents=True, exist_ok=True)
+            with (v2_dir / "segment-000001.jsonl").open("a", encoding="utf-8", newline="") as f:
+                f.write(line)
+                f.flush()
+            with (v2_dir / "index.json").open("w", encoding="utf-8", newline="") as f:
+                f.write(to_json_line({
+                    "schema": "logpost.raw.index.v2",
+                    "updatedAt": read_at,
+                    "segments": [
+                        {
+                            "fileName": "segment-000001.jsonl",
+                            "countHint": None,
+                        }
+                    ],
+                }) + "\n")
 
         return entry
