@@ -1231,14 +1231,10 @@ function formatReserveGroupLine(groupName) {
 }
 
 function formatReserveMemberLine(member) {
-  const commentParts = [member.expireAt];
-  if (member.name) {
-    commentParts.push(member.reason ? `名称:${member.name};` : `名称:${member.name}`);
-  }
-  if (member.reason) {
-    commentParts.push(member.reason);
-  }
-  return `Admin=${member.steamId}:${member.group} //${commentParts.join(" ")}`;
+  const expireAt = String(member.expireAt ?? '').trim();
+  const name = String(member.name ?? '').trim();
+  const safeName = name || 'Unknown Player';
+  return 'Admin=' + member.steamId + ':' + member.group + ' // ' + safeName + ' expireAt ' + (expireAt || 'unset');
 }
 
 export function syncReserveMemberNamesInAdminFileContent(content, members = []) {
@@ -1287,7 +1283,6 @@ export function syncReserveMemberNamesInAdminFileContent(content, members = []) 
       group: parsed.group,
       expireAt: parsed.expireAt,
       name: syncedName,
-      reason: Array.isArray(parsed.reasons) ? parsed.reasons.join(" | ") : "",
     });
     updatedSteamIds.push(parsed.steamId);
     changed = true;
@@ -1512,6 +1507,16 @@ function parseReserveComment(commentText) {
       name: namedPayload?.name ?? "",
       reasons: namedPayload?.reasons ?? splitReserveReasons(payload),
       remark: payload,
+    };
+  }
+
+  const namedExpireMatch = text.match(/^(.+?)\s+到期时间\s+(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})$/);
+  if (namedExpireMatch) {
+    return {
+      expireAt: namedExpireMatch[2].replace("T", " "),
+      name: namedExpireMatch[1].trim(),
+      reasons: [],
+      remark: text,
     };
   }
 
@@ -2064,19 +2069,30 @@ function csvEscape(value) {
 }
 
 function parseReserveNamedComment(text) {
-  const parts = splitReserveReasons(text);
+  const normalizedText = String(text ?? '').trim();
+  const namedExpireMatch = normalizedText.match(/^(.+?)\s+(?:expireAt|到期时间)\s+(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})$/);
+  if (namedExpireMatch) {
+    return {
+      expireAt: namedExpireMatch[2].replace('T', ' '),
+      name: namedExpireMatch[1].trim(),
+      reasons: [],
+      remark: normalizedText,
+    };
+  }
+
+  const parts = splitReserveReasons(normalizedText);
   const namePart = parts.find((item) => /^(name|显示|名称)\s*[:=]/i.test(item));
   const reasonParts = parts.filter((item) => !/^(name|显示|名称)\s*[:=]/i.test(item));
   if (!namePart && !reasonParts.length) return null;
 
-  const rawName = namePart ? String(namePart.split(/[:=]/, 2)[1] ?? "").trim() : "";
+  const rawName = namePart ? String(namePart.split(/[:=]/, 2)[1] ?? '').trim() : '';
   const { name, reason } = splitLegacyReasonFromReserveName(rawName);
   const reasons = reason ? [reason, ...reasonParts] : reasonParts;
   return {
     expireAt: null,
     name,
     reasons: reasons.length ? reasons : (name ? [] : parts),
-    remark: text,
+    remark: normalizedText,
   };
 }
 

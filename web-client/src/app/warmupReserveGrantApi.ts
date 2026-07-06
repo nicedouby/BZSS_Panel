@@ -13,6 +13,8 @@ export interface WarmupReserveGrantSettings {
   reminderEveryMinutes: number;
   maxEligiblePlayers: number;
   requireWarmupMode: boolean;
+  requireSquad: boolean;
+  requireUnlockedSquad: boolean;
   group: string;
   countMode: string;
   timeWindows: WarmupReserveGrantTimeWindow[];

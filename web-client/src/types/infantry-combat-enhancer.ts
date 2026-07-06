@@ -148,7 +148,7 @@ export const INFANTRY_COMBAT_DEFAULT_CONFIG: InfantryCombatConfig = {
   enabled: true,
   forceAttackerDamageDisplay: false,
   minAttackerDamage: 15,
-  damageDebounceMs: 150,
+  damageDebounceMs: 0,
   showKillDisplay: false,
   showOnlyLightWeaponDamage: true,
   showVictimDamage: true,

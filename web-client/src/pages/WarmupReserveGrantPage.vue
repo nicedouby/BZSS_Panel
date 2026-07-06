@@ -3,7 +3,7 @@
     <header class="page-header">
       <div>
         <h1>暖服赠送预留位</h1>
-        <p>系统按符合条件的在线暖服时长自动续费预留位。</p>
+        <p>系统按符合条件的小队成员暖服时长自动续费预留位。</p>
       </div>
       <div class="header-actions">
         <button type="button" class="btn" :disabled="loading" @click="refreshState">
@@ -32,7 +32,7 @@
         <strong>{{ conditions.matchedTimeWindow ? "命中" : "未命中" }}</strong>
       </article>
       <article class="summary-item">
-        <span>正在累计</span>
+        <span>正在累计的小队成员</span>
         <strong>{{ state?.status.accumulatingCount ?? 0 }}</strong>
       </article>
       <article class="summary-item">
@@ -76,6 +76,14 @@
           <label class="check-row">
             <input v-model="settings.requireWarmupMode" type="checkbox">
             <span>要求暖服模式</span>
+          </label>
+          <label class="check-row">
+            <input v-model="settings.requireSquad" type="checkbox">
+            <span>必须在小队内</span>
+          </label>
+          <label class="check-row">
+            <input v-model="settings.requireUnlockedSquad" type="checkbox">
+            <span>小队不得锁定</span>
           </label>
         </div>
 
@@ -220,8 +228,10 @@ const settings = reactive<WarmupReserveGrantSettings>({
   reminderEveryMinutes: 5,
   maxEligiblePlayers: 50,
   requireWarmupMode: true,
+  requireSquad: true,
+  requireUnlockedSquad: true,
   group: "BZSSVIP",
-  countMode: "accumulate_eligible_online_time",
+  countMode: "accumulate_eligible_squad_member_time",
   timeWindows: [{ enabled: true, start: "00:00", end: "23:59" }],
   clearOfflineAfterHours: 24,
   maxRecentRecords: 500,
@@ -393,31 +403,35 @@ function formatTime(value?: string | null) {
 }
 
 function statusLabel(status: string, pauseReason?: string | null) {
-  if (status === "active") return "累计中";
-  if (status === "granted") return "已发放";
-  if (status === "offline") return "离线";
-  if (pauseReason === "not_warmup") return "暂停：非暖服";
-  if (pauseReason === "player_limit") return "暂停：人数超限";
-  if (pauseReason === "time_window") return "暂停：时间区间";
-  if (pauseReason === "disabled") return "暂停：已停用";
-  return "暂停";
+  if (status === 'active') return 'Accumulating';
+  if (status === 'granted') return 'Granted';
+  if (status === 'offline') return 'Offline';
+  if (pauseReason === 'not_warmup') return 'Paused: not warmup';
+  if (pauseReason === 'not_in_squad') return 'Paused: not in squad';
+  if (pauseReason === 'squad_locked') return 'Paused: squad locked';
+  if (pauseReason === 'player_limit') return 'Paused: player limit';
+  if (pauseReason === 'time_window') return 'Paused: time window';
+  if (pauseReason === 'disabled') return 'Paused: disabled';
+  return 'Paused';
 }
 
 function recordTypeLabel(type: string) {
-  if (type === "grant") return "发放";
-  if (type === "grant_failed") return "发放失败";
-  if (type === "reminder") return "提示";
-  if (type === "pause") return "暂停";
-  if (type === "offline") return "离线";
+  if (type === 'grant') return 'Grant';
+  if (type === 'grant_failed') return 'Grant failed';
+  if (type === 'reminder') return 'Reminder';
+  if (type === 'invalid_reminder') return 'Invalid reminder';
+  if (type === 'pause') return 'Pause';
+  if (type === 'offline') return 'Offline';
   return type;
 }
 
 function recordText(record: WarmupReserveGrantRecord) {
-  if (record.type === "grant") return `赠送 ${record.grantedDays ?? 1} 天，到期 ${record.expireAt ?? "-"}`;
-  if (record.type === "grant_failed") return record.error ?? "发放失败";
-  if (record.type === "reminder") return `累计 ${minutes(record.eligibleSeconds ?? 0)} 分钟，提示 ${record.result ?? "-"}`;
-  if (record.type === "pause") return statusLabel("paused", record.pauseReason);
-  if (record.type === "offline") return `离线时累计 ${minutes(record.eligibleSeconds ?? 0)} 分钟`;
+  if (record.type === 'grant') return 'Granted ' + (record.grantedDays ?? 1) + ' day(s), expire at ' + (record.expireAt ?? '-');
+  if (record.type === 'grant_failed') return record.error ?? 'Grant failed';
+  if (record.type === 'reminder') return 'Accumulated ' + minutes(record.eligibleSeconds ?? 0) + ' minutes, reminder ' + (record.result ?? '-');
+  if (record.type === 'invalid_reminder') return 'Paused: ' + (record.pauseReason ?? '-');
+  if (record.type === 'pause') return statusLabel('paused', record.pauseReason);
+  if (record.type === 'offline') return 'Offline after accumulating ' + minutes(record.eligibleSeconds ?? 0) + ' minutes';
   return JSON.stringify(record);
 }
 </script>

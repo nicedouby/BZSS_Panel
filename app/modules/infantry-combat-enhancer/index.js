@@ -4,7 +4,7 @@ const DEFAULT_CONFIG = Object.freeze({
   enabled: true,
   forceAttackerDamageDisplay: false,
   minAttackerDamage: 15,
-  damageDebounceMs: 150,
+  damageDebounceMs: 0,
   showKillDisplay: false,
   showOnlyLightWeaponDamage: true,
   showVictimDamage: true,
@@ -14,7 +14,7 @@ const DEFAULT_CONFIG = Object.freeze({
   storeRecentEventLimit: 300,
   damageAggregation: {
     enabled: false,
-    debounceMs: 150,
+    debounceMs: 0,
   },
 });
 
@@ -223,6 +223,13 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
         ?? DEFAULT_CONFIG.damageDebounceMs,
       ),
     );
+    if (debounceMs <= 0) {
+      processEntryNow(entry).catch((error) => {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        moduleLogger?.warn?.(`Infantry combat damage processing failed: ${errorMessage}`);
+      });
+      return;
+    }
     const existing = damageAggregation.get(key);
 
     const merged = existing ?? {

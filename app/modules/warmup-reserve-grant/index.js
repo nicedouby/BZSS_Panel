@@ -16,8 +16,10 @@ export const DEFAULT_SETTINGS = {
   reminderEveryMinutes: 5,
   maxEligiblePlayers: 50,
   requireWarmupMode: true,
+  requireSquad: true,
+  requireUnlockedSquad: true,
   group: "BZSSVIP",
-  countMode: "accumulate_eligible_online_time",
+  countMode: "accumulate_eligible_squad_member_time",
   timeWindows: [
     { enabled: true, start: "00:00", end: "23:59" },
   ],
@@ -49,6 +51,7 @@ export function createWarmupReserveGrantModule({ core, modules, config, logger }
     lastConditions: null,
     lastError: null,
     todayGrantCount: 0,
+    squadStateSnapshot: null,
   };
 
   runtime.resolvedStoreFilePath = resolveConfigPath(runtime.settings.storeFilePath, DEFAULT_STORE_FILE);
@@ -72,7 +75,7 @@ export function createWarmupReserveGrantModule({ core, modules, config, logger }
       runtime.store.settingsSnapshot = stripRuntimeOnlySettings(runtime.settings);
       await persistStore();
       restartTimer();
-      return buildState({ message: "暖服赠送预留位设置已保存。" });
+      return buildState({ message: "Warmup reserve grant settings saved." });
     },
 
     async clearRecords() {
@@ -81,13 +84,13 @@ export function createWarmupReserveGrantModule({ core, modules, config, logger }
       await ensureDirectory(path.dirname(runtime.resolvedGrantsFilePath));
       await fs.writeFile(runtime.resolvedGrantsFilePath, "", "utf8");
       await persistStore();
-      return buildState({ message: "暖服赠送历史记录已清空。" });
+      return buildState({ message: "Warmup reserve grant history cleared." });
     },
 
     async clearProgress() {
       runtime.store.progress = {};
       await persistStore();
-      return buildState({ message: "玩家暖服累计进度已清空。" });
+      return buildState({ message: "Warmup accumulation progress cleared." });
     },
 
     async grantNow(input = {}, context = {}) {
@@ -95,7 +98,7 @@ export function createWarmupReserveGrantModule({ core, modules, config, logger }
       const existing = runtime.store.progress[steamId] ?? {};
       const name = String(input.name ?? existing.name ?? "").trim();
       const playerId = input.playerId ?? existing.playerId ?? null;
-      const record = ensureProgressRecord({ steamId, name, playerId }, Date.now());
+      const record = buildProgressRecord(runtime, { steamId, name, playerId }, Date.now());
       const durationDays = input.durationDays ? Number(input.durationDays) : null;
       const result = await grantReserveSlot(record, {
         manual: true,
@@ -107,7 +110,7 @@ export function createWarmupReserveGrantModule({ core, modules, config, logger }
       return {
         ok: true,
         success: true,
-        message: `已手动发放 ${result.grantedDays} 天预留位。`,
+        message: "Manual grant completed: " + result.grantedDays + " day(s).",
         grant: result,
         state: buildState(),
       };
@@ -187,40 +190,54 @@ export function createWarmupReserveGrantModule({ core, modules, config, logger }
     runtime.inTick = true;
     const now = Date.now();
     try {
-      const playersState = core?.runtimeState?.getPlayers?.() ?? {};
-      const activePlayers = Array.isArray(playersState.active) ? playersState.active : [];
       const webStatus = core?.webStatus?.getSnapshot?.() ?? {};
+      const squadSnapshot = getSquadManagementSnapshot();
+      const fallbackPlayersState = core?.runtimeState?.getPlayers?.() ?? {};
+      const fallbackPlayers = Array.isArray(fallbackPlayersState.active) ? fallbackPlayersState.active : [];
       const playerCount = Number.isFinite(Number(webStatus.playerCount))
         ? Number(webStatus.playerCount)
-        : activePlayers.length;
+        : (Array.isArray(squadSnapshot?.players) ? squadSnapshot.players.length : fallbackPlayers.length);
       const conditions = buildConditions({ webStatus, playerCount, settings: runtime.settings, now });
       runtime.lastConditions = conditions;
       runtime.lastTickAt = new Date(now).toISOString();
+      runtime.squadStateSnapshot = squadSnapshot;
 
       const seenSteamIds = new Set();
       const deltaSeconds = Math.max(0, Math.round((now - resolveLastTickMs()) / 1000));
       const cappedDeltaSeconds = Math.min(deltaSeconds || 30, 120);
+      const eligibleIndex = buildEligibilityIndex({
+        squadState: squadSnapshot,
+        fallbackPlayers,
+      });
 
-      for (const player of activePlayers) {
-        const normalized = normalizePlayer(player);
-        if (!normalized?.steamId) continue;
-        seenSteamIds.add(normalized.steamId);
-        const record = ensureProgressRecord(normalized, now);
-        record.name = normalized.name || record.name;
-        record.playerId = normalized.playerId ?? record.playerId ?? null;
+      for (const entry of eligibleIndex.entries) {
+        const { player, squad, eligibility } = entry;
+        if (!player?.steamId) continue;
+        seenSteamIds.add(player.steamId);
+        const record = buildProgressRecord(runtime, player, now);
+        record.name = player.name || record.name;
+        record.playerId = player.playerId ?? record.playerId ?? null;
+        record.teamId = player.teamId ?? player.teamID ?? record.teamId ?? null;
+        record.squadId = player.squadId ?? player.squadID ?? record.squadId ?? null;
+        record.squadName = squad?.squadName ?? record.squadName ?? "";
+        record.squadLocked = Boolean(squad?.locked);
         record.lastSeenAt = new Date(now).toISOString();
+        record.pauseReason = eligibility.pauseReason;
 
-        if (conditions.eligible) {
+        if (eligibility.eligible) {
           record.status = "active";
           record.eligibleSeconds = Math.max(0, Number(record.eligibleSeconds ?? 0)) + cappedDeltaSeconds;
           record.lastTickAt = new Date(now).toISOString();
-          record.pauseReason = null;
-          await maybeSendReminder(record, now);
-          await maybeGrant(record, conditions, now);
+          record.lastEligibleAt = new Date(now).toISOString();
+          record.lastPauseAt = null;
+          await maybeSendReminder(record, eligibility, now);
+          await maybeGrant(record, conditions, eligibility, now);
         } else {
           record.status = "paused";
           record.lastTickAt = new Date(now).toISOString();
-          maybeRecordPause(record, conditions.pauseReason, now);
+          record.lastPauseAt = new Date(now).toISOString();
+          maybeRecordPause(record, eligibility.pauseReason, now, squad);
+          await maybeSendInvalidReminder(record, eligibility, now);
         }
       }
 
@@ -239,55 +256,222 @@ export function createWarmupReserveGrantModule({ core, modules, config, logger }
     return Number.isFinite(value) && value > 0 ? value : Date.now() - TICK_MS;
   }
 
-  async function maybeSendReminder(record, now) {
+  function getSquadManagementSnapshot() {
+    const api = modules?.squadManagement;
+    if (typeof api?.getCurrent === "function") {
+      try {
+        return api.getCurrent();
+      } catch (error) {
+        moduleLogger?.warn?.("[WarmupReserveGrant] failed to read squadManagement.getCurrent(): " + (error?.message ?? error));
+      }
+    }
+    if (typeof api?.getState === "function") {
+      try {
+        return api.getState();
+      } catch (error) {
+        moduleLogger?.warn?.("[WarmupReserveGrant] failed to read squadManagement.getState(): " + (error?.message ?? error));
+      }
+    }
+    return null;
+  }
+
+  function buildEligibilityIndex({ squadState, fallbackPlayers = [] } = {}) {
+    const squadMap = new Map();
+    const squads = Array.isArray(squadState?.squads) ? squadState.squads : [];
+    for (const squad of squads) {
+      const teamId = Number(squad?.teamId ?? squad?.teamID);
+      const squadId = Number(squad?.squadId ?? squad?.squadID);
+      if (!Number.isFinite(teamId) || !Number.isFinite(squadId)) continue;
+      squadMap.set(`${teamId}:${squadId}`, squad);
+    }
+
+    const sourcePlayers = Array.isArray(squadState?.players) && squadState.players.length > 0
+      ? squadState.players
+      : fallbackPlayers;
+    const entries = [];
+    for (const sourcePlayer of sourcePlayers) {
+      const player = normalizePlayer(sourcePlayer);
+      if (!player?.steamId) continue;
+      const teamId = Number(sourcePlayer?.teamId ?? sourcePlayer?.teamID ?? player.teamId ?? NaN);
+      const squadId = Number(sourcePlayer?.squadId ?? sourcePlayer?.squadID ?? player.squadId ?? NaN);
+      const squad = Number.isFinite(teamId) && Number.isFinite(squadId)
+        ? squadMap.get(`${teamId}:${squadId}`) ?? null
+        : null;
+      const eligibility = classifyWarmupEligibility({
+        player: {
+          ...player,
+          teamId: Number.isFinite(teamId) ? teamId : null,
+          squadId: Number.isFinite(squadId) ? squadId : null,
+        },
+        squad,
+        settings: runtime.settings,
+        globalConditions: runtime.lastConditions,
+      });
+      entries.push({
+        player: {
+          ...player,
+          teamId: Number.isFinite(teamId) ? teamId : null,
+          squadId: Number.isFinite(squadId) ? squadId : null,
+        },
+        squad,
+        eligibility,
+      });
+    }
+
+    return { entries, squadMap, sourcePlayers };
+  }
+
+  function classifyWarmupEligibility({ player, squad, settings, globalConditions }) {
+    if (!globalConditions?.eligible) {
+      return {
+        eligible: false,
+        pauseReason: globalConditions?.pauseReason ?? "paused",
+        squad: squad ?? null,
+      };
+    }
+
+    const teamId = Number(player?.teamId ?? player?.teamID);
+    const squadId = Number(player?.squadId ?? player?.squadID);
+    const hasSquad = Number.isFinite(teamId) && Number.isFinite(squadId) && squadId > 0;
+    if (settings?.requireSquad !== false && !hasSquad) {
+      return {
+        eligible: false,
+        pauseReason: "not_in_squad",
+        squad: null,
+      };
+    }
+
+    if (settings?.requireUnlockedSquad !== false && squad?.locked) {
+      return {
+        eligible: false,
+        pauseReason: "squad_locked",
+        squad,
+      };
+    }
+
+    return {
+      eligible: true,
+      pauseReason: null,
+      squad: squad ?? null,
+    };
+  }
+
+  function buildEligibleReminderMessage(record, eligibility, doneMinutes, remainingMinutes) {
+    const squadLabel = formatSquadLabel(eligibility?.squad ?? null);
+    return 'Warmup squad accumulation: ' + doneMinutes + ' minutes completed, ' + remainingMinutes + ' minutes remaining before 1 day reserve is granted.' + squadLabel;
+  }
+
+  function buildInvalidReminderMessage(record, eligibility) {
+    const squadLabel = formatSquadLabel(eligibility?.squad ?? null);
+    if (eligibility?.pauseReason === 'squad_locked') {
+      return 'Warmup mode: your squad is locked, so accumulation is paused. Move to an unlocked squad to continue.' + squadLabel;
+    }
+    if (eligibility?.pauseReason === 'not_in_squad') {
+      return 'Warmup mode: you are not in a squad yet, so accumulation is paused. Join an unlocked squad to continue.' + squadLabel;
+    }
+    return 'Warmup mode: you are temporarily paused from accumulation.' + squadLabel;
+  }
+
+  function formatSquadLabel(squad) {
+    if (!squad) return "";
+    const squadName = String(squad.squadName ?? "").trim();
+    const teamId = squad.teamId ?? squad.teamID ?? "";
+    const squadId = squad.squadId ?? squad.squadID ?? "";
+    const parts = [];
+    if (teamId !== "") parts.push("T" + teamId);
+    if (squadId !== "") parts.push("S" + squadId);
+    const header = parts.length ? "[" + parts.join("/") + "]" : "";
+    return header || squadName ? " (" + [header, squadName].filter(Boolean).join(" ") + ")" : "";
+  }
+
+  function getPlayerTeamId(record) {
+    const value = Number(record?.teamId ?? record?.teamID ?? NaN);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  function getPlayerSquadId(record) {
+    const value = Number(record?.squadId ?? record?.squadID ?? NaN);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  async function maybeSendReminder(record, eligibility, now) {
     const reminderSeconds = Math.max(60, Number(runtime.settings.reminderEveryMinutes) * 60);
-    const lastReminderMs = Date.parse(record.lastReminderAt ?? "");
+    const lastReminderMs = Date.parse(record.lastReminderAt ?? '');
     if (Number.isFinite(lastReminderMs) && now - lastReminderMs < reminderSeconds * 1000) return;
     const thresholdSeconds = Math.max(60, Number(runtime.settings.grantEveryMinutes) * 60);
     const doneMinutes = Math.floor(Number(record.eligibleSeconds ?? 0) / 60);
     const remainingMinutes = Math.max(0, Math.ceil((thresholdSeconds - Number(record.eligibleSeconds ?? 0)) / 60));
-    const message = `你已暖服 ${doneMinutes} 分钟，${remainingMinutes} 分钟后将为你激活一天预留位，感激参与暖服。`;
-    const result = await warnPlayer(record, message, "warmup_reserve_grant_reminder");
+    const message = buildEligibleReminderMessage(record, eligibility, doneMinutes, remainingMinutes);
+    const result = await warnPlayer(record, message, 'warmup_reserve_grant_reminder');
     record.lastReminderAt = new Date(now).toISOString();
     appendRecentRecord({
-      type: "reminder",
+      type: 'reminder',
       steamId: record.steamId,
       name: record.name,
       playerId: record.playerId,
+      teamId: record.teamId ?? eligibility?.player?.teamId ?? null,
+      squadId: record.squadId ?? eligibility?.player?.squadId ?? null,
+      squadName: record.squadName ?? eligibility?.squad?.squadName ?? '',
+      squadLocked: Boolean(record.squadLocked ?? eligibility?.squad?.locked ?? false),
       eligibleSeconds: Math.floor(record.eligibleSeconds ?? 0),
-      result: result?.ok === false ? "failed" : "success",
+      result: result?.ok === false ? 'failed' : 'success',
       createdAt: new Date(now).toISOString(),
     });
   }
 
-  async function maybeGrant(record, conditions, now) {
+  async function maybeSendInvalidReminder(record, eligibility, now) {
+    if (!eligibility?.pauseReason || !['not_in_squad', 'squad_locked'].includes(eligibility.pauseReason)) return;
+    const reminderSeconds = Math.max(60, Number(runtime.settings.reminderEveryMinutes) * 60);
+    const lastReminderMs = Date.parse(record.lastInvalidReminderAt ?? '');
+    if (Number.isFinite(lastReminderMs) && now - lastReminderMs < reminderSeconds * 1000) return;
+    const message = buildInvalidReminderMessage(record, eligibility);
+    const result = await warnPlayer(record, message, 'warmup_reserve_grant_invalid');
+    record.lastInvalidReminderAt = new Date(now).toISOString();
+    appendRecentRecord({
+      type: 'invalid_reminder',
+      steamId: record.steamId,
+      name: record.name,
+      playerId: record.playerId,
+      teamId: record.teamId ?? eligibility?.player?.teamId ?? null,
+      squadId: record.squadId ?? eligibility?.player?.squadId ?? null,
+      squadName: record.squadName ?? eligibility?.squad?.squadName ?? '',
+      squadLocked: Boolean(record.squadLocked ?? eligibility?.squad?.locked ?? false),
+      pauseReason: eligibility.pauseReason,
+      eligibleSeconds: Math.floor(record.eligibleSeconds ?? 0),
+      result: result?.ok === false ? 'failed' : 'success',
+      createdAt: new Date(now).toISOString(),
+    });
+  }
+
+  async function maybeGrant(record, conditions, eligibility, now) {
     const thresholdSeconds = Math.max(60, Number(runtime.settings.grantEveryMinutes) * 60);
     if (Number(record.eligibleSeconds ?? 0) < thresholdSeconds) return;
-    const lastFailureMs = Date.parse(record.lastGrantFailedAt ?? "");
+    const lastFailureMs = Date.parse(record.lastGrantFailedAt ?? '');
     if (Number.isFinite(lastFailureMs) && now - lastFailureMs < GRANT_RETRY_COOLDOWN_MS) return;
 
     try {
       const grant = await grantReserveSlot(record, {
         manual: false,
         conditions,
+        eligibility,
       });
       record.eligibleSeconds = Math.max(0, Number(record.eligibleSeconds ?? 0) - thresholdSeconds);
       record.grantCount = Math.max(0, Number(record.grantCount ?? 0)) + 1;
       record.totalGrantedDays = Math.max(0, Number(record.totalGrantedDays ?? 0)) + Number(runtime.settings.grantDays);
       record.lastGrantedAt = grant.createdAt;
       record.lastGrantFailedAt = null;
-      record.status = Number(record.eligibleSeconds) >= thresholdSeconds ? "active" : "granted";
+      record.status = Number(record.eligibleSeconds) >= thresholdSeconds ? 'active' : 'granted';
       runtime.todayGrantCount += 1;
       await warnPlayer(
         record,
-        `感谢参与暖服，你已累计暖服 ${runtime.settings.grantEveryMinutes} 分钟，系统已为你激活 ${runtime.settings.grantDays} 天预留位。`,
-        "warmup_reserve_grant_success",
+        'Warmup reserve granted: you have accumulated ' + runtime.settings.grantEveryMinutes + ' minutes and received ' + runtime.settings.grantDays + ' day(s).',
+        'warmup_reserve_grant_success',
       );
     } catch (error) {
       record.lastGrantFailedAt = new Date(now).toISOString();
       runtime.lastError = error?.message ?? String(error);
       await appendAuditRecord({
-        type: "grant_failed",
+        type: 'grant_failed',
         steamId: record.steamId,
         name: record.name,
         playerId: record.playerId,
@@ -299,10 +483,10 @@ export function createWarmupReserveGrantModule({ core, modules, config, logger }
     }
   }
 
-  async function grantReserveSlot(record, { manual = false, actor = null, conditions = null, durationDays = null } = {}) {
-    if (typeof modules?.reserveSlots?.upsertMember !== "function") {
-      const error = new Error("reserveSlots.upsertMember is unavailable.");
-      error.code = "ReserveSlotsUnavailable";
+  async function grantReserveSlot(record, { manual = false, actor = null, conditions = null, durationDays = null, eligibility = null } = {}) {
+    if (typeof modules?.reserveSlots?.upsertMember !== 'function') {
+      const error = new Error('reserveSlots.upsertMember is unavailable.');
+      error.code = 'ReserveSlotsUnavailable';
       throw error;
     }
     const grantedDays = Math.max(1, Number(durationDays ?? runtime.settings.grantDays) || 1);
@@ -313,21 +497,25 @@ export function createWarmupReserveGrantModule({ core, modules, config, logger }
       name: record.name,
       group: runtime.settings.group,
       durationDays: grantedDays,
-      reason: manual
-        ? `暖服手动赠送：管理员立即发放 ${grantedDays} 天`
-        : `暖服自动赠送：累计暖服 ${runtime.settings.grantEveryMinutes} 分钟`,
     });
     const savedMember = result?.savedMember ?? result?.members?.find?.((item) => item?.steamId === record.steamId) ?? null;
     const createdAt = new Date().toISOString();
     const grantRecord = {
-      type: "grant",
+      type: 'grant',
       steamId: record.steamId,
       name: record.name,
       playerId: record.playerId ?? null,
+      teamId: record.teamId ?? eligibility?.player?.teamId ?? null,
+      squadId: record.squadId ?? eligibility?.player?.squadId ?? null,
+      squadName: record.squadName ?? eligibility?.squad?.squadName ?? '',
+      squadLocked: Boolean(record.squadLocked ?? eligibility?.squad?.locked ?? false),
       grantedDays,
       eligibleSeconds: Math.max(0, Number(runtime.settings.grantEveryMinutes) * 60),
       expireAt: savedMember?.expireAt ?? null,
       manual,
+      grantReason: manual
+        ? 'warmup manual grant: ' + grantedDays + ' days'
+        : 'warmup auto grant: eligible squad member accumulated ' + runtime.settings.grantEveryMinutes + ' minutes',
       actor: normalizeActorName(actor),
       conditions: summarizeConditions(conditions ?? getCurrentConditions()),
       createdAt,
@@ -337,31 +525,31 @@ export function createWarmupReserveGrantModule({ core, modules, config, logger }
   }
 
   async function resolveGrantPlayerName(record) {
-    const steamId = String(record?.steamId ?? "").trim();
-    if (!steamId) return String(record?.name ?? "").trim();
+    const steamId = String(record?.steamId ?? '').trim();
+    if (!steamId) return String(record?.name ?? '').trim();
 
-    if (typeof modules?.playerDatabase?.listPlayersBySteamIDs === "function") {
+    if (typeof modules?.playerDatabase?.listPlayersBySteamIDs === 'function') {
       try {
         const rows = await modules.playerDatabase.listPlayersBySteamIDs([steamId]);
         const row = Array.isArray(rows) ? rows.find((item) => {
-          const rowSteamId = String(item?.steam_id ?? item?.steamID ?? item?.steam64 ?? "").trim();
+          const rowSteamId = String(item?.steam_id ?? item?.steamID ?? item?.steam64 ?? '').trim();
           return rowSteamId === steamId;
         }) : null;
-        const dbName = String(row?.current_name ?? row?.currentName ?? row?.name ?? "").trim();
+        const dbName = String(row?.current_name ?? row?.currentName ?? row?.name ?? '').trim();
         if (dbName) return dbName;
       } catch (error) {
-        moduleLogger?.warn?.(`[WarmupReserveGrant] failed to resolve player name from database: ${error?.message ?? error}`);
+        moduleLogger?.warn?.('[WarmupReserveGrant] failed to resolve player name from database: ' + (error?.message ?? error));
       }
     }
 
     const runtimePlayer = core?.runtimeState?.getPlayers?.()?.bySteamID?.[steamId] ?? null;
-    const runtimeName = String(runtimePlayer?.name ?? "").trim();
-    return runtimeName || String(record?.name ?? "").trim();
+    const runtimeName = String(runtimePlayer?.name ?? '').trim();
+    return runtimeName || String(record?.name ?? '').trim();
   }
 
   async function warnPlayer(record, message, reason) {
     const sender = modules?.adminWarn?.warnPlayer ?? modules?.adminWarn?.sendAdminWarn;
-    if (typeof sender !== "function") return { ok: false, skipped: true };
+    if (typeof sender !== 'function') return { ok: false, skipped: true };
     return sender.call(modules.adminWarn, {
       targetName: record.name,
       targetPlayerId: record.playerId,
@@ -378,29 +566,42 @@ export function createWarmupReserveGrantModule({ core, modules, config, logger }
     if (!runtime.store.progress[steamId]) {
       runtime.store.progress[steamId] = {
         steamId,
-        name: player.name ?? "",
+        name: player.name ?? '',
         playerId: player.playerId ?? null,
+        teamId: player.teamId ?? player.teamID ?? null,
+        squadId: player.squadId ?? player.squadID ?? null,
+        squadName: '',
+        squadLocked: false,
         eligibleSeconds: 0,
         lastSeenAt: new Date(now).toISOString(),
         lastTickAt: null,
         lastReminderAt: null,
+        lastInvalidReminderAt: null,
         grantCount: 0,
         totalGrantedDays: 0,
         lastGrantedAt: null,
-        status: "active",
+        lastEligibleAt: null,
+        lastPauseAt: null,
+        lastGrantFailedAt: null,
+        status: 'active',
+        pauseReason: null,
       };
     }
     return runtime.store.progress[steamId];
   }
 
-  function maybeRecordPause(record, pauseReason, now) {
+  function maybeRecordPause(record, pauseReason, now, squad = null) {
     if (record.pauseReason === pauseReason) return;
     record.pauseReason = pauseReason;
     appendRecentRecord({
-      type: "pause",
+      type: 'pause',
       steamId: record.steamId,
       name: record.name,
       playerId: record.playerId,
+      teamId: record.teamId ?? getPlayerTeamId(record) ?? null,
+      squadId: record.squadId ?? getPlayerSquadId(record) ?? null,
+      squadName: record.squadName ?? squad?.squadName ?? '',
+      squadLocked: Boolean(record.squadLocked ?? squad?.locked ?? false),
       pauseReason,
       eligibleSeconds: Math.floor(record.eligibleSeconds ?? 0),
       createdAt: new Date(now).toISOString(),
@@ -410,13 +611,17 @@ export function createWarmupReserveGrantModule({ core, modules, config, logger }
   function markOfflinePlayers(seenSteamIds, now) {
     for (const record of Object.values(runtime.store.progress)) {
       if (seenSteamIds.has(record.steamId)) continue;
-      if (record.status !== "offline") {
-        record.status = "offline";
+      if (record.status !== 'offline') {
+        record.status = 'offline';
         appendRecentRecord({
-          type: "offline",
+          type: 'offline',
           steamId: record.steamId,
           name: record.name,
           playerId: record.playerId,
+          teamId: record.teamId ?? null,
+          squadId: record.squadId ?? null,
+          squadName: record.squadName ?? '',
+          squadLocked: Boolean(record.squadLocked ?? false),
           eligibleSeconds: Math.floor(record.eligibleSeconds ?? 0),
           createdAt: new Date(now).toISOString(),
         });
@@ -427,8 +632,8 @@ export function createWarmupReserveGrantModule({ core, modules, config, logger }
   function pruneOldOfflineProgress(now) {
     const ttlMs = Math.max(1, Number(runtime.settings.clearOfflineAfterHours) || 24) * 60 * 60 * 1000;
     for (const [steamId, record] of Object.entries(runtime.store.progress)) {
-      if (record.status !== "offline") continue;
-      const lastSeenMs = Date.parse(record.lastSeenAt ?? "");
+      if (record.status !== 'offline') continue;
+      const lastSeenMs = Date.parse(record.lastSeenAt ?? '');
       if (Number.isFinite(lastSeenMs) && now - lastSeenMs > ttlMs) {
         delete runtime.store.progress[steamId];
       }
@@ -437,8 +642,12 @@ export function createWarmupReserveGrantModule({ core, modules, config, logger }
 
   function getCurrentConditions() {
     const webStatus = core?.webStatus?.getSnapshot?.() ?? {};
-    const activePlayers = core?.runtimeState?.getPlayers?.()?.active ?? [];
-    const playerCount = Number.isFinite(Number(webStatus.playerCount)) ? Number(webStatus.playerCount) : activePlayers.length;
+    const squadSnapshot = runtime.squadStateSnapshot ?? getSquadManagementSnapshot();
+    const playerCount = Number.isFinite(Number(webStatus.playerCount))
+      ? Number(webStatus.playerCount)
+      : Array.isArray(squadSnapshot?.players)
+        ? squadSnapshot.players.length
+        : (core?.runtimeState?.getPlayers?.()?.active ?? []).length;
     return buildConditions({ webStatus, playerCount, settings: runtime.settings, now: Date.now() });
   }
 
@@ -460,16 +669,16 @@ export function createWarmupReserveGrantModule({ core, modules, config, logger }
         lastTickAt: runtime.lastTickAt,
         lastError: runtime.lastError,
         conditions,
-        accumulatingCount: progress.filter((record) => record.status === "active").length,
+        accumulatingCount: progress.filter((record) => record.status === 'active').length,
         todayGrantCount: runtime.todayGrantCount,
       },
       progress,
       records: runtime.store.recentRecords,
       summary: {
         progressCount: progress.length,
-        activeCount: progress.filter((record) => record.status === "active").length,
-        pausedCount: progress.filter((record) => record.status === "paused").length,
-        offlineCount: progress.filter((record) => record.status === "offline").length,
+        activeCount: progress.filter((record) => record.status === 'active').length,
+        pausedCount: progress.filter((record) => record.status === 'paused').length,
+        offlineCount: progress.filter((record) => record.status === 'offline').length,
         grantCount: progress.reduce((sum, record) => sum + Number(record.grantCount ?? 0), 0),
         totalGrantedDays: progress.reduce((sum, record) => sum + Number(record.totalGrantedDays ?? 0), 0),
       },
@@ -478,6 +687,7 @@ export function createWarmupReserveGrantModule({ core, modules, config, logger }
   }
 
   async function appendAuditRecord(record) {
+
     appendRecentRecord(record);
     await ensureDirectory(path.dirname(runtime.resolvedGrantsFilePath));
     await fs.appendFile(runtime.resolvedGrantsFilePath, `${JSON.stringify(record)}\n`, "utf8");
@@ -501,6 +711,35 @@ export function createWarmupReserveGrantModule({ core, modules, config, logger }
     });
     return runtime.saveQueue;
   }
+}
+
+function buildProgressRecord(runtime, player, now) {
+  const steamId = normalizeSteamId(player.steamId);
+  if (!runtime.store.progress[steamId]) {
+    runtime.store.progress[steamId] = {
+      steamId,
+      name: player.name ?? "",
+      playerId: player.playerId ?? null,
+      teamId: player.teamId ?? player.teamID ?? null,
+      squadId: player.squadId ?? player.squadID ?? null,
+      squadName: "",
+      squadLocked: false,
+      eligibleSeconds: 0,
+      lastSeenAt: new Date(now).toISOString(),
+      lastTickAt: null,
+      lastReminderAt: null,
+      lastInvalidReminderAt: null,
+      grantCount: 0,
+      totalGrantedDays: 0,
+      lastGrantedAt: null,
+      lastEligibleAt: null,
+      lastPauseAt: null,
+      lastGrantFailedAt: null,
+      status: "active",
+      pauseReason: null,
+    };
+  }
+  return runtime.store.progress[steamId];
 }
 
 function buildConditions({ webStatus, playerCount, settings, now }) {
@@ -548,13 +787,15 @@ function normalizeSettings(input = {}) {
   };
   return {
     enabled: Boolean(settings.enabled),
-    grantEveryMinutes: clampNumber(settings.grantEveryMinutes, 120, 1, 24 * 60),
+    grantEveryMinutes: clampNumber(settings.grantEveryMinutes, DEFAULT_SETTINGS.grantEveryMinutes, 1, 24 * 60),
     grantDays: clampNumber(settings.grantDays, 1, 1, 3650),
     reminderEveryMinutes: clampNumber(settings.reminderEveryMinutes, DEFAULT_SETTINGS.reminderEveryMinutes, 1, 24 * 60),
     maxEligiblePlayers: clampNumber(settings.maxEligiblePlayers, 50, 1, 200),
     requireWarmupMode: Boolean(settings.requireWarmupMode),
-    group: String(settings.group ?? "BZSSVIP").trim() || "BZSSVIP",
-    countMode: "accumulate_eligible_online_time",
+    requireSquad: Boolean(settings.requireSquad ?? DEFAULT_SETTINGS.requireSquad),
+    requireUnlockedSquad: Boolean(settings.requireUnlockedSquad ?? DEFAULT_SETTINGS.requireUnlockedSquad),
+    group: String(settings.group ?? 'BZSSVIP').trim() || 'BZSSVIP',
+    countMode: String(settings.countMode ?? DEFAULT_SETTINGS.countMode).trim() || DEFAULT_SETTINGS.countMode,
     timeWindows: normalizeTimeWindows(settings.timeWindows),
     clearOfflineAfterHours: clampNumber(settings.clearOfflineAfterHours, 24, 1, 24 * 30),
     maxRecentRecords: clampNumber(settings.maxRecentRecords, 500, 10, 5000),
@@ -575,13 +816,20 @@ function normalizeStore(input = {}) {
       steamId: item.steamId,
       name: String(item.name ?? ""),
       playerId: item.playerId ?? null,
+      teamId: item.teamId ?? null,
+      squadId: item.squadId ?? null,
+      squadName: String(item.squadName ?? ""),
+      squadLocked: Boolean(item.squadLocked ?? false),
       eligibleSeconds: Math.max(0, Number(item.eligibleSeconds ?? 0) || 0),
       lastSeenAt: item.lastSeenAt ?? null,
       lastTickAt: item.lastTickAt ?? null,
       lastReminderAt: item.lastReminderAt ?? null,
+      lastInvalidReminderAt: item.lastInvalidReminderAt ?? null,
       grantCount: Math.max(0, Number(item.grantCount ?? 0) || 0),
       totalGrantedDays: Math.max(0, Number(item.totalGrantedDays ?? 0) || 0),
       lastGrantedAt: item.lastGrantedAt ?? null,
+      lastEligibleAt: item.lastEligibleAt ?? null,
+      lastPauseAt: item.lastPauseAt ?? null,
       lastGrantFailedAt: item.lastGrantFailedAt ?? null,
       status: normalizeStatus(item.status),
       pauseReason: item.pauseReason ?? null,
@@ -669,6 +917,8 @@ function stripRuntimeOnlySettings(settings) {
     reminderEveryMinutes,
     maxEligiblePlayers,
     requireWarmupMode,
+    requireSquad,
+    requireUnlockedSquad,
     group,
     countMode,
     timeWindows,
@@ -682,6 +932,8 @@ function stripRuntimeOnlySettings(settings) {
     reminderEveryMinutes,
     maxEligiblePlayers,
     requireWarmupMode,
+    requireSquad,
+    requireUnlockedSquad,
     group,
     countMode,
     timeWindows,
