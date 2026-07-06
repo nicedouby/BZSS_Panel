@@ -1319,6 +1319,18 @@ watch(
       const key = getPlayerKey(player);
       if (!key) return;
       currentKeys.add(key);
+      const presenceState = String((player as any)?.presence?.state ?? "");
+      const presenceHint = String((player as any)?.presenceHint ?? (player as any)?.telemetry?.presenceHint ?? "");
+      const isNoPawn = presenceState === "noPawn" || presenceHint === "noPawn";
+
+      if (isNoPawn) {
+        if (nextCache[key]) {
+          delete nextCache[key];
+          changed = true;
+        }
+        return;
+      }
+
       if (hasValidPosition(player)) {
         nextCache[key] = {
           player,
@@ -1329,6 +1341,8 @@ watch(
         console.debug("[TacticalMap] player skipped: invalid position", {
           key,
           name: player.playerName,
+          presenceState,
+          presenceHint,
           position: player.soldierInfo?.position,
           raw: player,
         });

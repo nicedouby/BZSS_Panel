@@ -749,7 +749,7 @@
       "enabled": true,
       "grantEveryMinutes": 60,
       "grantDays": 1,
-      "reminderEveryMinutes": 1,
+      "reminderEveryMinutes": 5,
       "maxEligiblePlayers": 50,
       "requireWarmupMode": true,
       "requireSquad": true,

@@ -363,11 +363,21 @@ type BzssCoreMergedPlayer = {
   scoreboardObservedAt?: string;
   firstSeenAt?: string;
   lastSeenAt?: string;
+  position?: BzssCoreRuntimePlayerInfo["position"] | null;
+  yaw?: number | null;
+  combatInfo?: string;
   telemetry?: {
     position?: BzssCoreRuntimePlayerInfo["position"] | null;
     yaw?: number | null;
     combatInfo?: string;
     vehicleInfo?: any;
+  };
+  soldierInfo?: {
+    position?: BzssCoreRuntimePlayerInfo["position"] | null;
+    rotation?: {
+      z?: number | null;
+    } | null;
+    weaponClass?: string;
   };
   presence?: {
     state?: string;
@@ -503,14 +513,23 @@ const playerPairs = computed<PlayerPair[]>(() => {
 function buildPlayerPairFromMergedPlayer(player: BzssCoreMergedPlayer): PlayerPair {
   const telemetry = player.telemetry ?? {};
   const scoreboardStats = player.playerScoreboard?.stats ?? {};
+  const runtimePosition = telemetry.position ?? player.position ?? player.soldierInfo?.position ?? null;
+  const runtimeYaw = telemetry.yaw ?? player.yaw ?? player.soldierInfo?.rotation?.z ?? null;
+  const runtimeCombatInfo = telemetry.combatInfo ?? player.combatInfo ?? player.soldierInfo?.weaponClass ?? "";
+  const runtimeObservedAt = player.presence?.runtimeObservedAt
+    ?? player.runtimeObservedAt
+    ?? player.lastSeenAt
+    ?? player.firstSeenAt
+    ?? "";
+  const presenceState = player.presence?.state ?? "";
   const runtime: BzssCoreRuntimePlayerInfo & { playerGuid?: string; playerName?: string } = {
     playerId: player.playerId ?? null,
     playerIndex: player.playerIndex ?? null,
-    position: telemetry.position ?? null,
-    yaw: telemetry.yaw ?? null,
-    combatInfo: telemetry.combatInfo ?? "",
-    observedAt: player.runtimeObservedAt ?? player.lastSeenAt ?? player.firstSeenAt ?? "",
-    stale: player.presence?.state === "scoreboardOnly" || player.presence?.state === "notSpawned"
+    position: presenceState === "noPawn" ? null : runtimePosition,
+    yaw: presenceState === "noPawn" ? null : runtimeYaw,
+    combatInfo: runtimeCombatInfo,
+    observedAt: runtimeObservedAt,
+    stale: presenceState === "scoreboardOnly" || presenceState === "notSpawned"
       ? true
       : Boolean(player.stale),
     playerGuid: player.playerGuid ?? "",

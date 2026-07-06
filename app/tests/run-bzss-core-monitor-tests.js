@@ -163,6 +163,44 @@ function testParseLogLine() {
   assert.deepEqual(compactMixedRuntime.runtimePlayers[3].position, { x: 4300, y: 6400, z: -13000 });
   assert.equal(compactMixedRuntime.runtimePlayers[4].soldierInfo.weaponClass, "M249");
 
+  const compactAnonymousRuntime = parseBzssCoreLogLine(
+    "PIE: Error: {ID:6,Pos:777,1505,0,112,{1,1000.0/1000.0,None,13}}/n/"
+  );
+  assert.equal(compactAnonymousRuntime.type, "playerRuntime");
+  assert.equal(compactAnonymousRuntime.runtimePlayers.length, 1);
+  assert.equal(compactAnonymousRuntime.runtimePlayers[0].playerIndex, 6);
+  assert.deepEqual(compactAnonymousRuntime.runtimePlayers[0].position, { x: 77700, y: 150500, z: 0 });
+  assert.equal(compactAnonymousRuntime.runtimePlayers[0].yaw, 112);
+  assert.equal(compactAnonymousRuntime.runtimePlayers[0].combatInfo, "{1,1000.0/1000.0,None,13}");
+  assert.equal(compactAnonymousRuntime.runtimePlayers[0].compactStateInfo?.stateCode, 1);
+  assert.equal(compactAnonymousRuntime.runtimePlayers[0].compactStateInfo?.health, 1000);
+  assert.equal(compactAnonymousRuntime.runtimePlayers[0].compactStateInfo?.maxHealth, 1000);
+  assert.equal(compactAnonymousRuntime.runtimePlayers[0].compactStateInfo?.seatIndex, 13);
+
+  const compactAnonymousInvalidPawnRuntime = parseBzssCoreLogLine(
+    "PIE: Error: {ID:2,Pos:InvalidPawn,{1,1000.0/1000.0,None,13}}/n/"
+  );
+  assert.equal(compactAnonymousInvalidPawnRuntime.type, "playerRuntime");
+  assert.equal(compactAnonymousInvalidPawnRuntime.runtimePlayers.length, 1);
+  assert.equal(compactAnonymousInvalidPawnRuntime.runtimePlayers[0].playerIndex, 2);
+  assert.equal(compactAnonymousInvalidPawnRuntime.runtimePlayers[0].position, null);
+  assert.equal(compactAnonymousInvalidPawnRuntime.runtimePlayers[0].yaw, null);
+  assert.equal(compactAnonymousInvalidPawnRuntime.runtimePlayers[0].presenceHint, "noPawn");
+  assert.equal(compactAnonymousInvalidPawnRuntime.runtimePlayers[0].combatInfo, "{1,1000.0/1000.0,None,13}");
+
+  const compactAnonymousOnlyRuntime = parseBzssCoreLogLine(
+    "PIE: Error: {ID:2,Pos:InvalidPawn,{1,1000.0/1000.0,None,13}}/n/{ID:6,Pos:499,-43,-4,170,{3}}/n/{ID:1,Pos:866,1590,-4,-139,{1,1000.0/1000.0,None,13}}/n/"
+  );
+  assert.equal(compactAnonymousOnlyRuntime.type, "playerRuntime");
+  assert.equal(compactAnonymousOnlyRuntime.runtimePlayers.length, 3);
+  assert.deepEqual(
+    compactAnonymousOnlyRuntime.runtimePlayers.map((player) => player.playerIndex),
+    [2, 6, 1],
+  );
+  assert.equal(compactAnonymousOnlyRuntime.runtimePlayers[0].presenceHint, "noPawn");
+  assert.equal(compactAnonymousOnlyRuntime.runtimePlayers[1].combatInfo, "{3}");
+  assert.deepEqual(compactAnonymousOnlyRuntime.runtimePlayers[2].position, { x: 86600, y: 159000, z: -400 });
+
   const scoreboard = parseBzssCoreLogLine("PIE: PlayerScoreboard{0,1,-1,0,0,0,0,0,0,0,0,0,0,0,1,0-1,-1,19}}");
   assert.equal(scoreboard.type, "playerScoreboard");
   assert.equal(scoreboard.scoreboardPlayers.length, 1);
@@ -335,6 +373,32 @@ function testMonitorState() {
   assert.equal(compactInvalidPawnMerged.presence?.state, "noPawn");
   assert.equal(compactInvalidPawnMerged.telemetry?.position, null);
 
+  const compactAnonymousRuntimeModule = createBzssCoreMonitorModule({
+    core: {
+      eventBus: { onCoreEvent() { return () => {}; }, emitModuleEvent() {} },
+      logger: { info() {}, warn() {}, error() {}, debug() {} },
+    },
+  });
+  assert.equal(
+    compactAnonymousRuntimeModule.api.ingestLogLine(
+      "PIE: Error: {ID:2,Pos:InvalidPawn,{1,1000.0/1000.0,None,13}}/n/{ID:6,Pos:499,-43,-4,170,{3}}/n/{ID:1,Pos:866,1590,-4,-139,{1,1000.0/1000.0,None,13}}/n/"
+    ).ok,
+    true,
+  );
+  assert.deepEqual(
+    compactAnonymousRuntimeModule.api.getRuntimePlayers().map((player) => player.playerIndex),
+    [2, 6, 1],
+  );
+  const anonymousNoPawnPlayer = compactAnonymousRuntimeModule.api.getPlayers().find((player) => player.playerIndex === 2);
+  assert.ok(anonymousNoPawnPlayer);
+  assert.equal(anonymousNoPawnPlayer.presenceHint, "noPawn");
+  assert.equal(anonymousNoPawnPlayer.presence?.state, "noPawn");
+  assert.equal(anonymousNoPawnPlayer.telemetry?.position, null);
+  const anonymousActivePlayer = compactAnonymousRuntimeModule.api.getPlayers().find((player) => player.playerIndex === 1);
+  assert.ok(anonymousActivePlayer);
+  assert.deepEqual(anonymousActivePlayer.telemetry?.position, { x: 86600, y: 159000, z: -400 });
+  assert.equal(anonymousActivePlayer.combatInfo, "{1,1000.0/1000.0,None,13}");
+
   const fullBlockText = "PlayerBaseInfo{42,eos-42,Test Player,2,3,-1,-1}"
     + "SoldierInfo{BP_Soldier_US_Rifleman_C,88,0,0,0,0,0,0,BP_M4_C,30,120{X=1000 Y=2000 Z=0}{X=0 Y=90 Z=0}}"
     + "PlayerScoreboard{0,0,0,0,0,0,0,0,0,0,0,99}";
@@ -362,6 +426,14 @@ function testMonitorState() {
   assert.equal(afterNoPawn.presenceHint, "noPawn");
   assert.equal(afterNoPawn.presence?.state, "noPawn");
   assert.equal(afterNoPawn.stale, false);
+
+  assert.equal(module.api.ingestLogLine("PIE: PRI{{42,321,654,7,135,{0,100.0,false,NW,}}}").ok, true);
+  const afterRespawn = module.api.getPlayers().find((p) => p.playerIndex === 42);
+  assert.ok(afterRespawn);
+  assert.equal(afterRespawn.presenceHint, "");
+  assert.equal(afterRespawn.presence?.state, "active");
+  assert.deepEqual(afterRespawn.telemetry?.position, { x: 32100, y: 65400, z: 700 });
+  assert.equal(afterRespawn.telemetry?.yaw, 135);
 
   const runtimeMergeModule = createBzssCoreMonitorModule({
     core: {

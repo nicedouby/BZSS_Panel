@@ -801,7 +801,11 @@ function applyPlayerPatch(record, patch, observedAt) {
   record.position = isNoPawn ? null : cloneVector(patch.position ?? record.position);
   record.yaw = isNoPawn ? null : firstDefinedNumber(patch.yaw, record.yaw, null);
   record.combatInfo = firstText(patch.combatInfo, record.combatInfo, "");
-  record.presenceHint = firstText(patch.presenceHint, record.presenceHint, "");
+  if (Object.prototype.hasOwnProperty.call(patch, "presenceHint")) {
+    record.presenceHint = String(patch.presenceHint ?? "").trim();
+  } else {
+    record.presenceHint = firstText(record.presenceHint, "");
+  }
   record.runtimeObservedAt = patch.position != null || patch.yaw != null || patch.combatInfo != null || patch.sourceType === "runtime" || patch.sourceType === "fullBlocks"
     ? observedAt
     : record.runtimeObservedAt ?? "";
@@ -1660,9 +1664,11 @@ function parsePriRuntimeRows(rows, observedAt, rawPrefix = "PRI{{") {
 
 function isCompactBzssRuntimeLine(text) {
   const source = String(text ?? "");
-  return /\{?\s*ID\s*:\s*-?\d+/i.test(source)
-    && /Pos\s*:/i.test(source)
-    && source.includes("CI{");
+  if (!/\{?\s*ID\s*:\s*-?\d+/i.test(source) || !/Pos\s*:/i.test(source)) {
+    return false;
+  }
+  const rows = splitCompactRuntimeRows(source);
+  return rows.some((row) => parseCompactRuntimeRow(row) != null);
 }
 
 function splitCompactRuntimeRows(text) {
@@ -1703,30 +1709,84 @@ function parseCompactRuntimeSoldierInfo(rawText) {
   };
 }
 
+function parseCompactRuntimeAnonymousInfo(rawText) {
+  const source = String(rawText ?? "").trim();
+  if (!source.startsWith("{") || !source.endsWith("}")) return null;
+
+  const content = source.slice(1, -1);
+  const fields = splitTopLevelCsv(content);
+  const stateCode = toFiniteNumber(fields[0]);
+  const healthText = String(fields[1] ?? "").trim();
+  let health = null;
+  let maxHealth = null;
+  if (healthText) {
+    const [nextHealth, nextMaxHealth] = healthText.split("/").map(toFiniteNumber);
+    health = nextHealth;
+    maxHealth = nextMaxHealth;
+  }
+
+  return {
+    raw: source,
+    fields,
+    stateCode,
+    healthText,
+    health,
+    maxHealth,
+    vehicleType: String(fields[2] ?? "").trim(),
+    seatIndex: toFiniteNumber(fields[3]),
+  };
+}
+
 function parseCompactRuntimeRow(row) {
   const normalized = String(row ?? "").trim();
   if (!normalized) return null;
 
   const raw = normalized.startsWith("{") ? normalized.slice(1) : normalized;
   const rowText = raw.endsWith("}") ? raw.slice(0, -1) : raw;
-  const playerId = toFiniteNumber(rowText.match(/(?:^|,)ID:([-0-9.]+)/i)?.[1]);
+  const fields = splitTopLevelCsv(rowText);
+  const playerIdField = fields.find((field) => /^ID\s*:/i.test(field));
+  const playerId = toFiniteNumber(playerIdField?.split(":")?.slice(1).join(":"));
   if (playerId == null) return null;
 
-  const combatInfoBlock = findNamedBlock(rowText, "CI");
-  const combatInfo = combatInfoBlock ? `CI{${combatInfoBlock.content}}` : "";
-  const soldierInfo = parseCompactRuntimeSoldierInfo(combatInfo);
-  const posMatch = rowText.match(/(?:^|,)Pos:(.*?)(?=,CI\{|$)/i);
-  const posValue = String(posMatch?.[1] ?? "").trim();
-  const invalidPawn = posValue.toLowerCase() === "invalidpawn";
+  const posFieldIndex = fields.findIndex((field) => /^Pos\s*:/i.test(field));
+  if (posFieldIndex < 0) return null;
+
+  const posTokens = [];
+  const tailTokens = [];
+  const firstPosToken = String(fields[posFieldIndex] ?? "").replace(/^Pos\s*:/i, "").trim();
+  if (firstPosToken) posTokens.push(firstPosToken);
+
+  for (const token of fields.slice(posFieldIndex + 1)) {
+    const text = String(token ?? "").trim();
+    if (!text) continue;
+    if (/^CI\s*\{/i.test(text) || text.startsWith("{")) {
+      tailTokens.push(text);
+      continue;
+    }
+    if (tailTokens.length > 0) {
+      tailTokens.push(text);
+      continue;
+    }
+    posTokens.push(text);
+  }
+
+  const posValue = posTokens.join(",");
+  const invalidPawn = posTokens[0]?.toLowerCase() === "invalidpawn";
+  const combatInfoToken = tailTokens.find((token) => /^CI\s*\{/i.test(token)) ?? "";
+  const anonymousInfoToken = tailTokens.find((token) => token.startsWith("{")) ?? "";
+  const combatInfo = combatInfoToken || anonymousInfoToken || "";
+  const anonymousInfo = combatInfoToken ? null : parseCompactRuntimeAnonymousInfo(anonymousInfoToken);
+  const soldierInfo = combatInfoToken
+    ? parseCompactRuntimeSoldierInfo(combatInfoToken)
+    : createEmptySoldierInfo();
 
   let position = null;
   let yaw = null;
   if (!invalidPawn) {
-    const posFields = splitTopLevelCsv(posValue);
-    const x = toFiniteNumber(posFields[0]);
-    const y = toFiniteNumber(posFields[1]);
-    const z = toFiniteNumber(posFields[2]);
-    const nextYaw = toFiniteNumber(posFields[3]);
+    const x = toFiniteNumber(posTokens[0]);
+    const y = toFiniteNumber(posTokens[1]);
+    const z = toFiniteNumber(posTokens[2]);
+    const nextYaw = toFiniteNumber(posTokens[3]);
     if (x != null && y != null && z != null) {
       position = {
         x: x * COMPACT_RUNTIME_POSITION_SCALE,
@@ -1745,6 +1805,7 @@ function parseCompactRuntimeRow(row) {
     combatInfo,
     presenceHint: invalidPawn ? "noPawn" : "",
     soldierInfo,
+    compactStateInfo: anonymousInfo,
     rawText: normalized,
   };
 }
