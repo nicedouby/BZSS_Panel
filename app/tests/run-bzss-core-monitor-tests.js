@@ -97,6 +97,29 @@ function testParseLogLine() {
   assert.equal(priFrameRuntime.priFrame.chunkCount, 2);
   assert.equal(priFrameRuntime.priFrame.totalPlayers, 2);
 
+  const compactRuntime = parseBzssCoreLogLine("PIE: Error: {ID:0,Pos:-1295,-1465,3,8,CI{0,125,QBZ191,}}/n/");
+  assert.equal(compactRuntime.type, "playerRuntime");
+  assert.equal(compactRuntime.runtimePlayers.length, 1);
+  assert.equal(compactRuntime.runtimePlayers[0].playerIndex, 0);
+  assert.deepEqual(compactRuntime.runtimePlayers[0].position, { x: -129500, y: -146500, z: 300 });
+  assert.equal(compactRuntime.runtimePlayers[0].yaw, 8);
+  assert.equal(compactRuntime.runtimePlayers[0].combatInfo, "CI{0,125,QBZ191,}");
+  assert.equal(compactRuntime.runtimePlayers[0].soldierInfo.raw, "CI{0,125,QBZ191,}");
+  assert.deepEqual(compactRuntime.runtimePlayers[0].soldierInfo.fields, ["0", "125", "QBZ191"]);
+  assert.equal(compactRuntime.runtimePlayers[0].soldierInfo.health, 125);
+  assert.equal(compactRuntime.runtimePlayers[0].soldierInfo.weaponClass, "QBZ191");
+
+  const compactMultiRuntime = parseBzssCoreLogLine(
+    "PIE: Error: {ID:0,Pos:-1295,-1465,3,8,CI{0,125,QBZ191,}}/n/\n{ID:1,Pos:10,20,3,90,CI{0,100,M4,}}/n/"
+  );
+  assert.equal(compactMultiRuntime.type, "playerRuntime");
+  assert.equal(compactMultiRuntime.runtimePlayers.length, 2);
+  assert.deepEqual(
+    compactMultiRuntime.runtimePlayers.map((player) => player.playerIndex),
+    [0, 1],
+  );
+  assert.equal(compactMultiRuntime.runtimePlayers[1].soldierInfo.weaponClass, "M4");
+
   const scoreboard = parseBzssCoreLogLine("PIE: PlayerScoreboard{0,1,-1,0,0,0,0,0,0,0,0,0,0,0,1,0-1,-1,19}}");
   assert.equal(scoreboard.type, "playerScoreboard");
   assert.equal(scoreboard.scoreboardPlayers.length, 1);
@@ -240,6 +263,25 @@ function testMonitorState() {
   assert.equal(raw.fobs.length, 1);
   assert.equal(raw.mainZones.length, 1);
   assert.ok(raw.rawLineHash);
+
+  const compactRuntimeModule = createBzssCoreMonitorModule({
+    core: {
+      eventBus: { onCoreEvent() { return () => {}; }, emitModuleEvent() {} },
+      logger: { info() {}, warn() {}, error() {}, debug() {} },
+    },
+  });
+  assert.equal(
+    compactRuntimeModule.api.ingestLogLine(
+      "PIE: Error: {ID:0,Pos:-1295,-1465,3,8,CI{0,125,QBZ191,}}/n/{ID:1,Pos:10,20,3,90,CI{0,100,M4,}}/n/"
+    ).ok,
+    true,
+  );
+  assert.equal(compactRuntimeModule.api.getRuntimePlayers().length, 2);
+  assert.deepEqual(
+    compactRuntimeModule.api.getRuntimePlayers().map((player) => player.playerIndex),
+    [0, 1],
+  );
+  assert.equal(compactRuntimeModule.api.getRuntimePlayers()[0].soldierInfo.weaponClass, "QBZ191");
 
   const fullBlockText = "PlayerBaseInfo{42,eos-42,Test Player,2,3,-1,-1}"
     + "SoldierInfo{BP_Soldier_US_Rifleman_C,88,0,0,0,0,0,0,BP_M4_C,30,120{X=1000 Y=2000 Z=0}{X=0 Y=90 Z=0}}"

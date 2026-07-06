@@ -7,6 +7,7 @@ const START_NEEDLE = Buffer.from("PlayerBaseInfo{", "utf16le");
 const PRI_START_NEEDLE = Buffer.from("PRI{{", "utf16le");
 const MARKER_NEEDLE = Buffer.from(MARKER, "utf16le");
 const PRI_FRAME_TIMEOUT_MS = 500;
+const COMPACT_RUNTIME_POSITION_SCALE = 100;
 const SCOREBOARD_FIELDS = [
   ["dataLives", "Data lives"],
   ["numKills", "Num kills"],
@@ -1568,6 +1569,7 @@ export function parseBzssCoreLogLine(line) {
   const text = String(line ?? "");
   if (text.includes("PRIFrame{")) return parsePriFrameRuntimeLine(text);
   if (text.includes("PRI{{")) return parsePriRuntimePlayerLine(text);
+  if (isCompactBzssRuntimeLine(text)) return parseCompactBzssRuntimeLine(text);
   if (text.includes("PlayerBaseInfo{") && text.includes("SoldierInfo{") && text.includes("PlayerScoreboard{")) {
     const players = parseBzssCorePlayerBlocks(text);
     return {
@@ -1614,6 +1616,103 @@ function parsePriRuntimeRows(rows, observedAt, rawPrefix = "PRI{{") {
     });
   }
   return runtimePlayers;
+}
+
+function isCompactBzssRuntimeLine(text) {
+  const source = String(text ?? "");
+  return /\{?\s*ID\s*:\s*-?\d+/i.test(source)
+    && /Pos\s*:/i.test(source)
+    && source.includes("CI{");
+}
+
+function splitCompactRuntimeRows(text) {
+  const source = String(text ?? "");
+  const first = source.search(/\{?\s*ID\s*:/i);
+  if (first < 0) return [];
+
+  const payload = source.slice(first)
+    .replace(/\\n/g, "/n/")
+    .replace(/\r?\n/g, "/n/");
+
+  return payload
+    .split("/n/")
+    .map((row) => row.trim())
+    .filter(Boolean)
+    .map((row) => row.startsWith("{") ? row : `{${row}`)
+    .map((row) => row.endsWith("}") ? row : `${row}}`);
+}
+
+function parseCompactRuntimeSoldierInfo(rawText) {
+  const source = String(rawText ?? "");
+  const block = findNamedBlock(source, "CI");
+  if (!block) {
+    return createEmptySoldierInfo();
+  }
+
+  const fields = splitTopLevelCsv(block.content);
+  return {
+    raw: `CI{${block.content}}`,
+    fields,
+    values: {},
+    soldierClass: fields[0] ?? "",
+    health: toFiniteNumber(fields[1]),
+    weaponClass: fields[2] && fields[2] !== "NoWeapon" ? fields[2] : "",
+    ammoValues: fields.slice(3).map(toFiniteNumber).filter((value) => value != null),
+    position: null,
+    rotation: null,
+  };
+}
+
+function parseCompactRuntimeRows(rows, observedAt) {
+  const runtimePlayers = [];
+  for (const row of rows) {
+    const normalized = String(row ?? "").trim();
+    if (!normalized) continue;
+
+    const raw = normalized.startsWith("{") ? normalized.slice(1) : normalized;
+    const rowText = raw.endsWith("}") ? raw.slice(0, -1) : raw;
+    const fields = splitTopLevelCsv(rowText);
+    const fieldMap = parseKeyValueFields(fields);
+    const playerId = toFiniteNumber(fieldMap.ID ?? fields[0]);
+    if (playerId == null) continue;
+
+    const x = toFiniteNumber(fieldMap.Pos ?? fields[1]);
+    const y = toFiniteNumber(fields[2]);
+    const z = toFiniteNumber(fields[3]);
+    const combatInfo = fields.slice(5).join(",");
+    const soldierInfo = parseCompactRuntimeSoldierInfo(combatInfo);
+    const rawCombatInfo = soldierInfo.raw || combatInfo;
+
+    runtimePlayers.push({
+      playerId,
+      playerIndex: playerId,
+      position: x == null || y == null || z == null ? null : {
+        x: x * COMPACT_RUNTIME_POSITION_SCALE,
+        y: y * COMPACT_RUNTIME_POSITION_SCALE,
+        z: z * COMPACT_RUNTIME_POSITION_SCALE,
+      },
+      yaw: toFiniteNumber(fields[4]),
+      combatInfo: rawCombatInfo,
+      presenceHint: detectRuntimePresenceHint({ combatInfo: rawCombatInfo, x, y, z }),
+      soldierInfo,
+      observedAt,
+      stale: false,
+      rawText: normalized,
+    });
+  }
+  return runtimePlayers;
+}
+
+function parseCompactBzssRuntimeLine(text) {
+  const source = String(text ?? "");
+  const observedAt = new Date().toISOString();
+  const rows = splitCompactRuntimeRows(source);
+  const runtimePlayers = parseCompactRuntimeRows(rows, observedAt);
+  return {
+    type: "playerRuntime",
+    runtimePlayers,
+    rawFields: [],
+  };
 }
 
 function parsePriFrameHeader(headerText) {
