@@ -2,7 +2,21 @@
 
 const MODULE_ID = "module.battleLog";
 const DEFAULT_MAX_EVENTS = 1500;
-const VALID_STAT_TYPES = new Set(["down", "kill", "death", "revive", "tk"]);
+const VALID_STAT_TYPES = new Set([
+  "down",
+  "kill",
+  "death",
+  "revive",
+  "tk",
+  "player_connected",
+  "player_joined",
+  "player_disconnected",
+  "player_left",
+  "squad_created",
+  "squad_disbanded",
+  "map_bring_up",
+  "map_changed",
+]);
 let activePlayerApi = null;
 let activeBattleLogEvents = null;
 
@@ -189,6 +203,207 @@ export function createBattleLogModule({ core, modules, config, logger }) {
       relation,
       tags: ["friendly_fire", "team_kill", "death"],
       note: "RCON TEAM_KILL",
+    }));
+  }
+
+  function handlePlayerConnected(event) {
+    if (!enabled || !isSubscribed()) return null;
+    const payload = normalizeCorePayload(event);
+    const player = resolveCorePlayer(payload, event, "player");
+    const time = resolveTime(payload, event);
+    const sourceEventId = resolveCoreSourceEventId(event, payload);
+    const note = buildPlayerConnectionNote(payload);
+    return pushBattleRecord(buildBattleRecord({
+      statType: "player_connected",
+      sourceType: "core",
+      sourceModule: event?.source ?? "core.eventBus",
+      sourceEventName: event?.eventName ?? "On_PlayerConnected",
+      sourceEventId,
+      serverId: resolveServerId(event, payload),
+      time,
+      playerRole: "player",
+      player,
+      counterparty: null,
+      sourceRecord: payload,
+      relation: {},
+      tags: ["player_connected"],
+      note,
+      displayMode: "single",
+    }));
+  }
+
+  function handlePlayerJoined(event) {
+    if (!enabled || !isSubscribed()) return null;
+    const payload = normalizeCorePayload(event);
+    const player = resolveCorePlayer(payload, event, "player");
+    const time = resolveTime(payload, event);
+    const sourceEventId = resolveCoreSourceEventId(event, payload);
+    return pushBattleRecord(buildBattleRecord({
+      statType: "player_joined",
+      sourceType: "core",
+      sourceModule: event?.source ?? "core.eventBus",
+      sourceEventName: event?.eventName ?? "On_PlayerJoined",
+      sourceEventId,
+      serverId: resolveServerId(event, payload),
+      time,
+      playerRole: "player",
+      player,
+      counterparty: null,
+      sourceRecord: payload,
+      relation: {},
+      tags: ["player_joined"],
+      note: buildPlayerJoinNote(payload),
+      displayMode: "single",
+    }));
+  }
+
+  function handlePlayerDisconnected(event) {
+    if (!enabled || !isSubscribed()) return null;
+    const payload = normalizeCorePayload(event);
+    const player = resolveCorePlayer(payload, event, "player");
+    const time = resolveTime(payload, event);
+    const sourceEventId = resolveCoreSourceEventId(event, payload);
+    return pushBattleRecord(buildBattleRecord({
+      statType: "player_disconnected",
+      sourceType: "core",
+      sourceModule: event?.source ?? "core.eventBus",
+      sourceEventName: event?.eventName ?? "On_PlayerDisconnected",
+      sourceEventId,
+      serverId: resolveServerId(event, payload),
+      time,
+      playerRole: "player",
+      player,
+      counterparty: null,
+      sourceRecord: payload,
+      relation: {},
+      tags: ["player_disconnected"],
+      note: buildPlayerDisconnectNote(payload),
+      displayMode: "single",
+    }));
+  }
+
+  function handlePlayerLeft(event) {
+    if (!enabled || !isSubscribed()) return null;
+    const payload = normalizeCorePayload(event);
+    const player = resolveCorePlayer(payload, event, "player");
+    const time = resolveTime(payload, event);
+    const sourceEventId = resolveCoreSourceEventId(event, payload);
+    return pushBattleRecord(buildBattleRecord({
+      statType: "player_left",
+      sourceType: "core",
+      sourceModule: event?.source ?? "core.eventBus",
+      sourceEventName: event?.eventName ?? "On_PlayerLeft",
+      sourceEventId,
+      serverId: resolveServerId(event, payload),
+      time,
+      playerRole: "player",
+      player,
+      counterparty: null,
+      sourceRecord: payload,
+      relation: {},
+      tags: ["player_left"],
+      note: buildPlayerLeaveNote(payload),
+      displayMode: "single",
+    }));
+  }
+
+  function handleSquadCreated(event) {
+    if (!enabled || !isSubscribed()) return null;
+    const payload = normalizeCorePayload(event);
+    const creator = resolveCorePlayer(payload, event, "creator");
+    const time = resolveTime(payload, event);
+    const sourceEventId = resolveCoreSourceEventId(event, payload);
+    return pushBattleRecord(buildBattleRecord({
+      statType: "squad_created",
+      sourceType: "core",
+      sourceModule: event?.source ?? "core.eventBus",
+      sourceEventName: event?.eventName ?? "On_SquadCreated",
+      sourceEventId,
+      serverId: resolveServerId(event, payload),
+      time,
+      playerRole: "attacker",
+      player: creator,
+      counterparty: null,
+      sourceRecord: payload,
+      relation: {},
+      tags: ["squad_created"],
+      note: buildSquadCreateNote(payload),
+      displayMode: "single",
+    }));
+  }
+
+  function handleSquadDisbanded(event) {
+    if (!enabled || !isSubscribed()) return null;
+    const payload = normalizeCorePayload(event);
+    const creator = resolveCorePlayer(payload, event, "creator");
+    const time = resolveTime(payload, event);
+    const sourceEventId = resolveCoreSourceEventId(event, payload);
+    return pushBattleRecord(buildBattleRecord({
+      statType: "squad_disbanded",
+      sourceType: "core",
+      sourceModule: event?.source ?? "core.eventBus",
+      sourceEventName: event?.eventName ?? "On_SquadDisbanded",
+      sourceEventId,
+      serverId: resolveServerId(event, payload),
+      time,
+      playerRole: "attacker",
+      player: creator,
+      counterparty: null,
+      sourceRecord: payload,
+      relation: {},
+      tags: ["squad_disbanded"],
+      note: buildSquadDisbandNote(payload),
+      displayMode: "single",
+    }));
+  }
+
+  function handleRoundWorldBringUp(event) {
+    if (!enabled || !isSubscribed()) return null;
+    const payload = normalizeCorePayload(event);
+    const player = resolveCorePlayer(payload, event, "player");
+    const time = resolveTime(payload, event);
+    const sourceEventId = resolveCoreSourceEventId(event, payload);
+    return pushBattleRecord(buildBattleRecord({
+      statType: "map_bring_up",
+      sourceType: "core",
+      sourceModule: event?.source ?? "core.eventBus",
+      sourceEventName: event?.eventName ?? "round.world_bring_up",
+      sourceEventId,
+      serverId: resolveServerId(event, payload),
+      time,
+      playerRole: "player",
+      player,
+      counterparty: null,
+      sourceRecord: payload,
+      relation: {},
+      tags: ["map_bring_up"],
+      note: buildMapBringUpNote(payload),
+      displayMode: "single",
+    }));
+  }
+
+  function handleRoundMatchWinner(event) {
+    if (!enabled || !isSubscribed()) return null;
+    const payload = normalizeCorePayload(event);
+    const player = resolveCorePlayer(payload, event, "player");
+    const time = resolveTime(payload, event);
+    const sourceEventId = resolveCoreSourceEventId(event, payload);
+    return pushBattleRecord(buildBattleRecord({
+      statType: "map_changed",
+      sourceType: "core",
+      sourceModule: event?.source ?? "core.eventBus",
+      sourceEventName: event?.eventName ?? "round.match_winner",
+      sourceEventId,
+      serverId: resolveServerId(event, payload),
+      time,
+      playerRole: "player",
+      player,
+      counterparty: null,
+      sourceRecord: payload,
+      relation: {},
+      tags: ["map_changed"],
+      note: buildMapWinnerNote(payload),
+      displayMode: "single",
     }));
   }
 
@@ -504,6 +719,21 @@ export function createBattleLogModule({ core, modules, config, logger }) {
         unsubscribers.push(core.eventBus.onModuleEvent("module.combatClean", "reviveResolved", handleCombatCleanRevive));
       }
       unsubscribers.push(core.eventBus.onCoreEvent("TEAM_KILL", handleTeamKill));
+      unsubscribers.push(core.eventBus.onCoreEvent("On_PlayerConnected", handlePlayerConnected));
+      unsubscribers.push(core.eventBus.onCoreEvent("PLAYER_CONNECTED", handlePlayerConnected));
+      unsubscribers.push(core.eventBus.onCoreEvent("On_PlayerJoined", handlePlayerJoined));
+      unsubscribers.push(core.eventBus.onCoreEvent("PLAYER_JOINED", handlePlayerJoined));
+      unsubscribers.push(core.eventBus.onCoreEvent("PLAYER_POST_LOGIN", handlePlayerConnected));
+      unsubscribers.push(core.eventBus.onCoreEvent("On_PlayerDisconnected", handlePlayerDisconnected));
+      unsubscribers.push(core.eventBus.onCoreEvent("PLAYER_DISCONNECTED", handlePlayerDisconnected));
+      unsubscribers.push(core.eventBus.onCoreEvent("On_PlayerLeft", handlePlayerLeft));
+      unsubscribers.push(core.eventBus.onCoreEvent("PLAYER_LEFT", handlePlayerLeft));
+      unsubscribers.push(core.eventBus.onCoreEvent("On_SquadCreated", handleSquadCreated));
+      unsubscribers.push(core.eventBus.onCoreEvent("SQUAD_CREATED", handleSquadCreated));
+      unsubscribers.push(core.eventBus.onCoreEvent("On_SquadDisbanded", handleSquadDisbanded));
+      unsubscribers.push(core.eventBus.onCoreEvent("SQUAD_DISBANDED", handleSquadDisbanded));
+      unsubscribers.push(core.eventBus.onCoreEvent("round.world_bring_up", handleRoundWorldBringUp));
+      unsubscribers.push(core.eventBus.onCoreEvent("round.match_winner", handleRoundMatchWinner));
 
       const combatCleanBackfill = backfillFromCombatClean();
       const cacheBackfill = await backfillFromCombatManagerCache();
@@ -949,4 +1179,169 @@ function clampLimit(value, fallback = 200) {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0) return Math.max(1, Math.floor(fallback));
   return Math.min(Math.floor(number), 1000);
+}
+
+function normalizeCorePayload(event = {}) {
+  const payload = event?.payload ?? event?.data ?? event?.record ?? event?.normalized ?? event ?? {};
+  const source = payload && typeof payload === "object" ? payload : {};
+  const paramMap = source.paramMap && typeof source.paramMap === "object"
+    ? source.paramMap
+    : event?.paramMap && typeof event.paramMap === "object"
+      ? event.paramMap
+      : {};
+
+  return {
+    ...source,
+    paramMap,
+    eventName: firstPresent(source.eventName, source.Event, event?.eventName, ""),
+    eventId: firstPresent(source.eventId, source.EventId, event?.eventId, ""),
+    serverId: firstPresent(source.serverId, source.ServerID, event?.serverId, ""),
+    time: firstPresent(source.time, source.Time, event?.time, new Date().toISOString()),
+    logTime: firstPresent(source.logTime, source.LogTime, event?.logTime, ""),
+    rawLog: firstPresent(source.rawLog, source.Raw, event?.rawLog, ""),
+  };
+}
+
+function resolveCoreSourceEventId(event, payload) {
+  return firstPresent(
+    payload?.eventId,
+    payload?.EventId,
+    payload?.sourceEventId,
+    payload?.SourceEventId,
+    payload?.sourceSeq,
+    payload?.SourceSeq,
+    event?.eventId,
+    event?.sourceEventId,
+    `${payload?.serverId ?? event?.serverId ?? ""}:${payload?.time ?? event?.time ?? Date.now()}:${Math.random().toString(16).slice(2)}`,
+  );
+}
+
+function resolveCorePlayer(payload, event, role = "player") {
+  const serverId = resolveServerId(event, payload);
+  const prefix = role === "creator" ? "Creator" : role === "player" ? "" : String(role ?? "").replace(/[^a-z0-9]/gi, "");
+  const read = (...keys) => firstPresent(...keys.map((key) => {
+    if (!key) return "";
+    return payload?.[key] ?? payload?.paramMap?.[key] ?? event?.[key] ?? "";
+  }));
+  const name = read(
+    `${prefix}PlayerName`,
+    `${prefix}Name`,
+    `${prefix}DisplayName`,
+    "PlayerName",
+    "Name",
+    "DisplayName",
+  );
+  const controllerID = read(
+    `${prefix}ControllerID`,
+    `${prefix}ControllerId`,
+    "ControllerID",
+    "ControllerId",
+  );
+  const eosID = read(
+    `${prefix}EOSID`,
+    `${prefix}EosID`,
+    "EOSID",
+    "EosID",
+  );
+  const steam64ID = read(
+    `${prefix}Steam64ID`,
+    `${prefix}SteamID`,
+    `${prefix}SteamId`,
+    "Steam64ID",
+    "SteamID",
+    "SteamId",
+  );
+  const teamID = read(
+    `${prefix}TeamID`,
+    `${prefix}TeamId`,
+    "TeamID",
+    "TeamId",
+  );
+  const squadID = read(
+    `${prefix}SquadID`,
+    `${prefix}SquadId`,
+    "SquadID",
+    "SquadId",
+  );
+
+  return resolvePlayerRef(serverId, {
+    name,
+    displayName: name,
+    controllerID,
+    eosID,
+    steam64ID,
+    steamID: steam64ID,
+    teamID,
+    squadID,
+  });
+}
+
+function buildPlayerConnectionNote(payload) {
+  const name = firstPresent(payload?.PlayerName, payload?.paramMap?.PlayerName, payload?.playerName, "Unknown Player");
+  const controller = firstPresent(payload?.ControllerID, payload?.paramMap?.ControllerID, "");
+  const eos = firstPresent(payload?.EOSID, payload?.paramMap?.EOSID, "");
+  const steam = firstPresent(payload?.Steam64ID, payload?.paramMap?.Steam64ID, "");
+  return [
+    `connected: ${name}`,
+    controller ? `controller=${controller}` : "",
+    eos ? `eos=${eos}` : "",
+    steam ? `steam64=${steam}` : "",
+  ].filter(Boolean).join(" | ");
+}
+
+function buildPlayerJoinNote(payload) {
+  const name = firstPresent(payload?.PlayerName, payload?.paramMap?.PlayerName, payload?.playerName, "Unknown Player");
+  const channel = firstPresent(payload?.Channel, payload?.paramMap?.Channel, "");
+  return channel ? `joined: ${name} | channel=${channel}` : `joined: ${name}`;
+}
+
+function buildPlayerDisconnectNote(payload) {
+  const name = firstPresent(payload?.PlayerName, payload?.paramMap?.PlayerName, payload?.playerName, "Unknown Player");
+  return `disconnected: ${name}`;
+}
+
+function buildPlayerLeaveNote(payload) {
+  const name = firstPresent(payload?.PlayerName, payload?.paramMap?.PlayerName, payload?.playerName, "Unknown Player");
+  return `left: ${name}`;
+}
+
+function buildSquadCreateNote(payload) {
+  const playerName = firstPresent(payload?.PlayerName, payload?.paramMap?.PlayerName, payload?.playerName, "Unknown Player");
+  const squadName = firstPresent(payload?.SquadName, payload?.paramMap?.SquadName, payload?.squadName, "Squad");
+  const squadId = firstPresent(payload?.SquadID, payload?.paramMap?.SquadID, payload?.squadId, "");
+  const factionName = firstPresent(payload?.FactionName, payload?.paramMap?.FactionName, payload?.factionName, "");
+  return [
+    `squad created by ${playerName}`,
+    squadName ? `squad=${squadName}` : "",
+    squadId ? `squadId=${squadId}` : "",
+    factionName ? `faction=${factionName}` : "",
+  ].filter(Boolean).join(" | ");
+}
+
+function buildSquadDisbandNote(payload) {
+  const playerName = firstPresent(payload?.PlayerName, payload?.paramMap?.PlayerName, payload?.playerName, "Unknown Player");
+  const squadName = firstPresent(payload?.SquadName, payload?.paramMap?.SquadName, payload?.squadName, "Squad");
+  return `squad disbanded by ${playerName}${squadName ? ` | squad=${squadName}` : ""}`;
+}
+
+function buildMapBringUpNote(payload) {
+  const mapName = firstPresent(payload?.mapName, payload?.MapName, payload?.paramMap?.mapName, payload?.paramMap?.MapName, "");
+  const gameMode = firstPresent(payload?.gameMode, payload?.GameMode, payload?.paramMap?.gameMode, payload?.paramMap?.GameMode, "");
+  const worldPath = firstPresent(payload?.worldPath, payload?.WorldPath, payload?.paramMap?.worldPath, payload?.paramMap?.WorldPath, "");
+  return [
+    "round world bring up",
+    mapName ? `map=${mapName}` : "",
+    gameMode ? `mode=${gameMode}` : "",
+    worldPath ? `world=${worldPath}` : "",
+  ].filter(Boolean).join(" | ");
+}
+
+function buildMapWinnerNote(payload) {
+  const winner = firstPresent(payload?.winner, payload?.Winner, payload?.paramMap?.winner, payload?.paramMap?.Winner, "");
+  const mapName = firstPresent(payload?.mapName, payload?.MapName, payload?.paramMap?.mapName, payload?.paramMap?.MapName, "");
+  return [
+    "round winner",
+    winner ? `winner=${winner}` : "",
+    mapName ? `map=${mapName}` : "",
+  ].filter(Boolean).join(" | ");
 }

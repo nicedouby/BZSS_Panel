@@ -3,13 +3,24 @@ import mapCornersData from "./map-corners.json" with { type: "json" };
 const STATIC_ASSET_BY_MAP = {
   AlBasrah_AAS_v1: {
     captureZones: [
-      { name: "01-AlKhora", x: 31.0, y: 22.0, z: 0 },
-      { name: "02-WestOutskirts", x: 18.0, y: 41.5, z: 0 },
-      { name: "03-Courtyard", x: 34.5, y: 35.5, z: 0 },
-      { name: "04-SouthSuburbs", x: 37.5, y: 49.5, z: 0 },
-      { name: "05-Mosque", x: 51.5, y: 55.0, z: 0 },
-      { name: "06-Refinery", x: 44.5, y: 63.5, z: 0 },
-      { name: "07-IslandSuburbs", x: 59.0, y: 68.0, z: 0 },
+      { name: "01-AlKhora", x: -122747.449, y: -126662.33, z: 904.58 },
+      { name: "02-WestOutskirts", x: -85742.813, y: -108347.721, z: 804.115 },
+      { name: "03-Courtyard", x: -53290.842, y: -57268.061, z: 1290.001 },
+      { name: "04-SouthSuburbs", x: -48420.736, y: 13822.024, z: 592.639 },
+      { name: "05-Mosque", x: -12344.512, y: 21119.884, z: 588.047 },
+      { name: "06-Refinery", x: 34850.213, y: 28142.688, z: 590.547 },
+      { name: "07-IslandSuburbs", x: 63855.96, y: 64688.161, z: 642.812 },
+    ],
+  },
+  AlBasrah_RAAS_v1: {
+    captureZones: [
+      { name: "B1-Airfield", x: -57095.684, y: -126662.33, z: 904.58 },
+      { name: "B2-ShantyMarina", x: -122747.449, y: -49634.712, z: 592.186 },
+      { name: "B3-OldHospital", x: -53290.842, y: -57268.061, z: 1290.001 },
+      { name: "B4-GenevaApartments", x: -48420.736, y: 13822.024, z: 592.639 },
+      { name: "B5-BridgeviewApartments", x: 34850.213, y: 28142.688, z: 590.547 },
+      { name: "B6-CastleviewApartments", x: -472.482, y: 50957.83, z: 1689.992 },
+      { name: "B7-Kiriku", x: 63855.96, y: 64688.161, z: 642.812 },
     ],
   },
   Chora_RAAS_v1: {
@@ -30,9 +41,19 @@ const STATIC_ASSET_BY_MAP = {
       { name: "05-GasStation", x: 62.0, y: 61.0, z: 0 },
     ],
   },
+  Mestia_RAAS_v1: {
+    captureZones: [
+      { name: "01-Quarry", x: 69538.671, y: -29071.391, z: -1946.936 },
+      { name: "02-TunnelEntrance", x: 28854.453, y: 560.512, z: -1280.719 },
+      { name: "04-CrucibleAlpha", x: 10836.241, y: -2103.843, z: -1627.717 },
+      { name: "04-Warehouse", x: -38960.562, y: 66551.055, z: -9710.021 },
+      { name: "05-Armory", x: -58508.312, y: 23924.438, z: -6764.733 },
+    ],
+  },
 };
 
 const MAP_IMAGE_BY_KEY = {
+  AlBasrah_AAS_v1: "tactical_map.jpg",
   Anvil_RAAS_v1: "Anvil_Minimap.PNG",
   Belaya_RAAS_v1: "Belaya_Minimap.PNG",
   Chora_RAAS_v1: "Chora_Minimap.PNG",
@@ -51,11 +72,13 @@ const MAP_IMAGE_BY_KEY = {
   Narva_RAAS_v1: "Narva_Minimap.PNG",
   Skorpo_RAAS_v1: "Skorpo_Minimap.PNG",
   Sumari_RAAS_v1: "Sumari_Minimap.PNG",
+  Sumari_Seed_v1: "Sumari_Minimap.PNG",
   Tallil_RAAS_v1: "Tallil_Outskirts_Minimap.PNG",
   Yehorivka_RAAS_v1: "Yehorivka_Minimap.PNG",
 };
 
 const MAP_NAME_BY_KEY = {
+  AlBasrah_AAS_v1: "Al Basrah",
   Anvil_RAAS_v1: "Anvil",
   Belaya_RAAS_v1: "Belaya",
   Chora_RAAS_v1: "Chora",
@@ -74,6 +97,7 @@ const MAP_NAME_BY_KEY = {
   Narva_RAAS_v1: "Narva",
   Skorpo_RAAS_v1: "Skorpo",
   Sumari_RAAS_v1: "Sumari",
+  Sumari_Seed_v1: "Sumari",
   Tallil_RAAS_v1: "Tallil Outskirts",
   Yehorivka_RAAS_v1: "Yehorivka",
 };

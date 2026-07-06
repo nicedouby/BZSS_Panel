@@ -12,6 +12,19 @@
       "bIsValid": true
     }
   },
+  "AlBasrah_AAS_v1": {
+    "corners": {
+      "min": {
+        "x": -122747.449,
+        "y": -126662.33
+      },
+      "max": {
+        "x": 63855.96,
+        "y": 64688.161
+      },
+      "bIsValid": true
+    }
+  },
   "Belaya_RAAS_v1": {
     "corners": {
       "min": {

@@ -291,6 +291,14 @@ function testParseLogLine() {
   assert.equal(scene.captureZones.length, 2);
   assert.equal(scene.fobs.length, 1);
   assert.equal(scene.mainZones.length, 1);
+
+  const fullBlockScene = parseBzssCoreLogLine(
+    "PIE: CaptureZones{CaptureZone{B1-Airfield,Position:X=-57095.684 Y=-126662.330 Z=904.580}CaptureZone{B7-Kiriku,Position:X=63855.960 Y=64688.161 Z=642.812}}FOBs{FobInfo{TeamID=1,Health=300.0,IsBleeding=false,Ammo=10000.0,Construction=2000.0,Name=Alpha,Position=X=10.0 Y=20.0 Z=30.0}}MainZones{MainZone{1,X=-117217.094 Y=-83417.945 Z=1423.340}}"
+  );
+  assert.equal(fullBlockScene.type, "captureZones");
+  assert.equal(fullBlockScene.captureZones.length, 2);
+  assert.equal(fullBlockScene.captureZones[0].name, "B1-Airfield");
+  assert.equal(fullBlockScene.captureZones[1].name, "B7-Kiriku");
 }
 
 function testMonitorState() {

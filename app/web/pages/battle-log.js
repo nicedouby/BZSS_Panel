@@ -7,6 +7,14 @@ const TYPE_OPTIONS = [
   { value: "death", label: "死亡" },
   { value: "revive", label: "复苏" },
   { value: "tk", label: "TK" },
+  { value: "player_connected", label: "连接" },
+  { value: "player_joined", label: "加入" },
+  { value: "player_disconnected", label: "断开" },
+  { value: "player_left", label: "离开" },
+  { value: "squad_created", label: "建队" },
+  { value: "squad_disbanded", label: "解散" },
+  { value: "map_bring_up", label: "地图启动" },
+  { value: "map_changed", label: "胜负判定" },
 ];
 
 export async function renderPage({ root, api, apiFetch, routeInfo }) {
@@ -300,7 +308,7 @@ export async function renderPage({ root, api, apiFetch, routeInfo }) {
         <td><span class="type-pill ${esc(event.statType || "")}">${esc(eventTypeLabel(event))}</span></td>
         <td>${renderPlayerCell(event.player, event.playerName)}</td>
         <td>${renderPlayerCell(event.counterparty, event.counterpartyName)}</td>
-        <td>${esc(event.sourceType === "rcon" ? "RCON" : "combatClean")}<br><small>${esc(event.sourceEventName || event.sourceModule || "-")}</small></td>
+        <td>${esc(renderSourceLabel(event))}<br><small>${esc(event.sourceEventName || event.sourceModule || "-")}</small></td>
         <td>${esc(event.note || event.displayText || "-")}</td>
       </tr>
     `).join("");
@@ -359,7 +367,21 @@ function eventTypeLabel(event) {
   if (type === "death") return "死亡";
   if (type === "revive") return "复苏";
   if (type === "tk") return "TK";
+  if (type === "player_connected") return "连接";
+  if (type === "player_joined") return "加入";
+  if (type === "player_disconnected") return "断开";
+  if (type === "player_left") return "离开";
+  if (type === "squad_created") return "建队";
+  if (type === "squad_disbanded") return "解散";
+  if (type === "map_bring_up") return "地图启动";
+  if (type === "map_changed") return "胜负判定";
   return type || "-";
+}
+
+function renderSourceLabel(event) {
+  if (event?.sourceType === "rcon") return "RCON";
+  if (event?.sourceType === "core") return "BZSS CORE";
+  return String(event?.sourceModule ?? "").includes("combatClean") ? "combatClean" : "core";
 }
 
 function renderPlayerCell(player, fallback = "") {

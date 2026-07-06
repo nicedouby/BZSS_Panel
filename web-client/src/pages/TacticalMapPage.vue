@@ -1090,6 +1090,8 @@ const serverMapName = computed(() => {
   const serverMap = String(serverStore.snapshot?.mapName ?? "").trim();
   if (serverMap) return serverMap;
   if (isStandaloneMapRoute.value) {
+    const serverLayer = String(tacticalStateStore.server?.layer ?? tacticalStateStore.snapshot?.match?.layer ?? "").trim();
+    if (serverLayer) return serverLayer;
     return String(tacticalStateStore.server?.map ?? tacticalStateStore.snapshot?.match?.map ?? "").trim();
   }
   return "";
@@ -1110,6 +1112,9 @@ const activeMapConfig = computed<TacticalMapConfig>(() => {
 
 const mapOptions = computed<TacticalMapConfig[]>(() => TACTICAL_MAP_LIST);
 const staticAssets = computed(() => getStaticTacticalAssets(activeMapConfig.value.key));
+
+const lastKnownZonePositions = ref(new Map<string, { x: number; y: number }>());
+const lastKnownFobPositions = ref(new Map<string, { x: number; y: number }>());
 
 // Cache to prevent players disappearing when data is missing temporarily
 const cachedPlayers = ref<Record<string, { player: TacticalLinkedPlayer; lastSeen: number }>>({});
@@ -1940,8 +1945,14 @@ const captureZoneMarkers = computed<CaptureZoneMarker[]>(() => {
       const fallback = staticCaptureZones.find((entry) => String(entry.name ?? "").trim() === name);
       x = Number(fallback?.x);
       y = Number(fallback?.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        const cached = lastKnownZonePositions.value.get(name);
+        x = Number(cached?.x);
+        y = Number(cached?.y);
+      }
     }
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    lastKnownZonePositions.value.set(name, { x, y });
     markers.push({
       type: "captureZone",
       id: `capture-zone-${name}`,
@@ -2016,16 +2027,24 @@ const fobMarkers = computed<FobMarker[]>(() => {
   const bounds = activeMapConfig.value.bounds;
   const markers: FobMarker[] = [];
   for (const fob of list) {
+    const name = String(fob?.name ?? "FOB Radio").trim() || "FOB Radio";
+    const teamId = Number.isFinite(Number(fob?.teamId)) ? Number(fob?.teamId) : null;
+    const key = String(fob?.fobId ?? `${teamId ?? "unknown"}:${name}`).trim();
     const pos = fob?.position;
-    if (!pos) continue;
-    const x = Number(pos.x);
-    const y = Number(pos.y);
+    let x = Number(pos?.x);
+    let y = Number(pos?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      const cached = lastKnownFobPositions.value.get(key);
+      x = Number(cached?.x);
+      y = Number(cached?.y);
+    }
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    lastKnownFobPositions.value.set(key, { x, y });
     markers.push({
       type: "fob",
-      id: String(fob.fobId ?? fob.name ?? `${fob.teamId ?? "unknown"}-${x}-${y}`),
-      name: fob.name || "FOB Radio",
-      teamId: fob.teamId,
+      id: String(fob.fobId ?? key ?? `${teamId ?? "unknown"}-${x}-${y}`),
+      name,
+      teamId,
       health: fob.health ?? null,
       isBleeding: fob.isBleeding,
       ammo: fob.ammo ?? null,

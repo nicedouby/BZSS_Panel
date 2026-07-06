@@ -225,9 +225,30 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
           }
 
           if (parsed.type === "scene") {
-            draft.captureZones = parsed.captureZones;
-            draft.fobs = parsed.fobs;
-            draft.mainZones = parsed.mainZones;
+            draft.captureZones = mergeCaptureZones(draft.captureZones, parsed.captureZones);
+            draft.fobs = mergeFobs(draft.fobs, parsed.fobs);
+            draft.mainZones = mergeMainZones(draft.mainZones, parsed.mainZones);
+            continue;
+          }
+
+          if (parsed.type === "captureZones") {
+            if (parsed.captureZones.length > 0) {
+              draft.captureZones = mergeCaptureZones(draft.captureZones, parsed.captureZones);
+            }
+            continue;
+          }
+
+          if (parsed.type === "fobs") {
+            if (parsed.fobs.length > 0) {
+              draft.fobs = mergeFobs(draft.fobs, parsed.fobs);
+            }
+            continue;
+          }
+
+          if (parsed.type === "mainZones") {
+            if (parsed.mainZones.length > 0) {
+              draft.mainZones = mergeMainZones(draft.mainZones, parsed.mainZones);
+            }
             continue;
           }
 
@@ -1624,6 +1645,27 @@ export function parseBzssCoreLogLine(line) {
   }
   if (text.includes("PlayerBaseInfo{")) return parseRuntimePlayerLine(text);
   if (text.includes("PlayerScoreboard{")) return parseScoreboardPlayerLine(text);
+  if (text.includes("CaptureZones{")) {
+    return {
+      type: "captureZones",
+      captureZones: parseCaptureZones(text),
+      rawFields: [],
+    };
+  }
+  if (text.includes("FOBs{")) {
+    return {
+      type: "fobs",
+      fobs: parseFobs(text),
+      rawFields: [],
+    };
+  }
+  if (text.includes("MainZones{")) {
+    return {
+      type: "mainZones",
+      mainZones: parseMainZones(text),
+      rawFields: [],
+    };
+  }
   if (text.includes("CPZ:") && text.includes(",FOBI:") && text.includes(",MainZone:")) return parseSceneInfoLine(text);
   if (text.includes("ApplyExplosiveDamage():")) {
     return parseExplosiveDamageLine(text);
@@ -2274,6 +2316,69 @@ function parseCompactFobs(text) {
   });
 }
 
+function mergeCaptureZones(previousZones, nextZones) {
+  const previousByName = new Map(
+    (Array.isArray(previousZones) ? previousZones : [])
+      .map((zone) => [String(zone?.name ?? "").trim(), clonePlainObject(zone)])
+      .filter(([name]) => Boolean(name)),
+  );
+
+  return (Array.isArray(nextZones) ? nextZones : []).map((zone) => {
+    const cloned = clonePlainObject(zone);
+    const name = String(cloned?.name ?? "").trim();
+    const previous = previousByName.get(name) ?? null;
+    if (previous && (cloned.position == null || cloned.position?.x == null || cloned.position?.y == null)) {
+      cloned.position = clonePlainObject(previous.position ?? null);
+    }
+    return cloned;
+  });
+}
+
+function mergeMainZones(previousZones, nextZones) {
+  const previousByTeam = new Map(
+    (Array.isArray(previousZones) ? previousZones : [])
+      .map((zone) => [String(zone?.teamId ?? ""), clonePlainObject(zone)])
+      .filter(([teamKey]) => Boolean(teamKey)),
+  );
+
+  return (Array.isArray(nextZones) ? nextZones : []).map((zone) => {
+    const cloned = clonePlainObject(zone);
+    const teamKey = String(cloned?.teamId ?? "");
+    const previous = previousByTeam.get(teamKey) ?? null;
+    if (previous && (cloned.position == null || cloned.position?.x == null || cloned.position?.y == null)) {
+      cloned.position = clonePlainObject(previous.position ?? null);
+    }
+    return cloned;
+  });
+}
+
+function mergeFobs(previousFobs, nextFobs) {
+  const previousByKey = new Map(
+    (Array.isArray(previousFobs) ? previousFobs : [])
+      .map((fob, index) => [buildFobMergeKey(fob, index), clonePlainObject(fob)])
+      .filter(([key]) => Boolean(key)),
+  );
+
+  return (Array.isArray(nextFobs) ? nextFobs : []).map((fob, index) => {
+    const cloned = clonePlainObject(fob);
+    const key = buildFobMergeKey(cloned, index);
+    const previous = previousByKey.get(key) ?? null;
+    if (previous && (cloned.position == null || cloned.position?.x == null || cloned.position?.y == null)) {
+      cloned.position = clonePlainObject(previous.position ?? null);
+    }
+    return cloned;
+  });
+}
+
+function buildFobMergeKey(fob, index = 0) {
+  const fobId = String(fob?.fobId ?? "").trim();
+  if (fobId) return `id:${fobId}`;
+  const name = String(fob?.name ?? "").trim();
+  const teamId = String(fob?.teamId ?? "");
+  if (name || teamId) return `team:${teamId}:name:${name}`;
+  return `index:${index}`;
+}
+
 function parseMainZones(text) {
   const section = extractDelimitedSceneSection(text, "MainZone:", "");
   if (!section) return [];
@@ -2283,7 +2388,7 @@ function parseMainZones(text) {
     const vectorText = commaIndex >= 0 ? raw.slice(commaIndex + 1) : "";
     return {
       teamId: toFiniteNumber(teamText),
-      position: scalePosition(parseVectorBlock(vectorText)),
+      position: parseVectorBlock(vectorText),
       raw,
     };
   }).filter((zone) => zone.teamId != null || zone.position);
