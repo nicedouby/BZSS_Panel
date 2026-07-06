@@ -287,7 +287,7 @@ export function createCombatManagerService({ core, modules, config, logger }) {
       search: "",
     }) ?? [];
     const rawEvents = rawState?.events ?? [];
-    const primaryEvents = processedEvents.length > 0 ? processedEvents : rawEvents;
+    const primaryEvents = mergeCombatEventLists(rawEvents, processedEvents);
     const stats = processedOverview?.stats ?? rawState?.stats ?? {};
     const rawStats = rawState?.stats ?? {};
     const processedStats = processedOverview?.stats ?? {};
@@ -310,11 +310,11 @@ export function createCombatManagerService({ core, modules, config, logger }) {
       dependencies: {
         combatState: {
           loaded: Boolean(modules?.combatState),
-          subscribed: Boolean(modules?.combatState?.api),
+          subscribed: Boolean(modules?.combatState),
         },
         combatClean: {
           loaded: Boolean(modules?.combatClean),
-          subscribed: Boolean(modules?.combatClean?.api),
+          subscribed: Boolean(modules?.combatClean),
         },
       },
     };
@@ -566,11 +566,11 @@ function normalizeServerKey(value = "") {
   return String(value ?? "").trim().replace(/[^A-Za-z0-9_.-]/g, "_") || "default";
 }
 
-function selectPrimaryEvents(filter = {}) {
-  const serverId = String(filter.serverId ?? "").trim();
-  const type = normalizeType(filter.type ?? "all");
-  const search = String(filter.search ?? filter.q ?? "").trim().toLowerCase();
-  const limit = Math.max(1, Number(filter.limit ?? 300) || 300);
+  function selectPrimaryEvents(filter = {}) {
+    const serverId = String(filter.serverId ?? "").trim();
+    const type = normalizeType(filter.type ?? "all");
+    const search = String(filter.search ?? filter.q ?? "").trim().toLowerCase();
+    const limit = Math.max(1, Number(filter.limit ?? 300) || 300);
   const offset = Math.max(0, Number(filter.offset ?? 0) || 0);
   const mode = String(filter.mode ?? filter.view ?? "").trim().toLowerCase();
 
@@ -600,7 +600,7 @@ function selectPrimaryEvents(filter = {}) {
   } else if (mode === "processed") {
     events = processed;
   } else {
-    events = processed.length > 0 ? processed : raw;
+    events = mergeCombatEventLists(raw, processed);
   }
 
   const playerKeys = [
@@ -642,6 +642,47 @@ function selectPrimaryEvents(filter = {}) {
   }
 
   return events.slice().reverse().slice(offset, offset + limit);
+}
+
+function mergeCombatEventLists(rawEvents = [], processedEvents = []) {
+  const merged = [];
+  const seen = new Set();
+
+  for (const event of [...rawEvents, ...processedEvents]) {
+    const key = buildCombatEventDedupKey(event);
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    merged.push(event);
+  }
+
+  return merged.sort(compareCombatEventsForDisplay);
+}
+
+function buildCombatEventDedupKey(event = {}) {
+  const sourceEventId = String(
+    event?.raw?.sourceEventId
+    ?? event?.sourceEventId
+    ?? event?.eventId
+    ?? event?.id
+    ?? "",
+  ).trim();
+  const type = normalizeType(event?.type ?? event?.eventName);
+  const serverId = String(event?.serverId ?? "").trim();
+  const sourceMarker = String(event?.sourceModule ?? event?.sourceLayer ?? "").trim().toLowerCase();
+
+  if (!sourceEventId && !type && !serverId) return "";
+  return [serverId, sourceEventId || type || "event", sourceMarker].filter(Boolean).join("|");
+}
+
+function compareCombatEventsForDisplay(left, right) {
+  const leftTime = parseTimestampMs(left?.time ?? left?.createdAt ?? 0);
+  const rightTime = parseTimestampMs(right?.time ?? right?.createdAt ?? 0);
+  if (leftTime !== rightTime) return leftTime - rightTime;
+
+  const leftId = String(left?.id ?? left?.eventId ?? "").localeCompare(String(right?.id ?? right?.eventId ?? ""));
+  if (leftId !== 0) return leftId;
+
+  return String(left?.sourceModule ?? "").localeCompare(String(right?.sourceModule ?? ""));
 }
 
 function translateToCombatStateType(type) {

@@ -115,11 +115,12 @@
         <MatchChatPanel v-if="!isMobile" class="match-chat-column" />
       </div>
       <div v-else-if="viewMode === 'map' || (isMobile && mobileTab === 'map')" class="match-state-map-wrapper">
-        <TacticalMapPage
+      <TacticalMapPage
           :snapshot="tacticalMapSnapshot"
           :players="tacticalMapPlayers"
           :capture-zones="tacticalMapCaptureZones"
           :fobs="tacticalMapFobs"
+          :main-zones="tacticalMapMainZones"
           :loading="tacticalMapLoading"
           :errorText="tacticalMapError"
           :playtimes="playtimes"
@@ -402,6 +403,7 @@ const tacticalMapSnapshot = computed(() => {
 });
 const tacticalMapPlayers = computed(() => adaptTacticalStatePlayersForMap(tacticalPlayers.value, combatStatsLookup.value));
 const tacticalMapCaptureZones = computed(() => tacticalStateStore.assets?.captureZones ?? []);
+const tacticalMapMainZones = computed(() => tacticalStateStore.assets?.mainZones ?? []);
 const tacticalMapFobs = computed(() => tacticalStateStore.assets?.fobs ?? []);
 const tacticalMapLoading = computed(() => tacticalStateStore.loading);
 const tacticalMapError = computed(() => tacticalStateStore.error);

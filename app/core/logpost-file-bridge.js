@@ -6,6 +6,7 @@ import path from "node:path";
 const DEFAULT_POLL_INTERVAL_MS = 250;
 const DEFAULT_RECENT_REPLAY_LINES = 120;
 const DEFAULT_EVENT_NAME = "On_RawLogLine";
+const ALL_EVENTS_FILE_NAME = "all.jsonl";
 
 export class LogPostFileBridge {
   constructor({ config, logger, eventBus, eventPipeline, webStatus, logPostMonitor = null }) {
@@ -100,7 +101,7 @@ export class LogPostFileBridge {
 
   resolveCurrentFilePath() {
     const dateKey = getDateKey(new Date());
-    return path.resolve(this.workingDirectory, "LogPost", "events", dateKey, `${this.eventName}.jsonl`);
+    return resolveLogPostEventFilePath(this.workingDirectory, dateKey, this.eventName);
   }
 
   async replayRecent(filePath, fileSize) {
@@ -118,7 +119,7 @@ export class LogPostFileBridge {
     const rows = buffer.toString("utf8").split(/\r?\n/).filter(Boolean);
     const recentRows = rows.slice(-this.replayRecentLines);
     for (const row of recentRows) {
-      this.ingestJsonLine(row, { replay: true });
+      this.ingestJsonLine(row, { replay: true, filePath });
     }
   }
 
@@ -147,11 +148,11 @@ export class LogPostFileBridge {
     this.partialLine = lines.pop() ?? "";
     for (const line of lines) {
       if (!line) continue;
-      this.ingestJsonLine(line, { replay: false });
+      this.ingestJsonLine(line, { replay: false, filePath });
     }
   }
 
-  ingestJsonLine(line, { replay }) {
+  ingestJsonLine(line, { replay, filePath }) {
     let rawEvent;
     try {
       rawEvent = JSON.parse(line);
@@ -160,7 +161,9 @@ export class LogPostFileBridge {
       return;
     }
 
-    if (String(rawEvent?.Event ?? "") !== this.eventName) {
+    const sourceFileName = path.basename(String(filePath ?? ""));
+    const acceptAllEvents = sourceFileName === ALL_EVENTS_FILE_NAME;
+    if (!acceptAllEvents && String(rawEvent?.Event ?? "") !== this.eventName) {
       return;
     }
 
@@ -180,4 +183,22 @@ function getDateKey(now) {
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function resolveLogPostEventFilePath(workingDirectory, dateKey, eventName) {
+  const baseDirectory = path.resolve(workingDirectory);
+  const candidates = [
+    path.resolve(baseDirectory, "events", dateKey, ALL_EVENTS_FILE_NAME),
+    path.resolve(baseDirectory, "LogPost", "events", dateKey, ALL_EVENTS_FILE_NAME),
+    path.resolve(baseDirectory, "events", dateKey, `${eventName}.jsonl`),
+    path.resolve(baseDirectory, "LogPost", "events", dateKey, `${eventName}.jsonl`),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return candidates[0];
 }

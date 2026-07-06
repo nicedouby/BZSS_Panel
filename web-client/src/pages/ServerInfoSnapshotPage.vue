@@ -44,6 +44,7 @@
             :players="tacticalPlayers"
             :capture-zones="tacticalCaptureZones"
             :fobs="tacticalFobs"
+            :main-zones="tacticalMainZones"
             :loading="loading"
             :error-text="errorText"
             @snapshot-ready="handleSnapshotReady"
@@ -94,6 +95,7 @@ type SnapshotState = {
     players: any[];
     captureZones: any[];
     fobs: any[];
+    mainZones: any[];
     explosions: any[];
   };
 };
@@ -128,6 +130,7 @@ const tacticalSnapshot = computed(() => {
       ...(bzssCore.state.assets ?? {}),
       captureZones: bzssCore.captureZones ?? [],
       fobs: bzssCore.fobs ?? [],
+      mainZones: bzssCore.mainZones ?? [],
       explosions,
     },
   };
@@ -137,6 +140,7 @@ const tacticalPlayers = computed(() => linkTacticalPlayers({
   runtimePlayers: [],
 }));
 const tacticalCaptureZones = computed(() => snapshotState.value?.bzssCore.captureZones ?? []);
+const tacticalMainZones = computed(() => snapshotState.value?.bzssCore.mainZones ?? []);
 const tacticalFobs = computed(() => snapshotState.value?.bzssCore.fobs ?? []);
 
 watch(

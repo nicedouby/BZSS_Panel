@@ -259,16 +259,45 @@
         <!-- Assets Tab -->
         <div v-else-if="sidebarTab === 'assets'" class="sidebar-scroll">
           <div class="asset-group">
+            <div class="asset-group-title">主基地</div>
+            <button
+              v-for="zone in mainZoneMarkers"
+              :key="zone.id"
+              type="button"
+              class="asset-row asset-row--stacked"
+              @click="$emit('focus-zone', zone)"
+            >
+              <div class="asset-row-title">
+                <span class="bzss-team-indicator" :class="`team-ind-${zone.teamId ?? 0}`">T{{ zone.teamId ?? '--' }}</span>
+                <span>{{ zone.name }}</span>
+              </div>
+              <div class="asset-meta font-mono">{{ zone.mapX.toFixed(1) }}%, {{ zone.mapY.toFixed(1) }}%</div>
+            </button>
+            <div v-if="!mainZoneMarkers.length" class="empty-state">暂无主基地</div>
+          </div>
+
+          <div class="asset-group">
             <div class="asset-group-title">占领点</div>
             <button
               v-for="zone in captureZoneMarkers"
-              :key="zone.name"
+              :key="zone.id"
               type="button"
-              class="asset-row"
+              class="asset-row asset-row--stacked"
               @click="$emit('focus-zone', zone)"
             >
-              <span>{{ zone.name }}</span>
-              <span class="asset-meta font-mono">{{ zone.mapX.toFixed(1) }}%, {{ zone.mapY.toFixed(1) }}%</span>
+              <div class="asset-row-title">
+                <span class="bzss-badge bzss-badge--ok">CPZ</span>
+                <span>{{ zone.name }}</span>
+                <span v-if="zone.isLocked" class="bzss-badge bzss-badge--warn">LOCK</span>
+              </div>
+              <div class="asset-bars">
+                <div class="asset-bar-line">
+                  <span>CAP</span>
+                  <div class="mini-bar-track"><div class="mini-bar-fill bzss-fill-hp" :style="{ width: `${Math.max(0, Math.min(100, Math.round(zone.capturePercent ?? 0)))}%` }"></div></div>
+                  <span>{{ Math.round(zone.capturePercent ?? 0) }}%</span>
+                </div>
+                <div class="asset-meta font-mono">DIR {{ zone.captureDirection ?? '--' }}</div>
+              </div>
             </button>
             <div v-if="!captureZoneMarkers.length" class="empty-state">暂无占领点</div>
           </div>
@@ -392,21 +421,43 @@ interface TacticalTeamSquad {
 }
 
 interface TacticalCaptureZoneMarker {
+  id: string;
   name: string;
+  teamId: number | null;
+  mapX: number;
+  mapY: number;
+  gameX?: number | null;
+  gameY?: number | null;
+  capturePercent?: number | null;
+  captureDirection?: number | null;
+  isLocked?: boolean | null;
+  raw?: string;
+}
+
+interface TacticalMainZoneMarker {
+  id: string;
+  name: string;
+  teamId: number | null;
   mapX: number;
   mapY: number;
   raw?: string;
 }
 
 interface TacticalFobMarker {
+  id: string;
   name: string;
-  teamId: number;
+  teamId: number | null;
   health?: number | null;
   isBleeding?: boolean | null;
   ammo?: number | null;
   construction?: number | null;
   mapX: number;
   mapY: number;
+  gameX?: number | null;
+  gameY?: number | null;
+  exclusionRadius?: number | null;
+  constructionRadius?: number | null;
+  radiusPx?: number | null;
   raw?: string;
 }
 
@@ -446,6 +497,7 @@ const props = defineProps<{
   snapshot: BzssCorePlayerInfoResponse | null;
   currentTeamSquads: TacticalTeamSquad[];
   filteredTeamPlayers: TacticalLinkedPlayer[];
+  mainZoneMarkers: TacticalMainZoneMarker[];
   captureZoneMarkers: TacticalCaptureZoneMarker[];
   fobMarkers: TacticalFobMarker[];
   vehicleGroups: TacticalVehicleGroup[];

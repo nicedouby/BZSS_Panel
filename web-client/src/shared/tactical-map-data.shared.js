@@ -1,5 +1,37 @@
 import mapCornersData from "./map-corners.json" with { type: "json" };
 
+const STATIC_ASSET_BY_MAP = {
+  AlBasrah_AAS_v1: {
+    captureZones: [
+      { name: "01-AlKhora", x: 31.0, y: 22.0, z: 0 },
+      { name: "02-WestOutskirts", x: 18.0, y: 41.5, z: 0 },
+      { name: "03-Courtyard", x: 34.5, y: 35.5, z: 0 },
+      { name: "04-SouthSuburbs", x: 37.5, y: 49.5, z: 0 },
+      { name: "05-Mosque", x: 51.5, y: 55.0, z: 0 },
+      { name: "06-Refinery", x: 44.5, y: 63.5, z: 0 },
+      { name: "07-IslandSuburbs", x: 59.0, y: 68.0, z: 0 },
+    ],
+  },
+  Chora_RAAS_v1: {
+    captureZones: [
+      { name: "01-TriCommons", x: 33.0, y: 29.0, z: 0 },
+      { name: "02-AbdelsFarm", x: 39.5, y: 36.5, z: 0 },
+      { name: "03-WalledCourts", x: 48.0, y: 45.0, z: 0 },
+      { name: "04-OldTown", x: 55.0, y: 52.5, z: 0 },
+      { name: "05-TownCenter", x: 61.5, y: 59.0, z: 0 },
+    ],
+  },
+  Sumari_Seed_v1: {
+    captureZones: [
+      { name: "01-TriCommons", x: 40.0, y: 37.5, z: 0 },
+      { name: "02-AbdelsFarm", x: 45.5, y: 44.0, z: 0 },
+      { name: "03-WalledCourts", x: 51.0, y: 50.5, z: 0 },
+      { name: "04-Market", x: 56.0, y: 55.5, z: 0 },
+      { name: "05-GasStation", x: 62.0, y: 61.0, z: 0 },
+    ],
+  },
+};
+
 const MAP_IMAGE_BY_KEY = {
   Anvil_RAAS_v1: "Anvil_Minimap.PNG",
   Belaya_RAAS_v1: "Belaya_Minimap.PNG",
@@ -120,4 +152,8 @@ export function resolveTacticalMapKey(mapName) {
     }
   }
   return null;
+}
+
+export function getStaticTacticalAssets(mapKey) {
+  return STATIC_ASSET_BY_MAP[String(mapKey ?? "")] ?? null;
 }

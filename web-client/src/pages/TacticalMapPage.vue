@@ -58,11 +58,33 @@
 
 
 
+        <!-- Main Zone Overlay -->
+        <div v-if="mainZoneMarkers.length" class="main-zone-layer">
+          <div
+            v-for="zone in mainZoneMarkers"
+            :key="zone.id"
+            class="main-zone-marker"
+            :class="[`team-${zone.teamId ?? 0}`]"
+            :style="{
+              left: `${zone.mapX}%`,
+              top: `${zone.mapY}%`,
+              transform: `translate(-50%, -50%) scale(${dynamicMarkerScale})`,
+            }"
+            :title="zone.raw || zone.name"
+          >
+            <div class="main-zone-flag">
+              <span class="main-zone-pole"></span>
+              <span class="main-zone-flag-body">{{ zone.teamId ? `T${zone.teamId}` : "MAIN" }}</span>
+            </div>
+            <span class="main-zone-label">MAIN</span>
+          </div>
+        </div>
+
         <!-- Capture Zone Overlay -->
         <div v-if="showCaptureZones" class="capture-zone-layer">
           <button
             v-for="zone in captureZoneMarkers"
-            :key="zone.name"
+            :key="zone.id"
             class="capture-zone-marker"
             type="button"
             :style="{
@@ -73,7 +95,6 @@
             :title="zone.raw || zone.name"
           >
             <div class="tactical-flag-node">
-
               <div class="node-crosshair">
                 <span class="crosshair-bracket top-left"></span>
                 <span class="crosshair-bracket top-right"></span>
@@ -87,15 +108,44 @@
                 <span class="node-index-label">OBJ {{ zone.name.includes('-') ? zone.name.split('-')[0] : '' }}</span>
                 <span class="node-name-text">{{ zone.name.includes('-') ? zone.name.split('-').slice(1).join('-') : zone.name }}</span>
               </div>
+              <div class="capture-progress-ring">
+                <svg viewBox="0 0 36 36">
+                  <circle class="capture-progress-bg" cx="18" cy="18" r="15" />
+                  <circle
+                    class="capture-progress-fill"
+                    cx="18"
+                    cy="18"
+                    r="15"
+                    :stroke-dasharray="getCaptureDashArray(zone)"
+                  />
+                </svg>
+                <span class="capture-progress-text">{{ formatCapturePercent(zone.capturePercent) }}</span>
+              </div>
             </div>
           </button>
         </div>
 
         <!-- FOB Overlay -->
         <div v-if="showFobs" class="fob-layer">
+          <svg class="fob-radius-svg" viewBox="0 0 1000 1000" preserveAspectRatio="none">
+            <g v-for="fob in fobMarkers" :key="`fob-radius-${fob.id}`">
+              <circle
+                :cx="fob.mapX * 10"
+                :cy="fob.mapY * 10"
+                :r="Number(fob.exclusionRadius ?? 0) > 0 ? metersToSvgRadius(400) : 0"
+                class="fob-radius-circle fob-radius-exclusion"
+              />
+              <circle
+                :cx="fob.mapX * 10"
+                :cy="fob.mapY * 10"
+                :r="Number(fob.constructionRadius ?? 0) > 0 ? metersToSvgRadius(150) : 0"
+                class="fob-radius-circle fob-radius-construction"
+              />
+            </g>
+          </svg>
           <div
             v-for="fob in fobMarkers"
-            :key="fob.name"
+            :key="fob.id"
             class="fob-marker"
             :class="[`team-${fob.teamId}`, { 'is-bleeding': fob.isBleeding }]"
             :style="{
@@ -143,7 +193,7 @@
                 <div class="fob-tooltip-metric">
                   <div class="metric-info">
                     <span class="metric-label">RADIO HP</span>
-                    <span class="metric-value" :class="{ 'warning-text': fob.health < 1.0 }">
+                    <span class="metric-value" :class="{ 'warning-text': Number(fob.health ?? 0) < 1.0 }">
                       {{ Math.round((fob.health ?? 0) * 100) }}%
                     </span>
                   </div>
@@ -651,6 +701,7 @@
       :snapshot="snapshot"
       :current-team-squads="currentTeamSquads"
       :filtered-team-players="filteredTeamPlayers"
+      :main-zone-markers="mainZoneMarkers"
       :capture-zone-markers="captureZoneMarkers"
       :fob-markers="fobMarkers"
       :vehicle-groups="vehicleGroups"
@@ -722,6 +773,7 @@ import {
   getDefaultTacticalMapKey,
   TACTICAL_MAP_CONFIGS,
   TACTICAL_MAP_LIST,
+  getStaticTacticalAssets,
   resolveTacticalMapKey,
   type TacticalMapConfig,
 } from "../shared/tactical-map-data";
@@ -734,12 +786,14 @@ import PlayerActionMenu from "../components/tactical-map/PlayerActionMenu.vue";
 import { useMapCamera } from "../composables/useMapCamera";
 import { provideTacticalMapViewport } from "../composables/tacticalMapViewport";
 import { useTacticalStateStore } from "../stores/tactical-state.store";
+import type { BzssCoreMainZoneInfo } from "../app/bzssCoreApi";
 
 const props = withDefaults(defineProps<{
   snapshot: BzssCorePlayerInfoResponse | null;
   players: TacticalLinkedPlayer[];
   captureZones?: BzssCoreCaptureZoneInfo[];
   fobs?: BzssCoreFobInfo[];
+  mainZones?: BzssCoreMainZoneInfo[];
   loading: boolean;
   errorText: string;
   playtimes?: Record<string, any> | null;
@@ -749,6 +803,7 @@ const props = withDefaults(defineProps<{
   players: () => [],
   captureZones: () => [],
   fobs: () => [],
+  mainZones: () => [],
   loading: false,
   errorText: "",
   playtimes: () => ({}),
@@ -771,9 +826,48 @@ interface MapMarker extends TacticalLinkedPlayer {
 }
 
 interface CaptureZoneMarker {
+  type: "captureZone";
+  id: string;
   name: string;
+  teamId: number | null;
   mapX: number;
   mapY: number;
+  gameX: number | null;
+  gameY: number | null;
+  capturePercent?: number | null;
+  captureDirection?: number | null;
+  isLocked?: boolean | null;
+  raw?: string;
+}
+
+interface MainZoneMarker {
+  type: "mainZone";
+  id: string;
+  name: string;
+  teamId: number | null;
+  mapX: number;
+  mapY: number;
+  gameX: number | null;
+  gameY: number | null;
+  raw?: string;
+}
+
+interface FobMarker {
+  type: "fob";
+  id: string;
+  name: string;
+  teamId: number | null;
+  health?: number | null;
+  isBleeding?: boolean | null;
+  ammo?: number | null;
+  construction?: number | null;
+  mapX: number;
+  mapY: number;
+  gameX: number | null;
+  gameY: number | null;
+  exclusionRadius: number | null;
+  constructionRadius: number | null;
+  radiusPx: number;
   raw?: string;
 }
 
@@ -795,6 +889,7 @@ const isStandaloneMapRoute = computed(() => route.path === "/tactical-map" || ro
 const storeSnapshot = computed(() => tacticalStateStore.snapshot ?? null);
 const storeCaptureZones = computed(() => Array.isArray(tacticalStateStore.assets?.captureZones) ? tacticalStateStore.assets.captureZones : []);
 const storeFobs = computed(() => Array.isArray(tacticalStateStore.assets?.fobs) ? tacticalStateStore.assets.fobs : []);
+const storeMainZones = computed(() => Array.isArray(tacticalStateStore.assets?.mainZones) ? tacticalStateStore.assets.mainZones : []);
 
 function displayRole(role: string | null | undefined) {
   const raw = String(role ?? "").trim();
@@ -976,6 +1071,11 @@ const fobs = computed(() => {
   if (propFobs.length > 0 || !isStandaloneMapRoute.value) return propFobs;
   return storeFobs.value;
 });
+const mainZones = computed(() => {
+  const propZones = Array.isArray(props.mainZones) ? props.mainZones : [];
+  if (propZones.length > 0 || !isStandaloneMapRoute.value) return propZones;
+  return storeMainZones.value;
+});
 const emptyMapConfig: TacticalMapConfig = {
   key: "",
   name: "Unknown",
@@ -1009,6 +1109,7 @@ const activeMapConfig = computed<TacticalMapConfig>(() => {
 });
 
 const mapOptions = computed<TacticalMapConfig[]>(() => TACTICAL_MAP_LIST);
+const staticAssets = computed(() => getStaticTacticalAssets(activeMapConfig.value.key));
 
 // Cache to prevent players disappearing when data is missing temporarily
 const cachedPlayers = ref<Record<string, { player: TacticalLinkedPlayer; lastSeen: number }>>({});
@@ -1827,30 +1928,93 @@ const captureZoneMarkers = computed<CaptureZoneMarker[]>(() => {
   const zones = captureZones.value;
   if (!Array.isArray(zones) || zones.length === 0) return [];
   const bounds = activeMapConfig.value.bounds;
+  const staticCaptureZones = Array.isArray(staticAssets.value?.captureZones) ? staticAssets.value.captureZones : [];
   const markers: CaptureZoneMarker[] = [];
   for (const zone of zones) {
-    const pos = zone?.position;
-    if (!pos) continue;
-    const x = Number(pos.x);
-    const y = Number(pos.y);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
     const name = String(zone.name ?? "").trim();
     if (!name) continue;
+    const pos = zone?.position;
+    let x = Number(pos?.x);
+    let y = Number(pos?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      const fallback = staticCaptureZones.find((entry) => String(entry.name ?? "").trim() === name);
+      x = Number(fallback?.x);
+      y = Number(fallback?.y);
+    }
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
     markers.push({
+      type: "captureZone",
+      id: `capture-zone-${name}`,
       name,
+      teamId: null,
       mapX: project(x, bounds.minX, bounds.maxX),
       mapY: project(y, bounds.minY, bounds.maxY),
+      gameX: x,
+      gameY: y,
+      capturePercent: zone.capturePercent ?? null,
+      captureDirection: zone.captureDirection ?? null,
+      isLocked: zone.isLocked ?? null,
       raw: zone.raw,
     });
   }
   return markers;
 });
 
-const fobMarkers = computed(() => {
+function clampPercentValue(value: unknown) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return Math.max(0, Math.min(100, numeric));
+}
+
+function formatCapturePercent(value: unknown) {
+  const numeric = clampPercentValue(value);
+  return numeric == null ? "--" : `${Math.round(numeric)}%`;
+}
+
+function getCaptureDashArray(zone: CaptureZoneMarker) {
+  const percent = clampPercentValue(zone.capturePercent) ?? 0;
+  return `${percent} ${100 - percent}`;
+}
+
+const mainZoneMarkers = computed<MainZoneMarker[]>(() => {
+  const zones = mainZones.value;
+  if (!Array.isArray(zones) || zones.length === 0) return [];
+  const bounds = activeMapConfig.value.bounds;
+  return zones
+    .map((zone, index) => {
+      const pos = zone?.position;
+      const x = Number(pos?.x);
+      const y = Number(pos?.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+      const teamId = Number(zone?.teamId);
+      const resolvedTeamId = Number.isFinite(teamId) ? teamId : null;
+      return {
+        type: "mainZone",
+        id: `main-zone-${resolvedTeamId ?? index}`,
+        name: resolvedTeamId ? `T${resolvedTeamId}` : `Main ${index + 1}`,
+        teamId: resolvedTeamId,
+        mapX: project(x, bounds.minX, bounds.maxX),
+        mapY: project(y, bounds.minY, bounds.maxY),
+        gameX: x,
+        gameY: y,
+        raw: zone.raw,
+      };
+    })
+    .filter(Boolean) as MainZoneMarker[];
+});
+
+function metersToSvgRadius(meters: number) {
+  const bounds = activeMapConfig.value.bounds;
+  const mapGameWidth = bounds.maxX - bounds.minX;
+  if (mapGameWidth <= 0) return 0;
+  return ((meters * 100) / mapGameWidth) * 1000;
+}
+
+const fobMarkers = computed<FobMarker[]>(() => {
   const list = fobs.value;
   if (!Array.isArray(list) || list.length === 0) return [];
   const bounds = activeMapConfig.value.bounds;
-  const markers: any[] = [];
+  const markers: FobMarker[] = [];
   for (const fob of list) {
     const pos = fob?.position;
     if (!pos) continue;
@@ -1858,14 +2022,21 @@ const fobMarkers = computed(() => {
     const y = Number(pos.y);
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
     markers.push({
+      type: "fob",
+      id: String(fob.fobId ?? fob.name ?? `${fob.teamId ?? "unknown"}-${x}-${y}`),
       name: fob.name || "FOB Radio",
       teamId: fob.teamId,
-      health: fob.health,
+      health: fob.health ?? null,
       isBleeding: fob.isBleeding,
-      ammo: fob.ammo,
-      construction: fob.construction,
+      ammo: fob.ammo ?? null,
+      construction: fob.construction ?? null,
       mapX: project(x, bounds.minX, bounds.maxX),
       mapY: project(y, bounds.minY, bounds.maxY),
+      gameX: x,
+      gameY: y,
+      exclusionRadius: 40000,
+      constructionRadius: 15000,
+      radiusPx: metersToSvgRadius(400),
       raw: fob.raw,
     });
   }

@@ -5386,7 +5386,7 @@ export class WebServer {
 
   async getLogPostState() {
     const workingDirectory = this.getLogPostWorkingDirectory();
-    const outputDir = path.resolve(workingDirectory, "LogPost");
+    const outputDir = resolveLogPostOutputDir(workingDirectory);
     const legacyStatePath = path.resolve(outputDir, ".state", "tailer-state.json");
     const v2StatePath = path.resolve(outputDir, "state", "source-state.json");
     const legacyState = await this.readJsonFileSafe(legacyStatePath, {});
@@ -5413,7 +5413,7 @@ export class WebServer {
 
   async queryLogPostRawArchive({ date, start, end, q, limit, offset }) {
     const normalizedDate = normalizeLogPostDate(date);
-    const workingDir = path.resolve(this.getLogPostWorkingDirectory(), "LogPost");
+    const workingDir = resolveLogPostOutputDir(this.getLogPostWorkingDirectory());
     const v2FilePath = path.resolve(workingDir, "raw", normalizedDate, "segment-000001.jsonl");
     const legacyFilePath = path.resolve(workingDir, "Raw", normalizedDate, "all.jsonl");
     const filePath = await this.resolveFirstExistingPath([v2FilePath, legacyFilePath]);
@@ -5434,7 +5434,7 @@ export class WebServer {
 
   async queryLogPostStructuredEvents({ date, event, start, end, q, limit, offset }) {
     const normalizedDate = normalizeLogPostDate(date);
-    const workingDir = path.resolve(this.getLogPostWorkingDirectory(), "LogPost");
+    const workingDir = resolveLogPostOutputDir(this.getLogPostWorkingDirectory());
     const v2FilePath = path.resolve(workingDir, "events", normalizedDate, "all.jsonl");
     const legacyFilePath = path.resolve(workingDir, normalizedDate, "All.jsonl");
     const filePath = await this.resolveFirstExistingPath([v2FilePath, legacyFilePath]);
@@ -5456,7 +5456,7 @@ export class WebServer {
 
   async queryLogPostOutbox({ date, kind, q, limit, offset }) {
     const normalizedDate = normalizeLogPostDate(date);
-    const dir = path.resolve(this.getLogPostWorkingDirectory(), "LogPost", "outbox", normalizedDate);
+    const dir = path.resolve(resolveLogPostOutputDir(this.getLogPostWorkingDirectory()), "outbox", normalizedDate);
     const items = await this.readJsonlDirectory(dir);
     const filtered = filterLogPostRows(items, {
       q,
@@ -5473,7 +5473,7 @@ export class WebServer {
 
   async queryLogPostSafety({ date, kind, q, limit, offset }) {
     const normalizedDate = normalizeLogPostDate(date);
-    const dir = path.resolve(this.getLogPostWorkingDirectory(), "LogPost", "audit", normalizedDate);
+    const dir = path.resolve(resolveLogPostOutputDir(this.getLogPostWorkingDirectory()), "audit", normalizedDate);
     const items = await this.readJsonlDirectory(dir);
     const filtered = filterLogPostRows(items, {
       q,
@@ -5489,7 +5489,7 @@ export class WebServer {
   }
 
   async writeLogPostAuditRecord(kind, payload = {}) {
-    const outputDir = path.resolve(this.getLogPostWorkingDirectory(), "LogPost");
+    const outputDir = resolveLogPostOutputDir(this.getLogPostWorkingDirectory());
     const dir = path.resolve(outputDir, "audit", new Date().toISOString().slice(0, 10));
     await fs.mkdir(dir, { recursive: true });
     const filePath = path.resolve(dir, `${kind}.jsonl`);
@@ -5559,6 +5559,28 @@ export class WebServer {
       return fallback;
     }
   }
+}
+
+function resolveLogPostOutputDir(workingDirectory) {
+  const baseDirectory = path.resolve(workingDirectory);
+  const candidates = [
+    baseDirectory,
+    path.resolve(baseDirectory, "LogPost"),
+  ];
+
+  for (const candidate of candidates) {
+    if (
+      fs.existsSync(path.resolve(candidate, "events"))
+      || fs.existsSync(path.resolve(candidate, "raw"))
+      || fs.existsSync(path.resolve(candidate, "audit"))
+      || fs.existsSync(path.resolve(candidate, "state"))
+      || fs.existsSync(path.resolve(candidate, ".state"))
+    ) {
+      return candidate;
+    }
+  }
+
+  return candidates[0];
 }
 
 function contentType(filePath) {
