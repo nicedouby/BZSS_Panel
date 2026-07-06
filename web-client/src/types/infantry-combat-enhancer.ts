@@ -38,14 +38,6 @@ export interface InfantryCombatWarningDecision {
   relatedEventId?: string;
 }
 
-export interface InfantryCombatAttackerCircleState {
-  status?: "inside" | "outside" | "unknown" | "not_applicable";
-  leaderName?: string;
-  distanceMeters?: number | null;
-  radiusMeters?: number | null;
-  reason?: string;
-}
-
 export interface InfantryCombatEventRecord {
   id: string;
   createdAt?: string;
@@ -74,7 +66,6 @@ export interface InfantryCombatEventRecord {
   eventFlags?: Array<any>;
   eventFlagLabels?: Array<string>;
   tags?: Array<string>;
-  attackerCircleState?: InfantryCombatAttackerCircleState | null;
   victimWarning?: InfantryCombatWarningDecision | null;
   attackerWarning?: InfantryCombatWarningDecision | null;
   warnings?: Array<InfantryCombatWarningDecision>;

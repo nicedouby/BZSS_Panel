@@ -42,16 +42,6 @@
       </section>
 
       <section class="detail-section">
-        <h3>队长圈状态</h3>
-        <div class="kv-grid">
-          <div v-for="item in circleInfo" :key="item.key" class="kv-row">
-            <span>{{ item.key }}</span>
-            <strong>{{ item.value }}</strong>
-          </div>
-        </div>
-      </section>
-
-      <section class="detail-section">
         <h3>受害者</h3>
         <div class="kv-grid">
           <div v-for="item in victimInfo" :key="item.key" class="kv-row">
@@ -143,15 +133,6 @@ const attackerInfo = computed(() => [
   { key: "TeamID", value: valueOf(props.event?.attackerTeamID ?? props.event?.attacker?.teamID) },
 ]);
 
-const circleInfo = computed(() => [
-  { key: "状态", value: circleStatusLabel(props.event?.attackerCircleState?.status) },
-  { key: "队长", value: valueOf(props.event?.attackerCircleState?.leaderName) },
-  { key: "距离(m)", value: formatDistance(props.event?.attackerCircleState?.distanceMeters) },
-  { key: "半径(m)", value: formatDistance(props.event?.attackerCircleState?.radiusMeters) },
-  { key: "原因", value: valueOf(props.event?.attackerCircleState?.reason) },
-  { key: "提示跳过原因", value: valueOf(props.event?.attackerWarning?.skipReason) },
-]);
-
 const victimInfo = computed(() => [
   { key: "名称", value: valueOf(props.event?.victimName ?? props.event?.victim?.name) },
   { key: "Steam64ID", value: valueOf(props.event?.victimSteam64ID ?? props.event?.victim?.steam64ID) },
@@ -206,15 +187,6 @@ function formatDistance(value: unknown) {
 
 function valueOf(value: unknown) {
   const text = String(value ?? "").trim();
-  return text || "-";
-}
-
-function circleStatusLabel(value: unknown) {
-  const text = String(value ?? "").trim().toLowerCase();
-  if (text === "inside") return "圈内";
-  if (text === "outside") return "圈外";
-  if (text === "unknown") return "未知";
-  if (text === "not_applicable") return "不适用";
   return text || "-";
 }
 </script>

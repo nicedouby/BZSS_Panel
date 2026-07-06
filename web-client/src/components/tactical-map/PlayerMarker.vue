@@ -8,7 +8,6 @@
       { 'is-focused': isFocused },
       { 'is-hovered': isHovered },
       { 'no-pointer': disableInteraction },
-      { 'is-disengaged': isDisengaged },
       { 'is-vehicle': hasVehicle },
       `mode-${mode}`
     ]"
@@ -68,18 +67,8 @@
       {{ squadId }}
     </span>
 
-    <span
-      v-if="mode === 'tactical'"
-      class="follow-status-badge"
-      :class="followBadgeTone"
-      :title="followBadgeTitle"
-    >
-      {{ followBadgeText }}
-    </span>
-
     <!-- Text Tag for Player Name & Coords -->
     <span v-if="showName" class="tag">
-      <span v-if="isDisengaged && mode === 'tactical'" class="player-disengaged-tag">脱战</span>
       <span class="player-name-tag">{{ playerName }}</span>
       <span v-if="mode === 'tactical' && squadId" class="player-squad-tag">#{{ squadId }}</span>
       <span v-if="showCoords && hasCoords" class="player-coords-tag">
@@ -108,7 +97,6 @@ const props = withDefaults(
     vehicleType?: string | null;
     isFocused?: boolean;
     isHovered?: boolean;
-    isDisengaged?: boolean | null;
     showName?: boolean;
     showCoords?: boolean;
     gameX?: number | null;
@@ -128,7 +116,6 @@ const props = withDefaults(
     vehicleType: null,
     isFocused: false,
     isHovered: false,
-    isDisengaged: false,
     showName: true,
     showCoords: true,
     gameX: null,
@@ -150,21 +137,6 @@ defineEmits<{
 const isDead = computed(() => props.health !== null && props.health <= 0);
 const hasVehicle = computed(() => props.vehicleType && props.vehicleType !== "None");
 const hasCoords = computed(() => props.gameX !== null && props.gameY !== null);
-const followBadgeTone = computed(() => {
-  if (props.isDisengaged === true) return "disengaged";
-  if (props.isDisengaged === false) return "inside";
-  return "unknown";
-});
-const followBadgeText = computed(() => {
-  if (props.isDisengaged === true) return "脱圈";
-  if (props.isDisengaged === false) return "圈内";
-  return "未知";
-});
-const followBadgeTitle = computed(() => {
-  if (props.isDisengaged === true) return "脱离队长圈";
-  if (props.isDisengaged === false) return "队长圈内";
-  return "队长圈状态未知";
-});
 
 // Perspective colors palette definitions based on tone
 const palette = computed(() => {
@@ -454,47 +426,6 @@ function isRoleIconImage(icon: string | undefined) {
   box-shadow: 0 1px 3px rgba(0,0,0,0.5);
 }
 
-.follow-status-badge {
-  position: absolute;
-  top: -10px;
-  right: -10px;
-  min-width: 18px;
-  height: 14px;
-  padding: 0 3px;
-  border-radius: 999px;
-  color: #111827;
-  font-size: 8px;
-  font-weight: 900;
-  line-height: 14px;
-  text-align: center;
-  z-index: 6;
-  letter-spacing: 0.02em;
-}
-
-.follow-status-badge.inside {
-  background: rgba(74, 222, 128, 0.95);
-  box-shadow: 0 0 8px rgba(74, 222, 128, 0.45);
-}
-
-.follow-status-badge.unknown {
-  background: rgba(148, 163, 184, 0.9);
-  box-shadow: 0 0 8px rgba(148, 163, 184, 0.35);
-}
-
-.follow-status-badge.disengaged {
-  background: #fb923c;
-  box-shadow: 0 0 8px rgba(251, 146, 60, 0.8);
-}
-
-.player-marker.is-disengaged .marker-icon {
-  filter: brightness(0.95);
-}
-
-.player-marker.is-disengaged .marker-direction .direction-arrow {
-  border-bottom-color: #fb923c;
-  filter: drop-shadow(0 0 4px rgba(251, 146, 60, 0.9));
-}
-
 /* Direction indicators */
 .marker-direction {
   position: absolute;
@@ -580,17 +511,6 @@ function isRoleIconImage(icon: string | undefined) {
   color: #bbf7d0;
   line-height: 1;
   opacity: 1;
-}
-
-.player-disengaged-tag {
-  font-size: 7px;
-  font-weight: 800;
-  color: #fb923c;
-  line-height: 1;
-  border: 1px solid rgba(251, 146, 60, 0.4);
-  padding: 0 2.5px;
-  border-radius: 2px;
-  background: rgba(251, 146, 60, 0.1);
 }
 
 /* Minimalist rendering (Mode Replay) styles */

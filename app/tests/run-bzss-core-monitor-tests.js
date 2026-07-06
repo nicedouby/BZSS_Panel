@@ -85,6 +85,18 @@ function testParseLogLine() {
   assert.equal(noPawnRuntime.runtimePlayers[0].combatInfo, "NoPawn");
   assert.equal(noPawnRuntime.runtimePlayers[0].presenceHint, "noPawn");
 
+  const priFrameRuntime = parseBzssCoreLogLine("PIE: PRIFrame{Frame=12345,Chunk=1/2,Count=1,Total=2}{{88,123.4,567.8,9,180,{0,150.0,false,NW,}}}");
+  assert.equal(priFrameRuntime.type, "playerRuntime");
+  assert.equal(priFrameRuntime.runtimePlayers.length, 1);
+  assert.equal(priFrameRuntime.runtimePlayers[0].playerIndex, 88);
+  assert.equal(Math.round(priFrameRuntime.runtimePlayers[0].position.x), 12340);
+  assert.equal(Math.round(priFrameRuntime.runtimePlayers[0].position.y), 56780);
+  assert.equal(Math.round(priFrameRuntime.runtimePlayers[0].position.z), 900);
+  assert.equal(priFrameRuntime.priFrame.frameId, "12345");
+  assert.equal(priFrameRuntime.priFrame.chunkIndex, 1);
+  assert.equal(priFrameRuntime.priFrame.chunkCount, 2);
+  assert.equal(priFrameRuntime.priFrame.totalPlayers, 2);
+
   const scoreboard = parseBzssCoreLogLine("PIE: PlayerScoreboard{0,1,-1,0,0,0,0,0,0,0,0,0,0,0,1,0-1,-1,19}}");
   assert.equal(scoreboard.type, "playerScoreboard");
   assert.equal(scoreboard.scoreboardPlayers.length, 1);
@@ -380,6 +392,20 @@ function testMonitorState() {
   assert.equal(rconTemplatePlayers.find((player) => player.playerIndex === 1)?.playerName, "RCON Player 1");
   assert.equal(rconTemplatePlayers.find((player) => player.playerIndex === 1)?.role, "BP_SoldierRole_Rifleman");
   assert.equal(rconTemplatePlayers.find((player) => player.playerIndex === 1)?.rcon?.online, true);
+  const rconState = rconTemplateModule.api.getState();
+  assert.equal(rconState.rconOnlinePlayerCount, 100);
+  assert.deepEqual(rconState.runtimeCoverage, {
+    expectedCount: 100,
+    actualCount: 12,
+    missingCount: 88,
+    complete: false,
+  });
+  assert.deepEqual(rconState.scoreboardCoverage, {
+    expectedCount: 100,
+    actualCount: 0,
+    missingCount: 100,
+    complete: false,
+  });
   const rconRaw = rconTemplateModule.api.getRawSnapshot();
   assert.equal(rconRaw.runtimePlayers.length, 12);
   assert.equal(rconRaw.scoreboardPlayers.length, 0);
@@ -452,6 +478,60 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function testPriFrameAssembler() {
+  const module = createBzssCoreMonitorModule({
+    core: {
+      eventBus: { onCoreEvent() { return () => {}; }, emitModuleEvent() {} },
+      logger: { info() {}, warn() {}, error() {}, debug() {} },
+    },
+  });
+
+  const chunk1 = "PIE: PRIFrame{Frame=87654,Chunk=1/2,Count=2,Total=4}{{1,10,11,12,90,{0,150.0,false,NW,}}{2,20,21,22,180,{0,150.0,false,BP_M4_C,false,}}}";
+  const chunk2 = "PIE: PRIFrame{Frame=87654,Chunk=2/2,Count=2,Total=4}{{3,30,31,32,270,{0,150.0,false,NW,}}{4,40,41,42,0,{0,150.0,false,BP_M4_C,false,}}}";
+  assert.equal(module.api.ingestLogLine(chunk1).ok, true);
+  assert.equal(module.api.getRuntimePlayers().length, 0);
+  assert.deepEqual(module.api.getState().priFrame, {
+    frameId: "87654",
+    complete: false,
+    legacy: false,
+    chunks: 2,
+    receivedChunks: [1],
+    missingChunks: [2],
+    playerCount: 2,
+    expectedPlayerCount: 4,
+    updatedAt: module.api.getState().priFrame.updatedAt,
+  });
+
+  assert.equal(module.api.ingestLogLine(chunk2).ok, true);
+  assert.equal(module.api.getRuntimePlayers().length, 4);
+  assert.equal(module.api.getState().priFrame.frameId, "87654");
+  assert.equal(module.api.getState().priFrame.complete, true);
+  assert.deepEqual(module.api.getState().priFrame.receivedChunks, [1, 2]);
+  assert.deepEqual(module.api.getState().priFrame.missingChunks, []);
+  assert.equal(module.api.getState().priFrame.playerCount, 4);
+
+  const partialModule = createBzssCoreMonitorModule({
+    core: {
+      eventBus: { onCoreEvent() { return () => {}; }, emitModuleEvent() {} },
+      logger: { info() {}, warn() {}, error() {}, debug() {} },
+    },
+  });
+  assert.equal(partialModule.api.ingestLogLine(chunk1.replace("87654", "90001")).ok, true);
+  await sleep(650);
+  assert.equal(partialModule.api.getRuntimePlayers().length, 2);
+  assert.equal(partialModule.api.getState().priFrame.frameId, "90001");
+  assert.equal(partialModule.api.getState().priFrame.complete, false);
+  assert.deepEqual(partialModule.api.getState().priFrame.missingChunks, [2]);
+  assert.equal(partialModule.api.getState().priFrame.playerCount, 2);
+  assert.equal(
+    partialModule.api.getRawSnapshot().diagnostics.some((entry) => entry.type === "priFrame" && entry.reason === "timeout_partial" && entry.frameId === "90001"),
+    true,
+  );
+
+  await module.stop();
+  await partialModule.stop();
+}
+
 async function testParseExplosionDamage() {
   const line = "[2026.06.30-08.00.41:404][702]LogSquadTrace: [DedicatedServer]ApplyExplosiveDamage(): HitActor=nullptr DamageCauser=BP_M67Frag_C_2147006951 DamageInstigator=BP_PlayerController_C_2147480791 ExplosionLocation=V(X=-7008.21, Y=11835.69, Z=-13475.49)";
   const parsed = parseBzssCoreLogLine(line);
@@ -492,6 +572,7 @@ async function main() {
   testParsePlayerBlocks();
   testParseLogLine();
   testMonitorState();
+  await testPriFrameAssembler();
   await testParseExplosionDamage();
   console.log("run-bzss-core-monitor-tests: ok");
 }

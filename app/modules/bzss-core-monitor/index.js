@@ -6,6 +6,7 @@ const MARKER = "{BZSS-Marked}";
 const START_NEEDLE = Buffer.from("PlayerBaseInfo{", "utf16le");
 const PRI_START_NEEDLE = Buffer.from("PRI{{", "utf16le");
 const MARKER_NEEDLE = Buffer.from(MARKER, "utf16le");
+const PRI_FRAME_TIMEOUT_MS = 500;
 const SCOREBOARD_FIELDS = [
   ["dataLives", "Data lives"],
   ["numKills", "Num kills"],
@@ -99,6 +100,10 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
       draft.rawFields = [];
       draft.lastError = nextError;
       draft.diagnostics = [];
+      draft.priFramesById.clear();
+      draft.lastCompletePriFrameId = null;
+      draft.lastCompletePriFrameAt = "";
+      draft.priFrame = createEmptyPriFrameState();
     });
   }
 
@@ -125,7 +130,22 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
 
           if (parsed.type === "playerRuntime") {
             if (parsed.runtimePlayers.length > 0) {
-              mergeRuntimePlayers(draft, parsed.runtimePlayers, { sourceType: "runtime" });
+              if (parsed.priFrame?.frameId != null) {
+                ingestPriFrameChunk(draft, parsed, { publish });
+              } else {
+                mergeRuntimePlayers(draft, parsed.runtimePlayers, { sourceType: "runtime" });
+                draft.priFrame = {
+                  frameId: null,
+                  complete: null,
+                  legacy: true,
+                  chunks: null,
+                  receivedChunks: [],
+                  missingChunks: [],
+                  playerCount: parsed.runtimePlayers.length,
+                  expectedPlayerCount: null,
+                  updatedAt: parsed.priFrame?.updatedAt ?? new Date().toISOString(),
+                };
+              }
             } else {
               appendDiagnostic(draft, {
                 type: "playerRuntime",
@@ -220,6 +240,7 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
   function getState() {
     pruneExpiredPlayers(state, { core, modules });
     const players = getPlayers();
+    const coverage = buildBzssCoverageState(state, { core, modules });
     return {
       status: state.status,
       revision: state.revision,
@@ -227,17 +248,22 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
       markerSeen: state.markerSeen,
       runtimePlayerCount: state.runtimePlayersByKey.size,
       scoreboardPlayerCount: state.scoreboardPlayersByKey.size,
+      rconOnlinePlayerCount: coverage.rconOnlinePlayerCount,
+      runtimeCoverage: coverage.runtimeCoverage,
+      scoreboardCoverage: coverage.scoreboardCoverage,
       playerCount: players.length,
       mainZoneCount: state.mainZones.length,
       rawLineHash: state.rawLineHash,
       rawFields: [...state.rawFields],
       lastError: state.lastError,
+      priFrame: clonePriFrameState(state.priFrame),
       diagnostics: state.diagnostics.map(clonePlainObject),
     };
   }
 
   function getRawSnapshot() {
     pruneExpiredPlayers(state, { core, modules });
+    const coverage = buildBzssCoverageState(state, { core, modules });
     return {
       status: state.status,
       revision: state.revision,
@@ -245,6 +271,9 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
       markerSeen: state.markerSeen,
       runtimePlayerCount: state.runtimePlayersByKey.size,
       scoreboardPlayerCount: state.scoreboardPlayersByKey.size,
+      rconOnlinePlayerCount: coverage.rconOnlinePlayerCount,
+      runtimeCoverage: coverage.runtimeCoverage,
+      scoreboardCoverage: coverage.scoreboardCoverage,
       playerCount: state.playersByKey.size,
       captureZones: state.captureZones.map(clonePlainObject),
       fobs: state.fobs.map(clonePlainObject),
@@ -255,6 +284,7 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
       rawLineHash: state.rawLineHash,
       rawFields: [...state.rawFields],
       lastError: state.lastError,
+      priFrame: clonePriFrameState(state.priFrame),
       diagnostics: state.diagnostics.map(clonePlainObject),
     };
   }
@@ -531,6 +561,10 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
       clearTimeout(timeoutId);
     }
     activeTimeouts.clear();
+    for (const assembly of state.priFramesById.values()) {
+      clearPriFrameTimeout(assembly);
+    }
+    state.priFramesById.clear();
   }
 
   return {
@@ -574,7 +608,25 @@ function createInitialState() {
     rawLineHash: "",
     rawFields: [],
     lastError: "",
+    priFramesById: new Map(),
+    lastCompletePriFrameId: null,
+    lastCompletePriFrameAt: "",
+    priFrame: createEmptyPriFrameState(),
     diagnostics: [],
+  };
+}
+
+function createEmptyPriFrameState() {
+  return {
+    frameId: null,
+    complete: null,
+    legacy: false,
+    chunks: null,
+    receivedChunks: [],
+    missingChunks: [],
+    playerCount: 0,
+    expectedPlayerCount: null,
+    updatedAt: "",
   };
 }
 
@@ -899,6 +951,10 @@ function resetPlayerCaches(draft, { keepStatus = "ready" } = {}) {
   draft.rawLineHash = "";
   draft.rawFields = [];
   draft.lastError = "";
+  prunePriFrameAssemblies(draft);
+  draft.lastCompletePriFrameId = null;
+  draft.lastCompletePriFrameAt = "";
+  draft.priFrame = createEmptyPriFrameState();
   draft.diagnostics = [];
 }
 
@@ -937,6 +993,175 @@ function getRconTemplatePlayers(core, modules) {
   } catch {
     return [];
   }
+}
+
+function buildBzssCoverageState(state, { core, modules } = {}) {
+  const onlinePlayers = getRconTemplatePlayers(core, modules);
+  const expectedCount = onlinePlayers.length > 0 ? onlinePlayers.length : null;
+  return {
+    rconOnlinePlayerCount: expectedCount,
+    runtimeCoverage: buildCoverageEntry(expectedCount, state.runtimePlayersByKey.size),
+    scoreboardCoverage: buildCoverageEntry(expectedCount, state.scoreboardPlayersByKey.size),
+  };
+}
+
+function buildCoverageEntry(expectedCount, actualCount) {
+  const actual = Number.isFinite(actualCount) ? Number(actualCount) : 0;
+  if (!Number.isFinite(expectedCount) || expectedCount == null) {
+    return {
+      expectedCount: null,
+      actualCount: actual,
+      missingCount: null,
+      complete: null,
+    };
+  }
+  const expected = Number(expectedCount);
+  return {
+    expectedCount: expected,
+    actualCount: actual,
+    missingCount: Math.max(0, expected - actual),
+    complete: actual >= expected,
+  };
+}
+
+function ingestPriFrameChunk(draft, parsed, { publish }) {
+  const priFrame = parsed?.priFrame;
+  if (!priFrame || priFrame.frameId == null || priFrame.chunkIndex == null || priFrame.chunkCount == null) {
+    mergeRuntimePlayers(draft, parsed?.runtimePlayers ?? [], { sourceType: "runtime" });
+    return;
+  }
+
+  const frameId = String(priFrame.frameId);
+  let assembly = draft.priFramesById.get(frameId);
+  if (!assembly || assembly.expectedChunkCount !== priFrame.chunkCount) {
+    assembly = createPriFrameAssembly(priFrame);
+    draft.priFramesById.set(frameId, assembly);
+  }
+
+  assembly.updatedAt = priFrame.observedAt ?? new Date().toISOString();
+  assembly.totalPlayers = priFrame.totalPlayers ?? assembly.totalPlayers ?? null;
+  assembly.expectedChunkCount = priFrame.chunkCount;
+  assembly.chunks.set(priFrame.chunkIndex, parsed.runtimePlayers.map(clonePlainObject));
+  schedulePriFrameTimeout(assembly, publish);
+
+  const receivedChunks = [...assembly.chunks.keys()].sort((a, b) => a - b);
+  const missingChunks = [];
+  for (let index = 1; index <= assembly.expectedChunkCount; index += 1) {
+    if (!assembly.chunks.has(index)) missingChunks.push(index);
+  }
+
+  if (missingChunks.length === 0) {
+    clearPriFrameTimeout(assembly);
+    const mergedPlayers = [];
+    for (let index = 1; index <= assembly.expectedChunkCount; index += 1) {
+      mergedPlayers.push(...(assembly.chunks.get(index) ?? []));
+    }
+    mergeRuntimePlayers(draft, mergedPlayers, { sourceType: "runtime", observedAt: assembly.updatedAt });
+    draft.lastCompletePriFrameId = frameId;
+    draft.lastCompletePriFrameAt = assembly.updatedAt;
+    draft.priFrame = {
+      frameId,
+      complete: true,
+      legacy: false,
+      chunks: assembly.expectedChunkCount,
+      receivedChunks,
+      missingChunks: [],
+      playerCount: mergedPlayers.length,
+      expectedPlayerCount: assembly.totalPlayers,
+      updatedAt: assembly.updatedAt,
+    };
+    prunePriFrameAssemblies(draft, frameId);
+    return;
+  }
+
+  draft.priFrame = {
+    frameId,
+    complete: false,
+    legacy: false,
+    chunks: assembly.expectedChunkCount,
+    receivedChunks,
+    missingChunks,
+    playerCount: sumPriFramePlayers(assembly),
+    expectedPlayerCount: assembly.totalPlayers,
+    updatedAt: assembly.updatedAt,
+  };
+}
+
+function createPriFrameAssembly(priFrame) {
+  return {
+    frameId: String(priFrame.frameId),
+    expectedChunkCount: priFrame.chunkCount,
+    totalPlayers: priFrame.totalPlayers ?? null,
+    chunks: new Map(),
+    receivedAt: priFrame.observedAt ?? new Date().toISOString(),
+    updatedAt: priFrame.observedAt ?? new Date().toISOString(),
+    timeoutId: null,
+  };
+}
+
+function schedulePriFrameTimeout(assembly, publish) {
+  clearPriFrameTimeout(assembly);
+  const timeoutId = setTimeout(() => {
+    assembly.timeoutId = null;
+    publish((draft) => {
+      const currentAssembly = draft.priFramesById.get(assembly.frameId);
+      if (!currentAssembly) return;
+      const missingChunks = [];
+      for (let index = 1; index <= currentAssembly.expectedChunkCount; index += 1) {
+        if (!currentAssembly.chunks.has(index)) missingChunks.push(index);
+      }
+      if (missingChunks.length === 0) return;
+      const mergedPlayers = [];
+      for (const chunkIndex of [...currentAssembly.chunks.keys()].sort((a, b) => a - b)) {
+        mergedPlayers.push(...(currentAssembly.chunks.get(chunkIndex) ?? []));
+      }
+      if (mergedPlayers.length > 0) {
+        mergeRuntimePlayers(draft, mergedPlayers, { sourceType: "runtime", observedAt: currentAssembly.updatedAt });
+      }
+      draft.priFrame = {
+        frameId: currentAssembly.frameId,
+        complete: false,
+        legacy: false,
+        chunks: currentAssembly.expectedChunkCount,
+        receivedChunks: [...currentAssembly.chunks.keys()].sort((a, b) => a - b),
+        missingChunks,
+        playerCount: mergedPlayers.length,
+        expectedPlayerCount: currentAssembly.totalPlayers,
+        updatedAt: currentAssembly.updatedAt,
+      };
+      appendDiagnostic(draft, {
+        type: "priFrame",
+        reason: "timeout_partial",
+        frameId: currentAssembly.frameId,
+        receivedChunks: [...currentAssembly.chunks.keys()].sort((a, b) => a - b),
+        missingChunks,
+        playerCount: mergedPlayers.length,
+      });
+    });
+  }, PRI_FRAME_TIMEOUT_MS);
+  assembly.timeoutId = timeoutId;
+}
+
+function clearPriFrameTimeout(assembly) {
+  if (!assembly?.timeoutId) return;
+  clearTimeout(assembly.timeoutId);
+  assembly.timeoutId = null;
+}
+
+function prunePriFrameAssemblies(draft, keepFrameId = "") {
+  for (const [frameId, assembly] of [...draft.priFramesById.entries()]) {
+    if (frameId === keepFrameId) continue;
+    clearPriFrameTimeout(assembly);
+    draft.priFramesById.delete(frameId);
+  }
+}
+
+function sumPriFramePlayers(assembly) {
+  let total = 0;
+  for (const players of assembly?.chunks?.values?.() ?? []) {
+    total += Array.isArray(players) ? players.length : 0;
+  }
+  return total;
 }
 
 function createTemplatePlayerFromRcon(player) {
@@ -1011,6 +1236,20 @@ function appendDiagnostic(draft, diagnostic) {
   if (draft.diagnostics.length > 50) {
     draft.diagnostics.splice(0, draft.diagnostics.length - 50);
   }
+}
+
+function clonePriFrameState(priFrame) {
+  return {
+    frameId: priFrame?.frameId ?? null,
+    complete: priFrame?.complete ?? null,
+    legacy: Boolean(priFrame?.legacy),
+    chunks: priFrame?.chunks ?? null,
+    receivedChunks: Array.isArray(priFrame?.receivedChunks) ? [...priFrame.receivedChunks] : [],
+    missingChunks: Array.isArray(priFrame?.missingChunks) ? [...priFrame.missingChunks] : [],
+    playerCount: priFrame?.playerCount ?? 0,
+    expectedPlayerCount: priFrame?.expectedPlayerCount ?? null,
+    updatedAt: priFrame?.updatedAt ?? "",
+  };
 }
 
 function clonePlayerView(player) {
@@ -1327,6 +1566,7 @@ export function parseBzssCorePlayerBlocks(text) {
 
 export function parseBzssCoreLogLine(line) {
   const text = String(line ?? "");
+  if (text.includes("PRIFrame{")) return parsePriFrameRuntimeLine(text);
   if (text.includes("PRI{{")) return parsePriRuntimePlayerLine(text);
   if (text.includes("PlayerBaseInfo{") && text.includes("SoldierInfo{") && text.includes("PlayerScoreboard{")) {
     const players = parseBzssCorePlayerBlocks(text);
@@ -1343,6 +1583,129 @@ export function parseBzssCoreLogLine(line) {
     return parseExplosiveDamageLine(text);
   }
   return null;
+}
+
+function parsePriRuntimeRows(rows, observedAt, rawPrefix = "PRI{{") {
+  const runtimePlayers = [];
+  for (const row of rows) {
+    const raw = String(row ?? "").trim().replace(/^\{+/, "").replace(/}+$/g, "");
+    const fields = splitTopLevelCsv(raw);
+    const playerId = toFiniteNumber(fields[0]);
+    if (playerId == null) continue;
+    const x = toFiniteNumber(fields[1]);
+    const y = toFiniteNumber(fields[2]);
+    const z = toFiniteNumber(fields[3]);
+    const combatInfo = fields.slice(5).join(",");
+
+    runtimePlayers.push({
+      playerId,
+      playerIndex: playerId,
+      position: x == null || y == null || z == null ? null : {
+        x: x * 100,
+        y: y * 100,
+        z: z * 100,
+      },
+      yaw: toFiniteNumber(fields[4]),
+      combatInfo,
+      presenceHint: detectRuntimePresenceHint({ combatInfo, x, y, z }),
+      observedAt,
+      stale: false,
+      rawText: rawPrefix === "PRI{{" ? `PRI{{${raw}}}` : `PRIFrame{{${raw}}}`,
+    });
+  }
+  return runtimePlayers;
+}
+
+function parsePriFrameHeader(headerText) {
+  const frameId = firstText(matchPriFrameValue(headerText, "Frame"));
+  const round = firstText(matchPriFrameValue(headerText, "Round"));
+  const chunkText = firstText(matchPriFrameValue(headerText, "Chunk"));
+  const chunksText = firstText(matchPriFrameValue(headerText, "Chunks"));
+  const count = toFiniteNumber(matchPriFrameValue(headerText, "Count"));
+  const total = toFiniteNumber(matchPriFrameValue(headerText, "Total"));
+
+  let chunkIndex = null;
+  let chunkCount = null;
+  const inlineChunkMatch = chunkText.match(/^(\d+)\s*\/\s*(\d+)$/);
+  if (inlineChunkMatch) {
+    chunkIndex = Number(inlineChunkMatch[1]);
+    chunkCount = Number(inlineChunkMatch[2]);
+  } else {
+    chunkIndex = toFiniteNumber(chunkText);
+    chunkCount = toFiniteNumber(chunksText);
+  }
+
+  if (!frameId || chunkIndex == null || chunkCount == null) return null;
+  return {
+    frameId,
+    round,
+    chunkIndex,
+    chunkCount,
+    count,
+    totalPlayers: total,
+  };
+}
+
+function matchPriFrameValue(headerText, key) {
+  const match = String(headerText ?? "").match(new RegExp(`${key}=([^,}]+)`));
+  return match ? match[1].trim() : "";
+}
+
+function buildPriFrameMeta(meta, observedAt, parsedCount = null) {
+  return {
+    frameId: meta.frameId,
+    round: meta.round,
+    chunkIndex: meta.chunkIndex,
+    chunkCount: meta.chunkCount,
+    count: meta.count ?? parsedCount,
+    totalPlayers: meta.totalPlayers,
+    observedAt,
+    legacy: false,
+  };
+}
+
+function parsePriFrameRuntimeLine(text) {
+  const source = String(text ?? "");
+  const observedAt = new Date().toISOString();
+  const start = source.indexOf("PRIFrame{");
+  if (start < 0) {
+    return {
+      type: "playerRuntime",
+      runtimePlayers: [],
+      rawFields: [],
+    };
+  }
+
+  const headerStart = start + "PRIFrame{".length;
+  const headerEnd = source.indexOf("}", headerStart);
+  if (headerEnd < 0) {
+    return {
+      type: "playerRuntime",
+      runtimePlayers: [],
+      rawFields: [],
+    };
+  }
+
+  const headerText = source.slice(headerStart, headerEnd);
+  const meta = parsePriFrameHeader(headerText);
+  const payloadStart = source.indexOf("{{", headerEnd);
+  if (payloadStart < 0) {
+    return {
+      type: "playerRuntime",
+      runtimePlayers: [],
+      rawFields: [],
+      priFrame: meta ? buildPriFrameMeta(meta, observedAt) : null,
+    };
+  }
+
+  const rows = extractBraceItems(`{${source.slice(payloadStart + 2)}`);
+  const runtimePlayers = parsePriRuntimeRows(rows, observedAt, "PRIFrame{{");
+  return {
+    type: "playerRuntime",
+    runtimePlayers,
+    rawFields: [],
+    priFrame: meta ? buildPriFrameMeta(meta, observedAt, runtimePlayers.length) : null,
+  };
 }
 
 function parseExplosiveDamageLine(text) {
@@ -1414,7 +1777,6 @@ function parseRuntimePlayerLine(text) {
 function parsePriRuntimePlayerLine(text) {
   const source = String(text ?? "");
   const observedAt = new Date().toISOString();
-  const runtimePlayers = [];
   const start = source.indexOf("PRI{{");
   if (start < 0) {
     return {
@@ -1425,37 +1787,20 @@ function parsePriRuntimePlayerLine(text) {
   }
 
   const rows = extractBraceItems(`{${source.slice(start + 5)}`);
-  for (const row of rows) {
-    const raw = String(row ?? "").trim().replace(/^\{+/, "").replace(/}+$/g, "");
-    const fields = splitTopLevelCsv(raw);
-    const playerId = toFiniteNumber(fields[0]);
-    if (playerId == null) continue;
-    const x = toFiniteNumber(fields[1]);
-    const y = toFiniteNumber(fields[2]);
-    const z = toFiniteNumber(fields[3]);
-    const combatInfo = fields.slice(5).join(",");
-
-    runtimePlayers.push({
-      playerId,
-      playerIndex: playerId,
-      position: x == null || y == null || z == null ? null : {
-        x: x * 100,
-        y: y * 100,
-        z: z * 100,
-      },
-      yaw: toFiniteNumber(fields[4]),
-      combatInfo,
-      presenceHint: detectRuntimePresenceHint({ combatInfo, x, y, z }),
-      observedAt,
-      stale: false,
-      rawText: `PRI{{${raw}}}`,
-    });
-  }
+  const runtimePlayers = parsePriRuntimeRows(rows, observedAt, "PRI{{");
 
   return {
     type: "playerRuntime",
     runtimePlayers,
     rawFields: [],
+    priFrame: {
+      frameId: null,
+      chunkIndex: null,
+      chunkCount: null,
+      totalPlayers: null,
+      observedAt,
+      legacy: true,
+    },
   };
 }
 

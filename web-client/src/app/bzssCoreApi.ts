@@ -162,6 +162,30 @@ export interface BzssCorePlayerInfoState {
   mainZoneCount?: number;
   runtimePlayerCount?: number;
   scoreboardPlayerCount?: number;
+  rconOnlinePlayerCount?: number | null;
+  runtimeCoverage?: {
+    expectedCount?: number | null;
+    actualCount?: number;
+    missingCount?: number | null;
+    complete?: boolean | null;
+  };
+  scoreboardCoverage?: {
+    expectedCount?: number | null;
+    actualCount?: number;
+    missingCount?: number | null;
+    complete?: boolean | null;
+  };
+  priFrame?: {
+    frameId?: string | null;
+    complete?: boolean | null;
+    legacy?: boolean | null;
+    chunks?: number | null;
+    receivedChunks?: number[];
+    missingChunks?: number[];
+    playerCount?: number;
+    expectedPlayerCount?: number | null;
+    updatedAt?: string;
+  };
   rawLineHash?: string;
   rawFields?: string[];
   lastError: string;
@@ -199,6 +223,7 @@ export interface BzssCoreRawDataResponse {
   runtimePlayerCount: number;
   scoreboardPlayerCount: number;
   mainZoneCount: number;
+  priFrame?: BzssCorePlayerInfoState["priFrame"];
   rawLineHash: string;
   rawFields: string[];
   players?: any[];
