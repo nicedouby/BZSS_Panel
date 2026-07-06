@@ -358,18 +358,18 @@ export function createWarmupReserveGrantModule({ core, modules, config, logger }
 
   function buildEligibleReminderMessage(record, eligibility, doneMinutes, remainingMinutes) {
     const squadLabel = formatSquadLabel(eligibility?.squad ?? null);
-    return 'Warmup squad accumulation: ' + doneMinutes + ' minutes completed, ' + remainingMinutes + ' minutes remaining before 1 day reserve is granted.' + squadLabel;
+    return '你已累计暖服 ' + doneMinutes + ' 分钟，再累计 ' + remainingMinutes + ' 分钟，即可自动兑换 1 天预留位。\n感激参与暖服。' + squadLabel;
   }
 
   function buildInvalidReminderMessage(record, eligibility) {
     const squadLabel = formatSquadLabel(eligibility?.squad ?? null);
     if (eligibility?.pauseReason === 'squad_locked') {
-      return 'Warmup mode: your squad is locked, so accumulation is paused. Move to an unlocked squad to continue.' + squadLabel;
+      return '你的小队处于锁队状态，暂停暖服时间累计。\n进入有效小队累积 ' + runtime.settings.grantEveryMinutes + ' 分钟即可兑换 1 天预留位。' + squadLabel;
     }
     if (eligibility?.pauseReason === 'not_in_squad') {
-      return 'Warmup mode: you are not in a squad yet, so accumulation is paused. Join an unlocked squad to continue.' + squadLabel;
+      return '你尚未进入小队，暂停累计暖服时间。\n进入有效小队累积 ' + runtime.settings.grantEveryMinutes + ' 分钟即可兑换 1 天预留位。' + squadLabel;
     }
-    return 'Warmup mode: you are temporarily paused from accumulation.' + squadLabel;
+    return '当前已暂停累计暖服时间。' + squadLabel;
   }
 
   function formatSquadLabel(squad) {
@@ -464,7 +464,7 @@ export function createWarmupReserveGrantModule({ core, modules, config, logger }
       runtime.todayGrantCount += 1;
       await warnPlayer(
         record,
-        'Warmup reserve granted: you have accumulated ' + runtime.settings.grantEveryMinutes + ' minutes and received ' + runtime.settings.grantDays + ' day(s).',
+        '成功为你兑换 ' + runtime.settings.grantDays + ' 天预留位，感激参与暖服。',
         'warmup_reserve_grant_success',
       );
     } catch (error) {

@@ -736,6 +736,27 @@
         "enabled": false,
         "intervalMs": 15000
       }
+    },
+    "warmupReserveGrant": {
+      "enabled": true,
+      "grantEveryMinutes": 60,
+      "grantDays": 1,
+      "reminderEveryMinutes": 1,
+      "maxEligiblePlayers": 50,
+      "requireWarmupMode": true,
+      "requireSquad": true,
+      "requireUnlockedSquad": true,
+      "group": "BZSSVIP",
+      "countMode": "accumulate_eligible_squad_member_time",
+      "timeWindows": [
+        {
+          "enabled": true,
+          "start": "00:00",
+          "end": "23:59"
+        }
+      ],
+      "clearOfflineAfterHours": 24,
+      "maxRecentRecords": 500
     }
   },
   "webModules": {
@@ -832,6 +853,12 @@
       "minIntervalMinutes": 10,
       "maxIntervalMinutes": 15,
       "message": "听从队长指挥是战术小队的核心，团队合作才能带来最终的共赢。"
+    },
+    "seed-kill-warning": {
+      "enabled": true,
+      "title": "火力侦察自动战绩查询",
+      "intervalMinutes": 3,
+      "messageTemplate": "【${title}】你的击杀数为 ${kills}，感激参与暖服"
     },
     "plugin": {
       "fairSquadGuard": {

@@ -665,7 +665,8 @@
       "./plugins/fair-squad-guard.js",
       "./plugins/stepwise-squad-playtime-guard.js",
       "./plugins/squad-creation-broadcast.js",
-      "./plugins/periodic-teamwork-warning.js"
+      "./plugins/periodic-teamwork-warning.js",
+      "./plugins/seed-kill-warning.js"
     ],
     "squad-creation-broadcast": {
       "enabled": false,
@@ -677,6 +678,12 @@
       "minIntervalMinutes": 10,
       "maxIntervalMinutes": 15,
       "message": "听从队长指挥是战术小队的核心，团队合作才能带来最终的共赢。"
+    },
+    "seed-kill-warning": {
+      "enabled": true,
+      "title": "火力侦察自动战绩查询",
+      "intervalMinutes": 3,
+      "messageTemplate": "【${title}】你的击杀数为 ${kills}，感激参与暖服"
     },
     "fairSquadGuard": {
       "enabled": true,

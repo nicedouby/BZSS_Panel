@@ -135,8 +135,8 @@ async function testGrantUsesQualifiedSquadMembers() {
   assert.equal(upserts[0].group, "BZSSVIP");
   assert.ok(warnings.some((item) => item.reason === "warmup_reserve_grant_success"));
   assert.ok(warnings.some((item) => item.reason === "warmup_reserve_grant_invalid"));
-  assert.ok(warnings.some((item) => String(item.message).includes("not in a squad")));
-  assert.ok(warnings.some((item) => String(item.message).includes("squad is locked")));
+  assert.ok(warnings.some((item) => String(item.message).includes("尚未进入小队")));
+  assert.ok(warnings.some((item) => String(item.message).includes("锁队状态")));
 
   const state = module.api.getState();
   assert.equal(state.progress.find((item) => item.steamId === "76561198000000000")?.grantCount, 1);
