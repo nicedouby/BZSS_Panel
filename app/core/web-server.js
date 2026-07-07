@@ -5022,6 +5022,21 @@ export class WebServer {
       return this.modules.console.executeRconCommand(command, meta);
     }
 
+    if (this.coreClient?.dispatchRconCommand) {
+      return this.coreClient.dispatchRconCommand(command, meta?.actor ?? meta?.user ?? null);
+    }
+
+    if (this.core.rconManager?.dispatchCommand) {
+      return this.core.rconManager.dispatchCommand({
+        command,
+        requestedBy: meta.requestedBy ?? "web.console",
+        reason: meta.reason ?? "Manual RCON command from web console",
+        actor: meta.actor ?? meta.user ?? null,
+        system: Boolean(meta.system),
+        requiredPermission: meta.requiredPermission,
+      });
+    }
+
     return {
       success: false,
       ok: false,
@@ -5142,15 +5157,22 @@ export class WebServer {
 
     const succeeded = results.filter((item) => item.result === AUDIT_RESULTS.SUCCESS).length;
     const failed = results.length - succeeded;
+    const firstFailed = results.find((item) => item.result !== AUDIT_RESULTS.SUCCESS) ?? null;
     const auditResult = failed === 0
       ? AUDIT_RESULTS.SUCCESS
       : succeeded > 0
         ? AUDIT_RESULTS.PARTIAL
         : AUDIT_RESULTS.FAILED;
+    const message = failed === 0
+      ? "Tank battle commands executed."
+      : firstFailed
+        ? `Tank battle command failed: ${firstFailed.command}${firstFailed.message ? ` - ${firstFailed.message}` : ""}`
+        : "Tank battle commands failed.";
 
     return {
       ok: failed === 0,
       success: failed === 0,
+      message,
       auditResult,
       totalCommands: results.length,
       succeededCommands: succeeded,

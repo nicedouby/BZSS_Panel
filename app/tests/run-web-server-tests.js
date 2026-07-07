@@ -912,6 +912,69 @@ async function testConsoleRconForbiddenMapsTo403() {
   }
 }
 
+async function testTankBattleExecuteReturnsDetailedFailureMessage() {
+  const commands = [];
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return {
+            username: "admin",
+            role: "SuperAdmin",
+            isSuperAdmin: true,
+          };
+        },
+        hasEverything(user) {
+          return user?.isSuperAdmin === true;
+        },
+      },
+      rconManager: {
+        async dispatchCommand(request) {
+          commands.push(request.command);
+          return {
+            success: true,
+            ok: true,
+            message: "RCON command executed.",
+            response: "OK",
+            status: "success",
+            durationMs: 8,
+          };
+        },
+      },
+    },
+  });
+
+  const req = Readable.from([JSON.stringify({
+    preset: "open",
+    commands: [
+      "AdminNoRespawnTimer 1",
+      "AdminForceAllRoleAvailability 1",
+      "AdminDisableVehicleClaiming 1",
+    ],
+    sourcePage: "tank_battle_dialog",
+  })]);
+  req.method = "POST";
+  req.url = "/api/tank-battle/execute";
+  req.headers = { host: "localhost", "content-type": "application/json" };
+  req.socket = {};
+
+  const recorder = createRecorder();
+  await server.handleRequest(req, recorder.res);
+
+  assert.equal(recorder.state.status, 200);
+  const body = JSON.parse(recorder.state.body);
+  assert.equal(body.ok, true);
+  assert.equal(body.success, true);
+  assert.equal(body.failedCommands, 0);
+  assert.equal(body.succeededCommands, 3);
+  assert.equal(body.message, "Tank battle commands executed.");
+  assert.deepEqual(commands, [
+    "AdminNoRespawnTimer 1",
+    "AdminForceAllRoleAvailability 1",
+    "AdminDisableVehicleClaiming 1",
+  ]);
+}
+
 async function testConsoleWebSocketRequiresSuperAdmin() {
   const server = createServer({
     core: {
@@ -3709,6 +3772,7 @@ await testAdminPermissionGroupsApiSupportsCrudAndInUseConflict();
 await testConsoleRecentEndpointUsesUnifiedConsoleBuffer();
 await testConsoleRconEndpointsUseLoggedInUser();
 await testConsoleRconForbiddenMapsTo403();
+await testTankBattleExecuteReturnsDetailedFailureMessage();
 await testLogPostEndpointsExposeTailerStateAndQueries();
 await testConsoleWebSocketRequiresSuperAdmin();
 await testPlaytimeCacheReturnsEffectiveDuration();

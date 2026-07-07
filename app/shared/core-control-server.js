@@ -399,6 +399,16 @@ export class CoreControlServer {
     if (this.modules.console?.executeRconCommand) {
       return this.modules.console.executeRconCommand(command, meta);
     }
+    if (this.core.rconManager?.dispatchCommand) {
+      return this.core.rconManager.dispatchCommand({
+        command,
+        requestedBy: meta.requestedBy ?? "web.console",
+        reason: meta.reason ?? "Manual RCON command from web console",
+        actor: meta.actor ?? meta.user ?? null,
+        system: Boolean(meta.system),
+        requiredPermission: meta.requiredPermission,
+      });
+    }
     return {
       success: false,
       ok: false,
