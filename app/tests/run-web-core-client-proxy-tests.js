@@ -64,7 +64,7 @@ async function request(server, { method = "GET", url = "/", body = null } = {}) 
 async function main() {
   const coreClientCalls = [];
   const fakeCoreClient = {
-    async proxyApi({ path, search = "", method = "GET", body = undefined }) {
+  async proxyApi({ path, search = "", method = "GET", body = undefined }) {
       coreClientCalls.push({ path, search, method, body });
       if (`${path}${search}` === "/internal/plugins") {
         return [{ id: "group-report", active: true }];
@@ -86,6 +86,12 @@ async function main() {
       }
       if (`${path}${search}` === "/internal/warmup-reserve-grant/state") {
         return { ok: true, module: "warmup-reserve-grant" };
+      }
+      if (`${path}${search}` === "/internal/astrbot/health") {
+        return { ok: true, module: "astrbot" };
+      }
+      if (`${path}${search}` === "/internal/tactical-state/snapshot") {
+        return { ok: true, snapshot: { module: "tactical-state" } };
       }
       throw new Error(`Unexpected proxyApi call: ${method} ${path}${search}`);
     },
@@ -133,6 +139,14 @@ async function main() {
   assert.equal(warmupState.status, 200);
   assert.equal(JSON.parse(warmupState.body).module, "warmup-reserve-grant");
 
+  const astrbotHealth = await request(splitServer, { url: "/api/astrbot/health" });
+  assert.equal(astrbotHealth.status, 200);
+  assert.equal(JSON.parse(astrbotHealth.body).module, "astrbot");
+
+  const tacticalSnapshot = await request(splitServer, { url: "/api/tactical-state/snapshot" });
+  assert.equal(tacticalSnapshot.status, 200);
+  assert.equal(JSON.parse(tacticalSnapshot.body).snapshot.module, "tactical-state");
+
   assert.deepEqual(coreClientCalls.slice(0, 6), [
     { path: "/internal/plugins", search: "", method: "GET", body: undefined },
     { path: "/internal/plugin-subscriptions/state", search: "", method: "GET", body: undefined },
@@ -142,6 +156,8 @@ async function main() {
     { path: "/internal/jobs/playtime-refresh-online", search: "", method: "POST", body: { serverId: "s1", force: true } },
   ]);
   assert.equal(coreClientCalls.some((call) => call.path === "/internal/warmup-reserve-grant/state"), true);
+  assert.equal(coreClientCalls.some((call) => call.path === "/internal/astrbot/health"), true);
+  assert.equal(coreClientCalls.some((call) => call.path === "/internal/tactical-state/snapshot"), true);
 
   const legacyServer = createServer({
     modules: {

@@ -71,11 +71,13 @@ const CORE_API_PROXY_PREFIXES = [
   "/api/ip",
   "/api/weapon-collector",
   "/api/warmup-reserve-grant",
+  "/api/astrbot",
   "/api/reserve-slots",
   "/api/settings/reserve-slots",
   "/api/black-edge-privilege",
   "/api/tb",
   "/api/team-balance",
+  "/api/tactical-state",
   "/api/modules/player-session-records",
   "/api/server-stats",
   "/api/admin-warns",
@@ -384,18 +386,23 @@ export class WebServer {
       });
     }
 
-    const astrbotBridgeHandled = await handleAstrbotBridgeRoutes({
-      core: this.core,
-      modules: this.modules,
-      url,
-      req,
-      res,
-      readJsonBody: (request) => this.readJsonBody(request),
-      json: (status, obj, extraHeaders = {}) => this.json(res, status, obj, extraHeaders),
-      logger: this.logger,
-    });
-    if (astrbotBridgeHandled) {
-      return;
+    if (url.pathname.startsWith("/api/astrbot")) {
+      if (await this.maybeProxyToCore(url, req, res)) {
+        return;
+      }
+      const astrbotBridgeHandled = await handleAstrbotBridgeRoutes({
+        core: this.core,
+        modules: this.modules,
+        url,
+        req,
+        res,
+        readJsonBody: (request) => this.readJsonBody(request),
+        json: (status, obj, extraHeaders = {}) => this.json(res, status, obj, extraHeaders),
+        logger: this.logger,
+      });
+      if (astrbotBridgeHandled) {
+        return;
+      }
     }
 
     const user = this.core.authManager?.getUserFromRequest(req);
