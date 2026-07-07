@@ -53,12 +53,14 @@ const STATIC_ASSET_BY_MAP = {
 };
 
 const MAP_IMAGE_BY_KEY = {
-  AlBasrah_AAS_v1: "tactical_map.jpg",
+  AlBasrah_AAS_v1: "T_AlBasrah_Minimap.PNG",
+  BlackCoast_RAAS_v1: "Black_Coast_Minimap.PNG",
   Anvil_RAAS_v1: "Anvil_Minimap.PNG",
   Belaya_RAAS_v1: "Belaya_Minimap.PNG",
   Chora_RAAS_v1: "Chora_Minimap.PNG",
   Fallujah_RAAS_v1: "T_Fallujah_Minimap.PNG",
   FoolsRoad_RAAS_v1: "Fools_Road_Minimap.PNG",
+  Harju_RAAS_v1: "Harju_Minimap.PNG",
   GooseBay_RAAS_v1: "GooseBay_Minimap.PNG",
   Gorodok_RAAS_v1: "gorodok_minimap.PNG",
   Kamdesh_RAAS_v1: "Kamdesh_Minimap.PNG",
@@ -73,17 +75,20 @@ const MAP_IMAGE_BY_KEY = {
   Skorpo_RAAS_v1: "Skorpo_Minimap.PNG",
   Sumari_RAAS_v1: "Sumari_Minimap.PNG",
   Sumari_Seed_v1: "Sumari_Minimap.PNG",
+  Sanxian_RAAS_v1: "T_Sanxian_Minimap_Large.PNG",
   Tallil_RAAS_v1: "Tallil_Outskirts_Minimap.PNG",
   Yehorivka_RAAS_v1: "Yehorivka_Minimap.PNG",
 };
 
 const MAP_NAME_BY_KEY = {
   AlBasrah_AAS_v1: "Al Basrah",
+  BlackCoast_RAAS_v1: "Black Coast",
   Anvil_RAAS_v1: "Anvil",
   Belaya_RAAS_v1: "Belaya",
   Chora_RAAS_v1: "Chora",
   Fallujah_RAAS_v1: "Fallujah",
   FoolsRoad_RAAS_v1: "Fools Road",
+  Harju_RAAS_v1: "Harju",
   GooseBay_RAAS_v1: "Goose Bay",
   Gorodok_RAAS_v1: "Gorodok",
   Kamdesh_RAAS_v1: "Kamdesh",
@@ -98,6 +103,7 @@ const MAP_NAME_BY_KEY = {
   Skorpo_RAAS_v1: "Skorpo",
   Sumari_RAAS_v1: "Sumari",
   Sumari_Seed_v1: "Sumari",
+  Sanxian_RAAS_v1: "Sanxian",
   Tallil_RAAS_v1: "Tallil Outskirts",
   Yehorivka_RAAS_v1: "Yehorivka",
 };
@@ -112,6 +118,12 @@ function buildAliases(key, name) {
   const rawBase = key.replace(/_RAAS_v1$/i, "");
   const compactBase = normalizeMapToken(rawBase);
   const compactName = normalizeMapToken(name);
+  const extraAliasesByKey = {
+    BlackCoast_RAAS_v1: ["balck coast", "black coast"],
+    Sanxian_RAAS_v1: ["sanxian"],
+    Harju_RAAS_v1: ["harju"],
+    AlBasrah_AAS_v1: ["albasrah"],
+  };
   return Array.from(
     new Set(
       [
@@ -123,6 +135,7 @@ function buildAliases(key, name) {
         rawBase.replace(/([A-Z])/g, " $1"),
         compactBase,
         compactName,
+        ...(extraAliasesByKey[key] ?? []),
       ].filter(Boolean),
     ),
   );
@@ -131,7 +144,7 @@ function buildAliases(key, name) {
 function buildConfig(key, entry) {
   const imageName = MAP_IMAGE_BY_KEY[key];
   const corners = entry?.corners;
-  if (!imageName || !corners?.bIsValid) return null;
+  if (!imageName) return null;
 
   const minX = Number(corners.min?.x);
   const minY = Number(corners.min?.y);

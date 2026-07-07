@@ -15,6 +15,21 @@ describe("tactical-map-data", () => {
     expect(resolveTacticalMapKey("Sumari")).toBe("Sumari_RAAS_v1");
   });
 
+  it("resolves newly added tactical maps", () => {
+    expect(resolveTacticalMapKey("Sanxian")).toBe("Sanxian_RAAS_v1");
+    expect(resolveTacticalMapKey("Harju")).toBe("Harju_RAAS_v1");
+    expect(resolveTacticalMapKey("AlBasrah")).toBe("AlBasrah_AAS_v1");
+    expect(resolveTacticalMapKey("Balck Coast")).toBe("BlackCoast_RAAS_v1");
+    expect(TACTICAL_MAP_LIST.map((map) => map.key)).toEqual(
+      expect.arrayContaining([
+        "Sanxian_RAAS_v1",
+        "Harju_RAAS_v1",
+        "BlackCoast_RAAS_v1",
+        "AlBasrah_AAS_v1",
+      ]),
+    );
+  });
+
   it("resolves Al Basrah to the tactical map config", () => {
     expect(resolveTacticalMapKey("Al Basrah")).toBe("AlBasrah_AAS_v1");
     expect(getStaticTacticalAssets("AlBasrah_AAS_v1")?.captureZones?.length).toBeGreaterThan(0);
