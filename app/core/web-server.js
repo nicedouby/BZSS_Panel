@@ -1797,7 +1797,15 @@ export class WebServer {
     if (url.pathname === "/api/console/recent") {
       if (!this.requireSuperAdmin(user, res)) return;
       if (this.coreClient) {
-        const items = await this.snapshotCache.get(`consoleRecent:${url.search}`, async () => {
+        const cacheKey = [
+          "consoleRecent",
+          `limit=${normalizeCacheKeyPart(url.searchParams.get("limit") ?? "500")}`,
+          `channel=${normalizeCacheKeyPart(url.searchParams.get("channel") ?? "")}`,
+          `level=${normalizeCacheKeyPart(url.searchParams.get("level") ?? "")}`,
+          `source=${normalizeCacheKeyPart(url.searchParams.get("source") ?? "")}`,
+          `keyword=${normalizeCacheKeyPart(url.searchParams.get("keyword") ?? "")}`,
+        ].join("|");
+        const items = await this.snapshotCache.get(cacheKey, async () => {
           const response = await this.coreClient.getConsoleRecent({
             limit: url.searchParams.get("limit") ?? "500",
             channel: url.searchParams.get("channel") ?? "",
@@ -6276,6 +6284,13 @@ export class WebServer {
   }
 }
 
+function normalizeCacheKeyPart(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, 120);
+}
+
 function resolveLogPostOutputDir(workingDirectory) {
   const baseDirectory = path.resolve(workingDirectory);
   const candidates = [
@@ -6390,12 +6405,14 @@ function paginateLogPostRows(items, limit, offset, extra = {}) {
 }
 
 class SnapshotCache {
-  constructor() {
+  constructor({ maxEntries = 64 } = {}) {
     this.entries = new Map();
+    this.maxEntries = Math.max(1, Number(maxEntries) || 64);
   }
 
   async get(key, producer, ttlMs) {
     const now = Date.now();
+    this.prune(now);
     const existing = this.entries.get(key);
     if (existing?.value && existing.expiresAt > now) {
       return existing.value;
@@ -6410,6 +6427,7 @@ class SnapshotCache {
           value,
           expiresAt: Date.now() + Math.max(0, Number(ttlMs) || 0),
         });
+        this.prune(Date.now());
         return value;
       })
       .finally(() => {
@@ -6423,7 +6441,29 @@ class SnapshotCache {
       expiresAt: existing?.expiresAt ?? 0,
       promise,
     });
+    this.prune(now);
     return promise;
+  }
+
+  prune(now = Date.now()) {
+    for (const [key, entry] of this.entries) {
+      if (entry?.promise) continue;
+      if (entry?.expiresAt && entry.expiresAt > now) continue;
+      this.entries.delete(key);
+    }
+
+    if (this.entries.size <= this.maxEntries) {
+      return;
+    }
+
+    const sorted = [...this.entries.entries()]
+      .filter(([, entry]) => !entry?.promise)
+      .sort((left, right) => Number(left[1]?.expiresAt ?? 0) - Number(right[1]?.expiresAt ?? 0));
+
+    for (const [key] of sorted) {
+      if (this.entries.size <= this.maxEntries) break;
+      this.entries.delete(key);
+    }
   }
 }
 
