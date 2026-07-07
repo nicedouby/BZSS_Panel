@@ -1,6 +1,6 @@
 // -*- coding: utf-8 -*-
 
-const COMPOSE_DEBOUNCE_MS = 50;
+const DEFAULT_COMPOSE_DEBOUNCE_MS = 200;
 
 export function createTacticalStateV2Module({ core, modules, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
@@ -15,6 +15,7 @@ export function createTacticalStateV2Module({ core, modules, logger }) {
   let started = false;
   let composeTimer = null;
   let composeInFlight = null;
+  let composeDebounceMs = normalizePositiveInteger(core.config?.get?.("modules.tacticalStateV2.composeDebounceMs", DEFAULT_COMPOSE_DEBOUNCE_MS), DEFAULT_COMPOSE_DEBOUNCE_MS);
 
   function subscribe(listener) {
     subscribers.add(listener);
@@ -30,7 +31,7 @@ export function createTacticalStateV2Module({ core, modules, logger }) {
     composeTimer = setTimeout(() => {
       composeTimer = null;
       void composeSnapshot();
-    }, COMPOSE_DEBOUNCE_MS);
+    }, composeDebounceMs);
   }
 
   async function composeSnapshot() {
@@ -956,6 +957,7 @@ export function createTacticalStateV2Module({ core, modules, logger }) {
     async start() {
       if (started) return;
       started = true;
+      composeDebounceMs = normalizePositiveInteger(core.config?.get?.("modules.tacticalStateV2.composeDebounceMs", DEFAULT_COMPOSE_DEBOUNCE_MS), DEFAULT_COMPOSE_DEBOUNCE_MS);
       const watch = [
         ["module.matchState", "updated"],
         ["module.playerState", "playersSnapshotUpdated"],
@@ -1077,7 +1079,7 @@ function diffSnapshots(oldSnap, newSnap) {
 
   for (const [key, player] of newPlayers) {
     const oldPlayer = oldPlayers.get(key);
-    if (!oldPlayer || JSON.stringify(oldPlayer) !== JSON.stringify(player)) {
+    if (!oldPlayer || buildPlayerHash(oldPlayer) !== buildPlayerHash(player)) {
       patches.push({ op: "player.upsert", key, player });
     }
   }
@@ -1170,4 +1172,26 @@ function diffSnapshots(oldSnap, newSnap) {
   }
 
   return patches;
+}
+
+function buildPlayerHash(player = {}) {
+  return JSON.stringify([
+    player?.identity?.key ?? "",
+    player?.match?.teamId ?? "",
+    player?.match?.squadId ?? "",
+    player?.telemetry?.position?.x ?? "",
+    player?.telemetry?.position?.y ?? "",
+    player?.telemetry?.yaw ?? "",
+    player?.telemetry?.health ?? "",
+    player?.telemetry?.weaponClass ?? "",
+    player?.vehicle?.vehicleType ?? "",
+    player?.vehicle?.health ?? "",
+    player?.network?.gamePing ?? "",
+  ]);
+}
+
+function normalizePositiveInteger(value, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.floor(parsed);
 }

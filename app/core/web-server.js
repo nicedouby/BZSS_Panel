@@ -2,11 +2,13 @@
 
 import http from "node:http";
 import { createReadStream } from "node:fs";
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
 import { execFile } from "node:child_process";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { parseRevisionQuery } from "../shared/core-control-protocol.js";
 
 const requestStorage = new AsyncLocalStorage();
 import { handleSquadManagementRoutes } from "../modules/squad-management/routes.js";
@@ -66,7 +68,7 @@ function normalizeAdminSteam64ForRequest(value) {
 }
 
 export class WebServer {
-  constructor({ config, logger, core, modules }) {
+  constructor({ config, logger, core, modules, coreClient = null }) {
     this.enabled = config.enabled ?? true;
     this.host = config.host ?? "127.0.0.1";
     this.port = Number(config.port ?? 8899);
@@ -79,6 +81,7 @@ export class WebServer {
     this.logger = logger;
     this.core = core;
     this.modules = modules;
+    this.coreClient = coreClient ?? core?.coreClient ?? null;
     this.server = null;
     this.jobs = new Map();
     this.jobCounter = 0;
@@ -95,6 +98,9 @@ export class WebServer {
     this.memoryHistory = [];
     this.maxMemoryHistoryPoints = 120;
     this.memoryInterval = null;
+    this.activeHttpRequests = 0;
+    this.activeSseClients = 0;
+    this.snapshotCache = new SnapshotCache();
   }
 
   async start() {
@@ -212,19 +218,24 @@ export class WebServer {
   }
 
   async handleRequest(req, res) {
+    this.activeHttpRequests += 1;
     const url = new URL(req.url, `http://${req.headers.host}`);
 
-    if (url.pathname.startsWith("/api/")) {
-      const startMs = Date.now();
-      try {
-        return await this.handleApi(url, req, res);
-      } finally {
-        const durationMs = Date.now() - startMs;
-        this.recordApiDuration(url.pathname, durationMs);
+    try {
+      if (url.pathname.startsWith("/api/")) {
+        const startMs = Date.now();
+        try {
+          return await this.handleApi(url, req, res);
+        } finally {
+          const durationMs = Date.now() - startMs;
+          this.recordApiDuration(url.pathname, durationMs);
+        }
       }
-    }
 
-    return this.serveStatic(url, res);
+      return this.serveStatic(url, res);
+    } finally {
+      this.activeHttpRequests = Math.max(0, this.activeHttpRequests - 1);
+    }
   }
 
   recordApiDuration(endpoint, durationMs) {
@@ -261,6 +272,7 @@ export class WebServer {
 
   async handleApi(url, req, res) {
     if (url.pathname === "/api/health" && req.method === "GET") {
+      const coreHealth = this.coreClient ? await this.tryGetCoreHealth() : null;
       return this.json(res, 200, {
         ok: true,
         service: "BZSS Panel WebServer",
@@ -276,6 +288,12 @@ export class WebServer {
         auth: {
           enabled: Boolean(this.core.authManager?.enabled),
         },
+        role: "web",
+        coreReachable: coreHealth ? Boolean(coreHealth.ok) : !this.coreClient,
+        coreLatencyMs: this.coreClient?.lastCoreLatencyMs ?? null,
+        snapshotCacheAgeMs: this.coreClient?.getSnapshotCacheAgeMs?.() ?? null,
+        activeHttpRequests: this.activeHttpRequests,
+        activeSseClients: this.activeSseClients,
         rcon: this.core.rconManager?.getStatus?.() ?? null,
         runtimeState: Boolean(this.core.runtimeState),
       });
@@ -696,6 +714,8 @@ export class WebServer {
       res,
       user,
       json: (status, obj, extraHeaders = {}) => this.json(res, status, obj, extraHeaders),
+      coreClient: this.coreClient,
+      webServer: this,
     });
     if (tacticalStateV2Handled) {
       return;
@@ -845,6 +865,22 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/server/warmup") {
+      if (this.coreClient) {
+        if (req.method === "GET") {
+          return this.json(res, 200, await this.coreClient.getWarmupState());
+        }
+        if (req.method === "POST") {
+          const body = await this.readJsonBody(req);
+          if (!body || typeof body !== "object" || Array.isArray(body) || typeof body.isWarmup !== "boolean") {
+            return this.json(res, 400, {
+              error: "InvalidRequestBody",
+              message: "Request body must include isWarmup as a boolean.",
+            });
+          }
+          return this.json(res, 200, await this.coreClient.setWarmupState(body.isWarmup, user));
+        }
+      }
+
       const webStatus = this.core.webStatus;
       if (!webStatus?.getWarmupState) {
         return this.json(res, 503, {
@@ -880,18 +916,37 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/snapshot/all" && req.method === "GET") {
+      if (this.coreClient) {
+        const since = parseRevisionQuery(url.searchParams.get("since"));
+        const data = await this.snapshotCache.get("snapshotAll", async () => {
+          return this.coreClient.getSnapshotAll({
+            since,
+            cacheTtlMs: this.coreClient.config.snapshotCacheTtlMs,
+          });
+        }, this.coreClient.config.snapshotCacheTtlMs);
+        return this.json(res, data?.notModified ? 204 : 200, data);
+      }
       return this.json(res, 200, cleanSnapshotAllForClient(this.core.runtimeState.getAll()));
     }
 
     if (url.pathname === "/api/snapshot/server" && req.method === "GET") {
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getSnapshotServer());
+      }
       return this.json(res, 200, this.core.runtimeState.getServer());
     }
 
     if (url.pathname === "/api/snapshot/players" && req.method === "GET") {
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getSnapshotPlayers());
+      }
       return this.json(res, 200, cleanPlayersForClient(this.core.runtimeState.getPlayers()));
     }
 
     if (url.pathname === "/api/snapshot/squads" && req.method === "GET") {
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getSnapshotSquads());
+      }
       return this.json(res, 200, cleanSquadsForClient(this.core.runtimeState.getSquads()));
     }
 
@@ -1552,6 +1607,19 @@ export class WebServer {
 
     if (url.pathname === "/api/console/recent") {
       if (!this.requireSuperAdmin(user, res)) return;
+      if (this.coreClient) {
+        const items = await this.snapshotCache.get(`consoleRecent:${url.search}`, async () => {
+          const response = await this.coreClient.getConsoleRecent({
+            limit: url.searchParams.get("limit") ?? "500",
+            channel: url.searchParams.get("channel") ?? "",
+            level: url.searchParams.get("level") ?? "",
+            source: url.searchParams.get("source") ?? "",
+            keyword: url.searchParams.get("keyword") ?? "",
+          });
+          return response?.items ?? [];
+        }, this.coreClient.config.consoleRecentCacheTtlMs);
+        return this.json(res, 200, { items });
+      }
       return this.json(res, 200, {
         items: this.core.console?.getRecent?.({
           limit: url.searchParams.get("limit") ?? "500",
@@ -1570,11 +1638,7 @@ export class WebServer {
         await this.auditForbidden(auditContext, "SuperAdmin role is required.");
         return this.json(res, 403, { error: "Forbidden", message: "SuperAdmin role is required." });
       }
-      const result = await this.executeAudited(auditContext, () => this.executeConsoleRconCommand(body.command, {
-        requestedBy: "web.console",
-        actor: user,
-        system: false,
-      }));
+      const result = await this.executeAudited(auditContext, () => this.dispatchRconCommand(body.command, user));
       return this.json(res, result?.code === "Forbidden" ? 403 : result?.success ? 200 : 400, result);
     }
 
@@ -1585,11 +1649,7 @@ export class WebServer {
         await this.auditForbidden(auditContext, "SuperAdmin role is required.");
         return this.json(res, 403, { error: "Forbidden", message: "SuperAdmin role is required." });
       }
-      const result = await this.executeAudited(auditContext, () => this.executeConsoleRconCommand(body.command, {
-        requestedBy: "web.console",
-        actor: user,
-        system: false,
-      }));
+      const result = await this.executeAudited(auditContext, () => this.dispatchRconCommand(body.command, user));
       return this.json(res, result?.code === "Forbidden" ? 403 : result?.success ? 200 : 400, result);
     }
 
@@ -1601,11 +1661,7 @@ export class WebServer {
         await this.auditForbidden(auditContext, "SuperAdmin role is required.");
         return this.json(res, 403, { error: "Forbidden", message: "SuperAdmin role is required." });
       }
-      const result = await this.executeAudited(auditContext, () => this.executeConsoleRconCommand(body.command, {
-        requestedBy: "web.console",
-        actor: user,
-        system: false,
-      }));
+      const result = await this.executeAudited(auditContext, () => this.dispatchRconCommand(body.command, user));
       return this.json(res, result?.code === "Forbidden" ? 403 : result?.success ? 200 : 400, result);
     }
 
@@ -1766,6 +1822,9 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/rcon/status") {
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getRconStatus());
+      }
       return this.json(res, 200, this.core.rconManager.getStatus());
     }
 
@@ -1859,6 +1918,13 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/rcon/refresh" && req.method === "POST") {
+      if (this.coreClient) {
+        return this.json(res, 501, {
+          ok: false,
+          error: "NotImplementedInSplitMode",
+          message: "Remote refresh is not implemented in split mode yet.",
+        });
+      }
       if (!this.requireSuperAdmin(user, res)) return;
       const type = this.normalizeMatchRefreshType(url.searchParams.get("type") ?? "all");
       return this.json(res, 200, await this.refreshMatchState(type));
@@ -4840,6 +4906,36 @@ export class WebServer {
     };
   }
 
+  beginSse() {
+    this.activeSseClients += 1;
+  }
+
+  endSse() {
+    this.activeSseClients = Math.max(0, this.activeSseClients - 1);
+  }
+
+  dispatchRconCommand(command, actor = null) {
+    if (this.coreClient) {
+      return this.coreClient.dispatchRconCommand(command, actor);
+    }
+    return this.executeConsoleRconCommand(command, {
+      requestedBy: "web.console",
+      actor,
+      system: false,
+    });
+  }
+
+  async tryGetCoreHealth() {
+    try {
+      return await this.coreClient.getHealth();
+    } catch (error) {
+      this.logger?.warn?.(`Core health probe failed: ${error?.message ?? error}`, {
+        operation: "web.coreHealth",
+      });
+      return null;
+    }
+  }
+
   validateCreateVehicleParameter(parameter) {
     const parts = String(parameter ?? "").split(",").map((part) => part.trim());
     if (parts.length !== 2 && parts.length !== 3) {
@@ -5570,11 +5666,11 @@ function resolveLogPostOutputDir(workingDirectory) {
 
   for (const candidate of candidates) {
     if (
-      fs.existsSync(path.resolve(candidate, "events"))
-      || fs.existsSync(path.resolve(candidate, "raw"))
-      || fs.existsSync(path.resolve(candidate, "audit"))
-      || fs.existsSync(path.resolve(candidate, "state"))
-      || fs.existsSync(path.resolve(candidate, ".state"))
+      fsSync.existsSync(path.resolve(candidate, "events"))
+      || fsSync.existsSync(path.resolve(candidate, "raw"))
+      || fsSync.existsSync(path.resolve(candidate, "audit"))
+      || fsSync.existsSync(path.resolve(candidate, "state"))
+      || fsSync.existsSync(path.resolve(candidate, ".state"))
     ) {
       return candidate;
     }
@@ -5674,6 +5770,44 @@ function paginateLogPostRows(items, limit, offset, extra = {}) {
   };
 }
 
+class SnapshotCache {
+  constructor() {
+    this.entries = new Map();
+  }
+
+  async get(key, producer, ttlMs) {
+    const now = Date.now();
+    const existing = this.entries.get(key);
+    if (existing?.value && existing.expiresAt > now) {
+      return existing.value;
+    }
+    if (existing?.promise) {
+      return existing.promise;
+    }
+    const promise = Promise.resolve()
+      .then(producer)
+      .then((value) => {
+        this.entries.set(key, {
+          value,
+          expiresAt: Date.now() + Math.max(0, Number(ttlMs) || 0),
+        });
+        return value;
+      })
+      .finally(() => {
+        const current = this.entries.get(key);
+        if (current?.promise) {
+          delete current.promise;
+        }
+      });
+    this.entries.set(key, {
+      value: existing?.value ?? null,
+      expiresAt: existing?.expiresAt ?? 0,
+      promise,
+    });
+    return promise;
+  }
+}
+
 function parseOptionalDateMs(value) {
   const text = String(value ?? "").trim();
   if (!text) return null;
@@ -5716,7 +5850,7 @@ function cleanPlayerForClient(player) {
   return cleaned;
 }
 
-function cleanPlayersForClient(players) {
+export function cleanPlayersForClient(players) {
   if (!players) return players;
   const cleaned = { ...players };
   delete cleaned.bySteamID;
@@ -5732,7 +5866,7 @@ function cleanPlayersForClient(players) {
   return cleaned;
 }
 
-function cleanSquadsForClient(squads) {
+export function cleanSquadsForClient(squads) {
   if (!squads) return squads;
   const cleaned = { ...squads };
   delete cleaned.byKey;
@@ -5740,7 +5874,7 @@ function cleanSquadsForClient(squads) {
   return cleaned;
 }
 
-function cleanSnapshotAllForClient(all) {
+export function cleanSnapshotAllForClient(all) {
   if (!all) return all;
   return {
     ...all,

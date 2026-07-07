@@ -2,6 +2,7 @@
 
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import fsp from "node:fs/promises";
 import path from "node:path";
 
 const MARKER = "{BZSS-Marked}";
@@ -52,8 +53,16 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
   const unsubscribers = [];
   const activeTimeouts = new Set();
   const rawCapturePath = path.resolve(process.cwd(), RAW_CAPTURE_RELATIVE_PATH);
+  const rawCaptureEnabled = core.config?.get?.("modules.bzssCoreMonitor.rawCapture.enabled", false) ?? false;
+  const rawCaptureQueue = [];
+  const rawCaptureFlushIntervalMs = normalizePositiveInteger(core.config?.get?.("modules.bzssCoreMonitor.rawCapture.flushIntervalMs", 1000), 1000);
+  const rawCaptureMaxBatchLines = normalizePositiveInteger(core.config?.get?.("modules.bzssCoreMonitor.rawCapture.maxBatchLines", 200), 200);
+  const rawCaptureRotateBytes = normalizePositiveInteger(core.config?.get?.("modules.bzssCoreMonitor.rawCapture.rotateBytes", 20 * 1024 * 1024), 20 * 1024 * 1024);
+  let rawCaptureFlushTimer = null;
+  let rawCaptureFlushInFlight = null;
 
   function resetRawCaptureFile() {
+    if (!rawCaptureEnabled) return;
     try {
       fs.mkdirSync(path.dirname(rawCapturePath), { recursive: true });
       fs.rmSync(rawCapturePath, { force: true });
@@ -69,21 +78,53 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
   }
 
   function appendRawCapture(line) {
+    if (!rawCaptureEnabled) return;
+    rawCaptureQueue.push(JSON.stringify({
+      observedAt: new Date().toISOString(),
+      rawLine: String(line ?? ""),
+    }));
+  }
+
+  async function rotateRawCaptureIfNeeded() {
     try {
-      fs.mkdirSync(path.dirname(rawCapturePath), { recursive: true });
-      fs.appendFileSync(rawCapturePath, `${JSON.stringify({
-        observedAt: new Date().toISOString(),
-        rawLine: String(line ?? ""),
-      })}\n`, "utf8");
+      const stats = await fsp.stat(rawCapturePath).catch(() => null);
+      if (!stats || stats.size < rawCaptureRotateBytes) return;
+      const rotatedPath = rawCapturePath.replace(/\.jsonl$/i, `.${Date.now()}.jsonl`);
+      await fsp.rename(rawCapturePath, rotatedPath);
     } catch (error) {
-      moduleLogger.warn?.("Failed to append BZSS-Core raw capture.", {
-        operation: "bzssCoreMonitor.rawCapture.appendFailed",
+      moduleLogger.warn?.("Failed to rotate BZSS-Core raw capture.", {
+        operation: "bzssCoreMonitor.rawCapture.rotateFailed",
         data: {
           filePath: rawCapturePath,
           error: error?.message ?? String(error),
         },
       });
     }
+  }
+
+  async function flushRawCaptureQueue() {
+    if (!rawCaptureEnabled || rawCaptureFlushInFlight || rawCaptureQueue.length === 0) return rawCaptureFlushInFlight;
+    rawCaptureFlushInFlight = (async () => {
+      const lines = rawCaptureQueue.splice(0, rawCaptureMaxBatchLines);
+      try {
+        await fsp.mkdir(path.dirname(rawCapturePath), { recursive: true });
+        await rotateRawCaptureIfNeeded();
+        await fsp.appendFile(rawCapturePath, `${lines.join("\n")}\n`, "utf8");
+      } catch (error) {
+        rawCaptureQueue.unshift(...lines);
+        moduleLogger.warn?.("Failed to flush BZSS-Core raw capture.", {
+          operation: "bzssCoreMonitor.rawCapture.flushFailed",
+          data: {
+            filePath: rawCapturePath,
+            error: error?.message ?? String(error),
+            queueLength: rawCaptureQueue.length,
+          },
+        });
+      } finally {
+        rawCaptureFlushInFlight = null;
+      }
+    })();
+    return rawCaptureFlushInFlight;
   }
 
   const listeners = new Set();
@@ -599,6 +640,11 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
     if (started) return;
     started = true;
     resetRawCaptureFile();
+    if (rawCaptureEnabled) {
+      rawCaptureFlushTimer = setInterval(() => {
+        void flushRawCaptureQueue();
+      }, rawCaptureFlushIntervalMs);
+    }
     if (core.eventBus?.onCoreEvent) {
       unsubscribers.push(core.eventBus.onCoreEvent("On_RawLogLine", handleRawLogLine));
       unsubscribers.push(core.eventBus.onCoreEvent("round.world_bring_up", () => {
@@ -611,6 +657,11 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
 
   async function stop() {
     started = false;
+    if (rawCaptureFlushTimer) {
+      clearInterval(rawCaptureFlushTimer);
+      rawCaptureFlushTimer = null;
+    }
+    await flushRawCaptureQueue();
     for (const unsubscribe of unsubscribers.splice(0)) {
       try {
         unsubscribe();

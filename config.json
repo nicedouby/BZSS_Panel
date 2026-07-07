@@ -15,7 +15,20 @@
     "staticDirectory": "./web-client/dist",
     "useVueClient": true,
     "title": "BZSS Panel",
-    "enableDebugPage": false
+    "enableDebugPage": false,
+    "coreBaseUrl": "http://127.0.0.1:12866"
+  },
+  "processMode": "split",
+  "coreControl": {
+    "enabled": true,
+    "host": "127.0.0.1",
+    "port": 12866,
+    "tokenFromEnv": "BZSS_CORE_TOKEN",
+    "requestTimeoutMs": 3000,
+    "snapshotCacheTtlMs": 500,
+    "tacticalSnapshotCacheTtlMs": 150,
+    "consoleRecentCacheTtlMs": 300,
+    "streamReconnectMs": 1000
   },
   "squadNameClassifier": {
     "rulesPath": "./config/squad_name_nature_rules.json"

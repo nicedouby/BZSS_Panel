@@ -12,6 +12,7 @@ export interface SnapshotStore {
 }
 
 const snapshot = shallowRef<any>(null);
+let lastRevisions: Record<string, number> = {};
 
 const runtimeSyncState = reactive({
   started: false,
@@ -113,7 +114,8 @@ async function fetchSnapshot(options: { scheduleNext: boolean; immediate?: boole
 
   runtimeSyncState.inFlight = true;
   try {
-    const response = await fetch("/api/snapshot/all", {
+    const query = serializeRevisionQuery(lastRevisions);
+    const response = await fetch(query ? `/api/snapshot/all?since=${encodeURIComponent(query)}` : "/api/snapshot/all", {
       credentials: "same-origin",
       headers: {
         Accept: "application/json",
@@ -130,6 +132,14 @@ async function fetchSnapshot(options: { scheduleNext: boolean; immediate?: boole
       return;
     }
 
+    if (response.status === 204) {
+      runtimeSyncState.lastSuccessAt = Date.now();
+      runtimeSyncState.lastError = null;
+      runtimeSyncState.errorType = null;
+      runtimeSyncState.consecutiveFailures = 0;
+      return;
+    }
+
     if (!response.ok) {
       runtimeSyncState.lastError = `HTTP ${response.status}`;
       runtimeSyncState.errorType = "http";
@@ -141,7 +151,8 @@ async function fetchSnapshot(options: { scheduleNext: boolean; immediate?: boole
     const data = await response.json();
     if (!runtimeSyncState.started) return;
 
-    const normalized = markRaw(normalizeRuntimeSnapshot(data));
+    lastRevisions = data?.revisions ?? lastRevisions;
+    const normalized = markRaw(normalizeRuntimeSnapshot(mergeRuntimeSnapshot(snapshot.value, data)));
     snapshot.value = normalized;
     applySnapshotToStores(normalized);
 
@@ -223,4 +234,32 @@ function normalizeRuntimeSnapshot(input: any) {
     events: payload?.events ?? {},
     jobs: payload?.jobs ?? {},
   };
+}
+
+function serializeRevisionQuery(revisions: Record<string, number>) {
+  return Object.entries(revisions ?? {})
+    .filter(([, value]) => Number.isFinite(Number(value)))
+    .map(([key, value]) => `${key}:${Math.max(0, Math.floor(Number(value)))}`)
+    .join(",");
+}
+
+function mergeRuntimeSnapshot(previous: any, response: any) {
+  const patch = response?.patch;
+  if (!patch) {
+    return response?.snapshot ?? response ?? previous;
+  }
+  if (response?.notModified) {
+    return previous;
+  }
+  const next = {
+    ...(previous ?? {}),
+    revisions: response?.revisions ?? previous?.revisions ?? {},
+  };
+  for (const key of ["server", "players", "squads", "rcon", "jobs"]) {
+    if (patch[key] !== null && patch[key] !== undefined) {
+      next[key] = patch[key];
+    }
+  }
+  next.updatedAt = Date.now();
+  return next;
 }

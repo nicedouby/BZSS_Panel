@@ -748,6 +748,13 @@ async function testRawCaptureFileLifecycle() {
       core: {
         eventBus: { onCoreEvent() { return () => {}; }, emitModuleEvent() {} },
         logger: { info() {}, warn() {}, error() {}, debug() {} },
+        config: {
+          get(path, fallback) {
+            if (path === "modules.bzssCoreMonitor.rawCapture.enabled") return true;
+            if (path === "modules.bzssCoreMonitor.rawCapture.flushIntervalMs") return 10;
+            return fallback;
+          },
+        },
       },
     });
 
@@ -760,6 +767,7 @@ async function testRawCaptureFileLifecycle() {
 
     const line = "PIE: Error: {ID:3,Pos:-168,193,-133,98,CI{0,125,M16A4,}}/n/";
     assert.equal(module.api.ingestLogLine(line).ok, true);
+    await new Promise((resolve) => setTimeout(resolve, 50));
     assert.equal(fs.existsSync(capturePath), true);
 
     const entries = fs.readFileSync(capturePath, "utf8")
