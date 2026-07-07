@@ -225,6 +225,29 @@ describe("runtimeSync", () => {
     expect(players.active.map((player) => player.name)).toEqual(["Alice", "Bob"]);
   });
 
+  it("falls back to safe default lists when matchState omits squads and teams", async () => {
+    const squads = useSquadStore();
+
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        snapshot: {
+          matchState: {
+            players: {
+              list: [],
+              lastUpdatedAt: "2026-05-12T00:00:00.000Z",
+            },
+          },
+        },
+      }),
+    });
+
+    await syncOnce();
+
+    expect(squads.list).toEqual([]);
+  });
+
   it("resolves route-aware cadences and hidden tab backoff", () => {
     setRuntimeSyncRefreshPolicy("realtime");
 

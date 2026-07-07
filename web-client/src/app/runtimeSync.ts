@@ -192,7 +192,7 @@ function normalizeRuntimeSnapshot(input: any) {
   const squads = payload?.squads ?? match?.squads ?? {};
   const rcon = payload?.rcon ?? {};
   const webStatus = server?.webStatus ?? {};
-  const matchState = payload?.matchState ?? {
+  const fallbackMatchState = {
     serverStatus: {
       ...(match?.server ?? {}),
       ...webStatus,
@@ -213,6 +213,37 @@ function normalizeRuntimeSnapshot(input: any) {
     },
     match: match?.match ?? {},
     updatedAt: match?.updatedAt ?? payload?.updatedAt ?? Date.now(),
+  };
+
+  const incomingMatchState = payload?.matchState ?? {};
+  const matchState = {
+    ...fallbackMatchState,
+    ...incomingMatchState,
+    serverStatus: {
+      ...fallbackMatchState.serverStatus,
+      ...(incomingMatchState?.serverStatus ?? {}),
+    },
+    players: {
+      ...fallbackMatchState.players,
+      ...(incomingMatchState?.players ?? {}),
+      list: Array.isArray(incomingMatchState?.players?.list)
+        ? incomingMatchState.players.list
+        : fallbackMatchState.players.list,
+    },
+    squads: {
+      ...fallbackMatchState.squads,
+      ...(incomingMatchState?.squads ?? {}),
+      list: Array.isArray(incomingMatchState?.squads?.list)
+        ? incomingMatchState.squads.list
+        : fallbackMatchState.squads.list,
+    },
+    teams: Array.isArray(incomingMatchState?.teams)
+      ? incomingMatchState.teams
+      : fallbackMatchState.teams,
+    rconStatus: {
+      ...fallbackMatchState.rconStatus,
+      ...(incomingMatchState?.rconStatus ?? {}),
+    },
   };
 
   const overview = payload?.overview ?? {
