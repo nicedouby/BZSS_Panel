@@ -147,7 +147,7 @@ export class PluginManager {
   }
 
   async loadPlugin(pluginPath) {
-    const abs = path.resolve(process.cwd(), pluginPath);
+    const abs = await this.resolvePluginPath(pluginPath);
     this.logger.debug(`Loading plugin from ${pluginPath}`, {
       operation: "loadPlugin",
       data: {
@@ -211,6 +211,31 @@ export class PluginManager {
     } catch (error) {
       this.logger.error(`Failed to load plugin ${pluginPath}: ${error.stack}`);
     }
+  }
+
+  async resolvePluginPath(pluginPath) {
+    const text = String(pluginPath ?? "").trim();
+    const direct = path.resolve(process.cwd(), text);
+
+    try {
+      await fs.access(direct);
+      return direct;
+    } catch {}
+
+    const normalized = text.replaceAll("\\", "/");
+    if (normalized.startsWith("./plugins/") || normalized.startsWith("plugins/")) {
+      const relative = normalized.replace(/^\.?\/?plugins\//, "");
+      const appPath = path.resolve(process.cwd(), "app/plugins", relative);
+      try {
+        await fs.access(appPath);
+        this.logger.warn(`Plugin path fallback applied: ${pluginPath} -> ${path.relative(process.cwd(), appPath).replaceAll("\\", "/")}`, {
+          operation: "resolvePluginPath",
+        });
+        return appPath;
+      } catch {}
+    }
+
+    throw new Error(`Plugin path not found: ${pluginPath}`);
   }
 
   async stopAll() {

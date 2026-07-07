@@ -663,19 +663,6 @@
   },
   "plugins": {
     "enabled": true,
-    "paths": [
-      "./plugins/admin-camera-duration.js",
-      "./plugins/group-report.js",
-      "./plugins/weapon-collector.js",
-      "./plugins/player_duration_slow_refresh.js",
-      "./plugins/udp_event_forwarder.js",
-      "./plugins/match-snapshot.js",
-      "./plugins/fair-squad-guard.js",
-      "./plugins/stepwise-squad-playtime-guard.js",
-      "./plugins/squad-creation-broadcast.js",
-      "./plugins/periodic-teamwork-warning.js",
-      "./plugins/seed-kill-warning.js"
-    ],
     "squad-creation-broadcast": {
       "enabled": false,
       "delaySeconds": 5,

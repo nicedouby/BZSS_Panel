@@ -113,6 +113,14 @@ export class CoreControlClient {
     return this.requestJson("/internal/plugins", { cacheTtlMs: 0 });
   }
 
+  proxyApi({ path, search = "", method = "GET", body = undefined } = {}) {
+    return this.requestJson(`${String(path ?? "")}${String(search ?? "")}`, {
+      method,
+      body,
+      cacheTtlMs: 0,
+    });
+  }
+
   getPluginSubscriptionsState() {
     return this.requestJson("/internal/plugin-subscriptions/state", { cacheTtlMs: 0 });
   }

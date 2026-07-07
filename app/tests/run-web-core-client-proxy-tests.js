@@ -64,21 +64,27 @@ async function request(server, { method = "GET", url = "/", body = null } = {}) 
 async function main() {
   const coreClientCalls = [];
   const fakeCoreClient = {
-    async getPlugins() {
-      coreClientCalls.push("getPlugins");
-      return [{ id: "group-report", active: true }];
-    },
-    async getPluginSubscriptionsState() {
-      coreClientCalls.push("getPluginSubscriptionsState");
-      return { ok: true, items: [{ id: "group-report", subscribed: true }] };
-    },
-    async getGroupReportSnapshot() {
-      coreClientCalls.push("getGroupReportSnapshot");
-      return { ok: true, data: { plugin: "group-report", groups: [{ id: "g1" }] } };
-    },
-    async getUdpEventForwarderState() {
-      coreClientCalls.push("getUdpEventForwarderState");
-      return { status: { active: true }, items: [{ id: 1 }] };
+    async proxyApi({ path, search = "", method = "GET", body = undefined }) {
+      coreClientCalls.push({ path, search, method, body });
+      if (`${path}${search}` === "/internal/plugins") {
+        return [{ id: "group-report", active: true }];
+      }
+      if (`${path}${search}` === "/internal/plugin-subscriptions/state") {
+        return { ok: true, items: [{ id: "group-report", subscribed: true }] };
+      }
+      if (`${path}${search}` === "/internal/plugins/group-report/snapshot?limit=200&type=all") {
+        return { ok: true, data: { plugin: "group-report", groups: [{ id: "g1" }] } };
+      }
+      if (`${path}${search}` === "/internal/plugins/udp-event-forwarder/state") {
+        return { status: { active: true }, items: [{ id: 1 }] };
+      }
+      if (`${path}${search}` === "/internal/match/snapshot") {
+        return { ok: true, source: "core-client", match: { id: "m1" } };
+      }
+      if (`${path}${search}` === "/internal/jobs/playtime-refresh-online") {
+        return { ok: true, jobId: "job-1" };
+      }
+      throw new Error(`Unexpected proxyApi call: ${method} ${path}${search}`);
     },
     async setLogClockSeconds(body) {
       coreClientCalls.push(["setLogClockSeconds", body.seconds]);
@@ -96,7 +102,7 @@ async function main() {
   assert.equal(subs.status, 200);
   assert.equal(JSON.parse(subs.body).items[0].subscribed, true);
 
-  const groupSnapshot = await request(splitServer, { url: "/api/plugins/group-report/snapshot" });
+  const groupSnapshot = await request(splitServer, { url: "/api/plugins/group-report/snapshot?limit=200&type=all" });
   assert.equal(groupSnapshot.status, 200);
   assert.equal(JSON.parse(groupSnapshot.body).data.plugin, "group-report");
 
@@ -104,11 +110,30 @@ async function main() {
   assert.equal(udp.status, 200);
   assert.equal(JSON.parse(udp.body).status.active, true);
 
+  const matchSnapshot = await request(splitServer, { url: "/api/match/snapshot" });
+  assert.equal(matchSnapshot.status, 200);
+  assert.equal(JSON.parse(matchSnapshot.body).source, "core-client");
+
+  const playtimeJob = await request(splitServer, {
+    method: "POST",
+    url: "/api/jobs/playtime-refresh-online",
+    body: { serverId: "s1", force: true },
+  });
+  assert.equal(playtimeJob.status, 200);
+  assert.equal(JSON.parse(playtimeJob.body).jobId, "job-1");
+
   const logClock = await request(splitServer, { method: "POST", url: "/api/log-clock/set", body: { seconds: 12 } });
   assert.equal(logClock.status, 200);
   assert.equal(JSON.parse(logClock.body).logClockSeconds, 12);
 
-  assert.equal(coreClientCalls.length >= 5, true);
+  assert.deepEqual(coreClientCalls.slice(0, 6), [
+    { path: "/internal/plugins", search: "", method: "GET", body: undefined },
+    { path: "/internal/plugin-subscriptions/state", search: "", method: "GET", body: undefined },
+    { path: "/internal/plugins/group-report/snapshot", search: "?limit=200&type=all", method: "GET", body: undefined },
+    { path: "/internal/plugins/udp-event-forwarder/state", search: "", method: "GET", body: undefined },
+    { path: "/internal/match/snapshot", search: "", method: "GET", body: undefined },
+    { path: "/internal/jobs/playtime-refresh-online", search: "", method: "POST", body: { serverId: "s1", force: true } },
+  ]);
 
   const legacyServer = createServer({
     modules: {

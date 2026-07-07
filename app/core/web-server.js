@@ -54,6 +54,24 @@ const BASE_SECURITY_HEADERS = {
   "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' wss: ws:",
 };
 
+const CORE_API_PROXY_PREFIXES = [
+  "/api/plugins",
+  "/api/plugin-subscriptions",
+  "/api/tactical-map-replay",
+  "/api/remote-telemetry",
+  "/api/chat",
+  "/api/combat-manager",
+  "/api/combat-logs",
+  "/api/battle-log",
+  "/api/logpost",
+  "/api/match",
+  "/api/round",
+  "/api/jobs",
+  "/api/query/playtime-cache",
+  "/api/ip",
+  "/api/weapon-collector",
+];
+
 function normalizeAdminSteam64ForRequest(value) {
   if (value === null || value === undefined) return null;
   const text = String(value ?? "").trim();
@@ -390,6 +408,10 @@ export class WebServer {
         error: "Unauthorized",
         message: "Authentication required.",
       });
+    }
+
+    if (await this.maybeProxyToCore(url, req, res)) {
+      return;
     }
 
     if (
@@ -5974,8 +5996,52 @@ export class WebServer {
   }
 
   getPluginApi(pluginId) {
-    return this.core.pluginManager?.instances
-      ?.find((instance) => instance.manifest?.id === pluginId)?.api ?? null;
+    const raw = String(pluginId ?? "").trim();
+    if (!raw) return null;
+
+    const candidates = new Set([
+      raw,
+      raw.startsWith("plugin.") ? raw.slice("plugin.".length) : `plugin.${raw}`,
+      raw.replaceAll("-", "_"),
+      raw.replaceAll("_", "-"),
+    ]);
+
+    for (const instance of this.core.pluginManager?.instances ?? []) {
+      const id = String(instance?.manifest?.id ?? instance?.id ?? "").trim();
+      const apiName = String(instance?.apiName ?? "").trim();
+
+      if (candidates.has(id) || candidates.has(apiName)) {
+        return instance.api ?? null;
+      }
+
+      if (id.startsWith("plugin.") && candidates.has(id.slice("plugin.".length))) {
+        return instance.api ?? null;
+      }
+    }
+
+    return null;
+  }
+
+  async maybeProxyToCore(url, req, res) {
+    if (!this.coreClient) return false;
+
+    const shouldProxy = CORE_API_PROXY_PREFIXES.some((prefix) => (
+      url.pathname === prefix || url.pathname.startsWith(`${prefix}/`)
+    ));
+    if (!shouldProxy) return false;
+
+    const body = ["POST", "PATCH", "PUT", "DELETE"].includes(String(req.method ?? "").toUpperCase())
+      ? await this.readJsonBody(req)
+      : undefined;
+
+    const result = await this.coreClient.proxyApi({
+      path: url.pathname.replace(/^\/api/, "/internal"),
+      search: url.search,
+      method: req.method,
+      body,
+    });
+
+    return this.json(res, result?.statusCode ?? 200, result?.body ?? result), true;
   }
 
   getLogPostWorkingDirectory() {

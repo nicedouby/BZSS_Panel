@@ -11,6 +11,24 @@ import {
   readJsonRequestBody,
 } from "./core-control-protocol.js";
 
+const CORE_PROXY_PREFIXES = [
+  "/internal/plugins",
+  "/internal/plugin-subscriptions",
+  "/internal/tactical-map-replay",
+  "/internal/remote-telemetry",
+  "/internal/chat",
+  "/internal/combat-manager",
+  "/internal/combat-logs",
+  "/internal/battle-log",
+  "/internal/logpost",
+  "/internal/match",
+  "/internal/round",
+  "/internal/jobs",
+  "/internal/query",
+  "/internal/ip",
+  "/internal/weapon-collector",
+];
+
 export class CoreControlServer {
   constructor({ config, logger, core, modules }) {
     this.config = normalizeCoreControlConfig(config, process.env);
@@ -239,76 +257,10 @@ export class CoreControlServer {
       });
     }
 
-    if (url.pathname === "/internal/plugins" && req.method === "GET") {
-      return this.proxyLegacyApi("/api/plugins", req, res);
-    }
-
-    if (url.pathname.startsWith("/internal/plugin-subscriptions")) {
-      return this.proxyLegacyApi(url.pathname.replace("/internal", "/api"), req, res);
-    }
-
-    if (url.pathname.startsWith("/internal/plugins/")) {
-      return this.proxyLegacyApi(url.pathname.replace("/internal", "/api"), req, res);
-    }
-
-    if (url.pathname === "/internal/weapon-collector/clear" && req.method === "POST") {
-      return this.proxyLegacyApi("/api/weapon-collector/clear", req, res, url.search);
-    }
-
-    if (url.pathname.startsWith("/internal/tactical-map-replay/")) {
-      return this.proxyLegacyApi(url.pathname.replace("/internal", "/api"), req, res, url.search);
-    }
-
-    if (url.pathname.startsWith("/internal/remote-telemetry/")) {
-      return this.proxyLegacyApi(url.pathname.replace("/internal", "/api"), req, res, url.search);
-    }
-
-    if (url.pathname.startsWith("/internal/chat/")) {
-      return this.proxyLegacyApi(url.pathname.replace("/internal", "/api"), req, res, url.search);
-    }
-
-    if (url.pathname.startsWith("/internal/combat-manager/")) {
-      return this.proxyLegacyApi(url.pathname.replace("/internal", "/api"), req, res, url.search);
-    }
-
-    if (url.pathname.startsWith("/internal/combat-logs/")) {
-      return this.proxyLegacyApi(url.pathname.replace("/internal", "/api"), req, res, url.search);
-    }
-
-    if (url.pathname.startsWith("/internal/battle-log/")) {
-      return this.proxyLegacyApi(url.pathname.replace("/internal", "/api"), req, res, url.search);
-    }
-
-    if (url.pathname === "/internal/logpost/state" && req.method === "GET") {
-      return this.proxyLegacyApi("/api/logpost/state", req, res);
-    }
-
-    if (url.pathname === "/internal/logpost/raw" && req.method === "GET") {
-      return this.proxyLegacyApi("/api/logpost/raw", req, res, url.search);
-    }
-
-    if (url.pathname === "/internal/logpost/events" && req.method === "GET") {
-      return this.proxyLegacyApi("/api/logpost/events", req, res, url.search);
-    }
-
-    if (url.pathname === "/internal/logpost/gaps" && req.method === "GET") {
-      return this.proxyLegacyApi("/api/logpost/gaps", req, res);
-    }
-
-    if (url.pathname === "/internal/logpost/v2/outbox" && req.method === "GET") {
-      return this.proxyLegacyApi("/api/logpost/v2/outbox", req, res, url.search);
-    }
-
-    if (url.pathname === "/internal/logpost/v2/safety" && req.method === "GET") {
-      return this.proxyLegacyApi("/api/logpost/v2/safety", req, res, url.search);
-    }
-
-    if (url.pathname === "/internal/logpost/v2/replay" && req.method === "POST") {
-      return this.proxyLegacyApi("/api/logpost/v2/replay", req, res);
-    }
-
-    if (url.pathname === "/internal/logpost/v2/checkpoint/repair" && req.method === "POST") {
-      return this.proxyLegacyApi("/api/logpost/v2/checkpoint/repair", req, res);
+    for (const prefix of CORE_PROXY_PREFIXES) {
+      if (url.pathname === prefix || url.pathname.startsWith(`${prefix}/`)) {
+        return this.proxyLegacyApi(url.pathname.replace(/^\/internal/, "/api"), req, res, url.search);
+      }
     }
 
     throw createHttpError(404, "NotFound", "Internal route not found.");

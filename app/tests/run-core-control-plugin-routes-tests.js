@@ -128,6 +128,10 @@ async function main() {
   assert.equal(snapshot.status, 200);
   assert.equal(JSON.parse(snapshot.body).data.plugin, "group-report");
 
+  const queriedSnapshot = await request(server, { url: "/internal/plugins/group-report/snapshot?limit=200&type=all" });
+  assert.equal(queriedSnapshot.status, 200);
+  assert.equal(JSON.parse(queriedSnapshot.body).data.plugin, "group-report");
+
   const telemetry = await request(server, { url: "/internal/remote-telemetry/state" });
   assert.equal(telemetry.status, 200);
   assert.equal(JSON.parse(telemetry.body).remoteTelemetry.connected, true);
