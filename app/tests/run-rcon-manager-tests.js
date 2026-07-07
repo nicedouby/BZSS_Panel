@@ -115,6 +115,13 @@ async function testResolveRconPermissionAliases() {
   assert.equal(resolveRconPermission("AdminBroadcast Hello"), "rcon.broadcast");
   assert.equal(resolveRconPermission("AdminDisbandSquad 1 2"), "rcon.disband");
   assert.equal(resolveRconPermission("AdminKickFromSquad 1 2 3"), "rcon.remove");
+  assert.equal(resolveRconPermission("AdminNoRespawnTimer 1"), "rcon.tb");
+  assert.equal(resolveRconPermission("AdminForceAllVehicleAvailability 1"), "rcon.tb");
+  assert.equal(resolveRconPermission("AdminForceAllRoleAvailability 1"), "rcon.tb");
+  assert.equal(resolveRconPermission("AdminDisableVehicleKitRequirement 1"), "rcon.tb");
+  assert.equal(resolveRconPermission("AdminDisableVehicleClaiming 1"), "rcon.tb");
+  assert.equal(resolveRconPermission("AdminDisableVehicleTeamRequirement 1"), "rcon.tb");
+  assert.equal(resolveRconPermission("AdminForceAllDeployableAvailability 1"), "rcon.tb");
   assert.equal(resolveRconPermission("ListPlayers"), "");
 }
 

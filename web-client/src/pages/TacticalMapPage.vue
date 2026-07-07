@@ -1116,8 +1116,33 @@ const staticAssets = computed(() => getStaticTacticalAssets(activeMapConfig.valu
 const lastKnownZonePositions = ref(new Map<string, { x: number; y: number }>());
 const lastKnownFobPositions = ref(new Map<string, { x: number; y: number }>());
 
+const PLAYER_EMPTY_CACHE_GRACE_MS = 1000;
+
 // Cache to prevent players disappearing when data is missing temporarily
 const cachedPlayers = ref<Record<string, { player: TacticalLinkedPlayer; lastSeen: number }>>({});
+let emptyPlayersClearTimer: number | null = null;
+
+function clearEmptyPlayersTimer() {
+  if (emptyPlayersClearTimer != null) {
+    clearTimeout(emptyPlayersClearTimer);
+    emptyPlayersClearTimer = null;
+  }
+}
+
+function clearPlayerVisualCache(reason = "empty-players") {
+  clearEmptyPlayersTimer();
+  cachedPlayers.value = {};
+  playerTargets.clear();
+  hoveredPlayer.value = null;
+  focusedPlayerKey.value = "";
+  selectedPlayerKey.value = "";
+  playerInfoPanel.value = null;
+  playerActionMenu.value = null;
+  if (import.meta.env.DEV) {
+    console.debug("[TacticalMap] cleared player cache", { reason });
+  }
+}
+
 const positionedPlayers = computed<TacticalLinkedPlayer[]>(() => {
   return Object.values(cachedPlayers.value).map((entry) => entry.player);
 });
@@ -1413,9 +1438,18 @@ watch(
   players,
   (newPlayers) => {
     if (!newPlayers || newPlayers.length === 0) {
-      // Keep cached players on temporary empty data
+      if (emptyPlayersClearTimer == null && Object.keys(cachedPlayers.value).length > 0) {
+        emptyPlayersClearTimer = window.setTimeout(() => {
+          emptyPlayersClearTimer = null;
+          if (!players.value || players.value.length === 0) {
+            clearPlayerVisualCache("players-empty-timeout");
+          }
+        }, PLAYER_EMPTY_CACHE_GRACE_MS);
+      }
       return;
     }
+
+    clearEmptyPlayersTimer();
     const now = Date.now();
     const nextCache = { ...cachedPlayers.value };
     const currentKeys = new Set<string>();
@@ -1473,8 +1507,7 @@ watch(
 watch(
   activeMapConfig,
   () => {
-    cachedPlayers.value = {};
-    playerTargets.clear();
+    clearPlayerVisualCache("map-changed");
     combatHotspot.value = null;
     tilesReady.value = false;
   }

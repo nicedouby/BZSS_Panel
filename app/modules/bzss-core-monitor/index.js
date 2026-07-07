@@ -58,8 +58,10 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
   const rawCaptureFlushIntervalMs = normalizePositiveInteger(core.config?.get?.("modules.bzssCoreMonitor.rawCapture.flushIntervalMs", 1000), 1000);
   const rawCaptureMaxBatchLines = normalizePositiveInteger(core.config?.get?.("modules.bzssCoreMonitor.rawCapture.maxBatchLines", 200), 200);
   const rawCaptureRotateBytes = normalizePositiveInteger(core.config?.get?.("modules.bzssCoreMonitor.rawCapture.rotateBytes", 20 * 1024 * 1024), 20 * 1024 * 1024);
+  const noDataClearAfterMs = normalizePositiveInteger(core.config?.get?.("modules.bzssCoreMonitor.noDataClearAfterMs", 8000), 8000);
   let rawCaptureFlushTimer = null;
   let rawCaptureFlushInFlight = null;
+  let noDataWatchdogTimer = null;
 
   function resetRawCaptureFile() {
     if (!rawCaptureEnabled) return;
@@ -184,6 +186,38 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
       draft.lastCompletePriFrameAt = "";
       draft.priFrame = createEmptyPriFrameState();
     });
+  }
+
+  function hasPublishedBzssData() {
+    return state.runtimePlayersByKey.size > 0
+      || state.scoreboardPlayersByKey.size > 0
+      || state.playersByKey.size > 0
+      || state.captureZones.length > 0
+      || state.fobs.length > 0
+      || state.mainZones.length > 0
+      || (state.explosions?.length ?? 0) > 0;
+  }
+
+  function startNoDataWatchdog() {
+    if (noDataWatchdogTimer) return;
+    noDataWatchdogTimer = setInterval(() => {
+      if (!started) return;
+      if (!hasPublishedBzssData()) return;
+
+      const lastMs = Date.parse(String(state.updatedAt ?? ""));
+      if (!Number.isFinite(lastMs)) return;
+
+      const ageMs = Date.now() - lastMs;
+      if (ageMs < noDataClearAfterMs) return;
+
+      clearPublishedPlayers("idle", `BZSS-Core no data for ${ageMs}ms.`);
+    }, 1000);
+  }
+
+  function stopNoDataWatchdog() {
+    if (!noDataWatchdogTimer) return;
+    clearInterval(noDataWatchdogTimer);
+    noDataWatchdogTimer = null;
   }
 
   function ingestLogLine(input = {}) {
@@ -653,10 +687,12 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
         });
       }));
     }
+    startNoDataWatchdog();
   }
 
   async function stop() {
     started = false;
+    stopNoDataWatchdog();
     if (rawCaptureFlushTimer) {
       clearInterval(rawCaptureFlushTimer);
       rawCaptureFlushTimer = null;

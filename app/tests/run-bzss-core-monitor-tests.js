@@ -652,6 +652,15 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function waitForCondition(check, timeoutMs = 1500, intervalMs = 25) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (check()) return true;
+    await sleep(intervalMs);
+  }
+  return Boolean(check());
+}
+
 async function testPriFrameAssembler() {
   const module = createBzssCoreMonitorModule({
     core: {
@@ -784,6 +793,44 @@ async function testRawCaptureFileLifecycle() {
   });
 }
 
+async function testNoDataWatchdogClearsPublishedState() {
+  const events = [];
+  const module = createBzssCoreMonitorModule({
+    core: {
+      eventBus: {
+        onCoreEvent() { return () => {}; },
+        emitModuleEvent(moduleId, eventName, event) {
+          events.push({ moduleId, eventName, event });
+        },
+      },
+      webStatus: { serverId: "server-1" },
+      logger: { info() {}, warn() {}, error() {}, debug() {} },
+      config: {
+        get(path, fallback) {
+          if (path === "modules.bzssCoreMonitor.noDataClearAfterMs") return 50;
+          return fallback;
+        },
+      },
+    },
+  });
+
+  await module.start();
+  assert.equal(module.api.ingestLogLine("PIE: PlayerBaseInfo{7,100,200,300,45}").ok, true);
+  assert.equal(module.api.getRuntimePlayers().length, 1);
+
+  const cleared = await waitForCondition(() => module.api.getRuntimePlayers().length === 0, 1000, 20);
+  assert.equal(cleared, true);
+
+  const snapshotEvent = [...events].reverse().find((entry) => entry.moduleId === "module.bzssCoreMonitor" && entry.eventName === "snapshotUpdated");
+  assert.ok(snapshotEvent);
+  assert.equal(snapshotEvent.event.state.status, "idle");
+  assert.equal(snapshotEvent.event.state.playerCount, 0);
+  assert.equal(snapshotEvent.event.state.runtimePlayerCount, 0);
+  assert.equal(snapshotEvent.event.state.scoreboardPlayerCount, 0);
+
+  await module.stop();
+}
+
 async function main() {
   testParsePlayerBlocks();
   testParseLogLine();
@@ -791,6 +838,7 @@ async function main() {
   await testPriFrameAssembler();
   await testParseExplosionDamage();
   await testRawCaptureFileLifecycle();
+  await testNoDataWatchdogClearsPublishedState();
   console.log("run-bzss-core-monitor-tests: ok");
 }
 
