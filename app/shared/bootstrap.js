@@ -284,12 +284,16 @@ export async function startWebRuntime(options = {}) {
     config: configManager,
     logger: logger.child({ moduleId: "core.webRegistry", source: "core.webRegistry", channel: "web" }),
   });
-  const coreClient = new CoreControlClient({
+  const coreClient = options.coreClient ?? new CoreControlClient({
     config: configManager.get("coreControl", {}),
     logger: logger.child({ moduleId: "core.coreControlClient", source: "core.coreControlClient" }),
+    fetchImpl: options.fetchImpl,
   });
   const webServer = new WebServer({
-    config: configManager.get("web", {}),
+    config: {
+      ...(configManager.get("web", {}) ?? {}),
+      ...(options.webConfig ?? {}),
+    },
     logger: logger.child({ moduleId: "core.webServer", source: "core.webServer", channel: "web" }),
     core: {
       config: configManager,
@@ -303,7 +307,7 @@ export async function startWebRuntime(options = {}) {
         },
       },
     },
-    modules: {},
+    modules: options.modules ?? {},
     coreClient,
   });
 
@@ -328,4 +332,3 @@ export async function startWebRuntime(options = {}) {
     shutdown,
   };
 }
-

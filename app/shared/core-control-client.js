@@ -93,6 +93,391 @@ export class CoreControlClient {
     return this.lastSnapshotFetchedAt > 0 ? Math.max(0, Date.now() - this.lastSnapshotFetchedAt) : null;
   }
 
+  setLogClockSeconds(body = {}) {
+    return this.requestJson("/internal/log-clock/set", {
+      method: "POST",
+      body,
+      cacheTtlMs: 0,
+    });
+  }
+
+  resetLogClock(body = {}) {
+    return this.requestJson("/internal/log-clock/reset", {
+      method: "POST",
+      body,
+      cacheTtlMs: 0,
+    });
+  }
+
+  getPlugins() {
+    return this.requestJson("/internal/plugins", { cacheTtlMs: 0 });
+  }
+
+  getPluginSubscriptionsState() {
+    return this.requestJson("/internal/plugin-subscriptions/state", { cacheTtlMs: 0 });
+  }
+
+  setPluginSubscription(id, subscribed) {
+    return this.requestJson("/internal/plugin-subscriptions/set", {
+      method: "POST",
+      body: { id, subscribed },
+      cacheTtlMs: 0,
+    });
+  }
+
+  togglePluginSubscription(id) {
+    return this.requestJson("/internal/plugin-subscriptions/toggle", {
+      method: "POST",
+      body: { id },
+      cacheTtlMs: 0,
+    });
+  }
+
+  getUdpEventForwarderState(query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/plugins/udp-event-forwarder/state", query), { cacheTtlMs: 0 });
+  }
+
+  getGroupReportSnapshot() {
+    return this.requestJson("/internal/plugins/group-report/snapshot", { cacheTtlMs: 0 });
+  }
+
+  getGroupReportGroups() {
+    return this.requestJson("/internal/plugins/group-report/groups", { cacheTtlMs: 0 });
+  }
+
+  createGroupReportGroup(body = {}) {
+    return this.requestJson("/internal/plugins/group-report/groups", {
+      method: "POST",
+      body,
+      cacheTtlMs: 0,
+    });
+  }
+
+  deleteAllGroupReportGroups() {
+    return this.requestJson("/internal/plugins/group-report/groups", {
+      method: "DELETE",
+      cacheTtlMs: 0,
+    });
+  }
+
+  updateGroupReportGroup(id, body = {}) {
+    return this.requestJson(`/internal/plugins/group-report/groups/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body,
+      cacheTtlMs: 0,
+    });
+  }
+
+  deleteGroupReportGroup(id) {
+    return this.requestJson(`/internal/plugins/group-report/groups/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      cacheTtlMs: 0,
+    });
+  }
+
+  addGroupReportMember(id, body = {}) {
+    return this.requestJson(`/internal/plugins/group-report/groups/${encodeURIComponent(id)}/members`, {
+      method: "POST",
+      body,
+      cacheTtlMs: 0,
+    });
+  }
+
+  updateGroupReportMember(id, memberId, body = {}) {
+    return this.requestJson(`/internal/plugins/group-report/groups/${encodeURIComponent(id)}/members/${encodeURIComponent(memberId)}`, {
+      method: "PATCH",
+      body,
+      cacheTtlMs: 0,
+    });
+  }
+
+  clearGroupReportMembers(id) {
+    return this.requestJson(`/internal/plugins/group-report/groups/${encodeURIComponent(id)}/members`, {
+      method: "DELETE",
+      cacheTtlMs: 0,
+    });
+  }
+
+  deleteGroupReportMember(id, memberId) {
+    return this.requestJson(`/internal/plugins/group-report/groups/${encodeURIComponent(id)}/members/${encodeURIComponent(memberId)}`, {
+      method: "DELETE",
+      cacheTtlMs: 0,
+    });
+  }
+
+  getFairSquadGuardStatus() {
+    return this.requestJson("/internal/plugins/fair-squad-guard/status", { cacheTtlMs: 0 });
+  }
+
+  getFairSquadGuardRecords(query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/plugins/fair-squad-guard/records", query), { cacheTtlMs: 0 });
+  }
+
+  unlockFairSquadGuardCurrentRound(body = {}) {
+    return this.requestJson("/internal/plugins/fair-squad-guard/unlock-current-round", {
+      method: "POST",
+      body,
+      cacheTtlMs: 0,
+    });
+  }
+
+  resetFairSquadGuardSession(body = {}) {
+    return this.requestJson("/internal/plugins/fair-squad-guard/reset-session", {
+      method: "POST",
+      body,
+      cacheTtlMs: 0,
+    });
+  }
+
+  patchFairSquadGuardEnabled(body = {}) {
+    return this.requestJson("/internal/plugins/fair-squad-guard/enabled", {
+      method: "PATCH",
+      body,
+      cacheTtlMs: 0,
+    });
+  }
+
+  patchFairSquadGuardConfig(body = {}) {
+    return this.requestJson("/internal/plugins/fair-squad-guard/config", {
+      method: "PATCH",
+      body,
+      cacheTtlMs: 0,
+    });
+  }
+
+  getFairTeamBalanceState() {
+    return this.requestJson("/internal/plugins/fair-team-balance/state", { cacheTtlMs: 0 });
+  }
+
+  getFairTeamBalanceRequests() {
+    return this.requestJson("/internal/plugins/fair-team-balance/requests", { cacheTtlMs: 0 });
+  }
+
+  getFairTeamBalanceHistory(query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/plugins/fair-team-balance/history", query), { cacheTtlMs: 0 });
+  }
+
+  approveFairTeamBalance(body = {}) {
+    return this.requestJson("/internal/plugins/fair-team-balance/approve", {
+      method: "POST",
+      body,
+      cacheTtlMs: 0,
+    });
+  }
+
+  rejectFairTeamBalance(body = {}) {
+    return this.requestJson("/internal/plugins/fair-team-balance/reject", {
+      method: "POST",
+      body,
+      cacheTtlMs: 0,
+    });
+  }
+
+  resetFairTeamBalancePeriodQuotas() {
+    return this.requestJson("/internal/plugins/fair-team-balance/reset-period-quotas", {
+      method: "POST",
+      cacheTtlMs: 0,
+    });
+  }
+
+  resetFairTeamBalanceRound() {
+    return this.requestJson("/internal/plugins/fair-team-balance/reset-round", {
+      method: "POST",
+      cacheTtlMs: 0,
+    });
+  }
+
+  resetFairTeamBalancePlayerQuota(body = {}) {
+    return this.requestJson("/internal/plugins/fair-team-balance/reset-player-quota", {
+      method: "POST",
+      body,
+      cacheTtlMs: 0,
+    });
+  }
+
+  clearFairTeamBalanceHistory() {
+    return this.requestJson("/internal/plugins/fair-team-balance/clear-history", {
+      method: "POST",
+      cacheTtlMs: 0,
+    });
+  }
+
+  clearWeaponCollector(query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/weapon-collector/clear", query), {
+      method: "POST",
+      cacheTtlMs: 0,
+    });
+  }
+
+  getTacticalMapReplaySegments() {
+    return this.requestJson("/internal/tactical-map-replay/segments", { cacheTtlMs: 0 });
+  }
+
+  getTacticalMapReplaySegment(query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/tactical-map-replay/segment", query), { cacheTtlMs: 0 });
+  }
+
+  createTacticalMapReplayExport(body = {}) {
+    return this.requestJson("/internal/tactical-map-replay/export", {
+      method: "POST",
+      body,
+      cacheTtlMs: 0,
+    });
+  }
+
+  getTacticalMapReplayExportTasks(query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/tactical-map-replay/export-tasks", query), { cacheTtlMs: 0 });
+  }
+
+  getRemoteTelemetryState() {
+    return this.requestJson("/internal/remote-telemetry/state", { cacheTtlMs: 0 });
+  }
+
+  writeRemoteTelemetryTickets(body = {}) {
+    return this.requestJson("/internal/remote-telemetry/write-tickets", {
+      method: "POST",
+      body,
+      cacheTtlMs: 0,
+    });
+  }
+
+  adjustRemoteTelemetryTickets(body = {}) {
+    return this.requestJson("/internal/remote-telemetry/adjust-tickets", {
+      method: "POST",
+      body,
+      cacheTtlMs: 0,
+    });
+  }
+
+  getChatHistory() {
+    return this.requestJson("/internal/chat/history", { cacheTtlMs: 0 });
+  }
+
+  getChatStats() {
+    return this.requestJson("/internal/chat/stats", { cacheTtlMs: 0 });
+  }
+
+  getCombatManagerOverview(query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/combat-manager/overview", query), { cacheTtlMs: 0 });
+  }
+
+  getCombatManagerEvents(query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/combat-manager/events", query), { cacheTtlMs: 0 });
+  }
+
+  getCombatManagerRates(query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/combat-manager/rates", query), { cacheTtlMs: 0 });
+  }
+
+  getCombatManagerPlayerEvents(query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/combat-manager/player-events", query), { cacheTtlMs: 0 });
+  }
+
+  getCombatManagerCache(query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/combat-manager/cache", query), { cacheTtlMs: 0 });
+  }
+
+  clearCombatManager(body = {}, query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/combat-manager/clear", query), {
+      method: "POST",
+      body,
+      cacheTtlMs: 0,
+    });
+  }
+
+  getCombatLogsStatus() {
+    return this.requestJson("/internal/combat-logs/status", { cacheTtlMs: 0 });
+  }
+
+  getCombatLogsMonths() {
+    return this.requestJson("/internal/combat-logs/months", { cacheTtlMs: 0 });
+  }
+
+  getCombatLogsFiles(query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/combat-logs/files", query), { cacheTtlMs: 0 });
+  }
+
+  getCombatLogsRead(query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/combat-logs/read", query), { cacheTtlMs: 0 });
+  }
+
+  getBattleLogStatus(query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/battle-log/status", query), { cacheTtlMs: 0 });
+  }
+
+  getBattleLogOverview(query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/battle-log/overview", query), { cacheTtlMs: 0 });
+  }
+
+  getBattleLogEvents(query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/battle-log/events", query), { cacheTtlMs: 0 });
+  }
+
+  getBattleLogPlayer(query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/battle-log/player", query), { cacheTtlMs: 0 });
+  }
+
+  getBattleLogRates(query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/battle-log/rates", query), { cacheTtlMs: 0 });
+  }
+
+  clearBattleLog(body = {}, query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/battle-log/clear", query), {
+      method: "POST",
+      body,
+      cacheTtlMs: 0,
+    });
+  }
+
+  getLogPostState() {
+    return this.requestJson("/internal/logpost/state", { cacheTtlMs: 0 });
+  }
+
+  getLogPostRaw(query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/logpost/raw", query), { cacheTtlMs: 0 });
+  }
+
+  getLogPostEvents(query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/logpost/events", query), { cacheTtlMs: 0 });
+  }
+
+  getLogPostGaps() {
+    return this.requestJson("/internal/logpost/gaps", { cacheTtlMs: 0 });
+  }
+
+  getLogPostOutbox(query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/logpost/v2/outbox", query), { cacheTtlMs: 0 });
+  }
+
+  getLogPostSafety(query = {}) {
+    return this.requestJson(this.buildPathWithQuery("/internal/logpost/v2/safety", query), { cacheTtlMs: 0 });
+  }
+
+  requestLogPostReplay(body = {}) {
+    return this.requestJson("/internal/logpost/v2/replay", {
+      method: "POST",
+      body,
+      cacheTtlMs: 0,
+    });
+  }
+
+  requestLogPostCheckpointRepair(body = {}) {
+    return this.requestJson("/internal/logpost/v2/checkpoint/repair", {
+      method: "POST",
+      body,
+      cacheTtlMs: 0,
+    });
+  }
+
+  buildPathWithQuery(path, query = {}) {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query ?? {})) {
+      if (value == null || value === "") continue;
+      params.set(key, String(value));
+    }
+    return params.size ? `${path}?${params.toString()}` : path;
+  }
+
   async requestJson(path, options = {}) {
     const response = await this.request(path, options);
     return response.json();
@@ -146,4 +531,3 @@ export class CoreControlClient {
     return (await task).clone();
   }
 }
-

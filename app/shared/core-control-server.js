@@ -2,6 +2,7 @@
 
 import http from "node:http";
 import { cleanSnapshotAllForClient, cleanPlayersForClient, cleanSquadsForClient } from "../core/web-server.js";
+import { WebServer } from "../core/web-server.js";
 import {
   createHttpError,
   createJsonResponse,
@@ -21,6 +22,15 @@ export class CoreControlServer {
     this.tacticalSubscribers = new Set();
     this.consoleUnsubscribe = null;
     this.tacticalUnsubscribe = null;
+    this.internalProxyServer = new WebServer({
+      config: {
+        enabled: false,
+      },
+      logger: this.logger,
+      core: this.core,
+      modules: this.modules,
+      coreClient: null,
+    });
   }
 
   get baseUrl() {
@@ -210,18 +220,142 @@ export class CoreControlServer {
 
     if (url.pathname === "/internal/log-clock/set" && req.method === "POST") {
       const body = await readJsonRequestBody(req);
-      return createJsonResponse(res, 200, this.core.webStatus?.setLogClockSeconds?.(Number(body.seconds ?? body.value ?? 0), {
+      const next = this.core.webStatus?.setLogClockSeconds?.(Number(body.seconds ?? body.value ?? 0), {
         reason: body.reason ?? "manual",
-      }) ?? null);
+      }) ?? null;
+      return createJsonResponse(res, 200, {
+        ok: true,
+        logClockSeconds: next,
+      });
     }
 
     if (url.pathname === "/internal/log-clock/reset" && req.method === "POST") {
-      return createJsonResponse(res, 200, this.core.webStatus?.resetLogClock?.({
+      const next = this.core.webStatus?.resetLogClock?.({
         reason: "manual",
-      }) ?? null);
+      }) ?? null;
+      return createJsonResponse(res, 200, {
+        ok: true,
+        logClockSeconds: next,
+      });
+    }
+
+    if (url.pathname === "/internal/plugins" && req.method === "GET") {
+      return this.proxyLegacyApi("/api/plugins", req, res);
+    }
+
+    if (url.pathname.startsWith("/internal/plugin-subscriptions")) {
+      return this.proxyLegacyApi(url.pathname.replace("/internal", "/api"), req, res);
+    }
+
+    if (url.pathname.startsWith("/internal/plugins/")) {
+      return this.proxyLegacyApi(url.pathname.replace("/internal", "/api"), req, res);
+    }
+
+    if (url.pathname === "/internal/weapon-collector/clear" && req.method === "POST") {
+      return this.proxyLegacyApi("/api/weapon-collector/clear", req, res, url.search);
+    }
+
+    if (url.pathname.startsWith("/internal/tactical-map-replay/")) {
+      return this.proxyLegacyApi(url.pathname.replace("/internal", "/api"), req, res, url.search);
+    }
+
+    if (url.pathname.startsWith("/internal/remote-telemetry/")) {
+      return this.proxyLegacyApi(url.pathname.replace("/internal", "/api"), req, res, url.search);
+    }
+
+    if (url.pathname.startsWith("/internal/chat/")) {
+      return this.proxyLegacyApi(url.pathname.replace("/internal", "/api"), req, res, url.search);
+    }
+
+    if (url.pathname.startsWith("/internal/combat-manager/")) {
+      return this.proxyLegacyApi(url.pathname.replace("/internal", "/api"), req, res, url.search);
+    }
+
+    if (url.pathname.startsWith("/internal/combat-logs/")) {
+      return this.proxyLegacyApi(url.pathname.replace("/internal", "/api"), req, res, url.search);
+    }
+
+    if (url.pathname.startsWith("/internal/battle-log/")) {
+      return this.proxyLegacyApi(url.pathname.replace("/internal", "/api"), req, res, url.search);
+    }
+
+    if (url.pathname === "/internal/logpost/state" && req.method === "GET") {
+      return this.proxyLegacyApi("/api/logpost/state", req, res);
+    }
+
+    if (url.pathname === "/internal/logpost/raw" && req.method === "GET") {
+      return this.proxyLegacyApi("/api/logpost/raw", req, res, url.search);
+    }
+
+    if (url.pathname === "/internal/logpost/events" && req.method === "GET") {
+      return this.proxyLegacyApi("/api/logpost/events", req, res, url.search);
+    }
+
+    if (url.pathname === "/internal/logpost/gaps" && req.method === "GET") {
+      return this.proxyLegacyApi("/api/logpost/gaps", req, res);
+    }
+
+    if (url.pathname === "/internal/logpost/v2/outbox" && req.method === "GET") {
+      return this.proxyLegacyApi("/api/logpost/v2/outbox", req, res, url.search);
+    }
+
+    if (url.pathname === "/internal/logpost/v2/safety" && req.method === "GET") {
+      return this.proxyLegacyApi("/api/logpost/v2/safety", req, res, url.search);
+    }
+
+    if (url.pathname === "/internal/logpost/v2/replay" && req.method === "POST") {
+      return this.proxyLegacyApi("/api/logpost/v2/replay", req, res);
+    }
+
+    if (url.pathname === "/internal/logpost/v2/checkpoint/repair" && req.method === "POST") {
+      return this.proxyLegacyApi("/api/logpost/v2/checkpoint/repair", req, res);
     }
 
     throw createHttpError(404, "NotFound", "Internal route not found.");
+  }
+
+  async proxyLegacyApi(apiPath, req, res, search = "") {
+    const proxiedReq = req;
+    proxiedReq.url = `${apiPath}${search ?? ""}`;
+    proxiedReq.headers = {
+      ...(req.headers ?? {}),
+      host: req.headers?.host ?? `${this.config.host}:${this.config.port}`,
+    };
+
+    const proxyRes = {
+      writeHead: (statusCode, headers = {}) => {
+        res.writeHead(statusCode, headers);
+      },
+      end: (body = "") => {
+        res.end(body);
+      },
+      write: (chunk) => res.write(chunk),
+    };
+
+    const restoreAuth = this.attachInternalAuthContext();
+    try {
+      await this.internalProxyServer.handleRequest(proxiedReq, proxyRes);
+    } finally {
+      restoreAuth?.();
+    }
+  }
+
+  attachInternalAuthContext() {
+    if (!this.core.authManager) return () => {};
+    const authManager = this.core.authManager;
+    const original = {
+      getUserFromRequest: authManager.getUserFromRequest,
+      hasEverything: authManager.hasEverything,
+      hasPermission: authManager.hasPermission,
+    };
+    authManager.getUserFromRequest = () => INTERNAL_SUPER_ADMIN_USER;
+    authManager.hasEverything = () => true;
+    authManager.hasPermission = () => true;
+    return () => {
+      authManager.getUserFromRequest = original.getUserFromRequest;
+      authManager.hasEverything = original.hasEverything;
+      authManager.hasPermission = original.hasPermission;
+    };
   }
 
   authorize(req) {
@@ -299,6 +433,13 @@ export class CoreControlServer {
   }
 }
 
+const INTERNAL_SUPER_ADMIN_USER = {
+  id: "__core_control__",
+  username: "core-control",
+  role: "SuperAdmin",
+  isSuperAdmin: true,
+};
+
 function buildSnapshotDelta(snapshot, since = {}) {
   const revisions = snapshot?.revisions ?? {};
   const patch = {};
@@ -324,4 +465,3 @@ function buildSnapshotDelta(snapshot, since = {}) {
     snapshot: changed ? snapshot : undefined,
   };
 }
-

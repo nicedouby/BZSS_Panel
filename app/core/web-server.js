@@ -962,6 +962,9 @@ export class WebServer {
     if (url.pathname === "/api/log-clock/set" && req.method === "POST") {
       if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.setLogClockSeconds(body));
+      }
       const seconds = Number(body.seconds ?? body.value ?? 0);
       const next = this.core.webStatus.setLogClockSeconds(seconds, { reason: "manual" });
       return this.json(res, 200, {
@@ -972,6 +975,9 @@ export class WebServer {
 
     if (url.pathname === "/api/log-clock/reset" && req.method === "POST") {
       if (!this.requireSuperAdmin(user, res)) return;
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.resetLogClock({}));
+      }
       const next = this.core.webStatus.resetLogClock({ reason: "manualReset" });
       return this.json(res, 200, {
         ok: true,
@@ -985,6 +991,21 @@ export class WebServer {
           error: "Forbidden",
           message: "settings.manage permission is required.",
         });
+      }
+      if (this.coreClient) {
+        if (url.pathname === "/api/plugin-subscriptions/state" && req.method === "GET") {
+          return this.json(res, 200, await this.coreClient.getPluginSubscriptionsState());
+        }
+
+        if (url.pathname === "/api/plugin-subscriptions/set" && req.method === "POST") {
+          const body = await this.readJsonBody(req);
+          return this.json(res, 200, await this.coreClient.setPluginSubscription(body.id, body.subscribed));
+        }
+
+        if (url.pathname === "/api/plugin-subscriptions/toggle" && req.method === "POST") {
+          const body = await this.readJsonBody(req);
+          return this.json(res, 200, await this.coreClient.togglePluginSubscription(body.id));
+        }
       }
       const pluginSubscriptions = this.modules.pluginSubscriptions;
       if (!pluginSubscriptions) {
@@ -1010,6 +1031,9 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/plugins" && req.method === "GET") {
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getPlugins());
+      }
       return this.json(res, 200, getAllPlugins({
         subscriptionsApi: this.core.pluginSubscriptions ?? this.modules.pluginSubscriptions ?? null,
         pluginManager: this.core.pluginManager,
@@ -1017,6 +1041,14 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/plugins/udp-event-forwarder/state" && req.method === "GET") {
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getUdpEventForwarderState({
+          type: url.searchParams.get("type") ?? "all",
+          q: url.searchParams.get("q") ?? "",
+          limit: url.searchParams.get("limit") ?? "200",
+          offset: url.searchParams.get("offset") ?? "0",
+        }));
+      }
       const pluginApi = this.getPluginApi("udp_event_forwarder");
       if (!pluginApi?.getStatus || !pluginApi?.getLogs) {
         return this.json(res, 404, {
@@ -1039,6 +1071,75 @@ export class WebServer {
     }
 
     if (url.pathname.startsWith("/api/plugins/group-report")) {
+      if (this.coreClient) {
+        if (url.pathname === "/api/plugins/group-report/snapshot" && req.method === "GET") {
+          return this.json(res, 200, await this.coreClient.getGroupReportSnapshot());
+        }
+
+        if (url.pathname === "/api/plugins/group-report/groups" && req.method === "GET") {
+          return this.json(res, 200, await this.coreClient.getGroupReportGroups());
+        }
+
+        if (url.pathname === "/api/plugins/group-report/groups" && req.method === "POST") {
+          if (!this.requireSuperAdmin(user, res)) return;
+          const body = await this.readJsonBody(req);
+          return this.json(res, 200, await this.coreClient.createGroupReportGroup({
+            ...body,
+            createdBy: user?.username ?? user?.name ?? "",
+          }));
+        }
+
+        if (url.pathname === "/api/plugins/group-report/groups" && req.method === "DELETE") {
+          if (!this.requireSuperAdmin(user, res)) return;
+          return this.json(res, 200, await this.coreClient.deleteAllGroupReportGroups());
+        }
+
+        const groupMatch = url.pathname.match(/^\/api\/plugins\/group-report\/groups\/([^/]+)$/);
+        if (groupMatch && req.method === "PATCH") {
+          if (!this.requireSuperAdmin(user, res)) return;
+          const body = await this.readJsonBody(req);
+          return this.json(res, 200, await this.coreClient.updateGroupReportGroup(decodeURIComponent(groupMatch[1]), body));
+        }
+
+        if (groupMatch && req.method === "DELETE") {
+          if (!this.requireSuperAdmin(user, res)) return;
+          return this.json(res, 200, await this.coreClient.deleteGroupReportGroup(decodeURIComponent(groupMatch[1])));
+        }
+
+        const memberMatch = url.pathname.match(/^\/api\/plugins\/group-report\/groups\/([^/]+)\/members(?:\/([^/]+))?$/);
+        if (memberMatch && req.method === "DELETE" && !memberMatch[2]) {
+          if (!this.requireSuperAdmin(user, res)) return;
+          return this.json(res, 200, await this.coreClient.clearGroupReportMembers(decodeURIComponent(memberMatch[1])));
+        }
+
+        if (memberMatch && req.method === "POST") {
+          if (!this.requireSuperAdmin(user, res)) return;
+          const body = await this.readJsonBody(req);
+          return this.json(res, 200, await this.coreClient.addGroupReportMember(decodeURIComponent(memberMatch[1]), {
+            ...body,
+            addedBy: user?.username ?? user?.name ?? "",
+          }));
+        }
+
+        if (memberMatch && req.method === "PATCH" && memberMatch[2]) {
+          if (!this.requireSuperAdmin(user, res)) return;
+          const body = await this.readJsonBody(req);
+          return this.json(res, 200, await this.coreClient.updateGroupReportMember(
+            decodeURIComponent(memberMatch[1]),
+            decodeURIComponent(memberMatch[2]),
+            body,
+          ));
+        }
+
+        if (memberMatch && req.method === "DELETE" && memberMatch[2]) {
+          if (!this.requireSuperAdmin(user, res)) return;
+          return this.json(res, 200, await this.coreClient.deleteGroupReportMember(
+            decodeURIComponent(memberMatch[1]),
+            decodeURIComponent(memberMatch[2]),
+          ));
+        }
+      }
+
       const pluginApi = this.getPluginApi("group-report");
       if (!pluginApi) {
         return this.json(res, 404, {
@@ -1178,6 +1279,44 @@ export class WebServer {
     }
 
     if (url.pathname.startsWith("/api/plugins/fair-squad-guard")) {
+      if (this.coreClient) {
+        if (url.pathname === "/api/plugins/fair-squad-guard/enabled" && req.method === "PATCH") {
+          if (!this.requireSuperAdmin(user, res)) return;
+          return this.json(res, 200, await this.coreClient.patchFairSquadGuardEnabled(await this.readJsonBody(req)));
+        }
+
+        if (url.pathname === "/api/plugins/fair-squad-guard/config" && req.method === "PATCH") {
+          if (!this.requireSuperAdmin(user, res)) return;
+          return this.json(res, 200, await this.coreClient.patchFairSquadGuardConfig(await this.readJsonBody(req)));
+        }
+
+        if (url.pathname === "/api/plugins/fair-squad-guard/status" && req.method === "GET") {
+          return this.json(res, 200, await this.coreClient.getFairSquadGuardStatus());
+        }
+
+        if (url.pathname === "/api/plugins/fair-squad-guard/records" && req.method === "GET") {
+          return this.json(res, 200, await this.coreClient.getFairSquadGuardRecords({
+            limit: url.searchParams.get("limit") ?? "300",
+            offset: url.searchParams.get("offset") ?? "0",
+          }));
+        }
+
+        if (url.pathname === "/api/plugins/fair-squad-guard/unlock-current-round" && req.method === "POST") {
+          if (!this.requireSuperAdmin(user, res)) return;
+          const body = await this.readJsonBody(req);
+          return this.json(res, 200, await this.coreClient.unlockFairSquadGuardCurrentRound({
+            ...body,
+            actor: user,
+            by: user?.username ?? user?.name ?? "admin",
+          }));
+        }
+
+        if (url.pathname === "/api/plugins/fair-squad-guard/reset-session" && req.method === "POST") {
+          if (!this.requireSuperAdmin(user, res)) return;
+          return this.json(res, 200, await this.coreClient.resetFairSquadGuardSession(await this.readJsonBody(req)));
+        }
+      }
+
       if (url.pathname === "/api/plugins/fair-squad-guard/enabled" && req.method === "PATCH") {
         if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
@@ -1931,10 +2070,20 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/combat/overview") {
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getCombatManagerOverview({
+          serverId: url.searchParams.get("serverId") ?? "",
+        }));
+      }
       return this.json(res, 200, this.modules.combatState.getOverview());
     }
 
     if (url.pathname === "/api/combat-manager/overview") {
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getCombatManagerOverview({
+          serverId: url.searchParams.get("serverId") ?? "",
+        }));
+      }
       const combatManager = this.modules.combatManager;
       if (!combatManager) {
         return this.json(res, 404, {
@@ -1946,6 +2095,17 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/combat-manager/events") {
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getCombatManagerEvents({
+          type: url.searchParams.get("type") ?? "all",
+          search: url.searchParams.get("search") ?? url.searchParams.get("q") ?? "",
+          limit: url.searchParams.get("limit") ?? "300",
+          offset: url.searchParams.get("offset") ?? "0",
+          serverId: url.searchParams.get("serverId") ?? "",
+          mode: url.searchParams.get("mode") ?? "",
+          playerKey: url.searchParams.get("playerKey") ?? "",
+        }));
+      }
       const combatManager = this.modules.combatManager;
       if (!combatManager) {
         return this.json(res, 404, {
@@ -1968,6 +2128,12 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/combat-manager/rates") {
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getCombatManagerRates({
+          serverId: url.searchParams.get("serverId") ?? "",
+          window: Number(url.searchParams.get("window") ?? 30),
+        }));
+      }
       const combatManager = this.modules.combatManager;
       if (!combatManager) {
         return this.json(res, 404, {
@@ -1981,6 +2147,18 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/combat-manager/player-events" && req.method === "GET") {
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getCombatManagerPlayerEvents({
+          serverId: url.searchParams.get("serverId") ?? "",
+          steam64ID: url.searchParams.get("steam64ID") ?? url.searchParams.get("steamID") ?? "",
+          eosID: url.searchParams.get("eosID") ?? "",
+          controllerID: url.searchParams.get("controllerID") ?? "",
+          name: url.searchParams.get("name") ?? "",
+          playerKey: url.searchParams.get("playerKey") ?? "",
+          limit: url.searchParams.get("limit") ?? "20",
+          offset: url.searchParams.get("offset") ?? "0",
+        }));
+      }
       const combatManager = this.modules.combatManager;
       if (!combatManager) {
         return this.json(res, 404, {
@@ -2004,6 +2182,11 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/combat-manager/cache" && req.method === "GET") {
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getCombatManagerCache({
+          serverId: url.searchParams.get("serverId") ?? "",
+        }));
+      }
       const combatManager = this.modules.combatManager;
       if (!combatManager) {
         return this.json(res, 404, {
@@ -2025,6 +2208,12 @@ export class WebServer {
 
     if (url.pathname === "/api/combat-manager/clear" && req.method === "POST") {
       if (!this.requireSuperAdmin(user, res)) return;
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.clearCombatManager(
+          await this.readJsonBody(req),
+          { serverId: url.searchParams.get("serverId") ?? "" },
+        ));
+      }
       const combatManager = this.modules.combatManager;
       if (!combatManager) {
         return this.json(res, 404, {
@@ -2037,6 +2226,15 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/combat/events") {
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getCombatManagerEvents({
+          type: url.searchParams.get("type") ?? "all",
+          search: url.searchParams.get("search") ?? "",
+          limit: url.searchParams.get("limit") ?? "300",
+          offset: url.searchParams.get("offset") ?? "0",
+          serverId: url.searchParams.get("serverId") ?? "",
+        }));
+      }
       return this.json(res, 200, {
         events: this.modules.combatState.getEvents({
           type: url.searchParams.get("type") ?? "all",
@@ -2050,10 +2248,41 @@ export class WebServer {
 
     if (url.pathname === "/api/combat/clear" && req.method === "POST") {
       if (!this.requireSuperAdmin(user, res)) return;
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.clearCombatManager(await this.readJsonBody(req), {
+          serverId: url.searchParams.get("serverId") ?? "",
+        }));
+      }
       return this.json(res, 200, this.modules.combatState.clear());
     }
 
     if (url.pathname.startsWith("/api/combat-logs")) {
+      if (this.coreClient) {
+        if (url.pathname === "/api/combat-logs/status" && req.method === "GET") {
+          return this.json(res, 200, await this.coreClient.getCombatLogsStatus());
+        }
+
+        if (url.pathname === "/api/combat-logs/months" && req.method === "GET") {
+          return this.json(res, 200, await this.coreClient.getCombatLogsMonths());
+        }
+
+        if (url.pathname === "/api/combat-logs/files" && req.method === "GET") {
+          return this.json(res, 200, await this.coreClient.getCombatLogsFiles({
+            month: url.searchParams.get("month") ?? "",
+          }));
+        }
+
+        if (url.pathname === "/api/combat-logs/read" && req.method === "GET") {
+          return this.json(res, 200, await this.coreClient.getCombatLogsRead({
+            month: url.searchParams.get("month") ?? "",
+            date: url.searchParams.get("date") ?? "",
+            q: url.searchParams.get("q") ?? url.searchParams.get("search") ?? "",
+            limit: url.searchParams.get("limit") ?? "300",
+            offset: url.searchParams.get("offset") ?? "0",
+          }));
+        }
+      }
+
       const combatLog = this.modules.combatLog;
       if (!combatLog) {
         return this.json(res, 404, {
@@ -2093,6 +2322,53 @@ export class WebServer {
     }
 
     if (url.pathname.startsWith("/api/combat-clean")) {
+      if (this.coreClient) {
+        if (url.pathname === "/api/combat-clean/events" && req.method === "GET") {
+          return this.json(res, 200, await this.coreClient.getCombatManagerEvents({
+            serverId: url.searchParams.get("serverId") ?? "",
+            type: url.searchParams.get("type") ?? "all",
+            search: url.searchParams.get("search") ?? "",
+            limit: url.searchParams.get("limit") ?? "300",
+            offset: url.searchParams.get("offset") ?? "0",
+            playerKey: url.searchParams.get("playerKey") ?? "",
+          }));
+        }
+
+        if (url.pathname === "/api/combat-clean/overview" && req.method === "GET") {
+          return this.json(res, 200, await this.coreClient.getCombatManagerOverview({
+            serverId: url.searchParams.get("serverId") ?? "",
+          }));
+        }
+
+        if (url.pathname === "/api/combat-clean/rates" && req.method === "GET") {
+          return this.json(res, 200, await this.coreClient.getCombatManagerRates({
+            serverId: url.searchParams.get("serverId") ?? "",
+            window: Number(url.searchParams.get("window") ?? 30),
+          }));
+        }
+
+        if (url.pathname === "/api/combat-clean/player-events" && req.method === "GET") {
+          return this.json(res, 200, await this.coreClient.getCombatManagerPlayerEvents({
+            serverId: url.searchParams.get("serverId") ?? "",
+            steam64ID: url.searchParams.get("steam64ID") ?? url.searchParams.get("steamID") ?? "",
+            eosID: url.searchParams.get("eosID") ?? "",
+            controllerID: url.searchParams.get("controllerID") ?? "",
+            name: url.searchParams.get("name") ?? "",
+            playerKey: url.searchParams.get("playerKey") ?? "",
+            limit: url.searchParams.get("limit") ?? "20",
+            offset: url.searchParams.get("offset") ?? "0",
+          }));
+        }
+
+        if (url.pathname === "/api/combat-clean/clear" && req.method === "POST") {
+          if (!this.requireSuperAdmin(user, res)) return;
+          return this.json(res, 200, await this.coreClient.clearCombatManager(
+            await this.readJsonBody(req),
+            { serverId: url.searchParams.get("serverId") ?? "" },
+          ));
+        }
+      }
+
       const combatClean = this.modules.combatClean;
       if (!combatClean) {
         return this.json(res, 404, {
@@ -2158,6 +2434,58 @@ export class WebServer {
   }
 
     if (url.pathname.startsWith("/api/battle-log")) {
+      if (this.coreClient) {
+        if (url.pathname === "/api/battle-log/status" && req.method === "GET") {
+          return this.json(res, 200, await this.coreClient.getBattleLogStatus({
+            serverId: url.searchParams.get("serverId") ?? "",
+          }));
+        }
+
+        if (url.pathname === "/api/battle-log/overview" && req.method === "GET") {
+          return this.json(res, 200, await this.coreClient.getBattleLogOverview({
+            serverId: url.searchParams.get("serverId") ?? "",
+          }));
+        }
+
+        if (url.pathname === "/api/battle-log/events" && req.method === "GET") {
+          return this.json(res, 200, await this.coreClient.getBattleLogEvents({
+            serverId: url.searchParams.get("serverId") ?? "",
+            type: url.searchParams.get("type") ?? "all",
+            search: url.searchParams.get("search") ?? url.searchParams.get("q") ?? "",
+            limit: url.searchParams.get("limit") ?? "300",
+            offset: url.searchParams.get("offset") ?? "0",
+            playerKey: url.searchParams.get("playerKey") ?? url.searchParams.get("player") ?? "",
+          }));
+        }
+
+        if (url.pathname === "/api/battle-log/player" && req.method === "GET") {
+          return this.json(res, 200, await this.coreClient.getBattleLogPlayer({
+            serverId: url.searchParams.get("serverId") ?? "",
+            q: url.searchParams.get("q") ?? url.searchParams.get("search") ?? "",
+            playerKey: url.searchParams.get("playerKey") ?? "",
+            steam64ID: url.searchParams.get("steam64ID") ?? url.searchParams.get("steamID") ?? "",
+            eosID: url.searchParams.get("eosID") ?? "",
+            controllerID: url.searchParams.get("controllerID") ?? "",
+            name: url.searchParams.get("name") ?? "",
+          }));
+        }
+
+        if (url.pathname === "/api/battle-log/rates" && req.method === "GET") {
+          return this.json(res, 200, await this.coreClient.getBattleLogRates({
+            serverId: url.searchParams.get("serverId") ?? "",
+            window: Number(url.searchParams.get("window") ?? 30),
+          }));
+        }
+
+        if (url.pathname === "/api/battle-log/clear" && req.method === "POST") {
+          if (!this.requireSuperAdmin(user, res)) return;
+          return this.json(res, 200, await this.coreClient.clearBattleLog(
+            await this.readJsonBody(req),
+            { serverId: url.searchParams.get("serverId") ?? "" },
+          ));
+        }
+      }
+
       const battleLog = this.modules.battleLog;
       if (!battleLog) {
         return this.json(res, 404, {
@@ -2216,6 +2544,62 @@ export class WebServer {
     }
 
     if (url.pathname.startsWith("/api/plugins/fair-team-balance")) {
+      if (this.coreClient) {
+        if (url.pathname === "/api/plugins/fair-team-balance/state" && req.method === "GET") {
+          return this.json(res, 200, await this.coreClient.getFairTeamBalanceState());
+        }
+
+        if (url.pathname === "/api/plugins/fair-team-balance/requests" && req.method === "GET") {
+          return this.json(res, 200, await this.coreClient.getFairTeamBalanceRequests());
+        }
+
+        if (url.pathname === "/api/plugins/fair-team-balance/history" && req.method === "GET") {
+          return this.json(res, 200, await this.coreClient.getFairTeamBalanceHistory({
+            limit: Number(url.searchParams.get("limit") ?? "100") || 100,
+          }));
+        }
+
+        if (url.pathname === "/api/plugins/fair-team-balance/approve" && req.method === "POST") {
+          if (!this.requireSuperAdmin(user, res)) return;
+          const body = await this.readJsonBody(req);
+          return this.json(res, 200, await this.coreClient.approveFairTeamBalance({
+            requestId: body?.requestId,
+            direct: body?.direct === true,
+            actor: user,
+          }));
+        }
+
+        if (url.pathname === "/api/plugins/fair-team-balance/reject" && req.method === "POST") {
+          if (!this.requireSuperAdmin(user, res)) return;
+          const body = await this.readJsonBody(req);
+          return this.json(res, 200, await this.coreClient.rejectFairTeamBalance({
+            requestId: body?.requestId,
+            reason: body?.reason,
+            actor: user,
+          }));
+        }
+
+        if (url.pathname === "/api/plugins/fair-team-balance/reset-period-quotas" && req.method === "POST") {
+          if (!this.requireSuperAdmin(user, res)) return;
+          return this.json(res, 200, await this.coreClient.resetFairTeamBalancePeriodQuotas());
+        }
+
+        if (url.pathname === "/api/plugins/fair-team-balance/reset-round" && req.method === "POST") {
+          if (!this.requireSuperAdmin(user, res)) return;
+          return this.json(res, 200, await this.coreClient.resetFairTeamBalanceRound());
+        }
+
+        if (url.pathname === "/api/plugins/fair-team-balance/reset-player-quota" && req.method === "POST") {
+          if (!this.requireSuperAdmin(user, res)) return;
+          return this.json(res, 200, await this.coreClient.resetFairTeamBalancePlayerQuota(await this.readJsonBody(req)));
+        }
+
+        if (url.pathname === "/api/plugins/fair-team-balance/clear-history" && req.method === "POST") {
+          if (!this.requireSuperAdmin(user, res)) return;
+          return this.json(res, 200, await this.coreClient.clearFairTeamBalanceHistory());
+        }
+      }
+
       const pluginApi = this.getPluginApi("plugin.fairTeamBalance");
       if (!pluginApi) {
         return this.json(res, 404, {
@@ -3378,16 +3762,32 @@ export class WebServer {
 
     if (url.pathname === "/api/logpost/state" && req.method === "GET") {
       if (!this.requireSuperAdmin(user, res)) return;
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getLogPostState());
+      }
       return this.json(res, 200, await this.getLogPostState());
     }
 
     if (url.pathname === "/api/logpost/v2/state" && req.method === "GET") {
       if (!this.requireSuperAdmin(user, res)) return;
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getLogPostState());
+      }
       return this.json(res, 200, await this.getLogPostState());
     }
 
     if (url.pathname === "/api/logpost/raw" && req.method === "GET") {
       if (!this.requireSuperAdmin(user, res)) return;
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getLogPostRaw({
+          date: url.searchParams.get("date") ?? "",
+          start: url.searchParams.get("start") ?? "",
+          end: url.searchParams.get("end") ?? "",
+          q: url.searchParams.get("q") ?? "",
+          limit: url.searchParams.get("limit") ?? "200",
+          offset: url.searchParams.get("offset") ?? "0",
+        }));
+      }
       return this.json(res, 200, await this.queryLogPostRawArchive({
         date: url.searchParams.get("date") ?? "",
         start: url.searchParams.get("start") ?? "",
@@ -3400,6 +3800,16 @@ export class WebServer {
 
     if (url.pathname === "/api/logpost/v2/raw" && req.method === "GET") {
       if (!this.requireSuperAdmin(user, res)) return;
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getLogPostRaw({
+          date: url.searchParams.get("date") ?? "",
+          start: url.searchParams.get("start") ?? "",
+          end: url.searchParams.get("end") ?? "",
+          q: url.searchParams.get("q") ?? "",
+          limit: url.searchParams.get("limit") ?? "200",
+          offset: url.searchParams.get("offset") ?? "0",
+        }));
+      }
       return this.json(res, 200, await this.queryLogPostRawArchive({
         date: url.searchParams.get("date") ?? "",
         start: url.searchParams.get("start") ?? "",
@@ -3412,6 +3822,17 @@ export class WebServer {
 
     if (url.pathname === "/api/logpost/events" && req.method === "GET") {
       if (!this.requireSuperAdmin(user, res)) return;
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getLogPostEvents({
+          date: url.searchParams.get("date") ?? "",
+          event: url.searchParams.get("event") ?? "",
+          start: url.searchParams.get("start") ?? "",
+          end: url.searchParams.get("end") ?? "",
+          q: url.searchParams.get("q") ?? "",
+          limit: url.searchParams.get("limit") ?? "200",
+          offset: url.searchParams.get("offset") ?? "0",
+        }));
+      }
       return this.json(res, 200, await this.queryLogPostStructuredEvents({
         date: url.searchParams.get("date") ?? "",
         event: url.searchParams.get("event") ?? "",
@@ -3425,6 +3846,17 @@ export class WebServer {
 
     if (url.pathname === "/api/logpost/v2/events" && req.method === "GET") {
       if (!this.requireSuperAdmin(user, res)) return;
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getLogPostEvents({
+          date: url.searchParams.get("date") ?? "",
+          event: url.searchParams.get("event") ?? "",
+          start: url.searchParams.get("start") ?? "",
+          end: url.searchParams.get("end") ?? "",
+          q: url.searchParams.get("q") ?? "",
+          limit: url.searchParams.get("limit") ?? "200",
+          offset: url.searchParams.get("offset") ?? "0",
+        }));
+      }
       return this.json(res, 200, await this.queryLogPostStructuredEvents({
         date: url.searchParams.get("date") ?? "",
         event: url.searchParams.get("event") ?? "",
@@ -3438,16 +3870,31 @@ export class WebServer {
 
     if (url.pathname === "/api/logpost/gaps" && req.method === "GET") {
       if (!this.requireSuperAdmin(user, res)) return;
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getLogPostGaps());
+      }
       return this.json(res, 200, this.getLogPostGapState());
     }
 
     if (url.pathname === "/api/logpost/v2/gaps" && req.method === "GET") {
       if (!this.requireSuperAdmin(user, res)) return;
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getLogPostGaps());
+      }
       return this.json(res, 200, this.getLogPostGapState());
     }
 
     if (url.pathname === "/api/logpost/v2/outbox" && req.method === "GET") {
       if (!this.requireSuperAdmin(user, res)) return;
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getLogPostOutbox({
+          date: url.searchParams.get("date") ?? "",
+          kind: url.searchParams.get("kind") ?? "",
+          q: url.searchParams.get("q") ?? "",
+          limit: url.searchParams.get("limit") ?? "200",
+          offset: url.searchParams.get("offset") ?? "0",
+        }));
+      }
       return this.json(res, 200, await this.queryLogPostOutbox({
         date: url.searchParams.get("date") ?? "",
         kind: url.searchParams.get("kind") ?? "",
@@ -3459,6 +3906,15 @@ export class WebServer {
 
     if (url.pathname === "/api/logpost/v2/safety" && req.method === "GET") {
       if (!this.requireSuperAdmin(user, res)) return;
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getLogPostSafety({
+          date: url.searchParams.get("date") ?? "",
+          kind: url.searchParams.get("kind") ?? "",
+          q: url.searchParams.get("q") ?? "",
+          limit: url.searchParams.get("limit") ?? "200",
+          offset: url.searchParams.get("offset") ?? "0",
+        }));
+      }
       return this.json(res, 200, await this.queryLogPostSafety({
         date: url.searchParams.get("date") ?? "",
         kind: url.searchParams.get("kind") ?? "",
@@ -3470,6 +3926,9 @@ export class WebServer {
 
     if (url.pathname === "/api/logpost/v2/replay" && req.method === "POST") {
       if (!this.requireSuperAdmin(user, res)) return;
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.requestLogPostReplay(await this.readJsonBody(req)));
+      }
       const body = await this.readJsonBody(req);
       await this.writeLogPostAuditRecord("replay-requested", {
         requestedAt: new Date().toISOString(),
@@ -3484,6 +3943,9 @@ export class WebServer {
 
     if (url.pathname === "/api/logpost/v2/checkpoint/repair" && req.method === "POST") {
       if (!this.requireSuperAdmin(user, res)) return;
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.requestLogPostCheckpointRepair(await this.readJsonBody(req)));
+      }
       const body = await this.readJsonBody(req);
       await this.writeLogPostAuditRecord("checkpoint-repair-requested", {
         requestedAt: new Date().toISOString(),
@@ -3503,6 +3965,9 @@ export class WebServer {
           message: "tactical_map_replay.view permission is required.",
         });
       }
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getTacticalMapReplaySegments());
+      }
       const api = this.modules.tacticalMapReplay;
       if (!api?.listSegments) {
         return this.json(res, 404, {
@@ -3519,6 +3984,15 @@ export class WebServer {
           error: "Forbidden",
           message: "tactical_map_replay.view permission is required.",
         });
+      }
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getTacticalMapReplaySegment({
+          id: url.searchParams.get("id") ?? "",
+          from: url.searchParams.get("from") ?? "",
+          to: url.searchParams.get("to") ?? "",
+          players: url.searchParams.get("players") ?? "",
+          sampleEvery: url.searchParams.get("sampleEvery") ?? "",
+        }));
       }
       const api = this.modules.tacticalMapReplay;
       if (!api?.getSegment) {
@@ -3544,6 +4018,9 @@ export class WebServer {
           message: "tactical_map_replay.export permission is required.",
         });
       }
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.createTacticalMapReplayExport(await this.readJsonBody(req)));
+      }
       const api = this.modules.tacticalMapReplay;
       if (!api?.createExportTask) {
         return this.json(res, 404, {
@@ -3562,6 +4039,12 @@ export class WebServer {
           error: "Forbidden",
           message: "tactical_map_replay.view permission is required.",
         });
+      }
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getTacticalMapReplayExportTasks({
+          id: url.searchParams.get("id") ?? "",
+          segmentId: url.searchParams.get("segmentId") ?? "",
+        }));
       }
       const api = this.modules.tacticalMapReplay;
       if (!api?.listExportTasks) {
@@ -3610,6 +4093,9 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/remote-telemetry/state" && req.method === "GET") {
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getRemoteTelemetryState());
+      }
       const api = this.modules.remoteTelemetry;
       if (!api?.getState) {
         return this.json(res, 404, {
@@ -3631,6 +4117,9 @@ export class WebServer {
         : this.core.authManager?.hasEverything?.(user);
       if (!hasPerm) {
         return this.json(res, 403, { error: "Forbidden", message: "rcon.settickets permission is required." });
+      }
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.writeRemoteTelemetryTickets(await this.readJsonBody(req)));
       }
       const api = this.modules.remoteTelemetry;
       if (!api?.writeTickets) {
@@ -3665,6 +4154,9 @@ export class WebServer {
       if (!hasPerm) {
         return this.json(res, 403, { error: "Forbidden", message: "rcon.settickets permission is required." });
       }
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.adjustRemoteTelemetryTickets(await this.readJsonBody(req)));
+      }
       const api = this.modules.remoteTelemetry;
       if (!api?.adjustTickets) {
         return this.json(res, 404, {
@@ -3692,11 +4184,17 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/chat/history" && req.method === "GET") {
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getChatHistory());
+      }
       const history = this.modules.chatManager.getHistory();
       return this.json(res, 200, { history });
     }
 
     if (url.pathname === "/api/chat/stats" && req.method === "GET") {
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.getChatStats());
+      }
       return this.json(res, 200, {
         timeline: this.modules.chatManager.getStats(),
         spammers: this.modules.chatManager.getSpammers(),
@@ -3706,6 +4204,11 @@ export class WebServer {
 
     if (url.pathname === "/api/weapon-collector/clear" && req.method === "POST") {
       if (!this.requireSuperAdmin(user, res)) return;
+      if (this.coreClient) {
+        return this.json(res, 200, await this.coreClient.clearWeaponCollector({
+          serverId: url.searchParams.get("serverId") ?? null,
+        }));
+      }
       const pluginApi = this.getPluginApi("plugin.weaponCollector");
       if (!pluginApi) {
         return this.json(res, 404, { error: "WeaponCollectorNotLoaded" });
