@@ -165,7 +165,6 @@
                       :yaw="getPlayerYaw(player)"
                       :health="player.health"
                       :squad-id="player.squadId"
-                      :is-squad-leader="false"
                       :role-icon="player.roleInfo?.icon"
                       :role-label="player.roleInfo?.label"
                       :vehicle-type="player.vehicleInfo?.vehicleType"

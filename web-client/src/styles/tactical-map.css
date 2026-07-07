@@ -991,11 +991,6 @@
   box-shadow: none;
 }
 
-/* Leader special outline slightly larger scale only */
-.is-squadleader .marker-ring {
-  transform: translate(-50%, -50%) scale(1.15);
-}
-
 .kit-icon-fallback {
   width: 11px;
   height: 11px;
@@ -1112,13 +1107,6 @@
   border-color: #ffffff !important;
   box-shadow: 0 0 15px rgba(255, 255, 255, 0.9);
 }
-
-.player-marker.is-hovered.is-squadleader .marker-ring,
-.player-marker:hover.is-squadleader .marker-ring {
-  transform: translate(-50%, -50%) scale(1.4);
-}
-
-
 
 /* Floating Player Hover Tooltip */
 .player-tooltip {

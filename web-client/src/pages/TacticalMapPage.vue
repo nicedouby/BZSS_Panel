@@ -246,7 +246,6 @@
             :yaw="player.yaw"
             :health="getPlayerHealth(player)"
             :squad-id="player.squadId"
-            :is-squad-leader="isSquadLeader(player)"
             :role-icon="player.roleInfo.icon"
             :role-label="player.roleInfo.label"
             :vehicle-type="player.vehicleInfo?.vehicleType"
@@ -1116,7 +1115,8 @@ const staticAssets = computed(() => getStaticTacticalAssets(activeMapConfig.valu
 const lastKnownZonePositions = ref(new Map<string, { x: number; y: number }>());
 const lastKnownFobPositions = ref(new Map<string, { x: number; y: number }>());
 
-const PLAYER_EMPTY_CACHE_GRACE_MS = 1000;
+const PLAYER_EMPTY_CACHE_GRACE_MS = 3000;
+const PLAYER_POSITION_STALE_MS = 5000;
 
 // Cache to prevent players disappearing when data is missing temporarily
 const cachedPlayers = ref<Record<string, { player: TacticalLinkedPlayer; lastSeen: number }>>({});
@@ -1474,10 +1474,19 @@ watch(
       if (hasValidPosition(player)) {
         nextCache[key] = {
           player,
-          lastSeen: now
+          lastSeen: now,
         };
         changed = true;
-      } else if (import.meta.env.DEV) {
+        return;
+      }
+
+      const cached = nextCache[key];
+      if (cached && now - cached.lastSeen >= PLAYER_POSITION_STALE_MS) {
+        delete nextCache[key];
+        changed = true;
+      }
+
+      if (import.meta.env.DEV) {
         console.debug("[TacticalMap] player skipped: invalid position", {
           key,
           name: player.playerName,
@@ -1485,6 +1494,7 @@ watch(
           presenceHint,
           position: player.soldierInfo?.position,
           raw: player,
+          staleMs: cached ? now - cached.lastSeen : null,
         });
       }
     });

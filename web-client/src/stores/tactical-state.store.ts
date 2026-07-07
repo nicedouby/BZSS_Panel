@@ -7,6 +7,8 @@ import {
 } from "../app/tacticalStateApi";
 
 export const useTacticalStateStore = defineStore("tacticalState", () => {
+  const STREAM_SNAPSHOT_FALLBACK_MS = 3000;
+  const STREAM_SNAPSHOT_FALLBACK_POLL_MS = 2000;
   const snapshot = ref<any | null>(null);
   const players = ref<any[]>([]);
   const server = ref<any>({});
@@ -17,6 +19,18 @@ export const useTacticalStateStore = defineStore("tacticalState", () => {
   const error = ref("");
   const streamActive = ref(false);
   let closeStream: (() => void) | null = null;
+  let fallbackTimer: number | null = null;
+  let lastStreamMessageAt = 0;
+
+  function cleanupStreamRuntime() {
+    if (closeStream) {
+      closeStream();
+      closeStream = null;
+    }
+    stopFallbackPolling();
+    lastStreamMessageAt = 0;
+    streamActive.value = false;
+  }
 
   function applySnapshotResponse(response: TacticalStateSnapshotResponse) {
     snapshot.value = response?.snapshot ?? null;
@@ -25,6 +39,31 @@ export const useTacticalStateStore = defineStore("tacticalState", () => {
     teams.value = Array.isArray(response?.snapshot?.teams) ? response.snapshot.teams : [];
     assets.value = response?.snapshot?.assets ?? {};
     diagnostics.value = response?.snapshot?.diagnostics ?? {};
+  }
+
+  function markStreamMessage() {
+    lastStreamMessageAt = Date.now();
+  }
+
+  function startFallbackPolling() {
+    if (fallbackTimer != null) return;
+
+    fallbackTimer = window.setInterval(() => {
+      if (!streamActive.value) return;
+      if (!lastStreamMessageAt) return;
+
+      const silentMs = Date.now() - lastStreamMessageAt;
+      if (silentMs >= STREAM_SNAPSHOT_FALLBACK_MS) {
+        void fetchSnapshot();
+        markStreamMessage();
+      }
+    }, STREAM_SNAPSHOT_FALLBACK_POLL_MS);
+  }
+
+  function stopFallbackPolling() {
+    if (fallbackTimer == null) return;
+    window.clearInterval(fallbackTimer);
+    fallbackTimer = null;
   }
 
   async function fetchSnapshot() {
@@ -44,17 +83,23 @@ export const useTacticalStateStore = defineStore("tacticalState", () => {
   }
 
   function startStream() {
-    if (closeStream) return;
+    if (closeStream) {
+      if (streamActive.value) return;
+      cleanupStreamRuntime();
+    }
     streamActive.value = true;
+    markStreamMessage();
+    startFallbackPolling();
     closeStream = streamTacticalStateSnapshot(
       (response) => {
+        markStreamMessage();
         applySnapshotResponse(response);
         error.value = response?.ok === false ? "Failed to load tactical snapshot." : "";
         loading.value = false;
       },
       (err, source) => {
         if (source.readyState === EventSource.CLOSED) {
-          streamActive.value = false;
+          cleanupStreamRuntime();
         }
         if (err?.message) {
           error.value = err.message;
@@ -64,11 +109,7 @@ export const useTacticalStateStore = defineStore("tacticalState", () => {
   }
 
   function stopStream() {
-    if (closeStream) {
-      closeStream();
-      closeStream = null;
-    }
-    streamActive.value = false;
+    cleanupStreamRuntime();
   }
 
   return {

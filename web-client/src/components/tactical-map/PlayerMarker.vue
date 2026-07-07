@@ -4,7 +4,6 @@
     :class="[
       `tone-${tone}`,
       { 'is-dead': isDead },
-      { 'is-squadleader': isSquadLeader },
       { 'is-focused': isFocused },
       { 'is-hovered': isHovered },
       { 'no-pointer': disableInteraction },
@@ -91,7 +90,6 @@ const props = withDefaults(
     yaw?: number | null;
     health?: number | null;
     squadId?: number | null;
-    isSquadLeader?: boolean;
     roleIcon?: string;
     roleLabel?: string;
     vehicleType?: string | null;
@@ -110,7 +108,6 @@ const props = withDefaults(
     yaw: null,
     health: 100,
     squadId: null,
-    isSquadLeader: false,
     roleIcon: "",
     roleLabel: "",
     vehicleType: null,
@@ -184,8 +181,6 @@ const zIndex = computed(() => {
   let z = 20; // Default base for alive player
   if (isDead.value) {
     z = 10;
-  } else if (props.isSquadLeader) {
-    z = 40;
   }
   
   if (hasVehicle.value) {
@@ -333,11 +328,6 @@ function isRoleIconImage(icon: string | undefined) {
 .is-dead .marker-icon {
   filter: grayscale(0.9) brightness(0.6);
   opacity: 0.72;
-}
-
-/* Squad Leader amber/gold indicator styling */
-.is-squadleader .marker-icon {
-  transform: translate(-50%, -50%) scale(1.15);
 }
 
 /* Inner elements */
@@ -549,11 +539,6 @@ function isRoleIconImage(icon: string | undefined) {
 .player-marker:hover .marker-icon {
   transform: translate(-50%, -50%) scale(1.08);
   z-index: 50;
-}
-
-.player-marker.is-hovered.is-squadleader .marker-icon,
-.player-marker:hover.is-squadleader .marker-icon {
-  transform: translate(-50%, -50%) scale(1.12);
 }
 
 .player-marker.is-hovered .tag,
