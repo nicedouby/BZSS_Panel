@@ -84,6 +84,9 @@ async function main() {
       if (`${path}${search}` === "/internal/jobs/playtime-refresh-online") {
         return { ok: true, jobId: "job-1" };
       }
+      if (`${path}${search}` === "/internal/warmup-reserve-grant/state") {
+        return { ok: true, module: "warmup-reserve-grant" };
+      }
       throw new Error(`Unexpected proxyApi call: ${method} ${path}${search}`);
     },
     async setLogClockSeconds(body) {
@@ -126,6 +129,10 @@ async function main() {
   assert.equal(logClock.status, 200);
   assert.equal(JSON.parse(logClock.body).logClockSeconds, 12);
 
+  const warmupState = await request(splitServer, { url: "/api/warmup-reserve-grant/state" });
+  assert.equal(warmupState.status, 200);
+  assert.equal(JSON.parse(warmupState.body).module, "warmup-reserve-grant");
+
   assert.deepEqual(coreClientCalls.slice(0, 6), [
     { path: "/internal/plugins", search: "", method: "GET", body: undefined },
     { path: "/internal/plugin-subscriptions/state", search: "", method: "GET", body: undefined },
@@ -134,6 +141,7 @@ async function main() {
     { path: "/internal/match/snapshot", search: "", method: "GET", body: undefined },
     { path: "/internal/jobs/playtime-refresh-online", search: "", method: "POST", body: { serverId: "s1", force: true } },
   ]);
+  assert.equal(coreClientCalls.some((call) => call.path === "/internal/warmup-reserve-grant/state"), true);
 
   const legacyServer = createServer({
     modules: {

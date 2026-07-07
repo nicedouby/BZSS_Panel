@@ -70,6 +70,22 @@ const CORE_API_PROXY_PREFIXES = [
   "/api/query/playtime-cache",
   "/api/ip",
   "/api/weapon-collector",
+  "/api/warmup-reserve-grant",
+  "/api/modules/player-session-records",
+  "/api/server-stats",
+  "/api/admin-warns",
+  "/api/scheduled-broadcasts",
+  "/api/squad-management",
+  "/api/squad-disband",
+  "/api/squad-kick",
+  "/api/squad-remove",
+  "/api/kill-manage",
+  "/api/player-database",
+  "/api/db",
+  "/api/squads",
+  "/api/squad-lifecycle",
+  "/api/squad-creation-order",
+  "/api/squad-name-tracking",
 ];
 
 function normalizeAdminSteam64ForRequest(value) {

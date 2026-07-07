@@ -102,6 +102,53 @@ function createServer() {
   });
 }
 
+function createProxyServer() {
+  const forwarded = [];
+  return {
+    forwarded,
+    server: new CoreControlServer({
+      config: { enabled: true, token: "" },
+      logger: { info() {}, warn() {}, error() {} },
+      core: {
+        runtimeState: {
+          getAll() { return { revisions: {} }; },
+          getServer() { return {}; },
+          getPlayers() { return { active: [] }; },
+          getSquads() { return { list: [] }; },
+        },
+        authManager: {
+          getUserFromRequest() { return null; },
+          hasEverything() { return false; },
+          hasPermission() { return false; },
+        },
+        webStatus: {
+          setLogClockSeconds(seconds) { return Number(seconds); },
+          resetLogClock() { return 0; },
+        },
+        console: { getRecent() { return []; } },
+        rconManager: { getStatus() { return {}; } },
+      },
+      modules: {
+        warmupReserveGrant: {
+          getState() {
+            return { ok: true, module: "warmup-reserve-grant" };
+          },
+        },
+      },
+    }),
+    installInternalProxy() {
+      this.server.internalProxyServer = {
+        async handleRequest(req, res) {
+          forwarded.push({ url: req.url, method: req.method });
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: true, proxy: req.url }));
+        },
+      };
+      return this;
+    },
+  };
+}
+
 async function request(server, { method = "GET", url = "/", body = null } = {}) {
   const req = body == null ? Readable.from([]) : Readable.from([JSON.stringify(body)]);
   req.method = method;
@@ -139,6 +186,12 @@ async function main() {
   const logClock = await request(server, { method: "POST", url: "/internal/log-clock/set", body: { seconds: 33 } });
   assert.equal(logClock.status, 200);
   assert.equal(JSON.parse(logClock.body).logClockSeconds, 33);
+
+  const proxyHarness = createProxyServer().installInternalProxy();
+  const warmup = await request(proxyHarness.server, { url: "/internal/warmup-reserve-grant/state" });
+  assert.equal(warmup.status, 200);
+  assert.equal(JSON.parse(warmup.body).proxy, "/api/warmup-reserve-grant/state");
+  assert.equal(proxyHarness.forwarded[0].url, "/api/warmup-reserve-grant/state");
 
   console.log("run-core-control-plugin-routes-tests: ok");
 }

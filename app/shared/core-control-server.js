@@ -27,6 +27,22 @@ const CORE_PROXY_PREFIXES = [
   "/internal/query",
   "/internal/ip",
   "/internal/weapon-collector",
+  "/internal/warmup-reserve-grant",
+  "/internal/modules/player-session-records",
+  "/internal/server-stats",
+  "/internal/admin-warns",
+  "/internal/scheduled-broadcasts",
+  "/internal/squad-management",
+  "/internal/squad-disband",
+  "/internal/squad-kick",
+  "/internal/squad-remove",
+  "/internal/kill-manage",
+  "/internal/player-database",
+  "/internal/db",
+  "/internal/squads",
+  "/internal/squad-lifecycle",
+  "/internal/squad-creation-order",
+  "/internal/squad-name-tracking",
 ];
 
 export class CoreControlServer {
