@@ -1,4 +1,4 @@
-import json
+﻿import json
 import pathlib
 import shutil
 import sys
@@ -438,6 +438,32 @@ class LogPostPipelineTests(unittest.TestCase):
         self.assertFalse((output_dir / "events").exists())
         self.assertFalse((output_dir / "raw").exists())
 
+    def test_bzss_core_player_chunk_uses_dedicated_event_and_skips_raw_log(self) -> None:
+        app = self.make_app()
+        line = 'BZSSCORE|PS|v1|789|123456|Count=2|Players=[[16,167,-842,-1,0,1,2209,3000,"Tank",3],[14,-437,-1026,0,1,2]]'
+
+        app.process_line({
+            "line": line,
+            "offset": 0,
+            "next_offset": len(line) + 1,
+            "sourcePath": "SquadGame.log",
+            "fileId": "file-1",
+        })
+
+        sent_events = [event["Event"] for event in app.udp_sender.sent]
+        self.assertEqual(sent_events, ["On_BzssCorePlayerChunk"])
+        chunk = app.udp_sender.sent[0]
+        self.assertEqual(chunk["Tick"], "123456")
+        self.assertEqual(chunk["Count"], "2")
+        self.assertEqual(len(chunk["Players"]), 2)
+        self.assertNotIn("Raw", chunk)
+        self.assertEqual(app.stats["events_matched"], 1)
+        self.assertEqual(app.stats["lines_preserved"], 0)
+        self.assertEqual(app.stats["lines_blacklisted"], 0)
+
+        today = today_string()
+        raw_log_path = pathlib.Path(app.writer.output_dir) / today / "On_RawLogLine.jsonl"
+        self.assertFalse(raw_log_path.exists())
 
 if __name__ == "__main__":
     unittest.main()

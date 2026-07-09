@@ -1,8 +1,9 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 from __future__ import annotations
 
+import json
 import time
 from collections import deque
 from typing import Any, Dict, List, Optional, Tuple
@@ -230,15 +231,6 @@ class BzssLogParserApp:
         self.source_seq += 1
         self.stats["lines_read"] += 1
 
-        early_preserved_rule = ""
-        if self.preserve_enabled:
-            early_preserved_rule = self.preserve_filter.match(line)
-
-        if self.blacklist.is_blacklisted(line) and not early_preserved_rule:
-            self.stats["lines_blacklisted"] += 1
-            self.persist_checkpoint_only(record, source_mode)
-            return True
-
         raw_archive = self.build_raw_meta_only(record, line, source_mode)
         source_meta = self.build_source_meta(raw_archive)
         meta_for_files = {
@@ -248,35 +240,53 @@ class BzssLogParserApp:
             "SourcePath": str(raw_archive.get("sourcePath", "")),
         }
 
-        if not self.transport_only:
-            try:
-                self.raw_archive_writer.write(
-                    seq=int(raw_archive.get("seq", 0) or 0),
-                    offset=int(raw_archive.get("offset", 0) or 0),
-                    raw_line=line,
-                    source_path=str(raw_archive.get("sourcePath", "")),
-                    source_mode=source_mode,
-                )
-            except Exception as e:
-                self.tail_reader.rewind_to_offset(int(record.get("offset", 0) or 0))
-                self.console.warn(f"Raw archive write failed; rewinding: {e}")
-                return False
-
-        self.persist_checkpoint(
-            record,
-            source_mode,
-            last_raw_line_hash=str(raw_archive.get("rawLineHash", "")),
-            last_log_time=str(raw_archive.get("logTime", "")),
-            force=False,
-        )
-
-        if not self.transport_only:
-            try:
-                self.raw_input_writer.write(line)
-            except Exception as e:
-                self.console.warn(f"Raw input write failed: {e}")
-
         try:
+            chunk_event = self.try_parse_bzss_core_player_chunk(line, source_meta, raw_archive)
+            if chunk_event:
+                self.udp_sender.send(chunk_event)
+                self.stats["events_matched"] += 1
+                if self.checkpoint_force_on_event:
+                    self.persist_checkpoint(record, source_mode, force=True)
+                self.console.event(chunk_event)
+                return True
+
+            early_preserved_rule = ""
+            if self.preserve_enabled:
+                early_preserved_rule = self.preserve_filter.match(line)
+
+            if self.blacklist.is_blacklisted(line) and not early_preserved_rule:
+                self.stats["lines_blacklisted"] += 1
+                self.persist_checkpoint_only(record, source_mode)
+                return True
+
+            if not self.transport_only:
+                try:
+                    self.raw_archive_writer.write(
+                        seq=int(raw_archive.get("seq", 0) or 0),
+                        offset=int(raw_archive.get("offset", 0) or 0),
+                        raw_line=line,
+                        source_path=str(raw_archive.get("sourcePath", "")),
+                        source_mode=source_mode,
+                    )
+                except Exception as e:
+                    self.tail_reader.rewind_to_offset(int(record.get("offset", 0) or 0))
+                    self.console.warn(f"Raw archive write failed; rewinding: {e}")
+                    return False
+
+            self.persist_checkpoint(
+                record,
+                source_mode,
+                last_raw_line_hash=str(raw_archive.get("rawLineHash", "")),
+                last_log_time=str(raw_archive.get("logTime", "")),
+                force=False,
+            )
+
+            if not self.transport_only:
+                try:
+                    self.raw_input_writer.write(line)
+                except Exception as e:
+                    self.console.warn(f"Raw input write failed: {e}")
+
             self.auxiliary_identity_matcher.update(line)
 
             if looks_like_combat_line(line):
@@ -334,6 +344,65 @@ class BzssLogParserApp:
             "rawLineHash": raw_archive.get("rawLineHash"),
             "source_mode": source_mode,
             "can_trigger_actions": source_mode == "live",
+        }
+
+    def try_parse_bzss_core_player_chunk(
+        self,
+        line: str,
+        source_meta: Dict[str, Any],
+        raw_archive: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        normalized = self.parse_bzss_core_player_chunk_line(line)
+        if not normalized:
+            return None
+
+        debug_keep_raw = bool(self.config.get("debug_keep_raw", False))
+        return self.builder.build_bzss_core_player_chunk(
+            seq=int(raw_archive.get("seq", 0) or 0),
+            tick=normalized.get("Tick", ""),
+            count=normalized.get("Count", ""),
+            players=normalized.get("Players", []),
+            source_meta=source_meta,
+            raw=line,
+            debug_keep_raw=debug_keep_raw,
+        )
+
+    @staticmethod
+    def parse_bzss_core_player_chunk_line(line: str) -> Optional[Dict[str, Any]]:
+        text = str(line or "").strip()
+        if not text.startswith("BZSSCORE|PS|v1|"):
+            return None
+
+        parts = text.split("|", 5)
+        if len(parts) < 6:
+            return None
+
+        _, _, version_tag, seq_text, tick_text, payload = parts
+        if version_tag != "v1":
+            return None
+
+        if not payload.startswith("Count="):
+            return None
+
+        count_text, _, players_text = payload.partition("|Players=")
+        count = count_text.split("=", 1)[1] if "=" in count_text else ""
+        if not players_text:
+            return {"Tick": tick_text, "Count": count, "Players": []}
+
+        try:
+            players = json.loads(players_text)
+        except Exception:
+            return None
+
+        if not isinstance(players, list):
+            return None
+
+        return {
+            "Version": version_tag,
+            "Seq": seq_text,
+            "Tick": tick_text,
+            "Count": count,
+            "Players": players,
         }
 
     def match_event(self, line: str, meta_for_files: Dict[str, str]) -> Optional[MatchedEvent]:
@@ -567,3 +636,5 @@ def looks_like_combat_line(line: str) -> bool:
         or ("KillingDamage=" in line and "Player:" in line and "caused by" in line)
         or ("has revived" in line and "Online IDs:" in line)
     )
+
+

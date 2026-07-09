@@ -1,4 +1,4 @@
-// -*- coding: utf-8 -*-
+﻿// -*- coding: utf-8 -*-
 
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -11,6 +11,8 @@ const MARKER_NEEDLE = Buffer.from(MARKER, "utf16le");
 const PRI_FRAME_TIMEOUT_MS = 500;
 const COMPACT_RUNTIME_POSITION_SCALE = 100;
 const RAW_CAPTURE_RELATIVE_PATH = path.join("data", "bzss-core-monitor", "received-lines.jsonl");
+const BZSS_CORE_PLAYER_CHUNK_EVENT_NAME = "On_BzssCorePlayerChunk";
+const BZSS_CORE_BROADCAST_INTERVAL_MS = 200;
 const SCOREBOARD_FIELDS = [
   ["dataLives", "Data lives"],
   ["numKills", "Num kills"],
@@ -52,6 +54,8 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
   const unsubscribers = [];
   const activeTimeouts = new Set();
   const rawCapturePath = path.resolve(process.cwd(), RAW_CAPTURE_RELATIVE_PATH);
+  let broadcastTimer = null;
+  let broadcastPending = false;
 
   function resetRawCaptureFile() {
     try {
@@ -119,7 +123,19 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
         // ignore
       }
     }
-    core.eventBus?.emitModuleEvent?.("module.bzssCoreMonitor", "snapshotUpdated", getSnapshotEvent());
+    broadcastPending = true;
+    if (broadcastTimer) return;
+    broadcastTimer = setTimeout(() => {
+      broadcastTimer = null;
+      flushBroadcast();
+    }, BZSS_CORE_BROADCAST_INTERVAL_MS);
+    if (typeof broadcastTimer.unref === "function") broadcastTimer.unref();
+  }
+
+  function flushBroadcast() {
+    if (!broadcastPending) return;
+    broadcastPending = false;
+    core.eventBus?.emitModuleEvent?.("module.bzssCoreMonitor", "stateBroadcast", getState());
   }
 
   function clearPublishedPlayers(nextStatus, nextError = "") {
@@ -281,6 +297,88 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
     }
   }
 
+  function ingestPlayerChunk(chunk, line) {
+    try {
+      publish((draft) => {
+        draft.status = "ready";
+        draft.markerSeen = true;
+        draft.rawLineHash = hashText(line);
+        draft.lastError = "";
+        draft.rawFields = ["BZSSCORE", "PS", String(chunk.version ?? "v1")];
+
+        const observedAt = new Date().toISOString();
+        for (const player of Array.isArray(chunk.players) ? chunk.players : []) {
+          upsertBzssCorePlayerChunkRecord(draft, player, observedAt);
+        }
+        draft.updatedAt = observedAt;
+      });
+      appendRawCapture(line);
+      scheduleBroadcast();
+      return { ok: true, ignored: false, type: "playerChunk" };
+    } catch (error) {
+      return { ok: false, ignored: false, error: error?.message ?? "Failed to ingest BZSS-Core player chunk." };
+    }
+  }
+
+  function scheduleBroadcast() {
+    broadcastPending = true;
+    if (broadcastTimer) return;
+    broadcastTimer = setTimeout(() => {
+      broadcastTimer = null;
+      flushBroadcast();
+    }, BZSS_CORE_BROADCAST_INTERVAL_MS);
+    if (typeof broadcastTimer.unref === "function") broadcastTimer.unref();
+  }
+
+  function parseBzssCorePlayerChunkLine(line) {
+    const text = String(line ?? "").trim();
+    if (!text.startsWith("BZSSCORE|PS|v1|")) return null;
+    const parts = text.split("|");
+    if (parts.length < 6) return null;
+    const [, , version, seq, tick, ...rest] = parts;
+    const payload = rest.join("|");
+    if (version !== "v1") return null;
+    if (!payload.startsWith("Count=")) return null;
+    const [countPart, playersPart = ""] = payload.split("|Players=");
+    const count = String(countPart).slice("Count=".length);
+    const result = { version, seq, tick, count, players: [] };
+    if (!playersPart) return result;
+    try {
+      const parsed = JSON.parse(playersPart);
+      if (Array.isArray(parsed)) {
+        result.players = parsed;
+      }
+    } catch {
+      return null;
+    }
+    return result;
+  }
+
+  function upsertBzssCorePlayerChunkRecord(draft, rawPlayer, observedAt) {
+    if (!Array.isArray(rawPlayer) || rawPlayer.length === 0) return;
+    const playerId = toNumberOrNull(rawPlayer[0]);
+    if (playerId == null) return;
+    const key = `id:${playerId}`;
+    const existing = draft.playersByKey.get(key) ?? createPlaceholderPlayerRecord({ playerId }, observedAt);
+    existing.playerId = playerId;
+    existing.playerIndex = playerId;
+    existing.lastSeenAt = observedAt;
+    existing.stale = false;
+    existing.sourceTypes = mergeUniqueStrings(existing.sourceTypes, ["bzssCorePlayerChunk"]);
+    existing.rawText = JSON.stringify(rawPlayer);
+    existing.ping = toNumberOrNull(rawPlayer[6]) ?? existing.ping ?? null;
+    existing.ftIndex = toNumberOrNull(rawPlayer[8]) ?? existing.ftIndex ?? null;
+    existing.ftPosition = toNumberOrNull(rawPlayer[9]) ?? existing.ftPosition ?? null;
+    existing.teamId = toNumberOrNull(rawPlayer[3]) ?? existing.teamId ?? null;
+    existing.squadId = toNumberOrNull(rawPlayer[4]) ?? existing.squadId ?? null;
+    existing.presenceHint = "chunk";
+    existing.playerName = String(rawPlayer[8] ?? existing.playerName ?? "");
+    existing.playerScoreboard = existing.playerScoreboard ?? createEmptyScoreboardInfo();
+    existing.identityKeys = [key];
+    draft.playersByKey.set(key, existing);
+    draft.runtimePlayersByKey.set(key, existing);
+  }
+
   function getSnapshotEvent() {
     return {
       state: getState(),
@@ -360,16 +458,16 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
   }
 
   /**
-   * 获取合并且规范化后的在线玩家列表。
-   * 深度融合了运行时状态 (runtimePlayers) 与记分板指标 (scoreboardPlayers)，
-   * 确保提供一致的 JSDoc/TypeScript 契约结构，供战术地图及战术回放进行无差别访问。
+   * 鑾峰彇鍚堝苟涓旇鑼冨寲鍚庣殑鍦ㄧ嚎鐜╁鍒楄〃銆?
+   * 娣卞害铻嶅悎浜嗚繍琛屾椂鐘舵€?(runtimePlayers) 涓庤鍒嗘澘鎸囨爣 (scoreboardPlayers)锛?
+   * 纭繚鎻愪緵涓€鑷寸殑 JSDoc/TypeScript 濂戠害缁撴瀯锛屼緵鎴樻湳鍦板浘鍙婃垬鏈洖鏀捐繘琛屾棤宸埆璁块棶銆?
    *
-   * @returns {Array<Object>} 规范化的玩家数组
+   * @returns {Array<Object>} 瑙勮寖鍖栫殑鐜╁鏁扮粍
    */
   function _legacyGetPlayers() {
     const byIndex = new Map();
 
-    // 1. 写入运行时玩家数据
+    // 1. 鍐欏叆杩愯鏃剁帺瀹舵暟鎹?
     for (const player of state.runtimePlayers) {
       if (player.playerIndex == null && player.playerId == null) continue;
       const key = player.playerIndex ?? player.playerId;
@@ -380,7 +478,7 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
         fields: [],
         values: {},
         soldierClass: "",
-        health: 100, // 默认填充 100 生命值
+        health: 100, // 榛樿濉厖 100 鐢熷懡鍊?
         weaponClass: "",
         ammoValues: [],
         position: position ? { ...position } : null,
@@ -426,7 +524,7 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
       });
     }
 
-    // 2. 合并/更新记分板数据
+    // 2. 鍚堝苟/鏇存柊璁板垎鏉挎暟鎹?
     for (const player of state.scoreboardPlayers) {
       if (player.playerIndex == null && player.playerId == null) continue;
       const key = player.playerIndex ?? player.playerId;
@@ -2924,3 +3022,9 @@ function normalizeNonNegativeInteger(value, fallback) {
 function clonePlainObject(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
 }
+
+
+
+
+
+

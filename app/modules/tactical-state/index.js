@@ -1,4 +1,4 @@
-// -*- coding: utf-8 -*-
+﻿// -*- coding: utf-8 -*-
 
 const COMPOSE_DEBOUNCE_MS = 50;
 
@@ -949,7 +949,7 @@ export function createTacticalStateModule({ core, modules, logger }) {
       const watch = [
         ["module.matchState", "updated"],
         ["module.playerState", "playersSnapshotUpdated"],
-        ["module.bzssCoreMonitor", "snapshotUpdated"],
+        ["module.bzssCoreMonitor", "stateBroadcast"],
       ];
 
       for (const [moduleId, eventName] of watch) {
@@ -1042,3 +1042,4 @@ function firstText(...values) {
   }
   return "";
 }
+
