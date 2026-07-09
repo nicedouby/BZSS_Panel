@@ -386,6 +386,58 @@ class LogPostPipelineTests(unittest.TestCase):
         self.assertEqual([record["line"] for record in resumed_records], [second_line])
         restarted.tail_reader.close()
 
+    def test_transport_only_sends_udp_without_disk_writes(self) -> None:
+        app = self.make_app(
+            transport_only=True,
+            storage={
+                "write_v2_events": True,
+                "write_legacy_events": True,
+                "write_v2_raw_archive": True,
+                "write_legacy_raw_archive": True,
+            },
+            preserve={
+                "enabled": True,
+                "write_file": True,
+                "file_name": "Preserved.jsonl",
+                "contains": ["transport preserve hit"],
+            },
+            checkpoint={
+                "flush_every_lines": 1,
+                "flush_every_ms": 1,
+                "force_on_event": True,
+            },
+        )
+        app.matchers = [StubMatcher("matched", "On_TransportMatched")]
+
+        app.process_line({
+            "line": "matched line",
+            "offset": 0,
+            "next_offset": 13,
+            "sourcePath": "SquadGame.log",
+            "fileId": "file-1",
+        })
+        app.process_line({
+            "line": "transport raw line",
+            "offset": 13,
+            "next_offset": 32,
+            "sourcePath": "SquadGame.log",
+            "fileId": "file-1",
+        })
+
+        sent_events = [event["Event"] for event in app.udp_sender.sent]
+        self.assertEqual(sent_events, ["On_TransportMatched", "On_RawLogLine"])
+        self.assertEqual(app.stats["events_matched"], 1)
+        self.assertEqual(app.stats["rawlog_forwarded"], 1)
+
+        output_dir = pathlib.Path(app.writer.output_dir)
+        received_dir = pathlib.Path(app.raw_input_writer.output_dir)
+        self.assertFalse(output_dir.exists())
+        self.assertFalse(received_dir.exists())
+        self.assertFalse((output_dir / ".state").exists())
+        self.assertFalse((output_dir / "outbox").exists())
+        self.assertFalse((output_dir / "events").exists())
+        self.assertFalse((output_dir / "raw").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

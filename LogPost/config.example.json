@@ -91,6 +91,7 @@
     "host": "127.0.0.1",
     "port": 12345,
     "output_dir": "./LogPost",
+    "transport_only": false,
     "max_lines_per_request": 2000
   }
 }

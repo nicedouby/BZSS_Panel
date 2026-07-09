@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from bzss_parser.blacklist import BlacklistFilter
 from bzss_parser.console_printer import ConsolePrinter
 from bzss_parser.event_builder import EventBuilder
-from bzss_parser.helpers import make_session_id
+from bzss_parser.helpers import extract_log_time, make_session_id, sha1_hex
 from bzss_parser.identity_cache import IdentityCache
 from bzss_parser.logpost_writer import LogPostWriter
 from bzss_parser.matchers.auxiliary_identity_matcher import AuxiliaryIdentityMatcher
@@ -52,9 +52,10 @@ class BzssLogParserApp:
         ]
 
         self.blacklist = BlacklistFilter(self.config.get("blacklist_contains", []))
+        self.transport_only = bool(self.config.get("transport_only", False))
         preserve_config = self.config.get("preserve", {})
         self.preserve_enabled = bool(preserve_config.get("enabled", True))
-        self.preserve_write_file = bool(preserve_config.get("write_file", True))
+        self.preserve_write_file = bool(preserve_config.get("write_file", True)) and not self.transport_only
         self.preserve_filter = PreserveFilter(preserve_config.get("contains", []))
 
         self.builder = EventBuilder(
@@ -80,7 +81,7 @@ class BzssLogParserApp:
 
         raw_input_config = self.config.get("raw_input_log", {})
         self.raw_input_writer = RawInputWriter(
-            enabled=bool(raw_input_config.get("enabled", True)),
+            enabled=bool(raw_input_config.get("enabled", True)) and not self.transport_only,
             output_dir=str(raw_input_config.get("output_dir", "./ReceivedLogs")),
             file_name=str(raw_input_config.get("file_name", "Received.log")),
             fmt=str(raw_input_config.get("format", "raw")),
@@ -238,32 +239,28 @@ class BzssLogParserApp:
             self.persist_checkpoint_only(record, source_mode)
             return True
 
-        try:
-            raw_archive = self.raw_archive_writer.write(
-                seq=self.source_seq,
-                offset=int(record.get("offset", 0) or 0),
-                raw_line=line,
-                source_path=str(record.get("sourcePath", "")),
-                source_mode=source_mode,
-            )
-        except Exception as e:
-            self.tail_reader.rewind_to_offset(int(record.get("offset", 0) or 0))
-            self.console.warn(f"Raw archive write failed; rewinding: {e}")
-            return False
-
-        source_meta = {
-            "source_seq": raw_archive.get("seq"),
-            "source_offset": raw_archive.get("offset"),
-            "rawLineHash": raw_archive.get("rawLineHash"),
-            "source_mode": source_mode,
-            "can_trigger_actions": source_mode == "live",
-        }
+        raw_archive = self.build_raw_meta_only(record, line, source_mode)
+        source_meta = self.build_source_meta(raw_archive)
         meta_for_files = {
             "SourceSeq": str(raw_archive.get("seq", "")),
             "SourceOffset": str(raw_archive.get("offset", "")),
             "RawLineHash": str(raw_archive.get("rawLineHash", "")),
             "SourcePath": str(raw_archive.get("sourcePath", "")),
         }
+
+        if not self.transport_only:
+            try:
+                self.raw_archive_writer.write(
+                    seq=int(raw_archive.get("seq", 0) or 0),
+                    offset=int(raw_archive.get("offset", 0) or 0),
+                    raw_line=line,
+                    source_path=str(raw_archive.get("sourcePath", "")),
+                    source_mode=source_mode,
+                )
+            except Exception as e:
+                self.tail_reader.rewind_to_offset(int(record.get("offset", 0) or 0))
+                self.console.warn(f"Raw archive write failed; rewinding: {e}")
+                return False
 
         self.persist_checkpoint(
             record,
@@ -273,10 +270,11 @@ class BzssLogParserApp:
             force=False,
         )
 
-        try:
-            self.raw_input_writer.write(line)
-        except Exception as e:
-            self.console.warn(f"Raw input write failed: {e}")
+        if not self.transport_only:
+            try:
+                self.raw_input_writer.write(line)
+            except Exception as e:
+                self.console.warn(f"Raw input write failed: {e}")
 
         try:
             self.auxiliary_identity_matcher.update(line)
@@ -304,26 +302,51 @@ class BzssLogParserApp:
 
             self.forward_raw_log_line(line, source_meta, preserved_rule="")
 
-            if self.write_unknown:
+            if self.write_unknown and not self.transport_only:
                 self.writer.write_unknown(line, meta_for_files)
                 self.stats["lines_unknown"] += 1
 
         except Exception as e:
-            self.writer.write_parse_error(line, str(e), meta_for_files)
+            if not self.transport_only:
+                self.writer.write_parse_error(line, str(e), meta_for_files)
             self.console.warn(f"Parse error: {e}")
             self.stats["parse_errors"] += 1
         return True
+
+    def build_raw_meta_only(self, record: Dict[str, Any], line: str, source_mode: str) -> Dict[str, Any]:
+        offset = int(record.get("offset", 0) or 0)
+        source_path = str(record.get("sourcePath", ""))
+        return {
+            "seq": self.source_seq,
+            "offset": offset,
+            "logTime": extract_log_time(line),
+            "rawLineHash": sha1_hex(line),
+            "sourcePath": source_path,
+            "sourceMode": source_mode,
+        }
+
+    @staticmethod
+    def build_source_meta(raw_archive: Dict[str, Any]) -> Dict[str, Any]:
+        source_mode = str(raw_archive.get("sourceMode", "live") or "live")
+        return {
+            "source_seq": raw_archive.get("seq"),
+            "source_offset": raw_archive.get("offset"),
+            "rawLineHash": raw_archive.get("rawLineHash"),
+            "source_mode": source_mode,
+            "can_trigger_actions": source_mode == "live",
+        }
 
     def match_event(self, line: str, meta_for_files: Dict[str, str]) -> Optional[MatchedEvent]:
         for matcher in self.matchers:
             try:
                 matched = matcher.match(line)
             except Exception as e:
-                self.writer.write_parse_error(
-                    line,
-                    f"{matcher.__class__.__name__}: {e}",
-                    meta_for_files,
-                )
+                if not self.transport_only:
+                    self.writer.write_parse_error(
+                        line,
+                        f"{matcher.__class__.__name__}: {e}",
+                        meta_for_files,
+                    )
                 self.console.warn(f"Matcher parse error [{matcher.__class__.__name__}]: {e}")
                 self.stats["parse_errors"] += 1
                 continue
@@ -342,13 +365,17 @@ class BzssLogParserApp:
     ) -> None:
         event_name, params = matched
         event = self.builder.build(event_name, params, line, source_meta=source_meta)
-        self.writer.write_event(event)
-        self.writer.write_outbox("pending", event)
+        if not self.transport_only:
+            self.writer.write_event(event)
+            self.writer.write_outbox("pending", event)
         try:
             self.udp_sender.send(event)
-            self.writer.write_outbox("send_attempted", event)
+            if not self.transport_only:
+                self.writer.write_outbox("send_attempted", event)
         except Exception as e:
-            self.writer.write_outbox("send_failed", event, str(e))
+            if not self.transport_only:
+                self.writer.write_outbox("send_failed", event, str(e))
+            self.console.warn(f"UDP send failed: {e}")
         self.stats["events_matched"] += 1
         if event_name in {"On_PlayerDamaged", "On_PlayerWounded", "On_PlayerDied", "On_PlayerRevived"}:
             self.stats["combat_events"] = int(self.stats.get("combat_events", 0)) + 1
@@ -397,16 +424,21 @@ class BzssLogParserApp:
                 source=self.raw_log_output_source,
                 source_meta=source_meta,
             )
-            self.writer.write_event(event)
-            self.writer.write_outbox("pending", event)
+            if not self.transport_only:
+                self.writer.write_event(event)
+                self.writer.write_outbox("pending", event)
             try:
                 self.udp_sender.send(event)
-                self.writer.write_outbox("send_attempted", event)
+                if not self.transport_only:
+                    self.writer.write_outbox("send_attempted", event)
             except Exception as e:
-                self.writer.write_outbox("send_failed", event, str(e))
+                if not self.transport_only:
+                    self.writer.write_outbox("send_failed", event, str(e))
+                self.console.warn(f"Raw log UDP send failed: {e}")
             self.stats["rawlog_forwarded"] = int(self.stats.get("rawlog_forwarded", 0)) + 1
         except Exception as e:
-            self.writer.write_outbox("send_failed", {"EventId": "", "Event": "On_RawLogLine", "SourceSeq": str(source_meta.get("source_seq", "")), "SourceMode": str(source_meta.get("source_mode", "live"))}, str(e))
+            if not self.transport_only:
+                self.writer.write_outbox("send_failed", {"EventId": "", "Event": "On_RawLogLine", "SourceSeq": str(source_meta.get("source_seq", "")), "SourceMode": str(source_meta.get("source_mode", "live"))}, str(e))
             self.console.warn(f"Raw log output failed: {e}")
 
     def persist_checkpoint_only(self, record: Dict[str, Any], source_mode: str) -> None:
@@ -421,6 +453,8 @@ class BzssLogParserApp:
         last_log_time: str = "",
         force: bool = False,
     ) -> None:
+        if self.transport_only:
+            return
         self._last_checkpoint_record = {
             "record": record,
             "source_mode": source_mode,
@@ -432,6 +466,8 @@ class BzssLogParserApp:
         self.flush_pending_checkpoint(force=force)
 
     def flush_pending_checkpoint(self, force: bool = False) -> None:
+        if self.transport_only:
+            return
         if not self._last_checkpoint_record:
             return
 
@@ -498,13 +534,15 @@ class BzssLogParserApp:
                     "source_mode": self.tail_reader.current_mode,
                 },
             )
-            self.writer.write_event(event)
+            if not self.transport_only:
+                self.writer.write_event(event)
             self.udp_sender.send(event)
-            self.writer.write_audit("recovery-mode", {
-                "reason": reason,
-                "sourceMode": self.tail_reader.current_mode,
-                "sourcePath": str(self.tail_reader.log_path),
-            })
+            if not self.transport_only:
+                self.writer.write_audit("recovery-mode", {
+                    "reason": reason,
+                    "sourceMode": self.tail_reader.current_mode,
+                    "sourcePath": str(self.tail_reader.log_path),
+                })
         except Exception as e:
             self.console.warn(f"Rotate event write failed: {e}")
 

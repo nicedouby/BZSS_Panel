@@ -12,6 +12,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "server_id": "BZSS_Main",
     "log_file": "./Squad.log",
     "output_dir": "./LogPost",
+    "transport_only": False,
     "poll_interval_ms": 200,
 
     "tail": {
