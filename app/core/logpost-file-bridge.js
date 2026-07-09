@@ -7,6 +7,7 @@ const DEFAULT_POLL_INTERVAL_MS = 250;
 const DEFAULT_RECENT_REPLAY_LINES = 120;
 const DEFAULT_EVENT_NAME = "On_RawLogLine";
 const ALL_EVENTS_FILE_NAME = "all.jsonl";
+const BZSS_CORE_PLAYER_CHUNK_EVENT_NAME = "On_BzssCorePlayerChunk";
 
 export class LogPostFileBridge {
   constructor({ config, logger, eventBus, eventPipeline, webStatus, logPostMonitor = null }) {
@@ -170,9 +171,11 @@ export class LogPostFileBridge {
     const event = this.eventPipeline.processRawGameEvent(rawEvent);
     event.fileBridgeReplay = Boolean(replay);
     event.fileBridgeSourcePath = this.currentFilePath;
-    const gapEvent = this.logPostMonitor?.inspectEvent?.(event) ?? null;
-    if (gapEvent) {
-      this.eventBus.emitCoreEvent(gapEvent.eventName, gapEvent);
+    if (event.eventName !== BZSS_CORE_PLAYER_CHUNK_EVENT_NAME) {
+      const gapEvent = this.logPostMonitor?.inspectEvent?.(event) ?? null;
+      if (gapEvent) {
+        this.eventBus.emitCoreEvent(gapEvent.eventName, gapEvent);
+      }
     }
     this.eventBus.emitCoreEvent(event.eventName, event);
   }

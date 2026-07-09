@@ -65,7 +65,7 @@ class LogPostPipelineTests(unittest.TestCase):
             "output_dir": str(root / "LogPost"),
             "poll_interval_ms": 200,
             "tail": {"from_end": True, "reopen_on_truncate": True},
-            "udp": {"enabled": True, "host": "127.0.0.1", "port": 7788, "max_payload_bytes": 8192},
+            "udp": {"enabled": True, "host": "127.0.0.1", "port": 7788, "max_payload_bytes": 16384},
             "unknown": {"write_unknown": False},
             "storage": {
                 "write_v2_events": True,

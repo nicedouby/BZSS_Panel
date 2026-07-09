@@ -11,7 +11,7 @@
     "enabled": true,
     "host": "127.0.0.1",
     "port": 12345,
-    "max_payload_bytes": 2048
+    "max_payload_bytes": 16384
   },
   "unknown": {
     "write_unknown": false
@@ -60,12 +60,6 @@
       "LogSquad: PostLogin:",
       "LogNet: UNetConnection::Close:",
       "LogSquadTrace:",
-      "PIE: Error: {ID:",
-      "Pos:",
-      "CI{",
-      "PlayerBaseInfo{",
-      "PRI{{",
-      "PlayerScoreboard{",
       "CPZ:",
       "FOBI:",
       "MainZone:{",

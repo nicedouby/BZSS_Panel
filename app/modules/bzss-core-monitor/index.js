@@ -42,12 +42,13 @@ const SCOREBOARD_FIELD_ALIASES = {
   combatScore: ["Combat"],
 };
 
-export function createBzssCoreMonitorModule({ core, modules, logger }) {
+export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
     moduleId: "module.bzssCoreMonitor",
     source: "module.bzssCoreMonitor",
     channel: "module",
   }) ?? core.logger;
+  const rawCaptureEnabled = Boolean(config?.get?.("modules.bzssCoreMonitor.rawCapture.enabled", false));
 
   const state = createInitialState();
   let started = false;
@@ -58,6 +59,7 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
   let broadcastPending = false;
 
   function resetRawCaptureFile() {
+    if (!rawCaptureEnabled) return;
     try {
       fs.mkdirSync(path.dirname(rawCapturePath), { recursive: true });
       fs.rmSync(rawCapturePath, { force: true });
@@ -73,6 +75,7 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
   }
 
   function appendRawCapture(line) {
+    if (!rawCaptureEnabled) return;
     try {
       fs.mkdirSync(path.dirname(rawCapturePath), { recursive: true });
       fs.appendFileSync(rawCapturePath, `${JSON.stringify({
@@ -395,6 +398,16 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
     ingestLogLine(event);
   }
 
+  function handleBzssCorePlayerChunk(event) {
+    return ingestPlayerChunk({
+      version: "v1",
+      seq: event?.rawEvent?.Seq ?? event?.seq ?? "",
+      tick: event?.rawEvent?.Tick ?? "",
+      count: event?.rawEvent?.Count ?? "",
+      players: event?.rawEvent?.Players ?? [],
+    }, "");
+  }
+
   function getState() {
     pruneExpiredPlayers(state, { core, modules });
     const players = getPlayers();
@@ -699,6 +712,7 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
     resetRawCaptureFile();
     if (core.eventBus?.onCoreEvent) {
       unsubscribers.push(core.eventBus.onCoreEvent("On_RawLogLine", handleRawLogLine));
+      unsubscribers.push(core.eventBus.onCoreEvent(BZSS_CORE_PLAYER_CHUNK_EVENT_NAME, handleBzssCorePlayerChunk));
       unsubscribers.push(core.eventBus.onCoreEvent("round.world_bring_up", () => {
         publish((draft) => {
           resetPlayerCaches(draft, { keepStatus: "ready" });
@@ -744,6 +758,7 @@ export function createBzssCoreMonitorModule({ core, modules, logger }) {
       getRawSnapshot,
       subscribe,
       ingestLogLine,
+      ingestPlayerChunk,
       getRawCapturePath: () => rawCapturePath,
     },
     start,
@@ -3021,6 +3036,11 @@ function normalizeNonNegativeInteger(value, fallback) {
 
 function clonePlainObject(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
+}
+
+function toNumberOrNull(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 

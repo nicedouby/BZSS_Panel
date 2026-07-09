@@ -1,6 +1,6 @@
 ﻿// -*- coding: utf-8 -*-
 
-const COMPOSE_DEBOUNCE_MS = 50;
+const COMPOSE_DEBOUNCE_MS = 100;
 
 export function createTacticalStateV2Module({ core, modules, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({

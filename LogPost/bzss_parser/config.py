@@ -24,7 +24,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "enabled": True,
         "host": "127.0.0.1",
         "port": 7788,
-        "max_payload_bytes": 8192,
+        "max_payload_bytes": 16384,
     },
 
     "unknown": {

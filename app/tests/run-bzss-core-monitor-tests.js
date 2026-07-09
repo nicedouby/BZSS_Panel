@@ -745,6 +745,14 @@ async function testParseExplosionDamage() {
 async function testRawCaptureFileLifecycle() {
   await withTempCwd(async (tempDir) => {
     const module = createBzssCoreMonitorModule({
+      config: {
+        get(key, defaultValue) {
+          if (key === "modules.bzssCoreMonitor.rawCapture.enabled") {
+            return true;
+          }
+          return defaultValue;
+        },
+      },
       core: {
         eventBus: { onCoreEvent() { return () => {}; }, emitModuleEvent() {} },
         logger: { info() {}, warn() {}, error() {}, debug() {} },
@@ -776,12 +784,69 @@ async function testRawCaptureFileLifecycle() {
   });
 }
 
+async function testChunkSubscriptionAndNoRawCapture() {
+  await withTempCwd(async (tempDir) => {
+    const listeners = new Map();
+    const module = createBzssCoreMonitorModule({
+      config: {
+        get(key, defaultValue) {
+          if (key === "modules.bzssCoreMonitor.rawCapture.enabled") {
+            return false;
+          }
+          return defaultValue;
+        },
+      },
+      core: {
+        eventBus: {
+          onCoreEvent(eventName, handler) {
+            if (!listeners.has(eventName)) listeners.set(eventName, new Set());
+            listeners.get(eventName).add(handler);
+            return () => listeners.get(eventName)?.delete(handler);
+          },
+          emitModuleEvent() {},
+        },
+        logger: { info() {}, warn() {}, error() {}, debug() {} },
+      },
+    });
+
+    await module.start();
+    assert.equal(listeners.has("On_BzssCorePlayerChunk"), true);
+    const handler = [...(listeners.get("On_BzssCorePlayerChunk") ?? [])][0];
+    assert.equal(typeof handler, "function");
+
+    const capturePath = module.api.getRawCapturePath();
+    assert.equal(fs.existsSync(capturePath), false);
+
+    assert.equal(
+      module.api.ingestPlayerChunk({
+        version: "v1",
+        seq: "42",
+        tick: "12345",
+        count: "1",
+        players: [[7, 0, 0, 1, 2, 3, 4, 55, "Alpha", 9, 1, 2]],
+      }, "" ).ok,
+      true,
+    );
+
+    const runtimePlayers = module.api.getRuntimePlayers();
+    assert.equal(runtimePlayers.length, 1);
+    assert.equal(runtimePlayers[0].playerId, 7);
+    assert.equal(runtimePlayers[0].playerIndex, 7);
+    assert.equal(runtimePlayers[0].playerName, "Alpha");
+    assert.equal(fs.existsSync(capturePath), false);
+    assert.ok(capturePath.startsWith(tempDir));
+
+    await module.stop();
+  });
+}
+
 async function main() {
   testParsePlayerBlocks();
   testParseLogLine();
   testMonitorState();
   await testPriFrameAssembler();
   await testParseExplosionDamage();
+  await testChunkSubscriptionAndNoRawCapture();
   await testRawCaptureFileLifecycle();
   console.log("run-bzss-core-monitor-tests: ok");
 }

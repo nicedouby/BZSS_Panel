@@ -118,7 +118,7 @@ class BzssLogParserApp:
             enabled=bool(udp_config.get("enabled", True)),
             host=str(udp_config.get("host", "127.0.0.1")),
             port=int(udp_config.get("port", 7788)),
-            max_payload_bytes=int(udp_config.get("max_payload_bytes", 8192)),
+            max_payload_bytes=int(udp_config.get("max_payload_bytes", 16384)),
         )
 
         tail_config = self.config.get("tail", {})

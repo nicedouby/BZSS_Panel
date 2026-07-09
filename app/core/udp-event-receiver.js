@@ -2,6 +2,8 @@
 
 import dgram from "node:dgram";
 
+const BZSS_CORE_PLAYER_CHUNK_EVENT_NAME = "On_BzssCorePlayerChunk";
+
 /**
  * Core: UdpEventReceiver
  *
@@ -103,6 +105,19 @@ export class UdpEventReceiver {
       return;
     }
 
+    if (rawEvent.Event === BZSS_CORE_PLAYER_CHUNK_EVENT_NAME) {
+      const event = buildBzssCorePlayerChunkEvent(rawEvent, remoteInfo);
+      this.logger.debug(() => `UDP event accepted ${event.eventName}`, {
+        operation: "handleMessage",
+        eventName: event.eventName,
+        data: {
+          remote: `${remoteInfo.address}:${remoteInfo.port}`,
+        },
+      });
+      this.eventBus.emitCoreEvent(event.eventName, event);
+      return;
+    }
+
     const event = this.eventPipeline.processRawGameEvent(rawEvent);
     event.udpRemoteAddress = remoteInfo.address;
     event.udpRemotePort = remoteInfo.port;
@@ -138,4 +153,36 @@ function wrapUdpStartupError(error, host, port) {
   }
 
   return error;
+}
+
+
+function buildBzssCorePlayerChunkEvent(rawEvent, remoteInfo) {
+  const eventId = String(rawEvent?.EventId ?? `${String(rawEvent?.ServerID ?? "")}:${String(rawEvent?.SessionID ?? "")}:${String(rawEvent?.Seq ?? "")}:${BZSS_CORE_PLAYER_CHUNK_EVENT_NAME}`);
+  return {
+    eventId,
+    eventName: BZSS_CORE_PLAYER_CHUNK_EVENT_NAME,
+    layer: "core",
+    source: "python-log-parser",
+    serverId: String(rawEvent?.ServerID ?? ""),
+    sessionId: String(rawEvent?.SessionID ?? ""),
+    seq: String(rawEvent?.Seq ?? ""),
+    sourceSeq: String(rawEvent?.SourceSeq ?? ""),
+    time: String(rawEvent?.Time ?? new Date().toISOString()),
+    tick: String(rawEvent?.Tick ?? ""),
+    count: String(rawEvent?.Count ?? ""),
+    sourceMode: String(rawEvent?.SourceMode ?? "live"),
+    canTriggerActions: parseBooleanLike(rawEvent?.CanTriggerActions ?? true),
+    isReplay: parseBooleanLike(rawEvent?.IsReplay ?? false),
+    rawEvent,
+    udpRemoteAddress: remoteInfo.address,
+    udpRemotePort: remoteInfo.port,
+  };
+}
+
+function parseBooleanLike(value) {
+  if (value === true || value === false) return value;
+  const text = String(value ?? "").trim().toLowerCase();
+  if (text === "true" || text === "1" || text === "yes") return true;
+  if (text === "false" || text === "0" || text === "no") return false;
+  return Boolean(value);
 }
