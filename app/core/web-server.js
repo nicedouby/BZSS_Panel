@@ -1,7 +1,7 @@
 // -*- coding: utf-8 -*-
 
 import http from "node:http";
-import { createReadStream } from "node:fs";
+import { createReadStream, existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -285,10 +285,17 @@ export class WebServer {
       const user = this.core.authManager?.getUserFromRequest(req) ?? null;
       return this.json(res, 200, {
         authenticated: Boolean(user),
-        user: user ? await this.enrichAuthUserWithSteamAvatar(user) : null,
+        user: user ? this.serializeAuthSessionUser(user) : null,
       });
     }
 
+    if (url.pathname === "/api/auth/me/profile" && req.method === "GET") {
+      const user = this.core.authManager?.getUserFromRequest(req) ?? null;
+      return this.json(res, 200, {
+        authenticated: Boolean(user),
+        user: user ? await this.enrichAuthUserWithSteamAvatar(user) : null,
+      });
+    }
     if (url.pathname === "/api/auth/login" && req.method === "POST") {
       const body = await this.readJsonBody(req);
       const result = await this.core.authManager.login({
@@ -5218,6 +5225,18 @@ export class WebServer {
     }
   }
 
+  serializeAuthSessionUser(user) {
+    if (!user) return null;
+    return {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      isSuperAdmin: user.role === "SuperAdmin",
+      steam64: user.steam64 ?? null,
+      viewerTeamAutoSwapEnabled: user.viewerTeamAutoSwapEnabled !== false,
+      permissions: Array.isArray(user.permissions) ? [...user.permissions] : [],
+    };
+  }
   async enrichAuthUserWithSteamAvatar(user) {
     if (!user) return null;
     const steam64 = String(user?.steam64 ?? "").trim();
@@ -5570,11 +5589,11 @@ function resolveLogPostOutputDir(workingDirectory) {
 
   for (const candidate of candidates) {
     if (
-      fs.existsSync(path.resolve(candidate, "events"))
-      || fs.existsSync(path.resolve(candidate, "raw"))
-      || fs.existsSync(path.resolve(candidate, "audit"))
-      || fs.existsSync(path.resolve(candidate, "state"))
-      || fs.existsSync(path.resolve(candidate, ".state"))
+      existsSync(path.resolve(candidate, "events"))
+      || existsSync(path.resolve(candidate, "raw"))
+      || existsSync(path.resolve(candidate, "audit"))
+      || existsSync(path.resolve(candidate, "state"))
+      || existsSync(path.resolve(candidate, ".state"))
     ) {
       return candidate;
     }

@@ -442,7 +442,20 @@ async function testAuthSessionAndLoginIncludeSteamAvatar() {
 
   assert.equal(sessionRecorder.state.status, 200);
   const sessionBody = JSON.parse(sessionRecorder.state.body);
-  assert.equal(sessionBody.user.steamAvatar, avatarUrl);
+  assert.equal(sessionBody.user.steam64, "76561198194428818");
+  assert.equal(sessionBody.user.steamAvatar, undefined);
+
+  const profileRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/auth/me/profile",
+    headers: { host: "localhost" },
+    socket: {},
+  }, profileRecorder.res);
+
+  assert.equal(profileRecorder.state.status, 200);
+  const profileBody = JSON.parse(profileRecorder.state.body);
+  assert.equal(profileBody.user.steamAvatar, avatarUrl);
 
   const loginRecorder = createRecorder();
   const loginReq = Readable.from(['{"username":"Root","password":"Secret123"}']);
@@ -3746,3 +3759,5 @@ await testMatchSnapshotRoutesExposeArtifacts();
 await testVueRouteFallsBackToIndexHtml();
 
 console.log("web server tests passed");
+
+

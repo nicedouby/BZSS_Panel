@@ -39,6 +39,7 @@ export const useAuthStore = defineStore("auth", {
         const data = await apiGet<{ authenticated: boolean; user: AuthUser | null }>("/api/auth/session", {}, { timeoutMs: 8_000 });
         this.authenticated = Boolean(data.authenticated);
         this.user = data.user ?? null;
+        if (this.authenticated) void this.refreshProfile();
       } catch (error: any) {
         this.authenticated = false;
         this.user = null;
@@ -46,6 +47,15 @@ export const useAuthStore = defineStore("auth", {
       } finally {
         this.checked = true;
       }
+    },
+
+    async refreshProfile() {
+      if (!this.authenticated) return;
+      try {
+        const data = await apiGet<{ authenticated: boolean; user: AuthUser | null }>("/api/auth/me/profile", {}, { timeoutMs: 4_000 });
+        if (!data.authenticated || !data.user || !this.authenticated) return;
+        this.user = this.user ? { ...this.user, ...data.user } : data.user;
+      } catch {}
     },
 
     async login(username: string, password: string) {

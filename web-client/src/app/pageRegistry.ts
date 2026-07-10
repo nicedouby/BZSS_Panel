@@ -1,48 +1,5 @@
-import type { Component } from "vue";
 import type { RouteRecordRaw } from "vue-router";
 
-import MatchStatusPage from "../pages/MatchStatusPage.vue";
-import ConsolePage from "../pages/ConsolePage.vue";
-import PlayerDatabasePage from "../pages/PlayerDatabasePage.vue";
-import ReserveSlotsPage from "../pages/ReserveSlotsPage.vue";
-import WarmupReserveGrantPage from "../pages/WarmupReserveGrantPage.vue";
-import BlackEdgePrivilegePage from "../pages/BlackEdgePrivilegePage.vue";
-import CombatManagerPage from "../pages/CombatManagerPage.vue";
-import BattleLogPage from "../pages/BattleLogPage.vue";
-import AdminWarnsPage from "../pages/AdminWarnsPage.vue";
-import ScheduledBroadcastPage from "../pages/ScheduledBroadcastPage.vue";
-import InfantryCombatEnhancerPage from "../pages/InfantryCombatEnhancerPage.vue";
-import GroupReportPage from "../pages/GroupReportPage.vue";
-import FairTeamBalancePage from "../pages/FairTeamBalancePage.vue";
-import FairTeamBalanceLabPage from "../pages/FairTeamBalanceLabPage.vue";
-import PanelBanPage from "../pages/PanelBanPage.vue";
-import TacticalReportPage from "../pages/TacticalReportPage.vue";
-import TacticalReportConfigPage from "../pages/TacticalReportConfigPage.vue";
-import SquadManagementPage from "../pages/SquadManagementPage.vue";
-import TeamBalancePage from "../pages/TeamBalancePage.vue";
-import TeamShufflePage from "../pages/TeamShufflePage.vue";
-import UdpEventForwarderPage from "../pages/UdpEventForwarderPage.vue";
-import ServerInfoStatisticsPage from "../pages/ServerInfoStatisticsPage.vue";
-import MatchSnapshotDebugPage from "../pages/MatchSnapshotDebugPage.vue";
-import PjscAverageDurationPage from "../pages/PjscAverageDurationPage.vue";
-import DrawVoteGuardDebugPage from "../pages/DrawVoteGuardDebugPage.vue";
-import SquadNameClassifierDebugPage from "../pages/SquadNameClassifierDebugPage.vue";
-import SquadNameRulesPage from "../pages/SquadNameRulesPage.vue";
-import SquadNameTrackingPage from "../pages/SquadNameTrackingPage.vue";
-import SquadCreationOrderPage from "../pages/SquadCreationOrderPage.vue";
-import WelcomeJoinWarningDebugPage from "../pages/WelcomeJoinWarningDebugPage.vue";
-import PlayerSessionRecordsPage from "../pages/PlayerSessionRecordsPage.vue";
-import CombatLogPage from "../pages/CombatLogPage.vue";
-import ChatMonitorPage from "../pages/ChatMonitorPage.vue";
-import RuntimeStatusPage from "../pages/RuntimeStatusPage.vue";
-import LogPostInspectPage from "../pages/LogPostInspectPage.vue";
-import AdminUsersPage from "../pages/AdminUsersPage.vue";
-import AuditRecordsPage from "../pages/AuditRecordsPage.vue";
-import PluginSubscriptionsPage from "../pages/PluginSubscriptionsPage.vue";
-import TacticalMapPage from "../pages/TacticalMapPage.vue";
-import ServerInfoSnapshotPage from "../pages/ServerInfoSnapshotPage.vue";
-import BzssCoreSnapshotsPage from "../pages/BzssCoreSnapshotsPage.vue";
-import TacticalMapReplayPage from "../pages/TacticalMapReplayPage.vue";
 import {
   normalizePermissionList,
   resolveWebPagePermission,
@@ -57,7 +14,7 @@ export type ContentPadding = "none" | "default";
 export interface PageDefinition {
   name: string;
   path: string;
-  component: Component;
+  component: Exclude<RouteRecordRaw["component"], null | undefined>;
   aliases?: string[];
   title?: string;
   titleKey?: string;
@@ -92,7 +49,7 @@ export const pageRegistry: PageDefinition[] = [
     name: "match-status",
     path: "/match-status",
     aliases: ["/match-state"],
-    component: MatchStatusPage,
+    component: () => import("../pages/MatchStatusPage.vue"),
     titleKey: "routeTitle.matchStatus",
     category: "core",
     refreshPolicy: "realtime",
@@ -102,7 +59,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "tactical-map",
     path: "/tactical-map",
-    component: TacticalMapPage,
+    component: () => import("../pages/TacticalMapPage.vue"),
     title: "战术地图",
     category: "core",
     refreshPolicy: "realtime",
@@ -112,7 +69,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "astrbot-server-info-card",
     path: "/astrbot/server-info-card",
-    component: ServerInfoSnapshotPage,
+    component: () => import("../pages/ServerInfoSnapshotPage.vue"),
     title: "AstrBot Server Info Card",
     category: "plugin",
     refreshPolicy: "manual",
@@ -121,7 +78,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "console",
     path: "/console",
-    component: ConsolePage,
+    component: () => import("../pages/ConsolePage.vue"),
     titleKey: "routeTitle.console",
     category: "core",
     refreshPolicy: "realtime",
@@ -132,7 +89,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "chat-monitor",
     path: "/chat-monitor",
-    component: ChatMonitorPage,
+    component: () => import("../pages/ChatMonitorPage.vue"),
     title: "聊天监控",
     category: "core",
     refreshPolicy: "realtime",
@@ -142,7 +99,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "squad-creation-order",
     path: "/match/squad-creation-order",
-    component: SquadCreationOrderPage,
+    component: () => import("../pages/SquadCreationOrderPage.vue"),
     title: "建队顺序",
     category: "core",
     refreshPolicy: "polling",
@@ -153,7 +110,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "player-session-records",
     path: "/player-session-records",
-    component: PlayerSessionRecordsPage,
+    component: () => import("../pages/PlayerSessionRecordsPage.vue"),
     title: "进出服记录",
     category: "core",
     refreshPolicy: "polling",
@@ -163,7 +120,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "player-database",
     path: "/player-database",
-    component: PlayerDatabasePage,
+    component: () => import("../pages/PlayerDatabasePage.vue"),
     titleKey: "routeTitle.playerDatabase",
     category: "core",
     refreshPolicy: "manual",
@@ -173,7 +130,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "reserve-slots",
     path: "/reserve-slots",
-    component: ReserveSlotsPage,
+    component: () => import("../pages/ReserveSlotsPage.vue"),
     titleKey: "routeTitle.reserveSlots",
     category: "core",
     refreshPolicy: "manual",
@@ -183,7 +140,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "warmup-reserve-grant",
     path: "/warmup-reserve-grant",
-    component: WarmupReserveGrantPage,
+    component: () => import("../pages/WarmupReserveGrantPage.vue"),
     title: "暖服赠送预留位",
     category: "core",
     refreshPolicy: "polling",
@@ -194,7 +151,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "black-edge-privilege",
     path: "/black-edge-privilege",
-    component: BlackEdgePrivilegePage,
+    component: () => import("../pages/BlackEdgePrivilegePage.vue"),
     title: "黑奴跳边 CDK",
     category: "core",
     refreshPolicy: "manual",
@@ -204,7 +161,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "combat-manager",
     path: "/combat-manager",
-    component: CombatManagerPage,
+    component: () => import("../pages/CombatManagerPage.vue"),
     titleKey: "routeTitle.combatManager",
     category: "core",
     refreshPolicy: "polling",
@@ -216,7 +173,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "combat-log",
     path: "/combat-log",
-    component: CombatLogPage,
+    component: () => import("../pages/CombatLogPage.vue"),
     titleKey: "routeTitle.combatLog",
     category: "core",
     refreshPolicy: "polling",
@@ -226,7 +183,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "battle-log",
     path: "/battle-log",
-    component: BattleLogPage,
+    component: () => import("../pages/BattleLogPage.vue"),
     titleKey: "routeTitle.battleLog",
     category: "core",
     refreshPolicy: "polling",
@@ -238,7 +195,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "admin-warns",
     path: "/admin-warns",
-    component: AdminWarnsPage,
+    component: () => import("../pages/AdminWarnsPage.vue"),
     titleKey: "routeTitle.adminWarns",
     category: "core",
     refreshPolicy: "polling",
@@ -248,7 +205,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "scheduled-broadcasts",
     path: "/scheduled-broadcasts",
-    component: ScheduledBroadcastPage,
+    component: () => import("../pages/ScheduledBroadcastPage.vue"),
     title: "定时广播",
     category: "core",
     refreshPolicy: "polling",
@@ -258,7 +215,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "infantry-combat-enhancer",
     path: "/plugins/infantry-combat-enhancer",
-    component: InfantryCombatEnhancerPage,
+    component: () => import("../pages/InfantryCombatEnhancerPage.vue"),
     titleKey: "routeTitle.infantryCombatEnhancer",
     category: "plugin",
     refreshPolicy: "polling",
@@ -268,7 +225,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "group-report",
     path: "/plugins/group-report",
-    component: GroupReportPage,
+    component: () => import("../pages/GroupReportPage.vue"),
     title: "组队举报",
     category: "plugin",
     refreshPolicy: "polling",
@@ -278,7 +235,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "tactical-report",
     path: "/plugins/tactical-report",
-    component: TacticalReportPage,
+    component: () => import("../pages/TacticalReportPage.vue"),
     title: "战术报点",
     category: "plugin",
     refreshPolicy: "polling",
@@ -289,7 +246,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "tactical-report-config",
     path: "/plugins/tactical-report/config",
-    component: TacticalReportConfigPage,
+    component: () => import("../pages/TacticalReportConfigPage.vue"),
     title: "战术报点配置",
     category: "plugin",
     refreshPolicy: "polling",
@@ -300,7 +257,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "fair-team-balance",
     path: "/plugins/fair-team-balance",
-    component: FairTeamBalancePage,
+    component: () => import("../pages/FairTeamBalancePage.vue"),
     title: "公平跳边",
     category: "plugin",
     refreshPolicy: "polling",
@@ -316,7 +273,7 @@ export const pageRegistry: PageDefinition[] = [
       "/plugins/stepwise-squad-playtime-guard",
       "/plugins/fair-squad-guard",
     ],
-    component: SquadNameTrackingPage,
+    component: () => import("../pages/SquadNameTrackingPage.vue"),
     title: "建队规则链",
     category: "plugin",
     refreshPolicy: "polling",
@@ -326,7 +283,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "squad-rule-chain-squad-name",
     path: "/squad-rule-chain/squad-name",
-    component: SquadNameTrackingPage,
+    component: () => import("../pages/SquadNameTrackingPage.vue"),
     title: "队名规范流程",
     category: "plugin",
     refreshPolicy: "polling",
@@ -336,7 +293,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "squad-rule-chain-stepwise",
     path: "/squad-rule-chain/stepwise",
-    component: SquadNameTrackingPage,
+    component: () => import("../pages/SquadNameTrackingPage.vue"),
     title: "阶梯式建队流程",
     category: "plugin",
     refreshPolicy: "polling",
@@ -346,7 +303,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "squad-rule-chain-fair",
     path: "/squad-rule-chain/fair",
-    component: SquadNameTrackingPage,
+    component: () => import("../pages/SquadNameTrackingPage.vue"),
     title: "公平建队流程",
     category: "plugin",
     refreshPolicy: "polling",
@@ -356,7 +313,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "panel-ban",
     path: "/plugins/panel-ban",
-    component: PanelBanPage,
+    component: () => import("../pages/PanelBanPage.vue"),
     title: "面板封禁",
     category: "plugin",
     refreshPolicy: "polling",
@@ -366,7 +323,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "squad-management",
     path: "/squad-management",
-    component: SquadManagementPage,
+    component: () => import("../pages/SquadManagementPage.vue"),
     titleKey: "routeTitle.squadManagement",
     category: "core",
     refreshPolicy: "polling",
@@ -376,7 +333,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "team-balance",
     path: "/tb",
-    component: TeamBalancePage,
+    component: () => import("../pages/TeamBalancePage.vue"),
     titleKey: "routeTitle.teamBalance",
     category: "core",
     refreshPolicy: "manual",
@@ -386,7 +343,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "team-shuffle",
     path: "/team-shuffle",
-    component: TeamShufflePage,
+    component: () => import("../pages/TeamShufflePage.vue"),
     title: "随机打乱",
     category: "core",
     refreshPolicy: "manual",
@@ -396,7 +353,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "plugin-subscriptions",
     path: "/plugin-subscriptions",
-    component: PluginSubscriptionsPage,
+    component: () => import("../pages/PluginSubscriptionsPage.vue"),
     titleKey: "routeTitle.pluginSubscriptions",
     category: "system",
     refreshPolicy: "polling",
@@ -406,7 +363,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "udp-forwarder",
     path: "/debug/udp-forwarder",
-    component: UdpEventForwarderPage,
+    component: () => import("../pages/UdpEventForwarderPage.vue"),
     title: "UDP 转发日志",
     category: "debug",
     refreshPolicy: "manual",
@@ -416,7 +373,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "bzss-core-snapshots",
     path: "/bzss-core-snapshots",
-    component: BzssCoreSnapshotsPage,
+    component: () => import("../pages/BzssCoreSnapshotsPage.vue"),
     title: "BZSS-Core 玩家快照",
     category: "core",
     refreshPolicy: "polling",
@@ -427,7 +384,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "server-info-statistics",
     path: "/plugins/server-info-statistics",
-    component: ServerInfoStatisticsPage,
+    component: () => import("../pages/ServerInfoStatisticsPage.vue"),
     title: "服务器统计",
     category: "plugin",
     refreshPolicy: "polling",
@@ -437,7 +394,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "tactical-map-replay",
     path: "/analytics/tactical-map-replay",
-    component: TacticalMapReplayPage,
+    component: () => import("../pages/TacticalMapReplayPage.vue"),
     title: "战术地图回放",
     category: "plugin",
     refreshPolicy: "manual",
@@ -448,7 +405,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "match-snapshots",
     path: "/debug/match-snapshots",
-    component: MatchSnapshotDebugPage,
+    component: () => import("../pages/MatchSnapshotDebugPage.vue"),
     title: "快照录制",
     category: "debug",
     refreshPolicy: "manual",
@@ -458,7 +415,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "pjsc-average-duration",
     path: "/debug/pjsc-average-duration",
-    component: PjscAverageDurationPage,
+    component: () => import("../pages/PjscAverageDurationPage.vue"),
     title: "PJSC 平均时长",
     category: "debug",
     refreshPolicy: "manual",
@@ -468,7 +425,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "draw-vote-guard",
     path: "/debug/draw-vote-guard",
-    component: DrawVoteGuardDebugPage,
+    component: () => import("../pages/DrawVoteGuardDebugPage.vue"),
     title: "平局投票提示",
     category: "debug",
     refreshPolicy: "manual",
@@ -478,7 +435,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "fair-team-balance-lab",
     path: "/debug/fair-team-balance-lab",
-    component: FairTeamBalanceLabPage,
+    component: () => import("../pages/FairTeamBalanceLabPage.vue"),
     title: "公平跳边实验室",
     category: "debug",
     refreshPolicy: "manual",
@@ -488,7 +445,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "welcome-join-warning",
     path: "/debug/welcome-join-warning",
-    component: WelcomeJoinWarningDebugPage,
+    component: () => import("../pages/WelcomeJoinWarningDebugPage.vue"),
     title: "进服警告",
     category: "debug",
     refreshPolicy: "manual",
@@ -498,7 +455,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "squad-name-classifier",
     path: "/debug/squad-name-classifier",
-    component: SquadNameClassifierDebugPage,
+    component: () => import("../pages/SquadNameClassifierDebugPage.vue"),
     title: "小队名称分类器",
     category: "debug",
     refreshPolicy: "manual",
@@ -508,7 +465,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "squad-name-rules",
     path: "/debug/squad-name-policy/rules",
-    component: SquadNameRulesPage,
+    component: () => import("../pages/SquadNameRulesPage.vue"),
     title: "队名规范规则维护",
     category: "debug",
     refreshPolicy: "manual",
@@ -517,7 +474,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "runtime-status",
     path: "/system/status",
-    component: RuntimeStatusPage,
+    component: () => import("../pages/RuntimeStatusPage.vue"),
     titleKey: "routeTitle.runtimeStatus",
     category: "system",
     refreshPolicy: "polling",
@@ -527,7 +484,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "logpost-inspect",
     path: "/system/logpost",
-    component: LogPostInspectPage,
+    component: () => import("../pages/LogPostInspectPage.vue"),
     title: "LogPost v2 审计面",
     category: "system",
     refreshPolicy: "manual",
@@ -538,7 +495,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "admin-users",
     path: "/system/admin-users",
-    component: AdminUsersPage,
+    component: () => import("../pages/AdminUsersPage.vue"),
     title: "管理员账号",
     category: "system",
     refreshPolicy: "polling",
@@ -549,7 +506,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "audit-records",
     path: "/system/audit-records",
-    component: AuditRecordsPage,
+    component: () => import("../pages/AuditRecordsPage.vue"),
     title: "操作记录",
     category: "system",
     refreshPolicy: "polling",
