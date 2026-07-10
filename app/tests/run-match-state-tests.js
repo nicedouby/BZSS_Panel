@@ -4,6 +4,7 @@ import path from "node:path";
 import assert from "node:assert/strict";
 
 import { createMatchStateModule } from "../modules/match-state/index.js";
+import { parseListPlayers, parseListSquads } from "../core/squad-rcon.js";
 
 function createHarness({ sessionStateFile = "", logs = [], subscribed = true } = {}) {
   const subscriptionState = { subscribed };
@@ -86,6 +87,28 @@ function createHarness({ sessionStateFile = "", logs = [], subscribed = true } =
           success: true,
           rconResponse: responses[command] ?? "",
         };
+      },
+      async refreshPlayers() {
+        const result = await this.dispatchCommand({ command: "ListPlayers" });
+        if (!result.success) return [];
+        const players = parseListPlayers(result.rconResponse);
+        core.eventBus.emitCoreEvent("RCON_LIST_PLAYERS_UPDATED", {
+          eventName: "RCON_LIST_PLAYERS_UPDATED",
+          serverId: webStatusState.serverId,
+          players,
+        });
+        return players;
+      },
+      async refreshSquads() {
+        const result = await this.dispatchCommand({ command: "ListSquads" });
+        if (!result.success) return [];
+        const squads = parseListSquads(result.rconResponse);
+        core.eventBus.emitCoreEvent("RCON_LIST_SQUADS_UPDATED", {
+          eventName: "RCON_LIST_SQUADS_UPDATED",
+          serverId: webStatusState.serverId,
+          squads,
+        });
+        return squads;
       },
       getStatus() {
         return { ...rconStatusState };
