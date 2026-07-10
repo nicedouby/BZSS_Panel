@@ -453,6 +453,20 @@
       "minIntervalMs": 500,
       "priorityMinIntervalMs": 50,
       "maxQueueSize": 100
+    },
+    "polling": {
+      "enabled": true,
+      "playersIntervalMs": 3000,
+      "squadsIntervalMs": 5000,
+      "dynamic": {
+        "enabled": true,
+        "fastUntilSeconds": 90,
+        "mediumUntilSeconds": 180,
+        "fastPlayersIntervalMs": 1000,
+        "fastSquadsIntervalMs": 1500,
+        "mediumPlayersIntervalMs": 2500,
+        "mediumSquadsIntervalMs": 3500
+      }
     }
   },
   "core": {
@@ -547,17 +561,6 @@
       "enabled": true,
       "polling": {
         "serverInfoIntervalMs": 5000,
-        "playersIntervalMs": 3000,
-        "squadsIntervalMs": 5000,
-        "dynamic": {
-          "enabled": true,
-          "fastUntilSeconds": 90,
-          "mediumUntilSeconds": 180,
-          "fastPlayersIntervalMs": 1000,
-          "fastSquadsIntervalMs": 1500,
-          "mediumPlayersIntervalMs": 2500,
-          "mediumSquadsIntervalMs": 3500
-        },
         "currentMapIntervalMs": 15000,
         "nextMapIntervalMs": 30000
       }
@@ -620,7 +623,9 @@
         "enabled": false,
         "mode": "inside_leader_radius",
         "fallbackWhenUnknown": "allow",
-        "applyToTypes": ["damage"],
+        "applyToTypes": [
+          "damage"
+        ],
         "onlyLightWeapon": true
       }
     },
