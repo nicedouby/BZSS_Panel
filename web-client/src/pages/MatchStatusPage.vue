@@ -377,24 +377,6 @@ const tacticalStateStore = useTacticalStateStore();
 const tacticalStateSnapshot = computed(() => tacticalStateStore.snapshot);
 const tacticalPlayers = computed(() => tacticalStateStore.players);
 const tacticalPlayerLookup = computed(() => buildTacticalPlayerLookup(tacticalPlayers.value));
-const tacticalMapSnapshot = computed(() => {
-  const snapshot = tacticalStateStore.snapshot;
-  if (!snapshot) return null;
-  return {
-    ...snapshot,
-    captureZones: snapshot.assets?.captureZones ?? [],
-    fobs: snapshot.assets?.fobs ?? [],
-    mainZones: snapshot.assets?.mainZones ?? [],
-    explosions: snapshot.assets?.explosions ?? [],
-  };
-});
-const tacticalMapPlayers = computed(() => adaptTacticalStatePlayersForMap(tacticalPlayers.value, combatStatsLookup.value));
-const tacticalMapCaptureZones = computed(() => tacticalStateStore.assets?.captureZones ?? []);
-const tacticalMapMainZones = computed(() => tacticalStateStore.assets?.mainZones ?? []);
-const tacticalMapFobs = computed(() => tacticalStateStore.assets?.fobs ?? []);
-const tacticalMapLoading = computed(() => tacticalStateStore.loading);
-const tacticalMapError = computed(() => tacticalStateStore.error);
-
 const refreshingPlaytime = ref(false);
 const refreshingPlayers = ref(false);
 const refreshingSquads = ref(false);
@@ -729,104 +711,6 @@ function buildTacticalPlayerLookup(players: any[] = []) {
   return map;
 }
 
-function adaptTacticalStatePlayersForMap(playersList: any[] = [], combatLookup: Record<string, any> = {}) {
-  return (Array.isArray(playersList) ? playersList : []).map((player) => {
-    const steamId = player?.identity?.steamID ?? null;
-    const eosId = player?.identity?.eosID ?? null;
-    const rawRcon = player?.raw?.rcon ?? null;
-    const presenceState = String(player?.presence?.state ?? "");
-    const presenceHint = String(player?.telemetry?.presenceHint ?? "");
-    const isNoPawn = presenceHint === "noPawn" || presenceState === "noPawn";
-    const rconDetail = rawRcon
-      ? adaptPlayerDetail(rawRcon, player?.profile?.playtimeHours ?? null, combatLookup)
-      : null;
-    const position = player?.telemetry?.position ?? player?.position ?? null;
-    const yaw = player?.telemetry?.yaw ?? player?.yaw ?? null;
-    const rotation = player?.telemetry?.rotation ?? player?.soldierInfo?.rotation ?? null;
-
-    return {
-      key: player?.identity?.key ?? "",
-      playerId: player?.identity?.playerID ?? null,
-      playerIndex: player?.identity?.playerID ?? null,
-      playerName: player?.identity?.name ?? "Unknown",
-      playerGuid: steamId || eosId || "",
-      steamId: steamId || null,
-      eosId: eosId || null,
-      teamId: player?.match?.teamId ?? null,
-      squadId: player?.match?.squadId ?? null,
-      isLeader: Boolean(player?.match?.isLeader),
-      role: player?.match?.role ?? "",
-      health: player?.telemetry?.health ?? null,
-      ping: player?.network?.gamePing ?? null,
-      ftIndex: player?.telemetry?.fireTeamIndex ?? null,
-      ftPosition: player?.telemetry?.fireTeamPosition ?? null,
-      position,
-      yaw,
-      presenceHint: isNoPawn ? "noPawn" : presenceHint,
-      presence: {
-        ...(player?.presence ?? {}),
-        state: isNoPawn ? "noPawn" : presenceState,
-      },
-      hasTelemetry: Boolean(player?.telemetry?.hasTelemetry),
-      hasPosition: Boolean(player?.telemetry?.hasPosition || position),
-      playerBaseInfo: {
-        raw: "",
-        fields: [],
-        values: {},
-      },
-      soldierInfo: {
-        raw: "",
-        fields: [],
-        values: {},
-        soldierClass: player?.telemetry?.soldierClass ?? "",
-        health: player?.telemetry?.health ?? null,
-        weaponClass: player?.telemetry?.weaponClass ?? "",
-        ammoValues: [],
-        position,
-        rotation,
-      },
-      vehicleInfo: {
-        raw: player?.vehicle?.raw ?? "",
-        vehicleType: player?.vehicle?.vehicleType ?? "",
-        healthText: "",
-        health: player?.vehicle?.health ?? null,
-        maxHealth: player?.vehicle?.maxHealth ?? null,
-        position,
-        rotation,
-      },
-      playerScoreboard: {
-        raw: "",
-        values: [],
-        numericValues: [],
-        ping: player?.network?.gamePing ?? null,
-        stats: {
-          dataLives: null,
-          numKills: player?.combat?.kills ?? null,
-          numDeaths: player?.combat?.deaths ?? null,
-          numWoundeds: player?.combat?.woundeds ?? null,
-          numWounds: player?.combat?.wounds ?? null,
-          numTeamKills: player?.combat?.teamKills ?? null,
-          healPoints: player?.combat?.healPoints ?? null,
-          revivedPoints: player?.combat?.revives ?? null,
-          teamworkScore: player?.combat?.teamworkScore ?? null,
-          objectiveScore: player?.combat?.objectiveScore ?? null,
-          combatScore: player?.combat?.combatScore ?? null,
-        },
-      },
-      observedAt: player?.freshness?.bzssCoreUpdatedAt ?? player?.freshness?.generatedAt ?? "",
-      stale: !player?.freshness?.bzssCoreUpdatedAt,
-      rawText: "",
-      runtime: rawRcon,
-      raw: player?.raw ?? {},
-      profile: player?.profile ?? {},
-      rconDetail,
-      linkConfidence: player?.link?.confidence ?? "none",
-      linkReason: player?.link?.method ?? "unlinked",
-      bzss: player,
-    };
-  });
-}
-
 function resolveTacticalStatePlayerInfo(player: PlayerRowViewModel, lookup: Map<string, any>) {
   const normalizedName = String(player.name ?? "").trim().toLowerCase();
   const normalizedSuffix = normalizedName.split(/\s+/).filter(Boolean).pop() ?? "";
@@ -962,6 +846,15 @@ onDeactivated(() => {
   cancelIdleTask(playtimeRefreshIdleHandle);
   playtimeRefreshToken += 1;
 });
+
+watch(
+  () => auth.authenticated,
+  (authenticated) => {
+    if (authenticated && active.value) {
+      void loadInitialMatchState();
+    }
+  },
+);
 
 function formatTicketDisplay(value: number | null | undefined) {
   return value == null ? "--" : String(value);
@@ -1228,115 +1121,6 @@ function selectPlayer(payload: { player: PlayerRowViewModel; event: MouseEvent }
 
   if (player.steamId) {
     playtimeRequested.value = true;
-  }
-}
-
-function handleMapSelectPlayer(payload: { detail: any; event: MouseEvent }) {
-  activePlayerWindow.value = {
-    detail: payload.detail,
-    anchorX: payload.event.clientX,
-    anchorY: payload.event.clientY,
-    notice: "",
-  };
-  void hydrateActivePlayerWindowIp(payload.detail);
-
-  if (payload.detail.steamId) {
-    playtimeRequested.value = true;
-  }
-}
-
-async function handleMapWarnPlayer(detail: PlayerDetailViewModel) {
-  const message = await ui.openWarnPrompt({
-    title: "警告玩家",
-    targetName: detail.name,
-    defaultMessage: "请遵守服务器规则",
-  });
-  if (message === null) return;
-
-  try {
-    const res = await warnPlayer({
-      targetName: detail.name,
-      targetSteamId: detail.steamId || undefined,
-      targetEosId: detail.eosId || undefined,
-      message: message.trim() || "Admin Warning",
-      reason: "manual_warn",
-      sourceModule: "web.squadAdmin",
-    });
-    if (res.success) {
-      ui.pushToast({ title: "警告发送成功", message: `已成功向玩家 ${detail.name} 发送警告。`, tone: "ok" });
-    } else {
-      ui.pushToast({ title: "警告发送失败", message: res.error || "未知错误", tone: "error" });
-    }
-  } catch (err) {
-    ui.pushToast({ title: "警告发送失败", message: String(err), tone: "error" });
-  }
-}
-
-async function handleMapKickPlayer(detail: PlayerDetailViewModel) {
-  const reason = window.prompt(`请输入踢出原因(玩家: ${detail.name}):`, "")?.trim();
-  if (reason === undefined) return;
-  if (!reason) {
-    ui.pushToast({ title: "踢出失败", message: "踢出原因不能为空", tone: "warn" });
-    return;
-  }
-
-  const confirmed = await ui.openConfirm({
-    title: "确认踢出玩家",
-    message: `确定要踢出玩家 ${detail.name} 吗？\n原因: ${reason}`,
-    tone: "error",
-  });
-  if (!confirmed) return;
-
-  try {
-    const res = await kickPlayer({
-      playerId: detail.playerId ?? undefined,
-      anyId: detail.steamId || detail.eosId || detail.name || String(detail.playerId ?? ""),
-      steamId: detail.steamId || undefined,
-      eosId: detail.eosId || undefined,
-      name: detail.name,
-      reason,
-      source: "web.squadAdmin",
-    });
-    if (res.ok) {
-      ui.pushToast({ title: "踢出成功", message: `已成功踢出玩家 ${detail.name}。`, tone: "ok" });
-    } else {
-      ui.pushToast({ title: "踢出失败", message: res.error || "未知错误", tone: "error" });
-    }
-  } catch (err) {
-    ui.pushToast({ title: "踢出失败", message: String(err), tone: "error" });
-  }
-}
-
-async function handleMapForceTeamChange(detail: PlayerDetailViewModel) {
-  const confirmed = await ui.openConfirm({
-    title: "确认强制换队",
-    message: `确定要强制玩家 ${detail.name} 换队吗？`,
-    tone: "warn",
-  });
-  if (!confirmed) return;
-
-  try {
-    const res = await forceTeamChange({
-      steamId: detail.steamId || undefined,
-      playerName: detail.name,
-      source: "manual_team_balance",
-      reason: "manual_team_balance",
-      operator: {
-        id: auth.user?.id ?? auth.user?.username ?? "",
-        name: auth.user?.username ?? "",
-        username: auth.user?.username ?? "",
-        role: auth.user?.role ?? "",
-        isSuperAdmin: Boolean(auth.user?.isSuperAdmin),
-        permissions: Array.isArray(auth.user?.permissions) ? auth.user.permissions : [],
-      },
-    });
-    if (res.ok) {
-      ui.pushToast({ title: "强制换队成功", message: `已成功将玩家 ${detail.name} 强制换队。`, tone: "ok" });
-    } else {
-      ui.pushToast({ title: "强制换队失败", message: res.error || "未知错误", tone: "error" });
-    }
-  } catch (err) {
-    ui.pushToast({ title: "强制换队失败", message: String(err), tone: "error" });
   }
 }
 
