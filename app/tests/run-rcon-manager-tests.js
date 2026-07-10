@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { RconManager } from "../core/rcon-manager.js";
+import { resolveRconPollingConfig } from "../core/rcon-polling-config.js";
 import { createTeamBalanceService } from "../modules/team-balance/service.js";
 import { resolveRconPermission } from "../../web-client/src/shared/rcon-permissions.js";
 
@@ -50,6 +51,8 @@ function createHarness(overrides = {}) {
       enabled: true,
       polling: {
         enabled: Boolean(overrides.pollingEnabled ?? false),
+        playersIntervalMs: 5000,
+        squadsIntervalMs: 10000,
         dynamic: {
           enabled: true,
           fastUntilSeconds: 90,
@@ -59,10 +62,6 @@ function createHarness(overrides = {}) {
           mediumPlayersIntervalMs: 2500,
           mediumSquadsIntervalMs: 3500,
         },
-      },
-      matchStatePolling: {
-        playersIntervalMs: 5000,
-        squadsIntervalMs: 10000,
       },
       allowMultipleConnections: Boolean(overrides.allowMultipleConnections ?? false),
       ...(overrides.rconConfig ?? {}),
@@ -93,7 +92,12 @@ function createHarness(overrides = {}) {
     },
   });
 
-  manager.squadRcon = createFakeClient({ id: "default", executedCommands });
+  manager.squadRcon = createFakeClient({
+    id: "default",
+    executedCommands,
+    response: overrides.defaultResponse ?? "OK",
+    delayMs: Number(overrides.defaultDelayMs ?? 0),
+  });
   manager.disbandRcon = overrides.disbandRcon ?? null;
   if (Array.isArray(overrides.commandLanes)) {
     manager.commandPool.lanes = overrides.commandLanes;
@@ -328,15 +332,55 @@ async function testSchedulePollingRecomputesNextDelay() {
   assert.deepEqual(scheduledDelays, [1000, 2500]);
 }
 
-async function testRefreshPlayersSkipsWhenAlreadyInFlight() {
-  const { manager, executedCommands } = createHarness();
-  manager.refreshInFlight.players = true;
+async function testRefreshPlayersSharesInFlightPromise() {
+  const { manager, executedCommands } = createHarness({
+    defaultDelayMs: 5,
+    defaultResponse: "",
+  });
 
-  const result = await manager.refreshPlayers();
+  const first = manager.refreshPlayers();
+  const second = manager.refreshPlayers();
+  const [firstResult, secondResult] = await Promise.all([first, second]);
 
-  assert.deepEqual(result, []);
-  assert.deepEqual(executedCommands, []);
-  manager.refreshInFlight.players = false;
+  assert.deepEqual(firstResult, secondResult);
+  assert.deepEqual(executedCommands.map((item) => item.command), ["ListPlayers"]);
+  assert.equal(manager.refreshInFlight.players, null);
+}
+
+async function testCanonicalPollingConfigWinsOverLegacyConfig() {
+  const warnings = [];
+  const resolved = resolveRconPollingConfig({
+    rconConfig: {
+      polling: {
+        enabled: true,
+        playersIntervalMs: 2000,
+        squadsIntervalMs: 4000,
+        dynamic: { enabled: false },
+      },
+      matchStatePolling: {
+        playersIntervalMs: 3500,
+      },
+    },
+    matchStateConfig: {
+      enabled: true,
+      polling: {
+        playersIntervalMs: 5000,
+        squadsIntervalMs: 7000,
+        dynamic: { enabled: true },
+      },
+    },
+    logger: {
+      warn(message) {
+        warnings.push(message);
+      },
+    },
+  });
+
+  assert.equal(resolved.polling.enabled, true);
+  assert.equal(resolved.polling.playersIntervalMs, 2000);
+  assert.equal(resolved.polling.squadsIntervalMs, 4000);
+  assert.equal(resolved.polling.dynamic.enabled, false);
+  assert.equal(warnings.length, 1);
 }
 
 async function testDisbandLaneDoesNotWaitForBlockedDefaultCommand() {
@@ -707,7 +751,8 @@ await testSharedClientDoesNotRunPoolsConcurrently();
 await testLaneFailureDoesNotBlockOtherLane();
 await testDynamicPollingIntervalsFollowLogClock();
 await testSchedulePollingRecomputesNextDelay();
-await testRefreshPlayersSkipsWhenAlreadyInFlight();
+await testRefreshPlayersSharesInFlightPromise();
+await testCanonicalPollingConfigWinsOverLegacyConfig();
 await testDisbandLaneDoesNotWaitForBlockedDefaultCommand();
 
 console.log("rcon manager tests passed");
