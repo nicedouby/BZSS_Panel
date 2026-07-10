@@ -4,9 +4,29 @@ function hasOwnEntries(value) {
   return Boolean(value && typeof value === "object" && Object.keys(value).length > 0);
 }
 
-function stableJson(value) {
-  if (!value || typeof value !== "object") return "{}";
-  return JSON.stringify(value, Object.keys(value).sort());
+function pollingValuesConflict(canonical, legacy) {
+  const scalarKeys = ["enabled", "playersIntervalMs", "squadsIntervalMs"];
+  for (const key of scalarKeys) {
+    if (
+      canonical?.[key] !== undefined
+      && legacy?.[key] !== undefined
+      && canonical[key] !== legacy[key]
+    ) {
+      return true;
+    }
+  }
+
+  const canonicalDynamic = canonical?.dynamic ?? {};
+  const legacyDynamic = legacy?.dynamic ?? {};
+  for (const key of Object.keys(legacyDynamic)) {
+    if (
+      canonicalDynamic[key] !== undefined
+      && canonicalDynamic[key] !== legacyDynamic[key]
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -27,7 +47,7 @@ export function resolveRconPollingConfig({
   if (
     hasOwnEntries(canonical)
     && hasOwnEntries(legacyMatchState)
-    && stableJson(canonical) !== stableJson(legacyMatchState)
+    && pollingValuesConflict(canonical, legacyMatchState)
   ) {
     logger?.warn?.(
       "[RconManager] Both rcon.polling and modules.matchState.polling are configured. "
