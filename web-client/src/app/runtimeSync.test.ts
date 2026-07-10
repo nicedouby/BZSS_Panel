@@ -258,4 +258,33 @@ describe("runtimeSync", () => {
     expect(hiddenRealtimePrimary).toBeGreaterThan(realtimePrimary);
     expect(realtimeAuxiliary).toBeGreaterThan(realtimePrimary);
   });
+  it("rejects player and squad snapshots older than the current revision", () => {
+    const players = usePlayerStore();
+    const squads = useSquadStore();
+
+    expect(players.applySnapshot({
+      active: [{ playerID: 1, name: "Fresh" }],
+      revision: 5,
+      updatedAt: 500,
+    })).toBe(true);
+    expect(players.applySnapshot({
+      active: [{ playerID: 2, name: "Stale" }],
+      revision: 4,
+      updatedAt: 600,
+    })).toBe(false);
+    expect(players.active.map((player) => player.name)).toEqual(["Fresh"]);
+
+    expect(squads.applySnapshot({
+      list: [{ key: "1:1", squadID: 1 }],
+      revision: 8,
+      updatedAt: 800,
+    })).toBe(true);
+    expect(squads.applySnapshot({
+      list: [{ key: "1:2", squadID: 2 }],
+      revision: 7,
+      updatedAt: 900,
+    })).toBe(false);
+    expect(squads.list.map((squad) => squad.squadID)).toEqual([1]);
+  });
+
 });
