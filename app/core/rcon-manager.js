@@ -109,6 +109,13 @@ export class RconManager {
       lastError: "",
       lastPlayersRefresh: "",
       lastSquadsRefresh: "",
+      lastListPlayersQueuedMs: 0,
+      lastListPlayersExecutionMs: 0,
+      lastListPlayersParseMs: 0,
+      lastListPlayersCount: 0,
+      lastListSquadsQueuedMs: 0,
+      lastListSquadsExecutionMs: 0,
+      lastListSquadsCount: 0,
     };
 
     this.refreshInFlight = {
@@ -762,6 +769,10 @@ export class RconManager {
       const players = parseListPlayers(result.rconResponse);
       const parseMs = Date.now() - parseStartedAt;
       this.status.lastPlayersRefresh = new Date().toISOString();
+      this.status.lastListPlayersQueuedMs = Number(result.queuedMs ?? 0);
+      this.status.lastListPlayersExecutionMs = Number(result.executionMs ?? 0);
+      this.status.lastListPlayersParseMs = parseMs;
+      this.status.lastListPlayersCount = players.length;
       this.webStatus.set("playerCount", players.length);
       this.logger.info(
         `[RCON_PERF] command=ListPlayers queuedMs=${Number(result.queuedMs ?? 0)} executionMs=${Number(result.executionMs ?? 0)} parseMs=${parseMs} playerCount=${players.length}`,
@@ -807,6 +818,9 @@ export class RconManager {
 
       const squads = parseListSquads(result.rconResponse);
       this.status.lastSquadsRefresh = new Date().toISOString();
+      this.status.lastListSquadsQueuedMs = Number(result.queuedMs ?? 0);
+      this.status.lastListSquadsExecutionMs = Number(result.executionMs ?? 0);
+      this.status.lastListSquadsCount = squads.length;
       this.webStatus.set("squadCount", squads.length);
 
       this.eventBus.emitCoreEvent("RCON_LIST_SQUADS_UPDATED", {
