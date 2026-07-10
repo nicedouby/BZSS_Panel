@@ -49,7 +49,7 @@
         "restartRequired": true
       },
       {
-        "path": "modules.matchState.polling.playersIntervalMs",
+        "path": "rcon.polling.playersIntervalMs",
         "label": "Players Refresh Interval",
         "type": "number",
         "min": 100,
@@ -58,7 +58,7 @@
         "restartRequired": true
       },
       {
-        "path": "modules.matchState.polling.squadsIntervalMs",
+        "path": "rcon.polling.squadsIntervalMs",
         "label": "Squads Refresh Interval",
         "type": "number",
         "min": 100,
@@ -67,14 +67,14 @@
         "restartRequired": true
       },
       {
-        "path": "modules.matchState.polling.dynamic.enabled",
+        "path": "rcon.polling.dynamic.enabled",
         "label": "Dynamic Players/Squads Refresh Enabled",
         "type": "boolean",
         "advanced": true,
         "restartRequired": true
       },
       {
-        "path": "modules.matchState.polling.dynamic.fastUntilSeconds",
+        "path": "rcon.polling.dynamic.fastUntilSeconds",
         "label": "Dynamic Fast Window Seconds",
         "type": "number",
         "min": 1,
@@ -83,7 +83,7 @@
         "restartRequired": true
       },
       {
-        "path": "modules.matchState.polling.dynamic.mediumUntilSeconds",
+        "path": "rcon.polling.dynamic.mediumUntilSeconds",
         "label": "Dynamic Medium Window Seconds",
         "type": "number",
         "min": 1,
@@ -92,7 +92,7 @@
         "restartRequired": true
       },
       {
-        "path": "modules.matchState.polling.dynamic.fastPlayersIntervalMs",
+        "path": "rcon.polling.dynamic.fastPlayersIntervalMs",
         "label": "Fast Players Refresh Interval",
         "type": "number",
         "min": 100,
@@ -101,7 +101,7 @@
         "restartRequired": true
       },
       {
-        "path": "modules.matchState.polling.dynamic.fastSquadsIntervalMs",
+        "path": "rcon.polling.dynamic.fastSquadsIntervalMs",
         "label": "Fast Squads Refresh Interval",
         "type": "number",
         "min": 100,
@@ -133,7 +133,7 @@
         "restartRequired": false
       },
       {
-        "path": "modules.matchState.polling.dynamic.mediumPlayersIntervalMs",
+        "path": "rcon.polling.dynamic.mediumPlayersIntervalMs",
         "label": "Medium Players Refresh Interval",
         "type": "number",
         "min": 100,
@@ -142,7 +142,7 @@
         "restartRequired": true
       },
       {
-        "path": "modules.matchState.polling.dynamic.mediumSquadsIntervalMs",
+        "path": "rcon.polling.dynamic.mediumSquadsIntervalMs",
         "label": "Medium Squads Refresh Interval",
         "type": "number",
         "min": 100,
