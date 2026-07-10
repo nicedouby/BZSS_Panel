@@ -5,8 +5,6 @@ import path from "node:path";
 
 import {
   parseCurrentMap,
-  parseListPlayers,
-  parseListSquads,
   parseNextMap,
 } from "../../core/squad-rcon.js";
 import {
