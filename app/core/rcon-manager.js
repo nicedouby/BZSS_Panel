@@ -276,9 +276,12 @@ export class RconManager {
     for (const eventName of forwarded) {
       const handler = (payload = {}) => {
         if (eventName === "RCON_CONNECTED") {
+          const wasConnected = this.status.connected;
           this.setConnected(true);
-          this.connectionGeneration += 1;
-          this.kickInitialPolling(this.connectionGeneration);
+          if (!wasConnected) {
+            this.connectionGeneration += 1;
+            this.kickInitialPolling(this.connectionGeneration);
+          }
           this.emitNativeLog({
             level: "status",
             message: `Connected to ${payload.host}:${payload.port}`,
