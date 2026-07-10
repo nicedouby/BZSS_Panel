@@ -81,7 +81,7 @@
         aria-label="Match Status Sections"
         :items="mobileTabItems"
       />
-      <div v-if="viewMode === 'list'" class="match-state-content">
+      <div class="match-state-content">
         <div class="match-state-main">
           <div v-if="refreshError || playtimeError" class="match-error-stack">
             <ErrorBlock v-if="refreshError" :message="refreshError" />
@@ -113,23 +113,6 @@
         </div>
 
         <MatchChatPanel v-if="!isMobile" class="match-chat-column" />
-      </div>
-      <div v-else-if="viewMode === 'map' || (isMobile && mobileTab === 'map')" class="match-state-map-wrapper">
-      <TacticalMapPage
-          :snapshot="tacticalMapSnapshot"
-          :players="tacticalMapPlayers"
-          :capture-zones="tacticalMapCaptureZones"
-          :fobs="tacticalMapFobs"
-          :main-zones="tacticalMapMainZones"
-          :loading="tacticalMapLoading"
-          :errorText="tacticalMapError"
-          :playtimes="playtimes"
-          :combat-stats-lookup="combatStatsLookup"
-          @select-player="handleMapSelectPlayer"
-          @warn-player="handleMapWarnPlayer"
-          @kick-player="handleMapKickPlayer"
-          @force-team-player="handleMapForceTeamChange"
-        />
       </div>
     </DataState>
 
@@ -268,7 +251,12 @@ import { useRoute, useRouter } from "vue-router";
 import { apiGet, apiPost } from "../app/apiClient";
 import { renderApiError } from "../app/errors";
 import { getRuntimeSyncState, syncOnce, useSnapshot } from "../app/runtimeSync";
-import { applyMatchSnapshotResponse } from "../app/matchSnapshot";
+import {
+  fetchMatchStatusInitialData,
+  fetchPlayersSnapshot,
+  fetchSquadsSnapshot,
+  requestMatchStateRefresh,
+} from "../app/matchStateApi";
 import { useAuthStore } from "../stores/auth.store";
 import { usePlayerStore } from "../stores/player.store";
 import { useSquadStore } from "../stores/squad.store";
@@ -297,7 +285,6 @@ import SquadDetailDrawer from "../components/squad-admin/SquadDetailDrawer.vue";
 import MobileSegmentTabs from "../components/mobile/MobileSegmentTabs.vue";
 import StickyActionBar from "../components/mobile/StickyActionBar.vue";
 import { useIsMobile } from "../composables/useMediaQuery";
-import TacticalMapPage from "./TacticalMapPage.vue";
 import { t } from "../i18n";
 import { normalizeRefreshPolicy, resolveRefreshDelay } from "../app/refreshPolicy";
 import { useAutoRefreshGate } from "../composables/useAutoRefreshGate";
@@ -438,9 +425,14 @@ const activePlayerWindow = ref<{
 const selectedSquadDetail = ref<SquadViewModel | null>(null);
 const pageHidden = ref(typeof document !== "undefined" ? document.hidden : false);
 const active = ref(true);
+const pageCanQuery = computed(() => Boolean(auth.authenticated && active.value && !pageHidden.value));
 const { canAutoRefresh } = useAutoRefreshGate(computed(() => active.value && !pageHidden.value));
+const initialPlayersLoading = ref(false);
+let initialLoadPromise: Promise<void> | null = null;
 let battlePlayerRefreshToken = 0;
 let battleStatsRefreshIdleHandle: number | null = null;
+let playtimeRefreshIdleHandle: number | null = null;
+let playtimeRefreshToken = 0;
 
 const multiSelectMode = ref(false);
 const selectedPlayerIds = ref<Set<string | number>>(new Set());
@@ -467,7 +459,6 @@ const selectedT2Count = computed(() => {
 const mobileTabItems = computed(() => [
   { value: "teams" as const, label: "队伍" },
   { value: "chat" as const, label: "聊天" },
-  { value: "map" as const, label: "地图" },
   { value: "batch" as const, label: "批量", badge: multiSelectMode.value ? selectedPlayers.value.length : null },
 ]);
 
@@ -492,10 +483,10 @@ const routeRefreshPolicy = computed(() => normalizeRefreshPolicy(route.meta.refr
 const matchSnapshot = computed(() => snapshot.value?.snapshot?.matchState ?? snapshot.value?.matchState ?? null);
 const remoteTelemetryQuery = useQuery({
   queryKey: computed(() => ["remote-telemetry-state", auth.authenticated]),
-  enabled: computed(() => auth.authenticated),
+  enabled: pageCanQuery,
   queryFn: async () => apiGet<any>("/api/remote-telemetry/state"),
-  refetchInterval: computed(() => (auth.authenticated ? 2_000 : false)),
-  refetchIntervalInBackground: true,
+  refetchInterval: computed(() => (pageCanQuery.value ? 2_000 : false)),
+  refetchIntervalInBackground: false,
   refetchOnWindowFocus: false,
 });
 const remoteTelemetryState = computed(() => remoteTelemetryQuery.data.value?.remoteTelemetry ?? null);
@@ -583,17 +574,17 @@ const squadLifecycleRefetchInterval = computed(() => resolveRefreshDelay({
 }));
 const squadLifecycleQuery = useQuery({
   queryKey: computed(() => ["squad-lifecycle-current", auth.authenticated]),
-  enabled: computed(() => auth.authenticated),
+  enabled: pageCanQuery,
   queryFn: async () => apiGet<any>("/api/squad-lifecycle/current"),
-  refetchInterval: computed(() => squadLifecycleRefetchInterval.value),
-  refetchIntervalInBackground: true,
+  refetchInterval: computed(() => (pageCanQuery.value ? squadLifecycleRefetchInterval.value : false)),
+  refetchIntervalInBackground: false,
   refetchOnWindowFocus: false,
 });
 const squadLifecycleCurrent = computed(() => squadLifecycleQuery.data.value?.current ?? null);
 const combatStatsLookup = computed(() => buildCombatStatsLookupFromTacticalPlayers(tacticalPlayers.value));
 const battleLogOverviewQuery = useQuery({
   queryKey: computed(() => ["battle-log-overview", auth.authenticated, currentServerId.value]),
-  enabled: computed(() => auth.authenticated && Boolean(currentServerId.value)),
+  enabled: computed(() => pageCanQuery.value && Boolean(currentServerId.value)),
   queryFn: async () => {
     try {
       return await apiGet<any>(`/api/battle-log/overview?serverId=${encodeURIComponent(currentServerId.value)}`);
@@ -602,8 +593,8 @@ const battleLogOverviewQuery = useQuery({
     }
   },
   staleTime: 5_000,
-  refetchInterval: computed(() => combatCacheRefetchInterval.value),
-  refetchIntervalInBackground: true,
+  refetchInterval: computed(() => (pageCanQuery.value ? combatCacheRefetchInterval.value : false)),
+  refetchIntervalInBackground: false,
   refetchOnWindowFocus: false,
 });
 const battleLogOverview = computed(() => normalizeBattleLogOverview(
@@ -643,7 +634,7 @@ const showBattleLogPanel = computed(() => Boolean(currentServerId.value));
 const serverStatusUpdatedAt = computed(() => toMillis(matchSnapshot.value?.serverStatus?.lastUpdatedAt));
 const playersUpdatedAt = computed(() => toMillis(matchSnapshot.value?.players?.lastUpdatedAt));
 const squadsUpdatedAt = computed(() => toMillis(matchSnapshot.value?.squads?.lastUpdatedAt));
-const showInitialLoading = computed(() => auth.authenticated && !hasSnapshotData.value && runtime.inFlight && !runtime.lastError);
+const showInitialLoading = computed(() => auth.authenticated && players.active.length === 0 && initialPlayersLoading.value);
 const blockingRuntimeError = computed(() => {
   if (!auth.authenticated || hasSnapshotData.value || !runtime.lastError) return "";
   return renderApiErrorText(runtime.lastError);
@@ -914,6 +905,35 @@ function attachTacticalStateInfoToTeam(
   };
 }
 
+async function loadInitialMatchState() {
+  if (!auth.authenticated || !active.value) return;
+  if (initialLoadPromise) return initialLoadPromise;
+
+  initialPlayersLoading.value = players.active.length === 0;
+  const startedAt = performance.now();
+  initialLoadPromise = (async () => {
+    try {
+      const data = await fetchMatchStatusInitialData();
+      server.applyStableSnapshot(data.server);
+      players.applySnapshot(data.players);
+      squads.applySnapshot(data.squads);
+      refreshError.value = "";
+      if (import.meta.env.DEV) {
+        console.info("[MatchStatusPerf]", {
+          requestAndApplyMs: Math.round(performance.now() - startedAt),
+          players: players.active.length,
+        });
+      }
+    } catch (error) {
+      refreshError.value = renderApiError(error, "对局状态加载失败");
+    } finally {
+      initialPlayersLoading.value = false;
+      initialLoadPromise = null;
+    }
+  })();
+  return initialLoadPromise;
+}
+
 function handleVisibilityChange() {
   pageHidden.value = typeof document !== "undefined" ? document.hidden : false;
 }
@@ -921,23 +941,26 @@ function handleVisibilityChange() {
 onMounted(() => {
   pageHidden.value = typeof document !== "undefined" ? document.hidden : false;
   document.addEventListener("visibilitychange", handleVisibilityChange);
-  tacticalStateStore.startStream();
+  void loadInitialMatchState();
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("visibilitychange", handleVisibilityChange);
   cancelIdleTask(battleStatsRefreshIdleHandle);
-  tacticalStateStore.stopStream();
+  cancelIdleTask(playtimeRefreshIdleHandle);
+  playtimeRefreshToken += 1;
 });
 
 onActivated(() => {
   active.value = true;
-  tacticalStateStore.startStream();
+  void loadInitialMatchState();
 });
 
 onDeactivated(() => {
   active.value = false;
-  tacticalStateStore.stopStream();
+  cancelIdleTask(battleStatsRefreshIdleHandle);
+  cancelIdleTask(playtimeRefreshIdleHandle);
+  playtimeRefreshToken += 1;
 });
 
 function formatTicketDisplay(value: number | null | undefined) {
@@ -1103,28 +1126,39 @@ async function fetchPlaytimes(steamIDsList: string[]) {
 
 watch(
   () => players.active,
-  async (newPlayers) => {
-    if (!newPlayers || newPlayers.length === 0) return;
+  (newPlayers) => {
+    cancelIdleTask(playtimeRefreshIdleHandle);
+    const token = ++playtimeRefreshToken;
+    if (!newPlayers || newPlayers.length === 0 || !pageCanQuery.value || !playtimeRequested.value) return;
+
     const missingIDs = [...new Set(
       newPlayers
-        .map((p) => String(p.steamID ?? "").trim())
-        .filter((id) => id && stablePlaytimes.value[id] === undefined)
+        .map((player) => String(player.steamID ?? "").trim())
+        .filter((id) => id && stablePlaytimes.value[id] === undefined),
     )];
+    if (missingIDs.length === 0) return;
 
-    if (missingIDs.length > 0 && auth.authenticated && playtimeRequested.value) {
-      try {
-        const items = await fetchPlaytimes(missingIDs);
-        stablePlaytimes.value = {
-          ...stablePlaytimes.value,
-          ...items,
-        };
-        playtimeError.value = "";
-      } catch (err) {
-        playtimeError.value = renderApiError(err, t("common.error"));
-      }
-    }
+    playtimeRefreshIdleHandle = scheduleIdleTask(() => {
+      void (async () => {
+        try {
+          for (let offset = 0; offset < missingIDs.length; offset += 50) {
+            if (token !== playtimeRefreshToken || !pageCanQuery.value) return;
+            const items = await fetchPlaytimes(missingIDs.slice(offset, offset + 50));
+            stablePlaytimes.value = {
+              ...stablePlaytimes.value,
+              ...items,
+            };
+          }
+          playtimeError.value = "";
+        } catch (error) {
+          if (token === playtimeRefreshToken) {
+            playtimeError.value = renderApiError(error, t("common.error"));
+          }
+        }
+      })();
+    });
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 watch(
@@ -2018,11 +2052,18 @@ async function refreshMatchState(scope: "players" | "squads" | "all") {
   refreshingAll.value = scope === "all";
 
   try {
-    await syncOnce();
-    await Promise.all([
-      remoteTelemetryQuery.refetch(),
-      battleLogOverviewQuery.refetch(),
-    ]);
+    const result = await requestMatchStateRefresh(scope);
+    if (result?.ok === false) {
+      throw new Error(result?.errors?.[0]?.message || "RCON 刷新失败");
+    }
+
+    if (scope === "players") {
+      players.applySnapshot(await fetchPlayersSnapshot());
+    } else if (scope === "squads") {
+      squads.applySnapshot(await fetchSquadsSnapshot());
+    } else {
+      await loadInitialMatchState();
+    }
   } catch (error) {
     refreshError.value = renderApiError(error, "刷新失败");
     throw error;
