@@ -613,9 +613,18 @@ const battleLogLatestText = computed(() => {
 });
 const battleLogSummaryCards = computed(() => buildBattleLogSummaryCards(battleLogSummaryStats.value));
 const showBattleLogPanel = computed(() => Boolean(currentServerId.value));
-const serverStatusUpdatedAt = computed(() => toMillis(matchSnapshot.value?.serverStatus?.lastUpdatedAt));
-const playersUpdatedAt = computed(() => toMillis(matchSnapshot.value?.players?.lastUpdatedAt));
-const squadsUpdatedAt = computed(() => toMillis(matchSnapshot.value?.squads?.lastUpdatedAt));
+const serverStatusUpdatedAt = computed(() => Math.max(
+  toMillis(matchSnapshot.value?.serverStatus?.lastUpdatedAt),
+  server.updatedAt,
+));
+const playersUpdatedAt = computed(() => Math.max(
+  toMillis(matchSnapshot.value?.players?.lastUpdatedAt),
+  players.updatedAt,
+));
+const squadsUpdatedAt = computed(() => Math.max(
+  toMillis(matchSnapshot.value?.squads?.lastUpdatedAt),
+  squads.updatedAt,
+));
 const showInitialLoading = computed(() => auth.authenticated && players.active.length === 0 && initialPlayersLoading.value);
 const blockingRuntimeError = computed(() => {
   if (!auth.authenticated || hasSnapshotData.value || !runtime.lastError) return "";
