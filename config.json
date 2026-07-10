@@ -563,11 +563,25 @@
     "enabled": true,
     "host": "192.168.0.184",
     "port": 30144,
-    "password": "9290dd2aa02b",
-    "passwordFromEnv": "9290dd2aa02b",
+    "password": "",
+    "passwordFromEnv": "BZSS_RCON_PASSWORD",
     "rateLimit": {
       "minIntervalMs": 500,
       "maxQueueSize": 100
+    },
+    "polling": {
+      "enabled": true,
+      "playersIntervalMs": 2000,
+      "squadsIntervalMs": 4999,
+      "dynamic": {
+        "enabled": false,
+        "fastUntilSeconds": 90,
+        "mediumUntilSeconds": 180,
+        "fastPlayersIntervalMs": 500,
+        "fastSquadsIntervalMs": 500,
+        "mediumPlayersIntervalMs": 1500,
+        "mediumSquadsIntervalMs": 1500
+      }
     }
   },
   "core": {
@@ -618,17 +632,6 @@
       "enabled": true,
       "polling": {
         "serverInfoIntervalMs": 15000,
-        "playersIntervalMs": 2000,
-        "squadsIntervalMs": 4999,
-        "dynamic": {
-          "enabled": false,
-          "fastUntilSeconds": 90,
-          "mediumUntilSeconds": 180,
-          "fastPlayersIntervalMs": 500,
-          "fastSquadsIntervalMs": 500,
-          "mediumPlayersIntervalMs": 1500,
-          "mediumSquadsIntervalMs": 1500
-        },
         "currentMapIntervalMs": 30000,
         "nextMapIntervalMs": 30000
       }
