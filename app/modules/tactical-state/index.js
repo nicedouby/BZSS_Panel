@@ -201,6 +201,37 @@ export function createTacticalStateModule({ core, modules, logger }) {
     const teamMap = new Map();
     const squadsByTeam = new Map();
 
+    // ListSquads carries the authoritative battlegroup name for each team.
+    // Seed the tactical team model from it before player aggregation so Main
+    // Zone flags can resolve even though ListPlayers normally contains only team IDs.
+    const rconSquads = Array.isArray(matchState?.squads?.list)
+      ? matchState.squads.list
+      : [];
+    for (const squad of rconSquads) {
+      const teamId = numberOrNull(squad?.teamID, squad?.teamId, squad?.team);
+      if (teamId == null) continue;
+      const teamName = firstText(
+        squad?.teamName,
+        squad?.factionName,
+        squad?.faction,
+        `Team ${teamId}`,
+      );
+      if (!teamMap.has(teamId)) {
+        teamMap.set(teamId, {
+          teamId,
+          teamName,
+          factionName: teamName,
+          playerCount: 0,
+          ticketCount: null,
+          squads: [],
+        });
+      } else if (teamName && !/^Team\s+\d+$/i.test(teamName)) {
+        const team = teamMap.get(teamId);
+        team.teamName = teamName;
+        team.factionName = teamName;
+      }
+    }
+
     for (const player of linkedPlayers) {
       const teamId = player.match?.teamId ?? null;
       if (teamId == null) continue;
@@ -1042,4 +1073,3 @@ function firstText(...values) {
   }
   return "";
 }
-

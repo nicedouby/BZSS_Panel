@@ -788,7 +788,7 @@ import { useMapCamera } from "../composables/useMapCamera";
 import { provideTacticalMapViewport } from "../composables/tacticalMapViewport";
 import { useTacticalStateStore } from "../stores/tactical-state.store";
 import type { BzssCoreMainZoneInfo } from "../app/bzssCoreApi";
-import { getChineseNameByFaction, getFactionFromTeamName, getFlagUrlByTeamName } from "../shared/faction-assets/faction-data";
+import { getChineseNameByFaction, getFactionFromTeamName, 获取战斗群旗帜 } from "../shared/faction-assets/faction-data";
 
 const props = withDefaults(defineProps<{
   snapshot: BzssCorePlayerInfoResponse | null;
@@ -2035,7 +2035,7 @@ function resolveMainZoneFaction(teamId: number | null) {
   return {
     factionCode,
     factionLabel: factionCode ? getChineseNameByFaction(factionCode) : (teamName || (teamId == null ? "" : `Team ${teamId}`)),
-    flagUrl: teamName ? getFlagUrlByTeamName(teamName) : null,
+    flagUrl: teamName ? 获取战斗群旗帜(teamName) : null,
   };
 }
 
