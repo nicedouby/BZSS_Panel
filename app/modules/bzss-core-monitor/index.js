@@ -1885,7 +1885,7 @@ function parsePriRuntimeRows(rows, observedAt, rawPrefix = "PRI{{") {
 function parseBzssCorePieRuntimeLine(text) {
   const source = String(text ?? "");
   const observedAt = new Date().toISOString();
-  const rowPattern = /\\{\\s*ID\\s*:\\s*(-?\\d+)\\s*,\\s*Pos\\s*:\\s*([^,}]+(?:\\s*,\\s*[^,}]+){0,3})(?:\\s*,\\s*(CI\\s*\\{[^}]*\\}|\\{[^}]*\\}))?\\s*\\}/gi;
+  const rowPattern = /\{\s*ID\s*:\s*(-?\d+)\s*,\s*Pos\s*:\s*([^,}]+(?:\s*,\s*[^,}]+){0,3})(?:\s*,\s*(CI\s*\{[^}]*\}|\{[^}]*\}))?\s*\}/gi;
   const runtimePlayers = [];
   for (const match of source.matchAll(rowPattern)) {
     const playerId = Number(match[1]);
@@ -1899,7 +1899,7 @@ function parseBzssCorePieRuntimeLine(text) {
       ? { x: x * COMPACT_RUNTIME_POSITION_SCALE, y: y * COMPACT_RUNTIME_POSITION_SCALE, z: z * COMPACT_RUNTIME_POSITION_SCALE }
       : null;
     const combatInfo = String(match[3] ?? "").trim();
-    const soldierInfo = /^CI\\s*\\{/i.test(combatInfo)
+    const soldierInfo = /^CI\s*\{/i.test(combatInfo)
       ? parseCompactRuntimeSoldierInfo(combatInfo)
       : createEmptySoldierInfo();
     runtimePlayers.push({
