@@ -2511,10 +2511,12 @@ function parseCompactCaptureZones(text) {
 function parseCompactSceneVector(text) {
   const vector = parseVectorBlock(text);
   if (!vector) return null;
+  // CPZ/FOBI/MainZone scene coordinates are already in world units.
+  // Only compact player runtime rows use the /100 compression.
   return {
-    x: vector.x * COMPACT_RUNTIME_POSITION_SCALE,
-    y: vector.y * COMPACT_RUNTIME_POSITION_SCALE,
-    z: vector.z * COMPACT_RUNTIME_POSITION_SCALE,
+    x: vector.x,
+    y: vector.y,
+    z: vector.z,
   };
 }
 
