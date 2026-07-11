@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections import deque
 from typing import Any, Dict, List, Optional, Tuple
@@ -32,7 +33,7 @@ from bzss_parser.udp_sender import UdpSender
 
 MatchedEvent = Tuple[str, List[Tuple[str, str]]]
 
-BZSS_CORE_RUNTIME_LINE_RE = re.compile(r"\\{\\s*ID\\s*:\\s*-?\\d+\\s*,\\s*Pos\\s*:", re.IGNORECASE)
+BZSS_CORE_RUNTIME_LINE_RE = re.compile(r"\{\s*ID\s*:\s*-?\d+\s*,\s*Pos\s*:", re.IGNORECASE)
 
 def is_bzss_core_runtime_line(line: str) -> bool:
     return bool(BZSS_CORE_RUNTIME_LINE_RE.search(str(line or "")))
