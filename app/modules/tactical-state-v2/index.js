@@ -945,6 +945,8 @@ export function createTacticalStateV2Module({ core, modules, logger }) {
       kind: "module",
       version: "0.1.0",
       description: "Compose match-state, player-state, bzss-core-monitor, player database and network stats into a tactical snapshot, supporting state delta streaming.",
+      defaultEnabled: false,
+      deprecated: true,
     },
     apiName: "tacticalStateV2",
     api: {
@@ -1171,4 +1173,3 @@ function diffSnapshots(oldSnap, newSnap) {
 
   return patches;
 }
-
