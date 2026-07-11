@@ -1898,7 +1898,7 @@ function parseBzssCorePieRuntimeLine(text) {
     const position = !invalidPawn && x != null && y != null && z != null
       ? { x: x * COMPACT_RUNTIME_POSITION_SCALE, y: y * COMPACT_RUNTIME_POSITION_SCALE, z: z * COMPACT_RUNTIME_POSITION_SCALE }
       : null;
-    const combatInfo = String(match[4] ?? "").trim();
+    const combatInfo = String(match[3] ?? "").trim();
     const soldierInfo = /^CI\\s*\\{/i.test(combatInfo)
       ? parseCompactRuntimeSoldierInfo(combatInfo)
       : createEmptySoldierInfo();
