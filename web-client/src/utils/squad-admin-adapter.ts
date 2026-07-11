@@ -1,7 +1,7 @@
 import type { RuntimePlayer } from "../stores/player.store";
 import type { RuntimeSquad } from "../stores/squad.store";
 import type { RuntimeTeam } from "../stores/match.store";
-import { getFactionFromTeamName, getFlagUrlByTeamName } from "../shared/faction-assets/faction-data";
+import { getFactionFromTeamName, 获取战斗群旗帜 } from "../shared/faction-assets/faction-data";
 import type {
   CombatStats,
   PlayerRowViewModel,
@@ -58,7 +58,7 @@ export function adaptPlayerRow(
     matchLastSeenAt: normalizeOptionalString((player as any).matchLastSeenAt),
     matchJoinCount: normalizeOptionalNumber((player as any).matchJoinCount),
     steamAvatar,
-    factionFlagUrl: teamName ? getFlagUrlByTeamName(teamName) : null,
+    factionFlagUrl: teamName ? 获取战斗群旗帜(teamName) : null,
     bzssCorePing,
     bzssCoreFtIndex,
     bzssCoreFtPosition,
