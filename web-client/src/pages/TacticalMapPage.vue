@@ -277,7 +277,7 @@
             <!-- Radial particle dots flying outward and drifting dynamically -->
             <div class="explosion-particles">
               <span
-                v-for="p in staticExplosionParticles"
+                v-for="p in visibleExplosionParticles"
                 :key="p.id"
                 class="particle"
                 :class="p.type"
@@ -1212,7 +1212,7 @@ const measureMode = computed({
 });
 
 // Pre-generated static random values for denser grenade blast debris
-const staticExplosionParticles = Array.from({ length: 90 }, (_, idx) => {
+const staticExplosionParticles = Array.from({ length: 36 }, (_, idx) => {
   const angle = Math.floor(Math.random() * 360);
   const speed = +(1.2 + Math.random() * 1.8).toFixed(2);
   const delay = +(Math.random() * 0.12).toFixed(2);
@@ -1222,6 +1222,12 @@ const staticExplosionParticles = Array.from({ length: 90 }, (_, idx) => {
   const type = idx % 2 === 0 ? "spark" : "ember";
   return { id: idx, angle, speed, delay, startOffset, spread, size, type };
 });
+
+const visibleExplosionParticles = computed(() => (
+  explosionMarkers.value.length > 6
+    ? staticExplosionParticles.slice(0, 18)
+    : staticExplosionParticles
+));
 
 function createSeededRandom(seedText: string) {
   let seed = 0;
@@ -1243,7 +1249,9 @@ const blastRadiusPx = computed(() => {
 });
 
 const explosionMarkers = computed(() => {
-  const list = snapshotExplosions.value;
+  const list = Array.isArray(snapshotExplosions.value)
+    ? snapshotExplosions.value.slice(-12)
+    : [];
   if (!Array.isArray(list) || list.length === 0) return [];
   const bounds = activeMapConfig.value.bounds;
   const markers: any[] = [];
@@ -1311,8 +1319,7 @@ watch(
     if (hasNewExplosion) {
       triggerShake();
     }
-  },
-  { deep: true }
+  }
 );
 
 // Combat Hotspot State (Centroid of alive players)
