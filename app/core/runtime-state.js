@@ -122,7 +122,9 @@ export class RuntimeState {
   updatePlayers(input = []) {
     const active = normalizePlayers(input.active ?? input);
     const recentlyDisconnected = normalizePlayers(input.recentlyDisconnected ?? []);
+    const nextRevision = Number(this.state.players.revision ?? 0) + 1;
     const next = makePlayersState();
+    next.revision = nextRevision;
     next.active = active;
     next.recentlyDisconnected = recentlyDisconnected;
     next.updatedAt = Date.now();
@@ -136,13 +138,14 @@ export class RuntimeState {
     }
 
     this.state.players = next;
-    this.state.players.revision += 1;
     this.deriveTeams();
   }
 
   updateSquads(squads = []) {
     const list = normalizeSquads(squads);
+    const nextRevision = Number(this.state.squads.revision ?? 0) + 1;
     const next = makeSquadsState();
+    next.revision = nextRevision;
     next.list = list;
     next.updatedAt = Date.now();
     next.stale = false;
@@ -157,7 +160,6 @@ export class RuntimeState {
     }
 
     this.state.squads = next;
-    this.state.squads.revision += 1;
     this.deriveTeams();
   }
 

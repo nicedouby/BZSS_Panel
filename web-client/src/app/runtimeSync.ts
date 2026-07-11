@@ -193,10 +193,12 @@ function normalizeRuntimeSnapshot(input: any) {
     players: {
       list: Array.isArray(players?.active) ? players.active : [],
       lastUpdatedAt: players?.updatedAt ?? payload?.updatedAt ?? Date.now(),
+      revision: Number(players?.revision ?? payload?.revisions?.players ?? 0),
     },
     squads: {
       list: Array.isArray(squads?.list) ? squads.list : [],
       lastUpdatedAt: squads?.updatedAt ?? payload?.updatedAt ?? Date.now(),
+      revision: Number(squads?.revision ?? payload?.revisions?.squads ?? 0),
     },
     teams: Array.isArray(match?.teams) ? match.teams : Array.isArray(payload?.teams) ? payload.teams : [],
     rconStatus: {

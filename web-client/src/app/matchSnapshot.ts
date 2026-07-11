@@ -106,7 +106,8 @@ export function buildPlayersSnapshot(matchPlayers: any) {
     byEOSID: {} as Record<string, any>,
     byPlayerID: {} as Record<string, any>,
     byName: {} as Record<string, any>,
-    updatedAt: toMillis(matchPlayers?.lastUpdatedAt) || Date.now(),
+    updatedAt: toMillis(matchPlayers?.lastUpdatedAt ?? matchPlayers?.updatedAt) || Date.now(),
+    revision: Number(matchPlayers?.revision ?? 0),
     stale: false,
   };
 
@@ -126,7 +127,8 @@ export function buildSquadsSnapshot(matchSquads: any) {
     list: [...list],
     byKey: {} as Record<string, any>,
     byTeamID: {} as Record<string, any[]>,
-    updatedAt: toMillis(matchSquads?.lastUpdatedAt) || Date.now(),
+    updatedAt: toMillis(matchSquads?.lastUpdatedAt ?? matchSquads?.updatedAt) || Date.now(),
+    revision: Number(matchSquads?.revision ?? 0),
     stale: false,
   };
 

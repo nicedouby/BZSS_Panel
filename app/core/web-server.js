@@ -3759,38 +3759,6 @@ export class WebServer {
     };
   }
 
-  async refreshMatchState(type = "all") {
-    const matchStateModule = this.modules.matchState;
-    if (!matchStateModule?.refresh) {
-      return {
-        ok: false,
-        source: "module.matchState",
-        type,
-        error: "MatchStateUnavailable",
-        message: "Match state module is not loaded.",
-      };
-    }
-
-    const matchState = await matchStateModule.refresh(type);
-    const snapshot = matchStateModule.getState?.() ?? matchState ?? null;
-    const overview = matchStateModule.getOverview?.() ?? null;
-    return {
-      ok: true,
-      source: "module.matchState",
-      type,
-      matchState: snapshot,
-      overview,
-    };
-  }
-
-  normalizeMatchRefreshType(type) {
-    const normalized = String(type ?? "all").trim();
-    if (["players", "squads", "serverInfo", "currentMap", "nextMap", "all"].includes(normalized)) {
-      return normalized;
-    }
-    return "all";
-  }
-
   createLocalJob(type, input = {}) {
     const now = Date.now();
     const job = {
@@ -3939,26 +3907,71 @@ export class WebServer {
   }
 
   async refreshMatchState(type = "all") {
+    const normalizedType = this.normalizeMatchRefreshType(type);
     const matchStateModule = this.modules.matchState;
-    if (!matchStateModule?.refresh) {
+    const rconManager = this.core.rconManager;
+    const startedAt = Date.now();
+    const errors = [];
+
+    if (!matchStateModule?.getState && !rconManager) {
       return {
         ok: false,
-        source: "module.matchState",
-        type,
+        source: "core.rconManager",
+        type: normalizedType,
         error: "MatchStateUnavailable",
-        message: "Match state module is not loaded.",
+        message: "Match state and RCON manager are not available.",
       };
     }
 
-    const matchState = await matchStateModule.refresh(type);
-    const snapshot = matchStateModule.getState?.() ?? matchState ?? null;
-    const overview = matchStateModule.getOverview?.() ?? null;
+    const capture = async (scope, operation) => {
+      try {
+        await operation();
+      } catch (error) {
+        errors.push({
+          scope,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    };
+
+    if (normalizedType === "players") {
+      await capture("players", () => rconManager.refreshPlayers());
+    } else if (normalizedType === "squads") {
+      await capture("squads", () => rconManager.refreshSquads());
+    } else if (normalizedType === "all") {
+      await Promise.all([
+        capture("players", () => rconManager.refreshPlayers()),
+        capture("squads", () => rconManager.refreshSquads()),
+        capture("serverInfo", () => matchStateModule?.refresh?.("serverInfo")),
+        capture("currentMap", () => matchStateModule?.refresh?.("currentMap")),
+        capture("nextMap", () => matchStateModule?.refresh?.("nextMap")),
+      ]);
+    } else {
+      await capture(normalizedType, () => matchStateModule?.refresh?.(normalizedType));
+    }
+
+    const snapshot = matchStateModule?.getState?.() ?? null;
+    const overview = matchStateModule?.getOverview?.() ?? null;
+    const runtimePlayers = this.core.runtimeState?.getPlayers?.() ?? null;
+    const runtimeSquads = this.core.runtimeState?.getSquads?.() ?? null;
     return {
-      ok: true,
-      source: "module.matchState",
-      type,
+      ok: errors.length === 0,
+      source: "core.rconManager",
+      type: normalizedType,
+      durationMs: Date.now() - startedAt,
+      errors,
       matchState: snapshot,
       overview,
+      players: runtimePlayers ? {
+        count: runtimePlayers.active?.length ?? 0,
+        updatedAt: runtimePlayers.updatedAt ?? 0,
+        revision: runtimePlayers.revision ?? 0,
+      } : null,
+      squads: runtimeSquads ? {
+        count: runtimeSquads.list?.length ?? 0,
+        updatedAt: runtimeSquads.updatedAt ?? 0,
+        revision: runtimeSquads.revision ?? 0,
+      } : null,
     };
   }
 

@@ -5,8 +5,6 @@ import path from "node:path";
 
 import {
   parseCurrentMap,
-  parseListPlayers,
-  parseListSquads,
   parseNextMap,
 } from "../../core/squad-rcon.js";
 import {
@@ -427,25 +425,8 @@ export function createMatchStateModule({ core, modules, config, logger }) {
 
   async function refreshPlayers(report = null) {
     return guarded("players", async () => {
-      const result = await executeRcon("ListPlayers");
-      if (!result.success) {
-        noteRefreshFailure(report, "players", result.message || "ListPlayers failed.");
-        updateStatuses();
-        emitRconStatusUpdated();
-        return state.players.list;
-      }
-
-      const players = parseListPlayers(result.rconResponse);
-      const event = makeEvent("RCON_LIST_PLAYERS_UPDATED", { players });
-      logWithFallback(moduleLogger, "debug", () => `Players refreshed (${players.length})`, {
-        operation: "refreshPlayers",
-        data: {
-          players: players.length,
-        },
-      });
-      core.eventBus.emitCoreEvent("RCON_LIST_PLAYERS_UPDATED", event);
-      if (!started) applyPlayersUpdatedEvent(event);
-      return players;
+      await core.rconManager.refreshPlayers();
+      return state.players.list;
     }, () => state.players.list, report);
   }
 
@@ -520,26 +501,8 @@ export function createMatchStateModule({ core, modules, config, logger }) {
 
   async function refreshSquads(report = null) {
     return guarded("squads", async () => {
-      const result = await executeRcon("ListSquads");
-      if (!result.success) {
-        noteRefreshFailure(report, "squads", result.message || "ListSquads failed.");
-        updateStatuses();
-        emitRconStatusUpdated();
-        return state.squads.list;
-      }
-
-      const squads = parseListSquads(result.rconResponse);
-      logWithFallback(moduleLogger, "debug", () => `Squads refreshed (${squads.length})`, {
-        operation: "refreshSquads",
-        data: {
-          squads: squads.length,
-        },
-      });
-
-      const event = makeEvent("RCON_LIST_SQUADS_UPDATED", { squads });
-      core.eventBus.emitCoreEvent("RCON_LIST_SQUADS_UPDATED", event);
-      if (!started) applySquadsUpdatedEvent(event);
-      return squads;
+      await core.rconManager.refreshSquads();
+      return state.squads.list;
     }, () => state.squads.list, report);
   }
 

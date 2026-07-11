@@ -75,16 +75,8 @@ export class RconManager {
 
     this.polling = {
       enabled: Boolean(this.config.polling?.enabled ?? false),
-      playersIntervalMs: Number(
-        this.config.matchStatePolling?.playersIntervalMs
-        ?? this.config.polling?.playersIntervalMs
-        ?? 5000,
-      ),
-      squadsIntervalMs: Number(
-        this.config.matchStatePolling?.squadsIntervalMs
-        ?? this.config.polling?.squadsIntervalMs
-        ?? 10000,
-      ),
+      playersIntervalMs: Number(this.config.polling?.playersIntervalMs ?? 3000),
+      squadsIntervalMs: Number(this.config.polling?.squadsIntervalMs ?? 5000),
       dynamic: {
         enabled: Boolean(this.config.polling?.dynamic?.enabled ?? true),
         fastUntilSeconds: Number(this.config.polling?.dynamic?.fastUntilSeconds ?? 90),
@@ -104,6 +96,8 @@ export class RconManager {
       players: false,
       squads: false,
     };
+    this.connectionGeneration = 0;
+    this.initialRefreshGeneration = -1;
     this.rconEventTeardown = [];
     this.nativeLogListeners = new Set();
 
@@ -115,11 +109,18 @@ export class RconManager {
       lastError: "",
       lastPlayersRefresh: "",
       lastSquadsRefresh: "",
+      lastListPlayersQueuedMs: 0,
+      lastListPlayersExecutionMs: 0,
+      lastListPlayersParseMs: 0,
+      lastListPlayersCount: 0,
+      lastListSquadsQueuedMs: 0,
+      lastListSquadsExecutionMs: 0,
+      lastListSquadsCount: 0,
     };
 
     this.refreshInFlight = {
-      players: false,
-      squads: false,
+      players: null,
+      squads: null,
     };
   }
 
@@ -168,10 +169,12 @@ export class RconManager {
       this.logger.info(`Connecting to RCON ${this.config.host}:${this.config.port}`, {
         operation: "start",
       });
-      this.pollingKickPending.players = true;
-      this.pollingKickPending.squads = true;
       await this.squadRcon.connect();
       this.setConnected(true);
+      if (this.connectionGeneration === 0) {
+        this.connectionGeneration = 1;
+        this.kickInitialPolling(this.connectionGeneration);
+      }
 
       if (this.allowMultipleConnections) {
         this.disbandRcon.connect()
@@ -280,10 +283,12 @@ export class RconManager {
     for (const eventName of forwarded) {
       const handler = (payload = {}) => {
         if (eventName === "RCON_CONNECTED") {
+          const wasConnected = this.status.connected;
           this.setConnected(true);
-          this.pollingKickPending.players = true;
-          this.pollingKickPending.squads = true;
-          this.startPolling();
+          if (!wasConnected) {
+            this.connectionGeneration += 1;
+            this.kickInitialPolling(this.connectionGeneration);
+          }
           this.emitNativeLog({
             level: "status",
             message: `Connected to ${payload.host}:${payload.port}`,
@@ -384,6 +389,15 @@ export class RconManager {
       lanes.push(createPoolLane(`${kind}-${i + 1}`, client));
     }
     return lanes;
+  }
+
+  kickInitialPolling(generation) {
+    if (!this.polling.enabled) return;
+    if (this.initialRefreshGeneration === generation) return;
+    this.initialRefreshGeneration = generation;
+    this.pollingKickPending.players = true;
+    this.pollingKickPending.squads = true;
+    this.startPolling();
   }
 
   startPolling() {
@@ -739,11 +753,9 @@ export class RconManager {
 
   async refreshPlayers() {
     if (!this.enabled) return [];
-    if (this.refreshInFlight.players) return [];
+    if (this.refreshInFlight.players) return this.refreshInFlight.players;
 
-    this.refreshInFlight.players = true;
-
-    try {
+    const refreshPromise = (async () => {
       const result = await this.dispatchCommand({
         command: "ListPlayers",
         requestedBy: "core.rconManager",
@@ -753,15 +765,19 @@ export class RconManager {
       });
       if (!result?.success) return [];
 
+      const parseStartedAt = Date.now();
       const players = parseListPlayers(result.rconResponse);
+      const parseMs = Date.now() - parseStartedAt;
       this.status.lastPlayersRefresh = new Date().toISOString();
+      this.status.lastListPlayersQueuedMs = Number(result.queuedMs ?? 0);
+      this.status.lastListPlayersExecutionMs = Number(result.executionMs ?? 0);
+      this.status.lastListPlayersParseMs = parseMs;
+      this.status.lastListPlayersCount = players.length;
       this.webStatus.set("playerCount", players.length);
-      this.logger.debug(() => `ListPlayers refreshed (${players.length})`, {
-        operation: "refreshPlayers",
-        data: {
-          players: players.length,
-        },
-      });
+      this.logger.info(
+        `[RCON_PERF] command=ListPlayers queuedMs=${Number(result.queuedMs ?? 0)} executionMs=${Number(result.executionMs ?? 0)} parseMs=${parseMs} playerCount=${players.length}`,
+        { operation: "refreshPlayers" },
+      );
 
       this.eventBus.emitCoreEvent("RCON_LIST_PLAYERS_UPDATED", {
         eventId: `rcon:listPlayers:${Date.now()}`,
@@ -773,20 +789,24 @@ export class RconManager {
         params: [],
         players,
       });
-
       return players;
+    })();
+
+    this.refreshInFlight.players = refreshPromise;
+    try {
+      return await refreshPromise;
     } finally {
-      this.refreshInFlight.players = false;
+      if (this.refreshInFlight.players === refreshPromise) {
+        this.refreshInFlight.players = null;
+      }
     }
   }
 
   async refreshSquads() {
     if (!this.enabled) return [];
-    if (this.refreshInFlight.squads) return [];
+    if (this.refreshInFlight.squads) return this.refreshInFlight.squads;
 
-    this.refreshInFlight.squads = true;
-
-    try {
+    const refreshPromise = (async () => {
       const result = await this.dispatchCommand({
         command: "ListSquads",
         requestedBy: "core.rconManager",
@@ -798,13 +818,10 @@ export class RconManager {
 
       const squads = parseListSquads(result.rconResponse);
       this.status.lastSquadsRefresh = new Date().toISOString();
+      this.status.lastListSquadsQueuedMs = Number(result.queuedMs ?? 0);
+      this.status.lastListSquadsExecutionMs = Number(result.executionMs ?? 0);
+      this.status.lastListSquadsCount = squads.length;
       this.webStatus.set("squadCount", squads.length);
-      this.logger.debug(() => `ListSquads refreshed (${squads.length})`, {
-        operation: "refreshSquads",
-        data: {
-          squads: squads.length,
-        },
-      });
 
       this.eventBus.emitCoreEvent("RCON_LIST_SQUADS_UPDATED", {
         eventId: `rcon:listSquads:${Date.now()}`,
@@ -816,10 +833,16 @@ export class RconManager {
         params: [],
         squads,
       });
-
       return squads;
+    })();
+
+    this.refreshInFlight.squads = refreshPromise;
+    try {
+      return await refreshPromise;
     } finally {
-      this.refreshInFlight.squads = false;
+      if (this.refreshInFlight.squads === refreshPromise) {
+        this.refreshInFlight.squads = null;
+      }
     }
   }
 

@@ -2441,8 +2441,9 @@ async function testRemoteTelemetryAdjustTicketsRouteEnforcesPermission() {
   }
 }
 
-async function testMatchRefreshRoutesDelegateToMatchState() {
+async function testMatchRefreshRoutesUseRconManagerForPlayerQueries() {
   const refreshCalls = [];
+  const rconRefreshCalls = [];
   const matchState = {
     getState() {
       return {
@@ -2490,11 +2491,13 @@ async function testMatchRefreshRoutesDelegateToMatchState() {
         },
       },
       rconManager: {
-        refreshPlayers() {
-          throw new Error("legacy refresh should not be called");
+        async refreshPlayers() {
+          rconRefreshCalls.push("players");
+          return [];
         },
-        refreshSquads() {
-          throw new Error("legacy refresh should not be called");
+        async refreshSquads() {
+          rconRefreshCalls.push("squads");
+          return [];
         },
       },
     },
@@ -2514,10 +2517,11 @@ async function testMatchRefreshRoutesDelegateToMatchState() {
   assert.equal(response.state.status, 200);
   const body = JSON.parse(response.state.body);
   assert.equal(body.ok, true);
-  assert.equal(body.source, "module.matchState");
+  assert.equal(body.source, "core.rconManager");
   assert.equal(body.type, "all");
   assert.equal(body.matchState.serverStatus.map, "AlBasrah");
-  assert.equal(refreshCalls[0], "all");
+  assert.deepEqual(rconRefreshCalls, ["players", "squads"]);
+  assert.deepEqual(refreshCalls, ["serverInfo", "currentMap", "nextMap"]);
 
   const legacy = createRecorder();
   const legacyReq = Readable.from([JSON.stringify({ type: "players" })]);
@@ -2529,9 +2533,10 @@ async function testMatchRefreshRoutesDelegateToMatchState() {
 
   assert.equal(legacy.state.status, 200);
   const legacyBody = JSON.parse(legacy.state.body);
-  assert.equal(legacyBody.source, "module.matchState");
+  assert.equal(legacyBody.source, "core.rconManager");
   assert.equal(legacyBody.type, "players");
-  assert.equal(refreshCalls[1], "players");
+  assert.deepEqual(rconRefreshCalls, ["players", "squads", "players"]);
+  assert.deepEqual(refreshCalls, ["serverInfo", "currentMap", "nextMap"]);
 }
 
 async function testSquadLifecycleRouteReturnsCurrentSnapshot() {
@@ -3742,7 +3747,7 @@ await testMatchSnapshotRouteReusesPrebuiltSnapshot();
 await testRemoteTelemetryStateRouteUsesModuleState();
 await testRemoteTelemetryWriteTicketsRouteDelegatesToModule();
 await testRemoteTelemetryWriteTicketsRouteEnforcesPermission();
-await testMatchRefreshRoutesDelegateToMatchState();
+await testMatchRefreshRoutesUseRconManagerForPlayerQueries();
 await testSquadLifecycleRouteReturnsCurrentSnapshot();
 await testSquadManagementRoutesExposeStateAndMutations();
 await testSettingsRoutesRequireAuthAndSuperAdmin();

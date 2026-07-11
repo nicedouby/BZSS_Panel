@@ -33,6 +33,7 @@ import { ConsoleService } from "./core/console-service.js";
 import { WebRegistry } from "./core/web-registry.js";
 import { WebStatus } from "./core/web-status.js";
 import { RconManager } from "./core/rcon-manager.js";
+import { resolveRconPollingConfig } from "./core/rcon-polling-config.js";
 import { UdpEventReceiver } from "./core/udp-event-receiver.js";
 import { WebServer } from "./core/web-server.js";
 import { PythonLogParserManager } from "./core/python-log-parser-manager.js";
@@ -108,19 +109,14 @@ async function main() {
 
   const rconConfig = configManager.get("rcon", {}) ?? {};
   const matchStateConfig = configManager.get("modules.matchState", {}) ?? {};
-  const rconPollingConfig = rconConfig.polling ?? {};
-  const matchStatePollingConfig = matchStateConfig.polling ?? {};
+  const resolvedRconConfig = resolveRconPollingConfig({
+    rconConfig,
+    matchStateConfig,
+    logger,
+  });
 
   const rconManager = new RconManager({
-    config: {
-      ...rconConfig,
-      matchStatePolling: matchStatePollingConfig,
-      polling: {
-        ...rconPollingConfig,
-        enabled: rconPollingConfig.enabled ?? matchStateConfig.enabled !== false,
-        dynamic: matchStatePollingConfig.dynamic ?? rconPollingConfig.dynamic ?? {},
-      },
-    },
+    config: resolvedRconConfig,
     logger: logger.child({ moduleId: "core.rconManager", source: "core.rconManager" }),
     eventBus,
     webStatus,
