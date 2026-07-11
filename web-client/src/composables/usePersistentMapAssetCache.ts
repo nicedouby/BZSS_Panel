@@ -5,15 +5,20 @@ const MAP_CACHE_VERSION = "v1";
 const MAP_CACHE_NAME = `${MAP_CACHE_PREFIX}${MAP_CACHE_VERSION}`;
 
 const pendingAssets = new Map<string, Promise<string>>();
+let mapCachePromise: Promise<Cache | null> | null = null;
 
 async function openMapCache() {
-  if (typeof window === "undefined" || !("caches" in window)) return null;
-  await Promise.all(
-    (await window.caches.keys())
-      .filter((name) => name.startsWith(MAP_CACHE_PREFIX) && name !== MAP_CACHE_NAME)
-      .map((name) => window.caches.delete(name)),
-  );
-  return window.caches.open(MAP_CACHE_NAME);
+  if (mapCachePromise) return mapCachePromise;
+  mapCachePromise = (async () => {
+    if (typeof window === "undefined" || !("caches" in window)) return null;
+    await Promise.all(
+      (await window.caches.keys())
+        .filter((name) => name.startsWith(MAP_CACHE_PREFIX) && name !== MAP_CACHE_NAME)
+        .map((name) => window.caches.delete(name)),
+    );
+    return window.caches.open(MAP_CACHE_NAME);
+  })();
+  return mapCachePromise;
 }
 
 async function loadAsset(source: string): Promise<string> {
