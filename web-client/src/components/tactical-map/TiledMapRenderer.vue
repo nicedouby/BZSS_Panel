@@ -76,13 +76,28 @@ const emit = defineEmits<{
 
 // Track which tiles have finished loading via native <img> @load event
 const loadedSet = ref(new Set<string>());
-const fallbackLoaded = ref(false);
+const fallbackLoaded = ref(false);\nconst MAX_LOADED_TILE_KEYS = 256;
 
 function onTileLoad(key: string) {
   const next = new Set(loadedSet.value);
   next.add(key);
+  pruneLoadedKeys(next);
   loadedSet.value = next;
   syncReadyState();
+}
+
+function pruneLoadedKeys(target = loadedSet.value) {
+  const activeKeys = new Set([
+    ...visibleTiles.value.map((tile) => tile.key),
+    ...fallbackTiles.value.map((tile) => tile.key),
+  ]);
+  for (const key of target) {
+    if (!activeKeys.has(key)) target.delete(key);
+  }
+  if (target.size <= MAX_LOADED_TILE_KEYS) return;
+  for (const key of [...target].slice(0, target.size - MAX_LOADED_TILE_KEYS)) {
+    target.delete(key);
+  }
 }
 
 function isTileLoaded(key: string) {
@@ -111,8 +126,13 @@ watch(() => props.tileBasePath, () => {
 });
 
 watch(
-  () => [visibleTiles.value.length, fallbackTiles.value.length, props.tilesEnabled] as const,
+  () => [
+    visibleTiles.value.map((tile) => tile.key).join(","),
+    fallbackTiles.value.map((tile) => tile.key).join(","),
+    props.tilesEnabled,
+  ] as const,
   () => {
+    pruneLoadedKeys();
     syncReadyState();
   },
   { immediate: true }
