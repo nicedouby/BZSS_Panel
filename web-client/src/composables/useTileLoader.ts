@@ -49,7 +49,7 @@ export interface UseTileLoaderOptions {
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const TILE_SIZE_PX = 256;
-const LOAD_MARGIN = 1; // Extra tile margin around viewport for preloading
+const LOAD_MARGIN = 1; // Extra tile margin around viewport for preloading\nconst MAX_TRACKED_TILE_KEYS = 256;
 
 // ── Composable ──────────────────────────────────────────────────────────────
 
@@ -67,7 +67,7 @@ export function useTileLoader(options: UseTileLoaderOptions) {
   } = options;
 
   // Track which zoom-level tiles have been seen before (for fallback rendering)
-  const seenTileKeys = new Set<string>();
+  const seenTileKeys = new Map<string, number>();
 
   const visibleTiles = ref<TileInfo[]>([]);
   const fallbackTiles = ref<TileInfo[]>([]);
@@ -131,7 +131,7 @@ export function useTileLoader(options: UseTileLoaderOptions) {
         const tileWidthPct = 100 / tilesPerAxis;
         const tileHeightPct = 100 / tilesPerAxis;
 
-        seenTileKeys.add(key);
+        seenTileKeys.set(key, Date.now());
 
         tiles.push({
           key,
@@ -229,9 +229,29 @@ export function useTileLoader(options: UseTileLoaderOptions) {
     }
   }
 
+  function pruneSeenTileKeys(keepKeys: Set<string>) {
+    for (const key of seenTileKeys.keys()) {
+      if (!keepKeys.has(key)) seenTileKeys.delete(key);
+    }
+    if (seenTileKeys.size <= MAX_TRACKED_TILE_KEYS) return;
+    const entries = [...seenTileKeys.entries()]
+      .sort((left, right) => left[1] - right[1]);
+    for (const [key] of entries.slice(0, seenTileKeys.size - MAX_TRACKED_TILE_KEYS)) {
+      seenTileKeys.delete(key);
+    }
+  }
+
   function refreshTiles() {
+    if (!enabled.value) {
+      visibleTiles.value = [];
+      fallbackTiles.value = [];
+      seenTileKeys.clear();
+      return;
+    }
+
     const nextVisible = computeVisibleTiles();
     const nextFallback = computeFallbackTiles();
+    pruneSeenTileKeys(new Set(nextVisible.map((tile) => tile.key.replace(/^fb-/, ""))));
 
     const currentSrcs = visibleTiles.value.map(t => t.src).join(",");
     const nextSrcs = nextVisible.map(t => t.src).join(",");
