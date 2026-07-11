@@ -1466,6 +1466,8 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         emitRconStatusUpdated();
         void (async () => {
           await refreshServerInfo();
+          await refreshPlayers();
+          await refreshSquads();
           await refreshCurrentMap();
           await refreshNextMap();
         })();
