@@ -35,11 +35,7 @@ export function startRuntimeSync() {
   if (runtimeSyncState.started) return;
   runtimeSyncState.started = true;
   attachVisibilityListener();
-  clearRuntimeTimer();
-  timer = window.setTimeout(() => {
-    timer = null;
-    void fetchSnapshot({ scheduleNext: true, immediate: true });
-  }, 750);
+  void fetchSnapshot({ scheduleNext: true, immediate: true });
 }
 export function stopRuntimeSync() {
   runtimeSyncState.started = false;

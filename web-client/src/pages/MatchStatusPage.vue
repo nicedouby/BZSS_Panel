@@ -2018,12 +2018,6 @@ async function refreshMatchState(scope: "players" | "squads" | "all") {
   refreshingAll.value = scope === "all";
 
   try {
-    const refreshPath = scope === "players"
-      ? "/api/match/refresh/players"
-      : scope === "squads"
-        ? "/api/match/refresh/squads"
-        : "/api/match/refresh/all";
-    await apiPost<any>(refreshPath, {});
     await syncOnce();
     await Promise.all([
       remoteTelemetryQuery.refetch(),
