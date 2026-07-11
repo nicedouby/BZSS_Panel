@@ -49,7 +49,8 @@ export interface UseTileLoaderOptions {
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const TILE_SIZE_PX = 256;
-const LOAD_MARGIN = 1; // Extra tile margin around viewport for preloading\nconst MAX_TRACKED_TILE_KEYS = 256;
+const LOAD_MARGIN = 1; // Extra tile margin around viewport for preloading
+const MAX_TRACKED_TILE_KEYS = 256;
 
 // ── Composable ──────────────────────────────────────────────────────────────
 
@@ -277,6 +278,9 @@ export function useTileLoader(options: UseTileLoaderOptions) {
   // Clear caches when the map changes
   watch(tileBasePath, () => {
     seenTileKeys.clear();
+    visibleTiles.value = [];
+    fallbackTiles.value = [];
+    markDirty();
   });
 
   onBeforeUnmount(() => {
