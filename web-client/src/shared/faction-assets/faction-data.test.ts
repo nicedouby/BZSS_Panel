@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   __factionAssetManifestForTests,
   getFactionFromTeamName,
-  getFlagUrlByTeamName,
+  获取战斗群旗帜,
   getUnitIconUrlByTeamName,
   getChineseNameFromTeamName,
 } from "./faction-data";
@@ -14,8 +14,8 @@ describe("faction-data", () => {
     expect(getFactionFromTeamName("1st Infantry Division")).toBe("USA");
     expect(getFactionFromTeamName("Manticore Security Task Force")).toBe("WPMC");
 
-    expect(getFlagUrlByTeamName("95th Air Assault Brigade")).toContain("AFU.PNG");
-    expect(getFlagUrlByTeamName("1st Infantry Division")).toContain("USA.PNG");
+    expect(获取战斗群旗帜("95th Air Assault Brigade")).toContain("AFU.PNG");
+    expect(获取战斗群旗帜("1st Infantry Division")).toContain("USA.PNG");
     expect(getUnitIconUrlByTeamName("1st Infantry Division")).toContain("T_USA_1st_INFDIV_CombinedArms.PNG");
   });
 
@@ -27,7 +27,7 @@ describe("faction-data", () => {
 
   it("returns null for unknown or partial names", () => {
     expect(getFactionFromTeamName("Unknown Battlegroup")).toBeNull();
-    expect(getFlagUrlByTeamName("95th Air Assault")).toBeNull();
+    expect(获取战斗群旗帜("95th Air Assault")).toBeNull();
     expect(getUnitIconUrlByTeamName("95th Air Assault")).toBeNull();
   });
 
