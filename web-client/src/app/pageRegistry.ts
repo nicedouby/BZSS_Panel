@@ -382,6 +382,17 @@ export const pageRegistry: PageDefinition[] = [
     ...workspacePage,
   },
   {
+    name: "bzss-core-debug",
+    path: "/debug/bzss-core",
+    component: () => import("../pages/BzssCoreDebugPage.vue"),
+    title: "BZSS-Core 解析调试",
+    category: "debug",
+    refreshPolicy: "manual",
+    nav: { section: "opsLive", label: "BZSS-Core 调试", icon: "🧪", order: 27 },
+    requiredPermission: "bzss_core.use",
+    ...workspacePage,
+  },
+  {
     name: "server-info-statistics",
     path: "/plugins/server-info-statistics",
     component: () => import("../pages/ServerInfoStatisticsPage.vue"),
