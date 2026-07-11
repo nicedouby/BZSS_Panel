@@ -1,6 +1,8 @@
 ﻿// -*- coding: utf-8 -*-
 
-const COMPOSE_DEBOUNCE_MS = 50;
+import { compactSnapshot, buildSnapshotDelta, hasMeaningfulDelta } from "./stream-codec.js";
+
+const COMPOSE_DEBOUNCE_MS = 100;
 
 export function createTacticalStateModule({ core, modules, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
@@ -11,14 +13,22 @@ export function createTacticalStateModule({ core, modules, logger }) {
 
   const state = createInitialState();
   const subscribers = new Set();
+  const streamSubscribers = new Set();
   const unsubscribers = [];
   let started = false;
+  let stopped = false;
   let composeTimer = null;
   let composeInFlight = null;
+  let composeDirty = false;
 
   function subscribe(listener) {
     subscribers.add(listener);
     return () => subscribers.delete(listener);
+  }
+
+  function subscribeStream(listener) {
+    streamSubscribers.add(listener);
+    return () => streamSubscribers.delete(listener);
   }
 
   function getServerId() {
@@ -26,16 +36,22 @@ export function createTacticalStateModule({ core, modules, logger }) {
   }
 
   function scheduleCompose() {
-    if (composeTimer) clearTimeout(composeTimer);
+    composeDirty = true;
+    if (composeTimer || composeInFlight || stopped) return;
     composeTimer = setTimeout(() => {
       composeTimer = null;
       void composeSnapshot();
     }, COMPOSE_DEBOUNCE_MS);
+    composeTimer.unref?.();
   }
 
   async function composeSnapshot() {
-    if (composeInFlight) return composeInFlight;
-
+    if (composeInFlight) {
+      composeDirty = true;
+      return composeInFlight;
+    }
+    composeDirty = false;
+    const composeStartedAt = Date.now();
     composeInFlight = (async () => {
       const serverId = getServerId();
       const generatedAt = new Date().toISOString();
@@ -82,6 +98,38 @@ export function createTacticalStateModule({ core, modules, logger }) {
         state.snapshot = snapshot;
         state.lastError = "";
         state.lastUpdatedAt = generatedAt;
+        state.composeCount += 1;
+        state.lastComposeDurationMs = Date.now() - composeStartedAt;
+        state.maxComposeDurationMs = Math.max(state.maxComposeDurationMs, state.lastComposeDurationMs);
+        state.lastPlayerCount = snapshot.players?.length ?? 0;
+
+        const previousCompact = state.compactSnapshot;
+        const nextCompact = compactSnapshot(snapshot);
+        state.compactSnapshot = nextCompact;
+        const envelope = previousCompact
+          ? {
+              ok: true,
+              type: "tactical-state.delta",
+              revision: nextCompact?.meta?.revision ?? state.revision,
+              generatedAt,
+              delta: buildSnapshotDelta(previousCompact, nextCompact),
+            }
+          : { ok: true, type: "tactical-state.snapshot", snapshot: nextCompact };
+        state.deltaBuildCount += previousCompact ? 1 : 0;
+        const shouldBroadcast = !previousCompact || hasMeaningfulDelta(envelope.delta);
+        if (shouldBroadcast) {
+          const streamMessage = { envelope, serialized: JSON.stringify(envelope) };
+          state.serializationCount += 1;
+          state.streamSnapshotEnvelope = previousCompact ? state.streamSnapshotEnvelope : envelope;
+          state.streamSnapshotText = previousCompact ? state.streamSnapshotText : streamMessage.serialized;
+          state.lastDeltaEnvelope = previousCompact ? envelope : null;
+          state.lastDeltaText = previousCompact ? streamMessage.serialized : "";
+          state.lastSnapshotBytes = state.streamSnapshotText.length;
+          state.lastDeltaBytes = state.lastDeltaText.length;
+          for (const listener of streamSubscribers) {
+            try { listener(streamMessage); } catch {}
+          }
+        }
 
         const payload = clonePlainObject(snapshot);
         for (const listener of subscribers) {
@@ -98,7 +146,10 @@ export function createTacticalStateModule({ core, modules, logger }) {
           source: "module.tacticalState",
           serverId,
           time: generatedAt,
-          snapshot: payload,
+          revision: state.revision,
+          playerCount: snapshot.players?.length ?? 0,
+          changedPlayerCount: envelope?.delta?.players?.upsert?.length ?? snapshot.players?.length ?? 0,
+          removedPlayerCount: envelope?.delta?.players?.remove?.length ?? 0,
         });
         return payload;
       } catch (error) {
@@ -116,6 +167,7 @@ export function createTacticalStateModule({ core, modules, logger }) {
         return clonePlainObject(state.snapshot);
       } finally {
         composeInFlight = null;
+        if (composeDirty && !stopped) scheduleCompose();
       }
     })();
 
@@ -123,7 +175,40 @@ export function createTacticalStateModule({ core, modules, logger }) {
   }
 
   async function getSnapshot() {
-    return composeSnapshot();
+    if (!state.snapshot) await composeSnapshot();
+    return clonePlainObject(state.snapshot);
+  }
+
+  async function refreshSnapshot() {
+    composeDirty = true;
+    await composeSnapshot();
+    return clonePlainObject(state.snapshot);
+  }
+
+  async function getStreamSnapshot() {
+    if (!state.snapshot) await composeSnapshot();
+    return {
+      envelope: state.streamSnapshotEnvelope,
+      serialized: state.streamSnapshotText,
+    };
+  }
+
+  function getDiagnostics() {
+    return {
+      composeCount: state.composeCount,
+      composeInFlight: Boolean(composeInFlight),
+      composeDirty,
+      lastComposeDurationMs: state.lastComposeDurationMs,
+      maxComposeDurationMs: state.maxComposeDurationMs,
+      lastPlayerCount: state.lastPlayerCount,
+      subscriberCount: streamSubscribers.size,
+      profileCacheSize: 0,
+      profileDatabaseQueryCount: state.profileDatabaseQueryCount,
+      lastSnapshotBytes: state.lastSnapshotBytes,
+      lastDeltaBytes: state.lastDeltaBytes,
+      deltaBuildCount: state.deltaBuildCount,
+      serializationCount: state.serializationCount,
+    };
   }
 
   async function getPlayers() {
@@ -956,7 +1041,7 @@ export function createTacticalStateModule({ core, modules, logger }) {
   }
 
   async function getComposedSnapshot() {
-    return composeSnapshot();
+    return getSnapshot();
   }
 
   return {
@@ -973,10 +1058,15 @@ export function createTacticalStateModule({ core, modules, logger }) {
       getPlayers,
       getPlayer,
       subscribe,
+      subscribeStream,
+      getStreamSnapshot,
+      refreshSnapshot,
+      getDiagnostics,
     },
     async start() {
       if (started) return;
       started = true;
+      stopped = false;
       const watch = [
         ["module.matchState", "updated"],
         ["module.playerState", "playersSnapshotUpdated"],
@@ -991,6 +1081,7 @@ export function createTacticalStateModule({ core, modules, logger }) {
     },
     async stop() {
       started = false;
+      stopped = true;
       if (composeTimer) {
         clearTimeout(composeTimer);
         composeTimer = null;
@@ -1003,6 +1094,8 @@ export function createTacticalStateModule({ core, modules, logger }) {
         }
       }
       subscribers.clear();
+      streamSubscribers.clear();
+      composeDirty = false;
     },
   };
 }
@@ -1013,6 +1106,20 @@ function createInitialState() {
     generatedAt: "",
     lastUpdatedAt: "",
     snapshot: null,
+    compactSnapshot: null,
+    streamSnapshotEnvelope: null,
+    streamSnapshotText: "",
+    lastDeltaEnvelope: null,
+    lastDeltaText: "",
+    composeCount: 0,
+    lastComposeDurationMs: 0,
+    maxComposeDurationMs: 0,
+    lastPlayerCount: 0,
+    profileDatabaseQueryCount: 0,
+    lastSnapshotBytes: 0,
+    lastDeltaBytes: 0,
+    deltaBuildCount: 0,
+    serializationCount: 0,
     lastError: "",
   };
 }
