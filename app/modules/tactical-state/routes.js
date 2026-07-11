@@ -12,7 +12,9 @@ export async function handleTacticalStateRoutes({ modules, url, req, res, user, 
   }
 
   if (url.pathname === "/api/tactical-state/snapshot" && req.method === "GET") {
-    const snapshot = await tacticalState.getSnapshot?.({ user });
+    const snapshot = url.searchParams.get("compact") === "1"
+      ? await tacticalState.getCompactSnapshot?.({ user })
+      : await tacticalState.getSnapshot?.({ user });
     json(200, { ok: true, snapshot });
     return true;
   }
