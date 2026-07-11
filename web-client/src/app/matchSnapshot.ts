@@ -10,7 +10,15 @@ export function applyMatchSnapshotResponse(response: any, options: { skipPlayers
 
   useServerStore().applyStableSnapshot(buildServerSnapshot(matchState, response?.overview ?? null));
   if (!options.skipPlayers) {
-    usePlayerStore().applySnapshot(buildPlayersSnapshot(matchState.players));
+    const playerStore = usePlayerStore();
+    const nextPlayers = buildPlayersSnapshot(matchState.players);
+    // Do not replace a known-good list with an uninitialized empty snapshot.
+    const isUninitializedEmptySnapshot = nextPlayers.active.length === 0
+      && playerStore.active.length > 0
+      && (nextPlayers.stale || nextPlayers.updatedAt <= 0);
+    if (!isUninitializedEmptySnapshot) {
+      playerStore.applySnapshot(nextPlayers);
+    }
   }
   if (!options.skipSquads) {
     useSquadStore().applySnapshot(buildSquadsSnapshot(matchState.squads));
@@ -106,8 +114,8 @@ export function buildPlayersSnapshot(matchPlayers: any) {
     byEOSID: {} as Record<string, any>,
     byPlayerID: {} as Record<string, any>,
     byName: {} as Record<string, any>,
-    updatedAt: toMillis(matchPlayers?.lastUpdatedAt) || Date.now(),
-    stale: false,
+    updatedAt: toMillis(matchPlayers?.lastUpdatedAt),
+    stale: Boolean(matchPlayers?.stale) || toMillis(matchPlayers?.lastUpdatedAt) <= 0,
   };
 
   for (const player of list) {
