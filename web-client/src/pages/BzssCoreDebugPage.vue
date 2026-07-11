@@ -72,7 +72,8 @@ const loading = ref(false);
 const error = ref("");
 const snapshot = ref<any>(null);
 const raw = ref<any>(null);
-const jsonRef = ref<HTMLElement | null>(null);\nconst showFullJson = ref(false);
+const jsonRef = ref<HTMLElement | null>(null);
+const showFullJson = ref(false);
 
 const runtimePlayers = computed(() => Array.isArray(snapshot.value?.runtimePlayers) ? snapshot.value.runtimePlayers : []);
 const metrics = computed(() => [
@@ -85,7 +86,12 @@ const metrics = computed(() => [
 
 const formattedJson = computed(() => JSON.stringify({ snapshot: snapshot.value, raw: raw.value }, null, 2));
 
-function formatRaw(value: unknown) {\n  const text = String(value ?? '').trim();\n  return text.length > 1000 ? text.slice(0, 1000) + '…' : text || '--';\n}\n\nfunction formatPosition(position: any) {
+function formatRaw(value: unknown) {
+  const text = String(value ?? '').trim();
+  return text.length > 1000 ? text.slice(0, 1000) + '…' : text || '--';
+}
+
+function formatPosition(position: any) {
   if (!position || position.x == null || position.y == null || position.z == null) return "--";
   return `(${position.x}, ${position.y}, ${position.z})`;
 }
