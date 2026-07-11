@@ -252,7 +252,7 @@ export function useTileLoader(options: UseTileLoaderOptions) {
 
     const nextVisible = computeVisibleTiles();
     const nextFallback = computeFallbackTiles();
-    pruneSeenTileKeys(new Set(nextVisible.map((tile) => tile.key.replace(/^fb-/, ""))));
+    pruneSeenTileKeys(new Set([\n      ...nextVisible.map((tile) => tile.key.replace(/^fb-/, "")),\n      ...nextFallback.map((tile) => `${tile.z}-${tile.x}-${tile.y}`),\n    ]));
 
     const currentSrcs = visibleTiles.value.map(t => t.src).join(",");
     const nextSrcs = nextVisible.map(t => t.src).join(",");
