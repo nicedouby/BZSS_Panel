@@ -2,7 +2,26 @@ import { apiGet } from "./apiClient";
 
 export interface TacticalStateSnapshotResponse {
   ok: boolean;
-  snapshot: any;
+  type?: "tactical-state.snapshot" | "tactical-state.delta";
+  snapshot?: any;
+  revision?: number | null;
+  generatedAt?: string;
+  delta?: TacticalStateDelta;
+}
+
+export interface TacticalStateDelta {
+  replace?: any;
+  meta?: any;
+  server?: any;
+  match?: any;
+  teams?: any[];
+  squadFollow?: any;
+  assets?: any;
+  diagnostics?: any;
+  players?: {
+    upsert?: any[];
+    remove?: string[];
+  };
 }
 
 export interface TacticalStatePlayersResponse {
@@ -16,7 +35,7 @@ export interface TacticalStatePlayerResponse {
 }
 
 export async function fetchTacticalStateSnapshot() {
-  return apiGet<TacticalStateSnapshotResponse>("/api/tactical-state/snapshot");
+  return apiGet<TacticalStateSnapshotResponse>("/api/tactical-state/snapshot?compact=1");
 }
 
 export async function fetchTacticalStatePlayers() {
