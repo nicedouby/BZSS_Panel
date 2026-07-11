@@ -1993,26 +1993,38 @@ function getCaptureDashArray(zone: CaptureZoneMarker) {
 }
 
 const teamFactionById = computed(() => {
-  const sources = [
+  const map = new Map<number, string>();
+  const addTeamName = (item: any) => {
+    const teamId = Number(item?.teamId ?? item?.teamID ?? item?.id);
+    if (!Number.isFinite(teamId) || map.has(teamId)) return;
+    const factionName = String(
+      // ListSquads is the authoritative RCON source: Team ID: n (Battlegroup Name).
+      item?.teamName
+      ?? item?.factionName
+      ?? item?.name
+      ?? item?.faction
+      ?? "",
+    ).trim();
+    if (factionName) map.set(teamId, factionName);
+  };
+
+  const teamSources = [
     (snapshot.value as any)?.teams,
     (serverStore.snapshot as any)?.matchState?.teams,
     (serverStore.snapshot as any)?.teams,
   ];
-  const map = new Map<number, string>();
-  for (const source of sources) {
-    if (!Array.isArray(source)) continue;
-    for (const team of source) {
-      const teamId = Number(team?.teamId ?? team?.teamID ?? team?.id);
-      if (!Number.isFinite(teamId) || map.has(teamId)) continue;
-      const factionName = String(
-        team?.factionName
-        ?? team?.teamName
-        ?? team?.name
-        ?? team?.faction
-        ?? "",
-      ).trim();
-      if (factionName) map.set(teamId, factionName);
-    }
+  for (const source of teamSources) {
+    if (Array.isArray(source)) source.forEach(addTeamName);
+  }
+
+  const squadSources = [
+    (snapshot.value as any)?.squads,
+    (snapshot.value as any)?.matchState?.squads?.list,
+    (serverStore.snapshot as any)?.matchState?.squads?.list,
+    (serverStore.snapshot as any)?.squads?.list,
+  ];
+  for (const source of squadSources) {
+    if (Array.isArray(source)) source.forEach(addTeamName);
   }
   return map;
 });
