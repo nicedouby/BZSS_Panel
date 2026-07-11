@@ -1811,6 +1811,7 @@ export function parseBzssCoreLogLine(line) {
   const text = String(line ?? "");
   if (text.includes("PRIFrame{")) return parsePriFrameRuntimeLine(text);
   if (text.includes("PRI{{")) return parsePriRuntimePlayerLine(text);
+  if (text.includes("PIE: Error:") && /\{\s*ID\s*:/i.test(text)) return parseBzssCorePieRuntimeLine(text);
   if (isCompactBzssRuntimeLine(text)) return parseCompactBzssRuntimeLine(text);
   if (text.includes("PlayerBaseInfo{") && text.includes("SoldierInfo{") && text.includes("PlayerScoreboard{")) {
     const players = parseBzssCorePlayerBlocks(text);
@@ -1879,6 +1880,42 @@ function parsePriRuntimeRows(rows, observedAt, rawPrefix = "PRI{{") {
     });
   }
   return runtimePlayers;
+}
+
+function parseBzssCorePieRuntimeLine(text) {
+  const source = String(text ?? "");
+  const observedAt = new Date().toISOString();
+  const rows = splitCompactRuntimeRows(source);
+  const runtimePlayers = [];
+  for (const row of rows) {
+    const match = row.match(/ID\s*:\s*(-?\d+)\s*,\s*Pos\s*:\s*([^}]+?)(?:,\s*CI\s*\{([^}]*)\})?\s*}\s*$/i);
+    if (!match) continue;
+    const playerId = Number(match[1]);
+    const posText = String(match[2] ?? "").trim();
+    const posTokens = posText.split(",").map((value) => value.trim());
+    const invalidPawn = /^InvalidPawn$/i.test(posTokens[0] ?? "");
+    const x = toFiniteNumber(posTokens[0]);
+    const y = toFiniteNumber(posTokens[1]);
+    const z = toFiniteNumber(posTokens[2]);
+    const yaw = toFiniteNumber(posTokens[3]);
+    const position = !invalidPawn && x != null && y != null && z != null
+      ? { x: x * COMPACT_RUNTIME_POSITION_SCALE, y: y * COMPACT_RUNTIME_POSITION_SCALE, z: z * COMPACT_RUNTIME_POSITION_SCALE }
+      : null;
+    const combatInfo = match[3] ? `CI{${match[3]}}` : "";
+    runtimePlayers.push({
+      playerId,
+      playerIndex: playerId,
+      position,
+      yaw: invalidPawn ? null : yaw,
+      combatInfo,
+      presenceHint: invalidPawn ? "noPawn" : "",
+      observedAt,
+      stale: false,
+      soldierInfo: match[3] ? parseCompactRuntimeSoldierInfo(combatInfo) : createEmptySoldierInfo(),
+      rawText: row,
+    });
+  }
+  return { type: "playerRuntime", runtimePlayers, rawFields: [] };
 }
 
 function isCompactBzssRuntimeLine(text) {
