@@ -81,17 +81,7 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
 
   function openRawCaptureStream() {
     if (!rawCaptureEnabled || rawCaptureStream) return;
-    openRawCaptureStream();
-    if (!explosionCleanupTimer) {
-      explosionCleanupTimer = setInterval(() => {
-        const now = Date.now();
-        if (!state.explosions.some((item) => Number(item?.expiresAt ?? Infinity) <= now)) return;
-        publish((draft) => {
-          draft.explosions = draft.explosions.filter((item) => Number(item?.expiresAt ?? Infinity) > now);
-        });
-      }, 250);
-      explosionCleanupTimer.unref?.();
-    }
+    resetRawCaptureFile();
     rawCaptureStream = fs.createWriteStream(rawCapturePath, { flags: "a", encoding: "utf8" });
     rawCaptureStream.on("error", (error) => {
       moduleLogger.warn?.("BZSS-Core raw capture stream failed.", {
@@ -797,7 +787,17 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
   async function start() {
     if (started) return;
     started = true;
-    resetRawCaptureFile();
+    openRawCaptureStream();
+    if (!explosionCleanupTimer) {
+      explosionCleanupTimer = setInterval(() => {
+        const now = Date.now();
+        if (!state.explosions.some((item) => Number(item?.expiresAt ?? Infinity) <= now)) return;
+        publish((draft) => {
+          draft.explosions = draft.explosions.filter((item) => Number(item?.expiresAt ?? Infinity) > now);
+        });
+      }, 250);
+      explosionCleanupTimer.unref?.();
+    }
     if (core.eventBus?.onCoreEvent) {
       unsubscribers.push(core.eventBus.onCoreEvent("On_RawLogLine", handleRawLogLine));
       unsubscribers.push(core.eventBus.onCoreEvent(BZSS_CORE_PLAYER_CHUNK_EVENT_NAME, handleBzssCorePlayerChunk));
@@ -3189,7 +3189,6 @@ function toNumberOrNull(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
-
 
 
 
