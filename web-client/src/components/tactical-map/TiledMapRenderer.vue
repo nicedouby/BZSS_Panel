@@ -3,8 +3,8 @@
     <!-- Fallback: low-res tiles from cached lower zoom level -->
     <template v-for="tile in fallbackTiles" :key="tile.key">
       <img
-        v-if="cachedAssetUrl(tile.src)"
-        :src="cachedAssetUrl(tile.src)"
+        v-if="cachedImageSrc(tile.src)"
+        :src="cachedImageSrc(tile.src)"
         class="map-tile map-tile--fallback"
         :style="tileStyle(tile)"
         draggable="false"
@@ -16,8 +16,8 @@
     <!-- Primary tiles at current zoom level -->
     <template v-for="tile in visibleTiles" :key="tile.key">
       <img
-        v-if="cachedAssetUrl(tile.src)"
-        :src="cachedAssetUrl(tile.src)"
+        v-if="cachedImageSrc(tile.src)"
+        :src="cachedImageSrc(tile.src)"
         class="map-tile"
         :class="{ 'map-tile--loaded': isTileLoaded(tile.key) }"
         :style="tileStyle(tile)"
@@ -30,8 +30,8 @@
 
     <!-- Fallback: original full image stays visible under tiles -->
     <img
-      v-if="fallbackImage && cachedAssetUrl(fallbackImage)"
-      :src="cachedAssetUrl(fallbackImage)"
+      v-if="fallbackImage && cachedImageSrc(fallbackImage)"
+      :src="cachedImageSrc(fallbackImage)"
       alt="Tactical Map"
       class="map-image-fallback"
       draggable="false"
@@ -81,6 +81,11 @@ const mapAssetSources = computed(() => [
 ].filter(Boolean));
 
 const { getAssetUrl: cachedAssetUrl } = usePersistentMapAssetCache(mapAssetSources);
+
+function cachedImageSrc(source?: string) {
+  if (!source) return undefined;
+  return cachedAssetUrl(source) ?? undefined;
+}
 
 const emit = defineEmits<{
   (e: "ready"): void;
