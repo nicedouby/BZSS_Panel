@@ -2496,15 +2496,26 @@ function parseCompactCaptureZones(text) {
   if (!section) return [];
   return extractBraceItems(section).map((raw) => {
     const fields = splitTopLevelCsv(raw);
+    const position = parseCompactSceneVector(fields.slice(1).join(","));
     return {
       name: fields[0] ?? "",
-      isLocked: parseBooleanText(fields[1]),
-      capturePercent: toFiniteNumber(fields[2]),
-      captureDirection: toFiniteNumber(fields[3]),
-      position: null,
+      position,
+      isLocked: parseBooleanText(fields[2]),
+      capturePercent: toFiniteNumber(fields[3]),
+      captureDirection: toFiniteNumber(fields[4]),
       raw,
     };
   }).filter((zone) => zone.name);
+}
+
+function parseCompactSceneVector(text) {
+  const vector = parseVectorBlock(text);
+  if (!vector) return null;
+  return {
+    x: vector.x * COMPACT_RUNTIME_POSITION_SCALE,
+    y: vector.y * COMPACT_RUNTIME_POSITION_SCALE,
+    z: vector.z * COMPACT_RUNTIME_POSITION_SCALE,
+  };
 }
 
 function parseCompactFobs(text) {
