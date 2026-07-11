@@ -63,6 +63,7 @@ export class ModuleManager {
 
     this.registry = {};
     this.instances = [];
+    this.startedInstances = new Set();
   }
 
   async loadBuiltInModules() {
@@ -142,22 +143,29 @@ export class ModuleManager {
         channel: "module",
       }) ?? this.logger;
 
-      if (instance.init) await instance.init();
-      if (instance.start) await instance.start();
-
+      if (this.instances.includes(instance)) continue;
       this.instances.push(instance);
 
-      if (instance.apiName && instance.api) {
-        this.registry[instance.apiName] = instance.api;
-        if (instance.apiName === "pluginSubscriptions") {
-          this.core.pluginSubscriptions = instance.api;
+      const enabled = this.isModuleEnabled(instance);
+      if (enabled) {
+        if (instance.init) await instance.init();
+        if (instance.start && !this.startedInstances.has(instance)) {
+          await instance.start();
+          this.startedInstances.add(instance);
+        }
+
+        if (instance.apiName && instance.api) {
+          this.registry[instance.apiName] = instance.api;
+          if (instance.apiName === "pluginSubscriptions") {
+            this.core.pluginSubscriptions = instance.api;
+          }
         }
       }
 
-      if (!instance.manifest?.hidden && !instance.manifest?.deprecated) {
+      if (!instance.manifest?.hidden) {
         this.registry.pluginSubscriptions?.registerRuntimeItem?.({
           ...(instance.manifest ?? {}),
-          status: this.getRuntimeStatus(instance.manifest),
+          status: enabled ? "running" : "stopped",
         });
       }
 
@@ -183,8 +191,22 @@ export class ModuleManager {
       moduleLogger.debug(`Stopping ${moduleId}`, {
         operation: "stop",
       });
+      if (!this.startedInstances.has(instance)) continue;
       if (instance.stop) await instance.stop();
+      this.startedInstances.delete(instance);
     }
+  }
+
+  isModuleEnabled(instance) {
+    const moduleId = String(instance?.manifest?.id ?? "");
+    const configKey = moduleId.startsWith("module.")
+      ? moduleId.slice("module.".length)
+      : moduleId;
+    const moduleConfig = this.config.get(`modules.${configKey}`, {});
+    const defaultEnabled = instance?.manifest?.defaultEnabled !== false;
+    return moduleConfig.enabled === undefined
+      ? defaultEnabled
+      : moduleConfig.enabled !== false;
   }
 
   getRuntimeStatus(manifest = {}) {
@@ -203,7 +225,6 @@ function inferModuleId(factoryName) {
   const normalized = name.charAt(0).toLowerCase() + name.slice(1);
   return `module.${normalized}`;
 }
-
 
 
 
