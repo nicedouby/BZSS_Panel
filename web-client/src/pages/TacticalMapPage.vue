@@ -94,30 +94,28 @@
             }"
             :title="zone.raw || zone.name"
           >
-            <div class="capture-zone-visual">
-              <div class="capture-flag-emblem">
-                <span class="capture-flag-pole"></span>
-                <span class="capture-flag-banner">
-                  <span class="capture-flag-letter">{{ getFlagLetter(zone.name) }}</span>
-                </span>
-              </div>
-              <div class="node-label-container">
-                <span class="node-index-label">OBJ {{ zone.name.includes('-') ? zone.name.split('-')[0] : '' }}</span>
-                <span class="node-name-text">{{ zone.name.includes('-') ? zone.name.split('-').slice(1).join('-') : zone.name }}</span>
-              </div>
-              <div class="capture-progress-ring">
-                <svg viewBox="0 0 36 36">
-                  <circle class="capture-progress-bg" cx="18" cy="18" r="15" />
-                  <circle
-                    class="capture-progress-fill"
-                    cx="18"
-                    cy="18"
-                    r="15"
-                    :stroke-dasharray="getCaptureDashArray(zone)"
-                  />
-                </svg>
-                <span class="capture-progress-text">{{ formatCapturePercent(zone.capturePercent) }}</span>
-              </div>
+            <div class="capture-flag-emblem">
+              <span class="capture-flag-pole"></span>
+              <span class="capture-flag-banner">
+                <span class="capture-flag-letter">{{ getFlagLetter(zone.name) }}</span>
+              </span>
+            </div>
+            <div class="node-label-container">
+              <span class="node-index-label">OBJ {{ zone.name.includes('-') ? zone.name.split('-')[0] : '' }}</span>
+              <span class="node-name-text">{{ zone.name.includes('-') ? zone.name.split('-').slice(1).join('-') : zone.name }}</span>
+            </div>
+            <div class="capture-progress-ring">
+              <svg viewBox="0 0 36 36">
+                <circle class="capture-progress-bg" cx="18" cy="18" r="15" />
+                <circle
+                  class="capture-progress-fill"
+                  cx="18"
+                  cy="18"
+                  r="15"
+                  :stroke-dasharray="getCaptureDashArray(zone)"
+                />
+              </svg>
+              <span class="capture-progress-text">{{ formatCapturePercent(zone.capturePercent) }}</span>
             </div>
           </button>
         </div>
