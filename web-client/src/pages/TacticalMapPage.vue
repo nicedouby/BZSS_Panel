@@ -142,102 +142,63 @@
               <circle
                 :cx="fob.mapX * 10"
                 :cy="fob.mapY * 10"
-                :r="Number(fob.exclusionRadius ?? 0) > 0 ? metersToSvgRadius(400) : 0"
+                :r="metersToSvgRadius(fob.exclusionRadius ?? 300)"
                 class="fob-radius-circle fob-radius-exclusion"
+                vector-effect="non-scaling-stroke"
               />
               <circle
                 :cx="fob.mapX * 10"
                 :cy="fob.mapY * 10"
-                :r="Number(fob.constructionRadius ?? 0) > 0 ? metersToSvgRadius(150) : 0"
+                :r="metersToSvgRadius(fob.constructionRadius ?? 150)"
                 class="fob-radius-circle fob-radius-construction"
+                vector-effect="non-scaling-stroke"
               />
             </g>
           </svg>
+
           <div
             v-for="fob in fobMarkers"
             :key="fob.id"
             class="fob-marker"
-            :class="[`team-${fob.teamId}`, { 'is-bleeding': fob.isBleeding }]"
+            :class="[`team-${fob.teamId ?? 0}`, { 'is-bleeding': fob.isBleeding }]"
             :style="{
               left: `${fob.mapX}%`,
               top: `${fob.mapY}%`,
-              transform: `translate(-50%, -50%) scale(${dynamicMarkerScale})`,
+              '--fob-marker-scale': dynamicMarkerScale,
             }"
             :title="fob.raw || fob.name"
           >
-            <div class="tactical-fob-node">
-              <div class="fob-ring-outer">
-                <svg class="fob-status-ring" viewBox="0 0 36 36">
-                  <!-- Construction background circle -->
-                  <circle class="ring-bg" cx="18" cy="18" r="14" stroke="rgba(255, 255, 255, 0.05)" stroke-width="2" fill="none" />
-                  <!-- Construction circle track (orange) -->
-                  <circle class="ring-track const-track" cx="18" cy="18" r="14" stroke-width="2" :stroke-dasharray="getConstructionDashArray(fob)" />
-                  <!-- Ammo background circle -->
-                  <circle class="ring-bg" cx="18" cy="18" r="11" stroke="rgba(255, 255, 255, 0.05)" stroke-width="2" fill="none" />
-                  <!-- Ammo circle track (cyan) -->
-                  <circle class="ring-track ammo-track" cx="18" cy="18" r="11" stroke-width="2" :stroke-dasharray="getAmmoDashArray(fob)" />
-                </svg>
-                
-                <div class="fob-core-icon">
-                  <!-- Sleek communication satellite/radio tower SVG -->
-                  <svg class="fob-svg-icon" viewBox="0 0 24 24" width="12" height="12">
-                    <path fill="currentColor" d="M12 2A10 10 0 0 0 2 12a9.9 9.9 0 0 0 3.3 7.4l1.4-1.4A8 8 0 1 1 12 20a8 8 0 0 1-5.3-2l-1.4 1.4A9.9 9.9 0 0 0 12 22a10 10 0 0 0 10-10A10 10 0 0 0 12 2zm0 4a6 6 0 0 0-6 6c0 1.6.6 3.1 1.7 4.2l1.4-1.4A4 4 0 1 1 12 16a4 4 0 0 1-2.8-1.2l-1.4 1.4A5.9 5.9 0 0 0 12 18a6 6 0 0 0 6-6 6 6 0 0 0-6-6zm0 4a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/>
-                  </svg>
-                  <span class="fob-core-glow"></span>
-                </div>
+            <div class="fob-visual">
+              <div class="fob-fortress">
+                <span class="fob-battlement fob-battlement--left"></span>
+                <span class="fob-battlement fob-battlement--right"></span>
+                <span class="fob-fortress-gate"></span>
+                <span v-if="fob.isBleeding" class="fob-alert">!</span>
               </div>
-              
-              <!-- Quick Status HUD under the marker -->
-              <div class="fob-quick-hud">
-                <span class="hud-bar hp-bar" :style="{ width: `${Math.round((fob.health ?? 0) * 100)}%` }"></span>
+
+              <div class="fob-resource-panel">
+                <span class="fob-resource fob-resource--ammo">
+                  <small>AMMO</small>
+                  <strong>{{ formatFobResource(fob.ammo) }}</strong>
+                </span>
+                <span class="fob-resource fob-resource--construction">
+                  <small>BUILD</small>
+                  <strong>{{ formatFobResource(fob.construction) }}</strong>
+                </span>
               </div>
-              
-              <span class="fob-node-name">FOB [T{{ fob.teamId }}]</span>
-            </div>
-            
-            <!-- FOB Tooltip -->
-            <div class="fob-tooltip">
-              <div class="fob-tooltip-title">{{ fob.name || 'FOB Radio' }}</div>
-              <div class="fob-tooltip-grid">
-                <!-- Health Bar -->
-                <div class="fob-tooltip-metric">
-                  <div class="metric-info">
-                    <span class="metric-label">RADIO HP</span>
-                    <span class="metric-value" :class="{ 'warning-text': Number(fob.health ?? 0) < 1.0 }">
-                      {{ Math.round((fob.health ?? 0) * 100) }}%
-                    </span>
-                  </div>
-                  <div class="metric-bar-track">
-                    <div class="metric-bar-fill hp-fill" :style="{ width: `${Math.round((fob.health ?? 0) * 100)}%` }" :class="{ 'is-bleeding-fill': fob.isBleeding }"></div>
-                  </div>
-                </div>
-                
-                <!-- Ammo Bar -->
-                <div class="fob-tooltip-metric">
-                  <div class="metric-info">
-                    <span class="metric-label">AMMO</span>
-                    <span class="metric-value">{{ Math.round(fob.ammo ?? 0) }} / 10000</span>
-                  </div>
-                  <div class="metric-bar-track">
-                    <div class="metric-bar-fill ammo-fill" :style="{ width: `${Math.min(100, Math.round((fob.ammo ?? 0) / 100))}%` }"></div>
-                  </div>
-                </div>
 
-                <!-- Construction Bar -->
-                <div class="fob-tooltip-metric">
-                  <div class="metric-info">
-                    <span class="metric-label">CONSTRUCTION</span>
-                    <span class="metric-value">{{ Math.round(fob.construction ?? 0) }} / 2000</span>
-                  </div>
-                  <div class="metric-bar-track">
-                    <div class="metric-bar-fill const-fill" :style="{ width: `${Math.min(100, Math.round((fob.construction ?? 0) / 20))}%` }"></div>
-                  </div>
-                </div>
+              <span class="fob-marker-name">{{ fob.name || `FOB T${fob.teamId ?? "--"}` }}</span>
+              <span class="fob-anchor-dot"></span>
 
-                <!-- Bleeding Warning -->
-                <div class="fob-tooltip-item alert-item" v-if="fob.isBleeding">
-                  <span class="fob-tooltip-value bleeding-alert">⚠️ BLEEDING OUT!</span>
-                </div>
+              <div class="fob-tooltip">
+                <strong>{{ fob.name || "FOB Radio" }}</strong>
+                <span>阵营：T{{ fob.teamId ?? "--" }}</span>
+                <span>弹药：{{ formatFobResource(fob.ammo) }}</span>
+                <span>建材：{{ formatFobResource(fob.construction) }}</span>
+                <span>建造圈：150m</span>
+                <span>排除圈：300m</span>
+                <span v-if="fob.health != null">Radio HP：{{ Math.round(Number(fob.health) * 100) }}%</span>
+                <span v-if="fob.isBleeding" class="fob-tooltip-alert">FOB 正在流血</span>
               </div>
             </div>
           </div>
@@ -2118,9 +2079,9 @@ const fobMarkers = computed<FobMarker[]>(() => {
       mapY: project(y, bounds.minY, bounds.maxY),
       gameX: x,
       gameY: y,
-      exclusionRadius: 40000,
-      constructionRadius: 15000,
-      radiusPx: metersToSvgRadius(400),
+      exclusionRadius: 300,
+      constructionRadius: 150,
+      radiusPx: metersToSvgRadius(300),
       raw: fob.raw,
     });
   }
@@ -2984,20 +2945,10 @@ function cleanWeaponName(weaponClass: string | null | undefined): string {
     .replace(/_\d+$/, "");
 }
 
-function getConstructionDashArray(fob: any) {
-  const construction = Number(fob.construction ?? 0);
-  const max = 2000;
-  const ratio = Math.min(1.0, Math.max(0.0, construction / max));
-  const perimeter = 2 * Math.PI * 14; // ~87.96
-  return `${ratio * perimeter} ${perimeter}`;
-}
-
-function getAmmoDashArray(fob: any) {
-  const ammo = Number(fob.ammo ?? 0);
-  const max = 10000;
-  const ratio = Math.min(1.0, Math.max(0.0, ammo / max));
-  const perimeter = 2 * Math.PI * 11; // ~69.1
-  return `${ratio * perimeter} ${perimeter}`;
+function formatFobResource(value: number | null | undefined) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "--";
+  return Math.max(0, Math.round(numeric)).toLocaleString();
 }
 
 function handleWindowKeyDown(e: KeyboardEvent) {
