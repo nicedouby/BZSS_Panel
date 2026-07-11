@@ -49,11 +49,16 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
     channel: "module",
   }) ?? core.logger;
   const rawCaptureEnabled = Boolean(config?.get?.("modules.bzssCoreMonitor.rawCapture.enabled", false));
+  const rawCaptureMaxBufferedBytes = Number(config?.get?.("modules.bzssCoreMonitor.rawCapture.maxBufferedBytes", 4_194_304) ?? 4_194_304);
+  const maxActiveExplosions = Number(config?.get?.("modules.bzssCoreMonitor.maxActiveExplosions", 128) ?? 128);
 
   const state = createInitialState();
   let started = false;
   const unsubscribers = [];
-  const activeTimeouts = new Set();
+  let explosionCleanupTimer = null;
+  let rawCaptureStream = null;
+  let droppedRawCaptureLines = 0;
+  let lastRawCaptureWarningAt = 0;
   const rawCapturePath = path.resolve(process.cwd(), RAW_CAPTURE_RELATIVE_PATH);
   let broadcastTimer = null;
   let broadcastPending = false;
@@ -74,23 +79,46 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
     }
   }
 
-  function appendRawCapture(line) {
-    if (!rawCaptureEnabled) return;
-    try {
-      fs.mkdirSync(path.dirname(rawCapturePath), { recursive: true });
-      fs.appendFileSync(rawCapturePath, `${JSON.stringify({
-        observedAt: new Date().toISOString(),
-        rawLine: String(line ?? ""),
-      })}\n`, "utf8");
-    } catch (error) {
-      moduleLogger.warn?.("Failed to append BZSS-Core raw capture.", {
-        operation: "bzssCoreMonitor.rawCapture.appendFailed",
-        data: {
-          filePath: rawCapturePath,
-          error: error?.message ?? String(error),
-        },
-      });
+  function openRawCaptureStream() {
+    if (!rawCaptureEnabled || rawCaptureStream) return;
+    openRawCaptureStream();
+    if (!explosionCleanupTimer) {
+      explosionCleanupTimer = setInterval(() => {
+        const now = Date.now();
+        if (!state.explosions.some((item) => Number(item?.expiresAt ?? Infinity) <= now)) return;
+        publish((draft) => {
+          draft.explosions = draft.explosions.filter((item) => Number(item?.expiresAt ?? Infinity) > now);
+        });
+      }, 250);
+      explosionCleanupTimer.unref?.();
     }
+    rawCaptureStream = fs.createWriteStream(rawCapturePath, { flags: "a", encoding: "utf8" });
+    rawCaptureStream.on("error", (error) => {
+      moduleLogger.warn?.("BZSS-Core raw capture stream failed.", {
+        operation: "bzssCoreMonitor.rawCapture.streamFailed",
+        data: { filePath: rawCapturePath, error: error?.message ?? String(error) },
+      });
+    });
+  }
+
+  function appendRawCapture(line) {
+    if (!rawCaptureEnabled || !rawCaptureStream) return;
+    if (rawCaptureStream.writableLength > rawCaptureMaxBufferedBytes) {
+      droppedRawCaptureLines += 1;
+      const now = Date.now();
+      if (now - lastRawCaptureWarningAt >= 60_000) {
+        lastRawCaptureWarningAt = now;
+        moduleLogger.warn?.("BZSS-Core raw capture buffer full; dropping debug lines.", {
+          operation: "bzssCoreMonitor.rawCapture.backpressure",
+          data: { droppedRawCaptureLines, writableLength: rawCaptureStream.writableLength },
+        });
+      }
+      return;
+    }
+    rawCaptureStream.write(`${JSON.stringify({
+      observedAt: new Date().toISOString(),
+      rawLine: String(line ?? ""),
+    })}\n`);
   }
 
   const listeners = new Set();
@@ -275,17 +303,13 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
             if (!draft.explosions) {
               draft.explosions = [];
             }
-            draft.explosions.push(parsed.explosion);
-
-            const timeoutId = setTimeout(() => {
-              activeTimeouts.delete(timeoutId);
-              publish((d) => {
-                if (d.explosions) {
-                  d.explosions = d.explosions.filter((e) => e.id !== parsed.explosion.id);
-                }
-              });
-            }, 3000);
-            activeTimeouts.add(timeoutId);
+            draft.explosions.push({
+              ...parsed.explosion,
+              expiresAt: Date.now() + 3000,
+            });
+            if (draft.explosions.length > maxActiveExplosions) {
+              draft.explosions.splice(0, draft.explosions.length - maxActiveExplosions);
+            }
           }
         }
       });
@@ -794,10 +818,19 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
         // ignore
       }
     }
-    for (const timeoutId of activeTimeouts) {
-      clearTimeout(timeoutId);
+    if (explosionCleanupTimer) clearInterval(explosionCleanupTimer);
+    explosionCleanupTimer = null;
+    if (broadcastTimer) clearTimeout(broadcastTimer);
+    broadcastTimer = null;
+    if (rawCaptureStream) {
+      const stream = rawCaptureStream;
+      rawCaptureStream = null;
+      await new Promise((resolve) => {
+        stream.once("finish", resolve);
+        stream.once("error", resolve);
+        stream.end();
+      });
     }
-    activeTimeouts.clear();
     for (const assembly of state.priFramesById.values()) {
       clearPriFrameTimeout(assembly);
     }
@@ -3156,7 +3189,6 @@ function toNumberOrNull(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
-
 
 
 
