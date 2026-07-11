@@ -357,25 +357,89 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
     return result;
   }
 
+  function parseBzssCoreChunkPosition(rawPlayer) {
+    const candidates = [];
+    if (rawPlayer && typeof rawPlayer === "object" && !Array.isArray(rawPlayer)) {
+      candidates.push(
+        rawPlayer.position,
+        rawPlayer.pos,
+        rawPlayer.location,
+        rawPlayer.telemetry?.position,
+      );
+      if ([rawPlayer.x, rawPlayer.y, rawPlayer.z].every((value) => toNumberOrNull(value) != null)) {
+        candidates.push({ x: rawPlayer.x, y: rawPlayer.y, z: rawPlayer.z });
+      }
+    }
+    if (Array.isArray(rawPlayer)) {
+      for (const value of rawPlayer) {
+        if (value && typeof value === "object") {
+          candidates.push(value.position, value.pos, value.location, value);
+        }
+      }
+      // Newer BZSS-Core builds append x/y/z[/yaw] to the compact row.
+      if (rawPlayer.length >= 13) {
+        const offset = rawPlayer.length - 4;
+        const x = toNumberOrNull(rawPlayer[offset]);
+        const y = toNumberOrNull(rawPlayer[offset + 1]);
+        const z = toNumberOrNull(rawPlayer[offset + 2]);
+        if (x != null && y != null && z != null) {
+          candidates.push({ x, y, z, yaw: toNumberOrNull(rawPlayer[offset + 3]) });
+        }
+      }
+    }
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate) && candidate.length >= 3) {
+        const x = toNumberOrNull(candidate[0]);
+        const y = toNumberOrNull(candidate[1]);
+        const z = toNumberOrNull(candidate[2]);
+        if (x != null && y != null && z != null) {
+          return {
+            position: { x, y, z },
+            yaw: toNumberOrNull(candidate[3]),
+          };
+        }
+      }
+      if (!candidate || typeof candidate !== "object") continue;
+      const x = toNumberOrNull(candidate.x ?? candidate.X);
+      const y = toNumberOrNull(candidate.y ?? candidate.Y);
+      const z = toNumberOrNull(candidate.z ?? candidate.Z);
+      if (x == null || y == null || z == null) continue;
+      return {
+        position: { x, y, z },
+        yaw: toNumberOrNull(candidate.yaw ?? candidate.Yaw ?? candidate.rotation?.z),
+      };
+    }
+    return { position: null, yaw: null };
+  }
+
   function upsertBzssCorePlayerChunkRecord(draft, rawPlayer, observedAt) {
-    if (!Array.isArray(rawPlayer) || rawPlayer.length === 0) return;
-    const playerId = toNumberOrNull(rawPlayer[0]);
+    if ((!Array.isArray(rawPlayer) && (!rawPlayer || typeof rawPlayer !== "object")) || rawPlayer.length === 0) return;
+    const getField = (index, ...keys) => (Array.isArray(rawPlayer)
+      ? rawPlayer[index]
+      : keys.map((key) => rawPlayer[key]).find((value) => value != null));
+    const playerId = toNumberOrNull(getField(0, "playerId", "playerID", "id", "index"));
     if (playerId == null) return;
     const key = `id:${playerId}`;
     const existing = draft.playersByKey.get(key) ?? createPlaceholderPlayerRecord({ playerId }, observedAt);
+    const chunkTelemetry = parseBzssCoreChunkPosition(rawPlayer);
+    const chunkName = getField(8, "playerName", "name", "displayName");
     existing.playerId = playerId;
     existing.playerIndex = playerId;
     existing.lastSeenAt = observedAt;
     existing.stale = false;
     existing.sourceTypes = mergeUniqueStrings(existing.sourceTypes, ["bzssCorePlayerChunk"]);
     existing.rawText = JSON.stringify(rawPlayer);
-    existing.ping = toNumberOrNull(rawPlayer[6]) ?? existing.ping ?? null;
-    existing.ftIndex = toNumberOrNull(rawPlayer[8]) ?? existing.ftIndex ?? null;
-    existing.ftPosition = toNumberOrNull(rawPlayer[9]) ?? existing.ftPosition ?? null;
-    existing.teamId = toNumberOrNull(rawPlayer[3]) ?? existing.teamId ?? null;
-    existing.squadId = toNumberOrNull(rawPlayer[4]) ?? existing.squadId ?? null;
+    existing.ping = toNumberOrNull(getField(6, "ping")) ?? existing.ping ?? null;
+    existing.ftIndex = toNumberOrNull(getField(8, "ftIndex", "fireTeamIndex")) ?? existing.ftIndex ?? null;
+    existing.ftPosition = toNumberOrNull(getField(9, "ftPosition", "fireTeamPosition")) ?? existing.ftPosition ?? null;
+    existing.teamId = toNumberOrNull(getField(3, "teamId", "teamID", "team")) ?? existing.teamId ?? null;
+    existing.squadId = toNumberOrNull(getField(4, "squadId", "squadID", "squad")) ?? existing.squadId ?? null;
+    existing.position = chunkTelemetry.position ?? existing.position ?? null;
+    existing.yaw = chunkTelemetry.yaw ?? existing.yaw ?? null;
     existing.presenceHint = "chunk";
-    existing.playerName = String(rawPlayer[8] ?? existing.playerName ?? "");
+    if (chunkName != null && String(chunkName).trim()) {
+      existing.playerName = String(chunkName);
+    }
     existing.playerScoreboard = existing.playerScoreboard ?? createEmptyScoreboardInfo();
     existing.identityKeys = [key];
     draft.playersByKey.set(key, existing);
