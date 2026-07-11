@@ -140,7 +140,7 @@ import { computed } from "vue";
 import type { PlayerRowViewModel, TeamViewModel, SquadViewModel, CombatStats, SquadLeaderRowViewModel } from "../../types/squad-admin.types";
 import SquadCard from "./SquadCard.vue";
 import { extractPlaytimeHours } from "../../utils/squad-admin-adapter";
-import { getFlagUrlByTeamName, getUnitIconUrlByTeamName } from "../../shared/faction-assets/faction-data";
+import { 获取战斗群旗帜, getUnitIconUrlByTeamName } from "../../shared/faction-assets/faction-data";
 
 const props = defineProps<{
   team: TeamViewModel;
@@ -164,7 +164,7 @@ const teamColorClass = computed(() => (props.team.teamColorType === "team1" ? "t
 const isComfortable = computed(() => props.densityMode !== "compact");
 
 const factionFlagUrl = computed(() => {
-  return getFlagUrlByTeamName(props.team.teamName);
+  return 获取战斗群旗帜(props.team.teamName);
 });
 const unitIconUrl = computed(() => {
   return getUnitIconUrlByTeamName(props.team.teamName);
@@ -824,5 +824,4 @@ const teamAveragePingText = computed(() => {
   gap: 6px;
 }
 </style>
-
 
