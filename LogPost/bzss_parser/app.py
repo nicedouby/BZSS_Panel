@@ -32,6 +32,11 @@ from bzss_parser.udp_sender import UdpSender
 
 MatchedEvent = Tuple[str, List[Tuple[str, str]]]
 
+BZSS_CORE_RUNTIME_LINE_RE = re.compile(r"\\{\\s*ID\\s*:\\s*-?\\d+\\s*,\\s*Pos\\s*:", re.IGNORECASE)
+
+def is_bzss_core_runtime_line(line: str) -> bool:
+    return bool(BZSS_CORE_RUNTIME_LINE_RE.search(str(line or "")))
+
 
 class BzssLogParserApp:
     def __init__(self, config: Dict[str, Any]) -> None:
@@ -458,6 +463,12 @@ class BzssLogParserApp:
 
         if self.raw_log_output_drop_blacklisted and self.blacklist.is_blacklisted(line):
             return False
+
+        # BZSS-Core runtime frames are required by the panel position monitor.
+        # They are not part of the generic raw output token list because they
+        # are emitted as PIE/Error lines, so keep them even when contains is set.
+        if is_bzss_core_runtime_line(line):
+            return self.raw_log_rate_limiter_allow()
 
         if self.raw_log_output_only_preserved:
             return bool(preserved_rule or self.preserve_filter.match(line))
