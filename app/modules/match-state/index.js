@@ -1527,6 +1527,8 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       const initialRconStatus = core.rconManager.getStatus();
       if (initialRconStatus?.connected) {
         await refreshServerInfo();
+        await refreshPlayers();
+        await refreshSquads();
         await refreshCurrentMap();
         await refreshNextMap();
       }
