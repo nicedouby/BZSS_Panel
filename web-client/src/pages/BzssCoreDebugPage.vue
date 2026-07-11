@@ -59,7 +59,7 @@
 
     <section class="panel">
       <h2>完整 API 返回（可复制）</h2>
-      <pre ref="jsonRef" class="json">{{ formattedJson }}</pre>
+      <pre v-if="showFullJson" ref="jsonRef" class="json">{{ formattedJson }}</pre>
     </section>
   </section>
 </template>
