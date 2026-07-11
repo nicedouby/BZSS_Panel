@@ -388,6 +388,17 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
       }
     }
     for (const candidate of candidates) {
+      if (Array.isArray(candidate) && candidate.length >= 3) {
+        const x = toNumberOrNull(candidate[0]);
+        const y = toNumberOrNull(candidate[1]);
+        const z = toNumberOrNull(candidate[2]);
+        if (x != null && y != null && z != null) {
+          return {
+            position: { x, y, z },
+            yaw: toNumberOrNull(candidate[3]),
+          };
+        }
+      }
       if (!candidate || typeof candidate !== "object") continue;
       const x = toNumberOrNull(candidate.x ?? candidate.X);
       const y = toNumberOrNull(candidate.y ?? candidate.Y);
