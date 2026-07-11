@@ -19,6 +19,8 @@ export class PerformanceMonitor {
     
     this.enabled = this.config?.get?.("performance.enabled", true) ?? true;
     this.networkEnabled = this.config?.get?.("performance.network.enabled", false) ?? false;
+    this.networkSampleIntervalMs = Number(this.config?.get?.("performance.network.sampleIntervalMs", 60000) ?? 60000);
+    this.networkCommandTimeoutMs = Number(this.config?.get?.("performance.network.commandTimeoutMs", 5000) ?? 5000);
     this.sampleIntervalMs = Number(this.config?.get?.("performance.sampleIntervalMs", 10000) ?? 10000);
     this.logIntervalMs = Number(this.config?.get?.("performance.logIntervalMs", 60000) ?? 60000);
     this.maxHistoryPoints = Number(this.config?.get?.("performance.maxHistoryPoints", 120) ?? 120);
@@ -43,6 +45,10 @@ export class PerformanceMonitor {
   }
 
   start() {
+    if (this.sampleTimer || this.logTimer) {
+      this.logger?.warn("PerformanceMonitor is already running.");
+      return;
+    }
     if (!this.enabled) {
       this.logger?.info("PerformanceMonitor is disabled.");
       return;
@@ -88,7 +94,7 @@ export class PerformanceMonitor {
 
   sample() {
     try {
-      if (this.networkEnabled) {
+      if (this.networkEnabled && (!this.lastNetworkSampleAt || Date.now() - this.lastNetworkSampleAt >= this.networkSampleIntervalMs)) {
         this.#triggerNetworkSampling();
       }
 
@@ -220,7 +226,11 @@ export class PerformanceMonitor {
         "-NonInteractive",
         "-Command",
         script,
-      ], { encoding: "utf8" });
+      ], {
+        encoding: "utf8",
+        timeout: this.networkCommandTimeoutMs,
+        maxBuffer: 1024 * 1024,
+      });
 
       const output = stdout.trim();
       if (!output) return null;
