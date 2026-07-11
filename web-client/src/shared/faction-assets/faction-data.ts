@@ -497,11 +497,18 @@ export function getFlagUrl(factionCode: string): string | null {
   return getAssetUrlByBasename(factionFlagBasenames[normalizedCode] ?? null);
 }
 
-export function getFlagUrlByTeamName(teamName: string): string | null {
-  const factionCode = getFactionFromTeamName(teamName);
+/**
+ * 根据 RCON / 对局状态中的战斗群（编制）名称，返回所属阵营的旗帜资源。
+ * 支持完整名称、已登记别名及阵营代码；无法识别时返回 null。
+ */
+export function 获取战斗群旗帜(战斗群名称: string): string | null {
+  const factionCode = getFactionFromTeamName(战斗群名称);
   if (!factionCode) return null;
   return getFlagUrl(factionCode);
 }
+
+/** @deprecated 请使用 获取战斗群旗帜。 */
+export const getFlagUrlByTeamName = 获取战斗群旗帜;
 
 export function getUnitIconUrlByTeamName(teamName: string): string | null {
   return getAssetUrlByBasename(resolveBattlegroupVisual(teamName)?.unitIconBasename ?? null);
