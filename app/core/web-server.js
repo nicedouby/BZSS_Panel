@@ -98,6 +98,7 @@ export class WebServer {
     this.memoryHistory = [];
     this.maxMemoryHistoryPoints = 120;
     this.memoryInterval = null;
+    this.initialMatchHydration = null;
   }
 
   async start() {
@@ -890,6 +891,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/snapshot/all" && req.method === "GET") {
+      await this.ensureInitialMatchPlayers();
       return this.json(res, 200, cleanSnapshotAllForClient(this.core.runtimeState.getAll()));
     }
 
@@ -3687,6 +3689,32 @@ export class WebServer {
     }
 
     return Buffer.concat(chunks, totalLength).toString("utf8");
+  }
+
+  async ensureInitialMatchPlayers() {
+    const runtimeState = this.core.runtimeState;
+    const currentPlayers = runtimeState?.getPlayers?.() ?? null;
+    const rconStatus = this.core.rconManager?.getStatus?.() ?? {};
+
+    // Only hydrate an uninitialized snapshot. Once a valid RCON result exists,
+    // ordinary snapshot reads must remain cheap and must not issue commands.
+    if (!rconStatus.connected || Number(currentPlayers?.updatedAt ?? 0) > 0) return;
+    const refresh = this.modules.matchState?.refresh;
+    if (typeof refresh !== "function") return;
+
+    if (!this.initialMatchHydration) {
+      this.initialMatchHydration = Promise.resolve()
+        .then(() => refresh("players"))
+        .catch((error) => {
+          this.logger.warn?.(`Initial match player hydration failed: ${error?.message ?? error}`);
+          return null;
+        })
+        .finally(() => {
+          this.initialMatchHydration = null;
+        });
+    }
+
+    await this.initialMatchHydration;
   }
 
   getMatchOverviewFromRuntime() {
