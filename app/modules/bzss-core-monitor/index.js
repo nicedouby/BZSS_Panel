@@ -1885,14 +1885,11 @@ function parsePriRuntimeRows(rows, observedAt, rawPrefix = "PRI{{") {
 function parseBzssCorePieRuntimeLine(text) {
   const source = String(text ?? "");
   const observedAt = new Date().toISOString();
-  const rows = splitCompactRuntimeRows(source);
+  const rowPattern = /\\{\\s*ID\\s*:\\s*(-?\\d+)\\s*,\\s*Pos\\s*:\\s*([^,}]+(?:\\s*,\\s*[^,}]+){0,3})(?:\\s*,\\s*(CI\\s*\\{[^}]*\\}|\\{[^}]*\\}))?\\s*\\}/gi;
   const runtimePlayers = [];
-  for (const row of rows) {
-    const match = row.match(/ID\s*:\s*(-?\d+)\s*,\s*Pos\s*:\s*([^}]+?)(?:,\s*CI\s*\{([^}]*)\})?\s*}\s*$/i);
-    if (!match) continue;
+  for (const match of source.matchAll(rowPattern)) {
     const playerId = Number(match[1]);
-    const posText = String(match[2] ?? "").trim();
-    const posTokens = posText.split(",").map((value) => value.trim());
+    const posTokens = String(match[2] ?? "").split(",").map((value) => value.trim());
     const invalidPawn = /^InvalidPawn$/i.test(posTokens[0] ?? "");
     const x = toFiniteNumber(posTokens[0]);
     const y = toFiniteNumber(posTokens[1]);
@@ -1901,7 +1898,10 @@ function parseBzssCorePieRuntimeLine(text) {
     const position = !invalidPawn && x != null && y != null && z != null
       ? { x: x * COMPACT_RUNTIME_POSITION_SCALE, y: y * COMPACT_RUNTIME_POSITION_SCALE, z: z * COMPACT_RUNTIME_POSITION_SCALE }
       : null;
-    const combatInfo = match[3] ? `CI{${match[3]}}` : "";
+    const combatInfo = String(match[3] ?? "").trim();
+    const soldierInfo = /^CI\\s*\\{/i.test(combatInfo)
+      ? parseCompactRuntimeSoldierInfo(combatInfo)
+      : createEmptySoldierInfo();
     runtimePlayers.push({
       playerId,
       playerIndex: playerId,
@@ -1911,8 +1911,8 @@ function parseBzssCorePieRuntimeLine(text) {
       presenceHint: invalidPawn ? "noPawn" : "",
       observedAt,
       stale: false,
-      soldierInfo: match[3] ? parseCompactRuntimeSoldierInfo(combatInfo) : createEmptySoldierInfo(),
-      rawText: row,
+      soldierInfo,
+      rawText: match[0],
     });
   }
   return { type: "playerRuntime", runtimePlayers, rawFields: [] };
