@@ -1811,7 +1811,7 @@ export function parseBzssCoreLogLine(line) {
   const text = String(line ?? "");
   if (text.includes("PRIFrame{")) return parsePriFrameRuntimeLine(text);
   if (text.includes("PRI{{")) return parsePriRuntimePlayerLine(text);
-  if (text.includes("PIE: Error:") && /\{\s*ID\s*:/i.test(text)) return parseBzssCorePieRuntimeLine(text);
+  if (/\{?\s*ID\s*:\s*-?\d+\s*,\s*Pos\s*:/i.test(text)) return parseBzssCorePieRuntimeLine(text);
   if (isCompactBzssRuntimeLine(text)) return parseCompactBzssRuntimeLine(text);
   if (text.includes("PlayerBaseInfo{") && text.includes("SoldierInfo{") && text.includes("PlayerScoreboard{")) {
     const players = parseBzssCorePlayerBlocks(text);
