@@ -9,7 +9,8 @@
         <button class="btn btn-secondary" :disabled="loading" @click="refresh">
           {{ loading ? "读取中..." : "刷新调试数据" }}
         </button>
-        <button class="btn btn-secondary" @click="showFullJson = !showFullJson">{{ showFullJson ? "隐藏 JSON" : "显示完整 JSON" }}</button>\n        <button v-if="showFullJson" class="btn btn-secondary" @click="copyJson">复制 JSON</button>
+        <button class="btn btn-secondary" @click="showFullJson = !showFullJson">{{ showFullJson ? "隐藏 JSON" : "显示完整 JSON" }}</button>
+        <button v-if="showFullJson" class="btn btn-secondary" @click="copyJson">复制 JSON</button>
       </div>
     </header>
 
