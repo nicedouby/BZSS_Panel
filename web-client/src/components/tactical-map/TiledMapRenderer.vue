@@ -9,6 +9,7 @@
       :style="tileStyle(tile)"
       draggable="false"
       decoding="async"
+      loading="lazy"
     />
 
     <!-- Primary tiles at current zoom level -->
@@ -76,7 +77,8 @@ const emit = defineEmits<{
 
 // Track which tiles have finished loading via native <img> @load event
 const loadedSet = ref(new Set<string>());
-const fallbackLoaded = ref(false);\nconst MAX_LOADED_TILE_KEYS = 256;
+const fallbackLoaded = ref(false);
+const MAX_LOADED_TILE_KEYS = 256;
 
 function onTileLoad(key: string) {
   const next = new Set(loadedSet.value);
