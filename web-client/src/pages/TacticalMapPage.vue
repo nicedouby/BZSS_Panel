@@ -68,21 +68,30 @@
             :style="{
               left: `${zone.mapX}%`,
               top: `${zone.mapY}%`,
-              transform: `translate(-50%, -50%) scale(${dynamicMarkerScale})`,
+              '--main-base-scale': dynamicMarkerScale,
             }"
             :title="zone.raw || zone.name"
           >
-            <div class="main-zone-flag">
-              <span class="main-zone-pole"></span>
-              <img
-                v-if="zone.flagUrl"
-                class="main-zone-faction-flag"
-                :src="zone.flagUrl"
-                :alt="zone.factionLabel"
-              />
-              <span v-else class="main-zone-flag-body">{{ zone.teamId ? `T${zone.teamId}` : "MAIN" }}</span>
+            <div class="main-base-visual">
+              <span class="main-base-pole"></span>
+              <span class="main-base-flag-frame">
+                <img
+                  v-if="zone.flagUrl"
+                  class="main-base-faction-flag"
+                  :src="zone.flagUrl"
+                  :alt="zone.factionLabel"
+                />
+                <span v-else class="main-base-flag-fallback">{{ zone.teamId ? `T${zone.teamId}` : "MAIN" }}</span>
+              </span>
+              <span class="main-base-fortification">
+                <span class="main-base-gate"></span>
+              </span>
+              <span class="main-base-anchor-dot"></span>
+              <span class="main-base-label">
+                <small>MAIN BASE</small>
+                <strong>{{ zone.factionLabel || (zone.teamId ? `TEAM ${zone.teamId}` : "MAIN") }}</strong>
+              </span>
             </div>
-            <span class="main-zone-label">{{ zone.factionLabel || "MAIN" }}</span>
           </div>
         </div>
 
