@@ -283,6 +283,47 @@
             <span><strong>Hash:</strong> {{ rawData?.rawLineHash || "--" }}</span>
           </div>
 
+          <section class="capture-zone-section">
+            <div class="capture-zone-section__header">
+              <div>
+                <h3>Capture Zones</h3>
+                <p>当前场景快照中的占领点。列表可独立滚动。</p>
+              </div>
+              <span class="capture-zone-count">{{ captureZones.length }}</span>
+            </div>
+
+            <div v-if="captureZones.length > 0" class="capture-zone-list">
+              <article
+                v-for="(zone, index) in captureZones"
+                :key="`${zone.name}-${index}`"
+                class="capture-zone-card"
+              >
+                <div class="capture-zone-card__title">
+                  <strong>{{ zone.name || `Capture Zone ${index + 1}` }}</strong>
+                  <span class="capture-zone-state" :class="{ 'capture-zone-state--locked': zone.isLocked }">
+                    {{ zone.isLocked ? "已锁定" : "可占领" }}
+                  </span>
+                </div>
+
+                <dl class="capture-zone-facts">
+                  <div>
+                    <dt>世界坐标</dt>
+                    <dd class="mono">{{ formatSceneVector(zone.position) }}</dd>
+                  </div>
+                  <div>
+                    <dt>占领比例</dt>
+                    <dd>{{ formatCapturePercent(zone.capturePercent) }}</dd>
+                  </div>
+                  <div>
+                    <dt>占领方向</dt>
+                    <dd>{{ formatCaptureDirection(zone.captureDirection) }}</dd>
+                  </div>
+                </dl>
+              </article>
+            </div>
+            <p v-else class="capture-zone-empty">当前快照尚未包含 Capture Zone 数据。</p>
+          </section>
+
           <details open class="raw-accordion">
             <summary>
               <span>完整快照</span>
@@ -333,6 +374,7 @@ import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref }
 import {
   type BzssCorePlayerInfoResponse,
   type BzssCoreRawDataResponse,
+  type BzssCoreCaptureZoneInfo,
   type BzssCoreRuntimePlayerInfo,
   type BzssCoreScoreboardPlayerInfo,
 } from "../app/bzssCoreApi";
@@ -621,6 +663,10 @@ const sortedFilteredPairs = computed(() => {
   return list;
 });
 
+const captureZones = computed<BzssCoreCaptureZoneInfo[]>(() => (
+  payload.value?.captureZones ?? rawData.value?.captureZones ?? []
+));
+
 const fullRawSnapshotBlock = computed(() => JSON.stringify(rawData.value ?? {}, null, 2));
 const runtimeRawBlock = computed(() => JSON.stringify(runtimePlayers.value, null, 2));
 const scoreboardRawBlock = computed(() => JSON.stringify(scoreboardPlayers.value, null, 2));
@@ -680,6 +726,26 @@ function formatVector(value?: BzssCoreRuntimePlayerInfo["position"]) {
   const y = value.y != null ? value.y.toFixed(1) : "--";
   const z = value.z != null ? value.z.toFixed(1) : "--";
   return `X:${x}, Y:${y}, Z:${z}`;
+}
+
+function formatSceneVector(value?: BzssCoreCaptureZoneInfo["position"]) {
+  if (!value) return "--";
+  const formatAxis = (axis: number | null) => (axis == null ? "--" : axis.toFixed(1));
+  return `X:${formatAxis(value.x)}, Y:${formatAxis(value.y)}, Z:${formatAxis(value.z)}`;
+}
+
+function formatCapturePercent(value?: number | null) {
+  if (value == null || !Number.isFinite(value)) return "--";
+  const percent = Math.abs(value) <= 1 ? value * 100 : value;
+  return `${Math.max(0, Math.min(100, percent)).toFixed(1)}%`;
+}
+
+function formatCaptureDirection(value?: number | null) {
+  if (value == null) return "--";
+  if (value === 0) return "中立";
+  if (value === 1) return "阵营 1";
+  if (value === 2) return "阵营 2";
+  return `阵营 ${value}`;
 }
 
 function formatPlayerPairJson(pair: PlayerPair) {
@@ -1156,6 +1222,119 @@ onBeforeUnmount(() => {
 
 .raw-meta-row strong {
   color: var(--color-text-primary);
+}
+
+.capture-zone-section {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(90, 160, 255, 0.28);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(50, 120, 255, 0.1), rgba(0, 0, 0, 0.12));
+}
+
+.capture-zone-section__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.capture-zone-section h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.capture-zone-section p {
+  margin: 3px 0 0;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.capture-zone-count {
+  flex: 0 0 auto;
+  min-width: 22px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(50, 120, 255, 0.2);
+  color: #b8d3ff;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.capture-zone-list {
+  max-height: min(42vh, 360px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  gap: 8px;
+  padding-right: 3px;
+}
+
+.capture-zone-card {
+  padding: 9px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.capture-zone-card__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.capture-zone-card__title strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.capture-zone-state {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border: 1px solid rgba(0, 200, 120, 0.35);
+  border-radius: 999px;
+  color: var(--color-status-success);
+  font-size: 10px;
+}
+
+.capture-zone-state--locked {
+  border-color: rgba(255, 193, 7, 0.4);
+  color: var(--color-status-warning);
+}
+
+.capture-zone-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 10px;
+  margin: 8px 0 0;
+}
+
+.capture-zone-facts div:first-child {
+  grid-column: 1 / -1;
+}
+
+.capture-zone-facts dt {
+  margin-bottom: 2px;
+  color: var(--color-text-muted);
+  font-size: 10px;
+}
+
+.capture-zone-facts dd {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 11px;
+}
+
+.capture-zone-empty {
+  padding: 12px 0;
+  text-align: center;
 }
 
 .raw-accordion {
