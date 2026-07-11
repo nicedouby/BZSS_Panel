@@ -90,19 +90,16 @@
             :style="{
               left: `${zone.mapX}%`,
               top: `${zone.mapY}%`,
-              transform: `translate(-50%, -50%) scale(${dynamicMarkerScale})`,
+              '--capture-marker-scale': dynamicMarkerScale,
             }"
             :title="zone.raw || zone.name"
           >
-            <div class="tactical-flag-node">
-              <div class="node-crosshair">
-                <span class="crosshair-bracket top-left"></span>
-                <span class="crosshair-bracket top-right"></span>
-                <span class="crosshair-bracket bottom-left"></span>
-                <span class="crosshair-bracket bottom-right"></span>
-              </div>
-              <div class="node-core-diamond">
-                <span class="node-letter">{{ getFlagLetter(zone.name) }}</span>
+            <div class="capture-zone-visual">
+              <div class="capture-flag-emblem">
+                <span class="capture-flag-pole"></span>
+                <span class="capture-flag-banner">
+                  <span class="capture-flag-letter">{{ getFlagLetter(zone.name) }}</span>
+                </span>
               </div>
               <div class="node-label-container">
                 <span class="node-index-label">OBJ {{ zone.name.includes('-') ? zone.name.split('-')[0] : '' }}</span>
