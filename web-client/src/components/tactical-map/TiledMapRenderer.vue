@@ -4,7 +4,7 @@
     <template v-for="tile in fallbackTiles" :key="tile.key">
       <img
         v-if="cachedAssetUrl(tile.src)"
-        :src="cachedAssetUrl(tile.src)!"
+        :src="cachedAssetUrl(tile.src)"
         class="map-tile map-tile--fallback"
         :style="tileStyle(tile)"
         draggable="false"
@@ -17,7 +17,7 @@
     <template v-for="tile in visibleTiles" :key="tile.key">
       <img
         v-if="cachedAssetUrl(tile.src)"
-        :src="cachedAssetUrl(tile.src)!"
+        :src="cachedAssetUrl(tile.src)"
         class="map-tile"
         :class="{ 'map-tile--loaded': isTileLoaded(tile.key) }"
         :style="tileStyle(tile)"
@@ -31,7 +31,7 @@
     <!-- Fallback: original full image stays visible under tiles -->
     <img
       v-if="fallbackImage && cachedAssetUrl(fallbackImage)"
-      :src="cachedAssetUrl(fallbackImage)!"
+      :src="cachedAssetUrl(fallbackImage)"
       alt="Tactical Map"
       class="map-image-fallback"
       draggable="false"
