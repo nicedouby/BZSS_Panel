@@ -185,6 +185,11 @@ export function createTacticalStateModule({ core, modules, logger }) {
     return clonePlainObject(state.snapshot);
   }
 
+  async function getCompactSnapshot() {
+    if (!state.snapshot) await composeSnapshot();
+    return clonePlainObject(state.compactSnapshot);
+  }
+
   async function getStreamSnapshot() {
     if (!state.snapshot) await composeSnapshot();
     return {
@@ -1060,6 +1065,7 @@ export function createTacticalStateModule({ core, modules, logger }) {
       subscribe,
       subscribeStream,
       getStreamSnapshot,
+      getCompactSnapshot,
       refreshSnapshot,
       getDiagnostics,
     },
