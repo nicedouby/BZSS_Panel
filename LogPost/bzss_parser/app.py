@@ -34,9 +34,13 @@ from bzss_parser.udp_sender import UdpSender
 MatchedEvent = Tuple[str, List[Tuple[str, str]]]
 
 BZSS_CORE_RUNTIME_LINE_RE = re.compile(r"\{\s*ID\s*:\s*-?\d+\s*,\s*Pos\s*:", re.IGNORECASE)
+BZSS_CORE_SCOREBOARD_LINE_RE = re.compile(r"\bPlayerScoreboard\s*\{", re.IGNORECASE)
 
 def is_bzss_core_runtime_line(line: str) -> bool:
     return bool(BZSS_CORE_RUNTIME_LINE_RE.search(str(line or "")))
+
+def is_bzss_core_scoreboard_line(line: str) -> bool:
+    return bool(BZSS_CORE_SCOREBOARD_LINE_RE.search(str(line or "")))
 
 
 class BzssLogParserApp:
@@ -468,7 +472,7 @@ class BzssLogParserApp:
         # BZSS-Core runtime frames are required by the panel position monitor.
         # They are not part of the generic raw output token list because they
         # are emitted as PIE/Error lines, so keep them even when contains is set.
-        if is_bzss_core_runtime_line(line):
+        if is_bzss_core_runtime_line(line) or is_bzss_core_scoreboard_line(line):
             return self.raw_log_rate_limiter_allow()
 
         if self.raw_log_output_only_preserved:
