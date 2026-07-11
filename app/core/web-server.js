@@ -228,7 +228,7 @@ export class WebServer {
       }
     }
 
-    return this.serveStatic(url, res);
+    return this.serveStatic(url, req, res);
   }
 
   recordApiDuration(endpoint, durationMs) {
@@ -4072,33 +4072,75 @@ export class WebServer {
     return this.modules.playtime?.getJob?.(jobId) ?? null;
   }
 
-  async serveStatic(url, res) {
-    let filePath = url.pathname === "/" ? "/index.html" : url.pathname;
-
+  async serveStatic(url, req, res) {
+    let filePath = url.pathname === "/" ? "/index.html" : decodeURIComponent(url.pathname);
     filePath = path.normalize(filePath).replace(/^(\.\.[/\\])+/, "");
     const abs = path.join(this.staticDirectory, filePath);
 
+    let stat;
     try {
-      const stat = await fs.stat(abs);
-      if (!stat.isFile()) {
-        return this.serveIndex(res);
-      }
+      stat = await fs.stat(abs);
+    } catch (error) {
+      if (error?.code === "ENOENT" && !path.extname(filePath)) return this.serveIndex(res);
+      res.writeHead(404, { ...BASE_SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Not Found");
+      return;
+    }
+    if (!stat.isFile()) {
+      if (!path.extname(filePath)) return this.serveIndex(res);
+      res.writeHead(404, { ...BASE_SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Not Found");
+      return;
+    }
 
-      const data = await fs.readFile(abs);
-      const isHtml = abs.endsWith(".html");
-      let mime = contentType(abs);
-      if (isHtml && (!mime || !mime.includes("charset"))) {
-        mime = mime ? `${mime}; charset=utf-8` : "text/html; charset=utf-8";
-      }
-      res.writeHead(200, {
+    const isHtml = abs.endsWith(".html");
+    let mime = contentType(abs);
+    if (isHtml && (!mime || !mime.includes("charset"))) {
+      mime = mime ? `${mime}; charset=utf-8` : "text/html; charset=utf-8";
+    }
+    const etag = `W/"${stat.size.toString(16)}-${Math.trunc(stat.mtimeMs).toString(16)}"`;
+    const lastModified = stat.mtime.toUTCString();
+    if (req.headers["if-none-match"] === etag
+      || (!req.headers["if-none-match"] && req.headers["if-modified-since"]
+        && Date.parse(req.headers["if-modified-since"]) >= Math.trunc(stat.mtimeMs / 1000) * 1000)) {
+      res.writeHead(304, {
         ...BASE_SECURITY_HEADERS,
-        "Content-Type": mime,
+        ETag: etag,
+        "Last-Modified": lastModified,
         "Cache-Control": isHtml ? "no-store" : "public, max-age=31536000, immutable",
       });
-      res.end(data);
-    } catch {
-      return this.serveIndex(res);
+      res.end();
+      return;
     }
+
+    res.writeHead(200, {
+      ...BASE_SECURITY_HEADERS,
+      "Content-Type": mime,
+      "Content-Length": stat.size,
+      "Last-Modified": lastModified,
+      ETag: etag,
+      "Accept-Ranges": "bytes",
+      "Cache-Control": isHtml ? "no-store" : "public, max-age=31536000, immutable",
+    });
+    if (req.method === "HEAD") {
+      res.end();
+      return;
+    }
+
+    const stream = createReadStream(abs);
+    stream.on("error", (error) => {
+      this.logger?.error?.("Static file stream failed.", {
+        operation: "serveStatic",
+        data: { path: abs, message: error?.message ?? String(error) },
+      });
+      if (!res.headersSent) {
+        res.writeHead(500, { ...BASE_SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
+        res.end("Internal Server Error");
+      } else {
+        res.destroy(error);
+      }
+    });
+    stream.pipe(res);
   }
 
   async serveIndex(res) {
@@ -6081,7 +6123,6 @@ function pickLatestRecord(records) {
   }
   return latest;
 }
-
 
 
 
