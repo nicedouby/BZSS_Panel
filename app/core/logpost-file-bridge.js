@@ -3,6 +3,9 @@
 import fs from "node:fs";
 import path from "node:path";
 
+const MAX_READ_CHUNK_BYTES = 256 * 1024;
+const MAX_PARTIAL_LINE_CHARS = 1024 * 1024;
+
 const DEFAULT_POLL_INTERVAL_MS = 250;
 const DEFAULT_RECENT_REPLAY_LINES = 120;
 const DEFAULT_EVENT_NAME = "On_RawLogLine";
@@ -134,7 +137,7 @@ export class LogPostFileBridge {
     }
     if (stat.size === this.currentOffset) return;
 
-    const length = stat.size - this.currentOffset;
+    const length = Math.min(stat.size - this.currentOffset, MAX_READ_CHUNK_BYTES);
     const buffer = Buffer.alloc(length);
     const fd = fs.openSync(filePath, "r");
     try {
@@ -143,10 +146,14 @@ export class LogPostFileBridge {
       fs.closeSync(fd);
     }
 
-    this.currentOffset = stat.size;
+    this.currentOffset += length;
     const chunkText = this.partialLine + buffer.toString("utf8");
     const lines = chunkText.split(/\r?\n/);
     this.partialLine = lines.pop() ?? "";
+    if (this.partialLine.length > MAX_PARTIAL_LINE_CHARS) {
+      this.logger?.warn?.("LogPost file bridge discarded an oversized partial JSONL row.");
+      this.partialLine = "";
+    }
     for (const line of lines) {
       if (!line) continue;
       this.ingestJsonLine(line, { replay: false, filePath });

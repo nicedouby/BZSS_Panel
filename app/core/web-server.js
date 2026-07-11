@@ -39,6 +39,9 @@ import { verifyPassword, hashPassword } from "./auth-crypto.js";
 
 const MAX_JSON_BODY_BYTES = 1024 * 1024;
 const MAX_WS_FRAME_BYTES = 1024 * 1024; // WebSocket max frame size 1MB
+const MAX_WS_BUFFERED_BYTES = 1024 * 1024;
+const MAX_LOCAL_JOB_HISTORY = 200;
+const LOCAL_JOB_TTL_MS = 60 * 60 * 1000;
 
 /**
  * Base security headers
@@ -3801,6 +3804,7 @@ export class WebServer {
       result: null,
       error: null,
     };
+    this.pruneLocalJobs();
     this.jobs.set(job.id, job);
     this.core.runtimeState?.updateJob?.(job);
     return { ...job };
@@ -3828,6 +3832,7 @@ export class WebServer {
       .finally(() => {
         job.finishedAt = Date.now();
         this.core.runtimeState?.updateJob?.(job);
+        this.pruneLocalJobs();
       });
   }
     // API route handling has been refactored to appropriate modules.
@@ -3978,6 +3983,7 @@ export class WebServer {
       result: null,
       error: null,
     };
+    this.pruneLocalJobs();
     this.jobs.set(job.id, job);
     this.core.runtimeState?.updateJob?.(job);
     return { ...job };
@@ -4005,7 +4011,27 @@ export class WebServer {
       .finally(() => {
         job.finishedAt = Date.now();
         this.core.runtimeState?.updateJob?.(job);
+        this.pruneLocalJobs();
       });
+  }
+
+  pruneLocalJobs(now = Date.now()) {
+    const removable = [...this.jobs.values()]
+      .filter((job) => job?.status !== "queued" && job?.status !== "running")
+      .sort((a, b) => Number(a?.finishedAt ?? a?.createdAt ?? 0) - Number(b?.finishedAt ?? b?.createdAt ?? 0));
+
+    for (const job of removable) {
+      const completedAt = Number(job?.finishedAt ?? job?.createdAt ?? 0);
+      if (completedAt > 0 && now - completedAt > LOCAL_JOB_TTL_MS) {
+        this.jobs.delete(job.id);
+      }
+    }
+
+    if (this.jobs.size <= MAX_LOCAL_JOB_HISTORY) return;
+    for (const job of removable) {
+      if (this.jobs.size <= MAX_LOCAL_JOB_HISTORY) break;
+      this.jobs.delete(job.id);
+    }
   }
 
   async getJob(jobId, { waitMs = 0 } = {}) {
@@ -4366,7 +4392,20 @@ export class WebServer {
     }
 
     header[0] = 0x80 | (opcode & 0x0f);
-    socket.write(Buffer.concat([header, body]));
+    if (!socket?.writable || socket.destroyed || Number(socket.writableLength ?? 0) > MAX_WS_BUFFERED_BYTES) {
+      try {
+        socket?.destroy?.();
+      } catch {}
+      throw new Error("WebSocket client is not keeping up with broadcasts.");
+    }
+
+    const accepted = socket.write(Buffer.concat([header, body]));
+    if (!accepted && Number(socket.writableLength ?? 0) > MAX_WS_BUFFERED_BYTES) {
+      try {
+        socket.destroy();
+      } catch {}
+      throw new Error("WebSocket send buffer limit exceeded.");
+    }
   }
 
   getCurrentServerId(fallback = "") {

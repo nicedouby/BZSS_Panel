@@ -190,8 +190,14 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
     }
 
     events.push(record);
-    if (events.length > maxEvents) events.splice(0, events.length - maxEvents);
     if (sourceEventId) sourceEventIds.add(sourceEventId);
+    if (events.length > maxEvents) {
+      const removed = events.splice(0, events.length - maxEvents);
+      for (const item of removed) {
+        const removedSourceEventId = String(item?.sourceEventId ?? "").trim();
+        if (removedSourceEventId) sourceEventIds.delete(removedSourceEventId);
+      }
+    }
     lastUpdatedAt = record.time || new Date().toISOString();
 
     core.eventBus.emitModuleEvent("module.combatClean", `${cleanType}Resolved`, {
@@ -794,6 +800,11 @@ export function createCombatCleanModule({ core, modules, config, logger }) {
 
     async stop() {
       for (const unsubscribe of unsubscribers.splice(0)) unsubscribe();
+      events.splice(0);
+      rejected.splice(0);
+      sourceEventIds.clear();
+      recentWeaponHistory.clear();
+      lastUpdatedAt = "";
       logWithFallback(moduleLogger, "info", "CombatClean stopped.", {
         label: "MODULE",
         operation: "stop",
