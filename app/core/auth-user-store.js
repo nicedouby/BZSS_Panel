@@ -21,11 +21,50 @@ export class AuthUserStore {
     this.permissionGroupsById = new Map();
     this.writeQueue = Promise.resolve();
     this.lastLoadedMtimeMs = 0;
+    this.fileWatcher = null;
+    this.watchDebounceTimer = null;
+    this.fallbackRefreshTimer = null;
+    this.refreshPromise = null;
   }
 
   async start() {
     await migrateLegacyUsersFileIfNeeded(this.filePath, this.logger);
     await this.load();
+    const directory = path.dirname(this.filePath);
+    const filename = path.basename(this.filePath);
+    try {
+      this.fileWatcher = fsSync.watch(directory, (_eventType, changedName) => {
+        if (changedName && String(changedName) !== filename) return;
+        if (this.watchDebounceTimer) clearTimeout(this.watchDebounceTimer);
+        this.watchDebounceTimer = setTimeout(() => {
+          this.watchDebounceTimer = null;
+          void this.refreshFromDiskIfChanged().catch((error) => {
+            this.logger?.warn?.(`Auth users watcher refresh failed: ${error?.message ?? error}`);
+          });
+        }, 250);
+        this.watchDebounceTimer.unref?.();
+      });
+    } catch (error) {
+      this.logger?.warn?.(`Auth users watcher unavailable: ${error?.message ?? error}`);
+    }
+
+    this.fallbackRefreshTimer = setInterval(() => {
+      void this.refreshFromDiskIfChanged().catch(() => {});
+    }, 30_000);
+    this.fallbackRefreshTimer.unref?.();
+  }
+
+  async stop() {
+    this.fileWatcher?.close?.();
+    this.fileWatcher = null;
+    if (this.watchDebounceTimer) clearTimeout(this.watchDebounceTimer);
+    if (this.fallbackRefreshTimer) clearInterval(this.fallbackRefreshTimer);
+    this.watchDebounceTimer = null;
+    this.fallbackRefreshTimer = null;
+    if (this.refreshPromise) {
+      try { await this.refreshPromise; } catch {}
+    }
+    this.refreshPromise = null;
   }
 
   async load() {
@@ -46,25 +85,30 @@ export class AuthUserStore {
     }
   }
 
-  refreshFromDiskIfChangedSync() {
-    let stats = null;
-    try {
-      stats = fsSync.statSync(this.filePath);
-    } catch (error) {
-      if (error?.code === "ENOENT") {
-        return false;
+  async refreshFromDiskIfChanged() {
+    if (this.refreshPromise) return this.refreshPromise;
+    this.refreshPromise = (async () => {
+      try {
+        const stats = await fs.stat(this.filePath);
+        if (!stats || stats.mtimeMs <= this.lastLoadedMtimeMs) return false;
+        const text = await fs.readFile(this.filePath, "utf8");
+        const parsed = JSON.parse(text);
+        this.applyLoadedDocument(parsed, stats.mtimeMs);
+        return true;
+      } catch (error) {
+        if (error?.code === "ENOENT") return false;
+        throw error;
+      } finally {
+        this.refreshPromise = null;
       }
-      throw error;
-    }
+    })();
+    return this.refreshPromise;
+  }
 
-    if (!stats || stats.mtimeMs <= this.lastLoadedMtimeMs) {
-      return false;
-    }
-
-    const text = fsSync.readFileSync(this.filePath, "utf8");
-    const parsed = JSON.parse(text);
-    this.applyLoadedDocument(parsed, stats.mtimeMs);
-    return true;
+  // Compatibility-only path for legacy maintenance services. Request authentication
+  // never calls this synchronous method.
+  refreshFromDiskIfChangedSync() {
+    return false;
   }
 
   hasEnabledSuperAdmin() {
