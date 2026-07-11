@@ -74,9 +74,15 @@
           >
             <div class="main-zone-flag">
               <span class="main-zone-pole"></span>
-              <span class="main-zone-flag-body">{{ zone.teamId ? `T${zone.teamId}` : "MAIN" }}</span>
+              <img
+                v-if="zone.flagUrl"
+                class="main-zone-faction-flag"
+                :src="zone.flagUrl"
+                :alt="zone.factionLabel"
+              />
+              <span v-else class="main-zone-flag-body">{{ zone.teamId ? `T${zone.teamId}` : "MAIN" }}</span>
             </div>
-            <span class="main-zone-label">MAIN</span>
+            <span class="main-zone-label">{{ zone.factionLabel || "MAIN" }}</span>
           </div>
         </div>
 
@@ -782,6 +788,7 @@ import { useMapCamera } from "../composables/useMapCamera";
 import { provideTacticalMapViewport } from "../composables/tacticalMapViewport";
 import { useTacticalStateStore } from "../stores/tactical-state.store";
 import type { BzssCoreMainZoneInfo } from "../app/bzssCoreApi";
+import { getChineseNameByFaction, getFactionFromTeamName, getFlagUrlByTeamName } from "../shared/faction-assets/faction-data";
 
 const props = withDefaults(defineProps<{
   snapshot: BzssCorePlayerInfoResponse | null;
@@ -840,6 +847,9 @@ interface MainZoneMarker {
   id: string;
   name: string;
   teamId: number | null;
+  factionCode: string | null;
+  factionLabel: string;
+  flagUrl: string | null;
   mapX: number;
   mapY: number;
   gameX: number | null;
@@ -1982,6 +1992,41 @@ function getCaptureDashArray(zone: CaptureZoneMarker) {
   return `${percent} ${100 - percent}`;
 }
 
+const teamFactionById = computed(() => {
+  const sources = [
+    (snapshot.value as any)?.teams,
+    (serverStore.snapshot as any)?.matchState?.teams,
+    (serverStore.snapshot as any)?.teams,
+  ];
+  const map = new Map<number, string>();
+  for (const source of sources) {
+    if (!Array.isArray(source)) continue;
+    for (const team of source) {
+      const teamId = Number(team?.teamId ?? team?.teamID ?? team?.id);
+      if (!Number.isFinite(teamId) || map.has(teamId)) continue;
+      const factionName = String(
+        team?.factionName
+        ?? team?.teamName
+        ?? team?.name
+        ?? team?.faction
+        ?? "",
+      ).trim();
+      if (factionName) map.set(teamId, factionName);
+    }
+  }
+  return map;
+});
+
+function resolveMainZoneFaction(teamId: number | null) {
+  const teamName = teamId == null ? "" : (teamFactionById.value.get(teamId) ?? "");
+  const factionCode = teamName ? getFactionFromTeamName(teamName) : null;
+  return {
+    factionCode,
+    factionLabel: factionCode ? getChineseNameByFaction(factionCode) : (teamName || (teamId == null ? "" : `Team ${teamId}`)),
+    flagUrl: teamName ? getFlagUrlByTeamName(teamName) : null,
+  };
+}
+
 const mainZoneMarkers = computed<MainZoneMarker[]>(() => {
   const zones = mainZones.value;
   if (!Array.isArray(zones) || zones.length === 0) return [];
@@ -1994,11 +2039,15 @@ const mainZoneMarkers = computed<MainZoneMarker[]>(() => {
       if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
       const teamId = Number(zone?.teamId);
       const resolvedTeamId = Number.isFinite(teamId) ? teamId : null;
+      const faction = resolveMainZoneFaction(resolvedTeamId);
       return {
         type: "mainZone",
         id: `main-zone-${resolvedTeamId ?? index}`,
         name: resolvedTeamId ? `T${resolvedTeamId}` : `Main ${index + 1}`,
         teamId: resolvedTeamId,
+        factionCode: faction.factionCode,
+        factionLabel: faction.factionLabel,
+        flagUrl: faction.flagUrl,
         mapX: project(x, bounds.minX, bounds.maxX),
         mapY: project(y, bounds.minY, bounds.maxY),
         gameX: x,
