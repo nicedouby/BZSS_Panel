@@ -3284,12 +3284,33 @@ export class WebServer {
         });
       }
 
-      return this.json(res, 200, await api.getHistory({
-        serverId: url.searchParams.get("server_id") ?? url.searchParams.get("serverId") ?? this.getCurrentServerId(""),
-        fromMs: url.searchParams.get("from_ms") ?? url.searchParams.get("fromMs"),
-        toMs: url.searchParams.get("to_ms") ?? url.searchParams.get("toMs"),
-        includeCurrent: (url.searchParams.get("include_current") ?? url.searchParams.get("includeCurrent")) === "1",
-      }));
+      const controller = new AbortController();
+      const abortRequest = () => controller.abort();
+      req.once("aborted", abortRequest);
+      res.once("close", abortRequest);
+      try {
+        const history = await api.getHistory({
+          serverId: url.searchParams.get("server_id") ?? url.searchParams.get("serverId") ?? this.getCurrentServerId(""),
+          fromMs: url.searchParams.get("from_ms") ?? url.searchParams.get("fromMs"),
+          toMs: url.searchParams.get("to_ms") ?? url.searchParams.get("toMs"),
+          maxPoints: url.searchParams.get("max_points") ?? url.searchParams.get("maxPoints") ?? 1500,
+          includeCurrent: (url.searchParams.get("include_current") ?? url.searchParams.get("includeCurrent")) === "1",
+          signal: controller.signal,
+        });
+        if (!controller.signal.aborted && !res.writableEnded) {
+          return this.json(res, 200, history);
+        }
+        return undefined;
+      } catch (error) {
+        if (error?.name === "AbortError" || controller.signal.aborted) return undefined;
+        if (error?.statusCode === 400) {
+          return this.json(res, 400, { error: "InvalidServerStatsRange", message: error.message });
+        }
+        throw error;
+      } finally {
+        req.removeListener("aborted", abortRequest);
+        res.removeListener("close", abortRequest);
+      }
     }
 
     if (url.pathname === "/api/server-stats/current" && req.method === "GET") {
