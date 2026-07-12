@@ -55,7 +55,7 @@ function injectSyntheticPlayerIds(event) {
   };
 }
 
-function createHarness({ moduleConfig = {}, adminWarn, squadFollowState, subscriptionMap = {} } = {}) {
+function createHarness({ moduleConfig = {}, adminWarn, subscriptionMap = {} } = {}) {
   const pages = [];
   const calls = [];
   const eventBus = createEventBus();
@@ -89,27 +89,7 @@ function createHarness({ moduleConfig = {}, adminWarn, squadFollowState, subscri
           return { success: true, skipped: false, commandText };
         },
       },
-      squadFollowState: squadFollowState ?? {
-        getPlayerFollowState(identity) {
-          if (!String(identity?.steam64ID ?? identity?.steamID ?? identity?.name ?? "").trim()) {
-            return null;
-          }
-          return {
-            status: "inside",
-            leaderName: "SL",
-            distanceMeters: 1200,
-            radiusMeters: 20000,
-            reason: "inside_leader_radius",
-            inside: true,
-            disengaged: false,
-            teamId: 1,
-            squadId: 4,
-          };
-        },
-        isPlayerInsideLeaderRadius() {
-          return true;
-        },
-      },
+
     },
     config: {
       get(pathText, defaultValue) {
@@ -198,9 +178,6 @@ async function testDamageAggregationDisabledProcessesEachHit() {
       damageAggregation: {
         enabled: false,
         debounceMs: 0,
-      },
-      attackerDamageDisplayGate: {
-        enabled: false,
       },
       showOnlyLightWeaponDamage: false,
     },
@@ -672,261 +649,6 @@ async function testCombatCleanDependencyGate() {
   await module.stop();
 }
 
-async function testAttackerCircleGateInsideAllowsDamage() {
-  const { module, eventBus, calls } = createHarness({
-    moduleConfig: {
-      attackerDamageDisplayGate: {
-        enabled: true,
-      },
-      showOnlyLightWeaponDamage: false,
-    },
-    squadFollowState: {
-      getPlayerFollowState(identity) {
-        if (identity?.steam64ID === "123" || identity?.steamID === "123") {
-          return {
-            status: "inside",
-            leaderName: "SL",
-            distanceMeters: 1200,
-            radiusMeters: 20000,
-            reason: "inside_leader_radius",
-            inside: true,
-            disengaged: false,
-            teamId: 1,
-            squadId: 4,
-          };
-        }
-        return null;
-      },
-      isPlayerInsideLeaderRadius() {
-        return true;
-      },
-    },
-  });
-  await module.start();
-
-  await eventBus.emitModuleEvent("module.combatClean", "combat.record.processed", {
-    record: {
-      id: "combat-circle-inside",
-      serverId: "S1",
-      type: "damage",
-      time: "2026-05-30T13:20:00.000Z",
-      attackerName: "Alpha",
-      attackerSteam64ID: "123",
-      victimName: "Bravo",
-      victimSteam64ID: "456",
-      damage: 36,
-      weaponName: "M4A1",
-      tags: ["weapon.small_arm", "damage.direct"],
-    },
-  });
-
-  await sleep(500);
-
-  assert.equal(calls.length, 2);
-  const events = module.api.getEvents({ limit: 10 });
-  assert.equal(events[0].attackerCircleState.status, "inside");
-  assert.equal(events[0].attackerWarning.success, true);
-
-  await module.stop();
-}
-
-async function testAttackerCircleGateOutsideSkipsDamage() {
-  const { module, eventBus, calls } = createHarness({
-    moduleConfig: {
-      attackerDamageDisplayGate: {
-        enabled: true,
-      },
-      showOnlyLightWeaponDamage: false,
-    },
-    squadFollowState: {
-      getPlayerFollowState() {
-        return {
-          status: "outside",
-          leaderName: "SL",
-          distanceMeters: 24000,
-          radiusMeters: 20000,
-          reason: "outside_leader_radius",
-          inside: false,
-          disengaged: true,
-          teamId: 1,
-          squadId: 4,
-        };
-      },
-      isPlayerInsideLeaderRadius() {
-        return false;
-      },
-    },
-  });
-  await module.start();
-
-  await eventBus.emitModuleEvent("module.combatClean", "combat.record.processed", {
-    record: {
-      id: "combat-circle-outside",
-      serverId: "S1",
-      type: "damage",
-      time: "2026-05-30T13:21:00.000Z",
-      attackerName: "Alpha",
-      attackerSteam64ID: "123",
-      victimName: "Bravo",
-      victimSteam64ID: "456",
-      damage: 36,
-      weaponName: "M4A1",
-      tags: ["weapon.small_arm", "damage.direct"],
-    },
-  });
-
-  await sleep(500);
-
-  assert.equal(calls.length, 1);
-  const events = module.api.getEvents({ limit: 10 });
-  assert.equal(events[0].attackerCircleState.status, "outside");
-  assert.equal(events[0].attackerWarning.skipped, true);
-  assert.equal(events[0].attackerWarning.skipReason, "attacker_outside_leader_radius");
-
-  await module.stop();
-}
-
-async function testAttackerCircleGateDisabledAllowsOutsideDamage() {
-  const { module, eventBus, calls } = createHarness({
-    moduleConfig: {
-      attackerDamageDisplayGate: {
-        enabled: false,
-      },
-      showOnlyLightWeaponDamage: false,
-    },
-    squadFollowState: {
-      getPlayerFollowState() {
-        return {
-          status: "outside",
-          leaderName: "SL",
-          distanceMeters: 24000,
-          radiusMeters: 20000,
-          reason: "outside_leader_radius",
-          inside: false,
-          disengaged: true,
-          teamId: 1,
-          squadId: 4,
-        };
-      },
-      isPlayerInsideLeaderRadius() {
-        return false;
-      },
-    },
-  });
-  await module.start();
-
-  await eventBus.emitModuleEvent("module.combatClean", "combat.record.processed", {
-    record: {
-      id: "combat-circle-gate-disabled",
-      serverId: "S1",
-      type: "damage",
-      time: "2026-05-30T13:21:30.000Z",
-      attackerName: "Alpha",
-      attackerSteam64ID: "123",
-      victimName: "Bravo",
-      victimSteam64ID: "456",
-      damage: 36,
-      weaponName: "M4A1",
-      tags: ["weapon.small_arm", "damage.direct"],
-    },
-  });
-
-  await sleep(500);
-
-  assert.equal(calls.length, 2);
-  const events = module.api.getEvents({ limit: 10 });
-  assert.equal(events[0].attackerCircleState.status, "outside");
-  assert.equal(events[0].attackerWarning.success, true);
-  assert.notEqual(events[0].attackerWarning.skipReason, "attacker_outside_leader_radius");
-
-  await module.stop();
-}
-
-async function testAttackerCircleGateUnknownFallbacks() {
-  const denyHarness = createHarness({
-    moduleConfig: {
-      attackerDamageDisplayGate: {
-        enabled: true,
-        fallbackWhenUnknown: "deny",
-      },
-      showOnlyLightWeaponDamage: false,
-    },
-    squadFollowState: {
-      getPlayerFollowState() {
-        return null;
-      },
-      isPlayerInsideLeaderRadius() {
-        return null;
-      },
-    },
-  });
-  await denyHarness.module.start();
-
-  await denyHarness.eventBus.emitModuleEvent("module.combatClean", "combat.record.processed", {
-    record: {
-      id: "combat-circle-unknown-deny",
-      serverId: "S1",
-      type: "damage",
-      time: "2026-05-30T13:22:00.000Z",
-      attackerName: "Alpha",
-      attackerSteam64ID: "123",
-      victimName: "Bravo",
-      victimSteam64ID: "456",
-      damage: 36,
-      weaponName: "M4A1",
-      tags: ["weapon.small_arm", "damage.direct"],
-    },
-  });
-
-  await sleep(500);
-  assert.equal(denyHarness.calls.length, 1);
-  assert.equal(denyHarness.module.api.getEvents({ limit: 10 })[0].attackerWarning.skipReason, "attacker_leader_radius_unknown");
-  await denyHarness.module.stop();
-
-  const allowHarness = createHarness({
-    moduleConfig: {
-      showOnlyLightWeaponDamage: false,
-      attackerDamageDisplayGate: {
-        enabled: true,
-        mode: "inside_leader_radius",
-        fallbackWhenUnknown: "allow",
-        applyToTypes: ["damage"],
-        onlyLightWeapon: true,
-      },
-    },
-    squadFollowState: {
-      getPlayerFollowState() {
-        return null;
-      },
-      isPlayerInsideLeaderRadius() {
-        return null;
-      },
-    },
-  });
-  await allowHarness.module.start();
-
-  await allowHarness.eventBus.emitModuleEvent("module.combatClean", "combat.record.processed", {
-    record: {
-      id: "combat-circle-unknown-allow",
-      serverId: "S1",
-      type: "damage",
-      time: "2026-05-30T13:23:00.000Z",
-      attackerName: "Alpha",
-      attackerSteam64ID: "123",
-      victimName: "Bravo",
-      victimSteam64ID: "456",
-      damage: 36,
-      weaponName: "M4A1",
-      tags: ["weapon.small_arm", "damage.direct"],
-    },
-  });
-
-  await sleep(500);
-  assert.equal(allowHarness.calls.length, 2);
-  assert.equal(allowHarness.module.api.getEvents({ limit: 10 })[0].attackerWarning.success, true);
-  await allowHarness.module.stop();
-}
-
 async function testDamageDebounceDisabledProcessesImmediately() {
   const { module, eventBus, calls } = createHarness({
     moduleConfig: {
@@ -1057,10 +779,6 @@ await testSamePlayerStillDisplays();
 await testKillDisplayIsDisabledByDefault();
 await testFractionalDamageRoundsToInteger();
 await testCombatCleanDependencyGate();
-await testAttackerCircleGateInsideAllowsDamage();
-await testAttackerCircleGateOutsideSkipsDamage();
-await testAttackerCircleGateDisabledAllowsOutsideDamage();
-await testAttackerCircleGateUnknownFallbacks();
 await testDamageDebounceDisabledProcessesImmediately();
 await testWoundMergesPendingDamageExcludingLastHit();
 
