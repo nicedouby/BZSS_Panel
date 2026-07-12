@@ -50,6 +50,7 @@
             <!-- Left (8 or 7 cols): Population Chart -->
             <div class="grid-chart-col">
               <ServerPopulationChart
+                v-if="chartStage >= 1"
                 :samples="samples"
                 :max-players="currentServer?.maxPlayers ?? 100"
                 :match-started-at="currentMatch?.startedAt ?? null"
@@ -63,7 +64,7 @@
 
             <!-- Full Width (12 cols): TPS Chart -->
             <div class="grid-tps-col">
-              <ServerTpsChart :samples="samples" :summary="summary" />
+              <ServerTpsChart v-if="chartStage >= 2" :samples="samples" :summary="summary" />
             </div>
           </div>
         </div>
@@ -102,7 +103,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from "vue";
 import DataState from "../components/common/DataState.vue";
 import ServerStatsToolbar from "../components/server-stats/ServerStatsToolbar.vue";
 import ServerStatsKpiGrid from "../components/server-stats/ServerStatsKpiGrid.vue";
@@ -160,19 +161,52 @@ const tabs = [
 
 const blockingError = computed(() => (historyError.value && !hasData.value ? historyError.value : ""));
 
+const chartStage = ref(0);
+let chartFrameOne: number | null = null;
+let chartFrameTwo: number | null = null;
 let pageActive = false;
+
+function cancelChartFrames() {
+  if (chartFrameOne !== null) cancelAnimationFrame(chartFrameOne);
+  if (chartFrameTwo !== null) cancelAnimationFrame(chartFrameTwo);
+  chartFrameOne = null;
+  chartFrameTwo = null;
+}
+
+async function scheduleCharts() {
+  cancelChartFrames();
+  chartStage.value = 0;
+  if (!pageActive || activeTab.value !== "overview" || !hasData.value) return;
+  await nextTick();
+  chartFrameOne = requestAnimationFrame(() => {
+    chartFrameOne = null;
+    if (!pageActive || activeTab.value !== "overview") return;
+    chartStage.value = 1;
+    chartFrameTwo = requestAnimationFrame(() => {
+      chartFrameTwo = null;
+      if (pageActive && activeTab.value === "overview") chartStage.value = 2;
+    });
+  });
+}
 
 function activateStatsPage() {
   if (pageActive) return;
   pageActive = true;
   void start();
+  void scheduleCharts();
 }
 
 function deactivateStatsPage() {
   if (!pageActive) return;
   pageActive = false;
+  cancelChartFrames();
+  chartStage.value = 0;
   stop();
 }
+
+watch([hasData, activeTab], () => {
+  void scheduleCharts();
+});
 
 onMounted(activateStatsPage);
 onActivated(activateStatsPage);
