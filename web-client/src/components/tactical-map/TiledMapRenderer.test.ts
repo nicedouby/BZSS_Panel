@@ -3,18 +3,15 @@ import { ref } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import TiledMapRenderer from "./TiledMapRenderer.vue";
 
-const visibleTiles = ref([
-  { key: "primary-a", src: "/a.png", left: 0, top: 0, width: 50, height: 100 },
-  { key: "primary-b", src: "/b.png", left: 50, top: 0, width: 50, height: 100 },
-]);
-const fallbackTiles = ref([
-  { key: "fallback-old", src: "/fallback-tile.png", left: 0, top: 0, width: 100, height: 100 },
-]);
+const tileState = vi.hoisted(() => ({
+  visibleTiles: null as any,
+  fallbackTiles: null as any,
+}));
 
 vi.mock("../../composables/useTileLoader", () => ({
   useTileLoader: () => ({
-    visibleTiles,
-    fallbackTiles,
+    visibleTiles: tileState.visibleTiles,
+    fallbackTiles: tileState.fallbackTiles,
     currentTileZoom: ref(1),
   }),
 }));
@@ -42,13 +39,13 @@ function mountRenderer() {
 
 describe("TiledMapRenderer", () => {
   beforeEach(() => {
-    visibleTiles.value = [
+    tileState.visibleTiles = ref( [
       { key: "primary-a", src: "/a.png", left: 0, top: 0, width: 50, height: 100 },
       { key: "primary-b", src: "/b.png", left: 50, top: 0, width: 50, height: 100 },
-    ];
-    fallbackTiles.value = [
+    ]);
+    tileState.fallbackTiles = ref( [
       { key: "fallback-old", src: "/fallback-tile.png", left: 0, top: 0, width: 100, height: 100 },
-    ];
+    ]);
   });
 
   it("waits for every current primary tile instead of counting unrelated loaded keys", async () => {
