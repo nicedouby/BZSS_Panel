@@ -277,7 +277,7 @@
             <!-- Radial particle dots flying outward and drifting dynamically -->
             <div class="explosion-particles">
               <span
-                v-for="p in staticExplosionParticles"
+                v-for="p in visibleExplosionParticles"
                 :key="p.id"
                 class="particle"
                 :class="p.type"
@@ -723,7 +723,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, nextTick, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, nextTick, shallowRef, triggerRef, watch } from "vue";
 import { useRoute } from "vue-router";
 import { t } from "../i18n";
 import {
@@ -890,7 +890,7 @@ function displayRole(role: string | null | undefined) {
   return key ? t(key, raw) : raw;
 }
 
-function adaptTacticalStatePlayersForMap(playersList: any[] = [], combatLookup: Record<string, any> = {}) {
+function adaptTacticalStatePlayersForMapUncached(playersList: any[] = [], combatLookup: Record<string, any> = {}) {
   return (Array.isArray(playersList) ? playersList : []).map((player) => {
     const steamId = player?.identity?.steamID ?? null;
     const eosId = player?.identity?.eosID ?? null;
@@ -988,9 +988,51 @@ function adaptTacticalStatePlayersForMap(playersList: any[] = [], combatLookup: 
   });
 }
 
+const EMPTY_COMBAT_LOOKUP: Record<string, any> = Object.freeze({});
+const adaptedPlayerCache = new Map<string, {
+  source: object;
+  combatLookup: Record<string, any>;
+  adapted: TacticalLinkedPlayer;
+}>();
+
+function adaptTacticalStatePlayersForMap(playersList: any[] = [], combatLookup: Record<string, any> = {}) {
+  const activeKeys = new Set<string>();
+  const adaptedPlayers: TacticalLinkedPlayer[] = [];
+
+  for (const player of Array.isArray(playersList) ? playersList : []) {
+    const key = String(
+      player?.identity?.key
+      ?? player?.identity?.steamID
+      ?? player?.identity?.eosID
+      ?? player?.identity?.playerID
+      ?? player?.identity?.name
+      ?? "",
+    );
+    if (!key) continue;
+
+    activeKeys.add(key);
+    const cached = adaptedPlayerCache.get(key);
+    if (cached && cached.source === player && cached.combatLookup === combatLookup) {
+      adaptedPlayers.push(cached.adapted);
+      continue;
+    }
+
+    const adapted = adaptTacticalStatePlayersForMapUncached([player], combatLookup)[0] as TacticalLinkedPlayer | undefined;
+    if (!adapted) continue;
+    adaptedPlayerCache.set(key, { source: player, combatLookup, adapted });
+    adaptedPlayers.push(adapted);
+  }
+
+  for (const key of adaptedPlayerCache.keys()) {
+    if (!activeKeys.has(key)) adaptedPlayerCache.delete(key);
+  }
+
+  return adaptedPlayers;
+}
+
 const storePlayers = computed(() => adaptTacticalStatePlayersForMap(
   Array.isArray(tacticalStateStore.players) ? tacticalStateStore.players : [],
-  props.combatStatsLookup ?? {},
+  props.combatStatsLookup ?? EMPTY_COMBAT_LOOKUP,
 ));
 
 function getPlayerRconDetail(player: any) {
@@ -1092,9 +1134,9 @@ const lastKnownZonePositions = ref(new Map<string, { x: number; y: number }>());
 const lastKnownFobPositions = ref(new Map<string, { x: number; y: number }>());
 
 // Cache to prevent players disappearing when data is missing temporarily
-const cachedPlayers = ref<Record<string, { player: TacticalLinkedPlayer; lastSeen: number }>>({});
+const cachedPlayers = shallowRef(new Map<string, { player: TacticalLinkedPlayer; lastSeen: number }>());
 const positionedPlayers = computed<TacticalLinkedPlayer[]>(() => {
-  return Object.values(cachedPlayers.value).map((entry) => entry.player);
+  return [...cachedPlayers.value.values()].map((entry) => entry.player);
 });
 
 const hoveredPlayer = ref<TacticalLinkedPlayer | null>(null);
@@ -1212,7 +1254,7 @@ const measureMode = computed({
 });
 
 // Pre-generated static random values for denser grenade blast debris
-const staticExplosionParticles = Array.from({ length: 90 }, (_, idx) => {
+const staticExplosionParticles = Array.from({ length: 36 }, (_, idx) => {
   const angle = Math.floor(Math.random() * 360);
   const speed = +(1.2 + Math.random() * 1.8).toFixed(2);
   const delay = +(Math.random() * 0.12).toFixed(2);
@@ -1222,6 +1264,12 @@ const staticExplosionParticles = Array.from({ length: 90 }, (_, idx) => {
   const type = idx % 2 === 0 ? "spark" : "ember";
   return { id: idx, angle, speed, delay, startOffset, spread, size, type };
 });
+
+const visibleExplosionParticles = computed(() => (
+  explosionMarkers.value.length > 6
+    ? staticExplosionParticles.slice(0, 18)
+    : staticExplosionParticles
+));
 
 function createSeededRandom(seedText: string) {
   let seed = 0;
@@ -1243,7 +1291,9 @@ const blastRadiusPx = computed(() => {
 });
 
 const explosionMarkers = computed(() => {
-  const list = snapshotExplosions.value;
+  const list = Array.isArray(snapshotExplosions.value)
+    ? snapshotExplosions.value.slice(-12)
+    : [];
   if (!Array.isArray(list) || list.length === 0) return [];
   const bounds = activeMapConfig.value.bounds;
   const markers: any[] = [];
@@ -1311,8 +1361,7 @@ watch(
     if (hasNewExplosion) {
       triggerShake();
     }
-  },
-  { deep: true }
+  }
 );
 
 // Combat Hotspot State (Centroid of alive players)
@@ -1387,37 +1436,29 @@ const playerTargets = new Map<string, PlayerTarget>();
 watch(
   players,
   (newPlayers) => {
-    if (!newPlayers || newPlayers.length === 0) {
-      // Keep cached players on temporary empty data
-      return;
-    }
     const now = Date.now();
-    const nextCache = { ...cachedPlayers.value };
     const currentKeys = new Set<string>();
     let changed = false;
 
-    newPlayers.forEach((player) => {
+    for (const player of newPlayers ?? []) {
       const key = getPlayerKey(player);
-      if (!key) return;
+      if (!key) continue;
       currentKeys.add(key);
       const presenceState = String((player as any)?.presence?.state ?? "");
       const presenceHint = String((player as any)?.presenceHint ?? (player as any)?.telemetry?.presenceHint ?? "");
       const isNoPawn = presenceState === "noPawn" || presenceHint === "noPawn";
 
       if (isNoPawn) {
-        if (nextCache[key]) {
-          delete nextCache[key];
-          changed = true;
-        }
-        return;
+        changed = cachedPlayers.value.delete(key) || changed;
+        continue;
       }
 
       if (hasValidPosition(player)) {
-        nextCache[key] = {
-          player,
-          lastSeen: now
-        };
-        changed = true;
+        const cached = cachedPlayers.value.get(key);
+        if (cached?.player !== player) {
+          cachedPlayers.value.set(key, { player, lastSeen: now });
+          changed = true;
+        }
       } else if (import.meta.env.DEV) {
         console.debug("[TacticalMap] player skipped: invalid position", {
           key,
@@ -1428,18 +1469,16 @@ watch(
           raw: player,
         });
       }
-    });
+    }
 
-    for (const key of Object.keys(nextCache)) {
+    for (const key of cachedPlayers.value.keys()) {
       if (!currentKeys.has(key)) {
-        delete nextCache[key];
+        cachedPlayers.value.delete(key);
         changed = true;
       }
     }
 
-    if (changed) {
-      cachedPlayers.value = nextCache;
-    }
+    if (changed) triggerRef(cachedPlayers);
   },
   { immediate: true }
 );
@@ -1448,7 +1487,9 @@ watch(
 watch(
   activeMapConfig,
   () => {
-    cachedPlayers.value = {};
+    cachedPlayers.value.clear();
+    triggerRef(cachedPlayers);
+    adaptedPlayerCache.clear();
     playerTargets.clear();
     combatHotspot.value = null;
     tilesReady.value = false;

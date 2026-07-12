@@ -1,37 +1,35 @@
 <template>
   <div class="tiled-map-renderer">
     <!-- Fallback: low-res tiles from cached lower zoom level -->
-    <template v-for="tile in fallbackTiles" :key="tile.key">
-      <img
-        v-if="cachedImageSrc(tile.src)"
-        :src="cachedImageSrc(tile.src)"
-        class="map-tile map-tile--fallback"
-        :style="tileStyle(tile)"
-        draggable="false"
-        decoding="async"
-        loading="lazy"
-      />
-    </template>
+    <img
+      v-for="tile in fallbackTiles"
+      :key="tile.key"
+      :src="tile.src"
+      class="map-tile map-tile--fallback"
+      :style="tileStyle(tile)"
+      draggable="false"
+      decoding="async"
+      loading="lazy"
+    />
 
     <!-- Primary tiles at current zoom level -->
-    <template v-for="tile in visibleTiles" :key="tile.key">
-      <img
-        v-if="cachedImageSrc(tile.src)"
-        :src="cachedImageSrc(tile.src)"
-        class="map-tile"
-        :class="{ 'map-tile--loaded': isTileLoaded(tile.key) }"
-        :style="tileStyle(tile)"
-        draggable="false"
-        decoding="async"
-        @load="onTileLoad(tile.key)"
-        @error="onTileError(tile.key, tile.src)"
-      />
-    </template>
+    <img
+      v-for="tile in visibleTiles"
+      :key="tile.key"
+      :src="tile.src"
+      class="map-tile"
+      :class="{ 'map-tile--loaded': isTileLoaded(tile.key) }"
+      :style="tileStyle(tile)"
+      draggable="false"
+      decoding="async"
+      @load="onTileLoad(tile.key)"
+      @error="onTileError(tile.key, tile.src)"
+    />
 
     <!-- Fallback: original full image stays visible under tiles -->
     <img
-      v-if="fallbackImage && cachedImageSrc(fallbackImage)"
-      :src="cachedImageSrc(fallbackImage)"
+      v-if="showFallbackImage"
+      :src="fallbackImage"
       alt="Tactical Map"
       class="map-image-fallback"
       draggable="false"
@@ -43,7 +41,6 @@
 <script setup lang="ts">
 import { computed, toRef, ref, watch } from "vue";
 import { useTileLoader, type TileInfo } from "../../composables/useTileLoader";
-import { usePersistentMapAssetCache } from "../../composables/usePersistentMapAssetCache";
 import { useTacticalMapViewport } from "../../composables/tacticalMapViewport";
 
 const props = defineProps<{
@@ -74,19 +71,6 @@ const { visibleTiles, fallbackTiles, currentTileZoom } = useTileLoader({
   enabled: toRef(props, "tilesEnabled"),
 });
 
-const mapAssetSources = computed(() => [
-  ...visibleTiles.value.map((tile) => tile.src),
-  ...fallbackTiles.value.map((tile) => tile.src),
-  props.fallbackImage ?? "",
-].filter(Boolean));
-
-const { getAssetUrl: cachedAssetUrl } = usePersistentMapAssetCache(mapAssetSources);
-
-function cachedImageSrc(source?: string) {
-  if (!source) return undefined;
-  return cachedAssetUrl(source) ?? undefined;
-}
-
 const emit = defineEmits<{
   (e: "ready"): void;
 }>();
@@ -94,6 +78,10 @@ const emit = defineEmits<{
 // Track which tiles have finished loading via native <img> @load event
 const loadedSet = ref(new Set<string>());
 const fallbackLoaded = ref(false);
+const showFallbackImage = computed(() => Boolean(
+  props.fallbackImage
+  && (!props.tilesEnabled || loadedSet.value.size === 0),
+));
 const MAX_LOADED_TILE_KEYS = 256;
 
 function onTileLoad(key: string) {
@@ -161,7 +149,7 @@ function syncReadyState() {
   const tilesReady =
     fallbackLoaded.value ||
     !props.tilesEnabled ||
-    (expectedTiles > 0 && loadedSet.value.size >= expectedTiles);
+    (expectedTiles > 0 && visibleTiles.value.every((tile) => loadedSet.value.has(tile.key)));
 
   if (tilesReady) {
     emit("ready");

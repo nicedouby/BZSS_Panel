@@ -63,6 +63,7 @@ export class ModuleManager {
 
     this.registry = {};
     this.instances = [];
+    this.startedInstances = new Set();
   }
 
   async loadBuiltInModules() {
@@ -142,24 +143,7 @@ export class ModuleManager {
         channel: "module",
       }) ?? this.logger;
 
-      if (instance.init) await instance.init();
-      if (instance.start) await instance.start();
-
-      this.instances.push(instance);
-
-      if (instance.apiName && instance.api) {
-        this.registry[instance.apiName] = instance.api;
-        if (instance.apiName === "pluginSubscriptions") {
-          this.core.pluginSubscriptions = instance.api;
-        }
-      }
-
-      if (!instance.manifest?.hidden && !instance.manifest?.deprecated) {
-        this.registry.pluginSubscriptions?.registerRuntimeItem?.({
-          ...(instance.manifest ?? {}),
-          status: this.getRuntimeStatus(instance.manifest),
-        });
-      }
+      await this.activateInstance(instance);
 
       moduleLogger.info(`Loaded ${instance.manifest.id}`, {
         label: "MODULE",
@@ -170,6 +154,32 @@ export class ModuleManager {
         },
       });
     }
+  }
+
+  async activateInstance(instance) {
+    if (!instance || this.instances.includes(instance)) return this.isModuleEnabled(instance);
+    this.instances.push(instance);
+    const enabled = this.isModuleEnabled(instance);
+
+    if (enabled) {
+      if (instance.init) await instance.init();
+      if (instance.start && !this.startedInstances.has(instance)) {
+        await instance.start();
+        this.startedInstances.add(instance);
+      }
+      if (instance.apiName && instance.api) {
+        this.registry[instance.apiName] = instance.api;
+        if (instance.apiName === "pluginSubscriptions") this.core.pluginSubscriptions = instance.api;
+      }
+    }
+
+    if (!instance.manifest?.hidden) {
+      this.registry.pluginSubscriptions?.registerRuntimeItem?.({
+        ...(instance.manifest ?? {}),
+        status: enabled ? "running" : "stopped",
+      });
+    }
+    return enabled;
   }
 
   async stopAll() {
@@ -183,17 +193,26 @@ export class ModuleManager {
       moduleLogger.debug(`Stopping ${moduleId}`, {
         operation: "stop",
       });
+      if (!this.startedInstances.has(instance)) continue;
       if (instance.stop) await instance.stop();
+      this.startedInstances.delete(instance);
     }
   }
 
-  getRuntimeStatus(manifest = {}) {
-    const id = String(manifest.id ?? "");
-    if (!id.startsWith("module.")) return "running";
-
-    const configKey = id.slice("module.".length);
+  isModuleEnabled(instance) {
+    const moduleId = String(instance?.manifest?.id ?? "");
+    const configKey = moduleId.startsWith("module.")
+      ? moduleId.slice("module.".length)
+      : moduleId;
     const moduleConfig = this.config.get(`modules.${configKey}`, {});
-    return moduleConfig.enabled === false ? "stopped" : "running";
+    const defaultEnabled = instance?.manifest?.defaultEnabled !== false;
+    return moduleConfig.enabled === undefined
+      ? defaultEnabled
+      : moduleConfig.enabled !== false;
+  }
+
+  getRuntimeStatus(manifest = {}) {
+    return this.isModuleEnabled({ manifest }) ? "running" : "stopped";
   }
 }
 
@@ -203,7 +222,4 @@ function inferModuleId(factoryName) {
   const normalized = name.charAt(0).toLowerCase() + name.slice(1);
   return `module.${normalized}`;
 }
-
-
-
 

@@ -64,6 +64,7 @@ export class AuthManager {
       this._cleanupInterval = null;
     }
     this.sessions.clear();
+    await this.userStore.stop?.();
   }
 
   /**
@@ -94,8 +95,6 @@ export class AuthManager {
         error: "AuthDisabled",
       };
     }
-
-    this.userStore.refreshFromDiskIfChangedSync();
 
     const normalizedUsername = String(username ?? "").trim();
     const rawPassword = String(password ?? "");
@@ -145,8 +144,6 @@ export class AuthManager {
 
   getUserFromRequest(req) {
     if (!this.enabled) return null;
-    this.userStore.refreshFromDiskIfChangedSync();
-
     const token = this.getTokenFromRequest(req);
     if (!token) return null;
 

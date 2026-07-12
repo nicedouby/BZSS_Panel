@@ -260,17 +260,24 @@ function attachListPlayersSections(active, recentlyDisconnected) {
 
 export function parseListSquads(raw) {
   const squads = [];
-  if (!raw) return squads;
+  const teams = [];
+  if (!raw) return attachListSquadTeams(squads, teams);
 
   let teamID = null;
   let teamName = null;
 
   for (const line of String(raw).split("\n")) {
     const trimmed = line.trim();
-    const mTeam = trimmed.match(/Team ID: (\d+) \((.+)\)/);
+    const mTeam = trimmed.match(/Team ID:\s*(\d+)\s*\((.+)\)/i);
     if (mTeam) {
       teamID = Number(mTeam[1]);
-      teamName = mTeam[2];
+      teamName = String(mTeam[2] ?? "").trim();
+      const existing = teams.find((team) => team.teamID === teamID);
+      if (existing) {
+        existing.teamName = teamName;
+      } else {
+        teams.push({ teamID, teamName });
+      }
       continue;
     }
 
@@ -296,6 +303,15 @@ export function parseListSquads(raw) {
     squads.push(squad);
   }
 
+  return attachListSquadTeams(squads, teams);
+}
+
+function attachListSquadTeams(squads, teams) {
+  Object.defineProperty(squads, "teams", {
+    value: teams,
+    enumerable: false,
+    configurable: true,
+  });
   return squads;
 }
 

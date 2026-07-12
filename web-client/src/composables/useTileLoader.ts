@@ -211,7 +211,7 @@ export function useTileLoader(options: UseTileLoaderOptions) {
       }
     }
 
-    return tiles;
+    return tiles.slice(0, 64);
   }
 
   let rafId: number | null = null;
