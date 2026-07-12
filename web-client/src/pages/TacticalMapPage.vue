@@ -1012,7 +1012,7 @@ function adaptTacticalStatePlayersForMap(playersList: any[] = [], combatLookup: 
 
     activeKeys.add(key);
     const cached = adaptedPlayerCache.get(key);
-    if (cached?.source === player && cached.combatLookup === combatLookup) {
+    if (cached && cached.source === player && cached.combatLookup === combatLookup) {
       adaptedPlayers.push(cached.adapted);
       continue;
     }
