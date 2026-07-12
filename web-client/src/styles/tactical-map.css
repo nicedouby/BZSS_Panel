@@ -498,17 +498,27 @@
 
 .fob-radius-construction {
   stroke: rgba(56, 189, 248, 0.52);
-  stroke-dasharray: 4 7;
+  stroke-dasharray: none;
   fill: rgba(14, 165, 233, 0.018);
   filter: drop-shadow(0 0 1px rgba(56,189,248,.22));
 }
 
-.fob-layer:has(.fob-marker:hover) .fob-radius-circle {
+.fob-radius-construction-motion {
+  stroke: rgba(125, 211, 252, 0.9);
+  stroke-width: 1.2;
+  stroke-dasharray: 2 92;
+  stroke-linecap: round;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.fob-layer:has(.fob-marker:hover) .fob-radius-exclusion {
   animation: fob-radius-rotate 3.5s linear infinite;
 }
 
-.fob-layer:has(.fob-marker:hover) .fob-radius-construction {
-  animation-direction: reverse;
+.fob-layer:has(.fob-marker:hover) .fob-radius-construction-motion {
+  opacity: 1;
+  animation: fob-radius-rotate 2.4s linear infinite reverse;
 }
 
 @keyframes fob-radius-rotate {
@@ -546,23 +556,21 @@
   left: 11px;
   top: 0;
   width: 23px;
-  height: 19px;
-  box-sizing: border-box;
-  border: 1px solid rgba(248,250,252,.82);
-  border-radius: 2px 2px 3px 3px;
-  background: linear-gradient(180deg, var(--fob-accent), #172033 82%);
-  clip-path: polygon(0 27%, 13% 27%, 13% 0, 31% 0, 31% 27%, 69% 27%, 69% 0, 87% 0, 87% 27%, 100% 27%, 92% 100%, 8% 100%);
-  box-shadow: 0 0 8px var(--fob-glow);
+  height: 23px;
+  display: block;
+  color: var(--fob-accent);
+  filter: drop-shadow(0 0 5px var(--fob-glow));
 }
 
-.fob-fortress-gate {
-  position: absolute;
-  left: 8px;
-  bottom: 0;
-  width: 6px;
-  height: 8px;
-  border-radius: 4px 4px 0 0;
-  background: rgba(2,6,23,.88);
+.fob-castle-icon {
+  display: block;
+  width: 23px;
+  height: 23px;
+}
+
+.fob-marker.is-bleeding .fob-fortress {
+  --fob-accent: #ef4444;
+  --fob-glow: rgba(239,68,68,.8);
 }
 
 .fob-alert {
