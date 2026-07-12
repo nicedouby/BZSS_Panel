@@ -169,6 +169,7 @@ export function useServerMetrics() {
         include_current: "1",
         from_ms: String(fromMs),
         to_ms: String(toMs),
+        max_points: "1500",
       });
 
       const payload = await apiGet<ServerMetricHistoryResponse>(
