@@ -50,6 +50,8 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
   }) ?? core.logger;
   const rawCaptureEnabled = Boolean(config?.get?.("modules.bzssCoreMonitor.rawCapture.enabled", false));
   const rawCaptureMaxBufferedBytes = Number(config?.get?.("modules.bzssCoreMonitor.rawCapture.maxBufferedBytes", 4_194_304) ?? 4_194_304);
+  const rawCaptureMaxFileBytes = Number(config?.get?.("modules.bzssCoreMonitor.rawCapture.maxFileBytes", 67_108_864) ?? 67_108_864);
+  const rawCaptureMaxFiles = Math.max(1, Number(config?.get?.("modules.bzssCoreMonitor.rawCapture.maxFiles", 3) ?? 3));
   const maxActiveExplosions = Number(config?.get?.("modules.bzssCoreMonitor.maxActiveExplosions", 128) ?? 128);
 
   const state = createInitialState();
@@ -57,6 +59,10 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
   const unsubscribers = [];
   let explosionCleanupTimer = null;
   let rawCaptureStream = null;
+  let rawCaptureBytes = 0;
+  let rawCaptureRotation = null;
+  const pendingRawCaptureTexts = [];
+  let pendingRawCaptureBytes = 0;
   let droppedRawCaptureLines = 0;
   let lastRawCaptureWarningAt = 0;
   const rawCapturePath = path.resolve(process.cwd(), RAW_CAPTURE_RELATIVE_PATH);
@@ -68,6 +74,9 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
     try {
       fs.mkdirSync(path.dirname(rawCapturePath), { recursive: true });
       fs.rmSync(rawCapturePath, { force: true });
+      for (let index = 1; index < rawCaptureMaxFiles; index += 1) {
+        fs.rmSync(`${rawCapturePath.replace(/\.jsonl$/, "")}.${index}.jsonl`, { force: true });
+      }
     } catch (error) {
       moduleLogger.warn?.("Failed to reset BZSS-Core raw capture file.", {
         operation: "bzssCoreMonitor.rawCapture.resetFailed",
@@ -79,36 +88,121 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
     }
   }
 
-  function openRawCaptureStream() {
-    if (!rawCaptureEnabled || rawCaptureStream) return;
-    resetRawCaptureFile();
-    rawCaptureStream = fs.createWriteStream(rawCapturePath, { flags: "a", encoding: "utf8" });
-    rawCaptureStream.on("error", (error) => {
+  function createRawCaptureStream() {
+    const stream = fs.createWriteStream(rawCapturePath, { flags: "a", encoding: "utf8" });
+    stream.on("error", (error) => {
       moduleLogger.warn?.("BZSS-Core raw capture stream failed.", {
         operation: "bzssCoreMonitor.rawCapture.streamFailed",
         data: { filePath: rawCapturePath, error: error?.message ?? String(error) },
       });
     });
+    return stream;
+  }
+
+  function openRawCaptureStream() {
+    if (!rawCaptureEnabled || rawCaptureStream) return;
+    resetRawCaptureFile();
+    rawCaptureBytes = 0;
+    rawCaptureStream = createRawCaptureStream();
+  }
+
+  function recordDroppedRawCaptureLine() {
+    droppedRawCaptureLines += 1;
+    const now = Date.now();
+    if (now - lastRawCaptureWarningAt < 60_000) return;
+    lastRawCaptureWarningAt = now;
+    moduleLogger.warn?.("BZSS-Core raw capture buffer full; dropping debug lines.", {
+      operation: "bzssCoreMonitor.rawCapture.backpressure",
+      data: {
+        droppedRawCaptureLines,
+        writableLength: rawCaptureStream?.writableLength ?? pendingRawCaptureBytes,
+      },
+    });
+  }
+
+  function queueRawCaptureText(text, byteLength) {
+    if (pendingRawCaptureBytes + byteLength > rawCaptureMaxBufferedBytes) {
+      recordDroppedRawCaptureLine();
+      return;
+    }
+    pendingRawCaptureTexts.push(text);
+    pendingRawCaptureBytes += byteLength;
+  }
+
+  async function rotateRawCapture() {
+    if (rawCaptureRotation) return rawCaptureRotation;
+    const stream = rawCaptureStream;
+    rawCaptureStream = null;
+    rawCaptureRotation = (async () => {
+      if (stream) {
+        await new Promise((resolve) => {
+          stream.once("finish", resolve);
+          stream.once("error", resolve);
+          stream.end();
+        });
+      }
+
+      const base = rawCapturePath.replace(/\.jsonl$/, "");
+      for (let index = rawCaptureMaxFiles - 1; index >= 1; index -= 1) {
+        const source = index === 1 ? rawCapturePath : `${base}.${index - 1}.jsonl`;
+        const target = `${base}.${index}.jsonl`;
+        await fs.promises.rm(target, { force: true });
+        try {
+          await fs.promises.rename(source, target);
+        } catch (error) {
+          if (error?.code !== "ENOENT") throw error;
+        }
+      }
+
+      rawCaptureBytes = 0;
+      rawCaptureStream = createRawCaptureStream();
+      const queued = pendingRawCaptureTexts.splice(0);
+      pendingRawCaptureBytes = 0;
+      for (const text of queued) {
+        const bytes = Buffer.byteLength(text);
+        if (rawCaptureBytes + bytes > rawCaptureMaxFileBytes) {
+          recordDroppedRawCaptureLine();
+          continue;
+        }
+        rawCaptureStream.write(text);
+        rawCaptureBytes += bytes;
+      }
+    })().catch((error) => {
+      moduleLogger.warn?.("Failed to rotate BZSS-Core raw capture files.", {
+        operation: "bzssCoreMonitor.rawCapture.rotateFailed",
+        data: { filePath: rawCapturePath, error: error?.message ?? String(error) },
+      });
+      rawCaptureStream ??= createRawCaptureStream();
+    }).finally(() => {
+      rawCaptureRotation = null;
+    });
+    return rawCaptureRotation;
   }
 
   function appendRawCapture(line) {
-    if (!rawCaptureEnabled || !rawCaptureStream) return;
-    if (rawCaptureStream.writableLength > rawCaptureMaxBufferedBytes) {
-      droppedRawCaptureLines += 1;
-      const now = Date.now();
-      if (now - lastRawCaptureWarningAt >= 60_000) {
-        lastRawCaptureWarningAt = now;
-        moduleLogger.warn?.("BZSS-Core raw capture buffer full; dropping debug lines.", {
-          operation: "bzssCoreMonitor.rawCapture.backpressure",
-          data: { droppedRawCaptureLines, writableLength: rawCaptureStream.writableLength },
-        });
-      }
-      return;
-    }
-    rawCaptureStream.write(`${JSON.stringify({
+    if (!rawCaptureEnabled) return;
+    const text = `${JSON.stringify({
       observedAt: new Date().toISOString(),
       rawLine: String(line ?? ""),
-    })}\n`);
+    })}\n`;
+    const byteLength = Buffer.byteLength(text);
+
+    if (rawCaptureRotation || !rawCaptureStream) {
+      queueRawCaptureText(text, byteLength);
+      return;
+    }
+    if (rawCaptureStream.writableLength + byteLength > rawCaptureMaxBufferedBytes) {
+      recordDroppedRawCaptureLine();
+      return;
+    }
+    if (rawCaptureBytes + byteLength > rawCaptureMaxFileBytes) {
+      queueRawCaptureText(text, byteLength);
+      void rotateRawCapture();
+      return;
+    }
+
+    rawCaptureStream.write(text);
+    rawCaptureBytes += byteLength;
   }
 
   const listeners = new Set();
@@ -822,6 +916,9 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
     explosionCleanupTimer = null;
     if (broadcastTimer) clearTimeout(broadcastTimer);
     broadcastTimer = null;
+    if (rawCaptureRotation) {
+      try { await rawCaptureRotation; } catch {}
+    }
     if (rawCaptureStream) {
       const stream = rawCaptureStream;
       rawCaptureStream = null;
@@ -831,6 +928,8 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
         stream.end();
       });
     }
+    pendingRawCaptureTexts.length = 0;
+    pendingRawCaptureBytes = 0;
     for (const assembly of state.priFramesById.values()) {
       clearPriFrameTimeout(assembly);
     }
