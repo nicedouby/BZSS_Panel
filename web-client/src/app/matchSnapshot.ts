@@ -21,7 +21,10 @@ export function applyMatchSnapshotResponse(response: any, options: { skipPlayers
     }
   }
   if (!options.skipSquads) {
-    useSquadStore().applySnapshot(buildSquadsSnapshot(matchState.squads));
+    useSquadStore().applySnapshot(buildSquadsSnapshot(
+      matchState.squads,
+      matchState.teams ?? response?.overview?.teams,
+    ));
   }
   return true;
 }
@@ -128,19 +131,24 @@ export function buildPlayersSnapshot(matchPlayers: any) {
   return snapshot;
 }
 
-export function buildSquadsSnapshot(matchSquads: any) {
+export function buildSquadsSnapshot(matchSquads: any, fallbackTeams: any = undefined) {
   const list = Array.isArray(matchSquads?.list) ? matchSquads.list : [];
-  const teams = Array.isArray(matchSquads?.teams)
+  const teamSource = Array.isArray(matchSquads?.teams)
     ? matchSquads.teams
+    : Array.isArray(fallbackTeams)
+      ? fallbackTeams
+      : null;
+  const teams = teamSource
+    ? teamSource
       .map((team: any) => ({
         teamID: Number(team?.teamID ?? team?.teamId),
         teamName: String(team?.teamName ?? team?.factionName ?? "").trim(),
       }))
       .filter((team: any) => Number.isFinite(team.teamID) && team.teamName)
-    : [];
+    : null;
   const snapshot = {
     list: [...list],
-    teams,
+    ...(teams ? { teams } : {}),
     byKey: {} as Record<string, any>,
     byTeamID: {} as Record<string, any[]>,
     updatedAt: toMillis(matchSquads?.lastUpdatedAt) || Date.now(),
