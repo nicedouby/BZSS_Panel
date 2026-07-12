@@ -1971,23 +1971,6 @@ const captureZoneMarkers = computed<CaptureZoneMarker[]>(() => {
   return markers;
 });
 
-function clampPercentValue(value: unknown) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return null;
-  const percent = numeric >= 0 && numeric <= 1 ? numeric * 100 : numeric;
-  return Math.max(0, Math.min(100, percent));
-}
-
-function formatCapturePercent(value: unknown) {
-  const numeric = clampPercentValue(value);
-  return numeric == null ? "--" : `${Math.round(numeric)}%`;
-}
-
-function getCaptureDashArray(zone: CaptureZoneMarker) {
-  const percent = clampPercentValue(zone.capturePercent) ?? 0;
-  return `${percent} ${100 - percent}`;
-}
-
 const teamFactionById = computed(() => {
   const map = new Map<number, string>();
   const addTeamName = (item: any) => {
@@ -2952,19 +2935,6 @@ function getLinkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence
     default:
       return "未关联";
   }
-}
-
-function getFlagLetter(name: string): string {
-  if (!name) return "●";
-  const parts = name.split("-");
-  const first = parts[0]?.trim();
-  if (/^\d+$/.test(first)) {
-    const num = parseInt(first, 10);
-    if (num >= 1 && num <= 26) {
-      return String.fromCharCode(64 + num); // 1 -> A, 2 -> B, etc.
-    }
-  }
-  return first || "●";
 }
 
 function cleanWeaponName(weaponClass: string | null | undefined): string {
