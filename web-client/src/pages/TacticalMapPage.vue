@@ -409,7 +409,7 @@
 
       <!-- New Map Interaction Floating Elements -->
       <PlayerInfoPanel
-        v-if="playerInfoPanel"
+        v-if="isStandaloneMapRoute && playerInfoPanel"
         :player="playerInfoPanel.player"
         :x="playerInfoPanel.x"
         :y="playerInfoPanel.y"
@@ -1728,24 +1728,26 @@ function handlePlayerSingleClick(player: TacticalLinkedPlayer, event: MouseEvent
     singleClickTimer.value = null;
   }
 
-  selectedPlayerKey.value = getPlayerKey(player);
+  // MatchStatusPage owns the floating player window when the map is embedded.
+  // Render only one detail surface to avoid duplicate reactive update loops.
+  if (!isStandaloneMapRoute.value) {
+    showPlayerDetails(player, event);
+    return;
+  }
 
+  selectedPlayerKey.value = getPlayerKey(player);
   if (containerRef.value) {
     const rect = containerRef.value.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-
     playerInfoPanel.value = {
       player,
-      x,
-      y,
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
     };
   }
 
   playerActionMenu.value = null;
   mapCommandMenu.value = null;
 }
-
 function handlePlayerDoubleClick(player: TacticalLinkedPlayer, event: MouseEvent) {
   if (singleClickTimer.value) {
     clearTimeout(singleClickTimer.value);
@@ -2591,20 +2593,24 @@ function showPlayerDetails(player: TacticalLinkedPlayer, event?: MouseEvent) {
     };
   }
 
-  if (containerRef.value) {
-    const rect = containerRef.value.getBoundingClientRect();
-    const eventX = event?.clientX ?? rect.left + rect.width / 2;
-    const eventY = event?.clientY ?? rect.top + rect.height / 2;
-    playerInfoPanel.value = {
-      player,
-      x: Math.max(8, Math.min(rect.width - 268, eventX - rect.left)),
-      y: Math.max(8, Math.min(rect.height - 220, eventY - rect.top)),
-    };
-    selectedPlayerKey.value = getPlayerKey(player);
-    playerActionMenu.value = null;
-    mapCommandMenu.value = null;
+  if (isStandaloneMapRoute.value) {
+    if (containerRef.value) {
+      const rect = containerRef.value.getBoundingClientRect();
+      const eventX = event?.clientX ?? rect.left + rect.width / 2;
+      const eventY = event?.clientY ?? rect.top + rect.height / 2;
+      playerInfoPanel.value = {
+        player,
+        x: Math.max(8, Math.min(rect.width - 268, eventX - rect.left)),
+        y: Math.max(8, Math.min(rect.height - 220, eventY - rect.top)),
+      };
+      selectedPlayerKey.value = getPlayerKey(player);
+      playerActionMenu.value = null;
+      mapCommandMenu.value = null;
+    }
+    return;
   }
 
+  // Embedded map: the parent owns the single floating window.
   emit("select-player", {
     detail,
     event: event ?? ({ clientX: Math.floor(window.innerWidth / 2), clientY: Math.floor(window.innerHeight / 2) } as MouseEvent)
