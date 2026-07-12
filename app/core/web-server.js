@@ -4119,7 +4119,6 @@ export class WebServer {
       "Content-Length": stat.size,
       "Last-Modified": lastModified,
       ETag: etag,
-      "Accept-Ranges": "bytes",
       "Cache-Control": isHtml ? "no-store" : "public, max-age=31536000, immutable",
     });
     if (req.method === "HEAD") {
@@ -6123,7 +6122,6 @@ function pickLatestRecord(records) {
   }
   return latest;
 }
-
 
 
 
