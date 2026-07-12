@@ -20,6 +20,7 @@ export const useTacticalStateStore = defineStore("tacticalState", () => {
   const playersByKey = new Map<string, any>();
   let playerOrder: string[] = [];
   let closeStream: (() => void) | null = null;
+  let resyncPromise: Promise<void> | null = null;
 
   function playerKey(player: any) {
     const identity = player?.identity ?? {};
@@ -91,9 +92,30 @@ export const useTacticalStateStore = defineStore("tacticalState", () => {
     };
   }
 
-  function applySnapshotResponse(response: TacticalStateSnapshotResponse) {
-    if (response?.type === "tactical-state.delta") applyDelta(response.delta, response.revision, response.generatedAt);
-    else applyFullSnapshot(response?.snapshot ?? null);
+  async function applySnapshotResponse(response: TacticalStateSnapshotResponse) {
+    if (response?.type !== "tactical-state.delta") {
+      applyFullSnapshot(response?.snapshot ?? null);
+      return;
+    }
+
+    const incomingRevision = Number(response.revision ?? response.delta?.meta?.revision ?? 0);
+    const currentRevision = Number(snapshot.value?.meta?.revision ?? 0);
+    if (incomingRevision <= currentRevision) return;
+    if (incomingRevision !== currentRevision + 1) {
+      await requestResync();
+      return;
+    }
+    applyDelta(response.delta, incomingRevision, response.generatedAt);
+  }
+
+  async function requestResync() {
+    if (resyncPromise) return resyncPromise;
+    resyncPromise = (async () => {
+      await fetchSnapshot();
+    })().finally(() => {
+      resyncPromise = null;
+    });
+    return resyncPromise;
   }
 
   async function fetchSnapshot() {
@@ -101,7 +123,7 @@ export const useTacticalStateStore = defineStore("tacticalState", () => {
     try {
       const response = await fetchTacticalStateSnapshot();
       if (!response.ok) error.value = "Failed to load tactical snapshot.";
-      applySnapshotResponse(response);
+      await applySnapshotResponse(response);
     } catch (err: any) {
       error.value = err?.message ?? "Failed to load tactical snapshot.";
     } finally { loading.value = false; }
@@ -111,7 +133,7 @@ export const useTacticalStateStore = defineStore("tacticalState", () => {
     if (closeStream) return;
     streamActive.value = true;
     closeStream = streamTacticalStateSnapshot((response) => {
-      applySnapshotResponse(response);
+      void applySnapshotResponse(response);
       error.value = response?.ok === false ? "Failed to load tactical snapshot." : "";
       loading.value = false;
     }, (err, source) => {
