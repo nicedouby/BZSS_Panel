@@ -46,75 +46,67 @@
         v-for="section in sections"
         :key="section.key"
         class="nav-section"
-        :class="{ open: activeSectionKey === section.key }"
+        :class="{ open: expandedSectionKey === section.key }"
         :data-section="section.key"
       >
-        <RouterLink
-          :to="section.defaultPath"
+        <button
+          type="button"
           class="section-link"
-          :class="{ active: activeSectionKey === section.key }"
+          :class="{ active: expandedSectionKey === section.key }"
           :title="section.label"
           :aria-label="section.label"
-          @click="ui.closeMobileSidebar()"
+          :aria-expanded="expandedSectionKey === section.key"
+          @click="handleSectionClick(section.key)"
         >
           <span class="section-icon" aria-hidden="true">{{ section.icon }}</span>
           <span class="section-copy">
             <span class="section-label">{{ section.label }}</span>
             <span class="section-description">{{ section.description }}</span>
           </span>
-        </RouterLink>
+        </button>
 
-        <Transition
-          name="section-children"
-          @enter="transition.onEnter"
-          @after-enter="transition.onAfterEnter"
-          @leave="transition.onLeave"
-        >
-          <div v-if="activeSectionKey === section.key" class="section-children-wrap">
-            <div class="section-children">
-              <RouterLink
-                v-for="(item, index) in section.items"
-                :key="item.path"
-                :to="item.path"
-                class="child-link"
-                :style="{ '--child-index': String(index) }"
-                :class="{ active: isRouteActive(route.path, item.path) }"
-                :title="item.label"
-                @click="ui.closeMobileSidebar()"
-              >
-                <span class="child-icon" aria-hidden="true">{{ item.icon }}</span>
-                <span class="child-label">{{ item.label }}</span>
-              </RouterLink>
-            </div>
+        <div v-if="expandedSectionKey === section.key" class="section-children-wrap">
+          <div class="section-children">
+            <RouterLink
+              v-for="item in section.items"
+              :key="item.path"
+              :to="item.path"
+              class="child-link"
+              :class="{ active: isRouteActive(route.path, item.path) }"
+              :title="item.label"
+              @click="ui.closeMobileSidebar()"
+            >
+              <span class="child-icon" aria-hidden="true">{{ item.icon }}</span>
+              <span class="child-label">{{ item.label }}</span>
+            </RouterLink>
           </div>
-        </Transition>
+        </div>
       </section>
     </nav>
   </aside>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import {
   buildNavSections,
   findSectionForRoute,
   isRouteActive,
+  type NavSectionKey,
 } from "../../app/sidebarNav";
 import { t } from "../../i18n";
 import { useAuthStore } from "../../stores/auth.store";
 import { useUiStore } from "../../stores/ui.store";
 import { useIsMobile } from "../../composables/useMediaQuery";
-import { useExpandableTransition } from "./useExpandableTransition";
 import { useRegisteredWebPagesQuery } from "./useRegisteredWebPagesQuery";
 
 const ui = useUiStore();
 const auth = useAuthStore();
 const route = useRoute();
-// 导航抽屉断点（≤1024，含平板）与内容断点（≤780）解耦
-const isNavDrawer = useIsMobile(1024);
+// 导航抽屉断点统一到 1100px，避免 1025–1100px 的不可达死区。
+const isNavDrawer = useIsMobile(1100);
 const pagesQuery = useRegisteredWebPagesQuery();
-const transition = useExpandableTransition();
 const registeredPages = computed(() => Array.isArray(pagesQuery.data.value) ? pagesQuery.data.value : []);
 
 const sections = computed(() => buildNavSections({
@@ -122,7 +114,25 @@ const sections = computed(() => buildNavSections({
   user: auth.user,
 }));
 
-const activeSectionKey = computed(() => findSectionForRoute(sections.value, route.path)?.key ?? "");
+const expandedSectionKey = ref<NavSectionKey | "">("");
+
+watch(
+  [() => route.path, sections],
+  () => {
+    const current = findSectionForRoute(sections.value, route.path);
+    if (current) expandedSectionKey.value = current.key;
+  },
+  { immediate: true },
+);
+
+function handleSectionClick(key: NavSectionKey) {
+  if (ui.sidebarCollapsed && !isNavDrawer.value) {
+    ui.setSidebarCollapsed(false);
+    expandedSectionKey.value = key;
+    return;
+  }
+  expandedSectionKey.value = expandedSectionKey.value === key ? "" : key;
+}
 
 const sidebarButtonLabel = computed(() => ui.sidebarCollapsed ? t("topbar.expand") : t("topbar.collapse"));
 
@@ -540,7 +550,7 @@ nav::-webkit-scrollbar-thumb {
 }
 
 /* sm/平板 ≤1024px：抽屉浮层，带标签的完整导航 */
-@media (max-width: 1024px) {
+@media (max-width: 1100px) {
   .sidebar {
     position: fixed;
     inset: 0 auto 0 0;
@@ -648,48 +658,5 @@ nav::-webkit-scrollbar-thumb {
   }
 }
 
-@media (min-width: 1025px) and (max-width: 1100px) {
-  .sidebar {
-    width: 84px;
-  }
 
-  .sidebar .brand span,
-  .sidebar .section-copy,
-  .sidebar .section-children {
-    display: none;
-  }
-
-  .sidebar .brand {
-    padding: 22px 10px 18px;
-    text-align: center;
-  }
-
-  .sidebar .brand strong {
-    font-size: 13px;
-    letter-spacing: 0.08em;
-    margin: 0 auto;
-    padding: 7px 8px;
-  }
-
-  .sidebar nav {
-    padding: 14px 8px 18px;
-  }
-
-  .sidebar .section-link {
-    justify-content: center;
-    min-height: 48px;
-    padding: 8px 0;
-  }
-
-  .sidebar .nav-section.open {
-    padding: 0;
-    background: transparent;
-    border-color: transparent;
-    box-shadow: none;
-  }
-
-  .collapse-button {
-    display: none !important;
-  }
-}
 </style>
