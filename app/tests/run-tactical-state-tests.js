@@ -239,6 +239,9 @@ async function main() {
   eventBus.emitModuleEvent("module.playerState", "playersSnapshotUpdated", {});
   await new Promise((resolve) => setTimeout(resolve, 180));
   const latestStream = await tacticalModule.api.getStreamSnapshot();
+  const cacheDiagnostics = tacticalModule.api.getDiagnostics();
+  assert.equal(cacheDiagnostics.profileDatabaseQueryCount, 1);
+  assert.equal(cacheDiagnostics.profileCacheSize, 2);
   assert.ok(latestStream.envelope.snapshot.meta.revision > initialStream.envelope.snapshot.meta.revision);
   assert.equal(JSON.parse(latestStream.serialized).type, "tactical-state.snapshot");
   assert.ok(received.length >= 2);
