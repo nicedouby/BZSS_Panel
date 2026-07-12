@@ -122,15 +122,6 @@ export interface InfantryCombatConfig {
   showVictimKill: boolean;
   showAttackerDamage: boolean;
   storeRecentEventLimit: number;
-  attackerDamageDisplayGate: InfantryCombatAttackerDamageDisplayGateConfig;
-}
-
-export interface InfantryCombatAttackerDamageDisplayGateConfig {
-  enabled: boolean;
-  mode: "inside_leader_radius";
-  fallbackWhenUnknown: "allow" | "deny";
-  applyToTypes: Array<"damage" | "wound" | "kill" | "revive">;
-  onlyLightWeapon: boolean;
 }
 
 export const INFANTRY_COMBAT_DEFAULT_FILTERS: InfantryCombatFilters = {
@@ -156,11 +147,4 @@ export const INFANTRY_COMBAT_DEFAULT_CONFIG: InfantryCombatConfig = {
   showVictimKill: true,
   showAttackerDamage: true,
   storeRecentEventLimit: 300,
-  attackerDamageDisplayGate: {
-    enabled: true,
-    mode: "inside_leader_radius",
-    fallbackWhenUnknown: "deny",
-    applyToTypes: ["damage"],
-    onlyLightWeapon: true,
-  },
 };
