@@ -729,7 +729,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, nextTick, shallowRef, triggerRef, watch } from "vue";
+import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, nextTick, shallowRef, triggerRef, watch } from "vue";
 import { useRoute } from "vue-router";
 import { t } from "../i18n";
 import {
@@ -1196,6 +1196,8 @@ const vpWidth = ref(0);
 const vpHeight = ref(0);
 const tilesEnabled = ref(true);
 let resizeObserver: ResizeObserver | null = null;
+let fitViewportTimeout: number | null = null;
+let mapPageActive = false;
 const tilesReady = ref(false);
 
 const dynamicMarkerScale = computed(() => {
@@ -3051,50 +3053,93 @@ function handleWindowKeyDown(e: KeyboardEvent) {
   }
 }
 
-onMounted(() => {
+function attachResizeObserver() {
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+  if (!containerRef.value || typeof ResizeObserver === "undefined") return;
+
+  vpWidth.value = containerRef.value.clientWidth;
+  vpHeight.value = containerRef.value.clientHeight;
+  resizeObserver = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      vpWidth.value = entry.contentRect.width;
+      vpHeight.value = entry.contentRect.height;
+    }
+  });
+  resizeObserver.observe(containerRef.value);
+}
+
+function activateMapPage() {
+  if (mapPageActive) return;
+  mapPageActive = true;
+  tilesEnabled.value = true;
+
   if (isStandaloneMapRoute.value) {
     void tacticalStateStore.fetchSnapshot();
     tacticalStateStore.startStream();
   }
 
-  setTimeout(() => {
+  window.addEventListener("resize", fitToViewport);
+  window.addEventListener("keydown", handleWindowKeyDown);
+  attachResizeObserver();
+
+  if (fitViewportTimeout !== null) window.clearTimeout(fitViewportTimeout);
+  fitViewportTimeout = window.setTimeout(() => {
+    fitViewportTimeout = null;
     fitToViewport();
   }, 100);
 
   logCombatEvent("Tactical map scan initialized... coordinate grid ready", "system");
   logCombatEvent("Live tactical tracking active", "system");
 
-  if (import.meta.env.DEV) {
+  if (import.meta.env.DEV && !simulatedCombatTimer) {
     simulatedCombatTimer = window.setInterval(runCombatEventSimulation, 2500);
   }
-  window.addEventListener("resize", fitToViewport);
-  window.addEventListener("keydown", handleWindowKeyDown);
+}
 
-  // Track viewport dimensions for tile loader
-  if (containerRef.value) {
-    vpWidth.value = containerRef.value.clientWidth;
-    vpHeight.value = containerRef.value.clientHeight;
-    resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        vpWidth.value = entry.contentRect.width;
-        vpHeight.value = entry.contentRect.height;
-      }
-    });
-    resizeObserver.observe(containerRef.value);
-  }
-});
-
-onBeforeUnmount(() => {
+function deactivateMapPage() {
+  if (!mapPageActive) return;
+  mapPageActive = false;
   stopDrag();
+
   if (isStandaloneMapRoute.value) {
     tacticalStateStore.stopStream();
   }
-  if (simulatedCombatTimer) window.clearInterval(simulatedCombatTimer);
+
   window.removeEventListener("resize", fitToViewport);
   window.removeEventListener("keydown", handleWindowKeyDown);
   resizeObserver?.disconnect();
   resizeObserver = null;
-});
+
+  if (simulatedCombatTimer) {
+    window.clearInterval(simulatedCombatTimer);
+    simulatedCombatTimer = null;
+  }
+  if (fitViewportTimeout !== null) {
+    window.clearTimeout(fitViewportTimeout);
+    fitViewportTimeout = null;
+  }
+  clearTimeout(shakeTimeoutId);
+  shakeTimeoutId = null;
+  if (singleClickTimer.value) {
+    clearTimeout(singleClickTimer.value);
+    singleClickTimer.value = null;
+  }
+
+  tilesEnabled.value = false;
+  tilesReady.value = false;
+  playerInfoPanel.value = null;
+  playerActionMenu.value = null;
+  mapCommandMenu.value = null;
+  hoveredPlayer.value = null;
+  hoverCoords.value = null;
+}
+
+onMounted(activateMapPage);
+onActivated(activateMapPage);
+onDeactivated(deactivateMapPage);
+onBeforeUnmount(deactivateMapPage);
+
 </script>
 
 <style scoped>
