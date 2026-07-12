@@ -345,11 +345,16 @@ nav::-webkit-scrollbar-thumb {
 
 .section-link {
   position: relative;
+  width: 100%;
   display: flex;
   align-items: center;
   min-height: 56px;
   gap: 12px;
   color: var(--color-text-secondary);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
   text-decoration: none;
   padding: 10px 12px;
   border-radius: 11px;
