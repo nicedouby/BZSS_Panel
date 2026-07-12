@@ -50,8 +50,8 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
   }) ?? core.logger;
   const rawCaptureEnabled = Boolean(config?.get?.("modules.bzssCoreMonitor.rawCapture.enabled", false));
   const rawCaptureMaxBufferedBytes = Number(config?.get?.("modules.bzssCoreMonitor.rawCapture.maxBufferedBytes", 4_194_304) ?? 4_194_304);
-  const rawCaptureMaxFileBytes = Number(config?.get?.("modules.bzssCoreMonitor.rawCapture.maxFileBytes", 67_108_864) ?? 67_108_864);
-  const rawCaptureMaxFiles = Math.max(1, Number(config?.get?.("modules.bzssCoreMonitor.rawCapture.maxFiles", 3) ?? 3));
+  const rawCaptureMaxFileBytes = Math.max(1024, Number(config?.get?.("modules.bzssCoreMonitor.rawCapture.maxFileBytes", 67_108_864) ?? 67_108_864));
+  const rawCaptureMaxFiles = Math.max(1, Math.floor(Number(config?.get?.("modules.bzssCoreMonitor.rawCapture.maxFiles", 3) ?? 3)));
   const maxActiveExplosions = Number(config?.get?.("modules.bzssCoreMonitor.maxActiveExplosions", 128) ?? 128);
 
   const state = createInitialState();
@@ -143,6 +143,9 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
       }
 
       const base = rawCapturePath.replace(/\.jsonl$/, "");
+      if (rawCaptureMaxFiles === 1) {
+        await fs.promises.rm(rawCapturePath, { force: true });
+      }
       for (let index = rawCaptureMaxFiles - 1; index >= 1; index -= 1) {
         const source = index === 1 ? rawCapturePath : `${base}.${index - 1}.jsonl`;
         const target = `${base}.${index}.jsonl`;
