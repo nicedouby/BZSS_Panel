@@ -2687,19 +2687,23 @@ function parseCompactFobs(text) {
   if (!section) return [];
   return extractBraceItems(section).map((raw, index) => {
     const fields = splitTopLevelCsv(raw);
-    const teamId = toFiniteNumber(fields[1]);
+    const hasPosition = /^X=-?[0-9.]+\\s+Y=-?[0-9.]+\\s+Z=-?[0-9.]+$/i.test(String(fields[1] ?? "").trim());
+    const position = hasPosition ? parseVectorBlock(fields[1]) : null;
+    const offset = hasPosition ? 1 : 0;
+    const teamId = toFiniteNumber(fields[1 + offset]);
+    const name = fields[0] ?? "";
     return {
-      fobId: fields[0] ? fields[0] : `team:${teamId ?? "unknown"}:index:${index}`,
-      name: fields[0] ?? "",
+      fobId: name ? name : `team:${teamId ?? "unknown"}:index:${index}`,
+      name,
       teamId,
-      size: fields[2] ?? "",
-      health: toFiniteNumber(fields[3]),
-      ammo: toFiniteNumber(fields[4]),
-      constructionPoints: toFiniteNumber(fields[5]),
-      construction: toFiniteNumber(fields[5]),
-      instigator: fields[6] ?? "",
+      size: fields[2 + offset] ?? "",
+      health: toFiniteNumber(fields[3 + offset]),
+      ammo: toFiniteNumber(fields[4 + offset]),
+      constructionPoints: toFiniteNumber(fields[5 + offset]),
+      construction: toFiniteNumber(fields[5 + offset]),
+      instigator: fields[6 + offset] ?? "",
       isBleeding: false,
-      position: null,
+      position,
       raw,
     };
   });
