@@ -47,7 +47,9 @@ export const useSquadStore = defineStore("squads", () => {
 
   function applySnapshot(snapshot: any) {
     list.value = Array.isArray(snapshot?.list) ? snapshot.list : [];
-    teams.value = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
+    if (snapshot && Object.hasOwn(snapshot, "teams") && Array.isArray(snapshot.teams)) {
+      teams.value = snapshot.teams;
+    }
     byKey.value = snapshot?.byKey ?? {};
     byTeamID.value = snapshot?.byTeamID ?? {};
     updatedAt.value = Number(snapshot?.updatedAt ?? Date.now());
