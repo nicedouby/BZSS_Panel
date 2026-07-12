@@ -3,31 +3,39 @@
     <div v-if="loading" class="list-placeholder">{{ t("database.loadingPlayerList") }}</div>
     <div v-else-if="error" class="list-placeholder error">{{ error }}</div>
     <div v-else-if="!rows.length" class="list-placeholder">{{ t("database.noMatchingPlayers") }}</div>
-    <template v-else>
-      <div
-        v-for="player in rows"
-        :key="player.id"
-        class="player-item"
-        :class="{ active: selectedId === player.id }"
-        @click="$emit('select', player.id)"
-      >
-        <div class="item-main">
-          <span class="player-name">{{ player.current_name || player.name || t("common.unknown") }}</span>
-          <span class="player-group">{{ player.permission_group || "default" }}</span>
-        </div>
-        <div v-if="player.qq_number || player.qqNumber" class="item-qq">
-          QQ: {{ player.qq_number || player.qqNumber }}
-        </div>
-        <div class="item-meta">
-          <span>{{ formatTime(player.updated_at) }}</span>
-          <span v-if="player.current_ip || player.ip" class="player-ip">{{ player.current_ip || player.ip }}</span>
+    <RecycleScroller
+      v-else
+      class="db-list-scroller"
+      :items="rows"
+      :item-size="92"
+      key-field="id"
+      v-slot="{ item: player }"
+    >
+      <div class="player-item-wrap">
+        <div
+          class="player-item"
+          :class="{ active: selectedId === player.id }"
+          @click="$emit('select', player.id)"
+        >
+          <div class="item-main">
+            <span class="player-name">{{ player.current_name || player.name || t("common.unknown") }}</span>
+            <span class="player-group">{{ player.permission_group || "default" }}</span>
+          </div>
+          <div v-if="player.qq_number || player.qqNumber" class="item-qq">
+            QQ: {{ player.qq_number || player.qqNumber }}
+          </div>
+          <div class="item-meta">
+            <span>{{ formatTime(player.updated_at) }}</span>
+            <span v-if="player.current_ip || player.ip" class="player-ip">{{ player.current_ip || player.ip }}</span>
+          </div>
         </div>
       </div>
-    </template>
+    </RecycleScroller>
   </div>
 </template>
 
 <script setup lang="ts">
+import { RecycleScroller } from "vue-virtual-scroller";
 import { currentLocale, t } from "../../i18n";
 
 defineProps<{
@@ -58,8 +66,20 @@ function formatTime(value: unknown) {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  overflow-y: auto;
+  min-height: 0;
+  overflow: hidden;
   padding: 8px;
+}
+
+.db-list-scroller {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
+.player-item-wrap {
+  height: 92px;
+  padding-bottom: 8px;
 }
 
 .list-placeholder {
