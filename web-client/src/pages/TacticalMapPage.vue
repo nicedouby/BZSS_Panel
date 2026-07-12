@@ -2985,7 +2985,7 @@ function cleanWeaponName(weaponClass: string | null | undefined): string {
 function getFobIconColor(fob: FobMarker) {
   if (fob.isBleeding) return "#ef4444";
   const health = Number(fob.health);
-  const ratio = Number.isFinite(health) ? Math.max(0, Math.min(1, health > 1 ? health / 100 : health)) : 1;
+  const ratio = Number.isFinite(health) ? Math.max(0, Math.min(1, health > 1 ? health / 300 : health)) : 1;
   const base = fob.teamId === 1 ? [96, 165, 250] : fob.teamId === 2 ? [248, 113, 113] : [148, 163, 184];
   const shade = 0.35 + ratio * 0.65;
   return `rgb(${Math.round(base[0] * shade)} ${Math.round(base[1] * shade)} ${Math.round(base[2] * shade)})`;
