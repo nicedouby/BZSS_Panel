@@ -686,16 +686,7 @@
       "showVictimWound": true,
       "showVictimKill": true,
       "showAttackerDamage": true,
-      "storeRecentEventLimit": 300,
-      "attackerDamageDisplayGate": {
-        "enabled": false,
-        "mode": "inside_leader_radius",
-        "fallbackWhenUnknown": "allow",
-        "applyToTypes": [
-          "damage"
-        ],
-        "onlyLightWeapon": true
-      }
+      "storeRecentEventLimit": 300
     },
     "adminWarn": {
       "enabled": true,
