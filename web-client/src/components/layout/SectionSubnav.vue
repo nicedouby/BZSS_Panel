@@ -21,21 +21,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
-import { apiGet } from "../../app/apiClient";
 import {
   buildNavSections,
   findSectionForRoute,
   isRouteActive,
-  type RegisteredWebPage,
 } from "../../app/sidebarNav";
 import { useAuthStore } from "../../stores/auth.store";
+import { useRegisteredWebPagesQuery } from "./useRegisteredWebPagesQuery";
 
 const auth = useAuthStore();
 const route = useRoute();
-const apiPages = ref<RegisteredWebPage[]>([]);
-const registeredPages = computed(() => Array.isArray(apiPages.value) ? apiPages.value : []);
+const pagesQuery = useRegisteredWebPagesQuery();
+const registeredPages = computed(() => (
+  Array.isArray(pagesQuery.data.value) ? pagesQuery.data.value : []
+));
 
 const sections = computed(() => buildNavSections({
   apiPages: registeredPages.value,
@@ -44,16 +45,7 @@ const sections = computed(() => buildNavSections({
 
 const activeSection = computed(() => findSectionForRoute(sections.value, route.path));
 
-async function fetchPages() {
-  try {
-    const res = await apiGet<{ pages?: RegisteredWebPage[] }>("/api/web/pages");
-    apiPages.value = Array.isArray(res.pages) ? res.pages : [];
-  } catch (error) {
-    console.error("Failed to fetch section subnav pages:", error);
-  }
-}
 
-onMounted(fetchPages);
 </script>
 
 <style scoped>
