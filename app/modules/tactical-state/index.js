@@ -120,12 +120,18 @@ export function createTacticalStateModule({ core, modules, logger }) {
         if (shouldBroadcast) {
           const streamMessage = { envelope, serialized: JSON.stringify(envelope) };
           state.serializationCount += 1;
-          state.streamSnapshotEnvelope = previousCompact ? state.streamSnapshotEnvelope : envelope;
-          state.streamSnapshotText = previousCompact ? state.streamSnapshotText : streamMessage.serialized;
-          state.lastDeltaEnvelope = previousCompact ? envelope : null;
-          state.lastDeltaText = previousCompact ? streamMessage.serialized : "";
-          state.lastSnapshotBytes = state.streamSnapshotText.length;
-          state.lastDeltaBytes = state.lastDeltaText.length;
+          const latestSnapshotEnvelope = {
+            ok: true,
+            type: "tactical-state.snapshot",
+            snapshot: nextCompact,
+          };
+          state.latestCompactSnapshot = nextCompact;
+          state.latestSnapshotEnvelope = latestSnapshotEnvelope;
+          state.latestSnapshotText = JSON.stringify(latestSnapshotEnvelope);
+          state.latestDeltaEnvelope = previousCompact ? envelope : null;
+          state.latestDeltaText = previousCompact ? streamMessage.serialized : "";
+          state.lastSnapshotBytes = state.latestSnapshotText.length;
+          state.lastDeltaBytes = state.latestDeltaText.length;
           for (const listener of streamSubscribers) {
             try { listener(streamMessage); } catch {}
           }
@@ -193,8 +199,8 @@ export function createTacticalStateModule({ core, modules, logger }) {
   async function getStreamSnapshot() {
     if (!state.snapshot) await composeSnapshot();
     return {
-      envelope: state.streamSnapshotEnvelope,
-      serialized: state.streamSnapshotText,
+      envelope: state.latestSnapshotEnvelope,
+      serialized: state.latestSnapshotText,
     };
   }
 
@@ -1113,10 +1119,11 @@ function createInitialState() {
     lastUpdatedAt: "",
     snapshot: null,
     compactSnapshot: null,
-    streamSnapshotEnvelope: null,
-    streamSnapshotText: "",
-    lastDeltaEnvelope: null,
-    lastDeltaText: "",
+    latestCompactSnapshot: null,
+    latestSnapshotEnvelope: null,
+    latestSnapshotText: "",
+    latestDeltaEnvelope: null,
+    latestDeltaText: "",
     composeCount: 0,
     lastComposeDurationMs: 0,
     maxComposeDurationMs: 0,
