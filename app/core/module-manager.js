@@ -210,12 +210,7 @@ export class ModuleManager {
   }
 
   getRuntimeStatus(manifest = {}) {
-    const id = String(manifest.id ?? "");
-    if (!id.startsWith("module.")) return "running";
-
-    const configKey = id.slice("module.".length);
-    const moduleConfig = this.config.get(`modules.${configKey}`, {});
-    return moduleConfig.enabled === false ? "stopped" : "running";
+    return this.isModuleEnabled({ manifest }) ? "running" : "stopped";
   }
 }
 
@@ -225,6 +220,5 @@ function inferModuleId(factoryName) {
   const normalized = name.charAt(0).toLowerCase() + name.slice(1);
   return `module.${normalized}`;
 }
-
 
 
