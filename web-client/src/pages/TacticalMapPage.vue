@@ -409,7 +409,7 @@
 
       <!-- New Map Interaction Floating Elements -->
       <PlayerInfoPanel
-        v-if="playerInfoPanel"
+        v-if="isStandaloneMapRoute && playerInfoPanel"
         :player="playerInfoPanel.player"
         :x="playerInfoPanel.x"
         :y="playerInfoPanel.y"
@@ -1728,7 +1728,25 @@ function handlePlayerSingleClick(player: TacticalLinkedPlayer, event: MouseEvent
     singleClickTimer.value = null;
   }
 
-  openLocalPlayerInfo(player, event);
+  // MatchStatusPage owns the floating player window when the map is embedded.
+  // Render only one detail surface to avoid duplicate reactive update loops.
+  if (!isStandaloneMapRoute.value) {
+    showPlayerDetails(player, event);
+    return;
+  }
+
+  selectedPlayerKey.value = getPlayerKey(player);
+  if (containerRef.value) {
+    const rect = containerRef.value.getBoundingClientRect();
+    playerInfoPanel.value = {
+      player,
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+  }
+
+  playerActionMenu.value = null;
+  mapCommandMenu.value = null;
 }
 function handlePlayerDoubleClick(player: TacticalLinkedPlayer, event: MouseEvent) {
   if (singleClickTimer.value) {
@@ -1736,8 +1754,17 @@ function handlePlayerDoubleClick(player: TacticalLinkedPlayer, event: MouseEvent
     singleClickTimer.value = null;
   }
 
-  openLocalPlayerInfo(player, event);
+  // The embedded parent already handled the first click; do not emit a second
+  // selection or reopen the expensive drawer on double-click.
+  if (!isStandaloneMapRoute.value) return;
+
+  playerInfoPanel.value = null;
+  playerActionMenu.value = null;
+  mapCommandMenu.value = null;
+
+  showPlayerDetails(player, event);
 }
+
 function handlePlayerRightClick(player: TacticalLinkedPlayer, event: MouseEvent) {
   if (singleClickTimer.value) {
     clearTimeout(singleClickTimer.value);
@@ -2531,29 +2558,69 @@ function focusVehicleOnMap(marker: { mapX: number; mapY: number }) {
   panToMapPercent(marker.mapX, marker.mapY, Math.max(camera.zoom.value, 1.15));
 }
 
-// Tactical-map player details stay local to the map. The shared parent drawer
-// performs profile/database hydration and owns a full-screen Teleport backdrop;
-// using it for high-frequency tactical players can leave an invisible blocking
-// layer when the heavy drawer render fails.
-function openLocalPlayerInfo(player: TacticalLinkedPlayer, event?: MouseEvent) {
-  if (!containerRef.value) return;
-
-  const rect = containerRef.value.getBoundingClientRect();
-  const eventX = event?.clientX ?? rect.left + rect.width / 2;
-  const eventY = event?.clientY ?? rect.top + rect.height / 2;
-  playerInfoPanel.value = {
-    player,
-    x: Math.max(8, Math.min(Math.max(8, rect.width - 268), eventX - rect.left)),
-    y: Math.max(8, Math.min(Math.max(8, rect.height - 220), eventY - rect.top)),
-  };
-  selectedPlayerKey.value = getPlayerKey(player);
-  playerActionMenu.value = null;
-  mapCommandMenu.value = null;
-}
-
+// Show player detail in floating window
 function showPlayerDetails(player: TacticalLinkedPlayer, event?: MouseEvent) {
-  openLocalPlayerInfo(player, event);
+  let detail: any;
+  const rconDetail = getPlayerRconDetail(player);
+  const displayName = getPlayerLabel(player);
+  if (rconDetail) {
+    detail = {
+      ...rconDetail,
+      name: String(rconDetail.name ?? displayName).trim() || displayName,
+      playerName: String(rconDetail.playerName ?? rconDetail.name ?? displayName).trim() || displayName,
+      raw: rconDetail.raw ?? (player as any)?.raw?.rcon ?? rconDetail.raw,
+    };
+    detail.bzssCorePlayerInfo = player;
+    detail.bzssCoreStatus = "ready";
+  } else {
+    detail = {
+      playerId: null,
+      name: displayName,
+      playerName: displayName,
+      teamId: normalizeTeam(player.teamId),
+      squadId: normalizeSquad(player.squadId),
+      isLeader: isSquadLeader(player),
+      role: resolveMapRoleInfo(player).label,
+      isOnline: true,
+      ping: null,
+      steamId: player.playerGuid?.length === 17 ? player.playerGuid : null,
+      eosId: player.playerGuid?.length === 32 ? player.playerGuid : null,
+      bzssCorePlayerInfo: player,
+      bzssCoreStatus: "ready",
+      combatStats: {
+        kills: 0,
+        deaths: 0,
+        downs: 0,
+        tk: 0,
+        revives: 0
+      }
+    };
+  }
+
+  if (isStandaloneMapRoute.value) {
+    if (containerRef.value) {
+      const rect = containerRef.value.getBoundingClientRect();
+      const eventX = event?.clientX ?? rect.left + rect.width / 2;
+      const eventY = event?.clientY ?? rect.top + rect.height / 2;
+      playerInfoPanel.value = {
+        player,
+        x: Math.max(8, Math.min(rect.width - 268, eventX - rect.left)),
+        y: Math.max(8, Math.min(rect.height - 220, eventY - rect.top)),
+      };
+      selectedPlayerKey.value = getPlayerKey(player);
+      playerActionMenu.value = null;
+      mapCommandMenu.value = null;
+    }
+    return;
+  }
+
+  // Embedded map: the parent owns the single floating window.
+  emit("select-player", {
+    detail,
+    event: event ?? ({ clientX: Math.floor(window.innerWidth / 2), clientY: Math.floor(window.innerHeight / 2) } as MouseEvent)
+  });
 }
+
 // Log Feed
 function logCombatEvent(text: string, type: "kill" | "revive" | "capture" | "system" = "kill") {
   const time = new Date().toLocaleTimeString("zh-CN", { hour12: false });
