@@ -116,21 +116,23 @@ export function createTacticalStateModule({ core, modules, logger }) {
             }
           : { ok: true, type: "tactical-state.snapshot", snapshot: nextCompact };
         state.deltaBuildCount += previousCompact ? 1 : 0;
+        const latestSnapshotEnvelope = {
+          ok: true,
+          type: "tactical-state.snapshot",
+          snapshot: nextCompact,
+        };
+        state.latestCompactSnapshot = nextCompact;
+        state.latestSnapshotEnvelope = latestSnapshotEnvelope;
+        state.latestSnapshotText = JSON.stringify(latestSnapshotEnvelope);
+        state.lastSnapshotBytes = state.latestSnapshotText.length;
+        state.serializationCount += 1;
+
         const shouldBroadcast = !previousCompact || hasMeaningfulDelta(envelope.delta);
         if (shouldBroadcast) {
           const streamMessage = { envelope, serialized: JSON.stringify(envelope) };
           state.serializationCount += 1;
-          const latestSnapshotEnvelope = {
-            ok: true,
-            type: "tactical-state.snapshot",
-            snapshot: nextCompact,
-          };
-          state.latestCompactSnapshot = nextCompact;
-          state.latestSnapshotEnvelope = latestSnapshotEnvelope;
-          state.latestSnapshotText = JSON.stringify(latestSnapshotEnvelope);
           state.latestDeltaEnvelope = previousCompact ? envelope : null;
           state.latestDeltaText = previousCompact ? streamMessage.serialized : "";
-          state.lastSnapshotBytes = state.latestSnapshotText.length;
           state.lastDeltaBytes = state.latestDeltaText.length;
           for (const listener of streamSubscribers) {
             try { listener(streamMessage); } catch {}
