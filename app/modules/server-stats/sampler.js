@@ -12,8 +12,9 @@ export class ServerInfoSampler {
     this.getSnapshot = getSnapshot;
     this.logger = logger;
     this.lastSavedHash = null;
-    this.interval = null;
-    this.startupTimer = null;
+    this.timer = null;
+    this.running = false;
+    this.tickInFlight = null;
     this.currentSample = null;
   }
 
@@ -27,54 +28,57 @@ export class ServerInfoSampler {
   }
 
   async tick() {
-    try {
-      const raw = await this.getSnapshot();
-      const metrics = this.normalizeMetrics(raw);
-      const metricsHash = hashMetrics(metrics);
+    if (this.tickInFlight) return this.tickInFlight;
+    this.tickInFlight = (async () => {
+      try {
+        const raw = await this.getSnapshot();
+        const metrics = this.normalizeMetrics(raw);
+        const metricsHash = hashMetrics(metrics);
+        this.currentSample = {
+          server_id: this.serverId,
+          timestamp_ms: Date.now(),
+          metrics,
+        };
 
-      this.currentSample = {
-        server_id: this.serverId,
-        timestamp_ms: Date.now(),
-        metrics,
-      };
-
-      if (metricsHash === this.lastSavedHash) {
-        return;
+        if (metricsHash === this.lastSavedHash) return;
+        await this.store.insertSample({
+          serverId: this.serverId,
+          timestampMs: this.currentSample.timestamp_ms,
+          metrics,
+          metricsHash,
+        });
+        this.lastSavedHash = metricsHash;
+      } catch (error) {
+        this.logger?.warn?.(`[ServerStats] scheduled tick failed: ${error.message}`);
       }
+    })().finally(() => {
+      this.tickInFlight = null;
+    });
+    return this.tickInFlight;
+  }
 
-      await this.store.insertSample({
-        serverId: this.serverId,
-        timestampMs: this.currentSample.timestamp_ms,
-        metrics,
-        metricsHash,
-      });
-
-      this.lastSavedHash = metricsHash;
-    } catch (error) {
-      this.logger?.warn?.(`[ServerStats] scheduled tick failed: ${error.message}`);
-    }
+  schedule(delayMs) {
+    if (!this.running || this.timer) return;
+    this.timer = setTimeout(async () => {
+      this.timer = null;
+      await this.tick();
+      this.schedule(SAMPLE_INTERVAL_MS);
+    }, delayMs);
   }
 
   async start() {
-    if (this.interval || this.startupTimer) return;
-    this.startupTimer = setTimeout(() => {
-      this.startupTimer = null;
-      void this.tick();
-      this.interval = setInterval(() => {
-        void this.tick();
-      }, SAMPLE_INTERVAL_MS);
-    }, INITIAL_SAMPLE_DELAY_MS);
+    if (this.running) return;
+    this.running = true;
+    this.schedule(INITIAL_SAMPLE_DELAY_MS);
   }
 
   async stop() {
-    if (this.startupTimer) {
-      clearTimeout(this.startupTimer);
-      this.startupTimer = null;
+    this.running = false;
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
     }
-    if (this.interval) {
-      clearInterval(this.interval);
-      this.interval = null;
-    }
+    await this.tickInFlight;
   }
 
   getCurrentSample() {
