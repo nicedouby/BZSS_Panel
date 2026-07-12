@@ -25,10 +25,15 @@ export class AuthUserStore {
     this.watchDebounceTimer = null;
     this.fallbackRefreshTimer = null;
     this.refreshPromise = null;
+    this.lastLoadedText = "";
+    this.started = false;
   }
 
   async start() {
-    await migrateLegacyUsersFileIfNeeded(this.filePath, this.logger);
+    if (this.started) return;
+    this.started = true;
+    try {
+      await migrateLegacyUsersFileIfNeeded(this.filePath, this.logger);
     await this.load();
     const directory = path.dirname(this.filePath);
     const filename = path.basename(this.filePath);
@@ -51,10 +56,15 @@ export class AuthUserStore {
     this.fallbackRefreshTimer = setInterval(() => {
       void this.refreshFromDiskIfChanged().catch(() => {});
     }, 30_000);
-    this.fallbackRefreshTimer.unref?.();
+      this.fallbackRefreshTimer.unref?.();
+    } catch (error) {
+      this.started = false;
+      throw error;
+    }
   }
 
   async stop() {
+    this.started = false;
     this.fileWatcher?.close?.();
     this.fileWatcher = null;
     if (this.watchDebounceTimer) clearTimeout(this.watchDebounceTimer);
@@ -69,16 +79,15 @@ export class AuthUserStore {
 
   async load() {
     try {
-      const text = await fs.readFile(this.filePath, "utf8");
-      const parsed = JSON.parse(text);
-      const stats = await fs.stat(this.filePath);
-      this.applyLoadedDocument(parsed, stats.mtimeMs);
+      const { text, parsed, stats } = await readJsonFileWithRetry(this.filePath);
+      this.applyLoadedDocument(parsed, stats.mtimeMs, text);
     } catch (error) {
       if (error?.code === "ENOENT") {
         this.version = 1;
         this.replaceUsers([]);
         this.replacePermissionGroups([]);
         this.lastLoadedMtimeMs = 0;
+        this.lastLoadedText = "";
         return;
       }
       throw error;
@@ -89,14 +98,23 @@ export class AuthUserStore {
     if (this.refreshPromise) return this.refreshPromise;
     this.refreshPromise = (async () => {
       try {
-        const stats = await fs.stat(this.filePath);
-        if (!stats || stats.mtimeMs <= this.lastLoadedMtimeMs) return false;
-        const text = await fs.readFile(this.filePath, "utf8");
-        const parsed = JSON.parse(text);
-        this.applyLoadedDocument(parsed, stats.mtimeMs);
+        const { text, parsed, stats } = await readJsonFileWithRetry(this.filePath);
+        if (text === this.lastLoadedText) {
+          this.lastLoadedMtimeMs = stats.mtimeMs;
+          return false;
+        }
+        this.applyLoadedDocument(parsed, stats.mtimeMs, text);
         return true;
       } catch (error) {
-        if (error?.code === "ENOENT") return false;
+        if (error?.code === "ENOENT") {
+          const changed = this.users.length > 0 || this.permissionGroups.length > 0 || this.lastLoadedText !== "";
+          this.version = 1;
+          this.replaceUsers([]);
+          this.replacePermissionGroups([]);
+          this.lastLoadedMtimeMs = 0;
+          this.lastLoadedText = "";
+          return changed;
+        }
         throw error;
       } finally {
         this.refreshPromise = null;
@@ -431,10 +449,12 @@ export class AuthUserStore {
     const tempPath = path.join(dir, `${path.basename(this.filePath)}.${process.pid}.${Date.now()}.tmp`);
 
     try {
-      await fs.writeFile(tempPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+      const serialized = `${JSON.stringify(payload, null, 2)}\n`;
+      await fs.writeFile(tempPath, serialized, "utf8");
       await fs.rename(tempPath, this.filePath);
       const stats = await fs.stat(this.filePath);
       this.lastLoadedMtimeMs = stats.mtimeMs;
+      this.lastLoadedText = serialized;
       return {
         ok: true,
         filePath: this.filePath,
@@ -453,14 +473,34 @@ export class AuthUserStore {
     return run;
   }
 
-  applyLoadedDocument(parsed, mtimeMs = 0) {
+  applyLoadedDocument(parsed, mtimeMs = 0, text = "") {
     const rawUsers = Array.isArray(parsed?.users) ? parsed.users : [];
     const rawGroups = Array.isArray(parsed?.permissionGroups) ? parsed.permissionGroups : [];
     this.version = Number(parsed?.version ?? 1) || 1;
     this.replacePermissionGroups(rawGroups.map((group) => normalizePermissionGroup(group)));
     this.replaceUsers(rawUsers.map((user) => normalizeStoredUser(user)));
     this.lastLoadedMtimeMs = Number(mtimeMs ?? 0) || 0;
+    this.lastLoadedText = String(text ?? "");
   }
+}
+
+async function readJsonFileWithRetry(filePath, attempts = 3) {
+  let lastError = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const text = await fs.readFile(filePath, "utf8");
+      const parsed = JSON.parse(text);
+      const stats = await fs.stat(filePath);
+      return { text, parsed, stats };
+    } catch (error) {
+      lastError = error;
+      if (error?.code === "ENOENT" || !(error instanceof SyntaxError) || attempt === attempts - 1) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)));
+    }
+  }
+  throw lastError;
 }
 
 export function normalizeRole(role) {
