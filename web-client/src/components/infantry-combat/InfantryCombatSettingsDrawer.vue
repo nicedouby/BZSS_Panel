@@ -135,13 +135,6 @@ function cloneConfig(config: InfantryCombatConfig | null | undefined): InfantryC
     showVictimKill: config?.showVictimKill ?? true,
     showAttackerDamage: config?.showAttackerDamage ?? true,
     storeRecentEventLimit: config?.storeRecentEventLimit ?? 300,
-    attackerDamageDisplayGate: {
-      enabled: config?.attackerDamageDisplayGate?.enabled ?? true,
-      mode: config?.attackerDamageDisplayGate?.mode ?? "inside_leader_radius",
-      fallbackWhenUnknown: config?.attackerDamageDisplayGate?.fallbackWhenUnknown ?? "deny",
-      applyToTypes: [...(config?.attackerDamageDisplayGate?.applyToTypes ?? ["damage"])],
-      onlyLightWeapon: config?.attackerDamageDisplayGate?.onlyLightWeapon ?? true,
-    },
   };
 }
 
