@@ -40,7 +40,7 @@
       </div>
     </div>
 
-    <section class="status-ribbon">
+    <section class="status-cards-grid">
       <div class="status-card" :class="payload?.status || 'idle'">
         <div class="status-card-inner">
           <div class="status-header">
@@ -77,48 +77,23 @@
       </div>
     </section>
 
-    <div class="dashboard-layout">
+    <div class="dashboard-layout" :class="{ 'dashboard-layout--full': !showRawPanel }">
       <section class="dashboard-col main-panel">
         <header class="panel-header-wrapper">
           <div class="panel-header-top">
-            <h2>玩家快照 ({{ sortedFilteredPairs.length }} / {{ playerPairs.length }})</h2>
+            <div class="panel-title-group">
+              <h2>玩家快照 ({{ sortedFilteredPairs.length }} / {{ playerPairs.length }})</h2>
+              <span v-if="isFilterActive" class="filter-indicator-badge">已筛选</span>
+            </div>
 
             <div class="header-controls">
-              <!-- Team Filter Tabs -->
-              <div class="team-filter-tabs">
-                <button 
-                  type="button" 
-                  class="filter-tab-btn" 
-                  :class="{ 'filter-tab-btn--active': activeTeamFilter === 'all' }" 
-                  @click="activeTeamFilter = 'all'"
-                >全部</button>
-                <button 
-                  type="button" 
-                  class="filter-tab-btn filter-tab-btn--blue" 
-                  :class="{ 'filter-tab-btn--active': activeTeamFilter === 1 }" 
-                  @click="activeTeamFilter = 1"
-                >
-                  蓝军 <span class="tab-team-name" v-if="getTeamChineseName(1)">({{ getTeamChineseName(1) }})</span>
-                </button>
-                <button 
-                  type="button" 
-                  class="filter-tab-btn filter-tab-btn--red" 
-                  :class="{ 'filter-tab-btn--active': activeTeamFilter === 2 }" 
-                  @click="activeTeamFilter = 2"
-                >
-                  红军 <span class="tab-team-name" v-if="getTeamChineseName(2)">({{ getTeamChineseName(2) }})</span>
-                </button>
-              </div>
-
-              <div class="search-box">
-                <input
-                  v-model.trim="query"
-                  class="search-input"
-                  type="text"
-                  placeholder="搜索玩家、ID、队伍、小队..."
-                />
-                <button v-if="query" type="button" class="clear-search" @click="query = ''">清除</button>
-              </div>
+              <button 
+                type="button" 
+                class="btn btn-secondary btn-sm toggle-raw-panel-btn"
+                @click="showRawPanel = !showRawPanel"
+              >
+                {{ showRawPanel ? "隐藏原始数据" : "显示原始数据" }}
+              </button>
 
               <label class="toggle-switch">
                 <input v-model="showRaw" type="checkbox" />
@@ -126,6 +101,88 @@
                 <span class="label-text">显示原始 JSON</span>
               </label>
             </div>
+          </div>
+
+          <!-- New Premium Multi-Parameter Filter Bar -->
+          <div class="filter-bar">
+            <!-- 1. Search Box -->
+            <div class="filter-item search-filter">
+              <div class="search-input-wrapper">
+                <span class="search-icon">🔍</span>
+                <input
+                  v-model.trim="query"
+                  class="search-input"
+                  type="text"
+                  placeholder="搜索名字、ID、GUID..."
+                />
+                <button v-if="query" type="button" class="clear-search-btn" @click="query = ''">×</button>
+              </div>
+            </div>
+
+            <!-- 2. Team Faction Filter -->
+            <div class="filter-item team-filter">
+              <span class="filter-label">阵营：</span>
+              <div class="btn-group">
+                <button 
+                  type="button" 
+                  class="btn-tab" 
+                  :class="{ 'btn-tab--active': selectedTeam === null }"
+                  @click="selectedTeam = null"
+                >
+                  全部
+                </button>
+                <button 
+                  type="button" 
+                  class="btn-tab btn-tab--blue" 
+                  :class="{ 'btn-tab--active': selectedTeam === 1 }"
+                  @click="selectedTeam = 1"
+                >
+                  {{ getTeamShortLabel(1) }}
+                </button>
+                <button 
+                  type="button" 
+                  class="btn-tab btn-tab--red" 
+                  :class="{ 'btn-tab--active': selectedTeam === 2 }"
+                  @click="selectedTeam = 2"
+                >
+                  {{ getTeamShortLabel(2) }}
+                </button>
+              </div>
+            </div>
+
+            <!-- 3. Squad Filter -->
+            <div class="filter-item squad-filter">
+              <span class="filter-label">小队：</span>
+              <select v-model="selectedSquad" class="filter-select">
+                <option value="all">全部小队</option>
+                <option value="none">无小队</option>
+                <option v-for="squadId in availableSquads" :key="squadId" :value="squadId">
+                  Squad {{ squadId }}
+                </option>
+              </select>
+            </div>
+
+            <!-- 4. Role / Status Filter -->
+            <div class="filter-item role-filter">
+              <span class="filter-label">状态：</span>
+              <select v-model="selectedRole" class="filter-select">
+                <option value="all">全部状态</option>
+                <option value="commander">指挥官</option>
+                <option value="admin">管理员</option>
+                <option value="live">在线玩家</option>
+                <option value="stale">已过期/离线</option>
+              </select>
+            </div>
+
+            <!-- 5. Reset button -->
+            <button 
+              v-if="isFilterActive"
+              type="button" 
+              class="btn btn-secondary btn-sm reset-filter-btn"
+              @click="resetFilters"
+            >
+              重置筛选
+            </button>
           </div>
         </header>
 
@@ -343,7 +400,7 @@
         </div>
       </section>
 
-      <aside class="dashboard-col raw-panel">
+      <aside v-if="showRawPanel" class="dashboard-col raw-panel">
         <header class="panel-header-wrapper">
           <div class="panel-header-top">
             <h2>最近一次原始数据</h2>
@@ -556,6 +613,37 @@ const sortKey = ref<keyof BzssCoreScoreboardPlayerInfo | "playerIndex" | "player
 const sortOrder = ref<"asc" | "desc">("asc");
 const expandedPlayers = ref<Record<string | number, boolean>>({});
 
+// New filter state & panel state
+const showRawPanel = ref(true);
+const selectedTeam = ref<number | null>(null);
+const selectedSquad = ref<string | number>("all");
+const selectedRole = ref<string>("all");
+
+const availableSquads = computed(() => {
+  const squadsSet = new Set<number>();
+  playerPairs.value.forEach((pair) => {
+    const sId = pair.scoreboard?.squadId;
+    if (sId != null && sId !== 0) {
+      squadsSet.add(sId);
+    }
+  });
+  return Array.from(squadsSet).sort((a, b) => a - b);
+});
+
+const isFilterActive = computed(() => {
+  return query.value.trim() !== "" ||
+    selectedTeam.value !== null ||
+    selectedSquad.value !== "all" ||
+    selectedRole.value !== "all";
+});
+
+function resetFilters() {
+  query.value = "";
+  selectedTeam.value = null;
+  selectedSquad.value = "all";
+  selectedRole.value = "all";
+}
+
 // Custom UI filters and tabs state
 const activeTeamFilter = ref<'all' | 1 | 2>('all');
 const activeRawTab = ref<'full' | 'runtime' | 'scoreboard' | 'scene'>('full');
@@ -733,27 +821,52 @@ function buildPlayerPairFromMergedPlayer(player: BzssCoreMergedPlayer): PlayerPa
 }
 
 const filteredPairs = computed(() => {
-  let list = playerPairs.value;
-  
-  // Filter by Team Tabs
-  if (activeTeamFilter.value !== 'all') {
-    list = list.filter((pair) => pair.scoreboard?.teamId === activeTeamFilter.value);
-  }
-
   const needle = query.value.trim().toLowerCase();
-  if (!needle) return list;
-  return list.filter((pair) => {
-    const values = [
-      pair.playerIndex,
-      pair.runtime?.playerId,
-      pair.runtime?.combatInfo,
-      pair.scoreboard?.playerId,
-      pair.scoreboard?.teamId,
-      pair.scoreboard?.squadId,
-      getPlayerName(pair),
-      rawPlayerGuid(pair),
-    ];
-    return values.some((value) => String(value ?? "").toLowerCase().includes(needle));
+  return playerPairs.value.filter((pair) => {
+    // 1. Text Search Filter
+    if (needle) {
+      const values = [
+        pair.playerIndex,
+        pair.runtime?.playerId,
+        pair.runtime?.combatInfo,
+        pair.scoreboard?.playerId,
+        pair.scoreboard?.teamId,
+        pair.scoreboard?.squadId,
+        getPlayerName(pair),
+        rawPlayerGuid(pair),
+      ];
+      const matchesText = values.some((value) => String(value ?? "").toLowerCase().includes(needle));
+      if (!matchesText) return false;
+    }
+
+    // 2. Team/Faction Filter
+    if (selectedTeam.value !== null) {
+      if (pair.scoreboard?.teamId !== selectedTeam.value) return false;
+    }
+
+    // 3. Squad Filter
+    if (selectedSquad.value !== "all") {
+      if (selectedSquad.value === "none") {
+        if (pair.scoreboard?.squadId != null && pair.scoreboard?.squadId !== 0) return false;
+      } else {
+        if (pair.scoreboard?.squadId !== Number(selectedSquad.value)) return false;
+      }
+    }
+
+    // 4. Role/Status Filter
+    if (selectedRole.value !== "all") {
+      if (selectedRole.value === "admin") {
+        if (!pair.scoreboard?.isAdmin) return false;
+      } else if (selectedRole.value === "commander") {
+        if (!pair.scoreboard?.isCommander) return false;
+      } else if (selectedRole.value === "live") {
+        if (pair.runtime?.stale) return false;
+      } else if (selectedRole.value === "stale") {
+        if (!pair.runtime?.stale) return false;
+      }
+    }
+
+    return true;
   });
 });
 
@@ -1075,11 +1188,24 @@ onBeforeUnmount(() => {
 }
 
 /* Status Cards Grid */
-.status-ribbon {
+/* Status Cards Grid */
+.status-cards-grid {
   flex-shrink: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: 14px;
+}
+
+@media (max-width: 1024px) {
+  .status-cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .status-cards-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .status-card {
@@ -1163,6 +1289,11 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(360px, 1fr);
   gap: 16px;
+  transition: grid-template-columns 0.3s ease;
+}
+
+.dashboard-layout--full {
+  grid-template-columns: 1fr !important;
 }
 
 .dashboard-col {
@@ -1191,11 +1322,27 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 
+.panel-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .panel-header-top h2 {
   margin: 0;
   font-size: 16px;
   font-weight: 700;
   color: var(--color-text-primary);
+}
+
+.filter-indicator-badge {
+  background: rgba(55, 200, 255, 0.15);
+  border: 1px solid rgba(55, 200, 255, 0.35);
+  color: #a8ecff;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .header-controls {
@@ -1205,8 +1352,32 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 
-/* Team Filter Buttons Group */
-.team-filter-tabs {
+/* Premium Filter Bar */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.filter-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.filter-label {
+  color: var(--color-text-secondary);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Faction Button Group */
+.btn-group {
   display: inline-flex;
   padding: 2px;
   background: rgba(0, 0, 0, 0.2);
@@ -1214,7 +1385,7 @@ onBeforeUnmount(() => {
   border-radius: 8px;
 }
 
-.filter-tab-btn {
+.btn-tab {
   height: 28px;
   padding: 0 12px;
   font-size: 11px;
@@ -1224,52 +1395,88 @@ onBeforeUnmount(() => {
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
   transition: all 0.2s ease;
 }
 
-.filter-tab-btn:hover {
+.btn-tab:hover {
   color: var(--color-text-primary);
   background: rgba(255, 255, 255, 0.03);
 }
 
-.filter-tab-btn--active {
+.btn-tab--active {
   color: var(--color-text-primary) !important;
   background: rgba(255, 255, 255, 0.08) !important;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
-.filter-tab-btn--blue.filter-tab-btn--active {
+.btn-tab--blue.btn-tab--active {
   color: #c7d2fe !important;
   background: rgba(59, 130, 246, 0.2) !important;
   border: 1px solid rgba(59, 130, 246, 0.25);
 }
 
-.filter-tab-btn--red.filter-tab-btn--active {
+.btn-tab--red.btn-tab--active {
   color: #fecaca !important;
   background: rgba(239, 68, 68, 0.2) !important;
   border: 1px solid rgba(239, 68, 68, 0.25);
 }
 
-.tab-team-name {
-  font-size: 10px;
-  font-weight: 400;
-  opacity: 0.85;
+/* Custom Select Dropdowns */
+.filter-select {
+  height: 32px;
+  padding: 0 24px 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border-default);
+  background: rgba(0, 0, 0, 0.25) url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e") no-repeat right 6px center / 16px;
+  color: var(--color-text-primary);
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  transition: all 0.25s ease;
 }
 
-/* Search Box and Inputs */
-.search-box {
+.filter-select:focus {
+  border-color: var(--color-brand-primary);
+  box-shadow: 0 0 0 3px rgba(55, 200, 255, 0.15);
+}
+
+.reset-filter-btn {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 11px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #fecaca;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.25s ease;
+}
+
+.reset-filter-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+/* Search Box and Input Wrapper */
+.search-input-wrapper {
   position: relative;
   display: flex;
   align-items: center;
 }
 
-.search-input {
-  min-width: 200px;
+.search-icon {
+  position: absolute;
+  left: 10px;
+  font-size: 12px;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.search-filter .search-input {
+  min-width: 220px;
   height: 32px;
-  padding: 0 30px 0 12px;
+  padding: 0 30px 0 32px;
   border-radius: 8px;
   border: 1px solid var(--color-border-default);
   background: rgba(0, 0, 0, 0.25);
@@ -1279,10 +1486,10 @@ onBeforeUnmount(() => {
   transition: all 0.25s ease;
 }
 
-.search-input:focus {
+.search-filter .search-input:focus {
   border-color: var(--color-brand-primary);
-  background: rgba(0, 0, 0, 0.35);
   box-shadow: 0 0 0 3px rgba(55, 200, 255, 0.15);
+  background: rgba(0, 0, 0, 0.35);
 }
 
 .clear-search {
