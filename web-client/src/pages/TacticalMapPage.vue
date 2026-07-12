@@ -72,14 +72,18 @@
             }"
             :title="zone.raw || zone.name"
           >
-            <span class="zone-flag-visual main-zone-flag">
-              <img
-                v-if="zone.flagUrl"
-                class="zone-flag-image"
-                :src="zone.flagUrl"
-                :alt="zone.factionLabel"
-              />
-              <span v-else class="zone-flag-placeholder"></span>
+            <span class="zone-flag-group main-zone-flag">
+              <span class="zone-flag-visual">
+                <img
+                  v-if="zone.flagUrl"
+                  class="zone-flag-image"
+                  :src="zone.flagUrl"
+                  :alt="zone.factionLabel"
+                />
+                <span v-else class="zone-flag-placeholder"></span>
+                <span class="zone-flag-lock" aria-label="Locked"></span>
+              </span>
+              <span class="zone-flag-name">{{ zone.name }}</span>
             </span>
           </div>
         </div>
@@ -98,14 +102,23 @@
             }"
             :title="zone.raw || zone.name"
           >
-            <span class="zone-flag-visual capture-zone-flag" :class="[`team-${zone.teamId ?? 0}`]">
-              <img
-                v-if="zone.flagUrl"
-                class="zone-flag-image"
-                :src="zone.flagUrl"
-                :alt="zone.factionLabel"
-              />
-              <span v-else class="zone-flag-placeholder"></span>
+            <span
+              class="zone-flag-group capture-zone-flag"
+              :class="[`team-${zone.teamId ?? 0}`]"
+              :style="{ '--capture-progress-deg': `${zone.captureProgress * 3.6}deg` }"
+            >
+              <span class="zone-flag-visual">
+                <img
+                  v-if="zone.flagUrl"
+                  class="zone-flag-image"
+                  :src="zone.flagUrl"
+                  :alt="zone.factionLabel"
+                />
+                <span v-else class="zone-flag-placeholder"></span>
+                <span class="capture-flag-neutral-sweep"></span>
+                <span v-if="zone.isLocked" class="zone-flag-lock" aria-label="Locked"></span>
+              </span>
+              <span class="zone-flag-name">{{ zone.name }}</span>
             </span>
           </button>
         </div>
@@ -782,6 +795,7 @@ interface CaptureZoneMarker {
   gameX: number | null;
   gameY: number | null;
   capturePercent?: number | null;
+  captureProgress: number;
   captureDirection?: number | null;
   isLocked?: boolean | null;
   factionCode: string | null;
@@ -1948,6 +1962,10 @@ const captureZoneMarkers = computed<CaptureZoneMarker[]>(() => {
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
     lastKnownZonePositions.value.set(name, { x, y });
     const rawTeamId = Number(zone.teamId ?? zone.ownerTeamId ?? zone.captureDirection);
+    const rawCapturePercent = Number(zone.capturePercent);
+    const captureProgress = Number.isFinite(rawCapturePercent)
+      ? Math.max(0, Math.min(100, rawCapturePercent >= 0 && rawCapturePercent <= 1 ? rawCapturePercent * 100 : rawCapturePercent))
+      : 100;
     const teamId = Number.isFinite(rawTeamId) && (rawTeamId === 1 || rawTeamId === 2) ? rawTeamId : null;
     const faction = resolveMainZoneFaction(teamId);
     markers.push({
@@ -1960,6 +1978,7 @@ const captureZoneMarkers = computed<CaptureZoneMarker[]>(() => {
       gameX: x,
       gameY: y,
       capturePercent: zone.capturePercent ?? null,
+      captureProgress,
       captureDirection: zone.captureDirection ?? null,
       isLocked: zone.isLocked ?? null,
       factionCode: faction.factionCode,
@@ -2038,7 +2057,7 @@ const mainZoneMarkers = computed<MainZoneMarker[]>(() => {
       return {
         type: "mainZone",
         id: `main-zone-${resolvedTeamId ?? index}`,
-        name: resolvedTeamId ? `T${resolvedTeamId}` : `Main ${index + 1}`,
+        name: resolvedTeamId ? `MAIN T${resolvedTeamId}` : `MAIN ${index + 1}`,
         teamId: resolvedTeamId,
         factionCode: faction.factionCode,
         factionLabel: faction.factionLabel,
