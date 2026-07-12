@@ -31,7 +31,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, KeepAlive, ref } from "vue";
+import { computed, ref } from "vue";
 import { RouterView } from "vue-router";
 import { useRoute } from "vue-router";
 import { useAuthStore } from "../../stores/auth.store";
@@ -154,26 +154,7 @@ const contentShellClass = computed(() => {
 }
 
 @media (max-width: 1100px) {
-  /* md 断点：强制侧边栏折叠为 84px 图标模式 */
-  .app-shell {
-    grid-template-columns: 84px minmax(0, 1fr);
-  }
-
-  .app-shell.collapsed {
-    grid-template-columns: 84px minmax(0, 1fr);
-  }
-
-  .content-shell--padded {
-    padding: 14px;
-  }
-}
-
-/* sm/平板 ≤1024px：侧边栏改为抽屉浮层（在 Sidebar.vue 内定位），主区占满整行 */
-@media (max-width: 1024px) {
-  .app-shell {
-    grid-template-columns: 1fr;
-  }
-
+  .app-shell,
   .app-shell.collapsed {
     grid-template-columns: 1fr;
   }
