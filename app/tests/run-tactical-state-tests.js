@@ -58,7 +58,14 @@ function makeModule() {
               ],
               lastUpdatedAt: "2026-07-01T10:00:00.000Z",
             },
-            squads: { list: [], lastUpdatedAt: "2026-07-01T10:00:00.000Z" },
+            squads: {
+              list: [],
+              teams: [
+                { teamID: 1, teamName: "United States Army" },
+                { teamID: 2, teamName: "Russian Ground Forces" },
+              ],
+              lastUpdatedAt: "2026-07-01T10:00:00.000Z",
+            },
             rconStatus: { connected: true },
           };
         },
@@ -219,6 +226,8 @@ async function main() {
   assert.equal(ghost.match.teamId, 1);
 
   assert.equal(snapshot.assets.captureZones.length, 1);
+  assert.equal(snapshot.teams.find((team) => team.teamId === 1)?.factionName, "United States Army");
+  assert.equal(snapshot.teams.find((team) => team.teamId === 2)?.factionName, "Russian Ground Forces");
   assert.equal(snapshot.diagnostics.unlinkedBzssPlayers.length, 1);
   assert.equal(snapshot.diagnostics.unlinkedBzssPlayers[0].identity.name, "Ghost BZSS");
   assert.equal(snapshot.squadFollow?.radiusGameUnits, 20000);
