@@ -72,26 +72,19 @@
             }"
             :title="zone.raw || zone.name"
           >
-            <div class="main-base-visual">
-              <span class="main-base-pole"></span>
-              <span class="main-base-flag-frame">
+            <span class="zone-flag-group main-zone-flag">
+              <span class="zone-flag-visual">
                 <img
                   v-if="zone.flagUrl"
-                  class="main-base-faction-flag"
+                  class="zone-flag-image"
                   :src="zone.flagUrl"
                   :alt="zone.factionLabel"
                 />
-                <span v-else class="main-base-flag-fallback">{{ zone.teamId ? `T${zone.teamId}` : "MAIN" }}</span>
+                <span v-else class="zone-flag-placeholder"></span>
+                <span class="zone-flag-lock" aria-label="Locked"></span>
               </span>
-              <span class="main-base-fortification">
-                <span class="main-base-gate"></span>
-              </span>
-              <span class="main-base-anchor-dot"></span>
-              <span class="main-base-label">
-                <small>MAIN BASE</small>
-                <strong>{{ zone.factionLabel || (zone.teamId ? `TEAM ${zone.teamId}` : "MAIN") }}</strong>
-              </span>
-            </div>
+              <span class="zone-flag-name">{{ zone.name }}</span>
+            </span>
           </div>
         </div>
 
@@ -109,29 +102,24 @@
             }"
             :title="zone.raw || zone.name"
           >
-            <div class="capture-flag-emblem">
-              <span class="capture-flag-pole"></span>
-              <span class="capture-flag-banner">
-                <span class="capture-flag-letter">{{ getFlagLetter(zone.name) }}</span>
-              </span>
-            </div>
-            <div class="node-label-container">
-              <span class="node-index-label">OBJ {{ zone.name.includes('-') ? zone.name.split('-')[0] : '' }}</span>
-              <span class="node-name-text">{{ zone.name.includes('-') ? zone.name.split('-').slice(1).join('-') : zone.name }}</span>
-            </div>
-            <div class="capture-progress-ring">
-              <svg viewBox="0 0 36 36">
-                <circle class="capture-progress-bg" cx="18" cy="18" r="15" />
-                <circle
-                  class="capture-progress-fill"
-                  cx="18"
-                  cy="18"
-                  r="15"
-                  :stroke-dasharray="getCaptureDashArray(zone)"
+            <span
+              class="zone-flag-group capture-zone-flag"
+              :class="[`team-${zone.teamId ?? 0}`]"
+              :style="{ '--capture-progress-deg': `${zone.captureProgress * 3.6}deg` }"
+            >
+              <span class="zone-flag-visual">
+                <img
+                  v-if="zone.flagUrl"
+                  class="zone-flag-image"
+                  :src="zone.flagUrl"
+                  :alt="zone.factionLabel"
                 />
-              </svg>
-              <span class="capture-progress-text">{{ formatCapturePercent(zone.capturePercent) }}</span>
-            </div>
+                <span v-else class="zone-flag-placeholder"></span>
+                <span class="capture-flag-neutral-sweep"></span>
+                <span v-if="zone.isLocked" class="zone-flag-lock" aria-label="Locked"></span>
+              </span>
+              <span class="zone-flag-name">{{ zone.name }}</span>
+            </span>
           </button>
         </div>
 
@@ -807,6 +795,7 @@ interface CaptureZoneMarker {
   gameX: number | null;
   gameY: number | null;
   capturePercent?: number | null;
+  captureProgress: number;
   captureDirection?: number | null;
   isLocked?: boolean | null;
   raw?: string;
@@ -1973,12 +1962,13 @@ const captureZoneMarkers = computed<CaptureZoneMarker[]>(() => {
       type: "captureZone",
       id: `capture-zone-${name}`,
       name,
-      teamId: null,
+      teamId,
       mapX: project(x, bounds.minX, bounds.maxX),
       mapY: project(y, bounds.minY, bounds.maxY),
       gameX: x,
       gameY: y,
       capturePercent: zone.capturePercent ?? null,
+      captureProgress,
       captureDirection: zone.captureDirection ?? null,
       isLocked: zone.isLocked ?? null,
       raw: zone.raw,
@@ -1986,22 +1976,6 @@ const captureZoneMarkers = computed<CaptureZoneMarker[]>(() => {
   }
   return markers;
 });
-
-function clampPercentValue(value: unknown) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return null;
-  return Math.max(0, Math.min(100, numeric));
-}
-
-function formatCapturePercent(value: unknown) {
-  const numeric = clampPercentValue(value);
-  return numeric == null ? "--" : `${Math.round(numeric)}%`;
-}
-
-function getCaptureDashArray(zone: CaptureZoneMarker) {
-  const percent = clampPercentValue(zone.capturePercent) ?? 0;
-  return `${percent} ${100 - percent}`;
-}
 
 const teamFactionById = computed(() => {
   const map = new Map<number, string>();
@@ -2021,7 +1995,11 @@ const teamFactionById = computed(() => {
 
   const teamSources = [
     (snapshot.value as any)?.teams,
+    (snapshot.value as any)?.matchState?.teams,
+    (snapshot.value as any)?.matchState?.squads?.teams,
     (serverStore.snapshot as any)?.matchState?.teams,
+    (serverStore.snapshot as any)?.matchState?.squads?.teams,
+    (serverStore.snapshot as any)?.squads?.teams,
     (serverStore.snapshot as any)?.teams,
   ];
   for (const source of teamSources) {
@@ -2066,7 +2044,7 @@ const mainZoneMarkers = computed<MainZoneMarker[]>(() => {
       return {
         type: "mainZone",
         id: `main-zone-${resolvedTeamId ?? index}`,
-        name: resolvedTeamId ? `T${resolvedTeamId}` : `Main ${index + 1}`,
+        name: resolvedTeamId ? `MAIN T${resolvedTeamId}` : `MAIN ${index + 1}`,
         teamId: resolvedTeamId,
         factionCode: faction.factionCode,
         factionLabel: faction.factionLabel,
@@ -2963,19 +2941,6 @@ function getLinkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence
     default:
       return "未关联";
   }
-}
-
-function getFlagLetter(name: string): string {
-  if (!name) return "●";
-  const parts = name.split("-");
-  const first = parts[0]?.trim();
-  if (/^\d+$/.test(first)) {
-    const num = parseInt(first, 10);
-    if (num >= 1 && num <= 26) {
-      return String.fromCharCode(64 + num); // 1 -> A, 2 -> B, etc.
-    }
-  }
-  return first || "●";
 }
 
 function cleanWeaponName(weaponClass: string | null | undefined): string {
