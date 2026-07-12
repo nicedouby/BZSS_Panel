@@ -1,20 +1,12 @@
 import { computed, reactive, ref } from "vue";
-
 import { apiGet } from "../app/apiClient";
 import { renderApiError } from "../app/errors";
-import { canAutoRefreshNow } from "./useAutoRefreshGate";
-import { buildPlayerTooltipStats, type PlayerTooltipStats } from "./serverMetricsAnalytics";
+import { useServerMetricsPolling } from "./useServerMetricsPolling";
+import { useServerMetricsRange, type ServerMetricRangeKey } from "./useServerMetricsRange";
+import { useServerMetricsAnalytics } from "./useServerMetricsAnalytics";
+import { useServerMetricsComparison } from "./useServerMetricsComparison";
 
 export type ServerMetricTone = "critical" | "warn" | "ok" | "idle";
-
-export type ServerMetricRangeKey = "10m" | "30m" | "1h" | "match" | "24h";
-
-export interface ServerMetricRangeOption {
-  key: ServerMetricRangeKey;
-  label: string;
-  spanMs?: number;
-  kind: "fixed" | "match";
-}
 
 export interface ServerMetricChannel {
   key: string;
@@ -31,44 +23,33 @@ export interface ServerMetricSample {
   virtual?: boolean;
 }
 
+export interface ServerDetails {
+  id: string;
+  name: string;
+  maxPlayers: number;
+  maxQueue: number;
+}
+
+export interface MatchDetails {
+  map: string;
+  layer: string;
+  mode: string;
+  startedAt: number | null;
+  roundId: string | null;
+  phase: string;
+}
+
 interface ServerMetricHistoryResponse {
   samples?: ServerMetricSample[];
   channels?: ServerMetricChannel[];
 }
 
 interface ServerMetricCurrentResponse {
-  timestamp_ms?: number;
-  metrics?: Record<string, number>;
+  timestamp_ms: number;
+  server: ServerDetails;
+  match: MatchDetails;
+  metrics: Record<string, number>;
 }
-
-interface RoundOverviewRecord {
-  serverPlayAt?: string | number | null;
-  logLineTime?: string | number | null;
-  logTimeStartedAtMs?: number | null;
-  receivedAt?: string | null;
-  time?: string | null;
-}
-
-interface RoundOverviewResponse {
-  roundState?: {
-    current?: RoundOverviewRecord | null;
-    history?: RoundOverviewRecord[];
-    updatedAt?: string | null;
-  } | null;
-}
-
-const POLL_INTERVAL_MS = 2000;
-const MATCH_OVERVIEW_TTL_MS = 15_000;
-const MAX_SAMPLES = 8000;
-const TOOLTIP_ANALYTICS_WINDOW_MS = 15 * 24 * 60 * 60 * 1000;
-
-export const SERVER_METRIC_RANGES = [
-  { key: "10m", label: "10 分钟", spanMs: 10 * 60 * 1000, kind: "fixed" },
-  { key: "30m", label: "30 分钟", spanMs: 30 * 60 * 1000, kind: "fixed" },
-  { key: "1h", label: "1 小时", spanMs: 60 * 60 * 1000, kind: "fixed" },
-  { key: "match", label: "当前对局", kind: "match" },
-  { key: "24h", label: "24 小时", spanMs: 24 * 60 * 60 * 1000, kind: "fixed" },
-] as const satisfies readonly ServerMetricRangeOption[];
 
 export function useServerMetrics() {
   const loading = ref(false);
@@ -76,61 +57,68 @@ export function useServerMetrics() {
   const availableDates = ref<string[]>([]);
   const samples = ref<ServerMetricSample[]>([]);
   const channels = ref<ServerMetricChannel[]>([]);
-  const tooltipStatsByTimestamp = ref<Record<string, PlayerTooltipStats>>({});
-  const selectedRange = ref<ServerMetricRangeKey>("24h");
-  const selectedDates = ref<string[]>([]);
-  const showDateDialog = ref(false);
   const lastUpdatedAt = ref<number | null>(null);
-  const roundOverview = ref<RoundOverviewResponse | null>(null);
-  const roundOverviewLoadedAt = ref(0);
 
-  const enabledChannels = reactive<Record<string, boolean>>({});
+  // Metadata refs from backend
+  const currentServer = ref<ServerDetails | null>(null);
+  const currentMatch = ref<MatchDetails | null>(null);
 
-  let pollTimer: number | null = null;
-  let startPromise: Promise<void> | null = null;
-  let roundOverviewPromise: Promise<RoundOverviewResponse | null> | null = null;
-  let isStopped = true;
-
-  const currentMetrics = computed<Record<string, number>>(() => {
-    const latest = samples.value[samples.value.length - 1];
-    return latest?.metrics ?? {};
+  const enabledChannels = reactive<Record<string, boolean>>({
+    players: true,
+    queue: true,
+    tps: true,
   });
 
   const hasData = computed(() => samples.value.length > 0);
 
-  const hasCustomSelection = computed(() => selectedDates.value.length > 0);
-
-  const activeRangeLabel = computed(() => {
-    if (hasCustomSelection.value) {
-      return `自定义 ${selectedDates.value.length} 天`;
+  const currentMetrics = computed<Record<string, number>>(() => {
+    if (samples.value.length > 0) {
+      return samples.value[samples.value.length - 1].metrics;
     }
-
-    const range = SERVER_METRIC_RANGES.find((item) => item.key === selectedRange.value) ?? SERVER_METRIC_RANGES[SERVER_METRIC_RANGES.length - 1];
-    return range.label;
+    return { players: 0, queue: 0, tps: 0 };
   });
 
-  const matchRangeStartMs = computed(() => {
-    const record = getLatestRoundRecord();
-
-    return parseTimestampLike(record?.serverPlayAt)
-      ?? parseTimestampLike(record?.logLineTime)
-      ?? parseTimestampLike(record?.time)
-      ?? parseTimestampLike(record?.receivedAt)
-      ?? parseTimestampLike(record?.logTimeStartedAtMs)
-      ?? null;
+  // Range helper
+  const rangeManager = useServerMetricsRange(async () => {
+    await loadHistory();
   });
 
-  const rangeHint = computed(() => {
-    if (hasCustomSelection.value) {
-      return "已选择自定义日期，实时轮询已暂停。";
-    }
+  const {
+    selectedRange,
+    selectedDates,
+    showDateDialog,
+    hasCustomSelection,
+    activeRangeLabel,
+    openDateDialog,
+    closeDateDialog,
+    toggleDate,
+    resetSelectedDates,
+    applySelectedDates,
+    setRange,
+  } = rangeManager;
 
-    if (selectedRange.value === "match" && matchRangeStartMs.value === null) {
-      return "未解析到当前对局起点，已回退到 24 小时窗口。";
+  // Polling helper (5-second polling)
+  const pollingManager = useServerMetricsPolling(
+    async () => {
+      await refreshCurrent();
+    },
+    {
+      intervalMs: 5000,
+      hasCustomSelection: () => hasCustomSelection.value,
     }
+  );
 
-    return "";
-  });
+  const { start, stop, isPolling, isPending } = pollingManager;
+
+  // Analytics helper
+  const analyticsManager = useServerMetricsAnalytics(
+    () => samples.value,
+    () => lastUpdatedAt.value
+  );
+  const { summary } = analyticsManager;
+
+  // Comparison helper
+  const comparisonManager = useServerMetricsComparison(() => currentServer.value?.id ?? "BZSS_Main");
 
   const lastUpdatedLabel = computed(() => {
     if (!lastUpdatedAt.value) return "--:--:--";
@@ -140,85 +128,20 @@ export function useServerMetrics() {
   const tpsTone = computed<ServerMetricTone>(() => {
     const tps = currentMetrics.value.tps;
     if (tps == null) return "idle";
-    if (tps < 20) return "critical";
-    if (tps < 28) return "warn";
+    if (tps < 28) return "critical"; // matching standard normal/warning/critical rules
+    if (tps < 35) return "warn";
     return "ok";
   });
 
-  async function start() {
-    if (startPromise) return startPromise;
-    isStopped = false;
-    clearPollTimer();
-
-    startPromise = (async () => {
-      await Promise.all([
-        loadAvailableDates(),
-        loadHistory(),
-      ]);
-      if (isStopped) return;
-      pollTimer = window.setInterval(() => {
-        if (canAutoRefreshNow()) void refreshCurrent();
-      }, POLL_INTERVAL_MS);
-    })().finally(() => {
-      startPromise = null;
-    });
-
-    return startPromise;
-  }
-
-  function stop() {
-    isStopped = true;
-    clearPollTimer();
-  }
-
-  function clearPollTimer() {
-    if (pollTimer !== null) {
-      window.clearInterval(pollTimer);
-      pollTimer = null;
-    }
-  }
-
-  function openDateDialog() {
-    showDateDialog.value = true;
-  }
-
-  function closeDateDialog() {
-    showDateDialog.value = false;
-  }
-
-  function toggleDate(date: string) {
-    const index = selectedDates.value.indexOf(date);
-    if (index === -1) {
-      selectedDates.value.push(date);
-      return;
-    }
-
-    selectedDates.value.splice(index, 1);
-  }
-
-  function resetSelectedDates() {
-    selectedDates.value = [];
-  }
-
   function toggleChannel(key: string) {
     enabledChannels[key] = !enabledChannels[key];
-  }
-
-  async function applySelectedDates() {
-    closeDateDialog();
-    await loadHistory();
-  }
-
-  async function setRange(range: ServerMetricRangeKey) {
-    selectedRange.value = range;
-    selectedDates.value = [];
-    await loadHistory();
   }
 
   async function refreshAll() {
     await Promise.all([
       loadAvailableDates(),
       loadHistory(),
+      refreshCurrent(),
     ]);
   }
 
@@ -231,58 +154,41 @@ export function useServerMetrics() {
     }
   }
 
-  async function loadRoundOverview() {
-    const now = Date.now();
-    if (roundOverviewPromise) return roundOverviewPromise;
-    if (roundOverview.value && now - roundOverviewLoadedAt.value < MATCH_OVERVIEW_TTL_MS) {
-      return roundOverview.value;
-    }
-
-    roundOverviewPromise = (async () => {
-      try {
-        const payload = await apiGet<RoundOverviewResponse>("/api/round/overview");
-        roundOverview.value = payload;
-        roundOverviewLoadedAt.value = Date.now();
-        return payload;
-      } catch (error) {
-        console.warn("[ServerStats] Failed to load round overview:", error);
-        roundOverviewLoadedAt.value = Date.now();
-        return roundOverview.value;
-      } finally {
-        roundOverviewPromise = null;
-      }
-    })();
-
-    return roundOverviewPromise;
-  }
-
   async function loadHistory() {
     loading.value = true;
     try {
-      const { fromMs, toMs } = await resolveWindow();
-      const visiblePromise = loadHistoryWindow(fromMs, toMs, true);
-      const analyticsPromise = loadHistoryWindow(Math.max(0, fromMs - TOOLTIP_ANALYTICS_WINDOW_MS), toMs, false)
-        .catch((error) => {
-          console.warn("[ServerStats] Failed to load tooltip analytics window:", error);
-          return { samples: [] as ServerMetricSample[] };
-        });
-      const [visiblePayload, analyticsPayload] = await Promise.all([
-        visiblePromise,
-        analyticsPromise,
-      ]);
+      // 1. Fetch current info to get match start time if selecting "match" range
+      if (selectedRange.value === "match" && (!currentMatch.value || !currentMatch.value.startedAt)) {
+        await refreshCurrent();
+      }
 
-      samples.value = Array.isArray(visiblePayload.samples) ? visiblePayload.samples.map((sample) => ({
-        ...sample,
-        metrics: { ...sample.metrics },
-      })) : [];
+      const matchStartMs = currentMatch.value ? currentMatch.value.startedAt : null;
+      const { fromMs, toMs } = rangeManager.resolveWindow(matchStartMs);
 
-      const visibleTimestamps = new Set(samples.value.map((sample) => sample.timestamp_ms));
-      tooltipStatsByTimestamp.value = buildPlayerTooltipStats(
-        Array.isArray(analyticsPayload.samples) ? analyticsPayload.samples : [],
-        visibleTimestamps,
+      const params = new URLSearchParams({
+        include_current: "1",
+        from_ms: String(fromMs),
+        to_ms: String(toMs),
+      });
+
+      const payload = await apiGet<ServerMetricHistoryResponse>(
+        `/api/server-stats/history?${params.toString()}`
       );
 
-      const nextChannels = Array.isArray(visiblePayload.channels) ? visiblePayload.channels.map((channel) => ({ ...channel })) : [];
+      // Downsample/Limit data points to max 1500 to keep UI responsive
+      let loadedSamples = Array.isArray(payload.samples) ? payload.samples : [];
+      if (loadedSamples.length > 1500) {
+        // Simple downsampling
+        const ratio = Math.ceil(loadedSamples.length / 1500);
+        loadedSamples = loadedSamples.filter((_, idx) => idx % ratio === 0);
+      }
+
+      samples.value = loadedSamples.map((sample) => ({
+        ...sample,
+        metrics: { ...sample.metrics },
+      }));
+
+      const nextChannels = Array.isArray(payload.channels) ? payload.channels : [];
       if (nextChannels.length > 0) {
         channels.value = nextChannels;
       }
@@ -298,73 +204,35 @@ export function useServerMetrics() {
   }
 
   async function refreshCurrent() {
-    if (loading.value || hasCustomSelection.value) return;
+    if (hasCustomSelection.value) return;
 
     try {
-      if (selectedRange.value === "match") {
-        await loadRoundOverview();
-      }
-
       const payload = await apiGet<ServerMetricCurrentResponse>("/api/server-stats/current");
-      if (!payload?.metrics) return;
+      if (!payload) return;
 
-      const nextSample: ServerMetricSample = {
-        timestamp_ms: Number(payload.timestamp_ms ?? Date.now()),
-        metrics: { ...payload.metrics },
-      };
+      if (payload.server) currentServer.value = payload.server;
+      if (payload.match) currentMatch.value = payload.match;
 
-      const lastSample = samples.value[samples.value.length - 1];
-      if (!lastSample || nextSample.timestamp_ms > lastSample.timestamp_ms) {
-        const nextSamples = [...samples.value, nextSample];
-        if (nextSamples.length > MAX_SAMPLES) {
-          nextSamples.shift();
+      if (payload.metrics) {
+        const nextSample: ServerMetricSample = {
+          timestamp_ms: Number(payload.timestamp_ms ?? Date.now()),
+          metrics: { ...payload.metrics },
+        };
+
+        const lastSample = samples.value[samples.value.length - 1];
+        if (!lastSample || nextSample.timestamp_ms > lastSample.timestamp_ms) {
+          const nextSamples = [...samples.value, nextSample];
+          // Limit to max 1500
+          if (nextSamples.length > 1500) {
+            nextSamples.shift();
+          }
+          samples.value = nextSamples;
+          lastUpdatedAt.value = Date.now();
         }
-        samples.value = nextSamples;
-        lastUpdatedAt.value = Date.now();
       }
     } catch (error) {
       console.warn("[ServerStats] Failed to refresh current sample:", error);
     }
-  }
-
-  function getLatestRoundRecord() {
-    const roundState = roundOverview.value?.roundState;
-    if (!roundState) return null;
-    if (roundState.current) return roundState.current;
-    const history = roundState.history;
-    if (Array.isArray(history) && history.length > 0) {
-      return history[history.length - 1];
-    }
-    return null;
-  }
-
-  async function resolveWindow() {
-    if (hasCustomSelection.value) {
-      const sortedDates = [...selectedDates.value].sort();
-      const fromMs = Date.parse(`${sortedDates[0]}T00:00:00Z`);
-      const toMs = Date.parse(`${sortedDates[sortedDates.length - 1]}T23:59:59Z`);
-      return { fromMs, toMs };
-    }
-
-    const range = SERVER_METRIC_RANGES.find((item) => item.key === selectedRange.value) ?? SERVER_METRIC_RANGES[SERVER_METRIC_RANGES.length - 1];
-    const toMs = Date.now();
-
-    if (range.kind === "match") {
-      let startMs = matchRangeStartMs.value;
-      if (startMs === null) {
-        await loadRoundOverview();
-        startMs = matchRangeStartMs.value;
-      }
-
-      if (startMs !== null) {
-        return { fromMs: startMs, toMs };
-      }
-    }
-
-    const spanMs = "spanMs" in range && typeof range.spanMs === "number"
-      ? range.spanMs
-      : 24 * 60 * 60 * 1000;
-    return { fromMs: toMs - spanMs, toMs };
   }
 
   function syncEnabledChannels() {
@@ -380,7 +248,6 @@ export function useServerMetrics() {
     historyError,
     availableDates,
     samples,
-    tooltipStatsByTimestamp,
     channels,
     selectedRange,
     selectedDates,
@@ -391,9 +258,22 @@ export function useServerMetrics() {
     hasData,
     hasCustomSelection,
     activeRangeLabel,
-    rangeHint,
     lastUpdatedLabel,
     tpsTone,
+    currentServer,
+    currentMatch,
+    summary,
+    isPolling,
+    isPending,
+
+    // Compare fields
+    compareDates: comparisonManager.compareDates,
+    alignMode: comparisonManager.alignMode,
+    loadingCompare: comparisonManager.loadingCompare,
+    alignedComparisonSeries: comparisonManager.alignedComparisonSeries,
+    toggleCompareDate: comparisonManager.toggleCompareDate,
+    clearComparison: comparisonManager.clearComparison,
+
     start,
     stop,
     openDateDialog,
@@ -407,34 +287,5 @@ export function useServerMetrics() {
     refreshCurrent,
     loadHistory,
     loadAvailableDates,
-    loadRoundOverview,
   };
-}
-
-async function loadHistoryWindow(fromMs: number, toMs: number, includeCurrent: boolean) {
-  const params = new URLSearchParams({
-    include_current: includeCurrent ? "1" : "0",
-    from_ms: String(fromMs),
-    to_ms: String(toMs),
-  });
-  return apiGet<ServerMetricHistoryResponse>(`/api/server-stats/history?${params.toString()}`);
-}
-
-function parseTimestampLike(value: unknown) {
-  if (value === null || value === undefined) return null;
-
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value > 10 ** 11 ? value : value * 1000;
-  }
-
-  const text = String(value).trim();
-  if (!text) return null;
-
-  const numeric = Number(text);
-  if (Number.isFinite(numeric)) {
-    return numeric > 10 ** 11 ? numeric : numeric * 1000;
-  }
-
-  const parsed = Date.parse(text);
-  return Number.isNaN(parsed) ? null : parsed;
 }

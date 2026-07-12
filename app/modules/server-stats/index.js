@@ -79,6 +79,8 @@ export function createServerStatsModule({ core, modules, config, logger }) {
         store,
         getLiveSnapshot: async () => sampler.getCurrentSample(),
         getServerId,
+        getMatchStateSnapshot,
+        core,
       });
       this.api = api;
     },

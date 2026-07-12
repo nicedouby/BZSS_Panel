@@ -82,6 +82,15 @@
   --chart-series-4: #22d3ee;
   --chart-series-5: #c084fc;
   --chart-series-6: #34d399;
+
+  --stats-player: #4da3ff;
+  --stats-queue: #f0a84b;
+  --stats-tps-good: #40b983;
+  --stats-tps-warning: #e7b84b;
+  --stats-tps-critical: #e56868;
+  --stats-grid: rgba(148, 163, 184, 0.10);
+  --stats-panel: var(--color-bg-card);
+  --stats-panel-border: var(--color-border-soft);
 }
 
 @supports not (height: 100dvh) {
@@ -160,6 +169,15 @@
   --chart-axis: #64748b;
   --chart-tooltip-bg: #ffffff;
   --chart-tooltip-text: #172033;
+
+  --stats-player: #2563eb;
+  --stats-queue: #d97706;
+  --stats-tps-good: #059669;
+  --stats-tps-warning: #d97706;
+  --stats-tps-critical: #dc2626;
+  --stats-grid: rgba(71, 85, 105, 0.08);
+  --stats-panel: var(--color-bg-card);
+  --stats-panel-border: var(--color-border-soft);
 }
 
 :root[data-ui-theme="colorful"] {
