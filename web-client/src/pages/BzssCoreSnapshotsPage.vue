@@ -10,7 +10,7 @@
           </span>
         </div>
         <p class="hero-subtitle">
-          列表视图仅保留单一玩家列表。底部原始数据面板展示最近一次完整原始数据，以及运行时、计分板和场景原始块。
+          实时监测服务器底层的玩家数据快照，提供运行时位置、计分板统计与场景占领点数据。
         </p>
       </div>
 
@@ -41,35 +41,39 @@
     </div>
 
     <section class="status-ribbon">
-      <div class="status-item">
-        <span class="status-dot-indicator" :class="payload?.status || 'idle'"></span>
-        <span class="lbl">核心状态</span>
-        <strong class="val" :class="statusColorClass">{{ statusLabel }}</strong>
-        <span class="sub text-muted">({{ statusDetail }})</span>
+      <div class="status-card" :class="payload?.status || 'idle'">
+        <div class="status-card-inner">
+          <div class="status-header">
+            <span class="status-dot-indicator" :class="payload?.status || 'idle'"></span>
+            <span class="lbl">核心状态</span>
+          </div>
+          <strong class="val" :class="statusColorClass">{{ statusLabel }}</strong>
+          <span class="sub text-muted">{{ statusDetail }}</span>
+        </div>
       </div>
 
-      <div class="status-separator">|</div>
-
-      <div class="status-item">
-        <span class="lbl">运行时玩家：</span>
-        <strong class="val">{{ runtimePlayers.length }} 人</strong>
-        <span class="sub text-muted">({{ payload?.state?.runtimePlayerCount ?? 0 }})</span>
+      <div class="status-card">
+        <div class="status-card-inner">
+          <span class="lbl">运行时玩家</span>
+          <strong class="val">{{ runtimePlayers.length }} <span class="val-unit">人</span></strong>
+          <span class="sub text-muted">API同步: {{ payload?.state?.runtimePlayerCount ?? 0 }} 人</span>
+        </div>
       </div>
 
-      <div class="status-separator">|</div>
-
-      <div class="status-item">
-        <span class="lbl">计分板玩家：</span>
-        <strong class="val">{{ scoreboardPlayers.length }} 人</strong>
-        <span class="sub text-muted">({{ payload?.state?.scoreboardPlayerCount ?? 0 }})</span>
+      <div class="status-card">
+        <div class="status-card-inner">
+          <span class="lbl">计分板玩家</span>
+          <strong class="val">{{ scoreboardPlayers.length }} <span class="val-unit">人</span></strong>
+          <span class="sub text-muted">API同步: {{ payload?.state?.scoreboardPlayerCount ?? 0 }} 人</span>
+        </div>
       </div>
 
-      <div class="status-separator">|</div>
-
-      <div class="status-item">
-        <span class="lbl">场景对象：</span>
-        <strong class="val">{{ totalSceneCount }} 项</strong>
-        <span class="sub text-muted">({{ payload?.captureZones?.length ?? 0 }} 点 / {{ payload?.fobs?.length ?? 0 }} FOB)</span>
+      <div class="status-card">
+        <div class="status-card-inner">
+          <span class="lbl">场景对象</span>
+          <strong class="val">{{ totalSceneCount }} <span class="val-unit">项</span></strong>
+          <span class="sub text-muted">{{ payload?.captureZones?.length ?? 0 }} 点位 / {{ payload?.fobs?.length ?? 0 }} FOB</span>
+        </div>
       </div>
     </section>
 
@@ -80,6 +84,32 @@
             <h2>玩家快照 ({{ sortedFilteredPairs.length }} / {{ playerPairs.length }})</h2>
 
             <div class="header-controls">
+              <!-- Team Filter Tabs -->
+              <div class="team-filter-tabs">
+                <button 
+                  type="button" 
+                  class="filter-tab-btn" 
+                  :class="{ 'filter-tab-btn--active': activeTeamFilter === 'all' }" 
+                  @click="activeTeamFilter = 'all'"
+                >全部</button>
+                <button 
+                  type="button" 
+                  class="filter-tab-btn filter-tab-btn--blue" 
+                  :class="{ 'filter-tab-btn--active': activeTeamFilter === 1 }" 
+                  @click="activeTeamFilter = 1"
+                >
+                  蓝军 <span class="tab-team-name" v-if="getTeamChineseName(1)">({{ getTeamChineseName(1) }})</span>
+                </button>
+                <button 
+                  type="button" 
+                  class="filter-tab-btn filter-tab-btn--red" 
+                  :class="{ 'filter-tab-btn--active': activeTeamFilter === 2 }" 
+                  @click="activeTeamFilter = 2"
+                >
+                  红军 <span class="tab-team-name" v-if="getTeamChineseName(2)">({{ getTeamChineseName(2) }})</span>
+                </button>
+              </div>
+
               <div class="search-box">
                 <input
                   v-model.trim="query"
@@ -93,7 +123,7 @@
               <label class="toggle-switch">
                 <input v-model="showRaw" type="checkbox" />
                 <span class="slider"></span>
-                <span class="label-text">显示行原始 JSON</span>
+                <span class="label-text">显示原始 JSON</span>
               </label>
             </div>
           </div>
@@ -152,7 +182,7 @@
                       ]"
                       @click="togglePlayerExpand(pair.playerIndex)"
                     >
-                      <td class="mono font-bold">
+                      <td class="mono font-bold player-name-cell">
                         {{ getPlayerName(pair) || `Player ${pair.playerIndex}` }}
                         <span class="text-muted text-xs font-normal">({{ pair.playerIndex }})</span>
                       </td>
@@ -206,10 +236,43 @@
                             <div class="grid-card">
                               <h5>基础信息</h5>
                               <ul>
-                                <li><span>Player Index:</span> <strong class="mono">{{ pair.playerIndex }}</strong></li>
-                                <li><span>Player ID:</span> <strong class="mono">{{ pair.runtime?.playerId ?? pair.scoreboard?.playerId ?? "--" }}</strong></li>
+                                <li>
+                                  <span>Player Index:</span> 
+                                  <div class="val-copy-row">
+                                    <strong class="mono">{{ pair.playerIndex }}</strong>
+                                  </div>
+                                </li>
+                                <li>
+                                  <span>Player ID:</span> 
+                                  <div class="val-copy-row">
+                                    <strong class="mono">{{ pair.runtime?.playerId ?? pair.scoreboard?.playerId ?? "--" }}</strong>
+                                    <button 
+                                      v-if="pair.runtime?.playerId ?? pair.scoreboard?.playerId" 
+                                      type="button" 
+                                      class="btn-copy-mini" 
+                                      title="复制 ID"
+                                      @click="copyToClipboard(String(pair.runtime?.playerId ?? pair.scoreboard?.playerId), 'copied-val')"
+                                    >
+                                      📋
+                                    </button>
+                                  </div>
+                                </li>
                                 <li><span>Player Name:</span> <strong class="mono">{{ getPlayerName(pair) || "--" }}</strong></li>
-                                <li><span>Player GUID:</span> <strong class="mono">{{ rawPlayerGuid(pair) }}</strong></li>
+                                <li>
+                                  <span>Player GUID:</span> 
+                                  <div class="val-copy-row">
+                                    <strong class="mono text-truncate" style="max-width: 140px;">{{ rawPlayerGuid(pair) }}</strong>
+                                    <button 
+                                      v-if="rawPlayerGuid(pair) !== '--'" 
+                                      type="button" 
+                                      class="btn-copy-mini" 
+                                      title="复制 GUID"
+                                      @click="copyToClipboard(rawPlayerGuid(pair), 'copied-val')"
+                                    >
+                                      📋
+                                    </button>
+                                  </div>
+                                </li>
                                 <li><span>Team:</span> <strong class="mono">{{ pair.scoreboard?.teamId ?? "--" }}</strong></li>
                                 <li><span>Squad:</span> <strong class="mono">{{ pair.scoreboard?.squadId ?? "--" }}</strong></li>
                                 <li><span>Commander:</span> <strong class="mono">{{ boolText(pair.scoreboard?.isCommander) }}</strong></li>
@@ -221,7 +284,21 @@
                             <div class="grid-card">
                               <h5>运行时信息</h5>
                               <ul>
-                                <li><span>Position:</span> <strong class="mono">{{ formatVector(pair.runtime?.position) }}</strong></li>
+                                <li>
+                                  <span>Position:</span> 
+                                  <div class="val-copy-row">
+                                    <strong class="mono">{{ formatVector(pair.runtime?.position) }}</strong>
+                                    <button 
+                                      v-if="pair.runtime?.position" 
+                                      type="button" 
+                                      class="btn-copy-mini" 
+                                      title="复制位置"
+                                      @click="copyToClipboard(formatVector(pair.runtime?.position), 'copied-val')"
+                                    >
+                                      📋
+                                    </button>
+                                  </div>
+                                </li>
                                 <li><span>Yaw:</span> <strong class="mono">{{ pair.runtime?.yaw ?? "--" }}</strong></li>
                                 <li><span>Observed At:</span> <strong class="mono">{{ formatDateTime(pair.runtime?.observedAt) }}</strong></li>
                                 <li><span>Stale:</span> <strong class="mono">{{ boolText(pair.runtime?.stale) }}</strong></li>
@@ -261,7 +338,7 @@
           </div>
 
           <div v-else class="empty-list-state">
-            <p>当前没有可展示的玩家快照。</p>
+            <p>当前没有满足筛选条件的玩家数据。</p>
           </div>
         </div>
       </section>
@@ -286,7 +363,7 @@
           <section class="capture-zone-section">
             <div class="capture-zone-section__header">
               <div>
-                <h3>Capture Zones</h3>
+                <h3>Capture Zones (占领点)</h3>
                 <p>当前场景快照中的占领点。列表可独立滚动。</p>
               </div>
               <span class="capture-zone-count">{{ captureZones.length }}</span>
@@ -303,6 +380,23 @@
                   <span class="capture-zone-state" :class="{ 'capture-zone-state--locked': zone.isLocked }">
                     {{ zone.isLocked ? "已锁定" : "可占领" }}
                   </span>
+                </div>
+
+                <!-- Capture Progress Bar Visualizer -->
+                <div v-if="!zone.isLocked && zone.capturePercent != null && zone.capturePercent > 0" class="capture-progress-wrapper">
+                  <div class="capture-progress-track">
+                    <div 
+                      class="capture-progress-bar"
+                      :style="{ 
+                        width: formatCapturePercent(zone.capturePercent),
+                        background: zone.captureDirection === 1 
+                          ? 'linear-gradient(90deg, #3b82f6, #60a5fa)' 
+                          : zone.captureDirection === 2 
+                            ? 'linear-gradient(90deg, #ef4444, #f87171)' 
+                            : 'linear-gradient(90deg, #64748b, #94a3b8)'
+                      }"
+                    ></div>
+                  </div>
                 </div>
 
                 <dl class="capture-zone-facts">
@@ -324,45 +418,52 @@
             <p v-else class="capture-zone-empty">当前快照尚未包含 Capture Zone 数据。</p>
           </section>
 
-          <details open class="raw-accordion">
-            <summary>
-              <span>完整快照</span>
-              <button type="button" class="btn btn-secondary copy-btn" @click.stop="copyToClipboard(fullRawSnapshotBlock, 'full')">
-                {{ copiedBlock === 'full' ? '已复制' : '复制' }}
+          <!-- Tabbed interface for raw JSON data -->
+          <div class="raw-tabs-container">
+            <div class="raw-tabs-header">
+              <button 
+                type="button" 
+                class="raw-tab-btn" 
+                :class="{ 'raw-tab-btn--active': activeRawTab === 'full' }" 
+                @click="activeRawTab = 'full'"
+              >
+                完整快照
               </button>
-            </summary>
-            <pre class="raw-code-block">{{ fullRawSnapshotBlock }}</pre>
-          </details>
-
-          <details open class="raw-accordion">
-            <summary>
-              <span>运行时原始数据</span>
-              <button type="button" class="btn btn-secondary copy-btn" @click.stop="copyToClipboard(runtimeRawBlock, 'runtime')">
-                {{ copiedBlock === 'runtime' ? '已复制' : '复制' }}
+              <button 
+                type="button" 
+                class="raw-tab-btn" 
+                :class="{ 'raw-tab-btn--active': activeRawTab === 'runtime' }" 
+                @click="activeRawTab = 'runtime'"
+              >
+                运行时
               </button>
-            </summary>
-            <pre class="raw-code-block">{{ runtimeRawBlock }}</pre>
-          </details>
-
-          <details open class="raw-accordion">
-            <summary>
-              <span>计分板原始数据</span>
-              <button type="button" class="btn btn-secondary copy-btn" @click.stop="copyToClipboard(scoreboardRawBlock, 'scoreboard')">
-                {{ copiedBlock === 'scoreboard' ? '已复制' : '复制' }}
+              <button 
+                type="button" 
+                class="raw-tab-btn" 
+                :class="{ 'raw-tab-btn--active': activeRawTab === 'scoreboard' }" 
+                @click="activeRawTab = 'scoreboard'"
+              >
+                计分板
               </button>
-            </summary>
-            <pre class="raw-code-block">{{ scoreboardRawBlock }}</pre>
-          </details>
-
-          <details class="raw-accordion">
-            <summary>
-              <span>场景原始数据</span>
-              <button type="button" class="btn btn-secondary copy-btn" @click.stop="copyToClipboard(sceneRawBlock, 'scene')">
-                {{ copiedBlock === 'scene' ? '已复制' : '复制' }}
+              <button 
+                type="button" 
+                class="raw-tab-btn" 
+                :class="{ 'raw-tab-btn--active': activeRawTab === 'scene' }" 
+                @click="activeRawTab = 'scene'"
+              >
+                场景
               </button>
-            </summary>
-            <pre class="raw-code-block">{{ sceneRawBlock }}</pre>
-          </details>
+            </div>
+            <div class="raw-tab-content">
+              <div class="raw-tab-meta">
+                <span>{{ activeRawTab === 'full' ? '完整 JSON 数据' : activeRawTab === 'runtime' ? '运行时原始玩家' : activeRawTab === 'scoreboard' ? '计分板原始玩家' : '场景（点/FOB/爆破）数据' }}</span>
+                <button type="button" class="btn btn-secondary btn-sm copy-btn" @click="copyActiveRawBlock">
+                  {{ copiedBlock === activeRawTab ? '已复制' : '复制' }}
+                </button>
+              </div>
+              <pre class="raw-code-block">{{ activeRawBlock }}</pre>
+            </div>
+          </div>
         </div>
       </aside>
     </div>
@@ -372,8 +473,6 @@
 <script setup lang="ts">
 import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from "vue";
 import {
-  type BzssCorePlayerInfoResponse,
-  type BzssCoreRawDataResponse,
   type BzssCoreCaptureZoneInfo,
   type BzssCoreRuntimePlayerInfo,
   type BzssCoreScoreboardPlayerInfo,
@@ -457,6 +556,21 @@ const sortKey = ref<keyof BzssCoreScoreboardPlayerInfo | "playerIndex" | "player
 const sortOrder = ref<"asc" | "desc">("asc");
 const expandedPlayers = ref<Record<string | number, boolean>>({});
 
+// Custom UI filters and tabs state
+const activeTeamFilter = ref<'all' | 1 | 2>('all');
+const activeRawTab = ref<'full' | 'runtime' | 'scoreboard' | 'scene'>('full');
+
+const activeRawBlock = computed(() => {
+  if (activeRawTab.value === 'full') return fullRawSnapshotBlock.value;
+  if (activeRawTab.value === 'runtime') return runtimeRawBlock.value;
+  if (activeRawTab.value === 'scoreboard') return scoreboardRawBlock.value;
+  return sceneRawBlock.value;
+});
+
+async function copyActiveRawBlock() {
+  await copyToClipboard(activeRawBlock.value, activeRawTab.value);
+}
+
 function getPlayerName(pair: PlayerPair) {
   const mergedName = (pair.runtime as unknown as { playerName?: string })?.playerName ?? (pair.scoreboard as unknown as { playerName?: string })?.playerName;
   if (mergedName) return mergedName;
@@ -502,6 +616,13 @@ function getTeamChineseName(teamId: number) {
   if (teamId === 1) return getChineseNameFromTeamName(teamNames.value.t1Raw);
   if (teamId === 2) return getChineseNameFromTeamName(teamNames.value.t2Raw);
   return "";
+}
+
+// Check if a team translation was found, return raw name or clean short name if translation is empty
+function getTeamShortLabel(teamId: number) {
+  const cnName = getTeamChineseName(teamId);
+  if (cnName) return cnName;
+  return teamId === 1 ? teamNames.value.t1Raw : teamNames.value.t2Raw;
 }
 
 function togglePlayerExpand(playerIndex: string | number) {
@@ -612,9 +733,16 @@ function buildPlayerPairFromMergedPlayer(player: BzssCoreMergedPlayer): PlayerPa
 }
 
 const filteredPairs = computed(() => {
+  let list = playerPairs.value;
+  
+  // Filter by Team Tabs
+  if (activeTeamFilter.value !== 'all') {
+    list = list.filter((pair) => pair.scoreboard?.teamId === activeTeamFilter.value);
+  }
+
   const needle = query.value.trim().toLowerCase();
-  if (!needle) return playerPairs.value;
-  return playerPairs.value.filter((pair) => {
+  if (!needle) return list;
+  return list.filter((pair) => {
     const values = [
       pair.playerIndex,
       pair.runtime?.playerId,
@@ -687,13 +815,13 @@ const rawDataStatusLabel = computed(() => {
   const data = rawData.value;
   if (!data) return "尚未获取原始数据";
   if (data.lastError) return `原始数据错误: ${data.lastError}`;
-  return `更新于 ${formatDateTime(data.updatedAt)}，完整原始快照已同步`;
+  return `更新于 ${formatDateTime(data.updatedAt)}`;
 });
 
 const statusLabel = computed(() => {
   const status = String(payload.value?.status ?? "").trim();
-  if (status === "ready") return "正常";
-  if (status === "error") return "失败";
+  if (status === "ready") return "就绪";
+  if (status === "error") return "故障";
   if (status === "unavailable") return "不可用";
   return "空闲";
 });
@@ -743,8 +871,8 @@ function formatCapturePercent(value?: number | null) {
 function formatCaptureDirection(value?: number | null) {
   if (value == null) return "--";
   if (value === 0) return "中立";
-  if (value === 1) return "阵营 1";
-  if (value === 2) return "阵营 2";
+  if (value === 1) return `蓝军 (${getTeamShortLabel(1)})`;
+  if (value === 2) return `红军 (${getTeamShortLabel(2)})`;
   return `阵营 ${value}`;
 }
 
@@ -849,39 +977,46 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* Page Base Layout */
 .bzss-page {
   position: relative;
   height: 100%;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
+  gap: 16px;
+  padding: 20px;
   overflow: hidden;
   background: var(--color-bg-page);
 }
 
+/* Floating Glassmorphism Hero Header */
 .page-hero {
   flex-shrink: 0;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--color-border-soft);
+  gap: 20px;
+  padding: 18px 24px;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--card-radius, 14px);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 }
 
 .title-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   flex-wrap: wrap;
 }
 
 .title-row h1 {
-  font-size: 18px;
+  font-size: 22px;
   font-weight: 800;
   margin: 0;
+  letter-spacing: -0.5px;
   background: linear-gradient(135deg, var(--color-text-primary) 30%, var(--color-brand-primary) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -889,33 +1024,39 @@ onBeforeUnmount(() => {
 
 .hero-subtitle {
   margin: 6px 0 0;
-  color: var(--color-text-muted);
-  font-size: 12px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  max-width: 700px;
+  line-height: 1.4;
 }
 
 .hero-actions {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
   align-items: center;
 }
 
+/* SSE Stream Badge */
 .stream-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
+  gap: 8px;
+  padding: 4px 12px;
   border-radius: 999px;
   font-size: 11px;
-  color: var(--color-text-secondary);
-  background: rgba(255, 255, 255, 0.04);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--color-border-soft);
+  transition: all 0.3s ease;
 }
 
 .stream-badge--active {
   color: var(--color-status-success);
-  border-color: rgba(0, 200, 120, 0.35);
-  background: rgba(0, 200, 120, 0.08);
+  border-color: rgba(52, 211, 153, 0.3);
+  background: rgba(52, 211, 153, 0.06);
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.05);
 }
 
 .pulse-dot {
@@ -924,37 +1065,49 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   background: currentColor;
   box-shadow: 0 0 0 0 currentColor;
-  animation: pulse 1.8s infinite;
+  animation: pulse 2s infinite;
 }
 
 @keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(0, 180, 120, 0.45); }
-  70% { box-shadow: 0 0 0 8px rgba(0, 180, 120, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(0, 180, 120, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5); }
+  70% { box-shadow: 0 0 0 6px rgba(52, 211, 153, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
 }
 
+/* Status Cards Grid */
 .status-ribbon {
   flex-shrink: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-  padding: 10px 12px;
-  border: 1px solid var(--color-border-soft);
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.12);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
 }
 
-.status-item {
+.status-card {
+  position: relative;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 12px;
+  padding: 14px 18px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.status-card:hover {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--color-border-default);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+}
+
+.status-card-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.status-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
-  font-size: 12px;
-}
-
-.status-separator {
-  color: var(--color-text-muted);
 }
 
 .status-dot-indicator {
@@ -963,18 +1116,53 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   background: var(--color-text-muted);
 }
-
 .status-dot-indicator.ready { background: var(--color-status-success); }
 .status-dot-indicator.error { background: var(--color-status-danger); }
 .status-dot-indicator.unavailable { background: var(--color-status-warning); }
 .status-dot-indicator.idle { background: var(--color-text-muted); }
 
+.status-card.ready {
+  border-left: 3px solid var(--color-status-success);
+}
+.status-card.error {
+  border-left: 3px solid var(--color-status-danger);
+}
+.status-card.unavailable {
+  border-left: 3px solid var(--color-status-warning);
+}
+
+.status-card .lbl {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-card .val {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--color-text-primary);
+  line-height: 1.1;
+}
+
+.status-card .val-unit {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--color-text-muted);
+  margin-left: 2px;
+}
+
+.status-card .sub {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+/* Dashboard Columns Grid Layout */
 .dashboard-layout {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
-  gap: 12px;
+  grid-template-columns: minmax(0, 2fr) minmax(360px, 1fr);
+  gap: 16px;
 }
 
 .dashboard-col {
@@ -983,64 +1171,143 @@ onBeforeUnmount(() => {
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--color-border-default);
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.08);
+  border-radius: var(--card-radius, 14px);
+  background: var(--color-bg-card, rgba(15, 23, 34, 0.94));
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
 }
 
 .panel-header-wrapper {
   flex-shrink: 0;
-  padding: 10px 12px;
+  padding: 14px 20px;
   border-bottom: 1px solid var(--color-border-soft);
+  background: rgba(0, 0, 0, 0.1);
 }
 
 .panel-header-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
   flex-wrap: wrap;
 }
 
 .panel-header-top h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 700;
+  color: var(--color-text-primary);
 }
 
 .header-controls {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
+/* Team Filter Buttons Group */
+.team-filter-tabs {
+  display: inline-flex;
+  padding: 2px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 8px;
+}
+
+.filter-tab-btn {
+  height: 28px;
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+.filter-tab-btn:hover {
+  color: var(--color-text-primary);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.filter-tab-btn--active {
+  color: var(--color-text-primary) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.filter-tab-btn--blue.filter-tab-btn--active {
+  color: #c7d2fe !important;
+  background: rgba(59, 130, 246, 0.2) !important;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.filter-tab-btn--red.filter-tab-btn--active {
+  color: #fecaca !important;
+  background: rgba(239, 68, 68, 0.2) !important;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.tab-team-name {
+  font-size: 10px;
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+/* Search Box and Inputs */
 .search-box {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
 }
 
 .search-input {
-  min-width: 220px;
-  height: 30px;
-  padding: 0 10px;
+  min-width: 200px;
+  height: 32px;
+  padding: 0 30px 0 12px;
   border-radius: 8px;
   border: 1px solid var(--color-border-default);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(0, 0, 0, 0.25);
   color: var(--color-text-primary);
+  font-size: 12px;
   outline: none;
+  transition: all 0.25s ease;
+}
+
+.search-input:focus {
+  border-color: var(--color-brand-primary);
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0 0 3px rgba(55, 200, 255, 0.15);
 }
 
 .clear-search {
-  height: 30px;
-  padding: 0 10px;
-  border-radius: 8px;
-  border: 1px solid var(--color-border-default);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--color-text-primary);
+  position: absolute;
+  right: 8px;
+  height: 20px;
+  padding: 0 4px;
+  border-radius: 4px;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--color-text-muted);
+  font-size: 10px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
 }
 
+.clear-search:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--color-text-primary);
+}
+
+/* Toggle Switch Styles */
 .toggle-switch {
   display: inline-flex;
   align-items: center;
@@ -1048,19 +1315,25 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: var(--color-text-secondary);
   user-select: none;
+  cursor: pointer;
 }
 
 .toggle-switch input {
   accent-color: var(--color-brand-primary);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
 }
 
+/* Scroll Container */
 .player-list-scroll {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 12px;
+  padding: 16px;
 }
 
+/* Modern Player Table */
 .table-view-container {
   display: flex;
   flex-direction: column;
@@ -1071,6 +1344,7 @@ onBeforeUnmount(() => {
   overflow: auto;
   border: 1px solid var(--color-border-soft);
   border-radius: 10px;
+  background: rgba(0, 0, 0, 0.12);
 }
 
 .player-table {
@@ -1079,111 +1353,211 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 
-.player-table th,
-.player-table td {
-  padding: 10px 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  white-space: nowrap;
-}
-
 .player-table th {
   position: sticky;
   top: 0;
-  background: rgba(0, 0, 0, 0.3);
+  z-index: 10;
+  background: rgba(20, 26, 38, 0.98);
+  backdrop-filter: blur(10px);
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--color-border-default);
   text-align: left;
   font-weight: 700;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  user-select: none;
 }
 
 .player-table th.sortable {
   cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.player-table th.sortable:hover {
+  color: var(--color-text-primary);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.player-table td {
+  padding: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  white-space: nowrap;
+  vertical-align: middle;
 }
 
 .player-row {
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: all 0.2s ease;
 }
 
 .player-row:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.player-row--blue {
-  box-shadow: inset 3px 0 0 rgba(60, 130, 255, 0.9);
-}
-
-.player-row--red {
-  box-shadow: inset 3px 0 0 rgba(255, 80, 80, 0.9);
-}
-
-.player-row--expanded {
   background: rgba(255, 255, 255, 0.03);
 }
 
-.table-expand-btn {
-  min-width: 72px;
+/* Left Indicator Faction Row Styles */
+.player-row--blue {
+  border-left: 4px solid #3b82f6;
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.04) 0%, transparent 100%);
 }
 
+.player-row--blue:hover {
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.07) 0%, rgba(255, 255, 255, 0.01) 100%);
+}
+
+.player-row--red {
+  border-left: 4px solid #ef4444;
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.04) 0%, transparent 100%);
+}
+
+.player-row--red:hover {
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.07) 0%, rgba(255, 255, 255, 0.01) 100%);
+}
+
+.player-row--expanded {
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+.player-name-cell {
+  color: var(--color-text-primary);
+  font-size: 13px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.table-expand-btn {
+  min-width: 64px;
+}
+
+/* Expanded Detail Row */
 .detail-row td {
-  padding: 12px 8px 14px;
-  background: rgba(255, 255, 255, 0.02);
+  padding: 14px 18px;
+  background: rgba(0, 0, 0, 0.18);
+  border-bottom: 1px solid var(--color-border-soft);
 }
 
 .table-expanded-content {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .expanded-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 14px;
 }
 
 .grid-card {
   border: 1px solid var(--color-border-soft);
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.15);
-  padding: 10px;
+  background: rgba(10, 15, 25, 0.6);
+  padding: 14px;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .grid-card h5 {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
   font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-brand-primary);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding-bottom: 6px;
 }
 
 .grid-card ul {
   list-style: none;
   padding: 0;
   margin: 0;
-  display: grid;
-  gap: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .grid-card li {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-}
-
-.player-json-details summary {
-  cursor: pointer;
-  user-select: none;
+  align-items: center;
   font-size: 12px;
+  line-height: 1.4;
 }
 
-.json-block,
-.raw-code-block {
-  margin: 8px 0 0;
-  padding: 10px;
-  border-radius: 8px;
-  overflow: auto;
+.grid-card li > span {
+  color: var(--color-text-muted);
+}
+
+/* Expanded Copy Layout */
+.val-copy-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-copy-mini {
+  background: transparent;
+  border: none;
+  cursor: pointer;
   font-size: 11px;
-  line-height: 1.5;
-  background: rgba(0, 0, 0, 0.35);
+  padding: 2px 4px;
+  border-radius: 4px;
+  color: var(--color-text-muted);
+  opacity: 0.6;
+  display: inline-flex;
+  align-items: center;
+  transition: all 0.2s ease;
+}
+
+.btn-copy-mini:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.08);
   color: var(--color-text-primary);
 }
 
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Expanded JSON Drawer inside card */
+.player-json-details {
+  border: 1px solid var(--color-border-soft);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.player-json-details summary {
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.01);
+  transition: background 0.15s ease;
+}
+
+.player-json-details summary:hover {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--color-text-primary);
+}
+
+.json-block {
+  margin: 0;
+  padding: 12px;
+  border-top: 1px solid var(--color-border-soft);
+  font-size: 11px;
+  line-height: 1.5;
+  background: rgba(0, 0, 0, 0.4);
+  color: #38bdf8;
+  max-height: 260px;
+  overflow: auto;
+}
+
+/* Right Aside Panel Styles */
 .raw-panel {
   min-width: 0;
 }
@@ -1194,91 +1568,100 @@ onBeforeUnmount(() => {
   overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px;
+  gap: 14px;
+  padding: 16px;
 }
 
 .raw-pill {
   display: inline-flex;
   align-items: center;
-  padding: 4px 10px;
+  padding: 3px 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--color-border-soft);
   font-size: 11px;
+  font-weight: 500;
   color: var(--color-text-muted);
 }
 
 .raw-meta-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
   font-size: 11px;
-  padding: 8px 10px;
+  padding: 10px 14px;
   border-radius: 8px;
   border: 1px solid var(--color-border-soft);
-  background: rgba(0, 0, 0, 0.16);
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--color-text-secondary);
 }
 
 .raw-meta-row strong {
   color: var(--color-text-primary);
 }
 
+/* Capture Zone Visual Panel with Progress Bar */
 .capture-zone-section {
   display: flex;
   min-height: 0;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  border: 1px solid rgba(90, 160, 255, 0.28);
-  border-radius: 10px;
-  background: linear-gradient(135deg, rgba(50, 120, 255, 0.1), rgba(0, 0, 0, 0.12));
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.05), rgba(0, 0, 0, 0.15));
 }
 
 .capture-zone-section__header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
 }
 
 .capture-zone-section h3 {
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text-primary);
 }
 
 .capture-zone-section p {
-  margin: 3px 0 0;
+  margin: 4px 0 0;
   font-size: 11px;
   color: var(--color-text-muted);
 }
 
 .capture-zone-count {
   flex: 0 0 auto;
-  min-width: 22px;
-  padding: 3px 7px;
+  min-width: 24px;
+  padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(50, 120, 255, 0.2);
-  color: #b8d3ff;
+  background: rgba(59, 130, 246, 0.15);
+  color: #93c5fd;
   text-align: center;
   font-size: 11px;
   font-weight: 700;
+  border: 1px solid rgba(59, 130, 246, 0.25);
 }
 
 .capture-zone-list {
-  max-height: min(42vh, 360px);
+  max-height: 320px;
   overflow-y: auto;
   overscroll-behavior: contain;
   display: grid;
-  gap: 8px;
-  padding-right: 3px;
+  gap: 10px;
+  padding-right: 4px;
 }
 
 .capture-zone-card {
-  padding: 9px;
+  padding: 12px;
   border: 1px solid var(--color-border-soft);
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.18);
+  border-radius: 10px;
+  background: rgba(10, 15, 25, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .capture-zone-card__title {
@@ -1292,28 +1675,55 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: 13px;
+  color: var(--color-text-primary);
 }
 
 .capture-zone-state {
   flex: 0 0 auto;
-  padding: 2px 6px;
-  border: 1px solid rgba(0, 200, 120, 0.35);
+  padding: 2px 8px;
+  border: 1px solid rgba(52, 211, 153, 0.35);
   border-radius: 999px;
   color: var(--color-status-success);
   font-size: 10px;
+  font-weight: 600;
+  background: rgba(52, 211, 153, 0.05);
 }
 
 .capture-zone-state--locked {
-  border-color: rgba(255, 193, 7, 0.4);
+  border-color: rgba(245, 158, 11, 0.35);
   color: var(--color-status-warning);
+  background: rgba(245, 158, 11, 0.05);
+}
+
+/* Faction Progress Bar Design */
+.capture-progress-wrapper {
+  margin: 2px 0;
+  width: 100%;
+}
+
+.capture-progress-track {
+  height: 6px;
+  width: 100%;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.02);
+}
+
+.capture-progress-bar {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.35s ease;
 }
 
 .capture-zone-facts {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1.2fr 1fr;
   gap: 6px 10px;
-  margin: 8px 0 0;
+  margin: 4px 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.03);
+  padding-top: 6px;
 }
 
 .capture-zone-facts div:first-child {
@@ -1324,60 +1734,120 @@ onBeforeUnmount(() => {
   margin-bottom: 2px;
   color: var(--color-text-muted);
   font-size: 10px;
+  font-weight: 500;
 }
 
 .capture-zone-facts dd {
   margin: 0;
-  color: var(--color-text-primary);
+  color: var(--color-text-secondary);
   font-size: 11px;
 }
 
 .capture-zone-empty {
-  padding: 12px 0;
+  padding: 16px 0;
   text-align: center;
+  color: var(--color-text-muted);
+  font-size: 12px;
 }
 
-.raw-accordion {
+/* Tabbed JSON interface styling */
+.raw-tabs-container {
   border: 1px solid var(--color-border-soft);
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
-  background: rgba(0, 0, 0, 0.12);
+  background: rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
 }
 
-.raw-accordion summary {
+.raw-tabs-header {
+  display: flex;
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid var(--color-border-soft);
+  padding: 0 4px;
+}
+
+.raw-tab-btn {
+  height: 36px;
+  padding: 0 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.raw-tab-btn:hover {
+  color: var(--color-text-primary);
+}
+
+.raw-tab-btn--active {
+  color: var(--color-brand-primary);
+}
+
+.raw-tab-btn--active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 16px;
+  right: 16px;
+  height: 2px;
+  background-color: var(--color-brand-primary);
+  border-radius: 99px;
+}
+
+.raw-tab-content {
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.raw-tab-meta {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 8px 10px;
-  cursor: pointer;
-  user-select: none;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-bottom: 8px;
 }
 
-.raw-accordion summary::-webkit-details-marker {
-  display: none;
+.raw-code-block {
+  margin: 0;
+  padding: 12px;
+  border-radius: 8px;
+  overflow: auto;
+  font-size: 11px;
+  line-height: 1.5;
+  background: rgba(0, 0, 0, 0.35);
+  color: #38bdf8;
+  height: 280px;
+  border: 1px solid rgba(255, 255, 255, 0.02);
 }
 
+/* Mini copy button */
 .copy-btn {
   height: 24px;
-  padding: 0 8px;
+  padding: 0 10px;
   font-size: 10px;
+  border-radius: 6px;
 }
 
 .empty-list-state {
   text-align: center;
-  padding: 24px 10px;
+  padding: 32px 16px;
   color: var(--color-text-muted);
   border: 1px dashed var(--color-border-soft);
-  border-radius: 10px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.05);
 }
 
+/* Animations and Utilities */
 .spinner {
   display: inline-block;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border: 2px solid rgba(255, 255, 255, 0.2);
   border-top-color: #fff;
   border-radius: 50%;
@@ -1387,24 +1857,16 @@ onBeforeUnmount(() => {
 }
 
 @keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  to { transform: rotate(360deg); }
 }
 
 .fade-in {
-  animation: fadeIn 0.35s ease-out;
+  animation: fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .btn {
@@ -1414,22 +1876,22 @@ onBeforeUnmount(() => {
   height: var(--control-height-md, 34px);
   padding: 0 16px;
   border-radius: var(--control-radius, 10px);
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s ease;
   border: 1px solid transparent;
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--color-border-default);
   color: var(--color-text-primary);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.09);
-  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .btn:disabled {
@@ -1439,7 +1901,7 @@ onBeforeUnmount(() => {
 
 .btn-sm {
   height: var(--control-height-sm, 30px);
-  padding: 0 10px;
+  padding: 0 12px;
   font-size: 12px;
 }
 
@@ -1447,16 +1909,16 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 12px 16px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 80, 80, 0.35);
-  background: rgba(255, 80, 80, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  background: rgba(248, 113, 113, 0.08);
   color: var(--color-text-primary);
 }
 
 .error-banner--soft {
-  border-color: rgba(255, 193, 7, 0.35);
-  background: rgba(255, 193, 7, 0.08);
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.08);
 }
 
 .warning-icon {
@@ -1469,12 +1931,13 @@ onBeforeUnmount(() => {
   justify-content: center;
   background: currentColor;
   color: #000;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
 }
 
 .error-content {
   font-size: 12px;
+  line-height: 1.4;
 }
 
 .text-muted {
@@ -1520,10 +1983,12 @@ onBeforeUnmount(() => {
 
 .text-green-glow {
   color: var(--color-status-success);
+  text-shadow: 0 0 10px rgba(52, 211, 153, 0.15);
 }
 
 .text-red-soft {
   color: var(--color-status-danger);
+  text-shadow: 0 0 10px rgba(248, 113, 113, 0.15);
 }
 
 .player-status-dot {
@@ -1543,42 +2008,65 @@ onBeforeUnmount(() => {
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: 3px 8px;
+  padding: 2px 8px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 600;
   border: 1px solid transparent;
 }
 
 .badge--blue {
-  background: rgba(50, 120, 255, 0.14);
-  border-color: rgba(50, 120, 255, 0.35);
-  color: #b8d3ff;
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.25);
+  color: #93c5fd;
 }
 
 .badge--red {
-  background: rgba(255, 80, 80, 0.14);
-  border-color: rgba(255, 80, 80, 0.35);
-  color: #ffb6b6;
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: #fca5a5;
 }
 
 .badge--team {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.04);
   border-color: var(--color-border-soft);
   color: var(--color-text-secondary);
 }
 
 .badge--gold {
-  background: rgba(255, 193, 7, 0.14);
-  border-color: rgba(255, 193, 7, 0.35);
-  color: #ffe08a;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.25);
+  color: #fde047;
 }
 
 .badge--admin {
-  background: rgba(0, 200, 255, 0.14);
-  border-color: rgba(0, 200, 255, 0.35);
-  color: #a8ecff;
+  background: rgba(6, 182, 212, 0.12);
+  border-color: rgba(6, 182, 212, 0.25);
+  color: #67e8f9;
 }
 
+/* Custom Styled Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  transition: background 0.15s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Responsiveness */
 @media (max-width: 1200px) {
   .dashboard-layout {
     grid-template-columns: 1fr;
@@ -1586,10 +2074,24 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 900px) {
-  .page-hero,
-  .panel-header-top,
-  .status-ribbon {
+  .page-hero {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .hero-actions {
+    justify-content: flex-end;
+  }
+
+  .panel-header-top {
+    flex-direction: column;
     align-items: flex-start;
+    gap: 12px;
+  }
+
+  .header-controls {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .player-table {
@@ -1598,10 +2100,6 @@ onBeforeUnmount(() => {
 
   .expanded-grid {
     grid-template-columns: 1fr;
-  }
-
-  .search-input {
-    min-width: 180px;
   }
 }
 </style>
