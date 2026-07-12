@@ -329,7 +329,11 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
     const rconSquads = Array.isArray(matchState?.squads?.list)
       ? matchState.squads.list
       : [];
-    for (const squad of rconSquads) {
+    const rconTeams = Array.isArray(matchState?.squads?.teams)
+      ? matchState.squads.teams
+      : [];
+    for (const teamSource of [...rconTeams, ...rconSquads]) {
+      const squad = teamSource;
       const teamId = numberOrNull(squad?.teamID, squad?.teamId, squad?.team);
       if (teamId == null) continue;
       const teamName = firstText(
