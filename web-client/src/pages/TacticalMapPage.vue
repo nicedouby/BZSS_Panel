@@ -1046,18 +1046,25 @@ const storePlayers = computed(() => adaptTacticalStatePlayersForMap(
 ));
 
 function getPlayerRconDetail(player: any) {
-  if (player?.rconDetail) {
-    return player.rconDetail;
+  try {
+    if (player?.rconDetail) {
+      return player.rconDetail;
+    }
+
+    const rcon = player?.raw?.rcon ?? player?.runtime ?? null;
+    if (!rcon) return null;
+
+    const steamId = (rcon.steamID as string | undefined) || (rcon.steam64 as string | undefined) || null;
+    const playtime = steamId
+      ? (props.playtimes?.[steamId]?.playtimeHours ?? player?.profile?.playtimeHours ?? null)
+      : (player?.profile?.playtimeHours ?? null);
+    return adaptPlayerDetail(rcon, playtime, props.combatStatsLookup ?? {});
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn("[TacticalMap] failed to adapt player detail", error, player);
+    }
+    return null;
   }
-
-  const rcon = player?.raw?.rcon ?? player?.runtime ?? null;
-  if (!rcon) return null;
-
-  const steamId = (rcon.steamID as string | undefined) || (rcon.steam64 as string | undefined) || null;
-  const playtime = steamId
-    ? (props.playtimes?.[steamId]?.playtimeHours ?? player?.profile?.playtimeHours ?? null)
-    : (player?.profile?.playtimeHours ?? null);
-  return adaptPlayerDetail(rcon, playtime, props.combatStatsLookup ?? {});
 }
 
 const canManageRcon = computed(() => {
@@ -1718,27 +1725,25 @@ function handleMapRightClick(e: MouseEvent) {
 function handlePlayerSingleClick(player: TacticalLinkedPlayer, event: MouseEvent) {
   if (singleClickTimer.value) {
     clearTimeout(singleClickTimer.value);
+    singleClickTimer.value = null;
   }
 
-  singleClickTimer.value = setTimeout(() => {
-    selectedPlayerKey.value = getPlayerKey(player);
-    
-    if (containerRef.value) {
-      const rect = containerRef.value.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
+  selectedPlayerKey.value = getPlayerKey(player);
 
-      playerInfoPanel.value = {
-        player,
-        x,
-        y
-      };
-    }
-    
-    playerActionMenu.value = null;
-    mapCommandMenu.value = null;
-    singleClickTimer.value = null;
-  }, 180);
+  if (containerRef.value) {
+    const rect = containerRef.value.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    playerInfoPanel.value = {
+      player,
+      x,
+      y,
+    };
+  }
+
+  playerActionMenu.value = null;
+  mapCommandMenu.value = null;
 }
 
 function handlePlayerDoubleClick(player: TacticalLinkedPlayer, event: MouseEvent) {
