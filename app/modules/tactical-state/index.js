@@ -51,6 +51,76 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
     composeTimer.unref?.();
   }
 
+  function commitSnapshot(snapshot, { serverId, generatedAt, composeStartedAt, errorMessage = "" }) {
+    state.revision += 1;
+    state.generatedAt = generatedAt;
+    state.snapshot = snapshot;
+    state.lastError = errorMessage;
+    state.lastUpdatedAt = generatedAt;
+    state.composeCount += 1;
+    state.lastComposeDurationMs = Date.now() - composeStartedAt;
+    state.maxComposeDurationMs = Math.max(state.maxComposeDurationMs, state.lastComposeDurationMs);
+    state.lastPlayerCount = snapshot.players?.length ?? 0;
+
+    const previousCompact = state.compactSnapshot;
+    const nextCompact = compactSnapshot(snapshot);
+    state.compactSnapshot = nextCompact;
+    const envelope = previousCompact
+      ? {
+          ok: true,
+          type: "tactical-state.delta",
+          revision: nextCompact?.meta?.revision ?? state.revision,
+          generatedAt,
+          delta: buildSnapshotDelta(previousCompact, nextCompact),
+        }
+      : { ok: true, type: "tactical-state.snapshot", snapshot: nextCompact };
+    state.deltaBuildCount += previousCompact ? 1 : 0;
+    const latestSnapshotEnvelope = {
+      ok: true,
+      type: "tactical-state.snapshot",
+      snapshot: nextCompact,
+    };
+    state.latestCompactSnapshot = nextCompact;
+    state.latestSnapshotEnvelope = latestSnapshotEnvelope;
+    state.latestSnapshotText = JSON.stringify(latestSnapshotEnvelope);
+    state.lastSnapshotBytes = state.latestSnapshotText.length;
+    state.serializationCount += 1;
+
+    const shouldBroadcast = !previousCompact || hasMeaningfulDelta(envelope.delta);
+    if (shouldBroadcast) {
+      const streamMessage = { envelope, serialized: JSON.stringify(envelope) };
+      state.serializationCount += 1;
+      state.latestDeltaEnvelope = previousCompact ? envelope : null;
+      state.latestDeltaText = previousCompact ? streamMessage.serialized : "";
+      state.lastDeltaBytes = state.latestDeltaText.length;
+      for (const listener of streamSubscribers) {
+        try { listener(streamMessage); } catch {}
+      }
+    }
+
+    const payload = clonePlainObject(snapshot);
+    for (const listener of subscribers) {
+      try {
+        listener(payload);
+      } catch {
+        // ignore
+      }
+    }
+    core.eventBus?.emitModuleEvent?.("module.tacticalState", "snapshotUpdated", {
+      eventId: `module.tacticalState:${Date.now()}:${state.revision}`,
+      eventName: "module.tacticalState.snapshotUpdated",
+      layer: "module",
+      source: "module.tacticalState",
+      serverId,
+      time: generatedAt,
+      revision: state.revision,
+      playerCount: snapshot.players?.length ?? 0,
+      changedPlayerCount: envelope?.delta?.players?.upsert?.length ?? snapshot.players?.length ?? 0,
+      removedPlayerCount: envelope?.delta?.players?.remove?.length ?? 0,
+    });
+    return payload;
+  }
+
   async function composeSnapshot() {
     if (composeInFlight) {
       composeDirty = true;
@@ -102,73 +172,11 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
 
         if (stopped || generation !== composeGeneration) return clonePlainObject(state.snapshot);
 
-        state.revision += 1;
-        state.generatedAt = generatedAt;
-        state.snapshot = snapshot;
-        state.lastError = "";
-        state.lastUpdatedAt = generatedAt;
-        state.composeCount += 1;
-        state.lastComposeDurationMs = Date.now() - composeStartedAt;
-        state.maxComposeDurationMs = Math.max(state.maxComposeDurationMs, state.lastComposeDurationMs);
-        state.lastPlayerCount = snapshot.players?.length ?? 0;
-
-        const previousCompact = state.compactSnapshot;
-        const nextCompact = compactSnapshot(snapshot);
-        state.compactSnapshot = nextCompact;
-        const envelope = previousCompact
-          ? {
-              ok: true,
-              type: "tactical-state.delta",
-              revision: nextCompact?.meta?.revision ?? state.revision,
-              generatedAt,
-              delta: buildSnapshotDelta(previousCompact, nextCompact),
-            }
-          : { ok: true, type: "tactical-state.snapshot", snapshot: nextCompact };
-        state.deltaBuildCount += previousCompact ? 1 : 0;
-        const latestSnapshotEnvelope = {
-          ok: true,
-          type: "tactical-state.snapshot",
-          snapshot: nextCompact,
-        };
-        state.latestCompactSnapshot = nextCompact;
-        state.latestSnapshotEnvelope = latestSnapshotEnvelope;
-        state.latestSnapshotText = JSON.stringify(latestSnapshotEnvelope);
-        state.lastSnapshotBytes = state.latestSnapshotText.length;
-        state.serializationCount += 1;
-
-        const shouldBroadcast = !previousCompact || hasMeaningfulDelta(envelope.delta);
-        if (shouldBroadcast) {
-          const streamMessage = { envelope, serialized: JSON.stringify(envelope) };
-          state.serializationCount += 1;
-          state.latestDeltaEnvelope = previousCompact ? envelope : null;
-          state.latestDeltaText = previousCompact ? streamMessage.serialized : "";
-          state.lastDeltaBytes = state.latestDeltaText.length;
-          for (const listener of streamSubscribers) {
-            try { listener(streamMessage); } catch {}
-          }
-        }
-
-        const payload = clonePlainObject(snapshot);
-        for (const listener of subscribers) {
-          try {
-            listener(payload);
-          } catch {
-            // ignore
-          }
-        }
-        core.eventBus?.emitModuleEvent?.("module.tacticalState", "snapshotUpdated", {
-          eventId: `module.tacticalState:${Date.now()}:${state.revision}`,
-          eventName: "module.tacticalState.snapshotUpdated",
-          layer: "module",
-          source: "module.tacticalState",
+        return commitSnapshot(snapshot, {
           serverId,
-          time: generatedAt,
-          revision: state.revision,
-          playerCount: snapshot.players?.length ?? 0,
-          changedPlayerCount: envelope?.delta?.players?.upsert?.length ?? snapshot.players?.length ?? 0,
-          removedPlayerCount: envelope?.delta?.players?.remove?.length ?? 0,
+          generatedAt,
+          composeStartedAt,
         });
-        return payload;
       } catch (error) {
         const message = error?.message ?? "Failed to compose tactical snapshot.";
         state.lastError = message;
@@ -176,12 +184,18 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
           operation: "composeSnapshot",
           data: { serverId, message },
         });
-        state.snapshot = buildEmptySnapshot({
+        if (stopped || generation !== composeGeneration) return clonePlainObject(state.snapshot);
+        const errorSnapshot = buildEmptySnapshot({
           serverId,
           generatedAt,
           error: message,
         });
-        return clonePlainObject(state.snapshot);
+        return commitSnapshot(errorSnapshot, {
+          serverId,
+          generatedAt,
+          composeStartedAt,
+          errorMessage: message,
+        });
       } finally {
         composeInFlight = null;
         if (composeDirty && !stopped) scheduleCompose();
