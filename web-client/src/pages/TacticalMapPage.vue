@@ -1961,6 +1961,13 @@ const captureZoneMarkers = computed<CaptureZoneMarker[]>(() => {
     }
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
     lastKnownZonePositions.value.set(name, { x, y });
+    const rawTeamId = Number(zone.teamId ?? zone.ownerTeamId ?? zone.captureDirection);
+    const teamId = Number.isFinite(rawTeamId) && (rawTeamId === 1 || rawTeamId === 2) ? rawTeamId : null;
+    const rawCapturePercent = Number(zone.capturePercent);
+    const captureProgress = Number.isFinite(rawCapturePercent)
+      ? Math.max(0, Math.min(100, rawCapturePercent >= 0 && rawCapturePercent <= 1 ? rawCapturePercent * 100 : rawCapturePercent))
+      : 100;
+    const faction = resolveMainZoneFaction(teamId);
     markers.push({
       type: "captureZone",
       id: `capture-zone-${name}`,
