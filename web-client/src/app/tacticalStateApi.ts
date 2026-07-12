@@ -15,7 +15,6 @@ export interface TacticalStateDelta {
   server?: any;
   match?: any;
   teams?: any[];
-  squadFollow?: any;
   assets?: any;
   diagnostics?: any;
   players?: {
