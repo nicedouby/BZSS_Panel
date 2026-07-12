@@ -492,10 +492,12 @@ const routeRefreshPolicy = computed(() => normalizeRefreshPolicy(route.meta.refr
 const matchSnapshot = computed(() => snapshot.value?.snapshot?.matchState ?? snapshot.value?.matchState ?? null);
 const remoteTelemetryQuery = useQuery({
   queryKey: computed(() => ["remote-telemetry-state", auth.authenticated]),
-  enabled: computed(() => auth.authenticated),
+  enabled: computed(() => active.value && !pageHidden.value && auth.authenticated),
   queryFn: async () => apiGet<any>("/api/remote-telemetry/state"),
-  refetchInterval: computed(() => (auth.authenticated ? 2_000 : false)),
-  refetchIntervalInBackground: true,
+  refetchInterval: computed(() => (
+    active.value && !pageHidden.value && auth.authenticated ? 2_000 : false
+  )),
+  refetchIntervalInBackground: false,
   refetchOnWindowFocus: false,
 });
 const remoteTelemetryState = computed(() => remoteTelemetryQuery.data.value?.remoteTelemetry ?? null);
@@ -583,17 +585,26 @@ const squadLifecycleRefetchInterval = computed(() => resolveRefreshDelay({
 }));
 const squadLifecycleQuery = useQuery({
   queryKey: computed(() => ["squad-lifecycle-current", auth.authenticated]),
-  enabled: computed(() => auth.authenticated),
+  enabled: computed(() => active.value && !pageHidden.value && auth.authenticated),
   queryFn: async () => apiGet<any>("/api/squad-lifecycle/current"),
-  refetchInterval: computed(() => squadLifecycleRefetchInterval.value),
-  refetchIntervalInBackground: true,
+  refetchInterval: computed(() => (
+    active.value && !pageHidden.value && auth.authenticated
+      ? squadLifecycleRefetchInterval.value
+      : false
+  )),
+  refetchIntervalInBackground: false,
   refetchOnWindowFocus: false,
 });
 const squadLifecycleCurrent = computed(() => squadLifecycleQuery.data.value?.current ?? null);
 const combatStatsLookup = computed(() => buildCombatStatsLookupFromTacticalPlayers(tacticalPlayers.value));
 const battleLogOverviewQuery = useQuery({
   queryKey: computed(() => ["battle-log-overview", auth.authenticated, currentServerId.value]),
-  enabled: computed(() => auth.authenticated && Boolean(currentServerId.value)),
+  enabled: computed(() => (
+    active.value
+    && !pageHidden.value
+    && auth.authenticated
+    && Boolean(currentServerId.value)
+  )),
   queryFn: async () => {
     try {
       return await apiGet<any>(`/api/battle-log/overview?serverId=${encodeURIComponent(currentServerId.value)}`);
@@ -602,8 +613,12 @@ const battleLogOverviewQuery = useQuery({
     }
   },
   staleTime: 5_000,
-  refetchInterval: computed(() => combatCacheRefetchInterval.value),
-  refetchIntervalInBackground: true,
+  refetchInterval: computed(() => (
+    active.value && !pageHidden.value && auth.authenticated
+      ? combatCacheRefetchInterval.value
+      : false
+  )),
+  refetchIntervalInBackground: false,
   refetchOnWindowFocus: false,
 });
 const battleLogOverview = computed(() => normalizeBattleLogOverview(
@@ -937,6 +952,9 @@ onActivated(() => {
 
 onDeactivated(() => {
   active.value = false;
+  cancelIdleTask(battleStatsRefreshIdleHandle);
+  closePlayerDetail();
+  closeSquadDetail();
   tacticalStateStore.stopStream();
 });
 
