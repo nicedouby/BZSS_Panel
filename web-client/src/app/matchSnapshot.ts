@@ -130,8 +130,17 @@ export function buildPlayersSnapshot(matchPlayers: any) {
 
 export function buildSquadsSnapshot(matchSquads: any) {
   const list = Array.isArray(matchSquads?.list) ? matchSquads.list : [];
+  const teams = Array.isArray(matchSquads?.teams)
+    ? matchSquads.teams
+      .map((team: any) => ({
+        teamID: Number(team?.teamID ?? team?.teamId),
+        teamName: String(team?.teamName ?? team?.factionName ?? "").trim(),
+      }))
+      .filter((team: any) => Number.isFinite(team.teamID) && team.teamName)
+    : [];
   const snapshot = {
     list: [...list],
+    teams,
     byKey: {} as Record<string, any>,
     byTeamID: {} as Record<string, any[]>,
     updatedAt: toMillis(matchSquads?.lastUpdatedAt) || Date.now(),
@@ -211,10 +220,10 @@ function deriveModeFromLayer(...layers: unknown[]) {
     const tokens = text.split(/[_\s-]+/).filter(Boolean);
     if (!tokens.length) continue;
 
-  const lastToken = tokens[tokens.length - 1];
-  if (/^seed$/i.test(lastToken)) return "seed";
+    const lastToken = tokens[tokens.length - 1];
+    if (/^seed$/i.test(lastToken)) return "seed";
 
-  if (/^(?:v?\d+|pve|pvp)$/i.test(lastToken) && tokens.length > 1) {
+    if (/^(?:v?\d+|pve|pvp)$/i.test(lastToken) && tokens.length > 1) {
       const previous = String(tokens[tokens.length - 2] ?? "").trim();
       if (!previous) continue;
       if (/^seed$/i.test(previous)) return "seed";
