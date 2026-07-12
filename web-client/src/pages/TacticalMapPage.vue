@@ -988,6 +988,7 @@ function adaptTacticalStatePlayersForMapUncached(playersList: any[] = [], combat
   });
 }
 
+const EMPTY_COMBAT_LOOKUP: Record<string, any> = Object.freeze({});
 const adaptedPlayerCache = new Map<string, {
   source: object;
   combatLookup: Record<string, any>;
@@ -1031,7 +1032,7 @@ function adaptTacticalStatePlayersForMap(playersList: any[] = [], combatLookup: 
 
 const storePlayers = computed(() => adaptTacticalStatePlayersForMap(
   Array.isArray(tacticalStateStore.players) ? tacticalStateStore.players : [],
-  props.combatStatsLookup ?? {},
+  props.combatStatsLookup ?? EMPTY_COMBAT_LOOKUP,
 ));
 
 function getPlayerRconDetail(player: any) {
