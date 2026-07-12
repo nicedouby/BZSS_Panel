@@ -1017,7 +1017,7 @@ function adaptTacticalStatePlayersForMap(playersList: any[] = [], combatLookup: 
       continue;
     }
 
-    const adapted = adaptTacticalStatePlayersForMapUncached([player], combatLookup)[0];
+    const adapted = adaptTacticalStatePlayersForMapUncached([player], combatLookup)[0] as TacticalLinkedPlayer | undefined;
     if (!adapted) continue;
     adaptedPlayerCache.set(key, { source: player, combatLookup, adapted });
     adaptedPlayers.push(adapted);
