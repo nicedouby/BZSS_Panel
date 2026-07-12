@@ -127,8 +127,8 @@ const runtime = getRuntimeSyncState();
 const route = useRoute();
 const ui = useUiStore();
 const isMobile = useIsMobile(1024);
-// 导航抽屉断点（≤1024，含平板），独立于内容断点
-const isNavDrawer = useIsMobile(1024);
+// 导航抽屉断点统一到 ≤1100px，独立于内容断点
+const isNavDrawer = useIsMobile(1100);
 const warmupLoaded = ref(false);
 const warmupLoading = ref(false);
 const warmupSaving = ref(false);
@@ -665,7 +665,7 @@ function toggleSidebar() {
   display: none;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1100px) {
   .menu-button {
     display: inline-flex;
     align-items: center;
