@@ -15,63 +15,22 @@
             <span class="team-id-badge">TEAM {{ team.teamId }}</span>
             <span class="team-name" :title="team.teamName">{{ team.teamName }}</span>
           </h2>
-          <div class="team-column-visuals">
-            <img v-if="unitIconUrl" class="unit-icon" :src="unitIconUrl" alt="" />
-          </div>
-        </div>
 
-        <!-- Primary Stats Grid (Tickets & Players) -->
-        <div class="team-primary-stats">
-          <!-- Tickets Card -->
-          <button
-            type="button"
-            class="team-primary-card tickets-card"
-            :class="{ clickable: canEditTickets }"
-            :disabled="!canEditTickets"
-            :title="canEditTickets ? '点击修改票数' : '当前 sender 没有可用命令地址'"
-            @click="$emit('edit-tickets', props.team)"
-          >
-            <div class="card-label-row">
-              <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M15 5v2m0 4v2m0 4v2M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" />
-              </svg>
-              <span class="card-label">剩余票数</span>
-              <svg v-if="canEditTickets" class="card-edit-indicator" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-              </svg>
-            </div>
-            <div class="card-value">{{ teamTicketText }}</div>
-          </button>
-
-          <!-- Players Card -->
-          <div class="team-primary-card players-card">
-            <div class="card-label-row">
-              <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
-              <span class="card-label">在线玩家</span>
-            </div>
-            <div class="card-value">
-              <span class="players-current">{{ team.playerCount }}</span>
-              <span class="players-separator">/</span>
-              <span class="players-max">{{ team.maxPlayers }}</span>
-            </div>
-            <!-- Occupancy Progress Bar -->
-            <div class="players-progress-bar">
-              <div 
-                class="players-progress-fill" 
-                :style="{ width: `${Math.min(100, Math.max(0, (team.playerCount / (team.maxPlayers || 1)) * 100))}%` }"
-              ></div>
-            </div>
-          </div>
+          <img v-if="unitIconUrl" class="unit-icon" :src="unitIconUrl" alt="" />
         </div>
 
         <!-- Secondary Stats Chips -->
         <div class="team-secondary-stats">
+          <TeamHeaderQuickStats
+            :team-id="team.teamId"
+            :ticket-count="team.ticketCount"
+            :player-count="team.playerCount"
+            :max-players="team.maxPlayers"
+            :can-edit-tickets="canEditTickets"
+            :class="teamColorClass"
+            @edit-tickets="$emit('edit-tickets', props.team)"
+          />
+
           <span class="team-stat-chip avg" title="队伍平均游戏时长">
             <svg class="chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10" />
@@ -139,6 +98,7 @@
 import { computed } from "vue";
 import type { PlayerRowViewModel, TeamViewModel, SquadViewModel, CombatStats, SquadLeaderRowViewModel } from "../../types/squad-admin.types";
 import SquadCard from "./SquadCard.vue";
+import TeamHeaderQuickStats from "./TeamHeaderQuickStats.vue";
 import { extractPlaytimeHours } from "../../utils/squad-admin-adapter";
 import { 获取战斗群旗帜, getUnitIconUrlByTeamName } from "../../shared/faction-assets/faction-data";
 
@@ -290,7 +250,7 @@ const teamAveragePingText = computed(() => {
 /* ─── 队伍头部 ───────────────────────────────────────────────────────────── */
 .team-column-header {
   flex: 0 0 auto;
-  padding: 8px 10px 9px;
+  padding: 7px 9px;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border-soft);
   background:
@@ -347,10 +307,10 @@ const teamAveragePingText = computed(() => {
 
 .team-header-flag-bg {
   position: absolute;
-  top: -15px;
-  left: -20px;
-  width: calc(100% + 40px);
-  height: calc(100% + 30px);
+  top: -50px;
+  left: -50px;
+  width: calc(100% + 100px);
+  height: calc(100% + 100px);
   z-index: 0;
   pointer-events: none;
   overflow: visible;
@@ -374,15 +334,7 @@ const teamAveragePingText = computed(() => {
   min-width: 0;
 }
 
-.team-column-visuals {
-  display: flex;
-  align-items: stretch;
-  gap: 8px;
-  flex: 0 0 auto;
-  margin-left: auto;
-}
-
-.team-column-visuals > .unit-icon {
+.unit-icon {
   align-self: center;
   display: block;
   width: 22px;
@@ -435,9 +387,9 @@ const teamAveragePingText = computed(() => {
 .team-header-top-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   width: 100%;
+  min-width: 0;
 }
 
 .team-title-line {
@@ -458,6 +410,17 @@ const teamAveragePingText = computed(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
+}
+
+@media (max-width: 720px) {
+  .team-header-top-row {
+    flex-wrap: wrap;
+  }
+
+  .team-header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 
 .team-id-badge {
@@ -489,193 +452,7 @@ const teamAveragePingText = computed(() => {
   text-shadow: 0 0 8px rgba(255, 155, 69, 0.35);
 }
 
-/* ─── 核心状态面板 (双卡片网格) ───────────────────────────────────────────── */
-.team-primary-stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  margin-top: 4px;
-  margin-bottom: 4px;
-}
 
-.team-primary-card {
-  display: flex;
-  flex-direction: column;
-  padding: 4px 8px;
-  border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.025);
-  border: 1px solid var(--color-border-soft);
-  position: relative;
-  overflow: hidden;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  text-align: left;
-  min-width: 0;
-}
-
-/* 票数卡片 */
-.tickets-card {
-  appearance: none;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0.005) 100%);
-  color: #f8fafc;
-  cursor: default;
-}
-
-.team1 .tickets-card {
-  background: linear-gradient(135deg, rgba(55, 200, 255, 0.06) 0%, rgba(55, 200, 255, 0.015) 100%);
-  border-color: rgba(55, 200, 255, 0.22);
-}
-
-.team2 .tickets-card {
-  background: linear-gradient(135deg, rgba(255, 155, 69, 0.06) 0%, rgba(255, 155, 69, 0.015) 100%);
-  border-color: rgba(255, 155, 69, 0.22);
-}
-
-.tickets-card.clickable {
-  cursor: pointer;
-}
-
-.tickets-card.clickable:hover {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.015) 100%);
-  border-color: rgba(255, 255, 255, 0.35);
-  box-shadow: 0 2px 8px rgba(255, 255, 255, 0.04);
-  transform: translateY(-1px);
-}
-
-.team1 .tickets-card.clickable:hover {
-  background: linear-gradient(135deg, rgba(55, 200, 255, 0.12) 0%, rgba(55, 200, 255, 0.04) 100%);
-  border-color: rgba(55, 200, 255, 0.45);
-  box-shadow: 0 2px 10px rgba(55, 200, 255, 0.12);
-}
-
-.team2 .tickets-card.clickable:hover {
-  background: linear-gradient(135deg, rgba(255, 155, 69, 0.12) 0%, rgba(255, 155, 69, 0.04) 100%);
-  border-color: rgba(255, 155, 69, 0.45);
-  box-shadow: 0 2px 10px rgba(255, 155, 69, 0.12);
-}
-
-.tickets-card.clickable:active {
-  transform: translateY(0);
-}
-
-/* 玩家数卡片 */
-.players-card {
-  background: rgba(255, 255, 255, 0.015);
-  border-color: var(--color-border-soft);
-}
-
-.team1 .players-card {
-  border-color: rgba(55, 200, 255, 0.12);
-}
-
-.team2 .players-card {
-  border-color: rgba(255, 155, 69, 0.12);
-}
-
-/* 卡片内部元素 */
-.card-label-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-bottom: 1px;
-  color: var(--color-text-muted);
-}
-
-.card-icon {
-  width: 10px;
-  height: 10px;
-  opacity: 0.6;
-  flex-shrink: 0;
-}
-
-.card-label {
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-}
-
-.card-edit-indicator {
-  width: 9px;
-  height: 9px;
-  margin-left: auto;
-  opacity: 0.35;
-  transition: opacity 0.2s ease, transform 0.2s ease;
-}
-
-.tickets-card:hover .card-edit-indicator {
-  opacity: 0.9;
-  transform: scale(1.1);
-}
-
-.card-value {
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-  display: flex;
-  align-items: baseline;
-  margin-top: 1px;
-}
-
-.tickets-card .card-value {
-  color: #fff;
-}
-
-.team1 .tickets-card .card-value {
-  color: var(--color-team1-primary);
-  text-shadow: 0 0 8px rgba(55, 200, 255, 0.2);
-}
-
-.team2 .tickets-card .card-value {
-  color: var(--color-team2-primary);
-  text-shadow: 0 0 8px rgba(255, 155, 69, 0.2);
-}
-
-.players-card .card-value {
-  color: var(--color-text-primary);
-}
-
-.players-current {
-  font-weight: 800;
-}
-
-.players-separator {
-  margin: 0 1px;
-  font-size: 12px;
-  opacity: 0.35;
-  font-weight: 400;
-}
-
-.players-max {
-  font-size: 12px;
-  opacity: 0.6;
-  font-weight: 600;
-}
-
-/* 在线人数占用进度条 */
-.players-progress-bar {
-  width: 100%;
-  height: 2px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 99px;
-  margin-top: 4px;
-  overflow: hidden;
-  position: relative;
-}
-
-.players-progress-fill {
-  height: 100%;
-  border-radius: 99px;
-  background: var(--color-text-muted);
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.team1 .players-progress-fill {
-  background: linear-gradient(90deg, rgba(55, 200, 255, 0.5), var(--color-team1-primary));
-}
-
-.team2 .players-progress-fill {
-  background: linear-gradient(90deg, rgba(255, 155, 69, 0.5), var(--color-team2-primary));
-}
 
 /* ─── 次要指标芯片行 ─────────────────────────────────────────────────────── */
 .team-secondary-stats {
@@ -690,7 +467,7 @@ const teamAveragePingText = computed(() => {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  height: 18px;
+  height: 20px;
   padding: 0 6px;
   border-radius: var(--radius-full);
   border: 1px solid var(--color-border-soft);
@@ -738,6 +515,7 @@ const teamAveragePingText = computed(() => {
   color: inherit;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  font-size: 9px;
 }
 
 /* ─── 小队列表 ───────────────────────────────────────────────────────────── */
@@ -780,34 +558,8 @@ const teamAveragePingText = computed(() => {
   padding: 5px 8px 5px;
 }
 
-.team-column.compact .team-column-visuals {
-  gap: 6px;
-}
-
-.team-column.compact .team-column-visuals > .team-faction-bg {
-  width: 66px;
-}
-
-.team-column.compact .team-column-visuals > .unit-icon {
+.team-column.compact .unit-icon {
   padding: 1px;
-}
-
-.team-column.compact .team-primary-stats {
-  margin-top: 3px;
-  margin-bottom: 3px;
-  gap: 4px;
-}
-
-.team-column.compact .team-primary-card {
-  padding: 3px 6px;
-}
-
-.team-column.compact .card-value {
-  font-size: 12px;
-}
-
-.team-column.compact .players-progress-bar {
-  margin-top: 3px;
 }
 
 .team-column.compact .team-secondary-stats {
@@ -818,6 +570,44 @@ const teamAveragePingText = computed(() => {
   height: 16px;
   padding: 0 4px;
   font-size: 8px;
+}
+
+/* ─── 紧凑模式下的快速统计指标微调 ────────────────────────────────────────── */
+.team-column.compact :deep(.team-quick-stat) {
+  height: 16px;
+  padding: 0 4px;
+}
+
+.team-column.compact :deep(.team-ticket-stat) {
+  min-width: 48px;
+  padding: 0 4px;
+}
+
+.team-column.compact :deep(.team-player-stat) {
+  min-width: 62px;
+  padding-bottom: 1px;
+}
+
+.team-column.compact :deep(.quick-stat-label) {
+  font-size: 7px;
+}
+
+.team-column.compact :deep(.quick-stat-value),
+.team-column.compact :deep(.quick-stat-limit),
+.team-column.compact :deep(.quick-stat-divider) {
+  font-size: 8px;
+}
+
+.team-column.compact :deep(.quick-stat-edit) {
+  width: 7px;
+  height: 7px;
+}
+
+.team-column.compact :deep(.player-capacity-track) {
+  left: 4px;
+  right: 4px;
+  bottom: 0px;
+  height: 1px;
 }
 
 .team-column.compact .squad-list {
