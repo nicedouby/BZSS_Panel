@@ -286,9 +286,12 @@ function testParseLogLine() {
     [22, 23, 24],
   );
 
-  const scene = parseBzssCoreLogLine("PIE: CPZ:{01-TriCommons,true,1.0,1}{02-AbdelsFarm,true,1.0,1},FOBI:{,1,Very_Small,300.0,10000.0,2000.0,},MainZone:{1,X=56820.773 Y=7170.025 Z=-13376.360}");
+  const scene = parseBzssCoreLogLine("PIE: CPZ:{01-TriCommons,X=100 Y=200 Z=0,true,1.0,1}{02-AbdelsFarm,X=300 Y=400 Z=0,true,1.0,2},FOBI:{,1,Very_Small,300.0,10000.0,2000.0,},MainZone:{1,X=56820.773 Y=7170.025 Z=-13376.360}");
   assert.equal(scene.type, "scene");
   assert.equal(scene.captureZones.length, 2);
+  assert.equal(scene.captureZones[0].teamId, 1);
+  assert.equal(scene.captureZones[0].ownerTeamId, 1);
+  assert.equal(scene.captureZones[1].teamId, 2);
   assert.equal(scene.fobs.length, 1);
   assert.equal(scene.mainZones.length, 1);
 
@@ -344,11 +347,13 @@ function testMonitorState() {
     beforeEmptyScoreboard,
   );
 
-  assert.equal(module.api.ingestLogLine("PIE: CPZ:{01-TriCommons,true,1.0,1},FOBI:{,1,Very_Small,300.0,10000.0,2000.0,},MainZone:{1,X=56820.773 Y=7170.025 Z=-13376.360}").ok, true);
+  assert.equal(module.api.ingestLogLine("PIE: CPZ:{01-TriCommons,X=100 Y=200 Z=0,true,1.0,1},FOBI:{,1,Very_Small,300.0,10000.0,2000.0,},MainZone:{1,X=56820.773 Y=7170.025 Z=-13376.360}").ok, true);
   const raw = module.api.getRawSnapshot();
   assert.equal(raw.runtimePlayers.length, 3);
   assert.equal(raw.scoreboardPlayers.length, 3);
   assert.equal(raw.captureZones.length, 1);
+  assert.equal(raw.captureZones[0].teamId, 1);
+  assert.equal(raw.captureZones[0].ownerTeamId, 1);
   assert.equal(raw.fobs.length, 1);
   assert.equal(raw.mainZones.length, 1);
   assert.ok(raw.rawLineHash);
