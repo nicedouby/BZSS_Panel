@@ -112,6 +112,7 @@ async function fetchSnapshot(options: { scheduleNext: boolean; immediate?: boole
 
   runtimeSyncState.inFlight = true;
   try {
+    if (!options.immediate && !canAutoRefreshNow()) return;
     const response = await fetch("/api/snapshot/all", {
       credentials: "same-origin",
       headers: {
@@ -180,6 +181,13 @@ function normalizeRuntimeSnapshot(input: any) {
   const squads = payload?.squads ?? match?.squads ?? {};
   const rcon = payload?.rcon ?? {};
   const webStatus = server?.webStatus ?? {};
+  const fallbackTeamHeaders = Array.isArray(squads?.teams)
+    ? squads.teams
+    : Array.isArray(match?.teams)
+      ? match.teams
+      : Array.isArray(payload?.teams)
+        ? payload.teams
+        : [];
   const matchState = payload?.matchState ?? {
     serverStatus: {
       ...(match?.server ?? {}),
@@ -192,9 +200,10 @@ function normalizeRuntimeSnapshot(input: any) {
     },
     squads: {
       list: Array.isArray(squads?.list) ? squads.list : [],
+      teams: fallbackTeamHeaders,
       lastUpdatedAt: squads?.updatedAt ?? payload?.updatedAt ?? Date.now(),
     },
-    teams: Array.isArray(match?.teams) ? match.teams : Array.isArray(payload?.teams) ? payload.teams : [],
+    teams: fallbackTeamHeaders,
     rconStatus: {
       ...rcon,
       connected: Boolean(rcon?.connected ?? webStatus?.rconConnected ?? false),
@@ -210,7 +219,7 @@ function normalizeRuntimeSnapshot(input: any) {
     match: matchState.match,
     players: matchState.players.list,
     squads: matchState.squads.list,
-    teams: matchState.teams,
+    teams: matchState.squads?.teams ?? matchState.teams ?? [],
     rconStatus: matchState.rconStatus,
   };
 
