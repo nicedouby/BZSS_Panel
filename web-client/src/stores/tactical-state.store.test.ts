@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { flushPromises } from "@vue/test-utils";
+import { isReactive, reactive } from "vue";
 
 const hooks = vi.hoisted(() => {
   const state = {
@@ -77,6 +78,34 @@ describe("tactical-state store", () => {
     });
     await flushPromises();
     expect(store.players.map((item) => item.identity.key)).toEqual(["p2", "p3"]);
+    store.stopStream();
+  });
+
+  it("keeps full and delta players raw when inserted into a reactive window state", async () => {
+    const store = useTacticalStateStore();
+    store.startStream();
+    const p1 = player("p1", 1);
+    hooks.onMessage?.({ ...snapshot(1, [p1]), type: "tactical-state.snapshot" });
+    await flushPromises();
+
+    expect(store.players[0]).toBe(p1);
+    expect(isReactive(store.players[0])).toBe(false);
+    const fullHolder = reactive({ player: store.players[0] });
+    expect(fullHolder.player).toBe(p1);
+
+    const p2 = player("p2", 2);
+    hooks.onMessage?.({
+      ok: true,
+      type: "tactical-state.delta",
+      revision: 2,
+      delta: { meta: { revision: 2 }, players: { upsert: [p2], remove: [] } },
+    });
+    await flushPromises();
+
+    expect(store.players[1]).toBe(p2);
+    expect(isReactive(store.players[1])).toBe(false);
+    const deltaHolder = reactive({ player: store.players[1] });
+    expect(deltaHolder.player).toBe(p2);
     store.stopStream();
   });
 

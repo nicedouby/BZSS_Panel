@@ -69,7 +69,7 @@ export class RuntimeState {
     }));
 
     this.unsubscribers.push(eventBus.onCoreEvent("RCON_LIST_SQUADS_UPDATED", (event) => {
-      this.updateSquads(event?.squads ?? []);
+      this.updateSquads(event?.squads ?? [], event?.teams ?? event?.squads?.teams ?? []);
     }));
 
     this.unsubscribers.push(eventBus.onModuleEvent("module.matchState", "playersUpdated", (event) => {
@@ -77,7 +77,7 @@ export class RuntimeState {
     }));
 
     this.unsubscribers.push(eventBus.onModuleEvent("module.matchState", "squadsUpdated", (event) => {
-      this.updateSquads(event?.squads ?? []);
+      this.updateSquads(event?.squads ?? [], event?.teams ?? event?.squads?.teams ?? []);
     }));
 
     this.unsubscribers.push(eventBus.onCoreEvent("*", (event) => {
@@ -140,10 +140,14 @@ export class RuntimeState {
     this.deriveTeams();
   }
 
-  updateSquads(squads = []) {
+  updateSquads(squads = [], teams = []) {
     const list = normalizeSquads(squads);
+    const incomingTeams = normalizeTeamHeaders(teams);
     const next = makeSquadsState();
     next.list = list;
+    next.teams = incomingTeams.length > 0
+      ? incomingTeams
+      : normalizeTeamHeaders(this.state.squads?.teams ?? []);
     next.updatedAt = Date.now();
     next.stale = false;
 
@@ -196,6 +200,7 @@ export class RuntimeState {
     this.state.events.updatedAt = Date.now();
     this.state.events.revision += 1;
   }
+
   updateJob(job) {
     if (!job?.id) return;
     const publicJob = cloneJsonSafe(job);
@@ -337,6 +342,7 @@ export class RuntimeState {
       },
       squads: {
         list: squads.list,
+        teams: squads.teams,
         updatedAt: squads.updatedAt,
         stale: squads.stale,
       },
@@ -369,7 +375,11 @@ export class RuntimeState {
   }
 
   deriveTeams() {
-    this.state.teams = deriveTeams(this.state.players.active, this.state.squads.list);
+    this.state.teams = deriveTeams(
+      this.state.players.active,
+      this.state.squads.list,
+      this.state.squads.teams,
+    );
   }
 
   getServerCacheKey(webStatusUpdatedAt = "") {
@@ -466,6 +476,7 @@ function makePlayersState() {
 function makeSquadsState() {
   return {
     list: [],
+    teams: [],
     byKey: {},
     byTeamID: {},
     updatedAt: 0,
@@ -500,7 +511,20 @@ function normalizeSquads(squads) {
   });
 }
 
-function deriveTeams(players, squads) {
+function normalizeTeamHeaders(teams) {
+  const normalized = [];
+  const seen = new Set();
+  for (const team of Array.isArray(teams) ? teams : []) {
+    const teamID = numberOrNull(team?.teamID ?? team?.teamId);
+    const teamName = String(team?.teamName ?? team?.factionName ?? "").trim();
+    if (teamID == null || !teamName || seen.has(teamID)) continue;
+    seen.add(teamID);
+    normalized.push({ teamID, teamName });
+  }
+  return normalized;
+}
+
+function deriveTeams(players, squads, teamHeaders = []) {
   const teamMap = new Map();
   const unknownTeamID = "unknown";
   for (const teamID of [1, 2]) {
@@ -519,6 +543,10 @@ function deriveTeams(players, squads) {
     unassignedPlayers: [],
     playerCount: 0,
   });
+
+  for (const team of normalizeTeamHeaders(teamHeaders)) {
+    ensureTeam(teamMap, team.teamID, team.teamName);
+  }
 
   const squadMap = new Map();
   for (const squad of squads) {
