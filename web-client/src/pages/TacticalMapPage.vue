@@ -158,19 +158,17 @@
           >
             <div class="fob-visual">
               <div class="fob-fortress">
-                <span class="fob-battlement fob-battlement--left"></span>
-                <span class="fob-battlement fob-battlement--right"></span>
                 <span class="fob-fortress-gate"></span>
                 <span v-if="fob.isBleeding" class="fob-alert">!</span>
               </div>
 
-              <div class="fob-resource-panel">
-                <span class="fob-resource fob-resource--ammo">
-                  <small>AMMO</small>
+              <div class="fob-resource-row">
+                <span class="fob-resource fob-resource--ammo" :title="`弹药 ${formatFobResource(fob.ammo)}`">
+                  <span class="fob-resource-icon fob-ammo-icon" aria-hidden="true"></span>
                   <strong>{{ formatFobResource(fob.ammo) }}</strong>
                 </span>
-                <span class="fob-resource fob-resource--construction">
-                  <small>BUILD</small>
+                <span class="fob-resource fob-resource--construction" :title="`建材 ${formatFobResource(fob.construction)}`">
+                  <span class="fob-resource-icon fob-hammer-icon" aria-hidden="true"></span>
                   <strong>{{ formatFobResource(fob.construction) }}</strong>
                 </span>
               </div>
