@@ -4,7 +4,7 @@ import { compactSnapshot, buildSnapshotDelta, hasMeaningfulDelta } from "./strea
 
 const COMPOSE_DEBOUNCE_MS = 100;
 
-export function createTacticalStateModule({ core, modules, logger }) {
+export function createTacticalStateModule({ core, modules, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
     moduleId: "module.tacticalState",
     source: "module.tacticalState",
@@ -12,10 +12,10 @@ export function createTacticalStateModule({ core, modules, logger }) {
   }) ?? core.logger;
 
   const state = createInitialState();
-  const profileCacheTtlMs = Number(core.config?.get?.("modules.tacticalState.profileCacheTtlMs", 30_000) ?? 30_000);
+  const profileCacheTtlMs = Number(config?.get?.("modules.tacticalState.profileCacheTtlMs", 30_000) ?? 30_000);
   const profileNegativeCacheTtlMs = 10_000;
-  const profileCacheIdleTtlMs = Number(core.config?.get?.("modules.tacticalState.profileCacheIdleTtlMs", 600_000) ?? 600_000);
-  const profileCacheMaxEntries = Number(core.config?.get?.("modules.tacticalState.profileCacheMaxEntries", 5000) ?? 5000);
+  const profileCacheIdleTtlMs = Number(config?.get?.("modules.tacticalState.profileCacheIdleTtlMs", 600_000) ?? 600_000);
+  const profileCacheMaxEntries = Number(config?.get?.("modules.tacticalState.profileCacheMaxEntries", 5000) ?? 5000);
   const profileCache = new Map();
   const subscribers = new Set();
   const streamSubscribers = new Set();
