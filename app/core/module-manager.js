@@ -143,31 +143,7 @@ export class ModuleManager {
         channel: "module",
       }) ?? this.logger;
 
-      if (this.instances.includes(instance)) continue;
-      this.instances.push(instance);
-
-      const enabled = this.isModuleEnabled(instance);
-      if (enabled) {
-        if (instance.init) await instance.init();
-        if (instance.start && !this.startedInstances.has(instance)) {
-          await instance.start();
-          this.startedInstances.add(instance);
-        }
-
-        if (instance.apiName && instance.api) {
-          this.registry[instance.apiName] = instance.api;
-          if (instance.apiName === "pluginSubscriptions") {
-            this.core.pluginSubscriptions = instance.api;
-          }
-        }
-      }
-
-      if (!instance.manifest?.hidden) {
-        this.registry.pluginSubscriptions?.registerRuntimeItem?.({
-          ...(instance.manifest ?? {}),
-          status: enabled ? "running" : "stopped",
-        });
-      }
+      await this.activateInstance(instance);
 
       moduleLogger.info(`Loaded ${instance.manifest.id}`, {
         label: "MODULE",
@@ -178,6 +154,32 @@ export class ModuleManager {
         },
       });
     }
+  }
+
+  async activateInstance(instance) {
+    if (!instance || this.instances.includes(instance)) return this.isModuleEnabled(instance);
+    this.instances.push(instance);
+    const enabled = this.isModuleEnabled(instance);
+
+    if (enabled) {
+      if (instance.init) await instance.init();
+      if (instance.start && !this.startedInstances.has(instance)) {
+        await instance.start();
+        this.startedInstances.add(instance);
+      }
+      if (instance.apiName && instance.api) {
+        this.registry[instance.apiName] = instance.api;
+        if (instance.apiName === "pluginSubscriptions") this.core.pluginSubscriptions = instance.api;
+      }
+    }
+
+    if (!instance.manifest?.hidden) {
+      this.registry.pluginSubscriptions?.registerRuntimeItem?.({
+        ...(instance.manifest ?? {}),
+        status: enabled ? "running" : "stopped",
+      });
+    }
+    return enabled;
   }
 
   async stopAll() {
@@ -220,5 +222,4 @@ function inferModuleId(factoryName) {
   const normalized = name.charAt(0).toLowerCase() + name.slice(1);
   return `module.${normalized}`;
 }
-
 
