@@ -784,6 +784,46 @@ async function testRawCaptureFileLifecycle() {
   });
 }
 
+
+async function testRawCaptureRotation() {
+  await withTempCwd(async () => {
+    const module = createBzssCoreMonitorModule({
+      config: {
+        get(key, defaultValue) {
+          if (key === "modules.bzssCoreMonitor.rawCapture.enabled") return true;
+          if (key === "modules.bzssCoreMonitor.rawCapture.maxFileBytes") return 1024;
+          if (key === "modules.bzssCoreMonitor.rawCapture.maxFiles") return 3;
+          return defaultValue;
+        },
+      },
+      core: {
+        eventBus: { onCoreEvent() { return () => {}; }, emitModuleEvent() {} },
+        logger: { info() {}, warn() {}, error() {}, debug() {} },
+      },
+    });
+
+    await module.start();
+    const capturePath = module.api.getRawCapturePath();
+    for (let index = 0; index < 80; index += 1) {
+      module.api.ingestLogLine(`PIE: Raw capture rotation line ${index} ${"x".repeat(120)}`);
+    }
+    await module.stop();
+
+    const base = capturePath.replace(/\.jsonl$/, "");
+    const files = [capturePath, `${base}.1.jsonl`, `${base}.2.jsonl`];
+    assert.equal(files.every((file) => fs.existsSync(file)), true);
+    assert.equal(fs.existsSync(`${base}.3.jsonl`), false);
+    for (const file of files) {
+      const size = fs.statSync(file).size;
+      assert.ok(size > 0);
+      assert.ok(size <= 1024);
+      for (const row of fs.readFileSync(file, "utf8").trim().split(/\r?\n/).filter(Boolean)) {
+        JSON.parse(row);
+      }
+    }
+  });
+}
+
 async function testChunkSubscriptionAndNoRawCapture() {
   await withTempCwd(async (tempDir) => {
     const listeners = new Map();
@@ -848,6 +888,7 @@ async function main() {
   await testParseExplosionDamage();
   await testChunkSubscriptionAndNoRawCapture();
   await testRawCaptureFileLifecycle();
+  await testRawCaptureRotation();
   console.log("run-bzss-core-monitor-tests: ok");
 }
 

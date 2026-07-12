@@ -2,7 +2,8 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { Readable } from "node:stream";
+import { Readable, Writable } from "node:stream";
+import { once } from "node:events";
 
 import { WebRegistry } from "../core/web-registry.js";
 import { WebServer } from "../core/web-server.js";
@@ -53,6 +54,28 @@ function createRecorder() {
       end(body) {
         state.body = Buffer.isBuffer(body) ? body.toString("utf8") : String(body ?? "");
       },
+    },
+  };
+}
+
+
+function createWritableRecorder() {
+  const state = { status: null, headers: null, body: "" };
+  const res = new Writable({
+    write(chunk, _encoding, callback) {
+      state.body += Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk ?? "");
+      callback();
+    },
+  });
+  res.writeHead = (status, headers) => {
+    state.status = status;
+    state.headers = headers;
+  };
+  return {
+    state,
+    res,
+    async waitForFinish() {
+      if (!res.writableFinished) await once(res, "finish");
     },
   };
 }
@@ -3588,16 +3611,40 @@ async function testVueRouteFallsBackToIndexHtml() {
   assert.equal(routeRecorder.state.status, 200);
   assert.match(routeRecorder.state.body, /vue-app/);
 
-  const assetRecorder = createRecorder();
+  const assetRecorder = createWritableRecorder();
   await server.handleRequest({
     method: "GET",
     url: "/assets.txt",
     headers: { host: "localhost" },
     socket: {},
   }, assetRecorder.res);
+  await assetRecorder.waitForFinish();
 
   assert.equal(assetRecorder.state.status, 200);
   assert.equal(assetRecorder.state.body, "asset");
+  assert.equal(assetRecorder.state.headers["Accept-Ranges"], undefined);
+
+  const headRecorder = createRecorder();
+  await server.handleRequest({
+    method: "HEAD",
+    url: "/assets.txt",
+    headers: { host: "localhost" },
+    socket: {},
+  }, headRecorder.res);
+  assert.equal(headRecorder.state.status, 200);
+  assert.equal(headRecorder.state.body, "");
+  assert.equal(headRecorder.state.headers["Content-Length"], 5);
+  assert.ok(headRecorder.state.headers.ETag);
+
+  const cachedRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/assets.txt",
+    headers: { host: "localhost", "if-none-match": headRecorder.state.headers.ETag },
+    socket: {},
+  }, cachedRecorder.res);
+  assert.equal(cachedRecorder.state.status, 304);
+  assert.equal(cachedRecorder.state.body, "");
 
   await fs.rm(tempDir, { recursive: true, force: true });
 }

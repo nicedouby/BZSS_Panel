@@ -34,11 +34,20 @@ export function createChatManagerService({ core, config, logger }) {
     config?.get?.("modules.chatManager.maxStatsMinutes", DEFAULT_STATS_MINUTES),
     DEFAULT_STATS_MINUTES,
   );
+  const playerStatsIdleTtlMs = normalizePositiveInteger(
+    config?.get?.("modules.chatManager.playerStatsIdleTtlMs", 3_600_000),
+    3_600_000,
+  );
+  const maxTrackedPlayers = normalizePositiveInteger(
+    config?.get?.("modules.chatManager.maxTrackedPlayers", 2000),
+    2000,
+  );
 
   // playerId -> monitoring state
   const playerStats = new Map();
   const minuteStats = new Map();
   const unsubscribers = [];
+  let playerStatsCleanupTimer = null;
 
   const api = {
     getHistory(limit = maxHistory) {
@@ -119,6 +128,17 @@ export function createChatManagerService({ core, config, logger }) {
       );
     }
 
+    if (!playerStatsCleanupTimer) {
+      playerStatsCleanupTimer = setInterval(() => {
+        prunePlayerStats(playerStats, {
+          now: Date.now(),
+          idleTtlMs: playerStatsIdleTtlMs,
+          maxEntries: maxTrackedPlayers,
+          frequencyWindowMs,
+        });
+      }, 300_000);
+      playerStatsCleanupTimer.unref?.();
+    }
     logger?.info?.("ChatManager service started.");
   }
 
@@ -129,6 +149,9 @@ export function createChatManagerService({ core, config, logger }) {
       } catch {}
     }
 
+    if (playerStatsCleanupTimer) clearInterval(playerStatsCleanupTimer);
+    playerStatsCleanupTimer = null;
+    playerStats.clear();
     eventEmitter.removeAllListeners();
     logger?.info?.("ChatManager service stopped.");
   }
@@ -234,6 +257,7 @@ function updatePlayerStats(playerStats, { now, steamId, eosId, playerName, spamW
     steamID: String(steamId ?? ""),
     eosID: String(eosId ?? ""),
     messageTimestamps: [],
+    lastActivityAt: 0,
   };
 
   stats.name = String(playerName ?? stats.name ?? "Unknown").trim() || "Unknown";
@@ -246,10 +270,25 @@ function updatePlayerStats(playerStats, { now, steamId, eosId, playerName, spamW
     stats.count = 1;
   }
   stats.lastTime = now;
+  stats.lastActivityAt = now;
 
   stats.messageTimestamps = (stats.messageTimestamps || []).filter((timestamp) => now - timestamp < frequencyWindowMs);
   stats.messageTimestamps.push(now);
   playerStats.set(playerKey, stats);
+}
+
+function prunePlayerStats(playerStats, { now, idleTtlMs, maxEntries, frequencyWindowMs }) {
+  for (const [key, stats] of playerStats) {
+    stats.messageTimestamps = (stats.messageTimestamps || [])
+      .filter((timestamp) => now - timestamp < frequencyWindowMs);
+    if (stats.messageTimestamps.length === 0 && now - Number(stats.lastActivityAt || stats.lastTime || 0) > idleTtlMs) {
+      playerStats.delete(key);
+    }
+  }
+  if (playerStats.size <= maxEntries) return;
+  const oldest = [...playerStats.entries()]
+    .sort((left, right) => Number(left[1].lastActivityAt || 0) - Number(right[1].lastActivityAt || 0));
+  for (const [key] of oldest.slice(0, playerStats.size - maxEntries)) playerStats.delete(key);
 }
 
 function cloneChatEntry(entry, { exposeRawLog }) {

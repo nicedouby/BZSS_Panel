@@ -58,7 +58,14 @@ function makeModule() {
               ],
               lastUpdatedAt: "2026-07-01T10:00:00.000Z",
             },
-            squads: { list: [], lastUpdatedAt: "2026-07-01T10:00:00.000Z" },
+            squads: {
+              list: [],
+              teams: [
+                { teamID: 1, teamName: "United States Army" },
+                { teamID: 2, teamName: "Russian Ground Forces" },
+              ],
+              lastUpdatedAt: "2026-07-01T10:00:00.000Z",
+            },
             rconStatus: { connected: true },
           };
         },
@@ -184,7 +191,7 @@ function makeModule() {
 }
 
 async function main() {
-  const { tacticalModule } = makeModule();
+  const { tacticalModule, eventBus } = makeModule();
   await tacticalModule.start();
   const snapshot = await tacticalModule.api.getSnapshot();
 
@@ -219,12 +226,40 @@ async function main() {
   assert.equal(ghost.match.teamId, 1);
 
   assert.equal(snapshot.assets.captureZones.length, 1);
+  assert.equal(snapshot.teams.find((team) => team.teamId === 1)?.factionName, "United States Army");
+  assert.equal(snapshot.teams.find((team) => team.teamId === 2)?.factionName, "Russian Ground Forces");
   assert.equal(snapshot.diagnostics.unlinkedBzssPlayers.length, 1);
   assert.equal(snapshot.diagnostics.unlinkedBzssPlayers[0].identity.name, "Ghost BZSS");
   assert.equal(snapshot.squadFollow?.radiusGameUnits, 20000);
   assert.equal(snapshot.squadFollow?.squads.length, 0);
 
+  const diagnosticsBeforeRead = tacticalModule.api.getDiagnostics();
+  await tacticalModule.api.getSnapshot();
+  await tacticalModule.api.getSnapshot();
+  assert.equal(tacticalModule.api.getDiagnostics().composeCount, diagnosticsBeforeRead.composeCount);
+
+  const initialStream = await tacticalModule.api.getStreamSnapshot();
+  assert.equal(initialStream.envelope.type, "tactical-state.snapshot");
+  assert.equal(initialStream.envelope.snapshot.meta.revision, snapshot.meta.revision);
+
+  const received = [];
+  const unsubscribeA = tacticalModule.api.subscribeStream((message) => received.push(message.serialized));
+  const unsubscribeB = tacticalModule.api.subscribeStream((message) => received.push(message.serialized));
+  eventBus.emitModuleEvent("module.playerState", "playersSnapshotUpdated", {});
+  await new Promise((resolve) => setTimeout(resolve, 180));
+  const latestStream = await tacticalModule.api.getStreamSnapshot();
+  const cacheDiagnostics = tacticalModule.api.getDiagnostics();
+  assert.equal(cacheDiagnostics.profileDatabaseQueryCount, 1);
+  assert.equal(cacheDiagnostics.profileCacheSize, 2);
+  assert.ok(latestStream.envelope.snapshot.meta.revision > initialStream.envelope.snapshot.meta.revision);
+  assert.equal(JSON.parse(latestStream.serialized).type, "tactical-state.snapshot");
+  assert.ok(received.length >= 2);
+  assert.equal(received[0], received[1]);
+  unsubscribeA();
+  unsubscribeB();
+
   await tacticalModule.stop();
+  assert.equal(tacticalModule.api.getDiagnostics().subscriberCount, 0);
   console.log("run-tactical-state-tests: ok");
 }
 

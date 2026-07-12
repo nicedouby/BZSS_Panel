@@ -1,8 +1,10 @@
 ﻿// -*- coding: utf-8 -*-
 
-const COMPOSE_DEBOUNCE_MS = 50;
+import { compactSnapshot, buildSnapshotDelta, hasMeaningfulDelta } from "./stream-codec.js";
 
-export function createTacticalStateModule({ core, modules, logger }) {
+const COMPOSE_DEBOUNCE_MS = 100;
+
+export function createTacticalStateModule({ core, modules, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
     moduleId: "module.tacticalState",
     source: "module.tacticalState",
@@ -10,15 +12,29 @@ export function createTacticalStateModule({ core, modules, logger }) {
   }) ?? core.logger;
 
   const state = createInitialState();
+  const profileCacheTtlMs = Number(config?.get?.("modules.tacticalState.profileCacheTtlMs", 30_000) ?? 30_000);
+  const profileNegativeCacheTtlMs = 10_000;
+  const profileCacheIdleTtlMs = Number(config?.get?.("modules.tacticalState.profileCacheIdleTtlMs", 600_000) ?? 600_000);
+  const profileCacheMaxEntries = Number(config?.get?.("modules.tacticalState.profileCacheMaxEntries", 5000) ?? 5000);
+  const profileCache = new Map();
   const subscribers = new Set();
+  const streamSubscribers = new Set();
   const unsubscribers = [];
   let started = false;
+  let stopped = false;
   let composeTimer = null;
   let composeInFlight = null;
+  let composeDirty = false;
+  let composeGeneration = 0;
 
   function subscribe(listener) {
     subscribers.add(listener);
     return () => subscribers.delete(listener);
+  }
+
+  function subscribeStream(listener) {
+    streamSubscribers.add(listener);
+    return () => streamSubscribers.delete(listener);
   }
 
   function getServerId() {
@@ -26,16 +42,94 @@ export function createTacticalStateModule({ core, modules, logger }) {
   }
 
   function scheduleCompose() {
-    if (composeTimer) clearTimeout(composeTimer);
+    composeDirty = true;
+    if (composeTimer || composeInFlight || stopped) return;
     composeTimer = setTimeout(() => {
       composeTimer = null;
       void composeSnapshot();
     }, COMPOSE_DEBOUNCE_MS);
+    composeTimer.unref?.();
+  }
+
+  function commitSnapshot(snapshot, { serverId, generatedAt, composeStartedAt, errorMessage = "" }) {
+    state.revision += 1;
+    if (snapshot?.meta) snapshot.meta.revision = state.revision;
+    state.generatedAt = generatedAt;
+    state.snapshot = snapshot;
+    state.lastError = errorMessage;
+    state.lastUpdatedAt = generatedAt;
+    state.composeCount += 1;
+    state.lastComposeDurationMs = Date.now() - composeStartedAt;
+    state.maxComposeDurationMs = Math.max(state.maxComposeDurationMs, state.lastComposeDurationMs);
+    state.lastPlayerCount = snapshot.players?.length ?? 0;
+
+    const previousCompact = state.compactSnapshot;
+    const nextCompact = compactSnapshot(snapshot);
+    state.compactSnapshot = nextCompact;
+    const envelope = previousCompact
+      ? {
+          ok: true,
+          type: "tactical-state.delta",
+          revision: nextCompact?.meta?.revision ?? state.revision,
+          generatedAt,
+          delta: buildSnapshotDelta(previousCompact, nextCompact),
+        }
+      : { ok: true, type: "tactical-state.snapshot", snapshot: nextCompact };
+    state.deltaBuildCount += previousCompact ? 1 : 0;
+    const latestSnapshotEnvelope = {
+      ok: true,
+      type: "tactical-state.snapshot",
+      snapshot: nextCompact,
+    };
+    state.latestCompactSnapshot = nextCompact;
+    state.latestSnapshotEnvelope = latestSnapshotEnvelope;
+    state.latestSnapshotText = JSON.stringify(latestSnapshotEnvelope);
+    state.lastSnapshotBytes = state.latestSnapshotText.length;
+    state.serializationCount += 1;
+
+    const shouldBroadcast = !previousCompact || hasMeaningfulDelta(envelope.delta);
+    if (shouldBroadcast) {
+      const streamMessage = { envelope, serialized: JSON.stringify(envelope) };
+      state.serializationCount += 1;
+      state.latestDeltaEnvelope = previousCompact ? envelope : null;
+      state.latestDeltaText = previousCompact ? streamMessage.serialized : "";
+      state.lastDeltaBytes = state.latestDeltaText.length;
+      for (const listener of streamSubscribers) {
+        try { listener(streamMessage); } catch {}
+      }
+    }
+
+    const payload = clonePlainObject(snapshot);
+    for (const listener of subscribers) {
+      try {
+        listener(payload);
+      } catch {
+        // ignore
+      }
+    }
+    core.eventBus?.emitModuleEvent?.("module.tacticalState", "snapshotUpdated", {
+      eventId: `module.tacticalState:${Date.now()}:${state.revision}`,
+      eventName: "module.tacticalState.snapshotUpdated",
+      layer: "module",
+      source: "module.tacticalState",
+      serverId,
+      time: generatedAt,
+      revision: state.revision,
+      playerCount: snapshot.players?.length ?? 0,
+      changedPlayerCount: envelope?.delta?.players?.upsert?.length ?? snapshot.players?.length ?? 0,
+      removedPlayerCount: envelope?.delta?.players?.remove?.length ?? 0,
+    });
+    return payload;
   }
 
   async function composeSnapshot() {
-    if (composeInFlight) return composeInFlight;
-
+    if (composeInFlight) {
+      composeDirty = true;
+      return composeInFlight;
+    }
+    composeDirty = false;
+    const generation = composeGeneration;
+    const composeStartedAt = Date.now();
     composeInFlight = (async () => {
       const serverId = getServerId();
       const generatedAt = new Date().toISOString();
@@ -77,30 +171,13 @@ export function createTacticalStateModule({ core, modules, logger }) {
           sourceErrors,
         });
 
-        state.revision += 1;
-        state.generatedAt = generatedAt;
-        state.snapshot = snapshot;
-        state.lastError = "";
-        state.lastUpdatedAt = generatedAt;
+        if (stopped || generation !== composeGeneration) return clonePlainObject(state.snapshot);
 
-        const payload = clonePlainObject(snapshot);
-        for (const listener of subscribers) {
-          try {
-            listener(payload);
-          } catch {
-            // ignore
-          }
-        }
-        core.eventBus?.emitModuleEvent?.("module.tacticalState", "snapshotUpdated", {
-          eventId: `module.tacticalState:${Date.now()}:${state.revision}`,
-          eventName: "module.tacticalState.snapshotUpdated",
-          layer: "module",
-          source: "module.tacticalState",
+        return commitSnapshot(snapshot, {
           serverId,
-          time: generatedAt,
-          snapshot: payload,
+          generatedAt,
+          composeStartedAt,
         });
-        return payload;
       } catch (error) {
         const message = error?.message ?? "Failed to compose tactical snapshot.";
         state.lastError = message;
@@ -108,14 +185,21 @@ export function createTacticalStateModule({ core, modules, logger }) {
           operation: "composeSnapshot",
           data: { serverId, message },
         });
-        state.snapshot = buildEmptySnapshot({
+        if (stopped || generation !== composeGeneration) return clonePlainObject(state.snapshot);
+        const errorSnapshot = buildEmptySnapshot({
           serverId,
           generatedAt,
           error: message,
         });
-        return clonePlainObject(state.snapshot);
+        return commitSnapshot(errorSnapshot, {
+          serverId,
+          generatedAt,
+          composeStartedAt,
+          errorMessage: message,
+        });
       } finally {
         composeInFlight = null;
+        if (composeDirty && !stopped) scheduleCompose();
       }
     })();
 
@@ -123,7 +207,45 @@ export function createTacticalStateModule({ core, modules, logger }) {
   }
 
   async function getSnapshot() {
-    return composeSnapshot();
+    if (!state.snapshot) await composeSnapshot();
+    return clonePlainObject(state.snapshot);
+  }
+
+  async function refreshSnapshot() {
+    composeDirty = true;
+    await composeSnapshot();
+    return clonePlainObject(state.snapshot);
+  }
+
+  async function getCompactSnapshot() {
+    if (!state.snapshot) await composeSnapshot();
+    return clonePlainObject(state.compactSnapshot);
+  }
+
+  async function getStreamSnapshot() {
+    if (!state.snapshot) await composeSnapshot();
+    return {
+      envelope: state.latestSnapshotEnvelope,
+      serialized: state.latestSnapshotText,
+    };
+  }
+
+  function getDiagnostics() {
+    return {
+      composeCount: state.composeCount,
+      composeInFlight: Boolean(composeInFlight),
+      composeDirty,
+      lastComposeDurationMs: state.lastComposeDurationMs,
+      maxComposeDurationMs: state.maxComposeDurationMs,
+      lastPlayerCount: state.lastPlayerCount,
+      subscriberCount: streamSubscribers.size,
+      profileCacheSize: profileCache.size,
+      profileDatabaseQueryCount: state.profileDatabaseQueryCount,
+      lastSnapshotBytes: state.lastSnapshotBytes,
+      lastDeltaBytes: state.lastDeltaBytes,
+      deltaBuildCount: state.deltaBuildCount,
+      serializationCount: state.serializationCount,
+    };
   }
 
   async function getPlayers() {
@@ -207,7 +329,11 @@ export function createTacticalStateModule({ core, modules, logger }) {
     const rconSquads = Array.isArray(matchState?.squads?.list)
       ? matchState.squads.list
       : [];
-    for (const squad of rconSquads) {
+    const rconTeams = Array.isArray(matchState?.squads?.teams)
+      ? matchState.squads.teams
+      : [];
+    for (const teamSource of [...rconTeams, ...rconSquads]) {
+      const squad = teamSource;
       const teamId = numberOrNull(squad?.teamID, squad?.teamId, squad?.team);
       if (teamId == null) continue;
       const teamName = firstText(
@@ -279,6 +405,52 @@ export function createTacticalStateModule({ core, modules, logger }) {
     return [...teamMap.values()];
   }
 
+  async function getCachedProfileRows(steamIDs) {
+    const now = Date.now();
+    const missing = [];
+    const rows = [];
+    for (const steamID of steamIDs) {
+      const entry = profileCache.get(steamID);
+      if (entry && entry.expiresAt > now) {
+        entry.lastUsedAt = now;
+        if (entry.value) rows.push(entry.value);
+      } else {
+        missing.push(steamID);
+      }
+    }
+
+    if (missing.length > 0 && typeof modules.playerDatabase?.listPlayersBySteamIDs === "function") {
+      state.profileDatabaseQueryCount += 1;
+      const queried = await modules.playerDatabase.listPlayersBySteamIDs(missing);
+      const bySteamID = new Map();
+      for (const row of Array.isArray(queried) ? queried : []) {
+        const steamID = normalizeSteamID(row?.steam_id ?? row?.steamID ?? row?.steam64 ?? row?.steam64ID ?? "");
+        if (steamID) bySteamID.set(steamID, row);
+      }
+      for (const steamID of missing) {
+        const value = bySteamID.get(steamID) ?? null;
+        profileCache.set(steamID, {
+          value,
+          expiresAt: now + (value ? profileCacheTtlMs : profileNegativeCacheTtlMs),
+          lastUsedAt: now,
+        });
+        if (value) rows.push(value);
+      }
+    }
+
+    for (const [key, entry] of profileCache) {
+      if (now - entry.lastUsedAt > profileCacheIdleTtlMs) profileCache.delete(key);
+    }
+    if (profileCache.size > profileCacheMaxEntries) {
+      const oldest = [...profileCache.entries()]
+        .sort((left, right) => left[1].lastUsedAt - right[1].lastUsedAt);
+      for (const [key] of oldest.slice(0, profileCache.size - profileCacheMaxEntries)) {
+        profileCache.delete(key);
+      }
+    }
+    return rows;
+  }
+
   async function linkPlayers({ serverId, matchState, playerStatePlayers, bzssPlayers, modules, sourceErrors, generatedAt }) {
     const rconPlayers = dedupePlayers([
       ...(Array.isArray(matchState?.players?.list) ? matchState.players.list : []),
@@ -294,9 +466,7 @@ export function createTacticalStateModule({ core, modules, logger }) {
     }
 
     const [dbPlayers, profileMap, networkMap] = await Promise.all([
-      steamIDs.size > 0 && typeof modules.playerDatabase?.listPlayersBySteamIDs === "function"
-        ? modules.playerDatabase.listPlayersBySteamIDs([...steamIDs])
-        : [],
+      getCachedProfileRows([...steamIDs]),
       Promise.resolve(buildProfileMap(modules, [...steamIDs])),
       Promise.resolve(buildNetworkMap(modules, [...steamIDs])),
     ]);
@@ -956,7 +1126,7 @@ export function createTacticalStateModule({ core, modules, logger }) {
   }
 
   async function getComposedSnapshot() {
-    return composeSnapshot();
+    return getSnapshot();
   }
 
   return {
@@ -973,10 +1143,17 @@ export function createTacticalStateModule({ core, modules, logger }) {
       getPlayers,
       getPlayer,
       subscribe,
+      subscribeStream,
+      getStreamSnapshot,
+      getCompactSnapshot,
+      refreshSnapshot,
+      getDiagnostics,
     },
     async start() {
       if (started) return;
       started = true;
+      stopped = false;
+      composeGeneration += 1;
       const watch = [
         ["module.matchState", "updated"],
         ["module.playerState", "playersSnapshotUpdated"],
@@ -991,6 +1168,8 @@ export function createTacticalStateModule({ core, modules, logger }) {
     },
     async stop() {
       started = false;
+      stopped = true;
+      composeGeneration += 1;
       if (composeTimer) {
         clearTimeout(composeTimer);
         composeTimer = null;
@@ -1003,6 +1182,12 @@ export function createTacticalStateModule({ core, modules, logger }) {
         }
       }
       subscribers.clear();
+      if (composeInFlight) {
+        try { await composeInFlight; } catch {}
+      }
+      streamSubscribers.clear();
+      profileCache.clear();
+      composeDirty = false;
     },
   };
 }
@@ -1013,6 +1198,21 @@ function createInitialState() {
     generatedAt: "",
     lastUpdatedAt: "",
     snapshot: null,
+    compactSnapshot: null,
+    latestCompactSnapshot: null,
+    latestSnapshotEnvelope: null,
+    latestSnapshotText: "",
+    latestDeltaEnvelope: null,
+    latestDeltaText: "",
+    composeCount: 0,
+    lastComposeDurationMs: 0,
+    maxComposeDurationMs: 0,
+    lastPlayerCount: 0,
+    profileDatabaseQueryCount: 0,
+    lastSnapshotBytes: 0,
+    lastDeltaBytes: 0,
+    deltaBuildCount: 0,
+    serializationCount: 0,
     lastError: "",
   };
 }
