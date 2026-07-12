@@ -347,17 +347,17 @@ const teamAveragePingText = computed(() => {
 
 .team-header-flag-bg {
   position: absolute;
-  top: -0px;
-  left: -0px;
-  width: 260px;
-  height: 180px;
+  top: -15px;
+  left: -20px;
+  width: calc(100% + 40px);
+  height: calc(100% + 30px);
   z-index: 0;
   pointer-events: none;
   overflow: visible;
-  transform: rotate(-15deg);
-  opacity: 0.25;
-  mask-image: linear-gradient(135deg, rgba(0, 0, 0, 1) 20%, rgba(0, 0, 0, 0) 80%);
-  -webkit-mask-image: linear-gradient(135deg, rgba(0, 0, 0, 1) 20%, rgba(0, 0, 0, 0) 80%);
+  transform: rotate(-7deg);
+  opacity: 0.22;
+  mask-image: linear-gradient(135deg, rgba(0, 0, 0, 1) 15%, rgba(0, 0, 0, 0) 75%);
+  -webkit-mask-image: linear-gradient(135deg, rgba(0, 0, 0, 1) 15%, rgba(0, 0, 0, 0) 75%);
 }
 
 .team-header-flag-bg .team-faction-bg-img {
@@ -494,14 +494,14 @@ const teamAveragePingText = computed(() => {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
-  margin-top: 6px;
-  margin-bottom: 6px;
+  margin-top: 4px;
+  margin-bottom: 4px;
 }
 
 .team-primary-card {
   display: flex;
   flex-direction: column;
-  padding: 6px 10px;
+  padding: 4px 8px;
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.025);
   border: 1px solid var(--color-border-soft);
@@ -607,8 +607,8 @@ const teamAveragePingText = computed(() => {
 }
 
 .card-value {
-  font-size: 18px;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 700;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
   display: flex;
@@ -793,17 +793,17 @@ const teamAveragePingText = computed(() => {
 }
 
 .team-column.compact .team-primary-stats {
-  margin-top: 4px;
-  margin-bottom: 4px;
-  gap: 5px;
+  margin-top: 3px;
+  margin-bottom: 3px;
+  gap: 4px;
 }
 
 .team-column.compact .team-primary-card {
-  padding: 4px 6px;
+  padding: 3px 6px;
 }
 
 .team-column.compact .card-value {
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .team-column.compact .players-progress-bar {
