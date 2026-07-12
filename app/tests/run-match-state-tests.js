@@ -41,6 +41,7 @@ function createHarness({ sessionStateFile = "", logs = [], subscribed = true } =
     ListSquads: [
       "Team ID: 1 (USA)",
       "ID: 2 | Name: Alpha | Size: 1 | Locked: False | Creator Name: Alice | Creator Online IDs: EOS: eos-1 steam: 76561198000000001",
+      "Team ID: 2 (Russian Ground Forces)",
     ].join("\n"),
     ShowCurrentMap: "Current level is AlBasrah, layer is AlBasrah_RAAS_v1",
     ShowNextMap: "Next level is Fallujah, layer is Fallujah_RAAS_v2",
@@ -199,6 +200,10 @@ async function testAggregatesRconSnapshots() {
   assert.equal(state.players.byName.Alice.isLeader, true);
   assert.equal(state.squads.count, 1);
   assert.equal(state.squads.list[0].squadName, "Alpha");
+  assert.deepEqual(state.squads.teams, [
+    { teamID: 1, teamName: "USA" },
+    { teamID: 2, teamName: "Russian Ground Forces" },
+  ]);
 
   assert.equal(harness.webStatusState.map, "AlBasrah");
   assert.equal(harness.webStatusState.layer, "AlBasrah_RAAS_v1");
