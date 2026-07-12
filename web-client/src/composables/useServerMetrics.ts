@@ -58,6 +58,7 @@ export function useServerMetrics() {
   const samples = ref<ServerMetricSample[]>([]);
   const channels = ref<ServerMetricChannel[]>([]);
   const lastUpdatedAt = ref<number | null>(null);
+  let historyAbortController: AbortController | null = null;
 
   // Metadata refs from backend
   const currentServer = ref<ServerDetails | null>(null);
@@ -108,7 +109,22 @@ export function useServerMetrics() {
     }
   );
 
-  const { start, stop, isPolling, isPending } = pollingManager;
+  const {
+    start: startPolling,
+    stop: stopPolling,
+    isPolling,
+    isPending,
+  } = pollingManager;
+
+  function start() {
+    startPolling();
+  }
+
+  function stop() {
+    historyAbortController?.abort();
+    historyAbortController = null;
+    stopPolling();
+  }
 
   // Analytics helper
   const analyticsManager = useServerMetricsAnalytics(
@@ -155,6 +171,9 @@ export function useServerMetrics() {
   }
 
   async function loadHistory() {
+    historyAbortController?.abort();
+    const controller = new AbortController();
+    historyAbortController = controller;
     loading.value = true;
     try {
       // 1. Fetch current info to get match start time if selecting "match" range
@@ -173,7 +192,8 @@ export function useServerMetrics() {
       });
 
       const payload = await apiGet<ServerMetricHistoryResponse>(
-        `/api/server-stats/history?${params.toString()}`
+        `/api/server-stats/history?${params.toString()}`,
+        { signal: controller.signal },
       );
 
       // Downsample/Limit data points to max 1500 to keep UI responsive
@@ -197,10 +217,15 @@ export function useServerMetrics() {
       syncEnabledChannels();
       historyError.value = "";
       lastUpdatedAt.value = Date.now();
-    } catch (error) {
-      historyError.value = renderApiError(error, "Failed to load server metrics.");
+    } catch (error: any) {
+      if (error?.name !== "AbortError" && !controller.signal.aborted) {
+        historyError.value = renderApiError(error, "Failed to load server metrics.");
+      }
     } finally {
-      loading.value = false;
+      if (historyAbortController === controller) {
+        historyAbortController = null;
+        loading.value = false;
+      }
     }
   }
 
