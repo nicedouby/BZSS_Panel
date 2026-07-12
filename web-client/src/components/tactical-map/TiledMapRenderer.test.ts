@@ -12,15 +12,15 @@ vi.mock("../../composables/useTileLoader", () => ({
   useTileLoader: () => ({
     visibleTiles: tileState.visibleTiles,
     fallbackTiles: tileState.fallbackTiles,
-    currentTileZoom: ref(1),
+    currentTileZoom: { value: 1 },
   }),
 }));
 
 vi.mock("../../composables/tacticalMapViewport", () => ({
   useTacticalMapViewport: () => ({
-    zoom: ref(1),
-    panX: ref(0),
-    panY: ref(0),
+    zoom: { value: 1 },
+    panX: { value: 0 },
+    panY: { value: 0 },
   }),
 }));
 
