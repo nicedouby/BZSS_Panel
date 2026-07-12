@@ -141,6 +141,13 @@
                 class="fob-radius-circle fob-radius-construction"
                 vector-effect="non-scaling-stroke"
               />
+              <circle
+                :cx="fob.mapX * 10"
+                :cy="fob.mapY * 10"
+                :r="metersToSvgRadius(fob.constructionRadius ?? 150)"
+                class="fob-radius-circle fob-radius-construction-motion"
+                vector-effect="non-scaling-stroke"
+              />
             </g>
           </svg>
 
@@ -157,8 +164,21 @@
             :title="fob.raw || fob.name"
           >
             <div class="fob-visual">
-              <div class="fob-fortress">
-                <span class="fob-fortress-gate"></span>
+              <div class="fob-fortress" :style="{ color: getFobIconColor(fob) }">
+                <svg class="fob-castle-icon" viewBox="0 0 32 32" aria-hidden="true">
+                  <defs>
+                    <linearGradient :id="`fob-bleeding-${fob.id}`" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0%" stop-color="#fff1f2" />
+                      <stop offset="42%" stop-color="#ef4444" />
+                      <stop offset="100%" stop-color="#7f1d1d" />
+                    </linearGradient>
+                  </defs>
+                  <path
+                    d="M9 29V10H12V6H15V10H17V6H20V10H23V29H19V20H13V29H9ZM6 29H26V32H6V29Z"
+                    :fill="fob.isBleeding ? `url(#fob-bleeding-${fob.id})` : 'currentColor'"
+                  />
+                  <path d="M14 23H18V29H14Z" fill="rgba(2,6,23,.72)" />
+                </svg>
                 <span v-if="fob.isBleeding" class="fob-alert">!</span>
               </div>
 
@@ -2960,6 +2980,15 @@ function cleanWeaponName(weaponClass: string | null | undefined): string {
     .replace(/^(BP_|Weapon_)/i, "")
     .replace(/(_\d+)?_C.*$/i, "")
     .replace(/_\d+$/, "");
+}
+
+function getFobIconColor(fob: FobMarker) {
+  if (fob.isBleeding) return "#ef4444";
+  const health = Number(fob.health);
+  const ratio = Number.isFinite(health) ? Math.max(0, Math.min(1, health > 1 ? health / 100 : health)) : 1;
+  const base = fob.teamId === 1 ? [96, 165, 250] : fob.teamId === 2 ? [248, 113, 113] : [148, 163, 184];
+  const shade = 0.35 + ratio * 0.65;
+  return `rgb(${Math.round(base[0] * shade)} ${Math.round(base[1] * shade)} ${Math.round(base[2] * shade)})`;
 }
 
 function formatFobResource(value: number | null | undefined) {
