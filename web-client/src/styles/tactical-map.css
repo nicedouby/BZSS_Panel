@@ -144,7 +144,7 @@
 
 
 
-/* Main and capture zones share one fixed world-coordinate flag marker. */
+/* Main and capture zones share a small, unframed, fixed-coordinate flag. */
 .main-zone-layer,
 .capture-zone-layer {
   position: absolute;
@@ -152,13 +152,8 @@
   pointer-events: none;
 }
 
-.main-zone-layer {
-  z-index: 7;
-}
-
-.capture-zone-layer {
-  z-index: 8;
-}
+.main-zone-layer { z-index: 7; }
+.capture-zone-layer { z-index: 8; }
 
 .main-zone-marker,
 .capture-zone-marker {
@@ -171,32 +166,23 @@
   background: transparent;
 }
 
-.main-zone-marker {
-  pointer-events: none;
-}
+.main-zone-marker { pointer-events: none; }
 
 .capture-zone-marker {
   pointer-events: auto;
   cursor: pointer;
 }
 
-.zone-flag-visual {
+.zone-flag-group {
   position: absolute;
-  left: -23px;
-  top: -15px;
+  left: -17px;
+  top: -11px;
   display: block;
-  width: 46px;
-  height: 30px;
-  box-sizing: border-box;
-  overflow: hidden;
-  border: 2px solid rgba(248, 250, 252, 0.94);
-  border-radius: 3px;
-  background: rgba(15, 23, 42, 0.92);
-  box-shadow:
-    0 0 0 1px rgba(2, 6, 23, 0.9),
-    0 3px 8px rgba(0, 0, 0, 0.72);
-  transform-origin: 23px 15px;
+  width: 34px;
+  height: 22px;
+  transform-origin: 17px 11px;
   will-change: transform;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.72));
 }
 
 .main-zone-flag {
@@ -207,40 +193,108 @@
   transform: scale(var(--capture-marker-scale, 1));
 }
 
-.zone-flag-image {
+.zone-flag-visual {
+  position: relative;
+  display: block;
+  width: 34px;
+  height: 22px;
+  overflow: hidden;
+}
+
+.zone-flag-image,
+.zone-flag-placeholder,
+.capture-flag-neutral-sweep {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
-  box-sizing: border-box;
-  padding: 2px;
+}
+
+.zone-flag-image {
   object-fit: contain;
 }
 
 .zone-flag-placeholder {
+  background: rgba(226, 232, 240, 0.88);
+}
+
+.capture-flag-neutral-sweep {
+  z-index: 2;
+  background: rgba(226, 232, 240, 0.94);
+  -webkit-mask: conic-gradient(
+    from -90deg,
+    transparent 0deg var(--capture-progress-deg, 360deg),
+    #000 var(--capture-progress-deg, 360deg) 360deg
+  );
+  mask: conic-gradient(
+    from -90deg,
+    transparent 0deg var(--capture-progress-deg, 360deg),
+    #000 var(--capture-progress-deg, 360deg) 360deg
+  );
+  transition: -webkit-mask 180ms linear, mask 180ms linear;
+}
+
+.zone-flag-lock {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 4;
+  width: 10px;
+  height: 8px;
+  box-sizing: border-box;
+  border: 1px solid rgba(15, 23, 42, 0.95);
+  border-radius: 2px;
+  background: rgba(248, 250, 252, 0.92);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+  transform: translate(-50%, -34%);
+}
+
+.zone-flag-lock::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: -6px;
+  width: 4px;
+  height: 5px;
+  box-sizing: border-box;
+  border: 1.5px solid rgba(15, 23, 42, 0.95);
+  border-bottom: 0;
+  border-radius: 4px 4px 0 0;
+}
+
+.zone-flag-lock::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 2px;
+  width: 1px;
+  height: 3px;
+  border-radius: 1px;
+  background: rgba(15, 23, 42, 0.95);
+}
+
+.zone-flag-name {
+  position: absolute;
+  left: 50%;
+  top: 24px;
   display: block;
-  width: 100%;
-  height: 100%;
-  background:
-    linear-gradient(135deg, rgba(148, 163, 184, 0.42), rgba(30, 41, 59, 0.86));
+  max-width: 92px;
+  overflow: hidden;
+  color: rgba(248, 250, 252, 0.96);
+  font: 700 7px/1.1 system-ui, sans-serif;
+  letter-spacing: 0.15px;
+  text-align: center;
+  text-overflow: ellipsis;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.95),
+    0 0 3px rgba(0, 0, 0, 0.85);
+  white-space: nowrap;
+  transform: translateX(-50%);
 }
 
-.main-zone-marker.team-1 .zone-flag-visual,
-.capture-zone-flag.team-1 {
-  box-shadow:
-    0 0 0 1px rgba(2, 6, 23, 0.9),
-    0 0 10px rgba(59, 130, 246, 0.55);
-}
-
-.main-zone-marker.team-2 .zone-flag-visual,
-.capture-zone-flag.team-2 {
-  box-shadow:
-    0 0 0 1px rgba(2, 6, 23, 0.9),
-    0 0 10px rgba(239, 68, 68, 0.55);
-}
-
-.capture-zone-marker:hover .zone-flag-visual {
-  border-color: #ffffff;
-  filter: brightness(1.12);
+.capture-zone-marker:hover .zone-flag-group {
+  filter: drop-shadow(0 2px 4px rgba(255, 255, 255, 0.35)) brightness(1.08);
 }
 
 /* Explosion Layer */
