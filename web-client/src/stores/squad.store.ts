@@ -1,6 +1,11 @@
 import { defineStore } from "pinia";
 import { ref, shallowRef } from "vue";
 
+export interface RuntimeSquadTeam {
+  teamID: number;
+  teamName: string;
+}
+
 export interface RuntimeSquad {
   key: string;
   teamID: number | null;
@@ -34,13 +39,15 @@ export interface RuntimeSquad {
 
 export const useSquadStore = defineStore("squads", () => {
   const list = shallowRef<RuntimeSquad[]>([]);
+  const teams = shallowRef<RuntimeSquadTeam[]>([]);
   const byKey = shallowRef<Record<string, RuntimeSquad>>({});
   const byTeamID = shallowRef<Record<string, RuntimeSquad[]>>({});
   const updatedAt = ref(0);
   const stale = ref(false);
 
   function applySnapshot(snapshot: any) {
-    list.value = snapshot?.list ?? [];
+    list.value = Array.isArray(snapshot?.list) ? snapshot.list : [];
+    teams.value = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
     byKey.value = snapshot?.byKey ?? {};
     byTeamID.value = snapshot?.byTeamID ?? {};
     updatedAt.value = Number(snapshot?.updatedAt ?? Date.now());
@@ -53,6 +60,7 @@ export const useSquadStore = defineStore("squads", () => {
 
   return {
     list,
+    teams,
     byKey,
     byTeamID,
     updatedAt,
