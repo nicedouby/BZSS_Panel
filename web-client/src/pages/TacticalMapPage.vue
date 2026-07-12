@@ -213,7 +213,7 @@
         <!-- Player Markers Layer -->
         <div class="player-markers-layer" :style="{ pointerEvents: measureMode || isDragging ? 'none' : 'auto', outline: isDev ? '2px solid red' : 'none' }">
           <PlayerMarker
-            v-for="player in filteredPlayers"
+            v-for="player in renderedPlayers"
             :key="getPlayerKey(player)"
             mode="tactical"
             :player-name="getPlayerLabel(player)"
@@ -2189,6 +2189,45 @@ const filteredPlayers = computed(() => {
   }
   return list;
 });
+const renderedPlayerLimit = ref(0);
+let markerBatchFrame: number | null = null;
+let tilesEnableFrame: number | null = null;
+
+const renderedPlayers = computed(() => (
+  filteredPlayers.value.slice(0, renderedPlayerLimit.value)
+));
+
+function cancelMarkerBatch() {
+  if (markerBatchFrame !== null) cancelAnimationFrame(markerBatchFrame);
+  markerBatchFrame = null;
+}
+
+function scheduleMarkerBatch() {
+  cancelMarkerBatch();
+  const target = filteredPlayers.value.length;
+  if (!mapPageActive || target === 0) {
+    renderedPlayerLimit.value = 0;
+    return;
+  }
+
+  const step = () => {
+    if (!mapPageActive) return;
+    renderedPlayerLimit.value = Math.min(target, renderedPlayerLimit.value + 25);
+    if (renderedPlayerLimit.value < target) {
+      markerBatchFrame = requestAnimationFrame(step);
+    } else {
+      markerBatchFrame = null;
+    }
+  };
+  if (renderedPlayerLimit.value > target) renderedPlayerLimit.value = target;
+  markerBatchFrame = requestAnimationFrame(step);
+}
+
+watch(
+  () => filteredPlayers.value.length,
+  () => scheduleMarkerBatch(),
+);
+
 
 watch(
   () => ({
@@ -3072,7 +3111,16 @@ function attachResizeObserver() {
 function activateMapPage() {
   if (mapPageActive) return;
   mapPageActive = true;
-  tilesEnabled.value = true;
+  tilesEnabled.value = false;
+  renderedPlayerLimit.value = 0;
+
+  if (tilesEnableFrame !== null) cancelAnimationFrame(tilesEnableFrame);
+  tilesEnableFrame = requestAnimationFrame(() => {
+    tilesEnableFrame = null;
+    if (!mapPageActive) return;
+    tilesEnabled.value = true;
+    scheduleMarkerBatch();
+  });
 
   if (isStandaloneMapRoute.value) {
     void tacticalStateStore.fetchSnapshot();
@@ -3119,6 +3167,12 @@ function deactivateMapPage() {
     window.clearTimeout(fitViewportTimeout);
     fitViewportTimeout = null;
   }
+  if (tilesEnableFrame !== null) {
+    cancelAnimationFrame(tilesEnableFrame);
+    tilesEnableFrame = null;
+  }
+  cancelMarkerBatch();
+  renderedPlayerLimit.value = 0;
   clearTimeout(shakeTimeoutId);
   shakeTimeoutId = null;
   if (singleClickTimer.value) {
