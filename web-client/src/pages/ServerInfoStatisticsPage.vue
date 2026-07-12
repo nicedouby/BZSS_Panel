@@ -102,7 +102,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref } from "vue";
 import DataState from "../components/common/DataState.vue";
 import ServerStatsToolbar from "../components/server-stats/ServerStatsToolbar.vue";
 import ServerStatsKpiGrid from "../components/server-stats/ServerStatsKpiGrid.vue";
@@ -160,13 +160,24 @@ const tabs = [
 
 const blockingError = computed(() => (historyError.value && !hasData.value ? historyError.value : ""));
 
-onMounted(() => {
-  void start();
-});
+let pageActive = false;
 
-onUnmounted(() => {
+function activateStatsPage() {
+  if (pageActive) return;
+  pageActive = true;
+  void start();
+}
+
+function deactivateStatsPage() {
+  if (!pageActive) return;
+  pageActive = false;
   stop();
-});
+}
+
+onMounted(activateStatsPage);
+onActivated(activateStatsPage);
+onDeactivated(deactivateStatsPage);
+onUnmounted(deactivateStatsPage);
 </script>
 
 <style scoped>
