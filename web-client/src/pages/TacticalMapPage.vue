@@ -1754,6 +1754,10 @@ function handlePlayerDoubleClick(player: TacticalLinkedPlayer, event: MouseEvent
     singleClickTimer.value = null;
   }
 
+  // The embedded parent already handled the first click; do not emit a second
+  // selection or reopen the expensive drawer on double-click.
+  if (!isStandaloneMapRoute.value) return;
+
   playerInfoPanel.value = null;
   playerActionMenu.value = null;
   mapCommandMenu.value = null;
