@@ -252,19 +252,6 @@ function normalizeConfig(source: Partial<InfantryCombatConfig> | null | undefine
     showVictimKill: source?.showVictimKill ?? INFANTRY_COMBAT_DEFAULT_CONFIG.showVictimKill,
     showAttackerDamage: source?.showAttackerDamage ?? INFANTRY_COMBAT_DEFAULT_CONFIG.showAttackerDamage,
     storeRecentEventLimit: normalizeNumber(source?.storeRecentEventLimit, INFANTRY_COMBAT_DEFAULT_CONFIG.storeRecentEventLimit),
-    attackerDamageDisplayGate: normalizeGate(source?.attackerDamageDisplayGate),
-  };
-}
-
-function normalizeGate(source: Partial<InfantryCombatConfig["attackerDamageDisplayGate"]> | undefined) {
-  return {
-    enabled: source?.enabled ?? INFANTRY_COMBAT_DEFAULT_CONFIG.attackerDamageDisplayGate.enabled,
-    mode: source?.mode ?? INFANTRY_COMBAT_DEFAULT_CONFIG.attackerDamageDisplayGate.mode,
-    fallbackWhenUnknown: source?.fallbackWhenUnknown ?? INFANTRY_COMBAT_DEFAULT_CONFIG.attackerDamageDisplayGate.fallbackWhenUnknown,
-    applyToTypes: Array.isArray(source?.applyToTypes) && source.applyToTypes.length > 0
-      ? [...source.applyToTypes]
-      : [...INFANTRY_COMBAT_DEFAULT_CONFIG.attackerDamageDisplayGate.applyToTypes],
-    onlyLightWeapon: source?.onlyLightWeapon ?? INFANTRY_COMBAT_DEFAULT_CONFIG.attackerDamageDisplayGate.onlyLightWeapon,
   };
 }
 

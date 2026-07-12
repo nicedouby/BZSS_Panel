@@ -92,7 +92,6 @@ export function createTacticalStateV2Module({ core, modules, logger }) {
           server: clonePlainObject(snapshot.server),
           match: clonePlainObject(snapshot.match),
           teams: clonePlainObject(snapshot.teams),
-          squadFollow: clonePlainObject(snapshot.squadFollow),
           diagnostics: clonePlainObject(snapshot.diagnostics),
         };
 
@@ -198,7 +197,6 @@ export function createTacticalStateV2Module({ core, modules, logger }) {
       match: clonePlainObject(matchState?.match ?? {}),
       teams,
       players: linked.players,
-      squadFollow: linked.squadFollow ?? null,
       assets: {
         captureZones: cloneArray(bzssRaw?.captureZones),
         fobs: cloneArray(bzssRaw?.fobs),
@@ -380,15 +378,9 @@ export function createTacticalStateV2Module({ core, modules, logger }) {
       return leftKey.localeCompare(rightKey);
     });
 
-    const squadFollow = modules.squadFollowState?.composeFromPlayers?.({
-      serverId,
-      generatedAt,
-      players,
-    }) ?? null;
 
     return {
       players,
-      squadFollow,
       diagnostics,
       sourceInfo: {
         playerDatabaseUpdatedAt: profileMap.updatedAt ?? "",
@@ -923,7 +915,6 @@ export function createTacticalStateV2Module({ core, modules, logger }) {
       match: {},
       teams: [],
       players: [],
-      squadFollow: null,
       assets: { captureZones: [], fobs: [], mainZones: [], explosions: [] },
       diagnostics: {
         unlinkedRconPlayers: [],

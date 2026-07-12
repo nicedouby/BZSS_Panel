@@ -89,7 +89,6 @@ export const useTacticalStateStore = defineStore("tacticalState", () => {
       ...(Object.hasOwn(delta, "server") ? { server: server.value } : {}),
       ...(Object.hasOwn(delta, "match") ? { match: delta.match } : {}),
       ...(Object.hasOwn(delta, "teams") ? { teams: teams.value } : {}),
-      ...(Object.hasOwn(delta, "squadFollow") ? { squadFollow: delta.squadFollow } : {}),
       ...(Object.hasOwn(delta, "assets") ? { assets: assets.value } : {}),
       ...(Object.hasOwn(delta, "diagnostics") ? { diagnostics: diagnostics.value } : {}),
       meta: { ...(current.meta ?? {}), ...(delta.meta ?? {}),
