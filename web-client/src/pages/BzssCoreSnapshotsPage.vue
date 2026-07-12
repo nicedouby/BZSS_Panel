@@ -664,7 +664,7 @@ const rawPreviewBlocks = ref<Record<'full' | 'runtime' | 'scoreboard' | 'scene',
 const activeRawBlock = computed(() => rawPreviewBlocks.value[activeRawTab.value]);
 
 function stringifyRawPreview(value: unknown) {
-  const text = JSON.stringify(value, null, 2);
+  const text = JSON.stringify(value, null, 2) ?? "null";
   if (text.length <= RAW_PREVIEW_MAX_CHARS) return text;
   return `${text.slice(0, RAW_PREVIEW_MAX_CHARS)}\n\n... 预览已截断（最多 200KB），请下载完整 JSON。`;
 }
