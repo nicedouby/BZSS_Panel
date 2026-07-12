@@ -25,6 +25,7 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
   let composeTimer = null;
   let composeInFlight = null;
   let composeDirty = false;
+  let composeGeneration = 0;
 
   function subscribe(listener) {
     subscribers.add(listener);
@@ -56,6 +57,7 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
       return composeInFlight;
     }
     composeDirty = false;
+    const generation = composeGeneration;
     const composeStartedAt = Date.now();
     composeInFlight = (async () => {
       const serverId = getServerId();
@@ -97,6 +99,8 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
           linked,
           sourceErrors,
         });
+
+        if (stopped || generation !== composeGeneration) return clonePlainObject(state.snapshot);
 
         state.revision += 1;
         state.generatedAt = generatedAt;
@@ -1130,6 +1134,7 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
       if (started) return;
       started = true;
       stopped = false;
+      composeGeneration += 1;
       const watch = [
         ["module.matchState", "updated"],
         ["module.playerState", "playersSnapshotUpdated"],
@@ -1145,6 +1150,7 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
     async stop() {
       started = false;
       stopped = true;
+      composeGeneration += 1;
       if (composeTimer) {
         clearTimeout(composeTimer);
         composeTimer = null;
@@ -1157,6 +1163,9 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
         }
       }
       subscribers.clear();
+      if (composeInFlight) {
+        try { await composeInFlight; } catch {}
+      }
       streamSubscribers.clear();
       profileCache.clear();
       composeDirty = false;
