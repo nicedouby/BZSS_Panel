@@ -262,7 +262,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch, provide } from "vue";
+import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch, provide, toRaw } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { useRoute, useRouter } from "vue-router";
 import { apiGet, apiPost } from "../app/apiClient";
@@ -1128,27 +1128,49 @@ watch(
 );
 
 watch(
-  () => [tacticalPlayers.value, activePlayerWindow.value?.detail, tacticalStateSnapshot.value] as const,
-  ([, currentPlayerDetail, snapshotVal]) => {
-    if (!activePlayerWindow.value) return;
-    const matched = resolveTacticalStatePlayerInfo(currentPlayerDetail ?? activePlayerWindow.value.detail, tacticalPlayerLookup.value);
-    const nextStatus = String(snapshotVal?.meta?.revision ?? snapshotVal?.meta?.generatedAt ?? "");
+  () => [
+    tacticalPlayers.value,
+    tacticalStateSnapshot.value?.meta?.revision,
+    activePlayerWindow.value?.detail.playerId,
+    activePlayerWindow.value?.detail.steamId,
+    activePlayerWindow.value?.detail.steam64,
+    activePlayerWindow.value?.detail.eosId,
+    activePlayerWindow.value?.detail.controller,
+    activePlayerWindow.value?.detail.name,
+  ] as const,
+  () => {
+    const windowState = activePlayerWindow.value;
+    if (!windowState) return;
+
+    const currentDetail = windowState.detail;
+    const matched = resolveTacticalStatePlayerInfo(
+      currentDetail,
+      tacticalPlayerLookup.value,
+    );
+    const snapshotVal = tacticalStateSnapshot.value;
+    const nextStatus = String(
+      snapshotVal?.meta?.revision
+      ?? snapshotVal?.meta?.generatedAt
+      ?? "",
+    );
     const nextCompletedAt = snapshotVal?.meta?.generatedAt ?? null;
     const nextPlayerInfo = matched ?? null;
+    const currentPlayerInfo = currentDetail.bzssCorePlayerInfo
+      ? toRaw(currentDetail.bzssCorePlayerInfo)
+      : null;
 
-    const currentDetail = activePlayerWindow.value.detail;
     if (
-      currentDetail.bzssCoreStatus === nextStatus &&
-      currentDetail.bzssCoreLastCompletedAt === nextCompletedAt &&
-      currentDetail.bzssCorePlayerInfo === nextPlayerInfo
+      currentDetail.bzssCoreStatus === nextStatus
+      && currentDetail.bzssCoreLastCompletedAt === nextCompletedAt
+      && currentPlayerInfo === nextPlayerInfo
     ) {
       return;
     }
 
     activePlayerWindow.value = {
-      ...activePlayerWindow.value,
+      ...windowState,
       detail: {
-        ...activePlayerWindow.value.detail,
+        ...currentDetail,
         bzssCoreStatus: nextStatus,
         bzssCoreLastCompletedAt: nextCompletedAt,
         bzssCorePlayerInfo: nextPlayerInfo,
