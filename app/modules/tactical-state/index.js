@@ -12,6 +12,11 @@ export function createTacticalStateModule({ core, modules, logger }) {
   }) ?? core.logger;
 
   const state = createInitialState();
+  const profileCacheTtlMs = Number(core.config?.get?.("modules.tacticalState.profileCacheTtlMs", 30_000) ?? 30_000);
+  const profileNegativeCacheTtlMs = 10_000;
+  const profileCacheIdleTtlMs = Number(core.config?.get?.("modules.tacticalState.profileCacheIdleTtlMs", 600_000) ?? 600_000);
+  const profileCacheMaxEntries = Number(core.config?.get?.("modules.tacticalState.profileCacheMaxEntries", 5000) ?? 5000);
+  const profileCache = new Map();
   const subscribers = new Set();
   const streamSubscribers = new Set();
   const unsubscribers = [];
@@ -215,7 +220,7 @@ export function createTacticalStateModule({ core, modules, logger }) {
       maxComposeDurationMs: state.maxComposeDurationMs,
       lastPlayerCount: state.lastPlayerCount,
       subscriberCount: streamSubscribers.size,
-      profileCacheSize: 0,
+      profileCacheSize: profileCache.size,
       profileDatabaseQueryCount: state.profileDatabaseQueryCount,
       lastSnapshotBytes: state.lastSnapshotBytes,
       lastDeltaBytes: state.lastDeltaBytes,
@@ -377,6 +382,52 @@ export function createTacticalStateModule({ core, modules, logger }) {
     return [...teamMap.values()];
   }
 
+  async function getCachedProfileRows(steamIDs) {
+    const now = Date.now();
+    const missing = [];
+    const rows = [];
+    for (const steamID of steamIDs) {
+      const entry = profileCache.get(steamID);
+      if (entry && entry.expiresAt > now) {
+        entry.lastUsedAt = now;
+        if (entry.value) rows.push(entry.value);
+      } else {
+        missing.push(steamID);
+      }
+    }
+
+    if (missing.length > 0 && typeof modules.playerDatabase?.listPlayersBySteamIDs === "function") {
+      state.profileDatabaseQueryCount += 1;
+      const queried = await modules.playerDatabase.listPlayersBySteamIDs(missing);
+      const bySteamID = new Map();
+      for (const row of Array.isArray(queried) ? queried : []) {
+        const steamID = normalizeSteamID(row?.steam_id ?? row?.steamID ?? row?.steam64 ?? row?.steam64ID ?? "");
+        if (steamID) bySteamID.set(steamID, row);
+      }
+      for (const steamID of missing) {
+        const value = bySteamID.get(steamID) ?? null;
+        profileCache.set(steamID, {
+          value,
+          expiresAt: now + (value ? profileCacheTtlMs : profileNegativeCacheTtlMs),
+          lastUsedAt: now,
+        });
+        if (value) rows.push(value);
+      }
+    }
+
+    for (const [key, entry] of profileCache) {
+      if (now - entry.lastUsedAt > profileCacheIdleTtlMs) profileCache.delete(key);
+    }
+    if (profileCache.size > profileCacheMaxEntries) {
+      const oldest = [...profileCache.entries()]
+        .sort((left, right) => left[1].lastUsedAt - right[1].lastUsedAt);
+      for (const [key] of oldest.slice(0, profileCache.size - profileCacheMaxEntries)) {
+        profileCache.delete(key);
+      }
+    }
+    return rows;
+  }
+
   async function linkPlayers({ serverId, matchState, playerStatePlayers, bzssPlayers, modules, sourceErrors, generatedAt }) {
     const rconPlayers = dedupePlayers([
       ...(Array.isArray(matchState?.players?.list) ? matchState.players.list : []),
@@ -392,9 +443,7 @@ export function createTacticalStateModule({ core, modules, logger }) {
     }
 
     const [dbPlayers, profileMap, networkMap] = await Promise.all([
-      steamIDs.size > 0 && typeof modules.playerDatabase?.listPlayersBySteamIDs === "function"
-        ? modules.playerDatabase.listPlayersBySteamIDs([...steamIDs])
-        : [],
+      getCachedProfileRows([...steamIDs]),
       Promise.resolve(buildProfileMap(modules, [...steamIDs])),
       Promise.resolve(buildNetworkMap(modules, [...steamIDs])),
     ]);
@@ -1109,6 +1158,7 @@ export function createTacticalStateModule({ core, modules, logger }) {
       }
       subscribers.clear();
       streamSubscribers.clear();
+      profileCache.clear();
       composeDirty = false;
     },
   };
