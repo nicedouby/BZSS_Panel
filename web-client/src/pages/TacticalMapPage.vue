@@ -2006,7 +2006,11 @@ const teamFactionById = computed(() => {
 
   const teamSources = [
     (snapshot.value as any)?.teams,
+    (snapshot.value as any)?.matchState?.teams,
+    (snapshot.value as any)?.matchState?.squads?.teams,
     (serverStore.snapshot as any)?.matchState?.teams,
+    (serverStore.snapshot as any)?.matchState?.squads?.teams,
+    (serverStore.snapshot as any)?.squads?.teams,
     (serverStore.snapshot as any)?.teams,
   ];
   for (const source of teamSources) {
