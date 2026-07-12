@@ -2591,6 +2591,20 @@ function showPlayerDetails(player: TacticalLinkedPlayer, event?: MouseEvent) {
     };
   }
 
+  if (containerRef.value) {
+    const rect = containerRef.value.getBoundingClientRect();
+    const eventX = event?.clientX ?? rect.left + rect.width / 2;
+    const eventY = event?.clientY ?? rect.top + rect.height / 2;
+    playerInfoPanel.value = {
+      player,
+      x: Math.max(8, Math.min(rect.width - 268, eventX - rect.left)),
+      y: Math.max(8, Math.min(rect.height - 220, eventY - rect.top)),
+    };
+    selectedPlayerKey.value = getPlayerKey(player);
+    playerActionMenu.value = null;
+    mapCommandMenu.value = null;
+  }
+
   emit("select-player", {
     detail,
     event: event ?? ({ clientX: Math.floor(window.innerWidth / 2), clientY: Math.floor(window.innerHeight / 2) } as MouseEvent)
