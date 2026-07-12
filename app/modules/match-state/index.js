@@ -119,6 +119,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     players: makePlayersSnapshot([]),
     squads: {
       list: [],
+      teams: [],
       count: 0,
       lastUpdatedAt: "",
     },
@@ -180,6 +181,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       },
       squads: {
         list: [...state.squads.list],
+        teams: state.squads.teams.map((team) => ({ ...team })),
         count: state.squads.count,
         lastUpdatedAt: state.squads.lastUpdatedAt,
       },
@@ -536,7 +538,8 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         },
       });
 
-      const event = makeEvent("RCON_LIST_SQUADS_UPDATED", { squads });
+      const teams = Array.isArray(squads.teams) ? squads.teams.map((team) => ({ ...team })) : [];
+      const event = makeEvent("RCON_LIST_SQUADS_UPDATED", { squads, teams });
       core.eventBus.emitCoreEvent("RCON_LIST_SQUADS_UPDATED", event);
       if (!started) applySquadsUpdatedEvent(event);
       return squads;
@@ -547,13 +550,20 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     if (!enabled || !isSubscribed()) return;
 
     const squads = Array.isArray(event.squads) ? event.squads : [];
+    const teams = Array.isArray(event.teams)
+      ? event.teams.map((team) => ({
+          teamID: Number(team?.teamID ?? team?.teamId),
+          teamName: String(team?.teamName ?? team?.factionName ?? "").trim(),
+        })).filter((team) => Number.isFinite(team.teamID) && team.teamName)
+      : [];
     const serverId = String(event.serverId ?? state.serverId ?? core.webStatus.serverId ?? "").trim();
     if (serverId) state.serverId = serverId;
 
     const classifiedSquads = squads.map(classifySquad);
-    rememberTeamFactionMappings(serverId, classifiedSquads);
+    rememberTeamFactionMappings(serverId, [...teams, ...classifiedSquads]);
     state.squads = {
       list: classifiedSquads,
+      teams,
       count: classifiedSquads.length,
       lastUpdatedAt: new Date().toISOString(),
     };
@@ -1090,7 +1100,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     const baseParts = [map, layer, mode].filter(Boolean);
     if (baseParts.length === 0) return null;
 
-    const { team1Name, team2Name } = extractSquadTeamNames(state.squads.list);
+    const { team1Name, team2Name } = extractSquadTeamNames(state.squads.list, state.squads.teams);
     const normalizedTeam1Name = normalizeMatchFingerprintPart(team1Name);
     const normalizedTeam2Name = normalizeMatchFingerprintPart(team2Name);
     const fullParts = [baseParts.join("|"), normalizedTeam1Name, normalizedTeam2Name].filter(Boolean);
@@ -1146,9 +1156,17 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     };
   }
 
-  function extractSquadTeamNames(squads = []) {
+  function extractSquadTeamNames(squads = [], teams = []) {
     let team1Name = "";
     let team2Name = "";
+
+    for (const team of Array.isArray(teams) ? teams : []) {
+      const teamId = Number(team?.teamID ?? team?.teamId ?? NaN);
+      const teamName = String(team?.teamName ?? team?.factionName ?? "").trim();
+      if (!teamName) continue;
+      if (teamId === 1 && !team1Name) team1Name = teamName;
+      if (teamId === 2 && !team2Name) team2Name = teamName;
+    }
 
     for (const squad of Array.isArray(squads) ? squads : []) {
       const teamId = Number(squad?.teamID ?? squad?.teamId ?? NaN);
@@ -1233,7 +1251,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     const baseParts = [map, layer, mode].filter(Boolean);
     if (baseParts.length === 0) return null;
 
-    const { team1Name, team2Name } = extractSquadTeamNames(state.squads.list);
+    const { team1Name, team2Name } = extractSquadTeamNames(state.squads.list, state.squads.teams);
     const normalizedTeam1Name = normalizeMatchFingerprintPart(team1Name);
     const normalizedTeam2Name = normalizeMatchFingerprintPart(team2Name);
     const fullParts = [baseParts.join("|"), normalizedTeam1Name, normalizedTeam2Name].filter(Boolean);
