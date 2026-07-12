@@ -2656,12 +2656,15 @@ function parseCompactCaptureZones(text) {
   return extractBraceItems(section).map((raw) => {
     const fields = splitTopLevelCsv(raw);
     const position = parseCompactSceneVector(fields.slice(1).join(","));
+    const ownerTeamId = toFiniteNumber(fields[4]);
     return {
       name: fields[0] ?? "",
       position,
       isLocked: parseBooleanText(fields[2]),
       capturePercent: toFiniteNumber(fields[3]),
-      captureDirection: toFiniteNumber(fields[4]),
+      teamId: ownerTeamId,
+      ownerTeamId,
+      captureDirection: ownerTeamId,
       raw,
     };
   }).filter((zone) => zone.name);

@@ -144,347 +144,57 @@
 
 
 
-/* Main base markers use the actual faction flag resolved from team composition. */
-.main-zone-layer {
-  position: absolute;
-  inset: 0;
-  z-index: 7;
-  pointer-events: none;
-}
+/* Main and capture zones share a small, unframed, fixed-coordinate flag. */
+.main-zone-layer,
+.capture-zone-layer { position: absolute; inset: 0; pointer-events: none; }
+.main-zone-layer { z-index: 7; }
+.capture-zone-layer { z-index: 8; }
+.main-zone-marker,
+.capture-zone-marker { position: absolute; width: 0; height: 0; padding: 0; overflow: visible; border: 0; background: transparent; }
+.main-zone-marker { pointer-events: none; }
+.capture-zone-marker { pointer-events: auto; cursor: pointer; }
 
-.main-zone-marker {
-  position: absolute;
-  width: 0;
-  height: 0;
-  overflow: visible;
-  pointer-events: none;
-  --main-base-accent: #94a3b8;
-  --main-base-glow: rgba(148, 163, 184, 0.42);
+.zone-flag-group {
+  position: absolute; left: -17px; top: -11px; display: block;
+  width: 34px; height: 22px; transform-origin: 17px 11px;
+  will-change: transform; filter: drop-shadow(0 2px 3px rgba(0,0,0,.72));
 }
-
-/* The marker itself is the world-coordinate anchor. Only this child scales,
-   using the fortification's bottom center as transform origin. */
-.main-base-visual {
-  position: absolute;
-  left: -18px;
-  top: -58px;
-  width: 76px;
-  height: 60px;
-  transform: scale(var(--main-base-scale, 1));
-  transform-origin: 18px 58px;
-  will-change: transform;
-  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.78));
+.main-zone-flag { transform: scale(var(--main-base-scale, 1)); }
+.capture-zone-flag { transform: scale(var(--capture-marker-scale, 1)); }
+.zone-flag-visual { position: relative; display: block; width: 34px; height: 22px; overflow: hidden; }
+.zone-flag-image,
+.zone-flag-placeholder,
+.capture-flag-neutral-sweep { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+.zone-flag-image { object-fit: contain; }
+.zone-flag-placeholder { background: rgba(226,232,240,.88); }
+.capture-flag-neutral-sweep {
+  z-index: 2; background: rgba(226,232,240,.94);
+  -webkit-mask: conic-gradient(from -90deg, transparent 0deg var(--capture-progress-deg,360deg), #000 var(--capture-progress-deg,360deg) 360deg);
+  mask: conic-gradient(from -90deg, transparent 0deg var(--capture-progress-deg,360deg), #000 var(--capture-progress-deg,360deg) 360deg);
+  transition: -webkit-mask 180ms linear, mask 180ms linear;
 }
-
-.main-zone-marker.team-1 {
-  --main-base-accent: #60a5fa;
-  --main-base-glow: rgba(59, 130, 246, 0.52);
+.zone-flag-lock {
+  position: absolute; left: 50%; top: 50%; z-index: 4; width: 10px; height: 8px;
+  box-sizing: border-box; border: 1px solid rgba(15,23,42,.95); border-radius: 2px;
+  background: rgba(248,250,252,.92); box-shadow: 0 1px 3px rgba(0,0,0,.7);
+  transform: translate(-50%,-34%);
 }
-
-.main-zone-marker.team-2 {
-  --main-base-accent: #f87171;
-  --main-base-glow: rgba(239, 68, 68, 0.52);
+.zone-flag-lock::before {
+  content: ""; position: absolute; left: 2px; top: -6px; width: 4px; height: 5px;
+  box-sizing: border-box; border: 1.5px solid rgba(15,23,42,.95);
+  border-bottom: 0; border-radius: 4px 4px 0 0;
 }
-
-.main-base-pole {
-  position: absolute;
-  left: 17px;
-  top: 3px;
-  width: 3px;
-  height: 46px;
-  border-radius: 2px;
-  background: linear-gradient(90deg, #f8fafc, #64748b 48%, #e2e8f0);
-  box-shadow: 0 0 0 1px rgba(2, 6, 23, 0.92);
+.zone-flag-lock::after {
+  content: ""; position: absolute; left: 4px; top: 2px; width: 1px; height: 3px;
+  border-radius: 1px; background: rgba(15,23,42,.95);
 }
-
-.main-base-pole::before {
-  content: "";
-  position: absolute;
-  left: -2px;
-  top: -3px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--main-base-accent);
-  box-shadow: 0 0 10px var(--main-base-glow);
+.zone-flag-name {
+  position: absolute; left: 50%; top: 24px; display: block; max-width: 92px; overflow: hidden;
+  color: rgba(248,250,252,.96); font: 700 7px/1.1 system-ui,sans-serif;
+  text-align: center; text-overflow: ellipsis; text-shadow: 0 1px 2px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.85);
+  white-space: nowrap; transform: translateX(-50%);
 }
-
-.main-base-flag-frame {
-  position: absolute;
-  left: 20px;
-  top: 6px;
-  width: 42px;
-  height: 27px;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  border: 2px solid rgba(248, 250, 252, 0.9);
-  border-left: 0;
-  border-radius: 0 3px 3px 0;
-  background: rgba(15, 23, 42, 0.94);
-  box-shadow:
-    0 0 0 1px rgba(2, 6, 23, 0.9),
-    0 0 12px var(--main-base-glow);
-}
-
-.main-base-faction-flag {
-  display: block;
-  width: 100%;
-  height: 100%;
-  padding: 2px;
-  box-sizing: border-box;
-  object-fit: contain;
-}
-
-.main-base-flag-fallback {
-  color: #f8fafc;
-  font: 900 10px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
-  letter-spacing: 0.5px;
-}
-
-.main-base-fortification {
-  position: absolute;
-  left: 6px;
-  bottom: 2px;
-  width: 24px;
-  height: 15px;
-  box-sizing: border-box;
-  clip-path: polygon(0 32%, 17% 32%, 17% 0, 34% 0, 34% 32%, 66% 32%, 66% 0, 83% 0, 83% 32%, 100% 32%, 92% 100%, 8% 100%);
-  border: 1px solid rgba(248, 250, 252, 0.82);
-  background: linear-gradient(180deg, var(--main-base-accent), #1e293b 76%);
-  box-shadow: 0 0 12px var(--main-base-glow);
-}
-
-.main-base-gate {
-  position: absolute;
-  left: 9px;
-  bottom: 0;
-  width: 6px;
-  height: 7px;
-  border-radius: 4px 4px 0 0;
-  background: rgba(2, 6, 23, 0.82);
-}
-
-.main-base-anchor-dot {
-  position: absolute;
-  left: 14px;
-  bottom: -1px;
-  width: 8px;
-  height: 4px;
-  border-radius: 50%;
-  background: #f8fafc;
-  box-shadow: 0 0 8px var(--main-base-glow);
-}
-
-.main-base-label {
-  position: absolute;
-  left: 34px;
-  top: 37px;
-  min-width: 78px;
-  max-width: 132px;
-  overflow: hidden;
-  padding: 4px 7px;
-  border: 1px solid var(--main-base-glow);
-  border-left: 3px solid var(--main-base-accent);
-  border-radius: 3px;
-  color: #f8fafc;
-  background: rgba(2, 6, 23, 0.9);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.main-base-label small,
-.main-base-label strong {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.main-base-label small {
-  margin-bottom: 2px;
-  color: var(--main-base-accent);
-  font: 800 7px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
-  letter-spacing: 0.8px;
-}
-
-.main-base-label strong {
-  font: 750 9px/1.1 system-ui, sans-serif;
-}
-
-/* Capture zone markers: the button is the fixed world-coordinate anchor.
-   Only its child visual scales, so marker scale never alters map placement. */
-.capture-zone-layer {
-  position: absolute;
-  inset: 0;
-  z-index: 8;
-  pointer-events: none;
-}
-
-.capture-zone-marker {
-  position: absolute;
-  display: block;
-  width: 0;
-  height: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  overflow: visible;
-  pointer-events: auto;
-  cursor: pointer;
-  --capture-accent: #f6c453;
-  --capture-accent-soft: rgba(246, 196, 83, 0.35);
-}
-
-.capture-flag-emblem {
-  position: absolute;
-  left: -5px;
-  top: -29px;
-  width: 22px;
-  height: 30px;
-  transform: scale(var(--capture-marker-scale, 1));
-  transform-origin: 5px 29px;
-  will-change: transform;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.75));
-}
-
-.capture-flag-pole {
-  position: absolute;
-  left: 4px;
-  top: 1px;
-  width: 2px;
-  height: 27px;
-  border-radius: 2px;
-  background: linear-gradient(90deg, #cbd5e1, #64748b 48%, #e2e8f0);
-  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.85);
-}
-
-.capture-flag-pole::before {
-  content: "";
-  position: absolute;
-  left: -2px;
-  top: -3px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--capture-accent);
-  box-shadow: 0 0 8px var(--capture-accent-soft);
-}
-
-.capture-flag-banner {
-  position: absolute;
-  left: 6px;
-  top: 4px;
-  width: 16px;
-  height: 13px;
-  display: grid;
-  place-items: center;
-  clip-path: polygon(0 0, 100% 16%, 78% 50%, 100% 84%, 0 100%);
-  color: #07111f;
-  background: linear-gradient(135deg, #fff4c4, var(--capture-accent) 55%, #b7791f);
-  border: 1px solid rgba(255, 255, 255, 0.75);
-  box-shadow: 0 0 10px var(--capture-accent-soft);
-}
-
-.capture-flag-letter {
-  margin-left: -1px;
-  font: 800 9px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
-}
-
-.node-label-container {
-  position: absolute;
-  left: 17px;
-  top: -25px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1px;
-  min-width: 78px;
-  transform: scale(var(--capture-marker-scale, 1));
-  transform-origin: 0 25px;
-  will-change: transform;
-  padding: 4px 8px;
-  border: 1px solid var(--capture-accent-soft);
-  border-left: 2px solid var(--capture-accent);
-  border-radius: 3px 6px 6px 3px;
-  background: rgba(6, 12, 24, 0.88);
-  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(6px);
-}
-
-.node-index-label {
-  color: var(--capture-accent);
-  font: 800 8px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
-  letter-spacing: 0.9px;
-}
-
-.node-name-text {
-  max-width: 150px;
-  overflow: hidden;
-  color: #e2e8f0;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.35px;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.capture-progress-ring {
-  position: absolute;
-  left: -13px;
-  top: -42px;
-  width: 26px;
-  height: 26px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: rgba(5, 10, 20, 0.92);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.72);
-  transform: scale(var(--capture-marker-scale, 1));
-  transform-origin: 13px 42px;
-  will-change: transform;
-}
-
-.capture-progress-ring svg {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  transform: rotate(-90deg);
-}
-
-.capture-progress-bg,
-.capture-progress-fill {
-  fill: none;
-  stroke-width: 3.5;
-}
-
-.capture-progress-bg {
-  stroke: rgba(148, 163, 184, 0.3);
-}
-
-.capture-progress-fill {
-  stroke: var(--capture-accent);
-  stroke-linecap: round;
-  filter: drop-shadow(0 0 2px var(--capture-accent-soft));
-  transition: stroke-dasharray 180ms linear;
-}
-
-.capture-progress-text {
-  position: relative;
-  color: #f8fafc;
-  font: 800 7px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
-}
-
-.capture-zone-marker:hover {
-  --capture-accent: #fff4a8;
-  --capture-accent-soft: rgba(255, 224, 94, 0.62);
-}
-
-.capture-zone-marker:hover .node-label-container {
-  background: rgba(12, 23, 42, 0.98);
-  box-shadow: 0 5px 18px rgba(246, 196, 83, 0.25);
-}
+.capture-zone-marker:hover .zone-flag-group { filter: drop-shadow(0 2px 4px rgba(255,255,255,.35)) brightness(1.08); }
 
 /* Explosion Layer */
 .explosion-layer {
