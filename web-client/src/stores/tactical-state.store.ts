@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { computed, shallowRef } from "vue";
+import { computed, markRaw, shallowRef } from "vue";
 import {
   fetchTacticalStateSnapshot,
   streamTacticalStateSnapshot,
@@ -28,6 +28,10 @@ export const useTacticalStateStore = defineStore("tacticalState", () => {
       ?? identity.playerID ?? identity.playerId ?? identity.name ?? "");
   }
 
+  function retainRawPlayer(player: any) {
+    return player && typeof player === "object" ? markRaw(player) : player;
+  }
+
   function publishPlayers() {
     const next = playerOrder.map((key) => playersByKey.get(key)).filter(Boolean);
     players.value = next;
@@ -37,7 +41,8 @@ export const useTacticalStateStore = defineStore("tacticalState", () => {
   function applyFullSnapshot(nextSnapshot: any) {
     playersByKey.clear();
     playerOrder = [];
-    for (const player of Array.isArray(nextSnapshot?.players) ? nextSnapshot.players : []) {
+    for (const candidate of Array.isArray(nextSnapshot?.players) ? nextSnapshot.players : []) {
+      const player = retainRawPlayer(candidate);
       const key = playerKey(player);
       if (!key || playersByKey.has(key)) continue;
       playersByKey.set(key, player);
@@ -61,7 +66,8 @@ export const useTacticalStateStore = defineStore("tacticalState", () => {
     }
     if (playersChanged) playerOrder = playerOrder.filter((key) => playersByKey.has(key));
 
-    for (const player of delta.players?.upsert ?? []) {
+    for (const candidate of delta.players?.upsert ?? []) {
+      const player = retainRawPlayer(candidate);
       const key = playerKey(player);
       if (!key) continue;
       if (!playersByKey.has(key)) playerOrder.push(key);
