@@ -431,6 +431,57 @@ async function testPermissionGroupDeleteRejectsAssignedUsers() {
   }
 }
 
+
+async function testAuthWatcherLifecycleAndExternalRefresh() {
+  const originalCwd = process.cwd();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-auth-watcher-"));
+  process.chdir(tempDir);
+
+  const store = new AuthUserStore({
+    config: { usersFilePath: "./data/auth/users.json" },
+    logger: { warn() {} },
+  });
+  try {
+    await store.start();
+    await store.createUser({
+      username: "Root",
+      role: "SuperAdmin",
+      passwordHash: await hashPassword("Secret123"),
+    });
+
+    const firstWatcher = store.fileWatcher;
+    await store.start();
+    assert.equal(store.fileWatcher, firstWatcher);
+
+    const usersPath = path.resolve("./data/auth/users.json");
+    const originalStats = await fs.stat(usersPath);
+    const document = JSON.parse(await fs.readFile(usersPath, "utf8"));
+    document.users[0].username = "ExternallyEdited";
+    document.users[0].usernameNormalized = "externallyedited";
+    const changedText = `${JSON.stringify(document, null, 2)}\n`;
+    await fs.writeFile(usersPath, changedText, "utf8");
+    await fs.utimes(usersPath, originalStats.atime, originalStats.mtime);
+
+    assert.equal(await store.refreshFromDiskIfChanged(), true);
+    assert.equal(store.findByUsername("ExternallyEdited")?.username, "ExternallyEdited");
+
+    await fs.writeFile(usersPath, "{", "utf8");
+    setTimeout(() => {
+      void fs.writeFile(usersPath, changedText, "utf8");
+    }, 50);
+    assert.equal(await store.refreshFromDiskIfChanged(), false);
+    assert.equal(store.findByUsername("ExternallyEdited")?.username, "ExternallyEdited");
+
+    await fs.rm(usersPath, { force: true });
+    assert.equal(await store.refreshFromDiskIfChanged(), true);
+    assert.equal(store.listUsers().length, 0);
+  } finally {
+    await store.stop();
+    process.chdir(originalCwd);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
 await testUserStorePreventsDuplicateUsernamesAndKeepsLastSuperAdmin();
 await testAuthManagerBootstrapsLegacyDefaultSuperAdminOnEmptyStore();
 await testAuthManagerMigratesDefaultSteam64ToExistingSuperAdmin();
@@ -441,5 +492,6 @@ await testUserStoreProtectsLastSuperAdminDowngrade();
 await testPermissionGroupsPersistAndResolveForAdminUser();
 await testUserStorePersistsPanelBanPermission();
 await testPermissionGroupDeleteRejectsAssignedUsers();
+await testAuthWatcherLifecycleAndExternalRefresh();
 
 console.log("auth tests passed");
