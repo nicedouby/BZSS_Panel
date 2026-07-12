@@ -8,13 +8,35 @@ export function createServerStatsApi({ sampler, store, getLiveSnapshot, getServe
       return SERVER_STATS_CHANNELS.map((channel) => ({ ...channel }));
     },
 
-    async getHistory({ serverId, fromMs, toMs, includeCurrent = false }) {
+    async getHistory({ serverId, fromMs, toMs, includeCurrent = false, maxPoints = 1500, signal }) {
+      const boundedMaxPoints = Math.max(2, Math.min(5000, Math.floor(Number(maxPoints) || 1500)));
       const history = await store.getHistory({
         serverId: serverId ?? getServerId(),
         fromMs: Number(fromMs),
         toMs: Number(toMs),
-        includeCurrent,
+        maxPoints: includeCurrent ? Math.max(2, boundedMaxPoints - 1) : boundedMaxPoints,
+        signal,
       });
+
+      if (includeCurrent) {
+        const live = sampler.getCurrentSample();
+        const liveTimestamp = Number(live?.timestamp_ms);
+        const lastTimestamp = Number(history.samples.at(-1)?.timestamp_ms ?? 0);
+        if (
+          live
+          && Number.isFinite(liveTimestamp)
+          && liveTimestamp >= history.from_ms
+          && liveTimestamp <= history.to_ms
+          && liveTimestamp > lastTimestamp
+        ) {
+          history.samples.push({
+            timestamp_ms: liveTimestamp,
+            metrics: { ...(live.metrics ?? {}) },
+            virtual: false,
+          });
+          history.summary = summarizeHistory(history.samples, history.summary?.sourceSampleCount ?? history.samples.length);
+        }
+      }
 
       return {
         ...history,
@@ -57,5 +79,19 @@ export function createServerStatsApi({ sampler, store, getLiveSnapshot, getServe
     async listAvailableDates({ serverId }) {
       return store.listAvailableDates({ serverId: serverId ?? getServerId() });
     },
+  };
+}
+
+function summarizeHistory(samples, sourceSampleCount) {
+  return {
+    sampleCount: samples.length,
+    sourceSampleCount,
+    downsampled: sourceSampleCount > samples.filter((sample) => !sample.virtual).length,
+    firstAt: samples[0]?.timestamp_ms ?? null,
+    lastAt: samples.at(-1)?.timestamp_ms ?? null,
+    latest: samples.length > 0 ? {
+      timestamp_ms: samples.at(-1).timestamp_ms,
+      metrics: samples.at(-1).metrics,
+    } : null,
   };
 }
