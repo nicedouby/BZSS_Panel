@@ -22,6 +22,8 @@ export interface BzssCoreCaptureZoneInfo {
   raw?: string;
   isLocked?: boolean | null;
   capturePercent?: number | null;
+  teamId?: number | null;
+  ownerTeamId?: number | null;
   captureDirection?: number | null;
 }
 
