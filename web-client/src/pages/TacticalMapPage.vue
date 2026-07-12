@@ -798,6 +798,9 @@ interface CaptureZoneMarker {
   captureProgress: number;
   captureDirection?: number | null;
   isLocked?: boolean | null;
+  factionCode: string | null;
+  factionLabel: string;
+  flagUrl: string | null;
   raw?: string;
 }
 
@@ -1971,6 +1974,9 @@ const captureZoneMarkers = computed<CaptureZoneMarker[]>(() => {
       captureProgress,
       captureDirection: zone.captureDirection ?? null,
       isLocked: zone.isLocked ?? null,
+      factionCode: faction.factionCode,
+      factionLabel: faction.factionLabel,
+      flagUrl: faction.flagUrl,
       raw: zone.raw,
     });
   }
