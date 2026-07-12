@@ -290,7 +290,7 @@ function buildHistorySummary(samples, sourceSampleCount) {
 
 function waitForSharedHistory(promise, signal) {
   if (!signal) return promise;
-  throwIfAborted(signal);
+  if (signal.aborted) return Promise.reject(createAbortError());
   return new Promise((resolve, reject) => {
     const abort = () => reject(createAbortError());
     signal.addEventListener("abort", abort, { once: true });
