@@ -5,25 +5,27 @@ import { applyMatchSnapshotResponse, buildSquadsSnapshot } from "../app/matchSna
 import { useMatchStore } from "./match.store";
 import { useSquadStore } from "./squad.store";
 
+const TEAM_HEADERS = [
+  { teamID: 1, teamName: "118th Combined Arms Brigade" },
+  { teamID: 2, teamName: "Manticore Security Task Force" },
+];
+
 describe("match team headers", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
   });
 
-  it("preserves ListSquads team headers in the squad snapshot", () => {
-    const snapshot = buildSquadsSnapshot({
+  it("preserves ListSquads team headers from either squad or match state fields", () => {
+    expect(buildSquadsSnapshot({
       list: [],
-      teams: [
-        { teamID: 1, teamName: "118th Combined Arms Brigade" },
-        { teamID: 2, teamName: "Manticore Security Task Force" },
-      ],
+      teams: TEAM_HEADERS,
       lastUpdatedAt: "2026-07-12T00:00:00.000Z",
-    });
+    }).teams).toEqual(TEAM_HEADERS);
 
-    expect(snapshot.teams).toEqual([
-      { teamID: 1, teamName: "118th Combined Arms Brigade" },
-      { teamID: 2, teamName: "Manticore Security Task Force" },
-    ]);
+    expect(buildSquadsSnapshot({
+      list: [],
+      lastUpdatedAt: "2026-07-12T00:00:00.000Z",
+    }, TEAM_HEADERS).teams).toEqual(TEAM_HEADERS);
   });
 
   it("shows the battlegroup name for a team with no players or squads", () => {
@@ -53,12 +55,9 @@ describe("match team headers", () => {
               squadName: "Squad 1",
             },
           ],
-          teams: [
-            { teamID: 1, teamName: "118th Combined Arms Brigade" },
-            { teamID: 2, teamName: "Manticore Security Task Force" },
-          ],
           lastUpdatedAt: "2026-07-12T00:00:00.000Z",
         },
+        teams: TEAM_HEADERS,
         rconStatus: {
           connected: true,
         },
@@ -70,7 +69,7 @@ describe("match team headers", () => {
       },
     });
 
-    expect(useSquadStore().teams).toHaveLength(2);
+    expect(useSquadStore().teams).toEqual(TEAM_HEADERS);
 
     const emptyTeam = useMatchStore().teams.find((team) => team.teamID === 2);
     expect(emptyTeam).toMatchObject({
@@ -80,5 +79,23 @@ describe("match team headers", () => {
       squads: [],
       unassignedPlayers: [],
     });
+  });
+
+  it("does not erase known battlegroup names when a later partial snapshot omits headers", () => {
+    const store = useSquadStore();
+    store.applySnapshot(buildSquadsSnapshot({
+      list: [],
+      teams: TEAM_HEADERS,
+      lastUpdatedAt: "2026-07-12T00:00:00.000Z",
+    }));
+
+    store.applySnapshot(buildSquadsSnapshot({
+      list: [],
+      lastUpdatedAt: "2026-07-12T00:00:01.000Z",
+    }));
+
+    expect(store.teams).toEqual(TEAM_HEADERS);
+    expect(useMatchStore().teams.find((team) => team.teamID === 2)?.teamName)
+      .toBe("Manticore Security Task Force");
   });
 });
