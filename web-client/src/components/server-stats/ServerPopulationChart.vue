@@ -21,7 +21,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, shallowRef, watch } from "vue";
+import { ref, onActivated, onDeactivated, onMounted, onUnmounted, shallowRef, watch } from "vue";
 import * as echarts from "echarts";
 import { STATS_THEME } from "./serverStatsTheme";
 import { readChartThemeTokens } from "../../theme/chartTheme";
@@ -291,16 +291,21 @@ watch(
   }
 );
 
-onMounted(() => {
+function activateChart() {
   ensureChart();
-});
+}
 
-onUnmounted(() => {
+function deactivateChart() {
   resizeObserver?.disconnect();
   resizeObserver = null;
   chartInstance.value?.dispose();
   chartInstance.value = null;
-});
+}
+
+onMounted(activateChart);
+onActivated(activateChart);
+onDeactivated(deactivateChart);
+onUnmounted(deactivateChart);
 </script>
 
 <style scoped>
