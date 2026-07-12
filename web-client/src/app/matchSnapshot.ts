@@ -133,11 +133,13 @@ export function buildPlayersSnapshot(matchPlayers: any) {
 
 export function buildSquadsSnapshot(matchSquads: any, fallbackTeams: any = undefined) {
   const list = Array.isArray(matchSquads?.list) ? matchSquads.list : [];
-  const teamSource = Array.isArray(matchSquads?.teams)
-    ? matchSquads.teams
-    : Array.isArray(fallbackTeams)
-      ? fallbackTeams
-      : null;
+  const primaryTeams = Array.isArray(matchSquads?.teams) ? matchSquads.teams : null;
+  const secondaryTeams = Array.isArray(fallbackTeams) ? fallbackTeams : null;
+  const teamSource = primaryTeams?.length
+    ? primaryTeams
+    : secondaryTeams?.length
+      ? secondaryTeams
+      : primaryTeams ?? secondaryTeams;
   const teams = teamSource
     ? teamSource
       .map((team: any) => ({
