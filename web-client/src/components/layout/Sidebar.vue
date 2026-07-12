@@ -117,7 +117,7 @@ const sections = computed(() => buildNavSections({
 const expandedSectionKey = ref<NavSectionKey | "">("");
 
 watch(
-  [() => route.path, sections],
+  () => route.path,
   () => {
     const current = findSectionForRoute(sections.value, route.path);
     if (current) expandedSectionKey.value = current.key;
