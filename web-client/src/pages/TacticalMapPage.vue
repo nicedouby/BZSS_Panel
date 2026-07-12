@@ -72,26 +72,15 @@
             }"
             :title="zone.raw || zone.name"
           >
-            <div class="main-base-visual">
-              <span class="main-base-pole"></span>
-              <span class="main-base-flag-frame">
-                <img
-                  v-if="zone.flagUrl"
-                  class="main-base-faction-flag"
-                  :src="zone.flagUrl"
-                  :alt="zone.factionLabel"
-                />
-                <span v-else class="main-base-flag-fallback">{{ zone.teamId ? `T${zone.teamId}` : "MAIN" }}</span>
-              </span>
-              <span class="main-base-fortification">
-                <span class="main-base-gate"></span>
-              </span>
-              <span class="main-base-anchor-dot"></span>
-              <span class="main-base-label">
-                <small>MAIN BASE</small>
-                <strong>{{ zone.factionLabel || (zone.teamId ? `TEAM ${zone.teamId}` : "MAIN") }}</strong>
-              </span>
-            </div>
+            <span class="zone-flag-visual main-zone-flag">
+              <img
+                v-if="zone.flagUrl"
+                class="zone-flag-image"
+                :src="zone.flagUrl"
+                :alt="zone.factionLabel"
+              />
+              <span v-else class="zone-flag-placeholder"></span>
+            </span>
           </div>
         </div>
 
@@ -109,29 +98,15 @@
             }"
             :title="zone.raw || zone.name"
           >
-            <div class="capture-flag-emblem">
-              <span class="capture-flag-pole"></span>
-              <span class="capture-flag-banner">
-                <span class="capture-flag-letter">{{ getFlagLetter(zone.name) }}</span>
-              </span>
-            </div>
-            <div class="node-label-container">
-              <span class="node-index-label">OBJ {{ zone.name.includes('-') ? zone.name.split('-')[0] : '' }}</span>
-              <span class="node-name-text">{{ zone.name.includes('-') ? zone.name.split('-').slice(1).join('-') : zone.name }}</span>
-            </div>
-            <div class="capture-progress-ring">
-              <svg viewBox="0 0 36 36">
-                <circle class="capture-progress-bg" cx="18" cy="18" r="15" />
-                <circle
-                  class="capture-progress-fill"
-                  cx="18"
-                  cy="18"
-                  r="15"
-                  :stroke-dasharray="getCaptureDashArray(zone)"
-                />
-              </svg>
-              <span class="capture-progress-text">{{ formatCapturePercent(zone.capturePercent) }}</span>
-            </div>
+            <span class="zone-flag-visual capture-zone-flag" :class="[`team-${zone.teamId ?? 0}`]">
+              <img
+                v-if="zone.flagUrl"
+                class="zone-flag-image"
+                :src="zone.flagUrl"
+                :alt="zone.factionLabel"
+              />
+              <span v-else class="zone-flag-placeholder"></span>
+            </span>
           </button>
         </div>
 
@@ -809,6 +784,9 @@ interface CaptureZoneMarker {
   capturePercent?: number | null;
   captureDirection?: number | null;
   isLocked?: boolean | null;
+  factionCode: string | null;
+  factionLabel: string;
+  flagUrl: string | null;
   raw?: string;
 }
 
@@ -1969,11 +1947,14 @@ const captureZoneMarkers = computed<CaptureZoneMarker[]>(() => {
     }
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
     lastKnownZonePositions.value.set(name, { x, y });
+    const rawTeamId = Number(zone.teamId ?? zone.ownerTeamId ?? zone.captureDirection);
+    const teamId = Number.isFinite(rawTeamId) && (rawTeamId === 1 || rawTeamId === 2) ? rawTeamId : null;
+    const faction = resolveMainZoneFaction(teamId);
     markers.push({
       type: "captureZone",
       id: `capture-zone-${name}`,
       name,
-      teamId: null,
+      teamId,
       mapX: project(x, bounds.minX, bounds.maxX),
       mapY: project(y, bounds.minY, bounds.maxY),
       gameX: x,
@@ -1981,6 +1962,9 @@ const captureZoneMarkers = computed<CaptureZoneMarker[]>(() => {
       capturePercent: zone.capturePercent ?? null,
       captureDirection: zone.captureDirection ?? null,
       isLocked: zone.isLocked ?? null,
+      factionCode: faction.factionCode,
+      factionLabel: faction.factionLabel,
+      flagUrl: faction.flagUrl,
       raw: zone.raw,
     });
   }
@@ -1990,7 +1974,8 @@ const captureZoneMarkers = computed<CaptureZoneMarker[]>(() => {
 function clampPercentValue(value: unknown) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return null;
-  return Math.max(0, Math.min(100, numeric));
+  const percent = numeric >= 0 && numeric <= 1 ? numeric * 100 : numeric;
+  return Math.max(0, Math.min(100, percent));
 }
 
 function formatCapturePercent(value: unknown) {
