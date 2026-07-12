@@ -53,6 +53,7 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
 
   function commitSnapshot(snapshot, { serverId, generatedAt, composeStartedAt, errorMessage = "" }) {
     state.revision += 1;
+    if (snapshot?.meta) snapshot.meta.revision = state.revision;
     state.generatedAt = generatedAt;
     state.snapshot = snapshot;
     state.lastError = errorMessage;
