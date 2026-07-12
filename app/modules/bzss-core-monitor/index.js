@@ -163,9 +163,33 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
       pendingRawCaptureBytes = 0;
       for (const text of queued) {
         const bytes = Buffer.byteLength(text);
-        if (rawCaptureBytes + bytes > rawCaptureMaxFileBytes) {
+        if (bytes > rawCaptureMaxFileBytes) {
           recordDroppedRawCaptureLine();
           continue;
+        }
+        if (rawCaptureBytes + bytes > rawCaptureMaxFileBytes) {
+          const queuedStream = rawCaptureStream;
+          rawCaptureStream = null;
+          await new Promise((resolve) => {
+            queuedStream.once("finish", resolve);
+            queuedStream.once("error", resolve);
+            queuedStream.end();
+          });
+          if (rawCaptureMaxFiles === 1) {
+            await fs.promises.rm(rawCapturePath, { force: true });
+          }
+          for (let index = rawCaptureMaxFiles - 1; index >= 1; index -= 1) {
+            const source = index === 1 ? rawCapturePath : `${base}.${index - 1}.jsonl`;
+            const target = `${base}.${index}.jsonl`;
+            await fs.promises.rm(target, { force: true });
+            try {
+              await fs.promises.rename(source, target);
+            } catch (error) {
+              if (error?.code !== "ENOENT") throw error;
+            }
+          }
+          rawCaptureBytes = 0;
+          rawCaptureStream = createRawCaptureStream();
         }
         rawCaptureStream.write(text);
         rawCaptureBytes += bytes;
