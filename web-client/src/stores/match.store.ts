@@ -21,6 +21,13 @@ export const useMatchStore = defineStore("match", () => {
       map.set(teamID, { teamID, teamName: `Team ${teamID}`, squads: [], unassignedPlayers: [], playerCount: 0 });
     }
 
+    for (const teamHeader of squads.teams) {
+      const teamID = Number(teamHeader?.teamID);
+      const teamName = String(teamHeader?.teamName ?? "").trim();
+      if (!Number.isFinite(teamID) || !teamName) continue;
+      ensureTeam(map, teamID, teamName);
+    }
+
     const squadMap = new Map<string, RuntimeSquad & { members: RuntimePlayer[] }>();
     for (const squad of squads.list) {
       if (squad.teamID == null || squad.squadID == null) continue;
