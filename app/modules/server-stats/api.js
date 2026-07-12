@@ -10,13 +10,21 @@ export function createServerStatsApi({ sampler, store, getLiveSnapshot, getServe
 
     async getHistory({ serverId, fromMs, toMs, includeCurrent = false, maxPoints = 1500, signal }) {
       const boundedMaxPoints = Math.max(2, Math.min(5000, Math.floor(Number(maxPoints) || 1500)));
-      const history = await store.getHistory({
+      const sharedHistory = await store.getHistory({
         serverId: serverId ?? getServerId(),
         fromMs: Number(fromMs),
         toMs: Number(toMs),
         maxPoints: includeCurrent ? Math.max(2, boundedMaxPoints - 1) : boundedMaxPoints,
         signal,
       });
+      const history = {
+        ...sharedHistory,
+        samples: sharedHistory.samples.map((sample) => ({
+          ...sample,
+          metrics: { ...(sample.metrics ?? {}) },
+        })),
+        summary: { ...(sharedHistory.summary ?? {}) },
+      };
 
       if (includeCurrent) {
         const live = sampler.getCurrentSample();
@@ -34,6 +42,9 @@ export function createServerStatsApi({ sampler, store, getLiveSnapshot, getServe
             metrics: { ...(live.metrics ?? {}) },
             virtual: false,
           });
+          while (history.samples.length > boundedMaxPoints) {
+            history.samples.splice(history.samples[0]?.virtual ? 1 : 0, 1);
+          }
           history.summary = summarizeHistory(history.samples, history.summary?.sourceSampleCount ?? history.samples.length);
         }
       }
