@@ -2687,7 +2687,7 @@ function parseCompactFobs(text) {
   if (!section) return [];
   return extractBraceItems(section).map((raw, index) => {
     const fields = splitTopLevelCsv(raw);
-    const hasPosition = /^X=-?[0-9.]+\\s+Y=-?[0-9.]+\\s+Z=-?[0-9.]+$/i.test(String(fields[1] ?? "").trim());
+    const hasPosition = /^X=-?[0-9.]+\s+Y=-?[0-9.]+\s+Z=-?[0-9.]+$/i.test(String(fields[1] ?? "").trim());
     const position = hasPosition ? parseVectorBlock(fields[1]) : null;
     const offset = hasPosition ? 1 : 0;
     const teamId = toFiniteNumber(fields[1 + offset]);
