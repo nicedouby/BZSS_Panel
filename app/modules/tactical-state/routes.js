@@ -47,31 +47,61 @@ export async function handleTacticalStateRoutes({ modules, url, req, res, user, 
       "X-Accel-Buffering": "no",
     });
 
-    const connection = { blocked: false, pendingText: null, closed: false };
-    const sendLatest = (text) => {
-      if (connection.closed || !text) return;
-      if (connection.blocked) {
-        connection.pendingText = text;
-        return;
-      }
+    const connection = {
+      blocked: false,
+      needsResync: false,
+      resyncing: false,
+      closed: false,
+    };
+
+    const sendText = (text) => {
+      if (connection.closed || !text) return true;
       const accepted = res.write(`data: ${text}\n\n`);
       if (!accepted) connection.blocked = true;
+      return accepted;
     };
+
+    const sendDelta = (text) => {
+      if (connection.closed || !text) return;
+      if (connection.blocked || connection.resyncing) {
+        connection.needsResync = true;
+        return;
+      }
+      sendText(text);
+    };
+
+    const sendLatestSnapshot = async () => {
+      if (connection.closed || connection.resyncing) return;
+      connection.resyncing = true;
+      try {
+        do {
+          connection.needsResync = false;
+          const latest = await tacticalState.getStreamSnapshot?.();
+          if (connection.closed) return;
+          if (connection.blocked) {
+            connection.needsResync = true;
+            return;
+          }
+          sendText(latest?.serialized ?? "");
+        } while (connection.needsResync && !connection.blocked && !connection.closed);
+      } finally {
+        connection.resyncing = false;
+      }
+    };
+
     const onDrain = () => {
       connection.blocked = false;
-      const latest = connection.pendingText;
-      connection.pendingText = null;
-      if (latest) sendLatest(latest);
+      if (connection.needsResync) void sendLatestSnapshot();
     };
     res.on("drain", onDrain);
 
     const initial = await tacticalState.getStreamSnapshot?.();
-    sendLatest(initial?.serialized ?? JSON.stringify(initial?.envelope ?? {
+    sendText(initial?.serialized ?? JSON.stringify(initial?.envelope ?? {
       ok: true, type: "tactical-state.snapshot", snapshot: await tacticalState.getSnapshot?.({ user }),
     }));
 
     const unsubscribe = tacticalState.subscribeStream?.((message) => {
-      sendLatest(message?.serialized ?? "");
+      sendDelta(message?.serialized ?? "");
     });
     const heartbeatTimer = setInterval(() => {
       if (!connection.closed && !connection.blocked) res.write(": heartbeat\n\n");
@@ -81,7 +111,7 @@ export async function handleTacticalStateRoutes({ modules, url, req, res, user, 
     const cleanup = () => {
       if (connection.closed) return;
       connection.closed = true;
-      connection.pendingText = null;
+      connection.needsResync = false;
       clearInterval(heartbeatTimer);
       res.off("drain", onDrain);
       unsubscribe?.();
