@@ -90,7 +90,7 @@
               <button 
                 type="button" 
                 class="btn btn-secondary btn-sm toggle-raw-panel-btn"
-                @click="showRawPanel = !showRawPanel"
+                @click="showRawPanel ? closeRawPanel() : openRawPanel()"
               >
                 {{ showRawPanel ? "隐藏原始数据" : "显示原始数据" }}
               </button>
@@ -514,9 +514,14 @@
             <div class="raw-tab-content">
               <div class="raw-tab-meta">
                 <span>{{ activeRawTab === 'full' ? '完整 JSON 数据' : activeRawTab === 'runtime' ? '运行时原始玩家' : activeRawTab === 'scoreboard' ? '计分板原始玩家' : '场景（点/FOB/爆破）数据' }}</span>
-                <button type="button" class="btn btn-secondary btn-sm copy-btn" @click="copyActiveRawBlock">
-                  {{ copiedBlock === activeRawTab ? '已复制' : '复制' }}
-                </button>
+                <div class="raw-tab-actions">
+                  <button type="button" class="btn btn-secondary btn-sm copy-btn" @click="copyActiveRawBlock">
+                    {{ copiedBlock === activeRawTab ? '已复制' : '复制预览' }}
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-sm" @click="downloadFullRawJson">
+                    下载完整 JSON
+                  </button>
+                </div>
               </div>
               <pre class="raw-code-block">{{ activeRawBlock }}</pre>
             </div>
@@ -614,7 +619,8 @@ const sortOrder = ref<"asc" | "desc">("asc");
 const expandedPlayers = ref<Record<string | number, boolean>>({});
 
 // New filter state & panel state
-const showRawPanel = ref(true);
+const showRawPanel = ref(false);
+const rawLoaded = ref(false);
 const selectedTeam = ref<number | null>(null);
 const selectedSquad = ref<string | number>("all");
 const selectedRole = ref<string>("all");
@@ -647,13 +653,35 @@ function resetFilters() {
 // Custom UI filters and tabs state
 const activeTeamFilter = ref<'all' | 1 | 2>('all');
 const activeRawTab = ref<'full' | 'runtime' | 'scoreboard' | 'scene'>('full');
-
-const activeRawBlock = computed(() => {
-  if (activeRawTab.value === 'full') return fullRawSnapshotBlock.value;
-  if (activeRawTab.value === 'runtime') return runtimeRawBlock.value;
-  if (activeRawTab.value === 'scoreboard') return scoreboardRawBlock.value;
-  return sceneRawBlock.value;
+const RAW_PREVIEW_MAX_CHARS = 200 * 1024;
+const rawPreviewBlocks = ref<Record<'full' | 'runtime' | 'scoreboard' | 'scene', string>>({
+  full: "",
+  runtime: "",
+  scoreboard: "",
+  scene: "",
 });
+
+const activeRawBlock = computed(() => rawPreviewBlocks.value[activeRawTab.value]);
+
+function stringifyRawPreview(value: unknown) {
+  const text = JSON.stringify(value, null, 2);
+  if (text.length <= RAW_PREVIEW_MAX_CHARS) return text;
+  return `${text.slice(0, RAW_PREVIEW_MAX_CHARS)}\n\n... 预览已截断（最多 200KB），请下载完整 JSON。`;
+}
+
+function refreshRawPreviews() {
+  rawPreviewBlocks.value = {
+    full: stringifyRawPreview(rawData.value ?? {}),
+    runtime: stringifyRawPreview(runtimePlayers.value),
+    scoreboard: stringifyRawPreview(scoreboardPlayers.value),
+    scene: stringifyRawPreview({
+      captureZones: payload.value?.captureZones ?? [],
+      fobs: payload.value?.fobs ?? [],
+      mainZones: payload.value?.mainZones ?? [],
+      explosions: payload.value?.explosions ?? [],
+    }),
+  };
+}
 
 async function copyActiveRawBlock() {
   await copyToClipboard(activeRawBlock.value, activeRawTab.value);
@@ -908,21 +936,6 @@ const captureZones = computed<BzssCoreCaptureZoneInfo[]>(() => (
   payload.value?.captureZones ?? rawData.value?.captureZones ?? []
 ));
 
-const fullRawSnapshotBlock = computed(() => JSON.stringify(rawData.value ?? {}, null, 2));
-const runtimeRawBlock = computed(() => JSON.stringify(runtimePlayers.value, null, 2));
-const scoreboardRawBlock = computed(() => JSON.stringify(scoreboardPlayers.value, null, 2));
-const sceneRawBlock = computed(() =>
-  JSON.stringify(
-    {
-      captureZones: payload.value?.captureZones ?? [],
-      fobs: payload.value?.fobs ?? [],
-      mainZones: payload.value?.mainZones ?? [],
-      explosions: payload.value?.explosions ?? [],
-    },
-    null,
-    2,
-  ),
-);
 
 const rawDataStatusLabel = computed(() => {
   const data = rawData.value;
@@ -1034,6 +1047,36 @@ async function fetchData() {
 
 async function fetchRawData() {
   await bzssCoreStore.fetchRaw();
+  if (!rawError.value) {
+    rawLoaded.value = true;
+    if (showRawPanel.value) refreshRawPreviews();
+  }
+}
+
+async function openRawPanel() {
+  showRawPanel.value = true;
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  if (!rawLoaded.value) {
+    await fetchRawData();
+  } else {
+    refreshRawPreviews();
+  }
+}
+
+function closeRawPanel() {
+  showRawPanel.value = false;
+  rawPreviewBlocks.value = { full: "", runtime: "", scoreboard: "", scene: "" };
+}
+
+async function downloadFullRawJson() {
+  if (!rawLoaded.value) await fetchRawData();
+  const blob = new Blob([JSON.stringify(rawData.value ?? {}, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `bzss-core-raw-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 function clearRefresh() {
@@ -1048,7 +1091,7 @@ function scheduleRefresh() {
   refreshTimer = window.setTimeout(async () => {
     if (canAutoRefreshNow() && !bzssCoreStore.streamActive) {
       await fetchData();
-      await fetchRawData();
+      if (rawLoaded.value && showRawPanel.value) await fetchRawData();
     }
     scheduleRefresh();
   }, bzssCoreStore.streamActive ? 1500 : 1000);
@@ -1067,8 +1110,8 @@ function stopStreamIfNeeded() {
 }
 
 onMounted(async () => {
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   await fetchData();
-  await fetchRawData();
   startStreamIfNeeded();
   scheduleRefresh();
 });
