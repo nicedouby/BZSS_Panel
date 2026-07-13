@@ -602,7 +602,6 @@
     },
     "infantryCombatEnhancer": {
       "enabled": true,
-      "forceAttackerDamageDisplay": false,
       "minAttackerDamage": 15,
       "damageDebounceMs": 0,
       "damageAggregation": {
