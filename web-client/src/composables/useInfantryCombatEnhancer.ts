@@ -242,7 +242,6 @@ function buildQueryFromFilters(filters: InfantryCombatFilters) {
 function normalizeConfig(source: Partial<InfantryCombatConfig> | null | undefined): InfantryCombatConfig {
   return {
     enabled: source?.enabled ?? INFANTRY_COMBAT_DEFAULT_CONFIG.enabled,
-    forceAttackerDamageDisplay: source?.forceAttackerDamageDisplay ?? INFANTRY_COMBAT_DEFAULT_CONFIG.forceAttackerDamageDisplay,
     minAttackerDamage: normalizeNumber(source?.minAttackerDamage, INFANTRY_COMBAT_DEFAULT_CONFIG.minAttackerDamage),
     damageDebounceMs: normalizeNumber(source?.damageDebounceMs, INFANTRY_COMBAT_DEFAULT_CONFIG.damageDebounceMs),
     showKillDisplay: source?.showKillDisplay ?? INFANTRY_COMBAT_DEFAULT_CONFIG.showKillDisplay,
