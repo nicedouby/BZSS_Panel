@@ -221,7 +221,7 @@
         <!-- Player Markers Layer -->
         <div class="player-markers-layer" :style="{ pointerEvents: measureMode || isDragging ? 'none' : 'auto', outline: isDev ? '2px solid red' : 'none' }">
           <PlayerMarker
-            v-for="player in renderedPlayers"
+            v-for="player in displayedPlayers"
             :key="getPlayerKey(player)"
             mode="tactical"
             :player-name="getPlayerLabel(player)"
@@ -2224,6 +2224,48 @@ let tilesEnableFrame: number | null = null;
 const renderedPlayers = computed(() => (
   filteredPlayers.value.slice(0, renderedPlayerLimit.value)
 ));
+
+/**
+ * Fan out players that occupy the same screen-space bucket. This keeps every
+ * player clickable and readable without creating a second marker data model.
+ * The offset is screen-pixel based, so it remains stable while zooming.
+ */
+const displayedPlayers = computed(() => {
+  const source = renderedPlayers.value;
+  const zoom = Math.max(camera.zoom.value, 0.35);
+  const bucketSizePercent = 18 / (10 * zoom);
+  const buckets = new Map<string, any[]>();
+
+  for (const player of source) {
+    const key = [
+      Math.round(player.mapX / bucketSizePercent),
+      Math.round(player.mapY / bucketSizePercent),
+    ].join(":");
+    const bucket = buckets.get(key) ?? [];
+    bucket.push(player);
+    buckets.set(key, bucket);
+  }
+
+  const result: any[] = [];
+  for (const bucket of buckets.values()) {
+    if (bucket.length === 1) {
+      result.push(bucket[0]);
+      continue;
+    }
+
+    const radiusPx = Math.min(30, 9 + bucket.length * 1.5);
+    bucket.forEach((player, index) => {
+      const angle = (Math.PI * 2 * index) / bucket.length - Math.PI / 2;
+      const offsetPercent = 1 / (10 * zoom);
+      result.push({
+        ...player,
+        mapX: Math.max(0, Math.min(100, player.mapX + Math.cos(angle) * radiusPx * offsetPercent)),
+        mapY: Math.max(0, Math.min(100, player.mapY + Math.sin(angle) * radiusPx * offsetPercent)),
+      });
+    });
+  }
+  return result;
+});
 
 function cancelMarkerBatch() {
   if (markerBatchFrame !== null) cancelAnimationFrame(markerBatchFrame);
