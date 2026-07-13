@@ -17,6 +17,7 @@ import { useBzssCoreStore } from "./bzss-core.store";
 
 describe("bzss-core store stream lifecycle", () => {
   beforeEach(() => {
+    vi.stubGlobal("EventSource", { CLOSED: 2 });
     setActivePinia(createPinia());
     streamMock.close.mockClear();
     streamMock.start.mockClear();
