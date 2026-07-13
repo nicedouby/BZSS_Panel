@@ -2,7 +2,6 @@
 
 const DEFAULT_CONFIG = Object.freeze({
   enabled: true,
-  forceAttackerDamageDisplay: false,
   minAttackerDamage: 15,
   damageDebounceMs: 0,
   showKillDisplay: false,
@@ -93,7 +92,6 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
     const victim = extractIdentity(record, "victim");
     const damage = normalizeDamage(record.damage);
     if (!victim.name) return null;
-    if (type !== "revive" && Number.isFinite(damage) && Math.abs(damage) < 5) return null;
     const samePlayer = isSamePlayer(attacker, victim);
     const weaponName = resolveWeaponName(record);
     const serverId = String(record.serverId ?? event?.serverId ?? core.webStatus?.serverId ?? "").trim();
@@ -337,31 +335,20 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
     if (!entry.attacker.name) {
       return makeSkipDecision(entry, "attacker", "attacker_missing_target");
     }
-    if (entry.type === "revive") {
-      return makeSendDecision({
-        entry,
-        role: "attacker",
-        target: entry.attacker,
-        message: buildAttackerMessage(entry),
-        reason: `infantry_${entry.type}_attacker`,
-      });
+    if (entry.type !== "damage") {
+      return makeSkipDecision(entry, "attacker", "attacker_damage_only");
     }
-    if (entry.type === "damage" && !moduleConfig.showAttackerDamage) {
+    if (!moduleConfig.showAttackerDamage) {
       return makeSkipDecision(entry, "attacker", "attacker_damage_disabled");
     }
     if (
       entry.type === "damage"
-      && !moduleConfig.forceAttackerDamageDisplay
       && Number.isFinite(entry.damage)
       && entry.damage < moduleConfig.minAttackerDamage
     ) {
       return makeSkipDecision(entry, "attacker", "below_min_attacker_damage");
     }
-    if (
-      moduleConfig.showOnlyLightWeaponDamage
-      && !moduleConfig.forceAttackerDamageDisplay
-      && !isLightWeaponEntry(entry)
-    ) {
+    if (!isLightWeaponEntry(entry)) {
       return makeSkipDecision(entry, "attacker", "non_light_weapon_hidden");
     }
     if (entry.type === "kill" && !moduleConfig.showKillDisplay) {
@@ -535,8 +522,33 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
   }
 
   function isLightWeaponEntry(entry) {
-    const tags = Array.isArray(entry?.tags) ? entry.tags.map((tag) => normalizeText(tag)) : [];
-    return tags.some((tag) => LIGHT_WEAPON_TAGS.has(tag));
+    const tags = new Set([
+      ...(Array.isArray(entry?.tags) ? entry.tags : []),
+      ...(Array.isArray(entry?.eventFlagLabels) ? entry.eventFlagLabels : []),
+      ...(Array.isArray(entry?.eventFlags)
+        ? entry.eventFlags.flatMap((flag) => [flag?.key, flag?.label]).filter(Boolean)
+        : []),
+    ].map((tag) => normalizeText(tag)));
+
+    // Explicit non-infantry sources always win, even if an upstream parser
+    // accidentally leaves a small-arms tag on the same record.
+    for (const tag of tags) {
+      if (
+        tag === "weapon.explosive"
+        || tag === "weapon.vehicle"
+        || tag === "weapon.emplacement"
+        || tag === "weapon.artillery"
+        || tag === "weapon.indirect_fire"
+        || tag === "weapon.mortar"
+        || tag === "weapon.rocket"
+        || tag === "weapon.grenade"
+        || tag === "weapon.unknown"
+      ) {
+        return false;
+      }
+    }
+
+    return [...tags].some((tag) => LIGHT_WEAPON_TAGS.has(tag));
   }
 
   function extractIdentity(record, side) {
@@ -811,8 +823,7 @@ class InfantryEnhancerStore {
 function normalizeModuleConfig(source = {}) {
   return {
     enabled: source.enabled !== false,
-    forceAttackerDamageDisplay: Boolean(source.forceAttackerDamageDisplay ?? DEFAULT_CONFIG.forceAttackerDamageDisplay),
-    minAttackerDamage: Math.max(0, Number(source.minAttackerDamage ?? DEFAULT_CONFIG.minAttackerDamage)),
+      minAttackerDamage: Math.max(0, Number(source.minAttackerDamage ?? DEFAULT_CONFIG.minAttackerDamage)),
     damageDebounceMs: Math.max(0, Number(source.damageDebounceMs ?? DEFAULT_CONFIG.damageDebounceMs)),
     showKillDisplay: source.showKillDisplay ?? DEFAULT_CONFIG.showKillDisplay,
     showOnlyLightWeaponDamage: source.showOnlyLightWeaponDamage ?? DEFAULT_CONFIG.showOnlyLightWeaponDamage,
