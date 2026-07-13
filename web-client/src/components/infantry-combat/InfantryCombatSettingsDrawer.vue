@@ -29,14 +29,6 @@
             <input v-model="draft.showAttackerDamage" type="checkbox">
           </label>
 
-          <label class="toggle-row">
-            <span>
-              <strong>强制显示攻击者伤害</strong>
-              <small>即使低于阈值也继续发送</small>
-            </span>
-            <input v-model="draft.forceAttackerDamageDisplay" type="checkbox">
-          </label>
-
           <label class="field">
             <span>最低攻击者伤害阈值</span>
             <input v-model.number="draft.minAttackerDamage" type="number" min="0" step="1">
@@ -125,7 +117,6 @@ watch(
 function cloneConfig(config: InfantryCombatConfig | null | undefined): InfantryCombatConfig {
   return {
     enabled: config?.enabled ?? true,
-    forceAttackerDamageDisplay: config?.forceAttackerDamageDisplay ?? false,
     minAttackerDamage: config?.minAttackerDamage ?? 15,
     damageDebounceMs: config?.damageDebounceMs ?? 0,
     showKillDisplay: config?.showKillDisplay ?? false,
