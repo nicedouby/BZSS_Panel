@@ -57,7 +57,6 @@ export const useBzssCoreStore = defineStore("bzssCore", () => {
   const rawError = ref("");
 
   let closeStream: (() => void) | null = null;
-  const activeSubscribers = ref(0);
 
   function updatePlayers(data: BzssCorePlayerInfoResponse) {
     players.value = buildBzssCorePlayers(data);
@@ -91,7 +90,6 @@ export const useBzssCoreStore = defineStore("bzssCore", () => {
   }
 
   function startStream() {
-    activeSubscribers.value++;
     if (closeStream) return;
 
     loading.value = true;
@@ -106,22 +104,15 @@ export const useBzssCoreStore = defineStore("bzssCore", () => {
         loading.value = false;
         if (source.readyState === EventSource.CLOSED) {
           error.value = "SSE Stream connection error.";
-          stopStream(true);
+          stopStream();
         }
       }
     );
   }
 
-  function stopStream(force = false) {
-    if (!force) {
-      activeSubscribers.value = Math.max(0, activeSubscribers.value - 1);
-    }
-    if (force || activeSubscribers.value === 0) {
-      if (closeStream) {
-        closeStream();
-        closeStream = null;
-      }
-    }
+  function stopStream() {
+    closeStream?.();
+    closeStream = null;
   }
 
   return {
