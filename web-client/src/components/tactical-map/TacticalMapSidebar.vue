@@ -1522,16 +1522,36 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
   gap: 5px;
 }
 .player-health-bar-container {
+  position: relative;
   width: 100%;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 2px;
+  height: 8px;
+  padding: 1px;
+  box-sizing: border-box;
+  background: linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,.04)), rgba(2, 6, 23, .86);
+  border: 1px solid rgba(148, 163, 184, .18);
+  border-radius: 999px;
   overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.55), 0 0 0 1px rgba(0,0,0,.2);
+}
+.player-health-bar-container::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(105deg, rgba(255,255,255,.28), transparent 28%, transparent 72%, rgba(255,255,255,.08));
+  opacity: .7;
 }
 .player-health-bar-fill {
+  position: relative;
+  z-index: 1;
   height: 100%;
+  min-width: 0;
   border-radius: inherit;
-  transition: width 0.3s ease;
+  background-image: linear-gradient(180deg, rgba(255,255,255,.45), transparent 48%, rgba(0,0,0,.18));
+  background-blend-mode: overlay;
+  box-shadow: 0 0 7px currentColor;
+  transition: width .35s cubic-bezier(.22,.8,.35,1), filter .2s ease;
 }
 .player-status-row {
   display: flex;
