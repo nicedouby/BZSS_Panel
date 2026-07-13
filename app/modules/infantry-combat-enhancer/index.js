@@ -4,7 +4,6 @@ const DEFAULT_CONFIG = Object.freeze({
   enabled: true,
   minAttackerDamage: 15,
   damageDebounceMs: 0,
-  showOnlyLightWeaponDamage: true,
   showVictimDamage: true,
   showVictimWound: true,
   showVictimKill: true,
