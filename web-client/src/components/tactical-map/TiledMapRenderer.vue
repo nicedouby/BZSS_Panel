@@ -9,7 +9,7 @@
       :style="tileStyle(tile)"
       draggable="false"
       decoding="async"
-      loading="lazy"
+      loading="eager"
     />
 
     <!-- Primary tiles at current zoom level -->
@@ -78,9 +78,19 @@ const emit = defineEmits<{
 // Track which tiles have finished loading via native <img> @load event
 const loadedSet = ref(new Set<string>());
 const fallbackLoaded = ref(false);
+const primaryTilesReady = computed(() => (
+  visibleTiles.value.length > 0
+  && visibleTiles.value.every((tile) => loadedSet.value.has(tile.key))
+));
+
+/**
+ * Keep the local full-resolution fallback visible until every primary tile
+ * covering the viewport is ready. Individual loaded tiles render above it,
+ * so this prevents transparent square gaps during zoom/pan transitions.
+ */
 const showFallbackImage = computed(() => Boolean(
   props.fallbackImage
-  && (!props.tilesEnabled || loadedSet.value.size === 0),
+  && (!props.tilesEnabled || !primaryTilesReady.value),
 ));
 const MAX_LOADED_TILE_KEYS = 256;
 
