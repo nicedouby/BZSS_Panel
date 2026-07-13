@@ -609,7 +609,6 @@
         "debounceMs": 0
       },
       "showKillDisplay": false,
-      "showOnlyLightWeaponDamage": true,
       "showVictimDamage": true,
       "showVictimWound": true,
       "showVictimKill": true,
