@@ -4,7 +4,6 @@ const DEFAULT_CONFIG = Object.freeze({
   enabled: true,
   minAttackerDamage: 15,
   damageDebounceMs: 0,
-  showKillDisplay: false,
   showOnlyLightWeaponDamage: true,
   showVictimDamage: true,
   showVictimWound: true,
@@ -350,9 +349,6 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
     }
     if (!isLightWeaponEntry(entry)) {
       return makeSkipDecision(entry, "attacker", "non_light_weapon_hidden");
-    }
-    if (entry.type === "kill" && !moduleConfig.showKillDisplay) {
-      return makeSkipDecision(entry, "attacker", "kill_display_disabled");
     }
 
     return makeSendDecision({
@@ -825,8 +821,6 @@ function normalizeModuleConfig(source = {}) {
     enabled: source.enabled !== false,
       minAttackerDamage: Math.max(0, Number(source.minAttackerDamage ?? DEFAULT_CONFIG.minAttackerDamage)),
     damageDebounceMs: Math.max(0, Number(source.damageDebounceMs ?? DEFAULT_CONFIG.damageDebounceMs)),
-    showKillDisplay: source.showKillDisplay ?? DEFAULT_CONFIG.showKillDisplay,
-    showOnlyLightWeaponDamage: source.showOnlyLightWeaponDamage ?? DEFAULT_CONFIG.showOnlyLightWeaponDamage,
     showVictimDamage: source.showVictimDamage !== false,
     showVictimWound: source.showVictimWound !== false,
     showVictimKill: source.showVictimKill !== false,
