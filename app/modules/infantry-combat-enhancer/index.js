@@ -818,7 +818,7 @@ class InfantryEnhancerStore {
 function normalizeModuleConfig(source = {}) {
   return {
     enabled: source.enabled !== false,
-      minAttackerDamage: Math.max(0, Number(source.minAttackerDamage ?? DEFAULT_CONFIG.minAttackerDamage)),
+    minAttackerDamage: Math.max(0, Number(source.minAttackerDamage ?? DEFAULT_CONFIG.minAttackerDamage)),
     damageDebounceMs: Math.max(0, Number(source.damageDebounceMs ?? DEFAULT_CONFIG.damageDebounceMs)),
     showVictimDamage: source.showVictimDamage !== false,
     showVictimWound: source.showVictimWound !== false,
