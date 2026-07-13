@@ -96,7 +96,6 @@ function createHarness({ moduleConfig = {}, adminWarn, subscriptionMap = {} } = 
         if (pathText === "modules.infantryCombatEnhancer") {
           return {
             enabled: true,
-            forceAttackerDamageDisplay: false,
             minAttackerDamage: 15,
             damageDebounceMs: 0,
             showVictimDamage: true,
@@ -278,41 +277,25 @@ async function testProcessingAndWarnings() {
 async function testReviveResolvedWarnings() {
   const { module, eventBus, calls } = createHarness();
   await module.start();
-
   await eventBus.emitModuleEvent("module.combatClean", "reviveResolved", {
     eventId: "module.combatClean:revive-1",
     serverId: "S1",
     time: "2026-05-30T12:01:00.000Z",
     record: {
-      id: "revive-1",
-      serverId: "S1",
-      type: "revive",
+      id: "revive-1", serverId: "S1", type: "revive",
       time: "2026-05-30T12:01:00.000Z",
-      attackerName: "Medic",
-      attackerSteam64ID: "111",
-      victimName: "Downed",
-      victimSteam64ID: "222",
+      attackerName: "Medic", attackerSteam64ID: "111",
+      victimName: "Downed", victimSteam64ID: "222",
       tags: ["combat.revive"],
     },
   });
-
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 1);
   assert.equal(calls[0].targetName, "Downed");
-  assert.ok(String(calls[0].message).includes("Medic") || String(calls[0].message).includes("Killer") || String(calls[0].message).includes("Attacker"));
-  assert.equal(calls[0].reason, "infantry_revive_victim");
-  assert.equal(calls[1].targetName, "Medic");
-  assert.ok(String(calls[1].message).includes("Downed") || String(calls[1].message).includes("Victim"));
-  assert.equal(calls[1].reason, "infantry_revive_attacker");
-
   const events = module.api.getEvents({ type: "revive", limit: 10 });
   assert.equal(events.length, 1);
-  assert.equal(events[0].type, "revive");
   assert.equal(events[0].victimWarning.success, true);
-  assert.equal(events[0].attackerWarning.success, true);
-  assert.equal(module.api.getOverview().stats.revive, 1);
-  assert.equal(module.api.getOverview().stats.victimWarned, 1);
-  assert.equal(module.api.getOverview().stats.attackerWarned, 1);
-
+  assert.equal(events[0].attackerWarning.skipped, true);
+  assert.equal(events[0].attackerWarning.skipReason, "attacker_damage_only");
   await module.stop();
 }
 
@@ -343,7 +326,6 @@ async function testTagDrivenMessages() {
   });
 
   await sleep(500);
-  assert.ok(String(calls.at(-2).message).includes("Attacker"));
   assert.ok(String(calls.at(-1).message).includes("Victim"));
 
   await emit({
@@ -361,7 +343,6 @@ async function testTagDrivenMessages() {
   });
 
   await sleep(500);
-  assert.ok(String(calls.at(-2).message).includes("Attacker"));
   assert.ok(String(calls.at(-1).message).includes("Victim"));
 
   await emit({
@@ -377,7 +358,6 @@ async function testTagDrivenMessages() {
     weaponName: "XX",
     tags: ["combat.team_wound", "friendly_fire", "combat.wound", "weapon.small_arm"],
   });
-  assert.ok(String(calls.at(-2).message).includes("Attacker"));
   assert.ok(String(calls.at(-1).message).includes("Victim"));
 
   await emit({
@@ -393,7 +373,6 @@ async function testTagDrivenMessages() {
     weaponName: "XX",
     tags: ["combat.kill", "weapon.small_arm"],
   });
-  assert.ok(String(calls.at(-2).message).includes("Attacker"));
   assert.ok(String(calls.at(-1).message).includes("Victim"));
 
   await emit({
@@ -409,7 +388,6 @@ async function testTagDrivenMessages() {
     weaponName: "XX",
     tags: ["combat.team_kill", "friendly_fire", "combat.kill", "weapon.small_arm"],
   });
-  assert.ok(String(calls.at(-2).message).includes("Attacker"));
   assert.ok(String(calls.at(-1).message).includes("Victim"));
 
   await module.stop();
@@ -450,42 +428,26 @@ async function testOnlyLightWeaponDamageSkipsNonLightWeapons() {
   await module.stop();
 }
 
-async function testForceAttackerDamageDisplayOverridesLightWeaponFilter() {
-  const { module, eventBus, calls } = createHarness({
-    moduleConfig: {
-      forceAttackerDamageDisplay: true,
-      showOnlyLightWeaponDamage: true,
-    },
-  });
+async function testExplosiveDamageNeverWarnsAttacker() {
+  const { module, eventBus, calls } = createHarness();
   await module.start();
-
   await eventBus.emitModuleEvent("module.combatClean", "combat.record.processed", {
     record: {
-      id: "combat-force-attacker-damage",
-      serverId: "S1",
-      type: "damage",
+      id: "combat-explosive-damage", serverId: "S1", type: "damage",
       time: "2026-05-30T12:11:30.000Z",
-      attackerName: "Attacker",
-      attackerSteam64ID: "111",
-      victimName: "Victim",
-      victimSteam64ID: "222",
-      damage: 60,
+      attackerName: "Attacker", attackerSteam64ID: "111",
+      victimName: "Victim", victimSteam64ID: "222", damage: 60,
       weaponName: "Grenade",
-      tags: ["combat.damage", "weapon.explosive", "damage.splash"],
+      tags: ["combat.damage", "weapon.explosive", "weapon.small_arm", "damage.splash"],
     },
   });
-
-  await sleep(500);
-
-  assert.equal(calls.length, 2);
+  await sleep(50);
+  assert.equal(calls.length, 1);
   assert.equal(calls[0].targetName, "Victim");
-  assert.equal(calls[1].targetName, "Attacker");
-
   const events = module.api.getEvents({ limit: 10 });
-  assert.equal(events.length, 1);
   assert.equal(events[0].victimWarning.success, true);
-  assert.equal(events[0].attackerWarning.success, true);
-
+  assert.equal(events[0].attackerWarning.skipped, true);
+  assert.equal(events[0].attackerWarning.skipReason, "non_light_weapon_hidden");
   await module.stop();
 }
 
@@ -521,7 +483,7 @@ async function testOnlyLightWeaponDamageSkipsHeavyKillAttacker() {
   assert.equal(events.length, 1);
   assert.equal(events[0].victimWarning.success, true);
   assert.equal(events[0].attackerWarning.skipped, true);
-  assert.equal(events[0].attackerWarning.skipReason, "non_light_weapon_hidden");
+  assert.equal(events[0].attackerWarning.skipReason, "attacker_damage_only");
 
   await module.stop();
 }
@@ -593,7 +555,7 @@ async function testKillDisplayIsDisabledByDefault() {
   assert.equal(events.length, 1);
   assert.equal(events[0].victimWarning.success, true);
   assert.equal(events[0].attackerWarning.skipped, true);
-  assert.equal(events[0].attackerWarning.skipReason, "kill_display_disabled");
+  assert.equal(events[0].attackerWarning.skipReason, "attacker_damage_only");
 
   await module.stop();
 }
@@ -773,7 +735,7 @@ await testDamageAggregationDisabledProcessesEachHit();
 await testReviveResolvedWarnings();
 await testTagDrivenMessages();
 await testOnlyLightWeaponDamageSkipsNonLightWeapons();
-await testForceAttackerDamageDisplayOverridesLightWeaponFilter();
+await testExplosiveDamageNeverWarnsAttacker();
 await testOnlyLightWeaponDamageSkipsHeavyKillAttacker();
 await testSamePlayerStillDisplays();
 await testKillDisplayIsDisabledByDefault();
