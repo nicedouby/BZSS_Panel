@@ -156,11 +156,38 @@ export class WebServer {
     const recordMemory = () => {
       try {
         const mem = process.memoryUsage();
+        const runtimeState = this.core.runtimeState?.state;
+        const rcon = this.core.rconManager?.squadRcon;
+        let tacticalDiagnostics = {};
+        try {
+          tacticalDiagnostics = this.modules.tacticalState?.getDiagnostics?.() ?? {};
+        } catch (error) {
+          this.logger.warn?.(`Failed to collect Tactical State diagnostics: ${error.message}`);
+        }
+
         this.memoryHistory.push({
           timestamp: Date.now(),
           rss: mem.rss,
           heapUsed: mem.heapUsed,
           heapTotal: mem.heapTotal,
+          external: mem.external,
+          arrayBuffers: mem.arrayBuffers,
+          diagnostics: {
+            consoleConnections: this.consoleConnections.size,
+            chatConnections: this.chatConnections.size,
+            localJobs: this.jobs.size,
+            runtimeRawEvents: runtimeState?.events?.raw?.length ?? 0,
+            runtimeRconEvents: runtimeState?.events?.rcon?.length ?? 0,
+            runtimeRoundEvents: runtimeState?.events?.round?.length ?? 0,
+            runtimeCombatEvents: runtimeState?.events?.combat?.length ?? 0,
+            runtimeConsoleEvents: runtimeState?.events?.console?.length ?? 0,
+            runtimeJobs: Object.keys(runtimeState?.jobs?.byId ?? {}).length,
+            rconResponseQueue: rcon?._responseQueue?.length ?? 0,
+            rconCallbackIds: rcon?._callbackIds?.length ?? 0,
+            rconIncomingBytes: rcon?._incomingData?.byteLength ?? 0,
+            tacticalSubscribers: tacticalDiagnostics.subscriberCount ?? 0,
+            tacticalProfileCache: tacticalDiagnostics.profileCacheSize ?? 0,
+          },
         });
         if (this.memoryHistory.length > this.maxMemoryHistoryPoints) {
           this.memoryHistory.shift();
