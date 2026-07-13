@@ -114,7 +114,6 @@ export interface InfantryCombatConfig {
   enabled: boolean;
   minAttackerDamage: number;
   damageDebounceMs: number;
-  showKillDisplay: boolean;
   showVictimDamage: boolean;
   showVictimWound: boolean;
   showVictimKill: boolean;
@@ -137,7 +136,6 @@ export const INFANTRY_COMBAT_DEFAULT_CONFIG: InfantryCombatConfig = {
   enabled: true,
   minAttackerDamage: 15,
   damageDebounceMs: 0,
-  showKillDisplay: false,
   showVictimDamage: true,
   showVictimWound: true,
   showVictimKill: true,
