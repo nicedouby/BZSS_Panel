@@ -441,4 +441,253 @@ function displayRole(role: string | null | undefined) {
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.12);
 }
+
+/* ─── 玩家网格视觉重构：身份、状态、战绩分层 ─────────────────────────────── */
+.squad-player-row.player-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 10px;
+  min-height: 76px;
+  padding: 9px 11px 9px 9px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-left: 3px solid var(--player-accent, rgba(148, 163, 184, 0.32));
+  border-radius: 12px;
+  background:
+    linear-gradient(105deg, color-mix(in srgb, var(--player-accent, #94a3b8) 9%, transparent), transparent 38%),
+    linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.018)),
+    rgba(8, 13, 24, .82);
+  box-shadow: 0 5px 16px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.035);
+  overflow: hidden;
+  isolation: isolate;
+  transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+
+.squad-player-row.player-row::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(circle at 0% 50%, color-mix(in srgb, var(--player-accent, #94a3b8) 15%, transparent), transparent 42%);
+  opacity: .8;
+}
+
+.squad-player-row.player-row::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 34%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.035));
+  mask-image: linear-gradient(90deg, transparent, #000);
+}
+
+.squad-player-row.player-row:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--player-accent, #94a3b8) 68%, white 12%);
+  background:
+    linear-gradient(105deg, color-mix(in srgb, var(--player-accent, #94a3b8) 13%, transparent), transparent 44%),
+    rgba(11, 18, 32, .94);
+  box-shadow: 0 9px 24px rgba(0,0,0,.28), 0 0 18px color-mix(in srgb, var(--player-accent, #94a3b8) 12%, transparent);
+}
+
+.squad-player-row.player-row.selected {
+  border-color: color-mix(in srgb, var(--player-accent, #94a3b8) 78%, white 18%);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--player-accent, #94a3b8) 28%, transparent), 0 10px 26px rgba(0,0,0,.3);
+}
+
+.team1-context,
+.team1-context.squad-player-row {
+  --player-accent: var(--color-team1-primary, #37c8ff);
+}
+
+.team2-context,
+.team2-context.squad-player-row {
+  --player-accent: var(--color-team2-primary, #ff9b45);
+}
+
+.squad-player-row .player-side {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.squad-player-row .player-avatar {
+  width: 44px;
+  height: 44px;
+  border: 1px solid color-mix(in srgb, var(--player-accent, #94a3b8) 58%, white 8%);
+  border-radius: 13px;
+  background: rgba(2, 6, 23, .78);
+  box-shadow:
+    0 0 0 3px rgba(2,6,23,.5),
+    0 0 15px color-mix(in srgb, var(--player-accent, #94a3b8) 22%, transparent),
+    inset 0 1px 0 rgba(255,255,255,.14);
+  overflow: hidden;
+}
+
+.squad-player-row .player-avatar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255,255,255,.22), transparent 35%, rgba(0,0,0,.22));
+  mix-blend-mode: screen;
+  opacity: .45;
+}
+
+.squad-player-row .player-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  align-content: center;
+}
+
+.squad-player-row .player-title-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  line-height: 1.1;
+}
+
+.squad-player-row .player-name {
+  max-width: min(42%, 260px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #f8fafc;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 850;
+  letter-spacing: .01em;
+  text-shadow: 0 1px 8px rgba(0,0,0,.45);
+}
+
+.squad-player-row .player-sub-line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(148,163,184,.72);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 9px;
+  letter-spacing: .035em;
+}
+
+.squad-player-row .role-chip,
+.squad-player-row .playtime-chip,
+.squad-player-row .bzss-core-ft-badge {
+  flex: 0 0 auto;
+  min-height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 18px;
+  letter-spacing: .02em;
+}
+
+.squad-player-row .role-chip {
+  color: #cbd5e1;
+  border: 1px solid rgba(148,163,184,.24);
+  background: rgba(148,163,184,.08);
+}
+
+.squad-player-row .role-chip.leader {
+  color: #fde68a;
+  border-color: rgba(250,204,21,.38);
+  background: rgba(250,204,21,.12);
+  box-shadow: 0 0 10px rgba(250,204,21,.1);
+}
+
+.squad-player-row .playtime-chip {
+  color: #a7f3d0;
+  border: 1px solid rgba(52,211,153,.25);
+  background: rgba(52,211,153,.08);
+}
+
+.squad-player-row .scoreboard-line,
+.squad-player-row .legacy-combat-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.squad-player-row .scoreboard-chip,
+.squad-player-row .stat-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-height: 17px;
+  padding: 1px 6px;
+  border: 1px solid rgba(148,163,184,.14);
+  border-radius: 5px;
+  background: rgba(255,255,255,.035);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  line-height: 1.25;
+}
+
+.squad-player-row .scoreboard-chip .label,
+.squad-player-row .stat-chip .label {
+  color: rgba(148,163,184,.72);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.squad-player-row .scoreboard-chip .value,
+.squad-player-row .stat-chip .value {
+  color: #e2e8f0;
+  font-size: 10px;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+
+.squad-player-row .scoreboard-chip.kill,
+.squad-player-row .stat-chip.kill { border-color: rgba(248,113,113,.24); }
+.squad-player-row .scoreboard-chip.kill .value,
+.squad-player-row .stat-chip.kill .value { color: #fda4af; }
+.squad-player-row .scoreboard-chip.wound,
+.squad-player-row .stat-chip.wound { border-color: rgba(96,165,250,.24); }
+.squad-player-row .scoreboard-chip.wound .value,
+.squad-player-row .stat-chip.wound .value { color: #93c5fd; }
+.squad-player-row .scoreboard-chip.revive,
+.squad-player-row .stat-chip.revive { border-color: rgba(52,211,153,.24); }
+.squad-player-row .scoreboard-chip.revive .value,
+.squad-player-row .stat-chip.revive .value { color: #6ee7b7; }
+.squad-player-row .scoreboard-chip.tk,
+.squad-player-row .stat-chip.tk { border-color: rgba(251,191,36,.26); }
+.squad-player-row .scoreboard-chip.tk .value,
+.squad-player-row .stat-chip.tk .value { color: #fcd34d; }
+
+@media (max-width: 720px) {
+  .squad-player-row.player-row {
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .squad-player-row .player-avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 11px;
+  }
+
+  .squad-player-row .player-name {
+    max-width: 48%;
+    font-size: 12px;
+  }
+
+  .squad-player-row .scoreboard-chip,
+  .squad-player-row .stat-chip {
+    padding-inline: 5px;
+  }
+}
 </style>
