@@ -104,7 +104,6 @@ function cloneConfig(config: InfantryCombatConfig | null | undefined): InfantryC
     enabled: config?.enabled ?? true,
     minAttackerDamage: config?.minAttackerDamage ?? 15,
     damageDebounceMs: config?.damageDebounceMs ?? 0,
-    showKillDisplay: config?.showKillDisplay ?? false,
     showVictimDamage: config?.showVictimDamage ?? true,
     showVictimWound: config?.showVictimWound ?? true,
     showVictimKill: config?.showVictimKill ?? true,
