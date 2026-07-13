@@ -50,13 +50,6 @@
             <input v-model="draft.showKillDisplay" type="checkbox">
           </label>
 
-          <label class="toggle-row">
-            <span>
-              <strong>仅显示轻武器伤害</strong>
-              <small>非轻武器的攻击者提醒将被隐藏</small>
-            </span>
-            <input v-model="draft.showOnlyLightWeaponDamage" type="checkbox">
-          </label>
 
           <div class="note">
             受害者提醒在当前产品规则中始终可见，因此这里不提供 showVictimDamage / showVictimWound / showVictimKill 的前端入口。
@@ -120,7 +113,6 @@ function cloneConfig(config: InfantryCombatConfig | null | undefined): InfantryC
     minAttackerDamage: config?.minAttackerDamage ?? 15,
     damageDebounceMs: config?.damageDebounceMs ?? 0,
     showKillDisplay: config?.showKillDisplay ?? false,
-    showOnlyLightWeaponDamage: config?.showOnlyLightWeaponDamage ?? true,
     showVictimDamage: config?.showVictimDamage ?? true,
     showVictimWound: config?.showVictimWound ?? true,
     showVictimKill: config?.showVictimKill ?? true,
