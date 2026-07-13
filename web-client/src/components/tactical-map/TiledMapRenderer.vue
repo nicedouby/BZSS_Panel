@@ -155,11 +155,10 @@ watch(
 );
 
 function syncReadyState() {
-  const expectedTiles = visibleTiles.value.length;
   const tilesReady =
     fallbackLoaded.value ||
     !props.tilesEnabled ||
-    (expectedTiles > 0 && visibleTiles.value.every((tile) => loadedSet.value.has(tile.key)));
+    primaryTilesReady.value;
 
   if (tilesReady) {
     emit("ready");
