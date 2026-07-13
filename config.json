@@ -679,7 +679,6 @@
         "enabled": false,
         "debounceMs": 0
       },
-      "showKillDisplay": false,
       "showVictimDamage": true,
       "showVictimWound": true,
       "showVictimKill": true,
