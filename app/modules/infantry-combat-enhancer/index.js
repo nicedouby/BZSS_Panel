@@ -525,6 +525,11 @@ export function createInfantryCombatEnhancerModule({ core, modules, config, logg
         : []),
     ].map((tag) => normalizeText(tag)));
 
+    const weaponName = normalizeText(entry?.weapon);
+    if (/(grenade|rocket|missile|mortar|artillery|c4|mine|tnt|rpg|javelin|tank|vehicle|\bied\b)/i.test(weaponName)) {
+      return false;
+    }
+
     // Explicit non-infantry sources always win, even if an upstream parser
     // accidentally leaves a small-arms tag on the same record.
     for (const tag of tags) {
