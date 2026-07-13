@@ -104,7 +104,10 @@
           >
             <span
               class="zone-flag-group capture-zone-flag"
-              :class="[`team-${zone.teamId ?? 0}`]"
+              :class="[
+                `team-${zone.teamId ?? 0}`,
+                { "is-capturing": zone.isCapturing },
+              ]"
               :style="{ '--capture-progress-deg': `${zone.captureProgress * 3.6}deg` }"
             >
               <span class="zone-flag-visual">
@@ -126,7 +129,12 @@
         <!-- FOB Overlay -->
         <div v-if="showFobs" class="fob-layer">
           <svg class="fob-radius-svg" viewBox="0 0 1000 1000" preserveAspectRatio="none">
-            <g v-for="fob in fobMarkers" :key="`fob-radius-${fob.id}`">
+            <g
+              v-for="fob in fobMarkers"
+              :key="`fob-radius-${fob.id}`"
+              class="fob-radius-group"
+              :class="`team-${fob.teamId ?? 0}`"
+            >
               <circle
                 :cx="fob.mapX * 10"
                 :cy="fob.mapY * 10"
@@ -815,6 +823,8 @@ interface CaptureZoneMarker {
   capturePercent?: number | null;
   captureProgress: number;
   captureDirection?: number | null;
+  captureTeamId?: number | null;
+  isCapturing: boolean;
   isLocked?: boolean | null;
   factionCode: string | null;
   factionLabel: string;
@@ -1998,6 +2008,22 @@ const captureZoneMarkers = computed<CaptureZoneMarker[]>(() => {
     const captureProgress = Number.isFinite(rawCapturePercent)
       ? Math.max(0, Math.min(100, rawCapturePercent >= 0 && rawCapturePercent <= 1 ? rawCapturePercent * 100 : rawCapturePercent))
       : 100;
+    const rawCaptureTeamId = Number(
+      zone.captureTeamId
+      ?? zone.capturingTeamId
+      ?? zone.captureDirection
+      ?? zone.captureTeam
+    );
+    const captureTeamId = Number.isFinite(rawCaptureTeamId)
+      && (rawCaptureTeamId === 1 || rawCaptureTeamId === 2)
+      ? rawCaptureTeamId
+      : null;
+    const isCapturing = Boolean(
+      captureTeamId
+      && captureProgress > 0
+      && captureProgress < 100
+      && (zone.isCapturing ?? zone.capturing ?? true)
+    );
     const faction = resolveMainZoneFaction(teamId);
     markers.push({
       type: "captureZone",
@@ -2011,6 +2037,8 @@ const captureZoneMarkers = computed<CaptureZoneMarker[]>(() => {
       capturePercent: zone.capturePercent ?? null,
       captureProgress,
       captureDirection: zone.captureDirection ?? null,
+      captureTeamId,
+      isCapturing,
       isLocked: zone.isLocked ?? null,
       factionCode: faction.factionCode,
       factionLabel: faction.factionLabel,
