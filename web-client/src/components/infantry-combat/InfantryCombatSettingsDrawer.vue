@@ -42,14 +42,6 @@
 
         <section class="drawer-section">
           <h3>提醒内容</h3>
-          <label class="toggle-row">
-            <span>
-              <strong>显示击杀提示</strong>
-              <small>关闭后攻击者击杀消息会被跳过</small>
-            </span>
-            <input v-model="draft.showKillDisplay" type="checkbox">
-          </label>
-
 
           <div class="note">
             受害者提醒在当前产品规则中始终可见，因此这里不提供 showVictimDamage / showVictimWound / showVictimKill 的前端入口。
