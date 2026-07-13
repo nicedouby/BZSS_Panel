@@ -106,7 +106,7 @@
               class="zone-flag-group capture-zone-flag"
               :class="[
                 `team-${zone.captureTeamId ?? zone.teamId ?? 0}`,
-                { "is-capturing": zone.isCapturing },
+                { 'is-capturing': zone.isCapturing },
               ]"
               :style="{ '--capture-progress-deg': `${zone.captureProgress * 3.6}deg` }"
             >
