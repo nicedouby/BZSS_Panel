@@ -82,11 +82,11 @@
                     class="hud-header-db-btn"
                     @click="openDatabase"
                     :title="'查询玩家 ' + props.player.name + ' 的全球数据库记录'"
+                    aria-label="数据库"
                   >
                     <svg viewBox="0 0 24 24" width="12" height="12" class="btn-icon">
                       <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.53c-.26-.81-1-1.4-1.9-1.4h-1v-3c0-.55-.45-1-1-1h-6v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
                     </svg>
-                    数据库
                   </button>
                   <button
                     type="button"
@@ -95,12 +95,12 @@
                     @click="refreshSteamProfile"
                     :disabled="steamProfileRefreshing || !props.player?.steamId"
                     :title="'刷新 ' + (props.player?.name || '玩家') + ' 的 Steam 个人资料（时长+头像）'"
+                    aria-label="刷新个人资料"
                   >
                     <svg v-if="!steamProfileRefreshing" viewBox="0 0 24 24" width="12" height="12" class="btn-icon">
                       <path fill="currentColor" d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
                     </svg>
                     <span v-else class="refresh-spinner"></span>
-                    刷新个人资料
                   </button>
                   <button
                     type="button"
@@ -108,12 +108,12 @@
                     @click="handleAdminTrack"
                     :disabled="actionBusy || !canUseBzssCoreTrack"
                     :title="adminTrackTitle"
+                    aria-label="Track"
                   >
                     <svg viewBox="0 0 24 24" width="12" height="12" class="btn-icon">
                       <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
                       <circle cx="12" cy="12" r="3" fill="currentColor"/>
                     </svg>
-                    Track
                   </button>
                   <button
                     type="button"
@@ -121,23 +121,23 @@
                     @click="handleRemoveAdminTrack"
                     :disabled="actionBusy || !canUseBzssCoreTrack"
                     :title="adminTrackTitle"
+                    aria-label="Untrack"
                   >
                     <svg viewBox="0 0 24 24" width="12" height="12" class="btn-icon" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <line x1="18" y1="6" x2="6" y2="18"></line>
                       <line x1="6" y1="6" x2="18" y2="18"></line>
                     </svg>
-                    Untrack
                   </button>
                   <button
                     type="button"
                     class="hud-header-db-btn"
                     @click="showAdvanced = true"
                     title="查看开发调试原始数据"
+                    aria-label="调试"
                   >
                     <svg viewBox="0 0 24 24" width="12" height="12" class="btn-icon">
                       <path fill="currentColor" d="M20 8h-2.81c-.45-.78-1.07-1.45-1.82-1.96L17 4.41 15.59 3 15.59 3l-2.17 2.17C12.96 5.06 12.49 5 12 5c-.49 0-.96.06-1.41.17L8.41 3 7 4.41l1.62 1.63C7.88 6.55 7.26 7.22 6.81 8H4v2h2.09c-.05.33-.09.66-.09 1v1H4v2h2v1c0 .34.04.67.09 1H4v2h2.81c1.04 1.79 2.97 3 5.19 3s4.15-1.21 5.19-3H20v-2h-2.09c.05-.33.09-.66.09-1v-1h2v-2h-2v-1c0-.34-.04-.67-.09-1H20V8zm-6 8h-4v-2h4v2zm0-4h-4v-2h4v2z"/>
                     </svg>
-                    调试
                   </button>
 
                   </div>
@@ -3525,6 +3525,21 @@ onUnmounted(() => {
   .player-detail-floating .hud-header-identities {
     overflow-x: auto;
   }
+}
+
+
+/* Header actions are icon-only by structure, so they cannot create a second text line. */
+.player-detail-floating .hud-header-actions {
+  flex-wrap: nowrap !important;
+  white-space: nowrap !important;
+}
+
+.player-detail-floating .hud-header-actions .hud-header-db-btn {
+  color: var(--color-text-secondary) !important;
+}
+
+.player-detail-floating .hud-header-actions .hud-header-db-btn > :not(.btn-icon):not(.refresh-spinner) {
+  display: none !important;
 }
 
 </style>
